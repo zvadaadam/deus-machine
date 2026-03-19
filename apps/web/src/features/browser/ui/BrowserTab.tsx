@@ -16,11 +16,26 @@
  * browser:url-change events so the URL bar stays current.
  */
 
-import { useRef, useState, useEffect, useLayoutEffect, useCallback, useImperativeHandle, forwardRef } from "react";
+import {
+  useRef,
+  useState,
+  useEffect,
+  useLayoutEffect,
+  useCallback,
+  useImperativeHandle,
+  forwardRef,
+} from "react";
 import { match } from "ts-pattern";
 import { Button } from "@/components/ui/button";
 import { AlertCircle, Loader2, Globe } from "lucide-react";
-import { invoke, listen, createListenerGroup, BROWSER_PAGE_LOAD, BROWSER_TITLE_CHANGED, BROWSER_URL_CHANGE } from "@/platform/electron";
+import {
+  invoke,
+  listen,
+  createListenerGroup,
+  BROWSER_PAGE_LOAD,
+  BROWSER_TITLE_CHANGED,
+  BROWSER_URL_CHANGE,
+} from "@/platform/electron";
 import { getErrorMessage } from "@shared/lib/errors";
 import type { BrowserTabState, BrowserTabHandle, ConsoleLog, ElementSelectedEvent } from "../types";
 import { deriveTitleFromUrl } from "../types";
@@ -394,7 +409,12 @@ export const BrowserTab = forwardRef<BrowserTabHandle, BrowserTabProps>(function
         try {
           logs = JSON.parse(result);
         } catch (parseErr) {
-          console.error("[BrowserTab] console drain: JSON.parse failed", parseErr, "raw:", result.slice(0, 200));
+          console.error(
+            "[BrowserTab] console drain: JSON.parse failed",
+            parseErr,
+            "raw:",
+            result.slice(0, 200)
+          );
           return;
         }
         for (const log of logs) {
@@ -458,7 +478,12 @@ export const BrowserTab = forwardRef<BrowserTabHandle, BrowserTabProps>(function
           events = JSON.parse(result);
         } catch (parseErr) {
           // JSON parse failure — log the raw result for debugging
-          console.error("[BrowserTab] inspect drain: JSON.parse failed", parseErr, "raw result:", result.slice(0, 200));
+          console.error(
+            "[BrowserTab] inspect drain: JSON.parse failed",
+            parseErr,
+            "raw result:",
+            result.slice(0, 200)
+          );
           return;
         }
 
@@ -484,10 +509,7 @@ export const BrowserTab = forwardRef<BrowserTabHandle, BrowserTabProps>(function
       } catch (err) {
         failCount++;
         if (failCount <= 3 || failCount % 50 === 0) {
-          console.warn(
-            `[BrowserTab] inspect drain failed (${failCount}x):`,
-            getErrorMessage(err)
-          );
+          console.warn(`[BrowserTab] inspect drain failed (${failCount}x):`, getErrorMessage(err));
         }
       } finally {
         inFlight = false;
@@ -495,7 +517,16 @@ export const BrowserTab = forwardRef<BrowserTabHandle, BrowserTabProps>(function
     }, INSPECT_DRAIN_MS);
 
     return () => clearInterval(interval);
-  }, [visible, webviewReady, hasLoaded, tab.selectorActive, webviewLabel, tabId, onUpdateTab, onAddLog]);
+  }, [
+    visible,
+    webviewReady,
+    hasLoaded,
+    tab.selectorActive,
+    webviewLabel,
+    tabId,
+    onUpdateTab,
+    onAddLog,
+  ]);
 
   // --- Imperative methods exposed to parent ---
 
@@ -549,15 +580,11 @@ export const BrowserTab = forwardRef<BrowserTabHandle, BrowserTabProps>(function
         });
         const status = JSON.parse(verifyResult);
         if (!status.opendevsInspect || !status.hasDrainEvents) {
-          onAddLog(tabId, "error",
-            `Inspect mode setup incomplete: ${JSON.stringify(status)}`
-          );
+          onAddLog(tabId, "error", `Inspect mode setup incomplete: ${JSON.stringify(status)}`);
           return; // Don't mark as injected
         }
       } catch (verifyErr) {
-        onAddLog(tabId, "warn",
-          `Inspect verification failed: ${getErrorMessage(verifyErr)}`
-        );
+        onAddLog(tabId, "warn", `Inspect verification failed: ${getErrorMessage(verifyErr)}`);
         return;
       }
 
@@ -596,14 +623,10 @@ export const BrowserTab = forwardRef<BrowserTabHandle, BrowserTabProps>(function
         js,
         timeoutMs: 3000,
       });
-      onAddLog(tabId, "info",
-        enabling ? "Inspect mode activated" : "Inspect mode deactivated"
-      );
+      onAddLog(tabId, "info", enabling ? "Inspect mode activated" : "Inspect mode deactivated");
       onUpdateTab(tabId, { selectorActive: enabling });
     } catch (err) {
-      onAddLog(tabId, "error",
-        `Inspect mode toggle failed: ${getErrorMessage(err)}`
-      );
+      onAddLog(tabId, "error", `Inspect mode toggle failed: ${getErrorMessage(err)}`);
     }
   }, [webviewLabel, tabId, tab.selectorActive, injectAutomation, onUpdateTab, onAddLog]);
 

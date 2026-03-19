@@ -15,17 +15,20 @@
 
 // Guard: prevent double-injection
 if (!(window as any).__opendevsBrowserUtils) {
-
   // ========================================================================
   // Accessibility Tree Builder
   // ========================================================================
 
   function getTextFromIds(ids: string): string {
-    if (!ids) return '';
-    return ids.split(' ').map((id) => {
-      const el = document.getElementById(id);
-      return el ? (el.textContent || '').trim() : '';
-    }).filter(Boolean).join(' ');
+    if (!ids) return "";
+    return ids
+      .split(" ")
+      .map((id) => {
+        const el = document.getElementById(id);
+        return el ? (el.textContent || "").trim() : "";
+      })
+      .filter(Boolean)
+      .join(" ");
   }
 
   function getVisibleText(el: Element): string {
@@ -35,132 +38,202 @@ if (!(window as any).__opendevsBrowserUtils) {
           const parent = node.parentElement;
           if (!parent) return NodeFilter.FILTER_REJECT;
           const style = window.getComputedStyle(parent);
-          if (style.display === 'none' || style.visibility === 'hidden') return NodeFilter.FILTER_REJECT;
+          if (style.display === "none" || style.visibility === "hidden")
+            return NodeFilter.FILTER_REJECT;
           return NodeFilter.FILTER_ACCEPT;
         },
       });
-      let text = '';
+      let text = "";
       while (walker.nextNode()) {
-        text += ' ' + walker.currentNode.textContent;
+        text += " " + walker.currentNode.textContent;
         if (text.length > 200) break;
       }
-      return text.replace(/\s+/g, ' ').trim().substring(0, 200);
+      return text.replace(/\s+/g, " ").trim().substring(0, 200);
     } catch (_e) {
-      const raw = (el as HTMLElement).innerText || el.textContent || '';
-      return raw.replace(/\s+/g, ' ').trim().substring(0, 200);
+      const raw = (el as HTMLElement).innerText || el.textContent || "";
+      return raw.replace(/\s+/g, " ").trim().substring(0, 200);
     }
   }
 
   function getLabelsText(el: HTMLElement): string {
     try {
       const labeled = el as HTMLInputElement;
-      if (!labeled.labels || !labeled.labels.length) return '';
-      return Array.from(labeled.labels).map((l) => {
-        return getVisibleText(l);
-      }).filter(Boolean).join(' ').substring(0, 200);
-    } catch (_e) { return ''; }
+      if (!labeled.labels || !labeled.labels.length) return "";
+      return Array.from(labeled.labels)
+        .map((l) => {
+          return getVisibleText(l);
+        })
+        .filter(Boolean)
+        .join(" ")
+        .substring(0, 200);
+    } catch (_e) {
+      return "";
+    }
   }
 
   function getImplicitRole(el: Element): string {
     const tag = el.tagName.toLowerCase();
     switch (tag) {
-      case 'a': return el.hasAttribute('href') ? 'link' : 'generic';
-      case 'button': case 'summary': return 'button';
-      case 'input': {
-        const t = ((el as HTMLInputElement).type || 'text').toLowerCase();
-        if (t === 'button' || t === 'submit' || t === 'reset' || t === 'image') return 'button';
-        if (t === 'checkbox') return 'checkbox';
-        if (t === 'radio') return 'radio';
-        if (t === 'range') return 'slider';
-        if (t === 'number') return 'spinbutton';
-        return 'textbox';
+      case "a":
+        return el.hasAttribute("href") ? "link" : "generic";
+      case "button":
+      case "summary":
+        return "button";
+      case "input": {
+        const t = ((el as HTMLInputElement).type || "text").toLowerCase();
+        if (t === "button" || t === "submit" || t === "reset" || t === "image") return "button";
+        if (t === "checkbox") return "checkbox";
+        if (t === "radio") return "radio";
+        if (t === "range") return "slider";
+        if (t === "number") return "spinbutton";
+        return "textbox";
       }
-      case 'select': {
+      case "select": {
         const sel = el as HTMLSelectElement;
-        return (sel.multiple || (sel.size && sel.size > 1)) ? 'listbox' : 'combobox';
+        return sel.multiple || (sel.size && sel.size > 1) ? "listbox" : "combobox";
       }
-      case 'option': return 'option';
-      case 'textarea': return 'textbox';
-      case 'img': case 'svg': return 'img';
-      case 'h1': case 'h2': case 'h3': case 'h4': case 'h5': case 'h6': return 'heading';
-      case 'ul': case 'ol': return 'list';
-      case 'li': return 'listitem';
-      case 'nav': return 'navigation';
-      case 'main': return 'main';
-      case 'header': return 'banner';
-      case 'footer': return 'contentinfo';
-      case 'form': return 'form';
-      case 'table': return 'table';
-      case 'tr': return 'row';
-      case 'td': return 'cell';
-      case 'th': return 'columnheader';
-      case 'section': return 'section';
-      case 'article': return 'article';
-      case 'aside': return 'aside';
-      case 'details': return 'group';
-      case 'progress': return 'progressbar';
-      case 'meter': return 'meter';
-      case 'label': return 'label';
-      default: return 'generic';
+      case "option":
+        return "option";
+      case "textarea":
+        return "textbox";
+      case "img":
+      case "svg":
+        return "img";
+      case "h1":
+      case "h2":
+      case "h3":
+      case "h4":
+      case "h5":
+      case "h6":
+        return "heading";
+      case "ul":
+      case "ol":
+        return "list";
+      case "li":
+        return "listitem";
+      case "nav":
+        return "navigation";
+      case "main":
+        return "main";
+      case "header":
+        return "banner";
+      case "footer":
+        return "contentinfo";
+      case "form":
+        return "form";
+      case "table":
+        return "table";
+      case "tr":
+        return "row";
+      case "td":
+        return "cell";
+      case "th":
+        return "columnheader";
+      case "section":
+        return "section";
+      case "article":
+        return "article";
+      case "aside":
+        return "aside";
+      case "details":
+        return "group";
+      case "progress":
+        return "progressbar";
+      case "meter":
+        return "meter";
+      case "label":
+        return "label";
+      default:
+        return "generic";
     }
   }
 
   function computeAccessibleName(el: Element, role: string): string {
-    if (el.getAttribute('aria-hidden') === 'true') return '';
-    const labelledBy = el.getAttribute('aria-labelledby');
-    if (labelledBy) { const t = getTextFromIds(labelledBy); if (t) return t.substring(0, 200); }
-    const ariaLabel = el.getAttribute('aria-label');
+    if (el.getAttribute("aria-hidden") === "true") return "";
+    const labelledBy = el.getAttribute("aria-labelledby");
+    if (labelledBy) {
+      const t = getTextFromIds(labelledBy);
+      if (t) return t.substring(0, 200);
+    }
+    const ariaLabel = el.getAttribute("aria-label");
     if (ariaLabel) return ariaLabel.substring(0, 200);
-    const placeholder = el.getAttribute('aria-placeholder');
+    const placeholder = el.getAttribute("aria-placeholder");
     if (placeholder) return placeholder.substring(0, 200);
     const labels = getLabelsText(el as HTMLElement);
     if (labels) return labels;
     const tag = el.tagName.toLowerCase();
-    if (tag === 'img') { const alt = el.getAttribute('alt'); if (alt) return alt.substring(0, 200); }
-    if (tag === 'input') {
+    if (tag === "img") {
+      const alt = el.getAttribute("alt");
+      if (alt) return alt.substring(0, 200);
+    }
+    if (tag === "input") {
       const inp = el as HTMLInputElement;
-      if (['button', 'submit', 'reset'].includes((inp.type || '').toLowerCase())) {
+      if (["button", "submit", "reset"].includes((inp.type || "").toLowerCase())) {
         if (inp.value) return inp.value.substring(0, 200);
       }
-      return (inp.placeholder || inp.value || '').substring(0, 200);
+      return (inp.placeholder || inp.value || "").substring(0, 200);
     }
-    if (tag === 'textarea') {
+    if (tag === "textarea") {
       const ta = el as HTMLTextAreaElement;
-      return (ta.placeholder || ta.value || '').substring(0, 200);
+      return (ta.placeholder || ta.value || "").substring(0, 200);
     }
-    if (tag === 'select') {
+    if (tag === "select") {
       const sel = el as HTMLSelectElement;
       const opts = Array.from(sel.selectedOptions || []).map((o) => o.text);
-      if (opts.length) return opts.join(', ').substring(0, 200);
+      if (opts.length) return opts.join(", ").substring(0, 200);
     }
-    const interactiveTags = ['button', 'a', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'label', 'p', 'li', 'summary'];
-    if (interactiveTags.includes(tag) || role === 'button' || role === 'link' || role === 'heading') {
+    const interactiveTags = [
+      "button",
+      "a",
+      "h1",
+      "h2",
+      "h3",
+      "h4",
+      "h5",
+      "h6",
+      "label",
+      "p",
+      "li",
+      "summary",
+    ];
+    if (
+      interactiveTags.includes(tag) ||
+      role === "button" ||
+      role === "link" ||
+      role === "heading"
+    ) {
       return getVisibleText(el);
     }
-    const title = el.getAttribute('title');
+    const title = el.getAttribute("title");
     if (title) return title.substring(0, 200);
-    return '';
+    return "";
   }
 
   function collectElementStates(el: Element, _role: string): string[] {
     const states: string[] = [];
     try {
-      if (el.matches(':focus')) states.push('focused');
-      if (el.matches(':disabled')) states.push('disabled');
-      if ((el as HTMLInputElement).checked) states.push('checked');
-      if ((el as HTMLInputElement).required) states.push('required');
-      if ((el as HTMLInputElement).readOnly) states.push('readonly');
-      if ((el as HTMLOptionElement).selected) states.push('selected');
-    } catch (_e) { /* swallow */ }
+      if (el.matches(":focus")) states.push("focused");
+      if (el.matches(":disabled")) states.push("disabled");
+      if ((el as HTMLInputElement).checked) states.push("checked");
+      if ((el as HTMLInputElement).required) states.push("required");
+      if ((el as HTMLInputElement).readOnly) states.push("readonly");
+      if ((el as HTMLOptionElement).selected) states.push("selected");
+    } catch (_e) {
+      /* swallow */
+    }
     const ariaStates: Record<string, string | null> = {
-      'aria-selected': 'selected', 'aria-expanded': null, 'aria-pressed': 'pressed',
-      'aria-current': 'current', 'aria-invalid': 'invalid', 'aria-busy': 'busy',
+      "aria-selected": "selected",
+      "aria-expanded": null,
+      "aria-pressed": "pressed",
+      "aria-current": "current",
+      "aria-invalid": "invalid",
+      "aria-busy": "busy",
     };
     for (const attr in ariaStates) {
       const val = el.getAttribute(attr);
-      if (val && val !== 'false') {
-        if (attr === 'aria-expanded') states.push(val === 'true' ? 'expanded' : 'collapsed');
-        else states.push(ariaStates[attr] || attr.replace('aria-', ''));
+      if (val && val !== "false") {
+        if (attr === "aria-expanded") states.push(val === "true" ? "expanded" : "collapsed");
+        else states.push(ariaStates[attr] || attr.replace("aria-", ""));
       }
     }
     return [...new Set(states)];
@@ -168,40 +241,67 @@ if (!(window as any).__opendevsBrowserUtils) {
 
   function collectElementDetails(el: Element, _role: string): Record<string, any> {
     const details: Record<string, any> = {};
-    let desc = el.getAttribute('aria-description') || '';
-    const descBy = el.getAttribute('aria-describedby');
-    if (descBy) desc = (desc + ' ' + getTextFromIds(descBy)).trim();
+    let desc = el.getAttribute("aria-description") || "";
+    const descBy = el.getAttribute("aria-describedby");
+    if (descBy) desc = (desc + " " + getTextFromIds(descBy)).trim();
     if (desc) details.description = desc.substring(0, 200);
     const tag = el.tagName.toLowerCase();
-    if (tag === 'a' && (el as HTMLAnchorElement).href) details.url = (el as HTMLAnchorElement).href;
-    if ((tag === 'img' || tag === 'svg') && (el as HTMLImageElement).src) details.src = (el as HTMLImageElement).src;
-    if (tag === 'input' || tag === 'textarea') {
+    if (tag === "a" && (el as HTMLAnchorElement).href) details.url = (el as HTMLAnchorElement).href;
+    if ((tag === "img" || tag === "svg") && (el as HTMLImageElement).src)
+      details.src = (el as HTMLImageElement).src;
+    if (tag === "input" || tag === "textarea") {
       const inp = el as HTMLInputElement;
-      if ((inp.type || '').toLowerCase() !== 'password') {
+      if ((inp.type || "").toLowerCase() !== "password") {
         if (inp.value) details.value = inp.value.substring(0, 200);
       }
       if (inp.placeholder) details.placeholder = inp.placeholder.substring(0, 200);
     }
-    if (tag === 'select') {
+    if (tag === "select") {
       const sel = el as HTMLSelectElement;
       const opts = Array.from(sel.selectedOptions || []).map((o) => o.text);
-      if (opts.length) details.value = opts.join(', ').substring(0, 200);
+      if (opts.length) details.value = opts.join(", ").substring(0, 200);
     }
     return details;
   }
 
   function shouldIncludeElement(el: Element): boolean {
-    if (el.getAttribute('aria-hidden') === 'true') return false;
+    if (el.getAttribute("aria-hidden") === "true") return false;
     const tag = el.tagName.toLowerCase();
-    const includeTags = ['a', 'button', 'input', 'select', 'textarea', 'img', 'svg',
-      'h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'nav', 'main', 'header', 'footer',
-      'section', 'article', 'form', 'label', 'ul', 'ol', 'li', 'p', 'summary', 'details'];
+    const includeTags = [
+      "a",
+      "button",
+      "input",
+      "select",
+      "textarea",
+      "img",
+      "svg",
+      "h1",
+      "h2",
+      "h3",
+      "h4",
+      "h5",
+      "h6",
+      "nav",
+      "main",
+      "header",
+      "footer",
+      "section",
+      "article",
+      "form",
+      "label",
+      "ul",
+      "ol",
+      "li",
+      "p",
+      "summary",
+      "details",
+    ];
     if (includeTags.includes(tag)) return true;
-    const role = el.getAttribute('role');
-    if (role && role !== 'generic' && role !== 'presentation' && role !== 'none') return true;
-    if (el.getAttribute('aria-label') || el.getAttribute('aria-labelledby')) return true;
-    if ((el as HTMLElement).contentEditable === 'true') return true;
-    if (el.querySelector('a,button,input,select,textarea')) return true;
+    const role = el.getAttribute("role");
+    if (role && role !== "generic" && role !== "presentation" && role !== "none") return true;
+    if (el.getAttribute("aria-label") || el.getAttribute("aria-labelledby")) return true;
+    if ((el as HTMLElement).contentEditable === "true") return true;
+    if (el.querySelector("a,button,input,select,textarea")) return true;
     return false;
   }
 
@@ -214,12 +314,12 @@ if (!(window as any).__opendevsBrowserUtils) {
     if (depth > maxDepth || __nodeCount >= __NODE_LIMIT) return null;
     __nodeCount++;
     // Assign or reuse data-opendevs-ref
-    let ref = element.getAttribute('data-opendevs-ref');
+    let ref = element.getAttribute("data-opendevs-ref");
     if (!ref) {
-      ref = 'ref-' + Math.random().toString(36).substring(2, 15);
-      element.setAttribute('data-opendevs-ref', ref);
+      ref = "ref-" + Math.random().toString(36).substring(2, 15);
+      element.setAttribute("data-opendevs-ref", ref);
     }
-    const role = element.getAttribute('role') || getImplicitRole(element);
+    const role = element.getAttribute("role") || getImplicitRole(element);
     const name = computeAccessibleName(element, role);
     const states = collectElementStates(element, role);
     const details = collectElementDetails(element, role);
@@ -253,28 +353,31 @@ if (!(window as any).__opendevsBrowserUtils) {
 
   function accessibilityTreeToYaml(node: any, indent: number): string {
     indent = indent || 0;
-    if (!node) return '';
-    const pad = '  '.repeat(indent);
+    if (!node) return "";
+    const pad = "  ".repeat(indent);
     const lines: string[] = [];
-    lines.push(pad + '- role: ' + node.role);
+    lines.push(pad + "- role: " + node.role);
     if (node.name) {
-      const escaped = /[:"\\[]/.test(node.name) ? '"' + node.name.replace(/"/g, '\\"') + '"' : node.name;
-      lines.push(pad + '  name: ' + escaped);
+      const escaped = /[:"\\[]/.test(node.name)
+        ? '"' + node.name.replace(/"/g, '\\"') + '"'
+        : node.name;
+      lines.push(pad + "  name: " + escaped);
     }
-    lines.push(pad + '  ref: ' + node.ref);
-    if (node.level) lines.push(pad + '  level: ' + node.level);
-    if (node.states && node.states.length) lines.push(pad + '  states: [' + node.states.join(', ') + ']');
-    if (node.url) lines.push(pad + '  url: ' + node.url);
-    if (node.value) lines.push(pad + '  value: ' + node.value);
-    if (node.placeholder) lines.push(pad + '  placeholder: ' + node.placeholder);
-    if (node.description) lines.push(pad + '  description: ' + node.description);
+    lines.push(pad + "  ref: " + node.ref);
+    if (node.level) lines.push(pad + "  level: " + node.level);
+    if (node.states && node.states.length)
+      lines.push(pad + "  states: [" + node.states.join(", ") + "]");
+    if (node.url) lines.push(pad + "  url: " + node.url);
+    if (node.value) lines.push(pad + "  value: " + node.value);
+    if (node.placeholder) lines.push(pad + "  placeholder: " + node.placeholder);
+    if (node.description) lines.push(pad + "  description: " + node.description);
     if (node.children && node.children.length) {
-      lines.push(pad + '  children:');
+      lines.push(pad + "  children:");
       for (let i = 0; i < node.children.length; i++) {
         lines.push(accessibilityTreeToYaml(node.children[i], indent + 2));
       }
     }
-    return lines.join('\n');
+    return lines.join("\n");
   }
 
   // ========================================================================
@@ -287,10 +390,12 @@ if (!(window as any).__opendevsBrowserUtils) {
 
   function scrollIntoViewIfNeeded(el: Element): void {
     const rect = el.getBoundingClientRect();
-    const inView = rect.top >= 0 && rect.left >= 0
-      && rect.bottom <= (window.innerHeight || document.documentElement.clientHeight)
-      && rect.right <= (window.innerWidth || document.documentElement.clientWidth);
-    if (!inView) el.scrollIntoView({ block: 'center', inline: 'center', behavior: 'auto' });
+    const inView =
+      rect.top >= 0 &&
+      rect.left >= 0 &&
+      rect.bottom <= (window.innerHeight || document.documentElement.clientHeight) &&
+      rect.right <= (window.innerWidth || document.documentElement.clientWidth);
+    if (!inView) el.scrollIntoView({ block: "center", inline: "center", behavior: "auto" });
   }
 
   function getElementCenter(el: Element): { x: number; y: number } {
@@ -303,20 +408,27 @@ if (!(window as any).__opendevsBrowserUtils) {
     scrollIntoViewIfNeeded(el);
     const center = getElementCenter(el);
     const eventOpts = {
-      bubbles: true, cancelable: true, view: window,
-      button: 0, buttons: 1,
-      clientX: center.x, clientY: center.y,
-      ctrlKey: false, shiftKey: false, altKey: false, metaKey: false,
+      bubbles: true,
+      cancelable: true,
+      view: window,
+      button: 0,
+      buttons: 1,
+      clientX: center.x,
+      clientY: center.y,
+      ctrlKey: false,
+      shiftKey: false,
+      altKey: false,
+      metaKey: false,
     };
     (el as HTMLElement).focus();
-    el.dispatchEvent(new MouseEvent('mousedown', eventOpts));
-    el.dispatchEvent(new MouseEvent('mouseup', eventOpts));
-    el.dispatchEvent(new MouseEvent('click', eventOpts));
+    el.dispatchEvent(new MouseEvent("mousedown", eventOpts));
+    el.dispatchEvent(new MouseEvent("mouseup", eventOpts));
+    el.dispatchEvent(new MouseEvent("click", eventOpts));
     if (options.doubleClick) {
-      el.dispatchEvent(new MouseEvent('mousedown', eventOpts));
-      el.dispatchEvent(new MouseEvent('mouseup', eventOpts));
-      el.dispatchEvent(new MouseEvent('click', eventOpts));
-      el.dispatchEvent(new MouseEvent('dblclick', eventOpts));
+      el.dispatchEvent(new MouseEvent("mousedown", eventOpts));
+      el.dispatchEvent(new MouseEvent("mouseup", eventOpts));
+      el.dispatchEvent(new MouseEvent("click", eventOpts));
+      el.dispatchEvent(new MouseEvent("dblclick", eventOpts));
     }
   }
 
@@ -324,33 +436,44 @@ if (!(window as any).__opendevsBrowserUtils) {
     const options = opts || {};
     scrollIntoViewIfNeeded(el);
     (el as HTMLElement).focus();
-    if ((el as HTMLElement).contentEditable === 'true') {
+    if ((el as HTMLElement).contentEditable === "true") {
       el.textContent = text;
-      el.dispatchEvent(new Event('input', { bubbles: true }));
+      el.dispatchEvent(new Event("input", { bubbles: true }));
     } else {
       // Use the native value setter to bypass React's internal value tracker.
       const nativeSetter = Object.getOwnPropertyDescriptor(
-        el.tagName.toLowerCase() === 'textarea'
+        el.tagName.toLowerCase() === "textarea"
           ? HTMLTextAreaElement.prototype
           : HTMLInputElement.prototype,
-        'value',
+        "value"
       );
       if (nativeSetter && nativeSetter.set) {
         nativeSetter.set.call(el, text);
       } else {
         (el as HTMLInputElement).value = text;
       }
-      el.dispatchEvent(new InputEvent('input', {
-        bubbles: true, cancelable: true,
-        data: text, inputType: 'insertText',
-      }));
+      el.dispatchEvent(
+        new InputEvent("input", {
+          bubbles: true,
+          cancelable: true,
+          data: text,
+          inputType: "insertText",
+        })
+      );
     }
-    el.dispatchEvent(new Event('change', { bubbles: true }));
+    el.dispatchEvent(new Event("change", { bubbles: true }));
     if (options.submit) {
-      el.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', code: 'Enter', keyCode: 13, bubbles: true }));
-      el.dispatchEvent(new KeyboardEvent('keyup', { key: 'Enter', code: 'Enter', keyCode: 13, bubbles: true }));
-      const form = (el as HTMLElement).closest && (el as HTMLElement).closest('form');
-      if (form) (form as any).requestSubmit ? (form as any).requestSubmit() : (form as HTMLFormElement).submit();
+      el.dispatchEvent(
+        new KeyboardEvent("keydown", { key: "Enter", code: "Enter", keyCode: 13, bubbles: true })
+      );
+      el.dispatchEvent(
+        new KeyboardEvent("keyup", { key: "Enter", code: "Enter", keyCode: 13, bubbles: true })
+      );
+      const form = (el as HTMLElement).closest && (el as HTMLElement).closest("form");
+      if (form)
+        (form as any).requestSubmit
+          ? (form as any).requestSubmit()
+          : (form as HTMLFormElement).submit();
     }
   }
 
@@ -372,7 +495,10 @@ if (!(window as any).__opendevsBrowserUtils) {
         }, quiet);
       });
       observer.observe(document.body, {
-        childList: true, subtree: true, attributes: true, characterData: true,
+        childList: true,
+        subtree: true,
+        attributes: true,
+        characterData: true,
       });
       // Start quiet timer immediately (resolves if no mutations at all)
       timer = setTimeout(() => {

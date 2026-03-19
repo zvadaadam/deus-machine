@@ -9,7 +9,13 @@
  * workspace.service.ts routes through HTTP instead.
  */
 
-import type { BranchInfo, ChangedFilesResult, DiffStats, FileChange, FileDiff } from "@shared/types/workspace";
+import type {
+  BranchInfo,
+  ChangedFilesResult,
+  DiffStats,
+  FileChange,
+  FileDiff,
+} from "@shared/types/workspace";
 
 export type { BranchInfo, ChangedFilesResult, FileDiff };
 

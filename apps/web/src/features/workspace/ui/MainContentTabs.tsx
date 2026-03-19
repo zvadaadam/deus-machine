@@ -127,9 +127,7 @@ export function MainContentTabBar({
               const isActive = tab.id === activeTabId;
               // Per-tab working status: each tab checks its own session ID
               // against the working set (populated by useWorkingSessionIds).
-              const isWorking =
-                !!tab.data?.sessionId &&
-                workingSessionIds.has(tab.data.sessionId);
+              const isWorking = !!tab.data?.sessionId && workingSessionIds.has(tab.data.sessionId);
 
               return (
                 <SortableTab key={tab.id} id={tab.id}>
@@ -300,4 +298,3 @@ export function MainContentTabBar({
     </div>
   );
 }
-

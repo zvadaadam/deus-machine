@@ -100,12 +100,8 @@ export function FileMentionPopover({
             >
               <File className="text-muted-foreground h-3 w-3 shrink-0" />
               <div className="min-w-0 flex-1">
-                <span className="text-xs leading-tight">
-                  {highlightMatch(result.name, query)}
-                </span>
-                {dir && (
-                  <span className="text-muted-foreground ml-1.5 text-2xs">{dir}</span>
-                )}
+                <span className="text-xs leading-tight">{highlightMatch(result.name, query)}</span>
+                {dir && <span className="text-muted-foreground text-2xs ml-1.5">{dir}</span>}
               </div>
             </button>
           );

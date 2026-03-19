@@ -130,7 +130,7 @@ export function DiffFilesTree({
           <button
             type="button"
             onClick={onReview}
-            className="bg-primary/8 hover:bg-primary/14 text-primary flex h-7 w-full items-center justify-center gap-1.5 rounded-lg text-xs font-medium transition-colors duration-200 ease"
+            className="bg-primary/8 hover:bg-primary/14 text-primary ease flex h-7 w-full items-center justify-center gap-1.5 rounded-lg text-xs font-medium transition-colors duration-200"
           >
             <ScanText className="h-3 w-3" />
             <span>Review Changes</span>
@@ -166,7 +166,7 @@ function FolderGroupView({
         <button
           type="button"
           onClick={() => onToggle(group.folder)}
-          className="text-text-muted hover:text-text-secondary flex h-6 w-full items-center gap-1.5 px-3 text-left transition-colors duration-150 ease"
+          className="text-text-muted hover:text-text-secondary ease flex h-6 w-full items-center gap-1.5 px-3 text-left transition-colors duration-150"
         >
           {collapsed ? (
             <ChevronRight className="text-text-muted/60 h-3 w-3 flex-shrink-0" />
@@ -186,18 +186,15 @@ function FolderGroupView({
             type="button"
             onClick={() => onFileClick(file.path)}
             className={cn(
-              "flex h-6 w-full items-center gap-1.5 text-left transition-colors duration-150 ease",
-              isRoot ? "px-3" : "pl-8 pr-3",
+              "ease flex h-6 w-full items-center gap-1.5 text-left transition-colors duration-150",
+              isRoot ? "px-3" : "pr-3 pl-8",
               selectedFile === file.path
                 ? "bg-bg-elevated text-text-secondary"
                 : "text-text-muted hover:text-text-secondary"
             )}
           >
             <span
-              className={cn(
-                "h-1.5 w-1.5 flex-shrink-0 rounded-full",
-                STATUS_COLORS[file.status]
-              )}
+              className={cn("h-1.5 w-1.5 flex-shrink-0 rounded-full", STATUS_COLORS[file.status])}
             />
             <span
               className={cn(
@@ -209,12 +206,8 @@ function FolderGroupView({
             </span>
             {(file.additions > 0 || file.deletions > 0) && (
               <span className="flex flex-shrink-0 items-center gap-1 font-mono text-[10px] tabular-nums opacity-50">
-                {file.additions > 0 && (
-                  <span className="text-success">+{file.additions}</span>
-                )}
-                {file.deletions > 0 && (
-                  <span className="text-destructive">-{file.deletions}</span>
-                )}
+                {file.additions > 0 && <span className="text-success">+{file.additions}</span>}
+                {file.deletions > 0 && <span className="text-destructive">-{file.deletions}</span>}
               </span>
             )}
           </button>

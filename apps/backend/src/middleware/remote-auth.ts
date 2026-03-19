@@ -12,10 +12,7 @@ import {
 } from "../services/remote-auth.service";
 import { isLocalhost, getClientIp } from "../lib/network";
 
-const PUBLIC_PATHS = new Set([
-  "/api/health",
-  "/api/remote-auth/pair",
-]);
+const PUBLIC_PATHS = new Set(["/api/health", "/api/remote-auth/pair"]);
 
 /**
  * Auth middleware for remote access.
@@ -44,10 +41,7 @@ export const authMiddleware = createMiddleware(async (c, next) => {
   if (clientIp) {
     const lockout = checkRateLimit(clientIp);
     if (lockout > 0) {
-      return c.json(
-        { error: "Too many failed attempts. Try again later." },
-        429,
-      );
+      return c.json({ error: "Too many failed attempts. Try again later." }, 429);
     }
   }
 

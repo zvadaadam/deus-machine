@@ -80,12 +80,9 @@ export function FileViewer({ filePath, onClose }: FileViewerProps) {
    */
   const renderLine = (highlightedCode: string, lineNum: number) => {
     return (
-      <div
-        key={lineNum}
-        className="relative flex items-stretch font-mono text-[11px] leading-4"
-      >
+      <div key={lineNum} className="relative flex items-stretch font-mono text-[11px] leading-4">
         {/* Line number gutter */}
-        <span className="w-12 flex-shrink-0 px-3 text-right text-muted-foreground select-none">
+        <span className="text-muted-foreground w-12 flex-shrink-0 px-3 text-right select-none">
           {lineNum}
         </span>
         {/* Code content */}
@@ -117,7 +114,7 @@ export function FileViewer({ filePath, onClose }: FileViewerProps) {
               <button
                 type="button"
                 onClick={handleCopy}
-                className="text-muted-foreground hover:text-foreground flex h-5 w-5 items-center justify-center rounded-md transition-colors duration-200 ease"
+                className="text-muted-foreground hover:text-foreground ease flex h-5 w-5 items-center justify-center rounded-md transition-colors duration-200"
                 title={copied ? "Copied" : "Copy file content"}
                 aria-label="Copy file content"
               >
@@ -130,7 +127,7 @@ export function FileViewer({ filePath, onClose }: FileViewerProps) {
               <button
                 type="button"
                 onClick={onClose}
-                className="text-muted-foreground hover:text-foreground flex h-5 w-5 items-center justify-center rounded-md transition-colors duration-200 ease"
+                className="text-muted-foreground hover:text-foreground ease flex h-5 w-5 items-center justify-center rounded-md transition-colors duration-200"
                 title="Close file preview"
                 aria-label="Close file preview"
               >

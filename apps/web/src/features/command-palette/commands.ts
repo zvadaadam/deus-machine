@@ -1,12 +1,5 @@
 import type { LucideIcon } from "lucide-react";
-import {
-  Plus,
-  FolderOpen,
-  GitBranch,
-  Settings,
-  Sparkles,
-  Puzzle,
-} from "lucide-react";
+import { Plus, FolderOpen, GitBranch, Settings, Sparkles, Puzzle } from "lucide-react";
 import { uiActions } from "@/shared/stores/uiStore";
 import { capabilities } from "@/platform/capabilities";
 

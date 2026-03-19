@@ -77,9 +77,7 @@ export function SettingsPage() {
       return true;
     } catch (error) {
       console.error("Failed to save setting:", error);
-      toast.error(
-        `Failed to save setting: ${getErrorMessage(error)}`
-      );
+      toast.error(`Failed to save setting: ${getErrorMessage(error)}`);
       return false;
     }
   }

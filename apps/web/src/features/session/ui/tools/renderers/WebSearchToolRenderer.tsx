@@ -29,7 +29,7 @@ export function WebSearchToolRenderer({ toolUse, toolResult, isLoading }: ToolRe
   const hasResult = result && result.trim().length > 0;
 
   // Build filter info for preview
-  const filterInfo = [];
+  const filterInfo: string[] = [];
   if (allowed_domains?.length) filterInfo.push(`only: ${allowed_domains.join(", ")}`);
   if (blocked_domains?.length) filterInfo.push(`exclude: ${blocked_domains.join(", ")}`);
   const filterText = filterInfo.length ? ` • ${filterInfo.join(" • ")}` : "";

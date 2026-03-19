@@ -213,7 +213,10 @@ export function useAgentRpcHandler(
         // File list with stats
         const result = await gitDiffFiles(ws.workspacePath, ws.parentBranch, ws.defaultBranch);
         const statText = result.files
-          .map((f: { file: string; additions: number; deletions: number }) => `${f.file}: +${f.additions} -${f.deletions}`)
+          .map(
+            (f: { file: string; additions: number; deletions: number }) =>
+              `${f.file}: +${f.additions} -${f.deletions}`
+          )
           .join("\n");
         respond({ diff: statText });
       } else {

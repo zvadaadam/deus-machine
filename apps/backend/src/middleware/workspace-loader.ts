@@ -1,9 +1,9 @@
-import { createMiddleware } from 'hono/factory';
-import path from 'path';
-import { getDatabase } from '../lib/database';
-import { NotFoundError } from '../lib/errors';
-import { getWorkspaceForMiddleware } from '../db';
-import type { WorkspaceWithDetailsRow } from '../db';
+import { createMiddleware } from "hono/factory";
+import path from "path";
+import { getDatabase } from "../lib/database";
+import { NotFoundError } from "../lib/errors";
+import { getWorkspaceForMiddleware } from "../db";
+import type { WorkspaceWithDetailsRow } from "../db";
 
 export interface WorkspaceContext {
   workspace: WorkspaceWithDetailsRow;
@@ -18,8 +18,8 @@ export function computeWorkspacePath(ws: {
   root_path?: string | null;
   slug?: string | null;
 }): string {
-  if (!ws.root_path || !ws.slug) return '';
-  return path.join(ws.root_path, '.opendevs', ws.slug);
+  if (!ws.root_path || !ws.slug) return "";
+  return path.join(ws.root_path, ".opendevs", ws.slug);
 }
 
 /**
@@ -28,19 +28,19 @@ export function computeWorkspacePath(ws: {
  * Throws NotFoundError if workspace not found.
  */
 export const withWorkspace = createMiddleware(async (c, next) => {
-  const id = c.req.param('id')!;
+  const id = c.req.param("id")!;
   const db = getDatabase();
 
   const workspace = getWorkspaceForMiddleware(db, id);
 
   if (!workspace || !workspace.root_path || !workspace.slug) {
-    throw new NotFoundError('Workspace not found');
+    throw new NotFoundError("Workspace not found");
   }
 
   const workspacePath = computeWorkspacePath(workspace);
 
-  c.set('workspace', workspace);
-  c.set('workspacePath', workspacePath);
+  c.set("workspace", workspace);
+  c.set("workspacePath", workspacePath);
 
   await next();
 });

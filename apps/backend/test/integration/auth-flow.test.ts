@@ -81,14 +81,18 @@ beforeEach(() => {
   invalidateRemoteGateCache();
   testDb.exec("DELETE FROM paired_devices");
   // Settings live in preferences.json now (settings table was removed)
-  try { fs.unlinkSync(PREFS_PATH); } catch {}
+  try {
+    fs.unlinkSync(PREFS_PATH);
+  } catch {}
 });
 
 afterAll(() => {
   closeAllWs();
   testDb.close();
   // Clean up temp directory
-  try { fs.rmSync(TEST_DIR, { recursive: true }); } catch {}
+  try {
+    fs.rmSync(TEST_DIR, { recursive: true });
+  } catch {}
 });
 
 // ---- Helpers ----
@@ -117,7 +121,10 @@ async function generateCode(): Promise<string> {
 }
 
 /** Pair a device using a code. Returns { token, device }. */
-async function pairDevice(code: string, deviceName = "Test Device"): Promise<{ token: string; device: { id: string; name: string } }> {
+async function pairDevice(
+  code: string,
+  deviceName = "Test Device"
+): Promise<{ token: string; device: { id: string; name: string } }> {
   const res = await app.request("/api/remote-auth/pair", {
     method: "POST",
     headers: {

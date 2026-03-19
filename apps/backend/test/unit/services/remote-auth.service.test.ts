@@ -146,7 +146,14 @@ describe("validateDeviceToken", () => {
 describe("listDevices", () => {
   it("returns devices without token_hash", () => {
     mockStmt.all.mockReturnValue([
-      { id: "1", name: "Phone", ip_address: null, user_agent: null, last_seen_at: "2025-01-01", created_at: "2025-01-01" },
+      {
+        id: "1",
+        name: "Phone",
+        ip_address: null,
+        user_agent: null,
+        last_seen_at: "2025-01-01",
+        created_at: "2025-01-01",
+      },
     ]);
     const devices = listDevices();
     expect(devices).toHaveLength(1);

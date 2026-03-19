@@ -1,11 +1,11 @@
-import { execFileSync } from 'child_process';
-import fs from 'fs';
-import path from 'path';
+import { execFileSync } from "child_process";
+import fs from "fs";
+import path from "path";
 
 interface FileTreeNode {
   name: string;
   path: string;
-  type: 'file' | 'directory';
+  type: "file" | "directory";
   size?: number;
   children?: FileTreeNode[];
 }
@@ -23,9 +23,23 @@ const MAX_CACHE_ENTRIES = 8;
 
 /** Directories to skip when not in a git repo (or as extra safety). */
 const IGNORED_DIRS = new Set([
-  '.git', 'node_modules', '.next', '.turbo', 'dist', 'build', 'out',
-  '.cache', '.vite', '.parcel-cache', '__pycache__', '.tox', '.mypy_cache',
-  'target', '.opendevs', '.conductor', '.context',
+  ".git",
+  "node_modules",
+  ".next",
+  ".turbo",
+  "dist",
+  "build",
+  "out",
+  ".cache",
+  ".vite",
+  ".parcel-cache",
+  "__pycache__",
+  ".tox",
+  ".mypy_cache",
+  "target",
+  ".opendevs",
+  ".conductor",
+  ".context",
 ]);
 
 const MAX_ENTRIES = 25_000;
@@ -78,21 +92,23 @@ export function clearCache(): void {
  */
 function scanWithGit(workspacePath: string): string[] {
   // Verify it's a git repo first
-  execFileSync('git', ['rev-parse', '--git-dir'], {
-    cwd: workspacePath, encoding: 'utf-8', timeout: 2000,
+  execFileSync("git", ["rev-parse", "--git-dir"], {
+    cwd: workspacePath,
+    encoding: "utf-8",
+    timeout: 2000,
   });
 
   // List all tracked + untracked (non-ignored) files with null separator
   const output = execFileSync(
-    'git',
-    ['ls-files', '--cached', '--others', '--exclude-standard', '-z'],
-    { cwd: workspacePath, encoding: 'utf-8', timeout: GIT_TIMEOUT_MS, maxBuffer: 50 * 1024 * 1024 },
+    "git",
+    ["ls-files", "--cached", "--others", "--exclude-standard", "-z"],
+    { cwd: workspacePath, encoding: "utf-8", timeout: GIT_TIMEOUT_MS, maxBuffer: 50 * 1024 * 1024 }
   ).toString();
 
   if (!output) return [];
 
   // Split on null bytes, filter empty strings
-  const paths = output.split('\0').filter(Boolean);
+  const paths = output.split("\0").filter(Boolean);
 
   // Cap at max entries
   return paths.length > MAX_ENTRIES ? paths.slice(0, MAX_ENTRIES) : paths;
@@ -119,7 +135,7 @@ function scanWithReaddir(workspacePath: string): string[] {
       if (results.length >= MAX_ENTRIES) return;
 
       if (entry.isDirectory()) {
-        if (IGNORED_DIRS.has(entry.name) || entry.name.startsWith('.')) continue;
+        if (IGNORED_DIRS.has(entry.name) || entry.name.startsWith(".")) continue;
         walk(path.join(dir, entry.name));
       } else if (entry.isFile() || entry.isSymbolicLink()) {
         const rel = path.relative(workspacePath, path.join(dir, entry.name));
@@ -143,14 +159,14 @@ function buildTree(workspacePath: string, filePaths: string[]): FileTreeResponse
   let totalSize = 0;
 
   for (const filePath of filePaths) {
-    const parts = filePath.split('/');
+    const parts = filePath.split("/");
     let currentMap = rootMap;
     let currentChildren: FileTreeNode[] | undefined;
 
     for (let i = 0; i < parts.length; i++) {
       const part = parts[i];
       const isLast = i === parts.length - 1;
-      const currentPath = parts.slice(0, i + 1).join('/');
+      const currentPath = parts.slice(0, i + 1).join("/");
 
       if (isLast) {
         // File node
@@ -166,7 +182,7 @@ function buildTree(workspacePath: string, filePaths: string[]): FileTreeResponse
         const fileNode: FileTreeNode = {
           name: part,
           path: currentPath,
-          type: 'file',
+          type: "file",
           size: fileSize,
         };
 
@@ -181,15 +197,15 @@ function buildTree(workspacePath: string, filePaths: string[]): FileTreeResponse
         let dirNode: FileTreeNode | undefined;
 
         if (currentChildren) {
-          dirNode = currentChildren.find(n => n.name === part && n.type === 'directory');
+          dirNode = currentChildren.find((n) => n.name === part && n.type === "directory");
           if (!dirNode) {
-            dirNode = { name: part, path: currentPath, type: 'directory', children: [] };
+            dirNode = { name: part, path: currentPath, type: "directory", children: [] };
             currentChildren.push(dirNode);
           }
         } else {
           dirNode = currentMap.get(part);
           if (!dirNode) {
-            dirNode = { name: part, path: currentPath, type: 'directory', children: [] };
+            dirNode = { name: part, path: currentPath, type: "directory", children: [] };
             currentMap.set(part, dirNode);
           }
         }
@@ -210,7 +226,7 @@ function buildTree(workspacePath: string, filePaths: string[]): FileTreeResponse
 /** Sort tree: directories first (alphabetically), then files (alphabetically). */
 function sortTree(nodes: FileTreeNode[]): FileTreeNode[] {
   nodes.sort((a, b) => {
-    if (a.type !== b.type) return a.type === 'directory' ? -1 : 1;
+    if (a.type !== b.type) return a.type === "directory" ? -1 : 1;
     return a.name.localeCompare(b.name);
   });
 
@@ -231,7 +247,7 @@ function sortTree(nodes: FileTreeNode[]): FileTreeNode[] {
 export function fuzzySearchFiles(
   workspacePath: string,
   query: string,
-  limit: number = 15,
+  limit: number = 15
 ): Array<{ path: string; name: string; score: number }> {
   // Get the flat file list from cache (or trigger a scan)
   let filePaths: string[];
@@ -246,7 +262,7 @@ export function fuzzySearchFiles(
 
   for (const filePath of filePaths) {
     const lowerPath = filePath.toLowerCase();
-    const name = filePath.split('/').pop() || filePath;
+    const name = filePath.split("/").pop() || filePath;
     const lowerName = name.toLowerCase();
 
     // Must contain all query characters in order (subsequence match)
@@ -256,7 +272,7 @@ export function fuzzySearchFiles(
       if (lowerPath[i] === lowerQuery[qi]) {
         qi++;
         // Bonus for matching at word boundaries (after / or . or - or _)
-        if (i === 0 || '/.-_'.includes(lowerPath[i - 1])) score += 3;
+        if (i === 0 || "/.-_".includes(lowerPath[i - 1])) score += 3;
         else score += 1;
       }
     }
@@ -288,5 +304,5 @@ export function readTextFile(filePath: string): string | null {
   // Detect binary files
   const sample = buf.subarray(0, 8192);
   if (sample.includes(0)) return null;
-  return buf.toString('utf-8');
+  return buf.toString("utf-8");
 }

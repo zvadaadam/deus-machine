@@ -56,7 +56,7 @@ export async function getBackendPort(): Promise<number> {
     if (isElectronEnv) {
       for (let attempt = 0; attempt < PORT_MAX_RETRIES; attempt++) {
         try {
-          const port = await window.electronAPI.getBackendPort();
+          const port = await window.electronAPI!.getBackendPort();
           if (import.meta.env.DEV)
             console.log(`[API] Using Electron backend port: ${port} (attempt ${attempt + 1})`);
           cachedPort = port;

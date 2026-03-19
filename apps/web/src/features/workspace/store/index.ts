@@ -4,4 +4,9 @@ export {
   workspaceLayoutActions,
   defaultLayout,
 } from "./workspaceLayoutStore";
-export type { RightPanelTab, RightSideTab, SelectedFile, PersistedTerminalTab } from "./workspaceLayoutStore";
+export type {
+  RightPanelTab,
+  RightSideTab,
+  SelectedFile,
+  PersistedTerminalTab,
+} from "./workspaceLayoutStore";

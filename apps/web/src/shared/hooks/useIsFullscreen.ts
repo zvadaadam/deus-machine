@@ -17,7 +17,7 @@ export function useIsFullscreen(): boolean {
   const check = useCallback(async () => {
     if (!isElectronEnv) return;
     try {
-      const fs = await window.electronAPI.isFullscreen();
+      const fs = await window.electronAPI!.isFullscreen();
       setIsFullscreen(fs);
       document.documentElement.classList.toggle("fullscreen", fs);
     } catch {
@@ -31,7 +31,7 @@ export function useIsFullscreen(): boolean {
     check();
 
     // Listen for fullscreen changes from the main process
-    const unlisten = window.electronAPI.onFullscreenChange(({ isFullscreen: fs }) => {
+    const unlisten = window.electronAPI!.onFullscreenChange(({ isFullscreen: fs }) => {
       setIsFullscreen(fs);
       document.documentElement.classList.toggle("fullscreen", fs);
     });

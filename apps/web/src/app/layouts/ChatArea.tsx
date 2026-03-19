@@ -56,10 +56,7 @@ export function ChatArea({
   // so each tab's spinner reflects its own session's status (not the workspace's
   // single session_status which breaks with multiple tabs).
   const chatSessionIds = useMemo(
-    () =>
-      tabs
-        .filter((t) => t.data?.sessionId)
-        .map((t) => t.data!.sessionId!),
+    () => tabs.filter((t) => t.data?.sessionId).map((t) => t.data!.sessionId!),
     [tabs]
   );
   const workingSessionIds = useWorkingSessionIds(chatSessionIds);
@@ -93,7 +90,9 @@ export function ChatArea({
             isFirstSession={workspace.latest_message_sent_at === null}
             embedded={true}
             initialModel={activeTab?.data?.initialModel}
-            onAgentTypeChange={(agentType) => activeTab && updateChatTabAgentType(activeTab.id, agentType)}
+            onAgentTypeChange={(agentType) =>
+              activeTab && updateChatTabAgentType(activeTab.id, agentType)
+            }
             onSessionStarted={() => activeTab && markChatTabStarted(activeTab.id)}
             onOpenNewTab={handleTabAdd}
             onCreatePR={(handler) => onCreatePRHandlerChange(() => handler)}

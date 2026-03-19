@@ -9,17 +9,10 @@
 import { useState } from "react";
 import { AnimatePresence, m, useReducedMotion } from "framer-motion";
 import { ArrowUpRight } from "lucide-react";
-import {
-  Popover,
-  PopoverContent,
-  PopoverTrigger,
-} from "@/components/ui/popover";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { cn } from "@/shared/lib/utils";
 import { useProviderStatuses, type ProviderStatusEntry } from "../api/ai-status.queries";
-import {
-  PROVIDER_REGISTRY,
-  getIndicatorVisuals,
-} from "../lib/providers";
+import { PROVIDER_REGISTRY, getIndicatorVisuals } from "../lib/providers";
 
 const EASE_OUT_QUART = [0.165, 0.84, 0.44, 1] as const;
 
@@ -46,7 +39,7 @@ export function AIStatusIndicator() {
               <button
                 type="button"
                 aria-label={`AI provider status: ${visuals.label}`}
-                className="flex items-center gap-1.5 rounded-lg px-1 py-0.5 transition-colors duration-150 hover:bg-bg-muted"
+                className="hover:bg-bg-muted flex items-center gap-1.5 rounded-lg px-1 py-0.5 transition-colors duration-150"
               >
                 <StatusPulse dotClass={visuals.dotClass} pulse={worst.indicator === "critical"} />
                 <span className="text-text-muted text-xs">{visuals.label}</span>

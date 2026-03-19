@@ -20,7 +20,10 @@ vi.mock("../../../src/services/settings.service", () => ({
 }));
 
 import { authMiddleware } from "../../../src/middleware/remote-auth";
-import { remoteGateMiddleware, invalidateRemoteGateCache } from "../../../src/middleware/remote-gate";
+import {
+  remoteGateMiddleware,
+  invalidateRemoteGateCache,
+} from "../../../src/middleware/remote-gate";
 
 function createTestApp(middleware: any) {
   const app = new Hono();

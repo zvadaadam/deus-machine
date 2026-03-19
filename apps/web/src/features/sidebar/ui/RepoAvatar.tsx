@@ -34,7 +34,7 @@ export function RepoAvatar({ repoName, className }: RepoAvatarProps) {
       )}
       <AvatarFallback
         shape="square"
-        className="bg-bg-muted text-text-tertiary rounded-md text-2xs font-semibold"
+        className="bg-bg-muted text-text-tertiary text-2xs rounded-md font-semibold"
         delayMs={0}
       >
         {initial}

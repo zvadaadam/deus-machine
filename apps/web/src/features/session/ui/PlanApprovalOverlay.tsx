@@ -26,7 +26,12 @@ interface PlanApprovalOverlayProps {
   onReject: () => void;
 }
 
-export function PlanApprovalOverlay({ request, agentType, onApprove, onReject }: PlanApprovalOverlayProps) {
+export function PlanApprovalOverlay({
+  request,
+  agentType,
+  onApprove,
+  onReject,
+}: PlanApprovalOverlayProps) {
   return (
     <AnimatePresence>
       {request && (
@@ -43,13 +48,13 @@ export function PlanApprovalOverlay({ request, agentType, onApprove, onReject }:
         >
           {(() => {
             const Logo = getAgentLogo(agentType || "claude");
-            return Logo ? (
-              <Logo className="h-5 w-5 shrink-0" aria-hidden="true" />
-            ) : null;
+            return Logo ? <Logo className="h-5 w-5 shrink-0" aria-hidden="true" /> : null;
           })()}
 
           <div className="min-w-0 flex-1">
-            <p className="text-foreground text-sm font-medium">Agent is ready to execute the plan</p>
+            <p className="text-foreground text-sm font-medium">
+              Agent is ready to execute the plan
+            </p>
             <p className="text-muted-foreground mt-0.5 text-xs">
               Review the plan above, then approve or reject.
             </p>

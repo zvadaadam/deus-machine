@@ -25,27 +25,23 @@ export function OpenDevsRepositoryBanner({
     <div
       className={cn(
         // Match SidebarRow padding so icon aligns with repo avatar & plus icon
-        "px-3 mb-1.5 mt-0.5 py-1",
+        "mt-0.5 mb-1.5 px-3 py-1",
         className
       )}
     >
       <div className="flex items-center gap-2">
         <span className="flex h-5 w-5 shrink-0 items-center justify-center">
-          <GitPullRequest
-            className="h-3.5 w-3.5 text-primary/40"
-            strokeWidth={1.75}
-            aria-hidden
-          />
+          <GitPullRequest className="text-primary/40 h-3.5 w-3.5" strokeWidth={1.75} aria-hidden />
         </span>
-        <p className="text-2xs leading-[1.45] text-text-muted">
+        <p className="text-2xs text-text-muted leading-[1.45]">
           This is the tool you&apos;re using.{" "}
           <button
             type="button"
             onClick={onNewWorkspace}
             className={cn(
               "text-text-tertiary",
-              "underline decoration-border-default underline-offset-[2px]",
-              "transition-colors duration-200 ease",
+              "decoration-border-default underline underline-offset-[2px]",
+              "ease transition-colors duration-200",
               "hover:text-text-secondary hover:decoration-border-strong",
               // Invisible touch-padding so tap target is comfortable
               "-mx-0.5 px-0.5"

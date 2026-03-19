@@ -11,7 +11,7 @@
 // TypeScript functions that parameterize small runtime snippets — not worth extracting.
 
 /** The IIFE string to eval in WKWebView — sets up visual effects infrastructure. */
-import VISUAL_EFFECTS_SETUP from './dist-inject/visual-effects.js?raw';
+import VISUAL_EFFECTS_SETUP from "./dist-inject/visual-effects.js?raw";
 export { VISUAL_EFFECTS_SETUP };
 
 /**
@@ -101,4 +101,3 @@ export const SCAN_PAGE_JS = `(function(){
 export const KEY_FLASH_JS = `(function(){
   if (window.__opendevsVisuals) window.__opendevsVisuals.keyFlash();
 })()`;
-

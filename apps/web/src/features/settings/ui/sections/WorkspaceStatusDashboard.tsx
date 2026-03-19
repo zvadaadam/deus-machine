@@ -6,7 +6,10 @@ import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip
 import { useWorkspacesByRepo, useRetrySetup } from "@/features/workspace/api/workspace.queries";
 import type { SetupStatus } from "@shared/types/workspace";
 
-const SETUP_STATUS_CONFIG: Record<SetupStatus, { icon: typeof CheckCircle; label: string; className: string }> = {
+const SETUP_STATUS_CONFIG: Record<
+  SetupStatus,
+  { icon: typeof CheckCircle; label: string; className: string }
+> = {
   completed: { icon: CheckCircle, label: "Setup completed", className: "text-success" },
   failed: { icon: XCircle, label: "Setup failed", className: "text-destructive" },
   running: { icon: Clock, label: "Setup running...", className: "text-warning" },
@@ -42,7 +45,8 @@ export function WorkspaceStatusDashboard({ repoId }: WorkspaceStatusDashboardPro
       <Label className="text-sm">Workspace status</Label>
       <div className="space-y-1.5">
         {workspaces.map((ws) => {
-          const config = SETUP_STATUS_CONFIG[ws.setup_status as SetupStatus] ?? SETUP_STATUS_CONFIG.none;
+          const config =
+            SETUP_STATUS_CONFIG[ws.setup_status as SetupStatus] ?? SETUP_STATUS_CONFIG.none;
           const StatusIcon = config.icon;
           const isFailed = ws.setup_status === "failed";
           const isRunning = ws.setup_status === "running";
@@ -54,9 +58,7 @@ export function WorkspaceStatusDashboard({ repoId }: WorkspaceStatusDashboardPro
               ) : (
                 <StatusIcon className={`size-3.5 shrink-0 ${config.className}`} />
               )}
-              <span className="min-w-0 flex-1 truncate font-medium">
-                {ws.title || ws.slug}
-              </span>
+              <span className="min-w-0 flex-1 truncate font-medium">{ws.title || ws.slug}</span>
               <span className={`shrink-0 text-xs ${config.className}`}>{config.label}</span>
               {isFailed && (
                 <Tooltip>

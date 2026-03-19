@@ -26,10 +26,7 @@ const WATCHER_SETTLING_DELAY_MS = 2000;
  * @param workspaceId   - Workspace ID for cache invalidation (null to skip)
  * @returns Whether the watcher is active (true = can disable polling)
  */
-export function useFileWatcher(
-  workspacePath: string | null,
-  workspaceId: string | null,
-): boolean {
+export function useFileWatcher(workspacePath: string | null, workspaceId: string | null): boolean {
   const queryClient = useQueryClient();
   const [isWatching, setIsWatching] = useState(false);
 
@@ -58,7 +55,11 @@ export function useFileWatcher(
     // Listen for debounced change events via WS
     const unlisten = onEvent((event, data) => {
       if (event !== "fs:changed") return;
-      const payload = data as { workspace_path: string; change_type: string; affected_count: number };
+      const payload = data as {
+        workspace_path: string;
+        change_type: string;
+        affected_count: number;
+      };
 
       // Only process events for THIS workspace
       if (payload.workspace_path !== workspacePath) return;

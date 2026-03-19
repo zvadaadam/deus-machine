@@ -58,7 +58,7 @@ export const WorkspaceItem = React.memo(function WorkspaceItem({
           aria-label="Workspace setting up"
           className="pointer-events-none"
         >
-          <div className="flex min-w-0 flex-1 flex-col gap-0.5 animate-[shimmer_2s_ease-in-out_infinite]">
+          <div className="flex min-w-0 flex-1 animate-[shimmer_2s_ease-in-out_infinite] flex-col gap-0.5">
             {/* Row 1: thinking icon + branch name (or placeholder) */}
             <div className="flex min-w-0 items-center gap-1.5">
               <SidebarRowIconSlot>
@@ -72,9 +72,7 @@ export const WorkspaceItem = React.memo(function WorkspaceItem({
             <div className="flex min-w-0 items-center gap-1.5 pl-[26px]">
               {workspace.slug && (
                 <>
-                  <span className="text-text-disabled truncate text-xs">
-                    {workspace.slug}
-                  </span>
+                  <span className="text-text-disabled truncate text-xs">{workspace.slug}</span>
                   <span className="text-text-disabled text-xs">·</span>
                 </>
               )}
@@ -231,7 +229,9 @@ export const WorkspaceItem = React.memo(function WorkspaceItem({
             )}
             {statusText && (
               <span className={cn("flex shrink-0 items-center gap-1 text-xs", statusTextClass)}>
-                {isSetupRunning && <Loader2 className="h-3 w-3 animate-spin motion-reduce:animate-none" />}
+                {isSetupRunning && (
+                  <Loader2 className="h-3 w-3 animate-spin motion-reduce:animate-none" />
+                )}
                 {statusText}
               </span>
             )}

@@ -153,9 +153,7 @@ export function useChatTabs({ workspaceId, activeSessionId }: UseChatTabsOptions
       return updated;
     });
 
-    setActiveMainTabId((prev) =>
-      prev === "tab-default" ? `tab-${activeSessionId}` : prev
-    );
+    setActiveMainTabId((prev) => (prev === "tab-default" ? `tab-${activeSessionId}` : prev));
   }, [activeSessionId]);
 
   // --- Hydrate tabs with real session data when sessions load ---
@@ -275,9 +273,7 @@ export function useChatTabs({ workspaceId, activeSessionId }: UseChatTabsOptions
     async (initialModel?: string) => {
       try {
         const newSession = await createSessionMutation.mutateAsync(workspaceId);
-        const agentType = initialModel
-          ? getRuntimeAgentTypeForModel(initialModel)
-          : "claude";
+        const agentType = initialModel ? getRuntimeAgentTypeForModel(initialModel) : "claude";
         const newId = `tab-${newSession.id}`;
         const newTab: Tab = {
           id: newId,

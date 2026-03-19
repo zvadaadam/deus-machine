@@ -19,7 +19,14 @@ const mockCreateDeviceToken = vi.fn(() => ({
   },
 }));
 const mockListDevices = vi.fn(() => [
-  { id: "dev1", name: "Phone", ip_address: null, user_agent: null, last_seen_at: "2025-01-01", created_at: "2025-01-01" },
+  {
+    id: "dev1",
+    name: "Phone",
+    ip_address: null,
+    user_agent: null,
+    last_seen_at: "2025-01-01",
+    created_at: "2025-01-01",
+  },
 ]);
 const mockRevokeDevice = vi.fn(() => true);
 const mockCheckRateLimit = vi.fn(() => 0);
@@ -159,4 +166,3 @@ describe("DELETE /remote-auth/devices/:id", () => {
     expect(res.status).toBe(403);
   });
 });
-

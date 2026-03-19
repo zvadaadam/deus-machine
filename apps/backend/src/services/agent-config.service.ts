@@ -1,13 +1,19 @@
-import fs from 'fs';
-import path from 'path';
-import os from 'os';
-import { McpConfigFile, AgentConfigFile, SettingsFile } from '../lib/schemas';
-import type { SkillItem, CommandItem, AgentItem, McpServerItem, HooksMap } from '@shared/types/agent-config';
+import fs from "fs";
+import path from "path";
+import os from "os";
+import { McpConfigFile, AgentConfigFile, SettingsFile } from "../lib/schemas";
+import type {
+  SkillItem,
+  CommandItem,
+  AgentItem,
+  McpServerItem,
+  HooksMap,
+} from "@shared/types/agent-config";
 
-const CLAUDE_DIR = path.join(os.homedir(), '.claude');
-const COMMANDS_DIR = path.join(CLAUDE_DIR, 'commands');
-const AGENTS_DIR = path.join(CLAUDE_DIR, 'agents');
-const SETTINGS_PATH = path.join(CLAUDE_DIR, 'settings.json');
+const CLAUDE_DIR = path.join(os.homedir(), ".claude");
+const COMMANDS_DIR = path.join(CLAUDE_DIR, "commands");
+const AGENTS_DIR = path.join(CLAUDE_DIR, "agents");
+const SETTINGS_PATH = path.join(CLAUDE_DIR, "settings.json");
 
 /**
  * Resolve the .claude directory for a given scope.
@@ -17,21 +23,21 @@ const SETTINGS_PATH = path.join(CLAUDE_DIR, 'settings.json');
 export function resolveClaudeDir(projectPath?: string): string {
   if (!projectPath) return CLAUDE_DIR;
   if (!path.isAbsolute(projectPath)) {
-    throw new Error('projectPath must be an absolute path');
+    throw new Error("projectPath must be an absolute path");
   }
-  return path.join(projectPath, '.claude');
+  return path.join(projectPath, ".claude");
 }
 
 function sanitizeName(name: string): string {
   if (!name || !/^[a-zA-Z0-9_-]+$/.test(name)) {
-    throw new Error('Invalid name: must be alphanumeric, hyphens, or underscores only');
+    throw new Error("Invalid name: must be alphanumeric, hyphens, or underscores only");
   }
   return name;
 }
 
 function ensureDirectories(): void {
-  const dirs = [CLAUDE_DIR, path.join(CLAUDE_DIR, 'plugins'), COMMANDS_DIR, AGENTS_DIR];
-  dirs.forEach(dir => {
+  const dirs = [CLAUDE_DIR, path.join(CLAUDE_DIR, "plugins"), COMMANDS_DIR, AGENTS_DIR];
+  dirs.forEach((dir) => {
     if (!fs.existsSync(dir)) {
       fs.mkdirSync(dir, { recursive: true });
     }
@@ -46,20 +52,20 @@ ensureDirectories();
 // ============================================================================
 
 export function getMcpServers(projectPath?: string): McpServerItem[] {
-  const configPath = path.join(resolveClaudeDir(projectPath), 'plugins', 'config.json');
+  const configPath = path.join(resolveClaudeDir(projectPath), "plugins", "config.json");
   if (!fs.existsSync(configPath)) return [];
 
   let raw: unknown;
   try {
-    raw = JSON.parse(fs.readFileSync(configPath, 'utf8'));
+    raw = JSON.parse(fs.readFileSync(configPath, "utf8"));
   } catch {
-    console.error('Failed to parse MCP config file as JSON');
+    console.error("Failed to parse MCP config file as JSON");
     return [];
   }
 
   const parsed = McpConfigFile.safeParse(raw);
   if (!parsed.success) {
-    console.error('Invalid MCP config file:', parsed.error.issues);
+    console.error("Invalid MCP config file:", parsed.error.issues);
     return [];
   }
 
@@ -71,8 +77,11 @@ export function getMcpServers(projectPath?: string): McpServerItem[] {
   }));
 }
 
-export function saveMcpServers(servers: Array<{ name: string; command: string; args?: string[]; env?: Record<string, string> }>, projectPath?: string): void {
-  const configPath = path.join(resolveClaudeDir(projectPath), 'plugins', 'config.json');
+export function saveMcpServers(
+  servers: Array<{ name: string; command: string; args?: string[]; env?: Record<string, string> }>,
+  projectPath?: string
+): void {
+  const configPath = path.join(resolveClaudeDir(projectPath), "plugins", "config.json");
   const configDir = path.dirname(configPath);
   if (!fs.existsSync(configDir)) {
     fs.mkdirSync(configDir, { recursive: true });
@@ -82,18 +91,21 @@ export function saveMcpServers(servers: Array<{ name: string; command: string; a
   let existing: Record<string, unknown> = {};
   if (fs.existsSync(configPath)) {
     try {
-      const parsed = JSON.parse(fs.readFileSync(configPath, 'utf8'));
-      if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
+      const parsed = JSON.parse(fs.readFileSync(configPath, "utf8"));
+      if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
         existing = parsed as Record<string, unknown>;
       }
     } catch {
       // Corrupted config — start fresh
-      console.error('Failed to parse existing MCP config, starting fresh');
+      console.error("Failed to parse existing MCP config, starting fresh");
     }
   }
 
-  const mcpServers: Record<string, { command: string; args: string[]; env: Record<string, string> }> = {};
-  servers.forEach(server => {
+  const mcpServers: Record<
+    string,
+    { command: string; args: string[]; env: Record<string, string> }
+  > = {};
+  servers.forEach((server) => {
     mcpServers[server.name] = {
       command: server.command,
       args: server.args || [],
@@ -109,18 +121,18 @@ export function saveMcpServers(servers: Array<{ name: string; command: string; a
 // ============================================================================
 
 export function getCommands(projectPath?: string): CommandItem[] {
-  const commandsDir = path.join(resolveClaudeDir(projectPath), 'commands');
+  const commandsDir = path.join(resolveClaudeDir(projectPath), "commands");
   if (!fs.existsSync(commandsDir)) return [];
 
-  const files = fs.readdirSync(commandsDir).filter(f => f.endsWith('.md'));
+  const files = fs.readdirSync(commandsDir).filter((f) => f.endsWith(".md"));
   const commands: CommandItem[] = [];
 
-  files.forEach(file => {
+  files.forEach((file) => {
     const filePath = path.join(commandsDir, file);
-    const content = fs.readFileSync(filePath, 'utf8');
-    const name = file.replace('.md', '');
-    const firstLine = content.split('\n')[0];
-    const description = firstLine.replace(/^#\s*/, '');
+    const content = fs.readFileSync(filePath, "utf8");
+    const name = file.replace(".md", "");
+    const firstLine = content.split("\n")[0];
+    const description = firstLine.replace(/^#\s*/, "");
     commands.push({ name, description, content });
   });
 
@@ -129,7 +141,7 @@ export function getCommands(projectPath?: string): CommandItem[] {
 
 export function saveCommand(name: string, content: string, projectPath?: string): void {
   name = sanitizeName(name);
-  const commandsDir = path.join(resolveClaudeDir(projectPath), 'commands');
+  const commandsDir = path.join(resolveClaudeDir(projectPath), "commands");
   if (!fs.existsSync(commandsDir)) {
     fs.mkdirSync(commandsDir, { recursive: true });
   }
@@ -139,7 +151,7 @@ export function saveCommand(name: string, content: string, projectPath?: string)
 
 export function deleteCommand(name: string, projectPath?: string): boolean {
   name = sanitizeName(name);
-  const filePath = path.join(resolveClaudeDir(projectPath), 'commands', `${name}.md`);
+  const filePath = path.join(resolveClaudeDir(projectPath), "commands", `${name}.md`);
   if (fs.existsSync(filePath)) {
     fs.unlinkSync(filePath);
     return true;
@@ -152,22 +164,22 @@ export function deleteCommand(name: string, projectPath?: string): boolean {
 // ============================================================================
 
 export function getAgents(projectPath?: string): AgentItem[] {
-  const agentsDir = path.join(resolveClaudeDir(projectPath), 'agents');
+  const agentsDir = path.join(resolveClaudeDir(projectPath), "agents");
   if (!fs.existsSync(agentsDir)) return [];
 
-  const files = fs.readdirSync(agentsDir).filter(f => f.endsWith('.json'));
+  const files = fs.readdirSync(agentsDir).filter((f) => f.endsWith(".json"));
   const agents: AgentItem[] = [];
 
-  files.forEach(file => {
+  files.forEach((file) => {
     const filePath = path.join(agentsDir, file);
     try {
-      const raw = JSON.parse(fs.readFileSync(filePath, 'utf8'));
+      const raw = JSON.parse(fs.readFileSync(filePath, "utf8"));
       const parsed = AgentConfigFile.safeParse(raw);
       if (!parsed.success) {
         console.error(`Invalid agent config ${file}:`, parsed.error.issues);
         return;
       }
-      agents.push({ ...parsed.data, id: file.replace('.json', '') });
+      agents.push({ ...parsed.data, id: file.replace(".json", "") });
     } catch {
       // Skip unparseable agent files — they may be hand-edited
       console.error(`Failed to parse agent file: ${file}`);
@@ -177,9 +189,13 @@ export function getAgents(projectPath?: string): AgentItem[] {
   return agents;
 }
 
-export function saveAgent(id: string, agentData: { name?: string; description?: string; tools?: string[] }, projectPath?: string): void {
+export function saveAgent(
+  id: string,
+  agentData: { name?: string; description?: string; tools?: string[] },
+  projectPath?: string
+): void {
   id = sanitizeName(id);
-  const agentsDir = path.join(resolveClaudeDir(projectPath), 'agents');
+  const agentsDir = path.join(resolveClaudeDir(projectPath), "agents");
   if (!fs.existsSync(agentsDir)) {
     fs.mkdirSync(agentsDir, { recursive: true });
   }
@@ -189,7 +205,7 @@ export function saveAgent(id: string, agentData: { name?: string; description?: 
 
 export function deleteAgent(id: string, projectPath?: string): boolean {
   id = sanitizeName(id);
-  const filePath = path.join(resolveClaudeDir(projectPath), 'agents', `${id}.json`);
+  const filePath = path.join(resolveClaudeDir(projectPath), "agents", `${id}.json`);
   if (fs.existsSync(filePath)) {
     fs.unlinkSync(filePath);
     return true;
@@ -202,40 +218,40 @@ export function deleteAgent(id: string, projectPath?: string): boolean {
 // ============================================================================
 
 export function getHooks(projectPath?: string): HooksMap {
-  const settingsPath = path.join(resolveClaudeDir(projectPath), 'settings.json');
+  const settingsPath = path.join(resolveClaudeDir(projectPath), "settings.json");
   if (!fs.existsSync(settingsPath)) return {};
 
   let raw: unknown;
   try {
-    raw = JSON.parse(fs.readFileSync(settingsPath, 'utf8'));
+    raw = JSON.parse(fs.readFileSync(settingsPath, "utf8"));
   } catch {
-    console.error('Failed to parse settings.json as JSON');
+    console.error("Failed to parse settings.json as JSON");
     return {};
   }
 
   const parsed = SettingsFile.safeParse(raw);
   if (!parsed.success) {
-    console.error('Invalid settings file:', parsed.error.issues);
+    console.error("Invalid settings file:", parsed.error.issues);
     return {};
   }
-  return parsed.data.hooks;
+  return parsed.data.hooks as HooksMap;
 }
 
 export function saveHooks(hooks: HooksMap, projectPath?: string): void {
-  const settingsPath = path.join(resolveClaudeDir(projectPath), 'settings.json');
+  const settingsPath = path.join(resolveClaudeDir(projectPath), "settings.json");
   let settings: Record<string, unknown> = {};
   if (fs.existsSync(settingsPath)) {
     try {
-      const parsed = JSON.parse(fs.readFileSync(settingsPath, 'utf8'));
+      const parsed = JSON.parse(fs.readFileSync(settingsPath, "utf8"));
       // Only use parsed result if it's a plain object — arrays, strings, etc. are not valid settings
-      if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
+      if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
         settings = parsed as Record<string, unknown>;
       } else {
-        console.error('settings.json is not a valid object, starting with empty settings');
+        console.error("settings.json is not a valid object, starting with empty settings");
       }
     } catch {
       // Corrupted settings.json — start fresh to avoid crashing the write
-      console.error('Failed to parse settings.json, starting with empty settings');
+      console.error("Failed to parse settings.json, starting with empty settings");
     }
   }
   settings.hooks = hooks;
@@ -259,11 +275,14 @@ function parseFrontmatter(content: string): { frontmatter: Record<string, string
   if (!match) return { frontmatter: {}, body: content };
 
   const frontmatter: Record<string, string> = {};
-  match[1].split('\n').forEach(line => {
-    const colonIdx = line.indexOf(':');
+  match[1].split("\n").forEach((line) => {
+    const colonIdx = line.indexOf(":");
     if (colonIdx > 0) {
       const key = line.slice(0, colonIdx).trim();
-      const value = line.slice(colonIdx + 1).trim().replace(/^["']|["']$/g, '');
+      const value = line
+        .slice(colonIdx + 1)
+        .trim()
+        .replace(/^["']|["']$/g, "");
       frontmatter[key] = value;
     }
   });
@@ -272,24 +291,24 @@ function parseFrontmatter(content: string): { frontmatter: Record<string, string
 }
 
 export function getSkills(projectPath?: string): SkillItem[] {
-  const skillsDir = path.join(resolveClaudeDir(projectPath), 'skills');
+  const skillsDir = path.join(resolveClaudeDir(projectPath), "skills");
   if (!fs.existsSync(skillsDir)) return [];
 
   const entries = fs.readdirSync(skillsDir, { withFileTypes: true });
   const skills: SkillItem[] = [];
 
-  entries.forEach(entry => {
+  entries.forEach((entry) => {
     if (!entry.isDirectory()) return;
-    const skillMdPath = path.join(skillsDir, entry.name, 'SKILL.md');
+    const skillMdPath = path.join(skillsDir, entry.name, "SKILL.md");
     if (!fs.existsSync(skillMdPath)) return;
 
     try {
-      const content = fs.readFileSync(skillMdPath, 'utf8');
+      const content = fs.readFileSync(skillMdPath, "utf8");
       const { frontmatter } = parseFrontmatter(content);
       // Use directory name as canonical identity — frontmatter.name is display-only
       skills.push({
         name: entry.name,
-        description: frontmatter.description || frontmatter.name || '',
+        description: frontmatter.description || frontmatter.name || "",
         content,
       });
     } catch {
@@ -303,16 +322,16 @@ export function getSkills(projectPath?: string): SkillItem[] {
 
 export function saveSkill(name: string, content: string, projectPath?: string): void {
   name = sanitizeName(name);
-  const skillDir = path.join(resolveClaudeDir(projectPath), 'skills', name);
+  const skillDir = path.join(resolveClaudeDir(projectPath), "skills", name);
   if (!fs.existsSync(skillDir)) {
     fs.mkdirSync(skillDir, { recursive: true });
   }
-  fs.writeFileSync(path.join(skillDir, 'SKILL.md'), content);
+  fs.writeFileSync(path.join(skillDir, "SKILL.md"), content);
 }
 
 export function deleteSkill(name: string, projectPath?: string): boolean {
   name = sanitizeName(name);
-  const skillDir = path.join(resolveClaudeDir(projectPath), 'skills', name);
+  const skillDir = path.join(resolveClaudeDir(projectPath), "skills", name);
   if (fs.existsSync(skillDir)) {
     fs.rmSync(skillDir, { recursive: true });
     return true;

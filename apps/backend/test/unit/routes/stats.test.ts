@@ -1,5 +1,5 @@
-import { vi, describe, it, expect, beforeEach } from 'vitest';
-import { resetStatsCache } from '../../../src/db/queries';
+import { vi, describe, it, expect, beforeEach } from "vitest";
+import { resetStatsCache } from "../../../src/db/queries";
 
 const mockStmt = {
   get: vi.fn(() => ({
@@ -15,11 +15,11 @@ const mockStmt = {
 };
 const mockDb = { prepare: vi.fn(() => mockStmt) };
 
-vi.mock('../../../src/lib/database', () => ({
+vi.mock("../../../src/lib/database", () => ({
   getDatabase: vi.fn(() => mockDb),
 }));
 
-import app from '../../../src/routes/stats';
+import app from "../../../src/routes/stats";
 
 beforeEach(() => {
   vi.clearAllMocks();
@@ -27,23 +27,23 @@ beforeEach(() => {
   resetStatsCache();
 });
 
-describe('GET /stats', () => {
-  it('returns 200 with all 8 count fields', async () => {
-    const res = await app.request('/stats');
+describe("GET /stats", () => {
+  it("returns 200 with all 8 count fields", async () => {
+    const res = await app.request("/stats");
     expect(res.status).toBe(200);
     const body = await res.json();
-    expect(body).toHaveProperty('workspaces');
-    expect(body).toHaveProperty('workspaces_ready');
-    expect(body).toHaveProperty('workspaces_archived');
-    expect(body).toHaveProperty('repos');
-    expect(body).toHaveProperty('sessions');
-    expect(body).toHaveProperty('sessions_idle');
-    expect(body).toHaveProperty('sessions_working');
-    expect(body).toHaveProperty('messages');
+    expect(body).toHaveProperty("workspaces");
+    expect(body).toHaveProperty("workspaces_ready");
+    expect(body).toHaveProperty("workspaces_archived");
+    expect(body).toHaveProperty("repos");
+    expect(body).toHaveProperty("sessions");
+    expect(body).toHaveProperty("sessions_idle");
+    expect(body).toHaveProperty("sessions_working");
+    expect(body).toHaveProperty("messages");
   });
 
-  it('returns 42 for all fields from mock', async () => {
-    const res = await app.request('/stats');
+  it("returns 42 for all fields from mock", async () => {
+    const res = await app.request("/stats");
     const body = await res.json();
     expect(body.workspaces).toBe(42);
     expect(body.workspaces_ready).toBe(42);
@@ -55,8 +55,8 @@ describe('GET /stats', () => {
     expect(body.messages).toBe(42);
   });
 
-  it('calls db.prepare once with a single consolidated query', async () => {
-    await app.request('/stats');
+  it("calls db.prepare once with a single consolidated query", async () => {
+    await app.request("/stats");
     expect(mockDb.prepare).toHaveBeenCalledTimes(1);
   });
 });

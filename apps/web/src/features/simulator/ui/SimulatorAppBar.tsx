@@ -23,21 +23,29 @@ interface SimulatorAppBarProps {
   onUninstall: () => void;
 }
 
-export function SimulatorAppBar({ app, onRelaunch, onTerminate, onUninstall }: SimulatorAppBarProps) {
+export function SimulatorAppBar({
+  app,
+  onRelaunch,
+  onTerminate,
+  onUninstall,
+}: SimulatorAppBarProps) {
   return (
     <div className="border-border-subtle flex h-8 shrink-0 items-center gap-2 border-t px-3">
       <span className="bg-success h-1.5 w-1.5 shrink-0 rounded-full" />
-      <span
-        className="text-text-secondary min-w-0 flex-1 truncate text-xs"
-        title={app.bundle_id}
-      >
+      <span className="text-text-secondary min-w-0 flex-1 truncate text-xs" title={app.bundle_id}>
         {app.name}
       </span>
 
       <TooltipProvider delayDuration={200}>
         <Tooltip>
           <TooltipTrigger asChild>
-            <Button variant="ghost" size="sm" onClick={onRelaunch} aria-label="Relaunch" className="h-6 w-6 p-0">
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={onRelaunch}
+              aria-label="Relaunch"
+              className="h-6 w-6 p-0"
+            >
               <Rocket className="h-3 w-3" />
             </Button>
           </TooltipTrigger>

@@ -10,7 +10,7 @@
 // run `bun run build:inject` to recompile.
 
 /** The IIFE string to eval in WKWebView — sets up inspect mode infrastructure. */
-import INSPECT_MODE_SETUP from './dist-inject/inspect-mode.js?raw';
+import INSPECT_MODE_SETUP from "./dist-inject/inspect-mode.js?raw";
 export { INSPECT_MODE_SETUP };
 
 /** Enable inspect mode (call after INSPECT_MODE_SETUP has been eval'd) */

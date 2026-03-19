@@ -75,6 +75,7 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
       // Apply explicit theme choice to DOM
       setActualTheme(resolved);
       applyThemeClass(resolved);
+      return undefined;
     }
   }, [theme]);
 

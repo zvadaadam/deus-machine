@@ -36,7 +36,7 @@ export function BrowserTabBar({
         {tabs.map((tab) => (
           <div
             key={tab.id}
-            className={`flex items-center gap-1 rounded-md pr-1 text-xs whitespace-nowrap transition-colors duration-200 ease select-none ${
+            className={`ease flex items-center gap-1 rounded-md pr-1 text-xs whitespace-nowrap transition-colors duration-200 select-none ${
               activeTabId === tab.id
                 ? "bg-bg-raised text-text-secondary font-medium"
                 : "text-text-muted hover:bg-foreground/5 hover:text-text-tertiary"
@@ -55,7 +55,7 @@ export function BrowserTabBar({
             <button
               type="button"
               aria-label={`Close ${tab.title}`}
-              className="text-text-disabled hover:bg-foreground/8 hover:text-text-tertiary relative flex h-4 w-4 cursor-pointer items-center justify-center rounded-sm border-none bg-transparent p-0 text-xs leading-none transition-colors duration-200 ease before:absolute before:inset-[-12px] before:content-['']"
+              className="text-text-disabled hover:bg-foreground/8 hover:text-text-tertiary ease relative flex h-4 w-4 cursor-pointer items-center justify-center rounded-sm border-none bg-transparent p-0 text-xs leading-none transition-colors duration-200 before:absolute before:inset-[-12px] before:content-['']"
               onClick={() => onTabClose(tab.id)}
             >
               ×
@@ -65,7 +65,7 @@ export function BrowserTabBar({
         <button
           type="button"
           aria-label="New tab"
-          className="text-text-muted hover:bg-foreground/5 hover:text-text-tertiary cursor-pointer rounded-md border-none bg-transparent px-2 py-1 text-sm transition-colors duration-200 ease"
+          className="text-text-muted hover:bg-foreground/5 hover:text-text-tertiary ease cursor-pointer rounded-md border-none bg-transparent px-2 py-1 text-sm transition-colors duration-200"
           onClick={onTabAdd}
           title="New tab"
         >
@@ -77,7 +77,7 @@ export function BrowserTabBar({
         <button
           type="button"
           aria-label="Open browser in separate window"
-          className="text-text-disabled hover:bg-foreground/5 hover:text-text-tertiary relative mr-2 flex h-6 w-6 flex-shrink-0 cursor-pointer items-center justify-center rounded-md border-none bg-transparent transition-colors duration-200 ease before:absolute before:inset-[-10px] before:content-['']"
+          className="text-text-disabled hover:bg-foreground/5 hover:text-text-tertiary ease relative mr-2 flex h-6 w-6 flex-shrink-0 cursor-pointer items-center justify-center rounded-md border-none bg-transparent transition-colors duration-200 before:absolute before:inset-[-10px] before:content-['']"
           onClick={onDetach}
           title="Open in separate window"
         >

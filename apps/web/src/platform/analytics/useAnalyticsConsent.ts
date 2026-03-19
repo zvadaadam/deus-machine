@@ -34,8 +34,8 @@ export function useAnalyticsConsent(): void {
       if (!appLaunchTracked.current && isElectronEnv) {
         appLaunchTracked.current = true;
         // In Electron, get version via the preload bridge
-        window.electronAPI
-          .getAppVersion()
+        window
+          .electronAPI!.getAppVersion()
           .then((version) => track("app_launched", { version }))
           .catch(() => track("app_launched", { version: "unknown" }));
       }

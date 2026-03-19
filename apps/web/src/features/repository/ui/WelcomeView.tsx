@@ -32,7 +32,9 @@ export function WelcomeView({ onOpenProject, onCloneRepository }: WelcomeViewPro
         </div>
 
         {/* Action cards */}
-        <div className={`grid gap-4 ${capabilities.nativeFolderPicker ? "grid-cols-2" : "grid-cols-1"}`}>
+        <div
+          className={`grid gap-4 ${capabilities.nativeFolderPicker ? "grid-cols-2" : "grid-cols-1"}`}
+        >
           {capabilities.nativeFolderPicker && (
             <button
               type="button"

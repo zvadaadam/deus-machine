@@ -139,4 +139,3 @@ export interface StatsRow {
   sessions_working: number;
   messages: number;
 }
-

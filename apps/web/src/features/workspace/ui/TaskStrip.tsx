@@ -25,7 +25,13 @@ interface TaskStripProps {
   onSetupEnvironment?: () => void;
 }
 
-export function TaskStrip({ tasks, hasManifest, disabled, onRunTask, onSetupEnvironment }: TaskStripProps) {
+export function TaskStrip({
+  tasks,
+  hasManifest,
+  disabled,
+  onRunTask,
+  onSetupEnvironment,
+}: TaskStripProps) {
   // No manifest — show ghost wrench + label as absent affordance
   if (!hasManifest) {
     return (

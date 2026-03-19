@@ -48,13 +48,11 @@ export function WorkspaceEmptyState({
     return (
       <div
         className={cn(
-          "flex h-full flex-col items-center justify-center animate-fade-in-up",
+          "animate-fade-in-up flex h-full flex-col items-center justify-center",
           className
         )}
       >
-        <p className="text-sm text-muted-foreground/50">
-          What would you like to work on?
-        </p>
+        <p className="text-muted-foreground/50 text-sm">What would you like to work on?</p>
       </div>
     );
   }
@@ -62,28 +60,21 @@ export function WorkspaceEmptyState({
   // OpenDevs repo: the user is working on the IDE itself — show a special state
   const cleanRepoName = repoName ? getCleanRepoName(repoName) : repoName;
   if (cleanRepoName === "opendevs") {
-    return (
-      <OpenDevsEmptyState
-        parentBranch={parentBranch}
-        className={className}
-      />
-    );
+    return <OpenDevsEmptyState parentBranch={parentBranch} className={className} />;
   }
 
   // Fresh workspace — clean, confident, centered
   return (
     <div
       className={cn(
-        "flex h-full flex-col items-center justify-center animate-fade-in-up",
+        "animate-fade-in-up flex h-full flex-col items-center justify-center",
         className
       )}
     >
       <div className="flex flex-col items-center gap-5">
         <div className="text-center">
-          <h2 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground/60 flex items-center justify-center gap-2">
-            {initializing && (
-              <Loader2 className="h-3.5 w-3.5 animate-spin" />
-            )}
+          <h2 className="text-muted-foreground/60 flex items-center justify-center gap-2 text-xs font-semibold tracking-wide uppercase">
+            {initializing && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
             {initializing
               ? match(initStep)
                   .with("worktree", () => "Creating worktree...")
@@ -94,7 +85,7 @@ export function WorkspaceEmptyState({
               : "Workspace ready"}
           </h2>
           {!initializing && (
-            <p className="mt-1.5 text-sm text-muted-foreground/45">
+            <p className="text-muted-foreground/45 mt-1.5 text-sm">
               {subtitle(repoName, parentBranch)}
             </p>
           )}
@@ -103,10 +94,10 @@ export function WorkspaceEmptyState({
         <div className="flex items-baseline gap-6">
           {STEPS.map((step) => (
             <div key={step.num} className="flex items-baseline gap-1.5">
-              <span className="font-mono text-xs font-medium text-muted-foreground/30">
+              <span className="text-muted-foreground/30 font-mono text-xs font-medium">
                 {String(step.num).padStart(2, "0")}
               </span>
-              <span className="text-sm text-muted-foreground/50">{step.label}</span>
+              <span className="text-muted-foreground/50 text-sm">{step.label}</span>
             </div>
           ))}
         </div>

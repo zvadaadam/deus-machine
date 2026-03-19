@@ -27,7 +27,7 @@ export function InspectedElementCard({ element, onRemove }: InspectedElementCard
   // Best identifier: React component name > inner text > file basename
   const identifier =
     element.reactComponent ||
-    (element.innerText?.slice(0, 30)) ||
+    element.innerText?.slice(0, 30) ||
     (element.file ? element.file.split("/").pop() : null) ||
     element.path.split(" > ").pop();
 
@@ -41,11 +41,11 @@ export function InspectedElementCard({ element, onRemove }: InspectedElementCard
       className="group bg-primary/8 border-primary/20 relative flex shrink-0 items-center gap-1.5 rounded-full border py-1 pr-1.5 pl-2"
     >
       <Icon className="text-primary/70 h-3 w-3 shrink-0" />
-      <span className="text-foreground/50 font-mono text-2xs">{`<${element.tagName}>`}</span>
+      <span className="text-foreground/50 text-2xs font-mono">{`<${element.tagName}>`}</span>
       <span className="text-foreground/80 max-w-[120px] truncate text-xs">{identifier}</span>
       <button
         onClick={onRemove}
-        className="text-foreground/30 hover:text-foreground/60 ml-0.5 flex h-4 w-4 shrink-0 items-center justify-center rounded-full transition-colors duration-200 ease"
+        className="text-foreground/30 hover:text-foreground/60 ease ml-0.5 flex h-4 w-4 shrink-0 items-center justify-center rounded-full transition-colors duration-200"
         aria-label="Remove inspected element"
       >
         <X className="h-3 w-3" />

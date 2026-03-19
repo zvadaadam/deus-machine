@@ -32,7 +32,7 @@ export function PastedTextCard({ content, onRemove }: PastedTextCardProps) {
       {/* Remove button — appears on hover */}
       <button
         onClick={onRemove}
-        className="bg-bg-elevated border-border/40 ease absolute -top-1.5 -right-1.5 flex h-5 w-5 items-center justify-center rounded-full border opacity-0 shadow-sm transition-opacity duration-200 group-hover:opacity-100 focus-visible:opacity-100 before:absolute before:inset-[-12px] before:content-['']"
+        className="bg-bg-elevated border-border/40 ease absolute -top-1.5 -right-1.5 flex h-5 w-5 items-center justify-center rounded-full border opacity-0 shadow-sm transition-opacity duration-200 group-hover:opacity-100 before:absolute before:inset-[-12px] before:content-[''] focus-visible:opacity-100"
         aria-label="Remove pasted text"
       >
         <X className="text-muted-foreground h-3 w-3" />

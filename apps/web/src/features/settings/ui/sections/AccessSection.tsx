@@ -340,9 +340,7 @@ export function AccessSection({ settings, saveSetting }: SettingsSectionProps) {
       setPairCode(result.code);
       setCodeExpiresAt(Date.now() + result.expires_in_seconds * 1000);
     } catch (error) {
-      toast.error(
-        `Failed to generate code: ${getErrorMessage(error)}`
-      );
+      toast.error(`Failed to generate code: ${getErrorMessage(error)}`);
     }
   }
 
@@ -351,9 +349,7 @@ export function AccessSection({ settings, saveSetting }: SettingsSectionProps) {
       await revokeDeviceMutation.mutateAsync(device.id);
       toast.success(`Revoked "${device.name}"`);
     } catch (error) {
-      toast.error(
-        `Failed to revoke device: ${getErrorMessage(error)}`
-      );
+      toast.error(`Failed to revoke device: ${getErrorMessage(error)}`);
     }
   }
 

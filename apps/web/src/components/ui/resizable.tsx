@@ -63,7 +63,7 @@ function ResizableHandle({
       <div
         className={cn(
           "pointer-events-none absolute inset-y-0 left-1/2 w-px -translate-x-1/2",
-          "bg-gradient-to-b from-transparent via-border to-transparent",
+          "via-border bg-gradient-to-b from-transparent to-transparent",
           "transition duration-200 ease-out",
           // Drag state: visible with stronger color
           "group-data-[resize-handle-state=drag]:via-foreground/25 group-data-[resize-handle-state=drag]:opacity-100",

@@ -47,7 +47,10 @@ vi.mock("../../src/server", () => ({
 import fs from "fs";
 import { SCHEMA_SQL } from "@shared/schema";
 import { createApp } from "../../src/app";
-import { _clearAll as clearAuthState, createDeviceToken } from "../../src/services/remote-auth.service";
+import {
+  _clearAll as clearAuthState,
+  createDeviceToken,
+} from "../../src/services/remote-auth.service";
 import { invalidateRemoteGateCache } from "../../src/middleware/remote-gate";
 import { closeAll as closeAllWs } from "../../src/services/ws.service";
 import { saveSetting, PREFS_PATH } from "../../src/services/settings.service";
@@ -105,13 +108,10 @@ beforeAll(async () => {
 
   // Start a real HTTP server on a random port
   await new Promise<void>((resolve) => {
-    server = serve(
-      { fetch: app.fetch, port: 0, hostname: "127.0.0.1" },
-      (info) => {
-        port = info.port;
-        resolve();
-      },
-    );
+    server = serve({ fetch: app.fetch, port: 0, hostname: "127.0.0.1" }, (info) => {
+      port = info.port;
+      resolve();
+    });
     created.injectWebSocket(server);
   });
 });
@@ -121,7 +121,9 @@ beforeEach(() => {
   invalidateRemoteGateCache();
   testDb.exec("DELETE FROM paired_devices");
   // Settings live in preferences.json now (settings table was removed)
-  try { fs.unlinkSync(PREFS_PATH); } catch {}
+  try {
+    fs.unlinkSync(PREFS_PATH);
+  } catch {}
   enableRemoteAccess();
 });
 
@@ -130,7 +132,9 @@ afterAll(() => {
   server?.close();
   testDb.close();
   // Clean up temp directory
-  try { fs.rmSync(TEST_DIR, { recursive: true }); } catch {}
+  try {
+    fs.rmSync(TEST_DIR, { recursive: true });
+  } catch {}
 });
 
 // ============================================================================

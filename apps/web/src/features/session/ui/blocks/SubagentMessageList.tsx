@@ -32,9 +32,7 @@ export const SubagentMessageList = memo(function SubagentMessageList({
       // Skip messages that are only tool_results (they link to tool_use via toolResultMap)
       const onlyToolResults =
         contentBlocks.length > 0 &&
-        contentBlocks.every(
-          (b: ContentBlock | string) => isToolResultBlock(b)
-        );
+        contentBlocks.every((b: ContentBlock | string) => isToolResultBlock(b));
       if (onlyToolResults) return;
 
       contentBlocks.forEach((block: ContentBlock | string, index: number) => {

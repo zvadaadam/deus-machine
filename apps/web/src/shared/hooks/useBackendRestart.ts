@@ -13,7 +13,12 @@
  */
 
 import { useEffect } from "react";
-import { isElectronEnv, createListenerGroup, BACKEND_PORT_CHANGED, listen } from "@/platform/electron";
+import {
+  isElectronEnv,
+  createListenerGroup,
+  BACKEND_PORT_CHANGED,
+  listen,
+} from "@/platform/electron";
 import { setBackendPort } from "@/shared/config/api.config";
 import { forceReconnect } from "@/platform/ws/query-protocol-client";
 

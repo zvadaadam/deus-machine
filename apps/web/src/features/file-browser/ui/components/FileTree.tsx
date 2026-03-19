@@ -133,7 +133,7 @@ const TreeNode = memo(function TreeNode({
   );
 
   // Indent guide lines (visible on tree hover)
-  const indentGuides = [];
+  const indentGuides: React.ReactElement[] = [];
   for (let i = 0; i < level; i++) {
     indentGuides.push(
       <span

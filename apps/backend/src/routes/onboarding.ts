@@ -1,43 +1,49 @@
-import { Hono } from 'hono';
-import Database from 'better-sqlite3';
-import { existsSync, readdirSync } from 'fs';
-import { homedir } from 'os';
-import { join, basename } from 'path';
-import type { RecentProject } from '@shared/types/onboarding';
+import { Hono } from "hono";
+import Database from "better-sqlite3";
+import { existsSync, readdirSync } from "fs";
+import { homedir } from "os";
+import { join, basename } from "path";
+import type { RecentProject } from "@shared/types/onboarding";
 
 const app = new Hono();
 
-app.get('/onboarding/recent-projects', (c) => {
+app.get("/onboarding/recent-projects", (c) => {
   const home = homedir();
   const projects: RecentProject[] = [];
   const seenPaths = new Set<string>();
 
   // Read from Cursor state.vscdb
-  const cursorDbPath = join(home, 'Library/Application Support/Cursor/User/globalStorage/state.vscdb');
-  readVscdbProjects(cursorDbPath, 'cursor', projects, seenPaths);
+  const cursorDbPath = join(
+    home,
+    "Library/Application Support/Cursor/User/globalStorage/state.vscdb"
+  );
+  readVscdbProjects(cursorDbPath, "cursor", projects, seenPaths);
 
   // Read from VSCode state.vscdb
-  const vscodeDbPath = join(home, 'Library/Application Support/Code/User/globalStorage/state.vscdb');
-  readVscdbProjects(vscodeDbPath, 'vscode', projects, seenPaths);
+  const vscodeDbPath = join(
+    home,
+    "Library/Application Support/Code/User/globalStorage/state.vscdb"
+  );
+  readVscdbProjects(vscodeDbPath, "vscode", projects, seenPaths);
 
   // Read from Claude projects directory
-  readClaudeProjects(join(home, '.claude/projects'), projects, seenPaths);
+  readClaudeProjects(join(home, ".claude/projects"), projects, seenPaths);
 
   return c.json({ projects: projects.slice(0, 30) });
 });
 
 function readVscdbProjects(
   dbPath: string,
-  source: 'cursor' | 'vscode',
+  source: "cursor" | "vscode",
   projects: RecentProject[],
   seen: Set<string>
 ) {
   if (!existsSync(dbPath)) return;
   try {
     const db = new Database(dbPath, { readonly: true });
-    const row = db.prepare(
-      "SELECT value FROM ItemTable WHERE key = 'history.recentlyOpenedPathsList'"
-    ).get() as { value: string } | undefined;
+    const row = db
+      .prepare("SELECT value FROM ItemTable WHERE key = 'history.recentlyOpenedPathsList'")
+      .get() as { value: string } | undefined;
     db.close();
 
     if (!row?.value) return;
@@ -46,8 +52,8 @@ function readVscdbProjects(
 
     for (const entry of entries) {
       const uri = entry.folderUri;
-      if (!uri || !uri.startsWith('file://')) continue;
-      const fsPath = decodeURIComponent(uri.replace('file://', ''));
+      if (!uri || !uri.startsWith("file://")) continue;
+      const fsPath = decodeURIComponent(uri.replace("file://", ""));
       if (seen.has(fsPath) || !existsSync(fsPath)) continue;
       seen.add(fsPath);
       projects.push({ path: fsPath, name: basename(fsPath), source });
@@ -65,11 +71,11 @@ function readClaudeProjects(dir: string, projects: RecentProject[], seen: Set<st
       if (!entry.isDirectory()) continue;
       // Claude encodes paths: leading dash + dashes as path separators
       // e.g., "-Users-zvada-Developer-myproject" -> "/Users/zvada/Developer/myproject"
-      const decoded = entry.name.replace(/-/g, '/');
-      if (!decoded.startsWith('/')) continue;
+      const decoded = entry.name.replace(/-/g, "/");
+      if (!decoded.startsWith("/")) continue;
       if (seen.has(decoded) || !existsSync(decoded)) continue;
       seen.add(decoded);
-      projects.push({ path: decoded, name: basename(decoded), source: 'claude' });
+      projects.push({ path: decoded, name: basename(decoded), source: "claude" });
     }
   } catch {
     // Silently skip

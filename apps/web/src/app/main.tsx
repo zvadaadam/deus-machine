@@ -63,7 +63,10 @@ const posthogOptions = {
 
 ReactDOM.createRoot(document.getElementById("root") as HTMLElement).render(
   <React.StrictMode>
-    <PostHogProvider apiKey={import.meta.env.VITE_PUBLIC_POSTHOG_KEY} options={posthogOptions}>
+    <PostHogProvider
+      apiKey={import.meta.env.VITE_PUBLIC_POSTHOG_KEY ?? ""}
+      options={posthogOptions}
+    >
       <App />
     </PostHogProvider>
   </React.StrictMode>

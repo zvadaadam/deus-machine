@@ -80,7 +80,11 @@ export function manifestToDraft(raw: Record<string, unknown> | null): ManifestDr
     runScript: scripts.run || "",
     archiveScript: lifecycle.archive || scripts.archive || "",
     runScriptMode: (raw.runScriptMode as "concurrent" | "nonconcurrent") || "nonconcurrent",
-    requires: Object.entries(requires).map(([tool, version]) => ({ id: crypto.randomUUID(), tool, version })),
+    requires: Object.entries(requires).map(([tool, version]) => ({
+      id: crypto.randomUUID(),
+      tool,
+      version,
+    })),
     env: Object.entries(env).map(([key, value]) => ({ id: crypto.randomUUID(), key, value })),
     tasks: Object.entries(tasks).map(([name, entry]) => {
       if (typeof entry === "string") {
@@ -97,7 +101,11 @@ export function manifestToDraft(raw: Record<string, unknown> | null): ManifestDr
         persistent: (obj.persistent as boolean) || false,
         mode: (obj.mode as "concurrent" | "nonconcurrent") || "concurrent",
         depends: Array.isArray(obj.depends) ? (obj.depends as string[]) : [],
-        env: Object.entries(taskEnv).map(([key, value]) => ({ id: crypto.randomUUID(), key, value })),
+        env: Object.entries(taskEnv).map(([key, value]) => ({
+          id: crypto.randomUUID(),
+          key,
+          value,
+        })),
       };
     }),
   };

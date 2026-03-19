@@ -48,7 +48,7 @@ export const ProjectCard = memo(function ProjectCard({
         <p className="truncate text-xs text-white/40">{project.path}</p>
       </div>
 
-      <span className="shrink-0 rounded-md bg-white/5 px-2 py-0.5 text-2xs font-medium tracking-wider text-white/30 uppercase">
+      <span className="text-2xs shrink-0 rounded-md bg-white/5 px-2 py-0.5 font-medium tracking-wider text-white/30 uppercase">
         {SOURCE_LABELS[project.source] || project.source}
       </span>
     </button>

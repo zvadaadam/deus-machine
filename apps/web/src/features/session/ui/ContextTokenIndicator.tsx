@@ -46,7 +46,7 @@ export function ContextTokenIndicator({
           aria-label={tooltipText}
           className={cn(
             "relative flex h-8 w-8 shrink-0 items-center justify-center rounded-lg",
-            canCompact && "cursor-pointer hover:bg-accent",
+            canCompact && "hover:bg-accent cursor-pointer",
             className
           )}
         >

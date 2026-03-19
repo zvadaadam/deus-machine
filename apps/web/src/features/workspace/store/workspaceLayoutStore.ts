@@ -27,7 +27,14 @@ import { devtools, persist } from "zustand/middleware";
 import type { PersistedBrowserTab } from "@/features/browser/types";
 
 export type RightPanelTab = "changes" | "files";
-export type RightSideTab = "code" | "config" | "terminal" | "notebook" | "design" | "browser" | "simulator";
+export type RightSideTab =
+  | "code"
+  | "config"
+  | "terminal"
+  | "notebook"
+  | "design"
+  | "browser"
+  | "simulator";
 
 export interface SelectedFile {
   path: string;
@@ -503,7 +510,8 @@ export const workspaceLayoutActions = {
     tabs: PersistedTerminalTab[],
     activeTabId: string | null,
     nextNum: number
-  ) => useWorkspaceLayoutStore.getState().setTerminalTabState(workspaceId, tabs, activeTabId, nextNum),
+  ) =>
+    useWorkspaceLayoutStore.getState().setTerminalTabState(workspaceId, tabs, activeTabId, nextNum),
   setPendingTerminalCommand: (workspaceId: string, command: string | null) =>
     useWorkspaceLayoutStore.getState().setPendingTerminalCommand(workspaceId, command),
   setSimulatorUdid: (workspaceId: string, udid: string | null) =>

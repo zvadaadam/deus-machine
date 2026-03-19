@@ -76,7 +76,9 @@ export function killPty(id: string): void {
 /** Clean up all PTY sessions. Called on shutdown. */
 export function destroyAllPtySessions(): void {
   for (const [_id, session] of sessions) {
-    try { session.kill(); } catch {}
+    try {
+      session.kill();
+    } catch {}
   }
   sessions.clear();
 }

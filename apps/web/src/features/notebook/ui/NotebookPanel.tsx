@@ -81,7 +81,7 @@ function CellExecutionBadge({
     <span
       className={
         status === "error"
-          ? "font-mono text-xs text-destructive"
+          ? "text-destructive font-mono text-xs"
           : "text-muted-foreground font-mono text-xs"
       }
     >
@@ -96,7 +96,7 @@ function StreamOutput({ output }: { output: NotebookCellOutput }) {
   const isStderr = output.name === "stderr";
   return (
     <pre
-      className={`max-h-96 overflow-auto whitespace-pre-wrap break-words font-mono text-xs leading-relaxed ${
+      className={`max-h-96 overflow-auto font-mono text-xs leading-relaxed break-words whitespace-pre-wrap ${
         isStderr ? "text-destructive/80" : "text-foreground/80"
       }`}
     >
@@ -114,7 +114,7 @@ function ExecuteResultOutput({ output }: { output: NotebookCellOutput }) {
       <span className="text-muted-foreground flex-shrink-0 font-mono text-xs">
         {count != null ? `Out[${count}]:` : "Out:"}
       </span>
-      <pre className="text-foreground/80 max-h-96 min-w-0 flex-1 overflow-auto whitespace-pre-wrap break-words font-mono text-xs leading-relaxed">
+      <pre className="text-foreground/80 max-h-96 min-w-0 flex-1 overflow-auto font-mono text-xs leading-relaxed break-words whitespace-pre-wrap">
         {text}
       </pre>
     </div>
@@ -143,7 +143,7 @@ function DisplayDataOutput({ output }: { output: NotebookCellOutput }) {
   const text = normalizeText(data["text/plain"]);
   if (text) {
     return (
-      <pre className="text-foreground/80 max-h-96 overflow-auto whitespace-pre-wrap break-words font-mono text-xs leading-relaxed">
+      <pre className="text-foreground/80 max-h-96 overflow-auto font-mono text-xs leading-relaxed break-words whitespace-pre-wrap">
         {text}
       </pre>
     );
@@ -168,7 +168,7 @@ function ErrorOutput({ output }: { output: NotebookCellOutput }) {
         </span>
       </div>
       {output.traceback && output.traceback.length > 0 && (
-        <pre className="text-destructive/70 mt-2 max-h-96 overflow-auto whitespace-pre-wrap break-words font-mono text-xs leading-relaxed">
+        <pre className="text-destructive/70 mt-2 max-h-96 overflow-auto font-mono text-xs leading-relaxed break-words whitespace-pre-wrap">
           {stripAnsi(output.traceback.join("\n"))}
         </pre>
       )}
@@ -199,9 +199,7 @@ function NotebookCellView({ cell, index }: { cell: NotebookCell; index: number }
       {/* Source */}
       <div className="px-4 pt-3 pb-2">
         <div className="mb-1.5 flex items-center gap-2">
-          {isCode && (
-            <CellExecutionBadge executionCount={cell.execution_count} status={status} />
-          )}
+          {isCode && <CellExecutionBadge executionCount={cell.execution_count} status={status} />}
           {cell.cell_type === "markdown" && (
             <span className="text-muted-foreground font-mono text-xs">Markdown</span>
           )}

@@ -43,11 +43,7 @@ export function TaskButton({
             (disabled || isRunning) && "cursor-not-allowed opacity-50"
           )}
         >
-          {isRunning ? (
-            <Loader2 className="h-3 w-3 animate-spin" />
-          ) : (
-            <Icon className="h-3 w-3" />
-          )}
+          {isRunning ? <Loader2 className="h-3 w-3 animate-spin" /> : <Icon className="h-3 w-3" />}
         </button>
       </TooltipTrigger>
       <TooltipContent side="bottom">

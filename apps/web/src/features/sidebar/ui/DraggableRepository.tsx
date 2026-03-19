@@ -53,8 +53,8 @@ export function DraggableRepository({
       {...listeners}
       className={cn(
         isDragging
-          ? "z-50 cursor-grabbing [&_*]:cursor-grabbing opacity-70 shadow-lg shadow-black/20 rounded-lg"
-          : "cursor-grab [&_*]:cursor-grab",
+          ? "z-50 cursor-grabbing rounded-lg opacity-70 shadow-lg shadow-black/20 [&_*]:cursor-grabbing"
+          : "cursor-grab [&_*]:cursor-grab"
       )}
     >
       <RepositoryItem

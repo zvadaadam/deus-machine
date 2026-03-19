@@ -15,8 +15,7 @@ export const simulatorService = {
   startStreaming: (workspaceId: string, udid: string, skipBootCheck = false) =>
     invoke<StreamInfo>("start_streaming", { workspaceId, udid, skipBootCheck }),
 
-  stopStreaming: (workspaceId: string) =>
-    invoke<void>("stop_streaming", { workspaceId }),
+  stopStreaming: (workspaceId: string) => invoke<void>("stop_streaming", { workspaceId }),
 
   sendTouch: (workspaceId: string, x: number, y: number, touchType: string) =>
     invoke<void>("sim_send_touch", { workspaceId, x, y, touchType }),
@@ -30,11 +29,9 @@ export const simulatorService = {
   sendButton: (workspaceId: string, buttonType: string, direction: string) =>
     invoke<void>("sim_send_button", { workspaceId, buttonType, direction }),
 
-  takeScreenshot: (workspaceId: string) =>
-    invoke<number[]>("sim_take_screenshot", { workspaceId }),
+  takeScreenshot: (workspaceId: string) => invoke<number[]>("sim_take_screenshot", { workspaceId }),
 
-  pressHome: (workspaceId: string) =>
-    invoke<void>("sim_press_home", { workspaceId }),
+  pressHome: (workspaceId: string) => invoke<void>("sim_press_home", { workspaceId }),
 
   installApp: (workspaceId: string, appPath: string) =>
     invoke<InstalledApp>("sim_install_app", { workspaceId, appPath }),

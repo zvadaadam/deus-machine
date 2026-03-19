@@ -49,7 +49,10 @@ interface HooksViewProps {
   repoName?: string;
 }
 
-const EMPTY_FORM_GROUP: FormMatcherGroup = { matcher: "", commands: [{ command: "", timeout: "" }] };
+const EMPTY_FORM_GROUP: FormMatcherGroup = {
+  matcher: "",
+  commands: [{ command: "", timeout: "" }],
+};
 
 function createEmptyGroups(): FormMatcherGroup[] {
   return [{ ...EMPTY_FORM_GROUP, commands: [{ ...EMPTY_FORM_GROUP.commands[0] }] }];
@@ -86,10 +89,7 @@ function summarizeHandlers(handlers: HookMatcherGroup[]): string {
   return `${matcher}${basename}${timeout}${suffix}`;
 }
 
-function hooksToDisplayItems(
-  hooks: HooksMap | undefined,
-  scope: ConfigScope
-): ConfigDisplayItem[] {
+function hooksToDisplayItems(hooks: HooksMap | undefined, scope: ConfigScope): ConfigDisplayItem[] {
   if (!hooks || typeof hooks !== "object") return [];
   return Object.entries(hooks).map(([event, handlers]) => ({
     id: event,

@@ -135,7 +135,7 @@ function handleSendMessage(params: QueryParams): CommandResult {
   });
 
   // 2. Forward to agent-server (fire-and-forget — ACK already sent)
-  const agentType = readString(params, "agentType") || "claude";
+  const agentType = (readString(params, "agentType") || "claude") as "claude" | "codex";
 
   // Look up the existing agent_session_id so the SDK resumes the same
   // conversation rather than starting a new one.
@@ -153,7 +153,9 @@ function handleSendMessage(params: QueryParams): CommandResult {
       sessionId,
       agentType,
       prompt: content,
-      options: buildTurnOptions(params, model, existingAgentSessionId),
+      options: buildTurnOptions(params, model, existingAgentSessionId) as Parameters<
+        typeof agentService.forwardTurn
+      >[0]["options"],
     })
     .then((response) => {
       if (!response.accepted) {

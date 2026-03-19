@@ -2,10 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { ChevronDown } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useTerminalTaskStore, consumeTerminalTask } from "../store/terminalTaskStore";
-import {
-  useWorkspaceLayoutStore,
-  workspaceLayoutActions,
-} from "@/features/workspace/store";
+import { useWorkspaceLayoutStore, workspaceLayoutActions } from "@/features/workspace/store";
 import type { PersistedTerminalTab } from "@/features/workspace/store/workspaceLayoutStore";
 import { Terminal } from "./Terminal";
 
@@ -44,9 +41,7 @@ function WorkspaceTerminals({
   panelVisible: boolean;
   initialCommandsRef: React.MutableRefObject<Map<string, string>>;
 }) {
-  const tabs = useWorkspaceLayoutStore(
-    (s) => s.layouts[workspaceId]?.terminalTabs ?? []
-  );
+  const tabs = useWorkspaceLayoutStore((s) => s.layouts[workspaceId]?.terminalTabs ?? []);
   const activeTabId = useWorkspaceLayoutStore(
     (s) => s.layouts[workspaceId]?.activeTerminalTabId ?? null
   );
@@ -123,9 +118,7 @@ export function TerminalPanel({
   }, [workspaceId, workspacePath]);
 
   // Read terminal tab state for the CURRENT workspace (tab bar rendering only)
-  const tabs = useWorkspaceLayoutStore(
-    (s) => s.layouts[workspaceId]?.terminalTabs ?? []
-  );
+  const tabs = useWorkspaceLayoutStore((s) => s.layouts[workspaceId]?.terminalTabs ?? []);
   const activeTabId = useWorkspaceLayoutStore(
     (s) => s.layouts[workspaceId]?.activeTerminalTabId ?? null
   );
@@ -141,12 +134,7 @@ export function TerminalPanel({
   useEffect(() => {
     if (tabs.length === 0) {
       const id = `terminal-${crypto.randomUUID()}`;
-      workspaceLayoutActions.setTerminalTabState(
-        workspaceId,
-        [{ id, title: "Terminal 1" }],
-        id,
-        2
-      );
+      workspaceLayoutActions.setTerminalTabState(workspaceId, [{ id, title: "Terminal 1" }], id, 2);
     }
   }, [workspaceId, tabs.length]);
 
@@ -173,8 +161,7 @@ export function TerminalPanel({
     if (!task) return;
 
     // Read fresh state to avoid stale closure over render-time values
-    const { terminalTabs, nextTerminalNum: num } =
-      workspaceLayoutActions.getLayout(workspaceId);
+    const { terminalTabs, nextTerminalNum: num } = workspaceLayoutActions.getLayout(workspaceId);
     const id = `task-${crypto.randomUUID()}`;
     initialCommandsRef.current.set(id, task.command);
     workspaceLayoutActions.setTerminalTabState(
@@ -198,8 +185,7 @@ export function TerminalPanel({
     workspaceLayoutActions.setPendingTerminalCommand(workspaceId, null);
 
     // Read fresh state to avoid stale closure over render-time values
-    const { terminalTabs, nextTerminalNum: num } =
-      workspaceLayoutActions.getLayout(workspaceId);
+    const { terminalTabs, nextTerminalNum: num } = workspaceLayoutActions.getLayout(workspaceId);
     const id = `terminal-${crypto.randomUUID()}`;
     initialCommandsRef.current.set(id, cmd);
     workspaceLayoutActions.setTerminalTabState(
@@ -212,11 +198,7 @@ export function TerminalPanel({
 
   function addTerminal() {
     const id = `terminal-${crypto.randomUUID()}`;
-    updateTabs(
-      [...tabs, { id, title: `Terminal ${nextTerminalNum}` }],
-      id,
-      nextTerminalNum + 1
-    );
+    updateTabs([...tabs, { id, title: `Terminal ${nextTerminalNum}` }], id, nextTerminalNum + 1);
   }
 
   function closeTab(tabId: string) {

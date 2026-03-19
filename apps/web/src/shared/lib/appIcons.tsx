@@ -12,20 +12,14 @@ import { cn } from "@/shared/lib/utils";
  * Generic fallback icon — renders app's first letter in a muted rounded square.
  * Used only when native macOS icon extraction fails (app.icon is null/undefined).
  */
-export function AppIcon({
-  appId,
-  className,
-}: {
-  appId: string;
-  className?: string;
-}) {
+export function AppIcon({ appId, className }: { appId: string; className?: string }) {
   const initial = appId.charAt(0).toUpperCase();
 
   return (
     <div
       className={cn(
-        "bg-muted text-muted-foreground inline-flex items-center justify-center rounded-xs text-2xs font-semibold",
-        className,
+        "bg-muted text-muted-foreground text-2xs inline-flex items-center justify-center rounded-xs font-semibold",
+        className
       )}
     >
       {initial}

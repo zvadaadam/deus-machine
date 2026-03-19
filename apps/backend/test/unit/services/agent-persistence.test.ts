@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from "vitest";
 
 // ============================================================================
 // Mocks (vi.hoisted so they're available in vi.mock factories)
@@ -15,7 +15,7 @@ const { mockRun, mockPrepare, mockTransaction, mockDb } = vi.hoisted(() => {
   return { mockRun, mockPrepare, mockTransaction, mockDb };
 });
 
-vi.mock('../../../src/lib/database', () => ({
+vi.mock("../../../src/lib/database", () => ({
   getDatabase: vi.fn(() => mockDb),
 }));
 
@@ -33,7 +33,7 @@ import {
   persistSessionError,
   persistSessionCancelled,
   persistAgentSessionId,
-} from '../../../src/services/agent/persistence';
+} from "../../../src/services/agent/persistence";
 import type {
   MessageAssistantEvent,
   MessageToolResultEvent,
@@ -44,13 +44,13 @@ import type {
   SessionErrorEvent,
   SessionCancelledEvent,
   AgentSessionIdEvent,
-} from '../../../../shared/agent-events';
+} from "../../../../shared/agent-events";
 
 // ============================================================================
 // Tests
 // ============================================================================
 
-describe('agent-persistence', () => {
+describe("agent-persistence", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mockPrepare.mockReturnValue({ run: mockRun });
@@ -61,52 +61,50 @@ describe('agent-persistence', () => {
   // Message writes
   // ==========================================================================
 
-  describe('persistAssistantMessage', () => {
+  describe("persistAssistantMessage", () => {
     const baseEvent: MessageAssistantEvent = {
-      type: 'message.assistant',
-      sessionId: 'sess-1',
-      agentType: 'claude',
+      type: "message.assistant",
+      sessionId: "sess-1",
+      agentType: "claude",
       message: {
-        id: 'msg-sdk-1',
-        role: 'assistant',
-        content: [{ type: 'text', text: 'Hello!' }],
+        id: "msg-sdk-1",
+        role: "assistant",
+        content: [{ type: "text", text: "Hello!" }],
       },
-      model: 'opus',
+      model: "opus",
     };
 
-    it('inserts an assistant message with correct parameters', () => {
+    it("inserts an assistant message with correct parameters", () => {
       const result = persistAssistantMessage(baseEvent);
 
       expect(result.ok).toBe(true);
       if (result.ok) expect(result.value).toEqual(expect.any(String)); // UUID7 message ID
-      expect(mockPrepare).toHaveBeenCalledWith(
-        expect.stringContaining('INSERT INTO messages')
-      );
+      expect(mockPrepare).toHaveBeenCalledWith(expect.stringContaining("INSERT INTO messages"));
       expect(mockRun).toHaveBeenCalledWith(
         expect.any(String), // messageId
-        'sess-1',           // sessionId
+        "sess-1", // sessionId
         expect.any(String), // content JSON
         expect.any(String), // sentAt
-        'opus',             // model
-        'msg-sdk-1',        // agent_message_id
-        null                // parent_tool_use_id
+        "opus", // model
+        "msg-sdk-1", // agent_message_id
+        null // parent_tool_use_id
       );
     });
 
-    it('stores flat content for normal messages', () => {
+    it("stores flat content for normal messages", () => {
       persistAssistantMessage(baseEvent);
 
       const contentArg = mockRun.mock.calls[0][2] as string;
       const parsed = JSON.parse(contentArg);
-      expect(parsed).toEqual([{ type: 'text', text: 'Hello!' }]);
+      expect(parsed).toEqual([{ type: "text", text: "Hello!" }]);
     });
 
-    it('stores envelope format for cancelled messages', () => {
+    it("stores envelope format for cancelled messages", () => {
       const cancelledEvent: MessageAssistantEvent = {
         ...baseEvent,
         message: {
           ...baseEvent.message,
-          stop_reason: 'cancelled',
+          stop_reason: "cancelled",
         },
       };
 
@@ -115,17 +113,17 @@ describe('agent-persistence', () => {
       const contentArg = mockRun.mock.calls[0][2] as string;
       const parsed = JSON.parse(contentArg);
       expect(parsed).toEqual({
-        message: { stop_reason: 'cancelled' },
-        blocks: [{ type: 'text', text: 'Hello!' }],
+        message: { stop_reason: "cancelled" },
+        blocks: [{ type: "text", text: "Hello!" }],
       });
     });
 
-    it('handles parent_tool_use_id', () => {
+    it("handles parent_tool_use_id", () => {
       const eventWithParent: MessageAssistantEvent = {
         ...baseEvent,
         message: {
           ...baseEvent.message,
-          parent_tool_use_id: 'tool-use-123',
+          parent_tool_use_id: "tool-use-123",
         },
       };
 
@@ -134,86 +132,86 @@ describe('agent-persistence', () => {
       // parent_tool_use_id is the last argument
       expect(mockRun).toHaveBeenCalledWith(
         expect.any(String),
-        'sess-1',
+        "sess-1",
         expect.any(String),
         expect.any(String),
-        'opus',
-        'msg-sdk-1',
-        'tool-use-123'
+        "opus",
+        "msg-sdk-1",
+        "tool-use-123"
       );
     });
 
-    it('returns error on DB failure', () => {
+    it("returns error on DB failure", () => {
       mockPrepare.mockReturnValue({
-        run: vi.fn(() => { throw new Error('DB locked'); }),
+        run: vi.fn(() => {
+          throw new Error("DB locked");
+        }),
       });
 
       const result = persistAssistantMessage(baseEvent);
 
       expect(result.ok).toBe(false);
-      if (!result.ok) expect(result.error).toContain('DB locked');
+      if (!result.ok) expect(result.error).toContain("DB locked");
     });
   });
 
-  describe('persistToolResultMessage', () => {
+  describe("persistToolResultMessage", () => {
     const baseEvent: MessageToolResultEvent = {
-      type: 'message.tool_result',
-      sessionId: 'sess-1',
-      agentType: 'claude',
+      type: "message.tool_result",
+      sessionId: "sess-1",
+      agentType: "claude",
       message: {
-        id: 'msg-sdk-2',
-        role: 'user',
-        content: [{ type: 'tool_result', tool_use_id: 'tu-1', content: 'output' }],
-        parent_tool_use_id: 'tu-1',
+        id: "msg-sdk-2",
+        role: "user",
+        content: [{ type: "tool_result", tool_use_id: "tu-1", content: "output" }],
+        parent_tool_use_id: "tu-1",
       },
     };
 
-    it('inserts a tool_result message with role=user', () => {
+    it("inserts a tool_result message with role=user", () => {
       const result = persistToolResultMessage(baseEvent);
 
       expect(result.ok).toBe(true);
-      expect(mockPrepare).toHaveBeenCalledWith(
-        expect.stringContaining('INSERT INTO messages')
-      );
+      expect(mockPrepare).toHaveBeenCalledWith(expect.stringContaining("INSERT INTO messages"));
       expect(mockRun).toHaveBeenCalledWith(
         expect.any(String), // messageId
-        'sess-1',           // sessionId
+        "sess-1", // sessionId
         expect.any(String), // content JSON
         expect.any(String), // sentAt
-        'msg-sdk-2',        // agent_message_id
-        'tu-1'              // parent_tool_use_id
+        "msg-sdk-2", // agent_message_id
+        "tu-1" // parent_tool_use_id
       );
     });
 
-    it('stores content blocks directly (no envelope)', () => {
+    it("stores content blocks directly (no envelope)", () => {
       persistToolResultMessage(baseEvent);
 
       const contentArg = mockRun.mock.calls[0][2] as string;
       const parsed = JSON.parse(contentArg);
-      expect(parsed).toEqual([
-        { type: 'tool_result', tool_use_id: 'tu-1', content: 'output' },
-      ]);
+      expect(parsed).toEqual([{ type: "tool_result", tool_use_id: "tu-1", content: "output" }]);
     });
 
-    it('returns error on DB failure', () => {
+    it("returns error on DB failure", () => {
       mockPrepare.mockReturnValue({
-        run: vi.fn(() => { throw new Error('constraint violation'); }),
+        run: vi.fn(() => {
+          throw new Error("constraint violation");
+        }),
       });
 
       const result = persistToolResultMessage(baseEvent);
 
       expect(result.ok).toBe(false);
-      if (!result.ok) expect(result.error).toContain('constraint violation');
+      if (!result.ok) expect(result.error).toContain("constraint violation");
     });
   });
 
-  describe('persistMessageResult', () => {
-    it('is a no-op (informational only)', () => {
+  describe("persistMessageResult", () => {
+    it("is a no-op (informational only)", () => {
       const event: MessageResultEvent = {
-        type: 'message.result',
-        sessionId: 'sess-1',
-        agentType: 'claude',
-        subtype: 'success',
+        type: "message.result",
+        sessionId: "sess-1",
+        agentType: "claude",
+        subtype: "success",
       };
 
       // Should not throw and not call DB
@@ -223,14 +221,14 @@ describe('agent-persistence', () => {
     });
   });
 
-  describe('persistMessageCancelled', () => {
+  describe("persistMessageCancelled", () => {
     const event: MessageCancelledEvent = {
-      type: 'message.cancelled',
-      sessionId: 'sess-1',
-      agentType: 'claude',
+      type: "message.cancelled",
+      sessionId: "sess-1",
+      agentType: "claude",
     };
 
-    it('inserts a cancelled message marker and sets session to idle', () => {
+    it("inserts a cancelled message marker and sets session to idle", () => {
       const result = persistMessageCancelled(event);
 
       expect(result.ok).toBe(true);
@@ -239,7 +237,7 @@ describe('agent-persistence', () => {
       // First prepare: INSERT message
       expect(mockPrepare).toHaveBeenNthCalledWith(
         1,
-        expect.stringContaining('INSERT INTO messages')
+        expect.stringContaining("INSERT INTO messages")
       );
 
       // Second prepare: UPDATE session status to idle
@@ -249,26 +247,26 @@ describe('agent-persistence', () => {
       );
     });
 
-    it('inserts cancelled envelope content', () => {
+    it("inserts cancelled envelope content", () => {
       persistMessageCancelled(event);
 
       const contentArg = mockRun.mock.calls[0][2] as string;
       const parsed = JSON.parse(contentArg);
       expect(parsed).toEqual({
-        message: { stop_reason: 'cancelled' },
+        message: { stop_reason: "cancelled" },
         blocks: [],
       });
     });
 
-    it('returns error on DB failure', () => {
+    it("returns error on DB failure", () => {
       mockTransaction.mockImplementation(() => {
-        throw new Error('transaction failed');
+        throw new Error("transaction failed");
       });
 
       const result = persistMessageCancelled(event);
 
       expect(result.ok).toBe(false);
-      if (!result.ok) expect(result.error).toContain('transaction failed');
+      if (!result.ok) expect(result.error).toContain("transaction failed");
     });
   });
 
@@ -276,30 +274,28 @@ describe('agent-persistence', () => {
   // Session status writes
   // ==========================================================================
 
-  describe('persistSessionStarted', () => {
+  describe("persistSessionStarted", () => {
     const event: SessionStartedEvent = {
-      type: 'session.started',
-      sessionId: 'sess-1',
-      agentType: 'claude',
+      type: "session.started",
+      sessionId: "sess-1",
+      agentType: "claude",
     };
 
-    it('updates session to working status (idempotent)', () => {
+    it("updates session to working status (idempotent)", () => {
       const result = persistSessionStarted(event);
 
       expect(result.ok).toBe(true);
-      expect(mockPrepare).toHaveBeenCalledWith(
-        expect.stringContaining("status = 'working'")
-      );
+      expect(mockPrepare).toHaveBeenCalledWith(expect.stringContaining("status = 'working'"));
       // Should include idempotency guard
-      expect(mockPrepare).toHaveBeenCalledWith(
-        expect.stringContaining("status != 'working'")
-      );
-      expect(mockRun).toHaveBeenCalledWith('sess-1');
+      expect(mockPrepare).toHaveBeenCalledWith(expect.stringContaining("status != 'working'"));
+      expect(mockRun).toHaveBeenCalledWith("sess-1");
     });
 
-    it('returns error on DB failure', () => {
+    it("returns error on DB failure", () => {
       mockPrepare.mockReturnValue({
-        run: vi.fn(() => { throw new Error('DB error'); }),
+        run: vi.fn(() => {
+          throw new Error("DB error");
+        }),
       });
 
       const result = persistSessionStarted(event);
@@ -308,63 +304,53 @@ describe('agent-persistence', () => {
     });
   });
 
-  describe('persistSessionIdle', () => {
-    it('updates session to idle status', () => {
+  describe("persistSessionIdle", () => {
+    it("updates session to idle status", () => {
       const event: SessionIdleEvent = {
-        type: 'session.idle',
-        sessionId: 'sess-1',
-        agentType: 'claude',
+        type: "session.idle",
+        sessionId: "sess-1",
+        agentType: "claude",
       };
 
       const result = persistSessionIdle(event);
 
       expect(result.ok).toBe(true);
-      expect(mockPrepare).toHaveBeenCalledWith(
-        expect.stringContaining("status = 'idle'")
-      );
-      expect(mockRun).toHaveBeenCalledWith('sess-1');
+      expect(mockPrepare).toHaveBeenCalledWith(expect.stringContaining("status = 'idle'"));
+      expect(mockRun).toHaveBeenCalledWith("sess-1");
     });
   });
 
-  describe('persistSessionError', () => {
-    it('updates session to error status with error details', () => {
+  describe("persistSessionError", () => {
+    it("updates session to error status with error details", () => {
       const event: SessionErrorEvent = {
-        type: 'session.error',
-        sessionId: 'sess-1',
-        agentType: 'claude',
-        error: 'Rate limit exceeded',
-        category: 'rate_limit',
+        type: "session.error",
+        sessionId: "sess-1",
+        agentType: "claude",
+        error: "Rate limit exceeded",
+        category: "rate_limit",
       };
 
       const result = persistSessionError(event);
 
       expect(result.ok).toBe(true);
-      expect(mockPrepare).toHaveBeenCalledWith(
-        expect.stringContaining("status = 'error'")
-      );
-      expect(mockRun).toHaveBeenCalledWith(
-        'Rate limit exceeded',
-        'rate_limit',
-        'sess-1'
-      );
+      expect(mockPrepare).toHaveBeenCalledWith(expect.stringContaining("status = 'error'"));
+      expect(mockRun).toHaveBeenCalledWith("Rate limit exceeded", "rate_limit", "sess-1");
     });
   });
 
-  describe('persistSessionCancelled', () => {
-    it('updates session to idle status (cancelled = back to idle)', () => {
+  describe("persistSessionCancelled", () => {
+    it("updates session to idle status (cancelled = back to idle)", () => {
       const event: SessionCancelledEvent = {
-        type: 'session.cancelled',
-        sessionId: 'sess-1',
-        agentType: 'claude',
+        type: "session.cancelled",
+        sessionId: "sess-1",
+        agentType: "claude",
       };
 
       const result = persistSessionCancelled(event);
 
       expect(result.ok).toBe(true);
-      expect(mockPrepare).toHaveBeenCalledWith(
-        expect.stringContaining("status = 'idle'")
-      );
-      expect(mockRun).toHaveBeenCalledWith('sess-1');
+      expect(mockPrepare).toHaveBeenCalledWith(expect.stringContaining("status = 'idle'"));
+      expect(mockRun).toHaveBeenCalledWith("sess-1");
     });
   });
 
@@ -372,35 +358,32 @@ describe('agent-persistence', () => {
   // Metadata writes
   // ==========================================================================
 
-  describe('persistAgentSessionId', () => {
-    it('stores the agent session ID for resume support', () => {
+  describe("persistAgentSessionId", () => {
+    it("stores the agent session ID for resume support", () => {
       const event: AgentSessionIdEvent = {
-        type: 'agent.session_id',
-        sessionId: 'sess-1',
-        agentSessionId: 'claude-sdk-session-abc',
+        type: "agent.session_id",
+        sessionId: "sess-1",
+        agentSessionId: "claude-sdk-session-abc",
       };
 
       const result = persistAgentSessionId(event);
 
       expect(result.ok).toBe(true);
-      expect(mockPrepare).toHaveBeenCalledWith(
-        expect.stringContaining('agent_session_id')
-      );
-      expect(mockRun).toHaveBeenCalledWith(
-        'claude-sdk-session-abc',
-        'sess-1'
-      );
+      expect(mockPrepare).toHaveBeenCalledWith(expect.stringContaining("agent_session_id"));
+      expect(mockRun).toHaveBeenCalledWith("claude-sdk-session-abc", "sess-1");
     });
 
-    it('returns error on DB failure', () => {
+    it("returns error on DB failure", () => {
       mockPrepare.mockReturnValue({
-        run: vi.fn(() => { throw new Error('DB error'); }),
+        run: vi.fn(() => {
+          throw new Error("DB error");
+        }),
       });
 
       const event: AgentSessionIdEvent = {
-        type: 'agent.session_id',
-        sessionId: 'sess-1',
-        agentSessionId: 'abc',
+        type: "agent.session_id",
+        sessionId: "sess-1",
+        agentSessionId: "abc",
       };
 
       const result = persistAgentSessionId(event);

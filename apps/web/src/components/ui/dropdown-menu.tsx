@@ -33,7 +33,7 @@ function DropdownMenuContent({
         className={cn(
           "bg-popover text-popover-foreground z-50 max-h-(--radix-dropdown-menu-content-available-height) min-w-[8rem] origin-(--radix-dropdown-menu-content-transform-origin) overflow-x-hidden overflow-y-auto rounded-xl border p-1 shadow-md will-change-[transform,opacity]",
           // Directional slide offset (4px nudge toward trigger)
-          "data-[side=top]:[--dropdown-slide-y:4px] data-[side=bottom]:[--dropdown-slide-y:-4px]",
+          "data-[side=bottom]:[--dropdown-slide-y:-4px] data-[side=top]:[--dropdown-slide-y:4px]",
           // Enter: 180ms ease-out-cubic — fast start, gentle settle
           "data-[state=open]:animate-[dropdown-enter_180ms_cubic-bezier(.215,.61,.355,1)]",
           // Exit: 150ms — 20% faster than enter for snappy dismiss
@@ -206,9 +206,9 @@ function DropdownMenuSubContent({
       data-slot="dropdown-menu-sub-content"
       className={cn(
         "bg-popover text-popover-foreground z-50 min-w-[8rem] origin-(--radix-dropdown-menu-content-transform-origin) overflow-hidden rounded-xl border p-1 shadow-lg will-change-[transform,opacity]",
-          "data-[side=top]:[--dropdown-slide-y:4px] data-[side=bottom]:[--dropdown-slide-y:-4px]",
-          "data-[state=open]:animate-[dropdown-enter_180ms_cubic-bezier(.215,.61,.355,1)]",
-          "data-[state=closed]:animate-[dropdown-exit_150ms_cubic-bezier(.215,.61,.355,1)]",
+        "data-[side=bottom]:[--dropdown-slide-y:-4px] data-[side=top]:[--dropdown-slide-y:4px]",
+        "data-[state=open]:animate-[dropdown-enter_180ms_cubic-bezier(.215,.61,.355,1)]",
+        "data-[state=closed]:animate-[dropdown-exit_150ms_cubic-bezier(.215,.61,.355,1)]",
         className
       )}
       {...props}

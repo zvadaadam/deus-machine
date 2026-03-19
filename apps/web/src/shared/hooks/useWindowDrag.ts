@@ -52,7 +52,11 @@ export function useWindowDragZone(height: number = 48) {
     // Allow clicks to pass through to interactive elements underneath
     const handleMouseDown = (e: MouseEvent) => {
       const target = document.elementFromPoint(e.clientX, e.clientY);
-      if (target && target !== dragRegion && (target as HTMLElement).closest(INTERACTIVE_SELECTOR)) {
+      if (
+        target &&
+        target !== dragRegion &&
+        (target as HTMLElement).closest(INTERACTIVE_SELECTOR)
+      ) {
         // Re-dispatch the click to the actual target
         dragRegion.style.pointerEvents = "none";
         requestAnimationFrame(() => {
