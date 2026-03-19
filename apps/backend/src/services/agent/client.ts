@@ -285,13 +285,20 @@ export class AgentClient {
     // for the frontend's q:tool_response.
     const frontendMethods = Object.values(FRONTEND_RPC_METHODS);
     for (const method of frontendMethods) {
-      this.peer.addMethod(method, async (params: any) => {
+      this.peer.addMethod(method, async (params: unknown) => {
+        if (!params || typeof params !== "object") {
+          throw new Error(`${method} requires an object params payload`);
+        }
+        const normalizedParams = params as Record<string, unknown>;
+        const sessionId = normalizedParams.sessionId;
+        if (typeof sessionId !== "string" || sessionId.length === 0) {
+          throw new Error(`${method} requires params.sessionId`);
+        }
         const requestId = crypto.randomUUID();
-        const sessionId = params?.sessionId ?? "unknown";
         console.log(
           `[AgentClient] Frontend RPC: method=${method} requestId=${requestId} session=${sessionId}`
         );
-        const result = await this.onFrontendRpc(requestId, sessionId, method, params ?? {});
+        const result = await this.onFrontendRpc(requestId, sessionId, method, normalizedParams);
         return result;
       });
     }
@@ -306,7 +313,11 @@ export class AgentClient {
       this.peer = null;
     }
     if (wasConnected) {
-      this.onDisconnected?.();
+      try {
+        this.onDisconnected?.();
+      } catch (err) {
+        console.error("[AgentClient] onDisconnected callback failed:", err);
+      }
     }
   }
 
@@ -318,6 +329,12 @@ export class AgentClient {
       console.error(
         `[AgentClient] Invalid event payload for "${eventName}":`,
         parsed.error.message
+      );
+      return;
+    }
+    if (parsed.data.type !== eventName) {
+      console.error(
+        `[AgentClient] Event method/type mismatch: method="${eventName}" payload.type="${parsed.data.type}"`
       );
       return;
     }
@@ -367,7 +384,11 @@ export class AgentClient {
 
       this.connected = true;
       this.reconnectAttempt = 0;
-      this.onConnected?.(this.agents);
+      try {
+        this.onConnected?.(this.agents);
+      } catch (err) {
+        console.error("[AgentClient] onConnected callback failed:", err);
+      }
     } catch (err) {
       console.error("[AgentClient] Handshake failed:", err);
       // Close and reconnect
