@@ -10,8 +10,9 @@ export type ChangesFilter = "all-changes" | "uncommitted" | "last-turn";
 
 export const CHANGES_FILTER_OPTIONS: readonly [ChangesFilter, string][] = [
   ["all-changes", "All changes"],
-  ["uncommitted", "Uncommitted"],
-  ["last-turn", "Last turn"],
+  // TODO: Re-enable once backend endpoints exist for uncommitted/last-turn files.
+  // ["uncommitted", "Uncommitted"],
+  // ["last-turn", "Last turn"],
 ];
 
 /** Human-readable label for the active filter value */

@@ -204,9 +204,7 @@ export function useFileChanges(
 
 /**
  * Fetch uncommitted files for a workspace (HEAD → workdir).
- * IPC only — polls when workspace is actively working.
- *
- * IMPORTANT: Requires workspaceState === "ready" — same guard as useDiffStats.
+ * TODO: Backend endpoint not yet implemented — returns empty array.
  */
 export function useUncommittedFiles(
   workspaceId: string | null,
@@ -226,9 +224,7 @@ export function useUncommittedFiles(
 
 /**
  * Fetch last-turn files for a workspace (checkpoint → workdir).
- * IPC only — polls when workspace is actively working.
- *
- * IMPORTANT: Requires workspaceState === "ready" — same guard as useDiffStats.
+ * TODO: Backend endpoint not yet implemented — returns empty array.
  */
 export function useLastTurnFiles(
   workspaceId: string | null,

@@ -95,14 +95,11 @@ export function CodePanelContent({
     diffViewerRef.current?.scrollToFile(path);
   }, []);
 
-  // Build absolute file path for FileViewer from the relative selectedFilePath.
-  // Only meaningful in Files view, but computed unconditionally (cheap string op).
-  const absoluteFilePath = useMemo(() => {
+  // Relative file path for FileViewer (backend reads relative to workspace root).
+  const relativeFilePath = useMemo(() => {
     if (!selectedFilePath) return null;
-    const base = workspace.workspace_path.replace(/\/+$/, "");
-    const rel = selectedFilePath.replace(/^\/+/, "");
-    return `${base}/${rel}`;
-  }, [selectedFilePath, workspace.workspace_path]);
+    return selectedFilePath.replace(/^\/+/, "");
+  }, [selectedFilePath]);
 
   const activeFilterLabel = changesFilterLabel(changesFilter);
 
@@ -212,8 +209,8 @@ export function CodePanelContent({
         <ResizablePanelGroup direction="horizontal" className="min-h-0 flex-1">
           {/* File viewer — fills remaining space */}
           <ResizablePanel defaultSize={75} minSize={30}>
-            {absoluteFilePath ? (
-              <FileViewer filePath={absoluteFilePath} />
+            {relativeFilePath ? (
+              <FileViewer workspaceId={workspace.id} filePath={relativeFilePath} />
             ) : (
               <div className="flex h-full flex-col items-center justify-center gap-3">
                 <div className="bg-bg-muted/30 flex h-10 w-10 items-center justify-center rounded-xl">
