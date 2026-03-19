@@ -1,0 +1,36 @@
+{
+  "cli_version": "0.5.0",
+  "checkpoint_id": "5795f2d1cdd9",
+  "session_id": "8aa0f1c1-b25d-47c5-aab7-bbbe2fb1fd94",
+  "strategy": "manual-commit",
+  "created_at": "2026-03-19T23:07:19.236329Z",
+  "branch": "zvadaadam/explore-manus-app",
+  "checkpoints_count": 1,
+  "files_touched": [
+    "apps/web/src/features/file-browser/api/useFileContent.ts",
+    "apps/web/src/features/session/ui/SessionPanel.tsx",
+    "apps/web/src/features/workspace/api/workspace.queries.ts",
+    "apps/web/src/features/workspace/lib/changesFilter.ts"
+  ],
+  "agent": "Claude Code",
+  "turn_id": "5a66102c7463",
+  "token_usage": {
+    "input_tokens": 12961,
+    "cache_creation_tokens": 3682949,
+    "cache_read_tokens": 246878177,
+    "output_tokens": 290425,
+    "api_call_count": 1004
+  },
+  "session_metrics": {
+    "turn_count": 70
+  },
+  "initial_attribution": {
+    "calculated_at": "2026-03-19T23:07:14.904407Z",
+    "agent_lines": 0,
+    "human_added": 12,
+    "human_modified": 28,
+    "human_removed": 0,
+    "total_committed": 12,
+    "agent_percentage": 0
+  }
+}
