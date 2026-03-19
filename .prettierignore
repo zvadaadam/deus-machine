@@ -17,7 +17,3 @@ bun.lock
 .vscode/
 .idea/
 
-# Non-frontend code (has own formatting rules or isn't JS/TS)
-apps/backend/
-apps/sidecar/
-shared/
