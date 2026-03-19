@@ -376,7 +376,7 @@ if (!(window as any).__opendevsInspectMode) {
 
   /** Tailwind utility class pattern — skipped when building element paths and className */
   const TAILWIND_PATTERN =
-    /^(flex|grid|p-|m-|text-|bg-|border|rounded|w-|h-|gap-|items-|justify-|overflow-|opacity-|transition|duration|ease|hover:|focus:|active:|dark:|hidden|block|inline|relative|absolute|fixed|sticky|min-|max-|space-|divide-|ring-|shadow-|sr-|not-|group|peer|placeholder-|disabled:|data-|aria-|sm:|md:|lg:|xl:|2xl:|\[|\!)/;
+    /^(flex|grid|p-|m-|text-|bg-|border|rounded|w-|h-|gap-|items-|justify-|overflow-|opacity-|transition|duration|ease|hover:|focus:|active:|dark:|hidden|block|inline|relative|absolute|fixed|sticky|min-|max-|space-|divide-|ring-|shadow-|sr-|not-|group|peer|placeholder-|disabled:|data-|aria-|sm:|md:|lg:|xl:|2xl:|\[|!)/;
 
   // ========================================================================
   // React Props Extraction

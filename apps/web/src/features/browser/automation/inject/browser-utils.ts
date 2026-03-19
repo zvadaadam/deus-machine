@@ -470,10 +470,13 @@ if (!(window as any).__opendevsBrowserUtils) {
         new KeyboardEvent("keyup", { key: "Enter", code: "Enter", keyCode: 13, bubbles: true })
       );
       const form = (el as HTMLElement).closest && (el as HTMLElement).closest("form");
-      if (form)
-        (form as any).requestSubmit
-          ? (form as any).requestSubmit()
-          : (form as HTMLFormElement).submit();
+      if (form) {
+        if ((form as any).requestSubmit) {
+          (form as any).requestSubmit();
+        } else {
+          (form as HTMLFormElement).submit();
+        }
+      }
     }
   }
 

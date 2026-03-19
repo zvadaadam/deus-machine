@@ -54,6 +54,7 @@ export function setupAutoUpdater(mainWindow: BrowserWindow): void {
   });
 
   // IPC handlers for renderer to control updates
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
   const { ipcMain } = require("electron");
 
   ipcMain.handle("update:check", async () => {
