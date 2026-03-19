@@ -4,7 +4,7 @@
  * Exposes a typed API to the renderer via contextBridge.
  * This is the ONLY way the renderer communicates with the main process.
  *
- * Security: contextIsolation=true, nodeIntegration=false, sandbox=true.
+ * Security: contextIsolation=true, nodeIntegration=false, sandbox=false (ESM preload requires sandbox=false).
  * The renderer has zero direct access to Node.js or Electron APIs.
  */
 
@@ -27,8 +27,7 @@ const electronAPI = {
     ipcRenderer.invoke("native:confirm", { message, detail }),
   setTheme: (theme: "light" | "dark" | "system"): Promise<void> =>
     ipcRenderer.invoke("native:setTheme", { theme }),
-  openExternal: (url: string): Promise<void> =>
-    ipcRenderer.invoke("native:openExternal", { url }),
+  openExternal: (url: string): Promise<void> => ipcRenderer.invoke("native:openExternal", { url }),
   contextMenu: (
     items: Array<{ id: string; label: string; type?: string; enabled?: boolean }>
   ): Promise<string | null> => ipcRenderer.invoke("native:contextMenu", { items }),
@@ -54,8 +53,7 @@ const electronAPI = {
   browserInvoke: (method: string, args: unknown): Promise<unknown> =>
     ipcRenderer.invoke(`browser:${method}`, args),
   onBrowserEvent: (event: string, callback: (...args: unknown[]) => void): (() => void) => {
-    const listener = (_e: Electron.IpcRendererEvent, ...args: unknown[]): void =>
-      callback(...args);
+    const listener = (_e: Electron.IpcRendererEvent, ...args: unknown[]): void => callback(...args);
     ipcRenderer.on(event, listener);
     return () => ipcRenderer.removeListener(event, listener);
   },
@@ -80,8 +78,7 @@ const electronAPI = {
 
   checkCliTool: (tool: string): Promise<{ installed: boolean; path: string | null }> =>
     ipcRenderer.invoke("native:checkCliTool", { tool }),
-  checkGhAuth: (): Promise<{ authenticated: boolean }> =>
-    ipcRenderer.invoke("native:checkGhAuth"),
+  checkGhAuth: (): Promise<{ authenticated: boolean }> => ipcRenderer.invoke("native:checkGhAuth"),
   getInstalledApps: (): Promise<Array<{ name: string; path: string }>> =>
     ipcRenderer.invoke("native:getInstalledApps"),
   openInApp: (appPath: string, filePath: string): Promise<boolean> =>
@@ -98,11 +95,9 @@ const electronAPI = {
   // Generic IPC (for commands not yet ported to specific handlers)
   // ---------------------------------------------------------------------------
 
-  invoke: (channel: string, args?: unknown): Promise<unknown> =>
-    ipcRenderer.invoke(channel, args),
+  invoke: (channel: string, args?: unknown): Promise<unknown> => ipcRenderer.invoke(channel, args),
   on: (event: string, callback: (...args: unknown[]) => void): (() => void) => {
-    const listener = (_e: Electron.IpcRendererEvent, ...args: unknown[]): void =>
-      callback(...args);
+    const listener = (_e: Electron.IpcRendererEvent, ...args: unknown[]): void => callback(...args);
     ipcRenderer.on(event, listener);
     return () => ipcRenderer.removeListener(event, listener);
   },

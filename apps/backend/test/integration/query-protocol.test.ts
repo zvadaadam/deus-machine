@@ -504,17 +504,18 @@ describe("q:subscribe → live q:snapshot push", () => {
         )
         .run(REPO_ID);
 
-      // Trigger invalidation and wait for pushed snapshot
-      const pushPromise = waitForMessage(ws, "q:snapshot");
-      invalidate(["workspaces"]);
-      const pushed = await pushPromise;
+      try {
+        // Trigger invalidation and wait for pushed snapshot
+        const pushPromise = waitForMessage(ws, "q:snapshot");
+        invalidate(["workspaces"]);
+        const pushed = await pushPromise;
 
-      expect(pushed.id).toBe("sub_live_1");
-      const pushedGroup = pushed.data.find((g: any) => g.repo_id === REPO_ID);
-      expect(pushedGroup.workspaces.length).toBe(initialWsCount + 1);
-
-      // Cleanup
-      testDb.prepare("DELETE FROM workspaces WHERE id = 'ws-q-new'").run();
+        expect(pushed.id).toBe("sub_live_1");
+        const pushedGroup = pushed.data.find((g: any) => g.repo_id === REPO_ID);
+        expect(pushedGroup.workspaces.length).toBe(initialWsCount + 1);
+      } finally {
+        testDb.prepare("DELETE FROM workspaces WHERE id = 'ws-q-new'").run();
+      }
     } finally {
       ws.close();
     }
