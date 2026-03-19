@@ -94,9 +94,9 @@ export const SessionPanel = forwardRef<SessionPanelRef, SessionPanelProps>(
     },
     ref
   ) => {
-    // Agent RPC handler — listens for sidecar:request events and manages pending UI state.
-    // sessionWorkspaces maps this session's ID to its workspace git info so getDiff can
-    // auto-respond without round-tripping through Node.js.
+    // Agent RPC handler — listens for WS tool requests and manages pending UI state.
+    // sessionWorkspaces maps this session's ID to its workspace so getDiff can
+    // auto-respond via backend HTTP.
     const agentRpcContext = useMemo(() => {
       const map = new Map<
         string,

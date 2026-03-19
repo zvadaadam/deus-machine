@@ -7,6 +7,8 @@ import { useFileContent } from "../api/useFileContent";
 import { useQuery } from "@tanstack/react-query";
 
 interface FileViewerProps {
+  workspaceId: string;
+  /** Relative path within the workspace */
   filePath: string;
   /** Optional close handler — renders a close button in the header */
   onClose?: () => void;
@@ -15,7 +17,7 @@ interface FileViewerProps {
 /**
  * FileViewer - Display full file content with syntax highlighting
  *
- * Reads directly from the working tree (disk) via IPC.
+ * Reads from the working tree via backend HTTP.
  * Shows current file state including unsaved/uncommitted changes.
  *
  * Features:
@@ -24,7 +26,7 @@ interface FileViewerProps {
  * - Copy button
  * - Loading/error states
  */
-export function FileViewer({ filePath, onClose }: FileViewerProps) {
+export function FileViewer({ workspaceId, filePath, onClose }: FileViewerProps) {
   const [copied, setCopied] = useState(false);
 
   // Use app theme provider for syntax highlighting
@@ -46,8 +48,8 @@ export function FileViewer({ filePath, onClose }: FileViewerProps) {
    */
   const language = filePath ? detectLanguageFromPath(filePath) : "text";
 
-  // Fetch file content from disk
-  const { data: content, isLoading: isContentLoading, error } = useFileContent(filePath);
+  // Fetch file content via backend HTTP
+  const { data: content, isLoading: isContentLoading, error } = useFileContent(workspaceId, filePath);
 
   // Highlight entire file at once (single Shiki call instead of per-line)
   const { data: highlightedLines, isLoading: isHighlighting } = useQuery({

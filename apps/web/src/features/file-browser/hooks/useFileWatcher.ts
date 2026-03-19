@@ -69,7 +69,7 @@ export function useFileWatcher(workspacePath: string | null, workspaceId: string
         console.log(`[FileWatcher] ${payload.affected_count} files changed in workspace`);
       }
 
-      queryClient.invalidateQueries({ queryKey: ["files-rust", workspacePath] });
+      queryClient.invalidateQueries({ queryKey: ["files", workspaceId] });
       queryClient.invalidateQueries({ queryKey: queryKeys.workspaces.diffStats(workspaceId) });
       queryClient.invalidateQueries({ queryKey: queryKeys.workspaces.diffFiles(workspaceId) });
     });
