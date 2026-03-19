@@ -72,6 +72,7 @@ export interface AgentClientOptions {
 const BASE_RECONNECT_DELAY_MS = 1_000;
 const MAX_RECONNECT_DELAY_MS = 30_000;
 const HANDSHAKE_TIMEOUT_MS = 10_000;
+const RPC_TIMEOUT_MS = 30_000;
 const PROTOCOL_VERSION = "1.0";
 
 // ============================================================================
@@ -144,7 +145,11 @@ export class AgentClient {
   // ---- Turn lifecycle RPCs ----
 
   async sendTurnStart(params: TurnStartRequest): Promise<TurnStartResponse> {
-    return this.request(AGENT_RPC_METHODS.TURN_START, params) as Promise<TurnStartResponse>;
+    const result = await this.request(AGENT_RPC_METHODS.TURN_START, params);
+    if (!result || typeof result !== "object") {
+      throw new Error("Invalid turn_start response: expected object");
+    }
+    return result as TurnStartResponse;
   }
 
   async sendTurnCancel(params: TurnCancelRequest): Promise<void> {
@@ -187,7 +192,15 @@ export class AgentClient {
 
   async listAgents(): Promise<AgentInfo[]> {
     const result = await this.request(AGENT_RPC_METHODS.AGENT_LIST, {});
-    return (result as any)?.agents ?? [];
+    if (
+      !result ||
+      typeof result !== "object" ||
+      !Array.isArray((result as Record<string, unknown>).agents)
+    ) {
+      console.error("[AgentClient] listAgents: unexpected response shape", result);
+      return [];
+    }
+    return (result as Record<string, unknown>).agents as AgentInfo[];
   }
 
   // ==========================================================================
@@ -308,6 +321,7 @@ export class AgentClient {
   private teardownPeer(): void {
     const wasConnected = this.connected;
     this.connected = false;
+    this.agents = [];
     if (this.peer) {
       this.peer.rejectAllPendingRequests("Connection closed");
       this.peer = null;
@@ -430,7 +444,11 @@ export class AgentClient {
     if (!this.peer || !this.connected) {
       return Promise.reject(new Error(`AgentClient is not connected (method=${method})`));
     }
-    return Promise.resolve(this.peer.request(method, params, undefined));
+    return this.withTimeout(
+      Promise.resolve(this.peer.request(method, params, undefined)),
+      RPC_TIMEOUT_MS,
+      method
+    );
   }
 
   private notify(method: string, params: unknown): void {

@@ -68,7 +68,7 @@ async function createWindow(): Promise<void> {
     // settings/onboarding state is determined.
     // Safety net: force-show after 3s if the renderer hasn't called show_main_window.
     setTimeout(() => {
-      if (mainWindow && !mainWindow.isVisible()) {
+      if (mainWindow && !mainWindow.isDestroyed() && !mainWindow.isVisible()) {
         console.log("[main] Safety net: force-showing window after 3s timeout");
         mainWindow.show();
       }
@@ -80,13 +80,15 @@ async function createWindow(): Promise<void> {
     mainWindow.webContents.openDevTools({ mode: "detach" });
   }
 
-  // Forward renderer console to main process stdout (for debugging)
-  mainWindow.webContents.on("console-message", (_event, level, message, line, sourceId) => {
-    const prefix =
-      level === 2 ? "[renderer:warn]" : level === 3 ? "[renderer:error]" : "[renderer]";
-    const source = sourceId ? ` (${sourceId.split("/").pop()}:${line})` : "";
-    console.log(`${prefix} ${message}${source}`);
-  });
+  // Forward renderer console to main process stdout (dev only — avoid leaking PII in prod logs)
+  if (!app.isPackaged) {
+    mainWindow.webContents.on("console-message", (_event, level, message, line, sourceId) => {
+      const prefix =
+        level === 2 ? "[renderer:warn]" : level === 3 ? "[renderer:error]" : "[renderer]";
+      const source = sourceId ? ` (${sourceId.split("/").pop()}:${line})` : "";
+      console.log(`${prefix} ${message}${source}`);
+    });
+  }
 
   // External links open in system browser (only allow http/https)
   mainWindow.webContents.setWindowOpenHandler(({ url }) => {
@@ -137,7 +139,13 @@ app.whenReady().then(async () => {
   debugLog("[main] __dirname: " + __dirname);
   // Fix PATH when launched from macOS Finder (login shell doesn't run)
   if (process.platform === "darwin") {
-    await syncShellEnvironment();
+    try {
+      await syncShellEnvironment();
+    } catch (err) {
+      debugLog(
+        "[main] syncShellEnvironment failed: " + (err instanceof Error ? err.message : String(err))
+      );
+    }
   }
 
   // Spawn backend as child process
@@ -175,7 +183,7 @@ app.whenReady().then(async () => {
   // Auto-updater (delayed start — let the app boot first)
   if (!is.dev) {
     setTimeout(() => {
-      if (mainWindow) setupAutoUpdater(mainWindow);
+      if (mainWindow && !mainWindow.isDestroyed()) setupAutoUpdater(mainWindow);
     }, 15_000);
   }
 });
