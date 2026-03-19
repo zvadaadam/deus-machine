@@ -1,0 +1,50 @@
+{
+  "cli_version": "0.5.0",
+  "checkpoint_id": "e03564273ad2",
+  "session_id": "8aa0f1c1-b25d-47c5-aab7-bbbe2fb1fd94",
+  "strategy": "manual-commit",
+  "created_at": "2026-03-19T19:31:08.052073Z",
+  "branch": "zvadaadam/explore-manus-app",
+  "checkpoints_count": 1,
+  "files_touched": [
+    "apps/web/src/app/layouts/RightSidePanel.tsx",
+    "apps/web/src/features/file-browser/api/index.ts",
+    "apps/web/src/features/file-browser/api/useFiles.ts",
+    "apps/web/src/features/file-browser/api/useFilesRust.ts",
+    "apps/web/src/features/file-browser/index.ts",
+    "apps/web/src/features/file-browser/ui/FileBrowserPanel.tsx",
+    "apps/web/src/features/repository/api/repository.service.ts",
+    "apps/web/src/features/session/api/session.service.ts",
+    "apps/web/src/features/session/hooks/useAgentRpcHandler.ts",
+    "apps/web/src/features/workspace/api/index.ts",
+    "apps/web/src/features/workspace/api/workspace.queries.ts",
+    "apps/web/src/features/workspace/api/workspace.service.ts",
+    "apps/web/src/features/workspace/ui/AllDiffFileSection.tsx",
+    "apps/web/src/features/workspace/ui/AllFilesDiffViewer.tsx",
+    "apps/web/src/features/workspace/ui/CodePanelContent.tsx",
+    "apps/web/src/platform/electron/db.ts",
+    "apps/web/src/platform/electron/git.ts",
+    "apps/web/src/shared/config/api.config.ts"
+  ],
+  "agent": "Claude Code",
+  "turn_id": "b25173dd9cdf",
+  "token_usage": {
+    "input_tokens": 12911,
+    "cache_creation_tokens": 2881065,
+    "cache_read_tokens": 228942230,
+    "output_tokens": 279316,
+    "api_call_count": 957
+  },
+  "session_metrics": {
+    "turn_count": 68
+  },
+  "initial_attribution": {
+    "calculated_at": "2026-03-19T19:31:03.933388Z",
+    "agent_lines": 113,
+    "human_added": 0,
+    "human_modified": 0,
+    "human_removed": 0,
+    "total_committed": 113,
+    "agent_percentage": 100
+  }
+}
