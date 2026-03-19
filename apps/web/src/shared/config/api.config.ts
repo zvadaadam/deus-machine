@@ -143,6 +143,8 @@ export const ENDPOINTS = {
     `/workspaces/${id}/tasks/${encodeURIComponent(taskName)}/run`,
 
   // File endpoints
+  WORKSPACE_FILES: (id: string) => `/workspaces/${id}/files`,
+  WORKSPACE_FILES_INVALIDATE: (id: string) => `/workspaces/${id}/files/invalidate-cache`,
   WORKSPACE_FILES_SEARCH: (id: string) => `/workspaces/${id}/files/search`,
 
   // Session endpoints

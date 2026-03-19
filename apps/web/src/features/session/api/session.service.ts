@@ -1,12 +1,12 @@
 /**
  * Session Service
- * API methods for Claude Code session management
+ *
+ * All data operations go through the Node.js backend via HTTP.
+ * The backend handles DB reads, session management, and agent coordination.
  */
 
 import { apiClient } from "@/shared/api/client";
 import { ENDPOINTS } from "@/shared/config/api.config";
-import { isElectronAvailable } from "@/platform/electron/invoke";
-import { dbGetSession, dbGetMessages } from "@/platform/electron/db";
 import type { Session, Message } from "../types";
 
 /** Pagination params for cursor-based message fetching (seq-based) */
@@ -26,41 +26,18 @@ export interface PaginatedMessages {
 export const SessionService = {
   /**
    * Fetch session by ID.
-   * Uses direct DB IPC when available (~1ms),
-   * falls back to Node.js HTTP when in web mode.
    */
   fetchById: async (id: string): Promise<Session> => {
-    if (isElectronAvailable()) {
-      try {
-        const session = await dbGetSession(id);
-        if (session) return session;
-      } catch {
-        // IPC failed — fall through to HTTP
-      }
-    }
     return apiClient.get<Session>(ENDPOINTS.SESSION_BY_ID(id));
   },
 
   /**
    * Fetch messages for a session with optional cursor-based pagination.
-   * Uses direct DB IPC when available (~1ms),
-   * falls back to Node.js HTTP when in web mode.
    */
   fetchMessages: async (
     id: string,
     params?: MessagePaginationParams
   ): Promise<PaginatedMessages> => {
-    if (isElectronAvailable()) {
-      try {
-        return await dbGetMessages(id, {
-          limit: params?.limit,
-          before: params?.before,
-          after: params?.after,
-        });
-      } catch {
-        // IPC failed — fall through to HTTP
-      }
-    }
     const searchParams = new URLSearchParams();
     if (params?.limit != null) searchParams.set("limit", String(params.limit));
     if (params?.before != null) searchParams.set("before", String(params.before));

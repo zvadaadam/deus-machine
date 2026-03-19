@@ -34,7 +34,6 @@ import {
 } from "../lib/changesFilter";
 import type { Workspace } from "@/shared/types";
 import type { FileChange } from "@/features/workspace/types";
-import type { WorkspaceGitInfo } from "../api/workspace.service";
 
 type FilterMode = "all" | "changes";
 
@@ -55,8 +54,6 @@ interface CodePanelContentProps {
   filterMode?: FilterMode;
   /** Called when user switches filter tab */
   onFilterModeChange?: (mode: FilterMode) => void;
-  /** Git info for fetching diffs */
-  workspaceGitInfo: WorkspaceGitInfo;
   /** Callback to insert a code review prompt into the chat input */
   onReview?: () => void;
 }
@@ -72,7 +69,6 @@ export function CodePanelContent({
   onFileClick,
   filterMode = "changes",
   onFilterModeChange,
-  workspaceGitInfo,
   onReview,
 }: CodePanelContentProps) {
   const diffViewerRef = useRef<AllFilesDiffViewerRef>(null);
@@ -194,7 +190,6 @@ export function CodePanelContent({
                 ref={diffViewerRef}
                 workspaceId={workspace.id}
                 fileChanges={filteredFileChanges}
-                workspaceGitInfo={workspaceGitInfo}
                 hideHeader
               />
             </ResizablePanel>

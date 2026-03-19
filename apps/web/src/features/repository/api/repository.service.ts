@@ -1,12 +1,12 @@
 /**
  * Repository Service
- * API methods for repository management
+ *
+ * All data operations go through the Node.js backend via HTTP.
+ * The backend handles DB reads and external service coordination.
  */
 
 import { apiClient } from "@/shared/api/client";
 import { ENDPOINTS } from "@/shared/config/api.config";
-import { isElectronAvailable } from "@/platform/electron/invoke";
-import { dbGetStats } from "@/platform/electron/db";
 import type { Repository, Stats } from "../types";
 import type { ManifestResponse } from "@shared/types/manifest";
 
@@ -27,17 +27,8 @@ export const RepoService = {
 
   /**
    * Fetch system statistics.
-   * Uses direct DB IPC when available (~1ms),
-   * falls back to Node.js HTTP when in web mode.
    */
   fetchStats: async (): Promise<Stats> => {
-    if (isElectronAvailable()) {
-      try {
-        return await dbGetStats();
-      } catch {
-        // IPC failed — fall through to HTTP
-      }
-    }
     return apiClient.get<Stats>(ENDPOINTS.STATS);
   },
 

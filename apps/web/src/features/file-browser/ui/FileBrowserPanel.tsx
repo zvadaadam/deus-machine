@@ -24,7 +24,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { useFilesRust, invalidateFileCache } from "../api/useFilesRust";
+import { useFiles, invalidateFileCache } from "../api/useFiles";
 import { FileTree } from "./components/FileTree";
 import { cn } from "@/shared/lib/utils";
 import {
@@ -214,16 +214,16 @@ export function FileBrowserPanel({
   const [searchQuery, setSearchQuery] = useState("");
   const searchInputRef = useRef<HTMLInputElement>(null);
 
-  const workspacePath = selectedWorkspace?.workspace_path ?? null;
-  const { data, isLoading, error, refetch } = useFilesRust(workspacePath);
+  const workspaceId = selectedWorkspace?.id ?? null;
+  const { data, isLoading, error, refetch } = useFiles(workspaceId);
 
   const handleFileClick = (path: string) => {
     onFileClickProp?.(path);
   };
 
   const handleRefresh = async () => {
-    if (workspacePath) {
-      await invalidateFileCache(workspacePath);
+    if (workspaceId) {
+      await invalidateFileCache(workspaceId);
       refetch();
     }
   };

@@ -18,7 +18,6 @@ import { forwardRef, useImperativeHandle, useRef, useCallback, useState, useEffe
 import { X, ChevronsUpDown } from "lucide-react";
 import { AllDiffFileSection } from "./AllDiffFileSection";
 import { workspaceLayoutActions } from "../store";
-import type { WorkspaceGitInfo } from "../api/workspace.service";
 import type { FileChange } from "@/shared/types";
 
 export interface AllFilesDiffViewerRef {
@@ -28,7 +27,6 @@ export interface AllFilesDiffViewerRef {
 interface AllFilesDiffViewerProps {
   workspaceId: string;
   fileChanges: FileChange[];
-  workspaceGitInfo: WorkspaceGitInfo;
   /** Close handler — only needed when header is visible */
   onClose?: () => void;
   /** Hide the header bar (file count, collapse/expand, close). Used when
@@ -46,7 +44,6 @@ export const AllFilesDiffViewer = forwardRef<AllFilesDiffViewerRef, AllFilesDiff
     {
       workspaceId,
       fileChanges,
-      workspaceGitInfo,
       onClose,
       hideHeader,
       onActiveFileChange,
@@ -261,7 +258,6 @@ export const AllFilesDiffViewer = forwardRef<AllFilesDiffViewerRef, AllFilesDiff
                 key={path}
                 workspaceId={workspaceId}
                 fileChange={fc}
-                workspaceGitInfo={workspaceGitInfo}
                 isActive={activeFile === path}
                 sectionRef={sectionRefCallback}
                 expandStateKey={expandStateKey}
