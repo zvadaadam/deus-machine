@@ -143,7 +143,7 @@ type RespondFn = (result: unknown) => void;
 /**
  * Hook that handles browser automation RPC requests from the sidecar.
  *
- * Listens for "sidecar:request" IPC events, dispatches to the appropriate
+ * Listens for WS tool requests (via `useWsToolRequest`), dispatches to the appropriate
  * handler based on method name, and sends JSON-RPC responses back to the sidecar.
  *
  * @param getActiveTab - Function to get the current active browser tab state

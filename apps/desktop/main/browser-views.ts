@@ -20,6 +20,7 @@ import { join } from "path";
 import { is } from "@electron-toolkit/utils";
 
 const views = new Map<string, BrowserView>();
+const viewBounds = new Map<string, Electron.Rectangle>();
 
 /** Reference to the detached browser window (only one at a time) */
 let detachedWindow: BrowserWindow | null = null;
@@ -266,13 +267,17 @@ export function registerBrowserViewHandlers(): void {
       if (!mainWindow.getBrowserViews().includes(view)) {
         mainWindow.addBrowserView(view);
       }
+      const savedBounds = viewBounds.get(label);
+      if (savedBounds) {
+        view.setBounds(savedBounds);
+      }
     }
   });
 
   ipcMain.handle("hide_browser_webview", (_e, { label }: { label: string }) => {
     const view = views.get(label);
     if (view) {
-      // Hide by setting zero-size bounds
+      viewBounds.set(label, view.getBounds());
       view.setBounds({ x: 0, y: 0, width: 0, height: 0 });
     }
   });
@@ -286,6 +291,7 @@ export function registerBrowserViewHandlers(): void {
     }
     (view.webContents as any).destroy?.();
     views.delete(label);
+    viewBounds.delete(label);
   });
 
   ipcMain.handle("reload_browser_webview", (_e, { label }: { label: string }) => {

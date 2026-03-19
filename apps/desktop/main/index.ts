@@ -76,7 +76,7 @@ async function createWindow(): Promise<void> {
   });
 
   // Open DevTools in development
-  if (process.env.NODE_ENV !== "production" || !app.isPackaged) {
+  if (is.dev) {
     mainWindow.webContents.openDevTools({ mode: "detach" });
   }
 

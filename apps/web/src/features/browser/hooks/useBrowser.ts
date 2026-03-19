@@ -51,10 +51,15 @@ export function useBrowser() {
   const stopServer = useCallback(async () => {
     try {
       const baseUrl = await getBackendUrl();
-      await fetch(`${baseUrl}/api/browser-server/stop`, { method: "POST" });
+      const res = await fetch(`${baseUrl}/api/browser-server/stop`, { method: "POST" });
+      if (!res.ok) {
+        throw new Error(`Stop failed: HTTP ${res.status}`);
+      }
       setStatus({ running: false, port: null, authToken: null, error: null });
     } catch (error) {
-      console.error("[useBrowser] Error stopping server:", getErrorMessage(error));
+      const msg = getErrorMessage(error);
+      console.error("[useBrowser] Error stopping server:", msg);
+      setStatus((prev) => ({ ...prev, error: msg }));
     }
   }, []);
 

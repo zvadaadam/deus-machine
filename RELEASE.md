@@ -36,17 +36,20 @@ You (GitHub UI or CLI)
 ### Triggering a Release
 
 **From GitHub UI:**
+
 1. Go to Actions tab → "Release" workflow → "Run workflow"
 2. Enter version (e.g. `2.1.0`)
 3. Optionally check "Dry run" for build-only (no GitHub Release)
 4. Click "Run workflow"
 
 **From CLI:**
+
 ```bash
 gh workflow run release.yml -f version=2.1.0
 ```
 
 **Dry run (build only, no release):**
+
 ```bash
 gh workflow run release.yml -f version=2.1.0 -f dry_run=true
 ```
@@ -92,12 +95,12 @@ gh secret set APPLE_TEAM_ID --repo zvadaadam/box-ide
 
 ## Key Files
 
-| File | Purpose |
-|------|---------|
-| `.github/workflows/release.yml` | One-click release workflow |
-| `scripts/bump-version.sh` | Bumps version in all config files |
-| `electron-builder.yml` | Electron Builder packaging configuration |
-| `src/main/auto-updater.ts` | Auto-update via electron-updater |
+| File                                | Purpose                                  |
+| ----------------------------------- | ---------------------------------------- |
+| `.github/workflows/release.yml`     | One-click release workflow               |
+| `scripts/bump-version.sh`           | Bumps version in all config files        |
+| `electron-builder.yml`              | Electron Builder packaging configuration |
+| `apps/desktop/main/auto-updater.ts` | Auto-update via electron-updater         |
 
 ## Important Notes
 

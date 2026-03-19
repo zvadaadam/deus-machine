@@ -30,9 +30,6 @@ jobs:
       - name: Install dependencies
         run: bun install --frozen-lockfile
 
-      - name: Rebuild native modules for Node.js
-        run: npm rebuild better-sqlite3
-
       - name: Run tests
         run: bun run test:backend
 
@@ -54,9 +51,6 @@ jobs:
 
       - name: Install dependencies
         run: bun install --frozen-lockfile
-
-      - name: Rebuild native modules for Node.js
-        run: npm rebuild better-sqlite3
 
       - name: Build inject scripts
         run: bun run build:inject
