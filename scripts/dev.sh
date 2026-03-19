@@ -20,7 +20,7 @@ NC='\033[0m'
 # Trap to kill background processes on exit
 trap 'kill $(jobs -p) 2>/dev/null; rm -f /tmp/backend_port.txt /tmp/sidecar.log' EXIT
 
-# Kill any stale Vite process on port 1420 to prevent Tauri from
+# Kill any stale Vite process on port 1420 to prevent Electron from
 # connecting to an outdated dev server from a previous session.
 STALE_PID=$(lsof -ti:1420 2>/dev/null || true)
 if [ -n "$STALE_PID" ]; then
@@ -59,7 +59,7 @@ echo ""
 
 # Start backend server with dynamic port + agent-server URL
 echo -e "${BLUE}Starting backend server with dynamic port...${NC}"
-AGENT_SERVER_URL=$AGENT_SERVER_URL PORT=0 node backend/server.cjs > /tmp/backend.log 2>&1 &
+AGENT_SERVER_URL=$AGENT_SERVER_URL PORT=0 node apps/backend/server.cjs > /tmp/backend.log 2>&1 &
 BACKEND_PID=$!
 
 # Wait and capture the dynamic port

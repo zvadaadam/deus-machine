@@ -1,29 +1,23 @@
-# Dependencies
+# Dependencies & build output
 node_modules/
 dist/
+out/
+dist-electron/
 build/
-
-# Tauri build artifacts
-src-tauri/target/
-src-tauri/Cargo.lock
-src-tauri/gen/schemas/
+coverage/
 
 # Generated files
 *.min.js
 *.min.css
-coverage/
 
 # Lock files
-package-lock.json
-pnpm-lock.yaml
-yarn.lock
+bun.lock
 
 # IDE
 .vscode/
 .idea/
 
-# Logs
-*.log
-
-# Backend files (if needed)
-backend/
+# Non-frontend code (has own formatting rules or isn't JS/TS)
+apps/backend/
+apps/sidecar/
+shared/

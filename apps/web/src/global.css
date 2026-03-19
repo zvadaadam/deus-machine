@@ -1,0 +1,2303 @@
+/* Tailwind CSS v4 imports */
+@import "tailwindcss";
+
+/* Import fonts */
+@import "./fonts.css";
+
+@custom-variant dark (&:is(.dark *));
+
+/* Tailwind v4 Theme Configuration */
+@theme {
+  /* Semantic colors - exposed to Tailwind utilities */
+  /* These reference the CSS variables defined in :root (light) and .dark */
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-placeholder: color-mix(in oklch, var(--muted-foreground) 40%, transparent);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-destructive-foreground: var(--destructive-foreground);
+  --color-success: var(--success);
+  --color-success-foreground: var(--success-foreground);
+  --color-warning: var(--warning);
+  --color-warning-foreground: var(--warning-foreground);
+  --color-info: var(--info);
+  --color-info-foreground: var(--info-foreground);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-input-surface: var(--input-surface);
+  --color-input-tint: var(--input-tint);
+  --color-ring: var(--ring);
+  --color-destructive-ring: var(--destructive-ring);
+  --color-sidebar: var(--sidebar);
+  --color-sidebar-foreground: var(--sidebar-foreground);
+  --color-sidebar-primary: var(--sidebar-primary);
+  --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
+  --color-sidebar-accent: var(--sidebar-accent);
+  --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
+  --color-sidebar-border: var(--sidebar-border);
+  --color-sidebar-ring: var(--sidebar-ring);
+
+  /* Status colors for workspace/session states */
+  --color-status-working: var(--status-working);
+  --color-status-working-fg: var(--status-working-fg);
+  --color-status-compacting: var(--status-compacting);
+  --color-status-compacting-fg: var(--status-compacting-fg);
+  --color-status-unread: var(--status-unread);
+  --color-status-unread-fg: var(--status-unread-fg);
+
+  /* File type icon colors */
+  --color-file-typescript: var(--file-typescript);
+  --color-file-rust: var(--file-rust);
+  --color-file-data: var(--file-data);
+  --color-file-docs: var(--file-docs);
+  --color-file-styles: var(--file-styles);
+  --color-file-markup: var(--file-markup);
+  --color-file-image: var(--file-image);
+
+  /* Extended background tiers — for precise depth control */
+  --color-bg-base: var(--bg-base);
+  --color-bg-surface: var(--bg-surface);
+  --color-bg-elevated: var(--bg-elevated);
+  --color-bg-raised: var(--bg-raised);
+  --color-bg-overlay: var(--bg-overlay);
+  --color-bg-muted: var(--bg-muted);
+  --color-bg-sidebar: var(--bg-sidebar);
+  --color-bg-selection: var(--bg-selection);
+  --color-bg-code: var(--bg-code);
+
+  /* Extended border tiers */
+  --color-border-subtle: var(--border-subtle);
+  --color-border-default: var(--border-default);
+  --color-border-strong: var(--border-strong);
+
+  /* Extended text hierarchy */
+  --color-text-primary: var(--text-primary);
+  --color-text-secondary: var(--text-secondary);
+  --color-text-tertiary: var(--text-tertiary);
+  --color-text-subtle: var(--text-subtle);
+  --color-text-muted: var(--text-muted);
+  --color-text-disabled: var(--text-disabled);
+
+  /* Component surface tokens — variant backgrounds that flip with theme */
+  --color-destructive-surface: var(--destructive-surface);
+  --color-destructive-tint: var(--destructive-tint);
+  --color-control-surface: var(--control-surface);
+  --color-control-surface-hover: var(--control-surface-hover);
+  --color-checked-tint: var(--checked-tint);
+  --color-tooltip-kbd: var(--tooltip-kbd);
+
+  /* Accent palette */
+  --color-accent-blue-surface: var(--accent-blue-surface);
+  --color-accent-blue: var(--accent-blue);
+  --color-accent-green: var(--accent-green);
+  --color-accent-green-muted: var(--accent-green-muted);
+  --color-accent-red: var(--accent-red);
+  --color-accent-red-muted: var(--accent-red-muted);
+  --color-accent-gold: var(--accent-gold);
+
+  /* Neutral scale */
+  --color-neutral-50: var(--neutral-50);
+  --color-neutral-100: var(--neutral-100);
+  --color-neutral-200: var(--neutral-200);
+  --color-neutral-300: var(--neutral-300);
+  --color-neutral-400: var(--neutral-400);
+  --color-neutral-500: var(--neutral-500);
+  --color-neutral-600: var(--neutral-600);
+  --color-neutral-700: var(--neutral-700);
+  --color-neutral-800: var(--neutral-800);
+  --color-neutral-900: var(--neutral-900);
+
+  /* Z-index tokens */
+  --z-base: var(--z-base);
+  --z-dropdown: var(--z-dropdown);
+  --z-sticky: var(--z-sticky);
+  --z-fixed: var(--z-fixed);
+  --z-modal-backdrop: var(--z-modal-backdrop);
+  --z-modal: var(--z-modal);
+  --z-popover: var(--z-popover);
+  --z-tooltip: var(--z-tooltip);
+  --z-notification: var(--z-notification);
+
+  /* Font families — System native for UI and code */
+  --font-sans:
+    -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI", Roboto, Helvetica, Arial,
+    sans-serif;
+  --font-mono:
+    ui-monospace, "SFMono-Regular", "SF Mono", Menlo, Monaco, Consolas, "Liberation Mono",
+    "Courier New", monospace;
+  --font-pixel: "Geist Pixel Square", monospace;
+
+  /* Legacy aliases for backward compatibility */
+  --font-family-sans: var(--font-sans);
+  --font-family-mono: var(--font-mono);
+  --font-family-pixel: var(--font-pixel);
+
+  /*
+   * Typography Scale — Dense IDE system (13px base)
+   *
+   * Override Tailwind defaults for a compact productivity tool.
+   * Each size bundles font-size, line-height, and letter-spacing.
+   * Negative tracking throughout — the "premium texture" layer.
+   *
+   * Scale: 2xs(9) → xs(11) → sm(12) → base(13) → lg(15) → xl(18) → 2xl(24) → 3xl(32)
+   */
+  --text-2xs: 9px;
+  --text-2xs--line-height: 1.35;
+  --text-2xs--letter-spacing: -0.003em;
+  --text-xs: 11px;
+  --text-xs--line-height: 1.45;
+  --text-xs--letter-spacing: -0.006em;
+  --text-sm: 12px;
+  --text-sm--line-height: 1.5;
+  --text-sm--letter-spacing: -0.011em;
+  --text-base: 13px;
+  --text-base--line-height: 1.5;
+  --text-base--letter-spacing: -0.011em;
+  --text-lg: 15px;
+  --text-lg--line-height: 1.35;
+  --text-lg--letter-spacing: -0.014em;
+  --text-xl: 18px;
+  --text-xl--line-height: 1.25;
+  --text-xl--letter-spacing: -0.018em;
+  --text-2xl: 24px;
+  --text-2xl--line-height: 1.15;
+  --text-2xl--letter-spacing: -0.022em;
+  --text-3xl: 32px;
+  --text-3xl--line-height: 1.1;
+  --text-3xl--letter-spacing: -0.022em;
+
+  /* Letter-spacing tokens — semantic tracking for manual use */
+  --tracking-display: -0.022em;
+  --tracking-title: -0.014em;
+  --tracking-body: -0.011em;
+  --tracking-caption: -0.006em;
+  --tracking-caps: 0.06em;
+
+  /* Legacy aliases — backward compatibility during migration */
+  --tracking-tighter: -0.022em;
+  --tracking-tight: -0.014em;
+  --tracking-normal: -0.011em;
+  --tracking-wide: 0.06em;
+  --tracking-widest: 0.1em;
+
+  --leading-tight: 1.25;
+  --leading-snug: 1.35;
+  --leading-normal: 1.5;
+  --leading-relaxed: 1.6;
+
+  /* Border radius — 10-token scale with squircle support
+   * Two-layer architecture: base values × --corner-radius-scale = computed.
+   * When browser supports corner-shape: superellipse(1.5), scale bumps to 1.25
+   * to compensate for squircle corners appearing visually tighter. */
+  --radius-2xs: calc(var(--radius-2xs-base) * var(--corner-radius-scale));
+  --radius-xs: calc(var(--radius-xs-base) * var(--corner-radius-scale));
+  --radius-sm: calc(var(--radius-sm-base) * var(--corner-radius-scale));
+  --radius-md: calc(var(--radius-md-base) * var(--corner-radius-scale));
+  --radius-lg: calc(var(--radius-lg-base) * var(--corner-radius-scale));
+  --radius-xl: calc(var(--radius-xl-base) * var(--corner-radius-scale));
+  --radius-2xl: calc(var(--radius-2xl-base) * var(--corner-radius-scale));
+  --radius-3xl: calc(var(--radius-3xl-base) * var(--corner-radius-scale));
+  --radius-4xl: calc(var(--radius-4xl-base) * var(--corner-radius-scale));
+  --radius-full: 9999px;
+
+  /* Animations - Choreographed timing: content exits fast, container follows smooth */
+  --animate-fade-in: fadeIn 0.2s cubic-bezier(0, 0, 0.2, 1);
+  --animate-fade-in-up: fadeInUp 0.25s cubic-bezier(0, 0, 0.2, 1);
+  --animate-shimmer: shimmer 2s ease-in-out infinite;
+  --animate-subtle-spin: subtle-spin 2s linear infinite;
+  --animate-drop-overlay-enter: drop-overlay-enter 0.2s cubic-bezier(0.165, 0.84, 0.44, 1);
+}
+
+/* text-2xs is now defined in @theme above */
+
+@keyframes tooltip-enter {
+  from {
+    opacity: 0;
+    transform: scale(0.97) translateY(var(--tooltip-translate-y, 0))
+      translateX(var(--tooltip-translate-x, 0));
+  }
+  to {
+    opacity: 1;
+    transform: scale(1) translateY(0) translateX(0);
+  }
+}
+
+@keyframes tooltip-exit {
+  from {
+    opacity: 1;
+    transform: scale(1) translateY(0) translateX(0);
+  }
+  to {
+    opacity: 0;
+    transform: scale(0.97) translateY(var(--tooltip-translate-y, 0))
+      translateX(var(--tooltip-translate-x, 0));
+  }
+}
+
+/* Dropdown / popover enter/exit — used by Radix DropdownMenu, ContextMenu, Select.
+ * Scale from 0.96 (not 0) + fade + directional slide for snappy, polished feel.
+ * ease-out-cubic (.215,.61,.355,1): fast start, gentle settle — per Kowalski. */
+@keyframes dropdown-enter {
+  from {
+    opacity: 0;
+    transform: scale(0.96) translateY(var(--dropdown-slide-y, 0));
+  }
+  to {
+    opacity: 1;
+    transform: scale(1) translateY(0);
+  }
+}
+
+@keyframes dropdown-exit {
+  from {
+    opacity: 1;
+    transform: scale(1) translateY(0);
+  }
+  to {
+    opacity: 0;
+    transform: scale(0.96) translateY(var(--dropdown-slide-y, 0));
+  }
+}
+
+/* Overlay fade — used by Dialog, Sheet, AlertDialog overlays */
+@keyframes overlay-enter {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+@keyframes overlay-exit {
+  from {
+    opacity: 1;
+  }
+  to {
+    opacity: 0;
+  }
+}
+
+/* Dialog center zoom — individual scale property avoids conflict with Tailwind translate */
+@keyframes dialog-enter {
+  from {
+    opacity: 0;
+    scale: 0.96;
+  }
+  to {
+    opacity: 1;
+    scale: 1;
+  }
+}
+@keyframes dialog-exit {
+  from {
+    opacity: 1;
+    scale: 1;
+  }
+  to {
+    opacity: 0;
+    scale: 0.96;
+  }
+}
+
+/* Sheet slide — slides in from edge */
+@keyframes sheet-enter-right {
+  from {
+    transform: translateX(100%);
+  }
+  to {
+    transform: translateX(0);
+  }
+}
+@keyframes sheet-exit-right {
+  from {
+    transform: translateX(0);
+  }
+  to {
+    transform: translateX(100%);
+  }
+}
+@keyframes sheet-enter-left {
+  from {
+    transform: translateX(-100%);
+  }
+  to {
+    transform: translateX(0);
+  }
+}
+@keyframes sheet-exit-left {
+  from {
+    transform: translateX(0);
+  }
+  to {
+    transform: translateX(-100%);
+  }
+}
+@keyframes sheet-enter-top {
+  from {
+    transform: translateY(-100%);
+  }
+  to {
+    transform: translateY(0);
+  }
+}
+@keyframes sheet-exit-top {
+  from {
+    transform: translateY(0);
+  }
+  to {
+    transform: translateY(-100%);
+  }
+}
+@keyframes sheet-enter-bottom {
+  from {
+    transform: translateY(100%);
+  }
+  to {
+    transform: translateY(0);
+  }
+}
+@keyframes sheet-exit-bottom {
+  from {
+    transform: translateY(0);
+  }
+  to {
+    transform: translateY(100%);
+  }
+}
+
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+/* Breathing pulse for collapsed panel strip — signals active agent work.
+ * Slow 2s cycle with ease-in-out-cubic feels organic, not mechanical. */
+@keyframes strip-breathe {
+  0%,
+  100% {
+    opacity: 0.45;
+  }
+  50% {
+    opacity: 1;
+  }
+}
+
+/* Simulator idle state — subtle breathing on device silhouette.
+ * Oscillates around the element's base opacity (0.3) by scaling 0.7–1.0.
+ * The 6s cycle is intentionally slow — calm, unhurried. */
+@keyframes sim-idle-breathe {
+  0%,
+  100% {
+    opacity: 0.7;
+  }
+  50% {
+    opacity: 1;
+  }
+}
+
+/* Settle-in for collapsed strip content — pure opacity fade.
+ * No translate: the strip uses writing-mode: vertical-rl + rotate-180,
+ * and translateY would move along the wrong axis, causing a jarring multi-direction flash. */
+@keyframes strip-settle {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes fadeInUp {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes shimmer {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.5;
+  }
+}
+
+/* Build progress shimmer — bar slides left-to-right within its container.
+   Used by the simulator panel's indeterminate build progress indicator. */
+@keyframes build-shimmer {
+  0% {
+    transform: translateX(-100%);
+  }
+  100% {
+    transform: translateX(300%);
+  }
+}
+
+/* Subtle spinner for working state - 120° arc rotating smoothly */
+@keyframes subtle-spin {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+/* Browser-style loading bar — NProgress-inspired indeterminate progress.
+ * Starts fast, slows down near 90%, never reaches 100% until page loads.
+ * Uses transform (GPU-accelerated) instead of width for performance. */
+@keyframes browser-loading {
+  0% {
+    transform: scaleX(0);
+  }
+  20% {
+    transform: scaleX(0.5);
+  }
+  60% {
+    transform: scaleX(0.8);
+  }
+  100% {
+    transform: scaleX(0.92);
+  }
+}
+
+@keyframes browser-loading-complete {
+  0% {
+    transform: scaleX(0.92);
+    opacity: 1;
+  }
+  40% {
+    transform: scaleX(1);
+    opacity: 1;
+  }
+  100% {
+    transform: scaleX(1);
+    opacity: 0;
+  }
+}
+
+/* Pixel Grid - 3x3 agent status indicator animations
+ * Uses CSS custom properties set on the grid container:
+ *   --pixel-glow        : color
+ *   --pixel-peak-opacity : max cell opacity (default 1)
+ *   --pixel-glow-blur    : box-shadow blur radius (default 4px)
+ *   --pixel-glow-spread  : box-shadow spread (default 1px)
+ */
+@keyframes pixel-pulse {
+  0%,
+  100% {
+    opacity: 0;
+  }
+  20% {
+    opacity: var(--pixel-peak-opacity, 1);
+    box-shadow: 0 0 var(--pixel-glow-blur, 4px) var(--pixel-glow-spread, 1px) var(--pixel-glow);
+  }
+  40% {
+    opacity: 0;
+  }
+}
+
+@keyframes pixel-snake {
+  0% {
+    opacity: 0;
+  }
+  10% {
+    opacity: var(--pixel-peak-opacity, 1);
+    box-shadow: 0 0 var(--pixel-glow-blur, 4px) var(--pixel-glow-spread, 1px) var(--pixel-glow);
+  }
+  40% {
+    opacity: 0;
+  }
+  100% {
+    opacity: 0;
+  }
+}
+
+@keyframes pixel-sparkle {
+  0%,
+  100% {
+    opacity: 0;
+  }
+  50% {
+    opacity: var(--pixel-peak-opacity, 1);
+    box-shadow: 0 0 var(--pixel-glow-blur, 4px) var(--pixel-glow-spread, 1px) var(--pixel-glow);
+  }
+}
+
+/* Full-panel drop overlay — fade + subtle scale for the drop zone */
+@keyframes drop-overlay-enter {
+  from {
+    opacity: 0;
+    transform: scale(0.98);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+/* Tool loading shimmer — "make-shine" pattern.
+   Gradient slides across text via background-clip: text.
+   Applied to tool headers while result is pending. */
+@keyframes tool-shimmer {
+  from {
+    background-position: 200% 0;
+  }
+  to {
+    background-position: -200% 0;
+  }
+}
+
+.tool-loading-shimmer {
+  background-image: linear-gradient(
+    90deg,
+    currentColor 0%,
+    currentColor 25%,
+    color-mix(in oklch, var(--foreground) 90%, white) 50%,
+    currentColor 75%,
+    currentColor 100%
+  );
+  background-size: 200% 100%;
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+  animation: tool-shimmer 2s linear infinite;
+}
+
+/* Expand/collapse uses conditional render + inline animate-[fadeIn_150ms_ease-out]
+   (Cursor-aligned). No CSS grid height transitions needed — content mounts/
+   unmounts with a subtle opacity fade, removing DOM weight from collapsed
+   subtrees entirely. */
+
+/* One-shot entrance animations for chat items and tool blocks.
+   Replaces Framer Motion m.div wrappers — pure CSS, zero React overhead.
+   @keyframes + animation-fill-mode:both ensures the element starts hidden
+   and ends visible. No JS cleanup needed; the animation plays once on mount
+   then the element is a plain div with no ongoing cost.
+   Respects prefers-reduced-motion via the global media query.
+
+   Turn-level entrance: slide-up + fade. Inspired by Cursor's 8px/0.4s
+   entrance with elastic easing. Per-turn (not per-message) so it fires
+   once at conversation boundaries, not during mid-turn streaming.
+   Smooth auto-scroll runs concurrently — no conflict since the animation
+   is on the inner content div, not the virtualizer's positioning div. */
+@keyframes chatItemEnter {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.chat-item-enter {
+  animation: chatItemEnter 0.4s cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+/* Per-tool entrance animation removed. Turn-level chatItemEnter covers
+   entrance. Per-tool translateY fired on every new tool mount during
+   streaming, compounding into visual noise. Class kept empty so existing
+   references don't error. */
+.tool-use-enter {
+}
+
+/* Tool group header entrance — opacity only, no translateY */
+@keyframes toolGroupHeaderFadeIn {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+.tool-group-header-enter {
+  animation: toolGroupHeaderFadeIn 150ms cubic-bezier(0.32, 0.72, 0, 1) both;
+}
+
+/* Tiered thinking animations - organic breathing effect */
+/* Core (center cell): largest amplitude, fastest, most opaque */
+@keyframes pixel-think-core {
+  0%,
+  100% {
+    opacity: 0.3;
+    transform: scale(0.85);
+  }
+  25% {
+    opacity: 0.9;
+    transform: scale(1.25);
+  }
+  50% {
+    opacity: 1;
+    transform: scale(1.35);
+    box-shadow: 0 0 var(--pixel-glow-blur, 4px) var(--pixel-glow-spread, 1px) var(--pixel-glow);
+  }
+  75% {
+    opacity: 0.6;
+    transform: scale(1.05);
+  }
+}
+
+/* Support (edge-center cells): medium amplitude */
+@keyframes pixel-think-support {
+  0%,
+  100% {
+    opacity: 0.1;
+    transform: scale(0.65);
+  }
+  30% {
+    opacity: 0.7;
+    transform: scale(1.15);
+    box-shadow: 0 0 var(--pixel-glow-blur, 4px) var(--pixel-glow-spread, 1px) var(--pixel-glow);
+  }
+  60% {
+    opacity: 0.4;
+    transform: scale(0.9);
+  }
+}
+
+/* Subtle (corner cells): smallest amplitude, subtle shimmer */
+@keyframes pixel-think-subtle {
+  0%,
+  100% {
+    opacity: 0.05;
+    transform: scale(0.5);
+  }
+  40% {
+    opacity: 0.35;
+    transform: scale(0.9);
+  }
+  70% {
+    opacity: 0.15;
+    transform: scale(0.7);
+  }
+}
+
+/* Compacting animations — inward converge (corners → edges → center)
+ * Thinking breathes outward; compacting breathes inward.
+ * Structured, deliberate cascade: gather → channel → compress. */
+
+/* Corners: first to pulse, first to fade. Raw content being gathered.
+ * Brief, dim glow — material being consumed. */
+@keyframes pixel-compact-corner {
+  0%,
+  30%,
+  100% {
+    opacity: 0;
+    transform: scale(0.5);
+  }
+  12% {
+    opacity: 0.5;
+    transform: scale(0.9);
+    box-shadow: 0 0 var(--pixel-glow-blur, 4px) var(--pixel-glow-spread, 1px) var(--pixel-glow);
+  }
+}
+
+/* Edges: second wave, channeling content inward. */
+@keyframes pixel-compact-edge {
+  0%,
+  18%,
+  55%,
+  100% {
+    opacity: 0;
+    transform: scale(0.55);
+  }
+  34% {
+    opacity: 0.7;
+    transform: scale(1.05);
+    box-shadow: 0 0 var(--pixel-glow-blur, 4px) var(--pixel-glow-spread, 1px) var(--pixel-glow);
+  }
+}
+
+/* Center: receives all content, glows strongest, holds briefly.
+ * The "compressed" moment — result sits before fading. */
+@keyframes pixel-compact-center {
+  0%,
+  38%,
+  100% {
+    opacity: 0;
+    transform: scale(0.7);
+  }
+  54% {
+    opacity: 1;
+    transform: scale(1.3);
+    box-shadow: 0 0 var(--pixel-glow-blur, 4px) var(--pixel-glow-spread, 1px) var(--pixel-glow);
+  }
+  68% {
+    opacity: 0.5;
+    transform: scale(1);
+    box-shadow: 0 0 var(--pixel-glow-blur, 4px) var(--pixel-glow-spread, 1px) var(--pixel-glow);
+  }
+  82% {
+    opacity: 0;
+    transform: scale(0.8);
+  }
+}
+
+/* ═══════════════════════════════════════════════════════════
+ * Design Tokens — V2: Jony Ive
+ *
+ * "Design is not just what it looks like and feels like.
+ *  Design is how it works." — Steve Jobs
+ *
+ * Token architecture:
+ *   1. Core surfaces (background, foreground, card, popover)
+ *   2. Interactive accent (primary, secondary)
+ *   3. Semantic signals (destructive, success, warning, info)
+ *   4. Extended tiers (bg-*, border-*, text-*, neutral-*)
+ *   5. Status & file-type colors
+ *
+ * The system is dark-first. Light mode inverts the ramp.
+ * ═══════════════════════════════════════════════════════════ */
+
+/* ─── Onboarding Animations ──────────────────────────────────────────────── */
+
+/* Step transitions — GPU-accelerated (transform + opacity only) */
+@keyframes onboarding-step-enter-forward {
+  from {
+    opacity: 0;
+    transform: translateX(60px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+@keyframes onboarding-step-exit-forward {
+  from {
+    opacity: 1;
+    transform: translateX(0);
+  }
+  to {
+    opacity: 0;
+    transform: translateX(-60px);
+  }
+}
+
+@keyframes onboarding-step-enter-back {
+  from {
+    opacity: 0;
+    transform: translateX(-60px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+@keyframes onboarding-step-exit-back {
+  from {
+    opacity: 1;
+    transform: translateX(0);
+  }
+  to {
+    opacity: 0;
+    transform: translateX(60px);
+  }
+}
+
+/* Card window: fades in with subtle scale-up + lift */
+@keyframes onboarding-card-enter {
+  from {
+    opacity: 0;
+    transform: scale(0.94) translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1) translateY(0);
+  }
+}
+
+/* Overlay: fades in from transparent to semi-opaque dark */
+@keyframes onboarding-overlay-fade-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+/* Exit: scrim fades out */
+@keyframes onboarding-exit-scrim {
+  0% {
+    opacity: 1;
+  }
+  40% {
+    opacity: 0.6;
+  }
+  100% {
+    opacity: 0;
+  }
+}
+
+/* Shimmer for indeterminate progress bar in onboarding clone step */
+@keyframes onboarding-shimmer {
+  0% {
+    transform: translateX(-100%);
+  }
+  100% {
+    transform: translateX(400%);
+  }
+}
+
+/* Exit: card dissolves upward with blur */
+@keyframes onboarding-exit-card {
+  0% {
+    opacity: 1;
+    transform: scale(1) translateY(0);
+    filter: blur(0);
+  }
+  100% {
+    opacity: 0;
+    transform: scale(1.04) translateY(-12px);
+    filter: blur(8px);
+  }
+}
+
+:root {
+  --radius: 0.5rem; /* Legacy — kept for backward compat */
+  --traffic-light-clearance: 86px;
+
+  /* Radius base values — source of truth for the two-layer system */
+  --corner-radius-scale: 1;
+  --radius-2xs-base: 0.125rem; /* 2px */
+  --radius-xs-base: 0.25rem; /* 4px */
+  --radius-sm-base: 0.375rem; /* 6px */
+  --radius-md-base: 0.5rem; /* 8px */
+  --radius-lg-base: 0.625rem; /* 10px */
+  --radius-xl-base: 0.75rem; /* 12px */
+  --radius-2xl-base: 1rem; /* 16px */
+  --radius-3xl-base: 1.25rem; /* 20px */
+  --radius-4xl-base: 1.5rem; /* 24px */
+
+  /* --- Core surfaces (light mode — warm stone tones) --- */
+  --background: #f5f5f4;
+  --foreground: oklch(0.15 0 0);
+  --card: #ffffff;
+  --card-foreground: oklch(0.15 0 0);
+  --popover: #ffffff;
+  --popover-foreground: oklch(0.15 0 0);
+
+  /* --- Interactive accent (cool rose — pastel, warm, human) --- */
+  --primary: oklch(0.66 0.11 345);
+  --primary-foreground: #ffffff;
+
+  /* --- Secondary / structural --- */
+  --secondary: #efefed;
+  --secondary-foreground: #48484a;
+  --muted: #e8e8e6;
+  --muted-foreground: #8e8e93;
+  --accent: #efefed;
+  --accent-foreground: oklch(0.15 0 0);
+
+  /* --- Semantic signals (equiluminant OKLCH — all L=0.53 for equal visual weight) --- */
+  --destructive: oklch(0.53 0.19 25);
+  --destructive-foreground: #ffffff;
+  --success: oklch(0.53 0.16 155);
+  --success-foreground: #ffffff;
+  --warning: oklch(0.53 0.14 75);
+  --warning-foreground: #ffffff;
+  --info: var(--primary);
+  --info-foreground: var(--primary-foreground);
+
+  /* --- Status indicators (reference semantic tokens) --- */
+  --status-working: var(--success);
+  --status-working-fg: var(--success-foreground);
+  --status-compacting: var(--primary);
+  --status-compacting-fg: var(--primary-foreground);
+  --status-unread: var(--warning);
+  --status-unread-fg: var(--warning-foreground);
+
+  /* --- File type colors (reference semantic tokens) --- */
+  --file-typescript: var(--primary);
+  --file-rust: var(--destructive);
+  --file-data: var(--warning);
+  --file-docs: var(--success);
+  --file-styles: var(--primary);
+  --file-markup: var(--destructive);
+  --file-image: var(--warning);
+
+  /* --- Z-index scale --- */
+  --z-base: 0;
+  --z-dropdown: 100;
+  --z-sticky: 200;
+  --z-fixed: 300;
+  --z-modal-backdrop: 900;
+  --z-modal: 1000;
+  --z-popover: 1100;
+  --z-tooltip: 1200;
+  --z-notification: 1300;
+
+  /* --- Borders & inputs (semi-transparent — adapt to any surface) --- */
+  --border: color-mix(in oklch, var(--foreground) 8%, transparent);
+  --input: color-mix(in oklch, var(--foreground) 8%, transparent);
+  --input-surface: #ffffff;
+  --input-tint: transparent;
+  --ring: color-mix(in oklch, var(--primary) 40%, transparent);
+  --destructive-ring: color-mix(in oklch, var(--destructive) 20%, transparent);
+
+  /* --- Sidebar (cool gray — recedes behind warm content) --- */
+  --sidebar: #f3f4f6;
+  --sidebar-foreground: #6e6e73;
+  --sidebar-primary: var(--primary);
+  --sidebar-primary-foreground: var(--primary-foreground);
+  --sidebar-accent: #efefed;
+  --sidebar-accent-foreground: oklch(0.15 0 0);
+  --sidebar-border: color-mix(in oklch, var(--foreground) 5%, transparent);
+  --sidebar-ring: var(--ring);
+
+  /* --- Extended background tiers (warm stone) --- */
+  --bg-base: #f5f5f4;
+  --bg-surface: #fafaf9;
+  --bg-elevated: #ffffff;
+  --bg-raised: #efefed;
+  --bg-overlay: #fafafa;
+  --bg-muted: #e8e8e6;
+
+  /* --- Specialized backgrounds --- */
+  --bg-sidebar: #f3f4f6;
+  --bg-selection: #fffdfb;
+  --bg-code: #f7f7f5;
+
+  /* --- Extended border tiers (semi-transparent) --- */
+  --border-subtle: color-mix(in oklch, var(--foreground) 6%, transparent);
+  --border-default: color-mix(in oklch, var(--foreground) 8%, transparent);
+  --border-strong: color-mix(in oklch, var(--foreground) 14%, transparent);
+
+  /* --- Extended text hierarchy (OKLCH — wider gaps for readability) --- */
+  --text-primary: oklch(0.15 0 0);
+  --text-secondary: oklch(0.35 0 0);
+  --text-tertiary: oklch(0.48 0 0);
+  --text-subtle: oklch(0.58 0 0);
+  --text-muted: oklch(0.65 0 0);
+  --text-disabled: oklch(0.75 0 0);
+
+  /* --- Component surface tokens (light mode) --- */
+  --destructive-surface: var(--destructive);
+  --destructive-tint: color-mix(in oklch, var(--destructive) 10%, transparent);
+  --control-surface: var(--background);
+  --control-surface-hover: var(--accent);
+  --checked-tint: color-mix(in oklch, var(--primary) 5%, transparent);
+  --tooltip-kbd: color-mix(in oklch, var(--background) 20%, transparent);
+
+  /* --- Accent palette (reference semantic tokens) --- */
+  --accent-blue: var(--primary);
+  --accent-blue-surface: color-mix(in oklch, var(--primary) 10%, var(--background));
+  --accent-green: var(--success);
+  --accent-green-muted: color-mix(in oklch, var(--success) 50%, var(--muted-foreground));
+  --accent-red: var(--destructive);
+  --accent-red-muted: color-mix(in oklch, var(--destructive) 50%, var(--muted-foreground));
+  --accent-gold: var(--warning);
+
+  /* --- Neutral scale --- */
+  --neutral-50: #fafafa;
+  --neutral-100: #ebebeb;
+  --neutral-200: #c8c8c8;
+  --neutral-300: #a3a3a3;
+  --neutral-400: #8a8a8a;
+  --neutral-500: #737373;
+  --neutral-600: #5c5c5c;
+  --neutral-700: #454545;
+  --neutral-800: #2e2e2e;
+  --neutral-900: #1a1a1a;
+
+  /* --- Vibrancy tint system --- */
+  --sidebar-tint-opacity: 75%;
+  --sidebar-tint-strong: 85%;
+  --content-tint-opacity: 92%;
+  --sidebar-wash: #f3f4f6;
+
+  /* --- Content area border/shadow --- */
+  --content-border-opacity: 5%;
+  --content-shadow-opacity: 3%;
+
+  /* --- Elevated shadow (dropdowns, popovers, overlays) --- */
+  --shadow-elevated: 0 24px 64px rgba(0, 0, 0, 0.28);
+
+  /* --- Diff viewer (light mode) --- */
+  --diff-addition-bg: #e8f5e9;
+  --diff-addition-gutter: #c8e6c9;
+  --diff-addition-word: #a5d6a7;
+  --diff-addition-text: #2e7d32;
+
+  --diff-deletion-bg: #ffebee;
+  --diff-deletion-gutter: #ffcdd2;
+  --diff-deletion-word: #ef9a9a;
+  --diff-deletion-text: #c62828;
+
+  --diff-line-number: #8e8e93;
+  --diff-line-number-bg: #fafaf9;
+}
+
+.dark {
+  /* ═══════════════════════════════════════════════════════
+   * V2: Jony Ive — Dark Theme
+   *
+   * Design philosophy: "Simplicity is the ultimate sophistication."
+   * Pure neutral grays. No chroma in backgrounds. Every color earns
+   * its place through function, not decoration.
+   *
+   * Background hierarchy (6 tiers):
+   *   base → surface → elevated → raised → overlay → muted
+   *   Each step adds ~+6-7 lightness. Perceptible depth layers
+   *   that the eye reads without needing borders.
+   *
+   * Text hierarchy (5 levels):
+   *   primary → secondary → tertiary → muted → disabled
+   *   Generous contrast between levels. Never guess which is which.
+   *
+   * Accent palette: restrained, purposeful.
+   *   Steel blue for interactive, green/red for diffs, gold for warnings.
+   * ═══════════════════════════════════════════════════════ */
+
+  /* --- Core surfaces --- */
+  --background: #0b0b0b; /* bg-base: the canvas */
+  --foreground: oklch(0.86 0 0); /* text-primary — softer for sustained reading */
+  --card: #1a1a1a; /* bg-elevated */
+  --card-foreground: oklch(0.86 0 0);
+  --popover: #242424; /* bg-overlay */
+  --popover-foreground: oklch(0.86 0 0);
+
+  /* --- Interactive accent (cool rose — pastel, warm, human) --- */
+  --primary: oklch(0.78 0.09 345);
+  --primary-foreground: #0b0b0b;
+
+  /* --- Secondary / structural --- */
+  --secondary: #212121; /* bg-raised */
+  --secondary-foreground: oklch(0.75 0 0);
+  --muted: #2a2a2a; /* bg-muted */
+  --muted-foreground: oklch(0.58 0 0); /* text-tertiary */
+  --accent: #1a1a1a; /* bg-elevated */
+  --accent-foreground: oklch(0.86 0 0);
+
+  /* --- Semantic signals (equiluminant OKLCH — all L≈0.65-0.68, desaturated for comfort) --- */
+  --destructive: oklch(0.65 0.13 20);
+  --destructive-foreground: oklch(0.86 0 0);
+  --success: oklch(0.68 0.12 150);
+  --success-foreground: #0b0b0b;
+  --warning: oklch(0.68 0.13 75);
+  --warning-foreground: #0b0b0b;
+  --info: var(--primary);
+  --info-foreground: var(--primary-foreground);
+
+  /* --- Status indicators (reference semantic tokens) --- */
+  --status-working: var(--success);
+  --status-working-fg: var(--success-foreground);
+  --status-compacting: var(--primary);
+  --status-compacting-fg: var(--primary-foreground);
+  --status-unread: var(--warning);
+  --status-unread-fg: var(--warning-foreground);
+
+  /* --- File type colors (reference semantic tokens) --- */
+  --file-typescript: var(--primary);
+  --file-rust: var(--destructive);
+  --file-data: var(--warning);
+  --file-docs: var(--success);
+  --file-styles: var(--primary);
+  --file-markup: var(--destructive);
+  --file-image: var(--warning);
+
+  /* --- Borders (semi-transparent — adapt to any surface) --- */
+  --border: color-mix(in oklch, var(--foreground) 5%, transparent);
+  --input: color-mix(in oklch, var(--foreground) 5%, transparent);
+  --input-surface: #1a1a1a;
+  --input-tint: color-mix(in oklch, var(--foreground) 4%, transparent);
+  --ring: color-mix(in oklch, var(--primary) 40%, transparent);
+  --destructive-ring: color-mix(in oklch, var(--destructive) 40%, transparent);
+
+  /* --- Sidebar (inherits base, minimal distinction) --- */
+  --sidebar: #0b0b0b; /* Same as bg-base: unified canvas */
+  --sidebar-foreground: oklch(0.75 0 0);
+  --sidebar-primary: var(--primary);
+  --sidebar-primary-foreground: var(--primary-foreground);
+  --sidebar-accent: #1a1a1a;
+  --sidebar-accent-foreground: oklch(0.86 0 0);
+  --sidebar-border: color-mix(in oklch, var(--foreground) 3%, transparent);
+  --sidebar-ring: var(--ring);
+
+  /* --- Extended background tiers (wider steps for perceptible depth) --- */
+  --bg-base: #0b0b0b;
+  --bg-surface: #141414;
+  --bg-elevated: #1a1a1a;
+  --bg-raised: #212121;
+  --bg-overlay: #242424;
+  --bg-muted: #2a2a2a;
+
+  /* --- Specialized backgrounds --- */
+  --bg-sidebar: #0b0b0b;
+  --bg-selection: #212121;
+  --bg-code: #181818;
+
+  /* --- Extended border tiers (semi-transparent) --- */
+  --border-subtle: color-mix(in oklch, var(--foreground) 4%, transparent);
+  --border-default: color-mix(in oklch, var(--foreground) 5%, transparent);
+  --border-strong: color-mix(in oklch, var(--foreground) 8%, transparent);
+
+  /* --- Extended text hierarchy (OKLCH — wider gaps for readability) --- */
+  --text-primary: oklch(0.86 0 0);
+  --text-secondary: oklch(0.75 0 0);
+  --text-tertiary: oklch(0.58 0 0);
+  --text-subtle: oklch(0.54 0 0);
+  --text-muted: oklch(0.5 0 0);
+  --text-disabled: oklch(0.32 0 0);
+
+  /* --- Component surface tokens (dark mode) --- */
+  --destructive-surface: color-mix(in oklch, var(--destructive) 60%, transparent);
+  --destructive-tint: color-mix(in oklch, var(--destructive) 20%, transparent);
+  --control-surface: color-mix(in oklch, var(--input) 30%, transparent);
+  --control-surface-hover: color-mix(in oklch, var(--input) 50%, transparent);
+  --checked-tint: color-mix(in oklch, var(--primary) 10%, transparent);
+  --tooltip-kbd: color-mix(in oklch, var(--background) 10%, transparent);
+
+  /* --- Accent palette (reference semantic tokens) --- */
+  --accent-blue: var(--primary);
+  --accent-blue-surface: color-mix(in oklch, var(--primary) 10%, var(--background));
+  --accent-green: var(--success);
+  --accent-green-muted: color-mix(in oklch, var(--success) 50%, var(--muted-foreground));
+  --accent-red: var(--destructive);
+  --accent-red-muted: color-mix(in oklch, var(--destructive) 50%, var(--muted-foreground));
+  --accent-gold: var(--warning);
+
+  /* --- Neutral scale (pure gray ramp) --- */
+  --neutral-50: #e0e0e0;
+  --neutral-100: #c8c8c8;
+  --neutral-200: #a0a0a0;
+  --neutral-300: #909090;
+  --neutral-400: #808080;
+  --neutral-500: #686868;
+  --neutral-600: #555555;
+  --neutral-700: #404040;
+  --neutral-800: #2a2a2a;
+  --neutral-900: #1a1a1a;
+
+  /* --- Vibrancy tint system --- */
+  --sidebar-tint-opacity: 70%;
+  --sidebar-tint-strong: 88%;
+  --content-tint-opacity: 78%;
+  --sidebar-wash: #0f0f0f;
+
+  /* --- Content area border/shadow --- */
+  --content-border-opacity: 5%;
+  --content-shadow-opacity: 4%;
+
+  /* --- Elevated shadow (dropdowns, popovers, overlays) --- */
+  --shadow-elevated: 0 24px 64px rgba(0, 0, 0, 0.46);
+
+  /* --- Diff viewer (muted, integrated) --- */
+  --diff-addition-bg: #1a2a1a;
+  --diff-addition-gutter: #1a2a1a;
+  --diff-addition-word: #3d5a3d;
+  --diff-addition-text: #6a9a70;
+
+  --diff-deletion-bg: #2a1a1a;
+  --diff-deletion-gutter: #2a1a1a;
+  --diff-deletion-word: #5a3d3d;
+  --diff-deletion-text: #f97583;
+
+  --diff-line-number: #404040;
+  --diff-line-number-bg: #141414;
+}
+
+/* Apply semantic border color to all elements with border utilities */
+/* Using :where() for zero specificity - easily overridable */
+:where([class~="border"]) {
+  border-color: var(--border);
+}
+
+/* Legacy: Targeted border reset for form elements */
+:where(button, input, textarea, select, summary) {
+  border-color: var(--border);
+}
+
+/* Base layout - applies to both web and desktop */
+html,
+body {
+  margin: 0;
+  padding: 0;
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+  overscroll-behavior: none;
+}
+
+/* Contain scroll events in nested scrollables within the chat.
+   Prevents wheel events at scroll boundary from chaining to the main
+   chat container and triggering false pause detection.
+   Replaces the shouldPauseOnWheel DOM walk in useAutoScroll. */
+.chat-scroll-contain {
+  overscroll-behavior: contain;
+}
+
+body {
+  color: var(--foreground);
+  font-family: var(--font-family-sans);
+  background: var(--background); /* Web: solid background */
+  letter-spacing: -0.011em;
+  text-rendering: optimizeLegibility;
+  font-feature-settings:
+    "kern" 1,
+    "liga" 1,
+    "calt" 1;
+  font-optical-sizing: auto;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* Monospace tracking reset — negative body tracking (-0.011em) is designed
+ * for SF Pro proportional text. Monospace fonts have uniform character widths
+ * and must not inherit negative tracking from body or text-* scale tokens.
+ * Override the CSS variables that Tailwind text-* utilities reference. */
+code,
+pre,
+kbd,
+samp,
+.font-mono {
+  --text-2xs--letter-spacing: 0em;
+  --text-xs--letter-spacing: 0em;
+  --text-sm--letter-spacing: 0em;
+  --text-base--letter-spacing: 0em;
+  --text-lg--letter-spacing: 0em;
+  --text-xl--letter-spacing: 0em;
+  --text-2xl--letter-spacing: 0em;
+  --text-3xl--letter-spacing: 0em;
+  letter-spacing: 0em;
+}
+
+#root {
+  min-height: 100vh;
+  width: 100%;
+  margin: 0;
+  padding: 0;
+  transition-property: color, border-color, text-decoration-color, fill, stroke;
+  transition-duration: 200ms;
+}
+
+/* Desktop vibrancy
+ *
+ * Architecture (3 layers):
+ *   1. macOS native vibrancy provides blur of desktop
+ *   2. sidebar-wrapper: single 45% tint (covers sidebar + inset gap uniformly)
+ *   3. main-content: opaque — everything between wrapper and main-content is transparent
+ *
+ * Components use normal Tailwind classes (bg-sidebar, bg-background); CSS !important overrides. */
+
+.electron body {
+  background: transparent;
+}
+.electron #root {
+  background: transparent;
+  position: fixed;
+  inset: 0;
+  max-width: none;
+  will-change: transform;
+}
+
+/* Layer 2: vibrancy tint on the outermost wrapper (variable-driven) */
+.electron [data-slot="sidebar-wrapper"] {
+  position: relative;
+  background: color-mix(
+    in oklch,
+    var(--sidebar) var(--sidebar-tint-opacity),
+    transparent
+  ) !important;
+  transition: background 200ms ease;
+}
+
+/* Gradient wash overlay — breaks the flat monochrome look (Dia's WindowTint/BaseGradient) */
+.electron [data-slot="sidebar-wrapper"]::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  z-index: 0;
+  background: linear-gradient(
+    180deg,
+    color-mix(in oklch, var(--sidebar-wash) 25%, transparent) 0%,
+    transparent 100%
+  );
+  transition: opacity 200ms ease;
+}
+
+/* Grain noise texture — 155x155 Gaussian noise PNG tile (matching Arc/Dia's grain dimensions).
+ * Separate file instead of inline base64 to keep CSS clean.
+ * mix-blend-mode: soft-light avoids blowing out highlights (Arc uses alpha blending, not overlay). */
+.electron [data-slot="sidebar-wrapper"]::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  opacity: 0.04;
+  z-index: 1;
+  background-image: url("./assets/grain.png");
+  background-repeat: repeat;
+  mix-blend-mode: soft-light;
+}
+
+/* Ensure sidebar children sit above the pseudo-element overlays */
+.electron [data-slot="sidebar-wrapper"] > * {
+  position: relative;
+  z-index: 2;
+}
+
+/* Transparent pass-through so the wrapper tint shows uniformly */
+.electron [data-slot="sidebar-inset"],
+.electron [data-slot="sidebar-gap"],
+.electron [data-slot="sidebar-container"],
+.electron [data-slot="sidebar"],
+.electron [data-slot="sidebar-header"],
+.electron [data-slot="sidebar-footer"],
+.electron [data-sidebar="sidebar"] {
+  background: transparent !important;
+}
+
+/* SidebarInset — no drop shadow; relies on main-content border for separation (Linear-style). */
+.electron [data-slot="sidebar-inset"] {
+  box-shadow: none !important;
+}
+
+/* Layer 3: main content — semi-translucent surface with subtle border separation (Linear-style).
+ * Single 1px border from Tailwind class; no inset shadow or hairline ring. */
+.electron [data-slot="main-content"] {
+  background: color-mix(
+    in oklch,
+    var(--background) var(--content-tint-opacity),
+    transparent
+  ) !important;
+  box-shadow: none;
+  transition:
+    background 200ms ease,
+    border-color 280ms cubic-bezier(0.19, 1, 0.22, 1),
+    border-radius 280ms cubic-bezier(0.19, 1, 0.22, 1);
+}
+
+/* Edge-to-edge — sidebar collapsed: flatten card to seamless full-bleed */
+.electron
+  [data-slot="sidebar"][data-state="collapsed"][data-variant="inset"]
+  ~ [data-slot="sidebar-inset"]
+  [data-slot="main-content"] {
+  border-color: transparent !important;
+}
+
+/* Prevent CSS backdrop-filter from conflicting with native vibrancy layer on sidebar */
+.electron [data-slot="sidebar-wrapper"] *,
+.electron [data-slot="sidebar-container"] *,
+.electron [data-slot="sidebar"] *,
+.electron [data-slot="sidebar-inner"] * {
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
+}
+
+/* Disable sidebar CSS transitions during drag-resize so width follows
+ * the mouse instantly. Transitions re-enable when drag ends (data-resizing removed).
+ * This targets sidebar-gap (width), sidebar-container (width + position),
+ * and sidebar-inset (margin) — the three elements that animate on open/close. */
+[data-resizing] [data-slot="sidebar-gap"],
+[data-resizing] [data-slot="sidebar-container"],
+[data-resizing] [data-slot="sidebar-inset"] {
+  transition: none;
+}
+
+/* Smooth panel resize for programmatic collapse/expand and boundary transitions.
+ * ease at 300ms — gentle curve avoids the aggressive start of ease-out-quart
+ * that caused visible content reflow jolt during boundary resize.
+ * flex-grow is a layout property (not GPU-compositable), so we skip will-change
+ * here. The transition is suppressed during drag, programmatic restore, and
+ * window resize — it only fires on discrete collapse/expand actions. */
+[data-slot="resizable-panel"] {
+  transition: flex-grow 300ms ease;
+}
+
+/* Disable panel transitions during react-resizable-panels drag.
+ * The library sets data-resize-handle-active on the handle during drag. */
+[data-resize-handle-active] ~ [data-slot="resizable-panel"],
+:has(> [data-resize-handle-active]) [data-slot="resizable-panel"] {
+  transition: none;
+}
+
+/* Disable ALL layout transitions during native window resize (fullscreen exit, snap, drag).
+ * WKWebView pauses rendering during resize — CSS transitions fighting the native animation
+ * cause content to "stick" at the old size. Same pattern as [data-resizing] for sidebar drag. */
+.window-resizing [data-slot="sidebar-gap"],
+.window-resizing [data-slot="sidebar-container"],
+.window-resizing [data-slot="sidebar-inset"],
+.window-resizing [data-slot="sidebar-wrapper"],
+.window-resizing [data-slot="main-content"],
+.window-resizing [data-slot="resizable-panel"] {
+  transition: none !important;
+}
+
+/* Overlay titlebar: 32px top-padding clears macOS traffic lights (positioned at y:18).
+ * Removed in fullscreen since macOS hides traffic lights. See useWindowDragZone for drag logic. */
+.electron:not(.fullscreen) [data-slot="sidebar-header"] {
+  padding-top: 32px;
+}
+
+/* Traffic light clearance — horizontal offset for workspace header and welcome
+ * toggle when sidebar is collapsed. Pushes content right of the stoplight dots
+ * instead of down, preserving vertical space. Uses --traffic-light-clearance
+ * token (defined in :root) and logical properties for RTL support. */
+.electron:not(.fullscreen)
+  [data-slot="sidebar"][data-state="collapsed"][data-variant="inset"]
+  ~ [data-slot="sidebar-inset"]
+  [data-slot="workspace-header"] {
+  padding-inline-start: var(--traffic-light-clearance);
+}
+.electron:not(.fullscreen)
+  [data-slot="sidebar"][data-state="collapsed"][data-variant="inset"]
+  ~ [data-slot="sidebar-inset"]
+  [data-slot="welcome-sidebar-toggle"] {
+  transform: translateX(calc(var(--traffic-light-clearance) - 0.75rem));
+}
+
+/* Promote interactive sidebar elements to GPU layers (prevents hover flicker) */
+.electron [data-slot="sidebar-menu-button"],
+.electron [data-slot="sidebar-menu-action"],
+.electron [data-slot="sidebar-group-action"],
+.electron [data-slot="sidebar-menu-sub-button"] {
+  transform: translateZ(0);
+}
+
+/* Hover-reveal: near-opaque overlay when sidebar flies out over content */
+[data-hover-reveal="true"] [data-slot="sidebar-container"] {
+  background: color-mix(in oklch, var(--sidebar) 82%, transparent) !important;
+  backdrop-filter: blur(20px) saturate(180%);
+  -webkit-backdrop-filter: blur(20px) saturate(180%);
+}
+.electron [data-hover-reveal="true"] [data-slot="sidebar-container"] {
+  background: color-mix(
+    in oklch,
+    var(--sidebar) var(--sidebar-tint-strong),
+    transparent
+  ) !important;
+}
+[data-hover-reveal="true"] [data-sidebar="sidebar"] {
+  background: transparent !important;
+}
+
+/* Fullscreen — self-lit surfaces (no wallpaper behind in macOS fullscreen Space).
+ * macOS fullscreen puts the app in its own Space; underWindowBackground falls back
+ * to flat dark gray. Strategy: increase opacity to block the dead gray, but KEEP
+ * grain + wash — they become the primary source of surface life (no longer competing
+ * with wallpaper variation). Wash gets a whisper of primary chroma (hue 255) to
+ * replace the warmth/color the wallpaper provided. Pattern: Arc Browser. */
+.electron.fullscreen [data-slot="sidebar-wrapper"] {
+  background: color-mix(in oklch, var(--sidebar) 94%, transparent) !important;
+}
+
+/* Wash: same structure, but shift to a chromed base (primary hue whisper).
+ * In windowed mode, wallpaper bleeds natural color through the tint.
+ * In fullscreen, this gradient is the only color life — so we give it identity.
+ * Dark: cool blue whisper (hue 255). Light: warm golden whisper (hue 75). */
+.electron.fullscreen.dark [data-slot="sidebar-wrapper"]::after {
+  background: linear-gradient(
+    180deg,
+    color-mix(in oklch, oklch(0.13 0.01 255) 22%, transparent) 0%,
+    transparent 100%
+  );
+}
+.electron.fullscreen:not(.dark) [data-slot="sidebar-wrapper"]::after {
+  background: linear-gradient(
+    180deg,
+    color-mix(in oklch, oklch(0.94 0.008 75) 20%, transparent) 0%,
+    transparent 100%
+  );
+}
+
+/* Grain: unchanged. At 94% sidebar opacity over a uniform base,
+ * soft-light grain naturally becomes MORE visible (no wallpaper noise competing).
+ * The same 0.04 reads as richer texture in fullscreen. */
+
+/* Content: fully opaque — no value in semi-transparency over flat gray */
+.electron.fullscreen [data-slot="main-content"] {
+  background: var(--background) !important;
+}
+
+/* Hover-reveal in fullscreen — still needs to feel elevated */
+.electron.fullscreen [data-hover-reveal="true"] [data-slot="sidebar-container"] {
+  background: color-mix(in oklch, var(--sidebar) 97%, transparent) !important;
+}
+
+/* Fullscreen + inactive: sidebar goes near-opaque (same dim pattern as windowed) */
+.electron.fullscreen.window-inactive [data-slot="sidebar-wrapper"] {
+  background: color-mix(in oklch, var(--sidebar) 96%, transparent) !important;
+}
+
+/* Window inactive state — dim vibrancy when window loses focus (like Arc/Dia) */
+.electron.window-inactive [data-slot="sidebar-wrapper"] {
+  background: color-mix(in oklch, var(--sidebar) 88%, transparent) !important;
+}
+.electron.window-inactive [data-slot="sidebar-wrapper"]::after {
+  opacity: 0.5;
+}
+.electron.window-inactive [data-slot="sidebar-inset"] {
+  box-shadow: 0 1px 2px 0 color-mix(in oklch, var(--foreground) 2%, transparent) !important;
+}
+.electron.window-inactive [data-slot="main-content"] {
+  box-shadow:
+    inset 0 0.5px 1px 0 color-mix(in oklch, var(--foreground) 2%, transparent),
+    inset 0 0 0 0.5px color-mix(in oklch, var(--foreground) 3%, transparent);
+}
+
+/* Custom utilities */
+
+/* Touch: prevent 300ms double-tap delay on interactive elements */
+button,
+[role="button"],
+a,
+input,
+textarea,
+select {
+  touch-action: manipulation;
+}
+
+/* Theme switching: suppress color transitions during theme toggle */
+[data-theme-switching],
+[data-theme-switching] * {
+  transition-duration: 0s !important;
+}
+
+/* Accessibility: Reduced motion support */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
+/* Frosted glass vibrancy utilities */
+/* Desktop: native vibrancy handles blur */
+/* Web: CSS backdrop-filter applied to child panels */
+
+/* Main container background - for modals, dialogs */
+.vibrancy-bg {
+  background-color: color-mix(in oklch, var(--background) 95%, transparent);
+  backdrop-filter: blur(24px);
+  -webkit-backdrop-filter: blur(24px);
+  transition-property: color, border-color, text-decoration-color, fill, stroke;
+  transition-duration: 200ms;
+}
+
+/* Subtle panel sections - for headers, dividers */
+.vibrancy-panel {
+  background-color: color-mix(in oklch, var(--background) 30%, transparent);
+  backdrop-filter: blur(4px);
+  -webkit-backdrop-filter: blur(4px);
+  transition-property: color, border-color, text-decoration-color, fill, stroke;
+  transition-duration: 200ms;
+}
+
+/* Scrollbar styles - Linear/Stripe/Airbnb inspired subtle design */
+.scrollbar-vibrancy::-webkit-scrollbar {
+  width: 8px;
+}
+
+.scrollbar-vibrancy::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.scrollbar-vibrancy::-webkit-scrollbar-thumb {
+  background: color-mix(in oklch, var(--muted-foreground) 12%, transparent);
+  border-radius: var(--radius-sm);
+  transition: background 200ms cubic-bezier(0.25, 0.46, 0.45, 0.94);
+}
+
+.scrollbar-vibrancy::-webkit-scrollbar-thumb:hover {
+  background: color-mix(in oklch, var(--muted-foreground) 25%, transparent);
+}
+
+.scrollbar-vibrancy::-webkit-scrollbar-thumb:active {
+  background: color-mix(in oklch, var(--muted-foreground) 35%, transparent);
+}
+
+/* CSS containment for all-diffs sections — browser skips layout/paint for offscreen sections */
+.diff-section-contained {
+  content-visibility: auto;
+  contain-intrinsic-size: auto 360px;
+}
+
+/* Hide scrollbars (keep scroll behavior) */
+.scrollbar-hidden {
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+
+.scrollbar-hidden::-webkit-scrollbar {
+  width: 0;
+  height: 0;
+}
+
+/* Scoped scrollbar styles — only for app scrollable containers, not page-level.
+ * Per Emil's design principles: never replace page scrollbars. */
+[data-slot="sidebar"],
+[data-radix-scroll-area-viewport] {
+  scrollbar-width: thin;
+  scrollbar-color: color-mix(in oklch, var(--muted-foreground) 15%, transparent) transparent;
+}
+
+[data-slot="sidebar"]::-webkit-scrollbar,
+[data-radix-scroll-area-viewport]::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+
+[data-slot="sidebar"]::-webkit-scrollbar-track,
+[data-radix-scroll-area-viewport]::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+[data-slot="sidebar"]::-webkit-scrollbar-thumb,
+[data-radix-scroll-area-viewport]::-webkit-scrollbar-thumb {
+  background: color-mix(in oklch, var(--muted-foreground) 15%, transparent);
+  border-radius: var(--radius-sm);
+  border: 2px solid transparent;
+  background-clip: padding-box;
+  transition: background 200ms cubic-bezier(0.25, 0.46, 0.45, 0.94);
+}
+
+[data-slot="sidebar"]::-webkit-scrollbar-thumb:hover,
+[data-radix-scroll-area-viewport]::-webkit-scrollbar-thumb:hover {
+  background: color-mix(in oklch, var(--muted-foreground) 28%, transparent);
+  border: 2px solid transparent;
+  background-clip: padding-box;
+}
+
+[data-slot="sidebar"]::-webkit-scrollbar-thumb:active,
+[data-radix-scroll-area-viewport]::-webkit-scrollbar-thumb:active {
+  background: color-mix(in oklch, var(--muted-foreground) 40%, transparent);
+  border: 2px solid transparent;
+  background-clip: padding-box;
+}
+
+[data-slot="sidebar"]::-webkit-scrollbar-corner,
+[data-radix-scroll-area-viewport]::-webkit-scrollbar-corner {
+  background: transparent;
+}
+
+[data-slot="sidebar"]::-webkit-scrollbar-button,
+[data-radix-scroll-area-viewport]::-webkit-scrollbar-button {
+  display: none;
+}
+
+/* Reduce motion support for vibrancy and scrollbars */
+@media (prefers-reduced-motion: reduce) {
+  .vibrancy-bg,
+  .vibrancy-panel {
+    transition: none;
+  }
+
+  [data-slot="sidebar"]::-webkit-scrollbar-thumb,
+  [data-radix-scroll-area-viewport]::-webkit-scrollbar-thumb,
+  .scrollbar-vibrancy::-webkit-scrollbar-thumb {
+    transition: none !important;
+  }
+}
+
+/* Redundant utilities removed - use Tailwind's shadow-* and p-* utilities instead */
+
+/* Chat tabs header — soft bottom fade to avoid sharp edge.
+ * Uses --content-bg so the gradient matches the actual content background,
+ * which in desktop mode is semi-translucent (vibrancy) rather than opaque --bg-surface. */
+.chat-tabs-header {
+  --content-bg: var(--bg-surface);
+  background: var(--content-bg);
+}
+
+.chat-tabs-header::after {
+  content: "";
+  position: absolute;
+  right: 0;
+  bottom: -24px;
+  left: 0;
+  height: 24px;
+  pointer-events: none;
+  background: linear-gradient(to bottom, var(--content-bg), transparent);
+}
+
+/* Message input fade overlay utility */
+.bg-fade-overlay {
+  --content-bg: var(--bg-surface);
+  background: linear-gradient(to bottom, transparent 0%, var(--content-bg) 100%);
+}
+
+/* Desktop: content area is semi-translucent for vibrancy.
+ * Override gradients to use the same translucent mix as main-content. */
+.electron .chat-tabs-header,
+.electron .bg-fade-overlay {
+  --content-bg: color-mix(in oklch, var(--background) var(--content-tint-opacity), transparent);
+}
+
+/* Diffs (Pierre) theme bridge */
+diffs-container.diffs-theme {
+  padding: 0;
+  margin: 0;
+  letter-spacing: 0em; /* Reset: monospace diff content must not inherit body tracking */
+  --diffs-light-bg: var(--background);
+  --diffs-dark-bg: var(--background);
+  --diffs-light: var(--foreground);
+  --diffs-dark: var(--foreground);
+  --diffs-gap-block: 0;
+  --diffs-font-family: var(--font-family-mono);
+  --diffs-font-size: 12px;
+  --diffs-line-height: 18px;
+  --diffs-min-number-column-width: 4ch;
+  --diffs-fg-number-override: var(--diff-line-number);
+
+  --diffs-addition-color-override: var(--diff-addition-text);
+  --diffs-bg-addition-override: color-mix(in oklch, var(--diff-addition-bg) 22%, var(--background));
+  --diffs-bg-addition-number-override: color-mix(
+    in oklch,
+    var(--diff-addition-gutter) 28%,
+    var(--background)
+  );
+  --diffs-bg-addition-emphasis-override: color-mix(
+    in oklch,
+    var(--diff-addition-word) 30%,
+    var(--background)
+  );
+
+  --diffs-deletion-color-override: var(--diff-deletion-text);
+  --diffs-bg-deletion-override: color-mix(in oklch, var(--diff-deletion-bg) 20%, var(--background));
+  --diffs-bg-deletion-number-override: color-mix(
+    in oklch,
+    var(--diff-deletion-gutter) 26%,
+    var(--background)
+  );
+  --diffs-bg-deletion-emphasis-override: color-mix(
+    in oklch,
+    var(--diff-deletion-word) 28%,
+    var(--background)
+  );
+
+  --diffs-bg-selection-override: color-mix(in oklch, var(--primary) 14%, var(--background));
+  --diffs-bg-selection-number-override: color-mix(in oklch, var(--primary) 22%, var(--background));
+  --diffs-selection-color-override: var(--primary);
+
+  --diffs-bg-hover-override: color-mix(in oklch, var(--foreground) 4%, var(--background));
+  --diffs-bg-context-override: var(--background);
+  --diffs-bg-separator-override: transparent;
+}
+
+diffs-container.diffs-theme-compact {
+  --diffs-font-size: 11px;
+  --diffs-line-height: 16px;
+}
+
+.diff-hover-action {
+  position: relative;
+  top: 50%;
+  transform: translateY(-50%);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  height: 20px;
+  width: 20px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border);
+  background: var(--background);
+  color: var(--muted-foreground);
+  box-shadow: 0 1px 2px color-mix(in oklch, var(--foreground) 10%, transparent);
+  transition:
+    color 120ms ease,
+    border-color 120ms ease,
+    background 120ms ease;
+}
+
+.diff-hover-action:hover {
+  color: var(--foreground);
+  border-color: color-mix(in oklch, var(--foreground) 22%, var(--border));
+  background: color-mix(in oklch, var(--background) 80%, var(--foreground));
+}
+
+.diff-header-actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11px;
+  font-family: var(--font-family-sans);
+}
+
+.diff-viewer-header {
+  position: sticky;
+  top: 0;
+  z-index: var(--z-dropdown);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  height: 36px;
+  padding-inline: 12px;
+  flex-shrink: 0;
+  background: var(--bg-elevated);
+  border-bottom: none;
+  box-shadow: 0 1px 0 color-mix(in oklch, var(--foreground) 6%, transparent);
+}
+
+.diff-viewer-title {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--foreground);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.diff-viewer-title-muted {
+  color: var(--muted-foreground);
+}
+
+.diff-header-btn {
+  border: none;
+  background: transparent;
+  color: var(--muted-foreground);
+  border-radius: var(--radius-full);
+  padding: 2px 8px;
+  font-size: 11px;
+  transition:
+    color 120ms ease,
+    background 120ms ease;
+}
+
+.diff-header-btn[aria-pressed="true"] {
+  color: var(--foreground);
+  background: color-mix(in oklch, var(--foreground) 6%, transparent);
+}
+
+.diff-header-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.diff-header-icon {
+  height: 22px;
+  width: 22px;
+  border-radius: var(--radius-sm);
+  border: none;
+  background: transparent;
+  color: var(--muted-foreground);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  transition:
+    color 120ms ease,
+    background 120ms ease;
+}
+
+.diff-header-icon:hover,
+.diff-header-btn:hover {
+  color: var(--foreground);
+  background: color-mix(in oklch, var(--foreground) 8%, transparent);
+}
+
+.diff-comment-card {
+  border: none;
+  background: transparent;
+  border-radius: var(--radius-lg);
+  padding: 10px 12px;
+  margin: 8px 0;
+  font-family: var(--font-family-sans);
+  box-shadow: none;
+}
+
+.diff-comment-meta {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 11px;
+  color: var(--muted-foreground);
+  font-weight: 500;
+}
+
+.diff-comment-pill {
+  border-radius: var(--radius-full);
+  padding: 2px 8px;
+  font-size: 9px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+}
+
+.diff-comment-pill-addition {
+  color: var(--diff-addition-text);
+  background: var(--diff-addition-bg);
+}
+
+.diff-comment-pill-deletion {
+  color: var(--diff-deletion-text);
+  background: var(--diff-deletion-bg);
+}
+
+.diff-comment-text {
+  margin-top: 6px;
+  font-size: 12px;
+  color: var(--foreground);
+  white-space: pre-wrap;
+}
+
+.diff-comment-card textarea {
+  background: var(--card);
+  border-color: var(--border);
+}
+
+.diff-comment-card textarea:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 1px var(--primary);
+  border-color: var(--primary);
+}
+
+.diff-comment-save {
+  background: var(--primary);
+  color: var(--primary-foreground);
+}
+
+.diff-comment-save:hover {
+  background: color-mix(in oklch, var(--primary) 90%, var(--foreground));
+}
+
+.diff-comment-save:disabled {
+  opacity: 0.6;
+}
+
+.diff-comment-actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 8px;
+}
+
+/* ============================================
+   Markdown Content Styles - Jony Ive Philosophy
+   "Simplicity is about subtracting the obvious"
+
+   Design Principles:
+   - Tight density (minimal waste)
+   - Subtle colors (no harsh pure white/black)
+   - Small code (13px base, compact padding)
+   - Clear hierarchy without shouting
+   ============================================ */
+
+/* Base markdown container - Dense IDE typography (13px base) */
+.markdown-content {
+  font-size: 13px;
+  line-height: 1.5;
+  letter-spacing: -0.011em;
+  color: var(--foreground);
+  word-break: break-word;
+}
+
+/* Headings - Progressive hierarchy with scaled margins and per-level typography.
+   Asymmetric margins: large top (section break signal), small bottom (binds to content).
+   Line-height decreases with heading importance (tighter at large sizes). */
+.markdown-content h1,
+.markdown-content h2,
+.markdown-content h3,
+.markdown-content h4,
+.markdown-content h5,
+.markdown-content h6 {
+  color: var(--foreground);
+  font-weight: 600;
+  text-wrap: balance;
+}
+
+.markdown-content h1 {
+  font-size: 22px;
+  font-weight: 650;
+  line-height: 1.2;
+  letter-spacing: -0.022em;
+  margin-top: 1.5rem; /* 24px */
+  margin-bottom: 0.375rem; /* 6px */
+}
+
+.markdown-content h2 {
+  font-size: 17px;
+  line-height: 1.25;
+  letter-spacing: -0.018em;
+  margin-top: 1.25rem; /* 20px */
+  margin-bottom: 0.25rem; /* 4px */
+}
+
+.markdown-content h3 {
+  font-size: 15px;
+  line-height: 1.3;
+  letter-spacing: -0.014em;
+  margin-top: 1rem; /* 16px */
+  margin-bottom: 0.25rem; /* 4px */
+}
+
+.markdown-content h4 {
+  font-size: 13px;
+  line-height: 1.35;
+  letter-spacing: -0.011em;
+  margin-top: 0.75rem; /* 12px */
+  margin-bottom: 0.125rem; /* 2px */
+}
+
+.markdown-content h5 {
+  font-size: 12px;
+  line-height: 1.4;
+  letter-spacing: -0.006em;
+  margin-top: 0.75rem; /* 12px */
+  margin-bottom: 0.125rem; /* 2px */
+}
+
+/* h6 — uppercase label texture at sub-body size, distinct from h5 through
+   case + wide tracking + muted color instead of size alone */
+.markdown-content h6 {
+  font-size: 11px;
+  line-height: 1.45;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+  color: var(--muted-foreground);
+  margin-top: 0.5rem; /* 8px */
+  margin-bottom: 0.125rem; /* 2px */
+}
+
+/* First heading has no top margin */
+.markdown-content > :first-child {
+  margin-top: 0;
+}
+
+/* Last element has no bottom margin */
+.markdown-content > :last-child {
+  margin-bottom: 0;
+}
+
+/* Prevent double-spacing from markdown line breaks (Cursor pattern).
+   Scoped to paragraphs to avoid affecting <br> in code blocks or pre. */
+.markdown-content p br {
+  display: none;
+}
+
+/* Paragraphs - Tight spacing (4px like Codex) */
+.markdown-content p {
+  margin-top: 0.25rem;
+  margin-bottom: 0.25rem;
+}
+
+/* Strong and emphasis */
+.markdown-content strong {
+  font-weight: 600; /* Semibold - emphasis without being too heavy */
+  color: var(--foreground);
+}
+
+.markdown-content em {
+  font-style: italic;
+  color: color-mix(in oklch, var(--foreground) 90%, transparent);
+}
+
+/* Links */
+.markdown-content a {
+  color: var(--primary);
+  text-decoration: underline;
+  text-decoration-color: color-mix(in oklch, var(--primary) 40%, transparent);
+  text-underline-offset: 2px;
+}
+
+/* Hover effects only on devices with hover capability (not touch screens) */
+@media (hover: hover) and (pointer: fine) {
+  .markdown-content a {
+    transition: opacity 200ms ease;
+  }
+  .markdown-content a:hover {
+    opacity: 0.7;
+    text-decoration-color: var(--primary);
+  }
+}
+
+/* Disable transitions for users who prefer reduced motion */
+@media (prefers-reduced-motion: reduce) {
+  .markdown-content a {
+    transition: none;
+  }
+}
+
+/* Lists - Compact with visible bullets */
+.markdown-content ul,
+.markdown-content ol {
+  margin-top: 0.25rem;
+  margin-bottom: 0.5rem;
+  padding-left: 1.125rem;
+}
+
+.markdown-content ul {
+  list-style-type: disc;
+}
+
+.markdown-content ol {
+  list-style-type: decimal;
+}
+
+.markdown-content li {
+  margin-top: 0.125rem; /* Reduced from 0.25rem */
+  margin-bottom: 0.125rem;
+}
+
+/* Nested lists */
+.markdown-content ul ul,
+.markdown-content ol ul {
+  list-style-type: circle;
+  margin-top: 0.125rem;
+  margin-bottom: 0.125rem;
+}
+
+.markdown-content ul ul ul,
+.markdown-content ol ul ul,
+.markdown-content ol ol ul {
+  list-style-type: square;
+}
+
+/* List markers - Subtle but visible */
+.markdown-content li::marker {
+  color: color-mix(in oklch, var(--foreground) 50%, transparent);
+}
+
+/* Blockquotes - Minimal */
+.markdown-content blockquote {
+  margin-top: 0.75rem;
+  margin-bottom: 0.75rem;
+  padding-left: 0.75rem; /* Reduced from 1rem */
+  border-left: 2px solid color-mix(in oklch, var(--foreground) 12%, transparent);
+  color: var(--muted-foreground);
+  font-style: italic;
+}
+
+/* Horizontal rule — gradient fade (transparent edges → 50% border → transparent).
+   Softer than a solid line; subordinate to headings in visual hierarchy. */
+.markdown-content hr {
+  margin-top: 1rem;
+  margin-bottom: 1rem;
+  border: none;
+  height: 1px;
+  background: linear-gradient(
+    to right,
+    transparent,
+    color-mix(in oklch, var(--border) 50%, transparent) 15%,
+    color-mix(in oklch, var(--border) 50%, transparent) 85%,
+    transparent
+  );
+}
+
+/* Inline code - Subtle pill */
+.markdown-content code:not(pre code) {
+  font-family: var(--font-family-mono);
+  font-size: 0.85em; /* ~11px from 13px base */
+  letter-spacing: 0em; /* Reset: mono must not inherit body's -0.011em */
+  padding: 0.125rem 0.375rem;
+  background-color: color-mix(in oklch, var(--muted) 60%, transparent);
+  border-radius: var(--radius-xs);
+  color: color-mix(in oklch, var(--foreground) 90%, transparent);
+}
+
+/* Code blocks - COMPACT (12px, less padding) */
+.markdown-content pre {
+  margin-top: 0.75rem; /* Reduced from 1rem */
+  margin-bottom: 0.75rem;
+  padding: 0.75rem 0.75rem;
+  overflow-x: auto;
+  border-radius: var(--radius-sm);
+  background-color: var(--bg-code);
+  font-family: var(--font-family-mono);
+  font-size: 12px;
+  line-height: 1.5;
+  letter-spacing: 0em;
+}
+
+.markdown-content pre code {
+  font-family: var(--font-family-mono);
+  background: transparent;
+  padding: 0;
+  border-radius: 0;
+  font-size: inherit;
+  color: var(--foreground);
+}
+
+/* Tables - Compact */
+.markdown-content table {
+  margin-top: 0.75rem;
+  margin-bottom: 0.75rem;
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 12px;
+}
+
+.markdown-content th,
+.markdown-content td {
+  padding: 0.375rem 0.5rem; /* Reduced from 0.5rem 0.75rem */
+  border: 1px solid color-mix(in oklch, var(--border) 60%, transparent);
+  text-align: left;
+}
+
+.markdown-content th {
+  font-weight: 600;
+  background-color: color-mix(in oklch, var(--muted) 40%, transparent);
+}
+
+.markdown-content tr:nth-child(even) {
+  background-color: color-mix(in oklch, var(--muted) 20%, transparent);
+}
+
+/* Task lists (GFM) */
+.markdown-content input[type="checkbox"] {
+  margin-right: 0.375rem; /* Reduced from 0.5rem */
+}
+
+/* Images */
+.markdown-content img {
+  max-width: 100%;
+  height: auto;
+  border-radius: var(--radius-sm);
+  margin-top: 0.75rem;
+  margin-bottom: 0.75rem;
+}
+
+/* Squircle progressive enhancement — Apple-style continuous-curvature corners.
+ * superellipse(1.5) produces iOS/macOS squircle shape.
+ * --corner-radius-scale bumps ALL --radius-* tokens to 1.25× because squircle
+ * corners look visually tighter than standard border-radius at the same pixel
+ * value. corner-shape is applied to sm→4xl Tailwind classes; 2xs/xs are too
+ * small to benefit and full is a pill. Elements consuming var(--radius-*)
+ * directly in CSS (scrollbars, diff components, markdown) get the inflated
+ * radius without squircle — the 1-2px delta is imperceptible. */
+@supports (corner-shape: superellipse(1.5)) {
+  :root {
+    --corner-radius-scale: 1.25;
+  }
+  .rounded-sm,
+  .rounded-md,
+  .rounded-lg,
+  .rounded-xl,
+  .rounded-2xl,
+  .rounded-3xl,
+  .rounded-4xl {
+    corner-shape: superellipse(1.5);
+  }
+}

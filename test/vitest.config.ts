@@ -8,7 +8,7 @@ const projectRoot = path.resolve(__dirname, "..");
 export default defineConfig({
   resolve: {
     alias: {
-      "@": path.resolve(projectRoot, "src"),
+      "@": path.resolve(projectRoot, "apps/web/src"),
       "@shared": path.resolve(projectRoot, "shared"),
     },
   },
