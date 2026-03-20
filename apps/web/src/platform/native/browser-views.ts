@@ -107,20 +107,12 @@ export async function getCookieBrowsers(): Promise<unknown[]> {
 
 export async function syncCookies(browserName: string, domain: string): Promise<unknown[]> {
   if (!capabilities.nativeBrowser) return [];
-  try {
-    return (await invoke<unknown[]>("sync_browser_cookies", { browserName, domain })) ?? [];
-  } catch {
-    return [];
-  }
+  return (await invoke<unknown[]>("sync_browser_cookies", { browserName, domain })) ?? [];
 }
 
 export async function injectCookies(label: string, cookies: unknown[]): Promise<number> {
   if (!capabilities.nativeBrowser) return 0;
-  try {
-    return (await invoke<number>("inject_browser_cookies", { label, cookies })) ?? 0;
-  } catch {
-    return 0;
-  }
+  return (await invoke<number>("inject_browser_cookies", { label, cookies })) ?? 0;
 }
 
 export async function createDetachedWindow(params: {
