@@ -111,11 +111,11 @@ export interface WorkflowStatusConfig {
 }
 
 export const WORKFLOW_STATUS_CONFIG: Record<WorkspaceStatus, WorkflowStatusConfig> = {
-  backlog:       { label: "Backlog",     color: "text-muted-foreground" },
+  backlog: { label: "Backlog", color: "text-muted-foreground" },
   "in-progress": { label: "In Progress", color: "text-status-in-progress" },
-  "in-review":   { label: "In Review",   color: "text-status-in-review" },
-  done:          { label: "Done",        color: "text-status-done" },
-  canceled:      { label: "Canceled",    color: "text-muted-foreground" },
+  "in-review": { label: "In Review", color: "text-status-in-review" },
+  done: { label: "Done", color: "text-status-done" },
+  canceled: { label: "Canceled", color: "text-muted-foreground" },
 };
 
 /**

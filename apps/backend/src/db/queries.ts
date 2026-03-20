@@ -436,4 +436,3 @@ export function resetStatsCache(): void {
   cachedStats = null;
   cachedAt = 0;
 }
-
