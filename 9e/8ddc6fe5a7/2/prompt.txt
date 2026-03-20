@@ -100,3 +100,14 @@ The `updateWorkspaceStatus` mutation in `query-engine.ts` reads `status` via `re
 
 - **Stats COUNT consolidation** — pre-existing pattern; new code follows the same structure. Not a new violation.
 - **Missing workspace existence check** — pedantic consistency issue with zero real-world impact (frontend always sends valid IDs; SQLite UPDATE on missing row is a harmless no-op).
+
+---
+
+<system_instruction>
+The user has attached these files. Read them before proceeding.
+- /Users/zvada/Developer/agent/box-ide/.conductor/da-nang-v3/.context/attachments/PR instructions.md (951 B)
+</system_instruction>
+
+
+
+Create a PR
