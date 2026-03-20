@@ -17,7 +17,13 @@ import * as fs from "fs";
  * - We resolve relative to `process.argv[1]` (the sidecar entry point).
  */
 function resolveNotebookServerPath(): string | null {
-  // Primary: bundled CJS in the same directory as the sidecar
+  // 1. Env var from Electron main process (set in backend-process.ts)
+  const envPath = process.env.NOTEBOOK_SERVER_BUNDLE_PATH;
+  if (envPath && fs.existsSync(envPath)) {
+    return envPath;
+  }
+
+  // 2. Same directory as the sidecar bundle (production layout)
   const sidecarDir = path.dirname(process.argv[1]);
   const bundledPath = path.join(sidecarDir, "notebook-server.bundled.cjs");
   if (fs.existsSync(bundledPath)) {
@@ -25,7 +31,8 @@ function resolveNotebookServerPath(): string | null {
   }
 
   console.warn(
-    `[notebook-server] Bundled server not found at ${bundledPath}. ` +
+    `[notebook-server] Bundled server not found. ` +
+      `Checked: NOTEBOOK_SERVER_BUNDLE_PATH=${envPath ?? "(unset)"}, ${bundledPath}. ` +
       `Run 'bun run build:sidecar' to build it.`
   );
   return null;
