@@ -197,7 +197,7 @@ app.whenReady().then(async () => {
   // communicate with the main window (e.g., CHAT_INSERT events).
   const RELAY_EVENTS = new Set([
     "chat-insert", // Detached browser -> main window
-    "browser:workspace-change", // Main window -> browser views
+    "browser-window:workspace-change", // Main window → detached browser window
   ]);
 
   for (const channel of RELAY_EVENTS) {

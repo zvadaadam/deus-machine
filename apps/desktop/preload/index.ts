@@ -61,6 +61,7 @@ const ALLOWED_INVOKE_CHANNELS = new Set([
   "browser:closeDetachedWindow",
 
   // Native operations (called via generic invoke from platform layer)
+  "native:pickFolder",
   "native:setZoom",
   "native:setTitle",
   "native:homeDir",
