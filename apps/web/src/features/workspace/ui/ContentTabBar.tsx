@@ -17,6 +17,7 @@ import { useSettings } from "@/features/settings/api/settings.queries";
 import { useSimulatorStatusStore } from "@/features/simulator/store";
 import type { RightSideTab } from "@/features/workspace/store";
 import type { Settings } from "@shared/types/settings";
+import { capabilities } from "@/platform/capabilities";
 
 interface ContentTabBarProps {
   activeTab: RightSideTab;
@@ -47,6 +48,8 @@ const contentTabItems: Array<{
 
 /** Check if a tab should be visible given current settings. undefined = hidden (opt-in). */
 export function isTabVisible(tab: RightSideTab, settings?: Settings): boolean {
+  // Simulator tab requires both the setting AND the platform capability
+  if (tab === "simulator" && !capabilities.nativeSimulator) return false;
   const item = contentTabItems.find((i) => i.id === tab);
   if (!item?.visibilityKey) return true;
   return settings?.[item.visibilityKey] === true;

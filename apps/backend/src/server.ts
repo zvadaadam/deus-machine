@@ -87,6 +87,16 @@ if (agentServerUrl) {
   void spawnSidecarAndConnect(sidecarBundlePath);
 }
 
+// Track sidecar child process for cleanup on shutdown
+let sidecarChild: import("child_process").ChildProcess | null = null;
+
+function killSidecar(): void {
+  if (sidecarChild && !sidecarChild.killed) {
+    sidecarChild.kill("SIGTERM");
+    sidecarChild = null;
+  }
+}
+
 /** Spawn the sidecar bundle as a child process and connect to its WebSocket. */
 async function spawnSidecarAndConnect(bundlePath: string): Promise<void> {
   const { spawn } = await import("child_process");
@@ -97,7 +107,7 @@ async function spawnSidecarAndConnect(bundlePath: string): Promise<void> {
     return;
   }
 
-  const sidecar = spawn(process.execPath, [bundlePath], {
+  sidecarChild = spawn(process.execPath, [bundlePath], {
     stdio: ["ignore", "pipe", "pipe"],
     env: {
       ...process.env,
@@ -108,6 +118,7 @@ async function spawnSidecarAndConnect(bundlePath: string): Promise<void> {
     },
   });
 
+  const sidecar = sidecarChild!;
   let stdoutBuffer = "";
 
   sidecar.stdout?.on("data", (data: Buffer) => {
@@ -137,11 +148,7 @@ async function spawnSidecarAndConnect(bundlePath: string): Promise<void> {
 
   sidecar.on("exit", (code, signal) => {
     console.log(`[sidecar] Exited with code=${code} signal=${signal}`);
-  });
-
-  // Track for cleanup
-  process.on("beforeExit", () => {
-    if (!sidecar.killed) sidecar.kill("SIGTERM");
+    sidecarChild = null;
   });
 }
 
@@ -150,6 +157,7 @@ process.on("uncaughtException", (error, origin) => {
   console.error("[FATAL] Uncaught Exception:", origin, error);
   Sentry.captureException(error);
   Sentry.close(2000).finally(() => {
+    killSidecar();
     try {
       closeDatabase();
     } catch {}
@@ -167,6 +175,7 @@ process.on("unhandledRejection", (reason) => {
 function shutdown() {
   console.log("\nShutting down...");
   agentService.shutdown();
+  killSidecar();
   disconnectFromRelay();
   closeAllWsConnections();
   closeDatabase();
