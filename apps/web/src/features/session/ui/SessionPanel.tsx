@@ -25,7 +25,7 @@ import {
   getRuntimeModelId,
   type RuntimeAgentType,
 } from "../lib/agentRuntime";
-import { isElectronEnv } from "@/platform/electron";
+import { capabilities } from "@/platform/capabilities";
 import { workspaceLayoutActions } from "@/features/workspace/store";
 import type { InspectedElement } from "./InspectedElementCard";
 import type { ContentBlock, MessageRole } from "../types";

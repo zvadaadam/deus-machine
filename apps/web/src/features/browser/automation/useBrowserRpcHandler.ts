@@ -7,7 +7,8 @@
 
 import { match } from "ts-pattern";
 import { useEffect, useCallback, useRef } from "react";
-import { invoke, listen, BROWSER_PAGE_LOAD, BROWSER_URL_CHANGE } from "@/platform";
+import { native } from "@/platform";
+import { BROWSER_PAGE_LOAD, BROWSER_URL_CHANGE } from "@shared/events";
 import { getErrorMessage } from "@shared/lib/errors";
 import { evalWithResult } from "./eval-with-result";
 import {
@@ -112,25 +113,23 @@ async function waitForPageLoad(
     }
 
     // Primary: browser:page-load (real navigations)
-    listen(BROWSER_PAGE_LOAD, (evt) => {
-      if (evt.payload.label === label && evt.payload.event === "finished") {
-        onLoad(evt.payload.url);
+    const unlistenPageLoad = native.events.on(BROWSER_PAGE_LOAD, (data) => {
+      const payload = data as { label: string; event: string; url: string };
+      if (payload.label === label && payload.event === "finished") {
+        onLoad(payload.url);
       }
-    }).then((unlisten) => {
-      unlistenFns.push(unlisten);
-      if (settled) unlisten();
     });
+    unlistenFns.push(unlistenPageLoad);
 
     // Secondary: browser:url-change (SPA navigations via popstate)
     if (alsoListenUrlChange) {
-      listen(BROWSER_URL_CHANGE, (evt) => {
-        if (evt.payload.label === label) {
-          onLoad(evt.payload.url);
+      const unlistenUrlChange = native.events.on(BROWSER_URL_CHANGE, (data) => {
+        const payload = data as { label: string; url: string };
+        if (payload.label === label) {
+          onLoad(payload.url);
         }
-      }).then((unlisten) => {
-        unlistenFns.push(unlisten);
-        if (settled) unlisten();
       });
+      unlistenFns.push(unlistenUrlChange);
     }
   });
 }
@@ -218,7 +217,7 @@ export function useBrowserRpcHandler(
 
       try {
         // Visual feedback: scan-line to show the AI is reading the page (best-effort, fire-and-forget)
-        invoke("eval_browser_webview", { label, js: SCAN_PAGE_JS }).catch(() => {});
+        native.browserViews.evaluate(label, SCAN_PAGE_JS).catch(() => {});
 
         // Heavy pages (e.g. portals) can have 10k+ DOM nodes — the
         // accessibility tree builder needs more time than the default 8s.
@@ -270,7 +269,7 @@ export function useBrowserRpcHandler(
         const result = safeParseWebviewJson(resultStr);
 
         // Fade cursor out gracefully after click (dwell 600ms then fade)
-        invoke("eval_browser_webview", { label, js: buildFadeCursorJs() }).catch(() => {});
+        native.browserViews.evaluate(label, buildFadeCursorJs()).catch(() => {});
 
         respond(result);
       } catch (err: unknown) {
@@ -308,7 +307,7 @@ export function useBrowserRpcHandler(
         const result = safeParseWebviewJson(resultStr);
 
         // Unpin cursor after typing completes (best-effort)
-        invoke("eval_browser_webview", { label, js: HIDE_CURSOR_JS }).catch(() => {});
+        native.browserViews.evaluate(label, HIDE_CURSOR_JS).catch(() => {});
 
         respond(result);
       } catch (err: unknown) {
@@ -411,7 +410,7 @@ export function useBrowserRpcHandler(
 
       try {
         const t0 = Date.now();
-        await invoke("navigate_browser_webview", { label, url });
+        await native.browserViews.navigate(label, url);
         // Wait for page to finish loading (event-based, not polling)
         const loadedUrl = await waitForPageLoad(label);
         console.log(
@@ -628,7 +627,7 @@ export function useBrowserRpcHandler(
 
       try {
         // Visual feedback: highlight the focused element receiving the key (best-effort, fire-and-forget)
-        invoke("eval_browser_webview", { label, js: KEY_FLASH_JS }).catch(() => {});
+        native.browserViews.evaluate(label, KEY_FLASH_JS).catch(() => {});
 
         const modifiers = {
           ctrl: params.ctrl as boolean | undefined,
@@ -672,7 +671,7 @@ export function useBrowserRpcHandler(
         const result = safeParseWebviewJson(resultStr);
 
         // Fade cursor out gracefully after hover (dwell 600ms then fade)
-        invoke("eval_browser_webview", { label, js: buildFadeCursorJs() }).catch(() => {});
+        native.browserViews.evaluate(label, buildFadeCursorJs()).catch(() => {});
 
         respond(result);
       } catch (err: unknown) {
@@ -708,7 +707,7 @@ export function useBrowserRpcHandler(
         const result = safeParseWebviewJson(resultStr);
 
         // Fade cursor out gracefully after select (dwell 600ms then fade)
-        invoke("eval_browser_webview", { label, js: buildFadeCursorJs() }).catch(() => {});
+        native.browserViews.evaluate(label, buildFadeCursorJs()).catch(() => {});
 
         respond(result);
       } catch (err: unknown) {
@@ -732,7 +731,7 @@ export function useBrowserRpcHandler(
       try {
         const t0 = Date.now();
         // Execute history.back() in the webview
-        await invoke("eval_browser_webview", { label, js: "history.back();" });
+        await native.browserViews.evaluate(label, "history.back();");
         // Wait for page load OR SPA url-change (SPAs don't trigger real page loads)
         const loadedUrl = await waitForPageLoad(label, 15_000, 500, true);
         console.log(
@@ -798,24 +797,23 @@ export function useBrowserRpcHandler(
         const rect = params.rect as
           | { x: number; y: number; width: number; height: number }
           | undefined;
-        const invokeArgs: Record<string, unknown> = { label };
+        const screenshotOpts: Record<string, unknown> = {};
         if (rect) {
-          invokeArgs.rectX = rect.x;
-          invokeArgs.rectY = rect.y;
-          invokeArgs.rectWidth = rect.width;
-          invokeArgs.rectHeight = rect.height;
+          screenshotOpts.rectX = rect.x;
+          screenshotOpts.rectY = rect.y;
+          screenshotOpts.rectWidth = rect.width;
+          screenshotOpts.rectHeight = rect.height;
         }
 
         // Call the native screenshot command (Electron BrowserView.capturePage)
-        const base64 = await invoke<string>("screenshot_browser_webview", invokeArgs);
+        const base64 = await native.browserViews.screenshot(label, screenshotOpts);
 
         // Visual feedback: camera flash effect AFTER capture (so it doesn't appear in the image)
-        invoke("eval_browser_webview", {
-          label,
-          js: buildScreenshotFlashJs(rect ?? undefined),
-        }).catch(() => {});
+        native.browserViews
+          .evaluate(label, buildScreenshotFlashJs(rect ?? undefined))
+          .catch(() => {});
         // Best-effort URL + title for context
-        const url = await invoke<string>("get_browser_webview_url", { label }).catch(() => "");
+        const url = await native.browserViews.getUrl(label);
         respond({ image: base64, url, title: "" });
       } catch (err: unknown) {
         // Clear stale session mapping so next BrowserNavigate triggers auto-create

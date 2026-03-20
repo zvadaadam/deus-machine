@@ -34,7 +34,8 @@ import {
 } from "@/shared/stores/chatInsertStore";
 import { ResizeHandle } from "@/shared/components/ResizeHandle";
 import type { Workspace } from "@/shared/types";
-import { listen, createListenerGroup, CHAT_INSERT } from "@/platform/electron";
+import { native } from "@/platform";
+import { CHAT_INSERT } from "@shared/events";
 import { CommandPalette } from "@/features/command-palette";
 import { MainContent } from "./MainContent";
 import { useRepoActions } from "./hooks/useRepoActions";
@@ -221,8 +222,8 @@ export function MainLayout() {
   // Track fullscreen state — toggles `.fullscreen` class on <html> for CSS
   useIsFullscreen();
 
-  // Global drag zone — window-level mousedown in the top 48px triggers
-  // window dragging via -webkit-app-region: drag CSS overlay.
+  // Adds .electron class to <html> and injects CSS-only drag region rules.
+  // Headers with .drag-region class become draggable; buttons auto-excluded.
   useWindowDragZone();
 
   // Disable CSS transitions during native window resize to prevent content "sticking"
@@ -264,23 +265,19 @@ export function MainLayout() {
       deliverChatInsertPayload(workspaceChatPanelRef.current, payload);
     });
 
-    const listeners = createListenerGroup();
-
-    listeners.register(
-      listen(CHAT_INSERT, (event) => {
-        void deserializeChatInsertPayload(event.payload)
-          .then((payload) => {
-            chatInsertActions.dispatch(payload);
-          })
-          .catch((error) => {
-            console.error("Failed to deserialize detached chat insert:", error);
-          });
-      })
-    );
+    const unlistenChat = native.events.on(CHAT_INSERT, (data) => {
+      void deserializeChatInsertPayload(data)
+        .then((payload) => {
+          chatInsertActions.dispatch(payload);
+        })
+        .catch((error) => {
+          console.error("Failed to deserialize detached chat insert:", error);
+        });
+    });
 
     return () => {
       unsubStore();
-      listeners.cleanup();
+      unlistenChat();
     };
   }, []);
 

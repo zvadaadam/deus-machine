@@ -17,10 +17,7 @@ export function WelcomeView({ onOpenProject, onCloneRepository }: WelcomeViewPro
       <div className="w-full max-w-md px-6">
         {/* Branding */}
         <div className="mb-10 flex flex-col items-center text-center">
-          <h1
-            className="text-text-primary mb-3 text-3xl font-bold tracking-[0.02em]"
-            style={{ fontFamily: "var(--font-pixel)" }}
-          >
+          <h1 className="text-text-primary mb-3 text-3xl font-extrabold tracking-tight">
             OpenDevs
           </h1>
           <p className="text-text-tertiary max-w-xs text-sm">

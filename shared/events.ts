@@ -38,6 +38,7 @@ export const BROWSER_PAGE_LOAD = "browser:page-load" as const;
 export const BROWSER_TITLE_CHANGED = "browser:title-changed" as const;
 export const BROWSER_URL_CHANGE = "browser:url-change" as const;
 export const BROWSER_WORKSPACE_CHANGE = "browser-window:workspace-change" as const;
+export const BROWSER_DETACHED_CLOSED = "browser:detached-closed" as const;
 
 /** Simulator events — main process → frontend */
 export const SIM_BUILD_LOG = "sim:build-log" as const;
@@ -67,13 +68,19 @@ export type MutationName = (typeof MUTATION_NAMES)[number];
 
 /** Command names for the WebSocket relay protocol (async actions). */
 export const COMMAND_NAMES = [
-  "sendMessage", "stopSession",
+  "sendMessage",
+  "stopSession",
   // PTY commands
-  "pty:spawn", "pty:write", "pty:resize", "pty:kill",
+  "pty:spawn",
+  "pty:write",
+  "pty:resize",
+  "pty:kill",
   // File system commands
-  "fs:watch", "fs:unwatch",
+  "fs:watch",
+  "fs:unwatch",
   // Browser server commands
-  "browser-server:start", "browser-server:stop",
+  "browser-server:start",
+  "browser-server:stop",
   // Git commands
   "git:clone",
 ] as const;
@@ -86,7 +93,8 @@ export const PROTOCOL_EVENTS = [
   "session:progress",
   "tool:request",
   // PTY events (high-throughput)
-  "pty-data", "pty-exit",
+  "pty-data",
+  "pty-exit",
   // File system events
   "fs:changed",
   // Git events
@@ -237,6 +245,7 @@ export const AppEventSchemaMap = {
   [BROWSER_TITLE_CHANGED]: BrowserTitleChangedSchema,
   [BROWSER_URL_CHANGE]: BrowserUrlChangeSchema,
   [BROWSER_WORKSPACE_CHANGE]: BrowserWorkspaceChangeSchema,
+  [BROWSER_DETACHED_CLOSED]: z.undefined(),
   [SIM_BUILD_LOG]: SimBuildLogSchema,
   [CHAT_INSERT]: ChatInsertSchema,
   [GIT_CLONE_PROGRESS]: GitCloneProgressSchema,
@@ -270,6 +279,7 @@ export interface AppEventMap {
   [BROWSER_TITLE_CHANGED]: BrowserTitleChangedEvent;
   [BROWSER_URL_CHANGE]: BrowserUrlChangeEvent;
   [BROWSER_WORKSPACE_CHANGE]: BrowserWorkspaceChangeEvent;
+  [BROWSER_DETACHED_CLOSED]: undefined;
 
   // Simulator
   [SIM_BUILD_LOG]: SimBuildLogEvent;

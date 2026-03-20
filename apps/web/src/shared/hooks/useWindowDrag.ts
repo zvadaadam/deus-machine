@@ -1,76 +1,63 @@
 import { useEffect } from "react";
-import { isElectronEnv } from "@/platform/electron";
+import { capabilities } from "@/platform/capabilities";
 
 /**
- * Interactive element selector -- clicks on these pass through instead of
- * triggering a window drag. Matches buttons, links, inputs, and ARIA roles.
+ * Adds `.electron` class to `<html>` and injects CSS-only drag region rules.
+ * Components opt in with `className="drag-region"`. Interactive descendants
+ * (buttons, inputs, links, tabs) are automatically excluded.
  */
-const INTERACTIVE_SELECTOR =
-  'button, a, input, select, textarea, [role="button"], [role="link"], [role="tab"], [data-slot="sidebar-menu-button"], [data-slot="sidebar-menu-action"]';
-
-/**
- * Window-level drag zone for Electron.
- *
- * In Electron, we use `-webkit-app-region: drag` CSS to enable window dragging.
- * However, since the drag region is applied via CSS, we need to mark interactive
- * elements as `no-drag` to allow clicks through. This hook adds a mousedown
- * listener that applies the CSS dynamically within the specified top height.
- *
- * In Electron, we use `-webkit-app-region: drag` CSS. This is simpler than
- * other approaches since it's handled at the compositor level.
- */
-export function useWindowDragZone(height: number = 48) {
+export function useWindowDragZone() {
   useEffect(() => {
-    if (!isElectronEnv) return;
+    if (!capabilities.nativeWindowChrome) return;
 
-    // Apply drag region CSS to the document for the top area
+    document.documentElement.classList.add("electron");
+
+    // Inject CSS rules for drag regions
     const style = document.createElement("style");
+    style.setAttribute("data-electron-drag", "true");
     style.textContent = `
-      /* Electron window drag region -- top ${height}px of the viewport */
-      [data-electron-drag-region] {
+      /* Elements with .drag-region class become draggable in Electron */
+      .electron .drag-region {
         -webkit-app-region: drag;
-        position: fixed;
-        top: 0;
-        left: 0;
-        right: 0;
-        height: ${height}px;
-        z-index: 99999;
-        pointer-events: auto;
       }
-      /* Exclude interactive elements from drag */
-      [data-electron-drag-region] ${INTERACTIVE_SELECTOR} {
+
+      /* All interactive elements inside drag regions are excluded */
+      .electron .drag-region button,
+      .electron .drag-region a,
+      .electron .drag-region input,
+      .electron .drag-region select,
+      .electron .drag-region textarea,
+      .electron .drag-region [role="button"],
+      .electron .drag-region [role="link"],
+      .electron .drag-region [role="tab"],
+      .electron .drag-region [data-slot="sidebar-menu-button"],
+      .electron .drag-region [data-slot="sidebar-menu-action"] {
         -webkit-app-region: no-drag;
+      }
+
+      /* Fullscreen: disable drag regions (macOS hides traffic lights) */
+      .electron.fullscreen .drag-region {
+        -webkit-app-region: no-drag;
+      }
+
+      /* Traffic light clearance: push sidebar header below macOS stoplight buttons */
+      .electron:not(.fullscreen) [data-slot="sidebar-header"] {
+        padding-top: 42px;
+      }
+
+      /* Traffic light clearance when sidebar collapsed: push workspace header right */
+      .electron:not(.fullscreen)
+        [data-slot="sidebar"][data-state="collapsed"][data-variant="inset"]
+        ~ [data-slot="sidebar-inset"]
+        [data-slot="workspace-header"] {
+        padding-inline-start: var(--traffic-light-clearance, 78px);
       }
     `;
     document.head.appendChild(style);
 
-    // Create the drag region overlay element
-    const dragRegion = document.createElement("div");
-    dragRegion.setAttribute("data-electron-drag-region", "true");
-    document.body.appendChild(dragRegion);
-
-    // Allow clicks to pass through to interactive elements underneath
-    const handleMouseDown = (e: MouseEvent) => {
-      const target = document.elementFromPoint(e.clientX, e.clientY);
-      if (
-        target &&
-        target !== dragRegion &&
-        (target as HTMLElement).closest(INTERACTIVE_SELECTOR)
-      ) {
-        // Re-dispatch the click to the actual target
-        dragRegion.style.pointerEvents = "none";
-        requestAnimationFrame(() => {
-          dragRegion.style.pointerEvents = "auto";
-        });
-      }
-    };
-
-    dragRegion.addEventListener("mousedown", handleMouseDown);
-
     return () => {
-      dragRegion.removeEventListener("mousedown", handleMouseDown);
-      dragRegion.remove();
+      document.documentElement.classList.remove("electron");
       style.remove();
     };
-  }, [height]);
+  }, []);
 }

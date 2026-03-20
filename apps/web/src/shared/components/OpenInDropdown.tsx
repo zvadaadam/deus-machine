@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef } from "react";
-import { invoke } from "@/platform/electron";
+import { native } from "@/platform";
+import type { InstalledApp } from "@/platform";
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
@@ -12,13 +13,6 @@ import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip
 import { ArrowUpRight, ChevronRight } from "lucide-react";
 import { AppIcon, groupAppsByCategory } from "@/shared/lib/appIcons";
 import { track } from "@/platform/analytics";
-
-interface InstalledApp {
-  id: string;
-  name: string;
-  path: string;
-  icon?: string;
-}
 
 interface OpenInDropdownProps {
   workspacePath: string;
@@ -35,10 +29,10 @@ export function OpenInDropdown({ workspacePath, iconOnly = false }: OpenInDropdo
   useEffect(() => {
     async function loadInstalledApps() {
       try {
-        const apps = await invoke<InstalledApp[]>("get_installed_apps");
+        const apps = await native.apps.getInstalled();
         setInstalledApps(apps);
-      } catch (error) {
-        console.error("Failed to load installed apps:", error);
+      } catch {
+        // May fail if the IPC handler isn't registered
       } finally {
         setLoading(false);
       }
@@ -58,10 +52,7 @@ export function OpenInDropdown({ workspacePath, iconOnly = false }: OpenInDropdo
   function handleOpenInApp(appId: string) {
     setOpen(false);
     track("open_in_app", { app_id: appId });
-    invoke("open_in_app", {
-      appId,
-      workspacePath,
-    }).catch((error) => {
+    native.apps.openIn(appId, workspacePath).catch((error) => {
       console.error(`Failed to open in ${appId}:`, error);
     });
   }

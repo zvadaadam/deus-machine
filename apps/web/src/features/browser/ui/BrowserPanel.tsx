@@ -51,7 +51,7 @@ import { createBrowserTab, deriveTitleFromUrl, hydratePersistedTab } from "../ty
 import { useBrowserRpcHandler } from "../automation/useBrowserRpcHandler";
 import { workspaceLayoutActions } from "@/features/workspace/store/workspaceLayoutStore";
 import { chatInsertActions } from "@/shared/stores/chatInsertStore";
-import { invoke } from "@/platform/electron";
+import { native } from "@/platform";
 import { getErrorMessage } from "@shared/lib/errors";
 
 const MAX_LOGS = 500;
@@ -151,7 +151,7 @@ export function BrowserPanel({
     const currentTabs = tabInfoRef.current;
     for (const tab of currentTabs) {
       if (tab.id !== activeTabId || !panelVisible) {
-        invoke("hide_browser_webview", { label: tab.webviewLabel }).catch(() => {});
+        native.browserViews.hide(tab.webviewLabel).catch(() => {});
       }
     }
   }, [activeTabId, panelVisible]);
@@ -296,8 +296,8 @@ export function BrowserPanel({
     // immediately remove the native view from the NSView hierarchy, but hide() reliably
     // sets [view setHidden:YES] which makes it invisible instantly.
     for (const tab of tabs) {
-      invoke("hide_browser_webview", { label: tab.webviewLabel }).catch(() => {});
-      invoke("close_browser_webview", { label: tab.webviewLabel }).catch(() => {});
+      native.browserViews.hide(tab.webviewLabel).catch(() => {});
+      native.browserViews.close(tab.webviewLabel).catch(() => {});
     }
 
     // Load tabs for the new workspace
@@ -372,8 +372,8 @@ export function BrowserPanel({
       // during the gap because it renders above the DOM.
       const closingTab = tabs.find((t) => t.id === closingTabId);
       if (closingTab) {
-        invoke("hide_browser_webview", { label: closingTab.webviewLabel }).catch(() => {});
-        invoke("close_browser_webview", { label: closingTab.webviewLabel }).catch(() => {});
+        native.browserViews.hide(closingTab.webviewLabel).catch(() => {});
+        native.browserViews.close(closingTab.webviewLabel).catch(() => {});
       }
 
       setTabs((prev) => {
@@ -485,9 +485,8 @@ export function BrowserPanel({
   const handleScreenshot = useCallback(async () => {
     if (!activeTab?.webviewLabel || !activeTab.currentUrl || !workspaceId) return;
     try {
-      const base64 = await invoke<string>("screenshot_browser_webview", {
-        label: activeTab.webviewLabel,
-      });
+      const base64 = await native.browserViews.screenshot(activeTab.webviewLabel);
+      if (!base64) return;
       const binaryStr = atob(base64);
       const bytes = new Uint8Array(binaryStr.length);
       for (let i = 0; i < binaryStr.length; i++) {
@@ -622,7 +621,7 @@ export function BrowserPanel({
    *  Degrades gracefully to empty list when unavailable (web dev mode). */
   const handleCookieDropdownOpen = useCallback(async () => {
     try {
-      const browsers = await invoke<InstalledBrowser[]>("get_cookie_browsers");
+      const browsers = (await native.browserViews.getCookieBrowsers()) as InstalledBrowser[];
       setCookieBrowsers(browsers);
     } catch (err) {
       console.warn("[Browser] Cookie import unavailable (requires Electron native handler):", err);
@@ -649,10 +648,10 @@ export function BrowserPanel({
       handleAddLog(activeTab.id, "info", `Syncing cookies from ${browserName} for ${domain}...`);
 
       try {
-        const cookies = await invoke<DecryptedCookie[]>("sync_browser_cookies", {
+        const cookies = (await native.browserViews.syncCookies(
           browserName,
-          domain,
-        });
+          domain
+        )) as DecryptedCookie[];
 
         if (cookies.length === 0) {
           handleAddLog(activeTab.id, "warn", `No cookies found in ${browserName} for ${domain}`);
@@ -661,10 +660,7 @@ export function BrowserPanel({
         }
 
         // Inject ALL cookies (including HttpOnly) via native WKHTTPCookieStore
-        const injected = await invoke<number>("inject_browser_cookies", {
-          label: activeTab.webviewLabel,
-          cookies,
-        });
+        const injected = await native.browserViews.injectCookies(activeTab.webviewLabel, cookies);
 
         handleAddLog(
           activeTab.id,
@@ -856,12 +852,12 @@ export function BrowserPanel({
               // Hide native webview so the dropdown isn't rendered behind it
               // (WKWebView floats above all DOM layers including portals)
               if (activeTab?.webviewLabel) {
-                invoke("hide_browser_webview", { label: activeTab.webviewLabel }).catch(() => {});
+                native.browserViews.hide(activeTab.webviewLabel).catch(() => {});
               }
             } else {
               // Re-show webview when dropdown closes
               if (activeTab?.webviewLabel && activeTab.currentUrl) {
-                invoke("show_browser_webview", { label: activeTab.webviewLabel }).catch(() => {});
+                native.browserViews.show(activeTab.webviewLabel).catch(() => {});
               }
             }
           }}
@@ -952,13 +948,15 @@ export function BrowserPanel({
           onClick={() => {
             if (!activeTab?.webviewLabel) return;
             if (activeTab.devtoolsOpen) {
-              invoke("close_browser_devtools", { label: activeTab.webviewLabel })
+              native.browserViews
+                .closeDevtools(activeTab.webviewLabel)
                 .then(() => handleUpdateTab(activeTab.id, { devtoolsOpen: false }))
                 .catch((err) =>
                   handleAddLog(activeTab.id, "error", `Close devtools failed: ${err}`)
                 );
             } else {
-              invoke("open_browser_devtools", { label: activeTab.webviewLabel })
+              native.browserViews
+                .openDevtools(activeTab.webviewLabel)
                 .then(() => handleUpdateTab(activeTab.id, { devtoolsOpen: true }))
                 .catch((err) =>
                   handleAddLog(activeTab.id, "error", `Open devtools failed: ${err}`)

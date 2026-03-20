@@ -16,7 +16,7 @@
 // multi-process architecture coalesces rapid title changes, causing the
 // title-channel message to be silently dropped 100% of the time.
 
-import { invoke } from "@/platform/electron";
+import { native } from "@/platform";
 
 // Sentinel returned when JS produces a Promise result that needs async resolution
 const ASYNC_SENTINEL = "__OPENDEVS_ASYNC__";
@@ -72,11 +72,10 @@ export async function evalWithResult(
   })()`;
 
   // Call the native executeJavaScript via Electron IPC
-  const result = await invoke<string>("eval_browser_webview_with_result", {
-    label,
-    js: wrappedJs,
-    timeout_ms: timeoutMs,
-  });
+  const result = await native.browserViews.evaluateWithResult(label, wrappedJs, timeoutMs);
+  if (result === null) {
+    throw new Error("evalWithResult: browser view not available");
+  }
 
   // Synchronous result — return directly
   if (result !== ASYNC_SENTINEL) {
@@ -115,11 +114,8 @@ async function pollAsyncResult(
     await new Promise((r) => setTimeout(r, pollInterval));
 
     try {
-      const result = await invoke<string>("eval_browser_webview_with_result", {
-        label,
-        js: pollJs,
-        timeout_ms: 5000,
-      });
+      const result = await native.browserViews.evaluateWithResult(label, pollJs, 5000);
+      if (result === null) continue;
 
       // Check if still pending
       try {
@@ -138,10 +134,9 @@ async function pollAsyncResult(
   }
 
   // Clean up the pending entry
-  invoke("eval_browser_webview", {
-    label,
-    js: `delete (window.__opendevs_pending || {})['${requestId}']`,
-  }).catch(() => {});
+  native.browserViews
+    .evaluate(label, `delete (window.__opendevs_pending || {})['${requestId}']`)
+    .catch(() => {});
 
   throw new Error(
     `evalWithResult async result timed out after ${timeoutMs}ms (requestId: ${requestId})`

@@ -1,11 +1,48 @@
-import { resolve } from "path";
+import { resolve, join } from "path";
 import { defineConfig } from "electron-vite";
 import react from "@vitejs/plugin-react";
 import tailwindcss from "@tailwindcss/vite";
 import svgr from "vite-plugin-svgr";
-import { readFileSync } from "fs";
+import { readFileSync, existsSync } from "fs";
+import { tmpdir } from "os";
+import type { Plugin } from "vite";
 
 const pkg = JSON.parse(readFileSync(resolve(__dirname, "package.json"), "utf-8"));
+
+/**
+ * Vite plugin: serves the backend port file so Chrome tabs (without electronAPI)
+ * can discover the backend port during Electron dev mode.
+ *
+ * The Electron main process writes the port to a temp file after the backend starts.
+ * This middleware serves it at /__backend_port so the renderer can fetch it.
+ */
+function backendPortPlugin(): Plugin {
+  return {
+    name: "opendevs-backend-port",
+    configureServer(server) {
+      server.middlewares.use((req, res, next) => {
+        if (req.url === "/__backend_port") {
+          const portFile = join(tmpdir(), "opendevs-backend-port");
+          try {
+            if (existsSync(portFile)) {
+              const port = readFileSync(portFile, "utf-8").trim();
+              res.setHeader("Content-Type", "application/json");
+              res.setHeader("Access-Control-Allow-Origin", "*");
+              res.end(JSON.stringify({ port: parseInt(port, 10) }));
+              return;
+            }
+          } catch {
+            // Port file not readable — fall through to 503
+          }
+          res.statusCode = 503;
+          res.end(JSON.stringify({ error: "Backend not started yet" }));
+          return;
+        }
+        next();
+      });
+    },
+  };
+}
 
 export default defineConfig({
   // ---------------------------------------------------------------------------
@@ -43,7 +80,7 @@ export default defineConfig({
   // ---------------------------------------------------------------------------
   renderer: {
     root: resolve(__dirname, "apps/web"),
-    plugins: [react(), svgr(), tailwindcss()],
+    plugins: [react(), svgr(), tailwindcss(), backendPortPlugin()],
     define: {
       __APP_VERSION__: JSON.stringify(pkg.version),
     },

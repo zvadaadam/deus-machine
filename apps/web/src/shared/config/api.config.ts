@@ -7,7 +7,9 @@
  * - Web dev: Uses VITE_BACKEND_PORT environment variable from dev.sh
  */
 
-import { isElectronEnv } from "@/platform/electron";
+// Import directly from the source module (not the barrel) to avoid circular
+// dependency: client.ts → api.config.ts → platform/electron/index.ts → ... → client.ts
+import { isElectronEnv } from "@/platform/electron/invoke";
 
 let cachedPort: number | null = null;
 let portPromise: Promise<number> | null = null;
@@ -73,9 +75,27 @@ export async function getBackendPort(): Promise<number> {
       throw new Error("Backend port not available after retries");
     }
 
-    // 3. Fallback for non-Electron dev mode without VITE_BACKEND_PORT
+    // 3. Dev mode: fetch port from Vite middleware (Electron writes it to temp file).
+    // This enables Chrome tabs at localhost:1420 to work during `bun run dev`.
+    if (import.meta.env.DEV) {
+      try {
+        const res = await fetch("/__backend_port");
+        if (res.ok) {
+          const data = await res.json();
+          if (data.port && typeof data.port === "number") {
+            console.log(`[API] Using backend port from dev server: ${data.port}`);
+            cachedPort = data.port;
+            return data.port;
+          }
+        }
+      } catch {
+        // Vite middleware not available
+      }
+    }
+
+    // 4. Last resort fallback — do NOT cache so retries re-resolve
+    // (e.g. user clicks Retry after backend finishes starting)
     console.warn("[API] No port source available, falling back to default port 3333");
-    cachedPort = 3333;
     return 3333;
   })();
 
@@ -116,11 +136,6 @@ export async function getBaseURL(): Promise<string> {
   const port = await getBackendPort();
   return `http://localhost:${port}/api`;
 }
-
-export const API_CONFIG = {
-  getBaseURL,
-  REQUEST_TIMEOUT: 30000, // 30 seconds
-} as const;
 
 export const ENDPOINTS = {
   // Workspace endpoints

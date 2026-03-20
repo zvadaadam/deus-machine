@@ -35,7 +35,8 @@ import { ResizablePanelGroup, ResizablePanel, ResizableHandle } from "@/componen
 import { PanelLeft } from "lucide-react";
 import type { Workspace, PRStatus, GhCliStatus } from "@/shared/types";
 import { REVIEW_CODE } from "@/features/session/lib/sessionPrompts";
-import { emit, BROWSER_WORKSPACE_CHANGE } from "@/platform/electron";
+import { native } from "@/platform";
+import { BROWSER_WORKSPACE_CHANGE } from "@shared/events";
 import { useBrowserWindowStore } from "@/features/browser/store";
 import { track } from "@/platform/analytics";
 import { ChatArea } from "./ChatArea";
@@ -218,7 +219,7 @@ export function MainContent({
 
   useEffect(() => {
     if (!isBrowserDetached || !detachedWorkspaceContext) return;
-    void emit(BROWSER_WORKSPACE_CHANGE, detachedWorkspaceContext);
+    void native.events.send(BROWSER_WORKSPACE_CHANGE, detachedWorkspaceContext);
   }, [isBrowserDetached, detachedWorkspaceContext]);
 
   // Switching to code tab — used by file clicks (diff or preview) in RightSidePanel.
@@ -334,7 +335,7 @@ export function MainContent({
                 ) : (
                   <div className="flex h-full flex-col pr-2 pb-2">
                     {/* Tab header: content tabs (left) + PR actions (right) */}
-                    <div className="flex h-11 flex-shrink-0 items-center justify-between px-2.5">
+                    <div className="drag-region flex h-11 flex-shrink-0 items-center justify-between px-2.5">
                       <ContentTabBar
                         activeTab={effectiveRightSideTab}
                         onTabChange={handleContentTabChange}
