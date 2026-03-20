@@ -51,9 +51,9 @@ app.post("/repos", async (c) => {
   const stats = fs.statSync(root_path);
   if (!stats.isDirectory()) throw new ValidationError("Path is not a directory");
 
-  // Check git repo
+  // Check git repo and resolve to repo root
   try {
-    execFileSync("git", ["rev-parse", "--is-inside-work-tree"], { cwd: root_path, timeout: 2000 });
+    root_path = execFileSync("git", ["rev-parse", "--show-toplevel"], { cwd: root_path, timeout: 2000 }).toString().trim();
   } catch {
     throw new ValidationError("Path is not a git repository");
   }

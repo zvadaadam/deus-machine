@@ -56,6 +56,9 @@ app.post("/workspaces/:id/open-pen-file", withWorkspace, async (c) => {
 
   const absolutePath = path.resolve(workspacePath, safeRelativePath);
   if (!fs.existsSync(absolutePath)) throw new NotFoundError("File not found");
+  if (!absolutePath.endsWith(".pen")) throw new ValidationError("File must have .pen extension");
+  const fileStats = fs.statSync(absolutePath);
+  if (!fileStats.isFile()) throw new NotFoundError("Target is not a file");
 
   const envPencilApp = process.env.PENCIL_APP_NAME || process.env.PENCIL_APP;
   const pencilCandidates = [
@@ -86,6 +89,7 @@ app.post("/workspaces/:id/open-pen-file", withWorkspace, async (c) => {
       didFallback = true;
       const { cmd, args } = gitService.getOpenCommand("https://pencil.dev");
       const webChild = spawn(cmd, args, { stdio: "ignore" });
+      webChild.on("error", (err) => console.error("[workspaces.design] Failed to open web fallback:", err));
       webChild.unref();
     };
     child.on("error", fallbackToWeb);
@@ -96,6 +100,7 @@ app.post("/workspaces/:id/open-pen-file", withWorkspace, async (c) => {
   } else {
     const { cmd, args } = gitService.getOpenCommand("https://pencil.dev");
     const webChild = spawn(cmd, args, { stdio: "ignore" });
+    webChild.on("error", (err) => console.error("[workspaces.design] Failed to open web fallback:", err));
     webChild.unref();
   }
 

@@ -21,7 +21,13 @@ vi.mock("../../../src/services/git.service", () => ({
 }));
 
 vi.mock("child_process", () => ({
-  execFileSync: vi.fn(),
+  execFileSync: vi.fn((cmd: string, args: string[], opts?: { cwd?: string }) => {
+    // --show-toplevel returns the repo root path (echo back the cwd)
+    if (cmd === "git" && args?.includes("--show-toplevel")) {
+      return Buffer.from((opts?.cwd ?? "") + "\n");
+    }
+    return Buffer.from("");
+  }),
   execFile: vi.fn(),
 }));
 

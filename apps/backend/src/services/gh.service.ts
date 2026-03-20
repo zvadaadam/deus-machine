@@ -98,6 +98,17 @@ export function classifyCheck(check: any): "passing" | "failing" | "pending" {
   return "passing";
 }
 
+/** Parse a git remote URL (SSH or HTTPS) into OWNER/REPO format for gh --repo. */
+function parseGitHubRepo(url: string): string | null {
+  // SSH: git@github.com:owner/repo.git
+  const sshMatch = url.match(/git@[^:]+:([^/]+\/[^/]+?)(?:\.git)?$/);
+  if (sshMatch) return sshMatch[1];
+  // HTTPS: https://github.com/owner/repo.git
+  const httpsMatch = url.match(/https?:\/\/[^/]+\/([^/]+\/[^/]+?)(?:\.git)?$/);
+  if (httpsMatch) return httpsMatch[1];
+  return null;
+}
+
 export interface PrStatusResponse {
   has_pr: boolean;
   pr_number?: number;
@@ -181,7 +192,11 @@ export async function getPrStatus(workspacePath: string): Promise<PrStatusRespon
       "--json",
       "number,title,url,state,mergeable,mergeStateStatus,statusCheckRollup,reviewDecision,isDraft",
     ];
-    if (repoArg) args.push("--repo", repoArg);
+    if (repoArg) {
+      const parsed = parseGitHubRepo(repoArg);
+      if (parsed) args.push("--repo", parsed);
+      else args.push("--repo", repoArg);
+    }
 
     const result = await runGh(args, { cwd: workspacePath });
     if (!result.success) {

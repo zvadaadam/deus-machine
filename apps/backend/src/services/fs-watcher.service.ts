@@ -36,24 +36,23 @@ export async function watchWorkspace(workspacePath: string): Promise<void> {
   });
 
   let pendingCount = 0;
-  let pendingType = "mixed";
+  let pendingType: string | null = null;
 
   const flushChanges = (): void => {
     if (pendingCount > 0) {
       pushEvent("fs:changed", {
         workspace_path: workspacePath,
-        change_type: pendingType,
+        change_type: pendingType ?? "mixed",
         affected_count: pendingCount,
       });
     }
     pendingCount = 0;
-    pendingType = "mixed";
+    pendingType = null;
   };
 
   const onFileChange = (changeType: string): void => {
     pendingCount++;
-    pendingType =
-      pendingType === "mixed" ? "mixed" : pendingType === changeType ? changeType : "mixed";
+    pendingType = pendingType === null ? changeType : pendingType === changeType ? changeType : "mixed";
 
     const existing = debounceTimers.get(workspacePath);
     if (existing) clearTimeout(existing);
@@ -72,7 +71,11 @@ export async function watchWorkspace(workspacePath: string): Promise<void> {
     .on("unlink", () => onFileChange("unlink"))
     .on("addDir", () => onFileChange("add"))
     .on("unlinkDir", () => onFileChange("unlink"))
-    .on("error", (error) => console.error(`[fs-watcher] Error watching ${workspacePath}:`, error));
+    .on("error", (error) => {
+      console.error(`[fs-watcher] Error watching ${workspacePath}:`, error);
+      watchers.delete(workspacePath);
+      watcher.close().catch(() => {});
+    });
 
   watchers.set(workspacePath, watcher);
 }

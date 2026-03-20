@@ -183,9 +183,7 @@ export function validatePairCode(code: string): boolean {
   const upper = code.toUpperCase().trim();
   const entry = activeCodes.get(upper);
   if (!entry) {
-    console.log(
-      `[Auth] Code "${upper}" not found. Active codes: ${activeCodes.size} (keys: ${[...activeCodes.keys()].join(", ") || "none"})`
-    );
+    console.log(`[Auth] Code "${upper}" not found. Active codes: ${activeCodes.size}`);
     return false;
   }
   if (entry.expiresAt <= Date.now()) {

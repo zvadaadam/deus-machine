@@ -20,8 +20,16 @@ export async function syncShellEnvironment(): Promise<void> {
   if (process.platform !== "darwin") return;
 
   try {
-    // Detect user's shell from SHELL env var (defaults to /bin/zsh on modern macOS)
-    const userShell = process.env.SHELL || "/bin/zsh";
+    // Detect user's actual login shell via dscl (macOS directory service),
+    // falling back to SHELL env var. Finder-launched apps may not have SHELL set correctly.
+    let userShell = "/bin/zsh";
+    try {
+      const { stdout: dsclOut } = await execFileAsync("dscl", [".", "-read", `/Users/${process.env.USER}`, "UserShell"]);
+      const shellMatch = dsclOut.match(/UserShell:\s*(.+)/);
+      if (shellMatch) userShell = shellMatch[1].trim();
+    } catch {
+      userShell = process.env.SHELL || "/bin/zsh";
+    }
 
     // Run the shell in login + interactive mode to source all profile files,
     // then print PATH. The -i flag ensures .zshrc/.bashrc are sourced.
