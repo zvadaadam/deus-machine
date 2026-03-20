@@ -22,14 +22,7 @@ import { StringDecoder } from "string_decoder";
  */
 
 const SIDECAR_DIR = path.resolve(__dirname, "..");
-const BUNDLE_PATH = path.resolve(
-  SIDECAR_DIR,
-  "..",
-  "src-tauri",
-  "resources",
-  "bin",
-  "index.bundled.cjs"
-);
+const BUNDLE_PATH = path.resolve(SIDECAR_DIR, "dist", "index.bundled.cjs");
 
 // The workspace root — a real git repo for integration tests
 const WORKSPACE_ROOT = path.resolve(SIDECAR_DIR, "..");

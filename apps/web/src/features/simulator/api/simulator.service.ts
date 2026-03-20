@@ -16,7 +16,10 @@ export const simulatorService = {
     try {
       return await invoke<boolean>("sim_has_xcode_project", { workspacePath });
     } catch (err) {
-      console.warn("[Simulator] hasXcodeProject unavailable (requires Electron native handler):", err);
+      console.warn(
+        "[Simulator] hasXcodeProject unavailable (requires Electron native handler):",
+        err
+      );
       return false;
     }
   },
@@ -27,7 +30,10 @@ export const simulatorService = {
     try {
       return await invoke<SimulatorInfo[]>("list_simulators");
     } catch (err) {
-      console.warn("[Simulator] listSimulators unavailable (requires Electron native handler):", err);
+      console.warn(
+        "[Simulator] listSimulators unavailable (requires Electron native handler):",
+        err
+      );
       return [];
     }
   },
@@ -38,7 +44,10 @@ export const simulatorService = {
     try {
       return await invoke<StreamInfo | null>("get_stream_info", { workspaceId });
     } catch (err) {
-      console.warn("[Simulator] getStreamInfo unavailable (requires Electron native handler):", err);
+      console.warn(
+        "[Simulator] getStreamInfo unavailable (requires Electron native handler):",
+        err
+      );
       return null;
     }
   },
@@ -52,7 +61,10 @@ export const simulatorService = {
     try {
       return await invoke<StreamInfo>("start_streaming", { workspaceId, udid, skipBootCheck });
     } catch (err) {
-      console.warn("[Simulator] startStreaming unavailable (requires Electron native handler):", err);
+      console.warn(
+        "[Simulator] startStreaming unavailable (requires Electron native handler):",
+        err
+      );
       throw err;
     }
   },

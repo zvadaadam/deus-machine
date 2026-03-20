@@ -249,12 +249,7 @@ export function registerBrowserViewHandlers(): void {
       if (!view) return null;
       try {
         let image;
-        if (
-          x !== undefined &&
-          y !== undefined &&
-          width !== undefined &&
-          height !== undefined
-        ) {
+        if (x !== undefined && y !== undefined && width !== undefined && height !== undefined) {
           image = await view.webContents.capturePage({
             x: Math.round(x),
             y: Math.round(y),
