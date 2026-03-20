@@ -16,7 +16,7 @@ import { getWorkspaceRaw } from "../db";
 export function autoProgressStatus(
   workspaceId: string,
   target: WorkspaceStatus,
-  opts: { force?: boolean } = {},
+  opts: { force?: boolean } = {}
 ): void {
   const db = getDatabase();
   const ws = getWorkspaceRaw(db, workspaceId);
