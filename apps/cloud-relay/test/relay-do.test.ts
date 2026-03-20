@@ -437,15 +437,9 @@ describe("pairing flow", () => {
 
 describe("alarm", () => {
   it("rejects clients whose auth deadline has expired", async () => {
-    const harness = await createTestDO();
-    relay = harness.relay;
-    state = harness.state;
-    storage = harness.storage;
-
     const clientId = "expired-client";
     const clientWs = createMockWebSocket(["client", clientId]);
     state._websockets.set(clientWs, ["client", clientId]);
-    // Set deadline in the past
     await storage.put(`pending:${clientId}`, Date.now() - 1000);
 
     await relay.alarm();
@@ -459,11 +453,6 @@ describe("alarm", () => {
   });
 
   it("does not reject clients whose deadline has not passed", async () => {
-    const harness = await createTestDO();
-    relay = harness.relay;
-    state = harness.state;
-    storage = harness.storage;
-
     const clientId = "valid-client";
     const clientWs = createMockWebSocket(["client", clientId]);
     state._websockets.set(clientWs, ["client", clientId]);
@@ -476,11 +465,6 @@ describe("alarm", () => {
   });
 
   it("rejects pairers whose deadline has expired", async () => {
-    const harness = await createTestDO();
-    relay = harness.relay;
-    state = harness.state;
-    storage = harness.storage;
-
     const pairId = "expired-pair";
     const pairerWs = createMockWebSocket(["pairer", pairId]);
     state._websockets.set(pairerWs, ["pairer", pairId]);
@@ -496,11 +480,6 @@ describe("alarm", () => {
   });
 
   it("sends ping to tunnel for heartbeat", async () => {
-    const harness = await createTestDO();
-    relay = harness.relay;
-    state = harness.state;
-    storage = harness.storage;
-
     const tunnelWs = createMockWebSocket(["tunnel"]);
     state._websockets.set(tunnelWs, ["tunnel"]);
 
@@ -511,11 +490,6 @@ describe("alarm", () => {
   });
 
   it("schedules next alarm", async () => {
-    const harness = await createTestDO();
-    relay = harness.relay;
-    state = harness.state;
-    storage = harness.storage;
-
     const tunnelWs = createMockWebSocket(["tunnel"]);
     state._websockets.set(tunnelWs, ["tunnel"]);
 
