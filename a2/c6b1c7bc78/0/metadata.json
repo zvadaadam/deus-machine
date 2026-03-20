@@ -1,0 +1,22 @@
+{
+  "cli_version": "0.5.0",
+  "checkpoint_id": "a2c6b1c7bc78",
+  "session_id": "8aa0f1c1-b25d-47c5-aab7-bbbe2fb1fd94",
+  "strategy": "manual-commit",
+  "created_at": "2026-03-20T16:20:15.780082Z",
+  "branch": "zvadaadam/columbus-v4",
+  "checkpoints_count": 1,
+  "files_touched": [],
+  "agent": "Claude Code",
+  "turn_id": "8a2ce9abaabf",
+  "token_usage": {
+    "input_tokens": 13379,
+    "cache_creation_tokens": 5615037,
+    "cache_read_tokens": 405825735,
+    "output_tokens": 363802,
+    "api_call_count": 1354
+  },
+  "session_metrics": {
+    "turn_count": 97
+  }
+}
