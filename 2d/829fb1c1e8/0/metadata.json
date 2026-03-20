@@ -1,0 +1,33 @@
+{
+  "cli_version": "0.5.0",
+  "checkpoint_id": "2d829fb1c1e8",
+  "session_id": "8aa0f1c1-b25d-47c5-aab7-bbbe2fb1fd94",
+  "strategy": "manual-commit",
+  "created_at": "2026-03-20T16:47:11.310919Z",
+  "branch": "zvadaadam/columbus-v4",
+  "checkpoints_count": 2,
+  "files_touched": [
+    "apps/web/src/app/App.tsx"
+  ],
+  "agent": "Claude Code",
+  "turn_id": "4c8b7539a2d5",
+  "token_usage": {
+    "input_tokens": 13406,
+    "cache_creation_tokens": 5627360,
+    "cache_read_tokens": 416410941,
+    "output_tokens": 367771,
+    "api_call_count": 1375
+  },
+  "session_metrics": {
+    "turn_count": 99
+  },
+  "initial_attribution": {
+    "calculated_at": "2026-03-20T16:47:06.038668Z",
+    "agent_lines": 0,
+    "human_added": 25,
+    "human_modified": 1,
+    "human_removed": 0,
+    "total_committed": 25,
+    "agent_percentage": 0
+  }
+}
