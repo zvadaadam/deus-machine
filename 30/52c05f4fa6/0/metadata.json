@@ -1,0 +1,35 @@
+{
+  "cli_version": "0.5.0",
+  "checkpoint_id": "3052c05f4fa6",
+  "session_id": "fa2fd57b-3fa6-4122-8051-a52f45fb1763",
+  "strategy": "manual-commit",
+  "created_at": "2026-03-20T20:09:06.82473Z",
+  "branch": "zvadaadam/workspace-status",
+  "checkpoints_count": 1,
+  "files_touched": [
+    "apps/backend/src/routes/workspaces.pr.ts",
+    "apps/backend/src/services/workspace-status.service.ts",
+    "apps/web/src/features/sidebar/lib/status.ts"
+  ],
+  "agent": "Claude Code",
+  "turn_id": "be0eb319e177",
+  "token_usage": {
+    "input_tokens": 99,
+    "cache_creation_tokens": 164637,
+    "cache_read_tokens": 9993878,
+    "output_tokens": 33698,
+    "api_call_count": 84
+  },
+  "session_metrics": {
+    "turn_count": 5
+  },
+  "initial_attribution": {
+    "calculated_at": "2026-03-20T20:09:06.36974Z",
+    "agent_lines": 0,
+    "human_added": 3,
+    "human_modified": 7,
+    "human_removed": 0,
+    "total_committed": 3,
+    "agent_percentage": 0
+  }
+}
