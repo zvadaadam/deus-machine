@@ -17,7 +17,7 @@ import { toast } from "sonner";
 import type { Repository } from "@/features/repository/types";
 import { useCreateWorkspace } from "@/features/workspace/api";
 import { useAddRepo } from "@/features/repository/api";
-import { invoke } from "@/platform/electron";
+import { native } from "@/platform";
 import { capabilities } from "@/platform/capabilities";
 import { getBackendUrl } from "@/shared/config/api.config";
 import { extractRepoNameFromUrl } from "@/shared/lib/utils";
@@ -120,7 +120,7 @@ export function useRepoActions({
   /** Open a local project via native file dialog. */
   async function handleOpenProject() {
     if (!capabilities.nativeFolderPicker) return;
-    const folderPath = await invoke<string | null>("native:pickFolder");
+    const folderPath = await native.dialog.pickFolder();
     if (!folderPath) return;
     const folderName = folderPath.split("/").pop() || folderPath;
     const toastId = toast.loading(`Adding "${folderName}"…`);
@@ -156,7 +156,7 @@ export function useRepoActions({
       let cloneTarget = targetPath;
       if (!cloneTarget) {
         // Default to ~/Developer/<repoName>
-        const home = await invoke<string>("native:homeDir");
+        const home = await native.dialog.getHomeDir();
         cloneTarget = `${home}/Developer/${repoName}`;
       } else if (!targetPath.endsWith(repoName) && !targetPath.endsWith(`${repoName}/`)) {
         cloneTarget = `${targetPath}/${repoName}`;

@@ -21,7 +21,8 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { useSidebar } from "@/components/ui/sidebar";
 import { cn } from "@/shared/lib/utils";
-import { invoke, isElectronEnv } from "@/platform/electron";
+import { native } from "@/platform";
+import type { InstalledApp } from "@/platform";
 import { track } from "@/platform/analytics";
 import type { SetupStatus } from "@/shared/types";
 import type { NormalizedTask } from "../api/workspace.service";
@@ -200,13 +201,6 @@ export function WorkspaceHeader({
 // HeaderOpenButton — open workspace in external editors with product icons
 // ---------------------------------------------------------------------------
 
-interface InstalledApp {
-  id: string;
-  name: string;
-  path: string;
-  icon?: string;
-}
-
 function HeaderOpenButton({ workspacePath }: { workspacePath: string }) {
   const [apps, setApps] = useState<InstalledApp[]>([]);
   const [open, setOpen] = useState(false);
@@ -215,16 +209,13 @@ function HeaderOpenButton({ workspacePath }: { workspacePath: string }) {
   const isHoveringRef = useRef(false);
 
   useEffect(() => {
-    if (!isElectronEnv) return;
-    invoke<InstalledApp[]>("get_installed_apps")
-      .then(setApps)
-      .catch(() => {});
+    native.apps.getInstalled().then(setApps).catch(() => {});
   }, []);
 
   function handleOpenInApp(appId: string) {
     setOpen(false);
     track("open_in_app", { app_id: appId });
-    invoke("open_in_app", { appId, workspacePath }).catch(() => {});
+    native.apps.openIn(appId, workspacePath).catch(() => {});
   }
 
   function handleCopyPath() {

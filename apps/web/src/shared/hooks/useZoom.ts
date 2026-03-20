@@ -1,6 +1,6 @@
 import { useEffect, useCallback, useRef } from "react";
 import { toast } from "sonner";
-import { isElectronEnv, invoke } from "@/platform/electron";
+import { native, capabilities } from "@/platform";
 
 const ZOOM_STEP = 0.1;
 const ZOOM_MIN = 0.5;
@@ -31,13 +31,10 @@ function showZoomToast(level: number) {
 }
 
 async function applyZoom(level: number) {
-  if (isElectronEnv) {
-    try {
-      // Use generic invoke to set zoom — the main process handles webContents.setZoomFactor
-      await invoke("native:setZoom", { level });
-    } catch (error) {
-      console.warn("[Zoom] Electron setZoom failed:", error);
-    }
+  try {
+    await native.window.setZoom(level);
+  } catch (error) {
+    console.warn("[Zoom] setZoom failed:", error);
   }
 
   try {
@@ -53,7 +50,7 @@ export function useZoom() {
 
   // Restore persisted zoom on mount (Electron only)
   useEffect(() => {
-    if (!isElectronEnv) return;
+    if (!capabilities.nativeWindowChrome) return;
     applyZoom(zoomRef.current);
   }, []);
 
@@ -79,7 +76,7 @@ export function useZoom() {
 
   useEffect(() => {
     // Only intercept zoom shortcuts in Electron; let browser handle its own native zoom
-    if (!isElectronEnv) return;
+    if (!capabilities.nativeWindowChrome) return;
 
     function handleKeyDown(e: KeyboardEvent) {
       if (!(e.metaKey || e.ctrlKey)) return;

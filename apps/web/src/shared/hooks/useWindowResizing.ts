@@ -1,5 +1,5 @@
 import { useEffect, useRef } from "react";
-import { isElectronEnv } from "@/platform/electron";
+import { capabilities } from "@/platform/capabilities";
 
 /**
  * Detects active window resize and toggles `.window-resizing` class on <html>.
@@ -17,7 +17,7 @@ export function useWindowResizing(): void {
   const timeoutRef = useRef<ReturnType<typeof setTimeout>>();
 
   useEffect(() => {
-    if (!isElectronEnv) return;
+    if (!capabilities.nativeWindowChrome) return;
 
     const handleResize = () => {
       document.documentElement.classList.add("window-resizing");

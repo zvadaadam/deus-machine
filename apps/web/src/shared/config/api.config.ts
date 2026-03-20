@@ -83,20 +83,19 @@ export async function getBackendPort(): Promise<number> {
         if (res.ok) {
           const data = await res.json();
           if (data.port && typeof data.port === "number") {
-            if (import.meta.env.DEV)
-              console.log(`[API] Using backend port from dev server: ${data.port}`);
+            console.log(`[API] Using backend port from dev server: ${data.port}`);
             cachedPort = data.port;
             return data.port;
           }
         }
       } catch {
-        // Vite middleware not available (production or standalone web mode)
+        // Vite middleware not available
       }
     }
 
-    // 4. Last resort fallback
+    // 4. Last resort fallback — do NOT cache so retries re-resolve
+    // (e.g. user clicks Retry after backend finishes starting)
     console.warn("[API] No port source available, falling back to default port 3333");
-    cachedPort = 3333;
     return 3333;
   })();
 
