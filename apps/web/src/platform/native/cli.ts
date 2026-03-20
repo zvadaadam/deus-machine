@@ -21,7 +21,9 @@ export interface GhAuthResult {
 export async function checkCliTool(name: string): Promise<CliCheckResult> {
   if (!capabilities.ipcInvoke) return { installed: false, path: null, webMode: true };
   try {
-    return (await invoke<CliCheckResult>("check_cli_tool", { name })) ?? { installed: false, path: null };
+    return (
+      (await invoke<CliCheckResult>("check_cli_tool", { name })) ?? { installed: false, path: null }
+    );
   } catch {
     return { installed: false, path: null };
   }
@@ -30,7 +32,9 @@ export async function checkCliTool(name: string): Promise<CliCheckResult> {
 export async function checkGhAuth(): Promise<GhAuthResult> {
   if (!capabilities.ipcInvoke) return { authenticated: false, username: null };
   try {
-    return (await invoke<GhAuthResult>("check_gh_auth")) ?? { authenticated: false, username: null };
+    return (
+      (await invoke<GhAuthResult>("check_gh_auth")) ?? { authenticated: false, username: null }
+    );
   } catch {
     return { authenticated: false, username: null };
   }
