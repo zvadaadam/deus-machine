@@ -19,9 +19,9 @@ export function useFileContent(workspaceId: string | null, relativePath: string 
     queryKey: ["file-content", workspaceId, relativePath],
     queryFn: async () => {
       if (!workspaceId || !relativePath) return null;
+      const encodedPath = encodeURIComponent(relativePath);
       const data = await apiClient.get<{ content: string | null }>(
-        `${ENDPOINTS.WORKSPACES}/${workspaceId}/file-content`,
-        { params: { path: relativePath } }
+        `${ENDPOINTS.WORKSPACES}/${workspaceId}/file-content?path=${encodedPath}`
       );
       return data.content;
     },
