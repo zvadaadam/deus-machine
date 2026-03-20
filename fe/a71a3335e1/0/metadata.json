@@ -1,0 +1,36 @@
+{
+  "cli_version": "0.5.0",
+  "checkpoint_id": "fea71a3335e1",
+  "session_id": "8aa0f1c1-b25d-47c5-aab7-bbbe2fb1fd94",
+  "strategy": "manual-commit",
+  "created_at": "2026-03-20T18:11:58.19421Z",
+  "branch": "zvadaadam/review-columbus-v4",
+  "checkpoints_count": 1,
+  "files_touched": [
+    "apps/web/src/features/settings/ui/SettingsSidebar.tsx",
+    "apps/web/src/features/settings/ui/sections/GeneralSection.tsx",
+    "apps/web/src/features/workspace/ui/ContentTabBar.tsx",
+    "apps/web/src/features/workspace/ui/WorkspaceHeader.tsx"
+  ],
+  "agent": "Claude Code",
+  "turn_id": "4237791f0e88",
+  "token_usage": {
+    "input_tokens": 13550,
+    "cache_creation_tokens": 5712539,
+    "cache_read_tokens": 480559951,
+    "output_tokens": 407282,
+    "api_call_count": 1491
+  },
+  "session_metrics": {
+    "turn_count": 111
+  },
+  "initial_attribution": {
+    "calculated_at": "2026-03-20T18:11:52.371605Z",
+    "agent_lines": 0,
+    "human_added": 8,
+    "human_modified": 30,
+    "human_removed": 0,
+    "total_committed": 8,
+    "agent_percentage": 0
+  }
+}
