@@ -1,0 +1,31 @@
+{
+  "cli_version": "0.5.0",
+  "checkpoint_id": "b0084f442d1a",
+  "strategy": "manual-commit",
+  "branch": "zvadaadam/columbus-v4",
+  "checkpoints_count": 2,
+  "files_touched": [
+    "apps/desktop/main/backend-process.ts",
+    "apps/web/src/app/layouts/MainLayout.tsx",
+    "apps/web/src/features/sidebar/ui/SidebarHeader.tsx",
+    "apps/web/src/features/workspace/ui/ContentTabBar.tsx",
+    "apps/web/src/features/workspace/ui/MainContentTabs.tsx",
+    "apps/web/src/features/workspace/ui/WorkspaceHeader.tsx",
+    "apps/web/src/shared/hooks/useWindowDrag.ts"
+  ],
+  "sessions": [
+    {
+      "metadata": "/b0/084f442d1a/0/metadata.json",
+      "transcript": "/b0/084f442d1a/0/full.jsonl",
+      "content_hash": "/b0/084f442d1a/0/content_hash.txt",
+      "prompt": "/b0/084f442d1a/0/prompt.txt"
+    }
+  ],
+  "token_usage": {
+    "input_tokens": 13290,
+    "cache_creation_tokens": 5118851,
+    "cache_read_tokens": 375022851,
+    "output_tokens": 352949,
+    "api_call_count": 1290
+  }
+}
