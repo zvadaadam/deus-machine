@@ -75,7 +75,26 @@ export async function getBackendPort(): Promise<number> {
       throw new Error("Backend port not available after retries");
     }
 
-    // 3. Fallback for non-Electron dev mode without VITE_BACKEND_PORT
+    // 3. Dev mode: fetch port from Vite middleware (Electron writes it to temp file).
+    // This enables Chrome tabs at localhost:1420 to work during `bun run dev`.
+    if (import.meta.env.DEV) {
+      try {
+        const res = await fetch("/__backend_port");
+        if (res.ok) {
+          const data = await res.json();
+          if (data.port && typeof data.port === "number") {
+            if (import.meta.env.DEV)
+              console.log(`[API] Using backend port from dev server: ${data.port}`);
+            cachedPort = data.port;
+            return data.port;
+          }
+        }
+      } catch {
+        // Vite middleware not available (production or standalone web mode)
+      }
+    }
+
+    // 4. Last resort fallback
     console.warn("[API] No port source available, falling back to default port 3333");
     cachedPort = 3333;
     return 3333;
