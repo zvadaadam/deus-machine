@@ -10951,3 +10951,7 @@ This is the best. And also, like the invoke, like, I think the invoke shouldn't 
 To look at this problem more holistically across all the things, and not really like be tied to what we have, but more solving this evenly, effectively, maintainably.
 
 Maybe we need to define the whole problem space and then come over with a solution.do it
+
+---
+
+I mean, so we need to extend also the capabilities, right? So this is worse together with the capabilities and with the native. I like this idea. Go and implement this.
