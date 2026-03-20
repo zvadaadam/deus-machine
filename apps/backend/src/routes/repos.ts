@@ -53,7 +53,12 @@ app.post("/repos", async (c) => {
 
   // Check git repo and resolve to repo root
   try {
-    root_path = execFileSync("git", ["rev-parse", "--show-toplevel"], { cwd: root_path, timeout: 2000 }).toString().trim();
+    root_path = execFileSync("git", ["rev-parse", "--show-toplevel"], {
+      cwd: root_path,
+      timeout: 2000,
+    })
+      .toString()
+      .trim();
   } catch {
     throw new ValidationError("Path is not a git repository");
   }

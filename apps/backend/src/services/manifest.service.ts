@@ -290,7 +290,10 @@ export function runSetupScript(
     if (finished) return;
     finished = true;
     clearTimeout(timer);
-    if (forceKillTimer) { clearTimeout(forceKillTimer); forceKillTimer = null; }
+    if (forceKillTimer) {
+      clearTimeout(forceKillTimer);
+      forceKillTimer = null;
+    }
     try {
       setupLog.end();
     } catch {}

@@ -24,7 +24,12 @@ export async function syncShellEnvironment(): Promise<void> {
     // falling back to SHELL env var. Finder-launched apps may not have SHELL set correctly.
     let userShell = "/bin/zsh";
     try {
-      const { stdout: dsclOut } = await execFileAsync("dscl", [".", "-read", `/Users/${process.env.USER}`, "UserShell"]);
+      const { stdout: dsclOut } = await execFileAsync("dscl", [
+        ".",
+        "-read",
+        `/Users/${process.env.USER}`,
+        "UserShell",
+      ]);
       const shellMatch = dsclOut.match(/UserShell:\s*(.+)/);
       if (shellMatch) userShell = shellMatch[1].trim();
     } catch {

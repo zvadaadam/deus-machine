@@ -52,7 +52,8 @@ export async function watchWorkspace(workspacePath: string): Promise<void> {
 
   const onFileChange = (changeType: string): void => {
     pendingCount++;
-    pendingType = pendingType === null ? changeType : pendingType === changeType ? changeType : "mixed";
+    pendingType =
+      pendingType === null ? changeType : pendingType === changeType ? changeType : "mixed";
 
     const existing = debounceTimers.get(workspacePath);
     if (existing) clearTimeout(existing);
