@@ -19,6 +19,7 @@ import {
   runSetupScript,
 } from "../services/manifest.service";
 import { initializeWorkspace } from "../services/workspace-init.service";
+import { autoProgressStatus, setWorkspaceStatus } from "../services/workspace-status.service";
 import {
   getAllWorkspaces,
   getWorkspacesByRepo,
@@ -93,14 +94,22 @@ app.get("/workspaces/:id", (c) => {
 
 app.patch("/workspaces/:id", async (c) => {
   const db = getDatabase();
-  const { state } = parseBody(PatchWorkspaceBody, await c.req.json());
-  if (state) {
-    db.prepare("UPDATE workspaces SET state = ? WHERE id = ?").run(state, c.req.param("id"));
+  const id = c.req.param("id");
+  const { state, status } = parseBody(PatchWorkspaceBody, await c.req.json());
 
-    // Run archive lifecycle hook (best-effort)
+  if (status) {
+    setWorkspaceStatus(id, status);
+  }
+
+  if (state) {
+    db.prepare("UPDATE workspaces SET state = ? WHERE id = ?").run(state, id);
+
     if (state === "archived") {
+      autoProgressStatus(id, "done", { force: true });
+
+      // Run archive lifecycle hook (best-effort)
       try {
-        const ws = getWorkspaceById(db, c.req.param("id"));
+        const ws = getWorkspaceById(db, id);
         if (ws && ws.root_path) {
           const wsPath = computeWorkspacePath(ws);
           const manifest = readManifestWithFallback(wsPath, ws.root_path);
@@ -118,7 +127,7 @@ app.patch("/workspaces/:id", async (c) => {
               detached: false,
             });
             archiveProc.on("error", (err) => {
-              console.error(`Archive hook error for workspace ${c.req.param("id")}:`, err.message);
+              console.error(`Archive hook error for workspace ${id}:`, err.message);
             });
             archiveProc.unref();
           }
@@ -127,8 +136,16 @@ app.patch("/workspaces/:id", async (c) => {
         console.warn("[WORKSPACE] Archive lifecycle hook failed (continuing):", err);
       }
     }
+
+    // Unarchive: restore done → in-progress
+    if (state === "ready") {
+      const ws = getWorkspaceRaw(db, id);
+      if (ws?.status === "done") {
+        autoProgressStatus(id, "in-progress", { force: true });
+      }
+    }
   }
-  const updated = getWorkspaceRaw(db, c.req.param("id"));
+  const updated = getWorkspaceRaw(db, id);
   invalidate(["workspaces", "sessions", "stats"]);
   return c.json(updated);
 });

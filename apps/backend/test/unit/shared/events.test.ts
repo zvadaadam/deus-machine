@@ -196,6 +196,7 @@ describe("shared/events", () => {
     it("MUTATION_NAMES contains the expected mutations", () => {
       expect(MUTATION_NAMES).toContain("archiveWorkspace");
       expect(MUTATION_NAMES).toContain("updateWorkspaceTitle");
+      expect(MUTATION_NAMES).toContain("updateWorkspaceStatus");
       // New mutations
       expect(MUTATION_NAMES).toContain("updateWorkspace");
       expect(MUTATION_NAMES).toContain("createSession");
@@ -207,7 +208,7 @@ describe("shared/events", () => {
       expect(MUTATION_NAMES).toContain("invalidateFileCache");
       expect(MUTATION_NAMES).toContain("revokeDevice");
       expect(MUTATION_NAMES).toContain("runTask");
-      expect(MUTATION_NAMES).toHaveLength(12);
+      expect(MUTATION_NAMES).toHaveLength(13);
     });
 
     it("COMMAND_NAMES contains the expected commands", () => {

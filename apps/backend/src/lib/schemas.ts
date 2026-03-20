@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { WorkspaceStateSchema } from "@shared/enums";
+import { WorkspaceStateSchema, WorkspaceStatusSchema } from "@shared/enums";
 import { ValidationError } from "./errors";
 
 // ============================================================================
@@ -81,6 +81,7 @@ export const CreateRepoBody = z.object({
 
 export const PatchWorkspaceBody = z.object({
   state: WorkspaceStateSchema.optional(),
+  status: WorkspaceStatusSchema.optional(),
 });
 
 export const CreateWorkspaceBody = z.object({
