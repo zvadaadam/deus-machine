@@ -37,6 +37,8 @@
     "typecheck:backend": "tsc --noEmit --project apps/backend/tsconfig.json",
     "typecheck:sidecar": "tsc --noEmit --project apps/sidecar/tsconfig.json",
     "typecheck:mcp-notebook": "tsc --noEmit --project packages/mcp-notebook/tsconfig.json",
+    "test:relay": "cd apps/cloud-relay && bun run test",
+    "test:relay:watch": "cd apps/cloud-relay && bun run test:watch",
     "typecheck:relay": "cd apps/cloud-relay && tsc --noEmit",
     "typecheck:all": "bun run typecheck && bun run typecheck:backend && bun run typecheck:sidecar && bun run typecheck:mcp-notebook && bun run typecheck:relay",
     "format": "prettier --write \"apps/**/*.{ts,tsx,css,json}\"",
