@@ -13,7 +13,7 @@ build({
   platform: "node",
   target: "node20",
   format: "cjs",
-  outfile: path.join(sidecarDir, "..", "src-tauri", "resources", "bin", "index.bundled.cjs"),
+  outfile: path.join(sidecarDir, "dist", "index.bundled.cjs"),
   external: [
     // Node.js built-ins
     "net",

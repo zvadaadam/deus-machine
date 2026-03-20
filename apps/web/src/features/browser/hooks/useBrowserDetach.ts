@@ -7,8 +7,8 @@
  * only one physical detached browser window across all workspaces.
  */
 
-import { useCallback } from "react";
-import { emit, isElectronEnv, invoke, BROWSER_WORKSPACE_CHANGE } from "@/platform/electron";
+import { useCallback, useEffect } from "react";
+import { emit, listen, isElectronEnv, invoke, BROWSER_WORKSPACE_CHANGE } from "@/platform/electron";
 import {
   browserWindowActions,
   useBrowserWindowStore,
@@ -67,6 +67,22 @@ export function useBrowserDetach(context: DetachedBrowserWorkspaceContext | null
     } catch {
       // Window may already be closed
     }
+  }, []);
+
+  // When the user closes the detached OS window directly (via title bar X),
+  // the main process sends "browser:detached-closed" — reset our store so
+  // the main window UI reflects the reattached state.
+  useEffect(() => {
+    if (!isElectronEnv) return;
+
+    let unlisten: (() => void) | undefined;
+    listen<void>("browser:detached-closed", () => {
+      browserWindowActions.clearDetachedWindow();
+    }).then((fn) => {
+      unlisten = fn;
+    });
+
+    return () => unlisten?.();
   }, []);
 
   return { isDetached, detach, reattach };

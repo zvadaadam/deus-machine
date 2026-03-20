@@ -139,6 +139,8 @@ export const ENDPOINTS = {
   WORKSPACE_MANIFEST: (id: string) => `/workspaces/${id}/manifest`,
   WORKSPACE_RETRY_SETUP: (id: string) => `/workspaces/${id}/retry-setup`,
   WORKSPACE_SETUP_LOGS: (id: string) => `/workspaces/${id}/setup-logs`,
+  WORKSPACE_FILE_CONTENT: (id: string, relativePath: string) =>
+    `/workspaces/${id}/file-content?path=${encodeURIComponent(relativePath)}`,
   WORKSPACE_TASK_RUN: (id: string, taskName: string) =>
     `/workspaces/${id}/tasks/${encodeURIComponent(taskName)}/run`,
 

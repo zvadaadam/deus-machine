@@ -50,6 +50,9 @@ const ALLOWED_INVOKE_CHANNELS = new Set([
   "navigate_browser_webview",
   "reload_browser_webview",
   "eval_browser_webview",
+  "eval_browser_webview_with_result",
+  "get_browser_webview_url",
+  "screenshot_browser_webview",
   "open_browser_devtools",
   "close_browser_devtools",
 
@@ -85,6 +88,7 @@ const ALLOWED_EVENT_CHANNELS = new Set([
   "browser:title-changed",
   "browser:url-change",
   "browser-window:workspace-change",
+  "browser:detached-closed",
 
   // Simulator events
   "sim:build-log",

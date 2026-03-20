@@ -1,19 +1,61 @@
+/**
+ * Simulator Service — wraps Electron IPC calls to macOS Xcode/Simulator native handlers.
+ *
+ * All methods degrade gracefully when Electron IPC is unavailable (e.g., web dev mode).
+ * Data-query methods return safe defaults; action methods throw so callers can surface errors.
+ * These native handlers require the Electron desktop app with Xcode tooling on macOS.
+ */
+
 import { invoke } from "@/platform/electron";
 import type { InstalledApp, SimulatorInfo, StreamInfo } from "../types";
 
 export const simulatorService = {
-  /** Fast probe: does this workspace contain a buildable Xcode project? */
-  hasXcodeProject: (workspacePath: string) =>
-    invoke<boolean>("sim_has_xcode_project", { workspacePath }),
+  /** Fast probe: does this workspace contain a buildable Xcode project?
+   *  Returns false when Electron IPC is unavailable. */
+  hasXcodeProject: async (workspacePath: string): Promise<boolean> => {
+    try {
+      return await invoke<boolean>("sim_has_xcode_project", { workspacePath });
+    } catch (err) {
+      console.warn("[Simulator] hasXcodeProject unavailable (requires Electron native handler):", err);
+      return false;
+    }
+  },
 
-  listSimulators: () => invoke<SimulatorInfo[]>("list_simulators"),
+  /** List available iOS simulators.
+   *  Returns empty array when Electron IPC is unavailable. */
+  listSimulators: async (): Promise<SimulatorInfo[]> => {
+    try {
+      return await invoke<SimulatorInfo[]>("list_simulators");
+    } catch (err) {
+      console.warn("[Simulator] listSimulators unavailable (requires Electron native handler):", err);
+      return [];
+    }
+  },
 
-  /** Check if a streaming session is alive for this workspace. */
-  getStreamInfo: (workspaceId: string) =>
-    invoke<StreamInfo | null>("get_stream_info", { workspaceId }),
+  /** Check if a streaming session is alive for this workspace.
+   *  Returns null when Electron IPC is unavailable. */
+  getStreamInfo: async (workspaceId: string): Promise<StreamInfo | null> => {
+    try {
+      return await invoke<StreamInfo | null>("get_stream_info", { workspaceId });
+    } catch (err) {
+      console.warn("[Simulator] getStreamInfo unavailable (requires Electron native handler):", err);
+      return null;
+    }
+  },
 
-  startStreaming: (workspaceId: string, udid: string, skipBootCheck = false) =>
-    invoke<StreamInfo>("start_streaming", { workspaceId, udid, skipBootCheck }),
+  /** Start streaming from a simulator. Throws on failure — callers must handle errors. */
+  startStreaming: async (
+    workspaceId: string,
+    udid: string,
+    skipBootCheck = false
+  ): Promise<StreamInfo> => {
+    try {
+      return await invoke<StreamInfo>("start_streaming", { workspaceId, udid, skipBootCheck });
+    } catch (err) {
+      console.warn("[Simulator] startStreaming unavailable (requires Electron native handler):", err);
+      throw err;
+    }
+  },
 
   stopStreaming: (workspaceId: string) => invoke<void>("stop_streaming", { workspaceId }),
 

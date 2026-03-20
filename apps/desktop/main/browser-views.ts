@@ -190,21 +190,87 @@ export function registerBrowserViewHandlers(): void {
   );
 
   // -------------------------------------------------------------------------
-  // Screenshot
-  // Renderer calls: invoke("screenshot_browser_webview", { label })
+  // JavaScript evaluation (alias)
+  // Renderer calls: invoke("eval_browser_webview_with_result", { label, js })
+  // Same operation as eval_browser_webview — executeJavaScript already returns a result.
+  // Both names are used by renderer code (BrowserTab.tsx uses this variant).
   // -------------------------------------------------------------------------
 
-  ipcMain.handle("screenshot_browser_webview", async (_e, { label }: { label: string }) => {
-    const view = views.get(label);
-    if (!view) return null;
-    try {
-      const image = await view.webContents.capturePage();
-      return image.toJPEG(85).toString("base64");
-    } catch (err) {
-      console.error(`[browser:screenshot] Error in view "${label}":`, err);
-      return null;
+  ipcMain.handle(
+    "eval_browser_webview_with_result",
+    async (_e, { label, js }: { label: string; js: string }) => {
+      const view = views.get(label);
+      if (!view) return null;
+      try {
+        return await view.webContents.executeJavaScript(js);
+      } catch (err) {
+        console.error(`[BrowserView] eval failed for "${label}":`, err);
+        return null;
+      }
     }
+  );
+
+  // -------------------------------------------------------------------------
+  // Get URL (snake_case variant)
+  // Renderer calls: invoke("get_browser_webview_url", { label })
+  // Used by useBrowserRpcHandler.ts for URL queries.
+  // -------------------------------------------------------------------------
+
+  ipcMain.handle("get_browser_webview_url", (_e, { label }: { label: string }) => {
+    const view = views.get(label);
+    return view ? view.webContents.getURL() : "";
   });
+
+  // -------------------------------------------------------------------------
+  // Screenshot
+  // Renderer calls: invoke("screenshot_browser_webview", { label, x?, y?, width?, height? })
+  // Supports optional crop rectangle; omit for full page capture.
+  // -------------------------------------------------------------------------
+
+  ipcMain.handle(
+    "screenshot_browser_webview",
+    async (
+      _e,
+      {
+        label,
+        x,
+        y,
+        width,
+        height,
+      }: {
+        label: string;
+        x?: number;
+        y?: number;
+        width?: number;
+        height?: number;
+      }
+    ) => {
+      const view = views.get(label);
+      if (!view) return null;
+      try {
+        let image;
+        if (
+          x !== undefined &&
+          y !== undefined &&
+          width !== undefined &&
+          height !== undefined
+        ) {
+          image = await view.webContents.capturePage({
+            x: Math.round(x),
+            y: Math.round(y),
+            width: Math.round(width),
+            height: Math.round(height),
+          });
+        } else {
+          image = await view.webContents.capturePage();
+        }
+        return image.toDataURL();
+      } catch (err) {
+        console.error(`[BrowserView] screenshot failed for "${label}":`, err);
+        return null;
+      }
+    }
+  );
 
   // -------------------------------------------------------------------------
   // DevTools

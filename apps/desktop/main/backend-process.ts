@@ -25,8 +25,10 @@ export async function spawnBackend(): Promise<{ port: number; authToken: string 
   const authToken = crypto.randomBytes(24).toString("hex");
 
   // Resolve backend entry point
+  // Production: bundled CJS file (no tsx dependency needed)
+  // Development: server.cjs bootstraps tsx for live TypeScript
   const backendEntry = app.isPackaged
-    ? join(process.resourcesPath, "backend", "server.cjs")
+    ? join(process.resourcesPath, "backend", "server.bundled.cjs")
     : join(__dirname, "../../backend/server.cjs");
 
   // Database path — prefer legacy location (com.opendevs.ide) if it exists,
