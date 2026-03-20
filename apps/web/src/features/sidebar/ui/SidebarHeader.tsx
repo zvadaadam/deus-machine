@@ -23,7 +23,7 @@ export function SidebarHeader({
   const toggleTitle = `${isExpanded ? "Collapse" : "Expand"} sidebar (${modKey}B)`;
 
   return (
-    <SidebarHeaderUI className="flex-row items-center justify-between gap-1 px-1.5 py-1.5">
+    <SidebarHeaderUI className="drag-region flex-row items-center justify-between gap-1 px-1.5 py-1.5">
       <button
         type="button"
         aria-label="Open settings"

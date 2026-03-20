@@ -72,7 +72,7 @@ export function WorkspaceHeader({
   return (
     <div
       data-slot="workspace-header"
-      className="flex h-11 flex-shrink-0 items-center justify-between px-4"
+      className="drag-region flex h-11 flex-shrink-0 items-center justify-between px-4"
     >
       {/* Left: sidebar toggle + title + repo/branch */}
       <div className="flex min-w-0 items-center gap-[5px]">
