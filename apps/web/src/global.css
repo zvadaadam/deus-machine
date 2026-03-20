@@ -136,12 +136,9 @@
   --font-mono:
     ui-monospace, "SFMono-Regular", "SF Mono", Menlo, Monaco, Consolas, "Liberation Mono",
     "Courier New", monospace;
-  --font-pixel: "Geist Pixel Square", monospace;
-
   /* Legacy aliases for backward compatibility */
   --font-family-sans: var(--font-sans);
   --font-family-mono: var(--font-mono);
-  --font-family-pixel: var(--font-pixel);
 
   /*
    * Typography Scale — Dense IDE system (13px base)

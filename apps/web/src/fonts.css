@@ -5,15 +5,6 @@
  * Mono:  System mono (SF Mono / Menlo / Consolas)
  *
  * Using system fonts for faster load, native feel, and
- * consistent rendering across macOS. No custom font files
- * needed for sans/mono — only Geist Pixel for branding.
+ * consistent rendering across all platforms. No custom
+ * font files needed.
  * ═══════════════════════════════════════════════════════ */
-
-/* Geist Pixel Square - bitmap-inspired typeface for logo/branding */
-@font-face {
-  font-family: "Geist Pixel Square";
-  src: url("./assets/fonts/GeistPixel-Square.woff2") format("woff2");
-  font-weight: 400;
-  font-style: normal;
-  font-display: swap;
-}
