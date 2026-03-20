@@ -8709,3 +8709,7 @@ If you want, I can patch the last mile by gating `createSimulatorTools()` off th
 ---
 
 okey do all reveiw here before we merge thsi si huge one we ened to maek sure it's all good
+
+---
+
+Commit and push all changes
