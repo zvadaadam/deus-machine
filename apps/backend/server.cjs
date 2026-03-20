@@ -11,7 +11,14 @@ const tsxEsm = pathToFileURL(require.resolve('tsx/esm')).href;
 const child = spawn(
   process.execPath,
   ['--import', tsxEsm, path.join(__dirname, 'src/server.ts')],
-  { stdio: 'inherit', env: process.env }
+  {
+    stdio: 'inherit',
+    env: {
+      ...process.env,
+      // Point tsx at the backend tsconfig so @shared/* path aliases resolve
+      TSX_TSCONFIG_PATH: path.join(__dirname, 'tsconfig.json'),
+    },
+  }
 );
 
 child.on('error', (err) => {
