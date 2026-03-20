@@ -238,10 +238,7 @@ export class RelayDO extends DurableObject {
       }
     }
     if (expiredClientIds.length > 0) {
-      const keysToDelete = expiredClientIds.flatMap((id) => [
-        `pending:${id}`,
-        `auth_token:${id}`,
-      ]);
+      const keysToDelete = expiredClientIds.flatMap((id) => [`pending:${id}`, `auth_token:${id}`]);
       await this.ctx.storage.delete(keysToDelete);
       for (const clientId of expiredClientIds) {
         this.rejectClient(clientId, "Authentication timeout");
@@ -375,9 +372,7 @@ export class RelayDO extends DurableObject {
     // handler saw the new tunnel already existed).
     const pendingClients = await this.getPendingClients();
     for (const [pendingClientId] of pendingClients) {
-      const storedAuthToken = await this.ctx.storage.get<string>(
-        `auth_token:${pendingClientId}`
-      );
+      const storedAuthToken = await this.ctx.storage.get<string>(`auth_token:${pendingClientId}`);
       if (storedAuthToken) {
         this.safeSend(ws, {
           type: "client_connected",

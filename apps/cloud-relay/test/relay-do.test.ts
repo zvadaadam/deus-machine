@@ -130,10 +130,7 @@ describe("client auth flow", () => {
     state._websockets.set(clientWs, ["client", clientId]);
     await storage.put(`pending:${clientId}`, Date.now() + 5000);
 
-    await relay.webSocketMessage(
-      clientWs,
-      JSON.stringify({ type: "data", content: "hello" })
-    );
+    await relay.webSocketMessage(clientWs, JSON.stringify({ type: "data", content: "hello" }));
 
     // Tunnel should not receive any data message
     const tunnelMessages = getSentMessages(tunnelWs);
@@ -254,9 +251,7 @@ describe("data forwarding", () => {
     );
 
     // Client receives the raw payload string
-    expect(clientWs.send).toHaveBeenCalledWith(
-      '{"type":"q:snapshot","id":"sub_1","data":[]}'
-    );
+    expect(clientWs.send).toHaveBeenCalledWith('{"type":"q:snapshot","id":"sub_1","data":[]}');
   });
 
   it("server data for pending client is silently dropped", async () => {
@@ -675,10 +670,7 @@ describe("webSocketMessage dispatch", () => {
 
   it("invalid server frames are silently ignored", async () => {
     const tunnelWs = await registerServer(relay, state);
-    await relay.webSocketMessage(
-      tunnelWs,
-      JSON.stringify({ type: "invalid_type", foo: "bar" })
-    );
+    await relay.webSocketMessage(tunnelWs, JSON.stringify({ type: "invalid_type", foo: "bar" }));
     // No crash
   });
 
