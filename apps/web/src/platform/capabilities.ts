@@ -28,8 +28,9 @@ export const capabilities = {
   /** Embedded browser webview (requires Electron BrowserView) */
   nativeBrowser: isElectron,
 
-  /** iOS simulator panel (requires Electron + Xcode tooling) */
-  nativeSimulator: isElectron,
+  /** iOS simulator panel (requires Electron + Xcode tooling).
+   *  Currently disabled — IPC handlers not yet migrated from Tauri. */
+  nativeSimulator: false,
 
   /** Auto-update check/download/install (requires Electron updater) */
   autoUpdate: isElectron,

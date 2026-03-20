@@ -16,7 +16,7 @@ import { app, BrowserWindow, ipcMain, shell } from "electron";
 import { join } from "path";
 import { is } from "@electron-toolkit/utils";
 import { spawnBackend, stopBackend } from "./backend-process";
-// Sidecar is now spawned and managed by the backend (sidecar.service.ts)
+// Sidecar is spawned by the backend process (via SIDECAR_BUNDLE_PATH env var)
 import { registerNativeHandlers } from "./native-handlers";
 import { registerBrowserViewHandlers, destroyAllBrowserViews } from "./browser-views";
 // PTY, file watching, and browser server are now handled by the backend
@@ -185,7 +185,7 @@ app.whenReady().then(async () => {
     return;
   }
 
-  // Sidecar is now spawned by the backend process (sidecar.service.ts)
+  // Sidecar is spawned by the backend process (via SIDECAR_BUNDLE_PATH env var)
   // when SIDECAR_BUNDLE_PATH env var is present.
 
   // Register IPC handlers before window creation so they're ready immediately

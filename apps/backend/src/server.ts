@@ -70,12 +70,79 @@ if (remoteEnabled === true) {
   ensureRelayConnected();
 }
 
-// Connect to agent-server (sidecar) if AGENT_SERVER_URL is set.
-// The Electron main process sets this env var after spawning the agent-server
-// and parsing its LISTEN_URL=ws://... stdout line.
+// Connect to agent-server (sidecar).
+//
+// Two bootstrap paths:
+// 1. AGENT_SERVER_URL is set (dev.sh): sidecar already running, connect directly.
+// 2. SIDECAR_BUNDLE_PATH is set (Electron): spawn sidecar as child process,
+//    parse LISTEN_URL from its stdout, then connect.
 const agentServerUrl = process.env.AGENT_SERVER_URL;
+const sidecarBundlePath = process.env.SIDECAR_BUNDLE_PATH;
+
 if (agentServerUrl) {
+  // Path 1: Direct connection (dev.sh spawned the sidecar externally)
   agentService.init(agentServerUrl);
+} else if (sidecarBundlePath) {
+  // Path 2: Spawn sidecar and connect (Electron desktop mode)
+  void spawnSidecarAndConnect(sidecarBundlePath);
+}
+
+/** Spawn the sidecar bundle as a child process and connect to its WebSocket. */
+async function spawnSidecarAndConnect(bundlePath: string): Promise<void> {
+  const { spawn } = await import("child_process");
+  const fs = await import("fs");
+
+  if (!fs.existsSync(bundlePath)) {
+    console.error(`[server] Sidecar bundle not found: ${bundlePath}`);
+    return;
+  }
+
+  const sidecar = spawn(process.execPath, [bundlePath], {
+    stdio: ["ignore", "pipe", "pipe"],
+    env: {
+      ...process.env,
+      // Forward database path so sidecar can pass it to agents
+      DATABASE_PATH: process.env.DATABASE_PATH,
+      // Forward notebook server path
+      NOTEBOOK_SERVER_BUNDLE_PATH: process.env.NOTEBOOK_SERVER_BUNDLE_PATH,
+    },
+  });
+
+  let stdoutBuffer = "";
+
+  sidecar.stdout?.on("data", (data: Buffer) => {
+    stdoutBuffer += data.toString();
+    const lines = stdoutBuffer.split("\n");
+    stdoutBuffer = lines.pop() ?? "";
+
+    for (const line of lines) {
+      const trimmed = line.trim();
+      if (!trimmed) continue;
+      console.log("[sidecar]", trimmed);
+
+      // Capture the LISTEN_URL and connect
+      if (trimmed.startsWith("LISTEN_URL=")) {
+        const url = trimmed.slice("LISTEN_URL=".length);
+        console.log(`[server] Sidecar spawned and listening at ${url}`);
+        agentService.init(url);
+      }
+    }
+  });
+
+  sidecar.stderr?.on("data", (data: Buffer) => {
+    for (const line of data.toString().split("\n")) {
+      if (line.trim()) console.error("[sidecar:stderr]", line.trim());
+    }
+  });
+
+  sidecar.on("exit", (code, signal) => {
+    console.log(`[sidecar] Exited with code=${code} signal=${signal}`);
+  });
+
+  // Track for cleanup
+  process.on("beforeExit", () => {
+    if (!sidecar.killed) sidecar.kill("SIGTERM");
+  });
 }
 
 // Global error handlers
