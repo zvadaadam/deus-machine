@@ -1,0 +1,185 @@
+<system_instruction>
+You are working inside OpenDevs, a Mac app that lets the user run many coding agents in parallel.
+Your work should take place in the /Users/zvada/Developer/agent/box-ide/.conductor/da-nang-v3 directory (unless otherwise directed), which has been set up for you to work in.
+Each workspace has a .context directory (gitignored) where you can save files to collaborate with other agents.
+DO NOT EVER read or write files at /Users/zvada/Developer/agent/box-ide.
+The target branch for this workspace is main. Use this for actions like creating new PRs, bisecting, etc., unless you're told otherwise.
+
+If the user asks you to work on several unrelated tasks in parallel, you can suggest they start new workspaces.
+If the user asks for help with OpenDevs, ask them to email [humans@conductor.build](mailto:humans@conductor.build) or
+click on the comment icon in the bottom left to send feedback.
+</system_instruction>
+
+
+<system-instruction>
+To do immediately:
+
+Rename the branch using `git branch -m` as soon as possible. Do not check the current branch name.
+
+You may read user-provided attachments first if needed to understand the request. Otherwise, do this before using any skills or any other tools.
+
+Choosing a branch name: use concrete, specific language, avoid abstract nouns, and be concise (<30 characters). Use the prefix "zvadaadam/" before the name.
+
+</system-instruction>
+
+
+<system_instruction>
+The user has attached these files. Read them before proceeding.
+- /Users/zvada/Developer/agent/box-ide/.conductor/da-nang-v3/.context/attachments/pasted_text_2026-03-20_20-00-16.txt (24.4 KB)
+</system_instruction>
+
+
+
+we wnana implemnthtis whjat do u htink hwo doe it fit in here?
+
+---
+
+yes
+
+---
+
+/code-simplifier
+
+---
+
+I run AI code review, is it actionable? Wdyt? Explore in depth each problem.
+
+We want a clean, maintainable codebase, with proper best practices for the tech stack we use.
+
+Run subagents to verify, and if it should be fixed, try to merge some stuff together so it can be fixed together within one subagent. 
+
+If you can test something do it.
+
+-----
+
+
+The inline comment tool (`DiffComment`) is not available in this environment, so I'll present the review findings directly.
+
+---
+
+## Code Review: Workspace Workflow Status
+
+**Branch:** `zvadaadam/workspace-status`
+**Summary:** Adds a `status` field to workspaces (`backlog` → `in-progress` → `in-review` → `done` / `canceled`) with auto-progression logic, backfill migration, and frontend optimistic updates.
+
+---
+
+### Validated Issues
+
+### **#1 Backfill runs on every app startup and overrides user-set status**
+
+`backfillWorkspaceStatus()` is called from `initDatabase()` on every startup with no migration guard or "already ran" flag. It updates workspaces matching `status = 'in-progress'` based on heuristics (e.g., `pr_url IS NOT NULL → in-review`). Once users can explicitly set status, restarting the app silently overrides their choice. For example: user sets a workspace with a PR back to `in-progress` → next restart pushes it to `in-review` again. The `autoProgressStatus()` function has proper sticky/rank guards, but the backfill bypasses all of them via raw SQL.
+
+**Fix:** Add a migration guard (e.g., a one-time flag in a metadata table, or move this into a versioned migration) so it only runs once.
+
+**File:** `apps/backend/src/db/queries.ts` (backfillWorkspaceStatus) / `apps/backend/src/lib/database.ts:53`
+
+---
+
+### **#2 Unvalidated `status` value in WebSocket mutation allows arbitrary strings in DB**
+
+The `updateWorkspaceStatus` mutation in `query-engine.ts` reads `status` via `readStringParam` and casts with `as WorkspaceStatus` (compile-time only). No runtime Zod validation. The HTTP PATCH route validates via `PatchWorkspaceBody` → `WorkspaceStatusSchema`, but the WebSocket `q:mutate` path does not. Any arbitrary string sent via WebSocket would be written directly to the `status` column, causing: (1) the workspace to become invisible in stats counts, (2) `STATUS_RANK[current]` returning `undefined`, making `<=` comparisons always `false` and bypassing the regression guard.
+
+**Fix:** Add `WorkspaceStatusSchema.parse(status)` before calling `setWorkspaceStatus`.
+
+**File:** `apps/backend/src/services/query-engine.ts` (lines ~493-502)
+
+---
+
+### **#3 Hardcoded Tailwind color classes instead of semantic CSS variable tokens**
+
+`WORKFLOW_STATUS_CONFIG` uses `text-amber-500`, `text-purple-500`, and `text-green-500` — raw Tailwind palette utilities. The existing `STATUS_CONFIG` in the same file consistently uses semantic tokens (`text-destructive`, `text-status-unread`, `text-primary`, `text-muted-foreground`). CLAUDE.md explicitly states: *"Don't hardcode colors: `text-green-500 dark:text-green-400` — Create semantic variables: `--color-status-success` → `text-[color:var(--status-success)]`"*
+
+**Fix:** Define CSS variables in `global.css` (e.g., `--status-in-progress`, `--status-in-review`, `--status-done`) and reference them here.
+
+**File:** `apps/web/src/features/sidebar/lib/status.ts` (lines ~113-119)
+
+---
+
+### Filtered Out (not flagged)
+
+- **Stats COUNT consolidation** — pre-existing pattern; new code follows the same structure. Not a new violation.
+- **Missing workspace existence check** — pedantic consistency issue with zero real-world impact (frontend always sends valid IDs; SQLite UPDATE on missing row is a harmless no-op).
+
+---
+
+<system_instruction>
+The user has attached these files. Read them before proceeding.
+- /Users/zvada/Developer/agent/box-ide/.conductor/da-nang-v3/.context/attachments/PR instructions.md (951 B)
+</system_instruction>
+
+
+
+Create a PR
+
+---
+
+I run AI code review, is it actionable? Wdyt? Explore in depth each problem.
+
+We want a clean, maintainable codebase, with proper best practices for the tech stack we use.
+
+Run subagents to verify, and if it should be fixed, try to merge some stuff together so it can be fixed together within one subagent. 
+
+If you can test something do it.
+
+----
+
+No DiffComment tool available. I'll provide the review results directly.
+
+---
+
+## Review: Workspace Status Feature
+
+**Branch:** `zvadaadam/workspace-status` (no PR yet, all changes uncommitted)
+**Summary:** Adds Linear-style workflow states (`backlog`/`in-progress`/`in-review`/`done`/`canceled`) to workspaces. Includes schema migration, backend status service with auto-progression logic, frontend mutation hook with optimistic updates, CSS tokens for status colors, and analytics tracking. Well-structured change with clean separation between auto-progression (`autoProgressStatus`) and explicit user override (`setWorkspaceStatus`).
+
+**19 files changed, +204 / -14 lines**
+
+---
+
+### Validated Issues
+
+### **#1 Stats query adds 3 more separate COUNT subqueries instead of consolidating**
+
+Lines 407-409 of `apps/backend/src/db/queries.ts` add 3 new `SELECT COUNT(*) FROM workspaces WHERE status = ...` subqueries to `getStats()`, bringing the total from 8 to 11 separate full-table scans in one query. CLAUDE.md explicitly addresses this:
+
+> "Consolidate count queries -- GET /stats currently runs 8 separate COUNT(*) full table scans. Aggregate queries should combine into a single query where possible, and results should be cached with short TTL (5-10s) for frequently polled endpoints."
+
+While the existing 8 subqueries are pre-existing, the 3 **new** ones are introduced code that worsens the violation. These three status counts could be consolidated with the existing workspace counts into a single table scan using conditional aggregation:
+
+```sql
+-- Instead of 6 separate subqueries on `workspaces`, use one:
+SELECT
+  COUNT(*) as workspaces,
+  COUNT(CASE WHEN state = 'ready' THEN 1 END) as workspaces_ready,
+  COUNT(CASE WHEN state = 'archived' THEN 1 END) as workspaces_archived,
+  COUNT(CASE WHEN status = 'backlog' AND state != 'archived' THEN 1 END) as workspaces_backlog,
+  COUNT(CASE WHEN status = 'in-progress' AND state != 'archived' THEN 1 END) as workspaces_in_progress,
+  COUNT(CASE WHEN status = 'in-review' AND state != 'archived' THEN 1 END) as workspaces_in_review
+FROM workspaces
+```
+
+The 5s TTL cache mitigates the performance impact, but new code should follow the stated consolidation rule.
+
+**File:** `apps/backend/src/db/queries.ts:407-409`
+
+---
+
+### Filtered (False Positives)
+
+- **WS mutation vs HTTP mismatch:** `updateWorkspaceStatus` uses HTTP PATCH from the frontend despite being in `MUTATION_NAMES`. Filtered because all existing mutations (`archiveWorkspace`, `updateWorkspaceTitle`) follow the same HTTP pattern -- the WS mutation path is unused across the board. This is a pre-existing architectural inconsistency, not a new violation.
+
+---
+
+<system_instruction>
+The user has attached these files. Read them before proceeding.
+- /Users/zvada/Developer/agent/box-ide/.conductor/da-nang-v3/.context/attachments/Lint__Format___Typecheck_67960989419.log (82.8 KB)
+</system_instruction>
+
+
+
+Fix the failing CI actions. I've attached the failure logs.
+
+---
+
+can u run it so we can tets it and se it?
