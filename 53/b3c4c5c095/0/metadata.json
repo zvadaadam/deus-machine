@@ -1,0 +1,44 @@
+{
+  "cli_version": "0.5.0",
+  "checkpoint_id": "53b3c4c5c095",
+  "session_id": "8aa0f1c1-b25d-47c5-aab7-bbbe2fb1fd94",
+  "strategy": "manual-commit",
+  "created_at": "2026-03-20T10:51:04.346271Z",
+  "branch": "zvadaadam/explore-manus-app",
+  "checkpoints_count": 1,
+  "files_touched": [
+    "apps/desktop/main/backend-process.ts",
+    "apps/desktop/main/browser-views.ts",
+    "apps/desktop/main/index.ts",
+    "apps/desktop/preload/index.ts",
+    "apps/web/src/app/layouts/RightSidePanel.tsx",
+    "apps/web/src/features/browser/hooks/useBrowserDetach.ts",
+    "apps/web/src/features/browser/ui/BrowserPanel.tsx",
+    "apps/web/src/features/notebook/ui/NotebookPanel.tsx",
+    "apps/web/src/features/session/hooks/useAgentRpcHandler.ts",
+    "apps/web/src/features/simulator/api/simulator.service.ts",
+    "apps/web/src/shared/config/api.config.ts",
+    "package.json"
+  ],
+  "agent": "Claude Code",
+  "turn_id": "a1fe46ef84f7",
+  "token_usage": {
+    "input_tokens": 13010,
+    "cache_creation_tokens": 4111547,
+    "cache_read_tokens": 264313346,
+    "output_tokens": 304151,
+    "api_call_count": 1048
+  },
+  "session_metrics": {
+    "turn_count": 73
+  },
+  "initial_attribution": {
+    "calculated_at": "2026-03-20T10:50:59.939464Z",
+    "agent_lines": 210,
+    "human_added": 45,
+    "human_modified": 2,
+    "human_removed": 0,
+    "total_committed": 257,
+    "agent_percentage": 81.71206225680933
+  }
+}
