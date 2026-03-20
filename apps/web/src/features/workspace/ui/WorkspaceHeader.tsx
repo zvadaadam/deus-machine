@@ -209,7 +209,10 @@ function HeaderOpenButton({ workspacePath }: { workspacePath: string }) {
   const isHoveringRef = useRef(false);
 
   useEffect(() => {
-    native.apps.getInstalled().then(setApps).catch(() => {});
+    native.apps
+      .getInstalled()
+      .then(setApps)
+      .catch(() => {});
   }, []);
 
   function handleOpenInApp(appId: string) {
@@ -261,15 +264,9 @@ function HeaderOpenButton({ workspacePath }: { workspacePath: string }) {
     </button>
   );
 
+  // No apps detected — hide the button entirely (web mode or no editors installed)
   if (apps.length === 0) {
-    return (
-      <Tooltip delayDuration={200}>
-        <TooltipTrigger asChild>{trigger}</TooltipTrigger>
-        <TooltipContent side="bottom">
-          <p className="text-xs">Open in editor (desktop only)</p>
-        </TooltipContent>
-      </Tooltip>
-    );
+    return null;
   }
 
   const groups = groupAppsByCategory(apps);

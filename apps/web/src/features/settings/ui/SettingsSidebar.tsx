@@ -8,6 +8,7 @@ import {
   Download,
   Globe,
 } from "lucide-react";
+import { capabilities } from "@/platform";
 import type { LucideIcon } from "lucide-react";
 import {
   Sidebar,
@@ -24,6 +25,8 @@ interface NavItem {
   id: SettingsSection;
   label: string;
   icon: LucideIcon;
+  /** If set, this item only shows when the capability is true. */
+  capability?: keyof typeof capabilities;
 }
 
 const NAV_ITEMS: NavItem[] = [
@@ -33,8 +36,10 @@ const NAV_ITEMS: NavItem[] = [
   { id: "environment", label: "Environment", icon: Box },
   { id: "experimental", label: "Experimental", icon: FlaskConical },
   { id: "access", label: "Connect", icon: Globe },
-  { id: "updates", label: "Updates", icon: Download },
+  { id: "updates", label: "Updates", icon: Download, capability: "autoUpdate" },
 ];
+
+const visibleItems = NAV_ITEMS.filter((item) => !item.capability || capabilities[item.capability]);
 
 export function SettingsSidebar() {
   const closeSettings = useUIStore((s) => s.closeSettings);
@@ -56,7 +61,7 @@ export function SettingsSidebar() {
 
       <SidebarContent className="px-1.5">
         <SidebarMenu className="gap-0.5">
-          {NAV_ITEMS.map((item) => {
+          {visibleItems.map((item) => {
             const isActive = activeSection === item.id;
             const Icon = item.icon;
             return (

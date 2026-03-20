@@ -13,6 +13,7 @@ import { Switch } from "@/components/ui/switch";
 import { RotateCcw } from "lucide-react";
 import { useUIStore } from "@/shared/stores/uiStore";
 import { setAnalyticsEnabled } from "@/platform/analytics";
+import { capabilities } from "@/platform";
 import type { GeneralSectionProps } from "./types";
 
 export function GeneralSection({ settings, saveSetting, theme, setTheme }: GeneralSectionProps) {
@@ -88,24 +89,26 @@ export function GeneralSection({ settings, saveSetting, theme, setTheme }: Gener
 
       <Separator />
 
-      {/* Replay onboarding */}
-      <div className="flex items-center justify-between">
-        <div>
-          <Label className="text-sm">Onboarding</Label>
-          <p className="text-muted-foreground text-base">Replay the setup walkthrough.</p>
+      {/* Replay onboarding — desktop only (requires Electron window effects) */}
+      {capabilities.nativeOnboarding && (
+        <div className="flex items-center justify-between">
+          <div>
+            <Label className="text-sm">Onboarding</Label>
+            <p className="text-muted-foreground text-base">Replay the setup walkthrough.</p>
+          </div>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={async () => {
+              const ok = await saveSetting("onboarding_completed", false);
+              if (ok) closeSettings();
+            }}
+          >
+            <RotateCcw className="mr-1.5 size-3.5" />
+            Replay
+          </Button>
         </div>
-        <Button
-          variant="outline"
-          size="sm"
-          onClick={async () => {
-            const ok = await saveSetting("onboarding_completed", false);
-            if (ok) closeSettings();
-          }}
-        >
-          <RotateCcw className="mr-1.5 size-3.5" />
-          Replay
-        </Button>
-      </div>
+      )}
 
       <Separator />
 
