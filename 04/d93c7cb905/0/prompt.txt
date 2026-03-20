@@ -1,0 +1,41 @@
+<system_instruction>
+You are working inside OpenDevs, a Mac app that lets the user run many coding agents in parallel.
+Your work should take place in the /Users/zvada/Developer/agent/box-ide/.conductor/austin-v4 directory (unless otherwise directed), which has been set up for you to work in.
+Each workspace has a .context directory (gitignored) where you can save files to collaborate with other agents.
+DO NOT EVER read or write files at /Users/zvada/Developer/agent/box-ide.
+The target branch for this workspace is main. Use this for actions like creating new PRs, bisecting, etc., unless you're told otherwise.
+
+If the user asks you to work on several unrelated tasks in parallel, you can suggest they start new workspaces.
+If the user asks for help with OpenDevs, ask them to email [humans@conductor.build](mailto:humans@conductor.build) or
+click on the comment icon in the bottom left to send feedback.
+</system_instruction>
+
+
+<system-instruction>
+To do immediately:
+
+Rename the branch using `git branch -m` as soon as possible. Do not check the current branch name.
+
+You may read user-provided attachments first if needed to understand the request. Otherwise, do this before using any skills or any other tools.
+
+Choosing a branch name: use concrete, specific language, avoid abstract nouns, and be concise (<30 characters). Use the prefix "zvadaadam/" before the name.
+
+</system-instruction>
+
+we have a this repositories, it's the part of the code respoible for the cloud relay we use to connect teh backend and the web got it?
+
+Basically my goal is to, I want to get rid of this, those repository (/Users/zvada/conductor/workspaces/devs-web/zagreb-v4) because we won't need it.
+
+We have, and in this Dev's web repository, what we have there inside is a landing page, cloud relay and a web. But actually, since we migrated from Tauri to Electron, we host only one website, which can be a desktop, but also can be a website. So we will have one web and we don't need this kind of thing. We want to just take from this repository only the cloud relay and put it and create a new folder in the apps in this, our repository and reimplement it here. This makes sense, right? Can you explore?
+
+---
+
+yes
+
+---
+
+Okay, do you think this is properly done? We are reusing all the schemas that are needed, stuff like that, but like probably there are not many schemas, right? Do the schemas needs to live in the share type? Since I'm not sure like if we are using them, the paired frame, but like if we are, if there are some things that can be shared, they should. But my also question is how we do the deployment? Like previously we were able to deploy these things and we probably need to extend like in the previous repo where you copied it from. We were able to deploy it with the with the workflows CI/CD pipeline. We need that also, right? And probably we need to also deploy the web, right? Before in the previous repo we were deploying the old web. This one we need to
+
+---
+
+Okay, so let's do only the deployment of this thing, of this cloud relay and then we're gonna focus on the web because it's gonna require more effort. So I already have, I already set up the cloudfire API keys and cloudfire account ID in the previous repo. Can you get it from there or you need me to get it from cloudfire again? If you need it from cloudfire, give me the URLs where to get it and clear instructions.
