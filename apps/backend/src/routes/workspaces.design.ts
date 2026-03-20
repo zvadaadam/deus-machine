@@ -89,7 +89,9 @@ app.post("/workspaces/:id/open-pen-file", withWorkspace, async (c) => {
       didFallback = true;
       const { cmd, args } = gitService.getOpenCommand("https://pencil.dev");
       const webChild = spawn(cmd, args, { stdio: "ignore" });
-      webChild.on("error", (err) => console.error("[workspaces.design] Failed to open web fallback:", err));
+      webChild.on("error", (err) =>
+        console.error("[workspaces.design] Failed to open web fallback:", err)
+      );
       webChild.unref();
     };
     child.on("error", fallbackToWeb);
@@ -100,7 +102,9 @@ app.post("/workspaces/:id/open-pen-file", withWorkspace, async (c) => {
   } else {
     const { cmd, args } = gitService.getOpenCommand("https://pencil.dev");
     const webChild = spawn(cmd, args, { stdio: "ignore" });
-    webChild.on("error", (err) => console.error("[workspaces.design] Failed to open web fallback:", err));
+    webChild.on("error", (err) =>
+      console.error("[workspaces.design] Failed to open web fallback:", err)
+    );
     webChild.unref();
   }
 
