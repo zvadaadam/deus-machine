@@ -1,0 +1,69 @@
+# Deploy cloud relay to Cloudflare Workers.
+# Auto-deploys on push to main when relay files change.
+# Can also be triggered manually via workflow_dispatch.
+#
+# Required GitHub Secrets:
+#   CLOUDFLARE_API_TOKEN     — Cloudflare API token with Workers deploy permissions
+#   CLOUDFLARE_ACCOUNT_ID    — Cloudflare account ID
+
+name: Deploy
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "apps/cloud-relay/**"
+      - "shared/types/relay.ts"
+  workflow_dispatch:
+    inputs:
+      service:
+        description: "Service to deploy"
+        required: true
+        type: choice
+        options:
+          - relay
+          - all
+        default: relay
+
+concurrency:
+  group: deploy-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  deploy-relay:
+    name: Deploy Cloud Relay
+    runs-on: ubuntu-latest
+    if: >-
+      github.event_name == 'workflow_dispatch' ||
+      github.event_name == 'push'
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.2.19
+
+      - name: Install relay dependencies
+        run: cd apps/cloud-relay && bun install --frozen-lockfile
+
+      - name: Typecheck relay
+        run: cd apps/cloud-relay && bunx tsc --noEmit
+
+      - name: Deploy relay to Cloudflare
+        uses: cloudflare/wrangler-action@v3
+        with:
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          workingDirectory: apps/cloud-relay
+          command: deploy
+
+      - name: Health check
+        run: |
+          sleep 5
+          STATUS=$(curl -sf https://relay.rundeus.com/health | jq -r '.status')
+          if [ "$STATUS" != "ok" ]; then
+            echo "::warning::Health check returned status: $STATUS"
+          else
+            echo "Relay health check passed"
+          fi
