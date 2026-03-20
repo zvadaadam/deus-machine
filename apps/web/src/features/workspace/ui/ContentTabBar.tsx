@@ -46,10 +46,13 @@ const contentTabItems: Array<{
   { id: "config", label: "Agent", icon: Bot },
 ];
 
-/** Check if a tab should be visible given current settings. undefined = hidden (opt-in). */
+/** Check if a tab should be visible given current settings and platform capabilities. */
 export function isTabVisible(tab: RightSideTab, settings?: Settings): boolean {
-  // Simulator tab requires both the setting AND the platform capability
+  // Platform capability gates — hide tabs that can't work in the current environment
+  if (tab === "terminal" && !capabilities.nativeTerminal) return false;
+  if (tab === "browser" && !capabilities.nativeBrowser) return false;
   if (tab === "simulator" && !capabilities.nativeSimulator) return false;
+
   const item = contentTabItems.find((i) => i.id === tab);
   if (!item?.visibilityKey) return true;
   return settings?.[item.visibilityKey] === true;
