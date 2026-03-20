@@ -1,0 +1,14 @@
+can u try to add this? i thougth we have it: we have many CI erors can u check this?
+
+Medium Gaps
+
+6. Pre-commit Hooks
+The report recommends husky + lint-staged. We have neither. Developers can commit anything — broken types, lint errors, formatting inconsistencies.
+
+Our CI already runs lint + typecheck + format:check, so this is defense-in-depth, not critical. But it would catch the “19 React Compiler false positives” situation earlier.
+
+Action: Add husky + lint-staged running only prettier --write + eslint --fix on staged files. Keep it fast — no typecheck in pre-commit.
+
+---
+
+just tel hwo woudl u don it in oru coedbase
