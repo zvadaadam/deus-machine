@@ -245,7 +245,7 @@ export const AppEventSchemaMap = {
   [BROWSER_TITLE_CHANGED]: BrowserTitleChangedSchema,
   [BROWSER_URL_CHANGE]: BrowserUrlChangeSchema,
   [BROWSER_WORKSPACE_CHANGE]: BrowserWorkspaceChangeSchema,
-  [BROWSER_DETACHED_CLOSED]: z.object({}),
+  [BROWSER_DETACHED_CLOSED]: z.undefined(),
   [SIM_BUILD_LOG]: SimBuildLogSchema,
   [CHAT_INSERT]: ChatInsertSchema,
   [GIT_CLONE_PROGRESS]: GitCloneProgressSchema,
@@ -279,7 +279,7 @@ export interface AppEventMap {
   [BROWSER_TITLE_CHANGED]: BrowserTitleChangedEvent;
   [BROWSER_URL_CHANGE]: BrowserUrlChangeEvent;
   [BROWSER_WORKSPACE_CHANGE]: BrowserWorkspaceChangeEvent;
-  [BROWSER_DETACHED_CLOSED]: Record<string, never>;
+  [BROWSER_DETACHED_CLOSED]: undefined;
 
   // Simulator
   [SIM_BUILD_LOG]: SimBuildLogEvent;

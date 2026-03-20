@@ -16,9 +16,7 @@
 import { useEffect } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { queryKeys } from "@/shared/api/queryKeys";
-import {
-  WORKSPACE_PROGRESS,
-} from "@shared/events";
+import { WORKSPACE_PROGRESS } from "@shared/events";
 import { native } from "@/platform";
 import type { RepoGroup } from "@shared/types/workspace";
 import {

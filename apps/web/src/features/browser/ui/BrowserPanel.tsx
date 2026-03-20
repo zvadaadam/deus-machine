@@ -660,10 +660,7 @@ export function BrowserPanel({
         }
 
         // Inject ALL cookies (including HttpOnly) via native WKHTTPCookieStore
-        const injected = await native.browserViews.injectCookies(
-          activeTab.webviewLabel,
-          cookies
-        );
+        const injected = await native.browserViews.injectCookies(activeTab.webviewLabel, cookies);
 
         handleAddLog(
           activeTab.id,
