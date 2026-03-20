@@ -1,0 +1,25 @@
+{
+  "cli_version": "0.5.0",
+  "checkpoint_id": "6202325fb77f",
+  "strategy": "manual-commit",
+  "branch": "zvadaadam/explore-manus-app",
+  "checkpoints_count": 2,
+  "files_touched": [
+    "apps/desktop/main/index.ts"
+  ],
+  "sessions": [
+    {
+      "metadata": "/62/02325fb77f/0/metadata.json",
+      "transcript": "/62/02325fb77f/0/full.jsonl",
+      "content_hash": "/62/02325fb77f/0/content_hash.txt",
+      "prompt": "/62/02325fb77f/0/prompt.txt"
+    }
+  ],
+  "token_usage": {
+    "input_tokens": 13140,
+    "cache_creation_tokens": 4595674,
+    "cache_read_tokens": 316846195,
+    "output_tokens": 327261,
+    "api_call_count": 1167
+  }
+}
