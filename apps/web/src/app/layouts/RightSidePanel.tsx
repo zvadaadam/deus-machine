@@ -183,10 +183,7 @@ export function RightSidePanel({
       </div>
 
       {activeTab === "notebook" && (
-        <NotebookPanel
-          workspaceId={workspace.id}
-          sessionStatus={workspace.session_status}
-        />
+        <NotebookPanel workspaceId={workspace.id} sessionStatus={workspace.session_status} />
       )}
 
       {activeTab === "config" && <AgentConfigPanel workspace={workspace} />}
