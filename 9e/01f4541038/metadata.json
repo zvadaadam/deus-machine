@@ -1,0 +1,25 @@
+{
+  "cli_version": "0.5.0",
+  "checkpoint_id": "9e01f4541038",
+  "strategy": "manual-commit",
+  "branch": "zvadaadam/explore-workspace-states",
+  "checkpoints_count": 2,
+  "files_touched": [
+    ".context/workspace-status-plan.md"
+  ],
+  "sessions": [
+    {
+      "metadata": "/9e/01f4541038/0/metadata.json",
+      "transcript": "/9e/01f4541038/0/full.jsonl",
+      "content_hash": "/9e/01f4541038/0/content_hash.txt",
+      "prompt": "/9e/01f4541038/0/prompt.txt"
+    }
+  ],
+  "token_usage": {
+    "input_tokens": 3390,
+    "cache_creation_tokens": 399298,
+    "cache_read_tokens": 6934219,
+    "output_tokens": 43039,
+    "api_call_count": 89
+  }
+}
