@@ -7,7 +7,9 @@
  * - Web dev: Uses VITE_BACKEND_PORT environment variable from dev.sh
  */
 
-import { isElectronEnv } from "@/platform/electron";
+// Import directly from the source module (not the barrel) to avoid circular
+// dependency: client.ts → api.config.ts → platform/electron/index.ts → ... → client.ts
+import { isElectronEnv } from "@/platform/electron/invoke";
 
 let cachedPort: number | null = null;
 let portPromise: Promise<number> | null = null;
@@ -116,11 +118,6 @@ export async function getBaseURL(): Promise<string> {
   const port = await getBackendPort();
   return `http://localhost:${port}/api`;
 }
-
-export const API_CONFIG = {
-  getBaseURL,
-  REQUEST_TIMEOUT: 30000, // 30 seconds
-} as const;
 
 export const ENDPOINTS = {
   // Workspace endpoints
