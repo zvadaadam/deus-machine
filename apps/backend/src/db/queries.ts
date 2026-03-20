@@ -25,7 +25,7 @@ import type {
 const WORKSPACE_DETAILS_SELECT = `
   SELECT
     w.id, w.repository_id, w.slug, w.title, w.git_branch,
-    w.git_target_branch, w.state, w.current_session_id,
+    w.git_target_branch, w.state, w.status, w.current_session_id,
     w.pr_url, w.pr_number,
     w.setup_status, w.error_message, w.init_stage,
     w.updated_at,
@@ -68,7 +68,7 @@ export function getWorkspacesByRepo(
       `
     SELECT
       w.id, w.repository_id, w.slug, w.title, w.git_branch,
-      w.git_target_branch, w.state, w.current_session_id,
+      w.git_target_branch, w.state, w.status, w.current_session_id,
       w.pr_url, w.pr_number,
       w.setup_status, w.error_message, w.init_stage,
       w.updated_at,
@@ -139,7 +139,7 @@ export function getWorkspacesBySessionIds(
       `
     SELECT
       w.id, w.repository_id, w.slug, w.title, w.git_branch,
-      w.git_target_branch, w.state, w.current_session_id,
+      w.git_target_branch, w.state, w.status, w.current_session_id,
       w.pr_url, w.pr_number,
       w.setup_status, w.error_message, w.init_stage,
       w.updated_at,
@@ -404,6 +404,9 @@ export function getStats(db: Database.Database): StatsRow {
       (SELECT COUNT(*) FROM workspaces) as workspaces,
       (SELECT COUNT(*) FROM workspaces WHERE state = 'ready') as workspaces_ready,
       (SELECT COUNT(*) FROM workspaces WHERE state = 'archived') as workspaces_archived,
+      (SELECT COUNT(*) FROM workspaces WHERE status = 'backlog' AND state != 'archived') as workspaces_backlog,
+      (SELECT COUNT(*) FROM workspaces WHERE status = 'in-progress' AND state != 'archived') as workspaces_in_progress,
+      (SELECT COUNT(*) FROM workspaces WHERE status = 'in-review' AND state != 'archived') as workspaces_in_review,
       (SELECT COUNT(*) FROM repositories) as repositories,
       (SELECT COUNT(*) FROM sessions) as sessions,
       (SELECT COUNT(*) FROM sessions WHERE status = 'idle') as sessions_idle,
@@ -421,3 +424,4 @@ export function resetStatsCache(): void {
   cachedStats = null;
   cachedAt = 0;
 }
+

@@ -65,6 +65,7 @@ export type AnalyticsEventMap = {
   workspace_created: { repository_id: string };
   workspace_archived: WithWorkspace;
   workspace_unarchived: WithWorkspace;
+  workspace_status_changed: WithWorkspace & { status: string };
   /** Workspace init pipeline finished (initializing → ready or → error).
    *  duration_ms is approximate — includes polling latency (~2s window). */
   workspace_setup_completed: WithWorkspace & {

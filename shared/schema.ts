@@ -21,6 +21,8 @@
 export const MIGRATIONS: string[] = [
   // sessions: structured error category for category-aware UI
   `ALTER TABLE sessions ADD COLUMN error_category TEXT`,
+  // workspaces: Linear-style workflow status (backlog/in-progress/in-review/done/canceled)
+  `ALTER TABLE workspaces ADD COLUMN status TEXT NOT NULL DEFAULT 'in-progress'`,
 ];
 
 export const SCHEMA_SQL = `
@@ -44,6 +46,7 @@ export const SCHEMA_SQL = `
     git_branch TEXT,
     git_target_branch TEXT,
     state TEXT NOT NULL DEFAULT 'initializing',
+    status TEXT NOT NULL DEFAULT 'in-progress',
     current_session_id TEXT,
     pr_url TEXT,
     pr_number INTEGER,
@@ -105,6 +108,7 @@ export const SCHEMA_SQL = `
   -- Indexes (10)
   CREATE INDEX IF NOT EXISTS idx_workspaces_repository_id ON workspaces(repository_id);
   CREATE INDEX IF NOT EXISTS idx_workspaces_state ON workspaces(state);
+  CREATE INDEX IF NOT EXISTS idx_workspaces_status ON workspaces(status);
   CREATE INDEX IF NOT EXISTS idx_sessions_workspace_id ON sessions(workspace_id);
   CREATE INDEX IF NOT EXISTS idx_sessions_status ON sessions(status);
   CREATE INDEX IF NOT EXISTS idx_messages_seq ON messages(session_id, seq DESC);

@@ -5,6 +5,7 @@
 export type {
   Workspace,
   WorkspaceState,
+  WorkspaceStatus,
   RepoGroup,
   DiffStats,
   FileChange,

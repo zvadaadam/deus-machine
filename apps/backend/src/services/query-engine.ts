@@ -29,6 +29,8 @@ import { computeWorkspacePath } from "../middleware/workspace-loader";
 import { getConnection } from "./ws.service";
 import { resolveToolRelay, rejectToolRelay, runCommand } from "./agent";
 import { delegateToRoute } from "./route-delegate";
+import { autoProgressStatus, setWorkspaceStatus } from "./workspace-status.service";
+import { WorkspaceStatusSchema } from "@shared/enums";
 import {
   QUERY_RESOURCES,
   REQUEST_RESOURCES,
@@ -607,6 +609,7 @@ async function runMutation(action: string, params: QueryParams): Promise<unknown
         if (!workspace) throw new Error("Workspace not found");
 
         db.prepare("UPDATE workspaces SET state = 'archived' WHERE id = ?").run(workspaceId);
+        autoProgressStatus(workspaceId, "done", { force: true });
         invalidate(["workspaces", "stats"]);
         return { success: true };
       })
@@ -710,6 +713,17 @@ async function runMutation(action: string, params: QueryParams): Promise<unknown
           "DELETE",
           `/api/remote-auth/devices/${encodeURIComponent(deviceId)}`
         );
+      })
+      .with("updateWorkspaceStatus", () => {
+        const workspaceId = readStringParam(params, "workspaceId");
+        const status = readStringParam(params, "status");
+        if (!workspaceId || !status) {
+          throw new Error("updateWorkspaceStatus requires workspaceId and status");
+        }
+        const parsed = WorkspaceStatusSchema.parse(status);
+        setWorkspaceStatus(workspaceId, parsed);
+        invalidate(["workspaces", "stats"]);
+        return { success: true };
       })
       .exhaustive()
   );

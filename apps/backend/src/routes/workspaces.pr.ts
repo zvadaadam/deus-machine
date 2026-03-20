@@ -1,6 +1,9 @@
 import { Hono } from "hono";
 import { withWorkspace } from "../middleware/workspace-loader";
 import { runGh, getPrStatus } from "../services/gh.service";
+import { getDatabase } from "../lib/database";
+import { invalidate } from "../services/query-engine";
+import { autoProgressStatus } from "../services/workspace-status.service";
 import type { WorkspaceWithDetailsRow } from "../db";
 
 type Env = { Variables: { workspace: WorkspaceWithDetailsRow; workspacePath: string } };
@@ -15,9 +18,33 @@ app.get("/gh-status", async (c) => {
 });
 
 // PR status -- async, fork-aware, explicit errors
+// Side-effect: persists pr_url on first discovery + triggers auto-derive
 app.get("/workspaces/:id/pr-status", withWorkspace, async (c) => {
+  const workspace = c.get("workspace");
   const workspacePath = c.get("workspacePath");
   const result = await getPrStatus(workspacePath);
+
+  let needsInvalidation = false;
+
+  // Persist PR URL when we first discover a PR (enables auto-derive)
+  if (result.has_pr && result.pr_url && result.pr_url !== workspace.pr_url) {
+    const db = getDatabase();
+    db.prepare("UPDATE workspaces SET pr_url = ?, pr_number = ? WHERE id = ?")
+      .run(result.pr_url, result.pr_number ?? null, workspace.id);
+    autoProgressStatus(workspace.id, "in-review");
+    needsInvalidation = true;
+  }
+
+  // Auto-derive done on merge
+  if (result.merge_status === "merged" && workspace.status !== "done") {
+    autoProgressStatus(workspace.id, "done");
+    needsInvalidation = true;
+  }
+
+  if (needsInvalidation) {
+    invalidate(["workspaces", "stats"]);
+  }
+
   return c.json(result);
 });
 

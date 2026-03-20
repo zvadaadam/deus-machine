@@ -35,6 +35,7 @@ export interface WorkspaceRow {
   git_branch: string | null;
   git_target_branch: string | null;
   state: string;
+  status: string;
   current_session_id: string | null;
   pr_url: string | null;
   pr_number: number | null;
@@ -60,6 +61,7 @@ export interface WorkspaceWithDetailsRow {
   git_branch: string | null;
   git_target_branch: string | null;
   state: string;
+  status: string;
   current_session_id: string | null;
   pr_url: string | null;
   pr_number: number | null;
@@ -133,6 +135,9 @@ export interface StatsRow {
   workspaces: number;
   workspaces_ready: number;
   workspaces_archived: number;
+  workspaces_backlog: number;
+  workspaces_in_progress: number;
+  workspaces_in_review: number;
   repositories: number;
   sessions: number;
   sessions_idle: number;

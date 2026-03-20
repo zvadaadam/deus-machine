@@ -33,6 +33,28 @@ export type WorkspaceState = z.infer<typeof WorkspaceStateSchema>;
 export const SetupStatusSchema = z.enum(["none", "running", "completed", "failed"]);
 export type SetupStatus = z.infer<typeof SetupStatusSchema>;
 
+/** Linear-style workflow states for workspaces. */
+export const WorkspaceStatusSchema = z.enum([
+  "backlog",
+  "in-progress",
+  "in-review",
+  "done",
+  "canceled",
+]);
+export type WorkspaceStatus = z.infer<typeof WorkspaceStatusSchema>;
+
+/** Sticky states resist auto-progression. Only user action (or archive) can exit. */
+export const STICKY_STATUSES: ReadonlySet<WorkspaceStatus> = new Set(["backlog", "canceled"]);
+
+/** Numeric rank for progression comparison. canceled is -1 (side-exit, not in flow). */
+export const STATUS_RANK: Record<WorkspaceStatus, number> = {
+  backlog: 0,
+  "in-progress": 1,
+  "in-review": 2,
+  done: 3,
+  canceled: -1,
+};
+
 // ── Agent ────────────────────────────────────────────────────────────────
 
 export const AgentTypeSchema = z.enum(["claude", "codex"]);

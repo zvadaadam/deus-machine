@@ -12,6 +12,7 @@ import { queryKeys } from "@/shared/api/queryKeys";
 import { useQuerySubscription } from "@/shared/hooks/useQuerySubscription";
 import type { RepoGroup, DiffStats } from "../types";
 import type { PRStatus } from "@/shared/types";
+import type { WorkspaceStatus } from "@shared/enums";
 import { createOptimisticWorkspace, mergeWorkspaceDelta } from "../lib/workspace.utils";
 import { track } from "@/platform/analytics";
 
@@ -429,6 +430,54 @@ export function useArchiveWorkspace() {
     },
 
     // Always refetch after error or success to ensure consistency
+    onSettled: () => {
+      queryClient.invalidateQueries({ queryKey: queryKeys.workspaces.all });
+    },
+  });
+}
+
+/**
+ * Update workspace workflow status (backlog/in-progress/in-review/done/canceled).
+ * Optimistic: updates sidebar immediately, WS subscription confirms.
+ */
+export function useUpdateWorkspaceStatus() {
+  const queryClient = useQueryClient();
+  const queryKey = queryKeys.workspaces.byRepo("ready,initializing");
+
+  return useMutation({
+    mutationFn: ({ workspaceId, status }: { workspaceId: string; status: WorkspaceStatus }) =>
+      WorkspaceService.updateStatus(workspaceId, status),
+
+    onMutate: async ({ workspaceId, status }) => {
+      await queryClient.cancelQueries({ queryKey });
+      const previousData = queryClient.getQueryData<RepoGroup[]>(queryKey);
+
+      queryClient.setQueryData<RepoGroup[]>(queryKey, (old) => {
+        if (!old) return old;
+        return produce(old, (draft) => {
+          for (const repo of draft) {
+            const ws = repo.workspaces.find((w) => w.id === workspaceId);
+            if (ws) {
+              ws.status = status;
+              break;
+            }
+          }
+        });
+      });
+
+      return { previousData };
+    },
+
+    onError: (_err, _vars, context) => {
+      if (context?.previousData) {
+        queryClient.setQueryData(queryKey, context.previousData);
+      }
+    },
+
+    onSuccess: (_data, { workspaceId, status }) => {
+      track("workspace_status_changed", { workspace_id: workspaceId, status });
+    },
+
     onSettled: () => {
       queryClient.invalidateQueries({ queryKey: queryKeys.workspaces.all });
     },

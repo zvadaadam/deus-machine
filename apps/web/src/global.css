@@ -56,6 +56,11 @@
   --color-status-unread: var(--status-unread);
   --color-status-unread-fg: var(--status-unread-fg);
 
+  /* Workflow status colors */
+  --color-status-in-progress: var(--status-in-progress);
+  --color-status-in-review: var(--status-in-review);
+  --color-status-done: var(--status-done);
+
   /* File type icon colors */
   --color-file-typescript: var(--file-typescript);
   --color-file-rust: var(--file-rust);
@@ -930,6 +935,11 @@
   --status-unread: var(--warning);
   --status-unread-fg: var(--warning-foreground);
 
+  /* Workflow status colors (Linear-style) */
+  --status-in-progress: var(--warning);
+  --status-in-review: oklch(0.53 0.16 300);
+  --status-done: var(--success);
+
   /* --- File type colors (reference semantic tokens) --- */
   --file-typescript: var(--primary);
   --file-rust: var(--destructive);
@@ -1109,6 +1119,11 @@
   --status-compacting-fg: var(--primary-foreground);
   --status-unread: var(--warning);
   --status-unread-fg: var(--warning-foreground);
+
+  /* Workflow status colors (Linear-style) */
+  --status-in-progress: var(--warning);
+  --status-in-review: oklch(0.68 0.13 300);
+  --status-done: var(--success);
 
   /* --- File type colors (reference semantic tokens) --- */
   --file-typescript: var(--primary);
