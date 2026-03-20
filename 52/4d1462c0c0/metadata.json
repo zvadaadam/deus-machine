@@ -3,7 +3,7 @@
   "checkpoint_id": "524d1462c0c0",
   "strategy": "manual-commit",
   "branch": "zvadaadam/review-columbus-v4",
-  "checkpoints_count": 0,
+  "checkpoints_count": 2,
   "files_touched": [
     "apps/web/src/features/browser/automation/useBrowserRpcHandler.ts",
     "apps/web/src/features/browser/hooks/useBrowserDetach.ts",
@@ -17,13 +17,19 @@
       "transcript": "/52/4d1462c0c0/0/full.jsonl",
       "content_hash": "/52/4d1462c0c0/0/content_hash.txt",
       "prompt": "/52/4d1462c0c0/0/prompt.txt"
+    },
+    {
+      "metadata": "/52/4d1462c0c0/1/metadata.json",
+      "transcript": "/52/4d1462c0c0/1/full.jsonl",
+      "content_hash": "/52/4d1462c0c0/1/content_hash.txt",
+      "prompt": "/52/4d1462c0c0/1/prompt.txt"
     }
   ],
   "token_usage": {
-    "input_tokens": 21,
-    "cache_creation_tokens": 48926,
-    "cache_read_tokens": 454892,
-    "output_tokens": 9289,
-    "api_call_count": 11
+    "input_tokens": 13631,
+    "cache_creation_tokens": 5822352,
+    "cache_read_tokens": 511968088,
+    "output_tokens": 423842,
+    "api_call_count": 1552
   }
 }
