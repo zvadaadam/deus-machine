@@ -26,9 +26,6 @@ import { z } from "zod";
 /** Workspace events — backend → main process → frontend */
 export const WORKSPACE_PROGRESS = "workspace:progress" as const;
 
-/** Sidecar RPC — sidecar → main process → frontend (bidirectional requests) */
-export const SIDECAR_REQUEST = "sidecar:request" as const;
-
 /** File system events — chokidar watcher → frontend */
 export const FS_CHANGED = "fs:changed" as const;
 
