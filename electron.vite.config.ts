@@ -25,10 +25,16 @@ function backendPortPlugin(): Plugin {
           const portFile = join(tmpdir(), "opendevs-backend-port");
           try {
             if (existsSync(portFile)) {
-              const port = readFileSync(portFile, "utf-8").trim();
+              const raw = readFileSync(portFile, "utf-8").trim();
+              const portNum = parseInt(raw, 10);
+              if (!Number.isFinite(portNum) || portNum < 1 || portNum > 65535) {
+                res.statusCode = 503;
+                res.end(JSON.stringify({ error: "Invalid port in file" }));
+                return;
+              }
               res.setHeader("Content-Type", "application/json");
               res.setHeader("Access-Control-Allow-Origin", "*");
-              res.end(JSON.stringify({ port: parseInt(port, 10) }));
+              res.end(JSON.stringify({ port: portNum }));
               return;
             }
           } catch {

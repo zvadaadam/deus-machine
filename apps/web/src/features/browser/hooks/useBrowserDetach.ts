@@ -9,7 +9,7 @@
 
 import { useCallback, useEffect } from "react";
 import { native } from "@/platform";
-import { BROWSER_WORKSPACE_CHANGE } from "@shared/events";
+import { BROWSER_WORKSPACE_CHANGE, BROWSER_DETACHED_CLOSED } from "@shared/events";
 import {
   browserWindowActions,
   useBrowserWindowStore,
@@ -75,7 +75,7 @@ export function useBrowserDetach(context: DetachedBrowserWorkspaceContext | null
   // the main window UI reflects the reattached state.
   useEffect(() => {
     // native.events.on handles the capability check internally — no-op in web mode
-    const unlisten = native.events.on("browser:detached-closed" as any, () => {
+    const unlisten = native.events.on(BROWSER_DETACHED_CLOSED, () => {
       browserWindowActions.clearDetachedWindow();
     });
 
