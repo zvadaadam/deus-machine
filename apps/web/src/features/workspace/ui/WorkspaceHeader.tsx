@@ -21,7 +21,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { useSidebar } from "@/components/ui/sidebar";
 import { cn } from "@/shared/lib/utils";
-import { invoke } from "@/platform/electron";
+import { invoke, isElectronEnv } from "@/platform/electron";
 import { track } from "@/platform/analytics";
 import type { SetupStatus } from "@/shared/types";
 import type { NormalizedTask } from "../api/workspace.service";
@@ -215,6 +215,7 @@ function HeaderOpenButton({ workspacePath }: { workspacePath: string }) {
   const isHoveringRef = useRef(false);
 
   useEffect(() => {
+    if (!isElectronEnv) return;
     invoke<InstalledApp[]>("get_installed_apps")
       .then(setApps)
       .catch(() => {});
