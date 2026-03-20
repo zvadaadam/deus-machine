@@ -1,0 +1,28 @@
+{
+  "cli_version": "0.5.0",
+  "checkpoint_id": "fea71a3335e1",
+  "strategy": "manual-commit",
+  "branch": "zvadaadam/review-columbus-v4",
+  "checkpoints_count": 1,
+  "files_touched": [
+    "apps/web/src/features/settings/ui/SettingsSidebar.tsx",
+    "apps/web/src/features/settings/ui/sections/GeneralSection.tsx",
+    "apps/web/src/features/workspace/ui/ContentTabBar.tsx",
+    "apps/web/src/features/workspace/ui/WorkspaceHeader.tsx"
+  ],
+  "sessions": [
+    {
+      "metadata": "/fe/a71a3335e1/0/metadata.json",
+      "transcript": "/fe/a71a3335e1/0/full.jsonl",
+      "content_hash": "/fe/a71a3335e1/0/content_hash.txt",
+      "prompt": "/fe/a71a3335e1/0/prompt.txt"
+    }
+  ],
+  "token_usage": {
+    "input_tokens": 13550,
+    "cache_creation_tokens": 5712539,
+    "cache_read_tokens": 480559951,
+    "output_tokens": 407282,
+    "api_call_count": 1491
+  }
+}
