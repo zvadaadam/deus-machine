@@ -8,7 +8,6 @@
 import { match } from "ts-pattern";
 import { useEffect, useCallback, useRef } from "react";
 import { native } from "@/platform";
-import { native } from "@/platform";
 import { BROWSER_PAGE_LOAD, BROWSER_URL_CHANGE } from "@shared/events";
 import { getErrorMessage } from "@shared/lib/errors";
 import { evalWithResult } from "./eval-with-result";
