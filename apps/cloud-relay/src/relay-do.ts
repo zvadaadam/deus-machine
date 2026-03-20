@@ -199,24 +199,14 @@ export class RelayDO extends DurableObject {
     _reason: string,
     _wasClean: boolean
   ): Promise<void> {
-    const tags = this.ctx.getTags(ws);
-
-    if (tags.includes("tunnel")) {
-      await this.handleServerDisconnect();
-    } else if (tags.includes("pairer")) {
-      const pairId = tags.find((t) => t !== "pairer");
-      if (pairId) {
-        await this.ctx.storage.delete(`pending:pair:${pairId}`);
-      }
-    } else if (tags.includes("client")) {
-      const clientId = tags.find((t) => t !== "client");
-      if (clientId) {
-        await this.handleClientDisconnect(clientId);
-      }
-    }
+    await this.handleWebSocketTermination(ws);
   }
 
   async webSocketError(ws: WebSocket, _error: unknown): Promise<void> {
+    await this.handleWebSocketTermination(ws);
+  }
+
+  private async handleWebSocketTermination(ws: WebSocket): Promise<void> {
     const tags = this.ctx.getTags(ws);
 
     if (tags.includes("tunnel")) {
@@ -307,11 +297,10 @@ export class RelayDO extends DurableObject {
         await this.ctx.storage.delete(`pending:pair:${frame.pairId}`);
         const pairerWs = this.findPairerWs(frame.pairId);
         if (!pairerWs) break;
-        if (frame.success && "deviceToken" in frame) {
+        if (frame.success) {
           this.safeSend(pairerWs, { type: "pair_success", token: frame.deviceToken });
         } else {
-          const reason = "reason" in frame ? frame.reason : "Pairing failed";
-          this.safeSend(pairerWs, { type: "pair_failed", message: reason });
+          this.safeSend(pairerWs, { type: "pair_failed", message: frame.reason });
         }
         // Close the one-shot pairer WS — buffered messages are sent before the close frame
         try {
@@ -589,27 +578,19 @@ export class RelayDO extends DurableObject {
     const now = Date.now();
     const candidates: number[] = [];
 
-    // Earliest pending auth deadline
-    const pendingClients = await this.ctx.storage.list<number>({ prefix: "pending:" });
-    for (const [, deadline] of pendingClients) {
-      candidates.push(deadline);
-    }
-
-    // Earliest pending pair deadline
-    const pendingPairs = await this.ctx.storage.list<number>({ prefix: "pending:pair:" });
-    for (const [, deadline] of pendingPairs) {
+    // All pending deadlines (clients + pairs share the "pending:" prefix)
+    const allPending = await this.ctx.storage.list<number>({ prefix: "pending:" });
+    for (const [, deadline] of allPending) {
       candidates.push(deadline);
     }
 
     // Heartbeat interval (only if server is connected)
-    const tunnels = this.ctx.getWebSockets("tunnel");
-    if (tunnels.length > 0) {
+    if (this.ctx.getWebSockets("tunnel").length > 0) {
       candidates.push(now + HEARTBEAT_INTERVAL_MS);
     }
 
     if (candidates.length > 0) {
       const nextAlarm = Math.min(...candidates);
-      // Ensure alarm is at least 100ms in the future
       await this.ctx.storage.setAlarm(Math.max(nextAlarm, now + 100));
     }
   }
@@ -627,22 +608,19 @@ export class RelayDO extends DurableObject {
     return result;
   }
 
-  private findClientWs(clientId: string): WebSocket | null {
-    const allClients = this.ctx.getWebSockets("client");
-    for (const ws of allClients) {
-      const tags = this.ctx.getTags(ws);
-      if (tags.includes(clientId)) return ws;
+  private findWs(group: string, id: string): WebSocket | null {
+    for (const ws of this.ctx.getWebSockets(group)) {
+      if (this.ctx.getTags(ws).includes(id)) return ws;
     }
     return null;
   }
 
+  private findClientWs(clientId: string): WebSocket | null {
+    return this.findWs("client", clientId);
+  }
+
   private findPairerWs(pairId: string): WebSocket | null {
-    const allPairers = this.ctx.getWebSockets("pairer");
-    for (const ws of allPairers) {
-      const tags = this.ctx.getTags(ws);
-      if (tags.includes(pairId)) return ws;
-    }
-    return null;
+    return this.findWs("pairer", pairId);
   }
 
   private getTunnel(): WebSocket | null {

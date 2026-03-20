@@ -129,18 +129,6 @@ export function createMockState(): MockDOState {
   return state;
 }
 
-// ---- Mock WebSocketPair (Cloudflare global) ----
-
-export class MockWebSocketPair {
-  0: MockWebSocket;
-  1: MockWebSocket;
-
-  constructor() {
-    this[0] = createMockWebSocket(); // client
-    this[1] = createMockWebSocket(); // server
-  }
-}
-
 // ---- RelayDO Test Harness ----
 // Instantiates RelayDO with mocked ctx, bypassing the Cloudflare runtime.
 
@@ -156,9 +144,6 @@ export async function createTestDO() {
       }
     },
   }));
-
-  // Mock the global WebSocketPair
-  (globalThis as any).WebSocketPair = MockWebSocketPair;
 
   const { RelayDO } = await import("../src/relay-do");
   const state = createMockState();
