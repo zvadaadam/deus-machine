@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { isExecError } from "../../../shared/lib/errors";
+import { isExecError } from "@shared/lib/errors";
 
 describe("isExecError", () => {
   it("matches execFile-style async errors", () => {
