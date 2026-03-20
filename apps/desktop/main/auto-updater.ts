@@ -6,7 +6,7 @@
  * frontend can show update toasts.
  */
 
-import { type BrowserWindow } from "electron";
+import { type BrowserWindow, ipcMain } from "electron";
 import { autoUpdater, type UpdateInfo, type ProgressInfo } from "electron-updater";
 
 export type UpdateState =
@@ -55,8 +55,6 @@ export function setupAutoUpdater(mainWindow: BrowserWindow): void {
   });
 
   // IPC handlers for renderer to control updates
-  // eslint-disable-next-line @typescript-eslint/no-require-imports
-  const { ipcMain } = require("electron");
 
   ipcMain.handle("update:check", async () => {
     try {

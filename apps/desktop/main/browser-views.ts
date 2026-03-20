@@ -129,18 +129,8 @@ export function registerBrowserViewHandlers(): void {
         });
       });
 
-      // Network request tracking
-      const ses = view.webContents.session;
-      ses.webRequest.onCompleted((details) => {
-        mainWindow.webContents.send("browser:network-request", {
-          label,
-          url: details.url,
-          method: details.method,
-          statusCode: details.statusCode,
-          resourceType: details.resourceType,
-          fromCache: details.fromCache,
-        });
-      });
+      // TODO: Network request tracking — disabled until renderer listener is wired.
+      // The events were being sent but nothing consumed them (wasted IPC traffic).
 
       // Open external links in system browser (only allow http/https)
       view.webContents.setWindowOpenHandler(({ url: linkUrl }) => {

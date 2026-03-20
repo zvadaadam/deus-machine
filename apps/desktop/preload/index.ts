@@ -37,10 +37,6 @@ const ALLOWED_INVOKE_CHANNELS = new Set([
   "get_installed_apps",
   "open_in_app",
 
-  // File cache management
-  "clear_file_cache",
-  "invalidate_file_cache",
-
   // Browser webview management
   "create_browser_webview",
   "close_browser_webview",
