@@ -1,0 +1,25 @@
+{
+  "cli_version": "0.5.0",
+  "checkpoint_id": "a639e6ce48fc",
+  "strategy": "manual-commit",
+  "branch": "zvadaadam/explore-manus-app",
+  "checkpoints_count": 2,
+  "files_touched": [
+    ".claude/agent-memory/deep-reviewer/MEMORY.md"
+  ],
+  "sessions": [
+    {
+      "metadata": "/a6/39e6ce48fc/0/metadata.json",
+      "transcript": "/a6/39e6ce48fc/0/full.jsonl",
+      "content_hash": "/a6/39e6ce48fc/0/content_hash.txt",
+      "prompt": "/a6/39e6ce48fc/0/prompt.txt"
+    }
+  ],
+  "token_usage": {
+    "input_tokens": 13204,
+    "cache_creation_tokens": 5045571,
+    "cache_read_tokens": 341523464,
+    "output_tokens": 337589,
+    "api_call_count": 1224
+  }
+}
