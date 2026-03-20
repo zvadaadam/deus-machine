@@ -10864,3 +10864,25 @@ the elctron wporks cirrecly but the desktop doees not
 ---
 
 ae u tets it end to end i think u have teh tetsing tool for electrom skill right and u can tets the whole mcp claude browise th wbeosewr app so clean do it c=klieind teh eeletcro and u shoudl ened ot end tets eveythign se that dekstip btu also web works fgo
+
+---
+
+<system_instruction>
+The user has attached these files. Read them before proceeding.
+- /Users/zvada/Developer/agent/box-ide/.conductor/columbus-v3/.context/attachments/Screenshot 2026-03-20 at 5.20.23 PM.png (980.3 KB)
+</system_instruction>
+
+
+
+but thre web is still whote screeneee!!!!! and as lot of errors
+
+---
+
+<system_instruction>
+The user has attached these files. Read them before proceeding.
+- /Users/zvada/Developer/agent/box-ide/.conductor/columbus-v3/.context/attachments/pasted_text_2026-03-20_17-44-13.txt (1.3 MB)
+</system_instruction>
+
+
+
+but know the screen is white ane eemoty and in the web mode manyy errros flow thtought the deve tools consosleL
