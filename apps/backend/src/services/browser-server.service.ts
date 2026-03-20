@@ -104,9 +104,13 @@ export async function startBrowserServer(
       }
     });
 
+    const proc = browserProcess;
     setTimeout(() => {
       if (!resolved) {
         resolved = true;
+        if (proc && proc.exitCode === null && proc.signalCode === null) {
+          proc.kill("SIGTERM");
+        }
         browserProcess = null;
         browserPort = null;
         browserAuthToken = null;

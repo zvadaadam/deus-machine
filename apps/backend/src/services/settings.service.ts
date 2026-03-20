@@ -17,7 +17,7 @@ function readPreferences(): Record<string, any> {
     const parsed = PreferencesFile.safeParse(raw);
     if (!parsed.success) {
       console.error("[settings] Invalid preferences.json, returning raw:", parsed.error.issues);
-      return raw;
+      return typeof raw === "object" && raw !== null && !Array.isArray(raw) ? raw : {};
     }
     return parsed.data;
   } catch (error) {

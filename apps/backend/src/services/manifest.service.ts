@@ -272,10 +272,11 @@ export function runSetupScript(
   setupProc.stdout.pipe(setupLog);
   setupProc.stderr.pipe(setupLog);
 
+  let forceKillTimer: ReturnType<typeof setTimeout> | null = null;
   const timer = setTimeout(
     () => {
       setupProc.kill("SIGTERM");
-      setTimeout(() => {
+      forceKillTimer = setTimeout(() => {
         try {
           setupProc.kill("SIGKILL");
         } catch {}
@@ -289,6 +290,7 @@ export function runSetupScript(
     if (finished) return;
     finished = true;
     clearTimeout(timer);
+    if (forceKillTimer) { clearTimeout(forceKillTimer); forceKillTimer = null; }
     try {
       setupLog.end();
     } catch {}
