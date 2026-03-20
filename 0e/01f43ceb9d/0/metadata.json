@@ -1,0 +1,34 @@
+{
+  "cli_version": "0.5.0",
+  "checkpoint_id": "0e01f43ceb9d",
+  "session_id": "7a31a0fd-ac87-40e9-84c5-badf62342e54",
+  "strategy": "manual-commit",
+  "created_at": "2026-03-20T19:59:20.185605Z",
+  "branch": "zvadaadam/add-cloud-relay",
+  "checkpoints_count": 1,
+  "files_touched": [
+    "apps/cloud-relay/src/relay-do.ts",
+    "apps/cloud-relay/test/relay-do.test.ts"
+  ],
+  "agent": "Claude Code",
+  "turn_id": "991d0505a00f",
+  "token_usage": {
+    "input_tokens": 11020,
+    "cache_creation_tokens": 181191,
+    "cache_read_tokens": 14173906,
+    "output_tokens": 55803,
+    "api_call_count": 109
+  },
+  "session_metrics": {
+    "turn_count": 4
+  },
+  "initial_attribution": {
+    "calculated_at": "2026-03-20T19:59:19.420522Z",
+    "agent_lines": 0,
+    "human_added": 0,
+    "human_modified": 5,
+    "human_removed": 13,
+    "total_committed": 0,
+    "agent_percentage": 0
+  }
+}

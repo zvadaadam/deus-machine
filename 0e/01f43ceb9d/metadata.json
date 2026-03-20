@@ -1,0 +1,26 @@
+{
+  "cli_version": "0.5.0",
+  "checkpoint_id": "0e01f43ceb9d",
+  "strategy": "manual-commit",
+  "branch": "zvadaadam/add-cloud-relay",
+  "checkpoints_count": 1,
+  "files_touched": [
+    "apps/cloud-relay/src/relay-do.ts",
+    "apps/cloud-relay/test/relay-do.test.ts"
+  ],
+  "sessions": [
+    {
+      "metadata": "/0e/01f43ceb9d/0/metadata.json",
+      "transcript": "/0e/01f43ceb9d/0/full.jsonl",
+      "content_hash": "/0e/01f43ceb9d/0/content_hash.txt",
+      "prompt": "/0e/01f43ceb9d/0/prompt.txt"
+    }
+  ],
+  "token_usage": {
+    "input_tokens": 11020,
+    "cache_creation_tokens": 181191,
+    "cache_read_tokens": 14173906,
+    "output_tokens": 55803,
+    "api_call_count": 109
+  }
+}
