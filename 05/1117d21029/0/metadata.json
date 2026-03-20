@@ -1,0 +1,43 @@
+{
+  "cli_version": "0.5.0",
+  "checkpoint_id": "051117d21029",
+  "session_id": "8aa0f1c1-b25d-47c5-aab7-bbbe2fb1fd94",
+  "strategy": "manual-commit",
+  "created_at": "2026-03-20T13:47:54.516374Z",
+  "branch": "zvadaadam/explore-manus-app",
+  "checkpoints_count": 1,
+  "files_touched": [
+    "apps/backend/src/routes/repos.ts",
+    "apps/backend/src/routes/workspaces.design.ts",
+    "apps/backend/src/server.ts",
+    "apps/backend/src/services/browser-server.service.ts",
+    "apps/backend/src/services/fs-watcher.service.ts",
+    "apps/backend/src/services/gh.service.ts",
+    "apps/backend/src/services/manifest.service.ts",
+    "apps/backend/src/services/remote-auth.service.ts",
+    "apps/backend/src/services/settings.service.ts",
+    "apps/backend/test/unit/routes/repos.test.ts",
+    "apps/desktop/main/shell-env.ts"
+  ],
+  "agent": "Claude Code",
+  "turn_id": "764308547c4c",
+  "token_usage": {
+    "input_tokens": 13218,
+    "cache_creation_tokens": 5070831,
+    "cache_read_tokens": 345278608,
+    "output_tokens": 340297,
+    "api_call_count": 1232
+  },
+  "session_metrics": {
+    "turn_count": 85
+  },
+  "initial_attribution": {
+    "calculated_at": "2026-03-20T13:47:49.472413Z",
+    "agent_lines": 68,
+    "human_added": 0,
+    "human_modified": 0,
+    "human_removed": 0,
+    "total_committed": 68,
+    "agent_percentage": 100
+  }
+}
