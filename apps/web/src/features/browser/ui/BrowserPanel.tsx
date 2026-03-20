@@ -617,17 +617,22 @@ export function BrowserPanel({
     null
   );
 
-  /** Fetch available browsers when dropdown opens */
+  /** Fetch available browsers when dropdown opens.
+   *  Requires Electron native handler with macOS Keychain access for cookie decryption.
+   *  Degrades gracefully to empty list when unavailable (web dev mode). */
   const handleCookieDropdownOpen = useCallback(async () => {
     try {
       const browsers = await invoke<InstalledBrowser[]>("get_cookie_browsers");
       setCookieBrowsers(browsers);
     } catch (err) {
-      console.error("Failed to get cookie browsers:", err);
+      console.warn("[Browser] Cookie import unavailable (requires Electron native handler):", err);
+      setCookieBrowsers([]);
     }
   }, []);
 
-  /** Sync cookies from a browser for the active tab's domain, inject natively, and reload */
+  /** Sync cookies from a browser for the active tab's domain, inject natively, and reload.
+   *  Requires Electron native handlers: sync_browser_cookies (Keychain decryption)
+   *  and inject_browser_cookies (WKHTTPCookieStore injection). */
   const handleCookieSync = useCallback(
     async (browserName: string) => {
       if (!activeTab?.currentUrl) return;
@@ -675,6 +680,9 @@ export function BrowserPanel({
           handleAddLog(activeTab.id, "info", "Reloading page with injected cookies...");
         }
       } catch (err) {
+        // Cookie sync requires Electron native handlers with Keychain access.
+        // In web dev mode, invoke() throws — log warning instead of error.
+        console.warn("[Browser] Cookie sync failed (requires Electron native handler):", err);
         handleAddLog(activeTab.id, "error", `Cookie sync failed: ${err}`);
       } finally {
         setCookieSyncing(null);

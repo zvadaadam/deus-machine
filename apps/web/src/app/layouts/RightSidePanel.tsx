@@ -184,7 +184,7 @@ export function RightSidePanel({
 
       {activeTab === "notebook" && (
         <NotebookPanel
-          workspacePath={workspace.workspace_path}
+          workspaceId={workspace.id}
           sessionStatus={workspace.session_status}
         />
       )}

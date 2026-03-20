@@ -12,11 +12,12 @@
  * - display_data (text/plain, image/png as base64 img)
  */
 
-import { useCallback, useMemo } from "react";
+import { useCallback } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { match } from "ts-pattern";
 import { BookOpen, AlertCircle } from "lucide-react";
-import { invoke } from "@/platform/electron";
+import { apiClient } from "@/shared/api/client";
+import { ENDPOINTS } from "@/shared/config/api.config";
 
 // --- Jupyter notebook types (subset of nbformat v4) ---
 
@@ -226,29 +227,29 @@ function NotebookCellView({ cell, index }: { cell: NotebookCell; index: number }
 // --- Main component ---
 
 interface NotebookPanelProps {
-  workspacePath: string;
+  workspaceId: string;
   sessionStatus?: string | null;
 }
 
-export function NotebookPanel({ workspacePath, sessionStatus }: NotebookPanelProps) {
-  const notebookPath = useMemo(
-    () => `${workspacePath.replace(/\/+$/, "")}/.context/notebook.ipynb`,
-    [workspacePath]
-  );
+export function NotebookPanel({ workspaceId, sessionStatus }: NotebookPanelProps) {
+  /** Relative path within the workspace to the notebook file */
+  const notebookRelativePath = ".context/notebook.ipynb";
 
   const readNotebook = useCallback(async (): Promise<NotebookDocument | null> => {
     try {
-      const raw = await invoke<string>("read_text_file", { filePath: notebookPath });
-      const parsed = JSON.parse(raw) as NotebookDocument;
-      return parsed;
+      const data = await apiClient.get<{ content: string | null }>(
+        ENDPOINTS.WORKSPACE_FILE_CONTENT(workspaceId, notebookRelativePath)
+      );
+      if (!data.content) return null;
+      return JSON.parse(data.content) as NotebookDocument;
     } catch {
-      // File not found or invalid JSON — treat as empty
+      // File not found, binary, or invalid JSON — treat as empty
       return null;
     }
-  }, [notebookPath]);
+  }, [workspaceId]);
 
   const { data: notebook } = useQuery({
-    queryKey: ["notebook", notebookPath],
+    queryKey: ["notebook", workspaceId, notebookRelativePath],
     queryFn: readNotebook,
     refetchInterval: sessionStatus === "working" ? 2000 : false,
     staleTime: 1000,

@@ -18,7 +18,6 @@
 
 import { match } from "ts-pattern";
 import { useEffect, useLayoutEffect, useCallback, useRef, useState } from "react";
-import { invoke } from "@/platform";
 import { getErrorMessage } from "@shared/lib/errors";
 import { apiClient } from "@/shared/api/client";
 import { ENDPOINTS } from "@/shared/config/api.config";
@@ -258,33 +257,19 @@ export function useAgentRpcHandler(
   // ============================================================================
 
   const handleGetTerminalOutput = useCallback(
-    async (params: Record<string, unknown>, respond: RespondFn) => {
-      // Terminal output reading via Electron IPC.
-      // The main process exposes get_terminal_output (if implemented) or we fall back
-      // to a "no terminal output available" response so the agent can continue.
-      try {
-        const sessionId = params.sessionId as string;
-        const maxLines = (params.maxLines as number | undefined) ?? 200;
-
-        const output = await invoke<string | null>("get_terminal_output", {
-          sessionId,
-          maxLines,
-        });
-
-        respond({
-          output: output ?? "",
-          source: "terminal",
-          isRunning: false,
-        });
-      } catch {
-        // Command not yet implemented or PTY not active — degrade gracefully
-        respond({
-          output: "",
-          source: "none",
-          isRunning: false,
-          error: "Terminal output not available",
-        });
-      }
+    async (_params: Record<string, unknown>, respond: RespondFn) => {
+      // Terminal output is not available via buffered read. node-pty streams data
+      // as it arrives (via q:event "pty-data" frames) and does not maintain a
+      // scrollback buffer. There is no backend endpoint or Electron IPC handler
+      // that can retrieve past output.
+      //
+      // Respond with an empty result so the agent can continue without blocking.
+      respond({
+        output: "",
+        source: "none",
+        isRunning: false,
+        error: "Terminal output not available — PTY streams data in real-time without buffering",
+      });
     },
     []
   );

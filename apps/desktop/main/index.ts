@@ -12,7 +12,7 @@
  * is purely a desktop shell that spawns them and bridges native OS features.
  */
 
-import { app, BrowserWindow, shell } from "electron";
+import { app, BrowserWindow, ipcMain, shell } from "electron";
 import { join } from "path";
 import { is } from "@electron-toolkit/utils";
 import { spawnBackend, stopBackend } from "./backend-process";
@@ -191,6 +191,25 @@ app.whenReady().then(async () => {
   // Register IPC handlers before window creation so they're ready immediately
   registerNativeHandlers();
   registerBrowserViewHandlers();
+
+  // Cross-window event relay — when one renderer sends an event via ipcRenderer.send(),
+  // forward it to all OTHER windows. This enables the detached browser window to
+  // communicate with the main window (e.g., CHAT_INSERT events).
+  const RELAY_EVENTS = new Set([
+    "chat-insert", // Detached browser -> main window
+    "browser:workspace-change", // Main window -> browser views
+  ]);
+
+  for (const channel of RELAY_EVENTS) {
+    ipcMain.on(channel, (event, ...args) => {
+      for (const win of BrowserWindow.getAllWindows()) {
+        if (win.webContents.id !== event.sender.id && !win.isDestroyed()) {
+          win.webContents.send(channel, ...args);
+        }
+      }
+    });
+  }
+
   debugLog("[main] Creating window...");
   // PTY, FS watching, browser server — all handled by backend now
 

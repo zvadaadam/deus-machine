@@ -13,7 +13,7 @@
     "build": "electron-vite build",
     "build:inject": "bunx tsx apps/web/src/features/browser/automation/build-inject.ts",
     "build:sidecar": "bunx tsx apps/sidecar/build.ts && bun install --frozen-lockfile --cwd packages/mcp-notebook && bunx tsx packages/mcp-notebook/build.ts",
-    "build:backend": "bun run --cwd apps/backend build",
+    "build:backend": "bunx tsx apps/backend/build.ts",
     "build:all": "bun run build:inject && bun run build:sidecar && bun run build:backend && bun run build",
     "package:mac": "bun run build:all && electron-builder --mac",
     "package:win": "bun run build:all && electron-builder --win",
