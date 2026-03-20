@@ -1,0 +1,25 @@
+{
+  "cli_version": "0.5.0",
+  "checkpoint_id": "6e7d66ae690f",
+  "strategy": "manual-commit",
+  "branch": "zvadaadam/columbus-v4",
+  "checkpoints_count": 2,
+  "files_touched": [
+    "electron.vite.config.ts"
+  ],
+  "sessions": [
+    {
+      "metadata": "/6e/7d66ae690f/0/metadata.json",
+      "transcript": "/6e/7d66ae690f/0/full.jsonl",
+      "content_hash": "/6e/7d66ae690f/0/content_hash.txt",
+      "prompt": "/6e/7d66ae690f/0/prompt.txt"
+    }
+  ],
+  "token_usage": {
+    "input_tokens": 13437,
+    "cache_creation_tokens": 5640465,
+    "cache_read_tokens": 429355129,
+    "output_tokens": 373872,
+    "api_call_count": 1400
+  }
+}
