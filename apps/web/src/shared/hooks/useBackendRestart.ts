@@ -13,34 +13,24 @@
  */
 
 import { useEffect } from "react";
-import {
-  isElectronEnv,
-  createListenerGroup,
-  BACKEND_PORT_CHANGED,
-  listen,
-} from "@/platform/electron";
+import { native } from "@/platform";
+import { BACKEND_PORT_CHANGED } from "@shared/events";
 import { setBackendPort } from "@/shared/config/api.config";
 import { forceReconnect } from "@/platform/ws/query-protocol-client";
 
 export function useBackendRestart() {
   useEffect(() => {
-    if (!isElectronEnv) return;
+    const unlisten = native.events.on(BACKEND_PORT_CHANGED, (data) => {
+      const { port } = data;
+      console.log(`[BackendRestart] Backend restarted on port ${port}, reconnecting...`);
 
-    const listeners = createListenerGroup();
+      // 1. Update the cached port so getBackendPort() returns the new value
+      setBackendPort(port);
 
-    listeners.register(
-      listen(BACKEND_PORT_CHANGED, (event) => {
-        const { port } = event.payload;
-        console.log(`[BackendRestart] Backend restarted on port ${port}, reconnecting...`);
+      // 2. Force immediate WebSocket reconnect to the new port
+      forceReconnect();
+    });
 
-        // 1. Update the cached port so getBackendPort() returns the new value
-        setBackendPort(port);
-
-        // 2. Force immediate WebSocket reconnect to the new port
-        forceReconnect();
-      })
-    );
-
-    return () => listeners.cleanup();
+    return unlisten;
   }, []);
 }

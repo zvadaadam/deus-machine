@@ -11,7 +11,7 @@
  * - "Ping" — attention needed
  */
 
-import { isElectronEnv } from "@/platform/electron";
+import { capabilities } from "@/platform/capabilities";
 
 let permissionGranted = false;
 
@@ -20,7 +20,7 @@ let permissionGranted = false;
  * Safe to call multiple times — short-circuits if already granted.
  */
 export async function initNotifications(): Promise<boolean> {
-  if (!isElectronEnv) return false;
+  if (!capabilities.nativeNotifications) return false;
 
   try {
     if (!("Notification" in window)) {
@@ -52,7 +52,7 @@ export interface NotificationOptions {
  * Send an OS-level notification. No-ops if permission not granted or not in Electron.
  */
 export function sendNotification({ title, body }: NotificationOptions): void {
-  if (!isElectronEnv || !permissionGranted) return;
+  if (!capabilities.nativeNotifications || !permissionGranted) return;
 
   try {
     new Notification(title, { body });

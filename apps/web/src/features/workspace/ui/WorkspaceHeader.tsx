@@ -21,7 +21,8 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { useSidebar } from "@/components/ui/sidebar";
 import { cn } from "@/shared/lib/utils";
-import { invoke } from "@/platform/electron";
+import { native } from "@/platform";
+import type { InstalledApp } from "@/platform";
 import { track } from "@/platform/analytics";
 import type { SetupStatus } from "@/shared/types";
 import type { NormalizedTask } from "../api/workspace.service";
@@ -72,7 +73,7 @@ export function WorkspaceHeader({
   return (
     <div
       data-slot="workspace-header"
-      className="flex h-11 flex-shrink-0 items-center justify-between px-4"
+      className="drag-region flex h-11 flex-shrink-0 items-center justify-between px-4"
     >
       {/* Left: sidebar toggle + title + repo/branch */}
       <div className="flex min-w-0 items-center gap-[5px]">
@@ -200,13 +201,6 @@ export function WorkspaceHeader({
 // HeaderOpenButton — open workspace in external editors with product icons
 // ---------------------------------------------------------------------------
 
-interface InstalledApp {
-  id: string;
-  name: string;
-  path: string;
-  icon?: string;
-}
-
 function HeaderOpenButton({ workspacePath }: { workspacePath: string }) {
   const [apps, setApps] = useState<InstalledApp[]>([]);
   const [open, setOpen] = useState(false);
@@ -215,7 +209,8 @@ function HeaderOpenButton({ workspacePath }: { workspacePath: string }) {
   const isHoveringRef = useRef(false);
 
   useEffect(() => {
-    invoke<InstalledApp[]>("get_installed_apps")
+    native.apps
+      .getInstalled()
       .then(setApps)
       .catch(() => {});
   }, []);
@@ -223,7 +218,7 @@ function HeaderOpenButton({ workspacePath }: { workspacePath: string }) {
   function handleOpenInApp(appId: string) {
     setOpen(false);
     track("open_in_app", { app_id: appId });
-    invoke("open_in_app", { appId, workspacePath }).catch(() => {});
+    native.apps.openIn(appId, workspacePath).catch(() => {});
   }
 
   function handleCopyPath() {
@@ -269,15 +264,9 @@ function HeaderOpenButton({ workspacePath }: { workspacePath: string }) {
     </button>
   );
 
+  // No apps detected — hide the button entirely (web mode or no editors installed)
   if (apps.length === 0) {
-    return (
-      <Tooltip delayDuration={200}>
-        <TooltipTrigger asChild>{trigger}</TooltipTrigger>
-        <TooltipContent side="bottom">
-          <p className="text-xs">Open in editor (desktop only)</p>
-        </TooltipContent>
-      </Tooltip>
-    );
+    return null;
   }
 
   const groups = groupAppsByCategory(apps);

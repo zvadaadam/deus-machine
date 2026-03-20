@@ -16,12 +16,8 @@
 import { useEffect } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { queryKeys } from "@/shared/api/queryKeys";
-import {
-  isElectronEnv,
-  listen,
-  createListenerGroup,
-  WORKSPACE_PROGRESS,
-} from "@/platform/electron";
+import { WORKSPACE_PROGRESS } from "@shared/events";
+import { native } from "@/platform";
 import type { RepoGroup } from "@shared/types/workspace";
 import {
   applyWorkspaceProgressToRepoGroups,
@@ -37,42 +33,36 @@ export function useWorkspaceInitEvents() {
   const queryClient = useQueryClient();
 
   useEffect(() => {
-    if (!isElectronEnv) return;
+    const unlisten = native.events.on(WORKSPACE_PROGRESS, (data) => {
+      const { step, workspaceId } = data;
 
-    const listeners = createListenerGroup();
+      if (import.meta.env.DEV) {
+        console.log("[Events] Workspace progress:", data);
+      }
 
-    listeners.register(
-      listen(WORKSPACE_PROGRESS, (event) => {
-        const { step, workspaceId } = event.payload;
+      queryClient.setQueriesData<RepoGroup[]>({ queryKey: ["workspaces", "by-repo"] }, (old) =>
+        applyWorkspaceProgressToRepoGroups(old, data)
+      );
 
-        if (import.meta.env.DEV) {
-          console.log("[Events] Workspace progress:", event.payload);
-        }
+      // Terminal states: clear any diff caches that may have been populated
+      // during init (race window between state->ready and git checkout -- .),
+      // then invalidate workspace list to pick up the final state.
+      if (isTerminalWorkspaceProgressStep(step)) {
+        queryClient.removeQueries({
+          queryKey: queryKeys.workspaces.diffStats(workspaceId),
+        });
+        queryClient.removeQueries({
+          queryKey: queryKeys.workspaces.diffFiles(workspaceId),
+        });
+        queryClient.removeQueries({
+          queryKey: queryKeys.workspaces.uncommittedFiles(workspaceId),
+        });
+        queryClient.invalidateQueries({
+          queryKey: queryKeys.workspaces.all,
+        });
+      }
+    });
 
-        queryClient.setQueriesData<RepoGroup[]>({ queryKey: ["workspaces", "by-repo"] }, (old) =>
-          applyWorkspaceProgressToRepoGroups(old, event.payload)
-        );
-
-        // Terminal states: clear any diff caches that may have been populated
-        // during init (race window between state→ready and git checkout -- .),
-        // then invalidate workspace list to pick up the final state.
-        if (isTerminalWorkspaceProgressStep(step)) {
-          queryClient.removeQueries({
-            queryKey: queryKeys.workspaces.diffStats(workspaceId),
-          });
-          queryClient.removeQueries({
-            queryKey: queryKeys.workspaces.diffFiles(workspaceId),
-          });
-          queryClient.removeQueries({
-            queryKey: queryKeys.workspaces.uncommittedFiles(workspaceId),
-          });
-          queryClient.invalidateQueries({
-            queryKey: queryKeys.workspaces.all,
-          });
-        }
-      })
-    );
-
-    return () => listeners.cleanup();
+    return unlisten;
   }, [queryClient]);
 }

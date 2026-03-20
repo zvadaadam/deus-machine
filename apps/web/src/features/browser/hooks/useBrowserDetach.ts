@@ -8,7 +8,8 @@
  */
 
 import { useCallback, useEffect } from "react";
-import { emit, listen, isElectronEnv, invoke, BROWSER_WORKSPACE_CHANGE } from "@/platform/electron";
+import { native } from "@/platform";
+import { BROWSER_WORKSPACE_CHANGE, BROWSER_DETACHED_CLOSED } from "@shared/events";
 import {
   browserWindowActions,
   useBrowserWindowStore,
@@ -36,13 +37,13 @@ export function useBrowserDetach(context: DetachedBrowserWorkspaceContext | null
   const isDetached = useBrowserWindowStore((s) => s.detachedWindowOpen);
 
   const detach = useCallback(async () => {
-    if (!context || !isElectronEnv) return;
+    if (!context) return;
 
     // Mark as detached before creating the window so the main UI updates immediately.
     browserWindowActions.setDetachedWindowOpen(context);
 
     try {
-      await invoke("browser:createDetachedWindow", {
+      await native.browserViews.createDetachedWindow({
         url: buildDetachUrl(context),
         title: buildWindowTitle(context),
         width: 960,
@@ -51,7 +52,7 @@ export function useBrowserDetach(context: DetachedBrowserWorkspaceContext | null
         minHeight: 560,
       });
 
-      await emit(BROWSER_WORKSPACE_CHANGE, context);
+      await native.events.send(BROWSER_WORKSPACE_CHANGE, context);
     } catch (e) {
       console.error("[BrowserDetach] Failed to create detached window:", e);
       browserWindowActions.clearDetachedWindow();
@@ -63,7 +64,7 @@ export function useBrowserDetach(context: DetachedBrowserWorkspaceContext | null
 
     // Close the detached window if it exists
     try {
-      await invoke("browser:closeDetachedWindow");
+      await native.browserViews.closeDetachedWindow();
     } catch {
       // Window may already be closed
     }
@@ -73,16 +74,12 @@ export function useBrowserDetach(context: DetachedBrowserWorkspaceContext | null
   // the main process sends "browser:detached-closed" — reset our store so
   // the main window UI reflects the reattached state.
   useEffect(() => {
-    if (!isElectronEnv) return;
-
-    let unlisten: (() => void) | undefined;
-    listen<void>("browser:detached-closed", () => {
+    // native.events.on handles the capability check internally — no-op in web mode
+    const unlisten = native.events.on(BROWSER_DETACHED_CLOSED, () => {
       browserWindowActions.clearDetachedWindow();
-    }).then((fn) => {
-      unlisten = fn;
     });
 
-    return () => unlisten?.();
+    return unlisten;
   }, []);
 
   return { isDetached, detach, reattach };

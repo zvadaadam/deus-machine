@@ -1,6 +1,6 @@
 import { useState, useCallback, useEffect, useRef } from "react";
 import { useSettings } from "@/features/settings";
-import { isElectronEnv, invoke } from "@/platform/electron";
+import { native, capabilities } from "@/platform";
 import { cn } from "@/shared/lib/utils";
 import { track } from "@/platform/analytics";
 import { useOnboardingAudio } from "../hooks/useOnboardingAudio";
@@ -122,8 +122,8 @@ export function OnboardingOverlay() {
   // (saves frame only once, restores on exit, re-saves on next enter).
   // Sequence in StrictMode: enter → exit → enter → stays entered. ✅
   useEffect(() => {
-    if (isElectronEnv) {
-      invoke("enter_onboarding_mode").catch((e) => {
+    if (capabilities.nativeOnboarding) {
+      native.window.enterOnboarding().catch((e) => {
         console.error("[Onboarding] enter_onboarding_mode failed:", e);
       });
     } else {
@@ -136,8 +136,8 @@ export function OnboardingOverlay() {
       // StrictMode re-mount will call enter again, which is correct.
       audio.stop();
       if (!exitHandledRef.current) {
-        if (isElectronEnv) {
-          invoke("exit_onboarding_mode").catch((e) => {
+        if (capabilities.nativeOnboarding) {
+          native.window.exitOnboarding().catch((e) => {
             console.error("[Onboarding] exit_onboarding_mode cleanup:", e);
           });
         } else {
@@ -173,8 +173,8 @@ export function OnboardingOverlay() {
       if (exitHandledRef.current) return;
       exitHandledRef.current = true;
 
-      if (isElectronEnv) {
-        invoke("exit_onboarding_mode").catch((e) => {
+      if (capabilities.nativeOnboarding) {
+        native.window.exitOnboarding().catch((e) => {
           console.error("[Onboarding] exit_onboarding_mode failed:", e);
         });
       } else {

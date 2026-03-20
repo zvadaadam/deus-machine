@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from "react";
-import { isElectronEnv } from "@/platform/electron";
+import { capabilities } from "@/platform/capabilities";
 
 /**
  * Tracks Electron window fullscreen state and toggles a `.fullscreen` class on
@@ -15,7 +15,7 @@ export function useIsFullscreen(): boolean {
   const [isFullscreen, setIsFullscreen] = useState(false);
 
   const check = useCallback(async () => {
-    if (!isElectronEnv) return;
+    if (!capabilities.nativeWindowChrome) return;
     try {
       const fs = await window.electronAPI!.isFullscreen();
       setIsFullscreen(fs);
@@ -26,7 +26,7 @@ export function useIsFullscreen(): boolean {
   }, []);
 
   useEffect(() => {
-    if (!isElectronEnv) return;
+    if (!capabilities.nativeWindowChrome) return;
 
     check();
 

@@ -6,14 +6,16 @@
  * Attaches Bearer token for remote (non-localhost) browser clients.
  */
 
-import { API_CONFIG, getBaseURL } from "../config/api.config";
+import { getBaseURL } from "../config/api.config";
 import { getStoredToken, needsRemoteAuth } from "@/features/auth";
 import type { ApiError } from "../types";
+
+const REQUEST_TIMEOUT = 30_000;
 
 class ApiClient {
   private timeout: number;
 
-  constructor(timeout: number = API_CONFIG.REQUEST_TIMEOUT) {
+  constructor(timeout: number = REQUEST_TIMEOUT) {
     this.timeout = timeout;
   }
 

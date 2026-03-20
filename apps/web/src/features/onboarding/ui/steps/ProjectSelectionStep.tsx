@@ -2,7 +2,7 @@ import { useState, useCallback } from "react";
 import { Loader2, FolderOpen } from "lucide-react";
 import { useRecentProjects } from "../../api";
 import { useAddRepo } from "@/features/repository/api";
-import { invoke } from "@/platform/electron";
+import { native } from "@/platform";
 import { capabilities } from "@/platform/capabilities";
 import { ProjectCard } from "../components/ProjectCard";
 
@@ -50,7 +50,7 @@ export function ProjectSelectionStep({ onBack, onNext }: ProjectSelectionStepPro
 
   async function handleBrowse() {
     try {
-      const folderPath = await invoke<string | null>("native:pickFolder");
+      const folderPath = await native.dialog.pickFolder();
       if (!folderPath) return;
       setImporting(true);
       await addRepoMutation.mutateAsync(folderPath);

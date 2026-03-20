@@ -1,7 +1,7 @@
 import { useState, useEffect } from "react";
 import type { FallbackProps } from "react-error-boundary";
 import { Button } from "@/components/ui/button";
-import { isElectronEnv, invoke } from "@/platform/electron";
+import { native } from "@/platform";
 import { normalizeError } from "@/shared/utils/errorReporting";
 
 /**
@@ -20,9 +20,7 @@ export function ErrorFallback({ error, resetErrorBoundary }: FallbackProps) {
   // Force-show the window so the error is visible to the user.
   // Without this, errors during boot leave the window hidden forever.
   useEffect(() => {
-    if (isElectronEnv) {
-      invoke("show_main_window").catch(console.error);
-    }
+    native.window.show().catch(console.error);
   }, []);
   const normalizedError = normalizeError(error);
   const componentStack =

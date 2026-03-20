@@ -15,7 +15,7 @@
  */
 
 import { useSyncExternalStore } from "react";
-import { isElectronEnv } from "@/platform/electron";
+import { capabilities } from "@/platform/capabilities";
 
 // Assume focused on startup — the app window is in the foreground when it launches
 let focused = true;
@@ -40,7 +40,7 @@ function notifySubscribers() {
  * would break isWindowFocused() calls from non-React code (e.g., notification
  * handlers in useGlobalSessionNotifications).
  */
-if (isElectronEnv) {
+if (capabilities.nativeWindowChrome) {
   // Electron: use standard window focus/blur events (reliable at OS level)
   window.addEventListener("focus", () => {
     focused = true;

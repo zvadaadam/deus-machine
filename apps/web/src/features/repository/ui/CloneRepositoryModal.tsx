@@ -13,8 +13,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
 import { onEvent } from "@/platform/ws/query-protocol-client";
-import { invoke, isElectronEnv } from "@/platform/electron";
-import { capabilities } from "@/platform/capabilities";
+import { native, capabilities } from "@/platform";
 import type { GitCloneProgressEvent } from "@shared/events";
 
 /** User-friendly phase labels */
@@ -66,12 +65,8 @@ export function CloneRepositoryModal({
     if (!show) return;
     (async () => {
       try {
-        if (isElectronEnv) {
-          const home = await invoke<string>("native:homeDir");
-          setDefaultPath(`${home}/Developer`);
-        } else {
-          setDefaultPath("~/Developer");
-        }
+        const home = await native.dialog.getHomeDir();
+        setDefaultPath(`${home}/Developer`);
       } catch {
         setDefaultPath("~/Developer");
       }
@@ -124,7 +119,7 @@ export function CloneRepositoryModal({
 
   const handleBrowse = async () => {
     try {
-      const selected = await invoke<string | null>("native:pickFolder");
+      const selected = await native.dialog.pickFolder();
 
       if (typeof selected === "string") {
         setTargetPath(selected);

@@ -20,7 +20,7 @@
 import { useEffect, useRef } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { match } from "ts-pattern";
-import { isElectronEnv } from "@/platform/electron";
+import { capabilities } from "@/platform/capabilities";
 import { sendNotification } from "@/platform/notifications";
 import { isWindowFocused } from "@/shared/hooks/useWindowFocus";
 import { track } from "@/platform/analytics";
@@ -42,7 +42,7 @@ export function useGlobalSessionNotifications() {
   const queryClient = useQueryClient();
 
   useEffect(() => {
-    if (!isElectronEnv) return;
+    if (!capabilities.nativeNotifications) return;
 
     function flushFinishedBatch() {
       const batch = finishedBatch.current;
