@@ -1,0 +1,24 @@
+name = "opendevs-relay"
+account_id = "e247e098b7e2f5bee57ae8cf303b97df"
+main = "src/index.ts"
+compatibility_date = "2025-01-01"
+compatibility_flags = ["nodejs_compat"]
+
+routes = [
+  { pattern = "relay.rundeus.com", custom_domain = true }
+]
+
+[vars]
+ENVIRONMENT = "production"
+
+[durable_objects]
+bindings = [
+  { name = "RELAY", class_name = "RelayDO" }
+]
+
+[[migrations]]
+tag = "v1"
+new_sqlite_classes = ["RelayDO"]
+
+[dev]
+port = 8787

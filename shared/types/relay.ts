@@ -1,4 +1,4 @@
-// Relay envelope protocol types (copy from devs-web packages/types/src/relay.ts).
+// Relay envelope protocol types.
 // Defines the framing between OpenDevs server <-> CF Durable Object relay <-> web clients.
 
 // ---- Server <-> Relay (tunnel) ----
@@ -33,8 +33,9 @@ export type ClientAuthFrame = { type: "authenticate"; token: string };
 export type RelayClientFrame =
   | { type: "authenticated" }
   | { type: "auth_failed"; message: string }
-  | { type: "server_offline" }
-  | { type: "server_reconnecting" }
+  | { type: "server_offline"; serverName: string | null; serverDisconnectedAt: number }
+  | { type: "server_reconnecting"; serverName: string | null; serverDisconnectedAt: number }
+  | { type: "server_connected" }
   | { type: "error"; message: string };
 
 // ---- Pairer <-> Relay (one-shot /pair WebSocket) ----
@@ -50,3 +51,8 @@ export type PairerRequestFrame = {
 export type PairerResponseFrame =
   | { type: "pair_success"; token: string }
   | { type: "pair_failed"; message: string };
+
+// ---- Aliases (used by cloud-relay Durable Object) ----
+
+export type PairerFrame = PairerRequestFrame;
+export type RelayPairerFrame = PairerResponseFrame;
