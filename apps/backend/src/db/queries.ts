@@ -397,21 +397,33 @@ const STATS_TTL_MS = 5_000;
 export function getStats(db: Database.Database): StatsRow {
   const now = Date.now();
   if (cachedStats && now - cachedAt < STATS_TTL_MS) return cachedStats;
+  // Consolidated: 3 table scans (workspaces, sessions, scalar subqueries)
+  // instead of 11 separate COUNT(*) subqueries.
   cachedStats = db
     .prepare(
       `
     SELECT
-      (SELECT COUNT(*) FROM workspaces) as workspaces,
-      (SELECT COUNT(*) FROM workspaces WHERE state = 'ready') as workspaces_ready,
-      (SELECT COUNT(*) FROM workspaces WHERE state = 'archived') as workspaces_archived,
-      (SELECT COUNT(*) FROM workspaces WHERE status = 'backlog' AND state != 'archived') as workspaces_backlog,
-      (SELECT COUNT(*) FROM workspaces WHERE status = 'in-progress' AND state != 'archived') as workspaces_in_progress,
-      (SELECT COUNT(*) FROM workspaces WHERE status = 'in-review' AND state != 'archived') as workspaces_in_review,
+      w.workspaces, w.workspaces_ready, w.workspaces_archived,
+      w.workspaces_backlog, w.workspaces_in_progress, w.workspaces_in_review,
       (SELECT COUNT(*) FROM repositories) as repositories,
-      (SELECT COUNT(*) FROM sessions) as sessions,
-      (SELECT COUNT(*) FROM sessions WHERE status = 'idle') as sessions_idle,
-      (SELECT COUNT(*) FROM sessions WHERE status = 'working') as sessions_working,
+      s.sessions, s.sessions_idle, s.sessions_working,
       (SELECT COUNT(*) FROM messages) as messages
+    FROM (
+      SELECT
+        COUNT(*) as workspaces,
+        COUNT(CASE WHEN state = 'ready' THEN 1 END) as workspaces_ready,
+        COUNT(CASE WHEN state = 'archived' THEN 1 END) as workspaces_archived,
+        COUNT(CASE WHEN status = 'backlog' AND state != 'archived' THEN 1 END) as workspaces_backlog,
+        COUNT(CASE WHEN status = 'in-progress' AND state != 'archived' THEN 1 END) as workspaces_in_progress,
+        COUNT(CASE WHEN status = 'in-review' AND state != 'archived' THEN 1 END) as workspaces_in_review
+      FROM workspaces
+    ) w, (
+      SELECT
+        COUNT(*) as sessions,
+        COUNT(CASE WHEN status = 'idle' THEN 1 END) as sessions_idle,
+        COUNT(CASE WHEN status = 'working' THEN 1 END) as sessions_working
+      FROM sessions
+    ) s
   `
     )
     .get() as StatsRow;
