@@ -112,7 +112,7 @@ function AppContent({ reset }: { reset: () => void }) {
       return;
     }
     if (windowShownRef.current) return;
-    invoke("show_main_window").catch(console.error);
+    if (isElectronEnv) invoke("show_main_window").catch(console.error);
     windowShownRef.current = true;
   }, [settingsQuery.isLoading, showOnboarding]);
 
@@ -193,7 +193,7 @@ const WINDOW_SHOW_TIMEOUT_MS = 5_000;
 function useWindowShowSafetyNet() {
   const shownRef = useRef(false);
   useEffect(() => {
-    if (shownRef.current) return;
+    if (shownRef.current || !isElectronEnv) return;
     const timer = setTimeout(() => {
       if (!shownRef.current) {
         shownRef.current = true;
