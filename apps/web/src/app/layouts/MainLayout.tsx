@@ -221,8 +221,8 @@ export function MainLayout() {
   // Track fullscreen state — toggles `.fullscreen` class on <html> for CSS
   useIsFullscreen();
 
-  // Global drag zone — window-level mousedown in the top 48px triggers
-  // window dragging via -webkit-app-region: drag CSS overlay.
+  // Adds .electron class to <html> and injects CSS-only drag region rules.
+  // Headers with .drag-region class become draggable; buttons auto-excluded.
   useWindowDragZone();
 
   // Disable CSS transitions during native window resize to prevent content "sticking"

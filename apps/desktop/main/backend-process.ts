@@ -1,7 +1,9 @@
 /**
  * Backend Process Manager
  *
- * Spawns the Node.js backend as a child process using ELECTRON_RUN_AS_NODE=1.
+ * Spawns the Node.js backend as a child process.
+ * - Production: use the Electron binary with ELECTRON_RUN_AS_NODE=1.
+ * - Development: use the host Node runtime so native modules match the dev install ABI.
  * Parses the dynamic port from stdout, generates an auth token, and handles
  * exit/restart with exponential backoff.
  *
@@ -23,13 +25,15 @@ const STARTUP_TIMEOUT_MS = 30_000;
 
 export async function spawnBackend(): Promise<{ port: number; authToken: string }> {
   const authToken = crypto.randomBytes(24).toString("hex");
+  const projectRoot = join(__dirname, "../..");
+  const backendRuntime = app.isPackaged ? process.execPath : "node";
 
   // Resolve backend entry point
   // Production: bundled CJS file (no tsx dependency needed)
   // Development: server.cjs bootstraps tsx for live TypeScript
   const backendEntry = app.isPackaged
     ? join(process.resourcesPath, "backend", "server.bundled.cjs")
-    : join(__dirname, "../../backend/server.cjs");
+    : join(projectRoot, "apps/backend/server.cjs");
 
   // Database path — prefer legacy location (com.opendevs.ide) if it exists,
   // otherwise use Electron's userData dir (~/Library/Application Support/opendevs/).
@@ -40,19 +44,19 @@ export async function spawnBackend(): Promise<{ port: number; authToken: string 
   // Sidecar bundle path
   const sidecarPath = app.isPackaged
     ? join(process.resourcesPath, "bin", "index.bundled.cjs")
-    : join(__dirname, "../../sidecar/dist/index.bundled.cjs");
+    : join(projectRoot, "apps/sidecar/dist/index.bundled.cjs");
 
   // Notebook server bundle path
   const notebookPath = app.isPackaged
     ? join(process.resourcesPath, "bin", "notebook-server.bundled.cjs")
-    : join(__dirname, "../../packages/mcp-notebook/dist/notebook-server.bundled.cjs");
+    : join(projectRoot, "packages/mcp-notebook/dist/notebook-server.bundled.cjs");
 
   return new Promise((resolve, reject) => {
-    backendProcess = spawn(process.execPath, [backendEntry], {
-      cwd: app.isPackaged ? process.resourcesPath : join(__dirname, "../../backend"),
+    backendProcess = spawn(backendRuntime, [backendEntry], {
+      cwd: app.isPackaged ? process.resourcesPath : join(projectRoot, "apps/backend"),
       env: {
         ...process.env,
-        ELECTRON_RUN_AS_NODE: "1",
+        ...(app.isPackaged ? { ELECTRON_RUN_AS_NODE: "1" } : {}),
         DATABASE_PATH: dbPath,
         SIDECAR_BUNDLE_PATH: sidecarPath,
         NOTEBOOK_SERVER_BUNDLE_PATH: notebookPath,

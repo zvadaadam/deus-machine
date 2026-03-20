@@ -79,7 +79,7 @@ export function ContentTabBar({ activeTab, onTabChange, workspaceId }: ContentTa
   return (
     <div
       data-slot="content-tab-bar"
-      className="flex items-center gap-1"
+      className="drag-region flex items-center gap-1"
       role="tablist"
       aria-label="Content panel"
     >
