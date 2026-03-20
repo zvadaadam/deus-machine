@@ -70,6 +70,24 @@ describe("serverFrameSchema", () => {
     expect(result.success).toBe(true);
   });
 
+  it("rejects pair_response with success=true but no deviceToken", () => {
+    const result = serverFrameSchema.safeParse({
+      type: "pair_response",
+      pairId: "pair-1",
+      success: true,
+    });
+    expect(result.success).toBe(false);
+  });
+
+  it("rejects pair_response with success=false but no reason", () => {
+    const result = serverFrameSchema.safeParse({
+      type: "pair_response",
+      pairId: "pair-1",
+      success: false,
+    });
+    expect(result.success).toBe(false);
+  });
+
   it("parses pong frame", () => {
     const result = serverFrameSchema.safeParse({ type: "pong" });
     expect(result.success).toBe(true);
