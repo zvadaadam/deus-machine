@@ -1,0 +1,51 @@
+appId: com.opendevs.app
+productName: OpenDevs
+directories:
+  buildResources: resources
+  output: dist-electron
+files:
+  - "out/**/*"
+  - "resources/**/*"
+  - "!apps/**/*"
+asarUnpack:
+  - "resources/**"
+  - "node_modules/better-sqlite3/**"
+  - "node_modules/node-pty/**"
+extraResources:
+  - from: "apps/backend/dist"
+    to: "backend"
+    filter:
+      - "**/*"
+  - from: "apps/sidecar/dist/index.bundled.cjs"
+    to: "bin/index.bundled.cjs"
+  - from: "packages/mcp-notebook/dist/notebook-server.bundled.cjs"
+    to: "bin/notebook-server.bundled.cjs"
+mac:
+  category: public.app-category.developer-tools
+  target:
+    - target: dmg
+      arch: [arm64, x64]
+    - target: zip
+      arch: [arm64, x64]
+  entitlementsInherit: resources/entitlements.mac.plist
+  darkModeSupport: true
+  icon: resources/icons/icon.icns
+win:
+  target:
+    - target: nsis
+      arch: [x64, arm64]
+  icon: resources/icons/icon.png
+linux:
+  target:
+    - target: AppImage
+      arch: [x64]
+    - target: deb
+      arch: [x64]
+  category: Development
+  icon: resources/icons/icon.png
+nsis:
+  oneClick: false
+  allowToChangeInstallationDirectory: true
+publish:
+  provider: github
+  releaseType: release

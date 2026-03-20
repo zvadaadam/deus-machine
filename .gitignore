@@ -8,16 +8,20 @@ coverage/
 
 # Production
 dist/
-build/
 
-# Tauri
-src-tauri/target/
-src-tauri/crates/*/target/
-src-tauri/WixTools/
+# Electron
+out/
+dist-electron/
+electron.vite.config.js
+electron.vite.config.d.ts
+
+# TypeScript build info
+*.tsbuildinfo
+
 # Sidecar build artifact (built via `bun run build:sidecar`)
-src-tauri/resources/bin/index.bundled.cjs
+apps/sidecar/dist/
 # Browser inject build artifacts (built via `bun run build:inject`)
-src/features/browser/automation/dist-inject/
+apps/web/src/features/browser/automation/dist-inject/
 
 # Misc
 .DS_Store
@@ -54,14 +58,12 @@ database/
 
 # Logs
 logs/
-*.log
 backend.log
 backend-*.log
 frontend.log
 
 # OS
 Thumbs.DB
-.DS_Store
 
 # Temporary files
 tmp/

@@ -1,11 +1,14 @@
 {
+  "extends": "@electron-toolkit/tsconfig/tsconfig.node.json",
+  "include": [
+    "electron.vite.config.*",
+    "apps/desktop/main/**/*",
+    "apps/desktop/preload/**/*"
+  ],
   "compilerOptions": {
     "composite": true,
-    "skipLibCheck": true,
-    "module": "ESNext",
-    "moduleResolution": "bundler",
-    "allowSyntheticDefaultImports": true,
-    "strict": true
-  },
-  "include": ["vite.config.ts"]
+    "outDir": "./out/types-node",
+    "declarationDir": "./out/types-node",
+    "types": ["electron-vite/node"]
+  }
 }

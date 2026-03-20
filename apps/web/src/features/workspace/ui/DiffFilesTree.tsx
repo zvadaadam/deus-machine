@@ -1,0 +1,217 @@
+/**
+ * Diff Files Tree — Compact file tree showing only changed files.
+ *
+ * Renders inside the Code panel's "Changes" view.
+ * Files are grouped by directory with collapsible folder headers.
+ * Color dots indicate change status: green=added, yellow=modified, red=deleted.
+ */
+
+import { useState, useMemo, useCallback } from "react";
+import { ChevronDown, ChevronRight, Folder, ScanText } from "lucide-react";
+import { cn } from "@/shared/lib/utils";
+import type { FileChange } from "@/shared/types";
+
+interface DiffFilesTreeProps {
+  fileChanges: FileChange[];
+  selectedFile: string | null;
+  onFileClick: (path: string) => void;
+  /** Callback to insert a code review prompt into the chat input */
+  onReview?: () => void;
+}
+
+interface FileEntry {
+  path: string;
+  name: string;
+  status: "added" | "modified" | "deleted";
+  additions: number;
+  deletions: number;
+}
+
+interface FolderGroup {
+  folder: string;
+  files: FileEntry[];
+}
+
+/** Determine change status from additions/deletions */
+function getChangeStatus(change: FileChange): "added" | "modified" | "deleted" {
+  if (change.additions > 0 && change.deletions === 0) return "added";
+  if (change.deletions > 0 && change.additions === 0) return "deleted";
+  return "modified";
+}
+
+/** Color for status dot — uses semantic tokens for light/dark compatibility */
+const STATUS_COLORS: Record<string, string> = {
+  added: "bg-success",
+  modified: "bg-warning",
+  deleted: "bg-destructive",
+};
+
+/** Group flat file changes into folder groups */
+function groupByFolder(fileChanges: FileChange[]): FolderGroup[] {
+  const folderMap = new Map<string, FileEntry[]>();
+
+  for (const change of fileChanges) {
+    const path = change.file || change.file_path || "";
+    if (!path) continue;
+
+    const lastSlash = path.lastIndexOf("/");
+    const folder = lastSlash > 0 ? path.substring(0, lastSlash) : "";
+    const name = lastSlash > 0 ? path.substring(lastSlash + 1) : path;
+
+    const files = folderMap.get(folder) ?? [];
+    files.push({
+      path,
+      name,
+      status: getChangeStatus(change),
+      additions: change.additions,
+      deletions: change.deletions,
+    });
+    folderMap.set(folder, files);
+  }
+
+  // Sort folders alphabetically, root files ("") last
+  const groups: FolderGroup[] = [];
+  const sortedFolders = [...folderMap.keys()].sort((a, b) => {
+    if (a === "") return 1;
+    if (b === "") return -1;
+    return a.localeCompare(b);
+  });
+
+  for (const folder of sortedFolders) {
+    const files = folderMap.get(folder)!;
+    files.sort((a, b) => a.name.localeCompare(b.name));
+    groups.push({ folder, files });
+  }
+
+  return groups;
+}
+
+export function DiffFilesTree({
+  fileChanges,
+  selectedFile,
+  onFileClick,
+  onReview,
+}: DiffFilesTreeProps) {
+  const [collapsedFolders, setCollapsedFolders] = useState<Set<string>>(new Set());
+
+  const groups = useMemo(() => groupByFolder(fileChanges), [fileChanges]);
+
+  const toggleFolder = useCallback((folder: string) => {
+    setCollapsedFolders((prev) => {
+      const next = new Set(prev);
+      if (next.has(folder)) {
+        next.delete(folder);
+      } else {
+        next.add(folder);
+      }
+      return next;
+    });
+  }, []);
+
+  return (
+    <div className="flex h-full flex-col overflow-hidden">
+      {/* File list — no header, keeps it clean */}
+      <div className="scrollbar-vibrancy flex-1 overflow-y-auto py-1">
+        {groups.map((group) => (
+          <FolderGroupView
+            key={group.folder || "__root__"}
+            group={group}
+            collapsed={collapsedFolders.has(group.folder)}
+            onToggle={toggleFolder}
+            selectedFile={selectedFile}
+            onFileClick={onFileClick}
+          />
+        ))}
+      </div>
+
+      {/* Review Changes — sticky footer action */}
+      {onReview && fileChanges.length > 0 && (
+        <div className="flex-shrink-0 px-2 py-2">
+          <button
+            type="button"
+            onClick={onReview}
+            className="bg-primary/8 hover:bg-primary/14 text-primary ease flex h-7 w-full items-center justify-center gap-1.5 rounded-lg text-xs font-medium transition-colors duration-200"
+          >
+            <ScanText className="h-3 w-3" />
+            <span>Review Changes</span>
+            <span className="text-primary/60 ml-0.5 text-[10px] font-normal">
+              {fileChanges.length}
+            </span>
+          </button>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function FolderGroupView({
+  group,
+  collapsed,
+  onToggle,
+  selectedFile,
+  onFileClick,
+}: {
+  group: FolderGroup;
+  collapsed: boolean;
+  onToggle: (folder: string) => void;
+  selectedFile: string | null;
+  onFileClick: (path: string) => void;
+}) {
+  const isRoot = group.folder === "";
+
+  return (
+    <div>
+      {/* Folder header — skip for root-level files */}
+      {!isRoot && (
+        <button
+          type="button"
+          onClick={() => onToggle(group.folder)}
+          className="text-text-muted hover:text-text-secondary ease flex h-6 w-full items-center gap-1.5 px-3 text-left transition-colors duration-150"
+        >
+          {collapsed ? (
+            <ChevronRight className="text-text-muted/60 h-3 w-3 flex-shrink-0" />
+          ) : (
+            <ChevronDown className="text-text-muted/60 h-3 w-3 flex-shrink-0" />
+          )}
+          <Folder className="text-text-muted/60 h-3 w-3 flex-shrink-0" />
+          <span className="min-w-0 truncate text-xs">{group.folder}</span>
+        </button>
+      )}
+
+      {/* Files — hidden when folder is collapsed */}
+      {!collapsed &&
+        group.files.map((file) => (
+          <button
+            key={file.path}
+            type="button"
+            onClick={() => onFileClick(file.path)}
+            className={cn(
+              "ease flex h-6 w-full items-center gap-1.5 text-left transition-colors duration-150",
+              isRoot ? "px-3" : "pr-3 pl-8",
+              selectedFile === file.path
+                ? "bg-bg-elevated text-text-secondary"
+                : "text-text-muted hover:text-text-secondary"
+            )}
+          >
+            <span
+              className={cn("h-1.5 w-1.5 flex-shrink-0 rounded-full", STATUS_COLORS[file.status])}
+            />
+            <span
+              className={cn(
+                "min-w-0 flex-1 truncate text-xs",
+                file.status === "deleted" && "line-through opacity-50"
+              )}
+            >
+              {file.name}
+            </span>
+            {(file.additions > 0 || file.deletions > 0) && (
+              <span className="flex flex-shrink-0 items-center gap-1 font-mono text-[10px] tabular-nums opacity-50">
+                {file.additions > 0 && <span className="text-success">+{file.additions}</span>}
+                {file.deletions > 0 && <span className="text-destructive">-{file.deletions}</span>}
+              </span>
+            )}
+          </button>
+        ))}
+    </div>
+  );
+}

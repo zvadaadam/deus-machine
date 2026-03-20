@@ -1,5 +1,5 @@
 import { useEffect } from "react";
-import { useTheme } from "../src/app/providers/ThemeProvider";
+import { useTheme } from "../apps/web/src/app/providers/ThemeProvider";
 
 /**
  * Syncs the Storybook toolbar theme toggle with the ThemeProvider context.
