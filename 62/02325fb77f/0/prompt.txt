@@ -8630,3 +8630,38 @@ BASE DON THIS RPEOR IT CRETAE DTEH MARODEKO:
 ---
 
 do it alkl actionable but also the low risk stuff
+
+---
+
+report from another AI:
+
+**Verdict**
+- Short version: **the Electron shell migration is mostly real, but I would not sign off “all good” yet**.
+- The main window/preload/backend-port flow looks solid, but the migration is **incomplete around sidecar startup, simulator IPC, and detached browser windows**.
+- This is a **code + validation audit**, not a GUI smoke test; I did not launch the full Electron app interactively in this environment.
+
+**What’s Solid**
+- Electron security baseline is good: `contextIsolation: true`, `nodeIntegration: false`, guarded external navigation, and a preload allowlist are in place in `apps/desktop/main/index.ts:57` and `apps/desktop/preload/index.ts:22`.
+- Backend boot/reconnect logic is well thought through: main spawns backend, parses dynamic port, and notifies renderers on restart in `apps/desktop/main/backend-process.ts:53` and `apps/desktop/main/backend-process.ts:140`; renderer updates cached port in `apps/web/src/shared/hooks/useBackendRestart.ts:25`.
+- The core TS graph is healthy: `bun run typecheck:backend` passed, and `bunx tsc --noEmit --project tsconfig.node.json && bunx tsc --noEmit --project tsconfig.web.json` passed.
+
+**Major Gaps**
+- **Sidecar bootstrap is inconsistent and likely broken.** Electron passes `SIDECAR_BUNDLE_PATH`, but backend only initializes the agent client from `AGENT_SERVER_URL`; there is no source-path consumer of `SIDECAR_BUNDLE_PATH` in the backend. See `apps/desktop/main/backend-process.ts:53` and `apps/backend/src/server.ts:73`. Also, comments still reference nonexistent `sidecar.service.ts` in `apps/desktop/main/index.ts:19`.
+- **Simulator is not actually migrated to Electron.** Frontend still invokes old native channels like `sim_has_xcode_project`, `list_simulators`, `start_streaming`, etc. in `apps/web/src/features/simulator/api/simulator.service.ts:17`, while the preload allowlist contains none of them in `apps/desktop/preload/index.ts:22`. `capabilities.nativeSimulator` still advertises the feature as available for any Electron runtime in `apps/web/src/platform/capabilities.ts:31`.
+- **Detached browser window support is incomplete.** Renderer passes `windowLabel` when creating a BrowserView in `apps/web/src/features/browser/ui/BrowserTab.tsx:148`, but main ignores it and always targets the first window in `apps/desktop/main/browser-views.ts:45` and `apps/desktop/main/browser-views.ts:55`. That makes the detached browser path in `apps/web/src/features/browser/ui/DetachedBrowserWindow.tsx:126` very suspect.
+- **Browser cookie import is still wired to missing native commands.** UI calls `get_cookie_browsers`, `sync_browser_cookies`, and `inject_browser_cookies` in `apps/web/src/features/browser/ui/BrowserPanel.tsx:625`, `apps/web/src/features/browser/ui/BrowserPanel.tsx:652`, and `apps/web/src/features/browser/ui/BrowserPanel.tsx:664`, but there are no Electron handlers for them.
+
+**Repo Hygiene Still Off**
+- Docs are still materially stale: `README.md:21` says `bun run dev` runs everything, `README.md:39` still mentions “Sidecar socket relay,” and `README.md:130` still lists `sidecar-process.ts`. `CLAUDE.md:184`, `CLAUDE.md:196`, and `CLAUDE.md:203` say Electron main spawns the sidecar and passes `AGENT_SERVER_URL`, which does not match the current source.
+- Lint/CI is still not where the migration review said it should be: backend/sidecar/shared are ignored in `eslint.config.mjs:10`, and CI still masks lint failures in `.github/workflows/test.yml:28` and `.github/workflows/test.yml:33`.
+- `bun run typecheck:sidecar` currently fails in `apps/sidecar/agents/claude/claude-handler.ts:297`, `apps/sidecar/agents/claude/claude-sdk-options.ts:244`, and `apps/sidecar/index.ts:205`.
+
+**Validation**
+- `bun run lint` fails with 19 errors / 119 warnings; many are known React-hooks/compiler issues, but it reinforces that CI is not enforcing health yet.
+- `bun run test:backend` is **close but not clean**: 30/31 files passed, 437 tests passed, but one suite fails because of a broken moved import in `apps/backend/test/unit/shared/errors.test.ts:2`.
+- During that backend test run, integration tests still logged **“Agent server is disconnected”** from the send-message path, which matches the sidecar bootstrap concern in `apps/backend/src/services/agent/commands.ts:146`.
+
+**Bottom Line**
+- My real signoff: **base Electron migration = yes; end-to-end migration = no**.
+- I’d treat **sidecar startup mismatch** as the main ship-blocker, **detached browser window routing** as the next important bug, and **simulator/cookie-sync/docs/CI** as follow-up migration debt.
+- If you want, I can turn this into a ranked punch list or patch the top issues starting with the sidecar bootstrap path.
