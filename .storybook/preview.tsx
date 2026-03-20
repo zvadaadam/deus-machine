@@ -1,8 +1,8 @@
 import React, { useEffect } from "react";
 import type { Preview } from "@storybook/react-vite";
-import { ThemeProvider } from "../src/app/providers/ThemeProvider";
+import { ThemeProvider } from "../apps/web/src/app/providers/ThemeProvider";
 import { ThemeSync } from "./theme-sync";
-import "../src/global.css";
+import "../apps/web/src/global.css";
 
 const preview: Preview = {
   parameters: {

@@ -1,6 +1,6 @@
 // packages/mcp-notebook/build.ts
 // esbuild script to bundle the notebook MCP server into a single CJS file.
-// Output: src-tauri/resources/bin/notebook-server.bundled.cjs
+// Output: packages/mcp-notebook/dist/notebook-server.bundled.cjs
 // Run: bunx tsx packages/mcp-notebook/build.ts
 
 import { build } from "esbuild";
@@ -21,7 +21,7 @@ const pkgDir = path.dirname(fileURLToPath(import.meta.url));
       // even when build is invoked from a parent directory or root repo
       absWorkingDir: pkgDir,
       nodePaths: [path.join(pkgDir, "node_modules")],
-      outfile: path.join(pkgDir, "..", "..", "src-tauri", "resources", "bin", "notebook-server.bundled.cjs"),
+      outfile: path.join(pkgDir, "dist", "notebook-server.bundled.cjs"),
       external: [
         "net",
         "fs",

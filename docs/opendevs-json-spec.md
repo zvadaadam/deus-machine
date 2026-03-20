@@ -59,39 +59,39 @@ The `opendevs.json` manifest tells the OpenDevs orchestrator how to set up, run,
 
 ### Top-level fields
 
-| Field | Type | Required | Default | Description |
-|-------|------|----------|---------|-------------|
-| `$schema` | `string` | No | — | JSON schema URL for editor validation |
-| `version` | `number` | Yes | — | Manifest schema version. Currently `1` |
-| `name` | `string` | No | — | Human-readable project name |
+| Field     | Type     | Required | Default | Description                            |
+| --------- | -------- | -------- | ------- | -------------------------------------- |
+| `$schema` | `string` | No       | —       | JSON schema URL for editor validation  |
+| `version` | `number` | Yes      | —       | Manifest schema version. Currently `1` |
+| `name`    | `string` | No       | —       | Human-readable project name            |
 
 ### `scripts` (backwards-compatible)
 
 Legacy fields consumed by the current OpenDevs app. Keep these for backwards compatibility.
 
-| Field | Type | Required | Description |
-|-------|------|----------|-------------|
-| `scripts.setup` | `string` | No | Shell command or script path run when workspace is created |
-| `scripts.run` | `string` | No | Shell command or script path for the main dev server |
+| Field           | Type     | Required | Description                                                |
+| --------------- | -------- | -------- | ---------------------------------------------------------- |
+| `scripts.setup` | `string` | No       | Shell command or script path run when workspace is created |
+| `scripts.run`   | `string` | No       | Shell command or script path for the main dev server       |
 
 ### `runScriptMode`
 
-| Field | Type | Required | Default | Description |
-|-------|------|----------|---------|-------------|
-| `runScriptMode` | `"concurrent" \| "nonconcurrent"` | No | `"concurrent"` | Whether the run script allows concurrent execution across workspaces |
+| Field           | Type                              | Required | Default        | Description                                                          |
+| --------------- | --------------------------------- | -------- | -------------- | -------------------------------------------------------------------- |
+| `runScriptMode` | `"concurrent" \| "nonconcurrent"` | No       | `"concurrent"` | Whether the run script allows concurrent execution across workspaces |
 
 ### `requires`
 
 Runtime/tool version constraints. OpenDevs validates these before running setup.
 
-| Field | Type | Example | Description |
-|-------|------|---------|-------------|
-| `requires.node` | `string` | `">= 22"` | Node.js version constraint |
-| `requires.bun` | `string` | `">= 1.2"` | Bun version constraint |
-| `requires.rust` | `string` | `">= 1.75"` | Rust toolchain version |
-| `requires.python` | `string` | `">= 3.12"` | Python version |
-| `requires.go` | `string` | `">= 1.22"` | Go version |
-| `requires.<tool>` | `string` | `">= x.y"` | Any runtime or tool |
+| Field             | Type     | Example     | Description                |
+| ----------------- | -------- | ----------- | -------------------------- |
+| `requires.node`   | `string` | `">= 22"`   | Node.js version constraint |
+| `requires.bun`    | `string` | `">= 1.2"`  | Bun version constraint     |
+| `requires.rust`   | `string` | `">= 1.75"` | Rust toolchain version     |
+| `requires.python` | `string` | `">= 3.12"` | Python version             |
+| `requires.go`     | `string` | `">= 1.22"` | Go version                 |
+| `requires.<tool>` | `string` | `">= x.y"`  | Any runtime or tool        |
 
 Version strings use semver range syntax: `">= 1.2"`, `"^22.0"`, `"~3.12"`, `"1.2.19"`.
 
@@ -112,10 +112,10 @@ Values are strings. OpenDevs sets these as process environment variables before 
 
 Automatic hooks triggered by workspace state changes. These are NOT shown as clickable buttons in the UI.
 
-| Field | Type | Description |
-|-------|------|-------------|
-| `lifecycle.setup` | `string` | Run once when workspace is created. Install deps, copy configs, etc. |
-| `lifecycle.archive` | `string` | Run when workspace is archived/deleted. Cleanup, save state, etc. |
+| Field               | Type     | Description                                                          |
+| ------------------- | -------- | -------------------------------------------------------------------- |
+| `lifecycle.setup`   | `string` | Run once when workspace is created. Install deps, copy configs, etc. |
+| `lifecycle.archive` | `string` | Run when workspace is archived/deleted. Cleanup, save state, etc.    |
 
 ### `tasks`
 
@@ -152,16 +152,16 @@ String tasks use default settings: no icon, not persistent, no dependencies.
 }
 ```
 
-| Field | Type | Required | Default | Description |
-|-------|------|----------|---------|-------------|
-| `command` | `string` | Yes | — | Shell command or script path to execute |
-| `description` | `string` | No | — | Human-readable description shown in UI tooltip |
-| `icon` | `string` | No | `"terminal"` | Lucide icon name (see icon reference below) |
-| `persistent` | `boolean` | No | `false` | If `true`, task is a long-running process (dev server, watcher) |
-| `mode` | `"concurrent" \| "nonconcurrent"` | No | `"concurrent"` | Whether this task can run concurrently across workspaces |
-| `depends` | `string[]` | No | `[]` | Task names that must complete before this task starts |
-| `platform` | `string[]` | No | all | Restrict to platforms: `"macos"`, `"linux"`, `"windows"` |
-| `env` | `object` | No | `{}` | Additional env vars for this task only (merged with top-level `env`) |
+| Field         | Type                              | Required | Default        | Description                                                          |
+| ------------- | --------------------------------- | -------- | -------------- | -------------------------------------------------------------------- |
+| `command`     | `string`                          | Yes      | —              | Shell command or script path to execute                              |
+| `description` | `string`                          | No       | —              | Human-readable description shown in UI tooltip                       |
+| `icon`        | `string`                          | No       | `"terminal"`   | Lucide icon name (see icon reference below)                          |
+| `persistent`  | `boolean`                         | No       | `false`        | If `true`, task is a long-running process (dev server, watcher)      |
+| `mode`        | `"concurrent" \| "nonconcurrent"` | No       | `"concurrent"` | Whether this task can run concurrently across workspaces             |
+| `depends`     | `string[]`                        | No       | `[]`           | Task names that must complete before this task starts                |
+| `platform`    | `string[]`                        | No       | all            | Restrict to platforms: `"macos"`, `"linux"`, `"windows"`             |
+| `env`         | `object`                          | No       | `{}`           | Additional env vars for this task only (merged with top-level `env`) |
 
 ---
 
@@ -169,22 +169,22 @@ String tasks use default settings: no icon, not persistent, no dependencies.
 
 Icons use names from [lucide-react](https://lucide.dev/icons/), which is already a project dependency. The OpenDevs UI renders these as icon buttons next to each task.
 
-| Icon name | Lucide component | Use case |
-|-----------|-----------------|----------|
-| `play` | `Play` | Dev server, run, start, serve |
-| `hammer` | `Hammer` | Build, compile, bundle |
-| `check-circle` | `CheckCircle` | Test, validate, verify |
-| `search-code` | `SearchCode` | Lint, typecheck, static analysis |
-| `paintbrush` | `Paintbrush` | Format, prettify, style |
-| `rocket` | `Rocket` | Deploy, release, publish |
-| `terminal` | `Terminal` | Generic script, shell command |
-| `package` | `Package` | Bundle, package, sub-builds |
-| `monitor` | `Monitor` | Preview, visual inspection |
-| `book-open` | `BookOpen` | Documentation, storybook |
-| `database` | `Database` | Migrations, seed, DB operations |
-| `shield` | `Shield` | Security audit, vulnerability check |
-| `refresh-cw` | `RefreshCw` | Clean, reset, rebuild |
-| `globe` | `Globe` | Serve, expose, public URL |
+| Icon name      | Lucide component | Use case                            |
+| -------------- | ---------------- | ----------------------------------- |
+| `play`         | `Play`           | Dev server, run, start, serve       |
+| `hammer`       | `Hammer`         | Build, compile, bundle              |
+| `check-circle` | `CheckCircle`    | Test, validate, verify              |
+| `search-code`  | `SearchCode`     | Lint, typecheck, static analysis    |
+| `paintbrush`   | `Paintbrush`     | Format, prettify, style             |
+| `rocket`       | `Rocket`         | Deploy, release, publish            |
+| `terminal`     | `Terminal`       | Generic script, shell command       |
+| `package`      | `Package`        | Bundle, package, sub-builds         |
+| `monitor`      | `Monitor`        | Preview, visual inspection          |
+| `book-open`    | `BookOpen`       | Documentation, storybook            |
+| `database`     | `Database`       | Migrations, seed, DB operations     |
+| `shield`       | `Shield`         | Security audit, vulnerability check |
+| `refresh-cw`   | `RefreshCw`      | Clean, reset, rebuild               |
+| `globe`        | `Globe`          | Serve, expose, public URL           |
 
 When no icon is specified, the UI defaults to `terminal`.
 
@@ -194,11 +194,11 @@ When no icon is specified, the UI defaults to `terminal`.
 
 OpenDevs sets these environment variables automatically when running scripts:
 
-| Variable | Description | Example |
-|----------|-------------|---------|
-| `OPENDEVS_ROOT_PATH` | Path to the root repository (not the worktree) | `/Users/me/projects/my-app` |
-| `OPENDEVS_WORKSPACE_PATH` | Path to this workspace's worktree | `/Users/me/.opendevs/workspace-1` |
-| `OPENDEVS_WORKSPACE_ID` | Unique workspace identifier | `ws_abc123` |
+| Variable                  | Description                                    | Example                           |
+| ------------------------- | ---------------------------------------------- | --------------------------------- |
+| `OPENDEVS_ROOT_PATH`      | Path to the root repository (not the worktree) | `/Users/me/projects/my-app`       |
+| `OPENDEVS_WORKSPACE_PATH` | Path to this workspace's worktree              | `/Users/me/.opendevs/workspace-1` |
+| `OPENDEVS_WORKSPACE_ID`   | Unique workspace identifier                    | `ws_abc123`                       |
 
 Scripts can use these to locate shared configs, copy files from the root repo, etc.
 
@@ -289,7 +289,7 @@ Scripts can use these to locate shared configs, copy files from the root repo, e
 }
 ```
 
-### Full-stack Tauri (OpenDevs IDE)
+### Full-stack Electron (OpenDevs IDE)
 
 ```json
 {
@@ -311,7 +311,7 @@ Scripts can use these to locate shared configs, copy files from the root repo, e
     },
     "dev:desktop": {
       "command": "bun run dev",
-      "description": "Start full Tauri desktop app",
+      "description": "Start full Electron desktop app",
       "icon": "monitor",
       "persistent": true,
       "mode": "nonconcurrent",
@@ -322,9 +322,9 @@ Scripts can use these to locate shared configs, copy files from the root repo, e
       "icon": "hammer",
       "depends": ["build:sidecar"]
     },
-    "build:tauri": {
-      "command": "bun run build:tauri",
-      "description": "Build Tauri desktop binary",
+    "build:desktop": {
+      "command": "bun run build:all",
+      "description": "Build Electron desktop binary",
       "icon": "package",
       "depends": ["build:sidecar"]
     },
@@ -352,12 +352,12 @@ Scripts can use these to locate shared configs, copy files from the root repo, e
 
 For backwards compatibility, always include the `scripts` and `runScriptMode` top-level fields alongside the new `lifecycle` and `tasks` fields.
 
-| Legacy field | Maps to |
-|-------------|---------|
-| `scripts.setup` | `lifecycle.setup` |
-| `scripts.run` | Main `tasks.dev.command` |
-| `scripts.archive` | `lifecycle.archive` |
-| `runScriptMode` | `tasks.dev.mode` |
+| Legacy field      | Maps to                  |
+| ----------------- | ------------------------ |
+| `scripts.setup`   | `lifecycle.setup`        |
+| `scripts.run`     | Main `tasks.dev.command` |
+| `scripts.archive` | `lifecycle.archive`      |
+| `runScriptMode`   | `tasks.dev.mode`         |
 
 The current OpenDevs app reads `scripts.*` and `runScriptMode`. Future versions will read `lifecycle` and `tasks` directly. Including both ensures forwards and backwards compatibility.
 
@@ -372,6 +372,7 @@ Use the Claude Code skill to auto-generate a manifest:
 ```
 
 The skill:
+
 1. Imports from existing OpenDevs (`opendevs.json`) or Codex (`environment.toml`) configs
 2. Detects project type from files (`package.json`, `Cargo.toml`, `pyproject.toml`, etc.)
 3. Detects package manager from lockfiles
