@@ -1,0 +1,42 @@
+{
+  "cli_version": "0.5.0",
+  "checkpoint_id": "9e8ddc6fe5a7",
+  "strategy": "manual-commit",
+  "branch": "zvadaadam/workspace-status",
+  "checkpoints_count": 1,
+  "files_touched": [
+    "apps/backend/src/db/queries.ts",
+    "apps/backend/src/db/types.ts",
+    "apps/backend/src/lib/schemas.ts",
+    "apps/backend/src/routes/workspaces.pr.ts",
+    "apps/backend/src/routes/workspaces.ts",
+    "apps/backend/src/services/query-engine.ts",
+    "apps/backend/test/unit/shared/events.test.ts",
+    "apps/web/src/features/sidebar/lib/status.ts",
+    "apps/web/src/features/sidebar/ui/WorkspaceItem.stories.tsx",
+    "apps/web/src/features/workspace/api/workspace.queries.ts",
+    "apps/web/src/features/workspace/api/workspace.service.ts",
+    "apps/web/src/features/workspace/lib/workspace.utils.ts",
+    "apps/web/src/features/workspace/types.ts",
+    "apps/web/src/platform/analytics/events.ts",
+    "shared/enums.ts",
+    "shared/events.ts",
+    "shared/schema.ts",
+    "shared/types/workspace.ts"
+  ],
+  "sessions": [
+    {
+      "metadata": "/9e/8ddc6fe5a7/0/metadata.json",
+      "transcript": "/9e/8ddc6fe5a7/0/full.jsonl",
+      "content_hash": "/9e/8ddc6fe5a7/0/content_hash.txt",
+      "prompt": "/9e/8ddc6fe5a7/0/prompt.txt"
+    }
+  ],
+  "token_usage": {
+    "input_tokens": 14,
+    "cache_creation_tokens": 44096,
+    "cache_read_tokens": 318716,
+    "output_tokens": 6988,
+    "api_call_count": 8
+  }
+}
