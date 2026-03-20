@@ -10984,3 +10984,588 @@ The user has attached these files. Read them before proceeding.
 
 
 Create a PR
+
+---
+
+<system-instruction>
+The user has added 5 comments to the diff for this workspace. Please review and address these comments as part of your response. When addressing comments on the "original" side or on specific commits, read the file from that version (not the current version). Below are the comments, including metadata about what git state they were left on:
+
+Comment #1:
+
+File: 
+Line: undefined
+User comment: "<!-- This is an auto-generated comment: summarize by coderabbit.ai -->
+<!-- walkthrough_start -->
+
+<details>
+<summary>📝 Walkthrough</summary>
+
+## Walkthrough
+
+This PR introduces a unified `native` platform abstraction layer decoupling the web app from Electron-specific APIs and implements capability-based feature gating. Key changes include: spawning backend with explicit TSX config path, persisting backend port during development, replacing scattered Electron IPC calls (`invoke`/`listen`/`emit`) with a new `native.*` interface, refactoring window drag handling from event-driven to CSS-only via `drag-region` class, removing custom pixel font, and replacing `isElectronEnv` checks with capability flags throughout.
+
+## Changes
+
+|Cohort / File(s)|Summary|
+|---|---|
+|**Backend Spawning & Configuration** <br> `apps/backend/server.cjs`, `apps/desktop/main/backend-process.ts`|Updated bootstrap to spread `process.env` with `TSX_TSCONFIG_PATH`, changed dev/prod runtime selection for backend, and persisted dynamically assigned backend port to temp file for Chrome port discovery.|
+|**Platform Native Abstraction Layer** <br> `apps/web/src/platform/native/window.ts`, `apps/web/src/platform/native/apps.ts`, `apps/web/src/platform/native/cli.ts`, `apps/web/src/platform/native/dialog.ts`, `apps/web/src/platform/native/events.ts`, `apps/web/src/platform/native/browser-views.ts`, `apps/web/src/platform/native/updates.ts`, `apps/web/src/platform/native/index.ts`, `apps/web/src/platform/index.ts`|Created new module structure consolidating Electron IPC operations behind capability-gated async functions, with centralized `native` export aggregating window, apps, CLI, dialog, browser views, updates, and events sub-modules.|
+|**App-Level Error & Startup Handling** <br> `apps/web/src/app/App.tsx`, `apps/web/src/shared/components/error-fallbacks/ErrorFallback.tsx`|Replaced `invoke("show_main_window")` with `native.window.show()`, added backend-unreachable error UI with retry capability, and updated window lifecycle to skip safety-net on disabled window capabilities.|
+|**Event System Integration** <br> `apps/web/src/app/layouts/MainLayout.tsx`, `apps/web/src/app/layouts/MainContent.tsx`, `apps/web/src/shared/hooks/useBackendRestart.ts`, `apps/web/src/features/workspace/hooks/useWorkspaceInitEvents.ts`|Transitioned from `listen(...).then(unlisten)` + `createListenerGroup` to direct `native.events.on(...)` subscriptions with cleanup via returned unlisten functions; updated event payload shapes and removed `isElectronEnv` guards.|
+|**Browser View Refactoring** <br> `apps/web/src/features/browser/automation/eval-with-result.ts`, `apps/web/src/features/browser/automation/useBrowserRpcHandler.ts`, `apps/web/src/features/browser/ui/BrowserPanel.tsx`, `apps/web/src/features/browser/ui/BrowserTab.tsx`, `apps/web/src/features/browser/hooks/useBrowserDetach.ts`, `apps/web/src/features/browser/ui/DetachedBrowserWindow.tsx`|Replaced Electron IPC invocations with `native.browserViews.*` and `native.events.*` methods; updated event subscriptions to use `native.events.on` directly and modified event payload handling for consistency.|
+|**Dialog & File Operations** <br> `apps/web/src/features/repository/ui/CloneRepositoryModal.tsx`, `apps/web/src/features/onboarding/ui/steps/OpenDevsStep.tsx`, `apps/web/src/features/onboarding/ui/steps/ProjectSelectionStep.tsx`, `apps/web/src/features/repository/ui/WelcomeView.tsx`, `apps/web/src/features/workspace/hooks/useRepoActions.ts`, `apps/web/src/shared/components/OpenInDropdown.tsx`|Replaced `invoke("native:pickFolder")` and `invoke("native:homeDir")` with `native.dialog.pickFolder()` and `native.dialog.getHomeDir()`; unified file/folder access patterns across onboarding and repository flows.|
+|**Onboarding & Type Definitions** <br> `apps/web/src/features/onboarding/ui/OnboardingOverlay.tsx`, `apps/web/src/features/onboarding/api/onboarding.service.ts`, `apps/web/src/features/onboarding/types.ts`|Replaced Electron-specific mode entry/exit with capability-gated `native.window.enterOnboarding()` / `exitOnboarding()`, refactored service to delegate to `native.cli.*` directly, and moved `CliCheckResult`/`GhAuthResult` to re-exports from native layer.|
+|**Feature Gating & Capabilities** <br> `apps/web/src/features/auth/hooks/useAuth.ts`, `apps/web/src/features/session/hooks/useGlobalSessionNotifications.ts`, `apps/web/src/features/updates/hooks/useAutoUpdate.ts`, `apps/web/src/platform/analytics/useAnalyticsConsent.ts`, `apps/web/src/shared/hooks/useIsFullscreen.ts`, `apps/web/src/shared/hooks/useWindowFocus.ts`, `apps/web/src/shared/hooks/useWindowResizing.ts`|Systematically replaced `isElectronEnv` with corresponding capability flags (`capabilities.ipcInvoke`, `capabilities.autoUpdate`, `capabilities.nativeNotifications`, `capabilities.nativeWindowChrome`, etc.) throughout auth, session, updates, and window interaction hooks.|
+|**Settings & Visibility Gating** <br> `apps/web/src/features/settings/ui/SettingsSidebar.tsx`, `apps/web/src/features/settings/ui/sections/GeneralSection.tsx`, `apps/web/src/features/workspace/ui/ContentTabBar.tsx`, `apps/web/src/features/session/ui/SessionPanel.tsx`|Added capability-based nav item visibility (Updates requires `autoUpdate`), conditional onboarding replay UI based on `nativeOnboarding`, and tab visibility gating for terminal/browser tabs based on native capabilities.|
+|**Window Drag & Interactive Regions** <br> `apps/web/src/shared/hooks/useWindowDrag.ts`, `apps/web/src/app/layouts/SidebarHeader.tsx`, `apps/web/src/features/workspace/ui/MainContentTabs.tsx`, `apps/web/src/features/workspace/ui/WorkspaceHeader.tsx`|Refactored window drag handling from event-overlay approach to CSS-only `-webkit-app-region: drag` with `drag-region` class; added class to interactive headers and tab containers; simplified cleanup and removed height parameter from hook.|
+|**Zoom & Window State** <br> `apps/web/src/shared/hooks/useZoom.ts`|Replaced `invoke("native:setZoom")` with `native.window.setZoom()` and gated behind `capabilities.nativeWindowChrome`.|
+|**Styling & Fonts** <br> `apps/web/src/fonts.css`, `apps/web/src/global.css`, `apps/web/src/features/onboarding/ui/steps/WelcomeStep.tsx`|Removed `Geist Pixel Square` font-face definition and `--font-pixel` CSS token; updated branding text to use `font-extrabold tracking-tight` instead of custom font.|
+|**API Configuration** <br> `apps/web/src/shared/api/client.ts`, `apps/web/src/shared/config/api.config.ts`|Extracted `REQUEST_TIMEOUT` constant locally, added dev-mode backend port discovery via `/__backend_port` Vite middleware, and removed cached `API_CONFIG` export.|
+|**Vite Configuration** <br> `electron.vite.config.ts`|Added `backendPortPlugin` middleware to serve `/__backend_port` endpoint reading temp-file persisted port during development; supports dev-mode port discovery for Chrome tab integration.|
+
+## Sequence Diagram(s)
+
+```mermaid
+sequenceDiagram
+    participant Client as Web App
+    participant Native as native.*<br/>(Platform API)
+    participant ElectronIPC as Electron IPC<br/>(Backend)
+    participant OS as OS/System
+
+    Note over Client,OS: Old Flow (before)
+    Client->>Client: Check isElectronEnv
+    alt Electron Environment
+        Client->>ElectronIPC: invoke("native:setTitle")
+        ElectronIPC->>OS: Set Window Title
+    else Non-Electron
+        Client->>Client: No-op
+    end
+
+    Note over Client,OS: New Flow (after)
+    Client->>Native: Check capabilities.ipcInvoke
+    alt Capability Enabled
+        Native->>ElectronIPC: invoke("native:setTitle")
+        ElectronIPC->>OS: Set Window Title
+    else Capability Disabled
+        Native->>Native: Return immediately
+    end
+```
+
+```mermaid
+sequenceDiagram
+    participant Desktop as Desktop App<br/>(main process)
+    participant Backend as Backend Server<br/>(tsx)
+    participant TempFS as Temp File<br/>(opendevs-backend-port)
+    participant Web as Web App
+
+    Note over Desktop,Web: Backend Port Discovery (Dev Mode)
+    Desktop->>Backend: Spawn with TSX_TSCONFIG_PATH
+    Backend->>Backend: Resolve config, start listening
+    Backend->>Desktop: Write port to stdout
+    Desktop->>TempFS: Persist port to temp file
+    
+    Web->>Web: Initialize API client
+    alt Dev Mode
+        Web->>Web: Fetch /__backend_port from Vite
+        Web->>TempFS: Read persisted port
+        Web->>Web: Use discovered port
+    else Production
+        Web->>Web: Use hardcoded 3333
+    end
+```
+
+## Estimated code review effort
+
+🎯 4 (Complex) | ⏱️ ~60 minutes
+
+## Poem
+
+> 🐰 *In the warren of code, we've built a new burrow,*  
+> *Where native abstractions tomorrow won't sorrow,*  
+> *Capabilities guide what each platform can do,*  
+> *Drag-regions in CSS, our window dance new,*  
+> *No more scattered invokes—one path shines through!*
+
+</details>
+
+<!-- walkthrough_end -->
+
+
+<!-- tips_start -->
+
+---
+
+<sub>Comment `@coderabbitai help` to get the list of available commands and usage tips.</sub>
+
+<!-- tips_end -->
+
+<!-- internal state start -->
+
+
+<!-- REDACTED/REDACTED/REDACTED/REDACTED/REDACTED/REDACTED/REDACTED/REDACTED/SwLpHees9A/REDACTED/5RJAXJGVCCz06JdhjO9dQzE/REDACTED/REDACTED/REDACTED/REDACTED/7SC0C4FkJo0QwANCMLcFIndo2LjXM6V0vo/REDACTED/dJRFX7sPYiAARW4ABeBolWII1aeHV/REDACTED/REDACTED/REDACTED/REDACTED/ffDYHL+2SPZwrMVPY7MASgniHI9v/REDACTED/REDACTED/REDACTED/TC/REDACTED/REDACTED/0EymFZP0MgEAIQJAL4zAM9L/REDACTED/REDACTED/REDACTED/REDACTED/4SAapwLGBwhWEagCV/REDACTED/REDACTED/REDACTED/REDACTED/REDACTED/REDACTED/REDACTED/1G8nhm9W8/pTRMgrIxy78oMrjhioQMS1xHMSSRCuYqsSS2B/0kADytbm0BB0YhC/dIhZHeNys/REDACTED/REDACTED/REDACTED/REDACTED/AZ5ife4Z7pj/REDACTED/DtOt/REDACTED/REDACTED/REDACTED/REDACTED/REDACTED/REDACTED/REDACTED/REDACTED/REDACTED/5C2sXJC4iC8q889T8/REDACTED/cfsT2siYDZ+/cefov0/REDACTED/xMgikFKK89swBoUPCQF/REDACTED/REDACTED/REDACTED/mLZXc3847T/REDACTED/REDACTED/eBPnTNCcluS6fM/REDACTED/ts3GlrOBjwu/REDACTED/REDACTED/hXuK4BvFEZGNz+l/REDACTED/gCOvBdgjqjWR/g1iZos0fxAAfg0DZFyhQE0cT3Wsg/REDACTED/5vyPZCCi2wwokgPLyQGBiJRig/REDACTED/REDACTED/REDACTED/REDACTED/REDACTED/REDACTED/REDACTED/REDACTED/REDACTED/REDACTED/d/REDACTED/REDACTED/IZHc8qyS6r+aut/REDACTED/a4dCOwHcjt/REDACTED/REDACTED/REDACTED/PF/REDACTED/apIv04GTp0YL7ZfrZQ+pN9d+h/YguoR06o5igd/REDACTED/MXWGZ72L9B7R/REDACTED/REDACTED/REDACTED/REDACTED/REDACTED/REDACTED/REDACTED/REDACTED/REDACTED/REDACTED/REDACTED/DP/m70zACYF01kHZN/REDACTED/REDACTED/zMPaMbky/REDACTED/REDACTED/REDACTED/REDACTED/REDACTED/REDACTED/REDACTED/ekrAE/kQjATCPPwJtZ/REDACTED/s5gdIjnuZa/REDACTED/REDACTED/REDACTED/alTbscAWc/REDACTED/REDACTED/x48Cug3w4hxc69jf4L287ES6H3nqHfnmh/56fL3YXzOToLsh/hYmvEWYXjI8i0HZ/REDACTED/REDACTED/ul0k317zz7+iBJowO0/REDACTED/REDACTED/REDACTED/REDACTED/4JdB/REDACTED/a/REDACTED/REDACTED/8t3WKB5Rq/REDACTED/REDACTED/UZXiC7/REDACTED/REDACTED/NBklCQ4IBCE/REDACTED/REDACTED/REDACTED/REDACTED/REDACTED/ZnAlBx9Aq+a/nTBUgiuL7A/REDACTED/KL99Ggg0J0iHYDF1/jhAlBF9i7Q/REDACTED/REDACTED/REDACTED/REDACTED/wGxM1w7VXzBw/REDACTED/REDACTED/REDACTED/PHbTsjXDlThD/REDACTED/REDACTED/REDACTED/0hic9IDTz1kdZ+yits/REDACTED/REDACTED/aDIxcEECDLFGiYwnnHJzxiBKkRxs/JvWoR7VUYIN1unBjzqQyCB/REDACTED/REDACTED/REDACTED/REDACTED/GLLz5zIYylD489/MTyr8zSTrzU8ufP3zFBeEhxFGUANCwzQof/REDACTED/REDACTED/REDACTED/iPaWa4Z/YXByoVSbUAVi1Y5HRf9SgM+VJzKuJ/REDACTED/REDACTED/REDACTED/REDACTED/REDACTED/Fw1ZLwHKOo6/REDACTED/REDACTED/REDACTED/REDACTED/REDACTED/REDACTED/AvAKB+HJQArxWIZ12shKTWjlDBV69/REDACTED/Bv9OXV/REDACTED/REDACTED/REDACTED/REDACTED/REDACTED/CKqK4umhWpLkQGmRvQMf9P/REDACTED/REDACTED/onBjetILfwV/REDACTED//REDACTED/REDACTED/y/REDACTED/REDACTED/REDACTED/REDACTED/REDACTED/3kAkxU/REDACTED/vLWKLYjYtO0LwG5t2Ki6/REDACTED/REDACTED/REDACTED/VUCeLIKl/REDACTED/REDACTED/REDACTED/REDACTED/REDACTED/REDACTED/REDACTED/K2qgMEPkW0xtAUd6IJ6FgGNE/iLfz3qx2dQElGMygmCOahC/pRhKl/REDACTED/REDACTED/REDACTED/REDACTED/b4e/REDACTED/REDACTED/REDACTED/REDACTED/REDACTED/QYaaUTTe4QGj20ckqlJLg8XEiL/REDACTED/REDACTED/REDACTED/REDACTED/OlVj+o0eWz9cpFBLCxKO2XF/REDACTED/REDACTED/REDACTED/SzkgkQZFPD0YSRjtwgqLsE/BrknNsrERIaKBProtRsNqX62sjq/REDACTED/REDACTED/AaOLqcru5Et4i/REDACTED/REDACTED/Yc/ZHBXRAlb5C/REDACTED/REDACTED/REDACTED/REDACTED/pQbCAC/REDACTED/PACQCgb+Bbs/REDACTED/AhlLoX4j6BDmVDO/Rw9zuJqA3/REDACTED/REDACTED/REDACTED/IAfUhsomZyyLgNW+kiz1o11zakSMD/REDACTED/REDACTED/REDACTED/REDACTED/REDACTED/REDACTED -->
+
+<!-- internal state end -->"
+
+Comment metadata:
+This comment was left on a file.
+This comment was left on GitHub by @coderabbitai.
+
+
+Comment #2:
+
+File: apps/web/src/features/browser/automation/useBrowserRpcHandler.ts
+Line: 11
+User comment: "_⚠️ Potential issue_ | _🔴 Critical_
+
+**Duplicate import will cause a build error.**
+
+Lines 10-11 import `native` from `@/platform` twice, which will fail compilation.
+
+```diff
+ import { native } from "@/platform";
+-import { native } from "@/platform";
+```
+
+<!-- suggestion_start -->
+
+<details>
+<summary>📝 Committable suggestion</summary>
+
+> ‼️ **IMPORTANT**
+> Carefully review the code before committing. Ensure that it accurately replaces the highlighted code, contains no missing lines, and has no issues with indentation. Thoroughly test & benchmark the code to ensure it meets the requirements.
+
+```suggestion
+import { native } from "@/platform";
+```
+
+</details>
+
+<!-- suggestion_end -->
+
+<details>
+<summary>🤖 Prompt for AI Agents</summary>
+
+```
+Verify each finding against the current code and only fix it if needed.
+
+In `@apps/web/src/features/browser/automation/useBrowserRpcHandler.ts` around
+lines 10 - 11, The file useBrowserRpcHandler.ts contains a duplicate import of
+the same symbol; remove the redundant import so `native` from "@/platform" is
+imported only once (i.e., keep a single `import { native } from "@/platform";`
+and delete the duplicated line) to fix the build error caused by the duplicate
+`native` import.
+```
+
+</details>
+
+<!-- fingerprinting:phantom:medusa:ocelot -->
+
+<!-- This is an auto-generated comment by CodeRabbit -->"
+
+Comment metadata:
+This comment was left on the modified branch.
+This comment was left on GitHub by @coderabbitai.
+This comment is the start of thread PRRT_kwDOQEbULc51yQaH. 
+
+
+Comment #3:
+
+File: apps/web/src/features/browser/hooks/useBrowserDetach.ts
+Line: 82
+User comment: "_⚠️ Potential issue_ | _🟠 Major_
+
+<details>
+<summary>🧩 Analysis chain</summary>
+
+🏁 Script executed:
+
+```shell
+#!/bin/bash
+# Check if BROWSER_DETACHED_CLOSED is already defined in shared/events.ts
+rg -n "BROWSER_DETACHED_CLOSED|browser:detached-closed" shared/events.ts
+```
+
+Repository: zvadaadam/box-ide
+
+Length of output: 43
+
+---
+
+🏁 Script executed:
+
+```shell
+# Search for BROWSER_WORKSPACE_CHANGE to understand the pattern
+rg -n "BROWSER_WORKSPACE_CHANGE" --type ts --type tsx -B2 -A2
+```
+
+Repository: zvadaadam/box-ide
+
+Length of output: 88
+
+---
+
+🏁 Script executed:
+
+```shell
+# Check the native.events module and its type signatures
+fd -e ts -e tsx "native" | xargs rg -l "events" | head -20
+```
+
+Repository: zvadaadam/box-ide
+
+Length of output: 43
+
+---
+
+🏁 Script executed:
+
+```shell
+# Look at the useBrowserDetach.ts file structure
+cat -n apps/web/src/features/browser/hooks/useBrowserDetach.ts
+```
+
+Repository: zvadaadam/box-ide
+
+Length of output: 3679
+
+---
+
+🏁 Script executed:
+
+```shell
+# Search for how other event listeners are defined in the codebase
+rg "native\.events\.on\(" --type ts --type tsx -B1 -A1 | head -50
+```
+
+Repository: zvadaadam/box-ide
+
+Length of output: 88
+
+---
+
+🏁 Script executed:
+
+```shell
+# Find shared/events file and examine it
+fd -e ts "events" | grep shared
+```
+
+Repository: zvadaadam/box-ide
+
+Length of output: 170
+
+---
+
+🏁 Script executed:
+
+```shell
+# Search for BROWSER_WORKSPACE_CHANGE definition
+rg -n "BROWSER_WORKSPACE_CHANGE" -A5 -B1
+```
+
+Repository: zvadaadam/box-ide
+
+Length of output: 6397
+
+---
+
+🏁 Script executed:
+
+```shell
+# Search for native.events type definitions
+fd -e ts -path "*/platform/*" | head -20
+```
+
+Repository: zvadaadam/box-ide
+
+Length of output: 229
+
+---
+
+🏁 Script executed:
+
+```shell
+# Look at how native.events.on and .send are used elsewhere
+rg "native\.events\.(on|send)" -A2 -B1 | head -80
+```
+
+Repository: zvadaadam/box-ide
+
+Length of output: 5428
+
+---
+
+🏁 Script executed:
+
+```shell
+# Check the full shared/events.ts to see all events and patterns
+head -100 shared/events.ts
+```
+
+Repository: zvadaadam/box-ide
+
+Length of output: 4025
+
+---
+
+🏁 Script executed:
+
+```shell
+# Search for where "browser:detached-closed" is emitted/sent from
+rg "browser:detached-closed|browser-detached" --no-heading -B2 -A2
+```
+
+Repository: zvadaadam/box-ide
+
+Length of output: 4169
+
+---
+
+🏁 Script executed:
+
+```shell
+# Check the native.events module type definitions
+fd "platform" -type d
+```
+
+Repository: zvadaadam/box-ide
+
+Length of output: 231
+
+---
+
+🏁 Script executed:
+
+```shell
+# Look for where the detached window close event is sent (likely in backend/preload)
+rg "detached.*close|close.*detached" -i
+```
+
+Repository: zvadaadam/box-ide
+
+Length of output: 1742
+
+---
+
+</details>
+
+**Add `BROWSER_DETACHED_CLOSED` to the shared event catalog.**
+
+The `"browser:detached-closed" as any` cast on line 78 works around a missing type definition. This event is emitted by the Electron main process (apps/desktop/main/browser-views.ts) and appears in the preload whitelist, but unlike other browser events (BROWSER_PAGE_LOAD, BROWSER_URL_CHANGE, etc.), it's not defined in the `shared/events.ts` catalog.
+
+Add the event constant and schema to `shared/events.ts`:
+
+```diff
+export const BROWSER_WORKSPACE_CHANGE = "browser-window:workspace-change" as const;
++export const BROWSER_DETACHED_CLOSED = "browser:detached-closed" as const;
+
+export const SIM_BUILD_LOG = "sim:build-log" as const;
+```
+
+Then update the listener:
+
+```diff
+-import { BROWSER_WORKSPACE_CHANGE } from "@shared/events";
++import { BROWSER_WORKSPACE_CHANGE, BROWSER_DETACHED_CLOSED } from "@shared/events";
+ // ...
+-    const unlisten = native.events.on("browser:detached-closed" as any, () => {
++    const unlisten = native.events.on(BROWSER_DETACHED_CLOSED, () => {
+```
+
+Also add the corresponding payload schema in `shared/events.ts` (likely `z.void()` or minimal schema matching the emit site).
+
+<details>
+<summary>🤖 Prompt for AI Agents</summary>
+
+```
+Verify each finding against the current code and only fix it if needed.
+
+In `@apps/web/src/features/browser/hooks/useBrowserDetach.ts` around lines 77 -
+82, Add a new BROWSER_DETACHED_CLOSED event and schema to the shared event
+catalog and use that constant in the listener: in shared/events.ts define and
+export a BROWSER_DETACHED_CLOSED constant and add its payload schema (use
+z.void() or minimal matching the emitter) to the event map/registry so the event
+is typed, then update the listener in useBrowserDetach.ts to call
+native.events.on(BROWSER_DETACHED_CLOSED, ...) instead of the string cast; keep
+the handler calling browserWindowActions.clearDetachedWindow() unchanged.
+```
+
+</details>
+
+<!-- fingerprinting:phantom:medusa:ocelot -->
+
+<!-- This is an auto-generated comment by CodeRabbit -->"
+
+Comment metadata:
+This comment was left on the modified branch.
+This comment was left on GitHub by @coderabbitai.
+This comment is the start of thread PRRT_kwDOQEbULc51yQaT. 
+
+
+Comment #4:
+
+File: apps/web/src/platform/native/browser-views.ts
+Line: 122
+User comment: "_⚠️ Potential issue_ | _🟡 Minor_
+
+**Inconsistent error handling for `syncCookies` and `injectCookies`.**
+
+`getUrl` (line 90-97) and `getCookieBrowsers` (line 99-106) wrap their `invoke` calls in try/catch with safe fallbacks, but `syncCookies` and `injectCookies` do not. If the IPC call fails, these functions will throw and potentially crash the caller.
+
+
+<details>
+<summary>🛡️ Proposed fix to add consistent error handling</summary>
+
+```diff
+ export async function syncCookies(
+   browserName: string,
+   domain: string
+ ): Promise<unknown[]> {
+   if (!capabilities.nativeBrowser) return [];
+-  return (await invoke<unknown[]>("sync_browser_cookies", { browserName, domain })) ?? [];
++  try {
++    return (await invoke<unknown[]>("sync_browser_cookies", { browserName, domain })) ?? [];
++  } catch {
++    return [];
++  }
+ }
+
+ export async function injectCookies(
+   label: string,
+   cookies: unknown[]
+ ): Promise<number> {
+   if (!capabilities.nativeBrowser) return 0;
+-  return (await invoke<number>("inject_browser_cookies", { label, cookies })) ?? 0;
++  try {
++    return (await invoke<number>("inject_browser_cookies", { label, cookies })) ?? 0;
++  } catch {
++    return 0;
++  }
+ }
+```
+</details>
+
+<details>
+<summary>🤖 Prompt for AI Agents</summary>
+
+```
+Verify each finding against the current code and only fix it if needed.
+
+In `@apps/web/src/platform/native/browser-views.ts` around lines 108 - 122, Wrap
+the invoke calls in syncCookies and injectCookies with try/catch like getUrl and
+getCookieBrowsers do: check capabilities.nativeBrowser early, then try invoking
+"sync_browser_cookies" and "inject_browser_cookies" respectively, returning safe
+fallbacks (empty array for syncCookies, 0 for injectCookies) on error and
+logging the caught error; reference the functions syncCookies, injectCookies,
+the invoke helper, and capabilities.nativeBrowser to locate the code to change.
+```
+
+</details>
+
+<!-- fingerprinting:phantom:poseidon:ocelot -->
+
+<!-- This is an auto-generated comment by CodeRabbit -->"
+
+Comment metadata:
+This comment was left on the modified branch.
+This comment was left on GitHub by @coderabbitai.
+This comment is the start of thread PRRT_kwDOQEbULc51yQaY. 
+
+
+Comment #5:
+
+File: electron.vite.config.ts
+Line: 32
+User comment: "_⚠️ Potential issue_ | _🟡 Minor_
+
+**Add NaN guard for parsed port.**
+
+If the port file contains non-numeric content (corruption, race condition during write), `parseInt` returns `NaN`, which would be serialized as `{"port":null}` in JSON.
+
+
+<details>
+<summary>🛡️ Proposed fix</summary>
+
+```diff
+           if (existsSync(portFile)) {
+             const port = readFileSync(portFile, "utf-8").trim();
++            const portNum = parseInt(port, 10);
++            if (isNaN(portNum)) {
++              res.statusCode = 503;
++              res.end(JSON.stringify({ error: "Invalid port in file" }));
++              return;
++            }
+             res.setHeader("Content-Type", "application/json");
+             res.setHeader("Access-Control-Allow-Origin", "*");
+-            res.end(JSON.stringify({ port: parseInt(port, 10) }));
++            res.end(JSON.stringify({ port: portNum }));
+             return;
+           }
+```
+</details>
+
+<!-- suggestion_start -->
+
+<details>
+<summary>📝 Committable suggestion</summary>
+
+> ‼️ **IMPORTANT**
+> Carefully review the code before committing. Ensure that it accurately replaces the highlighted code, contains no missing lines, and has no issues with indentation. Thoroughly test & benchmark the code to ensure it meets the requirements.
+
+```suggestion
+          try {
+            if (existsSync(portFile)) {
+              const port = readFileSync(portFile, "utf-8").trim();
+              const portNum = parseInt(port, 10);
+              if (isNaN(portNum)) {
+                res.statusCode = 503;
+                res.end(JSON.stringify({ error: "Invalid port in file" }));
+                return;
+              }
+              res.setHeader("Content-Type", "application/json");
+              res.setHeader("Access-Control-Allow-Origin", "*");
+              res.end(JSON.stringify({ port: portNum }));
+              return;
+```
+
+</details>
+
+<!-- suggestion_end -->
+
+<details>
+<summary>🤖 Prompt for AI Agents</summary>
+
+```
+Verify each finding against the current code and only fix it if needed.
+
+In `@electron.vite.config.ts` around lines 26 - 32, When reading portFile in the
+try block (uses existsSync and readFileSync) you currently pass parseInt(port,
+10) directly to JSON which can produce null for NaN; update the handler to parse
+and validate the port (e.g., const parsed = Number.parseInt(port, 10); check
+Number.isFinite(parsed) and that parsed is within 1–65535) and if invalid return
+a proper error response (set appropriate status like 400 and a JSON error
+message) or omit the port field rather than emitting null. Ensure you reference
+the same portFile/res flow so the check occurs before
+res.end(JSON.stringify(...)).
+```
+
+</details>
+
+<!-- fingerprinting:phantom:medusa:ocelot -->
+
+<!-- This is an auto-generated comment by CodeRabbit -->"
+
+Comment metadata:
+This comment was left on the modified branch.
+This comment was left on GitHub by @coderabbitai.
+This comment is the start of thread PRRT_kwDOQEbULc51yQac. 
+
+</system-instruction>
+
+I run AI code review, is it actionable? Wdyt? Explore in depth each problem.
+
+We want a clean, maintainable codebase, with proper best practices for the tech stack we use.
+
+Run subagents to verify, and if it should be fixed, try to merge some stuff together so it can be fixed together within one subagent. 
+
+If you can test something do it.
