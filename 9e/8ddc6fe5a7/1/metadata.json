@@ -1,0 +1,49 @@
+{
+  "cli_version": "0.5.0",
+  "checkpoint_id": "9e8ddc6fe5a7",
+  "session_id": "c176c825-839f-4408-89c9-99e4f297bc76",
+  "strategy": "manual-commit",
+  "created_at": "2026-03-20T19:53:59.159729Z",
+  "branch": "zvadaadam/workspace-status",
+  "checkpoints_count": 0,
+  "files_touched": [
+    "apps/web/src/platform/analytics/events.ts",
+    "apps/backend/src/routes/workspaces.pr.ts",
+    "apps/backend/src/routes/workspaces.ts",
+    "apps/web/src/features/sidebar/lib/status.ts",
+    "apps/web/src/features/workspace/api/workspace.service.ts",
+    "apps/web/src/features/workspace/lib/workspace.utils.ts",
+    "apps/web/src/global.css",
+    "apps/backend/src/lib/schemas.ts",
+    "apps/web/src/features/sidebar/ui/WorkspaceItem.stories.tsx",
+    "apps/web/src/features/workspace/types.ts",
+    "shared/enums.ts",
+    "apps/backend/src/db/queries.ts",
+    "apps/backend/src/services/workspace-status.service.ts",
+    "shared/events.ts",
+    "shared/schema.ts",
+    "shared/types/workspace.ts",
+    "apps/backend/src/db/types.ts",
+    "apps/backend/src/services/query-engine.ts",
+    "apps/backend/test/unit/shared/events.test.ts",
+    "apps/web/src/features/workspace/api/workspace.queries.ts"
+  ],
+  "agent": "Claude Code",
+  "turn_id": "686f41c05149",
+  "token_usage": {
+    "input_tokens": 9,
+    "cache_creation_tokens": 37420,
+    "cache_read_tokens": 228512,
+    "output_tokens": 942,
+    "api_call_count": 7
+  },
+  "initial_attribution": {
+    "calculated_at": "2026-03-20T19:53:59.116579Z",
+    "agent_lines": 248,
+    "human_added": 0,
+    "human_modified": 0,
+    "human_removed": 0,
+    "total_committed": 248,
+    "agent_percentage": 100
+  }
+}

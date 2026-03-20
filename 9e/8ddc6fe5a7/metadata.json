@@ -11,6 +11,7 @@
     "apps/backend/src/routes/workspaces.pr.ts",
     "apps/backend/src/routes/workspaces.ts",
     "apps/backend/src/services/query-engine.ts",
+    "apps/backend/src/services/workspace-status.service.ts",
     "apps/backend/test/unit/shared/events.test.ts",
     "apps/web/src/features/sidebar/lib/status.ts",
     "apps/web/src/features/sidebar/ui/WorkspaceItem.stories.tsx",
@@ -18,6 +19,7 @@
     "apps/web/src/features/workspace/api/workspace.service.ts",
     "apps/web/src/features/workspace/lib/workspace.utils.ts",
     "apps/web/src/features/workspace/types.ts",
+    "apps/web/src/global.css",
     "apps/web/src/platform/analytics/events.ts",
     "shared/enums.ts",
     "shared/events.ts",
@@ -30,13 +32,19 @@
       "transcript": "/9e/8ddc6fe5a7/0/full.jsonl",
       "content_hash": "/9e/8ddc6fe5a7/0/content_hash.txt",
       "prompt": "/9e/8ddc6fe5a7/0/prompt.txt"
+    },
+    {
+      "metadata": "/9e/8ddc6fe5a7/1/metadata.json",
+      "transcript": "/9e/8ddc6fe5a7/1/full.jsonl",
+      "content_hash": "/9e/8ddc6fe5a7/1/content_hash.txt",
+      "prompt": "/9e/8ddc6fe5a7/1/prompt.txt"
     }
   ],
   "token_usage": {
-    "input_tokens": 14,
-    "cache_creation_tokens": 44096,
-    "cache_read_tokens": 318716,
-    "output_tokens": 6988,
-    "api_call_count": 8
+    "input_tokens": 23,
+    "cache_creation_tokens": 81516,
+    "cache_read_tokens": 547228,
+    "output_tokens": 7930,
+    "api_call_count": 15
   }
 }
