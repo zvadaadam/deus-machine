@@ -12,7 +12,7 @@
  * The main process uses electron-updater to handle the actual update flow.
  */
 import { useState, useEffect, useRef, useCallback } from "react";
-import { isElectronEnv } from "@/platform/electron";
+import { capabilities } from "@/platform/capabilities";
 import { getErrorMessage } from "@shared/lib/errors";
 
 export type UpdateStage = "idle" | "checking" | "downloading" | "ready" | "error";
@@ -46,7 +46,7 @@ export function useAutoUpdate(): UseAutoUpdateReturn {
 
   // Listen for update state changes from the main process
   useEffect(() => {
-    if (!isElectronEnv) return;
+    if (!capabilities.autoUpdate) return;
 
     const unlisten = window.electronAPI!.onUpdateState((updateState: unknown) => {
       const s = updateState as {
@@ -69,7 +69,7 @@ export function useAutoUpdate(): UseAutoUpdateReturn {
   }, []);
 
   const check = useCallback(async (): Promise<boolean> => {
-    if (!isElectronEnv) return true;
+    if (!capabilities.autoUpdate) return true;
 
     setState((prev) => ({ ...prev, stage: "checking" }));
 
@@ -114,7 +114,7 @@ export function useAutoUpdate(): UseAutoUpdateReturn {
   }, []);
 
   const install = useCallback(async () => {
-    if (!isElectronEnv) return;
+    if (!capabilities.autoUpdate) return;
     try {
       localStorage.removeItem(PENDING_VERSION_KEY);
       await window.electronAPI!.installUpdate();
@@ -125,7 +125,7 @@ export function useAutoUpdate(): UseAutoUpdateReturn {
 
   // Auto-check on mount + interval (skip in DEV and non-Electron)
   useEffect(() => {
-    if (!isElectronEnv || import.meta.env.DEV) return;
+    if (!capabilities.autoUpdate || import.meta.env.DEV) return;
 
     // Initial check
     void check().catch(console.error);

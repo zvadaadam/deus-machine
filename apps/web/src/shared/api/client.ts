@@ -10,7 +10,6 @@ import { getBaseURL } from "../config/api.config";
 import { getStoredToken, needsRemoteAuth } from "@/features/auth";
 import type { ApiError } from "../types";
 
-/** Request timeout in milliseconds. */
 const REQUEST_TIMEOUT = 30_000;
 
 class ApiClient {

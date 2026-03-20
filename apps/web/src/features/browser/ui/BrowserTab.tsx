@@ -28,14 +28,8 @@ import {
 import { match } from "ts-pattern";
 import { Button } from "@/components/ui/button";
 import { AlertCircle, Loader2, Globe } from "lucide-react";
-import {
-  invoke,
-  listen,
-  createListenerGroup,
-  BROWSER_PAGE_LOAD,
-  BROWSER_TITLE_CHANGED,
-  BROWSER_URL_CHANGE,
-} from "@/platform/electron";
+import { native } from "@/platform";
+import { BROWSER_PAGE_LOAD, BROWSER_TITLE_CHANGED, BROWSER_URL_CHANGE } from "@shared/events";
 import { getErrorMessage } from "@shared/lib/errors";
 import type { BrowserTabState, BrowserTabHandle, ConsoleLog, ElementSelectedEvent } from "../types";
 import { deriveTitleFromUrl } from "../types";
@@ -138,7 +132,7 @@ export const BrowserTab = forwardRef<BrowserTabHandle, BrowserTabProps>(function
 
       const rect = el.getBoundingClientRect();
       try {
-        await invoke("create_browser_webview", {
+        await native.browserViews.create({
           label: webviewLabel,
           url,
           x: rect.x,
@@ -150,14 +144,14 @@ export const BrowserTab = forwardRef<BrowserTabHandle, BrowserTabProps>(function
 
         // Guard: component may have unmounted during await
         if (!mountedRef.current) {
-          invoke("close_browser_webview", { label: webviewLabel }).catch(() => {});
+          native.browserViews.close(webviewLabel).catch(() => {});
           return;
         }
 
         setWebviewReady(true);
 
         // Start hidden — will show after first page load completes
-        invoke("hide_browser_webview", { label: webviewLabel }).catch(() => {});
+        native.browserViews.hide(webviewLabel).catch(() => {});
 
         onAddLog(tabId, "info", `Native webview created: ${webviewLabel}`);
       } catch (err) {
@@ -176,7 +170,7 @@ export const BrowserTab = forwardRef<BrowserTabHandle, BrowserTabProps>(function
     const label = webviewLabel;
     return () => {
       if (webviewCreatedRef.current) {
-        invoke("close_browser_webview", { label }).catch(() => {});
+        native.browserViews.close(label).catch(() => {});
         webviewCreatedRef.current = false;
       }
     };
@@ -207,20 +201,20 @@ export const BrowserTab = forwardRef<BrowserTabHandle, BrowserTabProps>(function
       const el = placeholderRef.current;
       if (el) {
         const rect = el.getBoundingClientRect();
-        invoke("set_browser_webview_bounds", {
-          label: webviewLabel,
-          x: rect.x,
-          y: rect.y,
-          width: rect.width,
-          height: rect.height,
-        })
-          .then(() => invoke("show_browser_webview", { label: webviewLabel }))
+        native.browserViews
+          .setBounds(webviewLabel, {
+            x: rect.x,
+            y: rect.y,
+            width: rect.width,
+            height: rect.height,
+          })
+          .then(() => native.browserViews.show(webviewLabel))
           .catch(() => {});
       } else {
-        invoke("show_browser_webview", { label: webviewLabel }).catch(() => {});
+        native.browserViews.show(webviewLabel).catch(() => {});
       }
     } else {
-      invoke("hide_browser_webview", { label: webviewLabel }).catch(() => {});
+      native.browserViews.hide(webviewLabel).catch(() => {});
     }
   }, [visible, webviewReady, hasLoaded, webviewLabel]);
 
@@ -236,13 +230,14 @@ export const BrowserTab = forwardRef<BrowserTabHandle, BrowserTabProps>(function
       rafRef.current = requestAnimationFrame(() => {
         const rect = el.getBoundingClientRect();
         if (rect.width === 0 || rect.height === 0) return;
-        invoke("set_browser_webview_bounds", {
-          label: webviewLabel,
-          x: rect.x,
-          y: rect.y,
-          width: rect.width,
-          height: rect.height,
-        }).catch(() => {});
+        native.browserViews
+          .setBounds(webviewLabel, {
+            x: rect.x,
+            y: rect.y,
+            width: rect.width,
+            height: rect.height,
+          })
+          .catch(() => {});
       });
     };
 
@@ -284,7 +279,7 @@ export const BrowserTab = forwardRef<BrowserTabHandle, BrowserTabProps>(function
     if (!el || !webviewCreatedRef.current) return;
 
     // Hide so the stale-position webview isn't visible during the transition.
-    invoke("hide_browser_webview", { label: webviewLabel }).catch(() => {});
+    native.browserViews.hide(webviewLabel).catch(() => {});
 
     // getBoundingClientRect() forces synchronous reflow — reads the post-toggle
     // layout including mx-auto centering offsets. No rAF needed because React
@@ -292,25 +287,25 @@ export const BrowserTab = forwardRef<BrowserTabHandle, BrowserTabProps>(function
     const rect = el.getBoundingClientRect();
     if (rect.width === 0 || rect.height === 0) return;
 
-    invoke("set_browser_webview_bounds", {
-      label: webviewLabel,
-      x: rect.x,
-      y: rect.y,
-      width: rect.width,
-      height: rect.height,
-    })
-      .then(() => invoke("show_browser_webview", { label: webviewLabel }))
+    native.browserViews
+      .setBounds(webviewLabel, {
+        x: rect.x,
+        y: rect.y,
+        width: rect.width,
+        height: rect.height,
+      })
+      .then(() => native.browserViews.show(webviewLabel))
       .catch(() => {});
   }, [mobileView, visible, webviewReady, hasLoaded, webviewLabel]);
 
   // --- IPC event listeners (page load, title, SPA nav) ---
   useEffect(() => {
-    const listeners = createListenerGroup();
+    const unlistenFns: Array<() => void> = [];
 
     // Page load events
-    listeners.register(
-      listen(BROWSER_PAGE_LOAD, (evt) => {
-        const { label, url, event: eventType } = evt.payload;
+    unlistenFns.push(
+      native.events.on(BROWSER_PAGE_LOAD, (data) => {
+        const { label, url, event: eventType } = data;
         if (label !== webviewLabel) return;
 
         if (eventType === "started") {
@@ -333,18 +328,18 @@ export const BrowserTab = forwardRef<BrowserTabHandle, BrowserTabProps>(function
     );
 
     // Title change events (regular, non-opendevs title changes)
-    listeners.register(
-      listen(BROWSER_TITLE_CHANGED, (evt) => {
-        const { label, title } = evt.payload;
+    unlistenFns.push(
+      native.events.on(BROWSER_TITLE_CHANGED, (data) => {
+        const { label, title } = data;
         if (label !== webviewLabel) return;
         onUpdateTab(tabId, { title });
       })
     );
 
     // SPA navigation events (pushState/replaceState detected by init script)
-    listeners.register(
-      listen(BROWSER_URL_CHANGE, (evt) => {
-        const { label, url } = evt.payload;
+    unlistenFns.push(
+      native.events.on(BROWSER_URL_CHANGE, (data) => {
+        const { label, url } = data;
         if (label !== webviewLabel) return;
         // Update URL bar and current URL, derive new title
         onUpdateTab(tabId, {
@@ -364,7 +359,7 @@ export const BrowserTab = forwardRef<BrowserTabHandle, BrowserTabProps>(function
     // (BROWSER_INIT_SCRIPT's SPA nav + inspect script) racing on document.title,
     // causing silent message loss via WKWebView's title-change coalescing.
 
-    return () => listeners.cleanup();
+    return () => unlistenFns.forEach((fn) => fn());
   }, [webviewLabel, tabId, onUpdateTab, onAddLog]);
 
   // --- Periodic console drain (only when visible and webview ready) ---
@@ -395,11 +390,11 @@ export const BrowserTab = forwardRef<BrowserTabHandle, BrowserTabProps>(function
       if (inFlight) return;
       inFlight = true;
       try {
-        const result = await invoke<string>("eval_browser_webview_with_result", {
-          label: webviewLabel,
-          js: CONSOLE_DRAIN_JS,
-          timeoutMs: 2000,
-        });
+        const result = await native.browserViews.evaluateWithResult(
+          webviewLabel,
+          CONSOLE_DRAIN_JS,
+          2000
+        );
         // Reset on success
         consoleDrainFails = 0;
 
@@ -463,11 +458,11 @@ export const BrowserTab = forwardRef<BrowserTabHandle, BrowserTabProps>(function
       if (inFlight) return;
       inFlight = true;
       try {
-        const result = await invoke<string>("eval_browser_webview_with_result", {
-          label: webviewLabel,
-          js: INSPECT_MODE_DRAIN_EVENTS,
-          timeoutMs: 2000,
-        });
+        const result = await native.browserViews.evaluateWithResult(
+          webviewLabel,
+          INSPECT_MODE_DRAIN_EVENTS,
+          2000
+        );
         // Reset fail counter on success
         failCount = 0;
 
@@ -538,7 +533,7 @@ export const BrowserTab = forwardRef<BrowserTabHandle, BrowserTabProps>(function
       } else {
         // Webview exists — navigate it
         try {
-          await invoke("navigate_browser_webview", { label: webviewLabel, url });
+          await native.browserViews.navigate(webviewLabel, url);
         } catch (err) {
           onAddLog(tabId, "error", `Navigation failed: ${err}`);
         }
@@ -549,7 +544,7 @@ export const BrowserTab = forwardRef<BrowserTabHandle, BrowserTabProps>(function
 
   const reload = useCallback(() => {
     if (!webviewCreatedRef.current) return;
-    invoke("reload_browser_webview", { label: webviewLabel }).catch((err) => {
+    native.browserViews.reload(webviewLabel).catch((err) => {
       onAddLog(tabId, "error", `Reload failed: ${err}`);
     });
   }, [webviewLabel, tabId, onAddLog]);
@@ -566,18 +561,19 @@ export const BrowserTab = forwardRef<BrowserTabHandle, BrowserTabProps>(function
 
     try {
       // Inject browser utils, visual effects, and inspect mode via native eval
-      await invoke("eval_browser_webview", { label: webviewLabel, js: BROWSER_UTILS_SETUP });
-      await invoke("eval_browser_webview", { label: webviewLabel, js: INSPECT_MODE_SETUP });
-      await invoke("eval_browser_webview", { label: webviewLabel, js: VISUAL_EFFECTS_SETUP });
+      await native.browserViews.evaluate(webviewLabel, BROWSER_UTILS_SETUP);
+      await native.browserViews.evaluate(webviewLabel, INSPECT_MODE_SETUP);
+      await native.browserViews.evaluate(webviewLabel, VISUAL_EFFECTS_SETUP);
 
       // Wait a tick for the IIFEs to execute, then verify inspect mode
       await new Promise((r) => setTimeout(r, 100));
       try {
-        const verifyResult = await invoke<string>("eval_browser_webview_with_result", {
-          label: webviewLabel,
-          js: INSPECT_MODE_VERIFY,
-          timeoutMs: 3000,
-        });
+        const verifyResult = await native.browserViews.evaluateWithResult(
+          webviewLabel,
+          INSPECT_MODE_VERIFY,
+          3000
+        );
+        if (!verifyResult) return;
         const status = JSON.parse(verifyResult);
         if (!status.opendevsInspect || !status.hasDrainEvents) {
           onAddLog(tabId, "error", `Inspect mode setup incomplete: ${JSON.stringify(status)}`);
@@ -618,11 +614,7 @@ export const BrowserTab = forwardRef<BrowserTabHandle, BrowserTabProps>(function
     // JS errors. The ENABLE/DISABLE IIFEs don't return a value (undefined),
     // but any thrown error will be reported via the completion handler.
     try {
-      await invoke<string>("eval_browser_webview_with_result", {
-        label: webviewLabel,
-        js,
-        timeoutMs: 3000,
-      });
+      await native.browserViews.evaluateWithResult(webviewLabel, js, 3000);
       onAddLog(tabId, "info", enabling ? "Inspect mode activated" : "Inspect mode deactivated");
       onUpdateTab(tabId, { selectorActive: enabling });
     } catch (err) {
@@ -635,13 +627,14 @@ export const BrowserTab = forwardRef<BrowserTabHandle, BrowserTabProps>(function
     if (!el || !webviewCreatedRef.current) return;
     const rect = el.getBoundingClientRect();
     if (rect.width === 0 || rect.height === 0) return;
-    invoke("set_browser_webview_bounds", {
-      label: webviewLabel,
-      x: rect.x,
-      y: rect.y,
-      width: rect.width,
-      height: rect.height,
-    }).catch(() => {});
+    native.browserViews
+      .setBounds(webviewLabel, {
+        x: rect.x,
+        y: rect.y,
+        width: rect.width,
+        height: rect.height,
+      })
+      .catch(() => {});
   }, [webviewLabel]);
 
   useImperativeHandle(

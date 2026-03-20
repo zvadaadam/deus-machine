@@ -13,7 +13,7 @@ import { Toaster } from "@/components/ui/sonner";
 import { OnboardingOverlay } from "@/features/onboarding";
 import { useSettings } from "@/features/settings";
 import { useAuth, PairGatePage } from "@/features/auth";
-import { invoke, isElectronEnv } from "@/platform/electron";
+import { native, capabilities } from "@/platform";
 import { initNotifications } from "@/platform/notifications";
 import { useGlobalSessionNotifications } from "@/features/session/hooks/useGlobalSessionNotifications";
 import { useWorkspaceInitEvents } from "@/features/workspace/hooks/useWorkspaceInitEvents";
@@ -112,7 +112,7 @@ function AppContent({ reset }: { reset: () => void }) {
       return;
     }
     if (windowShownRef.current) return;
-    if (isElectronEnv) invoke("show_main_window").catch(console.error);
+    native.window.show().catch(console.error);
     windowShownRef.current = true;
   }, [settingsQuery.isLoading, showOnboarding]);
 
@@ -123,16 +123,14 @@ function AppContent({ reset }: { reset: () => void }) {
   // While settings load, render nothing — window is hidden anyway
   if (settingsQuery.isLoading) return null;
 
-  // Backend unreachable — show error instead of white screen.
-  // This happens when opening localhost:1420 in Chrome during `bun run dev`
-  // (Electron mode) without VITE_BACKEND_PORT, or when the backend crashed.
+  // Backend unreachable — show error instead of white screen
   if (settingsQuery.isError && !settingsQuery.data) {
     return (
       <div className="bg-background flex h-screen items-center justify-center">
         <div className="max-w-md space-y-4 text-center">
           <h1 className="text-foreground text-xl font-semibold">Cannot connect to backend</h1>
           <p className="text-muted-foreground text-sm">
-            {isElectronEnv
+            {capabilities.windowLifecycle
               ? "The backend server failed to start. Check the terminal for errors."
               : "Run `bun run dev:web` for browser development, or use the Electron desktop app (`bun run dev`)."}
           </p>
@@ -193,12 +191,12 @@ const WINDOW_SHOW_TIMEOUT_MS = 5_000;
 function useWindowShowSafetyNet() {
   const shownRef = useRef(false);
   useEffect(() => {
-    if (shownRef.current || !isElectronEnv) return;
+    if (shownRef.current || !capabilities.windowLifecycle) return;
     const timer = setTimeout(() => {
       if (!shownRef.current) {
         shownRef.current = true;
         console.warn("[App] Safety net: force-showing window after timeout");
-        invoke("show_main_window").catch(console.error);
+        native.window.show().catch(console.error);
       }
     }, WINDOW_SHOW_TIMEOUT_MS);
     return () => clearTimeout(timer);

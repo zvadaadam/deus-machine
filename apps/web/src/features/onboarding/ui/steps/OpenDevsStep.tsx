@@ -1,7 +1,7 @@
 import { useCallback } from "react";
 import { toast } from "sonner";
 import { Github, Loader2 } from "lucide-react";
-import { invoke } from "@/platform/electron";
+import { native } from "@/platform";
 import { getBackendUrl } from "@/shared/config/api.config";
 import { getErrorMessage } from "@shared/lib/errors";
 import { RepoService } from "@/features/repository/api/repository.service";
@@ -51,7 +51,7 @@ function isAlreadyClonedError(message: string): boolean {
  */
 async function cloneAndRegisterInBackground() {
   try {
-    const home = await invoke<string>("native:homeDir");
+    const home = await native.dialog.getHomeDir();
     const target = `${home}/Developer/${REPO.name}`;
 
     // Phase 1: Clone (or detect already-cloned)

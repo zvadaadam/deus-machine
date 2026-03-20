@@ -3,14 +3,14 @@
 // Stores and validates device tokens in localStorage.
 
 import { useState, useEffect, useCallback } from "react";
-import { isElectronEnv } from "@/platform/electron";
+import { capabilities } from "@/platform/capabilities";
 
 const TOKEN_KEY = "opendevs_device_token";
 const DEVICE_NAME_KEY = "opendevs_device_name";
 
 /** Whether this browser session needs remote auth (non-Electron + non-localhost). */
 export function needsRemoteAuth(): boolean {
-  if (isElectronEnv) return false;
+  if (capabilities.ipcInvoke) return false;
   const host = window.location.hostname;
   return host !== "localhost" && host !== "127.0.0.1" && host !== "::1";
 }

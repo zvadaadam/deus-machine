@@ -11,14 +11,8 @@
 
 import { useState, useEffect } from "react";
 import { BrowserPanel } from "./BrowserPanel";
-import {
-  emit,
-  invoke,
-  isElectronEnv,
-  listen,
-  BROWSER_WORKSPACE_CHANGE,
-  CHAT_INSERT,
-} from "@/platform/electron";
+import { native } from "@/platform";
+import { BROWSER_WORKSPACE_CHANGE, CHAT_INSERT } from "@shared/events";
 import type { DetachedBrowserWorkspaceContext } from "@/features/browser/store";
 import {
   useChatInsertStore,
@@ -53,14 +47,12 @@ export function DetachedBrowserWindow() {
   const workspaceId = workspaceContext?.workspaceId ?? null;
 
   useEffect(() => {
-    if (!isElectronEnv) return;
-
     const unsubscribe = useChatInsertStore.subscribe((state, prevState) => {
       if (!state.pending || state.pending === prevState.pending) return;
 
       const payload = state.pending;
       void serializeChatInsertPayload(payload)
-        .then((serialized) => emit(CHAT_INSERT, serialized))
+        .then((serialized) => native.events.send(CHAT_INSERT, serialized))
         .catch((error) => {
           console.error("[DetachedBrowserWindow] Failed to bridge chat insert:", error);
         })
@@ -74,25 +66,22 @@ export function DetachedBrowserWindow() {
 
   // Listen for workspace changes from the main window
   useEffect(() => {
-    const unlistenPromise = listen(BROWSER_WORKSPACE_CHANGE, (event) => {
+    const unlisten = native.events.on(BROWSER_WORKSPACE_CHANGE, (data) => {
       setWorkspaceContext((prev) => ({
-        workspaceId: event.payload.workspaceId,
-        directoryName: event.payload.directoryName ?? prev?.directoryName ?? null,
-        repoName: event.payload.repoName ?? prev?.repoName ?? null,
-        branch: event.payload.branch ?? prev?.branch ?? null,
+        workspaceId: data.workspaceId,
+        directoryName: data.directoryName ?? prev?.directoryName ?? null,
+        repoName: data.repoName ?? prev?.repoName ?? null,
+        branch: data.branch ?? prev?.branch ?? null,
       }));
     });
 
-    return () => {
-      unlistenPromise.then((unlisten) => unlisten());
-    };
+    return unlisten;
   }, []);
 
   // Keep detached window title in sync with workspace context.
   useEffect(() => {
-    if (!isElectronEnv) return;
     const nextTitle = buildWindowTitle(workspaceContext);
-    invoke("native:setTitle", { title: nextTitle }).catch(() => {});
+    native.window.setTitle(nextTitle).catch(() => {});
   }, [workspaceContext]);
 
   const primaryTitle = workspaceContext?.directoryName ?? "Workspace";

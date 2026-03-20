@@ -1,26 +1,14 @@
 import { useEffect } from "react";
-import { isElectronEnv } from "@/platform/electron/invoke";
+import { capabilities } from "@/platform/capabilities";
 
 /**
- * Electron window drag zone — CSS-only approach.
- *
- * Adds the `.electron` class to `<html>` when running inside Electron.
- * Components use this to conditionally apply drag regions via CSS:
- *
- *   <div className="drag-region ...">  ← draggable in Electron, normal in browser
- *     <button>Click me</button>        ← auto no-drag via CSS descendant rule
- *   </div>
- *
- * The CSS rules are injected into <head> so they work with any component.
- * Interactive elements (buttons, inputs, links, tabs) are automatically
- * excluded from drag via `-webkit-app-region: no-drag`.
- *
- * NO overlay div. NO z-index hacks. NO pointer-events manipulation.
- * This is how OpenDevs, Cursor, and other Electron apps handle it.
+ * Adds `.electron` class to `<html>` and injects CSS-only drag region rules.
+ * Components opt in with `className="drag-region"`. Interactive descendants
+ * (buttons, inputs, links, tabs) are automatically excluded.
  */
 export function useWindowDragZone() {
   useEffect(() => {
-    if (!isElectronEnv) return;
+    if (!capabilities.nativeWindowChrome) return;
 
     document.documentElement.classList.add("electron");
 

@@ -1,31 +1,13 @@
 import { apiClient } from "@/shared/api/client";
-import { invoke, isElectronEnv } from "@/platform/electron";
-import type { CliCheckResult, GhAuthResult, RecentProject } from "../types";
+import { native } from "@/platform";
+import type { RecentProject } from "../types";
 
 export const OnboardingService = {
   /** Check if a CLI tool is installed. Returns safe default on failure or in web mode. */
-  async checkCliTool(name: string): Promise<CliCheckResult> {
-    if (!isElectronEnv) {
-      return { installed: false, path: null, webMode: true };
-    }
-    try {
-      return await invoke<CliCheckResult>("check_cli_tool", { name });
-    } catch {
-      return { installed: false, path: null };
-    }
-  },
+  checkCliTool: native.cli.checkCliTool,
 
   /** Check GitHub CLI auth status. Returns unauthenticated on failure or in web mode. */
-  async checkGhAuth(): Promise<GhAuthResult> {
-    if (!isElectronEnv) {
-      return { authenticated: false, username: null };
-    }
-    try {
-      return await invoke<GhAuthResult>("check_gh_auth");
-    } catch {
-      return { authenticated: false, username: null };
-    }
-  },
+  checkGhAuth: native.cli.checkGhAuth,
 
   /** Fetch recent projects from Cursor, VS Code, and Claude directories. */
   async fetchRecentProjects(): Promise<{ projects: RecentProject[] }> {

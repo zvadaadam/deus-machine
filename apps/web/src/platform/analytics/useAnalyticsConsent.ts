@@ -7,7 +7,7 @@
 import { useEffect, useRef } from "react";
 import { useSettings } from "@/features/settings";
 import { setAnalyticsEnabled, identifyUser, track } from "./track";
-import { isElectronEnv } from "@/platform/electron";
+import { capabilities } from "@/platform/capabilities";
 
 export function useAnalyticsConsent(): void {
   const { data: settings } = useSettings();
@@ -31,7 +31,7 @@ export function useAnalyticsConsent(): void {
 
       // Track app launch once per app lifecycle (guard prevents re-fire
       // if user toggles analytics off then back on)
-      if (!appLaunchTracked.current && isElectronEnv) {
+      if (!appLaunchTracked.current && capabilities.ipcInvoke) {
         appLaunchTracked.current = true;
         // In Electron, get version via the preload bridge
         window
