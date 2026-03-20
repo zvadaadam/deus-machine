@@ -145,19 +145,19 @@ useQuerySubscription("workspaces", {
 - `PROTOCOL_EVENTS` — typed ephemeral event names
 - `AGENT_EVENT_NAMES` — canonical agent-server event types (12 events: session._, message._, tool._, interaction._)
 
-### Tauri Events (streaming/control only)
+### Electron IPC Events (streaming/control only)
 
-Tauri events are used only for streaming I/O and control signals — NOT for data subscriptions:
+Electron IPC events are used for streaming I/O and control signals — NOT for data subscriptions:
 
 ```ts
-import { listen, WORKSPACE_PROGRESS, createListenerGroup } from "@/platform/tauri";
+import { listen, WORKSPACE_PROGRESS, createListenerGroup } from "@/platform/electron";
 
 const listeners = createListenerGroup();
 listeners.register(listen(WORKSPACE_PROGRESS, (e) => e.payload.workspaceId));
 return () => listeners.cleanup();
 ```
 
-**Active Tauri events:** `workspace:progress`, `fs:changed`, `pty-data`, `pty-exit`, `browser:*`, `chat-insert`, `git-clone-progress`. All defined in `shared/events.ts` with Zod schemas for runtime validation.
+**Active IPC events:** `workspace:progress`, `fs:changed`, `pty-data`, `pty-exit`, `browser:*`, `chat-insert`, `git-clone-progress`. All defined in `shared/events.ts` with Zod schemas for runtime validation.
 
 ## Database: Standalone OpenDevs Database
 
@@ -177,43 +177,14 @@ Our app owns its own SQLite database:
 - `sessions.last_user_message_at` is maintained by app code — use it instead of correlated subqueries
 - `sessions.workspace_id`, `sessions.agent_type`, `sessions.title`, etc. are available for multi-session support
 - Only the backend writes to the DB — the agent-server is stateless (no DB access)
-- Rust passes `DATABASE_PATH` env var to the backend process only
+- Electron main process passes `DATABASE_PATH` env var to the backend child process
 
-## Rust vs Node.js Boundary
+## Electron Main vs Node.js Backend Boundary
 
-- **Rust (Tauri commands):** Stateless pure functions. System-level ops. Performance-critical hot paths. File I/O, git operations, process management, terminal I/O.
-- **Node.js (Hono backend):** Business logic. Database reads/writes (repos, workspaces, all messages). Config management. External services (GitHub API via gh CLI). Agent event persistence and tool relay coordination.
+- **Electron Main Process:** Thin desktop shell. Window lifecycle, native OS dialogs, BrowserView management, auto-updater, process lifecycle (spawns backend + sidecar). No business logic.
+- **Node.js (Hono backend):** All business logic. Database reads/writes (repos, workspaces, all messages). Config management. External services (GitHub API via gh CLI). Agent event persistence, tool relay coordination, PTY management, file watching.
 - **Node.js (Agent-Server / sidecar):** Stateless agent SDK wrapper. Claude/Codex SDK integration. Canonical event emission. No DB access — streams events to backend via WebSocket.
-- **Rule of thumb:** If it takes `(path, params) → data` with no database, it belongs in Rust. If it needs to read/write DB or coordinate async workflows, it stays in Node.js backend. If it wraps an agent SDK and emits events, it goes in the agent-server.
-
-### Moving the Read Layer to Rust (Long-Term Direction)
-
-This app is data-heavy: tens of repos, hundreds of workspaces, multiple concurrent agent sessions streaming in real-time. Routing every read through `Frontend → HTTP → Node.js → SQLite → HTTP → Frontend` adds per-request latency that compounds at scale. The long-term direction is to **move most DB reads to typed Rust Tauri commands** accessed via direct IPC, while Node.js stays focused on orchestration-heavy writes and external service coordination.
-
-```
-Frontend → Tauri IPC → Rust (typed query) → SQLite    ← reads (fast, direct)
-Frontend → HTTP REST → Node.js → SQLite                ← writes + orchestration
-```
-
-**What belongs in Rust (reads):**
-
-- Workspace status, session state, message fetching — anything the UI polls or renders frequently
-- List queries (all workspaces, all sessions for a workspace, recent messages)
-- Any read where the HTTP round-trip is noticeable
-
-**What stays in Node.js (writes + orchestration):**
-
-- Multi-step operations (create workspace = DB insert + git worktree + state transitions)
-- Operations that coordinate with external services (GitHub API)
-- Complex writes that involve business logic validation across multiple tables
-- User message saving + forwarding turn/start to agent-server
-
-**Implementation rules:**
-
-- All Rust queries use typed structs and `sqlx::query_as!` — never raw SQL strings from the frontend
-- The frontend calls `invoke("get_workspace_status", { id })`, never constructs SQL
-- Rust commands are stateless reads: `(params) → data`. No business logic, no multi-step coordination
-- Node.js keeps its service layer for anything that needs orchestration
+- **Rule of thumb:** If it needs a native Electron API (BrowserWindow, dialog, shell), it belongs in the main process. Everything else belongs in the backend or sidecar.
 
 ## Electron Main Process (apps/desktop/)
 
@@ -322,7 +293,7 @@ This runs `./dev.sh` which starts:
 bun run dev
 ```
 
-This runs everything: Vite + Backend + Tauri desktop app.
+This runs everything: Vite + Backend + Electron desktop app.
 
 ## ❌ NEVER DO THIS
 
@@ -714,7 +685,7 @@ src/
 │   └── components/      ← Cross-feature reusable compositions
 ├── features/
 │   └── {feature}/ui/    ← Feature-scoped components (default)
-└── platform/            ← Platform abstraction (Tauri IPC, socket)
+└── platform/            ← Platform abstraction (Electron IPC, socket)
 ```
 
 #### Real Examples from This Project
@@ -885,7 +856,7 @@ Never fix a spacing issue by only reading the file where the element is rendered
 ```typescript
 // ✅ GOOD - Document in the code:
 /**
- * Event Flow: Backend → Unix Socket → Sidecar → Rust → Tauri Events → Frontend
+ * Event Flow: Backend → WebSocket → Sidecar → Backend → WS Push → Frontend
  * We use Unix socket instead of HTTP SSE because:
  * - Infrastructure already existed (sidecar communication)
  * - No HTTP overhead for desktop app
@@ -914,8 +885,8 @@ At 50 repos / 200+ workspaces / 10 active sessions, steady-state load is minimal
 | WS push | `useStats` (q:snapshot on any change)            | WebSocket                             |
 | WS push | `useSession` (q:snapshot on status change)       | WebSocket                             |
 | WS push | `useMessages` (q:delta cursor-based)             | WebSocket                             |
-| 5s      | `useDiffStats` per working workspace             | HTTP/Tauri IPC                        |
-| 5s      | `useFileChanges` per working workspace           | HTTP/Tauri IPC                        |
+| 5s      | `useDiffStats` per working workspace             | HTTP                                  |
+| 5s      | `useFileChanges` per working workspace           | HTTP                                  |
 
 The only pollers are conditional git diff queries (only when sessions are "working"). All other data arrives via WebSocket push with no polling.
 
@@ -1010,17 +981,15 @@ Git polling can dwarf DB time when scaled across many workspaces. Treat git call
 - Cache diff/file-change results with a short TTL (5-10s) and reuse across components.
 - Cap concurrent git subprocesses and queue excess work to prevent CPU spikes and I/O contention.
 
-### Read-Layer Migration Priority
+### Read-Layer Optimization Priority
 
-When moving reads from Node.js HTTP to Rust Tauri IPC (see "Moving the Read Layer to Rust" above), prioritize by query weight and frequency:
+All reads go through the Node.js backend via HTTP/WebSocket. When optimizing, prioritize by query weight:
 
-1. **First**: `GET /workspaces/by-repo` — heaviest query (N+1 + joins), event-invalidated but still benefits from IPC speed
-2. **Second**: `GET /stats` — consolidated count query, event-invalidated
-3. **Third**: `GET /sessions/:id` — event-invalidated, frequently fetched for active sessions
-4. **Fourth**: `GET /sessions/:id/messages` — event-invalidated, paginated
+1. **First**: `GET /workspaces/by-repo` — heaviest query (joins across repos + workspaces + sessions)
+2. **Second**: `GET /stats` — consolidated count query
+3. **Third**: `GET /sessions/:id` — frequently fetched for active sessions
+4. **Fourth**: `GET /sessions/:id/messages` — paginated, cursor-based
 5. **Later**: On-demand reads (repos, settings, config, PR status)
-
-Each migration should also fix the underlying query (add indexes, eliminate N+1, add pagination) — moving a bad query to Rust just makes it a faster bad query.
 
 ## AVOID AT ALL COST
 

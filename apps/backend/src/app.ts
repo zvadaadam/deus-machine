@@ -22,7 +22,8 @@ import statsRoutes from "./routes/stats";
 import onboardingRoutes from "./routes/onboarding";
 import authRoutes from "./routes/remote-auth";
 import filesRoutes from "./routes/files";
-import sidecarRoutes from "./routes/sidecar";
+// Legacy sidecar HTTP relay routes removed — all agent communication
+// now goes through WebSocket AgentClient (services/agent/client.ts)
 
 export function createApp() {
   const app = new Hono();
@@ -49,7 +50,7 @@ export function createApp() {
   app.route("/api", settingsRoutes);
   app.route("/api", statsRoutes);
   app.route("/api", filesRoutes);
-  app.route("/api", sidecarRoutes);
+  // Legacy sidecar HTTP routes removed (replaced by WS AgentClient)
   app.route("/api", onboardingRoutes);
 
   // Relay status endpoint

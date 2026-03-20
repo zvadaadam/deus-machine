@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   // Event name constants
+  BACKEND_PORT_CHANGED,
   WORKSPACE_PROGRESS,
   FS_CHANGED,
   PTY_DATA,
@@ -31,6 +32,7 @@ import {
 describe("shared/events", () => {
   describe("AppEventSchemaMap completeness", () => {
     const ALL_EVENT_NAMES = [
+      BACKEND_PORT_CHANGED,
       WORKSPACE_PROGRESS,
       FS_CHANGED,
       PTY_DATA,
@@ -197,7 +199,16 @@ describe("shared/events", () => {
     it("COMMAND_NAMES contains the expected commands", () => {
       expect(COMMAND_NAMES).toContain("sendMessage");
       expect(COMMAND_NAMES).toContain("stopSession");
-      expect(COMMAND_NAMES).toHaveLength(2);
+      expect(COMMAND_NAMES).toContain("pty:spawn");
+      expect(COMMAND_NAMES).toContain("pty:write");
+      expect(COMMAND_NAMES).toContain("pty:resize");
+      expect(COMMAND_NAMES).toContain("pty:kill");
+      expect(COMMAND_NAMES).toContain("fs:watch");
+      expect(COMMAND_NAMES).toContain("fs:unwatch");
+      expect(COMMAND_NAMES).toContain("browser-server:start");
+      expect(COMMAND_NAMES).toContain("browser-server:stop");
+      expect(COMMAND_NAMES).toContain("git:clone");
+      expect(COMMAND_NAMES).toHaveLength(11);
     });
 
     it("PROTOCOL_EVENTS contains the expected events", () => {
@@ -205,7 +216,12 @@ describe("shared/events", () => {
       expect(PROTOCOL_EVENTS).toContain("session:error");
       expect(PROTOCOL_EVENTS).toContain("session:progress");
       expect(PROTOCOL_EVENTS).toContain("tool:request");
-      expect(PROTOCOL_EVENTS).toHaveLength(4);
+      expect(PROTOCOL_EVENTS).toContain("pty-data");
+      expect(PROTOCOL_EVENTS).toContain("pty-exit");
+      expect(PROTOCOL_EVENTS).toContain("fs:changed");
+      expect(PROTOCOL_EVENTS).toContain("git-clone-progress");
+      expect(PROTOCOL_EVENTS).toContain("sidecar:request");
+      expect(PROTOCOL_EVENTS).toHaveLength(9);
     });
   });
 });
