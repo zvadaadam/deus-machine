@@ -49,7 +49,11 @@ export function FileViewer({ workspaceId, filePath, onClose }: FileViewerProps) 
   const language = filePath ? detectLanguageFromPath(filePath) : "text";
 
   // Fetch file content via backend HTTP
-  const { data: content, isLoading: isContentLoading, error } = useFileContent(workspaceId, filePath);
+  const {
+    data: content,
+    isLoading: isContentLoading,
+    error,
+  } = useFileContent(workspaceId, filePath);
 
   // Highlight entire file at once (single Shiki call instead of per-line)
   const { data: highlightedLines, isLoading: isHighlighting } = useQuery({
