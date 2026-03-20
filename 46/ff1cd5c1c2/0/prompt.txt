@@ -111,3 +111,60 @@ The user has attached these files. Read them before proceeding.
 
 
 Create a PR
+
+---
+
+I run AI code review, is it actionable? Wdyt? Explore in depth each problem.
+
+We want a clean, maintainable codebase, with proper best practices for the tech stack we use.
+
+Run subagents to verify, and if it should be fixed, try to merge some stuff together so it can be fixed together within one subagent. 
+
+If you can test something do it.
+
+----
+
+No DiffComment tool available. I'll provide the review results directly.
+
+---
+
+## Review: Workspace Status Feature
+
+**Branch:** `zvadaadam/workspace-status` (no PR yet, all changes uncommitted)
+**Summary:** Adds Linear-style workflow states (`backlog`/`in-progress`/`in-review`/`done`/`canceled`) to workspaces. Includes schema migration, backend status service with auto-progression logic, frontend mutation hook with optimistic updates, CSS tokens for status colors, and analytics tracking. Well-structured change with clean separation between auto-progression (`autoProgressStatus`) and explicit user override (`setWorkspaceStatus`).
+
+**19 files changed, +204 / -14 lines**
+
+---
+
+### Validated Issues
+
+### **#1 Stats query adds 3 more separate COUNT subqueries instead of consolidating**
+
+Lines 407-409 of `apps/backend/src/db/queries.ts` add 3 new `SELECT COUNT(*) FROM workspaces WHERE status = ...` subqueries to `getStats()`, bringing the total from 8 to 11 separate full-table scans in one query. CLAUDE.md explicitly addresses this:
+
+> "Consolidate count queries -- GET /stats currently runs 8 separate COUNT(*) full table scans. Aggregate queries should combine into a single query where possible, and results should be cached with short TTL (5-10s) for frequently polled endpoints."
+
+While the existing 8 subqueries are pre-existing, the 3 **new** ones are introduced code that worsens the violation. These three status counts could be consolidated with the existing workspace counts into a single table scan using conditional aggregation:
+
+```sql
+-- Instead of 6 separate subqueries on `workspaces`, use one:
+SELECT
+  COUNT(*) as workspaces,
+  COUNT(CASE WHEN state = 'ready' THEN 1 END) as workspaces_ready,
+  COUNT(CASE WHEN state = 'archived' THEN 1 END) as workspaces_archived,
+  COUNT(CASE WHEN status = 'backlog' AND state != 'archived' THEN 1 END) as workspaces_backlog,
+  COUNT(CASE WHEN status = 'in-progress' AND state != 'archived' THEN 1 END) as workspaces_in_progress,
+  COUNT(CASE WHEN status = 'in-review' AND state != 'archived' THEN 1 END) as workspaces_in_review
+FROM workspaces
+```
+
+The 5s TTL cache mitigates the performance impact, but new code should follow the stated consolidation rule.
+
+**File:** `apps/backend/src/db/queries.ts:407-409`
+
+---
+
+### Filtered (False Positives)
+
+- **WS mutation vs HTTP mismatch:** `updateWorkspaceStatus` uses HTTP PATCH from the frontend despite being in `MUTATION_NAMES`. Filtered because all existing mutations (`archiveWorkspace`, `updateWorkspaceTitle`) follow the same HTTP pattern -- the WS mutation path is unused across the board. This is a pre-existing architectural inconsistency, not a new violation.
