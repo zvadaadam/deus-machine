@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from "react";
-import { invoke } from "@/platform/electron";
+import { invoke, isElectronEnv } from "@/platform/electron";
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
@@ -33,12 +33,16 @@ export function OpenInDropdown({ workspacePath, iconOnly = false }: OpenInDropdo
   const isHoveringRef = useRef(false);
 
   useEffect(() => {
+    if (!isElectronEnv) {
+      setLoading(false);
+      return;
+    }
     async function loadInstalledApps() {
       try {
         const apps = await invoke<InstalledApp[]>("get_installed_apps");
         setInstalledApps(apps);
-      } catch (error) {
-        console.error("Failed to load installed apps:", error);
+      } catch {
+        // Expected in non-Electron environments
       } finally {
         setLoading(false);
       }
