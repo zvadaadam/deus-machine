@@ -12,7 +12,7 @@
 
 import { spawn, type ChildProcess } from "child_process";
 import { join } from "path";
-import { existsSync } from "fs";
+import { existsSync, writeFileSync } from "fs";
 import { app, BrowserWindow } from "electron";
 import crypto from "crypto";
 
@@ -91,7 +91,20 @@ export async function spawnBackend(): Promise<{ port: number; authToken: string 
         if (portMatch && !resolved) {
           resolved = true;
           restartAttempt = 0;
-          resolve({ port: parseInt(portMatch[1], 10), authToken });
+          const port = parseInt(portMatch[1], 10);
+
+          // Write port to temp file so Chrome tabs (without electronAPI) can discover it.
+          // The Vite dev server serves this via middleware in electron.vite.config.ts.
+          if (!app.isPackaged) {
+            try {
+              const portFile = join(app.getPath("temp"), "opendevs-backend-port");
+              writeFileSync(portFile, String(port));
+            } catch {
+              // Non-critical — only used for Chrome tab port discovery
+            }
+          }
+
+          resolve({ port, authToken });
         }
 
         // Relay workspace init progress events to the renderer.
