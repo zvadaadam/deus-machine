@@ -1,0 +1,35 @@
+{
+  "cli_version": "0.5.0",
+  "checkpoint_id": "524d1462c0c0",
+  "session_id": "8aa0f1c1-b25d-47c5-aab7-bbbe2fb1fd94",
+  "strategy": "manual-commit",
+  "created_at": "2026-03-20T18:38:22.990317Z",
+  "branch": "zvadaadam/review-columbus-v4",
+  "checkpoints_count": 2,
+  "files_touched": [
+    "apps/web/src/features/browser/automation/useBrowserRpcHandler.ts",
+    "electron.vite.config.ts",
+    "shared/events.ts"
+  ],
+  "agent": "Claude Code",
+  "turn_id": "a4ba63b1b4c4",
+  "token_usage": {
+    "input_tokens": 13610,
+    "cache_creation_tokens": 5773426,
+    "cache_read_tokens": 511513196,
+    "output_tokens": 414553,
+    "api_call_count": 1541
+  },
+  "session_metrics": {
+    "turn_count": 116
+  },
+  "initial_attribution": {
+    "calculated_at": "2026-03-20T18:38:17.208241Z",
+    "agent_lines": 6,
+    "human_added": 21,
+    "human_modified": 5,
+    "human_removed": 0,
+    "total_committed": 32,
+    "agent_percentage": 18.75
+  }
+}
