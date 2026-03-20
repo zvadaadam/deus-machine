@@ -1,0 +1,28 @@
+{
+  "cli_version": "0.5.0",
+  "checkpoint_id": "727d9f543f18",
+  "strategy": "manual-commit",
+  "branch": "zvadaadam/explore-manus-app",
+  "checkpoints_count": 0,
+  "files_touched": [
+    "apps/desktop/main/browser-views.ts",
+    "apps/sidecar/test/e2e.test.ts",
+    "apps/web/src/app/layouts/RightSidePanel.tsx",
+    "apps/web/src/features/simulator/api/simulator.service.ts"
+  ],
+  "sessions": [
+    {
+      "metadata": "/72/7d9f543f18/0/metadata.json",
+      "transcript": "/72/7d9f543f18/0/full.jsonl",
+      "content_hash": "/72/7d9f543f18/0/content_hash.txt",
+      "prompt": "/72/7d9f543f18/0/prompt.txt"
+    }
+  ],
+  "token_usage": {
+    "input_tokens": 3,
+    "cache_creation_tokens": 25721,
+    "cache_read_tokens": 8992,
+    "output_tokens": 1185,
+    "api_call_count": 1
+  }
+}
