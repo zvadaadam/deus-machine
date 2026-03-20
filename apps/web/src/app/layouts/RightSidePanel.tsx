@@ -22,6 +22,7 @@ import { AgentConfigPanel } from "@/features/agent-config/ui/AgentConfigPanel";
 import { DesignPanel } from "@/features/workspace/ui/DesignPanel";
 import { BrowserPanel } from "@/features/browser";
 import { SimulatorPanel } from "@/features/simulator";
+import { capabilities } from "@/platform/capabilities";
 import { BrowserDetachedPlaceholder } from "@/features/browser/ui/BrowserDetachedPlaceholder";
 import { useBrowserDetach } from "@/features/browser/hooks/useBrowserDetach";
 import { cn } from "@/shared/lib/utils";
@@ -190,16 +191,18 @@ export function RightSidePanel({
 
       {activeTab === "design" && <DesignPanel workspaceId={workspace.id} />}
 
-      {/* Simulator panel: always mounted so useSimulatorRpcHandler stays active
-          for agent-driven SimulatorStart/ListDevices calls (same pattern as BrowserPanel). */}
-      <div
-        className={cn(
-          "h-full w-full",
-          activeTab !== "simulator" && "pointer-events-none invisible absolute"
-        )}
-      >
-        <SimulatorPanel workspaceId={workspace.id} workspacePath={workspace.workspace_path} />
-      </div>
+      {/* Simulator panel: only mounted when capability is available.
+          Currently disabled — IPC handlers not migrated from Tauri. */}
+      {capabilities.nativeSimulator && (
+        <div
+          className={cn(
+            "h-full w-full",
+            activeTab !== "simulator" && "pointer-events-none invisible absolute"
+          )}
+        >
+          <SimulatorPanel workspaceId={workspace.id} workspacePath={workspace.workspace_path} />
+        </div>
+      )}
     </div>
   );
 }
