@@ -112,10 +112,9 @@ export const WorkspaceService = {
   /**
    * Archive a workspace
    */
-  archive: async (id: string): Promise<Workspace> => {
-    const result = await sendMutate<Workspace>("archiveWorkspace", { workspaceId: id });
+  archive: async (id: string): Promise<void> => {
+    const result = await sendMutate("archiveWorkspace", { workspaceId: id });
     if (!result.success) throw new Error(result.error || "Failed to archive workspace");
-    return result.data as unknown as Workspace;
   },
 
   /**
@@ -195,6 +194,8 @@ export const WorkspaceService = {
    * Run a task -- returns PTY spawn info
    */
   runTask: async (id: string, taskName: string): Promise<TaskRunResponse> => {
-    return sendRequest<TaskRunResponse>("taskRunInfo", { workspaceId: id, taskName });
+    const result = await sendMutate<TaskRunResponse>("runTask", { workspaceId: id, taskName });
+    if (!result.success) throw new Error(result.error || "Failed to run task");
+    return result.data!;
   },
 };

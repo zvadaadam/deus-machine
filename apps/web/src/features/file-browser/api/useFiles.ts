@@ -35,7 +35,8 @@ export function useFiles(workspaceId: string | null) {
  * Invalidate file cache for a workspace via q:mutate
  */
 export async function invalidateFileCache(workspaceId: string): Promise<void> {
-  await sendMutate("invalidateFileCache", { workspaceId });
+  const result = await sendMutate("invalidateFileCache", { workspaceId });
+  if (!result.success) throw new Error(result.error || "Failed to invalidate file cache");
 }
 
 /**

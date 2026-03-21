@@ -76,7 +76,6 @@ export const REQUEST_RESOURCES = [
   "allWorkspaces",
   "workspaceManifest",
   "setupLogs",
-  "taskRunInfo",
   "diffStats",
   "diffFiles",
   "diffFile",
@@ -104,6 +103,7 @@ export const MUTATION_NAMES = [
   "deleteAgentConfig",
   "saveSetting",
   "invalidateFileCache",
+  "runTask",
   "revokeDevice",
 ] as const;
 export type MutationName = (typeof MUTATION_NAMES)[number];
