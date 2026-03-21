@@ -1,0 +1,33 @@
+{
+  "cli_version": "0.5.0",
+  "checkpoint_id": "9561e8d4e56e",
+  "session_id": "af4e71c9-b07a-428c-b1cc-b2b1609de22f",
+  "strategy": "manual-commit",
+  "created_at": "2026-03-21T21:01:42.02916Z",
+  "branch": "zvadaadam/explore-web-routing",
+  "checkpoints_count": 3,
+  "files_touched": [
+    "apps/desktop/main/backend-process.ts"
+  ],
+  "agent": "Claude Code",
+  "turn_id": "2cbe88d09323",
+  "token_usage": {
+    "input_tokens": 512,
+    "cache_creation_tokens": 2277534,
+    "cache_read_tokens": 73456831,
+    "output_tokens": 159668,
+    "api_call_count": 346
+  },
+  "session_metrics": {
+    "turn_count": 43
+  },
+  "initial_attribution": {
+    "calculated_at": "2026-03-21T21:01:39.652158Z",
+    "agent_lines": 5,
+    "human_added": 0,
+    "human_modified": 0,
+    "human_removed": 0,
+    "total_committed": 5,
+    "agent_percentage": 100
+  }
+}
