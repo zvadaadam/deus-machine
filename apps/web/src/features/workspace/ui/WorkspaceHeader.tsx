@@ -25,8 +25,12 @@ import { native } from "@/platform";
 import type { InstalledApp } from "@/platform";
 import { track } from "@/platform/analytics";
 import type { SetupStatus } from "@/shared/types";
+import type { WorkspaceStatus } from "@shared/enums";
 import type { NormalizedTask } from "../api/workspace.service";
 import { TaskStrip } from "./TaskStrip";
+import { WorkflowStatusIcon } from "@/features/sidebar/ui/WorkflowStatusIcon";
+import { WorkspaceStatusMenu } from "@/features/sidebar/ui/WorkspaceStatusMenu";
+import { WORKFLOW_STATUS_CONFIG } from "@/features/sidebar/lib/status";
 import { AppIcon, groupAppsByCategory } from "@/shared/lib/appIcons";
 import { fixSetupErrorPrompt, GENERATE_HIVE_JSON } from "@/features/session/lib/sessionPrompts";
 
@@ -40,6 +44,8 @@ interface WorkspaceHeaderProps {
   onSendAgentMessage?: (text: string) => void;
   onRetrySetup?: () => void;
   onViewSetupLogs?: () => void;
+  workspaceStatus?: WorkspaceStatus;
+  onStatusChange?: (status: WorkspaceStatus) => void;
   tasks?: NormalizedTask[];
   hasManifest?: boolean;
   onRunTask?: (taskName: string) => void;
@@ -61,6 +67,8 @@ export function WorkspaceHeader({
   onSendAgentMessage,
   onRetrySetup,
   onViewSetupLogs,
+  workspaceStatus,
+  onStatusChange,
   tasks,
   hasManifest,
   onRunTask,
@@ -111,6 +119,24 @@ export function WorkspaceHeader({
           >
             {subtitle}
           </span>
+        )}
+
+        {workspaceStatus && onStatusChange && (
+          <>
+            <span className="text-border-strong mx-0.5 text-sm">|</span>
+            <WorkspaceStatusMenu
+              currentStatus={workspaceStatus}
+              onStatusChange={onStatusChange}
+            >
+              <button
+                type="button"
+                className="text-text-muted hover:text-text-secondary flex items-center gap-1 rounded-lg px-1 py-0.5 text-sm transition-colors duration-200"
+              >
+                <WorkflowStatusIcon status={workspaceStatus} size={12} />
+                <span className="text-xs">{WORKFLOW_STATUS_CONFIG[workspaceStatus].label}</span>
+              </button>
+            </WorkspaceStatusMenu>
+          </>
         )}
 
         {setupStatus === "running" && (
