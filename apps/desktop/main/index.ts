@@ -82,11 +82,10 @@ async function createWindow(): Promise<void> {
 
   // Forward renderer console to main process stdout (dev only — avoid leaking PII in prod logs)
   if (!app.isPackaged) {
-    mainWindow.webContents.on("console-message", (event) => {
-      const { level, message, lineNumber, sourceId } = event;
+    mainWindow.webContents.on("console-message", (_event, level, message, line, sourceId) => {
       const prefix =
         level === 2 ? "[renderer:warn]" : level === 3 ? "[renderer:error]" : "[renderer]";
-      const source = sourceId ? ` (${sourceId.split("/").pop()}:${lineNumber})` : "";
+      const source = sourceId ? ` (${sourceId.split("/").pop()}:${line})` : "";
       console.log(`${prefix} ${message}${source}`);
     });
   }
