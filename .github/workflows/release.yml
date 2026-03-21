@@ -51,6 +51,7 @@ jobs:
           token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Ensure release runs from main
+        if: ${{ inputs.dry_run == false }}
         run: |
           if [[ "${{ github.ref_name }}" != "main" ]]; then
             echo "::error::Release must be triggered from main branch, got: ${{ github.ref_name }}"
@@ -67,7 +68,7 @@ jobs:
             exit 1
           fi
           TAG="v${VERSION}"
-          if git rev-parse "$TAG" >/dev/null 2>&1; then
+          if [[ "${{ inputs.dry_run }}" != "true" ]] && git rev-parse "$TAG" >/dev/null 2>&1; then
             echo "::error::Tag $TAG already exists"
             exit 1
           fi
