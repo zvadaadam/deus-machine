@@ -1,0 +1,35 @@
+{
+  "cli_version": "0.5.0",
+  "checkpoint_id": "c0e6862edccd",
+  "session_id": "fa2fd57b-3fa6-4122-8051-a52f45fb1763",
+  "strategy": "manual-commit",
+  "created_at": "2026-03-21T22:04:44.838322Z",
+  "branch": "zvadaadam/workspace-status",
+  "checkpoints_count": 2,
+  "files_touched": [
+    "apps/web/src/features/browser/automation/dist-inject/browser-utils.js",
+    "apps/web/src/features/browser/automation/dist-inject/inspect-mode.js",
+    "apps/web/src/features/browser/automation/dist-inject/visual-effects.js"
+  ],
+  "agent": "Claude Code",
+  "turn_id": "3fd12f929514",
+  "token_usage": {
+    "input_tokens": 244,
+    "cache_creation_tokens": 431945,
+    "cache_read_tokens": 26875625,
+    "output_tokens": 46998,
+    "api_call_count": 193
+  },
+  "session_metrics": {
+    "turn_count": 23
+  },
+  "initial_attribution": {
+    "calculated_at": "2026-03-21T22:04:44.271335Z",
+    "agent_lines": 1797,
+    "human_added": 5129,
+    "human_modified": 0,
+    "human_removed": 0,
+    "total_committed": 6926,
+    "agent_percentage": 25.945711810568874
+  }
+}

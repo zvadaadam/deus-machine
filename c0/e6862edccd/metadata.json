@@ -1,0 +1,27 @@
+{
+  "cli_version": "0.5.0",
+  "checkpoint_id": "c0e6862edccd",
+  "strategy": "manual-commit",
+  "branch": "zvadaadam/workspace-status",
+  "checkpoints_count": 2,
+  "files_touched": [
+    "apps/web/src/features/browser/automation/dist-inject/browser-utils.js",
+    "apps/web/src/features/browser/automation/dist-inject/inspect-mode.js",
+    "apps/web/src/features/browser/automation/dist-inject/visual-effects.js"
+  ],
+  "sessions": [
+    {
+      "metadata": "/c0/e6862edccd/0/metadata.json",
+      "transcript": "/c0/e6862edccd/0/full.jsonl",
+      "content_hash": "/c0/e6862edccd/0/content_hash.txt",
+      "prompt": "/c0/e6862edccd/0/prompt.txt"
+    }
+  ],
+  "token_usage": {
+    "input_tokens": 244,
+    "cache_creation_tokens": 431945,
+    "cache_read_tokens": 26875625,
+    "output_tokens": 46998,
+    "api_call_count": 193
+  }
+}
