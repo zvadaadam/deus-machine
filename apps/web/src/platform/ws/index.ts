@@ -9,6 +9,7 @@ export {
   isConnected,
   sendCommand,
   sendToolResponse,
+  sendHttpRequest,
   onEvent,
   onConnectionChange,
 } from "./query-protocol-client";

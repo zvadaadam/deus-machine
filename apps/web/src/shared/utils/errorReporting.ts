@@ -1,3 +1,4 @@
+import type { ErrorInfo } from "react";
 import * as Sentry from "@sentry/react";
 import { track } from "@/platform/analytics";
 type ErrorContext = {
@@ -59,4 +60,16 @@ export function reportError(error: unknown, context: ErrorContext = {}): Error {
   });
 
   return normalized;
+}
+
+/** Shared error handler for React error boundaries -- reports + stores component stack. */
+export function createBoundaryErrorHandler(source: string) {
+  return (error: unknown, info: ErrorInfo) => {
+    reportError(error, {
+      source,
+      extra: { componentStack: info.componentStack ?? undefined },
+    });
+    (window as { __APP_LAST_COMPONENT_STACK__?: string }).__APP_LAST_COMPONENT_STACK__ =
+      info.componentStack ?? undefined;
+  };
 }

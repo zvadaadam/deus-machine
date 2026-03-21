@@ -365,14 +365,14 @@ export function AccessSection({ settings, saveSetting }: SettingsSectionProps) {
   const devices = devicesQuery.data ?? [];
 
   // Derive web app URL from relay WebSocket URL
-  // wss://relay.rundeus.com -> https://app.rundeus.com/server/{serverId}
+  // wss://relay.rundeus.com -> https://app.rundeus.com/connect/{serverId}
   const accessUrl = (() => {
     if (!relayStatus?.relayUrl || !relayStatus.serverId) return null;
     try {
       const url = new URL(relayStatus.relayUrl);
       const host = url.hostname;
       const domain = host.replace(/^relay\./, "app.");
-      return `https://${domain}/server/${relayStatus.serverId}`;
+      return `https://${domain}/connect/${relayStatus.serverId}`;
     } catch {
       return null;
     }
