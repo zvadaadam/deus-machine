@@ -46,7 +46,7 @@ function pairViaRelay(
   deviceName: string
 ): Promise<{ token: string }> {
   return new Promise((resolve, reject) => {
-    const url = `${RELAY_BASE_URL}/api/servers/${serverId}/pair`;
+    const url = `${RELAY_BASE_URL}/api/servers/${encodeURIComponent(serverId)}/pair`;
     const ws = new WebSocket(url);
     const timeout = setTimeout(() => {
       ws.close();
