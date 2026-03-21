@@ -1,0 +1,33 @@
+{
+  "cli_version": "0.5.0",
+  "checkpoint_id": "a190d084da0a",
+  "session_id": "591fb013-4d05-4ee4-bb04-3bbca0f4c102",
+  "strategy": "manual-commit",
+  "created_at": "2026-03-21T21:25:58.086408Z",
+  "branch": "zvadaadam/explore-agent-browser",
+  "checkpoints_count": 1,
+  "files_touched": [
+    "apps/desktop/main/index.ts"
+  ],
+  "agent": "Claude Code",
+  "turn_id": "22061a4b90e7",
+  "token_usage": {
+    "input_tokens": 3070,
+    "cache_creation_tokens": 920635,
+    "cache_read_tokens": 54339550,
+    "output_tokens": 133380,
+    "api_call_count": 366
+  },
+  "session_metrics": {
+    "turn_count": 38
+  },
+  "initial_attribution": {
+    "calculated_at": "2026-03-21T21:25:56.225859Z",
+    "agent_lines": 0,
+    "human_added": 0,
+    "human_modified": 2,
+    "human_removed": 1,
+    "total_committed": 0,
+    "agent_percentage": 0
+  }
+}
