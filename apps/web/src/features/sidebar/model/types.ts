@@ -4,6 +4,7 @@
  */
 
 import type { Workspace, DiffStats, RepoGroup } from "@/shared/types";
+import type { WorkspaceStatus } from "@shared/enums";
 
 /**
  * Main AppSidebar component props
@@ -17,6 +18,7 @@ export interface AppSidebarProps {
   onAddRepository?: () => void;
   onCloneRepository?: () => void;
   onArchive?: (workspaceId: string) => void;
+  onStatusChange?: (workspaceId: string, status: WorkspaceStatus) => void;
   profile?: {
     username: string;
     email?: string;
@@ -35,6 +37,7 @@ export interface RepositoryItemProps {
   onWorkspaceClick: (workspace: Workspace) => void;
   onNewWorkspace: (repoId?: string) => void;
   onArchive?: (workspaceId: string) => void;
+  onStatusChange?: (workspaceId: string, status: WorkspaceStatus) => void;
   // Avoid mounting workspace list when sidebar is offcanvas-collapsed.
   sidebarExpanded: boolean;
 }
@@ -48,6 +51,7 @@ export interface WorkspaceItemProps {
   diffStats?: DiffStats;
   onClick: (workspace: Workspace) => void;
   onArchive?: (workspaceId: string) => void;
+  onStatusChange?: (workspaceId: string, status: WorkspaceStatus) => void;
 }
 
 /**

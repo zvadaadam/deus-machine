@@ -19,6 +19,7 @@ export function createOptimisticWorkspace(repoId: string, repoName: string): Wor
     git_branch: null,
     git_target_branch: null,
     state: "initializing",
+    status: "in-progress",
     current_session_id: null,
     session_status: null,
     model: null,

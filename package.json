@@ -6,7 +6,7 @@
   "type": "module",
   "main": "./out/main/index.js",
   "scripts": {
-    "dev": "electron-vite dev",
+    "dev": "([ -f apps/sidecar/dist/index.bundled.cjs ] || bun run build:sidecar) && electron-vite dev",
     "dev:web": "./scripts/dev.sh",
     "dev:frontend": "vite --config apps/web/vite.config.ts",
     "dev:backend": "node apps/backend/server.cjs",
