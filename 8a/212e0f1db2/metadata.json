@@ -1,0 +1,48 @@
+{
+  "cli_version": "0.5.0",
+  "checkpoint_id": "8a212e0f1db2",
+  "strategy": "manual-commit",
+  "branch": "zvadaadam/explore-web-routing",
+  "checkpoints_count": 1,
+  "files_touched": [
+    "apps/backend/src/server.ts",
+    "apps/backend/src/services/agent/commands.ts",
+    "apps/backend/src/services/query-engine.ts",
+    "apps/backend/src/services/route-delegate.ts",
+    "apps/backend/src/services/ws.service.ts",
+    "apps/backend/test/unit/shared/events.test.ts",
+    "apps/web/src/features/agent-config/api/agent-config.service.ts",
+    "apps/web/src/features/file-browser/api/useFileContent.ts",
+    "apps/web/src/features/file-browser/api/useFiles.ts",
+    "apps/web/src/features/notebook/ui/NotebookPanel.tsx",
+    "apps/web/src/features/onboarding/api/onboarding.service.ts",
+    "apps/web/src/features/repository/api/repository.service.ts",
+    "apps/web/src/features/session/api/session.service.ts",
+    "apps/web/src/features/session/hooks/useAgentRpcHandler.ts",
+    "apps/web/src/features/session/hooks/useFileMention.ts",
+    "apps/web/src/features/settings/api/auth.service.ts",
+    "apps/web/src/features/settings/api/settings.service.ts",
+    "apps/web/src/features/workspace/api/workspace.service.ts",
+    "apps/web/src/platform/ws/index.ts",
+    "apps/web/src/platform/ws/query-protocol-client.ts",
+    "apps/web/src/shared/api/client.ts",
+    "shared/events.ts",
+    "shared/types/http-bridge.ts",
+    "shared/types/query-protocol.ts"
+  ],
+  "sessions": [
+    {
+      "metadata": "/8a/212e0f1db2/0/metadata.json",
+      "transcript": "/8a/212e0f1db2/0/full.jsonl",
+      "content_hash": "/8a/212e0f1db2/0/content_hash.txt",
+      "prompt": "/8a/212e0f1db2/0/prompt.txt"
+    }
+  ],
+  "token_usage": {
+    "input_tokens": 442,
+    "cache_creation_tokens": 1705112,
+    "cache_read_tokens": 57187790,
+    "output_tokens": 148536,
+    "api_call_count": 289
+  }
+}
