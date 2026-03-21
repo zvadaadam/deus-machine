@@ -1,11 +1,12 @@
-# One-click macOS release workflow (Electron Builder)
+# Multi-platform release workflow (macOS, Windows, Linux)
 #
-# TODO: This workflow needs to be rewritten for Electron Builder.
-# The previous release workflow has been removed.
-# See RELEASE.md for the planned release flow.
+# Builds and publishes the Electron app for all platforms via GitHub Releases.
+# electron-updater reads latest-mac.yml / latest.yml / latest-linux.yml from
+# the release assets to deliver auto-updates.
 #
 # Trigger: GitHub Actions UI → "Run workflow" → enter version
 # Or CLI:  gh workflow run release.yml -f version=2.1.0
+#          gh workflow run release.yml -f version=2.1.0 -f dry_run=true
 #
 # Required GitHub Secrets:
 #   APPLE_CERTIFICATE                  — Base64-encoded .p12 Developer ID Application certificate
@@ -13,6 +14,11 @@
 #   APPLE_ID                           — Apple ID email for notarization
 #   APPLE_PASSWORD                     — App-specific password (NOT your Apple ID password)
 #   APPLE_TEAM_ID                      — 10-character Apple Developer Team ID
+#
+# Optional GitHub Secrets:
+#   SENTRY_DSN_NODE                    — Sentry DSN for backend error tracking
+#   VITE_SENTRY_DSN                    — Sentry DSN for frontend error tracking
+#   SENTRY_AUTH_TOKEN                  — Sentry auth token for source map upload
 
 name: Release
 
@@ -69,45 +75,41 @@ jobs:
           echo "tag=$TAG" >> "$GITHUB_OUTPUT"
           echo "Version: $VERSION, Tag: $TAG"
 
-      - name: Setup Bun
-        uses: oven-sh/setup-bun@v2
+      - uses: oven-sh/setup-bun@v2
         with:
           bun-version: 1.2.19
 
-      - name: Bump version in all config files
-        env:
-          RELEASE_VERSION: ${{ steps.validate.outputs.version }}
-        run: bash scripts/bump-version.sh "$RELEASE_VERSION"
+      - name: Bump version
+        run: bash scripts/bump-version.sh "${{ steps.validate.outputs.version }}"
 
-      - name: Commit version bump
+      - name: Commit version bump & create tag
         if: ${{ inputs.dry_run == false }}
-        env:
-          RELEASE_VERSION: ${{ steps.validate.outputs.version }}
-          RELEASE_TAG: ${{ steps.validate.outputs.tag }}
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
           git add package.json
-          git commit -m "release: v${RELEASE_VERSION}"
-          git tag "$RELEASE_TAG"
-          git push origin HEAD "$RELEASE_TAG"
+          git commit -m "release: v${{ steps.validate.outputs.version }}"
+          git tag "${{ steps.validate.outputs.tag }}"
+          git push origin HEAD "${{ steps.validate.outputs.tag }}"
 
-  # ── Step 2: Build macOS (arm64), sign, notarize ─────────────────────
+  # ── Step 2a: Build macOS (arm64 + x64), sign, notarize ─────────────
   build-macos:
     needs: validate-and-bump
-    runs-on: macos-latest
+    runs-on: macos-14
+    env:
+      SENTRY_DSN_NODE: ${{ secrets.SENTRY_DSN_NODE }}
+      VITE_SENTRY_DSN: ${{ secrets.VITE_SENTRY_DSN }}
+      SENTRY_AUTH_TOKEN: ${{ secrets.SENTRY_AUTH_TOKEN }}
     steps:
       - uses: actions/checkout@v4
         with:
           ref: ${{ inputs.dry_run == false && needs.validate-and-bump.outputs.tag || github.ref }}
 
-      - name: Setup Bun
-        uses: oven-sh/setup-bun@v2
+      - uses: oven-sh/setup-bun@v2
         with:
           bun-version: 1.2.19
 
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
+      - uses: actions/setup-node@v4
         with:
           node-version: 22
 
@@ -117,15 +119,133 @@ jobs:
       - name: Build all
         run: bun run build:all
 
-      - name: Package macOS app
-        run: bun run package:mac
+      - name: Package macOS (arm64 + x64)
+        run: electron-builder --mac --publish never
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           CSC_LINK: ${{ secrets.APPLE_CERTIFICATE }}
           CSC_KEY_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
           APPLE_ID: ${{ secrets.APPLE_ID }}
-          APPLE_PASSWORD: ${{ secrets.APPLE_PASSWORD }}
+          APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_PASSWORD }}
           APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
-          SENTRY_DSN_NODE: ${{ secrets.SENTRY_DSN_NODE }}
-          VITE_SENTRY_DSN: ${{ secrets.VITE_SENTRY_DSN }}
-          SENTRY_AUTH_TOKEN: ${{ secrets.SENTRY_AUTH_TOKEN }}
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: macos
+          path: |
+            dist-electron/*.dmg
+            dist-electron/*.zip
+            dist-electron/*.blockmap
+            dist-electron/latest-mac.yml
+          if-no-files-found: error
+
+  # ── Step 2b: Build Windows (x64) ───────────────────────────────────
+  build-windows:
+    needs: validate-and-bump
+    runs-on: windows-latest
+    env:
+      SENTRY_DSN_NODE: ${{ secrets.SENTRY_DSN_NODE }}
+      VITE_SENTRY_DSN: ${{ secrets.VITE_SENTRY_DSN }}
+      SENTRY_AUTH_TOKEN: ${{ secrets.SENTRY_AUTH_TOKEN }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.dry_run == false && needs.validate-and-bump.outputs.tag || github.ref }}
+
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.2.19
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Install dependencies
+        run: bun install --frozen-lockfile
+
+      - name: Build all
+        run: bun run build:all
+
+      - name: Package Windows (x64)
+        run: npx electron-builder --win --publish never
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: windows
+          path: |
+            dist-electron/*.exe
+            dist-electron/*.blockmap
+            dist-electron/latest.yml
+          if-no-files-found: error
+
+  # ── Step 2c: Build Linux (x64) ─────────────────────────────────────
+  build-linux:
+    needs: validate-and-bump
+    runs-on: ubuntu-latest
+    env:
+      SENTRY_DSN_NODE: ${{ secrets.SENTRY_DSN_NODE }}
+      VITE_SENTRY_DSN: ${{ secrets.VITE_SENTRY_DSN }}
+      SENTRY_AUTH_TOKEN: ${{ secrets.SENTRY_AUTH_TOKEN }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.dry_run == false && needs.validate-and-bump.outputs.tag || github.ref }}
+
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.2.19
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Install dependencies
+        run: bun install --frozen-lockfile
+
+      - name: Build all
+        run: bun run build:all
+
+      - name: Package Linux (x64)
+        run: electron-builder --linux --publish never
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: linux
+          path: |
+            dist-electron/*.AppImage
+            dist-electron/*.deb
+            dist-electron/*.blockmap
+            dist-electron/latest-linux.yml
+          if-no-files-found: error
+
+  # ── Step 3: Create GitHub Release with all artifacts ────────────────
+  create-release:
+    needs: [validate-and-bump, build-macos, build-windows, build-linux]
+    if: ${{ inputs.dry_run == false }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+
+      - name: Collect release files
+        run: |
+          mkdir -p release
+          find artifacts -type f \( \
+            -name "*.dmg" -o -name "*.zip" -o -name "*.exe" -o \
+            -name "*.AppImage" -o -name "*.deb" -o \
+            -name "*.blockmap" -o -name "*.yml" \
+          \) -exec cp {} release/ \;
+          echo "=== Release files ==="
+          ls -lh release/
+
+      - name: Create GitHub Release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG: ${{ needs.validate-and-bump.outputs.tag }}
+          VERSION: ${{ needs.validate-and-bump.outputs.version }}
+        run: |
+          gh release create "$TAG" \
+            --repo "${{ github.repository }}" \
+            --title "OpenDevs v${VERSION}" \
+            --generate-notes \
+            release/*
