@@ -103,6 +103,20 @@ export function WorkspaceHeader({
           </Tooltip>
         )}
 
+        {workspaceStatus && onStatusChange && (
+          <WorkspaceStatusMenu
+            currentStatus={workspaceStatus}
+            onStatusChange={onStatusChange}
+          >
+            <button
+              type="button"
+              className="text-text-muted hover:text-text-secondary mr-1 flex items-center gap-1 rounded-lg px-1 py-0.5 transition-colors duration-200"
+            >
+              <WorkflowStatusIcon status={workspaceStatus} size={14} />
+            </button>
+          </WorkspaceStatusMenu>
+        )}
+
         {title && (
           <span className="text-foreground mr-0.5 max-w-[240px] truncate text-sm font-medium">
             {title}
@@ -119,24 +133,6 @@ export function WorkspaceHeader({
           >
             {subtitle}
           </span>
-        )}
-
-        {workspaceStatus && onStatusChange && (
-          <>
-            <span className="text-border-strong mx-0.5 text-sm">|</span>
-            <WorkspaceStatusMenu
-              currentStatus={workspaceStatus}
-              onStatusChange={onStatusChange}
-            >
-              <button
-                type="button"
-                className="text-text-muted hover:text-text-secondary flex items-center gap-1 rounded-lg px-1 py-0.5 text-sm transition-colors duration-200"
-              >
-                <WorkflowStatusIcon status={workspaceStatus} size={12} />
-                <span className="text-xs">{WORKFLOW_STATUS_CONFIG[workspaceStatus].label}</span>
-              </button>
-            </WorkspaceStatusMenu>
-          </>
         )}
 
         {setupStatus === "running" && (
