@@ -8111,3 +8111,168 @@ We want a clean, maintainable codebase, with proper best practices for the tech 
 Run subagents to verify, and if it should be fixed, try to merge some stuff together so it can be fixed together within one subagent. 
 
 If you can test something do it.
+
+---
+
+<system-instruction>
+The user has added 5 comments to the diff for this workspace. Please review and address these comments as part of your response. When addressing comments on the "original" side or on specific commits, read the file from that version (not the current version). Below are the comments, including metadata about what git state they were left on:
+
+Comment #1:
+
+File: apps/web/src/app/shells/DesktopShell.tsx
+Line: 29
+User comment: "**Duplicate function — shared utility exists in this same PR**
+
+This `createBoundaryErrorHandler` is byte-for-byte identical to the one exported from `apps/web/src/shared/utils/errorReporting.ts` (line 66), which was introduced in this same PR. All other consumers (`App.tsx`, `workspace.tsx`, `settings.tsx`) correctly import from `errorReporting.ts`.
+
+This file already imports `reportError` from `@/shared/utils/errorReporting` (line 14), so the fix is to add `createBoundaryErrorHandler` to that import and delete the private copy.
+
+**CLAUDE.md rule:** ["Split functionality into reusable components. Follow single responsibility principle."](https://github.com/zvadaadam/box-ide/blob/main/CLAUDE.md)"
+
+Comment metadata:
+This comment was left on the modified branch.
+This comment was left on GitHub by @zvadaadam.
+This comment is the start of thread PRRT_kwDOQEbULc5152PX. 
+
+
+Comment #2:
+
+File: apps/backend/src/services/query-engine.ts
+Line: 652
+User comment: "**Security: Path traversal via unencoded user-controlled URL segments**
+
+`section` and `itemId` are client-controlled strings from WebSocket `q:mutate` frames, interpolated into the URL path without `encodeURIComponent()`. The `new Request()` constructor in `delegateToRoute` normalizes `..` segments:
+
+```
+new Request("http://internal/api/agent-config/../remote-auth/devices/victim-id").url
+// => "http://internal/api/remote-auth/devices/victim-id"
+```
+
+Since `delegateToRoute` passes `{ relayBridged: true }`, the traversed request bypasses both `authMiddleware` and `remoteGateMiddleware`. Routes without `localhostOnly` guard (settings, workspaces, repos) are reachable via traversal.
+
+The same issue affects: `taskName` (line 668), `deviceId` (line 673), `repoId` (line 633). Note that `file`/`filePath` params on lines 539 and 558 are already correctly encoded — this was just missed for other params.
+
+**Fix:** Apply `encodeURIComponent()` to all user-supplied path segments, or validate against an allowlist."
+
+Comment metadata:
+This comment was left on the modified branch.
+This comment was left on GitHub by @zvadaadam.
+This comment is the start of thread PRRT_kwDOQEbULc5152Pa. 
+
+
+Comment #3:
+
+File: apps/backend/src/services/query-engine.ts
+Line: 572
+User comment: "**Bug: `pairedDevices` and `revokeDevice` always return 403 for relay/web clients**
+
+These delegate to routes guarded by `localhostOnly` middleware (in `routes/remote-auth.ts`). When `delegateToRoute` creates a synthetic `new Request(...)`, there is no underlying socket, so `getClientIp(c)` returns `undefined` and `isLocalhost(undefined)` returns `false` -> 403.
+
+The global `authMiddleware` and `remoteGateMiddleware` both have `relayBridged` bypass logic, but the per-route `localhostOnly` middleware does not check `c.env?.relayBridged`.
+
+**Impact:** `AuthService.listDevices()` and `AuthService.revokeDevice()` are broken for all web/relay clients.
+
+**Fix:** Add a `relayBridged` check to `localhostOnly` in `routes/remote-auth.ts`:
+```ts
+if (c.env?.relayBridged) { await next(); return; }
+```"
+
+Comment metadata:
+This comment was left on the modified branch.
+This comment was left on GitHub by @zvadaadam.
+This comment is the start of thread PRRT_kwDOQEbULc5152Pd. 
+
+
+Comment #4:
+
+File: apps/web/src/platform/ws/query-protocol-client.ts
+Line: 448
+User comment: "**Bug: `auth_failed` triggers infinite reconnect loop**
+
+The handler calls `signOut()` (clears token) then `ws?.close(4001)`. The `close()` fires `onclose`, which calls `scheduleReconnect()` because `wasConnected` is still `true` (only `connecting` is set to false here, not `connected`). The reconnect opens a new socket -> `onopen` finds no token -> `ws.close(4001, "No device token")` -> `onclose` -> `scheduleReconnect()` -> repeat.
+
+The loop caps at 8s backoff but never terminates, since subscriptions are never cleared on auth failure. Compare with `forceReconnect()` (line ~338) which correctly nulls `ws` and sets `staleWs.onclose = null` before closing.
+
+**Fix:** Either set `ws.onclose = null` before calling `close()` (like `forceReconnect` does), or clear `subscriptions` on auth failure, or add an `authFailed` flag that `scheduleReconnect` checks."
+
+Comment metadata:
+This comment was left on the modified branch.
+This comment was left on GitHub by @zvadaadam.
+This comment is the start of thread PRRT_kwDOQEbULc5152Pe. 
+
+
+Comment #5:
+
+File: apps/web/src/features/auth/ui/PairGatePage.tsx
+Line: 49
+User comment: "**Inconsistency: `serverId` not URL-encoded in relay WebSocket URL**
+
+`serverId` is interpolated directly without `encodeURIComponent()`:
+```ts
+const url = `${RELAY_BASE_URL}/api/servers/${serverId}/pair`;
+```
+
+Meanwhile, `backend.config.ts` (line 62) correctly encodes the same value:
+```ts
+const encodedId = encodeURIComponent(id);
+wsUrl: `${RELAY_BASE_URL}/api/servers/${encodedId}/connect`,
+```
+
+The `serverId` comes from URL path params which the browser decodes, so special characters could corrupt the WebSocket URL.
+
+**Fix:** `encodeURIComponent(serverId)` before interpolation."
+
+Comment metadata:
+This comment was left on the modified branch.
+This comment was left on GitHub by @zvadaadam.
+This comment is the start of thread PRRT_kwDOQEbULc5152Pf. 
+
+</system-instruction>
+
+I run AI code review, is it actionable? Wdyt? Explore in depth each problem.
+
+We want a clean, maintainable codebase, with proper best practices for the tech stack we use.
+
+Run subagents to verify, and if it should be fixed, try to merge some stuff together so it can be fixed together within one subagent. 
+
+If you can test something do it.
+
+----
+
+Review posted successfully. Here's the summary:
+
+---
+
+## Review: PR #189 — Web deployment with TanStack Router + relay auth + HTTP bridge
+
+**5 validated issues** found across 45 files / 5 commits:
+
+### **#1 Security: Path traversal via unencoded URL segments**
+
+Client-controlled `section`, `itemId`, `taskName` params are interpolated into `delegateToRoute` URL paths without `encodeURIComponent()`. The `new Request()` constructor normalizes `..` segments, allowing traversal to unintended routes — with `relayBridged: true` bypassing auth middleware.
+
+File: `apps/backend/src/services/query-engine.ts:652`
+
+### **#2 Bug: `pairedDevices` / `revokeDevice` always 403 for web clients**
+
+These delegate to routes with `localhostOnly` middleware, which doesn't check `c.env?.relayBridged`. The synthetic in-process Request has no socket, so `getClientIp()` returns `undefined` → always blocked.
+
+File: `apps/backend/src/services/query-engine.ts:572`
+
+### **#3 Bug: `auth_failed` triggers infinite reconnect loop**
+
+After `signOut()` + `ws.close(4001)`, `onclose` fires and calls `scheduleReconnect()` (because `wasConnected` is still true). The reconnect finds no token → closes → reconnects → repeat every 8s forever.
+
+File: `apps/web/src/platform/ws/query-protocol-client.ts:448`
+
+### **#4 Duplicate `createBoundaryErrorHandler`**
+
+`DesktopShell.tsx` defines a private copy identical to the shared export in `errorReporting.ts` from this same PR. All other files correctly import from the shared utility.
+
+File: `apps/web/src/app/shells/DesktopShell.tsx:29`
+
+### **#5 `serverId` not URL-encoded in pairing URL**
+
+`PairGatePage.tsx` interpolates `serverId` without `encodeURIComponent()`, while `backend.config.ts` correctly encodes the same value for structurally identical URLs.
+
+File: `apps/web/src/features/auth/ui/PairGatePage.tsx:49`
