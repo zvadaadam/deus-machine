@@ -9,14 +9,8 @@ import { PixelGrid } from "@/features/session/ui/PixelGrid";
 import { getDisplayStatus, STATUS_CONFIG } from "../lib/status";
 import type { WorkspaceItemProps } from "../model/types";
 import { SidebarRow, SidebarRowIconSlot } from "./SidebarRow";
-
-/**
- * Whether this status shows an icon in the 20x20 slot.
- * working → PixelGrid generating, unread → gold dot, error → red dot.
- * Only idle shows no icon (26px padding).
- */
-const hasStatusIcon = (status: string) =>
-  status === "working" || status === "unread" || status === "error";
+import { WorkflowStatusIcon } from "./WorkflowStatusIcon";
+import { WorkspaceStatusMenu } from "./WorkspaceStatusMenu";
 
 /**
  * WorkspaceItem — Sidebar workspace row
@@ -39,6 +33,7 @@ export const WorkspaceItem = React.memo(function WorkspaceItem({
   diffStats,
   onClick,
   onArchive,
+  onStatusChange,
 }: WorkspaceItemProps) {
   const isInitializing = workspace.state === "initializing";
 
@@ -109,9 +104,9 @@ export const WorkspaceItem = React.memo(function WorkspaceItem({
 
   const displayStatus = getDisplayStatus(workspace);
   const statusConfig = STATUS_CONFIG[displayStatus];
-  const showIcon = hasStatusIcon(displayStatus);
-  // 20px icon + 6px gap = 26px indent for rows without an icon
-  const rowIndent = "pl-[26px]";
+  // Session activity icons take priority over workflow status
+  const hasSessionIcon =
+    displayStatus === "working" || displayStatus === "unread" || displayStatus === "error";
 
   const isSetupRunning = workspace.setup_status === "running";
   const isSetupFailed = workspace.setup_status === "failed";
@@ -183,18 +178,31 @@ export const WorkspaceItem = React.memo(function WorkspaceItem({
         {/* Left: rows */}
         <div className="flex min-w-0 flex-1 flex-col gap-0.5">
           {/* Row 1: icon + branch name */}
-          <div className={cn("flex min-w-0 items-center gap-1.5", !showIcon && rowIndent)}>
-            {showIcon && (
+          <div className="flex min-w-0 items-center gap-1.5">
+            {hasSessionIcon ? (
               <SidebarRowIconSlot>
                 {displayStatus === "working" ? (
                   <PixelGrid variant="generating" size={14} />
                 ) : displayStatus === "error" ? (
                   <span className="bg-accent-red h-2 w-2 rounded-full" />
                 ) : (
-                  /* unread: gold dot */
                   <span className="bg-accent-gold h-2 w-2 rounded-full" />
                 )}
               </SidebarRowIconSlot>
+            ) : (
+              <WorkspaceStatusMenu
+                currentStatus={workspace.status}
+                onStatusChange={(status) => onStatusChange?.(workspace.id, status)}
+              >
+                <button
+                  type="button"
+                  onClick={(e) => e.stopPropagation()}
+                  className="flex h-5 w-5 shrink-0 items-center justify-center rounded transition-opacity hover:opacity-80"
+                  aria-label={`Status: ${workspace.status}`}
+                >
+                  <WorkflowStatusIcon status={workspace.status} size={14} />
+                </button>
+              </WorkspaceStatusMenu>
             )}
             <span
               className={cn(
@@ -211,7 +219,7 @@ export const WorkspaceItem = React.memo(function WorkspaceItem({
           </div>
 
           {/* Row 2: directory · status */}
-          <div className={cn("flex min-w-0 items-center gap-1.5", rowIndent)}>
+          <div className="flex min-w-0 items-center gap-1.5 pl-[26px]">
             <span
               className={cn(
                 "truncate text-xs",

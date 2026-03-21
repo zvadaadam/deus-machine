@@ -42,6 +42,7 @@ export const WorkspaceStatusSchema = z.enum([
   "canceled",
 ]);
 export type WorkspaceStatus = z.infer<typeof WorkspaceStatusSchema>;
+export const WORKFLOW_STATUSES = WorkspaceStatusSchema.options;
 
 /** Sticky states resist auto-progression. Only user action (or archive) can exit. */
 export const STICKY_STATUSES: ReadonlySet<WorkspaceStatus> = new Set(["backlog", "canceled"]);

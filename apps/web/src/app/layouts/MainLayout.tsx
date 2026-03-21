@@ -17,6 +17,7 @@ import {
   useGhStatus,
   useArchiveWorkspace,
   useUnarchiveWorkspace,
+  useUpdateWorkspaceStatus,
 } from "@/features/workspace/api";
 import { useResizeHandle } from "@/features/workspace";
 import { useRepos } from "@/features/repository/api";
@@ -214,6 +215,19 @@ export function MainLayout() {
     [selectWorkspace]
   );
 
+  // --- Workflow status change (ref-stable like archive) ---
+
+  const statusMutation = useUpdateWorkspaceStatus();
+  const statusMutationRef = useRef(statusMutation);
+  statusMutationRef.current = statusMutation;
+
+  const handleStatusChange = useCallback(
+    (workspaceId: string, status: import("@shared/enums").WorkspaceStatus) => {
+      statusMutationRef.current.mutate({ workspaceId, status });
+    },
+    []
+  );
+
   // --- Global hooks ---
 
   // Zoom (Cmd+=/Cmd+-/Cmd+0)
@@ -314,6 +328,7 @@ export function MainLayout() {
           onAddRepository={repoActions.handleOpenProject}
           onCloneRepository={() => repoActions.setShowCloneModal(true)}
           onArchive={archiveWorkspace}
+          onStatusChange={handleStatusChange}
           profile={{ username }}
         />
       )}

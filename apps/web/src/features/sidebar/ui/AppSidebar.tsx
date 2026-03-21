@@ -31,6 +31,7 @@ export function AppSidebar({
   onAddRepository,
   onCloneRepository,
   onArchive,
+  onStatusChange,
   diffStatsMap,
   profile = { username: "User" },
 }: AppSidebarProps) {
@@ -126,6 +127,7 @@ export function AppSidebar({
                     onWorkspaceClick={onWorkspaceClick}
                     onNewWorkspace={onNewWorkspace}
                     onArchive={onArchive}
+                    onStatusChange={onStatusChange}
                     diffStatsMap={diffStatsMap}
                     sidebarExpanded={isExpanded}
                     dragDisabled={!isExpanded}
