@@ -10,12 +10,23 @@
  *   Server sends: q:snapshot, q:delta, q:error, ping
  *   Client responds to ping with pong
  *
+ * Relay mode (web-production):
+ *   Connects through cloud relay at wss://relay.rundeus.com/api/servers/{id}/connect
+ *   Sends { type: "authenticate", token } on open for device token auth.
+ *   Handles relay control frames: authenticated, auth_failed, server_reconnecting, server_connected.
+ *
+ * HTTP bridge (web-production):
+ *   sendHttpRequest() tunnels HTTP requests as { type: "http:request" } frames.
+ *   Responses arrive as { type: "http:response" } and are correlated by requestId.
+ *
  * On reconnect, all active subscriptions are re-established automatically.
  */
 
 import { match } from "ts-pattern";
-import { getBackendPort } from "@/shared/config/api.config";
+import { resolveBackendEndpoints, isRelayMode } from "@/shared/config/backend.config";
+import { getStoredToken, clearToken } from "@/features/auth";
 import type { QueryResource, CommandName } from "@shared/types/query-protocol";
+import type { HttpRequestFrame, HttpResponseFrame } from "@shared/types/http-bridge";
 
 // ---- Types ----
 
@@ -26,6 +37,12 @@ type EventCallback = (event: string, data: unknown) => void;
 interface PendingCommand {
   resolve: (result: { accepted: boolean; commandId?: string; error?: string }) => void;
   reject: (err: Error) => void;
+}
+
+interface PendingHttpRequest {
+  resolve: (response: HttpResponseFrame) => void;
+  reject: (err: Error) => void;
+  timer: ReturnType<typeof setTimeout>;
 }
 
 interface Subscription {
@@ -40,6 +57,7 @@ interface Subscription {
 
 const BACKOFF_BASE_MS = 500;
 const BACKOFF_MAX_MS = 8000;
+const HTTP_REQUEST_TIMEOUT_MS = 30_000;
 
 // ---- Singleton State ----
 
@@ -56,6 +74,9 @@ const subscriptions = new Map<string, Subscription>();
 
 /** Pending commands waiting for q:command_ack. */
 const pendingCommands = new Map<string, PendingCommand>();
+
+/** Pending HTTP requests waiting for http:response correlation. */
+const pendingHttpRequests = new Map<string, PendingHttpRequest>();
 
 /** Listeners for q:event broadcasts. */
 const eventListeners = new Set<EventCallback>();
@@ -80,8 +101,10 @@ function nextSubId(): string {
 /**
  * Connect to the backend WebSocket. Resolves once authenticated.
  * No-op if already connected or connecting.
+ *
+ * In relay mode, pass the serverId so the WS URL can be resolved.
  */
-export async function connect(): Promise<void> {
+export async function connect(serverId?: string): Promise<void> {
   if (connected) return;
   if (connecting) {
     // Wait for the in-flight connection attempt
@@ -104,7 +127,7 @@ export async function connect(): Promise<void> {
   return new Promise<void>((resolve, reject) => {
     connectResolve = resolve;
     connectReject = reject;
-    openSocket().catch((err) => {
+    openSocket(serverId).catch((err) => {
       connecting = false;
       connectReject?.(err);
       connectResolve = null;
@@ -221,6 +244,29 @@ export function sendToolResponse(requestId: string, result?: unknown, error?: st
 }
 
 /**
+ * Send an HTTP request through the WebSocket tunnel (relay mode only).
+ * Returns a promise that resolves when the backend sends the http:response.
+ * Times out after 30 seconds.
+ */
+export function sendHttpRequest(frame: HttpRequestFrame): Promise<HttpResponseFrame> {
+  return new Promise((resolve, reject) => {
+    const timer = setTimeout(() => {
+      pendingHttpRequests.delete(frame.requestId);
+      reject(new Error(`HTTP bridge request timed out: ${frame.method} ${frame.path}`));
+    }, HTTP_REQUEST_TIMEOUT_MS);
+
+    pendingHttpRequests.set(frame.requestId, { resolve, reject, timer });
+
+    const sent = sendFrame(frame as unknown as Record<string, unknown>);
+    if (!sent) {
+      clearTimeout(timer);
+      pendingHttpRequests.delete(frame.requestId);
+      reject(new Error("WebSocket not connected — cannot send HTTP bridge request"));
+    }
+  });
+}
+
+/**
  * Force an immediate reconnection to the backend.
  * Used when the backend restarts on a new port — cancels any pending
  * backoff timer and closes the stale socket so reconnection picks up
@@ -275,14 +321,26 @@ export function onConnectionChange(callback: (connected: boolean) => void): () =
 
 // ---- Internal ----
 
-async function openSocket(): Promise<void> {
-  const port = await getBackendPort();
-  const url = `ws://localhost:${port}/ws`;
+async function openSocket(serverId?: string): Promise<void> {
+  const endpoints = await resolveBackendEndpoints(serverId);
+  const url = endpoints.wsUrl;
+  const relay = isRelayMode();
 
   ws = new WebSocket(url);
 
   ws.onopen = () => {
-    // Localhost connections are auto-authenticated by the backend.
+    if (relay) {
+      // Relay mode: send authenticate frame with device token
+      const token = getStoredToken();
+      if (token) {
+        sendFrame({ type: "authenticate", token });
+      } else {
+        // No token available — close and surface auth failure
+        console.error("[WS] Relay mode: no device token available for authentication");
+        ws?.close(4001, "No device token");
+      }
+    }
+    // Localhost/web-dev connections are auto-authenticated by the backend.
     // Wait for the "connected" frame in onmessage.
   };
 
@@ -298,20 +356,63 @@ async function openSocket(): Promise<void> {
 
     match(type)
       .with("connected", () => {
+        // Localhost/web-dev: backend sends "connected" after auto-auth
         _connectionId = msg.connectionId as string;
         connected = true;
         connecting = false;
         reconnectAttempt = 0;
 
-        // Re-subscribe all active subscriptions (reconnect scenario)
         resubscribeAll();
-
-        // Notify hooks that connection is available so they can set up subscriptions
         notifyConnectionChange(true);
 
         connectResolve?.();
         connectResolve = null;
         connectReject = null;
+      })
+      .with("authenticated", () => {
+        // Relay mode: relay confirms device token is valid
+        connected = true;
+        connecting = false;
+        reconnectAttempt = 0;
+
+        resubscribeAll();
+        notifyConnectionChange(true);
+
+        connectResolve?.();
+        connectResolve = null;
+        connectReject = null;
+      })
+      .with("auth_failed", () => {
+        // Relay mode: device token rejected — clear stored token, close
+        console.error("[WS] Relay auth failed:", msg.message);
+        clearToken();
+        ws?.close(4001, "Auth failed");
+
+        connecting = false;
+        connectReject?.(new Error(`Relay auth failed: ${msg.message}`));
+        connectResolve = null;
+        connectReject = null;
+
+        notifyConnectionChange(false);
+      })
+      .with("server_reconnecting", () => {
+        // Relay mode: desktop server disconnected from relay, waiting for reconnect.
+        // Notify listeners so UI can show "server offline" state.
+        // Keep the WS open — relay will send "server_connected" when server returns.
+        if (import.meta.env.DEV) {
+          console.log("[WS] Server reconnecting (relay):", msg);
+        }
+        notifyConnectionChange(false);
+      })
+      .with("server_connected", () => {
+        // Relay mode: desktop server reconnected to relay.
+        // Re-subscribe all active subscriptions.
+        if (import.meta.env.DEV) {
+          console.log("[WS] Server reconnected (relay)");
+        }
+        connected = true;
+        resubscribeAll();
+        notifyConnectionChange(true);
       })
       .with("ping", () => {
         sendFrame({ type: "pong" });
@@ -353,6 +454,16 @@ async function openSocket(): Promise<void> {
       .with("q:error", () => {
         console.warn("[WS] Query error:", msg.message, "for sub:", msg.id);
       })
+      .with("http:response", () => {
+        // HTTP bridge: correlate response to pending request
+        const requestId = msg.requestId as string;
+        const pending = pendingHttpRequests.get(requestId);
+        if (pending) {
+          clearTimeout(pending.timer);
+          pendingHttpRequests.delete(requestId);
+          pending.resolve(msg as unknown as HttpResponseFrame);
+        }
+      })
       .otherwise(() => {
         // Ignore unknown frame types (q:response, q:mutate_result, etc.)
       });
@@ -373,6 +484,13 @@ async function openSocket(): Promise<void> {
       pending.reject(new Error("WebSocket disconnected"));
     }
     pendingCommands.clear();
+
+    // Reject all pending HTTP bridge requests
+    for (const [_id, pending] of pendingHttpRequests) {
+      clearTimeout(pending.timer);
+      pending.reject(new Error("WebSocket disconnected — HTTP bridge request failed"));
+    }
+    pendingHttpRequests.clear();
 
     if (connecting) {
       // Initial connection failed — reject the connect() promise
