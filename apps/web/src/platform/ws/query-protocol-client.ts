@@ -24,7 +24,7 @@
 
 import { match } from "ts-pattern";
 import { resolveBackendEndpoints, isRelayMode } from "@/shared/config/backend.config";
-import { getStoredToken, clearToken } from "@/features/auth";
+import { getStoredToken, signOut } from "@/features/auth";
 import type { QueryResource, CommandName } from "@shared/types/query-protocol";
 import type { HttpRequestFrame, HttpResponseFrame } from "@shared/types/http-bridge";
 
@@ -383,9 +383,9 @@ async function openSocket(serverId?: string): Promise<void> {
         connectReject = null;
       })
       .with("auth_failed", () => {
-        // Relay mode: device token rejected — clear stored token, close
+        // Relay mode: device token rejected — sign out (clears storage + React state)
         console.error("[WS] Relay auth failed:", msg.message);
-        clearToken();
+        signOut();
         ws?.close(4001, "Auth failed");
 
         connecting = false;
@@ -397,11 +397,21 @@ async function openSocket(serverId?: string): Promise<void> {
       })
       .with("server_reconnecting", () => {
         // Relay mode: desktop server disconnected from relay, waiting for reconnect.
-        // Notify listeners so UI can show "server offline" state.
+        // Mark as disconnected so isConnected() returns false and the HTTP bridge
+        // in client.ts rejects immediately instead of sending frames that will time out.
         // Keep the WS open — relay will send "server_connected" when server returns.
         if (import.meta.env.DEV) {
           console.log("[WS] Server reconnecting (relay):", msg);
         }
+        connected = false;
+
+        // Reject all pending HTTP bridge requests — the server can't process them
+        for (const [_id, pending] of pendingHttpRequests) {
+          clearTimeout(pending.timer);
+          pending.reject(new Error("Server disconnected — reconnecting"));
+        }
+        pendingHttpRequests.clear();
+
         notifyConnectionChange(false);
       })
       .with("server_connected", () => {

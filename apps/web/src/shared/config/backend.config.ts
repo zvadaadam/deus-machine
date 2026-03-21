@@ -35,6 +35,8 @@ export const RELAY_BASE_URL =
   (import.meta.env.VITE_RELAY_URL as string | undefined) || "wss://relay.rundeus.com";
 
 let cachedEndpoints: BackendEndpoints | null = null;
+/** The serverId that the cached endpoints were built for (relay mode only). */
+let cachedRelayServerId: string | null = null;
 
 /**
  * Resolve the backend's WebSocket and HTTP base URLs.
@@ -53,15 +55,17 @@ export async function resolveBackendEndpoints(serverId?: string): Promise<Backen
     if (!id) {
       throw new Error("No server ID available for relay connection");
     }
-    // Cache is per-serverId — invalidate if serverId changes
-    if (cachedEndpoints && cachedEndpoints.wsUrl.includes(id)) {
+    // Cache is per-serverId — invalidate if serverId changes (strict equality)
+    if (cachedEndpoints && cachedRelayServerId === id) {
       return cachedEndpoints;
     }
+    const encodedId = encodeURIComponent(id);
+    cachedRelayServerId = id;
     cachedEndpoints = {
-      wsUrl: `${RELAY_BASE_URL}/api/servers/${id}/connect`,
+      wsUrl: `${RELAY_BASE_URL}/api/servers/${encodedId}/connect`,
       // In relay mode, HTTP is tunneled over WS — apiBase is a placeholder
       // that should never be used directly (client.ts intercepts requests).
-      apiBase: `${RELAY_BASE_URL}/api/servers/${id}`,
+      apiBase: `${RELAY_BASE_URL}/api/servers/${encodedId}`,
     };
     return cachedEndpoints;
   }
@@ -83,6 +87,7 @@ export async function resolveBackendEndpoints(serverId?: string): Promise<Backen
  */
 export function invalidateEndpointCache(): void {
   cachedEndpoints = null;
+  cachedRelayServerId = null;
 }
 
 /** Extract serverId from the current URL pathname (/s/{serverId}/...). */
