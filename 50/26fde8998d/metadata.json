@@ -1,0 +1,28 @@
+{
+  "cli_version": "0.5.0",
+  "checkpoint_id": "5026fde8998d",
+  "strategy": "manual-commit",
+  "branch": "zvadaadam/workspace-status",
+  "checkpoints_count": 2,
+  "files_touched": [
+    "apps/web/src/app/layouts/MainLayout.tsx",
+    "apps/web/src/features/sidebar/ui/WorkflowStatusIcon.tsx",
+    "apps/web/src/features/sidebar/ui/WorkspaceItem.tsx",
+    "apps/web/src/features/sidebar/ui/WorkspaceStatusMenu.tsx"
+  ],
+  "sessions": [
+    {
+      "metadata": "/50/26fde8998d/0/metadata.json",
+      "transcript": "/50/26fde8998d/0/full.jsonl",
+      "content_hash": "/50/26fde8998d/0/content_hash.txt",
+      "prompt": "/50/26fde8998d/0/prompt.txt"
+    }
+  ],
+  "token_usage": {
+    "input_tokens": 473,
+    "cache_creation_tokens": 938831,
+    "cache_read_tokens": 53214148,
+    "output_tokens": 91975,
+    "api_call_count": 380
+  }
+}
