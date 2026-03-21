@@ -1,0 +1,56 @@
+{
+  "cli_version": "0.5.0",
+  "checkpoint_id": "8a212e0f1db2",
+  "session_id": "af4e71c9-b07a-428c-b1cc-b2b1609de22f",
+  "strategy": "manual-commit",
+  "created_at": "2026-03-21T18:16:13.94716Z",
+  "branch": "zvadaadam/explore-web-routing",
+  "checkpoints_count": 1,
+  "files_touched": [
+    "apps/backend/src/server.ts",
+    "apps/backend/src/services/agent/commands.ts",
+    "apps/backend/src/services/query-engine.ts",
+    "apps/backend/src/services/route-delegate.ts",
+    "apps/backend/src/services/ws.service.ts",
+    "apps/backend/test/unit/shared/events.test.ts",
+    "apps/web/src/features/agent-config/api/agent-config.service.ts",
+    "apps/web/src/features/file-browser/api/useFileContent.ts",
+    "apps/web/src/features/file-browser/api/useFiles.ts",
+    "apps/web/src/features/notebook/ui/NotebookPanel.tsx",
+    "apps/web/src/features/onboarding/api/onboarding.service.ts",
+    "apps/web/src/features/repository/api/repository.service.ts",
+    "apps/web/src/features/session/api/session.service.ts",
+    "apps/web/src/features/session/hooks/useAgentRpcHandler.ts",
+    "apps/web/src/features/session/hooks/useFileMention.ts",
+    "apps/web/src/features/settings/api/auth.service.ts",
+    "apps/web/src/features/settings/api/settings.service.ts",
+    "apps/web/src/features/workspace/api/workspace.service.ts",
+    "apps/web/src/platform/ws/index.ts",
+    "apps/web/src/platform/ws/query-protocol-client.ts",
+    "apps/web/src/shared/api/client.ts",
+    "shared/events.ts",
+    "shared/types/http-bridge.ts",
+    "shared/types/query-protocol.ts"
+  ],
+  "agent": "Claude Code",
+  "turn_id": "c2cef3d7e20c",
+  "token_usage": {
+    "input_tokens": 442,
+    "cache_creation_tokens": 1705112,
+    "cache_read_tokens": 57187790,
+    "output_tokens": 148536,
+    "api_call_count": 289
+  },
+  "session_metrics": {
+    "turn_count": 36
+  },
+  "initial_attribution": {
+    "calculated_at": "2026-03-21T18:16:11.901203Z",
+    "agent_lines": 647,
+    "human_added": 16,
+    "human_modified": 86,
+    "human_removed": 0,
+    "total_committed": 749,
+    "agent_percentage": 86.38184245660881
+  }
+}
