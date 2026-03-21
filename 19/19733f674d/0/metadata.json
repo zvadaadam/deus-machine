@@ -1,0 +1,36 @@
+{
+  "cli_version": "0.5.0",
+  "checkpoint_id": "1919733f674d",
+  "session_id": "af4e71c9-b07a-428c-b1cc-b2b1609de22f",
+  "strategy": "manual-commit",
+  "created_at": "2026-03-21T17:21:30.762679Z",
+  "branch": "zvadaadam/explore-web-routing",
+  "checkpoints_count": 1,
+  "files_touched": [
+    "apps/backend/src/lib/relay-bridge.ts",
+    "apps/backend/src/middleware/remote-auth.ts",
+    "apps/backend/src/middleware/remote-gate.ts",
+    "apps/backend/src/server.ts"
+  ],
+  "agent": "Claude Code",
+  "turn_id": "283e4faa127d",
+  "token_usage": {
+    "input_tokens": 400,
+    "cache_creation_tokens": 1621935,
+    "cache_read_tokens": 52001566,
+    "output_tokens": 132305,
+    "api_call_count": 270
+  },
+  "session_metrics": {
+    "turn_count": 27
+  },
+  "initial_attribution": {
+    "calculated_at": "2026-03-21T17:21:28.943377Z",
+    "agent_lines": 14,
+    "human_added": 0,
+    "human_modified": 0,
+    "human_removed": 0,
+    "total_committed": 14,
+    "agent_percentage": 100
+  }
+}
