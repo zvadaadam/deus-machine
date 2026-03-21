@@ -2,22 +2,18 @@
  * WebSocket Query Protocol Client
  *
  * Singleton client that connects to the backend's /ws endpoint and handles
- * the q:* protocol for real-time data subscriptions. Used by the desktop
- * frontend to receive data pushes instead of HTTP polling.
+ * the q:* protocol for real-time data subscriptions, one-shot requests,
+ * mutations, and async commands.
  *
  * Protocol:
- *   Client sends: q:subscribe, q:unsubscribe
- *   Server sends: q:snapshot, q:delta, q:error, ping
+ *   Client sends: q:subscribe, q:unsubscribe, q:request, q:mutate, q:command
+ *   Server sends: q:snapshot, q:delta, q:response, q:mutate_result, q:command_ack, q:error, q:event, ping
  *   Client responds to ping with pong
  *
  * Relay mode (web-production):
  *   Connects through cloud relay at wss://relay.rundeus.com/api/servers/{id}/connect
  *   Sends { type: "authenticate", token } on open for device token auth.
  *   Handles relay control frames: authenticated, auth_failed, server_reconnecting, server_connected.
- *
- * HTTP bridge (web-production):
- *   sendHttpRequest() tunnels HTTP requests as { type: "http:request" } frames.
- *   Responses arrive as { type: "http:response" } and are correlated by requestId.
  *
  * On reconnect, all active subscriptions are re-established automatically.
  */
@@ -26,7 +22,6 @@ import { match } from "ts-pattern";
 import { resolveBackendEndpoints, isRelayMode } from "@/shared/config/backend.config";
 import { getStoredToken, signOut } from "@/features/auth";
 import type { QueryResource, CommandName } from "@shared/types/query-protocol";
-import type { HttpRequestFrame, HttpResponseFrame } from "@shared/types/http-bridge";
 
 // ---- Types ----
 
@@ -39,8 +34,14 @@ interface PendingCommand {
   reject: (err: Error) => void;
 }
 
-interface PendingHttpRequest {
-  resolve: (response: HttpResponseFrame) => void;
+interface PendingRequest {
+  resolve: (data: unknown) => void;
+  reject: (err: Error) => void;
+  timer: ReturnType<typeof setTimeout>;
+}
+
+interface PendingMutation {
+  resolve: (result: { success: boolean; data?: unknown; error?: string }) => void;
   reject: (err: Error) => void;
   timer: ReturnType<typeof setTimeout>;
 }
@@ -57,7 +58,6 @@ interface Subscription {
 
 const BACKOFF_BASE_MS = 500;
 const BACKOFF_MAX_MS = 8000;
-const HTTP_REQUEST_TIMEOUT_MS = 30_000;
 
 // ---- Singleton State ----
 
@@ -75,8 +75,11 @@ const subscriptions = new Map<string, Subscription>();
 /** Pending commands waiting for q:command_ack. */
 const pendingCommands = new Map<string, PendingCommand>();
 
-/** Pending HTTP requests waiting for http:response correlation. */
-const pendingHttpRequests = new Map<string, PendingHttpRequest>();
+/** Pending one-shot q:request frames waiting for q:response. */
+const pendingRequests = new Map<string, PendingRequest>();
+
+/** Pending q:mutate frames waiting for q:mutate_result. */
+const pendingMutations = new Map<string, PendingMutation>();
 
 /** Listeners for q:event broadcasts. */
 const eventListeners = new Set<EventCallback>();
@@ -86,6 +89,9 @@ const connectionChangeListeners = new Set<(connected: boolean) => void>();
 
 /** Counter for generating unique command frame IDs. */
 let commandCounter = 0;
+
+/** Counter for generating unique request/mutation frame IDs. */
+let requestCounter = 0;
 
 /** Resolvers waiting for the initial "connected" frame after open. */
 let connectResolve: (() => void) | null = null;
@@ -178,7 +184,6 @@ export function isConnected(): boolean {
 
 /**
  * Send an async command via the q:command frame.
- * Used by upcoming cloud/relay feature -- no desktop consumer yet.
  * Returns a promise that resolves when the server sends q:command_ack.
  */
 export function sendCommand(
@@ -215,6 +220,87 @@ export function sendCommand(
 }
 
 /**
+ * Send a one-shot data request via the q:request frame.
+ * Returns a promise that resolves with the response data when the
+ * server sends q:response, or rejects on q:error or timeout.
+ *
+ * Works with both subscribable (QueryResource) and request-only
+ * (RequestResource) resources.
+ */
+export function sendRequest<T = unknown>(
+  resource: string,
+  params?: Record<string, unknown>
+): Promise<T> {
+  const id = `req_${++requestCounter}`;
+  const REQUEST_TIMEOUT_MS = 30_000;
+
+  return new Promise<T>((resolve, reject) => {
+    const timer = setTimeout(() => {
+      pendingRequests.delete(id);
+      reject(new Error(`Request ${resource} timed out`));
+    }, REQUEST_TIMEOUT_MS);
+
+    pendingRequests.set(id, {
+      resolve: resolve as (data: unknown) => void,
+      reject,
+      timer,
+    });
+
+    const sent = sendFrame({
+      type: "q:request",
+      id,
+      resource,
+      ...(params ? { params } : {}),
+    });
+
+    if (!sent) {
+      clearTimeout(timer);
+      pendingRequests.delete(id);
+      reject(new Error("WebSocket not connected"));
+    }
+  });
+}
+
+/**
+ * Send a mutation via the q:mutate frame.
+ * Returns a promise that resolves with the mutation result when the
+ * server sends q:mutate_result, or rejects on timeout.
+ */
+export function sendMutate<T = unknown>(
+  action: string,
+  params: Record<string, unknown>
+): Promise<{ success: boolean; data?: T; error?: string }> {
+  const id = `mut_${++requestCounter}`;
+  const MUTATE_TIMEOUT_MS = 30_000;
+
+  return new Promise((resolve, reject) => {
+    const timer = setTimeout(() => {
+      pendingMutations.delete(id);
+      reject(new Error(`Mutation ${action} timed out`));
+    }, MUTATE_TIMEOUT_MS);
+
+    pendingMutations.set(id, {
+      resolve: resolve as (result: { success: boolean; data?: unknown; error?: string }) => void,
+      reject,
+      timer,
+    });
+
+    const sent = sendFrame({
+      type: "q:mutate",
+      id,
+      action,
+      params,
+    });
+
+    if (!sent) {
+      clearTimeout(timer);
+      pendingMutations.delete(id);
+      reject(new Error("WebSocket not connected"));
+    }
+  });
+}
+
+/**
  * Register a callback for q:event broadcasts.
  * Returns an unregister function.
  */
@@ -241,29 +327,6 @@ export function sendToolResponse(requestId: string, result?: unknown, error?: st
     frame.result = result;
   }
   return sendFrame(frame);
-}
-
-/**
- * Send an HTTP request through the WebSocket tunnel (relay mode only).
- * Returns a promise that resolves when the backend sends the http:response.
- * Times out after 30 seconds.
- */
-export function sendHttpRequest(frame: HttpRequestFrame): Promise<HttpResponseFrame> {
-  return new Promise((resolve, reject) => {
-    const timer = setTimeout(() => {
-      pendingHttpRequests.delete(frame.requestId);
-      reject(new Error(`HTTP bridge request timed out: ${frame.method} ${frame.path}`));
-    }, HTTP_REQUEST_TIMEOUT_MS);
-
-    pendingHttpRequests.set(frame.requestId, { resolve, reject, timer });
-
-    const sent = sendFrame(frame as unknown as Record<string, unknown>);
-    if (!sent) {
-      clearTimeout(timer);
-      pendingHttpRequests.delete(frame.requestId);
-      reject(new Error("WebSocket not connected — cannot send HTTP bridge request"));
-    }
-  });
 }
 
 /**
@@ -397,20 +460,26 @@ async function openSocket(serverId?: string): Promise<void> {
       })
       .with("server_reconnecting", () => {
         // Relay mode: desktop server disconnected from relay, waiting for reconnect.
-        // Mark as disconnected so isConnected() returns false and the HTTP bridge
-        // in client.ts rejects immediately instead of sending frames that will time out.
+        // Mark as disconnected so isConnected() returns false — q:request/q:mutate
+        // will reject immediately instead of sending frames that will time out.
         // Keep the WS open — relay will send "server_connected" when server returns.
         if (import.meta.env.DEV) {
           console.log("[WS] Server reconnecting (relay):", msg);
         }
         connected = false;
 
-        // Reject all pending HTTP bridge requests — the server can't process them
-        for (const [_id, pending] of pendingHttpRequests) {
+        // Reject all pending one-shot requests and mutations
+        for (const [_id, pending] of pendingRequests) {
           clearTimeout(pending.timer);
           pending.reject(new Error("Server disconnected — reconnecting"));
         }
-        pendingHttpRequests.clear();
+        pendingRequests.clear();
+
+        for (const [_id, pending] of pendingMutations) {
+          clearTimeout(pending.timer);
+          pending.reject(new Error("Server disconnected — reconnecting"));
+        }
+        pendingMutations.clear();
 
         notifyConnectionChange(false);
       })
@@ -461,21 +530,57 @@ async function openSocket(serverId?: string): Promise<void> {
           }
         }
       })
-      .with("q:error", () => {
-        console.warn("[WS] Query error:", msg.message, "for sub:", msg.id);
-      })
-      .with("http:response", () => {
-        // HTTP bridge: correlate response to pending request
-        const requestId = msg.requestId as string;
-        const pending = pendingHttpRequests.get(requestId);
+      .with("q:response", () => {
+        // One-shot q:request response
+        const id = msg.id as string;
+        const pending = pendingRequests.get(id);
         if (pending) {
           clearTimeout(pending.timer);
-          pendingHttpRequests.delete(requestId);
-          pending.resolve(msg as unknown as HttpResponseFrame);
+          pendingRequests.delete(id);
+          pending.resolve(msg.data);
         }
       })
+      .with("q:mutate_result", () => {
+        // Mutation result
+        const id = msg.id as string;
+        const pending = pendingMutations.get(id);
+        if (pending) {
+          clearTimeout(pending.timer);
+          pendingMutations.delete(id);
+          pending.resolve({
+            success: msg.success as boolean,
+            data: msg.data as unknown,
+            error: msg.error as string | undefined,
+          });
+        }
+      })
+      .with("q:error", () => {
+        const id = msg.id as string;
+        const errorMsg = (msg.message as string) || "Query error";
+
+        // Check if this error is for a pending request
+        const pendingReq = pendingRequests.get(id);
+        if (pendingReq) {
+          clearTimeout(pendingReq.timer);
+          pendingRequests.delete(id);
+          pendingReq.reject(new Error(errorMsg));
+          return;
+        }
+
+        // Check if this error is for a pending mutation
+        const pendingMut = pendingMutations.get(id);
+        if (pendingMut) {
+          clearTimeout(pendingMut.timer);
+          pendingMutations.delete(id);
+          pendingMut.reject(new Error(errorMsg));
+          return;
+        }
+
+        // Subscription error (existing behavior)
+        console.warn("[WS] Query error:", msg.message, "for sub:", id);
+      })
       .otherwise(() => {
-        // Ignore unknown frame types (q:response, q:mutate_result, etc.)
+        // Ignore unknown frame types
       });
   };
 
@@ -495,12 +600,19 @@ async function openSocket(serverId?: string): Promise<void> {
     }
     pendingCommands.clear();
 
-    // Reject all pending HTTP bridge requests
-    for (const [_id, pending] of pendingHttpRequests) {
+    // Reject all pending one-shot requests
+    for (const [_id, pending] of pendingRequests) {
       clearTimeout(pending.timer);
-      pending.reject(new Error("WebSocket disconnected — HTTP bridge request failed"));
+      pending.reject(new Error("WebSocket disconnected — request failed"));
     }
-    pendingHttpRequests.clear();
+    pendingRequests.clear();
+
+    // Reject all pending mutations
+    for (const [_id, pending] of pendingMutations) {
+      clearTimeout(pending.timer);
+      pending.reject(new Error("WebSocket disconnected — mutation failed"));
+    }
+    pendingMutations.clear();
 
     if (connecting) {
       // Initial connection failed — reject the connect() promise

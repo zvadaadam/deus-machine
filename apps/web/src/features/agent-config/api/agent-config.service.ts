@@ -1,42 +1,50 @@
 /**
- * Agent Config Service — scope-aware API calls for config management.
+ * Agent Config Service — scope-aware API calls for config management via q:* protocol.
  *
- * All endpoints accept scope (global/project) and optional repoPath.
- * Query params are appended to the endpoint URL since apiClient.get()
- * takes a plain string endpoint.
+ * All operations accept scope (global/project) and optional repoPath.
+ * Reads use sendRequest("agentConfig"), writes use sendMutate("saveAgentConfig"/"deleteAgentConfig").
  */
 
-import { apiClient } from "@/shared/api/client";
-
-function buildQueryString(scope: string, repoPath?: string): string {
-  const params = new URLSearchParams({ scope });
-  if (repoPath) params.set("repoPath", repoPath);
-  return params.toString();
-}
+import { sendRequest, sendMutate } from "@/platform/ws";
 
 export const AgentConfigService = {
   list: <T>(category: string, scope: string, repoPath?: string): Promise<T> => {
-    const qs = buildQueryString(scope, repoPath);
-    return apiClient.get<T>(`/agent-config/${category}?${qs}`);
+    return sendRequest<T>("agentConfig", {
+      section: category,
+      scope,
+      ...(repoPath ? { repoPath } : {}),
+    });
   },
 
-  save: (
+  save: async (
     category: string,
     data: Record<string, unknown>,
     scope: string,
     repoPath?: string
   ): Promise<{ success: boolean }> => {
-    const qs = buildQueryString(scope, repoPath);
-    return apiClient.post(`/agent-config/${category}?${qs}`, data);
+    const result = await sendMutate<{ success: boolean }>("saveAgentConfig", {
+      section: category,
+      scope,
+      ...(repoPath ? { repoPath } : {}),
+      ...data,
+    });
+    if (!result.success) throw new Error(result.error || "Failed to save agent config");
+    return result.data ?? { success: true };
   },
 
-  remove: (
+  remove: async (
     category: string,
     id: string,
     scope: string,
     repoPath?: string
   ): Promise<{ success: boolean }> => {
-    const qs = buildQueryString(scope, repoPath);
-    return apiClient.delete(`/agent-config/${category}/${encodeURIComponent(id)}?${qs}`);
+    const result = await sendMutate<{ success: boolean }>("deleteAgentConfig", {
+      section: category,
+      itemId: id,
+      scope,
+      ...(repoPath ? { repoPath } : {}),
+    });
+    if (!result.success) throw new Error(result.error || "Failed to delete agent config");
+    return result.data ?? { success: true };
   },
 };

@@ -9,8 +9,7 @@
  */
 
 import { useState, useCallback, useRef, useEffect } from "react";
-import { apiClient } from "@/shared/api/client";
-import { ENDPOINTS } from "@/shared/config/api.config";
+import { sendRequest } from "@/platform/ws";
 
 export interface FuzzyFileResult {
   path: string;
@@ -147,10 +146,11 @@ export function useFileMention({
     // Debounce search by 80ms to avoid hammering the backend on every keystroke
     searchTimerRef.current = setTimeout(async () => {
       try {
-        const searchResults = await apiClient.post<FuzzyFileResult[]>(
-          ENDPOINTS.WORKSPACE_FILES_SEARCH(workspaceId),
-          { query, limit: 15 }
-        );
+        const searchResults = await sendRequest<FuzzyFileResult[]>("fileSearch", {
+          workspaceId,
+          query,
+          limit: 15,
+        });
         // Only apply results if this is still the latest search
         if (searchIdRef.current !== currentSearchId) return;
         setResults(searchResults);

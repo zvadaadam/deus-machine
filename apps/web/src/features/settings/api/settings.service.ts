@@ -1,9 +1,9 @@
 /**
  * Settings Service
- * API methods for settings management
+ * API methods for settings management via WebSocket q:* protocol.
  */
 
-import { apiClient } from "@/shared/api/client";
+import { sendRequest, sendMutate } from "@/platform/ws";
 import type { Settings } from "../types";
 
 export const SettingsService = {
@@ -11,7 +11,7 @@ export const SettingsService = {
    * Fetch all settings
    */
   fetch: async (): Promise<Settings> => {
-    return apiClient.get<Settings>("/settings");
+    return sendRequest<Settings>("settings");
   },
 
   /**
@@ -20,13 +20,15 @@ export const SettingsService = {
    */
   update: async (settings: Partial<Settings>): Promise<Settings> => {
     const [key, value] = Object.entries(settings)[0];
-    return apiClient.post<Settings>("/settings", { key, value });
+    const result = await sendMutate<Settings>("saveSetting", { key, value });
+    if (!result.success) throw new Error(result.error || "Failed to save setting");
+    return result.data!;
   },
 
   /**
    * Fetch file-based configs (MCP servers, commands, agents, hooks)
    */
   fetchFileConfig: async <T>(type: string): Promise<T> => {
-    return apiClient.get<T>(`/config/${type}`);
+    return sendRequest<T>("agentConfig", { section: type });
   },
 };

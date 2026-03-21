@@ -5,19 +5,31 @@
 // live in shared/events.ts — the single source of truth for all app events
 // and resources. This file only defines the wire format that carries them.
 
-import type { QueryResource, MutationName, CommandName, ProtocolEvent } from "../events";
+import type {
+  QueryResource,
+  RequestResource,
+  MutationName,
+  CommandName,
+  ProtocolEvent,
+} from "../events";
 
 // Re-export so existing `import { QueryResource } from "query-protocol"` still works.
-export type { QueryResource, MutationName, CommandName, ProtocolEvent };
-export { QUERY_RESOURCES, MUTATION_NAMES, COMMAND_NAMES, PROTOCOL_EVENTS } from "../events";
+export type { QueryResource, RequestResource, MutationName, CommandName, ProtocolEvent };
+export {
+  QUERY_RESOURCES,
+  REQUEST_RESOURCES,
+  MUTATION_NAMES,
+  COMMAND_NAMES,
+  PROTOCOL_EVENTS,
+} from "../events";
 
 // ---- Client → Server Frames ----
 
-/** Client requests data (one-shot). */
+/** Client requests data (one-shot). Accepts both subscribable and request-only resources. */
 export interface QRequestFrame {
   type: "q:request";
   id: string;
-  resource: QueryResource;
+  resource: RequestResource;
   params?: Record<string, unknown>;
 }
 

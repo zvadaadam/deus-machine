@@ -56,14 +56,56 @@ export const GIT_CLONE_PROGRESS = "git-clone-progress" as const;
 // Domain Constants (queryable resources, mutations, sidecar notifications)
 // ============================================================================
 
-/** Queryable resources — single source of truth.
+/** Queryable resources — subscribable via q:subscribe for real-time push.
  *  Derive the type from the const array so runtime validators and
  *  compile-time checks always stay in sync. */
 export const QUERY_RESOURCES = ["workspaces", "stats", "sessions", "session", "messages"] as const;
 export type QueryResource = (typeof QUERY_RESOURCES)[number];
 
+/** Request-only resources — one-shot reads via q:request, not subscribable.
+ *  These delegate to existing Hono routes under the hood. */
+export const REQUEST_RESOURCES = [
+  "settings",
+  "repos",
+  "repoManifest",
+  "detectManifest",
+  "agentConfig",
+  "ghStatus",
+  "prStatus",
+  "workspace",
+  "allWorkspaces",
+  "workspaceManifest",
+  "setupLogs",
+  "taskRunInfo",
+  "diffStats",
+  "diffFiles",
+  "diffFile",
+  "penFiles",
+  "workspaceFiles",
+  "fileContent",
+  "fileSearch",
+  "recentProjects",
+  "pairedDevices",
+  "relayStatus",
+  "allSessions",
+] as const;
+export type RequestResource = QueryResource | (typeof REQUEST_RESOURCES)[number];
+
 /** Mutation action names for the WebSocket relay protocol (sync data writes). */
-export const MUTATION_NAMES = ["archiveWorkspace", "updateWorkspaceTitle"] as const;
+export const MUTATION_NAMES = [
+  "archiveWorkspace",
+  "updateWorkspaceTitle",
+  // New mutations
+  "updateWorkspace",
+  "createSession",
+  "addRepo",
+  "saveRepoManifest",
+  "saveAgentConfig",
+  "deleteAgentConfig",
+  "saveSetting",
+  "invalidateFileCache",
+  "revokeDevice",
+] as const;
 export type MutationName = (typeof MUTATION_NAMES)[number];
 
 /** Command names for the WebSocket relay protocol (async actions). */
@@ -80,6 +122,10 @@ export const COMMAND_NAMES = [
   "fs:unwatch",
   // Git commands
   "git:clone",
+  // New commands
+  "createWorkspace",
+  "retrySetup",
+  "openPenFile",
 ] as const;
 export type CommandName = (typeof COMMAND_NAMES)[number];
 

@@ -16,8 +16,7 @@ import { useCallback } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { match } from "ts-pattern";
 import { BookOpen, AlertCircle } from "lucide-react";
-import { apiClient } from "@/shared/api/client";
-import { ENDPOINTS } from "@/shared/config/api.config";
+import { sendRequest } from "@/platform/ws";
 
 // --- Jupyter notebook types (subset of nbformat v4) ---
 
@@ -237,9 +236,10 @@ export function NotebookPanel({ workspaceId, sessionStatus }: NotebookPanelProps
 
   const readNotebook = useCallback(async (): Promise<NotebookDocument | null> => {
     try {
-      const data = await apiClient.get<{ content: string | null }>(
-        ENDPOINTS.WORKSPACE_FILE_CONTENT(workspaceId, notebookRelativePath)
-      );
+      const data = await sendRequest<{ content: string | null }>("fileContent", {
+        workspaceId,
+        path: notebookRelativePath,
+      });
       if (!data.content) return null;
       return JSON.parse(data.content) as NotebookDocument;
     } catch {

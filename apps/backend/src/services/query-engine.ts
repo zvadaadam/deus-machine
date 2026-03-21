@@ -28,13 +28,16 @@ import {
 import { computeWorkspacePath } from "../middleware/workspace-loader";
 import { getConnection } from "./ws.service";
 import { resolveToolRelay, rejectToolRelay, runCommand } from "./agent";
+import { delegateToRoute } from "./route-delegate";
 import {
   QUERY_RESOURCES,
+  REQUEST_RESOURCES,
   MUTATION_NAMES,
   COMMAND_NAMES,
   type MutationName,
   type CommandName,
   type QueryResource,
+  type RequestResource,
   type QServerFrame,
 } from "@shared/types/query-protocol";
 
@@ -233,13 +236,20 @@ export function invalidate(resources: QueryResource[], ctx?: InvalidateContext):
 
 // ---- Frame Handlers ----
 
-function handleRequest(connectionId: string, msg: ResourceFrameInput): void {
+async function handleRequest(connectionId: string, msg: ResourceFrameInput): Promise<void> {
   const { id, resource, params } = msg;
 
   try {
-    const typedResource = toQueryResource(resource);
-    const data = runQuery(typedResource, params);
-    sendFrame(connectionId, { type: "q:response", id, data });
+    // Try subscribable resource first, then request-only resource
+    if (isQueryResource(resource)) {
+      const data = runQuery(resource, params);
+      sendFrame(connectionId, { type: "q:response", id, data });
+    } else if (isRequestResource(resource)) {
+      const data = await runRequest(resource, params);
+      sendFrame(connectionId, { type: "q:response", id, data });
+    } else {
+      throw new Error(`Unknown resource: ${resource}`);
+    }
   } catch (err) {
     sendFrame(connectionId, {
       type: "q:error",
@@ -313,11 +323,11 @@ function handleUnsubscribe(connectionId: string, msg: UnsubscribeFrameInput): vo
   }
 }
 
-function handleMutate(connectionId: string, msg: MutateFrameInput): void {
+async function handleMutate(connectionId: string, msg: MutateFrameInput): Promise<void> {
   const { id, action, params } = msg;
 
   try {
-    const result = runMutation(action, params);
+    const result = await runMutation(action, params);
     sendFrame(connectionId, {
       type: "q:mutate_result",
       id,
@@ -454,40 +464,217 @@ function runQuery(resource: QueryResource, params: QueryParams): unknown {
     .exhaustive();
 }
 
+// ---- Request Dispatch (one-shot reads via route delegation) ----
+
+type RequestResourceName = (typeof REQUEST_RESOURCES)[number];
+
+function isRequestResource(value: string): value is RequestResourceName {
+  return (REQUEST_RESOURCES as readonly string[]).includes(value);
+}
+
+/**
+ * Route one-shot request resources to existing Hono endpoints.
+ * Uses delegateToRoute() so all business logic stays in the route handlers.
+ */
+async function runRequest(resource: RequestResourceName, params: QueryParams): Promise<unknown> {
+  return match(resource)
+    .with("settings", () => delegateToRoute("GET", "/api/settings"))
+    .with("repos", () => delegateToRoute("GET", "/api/repos"))
+    .with("repoManifest", () => {
+      const repoId = readStringParam(params, "repoId");
+      if (!repoId) throw new Error("repoManifest requires repoId");
+      return delegateToRoute("GET", `/api/repos/${repoId}/manifest`);
+    })
+    .with("detectManifest", () => {
+      const repoId = readStringParam(params, "repoId");
+      if (!repoId) throw new Error("detectManifest requires repoId");
+      return delegateToRoute("GET", `/api/repos/${repoId}/detect-manifest`);
+    })
+    .with("agentConfig", () => {
+      const section = readStringParam(params, "section") ?? "agents";
+      const scope = readStringParam(params, "scope") ?? "global";
+      const repoPath = readStringParam(params, "repoPath");
+      const qs = new URLSearchParams({ scope });
+      if (repoPath) qs.set("repoPath", repoPath);
+      return delegateToRoute("GET", `/api/agent-config/${section}?${qs.toString()}`);
+    })
+    .with("ghStatus", () => delegateToRoute("GET", "/api/gh-status"))
+    .with("prStatus", () => {
+      const workspaceId = readStringParam(params, "workspaceId");
+      if (!workspaceId) throw new Error("prStatus requires workspaceId");
+      return delegateToRoute("GET", `/api/workspaces/${workspaceId}/pr-status`);
+    })
+    .with("workspace", () => {
+      const workspaceId = readStringParam(params, "workspaceId");
+      if (!workspaceId) throw new Error("workspace requires workspaceId");
+      return delegateToRoute("GET", `/api/workspaces/${workspaceId}`);
+    })
+    .with("allWorkspaces", () => delegateToRoute("GET", "/api/workspaces"))
+    .with("workspaceManifest", () => {
+      const workspaceId = readStringParam(params, "workspaceId");
+      if (!workspaceId) throw new Error("workspaceManifest requires workspaceId");
+      return delegateToRoute("GET", `/api/workspaces/${workspaceId}/manifest`);
+    })
+    .with("setupLogs", () => {
+      const workspaceId = readStringParam(params, "workspaceId");
+      if (!workspaceId) throw new Error("setupLogs requires workspaceId");
+      return delegateToRoute("GET", `/api/workspaces/${workspaceId}/setup-logs`);
+    })
+    .with("taskRunInfo", () => {
+      const workspaceId = readStringParam(params, "workspaceId");
+      const taskName = readStringParam(params, "taskName");
+      if (!workspaceId || !taskName)
+        throw new Error("taskRunInfo requires workspaceId and taskName");
+      return delegateToRoute("POST", `/api/workspaces/${workspaceId}/tasks/${taskName}/run`);
+    })
+    .with("diffStats", () => {
+      const workspaceId = readStringParam(params, "workspaceId");
+      if (!workspaceId) throw new Error("diffStats requires workspaceId");
+      return delegateToRoute("GET", `/api/workspaces/${workspaceId}/diff-stats`);
+    })
+    .with("diffFiles", () => {
+      const workspaceId = readStringParam(params, "workspaceId");
+      if (!workspaceId) throw new Error("diffFiles requires workspaceId");
+      return delegateToRoute("GET", `/api/workspaces/${workspaceId}/diff-files`);
+    })
+    .with("diffFile", () => {
+      const workspaceId = readStringParam(params, "workspaceId");
+      const file = readStringParam(params, "file");
+      if (!workspaceId || !file) throw new Error("diffFile requires workspaceId and file");
+      return delegateToRoute(
+        "GET",
+        `/api/workspaces/${workspaceId}/diff-file?file=${encodeURIComponent(file)}`
+      );
+    })
+    .with("penFiles", () => {
+      const workspaceId = readStringParam(params, "workspaceId");
+      if (!workspaceId) throw new Error("penFiles requires workspaceId");
+      return delegateToRoute("GET", `/api/workspaces/${workspaceId}/pen-files`);
+    })
+    .with("workspaceFiles", () => {
+      const workspaceId = readStringParam(params, "workspaceId");
+      if (!workspaceId) throw new Error("workspaceFiles requires workspaceId");
+      return delegateToRoute("GET", `/api/workspaces/${workspaceId}/files`);
+    })
+    .with("fileContent", () => {
+      const workspaceId = readStringParam(params, "workspaceId");
+      const filePath = readStringParam(params, "path");
+      if (!workspaceId || !filePath) throw new Error("fileContent requires workspaceId and path");
+      return delegateToRoute(
+        "GET",
+        `/api/workspaces/${workspaceId}/file-content?path=${encodeURIComponent(filePath)}`
+      );
+    })
+    .with("fileSearch", () => {
+      const workspaceId = readStringParam(params, "workspaceId");
+      const query = readStringParam(params, "query");
+      if (!workspaceId || !query) throw new Error("fileSearch requires workspaceId and query");
+      const limit = readNumberParam(params, "limit");
+      return delegateToRoute("POST", `/api/workspaces/${workspaceId}/files/search`, {
+        query,
+        ...(limit !== undefined ? { limit } : {}),
+      });
+    })
+    .with("recentProjects", () => delegateToRoute("GET", "/api/onboarding/recent-projects"))
+    .with("pairedDevices", () => delegateToRoute("GET", "/api/remote-auth/devices"))
+    .with("relayStatus", () => delegateToRoute("GET", "/api/relay/status"))
+    .with("allSessions", () => delegateToRoute("GET", "/api/sessions"))
+    .exhaustive();
+}
+
 // ---- Mutation Dispatch ----
 
-function runMutation(action: string, params: QueryParams): unknown {
+async function runMutation(action: string, params: QueryParams): Promise<unknown> {
   const typedAction = toMutationName(action);
 
-  return match(typedAction)
-    .with("archiveWorkspace", () => {
-      const db = getDatabase();
-      const workspaceId = readStringParam(params, "workspaceId");
-      if (!workspaceId) throw new Error("archiveWorkspace requires workspaceId");
+  return (
+    match(typedAction)
+      .with("archiveWorkspace", () => {
+        const db = getDatabase();
+        const workspaceId = readStringParam(params, "workspaceId");
+        if (!workspaceId) throw new Error("archiveWorkspace requires workspaceId");
 
-      const workspace = getWorkspaceRaw(db, workspaceId);
-      if (!workspace) throw new Error("Workspace not found");
+        const workspace = getWorkspaceRaw(db, workspaceId);
+        if (!workspace) throw new Error("Workspace not found");
 
-      db.prepare("UPDATE workspaces SET state = 'archived' WHERE id = ?").run(workspaceId);
-      invalidate(["workspaces", "stats"]);
-      return { success: true };
-    })
-    .with("updateWorkspaceTitle", () => {
-      const db = getDatabase();
-      const workspaceId = readStringParam(params, "workspaceId");
-      const title = readStringParam(params, "title");
-      if (!workspaceId || title === undefined) {
-        throw new Error("updateWorkspaceTitle requires workspaceId and title");
-      }
+        db.prepare("UPDATE workspaces SET state = 'archived' WHERE id = ?").run(workspaceId);
+        invalidate(["workspaces", "stats"]);
+        return { success: true };
+      })
+      .with("updateWorkspaceTitle", () => {
+        const db = getDatabase();
+        const workspaceId = readStringParam(params, "workspaceId");
+        const title = readStringParam(params, "title");
+        if (!workspaceId || title === undefined) {
+          throw new Error("updateWorkspaceTitle requires workspaceId and title");
+        }
 
-      const workspace = getWorkspaceRaw(db, workspaceId);
-      if (!workspace) throw new Error("Workspace not found");
+        const workspace = getWorkspaceRaw(db, workspaceId);
+        if (!workspace) throw new Error("Workspace not found");
 
-      db.prepare("UPDATE workspaces SET title = ? WHERE id = ?").run(title, workspaceId);
-      invalidate(["workspaces"]);
-      return { success: true };
-    })
-    .exhaustive();
+        db.prepare("UPDATE workspaces SET title = ? WHERE id = ?").run(title, workspaceId);
+        invalidate(["workspaces"]);
+        return { success: true };
+      })
+      // ---- New mutations delegated to existing routes ----
+      .with("updateWorkspace", () => {
+        const workspaceId = readStringParam(params, "workspaceId");
+        if (!workspaceId) throw new Error("updateWorkspace requires workspaceId");
+        const { workspaceId: _, ...body } = params;
+        return delegateToRoute("PATCH", `/api/workspaces/${workspaceId}`, body);
+      })
+      .with("createSession", () => {
+        const workspaceId = readStringParam(params, "workspaceId");
+        if (!workspaceId) throw new Error("createSession requires workspaceId");
+        return delegateToRoute("POST", `/api/workspaces/${workspaceId}/sessions`);
+      })
+      .with("addRepo", () => {
+        const rootPath = readStringParam(params, "root_path");
+        if (!rootPath) throw new Error("addRepo requires root_path");
+        return delegateToRoute("POST", "/api/repos", { root_path: rootPath });
+      })
+      .with("saveRepoManifest", () => {
+        const repoId = readStringParam(params, "repoId");
+        if (!repoId) throw new Error("saveRepoManifest requires repoId");
+        const { repoId: _, ...manifest } = params;
+        return delegateToRoute("POST", `/api/repos/${repoId}/manifest`, manifest);
+      })
+      .with("saveAgentConfig", () => {
+        const section = readStringParam(params, "section") ?? "agents";
+        const scope = readStringParam(params, "scope") ?? "global";
+        const repoPath = readStringParam(params, "repoPath");
+        const qs = new URLSearchParams({ scope });
+        if (repoPath) qs.set("repoPath", repoPath);
+        const { section: _, scope: _s, repoPath: _r, ...body } = params;
+        return delegateToRoute("POST", `/api/agent-config/${section}?${qs.toString()}`, body);
+      })
+      .with("deleteAgentConfig", () => {
+        const section = readStringParam(params, "section") ?? "agents";
+        const itemId = readStringParam(params, "itemId");
+        if (!itemId) throw new Error("deleteAgentConfig requires itemId");
+        const scope = readStringParam(params, "scope") ?? "global";
+        const repoPath = readStringParam(params, "repoPath");
+        const qs = new URLSearchParams({ scope });
+        if (repoPath) qs.set("repoPath", repoPath);
+        return delegateToRoute("DELETE", `/api/agent-config/${section}/${itemId}?${qs.toString()}`);
+      })
+      .with("saveSetting", () => {
+        const key = readStringParam(params, "key");
+        if (!key) throw new Error("saveSetting requires key");
+        return delegateToRoute("POST", "/api/settings", { key, value: params.value });
+      })
+      .with("invalidateFileCache", () => {
+        const workspaceId = readStringParam(params, "workspaceId");
+        if (!workspaceId) throw new Error("invalidateFileCache requires workspaceId");
+        return delegateToRoute("POST", `/api/workspaces/${workspaceId}/files/invalidate-cache`);
+      })
+      .with("revokeDevice", () => {
+        const deviceId = readStringParam(params, "deviceId");
+        if (!deviceId) throw new Error("revokeDevice requires deviceId");
+        return delegateToRoute("DELETE", `/api/remote-auth/devices/${deviceId}`);
+      })
+      .exhaustive()
+  );
 }
 
 // ---- Message Delta Push ----
