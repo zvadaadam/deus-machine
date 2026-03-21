@@ -206,7 +206,8 @@ describe("shared/events", () => {
       expect(MUTATION_NAMES).toContain("saveSetting");
       expect(MUTATION_NAMES).toContain("invalidateFileCache");
       expect(MUTATION_NAMES).toContain("revokeDevice");
-      expect(MUTATION_NAMES).toHaveLength(11);
+      expect(MUTATION_NAMES).toContain("runTask");
+      expect(MUTATION_NAMES).toHaveLength(12);
     });
 
     it("COMMAND_NAMES contains the expected commands", () => {
