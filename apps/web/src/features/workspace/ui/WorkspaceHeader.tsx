@@ -104,10 +104,7 @@ export function WorkspaceHeader({
         )}
 
         {workspaceStatus && onStatusChange && (
-          <WorkspaceStatusMenu
-            currentStatus={workspaceStatus}
-            onStatusChange={onStatusChange}
-          >
+          <WorkspaceStatusMenu currentStatus={workspaceStatus} onStatusChange={onStatusChange}>
             <button
               type="button"
               className="text-text-muted hover:text-text-secondary mr-1 flex items-center gap-1 rounded-lg px-1 py-0.5 transition-colors duration-200"
