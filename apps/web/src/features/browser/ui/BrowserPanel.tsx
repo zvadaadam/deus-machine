@@ -449,7 +449,7 @@ export function BrowserPanel({
       title: deriveTitleFromUrl(previousUrl),
     });
 
-    tabRefs.current.get(activeTab.id)?.navigateInHistory(previousUrl);
+    tabRefs.current.get(activeTab.id)?.goBack();
   }, [activeTab, handleUpdateTab]);
 
   const handleGoForward = useCallback(() => {
@@ -467,7 +467,7 @@ export function BrowserPanel({
       title: deriveTitleFromUrl(nextUrl),
     });
 
-    tabRefs.current.get(activeTab.id)?.navigateInHistory(nextUrl);
+    tabRefs.current.get(activeTab.id)?.goForward();
   }, [activeTab, handleUpdateTab]);
 
   const handleReload = useCallback(() => {

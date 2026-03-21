@@ -119,7 +119,8 @@ export function registerBrowserViewHandlers(): void {
         (_event, errorCode, errorDescription, _url, isMainFrame) => {
           // Only report main frame failures — subframe failures (ads, iframes)
           // shouldn't show as page-level errors.
-          if (!isMainFrame) return;
+          // ERR_ABORTED (-3) fires during redirects and canceled navigations — not a real failure.
+          if (!isMainFrame || errorCode === -3) return;
           mainWindow.webContents.send("browser:page-load", {
             label,
             url: view.webContents.getURL(),

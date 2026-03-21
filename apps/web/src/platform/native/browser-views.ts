@@ -56,6 +56,16 @@ export async function hideAll(): Promise<void> {
   await invoke("hide_all_browser_webviews");
 }
 
+export async function goBack(label: string): Promise<void> {
+  if (!capabilities.nativeBrowser) return;
+  await invoke("browser:back", { label });
+}
+
+export async function goForward(label: string): Promise<void> {
+  if (!capabilities.nativeBrowser) return;
+  await invoke("browser:forward", { label });
+}
+
 export async function close(label: string): Promise<void> {
   if (!capabilities.nativeBrowser) return;
   await invoke("close_browser_webview", { label });

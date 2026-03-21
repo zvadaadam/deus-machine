@@ -4,7 +4,7 @@
 // browser state (refs, cookies, DOM) across calls.
 
 import { execFile } from "child_process";
-import { join } from "path";
+import { dirname, join } from "path";
 
 export interface AgentBrowserResult {
   success: boolean;
@@ -16,9 +16,10 @@ export interface AgentBrowserResult {
 // The npm package has a Node.js wrapper at bin/agent-browser.js that selects
 // the correct platform binary. We resolve it relative to the package directory
 // since the package has no "main" field (require.resolve would throw).
+// Note: sidecar is bundled to CJS, so require.resolve is available.
 const BINARY = (() => {
   try {
-    const pkgDir = require.resolve("agent-browser/package.json").replace(/\/package\.json$/, "");
+    const pkgDir = dirname(require.resolve("agent-browser/package.json"));
     return join(pkgDir, "bin", "agent-browser.js");
   } catch {
     return "agent-browser"; // fallback to PATH
@@ -49,35 +50,44 @@ export async function execAgentBrowser(
       args,
       { env, timeout: timeoutMs, maxBuffer: 10 * 1024 * 1024 },
       (error, stdout, stderr) => {
-        if (error && !stdout) {
-          reject(new Error(stderr || error.message));
+        // agent-browser prints JSON to stdout when invoked from daemon
+        const output = stdout.trim();
+
+        // Try to parse the last JSON line (agent-browser may print status lines before JSON)
+        if (output) {
+          const lines = output.split("\n");
+          for (let i = lines.length - 1; i >= 0; i--) {
+            const line = lines[i].trim();
+            if (line.startsWith("{")) {
+              try {
+                const parsed = JSON.parse(line);
+                resolve({
+                  success: parsed.success !== false,
+                  data: parsed.data ?? parsed,
+                  error: parsed.error ?? null,
+                });
+                return;
+              } catch {
+                continue;
+              }
+            }
+          }
+        }
+
+        // If the subprocess errored (timeout, non-zero exit, etc.), report failure
+        if (error) {
+          resolve({
+            success: false,
+            data: output ? { text: output } : null,
+            error: stderr || error.message,
+          });
           return;
         }
 
-        // agent-browser prints JSON to stdout when invoked from daemon
-        const output = stdout.trim();
+        // No error and no output — success with no data
         if (!output) {
           resolve({ success: true, data: null, error: null });
           return;
-        }
-
-        // Try to parse the last JSON line (agent-browser may print status lines before JSON)
-        const lines = output.split("\n");
-        for (let i = lines.length - 1; i >= 0; i--) {
-          const line = lines[i].trim();
-          if (line.startsWith("{")) {
-            try {
-              const parsed = JSON.parse(line);
-              resolve({
-                success: parsed.success !== false,
-                data: parsed.data ?? parsed,
-                error: parsed.error ?? null,
-              });
-              return;
-            } catch {
-              continue;
-            }
-          }
         }
 
         // No JSON found — treat raw output as text data
