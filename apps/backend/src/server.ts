@@ -6,7 +6,6 @@ import { closeAll as closeAllWsConnections } from "./services/ws.service";
 import { ensureRelayConnected, disconnectFromRelay } from "./services/relay.service";
 import { getSetting } from "./services/settings.service";
 import * as agentService from "./services/agent";
-import { stopBrowserServer } from "./services/browser-server.service";
 import { destroyAllPtySessions } from "./services/pty.service";
 import { destroyAllWatchers } from "./services/fs-watcher.service";
 
@@ -160,7 +159,6 @@ process.on("uncaughtException", (error, origin) => {
   console.error("[FATAL] Uncaught Exception:", origin, error);
   Sentry.captureException(error);
   Sentry.close(2000).finally(() => {
-    stopBrowserServer();
     destroyAllPtySessions();
     destroyAllWatchers();
     killSidecar();
@@ -181,7 +179,6 @@ process.on("unhandledRejection", (reason) => {
 function shutdown() {
   console.log("\nShutting down...");
   agentService.shutdown();
-  stopBrowserServer();
   destroyAllPtySessions();
   destroyAllWatchers();
   killSidecar();

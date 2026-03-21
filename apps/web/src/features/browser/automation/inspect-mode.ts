@@ -1,16 +1,11 @@
 // src/features/browser/automation/inspect-mode.ts
-// Re-exports the compiled inspect mode IIFE for WKWebView injection.
+// Re-exports the inspect mode IIFE for WKWebView injection.
 //
-// The source TypeScript lives in inject/inspect-mode.ts with full IDE support
-// (syntax highlighting, type checking, autocomplete). It's compiled by
-// build-inject.ts (esbuild) into dist-inject/inspect-mode.js as a self-
-// contained IIFE. This file imports that compiled output as a raw string.
-//
-// To modify the inspect mode behavior, edit inject/inspect-mode.ts and
-// run `bun run build:inject` to recompile.
+// The source lives in inject/inspect-mode.js — a plain JavaScript IIFE
+// imported directly via Vite's ?raw suffix. No build step required.
 
 /** The IIFE string to eval in WKWebView — sets up inspect mode infrastructure. */
-import INSPECT_MODE_SETUP from "./dist-inject/inspect-mode.js?raw";
+import INSPECT_MODE_SETUP from "./inject/inspect-mode.js?raw";
 export { INSPECT_MODE_SETUP };
 
 /** Enable inspect mode (call after INSPECT_MODE_SETUP has been eval'd) */

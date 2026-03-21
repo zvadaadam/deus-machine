@@ -11,13 +11,12 @@
     "dev:frontend": "vite --config apps/web/vite.config.ts",
     "dev:backend": "node apps/backend/server.cjs",
     "build": "electron-vite build",
-    "build:inject": "bunx tsx apps/web/src/features/browser/automation/build-inject.ts",
     "build:sidecar": "bunx tsx apps/sidecar/build.ts && bun install --frozen-lockfile --cwd packages/mcp-notebook && bunx tsx packages/mcp-notebook/build.ts",
     "build:backend": "bunx tsx apps/backend/build.ts",
     "dev:relay": "cd apps/cloud-relay && wrangler dev",
     "build:relay": "cd apps/cloud-relay && wrangler deploy --dry-run --outdir dist",
     "deploy:relay": "cd apps/cloud-relay && wrangler deploy",
-    "build:all": "bun run build:inject && bun run build:sidecar && bun run build:backend && bun run build",
+    "build:all": "bun run build:sidecar && bun run build:backend && bun run build",
     "package:mac": "bun run build:all && electron-builder --mac",
     "package:win": "bun run build:all && electron-builder --win",
     "package:linux": "bun run build:all && electron-builder --linux",
@@ -89,6 +88,7 @@
     "@xterm/addon-fit": "^0.11.0",
     "@xterm/addon-web-links": "^0.12.0",
     "@xterm/xterm": "^5.5.0",
+    "agent-browser": "^0.21.4",
     "better-sqlite3": "^12.4.1",
     "chokidar": "^4.0.0",
     "class-variance-authority": "^0.7.1",
@@ -165,7 +165,9 @@
     "yallist": "4.0.0"
   },
   "prettier": {
-    "plugins": ["prettier-plugin-tailwindcss"],
+    "plugins": [
+      "prettier-plugin-tailwindcss"
+    ],
     "semi": true,
     "singleQuote": false,
     "tabWidth": 2,
@@ -174,7 +176,12 @@
     "endOfLine": "lf"
   },
   "lint-staged": {
-    "*.{ts,tsx}": ["eslint --fix", "prettier --write"],
-    "*.{json,md,html,css}": ["prettier --write"]
+    "*.{ts,tsx}": [
+      "eslint --fix",
+      "prettier --write"
+    ],
+    "*.{json,md,html,css}": [
+      "prettier --write"
+    ]
   }
 }

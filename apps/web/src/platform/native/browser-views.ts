@@ -51,6 +51,11 @@ export async function hide(label: string): Promise<void> {
   await invoke("hide_browser_webview", { label });
 }
 
+export async function hideAll(): Promise<void> {
+  if (!capabilities.nativeBrowser) return;
+  await invoke("hide_all_browser_webviews");
+}
+
 export async function close(label: string): Promise<void> {
   if (!capabilities.nativeBrowser) return;
   await invoke("close_browser_webview", { label });
@@ -77,23 +82,17 @@ export async function reload(label: string): Promise<void> {
   await invoke("reload_browser_webview", { label });
 }
 
-export async function openDevtools(label: string): Promise<void> {
+export async function openDevtools(
+  label: string,
+  mode?: "right" | "bottom" | "detach" | "undocked"
+): Promise<void> {
   if (!capabilities.nativeBrowser) return;
-  await invoke("open_browser_devtools", { label });
+  await invoke("open_browser_devtools", { label, mode });
 }
 
 export async function closeDevtools(label: string): Promise<void> {
   if (!capabilities.nativeBrowser) return;
   await invoke("close_browser_devtools", { label });
-}
-
-export async function getUrl(label: string): Promise<string> {
-  if (!capabilities.nativeBrowser) return "";
-  try {
-    return (await invoke<string>("get_browser_webview_url", { label })) ?? "";
-  } catch {
-    return "";
-  }
 }
 
 export async function getCookieBrowsers(): Promise<unknown[]> {

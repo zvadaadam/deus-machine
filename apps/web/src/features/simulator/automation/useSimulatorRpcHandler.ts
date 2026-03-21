@@ -18,7 +18,7 @@ import { useWsToolRequest } from "@/shared/hooks/useWsToolRequest";
 /**
  * Callbacks from SimulatorPanel that let the RPC handler trigger
  * panel state transitions (e.g., boot a simulator and start streaming).
- * Follows the same pattern as useBrowserRpcHandler's getActiveTab/onAutoCreateTab.
+ * Follows a ref-based callback pattern for stable identity across re-renders.
  */
 export interface SimulatorRpcCallbacks {
   /** Workspace ID for routing commands to the correct native session. */

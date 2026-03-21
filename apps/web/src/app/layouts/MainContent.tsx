@@ -203,6 +203,15 @@ export function MainContent({
     // eslint-disable-next-line react-hooks/exhaustive-deps -- only fire on workspace change, not on collapse toggles
   }, [selectedWorkspaceId]);
 
+  // --- Hide all native BrowserViews on workspace switch ---
+  // BrowserViews are native Electron overlays rendered ABOVE the DOM. When
+  // switching workspaces or going to the welcome screen, stale views from
+  // the previous workspace would remain visible. Hide them immediately;
+  // the new workspace's BrowserTab will re-show its own view when ready.
+  useEffect(() => {
+    native.browserViews.hideAll().catch(() => {});
+  }, [selectedWorkspaceId]);
+
   // --- Sync workspace changes to detached browser window ---
   const detachedWorkspaceContext = useMemo(
     () =>
