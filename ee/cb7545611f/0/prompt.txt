@@ -1,0 +1,786 @@
+<system_instruction>
+You are working inside OpenDevs, a Mac app that lets the user run many coding agents in parallel.
+Your work should take place in the /Users/zvada/Developer/agent/box-ide/.conductor/da-nang-v3 directory (unless otherwise directed), which has been set up for you to work in.
+Each workspace has a .context directory (gitignored) where you can save files to collaborate with other agents.
+DO NOT EVER read or write files at /Users/zvada/Developer/agent/box-ide.
+The target branch for this workspace is main. Use this for actions like creating new PRs, bisecting, etc., unless you're told otherwise.
+
+If the user asks you to work on several unrelated tasks in parallel, you can suggest they start new workspaces.
+If the user asks for help with OpenDevs, ask them to email [humans@conductor.build](mailto:humans@conductor.build) or
+click on the comment icon in the bottom left to send feedback.
+</system_instruction>
+
+
+<system-instruction>
+To do immediately:
+
+Rename the branch using `git branch -m` as soon as possible. Do not check the current branch name.
+
+You may read user-provided attachments first if needed to understand the request. Otherwise, do this before using any skills or any other tools.
+
+Choosing a branch name: use concrete, specific language, avoid abstract nouns, and be concise (<30 characters). Use the prefix "zvadaadam/" before the name.
+
+</system-instruction>
+
+
+<system_instruction>
+The user has attached these files. Read them before proceeding.
+- /Users/zvada/Developer/agent/box-ide/.conductor/da-nang-v3/.context/attachments/pasted_text_2026-03-20_20-00-16.txt (24.4 KB)
+</system_instruction>
+
+
+
+we wnana implemnthtis whjat do u htink hwo doe it fit in here?
+
+---
+
+yes
+
+---
+
+/code-simplifier
+
+---
+
+I run AI code review, is it actionable? Wdyt? Explore in depth each problem.
+
+We want a clean, maintainable codebase, with proper best practices for the tech stack we use.
+
+Run subagents to verify, and if it should be fixed, try to merge some stuff together so it can be fixed together within one subagent. 
+
+If you can test something do it.
+
+-----
+
+
+The inline comment tool (`DiffComment`) is not available in this environment, so I'll present the review findings directly.
+
+---
+
+## Code Review: Workspace Workflow Status
+
+**Branch:** `zvadaadam/workspace-status`
+**Summary:** Adds a `status` field to workspaces (`backlog` → `in-progress` → `in-review` → `done` / `canceled`) with auto-progression logic, backfill migration, and frontend optimistic updates.
+
+---
+
+### Validated Issues
+
+### **#1 Backfill runs on every app startup and overrides user-set status**
+
+`backfillWorkspaceStatus()` is called from `initDatabase()` on every startup with no migration guard or "already ran" flag. It updates workspaces matching `status = 'in-progress'` based on heuristics (e.g., `pr_url IS NOT NULL → in-review`). Once users can explicitly set status, restarting the app silently overrides their choice. For example: user sets a workspace with a PR back to `in-progress` → next restart pushes it to `in-review` again. The `autoProgressStatus()` function has proper sticky/rank guards, but the backfill bypasses all of them via raw SQL.
+
+**Fix:** Add a migration guard (e.g., a one-time flag in a metadata table, or move this into a versioned migration) so it only runs once.
+
+**File:** `apps/backend/src/db/queries.ts` (backfillWorkspaceStatus) / `apps/backend/src/lib/database.ts:53`
+
+---
+
+### **#2 Unvalidated `status` value in WebSocket mutation allows arbitrary strings in DB**
+
+The `updateWorkspaceStatus` mutation in `query-engine.ts` reads `status` via `readStringParam` and casts with `as WorkspaceStatus` (compile-time only). No runtime Zod validation. The HTTP PATCH route validates via `PatchWorkspaceBody` → `WorkspaceStatusSchema`, but the WebSocket `q:mutate` path does not. Any arbitrary string sent via WebSocket would be written directly to the `status` column, causing: (1) the workspace to become invisible in stats counts, (2) `STATUS_RANK[current]` returning `undefined`, making `<=` comparisons always `false` and bypassing the regression guard.
+
+**Fix:** Add `WorkspaceStatusSchema.parse(status)` before calling `setWorkspaceStatus`.
+
+**File:** `apps/backend/src/services/query-engine.ts` (lines ~493-502)
+
+---
+
+### **#3 Hardcoded Tailwind color classes instead of semantic CSS variable tokens**
+
+`WORKFLOW_STATUS_CONFIG` uses `text-amber-500`, `text-purple-500`, and `text-green-500` — raw Tailwind palette utilities. The existing `STATUS_CONFIG` in the same file consistently uses semantic tokens (`text-destructive`, `text-status-unread`, `text-primary`, `text-muted-foreground`). CLAUDE.md explicitly states: *"Don't hardcode colors: `text-green-500 dark:text-green-400` — Create semantic variables: `--color-status-success` → `text-[color:var(--status-success)]`"*
+
+**Fix:** Define CSS variables in `global.css` (e.g., `--status-in-progress`, `--status-in-review`, `--status-done`) and reference them here.
+
+**File:** `apps/web/src/features/sidebar/lib/status.ts` (lines ~113-119)
+
+---
+
+### Filtered Out (not flagged)
+
+- **Stats COUNT consolidation** — pre-existing pattern; new code follows the same structure. Not a new violation.
+- **Missing workspace existence check** — pedantic consistency issue with zero real-world impact (frontend always sends valid IDs; SQLite UPDATE on missing row is a harmless no-op).
+
+---
+
+<system_instruction>
+The user has attached these files. Read them before proceeding.
+- /Users/zvada/Developer/agent/box-ide/.conductor/da-nang-v3/.context/attachments/PR instructions.md (951 B)
+</system_instruction>
+
+
+
+Create a PR
+
+---
+
+I run AI code review, is it actionable? Wdyt? Explore in depth each problem.
+
+We want a clean, maintainable codebase, with proper best practices for the tech stack we use.
+
+Run subagents to verify, and if it should be fixed, try to merge some stuff together so it can be fixed together within one subagent. 
+
+If you can test something do it.
+
+----
+
+No DiffComment tool available. I'll provide the review results directly.
+
+---
+
+## Review: Workspace Status Feature
+
+**Branch:** `zvadaadam/workspace-status` (no PR yet, all changes uncommitted)
+**Summary:** Adds Linear-style workflow states (`backlog`/`in-progress`/`in-review`/`done`/`canceled`) to workspaces. Includes schema migration, backend status service with auto-progression logic, frontend mutation hook with optimistic updates, CSS tokens for status colors, and analytics tracking. Well-structured change with clean separation between auto-progression (`autoProgressStatus`) and explicit user override (`setWorkspaceStatus`).
+
+**19 files changed, +204 / -14 lines**
+
+---
+
+### Validated Issues
+
+### **#1 Stats query adds 3 more separate COUNT subqueries instead of consolidating**
+
+Lines 407-409 of `apps/backend/src/db/queries.ts` add 3 new `SELECT COUNT(*) FROM workspaces WHERE status = ...` subqueries to `getStats()`, bringing the total from 8 to 11 separate full-table scans in one query. CLAUDE.md explicitly addresses this:
+
+> "Consolidate count queries -- GET /stats currently runs 8 separate COUNT(*) full table scans. Aggregate queries should combine into a single query where possible, and results should be cached with short TTL (5-10s) for frequently polled endpoints."
+
+While the existing 8 subqueries are pre-existing, the 3 **new** ones are introduced code that worsens the violation. These three status counts could be consolidated with the existing workspace counts into a single table scan using conditional aggregation:
+
+```sql
+-- Instead of 6 separate subqueries on `workspaces`, use one:
+SELECT
+  COUNT(*) as workspaces,
+  COUNT(CASE WHEN state = 'ready' THEN 1 END) as workspaces_ready,
+  COUNT(CASE WHEN state = 'archived' THEN 1 END) as workspaces_archived,
+  COUNT(CASE WHEN status = 'backlog' AND state != 'archived' THEN 1 END) as workspaces_backlog,
+  COUNT(CASE WHEN status = 'in-progress' AND state != 'archived' THEN 1 END) as workspaces_in_progress,
+  COUNT(CASE WHEN status = 'in-review' AND state != 'archived' THEN 1 END) as workspaces_in_review
+FROM workspaces
+```
+
+The 5s TTL cache mitigates the performance impact, but new code should follow the stated consolidation rule.
+
+**File:** `apps/backend/src/db/queries.ts:407-409`
+
+---
+
+### Filtered (False Positives)
+
+- **WS mutation vs HTTP mismatch:** `updateWorkspaceStatus` uses HTTP PATCH from the frontend despite being in `MUTATION_NAMES`. Filtered because all existing mutations (`archiveWorkspace`, `updateWorkspaceTitle`) follow the same HTTP pattern -- the WS mutation path is unused across the board. This is a pre-existing architectural inconsistency, not a new violation.
+
+---
+
+<system_instruction>
+The user has attached these files. Read them before proceeding.
+- /Users/zvada/Developer/agent/box-ide/.conductor/da-nang-v3/.context/attachments/Lint__Format___Typecheck_67960989419.log (82.8 KB)
+</system_instruction>
+
+
+
+Fix the failing CI actions. I've attached the failure logs.
+
+---
+
+can u run it so we can tets it and se it?
+
+---
+
+<task-notification>
+<task-id>bqpg8f87x</task-id>
+<tool-use-id>REDACTED</tool-use-id>
+<output-file>/private/tmp/claude-501/-Users-zvada-Developer-agent-box-ide--conductor-da-nang-v3/fa2fd57b-3fa6-4122-8051-a52f45fb1763/tasks/bqpg8f87x.output</output-file>
+<status>completed</status>
+<summary>Background command "Start backend + frontend dev servers" completed (exit code 0)</summary>
+</task-notification>
+Read the output file to retrieve the result: /private/tmp/claude-501/-Users-zvada-Developer-agent-box-ide--conductor-da-nang-v3/fa2fd57b-3fa6-4122-8051-a52f45fb1763/tasks/bqpg8f87x.output
+
+---
+
+<task-notification>
+<task-id>balz74aa7</task-id>
+<tool-use-id>toolu_01TdeNRmMZbQZZ8qUoGsGR9t</tool-use-id>
+<output-file>/private/tmp/claude-501/-Users-zvada-Developer-agent-box-ide--conductor-da-nang-v3/fa2fd57b-3fa6-4122-8051-a52f45fb1763/tasks/balz74aa7.output</output-file>
+<status>completed</status>
+<summary>Background command "Start backend + frontend dev servers" completed (exit code 0)</summary>
+</task-notification>
+Read the output file to retrieve the result: /private/tmp/claude-501/-Users-zvada-Developer-agent-box-ide--conductor-da-nang-v3/fa2fd57b-3fa6-4122-8051-a52f45fb1763/tasks/balz74aa7.output
+
+---
+
+<task-notification>
+<task-id>brlenzuy2</task-id>
+<tool-use-id>toolu_01WLuju2djtgTQ2UV2wPWmdR</tool-use-id>
+<output-file>/private/tmp/claude-501/-Users-zvada-Developer-agent-box-ide--conductor-da-nang-v3/fa2fd57b-3fa6-4122-8051-a52f45fb1763/tasks/brlenzuy2.output</output-file>
+<status>completed</status>
+<summary>Background command "Kill old server and restart" completed (exit code 0)</summary>
+</task-notification>
+Read the output file to retrieve the result: /private/tmp/claude-501/-Users-zvada-Developer-agent-box-ide--conductor-da-nang-v3/fa2fd57b-3fa6-4122-8051-a52f45fb1763/tasks/brlenzuy2.output
+
+---
+
+<task-notification>
+<task-id>baap9fa2m</task-id>
+<tool-use-id>REDACTED</tool-use-id>
+<output-file>/private/tmp/claude-501/-Users-zvada-Developer-agent-box-ide--conductor-da-nang-v3/fa2fd57b-3fa6-4122-8051-a52f45fb1763/tasks/baap9fa2m.output</output-file>
+<status>completed</status>
+<summary>Background command "Start backend + frontend dev servers" completed (exit code 0)</summary>
+</task-notification>
+Read the output file to retrieve the result: /private/tmp/claude-501/-Users-zvada-Developer-agent-box-ide--conductor-da-nang-v3/fa2fd57b-3fa6-4122-8051-a52f45fb1763/tasks/baap9fa2m.output
+
+---
+
+<system_instruction>
+The user has attached these files. Read them before proceeding.
+- /Users/zvada/Developer/agent/box-ide/.conductor/da-nang-v3/.context/attachments/Screenshot 2026-03-20 at 9.27.50 PM.png (788.7 KB)
+</system_instruction>
+
+---
+
+<task-notification>
+<task-id>b5itbg3s3</task-id>
+<tool-use-id>REDACTED</tool-use-id>
+<output-file>/private/tmp/claude-501/-Users-zvada-Developer-agent-box-ide--conductor-da-nang-v3/fa2fd57b-3fa6-4122-8051-a52f45fb1763/tasks/b5itbg3s3.output</output-file>
+<status>completed</status>
+<summary>Background command "Test if main code has same error" completed (exit code 0)</summary>
+</task-notification>
+Read the output file to retrieve the result: /private/tmp/claude-501/-Users-zvada-Developer-agent-box-ide--conductor-da-nang-v3/fa2fd57b-3fa6-4122-8051-a52f45fb1763/tasks/b5itbg3s3.output
+
+---
+
+we gfet 500 is doens work unernal serve rerror
+
+---
+
+<task-notification>
+<task-id>b2kk67uy2</task-id>
+<tool-use-id>toolu_018AsNkJ9m8SG9s8DMTxEq9W</tool-use-id>
+<output-file>/private/tmp/claude-501/-Users-zvada-Developer-agent-box-ide--conductor-da-nang-v3/fa2fd57b-3fa6-4122-8051-a52f45fb1763/tasks/b2kk67uy2.output</output-file>
+<status>completed</status>
+<summary>Background command "Start fresh dev servers" completed (exit code 0)</summary>
+</task-notification>
+Read the output file to retrieve the result: /private/tmp/claude-501/-Users-zvada-Developer-agent-box-ide--conductor-da-nang-v3/fa2fd57b-3fa6-4122-8051-a52f45fb1763/tasks/b2kk67uy2.output
+
+---
+
+<task-notification>
+<task-id>b103z38ly</task-id>
+<tool-use-id>toolu_013XL6udYFowduypZQ5c5A61</tool-use-id>
+<output-file>/private/tmp/claude-501/-Users-zvada-Developer-agent-box-ide--conductor-da-nang-v3/fa2fd57b-3fa6-4122-8051-a52f45fb1763/tasks/b103z38ly.output</output-file>
+<status>completed</status>
+<summary>Background command "Start backend directly" completed (exit code 0)</summary>
+</task-notification>
+Read the output file to retrieve the result: /private/tmp/claude-501/-Users-zvada-Developer-agent-box-ide--conductor-da-nang-v3/fa2fd57b-3fa6-4122-8051-a52f45fb1763/tasks/b103z38ly.output
+
+---
+
+u should be abl to tets by youself u know using claude ,cp bvrowser so di it
+
+---
+
+<task-notification>
+<task-id>bf4xwv21w</task-id>
+<tool-use-id>toolu_016RNXkTDdnM7LKqLU78qJXq</tool-use-id>
+<output-file>/private/tmp/claude-501/-Users-zvada-Developer-agent-box-ide--conductor-da-nang-v3/fa2fd57b-3fa6-4122-8051-a52f45fb1763/tasks/bf4xwv21w.output</output-file>
+<status>completed</status>
+<summary>Background command "Start Vite with backend port" completed (exit code 0)</summary>
+</task-notification>
+Read the output file to retrieve the result: /private/tmp/claude-501/-Users-zvada-Developer-agent-box-ide--conductor-da-nang-v3/fa2fd57b-3fa6-4122-8051-a52f45fb1763/tasks/bf4xwv21w.output
+
+---
+
+u mean u shoudl do this run it kill the old ones and run the desktop and also web
+
+---
+
+<system_instruction>
+The user has attached these files. Read them before proceeding.
+- /Users/zvada/Developer/agent/box-ide/.conductor/da-nang-v3/.context/attachments/pasted_text_2026-03-20_21-39-24.txt (8.7 KB)
+</system_instruction>
+
+
+
+i run it and this:
+
+---
+
+Rebase this branch onto origin/main. Then push --force-with-lease.
+
+---
+
+Commit and push all changes
+
+---
+
+Commit and push all changes
+
+---
+
+yes
+
+---
+
+Rebase your branch onto the remote branch (main) and resolve conflicts. Stage the resolved files and run `git rebase --continue`, then push --force-with-lease.
+
+---
+
+<system_instruction>
+The user has attached these files. Read them before proceeding.
+- /Users/zvada/Developer/agent/box-ide/.conductor/da-nang-v3/.context/attachments/Lint__Format___Typecheck_68042646607.log (76.6 KB)
+</system_instruction>
+
+
+
+Fix the failing CI actions. I've attached the failure logs.
+
+---
+
+<system_instruction>
+The user has attached these files. Read them before proceeding.
+- /Users/zvada/Developer/agent/box-ide/.conductor/da-nang-v3/.context/attachments/pasted_text_2026-03-21_23-14-03.txt (13.3 KB)
+- /Users/zvada/Developer/agent/box-ide/.conductor/da-nang-v3/.context/attachments/Screenshot 2026-03-21 at 11.14.06 PM.png (105.1 KB)
+</system_instruction>
+
+
+
+i cannot send a mesage why? epxlore htu
+
+---
+
+but th ebun run dev shold run the sidecar right?
+
+---
+
+i thik we shoudl rebudl the sidecar an also the bakend right and mayb rveytjign so we dont weevr this incorects tuff, hwo this shoudlbe doen wdyt?
+
+---
+
+but i mean if we ussiantl do bun instal and bun run dev it shoudl prprae and buidl the nescary parts wdyt?
+
+---
+
+and how abut also the bakned taht neds to bun buid also and cloud replay also right?
+
+---
+
+but the building things shoud not be comit in git right? it shoudl be alway buildded right>  so many errors can arise, hwo this shudl be doen prerly epxlore ithink
+
+---
+
+do it here btu also shoudl we buld the backend and other stuff also right?
+
+---
+
+Commit and push all changes
+
+---
+
+okey nwo let's go back in the sttaus for worskapce, what should we do to tets it and see it i htogtn e will viiaslize it somehow reght?
+
+---
+
+<task-notification>
+<task-id>bgee1r8m3</task-id>
+<tool-use-id>toolu_01JQkbb5zBo13DKnFRz4duH3</tool-use-id>
+<output-file>/private/tmp/claude-501/-Users-zvada-Developer-agent-box-ide--conductor-da-nang-v3/458cf68f-e2a4-4943-b612-11e15a18f3ba/tasks/bgee1r8m3.output</output-file>
+<status>killed</status>
+<summary>Background command "find /Users/zvada/Developer/agent/box-ide -type f \( -name "*.ts" -o -name "*.tsx" \) -exec grep -l "WorkspaceStatus\|backlog.*in-progress.*in-review" {} \;" was stopped</summary>
+</task-notification>
+Read the output file to retrieve the result: /private/tmp/claude-501/-Users-zvada-Developer-agent-box-ide--conductor-da-nang-v3/458cf68f-e2a4-4943-b612-11e15a18f3ba/tasks/bgee1r8m3.output
+
+---
+
+let's do with the linear apprahc (ectalcy liek linear) if it's loading or working teh workapce we wil replace with th eloading th esttaus icon right? eplxor if make sense
+
+---
+
+do it
+
+---
+
+<system-instruction>
+The user has added 3 comments to the diff for this workspace. Please review and address these comments as part of your response. When addressing comments on the "original" side or on specific commits, read the file from that version (not the current version). Below are the comments, including metadata about what git state they were left on:
+
+Comment #1:
+
+File: 
+Line: undefined
+User comment: "<!-- This is an auto-generated comment: summarize by coderabbit.ai -->
+<!-- This is an auto-generated comment: review in progress by coderabbit.ai -->
+
+> [!NOTE]
+> Currently processing new changes in this PR. This may take a few minutes, please wait...
+> 
+> <details>
+> <summary>⚙️ Run configuration</summary>
+> 
+> **Configuration used**: defaults
+> 
+> **Review profile**: CHILL
+> 
+> **Plan**: Lite
+> 
+> **Run ID**: `299eafe0-7150-4d3c-8f6c-ed3fcc1eef7f`
+> 
+> </details>
+> 
+> <details>
+> <summary>📥 Commits</summary>
+> 
+> Reviewing files that changed from the base of the PR and between 9c5b7bbd5efd7494f213b7672b789fb73a5a7f9f and b495f2d5d62adf60a4c553dd7babb4daaba2fc12.
+> 
+> </details>
+> 
+> <details>
+> <summary>📒 Files selected for processing (8)</summary>
+> 
+> * `apps/web/src/app/layouts/MainLayout.tsx`
+> * `apps/web/src/features/sidebar/model/types.ts`
+> * `apps/web/src/features/sidebar/ui/AppSidebar.tsx`
+> * `apps/web/src/features/sidebar/ui/RepositoryItem.tsx`
+> * `apps/web/src/features/sidebar/ui/WorkflowStatusIcon.tsx`
+> * `apps/web/src/features/sidebar/ui/WorkspaceItem.tsx`
+> * `apps/web/src/features/sidebar/ui/WorkspaceStatusMenu.tsx`
+> * `shared/enums.ts`
+> 
+> </details>
+> 
+> ```ascii
+>  __________________________________________________________
+> < Solving problems you didn't know you were about to have. >
+>  ----------------------------------------------------------
+>   \
+>    \   (\__/)
+>        (•ㅅ•)
+>        / 　 づ
+> ```
+
+<!-- end of auto-generated comment: review in progress by coderabbit.ai -->
+
+<!-- walkthrough_start -->
+
+<details>
+<summary>📝 Walkthrough</summary>
+
+## Walkthrough
+
+This PR introduces a new workspace status workflow system with five states (`backlog`, `in-progress`, `in-review`, `done`, `canceled`). It adds database schema support, backend services with status progression guards, API mutations for client updates, frontend UI components with themed colors, and analytics tracking for status transitions.
+
+## Changes
+
+|Cohort / File(s)|Summary|
+|---|---|
+|**Shared Type System** <br> `shared/enums.ts`, `shared/types/workspace.ts`|Introduced `WorkspaceStatusSchema` enum, `WorkspaceStatus` type, and workflow metadata constants (`STICKY_STATUSES`, `STATUS_RANK`). Updated `Workspace` interface to include required `status: WorkspaceStatus` field.|
+|**Shared Events & Schema** <br> `shared/events.ts`, `shared/schema.ts`|Added `"updateWorkspaceStatus"` mutation name. Extended database migrations and schema SQL to add `workspaces.status TEXT NOT NULL DEFAULT 'in-progress'` column and idempotent index.|
+|**Backend Database Layer** <br> `apps/backend/src/db/queries.ts`, `apps/backend/src/db/types.ts`|Updated `WORKSPACE_DETAILS_SELECT` and aggregation queries to include `status` field. Extended `WorkspaceRow`, `WorkspaceWithDetailsRow`, and `StatsRow` types with new status-related properties.|
+|**Backend Services** <br> `apps/backend/src/services/workspace-status.service.ts`, `apps/backend/src/services/query-engine.ts`|Added new `workspace-status.service.ts` module with `autoProgressStatus()` (respects sticky states and rank progression) and `setWorkspaceStatus()` functions. Updated query engine to handle `updateWorkspaceStatus` mutation branch.|
+|**Backend API & Validation** <br> `apps/backend/src/lib/schemas.ts`, `apps/backend/src/routes/workspaces.ts`, `apps/backend/src/routes/workspaces.pr.ts`|Updated `PatchWorkspaceBody` schema to accept optional `status` field. Extended workspace PATCH handler to call `setWorkspaceStatus()` and trigger auto-progression on archive/unarchive. Enhanced PR-status endpoint to auto-update `status` to `"done"` on merge detection and to `"in-review"` on PR discovery.|
+|**Frontend Data Layer** <br> `apps/web/src/features/workspace/api/workspace.service.ts`, `apps/web/src/features/workspace/api/workspace.queries.ts`, `apps/web/src/features/workspace/types.ts`|Added `WorkspaceService.updateStatus()` method and `useUpdateWorkspaceStatus()` hook with optimistic updates, rollback, and cache invalidation. Re-exported `WorkspaceStatus` type.|
+|**Frontend UI & Styling** <br> `apps/web/src/features/sidebar/lib/status.ts`, `apps/web/src/features/sidebar/ui/WorkspaceItem.stories.tsx`, `apps/web/src/global.css`|Introduced `WORKFLOW_STATUS_CONFIG` mapping for status-to-label/color resolution. Added CSS variables `--color-status-in-progress`, `--color-status-in-review`, `--color-status-done` with semantic color tokens. Updated story defaults to include status.|
+|**Frontend Utilities** <br> `apps/web/src/features/workspace/lib/workspace.utils.ts`|Updated optimistic workspace factory to initialize `status: "in-progress"` alongside existing fields.|
+|**Analytics & Telemetry** <br> `apps/web/src/platform/analytics/events.ts`|Added `workspace_status_changed` event schema with workspace ID and status payload.|
+|**Backend Tests** <br> `apps/backend/test/unit/shared/events.test.ts`|Updated mutation name assertion to expect 13 mutations including `"updateWorkspaceStatus"`.|
+|**Dev Tooling** <br> `package.json`, `scripts/dev.sh`|Updated `dev` npm script and dev shell script to check for sidecar bundle existence and conditionally build it before starting Electron dev server.|
+
+## Sequence Diagram(s)
+
+```mermaid
+sequenceDiagram
+    participant Client as Frontend Client
+    participant Hook as useUpdateWorkspaceStatus
+    participant Service as WorkspaceService
+    participant WS as WebSocket/Mutation
+    participant BackendRoute as Backend Route
+    participant StatusService as workspace-status.service
+    participant DB as Database
+    participant Cache as Query Cache
+    participant Telemetry as Analytics
+
+    Client->>Hook: updateStatus(workspaceId, status)
+    Hook->>Cache: Snapshot & optimistically update<br/>query cache (immer produce)
+    Hook->>Service: updateStatus(workspaceId, status)
+    Service->>WS: sendMutate("updateWorkspaceStatus",<br/>{ workspaceId, status })
+    WS->>BackendRoute: Receive mutation
+    BackendRoute->>StatusService: setWorkspaceStatus(id, status)
+    StatusService->>DB: UPDATE workspaces SET status = ?
+    DB-->>StatusService: Success
+    BackendRoute->>WS: return { success: true }
+    WS->>Hook: mutation.onSuccess
+    Hook->>Telemetry: track("workspace_status_changed"<br/>{ workspace_id, status })
+    Hook->>Cache: Invalidate queryKeys.workspaces.all
+    Hook->>Client: Return updated workspace
+
+    Note over Client,Cache: On Error: Rollback snapshot
+```
+
+```mermaid
+sequenceDiagram
+    participant Endpoint as GET /workspaces/:id/pr-status
+    participant PRService as getPrStatus()
+    participant Detector as PR Detector
+    participant StatusService as autoProgressStatus
+    participant DB as Database
+    participant Cache as Cache/Query Invalidation
+
+    Endpoint->>PRService: getPrStatus(workspacePath)
+    PRService->>Detector: Check for PR changes
+    Detector-->>PRService: { has_pr, pr_url, merge_status }
+    PRService-->>Endpoint: result
+
+    alt New PR Detected
+        Endpoint->>DB: Update pr_url & pr_number
+        Endpoint->>StatusService: autoProgressStatus(id, "in-review")
+        StatusService->>DB: UPDATE workspaces SET status
+        DB-->>StatusService: Success
+    end
+
+    alt Merge Detected
+        Endpoint->>StatusService: autoProgressStatus(id, "done")
+        StatusService->>DB: UPDATE workspaces SET status
+        DB-->>StatusService: Success
+    end
+
+    Endpoint->>Cache: invalidate(["workspaces", "stats"])
+    Cache-->>Endpoint: Cache cleared
+    Endpoint-->>Client: Return PR status result
+```
+
+## Estimated code review effort
+
+🎯 3 (Moderate) | ⏱️ ~30 minutes
+
+## Poem
+
+> 🐰 *A status emerges, in progress we hop,*  
+> *From backlog to done, we'll never stop,*  
+> *In-review and in-progress, the workflow takes flight,*  
+> *Auto-progression keeps everything right,* 🚀
+
+</details>
+
+<!-- walkthrough_end -->
+
+
+<!-- tips_start -->
+
+---
+
+<sub>Comment `@coderabbitai help` to get the list of available commands and usage tips.</sub>
+
+<!-- tips_end -->
+
+<!-- internal state start -->
+
+
+<!-- REDACTED/REDACTED/REDACTED/REDACTED/REDACTED/REDACTED/REDACTED/REDACTED/REDACTED/REDACTED/REDACTED/REDACTED/REDACTED/REDACTED/REDACTED/REDACTED/REDACTED/J2paRFJmRXere26eRMuBRamPes+tY/REDACTED/REDACTED/REDACTED/REDACTED/REDACTED/REDACTED/REDACTED/REDACTED/gGW+QbejdMQep9w++/REDACTED/REDACTED/REDACTED/gnb0yyv02RoM6+KnVdlxU5DW+5L/hnTM1SXMwegs/REDACTED/REDACTED/kODnGu0QKrBQKaAtrDPUGEq/REDACTED/REDACTED/REDACTED/REDACTED/REDACTED/REDACTED/REDACTED/y+7qB5AGZO/REDACTED/REDACTED/REDACTED/REDACTED/REDACTED/REDACTED/REDACTED/REDACTED/REDACTED/REDACTED/REDACTED/REDACTED/EFM9EQzlpxiBHXaZaH2mDTA2/REDACTED/REDACTED/REDACTED/REDACTED/REDACTED/Coi8I/REDACTED/REDACTED/REDACTED/REDACTED/REDACTED/REDACTED/EPApTBRQPkriSAPNCWhLAy6YAT9oqQdC99no/REDACTED/REDACTED/REDACTED/REDACTED/REDACTED/MBwYlaznXDQZVwl4/REDACTED/REDACTED/REDACTED/REDACTED/REDACTED/REDACTED/REDACTED/REDACTED/REDACTED/REDACTED/KmtKs2fSCu4lgrlmVoftQKaD47IKR/REDACTED/R6+05nHLOYBK3H4Ibw/REDACTED/REDACTED/REDACTED/REDACTED/jpeXtNBnqK8ImLMVzdlus/REDACTED/REDACTED/REDACTED/REDACTED/REDACTED//REDACTED/4RklwCFyhZTwDQJTG/REDACTED/REDACTED/REDACTED/REDACTED/REDACTED/lUocH3IADnAAD7FPjHaj9h7Xg4BcPOg9+x/WI/REDACTED/REDACTED/REDACTED -->
+
+<!-- internal state end -->"
+
+Comment metadata:
+This comment was left on a file.
+This comment was left on GitHub by @coderabbitai.
+
+
+Comment #2:
+
+File: apps/backend/src/routes/workspaces.pr.ts
+Line: 38
+User comment: "_⚠️ Potential issue_ | _🟠 Major_
+
+**Run the `in-review` transition on any detected PR, not only on a new URL.**
+
+`autoProgressStatus(workspace.id, "in-review")` is currently gated behind `result.pr_url !== workspace.pr_url`. That misses workspaces whose `pr_url` was already populated before this feature lands, and any workspace a user moved back below `in-review`: `getPrStatus()` will keep returning `has_pr = true`, but the workflow status never catches up. Persist the metadata only when it changes, but drive the status transition from `result.has_pr` itself.
+
+<details>
+<summary>🤖 Prompt for AI Agents</summary>
+
+```
+Verify each finding against the current code and only fix it if needed.
+
+In `@apps/backend/src/routes/workspaces.pr.ts` around lines 29 - 38, The
+PR-detection block only calls autoProgressStatus(workspace.id, "in-review") when
+result.pr_url differs from workspace.pr_url, missing cases where has_pr is true
+but URL was already set; change the logic so that persistence
+(db.prepare(...).run(...)) and needsInvalidation are only performed when
+result.pr_url !== workspace.pr_url, but call autoProgressStatus(workspace.id,
+"in-review") whenever result.has_pr is true (regardless of URL change) so the
+workflow transitions on any detected PR; use the existing symbols result.has_pr,
+result.pr_url, workspace.pr_url, autoProgressStatus, getDatabase, and
+needsInvalidation to locate and update the code.
+```
+
+</details>
+
+<!-- fingerprinting:phantom:medusa:grasshopper -->
+
+<!-- This is an auto-generated comment by CodeRabbit -->"
+
+Comment metadata:
+This comment was left on the modified branch.
+This comment was left on GitHub by @coderabbitai.
+This comment is the start of thread PRRT_kwDOQEbULc517D4E. 
+
+
+Comment #3:
+
+File: apps/web/src/features/workspace/api/workspace.queries.ts
+Line: 475
+User comment: "_⚠️ Potential issue_ | _🟡 Minor_
+
+**Rollback only the touched workspace status.**
+
+`context.previousData` snapshots the whole `RepoGroup[]`. If two status mutations overlap, a failure in one mutation will restore an old snapshot and wipe the other workspace's optimistic status too. Capture the previous `status` for just `workspaceId` and revert that single node in `onError`.
+
+<details>
+<summary>♻️ Narrow the rollback scope</summary>
+
+```diff
+     onMutate: async ({ workspaceId, status }) => {
+       await queryClient.cancelQueries({ queryKey });
+-      const previousData = queryClient.getQueryData<RepoGroup[]>(queryKey);
++      let previousStatus: WorkspaceStatus | undefined;
+
+       queryClient.setQueryData<RepoGroup[]>(queryKey, (old) => {
+         if (!old) return old;
+         return produce(old, (draft) => {
+           for (const repo of draft) {
+             const ws = repo.workspaces.find((w) => w.id === workspaceId);
+             if (ws) {
++              previousStatus = ws.status;
+               ws.status = status;
+               break;
+             }
+           }
+         });
+       });
+
+-      return { previousData };
++      return { workspaceId, previousStatus };
+     },
+
+     onError: (_err, _vars, context) => {
+-      if (context?.previousData) {
+-        queryClient.setQueryData(queryKey, context.previousData);
+-      }
++      if (context?.previousStatus === undefined) return;
++      queryClient.setQueryData<RepoGroup[]>(queryKey, (old) => {
++        if (!old) return old;
++        return produce(old, (draft) => {
++          for (const repo of draft) {
++            const ws = repo.workspaces.find((w) => w.id === context.workspaceId);
++            if (ws) {
++              ws.status = context.previousStatus;
++              break;
++            }
++          }
++        });
++      });
+     },
+```
+</details>
+
+<!-- suggestion_start -->
+
+<details>
+<summary>📝 Committable suggestion</summary>
+
+> ‼️ **IMPORTANT**
+> Carefully review the code before committing. Ensure that it accurately replaces the highlighted code, contains no missing lines, and has no issues with indentation. Thoroughly test & benchmark the code to ensure it meets the requirements.
+
+```suggestion
+    onMutate: async ({ workspaceId, status }) => {
+      await queryClient.cancelQueries({ queryKey });
+      let previousStatus: WorkspaceStatus | undefined;
+
+      queryClient.setQueryData<RepoGroup[]>(queryKey, (old) => {
+        if (!old) return old;
+        return produce(old, (draft) => {
+          for (const repo of draft) {
+            const ws = repo.workspaces.find((w) => w.id === workspaceId);
+            if (ws) {
+              previousStatus = ws.status;
+              ws.status = status;
+              break;
+            }
+          }
+        });
+      });
+
+      return { workspaceId, previousStatus };
+    },
+
+    onError: (_err, _vars, context) => {
+      if (context?.previousStatus === undefined) return;
+      queryClient.setQueryData<RepoGroup[]>(queryKey, (old) => {
+        if (!old) return old;
+        return produce(old, (draft) => {
+          for (const repo of draft) {
+            const ws = repo.workspaces.find((w) => w.id === context.workspaceId);
+            if (ws) {
+              ws.status = context.previousStatus;
+              break;
+            }
+          }
+        });
+      });
+    },
+```
+
+</details>
+
+<!-- suggestion_end -->
+
+<details>
+<summary>🤖 Prompt for AI Agents</summary>
+
+```
+Verify each finding against the current code and only fix it if needed.
+
+In `@apps/web/src/features/workspace/api/workspace.queries.ts` around lines 451 -
+475, The current optimistic update saves the entire RepoGroup[] snapshot in
+onMutate and restores it in onError, which can overwrite other concurrent
+optimistic updates; instead, in onMutate (function handling { workspaceId,
+status }) read just the target workspace's current status from
+queryClient.getQueryData<RepoGroup[]>(queryKey) and return a context object like
+{ workspaceId, previousStatus } (not the whole array), while still applying the
+optimistic change via queryClient.setQueryData/produce; then change onError to
+look up context.workspaceId and only revert that workspace's status back to
+context.previousStatus using queryClient.setQueryData and produce (iterate
+repo.workspaces to find the workspace id and set its status).
+```
+
+</details>
+
+<!-- fingerprinting:phantom:medusa:grasshopper -->
+
+<!-- This is an auto-generated comment by CodeRabbit -->"
+
+Comment metadata:
+This comment was left on the modified branch.
+This comment was left on GitHub by @coderabbitai.
+This comment is the start of thread PRRT_kwDOQEbULc517D4F. 
+
+</system-instruction>
+
+I run AI code review, is it actionable? Wdyt? Explore in depth each problem.
+
+We want a clean, maintainable codebase, with proper best practices for the tech stack we use.
+
+Run subagents to verify, and if it should be fixed, try to merge some stuff together so it can be fixed together within one subagent. 
+
+If you can test something do it.
+
+---
+
+<system_instruction>
+The user has attached these files. Read them before proceeding.
+- /Users/zvada/Developer/agent/box-ide/.conductor/da-nang-v3/.context/attachments/Screenshot 2026-03-22 at 12.00.29 AM.png (15.7 KB)
+</system_instruction>
+
+
+
+maybe also here we could put the workspac estaus beore this? wdyt?
+
+---
+
+maybe more like th estaus shoudl be on far left
