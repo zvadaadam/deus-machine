@@ -8,6 +8,40 @@ interface WorkflowStatusIconProps {
   className?: string;
 }
 
+/** Partial arc circle used by in-progress and in-review statuses. */
+function ProgressCircle({
+  cx,
+  cy,
+  r,
+  c,
+  fraction,
+  color,
+}: {
+  cx: number;
+  cy: number;
+  r: number;
+  c: number;
+  fraction: number;
+  color: string;
+}) {
+  return (
+    <>
+      <circle cx={cx} cy={cy} r={r} stroke={color} strokeWidth={1.5} opacity={0.3} />
+      <circle
+        cx={cx}
+        cy={cy}
+        r={r}
+        stroke={color}
+        strokeWidth={1.5}
+        strokeDasharray={`${c * fraction} ${c}`}
+        strokeDashoffset={c * 0.25}
+        strokeLinecap="round"
+        transform={`rotate(-90 ${cx} ${cy})`}
+      />
+    </>
+  );
+}
+
 /**
  * Linear-style workflow status icons.
  *
@@ -47,60 +81,26 @@ export const WorkflowStatusIcon = React.memo(function WorkflowStatusIcon({
             opacity={0.6}
           />
         ))
-        .with("in-progress", () => {
-          // Half-filled circle: full outline + 50% arc fill
-          const halfArc = circumference * 0.5;
-          return (
-            <>
-              <circle
-                cx={half}
-                cy={half}
-                r={r}
-                stroke="var(--status-in-progress)"
-                strokeWidth={1.5}
-                opacity={0.3}
-              />
-              <circle
-                cx={half}
-                cy={half}
-                r={r}
-                stroke="var(--status-in-progress)"
-                strokeWidth={1.5}
-                strokeDasharray={`${halfArc} ${circumference}`}
-                strokeDashoffset={circumference * 0.25}
-                strokeLinecap="round"
-                transform={`rotate(-90 ${half} ${half})`}
-              />
-            </>
-          );
-        })
-        .with("in-review", () => {
-          // 3/4 filled circle
-          const threeQuarterArc = circumference * 0.75;
-          return (
-            <>
-              <circle
-                cx={half}
-                cy={half}
-                r={r}
-                stroke="var(--status-in-review)"
-                strokeWidth={1.5}
-                opacity={0.3}
-              />
-              <circle
-                cx={half}
-                cy={half}
-                r={r}
-                stroke="var(--status-in-review)"
-                strokeWidth={1.5}
-                strokeDasharray={`${threeQuarterArc} ${circumference}`}
-                strokeDashoffset={circumference * 0.25}
-                strokeLinecap="round"
-                transform={`rotate(-90 ${half} ${half})`}
-              />
-            </>
-          );
-        })
+        .with("in-progress", () => (
+          <ProgressCircle
+            cx={half}
+            cy={half}
+            r={r}
+            c={circumference}
+            fraction={0.5}
+            color="var(--status-in-progress)"
+          />
+        ))
+        .with("in-review", () => (
+          <ProgressCircle
+            cx={half}
+            cy={half}
+            r={r}
+            c={circumference}
+            fraction={0.75}
+            color="var(--status-in-review)"
+          />
+        ))
         .with("done", () => {
           // Filled circle + checkmark
           const checkScale = size / 14;
