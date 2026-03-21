@@ -810,3 +810,336 @@ The user has attached these files. Read them before proceeding.
 
 
 Fix the failing CI actions. I've attached the failure logs.
+
+---
+
+<system-instruction>
+The user has added 4 comments to the diff for this workspace. Please review and address these comments as part of your response. When addressing comments on the "original" side or on specific commits, read the file from that version (not the current version). Below are the comments, including metadata about what git state they were left on:
+
+Comment #1:
+
+File: apps/web/src/app/layouts/MainLayout.tsx
+Line: 227
+User comment: "_⚠️ Potential issue_ | _🟡 Minor_
+
+**Surface status update failures instead of silently snapping back.**
+
+`useUpdateWorkspaceStatus()` already rolls back the optimistic cache update on error. From here we fire `mutate()` without any user-facing error handler, so a failed write just looks like the status briefly changed and then reverted.
+
+
+<details>
+<summary>💡 Proposed fix</summary>
+
+```diff
+   const handleStatusChange = useCallback(
+     (workspaceId: string, status: import("@shared/enums").WorkspaceStatus) => {
+-      statusMutationRef.current.mutate({ workspaceId, status });
++      statusMutationRef.current.mutate(
++        { workspaceId, status },
++        {
++          onError: (error) => {
++            toast.error(getErrorMessage(error));
++          },
++        }
++      );
+     },
+     []
+   );
+```
+</details>
+
+<details>
+<summary>🤖 Prompt for AI Agents</summary>
+
+```
+Verify each finding against the current code and only fix it if needed.
+
+In `@apps/web/src/app/layouts/MainLayout.tsx` around lines 220 - 227, The
+optimistic update rollback is silent because handleStatusChange calls
+statusMutationRef.current.mutate(...) with no user-facing error handling; update
+handleStatusChange (or the mutate call) to pass an onError callback to
+statusMutation (useUpdateWorkspaceStatus()/statusMutation/statusMutationRef)
+that surfaces the failure to the user (e.g., show a toast/snackbar, set an error
+state, or open an alert) and optionally include the error message in the UI;
+ensure you attach the onError to the same mutate invocation so the optimistic
+update still rolls back but the user sees a clear error.
+```
+
+</details>
+
+<!-- fingerprinting:phantom:medusa:grasshopper -->
+
+<!-- This is an auto-generated comment by CodeRabbit -->"
+
+Comment metadata:
+This comment was left on the modified branch.
+This comment was left on GitHub by @coderabbitai.
+This comment is the start of thread PRRT_kwDOQEbULc517Kvp. 
+
+
+Comment #2:
+
+File: apps/web/src/features/sidebar/ui/WorkflowStatusIcon.tsx
+Line: 140
+User comment: "_⚠️ Potential issue_ | _🟡 Minor_
+
+**`canceled` currently renders as a minus, not a slash.**
+
+Because `y1` and `y2` are identical here, the glyph reads like a neutral horizontal bar instead of a canceled state.
+
+
+<details>
+<summary>🎨 Proposed fix</summary>
+
+```diff
+             <line
+               x1={half - r * 0.5}
+-              y1={half}
++              y1={half - r * 0.5}
+               x2={half + r * 0.5}
+-              y2={half}
++              y2={half + r * 0.5}
+               stroke="var(--muted-foreground)"
+               strokeWidth={1.5}
+               strokeLinecap="round"
+               opacity={0.6}
+             />
+```
+</details>
+
+<!-- suggestion_start -->
+
+<details>
+<summary>📝 Committable suggestion</summary>
+
+> ‼️ **IMPORTANT**
+> Carefully review the code before committing. Ensure that it accurately replaces the highlighted code, contains no missing lines, and has no issues with indentation. Thoroughly test & benchmark the code to ensure it meets the requirements.
+
+```suggestion
+        .with("canceled", () => (
+          // Circle + diagonal line
+          <>
+            <circle
+              cx={half}
+              cy={half}
+              r={r}
+              stroke="var(--muted-foreground)"
+              strokeWidth={1.5}
+              opacity={0.4}
+            />
+            <line
+              x1={half - r * 0.5}
+              y1={half - r * 0.5}
+              x2={half + r * 0.5}
+              y2={half + r * 0.5}
+              stroke="var(--muted-foreground)"
+              strokeWidth={1.5}
+              strokeLinecap="round"
+              opacity={0.6}
+            />
+          </>
+        ))
+```
+
+</details>
+
+<!-- suggestion_end -->
+
+<details>
+<summary>🤖 Prompt for AI Agents</summary>
+
+```
+Verify each finding against the current code and only fix it if needed.
+
+In `@apps/web/src/features/sidebar/ui/WorkflowStatusIcon.tsx` around lines 121 -
+140, The "canceled" case in WorkflowStatusIcon.tsx draws a horizontal bar
+because the line uses identical y1 and y2; update the line in the "canceled"
+branch (the JSX inside .with("canceled", ...) that renders <line ... />) to make
+it diagonal by setting y1 and y2 to different values (for example y1={half - r *
+0.5} and y2={half + r * 0.5} or the inverse) so the stroke becomes a slash
+across the circle; keep the existing x1/x2, stroke, strokeWidth, strokeLinecap
+and opacity values.
+```
+
+</details>
+
+<!-- fingerprinting:phantom:medusa:grasshopper -->
+
+<!-- This is an auto-generated comment by CodeRabbit -->"
+
+Comment metadata:
+This comment was left on the modified branch.
+This comment was left on GitHub by @coderabbitai.
+This comment is the start of thread PRRT_kwDOQEbULc517Kvs. 
+
+
+Comment #3:
+
+File: apps/web/src/features/sidebar/ui/WorkspaceItem.tsx
+Line: 109
+User comment: "_⚠️ Potential issue_ | _🟠 Major_
+
+**Rows with session activity lose the only status-change control.**
+
+The menu only exists in the `!hasSessionIcon` branch, so `working` / `unread` / `error` workspaces cannot be moved to `backlog`, `canceled`, etc. from the sidebar even though workflow status is meant to stay independent of `session_status`.
+
+
+
+Also applies to: 181-205
+
+<details>
+<summary>🤖 Prompt for AI Agents</summary>
+
+```
+Verify each finding against the current code and only fix it if needed.
+
+In `@apps/web/src/features/sidebar/ui/WorkspaceItem.tsx` around lines 107 - 109,
+The current conditional gating on hasSessionIcon prevents the status-change menu
+from rendering for workspaces with session activity; update the WorkspaceItem
+component so the status menu (the code currently inside the !hasSessionIcon
+branch) is rendered regardless of hasSessionIcon while still keeping the session
+activity icon precedence for visual display (i.e., compute displayStatus as
+before but move the menu JSX out of the !hasSessionIcon-only branch).
+Specifically, remove or relax the !hasSessionIcon check around the menu
+rendering (also in the other occurrence at the block covering lines 181-205) so
+the status-change controls (move to backlog/canceled/etc.) remain available even
+when displayStatus is "working"|"unread"|"error".
+```
+
+</details>
+
+<!-- fingerprinting:phantom:medusa:grasshopper -->
+
+<!-- This is an auto-generated comment by CodeRabbit -->"
+
+Comment metadata:
+This comment was left on the modified branch.
+This comment was left on GitHub by @coderabbitai.
+This comment is the start of thread PRRT_kwDOQEbULc517Kv7. 
+
+
+Comment #4:
+
+File: apps/web/src/features/sidebar/ui/WorkspaceStatusMenu.tsx
+Line: 40
+User comment: "_⚠️ Potential issue_ | _🟠 Major_
+
+<details>
+<summary>🧩 Analysis chain</summary>
+
+🏁 Script executed:
+
+```shell
+cat -n apps/web/src/features/sidebar/ui/WorkspaceStatusMenu.tsx | head -60
+```
+
+Repository: zvadaadam/box-ide
+
+Length of output: 2076
+
+---
+
+🌐 Web query:
+
+`Radix UI DropdownMenu Item onSelect keyboard accessibility Enter Space`
+
+💡 Result:
+
+- **You don’t need to manually handle `Enter`/`Space`.** Radix `DropdownMenu` follows the WAI-ARIA menubutton pattern: when focus is on a **menu item**, **`Enter` or `Space` “activates” the focused item**, which triggers the item’s selection logic (i.e., your `onSelect`). [1]  
+- **Use `onSelect` (not `onClick`) for accessible activation.** `DropdownMenu.Item` exposes an `onSelect` prop specifically for item activation/selection. [1]  
+- **Keeping the menu open:** by default, selecting an item closes the menu. If you need to keep it open (e.g., the item opens a dialog), call `event.preventDefault()` inside `onSelect`. [2][3]  
+
+```tsx
+<DropdownMenu.Item
+  onSelect={(e) => {
+    // fires for mouse click AND Enter/Space
+    // e.preventDefault(); // uncomment to keep the menu open
+    doAction();
+  }}
+>
+  Do action
+</DropdownMenu.Item>
+```
+
+**Sources:** Radix DropdownMenu docs (keyboard + API) [1], Radix issue reproduction note about `onSelect(e).preventDefault()` [2], StackOverflow example using `onSelect(e).preventDefault()` to stop close [3].
+
+---
+
+</details>
+
+**Use `onSelect` for menu item activation instead of `onClick`.**
+
+`DropdownMenu.Item` from Radix UI exposes `onSelect` to handle item activation—it fires for both mouse clicks and keyboard interaction (Enter/Space). Using `onClick` causes keyboard users to miss status changes, breaking accessibility compliance with the WAI-ARIA menubutton pattern. Remove `e.stopPropagation()` as it is not needed with `onSelect`.
+
+<details>
+<summary>🧭 Proposed fix</summary>
+
+```diff
+             <DropdownMenuItem
+               key={status}
+-              onClick={(e) => {
+-                e.stopPropagation();
++              onSelect={() => {
+                 if (!isActive) onStatusChange(status);
+               }}
+               className="flex items-center gap-2"
+             >
+```
+</details>
+
+<!-- suggestion_start -->
+
+<details>
+<summary>📝 Committable suggestion</summary>
+
+> ‼️ **IMPORTANT**
+> Carefully review the code before committing. Ensure that it accurately replaces the highlighted code, contains no missing lines, and has no issues with indentation. Thoroughly test & benchmark the code to ensure it meets the requirements.
+
+```suggestion
+            <DropdownMenuItem
+              key={status}
+              onSelect={() => {
+                if (!isActive) onStatusChange(status);
+              }}
+              className="flex items-center gap-2"
+            >
+```
+
+</details>
+
+<!-- suggestion_end -->
+
+<details>
+<summary>🤖 Prompt for AI Agents</summary>
+
+```
+Verify each finding against the current code and only fix it if needed.
+
+In `@apps/web/src/features/sidebar/ui/WorkspaceStatusMenu.tsx` around lines 35 -
+40, In WorkspaceStatusMenu replace the DropdownMenuItem onClick handler with the
+Radix onSelect prop: remove e.stopPropagation() and use onSelect={(event) => {
+if (!isActive) onStatusChange(status); }} (or the equivalent arrow fn) so
+activation works for both mouse and keyboard; keep the status and isActive
+checks and the onStatusChange call but move them into the onSelect handler.
+```
+
+</details>
+
+<!-- fingerprinting:phantom:medusa:grasshopper -->
+
+<!-- This is an auto-generated comment by CodeRabbit -->"
+
+Comment metadata:
+This comment was left on the modified branch.
+This comment was left on GitHub by @coderabbitai.
+This comment is the start of thread PRRT_kwDOQEbULc517Kv9. 
+
+</system-instruction>
+
+I run AI code review, is it actionable? Wdyt? Explore in depth each problem.
+
+We want a clean, maintainable codebase, with proper best practices for the tech stack we use.
+
+Run subagents to verify, and if it should be fixed, try to merge some stuff together so it can be fixed together within one subagent. 
+
+If you can test something do it.
