@@ -1,0 +1,29 @@
+{
+  "cli_version": "0.5.0",
+  "checkpoint_id": "a13da4e651bc",
+  "strategy": "manual-commit",
+  "branch": "zvadaadam/explore-web-routing",
+  "checkpoints_count": 2,
+  "files_touched": [
+    "apps/backend/src/routes/remote-auth.ts",
+    "apps/backend/src/services/query-engine.ts",
+    "apps/web/src/app/shells/DesktopShell.tsx",
+    "apps/web/src/features/auth/ui/PairGatePage.tsx",
+    "apps/web/src/platform/ws/query-protocol-client.ts"
+  ],
+  "sessions": [
+    {
+      "metadata": "/a1/3da4e651bc/0/metadata.json",
+      "transcript": "/a1/3da4e651bc/0/full.jsonl",
+      "content_hash": "/a1/3da4e651bc/0/content_hash.txt",
+      "prompt": "/a1/3da4e651bc/0/prompt.txt"
+    }
+  ],
+  "token_usage": {
+    "input_tokens": 483,
+    "cache_creation_tokens": 1985124,
+    "cache_read_tokens": 67427488,
+    "output_tokens": 154577,
+    "api_call_count": 323
+  }
+}

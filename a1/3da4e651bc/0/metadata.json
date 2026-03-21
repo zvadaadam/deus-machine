@@ -1,0 +1,37 @@
+{
+  "cli_version": "0.5.0",
+  "checkpoint_id": "a13da4e651bc",
+  "session_id": "af4e71c9-b07a-428c-b1cc-b2b1609de22f",
+  "strategy": "manual-commit",
+  "created_at": "2026-03-21T19:50:24.174697Z",
+  "branch": "zvadaadam/explore-web-routing",
+  "checkpoints_count": 2,
+  "files_touched": [
+    "apps/backend/src/routes/remote-auth.ts",
+    "apps/backend/src/services/query-engine.ts",
+    "apps/web/src/app/shells/DesktopShell.tsx",
+    "apps/web/src/features/auth/ui/PairGatePage.tsx",
+    "apps/web/src/platform/ws/query-protocol-client.ts"
+  ],
+  "agent": "Claude Code",
+  "turn_id": "9a13a9f490c4",
+  "token_usage": {
+    "input_tokens": 483,
+    "cache_creation_tokens": 1985124,
+    "cache_read_tokens": 67427488,
+    "output_tokens": 154577,
+    "api_call_count": 323
+  },
+  "session_metrics": {
+    "turn_count": 39
+  },
+  "initial_attribution": {
+    "calculated_at": "2026-03-21T19:50:21.612425Z",
+    "agent_lines": 23,
+    "human_added": 39,
+    "human_modified": 15,
+    "human_removed": 0,
+    "total_committed": 77,
+    "agent_percentage": 29.87012987012987
+  }
+}
