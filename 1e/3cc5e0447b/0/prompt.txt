@@ -368,3 +368,7 @@ but the building things shoud not be comit in git right? it shoudl be alway buil
 ---
 
 do it here btu also shoudl we buld the backend and other stuff also right?
+
+---
+
+Commit and push all changes
