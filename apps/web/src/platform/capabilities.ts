@@ -64,6 +64,11 @@ export const capabilities = {
   /** Direct Electron IPC invoke() for native commands (enter_onboarding_mode,
    *  native:homeDir, etc.) */
   ipcInvoke: isElectron,
+
+  /** Whether we're running inside the Electron desktop app (as opposed to a browser).
+   *  Prefer this for high-level desktop vs web branching over implementation-detail
+   *  capabilities like `ipcInvoke`. */
+  isDesktop: isElectron,
 } as const;
 
 export type Capabilities = typeof capabilities;

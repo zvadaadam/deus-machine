@@ -11,21 +11,9 @@ import {
   type PairedDevice,
 } from "../services/remote-auth.service";
 import { isLocalhost, getClientIp } from "../lib/network";
+import { isRelayBridgeRequest } from "../lib/relay-bridge";
 
 const PUBLIC_PATHS = new Set(["/api/health", "/api/remote-auth/pair"]);
-
-// Process-local secret set by server.ts at startup. Only in-process HTTP
-// bridge requests (from the relay tunnel) carry this secret as a header.
-// External clients cannot know it, preventing auth bypass via spoofed headers.
-let _bridgeSecret: string | null = null;
-
-/** Called once by server.ts at startup to register the bridge secret. */
-export function setRelayBridgeSecret(secret: string): void {
-  if (!secret.trim()) {
-    throw new Error("Relay bridge secret must be a non-empty string");
-  }
-  _bridgeSecret = secret;
-}
 
 /**
  * Auth middleware for remote access.
@@ -40,8 +28,7 @@ export const authMiddleware = createMiddleware(async (c, next) => {
   // In-process requests from the HTTP-over-WS bridge carry a secret that
   // only server.ts knows. External clients cannot guess this value, so
   // the header cannot be spoofed from the network.
-  const bridgeSecret = c.req.header("x-relay-bridge-secret");
-  if (bridgeSecret && _bridgeSecret && bridgeSecret === _bridgeSecret) {
+  if (isRelayBridgeRequest(c)) {
     await next();
     return;
   }

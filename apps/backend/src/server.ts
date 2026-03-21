@@ -14,19 +14,18 @@ import { getSetting } from "./services/settings.service";
 import * as agentService from "./services/agent";
 import { destroyAllPtySessions } from "./services/pty.service";
 import { destroyAllWatchers } from "./services/fs-watcher.service";
-import { setRelayBridgeSecret as setAuthBridgeSecret } from "./middleware/remote-auth";
-import { setRelayBridgeSecret as setGateBridgeSecret } from "./middleware/remote-gate";
+import { setRelayBridgeSecret } from "./lib/relay-bridge";
 
 // Random secret generated at startup to authenticate in-process HTTP bridge
 // requests. Only code running inside this process can know this value --
 // external clients cannot guess it, preventing x-relay-tunneled header spoofing.
 const RELAY_BRIDGE_SECRET = crypto.randomBytes(32).toString("hex");
 
-// Register the secret with both middleware modules so they can verify
-// that incoming requests with x-relay-bridge-secret actually originated
-// from the in-process HTTP bridge, not from an external client.
-setAuthBridgeSecret(RELAY_BRIDGE_SECRET);
-setGateBridgeSecret(RELAY_BRIDGE_SECRET);
+// Register the secret with the shared relay-bridge module so both
+// remote-gate and remote-auth middleware can verify that incoming requests
+// with x-relay-bridge-secret actually originated from the in-process HTTP
+// bridge, not from an external client.
+setRelayBridgeSecret(RELAY_BRIDGE_SECRET);
 
 // Initialize Sentry before anything else.
 // DSN passed as env var from Electron main process (not hardcoded — open source repo).

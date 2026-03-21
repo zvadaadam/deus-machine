@@ -3,14 +3,15 @@
 // Stores and validates device tokens in localStorage.
 //
 // The signOut() function is the canonical way to log out from any module.
-// It clears localStorage AND notifies the useAuth() hook via a module-level
-// callback so React state updates immediately (e.g., after an auth_failed WS frame).
+// It clears localStorage AND dispatches a CustomEvent so any useAuth() listener
+// updates React state immediately (e.g., after an auth_failed WS frame).
 
 import { useState, useEffect, useCallback } from "react";
 import { capabilities } from "@/platform/capabilities";
 
 const TOKEN_KEY = "opendevs_device_token";
 const DEVICE_NAME_KEY = "opendevs_device_name";
+const SIGNOUT_EVENT = "opendevs:signout";
 
 /** Whether this browser session needs remote auth (non-Electron + non-localhost). */
 export function needsRemoteAuth(): boolean {
@@ -40,19 +41,15 @@ export function clearToken(): void {
   localStorage.removeItem(DEVICE_NAME_KEY);
 }
 
-// Module-level callback set by the active useAuth() hook instance.
-// signOut() invokes this to push React state updates when called from
-// non-React code (e.g., the WS client's auth_failed handler).
-let _onSignOut: (() => void) | null = null;
-
 /**
- * Sign out: clears stored token AND notifies the active useAuth() hook
- * so React re-renders immediately. Safe to call from anywhere (WS handlers,
- * event listeners, non-React code).
+ * Sign out: clears stored token AND dispatches a CustomEvent so any
+ * useAuth() listener re-renders immediately. Safe to call from anywhere
+ * (WS handlers, event listeners, non-React code). Supports multiple
+ * listeners without mutable module state.
  */
 export function signOut(): void {
   clearToken();
-  _onSignOut?.();
+  window.dispatchEvent(new CustomEvent(SIGNOUT_EVENT));
 }
 
 export interface AuthState {
@@ -79,14 +76,14 @@ export function useAuth(): AuthState {
   });
   const [isLoading] = useState(false);
 
-  // Register the module-level signOut callback so external callers
-  // (e.g., the WS client on auth_failed) can invalidate React state.
+  // Listen for signOut events dispatched from any context (WS handlers, etc.)
   useEffect(() => {
     if (!requiresAuth) return;
 
-    _onSignOut = () => setIsAuthenticated(false);
+    const handler = () => setIsAuthenticated(false);
+    window.addEventListener(SIGNOUT_EVENT, handler);
     return () => {
-      _onSignOut = null;
+      window.removeEventListener(SIGNOUT_EVENT, handler);
     };
   }, [requiresAuth]);
 

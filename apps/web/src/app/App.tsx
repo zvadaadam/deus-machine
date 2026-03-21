@@ -58,7 +58,7 @@ function App() {
         <DetachedBrowserWindow />
       </ThemeProvider>
     </QueryClientProvider>
-  ) : capabilities.ipcInvoke ? (
+  ) : capabilities.isDesktop ? (
     // Desktop (Electron): no router, direct MainLayout via DesktopShell
     <QueryClientProvider>
       <QueryErrorResetBoundary>
