@@ -449,7 +449,15 @@ async function openSocket(serverId?: string): Promise<void> {
         // Relay mode: device token rejected — sign out (clears storage + React state)
         console.error("[WS] Relay auth failed:", msg.message);
         signOut();
-        ws?.close(4001, "Auth failed");
+
+        // Prevent the onclose handler from triggering a reconnect loop
+        connected = false;
+        subscriptions.clear();
+        if (ws) {
+          ws.onclose = null;
+          ws.close(4001, "Auth failed");
+          ws = null;
+        }
 
         connecting = false;
         connectReject?.(new Error(`Relay auth failed: ${msg.message}`));

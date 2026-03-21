@@ -11,7 +11,7 @@ import { useEffect, useRef } from "react";
 import { ErrorBoundary } from "react-error-boundary";
 import { MainLayout } from "../layouts/MainLayout";
 import { DashboardError } from "@/shared/components";
-import { reportError } from "@/shared/utils/errorReporting";
+import { createBoundaryErrorHandler } from "@/shared/utils/errorReporting";
 import { Toaster } from "@/components/ui/sonner";
 import { OnboardingOverlay } from "@/features/onboarding";
 import { useSettings } from "@/features/settings";
@@ -24,19 +24,6 @@ import { useQueryProtocol } from "@/shared/hooks/useQueryProtocol";
 import { useBackendRestart } from "@/shared/hooks/useBackendRestart";
 import { useAutoUpdate, useUpdateToast, UpdateProvider } from "@/features/updates";
 import { useAnalyticsConsent } from "@/platform/analytics";
-import type { ErrorInfo } from "react";
-
-function createBoundaryErrorHandler(source: string) {
-  return (error: unknown, info: ErrorInfo) => {
-    reportError(error, {
-      source,
-      extra: { componentStack: info.componentStack ?? undefined },
-    });
-    (window as { __APP_LAST_COMPONENT_STACK__?: string }).__APP_LAST_COMPONENT_STACK__ =
-      info.componentStack ?? undefined;
-  };
-}
-
 export function DesktopShell({ reset }: { reset: () => void }) {
   const auth = useAuth();
   const settingsQuery = useSettings();
