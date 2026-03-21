@@ -151,10 +151,9 @@ export function registerBrowserViewHandlers(): void {
       // TODO: Network request tracking — disabled until renderer listener is wired.
       // The events were being sent but nothing consumed them (wasted IPC traffic).
 
-      // Gracefully handle certificate errors instead of showing a blank page.
-      // Self-signed certs on localhost dev servers are common — accept them
-      // for localhost/127.0.0.1 only. All other cert errors show a warning
-      // in the console but don't block navigation.
+      // Gracefully handle certificate errors for localhost dev servers.
+      // Self-signed certs on localhost/127.0.0.1 are accepted — all other
+      // cert errors are rejected (navigation will fail).
       view.webContents.on("certificate-error", (event, _url, _error, _certificate, callback) => {
         try {
           const parsed = new URL(_url);

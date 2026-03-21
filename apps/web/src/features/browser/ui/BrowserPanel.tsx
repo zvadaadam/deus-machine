@@ -376,7 +376,7 @@ export function BrowserPanel({
     [workspaceId]
   );
 
-  /** Capture the active tab's BrowserView as JPEG and dispatch to chat input */
+  /** Capture the active tab's BrowserView as PNG and dispatch to chat input */
   const handleScreenshot = useCallback(async () => {
     if (!activeTab?.webviewLabel || !activeTab.currentUrl || !workspaceId) return;
     try {

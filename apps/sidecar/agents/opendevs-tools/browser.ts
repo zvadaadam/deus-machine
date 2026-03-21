@@ -11,7 +11,7 @@
 import { tool } from "@anthropic-ai/claude-agent-sdk";
 import type { SdkMcpToolDefinition } from "@anthropic-ai/claude-agent-sdk";
 import { z } from "zod";
-import { writeFileSync, mkdirSync, existsSync, readFileSync } from "fs";
+import { writeFileSync, mkdirSync, existsSync, readFileSync, unlinkSync } from "fs";
 import { join } from "path";
 import { homedir, tmpdir } from "os";
 import { getErrorMessage } from "@shared/lib/errors";
@@ -706,6 +706,11 @@ For structural/interactive analysis, prefer BrowserSnapshot (accessibility tree)
               data: base64Data,
               mimeType: "image/png",
             });
+            try {
+              unlinkSync(screenshotPath);
+            } catch {
+              // Ignore cleanup errors
+            }
           } catch {
             // File read failed — return text-only response
           }
