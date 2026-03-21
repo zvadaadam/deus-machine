@@ -10,6 +10,7 @@ export {
   sendCommand,
   sendToolResponse,
   sendHttpRequest,
+  forceReconnect,
   onEvent,
   onConnectionChange,
 } from "./query-protocol-client";

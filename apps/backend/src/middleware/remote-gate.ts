@@ -27,6 +27,9 @@ let _bridgeSecret: string | null = null;
 
 /** Called once by server.ts at startup to register the bridge secret. */
 export function setRelayBridgeSecret(secret: string): void {
+  if (!secret.trim()) {
+    throw new Error("Relay bridge secret must be a non-empty string");
+  }
   _bridgeSecret = secret;
 }
 
