@@ -562,3 +562,18 @@ The user has attached these files. Read them before proceeding.
 
 
 Create a PR
+
+---
+
+Commit and push all changes
+
+---
+
+<system_instruction>
+The user has attached these files. Read them before proceeding.
+- /Users/zvada/Developer/agent/box-ide/.conductor/san-diego-v2/.context/attachments/Sidecar_Tests_68040344357.log (20.4 KB)
+</system_instruction>
+
+
+
+Fix the failing CI actions. I've attached the failure logs.
