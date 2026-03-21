@@ -799,3 +799,14 @@ The user has attached these files. Read them before proceeding.
 
 
 I don't know why, but like, it started like, the history of the chat isn't loading, it's taking a while to load and then nothing happens, nothing is shown. I'm not sure. Also we lost the diff stats that's being messed also, maybe more.
+
+---
+
+<system_instruction>
+The user has attached these files. Read them before proceeding.
+- /Users/zvada/Developer/agent/box-ide/.conductor/da-nang-v3/.context/attachments/Lint__Format___Typecheck_68045131883.log (77.9 KB)
+</system_instruction>
+
+
+
+Fix the failing CI actions. I've attached the failure logs.
