@@ -1,0 +1,23 @@
+{
+  "cli_version": "0.5.0",
+  "checkpoint_id": "ca661cf0be9a",
+  "strategy": "manual-commit",
+  "branch": "zvadaadam/explore-agent-browser",
+  "checkpoints_count": 36,
+  "files_touched": null,
+  "sessions": [
+    {
+      "metadata": "/ca/661cf0be9a/0/metadata.json",
+      "transcript": "/ca/661cf0be9a/0/full.jsonl",
+      "content_hash": "/ca/661cf0be9a/0/content_hash.txt",
+      "prompt": "/ca/661cf0be9a/0/prompt.txt"
+    }
+  ],
+  "token_usage": {
+    "input_tokens": 3060,
+    "cache_creation_tokens": 912677,
+    "cache_read_tokens": 52525220,
+    "output_tokens": 131827,
+    "api_call_count": 358
+  }
+}
