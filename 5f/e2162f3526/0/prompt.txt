@@ -395,3 +395,377 @@ let's do with the linear apprahc (ectalcy liek linear) if it's loading or workin
 ---
 
 do it
+
+---
+
+<system-instruction>
+The user has added 3 comments to the diff for this workspace. Please review and address these comments as part of your response. When addressing comments on the "original" side or on specific commits, read the file from that version (not the current version). Below are the comments, including metadata about what git state they were left on:
+
+Comment #1:
+
+File: 
+Line: undefined
+User comment: "<!-- This is an auto-generated comment: summarize by coderabbit.ai -->
+<!-- This is an auto-generated comment: review in progress by coderabbit.ai -->
+
+> [!NOTE]
+> Currently processing new changes in this PR. This may take a few minutes, please wait...
+> 
+> <details>
+> <summary>⚙️ Run configuration</summary>
+> 
+> **Configuration used**: defaults
+> 
+> **Review profile**: CHILL
+> 
+> **Plan**: Lite
+> 
+> **Run ID**: `299eafe0-7150-4d3c-8f6c-ed3fcc1eef7f`
+> 
+> </details>
+> 
+> <details>
+> <summary>📥 Commits</summary>
+> 
+> Reviewing files that changed from the base of the PR and between 9c5b7bbd5efd7494f213b7672b789fb73a5a7f9f and b495f2d5d62adf60a4c553dd7babb4daaba2fc12.
+> 
+> </details>
+> 
+> <details>
+> <summary>📒 Files selected for processing (8)</summary>
+> 
+> * `apps/web/src/app/layouts/MainLayout.tsx`
+> * `apps/web/src/features/sidebar/model/types.ts`
+> * `apps/web/src/features/sidebar/ui/AppSidebar.tsx`
+> * `apps/web/src/features/sidebar/ui/RepositoryItem.tsx`
+> * `apps/web/src/features/sidebar/ui/WorkflowStatusIcon.tsx`
+> * `apps/web/src/features/sidebar/ui/WorkspaceItem.tsx`
+> * `apps/web/src/features/sidebar/ui/WorkspaceStatusMenu.tsx`
+> * `shared/enums.ts`
+> 
+> </details>
+> 
+> ```ascii
+>  __________________________________________________________
+> < Solving problems you didn't know you were about to have. >
+>  ----------------------------------------------------------
+>   \
+>    \   (\__/)
+>        (•ㅅ•)
+>        / 　 づ
+> ```
+
+<!-- end of auto-generated comment: review in progress by coderabbit.ai -->
+
+<!-- walkthrough_start -->
+
+<details>
+<summary>📝 Walkthrough</summary>
+
+## Walkthrough
+
+This PR introduces a new workspace status workflow system with five states (`backlog`, `in-progress`, `in-review`, `done`, `canceled`). It adds database schema support, backend services with status progression guards, API mutations for client updates, frontend UI components with themed colors, and analytics tracking for status transitions.
+
+## Changes
+
+|Cohort / File(s)|Summary|
+|---|---|
+|**Shared Type System** <br> `shared/enums.ts`, `shared/types/workspace.ts`|Introduced `WorkspaceStatusSchema` enum, `WorkspaceStatus` type, and workflow metadata constants (`STICKY_STATUSES`, `STATUS_RANK`). Updated `Workspace` interface to include required `status: WorkspaceStatus` field.|
+|**Shared Events & Schema** <br> `shared/events.ts`, `shared/schema.ts`|Added `"updateWorkspaceStatus"` mutation name. Extended database migrations and schema SQL to add `workspaces.status TEXT NOT NULL DEFAULT 'in-progress'` column and idempotent index.|
+|**Backend Database Layer** <br> `apps/backend/src/db/queries.ts`, `apps/backend/src/db/types.ts`|Updated `WORKSPACE_DETAILS_SELECT` and aggregation queries to include `status` field. Extended `WorkspaceRow`, `WorkspaceWithDetailsRow`, and `StatsRow` types with new status-related properties.|
+|**Backend Services** <br> `apps/backend/src/services/workspace-status.service.ts`, `apps/backend/src/services/query-engine.ts`|Added new `workspace-status.service.ts` module with `autoProgressStatus()` (respects sticky states and rank progression) and `setWorkspaceStatus()` functions. Updated query engine to handle `updateWorkspaceStatus` mutation branch.|
+|**Backend API & Validation** <br> `apps/backend/src/lib/schemas.ts`, `apps/backend/src/routes/workspaces.ts`, `apps/backend/src/routes/workspaces.pr.ts`|Updated `PatchWorkspaceBody` schema to accept optional `status` field. Extended workspace PATCH handler to call `setWorkspaceStatus()` and trigger auto-progression on archive/unarchive. Enhanced PR-status endpoint to auto-update `status` to `"done"` on merge detection and to `"in-review"` on PR discovery.|
+|**Frontend Data Layer** <br> `apps/web/src/features/workspace/api/workspace.service.ts`, `apps/web/src/features/workspace/api/workspace.queries.ts`, `apps/web/src/features/workspace/types.ts`|Added `WorkspaceService.updateStatus()` method and `useUpdateWorkspaceStatus()` hook with optimistic updates, rollback, and cache invalidation. Re-exported `WorkspaceStatus` type.|
+|**Frontend UI & Styling** <br> `apps/web/src/features/sidebar/lib/status.ts`, `apps/web/src/features/sidebar/ui/WorkspaceItem.stories.tsx`, `apps/web/src/global.css`|Introduced `WORKFLOW_STATUS_CONFIG` mapping for status-to-label/color resolution. Added CSS variables `--color-status-in-progress`, `--color-status-in-review`, `--color-status-done` with semantic color tokens. Updated story defaults to include status.|
+|**Frontend Utilities** <br> `apps/web/src/features/workspace/lib/workspace.utils.ts`|Updated optimistic workspace factory to initialize `status: "in-progress"` alongside existing fields.|
+|**Analytics & Telemetry** <br> `apps/web/src/platform/analytics/events.ts`|Added `workspace_status_changed` event schema with workspace ID and status payload.|
+|**Backend Tests** <br> `apps/backend/test/unit/shared/events.test.ts`|Updated mutation name assertion to expect 13 mutations including `"updateWorkspaceStatus"`.|
+|**Dev Tooling** <br> `package.json`, `scripts/dev.sh`|Updated `dev` npm script and dev shell script to check for sidecar bundle existence and conditionally build it before starting Electron dev server.|
+
+## Sequence Diagram(s)
+
+```mermaid
+sequenceDiagram
+    participant Client as Frontend Client
+    participant Hook as useUpdateWorkspaceStatus
+    participant Service as WorkspaceService
+    participant WS as WebSocket/Mutation
+    participant BackendRoute as Backend Route
+    participant StatusService as workspace-status.service
+    participant DB as Database
+    participant Cache as Query Cache
+    participant Telemetry as Analytics
+
+    Client->>Hook: updateStatus(workspaceId, status)
+    Hook->>Cache: Snapshot & optimistically update<br/>query cache (immer produce)
+    Hook->>Service: updateStatus(workspaceId, status)
+    Service->>WS: sendMutate("updateWorkspaceStatus",<br/>{ workspaceId, status })
+    WS->>BackendRoute: Receive mutation
+    BackendRoute->>StatusService: setWorkspaceStatus(id, status)
+    StatusService->>DB: UPDATE workspaces SET status = ?
+    DB-->>StatusService: Success
+    BackendRoute->>WS: return { success: true }
+    WS->>Hook: mutation.onSuccess
+    Hook->>Telemetry: track("workspace_status_changed"<br/>{ workspace_id, status })
+    Hook->>Cache: Invalidate queryKeys.workspaces.all
+    Hook->>Client: Return updated workspace
+
+    Note over Client,Cache: On Error: Rollback snapshot
+```
+
+```mermaid
+sequenceDiagram
+    participant Endpoint as GET /workspaces/:id/pr-status
+    participant PRService as getPrStatus()
+    participant Detector as PR Detector
+    participant StatusService as autoProgressStatus
+    participant DB as Database
+    participant Cache as Cache/Query Invalidation
+
+    Endpoint->>PRService: getPrStatus(workspacePath)
+    PRService->>Detector: Check for PR changes
+    Detector-->>PRService: { has_pr, pr_url, merge_status }
+    PRService-->>Endpoint: result
+
+    alt New PR Detected
+        Endpoint->>DB: Update pr_url & pr_number
+        Endpoint->>StatusService: autoProgressStatus(id, "in-review")
+        StatusService->>DB: UPDATE workspaces SET status
+        DB-->>StatusService: Success
+    end
+
+    alt Merge Detected
+        Endpoint->>StatusService: autoProgressStatus(id, "done")
+        StatusService->>DB: UPDATE workspaces SET status
+        DB-->>StatusService: Success
+    end
+
+    Endpoint->>Cache: invalidate(["workspaces", "stats"])
+    Cache-->>Endpoint: Cache cleared
+    Endpoint-->>Client: Return PR status result
+```
+
+## Estimated code review effort
+
+🎯 3 (Moderate) | ⏱️ ~30 minutes
+
+## Poem
+
+> 🐰 *A status emerges, in progress we hop,*  
+> *From backlog to done, we'll never stop,*  
+> *In-review and in-progress, the workflow takes flight,*  
+> *Auto-progression keeps everything right,* 🚀
+
+</details>
+
+<!-- walkthrough_end -->
+
+
+<!-- tips_start -->
+
+---
+
+<sub>Comment `@coderabbitai help` to get the list of available commands and usage tips.</sub>
+
+<!-- tips_end -->
+
+<!-- internal state start -->
+
+
+<!-- REDACTED/REDACTED/REDACTED/REDACTED/REDACTED/REDACTED/REDACTED/REDACTED/REDACTED/REDACTED/REDACTED/REDACTED/REDACTED/REDACTED/REDACTED/REDACTED/REDACTED/J2paRFJmRXere26eRMuBRamPes+tY/REDACTED/REDACTED/REDACTED/REDACTED/REDACTED/REDACTED/REDACTED/REDACTED/gGW+QbejdMQep9w++/REDACTED/REDACTED/REDACTED/gnb0yyv02RoM6+KnVdlxU5DW+5L/hnTM1SXMwegs/REDACTED/REDACTED/kODnGu0QKrBQKaAtrDPUGEq/REDACTED/REDACTED/REDACTED/REDACTED/REDACTED/REDACTED/REDACTED/y+7qB5AGZO/REDACTED/REDACTED/REDACTED/REDACTED/REDACTED/REDACTED/REDACTED/REDACTED/REDACTED/REDACTED/REDACTED/REDACTED/EFM9EQzlpxiBHXaZaH2mDTA2/REDACTED/REDACTED/REDACTED/REDACTED/REDACTED/Coi8I/REDACTED/REDACTED/REDACTED/REDACTED/REDACTED/REDACTED/EPApTBRQPkriSAPNCWhLAy6YAT9oqQdC99no/REDACTED/REDACTED/REDACTED/REDACTED/REDACTED/MBwYlaznXDQZVwl4/REDACTED/REDACTED/REDACTED/REDACTED/REDACTED/REDACTED/REDACTED/REDACTED/REDACTED/REDACTED/KmtKs2fSCu4lgrlmVoftQKaD47IKR/REDACTED/R6+05nHLOYBK3H4Ibw/REDACTED/REDACTED/REDACTED/REDACTED/jpeXtNBnqK8ImLMVzdlus/REDACTED/REDACTED/REDACTED/REDACTED/REDACTED//REDACTED/4RklwCFyhZTwDQJTG/REDACTED/REDACTED/REDACTED/REDACTED/REDACTED/lUocH3IADnAAD7FPjHaj9h7Xg4BcPOg9+x/WI/REDACTED/REDACTED/REDACTED -->
+
+<!-- internal state end -->"
+
+Comment metadata:
+This comment was left on a file.
+This comment was left on GitHub by @coderabbitai.
+
+
+Comment #2:
+
+File: apps/backend/src/routes/workspaces.pr.ts
+Line: 38
+User comment: "_⚠️ Potential issue_ | _🟠 Major_
+
+**Run the `in-review` transition on any detected PR, not only on a new URL.**
+
+`autoProgressStatus(workspace.id, "in-review")` is currently gated behind `result.pr_url !== workspace.pr_url`. That misses workspaces whose `pr_url` was already populated before this feature lands, and any workspace a user moved back below `in-review`: `getPrStatus()` will keep returning `has_pr = true`, but the workflow status never catches up. Persist the metadata only when it changes, but drive the status transition from `result.has_pr` itself.
+
+<details>
+<summary>🤖 Prompt for AI Agents</summary>
+
+```
+Verify each finding against the current code and only fix it if needed.
+
+In `@apps/backend/src/routes/workspaces.pr.ts` around lines 29 - 38, The
+PR-detection block only calls autoProgressStatus(workspace.id, "in-review") when
+result.pr_url differs from workspace.pr_url, missing cases where has_pr is true
+but URL was already set; change the logic so that persistence
+(db.prepare(...).run(...)) and needsInvalidation are only performed when
+result.pr_url !== workspace.pr_url, but call autoProgressStatus(workspace.id,
+"in-review") whenever result.has_pr is true (regardless of URL change) so the
+workflow transitions on any detected PR; use the existing symbols result.has_pr,
+result.pr_url, workspace.pr_url, autoProgressStatus, getDatabase, and
+needsInvalidation to locate and update the code.
+```
+
+</details>
+
+<!-- fingerprinting:phantom:medusa:grasshopper -->
+
+<!-- This is an auto-generated comment by CodeRabbit -->"
+
+Comment metadata:
+This comment was left on the modified branch.
+This comment was left on GitHub by @coderabbitai.
+This comment is the start of thread PRRT_kwDOQEbULc517D4E. 
+
+
+Comment #3:
+
+File: apps/web/src/features/workspace/api/workspace.queries.ts
+Line: 475
+User comment: "_⚠️ Potential issue_ | _🟡 Minor_
+
+**Rollback only the touched workspace status.**
+
+`context.previousData` snapshots the whole `RepoGroup[]`. If two status mutations overlap, a failure in one mutation will restore an old snapshot and wipe the other workspace's optimistic status too. Capture the previous `status` for just `workspaceId` and revert that single node in `onError`.
+
+<details>
+<summary>♻️ Narrow the rollback scope</summary>
+
+```diff
+     onMutate: async ({ workspaceId, status }) => {
+       await queryClient.cancelQueries({ queryKey });
+-      const previousData = queryClient.getQueryData<RepoGroup[]>(queryKey);
++      let previousStatus: WorkspaceStatus | undefined;
+
+       queryClient.setQueryData<RepoGroup[]>(queryKey, (old) => {
+         if (!old) return old;
+         return produce(old, (draft) => {
+           for (const repo of draft) {
+             const ws = repo.workspaces.find((w) => w.id === workspaceId);
+             if (ws) {
++              previousStatus = ws.status;
+               ws.status = status;
+               break;
+             }
+           }
+         });
+       });
+
+-      return { previousData };
++      return { workspaceId, previousStatus };
+     },
+
+     onError: (_err, _vars, context) => {
+-      if (context?.previousData) {
+-        queryClient.setQueryData(queryKey, context.previousData);
+-      }
++      if (context?.previousStatus === undefined) return;
++      queryClient.setQueryData<RepoGroup[]>(queryKey, (old) => {
++        if (!old) return old;
++        return produce(old, (draft) => {
++          for (const repo of draft) {
++            const ws = repo.workspaces.find((w) => w.id === context.workspaceId);
++            if (ws) {
++              ws.status = context.previousStatus;
++              break;
++            }
++          }
++        });
++      });
+     },
+```
+</details>
+
+<!-- suggestion_start -->
+
+<details>
+<summary>📝 Committable suggestion</summary>
+
+> ‼️ **IMPORTANT**
+> Carefully review the code before committing. Ensure that it accurately replaces the highlighted code, contains no missing lines, and has no issues with indentation. Thoroughly test & benchmark the code to ensure it meets the requirements.
+
+```suggestion
+    onMutate: async ({ workspaceId, status }) => {
+      await queryClient.cancelQueries({ queryKey });
+      let previousStatus: WorkspaceStatus | undefined;
+
+      queryClient.setQueryData<RepoGroup[]>(queryKey, (old) => {
+        if (!old) return old;
+        return produce(old, (draft) => {
+          for (const repo of draft) {
+            const ws = repo.workspaces.find((w) => w.id === workspaceId);
+            if (ws) {
+              previousStatus = ws.status;
+              ws.status = status;
+              break;
+            }
+          }
+        });
+      });
+
+      return { workspaceId, previousStatus };
+    },
+
+    onError: (_err, _vars, context) => {
+      if (context?.previousStatus === undefined) return;
+      queryClient.setQueryData<RepoGroup[]>(queryKey, (old) => {
+        if (!old) return old;
+        return produce(old, (draft) => {
+          for (const repo of draft) {
+            const ws = repo.workspaces.find((w) => w.id === context.workspaceId);
+            if (ws) {
+              ws.status = context.previousStatus;
+              break;
+            }
+          }
+        });
+      });
+    },
+```
+
+</details>
+
+<!-- suggestion_end -->
+
+<details>
+<summary>🤖 Prompt for AI Agents</summary>
+
+```
+Verify each finding against the current code and only fix it if needed.
+
+In `@apps/web/src/features/workspace/api/workspace.queries.ts` around lines 451 -
+475, The current optimistic update saves the entire RepoGroup[] snapshot in
+onMutate and restores it in onError, which can overwrite other concurrent
+optimistic updates; instead, in onMutate (function handling { workspaceId,
+status }) read just the target workspace's current status from
+queryClient.getQueryData<RepoGroup[]>(queryKey) and return a context object like
+{ workspaceId, previousStatus } (not the whole array), while still applying the
+optimistic change via queryClient.setQueryData/produce; then change onError to
+look up context.workspaceId and only revert that workspace's status back to
+context.previousStatus using queryClient.setQueryData and produce (iterate
+repo.workspaces to find the workspace id and set its status).
+```
+
+</details>
+
+<!-- fingerprinting:phantom:medusa:grasshopper -->
+
+<!-- This is an auto-generated comment by CodeRabbit -->"
+
+Comment metadata:
+This comment was left on the modified branch.
+This comment was left on GitHub by @coderabbitai.
+This comment is the start of thread PRRT_kwDOQEbULc517D4F. 
+
+</system-instruction>
+
+I run AI code review, is it actionable? Wdyt? Explore in depth each problem.
+
+We want a clean, maintainable codebase, with proper best practices for the tech stack we use.
+
+Run subagents to verify, and if it should be fixed, try to merge some stuff together so it can be fixed together within one subagent. 
+
+If you can test something do it.
