@@ -1,0 +1,22 @@
+{
+  "cli_version": "0.5.0",
+  "checkpoint_id": "3306b14b2034",
+  "session_id": "af4e71c9-b07a-428c-b1cc-b2b1609de22f",
+  "strategy": "manual-commit",
+  "created_at": "2026-03-21T20:39:52.253318Z",
+  "branch": "zvadaadam/explore-web-routing",
+  "checkpoints_count": 1,
+  "files_touched": [],
+  "agent": "Claude Code",
+  "turn_id": "75aa344696fd",
+  "token_usage": {
+    "input_tokens": 496,
+    "cache_creation_tokens": 2261528,
+    "cache_read_tokens": 70236254,
+    "output_tokens": 156421,
+    "api_call_count": 335
+  },
+  "session_metrics": {
+    "turn_count": 40
+  }
+}
