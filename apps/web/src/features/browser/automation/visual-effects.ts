@@ -1,17 +1,14 @@
 // src/features/browser/automation/visual-effects.ts
-// Re-exports the compiled visual effects IIFE + builder functions.
+// Re-exports the visual effects IIFE + builder functions.
 //
-// The source TypeScript lives in inject/visual-effects.ts with full IDE support.
-// It's compiled by build-inject.ts (esbuild) into dist-inject/visual-effects.js.
-//
-// To modify visual effects behavior, edit inject/visual-effects.ts and
-// run `bun run build:inject` to recompile.
+// The source lives in inject/visual-effects.js — a plain JavaScript IIFE
+// imported directly via Vite's ?raw suffix. No build step required.
 //
 // Builder functions (buildMoveCursorAndRippleJs, etc.) stay here because they're
 // TypeScript functions that parameterize small runtime snippets — not worth extracting.
 
 /** The IIFE string to eval in WKWebView — sets up visual effects infrastructure. */
-import VISUAL_EFFECTS_SETUP from "./dist-inject/visual-effects.js?raw";
+import VISUAL_EFFECTS_SETUP from "./inject/visual-effects.js?raw";
 export { VISUAL_EFFECTS_SETUP };
 
 /**

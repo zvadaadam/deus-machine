@@ -16,7 +16,6 @@ import { getSessionRaw } from "../../db";
 import { writeUserMessage } from "../message-writer";
 import { spawnPty, writeToPty, resizePty, killPty } from "../pty.service";
 import { watchWorkspace, unwatchWorkspace } from "../fs-watcher.service";
-import { startBrowserServer, stopBrowserServer } from "../browser-server.service";
 import { persistSessionError } from "./persistence";
 import { invalidate } from "../query-engine";
 import * as agentService from "./service";
@@ -93,18 +92,6 @@ export async function runCommand(
         if (!workspacePath) throw new Error("fs:unwatch requires workspacePath");
 
         await unwatchWorkspace(workspacePath);
-        return {};
-      })
-      // ---- Browser server commands ----
-      .with("browser-server:start", async () => {
-        const browserPath = readString(params, "browserPath");
-        if (!browserPath) throw new Error("browser-server:start requires browserPath");
-
-        const { port, authToken } = await startBrowserServer(browserPath);
-        return { commandId: `${port}:${authToken}` };
-      })
-      .with("browser-server:stop", () => {
-        stopBrowserServer();
         return {};
       })
       // ---- Git commands ----

@@ -1,1 +1,1 @@
-export { useBrowser } from "./useBrowser";
+export {};

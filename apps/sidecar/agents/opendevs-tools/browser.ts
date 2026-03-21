@@ -1,5 +1,7 @@
 // sidecar/agents/opendevs-tools/browser.ts
-// Browser automation tools: snapshot, click, type, navigate, evaluate, etc.
+// Browser automation tools powered by agent-browser CLI.
+// Each tool executes agent-browser commands via CDP (Chrome DevTools Protocol)
+// in a headed Chrome window. The daemon auto-starts on first use per session.
 //
 // Snapshot file-based fallback (inspired by Cursor):
 // When a page snapshot exceeds SNAPSHOT_SIZE_THRESHOLD, the full snapshot
@@ -9,19 +11,16 @@
 import { tool } from "@anthropic-ai/claude-agent-sdk";
 import type { SdkMcpToolDefinition } from "@anthropic-ai/claude-agent-sdk";
 import { z } from "zod";
-import { writeFileSync, mkdirSync, existsSync } from "fs";
+import { writeFileSync, mkdirSync, existsSync, readFileSync, unlinkSync } from "fs";
 import { join } from "path";
-import { homedir } from "os";
-import { EventBroadcaster } from "../../event-broadcaster";
+import { homedir, tmpdir } from "os";
 import { getErrorMessage } from "@shared/lib/errors";
+import { execAgentBrowser, execWithSnapshot, getSnapshot } from "./agent-browser-client";
 
 // ============================================================================
 // Snapshot file-based fallback constants
 // ============================================================================
 
-// Two-tier thresholds:
-// - Action tools (click, type, hover, etc.): 25 KB — keeps context compact
-// - Dedicated snapshot tool: 200 KB — user explicitly asked for a snapshot
 const SNAPSHOT_SIZE_THRESHOLD = 25 * 1024; // 25 KB for action tools
 const SNAPSHOT_SIZE_THRESHOLD_LARGE = 200 * 1024; // 200 KB for BrowserSnapshot
 const PREVIEW_LINE_COUNT = 50;
@@ -29,17 +28,6 @@ const BROWSER_LOGS_DIR = join(homedir(), ".opendevs", "browser-logs");
 
 /**
  * Format a snapshot response with file-based fallback for large snapshots.
- *
- * If the snapshot is within the threshold, it's returned inline.
- * If it exceeds the threshold, the full snapshot is written to a file
- * and only a preview (first 50 lines) + file path is returned.
- *
- * @param action - Action name for the header (e.g., "click", "navigate")
- * @param snapshot - The full accessibility tree YAML snapshot
- * @param pageUrl - Current page URL
- * @param pageTitle - Current page title
- * @param detailLines - Optional action-specific detail lines
- * @param sizeThreshold - Byte threshold for file fallback (default: 25KB for actions)
  */
 function formatSnapshotResponse(
   action: string,
@@ -51,7 +39,6 @@ function formatSnapshotResponse(
 ): string {
   const sections: string[] = [];
 
-  // Action header with details
   sections.push(`### Action: ${action}`);
   if (detailLines && detailLines.length > 0) {
     for (const line of detailLines) {
@@ -59,7 +46,6 @@ function formatSnapshotResponse(
     }
   }
 
-  // Page state
   sections.push("");
   sections.push("### Page state");
   if (pageUrl) sections.push(`- Page URL: ${pageUrl}`);
@@ -74,12 +60,10 @@ function formatSnapshotResponse(
   const snapshotLines = snapshot.split("\n");
 
   if (snapshotBytes <= sizeThreshold) {
-    // Small snapshot — return inline
     sections.push(`- Page Snapshot (${snapshotLines.length} lines)`);
     sections.push("");
     sections.push(snapshot);
   } else {
-    // Large snapshot — write to file, return preview
     let filePath: string | null = null;
     try {
       if (!existsSync(BROWSER_LOGS_DIR)) {
@@ -90,7 +74,6 @@ function formatSnapshotResponse(
       filePath = join(BROWSER_LOGS_DIR, filename);
       writeFileSync(filePath, snapshot, "utf-8");
     } catch (err: unknown) {
-      // File write failed — fall back to truncated inline
       console.warn(`[browser] Failed to write snapshot file: ${getErrorMessage(err)}`);
     }
 
@@ -108,7 +91,6 @@ function formatSnapshotResponse(
         sections.push(`... (${remaining} more lines in file)`);
       }
     } else {
-      // File write failed — truncate inline
       const truncated = snapshotLines.slice(0, PREVIEW_LINE_COUNT).join("\n");
       sections.push(
         `- Page Snapshot: Large snapshot (${snapshotBytes} bytes, ${snapshotLines.length} lines) — truncated inline`
@@ -128,8 +110,7 @@ function formatSnapshotResponse(
 
 /**
  * Creates the browser automation tool definitions for a given session.
- * These tools control the embedded browser via accessibility tree snapshots
- * and element ref-based interactions.
+ * These tools control a headed Chrome browser via agent-browser CLI and CDP.
  */
 export function createBrowserTools(sessionId: string): SdkMcpToolDefinition<any>[] {
   return [
@@ -140,30 +121,22 @@ export function createBrowserTools(sessionId: string): SdkMcpToolDefinition<any>
       "BrowserSnapshot",
       `Capture an accessibility snapshot of the current browser page. Returns a YAML-formatted accessibility tree showing all interactive elements with their roles, names, and reference IDs.
 
-Use the ref IDs from the snapshot to target elements with BrowserClick and BrowserType tools.
+Use the ref IDs (e.g. @e1, @e2) from the snapshot to target elements with BrowserClick and BrowserType tools.
 
 The snapshot includes:
 - Element roles (button, link, textbox, heading, etc.)
 - Element names (visible text, aria-label)
-- Reference IDs (ref-xxx) for targeting
+- Reference IDs (@e1, @e2, etc.) for targeting
 - Element states (focused, checked, disabled, expanded)
 - URLs for links, values for inputs
 
 For large pages, the snapshot is saved to a file and a preview is returned. Read the file for the full snapshot if needed.`,
-      {
-        webviewLabel: z
-          .string()
-          .optional()
-          .describe("Target browser tab webview label. If omitted, uses the active tab."),
-      },
-      async (args) => {
-        console.log(`[opendevsMCPServer] BrowserSnapshot invoked for session ${sessionId}`);
+      {},
+      async () => {
+        console.log(`[browser] BrowserSnapshot invoked for session ${sessionId}`);
 
         try {
-          const response = await EventBroadcaster.requestBrowserSnapshot({
-            sessionId,
-            webviewLabel: args.webviewLabel,
-          });
+          const response = await getSnapshot(sessionId, 20_000);
 
           if (response.error) {
             return {
@@ -177,7 +150,7 @@ For large pages, the snapshot is saved to a file and a preview is returned. Read
             response.url,
             response.title,
             undefined,
-            SNAPSHOT_SIZE_THRESHOLD_LARGE // 200KB — higher limit for explicit snapshot requests
+            SNAPSHOT_SIZE_THRESHOLD_LARGE
           );
 
           return { content: [{ type: "text", text }] };
@@ -186,7 +159,7 @@ For large pages, the snapshot is saved to a file and a preview is returned. Read
             content: [
               {
                 type: "text",
-                text: `Browser not available: ${getErrorMessage(err)}. Make sure the browser tab is open.`,
+                text: `Browser not available: ${getErrorMessage(err)}. Make sure the browser is open.`,
               },
             ],
           };
@@ -201,31 +174,22 @@ For large pages, the snapshot is saved to a file and a preview is returned. Read
       "BrowserClick",
       `Click on a web page element. Use BrowserSnapshot first to get element reference IDs.
 
-The element is scrolled into view, focused, and clicked with proper mouse event simulation (mousedown → mouseup → click). Returns a page snapshot after the click so you can see the updated state.`,
+The element is clicked via Chrome DevTools Protocol. Returns a page snapshot after the click so you can see the updated state.`,
       {
         ref: z
           .string()
-          .describe(
-            "The element's data-cursor-ref ID from the accessibility snapshot (e.g., 'ref-abc123')"
-          ),
+          .describe("The element reference from the accessibility snapshot (e.g., '@e1', '@e5')"),
         doubleClick: z.boolean().optional().describe("Whether to perform a double click"),
-        webviewLabel: z
-          .string()
-          .optional()
-          .describe("Target browser tab. If omitted, uses the active tab."),
       },
       async (args) => {
-        console.log(
-          `[opendevsMCPServer] BrowserClick invoked for session ${sessionId}: ref=${args.ref}`
-        );
+        console.log(`[browser] BrowserClick invoked for session ${sessionId}: ref=${args.ref}`);
 
         try {
-          const response = await EventBroadcaster.requestBrowserClick({
-            sessionId,
-            ref: args.ref,
-            doubleClick: args.doubleClick,
-            webviewLabel: args.webviewLabel,
-          });
+          const clickArgs = args.doubleClick
+            ? ["click", "--double", args.ref]
+            : ["click", args.ref];
+
+          const response = await execWithSnapshot(sessionId, clickArgs);
 
           if (response.error) {
             return {
@@ -264,7 +228,7 @@ The element is focused and text is entered. Use submit: true to press Enter afte
       {
         ref: z
           .string()
-          .describe("The element's data-cursor-ref ID from the accessibility snapshot"),
+          .describe("The element reference from the accessibility snapshot (e.g., '@e3')"),
         text: z.string().describe("Text to type into the element"),
         submit: z.boolean().optional().describe("Whether to press Enter after typing to submit"),
         slowly: z
@@ -273,30 +237,35 @@ The element is focused and text is entered. Use submit: true to press Enter afte
           .describe(
             "Type character by character (useful for triggering autocomplete or key handlers)"
           ),
-        webviewLabel: z
-          .string()
-          .optional()
-          .describe("Target browser tab. If omitted, uses the active tab."),
       },
       async (args) => {
-        console.log(
-          `[opendevsMCPServer] BrowserType invoked for session ${sessionId}: ref=${args.ref}`
-        );
+        console.log(`[browser] BrowserType invoked for session ${sessionId}: ref=${args.ref}`);
 
         try {
-          const response = await EventBroadcaster.requestBrowserType({
-            sessionId,
-            ref: args.ref,
-            text: args.text,
-            submit: args.submit,
-            slowly: args.slowly,
-            webviewLabel: args.webviewLabel,
-          });
+          // Use 'fill' for fast input (clears + sets value), 'type' for slow character-by-character
+          const cmd = args.slowly ? "type" : "fill";
+          const typeArgs = [cmd, args.ref, args.text];
+
+          const response = await execWithSnapshot(sessionId, typeArgs);
 
           if (response.error) {
             return {
               content: [{ type: "text", text: `Type failed: ${response.error}` }],
             };
+          }
+
+          // Press Enter if submit requested
+          let finalResponse = response;
+          if (args.submit) {
+            const submitResult = await execAgentBrowser(sessionId, ["press", "Enter"]);
+            if (!submitResult.success) {
+              return {
+                content: [
+                  { type: "text", text: `Submit failed: ${submitResult.error ?? "unknown error"}` },
+                ],
+              };
+            }
+            finalResponse = await getSnapshot(sessionId);
           }
 
           const details = [
@@ -307,9 +276,9 @@ The element is focused and text is entered. Use submit: true to press Enter afte
 
           const text = formatSnapshotResponse(
             "type",
-            response.snapshot,
-            response.url,
-            response.title,
+            finalResponse.snapshot,
+            finalResponse.url,
+            finalResponse.title,
             details
           );
 
@@ -330,22 +299,21 @@ The element is focused and text is entered. Use submit: true to press Enter afte
       `Navigate the browser to a URL. Returns an accessibility snapshot of the loaded page.`,
       {
         url: z.string().describe("The URL to navigate to"),
-        webviewLabel: z
-          .string()
-          .optional()
-          .describe("Target browser tab. If omitted, uses the active tab."),
       },
       async (args) => {
-        console.log(
-          `[opendevsMCPServer] BrowserNavigate invoked for session ${sessionId}: url=${args.url}`
-        );
+        // Redact query/fragment to avoid leaking tokens, auth codes, etc. in logs
+        const safeUrl = (() => {
+          try {
+            const u = new URL(args.url);
+            return `${u.origin}${u.pathname}`;
+          } catch {
+            return args.url.replace(/[?#].*$/, "");
+          }
+        })();
+        console.log(`[browser] BrowserNavigate invoked for session ${sessionId}: url=${safeUrl}`);
 
         try {
-          const response = await EventBroadcaster.requestBrowserNavigate({
-            sessionId,
-            url: args.url,
-            webviewLabel: args.webviewLabel,
-          });
+          const response = await execWithSnapshot(sessionId, ["open", args.url], 30_000);
 
           if (response.error) {
             return {
@@ -353,15 +321,11 @@ The element is focused and text is entered. Use submit: true to press Enter afte
             };
           }
 
-          const details: string[] = [];
-          if (response.webviewLabel) details.push(`Tab: ${response.webviewLabel}`);
-
           const text = formatSnapshotResponse(
             "navigate",
             response.snapshot,
             response.url,
-            response.title,
-            details
+            response.title
           );
 
           return { content: [{ type: "text", text }] };
@@ -386,28 +350,10 @@ The element is focused and text is entered. Use submit: true to press Enter afte
 
 Provide exactly one of: text, textGone, or time. Returns a page snapshot after the condition is met.`,
       {
-        text: z
-          .string()
-          .optional()
-          .describe("Wait until this text appears on the page (polls every 500ms)"),
-        textGone: z
-          .string()
-          .optional()
-          .describe("Wait until this text disappears from the page (polls every 500ms)"),
-        time: z
-          .number()
-          .optional()
-          .describe("Wait for a fixed number of seconds (e.g., 2 for 2 seconds)"),
-        timeout: z
-          .number()
-          .optional()
-          .describe(
-            "Maximum wait time in seconds (default: 30). Only applies to text/textGone modes."
-          ),
-        webviewLabel: z
-          .string()
-          .optional()
-          .describe("Target browser tab. If omitted, uses the active tab."),
+        text: z.string().optional().describe("Wait until this text appears on the page"),
+        textGone: z.string().optional().describe("Wait until this text disappears from the page"),
+        time: z.number().optional().describe("Wait for a fixed number of seconds"),
+        timeout: z.number().optional().describe("Maximum wait time in seconds (default: 30)"),
       },
       async (args) => {
         const mode = args.text
@@ -417,19 +363,22 @@ Provide exactly one of: text, textGone, or time. Returns a page snapshot after t
             : args.time
               ? "time"
               : "unknown";
-        console.log(
-          `[opendevsMCPServer] BrowserWaitFor invoked for session ${sessionId}: mode=${mode}`
-        );
+        console.log(`[browser] BrowserWaitFor invoked for session ${sessionId}: mode=${mode}`);
 
         try {
-          const response = await EventBroadcaster.requestBrowserWaitFor({
-            sessionId,
-            text: args.text,
-            textGone: args.textGone,
-            time: args.time,
-            timeout: args.timeout,
-            webviewLabel: args.webviewLabel,
-          });
+          const waitArgs: string[] = ["wait"];
+          if (args.text) {
+            waitArgs.push("--text", args.text);
+          } else if (args.textGone) {
+            waitArgs.push("--text-gone", args.textGone);
+          } else if (args.time) {
+            waitArgs.push("--time", String(args.time * 1000)); // agent-browser uses ms
+          }
+          if (args.timeout) {
+            waitArgs.push("--timeout", String(args.timeout * 1000));
+          }
+
+          const response = await execWithSnapshot(sessionId, waitArgs, 35_000);
 
           if (response.error) {
             return {
@@ -458,6 +407,7 @@ Provide exactly one of: text, textGone, or time. Returns a page snapshot after t
         }
       }
     ),
+
     // ====================================================================
     // BrowserEvaluate
     // ====================================================================
@@ -469,55 +419,32 @@ Provide exactly one of: text, textGone, or time. Returns a page snapshot after t
 - Run custom assertions or validations
 - Interact with page APIs (localStorage, sessionStorage, etc.)
 
-The code is wrapped in a Function constructor. Write it as a function body with a return statement.
-If a ref is provided, the matching element is passed as the 'element' argument. Returns the result and a page snapshot.`,
+Returns the result of the evaluation.`,
       {
         code: z
           .string()
           .describe(
-            "JavaScript function body to execute. Use 'return' to get results. " +
-              "Example: 'return document.title' or 'return element.textContent' when ref is provided."
+            "JavaScript code to execute. Use 'return' to get results. " +
+              "Example: 'return document.title'"
           ),
-        ref: z
-          .string()
-          .optional()
-          .describe(
-            "Element data-cursor-ref — if provided, the element is passed as 'element' argument"
-          ),
-        webviewLabel: z
-          .string()
-          .optional()
-          .describe("Target browser tab. If omitted, uses the active tab."),
       },
       async (args) => {
-        console.log(`[opendevsMCPServer] BrowserEvaluate invoked for session ${sessionId}`);
+        console.log(`[browser] BrowserEvaluate invoked for session ${sessionId}`);
 
         try {
-          const response = await EventBroadcaster.requestBrowserEvaluate({
-            sessionId,
-            code: args.code,
-            ref: args.ref,
-            webviewLabel: args.webviewLabel,
-          });
+          const result = await execAgentBrowser(sessionId, ["eval", args.code]);
 
-          if (response.error) {
+          if (!result.success) {
             return {
-              content: [{ type: "text", text: `Evaluate failed: ${response.error}` }],
+              content: [{ type: "text", text: `Evaluate failed: ${result.error}` }],
             };
           }
 
-          const details: string[] = [];
-          if (response.result) details.push(`Result: ${response.result}`);
+          const evalResult = (result.data?.result as string) || JSON.stringify(result.data);
 
-          const text = formatSnapshotResponse(
-            "evaluate",
-            response.snapshot,
-            undefined,
-            undefined,
-            details
-          );
-
-          return { content: [{ type: "text", text }] };
+          return {
+            content: [{ type: "text", text: `Evaluation result: ${evalResult}` }],
+          };
         } catch (err: unknown) {
           return {
             content: [{ type: "text", text: `Browser not available: ${getErrorMessage(err)}` }],
@@ -532,47 +459,41 @@ If a ref is provided, the matching element is passed as the 'element' argument. 
     tool(
       "BrowserPressKey",
       `Press a key on the keyboard. The key is dispatched to the currently focused element.
-Use this for keyboard shortcuts, form submission (Enter), navigation (Tab), dismissing dialogs (Escape),
-scrolling (ArrowDown, PageDown, Space), and text editing (Backspace, Delete).`,
+Use this for keyboard shortcuts, form submission (Enter), navigation (Tab), dismissing dialogs (Escape).`,
       {
         key: z
           .string()
           .describe(
-            "Name of the key to press or a character to generate, such as 'ArrowLeft', 'Enter', 'Tab', 'Escape', 'Backspace', 'a', '1'"
+            "Name of the key to press, such as 'ArrowLeft', 'Enter', 'Tab', 'Escape', 'Backspace', 'a', '1'"
           ),
-        ctrl: z.boolean().optional().describe("Hold Ctrl/Control key (e.g., Ctrl+A to select all)"),
-        shift: z.boolean().optional().describe("Hold Shift key (e.g., Shift+Tab to go back)"),
+        ctrl: z.boolean().optional().describe("Hold Ctrl/Control key"),
+        shift: z.boolean().optional().describe("Hold Shift key"),
         alt: z.boolean().optional().describe("Hold Alt/Option key"),
-        meta: z.boolean().optional().describe("Hold Meta/Cmd key (e.g., Cmd+S to save)"),
-        webviewLabel: z
-          .string()
-          .optional()
-          .describe("Target browser tab. If omitted, uses the active tab."),
+        meta: z.boolean().optional().describe("Hold Meta/Cmd key"),
       },
       async (args) => {
-        console.log(
-          `[opendevsMCPServer] BrowserPressKey invoked for session ${sessionId}: key=${args.key}`
-        );
+        console.log(`[browser] BrowserPressKey invoked for session ${sessionId}: key=${args.key}`);
 
         try {
-          const response = await EventBroadcaster.requestBrowserPressKey({
-            sessionId,
-            key: args.key,
-            ctrl: args.ctrl,
-            shift: args.shift,
-            alt: args.alt,
-            meta: args.meta,
-            webviewLabel: args.webviewLabel,
-          });
+          // Build modifier key combo: e.g. "Control+Shift+a"
+          const parts: string[] = [];
+          if (args.ctrl) parts.push("Control");
+          if (args.shift) parts.push("Shift");
+          if (args.alt) parts.push("Alt");
+          if (args.meta) parts.push("Meta");
+          parts.push(args.key);
+          const keyCombo = parts.join("+");
 
-          if (response.error) {
+          const result = await execAgentBrowser(sessionId, ["press", keyCombo]);
+
+          if (!result.success) {
             return {
-              content: [{ type: "text", text: `PressKey failed: ${response.error}` }],
+              content: [{ type: "text", text: `PressKey failed: ${result.error}` }],
             };
           }
 
           return {
-            content: [{ type: "text", text: `Pressed key: ${args.key}` }],
+            content: [{ type: "text", text: `Pressed key: ${keyCombo}` }],
           };
         } catch (err: unknown) {
           return {
@@ -588,30 +509,16 @@ scrolling (ArrowDown, PageDown, Space), and text editing (Backspace, Delete).`,
     tool(
       "BrowserHover",
       `Hover over an element on the page. Use this to reveal tooltips, dropdown menus,
-hover states, or any UI that appears on mouse hover. Returns a page snapshot after hovering so you can see what appeared.`,
+hover states, or any UI that appears on mouse hover. Returns a page snapshot after hovering.`,
       {
-        element: z
-          .string()
-          .describe(
-            "Human-readable element description (e.g., 'the Settings button', 'user avatar')"
-          ),
-        ref: z.string().describe("Exact target element data-cursor-ref from the page snapshot"),
-        webviewLabel: z
-          .string()
-          .optional()
-          .describe("Target browser tab. If omitted, uses the active tab."),
+        element: z.string().describe("Human-readable element description"),
+        ref: z.string().describe("Element reference from the page snapshot (e.g., '@e3')"),
       },
       async (args) => {
-        console.log(
-          `[opendevsMCPServer] BrowserHover invoked for session ${sessionId}: ref=${args.ref}`
-        );
+        console.log(`[browser] BrowserHover invoked for session ${sessionId}: ref=${args.ref}`);
 
         try {
-          const response = await EventBroadcaster.requestBrowserHover({
-            sessionId,
-            ref: args.ref,
-            webviewLabel: args.webviewLabel,
-          });
+          const response = await execWithSnapshot(sessionId, ["hover", args.ref]);
 
           if (response.error) {
             return {
@@ -641,37 +548,20 @@ hover states, or any UI that appears on mouse hover. Returns a page snapshot aft
     // ====================================================================
     tool(
       "BrowserSelectOption",
-      `Select an option in a dropdown (<select> element). Provide one or more values
-to select by option value or visible text. Returns a page snapshot after selection so you can see the updated state.`,
+      `Select an option in a dropdown (<select> element). Returns a page snapshot after selection.`,
       {
-        element: z
-          .string()
-          .describe(
-            "Human-readable description of the dropdown (e.g., 'country selector', 'language dropdown')"
-          ),
-        ref: z
-          .string()
-          .describe("Exact target <select> element data-cursor-ref from the page snapshot"),
-        values: z
-          .array(z.string())
-          .describe("Array of values to select. Can be option values or visible text labels."),
-        webviewLabel: z
-          .string()
-          .optional()
-          .describe("Target browser tab. If omitted, uses the active tab."),
+        element: z.string().describe("Human-readable description of the dropdown"),
+        ref: z.string().describe("Element reference for the <select> element"),
+        values: z.array(z.string()).describe("Values to select (option values or visible text)"),
       },
       async (args) => {
         console.log(
-          `[opendevsMCPServer] BrowserSelectOption invoked for session ${sessionId}: ref=${args.ref}`
+          `[browser] BrowserSelectOption invoked for session ${sessionId}: ref=${args.ref}`
         );
 
         try {
-          const response = await EventBroadcaster.requestBrowserSelectOption({
-            sessionId,
-            ref: args.ref,
-            values: args.values,
-            webviewLabel: args.webviewLabel,
-          });
+          const selectArgs = ["select", args.ref, ...args.values];
+          const response = await execWithSnapshot(sessionId, selectArgs);
 
           if (response.error) {
             return {
@@ -684,11 +574,7 @@ to select by option value or visible text. Returns a page snapshot after selecti
             response.snapshot,
             response.url,
             response.title,
-            [
-              `Dropdown: ${args.element}`,
-              `Selected values: ${args.values.join(", ")}`,
-              `Matched: ${response.matched ?? args.values.length} option(s)`,
-            ]
+            [`Dropdown: ${args.element}`, `Selected values: ${args.values.join(", ")}`]
           );
 
           return { content: [{ type: "text", text }] };
@@ -706,20 +592,12 @@ to select by option value or visible text. Returns a page snapshot after selecti
     tool(
       "BrowserNavigateBack",
       `Go back to the previous page in browser history. Returns a snapshot of the page after navigating back.`,
-      {
-        webviewLabel: z
-          .string()
-          .optional()
-          .describe("Target browser tab. If omitted, uses the active tab."),
-      },
-      async (args) => {
-        console.log(`[opendevsMCPServer] BrowserNavigateBack invoked for session ${sessionId}`);
+      {},
+      async () => {
+        console.log(`[browser] BrowserNavigateBack invoked for session ${sessionId}`);
 
         try {
-          const response = await EventBroadcaster.requestBrowserNavigateBack({
-            sessionId,
-            webviewLabel: args.webviewLabel,
-          });
+          const response = await execWithSnapshot(sessionId, ["back"]);
 
           if (response.error) {
             return {
@@ -748,43 +626,31 @@ to select by option value or visible text. Returns a page snapshot after selecti
     // ====================================================================
     tool(
       "BrowserConsoleMessages",
-      `Returns all console messages (log, warn, error, debug) captured since the page loaded.
-Use this to check for JavaScript errors, debug application behavior, or verify log output.
-Messages are formatted as [LEVEL] message.`,
-      {
-        webviewLabel: z
-          .string()
-          .optional()
-          .describe("Target browser tab. If omitted, uses the active tab."),
-      },
-      async (args) => {
-        console.log(`[opendevsMCPServer] BrowserConsoleMessages invoked for session ${sessionId}`);
+      `Returns console messages (log, warn, error) captured since the page loaded.
+Use this to check for JavaScript errors or debug application behavior.`,
+      {},
+      async () => {
+        console.log(`[browser] BrowserConsoleMessages invoked for session ${sessionId}`);
 
         try {
-          const response = await EventBroadcaster.requestBrowserConsoleMessages({
-            sessionId,
-            webviewLabel: args.webviewLabel,
-          });
+          const result = await execAgentBrowser(sessionId, ["console", "--json"]);
 
-          if (response.error) {
+          if (!result.success) {
             return {
-              content: [{ type: "text", text: `ConsoleMessages failed: ${response.error}` }],
+              content: [{ type: "text", text: `ConsoleMessages failed: ${result.error}` }],
             };
           }
 
-          if (response.count === 0) {
+          const messages = (result.data?.messages as string) || JSON.stringify(result.data);
+
+          if (!messages || messages === "[]" || messages === "null") {
             return {
               content: [{ type: "text", text: "No console messages captured." }],
             };
           }
 
           return {
-            content: [
-              {
-                type: "text",
-                text: `Console messages (${response.count}):\n${response.logs}`,
-              },
-            ],
+            content: [{ type: "text", text: `Console messages:\n${messages}` }],
           };
         } catch (err: unknown) {
           return {
@@ -799,110 +665,60 @@ Messages are formatted as [LEVEL] message.`,
     // ====================================================================
     tool(
       "BrowserScreenshot",
-      `Capture a pixel screenshot of the current browser page. Returns a JPEG image that you can analyze visually.
+      `Capture a screenshot of the current browser page. Returns a JPEG image.
 
-Use this when you need to:
-- Verify visual appearance, layout, or styling of a page
-- Check that UI elements render correctly after actions
-- Debug visual issues that the accessibility snapshot cannot reveal
-- See images, colors, or visual design elements
-
-You can capture:
-- The full page (no extra params)
-- A specific region using rect (x, y, width, height in CSS pixels)
-- A specific element using ref (element's data-cursor-ref from a snapshot) — auto-crops to that element with padding
-
-For structural/interactive page analysis, prefer BrowserSnapshot (accessibility tree) instead.`,
+Use this when you need to verify visual appearance, layout, or styling.
+For structural/interactive analysis, prefer BrowserSnapshot (accessibility tree) instead.`,
       {
-        webviewLabel: z
-          .string()
-          .optional()
-          .describe("Target browser tab webview label. If omitted, uses the active tab."),
         ref: z
           .string()
           .optional()
-          .describe(
-            "Element ref ID from a BrowserSnapshot (e.g. 'ref-abc123'). Screenshots just that element with padding."
-          ),
-        rect: z
-          .object({
-            x: z.number().describe("X offset in CSS pixels from left edge"),
-            y: z.number().describe("Y offset in CSS pixels from top edge"),
-            width: z.number().describe("Width in CSS pixels"),
-            height: z.number().describe("Height in CSS pixels"),
-          })
-          .optional()
-          .describe("Crop to a specific region. Takes priority over ref."),
+          .describe("Element ref to screenshot just that element (e.g., '@e5')"),
       },
       async (args) => {
-        console.log(`[opendevsMCPServer] BrowserScreenshot invoked for session ${sessionId}`);
+        console.log(`[browser] BrowserScreenshot invoked for session ${sessionId}`);
 
         try {
-          let cropRect = args.rect;
-
-          // If ref is provided (and no explicit rect), resolve element bounding rect
-          if (!cropRect && args.ref) {
-            try {
-              const evalResponse = await EventBroadcaster.requestBrowserEvaluate({
-                sessionId,
-                webviewLabel: args.webviewLabel,
-                code: `
-                  var el = document.querySelector('[data-cursor-ref="${args.ref}"]');
-                  if (!el) return JSON.stringify({ error: 'Element not found' });
-                  var r = el.getBoundingClientRect();
-                  var pad = 16;
-                  return JSON.stringify({
-                    x: Math.max(0, r.x - pad),
-                    y: Math.max(0, r.y - pad),
-                    width: r.width + pad * 2,
-                    height: r.height + pad * 2
-                  });
-                `,
-              });
-              let parsed: any = {};
-              try {
-                parsed = JSON.parse(evalResponse.result || "{}");
-              } catch {
-                // Malformed JSON from webview eval — fall through to full-page screenshot
-              }
-              if (!parsed.error && parsed.width > 0 && parsed.height > 0) {
-                cropRect = parsed;
-              }
-            } catch {
-              // Fall through to full-page screenshot if ref resolution fails
-            }
+          const screenshotPath = join(
+            tmpdir(),
+            `opendevs-screenshot-${sessionId}-${Date.now()}.png`
+          );
+          const screenshotArgs = ["screenshot", screenshotPath];
+          if (args.ref) {
+            screenshotArgs.push("--selector", args.ref);
           }
 
-          const response = await EventBroadcaster.requestBrowserScreenshot({
-            sessionId,
-            webviewLabel: args.webviewLabel,
-            rect: cropRect,
-          });
+          const result = await execAgentBrowser(sessionId, screenshotArgs, 15_000);
 
-          if (response.error) {
+          if (!result.success) {
             return {
-              content: [{ type: "text", text: `Screenshot failed: ${response.error}` }],
+              content: [{ type: "text", text: `Screenshot failed: ${result.error}` }],
             };
           }
 
+          // Read screenshot file and return as base64 image
           const parts: Array<{ type: string; [key: string]: unknown }> = [];
-
-          // Return the image using MCP ImageContent format (data + mimeType at top level).
-          // The Anthropic API format (source.data) causes "invalid result format" errors
-          // when returned through createSdkMcpServer.
-          if (response.image) {
+          try {
+            const imageBuffer = readFileSync(screenshotPath);
+            const base64Data = imageBuffer.toString("base64");
             parts.push({
               type: "image",
-              data: response.image,
-              mimeType: "image/jpeg",
+              data: base64Data,
+              mimeType: "image/png",
             });
+            try {
+              unlinkSync(screenshotPath);
+            } catch {
+              // Ignore cleanup errors
+            }
+          } catch {
+            // File read failed — return text-only response
           }
 
-          // Add URL context as text
-          let context = response.url ? `Screenshot of ${response.url}` : "Screenshot captured.";
+          const urlResult = await execAgentBrowser(sessionId, ["get", "url", "--json"]);
+          const url = (urlResult.data?.url as string) || "";
+          let context = url ? `Screenshot of ${url}` : "Screenshot captured.";
           if (args.ref) context += ` (element: ${args.ref})`;
-          if (cropRect)
-            context += ` [region: ${Math.round(cropRect.x)},${Math.round(cropRect.y)} ${Math.round(cropRect.width)}x${Math.round(cropRect.height)}]`;
           parts.push({ type: "text", text: context });
 
           return { content: parts };
@@ -911,7 +727,7 @@ For structural/interactive page analysis, prefer BrowserSnapshot (accessibility 
             content: [
               {
                 type: "text",
-                text: `Browser not available: ${getErrorMessage(err)}. Make sure the browser tab is open.`,
+                text: `Browser not available: ${getErrorMessage(err)}. Make sure the browser is open.`,
               },
             ],
           };
@@ -924,47 +740,30 @@ For structural/interactive page analysis, prefer BrowserSnapshot (accessibility 
     // ====================================================================
     tool(
       "BrowserNetworkRequests",
-      `Returns all network requests made since the page loaded. Use this to:
-- Debug API calls and check response status codes
-- Verify that expected resources are loading
-- Identify failed requests or slow endpoints
-- Monitor XHR/fetch calls triggered by user actions
-
-Requests are formatted as [TYPE] URL (duration, size).`,
-      {
-        webviewLabel: z
-          .string()
-          .optional()
-          .describe("Target browser tab. If omitted, uses the active tab."),
-      },
-      async (args) => {
-        console.log(`[opendevsMCPServer] BrowserNetworkRequests invoked for session ${sessionId}`);
+      `Returns network requests made since the page loaded. Use this to debug API calls and check response status codes.`,
+      {},
+      async () => {
+        console.log(`[browser] BrowserNetworkRequests invoked for session ${sessionId}`);
 
         try {
-          const response = await EventBroadcaster.requestBrowserNetworkRequests({
-            sessionId,
-            webviewLabel: args.webviewLabel,
-          });
+          const result = await execAgentBrowser(sessionId, ["network", "--json"]);
 
-          if (response.error) {
+          if (!result.success) {
             return {
-              content: [{ type: "text", text: `NetworkRequests failed: ${response.error}` }],
+              content: [{ type: "text", text: `NetworkRequests failed: ${result.error}` }],
             };
           }
 
-          if (response.count === 0) {
+          const requests = (result.data?.requests as string) || JSON.stringify(result.data);
+
+          if (!requests || requests === "[]" || requests === "null") {
             return {
               content: [{ type: "text", text: "No network requests captured." }],
             };
           }
 
           return {
-            content: [
-              {
-                type: "text",
-                text: `Network requests (${response.count}):\n${response.requests}`,
-              },
-            ],
+            content: [{ type: "text", text: `Network requests:\n${requests}` }],
           };
         } catch (err: unknown) {
           return {
@@ -981,14 +780,11 @@ Requests are formatted as [TYPE] URL (duration, size).`,
       "BrowserScroll",
       `Scroll the page in a direction, or scroll a specific element into view.
 
-Use this to navigate through long pages, load lazy content, or bring off-screen elements into the viewport.
-Returns a fresh accessibility snapshot after scrolling with updated ref IDs.
-
 Two modes:
-- **Direction scroll**: Scroll up/down/left/right by a pixel amount (default 600px ≈ one viewport)
-- **Element scroll**: Provide a ref to scroll that element into view (centered)
+- **Direction scroll**: Scroll up/down/left/right by a pixel amount (default 600px)
+- **Element scroll**: Provide a ref to scroll that element into view
 
-"down" scrolls the page content upward (reveals content below). "up" scrolls the page content downward (reveals content above).`,
+Returns a fresh accessibility snapshot after scrolling.`,
       {
         direction: z
           .enum(["up", "down", "left", "right"])
@@ -997,33 +793,29 @@ Two modes:
         amount: z
           .number()
           .optional()
-          .describe(
-            "Pixels to scroll (default 600 ≈ one viewport height). Ignored when ref is provided."
-          ),
+          .describe("Pixels to scroll (default 600). Ignored when ref is provided."),
         ref: z
           .string()
           .optional()
-          .describe(
-            "Element ref ID to scroll into view. If provided, direction/amount are ignored."
-          ),
-        webviewLabel: z
-          .string()
-          .optional()
-          .describe("Target browser tab. If omitted, uses the active tab."),
+          .describe("Element ref to scroll into view. If provided, direction/amount are ignored."),
       },
       async (args) => {
         console.log(
-          `[opendevsMCPServer] BrowserScroll invoked for session ${sessionId}: dir=${args.direction} amount=${args.amount} ref=${args.ref}`
+          `[browser] BrowserScroll invoked for session ${sessionId}: dir=${args.direction} ref=${args.ref}`
         );
 
         try {
-          const response = await EventBroadcaster.requestBrowserScroll({
-            sessionId,
-            direction: args.direction,
-            amount: args.amount,
-            ref: args.ref,
-            webviewLabel: args.webviewLabel,
-          });
+          let scrollArgs: string[];
+          if (args.ref) {
+            // Scroll element into view
+            scrollArgs = ["scroll", "--to", args.ref];
+          } else {
+            const dir = args.direction ?? "down";
+            const amount = args.amount ?? 600;
+            scrollArgs = ["scroll", dir, String(amount)];
+          }
+
+          const response = await execWithSnapshot(sessionId, scrollArgs);
 
           if (response.error) {
             return {

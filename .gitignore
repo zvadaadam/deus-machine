@@ -20,8 +20,6 @@ electron.vite.config.d.ts
 
 # Sidecar build artifact (built via `bun run build:sidecar`)
 apps/sidecar/dist/
-# Browser inject build artifacts (built via `bun run build:inject`)
-apps/web/src/features/browser/automation/dist-inject/
 
 # Misc
 .DS_Store

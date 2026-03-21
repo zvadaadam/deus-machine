@@ -24,36 +24,6 @@ import type {
   GetTerminalOutputResponse,
   ExitPlanModeRequest,
   ExitPlanModeResponse,
-  BrowserSnapshotRequest,
-  BrowserSnapshotResponse,
-  BrowserClickRequest,
-  BrowserClickResponse,
-  BrowserTypeRequest,
-  BrowserTypeResponse,
-  BrowserNavigateRequest,
-  BrowserNavigateResponse,
-  BrowserGetStateRequest,
-  BrowserGetStateResponse,
-  BrowserWaitForRequest,
-  BrowserWaitForResponse,
-  BrowserEvaluateRequest,
-  BrowserEvaluateResponse,
-  BrowserPressKeyRequest,
-  BrowserPressKeyResponse,
-  BrowserHoverRequest,
-  BrowserHoverResponse,
-  BrowserSelectOptionRequest,
-  BrowserSelectOptionResponse,
-  BrowserNavigateBackRequest,
-  BrowserNavigateBackResponse,
-  BrowserConsoleMessagesRequest,
-  BrowserConsoleMessagesResponse,
-  BrowserNetworkRequestsRequest,
-  BrowserNetworkRequestsResponse,
-  BrowserScreenshotRequest,
-  BrowserScreenshotResponse,
-  BrowserScrollRequest,
-  BrowserScrollResponse,
   SimScreenshotRequest,
   SimScreenshotResponse,
   SimTapRequest,
@@ -83,33 +53,6 @@ const USER_FACING_TIMEOUT_MS = 120_000;
 
 /** Timeout for data-fetching requests that should resolve quickly */
 const DATA_QUERY_TIMEOUT_MS = 10_000;
-
-/** Timeout for browser snapshot — the accessibility tree builder on heavy
- *  pages can take up to 15s (evalWithResult timeout), plus IPC overhead. */
-const BROWSER_SNAPSHOT_TIMEOUT_MS = 20_000;
-
-/** Timeout for browser navigate — allows extra time for auto-creating a tab,
- *  waiting for the webview to initialize, loading the page, and taking a snapshot. */
-const BROWSER_NAVIGATE_TIMEOUT_MS = 30_000;
-
-/** Timeout for browser navigate-back — page load (15s) + snapshot (12s) + buffer. */
-const BROWSER_NAVIGATE_BACK_TIMEOUT_MS = 30_000;
-
-/** Timeout for BrowserWaitFor — polls for up to 30s inside the webview,
- *  plus 5s buffer for eval overhead and title-channel round-trip. */
-const BROWSER_WAIT_FOR_TIMEOUT_MS = 35_000;
-
-/** Timeout for BrowserEvaluate — user code can run expensive operations,
- *  frontend allows 15s for eval, plus IPC overhead. */
-const BROWSER_EVALUATE_TIMEOUT_MS = 20_000;
-
-/** Timeout for BrowserScreenshot — native WKWebView.takeSnapshot() has a
- *  10s internal timeout, plus 5s buffer for IPC and base64 encoding. */
-const BROWSER_SCREENSHOT_TIMEOUT_MS = 15_000;
-
-/** Timeout for browser interactions (click, type, hover, etc.) that include
- *  visual effects + eval. Visual cursor animation up to 3s + eval up to 8s. */
-const BROWSER_INTERACTION_TIMEOUT_MS = 15_000;
 
 /** Timeout for simulator screenshot — native capture + JPEG
  *  encoding + base64 transfer. Typically <2s but allow headroom. */
@@ -383,113 +326,6 @@ class EventBroadcasterClass {
       FRONTEND_RPC_METHODS.GET_TERMINAL_OUTPUT,
       r,
       DATA_QUERY_TIMEOUT_MS
-    );
-  }
-
-  // --- Browser automation RPCs ---
-  requestBrowserSnapshot(r: BrowserSnapshotRequest) {
-    return this.rpc<BrowserSnapshotResponse>(
-      FRONTEND_RPC_METHODS.BROWSER_SNAPSHOT,
-      r,
-      BROWSER_SNAPSHOT_TIMEOUT_MS
-    );
-  }
-  requestBrowserClick(r: BrowserClickRequest) {
-    return this.rpc<BrowserClickResponse>(
-      FRONTEND_RPC_METHODS.BROWSER_CLICK,
-      r,
-      BROWSER_INTERACTION_TIMEOUT_MS
-    );
-  }
-  requestBrowserType(r: BrowserTypeRequest) {
-    return this.rpc<BrowserTypeResponse>(
-      FRONTEND_RPC_METHODS.BROWSER_TYPE,
-      r,
-      BROWSER_INTERACTION_TIMEOUT_MS
-    );
-  }
-  requestBrowserNavigate(r: BrowserNavigateRequest) {
-    return this.rpc<BrowserNavigateResponse>(
-      FRONTEND_RPC_METHODS.BROWSER_NAVIGATE,
-      r,
-      BROWSER_NAVIGATE_TIMEOUT_MS
-    );
-  }
-  requestBrowserGetState(r: BrowserGetStateRequest) {
-    return this.rpc<BrowserGetStateResponse>(
-      FRONTEND_RPC_METHODS.BROWSER_GET_STATE,
-      r,
-      DATA_QUERY_TIMEOUT_MS
-    );
-  }
-  requestBrowserWaitFor(r: BrowserWaitForRequest) {
-    return this.rpc<BrowserWaitForResponse>(
-      FRONTEND_RPC_METHODS.BROWSER_WAIT_FOR,
-      r,
-      BROWSER_WAIT_FOR_TIMEOUT_MS
-    );
-  }
-  requestBrowserEvaluate(r: BrowserEvaluateRequest) {
-    return this.rpc<BrowserEvaluateResponse>(
-      FRONTEND_RPC_METHODS.BROWSER_EVALUATE,
-      r,
-      BROWSER_EVALUATE_TIMEOUT_MS
-    );
-  }
-  requestBrowserPressKey(r: BrowserPressKeyRequest) {
-    return this.rpc<BrowserPressKeyResponse>(
-      FRONTEND_RPC_METHODS.BROWSER_PRESS_KEY,
-      r,
-      BROWSER_INTERACTION_TIMEOUT_MS
-    );
-  }
-  requestBrowserHover(r: BrowserHoverRequest) {
-    return this.rpc<BrowserHoverResponse>(
-      FRONTEND_RPC_METHODS.BROWSER_HOVER,
-      r,
-      BROWSER_INTERACTION_TIMEOUT_MS
-    );
-  }
-  requestBrowserSelectOption(r: BrowserSelectOptionRequest) {
-    return this.rpc<BrowserSelectOptionResponse>(
-      FRONTEND_RPC_METHODS.BROWSER_SELECT_OPTION,
-      r,
-      BROWSER_INTERACTION_TIMEOUT_MS
-    );
-  }
-  requestBrowserNavigateBack(r: BrowserNavigateBackRequest) {
-    return this.rpc<BrowserNavigateBackResponse>(
-      FRONTEND_RPC_METHODS.BROWSER_NAVIGATE_BACK,
-      r,
-      BROWSER_NAVIGATE_BACK_TIMEOUT_MS
-    );
-  }
-  requestBrowserConsoleMessages(r: BrowserConsoleMessagesRequest) {
-    return this.rpc<BrowserConsoleMessagesResponse>(
-      FRONTEND_RPC_METHODS.BROWSER_CONSOLE_MESSAGES,
-      r,
-      BROWSER_INTERACTION_TIMEOUT_MS
-    );
-  }
-  requestBrowserNetworkRequests(r: BrowserNetworkRequestsRequest) {
-    return this.rpc<BrowserNetworkRequestsResponse>(
-      FRONTEND_RPC_METHODS.BROWSER_NETWORK_REQUESTS,
-      r,
-      BROWSER_INTERACTION_TIMEOUT_MS
-    );
-  }
-  requestBrowserScreenshot(r: BrowserScreenshotRequest) {
-    return this.rpc<BrowserScreenshotResponse>(
-      FRONTEND_RPC_METHODS.BROWSER_SCREENSHOT,
-      r,
-      BROWSER_SCREENSHOT_TIMEOUT_MS
-    );
-  }
-  requestBrowserScroll(r: BrowserScrollRequest) {
-    return this.rpc<BrowserScrollResponse>(
-      FRONTEND_RPC_METHODS.BROWSER_SCROLL,
-      r,
-      BROWSER_INTERACTION_TIMEOUT_MS
     );
   }
 

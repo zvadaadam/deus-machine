@@ -207,10 +207,8 @@ describe("shared/events", () => {
       expect(COMMAND_NAMES).toContain("pty:kill");
       expect(COMMAND_NAMES).toContain("fs:watch");
       expect(COMMAND_NAMES).toContain("fs:unwatch");
-      expect(COMMAND_NAMES).toContain("browser-server:start");
-      expect(COMMAND_NAMES).toContain("browser-server:stop");
       expect(COMMAND_NAMES).toContain("git:clone");
-      expect(COMMAND_NAMES).toHaveLength(11);
+      expect(COMMAND_NAMES).toHaveLength(9);
     });
 
     it("PROTOCOL_EVENTS contains the expected events", () => {

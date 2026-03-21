@@ -82,10 +82,22 @@ export function registerBrowserViewHandlers(): void {
       mainWindow.addBrowserView(view);
       view.setBounds(bounds);
       view.setAutoResize({ width: false, height: false });
-      view.webContents.loadURL(url);
       views.set(label, view);
 
-      // Forward navigation events to renderer
+      // Register event listeners BEFORE loadURL to avoid race conditions.
+      // loadURL() triggers loading events that must be captured.
+      //
+      // Event semantics:
+      //   did-start-loading  — any frame starts (main + iframes/ads)
+      //   did-stop-loading   — ALL frames finished (tab spinner stops)
+      //   did-finish-load    — main frame only
+      //   did-fail-load      — main frame navigation failure
+      //
+      // We use did-start-loading + did-stop-loading to match browser tab
+      // spinner behavior. did-finish-load fires before subresources are
+      // done, and did-start-loading fires for iframes too — using
+      // did-stop-loading as "finished" ensures loading state clears once
+      // everything is truly done (no stuck spinner from ad iframes).
       view.webContents.on("did-start-loading", () => {
         mainWindow.webContents.send("browser:page-load", {
           label,
@@ -94,7 +106,7 @@ export function registerBrowserViewHandlers(): void {
         });
       });
 
-      view.webContents.on("did-finish-load", () => {
+      view.webContents.on("did-stop-loading", () => {
         mainWindow.webContents.send("browser:page-load", {
           label,
           url: view.webContents.getURL(),
@@ -102,14 +114,21 @@ export function registerBrowserViewHandlers(): void {
         });
       });
 
-      view.webContents.on("did-fail-load", (_event, errorCode, errorDescription) => {
-        mainWindow.webContents.send("browser:page-load", {
-          label,
-          url: view.webContents.getURL(),
-          event: "failed",
-          error: { code: errorCode, description: errorDescription },
-        });
-      });
+      view.webContents.on(
+        "did-fail-load",
+        (_event, errorCode, errorDescription, _url, isMainFrame) => {
+          // Only report main frame failures — subframe failures (ads, iframes)
+          // shouldn't show as page-level errors.
+          // ERR_ABORTED (-3) fires during redirects and canceled navigations — not a real failure.
+          if (!isMainFrame || errorCode === -3) return;
+          mainWindow.webContents.send("browser:page-load", {
+            label,
+            url: view.webContents.getURL(),
+            event: "failed",
+            error: { code: errorCode, description: errorDescription },
+          });
+        }
+      );
 
       view.webContents.on("page-title-updated", (_, title) => {
         mainWindow.webContents.send("browser:title-changed", { label, title });
@@ -132,6 +151,23 @@ export function registerBrowserViewHandlers(): void {
       // TODO: Network request tracking — disabled until renderer listener is wired.
       // The events were being sent but nothing consumed them (wasted IPC traffic).
 
+      // Gracefully handle certificate errors for localhost dev servers.
+      // Self-signed certs on localhost/127.0.0.1 are accepted — all other
+      // cert errors are rejected (navigation will fail).
+      view.webContents.on("certificate-error", (event, _url, _error, _certificate, callback) => {
+        try {
+          const parsed = new URL(_url);
+          if (parsed.hostname === "localhost" || parsed.hostname === "127.0.0.1") {
+            event.preventDefault();
+            callback(true); // Accept for localhost
+            return;
+          }
+        } catch {
+          // Malformed URL — fall through to reject
+        }
+        callback(false);
+      });
+
       // Open external links in system browser (only allow http/https)
       view.webContents.setWindowOpenHandler(({ url: linkUrl }) => {
         try {
@@ -144,6 +180,22 @@ export function registerBrowserViewHandlers(): void {
         }
         return { action: "deny" };
       });
+
+      // Handle keyboard shortcuts from the browser preload
+      view.webContents.on("ipc-message", (_event, channel, data) => {
+        if (channel === "browser:keyboard-shortcut") {
+          const { shortcut } = data as { shortcut: string };
+          if (shortcut === "reload") {
+            view.webContents.reload();
+          } else if (shortcut === "focus-url-bar") {
+            // Forward to renderer so the URL bar can be focused
+            mainWindow.webContents.send("browser:keyboard-shortcut", { shortcut });
+          }
+        }
+      });
+
+      // Start navigation AFTER all listeners are attached
+      view.webContents.loadURL(url);
     }
   );
 
@@ -160,9 +212,9 @@ export function registerBrowserViewHandlers(): void {
   );
 
   // -------------------------------------------------------------------------
-  // JavaScript evaluation
+  // JavaScript evaluation (fire-and-forget)
   // Renderer calls: invoke("eval_browser_webview", { label, js })
-  // Returns the result of the JS execution (used by eval-with-result.ts)
+  // Used by BrowserTab.tsx to inject automation scripts into the webview.
   // -------------------------------------------------------------------------
 
   ipcMain.handle(
@@ -180,10 +232,9 @@ export function registerBrowserViewHandlers(): void {
   );
 
   // -------------------------------------------------------------------------
-  // JavaScript evaluation (alias)
+  // JavaScript evaluation (with result capture)
   // Renderer calls: invoke("eval_browser_webview_with_result", { label, js })
-  // Same operation as eval_browser_webview — executeJavaScript already returns a result.
-  // Both names are used by renderer code (BrowserTab.tsx uses this variant).
+  // Used by BrowserTab.tsx for console drain and inspect mode event drain.
   // -------------------------------------------------------------------------
 
   ipcMain.handle(
@@ -199,17 +250,6 @@ export function registerBrowserViewHandlers(): void {
       }
     }
   );
-
-  // -------------------------------------------------------------------------
-  // Get URL (snake_case variant)
-  // Renderer calls: invoke("get_browser_webview_url", { label })
-  // Used by useBrowserRpcHandler.ts for URL queries.
-  // -------------------------------------------------------------------------
-
-  ipcMain.handle("get_browser_webview_url", (_e, { label }: { label: string }) => {
-    const view = views.get(label);
-    return view ? view.webContents.getURL() : "";
-  });
 
   // -------------------------------------------------------------------------
   // Screenshot
@@ -263,9 +303,12 @@ export function registerBrowserViewHandlers(): void {
   //                 invoke("close_browser_devtools", { label })
   // -------------------------------------------------------------------------
 
-  ipcMain.handle("open_browser_devtools", (_e, { label }: { label: string }) => {
-    views.get(label)?.webContents.openDevTools({ mode: "detach" });
-  });
+  ipcMain.handle(
+    "open_browser_devtools",
+    (_e, { label, mode }: { label: string; mode?: "right" | "bottom" | "detach" | "undocked" }) => {
+      views.get(label)?.webContents.openDevTools({ mode: mode ?? "bottom" });
+    }
+  );
 
   ipcMain.handle("close_browser_devtools", (_e, { label }: { label: string }) => {
     const view = views.get(label);
@@ -301,12 +344,19 @@ export function registerBrowserViewHandlers(): void {
         height: number;
       }
     ) => {
-      views.get(label)?.setBounds({
+      const bounds = {
         x: Math.round(x),
         y: Math.round(y),
         width: Math.round(width),
         height: Math.round(height),
-      });
+      };
+      const view = views.get(label);
+      if (view) {
+        view.setBounds(bounds);
+        // Also save to viewBounds so show() uses the latest position
+        // (important when setBounds is called while the view is hidden/detached)
+        viewBounds.set(label, bounds);
+      }
     }
   );
 
@@ -326,10 +376,26 @@ export function registerBrowserViewHandlers(): void {
   });
 
   ipcMain.handle("hide_browser_webview", (_e, { label }: { label: string }) => {
+    const mainWindow = BrowserWindow.getAllWindows()[0];
     const view = views.get(label);
     if (view) {
       viewBounds.set(label, view.getBounds());
-      view.setBounds({ x: 0, y: 0, width: 0, height: 0 });
+      // Remove from window entirely — setting bounds to 0,0 can still render
+      // on some Electron versions and leaves a stale overlay.
+      if (mainWindow) {
+        mainWindow.removeBrowserView(view);
+      }
+    }
+  });
+
+  // Hide ALL browser views at once — called when switching workspaces
+  // or navigating to the welcome screen to ensure no stale native overlays.
+  ipcMain.handle("hide_all_browser_webviews", () => {
+    const mainWindow = BrowserWindow.getAllWindows()[0];
+    if (!mainWindow) return;
+    for (const [label, view] of views) {
+      viewBounds.set(label, view.getBounds());
+      mainWindow.removeBrowserView(view);
     }
   });
 
@@ -373,16 +439,6 @@ export function registerBrowserViewHandlers(): void {
       return ses.cookies.get({ url });
     }
   );
-
-  // -------------------------------------------------------------------------
-  // Console message capture (preload browserInvoke calls "browser:getConsoleMessages")
-  // -------------------------------------------------------------------------
-
-  ipcMain.handle("browser:getConsoleMessages", (_e, { label }: { label: string }) => {
-    const view = views.get(label);
-    if (!view) return [];
-    return []; // TODO: buffer recent messages from preload forwarding
-  });
 
   // -------------------------------------------------------------------------
   // Get URL / title (preload browserInvoke calls "browser:getURL" / "browser:getTitle")

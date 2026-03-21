@@ -78,9 +78,6 @@ export const COMMAND_NAMES = [
   // File system commands
   "fs:watch",
   "fs:unwatch",
-  // Browser server commands
-  "browser-server:start",
-  "browser-server:stop",
   // Git commands
   "git:clone",
 ] as const;
