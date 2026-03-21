@@ -4,8 +4,9 @@
 
 import { build } from "esbuild";
 import * as path from "path";
+import { fileURLToPath } from "url";
 
-const sidecarDir = path.dirname(new URL(import.meta.url).pathname);
+const sidecarDir = path.dirname(fileURLToPath(import.meta.url));
 
 build({
   entryPoints: [path.join(sidecarDir, "index.ts")],

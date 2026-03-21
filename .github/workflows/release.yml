@@ -121,7 +121,7 @@ jobs:
         run: bun run build:all
 
       - name: Package macOS (arm64 + x64)
-        run: electron-builder --mac --publish never
+        run: npx electron-builder --mac --publish never
         env:
           CSC_LINK: ${{ secrets.APPLE_CERTIFICATE }}
           CSC_KEY_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
@@ -206,7 +206,7 @@ jobs:
         run: bun run build:all
 
       - name: Package Linux (x64)
-        run: electron-builder --linux --publish never
+        run: npx electron-builder --linux --publish never
 
       - uses: actions/upload-artifact@v4
         with:
