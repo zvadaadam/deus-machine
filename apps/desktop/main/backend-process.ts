@@ -26,8 +26,9 @@ const STARTUP_TIMEOUT_MS = 30_000;
 export async function spawnBackend(): Promise<{ port: number; authToken: string }> {
   const authToken = crypto.randomBytes(24).toString("hex");
   const projectRoot = join(__dirname, "../..");
-  // Always use Electron's Node runtime so native modules compiled by
-  // electron-builder install-app-deps match the ABI in both dev and prod.
+  // Always use Electron's Node binary for the backend process.
+  // electron-builder install-app-deps compiles native modules (better-sqlite3, node-pty)
+  // against Electron's Node ABI. Using system node would cause MODULE_VERSION mismatch.
   const backendRuntime = process.execPath;
 
   // Resolve backend entry point
