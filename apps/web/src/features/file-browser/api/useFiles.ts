@@ -1,22 +1,21 @@
 /**
- * Hook for scanning workspace files via the backend HTTP endpoint.
+ * Hook for scanning workspace files via the q:request protocol.
  * The backend handles .gitignore-aware file scanning with caching.
  */
 
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { apiClient } from "@/shared/api/client";
-import { ENDPOINTS } from "@/shared/config/api.config";
+import { sendRequest, sendMutate } from "@/platform/ws";
 import type { FileTreeResponse } from "../types";
 
 /**
- * Scan workspace files via backend HTTP
+ * Scan workspace files via q:request
  */
 async function scanWorkspaceFiles(workspaceId: string): Promise<FileTreeResponse> {
-  return apiClient.get<FileTreeResponse>(ENDPOINTS.WORKSPACE_FILES(workspaceId));
+  return sendRequest<FileTreeResponse>("workspaceFiles", { workspaceId });
 }
 
 /**
- * TanStack Query hook for file scanning via backend HTTP
+ * TanStack Query hook for file scanning via q:request
  */
 export function useFiles(workspaceId: string | null) {
   return useQuery({
@@ -33,10 +32,10 @@ export function useFiles(workspaceId: string | null) {
 }
 
 /**
- * Invalidate file cache for a workspace via backend HTTP
+ * Invalidate file cache for a workspace via q:mutate
  */
 export async function invalidateFileCache(workspaceId: string): Promise<void> {
-  await apiClient.post(ENDPOINTS.WORKSPACE_FILES_INVALIDATE(workspaceId));
+  await sendMutate("invalidateFileCache", { workspaceId });
 }
 
 /**

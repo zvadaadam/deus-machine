@@ -25,6 +25,7 @@ import {
   BrowserWorkspaceChangeSchema,
   // Domain constants
   QUERY_RESOURCES,
+  REQUEST_RESOURCES,
   MUTATION_NAMES,
   COMMAND_NAMES,
   PROTOCOL_EVENTS,
@@ -195,7 +196,17 @@ describe("shared/events", () => {
     it("MUTATION_NAMES contains the expected mutations", () => {
       expect(MUTATION_NAMES).toContain("archiveWorkspace");
       expect(MUTATION_NAMES).toContain("updateWorkspaceTitle");
-      expect(MUTATION_NAMES).toHaveLength(2);
+      // New mutations
+      expect(MUTATION_NAMES).toContain("updateWorkspace");
+      expect(MUTATION_NAMES).toContain("createSession");
+      expect(MUTATION_NAMES).toContain("addRepo");
+      expect(MUTATION_NAMES).toContain("saveRepoManifest");
+      expect(MUTATION_NAMES).toContain("saveAgentConfig");
+      expect(MUTATION_NAMES).toContain("deleteAgentConfig");
+      expect(MUTATION_NAMES).toContain("saveSetting");
+      expect(MUTATION_NAMES).toContain("invalidateFileCache");
+      expect(MUTATION_NAMES).toContain("revokeDevice");
+      expect(MUTATION_NAMES).toHaveLength(11);
     });
 
     it("COMMAND_NAMES contains the expected commands", () => {
@@ -208,7 +219,37 @@ describe("shared/events", () => {
       expect(COMMAND_NAMES).toContain("fs:watch");
       expect(COMMAND_NAMES).toContain("fs:unwatch");
       expect(COMMAND_NAMES).toContain("git:clone");
-      expect(COMMAND_NAMES).toHaveLength(9);
+      // New commands
+      expect(COMMAND_NAMES).toContain("createWorkspace");
+      expect(COMMAND_NAMES).toContain("retrySetup");
+      expect(COMMAND_NAMES).toContain("openPenFile");
+      expect(COMMAND_NAMES).toHaveLength(12);
+    });
+
+    it("REQUEST_RESOURCES contains the expected request-only resources", () => {
+      expect(REQUEST_RESOURCES).toContain("settings");
+      expect(REQUEST_RESOURCES).toContain("repos");
+      expect(REQUEST_RESOURCES).toContain("repoManifest");
+      expect(REQUEST_RESOURCES).toContain("detectManifest");
+      expect(REQUEST_RESOURCES).toContain("agentConfig");
+      expect(REQUEST_RESOURCES).toContain("ghStatus");
+      expect(REQUEST_RESOURCES).toContain("prStatus");
+      expect(REQUEST_RESOURCES).toContain("workspace");
+      expect(REQUEST_RESOURCES).toContain("allWorkspaces");
+      expect(REQUEST_RESOURCES).toContain("workspaceManifest");
+      expect(REQUEST_RESOURCES).toContain("setupLogs");
+      expect(REQUEST_RESOURCES).toContain("diffStats");
+      expect(REQUEST_RESOURCES).toContain("diffFiles");
+      expect(REQUEST_RESOURCES).toContain("diffFile");
+      expect(REQUEST_RESOURCES).toContain("penFiles");
+      expect(REQUEST_RESOURCES).toContain("workspaceFiles");
+      expect(REQUEST_RESOURCES).toContain("fileContent");
+      expect(REQUEST_RESOURCES).toContain("fileSearch");
+      expect(REQUEST_RESOURCES).toContain("recentProjects");
+      expect(REQUEST_RESOURCES).toContain("pairedDevices");
+      expect(REQUEST_RESOURCES).toContain("relayStatus");
+      expect(REQUEST_RESOURCES).toContain("allSessions");
+      expect(REQUEST_RESOURCES).toHaveLength(22);
     });
 
     it("PROTOCOL_EVENTS contains the expected events", () => {

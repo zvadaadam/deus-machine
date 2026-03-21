@@ -19,8 +19,7 @@
 import { match } from "ts-pattern";
 import { useEffect, useLayoutEffect, useCallback, useRef, useState } from "react";
 import { getErrorMessage } from "@shared/lib/errors";
-import { apiClient } from "@/shared/api/client";
-import { ENDPOINTS } from "@/shared/config/api.config";
+import { sendRequest } from "@/platform/ws";
 import { useWsToolRequest } from "@/shared/hooks/useWsToolRequest";
 import { sendToolResponse } from "@/platform/ws";
 
@@ -206,27 +205,27 @@ export function useAgentRpcHandler(
 
     try {
       if (file) {
-        // Single-file diff via backend HTTP
-        const result = await apiClient.get<{
+        // Single-file diff via q:request
+        const result = await sendRequest<{
           diff: string;
           old_content?: string | null;
           new_content?: string | null;
-        }>(ENDPOINTS.WORKSPACE_DIFF_FILE(ws.workspaceId, file));
+        }>("diffFile", { workspaceId: ws.workspaceId, file });
         respond({ diff: result.diff });
       } else if (stat) {
-        // File list with stats via backend HTTP
-        const result = await apiClient.get<{
+        // File list with stats via q:request
+        const result = await sendRequest<{
           files: Array<{ file: string; additions: number; deletions: number }>;
-        }>(ENDPOINTS.WORKSPACE_DIFF_FILES(ws.workspaceId));
+        }>("diffFiles", { workspaceId: ws.workspaceId });
         const statText = result.files
           .map((f) => `${f.file}: +${f.additions} -${f.deletions}`)
           .join("\n");
         respond({ diff: statText });
       } else {
         // All changed files list (summary, not full patch — patches can be huge)
-        const result = await apiClient.get<{
+        const result = await sendRequest<{
           files: Array<{ file: string }>;
-        }>(ENDPOINTS.WORKSPACE_DIFF_FILES(ws.workspaceId));
+        }>("diffFiles", { workspaceId: ws.workspaceId });
         const fileList = result.files.map((f) => f.file).join("\n");
         respond({ diff: fileList });
       }

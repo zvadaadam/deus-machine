@@ -1,4 +1,4 @@
-import { apiClient } from "@/shared/api/client";
+import { sendRequest, sendMutate } from "@/platform/ws";
 import { native } from "@/platform";
 import type { RecentProject } from "../types";
 
@@ -11,11 +11,15 @@ export const OnboardingService = {
 
   /** Fetch recent projects from Cursor, VS Code, and Claude directories. */
   async fetchRecentProjects(): Promise<{ projects: RecentProject[] }> {
-    return apiClient.get<{ projects: RecentProject[] }>("/onboarding/recent-projects");
+    return sendRequest<{ projects: RecentProject[] }>("recentProjects");
   },
 
   /** Persist onboarding_completed=true to settings. */
   async completeOnboarding(): Promise<void> {
-    await apiClient.post("/settings", { key: "onboarding_completed", value: true });
+    const result = await sendMutate("saveSetting", {
+      key: "onboarding_completed",
+      value: true,
+    });
+    if (!result.success) throw new Error(result.error || "Failed to complete onboarding");
   },
 };

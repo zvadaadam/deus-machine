@@ -16,6 +16,7 @@ import { getSessionRaw } from "../../db";
 import { writeUserMessage } from "../message-writer";
 import { spawnPty, writeToPty, resizePty, killPty } from "../pty.service";
 import { watchWorkspace, unwatchWorkspace } from "../fs-watcher.service";
+import { delegateToRoute } from "../route-delegate";
 import { persistSessionError } from "./persistence";
 import { invalidate } from "../query-engine";
 import * as agentService from "./service";
@@ -99,6 +100,31 @@ export async function runCommand(
         // Git clone is handled via HTTP POST /api/repos, not WS commands.
         // This arm exists so the exhaustive match compiles; reject at runtime.
         throw new Error("git:clone is not available as a WS command — use POST /api/repos instead");
+      })
+      // ---- Route-delegated commands ----
+      .with("createWorkspace", async () => {
+        const repositoryId = readString(params, "repository_id");
+        if (!repositoryId) throw new Error("createWorkspace requires repository_id");
+        const result = (await delegateToRoute("POST", "/api/workspaces", {
+          repository_id: repositoryId,
+        })) as { id?: string };
+        return { commandId: result.id };
+      })
+      .with("retrySetup", async () => {
+        const workspaceId = readString(params, "workspaceId");
+        if (!workspaceId) throw new Error("retrySetup requires workspaceId");
+        await delegateToRoute("POST", `/api/workspaces/${workspaceId}/retry-setup`);
+        return {};
+      })
+      .with("openPenFile", async () => {
+        const workspaceId = readString(params, "workspaceId");
+        const filePath = readString(params, "filePath");
+        if (!workspaceId || !filePath)
+          throw new Error("openPenFile requires workspaceId and filePath");
+        await delegateToRoute("POST", `/api/workspaces/${workspaceId}/open-pen-file`, {
+          filePath,
+        });
+        return {};
       })
       .exhaustive()
   );

@@ -1,17 +1,16 @@
 /**
- * Hook for reading file content from working tree.
- * Uses backend HTTP endpoint for file access (works in both Electron and browser).
+ * Hook for reading file content from working tree via q:request protocol.
+ * Works in both desktop and relay mode through the WebSocket connection.
  */
 
 import { useQuery } from "@tanstack/react-query";
-import { apiClient } from "@/shared/api/client";
-import { ENDPOINTS } from "@/shared/config/api.config";
+import { sendRequest } from "@/platform/ws";
 
 /**
  * Read file content from the working tree (current disk state).
  * Unlike git-based reading, this shows unsaved/uncommitted changes.
  *
- * @param workspaceId - The workspace ID for the backend route
+ * @param workspaceId - The workspace ID
  * @param relativePath - File path relative to the workspace root
  */
 export function useFileContent(workspaceId: string | null, relativePath: string | null) {
@@ -19,10 +18,10 @@ export function useFileContent(workspaceId: string | null, relativePath: string 
     queryKey: ["file-content", workspaceId, relativePath],
     queryFn: async () => {
       if (!workspaceId || !relativePath) return null;
-      const encodedPath = encodeURIComponent(relativePath);
-      const data = await apiClient.get<{ content: string | null }>(
-        `${ENDPOINTS.WORKSPACES}/${workspaceId}/file-content?path=${encodedPath}`
-      );
+      const data = await sendRequest<{ content: string | null }>("fileContent", {
+        workspaceId,
+        path: relativePath,
+      });
       return data.content;
     },
     enabled: !!workspaceId && !!relativePath,

@@ -140,9 +140,6 @@ function checkHeartbeats(): void {
 /** Handlers for protocol frames beyond the core pong. */
 export interface WsProtocolHandlers {
   onQueryFrame?: (connectionId: string, msg: Record<string, unknown>) => void;
-  /** HTTP-over-WS bridge: process an http:request frame and return an http:response
-   *  through the same connection. Used by relay-tunneled clients to access REST endpoints. */
-  onHttpRequest?: (connectionId: string, msg: Record<string, unknown>) => void;
 }
 
 let extendedHandlers: WsProtocolHandlers = {};
@@ -158,15 +155,11 @@ export function setProtocolHandlers(handlers: WsProtocolHandlers): void {
  *
  * Core: pong
  * Query protocol: q:* frames routed to query engine
- * HTTP bridge: http:request frames routed to in-process Hono app
  */
 export function handleProtocolMessage(connectionId: string, msg: Record<string, unknown>): void {
   match(msg.type as string)
     .with("pong", () => {
       recordPong(connectionId);
-    })
-    .with("http:request", () => {
-      extendedHandlers.onHttpRequest?.(connectionId, msg);
     })
     .otherwise(() => {
       // Route q:* frames to query engine handler

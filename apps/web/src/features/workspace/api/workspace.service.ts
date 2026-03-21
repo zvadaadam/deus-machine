@@ -1,12 +1,12 @@
 /**
  * Workspace Service
  *
- * All data operations go through the Node.js backend via HTTP.
- * The backend handles DB reads, git operations, and file scanning.
+ * All data operations go through the WebSocket q:* protocol.
+ * Request-only reads use sendRequest, mutations use sendMutate,
+ * async actions use sendCommand.
  */
 
-import { apiClient } from "@/shared/api/client";
-import { ENDPOINTS } from "@/shared/config/api.config";
+import { sendRequest, sendMutate, sendCommand } from "@/platform/ws";
 import type { Workspace, RepoGroup, DiffStats, FileChange } from "../types";
 import type { PRStatus, GhCliStatus } from "@/shared/types";
 import type { NormalizedTask, ManifestResponse, TaskRunResponse } from "@shared/types/manifest";
@@ -16,10 +16,11 @@ export type { NormalizedTask, ManifestResponse, TaskRunResponse };
 export const WorkspaceService = {
   /**
    * Fetch workspaces grouped by repository.
+   * Note: this is typically received via q:subscribe "workspaces" for real-time push.
+   * This one-shot version is used as a fallback.
    */
   fetchByRepo: async (state?: string): Promise<RepoGroup[]> => {
-    const query = state ? `?state=${state}` : "";
-    return apiClient.get<RepoGroup[]>(`${ENDPOINTS.WORKSPACES_BY_REPO}${query}`);
+    return sendRequest<RepoGroup[]>("workspaces", state ? { state } : undefined);
   },
 
   /**
@@ -30,7 +31,7 @@ export const WorkspaceService = {
    * so the merge-base is always a recent shared commit with upstream.
    */
   fetchDiffStats: async (id: string): Promise<DiffStats> => {
-    return apiClient.get<DiffStats>(ENDPOINTS.WORKSPACE_DIFF_STATS(id));
+    return sendRequest<DiffStats>("diffStats", { workspaceId: id });
   },
 
   /**
@@ -42,11 +43,11 @@ export const WorkspaceService = {
   fetchDiffFiles: async (
     id: string
   ): Promise<{ files: FileChange[]; truncated?: boolean; totalCount?: number }> => {
-    const result = await apiClient.get<{
+    const result = await sendRequest<{
       files: FileChange[];
       truncated?: boolean;
       total_count?: number;
-    }>(ENDPOINTS.WORKSPACE_DIFF_FILES(id));
+    }>("diffFiles", { workspaceId: id });
     return {
       files: result.files,
       truncated: result.truncated ?? false,
@@ -61,11 +62,11 @@ export const WorkspaceService = {
     id: string,
     file: string
   ): Promise<{ diff: string; oldContent: string | null; newContent: string | null }> => {
-    const data = await apiClient.get<{
+    const data = await sendRequest<{
       diff: string;
       old_content?: string | null;
       new_content?: string | null;
-    }>(ENDPOINTS.WORKSPACE_DIFF_FILE(id, file));
+    }>("diffFile", { workspaceId: id, file });
     return {
       diff: data.diff ?? "",
       oldContent: data.old_content ?? null,
@@ -93,28 +94,35 @@ export const WorkspaceService = {
    * Create a new workspace
    */
   create: async (repositoryId: string): Promise<Workspace> => {
-    return apiClient.post<Workspace>(ENDPOINTS.WORKSPACES, { repository_id: repositoryId });
+    const result = await sendCommand("createWorkspace", { repository_id: repositoryId });
+    if (!result.accepted) throw new Error(result.error || "Failed to create workspace");
+    // The command returns the workspace in the ack result
+    return result as unknown as Workspace;
   },
 
   /**
    * Update workspace (e.g., archive)
    */
   update: async (id: string, data: Partial<Workspace>): Promise<Workspace> => {
-    return apiClient.patch<Workspace>(ENDPOINTS.WORKSPACE_BY_ID(id), data);
+    const result = await sendMutate<Workspace>("updateWorkspace", { workspaceId: id, ...data });
+    if (!result.success) throw new Error(result.error || "Failed to update workspace");
+    return result.data!;
   },
 
   /**
    * Archive a workspace
    */
   archive: async (id: string): Promise<Workspace> => {
-    return apiClient.patch<Workspace>(ENDPOINTS.WORKSPACE_BY_ID(id), { state: "archived" });
+    const result = await sendMutate<Workspace>("archiveWorkspace", { workspaceId: id });
+    if (!result.success) throw new Error(result.error || "Failed to archive workspace");
+    return result.data as unknown as Workspace;
   },
 
   /**
    * Fetch PR status for a workspace
    */
   fetchPRStatus: async (id: string): Promise<PRStatus | null> => {
-    return apiClient.get<PRStatus | null>(ENDPOINTS.WORKSPACE_PR_STATUS(id));
+    return sendRequest<PRStatus | null>("prStatus", { workspaceId: id });
   },
 
   /**
@@ -122,14 +130,14 @@ export const WorkspaceService = {
    * Cached with long staleTime on the frontend -- rarely changes.
    */
   fetchGhStatus: async (): Promise<GhCliStatus> => {
-    return apiClient.get<GhCliStatus>(ENDPOINTS.GH_STATUS);
+    return sendRequest<GhCliStatus>("ghStatus");
   },
 
   /**
    * Fetch system prompt for a workspace
    */
   fetchSystemPrompt: async (id: string): Promise<{ system_prompt: string }> => {
-    return apiClient.get<{ system_prompt: string }>(ENDPOINTS.WORKSPACE_SYSTEM_PROMPT(id));
+    return sendRequest<{ system_prompt: string }>("workspace", { workspaceId: id });
   },
 
   /**
@@ -138,50 +146,55 @@ export const WorkspaceService = {
   fetchPenFiles: async (
     id: string
   ): Promise<{ files: Array<{ name: string; path: string }>; count: number }> => {
-    return apiClient.get(ENDPOINTS.WORKSPACE_PEN_FILES(id));
+    return sendRequest("penFiles", { workspaceId: id });
   },
 
   /**
    * Open a .pen file in the Pencil desktop app
    */
   openPenFile: async (id: string, filePath: string): Promise<{ success: boolean }> => {
-    return apiClient.post(ENDPOINTS.WORKSPACE_OPEN_PEN_FILE(id), { filePath });
+    const result = await sendCommand("openPenFile", { workspaceId: id, filePath });
+    return { success: result.accepted };
   },
 
   /**
    * Update system prompt for a workspace
    */
   updateSystemPrompt: async (id: string, systemPrompt: string): Promise<void> => {
-    return apiClient.put<void>(ENDPOINTS.WORKSPACE_SYSTEM_PROMPT(id), {
+    const result = await sendMutate("updateWorkspace", {
+      workspaceId: id,
       system_prompt: systemPrompt,
     });
+    if (!result.success) throw new Error(result.error || "Failed to update system prompt");
   },
 
   /**
    * Fetch parsed opendevs.json manifest + normalized tasks for a workspace
    */
   fetchManifest: async (id: string): Promise<ManifestResponse> => {
-    return apiClient.get<ManifestResponse>(ENDPOINTS.WORKSPACE_MANIFEST(id));
+    return sendRequest<ManifestResponse>("workspaceManifest", { workspaceId: id });
   },
 
   /**
    * Retry a failed setup script
    */
   retrySetup: async (id: string): Promise<{ setup_status: string }> => {
-    return apiClient.post<{ setup_status: string }>(ENDPOINTS.WORKSPACE_RETRY_SETUP(id), {});
+    const result = await sendCommand("retrySetup", { workspaceId: id });
+    if (!result.accepted) throw new Error(result.error || "Failed to retry setup");
+    return { setup_status: "running" };
   },
 
   /**
    * Get setup log output
    */
   fetchSetupLogs: async (id: string): Promise<{ logs: string | null }> => {
-    return apiClient.get<{ logs: string | null }>(ENDPOINTS.WORKSPACE_SETUP_LOGS(id));
+    return sendRequest<{ logs: string | null }>("setupLogs", { workspaceId: id });
   },
 
   /**
    * Run a task -- returns PTY spawn info
    */
   runTask: async (id: string, taskName: string): Promise<TaskRunResponse> => {
-    return apiClient.post<TaskRunResponse>(ENDPOINTS.WORKSPACE_TASK_RUN(id, taskName), {});
+    return sendRequest<TaskRunResponse>("taskRunInfo", { workspaceId: id, taskName });
   },
 };

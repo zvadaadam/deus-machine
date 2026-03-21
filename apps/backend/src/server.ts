@@ -2,17 +2,13 @@ import * as Sentry from "@sentry/node";
 import { serve } from "@hono/node-server";
 import { createApp } from "./app";
 import { initDatabase, closeDatabase, DB_PATH } from "./lib/database";
-import {
-  closeAll as closeAllWsConnections,
-  setProtocolHandlers,
-  getConnection,
-} from "./services/ws.service";
-import type { HttpRequestFrame, HttpResponseFrame } from "@shared/types/http-bridge";
+import { closeAll as closeAllWsConnections } from "./services/ws.service";
 import { ensureRelayConnected, disconnectFromRelay } from "./services/relay.service";
 import { getSetting } from "./services/settings.service";
 import * as agentService from "./services/agent";
 import { destroyAllPtySessions } from "./services/pty.service";
 import { destroyAllWatchers } from "./services/fs-watcher.service";
+import { setApp } from "./services/route-delegate";
 
 // Initialize Sentry before anything else.
 // DSN passed as env var from Electron main process (not hardcoded — open source repo).
@@ -38,63 +34,8 @@ const db = initDatabase();
 // Create Hono app + WebSocket injector
 const { app, injectWebSocket } = createApp();
 
-// Register HTTP-over-WS bridge handler.
-// When a relay-tunneled client sends an http:request frame, we dispatch it
-// through the Hono app in-process (no network hop) and return the response
-// as an http:response frame through the same relay tunnel.
-setProtocolHandlers({
-  onHttpRequest: (connectionId, msg) => {
-    const frame = msg as unknown as HttpRequestFrame;
-    const conn = getConnection(connectionId);
-    if (!conn) return;
-
-    // Build an in-process Request for the Hono app.
-    const headers: Record<string, string> = { ...frame.headers };
-    const request = new Request(`http://internal${frame.path}`, {
-      method: frame.method,
-      headers,
-      body: frame.method !== "GET" && frame.method !== "HEAD" ? frame.body : undefined,
-    });
-
-    // Dispatch through Hono app with env bindings to mark this as a relay
-    // bridge request. Hono env bindings are structurally impossible to spoof
-    // — external HTTP requests never pass env bindings to app.fetch().
-    Promise.resolve(app.fetch(request, { relayBridged: true }))
-      .then(async (response: Response) => {
-        // Extract response headers
-        const responseHeaders: Record<string, string> = {};
-        response.headers.forEach((value: string, key: string) => {
-          responseHeaders[key] = value;
-        });
-
-        const body = await response.text();
-        const responseFrame: HttpResponseFrame = {
-          type: "http:response",
-          requestId: frame.requestId,
-          status: response.status,
-          headers: responseHeaders,
-          body: body || null,
-        };
-
-        conn.ws.send(JSON.stringify(responseFrame));
-      })
-      .catch((err: Error) => {
-        console.error("[HTTP Bridge] Failed to process request:", err);
-        const errorFrame: HttpResponseFrame = {
-          type: "http:response",
-          requestId: frame.requestId,
-          status: 500,
-          headers: {},
-          body: JSON.stringify({ error: "Internal server error" }),
-        };
-        try {
-          conn.ws.send(JSON.stringify(errorFrame));
-        } catch {
-          // Connection may have closed
-        }
-      });
-  },
-});
+// Register the Hono app for in-process route delegation (q:request/q:mutate → Hono routes)
+setApp(app);
 
 // Global variable to store actual port (used by health endpoint)
 let actualServerPort: number | null = null;
