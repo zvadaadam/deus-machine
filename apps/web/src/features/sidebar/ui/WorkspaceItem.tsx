@@ -179,31 +179,26 @@ export const WorkspaceItem = React.memo(function WorkspaceItem({
         <div className="flex min-w-0 flex-1 flex-col gap-0.5">
           {/* Row 1: icon + branch name */}
           <div className="flex min-w-0 items-center gap-1.5">
-            {hasSessionIcon ? (
-              <SidebarRowIconSlot>
-                {displayStatus === "working" ? (
-                  <PixelGrid variant="generating" size={14} />
-                ) : displayStatus === "error" ? (
-                  <span className="bg-accent-red h-2 w-2 rounded-full" />
-                ) : (
-                  <span className="bg-accent-gold h-2 w-2 rounded-full" />
-                )}
-              </SidebarRowIconSlot>
-            ) : (
-              <WorkspaceStatusMenu
-                currentStatus={workspace.status}
-                onStatusChange={(status) => onStatusChange?.(workspace.id, status)}
+            <WorkspaceStatusMenu
+              currentStatus={workspace.status}
+              onStatusChange={(status) => onStatusChange?.(workspace.id, status)}
+            >
+              <button
+                type="button"
+                onClick={(e) => e.stopPropagation()}
+                className="flex h-5 w-5 shrink-0 items-center justify-center rounded transition-opacity hover:opacity-80"
+                aria-label={`Status: ${workspace.status}`}
               >
-                <button
-                  type="button"
-                  onClick={(e) => e.stopPropagation()}
-                  className="flex h-5 w-5 shrink-0 items-center justify-center rounded transition-opacity hover:opacity-80"
-                  aria-label={`Status: ${workspace.status}`}
-                >
+                {hasSessionIcon ? (
+                  match(displayStatus)
+                    .with("working", () => <PixelGrid variant="generating" size={14} />)
+                    .with("error", () => <span className="bg-accent-red h-2 w-2 rounded-full" />)
+                    .otherwise(() => <span className="bg-accent-gold h-2 w-2 rounded-full" />)
+                ) : (
                   <WorkflowStatusIcon status={workspace.status} size={14} />
-                </button>
-              </WorkspaceStatusMenu>
-            )}
+                )}
+              </button>
+            </WorkspaceStatusMenu>
             <span
               className={cn(
                 "truncate text-base",

@@ -131,9 +131,9 @@ export const WorkflowStatusIcon = React.memo(function WorkflowStatusIcon({
             />
             <line
               x1={half - r * 0.5}
-              y1={half}
+              y1={half - r * 0.5}
               x2={half + r * 0.5}
-              y2={half}
+              y2={half + r * 0.5}
               stroke="var(--muted-foreground)"
               strokeWidth={1.5}
               strokeLinecap="round"
