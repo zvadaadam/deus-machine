@@ -1,0 +1,22 @@
+{
+  "cli_version": "0.5.0",
+  "checkpoint_id": "acc7c1e74517",
+  "session_id": "fa2fd57b-3fa6-4122-8051-a52f45fb1763",
+  "strategy": "manual-commit",
+  "created_at": "2026-03-21T23:19:37.315516Z",
+  "branch": "zvadaadam/workspace-status",
+  "checkpoints_count": 2,
+  "files_touched": [],
+  "agent": "Claude Code",
+  "turn_id": "acf69f4a3d4c",
+  "token_usage": {
+    "input_tokens": 482,
+    "cache_creation_tokens": 945391,
+    "cache_read_tokens": 54858739,
+    "output_tokens": 93942,
+    "api_call_count": 387
+  },
+  "session_metrics": {
+    "turn_count": 45
+  }
+}
