@@ -558,14 +558,22 @@ export const BrowserTab = forwardRef<BrowserTabHandle, BrowserTabProps>(function
     [webviewLabel, tabId, createWebviewIfNeeded, onAddLog]
   );
 
-  /** Navigate without pushing to history — used by back/forward buttons */
-  const navigateInHistory = useCallback(
-    async (url: string) => {
-      suppressHistoryPushRef.current = true;
-      await navigateToUrl(url);
-    },
-    [navigateToUrl]
-  );
+  /** Navigate using native goBack/goForward — preserves scroll/form state */
+  const goBack = useCallback(() => {
+    if (!webviewCreatedRef.current) return;
+    suppressHistoryPushRef.current = true;
+    native.browserViews.goBack(webviewLabel).catch((err) => {
+      onAddLog(tabId, "error", `Go back failed: ${err}`);
+    });
+  }, [webviewLabel, tabId, onAddLog]);
+
+  const goForward = useCallback(() => {
+    if (!webviewCreatedRef.current) return;
+    suppressHistoryPushRef.current = true;
+    native.browserViews.goForward(webviewLabel).catch((err) => {
+      onAddLog(tabId, "error", `Go forward failed: ${err}`);
+    });
+  }, [webviewLabel, tabId, onAddLog]);
 
   const reload = useCallback(() => {
     if (!webviewCreatedRef.current) return;
@@ -665,13 +673,14 @@ export const BrowserTab = forwardRef<BrowserTabHandle, BrowserTabProps>(function
     ref,
     () => ({
       navigateToUrl,
-      navigateInHistory,
+      goBack,
+      goForward,
       reload,
       injectAutomation,
       toggleElementSelector,
       syncBounds,
     }),
-    [navigateToUrl, navigateInHistory, reload, injectAutomation, toggleElementSelector, syncBounds]
+    [navigateToUrl, goBack, goForward, reload, injectAutomation, toggleElementSelector, syncBounds]
   );
 
   return (

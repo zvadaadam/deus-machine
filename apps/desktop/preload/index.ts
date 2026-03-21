@@ -51,6 +51,8 @@ const ALLOWED_INVOKE_CHANNELS = new Set([
   "screenshot_browser_webview",
   "open_browser_devtools",
   "close_browser_devtools",
+  "browser:back",
+  "browser:forward",
 
   // Browser detached windows
   "browser:createDetachedWindow",

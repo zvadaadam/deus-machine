@@ -77,8 +77,10 @@ export interface ElementSelectedEvent {
 /** Imperative methods exposed by BrowserTab via forwardRef */
 export interface BrowserTabHandle {
   navigateToUrl: (url: string) => void;
-  /** Navigate without pushing to history — for back/forward buttons */
-  navigateInHistory: (url: string) => void;
+  /** Native session history back — preserves scroll/form state */
+  goBack: () => void;
+  /** Native session history forward — preserves scroll/form state */
+  goForward: () => void;
   reload: () => void;
   injectAutomation: () => Promise<void>;
   toggleElementSelector: () => void;

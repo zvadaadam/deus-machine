@@ -255,12 +255,18 @@ The element is focused and text is entered. Use submit: true to press Enter afte
           }
 
           // Press Enter if submit requested
+          let finalResponse = response;
           if (args.submit) {
-            await execAgentBrowser(sessionId, ["press", "Enter"]);
+            const submitResult = await execAgentBrowser(sessionId, ["press", "Enter"]);
+            if (!submitResult.success) {
+              return {
+                content: [
+                  { type: "text", text: `Submit failed: ${submitResult.error ?? "unknown error"}` },
+                ],
+              };
+            }
+            finalResponse = await getSnapshot(sessionId);
           }
-
-          // Re-snapshot after submit
-          const finalResponse = args.submit ? await getSnapshot(sessionId) : response;
 
           const details = [
             `Characters typed: ${args.text.length}`,
@@ -295,7 +301,16 @@ The element is focused and text is entered. Use submit: true to press Enter afte
         url: z.string().describe("The URL to navigate to"),
       },
       async (args) => {
-        console.log(`[browser] BrowserNavigate invoked for session ${sessionId}: url=${args.url}`);
+        // Redact query/fragment to avoid leaking tokens, auth codes, etc. in logs
+        const safeUrl = (() => {
+          try {
+            const u = new URL(args.url);
+            return `${u.origin}${u.pathname}`;
+          } catch {
+            return args.url.replace(/[?#].*$/, "");
+          }
+        })();
+        console.log(`[browser] BrowserNavigate invoked for session ${sessionId}: url=${safeUrl}`);
 
         try {
           const response = await execWithSnapshot(sessionId, ["open", args.url], 30_000);
