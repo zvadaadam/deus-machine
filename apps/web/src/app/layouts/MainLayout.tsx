@@ -223,7 +223,10 @@ export function MainLayout() {
 
   const handleStatusChange = useCallback(
     (workspaceId: string, status: import("@shared/enums").WorkspaceStatus) => {
-      statusMutationRef.current.mutate({ workspaceId, status });
+      statusMutationRef.current.mutate(
+        { workspaceId, status },
+        { onError: (error) => toast.error(getErrorMessage(error)) }
+      );
     },
     []
   );

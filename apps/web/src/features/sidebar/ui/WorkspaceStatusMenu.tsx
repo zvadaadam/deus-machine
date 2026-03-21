@@ -34,8 +34,7 @@ export const WorkspaceStatusMenu = React.memo(function WorkspaceStatusMenu({
           return (
             <DropdownMenuItem
               key={status}
-              onClick={(e) => {
-                e.stopPropagation();
+              onSelect={() => {
                 if (!isActive) onStatusChange(status);
               }}
               className="flex items-center gap-2"
