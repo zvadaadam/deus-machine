@@ -520,13 +520,6 @@ async function runRequest(resource: RequestResourceName, params: QueryParams): P
       if (!workspaceId) throw new Error("setupLogs requires workspaceId");
       return delegateToRoute("GET", `/api/workspaces/${workspaceId}/setup-logs`);
     })
-    .with("taskRunInfo", () => {
-      const workspaceId = readStringParam(params, "workspaceId");
-      const taskName = readStringParam(params, "taskName");
-      if (!workspaceId || !taskName)
-        throw new Error("taskRunInfo requires workspaceId and taskName");
-      return delegateToRoute("POST", `/api/workspaces/${workspaceId}/tasks/${taskName}/run`);
-    })
     .with("diffStats", () => {
       const workspaceId = readStringParam(params, "workspaceId");
       if (!workspaceId) throw new Error("diffStats requires workspaceId");
@@ -667,6 +660,12 @@ async function runMutation(action: string, params: QueryParams): Promise<unknown
         const workspaceId = readStringParam(params, "workspaceId");
         if (!workspaceId) throw new Error("invalidateFileCache requires workspaceId");
         return delegateToRoute("POST", `/api/workspaces/${workspaceId}/files/invalidate-cache`);
+      })
+      .with("runTask", () => {
+        const workspaceId = readStringParam(params, "workspaceId");
+        const taskName = readStringParam(params, "taskName");
+        if (!workspaceId || !taskName) throw new Error("runTask requires workspaceId and taskName");
+        return delegateToRoute("POST", `/api/workspaces/${workspaceId}/tasks/${taskName}/run`);
       })
       .with("revokeDevice", () => {
         const deviceId = readStringParam(params, "deviceId");
