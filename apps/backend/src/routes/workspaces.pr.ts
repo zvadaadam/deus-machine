@@ -26,7 +26,7 @@ app.get("/workspaces/:id/pr-status", withWorkspace, async (c) => {
 
   let needsInvalidation = false;
 
-  // Persist PR URL when we first discover a PR (enables auto-derive)
+  // Persist PR metadata when URL changes
   if (result.has_pr && result.pr_url && result.pr_url !== workspace.pr_url) {
     const db = getDatabase();
     db.prepare("UPDATE workspaces SET pr_url = ?, pr_number = ? WHERE id = ?").run(
@@ -34,6 +34,11 @@ app.get("/workspaces/:id/pr-status", withWorkspace, async (c) => {
       result.pr_number ?? null,
       workspace.id
     );
+    needsInvalidation = true;
+  }
+
+  // Auto-progress to in-review whenever a PR exists (not just on URL change)
+  if (result.has_pr) {
     autoProgressStatus(workspace.id, "in-review");
     needsInvalidation = true;
   }

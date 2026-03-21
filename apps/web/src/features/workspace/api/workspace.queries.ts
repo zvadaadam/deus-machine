@@ -450,7 +450,7 @@ export function useUpdateWorkspaceStatus() {
 
     onMutate: async ({ workspaceId, status }) => {
       await queryClient.cancelQueries({ queryKey });
-      const previousData = queryClient.getQueryData<RepoGroup[]>(queryKey);
+      let previousStatus: WorkspaceStatus | undefined;
 
       queryClient.setQueryData<RepoGroup[]>(queryKey, (old) => {
         if (!old) return old;
@@ -458,6 +458,7 @@ export function useUpdateWorkspaceStatus() {
           for (const repo of draft) {
             const ws = repo.workspaces.find((w) => w.id === workspaceId);
             if (ws) {
+              previousStatus = ws.status;
               ws.status = status;
               break;
             }
@@ -465,13 +466,23 @@ export function useUpdateWorkspaceStatus() {
         });
       });
 
-      return { previousData };
+      return { workspaceId, previousStatus };
     },
 
     onError: (_err, _vars, context) => {
-      if (context?.previousData) {
-        queryClient.setQueryData(queryKey, context.previousData);
-      }
+      if (context?.previousStatus === undefined) return;
+      queryClient.setQueryData<RepoGroup[]>(queryKey, (old) => {
+        if (!old) return old;
+        return produce(old, (draft) => {
+          for (const repo of draft) {
+            const ws = repo.workspaces.find((w) => w.id === context.workspaceId);
+            if (ws) {
+              ws.status = context.previousStatus!;
+              break;
+            }
+          }
+        });
+      });
     },
 
     onSuccess: (_data, { workspaceId, status }) => {
