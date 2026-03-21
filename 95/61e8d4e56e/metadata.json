@@ -1,0 +1,25 @@
+{
+  "cli_version": "0.5.0",
+  "checkpoint_id": "9561e8d4e56e",
+  "strategy": "manual-commit",
+  "branch": "zvadaadam/explore-web-routing",
+  "checkpoints_count": 3,
+  "files_touched": [
+    "apps/desktop/main/backend-process.ts"
+  ],
+  "sessions": [
+    {
+      "metadata": "/95/61e8d4e56e/0/metadata.json",
+      "transcript": "/95/61e8d4e56e/0/full.jsonl",
+      "content_hash": "/95/61e8d4e56e/0/content_hash.txt",
+      "prompt": "/95/61e8d4e56e/0/prompt.txt"
+    }
+  ],
+  "token_usage": {
+    "input_tokens": 512,
+    "cache_creation_tokens": 2277534,
+    "cache_read_tokens": 73456831,
+    "output_tokens": 159668,
+    "api_call_count": 346
+  }
+}
