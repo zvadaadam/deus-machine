@@ -148,7 +148,7 @@ export function RightSidePanel({
       )}
 
       {/* Browser panel section: when detached, show placeholder; otherwise
-          keep BrowserPanel always mounted for the useBrowserRpcHandler listener. */}
+          keep BrowserPanel always mounted to preserve webview instances. */}
       {isBrowserDetached ? (
         <div className={cn("h-full w-full", activeTab !== "browser" && "hidden")}>
           <BrowserDetachedPlaceholder onReattach={reattachBrowser} />

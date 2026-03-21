@@ -41,14 +41,12 @@ import {
   INSPECT_MODE_VERIFY,
 } from "../automation/inspect-mode";
 import { VISUAL_EFFECTS_SETUP } from "../automation/visual-effects";
-import { BROWSER_UTILS_SETUP } from "../automation/browser-utils";
 
 /** How often to drain console logs from the webview (ms) */
 const CONSOLE_DRAIN_INTERVAL_MS = 1500;
 
 interface BrowserTabProps {
   tab: BrowserTabState;
-  devBrowserStatus: { running: boolean; port: number | null; error: string | null };
   /** Update tab state in the parent — (tabId, updates) */
   onUpdateTab: (tabId: string, updates: Partial<BrowserTabState>) => void;
   /** Add a log line to the tab's console — (tabId, level, message) */
@@ -66,16 +64,7 @@ interface BrowserTabProps {
 }
 
 export const BrowserTab = forwardRef<BrowserTabHandle, BrowserTabProps>(function BrowserTab(
-  {
-    tab,
-    devBrowserStatus: _devBrowserStatus,
-    onUpdateTab,
-    onAddLog,
-    visible,
-    onElementSelected,
-    windowLabel,
-    mobileView,
-  },
+  { tab, onUpdateTab, onAddLog, visible, onElementSelected, windowLabel, mobileView },
   ref
 ) {
   const placeholderRef = useRef<HTMLDivElement>(null);
@@ -94,6 +83,12 @@ export const BrowserTab = forwardRef<BrowserTabHandle, BrowserTabProps>(function
   const rafRef = useRef(0);
   // Track whether automation scripts (inspect mode + visual effects) have been injected
   const automationInjectedRef = useRef(false);
+  // Ref to latest tab state — used in event handlers to read current history
+  const tabRef = useRef(tab);
+  tabRef.current = tab;
+  // Guard: suppress history push during back/forward navigation
+  // (did-navigate fires for loadURL too, which would double-push)
+  const suppressHistoryPushRef = useRef(false);
   // Stable ref for onElementSelected callback (used by the inspect drain loop)
   const onElementSelectedRef = useRef(onElementSelected);
   onElementSelectedRef.current = onElementSelected;
@@ -314,7 +309,9 @@ export const BrowserTab = forwardRef<BrowserTabHandle, BrowserTabProps>(function
           setCompletingLoad(false);
           // Reset injection flag — new page context destroys window.__opendevsVisuals
           automationInjectedRef.current = false;
-          setHasLoaded(false);
+          // Don't reset hasLoaded — once the first page has loaded, keep the
+          // BrowserView visible. Subsequent navigations (redirects, SPA nav,
+          // meta refresh) show the top loading bar, not the full-screen spinner.
           onUpdateTab(tabId, { loading: true });
         } else if (eventType === "finished") {
           setHasLoaded(true);
@@ -336,16 +333,35 @@ export const BrowserTab = forwardRef<BrowserTabHandle, BrowserTabProps>(function
       })
     );
 
-    // SPA navigation events (pushState/replaceState detected by init script)
+    // Navigation events (did-navigate, did-navigate-in-page, pushState/replaceState)
+    // Push to history so back/forward buttons work for all navigations.
     unlistenFns.push(
       native.events.on(BROWSER_URL_CHANGE, (data) => {
         const { label, url } = data;
         if (label !== webviewLabel) return;
-        // Update URL bar and current URL, derive new title
+
+        // Suppress history push from programmatic back/forward navigation
+        if (suppressHistoryPushRef.current) {
+          suppressHistoryPushRef.current = false;
+          onUpdateTab(tabId, { url, currentUrl: url, title: deriveTitleFromUrl(url) });
+          return;
+        }
+
+        const current = tabRef.current;
+        // Skip duplicate URLs (e.g. hash-only changes that resolve to same URL)
+        if (current.currentUrl === url) {
+          onUpdateTab(tabId, { title: deriveTitleFromUrl(url) });
+          return;
+        }
+        // Truncate forward history and append the new URL
+        const newHistory = current.history.slice(0, current.historyIndex + 1);
+        newHistory.push(url);
         onUpdateTab(tabId, {
           url,
           currentUrl: url,
           title: deriveTitleFromUrl(url),
+          history: newHistory,
+          historyIndex: newHistory.length - 1,
         });
       })
     );
@@ -542,6 +558,15 @@ export const BrowserTab = forwardRef<BrowserTabHandle, BrowserTabProps>(function
     [webviewLabel, tabId, createWebviewIfNeeded, onAddLog]
   );
 
+  /** Navigate without pushing to history — used by back/forward buttons */
+  const navigateInHistory = useCallback(
+    async (url: string) => {
+      suppressHistoryPushRef.current = true;
+      await navigateToUrl(url);
+    },
+    [navigateToUrl]
+  );
+
   const reload = useCallback(() => {
     if (!webviewCreatedRef.current) return;
     native.browserViews.reload(webviewLabel).catch((err) => {
@@ -549,7 +574,7 @@ export const BrowserTab = forwardRef<BrowserTabHandle, BrowserTabProps>(function
     });
   }, [webviewLabel, tabId, onAddLog]);
 
-  // Inject browser utils, visual effects, and inspect mode into the WKWebView.
+  // Inject visual effects and inspect mode into the BrowserView.
   // Uses fire-and-forget eval for dispatch + eval_with_result for verification
   // (fire-and-forget can't detect JS runtime errors in the IIFE).
   const injectAutomation = useCallback(async () => {
@@ -560,8 +585,7 @@ export const BrowserTab = forwardRef<BrowserTabHandle, BrowserTabProps>(function
     }
 
     try {
-      // Inject browser utils, visual effects, and inspect mode via native eval
-      await native.browserViews.evaluate(webviewLabel, BROWSER_UTILS_SETUP);
+      // Inject visual effects and inspect mode via native eval
       await native.browserViews.evaluate(webviewLabel, INSPECT_MODE_SETUP);
       await native.browserViews.evaluate(webviewLabel, VISUAL_EFFECTS_SETUP);
 
@@ -639,8 +663,15 @@ export const BrowserTab = forwardRef<BrowserTabHandle, BrowserTabProps>(function
 
   useImperativeHandle(
     ref,
-    () => ({ navigateToUrl, reload, injectAutomation, toggleElementSelector, syncBounds }),
-    [navigateToUrl, reload, injectAutomation, toggleElementSelector, syncBounds]
+    () => ({
+      navigateToUrl,
+      navigateInHistory,
+      reload,
+      injectAutomation,
+      toggleElementSelector,
+      syncBounds,
+    }),
+    [navigateToUrl, navigateInHistory, reload, injectAutomation, toggleElementSelector, syncBounds]
   );
 
   return (

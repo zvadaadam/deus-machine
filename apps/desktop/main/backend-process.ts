@@ -1,13 +1,13 @@
 /**
  * Backend Process Manager
  *
- * Spawns the Node.js backend as a child process.
- * - Production: use the Electron binary with ELECTRON_RUN_AS_NODE=1.
- * - Development: use the host Node runtime so native modules match the dev install ABI.
+ * Spawns the Node.js backend as a child process using Electron's built-in
+ * Node runtime (ELECTRON_RUN_AS_NODE=1) in both dev and production.
+ * This ensures native modules (better-sqlite3, node-pty) compiled by
+ * electron-builder always match the runtime ABI — no system Node required.
+ *
  * Parses the dynamic port from stdout, generates an auth token, and handles
  * exit/restart with exponential backoff.
- *
- * Uses child_process directly since we're already in Node.js.
  */
 
 import { spawn, type ChildProcess } from "child_process";
@@ -26,7 +26,9 @@ const STARTUP_TIMEOUT_MS = 30_000;
 export async function spawnBackend(): Promise<{ port: number; authToken: string }> {
   const authToken = crypto.randomBytes(24).toString("hex");
   const projectRoot = join(__dirname, "../..");
-  const backendRuntime = app.isPackaged ? process.execPath : "node";
+  // Always use Electron's Node runtime so native modules compiled by
+  // electron-builder install-app-deps match the ABI in both dev and prod.
+  const backendRuntime = process.execPath;
 
   // Resolve backend entry point
   // Production: bundled CJS file (no tsx dependency needed)
@@ -56,7 +58,7 @@ export async function spawnBackend(): Promise<{ port: number; authToken: string 
       cwd: app.isPackaged ? process.resourcesPath : join(projectRoot, "apps/backend"),
       env: {
         ...process.env,
-        ...(app.isPackaged ? { ELECTRON_RUN_AS_NODE: "1" } : {}),
+        ELECTRON_RUN_AS_NODE: "1",
         DATABASE_PATH: dbPath,
         SIDECAR_BUNDLE_PATH: sidecarPath,
         NOTEBOOK_SERVER_BUNDLE_PATH: notebookPath,
