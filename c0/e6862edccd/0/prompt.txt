@@ -305,3 +305,15 @@ i run it and this:
 ---
 
 Rebase this branch onto origin/main. Then push --force-with-lease.
+
+---
+
+Commit and push all changes
+
+---
+
+Commit and push all changes
+
+---
+
+yes
