@@ -11,13 +11,12 @@ import {
   type PairedDevice,
 } from "../services/remote-auth.service";
 import { isLocalhost, getClientIp } from "../lib/network";
-import { isRelayBridgeRequest } from "../lib/relay-bridge";
 
 const PUBLIC_PATHS = new Set(["/api/health", "/api/remote-auth/pair"]);
 
 /**
  * Auth middleware for remote access.
- * 1. Relay-tunneled (verified by bridge secret) → skip auth
+ * 1. Relay-bridged (via Hono env bindings) → skip auth
  * 2. Localhost → skip auth entirely
  * 3. Public paths → skip auth
  * 4. Rate-limited IP → 429
@@ -25,10 +24,10 @@ const PUBLIC_PATHS = new Set(["/api/health", "/api/remote-auth/pair"]);
  * 6. Missing/invalid token → 401
  */
 export const authMiddleware = createMiddleware(async (c, next) => {
-  // In-process requests from the HTTP-over-WS bridge carry a secret that
-  // only server.ts knows. External clients cannot guess this value, so
-  // the header cannot be spoofed from the network.
-  if (isRelayBridgeRequest(c)) {
+  // In-process requests from the HTTP-over-WS bridge pass relayBridged via
+  // Hono env bindings. This is structurally impossible to spoof — external
+  // HTTP requests never pass env bindings to app.fetch().
+  if (c.env?.relayBridged) {
     await next();
     return;
   }

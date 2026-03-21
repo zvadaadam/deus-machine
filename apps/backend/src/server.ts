@@ -1,4 +1,3 @@
-import crypto from "crypto";
 import * as Sentry from "@sentry/node";
 import { serve } from "@hono/node-server";
 import { createApp } from "./app";
@@ -14,18 +13,6 @@ import { getSetting } from "./services/settings.service";
 import * as agentService from "./services/agent";
 import { destroyAllPtySessions } from "./services/pty.service";
 import { destroyAllWatchers } from "./services/fs-watcher.service";
-import { setRelayBridgeSecret } from "./lib/relay-bridge";
-
-// Random secret generated at startup to authenticate in-process HTTP bridge
-// requests. Only code running inside this process can know this value --
-// external clients cannot guess it, preventing x-relay-tunneled header spoofing.
-const RELAY_BRIDGE_SECRET = crypto.randomBytes(32).toString("hex");
-
-// Register the secret with the shared relay-bridge module so both
-// remote-gate and remote-auth middleware can verify that incoming requests
-// with x-relay-bridge-secret actually originated from the in-process HTTP
-// bridge, not from an external client.
-setRelayBridgeSecret(RELAY_BRIDGE_SECRET);
 
 // Initialize Sentry before anything else.
 // DSN passed as env var from Electron main process (not hardcoded — open source repo).
@@ -62,22 +49,17 @@ setProtocolHandlers({
     if (!conn) return;
 
     // Build an in-process Request for the Hono app.
-    // The x-relay-bridge-secret header carries a process-local secret that
-    // middleware checks to verify this request originated in-process (not
-    // from an external client). External clients cannot know the secret.
-    const headers: Record<string, string> = {
-      ...frame.headers,
-      "x-relay-bridge-secret": RELAY_BRIDGE_SECRET,
-    };
+    const headers: Record<string, string> = { ...frame.headers };
     const request = new Request(`http://internal${frame.path}`, {
       method: frame.method,
       headers,
       body: frame.method !== "GET" && frame.method !== "HEAD" ? frame.body : undefined,
     });
 
-    // Dispatch through Hono app and send response back through the connection.
-    // app.fetch() may return Response | Promise<Response> — normalize to Promise.
-    Promise.resolve(app.fetch(request))
+    // Dispatch through Hono app with env bindings to mark this as a relay
+    // bridge request. Hono env bindings are structurally impossible to spoof
+    // — external HTTP requests never pass env bindings to app.fetch().
+    Promise.resolve(app.fetch(request, { relayBridged: true }))
       .then(async (response: Response) => {
         // Extract response headers
         const responseHeaders: Record<string, string> = {};

@@ -5,7 +5,6 @@
 import { createMiddleware } from "hono/factory";
 import { getAllSettings } from "../services/settings.service";
 import { isLocalhost, getClientIp } from "../lib/network";
-import { isRelayBridgeRequest } from "../lib/relay-bridge";
 
 let cachedEnabled = false;
 let cacheExpiry = 0;
@@ -25,12 +24,12 @@ function isRemoteEnabled(): boolean {
 /**
  * If remote_access_enabled is false, reject any non-localhost request with 403.
  * Localhost requests always pass through (desktop app is unaffected).
- * In-process relay bridge requests (verified by secret) bypass the gate.
+ * In-process relay bridge requests (via Hono env bindings) bypass the gate.
  */
 export const remoteGateMiddleware = createMiddleware(async (c, next) => {
-  // In-process requests from the HTTP-over-WS bridge carry a process-local
-  // secret. This cannot be spoofed by external clients over the network.
-  if (isRelayBridgeRequest(c)) {
+  // In-process requests from the HTTP-over-WS bridge pass relayBridged via
+  // Hono env bindings. Structurally impossible to spoof from external clients.
+  if (c.env?.relayBridged) {
     await next();
     return;
   }
