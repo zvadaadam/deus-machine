@@ -121,8 +121,9 @@ export const WorkspaceService = {
   /**
    * Update workspace workflow status (backlog/in-progress/in-review/done/canceled)
    */
-  updateStatus: async (id: string, status: WorkspaceStatus): Promise<Workspace> => {
-    return apiClient.patch<Workspace>(ENDPOINTS.WORKSPACE_BY_ID(id), { status });
+  updateStatus: async (id: string, status: WorkspaceStatus): Promise<void> => {
+    const result = await sendMutate("updateWorkspaceStatus", { workspaceId: id, status });
+    if (!result.success) throw new Error(result.error || "Failed to update workspace status");
   },
 
   /**
