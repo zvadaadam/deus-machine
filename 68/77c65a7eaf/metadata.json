@@ -1,0 +1,32 @@
+{
+  "cli_version": "0.5.0",
+  "checkpoint_id": "6877c65a7eaf",
+  "strategy": "manual-commit",
+  "branch": "zvadaadam/explore-web-routing",
+  "checkpoints_count": 23,
+  "files_touched": [
+    "apps/backend/src/middleware/remote-auth.ts",
+    "apps/backend/src/middleware/remote-gate.ts",
+    "apps/web/src/features/auth/hooks/useAuth.ts",
+    "apps/web/src/features/auth/index.ts",
+    "apps/web/src/platform/ws/index.ts",
+    "apps/web/src/platform/ws/query-protocol-client.ts",
+    "apps/web/src/shared/config/backend.config.ts",
+    "apps/web/src/shared/hooks/useQueryProtocol.ts"
+  ],
+  "sessions": [
+    {
+      "metadata": "/68/77c65a7eaf/0/metadata.json",
+      "transcript": "/68/77c65a7eaf/0/full.jsonl",
+      "content_hash": "/68/77c65a7eaf/0/content_hash.txt",
+      "prompt": "/68/77c65a7eaf/0/prompt.txt"
+    }
+  ],
+  "token_usage": {
+    "input_tokens": 381,
+    "cache_creation_tokens": 1607248,
+    "cache_read_tokens": 49284314,
+    "output_tokens": 126850,
+    "api_call_count": 258
+  }
+}
