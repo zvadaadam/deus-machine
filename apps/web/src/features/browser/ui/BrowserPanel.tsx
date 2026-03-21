@@ -37,7 +37,6 @@ import {
   Smartphone,
   Monitor,
 } from "lucide-react";
-import { useBrowser } from "../hooks/useBrowser";
 import { BrowserTabBar } from "./BrowserTabBar";
 import { BrowserTab } from "./BrowserTab";
 import type {
@@ -48,11 +47,9 @@ import type {
   ElementSelectedEvent,
 } from "../types";
 import { createBrowserTab, deriveTitleFromUrl, hydratePersistedTab } from "../types";
-import { useBrowserRpcHandler } from "../automation/useBrowserRpcHandler";
 import { workspaceLayoutActions } from "@/features/workspace/store/workspaceLayoutStore";
 import { chatInsertActions } from "@/shared/stores/chatInsertStore";
 import { native } from "@/platform";
-import { getErrorMessage } from "@shared/lib/errors";
 
 const MAX_LOGS = 500;
 const PERSIST_DEBOUNCE_MS = 300;
@@ -132,9 +129,6 @@ export function BrowserPanel({
   // Mobile viewport toggle — constrains webview width to 390px (iPhone 14 logical width)
   const [mobileView, setMobileView] = useState(false);
 
-  // Shared dev-browser server (called once in container, status passed to all tabs)
-  const { status: devBrowserStatus, startServer } = useBrowser();
-
   // Derived: active tab for nav bar state
   const activeTab = tabs.find((t) => t.id === activeTabId) ?? null;
 
@@ -155,85 +149,6 @@ export function BrowserPanel({
       }
     }
   }, [activeTabId, panelVisible]);
-
-  // Browser automation RPC handler — lets the sidecar operate the browser
-  // via MCP tools (snapshot, click, type, navigate, getState).
-  // Uses a ref-based callback to always read the latest active tab without
-  // causing the IPC event listener to re-subscribe on every tab change.
-  const activeTabRef = useRef(activeTab);
-  activeTabRef.current = activeTab;
-  const getActiveTab = useCallback(() => activeTabRef.current, []);
-
-  // Provide access to all tabs for session-mapped tab lookups
-  const tabsRef = useRef(tabs);
-  tabsRef.current = tabs;
-  const getTabs = useCallback(() => tabsRef.current, []);
-
-  // Auto-create (or populate an existing empty tab) when the sidecar calls
-  // BrowserNavigate and no usable tab exists. Sets the URL, switches the
-  // right panel to browser, and returns the webviewLabel.
-  // BrowserTab's auto-navigate effect handles actual native webview creation.
-  const handleAutoCreateTab = useCallback(
-    (url: string): string | null => {
-      if (!workspaceId) return null;
-
-      let fullUrl = url;
-      if (!url.startsWith("http://") && !url.startsWith("https://") && !url.startsWith("file://")) {
-        fullUrl = "https://" + url;
-      }
-
-      // Reuse existing empty tab if available (BrowserPanel always creates one)
-      const emptyTab = tabs.find((t) => !t.currentUrl);
-      let targetLabel: string;
-
-      if (emptyTab) {
-        // Populate the existing empty tab with the URL
-        setTabs((prev) =>
-          prev.map((t) =>
-            t.id === emptyTab.id
-              ? {
-                  ...t,
-                  url: fullUrl,
-                  currentUrl: fullUrl,
-                  title: deriveTitleFromUrl(fullUrl),
-                  loading: true,
-                  history: [fullUrl],
-                  historyIndex: 0,
-                }
-              : t
-          )
-        );
-        setActiveTabId(emptyTab.id);
-        targetLabel = emptyTab.webviewLabel;
-      } else {
-        // Create a new tab with URL pre-filled
-        const newTab = createBrowserTab(workspaceId);
-        newTab.url = fullUrl;
-        newTab.currentUrl = fullUrl;
-        newTab.title = deriveTitleFromUrl(fullUrl);
-        newTab.loading = true;
-        newTab.history = [fullUrl];
-        newTab.historyIndex = 0;
-
-        setTabs((prev) => [...prev, newTab]);
-        setActiveTabId(newTab.id);
-        targetLabel = newTab.webviewLabel;
-      }
-
-      // Switch the right panel to browser tab so the webview becomes visible
-      workspaceLayoutActions.setActiveRightSideTab(workspaceId, "browser");
-
-      return targetLabel;
-    },
-    [workspaceId, tabs]
-  );
-
-  // Store auto-create in ref for stable identity (avoids IPC listener re-subscribe)
-  const autoCreateTabRef = useRef(handleAutoCreateTab);
-  autoCreateTabRef.current = handleAutoCreateTab;
-  const stableAutoCreateTab = useCallback((url: string) => autoCreateTabRef.current(url), []);
-
-  useBrowserRpcHandler(getActiveTab, stableAutoCreateTab, workspaceId, getTabs);
 
   // --- Persist tab state to workspace layout store (debounced) ---
   const persistTabs = useCallback(
@@ -330,26 +245,6 @@ export function BrowserPanel({
     prevWorkspaceIdRef.current = workspaceId;
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [workspaceId]);
-
-  // --- Auto-start dev-browser server on mount ---
-  useEffect(() => {
-    if (!devBrowserStatus.running && !devBrowserStatus.error) {
-      startServer().catch((err) => {
-        const message = getErrorMessage(err);
-        if (!message.includes("VITE_DEV_BROWSER_PATH")) {
-          console.error("Failed to auto-start dev-browser:", err);
-        }
-      });
-    }
-  }, [devBrowserStatus.running, devBrowserStatus.error, startServer]);
-
-  // Log when MCP server starts (to active tab's console)
-  useEffect(() => {
-    if (devBrowserStatus.running && devBrowserStatus.port && activeTabId) {
-      handleAddLog(activeTabId, "info", `MCP server running on port ${devBrowserStatus.port}`);
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [devBrowserStatus.running]);
 
   // --- Tab operations ---
 
@@ -481,19 +376,21 @@ export function BrowserPanel({
     [workspaceId]
   );
 
-  /** Capture the active tab's WKWebView as JPEG and dispatch to chat input */
+  /** Capture the active tab's BrowserView as PNG and dispatch to chat input */
   const handleScreenshot = useCallback(async () => {
     if (!activeTab?.webviewLabel || !activeTab.currentUrl || !workspaceId) return;
     try {
-      const base64 = await native.browserViews.screenshot(activeTab.webviewLabel);
-      if (!base64) return;
+      const dataUrl = await native.browserViews.screenshot(activeTab.webviewLabel);
+      if (!dataUrl) return;
+      // capturePage().toDataURL() returns "data:image/png;base64,..." — strip prefix
+      const base64 = dataUrl.replace(/^data:image\/\w+;base64,/, "");
       const binaryStr = atob(base64);
       const bytes = new Uint8Array(binaryStr.length);
       for (let i = 0; i < binaryStr.length; i++) {
         bytes[i] = binaryStr.charCodeAt(i);
       }
-      const blob = new Blob([bytes], { type: "image/jpeg" });
-      const file = new File([blob], `browser-screenshot-${Date.now()}.jpg`, { type: "image/jpeg" });
+      const blob = new Blob([bytes], { type: "image/png" });
+      const file = new File([blob], `browser-screenshot-${Date.now()}.png`, { type: "image/png" });
       chatInsertActions.insertFiles(workspaceId, [file]);
     } catch (err) {
       console.error("Browser screenshot failed:", err);
@@ -552,7 +449,7 @@ export function BrowserPanel({
       title: deriveTitleFromUrl(previousUrl),
     });
 
-    tabRefs.current.get(activeTab.id)?.navigateToUrl(previousUrl);
+    tabRefs.current.get(activeTab.id)?.goBack();
   }, [activeTab, handleUpdateTab]);
 
   const handleGoForward = useCallback(() => {
@@ -570,7 +467,7 @@ export function BrowserPanel({
       title: deriveTitleFromUrl(nextUrl),
     });
 
-    tabRefs.current.get(activeTab.id)?.navigateToUrl(nextUrl);
+    tabRefs.current.get(activeTab.id)?.goForward();
   }, [activeTab, handleUpdateTab]);
 
   const handleReload = useCallback(() => {
@@ -603,7 +500,7 @@ export function BrowserPanel({
   const handleTabSelect = useCallback(
     (tabId: string) => {
       setActiveTabId(tabId);
-      persistTabs(tabsRef.current, tabId);
+      persistTabs(tabInfoRef.current, tabId);
     },
     [persistTabs]
   );
@@ -997,7 +894,6 @@ export function BrowserPanel({
                 key={tab.id}
                 ref={setTabRef(tab.id)}
                 tab={tab}
-                devBrowserStatus={devBrowserStatus}
                 onUpdateTab={handleUpdateTab}
                 onAddLog={handleAddLog}
                 onElementSelected={handleElementSelected}

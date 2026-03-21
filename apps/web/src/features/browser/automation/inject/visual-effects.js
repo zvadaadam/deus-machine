@@ -1,7 +1,7 @@
-// inject/visual-effects.ts
+// inject/visual-effects.js
 // AI visual effects system — runs inside WKWebView page context.
 //
-// Compiled by esbuild into a self-contained IIFE (see build-inject.ts).
+// Plain JavaScript IIFE — imported directly via Vite's ?raw suffix.
 // When eval'd, creates visual feedback for AI browser operations:
 // - SVG cursor overlay that moves smoothly to target elements
 // - Ripple effect on click (expanding ring with fade-out)
@@ -11,34 +11,36 @@
 // - Screenshot flash effect (camera-shutter pop + blue tint)
 // - Active glow (breathing edge vignette while AI operates)
 
+(function() {
 // Guard: prevent double-injection
-if (!(window as any).__opendevsVisuals) {
+if (window.__opendevsVisuals) return;
+
   // ========================================================================
   // State
   // ========================================================================
-  let cursorEl: SVGSVGElement | null = null;
-  let cursorInitialized = false;
-  let pinnedEl: Element | null = null;
-  let pinRAF: number | null = null;
-  let lastX: number | null = null;
-  let lastY: number | null = null;
-  const OFFSET_X = 6;
-  const OFFSET_Y = 6;
-  let frameEl: HTMLDivElement | null = null;
-  let frameHideTimer: ReturnType<typeof setTimeout> | null = null;
-  let activeGlowEl: HTMLDivElement | null = null;
-  let activeGlowStyleEl: HTMLStyleElement | null = null;
+  var cursorEl = null;
+  var cursorInitialized = false;
+  var pinnedEl = null;
+  var pinRAF = null;
+  var lastX = null;
+  var lastY = null;
+  var OFFSET_X = 6;
+  var OFFSET_Y = 6;
+  var frameEl = null;
+  var frameHideTimer = null;
+  var activeGlowEl = null;
+  var activeGlowStyleEl = null;
 
   // Animation config: distance-based timing with clamped range
-  const MIN_MS = 440;
-  const MAX_MS = 1000;
-  const PX_PER_MS = 1.5;
-  const EASING = "cubic-bezier(0.22, 0.61, 0.36, 1)";
+  var MIN_MS = 440;
+  var MAX_MS = 1000;
+  var PX_PER_MS = 1.5;
+  var EASING = "cubic-bezier(0.22, 0.61, 0.36, 1)";
 
   // ========================================================================
   // Capture Frame — shared rounded-corner border used by scan + screenshot
   // ========================================================================
-  function showFrame(rect?: { x: number; y: number; width: number; height: number } | null): void {
+  function showFrame(rect) {
     // Cancel any pending hide so rapid calls don't flicker
     if (frameHideTimer) {
       clearTimeout(frameHideTimer);
@@ -58,7 +60,7 @@ if (!(window as any).__opendevsVisuals) {
 
     // Position: region rect (sharp corners) or full viewport (rounded)
     if (rect) {
-      const pad = 6;
+      var pad = 6;
       frameEl.style.left = rect.x - pad + "px";
       frameEl.style.top = rect.y - pad + "px";
       frameEl.style.right = "auto";
@@ -82,8 +84,8 @@ if (!(window as any).__opendevsVisuals) {
     frameEl.style.opacity = "1";
   }
 
-  function hideFrame(delayMs?: number): void {
-    frameHideTimer = setTimeout(() => {
+  function hideFrame(delayMs) {
+    frameHideTimer = setTimeout(function() {
       if (frameEl) {
         frameEl.style.transition = "opacity 400ms ease-out";
         frameEl.style.opacity = "0";
@@ -95,11 +97,11 @@ if (!(window as any).__opendevsVisuals) {
   // ========================================================================
   // SVG Cursor (same pointer as mcp-dev-browser — Figma-style with shadow)
   // ========================================================================
-  function ensureCursor(): void {
+  function ensureCursor() {
     if (cursorInitialized) return;
     cursorInitialized = true;
     try {
-      const svgNS = "http://www.w3.org/2000/svg";
+      var svgNS = "http://www.w3.org/2000/svg";
       cursorEl = document.createElementNS(svgNS, "svg");
       cursorEl.setAttribute("width", "16");
       cursorEl.setAttribute("height", "16");
@@ -115,12 +117,12 @@ if (!(window as any).__opendevsVisuals) {
       cursorEl.style.top = "-1000px";
       cursorEl.style.transition = "opacity 150ms ease";
 
-      const gClip = document.createElementNS(svgNS, "g");
+      var gClip = document.createElementNS(svgNS, "g");
       gClip.setAttribute("clip-path", "url(#clip0_hive_vis)");
-      const gFilter = document.createElementNS(svgNS, "g");
+      var gFilter = document.createElementNS(svgNS, "g");
       gFilter.setAttribute("filter", "url(#filter0_hive_vis)");
 
-      const path = document.createElementNS(svgNS, "path");
+      var path = document.createElementNS(svgNS, "path");
       path.setAttribute(
         "d",
         "M1.68066 2.14282C1.5253 1.49746 2.16954 0.975576 2.75195 1.21118L2.86816 1.26782L3.11035 1.41333L12.958 7.27954L13.2031 7.42505C13.8128 7.78856 13.682 8.70779 12.9951 8.88696L12.7197 8.95825L8.28223 10.1155L6.16895 13.9592L6.02148 14.2288C5.66933 14.869 4.71301 14.741 4.54199 14.0305L4.4707 13.7317L1.74707 2.41724L1.68066 2.14282Z"
@@ -130,8 +132,8 @@ if (!(window as any).__opendevsVisuals) {
       gFilter.appendChild(path);
       gClip.appendChild(gFilter);
 
-      const defs = document.createElementNS(svgNS, "defs");
-      const filter = document.createElementNS(svgNS, "filter");
+      var defs = document.createElementNS(svgNS, "defs");
+      var filter = document.createElementNS(svgNS, "filter");
       filter.setAttribute("id", "filter0_hive_vis");
       filter.setAttribute("x", "-1.51");
       filter.setAttribute("y", "-1.35");
@@ -140,36 +142,36 @@ if (!(window as any).__opendevsVisuals) {
       filter.setAttribute("filterUnits", "userSpaceOnUse");
       filter.setAttribute("color-interpolation-filters", "sRGB");
 
-      const feFlood = document.createElementNS(svgNS, "feFlood");
+      var feFlood = document.createElementNS(svgNS, "feFlood");
       feFlood.setAttribute("flood-opacity", "0");
       feFlood.setAttribute("result", "BackgroundImageFix");
       filter.appendChild(feFlood);
-      const feCM = document.createElementNS(svgNS, "feColorMatrix");
+      var feCM = document.createElementNS(svgNS, "feColorMatrix");
       feCM.setAttribute("in", "SourceAlpha");
       feCM.setAttribute("type", "matrix");
       feCM.setAttribute("values", "0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 127 0");
       feCM.setAttribute("result", "hardAlpha");
       filter.appendChild(feCM);
-      const feOff = document.createElementNS(svgNS, "feOffset");
+      var feOff = document.createElementNS(svgNS, "feOffset");
       feOff.setAttribute("dy", "0.667");
       filter.appendChild(feOff);
-      const feBlur = document.createElementNS(svgNS, "feGaussianBlur");
+      var feBlur = document.createElementNS(svgNS, "feGaussianBlur");
       feBlur.setAttribute("stdDeviation", "1.333");
       filter.appendChild(feBlur);
-      const feComp = document.createElementNS(svgNS, "feComposite");
+      var feComp = document.createElementNS(svgNS, "feComposite");
       feComp.setAttribute("in2", "hardAlpha");
       feComp.setAttribute("operator", "out");
       filter.appendChild(feComp);
-      const feCM2 = document.createElementNS(svgNS, "feColorMatrix");
+      var feCM2 = document.createElementNS(svgNS, "feColorMatrix");
       feCM2.setAttribute("type", "matrix");
       feCM2.setAttribute("values", "0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0.5 0");
       filter.appendChild(feCM2);
-      const feB1 = document.createElementNS(svgNS, "feBlend");
+      var feB1 = document.createElementNS(svgNS, "feBlend");
       feB1.setAttribute("mode", "normal");
       feB1.setAttribute("in2", "BackgroundImageFix");
       feB1.setAttribute("result", "effect1");
       filter.appendChild(feB1);
-      const feB2 = document.createElementNS(svgNS, "feBlend");
+      var feB2 = document.createElementNS(svgNS, "feBlend");
       feB2.setAttribute("mode", "normal");
       feB2.setAttribute("in", "SourceGraphic");
       feB2.setAttribute("in2", "effect1");
@@ -177,9 +179,9 @@ if (!(window as any).__opendevsVisuals) {
       filter.appendChild(feB2);
       defs.appendChild(filter);
 
-      const clipPath = document.createElementNS(svgNS, "clipPath");
+      var clipPath = document.createElementNS(svgNS, "clipPath");
       clipPath.setAttribute("id", "clip0_hive_vis");
-      const rect = document.createElementNS(svgNS, "rect");
+      var rect = document.createElementNS(svgNS, "rect");
       rect.setAttribute("width", "16");
       rect.setAttribute("height", "16");
       rect.setAttribute("fill", "white");
@@ -197,16 +199,16 @@ if (!(window as any).__opendevsVisuals) {
   // ========================================================================
   // Cursor Movement
   // ========================================================================
-  function moveCursorToViewport(x: number, y: number): number {
+  function moveCursorToViewport(x, y) {
     ensureCursor();
-    const targetX = Math.round(x + OFFSET_X);
-    const targetY = Math.round(y + OFFSET_Y);
-    const fromX = lastX == null ? targetX : lastX;
-    const fromY = lastY == null ? targetY : lastY;
-    const dx = targetX - fromX;
-    const dy = targetY - fromY;
-    const distance = Math.sqrt(dx * dx + dy * dy);
-    const duration = Math.max(MIN_MS, Math.min(MAX_MS, Math.round(distance / PX_PER_MS)));
+    var targetX = Math.round(x + OFFSET_X);
+    var targetY = Math.round(y + OFFSET_Y);
+    var fromX = lastX == null ? targetX : lastX;
+    var fromY = lastY == null ? targetY : lastY;
+    var dx = targetX - fromX;
+    var dy = targetY - fromY;
+    var distance = Math.sqrt(dx * dx + dy * dy);
+    var duration = Math.max(MIN_MS, Math.min(MAX_MS, Math.round(distance / PX_PER_MS)));
 
     if (cursorEl) {
       cursorEl.style.transition =
@@ -227,29 +229,29 @@ if (!(window as any).__opendevsVisuals) {
     return duration;
   }
 
-  function moveCursorToElement(el: Element): number {
+  function moveCursorToElement(el) {
     if (!el || !el.getBoundingClientRect) return 0;
-    let rect = el.getBoundingClientRect();
+    var rect = el.getBoundingClientRect();
     // Scroll into view if needed
-    const inView =
+    var inView =
       rect.top >= 0 &&
       rect.left >= 0 &&
       rect.bottom <= window.innerHeight &&
       rect.right <= window.innerWidth;
     if (!inView) el.scrollIntoView({ block: "center", inline: "center", behavior: "auto" });
     rect = el.getBoundingClientRect();
-    const cx = Math.round(rect.left + rect.width / 2);
-    const cy = Math.round(rect.top + rect.height / 2);
+    var cx = Math.round(rect.left + rect.width / 2);
+    var cy = Math.round(rect.top + rect.height / 2);
     return moveCursorToViewport(cx, cy);
   }
 
   // ========================================================================
   // Ripple Effect
   // ========================================================================
-  function rippleAt(x: number, y: number): void {
+  function rippleAt(x, y) {
     try {
       // Primary ring — fast, bright, immediate feedback
-      const ring1 = document.createElement("div");
+      var ring1 = document.createElement("div");
       ring1.setAttribute("data-opendevs-visual", "true");
       ring1.style.position = "fixed";
       ring1.style.left = x + "px";
@@ -268,10 +270,10 @@ if (!(window as any).__opendevsVisuals) {
         "transform 220ms cubic-bezier(0.32, 0.72, 0, 1), opacity 260ms ease-out";
       document.documentElement.appendChild(ring1);
 
-      requestAnimationFrame(() => {
+      requestAnimationFrame(function() {
         ring1.style.transform = "translate(-50%, -50%) scale(1.5)";
         ring1.style.opacity = "0";
-        setTimeout(() => {
+        setTimeout(function() {
           try {
             ring1.remove();
           } catch (_e) {
@@ -281,8 +283,8 @@ if (!(window as any).__opendevsVisuals) {
       });
 
       // Secondary ring — staggered, wider, softer (shockwave echo)
-      setTimeout(() => {
-        const ring2 = document.createElement("div");
+      setTimeout(function() {
+        var ring2 = document.createElement("div");
         ring2.setAttribute("data-opendevs-visual", "true");
         ring2.style.position = "fixed";
         ring2.style.left = x + "px";
@@ -299,10 +301,10 @@ if (!(window as any).__opendevsVisuals) {
           "transform 320ms cubic-bezier(0.32, 0.72, 0, 1), opacity 350ms ease-out";
         document.documentElement.appendChild(ring2);
 
-        requestAnimationFrame(() => {
+        requestAnimationFrame(function() {
           ring2.style.transform = "translate(-50%, -50%) scale(2.2)";
           ring2.style.opacity = "0";
-          setTimeout(() => {
+          setTimeout(function() {
             try {
               ring2.remove();
             } catch (_e) {
@@ -319,14 +321,14 @@ if (!(window as any).__opendevsVisuals) {
   // ========================================================================
   // Cursor Pinning (for typing — follows element if it moves)
   // ========================================================================
-  function pinCursorToElement(el: Element): void {
+  function pinCursorToElement(el) {
     ensureCursor();
     unpinCursor();
     pinnedEl = el;
     try {
-      const rect = el.getBoundingClientRect();
-      const cx = Math.round(rect.left + rect.width / 2);
-      const cy = Math.round(rect.top + rect.height / 2);
+      var rect = el.getBoundingClientRect();
+      var cx = Math.round(rect.left + rect.width / 2);
+      var cy = Math.round(rect.top + rect.height / 2);
       if (cursorEl) {
         cursorEl.style.left = cx + OFFSET_X + "px";
         cursorEl.style.top = cy + OFFSET_Y + "px";
@@ -335,15 +337,15 @@ if (!(window as any).__opendevsVisuals) {
       /* swallow */
     }
 
-    const update = (): void => {
+    var update = function() {
       if (!pinnedEl || !pinnedEl.getBoundingClientRect) {
         pinRAF = null;
         return;
       }
       try {
-        const r = pinnedEl.getBoundingClientRect();
-        const cx = Math.round(r.left + r.width / 2);
-        const cy = Math.round(r.top + r.height / 2);
+        var r = pinnedEl.getBoundingClientRect();
+        var cx = Math.round(r.left + r.width / 2);
+        var cy = Math.round(r.top + r.height / 2);
         if (cursorEl) {
           cursorEl.style.left = cx + OFFSET_X + "px";
           cursorEl.style.top = cy + OFFSET_Y + "px";
@@ -358,7 +360,7 @@ if (!(window as any).__opendevsVisuals) {
     pinRAF = requestAnimationFrame(update);
   }
 
-  function unpinCursor(): void {
+  function unpinCursor() {
     if (pinRAF) {
       cancelAnimationFrame(pinRAF);
       pinRAF = null;
@@ -366,7 +368,7 @@ if (!(window as any).__opendevsVisuals) {
     pinnedEl = null;
   }
 
-  function hideCursor(): void {
+  function hideCursor() {
     unpinCursor();
     if (cursorEl) {
       cursorEl.style.left = "-1000px";
@@ -378,14 +380,14 @@ if (!(window as any).__opendevsVisuals) {
   }
 
   // Graceful fade-out: cursor stays visible for dwellMs, then fades + resets
-  function fadeCursor(dwellMs?: number): void {
+  function fadeCursor(dwellMs) {
     unpinCursor();
-    const ms = dwellMs || 1000;
-    setTimeout(() => {
+    var ms = dwellMs || 1000;
+    setTimeout(function() {
       if (cursorEl) {
         cursorEl.style.transition = "opacity 250ms ease-out";
         cursorEl.style.opacity = "0";
-        setTimeout(() => {
+        setTimeout(function() {
           if (cursorEl) {
             cursorEl.style.left = "-1000px";
             cursorEl.style.top = "-1000px";
@@ -402,15 +404,13 @@ if (!(window as any).__opendevsVisuals) {
   // ========================================================================
   // Screenshot Flash Effect — frame in -> blue tint flash -> frame out
   // ========================================================================
-  function screenshotFlash(
-    rect?: { x: number; y: number; width: number; height: number } | null
-  ): void {
+  function screenshotFlash(rect) {
     try {
       // Show capture frame — wraps region if rect provided, full viewport otherwise
       showFrame(rect || null);
 
       // --- Phase 1: White camera-shutter pop (asymmetric: fast in, fast out) ---
-      const flash = document.createElement("div");
+      var flash = document.createElement("div");
       flash.setAttribute("data-opendevs-visual", "true");
       flash.style.position = "fixed";
       flash.style.pointerEvents = "none";
@@ -431,10 +431,10 @@ if (!(window as any).__opendevsVisuals) {
       document.documentElement.appendChild(flash);
 
       // White pop fades after 50ms — brief enough to feel like a camera shutter
-      setTimeout(() => {
+      setTimeout(function() {
         flash.style.transition = "opacity 120ms ease-out";
         flash.style.opacity = "0";
-        setTimeout(() => {
+        setTimeout(function() {
           try {
             flash.remove();
           } catch (_e) {
@@ -443,7 +443,7 @@ if (!(window as any).__opendevsVisuals) {
         }, 140);
 
         // --- Phase 2: Blue tint holds, then fades (slow release) ---
-        const tint = document.createElement("div");
+        var tint = document.createElement("div");
         tint.setAttribute("data-opendevs-visual", "true");
         tint.style.position = "fixed";
         tint.style.pointerEvents = "none";
@@ -466,9 +466,9 @@ if (!(window as any).__opendevsVisuals) {
         document.documentElement.appendChild(tint);
 
         // Hold blue tint 350ms so it registers, then fade
-        setTimeout(() => {
+        setTimeout(function() {
           tint.style.opacity = "0";
-          setTimeout(() => {
+          setTimeout(function() {
             try {
               tint.remove();
             } catch (_e) {
@@ -488,11 +488,11 @@ if (!(window as any).__opendevsVisuals) {
   // ========================================================================
   // Element Highlight Effect (for snapshot — subtle blue outline pulse)
   // ========================================================================
-  function highlightElement(el: Element): void {
+  function highlightElement(el) {
     if (!el || !el.getBoundingClientRect) return;
     try {
-      const rect = el.getBoundingClientRect();
-      const box = document.createElement("div");
+      var rect = el.getBoundingClientRect();
+      var box = document.createElement("div");
       box.setAttribute("data-opendevs-visual", "true");
       box.style.position = "fixed";
       box.style.left = rect.left + "px";
@@ -508,9 +508,9 @@ if (!(window as any).__opendevsVisuals) {
       box.style.transition = "opacity 400ms ease-out";
       document.documentElement.appendChild(box);
 
-      setTimeout(() => {
+      setTimeout(function() {
         box.style.opacity = "0";
-        setTimeout(() => {
+        setTimeout(function() {
           try {
             box.remove();
           } catch (_e) {
@@ -529,33 +529,29 @@ if (!(window as any).__opendevsVisuals) {
   // Two-pass converging scan: slow recon + fast blaze, both landing together.
   // GPU-accelerated: bands use transform, tints use clip-path.
   // ========================================================================
-  function scanPage(): void {
+  function scanPage() {
     try {
       showFrame();
 
-      const EASE = "cubic-bezier(0.25, 0.1, 0.25, 1)";
-      const BLUE = "58,150,221";
+      var EASE = "cubic-bezier(0.25, 0.1, 0.25, 1)";
+      var BLUE = "58,150,221";
 
-      const P1_MS = 3000;
-      const P2_MS = 1100;
-      const P2_DELAY = P1_MS - P2_MS;
+      var P1_MS = 3000;
+      var P2_MS = 1100;
+      var P2_DELAY = P1_MS - P2_MS;
 
       // Helper: start a transition reliably by separating initial state from transition.
-      const startTransition = (
-        el: HTMLElement,
-        transitions: string,
-        endProps: Record<string, string>
-      ): void => {
+      var startTransition = function(el, transitions, endProps) {
         document.documentElement.appendChild(el);
         void el.offsetHeight; // force browser to compute the "from" state
         el.style.transition = transitions;
-        for (const k in endProps) {
-          (el.style as any)[k] = endProps[k];
+        for (var k in endProps) {
+          el.style[k] = endProps[k];
         }
       };
 
       // ---- Pass 1: slow recon scan line ----
-      const tint1 = document.createElement("div");
+      var tint1 = document.createElement("div");
       tint1.setAttribute("data-opendevs-visual", "true");
       tint1.style.cssText =
         "position:fixed;left:0;top:0;width:100vw;height:100vh;" +
@@ -571,7 +567,7 @@ if (!(window as any).__opendevsVisuals) {
         ",0.06) 75%,transparent 100%);" +
         "clip-path:inset(0 0 100% 0);";
 
-      const band1 = document.createElement("div");
+      var band1 = document.createElement("div");
       band1.setAttribute("data-opendevs-visual", "true");
       band1.style.cssText =
         "position:fixed;left:0;top:0;width:100vw;height:100px;" +
@@ -615,17 +611,17 @@ if (!(window as any).__opendevsVisuals) {
       tint1.style.transition = "clip-path " + P1_MS + "ms " + EASE;
       tint1.style.clipPath = "inset(0 0 0% 0)";
 
-      setTimeout(() => {
+      setTimeout(function() {
         try {
           band1.remove();
         } catch (_e) {
           /* swallow */
         }
       }, P1_MS + 100);
-      setTimeout(() => {
+      setTimeout(function() {
         tint1.style.transition = "opacity 800ms ease-out";
         tint1.style.opacity = "0";
-        setTimeout(() => {
+        setTimeout(function() {
           try {
             tint1.remove();
           } catch (_e) {
@@ -635,9 +631,9 @@ if (!(window as any).__opendevsVisuals) {
       }, P1_MS + 800);
 
       // ---- Pass 2: fast blaze scan line (converges with P1) ----
-      setTimeout(() => {
+      setTimeout(function() {
         try {
-          const tint2 = document.createElement("div");
+          var tint2 = document.createElement("div");
           tint2.setAttribute("data-opendevs-visual", "true");
           tint2.style.cssText =
             "position:fixed;left:0;top:0;width:100vw;height:100vh;" +
@@ -653,8 +649,8 @@ if (!(window as any).__opendevsVisuals) {
             ",0.04) 75%,transparent 100%);" +
             "clip-path:inset(0 0 100% 0);";
 
-          const fo2 = Math.min(400, Math.round(P2_MS * 0.15));
-          const band2 = document.createElement("div");
+          var fo2 = Math.min(400, Math.round(P2_MS * 0.15));
+          var band2 = document.createElement("div");
           band2.setAttribute("data-opendevs-visual", "true");
           band2.style.cssText =
             "position:fixed;left:0;top:0;width:100vw;height:80px;" +
@@ -703,17 +699,17 @@ if (!(window as any).__opendevsVisuals) {
           tint2.style.transition = "clip-path " + P2_MS + "ms " + EASE;
           tint2.style.clipPath = "inset(0 0 0% 0)";
 
-          setTimeout(() => {
+          setTimeout(function() {
             try {
               band2.remove();
             } catch (_e) {
               /* swallow */
             }
           }, P2_MS + 100);
-          setTimeout(() => {
+          setTimeout(function() {
             tint2.style.transition = "opacity 800ms ease-out";
             tint2.style.opacity = "0";
-            setTimeout(() => {
+            setTimeout(function() {
               try {
                 tint2.remove();
               } catch (_e) {
@@ -735,7 +731,7 @@ if (!(window as any).__opendevsVisuals) {
   // ========================================================================
   // Active Glow — breathing edge vignette while AI operates the browser
   // ========================================================================
-  function showActiveGlow(): void {
+  function showActiveGlow() {
     try {
       // Inject breathing keyframe once — shadow expands/contracts + subtle scale
       if (!activeGlowStyleEl) {
@@ -772,11 +768,11 @@ if (!(window as any).__opendevsVisuals) {
       // Fade in via opacity, then start breathing (transform + box-shadow)
       activeGlowEl.style.animation = "none";
       activeGlowEl.style.transition = "opacity 250ms ease-out";
-      requestAnimationFrame(() => {
+      requestAnimationFrame(function() {
         if (!activeGlowEl) return;
         activeGlowEl.style.opacity = "1";
         // Start breathing after fade-in settles
-        setTimeout(() => {
+        setTimeout(function() {
           if (!activeGlowEl) return;
           activeGlowEl.style.transition = "none";
           activeGlowEl.style.animation = "hiveBreathe 3.5s ease-in-out infinite";
@@ -787,16 +783,16 @@ if (!(window as any).__opendevsVisuals) {
     }
   }
 
-  function hideActiveGlow(): void {
+  function hideActiveGlow() {
     if (!activeGlowEl) return;
     try {
       // Keep animation running during fade-out — avoids transform/shadow snap
       activeGlowEl.style.transition = "opacity 350ms ease-out";
-      requestAnimationFrame(() => {
+      requestAnimationFrame(function() {
         if (!activeGlowEl) return;
         activeGlowEl.style.opacity = "0";
         // Stop animation after fully faded — invisible so no snap visible
-        setTimeout(() => {
+        setTimeout(function() {
           if (activeGlowEl) activeGlowEl.style.animation = "none";
         }, 400);
       });
@@ -808,9 +804,9 @@ if (!(window as any).__opendevsVisuals) {
   // ========================================================================
   // Key Flash Effect (highlight focused element when a key is pressed)
   // ========================================================================
-  function keyFlash(): void {
+  function keyFlash() {
     try {
-      const el = document.activeElement;
+      var el = document.activeElement;
       if (!el || el === document.body || el === document.documentElement) return;
       highlightElement(el);
     } catch (_e) {
@@ -821,22 +817,22 @@ if (!(window as any).__opendevsVisuals) {
   // ========================================================================
   // Public API
   // ========================================================================
-  (window as any).__opendevsVisuals = {
-    moveCursorToViewport,
-    moveCursorToElement,
-    rippleAt,
-    pinCursorToElement,
-    unpinCursor,
-    hideCursor,
-    fadeCursor,
-    ensureCursor,
-    screenshotFlash,
-    highlightElement,
-    scanPage,
-    keyFlash,
-    showFrame,
-    hideFrame,
-    showActiveGlow,
-    hideActiveGlow,
+  window.__opendevsVisuals = {
+    moveCursorToViewport: moveCursorToViewport,
+    moveCursorToElement: moveCursorToElement,
+    rippleAt: rippleAt,
+    pinCursorToElement: pinCursorToElement,
+    unpinCursor: unpinCursor,
+    hideCursor: hideCursor,
+    fadeCursor: fadeCursor,
+    ensureCursor: ensureCursor,
+    screenshotFlash: screenshotFlash,
+    highlightElement: highlightElement,
+    scanPage: scanPage,
+    keyFlash: keyFlash,
+    showFrame: showFrame,
+    hideFrame: hideFrame,
+    showActiveGlow: showActiveGlow,
+    hideActiveGlow: hideActiveGlow,
   };
-}
+})();

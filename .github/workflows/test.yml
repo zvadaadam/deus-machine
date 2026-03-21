@@ -91,9 +91,6 @@ jobs:
       - name: Install dependencies
         run: bun install --frozen-lockfile
 
-      - name: Build inject scripts
-        run: bun run build:inject
-
       - name: Run sidecar unit tests
         run: bun run test:sidecar:unit
 

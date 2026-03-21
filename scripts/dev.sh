@@ -29,12 +29,6 @@ if [ -n "$STALE_PID" ]; then
     sleep 0.3
 fi
 
-# Build browser inject scripts (TypeScript → IIFE for BrowserView)
-echo -e "${BLUE}Building browser inject scripts...${NC}"
-bun run build:inject
-echo -e "${GREEN}✓ Inject scripts built${NC}"
-echo ""
-
 # Start agent-server (sidecar) first to get its LISTEN_URL
 echo -e "${BLUE}Starting agent-server...${NC}"
 node apps/sidecar/dist/index.bundled.cjs > /tmp/sidecar.log 2>&1 &
