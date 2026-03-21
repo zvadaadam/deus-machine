@@ -321,3 +321,14 @@ yes
 ---
 
 Rebase your branch onto the remote branch (main) and resolve conflicts. Stage the resolved files and run `git rebase --continue`, then push --force-with-lease.
+
+---
+
+<system_instruction>
+The user has attached these files. Read them before proceeding.
+- /Users/zvada/Developer/agent/box-ide/.conductor/da-nang-v3/.context/attachments/Lint__Format___Typecheck_68042646607.log (76.6 KB)
+</system_instruction>
+
+
+
+Fix the failing CI actions. I've attached the failure logs.
