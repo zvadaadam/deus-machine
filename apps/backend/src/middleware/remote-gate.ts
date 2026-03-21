@@ -5,6 +5,7 @@
 import { createMiddleware } from "hono/factory";
 import { getAllSettings } from "../services/settings.service";
 import { isLocalhost, getClientIp } from "../lib/network";
+import { isRelayBridgeRequest } from "../lib/relay-bridge";
 
 let cachedEnabled = false;
 let cacheExpiry = 0;
@@ -21,18 +22,6 @@ function isRemoteEnabled(): boolean {
   return cachedEnabled;
 }
 
-// Process-local secret set by server.ts at startup. Mirrors the value in
-// remote-auth.ts -- both middleware modules receive it from the same source.
-let _bridgeSecret: string | null = null;
-
-/** Called once by server.ts at startup to register the bridge secret. */
-export function setRelayBridgeSecret(secret: string): void {
-  if (!secret.trim()) {
-    throw new Error("Relay bridge secret must be a non-empty string");
-  }
-  _bridgeSecret = secret;
-}
-
 /**
  * If remote_access_enabled is false, reject any non-localhost request with 403.
  * Localhost requests always pass through (desktop app is unaffected).
@@ -41,8 +30,7 @@ export function setRelayBridgeSecret(secret: string): void {
 export const remoteGateMiddleware = createMiddleware(async (c, next) => {
   // In-process requests from the HTTP-over-WS bridge carry a process-local
   // secret. This cannot be spoofed by external clients over the network.
-  const bridgeSecret = c.req.header("x-relay-bridge-secret");
-  if (bridgeSecret && _bridgeSecret && bridgeSecret === _bridgeSecret) {
+  if (isRelayBridgeRequest(c)) {
     await next();
     return;
   }
