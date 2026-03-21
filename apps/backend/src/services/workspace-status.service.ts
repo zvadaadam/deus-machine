@@ -17,21 +17,22 @@ export function autoProgressStatus(
   workspaceId: string,
   target: WorkspaceStatus,
   opts: { force?: boolean } = {}
-): void {
+): boolean {
   const db = getDatabase();
   const ws = getWorkspaceRaw(db, workspaceId);
-  if (!ws) return;
+  if (!ws) return false;
 
   const current = ws.status as WorkspaceStatus;
 
   if (!opts.force) {
     // Sticky states resist auto-progression (backlog, canceled)
-    if (STICKY_STATUSES.has(current)) return;
+    if (STICKY_STATUSES.has(current)) return false;
     // Don't regress (in-review → in-progress is wrong)
-    if (STATUS_RANK[target] <= STATUS_RANK[current]) return;
+    if (STATUS_RANK[target] <= STATUS_RANK[current]) return false;
   }
 
   db.prepare("UPDATE workspaces SET status = ? WHERE id = ?").run(target, workspaceId);
+  return true;
 }
 
 /**

@@ -39,14 +39,16 @@ app.get("/workspaces/:id/pr-status", withWorkspace, async (c) => {
 
   // Auto-progress to in-review whenever a PR exists (not just on URL change)
   if (result.has_pr) {
-    autoProgressStatus(workspace.id, "in-review");
-    needsInvalidation = true;
+    if (autoProgressStatus(workspace.id, "in-review")) {
+      needsInvalidation = true;
+    }
   }
 
   // Auto-derive done on merge
-  if (result.merge_status === "merged" && workspace.status !== "done") {
-    autoProgressStatus(workspace.id, "done");
-    needsInvalidation = true;
+  if (result.merge_status === "merged") {
+    if (autoProgressStatus(workspace.id, "done")) {
+      needsInvalidation = true;
+    }
   }
 
   if (needsInvalidation) {
