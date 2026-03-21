@@ -5457,3 +5457,815 @@ The user has attached these files. Read them before proceeding.
 
 
 Create a PR
+
+---
+
+<system-instruction>
+The user has added 8 comments to the diff for this workspace. Please review and address these comments as part of your response. When addressing comments on the "original" side or on specific commits, read the file from that version (not the current version). Below are the comments, including metadata about what git state they were left on:
+
+Comment #1:
+
+File: 
+Line: undefined
+User comment: "<!-- This is an auto-generated comment: summarize by coderabbit.ai -->
+<!-- walkthrough_start -->
+
+<details>
+<summary>📝 Walkthrough</summary>
+
+## Walkthrough
+
+This PR introduces a relay bridge authentication mechanism with HTTP-over-WebSocket tunneling, migrates the web app from React Router to TanStack Router with new layout components, and adds dual-transport API support for relay and direct modes.
+
+## Changes
+
+|Cohort / File(s)|Summary|
+|---|---|
+|**Backend Relay Bridge Initialization** <br> `apps/backend/src/middleware/remote-auth.ts`, `apps/backend/src/middleware/remote-gate.ts`, `apps/backend/src/server.ts`|Added process-local relay bridge secret registration via `setRelayBridgeSecret()`. Updated middleware to check `x-relay-bridge-secret` header and bypass standard auth/remote-gate enforcement when matched. Backend server now generates and registers `RELAY_BRIDGE_SECRET` at startup.|
+|**WebSocket HTTP Bridge** <br> `apps/backend/src/services/ws.service.ts`, `apps/backend/src/server.ts`|Extended `WsProtocolHandlers` to include optional `onHttpRequest` handler. Updated `setProtocolHandlers` to merge handlers instead of replacing. Implemented `onHttpRequest` frame handler in server to tunnel HTTP requests through WebSocket by constructing local Hono requests with bridge secret, executing via `app.fetch()`, and serializing responses back.|
+|**Web Router Migration** <br> `apps/web/src/app/router.ts`, `apps/web/src/app/App.tsx`|Replaced React Router with TanStack Router. Created `webRouter` with route tree supporting `/connect`, `/s/$serverId`, and settings pages. Updated `App.tsx` to conditionally render `DesktopShell` (Electron) or `RouterProvider` (web).|
+|**Web App Shells & Layouts** <br> `apps/web/src/app/shells/DesktopShell.tsx`, `apps/web/src/app/shells/ServerLayout.tsx`, `apps/web/src/app/routes/...` (root, connect, workspace, settings)|Introduced `DesktopShell` for Electron mode with onboarding/settings/backend connectivity gates. Created `ServerLayout` for relay mode with auth gate and `PairGatePage` integration. Added route components: `RootLayout` (outlet wrapper), `ConnectPage` (server ID entry), `WorkspaceRoute` (sync workspace state), `SettingsRoute` (toggle settings UI).|
+|**Relay Mode Authentication** <br> `apps/web/src/features/auth/ui/PairGatePage.tsx`|Extended pairing support with `pairViaRelay()` WebSocket-based flow and `pairViaDirect()` HTTP POST. Component now branches on `isRelayMode()` and accepts optional `serverId` parameter for relay connections.|
+|**Backend Endpoint & Mode Detection** <br> `apps/web/src/shared/config/backend.config.ts`|New module defining `DeploymentMode`, `isRelayMode()`, `RELAY_BASE_URL`, and `resolveBackendEndpoints()` to dynamically determine WebSocket and HTTP endpoint URLs based on deployment mode (electron/web-dev/web-production) and optional server ID.|
+|**Dual-Transport API Client** <br> `apps/web/src/shared/api/client.ts`, `apps/web/src/platform/ws/query-protocol-client.ts`|Updated `ApiClient.request()` to route through `requestViaWsBridge` (relay mode with HTTP-over-WS frames) or `requestViaFetch` (direct mode). Enhanced `connect()` to accept optional `serverId` and added `sendHttpRequest()` API for HTTP bridge requests with 30s timeout and pending-request cleanup on disconnect.|
+|**Configuration & API Updates** <br> `apps/web/src/shared/config/api.config.ts`, `apps/web/src/shared/hooks/useQueryProtocol.ts`, `apps/web/src/platform/ws/index.ts`|`getBackendUrl()` and `getBaseURL()` now throw in relay mode. `useQueryProtocol` accepts optional `serverId` and passes to `connect()`. Exported `sendHttpRequest` from query-protocol-client.|
+|**Error Boundary & Utilities** <br> `apps/web/src/shared/utils/errorReporting.ts`|Introduced `createBoundaryErrorHandler()` factory to standardize React error boundary error reporting and component stack tracking.|
+|**HTTP Bridge Protocol Types** <br> `shared/types/http-bridge.ts`|Defined `HttpRequestFrame` and `HttpResponseFrame` interfaces for WebSocket-tunneled HTTP protocol with request ID correlation.|
+|**Web Redirects & Build Config** <br> `apps/web/public/_redirects`, `package.json`|Added redirect rule for `/index.html`. Updated dependencies: added `@tanstack/react-router@^1.168.1`, removed `react-router-dom@^6.26.0`. Added `build:web` npm script.|
+|**Portal URL Path Update** <br> `apps/web/src/features/settings/ui/sections/AccessSection.tsx`|Updated relay portal URL path from `/server/{serverId}` to `/connect/{serverId}`.|
+
+## Sequence Diagram(s)
+
+```mermaid
+sequenceDiagram
+    participant Client as Web Client
+    participant Relay as Relay Server
+    participant Backend as Backend Server
+
+    Note over Client,Backend: Relay Authentication Flow
+    Client->>Relay: WebSocket connect to /api/servers/{serverId}/ws
+    Relay-->>Client: connection established
+    Client->>Relay: send authenticate frame with device token
+    Relay->>Backend: verify device token via relay bridge secret
+    alt Token Valid
+        Backend-->>Relay: auth success
+        Relay-->>Client: authenticated frame
+        Client->>Client: mark connection as connected
+    else Token Invalid
+        Backend-->>Relay: auth failed
+        Relay-->>Client: auth_failed frame
+        Client->>Client: clear stored token, close socket
+    end
+```
+
+```mermaid
+sequenceDiagram
+    participant Client as Web Client
+    participant Relay as Relay Server
+    participant WsBridge as WS Bridge Handler
+    participant App as Hono App
+
+    Note over Client,App: HTTP-over-WebSocket Tunneling
+    Client->>Relay: send http:request frame<br/>(method, path, headers, body, requestId)
+    Relay->>WsBridge: forward to onHttpRequest handler
+    WsBridge->>WsBridge: construct Request object<br/>with x-relay-bridge-secret header
+    WsBridge->>App: app.fetch(request)
+    App-->>WsBridge: Response (status, headers, body)
+    WsBridge->>WsBridge: serialize to HttpResponseFrame<br/>(requestId, status, headers, body)
+    WsBridge-->>Relay: send http:response frame
+    Relay-->>Client: deliver response frame
+    Client->>Client: correlate by requestId,<br/>resolve pending promise
+```
+
+## Estimated code review effort
+
+🎯 4 (Complex) | ⏱️ ~60 minutes
+
+---
+
+## Poem
+
+> 🐰 *A relay bridge across the wire,*  
+> *WebSocket tunnels ever higher,*  
+> *TanStack Router guides the way,*  
+> *HTTP frames dance in the fray,*  
+> *Desktop and web in harmony play,*  
+> *The infrastructure blooms today!* 🌸
+
+</details>
+
+<!-- walkthrough_end -->
+
+
+<!-- tips_start -->
+
+---
+
+<sub>Comment `@coderabbitai help` to get the list of available commands and usage tips.</sub>
+
+<!-- tips_end -->
+
+<!-- internal state start -->
+
+
+<!-- REDACTED/REDACTED/REDACTED/REDACTED/REDACTED/REDACTED/REDACTED/REDACTED/REDACTED/REDACTED/REDACTED/REDACTED/REDACTED/scZpgDQGQOWbA/REDACTED/REDACTED/zXtuVfOG/REDACTED/REDACTED/Bnk1Wm6Nk/REDACTED/S02tkDgM6oBx4/REDACTED/REDACTED/REDACTED/kxBLIj4Tpzy/REDACTED/REDACTED/REDACTED/REDACTED/REDACTED/fQCzNxQ4wIFndxDnXnYgDcPKDZAc/REDACTED/REDACTED/REDACTED/REDACTED/REDACTED/REDACTED/REDACTED/EmoIO/REDACTED/REDACTED/REDACTED/REDACTED/REDACTED/REDACTED/REDACTED/PbgNvyNqqcTaDzH2gxSP5MUdOZ/D5usMM4a5yh4oyoaLDxYnMYqsIxAF4waE/oFBQ3JQd/REDACTED/REDACTED/REDACTED/REDACTED/d2s6L06fM3RsMD0Q/REDACTED/REDACTED/REDACTED/aH8kOidToUlqsZFhH/REDACTED/4/REDACTED/REDACTED/lIO9FgDfR24LKfSEMYeA/REDACTED/REDACTED/REDACTED/JIZyAfaZKrXA/REDACTED/REDACTED/REDACTED/REDACTED/REDACTED/yTSziUUAOhYNRJYUD6B9A0xEU/oWQMyW7dE61A2gcnmSkhj3EfgF6n/REDACTED/REDACTED/REDACTED/REDACTED/REDACTED/REDACTED/REDACTED/3o7ywUO5yqhTRIDcSxKYB/a9Sf0cauNwBj/T5Ow3RKqW8YmbgRrm6dDkxJG/HMQNQyE5SB0U6jZQLzHSlZShY/JXfuY3ec0DNsmsC/REDACTED/REDACTED/REDACTED/REDACTED/REDACTED/REDACTED/REDACTED/U97V1/e4xUyVdGKEQyQY2/REDACTED/REDACTED/REDACTED/REDACTED/REDACTED/REDACTED/REDACTED/REDACTED/Y2tIeXV9XtOp/REDACTED/25FGGNJR87t478S+Ogn/REDACTED/REDACTED/REDACTED/REDACTED/REDACTED/REDACTED/REDACTED/REDACTED/REDACTED/v+T6z5rxIDw/REDACTED/FPo3ylPHhrl1/REDACTED/REDACTED/REDACTED/REDACTED/Ugbcl5e2+bPyf1z9BO5ZRKpPgG/REDACTED/REDACTED/oQx3+vEA/5lkazJ05WgRcBgxcAblB5QYAyynOBcAv/REDACTED/REDACTED/REDACTED/REDACTED/REDACTED/REDACTED/REDACTED/E/REDACTED/A7hOpGWRBRYhCFGD+k+uFH/REDACTED/sLYhQA7CKzFVAxYBzGsQNOJyj6AQAA== -->
+
+<!-- internal state end -->"
+
+Comment metadata:
+This comment was left on a file.
+This comment was left on GitHub by @coderabbitai.
+
+
+Comment #2:
+
+File: apps/backend/src/middleware/remote-gate.ts
+Line: 31
+User comment: "_⚠️ Potential issue_ | _🟠 Major_
+
+**Validate bridge secret is non-empty at registration.**
+
+An empty secret would make the bypass matchable via an empty `x-relay-bridge-secret` header, which weakens the gate under misconfiguration.
+
+<details>
+<summary>🔒 Proposed hardening</summary>
+
+```diff
+ export function setRelayBridgeSecret(secret: string): void {
++  if (!secret.trim()) {
++    throw new Error("Relay bridge secret must be a non-empty string");
++  }
+   _bridgeSecret = secret;
+ }
+```
+</details>
+
+<!-- suggestion_start -->
+
+<details>
+<summary>📝 Committable suggestion</summary>
+
+> ‼️ **IMPORTANT**
+> Carefully review the code before committing. Ensure that it accurately replaces the highlighted code, contains no missing lines, and has no issues with indentation. Thoroughly test & benchmark the code to ensure it meets the requirements.
+
+```suggestion
+export function setRelayBridgeSecret(secret: string): void {
+  if (!secret.trim()) {
+    throw new Error("Relay bridge secret must be a non-empty string");
+  }
+  _bridgeSecret = secret;
+}
+```
+
+</details>
+
+<!-- suggestion_end -->
+
+<details>
+<summary>🤖 Prompt for AI Agents</summary>
+
+```
+Verify each finding against the current code and only fix it if needed.
+
+In `@apps/backend/src/middleware/remote-gate.ts` around lines 29 - 31, The
+setRelayBridgeSecret function currently allows registering an empty secret which
+enables bypass via a blank x-relay-bridge-secret header; update
+setRelayBridgeSecret(secret: string) to validate the input (e.g., trim() and
+ensure length > 0) and reject invalid values by throwing an Error (or otherwise
+failing fast) instead of assigning to _bridgeSecret; reference the
+setRelayBridgeSecret function and the _bridgeSecret variable when making this
+change so callers cannot register an empty or whitespace-only secret.
+```
+
+</details>
+
+<!-- fingerprinting:phantom:poseidon:hawk -->
+
+<!-- This is an auto-generated comment by CodeRabbit -->"
+
+Comment metadata:
+This comment was left on the modified branch.
+This comment was left on GitHub by @coderabbitai.
+This comment is the start of thread PRRT_kwDOQEbULc514m-Q. 
+
+
+Comment #3:
+
+File: apps/web/src/app/routes/root.tsx
+Line: 13
+User comment: "_⚠️ Potential issue_ | _🔴 Critical_
+
+<details>
+<summary>🧩 Analysis chain</summary>
+
+🏁 Script executed:
+
+```shell
+#!/bin/bash
+# Verify whether root isolation wrapper and CSS rules exist somewhere in the repo.
+
+# 1) Look for a root wrapper in route/layout components
+rg -n --type=tsx '<div[^>]*className=["'"'"']root["'"'"']'
+
+# 2) Look for required CSS isolation rule
+rg -n --type=css '\.root\s*\{[^}]*isolation\s*:\s*isolate'
+
+# 3) Look for body positioning rule often paired with root isolation
+rg -n --type=css 'body\s*\{[^}]*position\s*:\s*relative'
+```
+
+Repository: zvadaadam/box-ide
+
+Length of output: 88
+
+---
+
+🏁 Script executed:
+
+```shell
+#!/bin/bash
+# Adjusted search - use glob patterns instead of file type
+
+echo "=== Search 1: Looking for <div className=\"root\" in tsx/jsx files ==="
+rg -g "*.tsx" -g "*.jsx" '<div[^>]*className=["\'"'"']root["\'"'"']' -A 2
+
+echo ""
+echo "=== Search 2: Looking for .root isolation CSS rule ==="
+rg -g "*.css" -g "*.scss" '\.root.*isolation\s*:\s*isolate' -B 1 -A 2
+
+echo ""
+echo "=== Search 3: Looking for body position relative in CSS ==="
+rg -g "*.css" -g "*.scss" 'body.*position\s*:\s*relative' -B 1 -A 2
+
+echo ""
+echo "=== Search 4: Check current root.tsx file and nearby layout files ==="
+find apps/web/src -name "*root*" -o -name "*layout*" | head -20
+```
+
+Repository: zvadaadam/box-ide
+
+Length of output: 513
+
+---
+
+🏁 Script executed:
+
+```shell
+#!/bin/bash
+# Fixed script without problematic escapes
+
+echo "=== Reading current root.tsx file ==="
+cat apps/web/src/app/routes/root.tsx
+
+echo ""
+echo "=== List layouts directory ==="
+ls -la apps/web/src/app/layouts/
+
+echo ""
+echo "=== Search for 'root' class name in tsx files (simpler pattern) ==="
+rg -g "*.tsx" 'className.*root' | head -20
+
+echo ""
+echo "=== Search for CSS files in app directory ==="
+find apps/web/src/app -name "*.css" -o -name "*.scss"
+
+echo ""
+echo "=== Search for global CSS files ==="
+find apps/web/src -name "globals.css" -o -name "global.css" -o -name "index.css"
+
+echo ""
+echo "=== Search for isolation property in CSS ==="
+rg 'isolation.*isolate' -g "*.css" -g "*.scss"
+
+echo ""
+echo "=== Search for 'body' with position in CSS ==="
+rg 'body\s*\{' -A 5 -g "*.css" -g "*.scss" | head -30
+```
+
+Repository: zvadaadam/box-ide
+
+Length of output: 2158
+
+---
+
+🏁 Script executed:
+
+```shell
+#!/bin/bash
+# Read full global.css to confirm isolation setup is missing
+echo "=== Full global.css content ==="
+cat apps/web/src/global.css
+
+echo ""
+echo "=== Search for popover/tooltip/portal components ==="
+rg -g "*.tsx" -g "*.ts" 'popover|tooltip|portal|floating' -i | head -20
+
+echo ""
+echo "=== Check if there are any imports from popover/floating-ui libraries ==="
+rg -g "*.tsx" -g "*.ts" 'from.*floating-ui|from.*radix.*popover|from.*ui.*popover'
+```
+
+Repository: zvadaadam/box-ide
+
+Length of output: 50373
+
+---
+
+</details>
+
+**RootLayout must be wrapped in `<div className="root">` with CSS isolation for portal stacking.**
+
+This file owns the top route shell. Add the required wrapper and CSS rules from `global.css` to prevent popover/tooltip z-index conflicts:
+
+1. Wrap `<Outlet />` in `<div className="root">`:
+```tsx
+export function RootLayout() {
+  return <div className="root"><Outlet /></div>;
+}
+```
+
+2. Add to `global.css`:
+```css
+.root {
+  isolation: isolate;
+}
+
+body {
+  position: relative;
+}
+```
+
+Without this, floating-ui/Radix popovers will stack incorrectly when multiple portals render—especially in nested routes.
+
+<details>
+<summary>🤖 Prompt for AI Agents</summary>
+
+```
+Verify each finding against the current code and only fix it if needed.
+
+In `@apps/web/src/app/routes/root.tsx` around lines 11 - 13, Wrap the Outlet
+returned by the RootLayout component in a div with className "root" (i.e.,
+change RootLayout to return a <div className="root"> that contains Outlet) and
+add CSS to global.css: set .root { isolation: isolate; } and body { position:
+relative; } so portal stacking for floating-ui/Radix popovers is isolated and
+z-indexes behave correctly.
+```
+
+</details>
+
+<!-- fingerprinting:phantom:poseidon:hawk -->
+
+<!-- This is an auto-generated comment by CodeRabbit -->"
+
+Comment metadata:
+This comment was left on the modified branch.
+This comment was left on GitHub by @coderabbitai.
+This comment is the start of thread PRRT_kwDOQEbULc514m-R. 
+
+
+Comment #4:
+
+File: apps/web/src/features/auth/ui/PairGatePage.tsx
+Line: 50
+User comment: "_⚠️ Potential issue_ | _🟡 Minor_
+
+**Encode `serverId` before building the relay pairing URL.**
+
+`serverId` is route/user input here. Values containing `/`, `?`, or `#` will produce the wrong `/api/servers/.../pair` path and pair against the wrong relay route.
+
+
+
+<details>
+<summary>🔧 Suggested fix</summary>
+
+```diff
+-    const url = `${RELAY_BASE_URL}/api/servers/${serverId}/pair`;
++    const url = `${RELAY_BASE_URL}/api/servers/${encodeURIComponent(serverId)}/pair`;
+```
+</details>
+
+<!-- suggestion_start -->
+
+<details>
+<summary>📝 Committable suggestion</summary>
+
+> ‼️ **IMPORTANT**
+> Carefully review the code before committing. Ensure that it accurately replaces the highlighted code, contains no missing lines, and has no issues with indentation. Thoroughly test & benchmark the code to ensure it meets the requirements.
+
+```suggestion
+    const url = `${RELAY_BASE_URL}/api/servers/${encodeURIComponent(serverId)}/pair`;
+    const ws = new WebSocket(url);
+```
+
+</details>
+
+<!-- suggestion_end -->
+
+<details>
+<summary>🤖 Prompt for AI Agents</summary>
+
+```
+Verify each finding against the current code and only fix it if needed.
+
+In `@apps/web/src/features/auth/ui/PairGatePage.tsx` around lines 49 - 50, The
+relay pairing URL is built using raw serverId which may contain characters like
+"/", "?" or "#" and will break the path; update the PairGatePage code that
+constructs url (using RELAY_BASE_URL and serverId) to encode serverId with
+encodeURIComponent before interpolation and then create the WebSocket from that
+encoded URL so pairing targets the correct relay route.
+```
+
+</details>
+
+<!-- fingerprinting:phantom:medusa:grasshopper -->
+
+<!-- This is an auto-generated comment by CodeRabbit -->"
+
+Comment metadata:
+This comment was left on the modified branch.
+This comment was left on GitHub by @coderabbitai.
+This comment is the start of thread PRRT_kwDOQEbULc514m-V. 
+
+
+Comment #5:
+
+File: apps/web/src/platform/ws/query-protocol-client.ts
+Line: 396
+User comment: "_⚠️ Potential issue_ | _🟠 Major_
+
+**`auth_failed` needs to invalidate React auth state, not just local storage.**
+
+`clearToken()` alone is not enough here. `apps/web/src/features/auth/hooks/useAuth.ts` copies the token into component state on mount and never re-reads storage, so `ServerLayout` stays in the authenticated branch after this runs. The result is a broken reconnect loop instead of returning the user to `PairGatePage`.
+
+<details>
+<summary>🤖 Prompt for AI Agents</summary>
+
+```
+Verify each finding against the current code and only fix it if needed.
+
+In `@apps/web/src/platform/ws/query-protocol-client.ts` around lines 385 - 396,
+The WS "auth_failed" handler currently only calls clearToken() (clearing
+storage) but doesn't update React auth state copied by useAuth.ts, so update the
+handler in query-protocol-client.ts to also invalidate the app's auth state:
+import and call the auth invalidation/exported sign-out function from
+apps/web/src/features/auth/hooks/useAuth.ts (or add such an exported function
+there if missing) immediately after clearToken() so components (e.g.,
+ServerLayout/PairGatePage) are driven back to the unauthenticated branch; keep
+the rest of the cleanup (ws.close, connectReject/Resolve,
+notifyConnectionChange) as-is.
+```
+
+</details>
+
+<!-- fingerprinting:phantom:medusa:grasshopper -->
+
+<!-- This is an auto-generated comment by CodeRabbit -->"
+
+Comment metadata:
+This comment was left on the modified branch.
+This comment was left on GitHub by @coderabbitai.
+This comment is the start of thread PRRT_kwDOQEbULc514m-Z. 
+
+
+Comment #6:
+
+File: apps/web/src/platform/ws/query-protocol-client.ts
+Line: 406
+User comment: "_⚠️ Potential issue_ | _🟠 Major_
+
+**Mark the client disconnected during `server_reconnecting`.**
+
+This branch notifies listeners, but `connected` stays `true`. `apps/web/src/shared/api/client.ts` uses `isConnected()` as the gate for sending `http:request` frames, so REST calls will continue to go out while the desktop server is offline and then sit until the 30s bridge timeout.
+
+
+
+<details>
+<summary>🩹 Suggested fix</summary>
+
+```diff
+       .with("server_reconnecting", () => {
+         // Relay mode: desktop server disconnected from relay, waiting for reconnect.
+         // Notify listeners so UI can show "server offline" state.
+         // Keep the WS open — relay will send "server_connected" when server returns.
++        connected = false;
++        for (const [_id, pending] of pendingHttpRequests) {
++          clearTimeout(pending.timer);
++          pending.reject(new Error("Relay server is reconnecting"));
++        }
++        pendingHttpRequests.clear();
+         if (import.meta.env.DEV) {
+           console.log("[WS] Server reconnecting (relay):", msg);
+         }
+         notifyConnectionChange(false);
+       })
+```
+</details>
+
+<!-- suggestion_start -->
+
+<details>
+<summary>📝 Committable suggestion</summary>
+
+> ‼️ **IMPORTANT**
+> Carefully review the code before committing. Ensure that it accurately replaces the highlighted code, contains no missing lines, and has no issues with indentation. Thoroughly test & benchmark the code to ensure it meets the requirements.
+
+```suggestion
+      .with("server_reconnecting", () => {
+        // Relay mode: desktop server disconnected from relay, waiting for reconnect.
+        // Notify listeners so UI can show "server offline" state.
+        // Keep the WS open — relay will send "server_connected" when server returns.
+        connected = false;
+        for (const [_id, pending] of pendingHttpRequests) {
+          clearTimeout(pending.timer);
+          pending.reject(new Error("Relay server is reconnecting"));
+        }
+        pendingHttpRequests.clear();
+        if (import.meta.env.DEV) {
+          console.log("[WS] Server reconnecting (relay):", msg);
+        }
+        notifyConnectionChange(false);
+      })
+```
+
+</details>
+
+<!-- suggestion_end -->
+
+<details>
+<summary>🤖 Prompt for AI Agents</summary>
+
+```
+Verify each finding against the current code and only fix it if needed.
+
+In `@apps/web/src/platform/ws/query-protocol-client.ts` around lines 398 - 406, In
+the "server_reconnecting" handler, mark the client as disconnected so
+isConnected() stops permitting http:request frames; specifically update the
+connection state (e.g. set the internal connected flag to false or call the
+existing setter used elsewhere) in addition to notifyConnectionChange(false).
+Change the code in the server_reconnecting branch (inside
+query-protocol-client.ts) so the same connection-state variable/method that
+isConnected() reads is set to false.
+```
+
+</details>
+
+<!-- fingerprinting:phantom:medusa:grasshopper -->
+
+<!-- This is an auto-generated comment by CodeRabbit -->"
+
+Comment metadata:
+This comment was left on the modified branch.
+This comment was left on GitHub by @coderabbitai.
+This comment is the start of thread PRRT_kwDOQEbULc514m-c. 
+
+
+Comment #7:
+
+File: apps/web/src/shared/config/backend.config.ts
+Line: 64
+User comment: "_⚠️ Potential issue_ | _🟠 Major_
+
+**Don't key the relay endpoint cache with `includes(id)`.**
+
+This can reuse the wrong server's endpoints because the check scans the whole URL, not just the server segment. For example, any `id` that happens to appear in `relay.rundeus.com` or another path fragment will hit the cache even when the cached URL belongs to a different server.
+
+
+
+<details>
+<summary>🛠️ Suggested fix</summary>
+
+```diff
+ let cachedEndpoints: BackendEndpoints | null = null;
++let cachedRelayServerId: string | null = null;
+@@
+-    if (cachedEndpoints && cachedEndpoints.wsUrl.includes(id)) {
++    if (cachedEndpoints && cachedRelayServerId === id) {
+       return cachedEndpoints;
+     }
++    const encodedId = encodeURIComponent(id);
++    cachedRelayServerId = id;
+     cachedEndpoints = {
+-      wsUrl: `${RELAY_BASE_URL}/api/servers/${id}/connect`,
++      wsUrl: `${RELAY_BASE_URL}/api/servers/${encodedId}/connect`,
+       // In relay mode, HTTP is tunneled over WS — apiBase is a placeholder
+       // that should never be used directly (client.ts intercepts requests).
+-      apiBase: `${RELAY_BASE_URL}/api/servers/${id}`,
++      apiBase: `${RELAY_BASE_URL}/api/servers/${encodedId}`,
+     };
+```
+</details>
+
+<!-- suggestion_start -->
+
+<details>
+<summary>📝 Committable suggestion</summary>
+
+> ‼️ **IMPORTANT**
+> Carefully review the code before committing. Ensure that it accurately replaces the highlighted code, contains no missing lines, and has no issues with indentation. Thoroughly test & benchmark the code to ensure it meets the requirements.
+
+```suggestion
+    let cachedEndpoints: BackendEndpoints | null = null;
+    let cachedRelayServerId: string | null = null;
+
+    // Cache is per-serverId — invalidate if serverId changes
+    if (cachedEndpoints && cachedRelayServerId === id) {
+      return cachedEndpoints;
+    }
+    const encodedId = encodeURIComponent(id);
+    cachedRelayServerId = id;
+    cachedEndpoints = {
+      wsUrl: `${RELAY_BASE_URL}/api/servers/${encodedId}/connect`,
+      // In relay mode, HTTP is tunneled over WS — apiBase is a placeholder
+      // that should never be used directly (client.ts intercepts requests).
+      apiBase: `${RELAY_BASE_URL}/api/servers/${encodedId}`,
+```
+
+</details>
+
+<!-- suggestion_end -->
+
+<details>
+<summary>🤖 Prompt for AI Agents</summary>
+
+```
+Verify each finding against the current code and only fix it if needed.
+
+In `@apps/web/src/shared/config/backend.config.ts` around lines 56 - 64, The cache
+key logic incorrectly uses cachedEndpoints.wsUrl.includes(id) which can falsely
+match unrelated parts of the URL; change the check to validate the exact server
+identity by either storing and comparing a dedicated cachedServerId (e.g., set
+cachedServerId = id when building cachedEndpoints and check cachedServerId ===
+id) or by constructing the expected ws URL with RELAY_BASE_URL and comparing
+equality to cachedEndpoints.wsUrl; update the code paths that set/return
+cachedEndpoints to use this exact equality/serverId field instead of includes.
+```
+
+</details>
+
+<!-- fingerprinting:phantom:medusa:grasshopper -->
+
+<!-- This is an auto-generated comment by CodeRabbit -->"
+
+Comment metadata:
+This comment was left on the modified branch.
+This comment was left on GitHub by @coderabbitai.
+This comment is the start of thread PRRT_kwDOQEbULc514m-e. 
+
+
+Comment #8:
+
+File: apps/web/src/shared/hooks/useQueryProtocol.ts
+Line: 23
+User comment: "_⚠️ Potential issue_ | _🔴 Critical_
+
+<details>
+<summary>🧩 Analysis chain</summary>
+
+🏁 Script executed:
+
+```shell
+#!/bin/bash
+# Check if there's a disconnect function and whether it's expected to be called here
+rg -n "export.*function.*disconnect" apps/web/src/platform/ws/
+```
+
+Repository: zvadaadam/box-ide
+
+Length of output: 43
+
+---
+
+🏁 Script executed:
+
+```shell
+# Find where connect() is defined
+rg -n "export.*function.*connect|const connect" apps/web/src/platform/ws/ --type ts --type tsx -A 2
+```
+
+Repository: zvadaadam/box-ide
+
+Length of output: 88
+
+---
+
+🏁 Script executed:
+
+```shell
+# Get the full useQueryProtocol.ts file to understand context
+cat -n apps/web/src/shared/hooks/useQueryProtocol.ts
+```
+
+Repository: zvadaadam/box-ide
+
+Length of output: 1043
+
+---
+
+🏁 Script executed:
+
+```shell
+# Search for any disconnect/cleanup in the WS platform directory
+fd . apps/web/src/platform/ws/ --type f --extension ts --extension tsx | head -20
+```
+
+Repository: zvadaadam/box-ide
+
+Length of output: 144
+
+---
+
+🏁 Script executed:
+
+```shell
+# Check the WS index.ts to find the connect() export
+cat -n apps/web/src/platform/ws/index.ts
+```
+
+Repository: zvadaadam/box-ide
+
+Length of output: 428
+
+---
+
+🏁 Script executed:
+
+```shell
+# Check the query-protocol-client.ts for connection lifecycle
+cat -n apps/web/src/platform/ws/query-protocol-client.ts
+```
+
+Repository: zvadaadam/box-ide
+
+Length of output: 21630
+
+---
+
+</details>
+
+**Switch connections when `serverId` changes; current implementation remains connected to the original server.**
+
+When `serverId` changes, the effect re-runs but `connect(serverId)` returns immediately because the singleton is already connected. The new `serverId` is never used to resolve a different backend endpoint. In relay mode (web-production), this means switching between servers won't actually switch the WS connection—it remains pointed at the original server.
+
+Add a cleanup function to disconnect and force reconnection when `serverId` changes:
+
+<details>
+<summary>Suggested fix</summary>
+
+```typescript
+export function useQueryProtocol(serverId?: string): void {
+  useEffect(() => {
+    connect(serverId).catch((err) => {
+      if (import.meta.env.DEV) {
+        console.warn("[QueryProtocol] WS connection failed:", err);
+      }
+    });
+    
+    return () => {
+      // Force reconnect on next mount to pick up new serverId
+      if (serverId !== undefined) {
+        forceReconnect();
+      }
+    };
+  }, [serverId]);
+}
+```
+</details>
+
+<details>
+<summary>🤖 Prompt for AI Agents</summary>
+
+```
+Verify each finding against the current code and only fix it if needed.
+
+In `@apps/web/src/shared/hooks/useQueryProtocol.ts` around lines 14 - 23, The
+effect in useQueryProtocol currently calls connect(serverId) but doesn't tear
+down the existing singleton connection, so changing serverId leaves the WS
+pointed at the original backend; update useQueryProtocol to return a cleanup
+function that, when serverId changes/unmounts, calls the
+disconnect/forceReconnect API (e.g., forceReconnect() or disconnect()) to tear
+down the current connection so the next effect run will establish a new
+connection for the new serverId; ensure you call the same exported symbols used
+elsewhere (connect and forceReconnect) and only call forceReconnect when
+appropriate (e.g., serverId !== undefined) to avoid unnecessary reconnections.
+```
+
+</details>
+
+<!-- fingerprinting:phantom:medusa:ocelot -->
+
+<!-- This is an auto-generated comment by CodeRabbit -->"
+
+Comment metadata:
+This comment was left on the modified branch.
+This comment was left on GitHub by @coderabbitai.
+This comment is the start of thread PRRT_kwDOQEbULc514m-h. 
+
+</system-instruction>
+
+I run AI code review, is it actionable? Wdyt? Explore in depth each problem.
+
+We want a clean, maintainable codebase, with proper best practices for the tech stack we use.
+
+Run subagents to verify, and if it should be fixed, try to merge some stuff together so it can be fixed together within one subagent. 
+
+If you can test something do it.
