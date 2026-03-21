@@ -30,6 +30,7 @@ export function RepositoryItem({
   onWorkspaceClick,
   onNewWorkspace,
   onArchive,
+  onStatusChange,
   diffStatsMap,
   sidebarExpanded,
 }: RepositoryItemProps) {
@@ -161,6 +162,7 @@ export function RepositoryItem({
                           diffStats={diffStatsMap?.[workspace.id]}
                           onClick={onWorkspaceClick}
                           onArchive={onArchive}
+                          onStatusChange={onStatusChange}
                         />
                       </m.li>
                     ))}

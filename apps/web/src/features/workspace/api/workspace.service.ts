@@ -8,6 +8,7 @@
 
 import { sendRequest, sendMutate, sendCommand } from "@/platform/ws";
 import type { Workspace, RepoGroup, DiffStats, FileChange } from "../types";
+import type { WorkspaceStatus } from "@shared/enums";
 import type { PRStatus, GhCliStatus } from "@/shared/types";
 import type { NormalizedTask, ManifestResponse, TaskRunResponse } from "@shared/types/manifest";
 
@@ -115,6 +116,14 @@ export const WorkspaceService = {
   archive: async (id: string): Promise<void> => {
     const result = await sendMutate("archiveWorkspace", { workspaceId: id });
     if (!result.success) throw new Error(result.error || "Failed to archive workspace");
+  },
+
+  /**
+   * Update workspace workflow status (backlog/in-progress/in-review/done/canceled)
+   */
+  updateStatus: async (id: string, status: WorkspaceStatus): Promise<void> => {
+    const result = await sendMutate("updateWorkspaceStatus", { workspaceId: id, status });
+    if (!result.success) throw new Error(result.error || "Failed to update workspace status");
   },
 
   /**

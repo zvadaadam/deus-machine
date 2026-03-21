@@ -29,6 +29,14 @@ if [ -n "$STALE_PID" ]; then
     sleep 0.3
 fi
 
+# Build sidecar + notebook if bundle doesn't exist
+if [ ! -f "apps/sidecar/dist/index.bundled.cjs" ]; then
+    echo -e "${BLUE}Building sidecar (first run)...${NC}"
+    bun run build:sidecar
+    echo -e "${GREEN}✓ Sidecar built${NC}"
+    echo ""
+fi
+
 # Start agent-server (sidecar) first to get its LISTEN_URL
 echo -e "${BLUE}Starting agent-server...${NC}"
 node apps/sidecar/dist/index.bundled.cjs > /tmp/sidecar.log 2>&1 &

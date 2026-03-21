@@ -8,6 +8,7 @@
  */
 
 import type { Workspace } from "@/features/workspace/types";
+import type { WorkspaceStatus } from "@shared/enums";
 
 /**
  * Display status extends SessionStatus with derived states.
@@ -98,6 +99,23 @@ export const STATUS_CONFIG: Record<DisplayStatus, StatusConfig> = {
     bg: "bg-muted/30",
     pulse: false,
   },
+};
+
+// ── Workflow Status (Linear-style) ────────────────────────────────────────
+// Separate from DisplayStatus which shows real-time agent activity.
+// Rendered as a small icon to the left of the workspace title.
+
+export interface WorkflowStatusConfig {
+  label: string;
+  color: string;
+}
+
+export const WORKFLOW_STATUS_CONFIG: Record<WorkspaceStatus, WorkflowStatusConfig> = {
+  backlog: { label: "Backlog", color: "text-muted-foreground" },
+  "in-progress": { label: "In Progress", color: "text-status-in-progress" },
+  "in-review": { label: "In Review", color: "text-status-in-review" },
+  done: { label: "Done", color: "text-status-done" },
+  canceled: { label: "Canceled", color: "text-muted-foreground" },
 };
 
 /**

@@ -34,6 +34,7 @@ import { cn } from "@/shared/lib/utils";
 import { ResizablePanelGroup, ResizablePanel, ResizableHandle } from "@/components/ui/resizable";
 import { PanelLeft } from "lucide-react";
 import type { Workspace, PRStatus, GhCliStatus } from "@/shared/types";
+import { useUpdateWorkspaceStatus } from "@/features/workspace/api";
 import { REVIEW_CODE } from "@/features/session/lib/sessionPrompts";
 import { native } from "@/platform";
 import { BROWSER_WORKSPACE_CHANGE } from "@shared/events";
@@ -104,6 +105,8 @@ export function MainContent({
     selectedWorkspace,
     setRightSideTab,
   });
+
+  const statusMutation = useUpdateWorkspaceStatus();
 
   // Only start watching and querying diffs once the worktree checkout is complete.
   const isReady = selectedWorkspace?.state === "ready";
@@ -306,6 +309,10 @@ export function MainContent({
                         selectedWorkspace.setup_status === "failed"
                           ? handleViewSetupLogs
                           : undefined
+                      }
+                      workspaceStatus={selectedWorkspace.status}
+                      onStatusChange={(status) =>
+                        statusMutation.mutate({ workspaceId: selectedWorkspace.id, status })
                       }
                       tasks={manifestTasks}
                       hasManifest={hasManifest}

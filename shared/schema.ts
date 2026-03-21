@@ -21,6 +21,9 @@
 export const MIGRATIONS: string[] = [
   // sessions: structured error category for category-aware UI
   `ALTER TABLE sessions ADD COLUMN error_category TEXT`,
+  // workspaces: Linear-style workflow status (backlog/in-progress/in-review/done/canceled)
+  `ALTER TABLE workspaces ADD COLUMN status TEXT NOT NULL DEFAULT 'in-progress'`,
+  `CREATE INDEX IF NOT EXISTS idx_workspaces_status ON workspaces(status)`,
 ];
 
 export const SCHEMA_SQL = `
@@ -44,6 +47,7 @@ export const SCHEMA_SQL = `
     git_branch TEXT,
     git_target_branch TEXT,
     state TEXT NOT NULL DEFAULT 'initializing',
+    status TEXT NOT NULL DEFAULT 'in-progress',
     current_session_id TEXT,
     pr_url TEXT,
     pr_number INTEGER,

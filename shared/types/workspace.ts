@@ -7,8 +7,8 @@ import type { SessionStatus } from "./session";
 
 // Canonical enum types — defined as Zod schemas in shared/enums.ts,
 // imported here for local use and re-exported for backwards compat.
-import type { WorkspaceState, SetupStatus } from "../enums";
-export type { WorkspaceState, SetupStatus };
+import type { WorkspaceState, SetupStatus, WorkspaceStatus } from "../enums";
+export type { WorkspaceState, SetupStatus, WorkspaceStatus };
 
 /**
  * Core workspace entity
@@ -22,6 +22,7 @@ export interface Workspace {
   git_branch: string | null;
   git_target_branch: string | null;
   state: WorkspaceState;
+  status: WorkspaceStatus;
   current_session_id: string | null;
   session_status: SessionStatus | null;
   model: string | null;

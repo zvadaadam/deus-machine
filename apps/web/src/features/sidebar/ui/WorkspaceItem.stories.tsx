@@ -10,6 +10,7 @@ const BASE_WORKSPACE: Workspace = {
   git_branch: "zvadaadam/restart-dev-server",
   git_target_branch: "main",
   state: "ready",
+  status: "in-progress",
   current_session_id: "session-1",
   session_status: "idle",
   model: "sonnet",

@@ -94,6 +94,7 @@ export type RequestResource = QueryResource | (typeof REQUEST_RESOURCES)[number]
 export const MUTATION_NAMES = [
   "archiveWorkspace",
   "updateWorkspaceTitle",
+  "updateWorkspaceStatus",
   // New mutations
   "updateWorkspace",
   "createSession",
