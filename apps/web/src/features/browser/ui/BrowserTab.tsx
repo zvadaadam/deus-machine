@@ -563,6 +563,7 @@ export const BrowserTab = forwardRef<BrowserTabHandle, BrowserTabProps>(function
     if (!webviewCreatedRef.current) return;
     suppressHistoryPushRef.current = true;
     native.browserViews.goBack(webviewLabel).catch((err) => {
+      suppressHistoryPushRef.current = false;
       onAddLog(tabId, "error", `Go back failed: ${err}`);
     });
   }, [webviewLabel, tabId, onAddLog]);
@@ -571,6 +572,7 @@ export const BrowserTab = forwardRef<BrowserTabHandle, BrowserTabProps>(function
     if (!webviewCreatedRef.current) return;
     suppressHistoryPushRef.current = true;
     native.browserViews.goForward(webviewLabel).catch((err) => {
+      suppressHistoryPushRef.current = false;
       onAddLog(tabId, "error", `Go forward failed: ${err}`);
     });
   }, [webviewLabel, tabId, onAddLog]);
