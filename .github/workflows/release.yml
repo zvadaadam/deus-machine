@@ -4,9 +4,10 @@
 # electron-updater reads latest-mac.yml / latest.yml / latest-linux.yml from
 # the release assets to deliver auto-updates.
 #
-# Trigger: GitHub Actions UI → "Run workflow" → enter version
-# Or CLI:  gh workflow run release.yml -f version=2.1.0
-#          gh workflow run release.yml -f version=2.1.0 -f dry_run=true
+# Trigger: GitHub Actions UI → "Run workflow" → pick bump type
+# Or CLI:  gh workflow run release.yml -f bump=patch
+#          gh workflow run release.yml -f bump=minor
+#          gh workflow run release.yml -f bump=patch -f dry_run=true
 #
 # Required GitHub Secrets:
 #   APPLE_CERTIFICATE                  — Base64-encoded .p12 Developer ID Application certificate
@@ -25,10 +26,14 @@ name: Release
 on:
   workflow_dispatch:
     inputs:
-      version:
-        description: "Release version (e.g. 2.1.0)"
+      bump:
+        description: "Version bump type"
         required: true
-        type: string
+        type: choice
+        options:
+          - patch
+          - minor
+          - major
       dry_run:
         description: "Dry run (build only, skip GitHub Release)"
         required: false
@@ -58,23 +63,29 @@ jobs:
             exit 1
           fi
 
-      - name: Validate version format
+      - name: Compute next version
         id: validate
         env:
-          VERSION: ${{ inputs.version }}
+          BUMP: ${{ inputs.bump }}
         run: |
-          if ! [[ "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+(-[a-zA-Z0-9.]+)?$ ]]; then
-            echo "::error::Invalid version format: $VERSION (expected semver X.Y.Z)"
-            exit 1
-          fi
+          CURRENT=$(jq -r '.version' package.json)
+          IFS='.' read -r MAJOR MINOR PATCH <<< "$CURRENT"
+          case "$BUMP" in
+            patch) PATCH=$((PATCH + 1)) ;;
+            minor) MINOR=$((MINOR + 1)); PATCH=0 ;;
+            major) MAJOR=$((MAJOR + 1)); MINOR=0; PATCH=0 ;;
+          esac
+          VERSION="${MAJOR}.${MINOR}.${PATCH}"
           TAG="v${VERSION}"
+
+          echo "Current: $CURRENT → Next: $VERSION ($BUMP bump)"
+
           if [[ "${{ inputs.dry_run }}" != "true" ]] && git ls-remote --exit-code --tags origin "refs/tags/$TAG" >/dev/null 2>&1; then
             echo "::error::Tag $TAG already exists on remote"
             exit 1
           fi
           echo "version=$VERSION" >> "$GITHUB_OUTPUT"
           echo "tag=$TAG" >> "$GITHUB_OUTPUT"
-          echo "Version: $VERSION, Tag: $TAG"
 
       - uses: oven-sh/setup-bun@v2
         with:
