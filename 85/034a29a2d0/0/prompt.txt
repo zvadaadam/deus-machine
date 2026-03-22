@@ -571,3 +571,7 @@ nothing added to
 ---
 
 When we're going to do the release, it's going to be that we have to trigger it by ourselves, right? And how does the bumping diversion is going to work? We have described is it valuable, we will use it like how the deployment will work.
+
+---
+
+But do we have to remember always the version or like we're gonna be doing like this incremental version? The +1 like you know, is there a better way to do it? Like I won't be able to remember this and I don't want to do mistakes there. And if we're gonna do like the main more mature change, what do you think how we should solve this?
