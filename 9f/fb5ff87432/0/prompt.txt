@@ -2207,3 +2207,69 @@ The user has attached these files. Read them before proceeding.
 
 
 Create a PR
+
+---
+
+I run AI code review, is it actionable? Wdyt? Explore in depth each problem.
+
+We want a clean, maintainable codebase, with proper best practices for the tech stack we use.
+
+Run subagents to verify, and if it should be fixed, try to merge some stuff together so it can be fixed together within one subagent. 
+
+If you can test something do it.
+
+----
+
+Now I have the full diff. Let me review it thoroughly.
+
+---
+
+## Code Review: Redesign Device Pairing UX
+
+**Commit:** `a763b02d0` — feat: redesign device pairing UX with two-word codes, QR dialog, and animated gate page
+
+**Summary:** Replaces `WORD-NNNN` pairing codes with two-word codes (e.g. "SOFT TIGER"), consolidates split input into a single field with smart paste handling, adds a QR code dialog for desktop pairing, and redesigns the remote PairGatePage with three animated states. Codes are now reusable within their 15-minute TTL.
+
+---
+
+### Review Findings
+
+I reviewed the diff across all 4 axes: CLAUDE.md compliance (2 passes), bug scan (diff-only), and introduced code analysis.
+
+### **#1 — Hardcoded Tailwind color classes (CLAUDE.md violation)**
+
+New code introduces `bg-emerald-500/10`, `text-emerald-500`, and `text-amber-500` — all hardcoded Tailwind color classes.
+
+**CLAUDE.md rule (quoted):**
+
+> **5. Use CSS Variables for Everything**
+> - ❌ Never hardcode: `bg-blue-500`, `#3b82f6`, `rgba(59, 130, 246, 0.5)`
+> - ✅ Always use tokens: `bg-primary`, `var(--primary)`
+
+> **Use CSS variables for colors**
+> - ❌ Don't hardcode colors: `text-green-500 dark:text-green-400`
+> - ✅ Create semantic variables: `--color-status-success` → `text-[color:var(--status-success)]`
+
+**Occurrences in the diff:**
+
+| File | Line(s) | Class |
+|------|---------|-------|
+| `PairGatePage.tsx` | AnimatedCheckmark | `bg-emerald-500/10`, `text-emerald-500` |
+| `AccessSection.tsx` | ConnectDeviceDialog success view | `bg-emerald-500/10`, `text-emerald-500` |
+| `AccessSection.tsx` | Countdown warning | `text-amber-500` |
+
+**Fix:** Define semantic CSS variables in `global.css` (e.g. `--color-status-success`, `--color-status-warning`) and use them via `bg-[var(--status-success)]/10` or similar token references.
+
+---
+
+### Items Reviewed and Validated as Correct
+
+- **Two-word code generation** (`idx2` offset logic): Verified the Fisher-Yates-style uniform sampling ensures two different words are always selected.
+- **Code normalization parity**: Backend `normalizePairCode` and frontend `normalizeCode` produce equivalent results despite slightly different ordering of `.trim()` vs `.replace()`.
+- **Reusable codes security trade-off**: Intentional design decision documented in the commit message. Rate limiting (10 failures / 5-min lockout) and 15-minute TTL mitigate the expanded window.
+- **Smart paste + auto-submit**: Correctly prevents default only when input is recognized; 300ms debounce avoids double-submission.
+- **ConnectDeviceDialog success detection**: `prevDeviceCount` tracking via `useEffect` correctly handles all edge cases (device added while dialog closed, rapid successive pairings, cleanup of timers).
+- **`handleToggle` no longer clears pair code state**: The entire section is gated by `enabled`, so orphaned state is inaccessible and naturally expires.
+- **Framer Motion usage**: Follows CLAUDE.md guidance — AnimatePresence for mount/unmount, height:"auto" for expandable error message (documented as a valid Framer Motion use case), custom `EASE_OUT_QUART` curve used throughout.
+- **Tests**: Comprehensive coverage for the new format, two-different-words invariant, all normalization variants (dashes, underscores, plus signs, mixed case, multiple spaces), and reuse-within-TTL semantics.
+- **`qrcode.react` dependency**: Appropriate addition; `bg-white` on the QR container is intentional (QR codes require white background for scanning).
