@@ -126,6 +126,7 @@ function ConnectDeviceDialog({
   isGenerating,
   onGenerate,
   devices,
+  isDevicesLoaded,
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
@@ -135,6 +136,7 @@ function ConnectDeviceDialog({
   isGenerating: boolean;
   onGenerate: () => void;
   devices: PairedDevice[];
+  isDevicesLoaded: boolean;
 }) {
   const [prevDeviceIds, setPrevDeviceIds] = useState<Set<string>>(
     () => new Set(devices.map((d) => d.id))
@@ -158,10 +160,18 @@ function ConnectDeviceDialog({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open]);
 
-  // Detect successful pairing by comparing device IDs (not just count).
-  // This prevents false positives when the initial query resolves from [] to existing devices.
+  // Detect successful pairing by comparing device IDs.
+  // Gate on isDevicesLoaded to prevent false positives when the query resolves
+  // from [] to existing devices after the dialog opens.
   useEffect(() => {
     const currentIds = new Set(devices.map((d) => d.id));
+
+    if (!isDevicesLoaded) {
+      // Query hasn't resolved yet — just update the baseline, don't detect
+      setPrevDeviceIds(currentIds);
+      return;
+    }
+
     const hasNewDevice = devices.some((d) => !prevDeviceIds.has(d.id));
 
     if (open && hasNewDevice) {
@@ -173,7 +183,7 @@ function ConnectDeviceDialog({
     setPrevDeviceIds(currentIds);
     return undefined;
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [devices, open]);
+  }, [devices, open, isDevicesLoaded]);
 
   const pairUrl = accessUrl && pairCode ? buildPairUrl(accessUrl, pairCode) : null;
   const minutes = Math.floor(countdown / 60);
@@ -483,6 +493,7 @@ export function AccessSection({ settings, saveSetting }: SettingsSectionProps) {
             isGenerating={generateCodeMutation.isPending}
             onGenerate={handleGenerateCode}
             devices={devices}
+            isDevicesLoaded={devicesQuery.isFetched}
           />
 
           <Separator />
