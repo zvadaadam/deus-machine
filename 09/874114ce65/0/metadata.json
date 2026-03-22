@@ -1,0 +1,48 @@
+{
+  "cli_version": "0.5.0",
+  "checkpoint_id": "09874114ce65",
+  "session_id": "30b05dd9-97c2-480d-8a76-d34505fc8fb0",
+  "strategy": "manual-commit",
+  "created_at": "2026-03-22T23:07:42.208824Z",
+  "branch": "zvadaadam/web-connection-overlay",
+  "checkpoints_count": 12,
+  "files_touched": [
+    ".claude/agent-memory/code-reviewer/MEMORY.md",
+    "apps/web/src/app/layouts/MainContent.tsx",
+    "apps/web/src/app/layouts/MainLayout.tsx",
+    "apps/web/src/app/shells/DesktopShell.tsx",
+    "apps/web/src/app/shells/ServerLayout.tsx",
+    "apps/web/src/features/connection/hooks/useConnectionState.ts",
+    "apps/web/src/features/connection/hooks/useConnectionStateInit.ts",
+    "apps/web/src/features/connection/index.ts",
+    "apps/web/src/features/connection/lib/connectionEvents.ts",
+    "apps/web/src/features/connection/store/connectionStore.ts",
+    "apps/web/src/features/connection/ui/ConnectionBanner.tsx",
+    "apps/web/src/features/connection/ui/ConnectionIllustration.tsx",
+    "apps/web/src/features/connection/ui/ConnectionOrb.tsx",
+    "apps/web/src/features/connection/ui/ServerOfflinePage.tsx",
+    "apps/web/src/features/session/api/session.queries.ts",
+    "apps/web/src/features/sidebar/ui/SidebarFooter.tsx"
+  ],
+  "agent": "Claude Code",
+  "turn_id": "4d3e8d2ca1e9",
+  "token_usage": {
+    "input_tokens": 108,
+    "cache_creation_tokens": 234517,
+    "cache_read_tokens": 9181000,
+    "output_tokens": 42449,
+    "api_call_count": 82
+  },
+  "session_metrics": {
+    "turn_count": 12
+  },
+  "initial_attribution": {
+    "calculated_at": "2026-03-22T23:07:41.610002Z",
+    "agent_lines": 670,
+    "human_added": 0,
+    "human_modified": 0,
+    "human_removed": 0,
+    "total_committed": 670,
+    "agent_percentage": 100
+  }
+}

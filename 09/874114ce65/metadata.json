@@ -1,0 +1,40 @@
+{
+  "cli_version": "0.5.0",
+  "checkpoint_id": "09874114ce65",
+  "strategy": "manual-commit",
+  "branch": "zvadaadam/web-connection-overlay",
+  "checkpoints_count": 12,
+  "files_touched": [
+    ".claude/agent-memory/code-reviewer/MEMORY.md",
+    "apps/web/src/app/layouts/MainContent.tsx",
+    "apps/web/src/app/layouts/MainLayout.tsx",
+    "apps/web/src/app/shells/DesktopShell.tsx",
+    "apps/web/src/app/shells/ServerLayout.tsx",
+    "apps/web/src/features/connection/hooks/useConnectionState.ts",
+    "apps/web/src/features/connection/hooks/useConnectionStateInit.ts",
+    "apps/web/src/features/connection/index.ts",
+    "apps/web/src/features/connection/lib/connectionEvents.ts",
+    "apps/web/src/features/connection/store/connectionStore.ts",
+    "apps/web/src/features/connection/ui/ConnectionBanner.tsx",
+    "apps/web/src/features/connection/ui/ConnectionIllustration.tsx",
+    "apps/web/src/features/connection/ui/ConnectionOrb.tsx",
+    "apps/web/src/features/connection/ui/ServerOfflinePage.tsx",
+    "apps/web/src/features/session/api/session.queries.ts",
+    "apps/web/src/features/sidebar/ui/SidebarFooter.tsx"
+  ],
+  "sessions": [
+    {
+      "metadata": "/09/874114ce65/0/metadata.json",
+      "transcript": "/09/874114ce65/0/full.jsonl",
+      "content_hash": "/09/874114ce65/0/content_hash.txt",
+      "prompt": "/09/874114ce65/0/prompt.txt"
+    }
+  ],
+  "token_usage": {
+    "input_tokens": 108,
+    "cache_creation_tokens": 234517,
+    "cache_read_tokens": 9181000,
+    "output_tokens": 42449,
+    "api_call_count": 82
+  }
+}
