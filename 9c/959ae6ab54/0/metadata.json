@@ -1,0 +1,33 @@
+{
+  "cli_version": "0.5.0",
+  "checkpoint_id": "9c959ae6ab54",
+  "session_id": "ea314d91-74ae-4b30-8fba-fb4bcdfeead9",
+  "strategy": "manual-commit",
+  "created_at": "2026-03-22T08:22:02.479361Z",
+  "branch": "zvadaadam/electron-prod-build",
+  "checkpoints_count": 2,
+  "files_touched": [
+    ".github/workflows/release.yml"
+  ],
+  "agent": "Claude Code",
+  "turn_id": "c5bdcb0d12e1",
+  "token_usage": {
+    "input_tokens": 4156,
+    "cache_creation_tokens": 286895,
+    "cache_read_tokens": 9300515,
+    "output_tokens": 48447,
+    "api_call_count": 83
+  },
+  "session_metrics": {
+    "turn_count": 1
+  },
+  "initial_attribution": {
+    "calculated_at": "2026-03-22T08:22:02.26371Z",
+    "agent_lines": 0,
+    "human_added": 0,
+    "human_modified": 8,
+    "human_removed": 2,
+    "total_committed": 0,
+    "agent_percentage": 0
+  }
+}
