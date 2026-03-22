@@ -21,6 +21,7 @@ import { useMemo, useCallback } from "react";
 import { track } from "@/platform/analytics";
 import { parseContentBlocks } from "../lib/contentParser";
 import { sendCommand, connect, isConnected } from "@/platform/ws";
+import { emitSendAttemptFailed } from "@/features/connection";
 import type { RuntimeAgentType } from "../lib/agentRuntime";
 
 /**
@@ -355,6 +356,21 @@ export function useSendMessage() {
     },
 
     onError: (_err, variables, context) => {
+      // If the error is a WS connectivity issue, escalate the connection state
+      // immediately. The WS client produces three distinct error messages:
+      //   "WebSocket not connected"     — socket already down before send
+      //   "WebSocket disconnected"      — connection dropped mid-flight
+      //   "WebSocket connection failed" — connect() rejected (initial open failed)
+      if (_err instanceof Error) {
+        const msg = _err.message.toLowerCase();
+        if (
+          msg.includes("not connected") ||
+          msg.includes("disconnected") ||
+          msg.includes("connection failed")
+        ) {
+          emitSendAttemptFailed();
+        }
+      }
       // Roll back optimistic message
       if (context?.previousMessages) {
         queryClient.setQueryData(
