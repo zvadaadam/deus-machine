@@ -40,6 +40,8 @@ export const queryKeys = {
     all: ["repos"] as const,
     detail: (id: string) => ["repos", "detail", id] as const,
     manifest: (id: string) => ["repos", "manifest", id] as const,
+    prs: (repoId: string) => ["repos", repoId, "prs"] as const,
+    branches: (repoId: string) => ["repos", repoId, "branches"] as const,
   },
 
   // Stats

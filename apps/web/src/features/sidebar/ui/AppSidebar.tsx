@@ -28,6 +28,7 @@ export function AppSidebar({
   selectedWorkspaceId,
   onWorkspaceClick,
   onNewWorkspace,
+  onNewWorkspaceFromGitHub,
   onAddRepository,
   onCloneRepository,
   onArchive,
@@ -126,6 +127,7 @@ export function AppSidebar({
                     onToggleCollapse={() => toggleRepoCollapse(repo.repo_id)}
                     onWorkspaceClick={onWorkspaceClick}
                     onNewWorkspace={onNewWorkspace}
+                    onNewWorkspaceFromGitHub={onNewWorkspaceFromGitHub}
                     onArchive={onArchive}
                     onStatusChange={onStatusChange}
                     diffStatsMap={diffStatsMap}

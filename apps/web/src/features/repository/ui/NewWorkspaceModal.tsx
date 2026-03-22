@@ -1,4 +1,5 @@
 import type { Repository } from "../types";
+import type { NewWorkspaceMode } from "@/shared/stores/uiStore";
 import {
   Dialog,
   DialogContent,
@@ -25,6 +26,7 @@ interface NewWorkspaceModalProps {
   onClose: () => void;
   onRepoChange: (repoId: string) => void;
   onCreate: () => void;
+  mode?: NewWorkspaceMode;
 }
 
 /**
@@ -39,15 +41,21 @@ export function NewWorkspaceModal({
   onClose,
   onRepoChange,
   onCreate,
+  mode = "default",
 }: NewWorkspaceModalProps) {
+  const isFromGitHub = mode === "from-github";
+
   return (
     <Dialog open={show} onOpenChange={(open) => !open && onClose()}>
       <DialogContent className="sm:max-w-[500px]">
         <DialogHeader>
-          <DialogTitle>Create New Workspace</DialogTitle>
+          <DialogTitle>
+            {isFromGitHub ? "New Workspace from\u2026" : "Create New Workspace"}
+          </DialogTitle>
           <DialogDescription>
-            A new workspace will be created with an auto-generated name (city name) and git
-            worktree.
+            {isFromGitHub
+              ? "Select a repository, then choose a pull request or branch."
+              : "A new workspace will be created with an auto-generated name (city name) and git worktree."}
           </DialogDescription>
         </DialogHeader>
 
@@ -77,8 +85,8 @@ export function NewWorkspaceModal({
             Cancel
           </Button>
           <Button onClick={onCreate} disabled={creating || !selectedRepoId} className="gap-2">
-            {creating ? "⟳" : "+"}
-            {creating ? "Creating..." : "Create Workspace"}
+            {creating ? "⟳" : isFromGitHub ? "→" : "+"}
+            {creating ? "Creating..." : isFromGitHub ? "Continue" : "Create Workspace"}
           </Button>
         </DialogFooter>
       </DialogContent>

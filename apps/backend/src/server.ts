@@ -9,6 +9,7 @@ import * as agentService from "./services/agent";
 import { destroyAllPtySessions } from "./services/pty.service";
 import { destroyAllWatchers } from "./services/fs-watcher.service";
 import { setApp } from "./services/route-delegate";
+import { invalidate } from "./services/query-engine";
 
 // Initialize Sentry before anything else.
 // DSN passed as env var from Electron main process (not hardcoded — open source repo).
@@ -30,6 +31,53 @@ if (process.env.SENTRY_DSN) {
 
 // Initialize database
 const db = initDatabase();
+
+// Backfill git_origin_url for repos added before we tracked origin URLs.
+// Runs once at startup (fire-and-forget) so WS subscribers get the data
+// on their first snapshot instead of waiting for GET /repos.
+async function backfillGitOriginUrls(): Promise<void> {
+  const { execFile } = await import("child_process");
+  const { promisify } = await import("util");
+  const execFileAsync = promisify(execFile);
+
+  try {
+    const nullUrlRepos = db
+      .prepare("SELECT id, root_path FROM repositories WHERE git_origin_url IS NULL")
+      .all() as { id: string; root_path: string }[];
+    if (nullUrlRepos.length === 0) return;
+
+    let updated = 0;
+    // Process in batches of 5 to cap concurrent git subprocesses
+    const BATCH_SIZE = 5;
+    for (let i = 0; i < nullUrlRepos.length; i += BATCH_SIZE) {
+      const batch = nullUrlRepos.slice(i, i + BATCH_SIZE);
+      const results = await Promise.allSettled(
+        batch.map(async (repo) => {
+          const { stdout } = await execFileAsync("git", ["remote", "get-url", "origin"], {
+            cwd: repo.root_path,
+            encoding: "utf-8",
+            timeout: 2000,
+          });
+          const url = stdout.trim();
+          if (url) {
+            db.prepare("UPDATE repositories SET git_origin_url = ? WHERE id = ?").run(url, repo.id);
+            return true;
+          }
+          return false;
+        })
+      );
+      updated += results.filter((r) => r.status === "fulfilled" && r.value).length;
+    }
+
+    // Push fresh data to WS subscribers so sidebar shows GitHub icons immediately
+    if (updated > 0) {
+      invalidate(["workspaces"]);
+    }
+  } catch {
+    // Backfill failed — not critical, icons will appear after next workspace creation
+  }
+}
+void backfillGitOriginUrls();
 
 // Create Hono app + WebSocket injector
 const { app, injectWebSocket } = createApp();

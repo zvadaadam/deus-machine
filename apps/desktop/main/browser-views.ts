@@ -4,6 +4,13 @@
  * Manages Electron BrowserViews for the agent browser automation feature.
  * Uses native Electron BrowserView APIs for cross-platform web automation.
  *
+ * Z-order strategy:
+ *   BrowserViews are currently added via contentView.addChildView(view)
+ *   which renders them on top of the main WebContents. The renderer hides
+ *   all views when dialogs/modals are open to prevent overlap issues.
+ *   Rendering behind the DOM via addChildView(view, 0) with a transparent
+ *   browser panel is tracked as a follow-up improvement.
+ *
  * Each browser view gets:
  * - Its own session partition (isolated cookies/storage)
  * - A preload script for console capture
@@ -15,11 +22,11 @@
  * for its own methods, but generic invoke() calls use snake_case.
  */
 
-import { BrowserView, BrowserWindow, ipcMain, shell } from "electron";
+import { WebContentsView, BrowserWindow, ipcMain, shell } from "electron";
 import { join } from "path";
 import { is } from "@electron-toolkit/utils";
 
-const views = new Map<string, BrowserView>();
+const views = new Map<string, WebContentsView>();
 const viewBounds = new Map<string, Electron.Rectangle>();
 
 /** Reference to the detached browser window (only one at a time) */
@@ -58,7 +65,7 @@ export function registerBrowserViewHandlers(): void {
       // Clean up existing view with same label
       const existing = views.get(label);
       if (existing) {
-        mainWindow.removeBrowserView(existing);
+        mainWindow.contentView.removeChildView(existing);
         (existing.webContents as any).destroy?.();
         views.delete(label);
       }
@@ -70,18 +77,21 @@ export function registerBrowserViewHandlers(): void {
         height: Math.round(Math.max(height, 100)),
       };
 
-      const view = new BrowserView({
+      const view = new WebContentsView({
         webPreferences: {
           partition: `persist:browser-${label}`,
           contextIsolation: true,
-          sandbox: true,
+          sandbox: false, // ESM preload (.mjs) requires sandbox: false
           preload: join(__dirname, "../preload/browser-preload.mjs"),
         },
       });
 
-      mainWindow.addBrowserView(view);
+      // Add as a child of contentView. Currently renders on top of main
+      // WebContents (same as old BrowserView behavior). To render BEHIND
+      // the DOM (like Cursor/VS Code), use addChildView(view, 0) and make
+      // the browser panel area transparent — tracked as a follow-up.
+      mainWindow.contentView.addChildView(view);
       view.setBounds(bounds);
-      view.setAutoResize({ width: false, height: false });
       views.set(label, view);
 
       // Register event listeners BEFORE loadURL to avoid race conditions.
@@ -364,10 +374,12 @@ export function registerBrowserViewHandlers(): void {
     const mainWindow = BrowserWindow.getAllWindows()[0];
     const view = views.get(label);
     if (mainWindow && view) {
-      // Re-add if it was removed (hidden)
-      if (!mainWindow.getBrowserViews().includes(view)) {
-        mainWindow.addBrowserView(view);
+      // Ensure view is in the contentView hierarchy
+      const children = mainWindow.contentView.children;
+      if (!children.includes(view)) {
+        mainWindow.contentView.addChildView(view);
       }
+      view.setVisible(true);
       const savedBounds = viewBounds.get(label);
       if (savedBounds) {
         view.setBounds(savedBounds);
@@ -376,26 +388,19 @@ export function registerBrowserViewHandlers(): void {
   });
 
   ipcMain.handle("hide_browser_webview", (_e, { label }: { label: string }) => {
-    const mainWindow = BrowserWindow.getAllWindows()[0];
     const view = views.get(label);
     if (view) {
       viewBounds.set(label, view.getBounds());
-      // Remove from window entirely — setting bounds to 0,0 can still render
-      // on some Electron versions and leaves a stale overlay.
-      if (mainWindow) {
-        mainWindow.removeBrowserView(view);
-      }
+      view.setVisible(false);
     }
   });
 
   // Hide ALL browser views at once — called when switching workspaces
   // or navigating to the welcome screen to ensure no stale native overlays.
   ipcMain.handle("hide_all_browser_webviews", () => {
-    const mainWindow = BrowserWindow.getAllWindows()[0];
-    if (!mainWindow) return;
     for (const [label, view] of views) {
       viewBounds.set(label, view.getBounds());
-      mainWindow.removeBrowserView(view);
+      view.setVisible(false);
     }
   });
 
@@ -404,7 +409,7 @@ export function registerBrowserViewHandlers(): void {
     if (!view) return;
     const mainWindow = BrowserWindow.getAllWindows()[0];
     if (mainWindow) {
-      mainWindow.removeBrowserView(view);
+      mainWindow.contentView.removeChildView(view);
     }
     (view.webContents as any).destroy?.();
     views.delete(label);
@@ -553,7 +558,7 @@ export function destroyAllBrowserViews(): void {
   const mainWindow = BrowserWindow.getAllWindows()[0];
   for (const [, view] of views) {
     if (mainWindow) {
-      mainWindow.removeBrowserView(view);
+      mainWindow.contentView.removeChildView(view);
     }
     (view.webContents as any).destroy?.();
   }

@@ -7,6 +7,7 @@ import { cn } from "@/shared/lib/utils";
 import { useWorkingDuration, formatDuration } from "@/shared/hooks";
 import { CircularPixelGrid } from "@/features/session/ui/CircularPixelGrid";
 import { getDisplayStatus, STATUS_CONFIG } from "../lib/status";
+import { getWorkspaceDisplayName, getWorkspaceSecondaryText } from "../lib/utils";
 import type { WorkspaceItemProps } from "../model/types";
 import { SidebarRow, SidebarRowIconSlot } from "./SidebarRow";
 import { WorkflowStatusIcon } from "./WorkflowStatusIcon";
@@ -17,10 +18,13 @@ import { WorkspaceStatusMenu } from "./WorkspaceStatusMenu";
  *
  * Layout:  [Left (flex-1)]  [Right]
  *   Left:
- *     Row 1: [Icon 20×20 | pad-left 26px] [branch name]
- *     Row 2: [pad-left 26px] [directory · status]
+ *     Row 1: [Icon 20×20] [display name]   (title > slug > branch)
+ *     Row 2: [pad-left 26px] [secondary · status]
  *   Right:
  *     [+additions -deletions]
+ *
+ * Display name priority: workspace.title (PR/user) → slug → git_branch → "New workspace"
+ * Secondary line: shows slug when title is primary, otherwise just status info.
  *
  * Icons: working → CircularPixelGrid working, error → red dot, unread → gold dot.
  * Idle → no icon (26px indent).
@@ -45,8 +49,9 @@ export const WorkspaceItem = React.memo(function WorkspaceItem({
 
   // Initializing state: non-interactive row with loading animation
   if (isInitializing) {
+    const initSecondary = getWorkspaceSecondaryText(workspace);
     return (
-      <li className="animate-[fadeInUp_0.25s_cubic-bezier(.215,.61,.355,1)]">
+      <div className="animate-[fadeInUp_0.25s_cubic-bezier(.215,.61,.355,1)]">
         <SidebarRow
           variant="workspace"
           isActive={false}
@@ -54,20 +59,20 @@ export const WorkspaceItem = React.memo(function WorkspaceItem({
           className="pointer-events-none"
         >
           <div className="flex min-w-0 flex-1 animate-[shimmer_2s_ease-in-out_infinite] flex-col gap-0.5">
-            {/* Row 1: thinking icon + branch name (or placeholder) */}
+            {/* Row 1: thinking icon + display name */}
             <div className="flex min-w-0 items-center gap-1.5">
               <SidebarRowIconSlot>
                 <CircularPixelGrid variant="working" size={14} resolution={8} />
               </SidebarRowIconSlot>
               <span className="text-text-disabled truncate text-base font-normal">
-                {workspace.git_branch || "New workspace"}
+                {getWorkspaceDisplayName(workspace)}
               </span>
             </div>
-            {/* Row 2: directory · status */}
+            {/* Row 2: secondary context · init stage */}
             <div className="flex min-w-0 items-center gap-1.5 pl-[26px]">
-              {workspace.slug && (
+              {initSecondary && (
                 <>
-                  <span className="text-text-disabled truncate text-xs">{workspace.slug}</span>
+                  <span className="text-text-disabled truncate text-xs">{initSecondary}</span>
                   <span className="text-text-disabled text-xs">·</span>
                 </>
               )}
@@ -82,7 +87,7 @@ export const WorkspaceItem = React.memo(function WorkspaceItem({
             </div>
           </div>
         </SidebarRow>
-      </li>
+      </div>
     );
   }
 
@@ -138,7 +143,9 @@ export const WorkspaceItem = React.memo(function WorkspaceItem({
   };
 
   const statusText = getStatusText();
-  const showStatusDot = Boolean(workspace.slug && statusText);
+  const displayName = getWorkspaceDisplayName(workspace);
+  const secondaryText = getWorkspaceSecondaryText(workspace);
+  const showStatusDot = Boolean(secondaryText && statusText);
 
   const additions = diffStats?.additions ?? 0;
   const deletions = diffStats?.deletions ?? 0;
@@ -157,7 +164,7 @@ export const WorkspaceItem = React.memo(function WorkspaceItem({
     displayStatus === "working" || displayStatus === "unread" || displayStatus === "error";
 
   return (
-    <li>
+    <div>
       <SidebarRow
         variant="workspace"
         isActive={isActive}
@@ -166,7 +173,7 @@ export const WorkspaceItem = React.memo(function WorkspaceItem({
         data-workspace-id={workspace.id}
         className="cursor-pointer"
         aria-current={isActive ? "page" : undefined}
-        aria-label={`Workspace ${workspace.git_branch} on ${workspace.slug}`}
+        aria-label={`Workspace ${displayName}`}
         onClick={() => onClick(workspace)}
         onKeyDown={(e) => {
           if (e.key === " ") e.preventDefault();
@@ -177,7 +184,7 @@ export const WorkspaceItem = React.memo(function WorkspaceItem({
       >
         {/* Left: rows */}
         <div className="flex min-w-0 flex-1 flex-col gap-0.5">
-          {/* Row 1: icon + branch name */}
+          {/* Row 1: icon + display name (title > slug > branch) */}
           <div className="flex min-w-0 items-center gap-1.5">
             <WorkspaceStatusMenu
               currentStatus={workspace.status}
@@ -211,20 +218,22 @@ export const WorkspaceItem = React.memo(function WorkspaceItem({
                     : "text-text-tertiary font-normal"
               )}
             >
-              {workspace.git_branch}
+              {displayName}
             </span>
           </div>
 
-          {/* Row 2: directory · status */}
+          {/* Row 2: secondary context · status */}
           <div className="flex min-w-0 items-center gap-1.5 pl-[26px]">
-            <span
-              className={cn(
-                "truncate text-xs",
-                isActiveState ? "text-text-tertiary" : "text-text-disabled"
-              )}
-            >
-              {workspace.slug}
-            </span>
+            {secondaryText && (
+              <span
+                className={cn(
+                  "truncate text-xs",
+                  isActiveState ? "text-text-tertiary" : "text-text-disabled"
+                )}
+              >
+                {secondaryText}
+              </span>
+            )}
             {showStatusDot && (
               <span
                 className={cn("text-xs", isActiveState ? "text-text-muted" : "text-text-disabled")}
@@ -273,7 +282,7 @@ export const WorkspaceItem = React.memo(function WorkspaceItem({
           <button
             type="button"
             onClick={handleArchive}
-            aria-label={`Archive workspace ${workspace.git_branch}`}
+            aria-label={`Archive workspace ${displayName}`}
             title="Archive workspace"
             className={cn(
               "text-text-muted hover:text-text-secondary flex h-7 w-7 items-center justify-center rounded-lg",
@@ -285,6 +294,6 @@ export const WorkspaceItem = React.memo(function WorkspaceItem({
           </button>
         ) : null}
       </SidebarRow>
-    </li>
+    </div>
   );
 });

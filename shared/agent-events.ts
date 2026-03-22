@@ -40,6 +40,7 @@ export const AGENT_EVENT_NAMES = {
 
   // Metadata
   AGENT_SESSION_ID: "agent.session_id",
+  SESSION_TITLE: "session.title",
 } as const;
 
 export type AgentEventName = (typeof AGENT_EVENT_NAMES)[keyof typeof AGENT_EVENT_NAMES];
@@ -374,6 +375,14 @@ export const AgentSessionIdEventSchema = z.object({
 });
 export type AgentSessionIdEvent = z.infer<typeof AgentSessionIdEventSchema>;
 
+export const SessionTitleEventSchema = z.object({
+  type: z.literal("session.title"),
+  sessionId: z.string(),
+  agentType: AgentTypeSchema,
+  title: z.string(),
+});
+export type SessionTitleEvent = z.infer<typeof SessionTitleEventSchema>;
+
 // ============================================================================
 // Discriminated Union of All Agent Events
 // ============================================================================
@@ -396,5 +405,6 @@ export const AgentEventSchema = z.discriminatedUnion("type", [
   ToolRequestEventSchema,
   // Metadata
   AgentSessionIdEventSchema,
+  SessionTitleEventSchema,
 ]);
 export type AgentEvent = z.infer<typeof AgentEventSchema>;
