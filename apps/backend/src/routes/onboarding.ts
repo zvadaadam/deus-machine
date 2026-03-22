@@ -35,11 +35,11 @@ app.get("/onboarding/recent-projects", (c) => {
 // Worktree directories created by AI coding tools — filter these from recent projects
 // so only root repos are shown, not individual worktree checkouts.
 const WORKTREE_SEGMENTS = [
-  "/.opendevs/",           // OpenDevs worktrees
-  "/.conductor/",          // OpenDevs legacy worktrees
-  "/.claude/worktrees/",   // Claude Code worktrees
-  "/.cursor/worktrees/",   // Cursor parallel agent worktrees
-  "/copilot-worktree/",    // GitHub Copilot CLI worktrees
+  "/.opendevs/", // OpenDevs worktrees
+  "/.conductor/", // OpenDevs legacy worktrees
+  "/.claude/worktrees/", // Claude Code worktrees
+  "/.cursor/worktrees/", // Cursor parallel agent worktrees
+  "/copilot-worktree/", // GitHub Copilot CLI worktrees
 ];
 
 function isWorktreePath(fsPath: string): boolean {
