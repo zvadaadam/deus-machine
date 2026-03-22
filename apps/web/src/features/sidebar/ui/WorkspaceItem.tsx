@@ -5,7 +5,7 @@ import NumberFlow from "@number-flow/react";
 
 import { cn } from "@/shared/lib/utils";
 import { useWorkingDuration, formatDuration } from "@/shared/hooks";
-import { PixelGrid } from "@/features/session/ui/PixelGrid";
+import { CircularPixelGrid } from "@/features/session/ui/CircularPixelGrid";
 import { getDisplayStatus, STATUS_CONFIG } from "../lib/status";
 import type { WorkspaceItemProps } from "../model/types";
 import { SidebarRow, SidebarRowIconSlot } from "./SidebarRow";
@@ -22,10 +22,10 @@ import { WorkspaceStatusMenu } from "./WorkspaceStatusMenu";
  *   Right:
  *     [+additions -deletions]
  *
- * Icons: working → PixelGrid generating, error → red dot, unread → gold dot.
+ * Icons: working → CircularPixelGrid working, error → red dot, unread → gold dot.
  * Idle → no icon (26px indent).
  *
- * State: "initializing" → shimmer row with PixelGrid thinking + "Setting up..."
+ * State: "initializing" → shimmer row with CircularPixelGrid working + "Setting up..."
  */
 export const WorkspaceItem = React.memo(function WorkspaceItem({
   workspace,
@@ -57,7 +57,7 @@ export const WorkspaceItem = React.memo(function WorkspaceItem({
             {/* Row 1: thinking icon + branch name (or placeholder) */}
             <div className="flex min-w-0 items-center gap-1.5">
               <SidebarRowIconSlot>
-                <PixelGrid variant="thinking" size={14} />
+                <CircularPixelGrid variant="working" size={14} resolution={8} />
               </SidebarRowIconSlot>
               <span className="text-text-disabled truncate text-base font-normal">
                 {workspace.git_branch || "New workspace"}
@@ -191,7 +191,7 @@ export const WorkspaceItem = React.memo(function WorkspaceItem({
               >
                 {hasSessionIcon ? (
                   match(displayStatus)
-                    .with("working", () => <PixelGrid variant="generating" size={14} />)
+                    .with("working", () => <CircularPixelGrid variant="working" size={14} resolution={8} />)
                     .with("error", () => <span className="bg-accent-red h-2 w-2 rounded-full" />)
                     .otherwise(() => <span className="bg-accent-gold h-2 w-2 rounded-full" />)
                 ) : (
