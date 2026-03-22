@@ -40,6 +40,7 @@ import { native } from "@/platform";
 import { BROWSER_WORKSPACE_CHANGE } from "@shared/events";
 import { useBrowserWindowStore } from "@/features/browser/store";
 import { track } from "@/platform/analytics";
+import { ConnectionBanner, useConnectionState } from "@/features/connection";
 import { ChatArea } from "./ChatArea";
 import { RightSidePanel } from "./RightSidePanel";
 import { CollapsedChatStrip, CollapsedContentStrip } from "./CollapsedPanelStrips";
@@ -84,6 +85,8 @@ export function MainContent({
     : "code";
 
   const isBrowserDetached = useBrowserWindowStore((s) => s.detachedWindowOpen);
+  const connectionState = useConnectionState().state;
+  const isDisconnected = connectionState === "disconnected";
 
   // --- Workspace actions (PR bridge, archive, retry, manifest) ---
   const {
@@ -246,13 +249,17 @@ export function MainContent({
 
   return (
     <SidebarInset className="min-w-0">
+      {/* Connection banner — appears at top of content area when WS is down */}
+      <ConnectionBanner />
+
       <div
         data-slot="main-content"
         className={cn(
-          "bg-bg-surface flex h-full min-w-0 flex-1 overflow-hidden border transition-[border-radius,border-color] duration-[280ms] ease-[cubic-bezier(.19,1,.22,1)]",
+          "bg-bg-surface flex h-full min-w-0 flex-1 overflow-hidden border transition-[border-radius,border-color,opacity] duration-[280ms] ease-[cubic-bezier(.19,1,.22,1)]",
           sidebarOpen
             ? "border-border-subtle rounded-l-xl border-r-0"
-            : "rounded-none border-transparent"
+            : "rounded-none border-transparent",
+          isDisconnected && "opacity-60"
         )}
       >
         {/* Sidebar toggle -- visible when sidebar collapsed and no workspace */}

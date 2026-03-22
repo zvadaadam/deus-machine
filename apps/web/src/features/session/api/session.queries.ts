@@ -21,6 +21,7 @@ import { useMemo, useCallback } from "react";
 import { track } from "@/platform/analytics";
 import { parseContentBlocks } from "../lib/contentParser";
 import { sendCommand, connect, isConnected } from "@/platform/ws";
+import { emitSendAttemptFailed } from "@/features/connection";
 import type { RuntimeAgentType } from "../lib/agentRuntime";
 
 /**
@@ -355,6 +356,15 @@ export function useSendMessage() {
     },
 
     onError: (_err, variables, context) => {
+      // If the error is a WS disconnect, escalate the connection state immediately.
+      // The WS client produces "WebSocket not connected" (socket already down)
+      // or "WebSocket disconnected" (connection dropped mid-flight).
+      if (_err instanceof Error) {
+        const msg = _err.message.toLowerCase();
+        if (msg.includes("not connected") || msg.includes("disconnected")) {
+          emitSendAttemptFailed();
+        }
+      }
       // Roll back optimistic message
       if (context?.previousMessages) {
         queryClient.setQueryData(

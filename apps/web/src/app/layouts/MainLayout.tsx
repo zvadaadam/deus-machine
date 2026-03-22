@@ -39,6 +39,7 @@ import { native } from "@/platform";
 import { CHAT_INSERT } from "@shared/events";
 import { CommandPalette } from "@/features/command-palette";
 import { GitHubPickerModal } from "@/features/sidebar/ui/GitHubPickerModal";
+import { useConnectionStateInit } from "@/features/connection";
 import { MainContent } from "./MainContent";
 import { useRepoActions } from "./hooks/useRepoActions";
 import { useSystemPrompt, useUpdateSystemPrompt } from "@/features/workspace/api";
@@ -264,6 +265,9 @@ export function MainLayout() {
   );
 
   // --- Global hooks ---
+
+  // Connection state machine — subscribes to WS changes + send-attempt-failed events
+  useConnectionStateInit();
 
   // Zoom (Cmd+=/Cmd+-/Cmd+0)
   useZoom();
