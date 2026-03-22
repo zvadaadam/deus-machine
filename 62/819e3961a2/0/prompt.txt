@@ -579,3 +579,7 @@ But do we have to remember always the version or like we're gonna be doing like 
 ---
 
 What is the version we do now? We want the version of 0.1.0, this version to be.
+
+---
+
+Okay, also with the icons in Electronab, like do we have it correctly with the icons and do we have different icons to manage like what should we do also with the favicons, do we have something there or the web like how we should solve this explore the codebase remember we use we have a web cloud version but also a desktop app
