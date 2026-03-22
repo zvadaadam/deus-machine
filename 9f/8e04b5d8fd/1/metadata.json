@@ -1,0 +1,30 @@
+{
+  "cli_version": "0.5.0",
+  "checkpoint_id": "9f8e04b5d8fd",
+  "session_id": "739d2686-edc7-4216-9f97-42c21c8d3e84",
+  "strategy": "manual-commit",
+  "created_at": "2026-03-22T16:10:37.240835Z",
+  "branch": "zvadaadam/onboarding-hide-worktrees",
+  "checkpoints_count": 0,
+  "files_touched": [
+    "apps/backend/src/routes/onboarding.ts"
+  ],
+  "agent": "Claude Code",
+  "turn_id": "4fd86cc13a0e",
+  "token_usage": {
+    "input_tokens": 2098,
+    "cache_creation_tokens": 31330,
+    "cache_read_tokens": 80183,
+    "output_tokens": 740,
+    "api_call_count": 3
+  },
+  "initial_attribution": {
+    "calculated_at": "2026-03-22T16:10:37.206354Z",
+    "agent_lines": 16,
+    "human_added": 0,
+    "human_modified": 0,
+    "human_removed": 0,
+    "total_committed": 16,
+    "agent_percentage": 100
+  }
+}
