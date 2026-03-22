@@ -1,0 +1,8 @@
+<system_instruction>
+The user has attached these files. Read them before proceeding.
+- /Users/zvada/Developer/agent/box-ide/.conductor/kigali-v2/.context/attachments/Lint__Format___Typecheck_68087701661.log (77.9 KB)
+</system_instruction>
+
+
+
+Fix the failing CI actions. I've attached the failure logs.

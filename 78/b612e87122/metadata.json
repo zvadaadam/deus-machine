@@ -1,0 +1,23 @@
+{
+  "cli_version": "0.5.0",
+  "checkpoint_id": "78b612e87122",
+  "strategy": "manual-commit",
+  "branch": "zvadaadam/onboarding-hide-worktrees",
+  "checkpoints_count": 1,
+  "files_touched": null,
+  "sessions": [
+    {
+      "metadata": "/78/b612e87122/0/metadata.json",
+      "transcript": "/78/b612e87122/0/full.jsonl",
+      "content_hash": "/78/b612e87122/0/content_hash.txt",
+      "prompt": "/78/b612e87122/0/prompt.txt"
+    }
+  ],
+  "token_usage": {
+    "input_tokens": 13,
+    "cache_creation_tokens": 4755,
+    "cache_read_tokens": 578939,
+    "output_tokens": 1173,
+    "api_call_count": 11
+  }
+}
