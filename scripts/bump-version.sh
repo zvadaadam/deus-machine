@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
-# Bump version across all config files (package.json, electron-builder.yml)
+# Bump the root package.json version (electron-builder reads version from here).
+# Sub-packages (cloud-relay, agent-dots, mcp-notebook) are internal and versioned independently.
 # Usage: bash scripts/bump-version.sh 2.1.0
 
 set -euo pipefail
