@@ -97,6 +97,7 @@ export function CommandPalette({ actionOverrides = {} }: CommandPaletteProps) {
   const grouped = useMemo(() => {
     const groups: Record<CmdGroup, typeof staticCommands> = {
       workspace: [],
+      project: [],
       navigation: [],
       settings: [],
     };

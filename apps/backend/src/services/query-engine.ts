@@ -403,7 +403,13 @@ function runQuery(resource: QueryResource, params: QueryParams): unknown {
 
       const grouped: Record<
         string,
-        { repo_id: string; repo_name: string; sort_order: number; workspaces: unknown[] }
+        {
+          repo_id: string;
+          repo_name: string;
+          sort_order: number;
+          git_origin_url?: string | null;
+          workspaces: unknown[];
+        }
       > = {};
       workspaces.forEach((workspace) => {
         const repoId = workspace.repository_id || "unknown";
@@ -412,6 +418,7 @@ function runQuery(resource: QueryResource, params: QueryParams): unknown {
             repo_id: repoId,
             repo_name: workspace.repo_name || "Unknown",
             sort_order: workspace.repo_sort_order ?? 999,
+            git_origin_url: workspace.git_origin_url ?? null,
             workspaces: [],
           };
         }
@@ -429,6 +436,7 @@ function runQuery(resource: QueryResource, params: QueryParams): unknown {
             repo_id: repo.id,
             repo_name: repo.name,
             sort_order: repo.sort_order ?? 999,
+            git_origin_url: repo.git_origin_url ?? null,
             workspaces: [],
           };
         }
@@ -590,6 +598,16 @@ async function runRequest(resource: RequestResourceName, params: QueryParams): P
     .with("pairedDevices", () => delegateToRoute("GET", "/api/remote-auth/devices"))
     .with("relayStatus", () => delegateToRoute("GET", "/api/relay/status"))
     .with("allSessions", () => delegateToRoute("GET", "/api/sessions"))
+    .with("repoPrs", () => {
+      const repoId = readStringParam(params, "repoId");
+      if (!repoId) throw new Error("repoPrs requires repoId");
+      return delegateToRoute("GET", `/api/repos/${encodeURIComponent(repoId)}/prs`);
+    })
+    .with("repoBranches", () => {
+      const repoId = readStringParam(params, "repoId");
+      if (!repoId) throw new Error("repoBranches requires repoId");
+      return delegateToRoute("GET", `/api/repos/${encodeURIComponent(repoId)}/branches`);
+    })
     .exhaustive();
 }
 

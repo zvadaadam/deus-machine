@@ -1614,9 +1614,9 @@ select {
 
 /* Main container background - for modals, dialogs */
 .vibrancy-bg {
-  background-color: color-mix(in oklch, var(--background) 95%, transparent);
-  backdrop-filter: blur(24px);
-  -webkit-backdrop-filter: blur(24px);
+  background-color: color-mix(in oklch, var(--background) 72%, transparent);
+  backdrop-filter: blur(40px) saturate(1.4);
+  -webkit-backdrop-filter: blur(40px) saturate(1.4);
   transition-property: color, border-color, text-decoration-color, fill, stroke;
   transition-duration: 200ms;
 }

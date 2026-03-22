@@ -77,7 +77,14 @@ export type { NormalizedTask, ManifestResponse, TaskRunResponse } from "./manife
 export type { RecentProject } from "./onboarding";
 
 // GitHub types
-export type { PRStatus, GhCliStatus, DevServer, CheckDetail } from "./github";
+export type {
+  PRStatus,
+  GhCliStatus,
+  DevServer,
+  CheckDetail,
+  PRSummary,
+  BranchSummary,
+} from "./github";
 
 // Query protocol types
 export type {

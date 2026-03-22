@@ -26,12 +26,14 @@ function CommandDialog({
   return (
     <Dialog {...props}>
       <DialogContent
-        className="overflow-hidden p-0 shadow-lg sm:max-w-[520px]"
+        className="vibrancy-bg border-border-subtle top-[20%] translate-y-0 overflow-hidden p-0 shadow-lg sm:max-w-[520px]"
         showCloseButton={false}
+        overlayClassName="bg-black/8"
+        aria-describedby={undefined}
       >
         <DialogTitle className="sr-only">{title}</DialogTitle>
         <Command
-          className="[&_[cmdk-group-heading]]:text-muted-foreground [&_[cmdk-group-heading]]:px-2 [&_[cmdk-group-heading]]:font-medium [&_[cmdk-group]:not([hidden])_~[cmdk-group]]:pt-0 [&_[cmdk-input-wrapper]_svg]:h-5 [&_[cmdk-input-wrapper]_svg]:w-5 [&_[cmdk-input]]:h-12 [&_[cmdk-item]]:px-2 [&_[cmdk-item]]:py-3 [&_[cmdk-item]_svg]:h-5 [&_[cmdk-item]_svg]:w-5"
+          className="[&_[cmdk-group-heading]]:text-muted-foreground bg-transparent [&_[cmdk-group-heading]]:px-2 [&_[cmdk-group-heading]]:font-medium [&_[cmdk-group]:not([hidden])_~[cmdk-group]]:pt-0 [&_[cmdk-input-wrapper]_svg]:h-4 [&_[cmdk-input-wrapper]_svg]:w-4 [&_[cmdk-input]]:h-12 [&_[cmdk-item]]:px-2 [&_[cmdk-item]]:py-3 [&_[cmdk-item]_svg]:h-4 [&_[cmdk-item]_svg]:w-4"
           loop
         >
           {children}
@@ -46,7 +48,10 @@ function CommandInput({
   ...props
 }: React.ComponentProps<typeof CommandPrimitive.Input>) {
   return (
-    <div className="flex items-center border-b px-3" data-slot="command-input-wrapper">
+    <div
+      className="border-border/30 flex items-center border-b px-3"
+      data-slot="command-input-wrapper"
+    >
       <SearchIcon className="mr-2 h-4 w-4 shrink-0 opacity-50" />
       <CommandPrimitive.Input
         data-slot="command-input"
@@ -103,7 +108,7 @@ function CommandSeparator({
   return (
     <CommandPrimitive.Separator
       data-slot="command-separator"
-      className={cn("bg-border -mx-1 h-px", className)}
+      className={cn("bg-border/30 -mx-1 h-px", className)}
       {...props}
     />
   );

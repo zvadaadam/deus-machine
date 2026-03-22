@@ -33,6 +33,7 @@ import {
   persistSessionError,
   persistSessionCancelled,
   persistAgentSessionId,
+  persistSessionTitle,
 } from "../../../src/services/agent/persistence";
 import type {
   MessageAssistantEvent,
@@ -44,6 +45,7 @@ import type {
   SessionErrorEvent,
   SessionCancelledEvent,
   AgentSessionIdEvent,
+  SessionTitleEvent,
 } from "../../../../shared/agent-events";
 
 // ============================================================================
@@ -389,6 +391,54 @@ describe("agent-persistence", () => {
       const result = persistAgentSessionId(event);
 
       expect(result.ok).toBe(false);
+    });
+  });
+
+  describe("persistSessionTitle", () => {
+    const event: SessionTitleEvent = {
+      type: "session.title",
+      sessionId: "sess-1",
+      agentType: "claude",
+      title: "Fix login page CSS",
+    };
+
+    it("updates session title and workspace title in a transaction", () => {
+      const result = persistSessionTitle(event);
+
+      expect(result.ok).toBe(true);
+      expect(mockTransaction).toHaveBeenCalledTimes(1);
+
+      // First prepare: UPDATE sessions SET title
+      expect(mockPrepare).toHaveBeenNthCalledWith(
+        1,
+        expect.stringContaining("UPDATE sessions SET title")
+      );
+      expect(mockRun).toHaveBeenNthCalledWith(1, "Fix login page CSS", "sess-1");
+
+      // Second prepare: UPDATE workspaces SET title ... AND title IS NULL
+      expect(mockPrepare).toHaveBeenNthCalledWith(
+        2,
+        expect.stringContaining("UPDATE workspaces SET title")
+      );
+      expect(mockRun).toHaveBeenNthCalledWith(2, "Fix login page CSS", "sess-1");
+    });
+
+    it("only sets workspace title when it is NULL (preserves user renames)", () => {
+      persistSessionTitle(event);
+
+      // The second SQL statement should include AND title IS NULL
+      expect(mockPrepare).toHaveBeenNthCalledWith(2, expect.stringContaining("AND title IS NULL"));
+    });
+
+    it("returns error on DB failure", () => {
+      mockTransaction.mockImplementation(() => {
+        throw new Error("transaction failed");
+      });
+
+      const result = persistSessionTitle(event);
+
+      expect(result.ok).toBe(false);
+      if (!result.ok) expect(result.error).toContain("transaction failed");
     });
   });
 });

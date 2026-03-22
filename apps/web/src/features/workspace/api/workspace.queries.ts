@@ -259,6 +259,34 @@ export function useGhStatus() {
 }
 
 /**
+ * Fetch open pull requests for a repository.
+ * Used by the "Create Workspace from PR" picker modal.
+ * Enabled only when a repoId is provided (i.e., modal is open).
+ */
+export function useRepoPrs(repoId: string | null) {
+  return useQuery({
+    queryKey: queryKeys.repos.prs(repoId || ""),
+    queryFn: () => WorkspaceService.fetchRepoPrs(repoId!),
+    enabled: !!repoId,
+    staleTime: 30_000,
+  });
+}
+
+/**
+ * Fetch remote branches for a repository.
+ * Used by the "Create Workspace from Branch" picker modal.
+ * Enabled only when a repoId is provided (i.e., modal is open).
+ */
+export function useRepoBranches(repoId: string | null) {
+  return useQuery({
+    queryKey: queryKeys.repos.branches(repoId || ""),
+    queryFn: () => WorkspaceService.fetchRepoBranches(repoId!),
+    enabled: !!repoId,
+    staleTime: 30_000,
+  });
+}
+
+/**
  * Fetch PR status for a workspace.
  *
  * Gated on gh CLI being installed + authenticated (like Codex).
@@ -316,14 +344,40 @@ export function useFileDiff(workspaceId: string | null, filePath: string | null)
  * 3. onSuccess replaces placeholder with real data, triggers refetch
  * 4. Workspace progress events + terminal invalidation catch the ready transition
  */
+/** Params accepted by the create-workspace mutation. */
+type CreateWorkspaceParams =
+  | string
+  | {
+      repositoryId: string;
+      source_branch?: string;
+      pr_number?: number;
+      pr_url?: string;
+      pr_title?: string;
+      target_branch?: string;
+    };
+
 export function useCreateWorkspace() {
   const queryClient = useQueryClient();
   const queryKey = queryKeys.workspaces.byRepo("ready,initializing");
 
   return useMutation({
-    mutationFn: (repositoryId: string) => WorkspaceService.create(repositoryId),
+    mutationFn: (params: CreateWorkspaceParams) => {
+      const repoId = typeof params === "string" ? params : params.repositoryId;
+      const options =
+        typeof params === "string"
+          ? undefined
+          : {
+              source_branch: params.source_branch,
+              pr_number: params.pr_number,
+              pr_url: params.pr_url,
+              pr_title: params.pr_title,
+              target_branch: params.target_branch,
+            };
+      return WorkspaceService.create(repoId, options);
+    },
 
-    onMutate: async (repositoryId: string) => {
+    onMutate: async (params: CreateWorkspaceParams) => {
+      const repositoryId = typeof params === "string" ? params : params.repositoryId;
       await queryClient.cancelQueries({ queryKey });
 
       const previousData = queryClient.getQueryData<RepoGroup[]>(queryKey);
@@ -344,13 +398,14 @@ export function useCreateWorkspace() {
       return { previousData };
     },
 
-    onError: (_err, _repositoryId, context) => {
+    onError: (_err, _params, context) => {
       if (context?.previousData) {
         queryClient.setQueryData(queryKey, context.previousData);
       }
     },
 
-    onSuccess: (_data, repositoryId) => {
+    onSuccess: (_data, params) => {
+      const repositoryId = typeof params === "string" ? params : params.repositoryId;
       track("workspace_created", { repository_id: repositoryId });
     },
 

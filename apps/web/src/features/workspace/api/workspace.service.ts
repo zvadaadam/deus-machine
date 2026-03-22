@@ -9,7 +9,7 @@
 import { sendRequest, sendMutate, sendCommand } from "@/platform/ws";
 import type { Workspace, RepoGroup, DiffStats, FileChange } from "../types";
 import type { WorkspaceStatus } from "@shared/enums";
-import type { PRStatus, GhCliStatus } from "@/shared/types";
+import type { PRStatus, GhCliStatus, PRSummary, BranchSummary } from "@/shared/types";
 import type { NormalizedTask, ManifestResponse, TaskRunResponse } from "@shared/types/manifest";
 
 export type { NormalizedTask, ManifestResponse, TaskRunResponse };
@@ -92,10 +92,24 @@ export const WorkspaceService = {
   },
 
   /**
-   * Create a new workspace
+   * Create a new workspace.
+   * Optionally accepts source_branch / PR metadata to create from a
+   * specific branch or pull request instead of the repo default branch.
    */
-  create: async (repositoryId: string): Promise<Workspace> => {
-    const result = await sendCommand("createWorkspace", { repository_id: repositoryId });
+  create: async (
+    repositoryId: string,
+    options?: {
+      source_branch?: string;
+      pr_number?: number;
+      pr_url?: string;
+      pr_title?: string;
+      target_branch?: string;
+    }
+  ): Promise<Workspace> => {
+    const result = await sendCommand("createWorkspace", {
+      repository_id: repositoryId,
+      ...options,
+    });
     if (!result.accepted) throw new Error(result.error || "Failed to create workspace");
     // The command returns the workspace in the ack result
     return result as unknown as Workspace;
@@ -206,5 +220,21 @@ export const WorkspaceService = {
     const result = await sendMutate<TaskRunResponse>("runTask", { workspaceId: id, taskName });
     if (!result.success) throw new Error(result.error || "Failed to run task");
     return result.data!;
+  },
+
+  /**
+   * Fetch open pull requests for a repository.
+   * Uses gh CLI on the backend — requires gh to be installed and authenticated.
+   */
+  fetchRepoPrs: async (repoId: string): Promise<PRSummary[]> => {
+    return sendRequest<PRSummary[]>("repoPrs", { repoId });
+  },
+
+  /**
+   * Fetch remote branches for a repository (sorted by most recent commit).
+   * Pure git — no gh CLI needed.
+   */
+  fetchRepoBranches: async (repoId: string): Promise<{ branches: BranchSummary[] }> => {
+    return sendRequest<{ branches: BranchSummary[] }>("repoBranches", { repoId });
   },
 };
