@@ -138,3 +138,7 @@ The startup backfill spawns one sequential `git remote get-url origin` subproces
 Severity is bounded (one-time backfill, not steady-state), but with many repos the sequential loop delays startup and the `invalidate(["workspaces"])` call. Use `Promise.allSettled` with a concurrency limit (e.g., 5).
 
 **File:** `apps/backend/src/server.ts:50-65`
+
+---
+
+Commit and push all changes
