@@ -201,6 +201,19 @@
 - Test describe blocks in `claude-handler.test.ts` still use old names: `handleClaudeQuery` (line 144),
   `handleClaudeCancel` (line 768), `handleClaudeUpdatePermissionMode` (line 798).
 
+## HTTP vs WS Query Parity Gap (PR "Create Workspace from PR or Branch")
+
+- `GET /workspaces/by-repo` HTTP fallback and query-engine `runQuery("workspaces")` both build `RepoGroup[]` independently.
+  When adding a field to one, must add to both. Confirmed: `git_origin_url` added to query-engine but NOT to HTTP route group object.
+- Full details in `http-vs-ws-parity.md`
+
+## createWorkspace Command Return Value (Pre-Existing Bug, #confirmed)
+
+- `WorkspaceService.create()` returns `as unknown as Workspace` — but the WS ack only has `{ accepted, commandId }`.
+- `workspace.id` on the result is `undefined`. `selectWorkspace(undefined)` no-ops silently.
+- Pre-existing since bad96ad4 (protocol unification). Does not cause visible breakage because WS subscription pushes snapshot.
+- Full details in `create-workspace-command-return.md`
+
 ## See Also
 
 - `patterns-deep.md` — overflow notes: error classification, chat virtualization, PRStatus, border radius, sidecar resume
