@@ -1,0 +1,33 @@
+{
+  "cli_version": "0.5.0",
+  "checkpoint_id": "3d241bdb321a",
+  "session_id": "85413b2a-01c5-48f0-8305-d21ed86c52b2",
+  "strategy": "manual-commit",
+  "created_at": "2026-03-22T21:08:33.811586Z",
+  "branch": "zvadaadam/explore-web-deploy",
+  "checkpoints_count": 5,
+  "files_touched": [
+    ".github/workflows/deploy.yml"
+  ],
+  "agent": "Claude Code",
+  "turn_id": "c91b5b1e0f4f",
+  "token_usage": {
+    "input_tokens": 64,
+    "cache_creation_tokens": 45211,
+    "cache_read_tokens": 843627,
+    "output_tokens": 6593,
+    "api_call_count": 19
+  },
+  "session_metrics": {
+    "turn_count": 5
+  },
+  "initial_attribution": {
+    "calculated_at": "2026-03-22T21:08:33.659561Z",
+    "agent_lines": 74,
+    "human_added": 0,
+    "human_modified": 0,
+    "human_removed": 0,
+    "total_committed": 74,
+    "agent_percentage": 100
+  }
+}

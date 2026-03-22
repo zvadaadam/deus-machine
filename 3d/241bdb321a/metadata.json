@@ -1,0 +1,25 @@
+{
+  "cli_version": "0.5.0",
+  "checkpoint_id": "3d241bdb321a",
+  "strategy": "manual-commit",
+  "branch": "zvadaadam/explore-web-deploy",
+  "checkpoints_count": 5,
+  "files_touched": [
+    ".github/workflows/deploy.yml"
+  ],
+  "sessions": [
+    {
+      "metadata": "/3d/241bdb321a/0/metadata.json",
+      "transcript": "/3d/241bdb321a/0/full.jsonl",
+      "content_hash": "/3d/241bdb321a/0/content_hash.txt",
+      "prompt": "/3d/241bdb321a/0/prompt.txt"
+    }
+  ],
+  "token_usage": {
+    "input_tokens": 64,
+    "cache_creation_tokens": 45211,
+    "cache_read_tokens": 843627,
+    "output_tokens": 6593,
+    "api_call_count": 19
+  }
+}
