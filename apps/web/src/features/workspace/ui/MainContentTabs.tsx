@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { X, Plus, History, PanelLeftClose } from "lucide-react";
-import { PixelGrid } from "@/features/session/ui/PixelGrid";
+import { CircularPixelGrid } from "@/features/session/ui/CircularPixelGrid";
 import {
   DndContext,
   closestCenter,
@@ -56,10 +56,10 @@ interface MainContentTabBarProps {
 const ICON_SIZE = "w-3.5 h-3.5";
 const EMPTY_CLOSED_TABS: ClosedTab[] = [];
 
-/** Render tab icon — shows PixelGrid spinner when working, agent logo otherwise. */
+/** Render tab icon — shows CircularPixelGrid spinner when working, agent logo otherwise. */
 function getTabIcon(tab: Tab, isWorking: boolean) {
   if (isWorking) {
-    return <PixelGrid variant="generating" size={14} className="flex-shrink-0" />;
+    return <CircularPixelGrid variant="generating" size={14} resolution={8} />;
   }
   const LogoComponent = getAgentLogo(tab.data?.agentType || "claude");
   if (LogoComponent) {
