@@ -3,12 +3,12 @@ import { CircularPixelGrid, type CircularPixelGridVariant } from "./CircularPixe
 import { PixelGrid } from "./PixelGrid";
 
 const VARIANTS: { variant: CircularPixelGridVariant; label: string; color: string }[] = [
-  { variant: "thinking", label: "Thinking", color: "text-primary" },
+  { variant: "thinking", label: "Thinking", color: "text-[oklch(0.68_0.14_265)]" },
   { variant: "generating", label: "Generating", color: "text-success" },
   { variant: "toolExecuting", label: "Tool Executing", color: "text-warning" },
   { variant: "error", label: "Error", color: "text-destructive" },
-  { variant: "compacting", label: "Compacting", color: "text-status-compacting" },
-  { variant: "working", label: "Working", color: "text-success" },
+  { variant: "compacting", label: "Compacting", color: "text-[oklch(0.68_0.14_300)]" },
+  { variant: "working", label: "Working", color: "text-muted-foreground" },
 ];
 
 const meta: Meta<typeof CircularPixelGrid> = {
@@ -27,7 +27,7 @@ const meta: Meta<typeof CircularPixelGrid> = {
 };
 export default meta;
 
-/* ── All 5 Variants ──────────────────────────────────────── */
+/* ── All 6 Variants ──────────────────────────────────────── */
 
 export const AllVariants: StoryObj<typeof CircularPixelGrid> = {
   render: () => (
@@ -35,7 +35,7 @@ export const AllVariants: StoryObj<typeof CircularPixelGrid> = {
       <h2 className="text-muted-foreground font-mono text-sm tracking-widest uppercase">
         Circular Pixel Grid — All Variants (48px, res 16)
       </h2>
-      <div className="grid grid-cols-5 gap-12">
+      <div className="grid grid-cols-6 gap-12">
         {VARIANTS.map(({ variant, label }) => (
           <div key={variant} className="flex flex-col items-center gap-4">
             <div className="flex items-center justify-center rounded-xl bg-black/80 p-8">

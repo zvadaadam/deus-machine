@@ -1,7 +1,7 @@
 /**
  * CircularPixelGrid — Canvas-based high-resolution pixel grid inside a circle.
  *
- * Redesign of the 3×3 PixelGrid: same 5 variants, but rendered at 8–32×
+ * Redesign of the 3×3 PixelGrid: same 6 variants, but rendered at 8–32×
  * resolution inside a circular mask. Uses <canvas> + requestAnimationFrame
  * for smooth 60fps with hundreds of cells.
  *
@@ -11,6 +11,7 @@
  *   toolExecuting : clockwise sweep (amber)  — radar-scan with tail
  *   error         : cross pulse (red)        — axis-aligned + pattern
  *   compacting    : ring collapse (violet)   — concentric rings inward
+ *   working       : shimmer waves (gray)     — sidebar ambient indicator
  */
 
 import { useRef, useEffect, useMemo } from "react";
@@ -316,7 +317,9 @@ export function CircularPixelGrid({
         const vc = VARIANT_COLORS[variant];
         colorRef.current = vc.direct
           ? resolveColorString(el, vc.direct)
-          : resolveRGB(el, vc.cssVar!);
+          : vc.cssVar
+            ? resolveRGB(el, vc.cssVar)
+            : [128, 128, 255];
       }
     };
     resolve();
