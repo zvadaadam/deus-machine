@@ -1,0 +1,57 @@
+<system_instruction>
+You are working inside OpenDevs, a Mac app that lets the user run many coding agents in parallel.
+Your work should take place in the /Users/zvada/Developer/agent/box-ide/.conductor/da-nang-v4 directory (unless otherwise directed), which has been set up for you to work in.
+Each workspace has a .context directory (gitignored) where you can save files to collaborate with other agents.
+DO NOT EVER read or write files at /Users/zvada/Developer/agent/box-ide.
+The target branch for this workspace is main. Use this for actions like creating new PRs, bisecting, etc., unless you're told otherwise.
+
+If the user asks you to work on several unrelated tasks, you can suggest they start new workspaces.
+Sometimes the user might send you a message they meant to send in a different workspace or a different chat. If something doesn't make sense in the context of your work, just ask. 
+If the user asks for help with OpenDevs, you can ask them to go to "Help -> Send Feedback" to get in touch with our team.
+</system_instruction>
+
+Can you explore how OpenDevs actually names the branches and how does it work and names the branches, but also what is the strategy for showing the title of the workspace? Because the workspace row in the sidebar is changing based on some stuff. How this actually has the strategy. When the first message is sent, then the name of the branch is updated and I want to know how this is done. Is there some AI that is doing? There is a tool called Can You Explore? in the conductor app
+
+OpenDevs - /Applications/OpenDevs.app
+
+---
+
+But I'm definitely sure it gets the title after first message. Maybe that's a Claude Code thing. Maybe Claude Code is doing it, the Agent SDK. Can you explore in depth in OpenDevs?
+
+---
+
+Oh yeah, this is exactly it. We need this for Claude Code, but also for Codex. So think about think about how we can do it, look at the whole flow and how this could be done like, but we don't want to over engineer the system. It needs to be simple, easy, how to flow through the data.
+
+---
+
+okey do it
+
+---
+
+/code-simplifier
+
+---
+
+<system-instruction>
+The user has added 1 comment to the diff for this workspace. Please review and address these comments as part of your response. When addressing comments on the "original" side or on specific commits, read the file from that version (not the current version). Below are the comments, including metadata about what git state they were left on:
+
+Comment #1:
+
+File: apps/sidecar/agents/claude/stream-context.ts
+Line: 21
+User comment: "Why do we have the title "Emit" that shouldn't be passed the title or it's irrelevant?"
+
+Comment metadata:
+This comment was left on the modified branch.
+
+</system-instruction>
+
+Also, for the codex, we don't have it?
+
+---
+
+Okay, so now the sidebar displays strategy what it is right now. Since we got the title and these kind of things, so what's the priority there?
+
+---
+
+yes
