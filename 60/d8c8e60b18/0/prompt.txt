@@ -3222,3 +3222,262 @@ We want a clean, maintainable codebase, with proper best practices for the tech 
 Run subagents to verify, and if it should be fixed, try to merge some stuff together so it can be fixed together within one subagent. 
 
 If you can test something do it.
+
+---
+
+<system-instruction>
+The user has added 2 comments to the diff for this workspace. Please review and address these comments as part of your response. When addressing comments on the "original" side or on specific commits, read the file from that version (not the current version). Below are the comments, including metadata about what git state they were left on:
+
+Comment #1:
+
+File: apps/web/src/features/settings/ui/sections/AccessSection.tsx
+Line: 201
+User comment: "_⚠️ Potential issue_ | _🟡 Minor_
+
+<details>
+<summary>🧩 Analysis chain</summary>
+
+🏁 Script executed:
+
+```shell
+# Locate and examine the file
+fd "AccessSection.tsx" --type f
+```
+
+Repository: zvadaadam/box-ide
+
+Length of output: 121
+
+---
+
+🏁 Script executed:
+
+```shell
+# Read the specific section mentioned in the review
+if [ -f "apps/web/src/features/settings/ui/sections/AccessSection.tsx" ]; then
+  wc -l "apps/web/src/features/settings/ui/sections/AccessSection.tsx"
+  sed -n '185,210p' "apps/web/src/features/settings/ui/sections/AccessSection.tsx"
+else
+  echo "File not found"
+fi
+```
+
+Repository: zvadaadam/box-ide
+
+Length of output: 1051
+
+---
+
+🏁 Script executed:
+
+```shell
+# Search for where these handlers are used
+rg "handleCopyCode|handleCopyLink" "apps/web/src/features/settings/ui/sections/" -B 2 -A 2
+```
+
+Repository: zvadaadam/box-ide
+
+Length of output: 2021
+
+---
+
+🏁 Script executed:
+
+```shell
+# Search for other clipboard usage patterns in the codebase
+rg "navigator\.clipboard" --type ts --type tsx -B 2 -A 2
+```
+
+Repository: zvadaadam/box-ide
+
+Length of output: 88
+
+---
+
+🏁 Script executed:
+
+```shell
+# Check for other similar patterns that don't await clipboard
+rg "clipboard\.writeText" -B 1 -A 1
+```
+
+Repository: zvadaadam/box-ide
+
+Length of output: 2810
+
+---
+
+🏁 Script executed:
+
+```shell
+# Get more context around the AccessSection.tsx clipboard usage
+sed -n '190,230p' "apps/web/src/features/settings/ui/sections/AccessSection.tsx"
+```
+
+Repository: zvadaadam/box-ide
+
+Length of output: 1577
+
+---
+
+🏁 Script executed:
+
+```shell
+# Find the third clipboard instance in AccessSection.tsx
+grep -n "navigator.clipboard.writeText" "apps/web/src/features/settings/ui/sections/AccessSection.tsx"
+```
+
+Repository: zvadaadam/box-ide
+
+Length of output: 209
+
+---
+
+🏁 Script executed:
+
+```shell
+# Get context around that third instance
+sed -n '220,260p' "apps/web/src/features/settings/ui/sections/AccessSection.tsx"
+```
+
+Repository: zvadaadam/box-ide
+
+Length of output: 1979
+
+---
+
+🏁 Script executed:
+
+```shell
+# Get context around line 104
+sed -n '100,115p' "apps/web/src/features/settings/ui/sections/AccessSection.tsx"
+```
+
+Repository: zvadaadam/box-ide
+
+Length of output: 402
+
+---
+
+</details>
+
+**Await clipboard writes before showing a "copied" toast.**
+
+`navigator.clipboard.writeText()` is async and can reject. Both handlers report success even when the copy fails. Make these functions async and wrap the clipboard call in a try-catch block to handle potential errors.
+
+<details>
+<summary>Minimal fix</summary>
+
+```diff
+-  function handleCopyCode() {
++  async function handleCopyCode() {
+     if (!pairCode) return;
+-    navigator.clipboard.writeText(pairCode);
+-    toast.success("Code copied");
++    try {
++      await navigator.clipboard.writeText(pairCode);
++      toast.success("Code copied");
++    } catch {
++      toast.error("Couldn't copy the code");
++    }
+   }
+
+-  function handleCopyLink() {
++  async function handleCopyLink() {
+     if (!pairUrl) return;
+-    navigator.clipboard.writeText(pairUrl);
+-    toast.success("Link copied");
++    try {
++      await navigator.clipboard.writeText(pairUrl);
++      toast.success("Link copied");
++    } catch {
++      toast.error("Couldn't copy the link");
++    }
+   }
+```
+</details>
+
+Note: There's also a third clipboard operation at line 104 in an inline onClick handler that should be updated similarly.
+
+<details>
+<summary>🤖 Prompt for AI Agents</summary>
+
+```
+Verify each finding against the current code and only fix it if needed.
+
+In `@apps/web/src/features/settings/ui/sections/AccessSection.tsx` around lines
+192 - 201, Make handleCopyCode and handleCopyLink async, await
+navigator.clipboard.writeText(...) and wrap each call in a try-catch so you only
+call toast.success when the await resolves; on error call toast.error (or
+similar) with a helpful message. Also update the inline onClick clipboard
+handler (the other clipboard writeText used in the component) to use an async
+handler with try-catch/await and show success or error toasts accordingly.
+Ensure you reference and update the functions handleCopyCode and handleCopyLink
+and the inline onClick clipboard usage so all clipboard writes are awaited and
+errors are handled.
+```
+
+</details>
+
+<!-- fingerprinting:phantom:medusa:grasshopper -->
+
+<!-- This is an auto-generated comment by CodeRabbit -->"
+
+Comment metadata:
+This comment was left on the modified branch.
+This comment was left on GitHub by @coderabbitai.
+This comment is the start of thread PRRT_kwDOQEbULc51_WS0. 
+
+
+Comment #2:
+
+File: apps/web/src/features/settings/ui/sections/AccessSection.tsx
+Line: 391
+User comment: "_⚠️ Potential issue_ | _🟡 Minor_
+
+**Keep these toast errors curated instead of piping through raw backend messages.**
+
+`getErrorMessage()` from `shared/lib/errors.ts` forwards the original message verbatim, so these toasts can reintroduce the exact technical wording this PR is trying to remove. Fixed user-facing copy here would keep the UX consistent; keep the raw message for logs/telemetry instead if you still need it.
+
+
+
+Also applies to: 410-412
+
+<details>
+<summary>🤖 Prompt for AI Agents</summary>
+
+```
+Verify each finding against the current code and only fix it if needed.
+
+In `@apps/web/src/features/settings/ui/sections/AccessSection.tsx` around lines
+389 - 391, The catch blocks in AccessSection (the toast.error calls at the
+generate-code error handling locations using getErrorMessage) are surfacing raw
+backend messages to users; replace them with curated, user-friendly messages
+(e.g., "Failed to generate code. Please try again.") while still sending the
+original error to logs/telemetry (use getErrorMessage(error) only for
+logging/telemetry, not the toast). Update the catch handlers surrounding the
+generate code logic in AccessSection.tsx to call toast.error with a fixed
+user-facing string and forward the detailed message to the existing
+logging/telemetry function instead.
+```
+
+</details>
+
+<!-- fingerprinting:phantom:medusa:grasshopper -->
+
+<!-- This is an auto-generated comment by CodeRabbit -->"
+
+Comment metadata:
+This comment was left on the modified branch.
+This comment was left on GitHub by @coderabbitai.
+This comment is the start of thread PRRT_kwDOQEbULc51_WS2. 
+
+</system-instruction>
+
+I run AI code review, is it actionable? Wdyt? Explore in depth each problem.
+
+We want a clean, maintainable codebase, with proper best practices for the tech stack we use.
+
+Run subagents to verify, and if it should be fixed, try to merge some stuff together so it can be fixed together within one subagent. 
+
+If you can test something do it.
