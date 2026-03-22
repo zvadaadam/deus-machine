@@ -90,8 +90,8 @@ export const CreateWorkspaceBody = z.object({
     .string()
     .refine((s) => !s.startsWith("-"), "Branch name must not start with a dash")
     .optional(), // remote branch to base worktree on
-  pr_number: z.number().optional(), // pre-populate PR tracking
-  pr_url: z.string().optional(),
+  pr_number: z.number().int().positive().optional(), // pre-populate PR tracking
+  pr_url: z.string().url().optional(),
   pr_title: z.string().optional(),
   target_branch: z
     .string()

@@ -165,7 +165,11 @@ export function MainLayout() {
   // effect handles re-showing when the dialog closes.
   const commandPaletteOpen = useUIStore((s) => s.commandPaletteOpen);
   const anyDialogOpen =
-    showNewWorkspaceModal || showSystemPromptModal || commandPaletteOpen || !!githubPickerRepoId;
+    showNewWorkspaceModal ||
+    showSystemPromptModal ||
+    commandPaletteOpen ||
+    !!githubPickerRepoId ||
+    repoActions.showCloneModal;
   useEffect(() => {
     if (anyDialogOpen) {
       native.browserViews.hideAll().catch(() => {});

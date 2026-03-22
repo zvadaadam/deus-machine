@@ -26,6 +26,8 @@ export function BackendStatusIndicator() {
           transition={{ duration: reduceMotion ? 0 : 0.2, ease: EASE_OUT_QUART }}
           className="flex items-center gap-1.5 px-1 py-0.5"
           aria-label="Server disconnected"
+          role="status"
+          aria-live="polite"
         >
           <span className="relative flex h-2 w-2 items-center justify-center">
             <span className="bg-accent-red absolute inline-flex h-full w-full animate-ping rounded-full opacity-60" />

@@ -255,7 +255,7 @@ apps/sidecar/
 
 ### Canonical Agent Events (`shared/agent-events.ts`)
 
-All agent output is normalized to 12 canonical event types that flow: Agent SDK → AgentHandler → EventBroadcaster → Backend agent-client → agent-event-handler → DB + WS push.
+All agent output is normalized to 13 canonical event types that flow: Agent SDK → AgentHandler → EventBroadcaster → Backend agent-client → agent-event-handler → DB + WS push.
 
 **Event categories:**
 
@@ -263,6 +263,7 @@ All agent output is normalized to 12 canonical event types that flow: Agent SDK 
 - **Messages:** `message.assistant`, `message.tool_result`, `message.result`, `message.cancelled`
 - **Requests:** `request.opened`, `request.resolved`
 - **Tool relay:** `tool.request`, `tool.response`
+- **Metadata:** `agent.session_id`, `session.title`
 
 ### Key Bun Scripts
 
@@ -892,7 +893,7 @@ The only pollers are conditional git diff queries (only when sessions are "worki
 
 ### Database Rules
 
-**Required indexes** — any new table or query pattern must have proper indexes. All indexes are defined in `apps/backend/src/lib/schema.ts` (and mirrored in `apps/sidecar/db/schema.ts`). For any new query pattern, add an index to the schema:
+**Required indexes** — any new table or query pattern must have proper indexes. All indexes are defined in `shared/schema.ts`. For any new query pattern, add an index to the schema:
 
 ```sql
 -- Defined in schema.ts:
