@@ -231,9 +231,15 @@ function ConnectDeviceDialog({
                 <div className="rounded-xl bg-white p-3">
                   <QRCodeSVG value={pairUrl} size={180} level="M" />
                 </div>
-              ) : (
+              ) : accessUrl ? (
                 <div className="bg-muted/40 flex size-[204px] items-center justify-center rounded-xl">
                   <span className="text-muted-foreground text-sm">Generating...</span>
+                </div>
+              ) : (
+                <div className="bg-muted/40 flex size-[204px] items-center justify-center rounded-xl">
+                  <span className="text-muted-foreground px-4 text-center text-sm">
+                    Waiting for connection...
+                  </span>
                 </div>
               )}
 
