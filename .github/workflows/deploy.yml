@@ -1,10 +1,19 @@
-# Deploy cloud relay to Cloudflare Workers.
-# Auto-deploys on push to main when relay files change.
+# Deploy cloud services to Cloudflare.
+# Auto-deploys on push to main when relevant files change.
 # Can also be triggered manually via workflow_dispatch.
 #
+# Services:
+#   relay — Cloudflare Worker (relay.rundeus.com)
+#   web   — Cloudflare Pages (app.rundeus.com)
+#
 # Required GitHub Secrets:
-#   CLOUDFLARE_API_TOKEN     — Cloudflare API token with Workers deploy permissions
+#   CLOUDFLARE_API_TOKEN     — Cloudflare API token with Workers/Pages deploy permissions
 #   CLOUDFLARE_ACCOUNT_ID    — Cloudflare account ID
+#
+# Optional GitHub Secrets:
+#   VITE_SENTRY_DSN          — Sentry DSN for frontend error tracking
+#   VITE_PUBLIC_POSTHOG_KEY  — PostHog analytics API key
+#   VITE_PUBLIC_POSTHOG_HOST — PostHog analytics host
 
 name: Deploy
 
@@ -13,7 +22,8 @@ on:
     branches: [main]
     paths:
       - "apps/cloud-relay/**"
-      - "shared/types/relay.ts"
+      - "apps/web/**"
+      - "shared/**"
   workflow_dispatch:
     inputs:
       service:
@@ -22,20 +32,44 @@ on:
         type: choice
         options:
           - relay
+          - web
           - all
-        default: relay
+        default: all
 
 concurrency:
   group: deploy-${{ github.ref }}
   cancel-in-progress: false
 
 jobs:
+  # ── Detect which services changed (for push events) ──────────────
+  changes:
+    name: Detect Changes
+    runs-on: ubuntu-latest
+    outputs:
+      relay: ${{ steps.filter.outputs.relay }}
+      web: ${{ steps.filter.outputs.web }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: dorny/paths-filter@v3
+        id: filter
+        with:
+          filters: |
+            relay:
+              - 'apps/cloud-relay/**'
+              - 'shared/types/relay.ts'
+            web:
+              - 'apps/web/**'
+              - 'shared/**'
+
+  # ── Deploy Cloud Relay (Cloudflare Worker) ───────────────────────
   deploy-relay:
     name: Deploy Cloud Relay
+    needs: changes
     runs-on: ubuntu-latest
     if: >-
-      github.event_name == 'workflow_dispatch' ||
-      github.event_name == 'push'
+      (github.event_name == 'workflow_dispatch' && github.event.inputs.service != 'web') ||
+      (github.event_name == 'push' && needs.changes.outputs.relay == 'true')
     steps:
       - uses: actions/checkout@v4
 
@@ -67,3 +101,36 @@ jobs:
           else
             echo "Relay health check passed"
           fi
+
+  # ── Deploy Web App (Cloudflare Pages) ────────────────────────────
+  deploy-web:
+    name: Deploy Web App
+    needs: changes
+    runs-on: ubuntu-latest
+    if: >-
+      (github.event_name == 'workflow_dispatch' && github.event.inputs.service != 'relay') ||
+      (github.event_name == 'push' && needs.changes.outputs.web == 'true')
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.2.19
+
+      - name: Install dependencies
+        run: bun install --frozen-lockfile
+
+      - name: Build web app
+        env:
+          VITE_SENTRY_DSN: ${{ secrets.VITE_SENTRY_DSN }}
+          VITE_PUBLIC_POSTHOG_KEY: ${{ secrets.VITE_PUBLIC_POSTHOG_KEY }}
+          VITE_PUBLIC_POSTHOG_HOST: ${{ secrets.VITE_PUBLIC_POSTHOG_HOST }}
+        run: bun run build:web
+
+      - name: Deploy to Cloudflare Pages
+        uses: cloudflare/wrangler-action@v3
+        with:
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          command: pages deploy dist/web --project-name=deus --branch=main
