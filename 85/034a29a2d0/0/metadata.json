@@ -1,0 +1,22 @@
+{
+  "cli_version": "0.5.0",
+  "checkpoint_id": "85034a29a2d0",
+  "session_id": "ea314d91-74ae-4b30-8fba-fb4bcdfeead9",
+  "strategy": "manual-commit",
+  "created_at": "2026-03-22T15:47:46.309341Z",
+  "branch": "zvadaadam/electron-prod-build",
+  "checkpoints_count": 8,
+  "files_touched": [],
+  "agent": "Claude Code",
+  "turn_id": "25920ce6e93f",
+  "token_usage": {
+    "input_tokens": 4195,
+    "cache_creation_tokens": 871734,
+    "cache_read_tokens": 12570560,
+    "output_tokens": 54700,
+    "api_call_count": 112
+  },
+  "session_metrics": {
+    "turn_count": 8
+  }
+}
