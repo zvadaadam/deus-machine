@@ -575,3 +575,7 @@ When we're going to do the release, it's going to be that we have to trigger it 
 ---
 
 But do we have to remember always the version or like we're gonna be doing like this incremental version? The +1 like you know, is there a better way to do it? Like I won't be able to remember this and I don't want to do mistakes there. And if we're gonna do like the main more mature change, what do you think how we should solve this?
+
+---
+
+What is the version we do now? We want the version of 0.1.0, this version to be.
