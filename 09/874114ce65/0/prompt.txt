@@ -1558,3 +1558,14 @@ CLAUDE.md rule (verbatim):
 **Practical impact is low** — the store has only 3 mutable fields, `retry`/`markSendAttemptFailed` are stable function refs, and state changes happen rarely (only on disconnect/reconnect). But the pattern sets a precedent that could be more costly in larger stores.
 
 Overall this is a well-structured feature that follows the project's architecture patterns. No bugs, good accessibility (`aria-live`, `useReducedMotion`), correct animation primitives (transform + opacity only), proper use of `ts-pattern` with `.exhaustive()`, and color tokens from the design system.
+
+---
+
+<system_instruction>
+The user has attached these files. Read them before proceeding.
+- /Users/zvada/Developer/agent/box-ide/.conductor/philadelphia-v2/.context/attachments/PR instructions.md (957 B)
+</system_instruction>
+
+
+
+Create a PR
