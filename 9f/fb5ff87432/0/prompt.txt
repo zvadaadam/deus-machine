@@ -1,0 +1,2209 @@
+<system_instruction>
+You are working inside OpenDevs, a Mac app that lets the user run many coding agents in parallel.
+Your work should take place in the /Users/zvada/Developer/agent/box-ide/.conductor/vienna-v2 directory (unless otherwise directed), which has been set up for you to work in.
+Each workspace has a .context directory (gitignored) where you can save files to collaborate with other agents.
+DO NOT EVER read or write files at /Users/zvada/Developer/agent/box-ide.
+The target branch for this workspace is main. Use this for actions like creating new PRs, bisecting, etc., unless you're told otherwise.
+
+If the user asks you to work on several unrelated tasks, you can suggest they start new workspaces.
+Sometimes the user might send you a message they meant to send in a different workspace or a different chat. If something doesn't make sense in the context of your work, just ask. 
+If the user asks for help with OpenDevs, you can ask them to go to "Help -> Send Feedback" to get in touch with our team.
+</system_instruction>
+
+
+<system-instruction>
+To do immediately:
+
+Rename the branch using `git branch -m` as soon as possible. Do not check the current branch name.
+
+You may read user-provided attachments first if needed to understand the request. Otherwise, do this before using any skills or any other tools.
+
+Choosing a branch name: use concrete, specific language, avoid abstract nouns, and be concise (<30 characters). Use the prefix "zvadaadam/" before the name.
+
+</system-instruction>
+
+Can you explore the way how we connect? So maybe lay out like how we connect from the front end to like from the desktop app to the website hosted. What is the flow? What the user has to do? What are the clicks? And what are the other workflows to actually connect and pair the desktop or server to the web clients and different kind of web clients? What would it be? How it would work? I'm thinking about like if the UX and the communication is clear if there are any better and easier ways to do it. More straightforward.
+
+What if the user is on a web or a mobile phone? What would it be?
+
+---
+
+Also a problem with the word and the number is the separator, because then you have two text fields and it's not as easy as copy it and then paste it. This can be also a problem. And I want you to visualize the flows and run a couple of design sub-agents that are like product designers and they can help you out with the improvements. But don't code it yet. Let them explore, get their opinion and then we will then suggest the improvement. Maybe they will come up with something different, but I don't know. /design-explore
+
+---
+
+<task-notification>
+<task-id>a82ebf4b0dabf21d5</task-id>
+<tool-use-id>REDACTED</tool-use-id>
+<output-file>/private/tmp/claude-501/-Users-zvada-Developer-agent-box-ide--conductor-vienna-v2/f7daa10a-7b09-4396-92df-4cd26838830b/tasks/a82ebf4b0dabf21d5.output</output-file>
+<status>completed</status>
+<summary>Agent "Dieter Rams pairing UX" completed</summary>
+<result>
+
+# SILENT HANDSHAKE
+
+**Philosophy:** A connection between two devices should feel as natural as handing someone a key. The technology disappears; only the intent remains — "I want to use this from there."
+
+---
+
+## Language System
+
+Every word was chosen to eliminate cognitive load. Technical infrastructure must never surface in the interface.
+
+| Kill this | Replace with |
+|-----------|-------------|
+| Relay / Portal / Server | *(nothing — never mentioned)* |
+| Server ID | *(hidden, embedded in URL/QR)* |
+| Remote access | **Link your phone** or **Connect a device** |
+| Pairing code | **Connection code** |
+| Paired devices | **Linked devices** |
+| Revoke | **Remove** |
+
+The word "pairing" itself is borderline. People pair Bluetooth headphones. They *link* their accounts, *connect* their devices. "Link" is warmer and more familiar.
+
+---
+
+## The Code Format
+
+**Format: `BEAR-4521` — single field, no change to the code itself, but fundamental change to input.**
+
+One field. One string. The user types or pastes `BEAR-4521` as a single token. The hyphen is a visual separator, not a field boundary.
+
+**Why keep WORD-NNNN:**
+- Verbal dictation: "bear forty-five twenty-one" — four syllables for the number, one word for the anchor. Humans chunk this naturally.
+- Visual memorability: a word gives the code an identity. "The bear code." Pure numbers vanish from short-term memory.
+- Copy-paste: a single string copies and pastes in one action. The current two-field design is the problem, not the format.
+
+**Input field behavior:**
+- Single text input, monospaced, centered, large (20px+ font).
+- Placeholder text: `WORD-0000`
+- Auto-uppercases as you type.
+- Accepts with or without hyphen (`BEAR4521` or `BEAR-4521` or `bear-4521`).
+- On paste: strips whitespace, normalizes case, auto-submits if valid format detected.
+- On submit: if code is invalid or expired, the field shakes subtly (200ms, 4px horizontal, ease-out-quart) and shows inline text below: "Code not recognized. Check the code on your desktop and try again." — never "invalid code" (accusatory) or "expired" (confusing if they just read it off screen).
+- No submit button visible until the field has content matching the pattern. Then a single `Connect` button appears with a fade (opacity 0→1, 150ms).
+
+**Validation regex:** `/^[A-Z]{3,8}-?\d{4}$/` after normalization.
+
+---
+
+## Desktop Side — Settings Panel
+
+### State 1: Device linking is OFF (default)
+
+Within Settings, under a section titled **Linked Devices**:
+
+```
+┌──────────────────────────────────────────────────────────┐
+│  Linked Devices                                          │
+│                                                          │
+│  Access your workspaces from your phone or another       │
+│  computer.                                               │
+│                                                          │
+│  ┌──────────────────────────────────────────────────┐    │
+│  │            Enable Device Linking                  │    │
+│  └──────────────────────────────────────────────────┘    │
+│                                                          │
+│  Your workspaces stay on this computer. Linked devices   │
+│  get a live view through a secure connection.            │
+│                                                          │
+└──────────────────────────────────────────────────────────┘
+```
+
+**Element details:**
+- Section heading: `Linked Devices` — `text-sm font-medium text-foreground tracking-wide uppercase`
+- Description: two lines, `text-sm text-muted-foreground`, max-width ~480px
+- Button: primary variant, medium size, centered in the card area
+- Footer note: `text-xs text-muted-foreground` — this is the only mention of how it works, and it uses plain language
+
+**What "Enable Device Linking" does:** Starts the relay WebSocket connection, transitions to State 2. If relay connection fails, the button shows a brief error state: "Couldn't connect. Check your internet and try again." with a retry affordance.
+
+---
+
+### State 2: Device linking is ON, no devices linked yet
+
+```
+┌──────────────────────────────────────────────────────────┐
+│  Linked Devices                                     [Off]│
+│                                                          │
+│  Scan the QR code or share the link to connect a device. │
+│                                                          │
+│  ┌────────────────────────────────────────────┐          │
+│  │                                            │          │
+│  │          ┌──────────────┐                  │          │
+│  │          │              │    Connection     │          │
+│  │          │   QR CODE    │    code:          │          │
+│  │          │  (120×120)   │                   │          │
+│  │          │              │    BEAR-4521      │          │
+│  │          └──────────────┘                   │          │
+│  │                                             │          │
+│  │  ┌──────────────────────────────────────┐   │          │
+│  │  │ https://app.rundeus.com/c/BEAR-4521  │   │          │
+│  │  │                              [Copy]  │   │          │
+│  │  └──────────────────────────────────────┘   │          │
+│  │                                             │          │
+│  │  Code expires in 14:32      [New code]      │          │
+│  └─────────────────────────────────────────────┘          │
+│                                                          │
+│  No devices linked yet.                                  │
+│                                                          │
+└──────────────────────────────────────────────────────────┘
+```
+
+**Element details:**
+
+- **[Off] toggle/button** — top right of section header. Text link style, `text-xs text-muted-foreground hover:text-foreground`. Clicking shows a confirmation: "This will disconnect all linked devices. Continue?" with `Disconnect` / `Cancel`. Labeled "Off" rather than "Disable" — shorter, clearer.
+
+- **QR Code** — 120x120px, left-aligned within the card. Encodes the full URL with code embedded: `https://app.rundeus.com/c/BEAR-4521`. White on dark background for high contrast/scannability. Subtle 1px border-radius (4px) on the container. The QR code IS the primary action — it's the largest element because phone-scanning-desktop-screen is the most common scenario.
+
+- **Connection code** — displayed to the right of the QR code. Label "Connection code:" in `text-xs text-muted-foreground`. The code itself in `text-lg font-mono font-semibold tracking-widest` — large, unmistakable, easy to read aloud. This serves the verbal dictation scenario.
+
+- **Shareable URL** — full URL in a contained row with a Copy button. `text-sm font-mono text-muted-foreground` in a subtle `bg-muted/30 rounded-lg` container. The URL is shortened: `/c/` instead of `/connect/` — saves characters for sharing. Copy button uses the clipboard icon, no label needed. On click: icon morphs to checkmark for 2 seconds, tooltip "Copied". This serves the link-shared-via-chat scenario.
+
+- **URL design decision:** The code IS the URL slug. `app.rundeus.com/c/BEAR-4521` — no separate server ID needed in the URL. The backend resolves the code to the correct relay connection. This means one thing to share, not two.
+
+- **Expiry countdown** — `text-xs text-muted-foreground`. Shows "Code expires in MM:SS" with a live countdown. Below 2 minutes: text shifts to `text-warning` (amber). Below 30 seconds: `text-destructive`. At 0: auto-generates a new code with a subtle crossfade (the QR, code, and URL all update simultaneously, 200ms opacity transition).
+
+- **[New code]** — text button, `text-xs text-muted-foreground`. Generates a fresh code immediately. Useful if you suspect someone saw the code, or if you want a fresh 15-minute window before sharing.
+
+- **Card container** — `bg-muted/20 rounded-xl border border-border/50 p-6`. Enough breathing room. The entire sharing surface is one cohesive card.
+
+---
+
+### State 3: Devices are linked
+
+```
+┌──────────────────────────────────────────────────────────┐
+│  Linked Devices                                     [Off]│
+│                                                          │
+│  ┌────────────────────────────────────────────┐          │
+│  │  Safari on iPhone              Connected    │          │
+│  │  Linked 2 hours ago                [Remove] │          │
+│  ├────────────────────────────────────────────┤          │
+│  │  Chrome on MacBook Pro         Connected    │          │
+│  │  Linked 3 days ago                 [Remove] │          │
+│  └────────────────────────────────────────────┘          │
+│                                                          │
+│  ┌──────────────────────────────────────────────┐        │
+│  │          + Link another device               │        │
+│  └──────────────────────────────────────────────┘        │
+│                                                          │
+└──────────────────────────────────────────────────────────┘
+```
+
+**Element details:**
+
+- **Device list** — each row shows: device description (derived from User-Agent at pairing time: "Safari on iPhone", "Chrome on Windows"), connection status (`Connected` in `text-xs text-green-500` or `Last seen 2h ago` in `text-xs text-muted-foreground`), time since linking, and a [Remove] text button (`text-xs text-destructive`).
+
+- **Remove** — immediate removal with a brief undo toast (5 seconds): "Device removed. [Undo]". No confirmation dialog — the undo toast is faster and less interruptive. Removing a device invalidates its stored token server-side.
+
+- **"+ Link another device"** — secondary/outline button. Clicking expands the QR/code card from State 2 directly below, pushing the button down. The expansion uses `height: auto` animation via Framer Motion (CSS cannot animate to auto). Generating another code while existing devices are connected is fine — each code is independent.
+
+- **Maximum 5 devices** — when 5 are linked, the "Link another device" button is replaced with `text-xs text-muted-foreground`: "Maximum 5 devices. Remove one to link another." No disabled button — disabled buttons without explanation are hostile.
+
+---
+
+## Remote Side — Phone Scanning Desktop Screen
+
+This is the golden path. User picks up phone, opens camera.
+
+### Step 1: Camera → QR → Browser opens
+
+The QR encodes `https://app.rundeus.com/c/BEAR-4521`. Every modern phone (iOS 11+, Android 8+) recognizes QR codes in the native camera app. No special app needed.
+
+Browser opens. The URL contains the code. Auto-submit begins immediately.
+
+### Step 2: Connection page (auto-connecting)
+
+```
+┌─────────────────────────────────────┐
+│                                     │
+│           ○ ○ ○                     │
+│        (pulsing dots)               │
+│                                     │
+│       Connecting...                 │
+│                                     │
+│                                     │
+└─────────────────────────────────────┘
+```
+
+- Three dots pulsing in sequence (stagger 100ms, opacity 0.3→1→0.3, ease-out-quart). Minimal. The QR path should feel instant — the user did nothing wrong, the system is working.
+- No input field shown. No code shown. The URL carried everything.
+- If connection succeeds (typical: <2 seconds): transitions to Step 3.
+- If connection fails after 8 seconds: shows the manual code entry (Step 2b) with message "Couldn't connect automatically. Enter the code from your desktop:" — graceful fallback, not an error wall.
+
+### Step 3: Connected
+
+```
+┌─────────────────────────────────────┐
+│                                     │
+│            ✓                        │
+│                                     │
+│       Connected to                  │
+│       Adam's MacBook Pro            │
+│                                     │
+│    You can now view and interact    │
+│    with your workspaces from        │
+│    this device.                     │
+│                                     │
+│  ┌───────────────────────────────┐  │
+│  │      Open Workspaces          │  │
+│  └───────────────────────────────┘  │
+│                                     │
+└─────────────────────────────────────┘
+```
+
+- Checkmark: single SVG, draws on with a stroke-dashoffset animation (300ms, ease-out-quart). Green (`text-green-500`).
+- Device name: the desktop's hostname, humanized. "Adam's MacBook Pro" not "Adams-MacBook-Pro.local". This builds trust — you know which computer you connected to.
+- Description: plain language, one purpose. `text-sm text-muted-foreground`, centered.
+- CTA: primary button, full width within comfortable margins. Takes you into the app.
+- The pairing token is stored in `localStorage` at this point. Subsequent visits skip the pairing flow entirely.
+
+---
+
+## Remote Side — Link Shared Via Chat
+
+Someone sends you: `https://app.rundeus.com/c/BEAR-4521`
+
+You click it. The experience is identical to Step 2→3 above. The code is in the URL. Auto-submit. Done.
+
+If the code has expired by the time you click (>15 min after it was generated):
+
+```
+┌─────────────────────────────────────┐
+│                                     │
+│       This link has expired.        │
+│                                     │
+│    Ask for a new code or link       │
+│    from the desktop app.            │
+│                                     │
+│    ─── or enter a code ───          │
+│                                     │
+│  ┌───────────────────────────────┐  │
+│  │         WORD-0000             │  │
+│  └───────────────────────────────┘  │
+│                                     │
+│  ┌───────────────────────────────┐  │
+│  │          Connect              │  │
+│  └───────────────────────────────┘  │
+│                                     │
+└─────────────────────────────────────┘
+```
+
+- Clear language: "This link has expired" — not "invalid code", not "error 403".
+- Instruction: tells you exactly what to do. Ask the person for a new one. Or type a code if you have one.
+- The manual input field appears as a fallback, not the primary path.
+
+---
+
+## Remote Side — Manual Code Entry (another computer, or verbal dictation)
+
+If someone arrives at `https://app.rundeus.com` directly (no code in URL), or navigates to `/connect`:
+
+```
+┌─────────────────────────────────────┐
+│                                     │
+│         OpenDevs                    │
+│                                     │
+│    Enter the connection code        │
+│    shown on your desktop.           │
+│                                     │
+│  ┌───────────────────────────────┐  │
+│  │         WORD-0000             │  │
+│  └───────────────────────────────┘  │
+│                                     │
+│  ┌───────────────────────────────┐  │
+│  │          Connect              │  │
+│  └───────────────────────────────┘  │
+│                                     │
+└─────────────────────────────────────┘
+```
+
+- Minimal page. Logo. One instruction. One field. One button.
+- The field placeholder `WORD-0000` teaches the format without explaining it.
+- On paste of a full URL (`https://app.rundeus.com/c/BEAR-4521`): the field extracts the code portion automatically. People copy URLs from chat, not just codes.
+- On paste of just the code: normalizes and optionally auto-submits.
+- Field is focused on page load (`autoFocus`). Keyboard appears immediately on mobile.
+
+---
+
+## Edge Cases
+
+### Relay disconnected (desktop side)
+
+The QR/code card in Settings is replaced with:
+
+```
+  ┌────────────────────────────────────────────┐
+  │                                            │
+  │  Connection lost. Attempting to             │
+  │  reconnect...                              │
+  │                                            │
+  │  Linked devices won't be able to connect   │
+  │  until the connection is restored.         │
+  │                                            │
+  │             [Retry now]                    │
+  │                                            │
+  └────────────────────────────────────────────┘
+```
+
+- Already-linked devices see their connection drop; the web app shows "Connection to your desktop was lost. It will reconnect automatically when available." with a subtle pulsing indicator. No action required from the user — WebSocket reconnection is automatic with exponential backoff.
+- No QR code shown while disconnected — showing a code that can't work is dishonest.
+
+### Code expires while user is typing on remote side
+
+- The code validation happens on submit, not on each keystroke. If the code expired 10 seconds ago and the user submits, they see: "That code has expired. Ask for a new one from the desktop app." Same gentle language.
+- The desktop auto-generates a new code when the old one expires (the countdown hits zero and refreshes). So by the time the remote user asks, there's already a fresh code displayed.
+
+### Token expired on return visit (remote side)
+
+When a previously-linked device returns but its token is no longer valid (device was removed, or token TTL expired):
+
+```
+┌─────────────────────────────────────┐
+│                                     │
+│    Your session has ended.          │
+│                                     │
+│    You'll need a new connection     │
+│    code from the desktop app.       │
+│                                     │
+│    ─── enter code ───               │
+│                                     │
+│  ┌───────────────────────────────┐  │
+│  │         WORD-0000             │  │
+│  └───────────────────────────────┘  │
+│                                     │
+└─────────────────────────────────────┘
+```
+
+- No ambiguity. No "unauthorized". Plain statement of what happened and what to do next.
+- localStorage token is cleared automatically so the user doesn't get stuck in a redirect loop.
+
+### User tries to link a 6th device
+
+Handled in State 3 above — the button disappears and is replaced with an explanation. The backend rejects the pairing attempt with a specific error code that the frontend translates to: "This desktop has the maximum number of linked devices. Remove one from Settings to continue."
+
+---
+
+## Three Key Decisions
+
+**1. The code IS the URL path — one artifact, not two.**
+
+The current design requires sharing a URL AND a code separately. By embedding the code directly in the URL (`/c/BEAR-4521`), every sharing mechanism collapses to one action: scan QR, click link, or say code. The backend resolves the code to the relay connection — the server ID is an implementation detail that never surfaces. This is the single most impactful change. It eliminates the entire "which piece of information goes where?" confusion.
+
+**2. QR code is the primary, not supplementary, element.**
+
+Phone-scanning-desktop is the most common cross-device pairing scenario (cf. WhatsApp Web, Discord, Telegram). The QR code occupies the most visual weight in the sharing card because it should be the first thing the user reaches for. The text code and copyable URL are secondary paths for scenarios where QR doesn't work (remote sharing, accessibility, verbal dictation). Hierarchy reflects frequency of use.
+
+**3. Single input field with intelligent paste handling.**
+
+Two fields for one code is a hostile pattern. It breaks copy-paste, it creates tab-order confusion, and it forces the user to understand the code's internal structure. A single field that accepts `BEAR-4521`, `bear4521`, `BEAR 4521`, or even a full pasted URL eliminates every friction point. The field is generous in what it accepts and precise in what it transmits.
+
+---
+
+## One Acknowledged Tradeoff
+
+**The word list is only 100 words, making codes partially guessable.**
+
+With 100 words and 4 digits, the code space is 100 x 10,000 = 1,000,000 combinations. This is small enough that a determined attacker could brute-force it within the 15-minute TTL if there were no rate limiting. The tradeoff is: short, memorable, dictatable codes vs. cryptographic strength. The mitigations (one-time use, 15-min TTL, max 5 active codes, rate limiting on the pairing endpoint — which should reject after 5 failed attempts per IP per minute) make this acceptable for the threat model of a desktop IDE tool. But it is not suitable for high-security environments. If the word list were expanded to 1,000 words or the digit portion to 6, the code space grows to 10M-1B, but dictation becomes harder. I chose human usability over theoretical security margin, accepting that rate limiting is the real security boundary.
+
+---
+
+## Implementation Notes
+
+The URL structure change (`/c/CODE` instead of `/connect/{serverId}?pair=CODE`) requires:
+- A route that resolves the word-code to a server ID on the backend/relay side
+- The `PairGatePage` to read the code from the path segment instead of (or in addition to) the query param
+- The QR generation to encode the simplified URL
+
+The single input field requires:
+- Removing the current two-field component
+- A normalization function: strip whitespace, uppercase, insert hyphen if missing between alpha and numeric portions, extract code from full URL if pasted
+- Validation on the normalized result, not the raw input
+
+Both are modest changes that dramatically simplify the user's mental model. The technology recedes. The intent — "connect this to that" — is all that remains.</result>
+<usage><total_tokens>21900</total_tokens><tool_uses>0</tool_uses><duration_ms>126184</duration_ms></usage>
+</task-notification>
+Full transcript available at: /private/tmp/claude-501/-Users-zvada-Developer-agent-box-ide--conductor-vienna-v2/f7daa10a-7b09-4396-92df-4cd26838830b/tasks/a82ebf4b0dabf21d5.output
+
+---
+
+<task-notification>
+<task-id>a58388284ebedb2aa</task-id>
+<tool-use-id>toolu_01E2U3S8n6v69BJmn29x3vTe</tool-use-id>
+<output-file>/private/tmp/claude-501/-Users-zvada-Developer-agent-box-ide--conductor-vienna-v2/f7daa10a-7b09-4396-92df-4cd26838830b/tasks/a58388284ebedb2aa.output</output-file>
+<status>completed</status>
+<summary>Agent "Jony Ive pairing UX" completed</summary>
+<result>
+
+# Direction: **Quiet Handshake**
+
+## Philosophy
+
+A connection between devices should feel like two people making eye contact across a room — immediate, natural, requiring no explanation. The technology disappears; what remains is the simple act of one device recognizing another.
+
+---
+
+## Language System
+
+Before anything else, we establish the vocabulary. Every word a user reads shapes their mental model.
+
+| Technical term | User-facing term |
+|---|---|
+| Relay server | *(never exposed)* |
+| Remote access | **Access from other devices** |
+| Pairing code | **Connection code** |
+| Server ID | *(never exposed)* |
+| Portal | *(never exposed)* |
+| Paired device | **Connected device** |
+| Token | *(never exposed)* |
+| Revoke | **Disconnect** |
+
+The language is deliberately domestic. "Connect" and "disconnect" — verbs everyone knows from plugging in a cable.
+
+---
+
+## The Code Format
+
+**Decision: Single unified code. Format: `WORD-NNNN` as one atomic string.**
+
+The code remains `WORD-NNNN` (e.g., `OAK-3847`) but is treated as a single indivisible token everywhere — one field, one clipboard entry, one thing to say aloud.
+
+Why this format works across all three scenarios:
+
+- **Phone scanning desktop**: QR code encodes the full URL with code embedded. No typing needed.
+- **Link shared via chat**: URL is `https://app.rundeus.com/connect/OAK-3847`. The code is in the URL. Click and done.
+- **Verbal dictation**: "Oak three eight four seven" — one word, four digits. Under 3 seconds to speak. The word anchors memory (people remember "oak" while their fingers find the numbers).
+
+**Why not pure numeric?** A 6-digit number (`384721`) is harder to dictate and harder to remember mid-transfer. The word provides a cognitive anchor. "Oak" sticks in working memory while the person types the digits.
+
+**Why not two words?** Two words from a 100-word list gives only 10,000 combinations — same as WORD-NNNN, but harder to type (spaces? hyphens? which word was first?). The hybrid format optimizes for both entropy and usability.
+
+---
+
+## Desktop Side — Screen by Screen
+
+### Screen 1: Settings > Devices
+
+This lives in Settings as a dedicated section. Not buried, not promoted — it's where you'd expect to find it.
+
+**Layout:**
+
+```
+┌─────────────────────────────────────────────────────┐
+│  Settings                                           │
+│                                                     │
+│  ┌─ General ─┐                                      │
+│  ├─ Agents   ┤                                      │
+│  ├─ Devices  ┤  ◄── selected                        │
+│  └─ ...      ┘                                      │
+│                                                     │
+│  Access from other devices                          │
+│  ─────────────────────────────────────              │
+│  Open your workspaces from a phone or another       │
+│  computer. Connections are end-to-end encrypted.    │
+│                                                     │
+│  ┌─────────────────────────────────────────────┐    │
+│  │  No devices connected                        │    │
+│  │                                              │    │
+│  │  [ + Connect a device ]                      │    │
+│  └─────────────────────────────────────────────┘    │
+│                                                     │
+└─────────────────────────────────────────────────────┘
+```
+
+**Details:**
+
+- Section title: "Access from other devices" — `text-lg font-medium text-foreground`
+- Subtitle: One line of reassurance. The phrase "end-to-end encrypted" is present but not shouting — it's stated as fact, not marketing. `text-sm text-muted-foreground`
+- The empty state card has a soft `bg-muted/30` background, `rounded-xl`, `border border-border/50`
+- The "+ Connect a device" button is a `variant="outline"` button, medium size, centered in the empty state
+
+**When devices exist:**
+
+```
+┌─────────────────────────────────────────────────────┐
+│  Access from other devices                          │
+│  Open your workspaces from a phone or another       │
+│  computer. Connections are end-to-end encrypted.    │
+│                                                     │
+│  ┌─────────────────────────────────────────────┐    │
+│  │  Safari on iPhone          Connected now     │    │
+│  │  First connected Mar 18    ·  Disconnect     │    │
+│  ├─────────────────────────────────────────────┤    │
+│  │  Chrome on MacBook Pro     Last seen 2h ago  │    │
+│  │  First connected Mar 12    ·  Disconnect     │    │
+│  └─────────────────────────────────────────────┘    │
+│                                                     │
+│  [ + Connect a device ]                             │
+│                                                     │
+└─────────────────────────────────────────────────────┘
+```
+
+- Each device row: `py-3 px-4`, separated by `border-b border-border/30`
+- Device name is derived from User-Agent, displayed as "Browser on Device" — `text-sm font-medium text-foreground`
+- Status: "Connected now" in `text-emerald-500` (using a CSS variable `--color-status-connected`), "Last seen 2h ago" in `text-muted-foreground`
+- "Disconnect" is a text button, `text-sm text-muted-foreground hover:text-destructive`, no underline — it becomes red on hover, signaling consequence without alarm
+- The "+ Connect a device" button sits below the list, left-aligned
+
+---
+
+### Screen 2: The Connection Sheet
+
+When the user clicks "+ Connect a device", a **sheet slides up from the bottom** (or a dialog on smaller viewports). Not a new page — the user hasn't left Settings. This is a momentary action, not a navigation.
+
+**Animation:** The sheet rises with `ease-out-quart` over 250ms, with a subtle `bg-background/80 backdrop-blur-xl` overlay behind it. The content inside fades in 50ms after the sheet reaches position — a slight stagger that gives the eye time to land.
+
+**Layout:**
+
+```
+┌─────────────────────────────────────────────────────┐
+│                                                     │
+│              Connect a device                       │
+│                                                     │
+│       Scan this code with your phone, or            │
+│       share the link with another computer.         │
+│                                                     │
+│         ┌───────────────────────┐                   │
+│         │                       │                   │
+│         │      ┌─────────┐      │                   │
+│         │      │ QR CODE │      │                   │
+│         │      │         │      │                   │
+│         │      │  200px  │      │                   │
+│         │      │         │      │                   │
+│         │      └─────────┘      │                   │
+│         │                       │                   │
+│         └───────────────────────┘                   │
+│                                                     │
+│         ── or share this link ──                    │
+│                                                     │
+│  ┌─────────────────────────────────────────┬──────┐ │
+│  │  app.rundeus.com/connect/OAK-3847       │ Copy │ │
+│  └─────────────────────────────────────────┴──────┘ │
+│                                                     │
+│         ── or enter this code ──                    │
+│                                                     │
+│              OAK-3847                               │
+│                                                     │
+│   Code expires in 14:32  ·  Generate new code       │
+│                                                     │
+└─────────────────────────────────────────────────────┘
+```
+
+**Element details:**
+
+**Title**: "Connect a device" — `text-xl font-semibold text-foreground`, centered.
+
+**Subtitle**: "Scan this code with your phone, or share the link with another computer." — `text-sm text-muted-foreground`, centered. Two scenarios in one sentence. No jargon.
+
+**QR Code container**: The QR code sits inside a `rounded-2xl bg-white p-6` card (always white background regardless of theme — QR codes need contrast). The card has `shadow-lg` — a subtle elevation that makes it feel like a physical card you could pick up. The QR code itself is ~200px, generated with rounded module dots (not harsh squares) and the OpenDevs logo mark centered as a quiet-zone image.
+
+The QR encodes: `https://app.rundeus.com/connect/OAK-3847`
+
+**Divider with text**: A horizontal rule with centered text "or share this link" — using the pattern: `flex items-center gap-3` with two `flex-1 h-px bg-border/50` lines flanking `text-xs text-muted-foreground uppercase tracking-wider`. The word "or" signals these are equivalent paths, not a hierarchy.
+
+**Link field**: A read-only input field showing the full URL. `rounded-lg bg-muted/40 border border-border/50 px-3 py-2 text-sm font-mono text-foreground`. The "Copy" button is attached to the right edge — `rounded-r-lg bg-primary text-primary-foreground px-3`. On click, the button text changes to a checkmark icon for 2 seconds with a satisfying `scale(0.95) -> scale(1)` micro-animation, then returns to "Copy".
+
+**Second divider**: "or enter this code" — same style as above. This is the verbal-dictation path.
+
+**The code display**: `OAK-3847` displayed large and prominent — `text-2xl font-mono font-bold tracking-[0.15em] text-foreground`. The letter-spacing makes each character distinct and easy to read aloud. The hyphen is visually lighter (`text-muted-foreground/50`) to show it's a separator, not something to dictate.
+
+**Expiry line**: "Code expires in 14:32 · Generate new code" — `text-xs text-muted-foreground`. The countdown is a live timer, updating every second. The minutes:seconds format is familiar. "Generate new code" is a text button in `text-primary hover:underline` — clicking it instantly replaces the code, QR, and link with a new set (a quick `opacity 0 -> 1` transition over 150ms, no layout shift since the format is identical).
+
+**Behavior notes:**
+- Opening this sheet immediately generates a pairing code (one API call). No "Generate" step needed.
+- If the relay is disconnected, the sheet still opens but shows: "Unable to connect to the pairing service. Check your internet connection." with a retry button. The QR area shows a subtle `bg-muted/20` placeholder with a cloud-off icon.
+- If 5 codes are already active, the oldest is silently rotated out (the user never sees this limit).
+
+---
+
+### Screen 3: Connection Success (Desktop Side)
+
+When the remote user successfully pairs, the desktop shows a **toast notification** that slides in from the top-right:
+
+```
+┌────────────────────────────────────────┐
+│  ✓  iPhone connected                   │
+│     Safari · Just now                  │
+└────────────────────────────────────────┘
+```
+
+- The toast uses `rounded-xl bg-background border border-border shadow-xl`
+- The checkmark is `text-emerald-500`, a small filled circle with a white check
+- It slides in with `translateY(-8px) -> translateY(0)` + `opacity 0 -> 1` over 200ms, `ease-out-quart`
+- It auto-dismisses after 5 seconds with a fade-out
+
+If the connection sheet is still open, it transforms in place. The QR code and fields smoothly fade out (150ms), and the success state fades in (150ms, 50ms delay):
+
+```
+┌─────────────────────────────────────────────────────┐
+│                                                     │
+│              Device connected                       │
+│                                                     │
+│              ┌──────────┐                           │
+│              │    ✓     │                           │
+│              │          │                           │
+│              └──────────┘                           │
+│                                                     │
+│         Safari on iPhone is now                     │
+│         connected to this computer.                 │
+│                                                     │
+│              [ Done ]                               │
+│                                                     │
+└─────────────────────────────────────────────────────┘
+```
+
+- The checkmark is a 48px circle, `bg-emerald-500/10 text-emerald-500`, with the check icon scaling from `scale(0) -> scale(1)` with a slight overshoot (`cubic-bezier(0.34, 1.56, 0.64, 1)`) over 400ms. This is the emotional peak — the moment of satisfaction.
+- "Done" dismisses the sheet.
+
+---
+
+## Remote Side — Phone Scanning Desktop
+
+### Flow: Scan QR -> Arrive -> Connected
+
+**Step 1**: User points phone camera at QR code on desktop screen. The phone's native camera app (or any QR reader) opens `https://app.rundeus.com/connect/OAK-3847`.
+
+**Step 2**: The web app loads. Because the URL contains the code, pairing begins automatically. The page shows:
+
+```
+┌─────────────────────────┐
+│                         │
+│     ┌──────────────┐    │
+│     │   OpenDevs    │    │
+│     │     logo      │    │
+│     └──────────────┘    │
+│                         │
+│      Connecting...      │
+│                         │
+│     ┌──────────────┐    │
+│     │  ●●●○○○○○    │    │  <- subtle progress dots
+│     └──────────────┘    │
+│                         │
+│   Establishing a secure │
+│   connection to your    │
+│   computer.             │
+│                         │
+└─────────────────────────┘
+```
+
+- The progress indicator is a row of small dots that fill left-to-right, pulsing gently. Not a spinner — spinners feel uncertain. Dots filling feel like progress.
+- Background: `bg-background` (respects system dark/light mode)
+- Logo: 40px, centered, the only branding moment
+- "Connecting..." in `text-lg font-medium`, the dots below in `text-primary`
+- "Establishing a secure connection to your computer." in `text-sm text-muted-foreground` — reassurance without technical detail
+
+**Step 3**: Connection succeeds. The dots complete, pause 300ms, then the entire view cross-fades (200ms) to the connected state:
+
+```
+┌─────────────────────────┐
+│                         │
+│     ┌──────────────┐    │
+│     │      ✓       │    │
+│     └──────────────┘    │
+│                         │
+│       Connected         │
+│                         │
+│  You're connected to    │
+│  Adam's MacBook Pro     │
+│                         │
+│  ─────────────────────  │
+│                         │
+│  Workspaces             │
+│                         │
+│  ┌───────────────────┐  │
+│  │  feature/auth     │  │
+│  │  3 files changed  │  │
+│  ├───────────────────┤  │
+│  │  fix/nav-layout   │  │
+│  │  idle             │  │
+│  └───────────────────┘  │
+│                         │
+└─────────────────────────┘
+```
+
+- The checkmark animation mirrors the desktop: `scale(0) -> scale(1)` with overshoot, 400ms
+- "Adam's MacBook Pro" — the desktop's hostname, humanized. This grounds the user: *yes, you're connected to the right machine.*
+- The workspace list appears 200ms after the checkmark, sliding up from `translateY(12px)` with fade-in. The user is immediately productive.
+
+---
+
+## Remote Side — Link Shared via Chat
+
+Someone sends you `https://app.rundeus.com/connect/OAK-3847` in Slack, iMessage, etc.
+
+**Step 1**: You click the link. The web app loads. Because `OAK-3847` is in the URL path, the `PairGatePage` detects the `?pair=CODE` param (or path-based code) and auto-submits.
+
+The flow is identical to the QR path from Step 2 onward. The user sees "Connecting..." then "Connected". Zero input required.
+
+**If the code is expired or invalid**, the auto-submit fails and the page shows:
+
+```
+┌─────────────────────────┐
+│                         │
+│     ┌──────────────┐    │
+│     │   OpenDevs    │    │
+│     │     logo      │    │
+│     └──────────────┘    │
+│                         │
+│   This link has expired │
+│                         │
+│   Connection codes are  │
+│   single-use and expire │
+│   after 15 minutes.     │
+│                         │
+│   Ask for a new code    │
+│   from the desktop app. │
+│                         │
+│   ── or enter a code ── │
+│                         │
+│   ┌─────────────────┐   │
+│   │                 │   │
+│   └─────────────────┘   │
+│   [ Connect ]           │
+│                         │
+└─────────────────────────┘
+```
+
+- "This link has expired" in `text-lg font-medium text-foreground` — direct, not apologetic
+- Explanation in `text-sm text-muted-foreground` — two facts (single-use, 15 minutes). No "oops" or "sorry".
+- Below the explanation, a manual code entry field appears as a fallback. The user can ask for a new code and type it in.
+
+---
+
+## Remote Side — Manual Code Entry (Verbal Dictation / Typing)
+
+If the user navigates directly to `https://app.rundeus.com/connect` (no code in URL), or the link expired, they see the manual entry screen:
+
+```
+┌─────────────────────────┐
+│                         │
+│     ┌──────────────┐    │
+│     │   OpenDevs    │    │
+│     │     logo      │    │
+│     └──────────────┘    │
+│                         │
+│   Enter connection code │
+│                         │
+│   ┌─────────────────┐   │
+│   │  OAK-3847       │   │
+│   └─────────────────┘   │
+│                         │
+│   [ Connect ]           │
+│                         │
+│   Open Settings >       │
+│   Devices in the        │
+│   desktop app to get    │
+│   a code.               │
+│                         │
+└─────────────────────────┘
+```
+
+### The Input Field — Detailed Design
+
+**Single field. One input. No splitting.**
+
+This is the most critical interaction design decision. The current two-field split (word + number) breaks copy-paste and creates confusion about which field has focus. A single field eliminates this entirely.
+
+**Field specifications:**
+
+- `rounded-lg border border-border bg-background px-4 py-3 text-center text-lg font-mono tracking-[0.1em] uppercase`
+- Placeholder: `WORD-1234` in `text-muted-foreground/40` — shows the expected format without instruction
+- The field auto-uppercases input (CSS `uppercase` + JS normalization on submit)
+- `maxLength={9}` (longest: 5-letter word + hyphen + 4 digits = 10, but most are 8-9)
+- `inputMode="text"` on mobile (we need letters, not just numbers)
+- `autocomplete="off"`, `autocorrect="off"`, `spellcheck="false"` — prevent keyboard interference
+
+**Paste handling:**
+- On paste, the field accepts the full code (`OAK-3847`), the full URL (`https://app.rundeus.com/connect/OAK-3847`), or partial strings
+- The paste handler strips the URL prefix if present, trims whitespace, normalizes to uppercase
+- If the pasted value looks like a complete valid code (matches `/^[A-Z]+-\d{4}$/` after normalization), auto-submit after a 300ms delay — the user sees the field populate, a brief beat, then "Connecting..."
+
+**Typing behavior:**
+- As the user types, the hyphen is NOT auto-inserted. The user types it themselves. Auto-inserting punctuation is disorienting when you don't expect it, and the dictation scenario ("oak dash three eight four seven") naturally includes it.
+- Real-time validation: the field border transitions to `border-primary` when the format matches `WORD-NNNN`. This is a subtle signal — "you've typed enough, you can submit." No error messages while typing.
+- The "Connect" button is `variant="default"` (primary), full-width below the input. Disabled with `opacity-50` until the input matches the code format.
+
+**On submit (click Connect or press Enter):**
+- The button text changes to a small spinner + "Connecting..." (the button doesn't disappear — layout stability)
+- If the code is invalid: the input field does a subtle `translateX` shake animation (3px left, 3px right, 2x, 200ms total) and the border turns `border-destructive` briefly. Below the field, red text appears: "Code not recognized. Check the code and try again." — `text-sm text-destructive`. No field clearing — the user can edit what they typed.
+- If the code is expired: same shake, but message says "This code has expired. Ask for a new one from the desktop app."
+- If network error: "Unable to connect. Check your internet and try again." with a "Retry" button that appears inline.
+
+---
+
+## Re-pairing and Revocation
+
+### Session Expired (Token Invalid)
+
+When the remote user opens the web app and their stored token is rejected:
+
+```
+┌─────────────────────────┐
+│                         │
+│   Session ended         │
+│                         │
+│   Your connection to    │
+│   this computer has     │
+│   expired.              │
+│                         │
+│   [ Reconnect ]         │
+│                         │
+└─────────────────────────┘
+```
+
+- "Session ended" — not "expired" (which implies fault), not "disconnected" (which implies a network problem). "Ended" is neutral.
+- "Reconnect" takes them to the manual code entry screen. They need a new code from the desktop.
+
+### Device Revoked from Desktop
+
+When the desktop user clicks "Disconnect" on a device:
+
+1. **Confirmation**: An inline confirmation replaces the "Disconnect" text — "Disconnect this device? [Yes] [No]" — no modal, no dialog. Inline confirmations are faster and less disruptive.
+2. On confirm, the device row collapses with `height -> 0` + `opacity -> 0` over 200ms. Smooth, physical, gone.
+3. The remote side, if currently connected via WebSocket, receives a disconnect frame. The web app shows "Session ended" (same as above). No drama.
+
+### Disconnecting All Devices
+
+Below the device list, if 2+ devices are connected: "Disconnect all devices" — a text button in `text-destructive/70 hover:text-destructive text-xs`. Requires the same inline confirmation pattern.
+
+---
+
+## Edge Cases
+
+### Relay Disconnected (Desktop Can't Reach Relay)
+
+If the backend cannot establish/maintain the WebSocket to `wss://relay.rundeus.com`:
+
+- **In Settings > Devices**: The "+ Connect a device" button is still visible but, upon click, the sheet opens and shows:
+
+```
+┌─────────────────────────────────────────────────────┐
+│                                                     │
+│              Connect a device                       │
+│                                                     │
+│       ┌─────────────────────────────────┐           │
+│       │  ☁️✕  Unable to generate a      │           │
+│       │      connection code.           │           │
+│       │                                 │           │
+│       │  The pairing service isn't      │           │
+│       │  reachable. Check your          │           │
+│       │  internet connection.           │           │
+│       │                                 │           │
+│       │      [ Try again ]              │           │
+│       └─────────────────────────────────┘           │
+│                                                     │
+└─────────────────────────────────────────────────────┘
+```
+
+(Note: the emoji above is for illustration; the actual icon would be a minimal cloud-slash SVG icon in `text-muted-foreground`, 24px.)
+
+- The error state is contained within the sheet — no system-level alerts.
+- "Try again" re-attempts the relay connection and code generation.
+
+### Code Expires While Sheet Is Open
+
+- The countdown reaches `0:00`. The code, QR, and link all fade to `opacity-40` simultaneously over 200ms.
+- The expiry text changes to: "Code expired · [Generate new code]"
+- Clicking "Generate new code" refreshes everything with a quick fade transition. The user never has to close and reopen anything.
+
+### Code Expires While Remote User Is Typing
+
+- The remote user submits the code. The backend returns "expired."
+- Same shake animation + "This code has expired. Ask for a new one from the desktop app."
+- The field retains their input (they might only need the new number portion if the desktop user regenerates).
+
+### Multiple Desktop Instances
+
+- If the user runs OpenDevs on two machines, each has its own device list. The remote web app connects to whichever machine generated the code. The URL/code contains the server identity implicitly (the `serverId` in the relay path).
+
+---
+
+## Animations — The Emotional Arc
+
+The pairing flow has a deliberate emotional shape: **calm preparation -> brief tension -> satisfying resolution**.
+
+### Act 1: Preparation (Desktop)
+- Sheet slides up smoothly. Elements appear with gentle staggers. Everything is laid out and ready. The user feels *in control*. QR code renders instantly (no loading state — it's generated client-side from the code).
+- Easing: `cubic-bezier(0.165, 0.84, 0.44, 1)` (ease-out-quart) — fast start, gentle landing.
+
+### Act 2: Tension (Remote)
+- "Connecting..." with filling dots. This is the only moment of uncertainty. Keep it short — the WebSocket handshake is typically < 1 second. The dots give the user something to watch, preventing the feeling of stuckness.
+- If this takes more than 3 seconds, the subtitle changes to "This is taking longer than usual..." — acknowledging the wait without alarm.
+
+### Act 3: Resolution (Both Sides)
+- The checkmark appears with a spring overshoot — `cubic-bezier(0.34, 1.56, 0.64, 1)`, 400ms. This is the dopamine moment. The overshoot (scale goes to ~1.1 then settles to 1.0) gives it a physical, bouncy quality — like a stamp pressing down.
+- On desktop, the toast slides in. On remote, the workspace list rises up. The user is immediately in their workspace — no "Continue" button, no interstitial. Connected means productive.
+
+### Micro-interactions Throughout
+- Copy button: `scale(0.97)` on press (50ms), then `scale(1)` with checkmark icon swap (150ms)
+- Code regeneration: old code fades out (100ms), new code fades in (150ms, 50ms delay) — a blink, not a transition
+- Input field focus: border transitions from `border-border` to `border-primary/50` over 150ms
+- Input validation match: border transitions to `border-primary` — a quiet "ready" signal
+- Sheet dismiss: slides down with `ease-in-quart` (fast at end, the inverse of open) over 200ms
+
+---
+
+## Three Key Decisions
+
+### 1. QR code is the primary path, not an afterthought
+
+The QR code occupies the visual center of the connection sheet. It's the largest element. This is intentional: the phone-scanning-desktop scenario is by far the most common real-world pairing flow (AirDrop, Spotify Connect, WhatsApp Web all validated this). The link and manual code are presented as secondary alternatives below dividers. By making QR dominant, we optimize for the 80% case while keeping the 20% cases accessible.
+
+### 2. Single input field, auto-submit on valid paste
+
+The current two-field design (word + number) exists because the developer who built it was thinking about validation, not about the user's hands. A person pasting a code from a chat message hits Cmd+V and expects it to work. Two fields break this completely — the paste lands in whichever field has focus, corrupting the input. A single field with smart paste handling (strip URLs, normalize, auto-submit on valid match) means the paste-from-chat scenario is literally one action: Cmd+V. Done. The 300ms delay before auto-submit gives the user a moment to see what was pasted — preventing the unsettling feeling of something happening before you understood it.
+
+### 3. The connection sheet, not a page
+
+Pairing is a *momentary action*, not a *destination*. A full page implies this is a place you spend time. A sheet (or dialog) layered over Settings communicates: "this takes 10 seconds, then you're done." The sheet pattern also means the desktop user doesn't lose context — Settings is still visible behind the overlay, and dismissing the sheet returns them exactly where they were. The connection success state transforms within the same sheet rather than navigating away, reinforcing that this was a quick aside, not a journey.
+
+---
+
+## One Acknowledged Tradeoff
+
+**The 15-minute TTL is short enough to cause friction but necessary for security.**
+
+A user who generates a code, gets distracted, then tries to share it 20 minutes later will hit an expired code. We mitigate this with: (a) the visible countdown timer, (b) effortless regeneration ("Generate new code" is one click, no confirmation), and (c) the remote-side expired state gracefully directs the user to ask for a new code. But we *don't* extend the TTL. One-time codes with short lifetimes are the security foundation — extending them would create a class of semi-valid codes floating in chat histories and screenshots that could be replayed. The tradeoff is: occasional re-generation friction in exchange for codes that are genuinely ephemeral. The interaction cost of regenerating (~2 seconds) is low enough that this is the right call.
+
+---
+
+## Implementation Notes
+
+For the engineering team — what changes from the current implementation:
+
+1. **Code format stays `WORD-NNNN`** but is always transmitted and displayed as a single string. Remove the split-field input on the remote side; replace with one `<input>`.
+
+2. **URL structure**: `https://app.rundeus.com/connect/{CODE}` (path-based, not query param). The `PairGatePage` should parse the code from the path. Keep `?pair=CODE` as a fallback for backward compat.
+
+3. **QR generation**: Use a client-side QR library (e.g., `qrcode` npm package) in the desktop frontend. Generate the QR from the full URL string. No backend round-trip needed for the QR image.
+
+4. **Paste handler on remote input**: `onPaste` event strips `https://app.rundeus.com/connect/` prefix if present, normalizes to uppercase, validates format, auto-submits after 300ms if valid.
+
+5. **Device name derivation**: Parse User-Agent on pairing to extract "Browser on Device" string. Store alongside the token in the `paired_devices` table.
+
+6. **Countdown timer**: Desktop sheet shows live `mm:ss` countdown from the code's TTL. Computed from `code.createdAt + 15min - now`. When it hits 0, fade the code to 40% opacity and show "Code expired."
+
+7. **Toast on connection**: Listen for a pairing success event (backend WS push) and display the toast. If the connection sheet is open, also transform its content to the success state.</result>
+<usage><total_tokens>21986</total_tokens><tool_uses>0</tool_uses><duration_ms>178232</duration_ms></usage>
+</task-notification>
+Full transcript available at: /private/tmp/claude-501/-Users-zvada-Developer-agent-box-ide--conductor-vienna-v2/f7daa10a-7b09-4396-92df-4cd26838830b/tasks/a58388284ebedb2aa.output
+
+---
+
+<task-notification>
+<task-id>a0ccbce470d6bc648</task-id>
+<tool-use-id>toolu_01GZpG3gKxp1SnEMZRcoyMxF</tool-use-id>
+<output-file>/private/tmp/claude-501/-Users-zvada-Developer-agent-box-ide--conductor-vienna-v2/f7daa10a-7b09-4396-92df-4cd26838830b/tasks/a0ccbce470d6bc648.output</output-file>
+<status>completed</status>
+<summary>Agent "Hella Jongerius pairing UX" completed</summary>
+<result>Now I have everything I need. Let me produce the complete design direction.
+
+---
+
+# "Chromatic Handshake"
+
+## Philosophy Statement
+
+Pairing two devices is an act of trust between strangers — your desktop inviting an unknown screen into its world. Color should perform the emotional labor of that introduction: warm amber signals readiness, a living gradient pulse says "I'm alive and waiting for you," and a shared color convergence at the moment of connection tells both sides "we found each other" without a single word of technical jargon. The palette is the protocol.
+
+---
+
+## Color Palette — Semantic Meanings
+
+Every color in this system earns its place through function. These are new CSS variables to add to the existing design system, living alongside the current `--primary` (cool rose) and `--success` (green) tokens.
+
+### Pairing-Specific Tokens
+
+| Token | Light Mode | Dark Mode | Meaning |
+|---|---|---|---|
+| `--pair-ready` | `oklch(0.72 0.14 75)` (warm amber) | `oklch(0.76 0.12 75)` | "I'm ready, come find me" — warmth, invitation |
+| `--pair-waiting` | `oklch(0.66 0.11 345)` (existing `--primary`, cool rose) | `oklch(0.78 0.09 345)` | "We're in progress" — activity, anticipation |
+| `--pair-connected` | `oklch(0.68 0.16 155)` (existing `--success`, green) | `oklch(0.72 0.12 155)` | "We found each other" — trust established |
+| `--pair-expired` | `oklch(0.58 0 0)` (neutral gray, existing `--text-subtle`) | `oklch(0.48 0 0)` | "This moment has passed" — quiet, not alarming |
+| `--pair-error` | `oklch(0.53 0.19 25)` (existing `--destructive`) | `oklch(0.65 0.13 20)` | "Something went wrong" — attention, not panic |
+| `--pair-glow` | `oklch(0.72 0.14 75 / 0.15)` (amber at 15% opacity) | `oklch(0.76 0.12 75 / 0.12)` | Ambient glow behind QR code and code display |
+
+### Why Amber as the Anchor
+
+The existing design system uses cool rose (`oklch(0.66 0.11 345)`) as primary and green (`oklch(0.53 0.16 155)`) as success. Amber at hue 75 sits exactly between them on the OKLCH color wheel — it is warm without being alarming (unlike red/orange), optimistic without being premature (unlike green), and distinct from the primary interactive accent. Amber says "something is about to happen." It is the color of a porch light left on.
+
+---
+
+## The Code Format: Unified Single Input
+
+### The Problem with WORD-NNNN Split Input
+
+The current `PairGatePage` uses two `<Input>` fields separated by a dash. This breaks three critical scenarios:
+
+1. **Copy-paste**: Users cannot paste `BEAR-4521` into the form because the fields are separated.
+2. **Verbal dictation**: Saying "bear dash four five two one" is awkward; the dash is ambiguous.
+3. **QR auto-submit**: Works only because the URL param parsing reconstructs the full code.
+
+### New Format: Single Field, Color-Segmented Display
+
+Keep the `WORD-NNNN` generation format in the backend (no backend changes needed). Change the input to a single field that:
+
+- Accepts the full code including the dash: `BEAR-4521`
+- Auto-uppercases as you type
+- Visually separates word and number using **color** instead of a physical divider
+- Auto-submits when the pattern matches `/^[A-Z]+-\d{4}$/`
+
+**On the desktop side** (AccessSection), the code display becomes a "color-split" rendering:
+
+```
+  BEAR  -  4521
+  ^^^^      ^^^^
+  amber     rose (primary)
+```
+
+The word portion renders in `--pair-ready` (amber). The number portion renders in `--primary` (cool rose). The dash is `--text-tertiary` (faded). This color-split serves multiple purposes:
+
+- **Visual chunking**: The eye naturally groups by color, making the code easier to read and dictate.
+- **Error prevention**: If someone types only letters or only numbers, the missing color segment is immediately apparent.
+- **Brand identity**: The amber-rose split becomes a recognizable pairing motif.
+
+On the **remote input side**, the single input field uses the same color treatment: as the user types letters, they render in amber; once the dash appears, subsequent digits render in rose. This creates a sense of the two devices speaking the same chromatic language.
+
+### Input Field Design (Remote/Phone Side)
+
+```
++--------------------------------------------------+
+|                                                    |
+|   ┌──────────────────────────────────────────┐    |
+|   │  BEAR-4521                               │    |
+|   │  ~~~~          (amber text, rose numbers) │    |
+|   └──────────────────────────────────────────┘    |
+|                                                    |
++--------------------------------------------------+
+```
+
+The input field has:
+- `min-height: 56px` — generous touch target for mobile
+- `text-align: center`, `font-mono`, `text-xl`, `tracking-[0.15em]`
+- A subtle inner glow (box-shadow inset) in `--pair-glow` that brightens as the user types
+- Background transitions from `--bg-surface` (empty) to a faint amber tint (`color-mix(in oklch, var(--pair-ready) 5%, var(--bg-surface))`) as the word portion fills in, then shifts to a faint rose tint as the number portion completes
+- On auto-submit, the entire field flashes `--pair-connected` green for 300ms before the loading state takes over
+
+---
+
+## Screen-by-Screen Flow
+
+### DESKTOP SIDE: AccessSection in Settings
+
+#### State 1: Remote Access Off (Default)
+
+No color change from current design. The toggle is off. The section is muted. The `--text-muted` description reads: "Let other devices access your workspace — phone, tablet, or browser."
+
+Note the language change: "remote access" becomes "access from other devices." No mention of "relay" or "portal" or "server."
+
+#### State 2: Remote Access Toggled On — Connecting to Relay
+
+The section background animates from neutral to a barely-perceptible amber wash: `color-mix(in oklch, var(--pair-ready) 3%, var(--background))`. This is subtle — the user should feel warmth without noticing a color.
+
+The status dot pulses amber (the existing emerald/red dot animation, but in `--pair-ready`). Text: "Setting up..." Not "Connecting to relay."
+
+#### State 3: Connected — Ready to Pair (Hero State)
+
+This is the primary state. The PortalCard transforms into the **Pairing Card**, a self-contained hero element.
+
+**Layout (top to bottom):**
+
+1. **QR Code** — centered, 180x180px, with a warm amber glow halo
+2. **The URL** — below the QR, in `font-mono text-sm`, copyable
+3. **Or enter this code** — divider text
+4. **The Code** — `BEAR-4521` in the color-split rendering (amber word, rose number), `font-mono text-2xl font-bold tracking-[0.15em]`
+5. **Countdown** — below the code, `text-xs text-muted-foreground`
+
+The QR code itself is custom-branded: instead of pure black modules on white, it uses the existing `--foreground` color on a `--bg-elevated` background, with the center finder patterns tinted in `--pair-ready` (amber). The quiet zone around the QR gets a radial gradient glow: `radial-gradient(circle, var(--pair-glow) 0%, transparent 70%)`. This glow pulses very slowly (4s cycle, `ease-in-out`) — a breathing light that says "I'm alive and waiting."
+
+**Why the QR code is the hero, not the URL:** The QR code is the fastest path for the most common scenario (phone scanning desktop screen). It encodes the full URL with `?pair=BEAR-4521` baked in, so scanning = instant auto-submit. No typing needed. The URL and manual code are fallbacks for the other two scenarios (link-shared-via-chat, verbal-dictation).
+
+The card border uses `--pair-ready` at 15% opacity: `color-mix(in oklch, var(--pair-ready) 15%, var(--border))`. This is the only element in the entire settings panel with a warm border — it draws the eye.
+
+**No numbered steps.** The current 1-2-3 step flow is over-explained. The QR code IS the instruction. Below it: "Scan with your phone, or share the link." That is the entire instruction set.
+
+#### State 4: Code Generated, Waiting for Pairing
+
+The breathing glow on the QR code continues. The countdown timer below the code uses a horizontal progress bar (not just text) in `--pair-ready` that depletes left-to-right over 15 minutes. The bar is 2px tall, subtle but alive.
+
+When the code is within 2 minutes of expiry, the amber shifts to the existing `--warning` token — same hue family but slightly more saturated, and the countdown text becomes bolder. This is not alarming — it is a gentle nudge.
+
+#### State 5: Device Paired (Success Flash)
+
+The moment a device successfully pairs:
+
+1. The QR code glow flashes from amber to `--pair-connected` (green) over 400ms with `ease-out-quart`.
+2. The card border shifts to `--pair-connected` at 15% opacity.
+3. A toast notification appears: "{Device Name} connected" with a green dot.
+4. The new device appears in the Paired Devices list below with a `chat-item-enter`-style slide-up animation.
+5. After 2 seconds, the card returns to the amber "ready" state (a new code can be generated).
+
+The emotional arc here is: warm amber (invitation) -> green flash (confirmation) -> back to amber (ready for more). The user never sees a "dead" state.
+
+#### State 6: Code Expired
+
+The code display fades to `--pair-expired` (neutral gray). The progress bar is empty. The QR code glow extinguishes (opacity 0). Text below: "Code expired." A "Generate new code" button appears in `variant="outline"`, using the existing component.
+
+No red. No error. Expiry is natural, not a failure.
+
+#### State 7: Error (Relay Disconnected)
+
+The status dot turns red (existing behavior). The card border shifts to `--pair-error` at 10% opacity. Text: "Connection lost. Reconnecting..." The QR code dims to 40% opacity. The breathing glow stops.
+
+When reconnected: glow resumes, border shifts back to amber, status dot turns emerald. No user action needed.
+
+---
+
+### REMOTE SIDE (Phone/Browser): PairGatePage
+
+#### The Emotional Journey
+
+The phone user arrives at a blank page. They know nothing about this app. They may have scanned a QR code (in which case pairing is already in progress), or they may have received a link from someone. The page must communicate three things instantly: **what is this**, **is it safe**, and **what do I do**.
+
+Color does this work.
+
+#### Screen 1: Landing (Pre-Input)
+
+**Background:** Not the flat `--background` of the desktop app. Instead, a full-screen gradient that signals warmth and trust:
+
+Light mode: `linear-gradient(180deg, var(--background) 0%, color-mix(in oklch, var(--pair-ready) 8%, var(--background)) 100%)`
+
+Dark mode: `linear-gradient(180deg, var(--background) 0%, color-mix(in oklch, var(--pair-ready) 5%, var(--background)) 100%)`
+
+This is a barely-there amber warmth at the bottom of the screen. The top is pure background. The gradient says "welcome" without being garish.
+
+**Content (centered vertically):**
+
+```
+     ┌─ OpenDevs icon (32x32, existing logo) ─┐
+
+          Connect to {serverName}
+
+     Your desktop is ready for you.
+     Enter the code shown on screen,
+     or scan the QR code.
+
+     ┌──────────────────────────────┐
+     │     BEAR-4521               │  <- single input
+     └──────────────────────────────┘
+
+              [Connect]
+
+     This is a one-time code that
+     expires in 15 minutes.
+```
+
+Key language decisions:
+- **"Connect to {serverName}"** not "Connect to OpenDevs" — the server name (e.g., "Adam's MacBook Pro") personalizes the experience. This uses the `serverName` from the relay status endpoint.
+- **"Your desktop is ready for you"** — warmth, anticipation, personal.
+- **"Enter the code shown on screen, or scan the QR code"** — covers both entry methods in one sentence.
+- **"This is a one-time code that expires in 15 minutes"** — security communicated as a feature, not a warning. No technical language.
+
+The input field has the color-segmented behavior described above. The Connect button uses `--pair-ready` (amber) as its background — NOT the default `--primary` (rose). This is intentional: the button belongs to the pairing flow's color world, not the app's general interactive palette. It visually connects to the amber warmth of the gradient and the code display on the desktop.
+
+Button states:
+- Disabled (no input): `bg-pair-ready/30`, text at `--text-disabled`
+- Enabled (valid code): `bg-pair-ready`, text at white/dark
+- Hover: `bg-pair-ready` with lightness +0.04
+
+#### Screen 2: Auto-Submit from QR (No Input Needed)
+
+If the user arrived via QR code (URL has `?pair=CODE`), the input is pre-filled and the form auto-submits. The screen shows:
+
+```
+     ┌─ OpenDevs icon ─┐
+
+     Connecting to {serverName}...
+
+     ┌──────────────────────────────┐
+     │     BEAR-4521               │  <- filled, disabled
+     └──────────────────────────────┘
+
+     [     ○ Connecting...       ]  <- button with spinner
+```
+
+The input field's background shifts to the amber tint. The button shows a spinner. The background gradient intensifies slightly (amber goes from 8% to 12%) — a chromatic "leaning forward."
+
+#### Screen 3: Pairing In Progress
+
+After submit (manual or auto), the entire page begins a slow color transition. The background gradient shifts from amber-tinted to rose-tinted over 2 seconds:
+
+```
+amber-warm bottom → rose-warm bottom
+```
+
+This is the "handshake in progress" — the color is literally transitioning from the desktop's invitation color (amber) toward the app's primary color (rose). The user feels motion without any loading bar.
+
+The input field's inner glow shifts from amber to rose. The button text reads "Connecting..." with the existing `Loader2` spinner, but tinted in `--primary` (rose).
+
+#### Screen 4: Paired Successfully
+
+The moment the token arrives:
+
+1. The background gradient shifts to green: `color-mix(in oklch, var(--pair-connected) 8%, var(--background))`
+2. The input field border flashes green
+3. A large checkmark icon fades in (48x48, `--pair-connected`, 300ms `ease-out-quart`)
+4. Text: **"You're connected"** in `text-xl font-semibold`
+5. Below: "{serverName}" in `text-muted-foreground`
+6. The page auto-redirects to the app after 1.5 seconds
+
+The entire chromatic journey — amber (invitation) -> rose (handshake) -> green (trust established) — completes in under 5 seconds. The user experiences a three-act color story.
+
+#### Screen 5: Error States
+
+**Invalid code:**
+- Input field border flashes `--pair-error` (red) for 600ms, then returns to default
+- Text below input: "That code didn't work. Check the code on your desktop and try again." in `--pair-error`
+- The background gradient does NOT change — the error is local to the input, not the whole page
+- Input clears and re-focuses for immediate retry
+
+**Server offline:**
+- Background gradient shifts to neutral (no amber, no rose) — the warmth drains out
+- Icon: a subtle cloud-with-X in `--text-muted` (not red — this is not the user's fault)
+- Text: "Your desktop appears to be offline. Make sure OpenDevs is running."
+- A "Try again" button in `variant="outline"` (neutral, not amber — no false promise of warmth)
+
+**Timed out:**
+- Same neutral treatment as server offline
+- Text: "The connection timed out. Ask for a new code from your desktop."
+
+---
+
+## QR Code Design
+
+The QR code encodes: `https://app.rundeus.com/connect/{serverId}?pair={CODE}`
+
+This is a full URL. Scanning it with any phone camera opens the web app with the code pre-filled and auto-submits. Zero typing.
+
+### Visual Treatment
+
+The QR code is generated with custom colors, not default black-on-white:
+
+- **Modules (dark squares):** `--foreground` — matches the app's text color
+- **Background:** `--bg-elevated` (white in light mode, #1a1a1a in dark)
+- **Finder patterns (3 corner squares):** Tinted with `--pair-ready` at 80% — `color-mix(in oklch, var(--pair-ready) 80%, var(--foreground))`. This makes the corners warm amber while the data modules stay neutral. It is a subtle brand touch that does not affect scannability.
+- **Center logo:** The OpenDevs icon at 20% of QR size, placed in the error-correction zone. Standard technique.
+
+### The Glow
+
+Behind the QR code, a `::before` pseudo-element creates a radial glow:
+
+```css
+.qr-glow::before {
+  content: '';
+  position: absolute;
+  inset: -20px;
+  background: radial-gradient(
+    circle at center,
+    var(--pair-glow) 0%,
+    transparent 70%
+  );
+  animation: qr-breathe 4s ease-in-out infinite;
+  border-radius: var(--radius-2xl);
+}
+
+@keyframes qr-breathe {
+  0%, 100% { opacity: 0.5; }
+  50% { opacity: 1; }
+}
+```
+
+The glow is 4 seconds per cycle — slow enough to feel organic, fast enough to register as alive. It uses only `opacity` for animation (GPU-accelerated). The `inset: -20px` extends the glow beyond the QR boundary, creating a warm halo effect.
+
+In dark mode, the glow is more visible (the amber-on-dark creates a genuine luminous quality). In light mode, it is barely perceptible — a warm shadow rather than a glow.
+
+---
+
+## Dark/Light Mode Adaptation
+
+### What Changes
+
+| Element | Light Mode | Dark Mode |
+|---|---|---|
+| QR glow intensity | 15% opacity ambient | 25% opacity — amber on dark glows genuinely |
+| Background gradient | 8% amber tint | 5% amber tint (less needed — dark already has depth) |
+| Code display bg | `--bg-surface` (warm stone) | `--bg-elevated` (#1a1a1a) |
+| Connect button | `bg-pair-ready` (solid amber) | `bg-pair-ready` (solid amber — one of few saturated elements) |
+| Finder pattern tint | 80% amber blend | 60% amber blend (more contrast needed) |
+
+### What Stays Constant
+
+- The amber -> rose -> green chromatic journey is identical in both modes
+- The OKLCH hue values (75 for amber, 345 for rose, 155 for green) are the same
+- The lightness values shift (dark mode primary is L=0.78 vs light mode L=0.66) following the existing system's pattern
+- The timing of all animations is identical
+- The copy and language are identical
+
+### The Constant Emotional Truth
+
+In both modes, amber is warm, rose is active, green is resolved. The user never needs to learn different meanings in different modes. The colors speak the same language at different volumes.
+
+---
+
+## 3 Key Decisions and Why
+
+### Decision 1: Single Input Field Replacing Split Input
+
+**Why:** The split input (two fields with a dash between them) is the single biggest UX friction point. It prevents copy-paste entirely. A user who receives `BEAR-4521` via text message must mentally parse it, type "BEAR" in one field, tab to the next, then type "4521." With a single field, they paste the whole string and it auto-submits. The color-segmented rendering (amber word, rose numbers) provides the same visual chunking that the split input was trying to achieve, but without fragmenting the interaction.
+
+This requires changes only to `PairGatePage.tsx` — the backend format, validation, and relay protocol are untouched.
+
+### Decision 2: QR Code as Hero Element (Not URL)
+
+**Why:** The current AccessSection treats the URL as the hero (PortalCard with URL + copy/open buttons) and the pairing code as a secondary step. This is backwards. The URL is meaningful only to technical users who understand what `https://app.rundeus.com/connect/abc123` means. For the target user (semi-technical, cares about output not technology), scanning a QR code is the fastest, most intuitive action. Making the QR the visual anchor — with the amber glow, generous size, center positioning — means the most common scenario (phone scanning desktop) is served first. The URL and manual code become fallback options, still accessible but not competing for visual priority.
+
+The QR encodes the full pairing URL including the code (`?pair=BEAR-4521`), so scanning it completes the entire pairing flow with zero typing. The current infrastructure already supports `?pair=CODE` auto-submit.
+
+### Decision 3: Color as the State Indicator (Not Text Badges or Icons)
+
+**Why:** The current design uses text ("Connected to relay" / "Connecting...") and a small colored dot to communicate state. This forces the user to read. In the new design, the ambient color of the pairing card — its border, glow, and background tint — shifts with state. The user does not need to read "Connected" when the entire card is radiating warm amber. They do not need to read "Paired" when the glow flashes green. Color operates below conscious attention; text requires conscious parsing. For a feature that the user interacts with rarely (pair once, forget), the color signal is faster and more memorable.
+
+This approach uses only `opacity` and `background-color` transitions — GPU-accelerated, 60fps, no layout thrashing.
+
+---
+
+## 1 Acknowledged Tradeoff
+
+**Color-segmented input text requires custom rendering logic.** A standard `<input>` element cannot render part of its value in amber and part in rose. Implementing the color-split display requires either:
+
+(a) A hidden input with a visible overlay `<span>` that parses and colors segments — adds DOM complexity and requires careful cursor/selection sync.
+
+(b) A `contentEditable` div with color spans — historically fragile on mobile browsers.
+
+(c) Accepting a simpler version: the input text is monochrome (the standard `font-mono` treatment), and only the *display* of the code on the desktop side uses the color-split rendering. The phone input is a plain single field.
+
+**I recommend option (c) for v1.** The emotional color journey (background gradient shifts, glow, button color) carries the chromatic weight on the phone side. The color-segmented text is a refinement for the desktop display (where it is rendered as static `<span>` elements, trivially implemented). Pursuing option (a) or (b) for the input field adds implementation risk disproportionate to its UX value, especially on mobile where custom text rendering has a long history of subtle bugs with virtual keyboards, autocorrect, and paste handling.
+
+The phone input remains a single monochrome field with `text-center font-mono text-xl tracking-[0.15em] uppercase` — clean, generous, and functional. The color tells its story through the environment, not through the text itself.</result>
+<usage><total_tokens>74422</total_tokens><tool_uses>29</tool_uses><duration_ms>214307</duration_ms></usage>
+</task-notification>
+Full transcript available at: /private/tmp/claude-501/-Users-zvada-Developer-agent-box-ide--conductor-vienna-v2/f7daa10a-7b09-4396-92df-4cd26838830b/tasks/a0ccbce470d6bc648.output
+
+---
+
+<task-notification>
+<task-id>a932ead9098e80021</task-id>
+<tool-use-id>toolu_01BZPsqNRqstPYtX2SAJigT1</tool-use-id>
+<output-file>/private/tmp/claude-501/-Users-zvada-Developer-agent-box-ide--conductor-vienna-v2/f7daa10a-7b09-4396-92df-4cd26838830b/tasks/a932ead9098e80021.output</output-file>
+<status>completed</status>
+<summary>Agent "Naoto Fukasawa pairing UX" completed</summary>
+<result>I don't have permission to edit files. Since this was framed as a design task rather than an implementation task, let me provide the complete design specification with concrete code details instead.
+
+---
+
+Here is the complete **Glance and Go** pairing redesign, grounded in the actual codebase I've now thoroughly reviewed.
+
+---
+
+## Direction: Glance and Go
+
+**Philosophy:** The pairing moment should feel like making eye contact -- you look, it connects, you move on. The interface should be so obvious that the user's body already knows what to do before their mind catches up.
+
+---
+
+## The Code Format
+
+**Current:** `BEAR-4521` (WORD-NNNN, two fields, split input)
+**Proposed:** `soft tiger` (two lowercase words, single field)
+
+From the existing 100-word `WORD_LIST` in `/apps/backend/src/services/remote-auth.service.ts`, two words produce 9,900 unique combinations (100 x 99, avoiding duplicates) -- comparable entropy to WORD-NNNN's 10,000. The behavioral difference:
+
+- **Glancing across a room:** Two short English words form a single cognitive chunk. "Soft tiger" is a phrase, not a code.
+- **Thumb-typing on a phone:** The keyboard stays alphabetic. The space bar is the largest key. No hunting for dash, no switching to the numeric keyboard.
+- **Saying aloud:** "Soft tiger" is four syllables. No "dash," no digit-by-digit spelling, no zero-vs-O ambiguity.
+- **Single input field:** One field. Paste it, type it, or let the URL parameter fill it. The split-field problem in `PairGatePage.tsx` (lines 209-235) disappears entirely.
+
+---
+
+## Changes Required: File by File
+
+### 1. Backend: `/apps/backend/src/services/remote-auth.service.ts`
+
+**`generatePairCode()`** (line 151): Change from `WORD-NNNN` to two-word format.
+
+```typescript
+export function generatePairCode(): { code: string; expiresAt: number } {
+  // ... existing eviction logic unchanged ...
+  
+  const word1 = WORD_LIST[randomInt(WORD_LIST.length)];
+  let word2 = WORD_LIST[randomInt(WORD_LIST.length)];
+  while (word2 === word1) {
+    word2 = WORD_LIST[randomInt(WORD_LIST.length)];
+  }
+  // Store lowercase, space-separated. Display format matches storage format.
+  const code = `${word1} ${word2}`.toLowerCase();
+  const expiresAt = now + CODE_TTL_MS;
+  
+  activeCodes.set(code, { code, createdAt: now, expiresAt });
+  return { code, expiresAt };
+}
+```
+
+**`validatePairCode()`** (line 182): Normalize aggressively so the user cannot get the format wrong.
+
+```typescript
+export function validatePairCode(code: string): boolean {
+  // Normalize: lowercase, collapse whitespace, treat dashes/underscores as spaces,
+  // then trim to canonical "word word" format
+  const normalized = code
+    .toLowerCase()
+    .trim()
+    .replace(/[-_]+/g, " ")   // treat dashes/underscores as word separators
+    .replace(/\s+/g, " ");     // collapse multiple spaces
+  
+  const entry = activeCodes.get(normalized);
+  if (!entry) return false;
+  if (entry.expiresAt <= Date.now()) {
+    activeCodes.delete(normalized);
+    return false;
+  }
+  activeCodes.delete(normalized);
+  return true;
+}
+```
+
+This means `SOFT TIGER`, `soft-tiger`, `Soft  Tiger`, and `soft tiger` all resolve to the same code. The user physically cannot format it wrong.
+
+### 2. Desktop Settings: `/apps/web/src/features/settings/ui/sections/AccessSection.tsx`
+
+The current `PairingFlow` component (lines 132-221) uses a three-step numbered flow with a "Generate Code" button. Replace with a single compact popover-like card that shows all three pairing methods simultaneously.
+
+**Remove:** `StepDot`, the three-step numbered flow, the countdown timer.
+
+**Replace `PairingFlow` with:**
+
+```tsx
+function PairingCard({
+  accessUrl,
+  pairCode,
+  isGenerating,
+  onGenerate,
+}: {
+  accessUrl: string | null;
+  pairCode: string | null;
+  isGenerating: boolean;
+  onGenerate: () => void;
+}) {
+  // Build the full pairing URL with code embedded as query param
+  const pairUrl = accessUrl && pairCode
+    ? `${accessUrl}?pair=${encodeURIComponent(pairCode)}`
+    : null;
+
+  if (!pairCode) {
+    return (
+      <div className="space-y-3">
+        <h4 className="text-sm font-medium">Open on another device</h4>
+        <p className="text-muted-foreground text-sm">
+          Generate a code to connect your phone or another browser.
+        </p>
+        <Button variant="outline" size="sm" onClick={onGenerate} disabled={isGenerating}>
+          {isGenerating && <RefreshCw className="mr-2 size-3.5 animate-spin" />}
+          Generate Code
+        </Button>
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-4">
+      <h4 className="text-sm font-medium">Open on another device</h4>
+
+      <div className="border-border/60 bg-muted/30 rounded-xl border p-5">
+        <div className="flex gap-6">
+          {/* QR code -- rendered client-side, encodes full URL with pair code */}
+          {pairUrl && (
+            <div className="shrink-0">
+              <QRCodeCanvas value={pairUrl} size={120} level="M" />
+            </div>
+          )}
+
+          <div className="min-w-0 flex-1 space-y-4">
+            {/* The code -- large, lowercase, human */}
+            <div>
+              <p className="text-muted-foreground mb-1.5 text-xs">
+                Enter this on the other device
+              </p>
+              <p className="text-2xl font-light tracking-[0.08em]">
+                {pairCode}
+              </p>
+            </div>
+
+            {/* Copy link -- quiet secondary action */}
+            <CopyLinkButton url={pairUrl} />
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+```
+
+**Key decisions in this component:**
+- QR code and text code are side by side, not in tabs. Both visible at once.
+- No countdown timer. The 15-minute TTL is generous; showing a ticking clock adds anxiety to a 10-second task.
+- The code renders in `font-light` (not `font-mono font-bold`) -- it's a phrase, not a technical identifier.
+- "Copy link" is a quiet secondary action, not a prominent button.
+
+**QR code dependency:** Add `qrcode.react` package (`bun add qrcode.react`). It renders QR codes client-side with zero server round-trip.
+
+### 3. Web PairGatePage: `/apps/web/src/features/auth/ui/PairGatePage.tsx`
+
+This is the remote user's experience. Replace the split WORD + NUMBER two-field input with a single text input.
+
+**Replace `getPairFromUrl`** (line 23):
+```typescript
+function getPairFromUrl(): string | null {
+  const params = new URLSearchParams(window.location.search);
+  const pair = params.get("pair");
+  if (!pair || !pair.trim()) return null;
+  return pair.trim();
+}
+```
+
+**Replace the state and input logic** (lines 114-193):
+```tsx
+export function PairGatePage({ onPaired, serverId }: PairGatePageProps) {
+  const prefill = getPairFromUrl();
+  const [code, setCode] = useState(prefill ?? "");
+  const [error, setError] = useState<string | null>(null);
+  const [isPending, setIsPending] = useState(false);
+
+  // Auto-submit if prefilled from QR code or shared link
+  useEffect(() => {
+    if (prefill) {
+      submitCode(prefill);
+    }
+  }, []);
+
+  const submitCode = useCallback(async (rawCode: string) => {
+    // Smart detection: if user pastes a full URL, extract the code from it
+    const code = extractCodeFromInput(rawCode);
+    if (!code) return;
+    
+    setError(null);
+    setIsPending(true);
+    const deviceName = navigator.userAgent.includes("Mobile") 
+      ? "Mobile Browser" : "Web Browser";
+
+    try {
+      if (isRelayMode()) {
+        const resolvedServerId = serverId || getServerIdFromUrl();
+        if (!resolvedServerId) {
+          setError("No server ID available for pairing");
+          return;
+        }
+        const result = await pairViaRelay(resolvedServerId, code, deviceName);
+        onPaired(result.token, deviceName);
+      } else {
+        const data = await pairViaDirect(code, deviceName);
+        onPaired(data.token, data.device?.name);
+      }
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Could not connect to server");
+    } finally {
+      setIsPending(false);
+    }
+  }, [onPaired, serverId]);
+
+  function handleSubmit(e: React.FormEvent) {
+    e.preventDefault();
+    if (!code.trim()) return;
+    submitCode(code.trim());
+  }
+
+  // ... render below
+}
+```
+
+**New helper -- smart input detection:**
+```typescript
+function extractCodeFromInput(input: string): string | null {
+  const trimmed = input.trim();
+  if (!trimmed) return null;
+  
+  // If the user pasted a full URL, extract the pair param
+  try {
+    const url = new URL(trimmed);
+    const pairParam = url.searchParams.get("pair");
+    if (pairParam) return pairParam;
+  } catch {
+    // Not a URL -- treat as raw code
+  }
+  
+  return trimmed;
+}
+```
+
+**New render -- single input, full-width button:**
+```tsx
+return (
+  <div className="bg-background flex min-h-screen items-center justify-center p-4">
+    <div className="w-full max-w-sm space-y-8">
+      <div className="text-center">
+        {/* OpenDevs mark here -- small, quiet */}
+        <h1 className="text-2xl font-bold tracking-tight">Connect to OpenDevs</h1>
+        <p className="text-muted-foreground mt-2 text-sm">
+          Enter the code shown on the desktop app.
+        </p>
+      </div>
+
+      <form onSubmit={handleSubmit} className="space-y-6">
+        <div className="space-y-2">
+          <Input
+            type="text"
+            placeholder="enter code"
+            value={code}
+            onChange={(e) => { setCode(e.target.value); setError(null); }}
+            autoFocus
+            autoComplete="off"
+            spellCheck={false}
+            disabled={isPending}
+            className="text-center text-lg tracking-wide"
+          />
+        </div>
+
+        {error && (
+          <p className="text-destructive text-center text-sm animate-shake">
+            {error}
+          </p>
+        )}
+
+        <Button
+          type="submit"
+          className="w-full"
+          disabled={isPending || !code.trim()}
+        >
+          {isPending ? (
+            <>
+              <Loader2 className="mr-2 size-4 animate-spin" />
+              Connecting...
+            </>
+          ) : (
+            "Connect"
+          )}
+        </Button>
+      </form>
+    </div>
+  </div>
+);
+```
+
+Note what's removed:
+- The `Label` ("Pairing Code") -- the placeholder is the instruction.
+- The `font-mono` class -- this is not a technical code anymore.
+- The help text about "Open Settings > Remote Access" -- that's implementation detail the remote user doesn't need.
+- The split input with dash separator.
+
+### 4. ConnectPage: `/apps/web/src/app/routes/connect.tsx`
+
+This page currently asks for a "Server ID" which is confusing. Since the `/connect/{serverId}` route redirects to `/s/{serverId}` (line 41-43 in router.ts), users rarely see this page directly. But if they do, update the language:
+
+- Change "Connect to Server" to "Connect to OpenDevs"
+- Change "Enter the server ID from your OpenDevs desktop app" to "Enter the connection ID from the desktop app"
+- Remove "e.g. abc123" placeholder -- replace with "connection ID"
+
+### 5. Relay URL format for QR codes
+
+The QR code encodes: `https://app.rundeus.com/connect/{serverId}?pair=soft+tiger`
+
+Since `/connect/$serverId` redirects to `/s/$serverId` (router.ts line 41-43), and `ServerLayout.tsx` renders `PairGatePage` which reads `?pair=` and auto-submits -- the entire QR scan path is: camera -> tap URL -> redirect -> auto-submit -> workspace. Zero manual steps.
+
+The `+` in `soft+tiger` is standard URL encoding for a space. The `getPairFromUrl()` function uses `URLSearchParams.get()` which decodes this automatically.
+
+### 6. Backend route: `/apps/backend/src/routes/remote-auth.ts`
+
+No changes needed. The `POST /remote-auth/pair` endpoint already accepts `{ code: string }` and passes it to `validatePairCode()`. The normalization in `validatePairCode()` handles format flexibility.
+
+### 7. Cloud relay schemas: `/apps/cloud-relay/src/schemas.ts`
+
+No changes needed. The `pairerFrameSchema` already accepts `code: z.string()` -- it's format-agnostic.
+
+### 8. Relay service: `/apps/backend/src/services/relay.service.ts`
+
+No changes needed. `handlePairRequest()` (line 299) passes the code string directly to `validatePairCode()`.
+
+---
+
+## Behavioral Flow: Desktop User (Initiator)
+
+1. User is in the desktop app working. They want to check their workspace on their phone.
+2. They go to Settings > Connect (the existing `AccessSection`). Remote access is already enabled.
+3. They click "Generate Code." A card appears instantly showing:
+   - A QR code (left side)
+   - `soft tiger` in large, light text (right side)  
+   - A quiet "Copy link" button below
+4. They point their phone camera at the QR code. Done. The card stays open but they've already moved on.
+5. If pairing succeeds, the devices list below updates (the existing 10-second polling in `usePairedDevices` handles this). No toast, no modal. The new device just appears in the list.
+
+**Alternative path:** They click "Copy link," paste it into Slack. The link includes the code. The recipient clicks it and lands directly in the workspace.
+
+**Alternative path:** They say "soft tiger" aloud. The colleague types it on their phone.
+
+## Behavioral Flow: Remote User (Phone, QR scan)
+
+1. Phone camera sees QR code -> URL banner appears -> tap.
+2. Safari opens `https://app.rundeus.com/connect/{serverId}?pair=soft+tiger`
+3. Router redirects to `/s/{serverId}?pair=soft+tiger`
+4. `ServerLayout` renders `PairGatePage` (user is unauthenticated)
+5. `PairGatePage` detects `?pair=soft+tiger`, calls `submitCode("soft tiger")` immediately
+6. Auto-submit via relay WebSocket. Success -> `onPaired()` -> workspace loads.
+7. Total user actions: point camera, tap URL. Total time: under 3 seconds.
+
+## Behavioral Flow: Remote User (Phone, verbal dictation)
+
+1. User opens browser, goes to `app.rundeus.com` (in history from before)
+2. Redirected to `/connect`, types server ID (or has it bookmarked at `/s/{id}`)
+3. Sees single input: `enter code` placeholder, keyboard already open
+4. Types `soft tiger` -- all lowercase, space between, alphabetic keyboard only
+5. Taps "Connect." Workspace loads.
+
+## Behavioral Flow: Remote User (Laptop, clicked link in Slack)
+
+1. Clicks `https://app.rundeus.com/connect/{serverId}?pair=soft+tiger`
+2. Browser opens. Redirect -> auto-submit -> workspace. They never see a form.
+3. If the link is expired: they see the code input field with "This code has expired" and can enter a fresh one.
+
+---
+
+## Three Key Decisions
+
+**1. Two lowercase words instead of WORD-NNNN.** Every pain point traces to the code format. Two words are one cognitive chunk, one keyboard mode, one speech pattern. Same entropy. Categorically better physical ergonomics.
+
+**2. All three methods visible simultaneously, no tabs.** The QR code, text code, and copy-link fit in a single card (~200px height). Showing all three costs nothing and eliminates the cognitive overhead of choosing between tabs. The user's body already knows which method they'll use.
+
+**3. No countdown timer.** The 15-minute TTL exists for security, but displaying it creates urgency where none belongs. Pairing takes under 15 seconds. The failure case (code expires) is handled by clicking "Generate Code" again -- a trivial 1-second recovery that doesn't justify polluting every normal pairing with a ticking clock.
+
+---
+
+## One Acknowledged Tradeoff
+
+**Two-word codes from a 100-word list produce ~10,000 combinations.** With max 5 active codes and 15-minute TTL, collisions are effectively impossible at desktop-app scale. But this does not scale to thousands of concurrent pairing attempts. If OpenDevs grows to that scale, the word list must expand (500 words -> 250K combinations) or a third word must be added (1M combinations, at the cost of slightly more typing). The design deliberately optimizes for today's real usage over hypothetical future scale.
+
+---
+
+## Files That Would Change
+
+| File | Nature of change |
+|---|---|
+| `apps/backend/src/services/remote-auth.service.ts` | `generatePairCode()` -> two-word format; `validatePairCode()` -> flexible normalization |
+| `apps/web/src/features/settings/ui/sections/AccessSection.tsx` | Replace `PairingFlow` + `StepDot` with `PairingCard` showing QR + code + copy-link; remove countdown timer |
+| `apps/web/src/features/auth/ui/PairGatePage.tsx` | Single input field; smart URL-paste detection; remove split WORD/NUMBER fields |
+| `apps/web/src/app/routes/connect.tsx` | Language update (remove "Server ID" jargon) |
+| `package.json` (web app) | Add `qrcode.react` dependency |
+
+No changes needed in: cloud relay (`relay-do.ts`, `schemas.ts`), relay service (`relay.service.ts`), backend routes (`remote-auth.ts`), auth hooks (`useAuth.ts`), router (`router.ts`), or protocol types (`relay.ts`). The backend and relay are already format-agnostic -- they pass code strings through without parsing the format.</result>
+<usage><total_tokens>76977</total_tokens><tool_uses>36</tool_uses><duration_ms>267122</duration_ms></usage>
+</task-notification>
+Full transcript available at: /private/tmp/claude-501/-Users-zvada-Developer-agent-box-ide--conductor-vienna-v2/f7daa10a-7b09-4396-92df-4cd26838830b/tasks/a932ead9098e80021.output
+
+---
+
+<task-notification>
+<task-id>af94f1b5fe1fa5767</task-id>
+<tool-use-id>toolu_01ErmVF3CofUrarjKjXaVAaG</tool-use-id>
+<output-file>/private/tmp/claude-501/-Users-zvada-Developer-agent-box-ide--conductor-vienna-v2/f7daa10a-7b09-4396-92df-4cd26838830b/tasks/af94f1b5fe1fa5767.output</output-file>
+<status>completed</status>
+<summary>Agent "Massimo Vignelli pairing UX" completed</summary>
+<result>Good. I now have a thorough understanding of the entire system. Let me provide the complete design specification.
+
+---
+
+Here is the complete design specification for the pairing flow redesign.
+
+---
+
+# DIRECT LINK
+
+**Philosophy:** The best pairing experience is one where the code disappears. A QR code is a hyperlink made physical -- it collapses two steps (open URL, type code) into one gesture. For every other scenario, a single unified code in monospace, designed for dictation and paste, is the only artifact. Strip away every word that does not serve the user's immediate action.
+
+---
+
+## CURRENT STATE ANALYSIS
+
+After reading the codebase, here is what exists and what must change:
+
+**Files involved:**
+
+- `/Users/zvada/Developer/agent/box-ide/.conductor/vienna-v2/apps/web/src/features/settings/ui/sections/AccessSection.tsx` -- Desktop settings panel (current: 3-step flow, PortalCard with relay status, split code display, numbered StepDots)
+- `/Users/zvada/Developer/agent/box-ide/.conductor/vienna-v2/apps/web/src/features/auth/ui/PairGatePage.tsx` -- Remote pairing page (current: two split inputs for WORD and NNNN, already supports `?pair=CODE` auto-submit)
+- `/Users/zvada/Developer/agent/box-ide/.conductor/vienna-v2/apps/web/src/app/routes/connect.tsx` -- ConnectPage asking for server ID (uses "Server ID" language)
+- `/Users/zvada/Developer/agent/box-ide/.conductor/vienna-v2/apps/backend/src/services/remote-auth.service.ts` -- Code generation (WORD-NNNN format, 100-word list, 15-min TTL, max 5 active)
+- `/Users/zvada/Developer/agent/box-ide/.conductor/vienna-v2/apps/backend/src/services/relay.service.ts` -- Relay tunnel, pair request handling
+- `/Users/zvada/Developer/agent/box-ide/.conductor/vienna-v2/shared/types/relay.ts` -- Wire protocol types
+
+**Current problems identified in code:**
+
+1. `PairGatePage` uses two separate `<Input>` fields (lines 210-235) -- cannot paste `BEAR-4521` as a single string
+2. `AccessSection` uses numbered "StepDot" indicators and "portal URL" language (lines 51-61, 68-123) -- the word "portal" and "relay" appear in user-facing UI
+3. `ConnectPage` asks for "Server ID" as a raw hex string (line 49: `placeholder="e.g. abc123"`) -- exposes infrastructure
+4. No QR code library installed (`bun.lock` has no qrcode dependency)
+5. The `AccessSection` shows the relay URL as the hero element (PortalCard, lines 68-123) -- but the URL is not the thing the user needs to *do*, it is infrastructure the code should link to
+
+---
+
+## THE CODE FORMAT
+
+**Format: `BEAR-4521` stays. Single field replaces the split input.**
+
+The WORD-NNNN format from `remote-auth.service.ts` (line 174: `` `${word}-${number}` ``) is correct. The 100-word list produces codes that are memorable, unambiguous, and dictation-friendly. The problem was never the format -- it was the two-field input that broke copy-paste.
+
+**Typographic treatment everywhere the code appears:**
+
+- Font: `font-mono` (maps to SF Mono / system monospace via the existing `--font-family-mono` token in `global.css`)
+- Size: `text-2xl` (24px) on desktop display, `text-xl` (20px) on mobile input field
+- Weight: `font-bold` (700)
+- Case: CSS `uppercase` always -- the backend already stores/generates uppercase (line 174 of `remote-auth.service.ts`)
+- Letter-spacing: `tracking-[0.12em]`
+- The hyphen: rendered at `opacity-60` via a span wrapper, or displayed naturally in the input field
+- Color: `text-foreground` -- maximum contrast, no decorative color
+
+**Single input field behavior (`PairGatePage` replacement):**
+
+- One `<input>`, `maxLength={9}`
+- Auto-uppercases via `onChange` normalization (the existing `handleWordChange` already does `.toUpperCase()`)
+- Paste normalization: accept `bear-4521`, `BEAR-4521`, `bear 4521`, `BEAR4521` -- regex normalize to `BEAR-4521`
+- Auto-insert hyphen after 4th alphabetic character
+- On valid paste, auto-submit after 300ms debounce
+- Validation: real-time. First 4 chars must be alpha, then hyphen, then 4 digits
+- Placeholder: `WORD-0000` at 30% opacity
+
+**QR code encodes:** `https://app.rundeus.com/connect/{serverId}?pair=BEAR-4521`
+
+The existing `PairGatePage.getPairFromUrl()` (line 23) already parses `?pair=WORD-NNNN` and auto-submits. The QR path requires zero code changes on the receiving end -- only the URL must be constructed correctly on the desktop side.
+
+---
+
+## DESKTOP SIDE -- SETTINGS PANEL
+
+### The AccessSection Redesign
+
+The current `AccessSection` has three layers of complexity: a master toggle, a PortalCard with relay status, and a 3-step numbered flow. This collapses into two states: **off** and **on (with Add Device)**.
+
+**Section header change:** The current `<h3>Connect</h3>` (line 387) stays. The description changes from "Access Deus from your phone or another browser" to:
+
+> Access your workspaces from your phone or another computer.
+
+No "Deus" brand name in a functional description. No "browser" -- people use devices, not browsers.
+
+**When remote access is ON and no code is active:**
+
+The PortalCard (relay status + URL) is removed as a hero element. It becomes a small status line. The pairing flow simplifies:
+
+```
+CONNECT                                    -- existing h3, text-base font-semibold
+Access your workspaces from your           -- text-sm text-muted-foreground
+phone or another computer.
+
+[Toggle: Enable remote access]             -- existing Switch, keeps current layout
+
+--- separator ---
+
+DEVICES                                    -- 11px, font-semibold uppercase tracking-[0.1em] text-muted-foreground
+                                              (replaces "Paired Devices")
+
+No devices connected.                      -- text-sm text-muted-foreground, centered in bordered container
+       [ + Add Device ]                    -- Button variant="outline" size="sm"
+```
+
+When devices exist, the list uses the existing `DevicesList` component (lines 227-274, already well-designed). The `+ Add Device` button moves below the list.
+
+**The "Add Device" interaction -- Dialog, not Sheet:**
+
+The current codebase has both `sheet.tsx` and `dialog.tsx` in `components/ui/`. For this redesign, a **centered dialog** is better than a sheet because:
+- The content is short (QR + code + copy buttons = fits in 480px height)
+- A centered dialog draws the eye to the QR code immediately
+- The user's phone is physically pointed at the center of the screen
+
+**Dialog layout (480px max-width):**
+
+```
+┌──────────────────────────────────────────────────────────┐
+│                                                      [x] │
+│                                                          │
+│  ADD DEVICE                                              │  -- 11px font-semibold uppercase tracking-[0.1em] text-muted-foreground
+│                                                          │
+│  Scan this code with your phone, or                      │  -- text-sm text-muted-foreground
+│  enter it at app.rundeus.com                             │     "app.rundeus.com" in font-medium text-foreground (not a link, just emphasized)
+│                                                          │
+│  ┌────────────────────────────────────────────────────┐  │
+│  │                                                    │  │
+│  │              ┌────────────────┐                     │  │  -- QR code: 180x180px, centered
+│  │              │                │                     │  │     foreground/background colors only (pure contrast)
+│  │              │    QR CODE     │                     │  │     No logo in center
+│  │              │                │                     │  │     16px quiet zone inside container
+│  │              └────────────────┘                     │  │
+│  │                                                    │  │
+│  └────────────────────────────────────────────────────┘  │  -- border border-border rounded-xl p-8
+│                                                          │
+│  ┌────────────────────────────────────────────────────┐  │
+│  │                                                    │  │
+│  │              BEAR-4521                             │  │  -- font-mono text-2xl font-bold tracking-[0.12em] text-center
+│  │                                                    │  │     hyphen at opacity-60
+│  │        [ Copy Code ]     [ Copy Link ]             │  │  -- two ghost buttons, text-xs font-medium
+│  │                                                    │  │     "Copy Code" copies "BEAR-4521"
+│  └────────────────────────────────────────────────────┘  │     "Copy Link" copies full URL with ?pair= param
+│                                                          │
+│  Expires in 14 minutes                                   │  -- text-xs text-muted-foreground
+│                                                          │     Live countdown, minutes:seconds format
+│                                                          │     When < 2 min: text-destructive
+│                                                          │
+└──────────────────────────────────────────────────────────┘
+```
+
+**State transitions in the dialog:**
+
+- **On successful pairing** (detected by polling the devices list, which already runs at 10s intervals per `auth.queries.ts` line 17): The dialog content cross-fades to a confirmation:
+  ```
+  CONNECTED
+  Chrome on iPhone 15                      -- text-base font-medium
+  is now connected.                        -- text-sm text-muted-foreground
+           [ Done ]                        -- variant="default", closes dialog
+  ```
+
+- **On code expiry**: The code and QR fade to `opacity-30`. Centered overlay text: "Code expired" with a `[ Generate New Code ]` button.
+
+**Key architectural note:** The code is generated eagerly when the dialog opens (call `generatePairCode` on dialog open), not as a separate "Generate Code" step. The current 2-step flow (open settings, *then* click "Generate Code") adds unnecessary friction. Since codes are cheap (in-memory, 15-min TTL, max 5 active), generating one on dialog open is the right default.
+
+---
+
+## REMOTE SIDE -- PHONE (QR SCAN)
+
+The user scans the QR code. Their phone opens `https://app.rundeus.com/connect/{serverId}?pair=BEAR-4521`.
+
+The existing `PairGatePage` (line 125-130) already detects `?pair=` and calls `submitCode` in a `useEffect`. No code change needed for the auto-submit path. The user sees:
+
+**Connecting state** (during the 1-2 second WebSocket exchange):
+
+```
+       [OpenDevs logo]                    -- centered, 32px
+
+       Connecting...                      -- text-lg font-medium text-foreground, centered
+       ────────────────                   -- 2px horizontal line animation
+                                             width oscillates 30%-70%, ease-in-out, 1.5s infinite
+```
+
+**Connected state** (on success -- cross-fade, 200ms opacity):
+
+```
+       [OpenDevs logo]
+
+       Connected                          -- text-lg font-medium
+       You can now access your            -- text-sm text-muted-foreground, centered, max-w-[280px]
+       workspaces from this device.
+```
+
+Then auto-navigate to the workspace view after 1.5 seconds.
+
+**Error state** (invalid/expired code): falls through to the manual entry screen.
+
+---
+
+## REMOTE SIDE -- MANUAL ENTRY (Phone or Another Computer)
+
+This replaces the current split-input `PairGatePage`. The changes are:
+
+1. **Replace two inputs with one.** Remove the `numberRef`, `handleWordKeyDown`, separate `handleWordChange`/`handleNumberChange` handlers.
+2. **Single unified input handler** that normalizes all input to `XXXX-NNNN` format.
+3. **Remove "Pairing Code" label.** The section header "ENTER CODE" is sufficient -- the label is redundant.
+4. **Remove "Open Settings > Remote Access" help text** (line 258-260). Replace with nothing. If the user is on this page, they already know what they are doing.
+
+**Layout:**
+
+```
+       [OpenDevs logo]
+
+       ENTER CODE                         -- 11px font-semibold uppercase tracking-[0.1em] text-muted-foreground
+       Enter the code shown               -- text-sm text-muted-foreground
+       on your desktop.
+
+       ┌─────────────────────┐
+       │     BEAR-4521       │            -- Single input: font-mono text-xl font-bold uppercase text-center
+       └─────────────────────┘               tracking-[0.12em], placeholder "WORD-0000" at placeholder opacity
+                                             border border-border rounded-lg p-4
+                                             Auto-focus on mount
+
+       [      Connect       ]             -- variant="default", full width matching input
+                                             Disabled until /^[A-Z]{4}-\d{4}$/
+```
+
+**Error state:** Input border becomes `border-destructive`. Below the input: "Invalid code. Check your desktop and try again." in `text-sm text-destructive`. No shake animation (gratuitous, violates Vignelli's restraint).
+
+---
+
+## REMOTE SIDE -- ANOTHER COMPUTER (LINK VIA CHAT)
+
+`ConnectPage` (`/connect` and `/connect/$serverId`) currently asks for "Server ID" with a raw hex input. This page needs rewriting:
+
+- If URL has `$serverId` and `?pair=CODE`: redirect immediately to `/s/$serverId` which triggers `ServerLayout` -> `PairGatePage` auto-submit. No intermediate page needed.
+- If URL has `$serverId` but no `?pair=`: redirect to `/s/$serverId` which shows the `PairGatePage` manual entry.
+- If URL has neither: show a minimal page asking for the full code. But this scenario is rare enough that the existing `ConnectPage` can simply be updated to remove "Server ID" language and say "Ask the desktop user to share a link."
+
+The important point: the `ConnectPage` should almost never be seen directly. The shared link includes the serverId. The QR code includes both serverId and pairing code. The only scenario where someone lands on bare `/connect` is if they typed it manually -- and in that case, the page should simply say:
+
+```
+       [OpenDevs logo]
+
+       CONNECT                            -- 11px font-semibold uppercase tracking-[0.1em]
+       Ask the person sharing their       -- text-sm text-muted-foreground, max-w-[320px]
+       desktop to send you a link         
+       or show you a QR code.
+```
+
+No input field. No "Server ID." The user cannot meaningfully proceed without a link or QR code, so do not pretend they can.
+
+---
+
+## LANGUAGE DECISIONS
+
+| Current (in code) | Replacement | Where |
+|---|---|---|
+| "Connected to relay" (AccessSection L87) | "Connected" (or remove entirely -- the status dot is sufficient) | AccessSection |
+| "Connecting to relay..." (AccessSection L87) | "Connecting..." | AccessSection |
+| "portal URL" / "the portal URL" (AccessSection L158-166) | Remove. The URL is shown in copy-link, not as a hero. | AccessSection |
+| "Pairing Code" (PairGatePage L208) | "Code" or no label (section header suffices) | PairGatePage |
+| "pairing code from your desktop app" (PairGatePage L201) | "the code shown on your desktop" | PairGatePage |
+| "Server ID" (ConnectPage L49) | Removed -- page redesigned to not ask for it | ConnectPage |
+| "Remote Access" (PairGatePage L259) | "Connect" (already the sidebar label, L38 in SettingsSidebar) | PairGatePage help text (removed) |
+| "Paired Devices" (AccessSection L448) | "Devices" | AccessSection |
+| "Pair a Device" (AccessSection L149) | "Add Device" | AccessSection |
+| "relay" (anywhere user-facing) | Never shown | All files |
+
+---
+
+## QR CODE INTEGRATION
+
+**Library:** `qrcode` (npm package, lightweight, generates SVG/canvas/data URL). Install with `bun add qrcode` and `bun add -d @types/qrcode`.
+
+**Where the QR is generated:** Inside the new `AddDeviceDialog` component in `AccessSection.tsx`. The dialog is desktop-only (the web/mobile side never shows a QR code).
+
+**QR content:** `https://app.rundeus.com/connect/{serverId}?pair={CODE}`
+
+Constructed the same way the existing `accessUrl` is derived (AccessSection lines 369-378), with `?pair=${pairCode}` appended.
+
+**QR rendering:**
+- 180x180px SVG, `foreground` and `background` CSS variable colors
+- No logo/icon embedded in the QR (reduces scan reliability, adds visual noise)
+- `margin: 0` (quiet zone handled by container padding)
+- Contained in a bordered card with `p-8 rounded-xl border`
+
+---
+
+## RE-PAIRING AND REVOCATION
+
+The existing `DevicesList` component (AccessSection lines 227-274) is already well-designed: device name, time ago, trash icon. Improvements:
+
+1. **Remove the IP address display** (line 255: `device.ip_address`). Users do not know what `192.168.1.42` means. It is security theater, not security.
+2. **On revoke, show undo toast** instead of immediate delete. The current code calls `revokeDevice` immediately (line 349). Add a 5-second undo window: `toast("Device removed", { action: { label: "Undo", onClick: ... } })`. Sonner already supports this pattern.
+3. **"Last seen" precision:** Current `timeAgo` (lines 23-31) is good. No change needed.
+
+---
+
+## THREE KEY DECISIONS
+
+**1. QR code as primary, code as secondary, URL as tertiary.**
+
+The QR code encodes the full URL with the pairing code embedded. Scanning it means zero typing, zero copy-paste, zero ambiguity. The code exists for verbal dictation and fallback. The URL exists only in the "Copy Link" button for chat-sharing. This hierarchy is reflected in the visual weight: QR is largest (180x180px in a padded container), code is medium (24px monospace), URL is never displayed as text (only copied).
+
+**2. Single input field with intelligent normalization.**
+
+The split input in the current `PairGatePage` (two `<Input>` components, lines 210-235) is the root cause of the UX failure. It breaks paste, confuses tab order, and adds complexity (the `handleWordKeyDown` handler on line 177 tries to intercept `-` and `Tab` to advance fields -- clever but fragile). One field that normalizes all reasonable inputs eliminates every edge case.
+
+**3. Eager code generation on dialog open.**
+
+The current flow requires two clicks: "Generate Code" then copy/dictate. The new flow generates a code when the dialog opens. Since codes are in-memory with 15-min TTL and max 5 active (lines 35-36 of `remote-auth.service.ts`), the cost is negligible. The user opens the dialog, the QR code and text code are immediately visible. One click, not two.
+
+---
+
+## ONE ACKNOWLEDGED TRADEOFF
+
+**The QR code requires a new dependency and consumes significant dialog space.**
+
+A 180x180px QR code inside a padded container consumes roughly 250px of vertical space. On the 480px-wide dialog, this means the text code and copy buttons are pushed below the visual center. Users on shorter displays or scaled-up UI may need to scroll. I accept this because the QR path eliminates all friction for the most common scenario (phone scanning desktop screen), and because the `qrcode` package adds minimal bundle size (~15KB gzipped for SVG generation). The alternative -- making the QR small or optional -- optimizes for the less common path at the expense of the primary one.
+
+---
+
+## IMPLEMENTATION SUMMARY
+
+**Files to modify:**
+
+1. **`apps/web/src/features/settings/ui/sections/AccessSection.tsx`** -- Replace `PairingFlow`, `PortalCard`, `StepDot` with a simplified "Devices" section + "Add Device" dialog. Generate code on dialog open. Add QR code rendering.
+
+2. **`apps/web/src/features/auth/ui/PairGatePage.tsx`** -- Replace two inputs with single unified input. Add paste normalization. Remove "Pairing Code" label and "Open Settings > Remote Access" help text. Add connecting/connected/error states.
+
+3. **`apps/web/src/app/routes/connect.tsx`** -- Simplify to either redirect (when serverId present) or show "ask for a link" message (when no serverId).
+
+4. **No backend changes needed.** The `WORD-NNNN` format, `generatePairCode`, `validatePairCode`, relay pair handling -- all stay exactly as they are.
+
+**New dependency:** `bun add qrcode && bun add -d @types/qrcode`</result>
+<usage><total_tokens>62918</total_tokens><tool_uses>24</tool_uses><duration_ms>297400</duration_ms></usage>
+</task-notification>
+Full transcript available at: /private/tmp/claude-501/-Users-zvada-Developer-agent-box-ide--conductor-vienna-v2/f7daa10a-7b09-4396-92df-4cd26838830b/tasks/af94f1b5fe1fa5767.output
+
+---
+
+Okay, can you show me the most best recommended options with CLI design that you show me to me how it would work and we can think about it more visually.
+
+---
+
+Okay, when you look at it like what is the best path for what would you recommend?
+
+---
+
+Okay, if you feel like this is the direction, let's do it. Just a small thing. Let's do uppercase of the two words. Yeah.
+
+---
+
+/code-simplifier
+
+---
+
+okey reveiw the comuciaiton text if clear and corect and also the ux now wdyt /design-explore
+
+---
+
+<system_instruction>
+The user has attached these files. Read them before proceeding.
+- /Users/zvada/Developer/agent/box-ide/.conductor/vienna-v2/.context/attachments/Screenshot 2026-03-22 at 6.20.08 PM.png (130.2 KB)
+</system_instruction>
+
+
+
+Okay, here's my feedback. I think it's really good, but whatever we are on a browser and we just want... I think that's good because there is the copy link, but like I think something should be conversion and I think the copy link should have higher priority, right?
+
+And also a question, when I click connect device and I close it and click again, then the previous link is already expired.
+
+---
+
+And on the code, there is an infinite amount of people. What if I want to connect through this code with multiple users? How this would work?
+
+---
+
+Okay, never mind. Let's do the Option A for now. We will change after.
+
+---
+
+And if you look at the web on the receiver side, like on the web or mobile, which like does the connection, how does the website looks and how does it communicate? Do you think this is like very clear when using the website and not from the from the desktop? What do you think? Is it is it very good? You UX-WISE?
+
+---
+
+Okay, yeah, let's do it and make it like very nicely designed. Our style, this minimalism, but like very nice. It should feel alive. If something is happening, right animation, you have the scale, you have the web engineering from ML, everything. So make sure you could do it
+
+---
+
+/code-simplifier
+
+---
+
+Oh, maybe in the settings, in the desktop app and the web app, it shouldn't be called, it shouldn't be named connect, maybe like remote access, right? That's better. What do you think?
+
+---
+
+<system_instruction>
+The user has attached these files. Read them before proceeding.
+- /Users/zvada/Developer/agent/box-ide/.conductor/vienna-v2/.context/attachments/PR instructions.md (953 B)
+</system_instruction>
+
+
+
+Create a PR
