@@ -356,12 +356,18 @@ export function useSendMessage() {
     },
 
     onError: (_err, variables, context) => {
-      // If the error is a WS disconnect, escalate the connection state immediately.
-      // The WS client produces "WebSocket not connected" (socket already down)
-      // or "WebSocket disconnected" (connection dropped mid-flight).
+      // If the error is a WS connectivity issue, escalate the connection state
+      // immediately. The WS client produces three distinct error messages:
+      //   "WebSocket not connected"     — socket already down before send
+      //   "WebSocket disconnected"      — connection dropped mid-flight
+      //   "WebSocket connection failed" — connect() rejected (initial open failed)
       if (_err instanceof Error) {
         const msg = _err.message.toLowerCase();
-        if (msg.includes("not connected") || msg.includes("disconnected")) {
+        if (
+          msg.includes("not connected") ||
+          msg.includes("disconnected") ||
+          msg.includes("connection failed")
+        ) {
           emitSendAttemptFailed();
         }
       }

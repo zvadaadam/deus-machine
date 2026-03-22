@@ -112,7 +112,7 @@ function WaitingDots({ reduced }: { reduced: boolean | null }) {
               duration: 1.5,
               repeat: Infinity,
               delay: i * 0.2,
-              ease: "easeInOut",
+              ease: "linear",
             }}
           />
         )

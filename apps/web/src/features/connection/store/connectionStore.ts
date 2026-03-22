@@ -93,6 +93,19 @@ export const useConnectionStore = create<ConnectionStore>((set, get) => ({
   },
 
   retry: () => {
+    // Reset to grace_period for immediate visual feedback (banner shows
+    // "Reconnecting..." instead of staying stuck on "Connection lost").
+    // When ws is null after 30s+, forceReconnect() skips notifyConnectionChange
+    // because its if(ws) guard fails — so we must transition the store ourselves.
+    clearTimers();
+    set({ state: "grace_period", disconnectedAt: Date.now(), sendAttemptFailed: false });
+
+    graceTimer = setTimeout(() => {
+      if (get().state === "grace_period") {
+        set({ state: "reconnecting" });
+      }
+    }, GRACE_MS);
+
     forceReconnect();
   },
 }));
