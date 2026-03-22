@@ -47,21 +47,26 @@ async function backfillGitOriginUrls(): Promise<void> {
     if (nullUrlRepos.length === 0) return;
 
     let updated = 0;
-    for (const repo of nullUrlRepos) {
-      try {
-        const { stdout } = await execFileAsync("git", ["remote", "get-url", "origin"], {
-          cwd: repo.root_path,
-          encoding: "utf-8",
-          timeout: 2000,
-        });
-        const url = stdout.trim();
-        if (url) {
-          db.prepare("UPDATE repositories SET git_origin_url = ? WHERE id = ?").run(url, repo.id);
-          updated++;
-        }
-      } catch {
-        // No origin remote or repo dir missing — skip
-      }
+    // Process in batches of 5 to cap concurrent git subprocesses
+    const BATCH_SIZE = 5;
+    for (let i = 0; i < nullUrlRepos.length; i += BATCH_SIZE) {
+      const batch = nullUrlRepos.slice(i, i + BATCH_SIZE);
+      const results = await Promise.allSettled(
+        batch.map(async (repo) => {
+          const { stdout } = await execFileAsync("git", ["remote", "get-url", "origin"], {
+            cwd: repo.root_path,
+            encoding: "utf-8",
+            timeout: 2000,
+          });
+          const url = stdout.trim();
+          if (url) {
+            db.prepare("UPDATE repositories SET git_origin_url = ? WHERE id = ?").run(url, repo.id);
+            return true;
+          }
+          return false;
+        })
+      );
+      updated += results.filter((r) => r.status === "fulfilled" && r.value).length;
     }
 
     // Push fresh data to WS subscribers so sidebar shows GitHub icons immediately
