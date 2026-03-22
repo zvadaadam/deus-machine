@@ -24,6 +24,9 @@ on:
       - "apps/cloud-relay/**"
       - "apps/web/**"
       - "shared/**"
+      - "package.json"
+      - "bun.lock"
+      - "tsconfig.web.json"
   workflow_dispatch:
     inputs:
       service:
@@ -61,6 +64,9 @@ jobs:
             web:
               - 'apps/web/**'
               - 'shared/**'
+              - 'package.json'
+              - 'bun.lock'
+              - 'tsconfig.web.json'
 
   # ── Deploy Cloud Relay (Cloudflare Worker) ───────────────────────
   deploy-relay:
