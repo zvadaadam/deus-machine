@@ -214,6 +214,22 @@
 - Pre-existing since bad96ad4 (protocol unification). Does not cause visible breakage because WS subscription pushes snapshot.
 - Full details in `create-workspace-command-return.md`
 
+## Connection State Machine (features/connection)
+
+- Zustand store in `connectionStore.ts`: CONNECTED → GRACE_PERIOD (2s) → RECONNECTING (30s total) → DISCONNECTED
+- `onDisconnected` guard checks `current !== "connected"` — must allow re-entry from `disconnected`
+  to handle Retry button flow (forceReconnect fires notifyConnectionChange(false) before new socket opens)
+- `forceReconnect()` in platform/ws immediately calls `notifyConnectionChange(false)` — if guard blocks,
+  the banner freezes at DISCONNECTED with no recovery until socket connects
+- `emitSendAttemptFailed` in `connectionEvents.ts` is a module-level Set-based event bus (no React deps)
+- WS error messages that trigger `emitSendAttemptFailed`: both `"not connected"` AND `"disconnected"`
+  must be matched — `"WebSocket disconnected"` (from onclose pending-command rejection) will be missed
+  if only checking `"not connected"`
+- `platform/ws → connectionStore` is safe (no circular import). `session.queries → connectionEvents` is safe.
+- `ConnectionBanner` animates `height` (violates project guidelines) — causes panel jitter on 32→44 change
+- `ConnectionOrb` color crossfade: CSS `transition-colors` on a class swap is better than Framer Motion
+  `backgroundColor` interpolation (avoids paint-per-frame)
+
 ## See Also
 
 - `patterns-deep.md` — overflow notes: error classification, chat virtualization, PRStatus, border radius, sidecar resume

@@ -21,6 +21,7 @@ import { useBackendRestart } from "@/shared/hooks/useBackendRestart";
 import { useAnalyticsConsent } from "@/platform/analytics";
 import { useSettings } from "@/features/settings";
 import { useAuth, PairGatePage } from "@/features/auth";
+import { ServerOfflinePage } from "@/features/connection";
 import { isRelayMode } from "@/shared/config/backend.config";
 
 export function ServerLayout() {
@@ -89,21 +90,10 @@ function ServerContent({ serverId }: { serverId: string }) {
   // Backend unreachable
   if (settingsQuery.isError && !settingsQuery.data) {
     return (
-      <div className="bg-background flex h-screen items-center justify-center">
-        <div className="max-w-md space-y-4 text-center">
-          <h1 className="text-foreground text-xl font-semibold">Cannot connect to server</h1>
-          <p className="text-muted-foreground text-sm">
-            Make sure the OpenDevs desktop app is running and the backend server is started.
-          </p>
-          <button
-            type="button"
-            onClick={() => settingsQuery.refetch()}
-            className="bg-primary text-primary-foreground hover:bg-primary/90 rounded-lg px-4 py-2 text-sm font-medium"
-          >
-            Retry
-          </button>
-        </div>
-      </div>
+      <ServerOfflinePage
+        onRetry={() => settingsQuery.refetch()}
+        variant={isRelayMode() ? "relay" : "desktop"}
+      />
     );
   }
 
