@@ -17,7 +17,7 @@ import { useSession } from "../context";
 import { useVirtualizer } from "@tanstack/react-virtual";
 import { useCallback, useMemo, useRef, useEffect, useLayoutEffect, useState } from "react";
 import { AnimatePresence, m } from "framer-motion";
-import { PixelGrid, type PixelGridVariant } from "./PixelGrid";
+import { CircularPixelGrid, type CircularPixelGridVariant } from "./CircularPixelGrid";
 
 const USER_PADDING_CLASS = "pb-8";
 const TIGHT_PADDING_CLASS = "pb-1";
@@ -244,13 +244,13 @@ export function Chat({
 
   /**
    * Derive agent sub-state from the last content block in the message stream.
-   * Maps to PixelGrid animation variant:
+   * Maps to CircularPixelGrid animation variant:
    * - thinking: last block is ThinkingBlock (extended reasoning)
    * - generating: last block is TextBlock (streaming text)
    * - toolExecuting: last block is ToolUseBlock with no result yet
    * - error: last tool result has is_error=true
    */
-  const agentSubState = useMemo((): PixelGridVariant => {
+  const agentSubState = useMemo((): CircularPixelGridVariant => {
     if (sessionStatus !== "working") return "generating";
 
     for (let i = renderableMessages.length - 1; i >= 0; i--) {
@@ -705,7 +705,7 @@ export function Chat({
                       indicatorMarginClass
                     )}
                   >
-                    <PixelGrid variant={agentSubState} size={15} className="flex-shrink-0" />
+                    <CircularPixelGrid variant={agentSubState} size={20} resolution={12} className="flex-shrink-0" />
                     <span className="text-foreground ml-1 font-mono text-xs tracking-tight tabular-nums opacity-50">
                       {formattedDuration || "0.0s"}
                     </span>
