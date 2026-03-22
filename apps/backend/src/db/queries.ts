@@ -29,7 +29,7 @@ const WORKSPACE_DETAILS_SELECT = `
     w.pr_url, w.pr_number,
     w.setup_status, w.error_message, w.init_stage,
     w.updated_at,
-    r.name as repo_name, r.root_path, r.git_default_branch,
+    r.name as repo_name, r.root_path, r.git_default_branch, r.git_origin_url,
     s.status as session_status, s.model,
     s.error_category as session_error_category,
     s.error_message as session_error_message,

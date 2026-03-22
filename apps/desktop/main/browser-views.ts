@@ -4,12 +4,12 @@
  * Manages Electron BrowserViews for the agent browser automation feature.
  * Uses native Electron BrowserView APIs for cross-platform web automation.
  *
- * Z-order strategy (same as Cursor/VS Code):
- *   BrowserViews are added via contentView.addChildView(view, 0) which
- *   places them BEHIND the main WebContents. The renderer's DOM (dialogs,
- *   dropdowns, modals) naturally renders on top. The browser content is
- *   visible through the transparent areas of the right panel. This avoids
- *   the classic Electron problem where BrowserViews float above all DOM.
+ * Z-order strategy:
+ *   BrowserViews are currently added via contentView.addChildView(view)
+ *   which renders them on top of the main WebContents. The renderer hides
+ *   all views when dialogs/modals are open to prevent overlap issues.
+ *   Rendering behind the DOM via addChildView(view, 0) with a transparent
+ *   browser panel is tracked as a follow-up improvement.
  *
  * Each browser view gets:
  * - Its own session partition (isolated cookies/storage)

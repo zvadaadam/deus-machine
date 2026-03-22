@@ -101,10 +101,10 @@ export function classifyCheck(check: any): "passing" | "failing" | "pending" {
 /** Parse a git remote URL (SSH or HTTPS) into OWNER/REPO format for gh --repo. */
 export function parseGitHubRepo(url: string): string | null {
   // SSH: git@github.com:owner/repo.git
-  const sshMatch = url.match(/git@[^:]+:([^/]+\/[^/]+?)(?:\.git)?$/);
+  const sshMatch = url.match(/git@github\.com:([^/]+\/[^/]+?)(?:\.git)?$/);
   if (sshMatch) return sshMatch[1];
   // HTTPS: https://github.com/owner/repo.git
-  const httpsMatch = url.match(/https?:\/\/[^/]+\/([^/]+\/[^/]+?)(?:\.git)?$/);
+  const httpsMatch = url.match(/https?:\/\/github\.com\/([^/]+\/[^/]+?)(?:\.git)?$/);
   if (httpsMatch) return httpsMatch[1];
   return null;
 }
