@@ -55,3 +55,14 @@ Okay, so now the sidebar displays strategy what it is right now. Since we got th
 ---
 
 yes
+
+---
+
+<system_instruction>
+The user has attached these files. Read them before proceeding.
+- /Users/zvada/Developer/agent/box-ide/.conductor/da-nang-v4/.context/attachments/PR instructions.md (956 B)
+</system_instruction>
+
+
+
+Create a PR
