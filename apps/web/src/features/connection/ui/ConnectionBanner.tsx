@@ -44,9 +44,11 @@ export function ConnectionBanner() {
 
           <div className="flex h-full items-center justify-between px-4">
             <div className="flex items-center gap-2.5">
-              {/* Amber dot */}
+              {/* Amber dot — suppress ping animation for reduced motion */}
               <span className="relative flex h-1.5 w-1.5">
-                <span className="bg-accent-gold absolute inline-flex h-full w-full animate-ping rounded-full opacity-40" />
+                {!reduceMotion && (
+                  <span className="bg-accent-gold absolute inline-flex h-full w-full animate-ping rounded-full opacity-40" />
+                )}
                 <span className="bg-accent-gold relative inline-flex h-1.5 w-1.5 rounded-full" />
               </span>
 
@@ -59,7 +61,7 @@ export function ConnectionBanner() {
                     initial={{ opacity: 0 }}
                     animate={{ opacity: 1 }}
                     exit={{ opacity: 0 }}
-                    transition={{ duration: 0.15 }}
+                    transition={{ duration: reduceMotion ? 0 : 0.15 }}
                   >
                     <span className="text-text-secondary text-sm font-medium">
                       {sendAttemptFailed ? "Message queued" : "Connection lost"}
@@ -75,7 +77,7 @@ export function ConnectionBanner() {
                     initial={{ opacity: 0 }}
                     animate={{ opacity: 1 }}
                     exit={{ opacity: 0 }}
-                    transition={{ duration: 0.15 }}
+                    transition={{ duration: reduceMotion ? 0 : 0.15 }}
                   >
                     Reconnecting...
                   </m.span>
@@ -94,7 +96,7 @@ export function ConnectionBanner() {
                   initial={{ opacity: 0 }}
                   animate={{ opacity: 1 }}
                   exit={{ opacity: 0 }}
-                  transition={{ duration: 0.2 }}
+                  transition={{ duration: reduceMotion ? 0 : 0.2 }}
                 >
                   Retry now
                 </m.button>
