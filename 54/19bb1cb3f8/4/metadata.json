@@ -1,9 +1,11 @@
 {
   "cli_version": "0.5.0",
   "checkpoint_id": "5419bb1cb3f8",
+  "session_id": "9a647143-cd92-43c2-80c8-c5130b5b11b9",
   "strategy": "manual-commit",
+  "created_at": "2026-03-22T19:08:41.579928Z",
   "branch": "zvadaadam/sidebar-grab-icon-fix",
-  "checkpoints_count": 35,
+  "checkpoints_count": 12,
   "files_touched": [
     "apps/backend/src/db/queries.ts",
     "apps/backend/src/db/types.ts",
@@ -12,19 +14,10 @@
     "apps/backend/src/routes/workspaces.ts",
     "apps/backend/src/server.ts",
     "apps/backend/src/services/agent/commands.ts",
-    "apps/backend/src/services/agent/event-handler.ts",
-    "apps/backend/src/services/agent/persistence.ts",
     "apps/backend/src/services/gh.service.ts",
     "apps/backend/src/services/query-engine.ts",
-    "apps/backend/test/unit/services/agent-event-handler.test.ts",
-    "apps/backend/test/unit/services/agent-persistence.test.ts",
     "apps/backend/test/unit/shared/events.test.ts",
     "apps/desktop/main/browser-views.ts",
-    "apps/sidecar/agents/claude/message-processor.ts",
-    "apps/sidecar/agents/claude/stream-context.ts",
-    "apps/sidecar/event-broadcaster.ts",
-    "apps/sidecar/test/message-processor.test.ts",
-    "apps/sidecar/test/stream-context.test.ts",
     "apps/web/src/app/layouts/MainLayout.tsx",
     "apps/web/src/app/layouts/hooks/useRepoActions.ts",
     "apps/web/src/components/ui/command.tsx",
@@ -47,49 +40,30 @@
     "apps/web/src/shared/api/queryKeys.ts",
     "apps/web/src/shared/stores/uiStore.ts",
     "apps/web/src/shared/types/index.ts",
-    "shared/agent-events.ts",
     "shared/events.ts",
     "shared/types/github.ts",
     "shared/types/index.ts",
     "shared/types/workspace.ts"
   ],
-  "sessions": [
-    {
-      "metadata": "/54/19bb1cb3f8/0/metadata.json",
-      "transcript": "/54/19bb1cb3f8/0/full.jsonl",
-      "content_hash": "/54/19bb1cb3f8/0/content_hash.txt",
-      "prompt": "/54/19bb1cb3f8/0/prompt.txt"
-    },
-    {
-      "metadata": "/54/19bb1cb3f8/1/metadata.json",
-      "transcript": "/54/19bb1cb3f8/1/full.jsonl",
-      "content_hash": "/54/19bb1cb3f8/1/content_hash.txt",
-      "prompt": "/54/19bb1cb3f8/1/prompt.txt"
-    },
-    {
-      "metadata": "/54/19bb1cb3f8/2/metadata.json",
-      "transcript": "/54/19bb1cb3f8/2/full.jsonl",
-      "content_hash": "/54/19bb1cb3f8/2/content_hash.txt",
-      "prompt": "/54/19bb1cb3f8/2/prompt.txt"
-    },
-    {
-      "metadata": "/54/19bb1cb3f8/3/metadata.json",
-      "transcript": "/54/19bb1cb3f8/3/full.jsonl",
-      "content_hash": "/54/19bb1cb3f8/3/content_hash.txt",
-      "prompt": "/54/19bb1cb3f8/3/prompt.txt"
-    },
-    {
-      "metadata": "/54/19bb1cb3f8/4/metadata.json",
-      "transcript": "/54/19bb1cb3f8/4/full.jsonl",
-      "content_hash": "/54/19bb1cb3f8/4/content_hash.txt",
-      "prompt": "/54/19bb1cb3f8/4/prompt.txt"
-    }
-  ],
+  "agent": "Claude Code",
+  "turn_id": "28dd087b9630",
   "token_usage": {
-    "input_tokens": 7490,
-    "cache_creation_tokens": 696065,
-    "cache_read_tokens": 51375624,
-    "output_tokens": 152594,
-    "api_call_count": 371
+    "input_tokens": 110,
+    "cache_creation_tokens": 198958,
+    "cache_read_tokens": 4783911,
+    "output_tokens": 27689,
+    "api_call_count": 88
+  },
+  "session_metrics": {
+    "turn_count": 12
+  },
+  "initial_attribution": {
+    "calculated_at": "2026-03-22T19:08:41.342571Z",
+    "agent_lines": 842,
+    "human_added": 295,
+    "human_modified": 53,
+    "human_removed": 0,
+    "total_committed": 1190,
+    "agent_percentage": 70.75630252100841
   }
 }
