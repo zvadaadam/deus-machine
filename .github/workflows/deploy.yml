@@ -133,4 +133,4 @@ jobs:
         with:
           apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-          command: pages deploy dist/web --project-name=deus --branch=main
+          command: pages deploy apps/web/dist/web --project-name=deus --branch=main
