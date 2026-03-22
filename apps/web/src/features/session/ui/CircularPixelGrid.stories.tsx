@@ -179,51 +179,55 @@ export const SizeComparison: StoryObj<typeof CircularPixelGrid> = {
 /* ── Old vs New: Side by Side ────────────────────────────── */
 
 export const OldVsNew: StoryObj<typeof CircularPixelGrid> = {
-  render: () => (
-    <div className="flex flex-col gap-10">
-      <h2 className="text-muted-foreground font-mono text-sm tracking-widest uppercase">
-        Old (3×3 Square) vs New (Circular) — 48px
-      </h2>
-      <div className="grid grid-cols-5 gap-8">
-        {VARIANTS.map(({ variant, label }) => (
-          <div key={variant} className="flex flex-col items-center gap-4">
-            <div className="flex items-center gap-8 rounded-xl bg-black/80 p-6">
-              <div className="flex flex-col items-center gap-2">
-                <PixelGrid variant={variant} size={48} />
-                <span className="text-muted-foreground text-[10px]">3×3</span>
+  render: () => {
+    // Old PixelGrid only supports 5 variants (no "working")
+    const oldVariants = VARIANTS.filter((v) => v.variant !== "working");
+    return (
+      <div className="flex flex-col gap-10">
+        <h2 className="text-muted-foreground font-mono text-sm tracking-widest uppercase">
+          Old (3×3 Square) vs New (Circular) — 48px
+        </h2>
+        <div className="grid grid-cols-5 gap-8">
+          {oldVariants.map(({ variant, label }) => (
+            <div key={variant} className="flex flex-col items-center gap-4">
+              <div className="flex items-center gap-8 rounded-xl bg-black/80 p-6">
+                <div className="flex flex-col items-center gap-2">
+                  <PixelGrid variant={variant} size={48} />
+                  <span className="text-muted-foreground text-[10px]">3×3</span>
+                </div>
+                <div className="flex flex-col items-center gap-2">
+                  <CircularPixelGrid variant={variant} size={48} resolution={16} />
+                  <span className="text-muted-foreground text-[10px]">circular</span>
+                </div>
               </div>
-              <div className="flex flex-col items-center gap-2">
-                <CircularPixelGrid variant={variant} size={48} resolution={16} />
-                <span className="text-muted-foreground text-[10px]">circular</span>
-              </div>
+              <span className="text-muted-foreground font-mono text-xs">{label}</span>
             </div>
-            <span className="text-muted-foreground font-mono text-xs">{label}</span>
-          </div>
-        ))}
-      </div>
+          ))}
+        </div>
 
-      <h2 className="text-muted-foreground mt-6 font-mono text-sm tracking-widest uppercase">
-        Inline size (15px) — as used in chat indicator
-      </h2>
-      <div className="flex gap-8">
-        {VARIANTS.map(({ variant, label, color }) => (
-          <div key={variant} className="flex flex-col items-center gap-3">
-            <div className={`flex items-center gap-3 ${color}`}>
-              <div className="flex flex-col items-center gap-1">
-                <PixelGrid variant={variant} size={15} />
-                <span className="text-muted-foreground text-[9px]">old</span>
+        <h2 className="text-muted-foreground mt-6 font-mono text-sm tracking-widest uppercase">
+          Inline size (15px) — as used in chat indicator
+        </h2>
+        <div className="flex gap-8">
+          {oldVariants.map(({ variant, label, color }) => (
+            <div key={variant} className="flex flex-col items-center gap-3">
+              <div className={`flex items-center gap-3 ${color}`}>
+                <div className="flex flex-col items-center gap-1">
+                  <PixelGrid variant={variant} size={15} />
+                  <span className="text-muted-foreground text-[9px]">old</span>
+                </div>
+                <div className="flex flex-col items-center gap-1">
+                  <CircularPixelGrid variant={variant} size={15} resolution={10} />
+                  <span className="text-muted-foreground text-[9px]">new</span>
+                </div>
               </div>
-              <div className="flex flex-col items-center gap-1">
-                <CircularPixelGrid variant={variant} size={15} resolution={10} />
-                <span className="text-muted-foreground text-[9px]">new</span>
-              </div>
+              <span className="text-muted-foreground text-[10px]">{label}</span>
             </div>
-            <span className="text-muted-foreground text-[10px]">{label}</span>
-          </div>
-        ))}
+          ))}
+        </div>
       </div>
-    </div>
-  ),
+    );
+  },
 };
 
 /* ── In-Chat Indicator Preview ───────────────────────────── */
