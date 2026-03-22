@@ -2273,3 +2273,14 @@ New code introduces `bg-emerald-500/10`, `text-emerald-500`, and `text-amber-500
 - **Framer Motion usage**: Follows CLAUDE.md guidance — AnimatePresence for mount/unmount, height:"auto" for expandable error message (documented as a valid Framer Motion use case), custom `EASE_OUT_QUART` curve used throughout.
 - **Tests**: Comprehensive coverage for the new format, two-different-words invariant, all normalization variants (dashes, underscores, plus signs, mixed case, multiple spaces), and reuse-within-TTL semantics.
 - **`qrcode.react` dependency**: Appropriate addition; `bg-white` on the QR container is intentional (QR codes require white background for scanning).
+
+---
+
+<system_instruction>
+The user has attached these files. Read them before proceeding.
+- /Users/zvada/Developer/agent/box-ide/.conductor/vienna-v2/.context/attachments/Backend_Tests_68092418480.log (98.3 KB)
+</system_instruction>
+
+
+
+Fix the failing CI actions. I've attached the failure logs.
