@@ -65,7 +65,9 @@ export const ResolutionComparison: StoryObj<typeof CircularPixelGrid> = {
               <div className="flex items-center justify-center rounded-xl bg-black/80 p-6">
                 <CircularPixelGrid variant="thinking" size={60} resolution={res} />
               </div>
-              <span className="text-muted-foreground font-mono text-xs">{res}×{res}</span>
+              <span className="text-muted-foreground font-mono text-xs">
+                {res}×{res}
+              </span>
             </div>
           ))}
         </div>
@@ -79,7 +81,9 @@ export const ResolutionComparison: StoryObj<typeof CircularPixelGrid> = {
               <div className="flex items-center justify-center rounded-xl bg-black/80 p-6">
                 <CircularPixelGrid variant="generating" size={60} resolution={res} />
               </div>
-              <span className="text-muted-foreground font-mono text-xs">{res}×{res}</span>
+              <span className="text-muted-foreground font-mono text-xs">
+                {res}×{res}
+              </span>
             </div>
           ))}
         </div>
@@ -93,7 +97,9 @@ export const ResolutionComparison: StoryObj<typeof CircularPixelGrid> = {
               <div className="flex items-center justify-center rounded-xl bg-black/80 p-6">
                 <CircularPixelGrid variant="toolExecuting" size={60} resolution={res} />
               </div>
-              <span className="text-muted-foreground font-mono text-xs">{res}×{res}</span>
+              <span className="text-muted-foreground font-mono text-xs">
+                {res}×{res}
+              </span>
             </div>
           ))}
         </div>
@@ -226,10 +232,25 @@ export const InChatIndicator: StoryObj<typeof CircularPixelGrid> = {
   render: () => {
     const states = [
       { variant: "thinking" as const, label: "Thinking", timer: "3.2s", color: "text-primary" },
-      { variant: "generating" as const, label: "Generating", timer: "1:23.4", color: "text-success" },
-      { variant: "toolExecuting" as const, label: "Tool Executing", timer: "45.1s", color: "text-warning" },
+      {
+        variant: "generating" as const,
+        label: "Generating",
+        timer: "1:23.4",
+        color: "text-success",
+      },
+      {
+        variant: "toolExecuting" as const,
+        label: "Tool Executing",
+        timer: "45.1s",
+        color: "text-warning",
+      },
       { variant: "error" as const, label: "Error", timer: "2:01.7", color: "text-destructive" },
-      { variant: "compacting" as const, label: "Compacting", timer: "5.0s", color: "text-status-compacting" },
+      {
+        variant: "compacting" as const,
+        label: "Compacting",
+        timer: "5.0s",
+        color: "text-status-compacting",
+      },
     ];
 
     return (
@@ -385,8 +406,8 @@ export const ThinkingVsWorking: StoryObj<typeof CircularPixelGrid> = {
           Thinking vs Working — Active vs Ambient
         </h2>
         <p className="text-muted-foreground mt-2 text-xs">
-          "Thinking" is dynamic — rotating sweep + radial pulse for active processing.
-          "Working" is calm — gentle breathing that just says "still going."
+          "Thinking" is dynamic — rotating sweep + radial pulse for active processing. "Working" is
+          calm — gentle breathing that just says "still going."
         </p>
       </div>
 
@@ -414,9 +435,7 @@ export const ThinkingVsWorking: StoryObj<typeof CircularPixelGrid> = {
 
       {/* Sidebar context simulation */}
       <div className="flex flex-col gap-3">
-        <h3 className="text-foreground text-sm font-medium">
-          Sidebar Context — Workspace Rows
-        </h3>
+        <h3 className="text-foreground text-sm font-medium">Sidebar Context — Workspace Rows</h3>
         <div className="bg-sidebar flex w-80 flex-col rounded-lg p-2">
           {[
             { name: "feat/auth-refactor", working: true },
@@ -481,61 +500,65 @@ export const ColorExploration: StoryObj<typeof CircularPixelGrid> = {
         name: "Current (theme defaults)",
         desc: "thinking & compacting share primary/rose — hard to tell apart",
         colors: {
-          thinking: undefined,     // --primary (rose h345)
-          generating: undefined,   // --success (green h155)
+          thinking: undefined, // --primary (rose h345)
+          generating: undefined, // --success (green h155)
           toolExecuting: undefined, // --warning (amber h75)
-          error: undefined,        // --destructive (red h25)
-          compacting: undefined,   // --status-compacting = --primary (rose h345)
+          error: undefined, // --destructive (red h25)
+          compacting: undefined, // --status-compacting = --primary (rose h345)
         },
       },
       {
         name: "Option A: Indigo thinking, Violet compacting",
         desc: "Cool blue for contemplation, violet for compression — classic separation",
         colors: {
-          thinking: "oklch(0.68 0.14 265)",     // indigo
-          generating: undefined,                 // keep green
-          toolExecuting: undefined,              // keep amber
-          error: undefined,                      // keep red
-          compacting: "oklch(0.68 0.14 300)",   // violet
+          thinking: "oklch(0.68 0.14 265)", // indigo
+          generating: undefined, // keep green
+          toolExecuting: undefined, // keep amber
+          error: undefined, // keep red
+          compacting: "oklch(0.68 0.14 300)", // violet
         },
       },
       {
         name: "Option B: Cyan thinking, Magenta compacting",
         desc: "Maximum hue distance between the two previously-identical states",
         colors: {
-          thinking: "oklch(0.68 0.12 210)",     // cyan/teal
-          generating: undefined,                 // keep green
-          toolExecuting: undefined,              // keep amber
-          error: undefined,                      // keep red
-          compacting: "oklch(0.68 0.12 330)",   // magenta/pink
+          thinking: "oklch(0.68 0.12 210)", // cyan/teal
+          generating: undefined, // keep green
+          toolExecuting: undefined, // keep amber
+          error: undefined, // keep red
+          compacting: "oklch(0.68 0.12 330)", // magenta/pink
         },
       },
       {
         name: "Option C: Keep rose thinking, Purple compacting",
         desc: "Thinking stays brand-aligned (primary/rose), compacting gets purple",
         colors: {
-          thinking: undefined,                   // keep primary/rose
-          generating: undefined,                 // keep green
-          toolExecuting: undefined,              // keep amber
-          error: undefined,                      // keep red
-          compacting: "oklch(0.68 0.15 285)",   // rich purple
+          thinking: undefined, // keep primary/rose
+          generating: undefined, // keep green
+          toolExecuting: undefined, // keep amber
+          error: undefined, // keep red
+          compacting: "oklch(0.68 0.15 285)", // rich purple
         },
       },
       {
         name: "Option D: Blue thinking, Teal compacting",
         desc: "Different temperature — warm actions (amber/red), cool processing (blue/teal)",
         colors: {
-          thinking: "oklch(0.68 0.13 250)",     // blue
-          generating: undefined,                 // keep green
-          toolExecuting: undefined,              // keep amber
-          error: undefined,                      // keep red
-          compacting: "oklch(0.68 0.11 190)",   // teal/cyan
+          thinking: "oklch(0.68 0.13 250)", // blue
+          generating: undefined, // keep green
+          toolExecuting: undefined, // keep amber
+          error: undefined, // keep red
+          compacting: "oklch(0.68 0.11 190)", // teal/cyan
         },
       },
     ];
 
     const variants: CircularPixelGridVariant[] = [
-      "thinking", "generating", "toolExecuting", "error", "compacting",
+      "thinking",
+      "generating",
+      "toolExecuting",
+      "error",
+      "compacting",
     ];
     const labels = ["Thinking", "Generating", "Tool Exec", "Error", "Compacting"];
 
@@ -546,8 +569,8 @@ export const ColorExploration: StoryObj<typeof CircularPixelGrid> = {
             Color Palette Exploration — 60px, res 16
           </h2>
           <p className="text-muted-foreground mt-2 text-xs">
-            Each row is a different color palette. Compare how well the 5 states
-            are distinguishable at a glance.
+            Each row is a different color palette. Compare how well the 5 states are distinguishable
+            at a glance.
           </p>
         </div>
 
@@ -613,7 +636,11 @@ export const IdealSizes: StoryObj<typeof CircularPixelGrid> = {
     ];
 
     const variants: CircularPixelGridVariant[] = [
-      "thinking", "generating", "toolExecuting", "error", "compacting",
+      "thinking",
+      "generating",
+      "toolExecuting",
+      "error",
+      "compacting",
     ];
 
     // Option C colors (rose thinking, purple compacting)
@@ -660,13 +687,13 @@ export const IdealSizes: StoryObj<typeof CircularPixelGrid> = {
             In Context — Chat indicator with timer
           </h3>
           <div className="flex flex-col gap-3">
-            {([
+            {[
               { v: "thinking" as const, t: "3.2s", c: "text-primary" },
               { v: "generating" as const, t: "1:23.4", c: "text-success" },
               { v: "toolExecuting" as const, t: "45.1s", c: "text-warning" },
               { v: "error" as const, t: "2:01.7", c: "text-destructive" },
               { v: "compacting" as const, t: "5.0s", c: "text-primary" },
-            ]).map(({ v, t, c }) => (
+            ].map(({ v, t, c }) => (
               <div key={v} className={`flex items-center gap-2 px-2 py-1 ${c}`}>
                 <CircularPixelGrid
                   variant={v}

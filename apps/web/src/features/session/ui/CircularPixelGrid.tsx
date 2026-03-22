@@ -44,16 +44,13 @@ interface CircularPixelGridProps {
 // cssVar: resolved from the theme (respects light/dark mode)
 // direct: hardcoded oklch color (used when no semantic token exists)
 
-const VARIANT_COLORS: Record<
-  CircularPixelGridVariant,
-  { cssVar?: string; direct?: string }
-> = {
-  thinking: { direct: "oklch(0.68 0.14 265)" },   // indigo — Option A
+const VARIANT_COLORS: Record<CircularPixelGridVariant, { cssVar?: string; direct?: string }> = {
+  thinking: { direct: "oklch(0.68 0.14 265)" }, // indigo — Option A
   generating: { cssVar: "--success" },
   toolExecuting: { cssVar: "--warning" },
   error: { cssVar: "--destructive" },
-  compacting: { direct: "oklch(0.68 0.14 300)" },  // violet — Option A
-  working: { cssVar: "--muted-foreground" },        // neutral gray
+  compacting: { direct: "oklch(0.68 0.14 300)" }, // violet — Option A
+  working: { cssVar: "--muted-foreground" }, // neutral gray
 };
 
 /* ── Pre-computed cell metadata ────────────────────────────── */
@@ -186,8 +183,8 @@ function compactingOp(c: Cell, t: number): number {
 
   // Two concentric rings cascading inward, offset by half-cycle
   const period = 3;
-  const phase1 = ((t / period) % 1);
-  const phase2 = ((t / period + 0.5) % 1);
+  const phase1 = (t / period) % 1;
+  const phase2 = (t / period + 0.5) % 1;
 
   const ringWidth = 0.28;
   const ringIntensity = (ringPos: number) => {
@@ -222,9 +219,9 @@ function workingOp(c: Cell, t: number): number {
   const p3 = t * 0.7 + (1 - Math.cos(t * 0.6 + 4.0)) * 0.5;
 
   // Wave directions at golden-angle offsets
-  const d1 = nx * 1.0 + ny * 0.0;           // horizontal
-  const d2 = nx * -0.73 + ny * 0.68;        // 137.5°
-  const d3 = nx * -0.17 + ny * -0.98;       // 275°
+  const d1 = nx * 1.0 + ny * 0.0; // horizontal
+  const d2 = nx * -0.73 + ny * 0.68; // 137.5°
+  const d3 = nx * -0.17 + ny * -0.98; // 275°
 
   const w1 = Math.sin(d1 * 3.5 - p1 * 2.2 + seed * 0.3);
   const w2 = Math.sin(d2 * 3.0 - p2 * 2.5 + seed * 0.5);
@@ -261,9 +258,7 @@ const OP_FN: Record<CircularPixelGridVariant, (c: Cell, t: number) => number> = 
  */
 function cssToRGB(cssColor: string): [number, number, number] {
   // Fast path: rgb(r, g, b) or rgba(r, g, b, a) — most common
-  const rgbMatch = cssColor.match(
-    /rgba?\(\s*(\d+)\s*,\s*(\d+)\s*,\s*(\d+)/,
-  );
+  const rgbMatch = cssColor.match(/rgba?\(\s*(\d+)\s*,\s*(\d+)\s*,\s*(\d+)/);
   if (rgbMatch) return [+rgbMatch[1], +rgbMatch[2], +rgbMatch[3]];
 
   // Slow path: oklch, lab, color(), hex, named — rasterize to get RGB
@@ -357,9 +352,7 @@ export function CircularPixelGrid({
     const glowR = dotR * 1.3;
     const glowExtra = dotPx * 0.4;
 
-    const prefersReduced = window.matchMedia(
-      "(prefers-reduced-motion: reduce)",
-    ).matches;
+    const prefersReduced = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
     const t0 = performance.now();
 
     function draw(now: number) {
@@ -405,12 +398,7 @@ export function CircularPixelGrid({
         } else {
           // Glow rect (slightly larger + dimmer)
           ctx!.fillStyle = `rgba(${cr},${cg},${cb},${(a * 0.3).toFixed(3)})`;
-          ctx!.fillRect(
-            x - glowExtra / 2,
-            y - glowExtra / 2,
-            dotPx + glowExtra,
-            dotPx + glowExtra,
-          );
+          ctx!.fillRect(x - glowExtra / 2, y - glowExtra / 2, dotPx + glowExtra, dotPx + glowExtra);
 
           // Sharp pixel
           ctx!.fillStyle = `rgba(${cr},${cg},${cb},${a.toFixed(3)})`;

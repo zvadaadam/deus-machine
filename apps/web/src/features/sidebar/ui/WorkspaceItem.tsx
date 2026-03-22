@@ -191,7 +191,9 @@ export const WorkspaceItem = React.memo(function WorkspaceItem({
               >
                 {hasSessionIcon ? (
                   match(displayStatus)
-                    .with("working", () => <CircularPixelGrid variant="working" size={14} resolution={8} />)
+                    .with("working", () => (
+                      <CircularPixelGrid variant="working" size={14} resolution={8} />
+                    ))
                     .with("error", () => <span className="bg-accent-red h-2 w-2 rounded-full" />)
                     .otherwise(() => <span className="bg-accent-gold h-2 w-2 rounded-full" />)
                 ) : (
