@@ -11,7 +11,7 @@
  *   - Real SHA-256 hashing: createDeviceToken() stores hash, validateDeviceToken() finds it
  *   - Real Zod validation: PairBody schema rejects malformed requests
  *   - Settings cache invalidation: toggling remote_access_enabled actually gates access
- *   - One-time pairing codes: generate -> use -> refuse reuse
+ *   - Reusable pairing codes: generate -> use -> reuse within TTL
  */
 
 import { describe, it, expect, beforeAll, beforeEach, afterAll, vi } from "vitest";
@@ -169,9 +169,10 @@ describe("Full pairing flow: generate code -> pair -> use token", () => {
     enableRemoteAccess();
   });
 
-  it("generates a WORD-NNNN code from localhost", async () => {
+  it("generates a two-word code from localhost", async () => {
     const code = await generateCode();
-    expect(code).toMatch(/^[A-Z]+-\d{4}$/);
+    // Two uppercase words separated by a space (e.g. "SOFT TIGER")
+    expect(code).toMatch(/^[A-Z]+ [A-Z]+$/);
   });
 
   it("rejects code generation from remote IP", async () => {
@@ -208,22 +209,14 @@ describe("Full pairing flow: generate code -> pair -> use token", () => {
     expect(res.status).toBe(200);
   });
 
-  it("rejects a reused pairing code", async () => {
+  it("allows reuse of a pairing code within its TTL", async () => {
     const code = await generateCode();
-    await pairDevice(code); // First use succeeds
+    await pairDevice(code, "Phone"); // First use succeeds
 
-    // Second use fails
-    const res = await app.request("/api/remote-auth/pair", {
-      method: "POST",
-      headers: {
-        "content-type": "application/json",
-        ...REMOTE_HEADERS,
-      },
-      body: JSON.stringify({ code }),
-    });
-    expect(res.status).toBe(401);
-    const body = await res.json();
-    expect(body.error).toBe("Invalid or expired pairing code");
+    // Second use also succeeds (codes are reusable for multi-device sharing)
+    const { token, device } = await pairDevice(code, "Tablet");
+    expect(token).toHaveLength(64);
+    expect(device.name).toBe("Tablet");
   });
 
   it("rejects an invalid token on protected endpoints", async () => {
