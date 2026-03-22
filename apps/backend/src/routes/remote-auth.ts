@@ -50,7 +50,7 @@ app.post("/remote-auth/pair", async (c) => {
 
   if (!validatePairCode(code)) {
     if (clientIp) recordFailure(clientIp);
-    return c.json({ error: "Invalid or expired pairing code" }, 401);
+    return c.json({ error: "Invalid or expired connection code" }, 401);
   }
 
   // Successful pairing — create device token

@@ -35,7 +35,7 @@ const NAV_ITEMS: NavItem[] = [
   { id: "extensions", label: "Extensions", icon: Puzzle },
   { id: "environment", label: "Environment", icon: Box },
   { id: "experimental", label: "Experimental", icon: FlaskConical },
-  { id: "access", label: "Connect", icon: Globe },
+  { id: "access", label: "Remote Access", icon: Globe },
   { id: "updates", label: "Updates", icon: Download, capability: "autoUpdate" },
 ];
 
