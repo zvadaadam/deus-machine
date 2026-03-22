@@ -1,0 +1,123 @@
+<system_instruction>
+You are working inside OpenDevs, a Mac app that lets the user run many coding agents in parallel.
+Your work should take place in the /Users/zvada/Developer/agent/box-ide/.conductor/da-nang-v4 directory (unless otherwise directed), which has been set up for you to work in.
+Each workspace has a .context directory (gitignored) where you can save files to collaborate with other agents.
+DO NOT EVER read or write files at /Users/zvada/Developer/agent/box-ide.
+The target branch for this workspace is main. Use this for actions like creating new PRs, bisecting, etc., unless you're told otherwise.
+
+If the user asks you to work on several unrelated tasks, you can suggest they start new workspaces.
+Sometimes the user might send you a message they meant to send in a different workspace or a different chat. If something doesn't make sense in the context of your work, just ask. 
+If the user asks for help with OpenDevs, you can ask them to go to "Help -> Send Feedback" to get in touch with our team.
+</system_instruction>
+
+Okay, so can you explore? We wanted to be able to create a workspace out of a zitary from a pull request or from a branch. And I want you to explore how we could do this. Would it be straightforward based on what we already have? Or there's gonna be a lot of things to build out for this support.
+
+---
+
+This is pretty good. We also need to think about UX, how this is going to work. I would put a GitHub icon in the sidebar in the repository next to the new workspace plus sign that there would be next to it like the GitHub icon and on a click. We would open the model which we have now when we trigger command K, this would be the interface to do it there, you know, where we would have like either PR or branch and from there we would be able to see and list the open PRs, you know, or what do you think. Can you explore all this like full thing? But we don't want to work around, so you need to think about the proper way how to do it.
+
+---
+
+Okay, do you think it would be better to have like this control, like segmented control, how it's called, like, we switch like pull request and below this, there will be like a list. And next to those, there's going to be branches, if you click on it, there's going to be the branches, like, you know, like this menu tabs, probably more like tabs for the command dialogue.
+
+---
+
+<system_instruction>
+The user has attached these files. Read them before proceeding.
+- /Users/zvada/Developer/agent/box-ide/.conductor/da-nang-v4/.context/attachments/Screenshot 2026-03-22 at 5.26.38 PM.png (143.0 KB)
+- /Users/zvada/Developer/agent/box-ide/.conductor/da-nang-v4/.context/attachments/Screenshot 2026-03-22 at 5.27.21 PM.png (34.5 KB)
+- /Users/zvada/Developer/agent/box-ide/.conductor/da-nang-v4/.context/attachments/pasted_text_2026-03-22_17-27-41.txt (17.6 KB)
+</system_instruction>
+
+
+
+Okay, so I had a couple of issues. First one was when the app was loaded. The new workspace from PR branch hasn't been appeared immediately. We had to create a new workspace and then it appeared, but that was probably back. You can research if you would spot something, but now when I opened it, it's all good. I think the design of the Command K dialogue, it doesn't look very much good. I shown you the design. It's probably not using the newer design system we have. Super big icons. The background should be transparent. We don't want to do this like a toned down background. We are ready to do the whole background below the dialogue is toned down, darkened. We would rather have this dialogue to have the vibrancy, transparency, but with the blur much better. Also, the design, I'm not sure, doesn't look that great, but I think it works.
+
+Oh, maybe one thing. Once we created the workspace in the sidebar, the name hasn't changed. It still had the name of the branch. And I think this is a problem across all the workspaces. Basically, there should be some priority how we are showing the name of the workspace. So the lowest one, we will show the branch name. If we have a PR title, maybe we're gonna show the PR title here. What do you think? I want you to run Subvision and explore this.
+
+There is multiple tasks here, so we run a couple of sub-agents and split the work. But no workarounds, don't take shortcuts, think about this, oh thoroughly.
+
+---
+
+<system_instruction>
+The user has attached these files. Read them before proceeding.
+- /Users/zvada/Developer/agent/box-ide/.conductor/da-nang-v4/.context/attachments/Screenshot 2026-03-22 at 5.39.01 PM.png (688.0 KB)
+</system_instruction>
+
+
+
+Okay, so many things we got to improve. I think the naming of the workspaces, the titles, stuff like that. Beat, Ricky. But first, let's look at this command dialog. You add blur around the whole thing, but I thought that like the command palette dialog model thing will have the transparency. So we can drop all the things around. Like we don't want a dark and we don't want a blur. So everything can stay the same, but only the background. And the design of the command dialog thing isn't very nice. Explore and Proof
+
+---
+
+<system_instruction>
+The user has attached these files. Read them before proceeding.
+- /Users/zvada/Developer/agent/box-ide/.conductor/da-nang-v4/.context/attachments/Screenshot 2026-03-22 at 5.43.57 PM.png (114.3 KB)
+</system_instruction>
+
+
+
+Okay, so I'm not sure if the vibrancy is enough because I don't see it very much. If it works, it should be very, very vibrant. Also, I think the dimming, it would be nice to have just a little bit of dim around the whole screen when you open the command dialog. Very little subtle, it should show with some progression and some animation of very subtle progression, not like flickering. Also, the command dialog, I can see the separator is very thick, it should be subtle. Also, the paddings are not consistent, I give you an image. So reason about it, improve.
+
+---
+
+<system_instruction>
+The user has attached these files. Read them before proceeding.
+- /Users/zvada/Developer/agent/box-ide/.conductor/da-nang-v4/.context/attachments/Screenshot 2026-03-22 at 5.50.21 PM.png (1.1 MB)
+</system_instruction>
+
+
+
+I'm not sure why, but the command dialogue thing is below the browser, so the browser should be, the command dialogue should be on top, I can explore.
+
+Also the loading of the dialogues of the PRs and the dialogue doesn't work. I'm sure why.
+
+---
+
+Okay, but now what I see is when I click Command + K and the browser is open, the browser is hidden. Or like the view drops, I don't know why. That's not what we want. Don't think about workarounds, we need to elevate the codebase and do it properly.
+
+---
+
+can u check how Cursor - /Applications/Cursor.app/ is doing it tehy gotta have teh same pronbelm right?
+
+---
+
+<system_instruction>
+The user has attached these files. Read them before proceeding.
+- /Users/zvada/Developer/agent/box-ide/.conductor/da-nang-v4/.context/attachments/Screenshot 2026-03-22 at 6.13.55 PM.png (519.7 KB)
+- /Users/zvada/Developer/agent/box-ide/.conductor/da-nang-v4/.context/attachments/Screenshot 2026-03-22 at 6.14.25 PM.png (175.2 KB)
+</system_instruction>
+
+
+
+this browser feels much faster to load that's nice! but i cnanot use the inspect desing mode with the bouding boxe right
+
+---
+
+<system_instruction>
+The user has attached these files. Read them before proceeding.
+- /Users/zvada/Developer/agent/box-ide/.conductor/da-nang-v4/.context/attachments/Screenshot 2026-03-22 at 6.16.12 PM.png (364.1 KB)
+</system_instruction>
+
+
+
+Okay, nice. Feels like it worked. Now, still the command K dialog is not on top, it's below. See?
+
+---
+
+Can you think if this was an anti-pattern, what you did, or like over-engineering, what do you think?
+
+---
+
+YES
+
+---
+
+<system_instruction>
+The user has attached these files. Read them before proceeding.
+- /Users/zvada/Developer/agent/box-ide/.conductor/da-nang-v4/.context/attachments/Screenshot 2026-03-22 at 6.51.21 PM.png (130.9 KB)
+</system_instruction>
+
+
+
+Okay, so we have this problem because like it's centered. So when the command dialogue changes shape size height, yeah height, then it just jumps around like the top part should be fixed. It should not move in the position just growth in height and they should be like for sure some max height, you know. So can you look at it? It's in a wink.
