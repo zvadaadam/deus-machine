@@ -110,7 +110,7 @@ function pairViaRelay(
           reject(new Error("Something went wrong. Try again."));
         }
       } catch {
-        reject(new Error("Invalid response from relay"));
+        reject(new Error("Something went wrong. Try again."));
       }
       ws.close();
     };
@@ -152,23 +152,31 @@ async function pairViaDirect(
 // Sub-components
 // ---------------------------------------------------------------------------
 
-/** Pulsing dots indicator — three dots that pulse in sequence. */
-function PulsingDots() {
+/** Pulsing dots indicator — three dots that pulse in sequence. Respects reduced motion. */
+function PulsingDots({ reduced }: { reduced: boolean | null }) {
   return (
     <div className="flex items-center justify-center gap-1.5">
-      {[0, 1, 2].map((i) => (
-        <m.span
-          key={i}
-          className="bg-foreground/60 size-1.5 rounded-full"
-          animate={{ opacity: [0.3, 1, 0.3], scale: [0.85, 1, 0.85] }}
-          transition={{
-            duration: 1.2,
-            repeat: Infinity,
-            delay: i * 0.15,
-            ease: "easeInOut",
-          }}
-        />
-      ))}
+      {[0, 1, 2].map((i) =>
+        reduced ? (
+          <span
+            key={i}
+            className="bg-foreground/60 size-1.5 rounded-full"
+            style={{ opacity: 0.6 }}
+          />
+        ) : (
+          <m.span
+            key={i}
+            className="bg-foreground/60 size-1.5 rounded-full"
+            animate={{ opacity: [0.3, 1, 0.3], scale: [0.85, 1, 0.85] }}
+            transition={{
+              duration: 1.2,
+              repeat: Infinity,
+              delay: i * 0.15,
+              ease: "easeInOut",
+            }}
+          />
+        )
+      )}
     </div>
   );
 }
@@ -215,7 +223,7 @@ function BrandMark() {
 // ---------------------------------------------------------------------------
 
 /** Auto-connecting view — shown when QR/link provides the code. */
-function ConnectingView() {
+function ConnectingView({ reduced }: { reduced: boolean | null }) {
   return (
     <m.div
       key="connecting"
@@ -235,7 +243,7 @@ function ConnectingView() {
         >
           Connecting...
         </m.h1>
-        <PulsingDots />
+        <PulsingDots reduced={reduced} />
         <m.p
           className="text-muted-foreground max-w-[260px] text-center text-sm"
           initial={{ opacity: 0 }}
@@ -302,6 +310,7 @@ function ManualEntryView({
   error,
   isPending,
   codeIsValid,
+  reduced,
   onChange,
   onPaste,
   onSubmit,
@@ -310,6 +319,7 @@ function ManualEntryView({
   error: string | null;
   isPending: boolean;
   codeIsValid: boolean;
+  reduced: boolean | null;
   onChange: (e: React.ChangeEvent<HTMLInputElement>) => void;
   onPaste: (e: React.ClipboardEvent<HTMLInputElement>) => void;
   onSubmit: (e: React.FormEvent) => void;
@@ -347,7 +357,11 @@ function ManualEntryView({
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.35, delay: 0.15, ease: EASE_OUT_QUART }}
       >
+        <label htmlFor="connection-code" className="sr-only">
+          Connection code
+        </label>
         <Input
+          id="connection-code"
           type="text"
           placeholder="WORD WORD"
           value={code}
@@ -359,13 +373,17 @@ function ManualEntryView({
           spellCheck={false}
           className="h-12 text-center font-mono text-lg tracking-wider uppercase"
           disabled={isPending}
+          aria-invalid={Boolean(error)}
+          aria-describedby={error ? "connection-code-error" : undefined}
         />
 
         <AnimatePresence mode="wait">
           {error && (
             <m.p
+              id="connection-code-error"
               key="error"
               className="text-destructive text-center text-sm"
+              role="alert"
               initial={{ opacity: 0, y: -4, height: 0 }}
               animate={{ opacity: 1, y: 0, height: "auto" }}
               exit={{ opacity: 0, y: -4, height: 0 }}
@@ -383,7 +401,7 @@ function ManualEntryView({
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
             >
-              <PulsingDots />
+              <PulsingDots reduced={reduced} />
               <span className="ml-1">Connecting...</span>
             </m.span>
           ) : (
@@ -408,7 +426,16 @@ export function PairGatePage({ onPaired, serverId }: PairGatePageProps) {
   const [pageState, setPageState] = useState<PageState>(isAutoConnect ? "connecting" : "idle");
 
   const autoSubmitTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const successTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const reduced = useReducedMotion();
+
+  // Clean up all timers on unmount
+  useEffect(() => {
+    return () => {
+      if (autoSubmitTimer.current) clearTimeout(autoSubmitTimer.current);
+      if (successTimer.current) clearTimeout(successTimer.current);
+    };
+  }, []);
 
   const submitCode = useCallback(
     async (rawCode: string) => {
@@ -441,7 +468,8 @@ export function PairGatePage({ onPaired, serverId }: PairGatePageProps) {
 
         // Show success state, then navigate
         setPageState("success");
-        setTimeout(() => onPaired(token, resolvedName), SUCCESS_HOLD_MS);
+        if (successTimer.current) clearTimeout(successTimer.current);
+        successTimer.current = setTimeout(() => onPaired(token, resolvedName), SUCCESS_HOLD_MS);
       } catch (err) {
         setError(err instanceof Error ? err.message : "Unable to connect. Try again.");
         setPageState("error");
@@ -458,12 +486,21 @@ export function PairGatePage({ onPaired, serverId }: PairGatePageProps) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  function clearAutoSubmitTimer() {
+    if (autoSubmitTimer.current) {
+      clearTimeout(autoSubmitTimer.current);
+      autoSubmitTimer.current = null;
+    }
+  }
+
   function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
+    clearAutoSubmitTimer();
     submitCode(code);
   }
 
   function handleChange(e: React.ChangeEvent<HTMLInputElement>) {
+    clearAutoSubmitTimer();
     setCode(e.target.value.toUpperCase());
     setError(null);
   }
@@ -477,7 +514,7 @@ export function PairGatePage({ onPaired, serverId }: PairGatePageProps) {
     setCode(resolved);
     setError(null);
 
-    if (autoSubmitTimer.current) clearTimeout(autoSubmitTimer.current);
+    clearAutoSubmitTimer();
     autoSubmitTimer.current = setTimeout(() => submitCode(resolved), 300);
   }
 
@@ -492,11 +529,9 @@ export function PairGatePage({ onPaired, serverId }: PairGatePageProps) {
 
   const codeIsValid = normalizeCode(code) !== null;
 
-  // Determine which view to render
   function renderContent() {
-    // Auto-connect path: connecting or error
     if (isAutoConnect && pageState === "connecting") {
-      return <ConnectingView />;
+      return <ConnectingView reduced={reduced} />;
     }
 
     if (pageState === "success") {
@@ -512,13 +547,13 @@ export function PairGatePage({ onPaired, serverId }: PairGatePageProps) {
       );
     }
 
-    // Manual entry path
     return (
       <ManualEntryView
         code={code}
         error={pageState === "error" ? error : null}
         isPending={pageState === "connecting"}
         codeIsValid={codeIsValid}
+        reduced={reduced}
         onChange={handleChange}
         onPaste={handlePaste}
         onSubmit={handleSubmit}

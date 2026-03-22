@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useRef, useEffect, useCallback } from "react";
 import { QRCodeSVG } from "qrcode.react";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
@@ -136,8 +136,16 @@ function ConnectDeviceDialog({
   onGenerate: () => void;
   devices: PairedDevice[];
 }) {
-  const [prevDeviceCount, setPrevDeviceCount] = useState(devices.length);
+  const [prevDeviceIds, setPrevDeviceIds] = useState<Set<string>>(
+    () => new Set(devices.map((d) => d.id))
+  );
   const [showSuccess, setShowSuccess] = useState(false);
+
+  // Keep a stable ref of onOpenChange to avoid stale closures in setTimeout
+  const onOpenChangeRef = useRef(onOpenChange);
+  useEffect(() => {
+    onOpenChangeRef.current = onOpenChange;
+  }, [onOpenChange]);
 
   // Generate code on first open if none exists
   useEffect(() => {
@@ -150,17 +158,22 @@ function ConnectDeviceDialog({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open]);
 
-  // Detect successful pairing via device count change
+  // Detect successful pairing by comparing device IDs (not just count).
+  // This prevents false positives when the initial query resolves from [] to existing devices.
   useEffect(() => {
-    if (open && devices.length > prevDeviceCount) {
+    const currentIds = new Set(devices.map((d) => d.id));
+    const hasNewDevice = devices.some((d) => !prevDeviceIds.has(d.id));
+
+    if (open && hasNewDevice) {
       setShowSuccess(true);
-      const timer = setTimeout(() => onOpenChange(false), 2000);
+      const timer = setTimeout(() => onOpenChangeRef.current(false), 2000);
+      setPrevDeviceIds(currentIds);
       return () => clearTimeout(timer);
     }
-    setPrevDeviceCount(devices.length);
+    setPrevDeviceIds(currentIds);
     return undefined;
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [devices.length, open]);
+  }, [devices, open]);
 
   const pairUrl = accessUrl && pairCode ? buildPairUrl(accessUrl, pairCode) : null;
   const minutes = Math.floor(countdown / 60);
