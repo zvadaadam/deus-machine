@@ -1,0 +1,22 @@
+{
+  "cli_version": "0.5.0",
+  "checkpoint_id": "36c4f0b6f8fc",
+  "session_id": "f7daa10a-7b09-4396-92df-4cd26838830b",
+  "strategy": "manual-commit",
+  "created_at": "2026-03-22T17:59:19.76125Z",
+  "branch": "zvadaadam/explore-pairing-ux",
+  "checkpoints_count": 2,
+  "files_touched": [],
+  "agent": "Claude Code",
+  "turn_id": "39eabb43f819",
+  "token_usage": {
+    "input_tokens": 162,
+    "cache_creation_tokens": 219062,
+    "cache_read_tokens": 17994186,
+    "output_tokens": 54197,
+    "api_call_count": 115
+  },
+  "session_metrics": {
+    "turn_count": 21
+  }
+}
