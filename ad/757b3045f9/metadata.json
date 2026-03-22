@@ -1,0 +1,25 @@
+{
+  "cli_version": "0.5.0",
+  "checkpoint_id": "ad757b3045f9",
+  "strategy": "manual-commit",
+  "branch": "zvadaadam/sidebar-grab-icon-fix",
+  "checkpoints_count": 2,
+  "files_touched": [
+    ".claude/agent-memory/code-reviewer/MEMORY.md"
+  ],
+  "sessions": [
+    {
+      "metadata": "/ad/757b3045f9/0/metadata.json",
+      "transcript": "/ad/757b3045f9/0/full.jsonl",
+      "content_hash": "/ad/757b3045f9/0/content_hash.txt",
+      "prompt": "/ad/757b3045f9/0/prompt.txt"
+    }
+  ],
+  "token_usage": {
+    "input_tokens": 2998,
+    "cache_creation_tokens": 224011,
+    "cache_read_tokens": 10965608,
+    "output_tokens": 38823,
+    "api_call_count": 98
+  }
+}
