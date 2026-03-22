@@ -1,0 +1,60 @@
+{
+  "cli_version": "0.5.0",
+  "checkpoint_id": "5419bb1cb3f8",
+  "strategy": "manual-commit",
+  "branch": "zvadaadam/sidebar-grab-icon-fix",
+  "checkpoints_count": 14,
+  "files_touched": [
+    "apps/backend/src/db/queries.ts",
+    "apps/backend/src/db/types.ts",
+    "apps/backend/src/lib/schemas.ts",
+    "apps/backend/src/routes/repos.ts",
+    "apps/backend/src/routes/workspaces.ts",
+    "apps/backend/src/server.ts",
+    "apps/backend/src/services/agent/commands.ts",
+    "apps/backend/src/services/gh.service.ts",
+    "apps/backend/src/services/query-engine.ts",
+    "apps/backend/test/unit/shared/events.test.ts",
+    "apps/desktop/main/browser-views.ts",
+    "apps/web/src/app/layouts/MainLayout.tsx",
+    "apps/web/src/app/layouts/hooks/useRepoActions.ts",
+    "apps/web/src/components/ui/command.tsx",
+    "apps/web/src/components/ui/dialog.tsx",
+    "apps/web/src/features/command-palette/commands.ts",
+    "apps/web/src/features/command-palette/ui/CommandPalette.tsx",
+    "apps/web/src/features/repository/ui/NewWorkspaceModal.tsx",
+    "apps/web/src/features/sidebar/lib/utils.ts",
+    "apps/web/src/features/sidebar/model/types.ts",
+    "apps/web/src/features/sidebar/ui/AppSidebar.tsx",
+    "apps/web/src/features/sidebar/ui/DraggableRepository.tsx",
+    "apps/web/src/features/sidebar/ui/GitHubPickerModal.tsx",
+    "apps/web/src/features/sidebar/ui/RepositoryItem.tsx",
+    "apps/web/src/features/sidebar/ui/SidebarFooter.tsx",
+    "apps/web/src/features/sidebar/ui/WorkspaceItem.tsx",
+    "apps/web/src/features/workspace/api/workspace.queries.ts",
+    "apps/web/src/features/workspace/api/workspace.service.ts",
+    "apps/web/src/global.css",
+    "apps/web/src/shared/api/queryKeys.ts",
+    "apps/web/src/shared/stores/uiStore.ts",
+    "apps/web/src/shared/types/index.ts",
+    "shared/events.ts",
+    "shared/types/github.ts",
+    "shared/types/index.ts",
+    "shared/types/workspace.ts"
+  ],
+  "sessions": [
+    {
+      "metadata": "/54/19bb1cb3f8/0/metadata.json",
+      "transcript": "/54/19bb1cb3f8/0/full.jsonl",
+      "content_hash": "/54/19bb1cb3f8/0/content_hash.txt",
+      "prompt": "/54/19bb1cb3f8/0/prompt.txt"
+    }
+  ],
+  "token_usage": {
+    "input_tokens": 2916,
+    "cache_creation_tokens": 259408,
+    "cache_read_tokens": 37226657,
+    "output_tokens": 82056,
+    "api_call_count": 191
+  }
+}
