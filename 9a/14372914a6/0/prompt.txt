@@ -1,0 +1,1924 @@
+<system_instruction>
+You are working inside OpenDevs, a Mac app that lets the user run many coding agents in parallel.
+Your work should take place in the /Users/zvada/Developer/agent/box-ide/.conductor/philadelphia-v2 directory (unless otherwise directed), which has been set up for you to work in.
+Each workspace has a .context directory (gitignored) where you can save files to collaborate with other agents.
+DO NOT EVER read or write files at /Users/zvada/Developer/agent/box-ide.
+The target branch for this workspace is main. Use this for actions like creating new PRs, bisecting, etc., unless you're told otherwise.
+
+If the user asks you to work on several unrelated tasks, you can suggest they start new workspaces.
+Sometimes the user might send you a message they meant to send in a different workspace or a different chat. If something doesn't make sense in the context of your work, just ask. 
+If the user asks for help with OpenDevs, you can ask them to go to "Help -> Send Feedback" to get in touch with our team.
+</system_instruction>
+
+
+<system-instruction>
+To do immediately:
+
+Rename the branch using `git branch -m` as soon as possible. Do not check the current branch name.
+
+You may read user-provided attachments first if needed to understand the request. Otherwise, do this before using any skills or any other tools.
+
+Choosing a branch name: use concrete, specific language, avoid abstract nouns, and be concise (<30 characters). Use the prefix "zvadaadam/" before the name.
+
+</system-instruction>
+
+I think when the app, I think in the website, when it loses the connection, we need to visualize it somehow and show some overlay that this happened. And also if you load a website, or like the server on a website, not in the desktop and on the website, we need to be able to communicate this. does it work now and what would you propose to change?
+
+---
+
+<system_instruction>
+The user has attached these files. Read them before proceeding.
+- /Users/zvada/Developer/agent/box-ide/.conductor/philadelphia-v2/.context/attachments/Screenshot 2026-03-22 at 10.46.49 PM.png (97.2 KB)
+</system_instruction>
+
+
+
+/design-explore we need to thing aboutt he proeuct design, baislcy if the conct is flaky we dont wnat somehtgn bgi tehre right but shod have some idnidcator but after some times it shudl dorp tight or wdyt? also if we load the ebs but alteyd doenst ahve acces we shoudl betet rosmuniate this and not shwo the web wdyt maybe some deisng smat?????
+
+some deisng desing icon in empty wfyt? epxore and think out of the box not just whati say
+
+---
+
+<task-notification>
+<task-id>a014db46b7f6386a4</task-id>
+<tool-use-id>REDACTED</tool-use-id>
+<output-file>/private/tmp/claude-501/-Users-zvada-Developer-agent-box-ide--conductor-philadelphia-v2/30b05dd9-97c2-480d-8a76-d34505fc8fb0/tasks/a014db46b7f6386a4.output</output-file>
+<status>completed</status>
+<summary>Agent "Dieter Rams - connection UX" completed</summary>
+<result>
+
+# Quiet Authority
+
+**Philosophy:** Connection state is infrastructure — it should be felt before it is read. The interface communicates through behavior change, not decoration.
+
+---
+
+## The System
+
+A single component, `ConnectionBanner`, owns all four states. It lives at the top of the main content area (not the sidebar), spanning the full width. It uses vertical space as its primary signal: no space when healthy, a thin 32px bar for transient issues, a 48px bar for persistent problems, and the full viewport for terminal states. The sidebar remains untouched in all cases — it is navigation, not status.
+
+A secondary indicator — a 6px circle in the sidebar footer next to the connection label — provides ambient awareness but never carries the primary communication burden.
+
+---
+
+## State 1: Transient Disconnect (auto-resolves in <30s)
+
+**Trigger:** WebSocket closes or misses 2+ heartbeats. Delay rendering by 2 seconds — if reconnection succeeds within that window, the user sees nothing.
+
+**Visual treatment:**
+
+A 32px banner slides down from the top of the content area. Background: `oklch(0.25 0.02 70)` — a barely warm neutral, darker than the app background but not alarming. No border. No icon.
+
+Single line of text, `font-size: 13px`, `oklch(0.65 0.01 70)` (muted foreground): **"Reconnecting…"**
+
+A subtle progress animation: a 2px-tall bar at the bottom edge of the banner, `oklch(0.55 0.08 70)` (desaturated amber), translating left-to-right in a 2.5s loop using `translateX` with `ease-in-out-sine` (`cubic-bezier(0.37, 0, 0.63, 1)`).
+
+**Sidebar indicator:** The 6px circle shifts from `oklch(0.72 0.19 145)` (green) to `oklch(0.75 0.15 85)` (amber). Transition: `300ms ease`.
+
+**Animation spec:**
+- Banner enter: `translateY(-100%) → translateY(0)`, `250ms`, `ease-out-quart` (`cubic-bezier(0.165, 0.84, 0.44, 1)`)
+- Banner exit on reconnect: `opacity 1 → 0`, `200ms`, `ease`, then unmount
+- No `AnimatePresence` exit animation needed — fade is sufficient for good news
+
+**Content area behavior:** No layout shift. The banner overlays the content with `position: sticky; top: 0; z-index: 40`. Content beneath is not pushed down — the message is transient and should not restructure the page.
+
+**Component structure:**
+
+```
+<ConnectionBanner state="reconnecting">
+  <div className="sticky top-0 z-40 flex h-8 items-center px-4">
+    <span className="text-[13px] text-[oklch(0.65_0.01_70)]">Reconnecting…</span>
+    <ReconnectProgress /> {/* 2px animated bar at bottom edge */}
+  </div>
+</ConnectionBanner>
+```
+
+---
+
+## State 2: Extended Outage (30+ seconds)
+
+**Trigger:** Reconnection has failed for 30 continuous seconds. The banner escalates.
+
+**Visual treatment:**
+
+The banner grows from 32px to 48px over `300ms` with `ease-out-quart`. Background shifts to `oklch(0.22 0.03 55)` — slightly warmer, slightly more present, but still not red. The progress bar stops its loop and holds at whatever position it reached, then fades to `opacity: 0.3` over `400ms`.
+
+Two lines of content now:
+
+- Primary: **"Connection lost"** — `font-size: 14px`, `font-weight: 500`, `oklch(0.85 0.01 55)` (warm off-white)
+- Secondary: **"Your agents are still running. We'll reconnect automatically."** — `font-size: 13px`, `oklch(0.55 0.01 55)` (muted)
+
+A text button appears on the right: **"Retry now"** — `font-size: 13px`, `font-weight: 500`, `oklch(0.75 0.12 85)` (amber, interactive). Hover: `oklch(0.82 0.12 85)`. The button calls a manual reconnection attempt.
+
+**Sidebar indicator:** Circle shifts to `oklch(0.65 0.18 25)` (soft red-orange). Not alarm red — diagnostic red.
+
+**Content area behavior:** The main content remains visible but receives `opacity: 0.6` and `pointer-events: none` on interactive elements. This communicates that the data is stale without hiding it. Transition: `opacity 400ms ease`.
+
+**Why not overlay or blur?** The user may be reading agent output, reviewing diffs, or copying text. Obscuring content punishes the user for an infrastructure failure. Dimming communicates staleness; blocking communicates respect for accuracy.
+
+**Component structure:**
+
+```
+<ConnectionBanner state="disconnected">
+  <div className="sticky top-0 z-40 flex h-12 items-center justify-between px-4">
+    <div>
+      <p className="text-sm font-medium text-[oklch(0.85_0.01_55)]">Connection lost</p>
+      <p className="text-[13px] text-[oklch(0.55_0.01_55)]">
+        Your agents are still running. We'll reconnect automatically.
+      </p>
+    </div>
+    <button className="text-[13px] font-medium text-[oklch(0.75_0.12_85)] ...">
+      Retry now
+    </button>
+  </div>
+</ConnectionBanner>
+
+{/* Content area wrapper */}
+<div className={cn("transition-opacity duration-400", disconnected && "opacity-60")}>
+  {children}
+</div>
+```
+
+---
+
+## State 3: Server Not Running (first load, desktop app is off)
+
+**Trigger:** Initial WebSocket connection fails on page load. No successful connection has ever been established in this session.
+
+**Visual treatment:**
+
+Full viewport takeover. No sidebar visible (there is nothing to navigate). The entire screen is a single centered composition on background `oklch(0.13 0.005 260)` (the app's base dark).
+
+**Layout:** Vertically and horizontally centered, `max-width: 400px`.
+
+Content stack, `gap: 24px`, `text-align: center`:
+
+1. **App icon** — the OpenDevs logomark, 40x40px, `opacity: 0.4`. Not decorative — it confirms the user is in the right place.
+
+2. **Heading:** **"Desktop app not detected"** — `font-size: 18px`, `font-weight: 600`, `oklch(0.90 0 0)` (near-white). Direct. No "Oops" or "Hmm."
+
+3. **Body:** **"Open the OpenDevs desktop app to connect this browser session. Your agents, workspaces, and files live on your machine."** — `font-size: 14px`, `line-height: 1.6`, `oklch(0.55 0 0)` (muted gray). Three sentences maximum. Explains the architecture without jargon.
+
+4. **Status line with live indicator:** A small `8px` circle, pulsing between `opacity: 0.3` and `opacity: 1` on a `2s` cycle (`ease-in-out-sine`), colored `oklch(0.55 0.01 260)` (neutral). Next to it: **"Waiting for connection…"** — `font-size: 13px`, `oklch(0.45 0 0)`. This pulses to show the page is alive and listening — not a dead end.
+
+5. **Secondary action:** Below the status line, `margin-top: 16px`: **"Don't have the app? Download"** — `font-size: 13px`, the word "Download" is a link styled `oklch(0.70 0.14 264)` (the app's primary blue), `text-decoration: underline`, `underline-offset: 3px`.
+
+**No retry button.** The page auto-detects when the backend comes online via WebSocket reconnection. When it connects, the entire view cross-fades to the app (`opacity 0 → 1`, `400ms`, `ease-out-quart`). No navigation event — the app simply appears.
+
+**Animation on arrival:**
+
+The content stack fades in with a stagger: each element `opacity 0 → 1` and `translateY(8px) → translateY(0)`, `300ms` each, `80ms` stagger delay, `ease-out-quart`. Total sequence: ~620ms. Subtle enough to feel intentional, not theatrical.
+
+**Component structure:**
+
+```
+<ServerOffScreen>
+  <div className="flex h-screen w-screen items-center justify-center bg-background">
+    <motion.div
+      className="flex max-w-[400px] flex-col items-center gap-6 text-center"
+      variants={staggerContainer}
+      initial="hidden"
+      animate="visible"
+    >
+      <motion.img variants={fadeUp} src={logomark} className="size-10 opacity-40" />
+      <motion.h1 variants={fadeUp} className="text-lg font-semibold text-[oklch(0.90_0_0)]">
+        Desktop app not detected
+      </motion.h1>
+      <motion.p variants={fadeUp} className="text-sm leading-relaxed text-[oklch(0.55_0_0)]">
+        Open the OpenDevs desktop app to connect this browser session.
+        Your agents, workspaces, and files live on your machine.
+      </motion.p>
+      <motion.div variants={fadeUp} className="flex items-center gap-2">
+        <PulsingDot />
+        <span className="text-[13px] text-[oklch(0.45_0_0)]">Waiting for connection…</span>
+      </motion.div>
+      <motion.p variants={fadeUp} className="text-[13px] text-[oklch(0.45_0_0)]">
+        Don't have the app? <a href="..." className="text-primary underline underline-offset-3">Download</a>
+      </motion.p>
+    </motion.div>
+  </div>
+</ServerOffScreen>
+```
+
+---
+
+## State 4: Unauthenticated / Unpaired
+
+**Trigger:** WebSocket connects, but the server responds that this browser session is not paired to a device.
+
+**Visual treatment:**
+
+Same full-viewport layout as State 3 — centered, no sidebar. But the content is different because the system is reachable; the user just lacks authorization.
+
+Content stack, `gap: 24px`, `text-align: center`:
+
+1. **App icon** — 40x40px, `opacity: 0.4`.
+
+2. **Heading:** **"Pair this browser"** — `font-size: 18px`, `font-weight: 600`, `oklch(0.90 0 0)`. Active voice. It is an action to take, not an error.
+
+3. **Body:** **"Enter the two-word code shown in your desktop app, or scan the QR code from your phone."** — `font-size: 14px`, `line-height: 1.6`, `oklch(0.55 0 0)`.
+
+4. **Pairing input:** A single text input, centered, `max-width: 280px`. Styled per the existing design system (`InputGroup` component). Placeholder: `"e.g. ocean-marble"`. `font-size: 16px` (prevents iOS zoom). `letter-spacing: 0.02em`. On submission, the input shows a brief inline loading state (the submit button label changes to a 16px spinner for up to 3 seconds).
+
+5. **Divider:** A horizontal rule with centered text: **"or"** — `font-size: 12px`, `oklch(0.40 0 0)`, `text-transform: uppercase`, `letter-spacing: 0.1em`. Rule color: `oklch(0.25 0 0)`.
+
+6. **QR code area:** A `180x180` container. If the QR is loading, show a skeleton rectangle (`oklch(0.20 0 0)`, `animate-pulse`). Once loaded, render the QR code with a `12px` border-radius container, background `oklch(0.95 0 0)` (near-white for scan contrast), `padding: 12px`.
+
+7. **Error state:** If pairing fails, the input border shifts to `oklch(0.60 0.18 25)` (muted red) and a line appears below: **"Code not recognized. Check your desktop app."** — `font-size: 13px`, `oklch(0.65 0.15 25)`. No toast, no modal — inline, adjacent to the action that caused it.
+
+**Transition to authenticated:** On successful pairing, the entire screen cross-fades to the app. Same `400ms ease-out-quart` opacity transition as State 3.
+
+**Component structure:**
+
+```
+<PairingScreen>
+  <div className="flex h-screen w-screen items-center justify-center bg-background">
+    <motion.div
+      className="flex max-w-[400px] flex-col items-center gap-6 text-center"
+      variants={staggerContainer}
+      initial="hidden"
+      animate="visible"
+    >
+      <motion.img variants={fadeUp} src={logomark} className="size-10 opacity-40" />
+      <motion.h1 variants={fadeUp} className="text-lg font-semibold text-[oklch(0.90_0_0)]">
+        Pair this browser
+      </motion.h1>
+      <motion.p variants={fadeUp} className="text-sm leading-relaxed text-[oklch(0.55_0_0)]">
+        Enter the two-word code shown in your desktop app, or scan the QR code from your phone.
+      </motion.p>
+      <motion.div variants={fadeUp}>
+        <PairingCodeInput onSubmit={handlePair} error={error} />
+      </motion.div>
+      <OrDivider />
+      <motion.div variants={fadeUp}>
+        <QRCodeDisplay deviceId={deviceId} />
+      </motion.div>
+    </motion.div>
+  </div>
+</PairingScreen>
+```
+
+---
+
+## State Machine & Timing
+
+The `ConnectionBanner` component is driven by a state machine with explicit timing thresholds:
+
+```
+CONNECTED ──[ws close/timeout]──→ GRACE_PERIOD (2s, render nothing)
+GRACE_PERIOD ──[reconnected]──→ CONNECTED
+GRACE_PERIOD ──[2s elapsed]──→ RECONNECTING (show thin banner)
+RECONNECTING ──[reconnected]──→ CONNECTED (fade out banner)
+RECONNECTING ──[30s elapsed]──→ DISCONNECTED (escalate banner)
+DISCONNECTED ──[reconnected]──→ CONNECTED (fade out banner, restore opacity)
+DISCONNECTED ──[retry click]──→ RECONNECTING (attempt + de-escalate banner)
+
+NEVER_CONNECTED (first load fail) → SERVER_OFF (full screen)
+SERVER_OFF ──[ws connects]──→ CONNECTED (cross-fade to app)
+
+CONNECTED ──[401/unpaired]──→ UNPAIRED (full screen)
+UNPAIRED ──[pairing success]──→ CONNECTED (cross-fade to app)
+```
+
+---
+
+## Three Key Decisions
+
+**1. No red anywhere in the transient or extended states.**
+
+Red implies user error or danger. A network blip is neither. Amber and warm neutrals communicate "working on it" without triggering alarm. Red appears only in the sidebar dot during extended outage, and even there it is `oklch(0.65 0.18 25)` — a diagnostic tone, not an emergency. This keeps the emotional register proportional to the actual severity. Users managing multiple AI agents cannot afford to be startled by infrastructure noise.
+
+**2. Content dims but never hides during disconnection.**
+
+The user may have sent an agent to refactor a module and is reviewing the streamed output when the connection drops. Hiding or blurring that content would destroy their context. Dimming to `opacity: 0.6` with disabled interaction clearly communicates "this is stale, do not trust it" without removing the information. The moment the connection returns, full interactivity restores instantly. This respects the user's attention, which is the most expensive resource in the system.
+
+**3. Full-viewport takeover only for terminal states (server off, unpaired).**
+
+States 3 and 4 share one trait: there is nothing meaningful the user can do in the app. No sidebar, no workspace list, no chat — all of it depends on the backend. Showing an empty shell with a banner would be worse than showing nothing, because it implies the app is partially functional when it is not. A centered, minimal screen with a single clear action (wait, or pair) eliminates ambiguity. It also avoids the uncanny valley of a populated-but-broken UI.
+
+---
+
+## One Acknowledged Tradeoff
+
+**The 2-second grace period means users with genuinely flaky connections will experience a delayed notification.** If a disconnect lasts 2.5 seconds, the user sees the banner for only 0.5 seconds before it disappears — which may feel like a flash or glitch. The alternative (showing the banner immediately) would create constant visual noise for users on unstable networks, which is worse. The 2-second threshold was chosen because WebSocket reconnection in a local-network desktop relay typically succeeds within 1-1.5 seconds. For users with genuinely poor connections, the banner will persist past the grace period and the escalation to State 2 will provide sustained, clear communication. The tradeoff favors quiet confidence over anxious transparency.</result>
+<usage><total_tokens>21561</total_tokens><tool_uses>0</tool_uses><duration_ms>93040</duration_ms></usage>
+</task-notification>
+Full transcript available at: /private/tmp/claude-501/-Users-zvada-Developer-agent-box-ide--conductor-philadelphia-v2/30b05dd9-97c2-480d-8a76-d34505fc8fb0/tasks/a014db46b7f6386a4.output
+
+---
+
+<task-notification>
+<task-id>a3dcbebed51da08f0</task-id>
+<tool-use-id>REDACTED</tool-use-id>
+<output-file>/private/tmp/claude-501/-Users-zvada-Developer-agent-box-ide--conductor-philadelphia-v2/30b05dd9-97c2-480d-8a76-d34505fc8fb0/tasks/a3dcbebed51da08f0.output</output-file>
+<status>completed</status>
+<summary>Agent "Massimo Vignelli - connection UX" completed</summary>
+<result>
+
+# SYSTEMATIC CLARITY
+
+## Philosophy
+
+Connection state is not an error — it is information. The user deserves to know the truth about their system's state with the same typographic rigor we apply to every other piece of data. We escalate visually in direct proportion to the user's need to act.
+
+---
+
+## The Four States
+
+### State 1: Transient Disconnect (auto-resolves in < 30 seconds)
+
+**The user should not be interrupted.** A brief flicker in connectivity is beneath the threshold of human concern. We acknowledge it at the periphery and resolve it silently.
+
+**Visual Treatment:**
+
+A thin 2px horizontal bar appears at the very top of the main content area (not the sidebar — the sidebar is navigation, not status). The bar spans the full width of the content region.
+
+- **Color:** `oklch(0.75 0.15 55)` — a warm amber at 75% lightness. Not red. Red means failure. This means "patience."
+- **Animation:** Slides down from `translateY(-2px)` to `translateY(0)` over 200ms with ease-out-quart `cubic-bezier(0.165, 0.84, 0.44, 1)`. A subtle horizontal shimmer animation — a `background-size: 200% 100%` gradient that translates left-to-right over 1.5s, linear, infinite. This communicates active reconnection without words.
+- **No text.** No icon. No tooltip. Two pixels of amber is sufficient. The user is mid-thought, directing agents — we do not steal their attention for something that will resolve itself.
+
+**Timing Logic:**
+
+- Appears after 2 seconds of lost WebSocket connection (not immediately — a 1-second disconnect during a network handoff should be invisible).
+- If connection restores within 30 seconds: bar slides up `translateY(-2px)` over 150ms and unmounts via `AnimatePresence`.
+- If 30 seconds elapse: escalate to State 2.
+
+**Component Structure:**
+
+```
+<TransientBar />
+  — Rendered at the top of the main content area layout
+  — Position: sticky, top: 0, z-index: 40
+  — Height: 2px
+  — No children, no text
+```
+
+**Framer Motion spec:**
+
+```ts
+initial: { y: -2, opacity: 0 }
+animate: { y: 0, opacity: 1 }
+exit: { y: -2, opacity: 0 }
+transition: { duration: 0.2, ease: [0.165, 0.84, 0.44, 1] }
+```
+
+---
+
+### State 2: Extended Outage (30+ seconds, server unresponsive)
+
+**Now we speak.** The user needs to know their agents may be unreachable, but we do not catastrophize. The desktop app and agents may still be running — only the relay is down.
+
+**Visual Treatment:**
+
+The 2px amber bar morphs into a 40px-tall banner at the top of the content area. This is a deliberate, measured escalation — same position, expanded presence.
+
+- **Background:** `oklch(0.20 0.02 55)` — near-black with the faintest amber warmth. Blends with the dark theme rather than screaming over it.
+- **Left edge accent:** A 3px vertical bar on the left side, `oklch(0.75 0.15 55)` (the same amber from State 1 — visual continuity).
+- **Typography:**
+  - Primary text: `"Connection lost"` — 13px/`0.8125rem`, `font-weight: 500`, `oklch(0.85 0.05 55)` (warm off-white). Tracking: `0.01em`.
+  - Secondary text: `" · Reconnecting..."` — same size, `font-weight: 400`, `oklch(0.55 0.03 55)` (muted). The interpunct (`·`) is Vignelli's punctuation — clean, European, no visual noise.
+  - Timer: `"(2m 15s)"` — same size, `font-weight: 400`, `oklch(0.45 0.02 55)` (even more muted). Counts up from 0:30. This respects the user's intelligence — they can decide when to intervene.
+- **Right side:** A single text button, `"Retry now"`, 13px, `font-weight: 500`, `oklch(0.75 0.15 55)` (amber). Underline on hover, 200ms ease. No background, no border, no pill shape. Typography is the button.
+- **Layout:** `flex items-center` with `px-4`. Text group on the left, retry on the right. Single row, no wrapping.
+
+**Animation:**
+
+The transition from 2px bar to 40px banner is a smooth height expansion. Framer Motion `layout` animation over 300ms ease-out-quart. The text fades in with `opacity: 0 → 1` over 200ms, delayed 100ms (let the container finish expanding before content appears).
+
+**When connection restores:**
+
+- Banner text changes to `"Reconnected"` for 2 seconds. Color shifts to `oklch(0.75 0.17 155)` (a restrained green — same lightness as the amber, just rotated on the hue wheel). This confirms resolution without celebration.
+- After 2 seconds: collapses back to 0px height, 200ms, unmounts.
+
+**Component Structure:**
+
+```
+<ConnectionBanner status="extended-outage" elapsed={elapsed}>
+  <div className="flex items-center justify-between px-4 h-10">
+    <span>
+      <span className="font-medium">Connection lost</span>
+      <span className="text-muted"> · Reconnecting...</span>
+      <span className="text-muted/60">(2m 15s)</span>
+    </span>
+    <button>Retry now</button>
+  </div>
+</ConnectionBanner>
+```
+
+---
+
+### State 3: Server Not Running (first load, desktop app is off)
+
+**This is the most critical state.** The user has navigated to a URL expecting their IDE. Nothing is there. This is not an error — it is an empty room. We must orient them with absolute clarity.
+
+**Visual Treatment:**
+
+The entire content area (everything right of the sidebar) displays a centered, typographic full-page state. The sidebar remains visible but with all items grayed to `oklch(0.35 0 0)` — present for spatial context but clearly inert.
+
+**Center composition — vertical stack, centered both axes:**
+
+1. **Status indicator:** A single circle, 10px diameter, `oklch(0.45 0 0)` (neutral gray) with a 1px ring of `oklch(0.30 0 0)`. Not red — the server isn't broken, it's absent. Pulsing opacity `0.4 → 1.0 → 0.4` over 2s, ease-in-out. This is not a loading spinner — it is a quiet heartbeat, waiting.
+
+2. **Headline:** `"Waiting for desktop app"` — 20px/`1.25rem`, `font-weight: 600`, `oklch(0.90 0 0)` (near-white). Tracking: `-0.01em` (slightly tight — Vignelli's preference for display type). This is the largest text on the page.
+
+3. **Subtext:** `"Start OpenDevs on your computer to connect this browser session."` — 14px/`0.875rem`, `font-weight: 400`, `oklch(0.55 0 0)` (muted gray). `max-width: 320px`, centered. Line-height: `1.5`. Every word earns its place — no "Oops!", no "It looks like...", no apology.
+
+4. **Vertical spacing:** 16px between indicator and headline. 8px between headline and subtext. 32px between subtext and the instruction block below.
+
+5. **Instruction block:** A subtle bordered container. `border: 1px solid oklch(0.25 0 0)`, `border-radius: 8px`, `padding: 16px 20px`, `max-width: 400px`.
+
+   Inside, two lines of monospace text:
+   - `"1. Open OpenDevs desktop app"` — 13px, `font-family: var(--font-mono)`, `oklch(0.70 0 0)`.
+   - `"2. This page connects automatically"` — same styling.
+
+   No buttons. No "click here." The system is event-driven — when the desktop app starts and the WebSocket connects, this page dissolves. The user needs to do one thing in another application. We tell them clearly and wait.
+
+**When connection establishes:**
+
+The entire composition fades out over 200ms (`opacity: 1 → 0`), then unmounts. The sidebar items animate to full color over 300ms. The workspace content loads with a standard entrance — no fanfare. The transition should feel like a light turning on.
+
+**Component Structure:**
+
+```
+<ServerWaitingPage>
+  <div className="flex flex-col items-center justify-center h-full text-center">
+    <PulsingDot />
+    <h1>"Waiting for desktop app"</h1>
+    <p>"Start OpenDevs on your computer..."</p>
+    <InstructionCard>
+      <ol>...</ol>
+    </InstructionCard>
+  </div>
+</ServerWaitingPage>
+```
+
+---
+
+### State 4: Unauthenticated / Unpaired
+
+**The user must act.** This is the only state where we ask for input. The design must make the single required action unmistakable.
+
+**Visual Treatment:**
+
+Same full-page centered composition as State 3 (consistency — both are "you cannot proceed" states). The sidebar is visible but grayed.
+
+**Center composition:**
+
+1. **Status indicator:** A 10px circle with a horizontal line through it (a simple "disconnected" glyph, rendered as SVG). `oklch(0.55 0.12 264)` — a cool blue-violet. Static, no animation. This state requires action, not patience.
+
+2. **Headline:** `"Pair this browser"` — 20px, `font-weight: 600`, `oklch(0.90 0 0)`. Direct imperative. Not "You need to pair" or "Authentication required" — those are descriptions of a problem. "Pair this browser" is an instruction.
+
+3. **Subtext:** `"Enter the two-word code shown in your desktop app."` — 14px, `oklch(0.55 0 0)`. `max-width: 320px`.
+
+4. **Spacing:** 16px, 8px, 24px (tighter before the input — draw the eye downward to the action).
+
+5. **Input group:** A single text input, centered, `max-width: 280px`. The input is the hero element.
+   - `height: 48px` (larger than standard inputs — this is the only thing on the page).
+   - `font-size: 18px`, `font-weight: 500`, `text-align: center`, `letter-spacing: 0.05em`.
+   - `border: 1px solid oklch(0.30 0 0)`. On focus: `border-color: oklch(0.55 0.12 264)` (the same blue-violet as the icon), `box-shadow: 0 0 0 3px oklch(0.55 0.12 264 / 0.15)`. Transition: 200ms ease.
+   - Placeholder: `"alpha · bravo"` in `oklch(0.35 0 0)`. Demonstrates the expected format.
+
+6. **Submit:** Below the input, 12px gap. Text button: `"Connect"`, 14px, `font-weight: 500`, `oklch(0.55 0.12 264)`. On hover: `oklch(0.65 0.15 264)`. No background. The input's Enter key also submits — the button is a visual affordance, not the primary interaction.
+
+7. **Error state:** If pairing fails, the input border shifts to `oklch(0.65 0.20 25)` (restrained red — not fire-engine red). Below the input: `"Code not recognized. Check your desktop app."` — 13px, `oklch(0.65 0.18 25)`. Appears with `opacity: 0 → 1` over 150ms. No shake animation, no exclamation marks. Calm correction.
+
+8. **Alternative:** Below the submit button, 24px gap. `"or scan QR code"` — 13px, `oklch(0.45 0 0)`. Underline on hover. Opens the QR dialog from the existing implementation.
+
+**Component Structure:**
+
+```
+<PairingPage>
+  <div className="flex flex-col items-center justify-center h-full text-center">
+    <DisconnectedIcon />
+    <h1>"Pair this browser"</h1>
+    <p>"Enter the two-word code..."</p>
+    <PairingInput onSubmit={handlePair} error={error} />
+    <QRCodeLink onClick={openQRDialog} />
+  </div>
+</PairingPage>
+```
+
+---
+
+## Three Key Decisions
+
+**1. Position dictates severity — the bar is a ruler.**
+
+States 1 and 2 live in the same physical location: the top edge of the content area. State 1 is 2 pixels. State 2 is 40 pixels. The expansion from 2px to 40px is itself the communication — the user registers that something small became something visible. This is spatial escalation, not chromatic escalation. I did not make State 2 red. I made it taller. The human eye is more attuned to spatial change than color change when focused on a task.
+
+**2. Full-page states share a single compositional template.**
+
+States 3 and 4 use the identical vertical-stack centered layout. Same type scale, same spacing rhythm (16-8-24-32), same muted sidebar treatment. The user learns one visual pattern for "this page needs something before you can work." The differentiation is entirely in the content: waiting vs. acting. This is the Vignelli grid — one structure, many expressions. Two templates is one template too many.
+
+**3. No red anywhere in the system.**
+
+Red is for destructive actions (delete workspace, force-push to main). Connection state is not destructive — it is informational. Amber (hue 55 in OKLCH) communicates "attention" without triggering alarm. The gray dot in State 3 communicates absence without suggesting failure. The blue-violet in State 4 communicates "action available" (it is the same hue family as link affordances). This preserves red's semantic weight for the moments that truly need it.
+
+---
+
+## One Acknowledged Tradeoff
+
+**State 1 (the 2px bar) will be invisible to some users.** A user on a large monitor with ambient light may not notice a 2px amber line appear at the top of their content area. This is intentional and accepted. The alternative — a toast, a badge, a modal — would interrupt their flow for a problem that resolves itself 90% of the time within 5 seconds. The 2px bar exists for the observant user who glances up and thinks "ah, reconnecting." For everyone else, the connection restores silently and they never knew it left. The information was available; we did not force its consumption. If the disconnect persists, State 2's 40px banner will not be missed by anyone. That is the escalation contract: we match visibility to consequence.</result>
+<usage><total_tokens>21547</total_tokens><tool_uses>0</tool_uses><duration_ms>87172</duration_ms></usage>
+</task-notification>
+Full transcript available at: /private/tmp/claude-501/-Users-zvada-Developer-agent-box-ide--conductor-philadelphia-v2/30b05dd9-97c2-480d-8a76-d34505fc8fb0/tasks/a3dcbebed51da08f0.output
+
+---
+
+<task-notification>
+<task-id>a572fcc5873db7a70</task-id>
+<tool-use-id>REDACTED</tool-use-id>
+<output-file>/private/tmp/claude-501/-Users-zvada-Developer-agent-box-ide--conductor-philadelphia-v2/30b05dd9-97c2-480d-8a76-d34505fc8fb0/tasks/a572fcc5873db7a70.output</output-file>
+<status>completed</status>
+<summary>Agent "Jony Ive - connection UX" completed</summary>
+<result>
+
+# Quiet Confidence
+
+**Philosophy:** The interface should whisper before it speaks. Connection state is infrastructure — it earns attention only when the user's work is genuinely at risk, and even then, it communicates with the calm authority of a system that knows what it is doing and what it will do next.
+
+---
+
+## State 1: Brief Flaky Disconnects (auto-resolves in <30 seconds)
+
+**Principle:** The user should never know this happened unless they are actively watching.
+
+### Visual Treatment
+
+**No toast. No banner. No modal.** The only signal is a subtle material change on the WebSocket status indicator already present in the sidebar footer.
+
+**Sidebar footer indicator** — replace the current red dot with a **breathing pulse**:
+- A 6px circle in the footer, normally `oklch(0.75 0.15 145)` (a quiet green, desaturated so it reads as "fine" without screaming "CONNECTED").
+- On disconnect, the circle transitions over 400ms (ease-out-quart) to `oklch(0.65 0.08 60)` — a warm amber, not red. Amber says "I noticed, I am handling it."
+- The circle begins a slow **opacity pulse**: `opacity` oscillates between 0.5 and 1.0 over a 2-second cycle using `ease-in-out-sine`. This is the visual equivalent of breathing — calm, alive, working on it.
+- A 1px ring around the circle fades in at `oklch(0.65 0.08 60 / 0.15)`, giving it a soft halo. This is Framer Motion `animate={{ boxShadow }}` with `transition: { duration: 0.6, ease: [0.33, 1, 0.68, 1] }`.
+
+**Tooltip on hover** — if the user happens to hover the indicator during a flaky disconnect, show a tooltip: **"Reconnecting..."** — no explanation, no countdown, no drama. The ellipsis does the work.
+
+**On reconnection:**
+- Circle transitions back to green over 300ms.
+- The halo ring fades out over 500ms.
+- No "Reconnected!" toast. Silence is the signal that everything is fine.
+
+### Component Structure
+
+```
+SidebarFooter
+  └── ConnectionIndicator (6px circle)
+        ├── state: "connected" | "reconnecting" | "disconnected" | "unpaired"
+        ├── Framer Motion: animate opacity pulse when reconnecting
+        └── Tooltip: conditional text based on state
+```
+
+### Timing
+
+| Event | Delay | Duration | Easing |
+|-------|-------|----------|--------|
+| Green → Amber | immediate on WS close | 400ms | ease-out-quart |
+| Pulse begin | 400ms after disconnect | 2000ms cycle | ease-in-out-sine |
+| Amber → Green | immediate on WS open | 300ms | ease-out-quart |
+| Halo fade out | on reconnect | 500ms | ease-out-cubic |
+
+---
+
+## State 2: Extended Outages (30+ seconds)
+
+**Principle:** After 30 seconds of silence, the system has earned the right to speak — but it speaks to the content area, not over it. The sidebar remains usable. The disruption is proportional to the disruption.
+
+### Escalation Timeline
+
+**0–30s:** State 1 behavior (amber pulse, silent).
+
+**At 30s:** The main content area receives a **translucent overlay bar** at the top — not a full takeover, not a tiny toast. A bar.
+
+### Visual Treatment: Content Area Top Bar
+
+A horizontal bar slides down from the top of the main content area. It does not cover the sidebar.
+
+**Dimensions:** Full width of content area, 48px tall, pinned to top.
+
+**Material:** `oklch(0.18 0.01 60 / 0.85)` background — near-black with a whisper of warm amber, 85% opacity. `backdrop-filter: blur(12px)` to frost the content beneath. A 1px bottom border at `oklch(0.35 0.06 60 / 0.3)` — the faintest amber line, like light under a door.
+
+**Entry animation:** Framer Motion `initial={{ y: -48, opacity: 0 }}`, `animate={{ y: 0, opacity: 1 }}`, `transition={{ duration: 0.35, ease: [0.165, 0.84, 0.44, 1] }}` (ease-out-quart).
+
+**Content layout** — three elements in a horizontal flex:
+
+1. **Left:** A small spinner — not a loading circle, but a **three-dot sequence** where each dot fades in and out with 200ms stagger. Dots are 4px, `oklch(0.7 0.1 60)` (soft amber). This says "alive, trying" without the anxiety of a spinning wheel.
+
+2. **Center:** Copy in `oklch(0.75 0 0)` (neutral light gray), 13px, weight 450:
+   **"Connection interrupted — reconnecting"**
+   No period. No exclamation. The dash creates a pause that mirrors the system's pause.
+
+3. **Right:** A subtle **"Retry now"** text button in `oklch(0.7 0.1 60)` at 12px, weight 500. On hover, underline fades in over 150ms. This gives agency without urgency.
+
+**Sidebar indicator** also escalates: the amber pulse quickens to a 1.2-second cycle, and the tooltip now reads **"Connection lost — retrying"**.
+
+### On Reconnection
+
+- The bar slides up and fades out: `exit={{ y: -48, opacity: 0 }}`, 300ms ease-out-quart.
+- A brief **green flash** — the bar's bottom border flashes `oklch(0.75 0.15 145 / 0.5)` for 600ms before the bar exits. This is the only "reconnected" confirmation. Blink and you miss it, which is fine — you will notice the bar is gone.
+
+### Component Structure
+
+```
+MainContentArea
+  └── AnimatePresence
+        └── ConnectionBar (conditional, state === "disconnected" && elapsed > 30s)
+              ├── ReconnectingDots (3-dot stagger animation)
+              ├── StatusText ("Connection interrupted — reconnecting")
+              └── RetryButton (text button, triggers immediate reconnect)
+```
+
+---
+
+## State 3: First-Load / Server Not Running
+
+**Principle:** This is the only state that deserves the full stage. The user opened a URL expecting their workspace — nothing is here. But even emptiness should feel intentional, like a room that has been prepared but is waiting for its occupant.
+
+### Visual Treatment: Full-Page Centered State
+
+The entire content area (sidebar hidden — there is nothing to show in it) becomes a single centered composition. No sidebar, no header chrome. Just the message.
+
+**Background:** The app's standard dark background `oklch(0.13 0.005 260)` — no special treatment. The emptiness itself communicates.
+
+**Composition** — vertically and horizontally centered, max-width 420px:
+
+1. **Illustration** (top): The existing warm illustration of phone and laptop connected by tangled orange cord. Rendered at 240px width. On load, a subtle Framer Motion animation: the illustration fades in (`opacity 0→1, 600ms, ease-out-quart`) and translates up slightly (`y: 8→0`). The tangled cord has a very slow, barely perceptible CSS animation — a gentle sway, 8-second cycle, `translateX` oscillating +/- 2px. This makes the illustration feel alive without being distracting. (If the illustration is static SVG/PNG, skip the cord animation — do not over-engineer.)
+
+2. **Headline** (below illustration, 16px gap): **"Your desktop app isn't running"**
+   - `oklch(0.92 0 0)` (near-white), 20px, weight 550, letter-spacing -0.01em.
+   - Fades in 150ms after illustration, `opacity 0→1, y: 4→0, 400ms ease-out-quart`.
+
+3. **Body text** (8px gap below headline): **"Open the OpenDevs desktop app to connect this browser session to your workspace."**
+   - `oklch(0.55 0 0)` (medium gray), 14px, weight 400, line-height 1.5.
+   - Max-width 340px, centered.
+   - Fades in 250ms after illustration.
+
+4. **Primary action** (24px gap below body): A button styled with the app's primary button variant, but with a specific treatment:
+   - **"Open Desktop App"** — attempts a deep link / protocol handler (`opendevs://`) to launch the desktop app.
+   - `oklch(0.45 0.18 264)` background (the app's primary blue), `oklch(0.95 0 0)` text, 14px weight 500.
+   - Subtle `box-shadow: 0 1px 2px oklch(0 0 0 / 0.3), 0 0 0 1px oklch(0.45 0.18 264 / 0.5)` — depth without gaudiness.
+   - On hover: background lightens to `oklch(0.50 0.18 264)` over 200ms ease.
+
+5. **Secondary action** (12px gap): Text link, **"Don't have the app? Download it"** — `oklch(0.55 0 0)`, 13px, underline on hover. Links to download page.
+
+6. **Polling indicator** (32px gap, at the very bottom of the composition): A single line of micro-text, `oklch(0.40 0 0)` (very dim), 11px:
+   **"Checking for connection..."** with a single dot that pulses (opacity 0.3→1, 1.5s cycle). This replaces a spinner — it is quieter, and the user can ignore it entirely. When the connection establishes, this line briefly changes to **"Connected"** in `oklch(0.65 0.12 145)` (soft green) before the entire page transitions to the workspace.
+
+### Page Exit Transition
+
+When the WebSocket connects and workspace data arrives:
+- The entire composition fades out: `opacity 1→0, 300ms ease-out-quart`.
+- Simultaneously, a `scale(0.98)` subtly shrinks it, like it is receding.
+- The workspace UI fades in from `opacity 0→1, scale(1.01)→1, 400ms ease-out-quart` — a gentle arrival.
+
+### Component Structure
+
+```
+WebAppShell (conditional on connection state)
+  └── AnimatePresence mode="wait"
+        ├── ServerOfflinePage (when state === "server_not_running")
+        │     ├── WarmIllustration (phone + laptop + tangled cord)
+        │     ├── Headline
+        │     ├── BodyText
+        │     ├── OpenDesktopAppButton (deep link)
+        │     ├── DownloadLink
+        │     └── PollingIndicator ("Checking for connection...")
+        │
+        └── WorkspaceShell (when connected)
+              └── Sidebar + MainContent (normal app)
+```
+
+---
+
+## State 4: Unauthenticated / Unpaired
+
+**Principle:** This is an identity moment, not an error. The user has arrived at the right place but hasn't introduced themselves yet. Treat it like a front door — welcoming, clear, secure.
+
+### Visual Treatment: Full-Page Centered State (same shell as State 3)
+
+Same layout principles as State 3 — centered, no sidebar, full stage. But the tone shifts from "waiting" to "welcoming."
+
+**Composition** — vertically and horizontally centered, max-width 420px:
+
+1. **Illustration** (top): The same warm illustration, but if the design system has a variant showing the phone and laptop **disconnected** (cord not yet plugged in, or ends reaching toward each other), use that. If not, use the same connected illustration — the cord's tangle becomes a metaphor for "we need to untangle this connection." 240px width, same fade-in animation as State 3.
+
+2. **Headline:** **"Pair this browser with your desktop"**
+   - Same styling as State 3 headline.
+
+3. **Body text:** **"Enter the pairing code shown in your desktop app, or scan the QR code from your phone."**
+   - Same styling as State 3 body.
+
+4. **Pairing input** (24px gap): A **two-word code input** — two adjacent input fields styled as a single unit.
+   - Container: `oklch(0.16 0.005 260)` background, 1px border `oklch(0.25 0 0)`, `border-radius: 12px`, `padding: 4px`.
+   - Two inputs inside, separated by a subtle `oklch(0.25 0 0)` 1px vertical divider.
+   - Each input: 14px, weight 450, `oklch(0.92 0 0)` text, placeholder `oklch(0.35 0 0)` showing "word" in each.
+   - The container has `transition: border-color 200ms ease`. On focus-within: border becomes `oklch(0.45 0.18 264 / 0.6)` (primary blue glow), and a `box-shadow: 0 0 0 3px oklch(0.45 0.18 264 / 0.08)` ring fades in.
+   - On invalid code submission: border flashes `oklch(0.65 0.2 25)` (soft red) for 600ms, input fields do a **horizontal shake** — Framer Motion `animate={{ x: [0, -6, 6, -4, 4, 0] }}`, `transition: { duration: 0.4, ease: "easeOut" }`. No error toast. The shake is the error.
+   - Below the input, micro-text: **"Find this code in your desktop app's status bar"** — `oklch(0.40 0 0)`, 12px.
+
+5. **"Pair" button** (12px gap): Primary button, same styling as State 3's "Open Desktop App" button but labeled **"Connect"**. Disabled state at `opacity: 0.4` until both words are entered.
+
+6. **QR alternative** (24px gap): A horizontal divider line with centered text **"or"** in `oklch(0.35 0 0)`, 12px. Below it, a text link: **"Scan QR code instead"** — opens the QR dialog (existing component). `oklch(0.55 0 0)`, 13px, underline on hover.
+
+### Successful Pairing Transition
+
+When pairing succeeds:
+- The pairing input border flashes `oklch(0.65 0.12 145)` (green) for 400ms.
+- The "Connect" button text changes to a **checkmark icon** (Lucide `Check`, 16px) with a quick scale-in: `scale(0)→1, 250ms, ease: [0.34, 1.56, 0.64, 1]` (slight overshoot bounce).
+- After 600ms, the entire page transitions out with the same fade+scale as State 3, and the workspace fades in.
+
+### Component Structure
+
+```
+WebAppShell
+  └── AnimatePresence mode="wait"
+        ├── PairingPage (when state === "unpaired")
+        │     ├── WarmIllustration
+        │     ├── Headline
+        │     ├── BodyText
+        │     ├── PairingCodeInput (two-word input with shake on error)
+        │     ├── ConnectButton (disabled until filled)
+        │     ├── Divider ("or")
+        │     └── QRCodeLink (opens existing QR dialog)
+        │
+        └── WorkspaceShell (when paired + connected)
+```
+
+---
+
+## Three Key Decisions
+
+**1. No toasts for connection state — ever.**
+
+Toasts are for actions the user initiated. Connection drops are infrastructure events. A toast for "Disconnected" forces the user to acknowledge something they cannot act on. The amber pulse in State 1 and the content bar in State 2 are **ambient** — they exist in peripheral vision, not in the notification stack. This keeps the toast system trustworthy: when a toast appears, it means something the user did had a result.
+
+**2. The 30-second threshold before any visible interruption to the content area.**
+
+Most WebSocket reconnects resolve in under 10 seconds. Showing a banner at 2 seconds trains users to see and then ignore warnings — "cry wolf" conditioning. At 30 seconds, the disruption is real: the user may have tried to send a message to an agent, or is watching an agent work and seeing no updates. The bar appears precisely when the user would start to wonder "is something wrong?" — not before. This restraint is what makes the signal trustworthy when it finally appears.
+
+**3. States 3 and 4 use the same full-page layout shell with no sidebar.**
+
+When the app cannot show workspace data (server off, user unpaired), rendering an empty sidebar frame with a loading skeleton would be dishonest — it implies content is coming momentarily when it may not be. A clean full-page state with the warm illustration communicates completeness: "This is the right place. Here is what needs to happen." It also means the transition into the full workspace (sidebar sliding in, content populating) feels like an arrival — a moment of satisfaction rather than incremental loading.
+
+---
+
+## One Acknowledged Tradeoff
+
+**The 30-second silence window means power users who are actively sending messages may wait up to 30 seconds before seeing explicit confirmation that their messages are not being delivered.** A user who types a message to an agent during a State 1 disconnect will see the message appear optimistically in the chat (standard optimistic UI), but the agent will not respond. The absence of a response is ambiguous — is the agent thinking, or is the connection down?
+
+The mitigation: if the user sends a `q:command` (like `sendMessage`) and the WebSocket is in reconnecting state, the command acknowledgment will fail. At that point — and only at that point — we escalate immediately to State 2's content bar, bypassing the 30-second wait. The trigger shifts from "time elapsed" to "user action blocked." This way, passive observation gets 30 seconds of grace, but active interaction gets immediate feedback. The bar copy in this case adjusts: **"Message queued — reconnecting"** instead of the generic "Connection interrupted." The message sends automatically when the connection restores.</result>
+<usage><total_tokens>21585</total_tokens><tool_uses>0</tool_uses><duration_ms>112632</duration_ms></usage>
+</task-notification>
+Full transcript available at: /private/tmp/claude-501/-Users-zvada-Developer-agent-box-ide--conductor-philadelphia-v2/30b05dd9-97c2-480d-8a76-d34505fc8fb0/tasks/a572fcc5873db7a70.output
+
+---
+
+<task-notification>
+<task-id>ad0bfbdfd31d1135a</task-id>
+<tool-use-id>REDACTED</tool-use-id>
+<output-file>/private/tmp/claude-501/-Users-zvada-Developer-agent-box-ide--conductor-philadelphia-v2/30b05dd9-97c2-480d-8a76-d34505fc8fb0/tasks/ad0bfbdfd31d1135a.output</output-file>
+<status>completed</status>
+<summary>Agent "Hella Jongerius - connection UX" completed</summary>
+<result>
+
+# Chromatic Temperature
+
+**Philosophy:** Connection health is expressed as warmth. A connected app radiates the amber glow of a live wire; a severed connection drains into the cool blue-gray of an unpowered circuit. The user never reads a status label — they *feel* the temperature shift.
+
+---
+
+## The Color Language
+
+Before detailing each state, here is the chromatic spectrum that governs everything:
+
+| State | Temperature | Primary OKLCH | Secondary OKLCH | Metaphor |
+|---|---|---|---|---|
+| Connected (baseline) | Warm | `oklch(0.75 0.16 70)` — amber | `oklch(0.65 0.12 55)` — deep copper | Live current flowing through the cord |
+| Flaky (state 1) | Warm, flickering | `oklch(0.72 0.13 65)` — muted amber | `oklch(0.55 0.08 60)` — faded copper | Loose connection, bulb dimming |
+| Extended outage (state 2) | Cool-shifting | `oklch(0.55 0.06 250)` — slate blue | `oklch(0.40 0.04 260)` — deep graphite | Wire going cold |
+| Server not running (state 3) | Cold | `oklch(0.35 0.03 270)` — blue-charcoal | `oklch(0.25 0.02 280)` — near-black | Dead circuit, no power source |
+| Unauthenticated (state 4) | Neutral warm | `oklch(0.60 0.10 50)` — warm taupe | `oklch(0.50 0.08 45)` — muted clay | Cord present but unplugged at one end |
+
+The critical insight: we never use red for disconnection. Red is reserved for destructive actions (delete, error). Disconnection is *absence of warmth* — the color drains away rather than shifting to an alarm hue. This is Jongerius, not a traffic light.
+
+---
+
+## State 1: Brief Flaky Disconnect (auto-resolves in <30 seconds)
+
+**Design intent:** The user should barely notice. A subtle thermal flicker — like a lamp dimming during a brown-out — that resolves itself. No interruption to workflow.
+
+### Visual Treatment
+
+**Sidebar pulse indicator.** Replace the current static red dot with a breathing amber orb in the sidebar footer, positioned next to the connection label. When the connection flickers:
+
+- The orb's opacity oscillates between 0.4 and 1.0 on a 1.6s cycle (ease-in-out-sine)
+- The orb's color shifts from baseline `oklch(0.75 0.16 70)` down to `oklch(0.60 0.10 60)` — a gentle desaturation, as if the warmth is dimming
+- A subtle `box-shadow` pulse: `0 0 8px oklch(0.72 0.13 65 / 0.3)` expanding to 12px and back
+
+**No banner. No toast. No modal.** The sidebar indicator is the only change. The main content area remains completely untouched.
+
+**On reconnect:** The orb snaps back to full warmth with a single quick pulse — 200ms ease-out-quart scale from 1.0 to 1.15 and back. A tiny moment of "the lights came back on."
+
+### Component Structure
+
+```
+SidebarFooter
+  └── ConnectionOrb (8x8px, rounded-full)
+        ├── state: "connected" | "flickering" | "degraded" | "offline" | "cold" | "unpaired"
+        ├── Framer Motion: animate opacity + backgroundColor + boxShadow
+        └── aria-label: "Connection unstable, reconnecting"
+```
+
+### Animation Spec
+
+```ts
+// Flickering state
+animate: {
+  opacity: [1, 0.4, 1],
+  backgroundColor: [
+    "oklch(0.75 0.16 70)",  // warm
+    "oklch(0.60 0.10 60)",  // dimmed
+    "oklch(0.75 0.16 70)",  // warm
+  ],
+  boxShadow: [
+    "0 0 6px oklch(0.75 0.16 70 / 0.25)",
+    "0 0 2px oklch(0.60 0.10 60 / 0.1)",
+    "0 0 6px oklch(0.75 0.16 70 / 0.25)",
+  ],
+}
+transition: {
+  duration: 1.6,
+  ease: "easeInOut",
+  repeat: Infinity,
+}
+```
+
+### Copy
+
+None visible. Tooltip on hover: "Connection interrupted — reconnecting automatically"
+
+### Timing
+
+- **Activation delay:** 2 seconds after disconnect detected (avoids flashing on sub-second blips)
+- **Deactivation:** Immediate on reconnect, with the 200ms "snap-back" pulse
+
+---
+
+## State 2: Extended Outage (30+ seconds, server unresponsive)
+
+**Design intent:** The workspace is cooling down. The user needs to know their agents are paused, but panic is counterproductive. We drain warmth progressively — a slow chromatic shift that communicates "waiting" without screaming "broken."
+
+### Visual Treatment
+
+**Phase A — Transition (triggers at 30s).** Over 800ms (ease-out-quart), the following changes propagate:
+
+1. **Sidebar orb** shifts from flickering amber to steady slate: `oklch(0.55 0.06 250)`. The pulse stops — it becomes a still, cool dot. Still is worse than flickering; stillness means the signal is gone entirely.
+
+2. **Top bar ambient stripe.** A 2px horizontal line appears at the very top of the main content area. Color: `oklch(0.55 0.06 250)` at 40% opacity. It fades in over 600ms. This is not a banner — it is a thin atmospheric shift, like a change in sky color before a storm.
+
+3. **Agent session cards** in the sidebar receive a subtle overlay. Each active session tile gets a `mix-blend-mode: saturation` overlay at 0.15 opacity — this desaturates the session's status colors slightly, making them feel muted. The sessions are still there, but they feel paused.
+
+4. **Main chat area** — if the active session was mid-stream, the streaming indicator (typing dots or progress) freezes and fades to 30% opacity over 400ms. The last message remains fully visible.
+
+**Phase B — Notification bar (triggers at 45s).** A slim notification slides down from below the 2px stripe. Height: 36px. Background: `oklch(0.20 0.03 255 / 0.85)` with `backdrop-filter: blur(12px)`. This sits quietly, not demanding immediate action.
+
+### Component Structure
+
+```
+MainContentArea
+  └── ConnectionDegradedBar (position: sticky, top: 0)
+        ├── AmbientStripe (h-[2px], full-width)
+        │     └── backgroundColor: oklch(0.55 0.06 250 / 0.4)
+        ├── NotificationSlim (h-9, appears at 45s)
+        │     ├── CoolPulse (6x6px orb, slate, slow breathing 3s cycle)
+        │     ├── Copy: "Connection lost — retrying every 5s"
+        │     ├── RetryButton (ghost variant, small)
+        │     └── DismissButton (ghost, icon-only, X)
+        └── AnimatePresence wrapper
+
+SidebarFooter
+  └── ConnectionOrb (state: "degraded", steady slate)
+
+SessionCards (each)
+  └── DesaturationOverlay (absolute, inset-0, mix-blend-saturation, opacity 0.15)
+```
+
+### Color Palette Detail
+
+```css
+/* Degraded state tokens */
+--connection-degraded-primary: oklch(0.55 0.06 250);     /* slate blue */
+--connection-degraded-surface: oklch(0.20 0.03 255 / 0.85); /* dark glass */
+--connection-degraded-text: oklch(0.72 0.02 250);         /* cool gray text */
+--connection-degraded-accent: oklch(0.60 0.08 250);       /* slightly brighter for buttons */
+```
+
+### Animation Spec
+
+```ts
+// Ambient stripe fade-in
+initial: { opacity: 0 }
+animate: { opacity: 1 }
+transition: { duration: 0.6, ease: [0.165, 0.84, 0.44, 1] }
+
+// Notification bar slide-down (at 45s)
+initial: { y: -36, opacity: 0 }
+animate: { y: 0, opacity: 1 }
+transition: { duration: 0.3, ease: [0.165, 0.84, 0.44, 1] }
+
+// Session card desaturation
+initial: { opacity: 0 }
+animate: { opacity: 0.15 }
+transition: { duration: 0.8, ease: "easeOut" }
+
+// Sidebar orb: steady cool pulse (slow, barely perceptible)
+animate: {
+  opacity: [0.7, 0.5, 0.7],
+  boxShadow: [
+    "0 0 4px oklch(0.55 0.06 250 / 0.2)",
+    "0 0 2px oklch(0.55 0.06 250 / 0.1)",
+    "0 0 4px oklch(0.55 0.06 250 / 0.2)",
+  ],
+}
+transition: { duration: 3, ease: "easeInOut", repeat: Infinity }
+```
+
+### Copy
+
+- Notification bar: **"Connection lost — retrying every 5s"**
+- Retry button: **"Retry now"**
+- Tooltip on orb: **"Server unreachable since [time]. Your agents' work is preserved."**
+
+### Recovery Animation
+
+On reconnect: the warmth floods back. Over 600ms, the stripe shifts from slate to amber (`oklch(0.75 0.16 70)`) then fades out. The desaturation overlays dissolve. The orb pulses warm once. The notification bar slides up and disappears. This "warming up" transition should feel like lights coming on in a room — not instantaneous, but quick and satisfying.
+
+---
+
+## State 3: First Load — Server Not Running
+
+**Design intent:** This is the coldest state. The circuit has no power. But it must not feel like an error — it is an *invitation*. The user opened the web URL; now they need to start their desktop app. The warm illustration style (phone and laptop with tangled orange cord) is the hero here, but the surrounding environment should feel cool and dormant, making the illustration's warmth the beacon.
+
+### Visual Treatment
+
+**Full-page takeover.** The sidebar is hidden (or collapsed to a 48px-wide rail showing only the app logo, dimmed to 40% opacity). The entire viewport becomes a centered, atmospheric landing.
+
+**Background:** A subtle radial gradient emanating from center. Core: `oklch(0.18 0.02 270)` — near-black with a whisper of blue. Edge: `oklch(0.12 0.01 280)` — true dark. This creates a vignette that draws the eye inward.
+
+**Hero illustration:** The existing warm illustration (phone + laptop + tangled orange cord) sits center-stage, scaled to roughly 280px wide. The cord in the illustration should be the warmest element on screen — it is the promise of connection. Around the illustration, a soft ambient glow: `box-shadow: 0 0 80px 20px oklch(0.55 0.12 55 / 0.08)` — a faint copper halo, as if the cord is still carrying residual warmth.
+
+**Below the illustration**, stacked vertically with 24px spacing:
+
+1. **Headline:** "Your desktop app isn't running" — set in the app's sans-serif, `text-lg` (18px), `oklch(0.78 0.02 70)` — warm off-white, not pure white. The slight warmth in the text color keeps the page from feeling sterile.
+
+2. **Subtext:** "Open the OpenDevs desktop app to connect this browser session." — `text-sm` (14px), `oklch(0.55 0.03 60)` — warm gray. Two lines max.
+
+3. **Primary action button:** "Open Desktop App" — uses the warm accent `oklch(0.65 0.14 60)` as background, `oklch(0.15 0.02 50)` as text. Rounded, medium size. This button attempts a deep-link protocol launch (`opendevs://`).
+
+4. **Secondary text link:** "Don't have the app? Download it" — `text-xs`, underlined, `oklch(0.50 0.06 55)`.
+
+**Ambient animation:** Behind the illustration, a slow-moving particle field — 8-12 small dots (2-3px) drifting at 0.3px/s in random directions, colored `oklch(0.35 0.04 260 / 0.3)`. They represent dormant data — potential energy waiting to flow. Implemented as a lightweight canvas element or Framer Motion absolutely-positioned dots with infinite linear transitions. Respect `prefers-reduced-motion` by making them static.
+
+**Connection polling indicator:** At the bottom of the card, a thin progress line (2px tall, 160px wide, centered). It animates a shimmer from left to right every 4 seconds in `oklch(0.40 0.05 255)` — the cool shimmer says "I'm checking" without urgency. When the desktop app starts and the WebSocket connects, this shimmer transitions to warm amber and fills completely before the page transitions.
+
+### Component Structure
+
+```
+ColdStartPage (full viewport, flex items-center justify-center)
+  ├── BackgroundGradient (absolute inset-0, radial-gradient)
+  ├── AmbientParticles (absolute inset-0, 8-12 drifting dots, canvas or motion.div)
+  ├── ContentCard (max-w-sm, flex flex-col items-center, gap-6, relative z-10)
+  │     ├── WarmIllustration (280px wide, with copper halo box-shadow)
+  │     ├── Headline (text-lg, warm off-white)
+  │     ├── Subtext (text-sm, warm gray, text-center, max-w-xs)
+  │     ├── OpenDesktopButton (primary, warm accent bg)
+  │     ├── DownloadLink (text-xs, underlined, warm muted)
+  │     └── ConnectionShimmer (w-40 h-[2px], cool shimmer animation)
+  └── SidebarRail (w-12, app logo dimmed, optional)
+```
+
+### Color Palette Detail
+
+```css
+/* Cold start tokens */
+--cold-bg-core: oklch(0.18 0.02 270);
+--cold-bg-edge: oklch(0.12 0.01 280);
+--cold-illustration-glow: oklch(0.55 0.12 55 / 0.08);
+--cold-headline: oklch(0.78 0.02 70);          /* warm off-white */
+--cold-subtext: oklch(0.55 0.03 60);           /* warm gray */
+--cold-button-bg: oklch(0.65 0.14 60);         /* copper accent */
+--cold-button-text: oklch(0.15 0.02 50);       /* dark warm */
+--cold-link: oklch(0.50 0.06 55);              /* muted warm */
+--cold-shimmer: oklch(0.40 0.05 255);          /* cool pulse */
+--cold-particle: oklch(0.35 0.04 260 / 0.3);  /* dormant blue */
+```
+
+### Animation Spec
+
+```ts
+// Illustration glow pulse (very slow, ambient)
+animate: {
+  boxShadow: [
+    "0 0 60px 15px oklch(0.55 0.12 55 / 0.06)",
+    "0 0 80px 20px oklch(0.55 0.12 55 / 0.10)",
+    "0 0 60px 15px oklch(0.55 0.12 55 / 0.06)",
+  ],
+}
+transition: { duration: 4, ease: "easeInOut", repeat: Infinity }
+
+// Shimmer bar
+// CSS @keyframes — a 2px-tall bar with a left-to-right highlight sweep
+@keyframes cold-shimmer {
+  0%   { background-position: -160px 0; }
+  100% { background-position: 160px 0; }
+}
+// background: linear-gradient(90deg, transparent, oklch(0.50 0.06 255 / 0.4), transparent)
+// background-size: 80px 2px
+// animation: cold-shimmer 4s linear infinite
+
+// On connect: shimmer fills warm
+animate: { backgroundColor: "oklch(0.75 0.16 70)" }
+transition: { duration: 0.6, ease: [0.165, 0.84, 0.44, 1] }
+// Then page cross-fades to the full app (opacity 0 over 400ms)
+
+// Ambient particles (each dot)
+animate: {
+  x: [0, randomOffset(-30, 30)],
+  y: [0, randomOffset(-20, 20)],
+}
+transition: { duration: randomBetween(8, 15), ease: "linear", repeat: Infinity, repeatType: "reverse" }
+```
+
+### Transition to Connected State
+
+When the WebSocket connects: the shimmer bar floods with amber, the illustration glow brightens to `oklch(0.65 0.14 60 / 0.15)`, the particles fade out, and after 600ms the entire page cross-fades (opacity to 0 over 400ms) revealing the full app underneath. Total transition: ~1 second. The warmth arriving should feel like a furnace kicking on.
+
+---
+
+## State 4: Unauthenticated / Unpaired
+
+**Design intent:** The connection infrastructure works — the wire is there — but it is not plugged in at the user's end. This is warmer than state 3 (the server exists and responds) but cooler than baseline (you are not yet authorized). The metaphor: the cord is dangling, waiting to be plugged in.
+
+### Visual Treatment
+
+**The app shell is visible** — sidebar, header, layout — but desaturated and non-interactive. A frosted overlay sits atop everything at `oklch(0.15 0.01 265 / 0.7)` with `backdrop-filter: blur(8px)`. The app is visible but untouchable, like looking through frosted glass at a warm room you have not entered yet.
+
+**Centered pairing card.** A card (max-width 400px) floats over the frosted overlay. The card has a warm border — 1px `oklch(0.50 0.10 55 / 0.3)` — the copper cord color at low opacity. Background: `oklch(0.16 0.01 60 / 0.95)` — near-black with the faintest warm undertone, distinguishing it from the cool overlay behind it.
+
+**Card contents:**
+
+1. **Illustration variant:** The same warm phone-laptop-cord illustration, but stylistically the cord is *disconnected at one end* — dangling. If we cannot modify the SVG, we use the existing illustration at reduced scale (200px) with one side cropped or faded, implying incompleteness.
+
+2. **Headline:** "Pair this browser" — `text-lg`, `oklch(0.80 0.03 65)` warm white.
+
+3. **Two-word pairing code display.** Large, monospaced, letter-spaced. The code itself is rendered in the warm accent: `oklch(0.75 0.16 70)` — amber, the hottest color on the page. It is the thing the user needs to act on, so it radiates warmth. Background: `oklch(0.22 0.03 60 / 0.6)` — subtle warm surface. Rounded, padded generously (`px-6 py-3`).
+
+4. **Instruction text:** "Enter this code in your desktop app, or scan the QR code below." — `text-sm`, `oklch(0.55 0.03 60)`.
+
+5. **QR code.** Rendered in `oklch(0.70 0.08 65)` (warm) on `oklch(0.20 0.02 60)` (dark warm background). The QR code itself has a warm tint rather than pure black-and-white — staying in the chromatic language.
+
+6. **Expiration indicator.** A thin arc or progress ring around the QR code (or below the pairing code) that depletes over the code's TTL. Color transitions from `oklch(0.65 0.14 60)` (full) to `oklch(0.40 0.04 260)` (expired — cool). When it expires, the code auto-refreshes with a subtle cross-fade (200ms).
+
+### Component Structure
+
+```
+PairingOverlay (fixed inset-0, z-50)
+  ├── FrostedBackdrop (absolute inset-0, bg oklch cool/0.7, backdrop-blur-8)
+  ├── PairingCard (relative, max-w-sm, centered)
+  │     ├── DanglingCordIllustration (200px, warm)
+  │     ├── Headline ("Pair this browser")
+  │     ├── PairingCodeDisplay
+  │     │     ├── Code (text-2xl, font-mono, tracking-widest, amber)
+  │     │     └── RefreshingCrossFade (AnimatePresence, on code expiry)
+  │     ├── InstructionText
+  │     ├── QRCodeWarm (warm-tinted QR)
+  │     │     └── ExpirationRing (SVG circle, stroke-dashoffset animation)
+  │     └── HelpLink ("Having trouble?")
+  └── AnimatePresence wrapper
+```
+
+### Color Palette Detail
+
+```css
+/* Unpaired state tokens */
+--unpaired-overlay: oklch(0.15 0.01 265 / 0.7);      /* cool frosted glass */
+--unpaired-card-bg: oklch(0.16 0.01 60 / 0.95);       /* warm dark surface */
+--unpaired-card-border: oklch(0.50 0.10 55 / 0.3);    /* copper border */
+--unpaired-headline: oklch(0.80 0.03 65);               /* warm white */
+--unpaired-code: oklch(0.75 0.16 70);                   /* amber — hottest element */
+--unpaired-code-bg: oklch(0.22 0.03 60 / 0.6);         /* warm code surface */
+--unpaired-subtext: oklch(0.55 0.03 60);                /* warm gray */
+--unpaired-qr-fg: oklch(0.70 0.08 65);                  /* warm QR modules */
+--unpaired-qr-bg: oklch(0.20 0.02 60);                  /* dark warm QR bg */
+--unpaired-expiry-full: oklch(0.65 0.14 60);            /* copper — time remaining */
+--unpaired-expiry-empty: oklch(0.40 0.04 260);          /* cool — expired */
+```
+
+### Animation Spec
+
+```ts
+// Overlay fade-in
+initial: { opacity: 0 }
+animate: { opacity: 1 }
+transition: { duration: 0.4, ease: [0.165, 0.84, 0.44, 1] }
+
+// Card scale-in
+initial: { opacity: 0, scale: 0.96, y: 12 }
+animate: { opacity: 1, scale: 1, y: 0 }
+transition: { duration: 0.35, ease: [0.165, 0.84, 0.44, 1], delay: 0.1 }
+
+// Pairing code refresh (on expiry)
+exit: { opacity: 0, y: -8 }
+initial: { opacity: 0, y: 8 }
+animate: { opacity: 1, y: 0 }
+transition: { duration: 0.2, ease: [0.165, 0.84, 0.44, 1] }
+
+// Expiration ring (SVG stroke-dashoffset)
+// Total circumference mapped to TTL (e.g., 300s)
+animate: { strokeDashoffset: [0, circumference] }
+transition: { duration: ttlSeconds, ease: "linear" }
+// Color interpolation as time depletes:
+style: {
+  stroke: `color-mix(in oklch, oklch(0.65 0.14 60) ${percentRemaining}%, oklch(0.40 0.04 260))`,
+}
+```
+
+### Copy
+
+- Headline: **"Pair this browser"**
+- Code label (above the code, optional): **"Your pairing code"**
+- Instruction: **"Enter this code in your desktop app, or scan the QR code below."**
+- Expiry note: **"Code refreshes in [countdown]"**
+- Help: **"Having trouble pairing?"** (links to docs)
+
+### On Successful Pairing
+
+The pairing code flashes bright amber `oklch(0.85 0.18 70)` for 300ms, then the card contracts slightly (scale 0.98, 150ms) and the frosted overlay dissolves warmth-first — the overlay color shifts from cool to `oklch(0.15 0.01 60 / 0.4)` (warm) over 300ms, then fades to transparent over another 300ms. The sidebar and content behind un-blur simultaneously. The feeling: the room's door opened and heat rushed in.
+
+---
+
+## The ConnectionOrb Component (Shared Across All States)
+
+This single 8x8px indicator lives in the sidebar footer and is the persistent, always-visible connection health signal. It replaces the current red dot.
+
+```
+States:
+  connected   → oklch(0.75 0.16 70), steady, faint warm glow
+  flickering  → oklch(0.72-0.60 oscillating), breathing 1.6s
+  degraded    → oklch(0.55 0.06 250), steady, slow cool pulse 3s
+  offline     → oklch(0.35 0.03 270), steady, no glow, dim
+  unpaired    → oklch(0.60 0.10 50), steady, warm but muted
+
+Tooltip (on hover):
+  connected   → "Connected"
+  flickering  → "Connection interrupted — reconnecting"
+  degraded    → "Server unreachable since {time}"
+  offline     → "Desktop app not running"
+  unpaired    → "Browser not paired"
+```
+
+This orb is always present regardless of which full-page or banner treatment is active. It is the ambient heartbeat of the app.
+
+---
+
+## 3 Key Decisions
+
+**1. Temperature as the primary communication channel, not iconography or severity colors.**
+
+Traditional UX uses green/yellow/red traffic-light coding. This creates a jarring, clinical feel that clashes with the product's warm illustration aesthetic. By mapping connection health to a warm-to-cool temperature gradient, we extend the existing brand language (the orange tangled cord) into a coherent chromatic system. A user who sees the app cooling down understands intuitively that warmth equals life — without needing to parse a status badge. This also avoids the accessibility pitfall of relying solely on red/green distinction, since the shift is along the warm/cool axis (hue 50-70 vs 250-280) which is perceptible even to most color-vision-deficient users.
+
+**2. Progressive escalation with timed phase transitions rather than instant state changes.**
+
+State 1 waits 2 seconds before showing anything. State 2 introduces the ambient stripe at 30 seconds and the notification bar at 45 seconds. State 3 is immediate (it is the initial load). This staggered approach prevents the "boy who cried wolf" problem — if every brief hiccup showed a banner, users would learn to ignore connection warnings entirely. By the time we show a notification bar, the user can trust that it is meaningful. The timing values (2s, 30s, 45s) are calibrated to WebSocket reconnection patterns: most auto-reconnects resolve within 5-15 seconds.
+
+**3. The app shell remains visible in states 2 and 4 but is desaturated or overlaid, not replaced.**
+
+Replacing the entire UI with an error page (as state 3 does) is appropriate only when there is genuinely nothing to show. For states 2 and 4, the user's workspace, their agent sessions, and their recent work should remain visible — even if non-interactive. This preserves spatial context ("I can see my sessions are still there") and reduces anxiety. The desaturation overlay in state 2 and the frosted glass in state 4 communicate "paused" rather than "gone," which is the accurate mental model.
+
+---
+
+## 1 Acknowledged Tradeoff
+
+**The temperature metaphor requires onboarding through experience, not explanation.** Unlike a red badge labeled "Disconnected," the chromatic temperature shift is ambient and non-verbal. A first-time user will not immediately understand that "the sidebar dot turned blue-gray" means "server unreachable." We accept this tradeoff because: (a) the notification bar in state 2 and the full-page in state 3 provide explicit textual fallbacks for serious outages, so no critical information is lost; (b) over repeated use, the temperature association becomes internalized faster than reading labels — it becomes a peripheral sense rather than a conscious check; and (c) the product's audience (semi-technical users managing AI agents) is sophisticated enough to build this association within a few sessions. The warmth language is learned through the body, not the manual. That is the point.</result>
+<usage><total_tokens>21662</total_tokens><tool_uses>0</tool_uses><duration_ms>155758</duration_ms></usage>
+</task-notification>
+Full transcript available at: /private/tmp/claude-501/-Users-zvada-Developer-agent-box-ide--conductor-philadelphia-v2/30b05dd9-97c2-480d-8a76-d34505fc8fb0/tasks/ad0bfbdfd31d1135a.output
+
+---
+
+<task-notification>
+<task-id>a8be29568b5415ba6</task-id>
+<tool-use-id>REDACTED</tool-use-id>
+<output-file>/private/tmp/claude-501/-Users-zvada-Developer-agent-box-ide--conductor-philadelphia-v2/30b05dd9-97c2-480d-8a76-d34505fc8fb0/tasks/a8be29568b5415ba6.output</output-file>
+<status>completed</status>
+<summary>Agent "Naoto Fukasawa - connection UX" completed</summary>
+<result>Now I have a comprehensive understanding of the codebase. Let me produce the design direction.
+
+---
+
+# Ambient Presence
+
+**Philosophy:** Connection state is not an alert — it is a quality of the environment. The way a room feels dim when a lamp goes off, then brightens when it returns. The user should never "read" the connection state; they should *feel* it through the interface's warmth, responsiveness, and visual density.
+
+---
+
+## State 1: Brief Flaky Disconnect (auto-resolves within ~5 seconds)
+
+**The user should not notice this at all.** This is a micro-disruption the software absorbs.
+
+### Visual treatment
+
+**No new UI element appears.** The existing interface continues to render with its cached data (React Query cache remains intact). The only change is an ambient, nearly subliminal desaturation of interactive elements.
+
+**Concrete implementation:**
+
+A CSS custom property `--connection-vitality` transitions from `1` to `0.85` when the WebSocket disconnects. This property modulates:
+
+- `--primary` saturation: the cool-rose interactive accent (`oklch(0.78 0.09 345)`) shifts to `oklch(0.78 0.04 345)` — the chroma drops by half, making buttons and links feel slightly muted without appearing broken
+- The sidebar's `CircularPixelGrid` animation speed slows by 30% (multiply `requestAnimationFrame` delta by `0.7`), creating a subtle "holding breath" effect
+- Message input placeholder text shifts from `--text-muted` to `--text-disabled`
+
+**Timing:**
+
+- Desaturation begins after a **1.5-second grace period** (covers most Wi-Fi blips). Uses `transition: 800ms cubic-bezier(0.165, 0.84, 0.44, 1)` on the custom property propagation via JS.
+- On reconnect, saturation returns over **400ms** — faster recovery than onset, because "restored" should feel crisp.
+
+**Message input behavior:**
+
+- The input remains fully interactive. Messages typed during the blip are queued and sent when the WebSocket reconnects (the existing `sendCommand` already rejects with "WebSocket not connected" — instead, queue in a local buffer and flush on `onConnectionChange(true)`).
+- No toast. No banner. No dot. Nothing.
+
+**Component structure:**
+
+No new components. The `BackendStatusIndicator` gains a `graceMs` prop (default `1500`) and suppresses rendering during the grace window. The CSS variable modulation lives in a `useConnectionVitality()` hook that sets `document.documentElement.style.setProperty('--connection-vitality', ...)`.
+
+```tsx
+// useConnectionVitality.ts — sets CSS variable on <html>
+function useConnectionVitality() {
+  useEffect(() => {
+    let graceTimer: ReturnType<typeof setTimeout> | null = null;
+    
+    return onConnectionChange((connected) => {
+      if (!connected) {
+        graceTimer = setTimeout(() => {
+          document.documentElement.style.setProperty('--connection-vitality', '0.85');
+        }, 1500);
+      } else {
+        if (graceTimer) clearTimeout(graceTimer);
+        document.documentElement.style.setProperty('--connection-vitality', '1');
+      }
+    });
+  }, []);
+}
+```
+
+**Copy:** None. Silence is the design.
+
+---
+
+## State 2: Extended Outage (30+ seconds, server not coming back soon)
+
+**The user should understand the situation without alarm.** They were working; something interrupted the connection. The interface communicates "I'm still here, I'm still trying, your work is safe."
+
+### Escalation timeline
+
+- **0-1.5s:** Nothing (grace period, State 1)
+- **1.5-8s:** Subtle desaturation (State 1)
+- **8s:** A quiet status line fades in at the **top of the main content area** (not the sidebar)
+- **30s:** The status line expands to show reconnection attempt count
+
+### Visual treatment at 8 seconds — "Reconnecting" bar
+
+**Component:** `ConnectionStatusBar` — a single horizontal line that appears at the very top of the `SidebarInset` (the `[data-slot="main-content"]` container), above the workspace header. It is 32px tall.
+
+**Layout:**
+
+```
+[sidebar] | [=== reconnecting bar (32px, full width) ===]
+          | [workspace header                            ]
+          | [chat | content panels                       ]
+```
+
+**Appearance:**
+
+- Background: `color-mix(in oklch, var(--warning) 6%, var(--bg-surface))` — a barely-warm tint of the surface, like amber light through fog
+- Left edge: a 2px-wide vertical accent line in `--warning` at `30%` opacity, providing the "status" signal without screaming
+- Text: `text-text-secondary` (oklch 0.75), 12px (`text-sm`), tracking-body
+- Copy: `"Reconnecting..."` with a single animated dot that cycles opacity `[0.3, 1, 0.3]` every 1.2s (same `PulsingDots` pattern from `PairGatePage`)
+- Right side: small `text-text-muted` timestamp: `"Lost connection 12s ago"` — updates every second, humanizes the wait
+
+**Animation:**
+
+- Enter: `initial={{ opacity: 0, height: 0 }}` / `animate={{ opacity: 1, height: 32 }}` with `duration: 0.3, ease: [0.165, 0.84, 0.44, 1]` (ease-out-quart)
+- Exit on reconnect: `exit={{ opacity: 0, height: 0 }}` with `duration: 0.25` — collapses smoothly, content shifts up naturally
+
+**The main content area dims slightly** — not via overlay, but by reducing the `--bg-surface` variable luminance from `#141414` to `#111111`. The content is still fully readable and interactive but feels "quieter." This uses the same CSS variable mechanism from State 1, extending `--connection-vitality` to drive background tint.
+
+### At 30 seconds — enhanced status
+
+The bar's right side adds: `"Attempt 4 of ..."` in `text-text-muted text-xs`. This communicates ongoing effort without countdown anxiety.
+
+**Additional effect at 30s:** The sidebar footer `BackendStatusIndicator` now renders its existing red-dot design — confirming the issue for users who look to the sidebar. This is the current behavior but now appears only after a meaningful delay rather than immediately.
+
+### On reconnect
+
+- The `ConnectionStatusBar` exit-animates (height collapses to 0)
+- A brief green flash of the left accent line (`--success`, `opacity: 0.6`, fades over 600ms) signals restoration
+- `--connection-vitality` returns to `1` over 400ms
+- No toast, no "Connected!" banner. The bar disappearing *is* the confirmation.
+
+**Copy:**
+
+- `"Reconnecting..."` (8-30s)
+- `"Reconnecting... Attempt 4"` (30s+)
+- `"Lost connection 12s ago"` / `"Lost connection 45s ago"` (right-aligned, rolling timestamp)
+
+---
+
+## State 3: First Load — Server Not Running
+
+**The user opened a web URL but the desktop app is off.** This is the coldest state — they have no context, no data, no prior connection. The interface must orient them and give them something to do.
+
+### Visual treatment
+
+**Full-page centered layout** (replaces the current plain text "Cannot connect to server" in `ServerLayout`). Uses the product's existing illustration style — the phone and laptop connected by a tangled orange cord.
+
+**Component:** `ServerOfflinePage` — renders instead of `<Outlet>` when `settingsQuery.isError && !settingsQuery.data`.
+
+**Layout:**
+
+```
+┌──────────────────────────────────────────────┐
+│                                              │
+│              [illustration]                  │
+│         (phone + laptop + cord)              │
+│                                              │
+│        Your computer is offline              │
+│                                              │
+│    Open the OpenDevs desktop app to          │
+│    connect this browser to your agents.      │
+│                                              │
+│            [ Try again ]                     │
+│                                              │
+│    ·  ·  ·   Waiting for connection          │
+│                                              │
+└──────────────────────────────────────────────┘
+```
+
+**Specifics:**
+
+- Background: `--bg-base` (`#0b0b0b`) — the deepest surface, establishing this as a "ground floor" state
+- Illustration: Existing warm illustration asset (phone + laptop + tangled orange cord), max-width 280px, centered. If no illustration asset exists, substitute a minimal icon composition: a laptop outline (`Monitor` from lucide) with a dashed line to a cloud, in `--text-disabled` color
+- Heading: `"Your computer is offline"` — `text-xl font-semibold tracking-tight text-foreground`. Direct, not technical. "Computer" is warmer than "server" or "backend."
+- Subtext: `"Open the OpenDevs desktop app to connect this browser to your agents."` — `text-sm text-muted-foreground`, max-width 320px, text-center
+- Button: `"Try again"` — `variant="outline" size="sm"`, calls `settingsQuery.refetch()`. Outline variant, not primary — this is a fallback action, not the main path
+- Below the button: three pulsing dots (reuse `PulsingDots` component) + `"Waiting for connection"` in `text-xs text-text-muted`. This auto-tries in the background: the settings query already has `retry` behavior from React Query. The dots communicate "I'm already trying."
+
+**Auto-reconnect behavior:**
+
+The page polls `settingsQuery.refetch()` every 5 seconds silently. When the backend comes online, the page automatically transitions to the main layout. No manual "retry" needed in practice — the button is a confidence mechanism.
+
+**Animation:**
+
+- Page enters with staggered fade-in:
+  - Illustration: `initial={{ opacity: 0, y: -8 }}`, `animate={{ opacity: 1, y: 0 }}`, `delay: 0`
+  - Heading: same, `delay: 0.08`
+  - Subtext: same, `delay: 0.14`
+  - Button: same, `delay: 0.2`
+  - Waiting indicator: same, `delay: 0.4`
+- All transitions use `duration: 0.35, ease: [0.165, 0.84, 0.44, 1]`
+- On backend becoming available: `exit={{ opacity: 0, scale: 0.98 }}`, `duration: 0.25` — matches the `ConnectingView` exit pattern from `PairGatePage`
+
+**Copy:**
+
+- `"Your computer is offline"` (heading)
+- `"Open the OpenDevs desktop app to connect this browser to your agents."` (body)
+- `"Try again"` (button)
+- `"Waiting for connection"` (ambient indicator)
+
+---
+
+## State 4: Unauthenticated / Unpaired
+
+**The user has a valid relay URL but no device token.** They need to pair their browser with their desktop app. This is already well-handled by `PairGatePage` — the design direction here is refinement, not replacement.
+
+### What stays
+
+The `PairGatePage` flow (manual code entry, auto-connect from URL, success checkmark) is excellent. The three-state animation choreography (`ConnectingView` / `SuccessView` / `ManualEntryView`) is clean and follows the product's spring-physics language.
+
+### What changes
+
+**Add a warm illustration** to the manual entry state. Currently `ManualEntryView` is purely typographic. Add the tangled-cord illustration above the `BrandMark`, at 200px width, to establish visual warmth and continuity with State 3 (`ServerOfflinePage`).
+
+**Differentiate "server offline" from "unpaired":**
+
+The relay WS client already receives `server_reconnecting` frames. When the relay connection is open but the desktop server is down, the UI should show a specialized variant of `ServerOfflinePage` that acknowledges the relay is working:
+
+- Heading: `"Your computer isn't connected"` (not "offline" — the relay works, but the desktop app's server isn't sending data)
+- Subtext: `"The desktop app may have closed or lost its connection. Reopen it to continue."` 
+- The three pulsing dots + `"Waiting for reconnection"` remain
+- **No "Try again" button** — in relay mode, the WebSocket stays open and the relay will push `server_connected` automatically. A manual retry button would be misleading.
+
+**Component structure:**
+
+```tsx
+// In ServerContent, replace the isError block:
+if (settingsQuery.isError && !settingsQuery.data) {
+  return <ServerOfflinePage mode={isRelayMode() ? "relay" : "direct"} onRetry={() => settingsQuery.refetch()} />;
+}
+```
+
+`ServerOfflinePage` accepts a `mode` prop:
+- `"direct"`: Shows "Your computer is offline" + "Try again" button + auto-poll
+- `"relay"`: Shows "Your computer isn't connected" + no retry button + auto-reconnect via relay WS
+
+**`server_reconnecting` mid-session handling:**
+
+When the relay WS receives `server_reconnecting` while the user is already using the app (they had a session, data in cache), the `ConnectionStatusBar` (from State 2) appears, but with relay-specific copy:
+
+- `"Desktop app disconnected..."` instead of `"Reconnecting..."`
+- The right side shows `"Waiting for your computer"` instead of attempt counts (because the relay handles reconnection, not the client)
+
+On `server_connected`, the bar exit-animates identically to State 2.
+
+**Copy:**
+
+- Unpaired: existing `PairGatePage` copy (no changes)
+- Relay server offline (cold): `"Your computer isn't connected"` / `"The desktop app may have closed or lost its connection. Reopen it to continue."`
+- Relay server offline (warm, mid-session): `"Desktop app disconnected..."` / `"Waiting for your computer"`
+
+---
+
+## 3 Key Decisions
+
+**1. Grace period before any visual feedback (1.5 seconds).**
+
+Most WebSocket disconnects in local development and even relay mode are transient — a Wi-Fi re-association, a macOS sleep/wake cycle, a backend hot-reload. Showing any indicator for these sub-second events would train users to associate the IDE with fragility. The 1.5-second grace period absorbs the majority of flaky disconnects silently. The user's experience is: "It just works." The 1.5s threshold was chosen because the existing backoff starts at 500ms and doubles — a disconnect that auto-resolves within 1.5s will have completed at most one reconnect attempt.
+
+**2. Ambient environmental response instead of discrete alerts.**
+
+Rather than adding toasts, banners, or modal overlays for connection issues, the design modulates *existing* visual properties — color saturation, animation speed, surface luminance. This follows Fukasawa's principle: the interface's "mood" shifts, not its structure. A toast demands attention and creates cognitive overhead ("Should I dismiss this? Is my work lost?"). An environment that feels slightly dimmer creates awareness without anxiety. The user's autonomic response is correct — "something feels different" — but they don't need to act on it.
+
+**3. Separate the relay "server disconnected" state from local disconnection.**
+
+In relay mode, the WebSocket between browser and relay stays open even when the desktop app goes down. The user's mental model is different: they're connected to a service, but their computer went away. The copy and behavior must reflect this distinction. Showing reconnection attempts (which the relay manages transparently) or a "Retry" button (which would do nothing useful) would violate the user's expectations. Instead, the interface says "waiting for your computer" — accurate, calm, and action-clear ("go open the desktop app").
+
+---
+
+## 1 Acknowledged Tradeoff
+
+**The ambient desaturation approach (CSS variable modulation) is invisible to users who are not visually attentive.** Someone focused on reading a chat transcript during a 5-second disconnect will not notice the chroma shift from `0.09` to `0.04` on the primary accent. This is intentional — for brief outages, we *want* invisibility — but it means that if a user sends a message during the 1.5-8 second window (after grace period, before status bar), the message will silently queue and the user has no feedback that it didn't send immediately. The mitigation is that messages appear instantly in the optimistic React Query cache, and the actual send latency (when the WS reconnects seconds later) is indistinguishable from normal agent processing time. The risk is low, but not zero — a user sending a time-sensitive "stop" command during a 6-second outage would experience a ~6-second delay with no indication it hasn't been delivered yet. For a v2 iteration, a per-message delivery indicator (subtle checkmark on sent messages) could close this gap, but adding that now would violate the "design dissolving into behavior" principle by introducing an element that is 99.9% redundant in normal operation.</result>
+<usage><total_tokens>78709</total_tokens><tool_uses>30</tool_uses><duration_ms>235954</duration_ms></usage>
+</task-notification>
+Full transcript available at: /private/tmp/claude-501/-Users-zvada-Developer-agent-box-ide--conductor-philadelphia-v2/30b05dd9-97c2-480d-8a76-d34505fc8fb0/tasks/a8be29568b5415ba6.output
+
+---
+
+show it to me with cli viuslaise hwo it will work
+
+---
+
+okye, this is prety good, wdyt? do u like it? any feeback on this before we impe,nt it?
+
+---
+
+yes
+
+---
+
+/code-simplifier
+
+---
+
+I run AI code review, is it actionable? Wdyt? Explore in depth each problem.
+
+We want a clean, maintainable codebase, with proper best practices for the tech stack we use.
+
+Run subagents to verify, and if it should be fixed, try to merge some stuff together so it can be fixed together within one subagent. 
+
+If you can test something do it.
+
+----
+
+I've thoroughly reviewed all the changes. Here's my assessment.
+
+---
+
+## Review: Web Connection Overlay
+
+**Branch:** `zvadaadam/web-connection-overlay` (all uncommitted changes, no PR yet)
+
+### Summary
+
+New `features/connection` module implementing a WebSocket connection state machine with UI overlays. The module tracks connection health through 4 states (CONNECTED → GRACE_PERIOD → RECONNECTING → DISCONNECTED) and provides:
+
+- **ConnectionBanner** — top-of-content bar with amber accent during reconnection
+- **ConnectionOrb** — sidebar footer dot replacing `BackendStatusIndicator`
+- **ServerOfflinePage** — full-page offline state (replaces inline JSX in DesktopShell/ServerLayout)
+- **Event bus** (`connectionEvents.ts`) — allows `useSendMessage` to escalate state when a command fails mid-flight
+
+The architecture is clean: Zustand store + module-level event bus + init hook wired in MainLayout. Color tokens, animation patterns, and `ts-pattern` usage all align with CLAUDE.md guidelines.
+
+### Findings
+
+**No runtime bugs found.** The state machine transitions are correct, timer cleanup is solid, error message matching covers all `sendCommand` rejection paths, and the `forceReconnect()` → `onDisconnected()` re-entry guard is handled properly.
+
+---
+
+### #1 — `useConnectionState` facade hook defeats Zustand selector discipline
+
+**Severity:** CLAUDE.md violation (low practical impact)
+
+**File:** `apps/web/src/features/connection/hooks/useConnectionState.ts`
+
+The facade hook creates 5 subscriptions internally:
+
+```ts
+const state = useConnectionStore((s) => s.state);
+const disconnectedAt = useConnectionStore((s) => s.disconnectedAt);
+const sendAttemptFailed = useConnectionStore((s) => s.sendAttemptFailed);
+const retry = useConnectionStore((s) => s.retry);
+const markSendAttemptFailed = useConnectionStore((s) => s.markSendAttemptFailed);
+```
+
+Every consumer of `useConnectionState()` subscribes to **all 5 fields**, regardless of what they actually use. `ConnectionOrb` and `MainContent` only need `state` but will re-render when `disconnectedAt` or `sendAttemptFailed` changes.
+
+CLAUDE.md rule (verbatim):
+> **Zustand selector discipline** — never subscribe to an entire store. Always use individual selectors:
+> ```tsx
+> // ❌ BAD — re-renders on ANY store change
+> const { collapsedRepos, toggleRepoCollapse } = useSidebarStore();
+> ```
+
+**Fix:** Have consumers use `useConnectionStore((s) => s.state)` directly when they only need one field. The facade hook is fine for `ConnectionBanner` which needs 3 fields.
+
+---
+
+**Practical impact is low** — the store has only 3 mutable fields, `retry`/`markSendAttemptFailed` are stable function refs, and state changes happen rarely (only on disconnect/reconnect). But the pattern sets a precedent that could be more costly in larger stores.
+
+Overall this is a well-structured feature that follows the project's architecture patterns. No bugs, good accessibility (`aria-live`, `useReducedMotion`), correct animation primitives (transform + opacity only), proper use of `ts-pattern` with `.exhaustive()`, and color tokens from the design system.
+
+---
+
+<system_instruction>
+The user has attached these files. Read them before proceeding.
+- /Users/zvada/Developer/agent/box-ide/.conductor/philadelphia-v2/.context/attachments/PR instructions.md (957 B)
+</system_instruction>
+
+
+
+Create a PR
+
+---
+
+<system-instruction>
+The user has added 2 comments to the diff for this workspace. Please review and address these comments as part of your response. When addressing comments on the "original" side or on specific commits, read the file from that version (not the current version). Below are the comments, including metadata about what git state they were left on:
+
+Comment #1:
+
+File: 
+Line: undefined
+User comment: "<!-- This is an auto-generated comment: summarize by coderabbit.ai -->
+<!-- walkthrough_start -->
+
+<details>
+<summary>📝 Walkthrough</summary>
+
+## Walkthrough
+
+This pull request introduces a comprehensive WebSocket connection state machine and associated UI components to provide users with real-time feedback on connection status. A Zustand store manages a state flow (connected → grace_period → reconnecting → disconnected) with timers for recovery logic. React hooks integrate WebSocket events and send failures into the store, while new UI components (ConnectionBanner, ConnectionOrb, ServerOfflinePage) visualize connection states. Existing layouts and sidebar components are updated to display these indicators.
+
+## Changes
+
+|Cohort / File(s)|Summary|
+|---|---|
+|**Documentation** <br> `.claude/agent-memory/code-reviewer/MEMORY.md`|Added detailed documentation of connection state machine lifecycle, Zustand transitions, WS error matching requirements, and UI behavior constraints for banner animations and color transitions.|
+|**State Management** <br> `apps/web/src/features/connection/store/connectionStore.ts`, `apps/web/src/features/connection/lib/connectionEvents.ts`|Introduced Zustand-based connection store with state machine logic (transitions between connected/grace_period/reconnecting/disconnected, timers for recovery escalation, immediate escalation on send failures) and module-level event emitter for send-attempt-failed notifications.|
+|**Connection Hooks** <br> `apps/web/src/features/connection/hooks/useConnectionState.ts`, `apps/web/src/features/connection/hooks/useConnectionStateInit.ts`|Added hook for reading UI-relevant connection state fields (state, sendAttemptFailed, retry) and initialization hook that subscribes to WebSocket changes and send failures, driving Zustand store transitions on component mount.|
+|**Connection UI Components** <br> `apps/web/src/features/connection/ui/ConnectionBanner.tsx`, `apps/web/src/features/connection/ui/ConnectionOrb.tsx`, `apps/web/src/features/connection/ui/ServerOfflinePage.tsx`, `apps/web/src/features/connection/ui/ConnectionIllustration.tsx`|Added four new UI components: fixed-height top banner with animated reconnection/queued-message states, sidebar footer health indicator with breathing pulse animation, full-screen offline page with variant-specific copy (desktop vs. relay), and SVG illustration for connection-related empty states.|
+|**Feature Exports** <br> `apps/web/src/features/connection/index.ts`|Created barrel export file defining the public API surface for hooks, types, components, and event emitter from the connection feature.|
+|**Layout Integration** <br> `apps/web/src/app/layouts/MainContent.tsx`, `apps/web/src/app/layouts/MainLayout.tsx`, `apps/web/src/app/shells/DesktopShell.tsx`, `apps/web/src/app/shells/ServerLayout.tsx`|Updated main content layout to render ConnectionBanner and apply opacity transition during disconnection; initialized connection state in MainLayout; replaced inline backend-unreachable fallback UI in DesktopShell and ServerLayout with ServerOfflinePage component.|
+|**Sidebar & Session Updates** <br> `apps/web/src/features/sidebar/ui/SidebarFooter.tsx`, `apps/web/src/features/session/api/session.queries.ts`|Replaced BackendStatusIndicator with ConnectionOrb in sidebar footer; added send-attempt-failed event emission in session message mutation error handler when WebSocket connectivity messages are detected.|
+
+## Sequence Diagram
+
+```mermaid
+sequenceDiagram
+    actor User
+    participant WS as WebSocket Layer
+    participant Store as Connection Store
+    participant Hooks as Connection Hooks
+    participant UI as UI Components
+
+    User->>WS: Network disrupted
+    WS->>Hooks: onConnectionChange(false)
+    Hooks->>Store: onDisconnected()
+    Store->>Store: state: "grace_period"<br/>(2s timer)
+    Store->>UI: Notify state change
+    UI->>UI: Render ConnectionBanner<br/>"Reconnecting..."
+
+    Note over Store: 2s elapsed
+    Store->>Store: state: "reconnecting"<br/>(escalation timer: 30s)
+
+    User->>WS: Send message fails
+    WS->>Hooks: Error: "not connected"
+    Hooks->>Store: markSendAttemptFailed()
+    Store->>Store: Escalate: state: "disconnected"<br/>sendAttemptFailed: true
+    Store->>UI: Notify state change
+    UI->>UI: Update banner to<br/>"Message queued"
+
+    User->>UI: Click "Retry now"
+    UI->>Store: retry()
+    Store->>WS: forceReconnect()
+    WS->>WS: Reconnect attempt
+    WS->>Hooks: onConnectionChange(true)
+    Hooks->>Store: onConnected()
+    Store->>Store: state: "connected"<br/>Clear timers
+    Store->>UI: Notify state change
+    UI->>UI: Hide banner,<br/>show green orb
+```
+
+## Estimated Code Review Effort
+
+🎯 3 (Moderate) | ⏱️ ~20 minutes
+
+## Poem
+
+> 🐰 *Whisker-twitching tales of reconnection,*  
+> *A state machine blooms with grace and section,*  
+> *When networks wane, our banner takes flight—*  
+> *Grace, then reconnect, then back to the light!*  
+> *The orb glows green when all is well,* 🟢✨
+
+</details>
+
+<!-- walkthrough_end -->
+
+
+<!-- tips_start -->
+
+---
+
+<sub>Comment `@coderabbitai help` to get the list of available commands and usage tips.</sub>
+
+<!-- tips_end -->
+
+<!-- internal state start -->
+
+
+<!-- REDACTED/REDACTED/REDACTED/tPMgDAtKUGhsNoO8JGQY8fxZJh/REDACTED/REDACTED/REDACTED/HbsBnlobBlxTr4PjZ/REDACTED/REDACTED/REDACTED/REDACTED/REDACTED/REDACTED/REDACTED/C4HkH/REDACTED/REDACTED/REDACTED/REDACTED/REDACTED/REDACTED/Y9wy/REDACTED/REDACTED/REDACTED/5CdiMf9Sc/REDACTED/REDACTED/TRAcg9TWQigMPXrHXFgx/REDACTED/REDACTED/P4hpHDAE8+IEr/AmX/REDACTED/dTdLJHELPyedXXQ09gk08hbggjC0y3CxG3CTEyjMA/REDACTED/REDACTED/HS34rDfSnHZwQEg4YE7/REDACTED/REDACTED/REDACTED/REDACTED/REDACTED//REDACTED/REDACTED/REDACTED/1711D/REDACTED/REDACTED/ibEiENzieDlqUgBNctYRSG/REDACTED/1os/REDACTED/q/REDACTED/REDACTED/BszgaIQyL/HCmimcjJooZmfR2wwzqSscSaSwhdQ/xjbwRUX+r/REDACTED/oWHJokA1YopQ/REDACTED/REDACTED/REDACTED/REDACTED/REDACTED/bGcjB8MLgEagdBOgJhRqJqDLzMGqCLB6MLgB6g/REDACTED/REDACTED/REDACTED/REDACTED/REDACTED/FXhv0zyToEdD/REDACTED/REDACTED/REDACTED/REDACTED/REDACTED/dAAwGXC8pUZ3kI0TGCCYJB/REDACTED/REDACTED/FwBnSsT7ZfPGKpZERljhFRwMwzh8D2FDT/REDACTED/LdiNlL4BON+kmRB9jaxDHkMVuH0/Ep9HBynIYwG5aIWnx/z4C/2XAZSCQA8jwhKMykoSM8jiFPcphN/REDACTED/REDACTED/REDACTED/nREB0linmJ3MqR7J/REDACTED/REDACTED/JQ1tTLAJkozDZKeYv/Fyn/REDACTED/REDACTED/uCRp/VVT/REDACTED/REDACTED -->
+
+<!-- internal state end -->"
+
+Comment metadata:
+This comment was left on a file.
+This comment was left on GitHub by @coderabbitai.
+
+
+Comment #2:
+
+File: apps/web/src/features/session/api/session.queries.ts
+Line: 365
+User comment: "_⚠️ Potential issue_ | _🟡 Minor_
+
+<details>
+<summary>🧩 Analysis chain</summary>
+
+🏁 Script executed:
+
+```shell
+#!/bin/bash
+# Verify current WS-layer error wording used by connect/send paths.
+# Expected: enumerate all thrown/rejected connectivity error strings so we can
+# confirm whether current substring checks are comprehensive.
+
+set -euo pipefail
+
+echo "== Candidate WS implementation files =="
+fd 'ws.*\.ts$' apps/web/src
+
+echo
+echo "== Connectivity-related error sites =="
+fd 'ws.*\.ts$' apps/web/src -x rg -n -C2 'throw new Error|Error\(|not connected|disconnected|socket|closed'
+
+echo
+echo "== sendCommand/connect usage context =="
+rg -n -C2 '\bsendCommand\s*\(|\bconnect\s*\(' apps/web/src/features/session/api/session.queries.ts apps/web/src/platform
+```
+
+Repository: zvadaadam/box-ide
+
+Length of output: 727
+
+---
+
+🏁 Script executed:
+
+```shell
+# Search for WebSocket client setup and actual implementation
+echo "=== Searching for WebSocket client initialization ==="
+rg -n "new WebSocket|ws\(" apps/web/src --type ts --type tsx -B2 -A2
+
+echo
+echo "=== Look at the full context of lines 359-375 in session.queries.ts ==="
+sed -n '350,380p' apps/web/src/features/session/api/session.queries.ts
+
+echo
+echo "=== Search for error handling patterns around WebSocket errors ==="
+rg -n "instanceof Error|Error\(|disconnect|connectivity" apps/web/src/features/session/api/session.queries.ts -B1 -A1
+
+echo
+echo "=== Find where WebSocket is imported/used in the session module ==="
+rg -n "import.*[Ww]eb[Ss]ocket|WebSocket|ws\b" apps/web/src/features/session --type ts --type tsx
+```
+
+Repository: zvadaadam/box-ide
+
+Length of output: 2168
+
+---
+
+🏁 Script executed:
+
+```shell
+# Search without problematic type flags
+echo "=== WebSocket imports and setup ==="
+rg -n "WebSocket|ws\(" apps/web/src/features/session -B2 -A2
+
+echo
+echo "=== Check useWsToolRequest hook mentioned in earlier search ==="
+head -100 apps/web/src/shared/hooks/useWsToolRequest.ts
+
+echo
+echo "=== Search broadly for error message generation ==="
+rg -n '"WebSocket|disconnected|not connected' apps/web/src
+
+echo
+echo "=== Check the full session.queries.ts file structure and imports ==="
+head -50 apps/web/src/features/session/api/session.queries.ts
+```
+
+Repository: zvadaadam/box-ide
+
+Length of output: 13107
+
+---
+
+🏁 Script executed:
+
+```shell
+# Double-check: verify "WebSocket connection failed" is thrown in connectivity context
+sed -n '620,635p' apps/web/src/platform/ws/query-protocol-client.ts
+```
+
+Repository: zvadaadam/box-ide
+
+Length of output: 519
+
+---
+
+</details>
+
+**Harden disconnect detection beyond message substrings.**
+
+Lines 364–365 rely on substring matching which misses error variants. The WS client throws "WebSocket connection failed" on failed connect attempts, but the current check only catches "not connected" or "disconnected"—causing missed state escalation.
+
+<details>
+<summary>💡 Suggested direction</summary>
+
+```diff
+-      if (_err instanceof Error) {
+-        const msg = _err.message.toLowerCase();
+-        if (msg.includes("not connected") || msg.includes("disconnected")) {
+-          emitSendAttemptFailed();
+-        }
+-      }
++      if (isWsConnectivityError(_err)) {
++        emitSendAttemptFailed();
++      }
+```
+
+Define `isWsConnectivityError` once in the WS layer (or a shared util) and reuse it here.
+</details>
+
+<details>
+<summary>🤖 Prompt for AI Agents</summary>
+
+```
+Verify each finding against the current code and only fix it if needed.
+
+In `@apps/web/src/features/session/api/session.queries.ts` around lines 362 - 365,
+The current detection of WS disconnects in the _err handler (the block that
+calls emitSendAttemptFailed) is brittle because it only checks message
+substrings; create or import a shared predicate named isWsConnectivityError in
+the WS layer/util and use it here instead of substring checks: replace the
+msg.includes(...) logic with a call to isWsConnectivityError(_err) (or
+isWsConnectivityError(_err.message)) so errors like "WebSocket connection
+failed" and other variants are consistently detected and trigger
+emitSendAttemptFailed. Ensure the new predicate is exported from the WS layer or
+shared utils and update imports in session.queries.ts where _err is evaluated.
+```
+
+</details>
+
+<!-- fingerprinting:phantom:poseidon:hawk -->
+
+<!-- This is an auto-generated comment by CodeRabbit -->"
+
+Comment metadata:
+This comment was left on the modified branch.
+This comment was left on GitHub by @coderabbitai.
+This comment is the start of thread PRRT_kwDOQEbULc52AUv0. 
+
+</system-instruction>
+
+I run AI code review, is it actionable? Wdyt? Explore in depth each problem.
+
+We want a clean, maintainable codebase, with proper best practices for the tech stack we use.
+
+Run subagents to verify, and if it should be fixed, try to merge some stuff together so it can be fixed together within one subagent. 
+
+If you can test something do it.
+
+---
+
+<system_instruction>
+The user has attached these files. Read them before proceeding.
+- /Users/zvada/Developer/agent/box-ide/.conductor/philadelphia-v2/.context/attachments/Lint__Format___Typecheck_68108056418.log (72.1 KB)
+</system_instruction>
+
+
+
+Fix the failing CI actions. I've attached the failure logs.
+
+---
+
+<system_instruction>
+The user has attached these files. Read them before proceeding.
+- /Users/zvada/Developer/agent/box-ide/.conductor/philadelphia-v2/.context/attachments/Lint__Format___Typecheck_68108650955.log (71.5 KB)
+</system_instruction>
+
+
+
+Fix the failing CI actions. I've attached the failure logs.
+
+---
+
+I run AI code review, is it actionable? Wdyt? Explore in depth each problem.
+
+We want a clean, maintainable codebase, with proper best practices for the tech stack we use.
+
+Run subagents to verify, and if it should be fixed, try to merge some stuff together so it can be fixed together within one subagent. 
+
+If you can test something do it.
+
+Review complete. Here are the validated findings:
+
+---
+
+## Review: PR #197 — feat: connection state overlay for web app
+
+3 issues found, 2 filtered out after validation.
+
+---
+
+### **#1 `retry()` provides no visual feedback when WebSocket is already closed**
+
+When the user clicks "Retry now" after 30+ seconds of disconnection, `retry()` calls `forceReconnect()`. By that point, the `ws` reference is `null` (cleaned up by `onclose` long ago). `forceReconnect()` only calls `notifyConnectionChange(false)` inside an `if (ws)` guard — so it's skipped entirely. The store state stays stuck at `"disconnected"` with no transition to `"reconnecting"` or `"grace_period"`. The user sees zero visual feedback until the new socket either connects (jumping straight to "connected") or fails silently.
+
+**Fix:** Have `retry()` reset the store state to `"grace_period"` before calling `forceReconnect()`, so the user gets immediate acknowledgment.
+
+File: `apps/web/src/features/connection/store/connectionStore.ts:95-97`
+
+---
+
+### **#2 `emitSendAttemptFailed()` misses `connect()` rejection errors**
+
+The `onError` handler in `useSendMessage` checks for `"not connected"` or `"disconnected"` in the error message. But when the WS is down, the mutation calls `await connect()` (line 267), which rejects with `"WebSocket connection failed"` — a string that matches neither check. The escalation from GRACE_PERIOD/RECONNECTING to DISCONNECTED never fires for this code path, defeating the intended design.
+
+The three WS error strings are:
+- `"WebSocket not connected"` — caught
+- `"WebSocket disconnected"` — caught  
+- `"WebSocket connection failed"` — **not caught**
+
+**Fix:** Also match `"connection failed"`, or more robustly, call `emitSendAttemptFailed()` for any error when `!isConnected()`.
+
+File: `apps/web/src/features/session/api/session.queries.ts:362-367`
+
+---
+
+### **#3 Built-in CSS easing `"easeInOut"` violates CLAUDE.md**
+
+The `WaitingDots` component uses `ease: "easeInOut"` on its Framer Motion transition. CLAUDE.md explicitly states: *"Don't use built-in CSS easings (ease-out, ease-in, etc.) except `ease` for hover and `linear` for constant-speed. Always use custom cubic-bezier curves."* For an infinite pulsing loop, `"linear"` is the appropriate choice.
+
+**Fix:** Replace `ease: "easeInOut"` with `ease: "linear"` or a custom cubic-bezier.
+
+File: `apps/web/src/features/connection/ui/ServerOfflinePage.tsx:116`
+
+---
+
+### Filtered out (not real issues)
+
+- **Timer cleanup on unmount**: Timers are module-scoped and self-managed by store actions. Even during route transitions where `MainLayout` remounts, the `isConnected()` check on mount self-heals the state.
+- **Initial state "connected" when WS never connects**: When the backend is unreachable on startup, `ServerLayout` renders `ServerOfflinePage` instead of `MainLayout`, so the `ConnectionOrb` is never mounted. No green dot is shown to the user.
