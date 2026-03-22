@@ -1,0 +1,31 @@
+can u try ot if it gona work?
+
+---
+
+<system_instruction>
+The user has attached these files. Read them before proceeding.
+- /Users/zvada/Developer/agent/box-ide/.conductor/dhaka-v7/.context/attachments/PR instructions.md (952 B)
+</system_instruction>
+
+
+
+Create a PR
+
+---
+
+idk, wass it deployed or what is in the conect page becasuye now it still has word + number irght? can u epxlore if the correct deploye dwas done or not
+
+---
+
+<system_instruction>
+The user has attached these files. Read them before proceeding.
+- /Users/zvada/Developer/agent/box-ide/.conductor/dhaka-v7/.context/attachments/Screenshot 2026-03-22 at 10.20.04 PM.png (56.0 KB)
+</system_instruction>
+
+
+
+https://app.rundeus.com/s/145b2b80 - this has also the word and code
+
+---
+
+but i told u to dpeloy it soem maybe teh deployed failed cna u verify?
