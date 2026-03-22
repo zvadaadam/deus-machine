@@ -705,7 +705,12 @@ export function Chat({
                       indicatorMarginClass
                     )}
                   >
-                    <CircularPixelGrid variant={agentSubState} size={20} resolution={12} className="flex-shrink-0" />
+                    <CircularPixelGrid
+                      variant={agentSubState}
+                      size={20}
+                      resolution={12}
+                      className="flex-shrink-0"
+                    />
                     <span className="text-foreground ml-1 font-mono text-xs tracking-tight tabular-nums opacity-50">
                       {formattedDuration || "0.0s"}
                     </span>
