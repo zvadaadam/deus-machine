@@ -1,0 +1,23 @@
+{
+  "cli_version": "0.5.0",
+  "checkpoint_id": "43c76b5ad359",
+  "strategy": "manual-commit",
+  "branch": "zvadaadam/explore-pairing-ux",
+  "checkpoints_count": 3,
+  "files_touched": null,
+  "sessions": [
+    {
+      "metadata": "/43/c76b5ad359/0/metadata.json",
+      "transcript": "/43/c76b5ad359/0/full.jsonl",
+      "content_hash": "/43/c76b5ad359/0/content_hash.txt",
+      "prompt": "/43/c76b5ad359/0/prompt.txt"
+    }
+  ],
+  "token_usage": {
+    "input_tokens": 203,
+    "cache_creation_tokens": 264772,
+    "cache_read_tokens": 25852416,
+    "output_tokens": 68619,
+    "api_call_count": 145
+  }
+}
