@@ -32,6 +32,20 @@ app.get("/onboarding/recent-projects", (c) => {
   return c.json({ projects: projects.slice(0, 30) });
 });
 
+// Worktree directories created by AI coding tools — filter these from recent projects
+// so only root repos are shown, not individual worktree checkouts.
+const WORKTREE_SEGMENTS = [
+  "/.opendevs/",           // OpenDevs worktrees
+  "/.conductor/",          // OpenDevs legacy worktrees
+  "/.claude/worktrees/",   // Claude Code worktrees
+  "/.cursor/worktrees/",   // Cursor parallel agent worktrees
+  "/copilot-worktree/",    // GitHub Copilot CLI worktrees
+];
+
+function isWorktreePath(fsPath: string): boolean {
+  return WORKTREE_SEGMENTS.some((seg) => fsPath.includes(seg));
+}
+
 function readVscdbProjects(
   dbPath: string,
   source: "cursor" | "vscode",
@@ -54,7 +68,7 @@ function readVscdbProjects(
       const uri = entry.folderUri;
       if (!uri || !uri.startsWith("file://")) continue;
       const fsPath = decodeURIComponent(uri.replace("file://", ""));
-      if (seen.has(fsPath) || !existsSync(fsPath)) continue;
+      if (seen.has(fsPath) || isWorktreePath(fsPath) || !existsSync(fsPath)) continue;
       seen.add(fsPath);
       projects.push({ path: fsPath, name: basename(fsPath), source });
     }
@@ -75,7 +89,7 @@ function readClaudeProjects(dir: string, projects: RecentProject[], seen: Set<st
       // e.g., "-Users-zvada-Developer-myproject" -> "/Users/zvada/Developer/myproject"
       const decoded = entry.name.replace(/-/g, "/");
       if (!decoded.startsWith("/")) continue;
-      if (seen.has(decoded) || !existsSync(decoded)) continue;
+      if (seen.has(decoded) || isWorktreePath(decoded) || !existsSync(decoded)) continue;
       seen.add(decoded);
       projects.push({ path: decoded, name: basename(decoded), source: "claude" });
     }
