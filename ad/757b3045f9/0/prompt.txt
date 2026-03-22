@@ -1,0 +1,140 @@
+<system_instruction>
+You are working inside OpenDevs, a Mac app that lets the user run many coding agents in parallel.
+Your work should take place in the /Users/zvada/Developer/agent/box-ide/.conductor/da-nang-v4 directory (unless otherwise directed), which has been set up for you to work in.
+Each workspace has a .context directory (gitignored) where you can save files to collaborate with other agents.
+DO NOT EVER read or write files at /Users/zvada/Developer/agent/box-ide.
+The target branch for this workspace is main. Use this for actions like creating new PRs, bisecting, etc., unless you're told otherwise.
+
+If the user asks you to work on several unrelated tasks, you can suggest they start new workspaces.
+Sometimes the user might send you a message they meant to send in a different workspace or a different chat. If something doesn't make sense in the context of your work, just ask. 
+If the user asks for help with OpenDevs, you can ask them to go to "Help -> Send Feedback" to get in touch with our team.
+</system_instruction>
+
+Can you explore how OpenDevs actually names the branches and how does it work and names the branches, but also what is the strategy for showing the title of the workspace? Because the workspace row in the sidebar is changing based on some stuff. How this actually has the strategy. When the first message is sent, then the name of the branch is updated and I want to know how this is done. Is there some AI that is doing? There is a tool called Can You Explore? in the conductor app
+
+OpenDevs - /Applications/OpenDevs.app
+
+---
+
+But I'm definitely sure it gets the title after first message. Maybe that's a Claude Code thing. Maybe Claude Code is doing it, the Agent SDK. Can you explore in depth in OpenDevs?
+
+---
+
+Oh yeah, this is exactly it. We need this for Claude Code, but also for Codex. So think about think about how we can do it, look at the whole flow and how this could be done like, but we don't want to over engineer the system. It needs to be simple, easy, how to flow through the data.
+
+---
+
+okey do it
+
+---
+
+/code-simplifier
+
+---
+
+<system-instruction>
+The user has added 1 comment to the diff for this workspace. Please review and address these comments as part of your response. When addressing comments on the "original" side or on specific commits, read the file from that version (not the current version). Below are the comments, including metadata about what git state they were left on:
+
+Comment #1:
+
+File: apps/sidecar/agents/claude/stream-context.ts
+Line: 21
+User comment: "Why do we have the title "Emit" that shouldn't be passed the title or it's irrelevant?"
+
+Comment metadata:
+This comment was left on the modified branch.
+
+</system-instruction>
+
+Also, for the codex, we don't have it?
+
+---
+
+Okay, so now the sidebar displays strategy what it is right now. Since we got the title and these kind of things, so what's the priority there?
+
+---
+
+yes
+
+---
+
+<system_instruction>
+The user has attached these files. Read them before proceeding.
+- /Users/zvada/Developer/agent/box-ide/.conductor/da-nang-v4/.context/attachments/PR instructions.md (956 B)
+</system_instruction>
+
+
+
+Create a PR
+
+---
+
+I run AI code review, is it actionable? Wdyt? Explore in depth each problem.
+
+We want a clean, maintainable codebase, with proper best practices for the tech stack we use.
+
+Run subagents to verify, and if it should be fixed, try to merge some stuff together so it can be fixed together within one subagent. 
+
+If you can test something do it.
+
+(also maybe our claude.md aint the bets or stale ddyt?)
+
+---
+
+## Code Review: `zvadaadam/sidebar-grab-icon-fix`
+
+**Scope:** 46 files, ~939 additions / ~160 deletions (uncommitted). Adds create-workspace-from-PR/branch, git_origin_url propagation, session title auto-generation, sidebar UI overhaul, backend status indicator, BrowserView→WebContentsView migration, and UI refinements.
+
+---
+
+### #1 Security: Git argument injection via unsanitized `source_branch`
+
+`source_branch` is validated only as `z.string().optional()` and flows directly into `git fetch origin <branch>` at line 197 with no `--` end-of-options separator. A crafted value like `--upload-pack=/bin/malicious` would be interpreted by git as an option flag, enabling arbitrary command execution. Combined with the app's open CORS policy, a malicious website could exploit this via `POST http://localhost:{port}/api/workspaces`.
+
+**Fix:** Add branch name validation in `schemas.ts` and/or insert `"--"` before ref arguments:
+
+```ts
+// schemas.ts
+source_branch: z.string()
+  .refine((s) => !s.startsWith("-"), "Branch name must not start with a dash")
+  .optional(),
+
+// workspaces.ts line 197
+await execFileAsync("git", ["fetch", "origin", "--", parent_branch], { ... });
+```
+
+Apply the same to `target_branch`.
+
+**File:** `apps/backend/src/lib/schemas.ts:89`, `apps/backend/src/routes/workspaces.ts:197`
+
+---
+
+### #2 `blur(40px)` exceeds CLAUDE.md 20px maximum
+
+The `.vibrancy-bg` class uses `blur(40px)`, which is double the explicitly stated limit.
+
+> CLAUDE.md: "No blur values above 20px."
+
+**File:** `apps/web/src/global.css:1614`
+
+---
+
+### #3 Fragile `cursor-grab` specificity on RepositoryItem
+
+`SidebarRow` at line 61 applies `cursor-grab [&_*]:cursor-grab`, which targets all descendants. The action buttons inside (lines ~93, ~110) apply `cursor-pointer [&_*]:cursor-pointer`. Both selectors have identical specificity `(0,1,0)`, so the winner depends on Tailwind's CSS generation order — non-deterministic from the developer's perspective. This means action buttons may show a `grab` cursor instead of `pointer`.
+
+The drag cursor previously lived in `DraggableRepository.tsx` (the drag host), which is the correct location. Moving it into the inner presentation component splits responsibility and creates this conflict.
+
+**File:** `apps/web/src/features/sidebar/ui/RepositoryItem.tsx:61`
+
+---
+
+### #4 N+1 git subprocess loop in `backfillGitOriginUrls`
+
+The startup backfill spawns one sequential `git remote get-url origin` subprocess per repo with `git_origin_url IS NULL` — no concurrency cap, no batching.
+
+> CLAUDE.md: "Cap concurrent git subprocesses and queue excess work to prevent CPU spikes and I/O contention." and "Avoid per-item hooks that spawn git processes."
+
+Severity is bounded (one-time backfill, not steady-state), but with many repos the sequential loop delays startup and the `invalidate(["workspaces"])` call. Use `Promise.allSettled` with a concurrency limit (e.g., 5).
+
+**File:** `apps/backend/src/server.ts:50-65`
