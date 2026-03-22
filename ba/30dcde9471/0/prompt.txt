@@ -74,3 +74,14 @@ Yeah, that's pretty good. That's pretty good. Any other feedback on other animat
 ---
 
 Let's keep only the pixel grid, yeah, that's gonna be a dead code, but put there the deprecated and why it was it was moved for this equal pixel grid. And yeah, update it and the whole app, go through everything where it needs to be updated and for what and let's do. Let's wired it up.
+
+---
+
+<system_instruction>
+The user has attached these files. Read them before proceeding.
+- /Users/zvada/Developer/agent/box-ide/.conductor/tashkent-v3/.context/attachments/PR instructions.md (953 B)
+</system_instruction>
+
+
+
+Create a PR
