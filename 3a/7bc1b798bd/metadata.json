@@ -1,0 +1,23 @@
+{
+  "cli_version": "0.5.0",
+  "checkpoint_id": "3a7bc1b798bd",
+  "strategy": "manual-commit",
+  "branch": "zvadaadam/electron-prod-build",
+  "checkpoints_count": 2,
+  "files_touched": null,
+  "sessions": [
+    {
+      "metadata": "/3a/7bc1b798bd/0/metadata.json",
+      "transcript": "/3a/7bc1b798bd/0/full.jsonl",
+      "content_hash": "/3a/7bc1b798bd/0/content_hash.txt",
+      "prompt": "/3a/7bc1b798bd/0/prompt.txt"
+    }
+  ],
+  "token_usage": {
+    "input_tokens": 4229,
+    "cache_creation_tokens": 887422,
+    "cache_read_tokens": 17345395,
+    "output_tokens": 62856,
+    "api_call_count": 140
+  }
+}
