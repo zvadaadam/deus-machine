@@ -1,17 +1,33 @@
-// Browser gate page for remote device pairing.
+// Browser gate page for remote device connection.
 // Shown when a non-localhost browser accesses OpenDevs without a valid token.
-// Provides a split input (WORD + NUMBER) to enter a pairing code.
+//
+// Three visual states:
+//   1. Auto-connecting — QR/link path, no form, just a clean "Connecting..." with animation
+//   2. Success — checkmark with spring animation, brief pause before navigating
+//   3. Manual entry — single code input, shown when there's no code in the URL
 //
 // In relay mode (web-production), pairing happens through a one-shot WebSocket
 // to the relay's /pair endpoint. In direct mode (web-dev with remote host),
 // pairing POSTs to the backend's /api/remote-auth/pair endpoint.
 
 import { useState, useRef, useEffect, useCallback } from "react";
+import { AnimatePresence, m, useReducedMotion } from "framer-motion";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { Loader2 } from "lucide-react";
+import { Check } from "lucide-react";
 import { isRelayMode, RELAY_BASE_URL } from "@/shared/config/backend.config";
+
+// ---------------------------------------------------------------------------
+// Constants
+// ---------------------------------------------------------------------------
+
+const EASE_OUT_QUART = [0.165, 0.84, 0.44, 1] as const;
+const SPRING_OVERSHOOT = { type: "spring", stiffness: 300, damping: 20 } as const;
+const SUCCESS_HOLD_MS = 1500;
+
+// ---------------------------------------------------------------------------
+// Types
+// ---------------------------------------------------------------------------
 
 interface PairGatePageProps {
   onPaired: (token: string, deviceName?: string) => void;
@@ -19,14 +35,40 @@ interface PairGatePageProps {
   serverId?: string;
 }
 
-/** Parse ?pair=WORD-NNNN from URL params. */
-function getPairFromUrl(): { word: string; number: string } | null {
-  const params = new URLSearchParams(window.location.search);
-  const pair = params.get("pair");
-  if (!pair) return null;
-  const match = pair.match(/^([A-Za-z]+)-(\d{4})$/);
-  if (!match) return null;
-  return { word: match[1].toUpperCase(), number: match[2] };
+type PageState = "idle" | "connecting" | "success" | "error";
+
+// ---------------------------------------------------------------------------
+// Code normalization
+// ---------------------------------------------------------------------------
+
+/**
+ * Normalize a raw code string to canonical form: "WORD WORD".
+ * Treats dashes, underscores, and plus signs as word separators.
+ * Returns null if the result isn't a valid two-word code.
+ */
+function normalizeCode(raw: string): string | null {
+  const normalized = raw.replace(/[-_+]/g, " ").replace(/\s+/g, " ").trim().toUpperCase();
+  const parts = normalized.split(" ");
+  if (parts.length === 2 && parts.every((p) => /^[A-Z]{2,}$/.test(p))) {
+    return normalized;
+  }
+  return null;
+}
+
+/** Extract code from the current URL's ?pair= query parameter. */
+function getPairFromUrl(): string | null {
+  const pair = new URLSearchParams(window.location.search).get("pair");
+  return pair ? normalizeCode(pair) : null;
+}
+
+/** Extract code from a pasted URL (e.g. "https://...?pair=SOFT+TIGER"). */
+function extractCodeFromPastedUrl(text: string): string | null {
+  try {
+    const pair = new URL(text.trim()).searchParams.get("pair");
+    return pair ? normalizeCode(pair) : null;
+  } catch {
+    return null;
+  }
 }
 
 /** Extract serverId from the current URL pathname (/s/{serverId}/...). */
@@ -35,11 +77,10 @@ function getServerIdFromUrl(): string | null {
   return match ? match[1] : null;
 }
 
-/**
- * Pair via the relay's one-shot /pair WebSocket endpoint.
- * Opens a WS to wss://relay.rundeus.com/api/servers/{serverId}/pair,
- * sends the pairing code, and waits for pair_success or pair_failed.
- */
+// ---------------------------------------------------------------------------
+// Pairing transports
+// ---------------------------------------------------------------------------
+
 function pairViaRelay(
   serverId: string,
   code: string,
@@ -50,7 +91,7 @@ function pairViaRelay(
     const ws = new WebSocket(url);
     const timeout = setTimeout(() => {
       ws.close();
-      reject(new Error("Pairing timed out"));
+      reject(new Error("Connection timed out. Try again."));
     }, 30_000);
 
     ws.onopen = () => {
@@ -64,34 +105,30 @@ function pairViaRelay(
         if (msg.type === "pair_success" && msg.token) {
           resolve({ token: msg.token });
         } else if (msg.type === "pair_failed") {
-          reject(new Error(msg.message || "Pairing failed"));
+          reject(new Error(msg.message || "Connection failed. Check your code and try again."));
         } else {
-          reject(new Error("Unexpected response from relay"));
+          reject(new Error("Something went wrong. Try again."));
         }
       } catch {
-        reject(new Error("Invalid response from relay"));
+        reject(new Error("Something went wrong. Try again."));
       }
       ws.close();
     };
 
     ws.onerror = () => {
       clearTimeout(timeout);
-      reject(new Error("Could not connect to relay"));
+      reject(new Error("Unable to connect. Check your internet and try again."));
     };
 
     ws.onclose = (evt) => {
       clearTimeout(timeout);
-      // If not resolved/rejected yet, treat as error
       if (evt.code !== 1000) {
-        reject(new Error("Connection closed unexpectedly"));
+        reject(new Error("Connection lost. Try again."));
       }
     };
   });
 }
 
-/**
- * Pair via direct HTTP POST to the backend (non-relay mode).
- */
 async function pairViaDirect(
   code: string,
   deviceName: string
@@ -105,160 +142,428 @@ async function pairViaDirect(
 
   if (!response.ok) {
     const data = await response.json().catch(() => null);
-    throw new Error(data?.error ?? "Invalid pairing code");
+    throw new Error(data?.error ?? "Invalid connection code");
   }
 
   return response.json();
 }
 
+// ---------------------------------------------------------------------------
+// Sub-components
+// ---------------------------------------------------------------------------
+
+/** Pulsing dots indicator — three dots that pulse in sequence. Respects reduced motion. */
+function PulsingDots({ reduced }: { reduced: boolean | null }) {
+  return (
+    <div className="flex items-center justify-center gap-1.5">
+      {[0, 1, 2].map((i) =>
+        reduced ? (
+          <span
+            key={i}
+            className="bg-foreground/60 size-1.5 rounded-full"
+            style={{ opacity: 0.6 }}
+          />
+        ) : (
+          <m.span
+            key={i}
+            className="bg-foreground/60 size-1.5 rounded-full"
+            animate={{ opacity: [0.3, 1, 0.3], scale: [0.85, 1, 0.85] }}
+            transition={{
+              duration: 1.2,
+              repeat: Infinity,
+              delay: i * 0.15,
+              ease: "easeInOut",
+            }}
+          />
+        )
+      )}
+    </div>
+  );
+}
+
+/** Animated checkmark — draws on with spring physics. */
+function AnimatedCheckmark({ reduced }: { reduced: boolean | null }) {
+  return (
+    <m.div
+      className="bg-success/10 flex size-20 items-center justify-center rounded-full"
+      initial={reduced ? false : { scale: 0, opacity: 0 }}
+      animate={{ scale: 1, opacity: 1 }}
+      transition={reduced ? { duration: 0.1 } : SPRING_OVERSHOOT}
+    >
+      <m.div
+        initial={reduced ? false : { scale: 0 }}
+        animate={{ scale: 1 }}
+        transition={reduced ? { duration: 0.1 } : { ...SPRING_OVERSHOOT, delay: 0.15 }}
+      >
+        <Check className="text-success size-10" strokeWidth={2.5} />
+      </m.div>
+    </m.div>
+  );
+}
+
+/** Brand mark — simple text logo for the gate page. */
+function BrandMark() {
+  return (
+    <m.div
+      className="flex items-center gap-2"
+      initial={{ opacity: 0, y: -4 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ duration: 0.3, ease: EASE_OUT_QUART }}
+    >
+      <div className="bg-foreground flex size-7 items-center justify-center rounded-lg">
+        <span className="text-background text-xs font-bold">OD</span>
+      </div>
+      <span className="text-muted-foreground text-sm font-medium tracking-wide">OpenDevs</span>
+    </m.div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Page states
+// ---------------------------------------------------------------------------
+
+/** Auto-connecting view — shown when QR/link provides the code. */
+function ConnectingView({ reduced }: { reduced: boolean | null }) {
+  return (
+    <m.div
+      key="connecting"
+      className="flex flex-col items-center gap-6"
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      exit={{ opacity: 0, scale: 0.98 }}
+      transition={{ duration: 0.25, ease: EASE_OUT_QUART }}
+    >
+      <BrandMark />
+      <div className="flex flex-col items-center gap-5">
+        <m.h1
+          className="text-xl font-semibold tracking-tight"
+          initial={{ opacity: 0, y: 8 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.35, delay: 0.1, ease: EASE_OUT_QUART }}
+        >
+          Connecting...
+        </m.h1>
+        <PulsingDots reduced={reduced} />
+        <m.p
+          className="text-muted-foreground max-w-[260px] text-center text-sm"
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          transition={{ duration: 0.3, delay: 0.3 }}
+        >
+          Establishing a secure connection to your computer.
+        </m.p>
+      </div>
+    </m.div>
+  );
+}
+
+/** Success view — shown briefly after successful pairing. */
+function SuccessView({ reduced }: { reduced: boolean | null }) {
+  return (
+    <m.div
+      key="success"
+      className="flex flex-col items-center gap-6"
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      exit={{ opacity: 0 }}
+      transition={{ duration: 0.25, ease: EASE_OUT_QUART }}
+    >
+      <AnimatedCheckmark reduced={reduced} />
+      <m.div
+        className="flex flex-col items-center gap-2"
+        initial={reduced ? false : { opacity: 0, y: 8 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.3, delay: reduced ? 0 : 0.25, ease: EASE_OUT_QUART }}
+      >
+        <h1 className="text-xl font-semibold tracking-tight">Connected</h1>
+        <p className="text-muted-foreground text-sm">You're all set.</p>
+      </m.div>
+    </m.div>
+  );
+}
+
+/** Error view for auto-connect failure — shows error + falls back to manual input. */
+function AutoConnectErrorView({ error, onRetry }: { error: string; onRetry: () => void }) {
+  return (
+    <m.div
+      key="auto-error"
+      className="flex flex-col items-center gap-6"
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      transition={{ duration: 0.25, ease: EASE_OUT_QUART }}
+    >
+      <BrandMark />
+      <div className="flex flex-col items-center gap-3">
+        <h1 className="text-xl font-semibold tracking-tight">Couldn't connect</h1>
+        <p className="text-muted-foreground max-w-[280px] text-center text-sm">{error}</p>
+        <Button variant="outline" size="sm" onClick={onRetry} className="mt-2">
+          Try again
+        </Button>
+      </div>
+    </m.div>
+  );
+}
+
+/** Manual entry form — shown when there's no code in the URL. */
+function ManualEntryView({
+  code,
+  error,
+  isPending,
+  codeIsValid,
+  reduced,
+  onChange,
+  onPaste,
+  onSubmit,
+}: {
+  code: string;
+  error: string | null;
+  isPending: boolean;
+  codeIsValid: boolean;
+  reduced: boolean | null;
+  onChange: (e: React.ChangeEvent<HTMLInputElement>) => void;
+  onPaste: (e: React.ClipboardEvent<HTMLInputElement>) => void;
+  onSubmit: (e: React.FormEvent) => void;
+}) {
+  return (
+    <m.div
+      key="manual"
+      className="w-full max-w-sm space-y-8"
+      initial={{ opacity: 0, y: 12 }}
+      animate={{ opacity: 1, y: 0 }}
+      exit={{ opacity: 0, y: -8 }}
+      transition={{ duration: 0.35, ease: EASE_OUT_QUART }}
+    >
+      {/* Brand + heading */}
+      <m.div
+        className="flex flex-col items-center gap-5"
+        initial={{ opacity: 0, y: 8 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.35, delay: 0.05, ease: EASE_OUT_QUART }}
+      >
+        <BrandMark />
+        <div className="text-center">
+          <h1 className="text-2xl font-bold tracking-tight">Connect to OpenDevs</h1>
+          <p className="text-muted-foreground mt-2 text-sm">
+            Enter the code from your desktop app.
+          </p>
+        </div>
+      </m.div>
+
+      {/* Code form */}
+      <m.form
+        onSubmit={onSubmit}
+        className="space-y-4"
+        initial={{ opacity: 0, y: 8 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.35, delay: 0.15, ease: EASE_OUT_QUART }}
+      >
+        <label htmlFor="connection-code" className="sr-only">
+          Connection code
+        </label>
+        <Input
+          id="connection-code"
+          type="text"
+          placeholder="WORD WORD"
+          value={code}
+          onChange={onChange}
+          onPaste={onPaste}
+          autoFocus
+          autoComplete="off"
+          autoCapitalize="characters"
+          spellCheck={false}
+          className="h-12 text-center font-mono text-lg tracking-wider uppercase"
+          disabled={isPending}
+          aria-invalid={Boolean(error)}
+          aria-describedby={error ? "connection-code-error" : undefined}
+        />
+
+        <AnimatePresence mode="wait">
+          {error && (
+            <m.p
+              id="connection-code-error"
+              key="error"
+              className="text-destructive text-center text-sm"
+              role="alert"
+              initial={{ opacity: 0, y: -4, height: 0 }}
+              animate={{ opacity: 1, y: 0, height: "auto" }}
+              exit={{ opacity: 0, y: -4, height: 0 }}
+              transition={{ duration: 0.2 }}
+            >
+              {error}
+            </m.p>
+          )}
+        </AnimatePresence>
+
+        <Button type="submit" className="h-11 w-full" disabled={isPending || !codeIsValid}>
+          {isPending ? (
+            <m.span
+              className="flex items-center gap-2"
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+            >
+              <PulsingDots reduced={reduced} />
+              <span className="ml-1">Connecting...</span>
+            </m.span>
+          ) : (
+            "Connect"
+          )}
+        </Button>
+      </m.form>
+    </m.div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Main component
+// ---------------------------------------------------------------------------
+
 export function PairGatePage({ onPaired, serverId }: PairGatePageProps) {
   const prefill = getPairFromUrl();
-  const [word, setWord] = useState(prefill?.word ?? "");
-  const [number, setNumber] = useState(prefill?.number ?? "");
+  const isAutoConnect = prefill !== null;
+
+  const [code, setCode] = useState(prefill ?? "");
   const [error, setError] = useState<string | null>(null);
-  const [isPending, setIsPending] = useState(false);
+  const [pageState, setPageState] = useState<PageState>(isAutoConnect ? "connecting" : "idle");
 
-  const numberRef = useRef<HTMLInputElement>(null);
-  const formRef = useRef<HTMLFormElement>(null);
+  const autoSubmitTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const successTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const reduced = useReducedMotion();
 
-  // Auto-submit if prefilled from QR code URL
+  // Clean up all timers on unmount
   useEffect(() => {
-    if (prefill?.word && prefill?.number) {
-      submitCode(prefill.word, prefill.number);
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    return () => {
+      if (autoSubmitTimer.current) clearTimeout(autoSubmitTimer.current);
+      if (successTimer.current) clearTimeout(successTimer.current);
+    };
   }, []);
 
   const submitCode = useCallback(
-    async (w: string, n: string) => {
-      const code = `${w.toUpperCase()}-${n}`;
+    async (rawCode: string) => {
+      const normalized = normalizeCode(rawCode);
+      if (!normalized) return;
+
       setError(null);
-      setIsPending(true);
+      setPageState("connecting");
 
       const deviceName = navigator.userAgent.includes("Mobile") ? "Mobile Browser" : "Web Browser";
 
       try {
+        let token: string;
+        let resolvedName: string | undefined = deviceName;
+
         if (isRelayMode()) {
-          // Relay mode: pair via one-shot WebSocket to relay
           const resolvedServerId = serverId || getServerIdFromUrl();
           if (!resolvedServerId) {
-            setError("No server ID available for pairing");
+            setError("Unable to connect. Try opening the link from your desktop app again.");
+            setPageState("error");
             return;
           }
-          const result = await pairViaRelay(resolvedServerId, code, deviceName);
-          onPaired(result.token, deviceName);
+          const result = await pairViaRelay(resolvedServerId, normalized, deviceName);
+          token = result.token;
         } else {
-          // Direct mode: pair via HTTP POST to backend
-          const data = await pairViaDirect(code, deviceName);
-          onPaired(data.token, data.device?.name);
+          const data = await pairViaDirect(normalized, deviceName);
+          token = data.token;
+          resolvedName = data.device?.name;
         }
+
+        // Show success state, then navigate
+        setPageState("success");
+        if (successTimer.current) clearTimeout(successTimer.current);
+        successTimer.current = setTimeout(() => onPaired(token, resolvedName), SUCCESS_HOLD_MS);
       } catch (err) {
-        setError(err instanceof Error ? err.message : "Could not connect to server");
-      } finally {
-        setIsPending(false);
+        setError(err instanceof Error ? err.message : "Unable to connect. Try again.");
+        setPageState("error");
       }
     },
     [onPaired, serverId]
   );
 
+  // Auto-submit on mount if code came from URL
+  useEffect(() => {
+    if (prefill) {
+      submitCode(prefill);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  function clearAutoSubmitTimer() {
+    if (autoSubmitTimer.current) {
+      clearTimeout(autoSubmitTimer.current);
+      autoSubmitTimer.current = null;
+    }
+  }
+
   function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
-    if (!word.trim() || number.length !== 4) return;
-    submitCode(word.trim(), number);
+    clearAutoSubmitTimer();
+    submitCode(code);
   }
 
-  function handleWordChange(e: React.ChangeEvent<HTMLInputElement>) {
-    const val = e.target.value.replace(/[^a-zA-Z]/g, "").toUpperCase();
-    setWord(val);
+  function handleChange(e: React.ChangeEvent<HTMLInputElement>) {
+    clearAutoSubmitTimer();
+    setCode(e.target.value.toUpperCase());
     setError(null);
-    // Auto-advance to number field when word looks complete (2+ chars and user presses tab/enters)
   }
 
-  function handleWordKeyDown(e: React.KeyboardEvent) {
-    if ((e.key === "-" || e.key === "Tab") && word.length >= 2) {
-      e.preventDefault();
-      numberRef.current?.focus();
+  function handlePaste(e: React.ClipboardEvent<HTMLInputElement>) {
+    const pasted = e.clipboardData.getData("text");
+    const resolved = extractCodeFromPastedUrl(pasted) ?? normalizeCode(pasted);
+    if (!resolved) return;
+
+    e.preventDefault();
+    setCode(resolved);
+    setError(null);
+
+    clearAutoSubmitTimer();
+    autoSubmitTimer.current = setTimeout(() => submitCode(resolved), 300);
+  }
+
+  function handleRetryAutoConnect() {
+    if (prefill) {
+      submitCode(prefill);
+    } else {
+      setPageState("idle");
+      setError(null);
     }
   }
 
-  function handleNumberChange(e: React.ChangeEvent<HTMLInputElement>) {
-    const val = e.target.value.replace(/\D/g, "").slice(0, 4);
-    setNumber(val);
-    setError(null);
-    // Auto-submit when 4 digits entered
-    if (val.length === 4 && word.trim().length >= 2) {
-      submitCode(word.trim(), val);
+  const codeIsValid = normalizeCode(code) !== null;
+
+  function renderContent() {
+    if (isAutoConnect && pageState === "connecting") {
+      return <ConnectingView reduced={reduced} />;
     }
+
+    if (pageState === "success") {
+      return <SuccessView reduced={reduced} />;
+    }
+
+    if (isAutoConnect && pageState === "error") {
+      return (
+        <AutoConnectErrorView
+          error={error ?? "Unable to connect."}
+          onRetry={handleRetryAutoConnect}
+        />
+      );
+    }
+
+    return (
+      <ManualEntryView
+        code={code}
+        error={pageState === "error" ? error : null}
+        isPending={pageState === "connecting"}
+        codeIsValid={codeIsValid}
+        reduced={reduced}
+        onChange={handleChange}
+        onPaste={handlePaste}
+        onSubmit={handleSubmit}
+      />
+    );
   }
 
   return (
     <div className="bg-background flex min-h-screen items-center justify-center p-4">
-      <div className="w-full max-w-sm space-y-8">
-        {/* Header */}
-        <div className="text-center">
-          <h1 className="text-2xl font-bold tracking-tight">Connect to OpenDevs</h1>
-          <p className="text-muted-foreground mt-2 text-sm">
-            Enter the pairing code from your desktop app to connect this device.
-          </p>
-        </div>
-
-        {/* Pairing form */}
-        <form ref={formRef} onSubmit={handleSubmit} className="space-y-6">
-          <div className="space-y-2">
-            <Label className="text-sm font-medium">Pairing Code</Label>
-            <div className="flex items-center gap-2">
-              <Input
-                type="text"
-                placeholder="WORD"
-                value={word}
-                onChange={handleWordChange}
-                onKeyDown={handleWordKeyDown}
-                autoFocus
-                autoComplete="off"
-                autoCapitalize="characters"
-                spellCheck={false}
-                className="text-center font-mono text-lg tracking-wider uppercase"
-                disabled={isPending}
-              />
-              <span className="text-muted-foreground text-xl font-bold">-</span>
-              <Input
-                ref={numberRef}
-                type="text"
-                inputMode="numeric"
-                placeholder="0000"
-                value={number}
-                onChange={handleNumberChange}
-                autoComplete="off"
-                className="text-center font-mono text-lg tracking-wider"
-                maxLength={4}
-                disabled={isPending}
-              />
-            </div>
-          </div>
-
-          {error && <p className="text-destructive text-center text-sm">{error}</p>}
-
-          <Button
-            type="submit"
-            className="w-full"
-            disabled={isPending || word.length < 2 || number.length !== 4}
-          >
-            {isPending ? (
-              <>
-                <Loader2 className="mr-2 size-4 animate-spin" />
-                Connecting...
-              </>
-            ) : (
-              "Connect"
-            )}
-          </Button>
-        </form>
-
-        {/* Help text */}
-        <p className="text-muted-foreground text-center text-xs">
-          Open Settings &gt; Remote Access in the OpenDevs desktop app to generate a pairing code.
-        </p>
-      </div>
+      <AnimatePresence mode="wait">{renderContent()}</AnimatePresence>
     </div>
   );
 }

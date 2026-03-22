@@ -36,12 +36,21 @@ beforeEach(() => {
   _clearAll();
 });
 
-// ---- Pairing Codes ----
+// ---- Pairing Codes (two-word format: "WORD WORD") ----
 
 describe("generatePairCode", () => {
-  it("returns a WORD-NNNN formatted code", () => {
+  it("returns a TWO WORD uppercase format", () => {
     const { code } = generatePairCode();
-    expect(code).toMatch(/^[A-Z]+-\d{4}$/);
+    expect(code).toMatch(/^[A-Z]+ [A-Z]+$/);
+  });
+
+  it("uses two different words", () => {
+    // Generate many codes and verify words differ in each
+    for (let i = 0; i < 20; i++) {
+      const { code } = generatePairCode();
+      const [word1, word2] = code.split(" ");
+      expect(word1).not.toBe(word2);
+    }
   });
 
   it("returns a future expiry timestamp", () => {
@@ -55,7 +64,7 @@ describe("generatePairCode", () => {
       const { code } = generatePairCode();
       codes.add(code);
     }
-    // With random 100 words * 9000 numbers, collisions in 20 tries are near-zero
+    // With ~250 words, 250*249 = 62250 combos — collisions in 20 tries are near-zero
     expect(codes.size).toBeGreaterThan(10);
   });
 
@@ -68,15 +77,15 @@ describe("generatePairCode", () => {
 });
 
 describe("validatePairCode", () => {
-  it("accepts a valid code (one-time use)", () => {
+  it("accepts a valid code and allows reuse within TTL", () => {
     const { code } = generatePairCode();
     expect(validatePairCode(code)).toBe(true);
-    // Second use fails
-    expect(validatePairCode(code)).toBe(false);
+    // Reuse within TTL succeeds (multi-device pairing)
+    expect(validatePairCode(code)).toBe(true);
   });
 
   it("rejects unknown code", () => {
-    expect(validatePairCode("NONEXISTENT-9999")).toBe(false);
+    expect(validatePairCode("NONEXISTENT UNKNOWN")).toBe(false);
   });
 
   it("is case-insensitive", () => {
@@ -87,6 +96,38 @@ describe("validatePairCode", () => {
   it("trims whitespace", () => {
     const { code } = generatePairCode();
     expect(validatePairCode(`  ${code}  `)).toBe(true);
+  });
+
+  it("normalizes dashes to spaces", () => {
+    const { code } = generatePairCode();
+    const dashed = code.replace(" ", "-");
+    expect(validatePairCode(dashed)).toBe(true);
+  });
+
+  it("normalizes underscores to spaces", () => {
+    const { code } = generatePairCode();
+    const underscored = code.replace(" ", "_");
+    expect(validatePairCode(underscored)).toBe(true);
+  });
+
+  it("collapses multiple spaces", () => {
+    const { code } = generatePairCode();
+    const extraSpaces = code.replace(" ", "   ");
+    expect(validatePairCode(extraSpaces)).toBe(true);
+  });
+
+  it("handles mixed separators and case", () => {
+    const { code } = generatePairCode();
+    const [w1, w2] = code.split(" ");
+    // e.g. "soft-tiger" from "SOFT TIGER"
+    const mangled = `${w1.toLowerCase()}-${w2.toLowerCase()}`;
+    expect(validatePairCode(mangled)).toBe(true);
+  });
+
+  it("handles URL-encoded plus sign as space", () => {
+    const { code } = generatePairCode();
+    const plusSeparated = code.replace(" ", "+");
+    expect(validatePairCode(plusSeparated)).toBe(true);
   });
 });
 

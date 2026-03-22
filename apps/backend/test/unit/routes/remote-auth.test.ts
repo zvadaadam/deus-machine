@@ -2,7 +2,7 @@ import { vi, describe, it, expect, beforeEach } from "vitest";
 
 // Mock auth service
 const mockGeneratePairCode = vi.fn(() => ({
-  code: "WOLF-1234",
+  code: "SOFT TIGER",
   expiresAt: Date.now() + 900_000,
 }));
 const mockValidatePairCode = vi.fn(() => true);
@@ -61,7 +61,7 @@ describe("POST /remote-auth/pair", () => {
         "content-type": "application/json",
         "x-forwarded-for": "192.168.1.50",
       },
-      body: JSON.stringify({ code: "WOLF-1234" }),
+      body: JSON.stringify({ code: "SOFT TIGER" }),
     });
     expect(res.status).toBe(200);
     const body = await res.json();
@@ -93,7 +93,7 @@ describe("POST /remote-auth/pair", () => {
         "content-type": "application/json",
         "x-forwarded-for": "192.168.1.50",
       },
-      body: JSON.stringify({ code: "WOLF-1234" }),
+      body: JSON.stringify({ code: "SOFT TIGER" }),
     });
     expect(res.status).toBe(429);
   });
@@ -107,7 +107,7 @@ describe("POST /remote-auth/generate-pair-code", () => {
     });
     expect(res.status).toBe(200);
     const body = await res.json();
-    expect(body.code).toBe("WOLF-1234");
+    expect(body.code).toBe("SOFT TIGER");
     expect(body.expires_in_seconds).toBeGreaterThan(0);
   });
 

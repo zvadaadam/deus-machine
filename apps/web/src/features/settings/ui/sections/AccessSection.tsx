@@ -1,12 +1,19 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useRef, useEffect, useCallback } from "react";
+import { QRCodeSVG } from "qrcode.react";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
 import { Separator } from "@/components/ui/separator";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+} from "@/components/ui/dialog";
 import { toast } from "sonner";
-import { Copy, Trash2, Smartphone, Monitor, RefreshCw, ArrowUpRight } from "lucide-react";
-import { getErrorMessage } from "@shared/lib/errors";
+import { Copy, Trash2, Smartphone, Monitor, Plus, Check, Link2 } from "lucide-react";
 import {
   usePairedDevices,
   useGeneratePairCode,
@@ -40,30 +47,20 @@ function getDeviceIcon(ua: string | null) {
   return Monitor;
 }
 
+/** Build the full pairing URL for QR code. */
+function buildPairUrl(accessUrl: string, code: string): string {
+  // accessUrl is like https://app.rundeus.com/connect/{serverId}
+  // Append ?pair=SOFT+TIGER (URL-encode the space as +)
+  const encodedCode = code.replace(/ /g, "+");
+  return `${accessUrl}?pair=${encodedCode}`;
+}
+
 // ---------------------------------------------------------------------------
 // Sub-components
 // ---------------------------------------------------------------------------
 
 /**
- * Step indicator -- a small numbered circle used in the pairing flow.
- * Uses primary color when active, muted when dimmed.
- */
-function StepDot({ n, dimmed }: { n: number; dimmed: boolean }) {
-  return (
-    <span
-      className={`flex size-5 shrink-0 items-center justify-center rounded-full text-[11px] leading-none font-semibold transition-colors duration-200 ${
-        dimmed ? "bg-muted text-muted-foreground/60" : "bg-primary/10 text-primary"
-      }`}
-    >
-      {n}
-    </span>
-  );
-}
-
-/**
- * Portal URL hero card.
- * The most important piece of information on this page -- where to go.
- * Rendered with subtle depth (border + background) and two action buttons.
+ * Portal URL card with connection status.
  */
 function PortalCard({
   url,
@@ -80,15 +77,17 @@ function PortalCard({
       <div className="flex items-center gap-2.5">
         <span
           className={`size-[7px] shrink-0 rounded-full ${
-            connected ? "bg-emerald-500 shadow-[0_0_6px_rgba(16,185,129,0.35)]" : "bg-red-400"
+            connected
+              ? "bg-success shadow-[0_0_6px_oklch(0.53_0.16_155/0.35)]"
+              : "bg-destructive/60"
           }`}
         />
         <span className="text-muted-foreground text-xs font-medium">
-          {connected ? "Connected to relay" : "Connecting..."}
+          {connected ? "Connected" : "Connecting..."}
         </span>
         {connected && clients > 0 && (
           <span className="text-muted-foreground/70 text-[11px]">
-            &middot; {clients} {clients === 1 ? "client" : "clients"}
+            &middot; {clients} {clients === 1 ? "device" : "devices"} online
           </span>
         )}
       </div>
@@ -100,141 +99,216 @@ function PortalCard({
           variant="ghost"
           size="icon"
           className="size-7 shrink-0"
-          onClick={() => {
-            navigator.clipboard.writeText(url);
-            toast.success("URL copied");
+          onClick={async () => {
+            try {
+              await navigator.clipboard.writeText(url);
+              toast.success("URL copied");
+            } catch {
+              toast.error("Couldn't copy the URL");
+            }
           }}
           title="Copy URL"
         >
           <Copy className="size-3.5" />
         </Button>
-        <Button
-          variant="ghost"
-          size="icon"
-          className="size-7 shrink-0"
-          onClick={() => window.open(url, "_blank", "noopener")}
-          title="Open in browser"
-        >
-          <ArrowUpRight className="size-3.5" />
-        </Button>
       </div>
     </div>
   );
 }
 
 /**
- * Pairing flow -- numbered steps that guide the user through device pairing.
- *
- * When no code is active: shows steps 1-2 with a "Generate Code" button.
- * When a code is active: step 2 transforms to show the code + countdown,
- * and step 3 appears ("device will appear below once paired").
+ * Connect Device Dialog -- shows QR code + code + countdown.
+ * Code state is owned by the parent so it survives close/reopen.
  */
-function PairingFlow({
+function ConnectDeviceDialog({
+  open,
+  onOpenChange,
   accessUrl,
   pairCode,
   countdown,
   isGenerating,
   onGenerate,
-  onCopyCode,
+  devices,
+  isDevicesLoaded,
 }: {
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
   accessUrl: string | null;
   pairCode: string | null;
   countdown: number;
   isGenerating: boolean;
   onGenerate: () => void;
-  onCopyCode: () => void;
+  devices: PairedDevice[];
+  isDevicesLoaded: boolean;
 }) {
+  const [prevDeviceIds, setPrevDeviceIds] = useState<Set<string>>(
+    () => new Set(devices.map((d) => d.id))
+  );
+  const [showSuccess, setShowSuccess] = useState(false);
+
+  // Keep a stable ref of onOpenChange to avoid stale closures in setTimeout
+  const onOpenChangeRef = useRef(onOpenChange);
+  useEffect(() => {
+    onOpenChangeRef.current = onOpenChange;
+  }, [onOpenChange]);
+
+  // Generate code on first open if none exists
+  useEffect(() => {
+    if (open && !pairCode && !isGenerating) {
+      onGenerate();
+    }
+    if (!open) {
+      setShowSuccess(false);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open]);
+
+  // Detect successful pairing by comparing device IDs.
+  // Gate on isDevicesLoaded to prevent false positives when the query resolves
+  // from [] to existing devices after the dialog opens.
+  useEffect(() => {
+    const currentIds = new Set(devices.map((d) => d.id));
+
+    if (!isDevicesLoaded) {
+      // Query hasn't resolved yet — just update the baseline, don't detect
+      setPrevDeviceIds(currentIds);
+      return;
+    }
+
+    const hasNewDevice = devices.some((d) => !prevDeviceIds.has(d.id));
+
+    if (open && hasNewDevice) {
+      setShowSuccess(true);
+      const timer = setTimeout(() => onOpenChangeRef.current(false), 2000);
+      setPrevDeviceIds(currentIds);
+      return () => clearTimeout(timer);
+    }
+    setPrevDeviceIds(currentIds);
+    return undefined;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [devices, open, isDevicesLoaded]);
+
+  const pairUrl = accessUrl && pairCode ? buildPairUrl(accessUrl, pairCode) : null;
+  const minutes = Math.floor(countdown / 60);
+  const isExpiringSoon = countdown > 0 && countdown < 120;
+
+  async function handleCopyCode() {
+    if (!pairCode) return;
+    try {
+      await navigator.clipboard.writeText(pairCode);
+      toast.success("Code copied");
+    } catch {
+      toast.error("Couldn't copy the code");
+    }
+  }
+
+  async function handleCopyLink() {
+    if (!pairUrl) return;
+    try {
+      await navigator.clipboard.writeText(pairUrl);
+      toast.success("Link copied");
+    } catch {
+      toast.error("Couldn't copy the link");
+    }
+  }
+
   return (
-    <div className="space-y-3">
-      <h4 className="text-sm font-medium">Pair a Device</h4>
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="sm:max-w-md">
+        {showSuccess ? (
+          <div className="flex flex-col items-center gap-4 py-8">
+            <div className="bg-success/10 flex size-16 items-center justify-center rounded-full">
+              <Check className="text-success size-8" />
+            </div>
+            <div className="text-center">
+              <DialogTitle className="text-lg font-semibold">Device Connected</DialogTitle>
+              <DialogDescription className="text-muted-foreground mt-1 text-sm">
+                You can now access your workspaces from this device.
+              </DialogDescription>
+            </div>
+          </div>
+        ) : (
+          <>
+            <DialogHeader className="text-center">
+              <DialogTitle>Connect a Device</DialogTitle>
+              <DialogDescription>
+                Scan the QR code or enter the code on your other device.
+              </DialogDescription>
+            </DialogHeader>
 
-      <div className="space-y-0.5">
-        {/* Step 1 */}
-        <div className="flex gap-3 py-2">
-          <StepDot n={1} dimmed={false} />
-          <p className="pt-px text-sm">
-            Open{" "}
-            {accessUrl ? (
-              <button
-                type="button"
-                className="text-primary font-medium underline-offset-2 hover:underline"
-                onClick={() => {
-                  navigator.clipboard.writeText(accessUrl);
-                  toast.success("URL copied");
-                }}
-              >
-                the portal URL
-              </button>
-            ) : (
-              <span className="text-muted-foreground">your access URL</span>
-            )}{" "}
-            on the other device
-          </p>
-        </div>
-
-        {/* Step 2 */}
-        <div className="flex gap-3 py-2">
-          <StepDot n={2} dimmed={!accessUrl && !pairCode} />
-          <div className="min-w-0 flex-1 pt-px">
-            {pairCode ? (
-              <div className="space-y-2">
-                <p className="text-sm">Enter this code on the other device</p>
-                <div className="bg-muted/40 flex items-center justify-between rounded-lg px-4 py-3.5">
-                  <span className="font-mono text-2xl font-bold tracking-[0.15em]">{pairCode}</span>
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    className="size-8"
-                    onClick={onCopyCode}
-                    title="Copy code"
-                  >
-                    <Copy className="size-3.5" />
-                  </Button>
+            <div className="flex flex-col items-center gap-5 pt-2">
+              {/* QR Code -- hero element */}
+              {pairUrl ? (
+                <div className="rounded-xl bg-white p-3">
+                  <QRCodeSVG value={pairUrl} size={180} level="M" />
                 </div>
-                <p className="text-muted-foreground text-xs">
-                  Expires in {Math.floor(countdown / 60)}:{String(countdown % 60).padStart(2, "0")}
-                </p>
-              </div>
-            ) : (
-              <div className="space-y-2.5">
-                <p className="text-muted-foreground text-sm">Generate a one-time pairing code</p>
-                <Button variant="outline" size="sm" onClick={onGenerate} disabled={isGenerating}>
-                  {isGenerating && <RefreshCw className="mr-2 size-3.5 animate-spin" />}
-                  Generate Code
+              ) : accessUrl ? (
+                <div className="bg-muted/40 flex size-[204px] items-center justify-center rounded-xl">
+                  <span className="text-muted-foreground text-sm">Generating...</span>
+                </div>
+              ) : (
+                <div className="bg-muted/40 flex size-[204px] items-center justify-center rounded-xl">
+                  <span className="text-muted-foreground px-4 text-center text-sm">
+                    Waiting for connection...
+                  </span>
+                </div>
+              )}
+
+              {/* Code display */}
+              {pairCode ? (
+                <p className="font-mono text-2xl font-bold tracking-wide">{pairCode}</p>
+              ) : (
+                <div className="bg-muted/40 h-8 w-40 animate-pulse rounded" />
+              )}
+
+              {/* Action buttons — Copy Link is primary (higher conversion for web sharing) */}
+              <div className="flex gap-2">
+                <Button variant="default" size="sm" onClick={handleCopyLink} disabled={!pairUrl}>
+                  <Link2 className="mr-1.5 size-3.5" />
+                  Copy Link
+                </Button>
+                <Button variant="outline" size="sm" onClick={handleCopyCode} disabled={!pairCode}>
+                  <Copy className="mr-1.5 size-3.5" />
+                  Copy Code
                 </Button>
               </div>
-            )}
-          </div>
-        </div>
 
-        {/* Step 3 -- visible only when code is active */}
-        {pairCode && (
-          <div className="flex gap-3 py-2">
-            <StepDot n={3} dimmed={false} />
-            <p className="text-muted-foreground pt-px text-sm">
-              The device will appear below once paired
-            </p>
-          </div>
+              {/* Countdown + regenerate */}
+              {countdown > 0 ? (
+                <p
+                  className={`text-xs ${isExpiringSoon ? "text-warning" : "text-muted-foreground"}`}
+                >
+                  {minutes >= 1
+                    ? `Expires in ${minutes} ${minutes === 1 ? "minute" : "minutes"}`
+                    : "Expiring soon"}
+                </p>
+              ) : pairCode === null && !isGenerating ? (
+                <Button variant="ghost" size="sm" onClick={onGenerate}>
+                  Generate new code
+                </Button>
+              ) : null}
+            </div>
+          </>
         )}
-      </div>
-    </div>
+      </DialogContent>
+    </Dialog>
   );
 }
 
 /**
- * Paired devices list with revoke action per device.
+ * Connected devices list with remove action per device.
  */
 function DevicesList({
   devices,
-  onRevoke,
-  isRevoking,
+  onRemove,
+  isRemoving,
 }: {
   devices: PairedDevice[];
-  onRevoke: (device: PairedDevice) => void;
-  isRevoking: boolean;
+  onRemove: (device: PairedDevice) => void;
+  isRemoving: boolean;
 }) {
   if (devices.length === 0) {
-    return <p className="text-muted-foreground py-0.5 text-sm">No devices paired yet.</p>;
+    return <p className="text-muted-foreground py-0.5 text-sm">No devices connected yet.</p>;
   }
 
   return (
@@ -260,9 +334,9 @@ function DevicesList({
               variant="ghost"
               size="icon"
               className="text-muted-foreground hover:text-destructive size-7"
-              onClick={() => onRevoke(device)}
-              disabled={isRevoking}
-              title={`Revoke ${device.name}`}
+              onClick={() => onRemove(device)}
+              disabled={isRemoving}
+              title={`Remove ${device.name}`}
             >
               <Trash2 className="size-3.5" />
             </Button>
@@ -281,12 +355,9 @@ function DevicesList({
  * Unified Access settings section.
  *
  * Hierarchy:
- *   1. Toggle + hero portal card (URL, status, copy/open)
- *   2. Guided pairing flow (numbered steps with inline code generation)
- *   3. Paired devices list
- *
- * The portal URL is the hero because it answers the first question every
- * user has: "where do I go?" The pairing code is step 2 in that flow.
+ *   1. Toggle + hero portal card (URL, status, copy)
+ *   2. "+ Connect a Device" button that opens a dialog with QR + code
+ *   3. Connected devices list
  */
 export function AccessSection({ settings, saveSetting }: SettingsSectionProps) {
   const enabled = settings.remote_access_enabled === true;
@@ -297,12 +368,15 @@ export function AccessSection({ settings, saveSetting }: SettingsSectionProps) {
   const generateCodeMutation = useGeneratePairCode();
   const revokeDeviceMutation = useRevokeDevice();
 
-  // Pairing code state
+  // Dialog state
+  const [dialogOpen, setDialogOpen] = useState(false);
+
+  // Code state -- lives here so it survives dialog close/reopen
   const [pairCode, setPairCode] = useState<string | null>(null);
   const [codeExpiresAt, setCodeExpiresAt] = useState(0);
   const [countdown, setCountdown] = useState(0);
 
-  // Countdown timer for pairing code expiry
+  // Countdown timer -- runs regardless of dialog open state
   useEffect(() => {
     if (!pairCode || codeExpiresAt <= 0) return;
     const tick = () => {
@@ -318,45 +392,35 @@ export function AccessSection({ settings, saveSetting }: SettingsSectionProps) {
     return () => clearInterval(interval);
   }, [pairCode, codeExpiresAt]);
 
+  async function handleGenerateCode() {
+    try {
+      const result = await generateCodeMutation.mutateAsync();
+      setPairCode(result.code);
+      setCodeExpiresAt(Date.now() + result.expires_in_seconds * 1000);
+    } catch {
+      toast.error("Couldn't generate a code. Try again.");
+    }
+  }
+
   // -- Handlers --
 
   const handleToggle = useCallback(
     async (on: boolean) => {
       const ok = await saveSetting("remote_access_enabled", on);
       if (ok) {
-        toast.success(on ? "Remote access enabled" : "Remote access disabled");
-        if (!on) {
-          setPairCode(null);
-          setCodeExpiresAt(0);
-        }
+        toast.success(on ? "Device connections enabled" : "Device connections disabled");
       }
     },
     [saveSetting]
   );
 
-  async function handleGenerateCode() {
-    try {
-      const result = await generateCodeMutation.mutateAsync();
-      setPairCode(result.code);
-      setCodeExpiresAt(Date.now() + result.expires_in_seconds * 1000);
-    } catch (error) {
-      toast.error(`Failed to generate code: ${getErrorMessage(error)}`);
-    }
-  }
-
-  async function handleRevokeDevice(device: PairedDevice) {
+  async function handleRemoveDevice(device: PairedDevice) {
     try {
       await revokeDeviceMutation.mutateAsync(device.id);
-      toast.success(`Revoked "${device.name}"`);
-    } catch (error) {
-      toast.error(`Failed to revoke device: ${getErrorMessage(error)}`);
+      toast.success(`Removed "${device.name}"`);
+    } catch {
+      toast.error("Couldn't remove device. Try again.");
     }
-  }
-
-  function handleCopyCode() {
-    if (!pairCode) return;
-    navigator.clipboard.writeText(pairCode);
-    toast.success("Code copied");
   }
 
   // -- Derived values --
@@ -384,9 +448,9 @@ export function AccessSection({ settings, saveSetting }: SettingsSectionProps) {
     <div className="space-y-6">
       {/* Header */}
       <div>
-        <h3 className="text-base font-semibold">Connect</h3>
+        <h3 className="text-base font-semibold">Remote Access</h3>
         <p className="text-muted-foreground mt-1 text-sm">
-          Access Deus from your phone or another browser.
+          Access your workspaces from your phone or another computer.
         </p>
       </div>
 
@@ -397,7 +461,7 @@ export function AccessSection({ settings, saveSetting }: SettingsSectionProps) {
             Enable remote access
           </Label>
           <p className="text-muted-foreground text-xs">
-            Connects to the cloud relay so other devices can reach this machine.
+            Allow other devices to connect to this machine.
           </p>
         </div>
         <Switch id="remote-access-toggle" checked={enabled} onCheckedChange={handleToggle} />
@@ -416,36 +480,45 @@ export function AccessSection({ settings, saveSetting }: SettingsSectionProps) {
             />
           )}
 
-          {/* Disconnected state without URL -- relay not configured yet */}
+          {/* Disconnected state without URL */}
           {relayStatus && !accessUrl && (
             <div className="bg-muted/30 flex items-center gap-2.5 rounded-lg px-4 py-3">
-              <span className="size-[7px] shrink-0 rounded-full bg-amber-400" />
+              <span className="bg-warning size-[7px] shrink-0 rounded-full" />
               <span className="text-muted-foreground text-sm">
-                {relayStatus.connected
-                  ? "Connected — waiting for server ID..."
-                  : "Connecting to relay..."}
+                {relayStatus.connected ? "Setting up..." : "Connecting..."}
               </span>
             </div>
           )}
 
           <Separator />
 
-          {/* Guided pairing flow */}
-          <PairingFlow
+          {/* Connect a Device button */}
+          <div className="space-y-3">
+            <Button variant="outline" size="sm" onClick={() => setDialogOpen(true)}>
+              <Plus className="mr-1.5 size-3.5" />
+              Connect a Device
+            </Button>
+          </div>
+
+          {/* Connect Device Dialog */}
+          <ConnectDeviceDialog
+            open={dialogOpen}
+            onOpenChange={setDialogOpen}
             accessUrl={accessUrl}
             pairCode={pairCode}
             countdown={countdown}
             isGenerating={generateCodeMutation.isPending}
             onGenerate={handleGenerateCode}
-            onCopyCode={handleCopyCode}
+            devices={devices}
+            isDevicesLoaded={devicesQuery.isFetched}
           />
 
           <Separator />
 
-          {/* Paired devices */}
+          {/* Connected devices */}
           <div className="space-y-3">
             <div className="flex items-center gap-2">
-              <h4 className="text-sm font-medium">Paired Devices</h4>
+              <h4 className="text-sm font-medium">Connected Devices</h4>
               {devices.length > 0 && (
                 <Badge variant="secondary" className="text-[11px]">
                   {devices.length}
@@ -454,8 +527,8 @@ export function AccessSection({ settings, saveSetting }: SettingsSectionProps) {
             </div>
             <DevicesList
               devices={devices}
-              onRevoke={handleRevokeDevice}
-              isRevoking={revokeDeviceMutation.isPending}
+              onRemove={handleRemoveDevice}
+              isRemoving={revokeDeviceMutation.isPending}
             />
           </div>
         </>
