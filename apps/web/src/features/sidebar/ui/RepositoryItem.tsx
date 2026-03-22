@@ -58,7 +58,7 @@ export function RepositoryItem({
             variant="repo"
             role="button"
             aria-label={`Toggle ${repoName} workspaces`}
-            className="cursor-grab [&_*]:cursor-grab"
+            className="cursor-grab"
           >
             <SidebarRowMain className="gap-2">
               <div className="relative flex-shrink-0">
