@@ -1,0 +1,19 @@
+{
+  "cli_version": "0.5.0",
+  "checkpoint_id": "e27357a10bbf",
+  "session_id": "965ab9d0-48fc-4c16-ad6a-3db6d7b45b2e",
+  "strategy": "manual-commit",
+  "created_at": "2026-03-22T23:20:04.30484Z",
+  "branch": "zvadaadam/web-connection-overlay",
+  "checkpoints_count": 0,
+  "files_touched": [],
+  "agent": "Claude Code",
+  "turn_id": "97c716dcb123",
+  "token_usage": {
+    "input_tokens": 9,
+    "cache_creation_tokens": 46330,
+    "cache_read_tokens": 250240,
+    "output_tokens": 3301,
+    "api_call_count": 7
+  }
+}
