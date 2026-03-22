@@ -1,0 +1,105 @@
+<system_instruction>
+You are working inside OpenDevs, a Mac app that lets the user run many coding agents in parallel.
+Your work should take place in the /Users/zvada/Developer/agent/box-ide/.conductor/da-nang-v4 directory (unless otherwise directed), which has been set up for you to work in.
+Each workspace has a .context directory (gitignored) where you can save files to collaborate with other agents.
+DO NOT EVER read or write files at /Users/zvada/Developer/agent/box-ide.
+The target branch for this workspace is main. Use this for actions like creating new PRs, bisecting, etc., unless you're told otherwise.
+
+If the user asks you to work on several unrelated tasks, you can suggest they start new workspaces.
+Sometimes the user might send you a message they meant to send in a different workspace or a different chat. If something doesn't make sense in the context of your work, just ask. 
+If the user asks for help with OpenDevs, you can ask them to go to "Help -> Send Feedback" to get in touch with our team.
+</system_instruction>
+
+
+<system-instruction>
+To do immediately:
+
+Rename the branch using `git branch -m` as soon as possible. Do not check the current branch name.
+
+You may read user-provided attachments first if needed to understand the request. Otherwise, do this before using any skills or any other tools.
+
+Choosing a branch name: use concrete, specific language, avoid abstract nouns, and be concise (<30 characters). Use the prefix "zvadaadam/" before the name.
+
+</system-instruction>
+
+Can you review the site bar? I think we have something weird that this icon, which is for like the grab icon for like moving with the repositories, feels like it changes for the whole repository and also the workspace like the whole thing, but it's we just wanted for the like repository line to understand. Can you explore?
+
+---
+
+<system_instruction>
+The user has attached these files. Read them before proceeding.
+- /Users/zvada/Developer/agent/box-ide/.conductor/da-nang-v4/.context/attachments/Screenshot 2026-03-22 at 3.22.49 PM.png (55.3 KB)
+</system_instruction>
+
+
+
+OK, this is great. The next thing what we need is if there is any workspace, we don't want to show the new workspace bar button, but only if the workspace is empty. So once again, we can create a new workspace only with a button that's in a row next to the repository. And if there are any workspaces, we will drop the new workspace button. This new workspace button will be shown only if there are no workspaces created. Do you got it? This feels a little complex, so maybe visualize it for you and think about how can you... I think there is an opportunity to simplify the codebase and think about how to do it most effectively in this condition.
+
+---
+
+<system_instruction>
+The user has attached these files. Read them before proceeding.
+- /Users/zvada/Developer/agent/box-ide/.conductor/da-nang-v4/.context/attachments/Screenshot 2026-03-22 at 4.32.55 PM.png (11.5 KB)
+</system_instruction>
+
+
+
+On the other hand, if we have the plus sign, it should say "New Workspace" and the three dots should probably say something.
+
+---
+
+Okay, for now we don't have anything in the options, so drop the options.
+
+---
+
+Okay, so can we put the chevron in the repository instead of the button, sorry, the repository icon that we will show the chevron and next to the repository where used to be the chevron, we will put the number of the workspaces inside the repository.
+
+---
+
+No, no, no, you didn't do it correctly. I mean, like the chevron should like be instead of the icon. Like on hover, we would show the chevron. On hover over the repository, we will show the chevron. Instead of the icon, so it's gonna switch, you know. Now we are showing both, but on hover we show the chevron only on hover effect.
+
+---
+
+<system_instruction>
+The user has attached these files. Read them before proceeding.
+- /Users/zvada/Developer/agent/box-ide/.conductor/da-nang-v4/.context/attachments/Screenshot 2026-03-22 at 6.30.17 PM.png (113.3 KB)
+</system_instruction>
+
+
+
+OK, so since we also do the create workspace like new branch or PR from PR branch, the new workspace, we probably should have also in the main command K-Palette, right? How would you communicate it and show?
+
+---
+
+But should it be like a new workspace from PR or a new workspace from? And also why we have under the workspace open project clone repository that should be under like a project, right?
+
+---
+
+<system_instruction>
+The user has attached these files. Read them before proceeding.
+- /Users/zvada/Developer/agent/box-ide/.conductor/da-nang-v4/.context/attachments/Screenshot 2026-03-22 at 6.39.06 PM.png (67.6 KB)
+</system_instruction>
+
+
+
+Okay, the flow, maybe it makes sense, probably, but then in this comment palette, if we are finding the workspace for a project like the project name, the repository should be written here, so it's obvious what we are looking for, right? how woudl u do ti and wher euwoudl u place it
+
+---
+
+<system_instruction>
+The user has attached these files. Read them before proceeding.
+- /Users/zvada/Developer/agent/box-ide/.conductor/da-nang-v4/.context/attachments/Screenshot 2026-03-22 at 6.41.25 PM.png (81.8 KB)
+- /Users/zvada/Developer/agent/box-ide/.conductor/da-nang-v4/.context/attachments/Screenshot 2026-03-22 at 6.42.10 PM.png (492.9 KB)
+</system_instruction>
+
+
+
+Okay, I don't know why, but we put there something which definitely has all the PR stuff like that and it doesn't work. And are you sure we can really search through all the PRs and branches, all the names, everything that is in Git? What do you think? Maybe you think this is because the back end was dropped?
+
+---
+
+Do we have the ability to know that the back end is down? Maybe we could show a red dot somewhere? I'm just wondering, but it should not happen, right?
+
+---
+
+I think, yeah, added next to... it should work similarly like the Claude Degradigated thing, right? Like, if it's all connected, nothing is shown, like, if it's not connected, we will show it with, like, the red dot and server not accessible or something very short, I don't know, in the place where the the clod code or like the AI services are.
