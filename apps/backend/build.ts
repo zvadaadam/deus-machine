@@ -4,8 +4,9 @@
 
 import { build } from "esbuild";
 import * as path from "path";
+import { fileURLToPath } from "url";
 
-const backendDir = path.dirname(new URL(import.meta.url).pathname);
+const backendDir = path.dirname(fileURLToPath(import.meta.url));
 
 build({
   entryPoints: [path.join(backendDir, "src/server.ts")],
