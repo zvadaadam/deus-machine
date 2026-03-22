@@ -1,0 +1,30 @@
+{
+  "cli_version": "0.5.0",
+  "checkpoint_id": "ba30dcde9471",
+  "strategy": "manual-commit",
+  "branch": "zvadaadam/circular-pixel-grid",
+  "checkpoints_count": 14,
+  "files_touched": [
+    "apps/web/src/features/session/ui/Chat.tsx",
+    "apps/web/src/features/session/ui/CircularPixelGrid.stories.tsx",
+    "apps/web/src/features/session/ui/CircularPixelGrid.tsx",
+    "apps/web/src/features/session/ui/PixelGrid.tsx",
+    "apps/web/src/features/sidebar/ui/WorkspaceItem.tsx",
+    "apps/web/src/features/workspace/ui/MainContentTabs.tsx"
+  ],
+  "sessions": [
+    {
+      "metadata": "/ba/30dcde9471/0/metadata.json",
+      "transcript": "/ba/30dcde9471/0/full.jsonl",
+      "content_hash": "/ba/30dcde9471/0/content_hash.txt",
+      "prompt": "/ba/30dcde9471/0/prompt.txt"
+    }
+  ],
+  "token_usage": {
+    "input_tokens": 180,
+    "cache_creation_tokens": 251815,
+    "cache_read_tokens": 17503699,
+    "output_tokens": 60570,
+    "api_call_count": 129
+  }
+}
