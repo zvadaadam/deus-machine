@@ -142,3 +142,1011 @@ Severity is bounded (one-time backfill, not steady-state), but with many repos t
 ---
 
 Commit and push all changes
+
+---
+
+<system-instruction>
+The user has added 12 comments to the diff for this workspace. Please review and address these comments as part of your response. When addressing comments on the "original" side or on specific commits, read the file from that version (not the current version). Below are the comments, including metadata about what git state they were left on:
+
+Comment #1:
+
+File: 
+Line: undefined
+User comment: "<!-- This is an auto-generated comment: summarize by coderabbit.ai -->
+<!-- walkthrough_start -->
+
+<details>
+<summary>📝 Walkthrough</summary>
+
+## Walkthrough
+
+This pull request introduces a GitHub-integrated workspace creation flow allowing users to create workspaces from pull requests or branches, adds session title metadata event handling, and enhances repository tracking with git origin URLs. Multiple backend endpoints, database fields, and frontend UI components are coordinated to support the new workflow.
+
+## Changes
+
+|Cohort / File(s)|Summary|
+|---|---|
+|**Agent Memory & Documentation** <br> `.claude/agent-memory/code-reviewer/*`, `CLAUDE.md`|Added memory entries documenting HTTP/WS query parity gaps for `RepoGroup` fields (specifically `git_origin_url`) and a pre-existing `createWorkspace` return value issue. Updated CLAUDE.md: renamed `updateTitle` → `updateWorkspaceTitle`, changed event taxonomy from 12 to 13 events with `interaction` → `request` category, and updated schema location reference.|
+|**Database Types & Queries** <br> `apps/backend/src/db/types.ts`, `apps/backend/src/db/queries.ts`|Extended `WorkspaceWithDetailsRow` with optional `git_origin_url?: string \| null` field. Updated `getAllRepositorySummaries` return type to include `git_origin_url`, and extended `getWorkspacesByRepo` / `getWorkspacesBySessionIds` to select this field.|
+|**Backend Schema & Routes** <br> `apps/backend/src/lib/schemas.ts`, `apps/backend/src/routes/workspaces.ts`|Extended `CreateWorkspaceBody` schema with optional PR/branch metadata (`source_branch`, `pr_number`, `pr_url`, `pr_title`, `target_branch`). Updated `POST /workspaces` to accept and store these fields, derive branch selection from `source_branch`, and populate `git_origin_url` in `GET /workspaces/by-repo` response.|
+|**Repository Endpoints & Git Integration** <br> `apps/backend/src/routes/repos.ts`, `apps/backend/src/server.ts`|Added `GET /repos/:id/prs` and `GET /repos/:id/branches` endpoints to fetch GitHub PRs and remote branches. Extended repository creation to capture `git remote get-url origin`. Added startup backfill task to populate missing `git_origin_url` values across existing repositories.|
+|**Backend Services** <br> `apps/backend/src/services/gh.service.ts`, `apps/backend/src/services/agent/commands.ts`, `apps/backend/src/services/agent/event-handler.ts`, `apps/backend/src/services/agent/persistence.ts`|Exported `parseGitHubRepo` function. Extended `createWorkspace` command to pass PR/branch metadata to workspace API. Added `session.title` event handling that persists session titles via new `persistSessionTitle()` function, propagating to workspace titles when empty.|
+|**Query Engine & Workspace Requests** <br> `apps/backend/src/services/query-engine.ts`|Extended `"workspaces"` query to include `git_origin_url` in grouped results. Added `"repoPrs"` and `"repoBranches"` request handlers delegating to new repository endpoints.|
+|**Backend Tests** <br> `apps/backend/test/unit/*`|Added test mocks and suites for new `persistSessionTitle` functionality, `session.title` event handling, and verified `repoPrs` / `repoBranches` in `REQUEST_RESOURCES`.|
+|**Desktop Application** <br> `apps/desktop/main/browser-views.ts`|Replaced `BrowserView` with `WebContentsView` API: updated view attachment/removal, visibility control (via `setVisible` instead of removal), and configuration for Electron compatibility.|
+|**Sidecar Agent Integration** <br> `apps/sidecar/agents/claude/stream-context.ts`, `apps/sidecar/agents/claude/message-processor.ts`, `apps/sidecar/event-broadcaster.ts`|Added `titleFetched` state to stream context. Implemented session title emission after first successful result by fetching session summary via SDK and broadcasting `emitSessionTitle` event. Added `SESSION_TITLE` event constant and emission method.|
+|**Frontend Layout & State Management** <br> `apps/web/src/app/layouts/MainLayout.tsx`, `apps/web/src/shared/stores/uiStore.ts`|Added GitHub picker modal integration with `githubPickerRepoId` state and `onNewWorkspaceFromGitHub` callback. Introduced `NewWorkspaceMode` type and updated modal open logic to support `"from-github"` mode. Refactored system prompt state to use `systemPromptEdit` with `useEffect`. Added dialog coordination to hide native views when any modal is open.|
+|**Frontend Repository/Sidebar UI** <br> `apps/web/src/features/repository/ui/NewWorkspaceModal.tsx`, `apps/web/src/features/sidebar/ui/*`|Updated `NewWorkspaceModal` with mode-aware UI copy and styling. Added `GitHubPickerModal` component for selecting PRs/branches and initiating workspace creation. Extended `RepositoryItem` to detect GitHub repos and show "New from PR or branch" button. Updated workspace display via `getWorkspaceDisplayName` and `getWorkspaceSecondaryText` helpers. Added `BackendStatusIndicator` showing server disconnection state.|
+|**Frontend Workspace API & Queries** <br> `apps/web/src/features/workspace/api/workspace.queries.ts`, `apps/web/src/features/workspace/api/workspace.service.ts`|Added `useRepoPrs` and `useRepoBranches` TanStack Query hooks and corresponding service methods. Extended `WorkspaceService.create` to accept optional PR/branch metadata object. Updated mutation callbacks to handle unified `CreateWorkspaceParams`.|
+|**Frontend Command Palette & Types** <br> `apps/web/src/features/command-palette/commands.ts`, `apps/web/src/shared/types/index.ts`, `shared/types/github.ts`|Added `"project"` command group and new `"new-workspace-from"` command for GitHub flow. Moved `"open-project"` and `"clone-repository"` to project group. Added `PRSummary` and `BranchSummary` type exports.|
+|**Frontend Styling & Dialog** <br> `apps/web/src/components/ui/command.tsx`, `apps/web/src/components/ui/dialog.tsx`, `apps/web/src/global.css`, `apps/web/src/features/sidebar/ui/DraggableRepository.tsx`, `apps/web/src/features/sidebar/ui/SidebarFooter.tsx`|Updated command palette styling with vibrancy and border refinements. Added `overlayClassName` prop to `DialogContent`. Reduced vibrancy background mixing and adjusted blur effect. Simplified dragging cursor logic. Integrated `BackendStatusIndicator` into sidebar footer.|
+|**Shared Type & Event Definitions** <br> `shared/types/workspace.ts`, `shared/agent-events.ts`, `shared/events.ts`|Extended `RepoGroup` with `git_origin_url` field. Added `SessionTitleEvent` and `SESSION_TITLE` event name to agent event protocol. Added `"repoPrs"` and `"repoBranches"` to `REQUEST_RESOURCES`.|
+
+## Sequence Diagram(s)
+
+```mermaid
+sequenceDiagram
+    participant User
+    participant UI as Client UI
+    participant Backend as Backend API
+    participant GH as GitHub API
+    participant DB as Database
+
+    User->>UI: Open repo, click "New from PR or branch"
+    UI->>UI: Show GitHub Picker Modal
+    Note over UI: Modal fetches PRs & branches
+    UI->>Backend: GET /repos/:id/prs
+    Backend->>Backend: git remote get-url origin (or use stored git_origin_url)
+    Backend->>GH: gh api repos/...listing PRs
+    GH-->>Backend: PR list (number, title, branch, baseBranch, url, isDraft)
+    Backend-->>UI: [{ number, title, branch, baseBranch, url, isDraft }, ...]
+    UI->>UI: Render PR list
+    
+    User->>UI: Select PR
+    UI->>UI: Also fetch branches
+    UI->>Backend: GET /repos/:id/branches
+    Backend->>Backend: git for-each-ref refs/remotes/origin/
+    Backend-->>UI: { branches: [{ name }, ...] }
+    UI->>UI: Render branches (show PR's baseBranch pre-selected)
+    
+    User->>UI: Click "Create Workspace"
+    UI->>Backend: POST /workspaces { repository_id, source_branch, pr_number, pr_url, pr_title, target_branch }
+    Backend->>DB: INSERT workspace with PR metadata and source/target branches
+    DB-->>Backend: workspace created
+    Backend-->>UI: { workspace.id, ... }
+    UI->>UI: selectWorkspace(workspace.id)
+    UI->>UI: Navigate to workspace
+```
+
+```mermaid
+sequenceDiagram
+    participant Agent as Agent Process
+    participant Sidecar as Sidecar
+    participant SDK as Agent SDK
+    participant Backend as Backend
+    participant WS as WebSocket Subscribers
+
+    Agent->>Sidecar: emit result/success message
+    Sidecar->>Sidecar: Check titleFetched = false & session.cwd exists
+    Sidecar->>SDK: listSessions({ dir: session.cwd, limit: 20 })
+    SDK-->>Sidecar: [{ sessionId, summary, ... }, ...]
+    Sidecar->>Sidecar: Match SDK sessionId with current session
+    Sidecar->>Sidecar: Extract title from summary
+    Sidecar->>Backend: emit "session.title" event { sessionId, agentType, title }
+    Backend->>Backend: persistSessionTitle(event)
+    Backend->>Backend: UPDATE sessions.title, UPDATE workspaces.title (if NULL)
+    Backend->>WS: invalidate(["workspaces", "sessions"])
+    WS-->>Subscribers: New snapshot with updated titles
+```
+
+## Estimated code review effort
+
+🎯 4 (Complex) | ⏱️ ~65 minutes
+
+## Poem
+
+> 🐰 *From branches tall and PRs fair*  
+> *A workspace springs with GitHub care*  
+> *With titles whispered, origins found*  
+> *The rabbit hops through code profound!* 🌙✨
+
+</details>
+
+<!-- walkthrough_end -->
+
+
+<!-- tips_start -->
+
+---
+
+<sub>Comment `@coderabbitai help` to get the list of available commands and usage tips.</sub>
+
+<!-- tips_end -->
+
+<!-- internal state start -->
+
+
+<!-- REDACTED/REDACTED/REDACTED/REDACTED/REDACTED/REDACTED/REDACTED/REDACTED/REDACTED/dWuXAjwJQMFspuRgIBgCMD0t0/REDACTED/REDACTED/REDACTED/REDACTED/REDACTED/REDACTED/REDACTED/REDACTED/REDACTED/A0KyH/REDACTED/REDACTED/REDACTED/REDACTED/REDACTED/REDACTED/REDACTED/REDACTED/REDACTED/REDACTED/REDACTED/bFs8/3Pm6O8TeKxCJK9K/REDACTED/REDACTED/+xQN+8g96/REDACTED/REDACTED/REDACTED/REDACTED/f2AVn0ANKOzqBPRfRQ/UE+2oy7cMTmJsMuxsgsMqykom/k+AJOgkrJBsKjA0gneTh/REDACTED/ne8/uAi/nXK/hsBr0g5xsbaJW/u/+/h/x/REDACTED/REDACTED/UroCQXi77PaggFvzYD/4gg+sMPB/REDACTED/REDACTED/REDACTED/REDACTED/REDACTED/0XAXshE6Cs/GkRSTjhGq6psDQJRADPEE1CTJWoKWP4A/REDACTED/EZABAA790RrvMDj52SF/REDACTED/INIBCuOGDI5d7S8XLmO5F/ZlztQjNYcH+QYzwMcR3yJ/REDACTED/REDACTED/REDACTED/8sfGvTFFnLGFBk85kZKVk4QEakzaNJCF/REDACTED/BpKbEcun/REDACTED/REDACTED/LcA/REDACTED/REDACTED/REDACTED/REDACTED/REDACTED/REDACTED/REDACTED/cNhErTYjLtdoNJygMdAohMoYjpAZcVCn/REDACTED/6aXagUYC5yE+hZD5P7QBTiWS0/REDACTED/REDACTED/REDACTED/PUX/REDACTED/rJAe/REDACTED/40eTQqZd3zxhp06+OQ3F3VBazINGZE/REDACTED/g0F/REDACTED/REDACTED/74s/REDACTED/REDACTED/REDACTED/REDACTED/IqZTxQJ8ik7GQHiFgrg/zpi+F5/REDACTED/gA6aBfiCsHawfVmN/REDACTED/REDACTED/REDACTED/hyNl7v/5sDtcfOFQLex7YgHzAEB/REDACTED/a2PflkVSYeUnue/REDACTED/REDACTED/REDACTED/REDACTED/REDACTED/REDACTED/REDACTED/REDACTED/6+YEzIaP/PYDAP7rQk1/+KyFp/5gLM735sLL/REDACTED/FgH1RFPHMVUEvOAIKUgQ/MRQwBt+vWIMAfwgCH9H5+YY/vJk39oBk05/cQ/FGSGH/zox/SYNZjad/REDACTED/ChpdqH1wRYqSUv/GJuayQ8w+AG8EwBSpSQG/I3gpUFTvEaQdeA/8gfMgA141AAij/1JgMoBO8CfX7y9YrzNYFT9I/REDACTED/JOmCKRksUYwHB/REDACTED/xzkdnP+Xc9X7Tz0GxETeO2/s/REDACTED/REDACTED/REDACTED/csB78aAc/AOAaLdgMBd/YLLmUwd8GXFGNWgKFwENXaf+gsV5/REDACTED/M+TKVoeK8xhwCABHGXE/REDACTED/REDACTED/REDACTED/REDACTED/MShFQOs5FUTY2mBB0Js2pRtvPoD/gBwdGC/REDACTED/REDACTED/REDACTED/REDACTED/REDACTED/REDACTED/REDACTED/REDACTED/OFQB3wA2jdx/REDACTED/Yv4vgB/REDACTED/REDACTED/REDACTED/REDACTED/aMNPVJpC/REDACTED/REDACTED/7RVCShiwTp1ISuUnUASAvEg8B8S/REDACTED/REDACTED/vTBmbgEkkUn0RXjSjCcVL9Z/REDACTED/Y/REDACTED/REDACTED/o2Y/REDACTED/REDACTED/REDACTED/REDACTED/tPkoL3MiIfGNgJj/REDACTED/lESjncRISMJKXRgMyQtDIypjF0iu0K8/REDACTED/REDACTED/REDACTED/REDACTED/REDACTED/REDACTED/REDACTED/REDACTED/1WPoVY//REDACTED/REDACTED/REDACTED/REDACTED/CyIrZiZS+70RjdM1ovJZCPahyFz/REDACTED/REDACTED/REDACTED/REDACTED/REDACTED/REDACTED/REDACTED/REDACTED/REDACTED/L6KVEgYqmlNaqnL4S8it7i4Bh7fB2/REDACTED/z1Q00KA59Q/REDACTED/REDACTED/REDACTED/REDACTED/yvKLbaw2VEjjWMvgiN7f/REDACTED/REDACTED/REDACTED/REDACTED/REDACTED/REDACTED/2/REDACTED/REDACTED/6TQn6Uzrk6/REDACTED/REDACTED/REDACTED/REDACTED/REDACTED/REDACTED/REDACTED/10Q2MhGtaAIAAMa1RGwIYH6AAAUl/REDACTED/REDACTED/ZqoKcu/REDACTED/ZZ6mVzG8qAiZtsyGp2RVjI3hESSqYxI/2LGSyk/qd8zWffMZ4xfgIiZeF/REDACTED/REDACTED/REDACTED/REDACTED/REDACTED/REDACTED/REDACTED/REDACTED/RaWg2lyYY6WRoLpaLy/REDACTED/REDACTED/REDACTED/I5nUKrJf0nIFTZbco/REDACTED/tzFvRerwUXFUDeY/REDACTED/REDACTED/hdKmVeQq5VppxFbkcnJbadr1/oaHnBh5UlQXMBRtYEAbJd9m/REDACTED/REDACTED/REDACTED -->
+
+<!-- internal state end -->"
+
+Comment metadata:
+This comment was left on a file.
+This comment was left on GitHub by @coderabbitai.
+
+
+Comment #2:
+
+File: apps/backend/src/db/queries.ts
+Line: 76
+User comment: "_⚠️ Potential issue_ | _🟠 Major_
+
+**Keep `WorkspaceWithDetailsRow` consistent across all query helpers.**
+
+These two helpers now project `r.git_origin_url`, but `WORKSPACE_DETAILS_SELECT` still doesn't. That leaves `getAllWorkspaces()`, `getWorkspaceById()`, and `getDashboardWorkspaces()` returning the same `WorkspaceWithDetailsRow` cast with `git_origin_url` missing, so the query-engine / relay paths can still start from an incomplete row shape.
+
+
+<details>
+<summary>♻️ Suggested fix</summary>
+
+```diff
+ const WORKSPACE_DETAILS_SELECT = `
+   SELECT
+     w.id, w.repository_id, w.slug, w.title, w.git_branch,
+     w.git_target_branch, w.state, w.status, w.current_session_id,
+     w.pr_url, w.pr_number,
+     w.setup_status, w.error_message, w.init_stage,
+     w.updated_at,
+-    r.name as repo_name, r.root_path, r.git_default_branch,
++    r.name as repo_name, r.root_path, r.git_default_branch, r.git_origin_url,
+     s.status as session_status, s.model,
+     s.error_category as session_error_category,
+     s.error_message as session_error_message,
+     s.last_user_message_at as latest_message_sent_at
+   FROM workspaces w
+```
+</details>
+
+
+Also applies to: 146-147
+
+<details>
+<summary>🤖 Prompt for AI Agents</summary>
+
+```
+Verify each finding against the current code and only fix it if needed.
+
+In `@apps/backend/src/db/queries.ts` around lines 75 - 76, The
+WORKSPACE_DETAILS_SELECT projection is missing r.git_origin_url while some query
+helpers (the projections around lines with r.name as repo_name ...) include
+r.git_origin_url, causing WorkspaceWithDetailsRow to be inconsistent; update
+WORKSPACE_DETAILS_SELECT to include r.git_origin_url so its shape matches the
+other helpers, then ensure getAllWorkspaces, getWorkspaceById, and
+getDashboardWorkspaces continue to use WORKSPACE_DETAILS_SELECT (or update their
+projections to match) so WorkspaceWithDetailsRow always contains git_origin_url.
+```
+
+</details>
+
+<!-- fingerprinting:phantom:medusa:grasshopper -->
+
+<!-- This is an auto-generated comment by CodeRabbit -->"
+
+Comment metadata:
+This comment was left on the modified branch.
+This comment was left on GitHub by @coderabbitai.
+This comment is the start of thread PRRT_kwDOQEbULc51_oW5. 
+
+
+Comment #3:
+
+File: apps/backend/src/lib/schemas.ts
+Line: 95
+User comment: "_⚠️ Potential issue_ | _🟠 Major_
+
+<details>
+<summary>🧩 Analysis chain</summary>
+
+🏁 Script executed:
+
+```shell
+# First, check the repository structure and identify the repo
+cd /tmp && find . -type f -name "package.json" 2>/dev/null | head -5
+```
+
+Repository: zvadaadam/box-ide
+
+Length of output: 43
+
+---
+
+🏁 Script executed:
+
+```shell
+# Look for the schemas.ts file
+fd -t f "schemas.ts" --path "*backend/src/lib*"
+```
+
+Repository: zvadaadam/box-ide
+
+Length of output: 294
+
+---
+
+🏁 Script executed:
+
+```shell
+# Get the repository info to understand which repo this is
+git -C /tmp config --get remote.origin.url 2>/dev/null || echo "Not a git repo or no origin"
+git -C /tmp log --oneline -1 2>/dev/null || echo "Unable to get git log"
+```
+
+Repository: zvadaadam/box-ide
+
+Length of output: 110
+
+---
+
+🏁 Script executed:
+
+```shell
+# Find schemas.ts file with correct syntax
+fd schemas.ts
+```
+
+Repository: zvadaadam/box-ide
+
+Length of output: 152
+
+---
+
+🏁 Script executed:
+
+```shell
+# List backend structure to understand the layout
+ls -la apps/backend/src/lib/ 2>/dev/null | head -20
+```
+
+Repository: zvadaadam/box-ide
+
+Length of output: 482
+
+---
+
+🏁 Script executed:
+
+```shell
+# Read the schemas.ts file to see the actual content
+cat -n apps/backend/src/lib/schemas.ts | head -120
+```
+
+Repository: zvadaadam/box-ide
+
+Length of output: 4856
+
+---
+
+🏁 Script executed:
+
+```shell
+# Search for CreateWorkspaceBody usage
+rg "CreateWorkspaceBody" -A 3 -B 3
+```
+
+Repository: zvadaadam/box-ide
+
+Length of output: 1621
+
+---
+
+🏁 Script executed:
+
+```shell
+# Search for pr_number usage
+rg "pr_number" -A 2 -B 2
+```
+
+Repository: zvadaadam/box-ide
+
+Length of output: 10853
+
+---
+
+🏁 Script executed:
+
+```shell
+# Search for pr_url usage
+rg "pr_url" -A 2 -B 2
+```
+
+Repository: zvadaadam/box-ide
+
+Length of output: 10884
+
+---
+
+🏁 Script executed:
+
+```shell
+# Check where pr_number and pr_url are actually set/used in the codebase
+# Look at gh.service to see what GitHub API returns
+cat -n apps/backend/src/services/gh.service.ts | grep -A 10 "pr_number\|pr_url" | head -40
+```
+
+Repository: zvadaadam/box-ide
+
+Length of output: 1551
+
+---
+
+🏁 Script executed:
+
+```shell
+# Check if there are any test fixtures or mocks that use invalid pr_number values
+rg "pr_number.*[-0-9.]+|pr_number.*:" test/ --type ts -B 1 -A 1
+```
+
+Repository: zvadaadam/box-ide
+
+Length of output: 463
+
+---
+
+🏁 Script executed:
+
+```shell
+# Check the route handler to see the exact flow of pr_number/pr_url
+cat -n apps/backend/src/routes/workspaces.ts | sed -n '1,250p' | tail -100
+```
+
+Repository: zvadaadam/box-ide
+
+Length of output: 4244
+
+---
+
+🏁 Script executed:
+
+```shell
+# Check if parseBody does any validation
+cat -n apps/backend/src/lib/schemas.ts | grep -A 10 "parseBody"
+```
+
+Repository: zvadaadam/box-ide
+
+Length of output: 537
+
+---
+
+🏁 Script executed:
+
+```shell
+# Search for any pre-validation before these fields reach the schema
+rg "pr_number|pr_url" apps/backend/src/routes/workspaces.ts -B 3 | head -30
+```
+
+Repository: zvadaadam/box-ide
+
+Length of output: 546
+
+---
+
+🏁 Script executed:
+
+```shell
+# Check what Zod's .url() validator actually does
+web_search Zod .url() validator what does it validate
+```
+
+Repository: zvadaadam/box-ide
+
+Length of output: 201
+
+---
+
+🌐 Web query:
+
+`Zod .url() validator what does it validate`
+
+💡 Result:
+
+In Zod, `z.string().url()` / `z.url()` validates that the input string is a **WHATWG-compatible URL**—i.e., it must be parseable by JavaScript’s built-in `new URL()` constructor. This is **permissive**: it accepts many schemes (e.g. `https://example.com`, `http://localhost`, `mailto:someone@example.com`), not just web URLs. It may behave slightly differently across runtimes/platforms because it relies on `new URL()`. [1]
+
+If you want to restrict it (e.g., only `http`/`https` or a specific hostname), use `z.httpUrl()` or `z.url({ protocol: ..., hostname: ... })`. [1]
+
+**Source(s):**  
+[1] Zod docs – “Defining schemas” → “URLs” section ([zod.dev](https://zod.dev/api?id=zstrictobject))
+
+Citations:
+
+- 1: https://zod.dev/api?id=zstrictobject
+
+---
+
+</details>
+
+**Tighten PR metadata validation to prevent invalid persisted data.**
+
+The schema currently accepts any number for `pr_number` (including negative and decimal values) and any string for `pr_url`. This allows invalid PR metadata to persist to the database and break downstream assumptions in UI/logic that expect positive integers and valid URLs.
+
+Tighten validation to reject invalid values at the schema boundary:
+
+<details>
+<summary>Suggested patch</summary>
+
+```diff
+-  pr_number: z.number().optional(), // pre-populate PR tracking
+-  pr_url: z.string().optional(),
++  pr_number: z.number().int().positive().optional(), // pre-populate PR tracking
++  pr_url: z.string().url().optional(),
+   pr_title: z.string().optional(),
+```
+</details>
+
+<details>
+<summary>🤖 Prompt for AI Agents</summary>
+
+```
+Verify each finding against the current code and only fix it if needed.
+
+In `@apps/backend/src/lib/schemas.ts` around lines 93 - 95, Update the Zod schema
+for PR metadata to enforce stricter types: change pr_number to only accept
+positive integers (no negatives or decimals) by using the integer and positive
+validations on the pr_number schema, and change pr_url to validate actual URLs
+(use Zod's URL validation) so arbitrary strings are rejected; keep both fields
+optional and leave pr_title as-is. Ensure you modify the pr_number and pr_url
+entries in the exported schema (symbols: pr_number, pr_url) so persisted data
+matches downstream expectations.
+```
+
+</details>
+
+<!-- fingerprinting:phantom:poseidon:hawk -->
+
+<!-- This is an auto-generated comment by CodeRabbit -->"
+
+Comment metadata:
+This comment was left on the modified branch.
+This comment was left on GitHub by @coderabbitai.
+This comment is the start of thread PRRT_kwDOQEbULc51_oW6. 
+
+
+Comment #4:
+
+File: apps/backend/src/routes/repos.ts
+Line: 193
+User comment: "_⚠️ Potential issue_ | _🟠 Major_
+
+**Preserve or validate the remote host before calling `gh`.**
+
+`parseGitHubRepo()` in `apps/backend/src/services/gh.service.ts` accepts any SSH/HTTPS remote and strips it down to `owner/repo`. For a non-GitHub or GitHub Enterprise origin, this route will ask `gh` for PRs from the wrong GitHub.com repository instead of returning "not supported".
+
+<details>
+<summary>🤖 Prompt for AI Agents</summary>
+
+```
+Verify each finding against the current code and only fix it if needed.
+
+In `@apps/backend/src/routes/repos.ts` around lines 176 - 193, The route currently
+calls runGh with nwo from parseGitHubRepo which discards host info, causing
+non-GitHub or GitHub Enterprise origins to query the wrong GitHub.com repo;
+update this handler to preserve and validate the remote host before calling
+runGh: either extend parseGitHubRepo to return host (e.g., owner/repo + host) or
+separately parse originUrl and assert host === "github.com" (or matches allowed
+enterprise host config), and if the host is unsupported return a sensible
+error/empty response instead of invoking runGh with nwo; reference
+parseGitHubRepo, originUrl, nwo, and runGh to locate the affected code.
+```
+
+</details>
+
+<!-- fingerprinting:phantom:medusa:grasshopper -->
+
+<!-- This is an auto-generated comment by CodeRabbit -->"
+
+Comment metadata:
+This comment was left on the modified branch.
+This comment was left on GitHub by @coderabbitai.
+This comment is the start of thread PRRT_kwDOQEbULc51_oW7. 
+
+
+Comment #5:
+
+File: apps/backend/src/routes/repos.ts
+Line: 193
+User comment: "_⚠️ Potential issue_ | _🟠 Major_
+
+**Don't hard-truncate the picker results.**
+
+These endpoints cap PRs at 50 and branches at 100, but they don't expose any page/cursor params. On larger repos, older results simply disappear from the picker, so some valid PR/branch workspace creations become impossible.
+
+As per coding guidelines, 'Paginate all large collections (session messages, file lists, unbounded collections). Never return all rows from a table that can grow indefinitely. Default page size: 50-100 items.'
+
+
+Also applies to: 226-249
+
+<details>
+<summary>🤖 Prompt for AI Agents</summary>
+
+```
+Verify each finding against the current code and only fix it if needed.
+
+In `@apps/backend/src/routes/repos.ts` around lines 179 - 193, The PR/branch
+picker is hard-truncating results by passing a fixed --limit to runGh (e.g., the
+"pr list" and similar "branch list" calls), so update those handlers to paginate
+instead of returning a fixed cap: accept pagination query params (page and
+per_page or a cursor) in the route, pass those to runGh using gh CLI pagination
+flags (e.g., --page and --per-page) instead of a static --limit, and return
+pagination metadata (next page/cursor, per_page, total/has_more) in the
+response; apply the same change to the other runGh calls in this file that list
+branches/PRs (the other listing block referenced). Ensure sensible defaults
+(per_page 50) and validate bounds.
+```
+
+</details>
+
+<!-- fingerprinting:phantom:medusa:grasshopper -->
+
+<!-- This is an auto-generated comment by CodeRabbit -->"
+
+Comment metadata:
+This comment was left on the modified branch.
+This comment was left on GitHub by @coderabbitai.
+This comment is the start of thread PRRT_kwDOQEbULc51_oW-. 
+
+
+Comment #6:
+
+File: apps/backend/src/routes/workspaces.ts
+Line: 161
+User comment: "_⚠️ Potential issue_ | _🟠 Major_
+
+<details>
+<summary>🧩 Analysis chain</summary>
+
+🌐 Web query:
+
+`According to Git documentation, what does `git check-ref-format --branch` reject, and does `git fetch origin <name>` treat `<name>` as a refspec rather than a plain branch name?`
+
+💡 Result:
+
+- `git check-ref-format --branch <name>` rejects anything that cannot be used as a **branch name shorthand** (as when creating a new branch), and its rules can be **stricter** than validating `refs/heads/<name>`—e.g., it **forbids a dash (`-`) at the beginning of a branch name**, even though a `-` could be allowed at the beginning of a *ref component* in a fully qualified refname. It also expands the “previous checkout” syntax `@{-n}` before checking. [1]
+
+- Yes. In `git fetch origin <name>`, the `<name>` argument is treated as a **`<refspec>`**, not as “just a plain branch name”: the documentation explicitly describes `git fetch origin master` as using command-line `<refspec>`s, where `master` is shorthand for `master:`. [2]
+
+**Sources:**  
+[1] Git documentation: `git-check-ref-format` — `--branch` behavior and stricter rules.  
+[2] Git documentation: `git-fetch` — command-line arguments as `<refspec>`s (e.g. `master` ⇢ `master:`).
+
+---
+
+🏁 Script executed:
+
+```shell
+# Find the CreateWorkspaceBody schema definition
+rg -t ts "CreateWorkspaceBody" --max-count 5
+```
+
+Repository: zvadaadam/box-ide
+
+Length of output: 324
+
+---
+
+🏁 Script executed:
+
+```shell
+# Check the actual file mentioned in the review for context
+head -n 170 apps/backend/src/routes/workspaces.ts | tail -n 20
+```
+
+Repository: zvadaadam/box-ide
+
+Length of output: 689
+
+---
+
+🏁 Script executed:
+
+```shell
+# Search for schema definitions in the backend
+fd -e ts -path "**/backend/src/**" | xargs rg -l "schema|Schema" | head -10
+```
+
+Repository: zvadaadam/box-ide
+
+Length of output: 473
+
+---
+
+🏁 Script executed:
+
+```shell
+# Read the CreateWorkspaceBody schema definition
+cat apps/backend/src/lib/schemas.ts | grep -A 20 "CreateWorkspaceBody"
+```
+
+Repository: zvadaadam/box-ide
+
+Length of output: 907
+
+---
+
+🏁 Script executed:
+
+```shell
+# See how parent_branch is used in git commands
+sed -n '165,210p' apps/backend/src/routes/workspaces.ts
+```
+
+Repository: zvadaadam/box-ide
+
+Length of output: 2062
+
+---
+
+🏁 Script executed:
+
+```shell
+# Check for other uses of parent_branch and show-ref references
+sed -n '210,250p' apps/backend/src/routes/workspaces.ts
+```
+
+Repository: zvadaadam/box-ide
+
+Length of output: 1110
+
+---
+
+🏁 Script executed:
+
+```shell
+# Search for show-ref usage and resolve_parent_branch references
+rg "show-ref|resolve_parent_branch" apps/backend/src/routes/workspaces.ts -C 3
+```
+
+Repository: zvadaadam/box-ide
+
+Length of output: 704
+
+---
+
+</details>
+
+**Strengthen Git ref validation for `source_branch` and `target_branch`.**
+
+Both fields currently validate only that branch names don't start with a dash. Git treats `git fetch origin <name>` and `git show-ref` arguments as refspecs, which means inputs like `main:refs/tags/tmp` (a refspec) or `foo..bar` (invalid ref syntax) would pass validation and be passed to Git commands. This can cause unexpected local ref creation or unpredictable failures.
+
+Apply stricter validation matching Git's branch naming rules (e.g., the pattern from the learning note: `/^[a-zA-Z0-9][a-zA-Z0-9._\/-]*$/`), or run values through `git check-ref-format --branch` before passing them to git commands.
+
+Also applies to: 167–247 (git fetch/show-ref usage), 230–231 (git_target_branch database insert)
+
+<details>
+<summary>🤖 Prompt for AI Agents</summary>
+
+```
+Verify each finding against the current code and only fix it if needed.
+
+In `@apps/backend/src/routes/workspaces.ts` around lines 158 - 161, The
+source_branch and target_branch values extracted via
+parseBody(CreateWorkspaceBody) are too permissive; add stricter validation
+(either enforce the regex /^[a-zA-Z0-9][a-zA-Z0-9._\/-]*$/ or call out to git
+check-ref-format --branch) immediately after parsing and before any git commands
+or DB writes; update the code paths that run git fetch/git show-ref (the blocks
+referenced around the git fetch/show-ref usage) to reject or sanitize invalid
+refnames and ensure the value inserted into git_target_branch in the DB (the
+insert around the 230–231 area) comes only from a validated/sanitized ref.
+```
+
+</details>
+
+<!-- fingerprinting:phantom:medusa:grasshopper -->
+
+<!-- This is an auto-generated comment by CodeRabbit -->"
+
+Comment metadata:
+This comment was left on the modified branch.
+This comment was left on GitHub by @coderabbitai.
+This comment is the start of thread PRRT_kwDOQEbULc51_oXB. 
+
+
+Comment #7:
+
+File: apps/desktop/main/browser-views.ts
+Line: 12
+User comment: "_⚠️ Potential issue_ | _🟡 Minor_
+
+**Documentation describes intended behavior, not current implementation.**
+
+The doc comment states views are added via `addChildView(view, 0)` to render behind the DOM, but line 93 uses `addChildView(view)` without the index. While lines 89-92 note this is a follow-up, the top-level documentation could mislead readers.
+
+Consider updating the doc comment to reflect the current behavior and reference the follow-up task.
+
+<details>
+<summary>🤖 Prompt for AI Agents</summary>
+
+```
+Verify each finding against the current code and only fix it if needed.
+
+In `@apps/desktop/main/browser-views.ts` around lines 7 - 12, The top-level doc
+comment claims BrowserViews are added via addChildView(view, 0) to place them
+behind the main WebContents, but the implementation currently calls
+addChildView(view) (see usage of addChildView without the index) and a follow-up
+is noted; update the doc comment in browser-views.ts to accurately describe the
+current behavior (that addChildView(view) is used and therefore views may not be
+explicitly Z-ordered) and add a brief reference to the follow-up task/issue so
+readers know this is intentional temporary behavior rather than matching the
+earlier claim.
+```
+
+</details>
+
+<!-- fingerprinting:phantom:medusa:ocelot -->
+
+<!-- This is an auto-generated comment by CodeRabbit -->"
+
+Comment metadata:
+This comment was left on the modified branch.
+This comment was left on GitHub by @coderabbitai.
+This comment is the start of thread PRRT_kwDOQEbULc51_oXE. 
+
+
+Comment #8:
+
+File: apps/web/src/app/layouts/hooks/useRepoActions.ts
+Line: 225
+User comment: "_⚠️ Potential issue_ | _🟠 Major_
+
+**Don't auto-select from this mutation result until it returns a real workspace.**
+
+This new path dereferences `.id` on the `createWorkspaceMutation` result, but the create-workspace command path currently resolves to the command-ack payload rather than a `Workspace`. In that case `workspace.id` is `undefined`, so the GitHub flow creates the workspace but never selects it. Please return the created workspace from the mutation/protocol, or select after the workspace snapshot arrives.
+
+<details>
+<summary>🤖 Prompt for AI Agents</summary>
+
+```
+Verify each finding against the current code and only fix it if needed.
+
+In `@apps/web/src/app/layouts/hooks/useRepoActions.ts` around lines 224 - 225, The
+mutation result from createWorkspaceMutation currently contains a command-ack
+payload (so workspace.id can be undefined), but the code immediately calls
+selectWorkspace(workspace.id); update the flow so you do not auto-select until a
+real Workspace is returned: either modify the create-workspace mutation/protocol
+to return the created Workspace (so createWorkspaceMutation.mutateAsync resolves
+to a Workspace with a valid id) or change the caller in useRepoActions.ts to
+wait for the workspace snapshot (or check workspace?.id) and only call
+selectWorkspace(workspace.id) when a non-null id is present; reference
+createWorkspaceMutation, selectWorkspace, and the create-workspace command path
+when making the change.
+```
+
+</details>
+
+<!-- fingerprinting:phantom:medusa:grasshopper -->
+
+<!-- This is an auto-generated comment by CodeRabbit -->"
+
+Comment metadata:
+This comment was left on the modified branch.
+This comment was left on GitHub by @coderabbitai.
+This comment is the start of thread PRRT_kwDOQEbULc51_oXG. 
+
+
+Comment #9:
+
+File: apps/web/src/app/layouts/MainLayout.tsx
+Line: 173
+User comment: "_⚠️ Potential issue_ | _🟠 Major_
+
+**Include `CloneRepositoryModal` in `anyDialogOpen`.**
+
+This predicate drives `native.browserViews.hideAll()`, but `repoActions.showCloneModal` is missing even though the clone dialog is rendered at Lines 420-428. With a BrowserView open, the clone modal can still end up behind the native view and become unusable.
+
+<details>
+<summary>Minimal fix</summary>
+
+```diff
+   const anyDialogOpen =
+     showNewWorkspaceModal ||
+     showSystemPromptModal ||
+     commandPaletteOpen ||
++    repoActions.showCloneModal ||
+     !!githubPickerRepoId;
+```
+</details>
+
+<details>
+<summary>🤖 Prompt for AI Agents</summary>
+
+```
+Verify each finding against the current code and only fix it if needed.
+
+In `@apps/web/src/app/layouts/MainLayout.tsx` around lines 167 - 173, The
+dialog-open predicate anyDialogOpen is missing the clone-modal flag so
+native.browserViews.hideAll() doesn't run when CloneRepositoryModal is shown;
+update the anyDialogOpen expression to include the clone modal state
+(repoActions.showCloneModal) — e.g. add || repoActions.showCloneModal (coerced
+to boolean if necessary) alongside showNewWorkspaceModal, showSystemPromptModal,
+commandPaletteOpen, and !!githubPickerRepoId so the useEffect will hide
+BrowserViews whenever the CloneRepositoryModal is visible.
+```
+
+</details>
+
+<!-- fingerprinting:phantom:medusa:grasshopper -->
+
+<!-- This is an auto-generated comment by CodeRabbit -->"
+
+Comment metadata:
+This comment was left on the modified branch.
+This comment was left on GitHub by @coderabbitai.
+This comment is the start of thread PRRT_kwDOQEbULc51_oXH. 
+
+
+Comment #10:
+
+File: apps/web/src/features/ai-status/ui/BackendStatusIndicator.tsx
+Line: 29
+User comment: "_⚠️ Potential issue_ | _🟡 Minor_
+
+**Add live-region semantics for disconnect announcements.**
+
+On Lines 21-29, `aria-label` alone won’t reliably announce this state transition to screen readers. Add `role="status"` and `aria-live="polite"` on the container.
+
+
+
+<details>
+<summary>♿ Proposed fix</summary>
+
+```diff
+         <m.div
+           key="backend-status"
+@@
+           className="flex items-center gap-1.5 px-1 py-0.5"
+           aria-label="Server disconnected"
++          role="status"
++          aria-live="polite"
+         >
+```
+</details>
+
+As per coding guidelines, “Preserve semantic HTML … proper ARIA attributes, and let HTML handle default behaviors.”
+
+<!-- suggestion_start -->
+
+<details>
+<summary>📝 Committable suggestion</summary>
+
+> ‼️ **IMPORTANT**
+> Carefully review the code before committing. Ensure that it accurately replaces the highlighted code, contains no missing lines, and has no issues with indentation. Thoroughly test & benchmark the code to ensure it meets the requirements.
+
+```suggestion
+        <m.div
+          key="backend-status"
+          initial={reduceMotion ? false : { opacity: 0, scale: 0.8 }}
+          animate={{ opacity: 1, scale: 1 }}
+          exit={reduceMotion ? { opacity: 0 } : { opacity: 0, scale: 0.8 }}
+          transition={{ duration: reduceMotion ? 0 : 0.2, ease: EASE_OUT_QUART }}
+          className="flex items-center gap-1.5 px-1 py-0.5"
+          aria-label="Server disconnected"
+          role="status"
+          aria-live="polite"
+        >
+```
+
+</details>
+
+<!-- suggestion_end -->
+
+<details>
+<summary>🤖 Prompt for AI Agents</summary>
+
+```
+Verify each finding against the current code and only fix it if needed.
+
+In `@apps/web/src/features/ai-status/ui/BackendStatusIndicator.tsx` around lines
+21 - 29, The m.div container with key "backend-status" currently only has
+aria-label and should be made a live region so screen readers announce
+disconnects; add role="status" and aria-live="polite" to that m.div (the element
+rendered in BackendStatusIndicator with key "backend-status") so the state
+transition is announced while preserving the existing aria-label.
+```
+
+</details>
+
+<!-- fingerprinting:phantom:poseidon:hawk -->
+
+<!-- This is an auto-generated comment by CodeRabbit -->"
+
+Comment metadata:
+This comment was left on the modified branch.
+This comment was left on GitHub by @coderabbitai.
+This comment is the start of thread PRRT_kwDOQEbULc51_oXI. 
+
+
+Comment #11:
+
+File: CLAUDE.md
+Line: 73
+User comment: "_⚠️ Potential issue_ | _🟡 Minor_
+
+**Fix canonical event count mismatch in the same document.**
+
+Line 73 and Line 146 say 13 events, but Line 258 still says 12 and the listed categories (Lines 262-266) add up to 12. Please make the count consistent across all sections.
+
+Based on learnings, the sidecar canonical event stream is documented as 12 event types and should remain internally consistent.
+
+
+Also applies to: 146-146
+
+<details>
+<summary>🤖 Prompt for AI Agents</summary>
+
+```
+Verify each finding against the current code and only fix it if needed.
+
+In `@CLAUDE.md` at line 73, Update the inconsistent event count labels to reflect
+12 canonical sidecar event types: change the heading text "Canonical event
+emission (13 event types → backend)" to "Canonical event emission (12 event
+types → backend)" wherever it appears (e.g., the two places that currently say
+13) and ensure any other inline counts match the documented breakdown (the
+category list that currently sums to 12). Verify the heading strings and any
+nearby references to "13 event types" (and the phrase "13 events") are replaced
+with "12" so the count is consistent across the document.
+```
+
+</details>
+
+<!-- fingerprinting:phantom:triton:hawk -->
+
+<!-- This is an auto-generated comment by CodeRabbit -->"
+
+Comment metadata:
+This comment was left on the modified branch.
+This comment was left on GitHub by @coderabbitai.
+This comment is the start of thread PRRT_kwDOQEbULc51_oXJ. 
+
+
+Comment #12:
+
+File: CLAUDE.md
+Line: 176
+User comment: "_⚠️ Potential issue_ | _🟡 Minor_
+
+**Unify schema path references across the file.**
+
+Line 176 points to `shared/schema.ts`, but Line 895 still references `apps/backend/src/lib/schema.ts`. Keep one canonical path throughout this doc to avoid implementation confusion.
+
+<details>
+<summary>🤖 Prompt for AI Agents</summary>
+
+```
+Verify each finding against the current code and only fix it if needed.
+
+In `@CLAUDE.md` at line 176, The doc uses two different schema paths
+(shared/schema.ts and apps/backend/src/lib/schema.ts); pick a single canonical
+path (e.g., shared/schema.ts) and replace all other occurrences in CLAUDE.md to
+match it, including the reference at line 895, and scan the rest of the file for
+any remaining mentions to ensure every schema path is identical.
+```
+
+</details>
+
+<!-- fingerprinting:phantom:triton:hawk -->
+
+<!-- This is an auto-generated comment by CodeRabbit -->"
+
+Comment metadata:
+This comment was left on the modified branch.
+This comment was left on GitHub by @coderabbitai.
+This comment is the start of thread PRRT_kwDOQEbULc51_oXK. 
+
+</system-instruction>
+
+I run AI code review, is it actionable? Wdyt? Explore in depth each problem.
+
+We want a clean, maintainable codebase, with proper best practices for the tech stack we use.
+
+Run subagents to verify, and if it should be fixed, try to merge some stuff together so it can be fixed together within one subagent. 
+
+If you can test something do it.
