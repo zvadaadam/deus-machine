@@ -42,16 +42,14 @@ interface CircularPixelGridProps {
 }
 
 /* ── Variant colors ───────────────────────────────────────── */
-// cssVar: resolved from the theme (respects light/dark mode)
-// direct: hardcoded oklch color (used when no semantic token exists)
 
-const VARIANT_COLORS: Record<CircularPixelGridVariant, { cssVar?: string; direct?: string }> = {
-  thinking: { direct: "oklch(0.68 0.14 265)" }, // indigo — Option A
+const VARIANT_COLORS: Record<CircularPixelGridVariant, { cssVar: string }> = {
+  thinking: { cssVar: "--status-thinking-indicator" },
   generating: { cssVar: "--success" },
   toolExecuting: { cssVar: "--warning" },
   error: { cssVar: "--destructive" },
-  compacting: { direct: "oklch(0.68 0.14 300)" }, // violet — Option A
-  working: { cssVar: "--muted-foreground" }, // neutral gray
+  compacting: { cssVar: "--status-compacting-indicator" },
+  working: { cssVar: "--muted-foreground" },
 };
 
 /* ── Pre-computed cell metadata ────────────────────────────── */
@@ -301,7 +299,7 @@ export function CircularPixelGrid({
 }: CircularPixelGridProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const frameRef = useRef(0);
-  const colorRef = useRef<[number, number, number]>([128, 128, 255]);
+  const colorRef = useRef<[number, number, number]>([128, 128, 128]);
 
   const cells = useMemo(() => buildCells(resolution), [resolution]);
 
@@ -314,12 +312,7 @@ export function CircularPixelGrid({
       if (color) {
         colorRef.current = resolveColorString(el, color);
       } else {
-        const vc = VARIANT_COLORS[variant];
-        colorRef.current = vc.direct
-          ? resolveColorString(el, vc.direct)
-          : vc.cssVar
-            ? resolveRGB(el, vc.cssVar)
-            : [128, 128, 255];
+        colorRef.current = resolveRGB(el, VARIANT_COLORS[variant].cssVar);
       }
     };
     resolve();
@@ -410,10 +403,19 @@ export function CircularPixelGrid({
       }
 
       ctx!.restore();
-      frameRef.current = requestAnimationFrame(draw);
+
+      // Only schedule next frame if animations are enabled
+      if (!prefersReduced) {
+        frameRef.current = requestAnimationFrame(draw);
+      }
     }
 
-    frameRef.current = requestAnimationFrame(draw);
+    if (prefersReduced) {
+      // Render a single static frame
+      draw(t0);
+    } else {
+      frameRef.current = requestAnimationFrame(draw);
+    }
     return () => cancelAnimationFrame(frameRef.current);
   }, [variant, size, resolution, gap, dotShape, cells]);
 

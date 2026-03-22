@@ -1,6 +1,6 @@
 import type { Meta, StoryObj } from "@storybook/react-vite";
 import { CircularPixelGrid, type CircularPixelGridVariant } from "./CircularPixelGrid";
-import { PixelGrid } from "./PixelGrid";
+import { PixelGrid, type PixelGridVariant } from "./PixelGrid";
 
 const VARIANTS: { variant: CircularPixelGridVariant; label: string; color: string }[] = [
   { variant: "thinking", label: "Thinking", color: "text-[oklch(0.68_0.14_265)]" },
@@ -192,7 +192,7 @@ export const OldVsNew: StoryObj<typeof CircularPixelGrid> = {
             <div key={variant} className="flex flex-col items-center gap-4">
               <div className="flex items-center gap-8 rounded-xl bg-black/80 p-6">
                 <div className="flex flex-col items-center gap-2">
-                  <PixelGrid variant={variant} size={48} />
+                  <PixelGrid variant={variant as PixelGridVariant} size={48} />
                   <span className="text-muted-foreground text-[10px]">3×3</span>
                 </div>
                 <div className="flex flex-col items-center gap-2">
@@ -213,7 +213,7 @@ export const OldVsNew: StoryObj<typeof CircularPixelGrid> = {
             <div key={variant} className="flex flex-col items-center gap-3">
               <div className={`flex items-center gap-3 ${color}`}>
                 <div className="flex flex-col items-center gap-1">
-                  <PixelGrid variant={variant} size={15} />
+                  <PixelGrid variant={variant as PixelGridVariant} size={15} />
                   <span className="text-muted-foreground text-[9px]">old</span>
                 </div>
                 <div className="flex flex-col items-center gap-1">
