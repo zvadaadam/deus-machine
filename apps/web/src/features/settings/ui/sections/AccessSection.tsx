@@ -14,7 +14,6 @@ import {
 } from "@/components/ui/dialog";
 import { toast } from "sonner";
 import { Copy, Trash2, Smartphone, Monitor, Plus, Check, Link2 } from "lucide-react";
-import { getErrorMessage } from "@shared/lib/errors";
 import {
   usePairedDevices,
   useGeneratePairCode,
@@ -100,9 +99,13 @@ function PortalCard({
           variant="ghost"
           size="icon"
           className="size-7 shrink-0"
-          onClick={() => {
-            navigator.clipboard.writeText(url);
-            toast.success("URL copied");
+          onClick={async () => {
+            try {
+              await navigator.clipboard.writeText(url);
+              toast.success("URL copied");
+            } catch {
+              toast.error("Couldn't copy the URL");
+            }
           }}
           title="Copy URL"
         >
@@ -189,16 +192,24 @@ function ConnectDeviceDialog({
   const minutes = Math.floor(countdown / 60);
   const isExpiringSoon = countdown > 0 && countdown < 120;
 
-  function handleCopyCode() {
+  async function handleCopyCode() {
     if (!pairCode) return;
-    navigator.clipboard.writeText(pairCode);
-    toast.success("Code copied");
+    try {
+      await navigator.clipboard.writeText(pairCode);
+      toast.success("Code copied");
+    } catch {
+      toast.error("Couldn't copy the code");
+    }
   }
 
-  function handleCopyLink() {
+  async function handleCopyLink() {
     if (!pairUrl) return;
-    navigator.clipboard.writeText(pairUrl);
-    toast.success("Link copied");
+    try {
+      await navigator.clipboard.writeText(pairUrl);
+      toast.success("Link copied");
+    } catch {
+      toast.error("Couldn't copy the link");
+    }
   }
 
   return (
@@ -386,8 +397,8 @@ export function AccessSection({ settings, saveSetting }: SettingsSectionProps) {
       const result = await generateCodeMutation.mutateAsync();
       setPairCode(result.code);
       setCodeExpiresAt(Date.now() + result.expires_in_seconds * 1000);
-    } catch (error) {
-      toast.error(`Failed to generate code: ${getErrorMessage(error)}`);
+    } catch {
+      toast.error("Couldn't generate a code. Try again.");
     }
   }
 
@@ -407,8 +418,8 @@ export function AccessSection({ settings, saveSetting }: SettingsSectionProps) {
     try {
       await revokeDeviceMutation.mutateAsync(device.id);
       toast.success(`Removed "${device.name}"`);
-    } catch (error) {
-      toast.error(`Failed to remove device: ${getErrorMessage(error)}`);
+    } catch {
+      toast.error("Couldn't remove device. Try again.");
     }
   }
 
