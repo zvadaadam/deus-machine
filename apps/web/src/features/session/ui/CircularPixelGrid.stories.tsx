@@ -206,18 +206,18 @@ export const OldVsNew: StoryObj<typeof CircularPixelGrid> = {
         </div>
 
         <h2 className="text-muted-foreground mt-6 font-mono text-sm tracking-widest uppercase">
-          Inline size (15px) — as used in chat indicator
+          Inline size (20px, res 12) — as used in chat indicator
         </h2>
         <div className="flex gap-8">
           {oldVariants.map(({ variant, label, color }) => (
             <div key={variant} className="flex flex-col items-center gap-3">
               <div className={`flex items-center gap-3 ${color}`}>
                 <div className="flex flex-col items-center gap-1">
-                  <PixelGrid variant={variant as PixelGridVariant} size={15} />
+                  <PixelGrid variant={variant as PixelGridVariant} size={20} />
                   <span className="text-muted-foreground text-[9px]">old</span>
                 </div>
                 <div className="flex flex-col items-center gap-1">
-                  <CircularPixelGrid variant={variant} size={15} resolution={10} />
+                  <CircularPixelGrid variant={variant} size={20} resolution={12} />
                   <span className="text-muted-foreground text-[9px]">new</span>
                 </div>
               </div>

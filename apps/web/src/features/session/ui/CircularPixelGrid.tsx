@@ -14,7 +14,7 @@
  *   working       : shimmer waves (gray)     — sidebar ambient indicator
  */
 
-import { useRef, useEffect, useMemo } from "react";
+import { useRef, useEffect, useMemo, useState } from "react";
 import { cn } from "@/shared/lib/utils";
 
 export type CircularPixelGridVariant =
@@ -300,6 +300,8 @@ export function CircularPixelGrid({
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const frameRef = useRef(0);
   const colorRef = useRef<[number, number, number]>([128, 128, 128]);
+  // Bumped on theme change so the render effect redraws (needed for reduced-motion)
+  const [colorRevision, setColorRevision] = useState(0);
 
   const cells = useMemo(() => buildCells(resolution), [resolution]);
 
@@ -314,6 +316,8 @@ export function CircularPixelGrid({
       } else {
         colorRef.current = resolveRGB(el, VARIANT_COLORS[variant].cssVar);
       }
+      // Bump revision so render effect redraws with new color
+      setColorRevision((r) => r + 1);
     };
     resolve();
 
@@ -417,7 +421,7 @@ export function CircularPixelGrid({
       frameRef.current = requestAnimationFrame(draw);
     }
     return () => cancelAnimationFrame(frameRef.current);
-  }, [variant, size, resolution, gap, dotShape, cells]);
+  }, [variant, size, resolution, gap, dotShape, cells, colorRevision]);
 
   return (
     <canvas
