@@ -1922,3 +1922,339 @@ File: `apps/web/src/features/connection/ui/ServerOfflinePage.tsx:116`
 
 - **Timer cleanup on unmount**: Timers are module-scoped and self-managed by store actions. Even during route transitions where `MainLayout` remounts, the `isConnected()` check on mount self-heals the state.
 - **Initial state "connected" when WS never connects**: When the backend is unreachable on startup, `ServerLayout` renders `ServerOfflinePage` instead of `MainLayout`, so the `ConnectionOrb` is never mounted. No green dot is shown to the user.
+
+---
+
+<system-instruction>
+The user has added 3 comments to the diff for this workspace. Please review and address these comments as part of your response. When addressing comments on the "original" side or on specific commits, read the file from that version (not the current version). Below are the comments, including metadata about what git state they were left on:
+
+Comment #1:
+
+File: 
+Line: undefined
+User comment: "## Re: CodeRabbit Review
+
+### Finding #1 (walkthrough/summary) — Informational, no action needed.
+
+### Finding #2 (`isWsConnectivityError` predicate) — **Not actionable.**
+
+The claim is that `"WebSocket connection failed"` is missed by the substring check in `session.queries.ts:364`. However, that error is **unreachable in this code path**:
+
+- `"WebSocket connection failed"` is thrown by `connect()` (initial connection attempt, line 628 of `query-protocol-client.ts`)
+- `useSendMessage` calls `sendCommand()`, not `connect()`
+- `sendCommand()` can only produce these connectivity errors:
+  1. `"WebSocket not connected"` → caught by `"not connected"` ✅
+  2. `"WebSocket disconnected"` → caught by `"disconnected"` ✅
+  3. `"Server disconnected — reconnecting"` (relay mode) → caught by `"disconnected"` ✅
+  4. `"Command {command} timed out"` → timeout, not connectivity (correct to skip) ✅
+
+Similarly, `"Relay auth failed"` is thrown during WS handshake, not during `sendCommand`. If relay auth fails, pending commands reject with `"WebSocket disconnected"` — which IS caught.
+
+Creating a shared `isWsConnectivityError` predicate would be premature abstraction for a single call site.
+
+**No changes needed.**"
+
+Comment metadata:
+This comment was left on a file.
+This comment was left on GitHub by @zvadaadam.
+
+
+Comment #2:
+
+File: apps/web/src/features/connection/ui/ConnectionBanner.tsx
+Line: 23
+User comment: "_🛠️ Refactor suggestion_ | _🟠 Major_
+
+<details>
+<summary>🧩 Analysis chain</summary>
+
+🏁 Script executed:
+
+```shell
+# First, find the ConnectionBanner.tsx file
+find . -name "ConnectionBanner.tsx" -type f
+```
+
+Repository: zvadaadam/box-ide
+
+Length of output: 119
+
+---
+
+🏁 Script executed:
+
+```shell
+# Check the current content of the file
+cat -n apps/web/src/features/connection/ui/ConnectionBanner.tsx
+```
+
+Repository: zvadaadam/box-ide
+
+Length of output: 4950
+
+---
+
+🏁 Script executed:
+
+```shell
+# Find the connection state hook to verify the type
+find . -name "useConnectionState*" -o -name "*connection*hook*" | grep -E "\.ts$|\.tsx$"
+```
+
+Repository: zvadaadam/box-ide
+
+Length of output: 190
+
+---
+
+🏁 Script executed:
+
+```shell
+cat -n apps/web/src/features/connection/hooks/useConnectionState.ts
+```
+
+Repository: zvadaadam/box-ide
+
+Length of output: 816
+
+---
+
+🏁 Script executed:
+
+```shell
+find . -name "connectionStore.ts" -o -name "connectionStore.tsx" | head -5
+```
+
+Repository: zvadaadam/box-ide
+
+Length of output: 120
+
+---
+
+🏁 Script executed:
+
+```shell
+cat -n apps/web/src/features/connection/store/connectionStore.ts
+```
+
+Repository: zvadaadam/box-ide
+
+Length of output: 3714
+
+---
+
+🏁 Script executed:
+
+```shell
+# Check if ts-pattern is available in the project
+grep -r "ts-pattern" package.json bun.lock 2>/dev/null | head -20
+```
+
+Repository: zvadaadam/box-ide
+
+Length of output: 298
+
+---
+
+</details>
+
+**Convert state branching to `ts-pattern` with `.exhaustive()` for compile-time state exhaustiveness.**
+
+The current boolean/ternary approach misses opportunities for compile-time safety. Using `ts-pattern` ensures all connection states (`"connected"`, `"grace_period"`, `"reconnecting"`, `"disconnected"`) are handled explicitly, preventing bugs when new states are added.
+
+<details>
+<summary>Suggested patch</summary>
+
+```diff
++import { match } from "ts-pattern";
+ import { AnimatePresence, m, useReducedMotion } from "framer-motion";
+ import { useConnectionState } from "../hooks/useConnectionState";
+@@
+-  const showBanner = state === "reconnecting" || state === "disconnected";
+-  const isEscalated = state === "disconnected";
++  const bannerState = match(state)
++    .with("connected", () => null)
++    .with("grace_period", () => null)
++    .with("reconnecting", () => ({ isEscalated: false }))
++    .with("disconnected", () => ({ isEscalated: true }))
++    .exhaustive();
++
++  if (!bannerState) return null;
++  const { isEscalated } = bannerState;
+@@
+-      {showBanner && (
+-        <m.div
++      <m.div
+           key="connection-banner"
+@@
+-        </m.div>
+-      )}
++        </m.div>
+     </AnimatePresence>
+```
+</details>
+
+Applies to lines 21–23 and 55–83.
+
+<details>
+<summary>🤖 Prompt for AI Agents</summary>
+
+```
+Verify each finding against the current code and only fix it if needed.
+
+In `@apps/web/src/features/connection/ui/ConnectionBanner.tsx` around lines 21 -
+23, Replace the ad-hoc boolean checks for connection state in ConnectionBanner
+with a ts-pattern match against the `state` value to get compile-time
+exhaustiveness: import `match` from 'ts-pattern', compute `showBanner` and
+`isEscalated` (and any other derived values used in the render block between the
+existing `state` checks around lines 55–83) via
+`match(state).with(...).exhaustive()` handling `"connected"`, `"grace_period"`,
+`"reconnecting"`, and `"disconnected"` explicitly, and update the render logic
+to consume those matched results; ensure you call `.exhaustive()` so the
+compiler will force you to handle future states.
+```
+
+</details>
+
+<!-- fingerprinting:phantom:poseidon:hawk -->
+
+<!-- This is an auto-generated comment by CodeRabbit -->"
+
+Comment metadata:
+This comment was left on the modified branch.
+This comment was left on GitHub by @coderabbitai.
+This comment is the start of thread PRRT_kwDOQEbULc52AXfT. 
+
+
+Comment #3:
+
+File: apps/web/src/features/connection/ui/ConnectionBanner.tsx
+Line: 50
+User comment: "_⚠️ Potential issue_ | _🟠 Major_
+
+**Respect reduced-motion for continuous and secondary animations.**
+
+`useReducedMotion()` is applied to the container slide, but the pulsing dot and inner fade transitions still animate when reduced motion is preferred.
+
+
+
+<details>
+<summary>Suggested patch</summary>
+
+```diff
+-              <span className="relative flex h-1.5 w-1.5">
+-                <span className="bg-accent-gold absolute inline-flex h-full w-full animate-ping rounded-full opacity-40" />
++              <span className="relative flex h-1.5 w-1.5">
++                <span
++                  className={`bg-accent-gold absolute inline-flex h-full w-full rounded-full opacity-40 ${
++                    reduceMotion ? "" : "animate-ping"
++                  }`}
++                />
+                 <span className="bg-accent-gold relative inline-flex h-1.5 w-1.5 rounded-full" />
+               </span>
+@@
+-                    transition={{ duration: 0.15 }}
++                    transition={{ duration: reduceMotion ? 0 : 0.15 }}
+@@
+-                    transition={{ duration: 0.15 }}
++                    transition={{ duration: reduceMotion ? 0 : 0.15 }}
+@@
+-                  transition={{ duration: 0.2 }}
++                  transition={{ duration: reduceMotion ? 0 : 0.2 }}
+```
+</details>
+
+
+Also applies to: 54-63, 72-79, 94-97
+
+<details>
+<summary>🤖 Prompt for AI Agents</summary>
+
+```
+Verify each finding against the current code and only fix it if needed.
+
+In `@apps/web/src/features/connection/ui/ConnectionBanner.tsx` around lines 48 -
+50, The pulsing dot and inner fade animations in ConnectionBanner still run
+under reduced-motion; update the component (ConnectionBanner) to read the same
+useReducedMotion() flag used for the container and disable/short-circuit those
+animations when reducedMotion is true: remove or omit the "animate-ping" class
+on the outer span and the transition/animate props or motion wrappers on the
+inner fade elements when reducedMotion is enabled, and instead render their
+static non-animated equivalents so the visual remains but no continuous or
+secondary animations run; apply this for the spans that contain "animate-ping"
+and any motion/transitions referenced around the same blocks (also adjust the
+similar blocks at the other indicated ranges).
+```
+
+</details>
+
+<!-- fingerprinting:phantom:poseidon:hawk -->
+
+<!-- This is an auto-generated comment by CodeRabbit -->"
+
+Comment metadata:
+This comment was left on the modified branch.
+This comment was left on GitHub by @coderabbitai.
+This comment is the start of thread PRRT_kwDOQEbULc52AXfX. 
+
+</system-instruction>
+
+I run AI code review, is it actionable? Wdyt? Explore in depth each problem.
+
+We want a clean, maintainable codebase, with proper best practices for the tech stack we use.
+
+Run subagents to verify, and if it should be fixed, try to merge some stuff together so it can be fixed together within one subagent. 
+
+If you can test something do it.
+
+----
+
+Review complete. Here are the validated findings:
+
+---
+
+## Review: PR #197 — feat: connection state overlay for web app
+
+3 issues found, 2 filtered out after validation.
+
+---
+
+### **#1 `retry()` provides no visual feedback when WebSocket is already closed**
+
+When the user clicks "Retry now" after 30+ seconds of disconnection, `retry()` calls `forceReconnect()`. By that point, the `ws` reference is `null` (cleaned up by `onclose` long ago). `forceReconnect()` only calls `notifyConnectionChange(false)` inside an `if (ws)` guard — so it's skipped entirely. The store state stays stuck at `"disconnected"` with no transition to `"reconnecting"` or `"grace_period"`. The user sees zero visual feedback until the new socket either connects (jumping straight to "connected") or fails silently.
+
+**Fix:** Have `retry()` reset the store state to `"grace_period"` before calling `forceReconnect()`, so the user gets immediate acknowledgment.
+
+File: `apps/web/src/features/connection/store/connectionStore.ts:95-97`
+
+---
+
+### **#2 `emitSendAttemptFailed()` misses `connect()` rejection errors**
+
+The `onError` handler in `useSendMessage` checks for `"not connected"` or `"disconnected"` in the error message. But when the WS is down, the mutation calls `await connect()` (line 267), which rejects with `"WebSocket connection failed"` — a string that matches neither check. The escalation from GRACE_PERIOD/RECONNECTING to DISCONNECTED never fires for this code path, defeating the intended design.
+
+The three WS error strings are:
+- `"WebSocket not connected"` — caught
+- `"WebSocket disconnected"` — caught  
+- `"WebSocket connection failed"` — **not caught**
+
+**Fix:** Also match `"connection failed"`, or more robustly, call `emitSendAttemptFailed()` for any error when `!isConnected()`.
+
+File: `apps/web/src/features/session/api/session.queries.ts:362-367`
+
+---
+
+### **#3 Built-in CSS easing `"easeInOut"` violates CLAUDE.md**
+
+The `WaitingDots` component uses `ease: "easeInOut"` on its Framer Motion transition. CLAUDE.md explicitly states: *"Don't use built-in CSS easings (ease-out, ease-in, etc.) except `ease` for hover and `linear` for constant-speed. Always use custom cubic-bezier curves."* For an infinite pulsing loop, `"linear"` is the appropriate choice.
+
+**Fix:** Replace `ease: "easeInOut"` with `ease: "linear"` or a custom cubic-bezier.
+
+File: `apps/web/src/features/connection/ui/ServerOfflinePage.tsx:116`
+
+---
+
+### Filtered out (not real issues)
+
+- **Timer cleanup on unmount**: Timers are module-scoped and self-managed by store actions. Even during route transitions where `MainLayout` remounts, the `isConnected()` check on mount self-heals the state.
+- **Initial state "connected" when WS never connects**: When the backend is unreachable on startup, `ServerLayout` renders `ServerOfflinePage` instead of `MainLayout`, so the `ConnectionOrb` is never mounted. No green dot is shown to the user.
