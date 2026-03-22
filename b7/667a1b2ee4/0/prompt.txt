@@ -89,3 +89,14 @@ Create a PR
 ---
 
 Are you sure you changed everything across? Like, I feel like you have not the tab sessions. I think there is more.
+
+---
+
+<system_instruction>
+The user has attached these files. Read them before proceeding.
+- /Users/zvada/Developer/agent/box-ide/.conductor/tashkent-v3/.context/attachments/Lint__Format___Typecheck_68095865714.log (78.2 KB)
+</system_instruction>
+
+
+
+Fix the failing CI actions. I've attached the failure logs.
