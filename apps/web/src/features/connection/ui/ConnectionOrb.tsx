@@ -57,7 +57,7 @@ export function ConnectionOrb() {
         {showLabel && (
           <m.span
             key="connection-label"
-            className="text-text-muted overflow-hidden whitespace-nowrap text-xs"
+            className="text-text-muted overflow-hidden text-xs whitespace-nowrap"
             initial={reduceMotion ? false : { opacity: 0, x: -4 }}
             animate={{ opacity: 1, x: 0 }}
             exit={reduceMotion ? { opacity: 0 } : { opacity: 0, x: -4 }}

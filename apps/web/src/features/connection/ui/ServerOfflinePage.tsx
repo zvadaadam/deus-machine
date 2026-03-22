@@ -68,10 +68,7 @@ export function ServerOfflinePage({ onRetry, variant }: ServerOfflinePageProps) 
           <ConnectionIllustration className="w-[260px] opacity-80" />
         </m.div>
 
-        <m.h1
-          variants={variants}
-          className="text-foreground text-xl font-semibold tracking-tight"
-        >
+        <m.h1 variants={variants} className="text-foreground text-xl font-semibold tracking-tight">
           {copy.heading}
         </m.h1>
 

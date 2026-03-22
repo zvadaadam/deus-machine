@@ -31,13 +31,9 @@ export function ConnectionBanner() {
           aria-atomic="true"
           className="relative w-full overflow-hidden"
           style={{ height: 40 }}
-          initial={
-            reduceMotion ? { opacity: 0 } : { opacity: 0, y: -40 }
-          }
+          initial={reduceMotion ? { opacity: 0 } : { opacity: 0, y: -40 }}
           animate={{ opacity: 1, y: 0 }}
-          exit={
-            reduceMotion ? { opacity: 0 } : { opacity: 0, y: -40 }
-          }
+          exit={reduceMotion ? { opacity: 0 } : { opacity: 0, y: -40 }}
           transition={{
             duration: reduceMotion ? 0.1 : 0.25,
             ease: EASE_OUT_QUART,
@@ -69,9 +65,7 @@ export function ConnectionBanner() {
                       {sendAttemptFailed ? "Message queued" : "Connection lost"}
                     </span>
                     <span className="text-text-muted text-xs">
-                      {sendAttemptFailed
-                        ? "— reconnecting"
-                        : "— Your agents are still running"}
+                      {sendAttemptFailed ? "— reconnecting" : "— Your agents are still running"}
                     </span>
                   </m.div>
                 ) : (
