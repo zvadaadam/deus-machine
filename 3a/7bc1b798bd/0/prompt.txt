@@ -583,3 +583,7 @@ What is the version we do now? We want the version of 0.1.0, this version to be.
 ---
 
 Okay, also with the icons in Electronab, like do we have it correctly with the icons and do we have different icons to manage like what should we do also with the favicons, do we have something there or the web like how we should solve this explore the codebase remember we use we have a web cloud version but also a desktop app
+
+---
+
+But here I see that you used not correct icons, we don't have this icon. So for now, create an icon just like a black screen with a dot in the middle. Could you do it? Would you be able to generate it and create these PNG files?
