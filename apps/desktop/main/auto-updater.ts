@@ -27,6 +27,12 @@ function sendState(win: BrowserWindow, state: UpdateState): void {
 }
 
 export function setupAutoUpdater(mainWindow: BrowserWindow): void {
+  // Auto-update only works from AppImage on Linux (deb users must update manually)
+  if (process.platform === "linux" && !process.env.APPIMAGE) {
+    console.log("[auto-updater] Skipping — Linux auto-update requires AppImage");
+    return;
+  }
+
   autoUpdater.autoDownload = false;
   autoUpdater.autoInstallOnAppQuit = true;
 
@@ -87,8 +93,8 @@ export function setupAutoUpdater(mainWindow: BrowserWindow): void {
     console.error("[auto-updater] Initial check failed:", err);
   });
 
-  // Periodic check every 4 hours
-  setInterval(
+  // Periodic check every 4 hours (unref so timer doesn't block app quit)
+  const timer = setInterval(
     () => {
       autoUpdater.checkForUpdates().catch((err) => {
         console.error("[auto-updater] Periodic check failed:", err);
@@ -96,4 +102,5 @@ export function setupAutoUpdater(mainWindow: BrowserWindow): void {
     },
     4 * 60 * 60 * 1000
   );
+  timer.unref();
 }
