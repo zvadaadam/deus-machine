@@ -16,7 +16,7 @@ import { Toaster } from "@/components/ui/sonner";
 import { OnboardingOverlay } from "@/features/onboarding";
 import { useSettings } from "@/features/settings";
 import { useAuth, PairGatePage } from "@/features/auth";
-import { native, capabilities } from "@/platform";
+import { native } from "@/platform";
 import { ServerOfflinePage } from "@/features/connection";
 import { initNotifications } from "@/platform/notifications";
 import { useGlobalSessionNotifications } from "@/features/session/hooks/useGlobalSessionNotifications";

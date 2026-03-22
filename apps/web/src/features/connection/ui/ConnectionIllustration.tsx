@@ -31,27 +31,13 @@ export function ConnectionIllustration({ className }: ConnectionIllustrationProp
           strokeWidth="1.5"
         />
         {/* Phone screen */}
-        <rect
-          x="47"
-          y="32"
-          width="46"
-          height="72"
-          rx="4"
-          className="fill-bg-surface"
-        />
+        <rect x="47" y="32" width="46" height="72" rx="4" className="fill-bg-surface" />
         {/* Chat bubbles on phone screen */}
         <rect x="51" y="38" width="28" height="8" rx="4" className="fill-border-subtle" />
         <rect x="59" y="50" width="30" height="8" rx="4" className="fill-border-subtle" />
         <rect x="51" y="62" width="24" height="8" rx="4" className="fill-border-subtle" />
         {/* Phone bottom bar */}
-        <rect
-          x="57"
-          y="110"
-          width="26"
-          height="4"
-          rx="2"
-          className="fill-border-subtle"
-        />
+        <rect x="57" y="110" width="26" height="4" rx="2" className="fill-border-subtle" />
       </g>
 
       {/* Tangled cord (center) — the warm accent element */}
@@ -86,14 +72,7 @@ export function ConnectionIllustration({ className }: ConnectionIllustrationProp
           strokeWidth="1.5"
         />
         {/* Laptop screen inner */}
-        <rect
-          x="226"
-          y="34"
-          width="60"
-          height="40"
-          rx="2"
-          className="fill-bg-surface"
-        />
+        <rect x="226" y="34" width="60" height="40" rx="2" className="fill-bg-surface" />
         {/* Cursor on laptop screen */}
         <path
           d="M252 48 L252 62 L258 58 L264 64"
