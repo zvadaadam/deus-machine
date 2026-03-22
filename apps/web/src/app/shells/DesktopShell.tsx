@@ -101,12 +101,7 @@ export function DesktopShell({ reset }: { reset: () => void }) {
 
   // Backend unreachable -- show error instead of white screen
   if (settingsQuery.isError && !settingsQuery.data) {
-    return (
-      <ServerOfflinePage
-        onRetry={() => settingsQuery.refetch()}
-        variant="desktop"
-      />
-    );
+    return <ServerOfflinePage onRetry={() => settingsQuery.refetch()} variant="desktop" />;
   }
 
   if (showOnboarding) {
