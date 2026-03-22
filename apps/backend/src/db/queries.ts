@@ -29,7 +29,7 @@ const WORKSPACE_DETAILS_SELECT = `
     w.pr_url, w.pr_number,
     w.setup_status, w.error_message, w.init_stage,
     w.updated_at,
-    r.name as repo_name, r.root_path, r.git_default_branch,
+    r.name as repo_name, r.root_path, r.git_default_branch, r.git_origin_url,
     s.status as session_status, s.model,
     s.error_category as session_error_category,
     s.error_message as session_error_message,
@@ -73,7 +73,7 @@ export function getWorkspacesByRepo(
       w.setup_status, w.error_message, w.init_stage,
       w.updated_at,
       r.name as repo_name, r.sort_order as repo_sort_order, r.root_path,
-      r.git_default_branch,
+      r.git_default_branch, r.git_origin_url,
       s.status as session_status, s.model,
       s.error_category as session_error_category,
       s.error_message as session_error_message,
@@ -144,7 +144,7 @@ export function getWorkspacesBySessionIds(
       w.setup_status, w.error_message, w.init_stage,
       w.updated_at,
       r.name as repo_name, r.sort_order as repo_sort_order, r.root_path,
-      r.git_default_branch,
+      r.git_default_branch, r.git_origin_url,
       s.status as session_status, s.model,
       s.error_category as session_error_category,
       s.error_message as session_error_message,
@@ -362,10 +362,12 @@ export function getAllRepositories(db: Database.Database): RepositoryWithCountsR
 /** Lightweight repo list for backfilling empty groups in by-repo queries. */
 export function getAllRepositorySummaries(
   db: Database.Database
-): { id: string; name: string; sort_order: number }[] {
+): { id: string; name: string; sort_order: number; git_origin_url: string | null }[] {
   return db
-    .prepare("SELECT id, name, sort_order FROM repositories ORDER BY sort_order, name")
-    .all() as { id: string; name: string; sort_order: number }[];
+    .prepare(
+      "SELECT id, name, sort_order, git_origin_url FROM repositories ORDER BY sort_order, name"
+    )
+    .all() as { id: string; name: string; sort_order: number; git_origin_url: string | null }[];
 }
 
 export function getRepositoryById(db: Database.Database, id: string): RepositoryRow | undefined {

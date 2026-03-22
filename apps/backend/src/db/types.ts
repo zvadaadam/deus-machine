@@ -78,6 +78,8 @@ export interface WorkspaceWithDetailsRow {
   git_default_branch: string | null;
   /** Only in by-repo query */
   repo_sort_order?: number;
+  /** Only in by-repo query — GitHub remote URL */
+  git_origin_url?: string | null;
 
   // From sessions JOIN (null when no active session)
   session_status: string | null;

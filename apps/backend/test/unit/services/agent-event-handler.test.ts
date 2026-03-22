@@ -14,6 +14,7 @@ const {
   mockPersistSessionError,
   mockPersistSessionCancelled,
   mockPersistAgentSessionId,
+  mockPersistSessionTitle,
   mockInvalidate,
   mockRelay,
   mockRespondToAgent,
@@ -27,6 +28,7 @@ const {
   mockPersistSessionError: vi.fn(() => ({ ok: true, value: undefined })),
   mockPersistSessionCancelled: vi.fn(() => ({ ok: true, value: undefined })),
   mockPersistAgentSessionId: vi.fn(() => ({ ok: true, value: undefined })),
+  mockPersistSessionTitle: vi.fn(() => ({ ok: true, value: undefined })),
   mockInvalidate: vi.fn(),
   mockRelay: vi.fn(() => Promise.resolve({ diff: "ok" })),
   mockRespondToAgent: vi.fn(() => Promise.resolve()),
@@ -42,6 +44,7 @@ vi.mock("../../../src/services/agent/persistence", () => ({
   persistSessionError: mockPersistSessionError,
   persistSessionCancelled: mockPersistSessionCancelled,
   persistAgentSessionId: mockPersistAgentSessionId,
+  persistSessionTitle: mockPersistSessionTitle,
 }));
 
 vi.mock("../../../src/services/query-engine", () => ({
@@ -367,6 +370,33 @@ describe("handleAgentEvent", () => {
     });
   });
 
+  describe("session.title", () => {
+    const event: AgentEvent = {
+      type: "session.title",
+      sessionId: "sess-1",
+      agentType: "claude",
+      title: "Fix login page CSS",
+    };
+
+    it("persists session title and invalidates session resources", () => {
+      handleAgentEvent(event);
+
+      expect(mockPersistSessionTitle).toHaveBeenCalledWith(event);
+      expect(mockInvalidate).toHaveBeenCalledWith(["workspaces", "sessions", "session", "stats"], {
+        sessionIds: ["sess-1"],
+      });
+    });
+
+    it("skips invalidation on persistence failure", () => {
+      mockPersistSessionTitle.mockReturnValue({ ok: false, error: "DB error" });
+
+      handleAgentEvent(event);
+
+      expect(mockPersistSessionTitle).toHaveBeenCalledWith(event);
+      expect(mockInvalidate).not.toHaveBeenCalled();
+    });
+  });
+
   // ==========================================================================
   // Exhaustiveness
   // ==========================================================================
@@ -419,6 +449,7 @@ describe("handleAgentEvent", () => {
           timeoutMs: 1000,
         },
         { type: "agent.session_id", sessionId: "s", agentSessionId: "a" },
+        { type: "session.title", sessionId: "s", agentType: "claude", title: "Fix bug" },
       ];
 
       for (const event of events) {

@@ -38,6 +38,7 @@ import type { Workspace } from "@/shared/types";
 import { native } from "@/platform";
 import { CHAT_INSERT } from "@shared/events";
 import { CommandPalette } from "@/features/command-palette";
+import { GitHubPickerModal } from "@/features/sidebar/ui/GitHubPickerModal";
 import { MainContent } from "./MainContent";
 import { useRepoActions } from "./hooks/useRepoActions";
 import { useSystemPrompt, useUpdateSystemPrompt } from "@/features/workspace/api";
@@ -83,6 +84,7 @@ export function MainLayout() {
   const selectWorkspace = useWorkspaceStore((state) => state.selectWorkspace);
 
   const showNewWorkspaceModal = useUIStore((s) => s.showNewWorkspaceModal);
+  const newWorkspaceMode = useUIStore((s) => s.newWorkspaceMode);
   const showSystemPromptModal = useUIStore((s) => s.showSystemPromptModal);
   const settingsOpen = useUIStore((s) => s.settingsOpen);
   const openNewWorkspaceModal = useUIStore((s) => s.openNewWorkspaceModal);
@@ -108,7 +110,9 @@ export function MainLayout() {
   }, [selectedWorkspaceId, repoGroups]);
 
   const selectedWorkspaceIdRef = useRef(selectedWorkspaceId);
-  selectedWorkspaceIdRef.current = selectedWorkspaceId;
+  useEffect(() => {
+    selectedWorkspaceIdRef.current = selectedWorkspaceId;
+  });
 
   // Bulk-fetch diff stats for all workspaces (replaces per-item useDiffStats in sidebar)
   const bulkDiffStatsQuery = useBulkDiffStats(repoGroups);
@@ -117,6 +121,9 @@ export function MainLayout() {
   const [sidebarWidth, setSidebarWidth] = useState<number | null>(null);
   // Tracks drag state to disable sidebar CSS transitions during resize
   const [sidebarDragging, setSidebarDragging] = useState(false);
+
+  // GitHub picker modal state
+  const [githubPickerRepoId, setGithubPickerRepoId] = useState<string | null>(null);
 
   // Ref for inserting text from browser element selector
   const workspaceChatPanelRef = useRef<SessionPanelRef | null>(null);
@@ -146,18 +153,38 @@ export function MainLayout() {
     closeNewWorkspaceModal,
   });
 
+  // Derive repo name for GitHub picker modal from repoGroups
+  const githubPickerRepoName = useMemo(() => {
+    if (!githubPickerRepoId) return "";
+    const group = repoGroups.find((g) => g.repo_id === githubPickerRepoId);
+    return group?.repo_name ?? "";
+  }, [githubPickerRepoId, repoGroups]);
+
+  // Hide native WebContentsViews when any dialog is open — they render above
+  // the DOM so dialogs would appear behind them. BrowserTab's own visible
+  // effect handles re-showing when the dialog closes.
+  const commandPaletteOpen = useUIStore((s) => s.commandPaletteOpen);
+  const anyDialogOpen =
+    showNewWorkspaceModal ||
+    showSystemPromptModal ||
+    commandPaletteOpen ||
+    !!githubPickerRepoId ||
+    repoActions.showCloneModal;
+  useEffect(() => {
+    if (anyDialogOpen) {
+      native.browserViews.hideAll().catch(() => {});
+    }
+  }, [anyDialogOpen]);
+
   // --- System prompt (inline — small scope, one modal) ---
 
   const systemPromptQuery = useSystemPrompt(selectedWorkspace?.id || null);
   const updateSystemPromptMutation = useUpdateSystemPrompt();
-  const [systemPromptDraft, setSystemPromptDraft] = useState("");
-
-  // Initialize system prompt draft when modal opens
-  useEffect(() => {
-    if (showSystemPromptModal && systemPromptQuery.data !== undefined) {
-      setSystemPromptDraft(systemPromptQuery.data || "");
-    }
-  }, [showSystemPromptModal, systemPromptQuery.data]);
+  // Track user edits separately; reset to null when modal closes so the
+  // derived value from the query takes over again (no useEffect + setState).
+  const [systemPromptEdit, setSystemPromptEdit] = useState<string | null>(null);
+  const systemPromptDraft = systemPromptEdit ?? (systemPromptQuery.data || "");
+  const setSystemPromptDraft = useCallback((value: string) => setSystemPromptEdit(value), []);
 
   async function saveSystemPrompt() {
     if (!selectedWorkspace) return;
@@ -167,6 +194,7 @@ export function MainLayout() {
         systemPrompt: systemPromptDraft,
       });
       closeSystemPromptModal();
+      setSystemPromptEdit(null);
     } catch (error) {
       console.error("Failed to save system prompt:", error);
       toast.error(getErrorMessage(error));
@@ -183,11 +211,13 @@ export function MainLayout() {
   // them in refs to keep the callback identity stable. This matters because
   // onArchive flows through the entire sidebar tree to every memoized WorkspaceItem.
   const archiveMutationRef = useRef(archiveWorkspaceMutation);
-  archiveMutationRef.current = archiveWorkspaceMutation;
   const unarchiveMutationRef = useRef(unarchiveMutation);
-  unarchiveMutationRef.current = unarchiveMutation;
   const selectedWorkspaceRef = useRef(selectedWorkspace);
-  selectedWorkspaceRef.current = selectedWorkspace;
+  useEffect(() => {
+    archiveMutationRef.current = archiveWorkspaceMutation;
+    unarchiveMutationRef.current = unarchiveMutation;
+    selectedWorkspaceRef.current = selectedWorkspace;
+  });
 
   const archiveWorkspace = useCallback(
     async (workspaceId: string) => {
@@ -219,7 +249,9 @@ export function MainLayout() {
 
   const statusMutation = useUpdateWorkspaceStatus();
   const statusMutationRef = useRef(statusMutation);
-  statusMutationRef.current = statusMutation;
+  useEffect(() => {
+    statusMutationRef.current = statusMutation;
+  });
 
   const handleStatusChange = useCallback(
     (workspaceId: string, status: import("@shared/enums").WorkspaceStatus) => {
@@ -328,6 +360,7 @@ export function MainLayout() {
           diffStatsMap={bulkDiffStatsQuery.data}
           onWorkspaceClick={handleWorkspaceClick}
           onNewWorkspace={repoActions.handleNewWorkspace}
+          onNewWorkspaceFromGitHub={setGithubPickerRepoId}
           onAddRepository={repoActions.handleOpenProject}
           onCloneRepository={() => repoActions.setShowCloneModal(true)}
           onArchive={archiveWorkspace}
@@ -362,7 +395,16 @@ export function MainLayout() {
         creating={repoActions.creating}
         onClose={closeNewWorkspaceModal}
         onRepoChange={repoActions.setSelectedRepoId}
-        onCreate={repoActions.createWorkspaceFromModal}
+        onCreate={
+          newWorkspaceMode === "from-github"
+            ? () => {
+                const repoId = repoActions.selectedRepoId;
+                closeNewWorkspaceModal();
+                if (repoId) setGithubPickerRepoId(repoId);
+              }
+            : repoActions.createWorkspaceFromModal
+        }
+        mode={newWorkspaceMode}
       />
 
       <SystemPromptModal
@@ -371,7 +413,10 @@ export function MainLayout() {
         systemPrompt={systemPromptDraft}
         loading={systemPromptQuery.isLoading}
         saving={updateSystemPromptMutation.isPending}
-        onClose={closeSystemPromptModal}
+        onClose={() => {
+          closeSystemPromptModal();
+          setSystemPromptEdit(null);
+        }}
         onChange={setSystemPromptDraft}
         onSave={saveSystemPrompt}
       />
@@ -384,6 +429,14 @@ export function MainLayout() {
         onClose={repoActions.closeCloneModal}
         onClone={repoActions.handleCloneRepository}
         onClearError={repoActions.clearCloneError}
+      />
+
+      <GitHubPickerModal
+        open={!!githubPickerRepoId}
+        onOpenChange={(open) => !open && setGithubPickerRepoId(null)}
+        repoId={githubPickerRepoId || ""}
+        repoName={githubPickerRepoName}
+        onCreateWorkspace={repoActions.handleNewWorkspaceFromGitHub}
       />
 
       {/* Command Palette (Cmd+K) */}

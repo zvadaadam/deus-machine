@@ -52,6 +52,7 @@ export interface RepoGroup {
   repo_id: string;
   repo_name: string;
   sort_order: number;
+  git_origin_url?: string | null;
   workspaces: Workspace[];
 }
 

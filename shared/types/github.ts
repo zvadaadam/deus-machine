@@ -53,3 +53,24 @@ export interface DevServer {
   type: "vite" | "webpack" | "angular" | "node" | "other";
   name: string;
 }
+
+/**
+ * Summary of an open GitHub Pull Request
+ * Used by the "Create Workspace from PR" picker
+ */
+export interface PRSummary {
+  number: number;
+  title: string;
+  branch: string; // headRefName
+  baseBranch: string; // baseRefName
+  url: string;
+  isDraft: boolean;
+}
+
+/**
+ * Summary of a remote git branch
+ * Used by the "Create Workspace from Branch" picker
+ */
+export interface BranchSummary {
+  name: string;
+}

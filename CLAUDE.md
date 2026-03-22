@@ -47,7 +47,7 @@ Frontend (React + Zustand + React Query)
     │                  ├── Commands (q:command/q:command_ack)
     │                  │   Async actions: sendMessage, stopSession
     │                  ├── Mutations (q:mutate/q:mutate_result)
-    │                  │   Sync writes: archiveWorkspace, updateTitle
+    │                  │   Sync writes: archiveWorkspace, updateWorkspaceTitle
     │                  ├── Events (q:event) — ephemeral push (tool relay, plan mode)
     │                  └── Agent Client ──→ Agent-Server (apps/sidecar/)
     │                       ├── WebSocket (ws://127.0.0.1:{port}) — JSON-RPC 2.0
@@ -70,7 +70,7 @@ Frontend (React + Zustand + React Query)
     └── Agent-Server (apps/sidecar/) — Stateless, no DB access
                        ├── Claude/Codex Agent SDKs (streaming responses)
                        ├── WebSocket server (JSON-RPC 2.0 with initialize handshake)
-                       ├── Canonical event emission (12 event types → backend)
+                       ├── Canonical event emission (13 event types → backend)
                        ├── Health endpoints (GET /health, GET /readyz)
                        └── Graceful shutdown with 30s turn draining
 ```
@@ -113,7 +113,7 @@ DATA (reactive DB subscriptions):
   q:snapshot / q:delta          → server pushes full or incremental data
 
 MUTATIONS (sync data writes):
-  q:mutate / q:mutate_result    → archiveWorkspace, updateTitle
+  q:mutate / q:mutate_result    → archiveWorkspace, updateWorkspaceTitle
 
 COMMANDS (async actions, ACK only):
   q:command / q:command_ack     → sendMessage, stopSession
@@ -143,7 +143,7 @@ useQuerySubscription("workspaces", {
 - `MUTATION_NAMES` — sync write actions (`archiveWorkspace`, `updateWorkspaceTitle`)
 - `COMMAND_NAMES` — async command actions (`sendMessage`, `stopSession`)
 - `PROTOCOL_EVENTS` — typed ephemeral event names
-- `AGENT_EVENT_NAMES` — canonical agent-server event types (12 events: session._, message._, tool._, interaction._)
+- `AGENT_EVENT_NAMES` — canonical agent-server event types (13 events: session._, message._, tool._, request._)
 
 ### Electron IPC Events (streaming/control only)
 
@@ -173,7 +173,7 @@ Our app owns its own SQLite database:
 
 **What this means for development:**
 
-- All indexes, triggers, and denormalized columns are created by our own schema — see `apps/backend/src/lib/schema.ts`
+- All indexes, triggers, and denormalized columns are created by our own schema — see `shared/schema.ts`
 - `sessions.last_user_message_at` is maintained by app code — use it instead of correlated subqueries
 - `sessions.workspace_id`, `sessions.agent_type`, `sessions.title`, etc. are available for multi-session support
 - Only the backend writes to the DB — the agent-server is stateless (no DB access)
@@ -255,14 +255,15 @@ apps/sidecar/
 
 ### Canonical Agent Events (`shared/agent-events.ts`)
 
-All agent output is normalized to 12 canonical event types that flow: Agent SDK → AgentHandler → EventBroadcaster → Backend agent-client → agent-event-handler → DB + WS push.
+All agent output is normalized to 13 canonical event types that flow: Agent SDK → AgentHandler → EventBroadcaster → Backend agent-client → agent-event-handler → DB + WS push.
 
 **Event categories:**
 
 - **Session lifecycle:** `session.started`, `session.idle`, `session.error`, `session.cancelled`
 - **Messages:** `message.assistant`, `message.tool_result`, `message.result`, `message.cancelled`
-- **Interactions:** `interaction.opened`, `interaction.resolved`
+- **Requests:** `request.opened`, `request.resolved`
 - **Tool relay:** `tool.request`, `tool.response`
+- **Metadata:** `agent.session_id`, `session.title`
 
 ### Key Bun Scripts
 
@@ -892,7 +893,7 @@ The only pollers are conditional git diff queries (only when sessions are "worki
 
 ### Database Rules
 
-**Required indexes** — any new table or query pattern must have proper indexes. All indexes are defined in `apps/backend/src/lib/schema.ts` (and mirrored in `apps/sidecar/db/schema.ts`). For any new query pattern, add an index to the schema:
+**Required indexes** — any new table or query pattern must have proper indexes. All indexes are defined in `shared/schema.ts`. For any new query pattern, add an index to the schema:
 
 ```sql
 -- Defined in schema.ts:
