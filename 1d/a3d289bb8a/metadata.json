@@ -1,0 +1,31 @@
+{
+  "cli_version": "0.5.0",
+  "checkpoint_id": "1da3d289bb8a",
+  "strategy": "manual-commit",
+  "branch": "zvadaadam/sidebar-grab-icon-fix",
+  "checkpoints_count": 2,
+  "files_touched": [
+    "CLAUDE.md",
+    "apps/backend/src/db/queries.ts",
+    "apps/backend/src/lib/schemas.ts",
+    "apps/backend/src/services/gh.service.ts",
+    "apps/desktop/main/browser-views.ts",
+    "apps/web/src/app/layouts/MainLayout.tsx",
+    "apps/web/src/features/ai-status/ui/BackendStatusIndicator.tsx"
+  ],
+  "sessions": [
+    {
+      "metadata": "/1d/a3d289bb8a/0/metadata.json",
+      "transcript": "/1d/a3d289bb8a/0/full.jsonl",
+      "content_hash": "/1d/a3d289bb8a/0/content_hash.txt",
+      "prompt": "/1d/a3d289bb8a/0/prompt.txt"
+    }
+  ],
+  "token_usage": {
+    "input_tokens": 3012,
+    "cache_creation_tokens": 303822,
+    "cache_read_tokens": 11848075,
+    "output_tokens": 46337,
+    "api_call_count": 108
+  }
+}

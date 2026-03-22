@@ -1,0 +1,39 @@
+{
+  "cli_version": "0.5.0",
+  "checkpoint_id": "1da3d289bb8a",
+  "session_id": "93c4430b-8a15-4354-bacd-8af1e0101d87",
+  "strategy": "manual-commit",
+  "created_at": "2026-03-22T20:18:10.449598Z",
+  "branch": "zvadaadam/sidebar-grab-icon-fix",
+  "checkpoints_count": 2,
+  "files_touched": [
+    "CLAUDE.md",
+    "apps/backend/src/db/queries.ts",
+    "apps/backend/src/lib/schemas.ts",
+    "apps/backend/src/services/gh.service.ts",
+    "apps/desktop/main/browser-views.ts",
+    "apps/web/src/app/layouts/MainLayout.tsx",
+    "apps/web/src/features/ai-status/ui/BackendStatusIndicator.tsx"
+  ],
+  "agent": "Claude Code",
+  "turn_id": "8f2eb54172c0",
+  "token_usage": {
+    "input_tokens": 3012,
+    "cache_creation_tokens": 303822,
+    "cache_read_tokens": 11848075,
+    "output_tokens": 46337,
+    "api_call_count": 108
+  },
+  "session_metrics": {
+    "turn_count": 11
+  },
+  "initial_attribution": {
+    "calculated_at": "2026-03-22T20:18:09.728211Z",
+    "agent_lines": 16,
+    "human_added": 4,
+    "human_modified": 1,
+    "human_removed": 0,
+    "total_committed": 21,
+    "agent_percentage": 76.19047619047619
+  }
+}
