@@ -1,0 +1,26 @@
+{
+  "cli_version": "0.5.0",
+  "checkpoint_id": "089f8af05d92",
+  "strategy": "manual-commit",
+  "branch": "zvadaadam/explore-pairing-ux",
+  "checkpoints_count": 3,
+  "files_touched": [
+    "apps/web/src/features/auth/ui/PairGatePage.tsx",
+    "apps/web/src/features/settings/ui/sections/AccessSection.tsx"
+  ],
+  "sessions": [
+    {
+      "metadata": "/08/9f8af05d92/0/metadata.json",
+      "transcript": "/08/9f8af05d92/0/full.jsonl",
+      "content_hash": "/08/9f8af05d92/0/content_hash.txt",
+      "prompt": "/08/9f8af05d92/0/prompt.txt"
+    }
+  ],
+  "token_usage": {
+    "input_tokens": 177,
+    "cache_creation_tokens": 253789,
+    "cache_read_tokens": 20750198,
+    "output_tokens": 64354,
+    "api_call_count": 126
+  }
+}
