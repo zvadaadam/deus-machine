@@ -3,7 +3,7 @@ import { FolderPlus, Github, Plus } from "lucide-react";
 import { SidebarFooter as SidebarFooterUI } from "@/components/ui/sidebar";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { AIStatusIndicator } from "@/features/ai-status/ui/AIStatusIndicator";
-import { BackendStatusIndicator } from "@/features/ai-status/ui/BackendStatusIndicator";
+import { ConnectionOrb } from "@/features/connection";
 import { capabilities } from "@/platform/capabilities";
 import type { SidebarFooterProps } from "../model/types";
 
@@ -61,7 +61,7 @@ export function SidebarFooter({ onAddRepository, onCloneRepository }: SidebarFoo
         </PopoverContent>
       </Popover>
       <div className="flex items-center gap-2">
-        <BackendStatusIndicator />
+        <ConnectionOrb />
         <AIStatusIndicator />
       </div>
     </SidebarFooterUI>
