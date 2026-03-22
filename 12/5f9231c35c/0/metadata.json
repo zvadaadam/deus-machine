@@ -1,0 +1,22 @@
+{
+  "cli_version": "0.5.0",
+  "checkpoint_id": "125f9231c35c",
+  "session_id": "1bf01c03-6d23-43e1-ab98-1ffa514f4ae6",
+  "strategy": "manual-commit",
+  "created_at": "2026-03-22T19:18:58.518585Z",
+  "branch": "zvadaadam/circular-pixel-grid",
+  "checkpoints_count": 2,
+  "files_touched": [],
+  "agent": "Claude Code",
+  "turn_id": "64858bc39381",
+  "token_usage": {
+    "input_tokens": 224,
+    "cache_creation_tokens": 300288,
+    "cache_read_tokens": 25157330,
+    "output_tokens": 69120,
+    "api_call_count": 165
+  },
+  "session_metrics": {
+    "turn_count": 18
+  }
+}
