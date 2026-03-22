@@ -68,8 +68,8 @@ jobs:
             exit 1
           fi
           TAG="v${VERSION}"
-          if [[ "${{ inputs.dry_run }}" != "true" ]] && git rev-parse "$TAG" >/dev/null 2>&1; then
-            echo "::error::Tag $TAG already exists"
+          if [[ "${{ inputs.dry_run }}" != "true" ]] && git ls-remote --exit-code --tags origin "refs/tags/$TAG" >/dev/null 2>&1; then
+            echo "::error::Tag $TAG already exists on remote"
             exit 1
           fi
           echo "version=$VERSION" >> "$GITHUB_OUTPUT"
@@ -80,18 +80,16 @@ jobs:
         with:
           bun-version: 1.2.19
 
-      - name: Bump version
-        run: bash scripts/bump-version.sh "${{ steps.validate.outputs.version }}"
-
-      - name: Commit version bump & create tag
+      - name: Bump version, commit & create tag
         if: ${{ inputs.dry_run == false }}
         run: |
+          bash scripts/bump-version.sh "${{ steps.validate.outputs.version }}"
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
           git add package.json
           git commit -m "release: v${{ steps.validate.outputs.version }}"
           git tag "${{ steps.validate.outputs.tag }}"
-          git push origin HEAD "${{ steps.validate.outputs.tag }}"
+          git push --atomic origin HEAD "${{ steps.validate.outputs.tag }}"
 
   # ── Step 2a: Build macOS (arm64 + x64), sign, notarize ─────────────
   build-macos:
@@ -121,7 +119,7 @@ jobs:
         run: bun run build:all
 
       - name: Package macOS (arm64 + x64)
-        run: npx electron-builder --mac --publish never
+        run: bunx electron-builder --mac --publish never
         env:
           CSC_LINK: ${{ secrets.APPLE_CERTIFICATE }}
           CSC_KEY_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
@@ -167,7 +165,7 @@ jobs:
         run: bun run build:all
 
       - name: Package Windows (x64)
-        run: npx electron-builder --win --publish never
+        run: bunx electron-builder --win --publish never
 
       - uses: actions/upload-artifact@v4
         with:
@@ -206,7 +204,7 @@ jobs:
         run: bun run build:all
 
       - name: Package Linux (x64)
-        run: npx electron-builder --linux --publish never
+        run: bunx electron-builder --linux --publish never
 
       - uses: actions/upload-artifact@v4
         with:
