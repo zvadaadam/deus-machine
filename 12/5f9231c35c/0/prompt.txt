@@ -251,3 +251,14 @@ We want a clean, maintainable codebase, with proper best practices for the tech 
 Run subagents to verify, and if it should be fixed, try to merge some stuff together so it can be fixed together within one subagent. 
 
 If you can test something do it.
+
+---
+
+<system_instruction>
+The user has attached these files. Read them before proceeding.
+- /Users/zvada/Developer/agent/box-ide/.conductor/tashkent-v3/.context/attachments/Lint__Format___Typecheck_68096261459.log (78.6 KB)
+</system_instruction>
+
+
+
+Fix the failing CI actions. I've attached the failure logs.
