@@ -1,9 +1,17 @@
 import type { LucideIcon } from "lucide-react";
-import { Plus, FolderOpen, GitBranch, Settings, Sparkles, Puzzle } from "lucide-react";
+import {
+  Plus,
+  FolderOpen,
+  GitBranch,
+  GitPullRequest,
+  Settings,
+  Sparkles,
+  Puzzle,
+} from "lucide-react";
 import { uiActions } from "@/shared/stores/uiStore";
 import { capabilities } from "@/platform/capabilities";
 
-export type CommandGroup = "workspace" | "navigation" | "settings";
+export type CommandGroup = "workspace" | "project" | "navigation" | "settings";
 
 export interface CommandDefinition {
   id: string;
@@ -19,6 +27,7 @@ export interface CommandDefinition {
 
 export const GROUP_LABELS: Record<CommandGroup, string> = {
   workspace: "Workspace",
+  project: "Project",
   navigation: "Navigation",
   settings: "Settings",
 };
@@ -41,10 +50,20 @@ export const staticCommands: CommandDefinition[] = [
     action: () => uiActions.openNewWorkspaceModal(),
   },
   {
+    id: "new-workspace-from",
+    label: "New Workspace from\u2026",
+    icon: GitPullRequest,
+    group: "workspace",
+    keywords: ["create", "pr", "pull request", "branch", "github", "from"],
+    action: () => uiActions.openNewWorkspaceModal("from-github"),
+  },
+
+  // --- Project ---
+  {
     id: "open-project",
     label: "Open Project",
     icon: FolderOpen,
-    group: "workspace",
+    group: "project",
     keywords: ["add", "repository", "folder", "directory", "repo"],
     when: () => capabilities.nativeFolderPicker,
     action: () => {},
@@ -53,7 +72,7 @@ export const staticCommands: CommandDefinition[] = [
     id: "clone-repository",
     label: "Clone Repository",
     icon: GitBranch,
-    group: "workspace",
+    group: "project",
     keywords: ["git", "clone", "github", "repo"],
     action: () => {},
   },

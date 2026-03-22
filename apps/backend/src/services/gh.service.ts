@@ -99,7 +99,7 @@ export function classifyCheck(check: any): "passing" | "failing" | "pending" {
 }
 
 /** Parse a git remote URL (SSH or HTTPS) into OWNER/REPO format for gh --repo. */
-function parseGitHubRepo(url: string): string | null {
+export function parseGitHubRepo(url: string): string | null {
   // SSH: git@github.com:owner/repo.git
   const sshMatch = url.match(/git@[^:]+:([^/]+\/[^/]+?)(?:\.git)?$/);
   if (sshMatch) return sshMatch[1];

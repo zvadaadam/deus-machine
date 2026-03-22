@@ -52,3 +52,37 @@ export function getCleanRepoName(repoName: string): string {
   // Return as-is if no prefix
   return repoName;
 }
+
+/**
+ * Smart display name for workspace sidebar row.
+ *
+ * Priority:
+ *   1. workspace.title — AI-generated summary (after first turn), PR title, or user rename
+ *   2. workspace.slug  — celestial name (clean, human-readable)
+ *   3. workspace.git_branch — raw branch name as absolute fallback
+ *   4. "New workspace" — nothing available yet (during early init)
+ */
+export function getWorkspaceDisplayName(workspace: {
+  title: string | null;
+  slug: string;
+  git_branch: string | null;
+}): string {
+  if (workspace.title) return workspace.title;
+  if (workspace.slug) return workspace.slug;
+  return workspace.git_branch || "New workspace";
+}
+
+/**
+ * Secondary line text for the workspace sidebar row.
+ *
+ * When a title is displayed (AI-generated, PR title, or user rename),
+ * show the slug as context. When slug IS the primary name, return null.
+ */
+export function getWorkspaceSecondaryText(workspace: {
+  title: string | null;
+  slug: string;
+}): string | null {
+  // Show slug as secondary only when title is the primary display name
+  if (workspace.title && workspace.slug) return workspace.slug;
+  return null;
+}

@@ -87,6 +87,8 @@ export const REQUEST_RESOURCES = [
   "pairedDevices",
   "relayStatus",
   "allSessions",
+  "repoPrs",
+  "repoBranches",
 ] as const;
 export type RequestResource = QueryResource | (typeof REQUEST_RESOURCES)[number];
 

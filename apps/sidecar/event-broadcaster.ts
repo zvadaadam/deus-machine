@@ -282,6 +282,15 @@ class EventBroadcasterClass {
 
   // --- Metadata ---
 
+  emitSessionTitle(sessionId: string, agentType: AgentType, title: string): void {
+    this.emitEvent({
+      type: AGENT_EVENT_NAMES.SESSION_TITLE,
+      sessionId,
+      agentType,
+      title,
+    });
+  }
+
   emitAgentSessionId(sessionId: string, agentSessionId: string): void {
     this.emitEvent({
       type: AGENT_EVENT_NAMES.AGENT_SESSION_ID,

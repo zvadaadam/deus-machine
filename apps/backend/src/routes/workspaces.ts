@@ -58,6 +58,7 @@ app.get("/workspaces/by-repo", (c) => {
         repo_id: repoId,
         repo_name: workspace.repo_name || "Unknown",
         sort_order: workspace.repo_sort_order || 999,
+        git_origin_url: workspace.git_origin_url ?? null,
         workspaces: [],
       };
     }
@@ -76,6 +77,7 @@ app.get("/workspaces/by-repo", (c) => {
         repo_id: repo.id,
         repo_name: repo.name,
         sort_order: repo.sort_order ?? 999,
+        git_origin_url: repo.git_origin_url ?? null,
         workspaces: [],
       };
     }
@@ -153,13 +155,16 @@ app.patch("/workspaces/:id", async (c) => {
 // Create workspace
 app.post("/workspaces", async (c) => {
   const db = getDatabase();
-  const { repository_id } = parseBody(CreateWorkspaceBody, await c.req.json());
+  const { repository_id, source_branch, pr_number, pr_url, pr_title, target_branch } = parseBody(
+    CreateWorkspaceBody,
+    await c.req.json()
+  );
 
   const repo = getRepositoryById(db, repository_id);
   if (!repo) throw new NotFoundError("Repository not found");
 
   const workspace_name = generateUniqueName(db);
-  const parent_branch = repo.git_default_branch || "main";
+  const parent_branch = source_branch || repo.git_default_branch || "main";
   const workspaceId = uuidv7();
 
   let branchPrefix = "workspace";
@@ -207,16 +212,19 @@ app.post("/workspaces", async (c) => {
   db.prepare(
     `
     INSERT INTO workspaces (
-      id, repository_id, slug, git_branch,
-      git_target_branch, state, updated_at
-    ) VALUES (?, ?, ?, ?, ?, ?, datetime('now'))
+      id, repository_id, slug, title, git_branch,
+      git_target_branch, pr_url, pr_number, state, updated_at
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'))
   `
   ).run(
     workspaceId,
     repository_id,
     workspace_name,
+    pr_title || null,
     placeholderBranchName,
-    parent_branch,
+    target_branch || repo.git_default_branch || "main",
+    pr_url || null,
+    pr_number || null,
     "initializing"
   );
 

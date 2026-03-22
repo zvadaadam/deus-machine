@@ -23,6 +23,7 @@ import {
   persistSessionError,
   persistSessionCancelled,
   persistAgentSessionId,
+  persistSessionTitle,
   type WriteResult,
 } from "./persistence";
 
@@ -138,6 +139,10 @@ export function createAgentEventHandler(deps: {
           `[AgentEvent] agent.session_id: session=${e.sessionId} agentSessionId=${e.agentSessionId}`
         );
         persistAndInvalidate(persistAgentSessionId(e), SESSION_RESOURCES, e.sessionId);
+      })
+      .with({ type: "session.title" }, (e) => {
+        console.log(`[AgentEvent] session.title: session=${e.sessionId} title="${e.title}"`);
+        persistAndInvalidate(persistSessionTitle(e), SESSION_RESOURCES, e.sessionId);
       })
 
       .exhaustive();

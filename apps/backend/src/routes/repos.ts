@@ -1,7 +1,10 @@
 import { Hono } from "hono";
 import path from "path";
 import fs from "fs";
-import { execFileSync } from "child_process";
+import { execFile, execFileSync } from "child_process";
+import { promisify } from "util";
+
+const execFileAsync = promisify(execFile);
 import { uuidv7 } from "@shared/lib/uuid";
 import { getDatabase } from "../lib/database";
 import { AppError, ValidationError, ConflictError, NotFoundError } from "../lib/errors";
@@ -21,6 +24,7 @@ import {
 } from "../services/manifest.service";
 import { OpenDevsManifestSchema } from "../lib/opendevs-manifest";
 import { invalidate } from "../services/query-engine";
+import { runGh, parseGitHubRepo } from "../services/gh.service";
 import type { QueryResource } from "@shared/types/query-protocol";
 
 const app = new Hono();
@@ -66,8 +70,27 @@ app.post("/repos", async (c) => {
   const repoName = path.basename(root_path);
   const defaultBranch = detectDefaultBranch(root_path);
 
+  // Resolve origin URL (non-fatal — repos without remotes should still work)
+  let gitOriginUrl: string | null = null;
+  try {
+    gitOriginUrl =
+      execFileSync("git", ["remote", "get-url", "origin"], {
+        cwd: root_path,
+        encoding: "utf-8",
+        timeout: 2000,
+      }).trim() || null;
+  } catch {
+    // No origin remote — that's fine
+  }
+
   const insertRepo = db.transaction(
-    (root_path: string, repoId: string, repoName: string, defaultBranch: string) => {
+    (
+      root_path: string,
+      repoId: string,
+      repoName: string,
+      defaultBranch: string,
+      originUrl: string | null
+    ) => {
       const existing = getRepositoryByRootPath(db, root_path);
       if (existing) throw new ConflictError("Repository already exists", existing);
 
@@ -75,17 +98,17 @@ app.post("/repos", async (c) => {
 
       db.prepare(
         `
-      INSERT INTO repositories (id, name, root_path, git_default_branch, sort_order)
-      VALUES (?, ?, ?, ?, ?)
+      INSERT INTO repositories (id, name, root_path, git_default_branch, sort_order, git_origin_url)
+      VALUES (?, ?, ?, ?, ?, ?)
     `
-      ).run(repoId, repoName, root_path, defaultBranch, sortOrder);
+      ).run(repoId, repoName, root_path, defaultBranch, sortOrder, originUrl);
 
       return getRepositoryById(db, repoId);
     }
   );
 
   const repoId = uuidv7();
-  const repo = insertRepo(root_path, repoId, repoName, defaultBranch);
+  const repo = insertRepo(root_path, repoId, repoName, defaultBranch, gitOriginUrl);
   invalidate(["stats"] as QueryResource[]);
   return c.json(repo, 201);
 });
@@ -124,6 +147,106 @@ app.get("/repos/:id/detect-manifest", (c) => {
 
   const manifest = detectManifestFromProject(repo.root_path, repo.name);
   return c.json({ manifest });
+});
+
+// ─── PR and Branch List Endpoints ─────────────────────────────
+
+app.get("/repos/:id/prs", async (c) => {
+  const db = getDatabase();
+  const repo = getRepositoryById(db, c.req.param("id"));
+  if (!repo) throw new NotFoundError("Repository not found");
+
+  // Resolve origin URL (prefer stored value, fall back to git)
+  let originUrl: string | null = repo.git_origin_url;
+  if (!originUrl) {
+    try {
+      originUrl =
+        execFileSync("git", ["remote", "get-url", "origin"], {
+          cwd: repo.root_path,
+          encoding: "utf-8",
+          timeout: 2000,
+        }).trim() || null;
+    } catch {
+      // No origin remote
+    }
+  }
+
+  if (!originUrl) return c.json([]);
+
+  const nwo = parseGitHubRepo(originUrl);
+  if (!nwo) return c.json([]);
+
+  const result = await runGh(
+    [
+      "pr",
+      "list",
+      "--repo",
+      nwo,
+      "--state",
+      "open",
+      "--json",
+      "number,title,headRefName,baseRefName,url,isDraft",
+      "--limit",
+      "50",
+    ],
+    { cwd: repo.root_path, timeoutMs: 10000 }
+  );
+
+  if (!result.success) {
+    return c.json([]);
+  }
+
+  let prs: any[];
+  try {
+    prs = JSON.parse(result.stdout || "[]");
+    if (!Array.isArray(prs)) return c.json([]);
+  } catch {
+    return c.json([]);
+  }
+
+  return c.json(
+    prs.map((pr: any) => ({
+      number: pr.number,
+      title: pr.title,
+      branch: pr.headRefName,
+      baseBranch: pr.baseRefName,
+      url: pr.url,
+      isDraft: pr.isDraft === true,
+    }))
+  );
+});
+
+app.get("/repos/:id/branches", async (c) => {
+  const db = getDatabase();
+  const repo = getRepositoryById(db, c.req.param("id"));
+  if (!repo) throw new NotFoundError("Repository not found");
+
+  let output: string;
+  try {
+    const { stdout } = await execFileAsync(
+      "git",
+      [
+        "for-each-ref",
+        "--sort=-committerdate",
+        "--format=%(refname:short)",
+        "refs/remotes/origin/",
+        "--count=100",
+      ],
+      { cwd: repo.root_path, encoding: "utf-8", timeout: 5000 }
+    );
+    output = stdout;
+  } catch {
+    return c.json({ branches: [] });
+  }
+
+  const branches = output
+    .split("\n")
+    .map((line) => line.trim())
+    .filter(Boolean)
+    .map((ref) => ref.replace(/^origin\//, ""))
+    .filter((name) => name !== "HEAD");
+
+  return c.json({ branches: branches.map((name) => ({ name })) });
 });
 
 export default app;

@@ -209,6 +209,31 @@ export function useRepoActions({
     resetCloneState();
   }, []);
 
+  /** Create workspace from a GitHub PR or branch (extended params). */
+  const handleNewWorkspaceFromGitHub = useCallback(
+    async (params: {
+      repositoryId: string;
+      source_branch: string;
+      pr_number?: number;
+      pr_url?: string;
+      pr_title?: string;
+      target_branch?: string;
+    }) => {
+      setCreating(true);
+      try {
+        const workspace = await createWorkspaceMutation.mutateAsync(params);
+        selectWorkspace(workspace.id);
+      } catch (error) {
+        selectWorkspace(null);
+        console.error("Failed to create workspace from GitHub:", error);
+        toast.error(getErrorMessage(error));
+      } finally {
+        setCreating(false);
+      }
+    },
+    [createWorkspaceMutation, selectWorkspace]
+  );
+
   return {
     // New-workspace modal state
     selectedRepoId,
@@ -216,6 +241,7 @@ export function useRepoActions({
     creating,
     createWorkspaceFromModal,
     handleNewWorkspace,
+    handleNewWorkspaceFromGitHub,
 
     // Clone modal state
     showCloneModal,

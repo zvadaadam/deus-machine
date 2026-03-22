@@ -105,9 +105,17 @@ export async function runCommand(
       .with("createWorkspace", async () => {
         const repositoryId = readString(params, "repository_id");
         if (!repositoryId) throw new Error("createWorkspace requires repository_id");
-        const result = (await delegateToRoute("POST", "/api/workspaces", {
-          repository_id: repositoryId,
-        })) as { id?: string };
+        const body: Record<string, unknown> = { repository_id: repositoryId };
+        const sourceBranch = readString(params, "source_branch");
+        const prUrl = readString(params, "pr_url");
+        const prTitle = readString(params, "pr_title");
+        const targetBranch = readString(params, "target_branch");
+        if (sourceBranch) body.source_branch = sourceBranch;
+        if (params.pr_number != null) body.pr_number = params.pr_number;
+        if (prUrl) body.pr_url = prUrl;
+        if (prTitle) body.pr_title = prTitle;
+        if (targetBranch) body.target_branch = targetBranch;
+        const result = (await delegateToRoute("POST", "/api/workspaces", body)) as { id?: string };
         return { commandId: result.id };
       })
       .with("retrySetup", async () => {

@@ -86,6 +86,11 @@ export const PatchWorkspaceBody = z.object({
 
 export const CreateWorkspaceBody = z.object({
   repository_id: z.string().min(1, "repository_id is required"),
+  source_branch: z.string().optional(), // remote branch to base worktree on
+  pr_number: z.number().optional(), // pre-populate PR tracking
+  pr_url: z.string().optional(),
+  pr_title: z.string().optional(),
+  target_branch: z.string().optional(), // PR's base branch (for diff target)
 });
 
 export const OpenPenFileBody = z.object({

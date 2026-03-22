@@ -7,9 +7,12 @@ import { create } from "zustand";
 import { devtools } from "zustand/middleware";
 import type { SettingsSection } from "@shared/types/settings";
 
+export type NewWorkspaceMode = "default" | "from-github";
+
 interface UIState {
   // Modals
   showNewWorkspaceModal: boolean;
+  newWorkspaceMode: NewWorkspaceMode;
   showSystemPromptModal: boolean;
 
   // Command palette
@@ -20,7 +23,7 @@ interface UIState {
   activeSettingsSection: SettingsSection;
 
   // Actions - Modals
-  openNewWorkspaceModal: () => void;
+  openNewWorkspaceModal: (mode?: NewWorkspaceMode) => void;
   closeNewWorkspaceModal: () => void;
   openSystemPromptModal: () => void;
   closeSystemPromptModal: () => void;
@@ -43,17 +46,26 @@ export const useUIStore = create<UIState>()(
     (set, get) => ({
       // Initial state
       showNewWorkspaceModal: false,
+      newWorkspaceMode: "default" as NewWorkspaceMode,
       showSystemPromptModal: false,
       commandPaletteOpen: false,
       settingsOpen: false,
       activeSettingsSection: "general" as SettingsSection,
 
       // Modal actions
-      openNewWorkspaceModal: () =>
-        set({ showNewWorkspaceModal: true }, false, "ui/openNewWorkspaceModal"),
+      openNewWorkspaceModal: (mode: NewWorkspaceMode = "default") =>
+        set(
+          { showNewWorkspaceModal: true, newWorkspaceMode: mode },
+          false,
+          "ui/openNewWorkspaceModal"
+        ),
 
       closeNewWorkspaceModal: () =>
-        set({ showNewWorkspaceModal: false }, false, "ui/closeNewWorkspaceModal"),
+        set(
+          { showNewWorkspaceModal: false, newWorkspaceMode: "default" },
+          false,
+          "ui/closeNewWorkspaceModal"
+        ),
 
       openSystemPromptModal: () =>
         set({ showSystemPromptModal: true }, false, "ui/openSystemPromptModal"),
@@ -86,6 +98,7 @@ export const useUIStore = create<UIState>()(
         set(
           {
             showNewWorkspaceModal: false,
+            newWorkspaceMode: "default" as NewWorkspaceMode,
             showSystemPromptModal: false,
             commandPaletteOpen: false,
             settingsOpen: false,
@@ -111,7 +124,8 @@ export const useUIStore = create<UIState>()(
  * - You don't need to subscribe to state changes
  */
 export const uiActions = {
-  openNewWorkspaceModal: () => useUIStore.getState().openNewWorkspaceModal(),
+  openNewWorkspaceModal: (mode?: NewWorkspaceMode) =>
+    useUIStore.getState().openNewWorkspaceModal(mode),
   closeNewWorkspaceModal: () => useUIStore.getState().closeNewWorkspaceModal(),
   openSystemPromptModal: () => useUIStore.getState().openSystemPromptModal(),
   closeSystemPromptModal: () => useUIStore.getState().closeSystemPromptModal(),

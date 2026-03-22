@@ -15,6 +15,7 @@ export interface AppSidebarProps {
   diffStatsMap?: Record<string, DiffStats>;
   onWorkspaceClick: (workspace: Workspace) => void;
   onNewWorkspace: (repoId?: string) => void;
+  onNewWorkspaceFromGitHub?: (repoId: string) => void;
   onAddRepository?: () => void;
   onCloneRepository?: () => void;
   onArchive?: (workspaceId: string) => void;
@@ -36,6 +37,7 @@ export interface RepositoryItemProps {
   onToggleCollapse: () => void;
   onWorkspaceClick: (workspace: Workspace) => void;
   onNewWorkspace: (repoId?: string) => void;
+  onNewWorkspaceFromGitHub?: (repoId: string) => void;
   onArchive?: (workspaceId: string) => void;
   onStatusChange?: (workspaceId: string, status: WorkspaceStatus) => void;
   // Avoid mounting workspace list when sidebar is offcanvas-collapsed.

@@ -23,6 +23,7 @@ import type {
   SessionErrorEvent,
   SessionCancelledEvent,
   AgentSessionIdEvent,
+  SessionTitleEvent,
 } from "@shared/agent-events";
 
 // ============================================================================
@@ -242,6 +243,33 @@ export function persistAgentSessionId(event: AgentSessionIdEvent): WriteResult<v
   } catch (error) {
     const msg = getErrorMessage(error);
     console.error(`[AgentPersistence] Failed to persist agent.session_id:`, msg);
+    return { ok: false, error: msg };
+  }
+}
+
+/** Update session title and auto-set workspace title if not already set. */
+export function persistSessionTitle(event: SessionTitleEvent): WriteResult<void> {
+  const db = getDatabase();
+
+  try {
+    db.transaction(() => {
+      // Always update session title
+      db.prepare(`UPDATE sessions SET title = ?, updated_at = datetime('now') WHERE id = ?`).run(
+        event.title,
+        event.sessionId
+      );
+
+      // Auto-set workspace title only if not already set (preserves PR titles and user renames)
+      db.prepare(
+        `UPDATE workspaces SET title = ?
+         WHERE id = (SELECT workspace_id FROM sessions WHERE id = ?)
+         AND title IS NULL`
+      ).run(event.title, event.sessionId);
+    })();
+    return { ok: true, value: undefined };
+  } catch (error) {
+    const msg = getErrorMessage(error);
+    console.error(`[AgentPersistence] Failed to persist session.title:`, msg);
     return { ok: false, error: msg };
   }
 }
