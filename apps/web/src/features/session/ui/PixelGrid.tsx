@@ -1,6 +1,11 @@
 /**
  * PixelGrid - 3x3 animated pixel grid for agent status indication
  *
+ * @deprecated Replaced by CircularPixelGrid — a canvas-based high-resolution
+ * pixel grid inside a circular mask. Use CircularPixelGrid for all new code.
+ * This component is kept for backward compatibility (stories, etc.) and will
+ * be removed in a future release.
+ *
  * Each variant represents a different agent processing phase:
  * - thinking: Tiered breathing (blue) - core pulses big, edges medium, corners subtle
  * - generating: Random sparkle (green) - creative text generation
@@ -14,6 +19,7 @@
 
 import { cn } from "@/shared/lib/utils";
 
+/** @deprecated Use CircularPixelGridVariant from CircularPixelGrid instead. */
 export type PixelGridVariant = "thinking" | "generating" | "toolExecuting" | "error" | "compacting";
 
 interface PixelGridProps {
@@ -124,6 +130,7 @@ const VARIANTS: Record<PixelGridVariant, VariantConfig> = {
   },
 };
 
+/** @deprecated Use CircularPixelGrid instead. */
 export function PixelGrid({
   variant,
   size = 24,
