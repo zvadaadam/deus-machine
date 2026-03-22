@@ -1851,3 +1851,14 @@ The user has attached these files. Read them before proceeding.
 
 
 Fix the failing CI actions. I've attached the failure logs.
+
+---
+
+<system_instruction>
+The user has attached these files. Read them before proceeding.
+- /Users/zvada/Developer/agent/box-ide/.conductor/philadelphia-v2/.context/attachments/Lint__Format___Typecheck_68108650955.log (71.5 KB)
+</system_instruction>
+
+
+
+Fix the failing CI actions. I've attached the failure logs.
