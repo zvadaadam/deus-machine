@@ -177,7 +177,7 @@ function PulsingDots() {
 function AnimatedCheckmark({ reduced }: { reduced: boolean | null }) {
   return (
     <m.div
-      className="flex size-20 items-center justify-center rounded-full bg-emerald-500/10"
+      className="bg-success/10 flex size-20 items-center justify-center rounded-full"
       initial={reduced ? false : { scale: 0, opacity: 0 }}
       animate={{ scale: 1, opacity: 1 }}
       transition={reduced ? { duration: 0.1 } : SPRING_OVERSHOOT}
@@ -187,7 +187,7 @@ function AnimatedCheckmark({ reduced }: { reduced: boolean | null }) {
         animate={{ scale: 1 }}
         transition={reduced ? { duration: 0.1 } : { ...SPRING_OVERSHOOT, delay: 0.15 }}
       >
-        <Check className="size-10 text-emerald-500" strokeWidth={2.5} />
+        <Check className="text-success size-10" strokeWidth={2.5} />
       </m.div>
     </m.div>
   );

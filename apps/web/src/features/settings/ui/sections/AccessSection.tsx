@@ -78,7 +78,9 @@ function PortalCard({
       <div className="flex items-center gap-2.5">
         <span
           className={`size-[7px] shrink-0 rounded-full ${
-            connected ? "bg-emerald-500 shadow-[0_0_6px_rgba(16,185,129,0.35)]" : "bg-red-400"
+            connected
+              ? "bg-success shadow-[0_0_6px_oklch(0.53_0.16_155/0.35)]"
+              : "bg-destructive/60"
           }`}
         />
         <span className="text-muted-foreground text-xs font-medium">
@@ -181,8 +183,8 @@ function ConnectDeviceDialog({
       <DialogContent className="sm:max-w-md">
         {showSuccess ? (
           <div className="flex flex-col items-center gap-4 py-8">
-            <div className="flex size-16 items-center justify-center rounded-full bg-emerald-500/10">
-              <Check className="size-8 text-emerald-500" />
+            <div className="bg-success/10 flex size-16 items-center justify-center rounded-full">
+              <Check className="text-success size-8" />
             </div>
             <div className="text-center">
               <DialogTitle className="text-lg font-semibold">Device Connected</DialogTitle>
@@ -234,9 +236,7 @@ function ConnectDeviceDialog({
               {/* Countdown + regenerate */}
               {countdown > 0 ? (
                 <p
-                  className={`text-xs ${
-                    isExpiringSoon ? "text-amber-500" : "text-muted-foreground"
-                  }`}
+                  className={`text-xs ${isExpiringSoon ? "text-warning" : "text-muted-foreground"}`}
                 >
                   {minutes >= 1
                     ? `Expires in ${minutes} ${minutes === 1 ? "minute" : "minutes"}`
@@ -443,7 +443,7 @@ export function AccessSection({ settings, saveSetting }: SettingsSectionProps) {
           {/* Disconnected state without URL */}
           {relayStatus && !accessUrl && (
             <div className="bg-muted/30 flex items-center gap-2.5 rounded-lg px-4 py-3">
-              <span className="size-[7px] shrink-0 rounded-full bg-amber-400" />
+              <span className="bg-warning size-[7px] shrink-0 rounded-full" />
               <span className="text-muted-foreground text-sm">
                 {relayStatus.connected ? "Setting up..." : "Connecting..."}
               </span>
