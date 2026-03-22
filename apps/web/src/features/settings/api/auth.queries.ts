@@ -19,14 +19,14 @@ export function usePairedDevices(enabled: boolean) {
   });
 }
 
-/** Generate a new pairing code (mutation). */
+/** Generate a new connection code (mutation). */
 export function useGeneratePairCode() {
   return useMutation({
     mutationFn: () => AuthService.generatePairCode(),
   });
 }
 
-/** Revoke a paired device. Invalidates the device list on success. */
+/** Remove a connected device. Invalidates the device list on success. */
 export function useRevokeDevice() {
   const queryClient = useQueryClient();
   return useMutation({
