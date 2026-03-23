@@ -1,0 +1,877 @@
+<task-notification>
+<task-id>a93c04588be7c1aa0</task-id>
+<tool-use-id>toolu_01Qy71uR6RqSwUygizCmdemQ</tool-use-id>
+<output-file>/private/tmp/claude-501/-Users-zvada-Developer-agent-box-ide--conductor-houston-v3/62071f00-6fd2-4c9e-8c13-5e211d426773/tasks/a93c04588be7c1aa0.output</output-file>
+<status>completed</status>
+<summary>Agent "CLAUDE.md compliance review 2" completed</summary>
+<result>Good — `MobileLayout.tsx`, `MobilePRBar.tsx`, and `MobileTabBar.tsx` live alongside `MainLayout.tsx`, `MainContent.tsx`, `ChatArea.tsx`, and `RightSidePanel.tsx` in the `app/layouts/` directory. This is the correct location for layout-level orchestration components used at the app root level (not feature-specific). The existing non-mobile layouts also live there, so this placement is consistent with the established pattern.
+
+Here are all the findings from the audit:
+
+---
+
+## Audit Findings
+
+### Issue 1: Bare `if` guard on a discriminated union instead of `ts-pattern` in `MobilePRHeaderAction`
+
+**File:** `apps/web/src/app/layouts/MobilePRBar.tsx`, line 82
+
+**Code:**
+```ts
+if (state.type !== "no_pr") return null;
+```
+
+`MobilePRHeaderAction` uses a plain negated `if` guard to dispatch on `state.type`, then the function implicitly handles only the `"no_pr"` case. The remaining cases (`ci_pending`, `ci_failing`, `conflicts`, `changes_requested`, `ready_to_merge`, `awaiting_review`, `merged`, `closed`, `gh_unavailable`, `error`) are all silently swallowed with no compile-time enforcement that all cases are covered.
+
+**CLAUDE.md rule violated:**
+> "Use `ts-pattern` for switch/case and if/else chains on discriminated unions."
+> "When to use: Any switch/case or if/else chain dispatching on `.type`, `.status`, `.state`, or similar discriminator fields."
+
+The `MobilePRStatusBar` function in the same file correctly uses `.exhaustive()` on the same `state` union. `MobilePRHeaderAction` should do the same — e.g., use `match(state).with({ type: "no_pr" }, () => <...pill...>).otherwise(() => null)` (or `.exhaustive()` if all cases are explicitly accounted for).
+
+---
+
+### Issue 2: `hover:opacity-90` on interactive elements rendered inside a mobile layout, without a `@media (hover: hover)` guard
+
+**File:** `apps/web/src/app/layouts/MobilePRBar.tsx`, lines 92, 137, 357
+
+**Code (representative):**
+```tsx
+!onCreatePR ? "cursor-not-allowed opacity-50" : "hover:opacity-90"
+```
+
+These buttons (Create PR pill, Create PR in sheet, `BarAction`) are rendered exclusively inside `MobileLayout`, meaning they will only be shown on touch devices where there is no actual hover state. The `hover:opacity-90` class will never fire on mobile, but more critically, on hybrid devices (e.g., iPad with keyboard+trackpad) it will trigger an opacity flash on tap-hold. The CLAUDE.md explicitly requires hover effects to be disabled on touch devices.
+
+**CLAUDE.md rule violated:**
+> "Hover transitions: 200ms ease for simple `color`, `background-color`, `opacity` changes. Disable on touch devices with `@media (hover: hover) and (pointer: fine)`."
+
+The existing `global.css` already has the `@media (hover: hover) and (pointer: fine)` block for markdown links. The same guard should apply to interactive elements in the mobile layout. Since these components are inline Tailwind, a global CSS rule or removing `hover:opacity-90` from these mobile-only buttons is the correct fix.
+
+---
+
+### No Violations Found
+
+The following areas were specifically checked and are clean:
+
+- **No hardcoded colors** — all color usage in the three new files is via CSS variables (`bg-primary`, `text-foreground`, `text-text-muted`, etc.). Compliant.
+- **Component placement** — `MobileLayout`, `MobilePRBar`, `MobileTabBar` live in `app/layouts/` alongside all other layout orchestrators (`MainLayout`, `MainContent`, etc.). This is the correct location for app-shell layout components that are not feature-scoped.
+- **ts-pattern usage in `MobilePRStatusBar`** — correctly uses `match(state)...exhaustive()` on all 9 PR states.
+- **No `!important` usage** anywhere in the new files.
+- **Zustand selectors** — `WorkspaceRoute` and `MainContent` use individual selectors (e.g., `useWorkspaceStore((s) => s.selectWorkspace)`) not whole-store subscriptions. Compliant.
+- **Animation properties** — transitions only animate `colors` and `opacity` (GPU-friendly). No `width`, `height`, or layout properties are animated.
+- **`useFileChanges` polling discipline** — `MobileLayout` calls `useFileChanges` with the correct `isWatched` and `workspaceState` guards, matching the identical call in `RightSidePanel`. React Query deduplicates the two calls into one in-flight request since they share the same `queryKey`.
+- **`CloneRepositoryModal` mobile simplification** — uses `useIsMobile()` to hide the destination picker. No new polling introduced, no `isElectronEnv` conditionals added.</result>
+<usage><total_tokens>75843</total_tokens><tool_uses>47</tool_uses><duration_ms>136920</duration_ms></usage>
+</task-notification>
+Full transcript available at: /private/tmp/claude-501/-Users-zvada-Developer-agent-box-ide--conductor-houston-v3/62071f00-6fd2-4c9e-8c13-5e211d426773/tasks/a93c04588be7c1aa0.output
+
+---
+
+<task-notification>
+<task-id>ab85531d9d4d23905</task-id>
+<tool-use-id>toolu_015AJLwLxM8jGL1RPExoC7tj</tool-use-id>
+<output-file>/private/tmp/claude-501/-Users-zvada-Developer-agent-box-ide--conductor-houston-v3/62071f00-6fd2-4c9e-8c13-5e211d426773/tasks/ab85531d9d4d23905.output</output-file>
+<status>completed</status>
+<summary>Agent "Introduced code problems" completed</summary>
+<result>On web/mobile (no IPC), `getHomeDir()` returns `"~"` immediately (line 15: early return). So the `useEffect` in `CloneRepositoryModal` would set `defaultPath` to `"~/.opendevs/repos"` on the next microtask. The race window is extremely small (one microtask + React state update). The user would need to paste a URL and click Clone within that frame. Practically unreachable. I won't flag this.
+
+Let me now review for any XSS concerns. The `StatusBar` component renders `prNumber` in `#{prNumber}` -- this is a number, no XSS risk. The `prUrl` is used in `href` -- this comes from GitHub API via the backend. No user-controlled injection vector here.
+
+Let me check one more thing: the `error` message display in `CloneRepositoryModal`.
+
+Line 257: `<p className="text-destructive text-sm">{error}</p>` -- `error` is a string from the backend. React auto-escapes string content, so no XSS.
+
+I believe I've been thorough enough. Let me compile my findings.
+
+---
+
+After a thorough review of the diff and all new/modified files, I found **no concrete bugs, security issues, runtime errors, or state management problems** in the introduced code.
+
+Here is a summary of what I verified:
+
+1. **MobileLayout.tsx**: Both tab panels always stay mounted (hidden via `display:none`). The `useFileChanges` hook is called with correct parameters matching the hook signature. The `prBarProps` object correctly derives `onSendAgentMessage` from the handler state. The `ChatArea` component's `onCollapseChatPanel` prop is optional and correctly omitted.
+
+2. **MobilePRBar.tsx**: The `MobilePRStatusBar` exhaustive match covers all 11 `PRActionState` variants. `MobilePRHeaderAction` correctly early-returns `null` for non-`no_pr` states. The Sheet open/close state is properly managed. All action buttons correctly use optional chaining (`onSendAgentMessage?.()`, `onCreatePR?.()`) and are gated by `disabled` props.
+
+3. **MobileTabBar.tsx**: Correct ARIA tab/tabpanel relationship with matching `aria-controls` IDs. Badge count rendering is correct with the `99+` cap.
+
+4. **WorkspaceHeader.tsx**: The `mobile` prop correctly hides the `TaskStrip` and `HeaderOpenButton` on mobile. The sidebar toggle is correctly shown when either the sidebar is collapsed or `mobile` is true.
+
+5. **CloneRepositoryModal.tsx**: The `isMobile` branch correctly hides the destination input and uses `defaultPath` as the effective path. The fallback in `handleCloneRepository` handles the edge case where `defaultPath` hasn't been resolved yet. The `getHomeDir()` function returns `"~"` synchronously in web mode (no IPC), making the race window practically unreachable.
+
+6. **MainContent.tsx**: The `MobileLayout` is correctly rendered conditionally via `isMobile`, with a `key={selectedWorkspace.id}` to remount on workspace switch. Keyboard shortcuts are correctly disabled on mobile (`enabled: selectedWorkspace !== null && !isMobile`).
+
+7. **Security**: No XSS vectors -- all user-facing strings are rendered as React children (auto-escaped). The `href={prUrl}` uses server-derived GitHub URLs. The `rel="noopener noreferrer"` is correctly set on external links.
+
+8. **State management**: No stale closures detected. The `sendAgentMessageHandler` state bridge pattern is the same as the desktop layout, using the correct `useState` + `useCallback` pattern documented in `useWorkspaceActions`.
+
+**No issues to flag.** The code is well-structured, follows existing patterns in the codebase, and handles edge cases properly.</result>
+<usage><total_tokens>74525</total_tokens><tool_uses>32</tool_uses><duration_ms>181362</duration_ms></usage>
+</task-notification>
+Full transcript available at: /private/tmp/claude-501/-Users-zvada-Developer-agent-box-ide--conductor-houston-v3/62071f00-6fd2-4c9e-8c13-5e211d426773/tasks/ab85531d9d4d23905.output
+
+---
+
+<task-notification>
+<task-id>aa934e167e86a7235</task-id>
+<tool-use-id>REDACTED</tool-use-id>
+<output-file>/private/tmp/claude-501/-Users-zvada-Developer-agent-box-ide--conductor-houston-v3/62071f00-6fd2-4c9e-8c13-5e211d426773/tasks/aa934e167e86a7235.output</output-file>
+<status>completed</status>
+<summary>Agent "Bug scan - diff only" completed</summary>
+<result>Good, the signature matches the usage.
+
+After thorough analysis of all the files in this PR, I've found no significant runtime bugs. Here is my assessment:
+
+---
+
+**No significant bugs found.**
+
+The code is well-structured and internally consistent. I verified:
+
+1. **`MobilePRStatusBar` exhaustive match** -- all 11 variants of `PRActionState` are covered, and the `.exhaustive()` call is correct.
+
+2. **`ChatArea` optional prop** -- `onCollapseChatPanel` is typed as optional (`?`), so `MobileLayout` not passing it is correct.
+
+3. **`useFileChanges` call signature** -- the 4-argument call in `MobileLayout` matches the hook's parameter list.
+
+4. **`AllFilesDiffViewer` props** -- `workspaceId`, `fileChanges`, and `hideHeader` are all valid props on the component.
+
+5. **CSS tokens** -- all custom color tokens (`text-text-muted`, `text-text-secondary`, `bg-warning`, `text-warning-foreground`, `bg-success`, `text-success-foreground`, etc.) are properly defined in `global.css`.
+
+6. **`BranchSelector` workspacePath** -- accepts `string | null`, matching the `MobilePRBarProps` type.
+
+7. **`useIsMobile` hook** -- correctly exported from `shared/hooks/index.ts` and properly used in `MainContent` and `CloneRepositoryModal`.
+
+8. **`CloneRepositoryModal` mobile path** -- The `effectivePath` on mobile uses `defaultPath` which resolves to `~/.opendevs/repos` when `getHomeDir()` falls back to `"~"` in web mode. This tilde path is passed to `handleCloneRepository`, which does not enter the `if (!cloneTarget)` branch (since it's truthy). The tilde path then gets sent to the backend's clone endpoint. However, this is arguably an architectural limitation of the web-mode clone flow (not a regression from this PR), since `getHomeDir()` already returned `"~"` on web before this change -- the pre-existing desktop code path had the same tilde fallback. The PR simply routes mobile users through this existing path.</result>
+<usage><total_tokens>71395</total_tokens><tool_uses>49</tool_uses><duration_ms>196385</duration_ms></usage>
+</task-notification>
+Full transcript available at: /private/tmp/claude-501/-Users-zvada-Developer-agent-box-ide--conductor-houston-v3/62071f00-6fd2-4c9e-8c13-5e211d426773/tasks/aa934e167e86a7235.output
+
+---
+
+<task-notification>
+<task-id>a30bbcda87705a621</task-id>
+<tool-use-id>REDACTED</tool-use-id>
+<output-file>/private/tmp/claude-501/-Users-zvada-Developer-agent-box-ide--conductor-houston-v3/62071f00-6fd2-4c9e-8c13-5e211d426773/tasks/a30bbcda87705a621.output</output-file>
+<status>completed</status>
+<summary>Agent "CLAUDE.md compliance review 1" completed</summary>
+<result>This `ease-out` usage is in `transition-[width]` — both the `ease-out` (instead of a custom cubic-bezier) and `transition-[width]` (animating width) are violations of the animation guidelines. However, this is in the pre-existing progress bar section of `CloneRepositoryModal.tsx`.
+
+The PR added mobile-specific code to `CloneRepositoryModal.tsx`, but the progress bar with `transition-[width] ... ease-out` at line 231 was almost certainly pre-existing. Without being able to run git diff, I cannot confirm this definitively, but since the PR is described as adding "simplified clone modal for mobile" and the `isMobile` checks don't touch the progress bar code, I'll treat it as pre-existing.
+
+Based on my thorough analysis of all the new files in this PR, here is my finding:
+
+---
+
+**No clear, unambiguous CLAUDE.md violations found in the new code introduced by this PR.**
+
+Here is a summary of what I checked and why items were cleared:
+
+1. **ts-pattern usage**: `MobilePRStatusBar` uses `match(...).exhaustive()` correctly on the discriminated union from `derivePRActionState`. Single early-return guards (`if (state.type !== "no_pr") return null`) are not multi-case chains and are not subject to the ts-pattern rule.
+
+2. **Hardcoded colors**: None found in any new file. All colors use design tokens (`bg-primary`, `text-foreground`, `text-text-muted`, etc.).
+
+3. **Animation rules**: No `transition-[width]`, `transition-[height]`, or other non-transform/opacity transitions were introduced in new files. The `transition-[width]` at `CloneRepositoryModal.tsx:231` is in the pre-existing progress bar section unrelated to the mobile changes.
+
+4. **`ease-out` custom easings**: Not used in any newly added file.
+
+5. **State management separation**: Mobile layout components receive all server state via props. No server state is stored in Zustand.
+
+6. **Mobile feature parity / `isElectronEnv` conditionals**: The `isMobile` checks use the approved `useIsMobile()` hook pattern explicitly endorsed by CLAUDE.md: "Mobile layout is detected with `useIsMobile()`." The `CloneRepositoryModal` mobile path uses `capabilities` (the project's own platform abstraction), not raw `isElectronEnv` checks.
+
+7. **Double flex nesting**: No purposeless double-flex containers introduced.
+
+8. **`@layer` / `@apply`**: Not used.
+
+9. **Polling discipline**: `useFileChanges` in `MobileLayout` is called with the same conditional-polling approach (5s only when `session_status === "working"`) consistent with the performance guidelines.
+
+10. **Arbitrary Tailwind values**: `max-w-[120px]`/`max-w-[140px]`/`max-w-[240px]`/`max-w-[280px]` are added in `WorkspaceHeader.tsx`, but `max-w-[px]` is a pattern used in 25 pre-existing files across the codebase, making this an established project convention rather than a new violation.</result>
+<usage><total_tokens>78622</total_tokens><tool_uses>53</tool_uses><duration_ms>220401</duration_ms></usage>
+</task-notification>
+Full transcript available at: /private/tmp/claude-501/-Users-zvada-Developer-agent-box-ide--conductor-houston-v3/62071f00-6fd2-4c9e-8c13-5e211d426773/tasks/a30bbcda87705a621.output
+
+---
+
+<task-notification>
+<task-id>a932a4fd00ed37c19</task-id>
+<tool-use-id>toolu_0117g6qHF7PAu2gSQQSk5jQT</tool-use-id>
+<output-file>/private/tmp/claude-501/-Users-zvada-Developer-agent-box-ide--conductor-houston-v3/62071f00-6fd2-4c9e-8c13-5e211d426773/tasks/a932a4fd00ed37c19.output</output-file>
+<status>completed</status>
+<summary>Agent "Validate ts-pattern issue" completed</summary>
+<result>**Verdict: False positive.**
+
+The finding does not hold up. Here is the reasoning:
+
+**The pattern in question (line 82):**
+```ts
+if (state.type !== "no_pr") return null;
+```
+
+This is a single early-return guard, not a switch/case or if/else chain. The CLAUDE.md rule explicitly targets "switch/case or if/else **chains** dispatching on `.type`" — chains imply multiple branches that each handle a different variant. A guard that filters to one specific type and returns null for everything else is idiomatic React (and TypeScript narrowing) — it is not dispatching different behavior per variant.
+
+**The contrast with `MobilePRStatusBar` confirms the distinction.** `MobilePRStatusBar` (lines 186–283) handles the same union with `.exhaustive()` because it genuinely renders a different UI for each of the 10 union variants. That is exactly what ts-pattern is for: multi-branch discriminated dispatch.
+
+`MobilePRHeaderAction` does the opposite: it has exactly one rendering path (the `"no_pr"` state renders a "Create PR" pill) and bails out for every other state. There is no dispatch chain to replace with `match(state).with(...).exhaustive()`. The closest `ts-pattern` equivalent would be:
+
+```ts
+return match(state)
+  .with({ type: "no_pr" }, () => <... pill ...>)
+  .otherwise(() => null);
+```
+
+That is arguably less readable than the guard for a single-branch case, and the CLAUDE.md itself says `.otherwise()` is for "intentional fallback for open-ended matching" — which is what the current `if` guard already expresses, just more directly. The rule's intent is to prevent scattered `if (x.type === "a") ... else if (x.type === "b") ...` chains from silently missing new union members; a guard that returns null for anything that isn't `"no_pr"` carries no such risk and needs no exhaustiveness check.
+
+**Conclusion: false positive.** The single-guard pattern is not a dispatch chain and does not violate the CLAUDE.md ts-pattern rule.</result>
+<usage><total_tokens>27162</total_tokens><tool_uses>1</tool_uses><duration_ms>18250</duration_ms></usage>
+</task-notification>
+Full transcript available at: /private/tmp/claude-501/-Users-zvada-Developer-agent-box-ide--conductor-houston-v3/62071f00-6fd2-4c9e-8c13-5e211d426773/tasks/a932a4fd00ed37c19.output
+
+---
+
+<task-notification>
+<task-id>aa2b03a975bf541d5</task-id>
+<tool-use-id>REDACTED</tool-use-id>
+<output-file>/private/tmp/claude-501/-Users-zvada-Developer-agent-box-ide--conductor-houston-v3/62071f00-6fd2-4c9e-8c13-5e211d426773/tasks/aa2b03a975bf541d5.output</output-file>
+<status>completed</status>
+<summary>Agent "Validate hover guard issue" completed</summary>
+<result>Now I have a clear picture. Let me deliver the verdict.
+
+**Verdict: This is a low-signal, codebase-wide pattern — not a violation specific to this PR.**
+
+Here is the evidence:
+
+**Scale of the pattern:** `hover:opacity` is used across **32 occurrences in 20 files** throughout the codebase, including desktop-only components like `PRActions.tsx` (3 occurrences), `WorkspaceItem.tsx`, `ThinkingBlock.tsx`, `ToolGroupBlock.tsx`, `SubagentGroupBlock.tsx`, `BaseToolRenderer.tsx`, etc. None of them use the `@media (hover: hover) and (pointer: fine)` guard.
+
+**The guard exists exactly once in the entire codebase** — in `global.css` at line 2142, and it only applies to `markdown-content a` links. It has never been applied to button/interactive components anywhere.
+
+**CLAUDE.md rule precision matters:** The rule states "Hover transitions: 200ms ease for simple `color`, `background-color`, `opacity` changes. Disable on touch devices with `@media (hover: hover) and (pointer: fine)`." The word "transitions" is key — this rule is about CSS transitions (the animation itself), not about the hover pseudo-class as a selector. The context in CLAUDE.md is in the "Hover transitions" section under performance/animation guidelines. The intent is to avoid running transition animations on touch devices, not to prohibit using `:hover` as a styling selector entirely.
+
+**The PR introduced `hover:opacity-90` in MobilePRBar.tsx with 3 occurrences.** These are identical in character to the 29 existing occurrences in desktop components that have never been flagged.
+
+**Conclusion:** This is a pre-existing codebase-wide pattern that the PR author simply followed consistently. Flagging only the mobile component while 29 identical usages exist across desktop components would be inconsistent. If enforcement were desired, it would require a systematic cleanup across all 20 files — a separate refactor task, not a PR-specific block.</result>
+<usage><total_tokens>29754</total_tokens><tool_uses>8</tool_uses><duration_ms>26985</duration_ms></usage>
+</task-notification>
+Full transcript available at: /private/tmp/claude-501/-Users-zvada-Developer-agent-box-ide--conductor-houston-v3/62071f00-6fd2-4c9e-8c13-5e211d426773/tasks/aa2b03a975bf541d5.output
+
+---
+
+<system-instruction>
+The user has added 7 comments to the diff for this workspace. Please review and address these comments as part of your response. When addressing comments on the "original" side or on specific commits, read the file from that version (not the current version). Below are the comments, including metadata about what git state they were left on:
+
+Comment #1:
+
+File: 
+Line: undefined
+User comment: "<!-- This is an auto-generated comment: summarize by coderabbit.ai -->
+<!-- walkthrough_start -->
+
+<details>
+<summary>📝 Walkthrough</summary>
+
+## Walkthrough
+
+The changes introduce mobile web layout support by adding new mobile-specific UI components (`MobileLayout`, `MobileTabBar`, `MobilePRBar`) and updating existing components to detect and conditionally render mobile experiences via `useIsMobile()`. A Node.js version constraint is added, and documentation captures observed mobile layout patterns.
+
+## Changes
+
+|Cohort / File(s)|Summary|
+|---|---|
+|**Mobile Layout Components** <br> `apps/web/src/app/layouts/MobileLayout.tsx`, `apps/web/src/app/layouts/MobileTabBar.tsx`, `apps/web/src/app/layouts/MobilePRBar.tsx`|New mobile UI components implementing a single-panel layout with bottom tab bar (`chat`/`code`), workspace header, and mobile-adapted PR actions/status bar with state-driven rendering and badge counts.|
+|**Mobile-aware Layout Routing** <br> `apps/web/src/app/layouts/MainContent.tsx`|Added `useIsMobile()` detection and conditional branching: when mobile and workspace selected, renders `MobileLayout` instead of desktop split-panel; disabled panel shortcuts on mobile.|
+|**Mobile-adapted Existing Components** <br> `apps/web/src/features/workspace/ui/WorkspaceHeader.tsx`, `apps/web/src/features/workspace/ui/DiffViewer.tsx`, `apps/web/src/features/repository/ui/CloneRepositoryModal.tsx`|Added mobile mode detection and responsive adjustments: header compact mode with hidden task strip and narrower title/subtitle, scrollable diff behavior for embedded mode, and mobile-specific repo clone path defaults (`~/.opendevs/repos` vs `~/Developer`).|
+|**Documentation & Configuration** <br> `.claude/agent-memory/code-reviewer/MEMORY.md`, `.claude/agent-memory/code-reviewer/mobile-layout-patterns.md`, `CLAUDE.md`, `.node-version`|Updated product scope to "Desktop + Mobile Web"; added memory section and patterns file documenting mobile layout issues (missing keys, duplicated types, ARIA semantics, safe-area padding); pinned Node.js version to 22.|
+
+## Estimated code review effort
+
+🎯 3 (Moderate) | ⏱️ ~25 minutes
+
+## Poem
+
+> 🐰 *A mobile home for web we've built,*  
+> *With tabs that slide and states that tilt,*  
+> *Bottom bars that dance and sway,*  
+> *PR flows now lead the way!*  
+> *Responsive dreams on tiny screens,*  
+> *The cleanest code I've ever seen!* ✨
+
+</details>
+
+<!-- walkthrough_end -->
+
+
+<!-- tips_start -->
+
+---
+
+<sub>Comment `@coderabbitai help` to get the list of available commands and usage tips.</sub>
+
+<!-- tips_end -->
+
+<!-- internal state start -->
+
+
+<!-- REDACTED/REDACTED/REDACTED/REDACTED/REDACTED/REDACTED/YDlEg/REDACTED/REDACTED/REDACTED/REDACTED/REDACTED/REDACTED/REDACTED/REDACTED/REDACTED/REDACTED/REDACTED/REDACTED/REDACTED/REDACTED/WHRcBpeCPUKEG4K/REDACTED/zJyh0OgeARwTY4w9yzy7yyIXy/yjmIKnGEKsHd1R1KK5gmw4rC4/REDACTED/REDACTED/MvK/REDACTED/REDACTED/UGCFXgcMKwUcb4eFQQEQMQZvPHSAlk/C0oOWTTaeVCUXa/REDACTED/REDACTED/DSgE8Aents0Rt+13RXlNtqB+i6h2h+B/REDACTED/REDACTED/REDACTED/REDACTED/8EX7PIB6wTJXpIO/OLxpXWZgBnPiP/EyPRPXPqOWBaP6ONPmPEPPO9BUO2skB9JBotwHNoRsX/REDACTED/REDACTED/REDACTED/REDACTED/REDACTED/ggOTpSB3+8Ar/meFYy/9cAGkZlv3wXDhMQK6AGGDVTGq/REDACTED/REDACTED/REDACTED/REDACTED/REDACTED/REDACTED/REDACTED/REDACTED/xB6Ltw3juid4/REDACTED/REDACTED/LJK6glg5ROss1gtA2wAaqUJQBgH/REDACTED/REDACTED/REDACTED/VEtQZV/REDACTED/REDACTED/REDACTED -->
+
+<!-- internal state end -->"
+
+Comment metadata:
+This comment was left on a file.
+This comment was left on GitHub by @coderabbitai.
+
+
+Comment #2:
+
+File: .claude/agent-memory/code-reviewer/MEMORY.md
+Line: 241
+User comment: "_⚠️ Potential issue_ | _🟡 Minor_
+
+**This memory entry includes stale “current issue” statements.**
+
+`MobileLayout` is no longer missing `key={selectedWorkspace.id}` in `MainContent.tsx`, so this should be updated to avoid carrying obsolete guidance.
+
+<details>
+<summary>🤖 Prompt for AI Agents</summary>
+
+```
+Verify each finding against the current code and only fix it if needed.
+
+In @.claude/agent-memory/code-reviewer/MEMORY.md around lines 236 - 241, Update
+the MEMORY.md entry to remove or correct the stale bullet that claims
+"MobileLayout missing key={selectedWorkspace.id}" — replace it with a note that
+MainContent.tsx now sets key={selectedWorkspace.id} (so the issue is resolved)
+or simply delete that bullet; ensure the entry references MobileLayout and
+MainContent.tsx so future reviewers know the specific symbols and that the
+missing-key problem is no longer present.
+```
+
+</details>
+
+<!-- fingerprinting:phantom:poseidon:hawk -->
+
+<!-- This is an auto-generated comment by CodeRabbit -->"
+
+Comment metadata:
+This comment was left on the modified branch.
+This comment was left on GitHub by @coderabbitai.
+This comment is the start of thread PRRT_kwDOQEbULc52Aqgf. 
+
+
+Comment #3:
+
+File: .claude/agent-memory/code-reviewer/mobile-layout-patterns.md
+Line: 17
+User comment: "_⚠️ Potential issue_ | _🟡 Minor_
+
+**These pattern notes are outdated relative to current code.**
+
+The doc still states missing `MobileLayout` key and mobile diff close-button no-op, but current code shows `key={selectedWorkspace.id}` and `AllFilesDiffViewer hideHeader` in the mobile path. Please update this file to reflect current behavior (or mark those as “fixed history”).
+
+
+
+Also applies to: 26-29
+
+<details>
+<summary>🤖 Prompt for AI Agents</summary>
+
+```
+Verify each finding against the current code and only fix it if needed.
+
+In @.claude/agent-memory/code-reviewer/mobile-layout-patterns.md around lines 12
+- 17, The documentation in
+.claude/agent-memory/code-reviewer/mobile-layout-patterns.md is stale: update
+the notes that claim MobileLayout in MainContent.tsx is missing a key and that
+the mobile diff close-button is a no-op — the current code already passes
+key={selectedWorkspace.id} to MobileLayout and uses AllFilesDiffViewer with
+hideHeader in the mobile path (ChatArea already gets key={workspace.id}); either
+update those entries to describe the current behavior or mark them as "fixed
+history" (also apply the same edits to the other occurrences referencing the
+same issue).
+```
+
+</details>
+
+<!-- fingerprinting:phantom:poseidon:hawk -->
+
+<!-- This is an auto-generated comment by CodeRabbit -->"
+
+Comment metadata:
+This comment was left on the modified branch.
+This comment was left on GitHub by @coderabbitai.
+This comment is the start of thread PRRT_kwDOQEbULc52Aqgk. 
+
+
+Comment #4:
+
+File: apps/web/src/app/layouts/MobileLayout.tsx
+Line: 73
+User comment: "_⚠️ Potential issue_ | _🟡 Minor_
+
+**Reset the active tab when switching workspaces.**
+
+`activeTab` persists across workspace changes, so a new workspace can open directly on Code instead of the documented/default Chat view.
+
+
+
+<details>
+<summary>🔁 Suggested fix</summary>
+
+```diff
+-import { useState, useMemo } from "react";
++import { useState, useMemo, useEffect } from "react";
+@@
+   const [activeTab, setActiveTab] = useState<MobileTab>("chat");
++  useEffect(() => {
++    setActiveTab("chat");
++  }, [workspace.id]);
+```
+</details>
+
+<!-- suggestion_start -->
+
+<details>
+<summary>📝 Committable suggestion</summary>
+
+> ‼️ **IMPORTANT**
+> Carefully review the code before committing. Ensure that it accurately replaces the highlighted code, contains no missing lines, and has no issues with indentation. Thoroughly test & benchmark the code to ensure it meets the requirements.
+
+```suggestion
+import { useState, useMemo, useEffect } from "react";
+
+// ... other code ...
+
+  const [activeTab, setActiveTab] = useState<MobileTab>("chat");
+  useEffect(() => {
+    setActiveTab("chat");
+  }, [workspace.id]);
+```
+
+</details>
+
+<!-- suggestion_end -->
+
+<details>
+<summary>🤖 Prompt for AI Agents</summary>
+
+```
+Verify each finding against the current code and only fix it if needed.
+
+In `@apps/web/src/app/layouts/MobileLayout.tsx` around lines 72 - 73, activeTab
+(state from useState<MobileTab>("chat") in the MobileLayout component) is not
+reset when the user switches workspaces; add a useEffect in MobileLayout that
+watches the current workspace identifier (e.g., workspace.id or
+selectedWorkspaceId prop) and calls setActiveTab("chat") whenever that
+identifier changes so each workspace opens on the default Chat tab. Ensure the
+effect lists the workspace id as a dependency and only resets activeTab when the
+id actually changes.
+```
+
+</details>
+
+<!-- fingerprinting:phantom:poseidon:hawk -->
+
+<!-- This is an auto-generated comment by CodeRabbit -->"
+
+Comment metadata:
+This comment was left on the modified branch.
+This comment was left on GitHub by @coderabbitai.
+This comment is the start of thread PRRT_kwDOQEbULc52Aqgl. 
+
+
+Comment #5:
+
+File: apps/web/src/app/layouts/MobileLayout.tsx
+Line: 127
+User comment: "_⚠️ Potential issue_ | _🟠 Major_
+
+**Link each `tabpanel` to its tab and hide inactive panels semantically.**
+
+Line 127 and Line 140 set `role="tabpanel"`, but the panels are only visually hidden via class. Add `aria-labelledby` + `hidden` to make state explicit for assistive tech.
+
+
+
+<details>
+<summary>♿ Suggested fix</summary>
+
+```diff
+-      <div className={cn("flex min-h-0 flex-1 flex-col overflow-hidden", activeTab !== "chat" && "hidden")}
+-        id="mobile-panel-chat" role="tabpanel">
++      <div
++        className="flex min-h-0 flex-1 flex-col overflow-hidden"
++        id="mobile-panel-chat"
++        role="tabpanel"
++        aria-labelledby="mobile-tab-chat"
++        hidden={activeTab !== "chat"}
++      >
+@@
+-      <div className={cn("relative min-h-0 flex-1", activeTab !== "code" && "hidden")}
+-        id="mobile-panel-code" role="tabpanel">
++      <div
++        className="relative min-h-0 flex-1"
++        id="mobile-panel-code"
++        role="tabpanel"
++        aria-labelledby="mobile-tab-code"
++        hidden={activeTab !== "code"}
++      >
+```
+</details>
+
+
+Also applies to: 139-140
+
+<details>
+<summary>🤖 Prompt for AI Agents</summary>
+
+```
+Verify each finding against the current code and only fix it if needed.
+
+In `@apps/web/src/app/layouts/MobileLayout.tsx` around lines 126 - 127, The
+tabpanel elements (e.g., the element with id "mobile-panel-chat") are only
+visually hidden via CSS; update each role="tabpanel" to include aria-labelledby
+that references the corresponding tab button id (for example "mobile-tab-chat"
+for "mobile-panel-chat") and set the hidden attribute when the panel is inactive
+(hidden if activeTab !== "chat"). Apply the same change to the other panel(s)
+with role="tabpanel" so assistive tech sees the active state (use the matching
+tab ids and the same activeTab-based condition to toggle hidden).
+```
+
+</details>
+
+<!-- fingerprinting:phantom:poseidon:hawk -->
+
+<!-- This is an auto-generated comment by CodeRabbit -->"
+
+Comment metadata:
+This comment was left on the modified branch.
+This comment was left on GitHub by @coderabbitai.
+This comment is the start of thread PRRT_kwDOQEbULc52Aqgo. 
+
+
+Comment #6:
+
+File: apps/web/src/app/layouts/MobilePRBar.tsx
+Line: 231
+User comment: "_⚠️ Potential issue_ | _🟡 Minor_
+
+**Use state-consistent copy for `changes_requested`.**
+
+Line 230 currently renders `"Review requested"` for `type: "changes_requested"`, which reads like the opposite state. Consider `"Changes requested"` to avoid confusion.
+
+
+
+<details>
+<summary>✏️ Suggested fix</summary>
+
+```diff
+-          Review requested
++          Changes requested
+```
+</details>
+
+<!-- suggestion_start -->
+
+<details>
+<summary>📝 Committable suggestion</summary>
+
+> ‼️ **IMPORTANT**
+> Carefully review the code before committing. Ensure that it accurately replaces the highlighted code, contains no missing lines, and has no issues with indentation. Thoroughly test & benchmark the code to ensure it meets the requirements.
+
+```suggestion
+    .with({ type: "changes_requested" }, (s) => (
+      <StatusBar prNumber={s.prNumber} prUrl={s.prUrl}>
+        <span className="text-warning flex items-center gap-1 text-xs">
+          <MessageSquareWarning className="h-3 w-3" />
+          Changes requested
+        </span>
+```
+
+</details>
+
+<!-- suggestion_end -->
+
+<details>
+<summary>🤖 Prompt for AI Agents</summary>
+
+```
+Verify each finding against the current code and only fix it if needed.
+
+In `@apps/web/src/app/layouts/MobilePRBar.tsx` around lines 226 - 231, The branch
+handling .with({ type: "changes_requested" }, (s) => ...) in MobilePRBar.tsx
+shows the incorrect copy "Review requested"; update the rendered text inside
+that StatusBar branch to "Changes requested" so the label matches the state type
+(refer to the .with({ type: "changes_requested" }, ...) block and the
+StatusBar/MessageSquareWarning usage).
+```
+
+</details>
+
+<!-- fingerprinting:phantom:poseidon:hawk -->
+
+<!-- This is an auto-generated comment by CodeRabbit -->"
+
+Comment metadata:
+This comment was left on the modified branch.
+This comment was left on GitHub by @coderabbitai.
+This comment is the start of thread PRRT_kwDOQEbULc52Aqgq. 
+
+
+Comment #7:
+
+File: apps/web/src/app/layouts/MobileTabBar.tsx
+Line: 47
+User comment: "_⚠️ Potential issue_ | _🟠 Major_
+
+**Implement full keyboard behavior for the ARIA tab pattern.**
+
+Line 43 adds `role="tab"`, but the current implementation lacks roving focus (`tabIndex`) and arrow/home/end keyboard navigation, so the tablist is only partially accessible.
+
+
+
+<details>
+<summary>♿ Suggested fix</summary>
+
+```diff
+-      {tabs.map((tab) => {
++      {tabs.map((tab, index) => {
+         const Icon = tab.icon;
+         const isActive = activeTab === tab.id;
+         const showBadge = tab.id === "code" && fileChangesCount > 0;
+
+         return (
+           <button
+             key={tab.id}
+             type="button"
+             role="tab"
++            id={`mobile-tab-${tab.id}`}
+             aria-selected={isActive}
+             aria-controls={`mobile-panel-${tab.id}`}
++            tabIndex={isActive ? 0 : -1}
+             onClick={() => onTabChange(tab.id)}
++            onKeyDown={(e) => {
++              if (!["ArrowRight", "ArrowLeft", "Home", "End"].includes(e.key)) return;
++              e.preventDefault();
++              const nextIndex =
++                e.key === "Home"
++                  ? 0
++                  : e.key === "End"
++                    ? tabs.length - 1
++                    : e.key === "ArrowRight"
++                      ? (index + 1) % tabs.length
++                      : (index - 1 + tabs.length) % tabs.length;
++              onTabChange(tabs[nextIndex].id);
++            }}
+             className={cn(
+               "relative flex flex-1 flex-col items-center justify-center gap-0.5 transition-colors duration-150",
+               isActive ? "text-foreground" : "text-text-muted"
+             )}
+           >
+```
+</details>
+
+
+Also applies to: 52-61
+
+<details>
+<summary>🤖 Prompt for AI Agents</summary>
+
+```
+Verify each finding against the current code and only fix it if needed.
+
+In `@apps/web/src/app/layouts/MobileTabBar.tsx` around lines 34 - 47, The buttons
+rendered inside tabs.map have role="tab" but lack roving focus and keyboard
+navigation; update the MobileTabBar component to implement ARIA tab keyboard
+behavior by (1) creating a ref array (e.g., tabRefs) for each tab item and
+ensuring the container has role="tablist", (2) set tabIndex on each button using
+the active state (tabIndex={isActive ? 0 : -1}), and (3) add an onKeyDown
+handler on the button (or the tablist) that handles ArrowLeft/ArrowRight to move
+focus to previous/next tab, and Home/End to move to first/last tab — when
+moving, call onTabChange(tabId) and call focus() on the appropriate ref; use
+existing symbols like tabs.map, activeTab, onTabChange, and fileChangesCount to
+locate and update the code.
+```
+
+</details>
+
+<!-- fingerprinting:phantom:poseidon:hawk -->
+
+<!-- This is an auto-generated comment by CodeRabbit -->"
+
+Comment metadata:
+This comment was left on the modified branch.
+This comment was left on GitHub by @coderabbitai.
+This comment is the start of thread PRRT_kwDOQEbULc52Aqgs. 
+
+</system-instruction>
+
+I run AI code review, is it actionable? Wdyt? Explore in depth each problem.
+
+We want a clean, maintainable codebase, with proper best practices for the tech stack we use.
+
+Run subagents to verify, and if it should be fixed, try to merge some stuff together so it can be fixed together within one subagent. 
+
+If you can test something do it.
+
+---
+
+<task-notification>
+<task-id>a4c5acb6a5ed864d8</task-id>
+<tool-use-id>REDACTED</tool-use-id>
+<output-file>/private/tmp/claude-501/-Users-zvada-Developer-agent-box-ide--conductor-houston-v3/62071f00-6fd2-4c9e-8c13-5e211d426773/tasks/a4c5acb6a5ed864d8.output</output-file>
+<status>completed</status>
+<summary>Agent "Verify PR copy text comment" completed</summary>
+<result>The findings are clear. Here is the verdict:
+
+**The CodeRabbit fix is valid. The correct copy is "Changes requested".**
+
+**Evidence:**
+
+In `MobilePRBar.tsx` (line 230), the `changes_requested` match arm renders:
+```
+Review requested
+```
+
+In the desktop `PRActions.tsx` (line 138-146), the same `changes_requested` state renders an action button labeled **"Address Review"** — it does not say "Review requested" anywhere. The desktop version's label focuses on the action, not the state description.
+
+**Semantic analysis:** The two phrases mean opposite things in GitHub's model:
+- `changes_requested` = a reviewer has already reviewed and *asked for changes*. The correct status label for the user to see is **"Changes requested"**.
+- "Review requested" would describe the `awaiting_review` state — where you've asked someone to review but they haven't responded yet. The desktop component already uses `"Awaiting review"` for that state (line 111).
+
+Using "Review requested" in the `changes_requested` arm is semantically backwards — it describes the wrong GitHub state entirely.
+
+**Correct copy:** `"Changes requested"` (matching the state name and GitHub's own UI language for this condition).</result>
+<usage><total_tokens>32388</total_tokens><tool_uses>3</tool_uses><duration_ms>15159</duration_ms></usage>
+</task-notification>
+Full transcript available at: /private/tmp/claude-501/-Users-zvada-Developer-agent-box-ide--conductor-houston-v3/62071f00-6fd2-4c9e-8c13-5e211d426773/tasks/a4c5acb6a5ed864d8.output
+
+---
+
+<task-notification>
+<task-id>aa8ff2883364ffc02</task-id>
+<tool-use-id>toolu_01V2gUbeNxPuTYiuMze96MK9</tool-use-id>
+<output-file>/private/tmp/claude-501/-Users-zvada-Developer-agent-box-ide--conductor-houston-v3/62071f00-6fd2-4c9e-8c13-5e211d426773/tasks/aa8ff2883364ffc02.output</output-file>
+<status>completed</status>
+<summary>Agent "Verify ARIA accessibility comments" completed</summary>
+<result>Now I have all the information needed. Here are my findings.
+
+---
+
+## Findings
+
+### Comment #5: Tabpanels using CSS `hidden` instead of HTML `hidden` attribute, and missing `aria-labelledby`
+
+**Current state in `MobileLayout.tsx` (lines 126-154):**
+- Two `<div>` elements with `role="tabpanel"` and `id="mobile-panel-chat"` / `id="mobile-panel-code"`
+- Inactive panels are hidden via Tailwind's `hidden` class (which applies `display: none`)
+- No `aria-labelledby` attribute on either panel
+
+**Analysis of the HTML `hidden` attribute suggestion:**
+
+CodeRabbit suggests using the HTML `hidden` attribute instead of the CSS `hidden` class. This is **incorrect advice for this use case**, and here is why:
+
+1. **Tailwind's `hidden` class** applies `display: none`. The element is not visible and does not participate in layout, but it **remains in the DOM** and React **keeps it mounted**. Event listeners, WebSocket connections, and component state are preserved.
+
+2. **The HTML `hidden` attribute** in modern browsers also applies `display: none` by default (via the browser's UA stylesheet: `[hidden] { display: none }`). So from a pure rendering standpoint, the behavior is identical -- both result in `display: none`.
+
+3. **However**, the code comment on line 125 explicitly states: "both views always mounted, inactive hidden via display:none." This is intentional because `ChatArea` maintains WebSocket connections and state. The CSS class approach makes the intent clearer in the React/Tailwind idiom -- it is conditionally applied via `cn()` based on `activeTab`.
+
+4. In practice, switching from `className="hidden"` to the HTML `hidden` attribute would produce the same DOM behavior (`display: none`). But there is a subtle risk: if any future CSS or framework behavior treats the HTML `hidden` attribute differently (e.g., `content-visibility` or `until-found` variants of `hidden`), it could break the always-mounted contract. The CSS class approach is safer and more explicit.
+
+**Verdict on HTML `hidden` attribute: Not worth changing.** Both approaches produce `display: none`. The CSS class is idiomatic in Tailwind/React and carries no risk of future semantic drift from the HTML attribute.
+
+**Analysis of the `aria-labelledby` suggestion:**
+
+This part of the comment is **valid**. The WAI-ARIA Tabs pattern specifies:
+- Each `tabpanel` SHOULD have `aria-labelledby` referencing its associated tab
+
+Currently the panels have `id` attributes (`mobile-panel-chat`, `mobile-panel-code`) and the tabs have `aria-controls` pointing to those IDs, but the reverse link (`aria-labelledby` on panels pointing to tab IDs) is missing. To add it, the tab buttons would need `id` attributes (e.g., `id="mobile-tab-chat"`, `id="mobile-tab-code"`), and each panel would add `aria-labelledby="mobile-tab-chat"` / `aria-labelledby="mobile-tab-code"`.
+
+**Verdict on `aria-labelledby`: Valid improvement, low risk.** Adding `id` to tabs and `aria-labelledby` to panels completes the bidirectional association. It is a small, mechanical change. However, given the `key={selectedWorkspace.id}` remount behavior (the entire `MobileLayout` remounts on workspace switch), there is no stale-ID risk across workspace transitions -- IDs are hardcoded strings, not dynamic.
+
+---
+
+### Comment #7: Tab buttons missing `id`, `tabIndex` roving focus, and keyboard navigation
+
+**Current state in `MobileTabBar.tsx` (lines 39-61):**
+- Buttons have `role="tab"`, `aria-selected`, and `aria-controls` -- good
+- No `id` attribute on any button
+- No `tabIndex` attribute at all (defaults to 0 for `<button>`, so both tabs are in the tab order)
+- No keyboard navigation handlers (Arrow keys, Home, End)
+
+**WAI-ARIA Tabs pattern requirements (from the Authoring Practices Guide):**
+
+| Feature | WAI-ARIA Requirement | Current MobileTabBar |
+|---------|---------------------|---------------------|
+| `role="tab"` on triggers | Required | Present |
+| `role="tablist"` on container | Required | Present |
+| `aria-selected` on tabs | Required | Present |
+| `aria-controls` pointing to panel | Recommended | Present |
+| `id` on tabs (for panel `aria-labelledby`) | Recommended | **Missing** |
+| Roving `tabIndex` (active: 0, inactive: -1) | Required for keyboard pattern | **Missing** |
+| Arrow Left/Right key navigation | Required | **Missing** |
+| Home/End key navigation | Recommended | **Missing** |
+
+**Comparison with other tab implementations in this codebase:**
+
+- **Radix `tabs.tsx`** (`src/components/ui/tabs.tsx`): Uses `@radix-ui/react-tabs` which handles all ARIA automatically -- roving tabindex, arrow keys, Home/End, `id` generation, `aria-labelledby`, `aria-controls`. This is the gold standard in the codebase.
+- **`ContentTabBar.tsx`**: Custom tabs with `role="tab"`, `aria-selected`, `aria-label`. No `id`, no `aria-controls`, no roving tabindex, no keyboard navigation. Same gaps as MobileTabBar.
+- **`MainContentTabBar.tsx`**: Uses `role="tab"` on divs with `tabIndex={0}` on all tabs (not roving). Has Enter/Space key handlers but no arrow key navigation. No `id`, no `aria-controls`.
+- **`BrowserTabBar.tsx`**: Has `role="tab"`, `aria-selected`. No `id`, no `aria-controls`, no tabIndex, no keyboard navigation.
+
+**Conclusion: The MobileTabBar has the same ARIA gaps as every other custom tab implementation in the codebase.** Only the Radix-based `tabs.tsx` component gets it right (because Radix handles it automatically).
+
+**Impact of `key={selectedWorkspace.id}` remount:**
+
+The remount on workspace switch means the `MobileLayout` (and therefore `MobileTabBar`) is destroyed and recreated when the user switches workspaces. This means:
+- Roving tabindex state would reset on workspace switch (but `activeTab` also resets to "chat" via `useState` default, so this is consistent)
+- No stale ARIA references across workspace transitions
+- The remount does not affect whether these ARIA features should be added -- it just means the implementation can be stateless (no need to persist focus state across remounts)
+
+**Practical significance for mobile:**
+
+This is a **mobile-only** bottom tab bar (like iOS/Android native tab bars). Users interact via touch, not keyboard. The roving tabindex and arrow-key navigation patterns are primarily valuable for:
+- Desktop keyboard users
+- Screen reader users on desktop
+- Mobile screen reader users (VoiceOver/TalkBack use swipe gestures, not arrow keys)
+
+On mobile, VoiceOver and TalkBack navigate via sequential swipe gestures, not arrow keys or tab-order focus management. The roving tabindex pattern is a desktop keyboard concern. That said, the `id` attribute is a prerequisite for `aria-labelledby` on panels (Comment #5), so it has value regardless of platform.
+
+**Verdict: Partially valid, but low priority.**
+
+- Adding `id` attributes: **Valid and easy.** Required to support `aria-labelledby` on panels. Recommend doing this.
+- Roving `tabIndex` (active: 0, inactive: -1): **Valid per spec but low practical impact.** This is a mobile-only component where touch is the primary interaction. No other custom tab implementation in the codebase does this either. If added, it should be done consistently across all tab bars.
+- Arrow key / Home / End keyboard navigation: **Valid per spec but very low practical impact for mobile.** Same consistency concern -- none of the custom tab bars in the codebase implement this. If the team decides to add it, it should be done via a shared hook or utility used by all custom tab bars, not just MobileTabBar.
+
+---
+
+## Summary
+
+| Comment | Sub-item | Valid? | Worth doing? | Risk/Tradeoff |
+|---------|----------|--------|-------------|---------------|
+| #5 | Use HTML `hidden` attribute | Technically equivalent | **No** | Semantic drift risk; CSS class is idiomatic in Tailwind/React; would NOT break always-mounted behavior since both produce `display: none` |
+| #5 | Add `aria-labelledby` to panels | Yes | **Yes** | Trivial change, completes ARIA contract; requires `id` on tabs (see #7) |
+| #7 | Add `id` to tab buttons | Yes | **Yes** | Trivial, prerequisite for `aria-labelledby` |
+| #7 | Roving `tabIndex` | Valid per spec | **Low priority** | Mobile-only component; no other custom tab bar in codebase does this; should be done consistently if at all |
+| #7 | Arrow/Home/End keyboard nav | Valid per spec | **Low priority** | Mobile-only; no other custom tab bar implements this; best done as shared utility if adopted |</result>
+<usage><total_tokens>37961</total_tokens><tool_uses>16</tool_uses><duration_ms>87086</duration_ms></usage>
+</task-notification>
+Full transcript available at: /private/tmp/claude-501/-Users-zvada-Developer-agent-box-ide--conductor-houston-v3/62071f00-6fd2-4c9e-8c13-5e211d426773/tasks/aa8ff2883364ffc02.output
+
+---
+
+<task-notification>
+<task-id>a12d8956520c304c0</task-id>
+<tool-use-id>toolu_01XJip7WXqSv6pMMzo1nZxXt</tool-use-id>
+<output-file>/private/tmp/claude-501/-Users-zvada-Developer-agent-box-ide--conductor-houston-v3/62071f00-6fd2-4c9e-8c13-5e211d426773/tasks/a12d8956520c304c0.output</output-file>
+<status>completed</status>
+<summary>Agent "Fix code issues from review" completed</summary>
+<result>I need permission to edit files. Let me explain what I'm trying to do:
+
+I need to edit three files to apply the review fixes:
+
+1. **`MobileTabBar.tsx`** -- Add `id={`mobile-tab-${tab.id}`}` and `tabIndex={isActive ? 0 : -1}` to each tab button
+2. **`MobileLayout.tsx`** -- Add `aria-labelledby="mobile-tab-chat"` and `aria-labelledby="mobile-tab-code"` to the respective tab panel divs
+3. **`MobilePRBar.tsx`** -- Change "Review requested" to "Changes requested" in the `changes_requested` match arm
+
+These are small, targeted accessibility and copy fixes. Could you grant permission to use the Edit tool so I can make these changes?</result>
+<usage><total_tokens>34792</total_tokens><tool_uses>4</tool_uses><duration_ms>15858</duration_ms></usage>
+</task-notification>
+Full transcript available at: /private/tmp/claude-501/-Users-zvada-Developer-agent-box-ide--conductor-houston-v3/62071f00-6fd2-4c9e-8c13-5e211d426773/tasks/a12d8956520c304c0.output

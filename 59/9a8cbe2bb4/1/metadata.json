@@ -1,0 +1,40 @@
+{
+  "cli_version": "0.5.0",
+  "checkpoint_id": "599a8cbe2bb4",
+  "session_id": "62071f00-6fd2-4c9e-8c13-5e211d426773",
+  "strategy": "manual-commit",
+  "created_at": "2026-03-23T13:21:07.510298Z",
+  "branch": "zvadaadam/mobile-web-layout",
+  "checkpoints_count": 11,
+  "files_touched": [
+    ".claude/agent-memory/code-reviewer/MEMORY.md",
+    ".claude/agent-memory/code-reviewer/mobile-layout-patterns.md",
+    "apps/web/src/app/layouts/MobileLayout.tsx",
+    "apps/web/src/app/layouts/MobilePRBar.tsx",
+    "apps/web/src/app/layouts/MobileTabBar.tsx",
+    "apps/web/src/features/workspace/ui/DiffViewer.tsx"
+  ],
+  "agent": "Claude Code",
+  "turn_id": "cfffe48c1fd3",
+  "checkpoint_transcript_start": 14,
+  "transcript_lines_at_start": 14,
+  "token_usage": {
+    "input_tokens": 2686,
+    "cache_creation_tokens": 150578,
+    "cache_read_tokens": 3604733,
+    "output_tokens": 15874,
+    "api_call_count": 46
+  },
+  "session_metrics": {
+    "turn_count": 11
+  },
+  "initial_attribution": {
+    "calculated_at": "2026-03-23T13:21:07.312587Z",
+    "agent_lines": 1,
+    "human_added": 0,
+    "human_modified": 22,
+    "human_removed": 1,
+    "total_committed": 23,
+    "agent_percentage": 4.3478260869565215
+  }
+}
