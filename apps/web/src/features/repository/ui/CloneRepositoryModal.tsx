@@ -14,6 +14,7 @@ import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
 import { onEvent } from "@/platform/ws/query-protocol-client";
 import { native, capabilities } from "@/platform";
+import { useIsMobile } from "@/shared/hooks/use-mobile";
 import type { GitCloneProgressEvent } from "@shared/events";
 
 /** User-friendly phase labels */
@@ -54,24 +55,28 @@ export function CloneRepositoryModal({
   onClearError,
 }: CloneRepositoryModalProps) {
   const reduceMotion = useReducedMotion();
+  const isMobile = useIsMobile();
   const [githubUrl, setGithubUrl] = useState("");
   const [targetPath, setTargetPath] = useState("");
   const [defaultPath, setDefaultPath] = useState("");
   const [progress, setProgress] = useState<GitCloneProgressEvent | null>(null);
   const previousCloning = useRef(cloning);
 
-  // Resolve default destination path on mount
+  // Resolve default destination path on mount.
+  // Mobile: use ~/.opendevs/repos (hidden, no user input needed).
+  // Desktop: use ~/Developer (shown in input field).
   useEffect(() => {
     if (!show) return;
     (async () => {
       try {
         const home = await native.dialog.getHomeDir();
-        setDefaultPath(`${home}/Developer`);
+        setDefaultPath(isMobile ? `${home}/.opendevs/repos` : `${home}/Developer`);
       } catch {
-        setDefaultPath("~/Developer");
+        setDefaultPath(isMobile ? "~/.opendevs/repos" : "~/Developer");
       }
+      if (isMobile) setTargetPath("");
     })();
-  }, [show]);
+  }, [show, isMobile]);
 
   useEffect(() => {
     if (!cloning) {
@@ -103,7 +108,9 @@ export function CloneRepositoryModal({
       return;
     }
     onClearError();
-    onClone(githubUrl.trim(), targetPath.trim());
+    // On mobile, pass the default path since the destination input is hidden.
+    const effectivePath = isMobile ? defaultPath : targetPath.trim();
+    onClone(githubUrl.trim(), effectivePath);
   };
 
   const handleUrlChange = (value: string) => {
@@ -164,36 +171,39 @@ export function CloneRepositoryModal({
             />
           </div>
 
-          <div className="grid gap-2">
-            <Label htmlFor="target-path">Destination</Label>
-            <div className="flex gap-2">
-              <Input
-                id="target-path"
-                placeholder={defaultPath || "~/Developer"}
-                value={targetPath}
-                onChange={(e) => setTargetPath(e.target.value)}
-                disabled={cloning}
-                className="flex-1"
-              />
-              {capabilities.nativeFolderPicker && (
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="icon"
-                  onClick={handleBrowse}
+          {/* Destination picker -- hidden on mobile (auto-clones to ~/.opendevs/repos) */}
+          {!isMobile && (
+            <div className="grid gap-2">
+              <Label htmlFor="target-path">Destination</Label>
+              <div className="flex gap-2">
+                <Input
+                  id="target-path"
+                  placeholder={defaultPath || "~/Developer"}
+                  value={targetPath}
+                  onChange={(e) => setTargetPath(e.target.value)}
                   disabled={cloning}
-                  title="Browse"
-                >
-                  <FolderOpen className="h-4 w-4" />
-                </Button>
+                  className="flex-1"
+                />
+                {capabilities.nativeFolderPicker && (
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="icon"
+                    onClick={handleBrowse}
+                    disabled={cloning}
+                    title="Browse"
+                  >
+                    <FolderOpen className="h-4 w-4" />
+                  </Button>
+                )}
+              </div>
+              {!targetPath && (
+                <p className="text-text-muted text-xs">
+                  Defaults to {defaultPath || "~/Developer"}/{"{repo}"}
+                </p>
               )}
             </div>
-            {!targetPath && (
-              <p className="text-text-muted text-xs">
-                Defaults to {defaultPath || "~/Developer"}/{"{repo}"}
-              </p>
-            )}
-          </div>
+          )}
         </div>
 
         {/* Progress / Error area */}

@@ -138,13 +138,16 @@ export function DiffViewer({
   const diffOptions = useMemo(
     () => ({
       ...baseDiffOptions,
-      overflow: "scroll" as const,
+      // In embedded mode (stacked inside a scrollable parent), use "visible"
+      // so the parent container handles scrolling. "scroll" inside Shadow DOM
+      // creates a nested scroll trap that captures touch events on mobile.
+      overflow: (embedded ? "visible" : "scroll") as const,
       disableFileHeader: true,
       enableHoverUtility: hasContent,
       expandUnchanged: showAll && canExpand,
       ...(isLargeDiff && { lineDiffType: "none" as const }),
     }),
-    [baseDiffOptions, canExpand, hasContent, isLargeDiff, showAll]
+    [baseDiffOptions, canExpand, embedded, hasContent, isLargeDiff, showAll]
   );
 
   const createCommentId = () =>

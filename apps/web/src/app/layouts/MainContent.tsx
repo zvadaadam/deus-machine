@@ -41,8 +41,10 @@ import { BROWSER_WORKSPACE_CHANGE } from "@shared/events";
 import { useBrowserWindowStore } from "@/features/browser/store";
 import { track } from "@/platform/analytics";
 import { ConnectionBanner, useConnectionState } from "@/features/connection";
+import { useIsMobile } from "@/shared/hooks/use-mobile";
 import { ChatArea } from "./ChatArea";
 import { RightSidePanel } from "./RightSidePanel";
+import { MobileLayout } from "./MobileLayout";
 import { CollapsedChatStrip, CollapsedContentStrip } from "./CollapsedPanelStrips";
 import { useWorkspaceActions } from "./hooks/useWorkspaceActions";
 import { usePanelShortcuts } from "./hooks/usePanelShortcuts";
@@ -67,6 +69,7 @@ export function MainContent({
   onCloneRepository,
 }: MainContentProps) {
   const { open: sidebarOpen, toggleSidebar } = useSidebar();
+  const isMobile = useIsMobile();
 
   const selectedWorkspaceId = selectedWorkspace?.id ?? null;
   const {
@@ -179,7 +182,7 @@ export function MainContent({
 
   // --- Keyboard shortcuts ---
   usePanelShortcuts({
-    enabled: selectedWorkspace !== null,
+    enabled: selectedWorkspace !== null && !isMobile,
     chatPanelCollapsed,
     chatPanelRef,
     contentPanelCollapsed: rightPanelCollapsed,
@@ -262,8 +265,8 @@ export function MainContent({
           isDisconnected && "opacity-60"
         )}
       >
-        {/* Sidebar toggle -- visible when sidebar collapsed and no workspace */}
-        {!sidebarOpen && !selectedWorkspace && (
+        {/* Sidebar toggle -- visible when sidebar collapsed (desktop) or always on mobile welcome */}
+        {(!sidebarOpen || isMobile) && !selectedWorkspace && (
           <button
             type="button"
             data-slot="welcome-sidebar-toggle"
@@ -276,6 +279,33 @@ export function MainContent({
         )}
 
         {selectedWorkspace ? (
+          isMobile ? (
+            /* Mobile: single-panel layout with bottom tab bar */
+            <MobileLayout
+              key={selectedWorkspace.id}
+              workspace={selectedWorkspace}
+              workspaceChatPanelRef={workspaceChatPanelRef}
+              sendAgentMessageHandler={sendAgentMessageHandler}
+              handleSendAgentMessage={handleSendAgentMessage}
+              onRetrySetup={selectedWorkspace.setup_status === "failed" ? handleRetrySetup : undefined}
+              onViewSetupLogs={selectedWorkspace.setup_status === "failed" ? handleViewSetupLogs : undefined}
+              setCreatePRHandler={setCreatePRHandler}
+              setSendAgentMessageHandler={setSendAgentMessageHandler}
+              isWatched={isWatched}
+              manifestTasks={manifestTasks}
+              hasManifest={hasManifest}
+              onRunTask={handleRunTask}
+              onStatusChange={(status) =>
+                statusMutation.mutate({ workspaceId: selectedWorkspace.id, status })
+              }
+              prStatus={prStatus}
+              ghStatus={ghStatus}
+              onCreatePR={createPRHandler ? handleCreatePR : undefined}
+              onArchive={handleArchive}
+              targetBranch={selectedTargetBranch}
+              onTargetBranchChange={setSelectedTargetBranch}
+            />
+          ) : (
           /* Two-panel split — the top-level layout, no full-width header */
           <div ref={panelGroupContainerRef} className="min-h-0 min-w-0 flex-1">
             <ResizablePanelGroup direction="horizontal">
@@ -394,6 +424,7 @@ export function MainContent({
               </ResizablePanel>
             </ResizablePanelGroup>
           </div>
+          )
         ) : (
           <div className="flex min-w-0 flex-1">
             <WelcomeView
