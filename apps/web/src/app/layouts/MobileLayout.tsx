@@ -94,7 +94,7 @@ export function MobileLayout({
   };
 
   return (
-    <div className="flex h-full min-w-0 flex-1 flex-col overflow-hidden">
+    <div className="flex h-dvh min-w-0 flex-col overflow-hidden">
       {/* Header row -- workspace title on left, compact Create PR pill on right */}
       <div className="flex flex-shrink-0 items-center justify-between pr-2">
         <WorkspaceHeader
