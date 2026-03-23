@@ -9,24 +9,19 @@ type: project
 - `useIsMobile()` returns `!!isMobile` where `isMobile` starts as `undefined` (SSR-safe). On initial
   hydration before the effect runs, `!!undefined === false` — the desktop layout flashes for one frame
   before switching to mobile. Not a bug for a desktop Electron app, but visible in web-only mode.
-  **Mitigation**: The `key` prop on MobileLayout in `MainContent.tsx` is missing — add `key={selectedWorkspace.id}` to reset `activeTab` state on workspace switch.
 
-- `MobileLayout` has no `key` prop at its call site in `MainContent.tsx` (line 277). When the user
-  switches workspaces, `activeTab` inside `MobileLayout` is NOT reset — user could be stuck on
-  "code" tab when they switch to a new workspace. `ChatArea` inside does get `key={workspace.id}`.
-  Fix: add `key={selectedWorkspace.id}` on the `<MobileLayout>` in MainContent.tsx.
+- `MobileLayout` has `key={selectedWorkspace.id}` at its call site in `MainContent.tsx` — React
+  remounts the component on workspace switch, resetting `activeTab` to "chat" automatically.
 
-- `MobileTab` type is defined twice (once in MobileTabBar.tsx, once in MobileLayout.tsx).
-  Should be a shared export from one file.
+- `MobileTab` type is defined once in MobileTabBar.tsx and imported in MobileLayout.tsx via
+  `import type { MobileTab } from "./MobileTabBar"`.
 
 - `WorkspaceHeader` receives `mobile` prop which gates: TaskStrip rendering, Open button, max-width
   truncation values. `onStatusChange` is intentionally omitted in MobileLayout (not a bug — status
   menu is a lower-priority feature for mobile).
 
-- `AllFilesDiffViewer` in MobileLayout does NOT pass `hideHeader={false}` explicitly, so the
-  header (file count + collapse-all + close) IS rendered in the mobile code view. The close button
-  calls `onClose` which is `undefined` here — clicking it is a no-op (not a crash, but confusing UX).
-  Fix: pass `hideHeader` to suppress the header bar, or pass `onClose={() => setActiveTab("chat")}`.
+- `AllFilesDiffViewer` in MobileLayout passes `hideHeader` prop to suppress the header bar
+  (including the close button), avoiding the confusing no-op UX.
 
 - `MobileTabBar` uses `h-12` (48px) container with `pb-[env(safe-area-inset-bottom)]`. When
   `safe-area-inset-bottom` is non-zero (iPhone home indicator), the content inside the 48px bar
@@ -34,9 +29,9 @@ type: project
   `min-h-12 h-[calc(3rem+env(safe-area-inset-bottom))]`. The viewport meta already has
   `viewport-fit=cover` so the inset value is non-zero on notched devices.
 
-- `MobileTabBar` tab buttons have no ARIA semantics. They are plain `<button>` elements with no
-  `role="tab"`, `aria-selected`, or `aria-controls`. Should use `role="tablist"` on wrapper and
-  `role="tab"` + `aria-selected` on each button.
+- `MobileTabBar` has proper ARIA semantics: `role="tablist"` on wrapper, `role="tab"` +
+  `aria-selected` + `aria-controls` + `id` on each button, roving `tabIndex`. Panels have
+  `aria-labelledby` linking back to tab buttons.
 
 - Active tab color: `text-text-secondary` (darker) for active, `text-text-muted` (lighter) for
   inactive. The primary color is NOT used for the active state — differs from the desktop ContentTabBar
@@ -46,9 +41,9 @@ type: project
   from `fileChangesData?.files` — prevents `AllFilesDiffViewer` from re-rendering on every parent
   render when `fileChangesData` object identity changes.
 
-- `handleCollapseChatPanel` in `MobileLayout` is implemented as a tab switch to "code" — this is
-  semantically correct for mobile (there's no collapse, just a tab change). The `useCallback` dep
-  array is empty, which is correct since `setActiveTab` is stable.
+- Mobile layout uses always-mounted tab panels with CSS `hidden` class (Tailwind `display: none`)
+  to preserve `ChatArea` WebSocket connections and state across tab switches. Do NOT switch to
+  HTML `hidden` attribute — both produce `display: none` but CSS class is idiomatic in React/Tailwind.
 
 - `drag-region` class is on `WorkspaceHeader`'s root div — harmless on mobile web because
   `useWindowDragZone` guards with `capabilities.nativeWindowChrome` before injecting the CSS.
