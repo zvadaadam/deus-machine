@@ -29,8 +29,7 @@ export function MobileTabBar({ activeTab, onTabChange, fileChangesCount }: Mobil
       data-slot="mobile-tab-bar"
       role="tablist"
       aria-label="View"
-      className="border-border-subtle bg-bg-surface flex flex-shrink-0 items-start border-t pt-2 pb-[env(safe-area-inset-bottom)]"
-      style={{ minHeight: "3rem" }}
+      className="border-border-subtle bg-bg-surface flex min-h-12 flex-shrink-0 items-start border-t pt-2 pb-[env(safe-area-inset-bottom)]"
     >
       {tabs.map((tab) => {
         const Icon = tab.icon;
@@ -53,7 +52,7 @@ export function MobileTabBar({ activeTab, onTabChange, fileChangesCount }: Mobil
             <div className="relative">
               <Icon className="h-[18px] w-[18px]" />
               {showBadge && (
-                <span className="bg-primary text-primary-foreground absolute -top-1.5 -right-2.5 flex h-4 min-w-4 items-center justify-center rounded-full px-1 text-[9px] font-bold leading-none">
+                <span className="bg-primary text-primary-foreground absolute -top-1.5 -right-2.5 flex h-4 min-w-4 items-center justify-center rounded-full px-1 text-[9px] leading-none font-bold">
                   {fileChangesCount > 99 ? "99+" : fileChangesCount}
                 </span>
               )}
