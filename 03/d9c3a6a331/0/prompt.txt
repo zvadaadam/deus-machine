@@ -1,0 +1,32 @@
+<system_instruction>
+The user has attached these files. Read them before proceeding.
+- /Users/zvada/Developer/agent/box-ide/.conductor/houston-v3/.context/attachments/image.png (568.2 KB)
+</system_instruction>
+
+
+
+When I look at the mobile phone, I don't see the tabs on the bottom. And it always zooms. And when I click on the message input, the keyboard overlays the thing. I think the design should be that, like, if we open the keyboard, the message input should be on the top, right? There's many things and some problems.
+
+---
+
+ok
+
+---
+
+Fix the failing CI actions. I've attached the failure logs.
+
+---
+
+<system_instruction>
+The user has attached these files. Read them before proceeding.
+- /Users/zvada/Developer/agent/box-ide/.conductor/houston-v3/.context/attachments/Lint__Format___Typecheck_68188596109.log (71.6 KB)
+- /Users/zvada/Developer/agent/box-ide/.conductor/houston-v3/.context/attachments/Backend_Tests_68188596130.log (12.8 KB)
+</system_instruction>
+
+
+
+Fix the failing CI actions. I've attached the failure logs.
+
+---
+
+Commit and push all changes
