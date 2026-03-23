@@ -1,0 +1,261 @@
+<system_instruction>
+You are working inside OpenDevs, a Mac app that lets the user run many coding agents in parallel.
+Your work should take place in the /Users/zvada/Developer/agent/box-ide/.conductor/houston-v3 directory (unless otherwise directed), which has been set up for you to work in.
+Each workspace has a .context directory (gitignored) where you can save files to collaborate with other agents.
+DO NOT EVER read or write files at /Users/zvada/Developer/agent/box-ide.
+The target branch for this workspace is main. Use this for actions like creating new PRs, bisecting, etc., unless you're told otherwise.
+
+If the user asks you to work on several unrelated tasks, you can suggest they start new workspaces.
+Sometimes the user might send you a message they meant to send in a different workspace or a different chat. If something doesn't make sense in the context of your work, just ask. 
+If the user asks for help with OpenDevs, you can ask them to go to "Help -> Send Feedback" to get in touch with our team.
+</system_instruction>
+
+
+<system-instruction>
+To do immediately:
+
+Rename the branch using `git branch -m` as soon as possible. Do not check the current branch name.
+
+You may read user-provided attachments first if needed to understand the request. Otherwise, do this before using any skills or any other tools.
+
+Choosing a branch name: use concrete, specific language, avoid abstract nouns, and be concise (<30 characters). Use the prefix "zvadaadam/" before the name.
+
+</system-instruction>
+
+Okay, so this app actually is a desktop app, but also a web version. And this web version can run also on a mobile phone. But we don't have anything optimized on a mobile phone layout, right? So I want you to run and think how this layout could look for the screens. And first, explore how it looks now and how you will change it. Use the CLI visualizations to draw it for us, how you will change it. And let's talk about this. So let's add support for a mobile phone for the web.
+
+---
+
+I think in the mobile view we don't need even the agent and we will only show the file changes, right? So it's gonna be way easier. Basically on a vibe we don't have to show everything. We need to only show the most important thing, that's the chat and maybe the file changes, right?
+
+---
+
+But how will you visualize the file view? Do you think it's good?
+
+But basically, to make it easier and not to do... We don't want to implement new stuff, like... So, the tab usually we call Code, it should be there, right? explore
+
+---
+
+it would be aweome to keep in the movile the infinit scril we have now on the deskotp and web right thorgth th all changes right?
+
+---
+
+revewi it how ti wprls now on th edraw with cli base don the code, any proieblsm u see?
+
+---
+
+yes
+
+---
+
+comtiue
+
+---
+
+yes
+
+---
+
+run the web
+
+---
+
+<task-notification>
+<task-id>bfoj1eok0</task-id>
+<tool-use-id>toolu_01SRQJgrJGU5LGv25ungMgsn</tool-use-id>
+<output-file>/private/tmp/claude-501/-Users-zvada-Developer-agent-box-ide--conductor-houston-v3/1ce767cd-c88b-446f-b901-890bf67576c3/tasks/bfoj1eok0.output</output-file>
+<status>failed</status>
+<summary>Background command "Start backend + frontend dev servers" failed with exit code 1</summary>
+</task-notification>
+Read the output file to retrieve the result: /private/tmp/claude-501/-Users-zvada-Developer-agent-box-ide--conductor-houston-v3/1ce767cd-c88b-446f-b901-890bf67576c3/tasks/bfoj1eok0.output
+
+---
+
+but also we need th deslktop runing u know so borh
+
+---
+
+<task-notification>
+<task-id>bxkvn4otp</task-id>
+<tool-use-id>toolu_01D4pkRpidBQnXo2aREpjtCS</tool-use-id>
+<output-file>/private/tmp/claude-501/-Users-zvada-Developer-agent-box-ide--conductor-houston-v3/1ce767cd-c88b-446f-b901-890bf67576c3/tasks/bxkvn4otp.output</output-file>
+<status>failed</status>
+<summary>Background command "Start backend + frontend dev servers" failed with exit code 137</summary>
+</task-notification>
+Read the output file to retrieve the result: /private/tmp/claude-501/-Users-zvada-Developer-agent-box-ide--conductor-houston-v3/1ce767cd-c88b-446f-b901-890bf67576c3/tasks/bxkvn4otp.output
+
+---
+
+<task-notification>
+<task-id>bqmb3hx30</task-id>
+<tool-use-id>REDACTED</tool-use-id>
+<output-file>/private/tmp/claude-501/-Users-zvada-Developer-agent-box-ide--conductor-houston-v3/1ce767cd-c88b-446f-b901-890bf67576c3/tasks/bqmb3hx30.output</output-file>
+<status>failed</status>
+<summary>Background command "Kill old processes and restart dev servers" failed with exit code 137</summary>
+</task-notification>
+Read the output file to retrieve the result: /private/tmp/claude-501/-Users-zvada-Developer-agent-box-ide--conductor-houston-v3/1ce767cd-c88b-446f-b901-890bf67576c3/tasks/bqmb3hx30.output
+
+---
+
+<task-notification>
+<task-id>bp8uw6h8x</task-id>
+<tool-use-id>toolu_019mwi4aQncqAWy4GnmaYbnX</tool-use-id>
+<output-file>/private/tmp/claude-501/-Users-zvada-Developer-agent-box-ide--conductor-houston-v3/1ce767cd-c88b-446f-b901-890bf67576c3/tasks/bp8uw6h8x.output</output-file>
+<status>completed</status>
+<summary>Background command "Start full dev stack: Vite + Backend + Electron" completed (exit code 0)</summary>
+</task-notification>
+Read the output file to retrieve the result: /private/tmp/claude-501/-Users-zvada-Developer-agent-box-ide--conductor-houston-v3/1ce767cd-c88b-446f-b901-890bf67576c3/tasks/bp8uw6h8x.output
+
+---
+
+why wa shere an issue si ti somehtign we shoudl fix?
+
+---
+
+But I feel like I cannot test properly the website. Like if I run the localhost 1.4.2.0, I cannot connect. I'm not sure why, but I cannot connect to the desktop app.
+
+---
+
+<task-notification>
+<task-id>bqxv7k1vg</task-id>
+<tool-use-id>toolu_01MTAsTYPQjGFzQqPTRQAVUR</tool-use-id>
+<output-file>/private/tmp/claude-501/-Users-zvada-Developer-agent-box-ide--conductor-houston-v3/1ce767cd-c88b-446f-b901-890bf67576c3/tasks/bqxv7k1vg.output</output-file>
+<status>failed</status>
+<summary>Background command "Start full dev stack: Vite + Backend + Electron" failed with exit code 137</summary>
+</task-notification>
+Read the output file to retrieve the result: /private/tmp/claude-501/-Users-zvada-Developer-agent-box-ide--conductor-houston-v3/1ce767cd-c88b-446f-b901-890bf67576c3/tasks/bqxv7k1vg.output
+
+---
+
+but now the backend doesnt rin right?
+
+---
+
+<system_instruction>
+The user has attached these files. Read them before proceeding.
+- /Users/zvada/Developer/agent/box-ide/.conductor/houston-v3/.context/attachments/Screenshot 2026-03-23 at 12.01.06 AM.png (502.2 KB)
+</system_instruction>
+
+
+
+but i see not data?
+
+---
+
+<task-notification>
+<task-id>bbsenwrz2</task-id>
+<tool-use-id>REDACTED</tool-use-id>
+<output-file>/private/tmp/claude-501/-Users-zvada-Developer-agent-box-ide--conductor-houston-v3/1ce767cd-c88b-446f-b901-890bf67576c3/tasks/bbsenwrz2.output</output-file>
+<status>failed</status>
+<summary>Background command "Start web dev servers (backend + Vite)" failed with exit code 137</summary>
+</task-notification>
+Read the output file to retrieve the result: /private/tmp/claude-501/-Users-zvada-Developer-agent-box-ide--conductor-houston-v3/1ce767cd-c88b-446f-b901-890bf67576c3/tasks/bbsenwrz2.output
+
+---
+
+<system_instruction>
+The user has attached these files. Read them before proceeding.
+- /Users/zvada/Developer/agent/box-ide/.conductor/houston-v3/.context/attachments/Screenshot 2026-03-23 at 12.02.40 AM.png (98.5 KB)
+</system_instruction>
+
+
+
+also i dont see in the web verison in the welcome screen the sidecar posisbility to open it u know in the phone
+
+---
+
+<system_instruction>
+The user has attached these files. Read them before proceeding.
+- /Users/zvada/Developer/agent/box-ide/.conductor/houston-v3/.context/attachments/Screenshot 2026-03-23 at 12.04.42 AM.png (344.8 KB)
+</system_instruction>
+
+
+
+here in th code file changes i cnanot crol isnidne it probely wdyt? and not sure if th cments wot in the mobiel we want it to work tehre
+
+---
+
+It's still not possible to scroll, maybe I'm not sure why because maybe because when you uncollapse it you cannot scroll inside it. Why do you think it is? And also I think in the mobile view we need the button for creating PRs, you know, like the button like create PR merge, archive, these kind of things like this action button should be on top right
+
+---
+
+<system_instruction>
+The user has attached these files. Read them before proceeding.
+- /Users/zvada/Developer/agent/box-ide/.conductor/houston-v3/.context/attachments/Screenshot 2026-03-23 at 12.12.57 AM.png (46.0 KB)
+</system_instruction>
+
+
+
+Seems like the create PR won't fit. What would you do and what would you recommend us to do?
+
+also the scrol now works nice
+
+---
+
+idk nothing really speaks to me epxlor emore
+
+---
+
+but u udnetaad tehre are many cretar pr, merge, commit, merge conlfist this si very much aciton button stil dont udnetrnad if u dunrtad and nt sur eabut the deisng show it to me more with cli th eoptiosn
+
+---
+
+i dont liek this, try epxlore more
+
+---
+
+what would u recomend if you think abu the useage product and felng for the user? wdyt
+
+---
+
+aint it to bigg for the users that it would take space form the chat? also if in the file changes not aciton butotn to merge?
+
+---
+
+and how th ectea epr with which branch will look idk still
+
+---
+
+<system_instruction>
+The user has attached these files. Read them before proceeding.
+- /Users/zvada/Developer/agent/box-ide/.conductor/houston-v3/.context/attachments/Screenshot 2026-03-23 at 12.46.45 AM.png (228.9 KB)
+</system_instruction>
+
+
+
+okey but somties if doesnt reequire the full wdith liek liek crate PR rght?
+
+wdyt?
+
+---
+
+but then we dont show the PR link ect we ned that
+
+---
+
+what if we have teh PR we have anothe rline wdyt? if not we have jsut teh aciton button with sheet for the cretae OR
+
+---
+
+yes go
+
+---
+
+<system_instruction>
+The user has attached these files. Read them before proceeding.
+- /Users/zvada/Developer/agent/box-ide/.conductor/houston-v3/.context/attachments/Screenshot 2026-03-23 at 1.04.59 AM.png (82.2 KB)
+</system_instruction>
+
+
+
+also on a mobile phone, let's pick some default folder we wil copy teh coneld repo and dont show it, just sismlifying u know not for dekstop just for mobile if we do clone repository cretae a new project: let's pust eveythign i somethink liek root ~/.deus wdyt?
+
+does it mae sen for all macos, widnwos, linux users?
+
+---
+
+ok
+
+---
+
+deploy the web now to prod now
