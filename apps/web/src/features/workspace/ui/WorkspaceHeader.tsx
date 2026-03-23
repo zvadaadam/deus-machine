@@ -49,6 +49,8 @@ interface WorkspaceHeaderProps {
   tasks?: NormalizedTask[];
   hasManifest?: boolean;
   onRunTask?: (taskName: string) => void;
+  /** Compact mode for mobile -- always show hamburger, hide Open button, tighter truncation */
+  mobile?: boolean;
 }
 
 /**
@@ -72,9 +74,11 @@ export function WorkspaceHeader({
   tasks,
   hasManifest,
   onRunTask,
+  mobile,
 }: WorkspaceHeaderProps) {
   const { state: sidebarState, toggleSidebar } = useSidebar();
   const sidebarCollapsed = sidebarState === "collapsed";
+  const showSidebarToggle = sidebarCollapsed || mobile;
 
   const subtitle = [repositoryName, branch].filter(Boolean).join(" / ");
 
@@ -85,7 +89,7 @@ export function WorkspaceHeader({
     >
       {/* Left: sidebar toggle + title + repo/branch */}
       <div className="flex min-w-0 items-center gap-[5px]">
-        {sidebarCollapsed && (
+        {showSidebarToggle && (
           <Tooltip delayDuration={200}>
             <TooltipTrigger asChild>
               <button
@@ -115,7 +119,12 @@ export function WorkspaceHeader({
         )}
 
         {title && (
-          <span className="text-foreground mr-0.5 max-w-[240px] truncate text-sm font-medium">
+          <span
+            className={cn(
+              "text-foreground mr-0.5 truncate text-sm font-medium",
+              mobile ? "max-w-[120px]" : "max-w-[240px]"
+            )}
+          >
             {title}
           </span>
         )}
@@ -123,7 +132,8 @@ export function WorkspaceHeader({
         {subtitle && (
           <span
             className={cn(
-              "max-w-[280px] truncate text-sm font-medium",
+              "truncate text-sm font-medium",
+              mobile ? "max-w-[140px]" : "max-w-[280px]",
               title ? "text-text-subtle" : "text-foreground"
             )}
             title={subtitle}
@@ -195,7 +205,7 @@ export function WorkspaceHeader({
           </div>
         )}
 
-        {onRunTask && (
+        {onRunTask && !mobile && (
           <TaskStrip
             tasks={tasks ?? []}
             hasManifest={hasManifest ?? false}
@@ -208,10 +218,12 @@ export function WorkspaceHeader({
         )}
       </div>
 
-      {/* Right: Open button */}
-      <div className="flex items-center">
-        {workspacePath && <HeaderOpenButton workspacePath={workspacePath} />}
-      </div>
+      {/* Right: Open button (desktop only) */}
+      {!mobile && (
+        <div className="flex items-center">
+          {workspacePath && <HeaderOpenButton workspacePath={workspacePath} />}
+        </div>
+      )}
     </div>
   );
 }

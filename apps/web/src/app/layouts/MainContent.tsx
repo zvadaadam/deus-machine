@@ -41,8 +41,10 @@ import { BROWSER_WORKSPACE_CHANGE } from "@shared/events";
 import { useBrowserWindowStore } from "@/features/browser/store";
 import { track } from "@/platform/analytics";
 import { ConnectionBanner, useConnectionState } from "@/features/connection";
+import { useIsMobile } from "@/shared/hooks/use-mobile";
 import { ChatArea } from "./ChatArea";
 import { RightSidePanel } from "./RightSidePanel";
+import { MobileLayout } from "./MobileLayout";
 import { CollapsedChatStrip, CollapsedContentStrip } from "./CollapsedPanelStrips";
 import { useWorkspaceActions } from "./hooks/useWorkspaceActions";
 import { usePanelShortcuts } from "./hooks/usePanelShortcuts";
@@ -67,6 +69,7 @@ export function MainContent({
   onCloneRepository,
 }: MainContentProps) {
   const { open: sidebarOpen, toggleSidebar } = useSidebar();
+  const isMobile = useIsMobile();
 
   const selectedWorkspaceId = selectedWorkspace?.id ?? null;
   const {
@@ -179,7 +182,7 @@ export function MainContent({
 
   // --- Keyboard shortcuts ---
   usePanelShortcuts({
-    enabled: selectedWorkspace !== null,
+    enabled: selectedWorkspace !== null && !isMobile,
     chatPanelCollapsed,
     chatPanelRef,
     contentPanelCollapsed: rightPanelCollapsed,
@@ -262,8 +265,8 @@ export function MainContent({
           isDisconnected && "opacity-60"
         )}
       >
-        {/* Sidebar toggle -- visible when sidebar collapsed and no workspace */}
-        {!sidebarOpen && !selectedWorkspace && (
+        {/* Sidebar toggle -- visible when sidebar collapsed (desktop) or always on mobile welcome */}
+        {(!sidebarOpen || isMobile) && !selectedWorkspace && (
           <button
             type="button"
             data-slot="welcome-sidebar-toggle"
@@ -276,124 +279,156 @@ export function MainContent({
         )}
 
         {selectedWorkspace ? (
-          /* Two-panel split — the top-level layout, no full-width header */
-          <div ref={panelGroupContainerRef} className="min-h-0 min-w-0 flex-1">
-            <ResizablePanelGroup direction="horizontal">
-              {/* ─── SESSION PANEL (left, collapsible) ─── */}
-              <ResizablePanel
-                ref={chatPanelRef}
-                collapsible
-                collapsedSize={safeCollapsedSize}
-                minSize={MIN_PANEL_SIZE}
-                defaultSize={chatPanelCollapsed ? safeCollapsedSize : sessionPanelDefaultSize}
-                onCollapse={handleCollapseChatPanel}
-                onExpand={handleExpandChatPanel}
-                className="min-w-0"
-                order={1}
-              >
-                {chatPanelCollapsed ? (
-                  <CollapsedChatStrip
-                    onExpand={() => chatPanelRef.current?.expand()}
-                    isWorking={isSessionWorking}
-                  />
-                ) : (
-                  <div className="flex h-full min-w-0 flex-col">
-                    {/* Title header — workspace name + repo/branch + Open */}
-                    <WorkspaceHeader
-                      title={selectedWorkspace.title ?? undefined}
-                      repositoryName={selectedWorkspace.repo_name}
-                      branch={selectedWorkspace.git_branch ?? undefined}
-                      workspacePath={selectedWorkspace.workspace_path}
-                      setupStatus={selectedWorkspace.setup_status}
-                      setupError={selectedWorkspace.error_message}
-                      onSendAgentMessage={
-                        sendAgentMessageHandler ? handleSendAgentMessage : undefined
-                      }
-                      onRetrySetup={
-                        selectedWorkspace.setup_status === "failed" ? handleRetrySetup : undefined
-                      }
-                      onViewSetupLogs={
-                        selectedWorkspace.setup_status === "failed"
-                          ? handleViewSetupLogs
-                          : undefined
-                      }
-                      workspaceStatus={selectedWorkspace.status}
-                      onStatusChange={(status) =>
-                        statusMutation.mutate({ workspaceId: selectedWorkspace.id, status })
-                      }
-                      tasks={manifestTasks}
-                      hasManifest={hasManifest}
-                      onRunTask={handleRunTask}
+          isMobile ? (
+            /* Mobile: single-panel layout with bottom tab bar */
+            <MobileLayout
+              key={selectedWorkspace.id}
+              workspace={selectedWorkspace}
+              workspaceChatPanelRef={workspaceChatPanelRef}
+              sendAgentMessageHandler={sendAgentMessageHandler}
+              handleSendAgentMessage={handleSendAgentMessage}
+              onRetrySetup={
+                selectedWorkspace.setup_status === "failed" ? handleRetrySetup : undefined
+              }
+              onViewSetupLogs={
+                selectedWorkspace.setup_status === "failed" ? handleViewSetupLogs : undefined
+              }
+              setCreatePRHandler={setCreatePRHandler}
+              setSendAgentMessageHandler={setSendAgentMessageHandler}
+              isWatched={isWatched}
+              manifestTasks={manifestTasks}
+              hasManifest={hasManifest}
+              onRunTask={handleRunTask}
+              onStatusChange={(status) =>
+                statusMutation.mutate({ workspaceId: selectedWorkspace.id, status })
+              }
+              prStatus={prStatus}
+              ghStatus={ghStatus}
+              onCreatePR={createPRHandler ? handleCreatePR : undefined}
+              onArchive={handleArchive}
+              targetBranch={selectedTargetBranch}
+              onTargetBranchChange={setSelectedTargetBranch}
+            />
+          ) : (
+            /* Two-panel split — the top-level layout, no full-width header */
+            <div ref={panelGroupContainerRef} className="min-h-0 min-w-0 flex-1">
+              <ResizablePanelGroup direction="horizontal">
+                {/* ─── SESSION PANEL (left, collapsible) ─── */}
+                <ResizablePanel
+                  ref={chatPanelRef}
+                  collapsible
+                  collapsedSize={safeCollapsedSize}
+                  minSize={MIN_PANEL_SIZE}
+                  defaultSize={chatPanelCollapsed ? safeCollapsedSize : sessionPanelDefaultSize}
+                  onCollapse={handleCollapseChatPanel}
+                  onExpand={handleExpandChatPanel}
+                  className="min-w-0"
+                  order={1}
+                >
+                  {chatPanelCollapsed ? (
+                    <CollapsedChatStrip
+                      onExpand={() => chatPanelRef.current?.expand()}
+                      isWorking={isSessionWorking}
                     />
-
-                    {/* Session tabs + chat messages + input */}
-                    <ChatArea
-                      key={selectedWorkspace.id}
-                      workspace={selectedWorkspace}
-                      workspaceChatPanelRef={workspaceChatPanelRef}
-                      onCreatePRHandlerChange={setCreatePRHandler}
-                      onSendAgentMessageHandlerChange={setSendAgentMessageHandler}
-                      onCollapseChatPanel={handleCollapseChatPanel}
-                    />
-                  </div>
-                )}
-              </ResizablePanel>
-
-              <ResizableHandle />
-
-              {/* ─── CONTENT PANEL (right, collapsible) ─── */}
-              <ResizablePanel
-                ref={contentPanelRef}
-                collapsible
-                collapsedSize={safeCollapsedSize}
-                defaultSize={rightPanelCollapsed ? safeCollapsedSize : contentPanelDefaultSize}
-                minSize={MIN_PANEL_SIZE}
-                onCollapse={handleCollapseContentPanel}
-                onExpand={handleExpandContentPanel}
-                className="min-w-0"
-                order={2}
-              >
-                {rightPanelCollapsed ? (
-                  <CollapsedContentStrip onExpand={() => contentPanelRef.current?.expand()} />
-                ) : (
-                  <div className="flex h-full flex-col pr-2 pb-2">
-                    {/* Tab header: content tabs (left) + PR actions (right) */}
-                    <div className="drag-region flex h-11 flex-shrink-0 items-center justify-between px-2.5">
-                      <ContentTabBar
-                        activeTab={effectiveRightSideTab}
-                        onTabChange={handleContentTabChange}
-                        workspaceId={selectedWorkspaceId}
-                      />
-                      <PRActions
-                        prStatus={prStatus}
-                        ghStatus={ghStatus}
-                        onCreatePR={createPRHandler ? handleCreatePR : undefined}
+                  ) : (
+                    <div className="flex h-full min-w-0 flex-col">
+                      {/* Title header — workspace name + repo/branch + Open */}
+                      <WorkspaceHeader
+                        title={selectedWorkspace.title ?? undefined}
+                        repositoryName={selectedWorkspace.repo_name}
+                        branch={selectedWorkspace.git_branch ?? undefined}
+                        workspacePath={selectedWorkspace.workspace_path}
+                        setupStatus={selectedWorkspace.setup_status}
+                        setupError={selectedWorkspace.error_message}
                         onSendAgentMessage={
                           sendAgentMessageHandler ? handleSendAgentMessage : undefined
                         }
-                        onArchive={handleArchive}
-                        targetBranch={selectedTargetBranch}
-                        onTargetBranchChange={setSelectedTargetBranch}
-                        workspacePath={selectedWorkspace.workspace_path}
-                        workspaceId={selectedWorkspaceId ?? undefined}
+                        onRetrySetup={
+                          selectedWorkspace.setup_status === "failed" ? handleRetrySetup : undefined
+                        }
+                        onViewSetupLogs={
+                          selectedWorkspace.setup_status === "failed"
+                            ? handleViewSetupLogs
+                            : undefined
+                        }
+                        workspaceStatus={selectedWorkspace.status}
+                        onStatusChange={(status) =>
+                          statusMutation.mutate({ workspaceId: selectedWorkspace.id, status })
+                        }
+                        tasks={manifestTasks}
+                        hasManifest={hasManifest}
+                        onRunTask={handleRunTask}
                       />
-                    </div>
 
-                    {/* Content area — rounded corners, subtle border */}
-                    <div className="border-border-subtle bg-bg-elevated flex min-h-0 flex-1 overflow-hidden rounded-lg border">
-                      <RightSidePanel
+                      {/* Session tabs + chat messages + input */}
+                      <ChatArea
+                        key={selectedWorkspace.id}
                         workspace={selectedWorkspace}
-                        activeTab={effectiveRightSideTab}
-                        onSwitchToCodeTab={handleSwitchToCodeTab}
-                        isWatched={isWatched}
-                        onReview={handleInsertReviewPrompt}
+                        workspaceChatPanelRef={workspaceChatPanelRef}
+                        onCreatePRHandlerChange={setCreatePRHandler}
+                        onSendAgentMessageHandlerChange={setSendAgentMessageHandler}
+                        onCollapseChatPanel={handleCollapseChatPanel}
                       />
                     </div>
-                  </div>
-                )}
-              </ResizablePanel>
-            </ResizablePanelGroup>
-          </div>
+                  )}
+                </ResizablePanel>
+
+                <ResizableHandle />
+
+                {/* ─── CONTENT PANEL (right, collapsible) ─── */}
+                <ResizablePanel
+                  ref={contentPanelRef}
+                  collapsible
+                  collapsedSize={safeCollapsedSize}
+                  defaultSize={rightPanelCollapsed ? safeCollapsedSize : contentPanelDefaultSize}
+                  minSize={MIN_PANEL_SIZE}
+                  onCollapse={handleCollapseContentPanel}
+                  onExpand={handleExpandContentPanel}
+                  className="min-w-0"
+                  order={2}
+                >
+                  {rightPanelCollapsed ? (
+                    <CollapsedContentStrip onExpand={() => contentPanelRef.current?.expand()} />
+                  ) : (
+                    <div className="flex h-full flex-col pr-2 pb-2">
+                      {/* Tab header: content tabs (left) + PR actions (right) */}
+                      <div className="drag-region flex h-11 flex-shrink-0 items-center justify-between px-2.5">
+                        <ContentTabBar
+                          activeTab={effectiveRightSideTab}
+                          onTabChange={handleContentTabChange}
+                          workspaceId={selectedWorkspaceId}
+                        />
+                        <PRActions
+                          prStatus={prStatus}
+                          ghStatus={ghStatus}
+                          onCreatePR={createPRHandler ? handleCreatePR : undefined}
+                          onSendAgentMessage={
+                            sendAgentMessageHandler ? handleSendAgentMessage : undefined
+                          }
+                          onArchive={handleArchive}
+                          targetBranch={selectedTargetBranch}
+                          onTargetBranchChange={setSelectedTargetBranch}
+                          workspacePath={selectedWorkspace.workspace_path}
+                          workspaceId={selectedWorkspaceId ?? undefined}
+                        />
+                      </div>
+
+                      {/* Content area — rounded corners, subtle border */}
+                      <div className="border-border-subtle bg-bg-elevated flex min-h-0 flex-1 overflow-hidden rounded-lg border">
+                        <RightSidePanel
+                          workspace={selectedWorkspace}
+                          activeTab={effectiveRightSideTab}
+                          onSwitchToCodeTab={handleSwitchToCodeTab}
+                          isWatched={isWatched}
+                          onReview={handleInsertReviewPrompt}
+                        />
+                      </div>
+                    </div>
+                  )}
+                </ResizablePanel>
+              </ResizablePanelGroup>
+            </div>
+          )
         ) : (
           <div className="flex min-w-0 flex-1">
             <WelcomeView
