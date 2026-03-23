@@ -343,3 +343,14 @@ Read the output file to retrieve the result: /private/tmp/claude-501/-Users-zvad
 ---
 
 u have not pushed the weba pp to produ do it
+
+---
+
+<system_instruction>
+The user has attached these files. Read them before proceeding.
+- /Users/zvada/Developer/agent/box-ide/.conductor/houston-v3/.context/attachments/PR instructions.md (945 B)
+</system_instruction>
+
+
+
+Create a PR
