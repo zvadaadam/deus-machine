@@ -259,3 +259,11 @@ ok
 ---
 
 deploy the web now to prod now
+
+---
+
+pleae lok more closely
+
+---
+
+Commit uncommitted changes, then rebase this branch onto origin/main. Then push --force-with-lease.
