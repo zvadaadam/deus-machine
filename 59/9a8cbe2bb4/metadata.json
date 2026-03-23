@@ -1,0 +1,27 @@
+{
+  "cli_version": "0.5.0",
+  "checkpoint_id": "599a8cbe2bb4",
+  "strategy": "manual-commit",
+  "branch": "zvadaadam/mobile-web-layout",
+  "checkpoints_count": 3,
+  "files_touched": [
+    ".claude/agent-memory/code-reviewer/MEMORY.md",
+    "apps/web/src/app/layouts/MobileLayout.tsx",
+    "apps/web/src/features/workspace/ui/DiffViewer.tsx"
+  ],
+  "sessions": [
+    {
+      "metadata": "/59/9a8cbe2bb4/0/metadata.json",
+      "transcript": "/59/9a8cbe2bb4/0/full.jsonl",
+      "content_hash": "/59/9a8cbe2bb4/0/content_hash.txt",
+      "prompt": "/59/9a8cbe2bb4/0/prompt.txt"
+    }
+  ],
+  "token_usage": {
+    "input_tokens": 343,
+    "cache_creation_tokens": 475817,
+    "cache_read_tokens": 22810856,
+    "output_tokens": 83531,
+    "api_call_count": 245
+  }
+}
