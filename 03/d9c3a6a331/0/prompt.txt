@@ -30,3 +30,14 @@ Fix the failing CI actions. I've attached the failure logs.
 ---
 
 Commit and push all changes
+
+---
+
+<system_instruction>
+The user has attached these files. Read them before proceeding.
+- /Users/zvada/Developer/agent/box-ide/.conductor/houston-v3/.context/attachments/Lint__Format___Typecheck_68191784216.log (72.5 KB)
+</system_instruction>
+
+
+
+Fix the failing CI actions. I've attached the failure logs.
