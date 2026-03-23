@@ -1,0 +1,27 @@
+{
+  "cli_version": "0.5.0",
+  "checkpoint_id": "a05bffa02290",
+  "strategy": "manual-commit",
+  "branch": "zvadaadam/mobile-web-layout",
+  "checkpoints_count": 10,
+  "files_touched": [
+    ".node-version",
+    "CLAUDE.md",
+    "apps/web/src/app/layouts/MobileTabBar.tsx"
+  ],
+  "sessions": [
+    {
+      "metadata": "/a0/5bffa02290/0/metadata.json",
+      "transcript": "/a0/5bffa02290/0/full.jsonl",
+      "content_hash": "/a0/5bffa02290/0/content_hash.txt",
+      "prompt": "/a0/5bffa02290/0/prompt.txt"
+    }
+  ],
+  "token_usage": {
+    "input_tokens": 321,
+    "cache_creation_tokens": 443885,
+    "cache_read_tokens": 20477676,
+    "output_tokens": 80342,
+    "api_call_count": 225
+  }
+}

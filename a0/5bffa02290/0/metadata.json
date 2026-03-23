@@ -1,0 +1,35 @@
+{
+  "cli_version": "0.5.0",
+  "checkpoint_id": "a05bffa02290",
+  "session_id": "0c8c5df7-7763-4242-81e3-676a62592cd2",
+  "strategy": "manual-commit",
+  "created_at": "2026-03-23T00:34:11.476635Z",
+  "branch": "zvadaadam/mobile-web-layout",
+  "checkpoints_count": 10,
+  "files_touched": [
+    ".node-version",
+    "CLAUDE.md",
+    "apps/web/src/app/layouts/MobileTabBar.tsx"
+  ],
+  "agent": "Claude Code",
+  "turn_id": "c3c9ca951679",
+  "token_usage": {
+    "input_tokens": 321,
+    "cache_creation_tokens": 443885,
+    "cache_read_tokens": 20477676,
+    "output_tokens": 80342,
+    "api_call_count": 225
+  },
+  "session_metrics": {
+    "turn_count": 45
+  },
+  "initial_attribution": {
+    "calculated_at": "2026-03-23T00:34:10.453892Z",
+    "agent_lines": 2,
+    "human_added": 739,
+    "human_modified": 1,
+    "human_removed": 0,
+    "total_committed": 742,
+    "agent_percentage": 0.2695417789757413
+  }
+}
