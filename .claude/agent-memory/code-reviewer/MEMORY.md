@@ -233,11 +233,12 @@
 ## Mobile Web Layout Patterns
 
 - Full details in `mobile-layout-patterns.md`
-- `MobileLayout` missing `key={workspace.id}` at call site → activeTab state survives workspace switches
-- `MobileTab` type defined twice (MobileTabBar.tsx + MobileLayout.tsx) — should share one export
-- `AllFilesDiffViewer` in mobile code view: `onClose` is undefined → close button is a silent no-op
+- `MobileLayout` has `key={selectedWorkspace.id}` at call site in MainContent.tsx — remounts on workspace switch, resetting `activeTab` state
+- `MobileTab` type defined once in MobileTabBar.tsx, imported in MobileLayout.tsx
+- `AllFilesDiffViewer` in mobile code view uses `hideHeader` prop to suppress close button
 - `MobileTabBar` safe-area-inset: uses `pb-[env(...)]` which compresses content; needs `min-h` adjustment
-- `MobileTabBar` buttons have no ARIA role="tab"/aria-selected semantics
+- `MobileTabBar` has ARIA semantics: `role="tablist"`, `role="tab"`, `aria-selected`, `aria-controls`, `aria-labelledby`
+
 ## See Also
 
 - `patterns-deep.md` — overflow notes: error classification, chat virtualization, PRStatus, border radius, sidecar resume

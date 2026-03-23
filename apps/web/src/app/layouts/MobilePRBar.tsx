@@ -100,9 +100,7 @@ export function MobilePRHeaderAction({
         <SheetContent side="bottom" className="rounded-t-xl">
           <SheetHeader>
             <SheetTitle>Create Pull Request</SheetTitle>
-            <SheetDescription>
-              Select target branch and create a PR.
-            </SheetDescription>
+            <SheetDescription>Select target branch and create a PR.</SheetDescription>
           </SheetHeader>
 
           <div className="flex flex-col gap-4 px-4 pb-4">
@@ -227,7 +225,7 @@ export function MobilePRStatusBar({
       <StatusBar prNumber={s.prNumber} prUrl={s.prUrl}>
         <span className="text-warning flex items-center gap-1 text-xs">
           <MessageSquareWarning className="h-3 w-3" />
-          Review requested
+          Changes requested
         </span>
         <BarAction
           label="Address"
@@ -267,9 +265,7 @@ export function MobilePRStatusBar({
           <GitMerge className="h-3 w-3" />
           Merged
         </span>
-        {onArchive && (
-          <BarAction label="Archive" variant="primary" onClick={onArchive} />
-        )}
+        {onArchive && <BarAction label="Archive" variant="primary" onClick={onArchive} />}
       </StatusBar>
     ))
     .with({ type: "closed" }, (s) => (
@@ -308,8 +304,7 @@ function StatusBar({
         rel="noopener noreferrer"
         className="text-text-muted hover:text-text-secondary flex flex-shrink-0 items-center gap-1 text-xs font-semibold transition-colors duration-200"
       >
-        <GitPullRequestCreate className="h-3 w-3" />
-        #{prNumber}
+        <GitPullRequestCreate className="h-3 w-3" />#{prNumber}
         <ExternalLink className="h-2.5 w-2.5" />
       </a>
 
@@ -317,9 +312,7 @@ function StatusBar({
       <span className="bg-border-subtle h-0.5 w-0.5 flex-shrink-0 rounded-full" />
 
       {/* Status + optional action -- pushed apart */}
-      <div className="flex min-w-0 flex-1 items-center justify-between gap-2">
-        {children}
-      </div>
+      <div className="flex min-w-0 flex-1 items-center justify-between gap-2">{children}</div>
     </div>
   );
 }

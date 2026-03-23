@@ -59,7 +59,7 @@ export function DiffViewer({
   diff = "",
   oldContent = null,
   newContent = null,
-  isLoading: isLoadingProp = false,
+  isLoading = false,
   error: errorProp = null,
   onClose,
   embedded = false,
@@ -82,10 +82,8 @@ export function DiffViewer({
     }
   };
 
-  const isLoading = isLoadingProp;
-  const hasError = Boolean(errorProp);
   const diffIsEmpty = diff.trim().length === 0;
-  const hasContent = !isLoading && !hasError && !diffIsEmpty;
+  const hasContent = !isLoading && !errorProp && !diffIsEmpty;
 
   const displayFileDiff = useMemo(() => {
     if (!diff.trim()) return null;
@@ -385,7 +383,7 @@ export function DiffViewer({
               ))}
             </div>
           </div>
-        ) : hasError ? (
+        ) : errorProp ? (
           <div className="text-muted-foreground/60 flex h-64 items-center justify-center">
             <div className="flex max-w-sm flex-col items-center gap-2 text-center">
               <p className="text-sm">{errorProp}</p>

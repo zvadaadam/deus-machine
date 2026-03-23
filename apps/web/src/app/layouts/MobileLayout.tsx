@@ -31,9 +31,7 @@ interface MobileLayoutProps {
   /** Pre-gated by caller: only passed when setup_status === "failed" */
   onViewSetupLogs?: () => void;
   setCreatePRHandler: (handler: (() => void) | null) => void;
-  setSendAgentMessageHandler: Dispatch<
-    SetStateAction<((text: string) => Promise<void>) | null>
-  >;
+  setSendAgentMessageHandler: Dispatch<SetStateAction<((text: string) => Promise<void>) | null>>;
   isWatched: boolean;
   manifestTasks?: NormalizedTask[];
   hasManifest?: boolean;
@@ -123,8 +121,15 @@ export function MobileLayout({
       <MobilePRStatusBar {...prBarProps} />
 
       {/* Content area -- both views always mounted, inactive hidden via display:none */}
-      <div className={cn("flex min-h-0 flex-1 flex-col overflow-hidden", activeTab !== "chat" && "hidden")}
-        id="mobile-panel-chat" role="tabpanel">
+      <div
+        className={cn(
+          "flex min-h-0 flex-1 flex-col overflow-hidden",
+          activeTab !== "chat" && "hidden"
+        )}
+        id="mobile-panel-chat"
+        role="tabpanel"
+        aria-labelledby="mobile-tab-chat"
+      >
         <ChatArea
           key={workspace.id}
           workspace={workspace}
@@ -136,19 +141,19 @@ export function MobileLayout({
 
       {/* Code panel -- absolute positioning gives AllFilesDiffViewer's h-full a proper
           height context (h-full doesn't resolve inside flex-grown parents). */}
-      <div className={cn("relative min-h-0 flex-1", activeTab !== "code" && "hidden")}
-        id="mobile-panel-code" role="tabpanel">
+      <div
+        className={cn("relative min-h-0 flex-1", activeTab !== "code" && "hidden")}
+        id="mobile-panel-code"
+        role="tabpanel"
+        aria-labelledby="mobile-tab-code"
+      >
         {fileChanges.length === 0 ? (
           <div className="flex h-full items-center justify-center">
             <p className="text-text-muted text-sm">No file changes yet</p>
           </div>
         ) : (
           <div className="absolute inset-0 overflow-y-auto">
-            <AllFilesDiffViewer
-              workspaceId={workspace.id}
-              fileChanges={fileChanges}
-              hideHeader
-            />
+            <AllFilesDiffViewer workspaceId={workspace.id} fileChanges={fileChanges} hideHeader />
           </div>
         )}
       </div>
