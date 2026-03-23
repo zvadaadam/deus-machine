@@ -1,0 +1,37 @@
+{
+  "cli_version": "0.5.0",
+  "checkpoint_id": "86ec436ca595",
+  "session_id": "62071f00-6fd2-4c9e-8c13-5e211d426773",
+  "strategy": "manual-commit",
+  "created_at": "2026-03-23T13:32:20.820021Z",
+  "branch": "zvadaadam/mobile-web-layout",
+  "checkpoints_count": 2,
+  "files_touched": [
+    "apps/web/index.html",
+    "apps/web/src/app/layouts/MobileLayout.tsx",
+    "apps/web/src/global.css"
+  ],
+  "agent": "Claude Code",
+  "turn_id": "91fe664c94b9",
+  "checkpoint_transcript_start": 273,
+  "transcript_lines_at_start": 273,
+  "token_usage": {
+    "input_tokens": 26,
+    "cache_creation_tokens": 35907,
+    "cache_read_tokens": 1959286,
+    "output_tokens": 12278,
+    "api_call_count": 22
+  },
+  "session_metrics": {
+    "turn_count": 13
+  },
+  "initial_attribution": {
+    "calculated_at": "2026-03-23T13:32:20.461284Z",
+    "agent_lines": 2,
+    "human_added": 6,
+    "human_modified": 2,
+    "human_removed": 0,
+    "total_committed": 10,
+    "agent_percentage": 20
+  }
+}

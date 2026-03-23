@@ -1,0 +1,27 @@
+{
+  "cli_version": "0.5.0",
+  "checkpoint_id": "86ec436ca595",
+  "strategy": "manual-commit",
+  "branch": "zvadaadam/mobile-web-layout",
+  "checkpoints_count": 2,
+  "files_touched": [
+    "apps/web/index.html",
+    "apps/web/src/app/layouts/MobileLayout.tsx",
+    "apps/web/src/global.css"
+  ],
+  "sessions": [
+    {
+      "metadata": "/86/ec436ca595/0/metadata.json",
+      "transcript": "/86/ec436ca595/0/full.jsonl",
+      "content_hash": "/86/ec436ca595/0/content_hash.txt",
+      "prompt": "/86/ec436ca595/0/prompt.txt"
+    }
+  ],
+  "token_usage": {
+    "input_tokens": 26,
+    "cache_creation_tokens": 35907,
+    "cache_read_tokens": 1959286,
+    "output_tokens": 12278,
+    "api_call_count": 22
+  }
+}
