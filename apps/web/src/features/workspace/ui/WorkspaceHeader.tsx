@@ -119,10 +119,12 @@ export function WorkspaceHeader({
         )}
 
         {title && (
-          <span className={cn(
-            "text-foreground mr-0.5 truncate text-sm font-medium",
-            mobile ? "max-w-[120px]" : "max-w-[240px]"
-          )}>
+          <span
+            className={cn(
+              "text-foreground mr-0.5 truncate text-sm font-medium",
+              mobile ? "max-w-[120px]" : "max-w-[240px]"
+            )}
+          >
             {title}
           </span>
         )}
