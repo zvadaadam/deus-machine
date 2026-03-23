@@ -1305,7 +1305,8 @@ samp,
 }
 
 #root {
-  min-height: 100vh;
+  height: 100vh; /* fallback for browsers without dvh support */
+  height: 100dvh; /* dynamic viewport height — tracks keyboard open/close on mobile */
   width: 100%;
   margin: 0;
   padding: 0;
