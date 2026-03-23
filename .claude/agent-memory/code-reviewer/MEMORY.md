@@ -230,6 +230,14 @@
 - `ConnectionOrb` color crossfade: CSS `transition-colors` on a class swap is better than Framer Motion
   `backgroundColor` interpolation (avoids paint-per-frame)
 
+## Mobile Web Layout Patterns
+
+- Full details in `mobile-layout-patterns.md`
+- `MobileLayout` missing `key={workspace.id}` at call site → activeTab state survives workspace switches
+- `MobileTab` type defined twice (MobileTabBar.tsx + MobileLayout.tsx) — should share one export
+- `AllFilesDiffViewer` in mobile code view: `onClose` is undefined → close button is a silent no-op
+- `MobileTabBar` safe-area-inset: uses `pb-[env(...)]` which compresses content; needs `min-h` adjustment
+- `MobileTabBar` buttons have no ARIA role="tab"/aria-selected semantics
 ## See Also
 
 - `patterns-deep.md` — overflow notes: error classification, chat virtualization, PRStatus, border radius, sidecar resume
