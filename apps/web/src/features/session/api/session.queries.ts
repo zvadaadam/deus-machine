@@ -254,12 +254,14 @@ export function useSendMessage() {
       model,
       cwd,
       agentType,
+      permissionMode,
     }: {
       sessionId: string;
       content: string;
       model?: string;
       cwd?: string;
       agentType?: RuntimeAgentType;
+      permissionMode?: string;
     }): Promise<Message | void> => {
       // Send message via WS command: backend saves user message to DB,
       // forwards to agent-server, and pushes q:delta to subscribers.
@@ -271,6 +273,7 @@ export function useSendMessage() {
           model,
           cwd,
           agentType: agentType || "claude",
+          permissionMode,
         });
         if (!ack.accepted) {
           throw new Error(ack.error || "Agent rejected the query");

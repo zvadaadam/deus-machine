@@ -13,6 +13,7 @@ export { WebSearchToolRenderer } from "./WebSearchToolRenderer";
 export { KillShellToolRenderer } from "./KillShellToolRenderer";
 export { TaskToolRenderer } from "./TaskToolRenderer";
 export { LSToolRenderer } from "./LSToolRenderer";
+export { EnterPlanModeToolRenderer, ExitPlanModeToolRenderer } from "./PlanModeToolRenderer";
 
 // OpenDevs MCP tools — Browser automation
 export {
