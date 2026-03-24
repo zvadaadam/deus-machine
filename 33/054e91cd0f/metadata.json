@@ -1,0 +1,46 @@
+{
+  "cli_version": "0.5.0",
+  "checkpoint_id": "33054e91cd0f",
+  "strategy": "manual-commit",
+  "branch": "zvadaadam/files-top-level-tab",
+  "checkpoints_count": 17,
+  "files_touched": [
+    "apps/web/src/app/layouts/ContentTabBar.tsx",
+    "apps/web/src/app/layouts/ContentView.tsx",
+    "apps/web/src/app/layouts/MainContent.tsx",
+    "apps/web/src/app/layouts/RightSidePanel.tsx",
+    "apps/web/src/app/layouts/content-tabs.ts",
+    "apps/web/src/app/layouts/hooks/useWorkspaceActions.ts",
+    "apps/web/src/features/file-browser/ui/FileViewer.tsx",
+    "apps/web/src/features/session/ui/SessionPanel.tsx",
+    "apps/web/src/features/simulator/ui/SimulatorPanel.tsx",
+    "apps/web/src/features/workspace/hooks/useWorkspaceLayout.ts",
+    "apps/web/src/features/workspace/lib/changesFilter.ts",
+    "apps/web/src/features/workspace/store/index.ts",
+    "apps/web/src/features/workspace/store/workspaceLayoutStore.ts",
+    "apps/web/src/features/workspace/ui/AllDiffFileSection.tsx",
+    "apps/web/src/features/workspace/ui/AllFilesDiffViewer.tsx",
+    "apps/web/src/features/workspace/ui/ChangesView.tsx",
+    "apps/web/src/features/workspace/ui/CodePanelContent.tsx",
+    "apps/web/src/features/workspace/ui/ContentTabBar.tsx",
+    "apps/web/src/features/workspace/ui/DiffFilesTree.tsx",
+    "apps/web/src/features/workspace/ui/FilesView.tsx",
+    "apps/web/src/features/workspace/ui/index.ts",
+    "apps/web/src/platform/analytics/events.ts"
+  ],
+  "sessions": [
+    {
+      "metadata": "/33/054e91cd0f/0/metadata.json",
+      "transcript": "/33/054e91cd0f/0/full.jsonl",
+      "content_hash": "/33/054e91cd0f/0/content_hash.txt",
+      "prompt": "/33/054e91cd0f/0/prompt.txt"
+    }
+  ],
+  "token_usage": {
+    "input_tokens": 340,
+    "cache_creation_tokens": 674482,
+    "cache_read_tokens": 21443964,
+    "output_tokens": 75058,
+    "api_call_count": 197
+  }
+}

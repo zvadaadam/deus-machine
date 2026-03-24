@@ -1,0 +1,54 @@
+{
+  "cli_version": "0.5.0",
+  "checkpoint_id": "33054e91cd0f",
+  "session_id": "a785ec52-141f-4682-aba4-d624ad7aec04",
+  "strategy": "manual-commit",
+  "created_at": "2026-03-24T18:57:47.056045Z",
+  "branch": "zvadaadam/files-top-level-tab",
+  "checkpoints_count": 17,
+  "files_touched": [
+    "apps/web/src/app/layouts/ContentTabBar.tsx",
+    "apps/web/src/app/layouts/ContentView.tsx",
+    "apps/web/src/app/layouts/MainContent.tsx",
+    "apps/web/src/app/layouts/RightSidePanel.tsx",
+    "apps/web/src/app/layouts/content-tabs.ts",
+    "apps/web/src/app/layouts/hooks/useWorkspaceActions.ts",
+    "apps/web/src/features/file-browser/ui/FileViewer.tsx",
+    "apps/web/src/features/session/ui/SessionPanel.tsx",
+    "apps/web/src/features/simulator/ui/SimulatorPanel.tsx",
+    "apps/web/src/features/workspace/hooks/useWorkspaceLayout.ts",
+    "apps/web/src/features/workspace/lib/changesFilter.ts",
+    "apps/web/src/features/workspace/store/index.ts",
+    "apps/web/src/features/workspace/store/workspaceLayoutStore.ts",
+    "apps/web/src/features/workspace/ui/AllDiffFileSection.tsx",
+    "apps/web/src/features/workspace/ui/AllFilesDiffViewer.tsx",
+    "apps/web/src/features/workspace/ui/ChangesView.tsx",
+    "apps/web/src/features/workspace/ui/CodePanelContent.tsx",
+    "apps/web/src/features/workspace/ui/ContentTabBar.tsx",
+    "apps/web/src/features/workspace/ui/DiffFilesTree.tsx",
+    "apps/web/src/features/workspace/ui/FilesView.tsx",
+    "apps/web/src/features/workspace/ui/index.ts",
+    "apps/web/src/platform/analytics/events.ts"
+  ],
+  "agent": "Claude Code",
+  "turn_id": "5d357693a879",
+  "token_usage": {
+    "input_tokens": 340,
+    "cache_creation_tokens": 674482,
+    "cache_read_tokens": 21443964,
+    "output_tokens": 75058,
+    "api_call_count": 197
+  },
+  "session_metrics": {
+    "turn_count": 17
+  },
+  "initial_attribution": {
+    "calculated_at": "2026-03-24T18:57:45.94527Z",
+    "agent_lines": 607,
+    "human_added": 1,
+    "human_modified": 29,
+    "human_removed": 0,
+    "total_committed": 637,
+    "agent_percentage": 95.29042386185243
+  }
+}
