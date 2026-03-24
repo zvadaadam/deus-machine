@@ -23,10 +23,11 @@ import type { SessionPanelRef } from "@/features/session";
 import { WelcomeView } from "@/features/repository";
 import { useWorkspaceLayout } from "@/features/workspace";
 import { useCollapsedSizePercent } from "@/features/workspace/hooks/useCollapsedSizePercent";
-import type { RightSideTab } from "@/features/workspace/store";
+import type { ContentTab } from "@/features/workspace/store";
 import { useFileWatcher } from "@/features/file-browser/hooks/useFileWatcher";
 import { WorkspaceHeader } from "@/features/workspace/ui/WorkspaceHeader";
-import { ContentTabBar, isTabVisible } from "@/features/workspace/ui/ContentTabBar";
+import { ContentTabBar } from "./ContentTabBar";
+import { isTabVisible } from "./content-tabs";
 import { PRActions } from "@/features/workspace/ui/PRActions";
 import { useSettings } from "@/features/settings/api/settings.queries";
 import { SidebarInset, useSidebar } from "@/components/ui";
@@ -43,7 +44,7 @@ import { track } from "@/platform/analytics";
 import { ConnectionBanner, useConnectionState } from "@/features/connection";
 import { useIsMobile } from "@/shared/hooks/use-mobile";
 import { ChatArea } from "./ChatArea";
-import { RightSidePanel } from "./RightSidePanel";
+import { ContentView } from "./ContentView";
 import { MobileLayout } from "./MobileLayout";
 import { CollapsedChatStrip, CollapsedContentStrip } from "./CollapsedPanelStrips";
 import { useWorkspaceActions } from "./hooks/useWorkspaceActions";
@@ -73,19 +74,19 @@ export function MainContent({
 
   const selectedWorkspaceId = selectedWorkspace?.id ?? null;
   const {
-    rightSideTab,
-    setRightSideTab,
+    contentTab,
+    setContentTab,
     chatPanelCollapsed,
     setChatPanelCollapsed,
-    rightPanelCollapsed,
-    setRightPanelCollapsed,
+    contentPanelCollapsed,
+    setContentPanelCollapsed,
   } = useWorkspaceLayout(selectedWorkspaceId);
 
-  // Effective tab: if the stored tab is hidden by experimental settings, fall back to "code".
+  // Effective tab: if the stored tab is hidden by experimental settings, fall back to "changes".
   const experimentalSettings = useSettings().data;
-  const effectiveRightSideTab = isTabVisible(rightSideTab, experimentalSettings)
-    ? rightSideTab
-    : "code";
+  const effectiveContentTab = isTabVisible(contentTab, experimentalSettings)
+    ? contentTab
+    : "changes";
 
   const isBrowserDetached = useBrowserWindowStore((s) => s.detachedWindowOpen);
   const connectionState = useConnectionState().state;
@@ -109,7 +110,7 @@ export function MainContent({
     handleRunTask,
   } = useWorkspaceActions({
     selectedWorkspace,
-    setRightSideTab,
+    setContentTab,
   });
 
   const statusMutation = useUpdateWorkspaceStatus();
@@ -142,22 +143,23 @@ export function MainContent({
 
   // --- Content tab change ---
   const handleContentTabChange = useCallback(
-    (tab: RightSideTab) => {
-      setRightSideTab(tab);
+    (tab: ContentTab) => {
+      setContentTab(tab);
       // Track feature surface adoption — fire on every user-initiated tab switch.
       // We use a static map instead of ts-pattern here because these are all
       // simple string→event mappings with no branching logic.
-      const tabEventMap: Partial<Record<RightSideTab, () => void>> = {
+      const tabEventMap: Partial<Record<ContentTab, () => void>> = {
         terminal: () =>
           track("terminal_opened", { workspace_id: selectedWorkspaceId ?? undefined }),
         browser: () => track("browser_opened", { workspace_id: selectedWorkspaceId ?? undefined }),
         simulator: () =>
           track("simulator_opened", { workspace_id: selectedWorkspaceId ?? undefined }),
-        code: () => track("diff_viewed", { workspace_id: selectedWorkspaceId ?? undefined }),
+        changes: () => track("diff_viewed", { workspace_id: selectedWorkspaceId ?? undefined }),
+        files: () => track("files_opened", { workspace_id: selectedWorkspaceId ?? undefined }),
       };
       tabEventMap[tab]?.();
     },
-    [setRightSideTab, selectedWorkspaceId]
+    [setContentTab, selectedWorkspaceId]
   );
 
   // --- Chat panel collapse/expand ---
@@ -172,20 +174,20 @@ export function MainContent({
 
   // --- Content panel collapse/expand ---
   const handleCollapseContentPanel = useCallback(() => {
-    setRightPanelCollapsed(true);
+    setContentPanelCollapsed(true);
     contentPanelRef.current?.collapse();
-  }, [setRightPanelCollapsed]);
+  }, [setContentPanelCollapsed]);
 
   const handleExpandContentPanel = useCallback(() => {
-    setRightPanelCollapsed(false);
-  }, [setRightPanelCollapsed]);
+    setContentPanelCollapsed(false);
+  }, [setContentPanelCollapsed]);
 
   // --- Keyboard shortcuts ---
   usePanelShortcuts({
     enabled: selectedWorkspace !== null && !isMobile,
     chatPanelCollapsed,
     chatPanelRef,
-    contentPanelCollapsed: rightPanelCollapsed,
+    contentPanelCollapsed,
     contentPanelRef,
   });
 
@@ -203,7 +205,7 @@ export function MainContent({
       chatPanelRef.current?.expand();
       chatPanelRef.current?.resize(sessionPanelDefaultSize);
     }
-    if (rightPanelCollapsed) {
+    if (contentPanelCollapsed) {
       contentPanelRef.current?.collapse();
     } else {
       contentPanelRef.current?.expand();
@@ -239,11 +241,6 @@ export function MainContent({
     if (!isBrowserDetached || !detachedWorkspaceContext) return;
     void native.events.send(BROWSER_WORKSPACE_CHANGE, detachedWorkspaceContext);
   }, [isBrowserDetached, detachedWorkspaceContext]);
-
-  // Switching to code tab — used by file clicks (diff or preview) in RightSidePanel.
-  const handleSwitchToCodeTab = useCallback(() => {
-    setRightSideTab("code");
-  }, [setRightSideTab]);
 
   // Insert code review prompt into chat input
   const handleInsertReviewPrompt = useCallback(() => {
@@ -380,21 +377,21 @@ export function MainContent({
                   ref={contentPanelRef}
                   collapsible
                   collapsedSize={safeCollapsedSize}
-                  defaultSize={rightPanelCollapsed ? safeCollapsedSize : contentPanelDefaultSize}
+                  defaultSize={contentPanelCollapsed ? safeCollapsedSize : contentPanelDefaultSize}
                   minSize={MIN_PANEL_SIZE}
                   onCollapse={handleCollapseContentPanel}
                   onExpand={handleExpandContentPanel}
                   className="min-w-0"
                   order={2}
                 >
-                  {rightPanelCollapsed ? (
+                  {contentPanelCollapsed ? (
                     <CollapsedContentStrip onExpand={() => contentPanelRef.current?.expand()} />
                   ) : (
                     <div className="flex h-full flex-col pr-2 pb-2">
                       {/* Tab header: content tabs (left) + PR actions (right) */}
                       <div className="drag-region flex h-11 flex-shrink-0 items-center justify-between px-2.5">
                         <ContentTabBar
-                          activeTab={effectiveRightSideTab}
+                          activeTab={effectiveContentTab}
                           onTabChange={handleContentTabChange}
                           workspaceId={selectedWorkspaceId}
                         />
@@ -415,10 +412,9 @@ export function MainContent({
 
                       {/* Content area — rounded corners, subtle border */}
                       <div className="border-border-subtle bg-bg-elevated flex min-h-0 flex-1 overflow-hidden rounded-lg border">
-                        <RightSidePanel
+                        <ContentView
                           workspace={selectedWorkspace}
-                          activeTab={effectiveRightSideTab}
-                          onSwitchToCodeTab={handleSwitchToCodeTab}
+                          activeTab={effectiveContentTab}
                           isWatched={isWatched}
                           onReview={handleInsertReviewPrompt}
                         />

@@ -1,4 +1,5 @@
-export { CodePanelContent } from "./CodePanelContent";
+export { ChangesView } from "./ChangesView";
+export { FilesView } from "./FilesView";
 export { DiffViewer } from "./DiffViewer";
 export { AllFilesDiffViewer, type AllFilesDiffViewerRef } from "./AllFilesDiffViewer";
 export { MainContentTabBar, type Tab, type ClosedTab } from "./MainContentTabs";

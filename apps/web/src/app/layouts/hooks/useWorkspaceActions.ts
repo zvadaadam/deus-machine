@@ -20,17 +20,17 @@ import { WorkspaceService } from "@/features/workspace/api/workspace.service";
 import { queueTerminalTask } from "@/features/terminal/store/terminalTaskStore";
 import { simulatorStoreActions } from "@/features/simulator/store";
 import { simulatorService } from "@/features/simulator/api/simulator.service";
-import type { RightSideTab } from "@/features/workspace/store";
+import type { ContentTab } from "@/features/workspace/store";
 import type { Workspace } from "@/shared/types";
 
 interface UseWorkspaceActionsOptions {
   selectedWorkspace: Workspace | null;
-  setRightSideTab: (tab: RightSideTab) => void;
+  setContentTab: (tab: ContentTab) => void;
 }
 
 export function useWorkspaceActions({
   selectedWorkspace,
-  setRightSideTab,
+  setContentTab,
 }: UseWorkspaceActionsOptions) {
   // PR handler bridge: ChatArea sets it, WorkspaceHeader consumes it.
   // Setter must be called as `setXxxHandler(() => handler)` — passing a
@@ -129,7 +129,7 @@ export function useWorkspaceActions({
           // Open a new terminal tab running the task command
           queueTerminalTask(taskName, command);
           // Switch to terminal tab (right panel is always visible now)
-          setRightSideTab("terminal");
+          setContentTab("terminal");
         })
         .catch((err) => {
           toast.error(
@@ -137,7 +137,7 @@ export function useWorkspaceActions({
           );
         });
     },
-    [selectedWorkspace, setRightSideTab]
+    [selectedWorkspace, setContentTab]
   );
 
   return {

@@ -113,8 +113,10 @@ export type AnalyticsEventMap = {
   terminal_opened: { workspace_id?: string };
   browser_opened: { workspace_id?: string };
   simulator_opened: { workspace_id?: string };
-  /** User opened the diff panel for a workspace. */
+  /** User opened the diff/changes panel for a workspace. */
   diff_viewed: { workspace_id?: string };
+  /** User opened the files panel for a workspace. */
+  files_opened: { workspace_id?: string };
   /** User opened the workspace in an external app (VS Code, Cursor, etc.). */
   open_in_app: { app_id: string; workspace_id?: string };
 

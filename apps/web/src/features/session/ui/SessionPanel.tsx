@@ -282,8 +282,8 @@ export const SessionPanel = forwardRef<SessionPanelRef, SessionPanelProps>(
     const handleOpenLoginTerminal = useCallback(() => {
       if (!workspaceId) return;
       workspaceLayoutActions.setLayout(workspaceId, {
-        activeRightSideTab: "terminal",
-        rightPanelCollapsed: false,
+        activeContentTab: "terminal",
+        contentPanelCollapsed: false,
       });
       workspaceLayoutActions.setPendingTerminalCommand(workspaceId, "claude login");
     }, [workspaceId]);
