@@ -82,16 +82,11 @@ export function ChatArea({
     }
   }, [workingSessionIds, activeSessionId, workspace.id]);
 
-  // Unread tracking: read the full map and filter to this workspace's sessions.
-  // The store is small (one key per recently-finished session) so this is fine.
   const unreadMap = useUnreadStore((s) => s.unreadSessionIds);
-  const unreadSessionIds = useMemo(() => {
-    const ids = new Set<string>();
-    for (const sid of chatSessionIds) {
-      if (unreadMap[sid]) ids.add(sid);
-    }
-    return ids;
-  }, [chatSessionIds, unreadMap]);
+  const unreadSessionIds = useMemo(
+    () => new Set(chatSessionIds.filter((sid) => unreadMap[sid])),
+    [chatSessionIds, unreadMap]
+  );
 
   // Wrap tab change to mark the newly-active session as read inline
   const handleTabChangeWithRead = useCallback(
