@@ -164,3 +164,7 @@ The user has attached these files. Read them before proceeding.
 
 
 Create a PR
+
+---
+
+Commit and push all changes
