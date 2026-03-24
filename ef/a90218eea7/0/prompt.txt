@@ -1,0 +1,153 @@
+<system_instruction>
+You are working inside OpenDevs, a Mac app that lets the user run many coding agents in parallel.
+Your work should take place in the /Users/zvada/Developer/agent/box-ide/.conductor/auckland-v5 directory (unless otherwise directed), which has been set up for you to work in.
+Each workspace has a .context directory (gitignored) where you can save files to collaborate with other agents.
+DO NOT EVER read or write files at /Users/zvada/Developer/agent/box-ide.
+The target branch for this workspace is main. Use this for actions like creating new PRs, bisecting, etc., unless you're told otherwise.
+
+If the user asks you to work on several unrelated tasks, you can suggest they start new workspaces.
+Sometimes the user might send you a message they meant to send in a different workspace or a different chat. If something doesn't make sense in the context of your work, just ask. 
+If the user asks for help with OpenDevs, you can ask them to go to "Help -> Send Feedback" to get in touch with our team.
+</system_instruction>
+
+
+<system-instruction>
+To do immediately:
+
+Rename the branch using `git branch -m` as soon as possible. Do not check the current branch name.
+
+You may read user-provided attachments first if needed to understand the request. Otherwise, do this before using any skills or any other tools.
+
+Choosing a branch name: use concrete, specific language, avoid abstract nouns, and be concise (<30 characters). Use the prefix "zvadaadam/" before the name.
+
+</system-instruction>
+
+Okay, so when the agent actually stops working using a message, we accept, expect that once it's done the job, we should see in the sidebar this dot that the user should see it because it's unread. I think we have some support for this, but it doesn't work. So once the agent is done implementing this dot that it needs an attention of yours because it's done working, you haven't read it. Like basically when new message comes like these dots are usual that if something is not read, it's highlighted and this highlight and the dot should be in the sidebar, but also in the tabs in the sessions, you know. Can you explore why it's not there? I think we used to have a support for this.
+
+---
+
+But if we close the app and open it again, this would be lost, right?
+
+---
+
+<system-instruction>
+The user has added 3 comments to the diff for this workspace. Please review and address these comments as part of your response. When addressing comments on the "original" side or on specific commits, read the file from that version (not the current version). Below are the comments, including metadata about what git state they were left on:
+
+Comment #1:
+
+File: apps/web/src/app/layouts/ChatArea.tsx
+Line: 87
+User comment: "is it clean to use the useffect here?"
+
+Comment metadata:
+This comment was left on the modified branch.
+
+
+Comment #2:
+
+File: apps/web/src/app/layouts/ChatArea.tsx
+Lines: 69-84
+User comment: "ain;t this coplexlity overgeining?"
+
+Comment metadata:
+This comment was left on the modified branch.
+
+
+Comment #3:
+
+File: apps/web/src/app/layouts/MainLayout.tsx
+Line: 341
+User comment: "but if tehre is two or more sesion taht have not been read it shoudn not be taht it undo the dot for the main siecar right, becaue u woudl ahgve to read and open more of thsoe ession"
+
+Comment metadata:
+This comment was left on the modified branch.
+
+</system-instruction>
+
+---
+
+Okay, you see like there were some problems. I want you to check more of the changes if something like very over engineered, something can be easier, better code structure explorer.
+
+---
+
+Okay, so I tested it and I'm not sure. So imagine I open a workspace and I have multiple sessions. I send a message on the multiple sessions and go away. If I go back to the workspace and this one session is opened, I haven't opened the rest. So the unseen activity dot in a workspace sidebar and also in the sessions should still be there, you know, maybe explore what I'm saying, what is the problem because I haven't described it properly, but like, I think you know what I'm saying, explore.
+
+---
+
+So I think there is a bug in the logic of actually if we have one workspace and we run multiple sessions in the workspace and they are in a working state, I don't see that the session once it's done and it's not viewed changes from working to this dot in the tabs of the sessions. Do you understand what I'm saying? Can you explore it?
+
+---
+
+<system-instruction>
+The user has added 1 comment to the diff for this workspace. Please review and address these comments as part of your response. When addressing comments on the "original" side or on specific commits, read the file from that version (not the current version). Below are the comments, including metadata about what git state they were left on:
+
+Comment #1:
+
+File: apps/web/src/features/session/hooks/useGlobalSessionNotifications.ts
+Line: 102
+User comment: "Why we have the detail, like what is what is exactly detail, I'm not sure about that. Feels like it's weird, feels like very complex and many things."
+
+Comment metadata:
+This comment was left on the modified branch.
+
+</system-instruction>
+
+---
+
+anymore any more of these priblems are there? somehtign sismlar to this
+
+---
+
+I don't know, this feels weird, so... It's like when I have an open workspace and I send a message and open another session, and I work with the session, but the previous session I opened, it's still working, and when I click on it, I see it's done. I never seen the activity there to be done. It feels like we are not listening to it or something.\
+
+---
+
+and so now if we hve teh ws we dont need the stale endpotn rght?
+
+---
+
+<system_instruction>
+The user has attached these files. Read them before proceeding.
+- /Users/zvada/Developer/agent/box-ide/.conductor/auckland-v5/.context/attachments/Screenshot 2026-03-24 at 11.29.31 PM.png (9.3 KB)
+</system_instruction>
+
+
+
+Well, so once there is the unread thing, we just replace the unread activity dot instead of the model icon, not putting the dot on the right, but to the left instead of the icon. Does it make sense in the session tabs?
+
+---
+
+<system_instruction>
+The user has attached these files. Read them before proceeding.
+- /Users/zvada/Developer/agent/box-ide/.conductor/auckland-v5/.context/attachments/PR instructions.md (956 B)
+</system_instruction>
+
+
+
+Create a PR
+
+---
+
+All 4 candidate issues were invalidated during verification:
+
+| # | Issue | Verdict | Reason |
+|---|-------|---------|--------|
+| 1 | Missing `useShallow` in `WorkspaceItem.tsx` | **Not a violation** | Selector returns a direct store reference, not a derived array. No new reference is created on each call. |
+| 2 | Missing `useShallow` in `ChatArea.tsx` | **Not a violation** | Selects one field (not the entire store). Re-renders are intentional and correct — each write only creates a new reference when data actually changes. |
+| 3 | `ts-pattern` not used for status checks | **Not a violation** | The code uses a single compound `if` (membership test) and independent guards — not an if/else dispatch chain. The file already uses `ts-pattern` correctly where actual dispatch happens. |
+| 4 | New `.md` in `.claude/agent-memory/` | **Not a violation** | `.claude/` is Claude Code's system directory for agent memory, not project documentation. The documentation policy doesn't apply here. |
+
+---
+
+## Review Result
+
+**No high-signal issues found.**
+
+The changes introduce a clean, client-side unread state layer using a persisted Zustand store. The implementation is logically sound:
+
+- `markUnread`/`markRead` are idempotent with correct state identity checks
+- Hook ordering respects Rules of Hooks (all called before early returns)
+- The dual marking paths (global notifications hook + ChatArea tab watcher) don't conflict
+- `prevWorkingRef` avoids false positives on mount
+- `checkIsViewingSession` correctly uses `getState()` for point-in-time reads outside React renders
+- No security, memory leak, or race condition concerns in the changed code
