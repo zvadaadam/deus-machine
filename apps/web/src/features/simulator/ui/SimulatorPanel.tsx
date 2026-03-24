@@ -239,7 +239,7 @@ export function SimulatorPanel({ workspaceId, workspacePath }: SimulatorPanelPro
       simulatorStoreActions.setSession(workspaceId, { phase: "booting", udid });
       // Auto-switch to simulator tab so the user sees the stream
       // (same pattern as BrowserPanel's onAutoCreateTab)
-      workspaceLayoutActions.setActiveRightSideTab(workspaceId, "simulator");
+      workspaceLayoutActions.setActiveContentTab(workspaceId, "simulator");
 
       try {
         // Skip boot check — agent-driven boot has already verified the UDID.

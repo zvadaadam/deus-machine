@@ -83,7 +83,18 @@
 
 - `experimental_*` fields are `boolean | undefined` on `Settings` — `undefined` means ON (backwards-compat)
 - `isTabVisible(tab, settings)` is exported from `ContentTabBar.tsx`
-- `effectiveRightSideTab` in `MainContent` = `isTabVisible(raw, settings) ? raw : "code"`
+- `effectiveContentTab` in `MainContent` = `isTabVisible(raw, settings) ? raw : "changes"` (was "code" before Changes rename)
+- BUG (unfixed): `isTabVisible` returns `settings?.[key] === true`, which returns `false` while settings is loading.
+  Correct: treat `undefined` as `true` for experimental tabs (`val === undefined || val === true`).
+
+## workspaceLayoutStore Setter Inconsistency (Confirmed Bug)
+
+- `setLayout` does a three-way merge: `{ ...defaultLayout, ...existingLayout, ...updates }` — correct.
+- All individual setters (`setActiveContentTab`, `setSelectedFilePath`, etc.) do only a two-way merge:
+  `{ ...(state.layouts[id] || defaultLayout), field: value }`. When a record exists but lacks a new field
+  (e.g. after a version bump), the individual setters will NOT backfill from `defaultLayout`.
+  Fix: use the same three-way pattern in all individual setters.
+- Store is now at version 10 (bumped during Files-as-top-level-tab refactor). `migrate` wipes all layouts.
 
 ## Simulator / Rust Command Patterns (Confirmed)
 
@@ -147,8 +158,30 @@
 
 ## Content Panel Redesign Pattern (Confirmed)
 
-- `AllFilesDiffViewer`: `hideHeader?: boolean` prop (default false) for embedding in CodePanelContent.
-- Both Changes/Files tabs: content | 1px separator | tree (220px fixed) layout.
+- "Code" tab renamed to "Changes". "Files" promoted from sub-tab inside Code to a top-level tab.
+- `RightSidePanel` monolith replaced by thin `ContentView` router (`app/layouts/ContentView.tsx`).
+- `ChangesView` (`features/workspace/ui/ChangesView.tsx`) is self-contained: fetches its own
+  `useFileChanges`, `useUncommittedFiles`, `useLastTurnFiles` data — parent only provides `workspace`.
+- `AllFilesDiffViewer`: `hideHeader?: boolean` prop (default false) for embedding in ChangesView.
+- Changes layout: AllFilesDiffViewer (75%) | ResizableHandle | DiffFilesTree (25%).
+- Files layout: FileViewer (75%) | ResizableHandle | FileBrowserPanel (25%).
+- `PersistentTab` (`app/layouts/PersistentTab.tsx`): thin wrapper for always-mounted tabs using
+  `pointer-events-none invisible absolute` CSS-hide pattern.
+
+## Circular Self-Import Pattern (Recurring Risk)
+
+- `ChangesView.tsx` imports `useFileChanges` et al. from `"@/features/workspace"` — the barrel that
+  re-exports `ChangesView` itself. Bundler resolves it, but it is fragile for HMR.
+  Fix: import hooks directly from their source (`../api/workspace.queries`, `../hooks/useWorkspaceLayout`).
+- Watch for this pattern whenever a component in `features/X/ui/` is also exported from `features/X/index.ts`
+  and then imports from `"@/features/X"`.
+
+## ContentView Data Ownership Pattern
+
+- `ContentView` is a routing shell — data fetching belongs in leaf tab components, not in the router.
+- The `useFileChanges` call inside `ContentView` (for the Files tab) is a leak of this pattern.
+  TanStack Query deduplicates the network call, so it is not a perf issue — but ownership is wrong.
+  Fix: move into the Files tab branch or into `FileBrowserPanel` itself.
 
 ## Always-Mount CSS Hide Pattern (Confirmed)
 

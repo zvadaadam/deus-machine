@@ -13,7 +13,7 @@
  */
 
 import { useState, useRef, useEffect, useCallback, memo } from "react";
-import { ChevronDown, ChevronRight, FileCode } from "lucide-react";
+import { ChevronDown, ChevronRight } from "lucide-react";
 import { DiffViewer } from "./DiffViewer";
 import { useFileDiff } from "../api/workspace.queries";
 import type { FileChange } from "@/shared/types";
@@ -25,8 +25,6 @@ interface AllDiffFileSectionProps {
   sectionRef: (filePath: string, el: HTMLDivElement | null) => void;
   /** Key counter — when it changes, section resets to expanded state */
   expandStateKey: number;
-  /** Open file in text editor (file preview mode) */
-  onOpenFile?: (filePath: string) => void;
 }
 
 function AllDiffFileSectionInner({
@@ -35,7 +33,6 @@ function AllDiffFileSectionInner({
   isActive,
   sectionRef,
   expandStateKey,
-  onOpenFile,
 }: AllDiffFileSectionProps) {
   const filePath = fileChange.file || fileChange.file_path || "";
   const [collapsedState, setCollapsedState] = useState({
@@ -134,18 +131,6 @@ function AllDiffFileSectionInner({
             )}
           </span>
         </button>
-
-        {/* Open in editor — separate button, sibling to collapse toggle */}
-        {onOpenFile && (
-          <button
-            type="button"
-            onClick={() => onOpenFile(filePath)}
-            className="text-muted-foreground/50 hover:text-foreground hover:bg-muted/50 ease flex h-5 w-5 flex-shrink-0 items-center justify-center rounded-md transition-colors duration-200"
-            title="Open in editor"
-          >
-            <FileCode className="h-3 w-3" />
-          </button>
-        )}
       </div>
 
       {/* Diff content — hidden when collapsed */}
