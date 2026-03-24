@@ -1,0 +1,45 @@
+{
+  "cli_version": "0.5.0",
+  "checkpoint_id": "60772f80f189",
+  "session_id": "3122aea7-f273-4691-8865-91ea18290297",
+  "strategy": "manual-commit",
+  "created_at": "2026-03-24T18:41:52.418957Z",
+  "branch": "zvadaadam/fix-plan-display",
+  "checkpoints_count": 42,
+  "files_touched": [
+    ".claude/agent-memory/code-reviewer/MEMORY.md",
+    "apps/backend/src/services/agent/persistence.ts",
+    "apps/backend/src/services/agent/service.ts",
+    "apps/sidecar/event-broadcaster.ts",
+    "apps/web/src/features/session/api/session.queries.ts",
+    "apps/web/src/features/session/hooks/useSessionActions.ts",
+    "apps/web/src/features/session/ui/MessageInput.tsx",
+    "apps/web/src/features/session/ui/PlanApprovalOverlay.tsx",
+    "apps/web/src/features/session/ui/PlanModeToggle.tsx",
+    "apps/web/src/features/session/ui/SessionPanel.tsx",
+    "apps/web/src/features/session/ui/tools/registerTools.ts",
+    "apps/web/src/features/session/ui/tools/renderers/PlanModeToolRenderer.tsx",
+    "apps/web/src/features/session/ui/tools/renderers/index.ts"
+  ],
+  "agent": "Claude Code",
+  "turn_id": "3e32f3b7e075",
+  "token_usage": {
+    "input_tokens": 436,
+    "cache_creation_tokens": 1554643,
+    "cache_read_tokens": 57005405,
+    "output_tokens": 101036,
+    "api_call_count": 356
+  },
+  "session_metrics": {
+    "turn_count": 42
+  },
+  "initial_attribution": {
+    "calculated_at": "2026-03-24T18:41:47.531084Z",
+    "agent_lines": 242,
+    "human_added": 7,
+    "human_modified": 14,
+    "human_removed": 0,
+    "total_committed": 263,
+    "agent_percentage": 92.01520912547528
+  }
+}
