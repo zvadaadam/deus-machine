@@ -17,7 +17,11 @@
 import { AgentClient } from "./client";
 import { createAgentEventHandler } from "./event-handler";
 import { relay } from "./tool-relay";
-import { persistSessionNeedsPlanResponse, persistSessionBackToWorking } from "./persistence";
+import {
+  persistSessionNeedsPlanResponse,
+  persistSessionNeedsResponse,
+  persistSessionBackToWorking,
+} from "./persistence";
 import { invalidate } from "../query-engine";
 import type {
   TurnStartRequest,
@@ -58,9 +62,12 @@ export function init(agentServerUrl: string): void {
       const isUserFacing = method === "exitPlanMode" || method === "askUserQuestion";
       const sessionResources = ["workspaces", "sessions", "session", "stats"] as const;
 
-      // Plan approval: stop showing "working", show "needs_plan_response"
+      // User-facing methods: update session status so sidebar shows "needs input" instead of "working"
       if (method === "exitPlanMode") {
         const result = persistSessionNeedsPlanResponse(sessionId);
+        if (result.ok) invalidate([...sessionResources], { sessionIds: [sessionId] });
+      } else if (method === "askUserQuestion") {
+        const result = persistSessionNeedsResponse(sessionId);
         if (result.ok) invalidate([...sessionResources], { sessionIds: [sessionId] });
       }
 
