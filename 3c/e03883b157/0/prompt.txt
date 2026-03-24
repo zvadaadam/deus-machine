@@ -114,3 +114,14 @@ The user has attached these files. Read them before proceeding.
 
 
 Well, so once there is the unread thing, we just replace the unread activity dot instead of the model icon, not putting the dot on the right, but to the left instead of the icon. Does it make sense in the session tabs?
+
+---
+
+<system_instruction>
+The user has attached these files. Read them before proceeding.
+- /Users/zvada/Developer/agent/box-ide/.conductor/auckland-v5/.context/attachments/PR instructions.md (956 B)
+</system_instruction>
+
+
+
+Create a PR
