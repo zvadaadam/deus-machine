@@ -195,6 +195,22 @@ export function persistSessionNeedsPlanResponse(sessionId: string): WriteResult<
   }
 }
 
+/** Update session status to "needs_response" when agent asks user a question. */
+export function persistSessionNeedsResponse(sessionId: string): WriteResult<void> {
+  const db = getDatabase();
+
+  try {
+    db.prepare(
+      `UPDATE sessions SET status = 'needs_response', updated_at = datetime('now') WHERE id = ?`
+    ).run(sessionId);
+    return { ok: true, value: undefined };
+  } catch (error) {
+    const msg = getErrorMessage(error);
+    console.error(`[AgentPersistence] Failed to persist needs_response:`, msg);
+    return { ok: false, error: msg };
+  }
+}
+
 /** Restore session status to "working" when a pending request is resolved. */
 export function persistSessionBackToWorking(sessionId: string): WriteResult<void> {
   const db = getDatabase();
