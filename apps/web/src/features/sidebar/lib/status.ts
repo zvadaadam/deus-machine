@@ -151,11 +151,11 @@ export function getDisplayStatus(workspace: Workspace, hasUnseenActivity = false
  */
 export function sortByStatusPriority<T extends Workspace>(
   workspaces: T[],
-  unreadSessionIds?: Set<string>
+  unreadWorkspaceIds?: Set<string>
 ): T[] {
   return [...workspaces].sort((a, b) => {
-    const hasUnreadA = !!(a.current_session_id && unreadSessionIds?.has(a.current_session_id));
-    const hasUnreadB = !!(b.current_session_id && unreadSessionIds?.has(b.current_session_id));
+    const hasUnreadA = !!unreadWorkspaceIds?.has(a.id);
+    const hasUnreadB = !!unreadWorkspaceIds?.has(b.id);
     const statusA = getDisplayStatus(a, hasUnreadA);
     const statusB = getDisplayStatus(b, hasUnreadB);
     const priorityA = STATUS_CONFIG[statusA].priority;
