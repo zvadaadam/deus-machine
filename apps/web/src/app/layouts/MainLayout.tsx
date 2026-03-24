@@ -24,7 +24,7 @@ import { useRepos } from "@/features/repository/api";
 import { useSettings as useSettingsQuery } from "@/features/settings";
 import { SidebarProvider, useSidebar } from "@/components/ui";
 import { AppSidebar, SidebarSkeleton } from "@/features/sidebar";
-import { useWorkspaceStore } from "@/features/workspace/store";
+import { useWorkspaceStore, workspaceLayoutActions } from "@/features/workspace/store";
 import { useUIStore } from "@/shared/stores/uiStore";
 import {
   useChatInsertStore,
@@ -35,6 +35,7 @@ import {
 } from "@/shared/stores/chatInsertStore";
 import { ResizeHandle } from "@/shared/components/ResizeHandle";
 import type { Workspace } from "@/shared/types";
+import { unreadActions } from "@/features/session/store/unreadStore";
 import { native } from "@/platform";
 import { CHAT_INSERT } from "@shared/events";
 import { CommandPalette } from "@/features/command-palette";
@@ -337,6 +338,13 @@ export function MainLayout() {
   const handleWorkspaceClick = useCallback(
     (workspace: Workspace) => {
       selectWorkspace(workspace.id);
+      // Only mark the active tab's session as read — other tabs keep their
+      // unread dots until the user actually switches to them.
+      const layout = workspaceLayoutActions.getLayout(workspace.id);
+      const activeSessionId = layout.activeChatTabSessionId || workspace.current_session_id;
+      if (activeSessionId) {
+        unreadActions.markRead(activeSessionId);
+      }
     },
     [selectWorkspace]
   );

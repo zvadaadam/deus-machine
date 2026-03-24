@@ -44,6 +44,8 @@ interface MainContentTabBarProps {
   activeTabId: string;
   /** Set of session IDs currently in "working" status — per-tab spinners */
   workingSessionIds?: Set<string>;
+  /** Set of session IDs with unseen activity — per-tab unread dots */
+  unreadSessionIds?: Set<string>;
   onTabChange: (tabId: string) => void;
   onTabClose?: (tabId: string) => void;
   onTabAdd?: () => void;
@@ -56,10 +58,13 @@ interface MainContentTabBarProps {
 const ICON_SIZE = "w-3.5 h-3.5";
 const EMPTY_CLOSED_TABS: ClosedTab[] = [];
 
-/** Render tab icon — shows CircularPixelGrid spinner when working, agent logo otherwise. */
-function getTabIcon(tab: Tab, isWorking: boolean) {
+/** Render tab icon — spinner when working, gold dot when unread, agent logo otherwise. */
+function getTabIcon(tab: Tab, isWorking: boolean, isUnread: boolean) {
   if (isWorking) {
     return <CircularPixelGrid variant="generating" size={14} resolution={8} />;
+  }
+  if (isUnread) {
+    return <span className="bg-accent-gold h-2 w-2 flex-shrink-0 rounded-full" />;
   }
   const LogoComponent = getAgentLogo(tab.data?.agentType || "claude");
   if (LogoComponent) {
@@ -90,6 +95,7 @@ export function MainContentTabBar({
   tabs,
   activeTabId,
   workingSessionIds = EMPTY_WORKING_SET,
+  unreadSessionIds = EMPTY_WORKING_SET,
   onTabChange,
   onTabClose,
   onTabAdd,
@@ -128,6 +134,12 @@ export function MainContentTabBar({
               // Per-tab working status: each tab checks its own session ID
               // against the working set (populated by useWorkingSessionIds).
               const isWorking = !!tab.data?.sessionId && workingSessionIds.has(tab.data.sessionId);
+              // Per-tab unread status: show dot when session has unseen activity
+              const isUnread =
+                !isActive &&
+                !isWorking &&
+                !!tab.data?.sessionId &&
+                unreadSessionIds.has(tab.data.sessionId);
 
               return (
                 <SortableTab key={tab.id} id={tab.id}>
@@ -149,10 +161,12 @@ export function MainContentTabBar({
                       "transition-colors duration-150",
                       isActive
                         ? "bg-bg-raised text-text-secondary"
-                        : "text-text-muted hover:text-text-tertiary"
+                        : isUnread
+                          ? "text-text-secondary"
+                          : "text-text-muted hover:text-text-tertiary"
                     )}
                   >
-                    {getTabIcon(tab, isWorking)}
+                    {getTabIcon(tab, isWorking, isUnread)}
 
                     <div className="min-w-0 flex-1">
                       <span className="block truncate">{tab.label}</span>
