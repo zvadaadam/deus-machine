@@ -1,0 +1,25 @@
+{
+  "cli_version": "0.5.0",
+  "checkpoint_id": "83a07d385ebd",
+  "strategy": "manual-commit",
+  "branch": "zvadaadam/fix-unread-indicators",
+  "checkpoints_count": 2,
+  "files_touched": [
+    "apps/web/src/app/layouts/ChatArea.tsx"
+  ],
+  "sessions": [
+    {
+      "metadata": "/83/a07d385ebd/0/metadata.json",
+      "transcript": "/83/a07d385ebd/0/full.jsonl",
+      "content_hash": "/83/a07d385ebd/0/content_hash.txt",
+      "prompt": "/83/a07d385ebd/0/prompt.txt"
+    }
+  ],
+  "token_usage": {
+    "input_tokens": 2307,
+    "cache_creation_tokens": 425436,
+    "cache_read_tokens": 22727415,
+    "output_tokens": 70322,
+    "api_call_count": 204
+  }
+}

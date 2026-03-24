@@ -1,0 +1,456 @@
+<system_instruction>
+You are working inside OpenDevs, a Mac app that lets the user run many coding agents in parallel.
+Your work should take place in the /Users/zvada/Developer/agent/box-ide/.conductor/auckland-v5 directory (unless otherwise directed), which has been set up for you to work in.
+Each workspace has a .context directory (gitignored) where you can save files to collaborate with other agents.
+DO NOT EVER read or write files at /Users/zvada/Developer/agent/box-ide.
+The target branch for this workspace is main. Use this for actions like creating new PRs, bisecting, etc., unless you're told otherwise.
+
+If the user asks you to work on several unrelated tasks, you can suggest they start new workspaces.
+Sometimes the user might send you a message they meant to send in a different workspace or a different chat. If something doesn't make sense in the context of your work, just ask. 
+If the user asks for help with OpenDevs, you can ask them to go to "Help -> Send Feedback" to get in touch with our team.
+</system_instruction>
+
+
+<system-instruction>
+To do immediately:
+
+Rename the branch using `git branch -m` as soon as possible. Do not check the current branch name.
+
+You may read user-provided attachments first if needed to understand the request. Otherwise, do this before using any skills or any other tools.
+
+Choosing a branch name: use concrete, specific language, avoid abstract nouns, and be concise (<30 characters). Use the prefix "zvadaadam/" before the name.
+
+</system-instruction>
+
+Okay, so when the agent actually stops working using a message, we accept, expect that once it's done the job, we should see in the sidebar this dot that the user should see it because it's unread. I think we have some support for this, but it doesn't work. So once the agent is done implementing this dot that it needs an attention of yours because it's done working, you haven't read it. Like basically when new message comes like these dots are usual that if something is not read, it's highlighted and this highlight and the dot should be in the sidebar, but also in the tabs in the sessions, you know. Can you explore why it's not there? I think we used to have a support for this.
+
+---
+
+But if we close the app and open it again, this would be lost, right?
+
+---
+
+<system-instruction>
+The user has added 3 comments to the diff for this workspace. Please review and address these comments as part of your response. When addressing comments on the "original" side or on specific commits, read the file from that version (not the current version). Below are the comments, including metadata about what git state they were left on:
+
+Comment #1:
+
+File: apps/web/src/app/layouts/ChatArea.tsx
+Line: 87
+User comment: "is it clean to use the useffect here?"
+
+Comment metadata:
+This comment was left on the modified branch.
+
+
+Comment #2:
+
+File: apps/web/src/app/layouts/ChatArea.tsx
+Lines: 69-84
+User comment: "ain;t this coplexlity overgeining?"
+
+Comment metadata:
+This comment was left on the modified branch.
+
+
+Comment #3:
+
+File: apps/web/src/app/layouts/MainLayout.tsx
+Line: 341
+User comment: "but if tehre is two or more sesion taht have not been read it shoudn not be taht it undo the dot for the main siecar right, becaue u woudl ahgve to read and open more of thsoe ession"
+
+Comment metadata:
+This comment was left on the modified branch.
+
+</system-instruction>
+
+---
+
+Okay, you see like there were some problems. I want you to check more of the changes if something like very over engineered, something can be easier, better code structure explorer.
+
+---
+
+Okay, so I tested it and I'm not sure. So imagine I open a workspace and I have multiple sessions. I send a message on the multiple sessions and go away. If I go back to the workspace and this one session is opened, I haven't opened the rest. So the unseen activity dot in a workspace sidebar and also in the sessions should still be there, you know, maybe explore what I'm saying, what is the problem because I haven't described it properly, but like, I think you know what I'm saying, explore.
+
+---
+
+So I think there is a bug in the logic of actually if we have one workspace and we run multiple sessions in the workspace and they are in a working state, I don't see that the session once it's done and it's not viewed changes from working to this dot in the tabs of the sessions. Do you understand what I'm saying? Can you explore it?
+
+---
+
+<system-instruction>
+The user has added 1 comment to the diff for this workspace. Please review and address these comments as part of your response. When addressing comments on the "original" side or on specific commits, read the file from that version (not the current version). Below are the comments, including metadata about what git state they were left on:
+
+Comment #1:
+
+File: apps/web/src/features/session/hooks/useGlobalSessionNotifications.ts
+Line: 102
+User comment: "Why we have the detail, like what is what is exactly detail, I'm not sure about that. Feels like it's weird, feels like very complex and many things."
+
+Comment metadata:
+This comment was left on the modified branch.
+
+</system-instruction>
+
+---
+
+anymore any more of these priblems are there? somehtign sismlar to this
+
+---
+
+I don't know, this feels weird, so... It's like when I have an open workspace and I send a message and open another session, and I work with the session, but the previous session I opened, it's still working, and when I click on it, I see it's done. I never seen the activity there to be done. It feels like we are not listening to it or something.\
+
+---
+
+and so now if we hve teh ws we dont need the stale endpotn rght?
+
+---
+
+<system_instruction>
+The user has attached these files. Read them before proceeding.
+- /Users/zvada/Developer/agent/box-ide/.conductor/auckland-v5/.context/attachments/Screenshot 2026-03-24 at 11.29.31 PM.png (9.3 KB)
+</system_instruction>
+
+
+
+Well, so once there is the unread thing, we just replace the unread activity dot instead of the model icon, not putting the dot on the right, but to the left instead of the icon. Does it make sense in the session tabs?
+
+---
+
+<system_instruction>
+The user has attached these files. Read them before proceeding.
+- /Users/zvada/Developer/agent/box-ide/.conductor/auckland-v5/.context/attachments/PR instructions.md (956 B)
+</system_instruction>
+
+
+
+Create a PR
+
+---
+
+All 4 candidate issues were invalidated during verification:
+
+| # | Issue | Verdict | Reason |
+|---|-------|---------|--------|
+| 1 | Missing `useShallow` in `WorkspaceItem.tsx` | **Not a violation** | Selector returns a direct store reference, not a derived array. No new reference is created on each call. |
+| 2 | Missing `useShallow` in `ChatArea.tsx` | **Not a violation** | Selects one field (not the entire store). Re-renders are intentional and correct — each write only creates a new reference when data actually changes. |
+| 3 | `ts-pattern` not used for status checks | **Not a violation** | The code uses a single compound `if` (membership test) and independent guards — not an if/else dispatch chain. The file already uses `ts-pattern` correctly where actual dispatch happens. |
+| 4 | New `.md` in `.claude/agent-memory/` | **Not a violation** | `.claude/` is Claude Code's system directory for agent memory, not project documentation. The documentation policy doesn't apply here. |
+
+---
+
+## Review Result
+
+**No high-signal issues found.**
+
+The changes introduce a clean, client-side unread state layer using a persisted Zustand store. The implementation is logically sound:
+
+- `markUnread`/`markRead` are idempotent with correct state identity checks
+- Hook ordering respects Rules of Hooks (all called before early returns)
+- The dual marking paths (global notifications hook + ChatArea tab watcher) don't conflict
+- `prevWorkingRef` avoids false positives on mount
+- `checkIsViewingSession` correctly uses `getState()` for point-in-time reads outside React renders
+- No security, memory leak, or race condition concerns in the changed code
+
+---
+
+<system-instruction>
+The user has added 4 comments to the diff for this workspace. Please review and address these comments as part of your response. When addressing comments on the "original" side or on specific commits, read the file from that version (not the current version). Below are the comments, including metadata about what git state they were left on:
+
+Comment #1:
+
+File: 
+Line: undefined
+User comment: "<!-- This is an auto-generated comment: summarize by coderabbit.ai -->
+<!-- walkthrough_start -->
+
+<details>
+<summary>📝 Walkthrough</summary>
+
+## Walkthrough
+
+A persistent unread activity tracking system for chat sessions has been introduced. New Zustand store manages session unread status. Integration points mark sessions read/unread based on user navigation and notifications. Session queries updated with explicit WebSocket subscriptions. UI displays unread indicators and sorts workspaces accordingly.
+
+## Changes
+
+|Cohort / File(s)|Summary|
+|---|---|
+|**Unread Store & Actions** <br> `apps/web/src/features/session/store/unreadStore.ts`|New Zustand-based persisted store tracking session IDs with unseen activity via `unreadSessionIds` map. Provides `markUnread` and `markRead` methods with devtools integration and persistence via `unread-sessions-store` key.|
+|**Navigation & Chat Integration** <br> `apps/web/src/app/layouts/ChatArea.tsx`, `apps/web/src/app/layouts/MainLayout.tsx`|Integrated unread store into navigation flows. `ChatArea` marks sessions as read on tab change; `MainLayout` marks sessions as read on workspace switch. Both use `unreadActions` to manage state during user navigation.|
+|**Session Queries & Subscriptions** <br> `apps/web/src/features/session/api/session.queries.ts`|Refactored `useWorkingSessionIds` to establish explicit per-session WebSocket subscriptions, updating TanStack Query cache directly. Session status queries now have infinite `staleTime` and disabled `refetchOnWindowFocus` for background tab optimization.|
+|**Session Notifications** <br> `apps/web/src/features/session/hooks/useGlobalSessionNotifications.ts`|Added `checkIsViewingSession` helper to detect if user is viewing a specific session. Integrated native notification gating via `canNotify` cache. Marks sessions as unread when transitioning to terminal states (unless currently viewed), replacing prior `workspace.current_session_id`-only logic.|
+|**Sidebar Status & Display** <br> `apps/web/src/features/sidebar/lib/status.ts`, `apps/web/src/features/sidebar/ui/RepositoryItem.tsx`, `apps/web/src/features/sidebar/ui/WorkspaceItem.tsx`|Refactored status display logic: `getDisplayStatus` now accepts `hasUnseenActivity` flag; `sortByStatusPriority` accepts optional `unreadSessionIds` set. Removed `getUnreadCount` and other helpers. UI components derive unread state from store and apply to workspace sorting and status display.|
+|**Tab UI Indicators** <br> `apps/web/src/features/workspace/ui/MainContentTabs.tsx`|Extended `MainContentTabBarProps` with optional `unreadSessionIds` set. Updated `getTabIcon` to render gold circular dot for unread sessions. Applied secondary text styling for unread non-active tabs to highlight unseen activity.|
+
+## Estimated code review effort
+
+🎯 3 (Moderate) | ⏱️ ~22 minutes
+
+## Poem
+
+> 🐰 *Hark! A quest for the unseen is born,*  
+> *Sessions marked unread, tabs adorned,*  
+> *With golden dots on scattered screens,*  
+> *The rabbit tracks what activity means!*  
+> *Through stores and hooks, persistence flows free—*  
+> *No note left unnoticed, not on this spree!* ✨
+
+</details>
+
+<!-- walkthrough_end -->
+
+
+<!-- tips_start -->
+
+---
+
+<sub>Comment `@coderabbitai help` to get the list of available commands and usage tips.</sub>
+
+<!-- tips_end -->
+
+<!-- internal state start -->
+
+
+<!-- REDACTED/G4ZCM/REDACTED/AYB48gMMMoQYLgAD67F/REDACTED/REDACTED/OC8T0RKBufAdeU7P5uT6BS2E2zq/REDACTED/hKgJFNAAA0/REDACTED/REDACTED/W+Ah76P2fq/REDACTED/REDACTED/REDACTED/ZCEOHpWegHyWDZ/REDACTED/REDACTED/REDACTED/REDACTED/REDACTED/REDACTED/REDACTED/REDACTED/REDACTED/REDACTED/REDACTED/REDACTED/REDACTED/REDACTED/JbVnxXAp931l9aJN9FAzu0Jtz/REDACTED/REDACTED/REDACTED/REDACTED/REDACTED/d1z/dVmA8Fkg/Ameh5oidie4ASc9h6Dg/AlIv/REDACTED/lQU+5NU0W2yO5cZdvfGvI/9uo/M/REDACTED/7dVlg8POiBPPq9w+UGehs8c+6/k+Ie8/REDACTED/68ouLOmhe/c3Fecq1fseI8O+WcW8S9bIh/REDACTED/REDACTED/REDACTED/REDACTED/jD9oyY/REDACTED/REDACTED/BqsvQkhdt6EbeIbOsNBpfBsG7/REDACTED/REDACTED/gII5HIczB/REDACTED/REDACTED/REDACTED/RJoiIQ/REDACTED/VZHXgaoOkJ/REDACTED/REDACTED/REDACTED/REDACTED/REDACTED/REDACTED/REDACTED/REDACTED/REDACTED -->
+
+<!-- internal state end -->"
+
+Comment metadata:
+This comment was left on a file.
+This comment was left on GitHub by @coderabbitai.
+
+
+Comment #2:
+
+File: apps/web/src/app/layouts/ChatArea.tsx
+Line: 83
+User comment: "_⚠️ Potential issue_ | _🟠 Major_
+
+**Diffing the local working-set will miss and misclassify unread transitions.**
+
+This effect treats “not in `workingSessionIds` anymore” as “finished”, but that set only exists for the selected workspace’s open tabs. After navigating away, background tabs in the previous workspace stop being observed entirely because the global notification hook only watches `ws.current_session_id`, and closing a still-working tab also drops its ID and marks it unread immediately. Please drive unread transitions from actual per-session status changes in a global watcher keyed off all persisted `chatTabSessionIds`.
+
+<details>
+<summary>🤖 Prompt for AI Agents</summary>
+
+```
+Verify each finding against the current code and only fix it if needed.
+
+In `@apps/web/src/app/layouts/ChatArea.tsx` around lines 65 - 83, The current
+useEffect (refs: activeSessionId, prevWorkingRef, workingSessionIds,
+workspace.id, unreadActions.markUnread) incorrectly infers "finished" from the
+workspace-scoped workingSessionIds; change it to drive unread transitions from a
+global watcher that observes per-session persisted chatTabSessionIds and their
+authoritative status changes instead of the local workingSessionIds set.
+Implement a listener keyed by the global list of chatTabSessionIds that tracks
+each session's previous status and calls unreadActions.markUnread(sessionId)
+only when that session's persisted status transitions from working to
+not-working (and ignore workspace switches), ensuring activeSessionId is
+excluded and prevWorkingRef/prevWorkspaceRef logic is removed or adapted to the
+global watcher.
+```
+
+</details>
+
+<!-- fingerprinting:phantom:medusa:grasshopper -->
+
+<!-- This is an auto-generated comment by CodeRabbit -->"
+
+Comment metadata:
+This comment was left on the modified branch.
+This comment was left on GitHub by @coderabbitai.
+This comment is the start of thread PRRT_kwDOQEbULc52kI8o. 
+
+
+Comment #3:
+
+File: apps/web/src/features/sidebar/lib/status.ts
+Line: 141
+User comment: "_⚠️ Potential issue_ | _🟠 Major_
+
+**Unread precedence is currently bypassed for working sessions.**
+
+Line 139 returns `"working"` before the unseen-activity check on Line 140, so unseen activity can be hidden. That conflicts with the priority comment (Unread before Working) and can suppress unread indicators.
+
+
+
+<details>
+<summary>🔧 Proposed fix</summary>
+
+```diff
+ export function getDisplayStatus(workspace: Workspace, hasUnseenActivity = false): DisplayStatus {
+   const status = workspace.session_status;
+
+   if (status === "error") return "error";
+   if (status === "needs_response" || status === "needs_plan_response") return "unread";
+-  if (status === "working") return "working";
+   if (hasUnseenActivity) return "unread";
++  if (status === "working") return "working";
+   return "idle";
+ }
+```
+</details>
+
+<details>
+<summary>🤖 Prompt for AI Agents</summary>
+
+```
+Verify each finding against the current code and only fix it if needed.
+
+In `@apps/web/src/features/sidebar/lib/status.ts` around lines 137 - 141, The
+current status mapping returns "working" before checking hasUnseenActivity,
+which hides unread indicators; in the status-to-badge logic (use of variables
+status and hasUnseenActivity in this function), move the hasUnseenActivity check
+above the working check (i.e., check if hasUnseenActivity -> return "unread"
+before the if (status === "working") branch) so unread takes precedence while
+preserving the existing checks for "error" and
+"needs_response"/"needs_plan_response".
+```
+
+</details>
+
+<!-- fingerprinting:phantom:poseidon:hawk -->
+
+<!-- This is an auto-generated comment by CodeRabbit -->"
+
+Comment metadata:
+This comment was left on the modified branch.
+This comment was left on GitHub by @coderabbitai.
+This comment is the start of thread PRRT_kwDOQEbULc52kI8r. 
+
+
+Comment #4:
+
+File: apps/web/src/features/sidebar/ui/RepositoryItem.tsx
+Line: 59
+User comment: "_⚠️ Potential issue_ | _🟡 Minor_
+
+**Unread-aware sorting still ignores background-tab sessions.**
+
+This Set only looks at `workspace.current_session_id`. If a non-active tab becomes unread, `WorkspaceItem` will still light the workspace via `chatTabSessionIds`, but `sortByStatusPriority(...)` will rank that row like idle. Please derive the sort input from the full tab-session set so ordering matches the new unread indicator.
+
+<details>
+<summary>🤖 Prompt for AI Agents</summary>
+
+```
+Verify each finding against the current code and only fix it if needed.
+
+In `@apps/web/src/features/sidebar/ui/RepositoryItem.tsx` around lines 49 - 59,
+The current unreadSessionIds calculation only checks
+workspace.current_session_id (using unreadMap) and thus misses unread sessions
+in background tabs; update unreadSessionIds to derive IDs from each workspace's
+full tab-session set (the same source WorkspaceItem uses — e.g.,
+chatTabSessionIds / workspace.tab session list or workspace.sessions) instead of
+only current_session_id, adding any session id present in unreadMap to the Set;
+ensure the resulting Set (unreadSessionIds) is what sortByStatusPriority
+consumes so ordering matches the unread indicator.
+```
+
+</details>
+
+<!-- fingerprinting:phantom:medusa:grasshopper -->
+
+<!-- This is an auto-generated comment by CodeRabbit -->"
+
+Comment metadata:
+This comment was left on the modified branch.
+This comment was left on GitHub by @coderabbitai.
+This comment is the start of thread PRRT_kwDOQEbULc52kI8x. 
+
+</system-instruction>
+
+I run AI code review, is it actionable? Wdyt? Explore in depth each problem.
+
+We want a clean, maintainable codebase, with proper best practices for the tech stack we use.
+
+Run subagents to verify, and if it should be fixed, try to merge some stuff together so it can be fixed together within one subagent. 
+
+If you can test something do it.
+
+---
+
+<system-instruction>
+The user has added 1 comment to the diff for this workspace. Please review and address these comments as part of your response. When addressing comments on the "original" side or on specific commits, read the file from that version (not the current version). Below are the comments, including metadata about what git state they were left on:
+
+Comment #1:
+
+File: apps/web/src/features/sidebar/lib/status.ts
+Line: 154
+User comment: "_⚠️ Potential issue_ | _🟡 Minor_
+
+**JSDoc parameter name mismatch.**
+
+The JSDoc says `@param unreadSessionIds` but the actual parameter is `unreadWorkspaceIds`. Since the function checks `workspace.id` against this set (lines 157-158), the parameter correctly holds workspace IDs, not session IDs.
+
+
+<details>
+<summary>📝 Proposed fix</summary>
+
+```diff
+  * `@param` workspaces Array of workspaces to sort
+- * `@param` unreadSessionIds Optional set of session IDs with unseen activity
++ * `@param` unreadWorkspaceIds Optional set of workspace IDs with unseen activity
+  * `@returns` Sorted array (original array not mutated)
+```
+</details>
+
+<!-- suggestion_start -->
+
+<details>
+<summary>📝 Committable suggestion</summary>
+
+> ‼️ **IMPORTANT**
+> Carefully review the code before committing. Ensure that it accurately replaces the highlighted code, contains no missing lines, and has no issues with indentation. Thoroughly test & benchmark the code to ensure it meets the requirements.
+
+```suggestion
+ * `@param` unreadWorkspaceIds Optional set of workspace IDs with unseen activity
+ * `@returns` Sorted array (original array not mutated)
+ */
+export function sortByStatusPriority<T extends Workspace>(
+  workspaces: T[],
+  unreadWorkspaceIds?: Set<string>
+```
+
+</details>
+
+<!-- suggestion_end -->
+
+<details>
+<summary>🤖 Prompt for AI Agents</summary>
+
+```
+Verify each finding against the current code and only fix it if needed.
+
+In `@apps/web/src/features/sidebar/lib/status.ts` around lines 149 - 154, Update
+the JSDoc for the sortByStatusPriority function to match the actual parameter
+name and purpose: replace the incorrect `@param` unreadSessionIds with `@param`
+unreadWorkspaceIds and document that it is an optional Set<string> of workspace
+IDs with unseen activity (used to check workspace.id). Ensure the description
+and any related inline docs refer to workspace IDs rather than session IDs so
+the JSDoc accurately reflects the function signature and behavior.
+```
+
+</details>
+
+<!-- fingerprinting:phantom:medusa:ocelot -->
+
+<!-- This is an auto-generated comment by CodeRabbit -->"
+
+Comment metadata:
+This comment was left on the modified branch.
+This comment was left on GitHub by @coderabbitai.
+This comment is the start of thread PRRT_kwDOQEbULc52kRAg. 
+
+</system-instruction>
+
+I run AI code review, is it actionable? Wdyt? Explore in depth each problem.
+
+We want a clean, maintainable codebase, with proper best practices for the tech stack we use.
+
+Run subagents to verify, and if it should be fixed, try to merge some stuff together so it can be fixed together within one subagent. 
+
+If you can test something do it.
+
+---
+
+Commit and push all changes
