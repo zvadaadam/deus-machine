@@ -1,15 +1,14 @@
 {
   "cli_version": "0.5.0",
   "checkpoint_id": "33054e91cd0f",
+  "session_id": "c86f9187-f79d-4537-a87d-1439087b355b",
   "strategy": "manual-commit",
+  "created_at": "2026-03-24T18:57:47.111078Z",
   "branch": "zvadaadam/files-top-level-tab",
-  "checkpoints_count": 18,
+  "checkpoints_count": 1,
   "files_touched": [
-    "apps/web/src/app/layouts/ContentTabBar.tsx",
-    "apps/web/src/app/layouts/ContentView.tsx",
     "apps/web/src/app/layouts/MainContent.tsx",
     "apps/web/src/app/layouts/RightSidePanel.tsx",
-    "apps/web/src/app/layouts/content-tabs.ts",
     "apps/web/src/app/layouts/hooks/useWorkspaceActions.ts",
     "apps/web/src/features/file-browser/ui/FileViewer.tsx",
     "apps/web/src/features/session/ui/SessionPanel.tsx",
@@ -18,35 +17,32 @@
     "apps/web/src/features/workspace/lib/changesFilter.ts",
     "apps/web/src/features/workspace/store/index.ts",
     "apps/web/src/features/workspace/store/workspaceLayoutStore.ts",
-    "apps/web/src/features/workspace/ui/AllDiffFileSection.tsx",
     "apps/web/src/features/workspace/ui/AllFilesDiffViewer.tsx",
-    "apps/web/src/features/workspace/ui/ChangesView.tsx",
     "apps/web/src/features/workspace/ui/CodePanelContent.tsx",
     "apps/web/src/features/workspace/ui/ContentTabBar.tsx",
     "apps/web/src/features/workspace/ui/DiffFilesTree.tsx",
-    "apps/web/src/features/workspace/ui/FilesView.tsx",
     "apps/web/src/features/workspace/ui/index.ts",
     "apps/web/src/platform/analytics/events.ts"
   ],
-  "sessions": [
-    {
-      "metadata": "/33/054e91cd0f/0/metadata.json",
-      "transcript": "/33/054e91cd0f/0/full.jsonl",
-      "content_hash": "/33/054e91cd0f/0/content_hash.txt",
-      "prompt": "/33/054e91cd0f/0/prompt.txt"
-    },
-    {
-      "metadata": "/33/054e91cd0f/1/metadata.json",
-      "transcript": "/33/054e91cd0f/1/full.jsonl",
-      "content_hash": "/33/054e91cd0f/1/content_hash.txt",
-      "prompt": "/33/054e91cd0f/1/prompt.txt"
-    }
-  ],
+  "agent": "Claude Code",
+  "turn_id": "2f55d8e503d8",
   "token_usage": {
-    "input_tokens": 349,
-    "cache_creation_tokens": 730642,
-    "cache_read_tokens": 21590530,
-    "output_tokens": 78696,
-    "api_call_count": 202
+    "input_tokens": 9,
+    "cache_creation_tokens": 56160,
+    "cache_read_tokens": 146566,
+    "output_tokens": 3638,
+    "api_call_count": 5
+  },
+  "session_metrics": {
+    "turn_count": 1
+  },
+  "initial_attribution": {
+    "calculated_at": "2026-03-24T18:57:47.090479Z",
+    "agent_lines": 136,
+    "human_added": 484,
+    "human_modified": 18,
+    "human_removed": 0,
+    "total_committed": 638,
+    "agent_percentage": 21.316614420062695
   }
 }
