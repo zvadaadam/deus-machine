@@ -167,8 +167,10 @@ export const AllFilesDiffViewer = forwardRef<AllFilesDiffViewerRef, AllFilesDiff
     useEffect(() => {
       if (!initialScrollTarget) return;
       const raf = requestAnimationFrame(() => {
+        const target = resolveSection(initialScrollTarget);
+        if (!target) return;
         setActiveFilePath(initialScrollTarget);
-        resolveSection(initialScrollTarget)?.scrollIntoView({
+        target.scrollIntoView({
           behavior: "auto",
           block: "start",
         });
