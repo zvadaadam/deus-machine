@@ -53,3 +53,14 @@ Okay, yes, the option C is good. Just the option C. And also, I would hate to se
 ---
 
 /code-simplifier /deslop
+
+---
+
+<system_instruction>
+The user has attached these files. Read them before proceeding.
+- /Users/zvada/Developer/agent/box-ide/.conductor/spokane-v3/.context/attachments/PR instructions.md (961 B)
+</system_instruction>
+
+
+
+Create a PR
