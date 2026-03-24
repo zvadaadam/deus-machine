@@ -1,10 +1,15 @@
 import { useState, useMemo } from "react";
-import { Copy, Check, Loader2, X } from "lucide-react";
+import { Copy, Check, Loader2, X, Code, BookOpen } from "lucide-react";
 import { highlightFileLines } from "@/shared/lib/syntaxHighlighter";
 import { detectLanguageFromPath } from "@/features/session/ui/tools/utils/detectLanguage";
+import { MarkdownRenderer } from "@/components/markdown/MarkdownRenderer";
 import { useTheme } from "@/app/providers";
 import { useFileContent } from "../api/useFileContent";
 import { useQuery } from "@tanstack/react-query";
+
+function isMarkdownFile(filePath: string): boolean {
+  return /\.(md|markdown|mdx)$/i.test(filePath);
+}
 
 interface FileViewerProps {
   workspaceId: string;
@@ -28,6 +33,8 @@ interface FileViewerProps {
  */
 export function FileViewer({ workspaceId, filePath, onClose }: FileViewerProps) {
   const [copied, setCopied] = useState(false);
+  const isMarkdown = isMarkdownFile(filePath);
+  const [showRawMarkdown, setShowRawMarkdown] = useState(false);
 
   // Use app theme provider for syntax highlighting
   const { actualTheme } = useTheme();
@@ -113,8 +120,21 @@ export function FileViewer({ workspaceId, filePath, onClose }: FileViewerProps) 
             <span className="text-foreground font-medium">{filename || "Untitled"}</span>
           </div>
 
-          {/* Right: Copy + Close buttons */}
+          {/* Right: Toggle + Copy + Close buttons */}
           <div className="flex items-center gap-1">
+            {/* Markdown preview/raw toggle */}
+            {isMarkdown && !isLoading && !error && content && (
+              <button
+                type="button"
+                onClick={() => setShowRawMarkdown((v) => !v)}
+                className="text-muted-foreground hover:text-foreground ease flex h-5 w-5 items-center justify-center rounded-md transition-colors duration-200"
+                title={showRawMarkdown ? "Show preview" : "Show raw markdown"}
+                aria-label={showRawMarkdown ? "Show preview" : "Show raw markdown"}
+              >
+                {showRawMarkdown ? <BookOpen className="h-3 w-3" /> : <Code className="h-3 w-3" />}
+              </button>
+            )}
+
             {/* Copy button */}
             {!isLoading && !error && content && (
               <button
@@ -168,6 +188,10 @@ export function FileViewer({ workspaceId, filePath, onClose }: FileViewerProps) 
         ) : isEmpty || lines.length === 0 ? (
           <div className="text-muted-foreground/60 flex h-64 items-center justify-center">
             <p className="text-sm">Empty file</p>
+          </div>
+        ) : isMarkdown && !showRawMarkdown ? (
+          <div className="markdown-content px-6 py-4">
+            <MarkdownRenderer allowHtml>{content!}</MarkdownRenderer>
           </div>
         ) : (
           <div>{highlightedLines?.map((html, idx) => renderLine(html, idx + 1))}</div>

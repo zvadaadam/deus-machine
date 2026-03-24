@@ -1,8 +1,8 @@
 /**
  * Changes filter — shared type and options for the diff filter dropdown.
  *
- * Used by both CodePanelContent (Changes sub-tab) and FileBrowserPanel
- * (standalone Changes mode). Extracting just the data avoids duplicating
+ * Used by ChangesView and FileBrowserPanel.
+ * Extracting just the data avoids duplicating
  * the type alias and options array while keeping UI rendering independent.
  */
 
