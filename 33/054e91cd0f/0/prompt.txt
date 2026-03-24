@@ -153,3 +153,14 @@ All 4 review axes came back clean:
 - **Introduced code problems:** No security issues, no incorrect logic, no memory leaks. The `content!` non-null assertion in `FileViewer.tsx` is safe (guarded by earlier loading/error/empty checks). `MarkdownRenderer` with `allowHtml` uses `rehype-sanitize`.
 
 One potential issue (`duration-150` instead of `duration-200 ease` on hover transitions) was flagged but validated as **pre-existing** — the identical pattern existed in the old `ContentTabBar.tsx` on `main` and was carried forward unchanged during the file relocation.
+
+---
+
+<system_instruction>
+The user has attached these files. Read them before proceeding.
+- /Users/zvada/Developer/agent/box-ide/.conductor/la-paz-v3/.context/attachments/PR instructions.md (954 B)
+</system_instruction>
+
+
+
+Create a PR
