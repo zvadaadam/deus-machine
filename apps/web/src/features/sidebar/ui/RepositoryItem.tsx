@@ -1,5 +1,5 @@
 import { useMemo } from "react";
-import { Plus, ChevronRight, GitPullRequest } from "lucide-react";
+import { Plus, ChevronRight, ChevronDown, GitPullRequest } from "lucide-react";
 import { AnimatePresence, m, useReducedMotion } from "framer-motion";
 import { SidebarMenuItem } from "@/components/ui/sidebar";
 import { Collapsible, CollapsibleTrigger } from "@/components/ui/collapsible";
@@ -7,9 +7,12 @@ import { Tooltip, TooltipTrigger, TooltipContent } from "@/components/ui/tooltip
 import { cn } from "@/shared/lib/utils";
 import { useUnreadStore } from "@/features/session/store/unreadStore";
 import { useWorkspaceLayoutStore } from "@/features/workspace/store/workspaceLayoutStore";
-import { getCleanRepoName } from "../lib/utils";
+import { getCleanRepoName, splitByRecency } from "../lib/utils";
 import { sortByStatusPriority } from "../lib/status";
+import { useSidebarStore } from "../store/sidebarStore";
 import type { RepositoryItemProps } from "../model/types";
+import type { Workspace, DiffStats, RepoGroup } from "@/shared/types";
+import type { WorkspaceStatus } from "@shared/enums";
 import { WorkspaceItem } from "./WorkspaceItem";
 import { RepoAvatar } from "./RepoAvatar";
 import { SidebarRow, SidebarRowMain, SidebarRowIconSlot, SidebarRowRight } from "./SidebarRow";
@@ -150,87 +153,161 @@ export function RepositoryItem({
             transition={{ duration: 0.22, ease: [0.165, 0.84, 0.44, 1] }}
             className="flex min-w-0 flex-col overflow-hidden"
           >
-            {sidebarExpanded &&
-              (() => {
-                const sortedWorkspaces = sortByStatusPriority(
-                  repository.workspaces.filter((w) => w.state !== "archived"),
-                  unreadWorkspaceIds
-                );
-
-                return (
-                  <>
-                    {/* OpenDevs repo gets a special contribution nudge banner */}
-                    {isOpenDevs && (
-                      <m.li
-                        initial={reduceMotion ? false : { opacity: 0, y: -4 }}
-                        animate={{ opacity: 1, y: 0 }}
-                        transition={{
-                          duration: 0.22,
-                          ease: [0.165, 0.84, 0.44, 1],
-                          delay: reduceMotion ? 0 : 0.02,
-                        }}
-                      >
-                        <OpenDevsRepositoryBanner
-                          onNewWorkspace={() => onNewWorkspace(repository.repo_id)}
-                        />
-                      </m.li>
-                    )}
-
-                    {sortedWorkspaces.length === 0 && (
-                      <m.li
-                        initial={reduceMotion ? false : { opacity: 0, y: -4 }}
-                        animate={{ opacity: 1, y: 0 }}
-                        transition={{
-                          duration: 0.18,
-                          ease: [0.165, 0.84, 0.44, 1],
-                          delay: reduceMotion ? 0 : 0.03,
-                        }}
-                      >
-                        <SidebarRow
-                          variant="action"
-                          asChild
-                          onClick={() => onNewWorkspace(repository.repo_id)}
-                          className="text-text-tertiary hover:text-text-secondary w-full text-left text-base"
-                        >
-                          <button type="button">
-                            <SidebarRowMain>
-                              <SidebarRowIconSlot>
-                                <Plus className="h-4 w-4" />
-                              </SidebarRowIconSlot>
-                              <span className="font-normal">New workspace</span>
-                            </SidebarRowMain>
-                          </button>
-                        </SidebarRow>
-                      </m.li>
-                    )}
-
-                    {sortedWorkspaces.map((workspace, index) => (
-                      <m.li
-                        key={workspace.id}
-                        initial={reduceMotion ? false : { opacity: 0, y: -4 }}
-                        animate={{ opacity: 1, y: 0 }}
-                        transition={{
-                          duration: 0.18,
-                          ease: [0.165, 0.84, 0.44, 1],
-                          delay: reduceMotion ? 0 : Math.min(0.05 + index * 0.025, 0.12),
-                        }}
-                      >
-                        <WorkspaceItem
-                          workspace={workspace}
-                          isActive={workspace.id === selectedWorkspaceId}
-                          diffStats={diffStatsMap?.[workspace.id]}
-                          onClick={onWorkspaceClick}
-                          onArchive={onArchive}
-                          onStatusChange={onStatusChange}
-                        />
-                      </m.li>
-                    ))}
-                  </>
-                );
-              })()}
+            {sidebarExpanded && (
+              <RepositoryWorkspaceList
+                repository={repository}
+                isOpenDevs={isOpenDevs}
+                selectedWorkspaceId={selectedWorkspaceId}
+                unreadWorkspaceIds={unreadWorkspaceIds}
+                diffStatsMap={diffStatsMap}
+                reduceMotion={reduceMotion}
+                onNewWorkspace={onNewWorkspace}
+                onWorkspaceClick={onWorkspaceClick}
+                onArchive={onArchive}
+                onStatusChange={onStatusChange}
+              />
+            )}
           </m.ul>
         )}
       </AnimatePresence>
     </Collapsible>
+  );
+}
+
+// ── Inner list with stale-workspace collapsing ───────────────────────────
+
+interface RepositoryWorkspaceListProps {
+  repository: RepoGroup;
+  isOpenDevs: boolean;
+  selectedWorkspaceId: string | null;
+  unreadWorkspaceIds?: Set<string>;
+  diffStatsMap?: Record<string, DiffStats>;
+  reduceMotion: boolean | null;
+  onNewWorkspace: (repoId?: string) => void;
+  onWorkspaceClick: (workspace: Workspace) => void;
+  onArchive?: (workspaceId: string) => void;
+  onStatusChange?: (workspaceId: string, status: WorkspaceStatus) => void;
+}
+
+function RepositoryWorkspaceList({
+  repository,
+  isOpenDevs,
+  selectedWorkspaceId,
+  unreadWorkspaceIds,
+  diffStatsMap,
+  reduceMotion,
+  onNewWorkspace,
+  onWorkspaceClick,
+  onArchive,
+  onStatusChange,
+}: RepositoryWorkspaceListProps) {
+  const isExpanded = useSidebarStore((s) => s.expandedOldWorkspaces.has(repository.repo_id));
+  const toggleOldWorkspaces = useSidebarStore((s) => s.toggleOldWorkspaces);
+
+  const sortedWorkspaces = sortByStatusPriority(
+    repository.workspaces.filter((w) => w.state !== "archived"),
+    unreadWorkspaceIds
+  );
+
+  const [visible, stale] = splitByRecency(sortedWorkspaces, selectedWorkspaceId);
+  const hasStale = stale.length > 0;
+  const displayedWorkspaces = hasStale && !isExpanded ? visible : sortedWorkspaces;
+
+  return (
+    <>
+      {isOpenDevs && (
+        <m.li
+          initial={reduceMotion ? false : { opacity: 0, y: -4 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{
+            duration: 0.22,
+            ease: [0.165, 0.84, 0.44, 1],
+            delay: reduceMotion ? 0 : 0.02,
+          }}
+        >
+          <OpenDevsRepositoryBanner onNewWorkspace={() => onNewWorkspace(repository.repo_id)} />
+        </m.li>
+      )}
+
+      {sortedWorkspaces.length === 0 && (
+        <m.li
+          initial={reduceMotion ? false : { opacity: 0, y: -4 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{
+            duration: 0.18,
+            ease: [0.165, 0.84, 0.44, 1],
+            delay: reduceMotion ? 0 : 0.03,
+          }}
+        >
+          <SidebarRow
+            variant="action"
+            asChild
+            onClick={() => onNewWorkspace(repository.repo_id)}
+            className="text-text-tertiary hover:text-text-secondary w-full text-left text-base"
+          >
+            <button type="button">
+              <SidebarRowMain>
+                <SidebarRowIconSlot>
+                  <Plus className="h-4 w-4" />
+                </SidebarRowIconSlot>
+                <span className="font-normal">New workspace</span>
+              </SidebarRowMain>
+            </button>
+          </SidebarRow>
+        </m.li>
+      )}
+
+      {displayedWorkspaces.map((workspace, index) => (
+        <m.li
+          key={workspace.id}
+          initial={reduceMotion ? false : { opacity: 0, y: -4 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{
+            duration: 0.18,
+            ease: [0.165, 0.84, 0.44, 1],
+            delay: reduceMotion ? 0 : Math.min(0.05 + index * 0.025, 0.12),
+          }}
+        >
+          <WorkspaceItem
+            workspace={workspace}
+            isActive={workspace.id === selectedWorkspaceId}
+            diffStats={diffStatsMap?.[workspace.id]}
+            onClick={onWorkspaceClick}
+            onArchive={onArchive}
+            onStatusChange={onStatusChange}
+          />
+        </m.li>
+      ))}
+
+      {hasStale && (
+        <m.li
+          initial={reduceMotion ? false : { opacity: 0 }}
+          animate={{ opacity: 1 }}
+          transition={{ duration: 0.15, ease: [0.165, 0.84, 0.44, 1] }}
+        >
+          <SidebarRow
+            variant="action"
+            asChild
+            className="text-text-muted hover:text-text-secondary w-full text-left"
+          >
+            <button type="button" onClick={() => toggleOldWorkspaces(repository.repo_id)}>
+              <SidebarRowMain>
+                <SidebarRowIconSlot>
+                  <ChevronDown
+                    className={cn(
+                      "h-3.5 w-3.5 transition-transform duration-150",
+                      isExpanded && "rotate-180"
+                    )}
+                  />
+                </SidebarRowIconSlot>
+                <span className="text-xs font-medium">
+                  {isExpanded ? "Show less" : `Show ${stale.length} more`}
+                </span>
+              </SidebarRowMain>
+            </button>
+          </SidebarRow>
+        </m.li>
+      )}
+    </>
   );
 }
