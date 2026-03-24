@@ -26,6 +26,7 @@ interface UseSessionActionsProps {
   messageInput: string;
   model?: string;
   agentType?: RuntimeAgentType;
+  permissionMode?: string;
   onMessageSent?: () => void;
   targetBranch?: string;
 }
@@ -48,6 +49,7 @@ export function useSessionActions({
   messageInput,
   model,
   agentType = "claude",
+  permissionMode,
   onMessageSent,
   targetBranch = "main",
 }: UseSessionActionsProps): UseSessionActionsReturn {
@@ -68,6 +70,7 @@ export function useSessionActions({
           model,
           cwd: workspacePath,
           agentType,
+          permissionMode,
         });
       } catch (error) {
         console.error("Failed to send message:", error);
@@ -84,7 +87,16 @@ export function useSessionActions({
         console.error("[useSessionActions] onMessageSent callback failed:", callbackError);
       }
     },
-    [messageInput, model, sendMessageMutation, sessionId, workspacePath, agentType, onMessageSent]
+    [
+      messageInput,
+      model,
+      sendMessageMutation,
+      sessionId,
+      workspacePath,
+      agentType,
+      permissionMode,
+      onMessageSent,
+    ]
   );
 
   const stopSession = useCallback(async () => {

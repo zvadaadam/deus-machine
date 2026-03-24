@@ -25,6 +25,7 @@ import {
 } from "../lib/agentRuntime";
 import { ThinkingIndicator } from "./ThinkingIndicator";
 import { ModelPicker } from "./ModelPicker";
+import { PlanModeToggle } from "./PlanModeToggle";
 import { ContextTokenIndicator } from "./ContextTokenIndicator";
 
 interface Attachment {
@@ -81,6 +82,10 @@ interface MessageInputProps {
   /** Called when user picks a model from a locked agent group (opens new tab) */
   onOpenNewTab?: (initialModel?: string) => void;
   onThinkingLevelChange?: (level: string) => void;
+  planModeEnabled?: boolean;
+  onPlanModeToggle?: () => void;
+  planModeDisabled?: boolean;
+  hasPendingPlan?: boolean;
   className?: string;
 }
 
@@ -105,6 +110,10 @@ export const MessageInput = forwardRef<MessageInputRef, MessageInputProps>(funct
     onModelChange,
     onOpenNewTab,
     onThinkingLevelChange,
+    planModeEnabled = false,
+    onPlanModeToggle,
+    planModeDisabled = false,
+    hasPendingPlan = false,
     className,
   },
   ref
@@ -436,6 +445,13 @@ export const MessageInput = forwardRef<MessageInputRef, MessageInputProps>(funct
         >
           {/* Controls group (left) */}
           <div className="flex items-center gap-0.5">
+            {onPlanModeToggle && (
+              <PlanModeToggle
+                enabled={planModeEnabled}
+                onClick={onPlanModeToggle}
+                disabled={planModeDisabled}
+              />
+            )}
             <ModelPicker
               model={model}
               hasMessages={hasMessages}
@@ -474,8 +490,8 @@ export const MessageInput = forwardRef<MessageInputRef, MessageInputProps>(funct
               onCompact={onCompact}
             />
 
-            {/* Stop button - shows when session is working */}
-            {sessionStatus === "working" && (
+            {/* Stop button - hidden when plan approval is pending (agent is blocked, not working) */}
+            {sessionStatus === "working" && !hasPendingPlan && (
               <InputGroupButton
                 onClick={onStop}
                 variant="default"

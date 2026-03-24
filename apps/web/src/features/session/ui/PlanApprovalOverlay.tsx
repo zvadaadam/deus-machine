@@ -1,17 +1,6 @@
-// src/features/session/ui/PlanApprovalOverlay.tsx
-//
-// Renders the plan approval UI when the agent calls ExitPlanMode.
-//
-// The plan content itself is already visible in the chat as regular assistant messages —
-// the agent writes a plan in text before calling ExitPlanMode. This overlay only adds
-// the Approve / Reject action buttons.
-//
-// Design rationale:
-// - Rendered inline at the bottom of Chat (above MessageInput), not as a modal.
-//   This preserves context — the user can scroll up to re-read the plan.
-// - AnimatePresence handles mount/unmount transitions (Framer Motion per CLAUDE.md).
-// - Clicking Reject sends { approved: false } immediately without asking the user
-//   to type a reason — that explanation flows in the next user message naturally.
+// Plan approval overlay — inline at bottom of Chat (above MessageInput).
+// Only shows Approve / Reject buttons. Plan content is rendered inline
+// in the chat via ExitPlanModeToolRenderer.
 
 import { AnimatePresence, motion } from "framer-motion";
 import { Check, X } from "lucide-react";
@@ -32,6 +21,8 @@ export function PlanApprovalOverlay({
   onApprove,
   onReject,
 }: PlanApprovalOverlayProps) {
+  const Logo = getAgentLogo(agentType || "claude");
+
   return (
     <AnimatePresence>
       {request && (
@@ -46,19 +37,12 @@ export function PlanApprovalOverlay({
           aria-label="Plan approval"
           aria-live="polite"
         >
-          {(() => {
-            const Logo = getAgentLogo(agentType || "claude");
-            return Logo ? <Logo className="h-5 w-5 shrink-0" aria-hidden="true" /> : null;
-          })()}
+          {/* eslint-disable-next-line react-hooks/static-components */}
+          {Logo && <Logo className="h-5 w-5 shrink-0" aria-hidden="true" />}
 
-          <div className="min-w-0 flex-1">
-            <p className="text-foreground text-sm font-medium">
-              Agent is ready to execute the plan
-            </p>
-            <p className="text-muted-foreground mt-0.5 text-xs">
-              Review the plan above, then approve or reject.
-            </p>
-          </div>
+          <p className="text-foreground min-w-0 flex-1 text-sm font-medium">
+            Agent is ready to execute the plan
+          </p>
 
           <div className="flex shrink-0 items-center gap-2">
             <Button

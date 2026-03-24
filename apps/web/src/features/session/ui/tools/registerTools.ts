@@ -37,6 +37,9 @@ import {
   BrowserScreenshotToolRenderer,
   BrowserNetworkRequestsToolRenderer,
   BrowserScrollToolRenderer,
+  // Plan mode lifecycle
+  EnterPlanModeToolRenderer,
+  ExitPlanModeToolRenderer,
   // OpenDevs MCP — Workspace
   AskUserQuestionToolRenderer,
   GetWorkspaceDiffToolRenderer,
@@ -74,6 +77,10 @@ export function registerAllTools() {
   toolRegistry.register("Task", TaskToolRenderer);
   toolRegistry.register("Agent", TaskToolRenderer); // Claude SDK "Agent" = same as "Task"
   toolRegistry.register("LS", LSToolRenderer);
+
+  // Plan mode lifecycle tools
+  toolRegistry.register("EnterPlanMode", EnterPlanModeToolRenderer);
+  toolRegistry.register("ExitPlanMode", ExitPlanModeToolRenderer);
 
   // OpenDevs MCP — Browser automation tools
   toolRegistry.register("BrowserSnapshot", BrowserSnapshotToolRenderer);
