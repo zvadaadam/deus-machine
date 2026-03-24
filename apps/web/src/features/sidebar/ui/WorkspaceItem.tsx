@@ -6,6 +6,8 @@ import NumberFlow from "@number-flow/react";
 import { cn } from "@/shared/lib/utils";
 import { useWorkingDuration, formatDuration } from "@/shared/hooks";
 import { CircularPixelGrid } from "@/features/session/ui/CircularPixelGrid";
+import { useUnreadStore } from "@/features/session/store/unreadStore";
+import { useWorkspaceLayoutStore } from "@/features/workspace/store/workspaceLayoutStore";
 import { getDisplayStatus, STATUS_CONFIG } from "../lib/status";
 import { getWorkspaceDisplayName, getWorkspaceSecondaryText } from "../lib/utils";
 import type { WorkspaceItemProps } from "../model/types";
@@ -45,6 +47,18 @@ export const WorkspaceItem = React.memo(function WorkspaceItem({
   const { duration } = useWorkingDuration({
     status: workspace.session_status,
     latestMessageSentAt: workspace.latest_message_sent_at,
+  });
+
+  // Check all sessions in this workspace's tabs for unseen activity,
+  // not just current_session_id — the user may have multiple tabs open.
+  const tabSessionIds = useWorkspaceLayoutStore((s) => s.layouts[workspace.id]?.chatTabSessionIds);
+  const hasUnseenActivity = useUnreadStore((s) => {
+    const ids = tabSessionIds?.length
+      ? tabSessionIds
+      : workspace.current_session_id
+        ? [workspace.current_session_id]
+        : [];
+    return ids.some((sid) => s.unreadSessionIds[sid]);
   });
 
   // Initializing state: non-interactive row with loading animation
@@ -107,7 +121,7 @@ export const WorkspaceItem = React.memo(function WorkspaceItem({
     return `${diffMonths}mo ago`;
   };
 
-  const displayStatus = getDisplayStatus(workspace);
+  const displayStatus = getDisplayStatus(workspace, hasUnseenActivity);
   const statusConfig = STATUS_CONFIG[displayStatus];
   // Session activity icons take priority over workflow status
   const hasSessionIcon =
@@ -134,7 +148,13 @@ export const WorkspaceItem = React.memo(function WorkspaceItem({
 
     return match(displayStatus)
       .with("idle", () => formatTime(workspace.updated_at))
-      .with("unread", () => "Needs response")
+      .with("unread", () => {
+        const sessionStatus = workspace.session_status;
+        if (sessionStatus === "needs_response" || sessionStatus === "needs_plan_response") {
+          return "Needs response";
+        }
+        return "Done";
+      })
       .with("working", () =>
         duration > 0 ? formatDuration(duration, false) : STATUS_CONFIG.working.labelActive
       )

@@ -5,11 +5,12 @@
  * This component focuses on layout and connecting tabs to SessionPanel.
  */
 
-import { useMemo } from "react";
+import { useMemo, useCallback, useEffect, useRef } from "react";
 import type { Dispatch, SetStateAction } from "react";
 import { SessionPanel } from "@/features/session";
 import type { SessionPanelRef } from "@/features/session";
 import { useWorkingSessionIds } from "@/features/session/api/session.queries";
+import { useUnreadStore, unreadActions } from "@/features/session/store/unreadStore";
 import { WorkspaceEmptyState } from "@/features/session/ui/WorkspaceEmptyState";
 import { MainContentTabBar } from "@/features/workspace";
 import type { Workspace } from "@/shared/types";
@@ -61,13 +62,52 @@ export function ChatArea({
   );
   const workingSessionIds = useWorkingSessionIds(chatSessionIds);
 
+  // Mark non-active tab sessions as unread when they leave the working set.
+  const activeSessionId = activeTab?.data?.sessionId;
+  const prevWorkingRef = useRef(workingSessionIds);
+  const prevWorkspaceRef = useRef(workspace.id);
+  useEffect(() => {
+    // Reset on workspace switch — don't compare across workspaces
+    if (prevWorkspaceRef.current !== workspace.id) {
+      prevWorkspaceRef.current = workspace.id;
+      prevWorkingRef.current = workingSessionIds;
+      return;
+    }
+    const prev = prevWorkingRef.current;
+    prevWorkingRef.current = workingSessionIds;
+    for (const sid of prev) {
+      if (!workingSessionIds.has(sid) && sid !== activeSessionId) {
+        unreadActions.markUnread(sid);
+      }
+    }
+  }, [workingSessionIds, activeSessionId, workspace.id]);
+
+  const unreadMap = useUnreadStore((s) => s.unreadSessionIds);
+  const unreadSessionIds = useMemo(
+    () => new Set(chatSessionIds.filter((sid) => unreadMap[sid])),
+    [chatSessionIds, unreadMap]
+  );
+
+  // Wrap tab change to mark the newly-active session as read inline
+  const handleTabChangeWithRead = useCallback(
+    (tabId: string) => {
+      const tab = tabs.find((t) => t.id === tabId);
+      if (tab?.data?.sessionId) {
+        unreadActions.markRead(tab.data.sessionId);
+      }
+      handleTabChange(tabId);
+    },
+    [tabs, handleTabChange]
+  );
+
   return (
     <div className="flex h-full min-w-0 flex-1 flex-col overflow-hidden">
       <MainContentTabBar
         tabs={tabs}
         activeTabId={activeTabId}
         workingSessionIds={workingSessionIds}
-        onTabChange={handleTabChange}
+        unreadSessionIds={unreadSessionIds}
+        onTabChange={handleTabChangeWithRead}
         onTabClose={handleTabClose}
         onTabAdd={handleTabAdd}
         onTabReorder={handleTabReorder}

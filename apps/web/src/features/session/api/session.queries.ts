@@ -17,10 +17,10 @@ import {
 import type { ContentBlock, Message, Session, SessionStatus } from "../types";
 import { isToolResultBlock } from "../types";
 import type { RepoGroup } from "@shared/types/workspace";
-import { useMemo, useCallback } from "react";
+import { useEffect, useMemo, useCallback } from "react";
 import { track } from "@/platform/analytics";
 import { parseContentBlocks } from "../lib/contentParser";
-import { sendCommand, connect, isConnected } from "@/platform/ws";
+import { sendCommand, connect, isConnected, subscribe } from "@/platform/ws";
 import { emitSendAttemptFailed } from "@/features/connection";
 import type { RuntimeAgentType } from "../lib/agentRuntime";
 
@@ -69,29 +69,39 @@ export function useSession(sessionId: string | null) {
 
 /**
  * Subscribe to per-session working status for multiple sessions at once.
- * Used by the tab bar to show per-tab spinners correctly.
+ * Used by the tab bar to show per-tab spinners and unread detection.
  *
- * The workspace's single `session_status` field breaks with multiple tabs —
- * it gets overwritten by whichever session's event fires last. This hook
- * subscribes to each session's detail cache reactively so tab spinners
- * reflect each session's actual status.
- *
- * No extra HTTP fetches when data is already in cache (populated by
- * the "session" WS subscription via q:snapshot on status changes).
+ * Subscribes each session to WS push so status transitions arrive in real
+ * time — even for non-active tabs. Without this, only the active tab
+ * (via useSession) receives WS updates; background tabs rely on stale
+ * HTTP cache and never trigger unread detection.
  */
 export function useWorkingSessionIds(sessionIds: string[]): Set<string> {
+  const queryClient = useQueryClient();
+
+  // WS-subscribe all tab sessions so status pushes keep the cache fresh.
+  const stableKey = useMemo(() => sessionIds.join(","), [sessionIds]);
+  useEffect(() => {
+    if (!sessionIds.length) return;
+    const unsubs = sessionIds.map((id) =>
+      subscribe("session", { sessionId: id }, (data) => {
+        queryClient.setQueryData(queryKeys.sessions.detail(id), data);
+      })
+    );
+    return () => unsubs.forEach((u) => u());
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [stableKey, queryClient]);
+
   const queries = useQueries({
     queries: sessionIds.map((id) => ({
       queryKey: queryKeys.sessions.detail(id),
       queryFn: () => SessionService.fetchById(id),
-      staleTime: 30_000,
+      staleTime: Infinity, // WS handles freshness now
+      refetchOnWindowFocus: false,
       select: (data: Session): SessionStatus => data.status,
     })),
   });
 
-  // Derive working IDs from query results. useMemo deps use `queries`
-  // directly — React Compiler requires it. The select: data.status
-  // ensures queries only change identity when a status actually changes.
   return useMemo(() => {
     const ids = new Set<string>();
     sessionIds.forEach((id, i) => {

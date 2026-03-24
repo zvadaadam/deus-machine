@@ -1,9 +1,12 @@
+import { useMemo } from "react";
 import { Plus, ChevronRight, GitPullRequest } from "lucide-react";
 import { AnimatePresence, m, useReducedMotion } from "framer-motion";
 import { SidebarMenuItem } from "@/components/ui/sidebar";
 import { Collapsible, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { Tooltip, TooltipTrigger, TooltipContent } from "@/components/ui/tooltip";
 import { cn } from "@/shared/lib/utils";
+import { useUnreadStore } from "@/features/session/store/unreadStore";
+import { useWorkspaceLayoutStore } from "@/features/workspace/store/workspaceLayoutStore";
 import { getCleanRepoName } from "../lib/utils";
 import { sortByStatusPriority } from "../lib/status";
 import type { RepositoryItemProps } from "../model/types";
@@ -43,6 +46,24 @@ export function RepositoryItem({
 }: RepositoryItemProps) {
   const reduceMotion = useReducedMotion();
   const repoName = getCleanRepoName(repository.repo_name);
+
+  // Build set of workspace IDs that have any unread tab session,
+  // checking all tab sessions (matching WorkspaceItem's logic).
+  const unreadMap = useUnreadStore((s) => s.unreadSessionIds);
+  const layouts = useWorkspaceLayoutStore((s) => s.layouts);
+  const unreadWorkspaceIds = useMemo(() => {
+    const ids = new Set<string>();
+    for (const ws of repository.workspaces) {
+      const tabIds = layouts[ws.id]?.chatTabSessionIds;
+      const sessionIds = tabIds?.length
+        ? tabIds
+        : ws.current_session_id
+          ? [ws.current_session_id]
+          : [];
+      if (sessionIds.some((sid) => unreadMap[sid])) ids.add(ws.id);
+    }
+    return ids.size > 0 ? ids : undefined;
+  }, [repository.workspaces, unreadMap, layouts]);
   // Detect the opendevs repo by clean name (works for "opendevs" or "org/opendevs")
   const isOpenDevs = repoName === "opendevs";
   const workspaceCount = repository.workspaces.filter((w) => w.state !== "archived").length;
@@ -132,7 +153,8 @@ export function RepositoryItem({
             {sidebarExpanded &&
               (() => {
                 const sortedWorkspaces = sortByStatusPriority(
-                  repository.workspaces.filter((w) => w.state !== "archived")
+                  repository.workspaces.filter((w) => w.state !== "archived"),
+                  unreadWorkspaceIds
                 );
 
                 return (
