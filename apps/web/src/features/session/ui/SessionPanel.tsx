@@ -196,6 +196,7 @@ export const SessionPanel = forwardRef<SessionPanelRef, SessionPanelProps>(
     const [messageInput, setMessageInput] = useState("");
     const [thinkingLevel, setThinkingLevel] = useState("NONE");
     const [model, setModel] = useState(initialModel ?? "opus");
+    const [planModeEnabled, setPlanModeEnabled] = useState(false);
     // Counter incremented when the human clicks Send — triggers auto-scroll resume
     const [userSendCount, setUserSendCount] = useState(0);
     const runtimeModelId = getRuntimeModelId(model);
@@ -232,6 +233,7 @@ export const SessionPanel = forwardRef<SessionPanelRef, SessionPanelProps>(
       messageInput,
       model: runtimeModelId,
       agentType: modelAgentType,
+      permissionMode: planModeEnabled ? "plan" : undefined,
       targetBranch: workspaceParentBranch ?? "main",
       onMessageSent: () => {
         setMessageInput("");
@@ -378,9 +380,6 @@ export const SessionPanel = forwardRef<SessionPanelRef, SessionPanelProps>(
               userSendCount={userSendCount}
             />
 
-            {/* Fade overlay: smoothly transitions chat scroll area into input */}
-            <div className="bg-fade-overlay pointer-events-none relative z-10 -mb-8 h-8 shrink-0" />
-
             {/* Agent-initiated interaction overlays — appear above MessageInput */}
             <PlanApprovalOverlay
               request={pendingPlan}
@@ -415,6 +414,10 @@ export const SessionPanel = forwardRef<SessionPanelRef, SessionPanelProps>(
               onModelChange={handleModelChange}
               onOpenNewTab={onOpenNewTab}
               onThinkingLevelChange={handleThinkingLevelChange}
+              planModeEnabled={planModeEnabled}
+              onPlanModeToggle={() => setPlanModeEnabled((p) => !p)}
+              planModeDisabled={modelAgentType === "codex"}
+              hasPendingPlan={!!pendingPlan}
             />
           </div>
         </SessionProvider>
@@ -484,9 +487,6 @@ export const SessionPanel = forwardRef<SessionPanelRef, SessionPanelProps>(
                     userSendCount={userSendCount}
                   />
 
-                  {/* Fade overlay: smoothly transitions chat scroll area into input */}
-                  <div className="bg-fade-overlay pointer-events-none relative z-10 -mb-8 h-8 shrink-0" />
-
                   {/* Agent-initiated interaction overlays — appear above MessageInput */}
                   <PlanApprovalOverlay
                     request={pendingPlan}
@@ -523,6 +523,10 @@ export const SessionPanel = forwardRef<SessionPanelRef, SessionPanelProps>(
                     onModelChange={handleModelChange}
                     onOpenNewTab={onOpenNewTab}
                     onThinkingLevelChange={handleThinkingLevelChange}
+                    planModeEnabled={planModeEnabled}
+                    onPlanModeToggle={() => setPlanModeEnabled((p) => !p)}
+                    planModeDisabled={modelAgentType === "codex"}
+                    hasPendingPlan={!!pendingPlan}
                   />
                 </div>
               </SessionProvider>

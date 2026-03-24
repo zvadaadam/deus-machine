@@ -179,6 +179,39 @@ export function persistSessionStarted(event: SessionStartedEvent): WriteResult<v
   }
 }
 
+/** Update session status to "needs_plan_response" when agent requests plan approval. */
+export function persistSessionNeedsPlanResponse(sessionId: string): WriteResult<void> {
+  const db = getDatabase();
+
+  try {
+    db.prepare(
+      `UPDATE sessions SET status = 'needs_plan_response', updated_at = datetime('now') WHERE id = ?`
+    ).run(sessionId);
+    return { ok: true, value: undefined };
+  } catch (error) {
+    const msg = getErrorMessage(error);
+    console.error(`[AgentPersistence] Failed to persist needs_plan_response:`, msg);
+    return { ok: false, error: msg };
+  }
+}
+
+/** Restore session status to "working" when a pending request is resolved. */
+export function persistSessionBackToWorking(sessionId: string): WriteResult<void> {
+  const db = getDatabase();
+
+  try {
+    db.prepare(
+      `UPDATE sessions SET status = 'working', updated_at = datetime('now')
+       WHERE id = ? AND status IN ('needs_plan_response', 'needs_response')`
+    ).run(sessionId);
+    return { ok: true, value: undefined };
+  } catch (error) {
+    const msg = getErrorMessage(error);
+    console.error(`[AgentPersistence] Failed to restore working status:`, msg);
+    return { ok: false, error: msg };
+  }
+}
+
 /** Update session status to "idle" when a turn completes. */
 export function persistSessionIdle(event: SessionIdleEvent): WriteResult<void> {
   const db = getDatabase();
