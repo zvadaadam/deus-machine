@@ -1,0 +1,33 @@
+{
+  "cli_version": "0.5.0",
+  "checkpoint_id": "aed120ae4c09",
+  "session_id": "a785ec52-141f-4682-aba4-d624ad7aec04",
+  "strategy": "manual-commit",
+  "created_at": "2026-03-24T19:00:00.338852Z",
+  "branch": "zvadaadam/files-top-level-tab",
+  "checkpoints_count": 2,
+  "files_touched": [
+    ".claude/agent-memory/code-reviewer/MEMORY.md"
+  ],
+  "agent": "Claude Code",
+  "turn_id": "ec2e27f000a9",
+  "token_usage": {
+    "input_tokens": 347,
+    "cache_creation_tokens": 676927,
+    "cache_read_tokens": 22065340,
+    "output_tokens": 75915,
+    "api_call_count": 202
+  },
+  "session_metrics": {
+    "turn_count": 18
+  },
+  "initial_attribution": {
+    "calculated_at": "2026-03-24T18:59:59.223058Z",
+    "agent_lines": 36,
+    "human_added": 0,
+    "human_modified": 0,
+    "human_removed": 0,
+    "total_committed": 36,
+    "agent_percentage": 100
+  }
+}
