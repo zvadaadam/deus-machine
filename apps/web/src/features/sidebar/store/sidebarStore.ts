@@ -6,6 +6,10 @@ interface SidebarState {
   collapsedRepos: Set<string>;
   toggleRepoCollapse: (repoId: string) => void;
 
+  // Repos where user expanded the "Show more" stale workspaces
+  expandedOldWorkspaces: Set<string>;
+  toggleOldWorkspaces: (repoId: string) => void;
+
   // Repository ordering
   repositoryOrder: string[];
   setRepositoryOrder: (order: string[]) => void;
@@ -28,7 +32,20 @@ export const useSidebarStore = create<SidebarState>()(
           return { collapsedRepos: newCollapsed };
         }),
 
-      // NEW: Repository ordering
+      // Stale workspace expansion (per-repo)
+      expandedOldWorkspaces: new Set(),
+      toggleOldWorkspaces: (repoId) =>
+        set((state) => {
+          const next = new Set(state.expandedOldWorkspaces);
+          if (next.has(repoId)) {
+            next.delete(repoId);
+          } else {
+            next.add(repoId);
+          }
+          return { expandedOldWorkspaces: next };
+        }),
+
+      // Repository ordering
       repositoryOrder: [],
 
       setRepositoryOrder: (order) => set({ repositoryOrder: order }),
@@ -58,11 +75,13 @@ export const useSidebarStore = create<SidebarState>()(
       // Serialize Set properly for localStorage
       partialize: (state) => ({
         collapsedRepos: Array.from(state.collapsedRepos),
+        expandedOldWorkspaces: Array.from(state.expandedOldWorkspaces),
         repositoryOrder: state.repositoryOrder,
       }),
       merge: (persistedState: any, currentState) => ({
         ...currentState,
         collapsedRepos: new Set(persistedState?.collapsedRepos || []),
+        expandedOldWorkspaces: new Set(persistedState?.expandedOldWorkspaces || []),
         repositoryOrder: persistedState?.repositoryOrder || [],
       }),
     }
