@@ -1,0 +1,41 @@
+{
+  "cli_version": "0.5.0",
+  "checkpoint_id": "3ce03883b157",
+  "session_id": "33e69c80-8b12-4421-8382-4c02f4da4fec",
+  "strategy": "manual-commit",
+  "created_at": "2026-03-24T22:35:36.193091Z",
+  "branch": "zvadaadam/fix-unread-indicators",
+  "checkpoints_count": 11,
+  "files_touched": [
+    "apps/web/src/app/layouts/ChatArea.tsx",
+    "apps/web/src/app/layouts/MainLayout.tsx",
+    "apps/web/src/features/session/api/session.queries.ts",
+    "apps/web/src/features/session/hooks/useGlobalSessionNotifications.ts",
+    "apps/web/src/features/session/store/unreadStore.ts",
+    "apps/web/src/features/sidebar/lib/status.ts",
+    "apps/web/src/features/sidebar/ui/RepositoryItem.tsx",
+    "apps/web/src/features/sidebar/ui/WorkspaceItem.tsx",
+    "apps/web/src/features/workspace/ui/MainContentTabs.tsx"
+  ],
+  "agent": "Claude Code",
+  "turn_id": "a0346ae66402",
+  "token_usage": {
+    "input_tokens": 192,
+    "cache_creation_tokens": 256987,
+    "cache_read_tokens": 18821358,
+    "output_tokens": 58475,
+    "api_call_count": 169
+  },
+  "session_metrics": {
+    "turn_count": 11
+  },
+  "initial_attribution": {
+    "calculated_at": "2026-03-24T22:35:35.429117Z",
+    "agent_lines": 241,
+    "human_added": 9,
+    "human_modified": 7,
+    "human_removed": 0,
+    "total_committed": 257,
+    "agent_percentage": 93.77431906614785
+  }
+}

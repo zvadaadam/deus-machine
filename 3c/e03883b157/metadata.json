@@ -1,0 +1,33 @@
+{
+  "cli_version": "0.5.0",
+  "checkpoint_id": "3ce03883b157",
+  "strategy": "manual-commit",
+  "branch": "zvadaadam/fix-unread-indicators",
+  "checkpoints_count": 11,
+  "files_touched": [
+    "apps/web/src/app/layouts/ChatArea.tsx",
+    "apps/web/src/app/layouts/MainLayout.tsx",
+    "apps/web/src/features/session/api/session.queries.ts",
+    "apps/web/src/features/session/hooks/useGlobalSessionNotifications.ts",
+    "apps/web/src/features/session/store/unreadStore.ts",
+    "apps/web/src/features/sidebar/lib/status.ts",
+    "apps/web/src/features/sidebar/ui/RepositoryItem.tsx",
+    "apps/web/src/features/sidebar/ui/WorkspaceItem.tsx",
+    "apps/web/src/features/workspace/ui/MainContentTabs.tsx"
+  ],
+  "sessions": [
+    {
+      "metadata": "/3c/e03883b157/0/metadata.json",
+      "transcript": "/3c/e03883b157/0/full.jsonl",
+      "content_hash": "/3c/e03883b157/0/content_hash.txt",
+      "prompt": "/3c/e03883b157/0/prompt.txt"
+    }
+  ],
+  "token_usage": {
+    "input_tokens": 192,
+    "cache_creation_tokens": 256987,
+    "cache_read_tokens": 18821358,
+    "output_tokens": 58475,
+    "api_call_count": 169
+  }
+}
