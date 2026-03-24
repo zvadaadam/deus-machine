@@ -450,3 +450,7 @@ We want a clean, maintainable codebase, with proper best practices for the tech 
 Run subagents to verify, and if it should be fixed, try to merge some stuff together so it can be fixed together within one subagent. 
 
 If you can test something do it.
+
+---
+
+Commit and push all changes
