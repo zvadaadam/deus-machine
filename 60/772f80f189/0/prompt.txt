@@ -255,3 +255,14 @@ But so how, where do we parse? I just want to understand like the, so what event
 ---
 
 Okay, so I feel like this is pretty good, right? There is no optimization that we can do and no bugs and this is pretty clear.
+
+---
+
+<system_instruction>
+The user has attached these files. Read them before proceeding.
+- /Users/zvada/Developer/agent/box-ide/.conductor/new-york-v4/.context/attachments/PR instructions.md (951 B)
+</system_instruction>
+
+
+
+Create a PR
