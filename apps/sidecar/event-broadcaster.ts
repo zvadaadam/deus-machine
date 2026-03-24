@@ -300,25 +300,24 @@ class EventBroadcasterClass {
   }
 
   // ==========================================================================
-  // OUTGOING REQUESTS (sidecar -> frontend, with timeout)
-  // All request methods delegate to rpc() — a typed wrapper over
-  // requireTunnel().request() + withTimeout().
+  // OUTGOING REQUESTS (sidecar -> frontend)
+  // User-facing requests (plan approval, questions) wait indefinitely —
+  // the user may close the laptop and return later. Only data-fetch
+  // requests use timeouts.
   // ==========================================================================
 
-  // --- Core workspace RPCs ---
+  // --- User-facing RPCs (no timeout, same as OpenDevs) ---
   requestExitPlanMode(r: ExitPlanModeRequest) {
-    return this.rpc<ExitPlanModeResponse>(
+    return this.requireTunnel().request(
       FRONTEND_RPC_METHODS.EXIT_PLAN_MODE,
-      r,
-      USER_FACING_TIMEOUT_MS
-    );
+      r
+    ) as Promise<ExitPlanModeResponse>;
   }
   requestAskUserQuestion(r: AskUserQuestionRequest) {
-    return this.rpc<AskUserQuestionResponse>(
+    return this.requireTunnel().request(
       FRONTEND_RPC_METHODS.ASK_USER_QUESTION,
-      r,
-      USER_FACING_TIMEOUT_MS
-    );
+      r
+    ) as Promise<AskUserQuestionResponse>;
   }
   requestGetDiff(r: GetDiffRequest) {
     return this.rpc<GetDiffResponse>(FRONTEND_RPC_METHODS.GET_DIFF, r, DATA_QUERY_TIMEOUT_MS);

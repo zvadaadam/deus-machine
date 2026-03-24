@@ -17,6 +17,12 @@
 import { AgentClient } from "./client";
 import { createAgentEventHandler } from "./event-handler";
 import { relay } from "./tool-relay";
+import {
+  persistSessionNeedsPlanResponse,
+  persistSessionNeedsResponse,
+  persistSessionBackToWorking,
+} from "./persistence";
+import { invalidate } from "../query-engine";
 import type {
   TurnStartRequest,
   TurnStartResponse,
@@ -53,14 +59,34 @@ export function init(agentServerUrl: string): void {
 
     // Relay sidecar's frontend-facing RPC requests (browser, sim, diff, plan)
     onFrontendRpc: async (requestId, sessionId, method, params) => {
-      return relay({
-        type: "tool.request",
-        requestId,
-        sessionId,
-        method,
-        params,
-        timeoutMs: 120_000,
-      });
+      const isUserFacing = method === "exitPlanMode" || method === "askUserQuestion";
+      const sessionResources = ["workspaces", "sessions", "session", "stats"] as const;
+
+      // User-facing methods: update session status so sidebar shows "needs input" instead of "working"
+      if (method === "exitPlanMode") {
+        const result = persistSessionNeedsPlanResponse(sessionId);
+        if (result.ok) invalidate([...sessionResources], { sessionIds: [sessionId] });
+      } else if (method === "askUserQuestion") {
+        const result = persistSessionNeedsResponse(sessionId);
+        if (result.ok) invalidate([...sessionResources], { sessionIds: [sessionId] });
+      }
+
+      try {
+        return await relay({
+          type: "tool.request",
+          requestId,
+          sessionId,
+          method,
+          params,
+          // User-facing methods wait indefinitely; auto-responding keep 2-min timeout
+          timeoutMs: isUserFacing ? 24 * 60 * 60 * 1000 : 120_000,
+        });
+      } finally {
+        if (isUserFacing) {
+          const result = persistSessionBackToWorking(sessionId);
+          if (result.ok) invalidate([...sessionResources], { sessionIds: [sessionId] });
+        }
+      }
     },
   });
 

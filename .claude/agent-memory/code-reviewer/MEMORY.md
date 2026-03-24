@@ -239,6 +239,31 @@
 - `MobileTabBar` safe-area-inset: uses `pb-[env(...)]` which compresses content; needs `min-h` adjustment
 - `MobileTabBar` has ARIA semantics: `role="tablist"`, `role="tab"`, `aria-selected`, `aria-controls`, `aria-labelledby`
 
+## parseContent Type Contract (Confirmed)
+
+- `parseContent` from `useSessionWithMessages` has type `(content: string) => (ContentBlock | string)[] | string`
+  — NOT `ContentBlock[]`. Returns `string` for plain-text user messages and envelope-format cancelled messages.
+- Any utility that accepts `parseContent` as a parameter MUST declare the full return type and guard
+  with `Array.isArray` before iterating. Declaring a narrower type (`ContentBlock[]`) compiles but
+  causes silent data loss at runtime (string is iterated character-by-character, all `isToolUseBlock`
+  guards return false).
+- Standard guard pattern: `const result = parseContent(msg.content); if (!Array.isArray(result)) continue;`
+
+## Reverse-Traverse + Flip Pattern for Message Extraction
+
+- Walking messages in reverse (newest→oldest) and collecting chunks, then calling `.reverse()` to
+  restore chronological order is correct at the message level.
+- When also walking blocks within each message in reverse, intra-message block order is ALSO reversed
+  before the final flip — resulting in wrong per-message block order after `.reverse()`.
+- Correct pattern: walk messages in reverse, but walk BLOCKS within each message FORWARD. Either
+  `unshift` message-level results to the output array, or accumulate per-message and prepend.
+
+## TOOL_COLORS Map Completeness
+
+- Every tool renderer registered in `registerTools.ts` should have a corresponding entry in `TOOL_COLORS`
+  in `toolColors.ts`. Missing entries don't cause crashes but leave other components that derive color
+  by tool name with `undefined` (falls through to no class).
+- When adding a new renderer, add its color entry to `TOOL_COLORS` in the same commit.
 ## See Also
 
 - `patterns-deep.md` — overflow notes: error classification, chat virtualization, PRStatus, border radius, sidecar resume

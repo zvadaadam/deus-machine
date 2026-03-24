@@ -47,10 +47,10 @@ describe("EventBroadcaster", () => {
       expect(() => EventBroadcaster.sendMessage(buildMessageResponse())).not.toThrow();
     });
 
-    it("requestExitPlanMode rejects when no tunnel is attached", async () => {
-      await expect(
-        EventBroadcaster.requestExitPlanMode({ sessionId: "s", toolInput: {} })
-      ).rejects.toThrow("EventBroadcaster tunnel not attached");
+    it("requestExitPlanMode throws when no tunnel is attached", () => {
+      expect(() => EventBroadcaster.requestExitPlanMode({ sessionId: "s", toolInput: {} })).toThrow(
+        "EventBroadcaster tunnel not attached"
+      );
     });
 
     it("works after attaching a tunnel", () => {
@@ -59,13 +59,13 @@ describe("EventBroadcaster", () => {
       expect(mockTunnel.notify).toHaveBeenCalled();
     });
 
-    it("request rejects after detaching the tunnel", async () => {
+    it("request throws after detaching the tunnel", () => {
       EventBroadcaster.attachTunnel(mockTunnel);
       EventBroadcaster.detachTunnel(mockTunnel);
-      // sendMessage won't throw (broadcasts to empty set), but requests will reject
-      await expect(
-        EventBroadcaster.requestExitPlanMode({ sessionId: "s", toolInput: {} })
-      ).rejects.toThrow("EventBroadcaster tunnel not attached");
+      // sendMessage won't throw (broadcasts to empty set), but requests will throw
+      expect(() => EventBroadcaster.requestExitPlanMode({ sessionId: "s", toolInput: {} })).toThrow(
+        "EventBroadcaster tunnel not attached"
+      );
     });
 
     it("broadcasts notifications to all attached tunnels", () => {
@@ -98,14 +98,14 @@ describe("EventBroadcaster", () => {
       expect(mockTunnel.notify).toHaveBeenCalledTimes(1); // only the first call
     });
 
-    it("detachTunnel without args clears all tunnels", async () => {
+    it("detachTunnel without args clears all tunnels", () => {
       EventBroadcaster.attachTunnel(mockTunnel);
       EventBroadcaster.attachTunnel(createMockTunnel());
       EventBroadcaster.detachTunnel();
-      // No tunnels left, request should reject
-      await expect(
-        EventBroadcaster.requestExitPlanMode({ sessionId: "s", toolInput: {} })
-      ).rejects.toThrow("EventBroadcaster tunnel not attached");
+      // No tunnels left, request should throw
+      expect(() => EventBroadcaster.requestExitPlanMode({ sessionId: "s", toolInput: {} })).toThrow(
+        "EventBroadcaster tunnel not attached"
+      );
     });
 
     it("detachTunnel with specific tunnel only removes that one", async () => {
@@ -188,18 +188,8 @@ describe("EventBroadcaster", () => {
       expect(result).toEqual({ approved: true, turnId: "turn-1" });
     });
 
-    it("rejects on timeout (120s)", async () => {
-      EventBroadcaster.attachTunnel(mockTunnel);
-      mockTunnel.request.mockReturnValue(new Promise(() => {})); // never resolves
-
-      const promise = EventBroadcaster.requestExitPlanMode({
-        sessionId: "sess-1",
-        toolInput: {},
-      });
-
-      vi.advanceTimersByTime(120_001);
-      await expect(promise).rejects.toThrow("timed out after 120000ms");
-    });
+    // No timeout test — user-facing RPCs (plan approval, questions) wait
+    // indefinitely. The user may close the laptop and return later.
   });
 
   describe("requestAskUserQuestion", () => {
