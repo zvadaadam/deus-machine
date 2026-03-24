@@ -71,7 +71,7 @@ export const STATUS_CONFIG: Record<DisplayStatus, StatusConfig> = {
   },
   unread: {
     priority: StatusPriority.UNREAD,
-    label: "Needs Response",
+    label: "Needs Attention",
     labelActive: "Awaiting Input",
     badge: "bg-status-unread text-status-unread-fg",
     border: "border-status-unread/60",
@@ -123,29 +123,22 @@ export const WORKFLOW_STATUS_CONFIG: Record<WorkspaceStatus, WorkflowStatusConfi
  *
  * Priority logic:
  * 1. Error — session in error state
- * 2. Unread — agent needs user response (needs_response / needs_plan_response)
+ * 2. Unread — agent needs user response OR has unseen activity
  * 3. Working — agent actively processing
  * 4. Idle — dormant
  *
  * @param workspace Workspace data with session info
+ * @param hasUnseenActivity Whether the session has activity the user hasn't viewed yet
  * @returns Derived display status for UI rendering
  */
-export function getDisplayStatus(workspace: Workspace): DisplayStatus {
+export function getDisplayStatus(workspace: Workspace, hasUnseenActivity = false): DisplayStatus {
   const status = workspace.session_status;
 
   if (status === "error") return "error";
   if (status === "needs_response" || status === "needs_plan_response") return "unread";
   if (status === "working") return "working";
+  if (hasUnseenActivity) return "unread";
   return "idle";
-}
-
-/**
- * Check if workspace needs user attention.
- * In V2, attention state is derived from session_status (needs_response / needs_plan_response).
- */
-export function getUnreadCount(workspace: Workspace): number {
-  const status = workspace.session_status;
-  return status === "needs_response" || status === "needs_plan_response" ? 1 : 0;
 }
 
 /**
@@ -153,12 +146,18 @@ export function getUnreadCount(workspace: Workspace): number {
  * Higher priority statuses appear first
  *
  * @param workspaces Array of workspaces to sort
+ * @param unreadSessionIds Optional set of session IDs with unseen activity
  * @returns Sorted array (original array not mutated)
  */
-export function sortByStatusPriority<T extends Workspace>(workspaces: T[]): T[] {
+export function sortByStatusPriority<T extends Workspace>(
+  workspaces: T[],
+  unreadSessionIds?: Set<string>
+): T[] {
   return [...workspaces].sort((a, b) => {
-    const statusA = getDisplayStatus(a);
-    const statusB = getDisplayStatus(b);
+    const hasUnreadA = !!(a.current_session_id && unreadSessionIds?.has(a.current_session_id));
+    const hasUnreadB = !!(b.current_session_id && unreadSessionIds?.has(b.current_session_id));
+    const statusA = getDisplayStatus(a, hasUnreadA);
+    const statusB = getDisplayStatus(b, hasUnreadB);
     const priorityA = STATUS_CONFIG[statusA].priority;
     const priorityB = STATUS_CONFIG[statusB].priority;
 
@@ -172,84 +171,4 @@ export function sortByStatusPriority<T extends Workspace>(workspaces: T[]): T[] 
     const timeB = new Date(b.updated_at).getTime();
     return timeB - timeA;
   });
-}
-
-/**
- * Group workspaces by display status
- * Used for rendering section headers in expanded sidebar
- *
- * @param workspaces Array of workspaces to group
- * @returns Object with status as keys, workspace arrays as values
- */
-export function groupByStatus<T extends Workspace>(
-  workspaces: T[]
-): Partial<Record<DisplayStatus, T[]>> {
-  const groups: Partial<Record<DisplayStatus, T[]>> = {};
-
-  workspaces.forEach((workspace) => {
-    const status = getDisplayStatus(workspace);
-    if (!groups[status]) {
-      groups[status] = [];
-    }
-    groups[status]!.push(workspace);
-  });
-
-  return groups;
-}
-
-/**
- * Get aggregate status counts for a repository
- * Used for collapsed sidebar status indicators
- *
- * @param workspaces Workspaces in a repository
- * @returns Count of each status type
- */
-export function getStatusCounts(workspaces: Workspace[]): Record<DisplayStatus, number> {
-  const counts: Record<DisplayStatus, number> = {
-    error: 0,
-    unread: 0,
-    working: 0,
-    idle: 0,
-  };
-
-  workspaces.forEach((workspace) => {
-    const status = getDisplayStatus(workspace);
-    counts[status]++;
-  });
-
-  return counts;
-}
-
-/**
- * Get total unread count for a repository
- * Sums unread across all workspaces
- */
-export function getRepoUnreadCount(workspaces: Workspace[]): number {
-  return workspaces.reduce((sum, workspace) => {
-    return sum + getUnreadCount(workspace);
-  }, 0);
-}
-
-/**
- * Get highest priority status for a repository
- * Used for collapsed sidebar badge color
- *
- * @param workspaces Workspaces in a repository
- * @returns The highest priority status present
- */
-export function getRepoPriorityStatus(workspaces: Workspace[]): DisplayStatus {
-  let highestPriority = StatusPriority.IDLE;
-  let highestStatus: DisplayStatus = "idle";
-
-  workspaces.forEach((workspace) => {
-    const status = getDisplayStatus(workspace);
-    const priority = STATUS_CONFIG[status].priority;
-
-    if (priority > highestPriority) {
-      highestPriority = priority;
-      highestStatus = status;
-    }
-  });
-
-  return highestStatus;
 }

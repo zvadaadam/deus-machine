@@ -24,6 +24,9 @@ import { capabilities } from "@/platform/capabilities";
 import { sendNotification } from "@/platform/notifications";
 import { isWindowFocused } from "@/shared/hooks/useWindowFocus";
 import { track } from "@/platform/analytics";
+import { unreadActions } from "@/features/session/store/unreadStore";
+import { useWorkspaceStore } from "@/features/workspace/store";
+import { workspaceLayoutActions } from "@/features/workspace/store/workspaceLayoutStore";
 import type { SessionStatus } from "@shared/types/session";
 import type { RepoGroup, SetupStatus } from "@shared/types/workspace";
 
@@ -32,6 +35,19 @@ import type { RepoGroup, SetupStatus } from "@shared/types/workspace";
  * Prevents notification spam when multiple agents finish simultaneously.
  */
 const BATCH_WINDOW_MS = 1500;
+
+/**
+ * Check if the user is currently viewing a specific session.
+ * True when the workspace is selected AND the active chat tab matches the session.
+ */
+function checkIsViewingSession(workspaceId: string, sessionId: string): boolean {
+  const selectedWorkspaceId = useWorkspaceStore.getState().selectedWorkspaceId;
+  if (selectedWorkspaceId !== workspaceId) return false;
+
+  const layout = workspaceLayoutActions.getLayout(workspaceId);
+  // If no persisted active tab, the workspace's current_session_id is shown
+  return layout.activeChatTabSessionId === sessionId || !layout.activeChatTabSessionId;
+}
 
 export function useGlobalSessionNotifications() {
   const prevStatusMap = useRef(new Map<string, SessionStatus>());
@@ -42,7 +58,7 @@ export function useGlobalSessionNotifications() {
   const queryClient = useQueryClient();
 
   useEffect(() => {
-    if (!capabilities.nativeNotifications) return;
+    const canNotify = capabilities.nativeNotifications;
 
     function flushFinishedBatch() {
       const batch = finishedBatch.current;
@@ -73,9 +89,9 @@ export function useGlobalSessionNotifications() {
       }
     }
 
-    // Detect all session + setup transitions from the workspace cache.
-    // The WS subscription pushes updated workspace rows including
-    // session_status, session_error_category, and session_error_message.
+    // Detect session + setup transitions from the workspace query cache.
+    // Only watches current_session_id per workspace. Non-current sessions
+    // (extra tabs) are handled by ChatArea which tracks workingSessionIds.
     const unsubscribe = queryClient.getQueryCache().subscribe((event) => {
       if (event.type !== "updated" || !event.query.queryKey[0]) return;
 
@@ -95,14 +111,30 @@ export function useGlobalSessionNotifications() {
             prevStatusMap.current.set(sessionId, status);
 
             if (prevStatus && prevStatus !== status) {
+              // Mark session as unread when transitioning out of "working"
+              // to any terminal state — but only if user is not currently
+              // viewing that exact session.
+              if (
+                prevStatus === "working" &&
+                (status === "idle" ||
+                  status === "error" ||
+                  status === "needs_response" ||
+                  status === "needs_plan_response")
+              ) {
+                const isViewingSession = checkIsViewingSession(ws.id, sessionId);
+                if (!isViewingSession) {
+                  unreadActions.markUnread(sessionId);
+                }
+              }
+
               // working → idle = agent finished
               if (prevStatus === "working" && status === "idle") {
                 track("ai_turn_completed", { session_id: sessionId });
-                if (!isWindowFocused()) queueFinished(sessionId);
+                if (canNotify && !isWindowFocused()) queueFinished(sessionId);
               }
 
               // → needs_response = agent needs user input
-              if (status === "needs_response" && !isWindowFocused()) {
+              if (status === "needs_response" && canNotify && !isWindowFocused()) {
                 sendNotification({
                   title: "Agent needs input",
                   body: `Session ${sessionId.substring(0, 8)} is waiting for your response`,
@@ -111,7 +143,7 @@ export function useGlobalSessionNotifications() {
               }
 
               // → needs_plan_response = plan ready for review
-              if (status === "needs_plan_response" && !isWindowFocused()) {
+              if (status === "needs_plan_response" && canNotify && !isWindowFocused()) {
                 sendNotification({
                   title: "Plan ready for review",
                   body: `Session ${sessionId.substring(0, 8)} has a plan waiting for approval`,
@@ -127,7 +159,7 @@ export function useGlobalSessionNotifications() {
                   error_category: category,
                 });
 
-                if (!isWindowFocused()) {
+                if (canNotify && !isWindowFocused()) {
                   const title = match(category)
                     .with("auth", () => "Authentication Error")
                     .with("rate_limit", () => "Rate Limited")
@@ -165,7 +197,12 @@ export function useGlobalSessionNotifications() {
             });
           }
 
-          if (prevSetup === "running" && ws.setup_status === "failed" && !isWindowFocused()) {
+          if (
+            prevSetup === "running" &&
+            ws.setup_status === "failed" &&
+            canNotify &&
+            !isWindowFocused()
+          ) {
             sendNotification({
               title: "Setup failed",
               body: `Workspace ${ws.title || ws.slug} setup failed${ws.error_message ? `: ${ws.error_message}` : ""}`,
@@ -175,7 +212,7 @@ export function useGlobalSessionNotifications() {
 
           if (prevSetup === "running" && ws.setup_status === "completed") {
             queryClient.invalidateQueries({ queryKey: ["workspaces", "manifest", ws.id] });
-            if (!isWindowFocused()) {
+            if (canNotify && !isWindowFocused()) {
               sendNotification({
                 title: "Setup complete",
                 body: `Workspace ${ws.title || ws.slug} is ready`,
