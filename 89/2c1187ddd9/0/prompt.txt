@@ -366,3 +366,87 @@ We want a clean, maintainable codebase, with proper best practices for the tech 
 Run subagents to verify, and if it should be fixed, try to merge some stuff together so it can be fixed together within one subagent. 
 
 If you can test something do it.
+
+---
+
+<system-instruction>
+The user has added 1 comment to the diff for this workspace. Please review and address these comments as part of your response. When addressing comments on the "original" side or on specific commits, read the file from that version (not the current version). Below are the comments, including metadata about what git state they were left on:
+
+Comment #1:
+
+File: apps/web/src/features/sidebar/lib/status.ts
+Line: 154
+User comment: "_⚠️ Potential issue_ | _🟡 Minor_
+
+**JSDoc parameter name mismatch.**
+
+The JSDoc says `@param unreadSessionIds` but the actual parameter is `unreadWorkspaceIds`. Since the function checks `workspace.id` against this set (lines 157-158), the parameter correctly holds workspace IDs, not session IDs.
+
+
+<details>
+<summary>📝 Proposed fix</summary>
+
+```diff
+  * `@param` workspaces Array of workspaces to sort
+- * `@param` unreadSessionIds Optional set of session IDs with unseen activity
++ * `@param` unreadWorkspaceIds Optional set of workspace IDs with unseen activity
+  * `@returns` Sorted array (original array not mutated)
+```
+</details>
+
+<!-- suggestion_start -->
+
+<details>
+<summary>📝 Committable suggestion</summary>
+
+> ‼️ **IMPORTANT**
+> Carefully review the code before committing. Ensure that it accurately replaces the highlighted code, contains no missing lines, and has no issues with indentation. Thoroughly test & benchmark the code to ensure it meets the requirements.
+
+```suggestion
+ * `@param` unreadWorkspaceIds Optional set of workspace IDs with unseen activity
+ * `@returns` Sorted array (original array not mutated)
+ */
+export function sortByStatusPriority<T extends Workspace>(
+  workspaces: T[],
+  unreadWorkspaceIds?: Set<string>
+```
+
+</details>
+
+<!-- suggestion_end -->
+
+<details>
+<summary>🤖 Prompt for AI Agents</summary>
+
+```
+Verify each finding against the current code and only fix it if needed.
+
+In `@apps/web/src/features/sidebar/lib/status.ts` around lines 149 - 154, Update
+the JSDoc for the sortByStatusPriority function to match the actual parameter
+name and purpose: replace the incorrect `@param` unreadSessionIds with `@param`
+unreadWorkspaceIds and document that it is an optional Set<string> of workspace
+IDs with unseen activity (used to check workspace.id). Ensure the description
+and any related inline docs refer to workspace IDs rather than session IDs so
+the JSDoc accurately reflects the function signature and behavior.
+```
+
+</details>
+
+<!-- fingerprinting:phantom:medusa:ocelot -->
+
+<!-- This is an auto-generated comment by CodeRabbit -->"
+
+Comment metadata:
+This comment was left on the modified branch.
+This comment was left on GitHub by @coderabbitai.
+This comment is the start of thread PRRT_kwDOQEbULc52kRAg. 
+
+</system-instruction>
+
+I run AI code review, is it actionable? Wdyt? Explore in depth each problem.
+
+We want a clean, maintainable codebase, with proper best practices for the tech stack we use.
+
+Run subagents to verify, and if it should be fixed, try to merge some stuff together so it can be fixed together within one subagent. 
+
+If you can test something do it.
