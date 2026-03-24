@@ -297,6 +297,40 @@
   in `toolColors.ts`. Missing entries don't cause crashes but leave other components that derive color
   by tool name with `undefined` (falls through to no class).
 - When adding a new renderer, add its color entry to `TOOL_COLORS` in the same commit.
+
+## Unread Session Indicator Pattern (Confirmed)
+
+- Store: `useUnreadStore` in `features/session/store/unreadStore.ts` — Zustand + persist, `unreadSessionIds: Record<string, true>`.
+- Mark unread: `useGlobalSessionNotifications` fires on `working → idle|error|needs_response|needs_plan_response`
+  transition ONLY when `!isUserViewingSession(ws.id, sessionId)`.
+- Mark read: two sites — `handleWorkspaceClick` in MainLayout (sidebar click), and `handleTabChangeWithRead`
+  in ChatArea (tab switch).
+- **String-key serialization hack in RepositoryItem**: builds a comma-joined string of unread session IDs
+  from the store, then splits it back to a Set in useMemo. This is an anti-pattern. Fix: `useShallow` selector
+  that filters in the selector itself and returns a `Set<string>`. Saves ~18 lines.
+- **ChatArea full-map subscription**: `useUnreadStore((s) => s.unreadSessionIds)` subscribes to the entire
+  map — any workspace marking unread re-renders ChatArea. Fix: `useShallow` filtered to `chatSessionIds`.
+- **`Record<string, true>` vs `Set`**: Record is used because JSON doesn't natively serialize Set. The
+  tradeoff is real, but should be documented. Extract `isSessionUnread(s, id) => !!s.unreadSessionIds[id]`
+  helper so callers don't all inline `!!s.unreadSessionIds[id]`.
+- **`unreadActions` is redundant indirection**: every method delegates to `useUnreadStore.getState()`.
+  `useUnreadStore.getState().markRead(id)` is already stable; the wrapper adds no value. `isUnread` is
+  never called from `unreadActions`. Consider deleting.
+- **Dead functions in status.ts**: `getUnreadCount`, `groupByStatus`, `getStatusCounts`, `getRepoUnreadCount`,
+  `getRepoPriorityStatus` are exported but have zero import sites. Safe to delete.
+- **isUserViewingSession naming**: reads from Zustand/layout snapshots (non-reactive), not a hook.
+  Rename to `checkIsViewingSession` to avoid hook-name confusion.
+- **Hook-after-conditional-return bug (pre-existing, UNFIXED)**: `useUnreadStore` at WorkspaceItem.tsx line 52
+  is AFTER the `if (isInitializing) return` at the same line. Violates Rules of Hooks.
+- **isUserViewingSession fallback**: `!layout.activeChatTabSessionId` means the session is assumed visible
+  when no tab session is persisted (new workspace, first session). Intentional and correct.
+- **localStorage leak**: persisted unread state is never pruned for deleted/archived workspaces.
+  Benign (orphan keys, ~10 bytes each), but accumulates over time.
+
+## Reviewer Feedback / Approach
+
+- `feedback_over_engineering.md` — user wants simplicity flagged aggressively; string-key hacks, pass-through wrappers, useEffect-vs-render-body, dead exports
+
 ## See Also
 
 - `patterns-deep.md` — overflow notes: error classification, chat virtualization, PRStatus, border radius, sidecar resume
