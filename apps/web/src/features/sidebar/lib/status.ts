@@ -146,7 +146,7 @@ export function getDisplayStatus(workspace: Workspace, hasUnseenActivity = false
  * Higher priority statuses appear first
  *
  * @param workspaces Array of workspaces to sort
- * @param unreadSessionIds Optional set of session IDs with unseen activity
+ * @param unreadWorkspaceIds Optional set of workspace IDs with unseen activity
  * @returns Sorted array (original array not mutated)
  */
 export function sortByStatusPriority<T extends Workspace>(
