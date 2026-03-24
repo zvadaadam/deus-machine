@@ -1,0 +1,27 @@
+{
+  "cli_version": "0.5.0",
+  "checkpoint_id": "20fc66d9223f",
+  "strategy": "manual-commit",
+  "branch": "zvadaadam/sidebar-hide-old-workspaces",
+  "checkpoints_count": 5,
+  "files_touched": [
+    "apps/web/src/features/sidebar/lib/utils.ts",
+    "apps/web/src/features/sidebar/store/sidebarStore.ts",
+    "apps/web/src/features/sidebar/ui/RepositoryItem.tsx"
+  ],
+  "sessions": [
+    {
+      "metadata": "/20/fc66d9223f/0/metadata.json",
+      "transcript": "/20/fc66d9223f/0/full.jsonl",
+      "content_hash": "/20/fc66d9223f/0/content_hash.txt",
+      "prompt": "/20/fc66d9223f/0/prompt.txt"
+    }
+  ],
+  "token_usage": {
+    "input_tokens": 57,
+    "cache_creation_tokens": 211343,
+    "cache_read_tokens": 2885205,
+    "output_tokens": 17842,
+    "api_call_count": 49
+  }
+}

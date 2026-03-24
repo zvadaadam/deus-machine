@@ -1,0 +1,35 @@
+{
+  "cli_version": "0.5.0",
+  "checkpoint_id": "20fc66d9223f",
+  "session_id": "9dc81ea1-08ff-415f-8926-cf86e11360a1",
+  "strategy": "manual-commit",
+  "created_at": "2026-03-24T23:56:19.906473Z",
+  "branch": "zvadaadam/sidebar-hide-old-workspaces",
+  "checkpoints_count": 5,
+  "files_touched": [
+    "apps/web/src/features/sidebar/lib/utils.ts",
+    "apps/web/src/features/sidebar/store/sidebarStore.ts",
+    "apps/web/src/features/sidebar/ui/RepositoryItem.tsx"
+  ],
+  "agent": "Claude Code",
+  "turn_id": "f14d48e14d4d",
+  "token_usage": {
+    "input_tokens": 57,
+    "cache_creation_tokens": 211343,
+    "cache_read_tokens": 2885205,
+    "output_tokens": 17842,
+    "api_call_count": 49
+  },
+  "session_metrics": {
+    "turn_count": 5
+  },
+  "initial_attribution": {
+    "calculated_at": "2026-03-24T23:56:19.750079Z",
+    "agent_lines": 237,
+    "human_added": 0,
+    "human_modified": 1,
+    "human_removed": 3,
+    "total_committed": 238,
+    "agent_percentage": 99.57983193277312
+  }
+}
