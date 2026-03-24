@@ -1,0 +1,26 @@
+{
+  "cli_version": "0.5.0",
+  "checkpoint_id": "efa90218eea7",
+  "strategy": "manual-commit",
+  "branch": "zvadaadam/fix-unread-indicators",
+  "checkpoints_count": 3,
+  "files_touched": [
+    "apps/web/src/features/sidebar/lib/status.ts",
+    "apps/web/src/features/sidebar/ui/RepositoryItem.tsx"
+  ],
+  "sessions": [
+    {
+      "metadata": "/ef/a90218eea7/0/metadata.json",
+      "transcript": "/ef/a90218eea7/0/full.jsonl",
+      "content_hash": "/ef/a90218eea7/0/content_hash.txt",
+      "prompt": "/ef/a90218eea7/0/prompt.txt"
+    }
+  ],
+  "token_usage": {
+    "input_tokens": 2285,
+    "cache_creation_tokens": 291484,
+    "cache_read_tokens": 20759370,
+    "output_tokens": 66145,
+    "api_call_count": 187
+  }
+}
