@@ -15,7 +15,7 @@
  */
 
 import { forwardRef, useImperativeHandle, useRef, useCallback, useState, useEffect } from "react";
-import { X, ChevronsUpDown } from "lucide-react";
+import { ChevronsUpDown } from "lucide-react";
 import { AllDiffFileSection } from "./AllDiffFileSection";
 import { workspaceLayoutActions } from "../store";
 import type { FileChange } from "@/shared/types";
@@ -27,29 +27,17 @@ export interface AllFilesDiffViewerRef {
 interface AllFilesDiffViewerProps {
   workspaceId: string;
   fileChanges: FileChange[];
-  /** Close handler — only needed when header is visible */
-  onClose?: () => void;
-  /** Hide the header bar (file count, collapse/expand, close). Used when
-   *  the viewer is embedded inside CodePanelContent which has its own chrome. */
+  /** Hide the header bar (file count, collapse/expand). Used when
+   *  the viewer is embedded inside ChangesView which has its own chrome. */
   hideHeader?: boolean;
   onActiveFileChange?: (filePath: string | null) => void;
   /** File to scroll to on mount (one-shot) */
   initialScrollTarget?: string;
-  /** Open a file in the text editor (file preview mode) */
-  onOpenFile?: (filePath: string) => void;
 }
 
 export const AllFilesDiffViewer = forwardRef<AllFilesDiffViewerRef, AllFilesDiffViewerProps>(
   function AllFilesDiffViewer(
-    {
-      workspaceId,
-      fileChanges,
-      onClose,
-      hideHeader,
-      onActiveFileChange,
-      initialScrollTarget,
-      onOpenFile,
-    },
+    { workspaceId, fileChanges, hideHeader, onActiveFileChange, initialScrollTarget },
     ref
   ) {
     const sectionRefsMap = useRef(new Map<string, HTMLDivElement>());
@@ -60,11 +48,14 @@ export const AllFilesDiffViewer = forwardRef<AllFilesDiffViewerRef, AllFilesDiff
 
     // Ref-based stable wrappers for props that change identity on refetch.
     const workspaceIdRef = useRef(workspaceId);
-    workspaceIdRef.current = workspaceId;
     const fileChangesRef = useRef(fileChanges);
-    fileChangesRef.current = fileChanges;
     const onActiveFileChangeRef = useRef(onActiveFileChange);
-    onActiveFileChangeRef.current = onActiveFileChange;
+
+    useEffect(() => {
+      workspaceIdRef.current = workspaceId;
+      fileChangesRef.current = fileChanges;
+      onActiveFileChangeRef.current = onActiveFileChange;
+    });
 
     // Clear ref maps on unmount to prevent stale entries
     useEffect(() => {
@@ -102,10 +93,7 @@ export const AllFilesDiffViewer = forwardRef<AllFilesDiffViewerRef, AllFilesDiff
       activeFileRef.current = { workspaceId: currentWorkspaceId, path };
       setActiveFile(path);
       onActiveFileChangeRef.current?.(path);
-      workspaceLayoutActions.setSelectedFile(
-        currentWorkspaceId,
-        path ? { path, source: "changes" } : null
-      );
+      workspaceLayoutActions.setSelectedFilePath(currentWorkspaceId, path);
     }, []);
 
     useEffect(() => {
@@ -178,15 +166,15 @@ export const AllFilesDiffViewer = forwardRef<AllFilesDiffViewerRef, AllFilesDiff
     // One-shot scroll to initial target after sections mount and register refs
     useEffect(() => {
       if (!initialScrollTarget) return;
-      setActiveFilePath(initialScrollTarget);
       const raf = requestAnimationFrame(() => {
+        setActiveFilePath(initialScrollTarget);
         resolveSection(initialScrollTarget)?.scrollIntoView({
           behavior: "auto",
           block: "start",
         });
       });
       return () => cancelAnimationFrame(raf);
-    }, [initialScrollTarget, workspaceId, resolveSection]);
+    }, [initialScrollTarget, workspaceId, resolveSection, setActiveFilePath]);
 
     // Expose scrollToFile to parent — immediately updates active file
     // so the tree highlight changes without waiting for the scroll event.
@@ -219,30 +207,20 @@ export const AllFilesDiffViewer = forwardRef<AllFilesDiffViewerRef, AllFilesDiff
 
     return (
       <div className="flex h-full flex-col overflow-hidden">
-        {/* Header bar — hidden when embedded in CodePanelContent */}
+        {/* Header bar — hidden when embedded in ChangesView */}
         {!hideHeader && (
           <div className="bg-muted/20 border-border/40 flex h-8 flex-shrink-0 items-center justify-between border-b px-3">
             <span className="text-muted-foreground/70 text-xs tabular-nums">
               {fileChanges.length} {fileChanges.length === 1 ? "file" : "files"} changed
             </span>
-            <div className="flex items-center gap-1">
-              <button
-                type="button"
-                onClick={handleCollapseExpandAll}
-                className="text-muted-foreground hover:text-foreground hover:bg-muted/50 ease flex h-5 w-5 items-center justify-center rounded-md transition-colors duration-200"
-                title="Reset expand/collapse"
-              >
-                <ChevronsUpDown className="h-3.5 w-3.5" />
-              </button>
-              <button
-                type="button"
-                onClick={onClose}
-                className="text-muted-foreground hover:text-foreground hover:bg-muted/50 ease flex h-5 w-5 items-center justify-center rounded-md transition-colors duration-200"
-                title="Close all diffs"
-              >
-                <X className="h-3.5 w-3.5" />
-              </button>
-            </div>
+            <button
+              type="button"
+              onClick={handleCollapseExpandAll}
+              className="text-muted-foreground hover:text-foreground hover:bg-muted/50 ease flex h-5 w-5 items-center justify-center rounded-md transition-colors duration-200"
+              title="Reset expand/collapse"
+            >
+              <ChevronsUpDown className="h-3.5 w-3.5" />
+            </button>
           </div>
         )}
 
@@ -261,7 +239,6 @@ export const AllFilesDiffViewer = forwardRef<AllFilesDiffViewerRef, AllFilesDiff
                 isActive={activeFile === path}
                 sectionRef={sectionRefCallback}
                 expandStateKey={expandStateKey}
-                onOpenFile={onOpenFile}
               />
             );
           })}
