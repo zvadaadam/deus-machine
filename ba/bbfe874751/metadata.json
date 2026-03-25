@@ -1,0 +1,25 @@
+{
+  "cli_version": "0.5.0",
+  "checkpoint_id": "babbfe874751",
+  "strategy": "manual-commit",
+  "branch": "zvadaadam/open-in-split-btn",
+  "checkpoints_count": 9,
+  "files_touched": [
+    ".claude/agent-memory/code-reviewer/MEMORY.md"
+  ],
+  "sessions": [
+    {
+      "metadata": "/ba/bbfe874751/0/metadata.json",
+      "transcript": "/ba/bbfe874751/0/full.jsonl",
+      "content_hash": "/ba/bbfe874751/0/content_hash.txt",
+      "prompt": "/ba/bbfe874751/0/prompt.txt"
+    }
+  ],
+  "token_usage": {
+    "input_tokens": 2237,
+    "cache_creation_tokens": 782260,
+    "cache_read_tokens": 22160786,
+    "output_tokens": 67584,
+    "api_call_count": 213
+  }
+}
