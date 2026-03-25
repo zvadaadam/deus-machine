@@ -158,3 +158,429 @@ async function getInstalledAppsList(): Promise<InstalledApp[]> {
 **File:** `apps/desktop/main/native-handlers.ts:401-407`
 ---
 **No other high-signal issues found.** The remaining findings from the review agents were either pre-existing issues (color tokens, unused effect deps, `ease-out` easing), established patterns (`action: () => {}` with `actionOverrides`), or subjective suggestions that don't meet the high-signal bar.
+
+---
+
+<system-instruction>
+The user has added 7 comments to the diff for this workspace. Please review and address these comments as part of your response. When addressing comments on the "original" side or on specific commits, read the file from that version (not the current version). Below are the comments, including metadata about what git state they were left on:
+
+Comment #1:
+
+File: 
+Line: undefined
+User comment: "<!-- This is an auto-generated comment: summarize by coderabbit.ai -->
+<!-- walkthrough_start -->
+
+<details>
+<summary>📝 Walkthrough</summary>
+
+## Walkthrough
+
+The PR implements an "Open in Last App" feature by introducing in-flight de-duplication for concurrent app list requests on desktop, refactoring macOS icon extraction with helper functions, adding keyboard shortcut (⌘O) and command palette integration for quick-access to the last-opened external app, and persisting this selection via localStorage.
+
+## Changes
+
+|Cohort / File(s)|Summary|
+|---|---|
+|**Desktop App List & Icon Handling** <br> `apps/desktop/main/native-handlers.ts`|Introduced in-flight de-duplication cache (`inflightPromise`) for concurrent `getInstalledAppsList()` calls on macOS. Refactored icon extraction by extracting `resolveIconFileName()` (reads `CFBundleIconFile` via `PlistBuddy`) and `extractAppIcon()` (converts `.icns` to 64×64 PNG base64 via `sips`) helper functions, replacing inline logic.|
+|**Web Command Integration** <br> `apps/web/src/features/command-palette/commands.ts`, `apps/web/src/app/layouts/MainLayout.tsx`, `apps/web/src/shared/hooks/useKeyboardShortcuts.ts`|Added new `open-in-app` command definition with icon, label, shortcut (⌘O), and conditional visibility. Wired keyboard shortcut handler (`onOpenInApp`) into `MainLayout` and `useKeyboardShortcuts`, which reads last app ID, emits analytics, and invokes native open.|
+|**Web UI Components & Controls** <br> `apps/web/src/features/workspace/ui/WorkspaceHeader.tsx`, `apps/web/src/shared/components/OpenInDropdown.tsx`|Refactored open controls from single combined button to split design: left quick-open button opens last-used app, right chevron opens dropdown. Enhanced dropdown menu to mark and visually highlight the last-opened app. Added loading state handling and menu item selection that persists the chosen app.|
+|**Web Persistence & Hooks** <br> `apps/web/src/shared/hooks/useLastOpenInApp.ts`, `apps/web/src/shared/hooks/index.ts`|Added new `useLastOpenInApp` hook and helper functions (`getLastOpenInAppId`, `setLastOpenInAppId`) providing localStorage-backed persistence of the last-opened app ID under key `opendevs:lastOpenInApp`.|
+|**Documentation** <br> `apps/web/src/shared/lib/appIcons.tsx`|Updated module-level comments to reflect icon extraction workflow change from Electron main process to runtime extraction via `app.getFileIcon()` API.|
+
+## Sequence Diagram
+
+```mermaid
+sequenceDiagram
+    participant User
+    participant MainLayout
+    participant KeyboardShortcuts as useKeyboardShortcuts
+    participant Hook as useLastOpenInApp
+    participant Storage as localStorage
+    participant Analytics
+    participant Native as native.apps
+
+    User->>KeyboardShortcuts: Press ⌘O
+    activate KeyboardShortcuts
+    KeyboardShortcuts->>MainLayout: onOpenInApp()
+    deactivate KeyboardShortcuts
+    
+    activate MainLayout
+    MainLayout->>Hook: [lastAppId, setLastAppId]
+    activate Hook
+    Hook->>Storage: getLastOpenInAppId()
+    Storage-->>Hook: appId or null
+    Hook-->>MainLayout: [lastAppId, setLastAppId]
+    deactivate Hook
+    
+    MainLayout->>Analytics: track("open_in_app", {app_id})
+    MainLayout->>Native: openIn(lastAppId, path)
+    Native-->>MainLayout: success/error
+    deactivate MainLayout
+```
+
+## Estimated Code Review Effort
+
+🎯 3 (Moderate) | ⏱️ ~28 minutes
+
+## Poem
+
+> 🐰 A shortcut ⌘O brings speed and grace,
+> Last apps remembered in their place,
+> Split controls dance—quick-open meets the menu's art,
+> localStorage whispers which app owns your heart,
+> Icons extracted with helpers so bright,
+> The rabbit hops forth into open delight! 🚀
+
+</details>
+
+<!-- walkthrough_end -->
+
+
+<!-- tips_start -->
+
+---
+
+<sub>Comment `@coderabbitai help` to get the list of available commands and usage tips.</sub>
+
+<!-- tips_end -->
+
+<!-- internal state start -->
+
+
+<!-- REDACTED/REDACTED/REDACTED/REDACTED/REDACTED/7IF1pXFUDIQzxjdHpT+VVdi/REDACTED/KwIR0jqVQgo+aQNbguIEMWVGwY/REDACTED/istZCllr/B5kGBK/REDACTED/REDACTED/REDACTED/REDACTED/REDACTED/REDACTED/REDACTED/REDACTED/4pRB/REDACTED/xHE8S0zwFAKqHwI8TlwKHPS4AAG0/REDACTED/UoAULoGbObVvdebRPNZbQtNbDbSALbRsHbGtOtA7RrZtI/VrOYU/fFJrAsTHa/REDACTED/REDACTED/REDACTED/REDACTED/REDACTED/REDACTED/REDACTED/loUolui0RcR0VomKnw3LHdP/REDACTED/REDACTED/REDACTED/5CJ/9qjnyr4MBXyfZ/REDACTED/REDACTED/REDACTED/REDACTED/REDACTED/Hewy21sDFFqZOci/AkuNU/REDACTED/YFbBJcPPAOscic90XMLYspyx4A5o/REDACTED/REDACTED/REDACTED/REDACTED/REDACTED/csQy3a3QjM8/REDACTED/w8l3Zpdql1pl5rVhx3wpx97Ly/K3l/ItdefI5Yh4/REDACTED/REDACTED/L9D7ge/REDACTED/np8Z7H2Z5SVZ/BaB4idB6K8/REDACTED/58F9uBHH2q6sCBeLdHUJ/AfFoGEJ71EZw6EmqSBEkcA2kdkaI/GwTT6Gmy5HUeo5cNo/cL0a8PgB8L21JYirY8XZGZ7XgDbSK/REDACTED/HHtmWyDBWoH/REDACTED/REDACTED/REDACTED/REDACTED -->
+
+<!-- internal state end -->"
+
+Comment metadata:
+This comment was left on a file.
+This comment was left on GitHub by @coderabbitai.
+
+
+Comment #2:
+
+File: apps/desktop/main/native-handlers.ts
+Line: 466
+User comment: "_🛠️ Refactor suggestion_ | _🟠 Major_
+
+**Keep app discovery and icon extraction out of Electron main.**
+
+This adds plist parsing, icon conversion, subprocess orchestration, and caching directly in `apps/desktop/main`. Please move this flow into the backend/sidecar and keep the IPC handler as a thin bridge.
+
+
+As per coding guidelines, "Electron Main Process should only contain window lifecycle, native OS dialogs, BrowserView management, auto-updater, and process lifecycle (spawning backend + sidecar). All business logic belongs in Node.js backend or sidecar".
+
+<details>
+<summary>🤖 Prompt for AI Agents</summary>
+
+```
+Verify each finding against the current code and only fix it if needed.
+
+In `@apps/desktop/main/native-handlers.ts` around lines 411 - 466, The app
+discovery and icon extraction logic (functions resolveIconFileName,
+extractAppIcon, and loadInstalledApps which iterates SUPPORTED_APPS and calls
+mdfind/sips/PlistBuddy) should be moved out of the Electron main into the
+backend/sidecar: create a new backend module/service that implements these
+functions and returns InstalledApp[] (with id,name,path,icon), preserving
+existing error handling and temp-file cleanup, then replace the heavy logic in
+the main process with a thin IPC handler that simply forwards requests to that
+backend service (call the new service via your existing backend RPC/IPC
+mechanism), keeping Electron main responsible only for bridging (no
+subprocess/plist parsing/icon conversion there).
+```
+
+</details>
+
+<!-- fingerprinting:phantom:medusa:grasshopper -->
+
+<!-- This is an auto-generated comment by CodeRabbit -->"
+
+Comment metadata:
+This comment was left on the modified branch.
+This comment was left on GitHub by @coderabbitai.
+This comment is the start of thread PRRT_kwDOQEbULc52v0of. 
+
+
+Comment #3:
+
+File: apps/desktop/main/native-handlers.ts
+Line: 447
+User comment: "_⚠️ Potential issue_ | _🟠 Major_
+
+**Use a unique temp file for icon conversion.**
+
+`/tmp/opendevs-icon-${appId}.png` is a predictable path in a world-writable directory. A pre-existing symlink or leftover file can make `sips --out` write to the wrong target, and failures before cleanup will leak junk into `/tmp`. Create a unique temp dir/file and remove it in `finally`.
+
+
+<details>
+<summary>Suggested fix</summary>
+
+```diff
+-import { homedir } from "os";
++import { homedir, tmpdir } from "os";
++import { mkdtemp, readFile, rm } from "fs/promises";
++import { join } from "path";
+
+ async function extractAppIcon(appPath: string, appId: string): Promise<string | undefined> {
++  const tempDir = await mkdtemp(join(tmpdir(), "opendevs-icon-"));
++  const tmpPng = join(tempDir, `${appId}.png`);
+   try {
+     const iconFileName = await resolveIconFileName(appPath);
+     const icnsPath = `${appPath}/Contents/Resources/${iconFileName}`;
+-    const tmpPng = `/tmp/opendevs-icon-${appId}.png`;
+     await execFileAsync("sips", [
+       "-s",
+       "format",
+@@
+       icnsPath,
+       "--out",
+       tmpPng,
+     ]);
+-    const fs = await import("fs/promises");
+-    const buf = await fs.readFile(tmpPng);
+-    await fs.unlink(tmpPng).catch(() => {});
++    const buf = await readFile(tmpPng);
+     return `data:image/png;base64,${buf.toString("base64")}`;
+   } catch {
+     return undefined;
++  } finally {
++    await rm(tempDir, { recursive: true, force: true }).catch(() => {});
+   }
+ }
+```
+</details>
+
+<details>
+<summary>🤖 Prompt for AI Agents</summary>
+
+```
+Verify each finding against the current code and only fix it if needed.
+
+In `@apps/desktop/main/native-handlers.ts` around lines 428 - 447, The
+extractAppIcon function currently writes to a predictable
+/tmp/opendevs-icon-${appId}.png which is unsafe and can leak or be hijacked;
+change it to create a unique temp directory or file (use fs.mkdtemp with
+os.tmpdir or similar) and build the output path inside that unique dir (use
+path.join), pass that unique path to sips, and move the existing cleanup/unlink
+into a finally block to ensure the temp file/dir is removed even on errors;
+update resolveIconFileName/icnsPath usage accordingly so nothing else changes
+and ensure any imports (fs/promises, os, path) are handled.
+```
+
+</details>
+
+<!-- fingerprinting:phantom:medusa:grasshopper -->
+
+<!-- This is an auto-generated comment by CodeRabbit -->"
+
+Comment metadata:
+This comment was left on the modified branch.
+This comment was left on GitHub by @coderabbitai.
+This comment is the start of thread PRRT_kwDOQEbULc52v0om. 
+
+
+Comment #4:
+
+File: apps/web/src/app/layouts/MainLayout.tsx
+Line: 294
+User comment: "_⚠️ Potential issue_ | _🟠 Major_
+
+**Gate the `⌘/Ctrl+O` callback behind external-app capability.**
+
+`useKeyboardShortcuts()` prevents the browser default as soon as `onOpenInApp` is present. Because `MainLayout` always passes it, web builds swallow `⌘/Ctrl+O` even though `native.apps.openIn()` is a no-op when `openInExternalApp` is unavailable. The palette command is already capability-gated; the shortcut should match.
+
+
+<details>
+<summary>Suggested fix</summary>
+
+```diff
++import { capabilities } from "@/platform/capabilities";
+@@
+-    onOpenInApp: openInLastApp,
++    onOpenInApp: capabilities.openInExternalApp ? openInLastApp : undefined,
+```
+</details>
+
+
+Also applies to: 297-317
+
+<details>
+<summary>🤖 Prompt for AI Agents</summary>
+
+```
+Verify each finding against the current code and only fix it if needed.
+
+In `@apps/web/src/app/layouts/MainLayout.tsx` around lines 287 - 294, The keyboard
+shortcut handler for "open in app" is registered even when the external-app
+capability isn't available, causing the browser to swallow ⌘/Ctrl+O; update the
+shortcut registration to only set onOpenInApp/useKeyboardShortcuts when the
+capability is present. Specifically, gate the callback that calls openInLastApp
+(and any onOpenInApp prop usage) behind a check for the external-app capability
+(the same condition that enables the palette command) so that
+useKeyboardShortcuts and any track/native.apps.openIn calls are only wired when
+openInExternalApp is available.
+```
+
+</details>
+
+<!-- fingerprinting:phantom:medusa:grasshopper -->
+
+<!-- This is an auto-generated comment by CodeRabbit -->"
+
+Comment metadata:
+This comment was left on the modified branch.
+This comment was left on GitHub by @coderabbitai.
+This comment is the start of thread PRRT_kwDOQEbULc52v0o_. 
+
+
+Comment #5:
+
+File: apps/web/src/features/command-palette/commands.ts
+Line: 71
+User comment: "_⚠️ Potential issue_ | _🟡 Minor_
+
+**Hide this command until a last editor exists.**
+
+On a clean profile this action is visible, but `openInLastApp` is still a no-op because nothing has been remembered yet. Folding `getLastOpenInAppId()` into `when` — or falling back to the picker — would keep first-run behavior consistent with the split button.
+
+<details>
+<summary>🤖 Prompt for AI Agents</summary>
+
+```
+Verify each finding against the current code and only fix it if needed.
+
+In `@apps/web/src/features/command-palette/commands.ts` around lines 62 - 71, The
+"open-in-app" command is shown on first-run even though no last editor is
+remembered; update its visibility or behavior by changing the when() or action:
+either make when() return capabilities.openInExternalApp &&
+Boolean(getLastOpenInAppId()) so the command is hidden until
+getLastOpenInAppId() returns a value, or keep it visible but modify action (the
+current no-op) to call the picker fallback when getLastOpenInAppId() is falsy;
+locate the command by id "open-in-app" and adjust the when() function or the
+action to use getLastOpenInAppId() accordingly.
+```
+
+</details>
+
+<!-- fingerprinting:phantom:medusa:grasshopper -->
+
+<!-- This is an auto-generated comment by CodeRabbit -->"
+
+Comment metadata:
+This comment was left on the modified branch.
+This comment was left on GitHub by @coderabbitai.
+This comment is the start of thread PRRT_kwDOQEbULc52v0pM. 
+
+
+Comment #6:
+
+File: apps/web/src/features/workspace/ui/WorkspaceHeader.tsx
+Line: 270
+User comment: "_⚠️ Potential issue_ | _🟡 Minor_
+
+**Consider disabling quick-open while apps are loading.**
+
+If the user clicks the button before apps finish loading, `defaultApp` is null and the dropdown opens with no apps to display. Consider disabling the button or showing a loading indicator during the initial fetch.
+
+
+
+<details>
+<summary>🛡️ Suggested fix</summary>
+
+```diff
+  function handleQuickOpen() {
++   if (loading) return;
+    if (defaultApp) {
+      handleOpenInApp(defaultApp.id);
+    } else {
+      setOpen(true);
+    }
+  }
+```
+
+Or disable the button in JSX:
+
+```diff
+  <button
+    type="button"
+    onClick={handleQuickOpen}
++   disabled={loading}
+    className="text-text-subtle hover:bg-bg-muted flex h-full shrink-0 items-center gap-1.5 rounded-l-lg px-2 transition-colors duration-200"
+  >
+```
+
+</details>
+
+<details>
+<summary>🤖 Prompt for AI Agents</summary>
+
+```
+Verify each finding against the current code and only fix it if needed.
+
+In `@apps/web/src/features/workspace/ui/WorkspaceHeader.tsx` around lines 264 -
+270, The quick-open action currently opens the dropdown when defaultApp is null,
+causing an empty list if apps are still loading; update the UI and handler to
+guard against the loading state: use the existing apps-loading flag (e.g.,
+isLoading or appsLoading from the apps hook) to disable the quick-open button in
+the JSX and show a spinner/aria-busy, and add a defensive check inside
+handleQuickOpen (if (isLoading) return;) so it neither calls setOpen nor
+handleOpenInApp while apps are fetching; reference the handleQuickOpen function
+and the variables defaultApp, setOpen, and handleOpenInApp when making the
+change.
+```
+
+</details>
+
+<!-- fingerprinting:phantom:medusa:ocelot -->
+
+<!-- This is an auto-generated comment by CodeRabbit -->"
+
+Comment metadata:
+This comment was left on the modified branch.
+This comment was left on GitHub by @coderabbitai.
+This comment is the start of thread PRRT_kwDOQEbULc52v0pP. 
+
+
+Comment #7:
+
+File: apps/web/src/shared/components/OpenInDropdown.tsx
+Line: 63
+User comment: "_⚠️ Potential issue_ | _🟡 Minor_
+
+**Persist the default only after the open succeeds.**
+
+`setLastAppId(appId)` runs before the native open result is known. `apps/web/src/platform/native/apps.ts` currently drops the `true/false` returned by `open_in_app`, so a normal launch failure still promotes that app to the remembered default. Return that boolean to the renderer and save the choice only on success.
+
+<details>
+<summary>🤖 Prompt for AI Agents</summary>
+
+```
+Verify each finding against the current code and only fix it if needed.
+
+In `@apps/web/src/shared/components/OpenInDropdown.tsx` around lines 56 - 63, The
+current handleOpenInApp sets setLastAppId(appId) before knowing whether
+native.apps.openIn succeeded, causing failed launches to become the remembered
+default; change the flow so native.apps.openIn(appId, workspacePath) returns the
+boolean success from apps/web/src/platform/native/apps.ts, await that result in
+handleOpenInApp, and only call setLastAppId(appId) when the returned value is
+true (handle false by logging/telemetry and do not persist); keep the existing
+tracking and error handling but move persistence to after a successful open.
+```
+
+</details>
+
+<!-- fingerprinting:phantom:medusa:grasshopper -->
+
+<!-- This is an auto-generated comment by CodeRabbit -->"
+
+Comment metadata:
+This comment was left on the modified branch.
+This comment was left on GitHub by @coderabbitai.
+This comment is the start of thread PRRT_kwDOQEbULc52v0pX. 
+
+</system-instruction>
+
+I run AI code review, is it actionable? Wdyt? Explore in depth each problem.
+We want a clean, maintainable codebase, with proper best practices for the tech stack we use.
+Run subagents to verify, and if it should be fixed, try to merge some stuff together so it can be fixed together within one subagent. 
+If you can test something do it.
