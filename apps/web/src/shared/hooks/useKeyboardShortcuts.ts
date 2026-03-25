@@ -5,6 +5,7 @@ import type { Workspace } from "@/shared/types";
 interface UseKeyboardShortcutsOptions {
   onRefresh: () => Promise<void>;
   onEscape?: () => void;
+  onOpenInApp?: () => void;
   selectedWorkspace: Workspace | null;
   modalStates?: {
     showNewWorkspaceModal?: boolean;
@@ -16,6 +17,7 @@ interface UseKeyboardShortcutsOptions {
 export function useKeyboardShortcuts({
   onRefresh,
   onEscape,
+  onOpenInApp,
   selectedWorkspace,
   modalStates = {},
 }: UseKeyboardShortcutsOptions) {
@@ -25,6 +27,13 @@ export function useKeyboardShortcuts({
       if ((e.metaKey || e.ctrlKey) && e.key === "k") {
         e.preventDefault();
         uiActions.toggleCommandPalette();
+        return;
+      }
+
+      // ⌘O or Ctrl+O - Open in last-used app
+      if ((e.metaKey || e.ctrlKey) && e.key === "o" && onOpenInApp) {
+        e.preventDefault();
+        onOpenInApp();
         return;
       }
 
@@ -43,5 +52,5 @@ export function useKeyboardShortcuts({
 
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [onRefresh, onEscape, selectedWorkspace, modalStates]);
+  }, [onRefresh, onEscape, onOpenInApp, selectedWorkspace, modalStates]);
 }
