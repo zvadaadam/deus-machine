@@ -1,0 +1,34 @@
+{
+  "cli_version": "0.5.0",
+  "checkpoint_id": "e86e6437f93c",
+  "session_id": "3a0cdc9a-29d2-4869-b3a1-7af2c830c085",
+  "strategy": "manual-commit",
+  "created_at": "2026-03-25T22:50:58.001841Z",
+  "branch": "zvadaadam/rename-opendevs-to-deus",
+  "checkpoints_count": 19,
+  "files_touched": [
+    "apps/desktop/main/backend-process.ts",
+    "apps/web/src/features/auth/ui/PairGatePage.tsx"
+  ],
+  "agent": "Claude Code",
+  "turn_id": "7a3d96845a15",
+  "token_usage": {
+    "input_tokens": 936,
+    "cache_creation_tokens": 142469,
+    "cache_read_tokens": 12064626,
+    "output_tokens": 37767,
+    "api_call_count": 131
+  },
+  "session_metrics": {
+    "turn_count": 19
+  },
+  "initial_attribution": {
+    "calculated_at": "2026-03-25T22:50:57.742173Z",
+    "agent_lines": 9,
+    "human_added": 3847,
+    "human_modified": 4,
+    "human_removed": 0,
+    "total_committed": 3860,
+    "agent_percentage": 0.233160621761658
+  }
+}
