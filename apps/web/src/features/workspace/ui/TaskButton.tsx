@@ -1,7 +1,7 @@
 /**
  * TaskButton — compact icon button for running manifest tasks from the header.
  *
- * Maps a string icon name (from opendevs.json) to a lucide-react component.
+ * Maps a string icon name (from deus.json) to a lucide-react component.
  * Ghost style, sm size. Shows tooltip with task name + description.
  */
 

@@ -9,7 +9,7 @@ import { AgentDotsAnimation } from "./AgentDotsAnimation";
 import { WelcomeStep } from "./steps/WelcomeStep";
 import { GitHubSetupStep } from "./steps/GitHubSetupStep";
 import { AIToolsCheckStep } from "./steps/AIToolsCheckStep";
-import { OpenDevsStep } from "./steps/OpenDevsStep";
+import { DeusStep } from "./steps/DeusStep";
 import { ProjectSelectionStep } from "./steps/ProjectSelectionStep";
 import type { OnboardingStep } from "../types";
 
@@ -317,7 +317,7 @@ export function OnboardingOverlay() {
                 {currentStep === 1 && <GitHubSetupStep onNext={goForward} onBack={goBack} />}
                 {currentStep === 2 && <AIToolsCheckStep onNext={goForward} onBack={goBack} />}
                 {currentStep === 3 && <ProjectSelectionStep onBack={goBack} onNext={goForward} />}
-                {currentStep === 4 && <OpenDevsStep onBack={goBack} onComplete={handleComplete} />}
+                {currentStep === 4 && <DeusStep onBack={goBack} onComplete={handleComplete} />}
               </div>
             </div>
 

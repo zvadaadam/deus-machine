@@ -7,7 +7,7 @@ const { mockScanWorkspaceFiles, mockInvalidateCache, mockReadTextFile, mockWithW
     mockReadTextFile: vi.fn(),
     mockWithWorkspace: vi.fn((c: any, next: any) => {
       c.set("workspace", { id: "ws-123", root_path: "/repos/myrepo", slug: "test-ws" });
-      c.set("workspacePath", "/repos/myrepo/.opendevs/test-ws");
+      c.set("workspacePath", "/repos/myrepo/.deus/test-ws");
       return next();
     }),
   }));
@@ -74,7 +74,7 @@ describe("GET /workspaces/:id/files", () => {
     expect(body.totalFiles).toBe(2);
     expect(body.totalSize).toBe(1536);
     expect(body.files).toHaveLength(2);
-    expect(mockScanWorkspaceFiles).toHaveBeenCalledWith("/repos/myrepo/.opendevs/test-ws");
+    expect(mockScanWorkspaceFiles).toHaveBeenCalledWith("/repos/myrepo/.deus/test-ws");
   });
 });
 
@@ -85,7 +85,7 @@ describe("POST /workspaces/:id/files/invalidate-cache", () => {
 
     const body = await res.json();
     expect(body.ok).toBe(true);
-    expect(mockInvalidateCache).toHaveBeenCalledWith("/repos/myrepo/.opendevs/test-ws");
+    expect(mockInvalidateCache).toHaveBeenCalledWith("/repos/myrepo/.deus/test-ws");
   });
 });
 

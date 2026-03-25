@@ -27,7 +27,7 @@ const ResizablePanel = React.forwardRef<
 ResizablePanel.displayName = "ResizablePanel";
 
 /**
- * Codex-style resize handle — zero-width separator with a gradient line
+ * Resize handle — zero-width separator with a gradient line
  * that fades at the top/bottom edges. Appears on hover, brightens on drag.
  * Keyboard accessible (arrow keys) via react-resizable-panels.
  *
@@ -41,7 +41,7 @@ function ResizableHandle({
     <ResizablePrimitive.PanelResizeHandle
       data-slot="resizable-handle"
       className={cn(
-        // Zero-width base — matches the Codex gradient handle style
+        // Zero-width base
         "group relative z-10 flex w-0 flex-shrink-0 items-center justify-center",
         // Vertical mode: zero-height instead
         "data-[panel-group-direction=vertical]:h-0 data-[panel-group-direction=vertical]:w-full",

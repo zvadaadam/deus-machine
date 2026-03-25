@@ -143,7 +143,7 @@ export const SettingsFile = z
 // Preferences File Schema (disk reads — used with safeParse for graceful fallback)
 // ============================================================================
 
-/** Shape of ~/Library/Application Support/com.opendevs.app/preferences.json */
+/** Shape of ~/Library/Application Support/com.deus.app/preferences.json */
 export const PreferencesFile = z
   .object({
     theme: z.enum(["light", "dark", "system"]).optional(),

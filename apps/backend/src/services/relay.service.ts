@@ -87,7 +87,7 @@ function getServerName(): string {
   try {
     return `${userInfo().username}'s computer`;
   } catch {
-    return "OpenDevs Server";
+    return "Deus Server";
   }
 }
 

@@ -1,13 +1,13 @@
 import { GitPullRequest } from "lucide-react";
 import { cn } from "@/shared/lib/utils";
 
-interface OpenDevsRepositoryBannerProps {
+interface DeusRepositoryBannerProps {
   onNewWorkspace: () => void;
   className?: string;
 }
 
 /**
- * OpenDevsRepositoryBanner — ambient contribution surface for the opendevs repo.
+ * DeusRepositoryBanner — ambient contribution surface for the deus repo.
  *
  * Direction: "Quiet Recognition"
  * Philosophy: The tool knows it is being built. No announcement needed —
@@ -17,10 +17,7 @@ interface OpenDevsRepositoryBannerProps {
  * 20x20 icon slot used by SidebarRow. No left border, no card, no
  * background — just an aligned row that reads like a natural sidebar item.
  */
-export function OpenDevsRepositoryBanner({
-  onNewWorkspace,
-  className,
-}: OpenDevsRepositoryBannerProps) {
+export function DeusRepositoryBanner({ onNewWorkspace, className }: DeusRepositoryBannerProps) {
   return (
     <div
       className={cn(

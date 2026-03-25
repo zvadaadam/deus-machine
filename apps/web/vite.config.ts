@@ -43,7 +43,7 @@ export default defineConfig({
   server: {
     port: 1420,
     watch: {
-      ignored: ["**/.opendevs/**"],
+      ignored: ["**/.deus/**"],
     },
   },
 });

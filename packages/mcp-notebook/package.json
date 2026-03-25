@@ -1,5 +1,5 @@
 {
-  "name": "@opendevs/mcp-notebook",
+  "name": "@deus/mcp-notebook",
   "version": "0.1.0",
   "type": "module",
   "main": "src/server.ts",

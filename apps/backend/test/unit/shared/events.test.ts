@@ -73,7 +73,7 @@ describe("shared/events", () => {
 
     it("FileChangeSchema accepts valid payload", () => {
       const result = FileChangeSchema.safeParse({
-        workspace_path: "/repo/.opendevs/alpha",
+        workspace_path: "/repo/.deus/alpha",
         change_type: "fileschanged",
         affected_count: 3,
       });

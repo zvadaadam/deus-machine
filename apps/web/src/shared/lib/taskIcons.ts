@@ -1,8 +1,8 @@
 /**
- * Shared task icon mapping for opendevs.json manifest tasks.
+ * Shared task icon mapping for deus.json manifest tasks.
  *
  * Single source of truth used by TaskButton (header) and EnvironmentSection (settings).
- * Keys are the icon names stored in opendevs.json, values are lucide-react components.
+ * Keys are the icon names stored in deus.json, values are lucide-react components.
  */
 
 import {

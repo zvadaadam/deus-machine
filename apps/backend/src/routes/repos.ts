@@ -22,7 +22,7 @@ import {
   writeManifest,
   detectManifestFromProject,
 } from "../services/manifest.service";
-import { OpenDevsManifestSchema } from "../lib/opendevs-manifest";
+import { DeusManifestSchema } from "../lib/deus-manifest";
 import { invalidate } from "../services/query-engine";
 import { runGh, parseGitHubRepo } from "../services/gh.service";
 import type { QueryResource } from "@shared/types/query-protocol";
@@ -133,7 +133,7 @@ app.post("/repos/:id/manifest", async (c) => {
   const repo = getRepositoryById(db, c.req.param("id"));
   if (!repo) throw new NotFoundError("Repository not found");
 
-  const manifest = parseBody(OpenDevsManifestSchema, await c.req.json());
+  const manifest = parseBody(DeusManifestSchema, await c.req.json());
   const success = writeManifest(repo.root_path, manifest);
   if (!success) return c.json({ error: "Failed to write manifest" }, 500);
   return c.json({ success: true });

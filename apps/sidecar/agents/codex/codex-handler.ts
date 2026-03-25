@@ -188,7 +188,7 @@ export class CodexAgentHandler implements AgentHandler {
       // Build environment (reuse shared env builder)
       const env = buildAgentEnvironment({
         providerEnvVars: options?.providerEnvVars,
-        opendevsEnv: options?.opendevsEnv,
+        deusEnv: options?.deusEnv,
         ghToken: options?.ghToken,
       });
 

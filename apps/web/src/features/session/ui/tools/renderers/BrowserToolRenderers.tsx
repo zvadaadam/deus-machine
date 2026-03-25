@@ -1,7 +1,7 @@
 /**
  * Browser MCP Tool Renderers
  *
- * Specialized renderers for the 13 OpenDevs browser automation tools.
+ * Specialized renderers for the 13 Deus browser automation tools.
  * Groups related tools that share similar output patterns (snapshot-based,
  * action confirmations, data inspection).
  *

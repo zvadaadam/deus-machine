@@ -1,7 +1,7 @@
 "use strict";
 (() => {
   // apps/web/src/features/browser/automation/inject/visual-effects.ts
-  if (!window.__opendevsVisuals) {
+  if (!window.__deusVisuals) {
     let showFrame = function(rect) {
       if (frameHideTimer) {
         clearTimeout(frameHideTimer);
@@ -9,7 +9,7 @@
       }
       if (!frameEl || !frameEl.parentNode) {
         frameEl = document.createElement("div");
-        frameEl.setAttribute("data-opendevs-visual", "true");
+        frameEl.setAttribute("data-deus-visual", "true");
         frameEl.style.position = "fixed";
         frameEl.style.pointerEvents = "none";
         frameEl.style.zIndex = "2147483646";
@@ -57,7 +57,7 @@
         cursorEl.setAttribute("height", "16");
         cursorEl.setAttribute("viewBox", "0 0 16 16");
         cursorEl.setAttribute("fill", "none");
-        cursorEl.setAttribute("data-opendevs-visual", "true");
+        cursorEl.setAttribute("data-deus-visual", "true");
         cursorEl.setAttribute("aria-hidden", "true");
         cursorEl.style.position = "fixed";
         cursorEl.style.pointerEvents = "none";
@@ -167,7 +167,7 @@
     }, rippleAt = function(x, y) {
       try {
         const ring1 = document.createElement("div");
-        ring1.setAttribute("data-opendevs-visual", "true");
+        ring1.setAttribute("data-deus-visual", "true");
         ring1.style.position = "fixed";
         ring1.style.left = x + "px";
         ring1.style.top = y + "px";
@@ -194,7 +194,7 @@
         });
         setTimeout(() => {
           const ring2 = document.createElement("div");
-          ring2.setAttribute("data-opendevs-visual", "true");
+          ring2.setAttribute("data-deus-visual", "true");
           ring2.style.position = "fixed";
           ring2.style.left = x + "px";
           ring2.style.top = y + "px";
@@ -293,7 +293,7 @@
       try {
         showFrame(rect || null);
         const flash = document.createElement("div");
-        flash.setAttribute("data-opendevs-visual", "true");
+        flash.setAttribute("data-deus-visual", "true");
         flash.style.position = "fixed";
         flash.style.pointerEvents = "none";
         flash.style.zIndex = "2147483647";
@@ -321,7 +321,7 @@
             }
           }, 140);
           const tint = document.createElement("div");
-          tint.setAttribute("data-opendevs-visual", "true");
+          tint.setAttribute("data-deus-visual", "true");
           tint.style.position = "fixed";
           tint.style.pointerEvents = "none";
           tint.style.zIndex = "2147483647";
@@ -359,7 +359,7 @@
       try {
         const rect = el.getBoundingClientRect();
         const box = document.createElement("div");
-        box.setAttribute("data-opendevs-visual", "true");
+        box.setAttribute("data-deus-visual", "true");
         box.style.position = "fixed";
         box.style.left = rect.left + "px";
         box.style.top = rect.top + "px";
@@ -401,10 +401,10 @@
           }
         };
         const tint1 = document.createElement("div");
-        tint1.setAttribute("data-opendevs-visual", "true");
+        tint1.setAttribute("data-deus-visual", "true");
         tint1.style.cssText = "position:fixed;left:0;top:0;width:100vw;height:100vh;pointer-events:none;z-index:2147483645;opacity:1;background:linear-gradient(180deg,rgba(" + BLUE + ",0.18) 0%,rgba(" + BLUE + ",0.12) 40%,rgba(" + BLUE + ",0.06) 75%,transparent 100%);clip-path:inset(0 0 100% 0);";
         const band1 = document.createElement("div");
-        band1.setAttribute("data-opendevs-visual", "true");
+        band1.setAttribute("data-deus-visual", "true");
         band1.style.cssText = "position:fixed;left:0;top:0;width:100vw;height:100px;pointer-events:none;z-index:2147483647;will-change:transform,opacity;background:linear-gradient(180deg,transparent 0%,rgba(" + BLUE + ",0.04) 20%,rgba(" + BLUE + ",0.12) 45%,rgba(" + BLUE + ",0.30) 70%,rgba(" + BLUE + ",0.55) 88%,rgba(" + BLUE + ",0.70) 96%,rgba(" + BLUE + ",0.40) 100%);box-shadow:0 4px 16px 2px rgba(" + BLUE + ",0.40),0 2px 40px 6px rgba(" + BLUE + ",0.15);transform:translateY(-100px);opacity:1;";
         document.documentElement.appendChild(tint1);
         startTransition(
@@ -433,11 +433,11 @@
         setTimeout(() => {
           try {
             const tint2 = document.createElement("div");
-            tint2.setAttribute("data-opendevs-visual", "true");
+            tint2.setAttribute("data-deus-visual", "true");
             tint2.style.cssText = "position:fixed;left:0;top:0;width:100vw;height:100vh;pointer-events:none;z-index:2147483645;opacity:1;background:linear-gradient(180deg,rgba(" + BLUE + ",0.12) 0%,rgba(" + BLUE + ",0.08) 40%,rgba(" + BLUE + ",0.04) 75%,transparent 100%);clip-path:inset(0 0 100% 0);";
             const fo2 = Math.min(400, Math.round(P2_MS * 0.15));
             const band2 = document.createElement("div");
-            band2.setAttribute("data-opendevs-visual", "true");
+            band2.setAttribute("data-deus-visual", "true");
             band2.style.cssText = "position:fixed;left:0;top:0;width:100vw;height:80px;pointer-events:none;z-index:2147483647;will-change:transform,opacity;background:linear-gradient(180deg,transparent 0%,rgba(" + BLUE + ",0.06) 20%,rgba(" + BLUE + ",0.20) 50%,rgba(" + BLUE + ",0.50) 78%,rgba(" + BLUE + ",0.80) 93%,rgba(" + BLUE + ",0.50) 100%);box-shadow:0 3px 14px 2px rgba(" + BLUE + ",0.50),0 2px 36px 5px rgba(" + BLUE + ",0.20);transform:translateY(-80px);opacity:1;";
             document.documentElement.appendChild(tint2);
             startTransition(
@@ -464,24 +464,24 @@
               }, 850);
             }, P2_MS + 600);
           } catch (_e) {
-            console.error("[opendevs] scanPage P2:", _e);
+            console.error("[deus] scanPage P2:", _e);
           }
         }, P2_DELAY);
         hideFrame(P1_MS + 1400);
       } catch (_e) {
-        console.error("[opendevs] scanPage:", _e);
+        console.error("[deus] scanPage:", _e);
       }
     }, showActiveGlow = function() {
       try {
         if (!activeGlowStyleEl) {
           activeGlowStyleEl = document.createElement("style");
-          activeGlowStyleEl.setAttribute("data-opendevs-visual", "true");
+          activeGlowStyleEl.setAttribute("data-deus-visual", "true");
           activeGlowStyleEl.textContent = "@keyframes hiveBreathe{0%,100%{transform:scale(1);box-shadow:inset 0 0 80px 20px rgba(58,150,221,0.35),inset 0 0 25px 8px rgba(58,150,221,0.40)}50%{transform:scale(1.04);box-shadow:inset 0 0 130px 40px rgba(58,150,221,0.45),inset 0 0 50px 18px rgba(58,150,221,0.50)}}";
           document.head.appendChild(activeGlowStyleEl);
         }
         if (!activeGlowEl || !activeGlowEl.parentNode) {
           activeGlowEl = document.createElement("div");
-          activeGlowEl.setAttribute("data-opendevs-visual", "true");
+          activeGlowEl.setAttribute("data-deus-visual", "true");
           activeGlowEl.style.position = "fixed";
           activeGlowEl.style.left = "0";
           activeGlowEl.style.top = "0";
@@ -547,7 +547,7 @@
     const MAX_MS = 1e3;
     const PX_PER_MS = 1.5;
     const EASING = "cubic-bezier(0.22, 0.61, 0.36, 1)";
-    window.__opendevsVisuals = {
+    window.__deusVisuals = {
       moveCursorToViewport,
       moveCursorToElement,
       rippleAt,

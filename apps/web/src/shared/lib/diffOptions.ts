@@ -6,13 +6,13 @@ import type { PatchDiffProps } from "@pierre/diffs/react";
 type DiffOptions<LAnnotation = undefined> = NonNullable<PatchDiffProps<LAnnotation>["options"]>;
 
 const DIFF_LIMITS = {
-  maxLineDiffLength: 1000, // Match Codex — process longer lines for word-level diffs
+  maxLineDiffLength: 1000, // Process longer lines for word-level diffs
   tokenizeMaxLineLength: 1000,
 } as const;
 
 const DIFF_CONTEXT = {
   collapsedContextThreshold: 6,
-  expansionLineCount: 100, // Match Codex — load context in smaller chunks
+  expansionLineCount: 100, // Load context in smaller chunks
 } as const;
 
 const DIFF_UNSAFE_CSS = `

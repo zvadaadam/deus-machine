@@ -7,7 +7,7 @@ import * as path from "path";
 import type { Options, PermissionMode, SettingSource } from "@anthropic-ai/claude-agent-sdk";
 import { EventBroadcaster } from "../../event-broadcaster";
 import { createCheckpoint } from "./checkpoint";
-import { createOpenDevsMCPServer } from "../opendevs-tools";
+import { createDeusMCPServer } from "../deus-tools";
 import { createNotebookMCPServer } from "../notebook-server";
 import { getClaudeExecutablePath } from "./claude-discovery";
 import { mapModelForProvider } from "./claude-models";
@@ -34,7 +34,7 @@ export const DEFAULT_SETTING_SOURCES: SettingSource[] = ["user", "project", "loc
 export function buildAppendSystemPrompt(cwd?: string): string {
   const workspaceContext =
     buildWorkspaceContext(cwd) ||
-    "You are working inside OpenDevs, a desktop app that orchestrates multiple AI coding agents in parallel.";
+    "You are working inside Deus, a desktop app that orchestrates multiple AI coding agents in parallel.";
 
   return `
 ${workspaceContext}
@@ -263,7 +263,7 @@ export function buildSdkOptions(
 
   if (!options?.strictDataPrivacy) {
     sdkOptions.mcpServers = {
-      opendevs: createOpenDevsMCPServer(sessionId),
+      deus: createDeusMCPServer(sessionId),
       ...createNotebookMCPServer(workingDirectory),
     };
   }

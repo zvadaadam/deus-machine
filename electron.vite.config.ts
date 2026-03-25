@@ -18,11 +18,11 @@ const pkg = JSON.parse(readFileSync(resolve(__dirname, "package.json"), "utf-8")
  */
 function backendPortPlugin(): Plugin {
   return {
-    name: "opendevs-backend-port",
+    name: "deus-backend-port",
     configureServer(server) {
       server.middlewares.use((req, res, next) => {
         if (req.url === "/__backend_port") {
-          const portFile = join(tmpdir(), "opendevs-backend-port");
+          const portFile = join(tmpdir(), "deus-backend-port");
           try {
             if (existsSync(portFile)) {
               const port = readFileSync(portFile, "utf-8").trim();
@@ -109,7 +109,7 @@ export default defineConfig({
     server: {
       port: 1420,
       watch: {
-        ignored: ["**/.opendevs/**"],
+        ignored: ["**/.deus/**"],
       },
     },
   },

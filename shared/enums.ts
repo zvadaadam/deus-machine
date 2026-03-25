@@ -33,7 +33,7 @@ export type WorkspaceState = z.infer<typeof WorkspaceStateSchema>;
 export const SetupStatusSchema = z.enum(["none", "running", "completed", "failed"]);
 export type SetupStatus = z.infer<typeof SetupStatusSchema>;
 
-/** Linear-style workflow states for workspaces. */
+/** Workflow states for workspaces. */
 export const WorkspaceStatusSchema = z.enum([
   "backlog",
   "in-progress",

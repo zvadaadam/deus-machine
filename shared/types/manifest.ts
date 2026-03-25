@@ -1,12 +1,12 @@
 /**
  * Manifest types — shared between frontend and backend.
  *
- * NormalizedTask is the resolved form of a task entry from opendevs.json
+ * NormalizedTask is the resolved form of a task entry from deus.json
  * (string shorthand expanded to full object). Used by manifest endpoints
  * on both sides.
  */
 
-/** A task from opendevs.json, normalized to full object form */
+/** A task from deus.json, normalized to full object form */
 export interface NormalizedTask {
   name: string;
   command: string;

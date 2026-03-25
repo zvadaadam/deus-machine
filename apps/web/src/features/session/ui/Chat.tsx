@@ -156,7 +156,7 @@ export function Chat({
   // Counter-based: only the turn at index > maxAnimatedTurnIndex gets the
   // entrance animation. Simpler than a Set, immune to unbounded growth,
   // and prepended messages automatically skip animation (their indices
-  // are below the counter). Inspired by Cursor's maxAnimatedPairIndex.
+  // are below the counter).
   const maxAnimatedTurnIndex = useRef(-1);
   // Pre-seed on first render with turns so initial load doesn't animate.
   // Without this, the last historical turn always plays the entrance animation.
@@ -185,7 +185,7 @@ export function Chat({
   const prevTotalSizeRef = useRef<number | undefined>(undefined);
 
   // ── Scroll-position-based load-older (replaces IntersectionObserver) ────
-  // Cursor-aligned: scroll-position math instead of a sentinel div.
+  // Scroll-position math instead of a sentinel div.
   // Fires when scrollTop < TRIGGER_DISTANCE and no cooldown/loading active.
   // The cooldown ref prevents the infinite loop where collapsed tool groups
   // produce too little visual height to push scrollTop above the trigger zone.

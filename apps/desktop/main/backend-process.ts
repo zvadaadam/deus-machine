@@ -38,10 +38,10 @@ export async function spawnBackend(): Promise<{ port: number; authToken: string 
     ? join(process.resourcesPath, "backend", "server.bundled.cjs")
     : join(projectRoot, "apps/backend/server.cjs");
 
-  // Database path — prefer legacy location (com.opendevs.ide) if it exists,
-  // otherwise use Electron's userData dir (~/Library/Application Support/opendevs/).
-  const legacyDbPath = join(app.getPath("appData"), "com.opendevs.ide", "opendevs.db");
-  const electronDbPath = join(app.getPath("userData"), "opendevs.db");
+  // Database path — prefer legacy location (com.deus.ide) if it exists,
+  // otherwise use Electron's userData dir (~/Library/Application Support/deus/).
+  const legacyDbPath = join(app.getPath("appData"), "com.deus.ide", "deus.db");
+  const electronDbPath = join(app.getPath("userData"), "deus.db");
   const dbPath = existsSync(legacyDbPath) ? legacyDbPath : electronDbPath;
 
   // Sidecar bundle path
@@ -100,7 +100,7 @@ export async function spawnBackend(): Promise<{ port: number; authToken: string 
           // The Vite dev server serves this via middleware in electron.vite.config.ts.
           if (!app.isPackaged) {
             try {
-              const portFile = join(app.getPath("temp"), "opendevs-backend-port");
+              const portFile = join(app.getPath("temp"), "deus-backend-port");
               writeFileSync(portFile, String(port));
             } catch {
               // Non-critical — only used for Chrome tab port discovery
@@ -111,11 +111,11 @@ export async function spawnBackend(): Promise<{ port: number; authToken: string 
         }
 
         // Relay workspace init progress events to the renderer.
-        // Backend emits: OPENDEVS_WORKSPACE_PROGRESS:{"workspaceId":"...","step":"...","label":"..."}
+        // Backend emits: DEUS_WORKSPACE_PROGRESS:{"workspaceId":"...","step":"...","label":"..."}
         // We parse the JSON and forward it as an IPC event to the renderer.
         // SYNC: Event name must match shared/events.ts (AppEventMap["workspace:progress"])
-        if (trimmed.startsWith("OPENDEVS_WORKSPACE_PROGRESS:")) {
-          const jsonStr = trimmed.slice("OPENDEVS_WORKSPACE_PROGRESS:".length);
+        if (trimmed.startsWith("DEUS_WORKSPACE_PROGRESS:")) {
+          const jsonStr = trimmed.slice("DEUS_WORKSPACE_PROGRESS:".length);
           try {
             const payload = JSON.parse(jsonStr);
             const win = BrowserWindow.getAllWindows()[0];
@@ -152,8 +152,8 @@ export async function spawnBackend(): Promise<{ port: number; authToken: string 
           spawnBackend()
             .then(({ port, authToken: newAuthToken }) => {
               // Update env vars so IPC handlers (native:getBackendPort) return the new port
-              process.env.OPENDEVS_BACKEND_PORT = String(port);
-              process.env.OPENDEVS_AUTH_TOKEN = newAuthToken;
+              process.env.DEUS_BACKEND_PORT = String(port);
+              process.env.DEUS_AUTH_TOKEN = newAuthToken;
 
               // Notify all renderer windows so they can invalidate their cached port
               // and reconnect WebSocket to the new address.

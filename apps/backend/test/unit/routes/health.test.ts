@@ -31,10 +31,10 @@ describe("GET /health", () => {
     expect(body.socket).toBeUndefined();
   });
 
-  it("includes app name as opendevs-backend", async () => {
+  it("includes app name as deus-backend", async () => {
     const res = await app.request("/health");
     const body = await res.json();
-    expect(body.app).toBe("opendevs-backend");
+    expect(body.app).toBe("deus-backend");
   });
 
   it("includes timestamp and port", async () => {

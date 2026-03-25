@@ -15,7 +15,7 @@ export { TaskToolRenderer } from "./TaskToolRenderer";
 export { LSToolRenderer } from "./LSToolRenderer";
 export { EnterPlanModeToolRenderer, ExitPlanModeToolRenderer } from "./PlanModeToolRenderer";
 
-// OpenDevs MCP tools — Browser automation
+// Deus MCP tools — Browser automation
 export {
   BrowserSnapshotToolRenderer,
   BrowserNavigateToolRenderer,
@@ -33,7 +33,7 @@ export {
   BrowserScrollToolRenderer,
 } from "./BrowserToolRenderers";
 
-// OpenDevs MCP tools — Workspace
+// Deus MCP tools — Workspace
 export {
   AskUserQuestionToolRenderer,
   GetWorkspaceDiffToolRenderer,

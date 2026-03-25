@@ -23,9 +23,9 @@ const { testDb, TEST_DB_PATH, TEST_DIR } = vi.hoisted(() => {
   const fs = require("fs");
 
   // Use a real temp directory so PREFS_PATH (derived from DB_PATH) resolves correctly.
-  const testDir = path.join(os.tmpdir(), `opendevs-test-ws-auth-${process.pid}-${Date.now()}`);
+  const testDir = path.join(os.tmpdir(), `deus-test-ws-auth-${process.pid}-${Date.now()}`);
   fs.mkdirSync(testDir, { recursive: true });
-  const dbPath = path.join(testDir, "opendevs.db");
+  const dbPath = path.join(testDir, "deus.db");
 
   const db = new Database(dbPath);
   db.pragma("journal_mode = WAL");

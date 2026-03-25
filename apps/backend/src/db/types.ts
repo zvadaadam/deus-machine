@@ -68,7 +68,7 @@ export interface WorkspaceWithDetailsRow {
   init_stage: string | null;
   updated_at: string;
 
-  // Setup tracking (opendevs.json manifest)
+  // Setup tracking (deus.json manifest)
   setup_status: string;
   error_message: string | null;
 

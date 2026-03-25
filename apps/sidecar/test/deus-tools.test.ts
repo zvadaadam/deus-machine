@@ -13,7 +13,7 @@ vi.mock("../event-broadcaster", () => ({
   EventBroadcaster: mockFrontendAPI,
 }));
 
-import { createOpenDevsMCPServer } from "../agents/opendevs-tools";
+import { createDeusMCPServer } from "../agents/deus-tools";
 
 // Helpers to access McpServer internals (the real McpServer class uses private fields)
 function getRegisteredTools(instance: any): Record<string, any> {
@@ -24,21 +24,21 @@ function getServerInfo(instance: any): { name: string; version: string } {
   return instance.server._serverInfo;
 }
 
-describe("createOpenDevsMCPServer", () => {
+describe("createDeusMCPServer", () => {
   const SESSION_ID = "test-session-123";
-  let server: ReturnType<typeof createOpenDevsMCPServer>;
+  let server: ReturnType<typeof createDeusMCPServer>;
 
   beforeEach(() => {
     vi.clearAllMocks();
-    server = createOpenDevsMCPServer(SESSION_ID);
+    server = createDeusMCPServer(SESSION_ID);
   });
 
   it("returns an SDK-compatible server descriptor", () => {
     expect(server.type).toBe("sdk");
-    expect(server.name).toBe("opendevs");
+    expect(server.name).toBe("deus");
     expect(server.instance).toBeDefined();
     const info = getServerInfo(server.instance);
-    expect(info.name).toBe("opendevs");
+    expect(info.name).toBe("deus");
     expect(info.version).toBe("1.0.0");
   });
 

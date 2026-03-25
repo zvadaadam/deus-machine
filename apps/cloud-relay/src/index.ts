@@ -1,4 +1,4 @@
-// OpenDevs Cloud Relay — Cloudflare Worker entry point.
+// Deus Cloud Relay — Cloudflare Worker entry point.
 // Routes WebSocket upgrades to the RelayDO (one Durable Object per server).
 
 import { Hono } from "hono";
@@ -39,7 +39,7 @@ app.get("/health", (c) =>
   c.json({
     status: "ok",
     timestamp: new Date().toISOString(),
-    service: "opendevs-relay",
+    service: "deus-relay",
   })
 );
 
@@ -76,7 +76,7 @@ app.get("/api/servers/:serverId/status", withRelay, async (c) => {
 // Root
 app.get("/", (c) =>
   c.json({
-    name: "opendevs-relay",
+    name: "deus-relay",
     version: "0.1.0",
     docs: "https://app.rundeus.com",
   })

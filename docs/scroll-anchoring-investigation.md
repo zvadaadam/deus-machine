@@ -58,7 +58,7 @@ The rAF auto-scroll chase loop (`useAutoScroll.ts`) continuously writes `scrollT
 
 ### Key Finding
 
-Neither app uses CSS `overflow-anchor: auto` as their primary scroll anchoring mechanism. Cursor does manual scroll compensation (same approach we'd need). Codex avoids the problem entirely by not virtualizing.
+Neither app uses CSS `overflow-anchor: auto` as their primary scroll anchoring mechanism. Codex avoids the problem entirely by not virtualizing.
 
 ---
 
@@ -99,7 +99,7 @@ shouldAdjustScrollPositionOnItemSizeChange?: (
 
 **Complexity:** Minimal. But insufficient alone.
 
-### Option B: Manual "pin the button" hook (Cursor's approach)
+### Option B: Manual "pin the button" hook
 
 **Implementation:**
 
@@ -208,6 +208,5 @@ The near-bottom collapse case (browser `scrollTop` clamp). This is rare — user
 ## References
 
 - TanStack Virtual v3 source: `node_modules/@tanstack/virtual-core/dist/esm/index.js` — search for `shouldAdjustScrollPositionOnItemSizeChange`
-- Cursor source: `/Applications/Cursor.app/Contents/Resources/app/out/vs/workbench/workbench.desktop.main.js`
 - Codex source: `/Applications/Codex.app/Contents/Resources/`
 - Our auto-scroll: `src/features/session/hooks/useAutoScroll.ts` — rAF chase loop with grace frames and in-loop pause detection

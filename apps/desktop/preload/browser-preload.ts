@@ -85,7 +85,7 @@ window.prompt = (_message?: string, _defaultValue?: string) => {
 // call navigator.credentials.create/get() with publicKey hang indefinitely
 // waiting for an authenticator response that never comes.
 //
-// Pattern from Cursor: wrap the native methods, apply a 45s abort timeout,
+// Wrap the native methods, apply a 45s abort timeout,
 // and report "NotSupportedError" so the page can fall back to password auth.
 // ---------------------------------------------------------------------------
 
@@ -100,7 +100,7 @@ try {
 
       function createNotSupportedError() {
         return new DOMException(
-          'WebAuthn is not supported in the OpenDevs browser.',
+          'WebAuthn is not supported in the Deus browser.',
           'NotSupportedError'
         );
       }
