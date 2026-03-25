@@ -38,9 +38,9 @@ export async function spawnBackend(): Promise<{ port: number; authToken: string 
     ? join(process.resourcesPath, "backend", "server.bundled.cjs")
     : join(projectRoot, "apps/backend/server.cjs");
 
-  // Database path — prefer legacy location (com.deus.ide) if it exists,
-  // otherwise use Electron's userData dir (~/Library/Application Support/deus/).
-  const legacyDbPath = join(app.getPath("appData"), "com.deus.ide", "deus.db");
+  // Database path — prefer legacy location (pre-rename) if it exists,
+  // otherwise use Electron's userData dir (~/Library/Application Support/Deus/).
+  const legacyDbPath = join(app.getPath("appData"), "com.opendevs.ide", "opendevs.db");
   const electronDbPath = join(app.getPath("userData"), "deus.db");
   const dbPath = existsSync(legacyDbPath) ? legacyDbPath : electronDbPath;
 
