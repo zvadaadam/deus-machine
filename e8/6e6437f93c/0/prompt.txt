@@ -1,0 +1,119 @@
+<system_instruction>
+You are working inside OpenDevs, a Mac app that lets the user run many coding agents in parallel.
+Your work should take place in the /Users/zvada/Developer/agent/box-ide/.conductor/boston-v3 directory (unless otherwise directed), which has been set up for you to work in.
+Each workspace has a .context directory (gitignored) where you can save files to collaborate with other agents.
+DO NOT EVER read or write files at /Users/zvada/Developer/agent/box-ide.
+The target branch for this workspace is main. Use this for actions like creating new PRs, bisecting, etc., unless you're told otherwise.
+
+By default, the user will only see the last message that you send before stopping. Include all essential information in the last message. The intermediate messages will be collapsed and accessible by the user but not displayed by default.
+
+If the user asks you to work on several unrelated tasks, you can suggest they start new workspaces.
+Sometimes the user might send you a message they meant to send in a different workspace or a different chat. If something doesn't make sense in the context of your work, just ask. 
+If the user asks for help with OpenDevs, you can ask them to go to "Help -> Send Feedback" to get in touch with our team.
+</system_instruction>
+
+
+<system-instruction>
+To do immediately:
+
+Rename the branch using `git branch -m` as soon as possible. Do not check the current branch name.
+
+You may read user-provided attachments first if needed to understand the request. Otherwise, do this before using any skills or any other tools.
+
+Choosing a branch name: use concrete, specific language, avoid abstract nouns, and be concise (<30 characters). Use the prefix "zvadaadam/" before the name.
+
+</system-instruction>
+
+I wanna rename the whole project from opendevs to deus, peloxre full projhect drop the databse becasue w enee to rename this also so it's okey to start from stracth we have not laucnhed u know
+
+---
+
+Do you think the app identity should be called like our domain or like if this product is called Deus, can it be like com.deus.app? What do you think?
+
+---
+
+are u sure?
+
+---
+
+but linear also doesnt have com domain and tehy ahve this erght
+
+---
+
+yes
+
+---
+
+do u think this is all from renaming is evythign fgona work?
+
+---
+
+can u update teh wnganler stuff
+
+---
+
+can u chekc if the codebase deosnt refrence any OpenDevs stuff, Cursor or T3 or OpenDevs?
+
+---
+
+it said - Couldn’t clone Deus. You can add it later from the sidebar. this si teh repo taht is shoud auto clone in obaording taht shoudl not change so it acutly works u know
+
+---
+
+-> 
+https://github.com/zvadaadam/deus
+
+---
+
+here: All clean — nothing that needs changing:
+OpenDevs (1 hit): A comment in event-broadcaster.ts — just says “same as OpenDevs”. Fine to leave, it’s a technical reference.
+OpenDevs (3 hits): All just source attribution comments like “Pattern borrowed from OpenDevs”. These document where design patterns came from — standard practice, not branding.
+Cursor (24 files): All legitimate references:
+CSS/mouse cursor (pointer animations, visual effects) — not the product
+Integration code (detecting Cursor IDE installs, opening workspaces in Cursor)
+“Inspired by Cursor’s approach” comments documenting pattern origins
+An SVG icon import for Cursor as an external editor option
+None of these are branding your product as something else. They’re either the English word “cursor”, integration with Cursor as an external editor, or attribution comments.
+
+----
+
+i dont ean refrence Conudctor and OpenDevs u kow and the insprie from Curso rw edont also want
+
+---
+
+i mena basicly the saying commnets adsyign inspired by or somehtign borrowed we dont wnat refrence others
+
+---
+
+is this all epxlor emor
+
+---
+
+okey and can we do the realse of this app?
+
+---
+
+and is eveythign setup for thr relase wdyt? will this wortk can u epxloe and do a tets run to se if evtyhgin goofd?
+
+---
+
+can u check whaever we have all the crediantls to deply inside teh gh secrets ehck this
+
+---
+
+yes i shoudl with email zvadaada@gmail.com
+
+---
+
+but this repository is diffrent i mean this is box-ide and u check thr deus repo which wilbe later teh prod repo if w edo a reelase it done from the repo wher th code is right?
+
+---
+
+<system_instruction>
+The user has attached these files. Read them before proceeding.
+- /Users/zvada/Developer/agent/box-ide/.conductor/boston-v3/.context/attachments/PR instructions.md (959 B)
+</system_instruction>
+
+
+
+Create a PR
