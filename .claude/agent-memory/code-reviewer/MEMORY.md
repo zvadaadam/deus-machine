@@ -298,38 +298,42 @@
   by tool name with `undefined` (falls through to no class).
 - When adding a new renderer, add its color entry to `TOOL_COLORS` in the same commit.
 
-## Unread Session Indicator Pattern (Confirmed)
+## Radix DropdownMenuTrigger + asChild + onClick Conflict Pattern
 
-- Store: `useUnreadStore` in `features/session/store/unreadStore.ts` — Zustand + persist, `unreadSessionIds: Record<string, true>`.
-- Mark unread: `useGlobalSessionNotifications` fires on `working → idle|error|needs_response|needs_plan_response`
-  transition ONLY when `!isUserViewingSession(ws.id, sessionId)`.
-- Mark read: two sites — `handleWorkspaceClick` in MainLayout (sidebar click), and `handleTabChangeWithRead`
-  in ChatArea (tab switch).
-- **String-key serialization hack in RepositoryItem**: builds a comma-joined string of unread session IDs
-  from the store, then splits it back to a Set in useMemo. This is an anti-pattern. Fix: `useShallow` selector
-  that filters in the selector itself and returns a `Set<string>`. Saves ~18 lines.
-- **ChatArea full-map subscription**: `useUnreadStore((s) => s.unreadSessionIds)` subscribes to the entire
-  map — any workspace marking unread re-renders ChatArea. Fix: `useShallow` filtered to `chatSessionIds`.
-- **`Record<string, true>` vs `Set`**: Record is used because JSON doesn't natively serialize Set. The
-  tradeoff is real, but should be documented. Extract `isSessionUnread(s, id) => !!s.unreadSessionIds[id]`
-  helper so callers don't all inline `!!s.unreadSessionIds[id]`.
-- **`unreadActions` is redundant indirection**: every method delegates to `useUnreadStore.getState()`.
-  `useUnreadStore.getState().markRead(id)` is already stable; the wrapper adds no value. `isUnread` is
-  never called from `unreadActions`. Consider deleting.
-- **Dead functions in status.ts**: `getUnreadCount`, `groupByStatus`, `getStatusCounts`, `getRepoUnreadCount`,
-  `getRepoPriorityStatus` are exported but have zero import sites. Safe to delete.
-- **isUserViewingSession naming**: reads from Zustand/layout snapshots (non-reactive), not a hook.
-  Rename to `checkIsViewingSession` to avoid hook-name confusion.
-- **Hook-after-conditional-return bug (pre-existing, UNFIXED)**: `useUnreadStore` at WorkspaceItem.tsx line 52
-  is AFTER the `if (isInitializing) return` at the same line. Violates Rules of Hooks.
-- **isUserViewingSession fallback**: `!layout.activeChatTabSessionId` means the session is assumed visible
-  when no tab session is persisted (new workspace, first session). Intentional and correct.
-- **localStorage leak**: persisted unread state is never pruned for deleted/archived workspaces.
-  Benign (orphan keys, ~10 bytes each), but accumulates over time.
+- When `<DropdownMenuTrigger asChild>` wraps a child with its own `onClick`, Radix's Slot merges
+  BOTH handlers. If the child's `onClick` calls `setOpen(false)` (to suppress the dropdown for a
+  quick-open action), the dropdown STILL opens first (Radix toggle runs), then closes — visible flicker.
+- Fix: either don't use `DropdownMenuTrigger` on the quick-open button (use a sibling trigger for
+  the chevron only), or put the `DropdownMenuTrigger` on the chevron/separator button only.
 
-## Reviewer Feedback / Approach
+## Last-Used App Persistence Pattern
 
-- `feedback_over_engineering.md` — user wants simplicity flagged aggressively; string-key hacks, pass-through wrappers, useEffect-vs-render-body, dead exports
+- `useLastOpenInApp` / `getLastOpenInAppId` / `setLastOpenInAppId` live in
+  `apps/web/src/shared/hooks/useLastOpenInApp.ts` and are exported from `shared/hooks/index.ts`.
+- Pattern: `setLastAppId(appId)` must be called at EVERY `openIn(appId, path)` call site.
+  `WorkspaceHeader.tsx`'s `HeaderOpenButton` currently skips this call — Cmd+O will not reflect
+  choices made from that dropdown.
+
+## Spurious useEffect Deps Pattern
+
+- `useKeyboardShortcuts` includes `selectedWorkspace` and `modalStates` in its `useEffect` deps
+  array but neither is read inside the effect body. This causes the global keydown listener to
+  be torn down and re-registered on every workspace switch and modal state change.
+  Fix: remove those deps, or move logic that needs them into the callback params.
+
+## getInstalledAppsList() Race / Cache Pattern (native-handlers.ts)
+
+- Pre-fix risk: `cachedInstalledApps` alone allowed simultaneous first-load callers to duplicate the
+  full `mdfind` loop and race on shared temp icon paths.
+- Current pattern: pair `cachedInstalledApps` with `inflightPromise` so concurrent callers share the
+  same discovery pass until the cache is populated. `.finally()` clears `inflightPromise` on both
+  success and failure paths.
+
+## mdfind bundleId Query Safety
+
+- `mdfind` in `native-handlers.ts` interpolates `app.bundleId` directly into the query string:
+  `kMDItemCFBundleIdentifier == '${app.bundleId}'`. Values come from SUPPORTED_APPS which is
+  hardcoded, so this is safe. No user-controlled data reaches mdfind.
 
 ## See Also
 
