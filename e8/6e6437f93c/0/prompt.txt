@@ -117,3 +117,40 @@ The user has attached these files. Read them before proceeding.
 
 
 Create a PR
+
+---
+
+I run AI code review, is it actionable? Wdyt? Explore in depth each problem.
+We want a clean, maintainable codebase, with proper best practices for the tech stack we use.
+Run subagents to verify, and if it should be fixed, try to merge some stuff together so it can be fixed together within one subagent. 
+If you can test something do it.
+
+
+
+No DiffComment tool available. Here are the validated findings:
+---
+## Review: OpenDevs → Deus Rename
+**Branch:** `zvadaadam/rename-opendevs-to-deus`
+**Scope:** ~161 files — bulk rename of product name, file paths, env vars, config, and string literals.
+The rename is thorough — no remaining `opendevs` references found in tracked source files. However, two issues were identified:
+---
+### **#1 Legacy database path will silently lose existing users' data**
+The legacy database fallback in `backend-process.ts` was blindly renamed from `com.opendevs.ide/opendevs.db` to `com.deus.ide/deus.db`. The entire purpose of this legacy path is to find databases from a **previous** version. No user has ever had a database at `com.deus.ide/deus.db`.
+Additionally, since `electron-builder.yml` changed `appId` to `com.deus.app`, Electron's `app.getPath("userData")` now returns `~/Library/Application Support/Deus/` instead of `~/Library/Application Support/OpenDevs/`. The `electronDbPath` also won't find existing databases.
+**Result:** Existing users upgrading will silently start with an empty database — all repositories, workspaces, sessions, and messages lost.
+**Fix:** The legacy path must keep the old location:
+```ts
+const legacyDbPath = join(app.getPath("appData"), "com.opendevs.ide", "opendevs.db");
+```
+**File:** `apps/desktop/main/backend-process.ts` (line ~41-45)
+---
+### **#2 BrandMark still shows "OD" (OpenDevs initials)**
+The `BrandMark` component in `PairGatePage.tsx` hardcodes `"OD"` as the brand monogram, while the adjacent label correctly reads `"Deus"`. This is an incomplete rename — "OD" stood for "OpenDevs".
+**Fix:** Update the initials text (e.g., to `"D"` or whatever the Deus brand monogram should be).
+**File:** `apps/web/src/features/auth/ui/PairGatePage.tsx` (line 214)
+---
+### Not flagged (awareness only)
+- **Existing git checkpoint refs** under `refs/opendevs-checkpoints/` will become orphaned (new ones go to `refs/deus-checkpoints/`). Expected for a rename.
+- **localStorage keys** renamed (`opendevs_device_token` → `deus_device_token`) — web users will need to re-pair. Expected.
+- **Existing worktrees** at `.opendevs/` on disk won't be found by new `.deus/` path logic. Stored paths in DB would handle this, but moot if DB is lost (Issue #1).
+- Minor comment cleanup artifacts (empty parentheses in `status.ts`, stripped third-party attributions) — cosmetic only.
