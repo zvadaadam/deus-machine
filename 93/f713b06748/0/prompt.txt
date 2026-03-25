@@ -943,3 +943,173 @@ Commit and push all changes
 ---
 
 Commit uncommitted changes, then rebase this branch onto origin/main. Then push --force-with-lease.
+
+---
+
+<system-instruction>
+The user has added 3 comments to the diff for this workspace. Please review and address these comments as part of your response. When addressing comments on the "original" side or on specific commits, read the file from that version (not the current version). Below are the comments, including metadata about what git state they were left on:
+
+Comment #1:
+
+File: .claude/agent-memory/code-reviewer/MEMORY.md
+Line: 330
+User comment: "_⚠️ Potential issue_ | _🟡 Minor_
+
+**Update this memory entry to the post-fix state.**
+
+It still says `getInstalledAppsList()` has no in-flight guard, but `apps/desktop/main/native-handlers.ts` now caches `inflightPromise`. Leaving this note as-is will make future reviews re-raise a resolved issue.
+
+<details>
+<summary>✏️ Suggested wording</summary>
+
+```diff
+ ## getInstalledAppsList() Race / Cache Pattern (native-handlers.ts)
+ 
+-- `cachedInstalledApps` is a module-level variable with no in-flight guard. Two simultaneous IPC
+-- calls before the first resolves will both execute the full mdfind loop in parallel and both write
+-- to `/tmp/opendevs-icon-{id}.png` at the same time.
+-- Fix: cache a Promise while in-flight: `let inflightPromise: Promise<InstalledApp[]> | null = null`.
++- Pre-fix risk: `cachedInstalledApps` alone allowed simultaneous first-load callers to duplicate the
++  full `mdfind` loop and race on shared temp icon paths.
++- Current pattern: pair `cachedInstalledApps` with `inflightPromise` so concurrent callers share the
++  same discovery pass until the cache is populated.
+```
+</details>
+
+<details>
+<summary>🤖 Prompt for AI Agents</summary>
+
+```
+Verify each finding against the current code and only fix it if needed.
+
+In @.claude/agent-memory/code-reviewer/MEMORY.md around lines 324 - 330, The
+MEMORY.md entry incorrectly states getInstalledAppsList() lacks an in-flight
+guard; update this entry to reflect the post-fix state in
+apps/desktop/main/native-handlers.ts by removing the obsolete complaint about
+simultaneous mdfind runs and noting that the implementation now caches a Promise
+(inflightPromise) to prevent parallel executions and concurrent writes to
+/tmp/opendevs-icon-{id}.png, and keep references to cachedInstalledApps and the
+new inflightPromise behaviour so future reviews don't reopen this resolved
+issue.
+```
+
+</details>
+
+<!-- fingerprinting:phantom:medusa:grasshopper -->
+
+<!-- This is an auto-generated comment by CodeRabbit -->"
+
+Comment metadata:
+This comment was left on the modified branch.
+This comment was left on GitHub by @coderabbitai.
+This comment is the start of thread PRRT_kwDOQEbULc520B1A. 
+
+
+Comment #2:
+
+File: apps/web/src/shared/components/OpenInDropdown.tsx
+Line: 159
+User comment: "_⚠️ Potential issue_ | _🟠 Major_
+
+**`iconOnly` mode loses a reliable path back to the picker.**
+
+This branch still uses the same button as the `DropdownMenuTrigger`, but once `lastApp` exists its click path immediately quick-opens via `handleOpenInApp()` and closes the menu. After the first selection, users here can’t stably reopen the app list to switch editors.
+
+<details>
+<summary>🤖 Prompt for AI Agents</summary>
+
+```
+Verify each finding against the current code and only fix it if needed.
+
+In `@apps/web/src/shared/components/OpenInDropdown.tsx` around lines 137 - 159,
+The trigger button currently calls handleOpenInApp(lastApp.id) on click whenever
+lastApp exists, which causes iconOnly mode to immediately open an app and
+prevents reopening the app picker; update the onClick handler on the Button
+inside DropdownMenuTrigger so that when iconOnly (prop/iconOnly) is true it does
+not call handleOpenInApp but instead opens the dropdown via setOpen(true) (or
+lets the DropdownMenuTrigger handle opening), and keep the quick-open behavior
+(calling handleOpenInApp) only when iconOnly is false; adjust references around
+lastApp, handleOpenInApp, setOpen, open, DropdownMenuTrigger and Button so the
+menu stays reachable after a quick-open selection.
+```
+
+</details>
+
+<!-- fingerprinting:phantom:medusa:grasshopper -->
+
+<!-- This is an auto-generated comment by CodeRabbit -->"
+
+Comment metadata:
+This comment was left on the modified branch.
+This comment was left on GitHub by @coderabbitai.
+This comment is the start of thread PRRT_kwDOQEbULc520B1E. 
+
+
+Comment #3:
+
+File: apps/web/src/shared/components/OpenInDropdown.tsx
+Line: 157
+User comment: "_⚠️ Potential issue_ | _🟠 Major_
+
+**Label the icon-only controls for assistive tech.**
+
+The icon-only quick-open button and the chevron-only trigger have no text or `aria-label`, so screen readers will hit unlabeled buttons here.
+
+<details>
+<summary>♿ Suggested fix</summary>
+
+```diff
+               <Button
++                aria-label={lastApp ? `Open in ${lastApp.name}` : "Open in app"}
+                 variant="ghost"
+                 size="icon"
+                 className="text-muted-foreground/80 hover:text-foreground hover:bg-muted/10 h-9 w-9 rounded-lg transition-colors duration-200 ease-out"
+                 onClick={(e) => {
+                   if (lastApp) {
+@@
+           <button
+             type="button"
++            aria-label="Choose app to open in"
+             className="text-muted-foreground hover:text-foreground hover:bg-muted/10 flex h-full items-center rounded-r-lg px-1.5 transition-colors duration-200"
+             onPointerEnter={handleOpen}
+             onPointerLeave={handleClose}
+           >
+```
+</details>
+
+
+Also applies to: 200-212
+
+<details>
+<summary>🤖 Prompt for AI Agents</summary>
+
+```
+Verify each finding against the current code and only fix it if needed.
+
+In `@apps/web/src/shared/components/OpenInDropdown.tsx` around lines 141 - 157,
+The icon-only quick-open Button (rendering lastApp.icon / ArrowUpRight and
+invoking handleOpenInApp) and the chevron-only trigger lack accessible names;
+update both Button instances to include meaningful aria-labels (e.g. for the
+quick-open button use a dynamic aria-label like `Open in ${lastApp.name}` or
+fallback `Open in app`, and for the chevron trigger add a label such as `Open
+options`), and ensure decorative img remains alt="" or aria-hidden as
+appropriate so screen readers get the button label rather than the image.
+```
+
+</details>
+
+<!-- fingerprinting:phantom:medusa:grasshopper -->
+
+<!-- This is an auto-generated comment by CodeRabbit -->"
+
+Comment metadata:
+This comment was left on the modified branch.
+This comment was left on GitHub by @coderabbitai.
+This comment is the start of thread PRRT_kwDOQEbULc520B1H. 
+
+</system-instruction>
+
+I run AI code review, is it actionable? Wdyt? Explore in depth each problem.
+We want a clean, maintainable codebase, with proper best practices for the tech stack we use.
+Run subagents to verify, and if it should be fixed, try to merge some stuff together so it can be fixed together within one subagent. 
+If you can test something do it.
