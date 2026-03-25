@@ -1,0 +1,40 @@
+{
+  "cli_version": "0.5.0",
+  "checkpoint_id": "feb3fd159924",
+  "session_id": "7a3bc995-6c7b-4fa4-8bba-0e8358e8fcf3",
+  "strategy": "manual-commit",
+  "created_at": "2026-03-25T14:45:55.733642Z",
+  "branch": "zvadaadam/open-in-split-btn",
+  "checkpoints_count": 1,
+  "files_touched": [
+    "apps/desktop/main/native-handlers.ts",
+    "apps/web/src/app/layouts/MainLayout.tsx",
+    "apps/web/src/features/command-palette/commands.ts",
+    "apps/web/src/features/workspace/ui/WorkspaceHeader.tsx",
+    "apps/web/src/shared/components/OpenInDropdown.tsx",
+    "apps/web/src/shared/hooks/index.ts",
+    "apps/web/src/shared/hooks/useKeyboardShortcuts.ts",
+    "apps/web/src/shared/lib/appIcons.tsx"
+  ],
+  "agent": "Claude Code",
+  "turn_id": "560e5cd104af",
+  "token_usage": {
+    "input_tokens": 52,
+    "cache_creation_tokens": 54881,
+    "cache_read_tokens": 328649,
+    "output_tokens": 5529,
+    "api_call_count": 8
+  },
+  "session_metrics": {
+    "turn_count": 1
+  },
+  "initial_attribution": {
+    "calculated_at": "2026-03-25T14:45:55.68478Z",
+    "agent_lines": 225,
+    "human_added": 28,
+    "human_modified": 26,
+    "human_removed": 0,
+    "total_committed": 279,
+    "agent_percentage": 80.64516129032258
+  }
+}
