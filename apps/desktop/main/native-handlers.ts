@@ -396,47 +396,73 @@ interface InstalledApp {
 }
 
 let cachedInstalledApps: InstalledApp[] | null = null;
+let inflightPromise: Promise<InstalledApp[]> | null = null;
 
 async function getInstalledAppsList(): Promise<InstalledApp[]> {
   if (cachedInstalledApps) return cachedInstalledApps;
+  if (inflightPromise) return inflightPromise;
   if (process.platform !== "darwin") return [];
+  inflightPromise = loadInstalledApps().finally(() => {
+    inflightPromise = null;
+  });
+  return inflightPromise;
+}
 
+/** Resolve icon filename from an app's Info.plist (apps use different names). */
+async function resolveIconFileName(appPath: string): Promise<string> {
+  try {
+    const { stdout } = await execFileAsync("/usr/libexec/PlistBuddy", [
+      "-c",
+      "Print :CFBundleIconFile",
+      `${appPath}/Contents/Info.plist`,
+    ]);
+    const name = stdout.trim();
+    if (name) return name.endsWith(".icns") ? name : `${name}.icns`;
+  } catch {
+    // PlistBuddy failed
+  }
+  return "AppIcon.icns";
+}
+
+/** Extract app icon as a base64 PNG data URL. */
+async function extractAppIcon(appPath: string, appId: string): Promise<string | undefined> {
+  try {
+    const iconFileName = await resolveIconFileName(appPath);
+    const icnsPath = `${appPath}/Contents/Resources/${iconFileName}`;
+    const tmpPng = `/tmp/opendevs-icon-${appId}.png`;
+    await execFileAsync("sips", [
+      "-s",
+      "format",
+      "png",
+      "-z",
+      "64",
+      "64",
+      icnsPath,
+      "--out",
+      tmpPng,
+    ]);
+    const fs = await import("fs/promises");
+    const buf = await fs.readFile(tmpPng);
+    await fs.unlink(tmpPng).catch(() => {});
+    return `data:image/png;base64,${buf.toString("base64")}`;
+  } catch {
+    return undefined;
+  }
+}
+
+async function loadInstalledApps(): Promise<InstalledApp[]> {
   const installed: InstalledApp[] = [];
 
-  for (const app of SUPPORTED_APPS) {
+  for (const appDef of SUPPORTED_APPS) {
     try {
-      // Find the app by bundle ID
       const { stdout } = await execFileAsync("mdfind", [
-        `kMDItemCFBundleIdentifier == '${app.bundleId}'`,
+        `kMDItemCFBundleIdentifier == '${appDef.bundleId}'`,
       ]);
       const appPath = stdout.trim().split("\n")[0];
       if (!appPath || !appPath.endsWith(".app")) continue;
 
-      // Extract icon as base64 PNG using sips
-      let icon: string | undefined;
-      try {
-        const iconPath = `${appPath}/Contents/Resources/AppIcon.icns`;
-        const tmpPng = `/tmp/opendevs-icon-${app.id}.png`;
-        await execFileAsync("sips", [
-          "-s",
-          "format",
-          "png",
-          "-z",
-          "64",
-          "64",
-          iconPath,
-          "--out",
-          tmpPng,
-        ]);
-        const fs = await import("fs/promises");
-        const buf = await fs.readFile(tmpPng);
-        icon = `data:image/png;base64,${buf.toString("base64")}`;
-        await fs.unlink(tmpPng).catch(() => {});
-      } catch {
-        // Icon extraction failed — will use fallback letter
-      }
-
-      installed.push({ id: app.id, name: app.name, path: appPath, icon });
+      const icon = await extractAppIcon(appPath, appDef.id);
+      installed.push({ id: appDef.id, name: appDef.name, path: appPath, icon });
     } catch {
       // App not installed — skip
     }

@@ -32,6 +32,7 @@ import { WorkflowStatusIcon } from "@/features/sidebar/ui/WorkflowStatusIcon";
 import { WorkspaceStatusMenu } from "@/features/sidebar/ui/WorkspaceStatusMenu";
 import { WORKFLOW_STATUS_CONFIG } from "@/features/sidebar/lib/status";
 import { AppIcon, groupAppsByCategory } from "@/shared/lib/appIcons";
+import { useLastOpenInApp } from "@/shared/hooks/useLastOpenInApp";
 import { fixSetupErrorPrompt, GENERATE_HIVE_JSON } from "@/features/session/lib/sessionPrompts";
 
 interface WorkspaceHeaderProps {
@@ -229,13 +230,15 @@ export function WorkspaceHeader({
 }
 
 // ---------------------------------------------------------------------------
-// HeaderOpenButton — open workspace in external editors with product icons
+// HeaderOpenButton — split button: quick open (last-used) + dropdown
 // ---------------------------------------------------------------------------
 
 function HeaderOpenButton({ workspacePath }: { workspacePath: string }) {
   const [apps, setApps] = useState<InstalledApp[]>([]);
+  const [loading, setLoading] = useState(true);
   const [open, setOpen] = useState(false);
   const [copied, setCopied] = useState(false);
+  const [lastAppId, setLastAppId] = useLastOpenInApp();
   const closeTimeoutRef = useRef<ReturnType<typeof setTimeout>>();
   const isHoveringRef = useRef(false);
 
@@ -243,13 +246,28 @@ function HeaderOpenButton({ workspacePath }: { workspacePath: string }) {
     native.apps
       .getInstalled()
       .then(setApps)
-      .catch(() => {});
+      .catch(() => {})
+      .finally(() => setLoading(false));
   }, []);
+
+  // Default app: last-used, or first editor in the list
+  const lastApp = lastAppId ? (apps.find((a) => a.id === lastAppId) ?? null) : null;
+  const defaultApp = lastApp ?? apps[0] ?? null;
 
   function handleOpenInApp(appId: string) {
     setOpen(false);
+    setLastAppId(appId);
     track("open_in_app", { app_id: appId });
     native.apps.openIn(appId, workspacePath).catch(() => {});
+  }
+
+  function handleQuickOpen() {
+    if (loading) return;
+    if (defaultApp) {
+      handleOpenInApp(defaultApp.id);
+    } else {
+      setOpen(true);
+    }
   }
 
   function handleCopyPath() {
@@ -282,21 +300,8 @@ function HeaderOpenButton({ workspacePath }: { workspacePath: string }) {
     };
   }, []);
 
-  const trigger = (
-    <button
-      type="button"
-      className="text-text-subtle border-border-strong hover:bg-bg-muted flex h-7 items-center gap-1 rounded-lg border px-2 transition-colors duration-200"
-      onPointerEnter={apps.length > 0 ? handleOpen : undefined}
-      onPointerLeave={apps.length > 0 ? handleClose : undefined}
-    >
-      <ArrowUpRight className="h-[11px] w-[11px]" />
-      <span className="text-sm font-medium">Open</span>
-      <ChevronDown className="text-text-muted h-2 w-2" />
-    </button>
-  );
-
-  // No apps detected — hide the button entirely (web mode or no editors installed)
-  if (apps.length === 0) {
+  // Hide only after loading confirms no apps installed (web mode)
+  if (!loading && apps.length === 0) {
     return null;
   }
 
@@ -304,9 +309,55 @@ function HeaderOpenButton({ workspacePath }: { workspacePath: string }) {
 
   return (
     <DropdownMenu open={open} onOpenChange={setOpen} modal={false}>
-      <DropdownMenuTrigger asChild>{trigger}</DropdownMenuTrigger>
+      <div className="border-border-strong flex h-7 shrink-0 items-center rounded-lg border">
+        {/* Left: quick-open action */}
+        <Tooltip delayDuration={200}>
+          <TooltipTrigger asChild>
+            <button
+              type="button"
+              onClick={handleQuickOpen}
+              className="text-text-subtle hover:bg-bg-muted flex h-full shrink-0 items-center gap-1.5 rounded-l-lg px-2 transition-colors duration-200"
+            >
+              {defaultApp?.icon ? (
+                <img
+                  src={defaultApp.icon}
+                  alt=""
+                  className="h-4 w-4 shrink-0 rounded-xs"
+                  draggable={false}
+                />
+              ) : (
+                <ArrowUpRight className="h-[11px] w-[11px] shrink-0" />
+              )}
+              <span className="shrink-0 text-sm font-medium">Open</span>
+            </button>
+          </TooltipTrigger>
+          <TooltipContent side="bottom">
+            <p className="text-xs">
+              {defaultApp ? `Open in ${defaultApp.name}` : "Open in\u2026"}
+              <span className="text-text-muted ml-2">⌘O</span>
+            </p>
+          </TooltipContent>
+        </Tooltip>
+
+        {/* Divider */}
+        <div className="bg-border-strong h-4 w-px shrink-0" />
+
+        {/* Right: dropdown chevron */}
+        <DropdownMenuTrigger asChild>
+          <button
+            type="button"
+            aria-label="Choose app to open in"
+            className="text-text-muted hover:bg-bg-muted hover:text-text-subtle flex h-full shrink-0 items-center rounded-r-lg px-1.5 transition-colors duration-200"
+            onPointerEnter={handleOpen}
+            onPointerLeave={handleClose}
+          >
+            <ChevronDown className="h-2.5 w-2.5" />
+          </button>
+        </DropdownMenuTrigger>
+      </div>
+
       <DropdownMenuContent
-        align="start"
+        align="end"
         sideOffset={4}
         className="min-w-[140px] shadow-sm"
         onPointerEnter={handleOpen}
@@ -331,7 +382,8 @@ function HeaderOpenButton({ workspacePath }: { workspacePath: string }) {
                 ) : (
                   <AppIcon appId={app.id} className="h-5 w-5 flex-shrink-0" />
                 )}
-                {app.name}
+                <span className={lastApp?.id === app.id ? "font-medium" : ""}>{app.name}</span>
+                {lastApp?.id === app.id && <Check className="text-text-muted ml-auto h-3 w-3" />}
               </DropdownMenuItem>
             ))}
           </div>

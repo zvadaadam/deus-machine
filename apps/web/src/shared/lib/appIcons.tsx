@@ -1,16 +1,16 @@
 /**
  * App icon utilities — fallback and categorization for installed applications.
  *
- * Real app icons are extracted from macOS via mdfind in the Electron main process.
- * The frontend renders <img src={app.icon}> when available. AppIcon below is the
- * generic fallback for the rare case where extraction fails.
+ * App icons are extracted at runtime via Electron's app.getFileIcon() API in the
+ * main process. The backend returns base64 data URLs in InstalledApp.icon.
+ * AppIcon below is the fallback for the rare case where extraction fails.
  */
 
 import { cn } from "@/shared/lib/utils";
 
 /**
  * Generic fallback icon — renders app's first letter in a muted rounded square.
- * Used only when native macOS icon extraction fails (app.icon is null/undefined).
+ * Used only when runtime icon extraction fails (app.icon is null/undefined).
  */
 export function AppIcon({ appId, className }: { appId: string; className?: string }) {
   const initial = appId.charAt(0).toUpperCase();

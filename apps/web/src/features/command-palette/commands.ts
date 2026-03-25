@@ -7,6 +7,7 @@ import {
   Settings,
   Sparkles,
   Puzzle,
+  ArrowUpRight,
 } from "lucide-react";
 import { uiActions } from "@/shared/stores/uiStore";
 import { capabilities } from "@/platform/capabilities";
@@ -56,6 +57,17 @@ export const staticCommands: CommandDefinition[] = [
     group: "workspace",
     keywords: ["create", "pr", "pull request", "branch", "github", "from"],
     action: () => uiActions.openNewWorkspaceModal("from-github"),
+  },
+
+  {
+    id: "open-in-app",
+    label: "Open in Last Editor",
+    icon: ArrowUpRight,
+    group: "workspace",
+    shortcut: "\u2318O",
+    keywords: ["open", "editor", "vscode", "cursor", "external", "app"],
+    when: () => capabilities.openInExternalApp,
+    action: () => {},
   },
 
   // --- Project ---
