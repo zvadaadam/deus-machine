@@ -37,6 +37,8 @@ import { ResizeHandle } from "@/shared/components/ResizeHandle";
 import type { Workspace } from "@/shared/types";
 import { unreadActions } from "@/features/session/store/unreadStore";
 import { native } from "@/platform";
+import { getLastOpenInAppId } from "@/shared/hooks/useLastOpenInApp";
+import { track } from "@/platform/analytics";
 import { CHAT_INSERT } from "@shared/events";
 import { CommandPalette } from "@/features/command-palette";
 import { GitHubPickerModal } from "@/features/sidebar/ui/GitHubPickerModal";
@@ -283,6 +285,15 @@ export function MainLayout() {
   // Disable CSS transitions during native window resize to prevent content "sticking"
   useWindowResizing();
 
+  function openInLastApp() {
+    const lastAppId = getLastOpenInAppId();
+    const path = selectedWorkspace?.workspace_path;
+    if (lastAppId && path) {
+      track("open_in_app", { app_id: lastAppId });
+      native.apps.openIn(lastAppId, path).catch(() => {});
+    }
+  }
+
   // Keyboard shortcuts
   useKeyboardShortcuts({
     onRefresh: async () => {
@@ -298,6 +309,7 @@ export function MainLayout() {
         closeSystemPromptModal();
       }
     },
+    onOpenInApp: openInLastApp,
     selectedWorkspace,
     modalStates: {
       showNewWorkspaceModal,
@@ -456,6 +468,7 @@ export function MainLayout() {
         actionOverrides={{
           "open-project": repoActions.handleOpenProject,
           "clone-repository": () => repoActions.setShowCloneModal(true),
+          "open-in-app": openInLastApp,
         }}
       />
     </SidebarProvider>
