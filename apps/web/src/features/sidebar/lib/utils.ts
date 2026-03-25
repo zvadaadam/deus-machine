@@ -6,6 +6,9 @@
  * @see status.ts
  */
 
+import type { Workspace } from "@/features/workspace/types";
+import { getDisplayStatus } from "./status";
+
 /**
  * Get repository initials for display
  * @param repoName - Repository name (e.g., "box-ide" or "owner/repo")
@@ -85,4 +88,70 @@ export function getWorkspaceSecondaryText(workspace: {
   // Show slug as secondary only when title is the primary display name
   if (workspace.title && workspace.slug) return workspace.slug;
   return null;
+}
+
+// ── Recency-based workspace splitting ────────────────────────────────────
+
+/** Minimum workspace count before stale hiding kicks in */
+const STALE_HIDE_MIN_WORKSPACES = 5;
+/** Always show at least this many workspaces (backfill from stale if needed) */
+const MIN_VISIBLE = 3;
+/** Don't bother with "Show N more" if fewer than this would be hidden */
+const MIN_STALE_TO_HIDE = 2;
+/** Days after which an idle workspace is considered stale */
+const STALE_DAYS = 7;
+
+/**
+ * Split workspaces into visible and stale (hidden by default).
+ *
+ * Rules:
+ * - Only activates when there are >= STALE_HIDE_MIN_WORKSPACES
+ * - Active workspaces (working, error, unread) are always visible
+ * - The currently selected workspace is always visible
+ * - Idle workspaces updated > STALE_DAYS ago are stale
+ * - Always shows at least MIN_VISIBLE workspaces (backfills from stale)
+ * - Never hides fewer than MIN_STALE_TO_HIDE (avoids "Show 1 more")
+ *
+ * @returns [visible, stale] — two arrays, already in the same order as input
+ */
+export function splitByRecency<T extends Workspace>(
+  workspaces: T[],
+  selectedWorkspaceId: string | null | undefined
+): [visible: T[], stale: T[]] {
+  if (workspaces.length < STALE_HIDE_MIN_WORKSPACES) {
+    return [workspaces, []];
+  }
+
+  const cutoff = Date.now() - STALE_DAYS * 24 * 60 * 60 * 1000;
+  const visibleIds = new Set<string>();
+
+  for (const ws of workspaces) {
+    const status = getDisplayStatus(ws);
+    const isActive = status !== "idle";
+    const isSelected = ws.id === selectedWorkspaceId;
+    const isRecent = new Date(ws.updated_at).getTime() >= cutoff;
+
+    if (isActive || isSelected || isRecent) {
+      visibleIds.add(ws.id);
+    }
+  }
+
+  // Backfill from stale so the repo never looks empty
+  if (visibleIds.size < MIN_VISIBLE) {
+    for (const ws of workspaces) {
+      if (visibleIds.size >= MIN_VISIBLE) break;
+      if (!visibleIds.has(ws.id)) visibleIds.add(ws.id);
+    }
+  }
+
+  // Re-derive from original array to preserve sort order
+  const visible = workspaces.filter((ws) => visibleIds.has(ws.id));
+  const stale = workspaces.filter((ws) => !visibleIds.has(ws.id));
+
+  // Don't bother hiding if only 1 would be hidden ("Show 1 more" is silly)
+  if (stale.length < MIN_STALE_TO_HIDE) {
+    return [workspaces, []];
+  }
+
+  return [visible, stale];
 }
