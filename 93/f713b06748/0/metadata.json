@@ -1,0 +1,22 @@
+{
+  "cli_version": "0.5.0",
+  "checkpoint_id": "93f713b06748",
+  "session_id": "68fd47d6-09a2-404a-9fda-261b5b635485",
+  "strategy": "manual-commit",
+  "created_at": "2026-03-25T19:36:10.374475Z",
+  "branch": "zvadaadam/open-in-split-btn",
+  "checkpoints_count": 2,
+  "files_touched": [],
+  "agent": "Claude Code",
+  "turn_id": "96c9d78f2d09",
+  "token_usage": {
+    "input_tokens": 2254,
+    "cache_creation_tokens": 928234,
+    "cache_read_tokens": 24260574,
+    "output_tokens": 70782,
+    "api_call_count": 229
+  },
+  "session_metrics": {
+    "turn_count": 20
+  }
+}
