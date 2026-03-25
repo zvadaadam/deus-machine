@@ -38,7 +38,7 @@ export function ConnectPage() {
         <div className="text-center">
           <h1 className="text-2xl font-bold tracking-tight">Connect to Server</h1>
           <p className="text-muted-foreground mt-2 text-sm">
-            Enter the server ID from your OpenDevs desktop app to connect.
+            Enter the server ID from your Deus desktop app to connect.
           </p>
         </div>
 
@@ -70,7 +70,7 @@ export function ConnectPage() {
 
         {/* Help text */}
         <p className="text-muted-foreground text-center text-xs">
-          Open Settings &gt; Remote Access in the OpenDevs desktop app to find your server ID.
+          Open Settings &gt; Remote Access in the Deus desktop app to find your server ID.
         </p>
       </div>
     </div>

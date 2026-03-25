@@ -3,7 +3,7 @@ import path from "path";
 import { DB_PATH } from "../lib/database";
 import { PreferencesFile } from "../lib/schemas";
 
-// Co-locate with opendevs.db in the Electron app data directory.
+// Co-locate with deus.db in the Electron app data directory.
 // Derived from DB_PATH so tests that set DATABASE_PATH get sandboxing for free.
 const PREFS_PATH = path.join(path.dirname(DB_PATH), "preferences.json");
 

@@ -29,7 +29,7 @@ interface FileTreeProps {
   defaultExpanded?: boolean;
 }
 
-/** File icon + color by extension (VS Code-inspired) */
+/** File icon + color by extension */
 function getFileIconConfig(filename: string): { icon: typeof File; color: string } {
   const ext = filename.split(".").pop()?.toLowerCase() || "";
 

@@ -1,12 +1,13 @@
 {
-  "name": "opendevs",
+  "name": "deus",
   "private": true,
   "version": "0.1.0",
   "description": "AI-powered IDE for managing multiple parallel coding agents",
   "author": {
-    "name": "OpenDevs",
-    "email": "hello@opendevs.com"
+    "name": "Deus",
+    "email": "hello@rundeus.com"
   },
+  "repository": "github:zvadaadam/deus",
   "packageManager": "bun@1.2.19",
   "type": "module",
   "main": "./out/main/index.js",

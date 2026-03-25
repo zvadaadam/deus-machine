@@ -37,7 +37,7 @@ const IGNORED_DIRS = new Set([
   ".tox",
   ".mypy_cache",
   "target",
-  ".opendevs",
+  ".deus",
   ".conductor",
   ".context",
 ]);

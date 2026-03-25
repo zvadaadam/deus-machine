@@ -256,6 +256,6 @@ jobs:
         run: |
           gh release create "$TAG" \
             --repo "${{ github.repository }}" \
-            --title "OpenDevs v${VERSION}" \
+            --title "Deus v${VERSION}" \
             --generate-notes \
             release/*

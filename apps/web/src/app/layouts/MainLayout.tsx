@@ -140,7 +140,7 @@ export function MainLayout() {
   const repos = reposQuery.data || [];
   const username = settingsQuery.data?.user_name || "My Account";
 
-  // GitHub CLI status — gates PR polling (like Codex)
+  // GitHub CLI status — gates PR polling
   const ghStatusQuery = useGhStatus();
 
   // PR status query — gated on gh CLI, polls while agent is working

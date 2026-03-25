@@ -1,15 +1,15 @@
 "use strict";
 (() => {
   // apps/web/src/features/browser/automation/inject/inspect-mode.ts
-  if (!window.__opendevsInspectMode) {
+  if (!window.__deusInspectMode) {
     let sendToFrontend = function(type, data) {
       eventBuffer.push({ type, data });
     }, getOrAssignElementId = function(el) {
-      const existing = el.getAttribute("data-opendevs-ref");
+      const existing = el.getAttribute("data-deus-ref");
       if (existing) return existing;
       elementIdCounter++;
-      const id = "opendevs-" + elementIdCounter;
-      el.setAttribute("data-opendevs-ref", id);
+      const id = "deus-" + elementIdCounter;
+      el.setAttribute("data-deus-ref", id);
       return id;
     }, getReactComponentInfo = function(el) {
       try {
@@ -148,7 +148,7 @@
       cursor.setAttribute("height", "16");
       cursor.setAttribute("viewBox", "0 0 16 16");
       cursor.setAttribute("fill", "none");
-      cursor.setAttribute("data-opendevs-inspect", "true");
+      cursor.setAttribute("data-deus-inspect", "true");
       cursor.setAttribute("aria-hidden", "true");
       cursor.style.position = "fixed";
       cursor.style.pointerEvents = "none";
@@ -227,7 +227,7 @@
       cursor.appendChild(gClip);
       return cursor;
     }, isInspectElement = function(el) {
-      return !!el && !!el.getAttribute && el.getAttribute("data-opendevs-inspect") === "true";
+      return !!el && !!el.getAttribute && el.getAttribute("data-deus-inspect") === "true";
     }, getReactProps = function(el) {
       try {
         const keys = Object.keys(el);
@@ -297,7 +297,7 @@
       if (attrs) {
         for (let i = 0; i < attrs.length; i++) {
           const name = attrs[i].name;
-          if (name.startsWith("data-") && !result[name] && name !== "data-opendevs-ref" && name !== "data-opendevs-inspect") {
+          if (name.startsWith("data-") && !result[name] && name !== "data-deus-ref" && name !== "data-deus-inspect") {
             if (name.indexOf("test") !== -1 || name.indexOf("state") !== -1 || name.indexOf("variant") !== -1 || name.indexOf("status") !== -1) {
               result[name] = attrs[i].value.substring(0, 100);
             }
@@ -332,11 +332,11 @@
       }
       if (!overlay) {
         overlay = document.createElement("div");
-        overlay.setAttribute("data-opendevs-inspect", "true");
+        overlay.setAttribute("data-deus-inspect", "true");
         overlay.style.cssText = "position:fixed;background:rgba(58,150,221,0.3);border:2px solid #3a96dd;pointer-events:none;z-index:2147483647;transition:all 0.1s ease;display:none;";
         document.body.appendChild(overlay);
         overlayLabel = document.createElement("div");
-        overlayLabel.setAttribute("data-opendevs-inspect", "true");
+        overlayLabel.setAttribute("data-deus-inspect", "true");
         overlayLabel.style.cssText = "position:fixed;background:#3a96dd;color:white;padding:2px 6px;font-size:11px;font-family:system-ui,-apple-system,sans-serif;font-weight:500;border-radius:2px;pointer-events:none;z-index:2147483648;transition:all 0.1s ease;white-space:nowrap;display:none;";
         document.body.appendChild(overlayLabel);
       }
@@ -389,7 +389,7 @@
       if (selectionCursor) selectionCursor.style.display = "none";
       if (!dragSelectionBox) {
         dragSelectionBox = document.createElement("div");
-        dragSelectionBox.setAttribute("data-opendevs-inspect", "true");
+        dragSelectionBox.setAttribute("data-deus-inspect", "true");
         dragSelectionBox.style.cssText = "position:fixed;background:rgba(58,150,221,0.1);border:2px dashed #3a96dd;pointer-events:none;z-index:2147483647;";
         document.body.appendChild(dragSelectionBox);
       }
@@ -665,7 +665,7 @@
       }
     };
     sendToFrontend2 = sendToFrontend, getOrAssignElementId2 = getOrAssignElementId, getReactComponentInfo2 = getReactComponentInfo, computeAccessibleName2 = computeAccessibleName, convertColorToHex2 = convertColorToHex, getMatchedVarDeclarations2 = getMatchedVarDeclarations, createSelectionCursor2 = createSelectionCursor, isInspectElement2 = isInspectElement, getReactProps2 = getReactProps, getFilteredAttributes2 = getFilteredAttributes, getShallowInnerHTML2 = getShallowInnerHTML, enableSelectionMode2 = enableSelectionMode, disableSelectionMode2 = disableSelectionMode, handleMouseDown2 = handleMouseDown, handleMouseMove2 = handleMouseMove, captureElement2 = captureElement, handleMouseUp2 = handleMouseUp, handleClick2 = handleClick, handleKeyDown2 = handleKeyDown;
-    window.__opendevsInspectMode = true;
+    window.__deusInspectMode = true;
     let selectionMode = false;
     let overlay = null;
     let overlayLabel = null;
@@ -677,7 +677,7 @@
     let dragSelectionBox = null;
     let elementIdCounter = 0;
     const eventBuffer = [];
-    window.__OPENDEVS_INSPECT_EVENTS__ = eventBuffer;
+    window.__DEUS_INSPECT_EVENTS__ = eventBuffer;
     let colorCanvas = null;
     let colorCtx = null;
     const varDeclCache = /* @__PURE__ */ new WeakMap();
@@ -719,7 +719,7 @@
       "pattern",
       "method"
     ];
-    window.__opendevsInspect = {
+    window.__deusInspect = {
       enable: enableSelectionMode,
       disable: disableSelectionMode,
       isActive: () => selectionMode,
@@ -730,7 +730,7 @@
         return JSON.stringify(events);
       }
     };
-    console.log("[opendevs-inspect] SETUP complete \u2014 window.__opendevsInspect installed");
+    console.log("[deus-inspect] SETUP complete \u2014 window.__deusInspect installed");
   }
   var sendToFrontend2;
   var getOrAssignElementId2;

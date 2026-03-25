@@ -1,9 +1,9 @@
 /**
- * Draft types and conversion functions for the opendevs.json manifest editor.
+ * Draft types and conversion functions for the deus.json manifest editor.
  *
  * ManifestDraft is the local editing state — flat, array-based fields
  * that map directly to form inputs. The two conversion functions transform
- * between the raw opendevs.json format (nested objects) and the draft format.
+ * between the raw deus.json format (nested objects) and the draft format.
  */
 
 import { DEFAULT_TASK_ICON } from "@/shared/lib/taskIcons";
@@ -111,7 +111,7 @@ export function manifestToDraft(raw: Record<string, unknown> | null): ManifestDr
   };
 }
 
-/** Convert draft back to opendevs.json manifest format */
+/** Convert draft back to deus.json manifest format */
 export function draftToManifest(draft: ManifestDraft): Record<string, unknown> {
   const manifest: Record<string, unknown> = { version: draft.version };
 

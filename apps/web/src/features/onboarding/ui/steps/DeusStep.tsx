@@ -10,16 +10,16 @@ import { queryClient } from "@/shared/api/queryClient";
 import { queryKeys } from "@/shared/api/queryKeys";
 import { useCompleteOnboarding } from "../../api";
 
-interface OpenDevsStepProps {
+interface DeusStepProps {
   onBack: () => void;
   onComplete: () => void;
 }
 
 const REPO = {
-  url: "https://github.com/zvadaadam/opendevs",
-  name: "opendevs",
-  displayName: "OpenDevs",
-  displayUrl: "github.com/zvadaadam/opendevs",
+  url: "https://github.com/zvadaadam/deus",
+  name: "deus",
+  displayName: "Deus",
+  displayUrl: "github.com/zvadaadam/deus",
   description: "The source behind the tool you\u2019re using right now.",
 } as const;
 
@@ -70,8 +70,8 @@ async function cloneAndRegisterInBackground() {
     } catch (err) {
       const message = getErrorMessage(err);
       if (!isAlreadyClonedError(message)) {
-        console.error("[OpenDevs] Clone failed:", message);
-        toast.error("Couldn\u2019t clone OpenDevs. You can add it later from the sidebar.");
+        console.error("[Deus] Clone failed:", message);
+        toast.error("Couldn\u2019t clone Deus. You can add it later from the sidebar.");
         return;
       }
       alreadyCloned = true;
@@ -92,13 +92,11 @@ async function cloneAndRegisterInBackground() {
           repoId = (existing as { id: string }).id;
         }
         if (!repoId) {
-          console.warn("[OpenDevs] 409 conflict but couldn't extract repo ID:", err);
+          console.warn("[Deus] 409 conflict but couldn't extract repo ID:", err);
         }
       } else {
-        console.error("[OpenDevs] Register failed:", err);
-        toast.error(
-          'OpenDevs cloned but couldn\u2019t register. Use "Add Repository" in the sidebar.'
-        );
+        console.error("[Deus] Register failed:", err);
+        toast.error('Deus cloned but couldn\u2019t register. Use "Add Repository" in the sidebar.');
         return;
       }
     }
@@ -111,7 +109,7 @@ async function cloneAndRegisterInBackground() {
       } catch {
         // Workspace creation failed -- repo is registered, user can create manually.
         // Don't block the success toast; the repo exists and can be used.
-        console.warn("[OpenDevs] Workspace creation failed, repo still registered");
+        console.warn("[Deus] Workspace creation failed, repo still registered");
       }
     }
 
@@ -119,14 +117,14 @@ async function cloneAndRegisterInBackground() {
     queryClient.invalidateQueries({ queryKey: queryKeys.repos.all });
     queryClient.invalidateQueries({ queryKey: queryKeys.workspaces.all });
 
-    toast.success(alreadyCloned ? "OpenDevs repository added" : "OpenDevs cloned and ready");
+    toast.success(alreadyCloned ? "Deus repository added" : "Deus cloned and ready");
   } catch (err) {
-    console.error("[OpenDevs] Background clone error:", err);
-    toast.error("Something went wrong cloning OpenDevs.");
+    console.error("[Deus] Background clone error:", err);
+    toast.error("Something went wrong cloning Deus.");
   }
 }
 
-export function OpenDevsStep({ onBack, onComplete }: OpenDevsStepProps) {
+export function DeusStep({ onBack, onComplete }: DeusStepProps) {
   const completeMutation = useCompleteOnboarding();
 
   /**
@@ -160,10 +158,10 @@ export function OpenDevsStep({ onBack, onComplete }: OpenDevsStepProps) {
 
       {/* Header */}
       <div className="-mt-4 space-y-2">
-        <h2 className="text-2xl font-semibold text-white">Shape OpenDevs with us</h2>
+        <h2 className="text-2xl font-semibold text-white">Shape Deus with us</h2>
         <p className="text-sm text-white/50">
-          OpenDevs is built by the people who use it. Clone the source, send a PR, or share an idea.
-          You have the power to shape it.
+          Deus is built by the people who use it. Clone the source, send a PR, or share an idea. You
+          have the power to shape it.
         </p>
       </div>
 

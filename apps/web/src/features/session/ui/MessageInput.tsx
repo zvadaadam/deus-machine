@@ -72,7 +72,7 @@ interface MessageInputProps {
    * switching to a different agent type requires opening a new chat tab.
    */
   hasMessages?: boolean;
-  /** Whether a opendevs.json manifest exists for this workspace */
+  /** Whether a deus.json manifest exists for this workspace */
   hasManifest?: boolean;
   onMessageChange: (value: string) => void;
   onSend: (content?: string) => void;
@@ -337,7 +337,7 @@ export const MessageInput = forwardRef<MessageInputRef, MessageInputProps>(funct
 
   return (
     <div className={cn("relative z-20 shrink-0 px-4 pb-4", className)}>
-      {/* Environment setup nudge — visible when no opendevs.json and chat is empty */}
+      {/* Environment setup nudge — visible when no deus.json and chat is empty */}
       <AnimatePresence>
         {showSetupNudge && (
           <motion.div

@@ -307,7 +307,7 @@ export const BrowserTab = forwardRef<BrowserTabHandle, BrowserTabProps>(function
           // Clear any pending completion animation
           if (completingTimerRef.current) clearTimeout(completingTimerRef.current);
           setCompletingLoad(false);
-          // Reset injection flag — new page context destroys window.__opendevsVisuals
+          // Reset injection flag — new page context destroys window.__deusVisuals
           automationInjectedRef.current = false;
           // Don't reset hasLoaded — once the first page has loaded, keep the
           // BrowserView visible. Subsequent navigations (redirects, SPA nav,
@@ -324,7 +324,7 @@ export const BrowserTab = forwardRef<BrowserTabHandle, BrowserTabProps>(function
       })
     );
 
-    // Title change events (regular, non-opendevs title changes)
+    // Title change events (regular, non-deus title changes)
     unlistenFns.push(
       native.events.on(BROWSER_TITLE_CHANGED, (data) => {
         const { label, title } = data;
@@ -391,8 +391,8 @@ export const BrowserTab = forwardRef<BrowserTabHandle, BrowserTabProps>(function
     if (!visible || !webviewReady || !hasLoaded) return;
 
     const CONSOLE_DRAIN_JS = `(function(){
-      var b = window.__OPENDEVS_LOGS__ || [];
-      window.__OPENDEVS_LOGS__ = [];
+      var b = window.__DEUS_LOGS__ || [];
+      window.__DEUS_LOGS__ = [];
       return JSON.stringify(b);
     })()`;
 
@@ -609,7 +609,7 @@ export const BrowserTab = forwardRef<BrowserTabHandle, BrowserTabProps>(function
         );
         if (!verifyResult) return;
         const status = JSON.parse(verifyResult);
-        if (!status.opendevsInspect || !status.hasDrainEvents) {
+        if (!status.deusInspect || !status.hasDrainEvents) {
           onAddLog(tabId, "error", `Inspect mode setup incomplete: ${JSON.stringify(status)}`);
           return; // Don't mark as injected
         }

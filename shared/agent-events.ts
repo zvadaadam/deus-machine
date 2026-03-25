@@ -5,10 +5,6 @@
 // Every agent (Claude, Codex, future providers) normalizes its native events
 // into these canonical types. The backend uses them for persistence + WS push.
 //
-// Design informed by:
-// - Codex App Server: thread/turn/item hierarchy, JSON-RPC notifications
-// - T3 Code: ProviderRuntimeEvent union, canonical item types
-// - Agnt Cloud: session channel events, PendingRequestStore pattern
 
 import { z } from "zod";
 
@@ -59,7 +55,7 @@ export const AgentCapabilitiesSchema = z.object({
   workspaceInit: z.boolean(),
   contextUsage: z.boolean(),
 
-  // Model switching behavior (from T3's sessionModelSwitch)
+  // Model switching behavior
   modelSwitch: ModelSwitchModeSchema,
 
   // Session features
@@ -99,7 +95,7 @@ export const TurnOptionsSchema = z.object({
   permissionMode: z.string().optional(),
   providerEnvVars: z.string().optional(),
   ghToken: z.string().optional(),
-  opendevsEnv: z.record(z.string(), z.string()).optional(),
+  deusEnv: z.record(z.string(), z.string()).optional(),
   additionalDirectories: z.array(z.string()).optional(),
   chromeEnabled: z.boolean().optional(),
   strictDataPrivacy: z.boolean().optional(),

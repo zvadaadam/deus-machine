@@ -13,7 +13,7 @@ interface DraggableRepositoryProps extends RepositoryItemProps {
  * Draggable wrapper for RepositoryItem
  * Entire row is the drag target — click = expand/collapse, drag = reorder
  * PointerSensor distance constraint (in AppSidebar) differentiates the two
- * Auto-collapses on drag start (Linear pattern) for better drag experience
+ * Auto-collapses on drag start for better drag experience
  */
 export function DraggableRepository({
   repository,

@@ -39,7 +39,7 @@ export const QueryOptionsSchema = z.object({
   permissionMode: PermissionModeSchema.optional(),
   providerEnvVars: z.string().optional(),
   ghToken: z.string().optional(),
-  opendevsEnv: z.record(z.string(), z.string()).optional(),
+  deusEnv: z.record(z.string(), z.string()).optional(),
   additionalDirectories: z.array(z.string()).optional(),
   chromeEnabled: z.boolean().optional(),
   strictDataPrivacy: z.boolean().optional(),

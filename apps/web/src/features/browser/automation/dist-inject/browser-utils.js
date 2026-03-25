@@ -1,7 +1,7 @@
 "use strict";
 (() => {
   // apps/web/src/features/browser/automation/inject/browser-utils.ts
-  if (!window.__opendevsBrowserUtils) {
+  if (!window.__deusBrowserUtils) {
     let getTextFromIds = function(ids) {
       if (!ids) return "";
       return ids.split(" ").map((id) => {
@@ -261,10 +261,10 @@
     }, buildAccessibilityTree = function(element, depth, maxDepth) {
       if (depth > maxDepth || __nodeCount >= __NODE_LIMIT) return null;
       __nodeCount++;
-      let ref = element.getAttribute("data-opendevs-ref");
+      let ref = element.getAttribute("data-deus-ref");
       if (!ref) {
         ref = "ref-" + Math.random().toString(36).substring(2, 15);
-        element.setAttribute("data-opendevs-ref", ref);
+        element.setAttribute("data-deus-ref", ref);
       }
       const role = element.getAttribute("role") || getImplicitRole(element);
       const name = computeAccessibleName(element, role);
@@ -314,7 +314,7 @@
       }
       return lines.join("\n");
     }, findElementByRef = function(ref) {
-      return document.querySelector('[data-opendevs-ref="' + ref + '"]');
+      return document.querySelector('[data-deus-ref="' + ref + '"]');
     }, scrollIntoViewIfNeeded = function(el) {
       const rect = el.getBoundingClientRect();
       const inView = rect.top >= 0 && rect.left >= 0 && rect.bottom <= (window.innerHeight || document.documentElement.clientHeight) && rect.right <= (window.innerWidth || document.documentElement.clientWidth);
@@ -427,7 +427,7 @@
     getTextFromIds2 = getTextFromIds, getVisibleText2 = getVisibleText, getLabelsText2 = getLabelsText, getImplicitRole2 = getImplicitRole, computeAccessibleName2 = computeAccessibleName, collectElementStates2 = collectElementStates, collectElementDetails2 = collectElementDetails, shouldIncludeElement2 = shouldIncludeElement, buildAccessibilityTree2 = buildAccessibilityTree, buildPageSnapshot2 = buildPageSnapshot, accessibilityTreeToYaml2 = accessibilityTreeToYaml, findElementByRef2 = findElementByRef, scrollIntoViewIfNeeded2 = scrollIntoViewIfNeeded, getElementCenter2 = getElementCenter, simulateClick2 = simulateClick, simulateType2 = simulateType, waitForDomSettle2 = waitForDomSettle;
     let __nodeCount = 0;
     const __NODE_LIMIT = 3e3;
-    window.__opendevsBrowserUtils = {
+    window.__deusBrowserUtils = {
       buildPageSnapshot,
       accessibilityTreeToYaml,
       findElementByRef,

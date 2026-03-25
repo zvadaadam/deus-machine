@@ -119,7 +119,7 @@ export function GeneralSection({ settings, saveSetting, theme, setTheme }: Gener
             Usage analytics
           </Label>
           <p className="text-muted-foreground text-base">
-            Help improve OpenDevs by sharing anonymous usage data.
+            Help improve Deus by sharing anonymous usage data.
           </p>
         </div>
         <Switch

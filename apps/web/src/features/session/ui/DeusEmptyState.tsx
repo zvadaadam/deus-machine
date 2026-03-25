@@ -1,7 +1,7 @@
 import { GitPullRequest, GitBranch, MessageSquarePlus } from "lucide-react";
 import { cn } from "@/shared/lib/utils";
 
-interface OpenDevsEmptyStateProps {
+interface DeusEmptyStateProps {
   parentBranch?: string | null;
   className?: string;
 }
@@ -9,7 +9,7 @@ interface OpenDevsEmptyStateProps {
 /**
  * Steps are the same as the standard empty state — contribution uses the
  * identical workflow. Only the framing sentence changes. We do NOT invent
- * OpenDevs-specific copy for each step because that would be patronizing
+ * Deus-specific copy for each step because that would be patronizing
  * to a semi-technical user who already knows how to open a PR.
  */
 const STEPS = [
@@ -19,7 +19,7 @@ const STEPS = [
 ] as const;
 
 /**
- * OpenDevsEmptyState — the "mirror moment" empty state for the opendevs repo.
+ * DeusEmptyState — the "mirror moment" empty state for the deus repo.
  *
  * Direction: "Mirror Moment"
  * Philosophy: The user is holding the tool they are about to improve. The
@@ -52,7 +52,7 @@ const STEPS = [
  * the state feel calmer but less distinctive. We accept this — the copy
  * is the differentiation; the animation was decoration.
  */
-export function OpenDevsEmptyState({ parentBranch, className }: OpenDevsEmptyStateProps) {
+export function DeusEmptyState({ parentBranch, className }: DeusEmptyStateProps) {
   return (
     <div
       className={cn(

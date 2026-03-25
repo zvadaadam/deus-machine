@@ -95,8 +95,8 @@
 - **`WHEEL_UP_THRESHOLD = -4`**: Lower than Codex (-12) to match macOS trackpad which fires many
   small deltas. Risk: very light resting-finger contact on trackpad fires deltaY < -4 and pauses.
   Mitigated by `OWN_SCROLL_WINDOW_MS` guard preventing false triggers during chase motion.
-- **Nested scrollable handling (CONFIRMED CORRECT for majority case)**: The old Cursor approach
-  walked the DOM to find the nearest scrollable ancestor. The new Codex approach attaches the wheel
+- **Nested scrollable handling (CONFIRMED CORRECT for majority case)**: The old approach
+  walked the DOM to find the nearest scrollable ancestor. The new approach attaches the wheel
   listener to `container` (the chat scroll element) directly — it only receives events that bubble
   to it, meaning events inside nested scrollables with `overscroll-behavior: contain` AND
   `overflow: auto/scroll` will still bubble the wheel event up to container. The `passive:true`

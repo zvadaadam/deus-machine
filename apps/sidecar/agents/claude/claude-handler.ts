@@ -425,7 +425,7 @@ export class ClaudeAgentHandler implements AgentHandler {
       const tEnvStart = Date.now();
       const envForClaude = buildAgentEnvironment({
         providerEnvVars: options?.providerEnvVars,
-        opendevsEnv: options?.opendevsEnv,
+        deusEnv: options?.deusEnv,
         ghToken: options?.ghToken,
         extraEnv: { CLAUDE_CODE_ENABLE_TASKS: "true" },
       });

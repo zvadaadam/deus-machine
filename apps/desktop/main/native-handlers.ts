@@ -150,15 +150,15 @@ export function registerNativeHandlers(): void {
   // -------------------------------------------------------------------------
 
   ipcMain.handle("native:getBackendPort", () => {
-    return parseInt(process.env.OPENDEVS_BACKEND_PORT!, 10);
+    return parseInt(process.env.DEUS_BACKEND_PORT!, 10);
   });
 
   ipcMain.handle("get_backend_port", () => {
-    return parseInt(process.env.OPENDEVS_BACKEND_PORT!, 10);
+    return parseInt(process.env.DEUS_BACKEND_PORT!, 10);
   });
 
   ipcMain.handle("native:getAuthToken", () => {
-    return process.env.OPENDEVS_AUTH_TOKEN;
+    return process.env.DEUS_AUTH_TOKEN;
   });
 
   // -------------------------------------------------------------------------
@@ -429,7 +429,7 @@ async function extractAppIcon(appPath: string, appId: string): Promise<string | 
   try {
     const iconFileName = await resolveIconFileName(appPath);
     const icnsPath = `${appPath}/Contents/Resources/${iconFileName}`;
-    const tmpPng = `/tmp/opendevs-icon-${appId}.png`;
+    const tmpPng = `/tmp/deus-icon-${appId}.png`;
     await execFileAsync("sips", [
       "-s",
       "format",

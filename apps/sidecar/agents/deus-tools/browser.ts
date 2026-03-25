@@ -1,11 +1,11 @@
-// sidecar/agents/opendevs-tools/browser.ts
+// sidecar/agents/deus-tools/browser.ts
 // Browser automation tools powered by agent-browser CLI.
 // Each tool executes agent-browser commands via CDP (Chrome DevTools Protocol)
 // in a headed Chrome window. The daemon auto-starts on first use per session.
 //
-// Snapshot file-based fallback (inspired by Cursor):
+// Snapshot file-based fallback:
 // When a page snapshot exceeds SNAPSHOT_SIZE_THRESHOLD, the full snapshot
-// is written to ~/.opendevs/browser-logs/ and only a preview (first N lines)
+// is written to ~/.deus/browser-logs/ and only a preview (first N lines)
 // is returned to the AI context. The AI can read the full file if needed.
 
 import { tool } from "@anthropic-ai/claude-agent-sdk";
@@ -24,7 +24,7 @@ import { execAgentBrowser, execWithSnapshot, getSnapshot } from "./agent-browser
 const SNAPSHOT_SIZE_THRESHOLD = 25 * 1024; // 25 KB for action tools
 const SNAPSHOT_SIZE_THRESHOLD_LARGE = 200 * 1024; // 200 KB for BrowserSnapshot
 const PREVIEW_LINE_COUNT = 50;
-const BROWSER_LOGS_DIR = join(homedir(), ".opendevs", "browser-logs");
+const BROWSER_LOGS_DIR = join(homedir(), ".deus", "browser-logs");
 
 /**
  * Format a snapshot response with file-based fallback for large snapshots.
@@ -679,10 +679,7 @@ For structural/interactive analysis, prefer BrowserSnapshot (accessibility tree)
         console.log(`[browser] BrowserScreenshot invoked for session ${sessionId}`);
 
         try {
-          const screenshotPath = join(
-            tmpdir(),
-            `opendevs-screenshot-${sessionId}-${Date.now()}.png`
-          );
+          const screenshotPath = join(tmpdir(), `deus-screenshot-${sessionId}-${Date.now()}.png`);
           const screenshotArgs = ["screenshot", screenshotPath];
           if (args.ref) {
             screenshotArgs.push("--selector", args.ref);

@@ -51,7 +51,7 @@ yarn-error.log*
 *.db
 *.db-shm
 *.db-wal
-opendevs.db
+deus.db
 database/
 
 # Logs
@@ -75,7 +75,7 @@ temp/
 .mcp.json
 
 # Local cloned workspaces (nested repos, not tracked in this repo)
-.opendevs/
+.deus/
 
 *storybook.log
 storybook-static

@@ -1,5 +1,5 @@
 /**
- * OpenDevs Database Schema — Single source of truth.
+ * Deus Database Schema — Single source of truth.
  *
  * Imported by backend/src/lib/schema.ts.
  * All statements are idempotent (IF NOT EXISTS).
@@ -21,7 +21,7 @@
 export const MIGRATIONS: string[] = [
   // sessions: structured error category for category-aware UI
   `ALTER TABLE sessions ADD COLUMN error_category TEXT`,
-  // workspaces: Linear-style workflow status (backlog/in-progress/in-review/done/canceled)
+  // workspaces: Workflow status (backlog/in-progress/in-review/done/canceled)
   `ALTER TABLE workspaces ADD COLUMN status TEXT NOT NULL DEFAULT 'in-progress'`,
   `CREATE INDEX IF NOT EXISTS idx_workspaces_status ON workspaces(status)`,
 ];

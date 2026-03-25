@@ -16,7 +16,7 @@ import type { WorkspaceStatus } from "@shared/enums";
 import { WorkspaceItem } from "./WorkspaceItem";
 import { RepoAvatar } from "./RepoAvatar";
 import { SidebarRow, SidebarRowMain, SidebarRowIconSlot, SidebarRowRight } from "./SidebarRow";
-import { OpenDevsRepositoryBanner } from "./OpenDevsRepositoryBanner";
+import { DeusRepositoryBanner } from "./DeusRepositoryBanner";
 
 /** Check if a git remote URL points to GitHub */
 function isGitHubUrl(url: string | null | undefined): boolean {
@@ -67,8 +67,8 @@ export function RepositoryItem({
     }
     return ids.size > 0 ? ids : undefined;
   }, [repository.workspaces, unreadMap, layouts]);
-  // Detect the opendevs repo by clean name (works for "opendevs" or "org/opendevs")
-  const isOpenDevs = repoName === "opendevs";
+  // Detect the deus repo by clean name
+  const isDeus = repoName === "deus";
   const workspaceCount = repository.workspaces.filter((w) => w.state !== "archived").length;
 
   return (
@@ -156,7 +156,7 @@ export function RepositoryItem({
             {sidebarExpanded && (
               <RepositoryWorkspaceList
                 repository={repository}
-                isOpenDevs={isOpenDevs}
+                isDeus={isDeus}
                 selectedWorkspaceId={selectedWorkspaceId}
                 unreadWorkspaceIds={unreadWorkspaceIds}
                 diffStatsMap={diffStatsMap}
@@ -178,7 +178,7 @@ export function RepositoryItem({
 
 interface RepositoryWorkspaceListProps {
   repository: RepoGroup;
-  isOpenDevs: boolean;
+  isDeus: boolean;
   selectedWorkspaceId: string | null;
   unreadWorkspaceIds?: Set<string>;
   diffStatsMap?: Record<string, DiffStats>;
@@ -191,7 +191,7 @@ interface RepositoryWorkspaceListProps {
 
 function RepositoryWorkspaceList({
   repository,
-  isOpenDevs,
+  isDeus,
   selectedWorkspaceId,
   unreadWorkspaceIds,
   diffStatsMap,
@@ -215,7 +215,7 @@ function RepositoryWorkspaceList({
 
   return (
     <>
-      {isOpenDevs && (
+      {isDeus && (
         <m.li
           initial={reduceMotion ? false : { opacity: 0, y: -4 }}
           animate={{ opacity: 1, y: 0 }}
@@ -225,7 +225,7 @@ function RepositoryWorkspaceList({
             delay: reduceMotion ? 0 : 0.02,
           }}
         >
-          <OpenDevsRepositoryBanner onNewWorkspace={() => onNewWorkspace(repository.repo_id)} />
+          <DeusRepositoryBanner onNewWorkspace={() => onNewWorkspace(repository.repo_id)} />
         </m.li>
       )}
 

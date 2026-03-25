@@ -231,7 +231,7 @@ async function spawnSidecar(): Promise<{
     });
   });
 
-  const logPath = `/tmp/opendevs-${proc.pid}.log`;
+  const logPath = `/tmp/deus-${proc.pid}.log`;
 
   return { process: proc, socketPath, client, logPath };
 }
@@ -284,7 +284,7 @@ describe.skipIf(!bundleExists)("E2E: Sidecar Process", () => {
   it("connects to the sidecar's Unix socket", () => {
     expect(client).toBeDefined();
     expect(socketPath).toBeDefined();
-    expect(socketPath).toContain("opendevs-sidecar-");
+    expect(socketPath).toContain("deus-sidecar-");
   });
 
   it("handles an unknown JSON-RPC method gracefully", async () => {

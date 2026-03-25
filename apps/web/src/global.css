@@ -588,7 +588,7 @@
 }
 
 /* Expand/collapse uses conditional render + inline animate-[fadeIn_150ms_ease-out]
-   (Cursor-aligned). No CSS grid height transitions needed — content mounts/
+  . No CSS grid height transitions needed — content mounts/
    unmounts with a subtle opacity fade, removing DOM weight from collapsed
    subtrees entirely. */
 
@@ -599,7 +599,7 @@
    then the element is a plain div with no ongoing cost.
    Respects prefers-reduced-motion via the global media query.
 
-   Turn-level entrance: slide-up + fade. Inspired by Cursor's 8px/0.4s
+   Turn-level entrance: slide-up + fade. 8px/0.4s
    entrance with elastic easing. Per-turn (not per-message) so it fires
    once at conversation boundaries, not during mid-turn streaming.
    Smooth auto-scroll runs concurrently — no conflict since the animation
@@ -937,7 +937,7 @@
   --status-thinking-indicator: oklch(0.53 0.14 265);
   --status-compacting-indicator: oklch(0.53 0.14 300);
 
-  /* Workflow status colors (Linear-style) */
+  /* Workflow status colors */
   --status-in-progress: var(--warning);
   --status-in-review: oklch(0.53 0.16 300);
   --status-done: var(--success);
@@ -1124,7 +1124,7 @@
   --status-thinking-indicator: oklch(0.68 0.14 265);
   --status-compacting-indicator: oklch(0.68 0.14 300);
 
-  /* Workflow status colors (Linear-style) */
+  /* Workflow status colors */
   --status-in-progress: var(--warning);
   --status-in-review: oklch(0.68 0.13 300);
   --status-done: var(--success);
@@ -1360,9 +1360,9 @@ samp,
   transition: opacity 200ms ease;
 }
 
-/* Grain noise texture — 155x155 Gaussian noise PNG tile (matching Arc/Dia's grain dimensions).
+/* Grain noise texture — 155x155 Gaussian noise PNG tile.
  * Separate file instead of inline base64 to keep CSS clean.
- * mix-blend-mode: soft-light avoids blowing out highlights (Arc uses alpha blending, not overlay). */
+ * mix-blend-mode: soft-light avoids blowing out highlights. */
 .electron [data-slot="sidebar-wrapper"]::before {
   content: "";
   position: absolute;
@@ -1392,12 +1392,12 @@ samp,
   background: transparent !important;
 }
 
-/* SidebarInset — no drop shadow; relies on main-content border for separation (Linear-style). */
+/* SidebarInset — no drop shadow; relies on main-content border for separation. */
 .electron [data-slot="sidebar-inset"] {
   box-shadow: none !important;
 }
 
-/* Layer 3: main content — semi-translucent surface with subtle border separation (Linear-style).
+/* Layer 3: main content — semi-translucent surface with subtle border separation.
  * Single 1px border from Tailwind class; no inset shadow or hairline ring. */
 .electron [data-slot="main-content"] {
   background: color-mix(
@@ -1521,7 +1521,7 @@ samp,
  * to flat dark gray. Strategy: increase opacity to block the dead gray, but KEEP
  * grain + wash — they become the primary source of surface life (no longer competing
  * with wallpaper variation). Wash gets a whisper of primary chroma (hue 255) to
- * replace the warmth/color the wallpaper provided. Pattern: Arc Browser. */
+ * replace the warmth/color the wallpaper provided. */
 .electron.fullscreen [data-slot="sidebar-wrapper"] {
   background: color-mix(in oklch, var(--sidebar) 94%, transparent) !important;
 }
@@ -1564,7 +1564,7 @@ samp,
   background: color-mix(in oklch, var(--sidebar) 96%, transparent) !important;
 }
 
-/* Window inactive state — dim vibrancy when window loses focus (like Arc/Dia) */
+/* Window inactive state — dim vibrancy when window loses focus */
 .electron.window-inactive [data-slot="sidebar-wrapper"] {
   background: color-mix(in oklch, var(--sidebar) 88%, transparent) !important;
 }
@@ -1631,7 +1631,7 @@ select {
   transition-duration: 200ms;
 }
 
-/* Scrollbar styles - Linear/Stripe/Airbnb inspired subtle design */
+/* Scrollbar styles - Subtle scrollbar design */
 .scrollbar-vibrancy::-webkit-scrollbar {
   width: 8px;
 }
@@ -2108,13 +2108,13 @@ diffs-container.diffs-theme-compact {
   margin-bottom: 0;
 }
 
-/* Prevent double-spacing from markdown line breaks (Cursor pattern).
+/* Prevent double-spacing from markdown line breaks..
    Scoped to paragraphs to avoid affecting <br> in code blocks or pre. */
 .markdown-content p br {
   display: none;
 }
 
-/* Paragraphs - Tight spacing (4px like Codex) */
+/* Paragraphs - Tight spacing (4px) */
 .markdown-content p {
   margin-top: 0.25rem;
   margin-bottom: 0.25rem;
