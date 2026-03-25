@@ -123,8 +123,8 @@ export function splitByRecency<T extends Workspace>(
   }
 
   const cutoff = Date.now() - STALE_DAYS * 24 * 60 * 60 * 1000;
-  const visible: T[] = [];
-  const stale: T[] = [];
+  const visibleIds = new Set<string>();
+  let staleCount = 0;
 
   for (const ws of workspaces) {
     const status = getDisplayStatus(ws);
@@ -133,16 +133,23 @@ export function splitByRecency<T extends Workspace>(
     const isRecent = new Date(ws.updated_at).getTime() >= cutoff;
 
     if (isActive || isSelected || isRecent) {
-      visible.push(ws);
+      visibleIds.add(ws.id);
     } else {
-      stale.push(ws);
+      staleCount++;
     }
   }
 
   // Backfill from stale so the repo never looks empty
-  while (visible.length < MIN_VISIBLE && stale.length > 0) {
-    visible.push(stale.shift()!);
+  if (visibleIds.size < MIN_VISIBLE) {
+    for (const ws of workspaces) {
+      if (visibleIds.size >= MIN_VISIBLE) break;
+      if (!visibleIds.has(ws.id)) visibleIds.add(ws.id);
+    }
   }
+
+  // Re-derive from original array to preserve sort order
+  const visible = workspaces.filter((ws) => visibleIds.has(ws.id));
+  const stale = workspaces.filter((ws) => !visibleIds.has(ws.id));
 
   // Don't bother hiding if only 1 would be hidden ("Show 1 more" is silly)
   if (stale.length < MIN_STALE_TO_HIDE) {
