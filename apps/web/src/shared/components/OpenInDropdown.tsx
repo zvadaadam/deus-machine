@@ -139,15 +139,10 @@ export function OpenInDropdown({ workspacePath, iconOnly = false }: OpenInDropdo
           <DropdownMenuTrigger asChild>
             <TooltipTrigger asChild>
               <Button
+                aria-label={lastApp ? `Open in ${lastApp.name}` : "Open in app"}
                 variant="ghost"
                 size="icon"
                 className="text-muted-foreground/80 hover:text-foreground hover:bg-muted/10 h-9 w-9 rounded-lg transition-colors duration-200 ease-out"
-                onClick={(e) => {
-                  if (lastApp) {
-                    e.preventDefault();
-                    handleOpenInApp(lastApp.id);
-                  }
-                }}
               >
                 {lastApp?.icon ? (
                   <img src={lastApp.icon} alt="" className="h-4 w-4 rounded-xs" draggable={false} />
@@ -200,6 +195,7 @@ export function OpenInDropdown({ workspacePath, iconOnly = false }: OpenInDropdo
         <DropdownMenuTrigger asChild>
           <button
             type="button"
+            aria-label="Choose app to open in"
             className="text-muted-foreground hover:text-foreground hover:bg-muted/10 flex h-full items-center rounded-r-lg px-1.5 transition-colors duration-200"
             onPointerEnter={handleOpen}
             onPointerLeave={handleClose}

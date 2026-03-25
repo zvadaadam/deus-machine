@@ -346,6 +346,7 @@ function HeaderOpenButton({ workspacePath }: { workspacePath: string }) {
         <DropdownMenuTrigger asChild>
           <button
             type="button"
+            aria-label="Choose app to open in"
             className="text-text-muted hover:bg-bg-muted hover:text-text-subtle flex h-full shrink-0 items-center rounded-r-lg px-1.5 transition-colors duration-200"
             onPointerEnter={handleOpen}
             onPointerLeave={handleClose}
