@@ -939,3 +939,7 @@ If you can test something do it.
 ---
 
 Commit and push all changes
+
+---
+
+Commit uncommitted changes, then rebase this branch onto origin/main. Then push --force-with-lease.
