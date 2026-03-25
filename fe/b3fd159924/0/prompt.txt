@@ -82,3 +82,48 @@ Also, I saw that once I opened it for the first time, the open button was not vi
 ---
 
 /code-simplifier /deslop
+
+---
+
+I run AI code review, is it actionable? Wdyt? Explore in depth each problem.
+
+We want a clean, maintainable codebase, with proper best practices for the tech stack we use.
+Run subagents to verify, and if it should be fixed, try to merge some stuff together so it can be fixed together within one subagent. 
+If you can test something do it.
+
+---
+
+I don't have access to the `DiffComment` tool, so I'll present the review findings directly.
+---
+## Code Review: `zvadaadam/open-in-split-btn`
+**Summary:** Adds a split-button pattern to the "Open in" button — left side quick-opens the last-used editor, right side opens a dropdown. Also adds `⌘O` keyboard shortcut, command palette entry, `useLastOpenInApp` localStorage hook, inflight-request guard for `getInstalledAppsList()`, and PlistBuddy-based icon extraction.
+**4 review agents ran in parallel (2x CLAUDE.md compliance, 2x bug scan). Issues were cross-validated.**
+---
+### **#1 `inflightPromise` never cleared on rejection — permanently breaks "Open in" feature**
+If `loadInstalledApps()` throws an unhandled exception (e.g., `import("fs/promises")` fails, or any error outside the per-app try/catch), `inflightPromise` remains set to the rejected promise forever. The cleanup at line 459-460 (`cachedInstalledApps = installed; inflightPromise = null;`) only runs on the success path. Every subsequent call to `getInstalledAppsList()` hits `if (inflightPromise) return inflightPromise;` and immediately returns the stale rejected promise.
+**Fix:** Use `try/finally` or wrap with `.finally(() => { inflightPromise = null; })`:
+```ts
+async function getInstalledAppsList(): Promise<InstalledApp[]> {
+  if (cachedInstalledApps) return cachedInstalledApps;
+  if (inflightPromise) return inflightPromise;
+  if (process.platform !== "darwin") return [];
+  inflightPromise = loadInstalledApps().finally(() => {
+    inflightPromise = null;
+  });
+  return inflightPromise;
+}
+```
+**File:** `apps/desktop/main/native-handlers.ts:401-407`
+---
+**No other high-signal issues found.** The remaining findings from the review agents were either pre-existing issues (color tokens, unused effect deps, `ease-out` easing), established patterns (`action: () => {}` with `actionOverrides`), or subjective suggestions that don't meet the high-signal bar.
+
+---
+
+<system_instruction>
+The user has attached these files. Read them before proceeding.
+- /Users/zvada/Developer/agent/box-ide/.conductor/albany-v6/.context/attachments/PR instructions.md (952 B)
+</system_instruction>
+
+
+
+Create a PR
