@@ -124,7 +124,6 @@ export function splitByRecency<T extends Workspace>(
 
   const cutoff = Date.now() - STALE_DAYS * 24 * 60 * 60 * 1000;
   const visibleIds = new Set<string>();
-  let staleCount = 0;
 
   for (const ws of workspaces) {
     const status = getDisplayStatus(ws);
@@ -134,8 +133,6 @@ export function splitByRecency<T extends Workspace>(
 
     if (isActive || isSelected || isRecent) {
       visibleIds.add(ws.id);
-    } else {
-      staleCount++;
     }
   }
 
