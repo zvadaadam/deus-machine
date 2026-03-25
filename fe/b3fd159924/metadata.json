@@ -1,0 +1,33 @@
+{
+  "cli_version": "0.5.0",
+  "checkpoint_id": "feb3fd159924",
+  "strategy": "manual-commit",
+  "branch": "zvadaadam/open-in-split-btn",
+  "checkpoints_count": 9,
+  "files_touched": [
+    "apps/desktop/main/native-handlers.ts",
+    "apps/web/src/app/layouts/MainLayout.tsx",
+    "apps/web/src/features/command-palette/commands.ts",
+    "apps/web/src/features/workspace/ui/WorkspaceHeader.tsx",
+    "apps/web/src/shared/components/OpenInDropdown.tsx",
+    "apps/web/src/shared/hooks/index.ts",
+    "apps/web/src/shared/hooks/useKeyboardShortcuts.ts",
+    "apps/web/src/shared/hooks/useLastOpenInApp.ts",
+    "apps/web/src/shared/lib/appIcons.tsx"
+  ],
+  "sessions": [
+    {
+      "metadata": "/fe/b3fd159924/0/metadata.json",
+      "transcript": "/fe/b3fd159924/0/full.jsonl",
+      "content_hash": "/fe/b3fd159924/0/content_hash.txt",
+      "prompt": "/fe/b3fd159924/0/prompt.txt"
+    }
+  ],
+  "token_usage": {
+    "input_tokens": 2172,
+    "cache_creation_tokens": 631831,
+    "cache_read_tokens": 16341468,
+    "output_tokens": 58758,
+    "api_call_count": 166
+  }
+}
