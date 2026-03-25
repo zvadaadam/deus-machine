@@ -323,10 +323,11 @@
 
 ## getInstalledAppsList() Race / Cache Pattern (native-handlers.ts)
 
-- `cachedInstalledApps` is a module-level variable with no in-flight guard. Two simultaneous IPC
-  calls before the first resolves will both execute the full mdfind loop in parallel and both write
-  to `/tmp/opendevs-icon-{id}.png` at the same time.
-- Fix: cache a Promise while in-flight: `let inflightPromise: Promise<InstalledApp[]> | null = null`.
+- Pre-fix risk: `cachedInstalledApps` alone allowed simultaneous first-load callers to duplicate the
+  full `mdfind` loop and race on shared temp icon paths.
+- Current pattern: pair `cachedInstalledApps` with `inflightPromise` so concurrent callers share the
+  same discovery pass until the cache is populated. `.finally()` clears `inflightPromise` on both
+  success and failure paths.
 
 ## mdfind bundleId Query Safety
 
