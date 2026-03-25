@@ -158,3 +158,894 @@ The `BrandMark` component in `PairGatePage.tsx` hardcodes `"OD"` as the brand mo
 ---
 
 Commit and push all changes
+
+---
+
+<system-instruction>
+The user has added 9 comments to the diff for this workspace. Please review and address these comments as part of your response. When addressing comments on the "original" side or on specific commits, read the file from that version (not the current version). Below are the comments, including metadata about what git state they were left on:
+
+Comment #1:
+
+File: 
+Line: undefined
+User comment: "<!-- This is an auto-generated comment: summarize by coderabbit.ai -->
+No actionable comments were generated in the recent review. 🎉
+
+<details>
+<summary>ℹ️ Recent review info</summary>
+
+<details>
+<summary>⚙️ Run configuration</summary>
+
+**Configuration used**: defaults
+
+**Review profile**: CHILL
+
+**Plan**: Lite
+
+**Run ID**: `d518532b-8d2a-4097-a281-0fc1737ea97f`
+
+</details>
+
+<details>
+<summary>📥 Commits</summary>
+
+Reviewing files that changed from the base of the PR and between 3d09c8ab77efaf9d204e2fe7cd0b6bc3f372f74a and b5a8fbd7a4e5257e980681912e118f1aebde7d2f.
+
+</details>
+
+<details>
+<summary>📒 Files selected for processing (2)</summary>
+
+* `apps/desktop/main/backend-process.ts`
+* `apps/web/src/features/auth/ui/PairGatePage.tsx`
+
+</details>
+
+<details>
+<summary>✅ Files skipped from review due to trivial changes (1)</summary>
+
+* apps/web/src/features/auth/ui/PairGatePage.tsx
+
+</details>
+
+</details>
+
+---
+
+<!-- walkthrough_start -->
+
+<details>
+<summary>📝 Walkthrough</summary>
+
+## Walkthrough
+
+Wide-scope rebranding from "OpenDevs" → "Deus" across code, docs, tests, and config (paths, env keys, globals, manifests, package metadata). Large backend change: complete removal of the agent service (client, commands, event handler, persistence, tool relay). Many tests and UI components updated to the new names/paths.
+
+## Changes
+
+|Cohort / File(s)|Summary|
+|---|---|
+|**Agent service removal** <br> `backend/src/services/agent/*`, `backend/src/services/agent/index.ts`|Deleted agent client, command dispatcher, event handler, persistence, tool-relay and the agent service barrel — removal of public APIs and ~1.2K LOC of agent plumbing.|
+|**Env & protocol option rename** <br> `shared/agent-events.ts`, `shared/protocol.ts`, `shared/types/...`|Renamed option keys from `opendevsEnv` → `deusEnv` in turn/query schemas and related types.|
+|**Manifest & manifest APIs** <br> `apps/backend/src/lib/deus-manifest.ts`, `apps/backend/src/services/manifest.service.ts`, `apps/backend/src/routes/repos.ts`|Renamed manifest schema/types and switched manifest handling to `deus.json`/`DeusManifestSchema`; API signatures/comments updated accordingly.|
+|**Paths, DB & workspace dirs** <br> `apps/backend/src/lib/database.ts`, `apps/backend/src/middleware/workspace-loader.ts`, `.gitignore`, `electron-builder.yml`, `deus.json`|Switch `.opendevs` → `.deus`, `opendevs.db` → `deus.db`, appId/productName and setup script paths updated.|
+|**Workspace init / progress protocol** <br> `apps/backend/src/services/workspace-init.service.ts`, `apps/backend/src/services/manifest.service.ts`, `apps/desktop/main/backend-process.ts`|Changed progress prefix `OPENDEVS_WORKSPACE_PROGRESS` → `DEUS_WORKSPACE_PROGRESS`, setup log names and emitted env var keys for setup/tasks.|
+|**Backend routes & messages** <br> `apps/backend/src/routes/health.ts`, `apps/backend/src/routes/workspaces.ts`, `apps/backend/src/routes/onboarding.ts`|Updated health app id, manifest schema usages, worktree filters, error strings and propagated DEUS_* env usages.|
+|**Desktop env & native handlers** <br> `apps/desktop/main/index.ts`, `apps/desktop/main/native-handlers.ts`, `apps/desktop/main/backend-process.ts`, `electron.vite.config.ts`|Renamed temp files, debug/log names, and env var keys `OPENDEVS_*` → `DEUS_*`; adjusted dev plugin temp port file and watch ignore patterns.|
+|**Web injected globals & automation** <br> `apps/web/src/features/browser/automation/.../visual-effects.js`, `inspect-mode.js`, `dist-inject/*`, `visual-effects.ts`|Renamed injected globals and DOM markers `window.__opendevs*` → `window.__deus*`, `data-opendevs-*` → `data-deus-*`, updated generated IIFEs and selectors.|
+|**Sidecar & MCP tooling** <br> `apps/sidecar/agents/deus-tools/*`, `apps/sidecar/agents/environment/env-builder.ts`, `apps/sidecar/agents/claude/*`, `apps/sidecar/index.ts`|Renamed MCP server factory and identity (`createOpenDevsMCPServer` → `createDeusMCPServer`, `"opendevs"` → `"deus"`), and renamed env layer to `deusEnv`; updated sidecar log/socket paths.|
+|**UI component / export renames** <br> `apps/web/src/features/session/ui/DeusEmptyState.tsx`, `apps/web/src/features/onboarding/ui/steps/DeusStep.tsx`, `apps/web/src/features/sidebar/ui/DeusRepositoryBanner.tsx`, `apps/web/src/features/sidebar/ui/RepositoryItem.tsx`|Renamed exported components/props/interfaces and repo-detection wiring from OpenDevs → Deus.|
+|**Local storage / keys / UX copy** <br> `apps/web/src/features/auth/hooks/useAuth.ts`, `apps/web/src/shared/hooks/useLastOpenInApp.ts`, `apps/web/src/features/repository/ui/CloneRepositoryModal.tsx`, multiple UI files|Updated localStorage keys, signout event names, default clone paths, many UI copy strings and manifest references to Deus.|
+|**Package & release metadata** <br> `package.json`, `apps/cloud-relay/package.json`, `packages/mcp-notebook/package.json`, `.github/workflows/release.yml`, `RELEASE.md`|Renamed root package/project and scoped packages (`opendevs` → `deus`), updated author/repo, release title and artifact names.|
+|**Husky hooks** <br> `.husky/_/commit-msg`, `.husky/_/prepare-commit-msg`, `.husky/_/pre-push`, `.husky/_/post-commit`|Replaced inline hook scripts with minimal wrappers that source a shared helper, removing prior inline "entire hooks" invocations.|
+|**Docs & skills** <br> `.claude/*`, `docs/*`, `.claude/skills/generate-deus-json/SKILL.md`|Added new generate-deus-json skill, removed old generate-opendevs-json skill, and updated docs/examples/comments to use Deus and adjust schema/manifest docs.|
+|**Tests & fixtures** <br> `apps/backend/test/**`, `apps/sidecar/test/**`, `test/**`, multiple unit/integration tests|Updated DB paths, temp dirs, expected workspace paths, progress prefixes, MCP server keys and related assertions to the new naming.|
+|**Comment and attribution cleanup** <br> `apps/web/src/global.css`, `docs/scroll-anchoring-investigation.md`, assorted files|Removed or generalized references to Cursor/Linear/Codex/Figma inspirations in comments and docs; no behavior changes.|
+
+## Sequence Diagram(s)
+
+```mermaid
+sequenceDiagram
+  autonumber
+  participant AgentServer as Agent Server (removed)
+  participant Backend as Backend
+  participant DB as Database
+  participant Frontend as Frontend / WS Clients
+
+  Note over AgentServer,Backend: Previous flow (agent integration removed)
+  AgentServer->>Backend: WebSocket connect / initialize
+  Backend->>AgentServer: initialized response / register handlers
+  AgentServer->>Backend: AgentEvent (e.g., tool:request)
+  Backend->>DB: persist event
+  DB-->>Backend: write result
+  Backend->>Frontend: broadcast tool:request via WS
+  Frontend->>Backend: q:tool_response
+  Backend->>AgentServer: relay tool response
+```
+
+```mermaid
+sequenceDiagram
+  autonumber
+  participant Backend as Backend (current)
+  participant DB as Database
+  participant Frontend as Frontend / WS Clients
+
+  Note over Backend,Frontend: Post-change flow (agent service removed)
+  Frontend->>Backend: User actions / API requests
+  Backend->>DB: read/write workspace/session state
+  DB-->>Backend: results
+  Backend->>Frontend: responses/events
+```
+
+## Estimated code review effort
+
+🎯 5 (Critical) | ⏱️ ~120 minutes
+
+> "🐇 Hops of joy in code and name,  
+> From OpenDevs to Deus I came.  
+> Paths and globals fresh and neat,  
+> New chorus—same heartbeat. 🥕"
+
+</details>
+
+<!-- walkthrough_end -->
+
+
+
+
+<!-- internal state start -->
+
+
+<!-- REDACTED/REDACTED/A7Wgl0rWAMQIg6ToBfR5M3nqABChw/REDACTED/REDACTED//REDACTED/REDACTED/REDACTED/REDACTED/REDACTED/REDACTED/REDACTED/REDACTED/XML/L55cQV/REDACTED/REDACTED/REDACTED/REDACTED/UVg/REDACTED/os2MeeD2BTToeYel/REDACTED/REDACTED/REDACTED/ICpEYRI/REDACTED/REDACTED/REDACTED/REDACTED/REDACTED/REDACTED/DtGZG+RCsgEBS5DsWIUJE/REDACTED/REDACTED/REDACTED/REDACTED/jT7aiY2OX2CBxyTxL0BhB1zV4/REDACTED/bg07TlEKGfq6k/REDACTED/REDACTED/REDACTED/EkgR07NxKewFtWAvgBdfN/REDACTED/REDACTED/V4kaaA6aa/fwJaZBjaergkKdH9O7tSVihEekDESSJw/REDACTED/REDACTED/mKNuNstEOyO2OxO/REDACTED/VoW/TbnoWrlWXBgq+ZCw/REDACTED/nsW24NMfG0R/REDACTED/REDACTED/REDACTED/QA5/baTDLMlGPLraP/R6/REDACTED/REDACTED/k0dAb4T/jRuNqbfd+vawaY60/eB7l660roV567BqVwhq/REDACTED/REDACTED/REDACTED/REDACTED/REDACTED/CA20J1cIGV8brh+jEa59fC/REDACTED/REDACTED/REDACTED/REDACTED/REDACTED/rOE/589r8iaGiMSglaisrk0/REDACTED/o/REDACTED/REDACTED/REDACTED/REDACTED/WkG/REDACTED/REDACTED/REDACTED/REDACTED/REDACTED/REDACTED/REDACTED/F/IvxxYZ0Lfl/REDACTED/REDACTED/REDACTED/REDACTED/REDACTED/REDACTED/IjA2iTHN0K6qrkRLL5cU3ZDdI/REDACTED/REDACTED/REDACTED/REDACTED/REDACTED/REDACTED/REDACTED/hb8hST/REDACTED/REDACTED/REDACTED/4YLFxDpB0gkSrkHwB/REDACTED/2qAAwp/REDACTED/REDACTED/REDACTED/REDACTED/FO9RuhhSgyjNQC/REDACTED/REDACTED/e+2/REDACTED/wboSkryRKGDQSg/REDACTED/REDACTED/REDACTED/REDACTED/REDACTED/REDACTED/REDACTED/REDACTED/REDACTED/4/REDACTED/REDACTED/REDACTED/REDACTED/REDACTED/REDACTED/REDACTED/QeYPbAODvB+sA4CH2EHIXlB2g/1AYOsH0X8yGRLi/REDACTED/REDACTED/REDACTED/qByvnD1F0C5ICP2tnRAW5y/REDACTED/j8y9E/REDACTED/REDACTED/0oEzuk/REDACTED/REDACTED/LL33wljYyLb6vPe/3PAUv+SWt9UBSsjv4tzYpcyDQwA6/REDACTED/sH/J/y/tB2QRTf904J+xADv/DQF/REDACTED/REDACTED/DpBHB5bJekYhhDJLlEN2/REDACTED/NQxzkJuG91REl/LsFV8zQKplX8q0f2HJhd/TQH39urQ316tqORAP/REDACTED/PcSgvNb7czGeAuwMAEiDNfMAC1cVhAAK8wH/REDACTED/bmjkDvgPQLr1FAmsCotgWQugQQXtZKS/UcWYoJoQiIUQPEDBAppTM1/REDACTED/cj/REDACTED/VOZKhVtU/0cJJG1/REDACTED/REDACTED/gu7yTCHvDMKe9NcU9y8CCwyYx11/REDACTED/REDACTED/WH2AisQ9QF4jTdUcLrCM3D9yFs/REDACTED/REDACTED/REDACTED/REDACTED/REDACTED/REDACTED/w09DYwIV/dSpaP3cR8lIGV+xVmWaP+9DQ12J/REDACTED/C9oaINVELAZKZpTCE0kXYAcJuAeQDpD/REDACTED/REDACTED/lN4wDQT5wZdMMH9Mw/REDACTED/REDACTED/REDACTED/REDACTED/REDACTED/REDACTED/REDACTED/REDACTED/REDACTED/REDACTED/REDACTED/REDACTED/REDACTED/REDACTED/5UxOWtgxfGCN5jwYIghh/REDACTED/sWg9g0aAFFAB8+IHi9EHPvNnzJrD/REDACTED/PZOH59GR1k/REDACTED/xEVJC/e03zt82fM/REDACTED/REDACTED/REDACTED/REDACTED/t2hOcC9iMYtxU/s6SodgZKn7Jkp6g/REDACTED/REDACTED/REDACTED/REDACTED/yicsG1SywmL4AKy8jyCs/Q4Oz7B/REDACTED/+Vb1URPS++FZZwIRIw/REDACTED/I7KP5R/OwzWy7MJjC0suMIyKLtGf0By/REDACTED/REDACTED/QyK0C0t3a7wyyM0qVOY9nAteLzEH8/REDACTED/NRUrnANStKqNK/tLowKizrXXM/REDACTED/+R/REDACTED/REDACTED/REDACTED/REDACTED/REDACTED/NMrf9IGzaJZjBK3aM7KU5JVK8C06/REDACTED/REDACTED/REDACTED/REDACTED/a9Rp/REDACTED/wv6NaIuBurNE6iyWliJ/Hhq8DcQRsQlLgczOq7EZPERvya/REDACTED/REDACTED/REDACTED/REDACTED/REDACTED/W5SvaI1OFh2oo/FAHpl/IbDog7vFIEnoA2i/REDACTED/REDACTED/REDACTED/REDACTED/REDACTED/OuwaVGvYVyh8oUGtayJ09rMLxtW/REDACTED/lkGWrwNK/REDACTED/lXe8rXS1Va/REDACTED/uD6AwWrU/F5++3sX6zQZfoFq0td0EvgN+kZi37/UK/oBczwMWsP6rXZ/rucz+i/owBQB0CBv6ySu/t96H+o/pucT+1/REDACTED/REDACTED/REDACTED/REDACTED/REDACTED/REDACTED/REDACTED/REDACTED/REDACTED/REDACTED/REDACTED/F/y0KVQd/REDACTED/REDACTED/REDACTED/REDACTED/y7JMTKTHJW0SelbNU/REDACTED/kRW2DmUqh1rDmm6m61Wl/REDACTED/J22aEa/2w6Z9jpKVIB/i9/REDACTED/REDACTED/65RiIaND2w+rqKp9VVlsO9N0/fpGZNQ3xrmznaMuvyTVEIvs/REDACTED/REDACTED/REDACTED/ZqxJrtjG/REDACTED/REDACTED/REDACTED/REDACTED/REDACTED/REDACTED/REDACTED/REDACTED/uMeMlsk/J29ulW5xp1JCDiUMMIlCyZzCf1/+a+3AFuyb5SHJ/REDACTED/REDACTED/REDACTED/REDACTED/REDACTED/REDACTED/REDACTED/JlwVND/REDACTED/REDACTED/A5sg6HG7+/REDACTED/REDACTED/ya1m93yaQyD+xjQfK9t3IL6QlvDmrvC/REDACTED/REDACTED/REDACTED/4eIDQc/z/gL3s0zAC6V3zzyO6mtwk8B8gf/REDACTED/REDACTED/LpjQcC9JZGHjc+9zqkbAB/uwwD1VpuE74NDAeIH1MzQeYHzB/REDACTED/DE7EACrfEAhKJOaoBZwALv/ARbr2Gwx8H5AqDPiSUm/Ng2nWko/uOnSAFaD6NhzRYv2S2J/REDACTED/REDACTED/7v0aJqNYuvMZF/REDACTED/REDACTED/REDACTED/REDACTED/REDACTED/DF11cY8RfA/Cu/8Wg/QaR7uL393znH20W0sfW03j2/REDACTED/REDACTED/9zm+95BWHuR4sfH7pO4/ul3+R4Y/REDACTED/ewfH5dD8eMAAJ6GY/REDACTED/5f1P0p6je3Pqp9PPxXup/REDACTED/ARpSLQVegPp9FrmO9ROA9a4O9zEg+czeoaQ+/3n3RLm1zjZ/REDACTED/ZtpyhRgs/nBCXxczpf/REDACTED/wzYEA0EKLoQ/REDACTED/REDACTED/2bm+Hy/XP6qLFfanyKl0/WXDr5Zg1Xg17Sezsf/1k+bP3V50x1Xw161ctXtyGzF+/Cj6KoO82I/V0uGGIjDcO9tBeCvu9zX7De6mjT9iuY39N/REDACTED/JU/hP+D/hfzwp3PvPGat5oO/EPz7xvAvyEgYxQv24GQuAqy9nGmw/REDACTED/REDACTED/REDACTED/REDACTED/REDACTED/wb0brvdYAPtMA5ZdP/L+/IK4K3EK48vMK5a/Zz4jnWK4G/REDACTED/EXph3Ilj5/PC5dfEgGm/REDACTED/REDACTED/REDACTED/REDACTED/X0ixEGIivVDs5JHI1a/REDACTED/REDACTED/REDACTED/REDACTED/pGU6FMRf7L/QECr/REDACTED/K3fFXD/7Vl5Dg9l78fUcEtnBMbgHdL4g5RW7B/Ac55UQn6h/REDACTED/QL8ycVY6Ts/REDACTED/REDACTED/R4w/jI6D9SDAB7FJ7KDsAah7Ff/REDACTED/xbA7j7T1q/REDACTED/YFIZVjN/Rn7D7CuWMJQApYnIpnDrAVjHzZLufuLIXF/REDACTED/REDACTED/REDACTED/REDACTED/REDACTED/REDACTED/REDACTED/Q83R/REDACTED/6Ek0F+BUI82E0I4fYmAyW4+/REDACTED/hCJdMKuzCGuJ/REDACTED/REDACTED/1vCcsIT/REDACTED/REDACTED/REDACTED/OD/REDACTED/REDACTED/REDACTED/REDACTED/REDACTED/REDACTED/REDACTED/REDACTED/REDACTED/REDACTED/REDACTED/REDACTED/wnXD/REDACTED/REDACTED/REDACTED/xIAbqHi4GAEUQ86O1oaSRGOCAD/AByAWGtOkQGrbBPyCIBEuFZV/REDACTED/EEwRVy7oRvxoeLvx/REDACTED/REDACTED/REDACTED/REDACTED/REDACTED/cRWIAWTHi8VL0G+2VhOzFJHJrFKl0/REDACTED/REDACTED/mLY6k3x1Cu/REDACTED/REDACTED/REDACTED/7UIZvBOLA/zI+Z7r1pOIhKS++YQ/aZJKMxuDM0RyeK8ZYqFTxTRyRgkJFyZkNPIZ/REDACTED/REDACTED/REDACTED/REDACTED/3g7ZVeNwwDILTk/REDACTED//REDACTED/7iU28wCmiprzlGN/REDACTED/J/REDACTED/REDACTED/REDACTED/REDACTED/REDACTED/Kj5ivPuZt3KOcB4IGcrnVKA8nP/REDACTED/REDACTED/REDACTED/LNgg8jJcgzB0qAvQMqA1Ehlh/REDACTED/REDACTED/REDACTED/REDACTED/1l+ALAR6QZHwlYrfyf2cUmHZf/REDACTED/REDACTED/REDACTED/M6014gPChiCbFqiDWlN0q8AY2z8oA/REDACTED/REDACTED/REDACTED/Ocgr/g6sHdGTowBAAwHdwX/REDACTED/REDACTED/hVA8EqaY/REDACTED/2Cc5Etpk8rmtE+qM0off1fI2JHYCkNH/REDACTED/9JBljUr4qEWwJJzZ1shl/JhlzS1Pl/REDACTED/REDACTED/W/REDACTED/REDACTED/REDACTED/HGkOkhEwAQ4D3CTp25Q+/3/REDACTED/REDACTED//TVqe/REDACTED/REDACTED/REDACTED/REDACTED/REDACTED/REDACTED/REDACTED/REDACTED/REDACTED/REDACTED/me5yMM2VW2uwIeqvSYc/REDACTED/REDACTED/S+qq/REDACTED/REDACTED/REDACTED/931KlVPme1MGK1YYEp4eRpqO1hGXSxeL/g/REDACTED/REDACTED/UmNzRumNa7S8M2zI/REDACTED/REDACTED/REDACTED/REDACTED/0FJmFopoHAGtZedFWq//REDACTED/1q+QwAC/REDACTED/REDACTED/REDACTED/REDACTED/REDACTED/NsIm2drxwudqOtbdr6xR1s7thNqttPdq9Mfdv/REDACTED/REDACTED/REDACTED/REDACTED/REDACTED/REDACTED/REDACTED/REDACTED/REDACTED/REDACTED/REDACTED/REDACTED/REDACTED/GmrAZkCJQ+svRJDiEEpkwArsG4mGuR/REDACTED/REDACTED/REDACTED/REDACTED/REDACTED/EJpuB9442l99/C1pqal4VsxlHQanx6amHXPgZGg0o/REDACTED/REDACTED/kM/REDACTED/eFlK/PSOYM/HVOK7DhmmHVgp/REDACTED/REDACTED/0KqGZDWJT/REDACTED/REDACTED/uAOgStgZBkjgW05I5hKkg/REDACTED/REDACTED/REDACTED/V2QBx/rMNp/REDACTED/REDACTED/ppDoDuI1zYXf9LwZ/REDACTED/ucUbB6Rzi/REDACTED/REDACTED/O4gDwVupXKMiWd/tcjxXX4wqgYKF1/REDACTED/REDACTED/REDACTED/REDACTED/REDACTED/REDACTED/REDACTED/REDACTED/REDACTED/mDHV/m4aqUjH8nvyogwQoc8YLjQlU/REDACTED/8mpT/REDACTED/8gFT4tLKl4VOJFCFU2FsSKSU2cf/REDACTED/AgV0vw2ubtItTP/REDACTED/REDACTED/REDACTED/REDACTED/REDACTED/DKIzFSj4ZhGeDQ+gPiA2ZAGE/OipOSqeYVT0K1wPSRyQ96f/REDACTED/REDACTED/REDACTED/REDACTED/REDACTED/REDACTED/M/REDACTED/REDACTED/oTzmzM050jR6EPq4c/REDACTED/REDACTED/REDACTED/N/SDKR2Mb31hgHFMBR3pEip3aQU5G/REDACTED/ltS+XjrZ1EMzRllL9LD/OP5r/REDACTED/REDACTED/REDACTED/REDACTED/REDACTED -->
+
+<!-- internal state end -->"
+
+Comment metadata:
+This comment was left on a file.
+This comment was left on GitHub by @coderabbitai.
+
+
+Comment #2:
+
+File: .claude/skills/generate-deus-json/SKILL.md
+Line: 63
+User comment: "_⚠️ Potential issue_ | _🟠 Major_
+
+**Resolve package-manager instruction conflict in the generator.**
+
+Line 53–Line 63 says the skill detects `npm`/`yarn`/`pnpm`, but Line 175 hardcodes Bun command shorthand. This can generate non-runnable `tasks` for non-Bun projects.
+
+<details>
+<summary>🛠️ Suggested doc fix</summary>
+
+```diff
+-- Use string shorthand for simple tasks: `"test": "bun run test"`
++- Use package-manager-aware shorthand for simple tasks:
++  - bun: `"test": "bun run test"`
++  - npm: `"test": "npm run test"`
++  - yarn: `"test": "yarn test"`
++  - pnpm: `"test": "pnpm test"`
+```
+</details>
+
+
+
+
+Also applies to: 175-176
+
+<details>
+<summary>🤖 Prompt for AI Agents</summary>
+
+```
+Verify each finding against the current code and only fix it if needed.
+
+In @.claude/skills/generate-deus-json/SKILL.md around lines 53 - 63, The
+README/table shows detection for multiple package managers but later the skill
+hardcodes Bun shorthand when emitting tasks (see SKILL.md lines 53–63 vs
+175–176); update the task generation logic/template so it chooses the
+install/run command based on the detected lockfile (package manager) instead of
+always using Bun—introduce a packageManager variable (e.g., derived from
+bun.lock/package-lock.json/yarn.lock/pnpm-lock.yaml) and replace the hardcoded
+Bun shorthand with a mapping to the correct command (npm/yarn/pnpm/bun) when
+generating `tasks` and examples.
+```
+
+</details>
+
+<!-- fingerprinting:phantom:poseidon:hawk -->
+
+<!-- This is an auto-generated comment by CodeRabbit -->"
+
+Comment metadata:
+This comment was left on the modified branch.
+This comment was left on GitHub by @coderabbitai.
+This comment is the start of thread PRRT_kwDOQEbULc523c-m. 
+
+
+Comment #3:
+
+File: .husky/_/commit-msg
+Line: 2
+User comment: "_⚠️ Potential issue_ | _🔴 Critical_
+
+<details>
+<summary>🧩 Analysis chain</summary>
+
+🏁 Script executed:
+
+```shell
+#!/bin/bash
+# Verify the shared Husky helper file exists and is executable
+
+echo "=== Checking for .husky/_/h helper file ==="
+if [ -f ".husky/_/h" ]; then
+  echo "✓ Helper file exists"
+  echo ""
+  echo "=== Contents of .husky/_/h ==="
+  cat ".husky/_/h"
+else
+  echo "✗ Helper file .husky/_/h NOT FOUND - hooks will fail!"
+  exit 1
+fi
+```
+
+Repository: zvadaadam/box-ide
+
+Length of output: 158
+
+---
+
+🏁 Script executed:
+
+```shell
+#!/bin/bash
+# Check .husky directory contents
+echo "=== Contents of .husky/ directory ==="
+if [ -d ".husky" ]; then
+  find .husky -type f | sort
+  echo ""
+  echo "=== Directory structure ==="
+  tree .husky 2>/dev/null || find .husky -type d | sort
+else
+  echo ".husky directory does not exist"
+fi
+```
+
+Repository: zvadaadam/box-ide
+
+Length of output: 367
+
+---
+
+</details>
+
+**The `.husky/_/commit-msg` hook will fail at runtime.** The hook attempts to source `.husky/_/h` on line 2, but this helper file does not exist in the repository. When git triggers this hook, it will fail with a "file not found" error.
+
+All four hooks in the `.husky/_/` directory depend on this missing helper file:
+- `.husky/_/commit-msg`
+- `.husky/_/post-commit`
+- `.husky/_/pre-push`
+- `.husky/_/prepare-commit-msg`
+
+Create the `.husky/_/h` helper file with the appropriate hook logic before merging these changes.
+
+<details>
+<summary>🤖 Prompt for AI Agents</summary>
+
+```
+Verify each finding against the current code and only fix it if needed.
+
+In @.husky/_/commit-msg around lines 1 - 2, The commit hooks in
+.husky/_/commit-msg, .husky/_/post-commit, .husky/_/pre-push, and
+.husky/_/prepare-commit-msg source a missing helper file `.husky/_/h`; create
+that helper file `.husky/_/h` and implement the shared hook functions it should
+export (e.g., common setup, environment exports, and any helper utilities used
+by those scripts such as the logic expected by commit-msg), then ensure each
+hook sources `.husky/_/h` successfully and calls the appropriate helper
+function(s) (refer to the scripts by name: commit-msg, post-commit, pre-push,
+prepare-commit-msg) so the hooks run without a "file not found" error.
+```
+
+</details>
+
+<!-- fingerprinting:phantom:poseidon:ocelot -->
+
+<!-- This is an auto-generated comment by CodeRabbit -->"
+
+Comment metadata:
+This comment was left on the modified branch.
+This comment was left on GitHub by @coderabbitai.
+This comment is the start of thread PRRT_kwDOQEbULc523c-p. 
+
+
+Comment #4:
+
+File: apps/backend/src/routes/workspaces.ts
+Line: 249
+User comment: "_⚠️ Potential issue_ | _🟠 Major_
+
+<details>
+<summary>🧩 Analysis chain</summary>
+
+🏁 Script executed:
+
+```shell
+#!/bin/bash
+set -euo pipefail
+
+echo "Workspace path references:"
+rg -n -C2 '\.deus\b|\.opendevs\b|computeWorkspacePath|withWorkspace' apps/backend apps/desktop shared
+
+echo
+echo "Potential migration or fallback handling:"
+rg -n -C3 'renameSync|rename\(|realpathSync|existsSync|migrate' apps/backend apps/desktop shared
+```
+
+Repository: zvadaadam/box-ide
+
+Length of output: 50373
+
+---
+
+🏁 Script executed:
+
+```shell
+#!/bin/bash
+set -euo pipefail
+
+echo "=== Database migrations ===" 
+fd -t f '*.sql' . 2>/dev/null | head -20
+
+echo
+echo "=== Database initialization (db.ts, init, setup) ==="
+rg -l 'migration|initialize|init|setup' apps/backend/src/lib apps/backend/src/db 2>/dev/null | head -10
+
+echo
+echo "=== Workspace initialization service ==="
+rg -n 'initWorkspace|workspace_init|setupWorkspace' apps/backend/src/services -A 5 | head -50
+
+echo
+echo "=== Any fallback/migration for legacy paths ==="
+rg -n 'existsSync.*deus|existsSync.*opendevs|check.*legacy|migrate.*path' apps/backend/src 2>/dev/null | head -20
+```
+
+Repository: zvadaadam/box-ide
+
+Length of output: 88
+
+---
+
+🏁 Script executed:
+
+```shell
+#!/bin/bash
+set -euo pipefail
+
+echo "=== Database initialization/schema files ==="
+find apps/backend/src -name "*schema*" -o -name "*init*" -o -name "*database*" | grep -E '\.(ts|js)$'
+
+echo
+echo "=== workspace-init.service.ts content (key sections) ==="
+head -100 apps/backend/src/services/workspace-init.service.ts | cat -n
+
+echo
+echo "=== Check for any legacy .opendevs handling in initialization ==="
+rg -n 'opendevs|legacyWorkspaceDir|\.conductor' apps/backend/src/services/workspace-init.service.ts
+```
+
+Repository: zvadaadam/box-ide
+
+Length of output: 4677
+
+---
+
+🏁 Script executed:
+
+```shell
+#!/bin/bash
+set -euo pipefail
+
+echo "=== Database initialization (database.ts) ==="
+cat -n apps/backend/src/lib/database.ts
+
+echo
+echo "=== Workspace creation route (lines 200-300) ==="
+sed -n '200,300p' apps/backend/src/routes/workspaces.ts | cat -n
+
+echo
+echo "=== Workspace init pipeline - full run function ==="
+sed -n '300,400p' apps/backend/src/services/workspace-init.service.ts | cat -n
+```
+
+Repository: zvadaadam/box-ide
+
+Length of output: 7719
+
+---
+
+</details>
+
+**Upgrade compatibility: existing `.opendevs` worktrees will become inaccessible.**
+
+When users upgrade, workspaces created under `.opendevs/<slug>` will no longer be found. Line 249 hardcodes new workspace paths to `.deus`, and `computeWorkspacePath()` has no fallback to check `.opendevs` directories. Either add a one-time migration to rename legacy `.opendevs` directories to `.deus` on app startup, or modify `computeWorkspacePath()` to try `.opendevs` if `.deus` doesn't exist.
+
+<details>
+<summary>🤖 Prompt for AI Agents</summary>
+
+```
+Verify each finding against the current code and only fix it if needed.
+
+In `@apps/backend/src/routes/workspaces.ts` at line 249, The code now constructs
+workspace paths using path.join(repo.root_path!, ".deus", workspace_name) which
+breaks access to legacy workspaces under ".opendevs"; update the logic in
+computeWorkspacePath (or the spot that builds workspacePath using workspace_name
+and repo.root_path) to first check for an existing ".deus/<slug>" and if missing
+fall back to ".opendevs/<slug>", returning whichever exists, or implement a
+one-time migration at app startup that renames/ moves existing ".opendevs"
+directories to ".deus" (ensuring atomic rename and error handling). Ensure you
+reference and update the functions/variables computeWorkspacePath,
+workspacePath, workspace_name and repo.root_path to locate and apply the
+fallback or migration so legacy worktrees remain accessible.
+```
+
+</details>
+
+<!-- fingerprinting:phantom:medusa:grasshopper -->
+
+<!-- This is an auto-generated comment by CodeRabbit -->"
+
+Comment metadata:
+This comment was left on the modified branch.
+This comment was left on GitHub by @coderabbitai.
+This comment is the start of thread PRRT_kwDOQEbULc523c-s. 
+
+
+Comment #5:
+
+File: apps/backend/src/routes/workspaces.ts
+Line: 428
+User comment: "_⚠️ Potential issue_ | _🟠 Major_
+
+**Keep `OPENDEVS_*` aliases in task env until manifests are migrated.**
+
+Task commands now receive only `DEUS_*`. Any existing repo task or shell script still reading `OPENDEVS_ROOT_PATH` / `OPENDEVS_WORKSPACE_*` will break immediately after upgrade. Please emit both prefixes for at least one release, ideally from `getDeusEnv()` so setup/archive/task execution stay aligned.
+
+
+<details>
+<summary>💡 Proposed compatibility patch</summary>
+
+```diff
+   const env = {
+     ...(manifest.env ?? {}),
+     ...task.env,
++    OPENDEVS_ROOT_PATH: workspace.root_path,
++    OPENDEVS_WORKSPACE_PATH: workspacePath,
++    OPENDEVS_WORKSPACE_ID: workspace.id,
+     DEUS_ROOT_PATH: workspace.root_path,
+     DEUS_WORKSPACE_PATH: workspacePath,
+     DEUS_WORKSPACE_ID: workspace.id,
+   };
+```
+</details>
+
+<details>
+<summary>🤖 Prompt for AI Agents</summary>
+
+```
+Verify each finding against the current code and only fix it if needed.
+
+In `@apps/backend/src/routes/workspaces.ts` around lines 422 - 428, The env object
+currently emits only DEUS_* variables which breaks backwards compatibility;
+update the env construction (or preferably centralize in getDeusEnv()) to also
+set matching OPENDEVS_* aliases—i.e., emit OPENDEVS_ROOT_PATH,
+OPENDEVS_WORKSPACE_PATH, and OPENDEVS_WORKSPACE_ID with the same values as
+DEUS_ROOT_PATH, DEUS_WORKSPACE_PATH, and DEUS_WORKSPACE_ID—so task execution and
+setup/archive remain compatible until manifests are migrated.
+```
+
+</details>
+
+<!-- fingerprinting:phantom:medusa:grasshopper -->
+
+<!-- This is an auto-generated comment by CodeRabbit -->"
+
+Comment metadata:
+This comment was left on the modified branch.
+This comment was left on GitHub by @coderabbitai.
+This comment is the start of thread PRRT_kwDOQEbULc523c-w. 
+
+
+Comment #6:
+
+File: apps/sidecar/agents/claude/checkpoint.ts
+Line: 47
+User comment: "_⚠️ Potential issue_ | _🔴 Critical_
+
+<details>
+<summary>🧩 Analysis chain</summary>
+
+🏁 Script executed:
+
+```shell
+#!/bin/bash
+# Check if there's any migration handling or fallback for old ref namespace
+rg -n "opendevs-checkpoints" --type ts
+```
+
+Repository: zvadaadam/box-ide
+
+Length of output: 43
+
+---
+
+🏁 Script executed:
+
+```shell
+cat -n apps/sidecar/agents/claude/checkpoint.ts | head -80
+```
+
+Repository: zvadaadam/box-ide
+
+Length of output: 3461
+
+---
+
+🏁 Script executed:
+
+```shell
+# Search for migration scripts or references
+fd -t f -e json -e ts -e js | xargs grep -l "migration\|migrate" 2>/dev/null | head -20
+```
+
+Repository: zvadaadam/box-ide
+
+Length of output: 370
+
+---
+
+🏁 Script executed:
+
+```shell
+# Check for revert/undo functionality related to checkpoints
+rg -n "revert|undo" apps/sidecar/agents/claude/checkpoint.ts --type ts -A 2 -B 2
+```
+
+Repository: zvadaadam/box-ide
+
+Length of output: 300
+
+---
+
+🏁 Script executed:
+
+```shell
+# Search for any reference to old namespace in all files (not just .ts)
+rg -n "opendevs" --type-list | head -5
+```
+
+Repository: zvadaadam/box-ide
+
+Length of output: 450
+
+---
+
+🏁 Script executed:
+
+```shell
+# Check git history for namespace changes
+git log --all --oneline -- apps/sidecar/agents/claude/checkpoint.ts 2>/dev/null | head -20
+```
+
+Repository: zvadaadam/box-ide
+
+Length of output: 225
+
+---
+
+🏁 Script executed:
+
+```shell
+# Look at the brand/namespace change commit for context
+git show b5a8fbd --stat 2>/dev/null | head -30
+```
+
+Repository: zvadaadam/box-ide
+
+Length of output: 1667
+
+---
+
+🏁 Script executed:
+
+```shell
+# Search for session cleanup or checkpoint cleanup logic
+rg -n "session.*end|cleanup|clear.*checkpoint" apps/sidecar --type ts -i
+```
+
+Repository: zvadaadam/box-ide
+
+Length of output: 4542
+
+---
+
+🏁 Script executed:
+
+```shell
+# Check if checkpoints are documented as ephemeral anywhere
+rg -n "ephemeral|session.*end" apps/sidecar --type ts -B 2 -A 2
+```
+
+Repository: zvadaadam/box-ide
+
+Length of output: 8067
+
+---
+
+</details>
+
+**Add migration or fallback handling for legacy checkpoint refs.**
+
+The namespace change from `opendevs-checkpoints` to `deus-checkpoints` introduces a breaking change. Users upgrading will have orphaned refs under `refs/opendevs-checkpoints/` that won't be accessible with the new namespace, affecting undo/revert functionality.
+
+Commit b5a8fbd addressed legacy DB paths during the brand rename, but checkpoint refs were not migrated. Consider:
+1. A migration script to rename existing refs from `refs/opendevs-checkpoints/` to `refs/deus-checkpoints/`
+2. Fallback logic in revert/undo operations to check old refs if new refs don't exist
+3. Or clearly document this as a breaking change (existing checkpoints are abandoned on upgrade)
+
+<details>
+<summary>🤖 Prompt for AI Agents</summary>
+
+```
+Verify each finding against the current code and only fix it if needed.
+
+In `@apps/sidecar/agents/claude/checkpoint.ts` at line 47, The ref creation uses a
+new namespace const refName = `refs/deus-checkpoints/${checkpointId}` but lacks
+migration/fallback for legacy refs; update the checkpoint resolution logic in
+apps/sidecar/agents/claude/checkpoint.ts (where refName and checkpointId are
+used) to first try the new refName, and if it does not exist, attempt the
+legacyRefName = `refs/opendevs-checkpoints/${checkpointId}`; on finding the
+legacy ref either return it (fallback) or create/move it to the new namespace
+(migration) so undo/revert functions that use refName will continue to work for
+upgraded repos. Ensure the fallback/migrate path is used in functions that
+read/resolve checkpoint refs (revert/undo handlers) and include an idempotent
+migration step if you choose to persist the rename.
+```
+
+</details>
+
+<!-- fingerprinting:phantom:poseidon:ocelot -->
+
+<!-- This is an auto-generated comment by CodeRabbit -->"
+
+Comment metadata:
+This comment was left on the modified branch.
+This comment was left on GitHub by @coderabbitai.
+This comment is the start of thread PRRT_kwDOQEbULc523c-z. 
+
+
+Comment #7:
+
+File: apps/web/src/features/session/lib/sessionPrompts.ts
+Line: 77
+User comment: "_⚠️ Potential issue_ | _🟡 Minor_
+
+<details>
+<summary>🧩 Analysis chain</summary>
+
+🏁 Script executed:
+
+```shell
+#!/bin/bash
+# Verify the schema URL responds with valid JSON
+curl -sI "https://deus.dev/schemas/deus.json" | head -5
+```
+
+Repository: zvadaadam/box-ide
+
+Length of output: 43
+
+---
+
+🏁 Script executed:
+
+```shell
+cat -n apps/web/src/features/session/lib/sessionPrompts.ts | head -100
+```
+
+Repository: zvadaadam/box-ide
+
+Length of output: 5167
+
+---
+
+🏁 Script executed:
+
+```shell
+#!/bin/bash
+# Better verification of the schema URL with verbose output
+curl -sL "https://deus.dev/schemas/deus.json" | head -20
+```
+
+Repository: zvadaadam/box-ide
+
+Length of output: 43
+
+---
+
+🏁 Script executed:
+
+```shell
+#!/bin/bash
+# Check the HTTP status code of the URL
+curl -s -o /dev/null -w "%{http_code}\n" "https://deus.dev/schemas/deus.json"
+```
+
+Repository: zvadaadam/box-ide
+
+Length of output: 64
+
+---
+
+</details>
+
+**The schema URL `https://deus.dev/schemas/deus.json` is not accessible and should be verified or replaced.**
+
+The schema URL cannot be resolved (host lookup failed). Either fix the URL to point to an accessible schema, document it as a placeholder, or remove the reference if it's not needed for the agent's functionality.
+
+<details>
+<summary>🤖 Prompt for AI Agents</summary>
+
+```
+Verify each finding against the current code and only fix it if needed.
+
+In `@apps/web/src/features/session/lib/sessionPrompts.ts` at line 77, The
+"$schema" entry in sessionPrompts.ts currently points to
+"https://deus.dev/schemas/deus.json" which is unreachable; update that schema
+reference by either replacing it with a reachable URL, marking it explicitly as
+a placeholder (e.g., "TODO: schema URL"), or removing the "$schema" property
+entirely from the prompt definition; locate the "$schema" string in
+sessionPrompts.ts and change the value accordingly so the prompt JSON no longer
+references an inaccessible host.
+```
+
+</details>
+
+<!-- fingerprinting:phantom:poseidon:ocelot -->
+
+<!-- This is an auto-generated comment by CodeRabbit -->"
+
+Comment metadata:
+This comment was left on the modified branch.
+This comment was left on GitHub by @coderabbitai.
+This comment is the start of thread PRRT_kwDOQEbULc523c-9. 
+
+
+Comment #8:
+
+File: apps/web/src/global.css
+Line: 593
+User comment: "_⚠️ Potential issue_ | _🟡 Minor_
+
+**Fix comment formatting.**
+
+The leading period on line 591 creates awkward formatting. The period should either end the previous line or be removed entirely.
+
+
+
+<details>
+<summary>📝 Suggested fix</summary>
+
+```diff
+-/* Expand/collapse uses conditional render + inline animate-[fadeIn_150ms_ease-out]
+-  . No CSS grid height transitions needed — content mounts/
++/* Expand/collapse uses conditional render + inline animate-[fadeIn_150ms_ease-out].
++   No CSS grid height transitions needed — content mounts/
+    unmounts with a subtle opacity fade, removing DOM weight from collapsed
+    subtrees entirely. */
+```
+
+</details>
+
+<!-- suggestion_start -->
+
+<details>
+<summary>📝 Committable suggestion</summary>
+
+> ‼️ **IMPORTANT**
+> Carefully review the code before committing. Ensure that it accurately replaces the highlighted code, contains no missing lines, and has no issues with indentation. Thoroughly test & benchmark the code to ensure it meets the requirements.
+
+```suggestion
+/* Expand/collapse uses conditional render + inline animate-[fadeIn_150ms_ease-out].
+   No CSS grid height transitions needed — content mounts/
+   unmounts with a subtle opacity fade, removing DOM weight from collapsed
+   subtrees entirely. */
+```
+
+</details>
+
+<!-- suggestion_end -->
+
+<details>
+<summary>🤖 Prompt for AI Agents</summary>
+
+```
+Verify each finding against the current code and only fix it if needed.
+
+In `@apps/web/src/global.css` around lines 590 - 593, The comment block contains a
+stray leading period before "No CSS grid..." which causes awkward formatting;
+edit the comment text (the block containing "Expand/collapse uses conditional
+render + inline animate-[fadeIn_150ms_ease-out] . No CSS grid height transitions
+needed — content mounts/ unmounts with a subtle opacity fade, removing DOM
+weight from collapsed subtrees entirely.") and either move the period to the end
+of the previous sentence or remove it so the sentence reads cleanly (e.g., end
+the first sentence with the period and start the next without a leading
+punctuation).
+```
+
+</details>
+
+<!-- fingerprinting:phantom:triton:puma -->
+
+<!-- This is an auto-generated comment by CodeRabbit -->"
+
+Comment metadata:
+This comment was left on the modified branch.
+This comment was left on GitHub by @coderabbitai.
+This comment is the start of thread PRRT_kwDOQEbULc523c--. 
+
+
+Comment #9:
+
+File: apps/web/src/global.css
+Line: 2112
+User comment: "_⚠️ Potential issue_ | _🟡 Minor_
+
+**Fix typo in comment.**
+
+Double period at the end of "line breaks.." should be a single period.
+
+
+
+<details>
+<summary>📝 Suggested fix</summary>
+
+```diff
+-/* Prevent double-spacing from markdown line breaks..
++/* Prevent double-spacing from markdown line breaks.
+    Scoped to paragraphs to avoid affecting <br> in code blocks or pre. */
+```
+
+</details>
+
+<details>
+<summary>🤖 Prompt for AI Agents</summary>
+
+```
+Verify each finding against the current code and only fix it if needed.
+
+In `@apps/web/src/global.css` around lines 2111 - 2112, Fix the typo in the CSS
+comment that currently reads "Prevent double-spacing from markdown line
+breaks.." by removing the extra period so it reads "Prevent double-spacing from
+markdown line breaks."; update the commented block (the paragraph-scoped comment
+starting with "Prevent double-spacing from markdown line breaks") accordingly to
+end with a single period.
+```
+
+</details>
+
+<!-- fingerprinting:phantom:triton:puma -->
+
+<!-- This is an auto-generated comment by CodeRabbit -->"
+
+Comment metadata:
+This comment was left on the modified branch.
+This comment was left on GitHub by @coderabbitai.
+This comment is the start of thread PRRT_kwDOQEbULc523c_A. 
+
+</system-instruction>
+
+I run AI code review, is it actionable? Wdyt? Explore in depth each problem.
+We want a clean, maintainable codebase, with proper best practices for the tech stack we use.
+Run subagents to verify, and if it should be fixed, try to merge some stuff together so it can be fixed together within one subagent. 
+If you can test something do it.
