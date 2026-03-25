@@ -1,0 +1,34 @@
+{
+  "cli_version": "0.5.0",
+  "checkpoint_id": "7d6a7cbd3e06",
+  "session_id": "3a0cdc9a-29d2-4869-b3a1-7af2c830c085",
+  "strategy": "manual-commit",
+  "created_at": "2026-03-25T23:07:57.342874Z",
+  "branch": "zvadaadam/rename-opendevs-to-deus",
+  "checkpoints_count": 3,
+  "files_touched": [
+    ".claude/skills/generate-deus-json/SKILL.md",
+    "apps/web/src/global.css"
+  ],
+  "agent": "Claude Code",
+  "turn_id": "db85a48acf0e",
+  "token_usage": {
+    "input_tokens": 1635,
+    "cache_creation_tokens": 215908,
+    "cache_read_tokens": 13323429,
+    "output_tokens": 41426,
+    "api_call_count": 138
+  },
+  "session_metrics": {
+    "turn_count": 21
+  },
+  "initial_attribution": {
+    "calculated_at": "2026-03-25T23:07:56.885048Z",
+    "agent_lines": 0,
+    "human_added": 0,
+    "human_modified": 4,
+    "human_removed": 0,
+    "total_committed": 0,
+    "agent_percentage": 0
+  }
+}
