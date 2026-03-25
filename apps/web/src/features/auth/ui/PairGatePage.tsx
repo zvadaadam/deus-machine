@@ -211,7 +211,7 @@ function BrandMark() {
       transition={{ duration: 0.3, ease: EASE_OUT_QUART }}
     >
       <div className="bg-foreground flex size-7 items-center justify-center rounded-lg">
-        <span className="text-background text-xs font-bold">OD</span>
+        <span className="text-background text-xs font-bold">D</span>
       </div>
       <span className="text-muted-foreground text-sm font-medium tracking-wide">Deus</span>
     </m.div>
