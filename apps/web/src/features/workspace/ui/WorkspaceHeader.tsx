@@ -262,6 +262,7 @@ function HeaderOpenButton({ workspacePath }: { workspacePath: string }) {
   }
 
   function handleQuickOpen() {
+    if (loading) return;
     if (defaultApp) {
       handleOpenInApp(defaultApp.id);
     } else {
