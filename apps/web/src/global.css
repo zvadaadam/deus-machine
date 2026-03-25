@@ -587,8 +587,8 @@
   animation: tool-shimmer 2s linear infinite;
 }
 
-/* Expand/collapse uses conditional render + inline animate-[fadeIn_150ms_ease-out]
-  . No CSS grid height transitions needed — content mounts/
+/* Expand/collapse uses conditional render + inline animate-[fadeIn_150ms_ease-out].
+   No CSS grid height transitions needed — content mounts/
    unmounts with a subtle opacity fade, removing DOM weight from collapsed
    subtrees entirely. */
 
@@ -2108,7 +2108,7 @@ diffs-container.diffs-theme-compact {
   margin-bottom: 0;
 }
 
-/* Prevent double-spacing from markdown line breaks..
+/* Prevent double-spacing from markdown line breaks.
    Scoped to paragraphs to avoid affecting <br> in code blocks or pre. */
 .markdown-content p br {
   display: none;

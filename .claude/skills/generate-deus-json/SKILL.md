@@ -172,7 +172,7 @@ Only use these icon names (they map to lucide-react components already in our de
 
 ## Rules
 
-- Use string shorthand for simple tasks: `"test": "bun run test"`
+- Use string shorthand for simple tasks (match detected package manager): `"test": "<pm> run test"` (e.g. `bun run test`, `npm run test`, `yarn test`, `pnpm test`)
 - Use object form only when task needs icon, depends, persistent, platform, or mode
 - Always include backwards-compatible `scripts.setup` and `scripts.run` fields
 - The `dev` task should always have `persistent: true` if it's a long-running server
