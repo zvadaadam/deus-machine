@@ -1,0 +1,26 @@
+{
+  "cli_version": "0.5.0",
+  "checkpoint_id": "7d6a7cbd3e06",
+  "strategy": "manual-commit",
+  "branch": "zvadaadam/rename-opendevs-to-deus",
+  "checkpoints_count": 3,
+  "files_touched": [
+    ".claude/skills/generate-deus-json/SKILL.md",
+    "apps/web/src/global.css"
+  ],
+  "sessions": [
+    {
+      "metadata": "/7d/6a7cbd3e06/0/metadata.json",
+      "transcript": "/7d/6a7cbd3e06/0/full.jsonl",
+      "content_hash": "/7d/6a7cbd3e06/0/content_hash.txt",
+      "prompt": "/7d/6a7cbd3e06/0/prompt.txt"
+    }
+  ],
+  "token_usage": {
+    "input_tokens": 1635,
+    "cache_creation_tokens": 215908,
+    "cache_read_tokens": 13323429,
+    "output_tokens": 41426,
+    "api_call_count": 138
+  }
+}
