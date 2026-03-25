@@ -37,6 +37,7 @@ import { ResizeHandle } from "@/shared/components/ResizeHandle";
 import type { Workspace } from "@/shared/types";
 import { unreadActions } from "@/features/session/store/unreadStore";
 import { native } from "@/platform";
+import { capabilities } from "@/platform/capabilities";
 import { getLastOpenInAppId } from "@/shared/hooks/useLastOpenInApp";
 import { track } from "@/platform/analytics";
 import { CHAT_INSERT } from "@shared/events";
@@ -309,7 +310,7 @@ export function MainLayout() {
         closeSystemPromptModal();
       }
     },
-    onOpenInApp: openInLastApp,
+    onOpenInApp: capabilities.openInExternalApp ? openInLastApp : undefined,
     selectedWorkspace,
     modalStates: {
       showNewWorkspaceModal,
