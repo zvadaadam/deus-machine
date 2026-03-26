@@ -24,7 +24,7 @@ import type {
  */
 const WORKSPACE_DETAILS_SELECT = `
   SELECT
-    w.id, w.repository_id, w.slug, w.title, w.git_branch,
+    w.id, w.repository_id, w.slug, w.title, w.title_source, w.git_branch,
     w.git_target_branch, w.state, w.status, w.current_session_id,
     w.pr_url, w.pr_number,
     w.setup_status, w.error_message, w.init_stage,
@@ -67,7 +67,7 @@ export function getWorkspacesByRepo(
     .prepare(
       `
     SELECT
-      w.id, w.repository_id, w.slug, w.title, w.git_branch,
+      w.id, w.repository_id, w.slug, w.title, w.title_source, w.git_branch,
       w.git_target_branch, w.state, w.status, w.current_session_id,
       w.pr_url, w.pr_number,
       w.setup_status, w.error_message, w.init_stage,
@@ -138,7 +138,7 @@ export function getWorkspacesBySessionIds(
     .prepare(
       `
     SELECT
-      w.id, w.repository_id, w.slug, w.title, w.git_branch,
+      w.id, w.repository_id, w.slug, w.title, w.title_source, w.git_branch,
       w.git_target_branch, w.state, w.status, w.current_session_id,
       w.pr_url, w.pr_number,
       w.setup_status, w.error_message, w.init_stage,

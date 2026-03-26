@@ -4,6 +4,10 @@ import { runGh, getPrStatus } from "../services/gh.service";
 import { getDatabase } from "../lib/database";
 import { invalidate } from "../services/query-engine";
 import { autoProgressStatus } from "../services/workspace-status.service";
+import {
+  promoteWorkspaceTitleFromPr,
+  syncWorkspaceBranchAndTitle,
+} from "../services/workspace-title.service";
 import type { WorkspaceWithDetailsRow } from "../db";
 
 type Env = { Variables: { workspace: WorkspaceWithDetailsRow; workspacePath: string } };
@@ -22,9 +26,8 @@ app.get("/gh-status", async (c) => {
 app.get("/workspaces/:id/pr-status", withWorkspace, async (c) => {
   const workspace = c.get("workspace");
   const workspacePath = c.get("workspacePath");
+  let needsInvalidation = syncWorkspaceBranchAndTitle(workspace, workspacePath);
   const result = await getPrStatus(workspacePath);
-
-  let needsInvalidation = false;
 
   // Persist PR metadata when URL changes
   if (result.has_pr && result.pr_url && result.pr_url !== workspace.pr_url) {
@@ -34,6 +37,10 @@ app.get("/workspaces/:id/pr-status", withWorkspace, async (c) => {
       result.pr_number ?? null,
       workspace.id
     );
+    needsInvalidation = true;
+  }
+
+  if (result.has_pr && promoteWorkspaceTitleFromPr(workspace, result.pr_title)) {
     needsInvalidation = true;
   }
 

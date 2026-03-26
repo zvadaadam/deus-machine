@@ -1,6 +1,14 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-const { mockTransaction, mockPrepare, mockRun, mockDb, mockGetSessionRaw } = vi.hoisted(() => {
+const {
+  mockTransaction,
+  mockPrepare,
+  mockRun,
+  mockDb,
+  mockGetSessionRaw,
+  mockGetWorkspaceRaw,
+  mockSeedWorkspaceTitleFromFirstPrompt,
+} = vi.hoisted(() => {
   const mockRun = vi.fn(() => ({ changes: 1 }));
   const mockPrepare = vi.fn(() => ({ run: mockRun }));
   const mockTransaction = vi.fn((fn: () => void) => fn);
@@ -9,12 +17,16 @@ const { mockTransaction, mockPrepare, mockRun, mockDb, mockGetSessionRaw } = vi.
     transaction: mockTransaction,
   };
   const mockGetSessionRaw = vi.fn();
+  const mockGetWorkspaceRaw = vi.fn();
+  const mockSeedWorkspaceTitleFromFirstPrompt = vi.fn();
   return {
     mockTransaction,
     mockPrepare,
     mockRun,
     mockDb,
     mockGetSessionRaw,
+    mockGetWorkspaceRaw,
+    mockSeedWorkspaceTitleFromFirstPrompt,
   };
 });
 
@@ -24,6 +36,11 @@ vi.mock("../../../src/lib/database", () => ({
 
 vi.mock("../../../src/db", () => ({
   getSessionRaw: mockGetSessionRaw,
+  getWorkspaceRaw: mockGetWorkspaceRaw,
+}));
+
+vi.mock("../../../src/services/workspace-title.service", () => ({
+  seedWorkspaceTitleFromFirstPrompt: mockSeedWorkspaceTitleFromFirstPrompt,
 }));
 
 import { writeUserMessage } from "../../../src/services/message-writer";
@@ -33,7 +50,12 @@ describe("writeUserMessage", () => {
     vi.clearAllMocks();
     mockPrepare.mockReturnValue({ run: mockRun });
     mockTransaction.mockImplementation((fn: () => void) => fn);
-    mockGetSessionRaw.mockReturnValue({ id: "sess-123" });
+    mockGetSessionRaw.mockReturnValue({ id: "sess-123", workspace_id: "ws-123" });
+    mockGetWorkspaceRaw.mockReturnValue({
+      id: "ws-123",
+      title: null,
+      title_source: "slug",
+    });
   });
 
   it("persists the message and updates session state", () => {
@@ -77,5 +99,16 @@ describe("writeUserMessage", () => {
 
     expect(result).toEqual({ success: false, error: "Session not found" });
     expect(mockTransaction).not.toHaveBeenCalled();
+  });
+
+  it("seeds the workspace title from the first user prompt", () => {
+    writeUserMessage("sess-123", "Fix websocket reconnect on mobile safari", "sonnet");
+
+    expect(mockSeedWorkspaceTitleFromFirstPrompt).toHaveBeenCalledWith(
+      "ws-123",
+      null,
+      "slug",
+      "Fix websocket reconnect on mobile safari"
+    );
   });
 });

@@ -26,6 +26,7 @@ import { useCollapsedSizePercent } from "@/features/workspace/hooks/useCollapsed
 import type { ContentTab } from "@/features/workspace/store";
 import { useFileWatcher } from "@/features/file-browser/hooks/useFileWatcher";
 import { WorkspaceHeader } from "@/features/workspace/ui/WorkspaceHeader";
+import { getWorkspaceDisplayName } from "@/features/sidebar/lib/utils";
 import { ContentTabBar } from "./ContentTabBar";
 import { isTabVisible } from "./content-tabs";
 import { PRActions } from "@/features/workspace/ui/PRActions";
@@ -331,7 +332,7 @@ export function MainContent({
                     <div className="flex h-full min-w-0 flex-col">
                       {/* Title header — workspace name + repo/branch + Open */}
                       <WorkspaceHeader
-                        title={selectedWorkspace.title ?? undefined}
+                        title={getWorkspaceDisplayName(selectedWorkspace)}
                         repositoryName={selectedWorkspace.repo_name}
                         branch={selectedWorkspace.git_branch ?? undefined}
                         workspacePath={selectedWorkspace.workspace_path}

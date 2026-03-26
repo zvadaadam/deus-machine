@@ -12,6 +12,7 @@ import type { SessionPanelRef } from "@/features/session";
 import { useFileChanges } from "@/features/workspace";
 import { AllFilesDiffViewer } from "@/features/workspace/ui/AllFilesDiffViewer";
 import { WorkspaceHeader } from "@/features/workspace/ui/WorkspaceHeader";
+import { getWorkspaceDisplayName } from "@/features/sidebar/lib/utils";
 import type { Workspace, PRStatus, GhCliStatus } from "@/shared/types";
 import type { WorkspaceStatus } from "@shared/enums";
 import type { NormalizedTask } from "@/features/workspace/api/workspace.service";
@@ -98,7 +99,7 @@ export function MobileLayout({
       {/* Header row -- workspace title on left, compact Create PR pill on right */}
       <div className="flex flex-shrink-0 items-center justify-between pr-2">
         <WorkspaceHeader
-          title={workspace.title ?? undefined}
+          title={getWorkspaceDisplayName(workspace)}
           repositoryName={workspace.repo_name}
           branch={workspace.git_branch ?? undefined}
           workspacePath={workspace.workspace_path}

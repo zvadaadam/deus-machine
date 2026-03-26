@@ -6,7 +6,15 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const { mockRun, mockPrepare, mockTransaction, mockDb } = vi.hoisted(() => {
   const mockRun = vi.fn(() => ({ changes: 1 }));
-  const mockPrepare = vi.fn(() => ({ run: mockRun }));
+  const mockPrepare = vi.fn((sql: string) => {
+    if (sql.includes("SELECT * FROM sessions WHERE id = ?")) {
+      return { get: vi.fn(() => ({ id: "sess-1", workspace_id: "ws-1" })) };
+    }
+    if (sql.includes("SELECT * FROM workspaces WHERE id = ?")) {
+      return { get: vi.fn(() => ({ id: "ws-1", title: null, title_source: "slug" })) };
+    }
+    return { run: mockRun };
+  });
   const mockTransaction = vi.fn((fn: () => void) => fn);
   const mockDb = {
     prepare: mockPrepare,
@@ -55,7 +63,15 @@ import type {
 describe("agent-persistence", () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    mockPrepare.mockReturnValue({ run: mockRun });
+    mockPrepare.mockImplementation((sql: string) => {
+      if (sql.includes("SELECT * FROM sessions WHERE id = ?")) {
+        return { get: vi.fn(() => ({ id: "sess-1", workspace_id: "ws-1" })) };
+      }
+      if (sql.includes("SELECT * FROM workspaces WHERE id = ?")) {
+        return { get: vi.fn(() => ({ id: "ws-1", title: null, title_source: "slug" })) };
+      }
+      return { run: mockRun };
+    });
     mockTransaction.mockImplementation((fn: () => void) => fn);
   });
 
@@ -415,19 +431,40 @@ describe("agent-persistence", () => {
       );
       expect(mockRun).toHaveBeenNthCalledWith(1, "Fix login page CSS", "sess-1");
 
-      // Second prepare: UPDATE workspaces SET title ... AND title IS NULL
+      // Follow-up reads fetch session/workspace state before source-aware promotion.
       expect(mockPrepare).toHaveBeenNthCalledWith(
         2,
-        expect.stringContaining("UPDATE workspaces SET title")
+        expect.stringContaining("SELECT * FROM sessions WHERE id = ?")
       );
-      expect(mockRun).toHaveBeenNthCalledWith(2, "Fix login page CSS", "sess-1");
+      expect(mockPrepare).toHaveBeenNthCalledWith(
+        3,
+        expect.stringContaining("SELECT * FROM workspaces WHERE id = ?")
+      );
+      expect(mockPrepare).toHaveBeenNthCalledWith(
+        4,
+        expect.stringContaining("UPDATE workspaces SET title = ?, title_source = ?")
+      );
+      expect(mockRun).toHaveBeenNthCalledWith(2, "Fix login page CSS", "agent_summary", "ws-1");
     });
 
-    it("only sets workspace title when it is NULL (preserves user renames)", () => {
+    it("only promotes workspace title for provisional sources", () => {
+      mockPrepare.mockImplementation((sql: string) => {
+        if (sql.includes("SELECT * FROM sessions WHERE id = ?")) {
+          return { get: vi.fn(() => ({ id: "sess-1", workspace_id: "ws-1" })) };
+        }
+        if (sql.includes("SELECT * FROM workspaces WHERE id = ?")) {
+          return {
+            get: vi.fn(() => ({ id: "ws-1", title: "Manual title", title_source: "manual" })),
+          };
+        }
+        return { run: mockRun };
+      });
+
       persistSessionTitle(event);
 
-      // The second SQL statement should include AND title IS NULL
-      expect(mockPrepare).toHaveBeenNthCalledWith(2, expect.stringContaining("AND title IS NULL"));
+      expect(mockPrepare).not.toHaveBeenCalledWith(
+        expect.stringContaining("UPDATE workspaces SET title = ?, title_source = ?")
+      );
     });
 
     it("returns error on DB failure", () => {

@@ -115,6 +115,8 @@ const MOCK_CREATED_WORKSPACE = {
   id: "ws-test-uuid",
   repository_id: "repo-001",
   slug: "europa",
+  title: null,
+  title_source: "slug",
   git_branch: "testuser/europa",
   git_target_branch: "main",
   state: "initializing",
@@ -194,6 +196,43 @@ describe("POST /workspaces", () => {
 
     // Verify INSERT run args include 'initializing'
     const insertRun = mockStmt.run.mock.calls.find((c: unknown[]) => c.includes("initializing"));
+    expect(insertRun).toBeTruthy();
+  });
+
+  it("stores PR titles with pr title source on creation", async () => {
+    mockStmt.get.mockReturnValueOnce(MOCK_REPO).mockReturnValueOnce({
+      ...MOCK_CREATED_WORKSPACE,
+      title: "Fix workspace title promotion",
+      title_source: "pr",
+    });
+
+    await app.request("/workspaces", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        repository_id: "repo-001",
+        source_branch: "main",
+        pr_title: "Fix workspace title promotion",
+      }),
+    });
+
+    const insertRun = mockStmt.run.mock.calls.find((c: unknown[]) =>
+      c.includes("Fix workspace title promotion")
+    );
+    expect(insertRun).toBeTruthy();
+    expect(insertRun).toContain("pr");
+  });
+
+  it("stores slug title source when no PR title is provided", async () => {
+    mockStmt.get.mockReturnValueOnce(MOCK_REPO).mockReturnValueOnce(MOCK_CREATED_WORKSPACE);
+
+    await app.request("/workspaces", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ repository_id: "repo-001" }),
+    });
+
+    const insertRun = mockStmt.run.mock.calls.find((c: unknown[]) => c.includes("slug"));
     expect(insertRun).toBeTruthy();
   });
 

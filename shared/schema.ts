@@ -24,6 +24,8 @@ export const MIGRATIONS: string[] = [
   // workspaces: Workflow status (backlog/in-progress/in-review/done/canceled)
   `ALTER TABLE workspaces ADD COLUMN status TEXT NOT NULL DEFAULT 'in-progress'`,
   `CREATE INDEX IF NOT EXISTS idx_workspaces_status ON workspaces(status)`,
+  // workspaces: explicit source of the current title for safe auto-promotion
+  `ALTER TABLE workspaces ADD COLUMN title_source TEXT NOT NULL DEFAULT 'legacy'`,
 ];
 
 export const SCHEMA_SQL = `
@@ -44,6 +46,7 @@ export const SCHEMA_SQL = `
     repository_id TEXT NOT NULL REFERENCES repositories(id) ON DELETE CASCADE,
     slug TEXT NOT NULL,
     title TEXT,
+    title_source TEXT NOT NULL DEFAULT 'legacy',
     git_branch TEXT,
     git_target_branch TEXT,
     state TEXT NOT NULL DEFAULT 'initializing',

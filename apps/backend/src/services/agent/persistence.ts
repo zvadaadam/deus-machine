@@ -25,6 +25,8 @@ import type {
   AgentSessionIdEvent,
   SessionTitleEvent,
 } from "@shared/agent-events";
+import { getSessionRaw, getWorkspaceRaw } from "../../db";
+import { promoteWorkspaceTitleFromAgentSummary } from "../workspace-title.service";
 
 // ============================================================================
 // WriteResult type (mirrors sidecar's pattern)
@@ -308,12 +310,16 @@ export function persistSessionTitle(event: SessionTitleEvent): WriteResult<void>
         event.sessionId
       );
 
-      // Auto-set workspace title only if not already set (preserves PR titles and user renames)
-      db.prepare(
-        `UPDATE workspaces SET title = ?
-         WHERE id = (SELECT workspace_id FROM sessions WHERE id = ?)
-         AND title IS NULL`
-      ).run(event.title, event.sessionId);
+      const session = getSessionRaw(db, event.sessionId);
+      if (!session) return;
+      const workspace = getWorkspaceRaw(db, session.workspace_id);
+      if (!workspace) return;
+      promoteWorkspaceTitleFromAgentSummary(
+        workspace.id,
+        workspace.title,
+        workspace.title_source,
+        event.title
+      );
     })();
     return { ok: true, value: undefined };
   } catch (error) {

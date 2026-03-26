@@ -32,6 +32,7 @@ export interface WorkspaceRow {
   repository_id: string;
   slug: string;
   title: string | null;
+  title_source: string | null;
   git_branch: string | null;
   git_target_branch: string | null;
   state: string;
@@ -58,6 +59,7 @@ export interface WorkspaceWithDetailsRow {
   repository_id: string;
   slug: string;
   title: string | null;
+  title_source: string | null;
   git_branch: string | null;
   git_target_branch: string | null;
   state: string;

@@ -4,8 +4,9 @@
 // This avoids the circular dependency: query-engine → message-writer → query-engine.
 
 import { getDatabase } from "../lib/database";
-import { getSessionRaw } from "../db";
+import { getSessionRaw, getWorkspaceRaw } from "../db";
 import { uuidv7 } from "@shared/lib/uuid";
+import { seedWorkspaceTitleFromFirstPrompt } from "./workspace-title.service";
 
 /**
  * Persist a user message and mark session as working.
@@ -37,6 +38,19 @@ export function writeUserMessage(
     db.prepare(
       "UPDATE sessions SET status = 'working', last_user_message_at = ?, error_message = NULL, error_category = NULL, updated_at = datetime('now') WHERE id = ?"
     ).run(sentAt, sessionId);
+
+    // The first user prompt is the best early title signal until the branch or PR
+    // becomes meaningful. Only seed when the workspace doesn't already have a
+    // stronger title source.
+    const workspace = getWorkspaceRaw(db, session.workspace_id);
+    if (workspace) {
+      seedWorkspaceTitleFromFirstPrompt(
+        workspace.id,
+        workspace.title,
+        workspace.title_source,
+        content
+      );
+    }
   })();
 
   return { success: true, messageId };

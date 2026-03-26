@@ -5,6 +5,8 @@ import { getErrorMessage, isExecError } from "@shared/lib/errors";
 import { withWorkspace } from "../middleware/workspace-loader";
 import { ValidationError } from "../lib/errors";
 import * as gitService from "../services/git.service";
+import { invalidate } from "../services/query-engine";
+import { syncWorkspaceBranchAndTitle } from "../services/workspace-title.service";
 import type { WorkspaceWithDetailsRow } from "../db";
 
 type Env = { Variables: { workspace: WorkspaceWithDetailsRow; workspacePath: string } };
@@ -14,6 +16,9 @@ const app = new Hono<Env>();
 app.get("/workspaces/:id/diff-stats", withWorkspace, (c) => {
   const workspace = c.get("workspace");
   const workspacePath = c.get("workspacePath");
+  if (syncWorkspaceBranchAndTitle(workspace, workspacePath)) {
+    invalidate(["workspaces"]);
+  }
   const parentBranch = gitService.resolveParentBranch(
     workspacePath,
     workspace.git_target_branch,
@@ -27,6 +32,9 @@ app.get("/workspaces/:id/diff-stats", withWorkspace, (c) => {
 app.get("/workspaces/:id/diff-files", withWorkspace, (c) => {
   const workspace = c.get("workspace");
   const workspacePath = c.get("workspacePath");
+  if (syncWorkspaceBranchAndTitle(workspace, workspacePath)) {
+    invalidate(["workspaces"]);
+  }
   const parentBranch = gitService.resolveParentBranch(
     workspacePath,
     workspace.git_target_branch,
@@ -43,6 +51,9 @@ app.get("/workspaces/:id/diff-file", withWorkspace, (c) => {
 
   const workspace = c.get("workspace");
   const workspacePath = c.get("workspacePath");
+  if (syncWorkspaceBranchAndTitle(workspace, workspacePath)) {
+    invalidate(["workspaces"]);
+  }
   const parentBranch = gitService.resolveParentBranch(
     workspacePath,
     workspace.git_target_branch,

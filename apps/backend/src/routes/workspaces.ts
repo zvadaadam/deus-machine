@@ -212,15 +212,16 @@ app.post("/workspaces", async (c) => {
   db.prepare(
     `
     INSERT INTO workspaces (
-      id, repository_id, slug, title, git_branch,
+      id, repository_id, slug, title, title_source, git_branch,
       git_target_branch, pr_url, pr_number, state, updated_at
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'))
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'))
   `
   ).run(
     workspaceId,
     repository_id,
     workspace_name,
     pr_title || null,
+    pr_title ? "pr" : "slug",
     placeholderBranchName,
     target_branch || repo.git_default_branch || "main",
     pr_url || null,
