@@ -1,0 +1,28 @@
+{
+  "cli_version": "0.5.0",
+  "checkpoint_id": "c4e90d0dc6a7",
+  "strategy": "manual-commit",
+  "branch": "zvadaadam/rename-opendevs-to-deus",
+  "checkpoints_count": 3,
+  "files_touched": [
+    ".husky/_/commit-msg",
+    ".husky/_/post-commit",
+    ".husky/_/pre-push",
+    ".husky/_/prepare-commit-msg"
+  ],
+  "sessions": [
+    {
+      "metadata": "/c4/e90d0dc6a7/0/metadata.json",
+      "transcript": "/c4/e90d0dc6a7/0/full.jsonl",
+      "content_hash": "/c4/e90d0dc6a7/0/content_hash.txt",
+      "prompt": "/c4/e90d0dc6a7/0/prompt.txt"
+    }
+  ],
+  "token_usage": {
+    "input_tokens": 1648,
+    "cache_creation_tokens": 333117,
+    "cache_read_tokens": 14447750,
+    "output_tokens": 42281,
+    "api_call_count": 148
+  }
+}
