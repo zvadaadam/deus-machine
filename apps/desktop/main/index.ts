@@ -50,9 +50,10 @@ async function createWindow(): Promise<void> {
     show: false,
     titleBarStyle: process.platform === "darwin" ? "hiddenInset" : "default",
     trafficLightPosition: { x: 16, y: 18 },
-    backgroundColor: "#00000000",
-    transparent: process.platform === "darwin",
-    vibrancy: process.platform === "darwin" ? "under-window" : undefined,
+    backgroundColor: "#0e0e10",
+    // Vibrancy is set dynamically via IPC after onboarding completes.
+    // No transparent:true — the CSS overlay handles the dark onboarding canvas,
+    // and vibrancy works without native transparency.
     ...(process.platform === "linux"
       ? { icon: join(__dirname, "../../resources/icons/icon.png") }
       : {}),
