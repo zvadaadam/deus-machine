@@ -1,10 +1,10 @@
 {
-  "$schema": "https://opendevs.dev/schemas/opendevs.json",
+  "$schema": "https://deus.dev/schemas/deus.json",
   "version": 1,
-  "name": "OpenDevs IDE",
+  "name": "Deus IDE",
 
   "scripts": {
-    "setup": "./scripts/opendevs-setup.sh",
+    "setup": "./scripts/deus-setup.sh",
     "run": "./scripts/dev.sh"
   },
   "runScriptMode": "nonconcurrent",
@@ -19,7 +19,7 @@
   },
 
   "lifecycle": {
-    "setup": "./scripts/opendevs-setup.sh"
+    "setup": "./scripts/deus-setup.sh"
   },
 
   "tasks": {

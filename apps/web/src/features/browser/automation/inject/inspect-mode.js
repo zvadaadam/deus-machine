@@ -10,7 +10,7 @@
 // - Escape to exit
 //
 // Communication back to frontend via event buffer:
-//   JS pushes events to window.__OPENDEVS_INSPECT_EVENTS__ array.
+//   JS pushes events to window.__DEUS_INSPECT_EVENTS__ array.
 //   React drains the buffer every 200ms via eval_browser_webview_with_result
 //   (WKWebView's native evaluateJavaScript:completionHandler:).
 //
@@ -21,8 +21,8 @@
 
 (function() {
 // Guard: prevent double-injection if eval'd multiple times
-if (window.__opendevsInspectMode) return;
-window.__opendevsInspectMode = true;
+if (window.__deusInspectMode) return;
+window.__deusInspectMode = true;
 
   // ========================================================================
   // State
@@ -46,7 +46,7 @@ window.__opendevsInspectMode = true;
   // This avoids the title-channel race condition (see architecture note below).
 
   var eventBuffer = [];
-  window.__OPENDEVS_INSPECT_EVENTS__ = eventBuffer;
+  window.__DEUS_INSPECT_EVENTS__ = eventBuffer;
 
   // ARCHITECTURE NOTE — DO NOT use document.title for inspect events.
   //
@@ -71,11 +71,11 @@ window.__opendevsInspectMode = true;
   // Monotonically increasing counter gives predictable, stable refs that
   // don't change between inspections — unlike random strings.
   function getOrAssignElementId(el) {
-    var existing = el.getAttribute("data-opendevs-ref");
+    var existing = el.getAttribute("data-deus-ref");
     if (existing) return existing;
     elementIdCounter++;
-    var id = "opendevs-" + elementIdCounter;
-    el.setAttribute("data-opendevs-ref", id);
+    var id = "deus-" + elementIdCounter;
+    el.setAttribute("data-deus-ref", id);
     return id;
   }
 
@@ -277,7 +277,7 @@ window.__opendevsInspectMode = true;
     cursor.setAttribute("height", "16");
     cursor.setAttribute("viewBox", "0 0 16 16");
     cursor.setAttribute("fill", "none");
-    cursor.setAttribute("data-opendevs-inspect", "true");
+    cursor.setAttribute("data-deus-inspect", "true");
     cursor.setAttribute("aria-hidden", "true");
     cursor.style.position = "fixed";
     cursor.style.pointerEvents = "none";
@@ -367,7 +367,7 @@ window.__opendevsInspectMode = true;
   // Inspect Element Helpers
   // ========================================================================
   function isInspectElement(el) {
-    return !!el && !!el.getAttribute && el.getAttribute("data-opendevs-inspect") === "true";
+    return !!el && !!el.getAttribute && el.getAttribute("data-deus-inspect") === "true";
   }
 
   /** Tailwind utility class pattern — skipped when building element paths and className */
@@ -520,8 +520,8 @@ window.__opendevsInspectMode = true;
         if (
           name.startsWith("data-") &&
           !result[name] &&
-          name !== "data-opendevs-ref" &&
-          name !== "data-opendevs-inspect"
+          name !== "data-deus-ref" &&
+          name !== "data-deus-inspect"
         ) {
           if (
             name.indexOf("test") !== -1 ||
@@ -578,13 +578,13 @@ window.__opendevsInspectMode = true;
 
     if (!overlay) {
       overlay = document.createElement("div");
-      overlay.setAttribute("data-opendevs-inspect", "true");
+      overlay.setAttribute("data-deus-inspect", "true");
       overlay.style.cssText =
         "position:fixed;background:rgba(58,150,221,0.3);border:2px solid #3a96dd;pointer-events:none;z-index:2147483647;transition:all 0.1s ease;display:none;";
       document.body.appendChild(overlay);
 
       overlayLabel = document.createElement("div");
-      overlayLabel.setAttribute("data-opendevs-inspect", "true");
+      overlayLabel.setAttribute("data-deus-inspect", "true");
       overlayLabel.style.cssText =
         "position:fixed;background:#3a96dd;color:white;padding:2px 6px;font-size:11px;font-family:system-ui,-apple-system,sans-serif;font-weight:500;border-radius:2px;pointer-events:none;z-index:2147483648;transition:all 0.1s ease;white-space:nowrap;display:none;";
       document.body.appendChild(overlayLabel);
@@ -654,7 +654,7 @@ window.__opendevsInspectMode = true;
 
     if (!dragSelectionBox) {
       dragSelectionBox = document.createElement("div");
-      dragSelectionBox.setAttribute("data-opendevs-inspect", "true");
+      dragSelectionBox.setAttribute("data-deus-inspect", "true");
       dragSelectionBox.style.cssText =
         "position:fixed;background:rgba(58,150,221,0.1);border:2px dashed #3a96dd;pointer-events:none;z-index:2147483647;";
       document.body.appendChild(dragSelectionBox);
@@ -1027,7 +1027,7 @@ window.__opendevsInspectMode = true;
   // ========================================================================
   // Public API on window
   // ========================================================================
-  window.__opendevsInspect = {
+  window.__deusInspect = {
     enable: enableSelectionMode,
     disable: disableSelectionMode,
     isActive: function() { return selectionMode; },
@@ -1039,5 +1039,5 @@ window.__opendevsInspectMode = true;
     },
   };
 
-  console.log("[opendevs-inspect] SETUP complete — window.__opendevsInspect installed");
+  console.log("[deus-inspect] SETUP complete — window.__deusInspect installed");
 })();

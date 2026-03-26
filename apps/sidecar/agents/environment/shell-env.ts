@@ -30,7 +30,7 @@ function parseEnv(output: string): Record<string, string> {
 /**
  * Keys stripped from the shell environment to prevent auth interference.
  * These are provider-specific keys that the user may have set globally
- * but that should not leak into the OpenDevs-managed Claude session.
+ * but that should not leak into the Deus-managed Claude session.
  */
 const STRIPPED_ENV_KEYS = [
   "ANTHROPIC_API_KEY",

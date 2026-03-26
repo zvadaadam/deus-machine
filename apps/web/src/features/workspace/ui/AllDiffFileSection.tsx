@@ -9,7 +9,7 @@
  * distributed observers across memoized children.
  *
  * CSS `content-visibility: auto` (via `.diff-section-contained`) lets the browser
- * skip layout/paint for offscreen sections — matches Codex app pattern.
+ * skip layout/paint for offscreen sections.
  */
 
 import { useState, useRef, useEffect, useCallback, memo } from "react";

@@ -48,7 +48,7 @@ describe("withWorkspace middleware", () => {
       slug: "tokyo",
       default_branch: "main",
     });
-    expect(body.workspacePath).toBe("/repo/.opendevs/tokyo");
+    expect(body.workspacePath).toBe("/repo/.deus/tokyo");
   });
 
   it("returns 404 when workspace is not found", async () => {
@@ -109,13 +109,13 @@ describe("withWorkspace middleware", () => {
 });
 
 describe("computeWorkspacePath", () => {
-  it("returns .opendevs path from root_path and slug", () => {
+  it("returns .deus path from root_path and slug", () => {
     expect(
       computeWorkspacePath({
         root_path: "/repo",
         slug: "tokyo",
       })
-    ).toBe("/repo/.opendevs/tokyo");
+    ).toBe("/repo/.deus/tokyo");
   });
 
   it("returns empty string when root_path is missing", () => {

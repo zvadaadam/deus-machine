@@ -24,11 +24,11 @@ interface ServerOfflinePageProps {
 const COPY = {
   desktop: {
     heading: "Desktop app not detected",
-    body: "Open the OpenDevs desktop app to connect this browser session to your agents and workspaces.",
+    body: "Open the Deus desktop app to connect this browser session to your agents and workspaces.",
   },
   relay: {
     heading: "Your computer isn't connected",
-    body: "Make sure the OpenDevs desktop app is running on your computer. This page will connect automatically.",
+    body: "Make sure the Deus desktop app is running on your computer. This page will connect automatically.",
   },
 } as const;
 

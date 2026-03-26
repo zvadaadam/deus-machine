@@ -13,7 +13,7 @@
 
 (function() {
 // Guard: prevent double-injection
-if (window.__opendevsVisuals) return;
+if (window.__deusVisuals) return;
 
   // ========================================================================
   // State
@@ -49,7 +49,7 @@ if (window.__opendevsVisuals) return;
 
     if (!frameEl || !frameEl.parentNode) {
       frameEl = document.createElement("div");
-      frameEl.setAttribute("data-opendevs-visual", "true");
+      frameEl.setAttribute("data-deus-visual", "true");
       frameEl.style.position = "fixed";
       frameEl.style.pointerEvents = "none";
       frameEl.style.zIndex = "2147483646";
@@ -95,7 +95,7 @@ if (window.__opendevsVisuals) return;
   }
 
   // ========================================================================
-  // SVG Cursor (same pointer as mcp-dev-browser — Figma-style with shadow)
+  // SVG Cursor (custom pointer with shadow)
   // ========================================================================
   function ensureCursor() {
     if (cursorInitialized) return;
@@ -107,7 +107,7 @@ if (window.__opendevsVisuals) return;
       cursorEl.setAttribute("height", "16");
       cursorEl.setAttribute("viewBox", "0 0 16 16");
       cursorEl.setAttribute("fill", "none");
-      cursorEl.setAttribute("data-opendevs-visual", "true");
+      cursorEl.setAttribute("data-deus-visual", "true");
       cursorEl.setAttribute("aria-hidden", "true");
       cursorEl.style.position = "fixed";
       cursorEl.style.pointerEvents = "none";
@@ -252,7 +252,7 @@ if (window.__opendevsVisuals) return;
     try {
       // Primary ring — fast, bright, immediate feedback
       var ring1 = document.createElement("div");
-      ring1.setAttribute("data-opendevs-visual", "true");
+      ring1.setAttribute("data-deus-visual", "true");
       ring1.style.position = "fixed";
       ring1.style.left = x + "px";
       ring1.style.top = y + "px";
@@ -285,7 +285,7 @@ if (window.__opendevsVisuals) return;
       // Secondary ring — staggered, wider, softer (shockwave echo)
       setTimeout(function() {
         var ring2 = document.createElement("div");
-        ring2.setAttribute("data-opendevs-visual", "true");
+        ring2.setAttribute("data-deus-visual", "true");
         ring2.style.position = "fixed";
         ring2.style.left = x + "px";
         ring2.style.top = y + "px";
@@ -411,7 +411,7 @@ if (window.__opendevsVisuals) return;
 
       // --- Phase 1: White camera-shutter pop (asymmetric: fast in, fast out) ---
       var flash = document.createElement("div");
-      flash.setAttribute("data-opendevs-visual", "true");
+      flash.setAttribute("data-deus-visual", "true");
       flash.style.position = "fixed";
       flash.style.pointerEvents = "none";
       flash.style.zIndex = "2147483647";
@@ -444,7 +444,7 @@ if (window.__opendevsVisuals) return;
 
         // --- Phase 2: Blue tint holds, then fades (slow release) ---
         var tint = document.createElement("div");
-        tint.setAttribute("data-opendevs-visual", "true");
+        tint.setAttribute("data-deus-visual", "true");
         tint.style.position = "fixed";
         tint.style.pointerEvents = "none";
         tint.style.zIndex = "2147483647";
@@ -493,7 +493,7 @@ if (window.__opendevsVisuals) return;
     try {
       var rect = el.getBoundingClientRect();
       var box = document.createElement("div");
-      box.setAttribute("data-opendevs-visual", "true");
+      box.setAttribute("data-deus-visual", "true");
       box.style.position = "fixed";
       box.style.left = rect.left + "px";
       box.style.top = rect.top + "px";
@@ -552,7 +552,7 @@ if (window.__opendevsVisuals) return;
 
       // ---- Pass 1: slow recon scan line ----
       var tint1 = document.createElement("div");
-      tint1.setAttribute("data-opendevs-visual", "true");
+      tint1.setAttribute("data-deus-visual", "true");
       tint1.style.cssText =
         "position:fixed;left:0;top:0;width:100vw;height:100vh;" +
         "pointer-events:none;z-index:2147483645;opacity:1;" +
@@ -568,7 +568,7 @@ if (window.__opendevsVisuals) return;
         "clip-path:inset(0 0 100% 0);";
 
       var band1 = document.createElement("div");
-      band1.setAttribute("data-opendevs-visual", "true");
+      band1.setAttribute("data-deus-visual", "true");
       band1.style.cssText =
         "position:fixed;left:0;top:0;width:100vw;height:100px;" +
         "pointer-events:none;z-index:2147483647;will-change:transform,opacity;" +
@@ -634,7 +634,7 @@ if (window.__opendevsVisuals) return;
       setTimeout(function() {
         try {
           var tint2 = document.createElement("div");
-          tint2.setAttribute("data-opendevs-visual", "true");
+          tint2.setAttribute("data-deus-visual", "true");
           tint2.style.cssText =
             "position:fixed;left:0;top:0;width:100vw;height:100vh;" +
             "pointer-events:none;z-index:2147483645;opacity:1;" +
@@ -651,7 +651,7 @@ if (window.__opendevsVisuals) return;
 
           var fo2 = Math.min(400, Math.round(P2_MS * 0.15));
           var band2 = document.createElement("div");
-          band2.setAttribute("data-opendevs-visual", "true");
+          band2.setAttribute("data-deus-visual", "true");
           band2.style.cssText =
             "position:fixed;left:0;top:0;width:100vw;height:80px;" +
             "pointer-events:none;z-index:2147483647;will-change:transform,opacity;" +
@@ -718,13 +718,13 @@ if (window.__opendevsVisuals) return;
             }, 850);
           }, P2_MS + 600);
         } catch (_e) {
-          console.error("[opendevs] scanPage P2:", _e);
+          console.error("[deus] scanPage P2:", _e);
         }
       }, P2_DELAY);
 
       hideFrame(P1_MS + 1400);
     } catch (_e) {
-      console.error("[opendevs] scanPage:", _e);
+      console.error("[deus] scanPage:", _e);
     }
   }
 
@@ -736,7 +736,7 @@ if (window.__opendevsVisuals) return;
       // Inject breathing keyframe once — shadow expands/contracts + subtle scale
       if (!activeGlowStyleEl) {
         activeGlowStyleEl = document.createElement("style");
-        activeGlowStyleEl.setAttribute("data-opendevs-visual", "true");
+        activeGlowStyleEl.setAttribute("data-deus-visual", "true");
         activeGlowStyleEl.textContent =
           "@keyframes hiveBreathe{" +
           "0%,100%{transform:scale(1);box-shadow:inset 0 0 80px 20px rgba(58,150,221,0.35),inset 0 0 25px 8px rgba(58,150,221,0.40)}" +
@@ -747,7 +747,7 @@ if (window.__opendevsVisuals) return;
 
       if (!activeGlowEl || !activeGlowEl.parentNode) {
         activeGlowEl = document.createElement("div");
-        activeGlowEl.setAttribute("data-opendevs-visual", "true");
+        activeGlowEl.setAttribute("data-deus-visual", "true");
         activeGlowEl.style.position = "fixed";
         activeGlowEl.style.left = "0";
         activeGlowEl.style.top = "0";
@@ -817,7 +817,7 @@ if (window.__opendevsVisuals) return;
   // ========================================================================
   // Public API
   // ========================================================================
-  window.__opendevsVisuals = {
+  window.__deusVisuals = {
     moveCursorToViewport: moveCursorToViewport,
     moveCursorToElement: moveCursorToElement,
     rippleAt: rippleAt,

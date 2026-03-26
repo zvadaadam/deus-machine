@@ -191,7 +191,7 @@ export const WorkspaceService = {
   },
 
   /**
-   * Fetch parsed opendevs.json manifest + normalized tasks for a workspace
+   * Fetch parsed deus.json manifest + normalized tasks for a workspace
    */
   fetchManifest: async (id: string): Promise<ManifestResponse> => {
     return sendRequest<ManifestResponse>("workspaceManifest", { workspaceId: id });

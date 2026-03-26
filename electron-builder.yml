@@ -1,5 +1,5 @@
-appId: com.opendevs.app
-productName: OpenDevs
+appId: com.deus.app
+productName: Deus
 directories:
   buildResources: resources
   output: dist-electron

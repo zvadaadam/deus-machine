@@ -1,4 +1,4 @@
-# OpenDevs
+# Deus
 
 A desktop IDE for managing multiple parallel AI coding agents. Built for semi-technical users who want to get the job done - treating AI chat as a first-class citizen with code as secondary.
 
@@ -121,7 +121,7 @@ We follow design inspiration from Linear, Vercel, Stripe, Airbnb, and Perplexity
 ## Project Structure
 
 ```
-opendevs/
+deus/
 ├── apps/
 │   ├── desktop/                 # Electron main + preload
 │   │   ├── main/
@@ -218,7 +218,7 @@ When working on this project:
 
 ## Important Notes
 
-- This workspace is managed by OpenDevs
+- This workspace is managed by Deus
 - Never edit files outside the workspace directory
 - Always run both backend AND frontend together
 - Use `bun run dev:web` for web development

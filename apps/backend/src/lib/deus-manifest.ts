@@ -3,10 +3,10 @@ import { z } from "zod";
 export type { NormalizedTask } from "@shared/types/manifest";
 
 /**
- * Zod schemas for opendevs.json manifest.
+ * Zod schemas for deus.json manifest.
  *
  * TaskEntry supports string shorthand ("bun run test") or full object form.
- * OpenDevsManifest is the top-level schema — parsed with safeParse for graceful fallback.
+ * DeusManifest is the top-level schema — parsed with safeParse for graceful fallback.
  */
 
 const TaskObjectSchema = z
@@ -24,7 +24,7 @@ const TaskObjectSchema = z
 
 const TaskEntrySchema = z.union([z.string().min(1), TaskObjectSchema]);
 
-export const OpenDevsManifestSchema = z
+export const DeusManifestSchema = z
   .object({
     $schema: z.string().optional(),
     version: z.number(),
@@ -51,4 +51,4 @@ export const OpenDevsManifestSchema = z
   })
   .passthrough();
 
-export type OpenDevsManifest = z.infer<typeof OpenDevsManifestSchema>;
+export type DeusManifest = z.infer<typeof DeusManifestSchema>;

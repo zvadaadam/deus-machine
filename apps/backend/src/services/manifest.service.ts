@@ -3,50 +3,46 @@ import path from "path";
 import os from "os";
 import { spawn } from "child_process";
 import type BetterSqlite3 from "better-sqlite3";
-import {
-  OpenDevsManifestSchema,
-  type OpenDevsManifest,
-  type NormalizedTask,
-} from "../lib/opendevs-manifest";
+import { DeusManifestSchema, type DeusManifest, type NormalizedTask } from "../lib/deus-manifest";
 import { emitProgress } from "./workspace-init.service";
 
 /**
- * Read and normalize opendevs.json manifests.
+ * Read and normalize deus.json manifests.
  *
  * Follows the config.service.ts pattern: readFileSync -> JSON.parse -> safeParse -> null on error.
  * Never throws — callers check for null.
  */
 
-export function readManifest(dirPath: string): OpenDevsManifest | null {
+export function readManifest(dirPath: string): DeusManifest | null {
   try {
-    const manifestPath = path.join(dirPath, "opendevs.json");
+    const manifestPath = path.join(dirPath, "deus.json");
     if (!fs.existsSync(manifestPath)) return null;
 
     const raw = JSON.parse(fs.readFileSync(manifestPath, "utf8"));
-    const parsed = OpenDevsManifestSchema.safeParse(raw);
+    const parsed = DeusManifestSchema.safeParse(raw);
     if (!parsed.success) {
-      console.error("[MANIFEST] Invalid opendevs.json:", parsed.error.issues);
+      console.error("[MANIFEST] Invalid deus.json:", parsed.error.issues);
       return null;
     }
     return parsed.data;
   } catch (error) {
-    console.error("[MANIFEST] Error reading opendevs.json:", error);
+    console.error("[MANIFEST] Error reading deus.json:", error);
     return null;
   }
 }
 
 /** lifecycle.setup takes precedence over legacy scripts.setup */
-export function getSetupCommand(manifest: OpenDevsManifest): string | null {
+export function getSetupCommand(manifest: DeusManifest): string | null {
   return manifest.lifecycle?.setup ?? manifest.scripts?.setup ?? null;
 }
 
 /** lifecycle.archive takes precedence over legacy scripts.archive */
-export function getArchiveCommand(manifest: OpenDevsManifest): string | null {
+export function getArchiveCommand(manifest: DeusManifest): string | null {
   return manifest.lifecycle?.archive ?? manifest.scripts?.archive ?? null;
 }
 
 /** Normalize task entries: string shorthand → full object form */
-export function getNormalizedTasks(manifest: OpenDevsManifest): NormalizedTask[] {
+export function getNormalizedTasks(manifest: DeusManifest): NormalizedTask[] {
   if (!manifest.tasks) return [];
 
   return Object.entries(manifest.tasks).map(([name, entry]) => {
@@ -76,44 +72,44 @@ export function getNormalizedTasks(manifest: OpenDevsManifest): NormalizedTask[]
 }
 
 /** Build environment variables for script execution */
-export function getOpenDevsEnv(
-  manifest: OpenDevsManifest,
+export function getDeusEnv(
+  manifest: DeusManifest,
   ctx: { id: string; rootPath: string; workspacePath: string }
 ): Record<string, string> {
   return {
     ...(manifest.env ?? {}),
-    OPENDEVS_ROOT_PATH: ctx.rootPath,
-    OPENDEVS_WORKSPACE_PATH: ctx.workspacePath,
-    OPENDEVS_WORKSPACE_ID: ctx.id,
+    DEUS_ROOT_PATH: ctx.rootPath,
+    DEUS_WORKSPACE_PATH: ctx.workspacePath,
+    DEUS_WORKSPACE_ID: ctx.id,
   };
 }
 
 /**
  * Read manifest with repo-root fallback.
- * Workspace worktrees may not have opendevs.json if it was added after creation.
+ * Workspace worktrees may not have deus.json if it was added after creation.
  * Checks the worktree first (agent may have modified it), then falls back to repo root.
  */
 export function readManifestWithFallback(
   workspacePath: string,
   repoRootPath: string
-): OpenDevsManifest | null {
+): DeusManifest | null {
   return readManifest(workspacePath) ?? readManifest(repoRootPath);
 }
 
-/** Write a manifest object to opendevs.json */
-export function writeManifest(dirPath: string, manifest: OpenDevsManifest): boolean {
+/** Write a manifest object to deus.json */
+export function writeManifest(dirPath: string, manifest: DeusManifest): boolean {
   try {
-    const manifestPath = path.join(dirPath, "opendevs.json");
+    const manifestPath = path.join(dirPath, "deus.json");
     fs.writeFileSync(manifestPath, JSON.stringify(manifest, null, 2) + "\n");
     return true;
   } catch (error) {
-    console.error("[MANIFEST] Error writing opendevs.json:", error);
+    console.error("[MANIFEST] Error writing deus.json:", error);
     return false;
   }
 }
 
 /**
- * Scan a project directory and generate a suggested opendevs.json manifest.
+ * Scan a project directory and generate a suggested deus.json manifest.
  * Reads package.json, Cargo.toml, Makefile, etc. to infer scripts and tasks.
  */
 export function detectManifestFromProject(
@@ -261,7 +257,7 @@ export function runSetupScript(
   setupEnv: Record<string, string>,
   workspacePath: string
 ): void {
-  const setupLogPath = path.join(os.tmpdir(), `opendevs-${workspaceId}-setup.log`);
+  const setupLogPath = path.join(os.tmpdir(), `deus-${workspaceId}-setup.log`);
   const setupLog = fs.createWriteStream(setupLogPath);
 
   const setupProc = spawn("sh", ["-c", setupCmd], {
@@ -307,7 +303,7 @@ export function runSetupScript(
       ).run(error, workspaceId);
     }
     // Emit progress event so frontend clears diff caches and re-fetches clean data.
-    // Uses the same OPENDEVS_WORKSPACE_PROGRESS protocol that initializeWorkspace() uses
+    // Uses the same DEUS_WORKSPACE_PROGRESS protocol that initializeWorkspace() uses
     // (Electron's backend-process.ts parses the prefix → IPC event → useWorkspaceInitEvents hook).
     const step = status === "completed" ? "setup_done" : "setup_failed";
     const label = status === "completed" ? "Setup complete" : `Setup failed: ${error ?? "unknown"}`;

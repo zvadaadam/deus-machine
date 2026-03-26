@@ -53,7 +53,7 @@ Agent interacts with browser normally
 
 **Implementation — 3 pieces (~300-400 lines, no Rust changes):**
 
-1. **Recording buffer** (~50 lines in `opendevs-tools/browser.ts`) — Per-session array. Each tool handler appends `{ tool, ref, role, name, selector, timestamp }`.
+1. **Recording buffer** (~50 lines in `deus-tools/browser.ts`) — Per-session array. Each tool handler appends `{ tool, ref, role, name, selector, timestamp }`.
 
 2. **`BrowserGenerateTest` tool** (~150 lines) — New MCP tool. Input: `testName`, `testDescription`, optional `framework` (playwright/cypress). Reads buffer, transforms to target framework API, writes file to workspace, clears buffer.
 
@@ -136,16 +136,16 @@ Reference API for the Claude in Chrome browser automation extension. Documented 
 
 **We have, they don't:**
 
-| Capability             | Our Approach                                              |
-| ---------------------- | --------------------------------------------------------- |
-| Cookie sync            | Decrypt + inject from Chrome/Arc/Brave/Edge via Keychain  |
-| Visual cursor + ripple | User sees animated AI interactions in real-time           |
-| Inspect mode           | Figma-style selector with React Fiber component detection |
-| Native webview         | No X-Frame-Options issues, full cookie/storage control    |
-| Workspace integration  | Browser + code + diff + terminal in same agent session    |
-| Multi-agent isolation  | Each agent gets its own browser tab automatically         |
-| SPA detection          | pushState/replaceState interception via init script       |
-| Console buffering      | Automatic capture with drain, no explicit start needed    |
+| Capability             | Our Approach                                             |
+| ---------------------- | -------------------------------------------------------- |
+| Cookie sync            | Decrypt + inject from Chrome/Arc/Brave/Edge via Keychain |
+| Visual cursor + ripple | User sees animated AI interactions in real-time          |
+| Inspect mode           | visual selector with React Fiber component detection     |
+| Native webview         | No X-Frame-Options issues, full cookie/storage control   |
+| Workspace integration  | Browser + code + diff + terminal in same agent session   |
+| Multi-agent isolation  | Each agent gets its own browser tab automatically        |
+| SPA detection          | pushState/replaceState interception via init script      |
+| Console buffering      | Automatic capture with drain, no explicit start needed   |
 
 ### Their `read_page` vs Our `BrowserSnapshot`
 

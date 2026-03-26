@@ -113,7 +113,7 @@ export function BaseToolRenderer({
             />
           </div>
 
-          {/* Tool name — shimmer when loading (Cursor "make-shine" pattern). */}
+          {/* Tool name — shimmer when loading. */}
           <span
             className={cn(
               "flex-shrink-0 font-medium",

@@ -1,6 +1,6 @@
 import { useState, useCallback } from "react";
 
-const STORAGE_KEY = "opendevs:lastOpenInApp";
+const STORAGE_KEY = "deus:lastOpenInApp";
 
 /** Read last-used app ID directly from localStorage (non-reactive). */
 export function getLastOpenInAppId(): string | null {

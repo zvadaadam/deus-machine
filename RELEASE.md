@@ -26,8 +26,8 @@ You (GitHub UI or CLI)
   │   │   ├─ Code-signs with Developer ID Application cert
   │   │   ├─ Notarizes with Apple (staples the ticket)
   │   │   └─ Creates draft GitHub Release with:
-  │   │       ├─ OpenDevs-2.1.0-arm64.dmg     (install package)
-  │   │       └─ OpenDevs-2.1.0-arm64-mac.zip (portable)
+  │   │       ├─ Deus-2.1.0-arm64.dmg     (install package)
+  │   │       └─ Deus-2.1.0-arm64-mac.zip (portable)
   │   └─ Done
   │
   └─ You: Review draft release on GitHub → click "Publish"

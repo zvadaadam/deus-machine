@@ -1,6 +1,6 @@
 # Tests
 
-This directory contains all test files for the OpenDevs application.
+This directory contains all test files for the Deus application.
 
 ## Test Files
 
@@ -43,7 +43,7 @@ BACKEND_PORT=60068 bun run test:e2e
 ## Requirements
 
 - Backend must be running
-- Database must be accessible at `~/Library/Application Support/com.opendevs.app/opendevs.db`
+- Database must be accessible at `~/Library/Application Support/com.deus.app/deus.db`
 
 ## Test Coverage
 

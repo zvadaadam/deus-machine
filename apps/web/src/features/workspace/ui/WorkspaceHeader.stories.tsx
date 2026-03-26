@@ -80,6 +80,6 @@ export const SetupFailed: Story = {
 /** Minimal — only repo name */
 export const MinimalRepoOnly: Story = {
   args: {
-    repositoryName: "opendevs-ide",
+    repositoryName: "deus-ide",
   },
 };

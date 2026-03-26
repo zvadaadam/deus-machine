@@ -67,7 +67,7 @@ export function ProjectSelectionStep({ onBack, onNext }: ProjectSelectionStepPro
       <div className="space-y-2">
         <h2 className="text-2xl font-semibold text-white">Your Projects</h2>
         <p className="text-sm text-white/50">
-          Select projects to add to OpenDevs, or browse for a folder.
+          Select projects to add to Deus, or browse for a folder.
         </p>
       </div>
 

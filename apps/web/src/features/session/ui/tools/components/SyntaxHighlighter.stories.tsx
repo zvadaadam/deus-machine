@@ -132,7 +132,7 @@ export const JSON: StoryObj<typeof SyntaxHighlighter> = {
   args: {
     language: "json",
     code: `{
-  "name": "opendevs-ide",
+  "name": "deus-ide",
   "version": "1.0.0",
   "dependencies": {
     "react": "^19.1.0",
@@ -213,7 +213,7 @@ echo "Building sidecar..."
 bun run build:sidecar
 
 echo "Starting dev server..."
-export DATABASE_PATH="$HOME/Library/Application Support/com.opendevs.app/opendevs.db"
+export DATABASE_PATH="$HOME/Library/Application Support/com.deus.app/deus.db"
 bun run dev:web &
 DEV_PID=$!
 

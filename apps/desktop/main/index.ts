@@ -143,7 +143,7 @@ async function createWindow(): Promise<void> {
 app.whenReady().then(async () => {
   // Debug logging to file (Electron swallows stdout/stderr in dev mode)
   const fs = await import("fs");
-  const debugLogPath = join(app.getPath("temp"), "opendevs-debug.log");
+  const debugLogPath = join(app.getPath("temp"), "deus-debug.log");
   const debugLog = (msg: string) => {
     try {
       fs.appendFileSync(debugLogPath, `${new Date().toISOString()} ${msg}\n`);
@@ -172,8 +172,8 @@ app.whenReady().then(async () => {
     debugLog("[main] Backend started on port: " + backendPort);
 
     // Expose backend connection info so IPC handlers can return it to renderer
-    process.env.OPENDEVS_BACKEND_PORT = String(backendPort);
-    process.env.OPENDEVS_AUTH_TOKEN = authToken;
+    process.env.DEUS_BACKEND_PORT = String(backendPort);
+    process.env.DEUS_AUTH_TOKEN = authToken;
   } catch (err) {
     debugLog("[main] Backend spawn FAILED: " + (err instanceof Error ? err.message : String(err)));
     const { dialog } = await import("electron");

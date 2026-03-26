@@ -13,7 +13,7 @@ if (sentryDsn) {
   Sentry.init({
     dsn: sentryDsn,
     environment: import.meta.env.DEV ? "development" : "production",
-    release: `opendevs@${__APP_VERSION__}`,
+    release: `deus@${__APP_VERSION__}`,
     sendDefaultPii: true,
     enabled: !import.meta.env.DEV,
   });
@@ -30,9 +30,9 @@ window.addEventListener("focus", () =>
 );
 window.addEventListener("blur", () => document.documentElement.classList.add("window-inactive"));
 
-const w = window as Window & { __opendevsErrorHandlers__?: boolean };
-if (!w.__opendevsErrorHandlers__) {
-  w.__opendevsErrorHandlers__ = true;
+const w = window as Window & { __deusErrorHandlers__?: boolean };
+if (!w.__deusErrorHandlers__) {
+  w.__deusErrorHandlers__ = true;
 
   window.addEventListener("error", (event) => {
     reportError(event.error ?? event.message, {

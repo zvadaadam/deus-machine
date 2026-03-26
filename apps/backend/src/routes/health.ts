@@ -8,7 +8,7 @@ app.get("/health", (c) => {
   const db = getDatabase();
   // Note: Sidecar status removed - sidecar status is reported via WebSocket
   return c.json({
-    app: "opendevs-backend",
+    app: "deus-backend",
     status: "ok",
     port: getServerPort(),
     timestamp: new Date().toISOString(),

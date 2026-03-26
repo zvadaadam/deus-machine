@@ -289,7 +289,7 @@ export function useRepoBranches(repoId: string | null) {
 /**
  * Fetch PR status for a workspace.
  *
- * Gated on gh CLI being installed + authenticated (like Codex).
+ * Gated on gh CLI being installed + authenticated.
  * Polls every 30s while agent is working (to detect PR creation),
  * 60s while CI is pending post-session (CI runs 2-15min after push),
  * stops polling otherwise.
@@ -626,7 +626,7 @@ export function useUpdateSystemPrompt() {
 }
 
 /**
- * Fetch opendevs.json manifest + normalized tasks for a workspace.
+ * Fetch deus.json manifest + normalized tasks for a workspace.
  * Manifest doesn't change during a session — staleTime: Infinity.
  */
 export function useManifestTasks(workspaceId: string | null) {

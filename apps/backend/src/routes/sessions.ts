@@ -46,7 +46,7 @@ app.get("/sessions/:id/messages", (c) => {
   // Validate pagination: clamp limit to 1-500, reject non-positive cursors
   const rawLimit = Number(c.req.query("limit"));
   const limit = Math.max(1, Math.min(Number.isFinite(rawLimit) ? rawLimit : 50, 500));
-  // Cursor is seq (integer), not sent_at (string with collisions)
+  // Pagination uses seq (integer), not sent_at (string with collisions)
   const beforeParsed = parseInt(c.req.query("before") ?? "", 10);
   const afterParsed = parseInt(c.req.query("after") ?? "", 10);
   const before = Number.isFinite(beforeParsed) && beforeParsed >= 1 ? beforeParsed : undefined;

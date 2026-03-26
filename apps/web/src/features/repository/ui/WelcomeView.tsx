@@ -9,7 +9,7 @@ interface WelcomeViewProps {
 
 /**
  * WelcomeView — Empty state when no workspace is selected.
- * Shows OpenDevs branding in pixel font + two action cards.
+ * Shows Deus branding in pixel font + two action cards.
  */
 export function WelcomeView({ onOpenProject, onCloneRepository }: WelcomeViewProps) {
   return (
@@ -17,9 +17,7 @@ export function WelcomeView({ onOpenProject, onCloneRepository }: WelcomeViewPro
       <div className="w-full max-w-md px-6">
         {/* Branding */}
         <div className="mb-10 flex flex-col items-center text-center">
-          <h1 className="text-text-primary mb-3 text-3xl font-extrabold tracking-tight">
-            OpenDevs
-          </h1>
+          <h1 className="text-text-primary mb-3 text-3xl font-extrabold tracking-tight">Deus</h1>
           <p className="text-text-tertiary max-w-xs text-sm">
             Manage multiple AI coding agents in parallel.
           </p>

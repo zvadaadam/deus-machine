@@ -2,7 +2,7 @@ import { Loader2 } from "lucide-react";
 import { cn } from "@/shared/lib/utils";
 import { match } from "ts-pattern";
 import { getCleanRepoName } from "@/features/sidebar/lib/utils";
-import { OpenDevsEmptyState } from "./OpenDevsEmptyState";
+import { DeusEmptyState } from "./DeusEmptyState";
 
 interface WorkspaceEmptyStateProps {
   repoName?: string | null;
@@ -57,10 +57,10 @@ export function WorkspaceEmptyState({
     );
   }
 
-  // OpenDevs repo: the user is working on the IDE itself — show a special state
+  // Deus repo: the user is working on the IDE itself — show a special state
   const cleanRepoName = repoName ? getCleanRepoName(repoName) : repoName;
-  if (cleanRepoName === "opendevs") {
-    return <OpenDevsEmptyState parentBranch={parentBranch} className={className} />;
+  if (cleanRepoName === "deus") {
+    return <DeusEmptyState parentBranch={parentBranch} className={className} />;
   }
 
   // Fresh workspace — clean, confident, centered

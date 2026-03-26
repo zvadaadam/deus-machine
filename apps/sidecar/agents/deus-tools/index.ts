@@ -1,5 +1,5 @@
-// sidecar/agents/opendevs-tools/index.ts
-// Composes workspace + browser tools into the OpenDevs MCP server.
+// sidecar/agents/deus-tools/index.ts
+// Composes workspace + browser tools into the Deus MCP server.
 
 import { createSdkMcpServer } from "@anthropic-ai/claude-agent-sdk";
 import { createWorkspaceTools } from "./workspace";
@@ -7,18 +7,18 @@ import { createBrowserTools } from "./browser";
 import { createSimulatorTools } from "./simulator";
 
 /**
- * Creates and returns the OpenDevs MCP server for a given session.
+ * Creates and returns the Deus MCP server for a given session.
  * Uses the SDK's createSdkMcpServer to create a real McpServer instance
  * with proper .connect() support for the agent transport layer.
  *
  * The server is injected into the Claude Agent SDK via:
- *   sdkOptions.mcpServers = { opendevs: createOpenDevsMCPServer(sessionId) }
+ *   sdkOptions.mcpServers = { deus: createDeusMCPServer(sessionId) }
  *
  * It is only enabled when `options.strictDataPrivacy` is false.
  */
-export function createOpenDevsMCPServer(sessionId: string) {
+export function createDeusMCPServer(sessionId: string) {
   return createSdkMcpServer({
-    name: "opendevs",
+    name: "deus",
     version: "1.0.0",
     tools: [
       ...createWorkspaceTools(sessionId),

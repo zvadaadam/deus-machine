@@ -25,9 +25,9 @@ const { testDb, TEST_DB_PATH, TEST_DIR } = vi.hoisted(() => {
   const path = require("path");
   const fs = require("fs");
 
-  const testDir = path.join(os.tmpdir(), `opendevs-test-query-${process.pid}-${Date.now()}`);
+  const testDir = path.join(os.tmpdir(), `deus-test-query-${process.pid}-${Date.now()}`);
   fs.mkdirSync(testDir, { recursive: true });
-  const dbPath = path.join(testDir, "opendevs.db");
+  const dbPath = path.join(testDir, "deus.db");
 
   const db = new Database(dbPath);
   db.pragma("journal_mode = WAL");

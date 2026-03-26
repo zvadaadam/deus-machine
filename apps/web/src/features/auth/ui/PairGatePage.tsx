@@ -1,5 +1,5 @@
 // Browser gate page for remote device connection.
-// Shown when a non-localhost browser accesses OpenDevs without a valid token.
+// Shown when a non-localhost browser accesses Deus without a valid token.
 //
 // Three visual states:
 //   1. Auto-connecting — QR/link path, no form, just a clean "Connecting..." with animation
@@ -211,9 +211,9 @@ function BrandMark() {
       transition={{ duration: 0.3, ease: EASE_OUT_QUART }}
     >
       <div className="bg-foreground flex size-7 items-center justify-center rounded-lg">
-        <span className="text-background text-xs font-bold">OD</span>
+        <span className="text-background text-xs font-bold">D</span>
       </div>
-      <span className="text-muted-foreground text-sm font-medium tracking-wide">OpenDevs</span>
+      <span className="text-muted-foreground text-sm font-medium tracking-wide">Deus</span>
     </m.div>
   );
 }
@@ -342,7 +342,7 @@ function ManualEntryView({
       >
         <BrandMark />
         <div className="text-center">
-          <h1 className="text-2xl font-bold tracking-tight">Connect to OpenDevs</h1>
+          <h1 className="text-2xl font-bold tracking-tight">Connect to Deus</h1>
           <p className="text-muted-foreground mt-2 text-sm">
             Enter the code from your desktop app.
           </p>

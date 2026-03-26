@@ -8,7 +8,7 @@
  * This module runs the user's login shell to capture the full PATH and
  * applies it to process.env before spawning the backend or any child processes.
  *
- * Pattern borrowed from T3 Code (syncShellEnvironment.ts) and VS Code.
+ * Ensures child processes get the user's full shell environment.
  */
 
 import { execFile } from "child_process";

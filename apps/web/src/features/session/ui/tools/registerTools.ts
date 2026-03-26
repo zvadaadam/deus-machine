@@ -22,7 +22,7 @@ import {
   KillShellToolRenderer,
   TaskToolRenderer,
   LSToolRenderer,
-  // OpenDevs MCP — Browser automation
+  // Deus MCP — Browser automation
   BrowserSnapshotToolRenderer,
   BrowserNavigateToolRenderer,
   BrowserNavigateBackToolRenderer,
@@ -40,7 +40,7 @@ import {
   // Plan mode lifecycle
   EnterPlanModeToolRenderer,
   ExitPlanModeToolRenderer,
-  // OpenDevs MCP — Workspace
+  // Deus MCP — Workspace
   AskUserQuestionToolRenderer,
   GetWorkspaceDiffToolRenderer,
   DiffCommentToolRenderer,
@@ -82,7 +82,7 @@ export function registerAllTools() {
   toolRegistry.register("EnterPlanMode", EnterPlanModeToolRenderer);
   toolRegistry.register("ExitPlanMode", ExitPlanModeToolRenderer);
 
-  // OpenDevs MCP — Browser automation tools
+  // Deus MCP — Browser automation tools
   toolRegistry.register("BrowserSnapshot", BrowserSnapshotToolRenderer);
   toolRegistry.register("BrowserNavigate", BrowserNavigateToolRenderer);
   toolRegistry.register("BrowserNavigateBack", BrowserNavigateBackToolRenderer);
@@ -98,7 +98,7 @@ export function registerAllTools() {
   toolRegistry.register("BrowserNetworkRequests", BrowserNetworkRequestsToolRenderer);
   toolRegistry.register("BrowserScroll", BrowserScrollToolRenderer);
 
-  // OpenDevs MCP — Workspace tools
+  // Deus MCP — Workspace tools
   toolRegistry.register("AskUserQuestion", AskUserQuestionToolRenderer);
   toolRegistry.register("GetWorkspaceDiff", GetWorkspaceDiffToolRenderer);
   toolRegistry.register("DiffComment", DiffCommentToolRenderer);

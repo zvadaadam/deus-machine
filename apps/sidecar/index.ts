@@ -1,5 +1,5 @@
 // sidecar/index.ts
-// Entry point for the OpenDevs agent-server process.
+// Entry point for the Deus agent-server process.
 //
 // Supports two transport modes (selected via --listen flag):
 //   --listen ws://    → WebSocket server on 127.0.0.1 (default, dynamic port)
@@ -52,7 +52,7 @@ import {
 // Logging
 // ============================================================================
 
-export const logFilePath = `/tmp/opendevs-${process.pid}.log`;
+export const logFilePath = `/tmp/deus-${process.pid}.log`;
 const originalLog = console.log;
 
 const LOG_LEVEL = (process.env.LOG_LEVEL || "info") as "debug" | "info" | "error";
@@ -149,7 +149,7 @@ class UnifiedSidecar {
 
   constructor(mode: TransportMode) {
     this.transportMode = mode;
-    this.socketPath = path.join(os.tmpdir(), `opendevs-sidecar-${process.pid}.sock`);
+    this.socketPath = path.join(os.tmpdir(), `deus-sidecar-${process.pid}.sock`);
 
     console.log(`UnifiedSidecar: Initializing (transport=${mode})...`);
 
@@ -607,7 +607,7 @@ class UnifiedSidecar {
         console.log(`Unified sidecar listening on ${this.socketPath}`);
         console.log(`Sidecar PID: ${process.pid}`);
 
-        // Print the socket path to stdout so the OpenDevs app can connect
+        // Print the socket path to stdout so the Deus app can connect
         originalLog(`SOCKET_PATH=${this.socketPath}`);
         resolve();
       });
