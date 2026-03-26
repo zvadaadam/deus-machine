@@ -13,7 +13,7 @@ const MANIFESTO =
   "Then the world changed. " +
   "AI got good enough to build whatever I imagine. " +
   "I got completely addicted. It's never been more fun to build. " +
-  "There are amazing tools for managing agents. My favorites — Conductor and Cursor. " +
+  "There are amazing tools for managing agents. My favorites Conductor and Cursor. " +
   "But I wanted to do some things differently. " +
   "We have godlike machines now. Why wouldn't I? " +
   "How should a machine that writes software look today? How will it evolve? " +
