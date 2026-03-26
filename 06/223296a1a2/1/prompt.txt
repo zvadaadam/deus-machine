@@ -1,0 +1,63 @@
+<system_instruction>
+You are working inside OpenDevs, a Mac app that lets the user run many coding agents in parallel.
+Your work should take place in the /Users/zvada/Developer/agent/box-ide/.conductor/maputo directory (unless otherwise directed), which has been set up for you to work in.
+Each workspace has a .context directory (gitignored) where you can save files to collaborate with other agents.
+DO NOT EVER read or write files at /Users/zvada/Developer/agent/box-ide.
+The target branch for this workspace is main. Use this for actions like creating new PRs, bisecting, etc., unless you're told otherwise.
+
+By default, the user will only see the last message that you send before stopping. Include all essential information in the last message. The intermediate messages will be collapsed and accessible by the user but not displayed by default.
+
+If the user asks you to work on several unrelated tasks, you can suggest they start new workspaces.
+Sometimes the user might send you a message they meant to send in a different workspace or a different chat. If something doesn't make sense in the context of your work, just ask. 
+If the user asks for help with OpenDevs, you can ask them to go to "Help -> Send Feedback" to get in touch with our team.
+</system_instruction>
+
+/Users/zvada/Developer/agent/box-ide/.conductor/maputo/.context/attachments/Screenshot 2026-03-26 at 11.48.38 PM.png Do you think we could add here in the welcome screen, the welcome step, we would add a glitch effect for the deus that it would change in depth and it would be like very nicely visually done? Can you explore how to do it?
+
+---
+
+But we want the glitch effect to show just the deaths and deus, like there is the change of one letter, you know, U and V. So I want this change to be visible.
+
+---
+
+If we would hover over the text, I want this glitch effect to turn on again.
+
+---
+
+So with the glitch effect, the glitched colors, can you make them a little more subtle? Color wise, maybe it would be nicer.
+
+---
+
+Also, maybe slower the glitch. What do you think? Would you change something there if you think like a great designer there?
+
+---
+
+<system-instruction>
+The user has added 1 comment to the diff for this workspace. Please review and address these comments as part of your response. When addressing comments on the "original" side or on specific commits, read the file from that version (not the current version). Below are the comments, including metadata about what git state they were left on:
+
+Comment #1:
+
+File: apps/web/src/features/onboarding/ui/steps/WelcomeStep.tsx
+Line: 5
+User comment: "How about we change the manifesto to make it more personal? Something like, yeah, think about what this is, but something along these lines. And I will ramble and you can rewrite it a bit so it sounds much better. But basically I felt something like the world has changed, at least for me. For a decade I was working on software. It was for me the ultimate way of expressing myself or something like the way how we built. And now I feel like I have this godlike machine I can talk to which builds my ideas and I'm totally addicted. I built this as a one person who wants to experiment with different kinds of ways to command agents in order for them to build. There are many tools like that are amazing like OpenDevs, Codex, Cursor. But since we are in a world where it's way easier to build software, I built Deus and yeah. Something along those lines but like make it so it sounds and feels nicely written. But I wanted to make it personal. I want people to understand the product then. Something like this."
+
+Comment metadata:
+This comment was left on the modified branch.
+
+</system-instruction>
+
+---
+
+Some feedback. Also, when we scroll, we should be able to scroll to the top and make sure that we have some space on the top. But on the bottom, we have too much space. I think this is incorrect. But for the manifest, my feedback is that every function, every system, small acts of creation feels like jargon. Maybe for a decade, writing and designing software products was how I expressed myself. Something along those lines, like not just writing software, like designing products. Maybe there would be like for a decade, writing software, blah, blah, blah. But it, but we can say like it was slow but fulfilling journey. But then the world changed. And not I found a machine I could talk to. I found some AI got that good that it can make whatever I imagine something along those lines. And I got a complicated editing that's good. The one prompt and one feature appears. I don't know. In the amazing tools add conductor there. And not because others aren't great, because I couldn't stop experimenting. And also they're like, I wanted stuff differently or somrhgin yeha?
+
+---
+
+Okay, just another feedback. It's much better. Maybe the connection between I got completely addicted. Maybe we could like I got completely addicted. Maybe something like I spent more time building that I ever had or something. But it's something that's like even more, it's never been more fun. And something like they are amazing tools for managing agents. Cursor, Drop Claude Code, Cursor, or like keep Claude Code. Yeah. And then there is this big thing, but I couldn't stop experimenting. I wanted to do things differently. But I couldn't stop. Maybe but I wanted to do some things differently. And now since we have a godlike machines, why wouldn't I? How would like a machine that write software would look like now? And how it will evolve? It's funny that one person can do this. I don't know, maybe some feedback iterated with that.
+
+---
+
+Okay, maybe last feedback. Let's drop. There are many amazing tools for managing agents. My favorite conductor and cursor, maybe. How about that? Like basically, Codex and Claude Code are the AI models, you know?
+
+---
+
+drop the —
