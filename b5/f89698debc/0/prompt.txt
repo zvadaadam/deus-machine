@@ -107,3 +107,14 @@ and in the budl when we wanna buidl it for productiom?
 ---
 
 and how abotu the run dekstop mode will it work also?
+
+---
+
+<system_instruction>
+The user has attached these files. Read them before proceeding.
+- /Users/zvada/Developer/agent/box-ide/.conductor/sarajevo-v4/.context/attachments/PR instructions.md (953 B)
+</system_instruction>
+
+
+
+Create a PR
