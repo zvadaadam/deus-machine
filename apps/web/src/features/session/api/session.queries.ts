@@ -297,7 +297,7 @@ export function useSendMessage() {
 
     // Optimistic update: show user message immediately.
     // Status indicators (tab spinner, sidebar) are updated by the workspaces
-    // WS subscription — the sidecar notifies the backend, which pushes fresh
+    // WS subscription — the agent-server notifies the backend, which pushes fresh
     // workspace snapshots within ~50ms.
     onMutate: async ({ sessionId, content, model }) => {
       await queryClient.cancelQueries({

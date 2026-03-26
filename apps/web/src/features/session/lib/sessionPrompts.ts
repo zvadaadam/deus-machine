@@ -2,7 +2,7 @@
  * Action prompt catalogue — plain-text prompts for UI-triggered agent actions.
  *
  * All prompts that originate from button clicks (not user-typed messages) live here.
- * The sidecar receives raw text via onSend(string) — no template engine, no structured format.
+ * The agent-server receives raw text via onSend(string) — no template engine, no structured format.
  *
  * Static prompts are string constants. Parameterized prompts are functions.
  * Add new exports here when adding new action buttons.

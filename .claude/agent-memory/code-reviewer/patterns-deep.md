@@ -16,7 +16,7 @@
 - **Optimistic workspace status**: `onMutate` sets `session_status: "working"` in `["workspaces", "by-repo"]` cache.
   `onError` rolls it back to `"idle"`. Matches by `current_session_id` (not `workspaceId` — no workspaceId
   available in onMutate context). This is intentionally less precise than the event-based path.
-- **reconcileStuckSessions**: Called at sidecar startup. Does NOT emit status-changed events for reconciled
+- **reconcileStuckSessions**: Called at agent-server startup. Does NOT emit status-changed events for reconciled
   sessions — frontend will pick up via the `invalidateQueries` on `useSessionEvents` mount.
 
 ## Error Classification + Session Writer Patterns (Confirmed)
@@ -147,7 +147,7 @@ startChase()` (not just `startChase()`, which guards against double-start). Forc
 - Squircle @supports block sets `--corner-radius-scale: 1.25` globally.
 - Legacy `--radius: 0.5rem` kept in :root for backward compat.
 
-## Sidecar Resume / AgentSessionId Patterns (Confirmed)
+## Agent-server Resume / AgentSessionId Patterns (Confirmed)
 
 - `agent_session_id` = Claude SDK's internal conversation ID (not app sessions.id). Required for `resume:` in SDK options.
 - `agentSessionIdCaptured` flag is one-shot per generator lifecycle.
@@ -155,7 +155,7 @@ startChase()` (not just `startChase()`, which guards against double-start). Forc
 - `saveAgentSessionId` does NOT call `notifyBackend` — internal bookkeeping only.
 - Double `updated_at` write in `saveAgentSessionId` is redundant (AFTER UPDATE trigger fires anyway).
 
-## Sidecar-Owns-Send Pattern (zvadaadam/sidecar-error-logging, 2026-03)
+## Agent-server-Owns-Send Pattern (zvadaadam/agent-server-error-logging, 2026-03)
 
 - `saveUserMessage()` in `session-writer.ts` uses `db.transaction()` for atomic INSERT message +
   UPDATE session status='working'. This is the entry point for all user messages in the desktop path.

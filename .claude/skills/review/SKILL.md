@@ -12,6 +12,7 @@ Review the current code changes for quality, security, performance, and adherenc
 ## What to review
 
 Determine scope from the arguments:
+
 - No arguments: review all uncommitted changes (`git diff` + `git diff --cached`)
 - `--staged`: review only staged changes (`git diff --cached`)
 - A branch name: review changes vs that branch (`git diff <branch>...HEAD`)
@@ -23,7 +24,7 @@ Determine scope from the arguments:
 2. **Read changed files**: Read the full content of each changed file for context
 3. **Check CLAUDE.md compliance**: Verify changes follow the project's documented conventions
 4. **Assess risk tier**: Note which risk tier the changed files fall into:
-   - **High risk**: `src-tauri/src/`, `sidecar/`, `backend/src/lib/schema.ts`, `backend/src/lib/database.ts`
+   - **High risk**: `src-tauri/src/`, `agent-server/`, `backend/src/lib/schema.ts`, `backend/src/lib/database.ts`
    - **Medium risk**: `backend/src/`, `src/platform/`, `src/features/*/api/`
    - **Low risk**: `src/components/`, `src/features/*/ui/`, tests, config files
 5. **Produce report**: Output structured findings organized by severity
@@ -43,6 +44,7 @@ Determine scope from the arguments:
 ## Output
 
 Produce a clear, actionable review. For each finding:
+
 - State the file and line
 - Explain what's wrong and why it matters
 - Suggest a specific fix

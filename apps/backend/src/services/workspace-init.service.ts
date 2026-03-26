@@ -225,7 +225,7 @@ const STAGES: InitStage[] = [
     fatal: true,
     async run(ctx) {
       // Retry with exponential backoff to handle SQLITE_BUSY / database-locked
-      // errors that can occur when the sidecar is concurrently accessing the DB.
+      // errors that can occur when the agent-server is concurrently accessing the DB.
       const db = getDatabase();
       const sessionId = uuidv7();
       const maxAttempts = 3;
@@ -267,7 +267,7 @@ export async function initializeWorkspace(ctx: InitContext): Promise<void> {
     try {
       updateInitStage(ctx.workspaceId, stage.name);
     } catch (err) {
-      // SQLITE_BUSY can fire when sidecar holds the DB — log but don't
+      // SQLITE_BUSY can fire when agent-server holds the DB — log but don't
       // abort, otherwise cleanup never runs and worktrees leak.
       console.warn("[WORKSPACE] Failed to update init_stage:", err);
     }

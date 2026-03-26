@@ -38,7 +38,7 @@
 - `clear_file_cache` and `invalidate_file_cache` in allowlist but no handler or caller
 - No test coverage for apps/desktop/ (8 files, ~800 lines)
 - Backend process management: exponential backoff restart, port-changed IPC to renderer, WS reconnect chain
-- Sidecar spawned by backend (not Electron main), tracked in server.ts module scope
+- Agent-server spawned by backend (not Electron main), tracked in server.ts module scope
 
 ## Review Infrastructure
 

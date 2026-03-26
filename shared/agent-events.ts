@@ -204,7 +204,7 @@ export const AGENT_RPC_METHODS = {
 } as const;
 
 /**
- * Frontend-facing RPC methods. The sidecar's tools call these as JSON-RPC
+ * Frontend-facing RPC methods. The agent-server's tools call these as JSON-RPC
  * requests through the tunnel. The backend relays them to the frontend via
  * q:event tool:request, the frontend handles them, and the result flows back.
  */

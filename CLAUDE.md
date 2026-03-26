@@ -49,7 +49,7 @@ Frontend (React + Zustand + React Query)
     │                  ├── Mutations (q:mutate/q:mutate_result)
     │                  │   Sync writes: archiveWorkspace, updateWorkspaceTitle
     │                  ├── Events (q:event) — ephemeral push (tool relay, plan mode)
-    │                  └── Agent Client ──→ Agent-Server (apps/sidecar/)
+    │                  └── Agent Client ──→ Agent-Server (apps/agent-server/)
     │                       ├── WebSocket (ws://127.0.0.1:{port}) — JSON-RPC 2.0
     │                       ├── turn/start, turn/cancel, turn/respond
     │                       ├── Receives canonical agent events → persists → pushes
@@ -67,7 +67,7 @@ Frontend (React + Zustand + React Query)
     │                  ├── Config management (MCP servers, agents, hooks)
     │                  └── External services (GitHub PR status via gh CLI)
     │
-    └── Agent-Server (apps/sidecar/) — Stateless, no DB access
+    └── Agent-Server (apps/agent-server/) — Stateless, no DB access
                        ├── Claude/Codex Agent SDKs (streaming responses)
                        ├── WebSocket server (JSON-RPC 2.0 with initialize handshake)
                        ├── Canonical event emission (13 event types → backend)
@@ -181,10 +181,10 @@ Our app owns its own SQLite database:
 
 ## Electron Main vs Node.js Backend Boundary
 
-- **Electron Main Process:** Thin desktop shell. Window lifecycle, native OS dialogs, BrowserView management, auto-updater, process lifecycle (spawns backend + sidecar). No business logic.
+- **Electron Main Process:** Thin desktop shell. Window lifecycle, native OS dialogs, BrowserView management, auto-updater, process lifecycle (spawns backend + agent-server). No business logic.
 - **Node.js (Hono backend):** All business logic. Database reads/writes (repos, workspaces, all messages). Config management. External services (GitHub API via gh CLI). Agent event persistence, tool relay coordination, PTY management, file watching.
-- **Node.js (Agent-Server / sidecar):** Stateless agent SDK wrapper. Claude/Codex SDK integration. Canonical event emission. No DB access — streams events to backend via WebSocket.
-- **Rule of thumb:** If it needs a native Electron API (BrowserWindow, dialog, shell), it belongs in the main process. Everything else belongs in the backend or sidecar.
+- **Node.js (Agent-Server):** Stateless agent SDK wrapper. Claude/Codex SDK integration. Canonical event emission. No DB access — streams events to backend via WebSocket.
+- **Rule of thumb:** If it needs a native Electron API (BrowserWindow, dialog, shell), it belongs in the main process. Everything else belongs in the backend or agent-server.
 
 ## Electron Main Process (apps/desktop/)
 
@@ -193,7 +193,7 @@ apps/desktop/
 ├── main/
 │   ├── index.ts          App init, IPC handler registration, lifecycle hooks
 │   ├── backend-process.ts  Node.js backend process management
-│   ├── sidecar-process.ts  Agent-server (sidecar) process management
+│   ├── agent-server-process.ts  Agent-server process management
 │   ├── native-handlers.ts  IPC handlers for native operations
 │   └── browser-views.ts    BrowserView management for webview automation
 └── preload/
@@ -229,7 +229,7 @@ apps/backend/src/
 
 Pattern: each route file maps to a REST resource. Services contain reusable business logic. Middleware loads context (workspace by `:id`) and maps errors to JSON responses. The agent-client connects to the agent-server on startup and dispatches all incoming canonical events through the agent-event-handler pipeline (persist → invalidate → WS push).
 
-## Agent-Server Structure (apps/sidecar/)
+## Agent-Server Structure (apps/agent-server/)
 
 The agent-server runs as a separate Node.js process, managed by the Electron main process. It wraps Claude/Codex SDKs and streams canonical events to the backend via WebSocket. It is **stateless** — no database access, no direct frontend communication.
 
@@ -240,7 +240,7 @@ The agent-server runs as a separate Node.js process, managed by the Electron mai
 **Transport:** WebSocket server on `ws://127.0.0.1:{port}` (default). Also supports Unix socket (`--listen unix://`) for backward compat. JSON-RPC 2.0 wire protocol with `initialize`/`initialized` handshake.
 
 ```
-apps/sidecar/
+apps/agent-server/
 ├── index.ts              Entry point, WebSocket + Unix socket server (JSON-RPC 2.0)
 ├── rpc-connection.ts     Bidirectional JSON-RPC 2.0 peer (WebSocket + net.Socket transport)
 ├── event-broadcaster.ts  Singleton: broadcasts canonical events to all connected clients
@@ -268,9 +268,9 @@ All agent output is normalized to 13 canonical event types that flow: Agent SDK 
 ### Key Bun Scripts
 
 ```bash
-bun run build:sidecar    # Build agent-server → apps/sidecar/dist/index.bundled.cjs
-bun run test:sidecar     # Run agent-server tests (452 tests)
-bun run test:sidecar:watch  # Watch mode for agent-server tests
+bun run build:agent-server    # Build agent-server → apps/agent-server/dist/index.bundled.cjs
+bun run test:agent-server     # Run agent-server tests (452 tests)
+bun run test:agent-server:watch  # Watch mode for agent-server tests
 ```
 
 # RUNNING THE APP
@@ -807,7 +807,7 @@ src/components/ui/              ← Shadcn base primitives only
 Test if the backend or frontend works using the browser tool or running tests.
 
 - **Backend tests** live in `apps/backend/test/unit/` (organized by domain: `lib/`, `middleware/`, `routes/`, `services/`). Run with `bun run test:backend`.
-- **Sidecar tests** live in `apps/sidecar/test/`. Run with `bun run test:sidecar`.
+- \*\*Agent-server tests live in `apps/agent-server/test/`. Run with `bun run test:agent-server`.
 - Tests use Vitest with `vi.mock()` and `vi.hoisted()` for module-level mocking. Keep tests outside `src/` — never colocate tests with source code.
 
 ### Debugging Frontend Layout & Spacing Issues
@@ -857,9 +857,9 @@ Never fix a spacing issue by only reading the file where the element is rendered
 ```typescript
 // ✅ GOOD - Document in the code:
 /**
- * Event Flow: Backend → WebSocket → Sidecar → Backend → WS Push → Frontend
+ * Event Flow: Backend → WebSocket → Agent-server → Backend → WS Push → Frontend
  * We use Unix socket instead of HTTP SSE because:
- * - Infrastructure already existed (sidecar communication)
+ * - Infrastructure already existed (agent-server communication)
  * - No HTTP overhead for desktop app
  * - ~150 lines vs ~200+ for SSE
  */

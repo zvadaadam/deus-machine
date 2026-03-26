@@ -36,11 +36,11 @@ See [DEVELOPMENT.md](DEVELOPMENT.md) for detailed development guide.
         │  │   • Hono API Server            │
         │  │   • SQLite Database            │
         │  │   • Workspace management       │
-        │  │   • Sidecar socket relay       │
+        │  │   • Agent-server socket relay       │
         │  └──────────┬────────────────────┘
         │             │ WebSocket (JSON-RPC 2.0)
         │  ┌──────────▼────────────────────┐
-        │  │   Sidecar (Claude Agent SDK)  │
+        │  │   Agent-server (Claude Agent SDK)  │
         │  │   (One per app instance)       │
         │  └───────────────────────────────┘
         │ IPC (preload bridge)
@@ -70,7 +70,7 @@ See [ARCHITECTURE.md](ARCHITECTURE.md) for detailed architecture documentation.
 - Node.js + Hono
 - SQLite (via better-sqlite3)
 - Claude Agent SDK integration
-- Unix socket IPC (for sidecar)
+- Unix socket IPC (for agent-server)
 
 **Desktop:**
 
@@ -78,7 +78,7 @@ See [ARCHITECTURE.md](ARCHITECTURE.md) for detailed architecture documentation.
 - Native OS integrations
 - node-pty for terminals
 - BrowserView for web automation
-- Sidecar process management
+- Agent-server process management
 
 ## Prerequisites
 
@@ -127,7 +127,7 @@ deus/
 │   │   ├── main/
 │   │   │   ├── index.ts             # App entry, window lifecycle
 │   │   │   ├── backend-process.ts   # Backend child process manager
-│   │   │   ├── sidecar-process.ts   # Sidecar manager + socket relay
+│   │   │   ├── agent-server-process.ts   # Agent-server manager + socket relay
 │   │   │   ├── pty-handlers.ts      # Terminal (node-pty)
 │   │   │   ├── browser-views.ts     # BrowserView management
 │   │   │   └── native-handlers.ts   # OS integrations (dialogs, theme)
@@ -152,7 +152,7 @@ deus/
 │   │   │   ├── services/            # Business logic
 │   │   │   └── db/                  # Database queries
 │   │   └── server.cjs               # Entry point
-│   └── sidecar/                 # Claude Agent SDK process
+│   └── agent-server/                 # Claude Agent SDK process
 │       ├── index.ts                 # JSON-RPC server over WebSocket
 │       └── agents/                  # Agent handlers
 ├── shared/                      # Shared types and constants
@@ -163,8 +163,8 @@ deus/
 
 ```bash
 bun run test:backend       # Backend tests
-bun run test:sidecar:unit  # Sidecar unit tests
-bun run test:sidecar:e2e   # Sidecar E2E tests
+bun run test:agent-server:unit  # Agent-server unit tests
+bun run test:agent-server:e2e   # Agent-server E2E tests
 bun run test               # All tests
 ```
 
@@ -181,7 +181,7 @@ Port discovery is automatic:
 
 ## AI Agent Workflow
 
-This repo ships with custom Claude Code agents and skills for a structured dev workflow. Everything is tailored to this codebase's architecture (Electron + React + Node.js + Sidecar).
+This repo ships with custom Claude Code agents and skills for a structured dev workflow. Everything is tailored to this codebase's architecture (Electron + React + Node.js + Agent-Server).
 
 ### Agents
 

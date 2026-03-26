@@ -265,7 +265,7 @@ describe("shared/events", () => {
       expect(PROTOCOL_EVENTS).toContain("pty-exit");
       expect(PROTOCOL_EVENTS).toContain("fs:changed");
       expect(PROTOCOL_EVENTS).toContain("git-clone-progress");
-      expect(PROTOCOL_EVENTS).toContain("sidecar:request");
+      expect(PROTOCOL_EVENTS).toContain("agent-server:request");
       expect(PROTOCOL_EVENTS).toHaveLength(9);
     });
   });

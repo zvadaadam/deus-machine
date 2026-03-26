@@ -57,7 +57,7 @@ export const capabilities = {
    *  Web Notifications API could work but needs explicit permission UX. */
   nativeNotifications: isElectron,
 
-  /** Electron IPC event listeners (workspace progress, sidecar requests, etc.).
+  /** Electron IPC event listeners (workspace progress, agent-server requests, etc.).
    *  When false, these events arrive through the WebSocket protocol instead. */
   ipcEventListeners: isElectron,
 

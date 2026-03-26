@@ -2,7 +2,7 @@
 
 ## What It Is
 
-`saveAssistantMessage` in `sidecar/db/session-writer.ts` wraps message content in an
+`saveAssistantMessage` in `agent-server/db/session-writer.ts` wraps message content in an
 envelope object only when `message.stop_reason === "cancelled"`:
 
 ```
@@ -18,11 +18,13 @@ not via envelope content.
 ## Frontend Unwrapping
 
 `normalizeContentBlocks` in `session.queries.ts` detects the envelope format and unwraps it:
+
 ```ts
 if ("message" in blocks && "blocks" in blocks && Array.isArray(blocks.blocks)) {
   return normalizeContentBlocks(blocks.blocks);
 }
 ```
+
 This runs before the `parseContent` result is used anywhere in the UI. All consumers
 (Chat.tsx, MessageItem, calculateTurnStats, groupTools, SubagentGroupBlock) see unwrapped
 blocks arrays.
@@ -34,6 +36,7 @@ JSON (before `parseContent`), via a separate `useMemo`. This is intentional — 
 discards the envelope, so you need to parse it separately to get the stop_reason.
 
 Rendering branches:
+
 - `stopReason === "cancelled"` → "Turn interrupted" pill (Square icon)
 - Otherwise (null or no envelope) → normal `MessageItem`
 
@@ -50,7 +53,8 @@ This is a low-likelihood edge case.
 ## stop_reason Values from Claude SDK
 
 Known values:
+
 - `"end_turn"` — normal completion (stored as flat array, no special UI)
-- `"cancelled"` — user interrupted (synthetic, injected by sidecar; stored in envelope)
+- `"cancelled"` — user interrupted (synthetic, injected by agent-server; stored in envelope)
 - `"max_tokens"` — context limit hit (stored as flat array; error shown via session error_category)
 - `"stop_sequence"` — custom stop sequence (stored as flat array; no special UI)
