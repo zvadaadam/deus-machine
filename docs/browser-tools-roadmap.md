@@ -8,7 +8,7 @@ Future enhancements for the browser automation system, plus competitive research
 
 ### BrowserResize (Low effort)
 
-Add a `BrowserResize` MCP tool for responsive design testing. `set_browser_webview_bounds` already exists in Rust — this just needs a thin sidecar tool wrapper.
+Add a `BrowserResize` MCP tool for responsive design testing. `set_browser_webview_bounds` already exists in Rust — this just needs a thin agent-server tool wrapper.
 
 - Agent tests at mobile (375x812), tablet (768x1024), desktop (1440x900)
 - Screenshot at each breakpoint for layout comparison
@@ -24,7 +24,7 @@ When the AI agent interacts with the browser (navigate, click, type, wait), capt
 Agent interacts with browser normally
         |
         v
-  Sidecar MCP tools execute (BrowserClick, BrowserType, etc.)
+  Agent-server MCP tools execute (BrowserClick, BrowserType, etc.)
         |
         v
   Each tool call is RECORDED with metadata
@@ -34,7 +34,7 @@ Agent interacts with browser normally
   Agent calls BrowserGenerateTest
         |
         v
-  Sidecar transforms recording -> Playwright test file
+  Agent-server transforms recording -> Playwright test file
         |
         v
   File written to workspace (e.g. tests/e2e/login.spec.ts)

@@ -54,7 +54,7 @@ export function parseContentBlocks(content: string): (ContentBlock | string)[] |
 /**
  * Check if a raw message content string represents a cancelled response.
  *
- * The sidecar writes cancelled messages with envelope:
+ * The agent-server writes cancelled messages with envelope:
  *   { message: { stop_reason: "cancelled" }, blocks: [...] }
  */
 export function isCancelledMessage(content: string): boolean {

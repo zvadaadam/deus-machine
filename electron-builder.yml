@@ -17,7 +17,7 @@ extraResources:
     to: "backend"
     filter:
       - "**/*"
-  - from: "apps/sidecar/dist/index.bundled.cjs"
+  - from: "apps/agent-server/dist/index.bundled.cjs"
     to: "bin/index.bundled.cjs"
   - from: "packages/mcp-notebook/dist/notebook-server.bundled.cjs"
     to: "bin/notebook-server.bundled.cjs"

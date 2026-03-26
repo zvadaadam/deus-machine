@@ -1,7 +1,7 @@
 /**
  * Shared error extraction utilities.
  *
- * Used across frontend, backend, and sidecar to safely extract information
+ * Used across frontend, backend, and agent-server to safely extract information
  * from `catch (err: unknown)` blocks without `any` casts.
  */
 

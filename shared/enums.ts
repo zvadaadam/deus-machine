@@ -1,6 +1,6 @@
 // shared/enums.ts
 // Canonical Zod enum schemas — single source of truth for all discriminator
-// enums used across frontend, backend, and sidecar.
+// enums used across frontend, backend, and agent-server.
 //
 // Import the *Schema when you need runtime validation (Zod .parse/.safeParse).
 // Import the inferred *type* when you only need TypeScript checking.

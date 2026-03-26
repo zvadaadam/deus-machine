@@ -26,7 +26,7 @@ if (process.env.SENTRY_DSN) {
  * Deus Backend Server
  *
  * Handles workspace CRUD, sessions, repos, config, and stats.
- * Agent runtime (Claude SDK) is managed by the agent-server (sidecar).
+ * Agent runtime (Claude SDK) is managed by the agent-server.
  */
 
 // Initialize database
@@ -124,58 +124,58 @@ if (remoteEnabled === true) {
   ensureRelayConnected();
 }
 
-// Connect to agent-server (sidecar).
+// Connect to agent-server.
 //
 // Two bootstrap paths:
-// 1. AGENT_SERVER_URL is set (dev.sh): sidecar already running, connect directly.
-// 2. SIDECAR_BUNDLE_PATH is set (Electron): spawn sidecar as child process,
+// 1. AGENT_SERVER_URL is set (dev.sh): agent-server already running, connect directly.
+// 2. AGENT_SERVER_BUNDLE_PATH is set (Electron): spawn agent-server as child process,
 //    parse LISTEN_URL from its stdout, then connect.
 const agentServerUrl = process.env.AGENT_SERVER_URL;
-const sidecarBundlePath = process.env.SIDECAR_BUNDLE_PATH;
+const agentServerBundlePath = process.env.AGENT_SERVER_BUNDLE_PATH;
 
 if (agentServerUrl) {
-  // Path 1: Direct connection (dev.sh spawned the sidecar externally)
+  // Path 1: Direct connection (dev.sh spawned the agent-server externally)
   agentService.init(agentServerUrl);
-} else if (sidecarBundlePath) {
-  // Path 2: Spawn sidecar and connect (Electron desktop mode)
-  void spawnSidecarAndConnect(sidecarBundlePath);
+} else if (agentServerBundlePath) {
+  // Path 2: Spawn agent-server and connect (Electron desktop mode)
+  void spawnAgentServerAndConnect(agentServerBundlePath);
 }
 
-// Track sidecar child process for cleanup on shutdown
-let sidecarChild: import("child_process").ChildProcess | null = null;
+// Track agent-server child process for cleanup on shutdown
+let agentServerChild: import("child_process").ChildProcess | null = null;
 
-function killSidecar(): void {
-  if (sidecarChild && !sidecarChild.killed) {
-    sidecarChild.kill("SIGTERM");
-    sidecarChild = null;
+function killAgentServer(): void {
+  if (agentServerChild && !agentServerChild.killed) {
+    agentServerChild.kill("SIGTERM");
+    agentServerChild = null;
   }
 }
 
-/** Spawn the sidecar bundle as a child process and connect to its WebSocket. */
-async function spawnSidecarAndConnect(bundlePath: string): Promise<void> {
+/** Spawn the agent-server bundle as a child process and connect to its WebSocket. */
+async function spawnAgentServerAndConnect(bundlePath: string): Promise<void> {
   const { spawn } = await import("child_process");
   const fs = await import("fs");
 
   if (!fs.existsSync(bundlePath)) {
-    console.error(`[server] Sidecar bundle not found: ${bundlePath}`);
+    console.error(`[server] Agent-server bundle not found: ${bundlePath}`);
     return;
   }
 
-  sidecarChild = spawn(process.execPath, [bundlePath], {
+  agentServerChild = spawn(process.execPath, [bundlePath], {
     stdio: ["ignore", "pipe", "pipe"],
     env: {
       ...process.env,
-      // Forward database path so sidecar can pass it to agents
+      // Forward database path so agent-server can pass it to agents
       DATABASE_PATH: process.env.DATABASE_PATH,
       // Forward notebook server path
       NOTEBOOK_SERVER_BUNDLE_PATH: process.env.NOTEBOOK_SERVER_BUNDLE_PATH,
     },
   });
 
-  const sidecar = sidecarChild!;
+  const agentServer = agentServerChild!;
   let stdoutBuffer = "";
 
-  sidecar.stdout?.on("data", (data: Buffer) => {
+  agentServer.stdout?.on("data", (data: Buffer) => {
     stdoutBuffer += data.toString();
     const lines = stdoutBuffer.split("\n");
     stdoutBuffer = lines.pop() ?? "";
@@ -183,26 +183,26 @@ async function spawnSidecarAndConnect(bundlePath: string): Promise<void> {
     for (const line of lines) {
       const trimmed = line.trim();
       if (!trimmed) continue;
-      console.log("[sidecar]", trimmed);
+      console.log("[agent-server]", trimmed);
 
       // Capture the LISTEN_URL and connect
       if (trimmed.startsWith("LISTEN_URL=")) {
         const url = trimmed.slice("LISTEN_URL=".length);
-        console.log(`[server] Sidecar spawned and listening at ${url}`);
+        console.log(`[server] Agent-server spawned and listening at ${url}`);
         agentService.init(url);
       }
     }
   });
 
-  sidecar.stderr?.on("data", (data: Buffer) => {
+  agentServer.stderr?.on("data", (data: Buffer) => {
     for (const line of data.toString().split("\n")) {
-      if (line.trim()) console.error("[sidecar:stderr]", line.trim());
+      if (line.trim()) console.error("[agent-server:stderr]", line.trim());
     }
   });
 
-  sidecar.on("exit", (code, signal) => {
-    console.log(`[sidecar] Exited with code=${code} signal=${signal}`);
-    sidecarChild = null;
+  agentServer.on("exit", (code, signal) => {
+    console.log(`[agent-server] Exited with code=${code} signal=${signal}`);
+    agentServerChild = null;
   });
 }
 
@@ -213,7 +213,7 @@ process.on("uncaughtException", (error, origin) => {
   Sentry.close(2000).finally(() => {
     destroyAllPtySessions();
     destroyAllWatchers();
-    killSidecar();
+    killAgentServer();
     try {
       closeDatabase();
     } catch {}
@@ -233,7 +233,7 @@ function shutdown() {
   agentService.shutdown();
   destroyAllPtySessions();
   destroyAllWatchers();
-  killSidecar();
+  killAgentServer();
   disconnectFromRelay();
   closeAllWsConnections();
   closeDatabase();

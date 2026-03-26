@@ -201,7 +201,7 @@ export const MessageInput = forwardRef<MessageInputRef, MessageInputProps>(funct
     }
 
     // With images: build Anthropic API content blocks array, JSON-stringified.
-    // The sidecar parses this and passes the array as MessageParam.content to the SDK.
+    // The agent-server parses this and passes the array as MessageParam.content to the SDK.
     const blocks: Array<Record<string, unknown>> = [];
 
     if (combinedText) {

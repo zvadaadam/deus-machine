@@ -16,7 +16,7 @@ $ARGUMENTS
 2. **Trace the full stack**:
    - Frontend: component → query hook → service → HTTP/IPC call
    - Backend: route → middleware → service → database query
-   - Sidecar: RPC handler → agent → SDK → DB write → frontend notification
+   - Agent-server: RPC handler → agent → SDK → DB write → frontend notification
    - Rust: command → core module → system call
 3. **Map the data flow**: How does data move through the system?
 4. **Identify the database tables**: Which tables and columns are involved?
@@ -37,7 +37,7 @@ Backend (backend/src/)
 ├── services/{feature}.ts       ← Business logic
 └── middleware/                  ← Request context
 
-Sidecar (sidecar/)
+Agent-server (agent-server/)
 ├── agents/                     ← Agent handlers
 ├── db/                         ← Direct SQLite writes
 └── frontend-client.ts          ← Notifications → Rust → Frontend
@@ -50,6 +50,7 @@ Rust (src-tauri/src/)
 ## Output format
 
 Produce a clear explanation with:
+
 - A brief overview of what this feature does
 - The full data flow (ideally as a sequence)
 - Key files and their responsibilities

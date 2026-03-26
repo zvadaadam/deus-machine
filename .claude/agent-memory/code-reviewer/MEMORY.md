@@ -3,7 +3,7 @@
 ## Key Architecture Patterns (Confirmed)
 
 - `react-resizable-panels` uses percentage values for `collapsedSize`/`minSize` — pixel↔percent
-  conversion via `panelGroupContainerRef` (excludes sidecar strip from container width math)
+  conversion via `panelGroupContainerRef` (excludes agent-server strip from container width math)
 - `workspaceLayoutStore` uses `version: 9` migrations (v9 added terminal tab state) — increment version when adding persisted fields
 - `cn()` uses `twMerge` internally — arbitrary `animate-[...]` classes conflict-resolve correctly
   (last wins), so conditional breathing override pattern with `cn()` works as intended
@@ -51,7 +51,7 @@
 
 - **DSN propagation**: Rust `option_env!("SENTRY_DSN_RUST")` bakes frontend DSN at compile time.
   `option_env!("SENTRY_DSN_NODE")` is baked into the binary and forwarded as `SENTRY_DSN` env var
-  to child processes (backend + sidecar). Frontend uses `import.meta.env.VITE_SENTRY_DSN`.
+  to child processes (backend + agent-server). Frontend uses `import.meta.env.VITE_SENTRY_DSN`.
 - **`option_env!` with empty string**: When `SENTRY_DSN_RUST` is unset, `option_env!` returns `None`,
   and `.unwrap_or("")` passes `""` to `sentry::init`. The sentry-rust crate treats empty DSN as
   disabled — no panic, no-op client. This pattern is correct and safe.
@@ -65,7 +65,7 @@
   it earlier would flush pending events prematurely. The single-underscore prefix suppresses the
   unused-variable warning without dropping it.
 - **`Sentry.close(2000)` before `process.exit`**: The 2-second flush window is appropriate. Both
-  backend and sidecar implement this correctly in their `uncaughtException` handlers.
+  backend and agent-server implement this correctly in their `uncaughtException` handlers.
 - **Hardcoded Sentry org/project in vite.config.ts**: `org: "deus-40"` and
   `project: "deus-desktop-frontend"` are hardcoded. These are metadata identifiers (not secrets).
   Leaking them poses minimal risk but couples the open-source repo to internal Sentry project names.
@@ -77,7 +77,7 @@
   that boundary go unreported to Sentry. Only the inner boundary (line 187) calls `reportError`.
 - **`@sentry/node` in production dependencies**: `@sentry/node` and `@sentry/vite-plugin` are in
   `dependencies` (not `devDependencies`). `@sentry/vite-plugin` is build-only and should be in
-  `devDependencies`. `@sentry/node` is needed at runtime by backend/sidecar, correct in `dependencies`.
+  `devDependencies`. `@sentry/node` is needed at runtime by backend/agent-server, correct in `dependencies`.
 
 ## Experimental Feature Toggle Pattern (Confirmed)
 
@@ -337,5 +337,5 @@
 
 ## See Also
 
-- `patterns-deep.md` — overflow notes: error classification, chat virtualization, PRStatus, border radius, sidecar resume
+- `patterns-deep.md` — overflow notes: error classification, chat virtualization, PRStatus, border radius, agent-server resume
 - `message-envelope-pattern.md` — session message envelope/flat array patterns

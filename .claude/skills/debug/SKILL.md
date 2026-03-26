@@ -24,7 +24,7 @@ Current git status:
 4. **Check common causes**:
    - Import path wrong after file move?
    - Mock setup missing or outdated? (check `vi.mock()` and `vi.hoisted()` patterns)
-   - Database schema mismatch between backend and sidecar?
+   - Database schema mismatch between backend and agent-server?
    - Tauri IPC command name mismatch between Rust and frontend?
    - Event name mismatch between emitter and listener?
    - Missing index causing slow/failing query?
@@ -37,10 +37,10 @@ Current git status:
 
 ## Architecture-aware debugging
 
-| Error location | Common causes |
-|---------------|---------------|
-| Backend route test | Mock not matching actual DB schema, missing `vi.mock()` |
-| Sidecar test | `vi.hoisted()` needed for mock variables, Claude SDK mock stale |
-| Frontend | TanStack Query key mismatch, Zustand selector returning stale data |
-| Rust | Borrow checker, missing `Clone`/`Send`, libgit2 path issues |
-| Cross-layer | Event name typo, IPC command name mismatch, socket message format |
+| Error location     | Common causes                                                      |
+| ------------------ | ------------------------------------------------------------------ |
+| Backend route test | Mock not matching actual DB schema, missing `vi.mock()`            |
+| Agent-server test  | `vi.hoisted()` needed for mock variables, Claude SDK mock stale    |
+| Frontend           | TanStack Query key mismatch, Zustand selector returning stale data |
+| Rust               | Borrow checker, missing `Clone`/`Send`, libgit2 path issues        |
+| Cross-layer        | Event name typo, IPC command name mismatch, socket message format  |

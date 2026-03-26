@@ -18,7 +18,7 @@ import { writeUserMessage } from "../services/message-writer";
  * Session Routes
  *
  * Sessions are associated with workspaces. Agent runtime (Claude SDK)
- * is managed by the agent-server (sidecar). This route handles:
+ * is managed by the agent-server (agent-server). This route handles:
  * - Session CRUD
  * - User message persistence
  * - Session status updates
@@ -68,7 +68,7 @@ app.get("/sessions/:id/messages", (c) => {
  * POST /sessions/:id/messages
  *
  * Gateway/web fallback for saving user messages. The primary desktop path
- * now uses the sidecar socket (saveUserMessage in sidecar/db/session-writer.ts)
+ * now uses the agent-server socket (saveUserMessage in agent-server/db/session-writer.ts)
  * which atomically persists the message + dispatches the agent in one call.
  * This endpoint is kept for non-desktop clients (cloud relay, web gateway).
  */

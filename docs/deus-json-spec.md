@@ -47,7 +47,7 @@ The `deus.json` manifest tells the Deus orchestrator how to set up, run, build, 
     "build": {
       "command": "bun run build",
       "icon": "hammer",
-      "depends": ["build:sidecar"]
+      "depends": ["build:agent-server"]
     }
   }
 }
@@ -315,24 +315,24 @@ Scripts can use these to locate shared configs, copy files from the root repo, e
       "icon": "monitor",
       "persistent": true,
       "mode": "nonconcurrent",
-      "depends": ["build:sidecar"]
+      "depends": ["build:agent-server"]
     },
     "build": {
       "command": "bun run build",
       "icon": "hammer",
-      "depends": ["build:sidecar"]
+      "depends": ["build:agent-server"]
     },
     "build:desktop": {
       "command": "bun run build:all",
       "description": "Build Electron desktop binary",
       "icon": "package",
-      "depends": ["build:sidecar"]
+      "depends": ["build:agent-server"]
     },
-    "build:sidecar": { "command": "bun run build:sidecar", "icon": "package" },
+    "build:agent-server": { "command": "bun run build:agent-server", "icon": "package" },
     "test": "bun run test",
     "test:backend": "bun run test:backend",
-    "test:sidecar": "bun run test:sidecar:unit",
-    "test:e2e": "bun run test:sidecar:e2e",
+    "test:agent-server": "bun run test:agent-server:unit",
+    "test:e2e": "bun run test:agent-server:e2e",
     "typecheck": { "command": "bun run typecheck", "icon": "search-code" },
     "lint": { "command": "bun run lint", "icon": "search-code" },
     "format": { "command": "bun run format", "icon": "paintbrush" },

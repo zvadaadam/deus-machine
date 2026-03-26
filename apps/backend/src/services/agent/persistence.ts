@@ -1,8 +1,8 @@
 // backend/src/services/agent/persistence.ts
 // Database write functions for persisting canonical agent events.
 //
-// Adapted from sidecar/db/session-writer.ts. Key differences:
-// - Uses backend's getDatabase() (not sidecar's)
+// Adapted from agent-server/db/session-writer.ts. Key differences:
+// - Uses backend's getDatabase() (not agent-server's)
 // - No notifyBackend() calls (backend handles WS push via invalidate())
 // - No FrontendClient calls (backend pushes via query-engine directly)
 // - Takes event objects instead of positional args
@@ -27,7 +27,7 @@ import type {
 } from "@shared/agent-events";
 
 // ============================================================================
-// WriteResult type (mirrors sidecar's pattern)
+// WriteResult type (mirrors agent-server's pattern)
 // ============================================================================
 
 export type WriteResult<T = string> = { ok: true; value: T } | { ok: false; error: string };
@@ -38,7 +38,7 @@ export type WriteResult<T = string> = { ok: true; value: T } | { ok: false; erro
 
 /**
  * Save an assistant message to the messages table.
- * Mirrors sidecar saveAssistantMessage() logic:
+ * Mirrors agent-server saveAssistantMessage() logic:
  * - Generates a local UUID7 message ID
  * - Stores flat content array, except for cancelled messages which get an envelope
  * - Records the agent_message_id and parent_tool_use_id for linking

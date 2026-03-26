@@ -1,11 +1,11 @@
 // shared/protocol.ts
 // Canonical Zod schemas for the JSON-RPC 2.0 protocol used by
-// the agent-server (sidecar) and backend.
+// the agent-server (agent-server) and backend.
 //
 // Query options and request schemas are used by agent handlers
-// (sidecar/agents/registry.ts). Frontend/backend RPC schemas
+// (agent-server/agents/registry.ts). Frontend/backend RPC schemas
 // (browser, simulator, diff, terminal, plan mode) live in
-// sidecar/rpc-schemas.ts and are re-exported via sidecar/protocol.ts.
+// agent-server/rpc-schemas.ts and are re-exported via agent-server/protocol.ts.
 
 import { z } from "zod";
 
