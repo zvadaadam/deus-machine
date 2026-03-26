@@ -180,7 +180,6 @@ export function DeusStep({ onBack, onComplete }: DeusStepProps) {
       {/* Description line */}
       <p className="text-xs text-white/40 italic">{REPO.description}</p>
 
-      {/* Spacer -- matches previous layout height for progress area */}
       <div className="min-h-[28px]" />
 
       {/* Footer */}
