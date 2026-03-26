@@ -1,0 +1,31 @@
+{
+  "cli_version": "0.5.0",
+  "checkpoint_id": "63f88c9e0a75",
+  "strategy": "manual-commit",
+  "branch": "zvadaadam/github-release-guide",
+  "checkpoints_count": 16,
+  "files_touched": [
+    ".claude/agents/code-reviewer.md",
+    ".claude/agents/deep-reviewer.md",
+    ".claude/agents/dev.md",
+    ".claude/skills/explore/SKILL.md",
+    ".claude/skills/risk-tier/SKILL.md",
+    "apps/backend/src/services/workspace-init.service.ts",
+    "test/e2e/e2e-flow.test.cjs"
+  ],
+  "sessions": [
+    {
+      "metadata": "/63/f88c9e0a75/0/metadata.json",
+      "transcript": "/63/f88c9e0a75/0/full.jsonl",
+      "content_hash": "/63/f88c9e0a75/0/content_hash.txt",
+      "prompt": "/63/f88c9e0a75/0/prompt.txt"
+    }
+  ],
+  "token_usage": {
+    "input_tokens": 343,
+    "cache_creation_tokens": 563603,
+    "cache_read_tokens": 9836386,
+    "output_tokens": 35004,
+    "api_call_count": 132
+  }
+}
