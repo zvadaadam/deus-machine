@@ -1,0 +1,51 @@
+{
+  "cli_version": "0.5.0",
+  "checkpoint_id": "3726413663c7",
+  "strategy": "manual-commit",
+  "branch": "zvadaadam/drop-legacy-compat",
+  "checkpoints_count": 4,
+  "files_touched": [
+    "apps/agent-server/event-broadcaster.ts",
+    "apps/agent-server/index.ts",
+    "apps/agent-server/rpc-connection.ts",
+    "apps/agent-server/test/e2e.test.ts",
+    "apps/agent-server/test/integration.test.ts",
+    "apps/agent-server/test/rpc-connection.test.ts",
+    "apps/backend/src/app.ts",
+    "apps/backend/src/routes/onboarding.ts",
+    "apps/backend/src/routes/settings.ts",
+    "apps/backend/src/services/agent/index.ts",
+    "apps/backend/src/services/agent/service.ts",
+    "apps/backend/src/services/query-engine.ts",
+    "apps/desktop/main/backend-process.ts",
+    "apps/web/src/app/layouts/MainLayout.tsx",
+    "apps/web/src/app/layouts/hooks/useRepoActions.ts",
+    "apps/web/src/features/command-palette/commands.ts",
+    "apps/web/src/features/settings/api/settings.queries.ts",
+    "apps/web/src/features/settings/api/settings.service.ts",
+    "apps/web/src/features/settings/types.ts",
+    "apps/web/src/features/settings/ui/SettingsPage.tsx",
+    "apps/web/src/features/settings/ui/SettingsSidebar.tsx",
+    "apps/web/src/features/settings/ui/sections/AISection.tsx",
+    "apps/web/src/features/settings/ui/sections/index.ts",
+    "apps/web/src/features/sidebar/store/sidebarStore.ts",
+    "apps/web/src/shared/api/queryKeys.ts",
+    "shared/events.ts",
+    "shared/types/settings.ts"
+  ],
+  "sessions": [
+    {
+      "metadata": "/37/26413663c7/0/metadata.json",
+      "transcript": "/37/26413663c7/0/full.jsonl",
+      "content_hash": "/37/26413663c7/0/content_hash.txt",
+      "prompt": "/37/26413663c7/0/prompt.txt"
+    }
+  ],
+  "token_usage": {
+    "input_tokens": 37,
+    "cache_creation_tokens": 160815,
+    "cache_read_tokens": 1825069,
+    "output_tokens": 19050,
+    "api_call_count": 30
+  }
+}
