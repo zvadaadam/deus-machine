@@ -1,0 +1,23 @@
+{
+  "cli_version": "0.5.0",
+  "checkpoint_id": "06850d6682fa",
+  "strategy": "manual-commit",
+  "branch": "zvadaadam/fix-sqlite-node-ver",
+  "checkpoints_count": 1,
+  "files_touched": null,
+  "sessions": [
+    {
+      "metadata": "/06/850d6682fa/0/metadata.json",
+      "transcript": "/06/850d6682fa/0/full.jsonl",
+      "content_hash": "/06/850d6682fa/0/content_hash.txt",
+      "prompt": "/06/850d6682fa/0/prompt.txt"
+    }
+  ],
+  "token_usage": {
+    "input_tokens": 7,
+    "cache_creation_tokens": 35280,
+    "cache_read_tokens": 196114,
+    "output_tokens": 1076,
+    "api_call_count": 6
+  }
+}
