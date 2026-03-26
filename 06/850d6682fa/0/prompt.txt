@@ -253,3 +253,113 @@ I run AI code review, is it actionable? Wdyt? Explore in depth each problem.
 We want a clean, maintainable codebase, with proper best practices for the tech stack we use.
 Run subagents to verify, and if it should be fixed, try to merge some stuff together so it can be fixed together within one subagent. 
 If you can test something do it.
+
+---
+
+<system-instruction>
+The user has added 1 comment to the diff for this workspace. Please review and address these comments as part of your response. When addressing comments on the "original" side or on specific commits, read the file from that version (not the current version). Below are the comments, including metadata about what git state they were left on:
+
+Comment #1:
+
+File: scripts/dev.sh
+Line: 56
+User comment: "_⚠️ Potential issue_ | _🟡 Minor_
+
+<details>
+<summary>🧩 Analysis chain</summary>
+
+🏁 Script executed:
+
+```shell
+#!/bin/bash
+# Verify unquoted NODE_CMD invocations in scripts/dev.sh
+rg -nP '\$NODE_CMD\s+apps/(agent-server/dist/index\.bundled\.cjs|backend/server\.cjs)' scripts/dev.sh
+```
+
+Repository: zvadaadam/box-ide
+
+Length of output: 250
+
+---
+
+🏁 Script executed:
+
+```shell
+#!/bin/bash
+# Show the full scripts/dev.sh to understand NODE_CMD definition and context
+cat -n scripts/dev.sh
+```
+
+Repository: zvadaadam/box-ide
+
+Length of output: 4763
+
+---
+
+🏁 Script executed:
+
+```shell
+#!/bin/bash
+# Search for all uses of NODE_CMD in the repository to understand its scope
+rg -n 'NODE_CMD' --type sh
+```
+
+Repository: zvadaadam/box-ide
+
+Length of output: 365
+
+---
+
+</details>
+
+**Quote `NODE_CMD` at launch sites to prevent word-splitting failures when the binary path contains spaces.**
+
+Lines 56 and 78 invoke `$NODE_CMD` unquoted. Since `NODE_CMD` is resolved from `require('electron')` and could contain spaces (e.g., on Windows with installation in Program Files), the unquoted variable will undergo bash word-splitting, causing the command to fail.
+
+<details>
+<summary>Suggested fix</summary>
+
+```diff
+-$NODE_CMD apps/agent-server/dist/index.bundled.cjs > /tmp/agent-server.log 2>&1 &
++"$NODE_CMD" apps/agent-server/dist/index.bundled.cjs > /tmp/agent-server.log 2>&1 &
+@@
+-AGENT_SERVER_URL=$AGENT_SERVER_URL PORT=0 $NODE_CMD apps/backend/server.cjs > /tmp/backend.log 2>&1 &
++AGENT_SERVER_URL=$AGENT_SERVER_URL PORT=0 "$NODE_CMD" apps/backend/server.cjs > /tmp/backend.log 2>&1 &
+```
+
+</details>
+
+Also applies to: 78-78
+
+<details>
+<summary>🤖 Prompt for AI Agents</summary>
+
+```
+Verify each finding against the current code and only fix it if needed.
+
+In `@scripts/dev.sh` at line 56, The launch sites call NODE_CMD unquoted which
+allows bash word-splitting when the path contains spaces; update both
+invocations that use NODE_CMD (the occurrences invoking
+apps/agent-server/dist/index.bundled.cjs and the other similar call around the
+end of the script) to quote the variable as "$NODE_CMD" so the entire path is
+treated as a single word while preserving the existing arguments, redirections
+and backgrounding.
+```
+
+</details>
+
+<!-- fingerprinting:phantom:poseidon:hawk -->
+
+<!-- This is an auto-generated comment by CodeRabbit -->"
+
+Comment metadata:
+This comment was left on the modified branch.
+This comment was left on GitHub by @coderabbitai.
+This comment is the start of thread PRRT_kwDOQEbULc53IkeI. 
+
+</system-instruction>
+
+I run AI code review, is it actionable? Wdyt? Explore in depth each problem.
+We want a clean, maintainable codebase, with proper best practices for the tech stack we use.
+Run subagents to verify, and if it should be fixed, try to merge some stuff together so it can be fixed together within one subagent. 
+If you can test something do it.
