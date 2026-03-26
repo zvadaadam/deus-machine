@@ -177,19 +177,24 @@ export function GeneralSection({ settings, saveSetting, theme, setTheme }: Gener
                 Updates are checked automatically every 5 minutes.
               </p>
             </div>
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={handleCheckForUpdates}
-              disabled={manualChecking || updateCtx?.state.stage === "downloading"}
-            >
-              {manualChecking ? (
-                <Loader2 className="mr-1.5 size-3.5 animate-spin" />
-              ) : (
-                <RefreshCw className="mr-1.5 size-3.5" />
-              )}
-              {manualChecking ? "Checking..." : "Check now"}
-            </Button>
+            {(() => {
+              const isChecking = manualChecking || updateCtx?.state.stage === "checking";
+              return (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={handleCheckForUpdates}
+                  disabled={isChecking || updateCtx?.state.stage === "downloading"}
+                >
+                  {isChecking ? (
+                    <Loader2 className="mr-1.5 size-3.5 animate-spin" />
+                  ) : (
+                    <RefreshCw className="mr-1.5 size-3.5" />
+                  )}
+                  {isChecking ? "Checking..." : "Check now"}
+                </Button>
+              );
+            })()}
           </div>
 
           {updateCtx &&
@@ -220,7 +225,9 @@ export function GeneralSection({ settings, saveSetting, theme, setTheme }: Gener
                   <span>Update check failed: {updateCtx.state.error}</span>
                 </div>
               ))
-              .otherwise(() => null)}
+              .with("idle", () => null)
+              .with("checking", () => null)
+              .exhaustive()}
 
           {manualResult === "up-to-date" && (
             <div className="text-muted-foreground flex items-center gap-2 text-sm">
