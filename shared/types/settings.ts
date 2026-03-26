@@ -16,11 +16,14 @@ export interface Settings {
   // Onboarding
   onboarding_completed?: boolean;
 
-  // AI
+  // AI — Claude
   anthropic_api_key?: string;
   claude_provider?: string;
   claude_model?: string;
   custom_endpoint?: string;
+
+  // AI — Codex
+  openai_api_key?: string;
 
   // Analytics (opt-out, default true when absent)
   analytics_enabled?: boolean;
@@ -47,11 +50,4 @@ export interface Settings {
  * Settings section identifiers
  * Used for navigation in settings UI
  */
-export type SettingsSection =
-  | "general"
-  | "ai"
-  | "extensions"
-  | "environment"
-  | "experimental"
-  | "access"
-  | "updates";
+export type SettingsSection = "general" | "ai" | "environment" | "experimental" | "access";

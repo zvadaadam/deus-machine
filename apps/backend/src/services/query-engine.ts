@@ -608,6 +608,7 @@ async function runRequest(resource: RequestResourceName, params: QueryParams): P
       if (!repoId) throw new Error("repoBranches requires repoId");
       return delegateToRoute("GET", `/api/repos/${encodeURIComponent(repoId)}/branches`);
     })
+    .with("agentAuth", () => delegateToRoute("GET", "/api/settings/agent-auth"))
     .exhaustive();
 }
 

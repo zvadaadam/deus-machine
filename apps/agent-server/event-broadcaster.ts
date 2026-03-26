@@ -1,8 +1,8 @@
 // agent-server/event-broadcaster.ts
 // Singleton facade that broadcasts JSON-RPC notifications to all connected
-// clients (backend, monitoring tools, etc.) via the WebSocket transport.
+// clients (backend, monitoring tools, etc.) via WebSocket.
 // Manages connection lifecycle (attach/detach tunnels) and exposes typed
-// methods for canonical agent events and legacy notification formats.
+// methods for canonical agent events.
 
 import type { RpcConnection } from "./rpc-connection";
 import { FRONTEND_NOTIFICATIONS, FRONTEND_RPC_METHODS } from "./protocol";

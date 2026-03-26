@@ -1,13 +1,4 @@
-import {
-  ArrowLeft,
-  Settings2,
-  Sparkles,
-  Puzzle,
-  Box,
-  FlaskConical,
-  Download,
-  Globe,
-} from "lucide-react";
+import { ArrowLeft, Settings2, Orbit, Box, FlaskConical, Globe } from "lucide-react";
 import { capabilities } from "@/platform";
 import type { LucideIcon } from "lucide-react";
 import {
@@ -31,12 +22,10 @@ interface NavItem {
 
 const NAV_ITEMS: NavItem[] = [
   { id: "general", label: "General", icon: Settings2 },
-  { id: "ai", label: "AI", icon: Sparkles },
-  { id: "extensions", label: "Extensions", icon: Puzzle },
+  { id: "ai", label: "AI Providers", icon: Orbit },
   { id: "environment", label: "Environment", icon: Box },
   { id: "experimental", label: "Experimental", icon: FlaskConical },
   { id: "access", label: "Remote Access", icon: Globe },
-  { id: "updates", label: "Updates", icon: Download, capability: "autoUpdate" },
 ];
 
 const visibleItems = NAV_ITEMS.filter((item) => !item.capability || capabilities[item.capability]);

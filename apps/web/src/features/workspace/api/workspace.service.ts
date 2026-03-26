@@ -111,8 +111,9 @@ export const WorkspaceService = {
       ...options,
     });
     if (!result.accepted) throw new Error(result.error || "Failed to create workspace");
-    // The command returns the workspace in the ack result
-    return result as unknown as Workspace;
+    // Command ack returns workspace ID as commandId — construct minimal
+    // workspace object for callers that need id + repository_id.
+    return { id: result.commandId, repository_id: repositoryId } as Workspace;
   },
 
   /**

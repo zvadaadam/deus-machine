@@ -1,11 +1,7 @@
 // agent-server/index.ts
 // Entry point for the Deus agent-server process.
 //
-// Supports two transport modes (selected via --listen flag):
-//   --listen ws://    → WebSocket server on 127.0.0.1 (default, dynamic port)
-//   --listen unix://  → Unix domain socket (legacy, for backward compat)
-//
-// Both transports use JSON-RPC 2.0 over text frames/lines.
+// WebSocket server on 127.0.0.1 (dynamic port) using JSON-RPC 2.0 text frames.
 
 import * as Sentry from "@sentry/node";
 
@@ -20,13 +16,9 @@ if (process.env.SENTRY_DSN) {
   });
 }
 
-import * as net from "net";
 import * as fs from "fs";
-import * as path from "path";
-import * as os from "os";
 import * as util from "util";
 import { exec } from "child_process";
-import { StringDecoder } from "string_decoder";
 import { createServer as createHttpServer } from "http";
 import { WebSocketServer, WebSocket } from "ws";
 
@@ -115,43 +107,16 @@ console.debug = (...args: any[]) => {
 };
 
 // ============================================================================
-// CLI flag parsing
-// ============================================================================
-
-type TransportMode = "ws" | "unix";
-
-function parseTransportMode(): TransportMode {
-  const listenIdx = process.argv.indexOf("--listen");
-  if (listenIdx === -1) return "ws"; // Default: WebSocket
-  const value = process.argv[listenIdx + 1] || "";
-  if (value.startsWith("unix://")) return "unix";
-  if (value.startsWith("ws://") || value === "") return "ws";
-  // Unknown scheme — default to ws
-  console.error(`[CLI] Unknown --listen scheme "${value}", defaulting to ws://`);
-  return "ws";
-}
-
-// ============================================================================
 // AgentServer
 // ============================================================================
 
 class AgentServer {
-  private transportMode: TransportMode;
   private initializedAgents = new Set<string>();
-
-  // Unix socket transport
-  private socketPath: string;
-  private unixServer: net.Server | null = null;
-
-  // WebSocket transport
   private httpServer: ReturnType<typeof createHttpServer> | null = null;
   private wss: WebSocketServer | null = null;
 
-  constructor(mode: TransportMode) {
-    this.transportMode = mode;
-    this.socketPath = path.join(os.tmpdir(), `deus-agent-server-${process.pid}.sock`);
-
-    console.log(`AgentServer: Initializing (transport=${mode})...`);
+  constructor() {
+    console.log("AgentServer: Initializing...");
 
     // Graceful shutdown handlers — drain in-flight turns before exiting
     const gracefulShutdown = async (signal: string) => {
@@ -164,10 +129,6 @@ class AgentServer {
       if (this.httpServer) {
         this.httpServer.close();
         console.log("[SHUTDOWN] HTTP server closed to new connections");
-      }
-      if (this.unixServer) {
-        this.unixServer.close();
-        console.log("[SHUTDOWN] Unix server closed to new connections");
       }
 
       // 3. Wait for in-flight turns to drain (default 30s timeout)
@@ -196,7 +157,6 @@ class AgentServer {
 
   /**
    * Wires up all JSON-RPC methods and notifications on a new connection.
-   * Transport-agnostic — works with both Unix socket and WebSocket tunnels.
    */
   private setupJsonRpc(rpcTunnel: RpcConnection): void {
     EventBroadcaster.attachTunnel(rpcTunnel);
@@ -382,51 +342,6 @@ class AgentServer {
     });
   }
 
-  // ==========================================================================
-  // Unix socket transport
-  // ==========================================================================
-
-  /**
-   * Handles a new TCP/Unix socket connection.
-   * Sets up line-based JSON-RPC message framing.
-   */
-  private handleUnixConnection(socket: net.Socket): void {
-    console.log("Client connected (unix)");
-    const rpcTunnel = new RpcConnection(socket);
-    this.setupJsonRpc(rpcTunnel);
-
-    let buffer = "";
-    const decoder = new StringDecoder("utf8");
-
-    socket.on("data", (data) => {
-      buffer += decoder.write(data);
-      console.debug("Received data with length", data.length);
-
-      const lines = buffer.split("\n");
-      buffer = lines.pop() || "";
-
-      for (const line of lines) {
-        if (line.trim()) {
-          rpcTunnel.handleLine(line);
-        }
-      }
-    });
-
-    socket.on("error", (error: any) => {
-      console.error("Socket error:", error);
-    });
-
-    socket.on("close", (hadError) => {
-      console.log(`Client disconnected (unix), hadError: ${hadError}`);
-      rpcTunnel.stop();
-      EventBroadcaster.detachTunnel(rpcTunnel);
-    });
-  }
-
-  // ==========================================================================
-  // WebSocket transport
-  // ==========================================================================
-
   /**
    * Handles a new WebSocket connection.
    * Each WS text frame is a complete JSON-RPC message (no line splitting needed).
@@ -497,18 +412,7 @@ class AgentServer {
   private async cleanup(): Promise<void> {
     await this.killRemainingChildProcesses();
 
-    // Clean up Unix socket
-    if (fs.existsSync(this.socketPath)) {
-      fs.unlinkSync(this.socketPath);
-      console.log("[CLEANUP] Removed socket file");
-    }
-    if (this.unixServer) {
-      this.unixServer.close();
-    }
-
-    // Clean up WebSocket server
     if (this.wss) {
-      // Close all connected clients
       for (const client of this.wss.clients) {
         client.close(1001, "Server shutting down");
       }
@@ -549,14 +453,10 @@ class AgentServer {
     // Mark agents as initialized for the /readyz endpoint only if at least one succeeded
     setAgentsInitialized(this.initializedAgents.size > 0);
 
-    if (this.transportMode === "ws") {
-      return this.startWebSocket();
-    } else {
-      return this.startUnixSocket();
-    }
+    return this.listen();
   }
 
-  private startWebSocket(): Promise<void> {
+  private listen(): Promise<void> {
     return new Promise((resolve, reject) => {
       // Create an HTTP server for health endpoints + WS upgrade.
       // Binding to 127.0.0.1 — agent-server only accepts local connections.
@@ -583,37 +483,13 @@ class AgentServer {
         console.log(`Agent-server listening on ws://127.0.0.1:${port}`);
         console.log(`Agent-server PID: ${process.pid}`);
 
-        // Machine-readable output for the Electron main process.
-        // LISTEN_URL is the new canonical output; SOCKET_PATH kept for transition.
+        // Machine-readable output for the Electron main process / dev.sh
         originalLog(`LISTEN_URL=ws://127.0.0.1:${port}`);
         resolve();
       });
 
       this.httpServer.on("error", (error: Error) => {
         console.error("HTTP server error:", error);
-        reject(error);
-      });
-    });
-  }
-
-  private startUnixSocket(): Promise<void> {
-    return new Promise((resolve, reject) => {
-      this.unixServer = net.createServer((socket) => {
-        console.log("Server: New connection accepted");
-        this.handleUnixConnection(socket);
-      });
-
-      this.unixServer.listen(this.socketPath, () => {
-        console.log(`Agent-server listening on ${this.socketPath}`);
-        console.log(`Agent-server PID: ${process.pid}`);
-
-        // Print the socket path to stdout so the Deus app can connect
-        originalLog(`SOCKET_PATH=${this.socketPath}`);
-        resolve();
-      });
-
-      this.unixServer.on("error", (error: any) => {
-        console.error("Server error:", error);
         reject(error);
       });
     });
@@ -645,8 +521,7 @@ process.on("unhandledRejection", (reason, _promise) => {
 // Bootstrap
 // ============================================================================
 
-const mode = parseTransportMode();
-const server = new AgentServer(mode);
+const server = new AgentServer();
 server.start().catch((error) => {
   console.error("Startup failed:", error);
   process.exit(1);
