@@ -1,0 +1,22 @@
+{
+  "cli_version": "0.5.0",
+  "checkpoint_id": "ca0151a70016",
+  "session_id": "3ca43b40-9533-4a3b-90d8-16c437bc34c4",
+  "strategy": "manual-commit",
+  "created_at": "2026-03-26T23:26:30.005783Z",
+  "branch": "zvadaadam/drop-legacy-compat",
+  "checkpoints_count": 2,
+  "files_touched": [],
+  "agent": "Claude Code",
+  "turn_id": "3c109a19be1f",
+  "token_usage": {
+    "input_tokens": 290,
+    "cache_creation_tokens": 688872,
+    "cache_read_tokens": 38486937,
+    "output_tokens": 81526,
+    "api_call_count": 252
+  },
+  "session_metrics": {
+    "turn_count": 17
+  }
+}
