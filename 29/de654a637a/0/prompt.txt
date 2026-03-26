@@ -501,3 +501,15 @@ This comment is the start of thread PRRT_kwDOQEbULc53KT91.
 </system-instruction>
 
 Fix the failing CI actions. I've attached the failure logs.
+
+---
+
+<system_instruction>
+The user has attached these files. Read them before proceeding.
+- /Users/zvada/Developer/agent/box-ide/.conductor/macau-v2/.context/attachments/Lint__Format___Typecheck_68806330811.log (59.2 KB)
+- /Users/zvada/Developer/agent/box-ide/.conductor/macau-v2/.context/attachments/Fix errors instructions-v1.md (430 B)
+</system_instruction>
+
+
+
+Fix the failing CI actions. I've attached the failure logs.
