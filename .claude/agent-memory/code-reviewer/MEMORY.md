@@ -39,13 +39,29 @@
   path, tagName, reactComponent) into XML attributes with NO escaping. A `"` breaks parsing.
   Fix: HTML-escape values before embedding.
 
+## Monorepo Source Path Map (CRITICAL — always verify before writing path globs)
+
+- `shared/schema.ts` — DB schema, indexes, triggers (single source of truth, NOT in backend/lib/)
+- `apps/backend/src/lib/database.ts` — DB connection + initialization
+- `apps/backend/src/routes/**`, `apps/backend/src/services/**`, `apps/backend/src/middleware/**`
+- `apps/agent-server/index.ts`, `apps/agent-server/rpc-connection.ts`, `apps/agent-server/protocol.ts`
+- `apps/agent-server/agents/**`, `apps/agent-server/event-broadcaster.ts`
+- `apps/desktop/main/index.ts` — Electron app init + lifecycle
+- `apps/desktop/main/backend-process.ts` — backend process management
+- `apps/desktop/main/native-handlers.ts` — Electron IPC handlers (replaces Tauri commands)
+- `apps/desktop/main/browser-views.ts` — BrowserView management
+- `apps/web/src/platform/**` — platform abstraction (IPC, WebSocket)
+- `apps/web/src/features/*/api/**`, `apps/web/src/features/*/ui/**`, `apps/web/src/features/*/store/**`
+- `apps/web/src/shared/**`, `apps/web/src/global.css`, `apps/web/src/app/**`
+- `apps/web/src/components/ui/**` — Shadcn base components
+- `src-tauri/` DOES NOT EXIST — the project migrated from Tauri (Rust) to Electron. No Cargo.toml, no .rs files.
+- `agent-server/db/` DOES NOT EXIST — agent-server is stateless (no DB). Schema lives in `shared/schema.ts`.
+
 ## Distribution / CI Patterns
 
 - `sed -i ''` is macOS/BSD syntax — fails on ubuntu-latest (GNU sed needs `sed -i "..."`).
-- Tauri updater `pubkey` empty string `""` disables signature verification entirely (security regression).
-- `minimumSystemVersion` for arm64-only builds should be `"11.0"` (Apple Silicon ships with 11.0).
-- The app spawns system `node` binary — hardened runtime notarization may need
-  `com.apple.security.cs.disable-library-validation` in Entitlements.plist.
+- The app is Electron (not Tauri). No Cargo.toml, no `cargo test`, no entitlements.plist at `src-tauri/`.
+- The app spawns system `node` binary for backend/agent-server child processes.
 
 ## Sentry / Observability Patterns (Confirmed)
 
@@ -96,12 +112,9 @@
   Fix: use the same three-way pattern in all individual setters.
 - Store is now at version 10 (bumped during Files-as-top-level-tab refactor). `migrate` wipes all layouts.
 
-## Simulator / Rust Command Patterns (Confirmed)
+## Simulator / Electron IPC Command Patterns (Confirmed)
 
-- `sim_has_xcode_project` is a `fn` (sync) Tauri command — safe ONLY because Pass 1 (filesystem
-  scan) dominates. Pattern: split fast probe (`has_xcode_project_fast`) from full build.
-- macOS-only Tauri commands: gated via `#[cfg(target_os = "macos")]` in both `commands/mod.rs`
-  and `main.rs` invoke_handler lists.
+- Simulator IPC handlers live in `apps/desktop/main/native-handlers.ts` (Electron, not Tauri/Rust).
 - Three-state probe pattern: `null | true | false`. `null` = loading, suppresses button flicker.
 
 ## Simulator State Machine Patterns (Confirmed)
