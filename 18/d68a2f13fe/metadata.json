@@ -1,0 +1,25 @@
+{
+  "cli_version": "0.5.0",
+  "checkpoint_id": "18d68a2f13fe",
+  "strategy": "manual-commit",
+  "branch": "zvadaadam/drop-legacy-compat",
+  "checkpoints_count": 2,
+  "files_touched": [
+    "apps/web/src/features/settings/ui/sections/GeneralSection.tsx"
+  ],
+  "sessions": [
+    {
+      "metadata": "/18/d68a2f13fe/0/metadata.json",
+      "transcript": "/18/d68a2f13fe/0/full.jsonl",
+      "content_hash": "/18/d68a2f13fe/0/content_hash.txt",
+      "prompt": "/18/d68a2f13fe/0/prompt.txt"
+    }
+  ],
+  "token_usage": {
+    "input_tokens": 315,
+    "cache_creation_tokens": 704398,
+    "cache_read_tokens": 42678989,
+    "output_tokens": 86747,
+    "api_call_count": 272
+  }
+}
