@@ -529,3 +529,313 @@ Comment metadata:
 This comment was left on the modified branch.
 
 </system-instruction>
+
+---
+
+<system-instruction>
+The user has added 2 comments to the diff for this workspace. Please review and address these comments as part of your response. When addressing comments on the "original" side or on specific commits, read the file from that version (not the current version). Below are the comments, including metadata about what git state they were left on:
+
+Comment #1:
+
+File: apps/web/src/features/settings/ui/sections/GeneralSection.tsx
+Line: 192
+User comment: "_⚠️ Potential issue_ | _🟡 Minor_
+
+**Button state misses active `"checking"` stage from update context.**
+
+The button can remain enabled and show “Check now” while `updateCtx.state.stage === "checking"` (e.g., background check), which allows overlapping checks and inconsistent status UX.
+
+<details>
+<summary>🛠️ Proposed fix</summary>
+
+```diff
++  const isCheckingUpdates = manualChecking || updateCtx?.state.stage === "checking";
+...
+             <Button
+               variant="outline"
+               size="sm"
+               onClick={handleCheckForUpdates}
+-              disabled={manualChecking || updateCtx?.state.stage === "downloading"}
++              disabled={isCheckingUpdates || updateCtx?.state.stage === "downloading"}
+             >
+-              {manualChecking ? (
++              {isCheckingUpdates ? (
+                 <Loader2 className="mr-1.5 size-3.5 animate-spin" />
+               ) : (
+                 <RefreshCw className="mr-1.5 size-3.5" />
+               )}
+-              {manualChecking ? "Checking..." : "Check now"}
++              {isCheckingUpdates ? "Checking..." : "Check now"}
+             </Button>
+```
+</details>
+
+<details>
+<summary>🤖 Prompt for AI Agents</summary>
+
+```
+Verify each finding against the current code and only fix it if needed.
+
+In `@apps/web/src/features/settings/ui/sections/GeneralSection.tsx` around lines
+180 - 192, The Button in GeneralSection should also be disabled when an update
+check is already in progress via the update context: extend the disabled
+condition in the Button (which currently checks manualChecking and
+updateCtx?.state.stage === "downloading") to also include updateCtx?.state.stage
+=== "checking" so handleCheckForUpdates cannot start overlapping checks; also
+ensure the button label/loader logic (which uses manualChecking and shows
+"Checking..." vs "Check now") accounts for the context stage
+(updateCtx?.state.stage === "checking") so the UI consistently shows a checking
+state when a background or manual check is active.
+```
+
+</details>
+
+<!-- fingerprinting:phantom:poseidon:hawk -->
+
+<!-- This is an auto-generated comment by CodeRabbit -->"
+
+Comment metadata:
+This comment was left on the modified branch.
+This comment was left on GitHub by @coderabbitai.
+This comment is the start of thread PRRT_kwDOQEbULc53KYbW. 
+
+
+Comment #2:
+
+File: apps/web/src/features/settings/ui/sections/GeneralSection.tsx
+Line: 223
+User comment: "_⚠️ Potential issue_ | _🟡 Minor_
+
+<details>
+<summary>🧩 Analysis chain</summary>
+
+🏁 Script executed:
+
+```shell
+# Find the file and check if it exists
+find . -type f -name "GeneralSection.tsx" | grep settings
+```
+
+Repository: zvadaadam/box-ide
+
+Length of output: 124
+
+---
+
+🏁 Script executed:
+
+```shell
+# Search for updateCtx type definition or where the update state is defined
+rg "updateCtx.*state.*stage" -A 5 -B 5
+```
+
+Repository: zvadaadam/box-ide
+
+Length of output: 4496
+
+---
+
+🏁 Script executed:
+
+```shell
+# Search for the update state type definition
+rg "stage.*ready.*downloading" -A 10 -B 10
+```
+
+Repository: zvadaadam/box-ide
+
+Length of output: 43
+
+---
+
+🏁 Script executed:
+
+```shell
+# Search for where updateCtx is defined
+rg "const updateCtx|useUpdateContext|updateCtx.*=" -A 3
+```
+
+Repository: zvadaadam/box-ide
+
+Length of output: 3055
+
+---
+
+🏁 Script executed:
+
+```shell
+# Search for where the update state type or interface is defined
+rg "stage.*ready\|ready.*stage" -B 10 -A 10 | head -60
+```
+
+Repository: zvadaadam/box-ide
+
+Length of output: 43
+
+---
+
+🏁 Script executed:
+
+```shell
+# Search for the type definition of the update state
+rg "type.*Update.*State|interface.*Update.*State" -A 15
+```
+
+Repository: zvadaadam/box-ide
+
+Length of output: 2461
+
+---
+
+🏁 Script executed:
+
+```shell
+# Search for UpdateStage type definition
+rg "type UpdateStage|enum UpdateStage|UpdateStage.*=" -A 10
+```
+
+Repository: zvadaadam/box-ide
+
+Length of output: 907
+
+---
+
+🏁 Script executed:
+
+```shell
+# Search in the useAutoUpdate hook file for stage assignments
+cat -n apps/web/src/features/updates/hooks/useAutoUpdate.ts | head -100
+```
+
+Repository: zvadaadam/box-ide
+
+Length of output: 3886
+
+---
+
+</details>
+
+**Use explicit stage coverage with `.exhaustive()` instead of `.otherwise()`.**
+
+`updateCtx.state.stage` is a discriminated union with stages: `"idle" | "checking" | "downloading" | "ready" | "error"`. Currently, only three stages ("ready", "downloading", "error") are explicitly handled, leaving "idle" and "checking" to fall through `.otherwise()`. Explicitly pattern-match all stages with `.exhaustive()` to catch missing cases at compile time when stages are added.
+
+<details>
+<summary>♻️ Proposed refactor</summary>
+
+```diff
+           {updateCtx &&
+             match(updateCtx.state.stage)
+               .with("ready", () => (
+                 <div className="bg-primary/5 border-primary/20 flex items-center justify-between rounded-lg border p-3">
+                   <div className="flex items-center gap-2">
+                     <Download className="text-primary size-4" />
+                     <span className="text-sm">
+                       Update <span className="font-semibold">v{updateCtx.state.version}</span> is
+                       ready
+                     </span>
+                   </div>
+                   <Button size="sm" onClick={() => void updateCtx.install()}>
+                     Restart to update
+                   </Button>
+                 </div>
+               ))
+               .with("downloading", () => (
+                 <div className="text-muted-foreground flex items-center gap-2 text-sm">
+                   <Loader2 className="size-3.5 animate-spin" />
+                   <span>Downloading update...</span>
+                 </div>
+               ))
+               .with("error", () => (
+                 <div className="text-destructive flex items-center gap-2 text-sm">
+                   <AlertCircle className="size-3.5" />
+                   <span>Update check failed: {updateCtx.state.error}</span>
+                 </div>
+               ))
++              .with("idle", () => null)
++              .with("checking", () => null)
+-              .otherwise(() => null)}
++              .exhaustive()}
+```
+</details>
+
+<!-- suggestion_start -->
+
+<details>
+<summary>📝 Committable suggestion</summary>
+
+> ‼️ **IMPORTANT**
+> Carefully review the code before committing. Ensure that it accurately replaces the highlighted code, contains no missing lines, and has no issues with indentation. Thoroughly test & benchmark the code to ensure it meets the requirements.
+
+```suggestion
+          {updateCtx &&
+            match(updateCtx.state.stage)
+              .with("ready", () => (
+                <div className="bg-primary/5 border-primary/20 flex items-center justify-between rounded-lg border p-3">
+                  <div className="flex items-center gap-2">
+                    <Download className="text-primary size-4" />
+                    <span className="text-sm">
+                      Update <span className="font-semibold">v{updateCtx.state.version}</span> is
+                      ready
+                    </span>
+                  </div>
+                  <Button size="sm" onClick={() => void updateCtx.install()}>
+                    Restart to update
+                  </Button>
+                </div>
+              ))
+              .with("downloading", () => (
+                <div className="text-muted-foreground flex items-center gap-2 text-sm">
+                  <Loader2 className="size-3.5 animate-spin" />
+                  <span>Downloading update...</span>
+                </div>
+              ))
+              .with("error", () => (
+                <div className="text-destructive flex items-center gap-2 text-sm">
+                  <AlertCircle className="size-3.5" />
+                  <span>Update check failed: {updateCtx.state.error}</span>
+                </div>
+              ))
+              .with("idle", () => null)
+              .with("checking", () => null)
+              .exhaustive()}
+```
+
+</details>
+
+<!-- suggestion_end -->
+
+<details>
+<summary>🤖 Prompt for AI Agents</summary>
+
+```
+Verify each finding against the current code and only fix it if needed.
+
+In `@apps/web/src/features/settings/ui/sections/GeneralSection.tsx` around lines
+195 - 223, The pattern-match on updateCtx.state.stage uses .otherwise() which
+hides unhandled stages; replace the final .otherwise(() => null) with explicit
+handlers for the remaining discriminants (handle "idle" and "checking" via
+additional .with("idle", () => ...) and .with("checking", () => ...)) and then
+call .exhaustive() so the compiler enforces coverage; keep the UI intent for
+those cases (e.g., render null for "idle" and a small status/spinner for
+"checking") while leaving the existing handlers for "ready", "downloading", and
+"error" intact, referencing updateCtx and the existing match(...).with(...)
+chain.
+```
+
+</details>
+
+<!-- fingerprinting:phantom:poseidon:hawk -->
+
+<!-- This is an auto-generated comment by CodeRabbit -->"
+
+Comment metadata:
+This comment was left on the modified branch.
+This comment was left on GitHub by @coderabbitai.
+This comment is the start of thread PRRT_kwDOQEbULc53KYbZ. 
+
+</system-instruction>
+
+I run AI code review, is it actionable? Wdyt? Explore in depth each problem.
+We want a clean, maintainable codebase, with proper best practices for the tech stack we use.
+Run subagents to verify, and if it should be fixed, try to merge some stuff together so it can be fixed together within one subagent. 
+If you can test something do it.
