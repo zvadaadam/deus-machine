@@ -24,8 +24,8 @@ trap 'kill $(jobs -p) 2>/dev/null; rm -f /tmp/backend_port.txt /tmp/agent-server
 # postinstall (electron-builder install-app-deps) compiles native modules
 # (better-sqlite3, node-pty) against Electron's Node ABI, so we must run
 # the backend with the same runtime — not the system Node.
-ELECTRON_BIN=$(node -e "console.log(require('electron'))")
-if [ -x "$ELECTRON_BIN" ]; then
+ELECTRON_BIN="$(node -e "try { console.log(require('electron')) } catch { process.exit(0) }" 2>/dev/null || true)"
+if [ -n "$ELECTRON_BIN" ] && [ -x "$ELECTRON_BIN" ]; then
     export ELECTRON_RUN_AS_NODE=1
     NODE_CMD="$ELECTRON_BIN"
     echo -e "${GREEN}✓ Using Electron's Node runtime for ABI compatibility${NC}"
