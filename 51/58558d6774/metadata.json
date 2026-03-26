@@ -3,7 +3,7 @@
   "checkpoint_id": "5158558d6774",
   "strategy": "manual-commit",
   "branch": "zvadaadam/explore-onboarding-ui",
-  "checkpoints_count": 3,
+  "checkpoints_count": 4,
   "files_touched": [
     "apps/desktop/main/native-handlers.ts",
     "apps/web/src/features/onboarding/ui/steps/WelcomeStep.tsx"
@@ -14,13 +14,19 @@
       "transcript": "/51/58558d6774/0/full.jsonl",
       "content_hash": "/51/58558d6774/0/content_hash.txt",
       "prompt": "/51/58558d6774/0/prompt.txt"
+    },
+    {
+      "metadata": "/51/58558d6774/1/metadata.json",
+      "transcript": "/51/58558d6774/1/full.jsonl",
+      "content_hash": "/51/58558d6774/1/content_hash.txt",
+      "prompt": "/51/58558d6774/1/prompt.txt"
     }
   ],
   "token_usage": {
-    "input_tokens": 3603,
-    "cache_creation_tokens": 427699,
-    "cache_read_tokens": 25533011,
-    "output_tokens": 112458,
-    "api_call_count": 277
+    "input_tokens": 3669,
+    "cache_creation_tokens": 640181,
+    "cache_read_tokens": 28649495,
+    "output_tokens": 157852,
+    "api_call_count": 322
   }
 }
