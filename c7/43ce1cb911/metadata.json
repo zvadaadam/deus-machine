@@ -3,7 +3,7 @@
   "checkpoint_id": "c743ce1cb911",
   "strategy": "manual-commit",
   "branch": "zvadaadam/better-notifications",
-  "checkpoints_count": 5,
+  "checkpoints_count": 6,
   "files_touched": [
     "apps/web/src/features/session/hooks/useGlobalSessionNotifications.ts",
     "apps/web/src/platform/notifications/notificationService.ts"
@@ -14,13 +14,19 @@
       "transcript": "/c7/43ce1cb911/0/full.jsonl",
       "content_hash": "/c7/43ce1cb911/0/content_hash.txt",
       "prompt": "/c7/43ce1cb911/0/prompt.txt"
+    },
+    {
+      "metadata": "/c7/43ce1cb911/1/metadata.json",
+      "transcript": "/c7/43ce1cb911/1/full.jsonl",
+      "content_hash": "/c7/43ce1cb911/1/content_hash.txt",
+      "prompt": "/c7/43ce1cb911/1/prompt.txt"
     }
   ],
   "token_usage": {
-    "input_tokens": 51,
-    "cache_creation_tokens": 109394,
-    "cache_read_tokens": 1987787,
-    "output_tokens": 15141,
-    "api_call_count": 40
+    "input_tokens": 60,
+    "cache_creation_tokens": 151292,
+    "cache_read_tokens": 2241330,
+    "output_tokens": 19783,
+    "api_call_count": 47
   }
 }
