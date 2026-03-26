@@ -32,7 +32,7 @@ Before writing any code, know where it belongs:
 
 | Layer            | Framework  | Command                                                 | Test Location                   |
 | ---------------- | ---------- | ------------------------------------------------------- | ------------------------------- |
-| Backend          | vitest     | `bun run test:backend`                                  | `backend/src/test/`             |
+| Backend          | vitest     | `bun run test:backend`                                  | `apps/backend/test/unit/`       |
 | Agent-server     | vitest     | `bun run test:agent-server:unit`                        | `agent-server/test/`            |
 | Agent-server E2E | vitest     | `bun run test:agent-server:e2e`                         | `agent-server/test/e2e.test.ts` |
 | Rust             | cargo test | `cargo test --manifest-path src-tauri/Cargo.toml --lib` | `src-tauri/src/` (inline)       |
