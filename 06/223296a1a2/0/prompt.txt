@@ -261,3 +261,14 @@ Would it be possible and when you click get started, there would be some animati
 
 Okay, I feel this is too fast and the text, the use machine doesn't go to the center, like to the true center of the screen. So I need this to go to the center and maybe once it goes down, then it will change to the Devs machine, not the use machine and it shouldn't blink/glithch
  anymore. That should be like just change in text.
+
+---
+
+<system_instruction>
+The user has attached these files. Read them before proceeding.
+- /Users/zvada/Developer/agent/box-ide/.conductor/maputo/.context/attachments/PR instructions.md (956 B)
+</system_instruction>
+
+
+
+Create a PR
