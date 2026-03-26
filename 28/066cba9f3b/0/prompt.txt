@@ -82,3 +82,320 @@ Create a PR
 ---
 
 /Users/zvada/Developer/agent/box-ide/.conductor/montgomery-v4/.context/attachments/image-v1.png Also, what do you think how to handle the setup environment? Like if there is not much place, how about we drop the text and only show it once there with a tooltip on hover over the icon, what do you think?
+
+---
+
+<system-instruction>
+The user has added 4 comments to the diff for this workspace. Please review and address these comments as part of your response. When addressing comments on the "original" side or on specific commits, read the file from that version (not the current version). Below are the comments, including metadata about what git state they were left on:
+
+Comment #1:
+
+File: 
+Line: undefined
+User comment: "<!-- This is an auto-generated comment: summarize by coderabbit.ai -->
+<!-- walkthrough_start -->
+
+<details>
+<summary>📝 Walkthrough</summary>
+
+## Walkthrough
+
+The changes refactor the workspace task UI by replacing the old `TaskStrip` and `TaskButton` components with a new `HeaderRunButton` component that provides a split-button interface for running tasks. A new `useLastRun` hook tracks the last-executed task, while `SettingsSidebar` gains logic to ensure visibility and `WorkspaceHeader` integrates the new button component.
+
+## Changes
+
+|Cohort / File(s)|Summary|
+|---|---|
+|**Settings Sidebar Enhancement** <br> `apps/web/src/features/settings/ui/SettingsSidebar.tsx`|Added `useEffect` hook with `useSidebar()` to automatically open the sidebar if closed, ensuring settings visibility.|
+|**Task UI Refactor** <br> `apps/web/src/features/workspace/ui/TaskButton.tsx`, `apps/web/src/features/workspace/ui/TaskStrip.tsx`|Deleted `TaskButton` (54 lines) and `TaskStrip` (129 lines) components that previously rendered individual task buttons and a collapsible task icon strip in the workspace header.|
+|**Header Run Button** <br> `apps/web/src/features/workspace/ui/HeaderRunButton.tsx`|New component (243 lines) implementing a workspace header split button with quick-run and dropdown task selection, environment setup option, and integration with `useLastRun` to track frequently-run tasks.|
+|**Workspace Header Integration** <br> `apps/web/src/features/workspace/ui/WorkspaceHeader.tsx`|Replaced inline `TaskStrip` rendering with new `HeaderRunButton`, adjusted layout spacing (`gap-4`, `gap-2`), reduced title/subtitle max-widths from 240–280px to 200px, and added overflow constraints.|
+|**Last Run Tracking Hook** <br> `apps/web/src/shared/hooks/useLastRun.ts`|New hook (33 lines) providing `getLastRunName()`, `setLastRunName()`, and `useLastRun()` to persist and retrieve the last-executed task name via `localStorage`.|
+
+## Estimated code review effort
+
+🎯 3 (Moderate) | ⏱️ ~20 minutes
+
+## Poem
+
+> 🐰 A split button hops where a strip used to be,  
+> With task memory springs and settings set free,  
+> Old buttons now gone, the UI runs sleek,  
+> Last runs remembered—what comfort we seek! ✨
+
+</details>
+
+<!-- walkthrough_end -->
+
+
+<!-- tips_start -->
+
+---
+
+<sub>Comment `@coderabbitai help` to get the list of available commands and usage tips.</sub>
+
+<!-- tips_end -->
+
+<!-- internal state start -->
+
+
+<!-- REDACTED/REDACTED/REDACTED/REDACTED/REDACTED/REDACTED/REDACTED/REDACTED/REDACTED/g0qBgAEJ+2fq/D+X8f7bj/REDACTED/REDACTED/REDACTED/REDACTED/ljLZWrnlYqm10n2BU6tLz/nEhBdQ+/REDACTED/bOUDy5naLsYGeW/dZbz/REDACTED/REDACTED/REDACTED/REDACTED/REDACTED/REDACTED/85kAZlo/REDACTED/REDACTED/REDACTED/YK2VCoO5KfaTpnhEh4UGKFAgAmATIC/REDACTED/REDACTED/REDACTED/z8lJyCl/REDACTED/mMaGhwEF0n7cRfgeA/REDACTED/REDACTED/REDACTED -->
+
+<!-- internal state end -->"
+
+Comment metadata:
+This comment was left on a file.
+This comment was left on GitHub by @coderabbitai.
+
+
+Comment #2:
+
+File: apps/web/src/features/settings/ui/SettingsSidebar.tsx
+Line: 55
+User comment: "_⚠️ Potential issue_ | _🟠 Major_
+
+**Restore previous sidebar state on unmount to avoid persistent preference override.**
+
+Line 54 forces the shared sidebar open, and that state is persisted via `setOpen` (cookie write in `apps/web/src/components/ui/sidebar.tsx`), so closing settings can leave the app sidebar permanently opened even if the user had collapsed it before entering settings.
+
+
+<details>
+<summary>Suggested fix</summary>
+
+```diff
+-import { useEffect } from "react";
++import { useEffect, useRef } from "react";
+...
+ export function SettingsSidebar() {
++  const wasSidebarOpenOnMount = useRef<boolean | null>(null);
+   const closeSettings = useUIStore((s) => s.closeSettings);
+   const activeSection = useUIStore((s) => s.activeSettingsSection);
+   const setActiveSection = useUIStore((s) => s.setActiveSettingsSection);
+
+   // Settings sidebar must always be visible — force open if the app sidebar was collapsed
+   const { open, setOpen } = useSidebar();
+   useEffect(() => {
+-    if (!open) setOpen(true);
++    if (wasSidebarOpenOnMount.current === null) {
++      wasSidebarOpenOnMount.current = open;
++      if (!open) setOpen(true);
++    }
+   }, [open, setOpen]);
++
++  useEffect(() => {
++    return () => {
++      if (wasSidebarOpenOnMount.current === false) {
++        setOpen(false);
++      }
++    };
++  }, [setOpen]);
+```
+</details>
+
+<!-- suggestion_start -->
+
+<details>
+<summary>📝 Committable suggestion</summary>
+
+> ‼️ **IMPORTANT**
+> Carefully review the code before committing. Ensure that it accurately replaces the highlighted code, contains no missing lines, and has no issues with indentation. Thoroughly test & benchmark the code to ensure it meets the requirements.
+
+```suggestion
+import { useEffect, useRef } from "react";
+// ... other imports ...
+
+export function SettingsSidebar() {
+  const wasSidebarOpenOnMount = useRef<boolean | null>(null);
+  const closeSettings = useUIStore((s) => s.closeSettings);
+  const activeSection = useUIStore((s) => s.activeSettingsSection);
+  const setActiveSection = useUIStore((s) => s.setActiveSettingsSection);
+
+  // Settings sidebar must always be visible — force open if the app sidebar was collapsed
+  const { open, setOpen } = useSidebar();
+  useEffect(() => {
+    if (wasSidebarOpenOnMount.current === null) {
+      wasSidebarOpenOnMount.current = open;
+      if (!open) setOpen(true);
+    }
+  }, [open, setOpen]);
+
+  useEffect(() => {
+    return () => {
+      if (wasSidebarOpenOnMount.current === false) {
+        setOpen(false);
+      }
+    };
+  }, [setOpen]);
+
+  // ... rest of component ...
+```
+
+</details>
+
+<!-- suggestion_end -->
+
+<details>
+<summary>🤖 Prompt for AI Agents</summary>
+
+```
+Verify each finding against the current code and only fix it if needed.
+
+In `@apps/web/src/features/settings/ui/SettingsSidebar.tsx` around lines 51 - 55,
+The SettingsSidebar hook currently forces the shared sidebar open via
+useSidebar() (const { open, setOpen } = useSidebar();) inside a useEffect which
+calls setOpen(true), causing the user's previous collapsed preference to be
+persisted; fix this by capturing the prior open state when the SettingsSidebar
+mounts (store the current open value in a local variable or ref) and then in the
+useEffect cleanup restore that prior value by calling setOpen(previousOpen) so
+the original user preference is reinstated on unmount; ensure the effect records
+the prior state only once on mount and includes setOpen in dependencies to
+satisfy hooks rules.
+```
+
+</details>
+
+<!-- fingerprinting:phantom:poseidon:hawk -->
+
+<!-- This is an auto-generated comment by CodeRabbit -->"
+
+Comment metadata:
+This comment was left on the modified branch.
+This comment was left on GitHub by @coderabbitai.
+This comment is the start of thread PRRT_kwDOQEbULc53J8n-. 
+
+
+Comment #3:
+
+File: apps/web/src/features/workspace/ui/HeaderRunButton.tsx
+Line: 55
+User comment: "_⚠️ Potential issue_ | _🟡 Minor_
+
+**Don't render an enabled no-op “Set up environment” button.**
+
+`onSetupEnvironment` is optional, and `WorkspaceHeader` only supplies it when chat sending is available. In the no-manifest state this still renders an enabled button, so some workspaces will show a dead control.
+
+
+<details>
+<summary>Suggested fix</summary>
+
+```diff
+   if (!hasManifest) {
++    if (!onSetupEnvironment) {
++      return <SettingsButton />;
++    }
++
+     return (
+       <button
+         type="button"
+         onClick={onSetupEnvironment}
+```
+</details>
+
+<details>
+<summary>🤖 Prompt for AI Agents</summary>
+
+```
+Verify each finding against the current code and only fix it if needed.
+
+In `@apps/web/src/features/workspace/ui/HeaderRunButton.tsx` around lines 44 - 55,
+When hasManifest is false, avoid rendering an enabled no-op button: in
+HeaderRunButton (where hasManifest and onSetupEnvironment are used) only attach
+the onClick handler and render the active "Set up environment" button when
+onSetupEnvironment is defined; otherwise render the same button in a disabled
+state (add disabled prop, aria-disabled="true", remove onClick, and adjust
+classes to show disabled styling) or return null if you prefer hiding it
+entirely—ensure you reference onSetupEnvironment and hasManifest so the control
+is never interactable when the handler is absent.
+```
+
+</details>
+
+<!-- fingerprinting:phantom:medusa:grasshopper -->
+
+<!-- This is an auto-generated comment by CodeRabbit -->"
+
+Comment metadata:
+This comment was left on the modified branch.
+This comment was left on GitHub by @coderabbitai.
+This comment is the start of thread PRRT_kwDOQEbULc53J8oJ. 
+
+
+Comment #4:
+
+File: apps/web/src/features/workspace/ui/HeaderRunButton.tsx
+Line: 64
+User comment: "_⚠️ Potential issue_ | _🟠 Major_
+
+**Use the full manifest task list here.**
+
+Filtering to `t.icon && t.icon !== "terminal"` changes the quick action from “first task in the manifest” to “first non-terminal icon task,” and it removes valid tasks from the dropdown entirely. A workspace whose tasks all use the default/terminal icon now falls through to `SettingsButton`, so the new header control can't run anything.
+
+
+<details>
+<summary>Suggested fix</summary>
+
+```diff
+-  const iconTasks = tasks.filter((t) => t.icon && t.icon !== "terminal");
+-
+-  if (iconTasks.length === 0) {
++  if (tasks.length === 0) {
+     return <SettingsButton />;
+   }
+ 
+-  return <TaskSplitButton tasks={iconTasks} disabled={disabled} onRunTask={onRunTask} />;
++  return <TaskSplitButton tasks={tasks} disabled={disabled} onRunTask={onRunTask} />;
+```
+</details>
+
+<!-- suggestion_start -->
+
+<details>
+<summary>📝 Committable suggestion</summary>
+
+> ‼️ **IMPORTANT**
+> Carefully review the code before committing. Ensure that it accurately replaces the highlighted code, contains no missing lines, and has no issues with indentation. Thoroughly test & benchmark the code to ensure it meets the requirements.
+
+```suggestion
+  if (tasks.length === 0) {
+    return <SettingsButton />;
+  }
+
+  return <TaskSplitButton tasks={tasks} disabled={disabled} onRunTask={onRunTask} />;
+```
+
+</details>
+
+<!-- suggestion_end -->
+
+<details>
+<summary>🤖 Prompt for AI Agents</summary>
+
+```
+Verify each finding against the current code and only fix it if needed.
+
+In `@apps/web/src/features/workspace/ui/HeaderRunButton.tsx` around lines 58 - 64,
+The current filtering of tasks to only those with icons and excluding terminal
+icons causes the quick action to skip the first task in the manifest and miss
+valid tasks. To fix this, remove the filter that excludes tasks without icons or
+with the "terminal" icon and instead use the entire tasks list in the logic that
+determines what button to render, so the first manifest task is always used for
+the quick action and all tasks appear in the dropdown.
+```
+
+</details>
+
+<!-- fingerprinting:phantom:medusa:grasshopper -->
+
+<!-- This is an auto-generated comment by CodeRabbit -->"
+
+Comment metadata:
+This comment was left on the modified branch.
+This comment was left on GitHub by @coderabbitai.
+This comment is the start of thread PRRT_kwDOQEbULc53J8oK. 
+
+</system-instruction>
+
+I run AI code review, is it actionable? Wdyt? Explore in depth each problem.
+We want a clean, maintainable codebase, with proper best practices for the tech stack we use.
+Run subagents to verify, and if it should be fixed, try to merge some stuff together so it can be fixed together within one subagent. 
+If you can test something do it.
