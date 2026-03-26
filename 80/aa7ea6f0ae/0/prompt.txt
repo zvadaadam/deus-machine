@@ -513,3 +513,19 @@ The user has attached these files. Read them before proceeding.
 
 
 Fix the failing CI actions. I've attached the failure logs.
+
+---
+
+<system-instruction>
+The user has added 1 comment to the diff for this workspace. Please review and address these comments as part of your response. When addressing comments on the "original" side or on specific commits, read the file from that version (not the current version). Below are the comments, including metadata about what git state they were left on:
+
+Comment #1:
+
+File: apps/desktop/main/backend-process.ts
+Line: 45
+User comment: "Oh, we don't want any one-time migration from legacy, like let's drop it completely."
+
+Comment metadata:
+This comment was left on the modified branch.
+
+</system-instruction>
