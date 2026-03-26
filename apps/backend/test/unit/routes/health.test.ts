@@ -24,10 +24,10 @@ describe("GET /health", () => {
     expect(body.database).toBe("connected");
   });
 
-  it("does not include sidecar status (reported via WebSocket)", async () => {
+  it("does not include agent-server status (reported via WebSocket)", async () => {
     const res = await app.request("/health");
     const body = await res.json();
-    expect(body.sidecar).toBeUndefined();
+    expect(body["agent-server"]).toBeUndefined();
     expect(body.socket).toBeUndefined();
   });
 

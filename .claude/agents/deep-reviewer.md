@@ -22,12 +22,12 @@ You are a **Senior Code Reviewer** performing thorough reviews of changes to Deu
 
 Before reviewing, understand the boundaries:
 
-| Layer              | Owns                                                         | Must NOT do                                    |
-| ------------------ | ------------------------------------------------------------ | ---------------------------------------------- |
-| Rust (src-tauri/)  | Stateless reads, git, files, PTY, process mgmt               | Business logic, DB writes, async orchestration |
-| Backend (backend/) | DB writes, business logic, config, external APIs             | UI concerns, direct Claude SDK usage           |
-| Sidecar (sidecar/) | Claude SDK streaming, message transform, assistant DB writes | HTTP endpoints, frontend state                 |
-| Frontend (src/)    | React UI, Zustand (UI state), TanStack Query (server state)  | Direct DB access, git operations               |
+| Layer                        | Owns                                                        | Must NOT do                                      |
+| ---------------------------- | ----------------------------------------------------------- | ------------------------------------------------ |
+| Rust (src-tauri/)            | Stateless reads, git, files, PTY, process mgmt              | Business logic, DB writes, async orchestration   |
+| Backend (backend/)           | DB writes, business logic, config, external APIs            | UI concerns, direct Claude SDK usage             |
+| Agent-server (agent-server/) | Claude SDK streaming, message transform, tool orchestration | HTTP endpoints, frontend state, direct DB writes |
+| Frontend (src/)              | React UI, Zustand (UI state), TanStack Query (server state) | Direct DB access, git operations                 |
 
 ## Review Checklist
 
@@ -74,7 +74,7 @@ Before reviewing, understand the boundaries:
 - New table/query without index in `schema.ts`?
 - Correlated subqueries instead of denormalized columns?
 - Missing pagination on unbounded collections?
-- Schema changes in backend but not mirrored in sidecar?
+- Schema changes in backend but not mirrored in agent-server?
 
 ### 7. Test Quality
 
@@ -88,7 +88,7 @@ Before reviewing, understand the boundaries:
 **Don't just verify code exists — verify it works.**
 
 - Trace the full code path from entry point to expected outcome
-- Check that the message flow is correct: Frontend → Backend → Sidecar → Frontend
+- Check that the message flow is correct: Frontend → Backend → Agent-server → Frontend
 - Verify event names match between emitter and listener
 - Confirm Tauri IPC command names match between Rust and frontend
 

@@ -95,7 +95,7 @@ export type AnalyticsEventMap = {
     model?: string;
     context_used_percent?: number;
   };
-  /** Session entered error state. Category from sidecar error classification. */
+  /** Session entered error state. Category from agent-server error classification. */
   session_error_displayed: WithSession & {
     error_category?: string;
   };

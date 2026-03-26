@@ -44,10 +44,10 @@ export async function spawnBackend(): Promise<{ port: number; authToken: string 
   const electronDbPath = join(app.getPath("userData"), "deus.db");
   const dbPath = existsSync(legacyDbPath) ? legacyDbPath : electronDbPath;
 
-  // Sidecar bundle path
-  const sidecarPath = app.isPackaged
+  // Agent-server bundle path
+  const agentServerPath = app.isPackaged
     ? join(process.resourcesPath, "bin", "index.bundled.cjs")
-    : join(projectRoot, "apps/sidecar/dist/index.bundled.cjs");
+    : join(projectRoot, "apps/agent-server/dist/index.bundled.cjs");
 
   // Notebook server bundle path
   const notebookPath = app.isPackaged
@@ -61,7 +61,7 @@ export async function spawnBackend(): Promise<{ port: number; authToken: string 
         ...process.env,
         ELECTRON_RUN_AS_NODE: "1",
         DATABASE_PATH: dbPath,
-        SIDECAR_BUNDLE_PATH: sidecarPath,
+        AGENT_SERVER_BUNDLE_PATH: agentServerPath,
         NOTEBOOK_SERVER_BUNDLE_PATH: notebookPath,
         AUTH_TOKEN: authToken,
         PORT: "0", // Dynamic port allocation

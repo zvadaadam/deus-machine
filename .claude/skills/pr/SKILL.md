@@ -34,7 +34,7 @@ Diff stats:
    - Understand the full scope of changes
 
 3. **Classify risk tier**:
-   - **Tier 1 (Critical)**: schema.ts, database.ts, sidecar core, Rust main/lib
+   - **Tier 1 (Critical)**: schema.ts, database.ts, agent-server core, Rust main/lib
    - **Tier 2 (High)**: routes, services, agents, git.rs, platform layer
    - **Tier 3 (Medium)**: UI features, stores, global.css
    - **Tier 4 (Low)**: docs, config, tests, Shadcn components
@@ -59,7 +59,7 @@ Changed areas: [list]
 ## Test plan
 - [ ] `bun run typecheck`
 - [ ] `bun run test:backend` (if backend changed)
-- [ ] `bun run test:sidecar` (if sidecar changed)
+- [ ] `bun run test:agent-server` (if agent-server changed)
 - [ ] `cargo test` (if Rust changed)
 - [ ] Visual verification (if UI changed)
 

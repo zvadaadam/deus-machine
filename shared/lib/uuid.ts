@@ -4,7 +4,7 @@
  * Returns lowercase 8-4-4-4-12 string (same format as UUIDv4).
  *
  * Why not an npm package: ~15 lines, zero deps beyond Node.js built-in crypto.
- * Both backend and sidecar import from here.
+ * Both backend and agent-server import from here.
  */
 import { randomBytes } from "crypto";
 

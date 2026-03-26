@@ -259,7 +259,7 @@ export function SimulatorPanel({ workspaceId, workspacePath }: SimulatorPanelPro
     [updateSelectedUdid, workspaceId]
   );
 
-  // Listen for simulator RPC requests from the sidecar (agent tools)
+  // Listen for simulator RPC requests from the agent-server (agent tools)
   useSimulatorRpcHandler({
     workspaceId,
     onBootSimulator: handleBootSimulator,

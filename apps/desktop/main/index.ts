@@ -8,7 +8,7 @@
  * - Auto-updater setup
  * - Shell environment sync (macOS PATH fix)
  *
- * Business logic stays in the Node.js backend and sidecar — the main process
+ * Business logic stays in the Node.js backend and agent-server — the main process
  * is purely a desktop shell that spawns them and bridges native OS features.
  */
 
@@ -16,13 +16,15 @@ import { app, BrowserWindow, ipcMain, shell } from "electron";
 import { join } from "path";
 import { is } from "@electron-toolkit/utils";
 import { spawnBackend, stopBackend } from "./backend-process";
-// Sidecar is spawned by the backend process (via SIDECAR_BUNDLE_PATH env var)
+// Agent-server is spawned by the backend process (via AGENT_SERVER_BUNDLE_PATH env var)
 import { registerNativeHandlers } from "./native-handlers";
 import { registerBrowserViewHandlers, destroyAllBrowserViews } from "./browser-views";
 // PTY, file watching, and browser server are now handled by the backend
 // via WebSocket commands — no Electron IPC needed for these.
 import { setupAutoUpdater } from "./auto-updater";
 import { syncShellEnvironment } from "./shell-env";
+import { setupAppMenu } from "./app-menu";
+import { setupTray, destroyTray } from "./tray";
 
 // ---------------------------------------------------------------------------
 // Single Instance Lock
@@ -154,6 +156,9 @@ app.whenReady().then(async () => {
   };
   debugLog("[main] App ready, starting initialization...");
   debugLog("[main] __dirname: " + __dirname);
+
+  // Set up the native app menu (File, Edit, View, Window, Help)
+  setupAppMenu();
   // Fix PATH when launched from macOS Finder (login shell doesn't run)
   if (process.platform === "darwin") {
     try {
@@ -174,6 +179,9 @@ app.whenReady().then(async () => {
     // Expose backend connection info so IPC handlers can return it to renderer
     process.env.DEUS_BACKEND_PORT = String(backendPort);
     process.env.DEUS_AUTH_TOKEN = authToken;
+
+    // System tray icon with backend health status
+    setupTray(backendPort);
   } catch (err) {
     debugLog("[main] Backend spawn FAILED: " + (err instanceof Error ? err.message : String(err)));
     const { dialog } = await import("electron");
@@ -185,8 +193,8 @@ app.whenReady().then(async () => {
     return;
   }
 
-  // Sidecar is spawned by the backend process (via SIDECAR_BUNDLE_PATH env var)
-  // when SIDECAR_BUNDLE_PATH env var is present.
+  // Agent-server is spawned by the backend process (via AGENT_SERVER_BUNDLE_PATH env var)
+  // when AGENT_SERVER_BUNDLE_PATH env var is present.
 
   // Register IPC handlers before window creation so they're ready immediately
   registerNativeHandlers();
@@ -216,6 +224,23 @@ app.whenReady().then(async () => {
   await createWindow();
   debugLog("[main] Window created");
 
+  // Dev mode: swap dock icon so it's visually distinct from the production app
+  if (is.dev && process.platform === "darwin") {
+    try {
+      const { nativeImage } = await import("electron");
+      const devIconPath = join(__dirname, "../../resources/icons/icon-dev.png");
+      const devIcon = nativeImage.createFromPath(devIconPath);
+      if (!devIcon.isEmpty()) {
+        app.dock?.setIcon(devIcon);
+        debugLog("[main] Dev dock icon set (orange dot)");
+      }
+    } catch (err) {
+      debugLog(
+        "[main] Failed to set dev dock icon: " + (err instanceof Error ? err.message : String(err))
+      );
+    }
+  }
+
   // Auto-updater (delayed start — let the app boot first)
   if (!is.dev) {
     setTimeout(() => {
@@ -238,6 +263,7 @@ app.on("window-all-closed", () => {
 });
 
 app.on("before-quit", () => {
+  destroyTray();
   destroyAllBrowserViews();
   stopBackend();
 });

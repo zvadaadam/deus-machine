@@ -18,7 +18,7 @@ RED='\033[0;31m'
 NC='\033[0m'
 
 # Trap to kill background processes on exit
-trap 'kill $(jobs -p) 2>/dev/null; rm -f /tmp/backend_port.txt /tmp/sidecar.log' EXIT
+trap 'kill $(jobs -p) 2>/dev/null; rm -f /tmp/backend_port.txt /tmp/agent-server.log' EXIT
 
 # Kill any stale Vite process on port 1420 to prevent Electron from
 # connecting to an outdated dev server from a previous session.
@@ -29,31 +29,31 @@ if [ -n "$STALE_PID" ]; then
     sleep 0.3
 fi
 
-# Build sidecar + notebook if bundle doesn't exist
-if [ ! -f "apps/sidecar/dist/index.bundled.cjs" ]; then
-    echo -e "${BLUE}Building sidecar (first run)...${NC}"
-    bun run build:sidecar
-    echo -e "${GREEN}✓ Sidecar built${NC}"
+# Build agent-server + notebook if bundle doesn't exist
+if [ ! -f "apps/agent-server/dist/index.bundled.cjs" ]; then
+    echo -e "${BLUE}Building agent-server (first run)...${NC}"
+    bun run build:agent-server
+    echo -e "${GREEN}✓ Agent-server built${NC}"
     echo ""
 fi
 
-# Start agent-server (sidecar) first to get its LISTEN_URL
+# Start agent-server first to get its LISTEN_URL
 echo -e "${BLUE}Starting agent-server...${NC}"
-node apps/sidecar/dist/index.bundled.cjs > /tmp/sidecar.log 2>&1 &
-SIDECAR_PID=$!
+node apps/agent-server/dist/index.bundled.cjs > /tmp/agent-server.log 2>&1 &
+AGENT_SERVER_PID=$!
 
 # Wait and capture the listen URL
 AGENT_SERVER_URL=""
 for i in {1..20}; do
-    if grep -q 'LISTEN_URL=' /tmp/sidecar.log 2>/dev/null; then
-        AGENT_SERVER_URL=$(grep 'LISTEN_URL=' /tmp/sidecar.log | head -1 | sed 's/.*LISTEN_URL=//')
+    if grep -q 'LISTEN_URL=' /tmp/agent-server.log 2>/dev/null; then
+        AGENT_SERVER_URL=$(grep 'LISTEN_URL=' /tmp/agent-server.log | head -1 | sed 's/.*LISTEN_URL=//')
         break
     fi
     sleep 0.3
 done
 
 if [ -n "$AGENT_SERVER_URL" ]; then
-    echo -e "${GREEN}✓ Agent-server started at $AGENT_SERVER_URL (PID: $SIDECAR_PID)${NC}"
+    echo -e "${GREEN}✓ Agent-server started at $AGENT_SERVER_URL (PID: $AGENT_SERVER_PID)${NC}"
 else
     echo -e "${YELLOW}⚠ Agent-server URL not detected, backend will run without agent connection${NC}"
 fi

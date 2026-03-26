@@ -8,19 +8,17 @@ import { useUpdateContext } from "@/features/updates";
 
 export function UpdateSection() {
   const updateCtx = useUpdateContext();
-  const [currentVersion, setCurrentVersion] = useState<string>("");
+  const [currentVersion, setCurrentVersion] = useState<string>(__APP_VERSION__);
   const [manualChecking, setManualChecking] = useState(false);
   const [manualResult, setManualResult] = useState<"up-to-date" | null>(null);
 
-  // Fetch current app version from Electron
+  // Fetch current app version from Electron (overrides Vite-injected fallback)
   useEffect(() => {
     if (window.electronAPI) {
       window.electronAPI
         .getAppVersion()
         .then(setCurrentVersion)
-        .catch(() => setCurrentVersion("unknown"));
-    } else {
-      setCurrentVersion("unknown");
+        .catch(() => {});
     }
   }, []);
 
@@ -55,8 +53,13 @@ export function UpdateSection() {
       {/* Current version */}
       <div className="space-y-2">
         <Label className="text-sm">Version</Label>
-        <p className="text-foreground font-mono text-base">
+        <p className="text-foreground flex items-center gap-2 font-mono text-base">
           {currentVersion ? `v${currentVersion}` : "Loading..."}
+          {import.meta.env.DEV && (
+            <span className="bg-warning/15 text-warning rounded px-1.5 py-0.5 text-xs font-semibold">
+              DEV
+            </span>
+          )}
         </p>
       </div>
 

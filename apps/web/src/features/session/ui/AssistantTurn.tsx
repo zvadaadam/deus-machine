@@ -28,7 +28,7 @@
  * └─ [optional] "Response stopped" badge (when turn was cancelled)
  *
  * Cancellation design:
- * The sidecar writes an empty placeholder message with stop_reason: "cancelled"
+ * The agent-server writes an empty placeholder message with stop_reason: "cancelled"
  * on user cancel. That placeholder is a persistence mechanism — not content.
  * We skip over it so the last real message is the summary, and render
  * "Response stopped" as a badge below the actual content.
@@ -77,7 +77,7 @@ export const AssistantTurn = memo(function AssistantTurn({
   const isStreaming = isLatest && isWorking;
 
   // Detect if the last message is a cancellation sentinel.
-  // The sidecar writes an empty message with stop_reason: "cancelled" on user cancel.
+  // The agent-server writes an empty message with stop_reason: "cancelled" on user cancel.
   // That message is metadata, not content — skip over it to find the real summary.
   const isCancelled = useMemo(
     () => isCancelledMessage(messages[messages.length - 1].content),

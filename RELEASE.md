@@ -20,7 +20,7 @@ You (GitHub UI or CLI)
   ├─ Job 2: build-macos (macos-latest, arm64)
   │   ├─ Checks out the tagged commit
   │   ├─ Installs Bun + Node.js
-  │   ├─ Builds all (inject, sidecar, backend, electron-vite)
+  │   ├─ Builds all (inject, agent-server, backend, electron-vite)
   │   ├─ Runs electron-builder --mac
   │   │   ├─ Builds the Electron app
   │   │   ├─ Code-signs with Developer ID Application cert

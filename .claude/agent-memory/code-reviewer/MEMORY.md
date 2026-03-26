@@ -3,7 +3,7 @@
 ## Key Architecture Patterns (Confirmed)
 
 - `react-resizable-panels` uses percentage values for `collapsedSize`/`minSize` — pixel↔percent
-  conversion via `panelGroupContainerRef` (excludes sidecar strip from container width math)
+  conversion via `panelGroupContainerRef` (excludes agent-server strip from container width math)
 - `workspaceLayoutStore` uses `version: 9` migrations (v9 added terminal tab state) — increment version when adding persisted fields
 - `cn()` uses `twMerge` internally — arbitrary `animate-[...]` classes conflict-resolve correctly
   (last wins), so conditional breathing override pattern with `cn()` works as intended
@@ -39,19 +39,35 @@
   path, tagName, reactComponent) into XML attributes with NO escaping. A `"` breaks parsing.
   Fix: HTML-escape values before embedding.
 
+## Monorepo Source Path Map (CRITICAL — always verify before writing path globs)
+
+- `shared/schema.ts` — DB schema, indexes, triggers (single source of truth, NOT in backend/lib/)
+- `apps/backend/src/lib/database.ts` — DB connection + initialization
+- `apps/backend/src/routes/**`, `apps/backend/src/services/**`, `apps/backend/src/middleware/**`
+- `apps/agent-server/index.ts`, `apps/agent-server/rpc-connection.ts`, `apps/agent-server/protocol.ts`
+- `apps/agent-server/agents/**`, `apps/agent-server/event-broadcaster.ts`
+- `apps/desktop/main/index.ts` — Electron app init + lifecycle
+- `apps/desktop/main/backend-process.ts` — backend process management
+- `apps/desktop/main/native-handlers.ts` — Electron IPC handlers (replaces Tauri commands)
+- `apps/desktop/main/browser-views.ts` — BrowserView management
+- `apps/web/src/platform/**` — platform abstraction (IPC, WebSocket)
+- `apps/web/src/features/*/api/**`, `apps/web/src/features/*/ui/**`, `apps/web/src/features/*/store/**`
+- `apps/web/src/shared/**`, `apps/web/src/global.css`, `apps/web/src/app/**`
+- `apps/web/src/components/ui/**` — Shadcn base components
+- `src-tauri/` DOES NOT EXIST — the project migrated from Tauri (Rust) to Electron. No Cargo.toml, no .rs files.
+- `agent-server/db/` DOES NOT EXIST — agent-server is stateless (no DB). Schema lives in `shared/schema.ts`.
+
 ## Distribution / CI Patterns
 
 - `sed -i ''` is macOS/BSD syntax — fails on ubuntu-latest (GNU sed needs `sed -i "..."`).
-- Tauri updater `pubkey` empty string `""` disables signature verification entirely (security regression).
-- `minimumSystemVersion` for arm64-only builds should be `"11.0"` (Apple Silicon ships with 11.0).
-- The app spawns system `node` binary — hardened runtime notarization may need
-  `com.apple.security.cs.disable-library-validation` in Entitlements.plist.
+- The app is Electron (not Tauri). No Cargo.toml, no `cargo test`, no entitlements.plist at `src-tauri/`.
+- The app spawns system `node` binary for backend/agent-server child processes.
 
 ## Sentry / Observability Patterns (Confirmed)
 
 - **DSN propagation**: Rust `option_env!("SENTRY_DSN_RUST")` bakes frontend DSN at compile time.
   `option_env!("SENTRY_DSN_NODE")` is baked into the binary and forwarded as `SENTRY_DSN` env var
-  to child processes (backend + sidecar). Frontend uses `import.meta.env.VITE_SENTRY_DSN`.
+  to child processes (backend + agent-server). Frontend uses `import.meta.env.VITE_SENTRY_DSN`.
 - **`option_env!` with empty string**: When `SENTRY_DSN_RUST` is unset, `option_env!` returns `None`,
   and `.unwrap_or("")` passes `""` to `sentry::init`. The sentry-rust crate treats empty DSN as
   disabled — no panic, no-op client. This pattern is correct and safe.
@@ -65,7 +81,7 @@
   it earlier would flush pending events prematurely. The single-underscore prefix suppresses the
   unused-variable warning without dropping it.
 - **`Sentry.close(2000)` before `process.exit`**: The 2-second flush window is appropriate. Both
-  backend and sidecar implement this correctly in their `uncaughtException` handlers.
+  backend and agent-server implement this correctly in their `uncaughtException` handlers.
 - **Hardcoded Sentry org/project in vite.config.ts**: `org: "deus-40"` and
   `project: "deus-desktop-frontend"` are hardcoded. These are metadata identifiers (not secrets).
   Leaking them poses minimal risk but couples the open-source repo to internal Sentry project names.
@@ -77,7 +93,7 @@
   that boundary go unreported to Sentry. Only the inner boundary (line 187) calls `reportError`.
 - **`@sentry/node` in production dependencies**: `@sentry/node` and `@sentry/vite-plugin` are in
   `dependencies` (not `devDependencies`). `@sentry/vite-plugin` is build-only and should be in
-  `devDependencies`. `@sentry/node` is needed at runtime by backend/sidecar, correct in `dependencies`.
+  `devDependencies`. `@sentry/node` is needed at runtime by backend/agent-server, correct in `dependencies`.
 
 ## Experimental Feature Toggle Pattern (Confirmed)
 
@@ -96,12 +112,9 @@
   Fix: use the same three-way pattern in all individual setters.
 - Store is now at version 10 (bumped during Files-as-top-level-tab refactor). `migrate` wipes all layouts.
 
-## Simulator / Rust Command Patterns (Confirmed)
+## Simulator / Electron IPC Command Patterns (Confirmed)
 
-- `sim_has_xcode_project` is a `fn` (sync) Tauri command — safe ONLY because Pass 1 (filesystem
-  scan) dominates. Pattern: split fast probe (`has_xcode_project_fast`) from full build.
-- macOS-only Tauri commands: gated via `#[cfg(target_os = "macos")]` in both `commands/mod.rs`
-  and `main.rs` invoke_handler lists.
+- Simulator IPC handlers live in `apps/desktop/main/native-handlers.ts` (Electron, not Tauri/Rust).
 - Three-state probe pattern: `null | true | false`. `null` = loading, suppresses button flicker.
 
 ## Simulator State Machine Patterns (Confirmed)
@@ -337,5 +350,5 @@
 
 ## See Also
 
-- `patterns-deep.md` — overflow notes: error classification, chat virtualization, PRStatus, border radius, sidecar resume
+- `patterns-deep.md` — overflow notes: error classification, chat virtualization, PRStatus, border radius, agent-server resume
 - `message-envelope-pattern.md` — session message envelope/flat array patterns

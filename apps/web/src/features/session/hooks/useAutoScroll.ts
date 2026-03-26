@@ -258,7 +258,7 @@ export function useAutoScroll({
 
   // ── Human send → resume ────────────────────────────────────────────
   // Triggered by SessionPanel incrementing userSendCount when the human
-  // actually clicks Send. NOT triggered by sidecar tool_results (which
+  // actually clicks Send. NOT triggered by agent-server tool_results (which
   // also have role="user" in the Claude SDK format).
   const prevSendCountRef = useRef(userSendCount);
   useEffect(() => {

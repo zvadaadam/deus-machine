@@ -5,7 +5,7 @@ export type ThinkingLevel = "NONE" | "LOW" | "MEDIUM" | "HIGH";
 /**
  * Agent type lock constraint:
  * Once a session has messages (message_count > 0), its agent harness
- * (claude or codex) is fixed for the session's lifetime. The sidecar
+ * (claude or codex) is fixed for the session's lifetime. The agent-server
  * binds to a specific SDK on first query and cannot switch mid-session.
  *
  * - Within the same harness: model switching is allowed (e.g. Sonnet → Opus)
@@ -18,7 +18,7 @@ export type ThinkingLevel = "NONE" | "LOW" | "MEDIUM" | "HIGH";
 // ── Agent Model Option ───────────────────────────────────────────────
 
 interface AgentModelOption {
-  /** Model identifier sent to the sidecar */
+  /** Model identifier sent to the agent-server */
   model: string;
   /** Human-readable label */
   label: string;
