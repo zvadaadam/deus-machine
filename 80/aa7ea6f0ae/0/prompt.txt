@@ -1,0 +1,515 @@
+<system_instruction>
+You are working inside OpenDevs, a Mac app that lets the user run many coding agents in parallel.
+Your work should take place in the /Users/zvada/Developer/agent/box-ide/.conductor/macau-v2 directory (unless otherwise directed), which has been set up for you to work in.
+Each workspace has a .context directory (gitignored) where you can save files to collaborate with other agents.
+DO NOT EVER read or write files at /Users/zvada/Developer/agent/box-ide.
+The target branch for this workspace is main. Use this for actions like creating new PRs, bisecting, etc., unless you're told otherwise.
+
+By default, the user will only see the last message that you send before stopping. Include all essential information in the last message. The intermediate messages will be collapsed and accessible by the user but not displayed by default.
+
+If the user asks you to work on several unrelated tasks, you can suggest they start new workspaces.
+Sometimes the user might send you a message they meant to send in a different workspace or a different chat. If something doesn't make sense in the context of your work, just ask. 
+If the user asks for help with OpenDevs, you can ask them to go to "Help -> Send Feedback" to get in touch with our team.
+</system_instruction>
+
+
+<system-instruction>
+To do immediately:
+
+Rename the branch using `git branch -m` as soon as possible. Do not check the current branch name.
+
+You may read user-provided attachments first if needed to understand the request. Otherwise, do this before using any skills or any other tools.
+
+Choosing a branch name: use concrete, specific language, avoid abstract nouns, and be concise (<30 characters). Use the prefix "zvadaadam/" before the name.
+
+</system-instruction>
+
+I think we switched to, like, what kind of database do we use? I thought like we switched to something else, right? t deus db?
+
+---
+
+But how come we have the workspaces? We used to not have any workspace, but now we have the repositories and the workspaces from the old database that was OpenDefs. And in the deus, I feel like we don't have it. Why?
+
+---
+
+I want you to drop the legacy codebase, drop that, like we want the current codebase, nothing old, this is getting ready for the production, so know these like backwards compatibility thing with the old thing, we want only latest, explore how and if there are any other problems.
+
+---
+
+/Users/zvada/Developer/agent/box-ide/.conductor/macau-v2/.context/attachments/Screenshot 2026-03-26 at 9.36.41 PM.png remove teh extesions form seetintd we dont need tit right?
+
+---
+
+/Users/zvada/Developer/agent/box-ide/.conductor/macau-v2/.context/attachments/Screenshot 2026-03-26 at 9.37.13 PM.png
+
+I don't know, the AI model things, the AI tab, what do you think, should we have it like this or we gonna call it like... I don't know, definitely put their different icon than the star, I hate the star. Also don't put there like the like a brain icon, maybe something more abstract for the tab row.
+
+also what we shoudk shwo teghre we need to see it we are logeed in with claude also clogged in with code and have ab ilityt add PAI key
+
+---
+
+/Users/zvada/Developer/agent/box-ide/.conductor/macau-v2/.context/attachments/Screenshot 2026-03-26 at 9.51.39 PM.png also if not connect we shoudl have a button to reconenct u know?
+
+also how we shuld be abel to set the open_api_key u kwo for the codex but an'nt nos sure if we amybe se wshoudld o thsi seciton liek for CLaude Code and COdex
+
+---
+
+Okay, but how about, yeah, this is not bad, but with like, entropic connection. This is like for the subscription for Claude Code and Codex. And these are little different things, right? And they are not through the API key. I think the link to API key that would be nice in the API key part, but yeah, it's not... But the layout is good.
+
+---
+
+this si good link for codex -> https://developers.openai.com/codex/cli
+
+but cna u not if teh codex is installed int he magine, beasue it would be cool if not isbtall shwo this liek and if installe we need just to open terminal and do tehre the codex llgon of tsomehgin?
+
+---
+
+/Users/zvada/Developer/agent/box-ide/.conductor/macau-v2/.context/attachments/Screenshot 2026-03-26 at 10.10.25 PM.png So I have here codex login, but it opens the, it doesn't open the terminal, it opens the page. I have the login, but it doesn't open the, it opens the web page, not the terminal.
+
+---
+
+But now it does copy why it doesn't like do like open terminal or something. Is it complex?
+
+---
+
+No, that still doesn't work. So explore, like when I click nothing happened. Explore, explore more. We need to do it clean.
+
+---
+
+kill all runinx box-ide
+
+---
+
+nice it worked nice
+
+---
+
+/Users/zvada/Developer/agent/box-ide/.conductor/macau-v2/.context/attachments/Screenshot 2026-03-26 at 11.37.26 PM.png we dont need the name right int he general
+
+---
+
+I think you can call it like the provider, so let's call it AI providers.
+
+---
+
+And maybe moving the section updates into the general. What do you think?
+
+---
+
+<system_instruction>
+The user has attached these files. Read them before proceeding.
+- /Users/zvada/Developer/agent/box-ide/.conductor/macau-v2/.context/attachments/PR instructions.md (953 B)
+</system_instruction>
+
+
+
+Create a PR
+
+---
+
+<system_instruction>
+The user has attached these files. Read them before proceeding.
+- /Users/zvada/Developer/agent/box-ide/.conductor/macau-v2/.context/attachments/Backend_Tests_68804988048.log (99.9 KB)
+- /Users/zvada/Developer/agent/box-ide/.conductor/macau-v2/.context/attachments/Fix errors instructions.md (430 B)
+</system_instruction>
+
+
+
+
+
+<system-instruction>
+The user has added 5 comments to the diff for this workspace. Please review and address these comments as part of your response. When addressing comments on the "original" side or on specific commits, read the file from that version (not the current version). Below are the comments, including metadata about what git state they were left on:
+
+Comment #1:
+
+File: 
+Line: undefined
+User comment: "<!-- This is an auto-generated comment: summarize by coderabbit.ai -->
+<!-- walkthrough_start -->
+
+<details>
+<summary>📝 Walkthrough</summary>
+
+## Walkthrough
+
+This pull request removes Unix domain socket transport from the agent server (now WebSocket-only), introduces agent provider authentication checking via a new API endpoint, consolidates settings UI to focus on AI providers with auth status indicators, adds desktop terminal launching capability, and refactors workspace/sidebar selection to auto-expand repositories.
+
+## Changes
+
+|Cohort / File(s)|Summary|
+|---|---|
+|**Agent Server Transport Migration** <br> `apps/agent-server/index.ts`, `rpc-connection.ts`, `event-broadcaster.ts`, `test/e2e.test.ts`, `test/integration.test.ts`, `test/rpc-connection.test.ts`|Removed all Unix domain socket transport support: deleted CLI `--listen` mode, `TransportMode` type, Unix socket initialization, and NDJSON framing. Server now runs only WebSocket-based HTTP on `127.0.0.1` dynamic port. Updated all e2e and integration tests to use WebSocket client instead of Unix socket connections and line-delimited JSON parsing.|
+|**Backend Agent Auth & Services** <br> `apps/backend/src/services/agent/service.ts`, `services/agent/index.ts`, `routes/settings.ts`, `services/query-engine.ts`, `app.ts`|Added two new agent service functions: `checkAuth()` (validates provider auth status) and `getAgents()` (enumerates installed agents). Created new `GET /settings/agent-auth` endpoint that queries available agents, checks auth for installed providers via `Promise.allSettled`, and returns aggregated auth status with error handling. Removed legacy HTTP relay routes.|
+|**Settings Types & API** <br> `apps/web/src/features/settings/types.ts`, `api/settings.service.ts`, `api/settings.queries.ts`, `shared/types/settings.ts`|Added `AgentAuthStatus`, `AgentProviderAuth`, `AgentInstallInfo` types. New `fetchAgentAuth()` service method and `useAgentAuth()` React Query hook (60s cache). Extended `Settings` interface with `openai_api_key` for Codex support. Simplified `SettingsSection` type by removing `"extensions"` and `"updates"`.|
+|**Settings UI Refactoring** <br> `apps/web/src/features/settings/ui/SettingsPage.tsx`, `SettingsSidebar.tsx`, `sections/AISection.tsx`, `sections/GeneralSection.tsx`, `sections/index.ts`|Consolidated AI settings into single "AI Providers" section with per-provider cards for Claude and Codex showing auth badges, install actions, and login commands. Removed Extensions and Updates sections from sidebar. Moved update check flow (version display, manual check button, staged status UI) to GeneralSection. Enhanced AISection with auth badge component and `openInTerminal()` helper for terminal command execution.|
+|**Desktop Terminal Integration** <br> `apps/desktop/main/native-handlers.ts`, `preload/index.ts`, `main/backend-process.ts`, `apps/web/src/env.d.ts`|Added new Electron IPC handler `native:openTerminal` accepting command string with whitelist validation (`^[a-zA-Z0-9 _-]+$`), executing via AppleScript on macOS. Exposed typed `openTerminal(command: string): Promise<void>` in preload bridge and updated TypeScript environment declarations. Simplified backend port detection to use only `[BACKEND_PORT]` format and removed legacy database path fallback.|
+|**Workspace & Sidebar Integration** <br> `apps/web/src/app/layouts/MainLayout.tsx`, `layouts/hooks/useRepoActions.ts`, `features/sidebar/store/sidebarStore.ts`, `features/workspace/api/workspace.service.ts`|Added `expandRepo(repoId: string)` action to sidebar store to remove repos from collapsed state. Updated `handleWorkspaceClick` and all workspace creation flows to auto-expand selected repository. Simplified `WorkspaceService.create()` return to minimal `Workspace` object with only `id` and `repository_id`.|
+|**Command Palette & Query Keys** <br> `apps/web/src/features/command-palette/commands.ts`, `shared/api/queryKeys.ts`, `shared/events.ts`, `apps/backend/src/routes/onboarding.ts`|Updated "settings-ai" command label to "Settings: Providers" and icon to Orbit; added `codex` and `openai` keywords. Removed "settings-extensions" command entirely. Added `queryKeys.settings.agentAuth` query key. Added `"agentAuth"` to `REQUEST_RESOURCES` event constant. Updated onboarding comment from "Deus legacy" to "OpenDevs".|
+
+## Sequence Diagram
+
+```mermaid
+sequenceDiagram
+    participant Client as Web Client
+    participant BE as Backend API
+    participant AS as Agent Service
+    participant AC as Agent Client
+    participant Remote as Remote Agent
+
+    Client->>BE: GET /api/settings/agent-auth
+    BE->>AS: getAgents()
+    AS->>AC: client.getAgents()
+    AC-->>AS: agents[]
+    AS-->>BE: agents[]
+    
+    Note over BE: Filter installed agents<br/>(claude, codex)
+    BE->>AS: checkAuth({provider, type})
+    AS->>AC: client.sendProviderAuth(params)
+    AC->>Remote: Forward provider auth request
+    Remote-->>AC: Auth status result
+    AC-->>AS: Promise<result>
+    AS-->>BE: checkAuth result
+    
+    Note over BE: Promise.allSettled()<br/>for all providers
+    BE->>Client: {agents[], claude?, codex?}
+```
+
+## Estimated code review effort
+
+🎯 4 (Complex) | ⏱️ ~50 minutes
+
+## Poem
+
+> 🐰 *Whiskers twitch with joy today,*  
+> *Unix sockets fade away!*  
+> *WebSockets reign supreme and bright,*  
+> *Providers auth'd in elegant sight,*  
+> *Terminals pop at my command,*  
+> *The coderabbit's work is grand!* 🌟
+
+</details>
+
+<!-- walkthrough_end -->
+
+
+<!-- tips_start -->
+
+---
+
+<sub>Comment `@coderabbitai help` to get the list of available commands and usage tips.</sub>
+
+<!-- tips_end -->
+
+<!-- internal state start -->
+
+
+<!-- REDACTED/REDACTED/REDACTED/REDACTED/REDACTED/REDACTED/lVSrT9PMryUp4BeXkp4rE/REDACTED/vE/REDACTED/REDACTED/DlNc2nwKimA9kwG6QUCRcwTyXhMA/oxb+vgWCfN+eWG5lSYQ0CyD/REDACTED/REDACTED/REDACTED/REDACTED/REDACTED/REDACTED/BG5/REDACTED/tQRAjTsfcNw/REDACTED/REDACTED/REDACTED/REDACTED/REDACTED/REDACTED/REDACTED/REDACTED/a180RsAIYAz11Ut66it7HXHGtmkywmz3L+z/L5dO2BoPsdzjtkGxJMGnz7nSx8w72/REDACTED/REDACTED/f8CshBJXIGtkqhdg/REDACTED/Q/REDACTED/2wi+S/ppUIft5dlU+AyXYjReNwuBkK5/xIJFO5rFjpZS/QLk7JZ/REDACTED/REDACTED/REDACTED/REDACTED/REDACTED/REDACTED/REDACTED/REDACTED/REDACTED/REDACTED/REDACTED/REDACTED/IzcE0kI3rE7D8Gew/REDACTED/IRAGkGSwMAk8CfA8K/REDACTED/REDACTED/REDACTED/nXrzS+6S0yEKhTWitg/REDACTED/REDACTED/REDACTED/REDACTED/REDACTED/D+JnQDgBgM1OP4Tcn1bQ4MM0zgTw9JV/REDACTED/JCsMFElWcAE0q3ngM88gNsHBg4LkB21E2/REDACTED/REDACTED/REDACTED/A/REDACTED/bD6goY/REDACTED/REDACTED/REDACTED/REDACTED/REDACTED/EU1UFTk/REDACTED/REDACTED/F6LLNziM9Flqyz3EQDZ7aG/REDACTED/REDACTED/REDACTED/REDACTED/REDACTED/REDACTED/UdmRdB5PSyQHkeMGzyy19npxf/REDACTED/0gBgs629qih3LeWBMVmXA/YRAH6hOAxPvKlwEEE3idRJh/REDACTED/REDACTED/REDACTED/REDACTED/REDACTED/REDACTED/REDACTED/REDACTED/ZYACoQ/REDACTED/YTANOdsE0oHTwCQ/cTTDIA4S/REDACTED/REDACTED/REDACTED/Ani/REDACTED/S/REDACTED/dmSv322H9xhD/f6NEAlwF+zL/REDACTED/pwchYiwJmoPtzqeJG5+sxVywIR/REDACTED/REDACTED/w9eRywfqIkg8DZ/REDACTED/SKKoT6fQaAg9pPu/REDACTED/REDACTED/REDACTED/REDACTED/REDACTED/REDACTED/REDACTED/REDACTED/REDACTED/2O1SkyOOmr5MWqfpS6e+c/gv6DQy/REDACTED/REDACTED/REDACTED/REDACTED/REDACTED/REDACTED/REDACTED/REDACTED/REDACTED/REDACTED/REDACTED/DdRiAKGyrc/REDACTED/REDACTED/REDACTED/REDACTED/REDACTED/YOOFGJ7p7ioTHtB/wEUMsA/REDACTED/REDACTED/REDACTED -->
+
+<!-- internal state end -->"
+
+Comment metadata:
+This comment was left on a file.
+This comment was left on GitHub by @coderabbitai.
+
+
+Comment #2:
+
+File: apps/desktop/main/backend-process.ts
+Line: 42
+User comment: "_⚠️ Potential issue_ | _🟠 Major_
+
+**Add a one-time legacy DB migration to prevent silent data loss on upgrade.**
+
+Line 42 hard-switches to `userData/deus.db` with no migration path. Users with data only in `com.opendevs.ide/opendevs.db` will lose visible history/settings after updating.
+
+<details>
+<summary>💡 Suggested minimal migration (one-time copy, no ongoing legacy fallback)</summary>
+
+```diff
+-import { join } from "path";
+-import { writeFileSync } from "fs";
++import { dirname, join } from "path";
++import { copyFileSync, existsSync, mkdirSync, writeFileSync } from "fs";
+@@
+-  const dbPath = join(app.getPath("userData"), "deus.db");
++  const dbPath = join(app.getPath("userData"), "deus.db");
++  const legacyDbPath = join(app.getPath("appData"), "com.opendevs.ide", "opendevs.db");
++
++  // One-time migration from legacy OpenDevs location.
++  if (!existsSync(dbPath) && existsSync(legacyDbPath)) {
++    mkdirSync(dirname(dbPath), { recursive: true });
++    copyFileSync(legacyDbPath, dbPath);
++  }
+```
+</details>
+
+<!-- suggestion_start -->
+
+<details>
+<summary>📝 Committable suggestion</summary>
+
+> ‼️ **IMPORTANT**
+> Carefully review the code before committing. Ensure that it accurately replaces the highlighted code, contains no missing lines, and has no issues with indentation. Thoroughly test & benchmark the code to ensure it meets the requirements.
+
+```suggestion
+  // Database lives in Electron's userData dir (~/Library/Application Support/Deus/).
+  const dbPath = join(app.getPath("userData"), "deus.db");
+  const legacyDbPath = join(app.getPath("appData"), "com.opendevs.ide", "opendevs.db");
+
+  // One-time migration from legacy OpenDevs location.
+  if (!existsSync(dbPath) && existsSync(legacyDbPath)) {
+    mkdirSync(dirname(dbPath), { recursive: true });
+    copyFileSync(legacyDbPath, dbPath);
+  }
+```
+
+</details>
+
+<!-- suggestion_end -->
+
+<details>
+<summary>🤖 Prompt for AI Agents</summary>
+
+```
+Verify each finding against the current code and only fix it if needed.
+
+In `@apps/desktop/main/backend-process.ts` around lines 41 - 42, The code sets
+dbPath to join(app.getPath("userData"), "deus.db") which silently drops data
+from the legacy location; add a one-time migration that checks for the legacy DB
+(e.g., "com.opendevs.ide/opendevs.db") and if it exists and the new dbPath does
+not, copy/rename the legacy file into place before opening the DB. Implement
+this near the dbPath declaration using app.getPath("userData"),
+fs.existsSync/fs.statSync to detect files, and fs.copyFileSync or fs.renameSync
+to perform an atomic one-time move, and ensure the migration runs only once
+(skip if new dbPath already exists) so the codepaths using dbPath remain
+unchanged thereafter.
+```
+
+</details>
+
+<!-- fingerprinting:phantom:poseidon:hawk -->
+
+<!-- This is an auto-generated comment by CodeRabbit -->"
+
+Comment metadata:
+This comment was left on the modified branch.
+This comment was left on GitHub by @coderabbitai.
+This comment is the start of thread PRRT_kwDOQEbULc53KT9o. 
+
+
+Comment #3:
+
+File: apps/web/src/features/command-palette/commands.ts
+Line: 119
+User comment: "_⚠️ Potential issue_ | _🟡 Minor_
+
+**Keep `ai` as a search keyword.**
+
+After renaming the label to “Providers”, users typing “AI” no longer have a guaranteed match. Add `ai` to preserve command-palette discoverability.
+
+<details>
+<summary>✏️ Proposed fix</summary>
+
+```diff
+-    keywords: ["model", "claude", "anthropic", "codex", "openai", "api", "key", "provider"],
++    keywords: ["ai", "model", "claude", "anthropic", "codex", "openai", "api", "key", "provider"],
+```
+</details>
+
+<!-- suggestion_start -->
+
+<details>
+<summary>📝 Committable suggestion</summary>
+
+> ‼️ **IMPORTANT**
+> Carefully review the code before committing. Ensure that it accurately replaces the highlighted code, contains no missing lines, and has no issues with indentation. Thoroughly test & benchmark the code to ensure it meets the requirements.
+
+```suggestion
+    id: "settings-ai",
+    label: "Settings: Providers",
+    icon: Orbit,
+    group: "settings",
+    keywords: ["ai", "model", "claude", "anthropic", "codex", "openai", "api", "key", "provider"],
+```
+
+</details>
+
+<!-- suggestion_end -->
+
+<details>
+<summary>🤖 Prompt for AI Agents</summary>
+
+```
+Verify each finding against the current code and only fix it if needed.
+
+In `@apps/web/src/features/command-palette/commands.ts` around lines 115 - 119,
+The command with id "settings-ai" (label "Settings: Providers") lost the "ai"
+search term; update its keywords array to include "ai" (e.g., add "ai" alongside
+existing entries like "model", "anthropic", etc.) so the command palette will
+match when users type "AI".
+```
+
+</details>
+
+<!-- fingerprinting:phantom:medusa:grasshopper -->
+
+<!-- This is an auto-generated comment by CodeRabbit -->"
+
+Comment metadata:
+This comment was left on the modified branch.
+This comment was left on GitHub by @coderabbitai.
+This comment is the start of thread PRRT_kwDOQEbULc53KT9v. 
+
+
+Comment #4:
+
+File: apps/web/src/features/settings/ui/sections/GeneralSection.tsx
+Line: 52
+User comment: "_⚠️ Potential issue_ | _🟠 Major_
+
+**Reset `manualChecking` in a `finally` block.**
+
+If `updateCtx.check()` rejects, the button stays stuck in the checking state until remount. This needs cleanup on both success and failure paths.
+
+<details>
+<summary>🛠️ Proposed fix</summary>
+
+```diff
+ async function handleCheckForUpdates() {
+   if (!updateCtx) return;
+   setManualChecking(true);
+   setManualResult(null);
+-  const isUpToDate = await updateCtx.check();
+-  setManualChecking(false);
+-  if (isUpToDate) {
+-    setManualResult("up-to-date");
+-  }
++  try {
++    const isUpToDate = await updateCtx.check();
++    if (isUpToDate) {
++      setManualResult("up-to-date");
++    }
++  } finally {
++    setManualChecking(false);
++  }
+ }
+```
+</details>
+
+<details>
+<summary>🤖 Prompt for AI Agents</summary>
+
+```
+Verify each finding against the current code and only fix it if needed.
+
+In `@apps/web/src/features/settings/ui/sections/GeneralSection.tsx` around lines
+43 - 52, In handleCheckForUpdates, ensure setManualChecking(false) always runs
+by moving the cleanup into a finally block around the await updateCtx.check()
+call; keep setManualResult(null) before calling updateCtx.check(),
+setManualResult("up-to-date") on success as currently done, and in the catch
+block set an error result (e.g., setManualResult("error") or retain null) to
+surface failures — reference the handleCheckForUpdates function, the
+updateCtx.check() call, and the setManualChecking / setManualResult state
+setters when making the change.
+```
+
+</details>
+
+<!-- fingerprinting:phantom:medusa:grasshopper -->
+
+<!-- This is an auto-generated comment by CodeRabbit -->"
+
+Comment metadata:
+This comment was left on the modified branch.
+This comment was left on GitHub by @coderabbitai.
+This comment is the start of thread PRRT_kwDOQEbULc53KT9z. 
+
+
+Comment #5:
+
+File: apps/web/src/features/workspace/api/workspace.service.ts
+Line: 116
+User comment: "_⚠️ Potential issue_ | _🟡 Minor_
+
+**Type assertion masks incomplete object — callers may access undefined fields.**
+
+The function returns `{ id, repository_id }` but casts it as full `Workspace`. Any caller accessing other properties (e.g., `workspace.status`, `workspace.title`) will get `undefined` at runtime until the cache invalidation/refetch completes.
+
+Per the context snippets, the optimistic update and `onSettled` invalidation pattern should eventually populate the full data, but there's a window where the returned object doesn't match the `Workspace` type contract.
+
+Consider either:
+1. Returning a more honest type (e.g., `Pick<Workspace, 'id' | 'repository_id'>`)
+2. Documenting that callers should not access other fields until subscription updates
+
+
+<details>
+<summary>🔧 Option 1: Return honest partial type</summary>
+
+```diff
+-  create: async (
++  create: async (
+     repositoryId: string,
+     options?: {
+       source_branch?: string;
+       pr_number?: number;
+       pr_url?: string;
+       pr_title?: string;
+       target_branch?: string;
+     }
+-  ): Promise<Workspace> => {
++  ): Promise<Pick<Workspace, 'id' | 'repository_id'>> => {
+     const result = await sendCommand("createWorkspace", {
+       repository_id: repositoryId,
+       ...options,
+     });
+     if (!result.accepted) throw new Error(result.error || "Failed to create workspace");
+-    return { id: result.commandId, repository_id: repositoryId } as Workspace;
++    return { id: result.commandId, repository_id: repositoryId };
+   },
+```
+</details>
+
+<details>
+<summary>🤖 Prompt for AI Agents</summary>
+
+```
+Verify each finding against the current code and only fix it if needed.
+
+In `@apps/web/src/features/workspace/api/workspace.service.ts` around lines 114 -
+116, The code is casting a partial object ({ id: result.commandId,
+repository_id: repositoryId }) to Workspace which can lead to callers accessing
+undefined fields; change the function to return an honest partial type instead
+of forcing Workspace: replace the cast with a concrete type such as
+Pick<Workspace, 'id' | 'repository_id'> (or define a MinimalWorkspace type) and
+update the function signature/return annotation accordingly so callers and
+TypeScript will know only id and repository_id are present; also update any call
+sites that rely on a full Workspace to handle the partial result or trigger a
+refetch.
+```
+
+</details>
+
+<!-- fingerprinting:phantom:medusa:ocelot -->
+
+<!-- This is an auto-generated comment by CodeRabbit -->"
+
+Comment metadata:
+This comment was left on the modified branch.
+This comment was left on GitHub by @coderabbitai.
+This comment is the start of thread PRRT_kwDOQEbULc53KT91. 
+
+</system-instruction>
+
+Fix the failing CI actions. I've attached the failure logs.
+
+---
+
+<system_instruction>
+The user has attached these files. Read them before proceeding.
+- /Users/zvada/Developer/agent/box-ide/.conductor/macau-v2/.context/attachments/Lint__Format___Typecheck_68806330811.log (59.2 KB)
+- /Users/zvada/Developer/agent/box-ide/.conductor/macau-v2/.context/attachments/Fix errors instructions-v1.md (430 B)
+</system_instruction>
+
+
+
+Fix the failing CI actions. I've attached the failure logs.
