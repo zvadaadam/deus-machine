@@ -46,16 +46,23 @@ export interface NotificationOptions {
   title: string;
   body?: string;
   sound?: "Glass" | "Basso" | "Ping";
+  onClick?: () => void;
 }
 
 /**
  * Send an OS-level notification. No-ops if permission not granted or not in Electron.
  */
-export function sendNotification({ title, body }: NotificationOptions): void {
+export function sendNotification({ title, body, onClick }: NotificationOptions): void {
   if (!capabilities.nativeNotifications || !permissionGranted) return;
 
   try {
-    new Notification(title, { body });
+    const n = new Notification(title, { body });
+    if (onClick) {
+      n.onclick = () => {
+        window.focus();
+        onClick();
+      };
+    }
   } catch (e) {
     console.warn("[Notifications] Failed to send:", e);
   }

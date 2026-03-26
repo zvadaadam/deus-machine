@@ -26,15 +26,44 @@ import { isWindowFocused } from "@/shared/hooks/useWindowFocus";
 import { track } from "@/platform/analytics";
 import { unreadActions } from "@/features/session/store/unreadStore";
 import { useWorkspaceStore } from "@/features/workspace/store";
-import { workspaceLayoutActions } from "@/features/workspace/store/workspaceLayoutStore";
+import {
+  useWorkspaceLayoutStore,
+  workspaceLayoutActions,
+} from "@/features/workspace/store/workspaceLayoutStore";
+import { show as showWindow } from "@/platform/native/window";
 import type { SessionStatus } from "@shared/types/session";
-import type { RepoGroup, SetupStatus } from "@shared/types/workspace";
+import type { RepoGroup, SetupStatus, Workspace } from "@shared/types/workspace";
 
 /**
  * Batches multiple notifications within a short window into a single one.
  * Prevents notification spam when multiple agents finish simultaneously.
  */
 const BATCH_WINDOW_MS = 1500;
+
+interface FinishedEntry {
+  workspaceId: string;
+  sessionId: string;
+  repoName: string;
+  label: string;
+}
+
+function formatBody(repoName: string, ws: Workspace): string {
+  const label = ws.title || ws.git_branch || ws.slug;
+  return `${repoName} · ${label}`;
+}
+
+function navigateToWorkspace(workspaceId: string, sessionId: string): void {
+  showWindow();
+  useWorkspaceStore.getState().selectWorkspace(workspaceId);
+  // Only update chat tabs if workspace has existing layout state.
+  // Stale notification clicks (workspace archived) skip this to avoid orphaned entries.
+  const existing = useWorkspaceLayoutStore.getState().layouts[workspaceId];
+  if (!existing || existing.activeChatTabSessionId === sessionId) return;
+  const sessionIds = existing.chatTabSessionIds.includes(sessionId)
+    ? existing.chatTabSessionIds
+    : [...existing.chatTabSessionIds, sessionId];
+  workspaceLayoutActions.setChatTabState(workspaceId, sessionIds, sessionId);
+}
 
 /**
  * Check if the user is currently viewing a specific session.
@@ -52,7 +81,7 @@ function checkIsViewingSession(workspaceId: string, sessionId: string): boolean 
 export function useGlobalSessionNotifications() {
   const prevStatusMap = useRef(new Map<string, SessionStatus>());
   const prevSetupStatusMap = useRef(new Map<string, SetupStatus>());
-  const finishedBatch = useRef<string[]>([]);
+  const finishedBatch = useRef<FinishedEntry[]>([]);
   const batchTimerRef = useRef<ReturnType<typeof setTimeout>>();
 
   const queryClient = useQueryClient();
@@ -68,22 +97,31 @@ export function useGlobalSessionNotifications() {
       if (batch.length === 0 || isWindowFocused()) return;
 
       if (batch.length === 1) {
+        const entry = batch[0];
         sendNotification({
           title: "Agent finished",
-          body: `Session ${batch[0].substring(0, 8)} completed`,
+          body: `${entry.repoName} · ${entry.label}`,
           sound: "Glass",
+          onClick: () => navigateToWorkspace(entry.workspaceId, entry.sessionId),
         });
       } else {
+        const repos = [...new Set(batch.map((e) => e.repoName))];
+        const body =
+          repos.length === 1
+            ? `${repos[0]} · ${batch.length} workspaces`
+            : `${repos[0]} + ${repos.length - 1} more`;
+        const first = batch[0];
         sendNotification({
           title: `${batch.length} agents finished`,
-          body: "Multiple sessions completed",
+          body,
           sound: "Glass",
+          onClick: () => navigateToWorkspace(first.workspaceId, first.sessionId),
         });
       }
     }
 
-    function queueFinished(sessionId: string) {
-      finishedBatch.current.push(sessionId);
+    function queueFinished(entry: FinishedEntry) {
+      finishedBatch.current.push(entry);
       if (!batchTimerRef.current) {
         batchTimerRef.current = setTimeout(flushFinishedBatch, BATCH_WINDOW_MS);
       }
@@ -130,15 +168,23 @@ export function useGlobalSessionNotifications() {
               // working → idle = agent finished
               if (prevStatus === "working" && status === "idle") {
                 track("ai_turn_completed", { session_id: sessionId });
-                if (canNotify && !isWindowFocused()) queueFinished(sessionId);
+                if (canNotify && !isWindowFocused()) {
+                  queueFinished({
+                    workspaceId: ws.id,
+                    sessionId,
+                    repoName: group.repo_name,
+                    label: ws.title || ws.git_branch || ws.slug,
+                  });
+                }
               }
 
               // → needs_response = agent needs user input
               if (status === "needs_response" && canNotify && !isWindowFocused()) {
                 sendNotification({
                   title: "Agent needs input",
-                  body: `Session ${sessionId.substring(0, 8)} is waiting for your response`,
+                  body: formatBody(group.repo_name, ws),
                   sound: "Ping",
+                  onClick: () => navigateToWorkspace(ws.id, sessionId),
                 });
               }
 
@@ -146,8 +192,9 @@ export function useGlobalSessionNotifications() {
               if (status === "needs_plan_response" && canNotify && !isWindowFocused()) {
                 sendNotification({
                   title: "Plan ready for review",
-                  body: `Session ${sessionId.substring(0, 8)} has a plan waiting for approval`,
+                  body: formatBody(group.repo_name, ws),
                   sound: "Ping",
+                  onClick: () => navigateToWorkspace(ws.id, sessionId),
                 });
               }
 
@@ -170,10 +217,9 @@ export function useGlobalSessionNotifications() {
                     .otherwise(() => "Agent Error");
                   sendNotification({
                     title,
-                    body:
-                      ws.session_error_message ||
-                      `Session ${sessionId.substring(0, 8)} encountered an error`,
+                    body: formatBody(group.repo_name, ws),
                     sound: "Basso",
+                    onClick: () => navigateToWorkspace(ws.id, sessionId),
                   });
                 }
               }
@@ -205,8 +251,12 @@ export function useGlobalSessionNotifications() {
           ) {
             sendNotification({
               title: "Setup failed",
-              body: `Workspace ${ws.title || ws.slug} setup failed${ws.error_message ? `: ${ws.error_message}` : ""}`,
+              body: formatBody(group.repo_name, ws),
               sound: "Basso",
+              onClick: () => {
+                showWindow();
+                useWorkspaceStore.getState().selectWorkspace(ws.id);
+              },
             });
           }
 
@@ -215,8 +265,12 @@ export function useGlobalSessionNotifications() {
             if (canNotify && !isWindowFocused()) {
               sendNotification({
                 title: "Setup complete",
-                body: `Workspace ${ws.title || ws.slug} is ready`,
+                body: formatBody(group.repo_name, ws),
                 sound: "Glass",
+                onClick: () => {
+                  showWindow();
+                  useWorkspaceStore.getState().selectWorkspace(ws.id);
+                },
               });
             }
           }
