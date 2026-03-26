@@ -15,7 +15,7 @@ Before writing any code, know where it belongs:
 
 - **Rust (src-tauri/)**: Stateless pure functions. `(path, params) → data`. System-level ops, git (libgit2), file scanning, PTY, process management, socket relay. No business logic, no DB writes.
 - **Node.js backend (backend/)**: Business logic, DB reads/writes (SQLite), config management, external services (GitHub API via gh CLI). Hono framework, routes + services pattern.
-- **Agent-server (agent-server/)**: Claude Agent SDK integration, canonical event emission. Stateless process with no DB access — streams events to backend, which handles all persistence.
+- **Agent-server (apps/agent-server/)**: Claude Agent SDK integration, canonical event emission. Stateless process with no DB access — streams events to backend, which handles all persistence.
 - **Frontend (src/)**: React 18 + Zustand (UI state only) + TanStack Query v5 (server state). Tailwind CSS v4. Features in `src/features/{feature}/`.
 
 ## Tech Stack Rules
@@ -30,19 +30,19 @@ Before writing any code, know where it belongs:
 
 ### Framework & Commands
 
-| Layer            | Framework  | Command                                                 | Test Location                   |
-| ---------------- | ---------- | ------------------------------------------------------- | ------------------------------- |
-| Backend          | vitest     | `bun run test:backend`                                  | `apps/backend/test/unit/`       |
-| Agent-server     | vitest     | `bun run test:agent-server:unit`                        | `agent-server/test/`            |
-| Agent-server E2E | vitest     | `bun run test:agent-server:e2e`                         | `agent-server/test/e2e.test.ts` |
-| Rust             | cargo test | `cargo test --manifest-path src-tauri/Cargo.toml --lib` | `src-tauri/src/` (inline)       |
-| All              | combined   | `bun run test`                                          | —                               |
+| Layer            | Framework  | Command                                                 | Test Location                        |
+| ---------------- | ---------- | ------------------------------------------------------- | ------------------------------------ |
+| Backend          | vitest     | `bun run test:backend`                                  | `apps/backend/test/unit/`            |
+| Agent-server     | vitest     | `bun run test:agent-server:unit`                        | `apps/agent-server/test/`            |
+| Agent-server E2E | vitest     | `bun run test:agent-server:e2e`                         | `apps/agent-server/test/e2e.test.ts` |
+| Rust             | cargo test | `cargo test --manifest-path src-tauri/Cargo.toml --lib` | `src-tauri/src/` (inline)            |
+| All              | combined   | `bun run test`                                          | —                                    |
 
 ### Testing Patterns in This Codebase
 
 **Backend tests** use `vi.mock()` at the top of the file to mock `database`, `services`, `fs`, `child_process`. Tests create a Hono app instance and use `app.request()` for route testing.
 
-**Agent-server tests** use `vi.hoisted()` for mock variables needed in `vi.mock()` factories. They mock the Claude Agent SDK, FrontendClient, and database modules.
+**Agent-server tests** use `vi.hoisted()` for mock variables needed in `vi.mock()` factories. They mock the Claude Agent SDK, EventBroadcaster, and system-boundary modules (`child_process`, `fs`). No database mocking — agent-server is stateless with no DB access.
 
 **Rust tests** are inline `#[cfg(test)]` modules within the source files.
 
