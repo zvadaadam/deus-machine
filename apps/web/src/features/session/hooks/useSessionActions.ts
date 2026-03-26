@@ -4,10 +4,10 @@
  * Centralizes all session action handlers (send, stop, compact, create PR).
  * Extracted from SessionPanel to reduce component complexity.
  *
- * Message Flow (sidecar-owns-send):
- * 1. User clicks send → useSendMessage routes through socket → sidecar
- * 2. Sidecar atomically: saves user message + sets status=working + dispatches agent
- * 3. Sidecar streams response → saves to DB → notifies backend
+ * Message Flow (agent-server-owns-send):
+ * 1. User clicks send → useSendMessage routes through socket → agent-server
+ * 2. Agent-server atomically: saves user message + sets status=working + dispatches agent
+ * 3. Agent-server streams response → saves to DB → notifies backend
  * 4. Backend pushes q:snapshot/q:delta to WS subscribers → React Query cache → UI updates
  */
 
@@ -62,7 +62,7 @@ export function useSessionActions({
       if (!content || sendMessageMutation.isPending) return;
 
       try {
-        // Single atomic call: sidecar saves message + starts agent.
+        // Single atomic call: agent-server saves message + starts agent.
         // Optimistic UI fires in onMutate, rollback fires in onError.
         await sendMessageMutation.mutateAsync({
           sessionId,
@@ -75,7 +75,7 @@ export function useSessionActions({
       } catch (error) {
         console.error("Failed to send message:", error);
         // onError already rolled back optimistic update.
-        // No stopSession cleanup needed — sidecar didn't persist anything on failure.
+        // No stopSession cleanup needed — agent-server didn't persist anything on failure.
         const reason = error instanceof Error ? error.message : "Failed to send message";
         toast.error(reason);
         return;
@@ -101,7 +101,7 @@ export function useSessionActions({
 
   const stopSession = useCallback(async () => {
     try {
-      // Cancel the sidecar agent first so it stops consuming API tokens
+      // Cancel the agent-server agent first so it stops consuming API tokens
       try {
         if (!isConnected()) await connect();
         await sendCommand("stopSession", { sessionId });

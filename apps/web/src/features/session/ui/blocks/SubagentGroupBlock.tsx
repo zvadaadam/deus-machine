@@ -39,7 +39,7 @@ export function SubagentGroupBlock({
   const { parseContent, sessionStatus } = useSession();
   const { description, subagent_type } = toolUse.input ?? {};
 
-  // Sidecar only persists assistant messages — tool_results for Task blocks
+  // Agent-server only persists assistant messages — tool_results for Task blocks
   // are never saved to DB. Use sessionStatus as the completion signal instead.
   const isRunning = sessionStatus === "working" && !toolResult;
   const isError = toolResult?.is_error;

@@ -22,7 +22,7 @@ import statsRoutes from "./routes/stats";
 import onboardingRoutes from "./routes/onboarding";
 import authRoutes from "./routes/remote-auth";
 import filesRoutes from "./routes/files";
-// Legacy sidecar HTTP relay routes removed — all agent communication
+// Legacy agent-server HTTP relay routes removed — all agent communication
 // now goes through WebSocket AgentClient (services/agent/client.ts)
 
 export function createApp() {
@@ -50,7 +50,7 @@ export function createApp() {
   app.route("/api", settingsRoutes);
   app.route("/api", statsRoutes);
   app.route("/api", filesRoutes);
-  // Legacy sidecar HTTP routes removed (replaced by WS AgentClient)
+  // Legacy agent-server HTTP routes removed (replaced by WS AgentClient)
   app.route("/api", onboardingRoutes);
 
   // Relay status endpoint

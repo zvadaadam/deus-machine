@@ -9,7 +9,7 @@
  *
  * 2. **Across messages** (`groupMessageToolStreaks`) — Groups consecutive assistant
  *    messages that each contain only tool_use blocks. Used by AssistantTurn when
- *    loading from DB, where the sidecar stores each tool call as a separate message row.
+ *    loading from DB, where the agent-server stores each tool call as a separate message row.
  *
  * Both functions output tool blocks compatible with ToolGroupBlock.
  */
@@ -96,7 +96,7 @@ export function groupToolStreaks(blocks: (ContentBlock | string)[]): GroupedItem
 /**
  * Groups consecutive groupable-tool-only messages into streaks for AssistantTurn rendering.
  *
- * The sidecar stores each tool call as a separate message row. When loading from DB,
+ * The agent-server stores each tool call as a separate message row. When loading from DB,
  * a sequence like [Read, Grep, Read, Edit] becomes 4 separate Message objects. This function
  * groups the consecutive Read/Grep messages into a ToolGroupBlock while Edit renders
  * individually — only read-only exploration tools (GROUPABLE_TOOLS) are grouped.

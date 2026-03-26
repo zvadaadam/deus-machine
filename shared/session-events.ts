@@ -2,8 +2,8 @@ import { z } from "zod";
 
 import { AgentTypeSchema, ErrorCategorySchema, SessionStatusSchema } from "./enums";
 
-// Canonical sidecar → frontend session notification payloads.
-// These are emitted by the sidecar, forwarded through the Electron main process as IPC events,
+// Canonical agent-server → frontend session notification payloads.
+// These are emitted by the agent-server, forwarded through the Electron main process as IPC events,
 // and consumed by the frontend.
 
 export const MessageResponseSchema = z.object({

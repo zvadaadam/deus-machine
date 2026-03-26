@@ -6,7 +6,7 @@ const app = new Hono();
 
 app.get("/health", (c) => {
   const db = getDatabase();
-  // Note: Sidecar status removed - sidecar status is reported via WebSocket
+  // Note: Agent-server status removed - agent-server status is reported via WebSocket
   return c.json({
     app: "deus-backend",
     status: "ok",

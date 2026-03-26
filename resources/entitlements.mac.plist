@@ -10,7 +10,7 @@
     <key>com.apple.security.files.user-selected.read-write</key>
     <true/>
 
-    <!-- Allow spawning child processes (backend, sidecar, git, gh) -->
+    <!-- Allow spawning child processes (backend, agent-server, git, gh) -->
     <key>com.apple.security.cs.allow-unsigned-executable-memory</key>
     <true/>
 

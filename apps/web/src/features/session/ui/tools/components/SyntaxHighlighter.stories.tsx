@@ -208,9 +208,9 @@ export const Bash: StoryObj<typeof SyntaxHighlighter> = {
     code: `#!/bin/bash
 set -euo pipefail
 
-# Build sidecar and start dev server
-echo "Building sidecar..."
-bun run build:sidecar
+# Build agent-server and start dev server
+echo "Building agent-server..."
+bun run build:agent-server
 
 echo "Starting dev server..."
 export DATABASE_PATH="$HOME/Library/Application Support/com.deus.app/deus.db"

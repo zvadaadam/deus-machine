@@ -36,23 +36,23 @@
       "icon": "monitor",
       "persistent": true,
       "mode": "nonconcurrent",
-      "depends": ["build:sidecar"]
+      "depends": ["build:agent-server"]
     },
     "build": {
       "command": "bun run build",
       "description": "Build frontend for production",
       "icon": "hammer",
-      "depends": ["build:sidecar"]
+      "depends": ["build:agent-server"]
     },
-    "build:sidecar": {
-      "command": "bun run build:sidecar",
-      "description": "Bundle sidecar to CJS",
+    "build:agent-server": {
+      "command": "bun run build:agent-server",
+      "description": "Bundle agent-server to CJS",
       "icon": "package"
     },
     "test": "bun run test",
     "test:backend": "bun run test:backend",
-    "test:sidecar": "bun run test:sidecar:unit",
-    "test:e2e": "bun run test:sidecar:e2e",
+    "test:agent-server": "bun run test:agent-server:unit",
+    "test:e2e": "bun run test:agent-server:e2e",
     "typecheck": {
       "command": "bun run typecheck",
       "description": "Run TypeScript type checker",

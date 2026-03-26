@@ -57,7 +57,7 @@ export function init(agentServerUrl: string): void {
       console.log("[AgentService] Disconnected from agent-server");
     },
 
-    // Relay sidecar's frontend-facing RPC requests (browser, sim, diff, plan)
+    // Relay agent-server's frontend-facing RPC requests (browser, sim, diff, plan)
     onFrontendRpc: async (requestId, sessionId, method, params) => {
       const isUserFacing = method === "exitPlanMode" || method === "askUserQuestion";
       const sessionResources = ["workspaces", "sessions", "session", "stats"] as const;

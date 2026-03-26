@@ -1,5 +1,5 @@
 // backend/src/services/agent/client.ts
-// WebSocket client that connects to the agent-server (sidecar).
+// WebSocket client that connects to the agent-server (agent-server).
 //
 // Implements the JSON-RPC 2.0 handshake protocol:
 //   Backend → Agent: { method: "initialize", params: { version: "1.0", capabilities: {} } }
@@ -55,7 +55,7 @@ export interface AgentClientOptions {
   onConnected?: (agents: AgentInfo[]) => void;
   /** Called when the connection drops */
   onDisconnected?: () => void;
-  /** Called when the sidecar sends a frontend-facing RPC (browser, sim, diff, plan).
+  /** Called when the agent-server sends a frontend-facing RPC (browser, sim, diff, plan).
    *  Must relay to the frontend and return the result. */
   onFrontendRpc?: (
     requestId: string,
@@ -292,7 +292,7 @@ export class AgentClient {
     }
 
     // Register handlers for frontend-facing RPC methods.
-    // The sidecar's tools (browser, simulator, workspace) call these as
+    // The agent-server's tools (browser, simulator, workspace) call these as
     // JSON-RPC requests through the tunnel. We relay them to the frontend
     // via tool-relay, which broadcasts a q:event tool:request and waits
     // for the frontend's q:tool_response.

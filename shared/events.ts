@@ -53,7 +53,7 @@ export const BACKEND_PORT_CHANGED = "backend:port-changed" as const;
 export const GIT_CLONE_PROGRESS = "git-clone-progress" as const;
 
 // ============================================================================
-// Domain Constants (queryable resources, mutations, sidecar notifications)
+// Domain Constants (queryable resources, mutations, agent-server notifications)
 // ============================================================================
 
 /** Queryable resources — subscribable via q:subscribe for real-time push.
@@ -145,8 +145,8 @@ export const PROTOCOL_EVENTS = [
   "fs:changed",
   // Git events
   "git-clone-progress",
-  // Sidecar bidirectional RPC
-  "sidecar:request",
+  // Agent-server bidirectional RPC
+  "agent-server:request",
 ] as const;
 export type ProtocolEvent = (typeof PROTOCOL_EVENTS)[number];
 

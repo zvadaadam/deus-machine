@@ -15,7 +15,7 @@ export function useCollapsedSizePercent(
   stripWidthPx: number = 36
 ): number {
   // Rough estimate for first render — corrected synchronously in useLayoutEffect.
-  // 0.65 ≈ panel group's share of window (sidebar ~240px + sidecar ~58px ≈ 35%).
+  // 0.65 ≈ panel group's share of window (sidebar ~240px + agent-server ~58px ≈ 35%).
   const [pct, setPct] = useState(() =>
     typeof window !== "undefined" ? (stripWidthPx / (window.innerWidth * 0.65)) * 100 : 3
   );

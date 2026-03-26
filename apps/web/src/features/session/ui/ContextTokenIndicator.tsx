@@ -1,7 +1,7 @@
 import { cn } from "@/shared/lib/utils";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 
-/** Fallback max tokens when sidecar hasn't reported the real model limit */
+/** Fallback max tokens when agent-server hasn't reported the real model limit */
 const DEFAULT_MAX_TOKENS = 200_000;
 
 interface ContextTokenIndicatorProps {
@@ -18,7 +18,7 @@ export function ContextTokenIndicator({
   onCompact,
   className,
 }: ContextTokenIndicatorProps) {
-  // Prefer DB percent (sidecar knows the model's real max), fallback to estimate
+  // Prefer DB percent (agent-server knows the model's real max), fallback to estimate
   const percentage =
     contextUsedPercent > 0
       ? Math.min(contextUsedPercent, 100)
