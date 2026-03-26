@@ -22,7 +22,7 @@ Understand the system boundary rules before reviewing:
 
 - **Rust (src-tauri/)**: Stateless pure functions. System-level ops. No business logic.
 - **Node.js backend (backend/)**: Business logic, DB writes, config management.
-- **Agent-server (agent-server/)**: Claude Agent SDK integration, message transformation, direct SQLite writes.
+- **Agent-server (agent-server/)**: Claude Agent SDK integration, message transformation, stateless runtime (no direct DB writes).
 - **Frontend (src/)**: React + Zustand (UI state) + TanStack Query (server state). Tailwind CSS v4.
 
 ## Review checklist

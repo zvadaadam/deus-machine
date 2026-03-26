@@ -16,7 +16,7 @@ $ARGUMENTS
 2. **Trace the full stack**:
    - Frontend: component → query hook → service → HTTP/IPC call
    - Backend: route → middleware → service → database query
-   - Agent-server: RPC handler → agent → SDK → DB write → frontend notification
+   - Agent-server: RPC handler → agent → SDK → canonical event → backend persists → frontend notification
    - Rust: command → core module → system call
 3. **Map the data flow**: How does data move through the system?
 4. **Identify the database tables**: Which tables and columns are involved?
@@ -38,9 +38,9 @@ Backend (backend/src/)
 └── middleware/                  ← Request context
 
 Agent-server (agent-server/)
-├── agents/                     ← Agent handlers
-├── db/                         ← Direct SQLite writes
-└── frontend-client.ts          ← Notifications → Rust → Frontend
+├── agents/                     ← Agent handlers (stateless — no DB access)
+├── event-broadcaster.ts        ← Canonical event emission → backend persists
+└── rpc-connection.ts           ← JSON-RPC 2.0 transport to backend
 
 Rust (src-tauri/src/)
 ├── commands/{feature}.rs       ← Tauri IPC handlers
