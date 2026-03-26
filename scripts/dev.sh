@@ -53,7 +53,7 @@ fi
 
 # Start agent-server first to get its LISTEN_URL
 echo -e "${BLUE}Starting agent-server...${NC}"
-$NODE_CMD apps/agent-server/dist/index.bundled.cjs > /tmp/agent-server.log 2>&1 &
+"$NODE_CMD" apps/agent-server/dist/index.bundled.cjs > /tmp/agent-server.log 2>&1 &
 AGENT_SERVER_PID=$!
 
 # Wait and capture the listen URL
@@ -75,7 +75,7 @@ echo ""
 
 # Start backend server with dynamic port + agent-server URL
 echo -e "${BLUE}Starting backend server with dynamic port...${NC}"
-AGENT_SERVER_URL=$AGENT_SERVER_URL PORT=0 $NODE_CMD apps/backend/server.cjs > /tmp/backend.log 2>&1 &
+AGENT_SERVER_URL=$AGENT_SERVER_URL PORT=0 "$NODE_CMD" apps/backend/server.cjs > /tmp/backend.log 2>&1 &
 BACKEND_PID=$!
 
 # Wait and capture the dynamic port
