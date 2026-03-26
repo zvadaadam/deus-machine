@@ -11,8 +11,8 @@
  */
 
 import { spawn, type ChildProcess } from "child_process";
-import { dirname, join } from "path";
-import { copyFileSync, existsSync, mkdirSync, writeFileSync } from "fs";
+import { join } from "path";
+import { writeFileSync } from "fs";
 import { app, BrowserWindow } from "electron";
 import crypto from "crypto";
 
@@ -40,13 +40,6 @@ export async function spawnBackend(): Promise<{ port: number; authToken: string 
 
   // Database lives in Electron's userData dir (~/Library/Application Support/Deus/).
   const dbPath = join(app.getPath("userData"), "deus.db");
-
-  // One-time migration from legacy OpenDevs location.
-  const legacyDbPath = join(app.getPath("appData"), "com.opendevs.ide", "opendevs.db");
-  if (!existsSync(dbPath) && existsSync(legacyDbPath)) {
-    mkdirSync(dirname(dbPath), { recursive: true });
-    copyFileSync(legacyDbPath, dbPath);
-  }
 
   // Agent-server bundle path
   const agentServerPath = app.isPackaged
