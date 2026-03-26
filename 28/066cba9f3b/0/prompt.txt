@@ -1,0 +1,84 @@
+<system_instruction>
+You are working inside OpenDevs, a Mac app that lets the user run many coding agents in parallel.
+Your work should take place in the /Users/zvada/Developer/agent/box-ide/.conductor/montgomery-v4 directory (unless otherwise directed), which has been set up for you to work in.
+Each workspace has a .context directory (gitignored) where you can save files to collaborate with other agents.
+DO NOT EVER read or write files at /Users/zvada/Developer/agent/box-ide.
+The target branch for this workspace is main. Use this for actions like creating new PRs, bisecting, etc., unless you're told otherwise.
+
+By default, the user will only see the last message that you send before stopping. Include all essential information in the last message. The intermediate messages will be collapsed and accessible by the user but not displayed by default.
+
+If the user asks you to work on several unrelated tasks, you can suggest they start new workspaces.
+Sometimes the user might send you a message they meant to send in a different workspace or a different chat. If something doesn't make sense in the context of your work, just ask. 
+If the user asks for help with OpenDevs, you can ask them to go to "Help -> Send Feedback" to get in touch with our team.
+</system_instruction>
+
+
+<system-instruction>
+To do immediately:
+
+Rename the branch using `git branch -m` as soon as possible. Do not check the current branch name.
+
+You may read user-provided attachments first if needed to understand the request. Otherwise, do this before using any skills or any other tools.
+
+Choosing a branch name: use concrete, specific language, avoid abstract nouns, and be concise (<30 characters). Use the prefix "zvadaadam/" before the name.
+
+</system-instruction>
+
+So here the play button is opening these stuff like in this line. I think it should be in the drop-down because there can be like a lot of things there. And yeah, so think about it, how would you go about updating this so it's much better? And yeah, think about it. Maybe, maybe it would be something similar like we have the open and with cursor that the by default thing would be the run, the play button, but like on the side we would have the drop-down, what do you think?
+
+/Users/zvada/Developer/agent/box-ide/.conductor/montgomery-v4/.context/attachments/Screenshot 2026-03-26 at 8.52.41 PM.png
+
+---
+
+let;s make it but also let's use some default ther how the default if not last run enver been lcick wdyt?
+
+---
+
+/Users/zvada/Developer/agent/box-ide/.conductor/montgomery-v4/.context/attachments/image.png  fels weird u know what let's put the play buttom right next to the open in u know and have teh same size of the button evutig u know
+
+---
+
+/Users/zvada/Developer/agent/box-ide/.conductor/montgomery-v4/.context/attachments/Screenshot 2026-03-26 at 9.26.50 PM.png also when we click the setup eviremtn and go th ethe setitng sir not the rigth seeitnf page right becasue it's msiisng teh menus ettings
+
+---
+
+<system-instruction>
+The user has added 1 comment to the diff for this workspace. Please review and address these comments as part of your response. When addressing comments on the "original" side or on specific commits, read the file from that version (not the current version). Below are the comments, including metadata about what git state they were left on:
+
+Comment #1:
+
+File: apps/web/src/features/workspace/ui/TaskStrip.tsx
+Line: 2
+User comment: "why it's calle dtask srip?"
+
+Comment metadata:
+This comment was left on the modified branch.
+
+</system-instruction>
+
+---
+
+/Users/zvada/Developer/agent/box-ide/.conductor/montgomery-v4/.context/attachments/Screenshot 2026-03-26 at 11.24.46 PM.png I think the header has this problem that now the text can go under it. Or at least we should have more paddings between the button and the left side text of the branch. Also, maybe what we should do has some max width of the title wdyt?
+
+---
+
+Is this button in the mobile app? And also we have the hooks, like use last run task. But I think this doesn't go well with the header run button, right? Like the name. So like, is it a run task or is it a run button? Yeah, think about it.
+
+---
+
+<system_instruction>
+The user has attached these files. Read them before proceeding.
+- /Users/zvada/Developer/agent/box-ide/.conductor/montgomery-v4/.context/attachments/PR instructions.md (952 B)
+</system_instruction>
+
+
+
+Create a PR
+
+---
+
+/code-simplifier /deslop
+
+---
+
+/Users/zvada/Developer/agent/box-ide/.conductor/montgomery-v4/.context/attachments/image-v1.png Also, what do you think how to handle the setup environment? Like if there is not much place, how about we drop the text and only show it once there with a tooltip on hover over the icon, what do you think?
