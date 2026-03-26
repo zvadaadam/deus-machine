@@ -44,10 +44,13 @@ export function GeneralSection({ settings, saveSetting, theme, setTheme }: Gener
     if (!updateCtx) return;
     setManualChecking(true);
     setManualResult(null);
-    const isUpToDate = await updateCtx.check();
-    setManualChecking(false);
-    if (isUpToDate) {
-      setManualResult("up-to-date");
+    try {
+      const isUpToDate = await updateCtx.check();
+      if (isUpToDate) {
+        setManualResult("up-to-date");
+      }
+    } finally {
+      setManualChecking(false);
     }
   }
 
