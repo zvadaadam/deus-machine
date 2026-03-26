@@ -1,0 +1,24 @@
+{
+  "cli_version": "0.5.0",
+  "checkpoint_id": "06850d6682fa",
+  "session_id": "3fa00fef-96fb-4bbe-b127-1b2d76a6a409",
+  "strategy": "manual-commit",
+  "created_at": "2026-03-26T21:48:30.378111Z",
+  "branch": "zvadaadam/fix-sqlite-node-ver",
+  "checkpoints_count": 1,
+  "files_touched": [],
+  "agent": "Claude Code",
+  "turn_id": "d51d2954cae8",
+  "checkpoint_transcript_start": 198,
+  "transcript_lines_at_start": 198,
+  "token_usage": {
+    "input_tokens": 7,
+    "cache_creation_tokens": 35280,
+    "cache_read_tokens": 196114,
+    "output_tokens": 1076,
+    "api_call_count": 6
+  },
+  "session_metrics": {
+    "turn_count": 6
+  }
+}
