@@ -276,3 +276,7 @@ Create a PR
 ---
 
 Just probably like last thing, when we are at the end of the onboarding, it just like expands to the app and it feels weird because like I think last time the app was like full screen. So it does this like expansion. I don't know. I don't know. Because now we are testing locally where we already have the full screen. I'm not sure. Can you think about this?
+
+---
+
+Commit and push all changes
