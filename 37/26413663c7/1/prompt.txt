@@ -93,3 +93,14 @@ I think you can call it like the provider, so let's call it AI providers.
 ---
 
 And maybe moving the section updates into the general. What do you think?
+
+---
+
+<system_instruction>
+The user has attached these files. Read them before proceeding.
+- /Users/zvada/Developer/agent/box-ide/.conductor/macau-v2/.context/attachments/PR instructions.md (953 B)
+</system_instruction>
+
+
+
+Create a PR
