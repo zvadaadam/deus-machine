@@ -121,7 +121,6 @@ async function testHealthCheck() {
     if (response.status === 200 && response.body.status === 'ok') {
       logSuccess(`Backend is healthy on port ${response.body.port}`);
       logInfo(`Database: ${response.body.database}`);
-      logInfo(`Agent-server: ${response.body.agent-server}`);
       logInfo(`Socket: ${response.body.socket}`);
       return true;
     } else {

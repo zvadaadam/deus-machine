@@ -15,7 +15,7 @@ Before writing any code, know where it belongs:
 
 - **Rust (src-tauri/)**: Stateless pure functions. `(path, params) → data`. System-level ops, git (libgit2), file scanning, PTY, process management, socket relay. No business logic, no DB writes.
 - **Node.js backend (backend/)**: Business logic, DB reads/writes (SQLite), config management, external services (GitHub API via gh CLI). Hono framework, routes + services pattern.
-- **Agent-server (agent-server/)**: Claude Agent SDK integration, message transformation, assistant message persistence (direct SQLite via better-sqlite3). Separate Node.js process.
+- **Agent-server (agent-server/)**: Claude Agent SDK integration, canonical event emission. Stateless process with no DB access — streams events to backend, which handles all persistence.
 - **Frontend (src/)**: React 18 + Zustand (UI state only) + TanStack Query v5 (server state). Tailwind CSS v4. Features in `src/features/{feature}/`.
 
 ## Tech Stack Rules
@@ -74,7 +74,7 @@ For these, just implement directly and run `bun run typecheck`.
 ### Must follow
 
 - **No N+1 queries** — Use denormalized columns or batch queries. Use `sessions.last_user_message_at` instead of correlated subqueries.
-- **New query patterns need indexes** — Add to `backend/src/lib/schema.ts` and `agent-server/db/schema.ts`.
+- **New query patterns need indexes** — Add to `shared/schema.ts` (the single source of truth for all indexes and triggers).
 - **No hardcoded colors** — Use CSS variables/tokens from `src/global.css`.
 - **Zustand selector discipline** — Always use individual selectors, never destructure the whole store.
 - **Paginate unbounded collections** — Default page size 50-100.

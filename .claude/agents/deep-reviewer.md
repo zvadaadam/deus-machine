@@ -22,12 +22,12 @@ You are a **Senior Code Reviewer** performing thorough reviews of changes to Deu
 
 Before reviewing, understand the boundaries:
 
-| Layer                        | Owns                                                         | Must NOT do                                    |
-| ---------------------------- | ------------------------------------------------------------ | ---------------------------------------------- |
-| Rust (src-tauri/)            | Stateless reads, git, files, PTY, process mgmt               | Business logic, DB writes, async orchestration |
-| Backend (backend/)           | DB writes, business logic, config, external APIs             | UI concerns, direct Claude SDK usage           |
-| Agent-server (agent-server/) | Claude SDK streaming, message transform, assistant DB writes | HTTP endpoints, frontend state                 |
-| Frontend (src/)              | React UI, Zustand (UI state), TanStack Query (server state)  | Direct DB access, git operations               |
+| Layer                        | Owns                                                        | Must NOT do                                      |
+| ---------------------------- | ----------------------------------------------------------- | ------------------------------------------------ |
+| Rust (src-tauri/)            | Stateless reads, git, files, PTY, process mgmt              | Business logic, DB writes, async orchestration   |
+| Backend (backend/)           | DB writes, business logic, config, external APIs            | UI concerns, direct Claude SDK usage             |
+| Agent-server (agent-server/) | Claude SDK streaming, message transform, tool orchestration | HTTP endpoints, frontend state, direct DB writes |
+| Frontend (src/)              | React UI, Zustand (UI state), TanStack Query (server state) | Direct DB access, git operations                 |
 
 ## Review Checklist
 
