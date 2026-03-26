@@ -1,0 +1,39 @@
+{
+  "cli_version": "0.5.0",
+  "checkpoint_id": "63f88c9e0a75",
+  "session_id": "dc2ef3f2-5114-48c7-887c-6bb24df0debb",
+  "strategy": "manual-commit",
+  "created_at": "2026-03-26T17:59:26.718065Z",
+  "branch": "zvadaadam/github-release-guide",
+  "checkpoints_count": 16,
+  "files_touched": [
+    ".claude/agents/code-reviewer.md",
+    ".claude/agents/deep-reviewer.md",
+    ".claude/agents/dev.md",
+    ".claude/skills/explore/SKILL.md",
+    ".claude/skills/risk-tier/SKILL.md",
+    "apps/backend/src/services/workspace-init.service.ts",
+    "test/e2e/e2e-flow.test.cjs"
+  ],
+  "agent": "Claude Code",
+  "turn_id": "2ca702c6ce8f",
+  "token_usage": {
+    "input_tokens": 343,
+    "cache_creation_tokens": 563603,
+    "cache_read_tokens": 9836386,
+    "output_tokens": 35004,
+    "api_call_count": 132
+  },
+  "session_metrics": {
+    "turn_count": 16
+  },
+  "initial_attribution": {
+    "calculated_at": "2026-03-26T17:59:26.233978Z",
+    "agent_lines": 62,
+    "human_added": 13794,
+    "human_modified": 6,
+    "human_removed": 0,
+    "total_committed": 13862,
+    "agent_percentage": 0.44726590679555617
+  }
+}

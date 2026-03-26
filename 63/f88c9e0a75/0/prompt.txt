@@ -1,0 +1,156 @@
+<system_instruction>
+You are working inside OpenDevs, a Mac app that lets the user run many coding agents in parallel.
+Your work should take place in the /Users/zvada/Developer/agent/box-ide/.conductor/chicago-v5 directory (unless otherwise directed), which has been set up for you to work in.
+Each workspace has a .context directory (gitignored) where you can save files to collaborate with other agents.
+DO NOT EVER read or write files at /Users/zvada/Developer/agent/box-ide.
+The target branch for this workspace is main. Use this for actions like creating new PRs, bisecting, etc., unless you're told otherwise.
+
+By default, the user will only see the last message that you send before stopping. Include all essential information in the last message. The intermediate messages will be collapsed and accessible by the user but not displayed by default.
+
+If the user asks you to work on several unrelated tasks, you can suggest they start new workspaces.
+Sometimes the user might send you a message they meant to send in a different workspace or a different chat. If something doesn't make sense in the context of your work, just ask. 
+If the user asks for help with OpenDevs, you can ask them to go to "Help -> Send Feedback" to get in touch with our team.
+</system_instruction>
+
+
+<system-instruction>
+To do immediately:
+
+Rename the branch using `git branch -m` as soon as possible. Do not check the current branch name.
+
+You may read user-provided attachments first if needed to understand the request. Otherwise, do this before using any skills or any other tools.
+
+Choosing a branch name: use concrete, specific language, avoid abstract nouns, and be concise (<30 characters). Use the prefix "zvadaadam/" before the name.
+
+</system-instruction>
+
+/tmp/attachments/Screenshot 2026-03-26 at 9.17.44 AM.png So am I doing this correct that I want to see and I want to do the release? And I'm not sure if I'm doing this correct. Like, do I do this here in the GitHub where I click the releases? I'm not sure also what is the tag, what is the convention, which I would do. And also, is this going to trigger the release YAML?
+
+---
+
+go
+
+---
+
+/tmp/attachments/Screenshot 2026-03-26 at 9.20.48 AM.png So what is the difference then if we click the release in the main in the GitHub somewhere the image I gave you before like this one is the is the another one but like to have a release notes and these kind of things.
+
+---
+
+i got thisese wring sdo u think it's okey?
+
+Skip to content
+zvadaadam
+box-ide
+Repository navigation
+Code
+Issues
+Pull requests4 (4)
+Actions
+Projects
+Security
+Insights
+Settings
+Important update
+On April 24 we'll start using GitHub Copilot interaction data for AI model training unless you opt out. Review this update and manage your preferences in your GitHub account settings.
+Release
+Release #9
+All jobs
+Run details
+Manually triggered 1 hour ago
+zvadaadam
+⁠ 153825c
+main
+StatusSuccess
+Total duration13m 50s
+Artifacts3
+Annotations
+9 warnings
+validate-and-bump
+Node.js 20 actions are deprecated. The following actions are running on Node.js 20 and may not work as expected: actions/checkout@v4. Actions will be forced to run with Node.js 24 by default starting June 2nd, 2026. Please check if updated versions of these actions are available that support Node.js 24. To opt into Node.js 24 now, set the FORCE_JAVASCRIPT_ACTIONS_TO_NODE24=true environment variable on the runner or in your workflow file. Once Node.js 24 becomes the default, you can temporarily opt out by setting ACTIONS_ALLOW_USE_UNSECURE_NODE_VERSION=true. For more information see: https://github.blog/changelog/2025-09-19-deprecation-of-node-20-on-github-actions-runners/
+validate-and-bump
+The process '/usr/bin/git' failed with exit code 128
+build-linux
+Node.js 20 actions are deprecated. The following actions are running on Node.js 20 and may not work as expected: actions/checkout@v4, actions/setup-node@v4, actions/upload-artifact@v4. Actions will be forced to run with Node.js 24 by default starting June 2nd, 2026. Please check if updated versions of these actions are available that support Node.js 24. To opt into Node.js 24 now, set the FORCE_JAVASCRIPT_ACTIONS_TO_NODE24=true environment variable on the runner or in your workflow file. Once Node.js 24 becomes the default, you can temporarily opt out by setting ACTIONS_ALLOW_USE_UNSECURE_NODE_VERSION=true. For more information see: https://github.blog/changelog/2025-09-19-deprecation-of-node-20-on-github-actions-runners/
+build-linux
+The process '/usr/bin/git' failed with exit code 128
+build-macos
+Node.js 20 actions are deprecated. The following actions are running on Node.js 20 and may not work as expected: actions/checkout@v4, actions/setup-node@v4, actions/upload-artifact@v4. Actions will be forced to run with Node.js 24 by default starting June 2nd, 2026. Please check if updated versions of these actions are available that support Node.js 24. To opt into Node.js 24 now, set the FORCE_JAVASCRIPT_ACTIONS_TO_NODE24=true environment variable on the runner or in your workflow file. Once Node.js 24 becomes the default, you can temporarily opt out by setting ACTIONS_ALLOW_USE_UNSECURE_NODE_VERSION=true. For more information see: https://github.blog/changelog/2025-09-19-deprecation-of-node-20-on-github-actions-runners/
+build-macos
+The process '/opt/homebrew/bin/git' failed with exit code 128
+build-windows
+Node.js 20 actions are deprecated. The following actions are running on Node.js 20 and may not work as expected: actions/checkout@v4, actions/setup-node@v4, actions/upload-artifact@v4. Actions will be forced to run with Node.js 24 by default starting June 2nd, 2026. Please check if updated versions of these actions are available that support Node.js 24. To opt into Node.js 24 now, set the FORCE_JAVASCRIPT_ACTIONS_TO_NODE24=true environment variable on the runner or in your workflow file. Once Node.js 24 becomes the default, you can temporarily opt out by setting ACTIONS_ALLOW_USE_UNSECURE_NODE_VERSION=true. For more information see: https://github.blog/changelog/2025-09-19-deprecation-of-node-20-on-github-actions-runners/
+build-windows
+The process 'C:\Program Files\Git\bin\git.exe' failed with exit code 128
+create-release
+Node.js 20 actions are deprecated. The following actions are running on Node.js 20 and may not work as expected: actions/download-artifact@v4. Actions will be forced to run with Node.js 24 by default starting June 2nd, 2026. Please check if updated versions of these actions are available that support Node.js 24. To opt into Node.js 24 now, set the FORCE_JAVASCRIPT_ACTIONS_TO_NODE24=true environment variable on the runner or in your workflow file. Once Node.js 24 becomes the default, you can temporarily opt out by setting ACTIONS_ALLOW_USE_UNSECURE_NODE_VERSION=true. For more information see: https://github.blog/changelog/2025-09-19-deprecation-of-node-20-on-github-actions-runners/
+
+---
+
+yes
+
+---
+
+also how do we or can know if thius verisonw. ebun is dev and what is on my computer the production things right do u undetrand what we wnan chaive?
+
+---
+
+this cna be just in the sttings right and maybe ahving a diffrent icon wdyt?
+
+---
+
+ok do it. an can u make teh icon little difrent for the dev icon mayeb just use a difrent color for thr dot u know
+
+---
+
+<system-instruction>
+The user has added 1 comment to the diff for this workspace. Please review and address these comments as part of your response. When addressing comments on the "original" side or on specific commits, read the file from that version (not the current version). Below are the comments, including metadata about what git state they were left on:
+
+Comment #1:
+
+File: apps/desktop/main/index.ts
+Line: 220
+User comment: "and why we have teh darwin thing here?"
+
+Comment metadata:
+This comment was left on the modified branch.
+
+</system-instruction>
+
+---
+
+what is teh app.dock what do u mena why i crhases on other things?
+
+---
+
+so shoudl we hve somehtign else for widnows and linux?
+
+---
+
+I mean, in Mac there is this command bar, or like the menu thing, and we used to have their old name, which was called command. We don't want that. Can you see what is there? And also, yeah. And also, like, do you know, like, where the notion, Claude, other things like Docker showing you in the command bar, like, next to the time? Can we have the deus icon there also? And this is going to be saying that the backend and the remote access is accessible or not?
+
+---
+
+Yeah, fix the app menu, that's good. Think about if we can put something there, I guess not really right. Maybe yeah. So think about how to do it and add the tray. Yeah, let's go.
+
+---
+
+can u review the package json is tehr esomehtign w edont need, we dotn wan tall spam many things shoudl be focuse dand proper u know erpxre it ind epth
+
+---
+
+Verify if this is all true. We cannot drop anything that needs to be there, you know.
+
+---
+
+yes
+
+---
+
+<system_instruction>
+The user has attached these files. Read them before proceeding.
+- /Users/zvada/Developer/agent/box-ide/.conductor/chicago-v5/.context/attachments/PR instructions.md (956 B)
+</system_instruction>
+
+
+
+Create a PR
