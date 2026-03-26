@@ -286,3 +286,7 @@ I run AI code review, is it actionable? Wdyt? Explore in depth each problem.
 We want a clean, maintainable codebase, with proper best practices for the tech stack we use.
 Run subagents to verify, and if it should be fixed, try to merge some stuff together so it can be fixed together within one subagent. 
 If you can test something do it
+
+---
+
+Commit and push all changes
