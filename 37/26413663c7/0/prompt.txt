@@ -1,0 +1,27 @@
+<system_instruction>
+You are working inside OpenDevs, a Mac app that lets the user run many coding agents in parallel.
+Your work should take place in the /Users/zvada/Developer/agent/box-ide/.conductor/macau-v2 directory (unless otherwise directed), which has been set up for you to work in.
+Each workspace has a .context directory (gitignored) where you can save files to collaborate with other agents.
+DO NOT EVER read or write files at /Users/zvada/Developer/agent/box-ide.
+The target branch for this workspace is main. Use this for actions like creating new PRs, bisecting, etc., unless you're told otherwise.
+
+By default, the user will only see the last message that you send before stopping. Include all essential information in the last message. The intermediate messages will be collapsed and accessible by the user but not displayed by default.
+
+If the user asks you to work on several unrelated tasks, you can suggest they start new workspaces.
+Sometimes the user might send you a message they meant to send in a different workspace or a different chat. If something doesn't make sense in the context of your work, just ask. 
+If the user asks for help with OpenDevs, you can ask them to go to "Help -> Send Feedback" to get in touch with our team.
+</system_instruction>
+
+/Users/zvada/Developer/agent/box-ide/.conductor/macau-v2/.context/attachments/pasted_text_2026-03-26_20-35-35.txt Can you tell me why the relay doesn't work? Can you explore it? What's wrong?
+
+---
+
+/Users/zvada/Developer/agent/box-ide/.conductor/macau-v2/.context/attachments/image.png Also, okay, good. But also, can you explore, sometimes, can you explore like the, on the web when I open it? Like, it doesn't remember the app, the connections. And I always go, I open, always open the server path that is for our project, our server desktop on the website, in my phone, but I always get the screen, but I should be able to connect, right?
+
+---
+
+but it;s not with privat window even u know
+
+---
+
+/Users/zvada/Developer/agent/box-ide/.conductor/macau-v2/.context/attachments/Screenshot 2026-03-26 at 9.56.16 PM.png Oh, I can see when I go to the web socket and I click toggle, it will turn off. When I turn it on, I get this error.
