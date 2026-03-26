@@ -1,0 +1,81 @@
+<system_instruction>
+You are working inside OpenDevs, a Mac app that lets the user run many coding agents in parallel.
+Your work should take place in the /Users/zvada/Developer/agent/box-ide/.conductor/pattaya-v2 directory (unless otherwise directed), which has been set up for you to work in.
+Each workspace has a .context directory (gitignored) where you can save files to collaborate with other agents.
+DO NOT EVER read or write files at /Users/zvada/Developer/agent/box-ide.
+The target branch for this workspace is main. Use this for actions like creating new PRs, bisecting, etc., unless you're told otherwise.
+
+By default, the user will only see the last message that you send before stopping. Include all essential information in the last message. The intermediate messages will be collapsed and accessible by the user but not displayed by default.
+
+If the user asks you to work on several unrelated tasks, you can suggest they start new workspaces.
+Sometimes the user might send you a message they meant to send in a different workspace or a different chat. If something doesn't make sense in the context of your work, just ask. 
+If the user asks for help with OpenDevs, you can ask them to go to "Help -> Send Feedback" to get in touch with our team.
+</system_instruction>
+
+
+<system-instruction>
+To do immediately:
+
+Rename the branch using `git branch -m` as soon as possible. Do not check the current branch name.
+
+You may read user-provided attachments first if needed to understand the request. Otherwise, do this before using any skills or any other tools.
+
+Choosing a branch name: use concrete, specific language, avoid abstract nouns, and be concise (<30 characters). Use the prefix "zvadaadam/" before the name.
+
+</system-instruction>
+
+When you explore the notification that this desktop app sends, I feel like they are not very nice. It should be more like when we click, we go to the session and it should tell us the project, the repository, and then the name of the branch. And something like click, yeah, what do you think we would add there from the text?
+
+---
+
+I think this is the best text we can have there for it, like from if you imagine like having this notification for like 300 times per day to see it. What would you want to see there and so it's actionable for you.
+
+---
+
+So if I click on it, I want to be able to open the workspace from the session, the workspace and the session, that would be the best, right?
+
+---
+
+/deslop /code-simplifier
+
+---
+
+I run AI code review, is it actionable? Wdyt? Explore in depth each problem.
+We want a clean, maintainable codebase, with proper best practices for the tech stack we use.
+Run subagents to verify, and if it should be fixed, try to merge some stuff together so it can be fixed together within one subagent. 
+If you can test something do it.
+
+
+I've reviewed the full diff. Here's my assessment:
+---
+## Review: Better Notifications
+**Changes summary:** Two files modified to improve OS notification quality — notifications now show `"repo-name · workspace-title"` instead of truncated session IDs, and clicking any notification navigates to the relevant workspace/session.
+### Issue Found
+### **#1 Setup notification `onClick` missing `showWindow()` — window won't restore from minimized**
+Session notifications use `navigateToWorkspace()` which calls `showWindow()` (Electron IPC → `show_main_window`) to restore minimized/hidden windows before navigating:
+```ts
+// navigateToWorkspace (line 54-64) — used by all session notifications
+function navigateToWorkspace(workspaceId: string, sessionId: string): void {
+  showWindow();  // ← Electron IPC to restore window
+  useWorkspaceStore.getState().selectWorkspace(workspaceId);
+  // ...
+}
+```
+But the **setup failed** and **setup complete** notification `onClick` handlers skip this:
+```ts
+// Line 261 — setup failed
+onClick: () => useWorkspaceStore.getState().selectWorkspace(ws.id),
+// Line 271 — setup complete  
+onClick: () => useWorkspaceStore.getState().selectWorkspace(ws.id),
+```
+The `window.focus()` call in `notificationService.ts` is a renderer-side call that doesn't invoke Electron's `show_main_window` IPC. On macOS, clicking a setup notification when the window is minimized/hidden will update internal state but the window won't actually come to the foreground.
+**Fix:** Add `showWindow()` to both setup notification `onClick` handlers:
+```ts
+onClick: () => {
+  showWindow();
+  useWorkspaceStore.getState().selectWorkspace(ws.id);
+},
+```
+**File:** `apps/web/src/features/session/hooks/useGlobalSessionNotifications.ts`, lines 261 and 271
+---
+**Overall:** Clean, well-structured change. The `FinishedEntry` interface, `formatBody` helper, and `navigateToWorkspace` utility are good abstractions. The notification bodies are now genuinely useful. Only the one inconsistency above needs fixing.
