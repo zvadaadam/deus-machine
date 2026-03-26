@@ -1053,3 +1053,7 @@ If you can test something do it.
 ---
 
 Commit and push all changes
+
+---
+
+/Users/zvada/Developer/agent/box-ide/.conductor/boston-v3/.context/attachments/Screenshot 2026-03-26 at 9.06.38 AM.png why we always have ths with thr husky>
