@@ -7,21 +7,13 @@ import { SidebarInset } from "@/components/ui/sidebar";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { useTheme } from "@/app/providers";
 import { useUIStore } from "@/shared/stores/uiStore";
-import {
-  useSettings,
-  useMCPServers,
-  useCommands,
-  useAgents,
-  useUpdateSettings,
-} from "../api/settings.queries";
+import { useSettings, useUpdateSettings } from "../api/settings.queries";
 import {
   GeneralSection,
   AISection,
-  ExtensionsSection,
   EnvironmentSection,
   ExperimentalSection,
   AccessSection,
-  UpdateSection,
 } from "./sections";
 
 export function SettingsPage() {
@@ -30,24 +22,13 @@ export function SettingsPage() {
   const { theme, setTheme } = useTheme();
 
   const settingsQuery = useSettings();
-  const mcpServersQuery = useMCPServers();
-  const commandsQuery = useCommands();
-  const agentsQuery = useAgents();
   const updateSettingsMutation = useUpdateSettings();
 
   const settings = settingsQuery.data || {};
-  const mcpServers = mcpServersQuery.data || [];
-  const commands = commandsQuery.data || [];
-  const agents = agentsQuery.data || [];
   const loading =
-    activeSection === "extensions"
-      ? settingsQuery.isLoading ||
-        mcpServersQuery.isLoading ||
-        commandsQuery.isLoading ||
-        agentsQuery.isLoading
-      : activeSection === "environment"
-        ? false // EnvironmentSection manages its own loading state
-        : settingsQuery.isLoading;
+    activeSection === "environment"
+      ? false // EnvironmentSection manages its own loading state
+      : settingsQuery.isLoading;
   const saving = updateSettingsMutation.isPending;
 
   // ESC closes settings
@@ -96,13 +77,9 @@ export function SettingsPage() {
     return match(activeSection)
       .with("general", () => <GeneralSection {...sectionProps} theme={theme} setTheme={setTheme} />)
       .with("ai", () => <AISection {...sectionProps} />)
-      .with("extensions", () => (
-        <ExtensionsSection mcpServers={mcpServers} commands={commands} agents={agents} />
-      ))
       .with("environment", () => <EnvironmentSection />)
       .with("experimental", () => <ExperimentalSection {...sectionProps} />)
       .with("access", () => <AccessSection {...sectionProps} />)
-      .with("updates", () => <UpdateSection />)
       .exhaustive();
   }
 

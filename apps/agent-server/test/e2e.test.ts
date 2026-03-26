@@ -1,14 +1,12 @@
 import { describe, it, expect, beforeAll, afterAll } from "vitest";
 import { spawn, ChildProcess, execSync } from "child_process";
-import * as net from "net";
 import * as fs from "fs";
 import * as path from "path";
-import * as os from "os";
-import { StringDecoder } from "string_decoder";
+import WebSocket from "ws";
 
 /**
  * End-to-end tests: Spawn a real agent-server process, connect via
- * Unix domain socket, send JSON-RPC messages, verify responses.
+ * WebSocket, send JSON-RPC messages, verify responses.
  *
  * Three test suites:
  * 1. Protocol compliance — tests JSON-RPC protocol handling (always runs)
@@ -79,62 +77,46 @@ if (isCI) {
 // Helpers
 // ============================================================================
 
-/** Wait for a message matching a predicate from the socket */
+/** Wait for a message matching a predicate from the WebSocket */
 function waitForMessage(
-  socket: net.Socket,
+  ws: WebSocket,
   predicate: (msg: any) => boolean,
   timeoutMs = 10000
 ): Promise<any> {
   return new Promise((resolve, reject) => {
-    let buffer = "";
-    const decoder = new StringDecoder("utf8");
     const timer = setTimeout(() => {
-      socket.removeListener("data", onData);
+      ws.removeListener("message", onMessage);
       reject(new Error(`waitForMessage timed out after ${timeoutMs}ms`));
     }, timeoutMs);
 
-    function onData(data: Buffer) {
-      buffer += decoder.write(data);
-      const lines = buffer.split("\n");
-      buffer = lines.pop() || "";
-
-      for (const line of lines) {
-        if (!line.trim()) continue;
-        try {
-          const msg = JSON.parse(line);
-          if (predicate(msg)) {
-            clearTimeout(timer);
-            socket.removeListener("data", onData);
-            resolve(msg);
-            return;
-          }
-        } catch {
-          // Ignore parse errors
-        }
-      }
-    }
-
-    socket.on("data", onData);
-  });
-}
-
-/** Collect all messages from a socket into an array (non-blocking) */
-function collectMessages(socket: net.Socket): any[] {
-  const messages: any[] = [];
-  let buffer = "";
-  const decoder = new StringDecoder("utf8");
-
-  socket.on("data", (data) => {
-    buffer += decoder.write(data);
-    const lines = buffer.split("\n");
-    buffer = lines.pop() || "";
-    for (const line of lines) {
-      if (!line.trim()) continue;
+    function onMessage(data: WebSocket.Data) {
+      const text = typeof data === "string" ? data : data.toString("utf8");
       try {
-        messages.push(JSON.parse(line));
+        const msg = JSON.parse(text);
+        if (predicate(msg)) {
+          clearTimeout(timer);
+          ws.removeListener("message", onMessage);
+          resolve(msg);
+        }
       } catch {
         // Ignore parse errors
       }
+    }
+
+    ws.on("message", onMessage);
+  });
+}
+
+/** Collect all messages from a WebSocket into an array (non-blocking) */
+function collectMessages(ws: WebSocket): any[] {
+  const messages: any[] = [];
+
+  ws.on("message", (data: WebSocket.Data) => {
+    const text = typeof data === "string" ? data : data.toString("utf8");
+    try {
+      messages.push(JSON.parse(text));
+    } catch {
+      // Ignore parse errors
     }
   });
 
@@ -142,17 +124,15 @@ function collectMessages(socket: net.Socket): any[] {
 }
 
 /** Send a JSON-RPC notification (fire-and-forget) */
-function sendNotification(socket: net.Socket, method: string, params: any): void {
-  const msg = JSON.stringify({ jsonrpc: "2.0", method, params });
-  socket.write(msg + "\n");
+function sendNotification(ws: WebSocket, method: string, params: any): void {
+  ws.send(JSON.stringify({ jsonrpc: "2.0", method, params }));
 }
 
 /** Send a JSON-RPC request and return its ID */
 let rpcIdCounter = 1;
-function sendRequest(socket: net.Socket, method: string, params: any): number {
+function sendRequest(ws: WebSocket, method: string, params: any): number {
   const id = rpcIdCounter++;
-  const msg = JSON.stringify({ jsonrpc: "2.0", id, method, params });
-  socket.write(msg + "\n");
+  ws.send(JSON.stringify({ jsonrpc: "2.0", id, method, params }));
   return id;
 }
 
@@ -175,15 +155,15 @@ async function readFileWithRetry(filePath: string, timeoutMs = 5000): Promise<st
   throw new Error(`Timed out waiting for log file: ${filePath}`);
 }
 
-/** Spawn an agent-server process and connect a client socket */
+/** Spawn an agent-server process and connect a WebSocket client */
 async function spawnAgentServer(): Promise<{
   process: ChildProcess;
-  socketPath: string;
-  client: net.Socket;
+  wsUrl: string;
+  client: WebSocket;
   logPath: string;
 }> {
   // The agent-server is stateless — no DATABASE_PATH needed.
-  const proc = spawn("node", [BUNDLE_PATH, "--listen", "unix://"], {
+  const proc = spawn("node", [BUNDLE_PATH], {
     env: {
       ...process.env,
       LOG_LEVEL: "debug",
@@ -192,22 +172,22 @@ async function spawnAgentServer(): Promise<{
   });
 
   let stderrOutput = "";
-  proc.stderr?.on("data", (data) => {
+  proc.stderr?.on("data", (data: Buffer) => {
     stderrOutput += data.toString();
   });
 
-  // Wait for SOCKET_PATH= from stdout
-  const socketPath = await new Promise<string>((resolve, reject) => {
+  // Wait for LISTEN_URL= from stdout
+  const wsUrl = await new Promise<string>((resolve, reject) => {
     let stdoutBuffer = "";
     const timeout = setTimeout(() => {
       reject(
-        new Error(`Agent-server did not print SOCKET_PATH within 15s. stderr: ${stderrOutput}`)
+        new Error(`Agent-server did not print LISTEN_URL within 15s. stderr: ${stderrOutput}`)
       );
     }, 15_000);
 
-    proc.stdout?.on("data", (data) => {
+    proc.stdout?.on("data", (data: Buffer) => {
       stdoutBuffer += data.toString();
-      const match = stdoutBuffer.match(/SOCKET_PATH=(.+)/);
+      const match = stdoutBuffer.match(/LISTEN_URL=(.+)/);
       if (match) {
         clearTimeout(timeout);
         resolve(match[1].trim());
@@ -220,14 +200,15 @@ async function spawnAgentServer(): Promise<{
     });
   });
 
-  // Connect to the agent-server's Unix domain socket
-  const client = await new Promise<net.Socket>((resolve, reject) => {
-    const timeout = setTimeout(() => reject(new Error("Client connection timed out")), 5000);
-    const sock = net.connect(socketPath, () => {
+  // Connect to the agent-server's WebSocket
+  const client = await new Promise<WebSocket>((resolve, reject) => {
+    const timeout = setTimeout(() => reject(new Error("WebSocket connection timed out")), 5000);
+    const ws = new WebSocket(wsUrl);
+    ws.on("open", () => {
       clearTimeout(timeout);
-      resolve(sock);
+      resolve(ws);
     });
-    sock.on("error", (err) => {
+    ws.on("error", (err) => {
       clearTimeout(timeout);
       reject(err);
     });
@@ -235,17 +216,13 @@ async function spawnAgentServer(): Promise<{
 
   const logPath = `/tmp/deus-${proc.pid}.log`;
 
-  return { process: proc, socketPath, client, logPath };
+  return { process: proc, wsUrl, client, logPath };
 }
 
 /** Kill an agent-server process and clean up */
-async function killAgentServer(srv: {
-  process: ChildProcess;
-  socketPath: string;
-  client: net.Socket;
-}): Promise<void> {
+async function killAgentServer(srv: { process: ChildProcess; client: WebSocket }): Promise<void> {
   if (srv.client) {
-    srv.client.destroy();
+    srv.client.close();
   }
   if (srv.process) {
     srv.process.kill("SIGTERM");
@@ -253,13 +230,6 @@ async function killAgentServer(srv: {
       srv.process.on("exit", () => resolve());
       setTimeout(resolve, 3000);
     });
-  }
-  if (srv.socketPath && fs.existsSync(srv.socketPath)) {
-    try {
-      fs.unlinkSync(srv.socketPath);
-    } catch {
-      // ignore
-    }
   }
 }
 
@@ -269,24 +239,24 @@ async function killAgentServer(srv: {
 
 describe.skipIf(!bundleExists)("E2E: Agent Server Process", () => {
   let agentServerProcess: ChildProcess;
-  let socketPath: string;
-  let client: net.Socket;
+  let wsUrl: string;
+  let client: WebSocket;
 
   beforeAll(async () => {
     const result = await spawnAgentServer();
     agentServerProcess = result.process;
-    socketPath = result.socketPath;
+    wsUrl = result.wsUrl;
     client = result.client;
   }, 30_000);
 
   afterAll(async () => {
-    await killAgentServer({ process: agentServerProcess, socketPath, client });
+    await killAgentServer({ process: agentServerProcess, client });
   });
 
-  it("connects to the agent-server's Unix socket", () => {
+  it("connects to the agent-server via WebSocket", () => {
     expect(client).toBeDefined();
-    expect(socketPath).toBeDefined();
-    expect(socketPath).toContain("deus-agent-server-");
+    expect(wsUrl).toContain("ws://127.0.0.1:");
+    expect(client.readyState).toBe(WebSocket.OPEN);
   });
 
   it("handles an unknown JSON-RPC method gracefully", async () => {
@@ -321,8 +291,8 @@ describe.skipIf(!bundleExists)("E2E: Agent Server Process", () => {
   });
 
   it("handles malformed JSON gracefully (no crash)", async () => {
-    client.write("this is not valid json\n");
-    client.write("{ incomplete\n");
+    client.send("this is not valid json");
+    client.send("{ incomplete");
 
     const id = sendRequest(client, "provider/auth", {
       agentType: "claude",
@@ -341,7 +311,7 @@ describe.skipIf(!bundleExists)("E2E: Agent Server Process", () => {
   });
 
   it("handles non-JSON-RPC JSON gracefully", async () => {
-    client.write(JSON.stringify({ foo: "bar", not: "jsonrpc" }) + "\n");
+    client.send(JSON.stringify({ foo: "bar", not: "jsonrpc" }));
 
     const id = sendRequest(client, "provider/auth", {
       agentType: "claude",
@@ -365,20 +335,18 @@ describe.skipIf(!bundleExists)("E2E: Agent Server Process", () => {
 
 describe.skipIf(!bundleExists || !claudeCliAvailable)("E2E: Real Claude Integration", () => {
   let agentServerProcess: ChildProcess;
-  let socketPath: string;
-  let client: net.Socket;
+  let client: WebSocket;
   let logPath: string;
 
   beforeAll(async () => {
     const result = await spawnAgentServer();
     agentServerProcess = result.process;
-    socketPath = result.socketPath;
     client = result.client;
     logPath = result.logPath;
   }, 30_000);
 
   afterAll(async () => {
-    await killAgentServer({ process: agentServerProcess, socketPath, client });
+    await killAgentServer({ process: agentServerProcess, client });
   });
 
   // ------------------------------------------------------------------
@@ -605,20 +573,18 @@ describe.skipIf(!bundleExists || !claudeCliAvailable)("E2E: Real Claude Integrat
 // Fork PRs can't access repo secrets — skip gracefully instead of failing.
 describe.skipIf(!bundleExists || !hasOpenAIKey)("E2E: Real Codex Integration", () => {
   let agentServerProcess: ChildProcess;
-  let socketPath: string;
-  let client: net.Socket;
+  let client: WebSocket;
   let logPath: string;
 
   beforeAll(async () => {
     const result = await spawnAgentServer();
     agentServerProcess = result.process;
-    socketPath = result.socketPath;
     client = result.client;
     logPath = result.logPath;
   }, 30_000);
 
   afterAll(async () => {
-    await killAgentServer({ process: agentServerProcess, socketPath, client });
+    await killAgentServer({ process: agentServerProcess, client });
   });
 
   // ------------------------------------------------------------------

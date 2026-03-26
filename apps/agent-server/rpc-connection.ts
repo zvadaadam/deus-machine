@@ -1,13 +1,6 @@
 // agent-server/rpc-connection.ts
-// Bidirectional JSON-RPC 2.0 connection over a pluggable transport.
-//
-// Supports two transports:
-// - TCP/Unix socket (net.Socket): newline-delimited JSON lines (NDJSON)
-// - WebSocket (ws): each JSON-RPC message is a single WS text frame
-//
-// The caller is responsible for message framing:
-// - For net.Socket: split on newlines, call handleLine() per line
-// - For WebSocket: call handleMessage() per WS "message" event
+// Bidirectional JSON-RPC 2.0 connection over WebSocket.
+// Each JSON-RPC message is a single WS text frame.
 
 import {
   JSONRPCServer,
@@ -18,7 +11,6 @@ import {
   isJSONRPCResponse,
   isJSONRPCResponses,
 } from "json-rpc-2.0";
-import type { Socket } from "net";
 import type { WebSocket } from "ws";
 
 // ============================================================================
@@ -34,18 +26,6 @@ export interface RpcTransport {
   send(data: string): void;
   /** Returns true if the underlying connection is no longer usable. */
   isClosed(): boolean;
-}
-
-/** Wraps a net.Socket as an RpcTransport (newline-delimited JSON). */
-export function socketTransport(socket: Socket): RpcTransport {
-  return {
-    send(data: string) {
-      socket.write(data + "\n");
-    },
-    isClosed() {
-      return socket.destroyed;
-    },
-  };
 }
 
 /** Wraps a ws.WebSocket as an RpcTransport (text frames). */
@@ -90,19 +70,8 @@ export class RpcConnection {
   private transport: RpcTransport;
   private peer: JSONRPCServerAndClient;
 
-  /**
-   * Create an RPC connection over any transport.
-   *
-   * Accepts either:
-   * - A net.Socket (legacy Unix socket path) — auto-wrapped in socketTransport
-   * - An RpcTransport (WebSocket or custom) — used directly
-   */
-  constructor(transportOrSocket: RpcTransport | Socket) {
-    // Duck-type: if it has send() and isClosed(), treat as RpcTransport.
-    // Otherwise, wrap as a net.Socket via socketTransport().
-    this.transport = isRpcTransport(transportOrSocket)
-      ? transportOrSocket
-      : socketTransport(transportOrSocket as Socket);
+  constructor(transport: RpcTransport) {
+    this.transport = transport;
 
     const server = new JSONRPCServer({
       errorListener: (message, data) => {
@@ -184,21 +153,4 @@ export class RpcConnection {
   stop(): void {
     this.peer.rejectAllPendingRequests("RPC connection stopped");
   }
-}
-
-// ============================================================================
-// Type guard
-// ============================================================================
-
-/**
- * Duck-type check: RpcTransport has `send` (function) and `isClosed` (function).
- * Anything that doesn't match is treated as a net.Socket (which has `write`).
- */
-function isRpcTransport(obj: unknown): obj is RpcTransport {
-  return (
-    typeof obj === "object" &&
-    obj !== null &&
-    typeof (obj as any).send === "function" &&
-    typeof (obj as any).isClosed === "function"
-  );
 }

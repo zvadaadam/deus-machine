@@ -28,6 +28,7 @@ import type {
   TurnStartResponse,
   TurnRespondRequest,
   SessionStopRequest,
+  ProviderAuthRequest,
 } from "@shared/agent-events";
 
 // ---- Singleton ----
@@ -122,4 +123,15 @@ export async function stopSession(params: SessionStopRequest): Promise<void> {
 /** Check if the agent service is connected. */
 export function isConnected(): boolean {
   return client?.isConnected() ?? false;
+}
+
+/** Check authentication status for an agent provider. */
+export async function checkAuth(params: ProviderAuthRequest): Promise<unknown> {
+  if (!client) throw new Error("Agent service not initialized");
+  return client.sendProviderAuth(params);
+}
+
+/** Returns the agents discovered during the initialize handshake. */
+export function getAgents() {
+  return client?.getAgents() ?? [];
 }

@@ -25,6 +25,7 @@ import { useSettings as useSettingsQuery } from "@/features/settings";
 import { SidebarProvider, useSidebar } from "@/components/ui";
 import { AppSidebar, SidebarSkeleton } from "@/features/sidebar";
 import { useWorkspaceStore, workspaceLayoutActions } from "@/features/workspace/store";
+import { useSidebarStore } from "@/features/sidebar/store";
 import { useUIStore } from "@/shared/stores/uiStore";
 import {
   useChatInsertStore,
@@ -87,6 +88,7 @@ export function MainLayout() {
   // Zustand stores - Global state (ID-only; full object derived from React Query below)
   const selectedWorkspaceId = useWorkspaceStore((state) => state.selectedWorkspaceId);
   const selectWorkspace = useWorkspaceStore((state) => state.selectWorkspace);
+  const expandRepo = useSidebarStore((s) => s.expandRepo);
 
   const showNewWorkspaceModal = useUIStore((s) => s.showNewWorkspaceModal);
   const newWorkspaceMode = useUIStore((s) => s.newWorkspaceMode);
@@ -351,6 +353,7 @@ export function MainLayout() {
   const handleWorkspaceClick = useCallback(
     (workspace: Workspace) => {
       selectWorkspace(workspace.id);
+      expandRepo(workspace.repository_id);
       // Only mark the active tab's session as read — other tabs keep their
       // unread dots until the user actually switches to them.
       const layout = workspaceLayoutActions.getLayout(workspace.id);
@@ -359,7 +362,7 @@ export function MainLayout() {
         unreadActions.markRead(activeSessionId);
       }
     },
-    [selectWorkspace]
+    [selectWorkspace, expandRepo]
   );
 
   return (

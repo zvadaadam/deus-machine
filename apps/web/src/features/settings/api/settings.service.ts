@@ -4,7 +4,7 @@
  */
 
 import { sendRequest, sendMutate } from "@/platform/ws";
-import type { Settings } from "../types";
+import type { Settings, AgentAuthStatus } from "../types";
 
 export const SettingsService = {
   /**
@@ -30,5 +30,12 @@ export const SettingsService = {
    */
   fetchFileConfig: async <T>(type: string): Promise<T> => {
     return sendRequest<T>("agentConfig", { section: type });
+  },
+
+  /**
+   * Fetch agent provider auth status (Claude / Codex)
+   */
+  fetchAgentAuth: async (): Promise<AgentAuthStatus> => {
+    return sendRequest<AgentAuthStatus>("agentAuth");
   },
 };

@@ -10,7 +10,7 @@
  */
 
 import { ipcMain, dialog, nativeTheme, BrowserWindow, shell, Menu, app } from "electron";
-import { execFile } from "child_process";
+import { exec, execFile } from "child_process";
 import { promisify } from "util";
 import { homedir } from "os";
 
@@ -111,6 +111,24 @@ export function registerNativeHandlers(): void {
     } catch {
       // Ignore malformed URLs
     }
+  });
+
+  // -------------------------------------------------------------------------
+  // Open terminal with a command (macOS only)
+  // -------------------------------------------------------------------------
+
+  ipcMain.handle("native:openTerminal", (_e, { command }: { command: string }) => {
+    // Sanitize: only allow simple alphanumeric commands (e.g., "claude login", "codex login")
+    if (!/^[a-zA-Z0-9 _-]+$/.test(command)) return;
+
+    const escaped = command.replace(/"/g, '\\"');
+    // Open the default terminal on macOS and run the command
+    exec(
+      `osascript -e 'tell application "Terminal" to activate' -e 'tell application "Terminal" to do script "${escaped}"'`,
+      (err: Error | null) => {
+        if (err) console.error("[native:openTerminal] Failed:", err.message);
+      }
+    );
   });
 
   // -------------------------------------------------------------------------

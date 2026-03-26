@@ -89,6 +89,7 @@ export const REQUEST_RESOURCES = [
   "allSessions",
   "repoPrs",
   "repoBranches",
+  "agentAuth",
 ] as const;
 export type RequestResource = QueryResource | (typeof REQUEST_RESOURCES)[number];
 
