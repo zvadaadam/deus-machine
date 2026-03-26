@@ -1,0 +1,109 @@
+<system_instruction>
+You are working inside OpenDevs, a Mac app that lets the user run many coding agents in parallel.
+Your work should take place in the /Users/zvada/Developer/agent/box-ide/.conductor/sarajevo-v4 directory (unless otherwise directed), which has been set up for you to work in.
+Each workspace has a .context directory (gitignored) where you can save files to collaborate with other agents.
+DO NOT EVER read or write files at /Users/zvada/Developer/agent/box-ide.
+The target branch for this workspace is main. Use this for actions like creating new PRs, bisecting, etc., unless you're told otherwise.
+
+By default, the user will only see the last message that you send before stopping. Include all essential information in the last message. The intermediate messages will be collapsed and accessible by the user but not displayed by default.
+
+If the user asks you to work on several unrelated tasks, you can suggest they start new workspaces.
+Sometimes the user might send you a message they meant to send in a different workspace or a different chat. If something doesn't make sense in the context of your work, just ask. 
+If the user asks for help with OpenDevs, you can ask them to go to "Help -> Send Feedback" to get in touch with our team.
+</system_instruction>
+
+
+<system-instruction>
+To do immediately:
+
+Rename the branch using `git branch -m` as soon as possible. Do not check the current branch name.
+
+You may read user-provided attachments first if needed to understand the request. Otherwise, do this before using any skills or any other tools.
+
+Choosing a branch name: use concrete, specific language, avoid abstract nouns, and be concise (<30 characters). Use the prefix "zvadaadam/" before the name.
+
+</system-instruction>
+
+why did i get this error when run the bun run dev web?
+
+./scripts/dev.sh
+…/deneb  adam-zvada/deneb ≡ ⬢ v25.2.1 
+❯ ./scripts/dev.sh
+======================================
+Deus - Development Mode
+======================================
+Killing stale process on port 1420 (PID: 76092
+76460)...
+Building agent-server (first run)...
+$ bunx tsx apps/agent-server/build.ts && bun install --frozen-lockfile --cwd packages/mcp-notebook && bunx tsx packages/mcp-notebook/build.ts
+  apps/agent-server/dist/index.bundled.cjs  1.2mb ⚠️
+⚡ Done in 46ms
+Agent-server build complete!
+bun install v1.3.6 (d530ed99)
++ @types/node@22.19.11
++ tsx@4.21.0
++ @modelcontextprotocol/sdk@1.26.0
++ zod@3.25.76
+99 packages installed [155.00ms]
+  packages/mcp-notebook/dist/notebook-server.bundled.cjs  730.7kb
+⚡ Done in 25ms
+Notebook MCP server build complete!
+✓ Agent-server built
+Starting agent-server...
+✓ Agent-server started at ws://127.0.0.1:52614 (PID: 79541)
+Starting backend server with dynamic port...
+Waiting for backend to assign port...
+✗ Failed to capture backend port
+Opening database: /Users/zvada/Library/Application Support/com.opendevs.ide/opendevs.db
+Failed to open database: Error: The module '/Users/zvada/Developer/agent/box-ide/.deus/deneb/node_modules/better-sqlite3/build/Release/better_sqlite3.node'
+was compiled against a different Node.js version using
+NODE_MODULE_VERSION 133. This version of Node.js requires
+NODE_MODULE_VERSION 141. Please try re-compiling or re-installing
+the module (for instance, using `npm rebuild` or `npm install`).
+    at Object..node (node:internal/modules/cjs/loader:1919:18)
+    at Module.load (node:internal/modules/cjs/loader:1480:32)
+    at Module._load (node:internal/modules/cjs/loader:1299:12)
+    at TracingChannel.traceSync (node:diagnostics_channel:328:14)
+    at wrapModuleLoad (node:internal/modules/cjs/loader:245:24)
+    at Module.require (node:internal/modules/cjs/loader:1503:12)
+    at require (node:internal/modules/helpers:152:16)
+    at bindings (/Users/zvada/Developer/agent/box-ide/.deus/deneb/node_modules/bindings/bindings.js:112:48)
+    at new Database (/Users/zvada/Developer/agent/box-ide/.deus/deneb/node_modules/better-sqlite3/lib/database.js:48:64)
+    at initDatabase (/Users/zvada/Developer/agent/box-ide/.deus/deneb/apps/backend/src/lib/database.ts:30:18) {
+  code: 'ERR_DLOPEN_FAILED'
+}
+node:internal/modules/run_main:107
+    triggerUncaughtException(
+    ^
+Error: The module '/Users/zvada/Developer/agent/box-ide/.deus/deneb/node_modules/better-sqlite3/build/Release/better_sqlite3.node'
+was compiled against a different Node.js version using
+NODE_MODULE_VERSION 133. This version of Node.js requires
+NODE_MODULE_VERSION 141. Please try re-compiling or re-installing
+the module (for instance, using `npm rebuild` or `npm install`).
+    at Object..node (node:internal/modules/cjs/loader:1919:18)
+    at Module.load (node:internal/modules/cjs/loader:1480:32)
+    at Module._load (node:internal/modules/cjs/loader:1299:12)
+    at TracingChannel.traceSync (node:diagnostics_channel:328:14)
+    at wrapModuleLoad (node:internal/modules/cjs/loader:245:24)
+    at Module.require (node:internal/modules/cjs/loader:1503:12)
+    at require (node:internal/modules/helpers:152:16)
+    at bindings (/Users/zvada/Developer/agent/box-ide/.deus/deneb/node_modules/bindings/bindings.js:112:48)
+    at new Database (/Users/zvada/Developer/agent/box-ide/.deus/deneb/node_modules/better-sqlite3/lib/database.js:48:64)
+    at initDatabase (/Users/zvada/Developer/agent/box-ide/.deus/deneb/apps/backend/src/lib/database.ts:30:18) {
+  code: 'ERR_DLOPEN_FAILED'
+}
+Node.js v25.2.1
+…/deneb  adam-zvada/deneb ≡ ⬢ v25.2.1 18s 
+❯
+
+---
+
+I don't know, this feels like we have a mass here. Basically, if I run it, it should be compiled for the electron. I'm not sure, like, should we use the note that is bundled together with the electron, right?
+
+---
+
+and in the budl when we wanna buidl it for productiom?
+
+---
+
+and how abotu the run dekstop mode will it work also?
