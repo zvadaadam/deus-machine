@@ -40,28 +40,34 @@ export function HeaderRunButton({
   onRunTask,
   onSetupEnvironment,
 }: HeaderRunButtonProps) {
-  // No manifest — show ghost wrench + label as absent affordance
+  // No manifest — show wrench icon (with setup handler) or fall back to settings
   if (!hasManifest) {
+    if (!onSetupEnvironment) return <SettingsButton />;
+
     return (
-      <button
-        type="button"
-        onClick={onSetupEnvironment}
-        aria-label="Set up your environment"
-        className="text-text-disabled hover:text-text-muted border-border-strong flex h-7 items-center gap-1 rounded-lg border px-2 text-sm transition-colors duration-200"
-      >
-        <Wrench className="h-3 w-3 shrink-0" />
-        <span>Set up environment</span>
-      </button>
+      <Tooltip delayDuration={200}>
+        <TooltipTrigger asChild>
+          <button
+            type="button"
+            onClick={onSetupEnvironment}
+            aria-label="Set up your environment"
+            className="text-text-disabled hover:text-text-muted border-border-strong flex h-7 w-7 items-center justify-center rounded-lg border transition-colors duration-200"
+          >
+            <Wrench className="h-3 w-3" />
+          </button>
+        </TooltipTrigger>
+        <TooltipContent side="bottom">
+          <p className="text-xs">Set up environment</p>
+        </TooltipContent>
+      </Tooltip>
     );
   }
 
-  const iconTasks = tasks.filter((t) => t.icon && t.icon !== "terminal");
-
-  if (iconTasks.length === 0) {
+  if (tasks.length === 0) {
     return <SettingsButton />;
   }
 
-  return <TaskSplitButton tasks={iconTasks} disabled={disabled} onRunTask={onRunTask} />;
+  return <TaskSplitButton tasks={tasks} disabled={disabled} onRunTask={onRunTask} />;
 }
 
 // ---------------------------------------------------------------------------
@@ -94,7 +100,6 @@ function TaskSplitButton({
   }
 
   function handleQuickRun() {
-    if (disabled) return;
     handleRunTask(defaultTask.name);
   }
 
