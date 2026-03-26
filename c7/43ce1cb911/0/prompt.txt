@@ -79,3 +79,14 @@ onClick: () => {
 **File:** `apps/web/src/features/session/hooks/useGlobalSessionNotifications.ts`, lines 261 and 271
 ---
 **Overall:** Clean, well-structured change. The `FinishedEntry` interface, `formatBody` helper, and `navigateToWorkspace` utility are good abstractions. The notification bodies are now genuinely useful. Only the one inconsistency above needs fixing.
+
+---
+
+<system_instruction>
+The user has attached these files. Read them before proceeding.
+- /Users/zvada/Developer/agent/box-ide/.conductor/pattaya-v2/.context/attachments/PR instructions.md (954 B)
+</system_instruction>
+
+
+
+Create a PR
