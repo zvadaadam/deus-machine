@@ -127,7 +127,7 @@ export function DiffViewer({
     setShowAll(false);
   }, [filePath]);
 
-  // Disable word-level diffs for large diffs (Codex pattern: 2000 line threshold)
+  // Disable word-level diffs for large diffs (2000 line threshold)
   const isLargeDiff = useMemo(
     () => displayFileDiff != null && countDiffLines(displayFileDiff) > LARGE_DIFF_LINE_THRESHOLD,
     [displayFileDiff]
@@ -423,7 +423,7 @@ export function DiffViewer({
   );
 }
 
-// Above this threshold, disable word-level diffs (matches Codex at 2000 lines)
+// Above this threshold, disable word-level diffs
 const LARGE_DIFF_LINE_THRESHOLD = 2000;
 
 function countDiffLines(fileDiff: FileDiffMetadata): number {

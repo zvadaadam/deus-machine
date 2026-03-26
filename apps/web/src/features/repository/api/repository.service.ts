@@ -46,14 +46,14 @@ export const RepoService = {
   },
 
   /**
-   * Read opendevs.json manifest for a repo
+   * Read deus.json manifest for a repo
    */
   fetchManifest: async (repoId: string): Promise<ManifestResponse> => {
     return sendRequest<ManifestResponse>("repoManifest", { repoId });
   },
 
   /**
-   * Write opendevs.json manifest for a repo
+   * Write deus.json manifest for a repo
    */
   saveManifest: async (repoId: string, manifest: Record<string, unknown>): Promise<void> => {
     const result = await sendMutate("saveRepoManifest", { repoId, ...manifest });

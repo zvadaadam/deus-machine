@@ -308,7 +308,7 @@ describe("POST /workspaces", () => {
         workspaceId: "ws-test-uuid",
         repositoryId: "repo-001",
         repoRootPath: "/repos/my-project",
-        workspacePath: "/repos/my-project/.opendevs/europa",
+        workspacePath: "/repos/my-project/.deus/europa",
         branchName: "testuser/europa",
         parentBranch: "main",
       })
@@ -339,7 +339,7 @@ describe("POST /workspaces", () => {
     });
 
     const body = await res.json();
-    expect(body.workspace_path).toBe("/repos/my-project/.opendevs/europa");
+    expect(body.workspace_path).toBe("/repos/my-project/.deus/europa");
   });
 
   it("uses repo git_default_branch as parent_branch", async () => {

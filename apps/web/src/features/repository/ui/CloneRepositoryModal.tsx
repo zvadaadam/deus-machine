@@ -63,16 +63,16 @@ export function CloneRepositoryModal({
   const previousCloning = useRef(cloning);
 
   // Resolve default destination path on mount.
-  // Mobile: use ~/.opendevs/repos (hidden, no user input needed).
+  // Mobile: use ~/.deus/repos (hidden, no user input needed).
   // Desktop: use ~/Developer (shown in input field).
   useEffect(() => {
     if (!show) return;
     (async () => {
       try {
         const home = await native.dialog.getHomeDir();
-        setDefaultPath(isMobile ? `${home}/.opendevs/repos` : `${home}/Developer`);
+        setDefaultPath(isMobile ? `${home}/.deus/repos` : `${home}/Developer`);
       } catch {
-        setDefaultPath(isMobile ? "~/.opendevs/repos" : "~/Developer");
+        setDefaultPath(isMobile ? "~/.deus/repos" : "~/Developer");
       }
       if (isMobile) setTargetPath("");
     })();
@@ -80,6 +80,7 @@ export function CloneRepositoryModal({
 
   useEffect(() => {
     if (!cloning) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- reset form when clone completes
       setProgress(null);
       return;
     }
@@ -97,7 +98,9 @@ export function CloneRepositoryModal({
 
   useEffect(() => {
     if (previousCloning.current && !cloning) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- reset form after clone transition
       setGithubUrl("");
+
       setTargetPath("");
     }
     previousCloning.current = cloning;
@@ -171,7 +174,7 @@ export function CloneRepositoryModal({
             />
           </div>
 
-          {/* Destination picker -- hidden on mobile (auto-clones to ~/.opendevs/repos) */}
+          {/* Destination picker -- hidden on mobile (auto-clones to ~/.deus/repos) */}
           {!isMobile && (
             <div className="grid gap-2">
               <Label htmlFor="target-path">Destination</Label>

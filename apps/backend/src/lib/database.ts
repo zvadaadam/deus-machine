@@ -6,7 +6,7 @@ import { SCHEMA_SQL, MIGRATIONS } from "@shared/schema";
 
 const DEFAULT_DB_PATH = path.join(
   process.env.HOME || os.homedir(),
-  "Library/Application Support/com.opendevs.app/opendevs.db"
+  "Library/Application Support/com.deus.app/deus.db"
 );
 
 const DB_PATH = process.env.DATABASE_PATH || DEFAULT_DB_PATH;

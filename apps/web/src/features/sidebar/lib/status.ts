@@ -101,7 +101,7 @@ export const STATUS_CONFIG: Record<DisplayStatus, StatusConfig> = {
   },
 };
 
-// ── Workflow Status (Linear-style) ────────────────────────────────────────
+// ── Workflow Status () ────────────────────────────────────────
 // Separate from DisplayStatus which shows real-time agent activity.
 // Rendered as a small icon to the left of the workspace title.
 

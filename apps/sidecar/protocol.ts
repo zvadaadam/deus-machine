@@ -1,6 +1,6 @@
 // sidecar/protocol.ts
 // Protocol definitions for JSON-RPC 2.0 communication between the
-// OpenDevs backend and the sidecar agent runtime.
+// Deus backend and the sidecar agent runtime.
 //
 // Query/options schemas (QueryRequest, QueryOptions) are canonical in
 // shared/protocol.ts. MCP-facing RPC schemas (browser, simulator, diff,

@@ -306,7 +306,7 @@ class EventBroadcasterClass {
   // requests use timeouts.
   // ==========================================================================
 
-  // --- User-facing RPCs (no timeout, same as OpenDevs) ---
+  // --- User-facing RPCs (no timeout) ---
   requestExitPlanMode(r: ExitPlanModeRequest) {
     return this.requireTunnel().request(
       FRONTEND_RPC_METHODS.EXIT_PLAN_MODE,

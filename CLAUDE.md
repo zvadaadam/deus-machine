@@ -159,12 +159,12 @@ return () => listeners.cleanup();
 
 **Active IPC events:** `workspace:progress`, `fs:changed`, `pty-data`, `pty-exit`, `browser:*`, `chat-insert`, `git-clone-progress`. All defined in `shared/events.ts` with Zod schemas for runtime validation.
 
-## Database: Standalone OpenDevs Database
+## Database: Standalone Deus Database
 
 Our app owns its own SQLite database:
 
 ```
-~/Library/Application Support/com.opendevs.app/opendevs.db
+~/Library/Application Support/com.deus.app/deus.db
 ```
 
 `initDatabase()` in `apps/backend/src/lib/database.ts` creates all tables, indexes, and triggers on first run via the `SCHEMA_SQL` constant defined in `shared/schema.ts`. No external dependencies — the app is fully self-contained.
@@ -404,7 +404,7 @@ This is the **single source of truth** for where different types of styling shou
 2. **@keyframes**: GPU-accelerated animations (`fadeIn`, `slideInRight`, etc.)
 3. **Global Element Styles**: `html`, `body`, `#root`, scrollbars
 4. **Complex Effects Tailwind Can't Do**:
-   - `.vibrancy-bg`, `.vibrancy-panel` (backdrop filters with Arc-style frosting)
+   - `.vibrancy-bg`, `.vibrancy-panel` (backdrop filters with frosted glass effect)
    - `.bg-fade-overlay` (custom gradients)
    - `.markdown-content` (complex nested selectors for markdown rendering)
    - `.scrollbar-vibrancy` (custom scrollbar styling)

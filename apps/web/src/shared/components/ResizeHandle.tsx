@@ -12,7 +12,7 @@ interface ResizeHandleProps {
 }
 
 /**
- * Codex-style resize handle — a zero-width separator with a gradient line
+ * Resize handle — a zero-width separator with a gradient line
  * that fades at the top and bottom edges. Appears on hover, brightens on drag.
  *
  * Usage: pair with useResizeHandle() and spread its handleProps.

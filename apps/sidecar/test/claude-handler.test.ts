@@ -49,8 +49,8 @@ vi.mock("../agents/claude/checkpoint", () => ({
   createCheckpoint: vi.fn(),
 }));
 
-vi.mock("../agents/opendevs-tools", () => ({
-  createOpenDevsMCPServer: vi.fn(() => ({ type: "sdk", name: "opendevs" })),
+vi.mock("../agents/deus-tools", () => ({
+  createDeusMCPServer: vi.fn(() => ({ type: "sdk", name: "deus" })),
 }));
 
 vi.mock("child_process", () => ({
@@ -261,7 +261,7 @@ describe("claude-handler", () => {
 
       const sdkCall = mockClaudeSDK.mock.calls[0][0];
       expect(sdkCall.options.mcpServers).toBeDefined();
-      expect(sdkCall.options.mcpServers.opendevs).toBeDefined();
+      expect(sdkCall.options.mcpServers.deus).toBeDefined();
     });
 
     it("excludes MCP server when strictDataPrivacy is true", async () => {

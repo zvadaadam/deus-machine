@@ -232,7 +232,7 @@ function buildTurnOptions(
     permissionMode: readString(params, "permissionMode"),
     providerEnvVars: readString(params, "providerEnvVars"),
     ghToken: readString(params, "ghToken"),
-    opendevsEnv: params.opendevsEnv as Record<string, string> | undefined,
+    deusEnv: params.deusEnv as Record<string, string> | undefined,
     additionalDirectories: params.additionalDirectories as string[] | undefined,
     chromeEnabled: params.chromeEnabled as boolean | undefined,
     strictDataPrivacy: params.strictDataPrivacy as boolean | undefined,

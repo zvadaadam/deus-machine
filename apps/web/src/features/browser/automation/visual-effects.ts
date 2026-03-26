@@ -12,22 +12,22 @@ import VISUAL_EFFECTS_SETUP from "./inject/visual-effects.js?raw";
 export { VISUAL_EFFECTS_SETUP };
 
 /**
- * Build JS to move cursor to an element by data-opendevs-ref,
+ * Build JS to move cursor to an element by data-deus-ref,
  * then ripple on arrival (used before click actions).
  * Returns duration (ms) via title-channel so frontend can wait.
  */
 export function buildMoveCursorAndRippleJs(ref: string): string {
   return `(function(){
-  if (!window.__opendevsVisuals) return JSON.stringify({duration:0});
-  var el = document.querySelector('[data-opendevs-ref="${ref}"]');
+  if (!window.__deusVisuals) return JSON.stringify({duration:0});
+  var el = document.querySelector('[data-deus-ref="${ref}"]');
   if (!el) return JSON.stringify({duration:0, error:'Element not found'});
-  var dur = window.__opendevsVisuals.moveCursorToElement(el);
+  var dur = window.__deusVisuals.moveCursorToElement(el);
   // Ripple after cursor arrives
   setTimeout(function(){
     var rect = el.getBoundingClientRect();
     var cx = Math.round(rect.left + rect.width / 2);
     var cy = Math.round(rect.top + rect.height / 2);
-    window.__opendevsVisuals.rippleAt(cx, cy);
+    window.__deusVisuals.rippleAt(cx, cy);
   }, dur + 20);
   return JSON.stringify({duration: dur + 280});
 })()`;
@@ -38,12 +38,12 @@ export function buildMoveCursorAndRippleJs(ref: string): string {
  */
 export function buildPinCursorJs(ref: string): string {
   return `(function(){
-  if (!window.__opendevsVisuals) return JSON.stringify({duration:0});
-  var el = document.querySelector('[data-opendevs-ref="${ref}"]');
+  if (!window.__deusVisuals) return JSON.stringify({duration:0});
+  var el = document.querySelector('[data-deus-ref="${ref}"]');
   if (!el) return JSON.stringify({duration:0, error:'Element not found'});
-  var dur = window.__opendevsVisuals.moveCursorToElement(el);
+  var dur = window.__deusVisuals.moveCursorToElement(el);
   setTimeout(function(){
-    window.__opendevsVisuals.pinCursorToElement(el);
+    window.__deusVisuals.pinCursorToElement(el);
   }, dur + 20);
   return JSON.stringify({duration: dur + 20});
 })()`;
@@ -51,7 +51,7 @@ export function buildPinCursorJs(ref: string): string {
 
 /** Build JS to unpin and hide cursor (after typing finishes) */
 export const HIDE_CURSOR_JS = `(function(){
-  if (window.__opendevsVisuals) window.__opendevsVisuals.hideCursor();
+  if (window.__deusVisuals) window.__deusVisuals.hideCursor();
 })()`;
 
 /**
@@ -61,7 +61,7 @@ export const HIDE_CURSOR_JS = `(function(){
  */
 export function buildFadeCursorJs(dwellMs = 1000): string {
   return `(function(){
-  if (window.__opendevsVisuals) window.__opendevsVisuals.fadeCursor(${dwellMs});
+  if (window.__deusVisuals) window.__deusVisuals.fadeCursor(${dwellMs});
 })()`;
 }
 
@@ -79,7 +79,7 @@ export function buildScreenshotFlashJs(rect?: {
     ? `{x:${rect.x},y:${rect.y},width:${rect.width},height:${rect.height}}`
     : "null";
   return `(function(){
-  if (window.__opendevsVisuals) window.__opendevsVisuals.screenshotFlash(${rectArg});
+  if (window.__deusVisuals) window.__deusVisuals.screenshotFlash(${rectArg});
 })()`;
 }
 
@@ -88,7 +88,7 @@ export function buildScreenshotFlashJs(rect?: {
  * Used to show the AI is reading/scanning the page (BrowserSnapshot).
  */
 export const SCAN_PAGE_JS = `(function(){
-  if (window.__opendevsVisuals) window.__opendevsVisuals.scanPage();
+  if (window.__deusVisuals) window.__deusVisuals.scanPage();
 })()`;
 
 /**
@@ -96,5 +96,5 @@ export const SCAN_PAGE_JS = `(function(){
  * Used to show the AI pressing a key on an input/element.
  */
 export const KEY_FLASH_JS = `(function(){
-  if (window.__opendevsVisuals) window.__opendevsVisuals.keyFlash();
+  if (window.__deusVisuals) window.__deusVisuals.keyFlash();
 })()`;

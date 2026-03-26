@@ -43,7 +43,7 @@ function ProgressCircle({
 }
 
 /**
- * Linear-style workflow status icons.
+ * Workflow status icons.
  *
  * Backlog     → dashed circle (gray)
  * In Progress → half-filled circle (amber)

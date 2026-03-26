@@ -10,7 +10,7 @@
  *
  * Each step updates the workspace's `init_stage` column in DB and emits
  * a structured stdout line that Electron main process parses and relays as an IPC event:
- *   OPENDEVS_WORKSPACE_PROGRESS:{"workspaceId":"...","step":"...","label":"..."}
+ *   DEUS_WORKSPACE_PROGRESS:{"workspaceId":"...","step":"...","label":"..."}
  *
  * Design decisions:
  * - Pipeline runs in-process (async), not as spawned child — proper try/catch
@@ -65,11 +65,11 @@ interface InitStage {
 /**
  * Emit workspace init progress via stdout JSON protocol.
  * Electron's backend-process.ts reads stdout line-by-line and relays lines
- * prefixed with OPENDEVS_WORKSPACE_PROGRESS: as IPC events.
+ * prefixed with DEUS_WORKSPACE_PROGRESS: as IPC events.
  */
 export function emitProgress(workspaceId: string, step: string, label: string): void {
   const payload = JSON.stringify({ workspaceId, step, label });
-  process.stdout.write(`OPENDEVS_WORKSPACE_PROGRESS:${payload}\n`);
+  process.stdout.write(`DEUS_WORKSPACE_PROGRESS:${payload}\n`);
 }
 
 function updateInitStage(workspaceId: string, stage: string): void {

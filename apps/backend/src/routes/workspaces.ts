@@ -14,7 +14,7 @@ import {
   readManifestWithFallback,
   getSetupCommand,
   getArchiveCommand,
-  getOpenDevsEnv,
+  getDeusEnv,
   getNormalizedTasks,
   runSetupScript,
 } from "../services/manifest.service";
@@ -117,7 +117,7 @@ app.patch("/workspaces/:id", async (c) => {
           const manifest = readManifestWithFallback(wsPath, ws.root_path);
           const archiveCmd = manifest ? getArchiveCommand(manifest) : null;
           if (archiveCmd) {
-            const archiveEnv = getOpenDevsEnv(manifest!, {
+            const archiveEnv = getDeusEnv(manifest!, {
               id: ws.id,
               rootPath: ws.root_path,
               workspacePath: wsPath,
@@ -246,7 +246,7 @@ app.post("/workspaces", async (c) => {
     }
   })();
 
-  const workspacePath = path.join(repo.root_path!, ".opendevs", workspace_name);
+  const workspacePath = path.join(repo.root_path!, ".deus", workspace_name);
 
   // Fire-and-forget: run the init pipeline async (don't await).
   // Pipeline handles: worktree creation → deps install → .env copy → session creation.
@@ -267,7 +267,7 @@ app.post("/workspaces", async (c) => {
       const setupCmd = manifest ? getSetupCommand(manifest) : null;
       if (setupCmd && manifest) {
         db.prepare("UPDATE workspaces SET setup_status = 'running' WHERE id = ?").run(workspaceId);
-        const setupEnv = getOpenDevsEnv(manifest, {
+        const setupEnv = getDeusEnv(manifest, {
           id: workspaceId,
           rootPath: repo.root_path!,
           workspacePath,
@@ -378,7 +378,7 @@ app.post("/workspaces/:id/retry-setup", withWorkspace, (c) => {
     "UPDATE workspaces SET setup_status = 'running', error_message = NULL, updated_at = datetime('now') WHERE id = ?"
   ).run(workspace.id);
 
-  const setupEnv = getOpenDevsEnv(manifest, {
+  const setupEnv = getDeusEnv(manifest, {
     id: workspace.id,
     rootPath: workspace.root_path,
     workspacePath,
@@ -391,7 +391,7 @@ app.post("/workspaces/:id/retry-setup", withWorkspace, (c) => {
 // Get setup logs
 app.get("/workspaces/:id/setup-logs", withWorkspace, (c) => {
   const workspace = c.get("workspace");
-  const setupLogPath = path.join(os.tmpdir(), `opendevs-${workspace.id}-setup.log`);
+  const setupLogPath = path.join(os.tmpdir(), `deus-${workspace.id}-setup.log`);
   try {
     if (!fs.existsSync(setupLogPath)) return c.json({ logs: null });
     const logs = fs.readFileSync(setupLogPath, "utf8");
@@ -412,7 +412,7 @@ app.post("/workspaces/:id/tasks/:name/run", withWorkspace, (c) => {
   }
 
   const manifest = readManifestWithFallback(workspacePath, workspace.root_path);
-  if (!manifest) throw new NotFoundError("No opendevs.json manifest found");
+  if (!manifest) throw new NotFoundError("No deus.json manifest found");
 
   const tasks = getNormalizedTasks(manifest);
   const task = tasks.find((t) => t.name === taskName);
@@ -422,9 +422,9 @@ app.post("/workspaces/:id/tasks/:name/run", withWorkspace, (c) => {
   const env = {
     ...(manifest.env ?? {}),
     ...task.env,
-    OPENDEVS_ROOT_PATH: workspace.root_path,
-    OPENDEVS_WORKSPACE_PATH: workspacePath,
-    OPENDEVS_WORKSPACE_ID: workspace.id,
+    DEUS_ROOT_PATH: workspace.root_path,
+    DEUS_WORKSPACE_PATH: workspacePath,
+    DEUS_WORKSPACE_ID: workspace.id,
   };
 
   return c.json({

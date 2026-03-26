@@ -1,4 +1,4 @@
-// sidecar/agents/opendevs-tools/simulator.ts
+// sidecar/agents/deus-tools/simulator.ts
 // iOS Simulator automation tools: list devices, start, screenshot, tap, swipe, type text, press key, build & run.
 // These tools proxy through EventBroadcaster over backend-routed WebSocket flow,
 // then reach the simulator control path used by existing sim-core commands.
@@ -33,7 +33,7 @@ Example output:
 - iPhone 16e (UDID: DEF456) - Booted - iOS-26-1`,
       {},
       async () => {
-        console.log(`[opendevsMCPServer] iOSSimulatorListDevices invoked for session ${sessionId}`);
+        console.log(`[deusMCPServer] iOSSimulatorListDevices invoked for session ${sessionId}`);
 
         try {
           const response = await EventBroadcaster.requestSimListDevices({ sessionId });
@@ -95,7 +95,7 @@ After starting, the simulator stream will appear in the app's Simulator panel. U
       },
       async (args) => {
         console.log(
-          `[opendevsMCPServer] iOSSimulatorStart invoked for session ${sessionId}: udid=${args.udid}`
+          `[deusMCPServer] iOSSimulatorStart invoked for session ${sessionId}: udid=${args.udid}`
         );
 
         try {
@@ -149,7 +149,7 @@ Use this to see the current state of the app running in the simulator before int
 The simulator must be booted and streaming (use iOSSimulatorStart first).`,
       {},
       async () => {
-        console.log(`[opendevsMCPServer] iOSSimulatorScreenshot invoked for session ${sessionId}`);
+        console.log(`[deusMCPServer] iOSSimulatorScreenshot invoked for session ${sessionId}`);
 
         try {
           const response = await EventBroadcaster.requestSimScreenshot({ sessionId });
@@ -201,7 +201,7 @@ Use iOSSimulatorScreenshot first to see the current screen, then estimate the co
       },
       async (args) => {
         console.log(
-          `[opendevsMCPServer] iOSSimulatorTap invoked for session ${sessionId}: (${args.x}, ${args.y})`
+          `[deusMCPServer] iOSSimulatorTap invoked for session ${sessionId}: (${args.x}, ${args.y})`
         );
 
         try {
@@ -257,7 +257,7 @@ Coordinates are normalized (0.0 to 1.0). Common swipe patterns:
       },
       async (args) => {
         console.log(
-          `[opendevsMCPServer] iOSSimulatorSwipe invoked for session ${sessionId}: ` +
+          `[deusMCPServer] iOSSimulatorSwipe invoked for session ${sessionId}: ` +
             `(${args.startX}, ${args.startY}) → (${args.endX}, ${args.endY})`
         );
 
@@ -307,7 +307,7 @@ Make sure an input field is focused first (tap on it using iOSSimulatorTap). The
       async (args) => {
         const preview = args.text.length > 30 ? `${args.text.slice(0, 30)}...` : args.text;
         console.log(
-          `[opendevsMCPServer] iOSSimulatorTypeText invoked for session ${sessionId}: "${preview}"`
+          `[deusMCPServer] iOSSimulatorTypeText invoked for session ${sessionId}: "${preview}"`
         );
 
         try {
@@ -370,7 +370,7 @@ By default, sends both key-down and key-up. Use direction to send only one.`,
       },
       async (args) => {
         console.log(
-          `[opendevsMCPServer] iOSSimulatorPressKey invoked for session ${sessionId}: keycode=${args.keycode}`
+          `[deusMCPServer] iOSSimulatorPressKey invoked for session ${sessionId}: keycode=${args.keycode}`
         );
 
         try {
@@ -423,7 +423,7 @@ The simulator must be booted and streaming (use iOSSimulatorStart first). The bu
       },
       async (args) => {
         console.log(
-          `[opendevsMCPServer] iOSSimulatorBuildAndRun invoked for session ${sessionId}: ${args.workspacePath}`
+          `[deusMCPServer] iOSSimulatorBuildAndRun invoked for session ${sessionId}: ${args.workspacePath}`
         );
 
         try {

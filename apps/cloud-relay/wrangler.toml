@@ -1,4 +1,4 @@
-name = "opendevs-relay"
+name = "deus-relay"
 account_id = "e247e098b7e2f5bee57ae8cf303b97df"
 main = "src/index.ts"
 compatibility_date = "2025-01-01"

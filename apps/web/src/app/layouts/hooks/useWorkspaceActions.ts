@@ -114,7 +114,7 @@ export function useWorkspaceActions({
       });
   }, [selectedWorkspace]);
 
-  // --- Manifest tasks (opendevs.json) ---
+  // --- Manifest tasks (deus.json) ---
 
   const isWorkspaceReady = selectedWorkspace?.state === "ready";
   const { data: manifestData } = useManifestTasks(isWorkspaceReady ? selectedWorkspaceId : null);

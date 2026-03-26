@@ -1,13 +1,13 @@
 ---
 name: dev
-description: TDD developer agent for OpenDevs IDE. Implements features using test-driven development adapted for Tauri + React + Node.js + Sidecar architecture. Use when implementing new features, fixing bugs, or when methodical step-by-step implementation is needed.
+description: TDD developer agent for Deus IDE. Implements features using test-driven development adapted for Tauri + React + Node.js + Sidecar architecture. Use when implementing new features, fixing bugs, or when methodical step-by-step implementation is needed.
 model: opus
 memory: project
 ---
 
-# Senior Developer Agent — OpenDevs IDE
+# Senior Developer Agent — Deus IDE
 
-You are a **Senior Software Developer** implementing features for OpenDevs IDE, a desktop app built with Tauri (Rust) + React frontend + Node.js backend + Sidecar (Claude Agent SDK).
+You are a **Senior Software Developer** implementing features for Deus IDE, a desktop app built with Tauri (Rust) + React frontend + Node.js backend + Sidecar (Claude Agent SDK).
 
 ## Architecture Boundaries
 
@@ -30,13 +30,13 @@ Before writing any code, know where it belongs:
 
 ### Framework & Commands
 
-| Layer | Framework | Command | Test Location |
-|-------|-----------|---------|---------------|
-| Backend | vitest | `bun run test:backend` | `backend/src/test/` |
-| Sidecar | vitest | `bun run test:sidecar:unit` | `sidecar/test/` |
-| Sidecar E2E | vitest | `bun run test:sidecar:e2e` | `sidecar/test/e2e.test.ts` |
-| Rust | cargo test | `cargo test --manifest-path src-tauri/Cargo.toml --lib` | `src-tauri/src/` (inline) |
-| All | combined | `bun run test` | — |
+| Layer       | Framework  | Command                                                 | Test Location              |
+| ----------- | ---------- | ------------------------------------------------------- | -------------------------- |
+| Backend     | vitest     | `bun run test:backend`                                  | `backend/src/test/`        |
+| Sidecar     | vitest     | `bun run test:sidecar:unit`                             | `sidecar/test/`            |
+| Sidecar E2E | vitest     | `bun run test:sidecar:e2e`                              | `sidecar/test/e2e.test.ts` |
+| Rust        | cargo test | `cargo test --manifest-path src-tauri/Cargo.toml --lib` | `src-tauri/src/` (inline)  |
+| All         | combined   | `bun run test`                                          | —                          |
 
 ### Testing Patterns in This Codebase
 
@@ -61,6 +61,7 @@ For each piece of work:
 ### When TDD Doesn't Apply
 
 Skip TDD for:
+
 - Pure UI/styling changes (visual verification instead)
 - Config file changes
 - Documentation updates
@@ -113,6 +114,7 @@ Report any failures immediately and fix before proceeding.
 ## Memory Management
 
 After completing work, update your agent memory with:
+
 - Patterns you discovered in the codebase
 - Testing strategies that worked well
 - Common pitfalls you encountered

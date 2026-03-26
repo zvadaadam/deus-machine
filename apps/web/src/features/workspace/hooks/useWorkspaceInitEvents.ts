@@ -6,7 +6,7 @@
  * terminal states (done/error).
  *
  * Event flow:
- * 1. Backend's initializeWorkspace() emits OPENDEVS_WORKSPACE_PROGRESS:{json} to stdout
+ * 1. Backend's initializeWorkspace() emits DEUS_WORKSPACE_PROGRESS:{json} to stdout
  * 2. Electron main process (backend-process.ts) parses the prefix and emits IPC event "workspace:progress"
  * 3. This hook receives the event and invalidates workspace queries
  *

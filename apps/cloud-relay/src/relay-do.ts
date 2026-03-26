@@ -1,5 +1,5 @@
 // Cloudflare Durable Object for relay WebSocket multiplexing.
-// One DO per OpenDevs server. Holds the server tunnel + all client connections.
+// One DO per Deus server. Holds the server tunnel + all client connections.
 // Uses the WebSocket Hibernation API for efficient connection handling.
 // All mutable state lives in ctx.storage to survive hibernation.
 //

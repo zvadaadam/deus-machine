@@ -117,17 +117,17 @@ describe("buildAgentEnvironment", () => {
     expect(env.PATH).toBe("/custom/path");
   });
 
-  it("opendevsEnv overrides extraEnv", () => {
+  it("deusEnv overrides extraEnv", () => {
     const env = buildAgentEnvironment({
       extraEnv: { MY_KEY: "extra" },
-      opendevsEnv: { MY_KEY: "opendevs" },
+      deusEnv: { MY_KEY: "deus" },
     });
-    expect(env.MY_KEY).toBe("opendevs");
+    expect(env.MY_KEY).toBe("deus");
   });
 
-  it("providerEnvVars overrides opendevsEnv", () => {
+  it("providerEnvVars overrides deusEnv", () => {
     const env = buildAgentEnvironment({
-      opendevsEnv: { MY_KEY: "opendevs" },
+      deusEnv: { MY_KEY: "deus" },
       providerEnvVars: "MY_KEY=from-user",
     });
     expect(env.MY_KEY).toBe("from-user");
@@ -166,7 +166,7 @@ describe("buildAgentEnvironment", () => {
   it("applies multiple layers together", () => {
     const env = buildAgentEnvironment({
       extraEnv: { TASKS: "true", AGENT: "claude" },
-      opendevsEnv: { WORKSPACE: "/my/project" },
+      deusEnv: { WORKSPACE: "/my/project" },
       providerEnvVars: "CUSTOM=value\nANOTHER=123",
       ghToken: "gh-token-123",
     });

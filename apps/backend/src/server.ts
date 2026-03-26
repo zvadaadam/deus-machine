@@ -23,7 +23,7 @@ if (process.env.SENTRY_DSN) {
 }
 
 /**
- * OpenDevs Backend Server
+ * Deus Backend Server
  *
  * Handles workspace CRUD, sessions, repos, config, and stats.
  * Agent runtime (Claude SDK) is managed by the agent-server (sidecar).
@@ -109,7 +109,7 @@ const server = serve(
     // CRITICAL: Machine-readable port output for Electron main process and dev.sh
     console.log(`[BACKEND_PORT]${info.port}`);
 
-    console.log("\nOpenDevs Backend Server");
+    console.log("\nDeus Backend Server");
     console.log(`API Server: http://0.0.0.0:${info.port}`);
     console.log(`Database: ${DB_PATH}`);
     console.log("Server ready!\n");

@@ -5,7 +5,7 @@
 - Inject scripts live in `src/features/browser/automation/inject/` (TypeScript source)
 - Compiled via esbuild to `dist-inject/` (IIFE format, gitignored)
 - Consumer files import compiled output via Vite `?raw` imports
-- Three independent scripts: `browser-utils` (`__opendevsBrowserUtils`), `visual-effects` (`__opendevsVisuals`), `inspect-mode` (`__opendevsInspect`)
+- Three independent scripts: `browser-utils` (`__deusBrowserUtils`), `visual-effects` (`__deusVisuals`), `inspect-mode` (`__deusInspect`)
 - Title-channel protocol uses `\x01` (SOH) prefix bytes -- verify hex dump, not text grep
 - Build command: `bun run build:inject` (runs before dev/build)
 
@@ -13,7 +13,7 @@
 
 - `waitForDomSettle` timer cleanup: ensure all timers are cleared on all exit paths
 - Dead parameters: `slowly` in `buildTypeJs` is accepted but never used
-- `data-opendevs-ref` is used for both tree snapshots and inspect mode element refs
+- `data-deus-ref` is used for both tree snapshots and inspect mode element refs
 
 ## WebSocket Query Protocol Architecture (Post-Migration)
 

@@ -20,7 +20,7 @@ const BASE_WORKSPACE: Workspace = {
   updated_at: new Date(Date.now() - 120_000).toISOString(),
   repo_name: "sample-backend",
   root_path: "/code/sample-backend",
-  workspace_path: "/code/sample-backend/.opendevs/addis-ababa",
+  workspace_path: "/code/sample-backend/.deus/addis-ababa",
   setup_status: "none",
   error_message: null,
 };
