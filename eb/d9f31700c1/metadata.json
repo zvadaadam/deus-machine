@@ -1,0 +1,25 @@
+{
+  "cli_version": "0.5.0",
+  "checkpoint_id": "ebd9f31700c1",
+  "strategy": "manual-commit",
+  "branch": "zvadaadam/github-release-guide",
+  "checkpoints_count": 3,
+  "files_touched": [
+    ".claude/agents/dev.md"
+  ],
+  "sessions": [
+    {
+      "metadata": "/eb/d9f31700c1/0/metadata.json",
+      "transcript": "/eb/d9f31700c1/0/full.jsonl",
+      "content_hash": "/eb/d9f31700c1/0/content_hash.txt",
+      "prompt": "/eb/d9f31700c1/0/prompt.txt"
+    }
+  ],
+  "token_usage": {
+    "input_tokens": 369,
+    "cache_creation_tokens": 697652,
+    "cache_read_tokens": 12108655,
+    "output_tokens": 37033,
+    "api_call_count": 150
+  }
+}
