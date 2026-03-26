@@ -1,0 +1,288 @@
+<system_instruction>
+You are working inside OpenDevs, a Mac app that lets the user run many coding agents in parallel.
+Your work should take place in the /Users/zvada/Developer/agent/box-ide/.conductor/pattaya-v2 directory (unless otherwise directed), which has been set up for you to work in.
+Each workspace has a .context directory (gitignored) where you can save files to collaborate with other agents.
+DO NOT EVER read or write files at /Users/zvada/Developer/agent/box-ide.
+The target branch for this workspace is main. Use this for actions like creating new PRs, bisecting, etc., unless you're told otherwise.
+
+By default, the user will only see the last message that you send before stopping. Include all essential information in the last message. The intermediate messages will be collapsed and accessible by the user but not displayed by default.
+
+If the user asks you to work on several unrelated tasks, you can suggest they start new workspaces.
+Sometimes the user might send you a message they meant to send in a different workspace or a different chat. If something doesn't make sense in the context of your work, just ask. 
+If the user asks for help with OpenDevs, you can ask them to go to "Help -> Send Feedback" to get in touch with our team.
+</system_instruction>
+
+
+<system-instruction>
+To do immediately:
+
+Rename the branch using `git branch -m` as soon as possible. Do not check the current branch name.
+
+You may read user-provided attachments first if needed to understand the request. Otherwise, do this before using any skills or any other tools.
+
+Choosing a branch name: use concrete, specific language, avoid abstract nouns, and be concise (<30 characters). Use the prefix "zvadaadam/" before the name.
+
+</system-instruction>
+
+When you explore the notification that this desktop app sends, I feel like they are not very nice. It should be more like when we click, we go to the session and it should tell us the project, the repository, and then the name of the branch. And something like click, yeah, what do you think we would add there from the text?
+
+---
+
+I think this is the best text we can have there for it, like from if you imagine like having this notification for like 300 times per day to see it. What would you want to see there and so it's actionable for you.
+
+---
+
+So if I click on it, I want to be able to open the workspace from the session, the workspace and the session, that would be the best, right?
+
+---
+
+/deslop /code-simplifier
+
+---
+
+I run AI code review, is it actionable? Wdyt? Explore in depth each problem.
+We want a clean, maintainable codebase, with proper best practices for the tech stack we use.
+Run subagents to verify, and if it should be fixed, try to merge some stuff together so it can be fixed together within one subagent. 
+If you can test something do it.
+
+
+I've reviewed the full diff. Here's my assessment:
+---
+## Review: Better Notifications
+**Changes summary:** Two files modified to improve OS notification quality — notifications now show `"repo-name · workspace-title"` instead of truncated session IDs, and clicking any notification navigates to the relevant workspace/session.
+### Issue Found
+### **#1 Setup notification `onClick` missing `showWindow()` — window won't restore from minimized**
+Session notifications use `navigateToWorkspace()` which calls `showWindow()` (Electron IPC → `show_main_window`) to restore minimized/hidden windows before navigating:
+```ts
+// navigateToWorkspace (line 54-64) — used by all session notifications
+function navigateToWorkspace(workspaceId: string, sessionId: string): void {
+  showWindow();  // ← Electron IPC to restore window
+  useWorkspaceStore.getState().selectWorkspace(workspaceId);
+  // ...
+}
+```
+But the **setup failed** and **setup complete** notification `onClick` handlers skip this:
+```ts
+// Line 261 — setup failed
+onClick: () => useWorkspaceStore.getState().selectWorkspace(ws.id),
+// Line 271 — setup complete  
+onClick: () => useWorkspaceStore.getState().selectWorkspace(ws.id),
+```
+The `window.focus()` call in `notificationService.ts` is a renderer-side call that doesn't invoke Electron's `show_main_window` IPC. On macOS, clicking a setup notification when the window is minimized/hidden will update internal state but the window won't actually come to the foreground.
+**Fix:** Add `showWindow()` to both setup notification `onClick` handlers:
+```ts
+onClick: () => {
+  showWindow();
+  useWorkspaceStore.getState().selectWorkspace(ws.id);
+},
+```
+**File:** `apps/web/src/features/session/hooks/useGlobalSessionNotifications.ts`, lines 261 and 271
+---
+**Overall:** Clean, well-structured change. The `FinishedEntry` interface, `formatBody` helper, and `navigateToWorkspace` utility are good abstractions. The notification bodies are now genuinely useful. Only the one inconsistency above needs fixing.
+
+---
+
+<system_instruction>
+The user has attached these files. Read them before proceeding.
+- /Users/zvada/Developer/agent/box-ide/.conductor/pattaya-v2/.context/attachments/PR instructions.md (954 B)
+</system_instruction>
+
+
+
+Create a PR
+
+---
+
+<system-instruction>
+The user has added 3 comments to the diff for this workspace. Please review and address these comments as part of your response. When addressing comments on the "original" side or on specific commits, read the file from that version (not the current version). Below are the comments, including metadata about what git state they were left on:
+
+Comment #1:
+
+File: 
+Line: undefined
+User comment: "<!-- This is an auto-generated comment: summarize by coderabbit.ai -->
+<!-- walkthrough_start -->
+
+<details>
+<summary>📝 Walkthrough</summary>
+
+## Walkthrough
+
+Session notifications now support click handlers with contextual workspace and repository information. The notification service infrastructure is enhanced with an optional `onClick` callback, which new notification helpers leverage to navigate users directly to relevant workspaces and sessions when clicked.
+
+## Changes
+
+|Cohort / File(s)|Summary|
+|---|---|
+|**Notification Service Infrastructure** <br> `apps/web/src/platform/notifications/notificationService.ts`|Added optional `onClick?: () => void` callback to `NotificationOptions` interface; `sendNotification` now destructures and assigns the click handler to native `Notification` objects with window focus integration.|
+|**Session Notification Enhancements** <br> `apps/web/src/features/session/hooks/useGlobalSessionNotifications.ts`|Added reusable helper functions (`formatBody`, `navigateToWorkspace`) for consistent notification formatting with workspace/repo context. Enhanced "Agent finished", "Agent needs input", "Plan ready for review", "Agent error", "Setup failed", and "Setup complete" notifications with contextual bodies and click handlers that navigate to workspaces and manage chat tab state.|
+
+## Sequence Diagram
+
+```mermaid
+sequenceDiagram
+    participant User
+    participant Notification as OS Notification
+    participant NotificationService
+    participant SessionHook as useGlobalSessionNotifications
+    participant Navigation as Workspace Navigation
+
+    User->>Notification: Clicks notification
+    Notification->>NotificationService: Triggers onclick handler
+    NotificationService->>NotificationService: Focus window
+    NotificationService->>SessionHook: Invoke onClick callback
+    SessionHook->>Navigation: navigateToWorkspace(workspaceId, sessionId)
+    Navigation->>Navigation: Show window & select workspace
+    Navigation->>Navigation: Update active chat tab
+```
+
+## Estimated code review effort
+
+🎯 3 (Moderate) | ⏱️ ~22 minutes
+
+## Poem
+
+> 🐰 *A notification hops with newfound grace,*  
+> *Its click now guides you to the right place.*  
+> *Workspace and session, context so clear,*  
+> *The humble alert brings workspace cheer!* ✨
+
+</details>
+
+<!-- walkthrough_end -->
+
+
+<!-- tips_start -->
+
+---
+
+<sub>Comment `@coderabbitai help` to get the list of available commands and usage tips.</sub>
+
+<!-- tips_end -->
+
+<!-- internal state start -->
+
+
+<!-- REDACTED/REDACTED/REDACTED/REDACTED/Gb3vSxT/1/REDACTED/REDACTED/REDACTED/R/REDACTED/REDACTED/oDHESMTJOpGAjEzJ/nwP65V5wrP9JkhMxo/zgynIadJJl5BgIwbgKoKh7AUiKbRfB0gkwUUaY/O5rdaBeFwt/REDACTED/V/REDACTED/REDACTED/REDACTED/REDACTED/REDACTED/REDACTED/REDACTED/XBvDarGL/REDACTED/XEXTeJCNyJ1U5uYiW8Ljbo1sjeFJ8Fin1U/REDACTED/N8KiQVvx0ZKu/DJ3/DSvVS9/RP3j7PuGfye/REDACTED/REDACTED/REDACTED -->
+
+<!-- internal state end -->"
+
+Comment metadata:
+This comment was left on a file.
+This comment was left on GitHub by @coderabbitai.
+
+
+Comment #2:
+
+File: apps/web/src/features/session/hooks/useGlobalSessionNotifications.ts
+Line: 60
+User comment: "_⚠️ Potential issue_ | _🟡 Minor_
+
+**Validate the target before opening a chat tab.**
+
+OS notifications can be clicked after the underlying workspace/session changed. Here `getLayout()` still returns a default layout for missing workspaces, and `setChatTabState()` will persist any `sessionId`, so a stale click can manufacture an orphaned tab entry. Re-check the current workspace/session before mutating layout state and fall back to just selecting the workspace if the session is gone.
+
+<details>
+<summary>🤖 Prompt for AI Agents</summary>
+
+```
+Verify each finding against the current code and only fix it if needed.
+
+In `@apps/web/src/features/session/hooks/useGlobalSessionNotifications.ts` around
+lines 54 - 60, Validate the workspace and session before mutating layout: after
+calling useWorkspaceStore.getState().selectWorkspace(workspaceId), retrieve the
+current layout via workspaceLayoutActions.getLayout(workspaceId) and confirm the
+workspace exists and that sessionId is present (e.g., layout is not a
+default/empty layout and layout.chatTabSessionIds includes sessionId or the
+workspace still contains that session); if the session is missing or the layout
+is the default placeholder, do NOT call
+workspaceLayoutActions.setChatTabState(workspaceId, sessionIds, sessionId) and
+instead just return after selecting the workspace to avoid creating orphaned
+tabs; otherwise proceed to compute sessionIds and call setChatTabState as
+before.
+```
+
+</details>
+
+<!-- fingerprinting:phantom:medusa:grasshopper -->
+
+<!-- This is an auto-generated comment by CodeRabbit -->"
+
+Comment metadata:
+This comment was left on the modified branch.
+This comment was left on GitHub by @coderabbitai.
+This comment is the start of thread PRRT_kwDOQEbULc53IU0E. 
+
+
+Comment #3:
+
+File: apps/web/src/features/session/hooks/useGlobalSessionNotifications.ts
+Line: 221
+User comment: "_⚠️ Potential issue_ | _🟠 Major_
+
+**Don't surface raw error strings in native notifications.**
+
+`ws.session_error_message` and `ws.error_message` are arbitrary backend/setup text that will end up in the OS notification center and potentially the lock screen. That can leak repo internals or provider responses outside the app. Keep the body generic here and show the detailed error only after the app is opened.
+
+<details>
+<summary>🔒 Safer body text</summary>
+
+```diff
+                   sendNotification({
+                     title,
+-                    body: ws.session_error_message
+-                      ? `${context} — ${ws.session_error_message}`
+-                      : context,
++                    body: context,
+                     sound: "Basso",
+                     onClick: () => navigateToWorkspace(ws.id, sessionId),
+                   });
+...
+             sendNotification({
+               title: "Setup failed",
+-              body: ws.error_message ? `${context} — ${ws.error_message}` : context,
++              body: context,
+               sound: "Basso",
+               onClick: () => {
+                 showWindow();
+                 useWorkspaceStore.getState().selectWorkspace(ws.id);
+```
+</details>
+
+
+Also applies to: 251-255
+
+<details>
+<summary>🤖 Prompt for AI Agents</summary>
+
+```
+Verify each finding against the current code and only fix it if needed.
+
+In `@apps/web/src/features/session/hooks/useGlobalSessionNotifications.ts` around
+lines 214 - 221, The notification currently includes raw backend error strings
+(ws.session_error_message / ws.error_message) which may leak sensitive details;
+update the sendNotification call in useGlobalSessionNotifications (where
+formatBody, sendNotification, and navigateToWorkspace are used) to use a generic
+body message (e.g., keep context only or append a non-sensitive phrase like "An
+error occurred — open the app for details") and remove or replace direct
+inclusion of ws.session_error_message/ws.error_message; ensure detailed error
+text is shown only inside the app UI after navigateToWorkspace is invoked.
+```
+
+</details>
+
+<!-- fingerprinting:phantom:medusa:grasshopper -->
+
+<!-- This is an auto-generated comment by CodeRabbit -->"
+
+Comment metadata:
+This comment was left on the modified branch.
+This comment was left on GitHub by @coderabbitai.
+This comment is the start of thread PRRT_kwDOQEbULc53IU0G. 
+
+</system-instruction>
+
+I run AI code review, is it actionable? Wdyt? Explore in depth each problem.
+We want a clean, maintainable codebase, with proper best practices for the tech stack we use.
+Run subagents to verify, and if it should be fixed, try to merge some stuff together so it can be fixed together within one subagent. 
+If you can test something do it
