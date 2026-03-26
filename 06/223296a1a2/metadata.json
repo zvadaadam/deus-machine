@@ -1,0 +1,36 @@
+{
+  "cli_version": "0.5.0",
+  "checkpoint_id": "06223296a1a2",
+  "strategy": "manual-commit",
+  "branch": "zvadaadam/explore-onboarding-ui",
+  "checkpoints_count": 52,
+  "files_touched": [
+    "apps/desktop/main/index.ts",
+    "apps/desktop/main/native-handlers.ts",
+    "apps/web/public/audio/intro-music.mp3",
+    "apps/web/src/features/onboarding/hooks/useOnboardingAudio.ts",
+    "apps/web/src/features/onboarding/ui/AgentDotsAnimation.stories.tsx",
+    "apps/web/src/features/onboarding/ui/AgentDotsAnimation.tsx",
+    "apps/web/src/features/onboarding/ui/OnboardingOverlay.tsx",
+    "apps/web/src/features/onboarding/ui/animation-utils.ts",
+    "apps/web/src/features/onboarding/ui/steps/DeusStep.tsx",
+    "apps/web/src/features/onboarding/ui/steps/ProjectSelectionStep.tsx",
+    "apps/web/src/features/onboarding/ui/steps/WelcomeStep.tsx",
+    "apps/web/src/global.css"
+  ],
+  "sessions": [
+    {
+      "metadata": "/06/223296a1a2/0/metadata.json",
+      "transcript": "/06/223296a1a2/0/full.jsonl",
+      "content_hash": "/06/223296a1a2/0/content_hash.txt",
+      "prompt": "/06/223296a1a2/0/prompt.txt"
+    }
+  ],
+  "token_usage": {
+    "input_tokens": 3588,
+    "cache_creation_tokens": 421887,
+    "cache_read_tokens": 24142324,
+    "output_tokens": 109394,
+    "api_call_count": 266
+  }
+}
