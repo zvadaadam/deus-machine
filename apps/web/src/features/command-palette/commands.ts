@@ -116,7 +116,7 @@ export const staticCommands: CommandDefinition[] = [
     label: "Settings: Providers",
     icon: Orbit,
     group: "settings",
-    keywords: ["model", "claude", "anthropic", "codex", "openai", "api", "key", "provider"],
+    keywords: ["ai", "model", "claude", "anthropic", "codex", "openai", "api", "key", "provider"],
     action: () => {
       uiActions.openSettings();
       uiActions.setActiveSettingsSection("ai");

@@ -105,15 +105,15 @@ export const WorkspaceService = {
       pr_title?: string;
       target_branch?: string;
     }
-  ): Promise<Workspace> => {
+  ): Promise<Pick<Workspace, "id" | "repository_id">> => {
     const result = await sendCommand("createWorkspace", {
       repository_id: repositoryId,
       ...options,
     });
     if (!result.accepted) throw new Error(result.error || "Failed to create workspace");
-    // Command ack returns workspace ID as commandId — construct minimal
-    // workspace object for callers that need id + repository_id.
-    return { id: result.commandId, repository_id: repositoryId } as Workspace;
+    // Command ack returns workspace ID as commandId — full workspace data
+    // arrives via WS subscription after the backend processes the command.
+    return { id: result.commandId, repository_id: repositoryId };
   },
 
   /**
