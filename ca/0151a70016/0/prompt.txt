@@ -1,0 +1,106 @@
+<system_instruction>
+You are working inside OpenDevs, a Mac app that lets the user run many coding agents in parallel.
+Your work should take place in the /Users/zvada/Developer/agent/box-ide/.conductor/macau-v2 directory (unless otherwise directed), which has been set up for you to work in.
+Each workspace has a .context directory (gitignored) where you can save files to collaborate with other agents.
+DO NOT EVER read or write files at /Users/zvada/Developer/agent/box-ide.
+The target branch for this workspace is main. Use this for actions like creating new PRs, bisecting, etc., unless you're told otherwise.
+
+By default, the user will only see the last message that you send before stopping. Include all essential information in the last message. The intermediate messages will be collapsed and accessible by the user but not displayed by default.
+
+If the user asks you to work on several unrelated tasks, you can suggest they start new workspaces.
+Sometimes the user might send you a message they meant to send in a different workspace or a different chat. If something doesn't make sense in the context of your work, just ask. 
+If the user asks for help with OpenDevs, you can ask them to go to "Help -> Send Feedback" to get in touch with our team.
+</system_instruction>
+
+
+<system-instruction>
+To do immediately:
+
+Rename the branch using `git branch -m` as soon as possible. Do not check the current branch name.
+
+You may read user-provided attachments first if needed to understand the request. Otherwise, do this before using any skills or any other tools.
+
+Choosing a branch name: use concrete, specific language, avoid abstract nouns, and be concise (<30 characters). Use the prefix "zvadaadam/" before the name.
+
+</system-instruction>
+
+I think we switched to, like, what kind of database do we use? I thought like we switched to something else, right? t deus db?
+
+---
+
+But how come we have the workspaces? We used to not have any workspace, but now we have the repositories and the workspaces from the old database that was OpenDefs. And in the deus, I feel like we don't have it. Why?
+
+---
+
+I want you to drop the legacy codebase, drop that, like we want the current codebase, nothing old, this is getting ready for the production, so know these like backwards compatibility thing with the old thing, we want only latest, explore how and if there are any other problems.
+
+---
+
+/Users/zvada/Developer/agent/box-ide/.conductor/macau-v2/.context/attachments/Screenshot 2026-03-26 at 9.36.41 PM.png remove teh extesions form seetintd we dont need tit right?
+
+---
+
+/Users/zvada/Developer/agent/box-ide/.conductor/macau-v2/.context/attachments/Screenshot 2026-03-26 at 9.37.13 PM.png
+
+I don't know, the AI model things, the AI tab, what do you think, should we have it like this or we gonna call it like... I don't know, definitely put their different icon than the star, I hate the star. Also don't put there like the like a brain icon, maybe something more abstract for the tab row.
+
+also what we shoudk shwo teghre we need to see it we are logeed in with claude also clogged in with code and have ab ilityt add PAI key
+
+---
+
+/Users/zvada/Developer/agent/box-ide/.conductor/macau-v2/.context/attachments/Screenshot 2026-03-26 at 9.51.39 PM.png also if not connect we shoudl have a button to reconenct u know?
+
+also how we shuld be abel to set the open_api_key u kwo for the codex but an'nt nos sure if we amybe se wshoudld o thsi seciton liek for CLaude Code and COdex
+
+---
+
+Okay, but how about, yeah, this is not bad, but with like, entropic connection. This is like for the subscription for Claude Code and Codex. And these are little different things, right? And they are not through the API key. I think the link to API key that would be nice in the API key part, but yeah, it's not... But the layout is good.
+
+---
+
+this si good link for codex -> https://developers.openai.com/codex/cli
+
+but cna u not if teh codex is installed int he magine, beasue it would be cool if not isbtall shwo this liek and if installe we need just to open terminal and do tehre the codex llgon of tsomehgin?
+
+---
+
+/Users/zvada/Developer/agent/box-ide/.conductor/macau-v2/.context/attachments/Screenshot 2026-03-26 at 10.10.25 PM.png So I have here codex login, but it opens the, it doesn't open the terminal, it opens the page. I have the login, but it doesn't open the, it opens the web page, not the terminal.
+
+---
+
+But now it does copy why it doesn't like do like open terminal or something. Is it complex?
+
+---
+
+No, that still doesn't work. So explore, like when I click nothing happened. Explore, explore more. We need to do it clean.
+
+---
+
+kill all runinx box-ide
+
+---
+
+nice it worked nice
+
+---
+
+/Users/zvada/Developer/agent/box-ide/.conductor/macau-v2/.context/attachments/Screenshot 2026-03-26 at 11.37.26 PM.png we dont need the name right int he general
+
+---
+
+I think you can call it like the provider, so let's call it AI providers.
+
+---
+
+And maybe moving the section updates into the general. What do you think?
+
+---
+
+<system_instruction>
+The user has attached these files. Read them before proceeding.
+- /Users/zvada/Developer/agent/box-ide/.conductor/macau-v2/.context/attachments/PR instructions.md (953 B)
+</system_instruction>
+
+
+
+Create a PR
