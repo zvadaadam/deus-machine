@@ -154,3 +154,667 @@ The user has attached these files. Read them before proceeding.
 
 
 Create a PR
+
+---
+
+<system-instruction>
+The user has added 11 comments to the diff for this workspace. Please review and address these comments as part of your response. When addressing comments on the "original" side or on specific commits, read the file from that version (not the current version). Below are the comments, including metadata about what git state they were left on:
+
+Comment #1:
+
+File: 
+Line: undefined
+User comment: "<!-- This is an auto-generated comment: summarize by coderabbit.ai -->
+<!-- walkthrough_start -->
+
+<details>
+<summary>📝 Walkthrough</summary>
+
+## Walkthrough
+
+Comprehensive rename of the "sidecar" process to "agent-server" across documentation, source code, configuration, and build systems. Introduces new Electron UI components (app menu and system tray) and removes unused UI library components from the web package.
+
+## Changes
+
+|Cohort / File(s)|Summary|
+|---|---|
+|**Claude AI Memory & Agent Docs** <br> `.claude/agent-memory/.../*`, `.claude/agents/*`, `.claude/skills/*/*`|Updated documentation to replace "sidecar" with "agent-server" terminology across architecture descriptions, risk tier mappings, test instructions, and review guidelines. No functional logic changes.|
+|**Agent-server Source Code** <br> `apps/agent-server/agents/.../*`, `apps/agent-server/*.ts`, `apps/agent-server/test/*`|Updated file header comments and internal documentation from `sidecar/` paths to `agent-server/` paths. Modified entry point naming (`UnifiedSidecar` → `AgentServer`), socket filename pattern (`deus-sidecar-${pid}.sock` → `deus-agent-server-${pid}.sock`), process tag values, and environment variable references (`SIDECAR_BUNDLE_PATH` → `AGENT_SERVER_BUNDLE_PATH`).|
+|**Backend Service Code** <br> `apps/backend/src/.../*`, `apps/backend/test/.../*`|Updated references from "sidecar" to "agent-server" in environment variables, child-process spawn helpers, lifecycle management, route documentation, and test assertions. No routing or control flow changes.|
+|**Desktop/Electron UI** <br> `apps/desktop/main/app-menu.ts`, `apps/desktop/main/tray.ts`, `apps/desktop/main/index.ts`, `apps/desktop/main/backend-process.ts`|Added new `setupAppMenu()` and `setupTray()` components for Electron menu and system tray management. Updated backend process bundle path from sidecar to agent-server. Integrated new UI setup into main process lifecycle.|
+|**Web/Frontend Code** <br> `apps/web/src/.../*`|Updated inline documentation and comments to reflect "agent-server" as message/event source instead of "sidecar". Removed `Checkbox` component and entire `NavigationMenu` component module. Enhanced `UpdateSection` to show build-time version and dev badge.|
+|**Configuration & Build System** <br> `deus.json`, `package.json`, `.github/workflows/test.yml`, `scripts/dev.sh`, `electron-builder.yml`|Renamed build tasks (`build:sidecar` → `build:agent-server`), test scripts, and CI job names. Updated bundle paths and script commands. Removed UI dependency packages from `package.json`.|
+|**Shared Code & Protocols** <br> `shared/events.ts`, `shared/protocol.ts`, `shared/session-events.ts`, `shared/enums.ts`, `shared/agent-events.ts`, `shared/lib/*`|Renamed protocol event from `"sidecar:request"` to `"agent-server:request"` in `PROTOCOL_EVENTS`. Updated module documentation to reference agent-server instead of sidecar across canonical event definitions and shared utilities.|
+|**Documentation** <br> `CLAUDE.md`, `DEVELOPMENT.md`, `README.md`, `RELEASE.md`, `.env.example`, `docs/agent-server-communication-refactor.md`, `docs/browser-tools-roadmap.md`, `docs/deus-json-spec.md`|Updated architecture diagrams, process names, and command examples. Replaced `docs/sidecar-communication-refactor.md` with new `docs/agent-server-communication-refactor.md` describing unified WebSocket-based messaging architecture. Updated `.gitignore` and ESLint config to reference agent-server directory.|
+|**Test Files** <br> `apps/agent-server/test/e2e.test.ts`, `apps/agent-server/test/integration.test.ts`, `test/e2e/e2e-flow.test.cjs`|Updated socket naming patterns, build prerequisites, process spawn/cleanup helpers from sidecar to agent-server. Updated test suite and assertion descriptions.|
+
+## Estimated code review effort
+
+🎯 3 (Moderate) | ⏱️ ~25 minutes
+
+## Poem
+
+> 🐰 *Whiskers twitching at the changes made—*
+> *From sidecar paths to agent-server's shade,*
+> *Fresh UI components hop into view,*
+> *As documentation and configs renew.*
+> *The tunnel still flows, just a new sign ahead,*
+> *Let's verify this refactor's thread!* ✨
+
+</details>
+
+<!-- walkthrough_end -->
+
+
+<!-- tips_start -->
+
+---
+
+<sub>Comment `@coderabbitai help` to get the list of available commands and usage tips.</sub>
+
+<!-- tips_end -->
+
+<!-- internal state start -->
+
+
+<!-- REDACTED/REDACTED/REDACTED/REDACTED/REDACTED/REDACTED/REDACTED/REDACTED/REDACTED/REDACTED/REDACTED/gGiKwC2nfjwC3cO/REDACTED/REDACTED/REDACTED/REDACTED/REDACTED/T/b/aOZfDlDAVIG/REDACTED/epONQA4/REDACTED/REDACTED/REDACTED/REDACTED/orRlL6AkReLbl8rZ8Y0FUkQcq89/REDACTED/REDACTED/REDACTED/REDACTED/REDACTED/REDACTED/REDACTED/iqTqnX0h7CiR6WnKz/REDACTED/REDACTED/REDACTED/KLQFSJ3om1xrPgWxg2e/REDACTED/REDACTED/REDACTED/REDACTED/REDACTED/REDACTED/fbvk3GFQcphp3N1ua0u590FhJ/REDACTED/AnEFDnxWuX2MYVMKoxcOro/7s4VcIhsByf/REDACTED/REDACTED/REDACTED/Mph+PmFIdOmr3PQu90/Erj/REDACTED/REDACTED/REDACTED/REDACTED/REDACTED/qDtfGfzxJlE01E/WB/REDACTED/REDACTED/I9ueTZ4k+OO4cyzuPU7mZ+OIwD1T+ChO7ioT/REDACTED/REDACTED/REDACTED/REDACTED/REDACTED/REDACTED/REDACTED/We/REDACTED/yB4iyfRDC8jiOQ/U0d7ZmM7Ej6An4MAwAgfecBlFjB/REDACTED/REDACTED/77bYtCzY7dSNMSnalmU9IpdmGFY/REDACTED/REDACTED/Zbr/3n7/REDACTED/Te3fhVapOFm1XdKW/REDACTED/REDACTED/RIaP287ddgR4I2jSjVG7AD/REDACTED/REDACTED/evY+hmO3rbpFC8g0zt/REDACTED/REDACTED/htDkTJQK0eQPtHs9EJlsLWKZJp4ETVmkY/REDACTED/TGxgM/RWzM7i/REDACTED/REDACTED/REDACTED/REDACTED/REDACTED/IfJN6WuIBl6S4Xv/REDACTED/wLunQJDOTUl/Tpa/REDACTED/raEFz1aEULGOzU5hcbNuwcLs/REDACTED/REDACTED/REDACTED/REDACTED/REDACTED/REDACTED/abwgKOMmWRnkyw/REDACTED/REDACTED/REDACTED/REDACTED/Is4uOLk1MMgai85rbGDXnXh/REDACTED/REDACTED/REDACTED/b4GDrKTC8ayX4GiEe/tooLc3DT3d5m4/eHvQxn1m+/m4xeAeYWwH2LInuud6u2jbr+HLVK/vpO/REDACTED/REDACTED//REDACTED/REDACTED/zgNrp8gd2v0T87hw06/REDACTED/REDACTED/REDACTED/REDACTED/lHJBWBW5Wo/RS4v1z0xE0mSXApJ8+iQ/REDACTED/REDACTED/jfIe45ttPPPlIwVKzgKPVdgc/BQrk0CTpKUjt/REDACTED/t/REDACTED/REDACTED/6m/REDACTED/uYe6Xpyp/8COf5z/REDACTED/REDACTED/O2wwl0bdfQAB2WDEKC8A9d1QcD/REDACTED/REDACTED/PIJ18YHGBX6kl/REDACTED/REDACTED/REDACTED/cdDfNc3ZyMN43I//23dAo1yIL8nwZwJ0lIwV7DeU/REDACTED/DegewTCnUAqEJ/REDACTED/cf0MjXnUdG08hsJfW/ByLMkJ4jbbcBX4iMgwSK/REDACTED/REDACTED/REDACTED/REDACTED/REDACTED/REDACTED/REDACTED/REDACTED/DUigFuSXklVjUkz0NPdL/REDACTED/S2NMkBp9KoxoUuZ/AMPFRSOXEJC3T1U/REDACTED/REDACTED/REDACTED/REDACTED/REDACTED/REDACTED/REDACTED/REDACTED/AZ9QXIlzzswNg/REDACTED/REDACTED/REDACTED/REDACTED/NxNSzjbMXhM1uMVMh/REDACTED/REDACTED/REDACTED/goin8jAhOkqATIH3x/REDACTED/REDACTED/REDACTED/N5x2yPnX+2JLfC/REDACTED/REDACTED/REDACTED/REDACTED/REDACTED/REDACTED/REDACTED/REDACTED/JBkagA2wdVX2jVVrys/Xwck0NxXQbqpISCXtPcwuIvLmI+QF1A/REDACTED/REDACTED/REDACTED/REDACTED/REDACTED/REDACTED/fEYxLsX/REDACTED/REDACTED/g05ZKWpcHrq3Lelr/REDACTED/REDACTED/REDACTED/REDACTED/REDACTED/REDACTED/REDACTED/REDACTED/REDACTED/REDACTED/o84H+6qBmGSB/REDACTED/REDACTED/q5BGQaQquz8AzTihRb+uRiC4/AZC0ACGmLUGqh/REDACTED/swmkSRcIcrktBpAT2Gk9NRrUENheYQ/LpgTgD93oB7saGAAA/REDACTED/REDACTED/REDACTED/rewLlH+ANbDgoF4viQWC38DAi/REDACTED/REDACTED/REDACTED/REDACTED/REDACTED/REDACTED/REDACTED/REDACTED/REDACTED/k5DQPSqIqAIRDd0CseCSgaRwH/REDACTED/Mt6mN57BJzGE4k/REDACTED/YS4Y/REDACTED/REDACTED/REDACTED/REDACTED/REDACTED/REDACTED/Zhejn3lyAXvsG+l4CKwCQXYGZHYAXYsGBosX/REDACTED/REDACTED/REDACTED/REDACTED/TDtegs1zwLYF7YfHgrEFtlKiAC/REDACTED/REDACTED/REDACTED/REDACTED/REDACTED/REDACTED/REDACTED/REDACTED/REDACTED/REDACTED/REDACTED/REDACTED/Zc1nDlquVvSFTmk/F7LM3oxrJyTvLAlEXhr04X3g2sU/REDACTED/QiCRUc/1Az16lQ7PZYKvKp6MmeU+pOyziegrP/REDACTED/REDACTED/T2S6vRHStIaHw65KmlyFcHKS/REDACTED/IbYo9y1Wk1Vbk1C+QP1FmUX1Nol/REDACTED/REDACTED/REDACTED/zl2vpy2/NkS/yfY+0pOjtLEQ0RgBlDxY+/REDACTED/REDACTED/REDACTED/REDACTED/REDACTED/REDACTED/REDACTED/REDACTED/REDACTED/REDACTED/REDACTED/NDheSbW5/REDACTED/REDACTED/MlzRDi/Jedn7pFTPQhXi7umxH/AMn2DAKR9DlPM4y/REDACTED/REDACTED/REDACTED/Pqarv0Cz/ImNjDIaC7/REDACTED/IpdyBpr6AE2PXYMppTDRFWf4eE5/zIKr/u/E+RUWdfVSYJ8ovqVCyRc55flIFdfFfw5+V/REDACTED/D9fysGSk2sSX/chC0Y+EszLun0A95n57OH++MoTR/REDACTED/+AS0DvUyhsoIsDyhCoUa36/REDACTED/REDACTED/REDACTED/w4Uf8yQJ/REDACTED/hxlNn0JYI4F/SpsACQMQkUlCXYV/REDACTED/REDACTED/REDACTED/oq8c4duOgPjj5s7PuN9v/REDACTED/4gvK6DPsDdE6uH/REDACTED/REDACTED/REDACTED/REDACTED/REDACTED/REDACTED/REDACTED/REDACTED -->
+
+<!-- internal state end -->"
+
+Comment metadata:
+This comment was left on a file.
+This comment was left on GitHub by @coderabbitai.
+
+
+Comment #2:
+
+File: .claude/agents/code-reviewer.md
+Line: 25
+User comment: "_⚠️ Potential issue_ | _🟠 Major_
+
+**Architecture note is incorrect: agent-server should not perform direct SQLite writes.**
+
+Line 25 contradicts the current boundary model and may steer future reviews in the wrong direction. Update it to reflect stateless agent-server behavior with DB writes in backend only.
+
+<details>
+<summary>✏️ Suggested wording</summary>
+
+```diff
+-- **Agent-server (agent-server/)**: Claude Agent SDK integration, message transformation, direct SQLite writes.
++- **Agent-server (agent-server/)**: Claude Agent SDK integration, message transformation, stateless runtime (no direct DB writes).
+```
+</details>
+
+
+
+Based on learnings: “Agent-server (apps/sidecar/) is stateless child process with no DB access” and “Only the backend writes to the DB.”
+
+<!-- suggestion_start -->
+
+<details>
+<summary>📝 Committable suggestion</summary>
+
+> ‼️ **IMPORTANT**
+> Carefully review the code before committing. Ensure that it accurately replaces the highlighted code, contains no missing lines, and has no issues with indentation. Thoroughly test & benchmark the code to ensure it meets the requirements.
+
+```suggestion
+- **Agent-server (agent-server/)**: Claude Agent SDK integration, message transformation, stateless runtime (no direct DB writes).
+```
+
+</details>
+
+<!-- suggestion_end -->
+
+<details>
+<summary>🤖 Prompt for AI Agents</summary>
+
+```
+Verify each finding against the current code and only fix it if needed.
+
+In @.claude/agents/code-reviewer.md at line 25, Update the architecture note
+that currently states "Agent-server (agent-server/): Claude Agent SDK
+integration, message transformation, direct SQLite writes" to reflect that the
+agent-server is stateless and must not perform DB writes: replace the phrase
+"direct SQLite writes" with wording that the agent-server (apps/sidecar/ /
+agent-server/) is a stateless child process with no DB access and that all
+database writes are performed only by the backend; ensure the revised sentence
+mentions the Claude Agent SDK integration and message transformation
+responsibilities remain with agent-server but explicitly denies DB write
+privileges.
+```
+
+</details>
+
+<!-- fingerprinting:phantom:poseidon:hawk -->
+
+<!-- This is an auto-generated comment by CodeRabbit -->"
+
+Comment metadata:
+This comment was left on the modified branch.
+This comment was left on GitHub by @coderabbitai.
+This comment is the start of thread PRRT_kwDOQEbULc53DTRt. 
+
+
+Comment #3:
+
+File: .claude/agents/deep-reviewer.md
+Line: 30
+User comment: "_⚠️ Potential issue_ | _🟠 Major_
+
+**Correct the architecture boundary: agent-server should not own DB writes.**
+
+Line 29 currently says agent-server owns “assistant DB writes,” which conflicts with the repo architecture where backend is the sole DB writer and agent-server is stateless.  
+
+
+<details>
+<summary>✏️ Proposed fix</summary>
+
+```diff
+-| Agent-server (agent-server/) | Claude SDK streaming, message transform, assistant DB writes | HTTP endpoints, frontend state                 |
++| Agent-server (apps/agent-server/) | Claude SDK streaming, message transform, tool orchestration | HTTP endpoints, frontend state, direct DB writes |
+```
+</details>
+
+Based on learnings: “Only the backend writes to the DB. The agent-server is stateless (no DB access).”
+
+<details>
+<summary>🤖 Prompt for AI Agents</summary>
+
+```
+Verify each finding against the current code and only fix it if needed.
+
+In @.claude/agents/deep-reviewer.md around lines 25 - 30, Update the
+architecture table entry for "Agent-server (agent-server/)" to remove any claim
+that it performs DB writes (the current "assistant DB writes"); instead state it
+is stateless and only handles Claude SDK streaming and message transformation.
+Concretely, edit the row where "Agent-server (agent-server/)" appears so the
+"Owns" column lists only "Claude SDK streaming, message transform" (or similar
+stateless responsibilities) and the "Must NOT do" column explicitly includes "DB
+writes" to match the repo rule that only the backend writes the DB.
+```
+
+</details>
+
+<!-- fingerprinting:phantom:poseidon:hawk -->
+
+<!-- This is an auto-generated comment by CodeRabbit -->"
+
+Comment metadata:
+This comment was left on the modified branch.
+This comment was left on GitHub by @coderabbitai.
+This comment is the start of thread PRRT_kwDOQEbULc53DTSK. 
+
+
+Comment #4:
+
+File: .claude/agents/dev.md
+Line: 18
+User comment: "_⚠️ Potential issue_ | _🟠 Major_
+
+**Agent-server DB persistence claim conflicts with project architecture.**
+
+Line 18 says the agent-server does direct SQLite persistence, which contradicts the documented backend-only DB ownership and can lead to boundary violations in future changes.
+
+
+<details>
+<summary>Suggested fix</summary>
+
+```diff
+-- **Agent-server (agent-server/)**: Claude Agent SDK integration, message transformation, assistant message persistence (direct SQLite via better-sqlite3). Separate Node.js process.
++- **Agent-server (apps/agent-server/)**: Claude/Codex SDK integration, message transformation, canonical event emission. Stateless process with no DB access.
+```
+</details>
+Based on learnings: Backend database uses standalone SQLite and only the backend writes to the DB; the agent-server is stateless (no DB access).
+
+<details>
+<summary>🤖 Prompt for AI Agents</summary>
+
+```
+Verify each finding against the current code and only fix it if needed.
+
+In @.claude/agents/dev.md at line 18, Update the Agent-server description to
+remove the claim that it performs direct DB writes: locate the line containing
+"Agent-server (agent-server/)" and the phrase "assistant message persistence
+(direct SQLite via better-sqlite3)" and replace that clause with a statement
+that the agent-server is stateless and does not access the database; instead
+indicate that backend service owns and performs all SQLite persistence. Ensure
+the wording clearly states "stateless (no DB access)" and that persistence is
+handled only by the backend.
+```
+
+</details>
+
+<!-- fingerprinting:phantom:poseidon:hawk -->
+
+<!-- This is an auto-generated comment by CodeRabbit -->"
+
+Comment metadata:
+This comment was left on the modified branch.
+This comment was left on GitHub by @coderabbitai.
+This comment is the start of thread PRRT_kwDOQEbULc53DTSO. 
+
+
+Comment #5:
+
+File: .claude/agents/dev.md
+Line: 77
+User comment: "_⚠️ Potential issue_ | _🟠 Major_
+
+**Index guidance points to the wrong schema ownership.**
+
+Line 77 directs index updates to `backend/src/lib/schema.ts` and `agent-server/db/schema.ts`; current guidance says indexes are defined in `shared/schema.ts`, and agent-server should not own DB schema.
+
+
+<details>
+<summary>Suggested fix</summary>
+
+```diff
+-- **New query patterns need indexes** — Add to `backend/src/lib/schema.ts` and `agent-server/db/schema.ts`.
++- **New query patterns need indexes** — Add to `shared/schema.ts` (backend-owned DB schema).
+```
+</details>
+Based on learnings: All required database indexes are defined in `shared/schema.ts`, and the agent-server is stateless (no DB access).
+
+<!-- suggestion_start -->
+
+<details>
+<summary>📝 Committable suggestion</summary>
+
+> ‼️ **IMPORTANT**
+> Carefully review the code before committing. Ensure that it accurately replaces the highlighted code, contains no missing lines, and has no issues with indentation. Thoroughly test & benchmark the code to ensure it meets the requirements.
+
+```suggestion
+- **New query patterns need indexes** — Add to `shared/schema.ts` (backend-owned DB schema).
+```
+
+</details>
+
+<!-- suggestion_end -->
+
+<details>
+<summary>🤖 Prompt for AI Agents</summary>
+
+```
+Verify each finding against the current code and only fix it if needed.
+
+In @.claude/agents/dev.md at line 77, Update the index guidance under the "**New
+query patterns need indexes**" bullet: replace references to
+backend/src/lib/schema.ts and agent-server/db/schema.ts with the single
+canonical location shared/schema.ts, and remove the agent-server/db schema
+ownership note (agent-server is stateless and does not own DB schema). Ensure
+the sentence points contributors to define indexes in shared/schema.ts and drop
+any instruction that the agent-server should modify DB schema.
+```
+
+</details>
+
+<!-- fingerprinting:phantom:poseidon:hawk -->
+
+<!-- This is an auto-generated comment by CodeRabbit -->"
+
+Comment metadata:
+This comment was left on the modified branch.
+This comment was left on GitHub by @coderabbitai.
+This comment is the start of thread PRRT_kwDOQEbULc53DTSS. 
+
+
+Comment #6:
+
+File: .claude/skills/explore/SKILL.md
+Line: 19
+User comment: "_⚠️ Potential issue_ | _🟠 Major_
+
+**Architecture doc now contradicts runtime boundary (agent-server should not write DB)**
+
+Line 19 and Line 42 describe DB writes inside agent-server, but this project’s architecture keeps DB writes in backend only. Please update this skill doc so agent-server is shown as stateless (RPC/events), with persistence handled by backend services.  
+
+
+Based on learnings: “Agent-server (apps/sidecar/) is stateless with no DB access… Only the backend writes to the DB.”
+
+
+Also applies to: 40-43
+
+<details>
+<summary>🤖 Prompt for AI Agents</summary>
+
+```
+Verify each finding against the current code and only fix it if needed.
+
+In @.claude/skills/explore/SKILL.md at line 19, Update the architecture text
+that currently reads "Agent-server: RPC handler → agent → SDK → DB write →
+frontend notification" to reflect that the agent-server (Agent-server /
+apps/sidecar/) is stateless and must not write to the DB; replace the DB write
+step with an RPC/event to the backend (e.g., "RPC/event → backend (persists) →
+frontend notification") and make the same change for the repeated description
+around lines 40-43 so persistence is shown as handled only by backend services.
+```
+
+</details>
+
+<!-- fingerprinting:phantom:triton:hawk -->
+
+<!-- This is an auto-generated comment by CodeRabbit -->"
+
+Comment metadata:
+This comment was left on the modified branch.
+This comment was left on GitHub by @coderabbitai.
+This comment is the start of thread PRRT_kwDOQEbULc53DTSb. 
+
+
+Comment #7:
+
+File: .claude/skills/risk-tier/SKILL.md
+Line: 26
+User comment: "_⚠️ Potential issue_ | _🟠 Major_
+
+**Risk-tier path globs won’t match the actual monorepo layout.**
+
+These new `agent-server/...` paths omit the `apps/` prefix, so changed files under `apps/agent-server/**` may be misclassified and required checks may be skipped.
+
+
+<details>
+<summary>Suggested fix</summary>
+
+```diff
+-- `agent-server/db/schema.ts` — agent-server's schema mirror
+-- `agent-server/db/index.ts` — agent-server database access
++- `apps/agent-server/db/schema.ts` — agent-server's schema mirror
++- `apps/agent-server/db/index.ts` — agent-server database access
+...
+-- `agent-server/index.ts` — agent-server entry point
+-- `agent-server/rpc-connection.ts` — JSON-RPC communication
+-- `agent-server/protocol.ts` — shared message types
++- `apps/agent-server/index.ts` — agent-server entry point
++- `apps/agent-server/rpc-connection.ts` — JSON-RPC communication
++- `apps/agent-server/protocol.ts` — shared message types
+```
+</details>
+Based on learnings: Build monorepo with Bun package manager. Structure: `apps/backend/`, `apps/desktop/`, `apps/sidecar/`, `src/` for shared frontend.
+
+<details>
+<summary>🤖 Prompt for AI Agents</summary>
+
+```
+Verify each finding against the current code and only fix it if needed.
+
+In @.claude/skills/risk-tier/SKILL.md around lines 18 - 26, The path globs
+listed (e.g., `agent-server/db/schema.ts`, `agent-server/index.ts`,
+`agent-server/protocol.ts`) will not match the monorepo because those files live
+under apps/agent-server; update the risk-tier globs in
+.claude/skills/risk-tier/SKILL.md to prepend the apps/ prefix (e.g.,
+`apps/agent-server/db/schema.ts`, `apps/agent-server/index.ts`,
+`apps/agent-server/protocol.ts`) and similarly adjust any other entries to use
+the repo layout (apps/backend/, apps/desktop/, apps/sidecar/, src/) so changed
+files are correctly classified and checks run.
+```
+
+</details>
+
+<!-- fingerprinting:phantom:poseidon:hawk -->
+
+<!-- This is an auto-generated comment by CodeRabbit -->"
+
+Comment metadata:
+This comment was left on the modified branch.
+This comment was left on GitHub by @coderabbitai.
+This comment is the start of thread PRRT_kwDOQEbULc53DTSd. 
+
+
+Comment #8:
+
+File: .claude/skills/risk-tier/SKILL.md
+Line: 130
+User comment: "_⚠️ Potential issue_ | _🟠 Major_
+
+**Schema sync warning is inconsistent with current architecture.**
+
+Line 130 states backend/agent-server schema sync is required, but agent-server is documented as stateless with no DB access. This guidance will push reviewers toward non-existent or forbidden coupling.
+
+
+<details>
+<summary>Suggested fix</summary>
+
+```diff
+-- Schema changes require both backend and agent-server schema sync
++- Schema changes require backend schema + query invalidation review (shared/schema.ts, query-engine, agent-event-handler)
+```
+</details>
+Based on learnings: Backend database uses standalone SQLite and only the backend writes to the DB; the agent-server is stateless (no DB access).
+
+<!-- suggestion_start -->
+
+<details>
+<summary>📝 Committable suggestion</summary>
+
+> ‼️ **IMPORTANT**
+> Carefully review the code before committing. Ensure that it accurately replaces the highlighted code, contains no missing lines, and has no issues with indentation. Thoroughly test & benchmark the code to ensure it meets the requirements.
+
+```suggestion
+- Schema changes require backend schema + query invalidation review (shared/schema.ts, query-engine, agent-event-handler)
+```
+
+</details>
+
+<!-- suggestion_end -->
+
+<details>
+<summary>🤖 Prompt for AI Agents</summary>
+
+```
+Verify each finding against the current code and only fix it if needed.
+
+In @.claude/skills/risk-tier/SKILL.md at line 130, The line containing the
+phrase "Schema changes require both backend and agent-server schema sync" is
+incorrect; update this sentence in SKILL.md to state that only the backend
+(using a standalone SQLite) owns and writes the database schema and that the
+agent-server is stateless with no DB access, so schema migrations/updates must
+be applied to the backend only (remove any requirement to sync agent-server).
+```
+
+</details>
+
+<!-- fingerprinting:phantom:poseidon:hawk -->
+
+<!-- This is an auto-generated comment by CodeRabbit -->"
+
+Comment metadata:
+This comment was left on the modified branch.
+This comment was left on GitHub by @coderabbitai.
+This comment is the start of thread PRRT_kwDOQEbULc53DTSj. 
+
+
+Comment #9:
+
+File: apps/backend/src/services/workspace-init.service.ts
+Line: 228
+User comment: "_⚠️ Potential issue_ | _🟠 Major_
+
+**Incorrect architectural attribution in retry comment.**
+
+The comment states that SQLITE_BUSY errors occur "when the agent-server is concurrently accessing the DB," but this contradicts the established architecture. Based on learnings, the agent-server is stateless with no DB access—only the backend writes to the database.
+
+The actual concurrency source is likely the backend itself handling concurrent requests (e.g., multiple workspace initialization pipelines, query-engine subscriptions, or other backend operations running in parallel).
+
+
+
+<details>
+<summary>📝 Suggested fix for accurate attribution</summary>
+
+```diff
+-      // Retry with exponential backoff to handle SQLITE_BUSY / database-locked
+-      // errors that can occur when the agent-server is concurrently accessing the DB.
++      // Retry with exponential backoff to handle SQLITE_BUSY / database-locked
++      // errors that can occur when concurrent backend operations access the DB.
+```
+
+</details>
+
+Based on learnings: "Only the backend writes to the DB. The agent-server is stateless (no DB access)."
+
+<details>
+<summary>🤖 Prompt for AI Agents</summary>
+
+```
+Verify each finding against the current code and only fix it if needed.
+
+In `@apps/backend/src/services/workspace-init.service.ts` at line 228, Update the
+inaccurate comment in the retry block inside the WorkspaceInitService (the
+workspace initialization retry logic in methods like initializeWorkspace /
+initWorkspace) to attribute SQLITE_BUSY to concurrent backend DB writes rather
+than the agent-server; change the sentence that currently mentions "agent-server
+is concurrently accessing the DB" to something like "SQLITE_BUSY can occur due
+to concurrent backend writes (e.g., multiple initialization pipelines,
+query-engine subscriptions, or other backend operations) since only the backend
+writes to the DB." Ensure the new comment sits immediately above the
+retry/SQLITE_BUSY handling code in the WorkspaceInitService.
+```
+
+</details>
+
+<!-- fingerprinting:phantom:triton:puma -->
+
+<!-- This is an auto-generated comment by CodeRabbit -->"
+
+Comment metadata:
+This comment was left on the modified branch.
+This comment was left on GitHub by @coderabbitai.
+This comment is the start of thread PRRT_kwDOQEbULc53DTSs. 
+
+
+Comment #10:
+
+File: apps/backend/src/services/workspace-init.service.ts
+Line: 270
+User comment: "_⚠️ Potential issue_ | _🟠 Major_
+
+**Incorrect architectural attribution in error handler comment.**
+
+Similar to line 228, this comment incorrectly attributes SQLITE_BUSY errors to the agent-server holding the DB. The agent-server has no database access and cannot cause database contention.
+
+
+
+<details>
+<summary>📝 Suggested fix for accurate attribution</summary>
+
+```diff
+-      // SQLITE_BUSY can fire when agent-server holds the DB — log but don't
++      // SQLITE_BUSY can fire when concurrent backend operations hold the DB — log but don't
+       // abort, otherwise cleanup never runs and worktrees leak.
+```
+
+</details>
+
+Based on learnings: "Only the backend writes to the DB. The agent-server is stateless (no DB access)."
+
+<!-- suggestion_start -->
+
+<details>
+<summary>📝 Committable suggestion</summary>
+
+> ‼️ **IMPORTANT**
+> Carefully review the code before committing. Ensure that it accurately replaces the highlighted code, contains no missing lines, and has no issues with indentation. Thoroughly test & benchmark the code to ensure it meets the requirements.
+
+```suggestion
+      // SQLITE_BUSY can fire when concurrent backend operations hold the DB — log but don't
+       // abort, otherwise cleanup never runs and worktrees leak.
+```
+
+</details>
+
+<!-- suggestion_end -->
+
+<details>
+<summary>🤖 Prompt for AI Agents</summary>
+
+```
+Verify each finding against the current code and only fix it if needed.
+
+In `@apps/backend/src/services/workspace-init.service.ts` at line 270, The comment
+above the SQLITE_BUSY error handler incorrectly blames the agent-server for DB
+contention; update the comment in workspace-init.service.ts (the SQLITE_BUSY
+handling block) to state that SQLITE_BUSY indicates the database is locked or
+being written by the backend process (or another DB connection), not the
+agent-server, and make the wording consistent with the similar comment earlier
+around line 228 so it accurately attributes contention to backend/DB access
+rather than the stateless agent-server.
+```
+
+</details>
+
+<!-- fingerprinting:phantom:triton:puma -->
+
+<!-- This is an auto-generated comment by CodeRabbit -->"
+
+Comment metadata:
+This comment was left on the modified branch.
+This comment was left on GitHub by @coderabbitai.
+This comment is the start of thread PRRT_kwDOQEbULc53DTSx. 
+
+
+Comment #11:
+
+File: test/e2e/e2e-flow.test.cjs
+Line: 124
+User comment: "_⚠️ Potential issue_ | _🔴 Critical_
+
+**Fix invalid property access for `"agent-server"` in health logging.**
+
+Line 124 uses `response.body.agent-server`, which evaluates as subtraction and will throw at runtime (`server` is undefined). Use bracket access (or remove the log since `/health` no longer returns this key).
+
+<details>
+<summary>🐛 Suggested fix</summary>
+
+```diff
+-      logInfo(`Agent-server: ${response.body.agent-server}`);
++      logInfo(`Agent-server: ${response.body["agent-server"] ?? "N/A"}`);
+```
+</details>
+
+<!-- suggestion_start -->
+
+<details>
+<summary>📝 Committable suggestion</summary>
+
+> ‼️ **IMPORTANT**
+> Carefully review the code before committing. Ensure that it accurately replaces the highlighted code, contains no missing lines, and has no issues with indentation. Thoroughly test & benchmark the code to ensure it meets the requirements.
+
+```suggestion
+      logInfo(`Agent-server: ${response.body["agent-server"] ?? "N/A"}`);
+```
+
+</details>
+
+<!-- suggestion_end -->
+
+<details>
+<summary>🤖 Prompt for AI Agents</summary>
+
+```
+Verify each finding against the current code and only fix it if needed.
+
+In `@test/e2e/e2e-flow.test.cjs` at line 124, The log uses invalid property access
+response.body.agent-server which is parsed as subtraction and will throw; update
+the log call that references "agent-server" (the logInfo invocation) to use
+bracket notation (response.body['agent-server']) or, if the /health response no
+longer includes that key, remove the log line entirely so it doesn't reference
+response.body['agent-server'] at all. Ensure the change targets the logInfo(...)
+call that currently interpolates `Agent-server: ${response.body.agent-server}`.
+```
+
+</details>
+
+<!-- fingerprinting:phantom:poseidon:hawk -->
+
+<!-- This is an auto-generated comment by CodeRabbit -->"
+
+Comment metadata:
+This comment was left on the modified branch.
+This comment was left on GitHub by @coderabbitai.
+This comment is the start of thread PRRT_kwDOQEbULc53DTS3. 
+
+</system-instruction>
+
+I run AI code review, is it actionable? Wdyt? Explore in depth each problem.
+We want a clean, maintainable codebase, with proper best practices for the tech stack we use.
+Run subagents to verify, and if it should be fixed, try to merge some stuff together so it can be fixed together within one subagent. 
+If you can test something do it.
