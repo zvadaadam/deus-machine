@@ -26,7 +26,10 @@ import { isWindowFocused } from "@/shared/hooks/useWindowFocus";
 import { track } from "@/platform/analytics";
 import { unreadActions } from "@/features/session/store/unreadStore";
 import { useWorkspaceStore } from "@/features/workspace/store";
-import { workspaceLayoutActions } from "@/features/workspace/store/workspaceLayoutStore";
+import {
+  useWorkspaceLayoutStore,
+  workspaceLayoutActions,
+} from "@/features/workspace/store/workspaceLayoutStore";
 import { show as showWindow } from "@/platform/native/window";
 import type { SessionStatus } from "@shared/types/session";
 import type { RepoGroup, SetupStatus, Workspace } from "@shared/types/workspace";
@@ -52,13 +55,14 @@ function formatBody(repoName: string, ws: Workspace): string {
 function navigateToWorkspace(workspaceId: string, sessionId: string): void {
   showWindow();
   useWorkspaceStore.getState().selectWorkspace(workspaceId);
-  const layout = workspaceLayoutActions.getLayout(workspaceId);
-  if (layout.activeChatTabSessionId !== sessionId) {
-    const sessionIds = layout.chatTabSessionIds.includes(sessionId)
-      ? layout.chatTabSessionIds
-      : [...layout.chatTabSessionIds, sessionId];
-    workspaceLayoutActions.setChatTabState(workspaceId, sessionIds, sessionId);
-  }
+  // Only update chat tabs if workspace has existing layout state.
+  // Stale notification clicks (workspace archived) skip this to avoid orphaned entries.
+  const existing = useWorkspaceLayoutStore.getState().layouts[workspaceId];
+  if (!existing || existing.activeChatTabSessionId === sessionId) return;
+  const sessionIds = existing.chatTabSessionIds.includes(sessionId)
+    ? existing.chatTabSessionIds
+    : [...existing.chatTabSessionIds, sessionId];
+  workspaceLayoutActions.setChatTabState(workspaceId, sessionIds, sessionId);
 }
 
 /**
@@ -211,12 +215,9 @@ export function useGlobalSessionNotifications() {
                     .with("db_write", () => "Database Error")
                     .with("process_exit", () => "Agent Process Crashed")
                     .otherwise(() => "Agent Error");
-                  const context = formatBody(group.repo_name, ws);
                   sendNotification({
                     title,
-                    body: ws.session_error_message
-                      ? `${context} — ${ws.session_error_message}`
-                      : context,
+                    body: formatBody(group.repo_name, ws),
                     sound: "Basso",
                     onClick: () => navigateToWorkspace(ws.id, sessionId),
                   });
@@ -248,10 +249,9 @@ export function useGlobalSessionNotifications() {
             canNotify &&
             !isWindowFocused()
           ) {
-            const context = formatBody(group.repo_name, ws);
             sendNotification({
               title: "Setup failed",
-              body: ws.error_message ? `${context} — ${ws.error_message}` : context,
+              body: formatBody(group.repo_name, ws),
               sound: "Basso",
               onClick: () => {
                 showWindow();
