@@ -1,0 +1,38 @@
+{
+  "cli_version": "0.5.0",
+  "checkpoint_id": "cfa917c8f1ca",
+  "session_id": "33c55e2a-a2f8-4fdb-a3f7-d8614a010fd7",
+  "strategy": "manual-commit",
+  "created_at": "2026-03-26T22:34:25.31454Z",
+  "branch": "zvadaadam/split-run-dropdown",
+  "checkpoints_count": 7,
+  "files_touched": [
+    "apps/web/src/features/settings/ui/SettingsSidebar.tsx",
+    "apps/web/src/features/workspace/ui/HeaderRunButton.tsx",
+    "apps/web/src/features/workspace/ui/TaskButton.tsx",
+    "apps/web/src/features/workspace/ui/TaskStrip.tsx",
+    "apps/web/src/features/workspace/ui/WorkspaceHeader.tsx",
+    "apps/web/src/shared/hooks/useLastRun.ts"
+  ],
+  "agent": "Claude Code",
+  "turn_id": "d60fb6041d9c",
+  "token_usage": {
+    "input_tokens": 95,
+    "cache_creation_tokens": 193298,
+    "cache_read_tokens": 5283719,
+    "output_tokens": 20859,
+    "api_call_count": 82
+  },
+  "session_metrics": {
+    "turn_count": 7
+  },
+  "initial_attribution": {
+    "calculated_at": "2026-03-26T22:34:25.117021Z",
+    "agent_lines": 301,
+    "human_added": 0,
+    "human_modified": 0,
+    "human_removed": 1,
+    "total_committed": 301,
+    "agent_percentage": 100
+  }
+}

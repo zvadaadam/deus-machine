@@ -1,0 +1,30 @@
+{
+  "cli_version": "0.5.0",
+  "checkpoint_id": "cfa917c8f1ca",
+  "strategy": "manual-commit",
+  "branch": "zvadaadam/split-run-dropdown",
+  "checkpoints_count": 7,
+  "files_touched": [
+    "apps/web/src/features/settings/ui/SettingsSidebar.tsx",
+    "apps/web/src/features/workspace/ui/HeaderRunButton.tsx",
+    "apps/web/src/features/workspace/ui/TaskButton.tsx",
+    "apps/web/src/features/workspace/ui/TaskStrip.tsx",
+    "apps/web/src/features/workspace/ui/WorkspaceHeader.tsx",
+    "apps/web/src/shared/hooks/useLastRun.ts"
+  ],
+  "sessions": [
+    {
+      "metadata": "/cf/a917c8f1ca/0/metadata.json",
+      "transcript": "/cf/a917c8f1ca/0/full.jsonl",
+      "content_hash": "/cf/a917c8f1ca/0/content_hash.txt",
+      "prompt": "/cf/a917c8f1ca/0/prompt.txt"
+    }
+  ],
+  "token_usage": {
+    "input_tokens": 95,
+    "cache_creation_tokens": 193298,
+    "cache_read_tokens": 5283719,
+    "output_tokens": 20859,
+    "api_call_count": 82
+  }
+}
