@@ -41,8 +41,6 @@ export function registerNativeHandlers(): void {
       if (process.platform === "darwin") {
         win.setWindowButtonVisibility(false);
       }
-      win.setSize(660, 580);
-      win.center();
       win.show();
     }
   });
@@ -55,8 +53,6 @@ export function registerNativeHandlers(): void {
         win.setVibrancy("under-window");
       }
       win.setBackgroundColor("#1a1a1a");
-      win.setSize(1400, 900, true);
-      win.center();
     }
   });
 
