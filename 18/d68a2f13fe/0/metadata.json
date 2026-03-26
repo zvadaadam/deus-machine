@@ -1,0 +1,33 @@
+{
+  "cli_version": "0.5.0",
+  "checkpoint_id": "18d68a2f13fe",
+  "session_id": "3ca43b40-9533-4a3b-90d8-16c437bc34c4",
+  "strategy": "manual-commit",
+  "created_at": "2026-03-26T23:39:17.198773Z",
+  "branch": "zvadaadam/drop-legacy-compat",
+  "checkpoints_count": 2,
+  "files_touched": [
+    "apps/web/src/features/settings/ui/sections/GeneralSection.tsx"
+  ],
+  "agent": "Claude Code",
+  "turn_id": "f8bafb03c950",
+  "token_usage": {
+    "input_tokens": 315,
+    "cache_creation_tokens": 704398,
+    "cache_read_tokens": 42678989,
+    "output_tokens": 86747,
+    "api_call_count": 272
+  },
+  "session_metrics": {
+    "turn_count": 20
+  },
+  "initial_attribution": {
+    "calculated_at": "2026-03-26T23:39:16.355375Z",
+    "agent_lines": 0,
+    "human_added": 7,
+    "human_modified": 14,
+    "human_removed": 0,
+    "total_committed": 7,
+    "agent_percentage": 0
+  }
+}
