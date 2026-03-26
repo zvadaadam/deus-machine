@@ -1,0 +1,33 @@
+{
+  "cli_version": "0.5.0",
+  "checkpoint_id": "dc8ceeedfa05",
+  "session_id": "dc2ef3f2-5114-48c7-887c-6bb24df0debb",
+  "strategy": "manual-commit",
+  "created_at": "2026-03-26T18:41:19.73796Z",
+  "branch": "zvadaadam/github-release-guide",
+  "checkpoints_count": 3,
+  "files_touched": [
+    ".claude/agents/dev.md"
+  ],
+  "agent": "Claude Code",
+  "turn_id": "6f8b3e24e4b2",
+  "token_usage": {
+    "input_tokens": 358,
+    "cache_creation_tokens": 692591,
+    "cache_read_tokens": 11132724,
+    "output_tokens": 35842,
+    "api_call_count": 143
+  },
+  "session_metrics": {
+    "turn_count": 19
+  },
+  "initial_attribution": {
+    "calculated_at": "2026-03-26T18:41:19.186871Z",
+    "agent_lines": 1,
+    "human_added": 0,
+    "human_modified": 0,
+    "human_removed": 0,
+    "total_committed": 1,
+    "agent_percentage": 100
+  }
+}
