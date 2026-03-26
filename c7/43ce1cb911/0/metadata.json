@@ -1,0 +1,34 @@
+{
+  "cli_version": "0.5.0",
+  "checkpoint_id": "c743ce1cb911",
+  "session_id": "26353073-8857-45c7-87a0-a6a283164a27",
+  "strategy": "manual-commit",
+  "created_at": "2026-03-26T20:17:26.537176Z",
+  "branch": "zvadaadam/better-notifications",
+  "checkpoints_count": 5,
+  "files_touched": [
+    "apps/web/src/features/session/hooks/useGlobalSessionNotifications.ts",
+    "apps/web/src/platform/notifications/notificationService.ts"
+  ],
+  "agent": "Claude Code",
+  "turn_id": "f93dfaf7ee0c",
+  "token_usage": {
+    "input_tokens": 51,
+    "cache_creation_tokens": 109394,
+    "cache_read_tokens": 1987787,
+    "output_tokens": 15141,
+    "api_call_count": 40
+  },
+  "session_metrics": {
+    "turn_count": 5
+  },
+  "initial_attribution": {
+    "calculated_at": "2026-03-26T20:17:26.353645Z",
+    "agent_lines": 77,
+    "human_added": 0,
+    "human_modified": 0,
+    "human_removed": 0,
+    "total_committed": 77,
+    "agent_percentage": 100
+  }
+}
