@@ -34,6 +34,12 @@ export function WelcomeStep({ onNext }: WelcomeStepProps) {
   const handleRun = useCallback(() => {
     if (phase !== "idle") return;
 
+    // Skip animation choreography for users who prefer reduced motion
+    if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) {
+      onNext();
+      return;
+    }
+
     // Measure exact offset to viewport center
     if (titleRef.current) {
       const rect = titleRef.current.getBoundingClientRect();
