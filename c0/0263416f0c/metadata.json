@@ -1,0 +1,26 @@
+{
+  "cli_version": "0.5.0",
+  "checkpoint_id": "c00263416f0c",
+  "strategy": "manual-commit",
+  "branch": "adam-zvada/alioth",
+  "checkpoints_count": 3,
+  "files_touched": [
+    "apps/web/src/app/layouts/MobileLayout.tsx",
+    "apps/web/src/features/workspace/ui/AllDiffFileSection.tsx"
+  ],
+  "sessions": [
+    {
+      "metadata": "/c0/0263416f0c/0/metadata.json",
+      "transcript": "/c0/0263416f0c/0/full.jsonl",
+      "content_hash": "/c0/0263416f0c/0/content_hash.txt",
+      "prompt": "/c0/0263416f0c/0/prompt.txt"
+    }
+  ],
+  "token_usage": {
+    "input_tokens": 26,
+    "cache_creation_tokens": 26275,
+    "cache_read_tokens": 1345527,
+    "output_tokens": 5766,
+    "api_call_count": 18
+  }
+}
