@@ -1,0 +1,33 @@
+{
+  "cli_version": "0.5.0",
+  "checkpoint_id": "813be602427d",
+  "session_id": "33c55e2a-a2f8-4fdb-a3f7-d8614a010fd7",
+  "strategy": "manual-commit",
+  "created_at": "2026-03-27T00:08:40.854779Z",
+  "branch": "zvadaadam/split-run-dropdown",
+  "checkpoints_count": 4,
+  "files_touched": [
+    "apps/web/src/features/workspace/ui/HeaderRunButton.tsx"
+  ],
+  "agent": "Claude Code",
+  "turn_id": "1c0ab06d9f25",
+  "token_usage": {
+    "input_tokens": 157,
+    "cache_creation_tokens": 302912,
+    "cache_read_tokens": 10015506,
+    "output_tokens": 32122,
+    "api_call_count": 134
+  },
+  "session_metrics": {
+    "turn_count": 13
+  },
+  "initial_attribution": {
+    "calculated_at": "2026-03-27T00:08:40.581345Z",
+    "agent_lines": 1,
+    "human_added": 810,
+    "human_modified": 0,
+    "human_removed": 0,
+    "total_committed": 811,
+    "agent_percentage": 0.12330456226880394
+  }
+}
