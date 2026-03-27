@@ -223,3 +223,14 @@ Check the render method of `PopChild`.
     at LazyMotion (http://localhost:1420/@fs/Users/zvada/Developer/agent/box-ide/.conductor/dubai-v2/node_modules/.vite/deps/framer-motion.js?v=34d318cb:8208:23)
     at App (http://localhost:1420/src/app/App.tsx:51:3)
     at PostHogProvider (http://localhost:1420/@fs/Users/zvada/Developer/agent/box-ide/.conductor/dubai-v2/node_modules/.vite/deps/posthog-js_react.js?v=34d318cb:49:21) (chunk-XDPWHSPQ.js?v=34d318cb:521)
+
+---
+
+<system_instruction>
+The user has attached these files. Read them before proceeding.
+- /Users/zvada/Developer/agent/box-ide/.conductor/dubai-v2/.context/attachments/PR instructions.md (956 B)
+</system_instruction>
+
+
+
+Create a PR
