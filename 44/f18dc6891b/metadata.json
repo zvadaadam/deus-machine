@@ -3,10 +3,11 @@
   "checkpoint_id": "44f18dc6891b",
   "strategy": "manual-commit",
   "branch": "adam-zvada/alioth",
-  "checkpoints_count": 3,
+  "checkpoints_count": 4,
   "files_touched": [
     "apps/web/src/features/repository/ui/HomeView.tsx",
     "apps/web/src/features/session/ui/MessageInput.tsx",
+    "apps/web/src/features/settings/ui/SettingsPage.tsx",
     "apps/web/src/features/workspace/ui/BranchSelector.tsx"
   ],
   "sessions": [
@@ -21,13 +22,19 @@
       "transcript": "/44/f18dc6891b/1/full.jsonl",
       "content_hash": "/44/f18dc6891b/1/content_hash.txt",
       "prompt": "/44/f18dc6891b/1/prompt.txt"
+    },
+    {
+      "metadata": "/44/f18dc6891b/2/metadata.json",
+      "transcript": "/44/f18dc6891b/2/full.jsonl",
+      "content_hash": "/44/f18dc6891b/2/content_hash.txt",
+      "prompt": "/44/f18dc6891b/2/prompt.txt"
     }
   ],
   "token_usage": {
-    "input_tokens": 43,
-    "cache_creation_tokens": 114837,
-    "cache_read_tokens": 1911309,
-    "output_tokens": 23477,
-    "api_call_count": 35
+    "input_tokens": 61,
+    "cache_creation_tokens": 164723,
+    "cache_read_tokens": 2485820,
+    "output_tokens": 28105,
+    "api_call_count": 49
   }
 }
