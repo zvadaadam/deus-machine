@@ -36,7 +36,7 @@ app.get("/onboarding/recent-projects", (c) => {
 // so only root repos are shown, not individual worktree checkouts.
 const WORKTREE_SEGMENTS = [
   "/.deus/", // Deus worktrees
-  "/.conductor/", // Deus legacy worktrees
+  "/.conductor/", // Conductor worktrees
   "/.claude/worktrees/", // Claude Code worktrees
   "/.cursor/worktrees/", // Cursor parallel agent worktrees
   "/copilot-worktree/", // GitHub Copilot CLI worktrees

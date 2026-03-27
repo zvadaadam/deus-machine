@@ -5,8 +5,7 @@ import {
   GitBranch,
   GitPullRequest,
   Settings,
-  Sparkles,
-  Puzzle,
+  Orbit,
   ArrowUpRight,
 } from "lucide-react";
 import { uiActions } from "@/shared/stores/uiStore";
@@ -114,24 +113,13 @@ export const staticCommands: CommandDefinition[] = [
   },
   {
     id: "settings-ai",
-    label: "Settings: AI",
-    icon: Sparkles,
+    label: "Settings: Providers",
+    icon: Orbit,
     group: "settings",
-    keywords: ["model", "claude", "anthropic", "api", "key", "provider"],
+    keywords: ["ai", "model", "claude", "anthropic", "codex", "openai", "api", "key", "provider"],
     action: () => {
       uiActions.openSettings();
       uiActions.setActiveSettingsSection("ai");
-    },
-  },
-  {
-    id: "settings-extensions",
-    label: "Settings: Extensions",
-    icon: Puzzle,
-    group: "settings",
-    keywords: ["mcp", "servers", "commands", "agents", "hooks", "plugins"],
-    action: () => {
-      uiActions.openSettings();
-      uiActions.setActiveSettingsSection("extensions");
     },
   },
 ];

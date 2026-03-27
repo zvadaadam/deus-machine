@@ -55,6 +55,17 @@ export function useAgents() {
 }
 
 /**
+ * Fetch agent provider auth status (Claude / Codex)
+ */
+export function useAgentAuth() {
+  return useQuery({
+    queryKey: queryKeys.settings.agentAuth,
+    queryFn: () => SettingsService.fetchAgentAuth(),
+    staleTime: 60000, // Cache for 60s — auth status changes infrequently
+  });
+}
+
+/**
  * Update settings mutation with optimistic update
  */
 export function useUpdateSettings() {

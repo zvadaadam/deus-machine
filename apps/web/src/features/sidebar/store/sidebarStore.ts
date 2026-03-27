@@ -5,6 +5,7 @@ interface SidebarState {
   // Sidebar-specific state
   collapsedRepos: Set<string>;
   toggleRepoCollapse: (repoId: string) => void;
+  expandRepo: (repoId: string) => void;
 
   // Repos where user expanded the "Show more" stale workspaces
   expandedOldWorkspaces: Set<string>;
@@ -29,6 +30,13 @@ export const useSidebarStore = create<SidebarState>()(
           } else {
             newCollapsed.add(repoId);
           }
+          return { collapsedRepos: newCollapsed };
+        }),
+      expandRepo: (repoId) =>
+        set((state) => {
+          if (!state.collapsedRepos.has(repoId)) return state;
+          const newCollapsed = new Set(state.collapsedRepos);
+          newCollapsed.delete(repoId);
           return { collapsedRepos: newCollapsed };
         }),
 

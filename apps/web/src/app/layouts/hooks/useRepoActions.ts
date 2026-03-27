@@ -17,6 +17,7 @@ import { toast } from "sonner";
 import type { Repository } from "@/features/repository/types";
 import { useCreateWorkspace } from "@/features/workspace/api";
 import { useAddRepo } from "@/features/repository/api";
+import { useSidebarStore } from "@/features/sidebar/store";
 import { native } from "@/platform";
 import { capabilities } from "@/platform/capabilities";
 import { getBackendUrl } from "@/shared/config/api.config";
@@ -37,6 +38,7 @@ export function useRepoActions({
   // Mutations
   const createWorkspaceMutation = useCreateWorkspace();
   const addRepoMutation = useAddRepo();
+  const expandRepo = useSidebarStore((s) => s.expandRepo);
 
   // New-workspace modal state
   const [selectedRepoId, setSelectedRepoId] = useState("");
@@ -82,6 +84,7 @@ export function useRepoActions({
       try {
         const workspace = await createWorkspaceMutation.mutateAsync(repoId);
         selectWorkspace(workspace.id);
+        expandRepo(workspace.repository_id);
       } catch (error) {
         selectWorkspace(null);
         console.error("Error creating workspace:", error);
@@ -90,7 +93,7 @@ export function useRepoActions({
         setCreating(false);
       }
     },
-    [createWorkspaceMutation, selectWorkspace]
+    [createWorkspaceMutation, selectWorkspace, expandRepo]
   );
 
   /** Create workspace from the new-workspace modal (validates repo selection). */
@@ -129,6 +132,7 @@ export function useRepoActions({
       const repo = await addRepoOrUseExisting(folderPath);
       const workspace = await createWorkspaceMutation.mutateAsync(repo.id);
       selectWorkspace(workspace.id);
+      expandRepo(workspace.repository_id);
       toast.success(`"${repo.name}" ready`, { id: toastId });
     } catch (error) {
       console.error("Error adding repository:", error);
@@ -189,6 +193,7 @@ export function useRepoActions({
       // are pushed via WORKSPACE_PROGRESS events which invalidate React Query.
       resetCloneState();
       selectWorkspace(workspace.id);
+      expandRepo(workspace.repository_id);
       toast.success(`"${repo.name}" cloned`);
     } catch (error) {
       if (!isStale()) {
@@ -223,6 +228,7 @@ export function useRepoActions({
       try {
         const workspace = await createWorkspaceMutation.mutateAsync(params);
         selectWorkspace(workspace.id);
+        expandRepo(workspace.repository_id);
       } catch (error) {
         selectWorkspace(null);
         console.error("Failed to create workspace from GitHub:", error);
@@ -231,7 +237,7 @@ export function useRepoActions({
         setCreating(false);
       }
     },
-    [createWorkspaceMutation, selectWorkspace]
+    [createWorkspaceMutation, selectWorkspace, expandRepo]
   );
 
   return {

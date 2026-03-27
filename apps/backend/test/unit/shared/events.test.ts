@@ -253,7 +253,8 @@ describe("shared/events", () => {
       expect(REQUEST_RESOURCES).toContain("allSessions");
       expect(REQUEST_RESOURCES).toContain("repoPrs");
       expect(REQUEST_RESOURCES).toContain("repoBranches");
-      expect(REQUEST_RESOURCES).toHaveLength(24);
+      expect(REQUEST_RESOURCES).toContain("agentAuth");
+      expect(REQUEST_RESOURCES).toHaveLength(25);
     });
 
     it("PROTOCOL_EVENTS contains the expected events", () => {
