@@ -468,7 +468,7 @@ export function Chat({
         id="chat-messages"
         role="log"
         aria-live="polite"
-        className="absolute inset-0 overflow-x-hidden overflow-y-auto px-6 pt-6"
+        className="absolute inset-0 overflow-x-hidden overflow-y-auto px-3 pt-4 md:px-6 md:pt-6"
         ref={messagesContainerRef}
       >
         {loading ? (
