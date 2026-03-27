@@ -1,0 +1,48 @@
+{
+  "cli_version": "0.5.0",
+  "checkpoint_id": "d74ba6ed54c4",
+  "strategy": "manual-commit",
+  "branch": "zvadaadam/update-welcome-screen",
+  "checkpoints_count": 36,
+  "files_touched": [
+    "apps/backend/src/routes/repos.ts",
+    "apps/backend/src/services/agent/commands.ts",
+    "apps/backend/src/services/workspace-init.service.ts",
+    "apps/backend/test/unit/services/workspace-init.service.test.ts",
+    "apps/backend/test/unit/shared/events.test.ts",
+    "apps/web/src/app/layouts/MainContent.tsx",
+    "apps/web/src/app/layouts/MainLayout.tsx",
+    "apps/web/src/app/layouts/MobileLayout.tsx",
+    "apps/web/src/app/layouts/MobilePRBar.tsx",
+    "apps/web/src/app/layouts/hooks/useRepoActions.ts",
+    "apps/web/src/features/repository/ui/CloneRepositoryModal.tsx",
+    "apps/web/src/features/repository/ui/WelcomeView.tsx",
+    "apps/web/src/features/session/hooks/useImageAttachments.ts",
+    "apps/web/src/features/session/ui/MessageInput.tsx",
+    "apps/web/src/features/session/ui/PastedImageCard.tsx",
+    "apps/web/src/features/sidebar/model/types.ts",
+    "apps/web/src/features/sidebar/ui/AppSidebar.tsx",
+    "apps/web/src/features/sidebar/ui/SidebarHeader.tsx",
+    "apps/web/src/features/workspace/api/workspace.queries.ts",
+    "apps/web/src/features/workspace/ui/BranchSelector.tsx",
+    "apps/web/src/features/workspace/ui/PRActions.tsx",
+    "apps/web/src/platform/ws/query-protocol-client.ts",
+    "shared/events.ts",
+    "shared/types/github.ts"
+  ],
+  "sessions": [
+    {
+      "metadata": "/d7/4ba6ed54c4/0/metadata.json",
+      "transcript": "/d7/4ba6ed54c4/0/full.jsonl",
+      "content_hash": "/d7/4ba6ed54c4/0/content_hash.txt",
+      "prompt": "/d7/4ba6ed54c4/0/prompt.txt"
+    }
+  ],
+  "token_usage": {
+    "input_tokens": 397,
+    "cache_creation_tokens": 657915,
+    "cache_read_tokens": 49164136,
+    "output_tokens": 140325,
+    "api_call_count": 321
+  }
+}
