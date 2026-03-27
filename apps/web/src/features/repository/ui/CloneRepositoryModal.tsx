@@ -1,6 +1,5 @@
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { AlertCircle, FolderOpen, Loader2 } from "lucide-react";
-import { m, useReducedMotion } from "framer-motion";
 import {
   Dialog,
   DialogContent,
@@ -15,24 +14,8 @@ import { Button } from "@/components/ui/button";
 import { onEvent } from "@/platform/ws/query-protocol-client";
 import { native, capabilities } from "@/platform";
 import { useIsMobile } from "@/shared/hooks/use-mobile";
-import type { GitCloneProgressEvent } from "@shared/events";
 
-/** User-friendly phase labels */
-const PHASE_LABELS: Record<string, string> = {
-  connecting: "Connecting...",
-  receiving: "Downloading...",
-  indexing: "Processing...",
-  resolving: "Almost done...",
-  complete: "Complete",
-};
-
-function formatBytes(bytes: number): string {
-  if (bytes === 0) return "";
-  if (bytes < 1024) return `${bytes} B`;
-  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
-  if (bytes < 1024 * 1024 * 1024) return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
-  return `${(bytes / (1024 * 1024 * 1024)).toFixed(2)} GB`;
-}
+const MAX_LINES = 3;
 
 interface CloneRepositoryModalProps {
   show: boolean;
@@ -54,17 +37,13 @@ export function CloneRepositoryModal({
   onClone,
   onClearError,
 }: CloneRepositoryModalProps) {
-  const reduceMotion = useReducedMotion();
   const isMobile = useIsMobile();
   const [githubUrl, setGithubUrl] = useState("");
   const [targetPath, setTargetPath] = useState("");
   const [defaultPath, setDefaultPath] = useState("");
-  const [progress, setProgress] = useState<GitCloneProgressEvent | null>(null);
-  const previousCloning = useRef(cloning);
+  const [lines, setLines] = useState<string[]>([]);
 
   // Resolve default destination path on mount.
-  // Mobile: use ~/.deus/repos (hidden, no user input needed).
-  // Desktop: use ~/Developer (shown in input field).
   useEffect(() => {
     if (!show) return;
     (async () => {
@@ -78,43 +57,29 @@ export function CloneRepositoryModal({
     })();
   }, [show, isMobile]);
 
+  // Listen for raw git stderr lines while cloning
   useEffect(() => {
-    if (!cloning) {
-      // eslint-disable-next-line react-hooks/set-state-in-effect -- reset form when clone completes
-      setProgress(null);
-      return;
-    }
+    if (!cloning) return;
 
     const unlisten = onEvent((event, data) => {
       if (event === "git-clone-progress") {
-        setProgress(data as GitCloneProgressEvent);
+        const { line } = data as { line: string };
+        if (line) {
+          setLines((prev) => [...prev, line].slice(-MAX_LINES));
+        }
       }
     });
 
-    return () => {
-      unlisten();
-    };
+    return unlisten;
   }, [cloning]);
 
-  useEffect(() => {
-    if (previousCloning.current && !cloning) {
-      // eslint-disable-next-line react-hooks/set-state-in-effect -- reset form after clone transition
-      setGithubUrl("");
-
-      setTargetPath("");
-    }
-    previousCloning.current = cloning;
-  }, [cloning]);
-
-  const handleClone = () => {
-    if (!githubUrl.trim()) {
-      return;
-    }
+  const handleClone = useCallback(() => {
+    if (!githubUrl.trim()) return;
     onClearError();
-    // On mobile, pass the default path since the destination input is hidden.
+    setLines([]);
     const effectivePath = isMobile ? defaultPath : targetPath.trim();
     onClone(githubUrl.trim(), effectivePath);
-  };
+  }, [githubUrl, isMobile, defaultPath, targetPath, onClearError, onClone]);
 
   const handleUrlChange = (value: string) => {
     setGithubUrl(value);
@@ -130,21 +95,13 @@ export function CloneRepositoryModal({
   const handleBrowse = async () => {
     try {
       const selected = await native.dialog.pickFolder();
-
       if (typeof selected === "string") {
         setTargetPath(selected);
       }
-    } catch (error) {
-      console.error("Error opening folder picker:", error);
+    } catch (err) {
+      console.error("Error opening folder picker:", err);
     }
   };
-
-  const phaseLabel = progress ? PHASE_LABELS[progress.phase] || progress.status : "Connecting...";
-
-  // Determinate progress for receiving phase, indeterminate for others
-  const isIndeterminate =
-    !progress || progress.phase === "connecting" || progress.phase === "resolving";
-  const progressPercent = progress?.percent ?? 0;
 
   return (
     <Dialog open={show} onOpenChange={(open) => !open && handleClose()}>
@@ -174,7 +131,7 @@ export function CloneRepositoryModal({
             />
           </div>
 
-          {/* Destination picker -- hidden on mobile (auto-clones to ~/.deus/repos) */}
+          {/* Destination picker -- hidden on mobile */}
           {!isMobile && (
             <div className="grid gap-2">
               <Label htmlFor="target-path">Destination</Label>
@@ -212,45 +169,24 @@ export function CloneRepositoryModal({
         {/* Progress / Error area */}
         <div className="min-h-[2.5rem]">
           {cloning && (
-            <div className="space-y-2.5">
-              {/* Progress bar */}
-              <div className="bg-muted h-1 overflow-hidden rounded-full">
-                {statusMessage || isIndeterminate ? (
-                  reduceMotion ? (
-                    <div className="bg-primary h-full w-1/3 rounded-full" />
-                  ) : (
-                    <m.div
-                      className="bg-primary h-full w-1/3 rounded-full"
-                      animate={{ x: ["-100%", "400%"] }}
-                      transition={{
-                        duration: 1.5,
-                        ease: [0.645, 0.045, 0.355, 1],
-                        repeat: Infinity,
-                      }}
-                    />
-                  )
-                ) : (
-                  <div
-                    className="bg-primary h-full rounded-full transition-[width] duration-300 ease-out"
-                    style={{ width: `${Math.max(progressPercent, 2)}%` }}
-                  />
-                )}
-              </div>
-
-              {/* Status text */}
-              <div className="flex items-center justify-between">
-                <p className="text-text-tertiary text-xs">
-                  {statusMessage || phaseLabel}
-                  {!statusMessage && progress && progress.received_bytes > 0 && (
-                    <span className="text-text-muted ml-1.5 tabular-nums">
-                      {formatBytes(progress.received_bytes)}
-                    </span>
-                  )}
-                </p>
-                {!statusMessage && progress && progressPercent > 0 && !isIndeterminate && (
-                  <p className="text-text-muted text-xs tabular-nums">{progressPercent}%</p>
-                )}
-              </div>
+            <div className="bg-bg-muted/50 rounded-lg px-3 py-2.5">
+              {statusMessage ? (
+                <p className="text-text-tertiary font-mono text-xs">{statusMessage}</p>
+              ) : lines.length > 0 ? (
+                <div className="space-y-0.5">
+                  {lines.map((line, i) => (
+                    <p
+                      key={i}
+                      className="text-text-tertiary truncate font-mono text-xs"
+                      style={{ opacity: i === lines.length - 1 ? 1 : 0.5 }}
+                    >
+                      {line}
+                    </p>
+                  ))}
+                </div>
+              ) : (
+                <p className="text-text-tertiary font-mono text-xs">Connecting...</p>
+              )}
             </div>
           )}
 

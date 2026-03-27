@@ -33,6 +33,7 @@ export function AppSidebar({
   onCloneRepository,
   onArchive,
   onStatusChange,
+  onNewSession,
   diffStatsMap,
   profile = { username: "User" },
 }: AppSidebarProps) {
@@ -92,6 +93,7 @@ export function AppSidebar({
         profile={profile}
         onOpenSettings={openSettings}
         onToggleSidebar={toggleSidebar}
+        onNewSession={onNewSession}
         isExpanded={isExpanded}
       />
 

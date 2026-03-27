@@ -58,6 +58,13 @@ interface MainContentProps {
   onCreateWorkspace: () => void;
   onOpenProject: () => void;
   onCloneRepository: () => void;
+  /** Repos for the welcome screen's repo picker */
+  repos: import("@/features/repository/types").Repository[];
+  /** Handler for sending the first message from the welcome screen.
+   *  Creates workspace + selects it + queues the first message. */
+  onSendFromWelcome: (repoId: string, message: string, model: string) => void;
+  /** True while the welcome-screen send is creating a workspace */
+  welcomeSending?: boolean;
 }
 
 export function MainContent({
@@ -65,9 +72,12 @@ export function MainContent({
   prStatus,
   ghStatus,
   workspaceChatPanelRef,
-  onCreateWorkspace,
+  onCreateWorkspace: _onCreateWorkspace,
   onOpenProject,
   onCloneRepository,
+  repos,
+  onSendFromWelcome,
+  welcomeSending,
 }: MainContentProps) {
   const { open: sidebarOpen, toggleSidebar } = useSidebar();
   const isMobile = useIsMobile();
@@ -405,7 +415,7 @@ export function MainContent({
                           onArchive={handleArchive}
                           targetBranch={selectedTargetBranch}
                           onTargetBranchChange={setSelectedTargetBranch}
-                          workspacePath={selectedWorkspace.workspace_path}
+                          repoId={selectedWorkspace.repository_id}
                           workspaceId={selectedWorkspaceId ?? undefined}
                         />
                       </div>
@@ -428,9 +438,11 @@ export function MainContent({
         ) : (
           <div className="flex min-w-0 flex-1">
             <WelcomeView
-              onCreateWorkspace={onCreateWorkspace}
+              repos={repos}
+              onSendMessage={onSendFromWelcome}
               onOpenProject={onOpenProject}
               onCloneRepository={onCloneRepository}
+              sending={welcomeSending}
             />
           </div>
         )}

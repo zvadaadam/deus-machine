@@ -25,22 +25,11 @@ import {
   getRuntimeModelId,
   type RuntimeAgentType,
 } from "../lib/agentRuntime";
-import { capabilities } from "@/platform/capabilities";
 import { workspaceLayoutActions } from "@/features/workspace/store";
 import type { InspectedElement } from "./InspectedElementCard";
 import type { ContentBlock, MessageRole } from "../types";
 
 const CONTENT_WIDTH_CLASSES = "w-full max-w-[960px] mx-auto min-w-0";
-
-// Native drag-drop: only accept formats the Anthropic vision API supports
-const IMAGE_EXTENSIONS = /\.(png|jpe?g|gif|webp)$/i;
-const EXT_TO_MIME: Record<string, string> = {
-  png: "image/png",
-  jpg: "image/jpeg",
-  jpeg: "image/jpeg",
-  gif: "image/gif",
-  webp: "image/webp",
-};
 
 interface SessionPanelProps {
   sessionId: string;
@@ -69,6 +58,7 @@ export interface SessionPanelRef {
   insertText: (text: string) => void;
   addInspectedElement: (element: Omit<InspectedElement, "id">) => void;
   addFiles: (files: File[]) => void;
+  sendMessage: (content: string) => Promise<void>;
 }
 
 export const SessionPanel = forwardRef<SessionPanelRef, SessionPanelProps>(
@@ -276,8 +266,9 @@ export const SessionPanel = forwardRef<SessionPanelRef, SessionPanelProps>(
         addFiles: (files: File[]) => {
           messageInputRef.current?.addFiles(files);
         },
+        sendMessage: (content: string) => sendMessage(content),
       }),
-      [setMessageInput]
+      [setMessageInput, sendMessage]
     );
 
     // Error action handlers

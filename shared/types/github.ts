@@ -68,9 +68,11 @@ export interface PRSummary {
 }
 
 /**
- * Summary of a remote git branch
- * Used by the "Create Workspace from Branch" picker
+ * Summary of a git branch (remote and/or local).
+ * Used by the welcome screen and "Create Workspace from Branch" picker.
  */
 export interface BranchSummary {
   name: string;
+  is_remote?: boolean;
+  is_local?: boolean;
 }
