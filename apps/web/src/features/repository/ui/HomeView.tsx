@@ -327,7 +327,7 @@ export function HomeView({
         initial={{ opacity: 0, y: 8 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.3, ease: EASE_OUT_QUART }}
-        className="text-text-muted mb-5 w-full max-w-[560px] px-6 text-sm font-semibold uppercase"
+        className="text-text-muted mb-5 w-full max-w-[560px] px-4 text-sm font-semibold uppercase sm:px-6"
         style={{ letterSpacing: "0.08em" }}
       >
         {hasRepos ? "What are we building?" : "Start with a project"}
@@ -338,7 +338,7 @@ export function HomeView({
         initial={{ opacity: 0, y: 12 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.4, delay: 0.06, ease: EASE_OUT_QUART }}
-        className="w-full max-w-[560px] px-6"
+        className="w-full max-w-[560px] px-4 sm:px-6"
       >
         <div
           className={cn(
@@ -421,7 +421,7 @@ export function HomeView({
                       exit={{ opacity: 0, scale: 0.96, y: -4 }}
                       transition={{ duration: 0.15, ease: [0.215, 0.61, 0.355, 1] }}
                       className={cn(
-                        "absolute top-full left-0 z-50 mt-1 w-72 overflow-hidden rounded-xl border",
+                        "absolute top-full left-0 z-50 mt-1 w-72 max-w-[calc(100vw-2rem)] overflow-hidden rounded-xl border",
                         "border-border/55 from-bg-overlay/95 to-bg-elevated/94 bg-linear-to-b backdrop-blur-2xl",
                         "shadow-[var(--shadow-elevated)]"
                       )}
@@ -737,7 +737,7 @@ export function HomeView({
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0, y: 12 }}
             transition={{ duration: 0.3, delay: 0.15, ease: EASE_OUT_QUART }}
-            className="mt-6 w-full max-w-[560px] px-6"
+            className="mt-6 w-full max-w-[560px] px-4 sm:px-6"
           >
             <p className="text-text-muted mb-4 text-sm">
               Add a project to start working with your AI coding agent.
