@@ -1,10 +1,11 @@
 import { useEffect } from "react";
 import { match } from "ts-pattern";
 import { toast } from "sonner";
-import { Loader2 } from "lucide-react";
+import { Loader2, PanelLeft } from "lucide-react";
 import { getErrorMessage } from "@shared/lib/errors";
-import { SidebarInset } from "@/components/ui/sidebar";
+import { SidebarInset, useSidebar } from "@/components/ui/sidebar";
 import { ScrollArea } from "@/components/ui/scroll-area";
+import { useIsMobile } from "@/shared/hooks/use-mobile";
 import { useTheme } from "@/app/providers";
 import { useUIStore } from "@/shared/stores/uiStore";
 import { useSettings, useUpdateSettings } from "../api/settings.queries";
@@ -16,10 +17,20 @@ import {
   AccessSection,
 } from "./sections";
 
+const SECTION_LABELS: Record<string, string> = {
+  general: "General",
+  ai: "AI Providers",
+  environment: "Environment",
+  experimental: "Experimental",
+  access: "Remote Access",
+};
+
 export function SettingsPage() {
   const activeSection = useUIStore((s) => s.activeSettingsSection);
   const closeSettings = useUIStore((s) => s.closeSettings);
   const { theme, setTheme } = useTheme();
+  const { toggleSidebar } = useSidebar();
+  const isMobile = useIsMobile();
 
   const settingsQuery = useSettings();
   const updateSettingsMutation = useUpdateSettings();
@@ -85,7 +96,22 @@ export function SettingsPage() {
 
   return (
     <SidebarInset className="min-w-0">
-      <div className="bg-bg-surface border-border-subtle flex h-full min-w-0 flex-1 overflow-hidden rounded-xl border">
+      <div className="bg-bg-surface border-border-subtle flex h-full min-w-0 flex-1 flex-col overflow-hidden rounded-xl border">
+        {isMobile && (
+          <div className="border-border-subtle flex h-11 flex-shrink-0 items-center gap-2 border-b px-4">
+            <button
+              type="button"
+              aria-label="Open settings menu"
+              onClick={toggleSidebar}
+              className="text-text-muted hover:text-text-secondary hover:bg-bg-muted -ml-1 flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-lg transition-colors duration-200"
+            >
+              <PanelLeft className="h-4 w-4" />
+            </button>
+            <span className="text-text-secondary text-sm font-medium">
+              {SECTION_LABELS[activeSection] ?? "Settings"}
+            </span>
+          </div>
+        )}
         <ScrollArea className="flex-1">
           <div className="mx-auto max-w-2xl px-8 py-8">
             {/* Saving indicator */}

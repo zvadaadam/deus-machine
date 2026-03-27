@@ -80,10 +80,14 @@ function AllDiffFileSectionInner({
   );
 
   return (
-    <div ref={refCallback} data-diff-path={filePath} className="diff-section-contained">
+    <div
+      ref={refCallback}
+      data-diff-path={filePath}
+      className="diff-section-contained overflow-hidden rounded-lg md:rounded-none"
+    >
       {/* Sticky file header — two sibling buttons to avoid nesting interactive elements */}
       <div
-        className={`flex w-full items-center gap-2 px-3 py-1.5 transition-colors duration-200 ease-[cubic-bezier(.165,.84,.44,1)] ${
+        className={`flex w-full items-center gap-2 px-3 py-2.5 transition-colors duration-200 ease-[cubic-bezier(.165,.84,.44,1)] md:py-1.5 ${
           isActive
             ? "bg-muted/60"
             : collapsed

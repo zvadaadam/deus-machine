@@ -14,6 +14,14 @@ import {
 import { useImageAttachments } from "@/features/session/hooks/useImageAttachments";
 import { PastedImageCard } from "@/features/session/ui/PastedImageCard";
 import { BranchSelector } from "@/features/workspace/ui/BranchSelector";
+import {
+  Sheet,
+  SheetContent,
+  SheetHeader,
+  SheetTitle,
+  SheetDescription,
+} from "@/components/ui/sheet";
+import { useIsMobile } from "@/shared/hooks/use-mobile";
 import type { Repository } from "../types";
 
 // ── Easing ──────────────────────────────────────────────────────────
@@ -108,6 +116,7 @@ export function HomeView({
   onCloneRepository,
 }: HomeViewProps) {
   const hasRepos = repos.length > 0;
+  const isMobile = useIsMobile();
 
   // ── Input state ─────────────────────────────────────────────────
   const [message, setMessage] = useState("");
@@ -193,14 +202,14 @@ export function HomeView({
     return repos.filter((r) => r.name.toLowerCase().includes(q));
   }, [repos, repoFilter]);
 
-  // Close on outside click
+  // Close on outside click (desktop only — Sheet handles its own dismissal on mobile)
   const closeRepoPicker = useCallback(() => {
     setRepoPickerOpen(false);
     setRepoFilter("");
   }, []);
 
   useEffect(() => {
-    if (!repoPickerOpen) return;
+    if (isMobile || !repoPickerOpen) return;
     function handleClick(e: MouseEvent) {
       if (repoPickerRef.current && !repoPickerRef.current.contains(e.target as Node)) {
         closeRepoPicker();
@@ -208,7 +217,7 @@ export function HomeView({
     }
     document.addEventListener("mousedown", handleClick);
     return () => document.removeEventListener("mousedown", handleClick);
-  }, [repoPickerOpen, closeRepoPicker]);
+  }, [isMobile, repoPickerOpen, closeRepoPicker]);
 
   const handleSelectRepo = useCallback((repoId: string) => {
     setUserRepoId(repoId);
@@ -223,7 +232,7 @@ export function HomeView({
   const modelPickerRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    if (!modelPickerOpen) return;
+    if (isMobile || !modelPickerOpen) return;
     function handleClick(e: MouseEvent) {
       if (modelPickerRef.current && !modelPickerRef.current.contains(e.target as Node)) {
         setModelPickerOpen(false);
@@ -231,7 +240,7 @@ export function HomeView({
     }
     document.addEventListener("mousedown", handleClick);
     return () => document.removeEventListener("mousedown", handleClick);
-  }, [modelPickerOpen]);
+  }, [isMobile, modelPickerOpen]);
 
   const modelLabel = getRuntimeModelLabel(model);
   const selectedModelOption = getRuntimeModelOption(model);
@@ -412,37 +421,39 @@ export function HomeView({
                   />
                 </button>
 
-                {/* Repo dropdown — opens downward from context bar */}
-                <AnimatePresence>
-                  {repoPickerOpen && (
-                    <motion.div
-                      initial={{ opacity: 0, scale: 0.96, y: -4 }}
-                      animate={{ opacity: 1, scale: 1, y: 0 }}
-                      exit={{ opacity: 0, scale: 0.96, y: -4 }}
-                      transition={{ duration: 0.15, ease: [0.215, 0.61, 0.355, 1] }}
-                      className={cn(
-                        "absolute top-full left-0 z-50 mt-1 w-72 max-w-[calc(100vw-2rem)] overflow-hidden rounded-xl border",
-                        "border-border/55 from-bg-overlay/95 to-bg-elevated/94 bg-linear-to-b backdrop-blur-2xl",
-                        "shadow-[var(--shadow-elevated)]"
-                      )}
-                    >
+                {/* Mobile: bottom sheet */}
+                {isMobile ? (
+                  <Sheet
+                    open={repoPickerOpen}
+                    onOpenChange={(v) => {
+                      setRepoPickerOpen(v);
+                      if (!v) setRepoFilter("");
+                    }}
+                  >
+                    <SheetContent side="bottom" className="rounded-t-xl px-0">
+                      <SheetHeader className="px-4 pb-0">
+                        <SheetTitle className="text-sm">Select repository</SheetTitle>
+                        <SheetDescription className="sr-only">
+                          Choose a repository for your workspace
+                        </SheetDescription>
+                      </SheetHeader>
+
                       {/* Filter input */}
                       <div className="border-border-subtle flex items-center gap-2 border-b px-3 py-2">
                         <Search className="text-text-disabled size-3.5 shrink-0" />
                         <input
-                          ref={filterInputRef}
                           type="text"
                           value={repoFilter}
                           onChange={(e) => setRepoFilter(e.target.value)}
                           placeholder="Search repos..."
-                          className="text-text-primary placeholder:text-text-disabled w-full bg-transparent text-xs outline-none"
+                          className="text-text-primary placeholder:text-text-disabled w-full bg-transparent text-sm outline-none"
                         />
                       </div>
 
                       {/* Repo list */}
-                      <div className="scrollbar-vibrancy max-h-[224px] overflow-y-auto py-1">
+                      <div className="scrollbar-vibrancy max-h-[50vh] overflow-y-auto py-1">
                         {filteredRepos.length === 0 && (
-                          <div className="text-text-disabled px-3 py-3 text-center text-xs">
+                          <div className="text-text-disabled px-3 py-3 text-center text-sm">
                             No repos match
                           </div>
                         )}
@@ -454,30 +465,25 @@ export function HomeView({
                               type="button"
                               onClick={() => handleSelectRepo(repo.id)}
                               className={cn(
-                                "flex w-full items-center justify-between px-3 py-1.5 text-left text-xs transition-colors duration-100",
+                                "flex w-full items-center justify-between px-3 py-2.5 text-left text-sm transition-colors duration-100",
                                 "hover:bg-bg-raised/45",
                                 isSelected ? "text-text-primary" : "text-text-secondary"
                               )}
                             >
                               <div className="flex items-center gap-2 overflow-hidden">
                                 {isSelected ? (
-                                  <span className="relative flex h-1 w-1 shrink-0" aria-hidden>
+                                  <span className="relative flex h-1.5 w-1.5 shrink-0" aria-hidden>
                                     <span className="bg-accent-green/25 absolute -inset-px rounded-full blur-[1.5px]" />
-                                    <span className="bg-accent-green relative h-1 w-1 rounded-full" />
+                                    <span className="bg-accent-green relative h-1.5 w-1.5 rounded-full" />
                                   </span>
                                 ) : (
                                   <span className="h-1.5 w-1.5 shrink-0" />
                                 )}
                                 <span className="truncate font-medium">{repo.name}</span>
                               </div>
-                              <div className="flex items-center gap-2">
-                                <span className="text-text-disabled text-2xs max-w-[120px] truncate">
-                                  {abbreviatePath(repo.root_path)}
-                                </span>
-                                {isSelected && (
-                                  <Check className="text-text-primary size-3 shrink-0" />
-                                )}
-                              </div>
+                              {isSelected && (
+                                <Check className="text-text-primary size-3.5 shrink-0" />
+                              )}
                             </button>
                           );
                         })}
@@ -492,9 +498,9 @@ export function HomeView({
                               closeRepoPicker();
                               onOpenProject();
                             }}
-                            className="text-text-muted hover:text-text-secondary hover:bg-bg-raised/45 flex w-full items-center gap-2 px-3 py-1.5 text-xs transition-colors duration-100"
+                            className="text-text-muted hover:text-text-secondary hover:bg-bg-raised/45 flex w-full items-center gap-2 px-3 py-2.5 text-sm transition-colors duration-100"
                           >
-                            <FolderOpen className="size-3 shrink-0" />
+                            <FolderOpen className="size-4 shrink-0" />
                             <span>Open local...</span>
                           </button>
                         )}
@@ -505,16 +511,120 @@ export function HomeView({
                               closeRepoPicker();
                               onCloneRepository();
                             }}
-                            className="text-text-muted hover:text-text-secondary hover:bg-bg-raised/45 flex w-full items-center gap-2 px-3 py-1.5 text-xs transition-colors duration-100"
+                            className="text-text-muted hover:text-text-secondary hover:bg-bg-raised/45 flex w-full items-center gap-2 px-3 py-2.5 text-sm transition-colors duration-100"
                           >
-                            <GitBranch className="size-3 shrink-0" />
+                            <GitBranch className="size-4 shrink-0" />
                             <span>Clone from GitHub</span>
                           </button>
                         )}
                       </div>
-                    </motion.div>
-                  )}
-                </AnimatePresence>
+                    </SheetContent>
+                  </Sheet>
+                ) : (
+                  /* Desktop: animated dropdown */
+                  <AnimatePresence>
+                    {repoPickerOpen && (
+                      <motion.div
+                        initial={{ opacity: 0, scale: 0.96, y: -4 }}
+                        animate={{ opacity: 1, scale: 1, y: 0 }}
+                        exit={{ opacity: 0, scale: 0.96, y: -4 }}
+                        transition={{ duration: 0.15, ease: [0.215, 0.61, 0.355, 1] }}
+                        className={cn(
+                          "absolute top-full left-0 z-50 mt-1 w-72 max-w-[calc(100vw-2rem)] overflow-hidden rounded-xl border",
+                          "border-border/55 from-bg-overlay/95 to-bg-elevated/94 bg-linear-to-b backdrop-blur-2xl",
+                          "shadow-[var(--shadow-elevated)]"
+                        )}
+                      >
+                        {/* Filter input */}
+                        <div className="border-border-subtle flex items-center gap-2 border-b px-3 py-2">
+                          <Search className="text-text-disabled size-3.5 shrink-0" />
+                          <input
+                            ref={filterInputRef}
+                            type="text"
+                            value={repoFilter}
+                            onChange={(e) => setRepoFilter(e.target.value)}
+                            placeholder="Search repos..."
+                            className="text-text-primary placeholder:text-text-disabled w-full bg-transparent text-xs outline-none"
+                          />
+                        </div>
+
+                        {/* Repo list */}
+                        <div className="scrollbar-vibrancy max-h-[224px] overflow-y-auto py-1">
+                          {filteredRepos.length === 0 && (
+                            <div className="text-text-disabled px-3 py-3 text-center text-xs">
+                              No repos match
+                            </div>
+                          )}
+                          {filteredRepos.map((repo) => {
+                            const isSelected = repo.id === selectedRepoId;
+                            return (
+                              <button
+                                key={repo.id}
+                                type="button"
+                                onClick={() => handleSelectRepo(repo.id)}
+                                className={cn(
+                                  "flex w-full items-center justify-between px-3 py-1.5 text-left text-xs transition-colors duration-100",
+                                  "hover:bg-bg-raised/45",
+                                  isSelected ? "text-text-primary" : "text-text-secondary"
+                                )}
+                              >
+                                <div className="flex items-center gap-2 overflow-hidden">
+                                  {isSelected ? (
+                                    <span className="relative flex h-1 w-1 shrink-0" aria-hidden>
+                                      <span className="bg-accent-green/25 absolute -inset-px rounded-full blur-[1.5px]" />
+                                      <span className="bg-accent-green relative h-1 w-1 rounded-full" />
+                                    </span>
+                                  ) : (
+                                    <span className="h-1.5 w-1.5 shrink-0" />
+                                  )}
+                                  <span className="truncate font-medium">{repo.name}</span>
+                                </div>
+                                <div className="flex items-center gap-2">
+                                  <span className="text-text-disabled text-2xs max-w-[120px] truncate">
+                                    {abbreviatePath(repo.root_path)}
+                                  </span>
+                                  {isSelected && (
+                                    <Check className="text-text-primary size-3 shrink-0" />
+                                  )}
+                                </div>
+                              </button>
+                            );
+                          })}
+                        </div>
+
+                        {/* Add repo actions */}
+                        <div className="border-border-subtle border-t py-1">
+                          {capabilities.nativeFolderPicker && onOpenProject && (
+                            <button
+                              type="button"
+                              onClick={() => {
+                                closeRepoPicker();
+                                onOpenProject();
+                              }}
+                              className="text-text-muted hover:text-text-secondary hover:bg-bg-raised/45 flex w-full items-center gap-2 px-3 py-1.5 text-xs transition-colors duration-100"
+                            >
+                              <FolderOpen className="size-3 shrink-0" />
+                              <span>Open local...</span>
+                            </button>
+                          )}
+                          {onCloneRepository && (
+                            <button
+                              type="button"
+                              onClick={() => {
+                                closeRepoPicker();
+                                onCloneRepository();
+                              }}
+                              className="text-text-muted hover:text-text-secondary hover:bg-bg-raised/45 flex w-full items-center gap-2 px-3 py-1.5 text-xs transition-colors duration-100"
+                            >
+                              <GitBranch className="size-3 shrink-0" />
+                              <span>Clone from GitHub</span>
+                            </button>
+                          )}
+                        </div>
+                      </motion.div>
+                    )}
+                  </AnimatePresence>
+                )}
               </div>
             ) : (
               /* Zero repos — "Add a project" label */
@@ -616,59 +726,111 @@ export function HomeView({
                 />
               </button>
 
-              {/* Model dropdown — opens downward from bottom bar */}
-              <AnimatePresence>
-                {modelPickerOpen && (
-                  <motion.div
-                    initial={{ opacity: 0, scale: 0.96, y: -4 }}
-                    animate={{ opacity: 1, scale: 1, y: 0 }}
-                    exit={{ opacity: 0, scale: 0.96, y: -4 }}
-                    transition={{ duration: 0.15, ease: [0.215, 0.61, 0.355, 1] }}
-                    className={cn(
-                      "absolute top-full left-0 z-50 mt-1 w-56 overflow-hidden rounded-xl border p-1.5",
-                      "border-border/55 from-bg-overlay/95 to-bg-elevated/94 bg-linear-to-b backdrop-blur-2xl",
-                      "shadow-[var(--shadow-elevated)]"
-                    )}
-                  >
-                    {MODEL_PICKER_GROUPS.map((agentConfig, groupIdx) => (
-                      <div key={agentConfig.id}>
-                        {groupIdx > 0 && <div className="bg-border/70 mx-1 my-1.5 h-px" />}
-                        <div className="text-text-muted/90 text-2xs px-2 py-1 font-normal tracking-wide">
-                          {agentConfig.groupLabel}
-                        </div>
-                        {RUNTIME_MODEL_OPTIONS.filter((o) => o.group === agentConfig.id).map(
-                          (option) => {
-                            const isSelected = selectedModelOption?.value === option.value;
-                            return (
-                              <button
-                                key={option.value}
-                                type="button"
-                                onClick={() => handleSelectModel(option.value)}
-                                className={cn(
-                                  "flex w-full items-center gap-2 rounded-lg px-2 py-1.5 text-xs transition-colors duration-100",
-                                  "hover:bg-bg-raised/45",
-                                  isSelected ? "text-text-primary" : "text-text-secondary"
-                                )}
-                              >
-                                <AgentLogo type={option.agentType} className="h-3.5 w-3.5" />
-                                <span className="font-normal">{option.label}</span>
-                                {option.isNew && (
-                                  <span className="border-accent-red-muted/60 bg-accent-red-muted/20 text-accent-red-muted text-2xs rounded-xs border px-1 py-px tracking-wide uppercase">
-                                    New
+              {/* Mobile: bottom sheet */}
+              {isMobile ? (
+                <Sheet open={modelPickerOpen} onOpenChange={setModelPickerOpen}>
+                  <SheetContent side="bottom" className="rounded-t-xl px-0">
+                    <SheetHeader className="px-4 pb-0">
+                      <SheetTitle className="text-sm">Select model</SheetTitle>
+                      <SheetDescription className="sr-only">
+                        Choose an AI model for your workspace
+                      </SheetDescription>
+                    </SheetHeader>
+                    <div className="max-h-[50vh] overflow-y-auto p-2">
+                      {MODEL_PICKER_GROUPS.map((agentConfig, groupIdx) => (
+                        <div key={agentConfig.id}>
+                          {groupIdx > 0 && <div className="bg-border/70 mx-2 my-2 h-px" />}
+                          <div className="text-text-muted/90 px-2 py-1.5 text-xs font-normal tracking-wide">
+                            {agentConfig.groupLabel}
+                          </div>
+                          {RUNTIME_MODEL_OPTIONS.filter((o) => o.group === agentConfig.id).map(
+                            (option) => {
+                              const isSelected = selectedModelOption?.value === option.value;
+                              return (
+                                <button
+                                  key={option.value}
+                                  type="button"
+                                  onClick={() => handleSelectModel(option.value)}
+                                  className={cn(
+                                    "flex w-full items-center gap-2.5 rounded-lg px-2 py-2.5 text-sm transition-colors duration-100",
+                                    "hover:bg-bg-raised/45",
+                                    isSelected ? "text-text-primary" : "text-text-secondary"
+                                  )}
+                                >
+                                  <AgentLogo type={option.agentType} className="h-4 w-4" />
+                                  <span className="font-normal">{option.label}</span>
+                                  {option.isNew && (
+                                    <span className="border-accent-red-muted/60 bg-accent-red-muted/20 text-accent-red-muted text-2xs rounded-xs border px-1 py-px tracking-wide uppercase">
+                                      New
+                                    </span>
+                                  )}
+                                  <span className="ml-auto">
+                                    {isSelected && <Check className="text-text-primary size-3.5" />}
                                   </span>
-                                )}
-                                <span className="ml-auto">
-                                  {isSelected && <Check className="text-text-primary size-3" />}
-                                </span>
-                              </button>
-                            );
-                          }
-                        )}
-                      </div>
-                    ))}
-                  </motion.div>
-                )}
-              </AnimatePresence>
+                                </button>
+                              );
+                            }
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                  </SheetContent>
+                </Sheet>
+              ) : (
+                /* Desktop: animated dropdown */
+                <AnimatePresence>
+                  {modelPickerOpen && (
+                    <motion.div
+                      initial={{ opacity: 0, scale: 0.96, y: -4 }}
+                      animate={{ opacity: 1, scale: 1, y: 0 }}
+                      exit={{ opacity: 0, scale: 0.96, y: -4 }}
+                      transition={{ duration: 0.15, ease: [0.215, 0.61, 0.355, 1] }}
+                      className={cn(
+                        "absolute top-full left-0 z-50 mt-1 w-56 overflow-hidden rounded-xl border p-1.5",
+                        "border-border/55 from-bg-overlay/95 to-bg-elevated/94 bg-linear-to-b backdrop-blur-2xl",
+                        "shadow-[var(--shadow-elevated)]"
+                      )}
+                    >
+                      {MODEL_PICKER_GROUPS.map((agentConfig, groupIdx) => (
+                        <div key={agentConfig.id}>
+                          {groupIdx > 0 && <div className="bg-border/70 mx-1 my-1.5 h-px" />}
+                          <div className="text-text-muted/90 text-2xs px-2 py-1 font-normal tracking-wide">
+                            {agentConfig.groupLabel}
+                          </div>
+                          {RUNTIME_MODEL_OPTIONS.filter((o) => o.group === agentConfig.id).map(
+                            (option) => {
+                              const isSelected = selectedModelOption?.value === option.value;
+                              return (
+                                <button
+                                  key={option.value}
+                                  type="button"
+                                  onClick={() => handleSelectModel(option.value)}
+                                  className={cn(
+                                    "flex w-full items-center gap-2 rounded-lg px-2 py-1.5 text-xs transition-colors duration-100",
+                                    "hover:bg-bg-raised/45",
+                                    isSelected ? "text-text-primary" : "text-text-secondary"
+                                  )}
+                                >
+                                  <AgentLogo type={option.agentType} className="h-3.5 w-3.5" />
+                                  <span className="font-normal">{option.label}</span>
+                                  {option.isNew && (
+                                    <span className="border-accent-red-muted/60 bg-accent-red-muted/20 text-accent-red-muted text-2xs rounded-xs border px-1 py-px tracking-wide uppercase">
+                                      New
+                                    </span>
+                                  )}
+                                  <span className="ml-auto">
+                                    {isSelected && <Check className="text-text-primary size-3" />}
+                                  </span>
+                                </button>
+                              );
+                            }
+                          )}
+                        </div>
+                      ))}
+                    </motion.div>
+                  )}
+                </AnimatePresence>
+              )}
             </div>
 
             {/* Send button */}
