@@ -1,0 +1,28 @@
+{
+  "cli_version": "0.5.0",
+  "checkpoint_id": "7722b80ce755",
+  "strategy": "manual-commit",
+  "branch": "zvadaadam/fix-mobile-right-padding",
+  "checkpoints_count": 2,
+  "files_touched": [
+    "apps/web/src/features/session/ui/Chat.tsx",
+    "apps/web/src/features/session/ui/MessageInput.tsx",
+    "apps/web/src/features/sidebar/ui/AppSidebar.tsx",
+    "apps/web/src/features/workspace/ui/MainContentTabs.tsx"
+  ],
+  "sessions": [
+    {
+      "metadata": "/77/22b80ce755/0/metadata.json",
+      "transcript": "/77/22b80ce755/0/full.jsonl",
+      "content_hash": "/77/22b80ce755/0/content_hash.txt",
+      "prompt": "/77/22b80ce755/0/prompt.txt"
+    }
+  ],
+  "token_usage": {
+    "input_tokens": 23,
+    "cache_creation_tokens": 40627,
+    "cache_read_tokens": 702630,
+    "output_tokens": 4094,
+    "api_call_count": 17
+  }
+}

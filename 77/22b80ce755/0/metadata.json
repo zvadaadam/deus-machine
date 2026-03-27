@@ -1,0 +1,36 @@
+{
+  "cli_version": "0.5.0",
+  "checkpoint_id": "7722b80ce755",
+  "session_id": "63e7fb87-81f7-4c0f-9b8b-6cd2fffee8e2",
+  "strategy": "manual-commit",
+  "created_at": "2026-03-27T20:16:57.86908Z",
+  "branch": "zvadaadam/fix-mobile-right-padding",
+  "checkpoints_count": 2,
+  "files_touched": [
+    "apps/web/src/features/session/ui/Chat.tsx",
+    "apps/web/src/features/session/ui/MessageInput.tsx",
+    "apps/web/src/features/sidebar/ui/AppSidebar.tsx",
+    "apps/web/src/features/workspace/ui/MainContentTabs.tsx"
+  ],
+  "agent": "Claude Code",
+  "turn_id": "40d2a491cdcb",
+  "token_usage": {
+    "input_tokens": 23,
+    "cache_creation_tokens": 40627,
+    "cache_read_tokens": 702630,
+    "output_tokens": 4094,
+    "api_call_count": 17
+  },
+  "session_metrics": {
+    "turn_count": 2
+  },
+  "initial_attribution": {
+    "calculated_at": "2026-03-27T20:16:57.796035Z",
+    "agent_lines": 16,
+    "human_added": 0,
+    "human_modified": 0,
+    "human_removed": 0,
+    "total_committed": 16,
+    "agent_percentage": 100
+  }
+}
