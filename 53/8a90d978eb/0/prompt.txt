@@ -234,3 +234,55 @@ The user has attached these files. Read them before proceeding.
 
 
 Create a PR
+
+---
+
+I run AI code review, is it actionable? Wdyt? Explore in depth each problem.
+We want a clean, maintainable codebase, with proper best practices for the tech stack we use.
+Run subagents to verify, and if it should be fixed, try to merge some stuff together so it can be fixed together within one subagent. 
+If you can test something do it.
+
+-----
+
+
+All validation agents have returned. Let me compile the final results.
+**Validation results:**
+- Model param dropped: **VALIDATED** (bug)
+- Branch param type mismatch: VALIDATED but works at runtime (TypeScript type inaccuracy only — filtering out since it's not an objective runtime bug)
+- Clone path traversal: **VALIDATED** (security — the agent confirmed no sanitization and relay accessibility)
+- Unconditional branch fetch: **VALIDATED** (CLAUDE.md violation)
+- Fake virtualization comment: **VALIDATED** (CLAUDE.md violation)
+- Hardcoded colors: **VALIDATED** (CLAUDE.md violation)
+I don't have access to `mcp__conductor__DiffComment`, so I'll present the findings directly.
+---
+## Review: `zvadaadam/update-welcome-screen`
+**5 validated issues found.**
+### **#1 Model selection from welcome screen is silently dropped**
+`WelcomeView` lets the user pick a model and passes it via `onSendMessage(repoId, content, model, branch)`. In `MainLayout.tsx`, `handleSendFromWelcome` receives the `model` parameter but never stores it in `pendingWelcomeMessageRef` (which only has `{ message, workspaceId }`). When the message is later sent via `workspaceChatPanelRef.current.sendMessage(pending.message)`, the model is discarded — the session uses the default model, not the user's choice.
+**File:** `apps/web/src/app/layouts/MainLayout.tsx:177-216`
+**Type:** Bug
+---
+### **#2 `/repos/clone` endpoint has no path sanitization**
+The new `POST /api/repos/clone` endpoint accepts `targetPath` from the request body and passes it directly to `fs.mkdirSync(parentDir, { recursive: true })` and `spawn("git", ["clone", ..., targetPath])` with zero validation. Compare to `POST /repos` which uses `fs.realpathSync()`, `fs.accessSync()`, and validates it's a git root. This endpoint is reachable via the cloud relay (`delegateToRoute` in `commands.ts`), so an authenticated remote user could clone to arbitrary filesystem locations.
+**File:** `apps/backend/src/routes/repos.ts:124-185`
+**Type:** Security
+---
+### **#3 `useRepoBranches` fires unconditionally in `BranchSelector`**
+The old code gated the branch query on the popover being open: `useBranches(open ? workspacePath : null)`. The new code calls `useRepoBranches(repoId)` unconditionally on mount, and the hook in `workspace.queries.ts` only gates on `!!repoId` — no `open` condition. Every `BranchSelector` instance fires a WS request immediately, even if the user never opens the dropdown.
+**CLAUDE.md rule:** *"Conditional polling — always gate polling on relevant state... don't poll idle workspaces, don't poll settings, don't poll repos."*
+**File:** `apps/web/src/features/workspace/ui/BranchSelector.tsx:27`
+**Type:** CLAUDE.md violation
+---
+### **#4 Repo dropdown claims virtualization but has none**
+Line 431 of `WelcomeView.tsx` has `{/* Repo list — virtualized scroll for 30+ repos */}` but the implementation is a plain `filteredRepos.map(...)` inside a scrollable `<div>`. No `@tanstack/react-virtual` or `useVirtualizer` is used. The repo list is unbounded.
+**CLAUDE.md rule:** *"Virtualize all unbounded lists — any list that can grow beyond ~30 items must use virtualization (`@tanstack/react-virtual`)."*
+**File:** `apps/web/src/features/repository/ui/WelcomeView.tsx:431-473`
+**Type:** CLAUDE.md violation
+---
+### **#5 Hardcoded color values in new components**
+Multiple raw Tailwind palette colors introduced instead of semantic CSS variable tokens:
+- **WelcomeView.tsx:** `bg-black/30`, `text-white/70`, `bg-emerald-400`, `bg-emerald-400/30`, `bg-emerald-400/25`
+- **PastedImageCard.tsx:** `bg-black/50`, `text-white/80`, `hover:bg-black/70`, `hover:text-white`
+**CLAUDE.md rule:** *"Use CSS Variables for Everything — Never hardcode: `bg-blue-500`, `#3b82f6`... Always use tokens: `bg-primary`, `var(--primary)`"* and *"Consistent colors (avoid hardcoding colors at all costs)"*
+**Files:** `apps/web/src/features/repository/ui/WelcomeView.tsx`, `apps/web/src/features/session/ui/PastedImageCard.tsx`
+**Type:** CLAUDE.md violation
