@@ -1,3 +1,4 @@
+import { useEffect, useRef } from "react";
 import { ArrowLeft, Settings2, Orbit, Box, FlaskConical, Globe } from "lucide-react";
 import { capabilities } from "@/platform";
 import type { LucideIcon } from "lucide-react";
@@ -8,6 +9,7 @@ import {
   SidebarMenu,
   SidebarMenuItem,
   SidebarMenuButton,
+  useSidebar,
 } from "@/components/ui/sidebar";
 import { useUIStore } from "@/shared/stores/uiStore";
 import type { SettingsSection } from "@shared/types/settings";
@@ -34,6 +36,26 @@ export function SettingsSidebar() {
   const closeSettings = useUIStore((s) => s.closeSettings);
   const activeSection = useUIStore((s) => s.activeSettingsSection);
   const setActiveSection = useUIStore((s) => s.setActiveSettingsSection);
+
+  // Settings sidebar must always be visible — force open if the app sidebar was collapsed.
+  // Capture prior state so we can restore it when settings closes.
+  const { open, setOpen } = useSidebar();
+  const wasOpenOnMount = useRef<boolean | null>(null);
+
+  useEffect(() => {
+    if (wasOpenOnMount.current === null) {
+      wasOpenOnMount.current = open;
+      if (!open) setOpen(true);
+    }
+  }, [open, setOpen]);
+
+  useEffect(() => {
+    return () => {
+      if (wasOpenOnMount.current === false) {
+        setOpen(false);
+      }
+    };
+  }, [setOpen]);
 
   return (
     <Sidebar variant="inset" collapsible="offcanvas" className="p-0">
