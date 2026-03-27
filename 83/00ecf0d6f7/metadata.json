@@ -1,0 +1,30 @@
+{
+  "cli_version": "0.5.0",
+  "checkpoint_id": "8300ecf0d6f7",
+  "strategy": "manual-commit",
+  "branch": "zvadaadam/update-welcome-screen",
+  "checkpoints_count": 2,
+  "files_touched": [
+    "apps/backend/src/routes/repos.ts",
+    "apps/backend/src/services/workspace-init.service.ts",
+    "apps/backend/test/unit/services/workspace-init.service.test.ts",
+    "apps/web/src/app/layouts/hooks/useRepoActions.ts",
+    "apps/web/src/features/repository/ui/WelcomeView.tsx",
+    "apps/web/src/features/workspace/api/workspace.queries.ts"
+  ],
+  "sessions": [
+    {
+      "metadata": "/83/00ecf0d6f7/0/metadata.json",
+      "transcript": "/83/00ecf0d6f7/0/full.jsonl",
+      "content_hash": "/83/00ecf0d6f7/0/content_hash.txt",
+      "prompt": "/83/00ecf0d6f7/0/prompt.txt"
+    }
+  ],
+  "token_usage": {
+    "input_tokens": 432,
+    "cache_creation_tokens": 718009,
+    "cache_read_tokens": 53306342,
+    "output_tokens": 149818,
+    "api_call_count": 348
+  }
+}

@@ -1,0 +1,38 @@
+{
+  "cli_version": "0.5.0",
+  "checkpoint_id": "8300ecf0d6f7",
+  "session_id": "01a6c22c-a8c9-4c48-a6b2-993edaf9d2fb",
+  "strategy": "manual-commit",
+  "created_at": "2026-03-27T19:20:10.067723Z",
+  "branch": "zvadaadam/update-welcome-screen",
+  "checkpoints_count": 2,
+  "files_touched": [
+    "apps/backend/src/routes/repos.ts",
+    "apps/backend/src/services/workspace-init.service.ts",
+    "apps/backend/test/unit/services/workspace-init.service.test.ts",
+    "apps/web/src/app/layouts/hooks/useRepoActions.ts",
+    "apps/web/src/features/repository/ui/WelcomeView.tsx",
+    "apps/web/src/features/workspace/api/workspace.queries.ts"
+  ],
+  "agent": "Claude Code",
+  "turn_id": "d1504fff90be",
+  "token_usage": {
+    "input_tokens": 432,
+    "cache_creation_tokens": 718009,
+    "cache_read_tokens": 53306342,
+    "output_tokens": 149818,
+    "api_call_count": 348
+  },
+  "session_metrics": {
+    "turn_count": 38
+  },
+  "initial_attribution": {
+    "calculated_at": "2026-03-27T19:20:07.437579Z",
+    "agent_lines": 39,
+    "human_added": 0,
+    "human_modified": 0,
+    "human_removed": 0,
+    "total_committed": 39,
+    "agent_percentage": 100
+  }
+}
