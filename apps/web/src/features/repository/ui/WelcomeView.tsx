@@ -387,8 +387,8 @@ export function WelcomeView({
                 >
                   {/* Green glow dot — active project indicator */}
                   <span className="relative flex h-1.5 w-1.5 shrink-0" aria-hidden>
-                    <span className="absolute -inset-0.5 rounded-full bg-emerald-400/30 blur-[2px]" />
-                    <span className="relative h-1.5 w-1.5 rounded-full bg-emerald-400" />
+                    <span className="bg-accent-green/30 absolute -inset-0.5 rounded-full blur-[2px]" />
+                    <span className="bg-accent-green relative h-1.5 w-1.5 rounded-full" />
                   </span>
                   <span className="max-w-[200px] truncate font-medium">
                     {selectedRepo?.name ?? "Select repo"}
@@ -428,7 +428,7 @@ export function WelcomeView({
                         />
                       </div>
 
-                      {/* Repo list — virtualized scroll for 30+ repos */}
+                      {/* Repo list */}
                       <div className="scrollbar-vibrancy max-h-[224px] overflow-y-auto py-1">
                         {filteredRepos.length === 0 && (
                           <div className="text-text-disabled px-3 py-3 text-center text-xs">
@@ -451,8 +451,8 @@ export function WelcomeView({
                               <div className="flex items-center gap-2 overflow-hidden">
                                 {isSelected ? (
                                   <span className="relative flex h-1 w-1 shrink-0" aria-hidden>
-                                    <span className="absolute -inset-px rounded-full bg-emerald-400/25 blur-[1.5px]" />
-                                    <span className="relative h-1 w-1 rounded-full bg-emerald-400" />
+                                    <span className="bg-accent-green/25 absolute -inset-px rounded-full blur-[1.5px]" />
+                                    <span className="bg-accent-green relative h-1 w-1 rounded-full" />
                                   </span>
                                 ) : (
                                   <span className="h-1.5 w-1.5 shrink-0" />

@@ -24,7 +24,8 @@ export function BranchSelector({
 }: BranchSelectorProps) {
   const [open, setOpen] = useState(false);
   const [search, setSearch] = useState("");
-  const { data, isLoading, isError, error, refetch } = useRepoBranches(repoId);
+  // Only fetch when popover is open — avoids unnecessary WS requests on mount
+  const { data, isLoading, isError, error, refetch } = useRepoBranches(open ? repoId : null);
 
   const branches = useMemo(() => {
     const raw = data?.branches ?? [];

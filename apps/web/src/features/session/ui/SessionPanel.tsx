@@ -58,7 +58,7 @@ export interface SessionPanelRef {
   insertText: (text: string) => void;
   addInspectedElement: (element: Omit<InspectedElement, "id">) => void;
   addFiles: (files: File[]) => void;
-  sendMessage: (content: string) => Promise<void>;
+  sendMessage: (content: string, model?: string) => Promise<void>;
 }
 
 export const SessionPanel = forwardRef<SessionPanelRef, SessionPanelProps>(
@@ -266,7 +266,10 @@ export const SessionPanel = forwardRef<SessionPanelRef, SessionPanelProps>(
         addFiles: (files: File[]) => {
           messageInputRef.current?.addFiles(files);
         },
-        sendMessage: (content: string) => sendMessage(content),
+        sendMessage: (content: string, modelOverride?: string) => {
+          if (modelOverride) setModel(modelOverride);
+          return sendMessage(content);
+        },
       }),
       [setMessageInput, sendMessage]
     );
