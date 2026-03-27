@@ -1704,3 +1704,150 @@ i fele liek can drop a lot of this beacsue of the autorsume right edyt> can u ep
 ---
 
 nooo i by mistake send an ddidfent meaaeg taht wans suppsoe for u
+
+---
+
+<system-instruction>
+The user has added 2 comments to the diff for this workspace. Please review and address these comments as part of your response. When addressing comments on the "original" side or on specific commits, read the file from that version (not the current version). Below are the comments, including metadata about what git state they were left on:
+
+Comment #1:
+
+File: apps/backend/src/services/workspace-init.service.ts
+Line: 177
+User comment: "_⚠️ Potential issue_ | _🟠 Major_
+
+**Add bounded retry for transient DB lock in fatal session stage.**
+
+If this transaction hits `SQLITE_BUSY`, the workspace hard-fails even though the failure is transient. This stage is fatal, so it should tolerate short lock contention.
+
+
+
+<details>
+<summary>Suggested fix</summary>
+
+```diff
+     async run(ctx) {
+       // Create session early so the frontend can render the chat input immediately.
+       // The workspace transitions to 'ready' here; remaining stages (deps, hooks,
+       // git-clean) continue in the background while the user is already chatting.
+       const db = getDatabase();
+       const sessionId = uuidv7();
+
+-      db.transaction(() => {
++      const runTx = db.transaction(() => {
+         db.prepare(
+           "INSERT INTO sessions (id, workspace_id, status, updated_at) VALUES (?, ?, 'idle', datetime('now'))"
+         ).run(sessionId, ctx.workspaceId);
+         db.prepare(
+           "UPDATE workspaces SET state = 'ready', current_session_id = ? WHERE id = ?"
+         ).run(sessionId, ctx.workspaceId);
+-      })();
++      });
++
++      for (let attempt = 0; ; attempt++) {
++        try {
++          runTx();
++          break;
++        } catch (err) {
++          const message = err instanceof Error ? err.message : String(err);
++          if (!message.includes("SQLITE_BUSY") || attempt >= 2) throw err;
++          await new Promise((resolve) => setTimeout(resolve, 50 * 2 ** attempt));
++        }
++      }
+
+       // Push state change immediately so frontend picks up session + ready state
+       invalidate(["workspaces", "stats", "sessions"]);
+     },
+```
+</details>
+
+<details>
+<summary>🤖 Prompt for AI Agents</summary>
+
+```
+Verify each finding against the current code and only fix it if needed.
+
+In `@apps/backend/src/services/workspace-init.service.ts` around lines 170 - 177,
+Wrap the db.transaction(...) invocation that inserts into sessions and updates
+workspaces (the block using sessionId and ctx.workspaceId) with a bounded retry
+loop that catches transient SQLITE_BUSY errors, sleeps a short backoff between
+attempts (e.g., exponential or fixed small delay), and retries a limited number
+of times before rethrowing; on any non-SQLITE_BUSY error immediately rethrow.
+Ensure the retry only surrounds the transactional call (the
+db.transaction(...).run/execute invocation) and preserve the original error when
+retries are exhausted so the caller can handle the fatal stage appropriately.
+```
+
+</details>
+
+<!-- fingerprinting:phantom:poseidon:hawk -->
+
+<!-- This is an auto-generated comment by CodeRabbit -->"
+
+Comment metadata:
+This comment was left on the modified branch.
+This comment was left on GitHub by @coderabbitai.
+This comment is the start of thread PRRT_kwDOQEbULc53Xe-M. 
+
+
+Comment #2:
+
+File: apps/backend/src/services/workspace-init.service.ts
+Line: 303
+User comment: "_⚠️ Potential issue_ | _🟠 Major_
+
+**Protect final completion signaling from DB lock failures.**
+
+`updateInitStage(..., "done")` is currently uncaught. If it throws, `"done"` progress and final invalidation won’t run.
+
+
+
+<details>
+<summary>Suggested fix</summary>
+
+```diff
+   // Mark init pipeline as fully complete (deps, hooks, git-clean all done)
+-  updateInitStage(ctx.workspaceId, "done");
++  try {
++    updateInitStage(ctx.workspaceId, "done");
++  } catch (err) {
++    console.warn("[WORKSPACE] Failed to update init_stage to done:", err);
++  }
+   emitProgress(ctx.workspaceId, "done", "Ready");
+```
+</details>
+
+<details>
+<summary>🤖 Prompt for AI Agents</summary>
+
+```
+Verify each finding against the current code and only fix it if needed.
+
+In `@apps/backend/src/services/workspace-init.service.ts` around lines 301 - 303,
+Wrap the final stage update in a try/catch (or try/finally) so a DB error from
+updateInitStage(ctx.workspaceId, "done") cannot prevent
+emitProgress(ctx.workspaceId, "done", "Ready") and the subsequent workspace
+cache invalidation from running; specifically, call updateInitStage inside a try
+and still call emitProgress and the cache invalidation (e.g.,
+invalidateWorkspaceCache or whatever finalizer is used) in the finally block,
+and log the caught error (including ctx.workspaceId) so failures are visible
+without blocking final signaling.
+```
+
+</details>
+
+<!-- fingerprinting:phantom:poseidon:hawk -->
+
+<!-- This is an auto-generated comment by CodeRabbit -->"
+
+Comment metadata:
+This comment was left on the modified branch.
+This comment was left on GitHub by @coderabbitai.
+This comment is the start of thread PRRT_kwDOQEbULc53Xe-Q. 
+
+</system-instruction>
+
+I run AI code review, is it actionable? Wdyt? Explore in depth each problem.
+We want a clean, maintainable codebase, with proper best practices for the tech stack we use.
+Run subagents to verify, and if it should be fixed, try to merge some stuff together so it can be fixed together within one subagent. 
+If you can test something do it.
