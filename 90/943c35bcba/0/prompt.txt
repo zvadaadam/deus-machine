@@ -280,3 +280,493 @@ Just probably like last thing, when we are at the end of the onboarding, it just
 ---
 
 Commit and push all changes
+
+---
+
+<system-instruction>
+The user has added 6 comments to the diff for this workspace. Please review and address these comments as part of your response. When addressing comments on the "original" side or on specific commits, read the file from that version (not the current version). Below are the comments, including metadata about what git state they were left on:
+
+Comment #1:
+
+File: 
+Line: undefined
+User comment: "<!-- This is an auto-generated comment: summarize by coderabbit.ai -->
+<!-- This is an auto-generated comment: rate limited by coderabbit.ai -->
+
+> [!WARNING]
+> ## Rate limit exceeded
+> 
+> `@zvadaadam` has exceeded the limit for the number of commits that can be reviewed per hour. Please wait **7 minutes and 31 seconds** before requesting another review.
+> 
+> Your organization is not enrolled in usage-based pricing. Contact your admin to enable usage-based pricing to continue reviews beyond the rate limit, or try again in **7 minutes and 31 seconds**.
+> 
+> <details>
+> <summary>⌛ How to resolve this issue?</summary>
+> 
+> After the wait time has elapsed, a review can be triggered using the `@coderabbitai review` command as a PR comment. Alternatively, push new commits to this PR.
+> 
+> We recommend that you space out your commits to avoid hitting the rate limit.
+> 
+> </details>
+> 
+> 
+> <details>
+> <summary>🚦 How do rate limits work?</summary>
+> 
+> CodeRabbit enforces hourly rate limits for each developer per organization.
+> 
+> Our paid plans have higher rate limits than the trial, open-source and free plans. In all cases, we re-allow further reviews after a brief timeout.
+> 
+> Please see our [FAQ](https://docs.coderabbit.ai/faq) for further information.
+> 
+> </details>
+> 
+> <details>
+> <summary>ℹ️ Review info</summary>
+> 
+> <details>
+> <summary>⚙️ Run configuration</summary>
+> 
+> **Configuration used**: defaults
+> 
+> **Review profile**: CHILL
+> 
+> **Plan**: Lite
+> 
+> **Run ID**: `f830de16-ad5d-455d-8a95-1ce434c14107`
+> 
+> </details>
+> 
+> <details>
+> <summary>📥 Commits</summary>
+> 
+> Reviewing files that changed from the base of the PR and between 61927fdfef06f5ef1147f1e6771bb86202346922 and 0b81174ba4f129d12f4231b282e4fb3a228f602a.
+> 
+> </details>
+> 
+> <details>
+> <summary>⛔ Files ignored due to path filters (1)</summary>
+> 
+> * `apps/web/public/audio/intro-music.mp3` is excluded by `!**/*.mp3`
+> 
+> </details>
+> 
+> <details>
+> <summary>📒 Files selected for processing (11)</summary>
+> 
+> * `apps/desktop/main/index.ts`
+> * `apps/desktop/main/native-handlers.ts`
+> * `apps/web/src/features/onboarding/hooks/useOnboardingAudio.ts`
+> * `apps/web/src/features/onboarding/ui/AgentDotsAnimation.stories.tsx`
+> * `apps/web/src/features/onboarding/ui/AgentDotsAnimation.tsx`
+> * `apps/web/src/features/onboarding/ui/OnboardingOverlay.tsx`
+> * `apps/web/src/features/onboarding/ui/animation-utils.ts`
+> * `apps/web/src/features/onboarding/ui/steps/DeusStep.tsx`
+> * `apps/web/src/features/onboarding/ui/steps/ProjectSelectionStep.tsx`
+> * `apps/web/src/features/onboarding/ui/steps/WelcomeStep.tsx`
+> * `apps/web/src/global.css`
+> 
+> </details>
+> 
+> </details>
+
+<!-- end of auto-generated comment: rate limited by coderabbit.ai -->
+
+<!-- walkthrough_start -->
+
+<details>
+<summary>📝 Walkthrough</summary>
+
+## Walkthrough
+
+The pull request modernizes the onboarding experience by removing the audio-driven animation pipeline and SVG-based agent dots animation. Desktop window management is enhanced with explicit visual state handling for vibrancy and background colors, while the web application introduces a phase-based animated welcome step with text-swapping and manifesto scrolling effects powered by new CSS animations.
+
+## Changes
+
+|Cohort / File(s)|Summary|
+|---|---|
+|**Desktop Window Configuration** <br> `apps/desktop/main/index.ts`, `apps/desktop/main/native-handlers.ts`|Updated BrowserWindow background color from transparent (`#00000000`) to solid dark (`#0e0e10`); removed native transparency and vibrancy initialization. Enhanced window mode transitions to explicitly set visual state including vibrancy, background colors, and window dimensions with centering for onboarding and normal modes.|
+|**Onboarding Animation Removal** <br> `apps/web/src/features/onboarding/hooks/useOnboardingAudio.ts`, `apps/web/src/features/onboarding/ui/AgentDotsAnimation.tsx`, `apps/web/src/features/onboarding/ui/AgentDotsAnimation.stories.tsx`, `apps/web/src/features/onboarding/ui/animation-utils.ts`|Deleted audio hook, SVG animation component, Storybook stories, and animation utility library. These modules provided fade-in/out audio control, frame-based agent dots animation with easing, and standalone easing/spring/interpolation helpers.|
+|**Onboarding UI Refactor** <br> `apps/web/src/features/onboarding/ui/OnboardingOverlay.tsx`, `apps/web/src/features/onboarding/ui/steps/WelcomeStep.tsx`|Replaced audio-driven intro pipeline with simplified native onboarding calls (`enterOnboarding()` / `exitOnboarding()`). Redesigned welcome step with phase-driven state machine (`idle` → `fade-content` → `center` → `swap` → `exit`), DOM measurement for title centering, text swapping animation from "Deus" to "Devs", and scrolling manifesto text overlay.|
+|**Onboarding Steps Updates** <br> `apps/web/src/features/onboarding/ui/steps/ProjectSelectionStep.tsx`, `apps/web/src/features/onboarding/ui/steps/DeusStep.tsx`|Parallelized bulk repository imports using `Promise.allSettled()` instead of sequential `for...of` loop; removed per-repo error handling. Removed minor comment in DeusStep.|
+|**Global Styling** <br> `apps/web/src/global.css`|Added four CSS easing custom properties (`--ease-out-quart`, `--ease-out-expo`, `--ease-out-cubic`, `--ease-in-out-cubic`). Replaced old onboarding animation keyframes with glitch-themed animations (`.glitch-swap`, `.glitch-swap-burst` classes, `manifesto-crawl` keyframe) and new `.onboarding-grain` background pattern class.|
+
+## Estimated code review effort
+
+🎯 4 (Complex) | ⏱️ ~60 minutes
+
+## Poem
+
+> 🐰 *Hops through the code with glee,*  
+> *Old animations fade to history,*  
+> *Phase-based dances, text that swaps,*  
+> *Manifesto scrolls and glitch effects pop!*  
+> *A welcome renewed, the onboarding gleams!* ✨
+
+</details>
+
+<!-- walkthrough_end -->
+
+
+<!-- tips_start -->
+
+---
+
+<sub>Comment `@coderabbitai help` to get the list of available commands and usage tips.</sub>
+
+<!-- tips_end -->
+
+<!-- internal state start -->
+
+
+<!-- REDACTED/REDACTED/REDACTED/ts5ZjlAACSIReGwAbWmgjDTBU+B/REDACTED/REDACTED/REDACTED/REDACTED/REDACTED/REDACTED/REDACTED/REDACTED/REDACTED/REDACTED/LvEZkHGOoWypJdeQqpyzcet/REDACTED/REDACTED/REDACTED/REDACTED/PCL/REDACTED/REDACTED/REDACTED/NhTFpRSvZxTrQ/REDACTED/REDACTED/Azl/REDACTED/REDACTED/RAAAbk7x/REDACTED/REDACTED/REDACTED/vxd8whq8yhuC0FKQsCwRoFKRs/REDACTED/REDACTED/REDACTED/V5pNqI5dB3vntp2BTshwmWEw/oE1BiSiGlKypLCpFGf4FQ6Sp6EQfuvLEoH0+o/REDACTED/REDACTED/pME/REDACTED/REDACTED/REDACTED/W2gtrUQ0SjHB/REDACTED/REDACTED/REDACTED/REDACTED/REDACTED/REDACTED/REDACTED/REDACTED/REDACTED/LxBkAwBpc+O7NL/qKzBEw0Xo//REDACTED/REDACTED/REDACTED/ruQAACr0NgOMMeicY/x/REDACTED/REDACTED/REDACTED/REDACTED/REDACTED -->
+
+<!-- internal state end -->"
+
+Comment metadata:
+This comment was left on a file.
+This comment was left on GitHub by @coderabbitai.
+
+
+Comment #2:
+
+File: 
+Line: undefined
+User comment: "@coderabbit full review"
+
+Comment metadata:
+This comment was left on a file.
+This comment was left on GitHub by @zvadaadam.
+
+
+Comment #3:
+
+File: 
+Line: undefined
+User comment: "<!-- This is an auto-generated reply by CodeRabbit -->
+<details>
+<summary>✅ Actions performed</summary>
+
+Full review triggered.
+
+</details>"
+
+Comment metadata:
+This comment was left on a file.
+This comment was left on GitHub by @coderabbitai.
+
+
+Comment #4:
+
+File: apps/desktop/main/native-handlers.ts
+Line: 61
+User comment: "_⚠️ Potential issue_ | _🟠 Major_
+
+**Unify the onboarding handlers before these paths drift further.**
+
+`OnboardingOverlay` now drives onboarding through `native.window.enterOnboarding()` / `exitOnboarding()`, but the `native:*` aliases here no longer match the snake_case handlers: they skip `setWindowButtonVisibility(false/true)` on macOS, and both enter paths still request `660x580` even though `createWindow()` keeps the BrowserWindow minimum at `800x600` in `apps/desktop/main/index.ts`. That means the renderer path can miss the traffic-light hide/restore behavior, and the compact onboarding size never actually applies.
+
+<details>
+<summary>Suggested direction</summary>
+
+```diff
++  const enterOnboardingMode = (win: BrowserWindow) => {
++    win.setBackgroundColor("#0e0e10");
++    if (process.platform === "darwin") {
++      win.setWindowButtonVisibility(false);
++    }
++    win.setMinimumSize(660, 580);
++    win.setSize(660, 580);
++    win.center();
++    win.show();
++  };
++
++  const exitOnboardingMode = (win: BrowserWindow) => {
++    if (process.platform === "darwin") {
++      win.setWindowButtonVisibility(true);
++      win.setVibrancy("under-window");
++    }
++    win.setBackgroundColor("#1a1a1a");
++    win.setMinimumSize(800, 600);
++    win.setSize(1400, 900, true);
++    win.center();
++  };
++
+   ipcMain.handle("enter_onboarding_mode", () => {
+     const win = BrowserWindow.getAllWindows()[0];
+-    if (win) {
+-      win.setBackgroundColor("#0e0e10");
+-      if (process.platform === "darwin") {
+-        win.setWindowButtonVisibility(false);
+-      }
+-      win.setSize(660, 580);
+-      win.center();
+-      win.show();
+-    }
++    if (win) enterOnboardingMode(win);
+   });
+ 
+   ipcMain.handle("exit_onboarding_mode", () => {
+     const win = BrowserWindow.getAllWindows()[0];
+-    if (win) {
+-      if (process.platform === "darwin") {
+-        win.setWindowButtonVisibility(true);
+-        win.setVibrancy("under-window");
+-      }
+-      win.setBackgroundColor("#1a1a1a");
+-      win.setSize(1400, 900, true);
+-      win.center();
+-    }
++    if (win) exitOnboardingMode(win);
+   });
+ 
+   ipcMain.handle("native:enterOnboardingMode", () => {
+     const win = BrowserWindow.getAllWindows()[0];
+-    if (win) {
+-      win.setBackgroundColor("#0e0e10");
+-      win.setSize(660, 580);
+-      win.center();
+-      win.show();
+-    }
++    if (win) enterOnboardingMode(win);
+   });
+ 
+   ipcMain.handle("native:exitOnboardingMode", () => {
+     const win = BrowserWindow.getAllWindows()[0];
+-    if (win) {
+-      if (process.platform === "darwin") {
+-        win.setVibrancy("under-window");
+-      }
+-      win.setBackgroundColor("#1a1a1a");
+-      win.setSize(1400, 900, true);
+-      win.center();
+-    }
++    if (win) exitOnboardingMode(win);
+   });
+```
+</details>
+ 
+
+
+Also applies to: 235-255
+
+<details>
+<summary>🤖 Prompt for AI Agents</summary>
+
+```
+Verify each finding against the current code and only fix it if needed.
+
+In `@apps/desktop/main/native-handlers.ts` around lines 37 - 61, The two ipc
+handlers "enter_onboarding_mode" and "exit_onboarding_mode" diverge from the
+renderer's native.window.enterOnboarding()/exitOnboarding() behavior and use
+inconsistent sizes (660x580) and omit macOS traffic-light toggling; unify them
+by updating both handlers to match the renderer API: call
+win.setWindowButtonVisibility(false) and win.setBackgroundColor("#0e0e10"), set
+win.setSize to a size that respects the BrowserWindow minimum (use 800x600 or
+derive from createWindow() constraints) and win.center() on enter, and on exit
+restore win.setWindowButtonVisibility(true), win.setVibrancy("under-window"),
+win.setBackgroundColor("#1a1a1a") and setSize(1400,900,true)/center as currently
+done; ensure the same logic is applied in the duplicate block referenced (lines
+~235-255) so native:* aliases behave identically to the snake_case handlers.
+```
+
+</details>
+
+<!-- fingerprinting:phantom:medusa:grasshopper -->
+
+<!-- This is an auto-generated comment by CodeRabbit -->"
+
+Comment metadata:
+This comment was left on the modified branch.
+This comment was left on GitHub by @coderabbitai.
+This comment is the start of thread PRRT_kwDOQEbULc53Kpgc. 
+
+
+Comment #5:
+
+File: apps/web/src/features/onboarding/ui/OnboardingOverlay.tsx
+Line: 43
+User comment: "_⚠️ Potential issue_ | _🟠 Major_
+
+**Don’t key the exit timer off the whole query object.**
+
+Once `exiting` flips true, `settingsQuery.refetch()` changes query state, which can retrigger this effect and schedule another timer. If the completion fetch is slow or stale, this path can keep re-arming refetches every 600ms. Depend on `settingsQuery.refetch` (or a memoized callback) instead of the full query result.
+
+<details>
+<summary>Suggested fix</summary>
+
+```diff
++  const { refetch } = settingsQuery;
++
+   useEffect(() => {
+     if (!exiting) return;
+-    const timer = setTimeout(() => settingsQuery.refetch(), 600);
++    const timer = setTimeout(() => {
++      void refetch();
++    }, 600);
+     return () => clearTimeout(timer);
+-  }, [exiting, settingsQuery]);
++  }, [exiting, refetch]);
+```
+</details>
+
+<!-- suggestion_start -->
+
+<details>
+<summary>📝 Committable suggestion</summary>
+
+> ‼️ **IMPORTANT**
+> Carefully review the code before committing. Ensure that it accurately replaces the highlighted code, contains no missing lines, and has no issues with indentation. Thoroughly test & benchmark the code to ensure it meets the requirements.
+
+```suggestion
+  const { refetch } = settingsQuery;
+
+  useEffect(() => {
+    if (!exiting) return;
+    const timer = setTimeout(() => {
+      void refetch();
+    }, 600);
+    return () => clearTimeout(timer);
+  }, [exiting, refetch]);
+```
+
+</details>
+
+<!-- suggestion_end -->
+
+<details>
+<summary>🤖 Prompt for AI Agents</summary>
+
+```
+Verify each finding against the current code and only fix it if needed.
+
+In `@apps/web/src/features/onboarding/ui/OnboardingOverlay.tsx` around lines 39 -
+43, The effect in OnboardingOverlay is currently depending on the whole
+settingsQuery object which lets refetch update the query and re-run the effect
+repeatedly; fix it by depending only on the refetch callback instead: capture
+settingsQuery.refetch (e.g., const { refetch } = settingsQuery or const refetch
+= settingsQuery.refetch) and use [exiting, refetch] as the effect dependencies,
+and call refetch() inside the timer so the effect is not retriggered by other
+query state changes.
+```
+
+</details>
+
+<!-- fingerprinting:phantom:medusa:grasshopper -->
+
+<!-- This is an auto-generated comment by CodeRabbit -->"
+
+Comment metadata:
+This comment was left on the modified branch.
+This comment was left on GitHub by @coderabbitai.
+This comment is the start of thread PRRT_kwDOQEbULc53Kpgd. 
+
+
+Comment #6:
+
+File: apps/web/src/features/onboarding/ui/steps/WelcomeStep.tsx
+Line: 57
+User comment: "_⚠️ Potential issue_ | _🟠 Major_
+
+**Skip the timer choreography when reduced motion is enabled.**
+
+The global CSS collapses the transitions, but these `setTimeout`s still keep the user on this step for 2.8s. With `prefers-reduced-motion: reduce`, this should advance immediately (or near-immediately) instead of waiting through the full scripted sequence.
+
+<details>
+<summary>Suggested fix</summary>
+
+```diff
+   const handleRun = useCallback(() => {
+     if (phase !== "idle") return;
++
++    if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) {
++      onNext();
++      return;
++    }
+ 
+     // Measure exact offset to viewport center
+     if (titleRef.current) {
+```
+</details>
+
+
+Based on learnings: "Animations should be performant and respect user preferences with `media (prefers-reduced-motion: reduce)`."
+
+<!-- suggestion_start -->
+
+<details>
+<summary>📝 Committable suggestion</summary>
+
+> ‼️ **IMPORTANT**
+> Carefully review the code before committing. Ensure that it accurately replaces the highlighted code, contains no missing lines, and has no issues with indentation. Thoroughly test & benchmark the code to ensure it meets the requirements.
+
+```suggestion
+  const handleRun = useCallback(() => {
+    if (phase !== "idle") return;
+
+    if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) {
+      onNext();
+      return;
+    }
+
+    // Measure exact offset to viewport center
+    if (titleRef.current) {
+      const rect = titleRef.current.getBoundingClientRect();
+      const titleCenter = rect.top + rect.height / 2;
+      const viewportCenter = window.innerHeight / 2;
+      setTitleOffset(viewportCenter - titleCenter);
+    }
+
+    // Phase 1: fade out button + manifesto
+    setPhase("fade-content");
+
+    // Phase 2: title floats to true center
+    setTimeout(() => setPhase("center"), 500);
+
+    // Phase 3: swap text Deus → Devs (no glitch, clean)
+    setTimeout(() => setPhase("swap"), 1400);
+
+    // Phase 4: slide left + fade, then advance
+    setTimeout(() => setPhase("exit"), 2200);
+    setTimeout(() => onNext(), 2800);
+  }, [phase, onNext]);
+```
+
+</details>
+
+<!-- suggestion_end -->
+
+<details>
+<summary>🤖 Prompt for AI Agents</summary>
+
+```
+Verify each finding against the current code and only fix it if needed.
+
+In `@apps/web/src/features/onboarding/ui/steps/WelcomeStep.tsx` around lines 34 -
+57, The handleRun flow uses several setTimeouts which keep the step open for
+2.8s even when users prefer reduced motion; detect reduced-motion via
+window.matchMedia('(prefers-reduced-motion: reduce)').matches at the top of
+handleRun (use titleRef and setTitleOffset as you already do), and if true skip
+the timer choreography by setting the final phase immediately (e.g.,
+setPhase("exit") or whichever final state your UI expects) and call onNext()
+right away (do not schedule timeouts); otherwise run the existing setTimeout
+sequence. Reference: handleRun, titleRef, setTitleOffset, setPhase, onNext.
+```
+
+</details>
+
+<!-- fingerprinting:phantom:medusa:grasshopper -->
+
+<!-- This is an auto-generated comment by CodeRabbit -->"
+
+Comment metadata:
+This comment was left on the modified branch.
+This comment was left on GitHub by @coderabbitai.
+This comment is the start of thread PRRT_kwDOQEbULc53Kpgh. 
+
+</system-instruction>
+
+I run AI code review, is it actionable? Wdyt? Explore in depth each problem.
+We want a clean, maintainable codebase, with proper best practices for the tech stack we use.
+Run subagents to verify, and if it should be fixed, try to merge some stuff together so it can be fixed together within one subagent. 
+If you can test something do it.
