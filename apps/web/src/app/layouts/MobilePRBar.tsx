@@ -55,8 +55,8 @@ interface MobilePRBarProps {
   onArchive?: () => void;
   targetBranch: string;
   onTargetBranchChange: (branch: string) => void;
-  workspacePath: string | null;
   workspaceId?: string;
+  repoId?: string;
 }
 
 // ---------------------------------------------------------------------------
@@ -74,7 +74,7 @@ export function MobilePRHeaderAction({
   onArchive,
   targetBranch,
   onTargetBranchChange,
-  workspacePath,
+  repoId,
 }: MobilePRBarProps) {
   const [sheetOpen, setSheetOpen] = useState(false);
   const state = derivePRActionState(prStatus, ghStatus, targetBranch);
@@ -108,7 +108,7 @@ export function MobilePRHeaderAction({
             <div className="flex flex-col gap-2">
               <span className="text-text-muted text-xs font-medium">Target branch</span>
               <BranchSelector
-                workspacePath={workspacePath}
+                repoId={repoId ?? null}
                 currentBranch={targetBranch}
                 onBranchSelect={onTargetBranchChange}
               >

@@ -50,6 +50,7 @@ import { useRepoActions } from "./hooks/useRepoActions";
 import { useSystemPrompt, useUpdateSystemPrompt } from "@/features/workspace/api";
 import { toast } from "sonner";
 import { getErrorMessage } from "@shared/lib/errors";
+import { useCreateWorkspace } from "@/features/workspace/api";
 
 /**
  * SidebarResizeHandle — drag handle on the sidebar's right edge.
@@ -159,6 +160,64 @@ export function MainLayout() {
     openNewWorkspaceModal,
     closeNewWorkspaceModal,
   });
+
+  // --- Welcome screen send flow ---
+  // When the user sends a message from the welcome screen, we:
+  // 1. Create a workspace for the selected repo
+  // 2. Select it (transitions to two-panel layout)
+  // 3. Queue the message to be sent once the workspace has a session
+  const welcomeCreateMutation = useCreateWorkspace();
+  const [welcomeSending, setWelcomeSending] = useState(false);
+  const pendingWelcomeMessageRef = useRef<{
+    message: string;
+    workspaceId: string;
+  } | null>(null);
+
+  const handleSendFromWelcome = useCallback(
+    async (repoId: string, message: string, model: string, branch?: string) => {
+      if (welcomeSending) return;
+      setWelcomeSending(true);
+
+      try {
+        const workspace = await welcomeCreateMutation.mutateAsync(
+          branch ? { repositoryId: repoId, source_branch: branch } : repoId
+        );
+        // Store pending message — will be sent when workspace gets a session
+        pendingWelcomeMessageRef.current = {
+          message,
+          workspaceId: workspace.id,
+        };
+        selectWorkspace(workspace.id);
+        expandRepo(workspace.repository_id);
+      } catch (error) {
+        console.error("Failed to create workspace from welcome:", error);
+        toast.error(getErrorMessage(error));
+        pendingWelcomeMessageRef.current = null;
+      } finally {
+        setWelcomeSending(false);
+      }
+    },
+    [welcomeSending, welcomeCreateMutation, selectWorkspace, expandRepo]
+  );
+
+  // Effect: when the pending workspace becomes ready with a session, send the queued message.
+  // Uses the SessionPanel ref so the message goes through useSendMessage() → optimistic UI.
+  // React effect ordering guarantees child useImperativeHandle runs before parent useEffect,
+  // so workspaceChatPanelRef.current is set when this fires.
+  useEffect(() => {
+    const pending = pendingWelcomeMessageRef.current;
+    if (!pending) return;
+    if (!selectedWorkspace) return;
+    if (selectedWorkspace.id !== pending.workspaceId) return;
+    if (selectedWorkspace.state !== "ready" || !selectedWorkspace.current_session_id) return;
+    if (!workspaceChatPanelRef.current) return;
+
+    pendingWelcomeMessageRef.current = null;
+    workspaceChatPanelRef.current.sendMessage(pending.message).catch((error) => {
+      console.error("Failed to send welcome message:", error);
+      toast.error(getErrorMessage(error));
+    });
+  }, [selectedWorkspace]);
 
   // Derive repo name for GitHub picker modal from repoGroups
   const githubPickerRepoName = useMemo(() => {
@@ -393,6 +452,7 @@ export function MainLayout() {
           onCloneRepository={() => repoActions.setShowCloneModal(true)}
           onArchive={archiveWorkspace}
           onStatusChange={handleStatusChange}
+          onNewSession={() => selectWorkspace(null)}
           profile={{ username }}
         />
       )}
@@ -412,6 +472,9 @@ export function MainLayout() {
           onCreateWorkspace={openNewWorkspaceModal}
           onOpenProject={repoActions.handleOpenProject}
           onCloneRepository={() => repoActions.setShowCloneModal(true)}
+          repos={repos}
+          onSendFromWelcome={handleSendFromWelcome}
+          welcomeSending={welcomeSending}
         />
       )}
 

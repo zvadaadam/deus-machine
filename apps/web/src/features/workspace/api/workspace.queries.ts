@@ -273,9 +273,12 @@ export function useRepoPrs(repoId: string | null) {
 }
 
 /**
- * Fetch remote branches for a repository.
- * Used by the "Create Workspace from Branch" picker modal.
- * Enabled only when a repoId is provided (i.e., modal is open).
+ * Fetch remote + local branches for a repository.
+ * Used by BranchSelector (welcome screen + Create PR).
+ *
+ * sendRequest rejects immediately if the WS isn't connected yet (common
+ * during app startup and Vite HMR). We retry with exponential backoff
+ * so the query self-heals once the WS is ready (~1-2s after load).
  */
 export function useRepoBranches(repoId: string | null) {
   return useQuery({
@@ -283,6 +286,8 @@ export function useRepoBranches(repoId: string | null) {
     queryFn: () => WorkspaceService.fetchRepoBranches(repoId!),
     enabled: !!repoId,
     staleTime: 30_000,
+    retry: 5,
+    retryDelay: (attempt) => Math.min(1000 * 2 ** attempt, 10_000),
   });
 }
 
@@ -412,22 +417,6 @@ export function useCreateWorkspace() {
     onSettled: () => {
       queryClient.invalidateQueries({ queryKey: queryKeys.workspaces.all });
     },
-  });
-}
-
-/**
- * Fetch available branches for a workspace/repo.
- * TODO: Add backend endpoint for listing branches. Currently returns [].
- */
-export function useBranches(_workspacePath: string | null) {
-  return useQuery({
-    queryKey: ["branches", _workspacePath],
-    queryFn: async () => {
-      // TODO: Call backend endpoint when available
-      return [] as Array<{ name: string; is_current: boolean; is_remote: boolean }>;
-    },
-    enabled: !!_workspacePath,
-    staleTime: 30_000,
   });
 }
 

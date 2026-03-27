@@ -96,10 +96,16 @@ export async function runCommand(
         return {};
       })
       // ---- Git commands ----
-      .with("git:clone", () => {
-        // Git clone is handled via HTTP POST /api/repos, not WS commands.
-        // This arm exists so the exhaustive match compiles; reject at runtime.
-        throw new Error("git:clone is not available as a WS command — use POST /api/repos instead");
+      .with("git:clone", async () => {
+        const url = readString(params, "url");
+        const targetPath = readString(params, "targetPath");
+        if (!url || !targetPath) throw new Error("git:clone requires url and targetPath");
+        const result = (await delegateToRoute("POST", "/api/repos/clone", {
+          url,
+          targetPath,
+        })) as { success?: boolean; path?: string; error?: string };
+        if (result.error) throw new Error(result.error);
+        return {};
       })
       // ---- Route-delegated commands ----
       .with("createWorkspace", async () => {
