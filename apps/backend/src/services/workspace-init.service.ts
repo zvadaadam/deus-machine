@@ -234,7 +234,9 @@ const STAGES: InitStage[] = [
       // while deps were installing, and git checkout would wipe agent changes.
       const db = getDatabase();
       const session = db
-        .prepare("SELECT last_user_message_at FROM sessions WHERE workspace_id = ? LIMIT 1")
+        .prepare(
+          "SELECT s.last_user_message_at FROM sessions s JOIN workspaces w ON w.current_session_id = s.id WHERE w.id = ? LIMIT 1"
+        )
         .get(ctx.workspaceId) as { last_user_message_at: string | null } | undefined;
       if (session?.last_user_message_at) {
         console.log("[WORKSPACE] Skipping git-clean: agent already working");

@@ -129,6 +129,12 @@ app.post("/repos/clone", async (c) => {
   if (!url || typeof url !== "string") {
     throw new ValidationError("Missing or invalid 'url' parameter");
   }
+
+  const SAFE_GIT_URL_PATTERN = /^https?:\/\/[^\s;|&`$()]+$/;
+  if (!SAFE_GIT_URL_PATTERN.test(url)) {
+    throw new ValidationError("Invalid repository URL format");
+  }
+
   if (!targetPath || typeof targetPath !== "string") {
     throw new ValidationError("Missing or invalid 'targetPath' parameter");
   }
