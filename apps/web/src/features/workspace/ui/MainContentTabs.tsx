@@ -112,7 +112,7 @@ export function MainContentTabBar({
   // Touch: 250ms long-press required before drag activates (allows normal scrolling)
   const sensors = useSensors(
     useSensor(MouseSensor, { activationConstraint: { distance: 5 } }),
-    useSensor(TouchSensor, { activationConstraint: { delay: 250, tolerance: 5 } }),
+    useSensor(TouchSensor, { activationConstraint: { delay: 250, tolerance: 5 } })
   );
 
   function handleDragEnd(event: DragEndEvent) {
