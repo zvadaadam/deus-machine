@@ -65,13 +65,11 @@ const QUICK_PROMPTS = [
 ];
 
 // ── Types ───────────────────────────────────────────────────────────
-interface WelcomeViewProps {
+interface HomeViewProps {
   repos: Repository[];
   onSendMessage: (repoId: string, message: string, model: string, branch?: string) => void;
   onOpenProject?: () => void;
   onCloneRepository?: () => void;
-  /** True while workspace is being created after send */
-  sending?: boolean;
 }
 
 // ── Agent Logo Helper ───────────────────────────────────────────────
@@ -93,7 +91,7 @@ function abbreviatePath(path: string): string {
 }
 
 /**
- * WelcomeView — "Gravity Well" input-first workspace launcher.
+ * HomeView — "Gravity Well" input-first workspace launcher.
  *
  * Design direction: The message input is the gravitational center.
  * Repo picker and model selector live in a context bar at the top
@@ -103,13 +101,12 @@ function abbreviatePath(path: string): string {
  * Flow: user types message + picks repo/model -> onSendMessage()
  * -> parent creates workspace + session, transitions to two-panel layout.
  */
-export function WelcomeView({
+export function HomeView({
   repos = [],
   onSendMessage,
   onOpenProject,
   onCloneRepository,
-  sending = false,
-}: WelcomeViewProps) {
+}: HomeViewProps) {
   const hasRepos = repos.length > 0;
 
   // ── Input state ─────────────────────────────────────────────────
@@ -247,7 +244,7 @@ export function WelcomeView({
 
   // ── Send ────────────────────────────────────────────────────────
   const hasContent = message.trim().length > 0 || attachments.length > 0;
-  const canSend = hasContent && !!selectedRepoId && !sending && !isSubmitting;
+  const canSend = hasContent && !!selectedRepoId && !isSubmitting;
 
   const handleSend = useCallback(async () => {
     if (!canSend || !selectedRepoId) return;
@@ -292,7 +289,7 @@ export function WelcomeView({
   // This avoids accidental sends and lets users customize the prompt.
   const handleQuickPrompt = useCallback(
     (prompt: string) => {
-      if (!selectedRepoId || sending) return;
+      if (!selectedRepoId || isSubmitting) return;
       setMessage(prompt);
       // Focus + move cursor to end so user can append or edit
       setTimeout(() => {
@@ -304,7 +301,7 @@ export function WelcomeView({
         }
       }, 10);
     },
-    [selectedRepoId, sending]
+    [selectedRepoId, isSubmitting]
   );
 
   // Auto-resize textarea
@@ -352,13 +349,13 @@ export function WelcomeView({
           onDragOver={(e) => {
             e.preventDefault();
             e.stopPropagation();
-            if (!hasRepos || sending) return;
+            if (!hasRepos || isSubmitting) return;
             if (!isDragging) setIsDragging(true);
           }}
           onDragLeave={(e) => {
             e.preventDefault();
             e.stopPropagation();
-            if (!hasRepos || sending) {
+            if (!hasRepos || isSubmitting) {
               setIsDragging(false);
               return;
             }
@@ -377,7 +374,7 @@ export function WelcomeView({
             e.preventDefault();
             e.stopPropagation();
             setIsDragging(false);
-            if (!hasRepos || sending) return;
+            if (!hasRepos || isSubmitting) return;
             const files = Array.from(e.dataTransfer.files);
             if (files.length > 0) processFiles(files);
           }}
@@ -587,7 +584,7 @@ export function WelcomeView({
             placeholder={
               hasRepos ? "Describe what you'd like to do..." : "Add a project to get started"
             }
-            disabled={!hasRepos || sending}
+            disabled={!hasRepos || isSubmitting}
             aria-label="Message to start a new workspace"
             autoCorrect="off"
             autoCapitalize="off"
@@ -688,7 +685,7 @@ export function WelcomeView({
                   : "bg-bg-muted text-text-disabled cursor-default"
               )}
             >
-              {sending ? (
+              {isSubmitting ? (
                 <div className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-current border-t-transparent" />
               ) : (
                 <ArrowUp className="h-3.5 w-3.5" />
@@ -717,7 +714,7 @@ export function WelcomeView({
                 animate={{ opacity: 1, y: 0 }}
                 transition={{ duration: 0.2, delay: 0.14 + i * 0.04, ease: EASE_OUT_QUART }}
                 onClick={() => handleQuickPrompt(prompt)}
-                disabled={!selectedRepoId || sending}
+                disabled={!selectedRepoId || isSubmitting}
                 className={cn(
                   "border-border-subtle/60 text-text-muted rounded-lg border px-3 py-2 text-xs transition-colors duration-150",
                   "hover:border-border hover:bg-foreground/[0.03] hover:text-text-secondary",

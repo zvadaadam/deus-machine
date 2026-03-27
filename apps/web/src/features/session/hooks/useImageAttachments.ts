@@ -17,7 +17,7 @@ export interface ImageAttachment {
 
 /**
  * Shared image attachment state + handlers for any input that supports
- * pasting/dropping images. Used by both WelcomeView and MessageInput.
+ * pasting/dropping images. Used by both HomeView and MessageInput.
  *
  * Owns: attachment state, file processing (FileReader → base64 preview),
  * clipboard image extraction, and Anthropic content block building.

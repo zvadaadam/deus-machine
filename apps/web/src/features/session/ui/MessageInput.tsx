@@ -109,7 +109,7 @@ export const MessageInput = forwardRef<MessageInputRef, MessageInputProps>(funct
   },
   ref
 ) {
-  // Image attachments (shared hook with WelcomeView)
+  // Image attachments (shared hook with HomeView)
   const {
     attachments,
     processFiles,
