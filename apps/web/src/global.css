@@ -134,6 +134,12 @@
   --z-tooltip: var(--z-tooltip);
   --z-notification: var(--z-notification);
 
+  /* Easing curves — use via ease-out-quart, ease-out-expo, etc. */
+  --ease-out-quart: cubic-bezier(0.165, 0.84, 0.44, 1);
+  --ease-out-expo: cubic-bezier(0.16, 1, 0.3, 1);
+  --ease-out-cubic: cubic-bezier(0.215, 0.61, 0.355, 1);
+  --ease-in-out-cubic: cubic-bezier(0.645, 0.045, 0.355, 1);
+
   /* Font families — System native for UI and code */
   --font-sans:
     -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI", Roboto, Helvetica, Arial,
@@ -834,51 +840,225 @@
   }
 }
 
-/* Overlay: fades in from transparent to semi-opaque dark */
-@keyframes onboarding-overlay-fade-in {
-  from {
-    opacity: 0;
+/* ── Glitch swap effect (Deus ↔ Devs) ── */
+.glitch-swap {
+  position: relative;
+  display: inline-block;
+}
+
+.glitch-swap-alt {
+  position: absolute;
+  left: 0;
+  top: 0;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .glitch-swap {
+    animation: glitch-container 7s steps(1) infinite;
   }
-  to {
-    opacity: 1;
+
+  .glitch-swap-text {
+    display: inline-block;
+    animation: glitch-deus 7s steps(1) infinite;
+  }
+
+  .glitch-swap-alt {
+    display: inline-block;
+    opacity: 0;
+    animation: glitch-devs 7s steps(1) infinite;
   }
 }
 
-/* Exit: scrim fades out */
-@keyframes onboarding-exit-scrim {
-  0% {
-    opacity: 1;
+/* Container — gentle jitter flanking the swap */
+@keyframes glitch-container {
+  0%,
+  85% {
+    transform: none;
   }
-  40% {
-    opacity: 0.6;
+  86% {
+    transform: translate(1px, 0) skewX(-0.3deg);
+  }
+  87% {
+    transform: translate(-1px, 0);
+  }
+  88% {
+    transform: none;
+  }
+  92% {
+    transform: translate(1px, 0) skewX(0.3deg);
+  }
+  93% {
+    transform: none;
+  }
+  100% {
+    transform: none;
+  }
+}
+
+/* "Deus" — one clean hide/reveal around the swap */
+@keyframes glitch-deus {
+  0%,
+  85% {
+    opacity: 1;
+    text-shadow: none;
+  }
+  86% {
+    opacity: 1;
+    text-shadow:
+      -1px 0 oklch(0.9 0.05 210),
+      1px 0 oklch(0.85 0.06 15);
+  }
+  87% {
+    opacity: 0;
+  }
+  92% {
+    opacity: 1;
+    text-shadow: 1px 0 oklch(0.85 0.06 15);
+  }
+  93% {
+    opacity: 1;
+    text-shadow: none;
+  }
+  100% {
+    opacity: 1;
+    text-shadow: none;
+  }
+}
+
+/* "Devs" — single deliberate reveal (~350ms visible) */
+@keyframes glitch-devs {
+  0%,
+  86% {
+    opacity: 0;
+  }
+  87% {
+    opacity: 1;
+    text-shadow:
+      -1px 0 oklch(0.9 0.05 210),
+      1px 0 oklch(0.85 0.06 15);
+    transform: translate(-1px, 0);
+  }
+  92% {
+    opacity: 0;
+    transform: none;
   }
   100% {
     opacity: 0;
   }
 }
 
-/* Shimmer for indeterminate progress bar in onboarding clone step */
-@keyframes onboarding-shimmer {
-  0% {
-    transform: translateX(-100%);
+/* ── Hover-triggered glitch (plays burst immediately) ── */
+@media (prefers-reduced-motion: no-preference) and (hover: hover) and (pointer: fine) {
+  .glitch-swap:hover {
+    animation: glitch-container-hover 700ms steps(1) forwards;
   }
-  100% {
-    transform: translateX(400%);
+  .glitch-swap:hover .glitch-swap-text {
+    animation: glitch-deus-hover 700ms steps(1) forwards;
+  }
+  .glitch-swap:hover .glitch-swap-alt {
+    animation: glitch-devs-hover 700ms steps(1) forwards;
   }
 }
 
-/* Exit: card dissolves upward with blur */
-@keyframes onboarding-exit-card {
+@keyframes glitch-container-hover {
+  0% {
+    transform: none;
+  }
+  8% {
+    transform: translate(1px, 0) skewX(-0.3deg);
+  }
+  15% {
+    transform: translate(-1px, 0);
+  }
+  20% {
+    transform: none;
+  }
+  65% {
+    transform: translate(1px, 0) skewX(0.3deg);
+  }
+  72% {
+    transform: none;
+  }
+  100% {
+    transform: none;
+  }
+}
+
+@keyframes glitch-deus-hover {
   0% {
     opacity: 1;
-    transform: scale(1) translateY(0);
-    filter: blur(0);
+    text-shadow: none;
+  }
+  8% {
+    opacity: 1;
+    text-shadow:
+      -1px 0 oklch(0.9 0.05 210),
+      1px 0 oklch(0.85 0.06 15);
+  }
+  15% {
+    opacity: 0;
+  }
+  65% {
+    opacity: 1;
+    text-shadow: 1px 0 oklch(0.85 0.06 15);
+  }
+  72% {
+    opacity: 1;
+    text-shadow: none;
+  }
+  100% {
+    opacity: 1;
+    text-shadow: none;
+  }
+}
+
+@keyframes glitch-devs-hover {
+  0%,
+  12% {
+    opacity: 0;
+  }
+  15% {
+    opacity: 1;
+    text-shadow:
+      -1px 0 oklch(0.9 0.05 210),
+      1px 0 oklch(0.85 0.06 15);
+    transform: translate(-1px, 0);
+  }
+  65% {
+    opacity: 0;
+    transform: none;
   }
   100% {
     opacity: 0;
-    transform: scale(1.04) translateY(-12px);
-    filter: blur(8px);
   }
+}
+
+/* Programmatic glitch burst — triggered via .glitch-swap-burst class */
+.glitch-swap-burst {
+  animation: glitch-container-hover 600ms steps(1) forwards !important;
+}
+.glitch-swap-burst .glitch-swap-text {
+  animation: glitch-deus-hover 600ms steps(1) forwards !important;
+}
+.glitch-swap-burst .glitch-swap-alt {
+  animation: glitch-devs-hover 600ms steps(1) forwards !important;
+}
+
+/* Manifesto auto-scroll — slow upward crawl, loops seamlessly */
+@keyframes manifesto-crawl {
+  0% {
+    transform: translateY(0);
+  }
+  100% {
+    transform: translateY(-50%);
+  }
+}
+
+/* Film grain — SVG turbulence, tiled. Used on onboarding background. */
+.onboarding-grain {
+  background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='g'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23g)'/%3E%3C/svg%3E");
+  background-size: 200px 200px;
+  pointer-events: none;
 }
 
 :root {

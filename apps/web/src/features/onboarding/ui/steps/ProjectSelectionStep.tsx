@@ -35,13 +35,7 @@ export function ProjectSelectionStep({ onBack, onNext }: ProjectSelectionStepPro
     if (selectedPaths.size === 0) return;
     setImporting(true);
     try {
-      for (const path of selectedPaths) {
-        try {
-          await addRepoMutation.mutateAsync(path);
-        } catch {
-          // Skip repos that fail (e.g. already added)
-        }
-      }
+      await Promise.allSettled([...selectedPaths].map((p) => addRepoMutation.mutateAsync(p)));
       onNext();
     } finally {
       setImporting(false);
