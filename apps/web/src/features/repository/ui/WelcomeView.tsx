@@ -116,6 +116,7 @@ export function WelcomeView({
   const [message, setMessage] = useState("");
   const [model, setModel] = useState(getStoredModel);
   const [isDragging, setIsDragging] = useState(false);
+  const [isSubmitting, setIsSubmitting] = useState(false);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
   // Image attachments (shared hook with MessageInput)
@@ -246,14 +247,20 @@ export function WelcomeView({
 
   // ── Send ────────────────────────────────────────────────────────
   const hasContent = message.trim().length > 0 || attachments.length > 0;
-  const canSend = hasContent && !!selectedRepoId && !sending;
+  const canSend = hasContent && !!selectedRepoId && !sending && !isSubmitting;
 
-  const handleSend = useCallback(() => {
+  const handleSend = useCallback(async () => {
     if (!canSend || !selectedRepoId) return;
     const content = buildCombinedContent();
     if (!content) return;
-    onSendMessage(selectedRepoId, content, model, selectedBranch ?? undefined);
-    clearAttachments();
+    setIsSubmitting(true);
+    try {
+      onSendMessage(selectedRepoId, content, model, selectedBranch ?? undefined);
+      clearAttachments();
+      setMessage("");
+    } finally {
+      setIsSubmitting(false);
+    }
   }, [
     canSend,
     selectedRepoId,
@@ -262,6 +269,7 @@ export function WelcomeView({
     selectedBranch,
     onSendMessage,
     clearAttachments,
+    isSubmitting,
   ]);
 
   const handleKeyDown = useCallback(
@@ -344,11 +352,16 @@ export function WelcomeView({
           onDragOver={(e) => {
             e.preventDefault();
             e.stopPropagation();
+            if (!hasRepos || sending) return;
             if (!isDragging) setIsDragging(true);
           }}
           onDragLeave={(e) => {
             e.preventDefault();
             e.stopPropagation();
+            if (!hasRepos || sending) {
+              setIsDragging(false);
+              return;
+            }
             // Only dismiss when cursor truly leaves the card bounds
             const rect = e.currentTarget.getBoundingClientRect();
             if (
@@ -364,6 +377,7 @@ export function WelcomeView({
             e.preventDefault();
             e.stopPropagation();
             setIsDragging(false);
+            if (!hasRepos || sending) return;
             const files = Array.from(e.dataTransfer.files);
             if (files.length > 0) processFiles(files);
           }}
@@ -574,6 +588,7 @@ export function WelcomeView({
               hasRepos ? "Describe what you'd like to do..." : "Add a project to get started"
             }
             disabled={!hasRepos || sending}
+            aria-label="Message to start a new workspace"
             autoCorrect="off"
             autoCapitalize="off"
             spellCheck={false}

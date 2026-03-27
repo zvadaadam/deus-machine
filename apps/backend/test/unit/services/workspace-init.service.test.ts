@@ -194,7 +194,7 @@ describe("initializeWorkspace", () => {
       .map((c: string[]) => c[0]);
 
     // Should update init_stage for worktree, session, dependencies, hooks, git-clean, done = 6
-    expect(initStageUpdates.length).toBeGreaterThanOrEqual(5);
+    expect(initStageUpdates.length).toBeGreaterThanOrEqual(6);
   });
 
   it("uses correct worktreeBase for branching", async () => {

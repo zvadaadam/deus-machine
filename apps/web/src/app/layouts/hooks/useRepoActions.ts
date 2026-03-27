@@ -164,15 +164,20 @@ export function useRepoActions({
       let cloneTarget = targetPath;
       if (!cloneTarget) {
         const home = await native.dialog.getHomeDir();
+        if (isStale()) return;
         cloneTarget = `${home}/Developer/${repoName}`;
       } else if (!targetPath.endsWith(repoName) && !targetPath.endsWith(`${repoName}/`)) {
         cloneTarget = `${targetPath}/${repoName}`;
       }
 
       // Ensure WS is connected before starting
-      if (!isConnected()) await connect();
+      if (!isConnected()) {
+        await connect();
+        if (isStale()) return;
+      }
 
       // Phase 1: Git clone via WS command (5min timeout — large repos take a while)
+      if (isStale()) return;
       const cloneAck = await sendCommand(
         "git:clone",
         { url: githubUrl, targetPath: cloneTarget },
