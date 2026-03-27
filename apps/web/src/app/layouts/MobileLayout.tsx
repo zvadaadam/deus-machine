@@ -152,7 +152,7 @@ export function MobileLayout({
             <p className="text-text-muted text-sm">No file changes yet</p>
           </div>
         ) : (
-          <div className="absolute inset-0 overflow-y-auto">
+          <div className="absolute inset-0 overflow-x-hidden overflow-y-auto px-2 pt-2">
             <AllFilesDiffViewer workspaceId={workspace.id} fileChanges={fileChanges} hideHeader />
           </div>
         )}
