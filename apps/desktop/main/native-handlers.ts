@@ -215,41 +215,6 @@ export function registerNativeHandlers(): void {
     }
   });
 
-  // Also register the snake_case aliases the preload named methods use
-  ipcMain.handle("native:showMainWindow", () => {
-    const win = BrowserWindow.getFocusedWindow() ?? BrowserWindow.getAllWindows()[0];
-    if (win) {
-      if (process.platform === "darwin") {
-        win.setVibrancy("under-window");
-      }
-      win.setBackgroundColor("#1a1a1a");
-      win.show();
-      win.focus();
-    }
-  });
-
-  ipcMain.handle("native:enterOnboardingMode", () => {
-    const win = BrowserWindow.getAllWindows()[0];
-    if (win) {
-      win.setBackgroundColor("#0e0e10");
-      win.setSize(660, 580);
-      win.center();
-      win.show();
-    }
-  });
-
-  ipcMain.handle("native:exitOnboardingMode", () => {
-    const win = BrowserWindow.getAllWindows()[0];
-    if (win) {
-      if (process.platform === "darwin") {
-        win.setVibrancy("under-window");
-      }
-      win.setBackgroundColor("#1a1a1a");
-      win.setSize(1400, 900, true);
-      win.center();
-    }
-  });
-
   // -------------------------------------------------------------------------
   // CLI tool checks
   // -------------------------------------------------------------------------

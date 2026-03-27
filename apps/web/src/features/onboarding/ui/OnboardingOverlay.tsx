@@ -16,7 +16,7 @@ const STEP_NAMES = ["welcome", "github", "ai-tools", "project-selection", "finis
 
 /** Full-screen onboarding view — dark, grain-textured, CLI-inspired. */
 export function OnboardingOverlay() {
-  const settingsQuery = useSettings();
+  const { refetch } = useSettings();
 
   const [currentStep, setCurrentStep] = useState<OnboardingStep>(0);
   const [animClass, setAnimClass] = useState("");
@@ -38,9 +38,9 @@ export function OnboardingOverlay() {
 
   useEffect(() => {
     if (!exiting) return;
-    const timer = setTimeout(() => settingsQuery.refetch(), 600);
+    const timer = setTimeout(() => void refetch(), 600);
     return () => clearTimeout(timer);
-  }, [exiting, settingsQuery]);
+  }, [exiting, refetch]);
 
   const goForward = useCallback(() => {
     if (animating) return;
