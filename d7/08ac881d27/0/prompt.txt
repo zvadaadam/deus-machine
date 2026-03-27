@@ -1879,3 +1879,7 @@ This comment was left on the modified branch.
 ---
 
 Maybe in general, like the welcome screen, welcome view, should it be like a, like a, I don't know, something like a home or new message or initial view, I don't know, maybe home we were gonna call it, what do you think? And yeah, maybe like the welcome sending, I don't think this is good. ,"Is creating, I'm not sure if it's good either." Or maybe like think about this flow and what it should be maybe that it should be done differently.
+
+---
+
+do it
