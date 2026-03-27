@@ -51,7 +51,7 @@ export function HeaderRunButton({
             type="button"
             onClick={onSetupEnvironment}
             aria-label="Set up your environment"
-            className="text-text-disabled hover:text-text-muted border-border-strong flex h-7 w-7 items-center justify-center rounded-lg border transition-colors duration-200"
+            className="text-text-disabled hover:text-text-muted hover:bg-bg-muted flex h-7 w-7 items-center justify-center rounded-lg transition-colors duration-200"
           >
             <Wrench className="h-3 w-3" />
           </button>
