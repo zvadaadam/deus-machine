@@ -9,7 +9,7 @@
 export type { FileTreeNode, FileTreeResponse } from "./types";
 
 // API Hooks
-export { useFiles, invalidateFileCache, useClearFileCache, useFileContent } from "./api";
+export { useFiles, invalidateFileCache, useFileContent } from "./api";
 
 // UI Components
 export { FileBrowserPanel, FileViewer, FileTree } from "./ui";

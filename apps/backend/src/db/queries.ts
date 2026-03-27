@@ -301,22 +301,6 @@ export function hasNewerMessages(db: Database.Database, sessionId: string, seq: 
     .get(sessionId, seq);
 }
 
-export function getLastAssistantAgentMessageId(
-  db: Database.Database,
-  sessionId: string
-): string | null {
-  const row = db
-    .prepare(
-      `
-    SELECT agent_message_id FROM messages
-    WHERE session_id = ? AND role = 'assistant' AND agent_message_id IS NOT NULL
-    ORDER BY id DESC LIMIT 1
-  `
-    )
-    .get(sessionId) as { agent_message_id: string } | undefined;
-  return row?.agent_message_id ?? null;
-}
-
 export function getMessageById(db: Database.Database, id: string): MessageRow | undefined {
   return db.prepare("SELECT * FROM messages WHERE id = ?").get(id) as MessageRow | undefined;
 }
