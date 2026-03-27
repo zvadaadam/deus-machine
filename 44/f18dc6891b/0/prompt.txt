@@ -1,0 +1,1 @@
+on a mobiro phone if i styoe into the message input in the session i think that i neeed to make srie that when i click return it just does a new line and doesnt send the messge to send we message we need to kust hi the send button in the mesage input, wdyt? how to axhive that or do u feel thsi is wrong patterns?
