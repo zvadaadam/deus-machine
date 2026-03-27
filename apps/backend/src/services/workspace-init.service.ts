@@ -167,14 +167,27 @@ const STAGES: InitStage[] = [
       const db = getDatabase();
       const sessionId = uuidv7();
 
-      db.transaction(() => {
+      const runTx = db.transaction(() => {
         db.prepare(
           "INSERT INTO sessions (id, workspace_id, status, updated_at) VALUES (?, ?, 'idle', datetime('now'))"
         ).run(sessionId, ctx.workspaceId);
         db.prepare(
           "UPDATE workspaces SET state = 'ready', current_session_id = ? WHERE id = ?"
         ).run(sessionId, ctx.workspaceId);
-      })();
+      });
+
+      // Bounded retry for transient SQLITE_BUSY (WAL lock contention under
+      // concurrent workspace creation). This stage is fatal — tolerate brief locks.
+      for (let attempt = 0; ; attempt++) {
+        try {
+          runTx();
+          break;
+        } catch (err) {
+          const msg = err instanceof Error ? err.message : String(err);
+          if (!msg.includes("SQLITE_BUSY") || attempt >= 2) throw err;
+          await new Promise((r) => setTimeout(r, 50 * 2 ** attempt));
+        }
+      }
 
       // Push state change immediately so frontend picks up session + ready state
       invalidate(["workspaces", "stats", "sessions"]);
@@ -298,8 +311,13 @@ export async function initializeWorkspace(ctx: InitContext): Promise<void> {
     }
   }
 
-  // Mark init pipeline as fully complete (deps, hooks, git-clean all done)
-  updateInitStage(ctx.workspaceId, "done");
+  // Mark init pipeline as fully complete (deps, hooks, git-clean all done).
+  // Wrapped in try/catch so a DB lock can't block final progress signaling.
+  try {
+    updateInitStage(ctx.workspaceId, "done");
+  } catch (err) {
+    console.warn(`[WORKSPACE] Failed to update init_stage to done for ${ctx.workspaceId}:`, err);
+  }
   emitProgress(ctx.workspaceId, "done", "Ready");
 
   // Background stages finished — push final state to all connected clients.
