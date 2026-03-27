@@ -1,5 +1,6 @@
 import type { SessionStatus } from "@/shared/types";
 import { useState, forwardRef, useImperativeHandle } from "react";
+import { useIsMobile } from "@/shared/hooks/use-mobile";
 import { AnimatePresence, motion } from "framer-motion";
 import { Minimize2, ArrowUp, Square, Wrench } from "lucide-react";
 import { useFileMention } from "../hooks/useFileMention";
@@ -109,6 +110,8 @@ export const MessageInput = forwardRef<MessageInputRef, MessageInputProps>(funct
   },
   ref
 ) {
+  const isMobile = useIsMobile();
+
   // Image attachments (shared hook with HomeView)
   const {
     attachments,
@@ -206,7 +209,8 @@ export const MessageInput = forwardRef<MessageInputRef, MessageInputProps>(funct
   });
 
   // Keyboard shortcut — file mention gets first pass for arrow/enter/escape
-  // Enter sends, Shift+Enter inserts newline (standard chat UX)
+  // Desktop: Enter sends, Shift+Enter inserts newline
+  // Mobile: Enter inserts newline, send button sends (standard mobile UX)
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
     // Let file mention popover handle navigation keys first
     if (fileMention.handleKeyDown(e)) {
@@ -216,6 +220,7 @@ export const MessageInput = forwardRef<MessageInputRef, MessageInputProps>(funct
 
     if (
       e.key === "Enter" &&
+      !isMobile &&
       !e.shiftKey &&
       !e.metaKey &&
       !e.ctrlKey &&
