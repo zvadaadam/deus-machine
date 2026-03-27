@@ -1,0 +1,36 @@
+{
+  "cli_version": "0.5.0",
+  "checkpoint_id": "90943c35bcba",
+  "session_id": "baeaac34-0d3f-494f-a61f-c5b3d581117e",
+  "strategy": "manual-commit",
+  "created_at": "2026-03-27T00:11:09.098473Z",
+  "branch": "zvadaadam/explore-onboarding-ui",
+  "checkpoints_count": 2,
+  "files_touched": [
+    "apps/desktop/main/native-handlers.ts",
+    "apps/desktop/preload/index.ts",
+    "apps/web/src/features/onboarding/ui/OnboardingOverlay.tsx",
+    "apps/web/src/features/onboarding/ui/steps/WelcomeStep.tsx"
+  ],
+  "agent": "Claude Code",
+  "turn_id": "e86844fb1837",
+  "token_usage": {
+    "input_tokens": 3618,
+    "cache_creation_tokens": 451575,
+    "cache_read_tokens": 27422472,
+    "output_tokens": 116456,
+    "api_call_count": 290
+  },
+  "session_metrics": {
+    "turn_count": 55
+  },
+  "initial_attribution": {
+    "calculated_at": "2026-03-27T00:11:08.073342Z",
+    "agent_lines": 0,
+    "human_added": 0,
+    "human_modified": 10,
+    "human_removed": 31,
+    "total_committed": 0,
+    "agent_percentage": 0
+  }
+}
