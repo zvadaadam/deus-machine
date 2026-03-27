@@ -161,24 +161,20 @@ export function MainLayout() {
     closeNewWorkspaceModal,
   });
 
-  // --- Welcome screen send flow ---
-  // When the user sends a message from the welcome screen, we:
+  // --- Home screen send flow ---
+  // When the user sends a message from the home screen, we:
   // 1. Create a workspace for the selected repo
   // 2. Select it (transitions to two-panel layout)
   // 3. Queue the message to be sent once the workspace has a session
   const welcomeCreateMutation = useCreateWorkspace();
-  const [welcomeSending, setWelcomeSending] = useState(false);
   const pendingWelcomeMessageRef = useRef<{
     message: string;
     workspaceId: string;
     model: string;
   } | null>(null);
 
-  const handleSendFromWelcome = useCallback(
+  const handleStartWorkspace = useCallback(
     async (repoId: string, message: string, model: string, branch?: string) => {
-      if (welcomeSending) return;
-      setWelcomeSending(true);
-
       try {
         const workspace = await welcomeCreateMutation.mutateAsync(
           branch ? { repositoryId: repoId, source_branch: branch } : repoId
@@ -192,14 +188,12 @@ export function MainLayout() {
         selectWorkspace(workspace.id);
         expandRepo(workspace.repository_id);
       } catch (error) {
-        console.error("Failed to create workspace from welcome:", error);
+        console.error("Failed to create workspace from home:", error);
         toast.error(getErrorMessage(error));
         pendingWelcomeMessageRef.current = null;
-      } finally {
-        setWelcomeSending(false);
       }
     },
-    [welcomeSending, welcomeCreateMutation, selectWorkspace, expandRepo]
+    [welcomeCreateMutation, selectWorkspace, expandRepo]
   );
 
   // Effect: when the pending workspace becomes ready with a session, send the queued message.
@@ -475,8 +469,7 @@ export function MainLayout() {
           onOpenProject={repoActions.handleOpenProject}
           onCloneRepository={() => repoActions.setShowCloneModal(true)}
           repos={repos}
-          onSendFromWelcome={handleSendFromWelcome}
-          welcomeSending={welcomeSending}
+          onStartWorkspace={handleStartWorkspace}
         />
       )}
 
