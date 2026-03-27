@@ -3,7 +3,7 @@
   "checkpoint_id": "90943c35bcba",
   "strategy": "manual-commit",
   "branch": "zvadaadam/explore-onboarding-ui",
-  "checkpoints_count": 2,
+  "checkpoints_count": 3,
   "files_touched": [
     "apps/desktop/main/native-handlers.ts",
     "apps/desktop/preload/index.ts",
@@ -16,13 +16,19 @@
       "transcript": "/90/943c35bcba/0/full.jsonl",
       "content_hash": "/90/943c35bcba/0/content_hash.txt",
       "prompt": "/90/943c35bcba/0/prompt.txt"
+    },
+    {
+      "metadata": "/90/943c35bcba/1/metadata.json",
+      "transcript": "/90/943c35bcba/1/full.jsonl",
+      "content_hash": "/90/943c35bcba/1/content_hash.txt",
+      "prompt": "/90/943c35bcba/1/prompt.txt"
     }
   ],
   "token_usage": {
-    "input_tokens": 3618,
-    "cache_creation_tokens": 451575,
-    "cache_read_tokens": 27422472,
-    "output_tokens": 116456,
-    "api_call_count": 290
+    "input_tokens": 3684,
+    "cache_creation_tokens": 664057,
+    "cache_read_tokens": 30538956,
+    "output_tokens": 161850,
+    "api_call_count": 335
   }
 }
