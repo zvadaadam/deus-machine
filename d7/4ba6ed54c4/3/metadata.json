@@ -1,0 +1,51 @@
+{
+  "cli_version": "0.5.0",
+  "checkpoint_id": "d74ba6ed54c4",
+  "session_id": "d3d53468-6f8a-422b-aee3-e9655511560a",
+  "strategy": "manual-commit",
+  "created_at": "2026-03-27T18:47:03.727942Z",
+  "branch": "zvadaadam/update-welcome-screen",
+  "checkpoints_count": 7,
+  "files_touched": [
+    "apps/backend/src/routes/repos.ts",
+    "apps/backend/src/services/agent/commands.ts",
+    "apps/backend/test/unit/shared/events.test.ts",
+    "apps/web/src/app/layouts/MainContent.tsx",
+    "apps/web/src/app/layouts/MainLayout.tsx",
+    "apps/web/src/app/layouts/MobileLayout.tsx",
+    "apps/web/src/app/layouts/MobilePRBar.tsx",
+    "apps/web/src/app/layouts/hooks/useRepoActions.ts",
+    "apps/web/src/features/repository/ui/CloneRepositoryModal.tsx",
+    "apps/web/src/features/repository/ui/WelcomeView.tsx",
+    "apps/web/src/features/sidebar/model/types.ts",
+    "apps/web/src/features/sidebar/ui/AppSidebar.tsx",
+    "apps/web/src/features/sidebar/ui/SidebarHeader.tsx",
+    "apps/web/src/features/workspace/api/workspace.queries.ts",
+    "apps/web/src/features/workspace/ui/BranchSelector.tsx",
+    "apps/web/src/features/workspace/ui/PRActions.tsx",
+    "apps/web/src/platform/ws/query-protocol-client.ts",
+    "shared/events.ts",
+    "shared/types/github.ts"
+  ],
+  "agent": "Claude Code",
+  "turn_id": "493b631ef8b8",
+  "token_usage": {
+    "input_tokens": 115,
+    "cache_creation_tokens": 186882,
+    "cache_read_tokens": 12563799,
+    "output_tokens": 37580,
+    "api_call_count": 97
+  },
+  "session_metrics": {
+    "turn_count": 7
+  },
+  "initial_attribution": {
+    "calculated_at": "2026-03-27T18:47:03.406326Z",
+    "agent_lines": 1076,
+    "human_added": 256,
+    "human_modified": 67,
+    "human_removed": 0,
+    "total_committed": 1399,
+    "agent_percentage": 76.9120800571837
+  }
+}

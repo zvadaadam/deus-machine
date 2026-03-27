@@ -1,0 +1,397 @@
+<system_instruction>
+You are working inside OpenDevs, a Mac app that lets the user run many coding agents in parallel.
+Your work should take place in the /Users/zvada/Developer/agent/box-ide/.conductor/dubai-v2 directory (unless otherwise directed), which has been set up for you to work in.
+Each workspace has a .context directory (gitignored) where you can save files to collaborate with other agents.
+DO NOT EVER read or write files at /Users/zvada/Developer/agent/box-ide.
+The target branch for this workspace is main. Use this for actions like creating new PRs, bisecting, etc., unless you're told otherwise.
+
+By default, the user will only see the last message that you send before stopping. Include all essential information in the last message. The intermediate messages will be collapsed and accessible by the user but not displayed by default.
+
+If the user asks you to work on several unrelated tasks, you can suggest they start new workspaces.
+Sometimes the user might send you a message they meant to send in a different workspace or a different chat. If something doesn't make sense in the context of your work, just ask. 
+If the user asks for help with OpenDevs, you can ask them to go to "Help -> Send Feedback" to get in touch with our team.
+</system_instruction>
+
+/Users/zvada/Developer/agent/box-ide/.conductor/dubai-v2/.context/attachments/pasted_text_2026-03-27_16-40-21.txt /Users/zvada/Developer/agent/box-ide/.conductor/dubai-v2/.context/attachments/Screenshot 2026-03-27 at 4.40.24 PM.png sill getting erro clonign repo
+
+---
+
+/Users/zvada/Developer/agent/box-ide/.conductor/dubai-v2/.context/attachments/Screenshot 2026-03-27 at 5.08.13 PM.png I just see this thing like when I edit the repo, like it says only like connecting and then actually it worked and cloned repo, but like I don't see the progress. I think we can simplify and just like show the last three, three lines of the thing, if we would run it in a terminal, right? Of the progress that would be probably the best, then we can like very simplifies things in the in the git clone. Look at it how it now works and like think about how to do it like the most easiest but like show the proof of work that this is happening.
+
+---
+
+/Users/zvada/Developer/agent/box-ide/.conductor/dubai-v2/.context/attachments/pasted_text_2026-03-27_17-22-07.txt I saw it was just saying like connecting. I'm not sure like maybe it was that that's that fast like I thought that maybe the repo was already cloned there so we reused it or what do you think?
+
+
+So I tried it once again and I actually showed like adding lines something but like then the web sockets got not connected. I gave you some like logs and screenshots.
+
+
+/Users/zvada/Developer/agent/box-ide/.conductor/dubai-v2/.context/attachments/pasted_text_2026-03-27_17-23-28.txt /Users/zvada/Developer/agent/box-ide/.conductor/dubai-v2/.context/attachments/Screenshot 2026-03-27 at 5.23.31 PM.png
+
+---
+
+But when you think about it, like, if we're gonna do it in a web, and this will work with, you know, like, if we use the HTTP endpoint, will it work when we are gonna be in the web state and we're gonna be communicating with the web socket?
+
+---
+
+But we need the clone, it needs to be also remote, support remote, so yeah, make sure it is.
+
+
+Also, I can see that the websockets are having this issue, like the websockets are not connected, but like the backend is running, why do we have these problems? Also, when I'm in the welcome page, please explore.
+
+
+628533012:405)
+[renderer:warn] [WS] Dropped q:request frame: WebSocket not connected (query-protocol-client.ts?t=1774628533012:405)
+[renderer:warn] [WS] Dropped q:request frame: WebSocket not connected (query-protocol-client.ts?t=1774628533012:405)
+[renderer:warn] [WS] Dropped q:request frame: WebSocket not connected (query-protocol-client.ts?t=1774628533012:405)
+[renderer:warn] [WS] Dropped q:request frame: WebSocket not connected (query-protocol-client.ts?t=1774628533012:405)
+[renderer:warn] [WS] Dropped q:request frame: WebSocket not connected (query-protocol-client.ts?t=1774628533012:405)
+[renderer:warn] [WS] Dropped q:request frame: WebSocket not connected (query-protocol-client.ts?t=1774628533012:405)
+[renderer:warn] [WS] Dropped q:request frame: WebSocket not connected (query-protocol-client.ts?t=1774628533012:405)
+[renderer:warn] [WS] Dropped q:mutate frame: WebSocket not connected (query-protocol-client.ts?t=1774628533012:405)
+[renderer:error] [useChatTabs] Failed to create new session: Error: WebSocket not connected (useChatTabs.ts?t=1774628533012:206)
+[renderer:warn] [WS] Dropped q:request frame: WebSocket not connected (query-protocol-client.ts?t=1774628533012:405)
+[renderer:warn] [WS] Dropped q:request frame: WebSocket not connected (query-protocol-client.ts?t=1774628533012:405)
+[renderer:warn] [WS] Dropped q:request frame: WebSocket not connected (query-protocol-client.ts?t=1774628533012:405)
+[renderer:warn] [WS] Dropped q:request frame: WebSocket not connected (query-protocol-client.ts?t=1774628533012:405)
+[renderer:warn] [WS] Dropped q:request frame: WebSocket not connected (query-protocol-client.ts?t=1774628533012:405)
+[renderer:warn] [WS] Dropped q:request frame: WebSocket not connected (query-protocol-client.ts?t=1774628533012:405)
+[renderer:warn] [WS] Dropped q:request frame: WebSocket not connected (query-protocol-client.ts?t=1774628533012:405)
+[renderer:warn] [WS] Dropped q:request frame: WebSocket not connected (query-protocol-client.ts?t=1774628533012:405)
+[renderer:warn] [WS] Dropped q:request frame: WebSocket not connected (query-protocol-client.ts?t=1774628533012:405)
+[renderer:warn] [WS] Dropped q:request frame: WebSocket not connected (query-protocol-client.ts?t=1774628533012:405)
+[backend] [AgentEvent] session.started: session=019d300c-d6c3-75da-a188-e042796ec131 agent=claude
+[renderer] [DesktopShell] mount -- auth: [object Object] (DesktopShell.tsx?t=1774627803529:55)
+[renderer] [DesktopShell] mount -- settings: [object Object] (DesktopShell.tsx?t=1774627803529:59)
+[backend] [AgentEvent] message.assistant: session=019d300c-d6c3-75da-a188-e042796ec131 REDACTED
+[backend] [AgentEvent] message.result: session=019d300c-d6c3-75da-a188-e042796ec131 subtype=success
+[backend] [AgentEvent] session.idle: session=019d300c-d6c3-75da-a188-e042796ec131
+
+---
+
+<task-notification>
+<task-id>a16193b088fddf50e</task-id>
+<tool-use-id>toolu_01UUsioWFE26wjoBr3igkZwt</tool-use-id>
+<output-file>/private/tmp/claude-501/-Users-zvada-Developer-agent-box-ide--conductor-dubai-v2/d3d53468-6f8a-422b-aee3-e9655511560a/tasks/a16193b088fddf50e.output</output-file>
+<status>completed</status>
+<summary>Agent "Investigate WS disconnection bug" completed</summary>
+<result>Perfect! Now I have all the information I need. Let me write up my findings:
+
+## Summary: WebSocket Connection Lifecycle and HMR Disconnection Issue
+
+I've traced the WebSocket connection flow in your app and identified the root cause of the `[WS] Dropped q:request frame: WebSocket not connected` floods after Vite HMR reloads.
+
+### **Current Connection Initialization Flow**
+
+**Entry points (in order of execution):**
+
+1. **`apps/web/src/app/main.tsx`** — ReactDOM mounts the app
+2. **`apps/web/src/app/App.tsx`** — Routes to `DesktopShell` (desktop) or `RouterProvider` (web)
+3. **`apps/web/src/app/shells/DesktopShell.tsx`** — Top-level Electron shell component
+4. **`apps/web/src/app/layouts/MainLayout.tsx`** (line 363) — Calls `useConnectionStateInit()` 
+5. **`apps/web/src/features/connection/hooks/useConnectionStateInit.ts`** — Subscribes to WS connection state changes
+6. **`apps/web/src/shared/hooks/useQueryProtocol.ts`** — Calls `connect(serverId)` on mount (lines 27-32)
+
+### **The WebSocket Singleton Architecture**
+
+The WS client is a **module-level singleton** in `/apps/web/src/platform/ws/query-protocol-client.ts` (lines 64-97):
+
+```
+let ws: WebSocket | null = null;
+let connected = false;
+let connecting = false;
+let reconnectAttempt = 0;
+let reconnectTimer: ReturnType<typeof setTimeout> | null = null;
+const subscriptions = new Map<string, Subscription>();
+const pendingCommands = new Map<string, PendingCommand>();
+const pendingRequests = new Map<string, PendingRequest>();
+const pendingMutations = new Map<string, PendingMutation>();
+const eventListeners = new Set<EventCallback>();
+const connectionChangeListeners = new Set<(connected: boolean) => void>();
+```
+
+### **What Happens on Vite HMR Reload**
+
+Here's the critical issue:
+
+1. **Vite HMR triggers** — JavaScript modules are reloaded
+2. **Module state is preserved** — The singleton module-level variables (`ws`, `connected`, `subscriptions`, etc.) in `query-protocol-client.ts` are **NOT reset** because the module file itself doesn't change
+3. **However, React component re-mount occurs** — `useConnectionStateInit()` and `useQueryProtocol()` run again
+4. **Race condition in connection logic:**
+   - Line 114: `if (connected) return;` — if `connected === true` from the old socket, `connect()` is a no-op
+   - But the old WebSocket might be **stale** (socket reference closed by Vite's module reloader, or browser garbage collected)
+   - Line 162-169: `subscribe()` checks `if (connected && ws)` — if `ws` is null or stale, frames silently fail
+5. **The "Dropped q:request frame" logs appear** (line 666) because `sendFrame()` returns false when the stale socket is checked at line 656:
+   ```
+   if (ws && ws.readyState === WebSocket.OPEN)
+   ```
+   A stale WebSocket has `readyState !== OPEN`, so the check fails.
+
+### **Why It Stays Stuck**
+
+The reconnection backoff in `scheduleReconnect()` only triggers if:
+- Line 638: `wasConnected || subscriptions.size > 0` — was previously connected OR has active subs
+
+But if subscriptions were registered BEFORE the HMR reload and the `subscriptions` Map is preserved, the condition is true. However:
+- The old `ws` reference is stale
+- `forceReconnect()` tries to close it (line 357-358), but there's no guarantee the close succeeds
+- `onclose` handler won't fire on a dead socket, so `scheduleReconnect()` may not trigger
+
+### **Key Vulnerable Code Paths**
+
+**1. `useQueryProtocol()` doesn't force reconnect on HMR:**
+```tsx
+// apps/web/src/shared/hooks/useQueryProtocol.ts, lines 19-25
+if (prevServerIdRef.current !== undefined && prevServerIdRef.current !== serverId) {
+  forceReconnect();
+}
+prevServerIdRef.current = serverId;
+// ❌ NO CHECK for stale socket on same serverId!
+```
+
+When `serverId` doesn't change (normal dev), `forceReconnect()` is never called.
+
+**2. `connect()` is a no-op if `connected === true`:**
+```tsx
+// query-protocol-client.ts, lines 113-115
+export async function connect(serverId?: string): Promise<void> {
+  if (connected) return;  // ❌ Doesn't verify ws is still alive!
+  // ...
+}
+```
+
+**3. `subscribe()` silently fails if ws is stale:**
+```tsx
+// query-protocol-client.ts, lines 162-169
+if (connected && ws) {
+  sendFrame({...});
+}
+// ❌ No reconnect trigger; subscription just waits silently
+```
+
+### **Why The Logs Show "WebSocket not connected"**
+
+The message comes from line 666 in `query-protocol-client.ts`:
+```tsx
+console.warn(`[WS] Dropped ${frame.type} frame: WebSocket not connected`);
+```
+
+This fires when `sendFrame()` is called but `ws.readyState !== WebSocket.OPEN`. The app attempts to send frames, but the stale socket blocks them.
+
+### **The State Machine Path During HMR**
+
+```
+Before HMR:  connected=true, ws=<WebSocket OPEN>, subscriptions={...}
+HMR Reload:  modules reloaded, React components remount
+After HMR:   connected=true (preserved), ws=<stale/dead>, subscriptions={...} (preserved)
+             useQueryProtocol() calls connect() → no-op (connected === true)
+             useConnectionStateInit() sees connected=true → no update
+             First sendFrame() call → readyState !== OPEN → logs warning
+```
+
+The connection store in `connectionStore.ts` is **Zustand state** (separate from the singleton), so it has its own lifecycle and may not sync with the actual WS state after HMR.
+
+### **Files Involved in the Issue**
+
+- **`/Users/zvada/Developer/agent/box-ide/.conductor/dubai-v2/apps/web/src/platform/ws/query-protocol-client.ts`** — Singleton WS client, no HMR cleanup
+- **`/Users/zvada/Developer/agent/box-ide/.conductor/dubai-v2/apps/web/src/shared/hooks/useQueryProtocol.ts`** — No force-reconnect on HMR
+- **`/Users/zvada/Developer/agent/box-ide/.conductor/dubai-v2/apps/web/src/features/connection/hooks/useConnectionStateInit.ts`** — Only subscribes to connection changes, doesn't force reconnect
+- **`/Users/zvada/Developer/agent/box-ide/.conductor/dubai-v2/apps/web/src/features/connection/store/connectionStore.ts`** — State machine, but can't see stale socket state
+
+The root cause is **no mechanism to detect stale WS reference after HMR and trigger reconnection**.</result>
+<usage><total_tokens>77262</total_tokens><tool_uses>27</tool_uses><duration_ms>53511</duration_ms></usage>
+</task-notification>
+Full transcript available at: /private/tmp/claude-501/-Users-zvada-Developer-agent-box-ide--conductor-dubai-v2/d3d53468-6f8a-422b-aee3-e9655511560a/tasks/a16193b088fddf50e.output
+
+---
+
+<task-notification>
+<task-id>af522c0f33d99d3f8</task-id>
+<tool-use-id>REDACTED</tool-use-id>
+<output-file>/private/tmp/claude-501/-Users-zvada-Developer-agent-box-ide--conductor-dubai-v2/d3d53468-6f8a-422b-aee3-e9655511560a/tasks/af522c0f33d99d3f8.output</output-file>
+<status>completed</status>
+<summary>Agent "Explore WS command infrastructure" completed</summary>
+<result>Excellent! Now I have the complete picture. Let me create a comprehensive summary document.
+
+## WS Command Infrastructure Research Summary
+
+I've thoroughly researched the WebSocket command infrastructure in the codebase. Here's what I found:
+
+### Core Architecture
+
+**Frame Flow:**
+```
+Client sends q:command frame
+  ↓
+app.ts (WS route) → handleProtocolMessage()
+  ↓
+ws.service.ts → routes to onQueryFrame() handler
+  ↓
+query-engine.ts → handleFrame() → handleCommand()
+  ↓
+agent/commands.ts → runCommand() → handlers
+```
+
+### Key Files and Their Roles
+
+**1. `/shared/events.ts` — Event Catalog (Single Source of Truth)**
+- Line 116-134: `COMMAND_NAMES` array defines all valid command names
+- `git:clone` is already listed (line 128)
+- Commands are typed as `CommandName`
+- Changes here are shared between frontend and backend
+
+**2. `/shared/types/query-protocol.ts` — Wire Format**
+- Defines `QCommandFrame` interface (lines 59-64):
+  ```typescript
+  interface QCommandFrame {
+    type: "q:command";
+    id: string;
+    command: CommandName;
+    params: Record<string, unknown>;
+  }
+  ```
+- Also defines response frame: `QCommandAckFrame` (lines 134-140)
+
+**3. `/apps/backend/src/services/query-engine.ts` — Command Dispatch Layer**
+- Line 91-130: `handleFrame()` is the entry point for all protocol frames
+- Line 108-110: `q:command` frames are dispatched to `handleCommand()`
+- Line 349-368: `handleCommand()` function:
+  - Parses command frame
+  - Calls `runCommand()` from agent/commands.ts (line 353)
+  - Sends `q:command_ack` response with result
+- Line 863-878: Validation helpers (`parseCommandFrame`, `toCommandName`)
+
+**4. `/apps/backend/src/services/agent/commands.ts` — Command Handlers**
+- Line 35-139: `runCommand()` function — exhaustive match on CommandName
+- Lines 99-103: Current `git:clone` handler:
+  ```typescript
+  .with("git:clone", () => {
+    throw new Error("git:clone is not available as a WS command — use POST /api/repos instead");
+  })
+  ```
+- **Pattern for adding a handler:**
+  1. Validate and extract typed params using `readString()` / `readNumber()` helpers (lines 271-279)
+  2. Call business logic (PTY, FS watcher, or route delegation)
+  3. Return `CommandResult` (lines 29-31) — optionally include `commandId`
+  4. Mutations/invalidations happen in the business logic, not the command handler
+
+**5. `/apps/backend/src/routes/repos.ts` — Actual git:clone Implementation**
+- Lines 124-185: `POST /api/repos/clone` endpoint (HTTP, not WS)
+- **Why HTTP instead of WS command:**
+  - Long-running operation (can take minutes)
+  - Streams stderr progress to all connected clients via `broadcast()`
+  - Uses `spawn("git", ["clone", "--progress", url, targetPath])`
+  - Pushes progress events: `q:event { event: "git-clone-progress", data: { line } }` (line 121)
+- Frontend can poll git-clone-progress via Electron IPC or WS event subscription
+
+### Protocol Handler Registration
+
+**In `/apps/backend/src/services/relay.service.ts` (lines 21-99):**
+```typescript
+setProtocolHandlers({
+  onQueryFrame: handleQueryFrame, // from query-engine
+});
+```
+This single registration happens at module load and routes ALL `q:*` frames to the query engine. No per-command registration needed.
+
+### Message Flow for a WS Command
+
+1. **Frontend sends:**
+   ```json
+   {
+     "type": "q:command",
+     "id": "cmd_1",
+     "command": "sendMessage",
+     "params": { "sessionId": "...", "content": "..." }
+   }
+   ```
+
+2. **Backend processes:**
+   - `app.ts` receives, calls `handleProtocolMessage(connectionId, msg)`
+   - `ws.service.ts` routes to `onQueryFrame`
+   - `query-engine.ts` calls `handleCommand(connectionId, msg)`
+   - `agent/commands.ts` calls `runCommand("sendMessage", params)`
+   - Handler executes and returns `CommandResult`
+
+3. **Backend responds:**
+   ```json
+   {
+     "type": "q:command_ack",
+     "id": "cmd_1",
+     "accepted": true,
+     "commandId": "msg_xyz123"
+   }
+   ```
+   Or on error:
+   ```json
+   {
+     "type": "q:command_ack",
+     "id": "cmd_1",
+     "accepted": false,
+     "error": "Session not found"
+   }
+   ```
+
+### Pattern: Adding a New WS Command
+
+**Step 1:** Add to `/shared/events.ts` line 116-134:
+```typescript
+export const COMMAND_NAMES = [
+  // ... existing
+  "myNewCommand",
+] as const;
+```
+
+**Step 2:** Add handler in `/apps/backend/src/services/agent/commands.ts`:
+```typescript
+.with("myNewCommand", async () => {
+  const param1 = readString(params, "param1");
+  if (!param1) throw new Error("myNewCommand requires param1");
+  
+  // Business logic here
+  const result = await doSomething(param1);
+  
+  // Invalidate subscriptions if data changed
+  invalidate(["workspaces", "stats"]);
+  
+  return { commandId: result.id }; // Optional
+})
+```
+
+**Step 3:** Frontend sends the command (via WebSocket query protocol).
+
+### Why git:clone is HTTP, Not WS Command
+
+1. **Long-running:** Takes minutes, needs timeout tolerance
+2. **Progress streaming:** Uses `broadcast()` to push stderr lines to ALL clients
+3. **Error handling:** HTTP 500 on failure, JSON response
+4. **Simplicity:** HTTP is stateless; WS command/ack is for fire-and-forget or quick operations
+
+The route-delegated commands (`createWorkspace`, `retrySetup`, `openPenFile`) show the hybrid pattern: WS command wrapper that delegates to an HTTP endpoint internally (lines 105-136).
+
+### Existing WS Commands (Reference)
+
+| Command | Type | Purpose |
+|---------|------|---------|
+| `sendMessage` | Sync | Send message to agent session |
+| `stopSession` | Async | Stop running session |
+| `pty:spawn` | Sync | Spawn terminal session |
+| `pty:write` | Sync | Write data to terminal |
+| `pty:resize` | Sync | Resize terminal |
+| `pty:kill` | Sync | Kill terminal |
+| `fs:watch` | Async | Watch workspace filesystem |
+| `fs:unwatch` | Async | Stop watching workspace |
+| `createWorkspace` | Async | Create workspace (delegates to HTTP) |
+| `retrySetup` | Async | Retry setup (delegates to HTTP) |
+| `openPenFile` | Async | Open .pen file (delegates to HTTP) |
+
+### Key Insights
+
+- **Exhaustive matching:** All command handlers use `.exhaustive()` from `ts-pattern`, so TypeScript enforces all commands are handled
+- **Param validation:** Use `readString()` / `readNumber()` helpers; throw early on missing params
+- **Invalidation:** Commands that modify data call `invalidate()` to push updates to WS subscribers
+- **Route delegation:** For complex operations, delegate to existing HTTP routes using `delegateToRoute()`
+- **No circular dependencies:** Command handlers don't import query-engine; event handler imports are one-way down</result>
+<usage><total_tokens>92761</total_tokens><tool_uses>17</tool_uses><duration_ms>50355</duration_ms></usage>
+</task-notification>
+Full transcript available at: /private/tmp/claude-501/-Users-zvada-Developer-agent-box-ide--conductor-dubai-v2/d3d53468-6f8a-422b-aee3-e9655511560a/tasks/af522c0f33d99d3f8.output
