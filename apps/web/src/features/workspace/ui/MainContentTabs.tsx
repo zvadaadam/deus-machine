@@ -4,7 +4,8 @@ import { CircularPixelGrid } from "@/features/session/ui/CircularPixelGrid";
 import {
   DndContext,
   closestCenter,
-  PointerSensor,
+  MouseSensor,
+  TouchSensor,
   useSensor,
   useSensors,
   type DragEndEvent,
@@ -107,8 +108,12 @@ export function MainContentTabBar({
   const [restoreOpen, setRestoreOpen] = useState(false);
   const canCloseTabs = tabs.length > 1;
 
-  // dnd-kit: 5px distance threshold prevents accidental drags when clicking tabs
-  const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 5 } }));
+  // Mouse: 5px distance prevents accidental drags when clicking tabs
+  // Touch: 250ms long-press required before drag activates (allows normal scrolling)
+  const sensors = useSensors(
+    useSensor(MouseSensor, { activationConstraint: { distance: 5 } }),
+    useSensor(TouchSensor, { activationConstraint: { delay: 250, tolerance: 5 } }),
+  );
 
   function handleDragEnd(event: DragEndEvent) {
     const { active, over } = event;
