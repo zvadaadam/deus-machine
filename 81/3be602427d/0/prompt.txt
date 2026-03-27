@@ -413,3 +413,7 @@ Rebase the current branch onto main and resolve the merge conflicts. Stage the r
 ---
 
 Okay, I was thinking maybe the setup environment button, when it's not set up, like it can be a ghost button, right? It doesn't need the roundings in this case, right?
+
+---
+
+Commit and push all changes
