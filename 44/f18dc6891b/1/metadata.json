@@ -1,0 +1,35 @@
+{
+  "cli_version": "0.5.0",
+  "checkpoint_id": "44f18dc6891b",
+  "session_id": "85333ad4-7ee8-4b5c-bae7-73a2ced9f459",
+  "strategy": "manual-commit",
+  "created_at": "2026-03-27T20:49:28.260841Z",
+  "branch": "adam-zvada/alioth",
+  "checkpoints_count": 2,
+  "files_touched": [
+    "apps/web/src/features/repository/ui/HomeView.tsx",
+    "apps/web/src/features/session/ui/MessageInput.tsx",
+    "apps/web/src/features/workspace/ui/BranchSelector.tsx"
+  ],
+  "agent": "Claude Code",
+  "turn_id": "b8e996824c8b",
+  "token_usage": {
+    "input_tokens": 29,
+    "cache_creation_tokens": 85445,
+    "cache_read_tokens": 1483837,
+    "output_tokens": 20793,
+    "api_call_count": 23
+  },
+  "session_metrics": {
+    "turn_count": 2
+  },
+  "initial_attribution": {
+    "calculated_at": "2026-03-27T20:49:28.058349Z",
+    "agent_lines": 368,
+    "human_added": 29,
+    "human_modified": 1,
+    "human_removed": 0,
+    "total_committed": 398,
+    "agent_percentage": 92.46231155778895
+  }
+}
