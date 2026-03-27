@@ -1,9 +1,11 @@
 {
   "cli_version": "0.5.0",
   "checkpoint_id": "d74ba6ed54c4",
+  "session_id": "9cffbb9c-935f-48d0-a859-1bd7a8b9c814",
   "strategy": "manual-commit",
+  "created_at": "2026-03-27T18:47:03.352239Z",
   "branch": "zvadaadam/update-welcome-screen",
-  "checkpoints_count": 44,
+  "checkpoints_count": 8,
   "files_touched": [
     "apps/backend/src/routes/repos.ts",
     "apps/backend/src/services/agent/commands.ts",
@@ -31,31 +33,25 @@
     "shared/events.ts",
     "shared/types/github.ts"
   ],
-  "sessions": [
-    {
-      "metadata": "/d7/4ba6ed54c4/0/metadata.json",
-      "transcript": "/d7/4ba6ed54c4/0/full.jsonl",
-      "content_hash": "/d7/4ba6ed54c4/0/content_hash.txt",
-      "prompt": "/d7/4ba6ed54c4/0/prompt.txt"
-    },
-    {
-      "metadata": "/d7/4ba6ed54c4/1/metadata.json",
-      "transcript": "/d7/4ba6ed54c4/1/full.jsonl",
-      "content_hash": "/d7/4ba6ed54c4/1/content_hash.txt",
-      "prompt": "/d7/4ba6ed54c4/1/prompt.txt"
-    },
-    {
-      "metadata": "/d7/4ba6ed54c4/2/metadata.json",
-      "transcript": "/d7/4ba6ed54c4/2/full.jsonl",
-      "content_hash": "/d7/4ba6ed54c4/2/content_hash.txt",
-      "prompt": "/d7/4ba6ed54c4/2/prompt.txt"
-    }
-  ],
+  "agent": "Claude Code",
+  "turn_id": "5cfa5199443a",
   "token_usage": {
-    "input_tokens": 504,
-    "cache_creation_tokens": 927759,
-    "cache_read_tokens": 57335949,
-    "output_tokens": 183003,
-    "api_call_count": 399
+    "input_tokens": 100,
+    "cache_creation_tokens": 238152,
+    "cache_read_tokens": 8011968,
+    "output_tokens": 39427,
+    "api_call_count": 73
+  },
+  "session_metrics": {
+    "turn_count": 8
+  },
+  "initial_attribution": {
+    "calculated_at": "2026-03-27T18:47:02.96397Z",
+    "agent_lines": 1208,
+    "human_added": 0,
+    "human_modified": 104,
+    "human_removed": 72,
+    "total_committed": 1311,
+    "agent_percentage": 92.14340198321892
   }
 }
