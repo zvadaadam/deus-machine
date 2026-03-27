@@ -89,8 +89,8 @@ export function MobileLayout({
     onArchive,
     targetBranch,
     onTargetBranchChange,
-    workspacePath: workspace.workspace_path,
     workspaceId: workspace.id,
+    repoId: workspace.repository_id,
   };
 
   return (

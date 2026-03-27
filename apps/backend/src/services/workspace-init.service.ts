@@ -3,10 +3,14 @@
  *
  * Orchestrates the multi-step process of creating a workspace:
  *   1. git worktree add (fatal — cleanup on failure)
- *   2. Dependency installation via lockfile-detected PM (non-fatal)
- *   3. Post-create hooks: .env / .env.local copy (non-fatal)
- *   4. Git clean: restore tracked files so diff starts at zero (non-fatal)
- *   5. Session creation + state transition to 'ready' (fatal)
+ *   2. Session creation + state transition to 'ready' (fatal)
+ *      → invalidates immediately so frontend renders chat input
+ *   3. Dependency installation via lockfile-detected PM (non-fatal, background)
+ *   4. Post-create hooks: .env / .env.local copy (non-fatal, background)
+ *   5. Git clean: restore tracked files so diff starts at zero (non-fatal, background)
+ *
+ * Session is created early (stage 2) so the user can start chatting within
+ * seconds of workspace creation. Dependencies install in the background.
  *
  * Each step updates the workspace's `init_stage` column in DB and emits
  * a structured stdout line that Electron main process parses and relays as an IPC event:
@@ -16,7 +20,6 @@
  * - Pipeline runs in-process (async), not as spawned child — proper try/catch
  * - Non-fatal steps (deps, hooks) log warnings but don't block workspace creation
  * - Reverse-order cleanup on fatal failure: rm dir → prune worktree → delete branch
- * - Structured init pipeline with deps install
  */
 
 import fs from "fs";
@@ -28,17 +31,6 @@ import { getDatabase } from "../lib/database";
 import { invalidate } from "./query-engine";
 
 const execFileAsync = promisify(execFile);
-
-/** Check if an error is a retryable SQLite concurrency error (BUSY / locked). */
-export function isRetryableDbError(err: unknown): boolean {
-  if (!(err instanceof Error)) return false;
-  const msg = err.message.toLowerCase();
-  return (
-    msg.includes("sqlite_busy") ||
-    msg.includes("database is locked") ||
-    msg.includes("database is busy")
-  );
-}
 
 // ─── Types ──────────────────────────────────────────────────────
 
@@ -165,6 +157,30 @@ const STAGES: InitStage[] = [
     },
   },
   {
+    name: "session",
+    label: "Preparing workspace...",
+    fatal: true,
+    async run(ctx) {
+      // Create session early so the frontend can render the chat input immediately.
+      // The workspace transitions to 'ready' here; remaining stages (deps, hooks,
+      // git-clean) continue in the background while the user is already chatting.
+      const db = getDatabase();
+      const sessionId = uuidv7();
+
+      db.transaction(() => {
+        db.prepare(
+          "INSERT INTO sessions (id, workspace_id, status, updated_at) VALUES (?, ?, 'idle', datetime('now'))"
+        ).run(sessionId, ctx.workspaceId);
+        db.prepare(
+          "UPDATE workspaces SET state = 'ready', current_session_id = ? WHERE id = ?"
+        ).run(sessionId, ctx.workspaceId);
+      })();
+
+      // Push state change immediately so frontend picks up session + ready state
+      invalidate(["workspaces", "stats", "sessions"]);
+    },
+  },
+  {
     name: "dependencies",
     label: "Installing dependencies...",
     fatal: false,
@@ -213,47 +229,24 @@ const STAGES: InitStage[] = [
       // package manager, generated build cache files). Reset tracked files
       // to match the index so the diff pipeline sees zero changes on a
       // fresh workspace branched from origin/main.
+      //
+      // Skip if the agent is already working — user may have sent a message
+      // while deps were installing, and git checkout would wipe agent changes.
+      const db = getDatabase();
+      const session = db
+        .prepare(
+          "SELECT s.last_user_message_at FROM sessions s JOIN workspaces w ON w.current_session_id = s.id WHERE w.id = ? LIMIT 1"
+        )
+        .get(ctx.workspaceId) as { last_user_message_at: string | null } | undefined;
+      if (session?.last_user_message_at) {
+        console.log("[WORKSPACE] Skipping git-clean: agent already working");
+        return;
+      }
+
       await execFileAsync("git", ["checkout", "--", "."], {
         cwd: ctx.workspacePath,
         timeout: 10_000,
       });
-    },
-  },
-  {
-    name: "session",
-    label: "Finalizing...",
-    fatal: true,
-    async run(ctx) {
-      // Retry with exponential backoff to handle SQLITE_BUSY / database-locked
-      // errors that can occur during concurrent backend operations.
-      const db = getDatabase();
-      const sessionId = uuidv7();
-      const maxAttempts = 3;
-
-      for (let attempt = 1; attempt <= maxAttempts; attempt++) {
-        try {
-          const finalize = db.transaction(() => {
-            db.prepare(
-              "INSERT INTO sessions (id, workspace_id, status, updated_at) VALUES (?, ?, 'idle', datetime('now'))"
-            ).run(sessionId, ctx.workspaceId);
-            db.prepare(
-              "UPDATE workspaces SET state = 'ready', current_session_id = ?, init_stage = 'done' WHERE id = ?"
-            ).run(sessionId, ctx.workspaceId);
-          });
-          finalize();
-          return;
-        } catch (err) {
-          if (attempt < maxAttempts && isRetryableDbError(err)) {
-            const delay = Math.pow(2, attempt) * 100; // 200ms, 400ms
-            console.warn(
-              `[WORKSPACE] Session creation attempt ${attempt}/${maxAttempts} failed (${(err as Error).message}), retrying in ${delay}ms...`
-            );
-            await new Promise((r) => setTimeout(r, delay));
-          } else {
-            throw err;
-          }
-        }
-      }
     },
   },
 ];
@@ -305,9 +298,15 @@ export async function initializeWorkspace(ctx: InitContext): Promise<void> {
     }
   }
 
+  // Mark init pipeline as fully complete (deps, hooks, git-clean all done).
+  // Wrapped in try/catch so a DB lock can't block final progress signaling.
+  try {
+    updateInitStage(ctx.workspaceId, "done");
+  } catch (err) {
+    console.warn(`[WORKSPACE] Failed to update init_stage to done for ${ctx.workspaceId}:`, err);
+  }
   emitProgress(ctx.workspaceId, "done", "Ready");
 
-  // Workspace transitioned to 'ready' — push to all connected clients.
-  // Query-protocol subscribers get fresh snapshots + q:invalidate for unmounted caches.
-  invalidate(["workspaces", "stats", "sessions"]);
+  // Background stages finished — push final state to all connected clients.
+  invalidate(["workspaces", "stats"]);
 }

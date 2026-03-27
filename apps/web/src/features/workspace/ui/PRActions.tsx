@@ -52,8 +52,8 @@ interface PRActionsProps {
   onArchive?: () => void;
   targetBranch: string;
   onTargetBranchChange: (branch: string) => void;
-  workspacePath: string | null;
   workspaceId?: string;
+  repoId?: string;
 }
 
 // ---------------------------------------------------------------------------
@@ -68,8 +68,8 @@ export function PRActions({
   onArchive,
   targetBranch: targetBranchProp = "main",
   onTargetBranchChange,
-  workspacePath,
   workspaceId,
+  repoId,
 }: PRActionsProps) {
   const [localTargetBranch, setLocalTargetBranch] = useState(targetBranchProp);
   useEffect(() => {
@@ -95,7 +95,7 @@ export function PRActions({
         .with({ type: "no_pr" }, () => (
           <CreatePRButton
             targetBranch={localTargetBranch}
-            workspacePath={workspacePath}
+            repoId={repoId}
             onBranchSelect={handleBranchSelect}
             onCreatePR={onCreatePR}
           />
@@ -350,12 +350,12 @@ function ActionButton({
 
 function CreatePRButton({
   targetBranch,
-  workspacePath,
+  repoId,
   onBranchSelect,
   onCreatePR,
 }: {
   targetBranch: string;
-  workspacePath: string | null;
+  repoId?: string;
   onBranchSelect: (branch: string) => void;
   onCreatePR?: () => void;
 }) {
@@ -377,7 +377,7 @@ function CreatePRButton({
       </button>
 
       <BranchSelector
-        workspacePath={workspacePath}
+        repoId={repoId || null}
         currentBranch={targetBranch}
         onBranchSelect={onBranchSelect}
       >

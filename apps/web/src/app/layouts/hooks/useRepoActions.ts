@@ -20,9 +20,9 @@ import { useAddRepo } from "@/features/repository/api";
 import { useSidebarStore } from "@/features/sidebar/store";
 import { native } from "@/platform";
 import { capabilities } from "@/platform/capabilities";
-import { getBackendUrl } from "@/shared/config/api.config";
 import { extractRepoNameFromUrl } from "@/shared/lib/utils";
 import { getErrorMessage } from "@shared/lib/errors";
+import { sendCommand, connect, isConnected } from "@/platform/ws";
 
 interface UseRepoActionsOptions {
   selectWorkspace: (id: string | null) => void;
@@ -140,7 +140,11 @@ export function useRepoActions({
     }
   }
 
-  /** Clone a GitHub repository with staleness detection. */
+  /**
+   * Clone a GitHub repository with staleness detection.
+   * All steps go through WS commands/mutations so it works in both
+   * desktop (local backend) and web (relay) modes.
+   */
   async function handleCloneRepository(githubUrl: string, targetPath: string) {
     // Advance generation so any in-flight clone from a previous invocation bails out.
     const generation = ++cloneGenerationRef.current;
@@ -159,38 +163,42 @@ export function useRepoActions({
 
       let cloneTarget = targetPath;
       if (!cloneTarget) {
-        // Default to ~/Developer/<repoName>
         const home = await native.dialog.getHomeDir();
+        if (isStale()) return;
         cloneTarget = `${home}/Developer/${repoName}`;
       } else if (!targetPath.endsWith(repoName) && !targetPath.endsWith(`${repoName}/`)) {
         cloneTarget = `${targetPath}/${repoName}`;
       }
 
-      // Phase 1: Git clone via backend HTTP (progress events pushed via WS)
-      const baseUrl = await getBackendUrl();
-      const cloneRes = await fetch(`${baseUrl}/api/repos/clone`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ url: githubUrl, targetPath: cloneTarget }),
-      });
-      if (!cloneRes.ok) {
-        const err = await cloneRes.json().catch(() => ({ error: "Clone failed" }));
-        throw new Error(err.error || `HTTP ${cloneRes.status}`);
+      // Ensure WS is connected before starting
+      if (!isConnected()) {
+        await connect();
+        if (isStale()) return;
+      }
+
+      // Phase 1: Git clone via WS command (5min timeout — large repos take a while)
+      if (isStale()) return;
+      const cloneAck = await sendCommand(
+        "git:clone",
+        { url: githubUrl, targetPath: cloneTarget },
+        300_000
+      );
+      if (!cloneAck.accepted) {
+        throw new Error(cloneAck.error || "Clone failed");
       }
       if (isStale()) return;
 
-      // Phase 2: Register repository
+      // Phase 2: Register repository via WS mutation
       setCloneStatus("Adding repository...");
       const repo = await addRepoOrUseExisting(cloneTarget);
       if (isStale()) return;
 
-      // Phase 3: Create workspace (returns immediately as 'initializing')
+      // Phase 3: Create workspace via WS command
       setCloneStatus("Setting up workspace...");
       const workspace = await createWorkspaceMutation.mutateAsync(repo.id);
       if (isStale()) return;
 
-      // Close modal and select workspace immediately — workspace state transitions
-      // are pushed via WORKSPACE_PROGRESS events which invalidate React Query.
+      // Close modal and select workspace
       resetCloneState();
       selectWorkspace(workspace.id);
       expandRepo(workspace.repository_id);

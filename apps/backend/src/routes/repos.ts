@@ -1,7 +1,8 @@
 import { Hono } from "hono";
 import path from "path";
 import fs from "fs";
-import { execFile, execFileSync } from "child_process";
+import os from "os";
+import { spawn, execFile, execFileSync } from "child_process";
 import { promisify } from "util";
 
 const execFileAsync = promisify(execFile);
@@ -25,6 +26,7 @@ import {
 import { DeusManifestSchema } from "../lib/deus-manifest";
 import { invalidate } from "../services/query-engine";
 import { runGh, parseGitHubRepo } from "../services/gh.service";
+import { broadcast } from "../services/ws.service";
 import type { QueryResource } from "@shared/types/query-protocol";
 
 const app = new Hono();
@@ -111,6 +113,89 @@ app.post("/repos", async (c) => {
   const repo = insertRepo(root_path, repoId, repoName, defaultBranch, gitOriginUrl);
   invalidate(["stats"] as QueryResource[]);
   return c.json(repo, 201);
+});
+
+// ─── Clone Endpoint ──────────────────────────────────────────
+
+/** Broadcast a raw git stderr line to all connected WS clients. */
+function pushCloneLine(line: string): void {
+  broadcast(JSON.stringify({ type: "q:event", event: "git-clone-progress", data: { line } }));
+}
+
+app.post("/repos/clone", async (c) => {
+  const body = await c.req.json();
+  const { url, targetPath } = body as { url: string; targetPath: string };
+
+  if (!url || typeof url !== "string") {
+    throw new ValidationError("Missing or invalid 'url' parameter");
+  }
+
+  const SAFE_GIT_URL_PATTERN = /^https?:\/\/[^\s;|&`$()]+$/;
+  if (!SAFE_GIT_URL_PATTERN.test(url)) {
+    throw new ValidationError("Invalid repository URL format");
+  }
+
+  if (!targetPath || typeof targetPath !== "string") {
+    throw new ValidationError("Missing or invalid 'targetPath' parameter");
+  }
+
+  // Path traversal guard — reject paths that escape the user's home directory
+  const resolvedPath = path.resolve(targetPath);
+  const homeDir = os.homedir();
+  if (!resolvedPath.startsWith(homeDir + path.sep) && resolvedPath !== homeDir) {
+    throw new ValidationError("Target path must be within the home directory");
+  }
+
+  // Ensure parent directory exists
+  const parentDir = path.dirname(resolvedPath);
+  try {
+    fs.mkdirSync(parentDir, { recursive: true });
+  } catch (err) {
+    throw new AppError(500, `Cannot create parent directory: ${(err as Error).message}`);
+  }
+
+  // Check target doesn't already exist
+  if (fs.existsSync(resolvedPath)) {
+    throw new ConflictError("Target directory already exists");
+  }
+
+  // Run git clone with progress, forward raw stderr lines to frontend
+  return new Promise<Response>((resolve) => {
+    const proc = spawn("git", ["clone", "--progress", url, resolvedPath], {
+      stdio: ["ignore", "pipe", "pipe"],
+      timeout: 300_000, // 5 minute timeout
+    });
+
+    let stderrBuffer = "";
+
+    proc.stderr?.on("data", (chunk: Buffer) => {
+      stderrBuffer += chunk.toString();
+      // Git progress uses \r for in-place updates within a phase
+      const lines = stderrBuffer.split(/[\r\n]+/);
+      stderrBuffer = lines.pop() || "";
+      for (const line of lines) {
+        const trimmed = line.trim();
+        if (trimmed) pushCloneLine(trimmed);
+      }
+    });
+
+    proc.on("close", (code) => {
+      // Flush remaining buffer
+      const remaining = stderrBuffer.trim();
+      if (remaining) pushCloneLine(remaining);
+
+      if (code === 0) {
+        pushCloneLine("Clone complete.");
+        resolve(c.json({ success: true, path: resolvedPath }));
+      } else {
+        resolve(c.json({ error: remaining || `git clone exited with code ${code}` }, 500));
+      }
+    });
+
+    proc.on("error", (err) => {
+      resolve(c.json({ error: `Failed to start git: ${err.message}` }, 500));
+    });
+  });
 });
 
 // ─── Manifest Endpoints (per-repo, settings UI) ─────────────

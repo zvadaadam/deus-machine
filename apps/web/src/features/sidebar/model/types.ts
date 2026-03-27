@@ -20,6 +20,7 @@ export interface AppSidebarProps {
   onCloneRepository?: () => void;
   onArchive?: (workspaceId: string) => void;
   onStatusChange?: (workspaceId: string, status: WorkspaceStatus) => void;
+  onNewSession?: () => void;
   profile?: {
     username: string;
     email?: string;
@@ -66,6 +67,7 @@ export interface SidebarHeaderProps {
   };
   onOpenSettings: () => void;
   onToggleSidebar: () => void;
+  onNewSession?: () => void;
   isExpanded: boolean;
 }
 

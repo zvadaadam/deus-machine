@@ -123,12 +123,7 @@ describe("shared/events", () => {
 
     it("GitCloneProgressSchema accepts valid payload", () => {
       const result = GitCloneProgressSchema.safeParse({
-        percent: 42,
-        received: 100,
-        total: 238,
-        received_bytes: 51200,
-        status: "Receiving objects",
-        phase: "receiving",
+        line: "Receiving objects:  42% (100/238), 50.00 KiB | 1.00 MiB/s",
       });
       expect(result.success).toBe(true);
     });
@@ -170,14 +165,9 @@ describe("shared/events", () => {
       expect(result.success).toBe(false);
     });
 
-    it("GitCloneProgressSchema rejects invalid phase enum", () => {
+    it("GitCloneProgressSchema rejects missing line field", () => {
       const result = GitCloneProgressSchema.safeParse({
-        percent: 0,
-        received: 0,
-        total: 0,
-        received_bytes: 0,
         status: "Starting",
-        phase: "downloading", // not a valid phase
       });
       expect(result.success).toBe(false);
     });

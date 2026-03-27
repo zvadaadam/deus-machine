@@ -1,8 +1,9 @@
 import type { SessionStatus } from "@/shared/types";
-import { useState, useCallback, forwardRef, useImperativeHandle } from "react";
+import { useState, forwardRef, useImperativeHandle } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import { Minimize2, ArrowUp, Square, Wrench } from "lucide-react";
 import { useFileMention } from "../hooks/useFileMention";
+import { useImageAttachments } from "../hooks/useImageAttachments";
 import { FileMentionPopover } from "./FileMentionPopover";
 import { GENERATE_HIVE_JSON } from "../lib/sessionPrompts";
 import {
@@ -28,13 +29,6 @@ import { ModelPicker } from "./ModelPicker";
 import { PlanModeToggle } from "./PlanModeToggle";
 import { ContextTokenIndicator } from "./ContextTokenIndicator";
 
-interface Attachment {
-  id: string;
-  file: File;
-  preview: string;
-  type: string;
-}
-
 interface PastedText {
   id: string;
   content: string;
@@ -45,9 +39,6 @@ export interface MessageInputRef {
   clearPastedContent: () => void;
   addInspectedElement: (element: Omit<InspectedElement, "id">) => void;
 }
-
-// Anthropic API only supports these image formats for vision
-const SUPPORTED_IMAGE_TYPES = new Set(["image/jpeg", "image/png", "image/gif", "image/webp"]);
 
 // Long pastes (20+ lines) are shown as collapsed cards instead of inline text
 const PASTE_LINE_THRESHOLD = 20;
@@ -99,7 +90,7 @@ export const MessageInput = forwardRef<MessageInputRef, MessageInputProps>(funct
     showCompactButton = false,
     contextTokenCount = 0,
     contextUsedPercent = 0,
-    workspacePath = null,
+    workspacePath: _workspacePath = null,
     workspaceId = null,
     hasMessages = false,
     hasManifest = true,
@@ -118,40 +109,21 @@ export const MessageInput = forwardRef<MessageInputRef, MessageInputProps>(funct
   },
   ref
 ) {
-  // Attachment state
-  const [attachments, setAttachments] = useState<Attachment[]>([]);
+  // Image attachments (shared hook with HomeView)
+  const {
+    attachments,
+    processFiles,
+    removeAttachment,
+    clearAttachments,
+    extractImagesFromClipboard,
+    buildImageBlocks,
+  } = useImageAttachments();
 
   // Pasted text cards (long pastes shown as collapsed cards)
   const [pastedTexts, setPastedTexts] = useState<PastedText[]>([]);
 
   // Inspected elements from InSpec mode (shown as pill cards)
   const [inspectedElements, setInspectedElements] = useState<InspectedElement[]>([]);
-
-  // Process image files into attachment previews (shared by paste + panel drop)
-  const processFiles = useCallback(async (files: File[]) => {
-    const imageFiles = files.filter((f) => SUPPORTED_IMAGE_TYPES.has(f.type));
-    if (!imageFiles.length) return;
-    const previews = await Promise.all(
-      imageFiles.map(
-        (file) =>
-          new Promise<Attachment | null>((resolve) => {
-            const reader = new FileReader();
-            reader.onload = (ev) =>
-              resolve({
-                id: crypto.randomUUID(),
-                file,
-                preview: ev.target?.result as string,
-                type: file.type,
-              });
-            reader.onerror = () => resolve(null);
-            reader.onabort = () => resolve(null);
-            reader.readAsDataURL(file);
-          })
-      )
-    );
-    const valid = previews.filter(Boolean) as Attachment[];
-    if (valid.length) setAttachments((prev) => [...prev, ...valid]);
-  }, []);
 
   // Expose addFiles + clearPastedContent + addInspectedElement for parent-level interactions
   useImperativeHandle(
@@ -160,14 +132,14 @@ export const MessageInput = forwardRef<MessageInputRef, MessageInputProps>(funct
       addFiles: processFiles,
       clearPastedContent: () => {
         setPastedTexts([]);
-        setAttachments([]);
+        clearAttachments();
         setInspectedElements([]);
       },
       addInspectedElement: (element: Omit<InspectedElement, "id">) => {
         setInspectedElements((prev) => [...prev, { ...element, id: crypto.randomUUID() }]);
       },
     }),
-    [processFiles]
+    [processFiles, clearAttachments]
   );
 
   /**
@@ -176,8 +148,6 @@ export const MessageInput = forwardRef<MessageInputRef, MessageInputProps>(funct
    * (Anthropic API format). Otherwise returns plain text for backward compat.
    */
   const buildCombinedContent = () => {
-    const hasImages = attachments.length > 0;
-
     // Combine all text sources (inspected elements serialized as <inspect> XML tags)
     const textParts: string[] = [];
 
@@ -196,34 +166,17 @@ export const MessageInput = forwardRef<MessageInputRef, MessageInputProps>(funct
     const combinedText = textParts.join("\n\n");
 
     // No images: return plain text string (backward compatible)
-    if (!hasImages) {
+    const imageBlocks = buildImageBlocks();
+    if (!imageBlocks) {
       return combinedText;
     }
 
     // With images: build Anthropic API content blocks array, JSON-stringified.
-    // The agent-server parses this and passes the array as MessageParam.content to the SDK.
     const blocks: Array<Record<string, unknown>> = [];
-
     if (combinedText) {
       blocks.push({ type: "text", text: combinedText });
     }
-
-    for (const attachment of attachments) {
-      // Strip data URL prefix (e.g. "data:image/png;base64,") to get raw base64
-      const base64Data = attachment.preview.includes(",")
-        ? attachment.preview.split(",")[1]
-        : attachment.preview;
-
-      blocks.push({
-        type: "image",
-        source: {
-          type: "base64",
-          media_type: attachment.type,
-          data: base64Data,
-        },
-      });
-    }
-
+    blocks.push(...imageBlocks);
     return JSON.stringify(blocks);
   };
 
@@ -274,24 +227,15 @@ export const MessageInput = forwardRef<MessageInputRef, MessageInputProps>(funct
   };
 
   const handlePaste = async (e: React.ClipboardEvent) => {
-    // Check for pasted images — clipboardData.items is the reliable API
-    // (clipboardData.files is often empty for clipboard screenshots)
-    const imageFiles: File[] = [];
-    if (e.clipboardData.items) {
-      for (const item of Array.from(e.clipboardData.items)) {
-        if (item.kind === "file" && SUPPORTED_IMAGE_TYPES.has(item.type)) {
-          const file = item.getAsFile();
-          if (file) imageFiles.push(file);
-        }
-      }
-    }
+    // Check for pasted images first
+    const imageFiles = extractImagesFromClipboard(e);
     if (imageFiles.length > 0) {
       e.preventDefault();
       processFiles(imageFiles);
       return;
     }
 
-    // Check for long text pastes
+    // Check for long text pastes (20+ lines shown as collapsed cards)
     const text = e.clipboardData.getData("text/plain");
     if (!text) return;
 
@@ -315,10 +259,6 @@ export const MessageInput = forwardRef<MessageInputRef, MessageInputProps>(funct
 
   const removeInspectedElement = (id: string) => {
     setInspectedElements((prev) => prev.filter((el) => el.id !== id));
-  };
-
-  const removeAttachment = (id: string) => {
-    setAttachments((prev) => prev.filter((a) => a.id !== id));
   };
 
   // Thinking cycle — derive agent type from selected model

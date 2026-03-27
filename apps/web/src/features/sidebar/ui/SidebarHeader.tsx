@@ -1,4 +1,4 @@
-import { PanelLeftClose } from "lucide-react";
+import { PanelLeftClose, SquarePen } from "lucide-react";
 import { SidebarHeader as SidebarHeaderUI, useSidebar } from "@/components/ui/sidebar";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { cn } from "@/shared/lib/utils";
@@ -14,6 +14,7 @@ export function SidebarHeader({
   profile = { username: "User" },
   onOpenSettings,
   onToggleSidebar,
+  onNewSession,
   isExpanded,
 }: SidebarHeaderProps) {
   const { isMobile } = useSidebar();
@@ -40,18 +41,32 @@ export function SidebarHeader({
         )}
       </button>
 
-      <button
-        type="button"
-        onClick={onToggleSidebar}
-        aria-label={isExpanded ? "Collapse sidebar" : "Expand sidebar"}
-        title={!isMobile ? toggleTitle : undefined}
-        className={cn(
-          "text-text-muted hover:text-text-tertiary hover:bg-foreground/[0.04] flex h-7 w-7 shrink-0 items-center justify-center rounded-md transition-colors duration-150",
-          !isExpanded && "opacity-60"
+      <div className="flex items-center gap-0.5">
+        {onNewSession && (
+          <button
+            type="button"
+            onClick={onNewSession}
+            aria-label="New session"
+            title={`New session (${modKey}N)`}
+            className="text-text-muted hover:text-text-tertiary hover:bg-foreground/[0.04] flex h-7 w-7 shrink-0 items-center justify-center rounded-md transition-colors duration-150"
+          >
+            <SquarePen className="h-[16px] w-[16px]" />
+          </button>
         )}
-      >
-        <PanelLeftClose className="h-[18px] w-[18px]" />
-      </button>
+
+        <button
+          type="button"
+          onClick={onToggleSidebar}
+          aria-label={isExpanded ? "Collapse sidebar" : "Expand sidebar"}
+          title={!isMobile ? toggleTitle : undefined}
+          className={cn(
+            "text-text-muted hover:text-text-tertiary hover:bg-foreground/[0.04] flex h-7 w-7 shrink-0 items-center justify-center rounded-md transition-colors duration-150",
+            !isExpanded && "opacity-60"
+          )}
+        >
+          <PanelLeftClose className="h-[18px] w-[18px]" />
+        </button>
+      </div>
     </SidebarHeaderUI>
   );
 }
