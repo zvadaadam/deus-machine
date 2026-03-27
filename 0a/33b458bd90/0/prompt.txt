@@ -1883,3 +1883,7 @@ Maybe in general, like the welcome screen, welcome view, should it be like a, li
 ---
 
 do it
+
+---
+
+make sure the homeview also works on a mobile u know we =wanan suport it to so make sure it's good
