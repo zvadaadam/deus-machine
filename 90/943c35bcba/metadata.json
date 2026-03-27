@@ -1,0 +1,28 @@
+{
+  "cli_version": "0.5.0",
+  "checkpoint_id": "90943c35bcba",
+  "strategy": "manual-commit",
+  "branch": "zvadaadam/explore-onboarding-ui",
+  "checkpoints_count": 2,
+  "files_touched": [
+    "apps/desktop/main/native-handlers.ts",
+    "apps/desktop/preload/index.ts",
+    "apps/web/src/features/onboarding/ui/OnboardingOverlay.tsx",
+    "apps/web/src/features/onboarding/ui/steps/WelcomeStep.tsx"
+  ],
+  "sessions": [
+    {
+      "metadata": "/90/943c35bcba/0/metadata.json",
+      "transcript": "/90/943c35bcba/0/full.jsonl",
+      "content_hash": "/90/943c35bcba/0/content_hash.txt",
+      "prompt": "/90/943c35bcba/0/prompt.txt"
+    }
+  ],
+  "token_usage": {
+    "input_tokens": 3618,
+    "cache_creation_tokens": 451575,
+    "cache_read_tokens": 27422472,
+    "output_tokens": 116456,
+    "api_call_count": 290
+  }
+}
