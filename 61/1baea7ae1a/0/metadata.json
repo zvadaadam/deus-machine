@@ -1,0 +1,22 @@
+{
+  "cli_version": "0.5.0",
+  "checkpoint_id": "611baea7ae1a",
+  "session_id": "01a6c22c-a8c9-4c48-a6b2-993edaf9d2fb",
+  "strategy": "manual-commit",
+  "created_at": "2026-03-27T19:37:24.512242Z",
+  "branch": "zvadaadam/update-welcome-screen",
+  "checkpoints_count": 3,
+  "files_touched": [],
+  "agent": "Claude Code",
+  "turn_id": "982748440f59",
+  "token_usage": {
+    "input_tokens": 459,
+    "cache_creation_tokens": 728640,
+    "cache_read_tokens": 56702476,
+    "output_tokens": 154081,
+    "api_call_count": 365
+  },
+  "session_metrics": {
+    "turn_count": 43
+  }
+}
