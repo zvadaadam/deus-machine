@@ -1,0 +1,5 @@
+one a mobile vire the branch selector gotta have a different layout right? how to achive the best layour for this wdyr? it's also uswd in the howmview u know so it needs to he smart
+
+---
+
+do u think we shiuel samw habdle it in the homevure for the dorpodown of the reposiyories? wdyr? i like how it behaves on a deskrip but ona phone deela little weird
