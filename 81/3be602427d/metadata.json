@@ -1,0 +1,25 @@
+{
+  "cli_version": "0.5.0",
+  "checkpoint_id": "813be602427d",
+  "strategy": "manual-commit",
+  "branch": "zvadaadam/split-run-dropdown",
+  "checkpoints_count": 4,
+  "files_touched": [
+    "apps/web/src/features/workspace/ui/HeaderRunButton.tsx"
+  ],
+  "sessions": [
+    {
+      "metadata": "/81/3be602427d/0/metadata.json",
+      "transcript": "/81/3be602427d/0/full.jsonl",
+      "content_hash": "/81/3be602427d/0/content_hash.txt",
+      "prompt": "/81/3be602427d/0/prompt.txt"
+    }
+  ],
+  "token_usage": {
+    "input_tokens": 157,
+    "cache_creation_tokens": 302912,
+    "cache_read_tokens": 10015506,
+    "output_tokens": 32122,
+    "api_call_count": 134
+  }
+}
