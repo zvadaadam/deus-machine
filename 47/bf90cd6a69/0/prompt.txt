@@ -1,0 +1,9 @@
+<system_instruction>
+The user has attached these files. Read them before proceeding.
+- /Users/zvada/Developer/agent/box-ide/.conductor/muscat-v4/.context/attachments/Lint__Format___Typecheck_68946989397.log (57.4 KB)
+- /Users/zvada/Developer/agent/box-ide/.conductor/muscat-v4/.context/attachments/Fix errors instructions.md (430 B)
+</system_instruction>
+
+
+
+Fix the failing CI actions. I've attached the failure logs.
