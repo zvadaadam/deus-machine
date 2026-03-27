@@ -21,18 +21,6 @@ export function useRepos() {
 }
 
 /**
- * Fetch single repository by ID
- */
-export function useRepo(id: string | null) {
-  return useQuery({
-    queryKey: queryKeys.repos.detail(id || ""),
-    queryFn: () => RepoService.fetchById(id!),
-    enabled: !!id,
-    staleTime: 10000,
-  });
-}
-
-/**
  * Fetch deus.json manifest for a repo.
  * staleTime: Infinity — manifest doesn't change unless user saves.
  */
