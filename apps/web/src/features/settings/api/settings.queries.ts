@@ -8,7 +8,7 @@ import { produce } from "immer";
 import { SettingsService } from "./settings.service";
 import { queryKeys } from "@/shared/api/queryKeys";
 import { track } from "@/platform/analytics";
-import type { Settings, MCPServer, Command, Agent } from "../types";
+import type { Settings } from "../types";
 
 /**
  * Fetch all settings
@@ -18,39 +18,6 @@ export function useSettings() {
     queryKey: queryKeys.settings.all,
     queryFn: () => SettingsService.fetch(),
     staleTime: 30000, // Cache for 30s (settings change less frequently)
-  });
-}
-
-/**
- * Fetch MCP servers configuration
- */
-export function useMCPServers() {
-  return useQuery({
-    queryKey: queryKeys.settings.mcpServers,
-    queryFn: () => SettingsService.fetchFileConfig<MCPServer[]>("mcp-servers"),
-    staleTime: 30000,
-  });
-}
-
-/**
- * Fetch commands configuration
- */
-export function useCommands() {
-  return useQuery({
-    queryKey: queryKeys.settings.commands,
-    queryFn: () => SettingsService.fetchFileConfig<Command[]>("commands"),
-    staleTime: 30000,
-  });
-}
-
-/**
- * Fetch agents configuration
- */
-export function useAgents() {
-  return useQuery({
-    queryKey: queryKeys.settings.agents,
-    queryFn: () => SettingsService.fetchFileConfig<Agent[]>("agents"),
-    staleTime: 30000,
   });
 }
 

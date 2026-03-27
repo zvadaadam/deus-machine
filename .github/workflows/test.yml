@@ -32,6 +32,11 @@ jobs:
         # are updated or we pin to v5, remove "|| true" to make lint blocking.
         run: bun run lint || true
 
+      - name: Dead code check (Knip)
+        # Non-blocking while we clean up existing unused files/exports.
+        # Once resolved, remove "|| true" and use --max-issues 0 to enforce.
+        run: bun run knip || true
+
       - name: Format check (Prettier)
         run: bun run format:check
 

@@ -3,7 +3,7 @@
  * The backend handles .gitignore-aware file scanning with caching.
  */
 
-import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useQuery } from "@tanstack/react-query";
 import { sendRequest, sendMutate } from "@/platform/ws";
 import type { FileTreeResponse } from "../types";
 
@@ -37,12 +37,4 @@ export function useFiles(workspaceId: string | null) {
 export async function invalidateFileCache(workspaceId: string): Promise<void> {
   const result = await sendMutate("invalidateFileCache", { workspaceId });
   if (!result.success) throw new Error(result.error || "Failed to invalidate file cache");
-}
-
-/**
- * Clear file cache — invalidates all file queries in the React Query cache
- */
-export function useClearFileCache() {
-  const queryClient = useQueryClient();
-  return () => queryClient.invalidateQueries({ queryKey: ["files"] });
 }
