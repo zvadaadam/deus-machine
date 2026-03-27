@@ -24,6 +24,11 @@ export function registerNativeHandlers(): void {
   ipcMain.handle("show_main_window", () => {
     const win = BrowserWindow.getFocusedWindow() ?? BrowserWindow.getAllWindows()[0];
     if (win) {
+      // Transition to app mode — vibrancy + solid background.
+      if (process.platform === "darwin") {
+        win.setVibrancy("under-window");
+      }
+      win.setBackgroundColor("#1a1a1a");
       win.show();
       win.focus();
     }
@@ -32,7 +37,10 @@ export function registerNativeHandlers(): void {
   ipcMain.handle("enter_onboarding_mode", () => {
     const win = BrowserWindow.getAllWindows()[0];
     if (win) {
-      win.setBackgroundColor("#00000000");
+      win.setBackgroundColor("#0e0e10");
+      if (process.platform === "darwin") {
+        win.setWindowButtonVisibility(false);
+      }
       win.show();
     }
   });
@@ -40,7 +48,11 @@ export function registerNativeHandlers(): void {
   ipcMain.handle("exit_onboarding_mode", () => {
     const win = BrowserWindow.getAllWindows()[0];
     if (win) {
-      win.hide();
+      if (process.platform === "darwin") {
+        win.setWindowButtonVisibility(true);
+        win.setVibrancy("under-window");
+      }
+      win.setBackgroundColor("#1a1a1a");
     }
   });
 
@@ -218,30 +230,6 @@ export function registerNativeHandlers(): void {
     const win = BrowserWindow.getFocusedWindow() ?? BrowserWindow.getAllWindows()[0];
     if (win) {
       win.setFullScreen(!win.isFullScreen());
-    }
-  });
-
-  // Also register the snake_case aliases the preload named methods use
-  ipcMain.handle("native:showMainWindow", () => {
-    const win = BrowserWindow.getFocusedWindow() ?? BrowserWindow.getAllWindows()[0];
-    if (win) {
-      win.show();
-      win.focus();
-    }
-  });
-
-  ipcMain.handle("native:enterOnboardingMode", () => {
-    const win = BrowserWindow.getAllWindows()[0];
-    if (win) {
-      win.setBackgroundColor("#00000000");
-      win.show();
-    }
-  });
-
-  ipcMain.handle("native:exitOnboardingMode", () => {
-    const win = BrowserWindow.getAllWindows()[0];
-    if (win) {
-      win.hide();
     }
   });
 

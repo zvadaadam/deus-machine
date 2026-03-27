@@ -131,9 +131,7 @@ const electronAPI = {
   // Window visibility & control
   // ---------------------------------------------------------------------------
 
-  showMainWindow: (): Promise<void> => ipcRenderer.invoke("native:showMainWindow"),
-  enterOnboardingMode: (): Promise<void> => ipcRenderer.invoke("native:enterOnboardingMode"),
-  exitOnboardingMode: (): Promise<void> => ipcRenderer.invoke("native:exitOnboardingMode"),
+  showMainWindow: (): Promise<void> => ipcRenderer.invoke("show_main_window"),
   minimize: (): Promise<void> => ipcRenderer.invoke("native:minimize"),
   maximize: (): Promise<void> => ipcRenderer.invoke("native:maximize"),
   close: (): Promise<void> => ipcRenderer.invoke("native:close"),
