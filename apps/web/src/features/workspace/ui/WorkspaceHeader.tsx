@@ -27,7 +27,7 @@ import { track } from "@/platform/analytics";
 import type { SetupStatus } from "@/shared/types";
 import type { WorkspaceStatus } from "@shared/enums";
 import type { NormalizedTask } from "../api/workspace.service";
-import { TaskStrip } from "./TaskStrip";
+import { HeaderRunButton } from "./HeaderRunButton";
 import { WorkflowStatusIcon } from "@/features/sidebar/ui/WorkflowStatusIcon";
 import { WorkspaceStatusMenu } from "@/features/sidebar/ui/WorkspaceStatusMenu";
 import { WORKFLOW_STATUS_CONFIG } from "@/features/sidebar/lib/status";
@@ -86,10 +86,10 @@ export function WorkspaceHeader({
   return (
     <div
       data-slot="workspace-header"
-      className="drag-region flex h-11 flex-shrink-0 items-center justify-between px-4"
+      className="drag-region flex h-11 flex-shrink-0 items-center justify-between gap-4 px-4"
     >
       {/* Left: sidebar toggle + title + repo/branch */}
-      <div className="flex min-w-0 items-center gap-[5px]">
+      <div className="flex min-w-0 items-center gap-[5px] overflow-hidden">
         {showSidebarToggle && (
           <Tooltip delayDuration={200}>
             <TooltipTrigger asChild>
@@ -123,7 +123,7 @@ export function WorkspaceHeader({
           <span
             className={cn(
               "text-foreground mr-0.5 truncate text-sm font-medium",
-              mobile ? "max-w-[120px]" : "max-w-[240px]"
+              mobile ? "max-w-[120px]" : "max-w-[200px]"
             )}
           >
             {title}
@@ -134,7 +134,7 @@ export function WorkspaceHeader({
           <span
             className={cn(
               "truncate text-sm font-medium",
-              mobile ? "max-w-[140px]" : "max-w-[280px]",
+              mobile ? "max-w-[140px]" : "max-w-[200px]",
               title ? "text-text-subtle" : "text-foreground"
             )}
             title={subtitle}
@@ -205,23 +205,22 @@ export function WorkspaceHeader({
             )}
           </div>
         )}
-
-        {onRunTask && !mobile && (
-          <TaskStrip
-            tasks={tasks ?? []}
-            hasManifest={hasManifest ?? false}
-            disabled={setupStatus === "running"}
-            onRunTask={onRunTask}
-            onSetupEnvironment={
-              onSendAgentMessage ? () => onSendAgentMessage(GENERATE_HIVE_JSON) : undefined
-            }
-          />
-        )}
       </div>
 
-      {/* Right: Open button (desktop only) */}
+      {/* Right: Run + Open buttons (desktop only) */}
       {!mobile && (
-        <div className="flex items-center">
+        <div className="flex items-center gap-2">
+          {onRunTask && (
+            <HeaderRunButton
+              tasks={tasks ?? []}
+              hasManifest={hasManifest ?? false}
+              disabled={setupStatus === "running"}
+              onRunTask={onRunTask}
+              onSetupEnvironment={
+                onSendAgentMessage ? () => onSendAgentMessage(GENERATE_HIVE_JSON) : undefined
+              }
+            />
+          )}
           {workspacePath && <HeaderOpenButton workspacePath={workspacePath} />}
         </div>
       )}
