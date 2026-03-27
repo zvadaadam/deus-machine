@@ -1,0 +1,22 @@
+{
+  "cli_version": "0.5.0",
+  "checkpoint_id": "90943c35bcba",
+  "session_id": "fac6d346-3d64-4c05-a125-bbb33e40eda6",
+  "strategy": "manual-commit",
+  "created_at": "2026-03-27T00:11:09.553147Z",
+  "branch": "zvadaadam/explore-onboarding-ui",
+  "checkpoints_count": 1,
+  "files_touched": [],
+  "agent": "Claude Code",
+  "turn_id": "7496609ee8dd",
+  "token_usage": {
+    "input_tokens": 66,
+    "cache_creation_tokens": 212482,
+    "cache_read_tokens": 3116484,
+    "output_tokens": 45394,
+    "api_call_count": 45
+  },
+  "session_metrics": {
+    "turn_count": 9
+  }
+}
