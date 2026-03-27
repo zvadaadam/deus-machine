@@ -170,8 +170,8 @@ describe("initializeWorkspace", () => {
     await initializeWorkspace(createInitContext());
 
     const progressLines = lines.filter((l) => l.startsWith("DEUS_WORKSPACE_PROGRESS:"));
-    // worktree, dependencies, hooks, session, done = 5 progress lines
-    expect(progressLines.length).toBeGreaterThanOrEqual(5);
+    // worktree, session, dependencies, hooks, git-clean, done = 6 progress lines
+    expect(progressLines.length).toBeGreaterThanOrEqual(6);
 
     const payloads = progressLines.map((l) =>
       JSON.parse(l.replace("DEUS_WORKSPACE_PROGRESS:", "").trim())
@@ -193,8 +193,8 @@ describe("initializeWorkspace", () => {
       .filter((c: string[]) => c[0].includes("init_stage = ?"))
       .map((c: string[]) => c[0]);
 
-    // Should update init_stage for worktree, dependencies, hooks, session (+ session sets 'done')
-    expect(initStageUpdates.length).toBeGreaterThanOrEqual(4);
+    // Should update init_stage for worktree, session, dependencies, hooks, git-clean, done = 6
+    expect(initStageUpdates.length).toBeGreaterThanOrEqual(6);
   });
 
   it("uses correct worktreeBase for branching", async () => {
@@ -212,7 +212,7 @@ describe("initializeWorkspace", () => {
 
   // ─── Non-fatal stage failure ──────────────────────────────────
 
-  it("continues to session stage when dependencies stage fails", async () => {
+  it("workspace becomes ready even when dependencies stage fails", async () => {
     mockExecFileAsync
       .mockResolvedValueOnce({ stdout: "", stderr: "" }) // worktree succeeds
       .mockRejectedValueOnce(new Error("bun install failed")); // deps fails
@@ -368,5 +368,35 @@ describe("initializeWorkspace", () => {
       (q: string) => q.includes("state = 'ready'") && q.includes("current_session_id")
     );
     expect(updateWorkspace).toBeTruthy();
+  });
+
+  // ─── Git-clean skip ──────────────────────────────────────────
+
+  it("skips git-clean when agent already has user messages", async () => {
+    // Make the session query return a last_user_message_at (agent is working)
+    mockStmt.get.mockReturnValue({ last_user_message_at: "2026-01-01T00:00:00Z" });
+    mockFs.existsSync.mockReturnValue(false);
+
+    await initializeWorkspace(createInitContext());
+
+    // git checkout -- . should NOT be called (only worktree add is called)
+    const gitCheckoutCalls = mockExecFileAsync.mock.calls.filter(
+      (c: unknown[]) => c[0] === "git" && (c[1] as string[])?.includes("checkout")
+    );
+    expect(gitCheckoutCalls).toHaveLength(0);
+  });
+
+  it("runs git-clean when no user messages exist yet", async () => {
+    // Session query returns null last_user_message_at
+    mockStmt.get.mockReturnValue({ last_user_message_at: null });
+    mockFs.existsSync.mockReturnValue(false);
+
+    await initializeWorkspace(createInitContext());
+
+    // git checkout -- . should be called
+    const gitCheckoutCalls = mockExecFileAsync.mock.calls.filter(
+      (c: unknown[]) => c[0] === "git" && (c[1] as string[])?.includes("checkout")
+    );
+    expect(gitCheckoutCalls).toHaveLength(1);
   });
 });

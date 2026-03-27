@@ -111,6 +111,25 @@ function nextSubId(): string {
  * In relay mode, pass the serverId so the WS URL can be resolved.
  */
 export async function connect(serverId?: string): Promise<void> {
+  // Detect stale socket: `connected` flag says yes but the actual WebSocket is dead.
+  // This happens after Vite HMR reloads — module state is preserved but the socket
+  // reference is stale (readyState !== OPEN). Force reconnect in this case.
+  if (connected && (!ws || ws.readyState !== WebSocket.OPEN)) {
+    connected = false;
+    connecting = false;
+    _connectionId = null;
+    if (ws) {
+      const staleWs = ws;
+      ws = null;
+      staleWs.onclose = null;
+      try {
+        staleWs.close();
+      } catch {
+        /* ignore */
+      }
+    }
+    notifyConnectionChange(false);
+  }
   if (connected) return;
   if (connecting) {
     // Wait for the in-flight connection attempt
@@ -185,10 +204,12 @@ export function isConnected(): boolean {
 /**
  * Send an async command via the q:command frame.
  * Returns a promise that resolves when the server sends q:command_ack.
+ * @param timeoutMs — override default 30s timeout (e.g. 300_000 for long-running commands like git:clone)
  */
 export function sendCommand(
   command: CommandName,
-  params: Record<string, unknown>
+  params: Record<string, unknown>,
+  timeoutMs = 30_000
 ): Promise<{ accepted: boolean; commandId?: string; error?: string }> {
   const id = `cmd_${++commandCounter}`;
 
@@ -209,13 +230,13 @@ export function sendCommand(
       return;
     }
 
-    // Timeout after 30s to prevent leaked promises
+    // Timeout to prevent leaked promises
     setTimeout(() => {
       if (pendingCommands.has(id)) {
         pendingCommands.delete(id);
         reject(new Error(`Command ${command} timed out`));
       }
-    }, 30_000);
+    }, timeoutMs);
   });
 }
 

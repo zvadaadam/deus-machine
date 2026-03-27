@@ -219,12 +219,8 @@ export const BackendPortChangedSchema = z.object({
 export type BackendPortChangedEvent = z.infer<typeof BackendPortChangedSchema>;
 
 export const GitCloneProgressSchema = z.object({
-  percent: z.number(),
-  received: z.number(),
-  total: z.number(),
-  received_bytes: z.number(),
-  status: z.string(),
-  phase: z.enum(["connecting", "receiving", "indexing", "resolving", "complete"]),
+  /** Raw stderr line from git clone --progress */
+  line: z.string(),
 });
 export type GitCloneProgressEvent = z.infer<typeof GitCloneProgressSchema>;
 
