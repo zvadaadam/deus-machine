@@ -1,0 +1,63 @@
+<system_instruction>
+You are working inside OpenDevs, a Mac app that lets the user run many coding agents in parallel.
+Your work should take place in the /Users/zvada/Developer/agent/box-ide/.conductor/dubai-v2 directory (unless otherwise directed), which has been set up for you to work in.
+Each workspace has a .context directory (gitignored) where you can save files to collaborate with other agents.
+DO NOT EVER read or write files at /Users/zvada/Developer/agent/box-ide.
+The target branch for this workspace is main. Use this for actions like creating new PRs, bisecting, etc., unless you're told otherwise.
+
+By default, the user will only see the last message that you send before stopping. Include all essential information in the last message. The intermediate messages will be collapsed and accessible by the user but not displayed by default.
+
+If the user asks you to work on several unrelated tasks, you can suggest they start new workspaces.
+Sometimes the user might send you a message they meant to send in a different workspace or a different chat. If something doesn't make sense in the context of your work, just ask. 
+If the user asks for help with OpenDevs, you can ask them to go to "Help -> Send Feedback" to get in touch with our team.
+</system_instruction>
+
+When we are creating a new workspace, I feel the biggest problem is that when we are installing the dependencies, we don't show the message input. And it feels like it's in this, like, not working state. But like, I think we don't need to hide the message input. If it's installing the dependencies, this can happen, like, it's okay. But I want when the workspace is created, like the message input should already be there ready. Can you think about the UX, how it works, when like, we click and create new works, new workspace, what happens, what is the flow, what code gets executed, what is the diagram so we can spot it and improve it UX wise.
+
+---
+
+Once we have it here, what do you think about the flow, the coding, the code structure, the UX? Are there any improvements we can actually do to make it like better, better?
+
+---
+
+Yeah, there is a lot of things to go through, like you had some good points, so I want you to go through it in depth and create a plan of what you're gonna do. Also with the states, I want you to review the states, what is the in its stage, I'm not sure about that. Is it in a database or is it like a ephemeral thing? The setup and the status for the workspace explorer.
+
+---
+
+Okay, so think about it if the plan is actually correct and nothing is over-engineered and verify if this is what we want. So actually the whole flow is very simple yet based on the product right flows. So explore once again and update the plan.
+
+---
+
+Can you explain to me what this means? Like, remove any stage equals done. Like, we want to remove this from the database, you mean? So it's gonna be like only an empty state state.
+
+---
+
+Okay, so she was the full plan and let's get to executing it.
+
+---
+
+<system-instruction>
+The user has added 1 comment to the diff for this workspace. Please review and address these comments as part of your response. When addressing comments on the "original" side or on specific commits, read the file from that version (not the current version). Below are the comments, including metadata about what git state they were left on:
+
+Comment #1:
+
+File: apps/backend/src/services/workspace-init.service.ts
+Line: 183
+User comment: "Why do you do the retries? I don't think this is a good pattern to do retries. It should work just like immediately. Why the fact that you do retries?"
+
+Comment metadata:
+This comment was left on the modified branch.
+
+</system-instruction>
+
+---
+
+We go through it with any other anti-patterns or something that are very ugly and we don't need, I think, our meaning better code structure. /code-simplifier /deslop
+
+---
+
+Okay, and so now if we create a new message inside the welcome view, is the message optimistically rendered there? And the flow would be very nice because we have two options to create a workspace with a click where we create a simple workspace, but no image inside, but another one is from the welcome view where we send over the image. And the image should optimistically be rendered immediately.
+
+---
+
+I want you to think how to actually do it the best epxlore in pdeth hwo to do it most clean no oevginedf make plan
