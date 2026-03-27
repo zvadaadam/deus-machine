@@ -1,0 +1,108 @@
+{
+  "$schema": "https://unpkg.com/knip@6/schema.json",
+  "entry": [
+    "apps/backend/src/server.ts",
+    "apps/agent-server/index.ts",
+    "apps/desktop/main/index.ts",
+    "apps/desktop/preload/index.ts",
+    "apps/desktop/preload/browser-preload.ts",
+    "shared/types/index.ts",
+    "shared/events.ts",
+    "shared/agent-events.ts",
+    "shared/protocol.ts",
+    "shared/schema.ts",
+    "shared/session-events.ts",
+    "shared/enums.ts",
+    "shared/lib/*.ts",
+    "apps/**/test/**/*.ts",
+    "test/**/*.ts"
+  ],
+  "project": ["apps/**/*.{ts,tsx}", "shared/**/*.ts", "test/**/*.ts", "!**/*.d.ts"],
+  "paths": {
+    "@/*": ["apps/web/src/*"],
+    "@/app/*": ["apps/web/src/app/*"],
+    "@/features/*": ["apps/web/src/features/*"],
+    "@/platform/*": ["apps/web/src/platform/*"],
+    "@/shared/*": ["apps/web/src/shared/*"],
+    "@/components/*": ["apps/web/src/components/*"],
+    "@/lib/*": ["apps/web/src/shared/lib/*"],
+    "@/hooks/*": ["apps/web/src/shared/hooks/*"],
+    "@/ui/*": ["apps/web/src/components/ui/*"],
+    "@shared/*": ["shared/*"]
+  },
+  "ignore": ["apps/cloud-relay/**", "packages/**"],
+  "ignoreDependencies": [
+    "yallist",
+    "playwright",
+    "@sentry/vite-plugin",
+    "eslint-plugin-react",
+    "tailwindcss",
+    "esbuild",
+    "@electron/rebuild",
+    "@openai/codex"
+  ],
+  "ignoreBinaries": ["wrangler"],
+  "ignoreExportsUsedInFile": true,
+  "ignoreFiles": [
+    "apps/web/src/components/ui/button-group.tsx",
+    "apps/web/src/components/ui/empty.tsx",
+    "apps/web/src/components/ui/field.tsx",
+    "apps/web/src/components/ui/item.tsx",
+    "apps/web/src/components/ui/kbd.tsx",
+    "apps/web/src/features/agent-config/index.ts",
+    "apps/web/src/features/session/ui/tools/index.ts",
+    "apps/web/src/features/sidebar/lib/index.ts"
+  ],
+  "ignoreUnresolved": [
+    "../../../src/features/simulator/machine",
+    "../../../src/features/simulator/types",
+    "../../../../shared/agent-events",
+    "./test/setup.ts"
+  ],
+  "ignoreIssues": {
+    "apps/web/src/components/ui/**": ["exports", "types"],
+    "apps/web/src/platform/native/**": ["exports"],
+    "apps/web/src/platform/electron/**": ["exports"],
+    "apps/web/src/features/browser/automation/**": ["exports"],
+    "apps/web/src/shared/components/**": ["exports"],
+    "apps/web/src/shared/config/**": ["exports"],
+    "apps/web/src/shared/hooks/**": ["exports"],
+    "apps/web/src/shared/lib/**": ["exports"],
+    "apps/web/src/features/workspace/api/workspace.queries.ts": ["exports"],
+    "apps/web/src/features/sidebar/lib/**": ["exports"],
+    "apps/web/src/features/simulator/**": ["exports"],
+    "apps/web/src/features/repository/ui/RepoGroup.tsx": ["exports"],
+    "apps/web/src/features/session/ui/blocks/ToolResultBlock.tsx": ["exports"],
+    "apps/agent-server/rpc-schemas.ts": ["exports", "types"],
+    "apps/backend/src/middleware/workspace-loader.ts": ["types"],
+    "apps/web/src/features/ai-status/lib/providers.ts": ["types"],
+    "shared/types/relay.ts": ["types"],
+    "shared/types/workspace.ts": ["types"]
+  },
+  "vitest": {
+    "config": [
+      "apps/backend/vitest.config.ts",
+      "apps/agent-server/vitest.config.ts",
+      "test/vitest.config.ts"
+    ],
+    "entry": ["apps/**/test/**/*.{test,spec}.ts", "test/**/*.{test,spec}.ts"]
+  },
+  "vite": {
+    "config": ["apps/web/vite.config.ts"]
+  },
+  "eslint": {
+    "config": ["eslint.config.mjs"]
+  },
+  "rules": {
+    "files": "error",
+    "dependencies": "error",
+    "devDependencies": "error",
+    "optionalPeerDependencies": "error",
+    "unlisted": "error",
+    "unresolved": "error",
+    "binaries": "error",
+    "exports": "warn",
+    "types": "warn",
+    "enumMembers": "off"
+  }
+}

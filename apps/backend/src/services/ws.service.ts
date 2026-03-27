@@ -74,11 +74,6 @@ export function broadcast(message: string): void {
   }
 }
 
-/** Get number of active connections. */
-export function getConnectionCount(): number {
-  return connections.size;
-}
-
 /** Close all connections and stop heartbeat (for shutdown). */
 export function closeAll(): void {
   stopHeartbeat();

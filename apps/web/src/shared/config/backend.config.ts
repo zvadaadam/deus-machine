@@ -81,11 +81,7 @@ export async function resolveBackendEndpoints(serverId?: string): Promise<Backen
   return cachedEndpoints;
 }
 
-/**
- * Invalidate the cached endpoints. Called when the backend port changes
- * (e.g., backend restart) or when switching servers in web mode.
- */
-export function invalidateEndpointCache(): void {
+function invalidateEndpointCache(): void {
   cachedEndpoints = null;
   cachedRelayServerId = null;
 }

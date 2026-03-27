@@ -112,10 +112,3 @@ export async function emit<T>(event: string, payload?: T): Promise<void> {
 
   window.electronAPI!.send(event, payload);
 }
-
-/**
- * Check if Electron APIs are available (function version of isElectronEnv)
- */
-export function isElectronAvailable(): boolean {
-  return isElectronEnv;
-}
