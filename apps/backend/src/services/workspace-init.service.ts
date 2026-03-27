@@ -167,27 +167,14 @@ const STAGES: InitStage[] = [
       const db = getDatabase();
       const sessionId = uuidv7();
 
-      const runTx = db.transaction(() => {
+      db.transaction(() => {
         db.prepare(
           "INSERT INTO sessions (id, workspace_id, status, updated_at) VALUES (?, ?, 'idle', datetime('now'))"
         ).run(sessionId, ctx.workspaceId);
         db.prepare(
           "UPDATE workspaces SET state = 'ready', current_session_id = ? WHERE id = ?"
         ).run(sessionId, ctx.workspaceId);
-      });
-
-      // Bounded retry for transient SQLITE_BUSY (WAL lock contention under
-      // concurrent workspace creation). This stage is fatal — tolerate brief locks.
-      for (let attempt = 0; ; attempt++) {
-        try {
-          runTx();
-          break;
-        } catch (err) {
-          const msg = err instanceof Error ? err.message : String(err);
-          if (!msg.includes("SQLITE_BUSY") || attempt >= 2) throw err;
-          await new Promise((r) => setTimeout(r, 50 * 2 ** attempt));
-        }
-      }
+      })();
 
       // Push state change immediately so frontend picks up session + ready state
       invalidate(["workspaces", "stats", "sessions"]);
