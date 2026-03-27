@@ -3,7 +3,8 @@ import {
   DndContext,
   closestCenter,
   KeyboardSensor,
-  PointerSensor,
+  MouseSensor,
+  TouchSensor,
   useSensor,
   useSensors,
   DragEndEvent,
@@ -54,9 +55,11 @@ export function AppSidebar({
     [repositories, repositoryOrder, reorderRepositories]
   );
 
-  // 5px distance threshold: click = expand/collapse, drag = reorder
+  // Mouse: 5px distance differentiates click from drag
+  // Touch: 250ms long-press required before drag activates (allows normal scrolling)
   const sensors = useSensors(
-    useSensor(PointerSensor, { activationConstraint: { distance: 5 } }),
+    useSensor(MouseSensor, { activationConstraint: { distance: 5 } }),
+    useSensor(TouchSensor, { activationConstraint: { delay: 250, tolerance: 5 } }),
     useSensor(KeyboardSensor, {
       coordinateGetter: sortableKeyboardCoordinates,
     })
