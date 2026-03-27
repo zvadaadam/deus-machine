@@ -1,0 +1,225 @@
+<system_instruction>
+You are working inside OpenDevs, a Mac app that lets the user run many coding agents in parallel.
+Your work should take place in the /Users/zvada/Developer/agent/box-ide/.conductor/dubai-v2 directory (unless otherwise directed), which has been set up for you to work in.
+Each workspace has a .context directory (gitignored) where you can save files to collaborate with other agents.
+DO NOT EVER read or write files at /Users/zvada/Developer/agent/box-ide.
+The target branch for this workspace is main. Use this for actions like creating new PRs, bisecting, etc., unless you're told otherwise.
+
+By default, the user will only see the last message that you send before stopping. Include all essential information in the last message. The intermediate messages will be collapsed and accessible by the user but not displayed by default.
+
+If the user asks you to work on several unrelated tasks, you can suggest they start new workspaces.
+Sometimes the user might send you a message they meant to send in a different workspace or a different chat. If something doesn't make sense in the context of your work, just ask. 
+If the user asks for help with OpenDevs, you can ask them to go to "Help -> Send Feedback" to get in touch with our team.
+</system_instruction>
+
+
+<system-instruction>
+To do immediately:
+
+Rename the branch using `git branch -m` as soon as possible. Do not check the current branch name.
+
+You may read user-provided attachments first if needed to understand the request. Otherwise, do this before using any skills or any other tools.
+
+Choosing a branch name: use concrete, specific language, avoid abstract nouns, and be concise (<30 characters). Use the prefix "zvadaadam/" before the name.
+
+</system-instruction>
+
+Okay, so what I want here is actually change and update the welcome screen. How would you go about updating this welcome screen? Can you explore? What do you think? What would be the feedback on this?
+
+---
+
+i mean the main welcome screen or teh screen werhe we hve teh oepn local of ad clone u ko i wanan imprve that
+
+---
+
+But what do you think it wouldn't be like a welcome view, but more like a new workspace view, where it would be a message input, and where we would pick the project to build on, you know, and we would have a message input prompt, what do you think? Try to visualize it because like, we need to be able to like clone repository and add repositories easily so people are not confused,
+
+---
+
+Okay, I want you to explore a couple of variants. I think this is pretty good, but I want you to explore a couple of variants with design explorers /design-explore But I like this option, like we will have a one message input inside the message mode, but we will be able to switch between repositories. We should be able to speak the model, yeah, and maybe have an opportunity to add like a one-click prompt there.
+
+---
+
+I think one of the designers already implemented, but I kind of like it what we have here. Just make sure that you put it in... I think this is good. Just the model should be on the bottom, right? With all the things... Yeah, so we put the model on the bottom. Now it's in the top part, which is not good. And the suggestions... What do you think? Are they good? Would you do it differently?
+
+---
+
+/Users/zvada/Developer/agent/box-ide/.conductor/dubai-v2/.context/attachments/Screenshot 2026-03-27 at 3.53.54 PM.png Also, to make it more clear in which project this is gonna be done, how about we do it like this dot is like green with this like little glow gradient around like very subtle gradient like I'm giving you on this image./Users/zvada/Developer/agent/box-ide/.conductor/dubai-v2/.context/attachments/Screenshot 2026-03-27 at 3.54.47 PM.png
+
+---
+
+Okay, when I'm looking at it, the dot could be a little smaller with a more stronger, the glow gradient effect. Can you think about this?
+
+---
+
+Also the drop down for the models, I think the drop down should go to the bottom.
+
+---
+
+Also, I think it should really support images, the same as we have in the message input in the session.
+
+---
+
+So let me give you a feedback. So I think the glow around the green dot is like too strong, make it like more subtle. Think about it, look at it like a designer is not. But very nice. Also, I think the branch from which we're gonna create the repo could be on the right side, right on the top. Do we have a support for that when we are creating a workspace?
+
+---
+
+Awesome. It would be nice to have a way to get to the welcome screen, right? Or the start screen. I think we will rename it later. And I think there should be some way in the sidebar to get here. And the screen is basically like creating a new feature, a new workspace, right? Or a new agent, or a new thread, or a new session, or there's many words. So explore
+
+---
+
+/Users/zvada/Developer/agent/box-ide/.conductor/dubai-v2/.context/attachments/Screenshot 2026-03-27 at 4.08.40 PM.png theee branches shpudl be loaded from cloud origin u know but also local what do u think or doens maek sense? also i thin this button is also the int ehcreate PR thing thy shjoudl work teh same right?
+
+---
+
+/Users/zvada/Developer/agent/box-ide/.conductor/dubai-v2/.context/attachments/Screenshot 2026-03-27 at 4.12.22 PM.png Yeah, I'll update the endpoint, but the origin shouldn't be like origin main and then we have a main like it's like a local main or origin main, right? So what do you think? It needs to be obvious.
+
+---
+
+But what if a user has... Basically when we click "Create a new workspace" we do from origin main, right? That's what we want from the cloud. So I think we should keep it that way. What it should say, the origin main. I think in the scroll through the branches. And yeah, feel free to add the badge there on the local. Make sure to do it properly and don't over complicate over engineered things like if something would be complex tell it to me we can remove stuff.
+
+---
+
+Have you updated also the endpoint when we create a PR? I cannot see any branches when we do the create PR, but it should load the branches, right?/Users/zvada/Developer/agent/box-ide/.conductor/dubai-v2/.context/attachments/Screenshot 2026-03-27 at 4.24.43 PM.png
+
+---
+
+We should be reusing the component of the branch selector right inside the welcome view. We don't want to rewrite that.
+
+---
+
+/Users/zvada/Developer/agent/box-ide/.conductor/dubai-v2/.context/attachments/Screenshot 2026-03-27 at 4.32.06 PM.png But now nothing close, I think, inside the brain selectors Y.
+
+---
+
+Well, before it worked, so can you explore still when I click on the main on the branch feature inside the welcome screen? It does nothing. It just says "loading
+". Explore in more depth what is what is calling and stuff like that.
+
+---
+
+/Users/zvada/Developer/agent/box-ide/.conductor/dubai-v2/.context/attachments/Screenshot 2026-03-27 at 4.44.47 PM.png i see no "branches avaible" still doenst work
+
+---
+
+/Users/zvada/Developer/agent/box-ide/.conductor/dubai-v2/.context/attachments/Screenshot 2026-03-27 at 4.57.10 PM.png
+
+---
+
+yeha i wa getign this:[renderer] [vite] hot updated: /src/global.css (client:223)
+[renderer:warn] [WS] Dropped q:request frame: WebSocket not connected (query-protocol-client.ts?t=1774626596673:405)
+[renderer:warn] [WS] Dropped q:request frame: WebSocket not connected (query-protocol-client.ts?t=1774626596673:405)
+[renderer:warn] [WS] Dropped q:request frame: WebSocket not connected (query-protocol-client.ts?t=1774626596673:405)
+[renderer:warn] [WS] Dropped q:request frame: WebSocket not connected (query-protocol-client.ts?t=1774626596673:405)
+[renderer:warn] [WS] Dropped q:request frame: WebSocket not connected (query-protocol-client.ts?t=1774626596673:405)
+[renderer:warn] [WS] Dropped q:request frame: WebSocket not connected (query-protocol-client.ts?t=1774626596673:405)
+[renderer:warn] [WS] Dropped q:request frame: WebSocket not connected (query-protocol-client.ts?t=1774626596673:405)
+[renderer:warn] [WS] Dropped q:request frame: WebSocket not connected (query-protocol-client.ts?t=1774626596673:405)
+[renderer:warn] [WS] Dropped q:request frame: WebSocket not connected (query-protocol-client.ts?t=1774626596673:405)
+
+---
+
+/Users/zvada/Developer/agent/box-ide/.conductor/dubai-v2/.context/attachments/Screenshot 2026-03-27 at 5.00.21 PM.png but mpw t data is loaded why? fel sbroken
+
+---
+
+/Users/zvada/Developer/agent/box-ide/.conductor/dubai-v2/.context/attachments/pasted_text_2026-03-27_17-02-14.txt But why the backend just like stop working? It should not, right?
+
+---
+
+Also the major audit that's AI, the green dot says that like the connection to the back end is good.
+
+---
+
+/Users/zvada/Developer/agent/box-ide/.conductor/dubai-v2/.context/attachments/Screenshot 2026-03-27 at 5.05.47 PM.png Okay, so after restarting, seems like it works. Just, how do I know that this main is not local main, but from remote origin? Like, should we say like origin main or what do you think, if you explore, think about it.
+
+---
+
+Okay, but now how come it works inside the welcome screen, but inside the workspace next to the create PR, it doesn't work?????
+
+---
+
+/Users/zvada/Developer/agent/box-ide/.conductor/dubai-v2/.context/attachments/Screenshot 2026-03-27 at 5.20.18 PM.png 
+Here you can see an image. It says it was showing loading and failed to load branches. But in the new thread, this doesn't say, but also the web circuit says this, but like I'm not sure. I don't think that this is because the backend doesn't run. I think the backend is fine. But we used to have this problem also in the welcome view with the branch select right.
+
+
+
+[renderer:warn] [WS] Dropped q:request frame: WebSocket not connected (query-protocol-client.ts?t=1774628144629:405)
+[renderer:warn] [WS] Dropped q:request frame: WebSocket not connected (query-protocol-client.ts?t=1774628144629:405)
+
+---
+
+/code-simplifier /deslop We had a lot of iteration on top of this cloning stuff, the branches. So I want you to actually look and if there are any like that, not very nice code, some bad code structure or some over-engineering that can be done much simpler when you actually think about it. I want you to explore it and report to me back.
+
+---
+
+continue
+
+---
+
+Okay, I want you to explore the welcome view. And there is a way how to handle the image inputs and how they are rendered. And the same thing we do in the message input, right, in the session. Are we reusing the components? We don't want to like recreate a lot of code. Again, if it's brilliant somewhere, can you explore if something can be reused? Or we are reusing the maximum value without like over complicating abstraction.
+
+---
+
+Okay, let's do it.
+
+---
+
+And the visuals of the attachment or the image that's like implemented somewhere in another, in some component, because I feel like it's maybe too big, I would make it a little smaller.
+
+---
+
+So I don't have any visual, like once we drag the image it should show something that like this is the area to drop the image in, like see the message input, how we do it. So I want you to explore it and edit.
+
+---
+
+/Users/zvada/Developer/agent/box-ide/.conductor/dubai-v2/.context/attachments/Screenshot 2026-03-27 at 6.30.14 PM.png So this is one problem, when we want to clear or erase the image from the message input or the welcome view input, the close button inside the image, I think it should be like relative, like on top, so it's like visible or think about other ways to do it better.
+
+---
+
+Can you make the drop image thing more like a design more subtle? It's, I don't know, something is wrong there. Feels maybe, maybe the card, like the overlay is good, the color is good, but maybe the card in which the icon is. Is it even like needed there?
+
+---
+
+Can you explain me this error which I got in the logs? Is it unnecessary or is this something serious?
+
+
+[renderer:error] Warning: Function components cannot be given refs. Attempts to access this ref will fail. Did you mean to use React.forwardRef()?%s%s
+Check the render method of `PopChild`.
+    at PastedImageCard (http://localhost:1420/src/features/session/ui/PastedImageCard.tsx?t=1774632743567:25:35)
+    at PopChildMeasure (http://localhost:1420/@fs/Users/zvada/Developer/agent/box-ide/.conductor/dubai-v2/node_modules/.vite/deps/framer-motion.js?v=34d318cb:7864:23)
+    at PopChild (http://localhost:1420/@fs/Users/zvada/Developer/agent/box-ide/.conductor/dubai-v2/node_modules/.vite/deps/framer-motion.js?v=34d318cb:7890:21)
+    at PresenceChild (http://localhost:1420/@fs/Users/zvada/Developer/agent/box-ide/.conductor/dubai-v2/node_modules/.vite/deps/framer-motion.js?v=34d318cb:7938:24)
+    at AnimatePresence (http://localhost:1420/@fs/Users/zvada/Developer/agent/box-ide/.conductor/dubai-v2/node_modules/.vite/deps/framer-motion.js?v=34d318cb:8015:26)
+    at div
+    at MotionDOMComponent (http://localhost:1420/@fs/Users/zvada/Developer/agent/box-ide/.conductor/dubai-v2/node_modules/.vite/deps/framer-motion.js?v=34d318cb:8718:40)
+    at PopChildMeasure (http://localhost:1420/@fs/Users/zvada/Developer/agent/box-ide/.conductor/dubai-v2/node_modules/.vite/deps/framer-motion.js?v=34d318cb:7864:23)
+    at PopChild (http://localhost:1420/@fs/Users/zvada/Developer/agent/box-ide/.conductor/dubai-v2/node_modules/.vite/deps/framer-motion.js?v=34d318cb:7890:21)
+    at PresenceChild (http://localhost:1420/@fs/Users/zvada/Developer/agent/box-ide/.conductor/dubai-v2/node_modules/.vite/deps/framer-motion.js?v=34d318cb:7938:24)
+    at AnimatePresence (http://localhost:1420/@fs/Users/zvada/Developer/agent/box-ide/.conductor/dubai-v2/node_modules/.vite/deps/framer-motion.js?v=34d318cb:8015:26)
+    at div
+    at div
+    at MotionDOMComponent (http://localhost:1420/@fs/Users/zvada/Developer/agent/box-ide/.conductor/dubai-v2/node_modules/.vite/deps/framer-motion.js?v=34d318cb:8718:40)
+    at div
+    at WelcomeView (http://localhost:1420/src/features/repository/ui/WelcomeView.tsx?t=1774633181398:99:3)
+    at div
+    at div
+    at main
+    at SidebarInset (http://localhost:1420/src/components/ui/sidebar.tsx:485:25)
+    at MainContent (http://localhost:1420/src/app/layouts/MainContent.tsx:47:3)
+    at div
+    at Provider2 (http://localhost:1420/@fs/Users/zvada/Developer/agent/box-ide/.conductor/dubai-v2/node_modules/.vite/deps/@radix-ui_react-tooltip.js?v=34d318cb:62:15)
+    at TooltipProvider (http://localhost:1420/@fs/Users/zvada/Developer/agent/box-ide/.conductor/dubai-v2/node_modules/.vite/deps/@radix-ui_react-tooltip.js?v=34d318cb:260:5)
+    at TooltipProvider (http://localhost:1420/src/components/ui/tooltip.tsx:22:3)
+    at SidebarProvider (http://localhost:1420/src/components/ui/sidebar.tsx:52:3)
+    at MainLayout (http://localhost:1420/src/app/layouts/MainLayout.tsx:104:31)
+    at m (http://localhost:1420/@fs/Users/zvada/Developer/agent/box-ide/.conductor/dubai-v2/node_modules/.vite/deps/react-error-boundary.js?v=34d318cb:18:5)
+    at UpdateProvider (http://localhost:1420/src/features/updates/UpdateContext.tsx:21:3)
+    at DesktopShell (http://localhost:1420/src/app/shells/DesktopShell.tsx:36:32)
+    at ThemeProvider (http://localhost:1420/src/app/providers/ThemeProvider.tsx:20:33)
+    at m (http://localhost:1420/@fs/Users/zvada/Developer/agent/box-ide/.conductor/dubai-v2/node_modules/.vite/deps/react-error-boundary.js?v=34d318cb:18:5)
+    at QueryErrorResetBoundary (http://localhost:1420/@fs/Users/zvada/Developer/agent/box-ide/.conductor/dubai-v2/node_modules/.vite/deps/chunk-G6AZ5D6C.js?v=34d318cb:3206:3)
+    at QueryClientProvider (http://localhost:1420/@fs/Users/zvada/Developer/agent/box-ide/.conductor/dubai-v2/node_modules/.vite/deps/chunk-G6AZ5D6C.js?v=34d318cb:3168:3)
+    at QueryClientProvider (http://localhost:1420/src/app/providers/QueryClientProvider.tsx:20:39)
+    at LazyMotion (http://localhost:1420/@fs/Users/zvada/Developer/agent/box-ide/.conductor/dubai-v2/node_modules/.vite/deps/framer-motion.js?v=34d318cb:8208:23)
+    at App (http://localhost:1420/src/app/App.tsx:51:3)
+    at PostHogProvider (http://localhost:1420/@fs/Users/zvada/Developer/agent/box-ide/.conductor/dubai-v2/node_modules/.vite/deps/posthog-js_react.js?v=34d318cb:49:21) (chunk-XDPWHSPQ.js?v=34d318cb:521)

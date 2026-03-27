@@ -1,0 +1,56 @@
+{
+  "cli_version": "0.5.0",
+  "checkpoint_id": "d74ba6ed54c4",
+  "session_id": "01a6c22c-a8c9-4c48-a6b2-993edaf9d2fb",
+  "strategy": "manual-commit",
+  "created_at": "2026-03-27T18:46:59.813647Z",
+  "branch": "zvadaadam/update-welcome-screen",
+  "checkpoints_count": 36,
+  "files_touched": [
+    "apps/backend/src/routes/repos.ts",
+    "apps/backend/src/services/agent/commands.ts",
+    "apps/backend/src/services/workspace-init.service.ts",
+    "apps/backend/test/unit/services/workspace-init.service.test.ts",
+    "apps/backend/test/unit/shared/events.test.ts",
+    "apps/web/src/app/layouts/MainContent.tsx",
+    "apps/web/src/app/layouts/MainLayout.tsx",
+    "apps/web/src/app/layouts/MobileLayout.tsx",
+    "apps/web/src/app/layouts/MobilePRBar.tsx",
+    "apps/web/src/app/layouts/hooks/useRepoActions.ts",
+    "apps/web/src/features/repository/ui/CloneRepositoryModal.tsx",
+    "apps/web/src/features/repository/ui/WelcomeView.tsx",
+    "apps/web/src/features/session/hooks/useImageAttachments.ts",
+    "apps/web/src/features/session/ui/MessageInput.tsx",
+    "apps/web/src/features/session/ui/PastedImageCard.tsx",
+    "apps/web/src/features/sidebar/model/types.ts",
+    "apps/web/src/features/sidebar/ui/AppSidebar.tsx",
+    "apps/web/src/features/sidebar/ui/SidebarHeader.tsx",
+    "apps/web/src/features/workspace/api/workspace.queries.ts",
+    "apps/web/src/features/workspace/ui/BranchSelector.tsx",
+    "apps/web/src/features/workspace/ui/PRActions.tsx",
+    "apps/web/src/platform/ws/query-protocol-client.ts",
+    "shared/events.ts",
+    "shared/types/github.ts"
+  ],
+  "agent": "Claude Code",
+  "turn_id": "0e173196c9cd",
+  "token_usage": {
+    "input_tokens": 397,
+    "cache_creation_tokens": 657915,
+    "cache_read_tokens": 49164136,
+    "output_tokens": 140325,
+    "api_call_count": 321
+  },
+  "session_metrics": {
+    "turn_count": 36
+  },
+  "initial_attribution": {
+    "calculated_at": "2026-03-27T18:46:57.53771Z",
+    "agent_lines": 996,
+    "human_added": 63,
+    "human_modified": 216,
+    "human_removed": 0,
+    "total_committed": 1271,
+    "agent_percentage": 78.36349331235249
+  }
+}
