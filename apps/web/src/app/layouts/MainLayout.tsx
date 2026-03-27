@@ -171,6 +171,7 @@ export function MainLayout() {
   const pendingWelcomeMessageRef = useRef<{
     message: string;
     workspaceId: string;
+    model: string;
   } | null>(null);
 
   const handleSendFromWelcome = useCallback(
@@ -186,6 +187,7 @@ export function MainLayout() {
         pendingWelcomeMessageRef.current = {
           message,
           workspaceId: workspace.id,
+          model,
         };
         selectWorkspace(workspace.id);
         expandRepo(workspace.repository_id);
@@ -213,7 +215,7 @@ export function MainLayout() {
     if (!workspaceChatPanelRef.current) return;
 
     pendingWelcomeMessageRef.current = null;
-    workspaceChatPanelRef.current.sendMessage(pending.message).catch((error) => {
+    workspaceChatPanelRef.current.sendMessage(pending.message, pending.model).catch((error) => {
       console.error("Failed to send welcome message:", error);
       toast.error(getErrorMessage(error));
     });

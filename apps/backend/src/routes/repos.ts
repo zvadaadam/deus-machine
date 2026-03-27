@@ -1,6 +1,7 @@
 import { Hono } from "hono";
 import path from "path";
 import fs from "fs";
+import os from "os";
 import { spawn, execFile, execFileSync } from "child_process";
 import { promisify } from "util";
 
@@ -132,8 +133,15 @@ app.post("/repos/clone", async (c) => {
     throw new ValidationError("Missing or invalid 'targetPath' parameter");
   }
 
+  // Path traversal guard — reject paths that escape the user's home directory
+  const resolvedPath = path.resolve(targetPath);
+  const homeDir = os.homedir();
+  if (!resolvedPath.startsWith(homeDir + path.sep) && resolvedPath !== homeDir) {
+    throw new ValidationError("Target path must be within the home directory");
+  }
+
   // Ensure parent directory exists
-  const parentDir = path.dirname(targetPath);
+  const parentDir = path.dirname(resolvedPath);
   try {
     fs.mkdirSync(parentDir, { recursive: true });
   } catch (err) {
@@ -141,13 +149,13 @@ app.post("/repos/clone", async (c) => {
   }
 
   // Check target doesn't already exist
-  if (fs.existsSync(targetPath)) {
+  if (fs.existsSync(resolvedPath)) {
     throw new ConflictError("Target directory already exists");
   }
 
   // Run git clone with progress, forward raw stderr lines to frontend
   return new Promise<Response>((resolve) => {
-    const proc = spawn("git", ["clone", "--progress", url, targetPath], {
+    const proc = spawn("git", ["clone", "--progress", url, resolvedPath], {
       stdio: ["ignore", "pipe", "pipe"],
       timeout: 300_000, // 5 minute timeout
     });
@@ -172,7 +180,7 @@ app.post("/repos/clone", async (c) => {
 
       if (code === 0) {
         pushCloneLine("Clone complete.");
-        resolve(c.json({ success: true, path: targetPath }));
+        resolve(c.json({ success: true, path: resolvedPath }));
       } else {
         resolve(c.json({ error: remaining || `git clone exited with code ${code}` }, 500));
       }
