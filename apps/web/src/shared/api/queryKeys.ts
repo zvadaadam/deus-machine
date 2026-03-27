@@ -66,6 +66,7 @@ export const queryKeys = {
     mcpServers: ["settings", "mcp-servers"] as const,
     commands: ["settings", "commands"] as const,
     agents: ["settings", "agents"] as const,
+    agentAuth: ["settings", "agent-auth"] as const,
   },
 
   // Agent Config (scope-aware config management)

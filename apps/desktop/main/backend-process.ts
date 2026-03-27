@@ -12,7 +12,7 @@
 
 import { spawn, type ChildProcess } from "child_process";
 import { join } from "path";
-import { existsSync, writeFileSync } from "fs";
+import { writeFileSync } from "fs";
 import { app, BrowserWindow } from "electron";
 import crypto from "crypto";
 
@@ -38,11 +38,8 @@ export async function spawnBackend(): Promise<{ port: number; authToken: string 
     ? join(process.resourcesPath, "backend", "server.bundled.cjs")
     : join(projectRoot, "apps/backend/server.cjs");
 
-  // Database path — prefer legacy location (pre-rename) if it exists,
-  // otherwise use Electron's userData dir (~/Library/Application Support/Deus/).
-  const legacyDbPath = join(app.getPath("appData"), "com.opendevs.ide", "opendevs.db");
-  const electronDbPath = join(app.getPath("userData"), "deus.db");
-  const dbPath = existsSync(legacyDbPath) ? legacyDbPath : electronDbPath;
+  // Database lives in Electron's userData dir (~/Library/Application Support/Deus/).
+  const dbPath = join(app.getPath("userData"), "deus.db");
 
   // Agent-server bundle path
   const agentServerPath = app.isPackaged
@@ -86,11 +83,7 @@ export async function spawnBackend(): Promise<{ port: number; authToken: string 
           console.log("[backend]", trimmed);
         }
 
-        // Match both formats: "[BACKEND_PORT]12345" (primary) and
-        // "Backend server started on port 12345" (legacy fallback).
-        const portMatch =
-          trimmed.match(/^\[BACKEND_PORT\](\d+)$/) ||
-          trimmed.match(/Backend server started on port (\d+)/);
+        const portMatch = trimmed.match(/^\[BACKEND_PORT\](\d+)$/);
         if (portMatch && !resolved) {
           resolved = true;
           restartAttempt = 0;
