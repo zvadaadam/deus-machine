@@ -1,0 +1,22 @@
+{
+  "cli_version": "0.5.0",
+  "checkpoint_id": "337aa1444333",
+  "session_id": "8b787eb2-e608-42a4-9663-b07de97ab213",
+  "strategy": "manual-commit",
+  "created_at": "2026-03-28T20:11:54.538005Z",
+  "branch": "zvadaadam/fix-browser-zoom-overflow",
+  "checkpoints_count": 2,
+  "files_touched": [],
+  "agent": "Claude Code",
+  "turn_id": "dd3af1d80ff9",
+  "token_usage": {
+    "input_tokens": 3346,
+    "cache_creation_tokens": 1151133,
+    "cache_read_tokens": 50726174,
+    "output_tokens": 133380,
+    "api_call_count": 345
+  },
+  "session_metrics": {
+    "turn_count": 29
+  }
+}
