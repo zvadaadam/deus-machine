@@ -2119,3 +2119,16 @@ File: `apps/desktop/main/index.ts:42`, `apps/desktop/main/backend-process.ts:65`
 ---
 
 Commit and push all changes
+
+---
+
+<system_instruction>
+The user has attached these files. Read them before proceeding.
+- /Users/zvada/Developer/agent/box-ide/.conductor/cancun-v4/.context/attachments/REDACTED.log (58.4 KB)
+- /Users/zvada/Developer/agent/box-ide/.conductor/cancun-v4/.context/attachments/Backend_Tests_69021854404.log (100.7 KB)
+- /Users/zvada/Developer/agent/box-ide/.conductor/cancun-v4/.context/attachments/Fix errors instructions.md (430 B)
+</system_instruction>
+
+
+
+Fix the failing CI actions. I've attached the failure logs.
