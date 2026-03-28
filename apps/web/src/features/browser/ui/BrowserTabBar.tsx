@@ -6,6 +6,7 @@
  */
 
 import { Globe, ExternalLink } from "lucide-react";
+import { cn } from "@/shared/lib/utils";
 import type { BrowserTabState } from "../types";
 
 interface BrowserTabBarProps {
@@ -36,11 +37,12 @@ export function BrowserTabBar({
         {tabs.map((tab) => (
           <div
             key={tab.id}
-            className={`ease flex items-center gap-1 rounded-md pr-1 text-xs whitespace-nowrap transition-colors duration-200 select-none ${
+            className={cn(
+              "flex items-center gap-1 rounded-md pr-1 text-xs whitespace-nowrap transition-colors duration-200 ease-out select-none",
               activeTabId === tab.id
                 ? "bg-bg-raised text-text-secondary font-medium"
                 : "text-text-muted hover:bg-foreground/5 hover:text-text-tertiary"
-            }`}
+            )}
           >
             <button
               type="button"

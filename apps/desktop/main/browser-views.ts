@@ -12,17 +12,17 @@
  *   browser panel is tracked as a follow-up improvement.
  *
  * Each browser view gets:
- * - Its own session partition (isolated cookies/storage)
- * - A preload script for console capture
+ * - A shared session partition for cookie persistence across tabs/restarts
+ * - A preload script for console capture + keyboard routing
+ * - Main-world polyfill injection (WebAuthn, local-network-access)
  * - Event forwarding (page-load, title, url, navigation)
- * - Network request tracking via session.webRequest
  *
- * Handler names match the snake_case names the renderer calls
- * via invoke(). The preload's browserInvoke() uses "browser:" prefixed names
- * for its own methods, but generic invoke() calls use snake_case.
+ * Handler names match the snake_case names the renderer calls via invoke().
+ * Handlers prefixed "browser:" are invoked via the generic invoke() bridge
+ * (back, forward, createDetachedWindow, closeDetachedWindow).
  */
 
-import { WebContentsView, BrowserWindow, ipcMain, shell } from "electron";
+import { WebContentsView, BrowserWindow, ipcMain } from "electron";
 import { join } from "path";
 import { is } from "@electron-toolkit/utils";
 
@@ -31,6 +31,91 @@ const viewBounds = new Map<string, Electron.Rectangle>();
 
 /** Reference to the detached browser window (only one at a time) */
 let detachedWindow: BrowserWindow | null = null;
+
+/** Centralized main window lookup — avoids repeating getAllWindows()[0] in every handler */
+function getMainWindow(): BrowserWindow | undefined {
+  return BrowserWindow.getAllWindows().find((w) => w !== detachedWindow) ?? BrowserWindow.getAllWindows()[0];
+}
+
+// ---------------------------------------------------------------------------
+// Main-world polyfill scripts
+//
+// These are injected via view.webContents.executeJavaScript() on `dom-ready`
+// so they run in the page's main world. The preload's webFrame.executeJavaScript()
+// runs in the isolated world and cannot override page-visible APIs like
+// navigator.credentials or navigator.permissions.
+// ---------------------------------------------------------------------------
+
+const WEBAUTHN_POLYFILL_JS = `(function() {
+  if (typeof navigator === 'undefined' || !navigator.credentials) return;
+  if (navigator.credentials.__webAuthnPolyfillApplied) return;
+  navigator.credentials.__webAuthnPolyfillApplied = true;
+
+  function createNotSupportedError() {
+    return new DOMException('WebAuthn is not supported in the Deus browser. Click "Try another way" to use password login.', 'NotSupportedError');
+  }
+
+  var origCreate = navigator.credentials.create;
+  var origGet = navigator.credentials.get;
+
+  // Reject passkey/FIDO2 requests immediately so sites fall back to
+  // password login. Wrapping the original method with a 45s timeout
+  // just makes users wait — rejecting instantly shows the fallback UI.
+  navigator.credentials.create = function(options) {
+    if (options && options.publicKey) return Promise.reject(createNotSupportedError());
+    return origCreate ? origCreate.apply(navigator.credentials, arguments) : Promise.reject(createNotSupportedError());
+  };
+  navigator.credentials.get = function(options) {
+    if (options && options.publicKey) return Promise.reject(createNotSupportedError());
+    return origGet ? origGet.apply(navigator.credentials, arguments) : Promise.reject(createNotSupportedError());
+  };
+
+  if (typeof PublicKeyCredential !== 'undefined') {
+    PublicKeyCredential.isUserVerifyingPlatformAuthenticatorAvailable = function() {
+      return Promise.resolve(false);
+    };
+    if (typeof PublicKeyCredential.isConditionalMediationAvailable === 'function') {
+      PublicKeyCredential.isConditionalMediationAvailable = function() {
+        return Promise.resolve(false);
+      };
+    }
+  }
+})();`;
+
+const LOCAL_NETWORK_POLYFILL_JS = `(function() {
+  if (typeof navigator === 'undefined' || !navigator.permissions || !navigator.permissions.query) return;
+  if (navigator.permissions.__localNetworkPolyfillApplied) return;
+  navigator.permissions.__localNetworkPolyfillApplied = true;
+
+  var origQuery = navigator.permissions.query.bind(navigator.permissions);
+  navigator.permissions.query = function(descriptor) {
+    if (descriptor && (descriptor.name === 'local-network-access' || descriptor.name === 'local-network')) {
+      return Promise.resolve({
+        state: 'granted',
+        name: descriptor.name,
+        onchange: null,
+        addEventListener: function() {},
+        removeEventListener: function() {},
+        dispatchEvent: function() { return true; }
+      });
+    }
+    return origQuery(descriptor);
+  };
+})();`;
+
+const AUTH_DOMAINS = [
+  ".okta.com",
+  ".okta-emea.com",
+  ".oktapreview.com",
+  ".duosecurity.com",
+  ".duo.com",
+  ".login.microsoftonline.com",
+  ".onelogin.com",
+  ".auth0.com",
+  ".pingidentity.com",
+  ".pingone.com",
+  ".rippling.com",
+];
 
 export function registerBrowserViewHandlers(): void {
   // -------------------------------------------------------------------------
@@ -59,7 +144,7 @@ export function registerBrowserViewHandlers(): void {
         windowLabel?: string;
       }
     ) => {
-      const mainWindow = BrowserWindow.getAllWindows()[0];
+      const mainWindow = getMainWindow();
       if (!mainWindow) return;
 
       // Clean up existing view with same label
@@ -70,18 +155,30 @@ export function registerBrowserViewHandlers(): void {
         views.delete(label);
       }
 
+      // getBoundingClientRect() returns CSS-pixel coordinates, but
+      // WebContentsView.setBounds() operates in the window's native coordinate
+      // space. When the user zooms the renderer (Cmd+/Cmd-), CSS pixels diverge
+      // from window points by the zoom factor — multiply to correct.
+      const zoomFactor = mainWindow.webContents.getZoomFactor();
       const bounds = {
-        x: Math.round(x),
-        y: Math.round(y),
-        width: Math.round(Math.max(width, 100)),
-        height: Math.round(Math.max(height, 100)),
+        x: Math.round(x * zoomFactor),
+        y: Math.round(y * zoomFactor),
+        width: Math.round(Math.max(width * zoomFactor, 100)),
+        height: Math.round(Math.max(height * zoomFactor, 100)),
       };
 
       const view = new WebContentsView({
         webPreferences: {
-          partition: `persist:browser-${label}`,
+          // Single shared partition — all tabs share cookies like a real browser.
+          // Login once on localhost:3000, every tab sees it. Persists across restarts.
+          partition: "persist:browser",
           contextIsolation: true,
-          sandbox: false, // ESM preload (.mjs) requires sandbox: false
+          nodeIntegration: false,
+          nodeIntegrationInSubFrames: false,
+          sandbox: false, // ESM preload (.mjs) requires sandbox: false — TODO: convert to CJS
+          webviewTag: false,
+          navigateOnDragDrop: false,
+          enableBlinkFeatures: "StandardizedBrowserZoom",
           preload: join(__dirname, "../preload/browser-preload.mjs"),
         },
       });
@@ -161,29 +258,38 @@ export function registerBrowserViewHandlers(): void {
       // TODO: Network request tracking — disabled until renderer listener is wired.
       // The events were being sent but nothing consumed them (wasted IPC traffic).
 
-      // Gracefully handle certificate errors for localhost dev servers.
-      // Self-signed certs on localhost/127.0.0.1 are accepted — all other
-      // cert errors are rejected (navigation will fail).
+      // Certificate error handling — only accept self-signed certs on localhost
+      // in development mode. Production builds reject all cert errors.
       view.webContents.on("certificate-error", (event, _url, _error, _certificate, callback) => {
-        try {
-          const parsed = new URL(_url);
-          if (parsed.hostname === "localhost" || parsed.hostname === "127.0.0.1") {
-            event.preventDefault();
-            callback(true); // Accept for localhost
-            return;
+        if (is.dev) {
+          try {
+            const parsed = new URL(_url);
+            if (parsed.hostname === "localhost" || parsed.hostname === "127.0.0.1") {
+              event.preventDefault();
+              callback(true);
+              return;
+            }
+          } catch {
+            // Malformed URL — fall through to reject
           }
-        } catch {
-          // Malformed URL — fall through to reject
         }
         callback(false);
       });
 
-      // Open external links in system browser (only allow http/https)
-      view.webContents.setWindowOpenHandler(({ url: linkUrl }) => {
+      // Handle popups (window.open, target="_blank", OAuth flows).
+      // Instead of opening in the system browser (which breaks OAuth callbacks),
+      // forward to the renderer so it opens as a new browser tab in the IDE.
+      // This matches how Cursor handles it — popup stays in-app, cookies are shared.
+      view.webContents.setWindowOpenHandler(({ url: linkUrl, disposition }) => {
         try {
           const parsed = new URL(linkUrl);
           if (parsed.protocol === "http:" || parsed.protocol === "https:") {
-            shell.openExternal(linkUrl);
+            // Send to renderer to open as a new browser tab
+            mainWindow.webContents.send("browser:new-tab-requested", {
+              url: linkUrl,
+              disposition, // "foreground-tab", "background-tab", "new-window"
+              openerLabel: label,
+            });
           }
         } catch {
           // Ignore malformed URLs
@@ -191,16 +297,44 @@ export function registerBrowserViewHandlers(): void {
         return { action: "deny" };
       });
 
-      // Handle keyboard shortcuts from the browser preload
-      view.webContents.on("ipc-message", (_event, channel, data) => {
+      // Handle messages from the browser preload (keyboard shortcuts + console)
+      view.webContents.on("ipc-message", (_event, channel, ...args) => {
         if (channel === "browser:keyboard-shortcut") {
-          const { shortcut } = data as { shortcut: string };
+          const payload = args[0];
+          if (!payload || typeof payload !== "object") return;
+          const { shortcut } = payload as { shortcut: string };
           if (shortcut === "reload") {
             view.webContents.reload();
           } else if (shortcut === "focus-url-bar") {
             // Forward to renderer so the URL bar can be focused
             mainWindow.webContents.send("browser:keyboard-shortcut", { shortcut });
           }
+        } else if (channel === "browser:console-message") {
+          // Forward console messages from browser views to the renderer
+          mainWindow.webContents.send("browser:console-message", args[0]);
+        }
+      });
+
+      // Inject polyfills into the page's main world.
+      // WebAuthn must run BEFORE page scripts — use did-start-navigation so it
+      // executes before any site JS checks PublicKeyCredential availability.
+      // dom-ready is too late: Google's auth JS runs during parsing.
+      view.webContents.on("did-start-navigation", (_event, _url, isInPlace, isMainFrame) => {
+        if (!isMainFrame || isInPlace) return;
+        // WebAuthn polyfill — immediate rejection for passkey/FIDO2 requests
+        view.webContents.executeJavaScript(WEBAUTHN_POLYFILL_JS).catch(() => {});
+      });
+
+      // Local network polyfill needs the final URL (after redirects), so use dom-ready
+      view.webContents.on("dom-ready", () => {
+        try {
+          const pageUrl = view.webContents.getURL();
+          const hostname = new URL(pageUrl).hostname.toLowerCase();
+          if (AUTH_DOMAINS.some((d) => hostname === d.slice(1) || hostname.endsWith(d))) {
+            view.webContents.executeJavaScript(LOCAL_NETWORK_POLYFILL_JS).catch(() => {});
+          }
+        } catch {
+          /* malformed URL — skip polyfill */
         }
       });
 
@@ -235,25 +369,34 @@ export function registerBrowserViewHandlers(): void {
       try {
         return await view.webContents.executeJavaScript(js);
       } catch (err) {
-        console.error(`[browser:eval] Error in view "${label}":`, err);
+        console.error(`[BrowserView] eval failed for "${label}":`, err);
         return null;
       }
     }
   );
 
   // -------------------------------------------------------------------------
-  // JavaScript evaluation (with result capture)
-  // Renderer calls: invoke("eval_browser_webview_with_result", { label, js })
+  // JavaScript evaluation (with result capture + timeout)
+  // Renderer calls: invoke("eval_browser_webview_with_result", { label, js, timeout_ms })
   // Used by BrowserTab.tsx for console drain and inspect mode event drain.
   // -------------------------------------------------------------------------
 
   ipcMain.handle(
     "eval_browser_webview_with_result",
-    async (_e, { label, js }: { label: string; js: string }) => {
+    async (
+      _e,
+      { label, js, timeout_ms }: { label: string; js: string; timeout_ms?: number }
+    ) => {
       const view = views.get(label);
       if (!view) return null;
       try {
-        return await view.webContents.executeJavaScript(js);
+        const timeout = timeout_ms ?? 30_000;
+        return await Promise.race([
+          view.webContents.executeJavaScript(js),
+          new Promise<never>((_, reject) =>
+            setTimeout(() => reject(new Error("Eval timeout")), timeout)
+          ),
+        ]);
       } catch (err) {
         console.error(`[BrowserView] eval failed for "${label}":`, err);
         return null;
@@ -354,11 +497,14 @@ export function registerBrowserViewHandlers(): void {
         height: number;
       }
     ) => {
+      // CSS-pixel → window-point conversion (see create_browser_webview comment)
+      const mainWindow = getMainWindow();
+      const zoomFactor = mainWindow?.webContents.getZoomFactor() ?? 1;
       const bounds = {
-        x: Math.round(x),
-        y: Math.round(y),
-        width: Math.round(width),
-        height: Math.round(height),
+        x: Math.round(x * zoomFactor),
+        y: Math.round(y * zoomFactor),
+        width: Math.round(width * zoomFactor),
+        height: Math.round(height * zoomFactor),
       };
       const view = views.get(label);
       if (view) {
@@ -371,7 +517,7 @@ export function registerBrowserViewHandlers(): void {
   );
 
   ipcMain.handle("show_browser_webview", (_e, { label }: { label: string }) => {
-    const mainWindow = BrowserWindow.getAllWindows()[0];
+    const mainWindow = getMainWindow();
     const view = views.get(label);
     if (mainWindow && view) {
       // Ensure view is in the contentView hierarchy
@@ -407,7 +553,7 @@ export function registerBrowserViewHandlers(): void {
   ipcMain.handle("close_browser_webview", (_e, { label }: { label: string }) => {
     const view = views.get(label);
     if (!view) return;
-    const mainWindow = BrowserWindow.getAllWindows()[0];
+    const mainWindow = getMainWindow();
     if (mainWindow) {
       mainWindow.contentView.removeChildView(view);
     }
@@ -421,44 +567,15 @@ export function registerBrowserViewHandlers(): void {
   });
 
   // -------------------------------------------------------------------------
-  // Cookie management (preload browserInvoke calls "browser:cookies:set/get")
-  // Keep these with the browser: prefix for the preload's browserInvoke()
+  // View existence check (used by try-recall-before-create pattern)
   // -------------------------------------------------------------------------
 
-  ipcMain.handle(
-    "browser:cookies:set",
-    async (_e, { label, cookies }: { label: string; cookies: Electron.CookiesSetDetails[] }) => {
-      const ses = views.get(label)?.webContents.session;
-      if (!ses) return;
-      for (const cookie of cookies) {
-        await ses.cookies.set(cookie);
-      }
-    }
-  );
-
-  ipcMain.handle(
-    "browser:cookies:get",
-    async (_e, { label, url }: { label: string; url: string }) => {
-      const ses = views.get(label)?.webContents.session;
-      if (!ses) return [];
-      return ses.cookies.get({ url });
-    }
-  );
-
-  // -------------------------------------------------------------------------
-  // Get URL / title (preload browserInvoke calls "browser:getURL" / "browser:getTitle")
-  // -------------------------------------------------------------------------
-
-  ipcMain.handle("browser:getURL", (_e, { label }: { label: string }) => {
-    return views.get(label)?.webContents.getURL() ?? null;
-  });
-
-  ipcMain.handle("browser:getTitle", (_e, { label }: { label: string }) => {
-    return views.get(label)?.webContents.getTitle() ?? null;
+  ipcMain.handle("browser_view_exists", (_e, { label }: { label: string }) => {
+    return views.has(label);
   });
 
   // -------------------------------------------------------------------------
-  // Back / Forward (preload browserInvoke calls "browser:back" / "browser:forward")
+  // Back / Forward
   // -------------------------------------------------------------------------
 
   ipcMain.handle("browser:back", (_e, { label }: { label: string }) => {
@@ -532,10 +649,11 @@ export function registerBrowserViewHandlers(): void {
         });
       }
 
+      // Register close handler immediately after creation (before loadURL completes)
+      // to prevent race conditions where the window closes before the listener is attached.
       detachedWindow.on("closed", () => {
         detachedWindow = null;
-        // Notify the main renderer that the detached window was closed
-        const mainWindow = BrowserWindow.getAllWindows()[0];
+        const mainWindow = getMainWindow();
         if (mainWindow) {
           mainWindow.webContents.send("browser:detached-closed");
         }
@@ -555,7 +673,7 @@ export function registerBrowserViewHandlers(): void {
  * Clean up all browser views. Called on app quit.
  */
 export function destroyAllBrowserViews(): void {
-  const mainWindow = BrowserWindow.getAllWindows()[0];
+  const mainWindow = getMainWindow();
   for (const [, view] of views) {
     if (mainWindow) {
       mainWindow.contentView.removeChildView(view);
@@ -563,6 +681,7 @@ export function destroyAllBrowserViews(): void {
     (view.webContents as any).destroy?.();
   }
   views.clear();
+  viewBounds.clear();
 
   if (detachedWindow && !detachedWindow.isDestroyed()) {
     detachedWindow.close();

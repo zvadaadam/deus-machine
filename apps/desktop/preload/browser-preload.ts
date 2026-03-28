@@ -6,12 +6,15 @@
  * Responsibilities:
  * 1. Console capture — forward to main process for the console panel
  * 2. Dialog override — alert/confirm/prompt are non-blocking (prevents app freeze)
- * 3. WebAuthn polyfill — graceful rejection so passkey prompts don't hang
- * 4. Local network access polyfill — auto-grant for auth domains (Okta, Duo, etc.)
- * 5. Keyboard shortcut routing — Cmd+R/L route back to IDE
+ * 3. Keyboard shortcut routing — Cmd+R/L route back to IDE
+ *
+ * NOTE: WebAuthn and local-network-access polyfills are injected from the main
+ * process via view.webContents.executeJavaScript() on `dom-ready`, which targets
+ * the page's main world. The preload's webFrame.executeJavaScript() runs in the
+ * isolated world and cannot override page-visible APIs.
  */
 
-import { ipcRenderer, webFrame } from "electron";
+import { ipcRenderer } from "electron";
 
 // ---------------------------------------------------------------------------
 // Console capture — forward to main process
@@ -62,6 +65,7 @@ console.info = (...args: unknown[]) => {
 
 // ---------------------------------------------------------------------------
 // Override blocking dialogs to be non-blocking
+// (intentional for agent automation — prevents app freeze from page dialogs)
 // ---------------------------------------------------------------------------
 
 window.alert = (message?: string) => {
@@ -77,150 +81,6 @@ window.prompt = (_message?: string, _defaultValue?: string) => {
   originalConsole.log("[prompt]", _message);
   return _defaultValue ?? null;
 };
-
-// ---------------------------------------------------------------------------
-// WebAuthn polyfill — graceful rejection for passkey/FIDO2 requests
-//
-// BrowserViews don't support WebAuthn. Without this polyfill, pages that
-// call navigator.credentials.create/get() with publicKey hang indefinitely
-// waiting for an authenticator response that never comes.
-//
-// Wrap the native methods, apply a 45s abort timeout,
-// and report "NotSupportedError" so the page can fall back to password auth.
-// ---------------------------------------------------------------------------
-
-try {
-  webFrame.executeJavaScript(`
-    (function() {
-      if (typeof navigator === 'undefined' || !navigator.credentials) return;
-      if (navigator.credentials.__webAuthnPolyfillApplied) return;
-      navigator.credentials.__webAuthnPolyfillApplied = true;
-
-      var ABORT_DELAY_MS = 45000;
-
-      function createNotSupportedError() {
-        return new DOMException(
-          'WebAuthn is not supported in the Deus browser.',
-          'NotSupportedError'
-        );
-      }
-
-      var origCreate = navigator.credentials.create;
-      var origGet = navigator.credentials.get;
-
-      function wrapWebAuthn(originalMethod, options, args) {
-        if (!originalMethod) return Promise.reject(createNotSupportedError());
-
-        var callerSignal = options && options.signal;
-        if (callerSignal && callerSignal.aborted) {
-          return Promise.reject(callerSignal.reason || new DOMException('Aborted', 'AbortError'));
-        }
-
-        var ac = typeof AbortController === 'function' ? new AbortController() : undefined;
-        var reqArgs = Array.prototype.slice.call(args);
-        if (ac) reqArgs[0] = Object.assign({}, options, { signal: ac.signal });
-
-        var done = false;
-        var timer;
-
-        return new Promise(function(resolve, reject) {
-          timer = setTimeout(function() {
-            if (done) return;
-            done = true;
-            if (ac) ac.abort();
-            reject(new DOMException('WebAuthn timed out.', 'TimeoutError'));
-          }, ABORT_DELAY_MS);
-
-          Promise.resolve().then(function() {
-            return originalMethod.apply(navigator.credentials, reqArgs);
-          }).then(
-            function(v) { if (!done) { done = true; clearTimeout(timer); resolve(v); } },
-            function(e) { if (!done) { done = true; clearTimeout(timer); reject(e); } }
-          );
-        });
-      }
-
-      navigator.credentials.create = function(options) {
-        if (options && options.publicKey) return wrapWebAuthn(origCreate, options, arguments);
-        return origCreate ? origCreate.apply(navigator.credentials, arguments) : Promise.reject(createNotSupportedError());
-      };
-
-      navigator.credentials.get = function(options) {
-        if (options && options.publicKey) return wrapWebAuthn(origGet, options, arguments);
-        return origGet ? origGet.apply(navigator.credentials, arguments) : Promise.reject(createNotSupportedError());
-      };
-
-      if (typeof PublicKeyCredential !== 'undefined') {
-        PublicKeyCredential.isUserVerifyingPlatformAuthenticatorAvailable = function() {
-          return Promise.resolve(false);
-        };
-        if (typeof PublicKeyCredential.isConditionalMediationAvailable === 'function') {
-          PublicKeyCredential.isConditionalMediationAvailable = function() {
-            return Promise.resolve(false);
-          };
-        }
-      }
-    })();
-  `);
-} catch (e) {
-  originalConsole.error("[browser-preload] WebAuthn polyfill injection failed:", e);
-}
-
-// ---------------------------------------------------------------------------
-// Local network access permission polyfill
-//
-// Corporate auth pages (Okta, Duo, Microsoft, Auth0, etc.) sometimes query
-// navigator.permissions for "local-network-access". Without granting it,
-// the auth flow can stall. Auto-grant on known auth domains only.
-// ---------------------------------------------------------------------------
-
-const AUTH_DOMAINS = [
-  ".okta.com",
-  ".okta-emea.com",
-  ".oktapreview.com",
-  ".duosecurity.com",
-  ".duo.com",
-  ".login.microsoftonline.com",
-  ".onelogin.com",
-  ".auth0.com",
-  ".pingidentity.com",
-  ".pingone.com",
-  ".rippling.com",
-];
-
-function injectLocalNetworkPolyfill(): void {
-  try {
-    const hostname = window.location.hostname.toLowerCase();
-    if (!AUTH_DOMAINS.some((d) => hostname === d.slice(1) || hostname.endsWith(d))) return;
-
-    webFrame.executeJavaScript(`
-      (function() {
-        if (typeof navigator === 'undefined' || !navigator.permissions || !navigator.permissions.query) return;
-        if (navigator.permissions.__localNetworkPolyfillApplied) return;
-        navigator.permissions.__localNetworkPolyfillApplied = true;
-
-        var origQuery = navigator.permissions.query.bind(navigator.permissions);
-        navigator.permissions.query = function(descriptor) {
-          if (descriptor && (descriptor.name === 'local-network-access' || descriptor.name === 'local-network')) {
-            return Promise.resolve({
-              state: 'granted',
-              name: descriptor.name,
-              onchange: null,
-              addEventListener: function() {},
-              removeEventListener: function() {},
-              dispatchEvent: function() { return true; }
-            });
-          }
-          return origQuery(descriptor);
-        };
-      })();
-    `);
-  } catch (e) {
-    originalConsole.error("[browser-preload] Local network polyfill failed:", e);
-  }
-}
-
-injectLocalNetworkPolyfill();
 
 // ---------------------------------------------------------------------------
 // Keyboard shortcut routing

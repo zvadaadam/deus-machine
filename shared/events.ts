@@ -39,6 +39,7 @@ export const BROWSER_TITLE_CHANGED = "browser:title-changed" as const;
 export const BROWSER_URL_CHANGE = "browser:url-change" as const;
 export const BROWSER_WORKSPACE_CHANGE = "browser-window:workspace-change" as const;
 export const BROWSER_DETACHED_CLOSED = "browser:detached-closed" as const;
+export const BROWSER_NEW_TAB_REQUESTED = "browser:new-tab-requested" as const;
 
 /** Simulator events — main process → frontend */
 export const SIM_BUILD_LOG = "sim:build-log" as const;
@@ -184,6 +185,7 @@ export const BrowserPageLoadSchema = z.object({
   label: z.string(),
   url: z.string(),
   event: z.string(),
+  error: z.object({ code: z.number(), description: z.string() }).optional(),
 });
 export type BrowserPageLoadEvent = z.infer<typeof BrowserPageLoadSchema>;
 
@@ -206,6 +208,13 @@ export const BrowserWorkspaceChangeSchema = z.object({
   branch: z.string().nullish(),
 });
 export type BrowserWorkspaceChangeEvent = z.infer<typeof BrowserWorkspaceChangeSchema>;
+
+export const BrowserNewTabRequestedSchema = z.object({
+  url: z.string(),
+  disposition: z.string().optional(),
+  openerLabel: z.string().optional(),
+});
+export type BrowserNewTabRequestedEvent = z.infer<typeof BrowserNewTabRequestedSchema>;
 
 export const SimBuildLogSchema = z.object({
   workspaceId: z.string(),
@@ -289,6 +298,7 @@ export const AppEventSchemaMap = {
   [BROWSER_URL_CHANGE]: BrowserUrlChangeSchema,
   [BROWSER_WORKSPACE_CHANGE]: BrowserWorkspaceChangeSchema,
   [BROWSER_DETACHED_CLOSED]: z.undefined(),
+  [BROWSER_NEW_TAB_REQUESTED]: BrowserNewTabRequestedSchema,
   [SIM_BUILD_LOG]: SimBuildLogSchema,
   [CHAT_INSERT]: ChatInsertSchema,
   [GIT_CLONE_PROGRESS]: GitCloneProgressSchema,
@@ -323,6 +333,7 @@ export interface AppEventMap {
   [BROWSER_URL_CHANGE]: BrowserUrlChangeEvent;
   [BROWSER_WORKSPACE_CHANGE]: BrowserWorkspaceChangeEvent;
   [BROWSER_DETACHED_CLOSED]: undefined;
+  [BROWSER_NEW_TAB_REQUESTED]: BrowserNewTabRequestedEvent;
 
   // Simulator
   [SIM_BUILD_LOG]: SimBuildLogEvent;

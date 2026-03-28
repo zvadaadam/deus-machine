@@ -62,6 +62,7 @@ export async function spawnBackend(): Promise<{ port: number; authToken: string 
         NOTEBOOK_SERVER_BUNDLE_PATH: notebookPath,
         AUTH_TOKEN: authToken,
         PORT: "0", // Dynamic port allocation
+        CDP_PORT: "19222", // Chrome DevTools Protocol port for agent-browser integration
       },
       stdio: ["ignore", "pipe", "pipe"],
     });
