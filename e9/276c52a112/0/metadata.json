@@ -1,0 +1,38 @@
+{
+  "cli_version": "0.5.0",
+  "checkpoint_id": "e9276c52a112",
+  "session_id": "e6142832-037a-4f1f-bcf5-fd75e146ee6e",
+  "strategy": "manual-commit",
+  "created_at": "2026-03-28T00:47:59.535408Z",
+  "branch": "adam-zvada/mercury",
+  "checkpoints_count": 8,
+  "files_touched": [
+    ".claude/agent-memory/code-reviewer/mobile-layout-patterns.md",
+    "apps/web/src/components/ui/sheet.tsx",
+    "apps/web/src/features/sidebar/ui/WorkspaceActionSheet.tsx",
+    "apps/web/src/features/sidebar/ui/WorkspaceItem.tsx",
+    "apps/web/src/shared/hooks/index.ts",
+    "apps/web/src/shared/hooks/useLongPress.ts"
+  ],
+  "agent": "Claude Code",
+  "turn_id": "f1b5cbcfa0c1",
+  "token_usage": {
+    "input_tokens": 140,
+    "cache_creation_tokens": 208433,
+    "cache_read_tokens": 5780534,
+    "output_tokens": 26579,
+    "api_call_count": 75
+  },
+  "session_metrics": {
+    "turn_count": 8
+  },
+  "initial_attribution": {
+    "calculated_at": "2026-03-28T00:47:59.396461Z",
+    "agent_lines": 255,
+    "human_added": 1,
+    "human_modified": 5,
+    "human_removed": 0,
+    "total_committed": 261,
+    "agent_percentage": 97.70114942528735
+  }
+}
