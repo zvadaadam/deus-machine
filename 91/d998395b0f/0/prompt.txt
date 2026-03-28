@@ -2901,3 +2901,96 @@ If you can test something do it.
 Remember, we don't want to over engineer if some of the changes before like we're over engineering stuff. We don't want them and we want to simplify, you know, but always like check the code review. /code-simplifier /deslop 
 
 ----
+
+---
+
+<system-instruction>
+The user has added 1 comment to the diff for this workspace. Please review and address these comments as part of your response. When addressing comments on the "original" side or on specific commits, read the file from that version (not the current version). Below are the comments, including metadata about what git state they were left on:
+
+Comment #1:
+
+File: apps/agent-server/rpc-schemas.ts
+Line: 99
+User comment: "_⚠️ Potential issue_ | _🟠 Major_
+
+**Missing `x` and `y` coordinate fields for coordinate-based clicks.**
+
+The commit message states this change enables coordinate-based clicks `(x/y)`, and the implementation in `browser.ts` (lines 254-261) validates that either `ref` OR both `x` and `y` must be provided. However, this schema only makes `ref` optional without adding the `x`/`y` fields.
+
+This allows requests like `{ sessionId: "..." }` (no `ref`, no coordinates) to pass schema validation, but they will fail at runtime with: `"Click requires either 'ref' (e.g., '@e1') or both 'x' and 'y' coordinates."`
+
+
+
+<details>
+<summary>Proposed fix: Add x/y coordinate fields</summary>
+
+```diff
+ export const BrowserClickRequestSchema = z.object({
+   sessionId: z.string(),
+   ref: z.string().optional().describe("Element data-cursor-ref to click"),
++  x: z.number().optional().describe("X coordinate for coordinate-based click"),
++  y: z.number().optional().describe("Y coordinate for coordinate-based click"),
+   doubleClick: z.boolean().optional(),
+   webviewLabel: z.string().optional(),
+ });
+```
+
+</details>
+
+Note: You may also want to add a `.refine()` to enforce "either `ref` or both `x`/`y`" at the schema level, matching the runtime validation in the handler.
+
+<!-- suggestion_start -->
+
+<details>
+<summary>📝 Committable suggestion</summary>
+
+> ‼️ **IMPORTANT**
+> Carefully review the code before committing. Ensure that it accurately replaces the highlighted code, contains no missing lines, and has no issues with indentation. Thoroughly test & benchmark the code to ensure it meets the requirements.
+
+```suggestion
+export const BrowserClickRequestSchema = z.object({
+  sessionId: z.string(),
+  ref: z.string().optional().describe("Element data-cursor-ref to click"),
+  x: z.number().optional().describe("X coordinate for coordinate-based click"),
+  y: z.number().optional().describe("Y coordinate for coordinate-based click"),
+  doubleClick: z.boolean().optional(),
+  webviewLabel: z.string().optional(),
+});
+```
+
+</details>
+
+<!-- suggestion_end -->
+
+<details>
+<summary>🤖 Prompt for AI Agents</summary>
+
+```
+Verify each finding against the current code and only fix it if needed.
+
+In `@apps/agent-server/rpc-schemas.ts` around lines 94 - 99, The schema
+BrowserClickRequestSchema is missing numeric x and y fields, so add x:
+z.number().optional() and y: z.number().optional() to the object and then add a
+.refine(...) that enforces either ref is present or both x and y are present
+(matching the runtime check in browser.ts where the handler requires "ref OR
+both x and y"); update the schema declaration accordingly to prevent requests
+like {sessionId: "..."} from passing validation.
+```
+
+</details>
+
+<!-- fingerprinting:phantom:poseidon:ocelot -->
+
+<!-- This is an auto-generated comment by CodeRabbit -->"
+
+Comment metadata:
+This comment was left on the modified branch.
+This comment was left on GitHub by @coderabbitai.
+This comment is the start of thread PRRT_kwDOQEbULc53euM-. 
+
+</system-instruction>
+
+I run AI code review, is it actionable? Wdyt? Explore in depth each problem.
+We want a clean, maintainable codebase, with proper best practices for the tech stack we use.
+Run subagents to verify, and if it should be fixed, try to merge some stuff together so it can be fixed together within one subagent. 
+If you can test something do it.
