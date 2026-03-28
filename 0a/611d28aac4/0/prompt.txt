@@ -305,3 +305,52 @@ The user has attached these files. Read them before proceeding.
 
 
 Create a PR
+
+---
+
+I run AI code review, is it actionable? Wdyt? Explore in depth each problem.
+We want a clean, maintainable codebase, with proper best practices for the tech stack we use.
+Run subagents to verify, and if it should be fixed, try to merge some stuff together so it can be fixed together within one subagent. 
+If you can test something do it.
+
+In this code rig, we don't want to over engineer stuff, but like if we want to have a clean, maintainable, amazing codebase, no bugs, you know.
+
+
+No DiffComment tool available, and no PR to comment on. I'll compile the final review here.
+---
+## Code Review: `packages/screen-studio/` (feat: add @deus/screen-studio)
+**Branch:** `zvadaadam/explore-screen-recording`
+**Commit:** `2dfffe206` — adds a new `@deus/screen-studio` package (50 files, ~9740 lines)
+**Scope:** Standalone screen recording library — camera engine with spring physics, compositor, MCP server, CLI, ffmpeg integration
+---
+### **#1 — Spring velocity formula has a math error**
+The underdamped spring velocity computation in `stepUnderdamped` uses `displacement * dampedOmega` (i.e. `displacement * ωd`) where the correct analytical derivative requires `displacement * omega * omega / dampedOmega` (i.e. `displacement * ω²/ωd`).
+These are equal only when `ζ = 0` (undamped). With the default camera preset (`ζ = 0.7`), `ωd ≈ 5.71` but `ω²/ωd ≈ 11.20` — the code is off by nearly 2x. The incorrect velocity feeds back into subsequent frames, producing a different motion profile than intended. The spring still converges (position formula is correct), but camera animations will feel noticeably different from the specified spring parameters.
+**Fix:** Line 82: change `displacement * dampedOmega` to `displacement * omega * omega / dampedOmega`.
+File: `packages/screen-studio/src/camera/spring.ts:82`
+---
+### **#2 — `escapeDrawtext` uses shell-level escaping but ffmpeg is invoked via `spawn` (no shell)**
+The entire `escapeDrawtext` function assumes a shell interpretation layer (the comment on line 151 says "needs quadruple escaping for shell + ffmpeg"), but all `spawn("ffmpeg", args)` calls use array-based arguments without `shell: true`. There is no shell layer — args go directly to ffmpeg's filter parser.
+The single-quote replacement `.replace(/'/g, "'\\\\''")` produces `'\\''` (two backslashes) when the correct spawn-context escaping is `'\''` (one backslash). Similarly, colons get `\\:` (double backslash) when they should get `\:` (single). Any watermark text with apostrophes, colons, semicolons, brackets, or equals signs will cause ffmpeg filter parse errors.
+The tests encode the same incorrect expectations (e.g., line 240 of the test file asserts the wrong output).
+**Fix:** Either halve all backslash escaping levels throughout the function (correct for `spawn`), or add `shell: true` to the `spawn` calls (not recommended).
+File: `packages/screen-studio/src/mcp/ffmpeg-recorder.ts:160-171`
+---
+### **#3 — `test:screen-studio` missing from root `package.json` — 213 tests unreachable from CI**
+The root `test` script (line 32) runs vitest configs for `apps/backend`, `apps/agent-server`, and `test/` but does not include `packages/screen-studio/vitest.config.ts`. There is no `test:screen-studio` entry in the scripts section, even though `packages/screen-studio/README.md:383` documents `bun run test:screen-studio` as the canonical command.
+CI running `bun run test` will silently skip all 14 test files / 213 tests in this package.
+File: `package.json:32`
+---
+### **#4 — CLI `--capture` mode is architecturally broken (hangs indefinitely)**
+When `cmdStart` is called with `--capture x11grab` or `--capture avfoundation`, the `SessionManager` spawns an ffmpeg capture child process with piped stdio. The active stdio pipe listeners keep the Node.js event loop alive, so the CLI **hangs indefinitely** after printing the session ID instead of returning to the shell.
+Even if the hang were fixed (e.g., via `unref()`), the subsequent `cmdStop` has no way to signal the ffmpeg process to stop — the PID is not persisted to the state file, and `cmdStop` creates a fresh `SessionManager` with no connection to the running ffmpeg process.
+The `--capture none` default works fine (events-only mode), and the MCP server (persistent process) is unaffected.
+File: `packages/screen-studio/src/cli/index.ts:165-206`
+---
+### **#5 — CLAUDE.md: `ts-pattern` not used for discriminated union dispatch**
+Two `switch` statements dispatch on discriminated union `.type` fields, which CLAUDE.md requires to use `ts-pattern` with `.exhaustive()`:
+1. `canvas-renderer.ts:86` — `switch (config.type)` on `BackgroundConfig.type` (`"gradient" | "solid" | "blur"`)
+2. `classifier.ts:201` — `switch (type)` on `AgentEvent["type"]` (`"click" | "type" | "scroll" | ...`)
+**Note:** `ts-pattern` is not currently a dependency of this package. The fix requires `bun add ts-pattern` in `packages/screen-studio/` before converting the switches.
+CLAUDE.md rule: *"Use `ts-pattern` for switch/case and if/else chains on discriminated unions. Prefer `.exhaustive()` to catch missing cases at compile time. [...] **When to use:** Any switch/case or if/else chain dispatching on `.type`, `.status`, `.state`, or similar discriminator fields."*
+Files: `packages/screen-studio/src/compositor/canvas-renderer.ts:86`, `packages/screen-studio/src/intent/classifier.ts:201`
