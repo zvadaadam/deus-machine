@@ -1,0 +1,57 @@
+{
+  "name": "@deus/screen-studio",
+  "version": "0.1.0",
+  "description": "Screen Studio-style camera engine and compositing for agent screen recordings",
+  "type": "module",
+  "main": "./dist/index.cjs",
+  "module": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "bin": {
+    "screen-studio": "./dist/cli/index.js",
+    "screen-studio-mcp": "./dist/mcp/index.js"
+  },
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js",
+      "require": "./dist/index.cjs"
+    },
+    "./compositor": {
+      "types": "./dist/compositor/index.d.ts",
+      "import": "./dist/compositor/index.js",
+      "require": "./dist/compositor/index.cjs"
+    },
+    "./mcp": {
+      "types": "./dist/mcp/index.d.ts",
+      "import": "./dist/mcp/index.js",
+      "require": "./dist/mcp/index.cjs"
+    }
+  },
+  "files": ["dist", "README.md"],
+  "scripts": {
+    "build": "tsup",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.12.1",
+    "zod": "^3.24.4"
+  },
+  "devDependencies": {
+    "@napi-rs/canvas": "^0.1.97",
+    "tsup": "^8.0.0",
+    "typescript": "^5.7.0",
+    "vitest": "^3.2.1"
+  },
+  "peerDependencies": {
+    "canvas": ">=2.0.0"
+  },
+  "peerDependenciesMeta": {
+    "canvas": {
+      "optional": true
+    }
+  },
+  "license": "MIT",
+  "keywords": ["screen-recording", "camera-engine", "auto-zoom", "spring-physics", "compositing", "mcp"]
+}
