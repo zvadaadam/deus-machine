@@ -294,3 +294,14 @@ Okay, the cursor is there. Maybe do more like modern cursor a little bit. But wh
 ---
 
 /code-simplifier /deslop Okay, so I think we're good. Just explore if the code structure is good, everything is properly done as a final product that has very good code quality, it's maintainable, and we can actually use it in production. In the next PR, we will hook it up to the whole system. Can you explore if it's all good? The CLI, the MCP server, the packages,
+
+---
+
+<system_instruction>
+The user has attached these files. Read them before proceeding.
+- /Users/zvada/Developer/agent/box-ide/.conductor/la-paz-v4/.context/attachments/PR instructions.md (959 B)
+</system_instruction>
+
+
+
+Create a PR
