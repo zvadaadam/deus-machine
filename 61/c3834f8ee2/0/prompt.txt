@@ -2744,3 +2744,160 @@ I run AI code review, is it actionable? Wdyt? Explore in depth each problem.
 We want a clean, maintainable codebase, with proper best practices for the tech stack we use.
 Run subagents to verify, and if it should be fixed, try to merge some stuff together so it can be fixed together within one subagent. 
 If you can test something do it.
+
+---
+
+<system-instruction>
+The user has added 2 comments to the diff for this workspace. Please review and address these comments as part of your response. When addressing comments on the "original" side or on specific commits, read the file from that version (not the current version). Below are the comments, including metadata about what git state they were left on:
+
+Comment #1:
+
+File: apps/agent-server/agents/deus-tools/browser.ts
+Line: 246
+User comment: "_⚠️ Potential issue_ | _🟠 Major_
+
+<details>
+<summary>🧩 Analysis chain</summary>
+
+🏁 Script executed:
+
+```shell
+#!/bin/bash
+# Check the current BrowserClickRequestSchema definition
+rg -A 10 "BrowserClickRequestSchema" apps/agent-server/rpc-schemas.ts
+```
+
+Repository: zvadaadam/box-ide
+
+Length of output: 1320
+
+---
+
+</details>
+
+**Update RPC schema to make `ref` optional in BrowserClickRequestSchema.**
+
+The tool schema now allows `ref` to be optional when `x`/`y` coordinates are provided (lines 235-245), but the RPC schema at `apps/agent-server/rpc-schemas.ts` still requires `ref` as a mandatory field. This will cause validation failures when coordinate-based clicks are submitted through the RPC layer. Update the RPC schema to make `ref` optional:
+
+```
+ref: z.string().optional().describe("Element data-cursor-ref to click")
+```
+
+<details>
+<summary>🤖 Prompt for AI Agents</summary>
+
+```
+Verify each finding against the current code and only fix it if needed.
+
+In `@apps/agent-server/agents/deus-tools/browser.ts` around lines 233 - 246, The
+RPC schema for BrowserClickRequestSchema still marks ref as required, causing
+validation to fail for coordinate-based clicks; update the RPC definition of
+BrowserClickRequestSchema (look for the BrowserClickRequestSchema symbol or the
+RPC schema entry that defines ref) to change the ref field from a required
+string to an optional string by making it z.string().optional() and keep the
+existing description ("Element data-cursor-ref to click") so the RPC layer
+matches the tool schema that allows ref to be omitted when x/y are supplied.
+```
+
+</details>
+
+<!-- fingerprinting:phantom:medusa:ocelot -->
+
+<!-- This is an auto-generated comment by CodeRabbit -->"
+
+Comment metadata:
+This comment was left on the modified branch.
+This comment was left on GitHub by @coderabbitai.
+This comment is the start of thread PRRT_kwDOQEbULc53erJk. 
+
+
+Comment #2:
+
+File: apps/agent-server/agents/deus-tools/browser.ts
+Line: 829
+User comment: "_⚠️ Potential issue_ | _🟡 Minor_
+
+<details>
+<summary>🧩 Analysis chain</summary>
+
+🏁 Script executed:
+
+```shell
+#!/bin/bash
+# Check if the schema documentation still mentions JPEG
+rg -n "JPEG" apps/agent-server/rpc-schemas.ts
+```
+
+Repository: zvadaadam/box-ide
+
+Length of output: 259
+
+---
+
+🏁 Script executed:
+
+```shell
+cat -n apps/agent-server/agents/deus-tools/browser.ts | sed -n '820,835p'
+```
+
+Repository: zvadaadam/box-ide
+
+Length of output: 654
+
+---
+
+🏁 Script executed:
+
+```shell
+cat -n apps/agent-server/rpc-schemas.ts | sed -n '295,325p'
+```
+
+Repository: zvadaadam/box-ide
+
+Length of output: 1234
+
+---
+
+</details>
+
+**Update schema documentation to reflect PNG format.**
+
+The implementation at line 828 returns `"image/png"`, but the schemas at `apps/agent-server/rpc-schemas.ts:302` (BrowserScreenshotResponseSchema) and line 317 (SimScreenshotResponseSchema) still document `"Base64-encoded JPEG screenshot"`. Update both schema descriptions to match the PNG implementation.
+
+<details>
+<summary>🤖 Prompt for AI Agents</summary>
+
+```
+Verify each finding against the current code and only fix it if needed.
+
+In `@apps/agent-server/agents/deus-tools/browser.ts` around lines 825 - 829, The
+schema descriptions for BrowserScreenshotResponseSchema and
+SimScreenshotResponseSchema currently state "Base64-encoded JPEG screenshot" but
+the implementation (parts.push creating an image with mimeType "image/png")
+returns PNG; update both schema description strings to indicate "Base64-encoded
+PNG screenshot" (or similar wording referencing image/png) so the documented
+response matches the actual mimeType produced by the screenshot code path that
+constructs the image part.
+```
+
+</details>
+
+<!-- fingerprinting:phantom:medusa:ocelot -->
+
+<!-- This is an auto-generated comment by CodeRabbit -->"
+
+Comment metadata:
+This comment was left on the modified branch.
+This comment was left on GitHub by @coderabbitai.
+This comment is the start of thread PRRT_kwDOQEbULc53erJm. 
+
+</system-instruction>
+
+I run AI code review, is it actionable? Wdyt? Explore in depth each problem.
+We want a clean, maintainable codebase, with proper best practices for the tech stack we use.
+Run subagents to verify, and if it should be fixed, try to merge some stuff together so it can be fixed together within one subagent. 
+If you can test something do it.
+
+Remember, we don't want to over engineer if some of the changes before like we're over engineering stuff. We don't want them and we want to simplify, you know, but always like check the code review. /code-simplifier /deslop 
+
+----
