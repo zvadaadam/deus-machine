@@ -71,10 +71,12 @@ function parseJsonFromOutput(output: string): AgentBrowserResult | null {
         if (Array.isArray(parsed)) {
           return { success: true, data: { results: parsed }, error: null };
         }
+        const error =
+          typeof parsed.error === "string" && parsed.error.length > 0 ? parsed.error : null;
         return {
-          success: parsed.success !== false,
+          success: parsed.success === false ? false : error == null,
           data: parsed.data ?? parsed,
-          error: parsed.error ?? null,
+          error,
         };
       } catch {
         continue;
@@ -149,22 +151,30 @@ export async function execAgentBrowserWithStdin(
       stdio: ["pipe", "pipe", "pipe"],
     });
 
+    const MAX_OUTPUT_BYTES = 10 * 1024 * 1024;
     let stdout = "";
     let stderr = "";
+    let outputBytes = 0;
     let settled = false;
 
-    const timer = setTimeout(() => {
-      if (!settled) {
-        settled = true;
-        child.kill("SIGTERM");
-        resolve({ success: false, data: null, error: "Batch timed out" });
-      }
-    }, timeoutMs);
+    function abort(error: string): void {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timer);
+      child.kill("SIGTERM");
+      resolve({ success: false, data: null, error });
+    }
+
+    const timer = setTimeout(() => abort("Batch timed out"), timeoutMs);
 
     child.stdout.on("data", (chunk: Buffer) => {
+      outputBytes += chunk.length;
+      if (outputBytes > MAX_OUTPUT_BYTES) return abort("Batch output exceeded 10MB");
       stdout += chunk.toString();
     });
     child.stderr.on("data", (chunk: Buffer) => {
+      outputBytes += chunk.length;
+      if (outputBytes > MAX_OUTPUT_BYTES) return abort("Batch output exceeded 10MB");
       stderr += chunk.toString();
     });
 
