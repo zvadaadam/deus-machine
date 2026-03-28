@@ -1,0 +1,38 @@
+{
+  "cli_version": "0.5.0",
+  "checkpoint_id": "0a611d28aac4",
+  "session_id": "a1c767af-1743-421d-9432-46f6237073eb",
+  "strategy": "manual-commit",
+  "created_at": "2026-03-28T20:44:48.54156Z",
+  "branch": "zvadaadam/explore-screen-recording",
+  "checkpoints_count": 2,
+  "files_touched": [
+    "package.json",
+    "packages/screen-studio/src/camera/spring.ts",
+    "packages/screen-studio/src/cli/index.ts",
+    "packages/screen-studio/src/mcp/ffmpeg-recorder.ts",
+    "packages/screen-studio/test/ffmpeg-recorder.test.ts",
+    "packages/screen-studio/test/spring.test.ts"
+  ],
+  "agent": "Claude Code",
+  "turn_id": "587bf6de3267",
+  "token_usage": {
+    "input_tokens": 4980,
+    "cache_creation_tokens": 1437194,
+    "cache_read_tokens": 47125232,
+    "output_tokens": 189354,
+    "api_call_count": 342
+  },
+  "session_metrics": {
+    "turn_count": 38
+  },
+  "initial_attribution": {
+    "calculated_at": "2026-03-28T20:44:47.384269Z",
+    "agent_lines": 57,
+    "human_added": 0,
+    "human_modified": 0,
+    "human_removed": 0,
+    "total_committed": 57,
+    "agent_percentage": 100
+  }
+}
