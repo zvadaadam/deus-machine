@@ -5,13 +5,11 @@
  * Exposes `scrollToFile(path)` via ref for bidirectional sync with the file tree.
  * Tracks which file is currently visible and reports it via `onActiveFileChange`.
  *
- * Scroll-spy: uses a scroll event listener on the container to find the topmost
- * visible section. This is simpler and more reliable than distributed
- * IntersectionObservers across memoized children (which suffer stale closure
- * and content-visibility timing issues).
+ * Scroll-spy: centralized scroll listener finds the topmost visible section
+ * and syncs active file state to the sidebar tree.
  *
- * Performance: CSS containment per section, IntersectionObserver lazy loading,
- * React.memo per section, rAF-throttled scroll spy.
+ * Performance: IntersectionObserver lazy loading per section, React.memo,
+ * rAF-throttled scroll spy.
  */
 
 import { forwardRef, useImperativeHandle, useRef, useCallback, useState, useEffect } from "react";
@@ -65,12 +63,9 @@ export const AllFilesDiffViewer = forwardRef<AllFilesDiffViewerRef, AllFilesDiff
     }, []);
 
     // Resolve a file path to its DOM element — ref map first, DOM query fallback.
-    // content-visibility: auto can confuse ref-based lookups for off-screen elements,
-    // so the data-diff-path selector provides a reliable backup.
     const resolveSection = useCallback((path: string): HTMLElement | null => {
       const el = sectionRefsMap.current.get(path);
       if (el) return el;
-      // Fallback: query the scroll container by data attribute
       return (
         scrollContainerRef.current?.querySelector(`[data-diff-path="${CSS.escape(path)}"]`) ?? null
       );
@@ -229,7 +224,7 @@ export const AllFilesDiffViewer = forwardRef<AllFilesDiffViewerRef, AllFilesDiff
         {/* Scrollable file sections */}
         <div
           ref={scrollContainerRef}
-          className="scrollbar-vibrancy flex flex-1 flex-col gap-3 overflow-y-auto pb-3"
+          className="scrollbar-vibrancy divide-border/40 flex flex-1 flex-col divide-y overflow-y-auto pb-3"
         >
           {fileChanges.map((fc) => {
             const path = fc.file || fc.file_path || "";

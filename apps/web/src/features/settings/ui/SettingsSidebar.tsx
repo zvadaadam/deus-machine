@@ -39,7 +39,7 @@ export function SettingsSidebar() {
 
   // Settings sidebar must always be visible — force open if the app sidebar was collapsed.
   // Capture prior state so we can restore it when settings closes.
-  const { open, setOpen } = useSidebar();
+  const { open, setOpen, isMobile, setOpenMobile } = useSidebar();
   const wasOpenOnMount = useRef<boolean | null>(null);
 
   useEffect(() => {
@@ -79,7 +79,10 @@ export function SettingsSidebar() {
               <SidebarMenuItem key={item.id}>
                 <SidebarMenuButton
                   isActive={isActive}
-                  onClick={() => setActiveSection(item.id)}
+                  onClick={() => {
+                    setActiveSection(item.id);
+                    if (isMobile) setOpenMobile(false);
+                  }}
                   className="gap-2.5 px-3 py-1.5"
                 >
                   <Icon className="size-4 shrink-0" />

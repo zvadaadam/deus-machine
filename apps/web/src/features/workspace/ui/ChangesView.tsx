@@ -35,9 +35,11 @@ interface ChangesViewProps {
   isWatched?: boolean;
   /** Callback to insert a code review prompt into the chat input */
   onReview?: () => void;
+  /** Single-column layout without file tree side panel (used on mobile) */
+  compact?: boolean;
 }
 
-export function ChangesView({ workspace, isWatched = false, onReview }: ChangesViewProps) {
+export function ChangesView({ workspace, isWatched = false, onReview, compact }: ChangesViewProps) {
   const { selectedFilePath } = useWorkspaceLayout(workspace.id);
   const diffViewerRef = useRef<AllFilesDiffViewerRef>(null);
   const [changesFilter, setChangesFilter] = useState<ChangesFilter>("all-changes");
@@ -123,6 +125,13 @@ export function ChangesView({ workspace, isWatched = false, onReview }: ChangesV
             Changes will appear here as the agent modifies files
           </p>
         </div>
+      ) : compact ? (
+        <AllFilesDiffViewer
+          ref={diffViewerRef}
+          workspaceId={workspace.id}
+          fileChanges={filteredFileChanges}
+          hideHeader
+        />
       ) : (
         <ResizablePanelGroup direction="horizontal" className="min-h-0 flex-1">
           <ResizablePanel defaultSize={75} minSize={30}>

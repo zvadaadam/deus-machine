@@ -1834,12 +1834,6 @@ select {
   background: color-mix(in oklch, var(--muted-foreground) 35%, transparent);
 }
 
-/* CSS containment for all-diffs sections — browser skips layout/paint for offscreen sections */
-.diff-section-contained {
-  content-visibility: auto;
-  contain-intrinsic-size: auto 360px;
-}
-
 /* Hide scrollbars (keep scroll behavior) */
 .scrollbar-hidden {
   scrollbar-width: none;
@@ -1951,22 +1945,41 @@ select {
   --content-bg: color-mix(in oklch, var(--background) var(--content-tint-opacity), transparent);
 }
 
-/* Diffs (Pierre) theme bridge */
+/* Diffs (Pierre) theme bridge — v1.1.7
+   All theming goes here on the host element. CSS custom properties inherit
+   into Shadow DOM, so the library picks these up without unsafeCSS hacks.
+
+   Use --diffs-*-override variables for colors the library explicitly exposes.
+   Use --diffs-fg/--diffs-bg for base foreground/background (v1.1.7+).
+   Never use !important — the override variables are the intended cascade path. */
 diffs-container.diffs-theme {
   padding: 0;
   margin: 0;
-  letter-spacing: 0em; /* Reset: monospace diff content must not inherit body tracking */
+  letter-spacing: 0em;
+
+  /* Base colors — controls pre/code background + default text color */
+  --diffs-fg: var(--foreground);
+  --diffs-bg: var(--background);
   --diffs-light-bg: var(--background);
   --diffs-dark-bg: var(--background);
   --diffs-light: var(--foreground);
   --diffs-dark: var(--foreground);
+
+  /* Layout */
   --diffs-gap-block: 0;
   --diffs-font-family: var(--font-family-mono);
   --diffs-font-size: 12px;
   --diffs-line-height: 18px;
   --diffs-min-number-column-width: 4ch;
+
+  /* Line numbers */
   --diffs-fg-number-override: var(--diff-line-number);
 
+  /* Context (unchanged) lines — match app background */
+  --diffs-bg-context-override: var(--background);
+  --diffs-bg-context-number-override: var(--background);
+
+  /* Additions */
   --diffs-addition-color-override: var(--diff-addition-text);
   --diffs-bg-addition-override: color-mix(in oklch, var(--diff-addition-bg) 22%, var(--background));
   --diffs-bg-addition-number-override: color-mix(
@@ -1980,6 +1993,7 @@ diffs-container.diffs-theme {
     var(--background)
   );
 
+  /* Deletions */
   --diffs-deletion-color-override: var(--diff-deletion-text);
   --diffs-bg-deletion-override: color-mix(in oklch, var(--diff-deletion-bg) 20%, var(--background));
   --diffs-bg-deletion-number-override: color-mix(
@@ -1993,13 +2007,15 @@ diffs-container.diffs-theme {
     var(--background)
   );
 
+  /* Selection */
   --diffs-bg-selection-override: color-mix(in oklch, var(--primary) 14%, var(--background));
   --diffs-bg-selection-number-override: color-mix(in oklch, var(--primary) 22%, var(--background));
   --diffs-selection-color-override: var(--primary);
 
+  /* Hover + separator */
   --diffs-bg-hover-override: color-mix(in oklch, var(--foreground) 4%, var(--background));
-  --diffs-bg-context-override: var(--background);
   --diffs-bg-separator-override: transparent;
+  --diffs-bg-buffer-override: transparent;
 }
 
 diffs-container.diffs-theme-compact {
