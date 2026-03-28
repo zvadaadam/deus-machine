@@ -1,0 +1,25 @@
+{
+  "cli_version": "0.5.0",
+  "checkpoint_id": "788bcb6811e0",
+  "strategy": "manual-commit",
+  "branch": "zvadaadam/fix-browser-zoom-overflow",
+  "checkpoints_count": 1,
+  "files_touched": [
+    "apps/desktop/main/browser-views.ts"
+  ],
+  "sessions": [
+    {
+      "metadata": "/78/8bcb6811e0/0/metadata.json",
+      "transcript": "/78/8bcb6811e0/0/full.jsonl",
+      "content_hash": "/78/8bcb6811e0/0/content_hash.txt",
+      "prompt": "/78/8bcb6811e0/0/prompt.txt"
+    }
+  ],
+  "token_usage": {
+    "input_tokens": 8,
+    "cache_creation_tokens": 49664,
+    "cache_read_tokens": 237046,
+    "output_tokens": 2246,
+    "api_call_count": 6
+  }
+}
