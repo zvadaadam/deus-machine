@@ -182,29 +182,34 @@ For large pages, the snapshot is saved to a file and a preview is returned.`,
           .optional()
           .describe("CSS selector to scope snapshot to a subtree (e.g., '#main')"),
       },
-      withBrowserTool("BrowserSnapshot", sessionId, () => "", async (args) => {
-        const response = await getSnapshot(sessionId, 20_000, {
-          interactive: args.filter === "interactive",
-          compact: args.filter === "compact",
-          depth: args.depth,
-          selector: args.selector,
-        });
+      withBrowserTool(
+        "BrowserSnapshot",
+        sessionId,
+        () => "",
+        async (args) => {
+          const response = await getSnapshot(sessionId, 20_000, {
+            interactive: args.filter === "interactive",
+            compact: args.filter === "compact",
+            depth: args.depth,
+            selector: args.selector,
+          });
 
-        if (response.error) {
-          return textResult(`Error capturing snapshot: ${response.error}`);
+          if (response.error) {
+            return textResult(`Error capturing snapshot: ${response.error}`);
+          }
+
+          return textResult(
+            formatSnapshotResponse(
+              "snapshot",
+              response.snapshot,
+              response.url,
+              response.title,
+              args.filter ? [`Filter: ${args.filter}`] : undefined,
+              SNAPSHOT_SIZE_THRESHOLD_LARGE
+            )
+          );
         }
-
-        return textResult(
-          formatSnapshotResponse(
-            "snapshot",
-            response.snapshot,
-            response.url,
-            response.title,
-            args.filter ? [`Filter: ${args.filter}`] : undefined,
-            SNAPSHOT_SIZE_THRESHOLD_LARGE
-          )
-        );
-      })
+      )
     ),
 
     tool(
@@ -299,20 +304,13 @@ Returns a page snapshot after clicking and the clicked element's bounding box (x
 The element is focused and text is entered. Use submit: true to press Enter after typing.
 Returns a page snapshot and the input element's bounding box.`,
       {
-        ref: z
-          .string()
-          .describe("Element reference from the accessibility snapshot (e.g., '@e3')"),
+        ref: z.string().describe("Element reference from the accessibility snapshot (e.g., '@e3')"),
         text: z.string().describe("Text to type into the element"),
-        submit: z
-          .boolean()
-          .optional()
-          .describe("Press Enter after typing to submit the form"),
+        submit: z.boolean().optional().describe("Press Enter after typing to submit the form"),
         slowly: z
           .boolean()
           .optional()
-          .describe(
-            "Type character by character (useful for autocomplete or key handlers)"
-          ),
+          .describe("Type character by character (useful for autocomplete or key handlers)"),
       },
       withBrowserTool(
         "BrowserType",
@@ -408,10 +406,7 @@ Provide exactly ONE of:
 Returns a page snapshot after the condition is met.`,
       {
         text: z.string().optional().describe("Wait until this text appears on the page"),
-        textGone: z
-          .string()
-          .optional()
-          .describe("Wait until this text disappears from the page"),
+        textGone: z.string().optional().describe("Wait until this text disappears from the page"),
         time: z.number().optional().describe("Wait for a fixed number of seconds"),
         networkIdle: z
           .boolean()
@@ -424,11 +419,10 @@ Returns a page snapshot after the condition is met.`,
         elementGone: z
           .string()
           .optional()
-          .describe("Wait for element to disappear (ref like '@e3' or CSS selector like '.spinner')"),
-        timeout: z
-          .number()
-          .optional()
-          .describe("Maximum wait time in seconds (default: 30)"),
+          .describe(
+            "Wait for element to disappear (ref like '@e3' or CSS selector like '.spinner')"
+          ),
+        timeout: z.number().optional().describe("Maximum wait time in seconds (default: 30)"),
       },
       withBrowserTool(
         "BrowserWaitFor",
@@ -494,7 +488,13 @@ Returns a page snapshot after the condition is met.`,
           if (args.elementGone) details.push(`Waited for gone: ${args.elementGone}`);
 
           return textResult(
-            formatSnapshotResponse("wait_for", response.snapshot, response.url, response.title, details)
+            formatSnapshotResponse(
+              "wait_for",
+              response.snapshot,
+              response.url,
+              response.title,
+              details
+            )
           );
         }
       )
@@ -546,7 +546,9 @@ Returns a page snapshot after all actions complete.`,
           if (Array.isArray(batchData)) {
             batchData.forEach((r, i) => {
               if (r && r.success === false) {
-                failures.push(`Action ${i + 1} (${args.actions[i]?.join(" ")}): ${r.error ?? "failed"}`);
+                failures.push(
+                  `Action ${i + 1} (${args.actions[i]?.join(" ")}): ${r.error ?? "failed"}`
+                );
               }
             });
           }
@@ -580,22 +582,23 @@ Returns a page snapshot after all actions complete.`,
 
 Use 'return' to get results. Example: 'return document.title'`,
       {
-        code: z
-          .string()
-          .describe(
-            "JavaScript code to execute. Use 'return' to get results."
-          ),
+        code: z.string().describe("JavaScript code to execute. Use 'return' to get results."),
       },
-      withBrowserTool("BrowserEvaluate", sessionId, () => "", async (args) => {
-        const result = await execAgentBrowser(sessionId, ["eval", args.code]);
+      withBrowserTool(
+        "BrowserEvaluate",
+        sessionId,
+        () => "",
+        async (args) => {
+          const result = await execAgentBrowser(sessionId, ["eval", args.code]);
 
-        if (!result.success) {
-          return textResult(`Evaluate failed: ${result.error}`);
+          if (!result.success) {
+            return textResult(`Evaluate failed: ${result.error}`);
+          }
+
+          const evalResult = (result.data?.result as string) || JSON.stringify(result.data);
+          return textResult(`Evaluation result: ${evalResult}`);
         }
-
-        const evalResult = (result.data?.result as string) || JSON.stringify(result.data);
-        return textResult(`Evaluation result: ${evalResult}`);
-      })
+      )
     ),
 
     tool(
@@ -605,9 +608,7 @@ Use for keyboard shortcuts, form submission (Enter), navigation (Tab), dismissin
       {
         key: z
           .string()
-          .describe(
-            "Key name: 'ArrowLeft', 'Enter', 'Tab', 'Escape', 'Backspace', 'a', '1'"
-          ),
+          .describe("Key name: 'ArrowLeft', 'Enter', 'Tab', 'Escape', 'Backspace', 'a', '1'"),
         ctrl: z.boolean().optional().describe("Hold Ctrl/Control key"),
         shift: z.boolean().optional().describe("Hold Shift key"),
         alt: z.boolean().optional().describe("Hold Alt/Option key"),
@@ -682,9 +683,7 @@ Returns a page snapshot after hovering and the element's bounding box.`,
       {
         element: z.string().describe("Human-readable description of the dropdown"),
         ref: z.string().describe("Element reference for the <select> element"),
-        values: z
-          .array(z.string())
-          .describe("Values to select (option values or visible text)"),
+        values: z.array(z.string()).describe("Values to select (option values or visible text)"),
       },
       withBrowserTool(
         "BrowserSelectOption",
@@ -721,17 +720,22 @@ Returns a page snapshot after hovering and the element's bounding box.`,
       "BrowserNavigateBack",
       `Go back to the previous page in browser history. Returns a snapshot of the page.`,
       {},
-      withBrowserTool("BrowserNavigateBack", sessionId, () => "", async () => {
-        const response = await execWithSnapshot(sessionId, ["back"]);
+      withBrowserTool(
+        "BrowserNavigateBack",
+        sessionId,
+        () => "",
+        async () => {
+          const response = await execWithSnapshot(sessionId, ["back"]);
 
-        if (response.error) {
-          return textResult(`NavigateBack failed: ${response.error}`);
+          if (response.error) {
+            return textResult(`NavigateBack failed: ${response.error}`);
+          }
+
+          return textResult(
+            formatSnapshotResponse("navigate_back", response.snapshot, response.url, response.title)
+          );
         }
-
-        return textResult(
-          formatSnapshotResponse("navigate_back", response.snapshot, response.url, response.title)
-        );
-      })
+      )
     ),
 
     tool(
@@ -739,21 +743,26 @@ Returns a page snapshot after hovering and the element's bounding box.`,
       `Returns console messages (log, warn, error) captured since the page loaded.
 Use to check for JavaScript errors or debug application behavior.`,
       {},
-      withBrowserTool("BrowserConsoleMessages", sessionId, () => "", async () => {
-        const result = await execAgentBrowser(sessionId, ["console", "--json"]);
+      withBrowserTool(
+        "BrowserConsoleMessages",
+        sessionId,
+        () => "",
+        async () => {
+          const result = await execAgentBrowser(sessionId, ["console", "--json"]);
 
-        if (!result.success) {
-          return textResult(`ConsoleMessages failed: ${result.error}`);
+          if (!result.success) {
+            return textResult(`ConsoleMessages failed: ${result.error}`);
+          }
+
+          const messages = (result.data?.messages as string) || JSON.stringify(result.data);
+
+          if (!messages || messages === "[]" || messages === "null") {
+            return textResult("No console messages captured.");
+          }
+
+          return textResult(`Console messages:\n${messages}`);
         }
-
-        const messages = (result.data?.messages as string) || JSON.stringify(result.data);
-
-        if (!messages || messages === "[]" || messages === "null") {
-          return textResult("No console messages captured.");
-        }
-
-        return textResult(`Console messages:\n${messages}`);
-      })
+      )
     ),
 
     tool(
@@ -768,68 +777,75 @@ For structural/interactive analysis, prefer BrowserSnapshot instead.`,
           .optional()
           .describe("Element ref to screenshot just that element (e.g., '@e5')"),
       },
-      withBrowserTool("BrowserScreenshot", sessionId, () => "", async (args) => {
-        const screenshotPath = join(
-          tmpdir(),
-          `deus-screenshot-${sessionId}-${Date.now()}.png`
-        );
-        const screenshotArgs = ["screenshot", screenshotPath];
-        if (args.ref) {
-          screenshotArgs.push("--selector", args.ref);
-        }
-
-        const result = await execAgentBrowser(sessionId, screenshotArgs, 15_000);
-
-        if (!result.success) {
-          return textResult(`Screenshot failed: ${result.error}`);
-        }
-
-        const parts: Array<{ type: string; [key: string]: unknown }> = [];
-        try {
-          const imageBuffer = readFileSync(screenshotPath);
-          parts.push({
-            type: "image",
-            data: imageBuffer.toString("base64"),
-            mimeType: "image/png",
-          });
-          try {
-            unlinkSync(screenshotPath);
-          } catch {
-            // Ignore cleanup errors
+      withBrowserTool(
+        "BrowserScreenshot",
+        sessionId,
+        () => "",
+        async (args) => {
+          const screenshotPath = join(tmpdir(), `deus-screenshot-${sessionId}-${Date.now()}.png`);
+          const screenshotArgs = ["screenshot", screenshotPath];
+          if (args.ref) {
+            screenshotArgs.push("--selector", args.ref);
           }
-        } catch {
-          // File read failed — return text-only response
+
+          const result = await execAgentBrowser(sessionId, screenshotArgs, 15_000);
+
+          if (!result.success) {
+            return textResult(`Screenshot failed: ${result.error}`);
+          }
+
+          const parts: Array<{ type: string; [key: string]: unknown }> = [];
+          try {
+            const imageBuffer = readFileSync(screenshotPath);
+            parts.push({
+              type: "image",
+              data: imageBuffer.toString("base64"),
+              mimeType: "image/png",
+            });
+            try {
+              unlinkSync(screenshotPath);
+            } catch {
+              // Ignore cleanup errors
+            }
+          } catch {
+            // File read failed — return text-only response
+          }
+
+          const urlResult = await execAgentBrowser(sessionId, ["get", "url", "--json"]);
+          const url = (urlResult.data?.url as string) || "";
+          let context = url ? `Screenshot of ${url}` : "Screenshot captured.";
+          if (args.ref) context += ` (element: ${args.ref})`;
+          parts.push({ type: "text", text: context });
+
+          return { content: parts };
         }
-
-        const urlResult = await execAgentBrowser(sessionId, ["get", "url", "--json"]);
-        const url = (urlResult.data?.url as string) || "";
-        let context = url ? `Screenshot of ${url}` : "Screenshot captured.";
-        if (args.ref) context += ` (element: ${args.ref})`;
-        parts.push({ type: "text", text: context });
-
-        return { content: parts };
-      })
+      )
     ),
 
     tool(
       "BrowserNetworkRequests",
       `Returns network requests made since the page loaded. Use to debug API calls and check response status codes.`,
       {},
-      withBrowserTool("BrowserNetworkRequests", sessionId, () => "", async () => {
-        const result = await execAgentBrowser(sessionId, ["network", "--json"]);
+      withBrowserTool(
+        "BrowserNetworkRequests",
+        sessionId,
+        () => "",
+        async () => {
+          const result = await execAgentBrowser(sessionId, ["network", "--json"]);
 
-        if (!result.success) {
-          return textResult(`NetworkRequests failed: ${result.error}`);
+          if (!result.success) {
+            return textResult(`NetworkRequests failed: ${result.error}`);
+          }
+
+          const requests = (result.data?.requests as string) || JSON.stringify(result.data);
+
+          if (!requests || requests === "[]" || requests === "null") {
+            return textResult("No network requests captured.");
+          }
+
+          return textResult(`Network requests:\n${requests}`);
         }
-
-        const requests = (result.data?.requests as string) || JSON.stringify(result.data);
-
-        if (!requests || requests === "[]" || requests === "null") {
-          return textResult("No network requests captured.");
-        }
-
-        return textResult(`Network requests:\n${requests}`);
-      })
+      )
     ),
 
     tool(
@@ -853,9 +869,7 @@ Returns a fresh snapshot after scrolling.`,
         ref: z
           .string()
           .optional()
-          .describe(
-            "Element ref to scroll into view. If provided, direction/amount are ignored."
-          ),
+          .describe("Element ref to scroll into view. If provided, direction/amount are ignored."),
       },
       withBrowserTool(
         "BrowserScroll",
@@ -877,13 +891,9 @@ Returns a fresh snapshot after scrolling.`,
             : `Scrolled ${args.direction ?? "down"} by ${args.amount ?? 600}px`;
 
           return textResult(
-            formatSnapshotResponse(
-              "scroll",
-              response.snapshot,
-              response.url,
-              response.title,
-              [detail]
-            )
+            formatSnapshotResponse("scroll", response.snapshot, response.url, response.title, [
+              detail,
+            ])
           );
         }
       )

@@ -38,7 +38,7 @@ export function BrowserTabBar({
           <div
             key={tab.id}
             className={cn(
-              "flex items-center gap-1 rounded-md pr-1 text-xs whitespace-nowrap transition-colors duration-200 ease select-none",
+              "ease flex items-center gap-1 rounded-md pr-1 text-xs whitespace-nowrap transition-colors duration-200 select-none",
               activeTabId === tab.id
                 ? "bg-bg-raised text-text-secondary font-medium"
                 : "text-text-muted hover:bg-foreground/5 hover:text-text-tertiary"
