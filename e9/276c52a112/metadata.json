@@ -1,0 +1,30 @@
+{
+  "cli_version": "0.5.0",
+  "checkpoint_id": "e9276c52a112",
+  "strategy": "manual-commit",
+  "branch": "adam-zvada/mercury",
+  "checkpoints_count": 8,
+  "files_touched": [
+    ".claude/agent-memory/code-reviewer/mobile-layout-patterns.md",
+    "apps/web/src/components/ui/sheet.tsx",
+    "apps/web/src/features/sidebar/ui/WorkspaceActionSheet.tsx",
+    "apps/web/src/features/sidebar/ui/WorkspaceItem.tsx",
+    "apps/web/src/shared/hooks/index.ts",
+    "apps/web/src/shared/hooks/useLongPress.ts"
+  ],
+  "sessions": [
+    {
+      "metadata": "/e9/276c52a112/0/metadata.json",
+      "transcript": "/e9/276c52a112/0/full.jsonl",
+      "content_hash": "/e9/276c52a112/0/content_hash.txt",
+      "prompt": "/e9/276c52a112/0/prompt.txt"
+    }
+  ],
+  "token_usage": {
+    "input_tokens": 140,
+    "cache_creation_tokens": 208433,
+    "cache_read_tokens": 5780534,
+    "output_tokens": 26579,
+    "api_call_count": 75
+  }
+}
