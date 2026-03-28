@@ -22,6 +22,7 @@ export function useLongPress(
   const didFireRef = useRef(false);
   const callbackRef = useRef(onLongPress);
 
+  // Sync after render — React Compiler forbids ref writes during render
   useEffect(() => {
     callbackRef.current = onLongPress;
   });

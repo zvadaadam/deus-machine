@@ -38,7 +38,7 @@ export const WorkspaceActionSheet = React.memo(function WorkspaceActionSheet({
       <SheetContent
         side="bottom"
         hideClose
-        className="rounded-t-2xl pb-[max(env(safe-area-inset-bottom),_0.5rem)]"
+        className="gap-0 rounded-t-2xl pb-[max(env(safe-area-inset-bottom),_0.5rem)]"
       >
         {/* Accessible title (visually hidden) */}
         <SheetTitle className="sr-only">{displayName}</SheetTitle>
