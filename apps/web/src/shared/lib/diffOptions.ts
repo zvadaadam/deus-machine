@@ -15,80 +15,33 @@ const DIFF_CONTEXT = {
   expansionLineCount: 100, // Load context in smaller chunks
 } as const;
 
+/**
+ * Injected into the @pierre/diffs Shadow DOM via the `unsafeCSS` option.
+ *
+ * RULES:
+ *   1. ONLY set CSS variables — never override layout, position, or sizing.
+ *      The library's grid handles separator/line positioning; fighting it breaks things.
+ *   2. NO !important — the library's --diffs-*-override variables are designed to win
+ *      the cascade. Setting them is sufficient; !important fights future library updates.
+ *   3. Use var(--our-token) so Shadow DOM inherits from :root.
+ */
 const DIFF_UNSAFE_CSS = `
-  [data-diffs-header],
-  [data-diffs] {
-    --diffs-dark-bg: var(--background) !important;
-    --diffs-light-bg: var(--background) !important;
-    --diffs-dark: var(--foreground) !important;
-    --diffs-light: var(--foreground) !important;
-    --diffs-bg-context-override: var(--background) !important;
-    --diffs-bg-separator-override: transparent !important;
-    --diffs-bg-buffer-override: transparent !important;
-    background-color: var(--background) !important;
-  }
   [data-diffs-header] {
     position: sticky;
     top: 0;
     z-index: 4;
-    min-height: 34px;
-    padding-inline: 12px;
     background: var(--bg-elevated, var(--background));
     border-bottom: none;
     box-shadow: 0 1px 0 color-mix(in oklch, var(--foreground) 6%, transparent);
   }
-  [data-header-content] {
-    font-size: 12px;
-    font-weight: 500;
-  }
   [data-metadata] [data-additions-count],
   [data-metadata] [data-deletions-count] {
-    display: none !important;
-  }
-  [data-separator='line-info'] {
-    background: transparent;
-  }
-  [data-separator-wrapper] {
-    position: relative;
-    cursor: pointer;
-    background: transparent;
-    border: 1px solid var(--border);
-    border-radius: var(--radius-md);
+    display: none;
   }
   [data-line],
   [data-column-number],
   [data-column-content] {
-    transition: none !important;
-  }
-  [data-separator-wrapper]:hover {
-    background: color-mix(in lab, var(--foreground) 6%, var(--background));
-    border-color: color-mix(in lab, var(--foreground) 16%, var(--border));
-  }
-  [data-separator-wrapper]:hover [data-separator-content],
-  [data-separator-wrapper]:hover [data-expand-button] {
-    opacity: 0.9;
-  }
-  [data-separator-wrapper] [data-expand-button] {
-    position: absolute;
-    inset: 0;
-    width: 100%;
-    height: 100%;
-    display: flex;
-    align-items: center;
-    justify-content: flex-start;
-    padding-left: 10px;
-    background: transparent;
-    z-index: 2;
-  }
-  [data-separator-content] {
-    pointer-events: none;
-    position: relative;
-    z-index: 1;
-    padding-left: 28px;
-  }
-  [data-separator-content],
-  [data-expand-button] {
-    background: transparent;
+    transition: none;
   }
 `;
 

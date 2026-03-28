@@ -38,7 +38,7 @@ export function AppSidebar({
   diffStatsMap,
   profile = { username: "User" },
 }: AppSidebarProps) {
-  const { state, hoverOpen, toggleSidebar } = useSidebar();
+  const { state, hoverOpen, toggleSidebar, isMobile, setOpenMobile } = useSidebar();
   const openSettings = useUIStore((s) => s.openSettings);
   const collapsedRepos = useSidebarStore((s) => s.collapsedRepos);
   const toggleRepoCollapse = useSidebarStore((s) => s.toggleRepoCollapse);
@@ -47,6 +47,15 @@ export function AppSidebar({
   const reorderRepositories = useSidebarStore((s) => s.reorderRepositories);
 
   const isExpanded = state === "expanded" || hoverOpen;
+
+  // On mobile, close the sidebar sheet after selecting a workspace
+  const handleWorkspaceClick = React.useCallback(
+    (workspace: Parameters<typeof onWorkspaceClick>[0]) => {
+      onWorkspaceClick(workspace);
+      if (isMobile) setOpenMobile(false);
+    },
+    [onWorkspaceClick, isMobile, setOpenMobile]
+  );
 
   // User's drag-drop order is the final word.
   // Status is shown visually (badges, colors) — not by re-sorting after drag.
@@ -130,7 +139,7 @@ export function AppSidebar({
                     isCollapsed={collapsedRepos.has(repo.repo_id)}
                     selectedWorkspaceId={selectedWorkspaceId}
                     onToggleCollapse={() => toggleRepoCollapse(repo.repo_id)}
-                    onWorkspaceClick={onWorkspaceClick}
+                    onWorkspaceClick={handleWorkspaceClick}
                     onNewWorkspace={onNewWorkspace}
                     onNewWorkspaceFromGitHub={onNewWorkspaceFromGitHub}
                     onArchive={onArchive}
