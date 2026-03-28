@@ -26,7 +26,7 @@ export interface BrowserTabState {
   history: string[];
   /** Current position in history */
   historyIndex: number;
-  /** Whether iframe is loading */
+  /** Whether the native BrowserView is loading */
   loading: boolean;
   /** Error message if page load failed */
   error: string | null;
@@ -84,10 +84,6 @@ export interface BrowserTabHandle {
   reload: () => void;
   injectAutomation: () => Promise<void>;
   toggleElementSelector: () => void;
-  /** Force re-sync native webview position to placeholder bounds.
-   *  Call when the container layout shifts without a size change
-   *  (e.g., mobile view toggle repositions via flex centering). */
-  syncBounds: () => void;
 }
 
 /** Extract a readable title from a URL (domain or localhost:port) */
@@ -132,18 +128,13 @@ export function createBrowserTab(workspaceId?: string | null): BrowserTabState {
 
 /** Hydrate a PersistedBrowserTab into a full BrowserTabState with
  *  ephemeral defaults (loading, history, consoleLogs, etc.) */
-export function hydratePersistedTab(
-  persisted: PersistedBrowserTab,
-  workspaceId?: string | null
-): BrowserTabState {
-  const rand = Math.random().toString(36).slice(2, 6);
-  // Create a new webview label (old webview is destroyed, new one will be created)
-  const webviewLabel = workspaceId
-    ? `ws-${workspaceId.slice(0, 8)}-tab-${Date.now()}-${rand}`
-    : `browser-tab-${Date.now()}-${rand}`;
+export function hydratePersistedTab(persisted: PersistedBrowserTab): BrowserTabState {
+  // Use persisted.id as a stable webview label — same tab always maps to the
+  // same native view. This enables view parking: parked views can be recalled
+  // by label without creating a new native WebContentsView.
   return {
     id: persisted.id,
-    webviewLabel,
+    webviewLabel: persisted.id,
     title: persisted.title || deriveTitleFromUrl(persisted.url),
     url: persisted.url,
     currentUrl: persisted.url,

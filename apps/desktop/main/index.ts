@@ -35,6 +35,13 @@ if (!app.requestSingleInstanceLock()) {
   process.exit(0);
 }
 
+// Enable Chrome DevTools Protocol so agent-browser can connect to IDE browser views
+// via CDP instead of spawning a separate Chrome process. Listens on 127.0.0.1 only.
+// Agent tools use `agent-browser --cdp <port>` to interact with the same browser
+// the user sees — shared cookies, real-time visibility of agent actions.
+app.commandLine.appendSwitch("remote-debugging-port", "19222");
+app.commandLine.appendSwitch("remote-debugging-address", "127.0.0.1");
+
 let mainWindow: BrowserWindow | null = null;
 
 // ---------------------------------------------------------------------------
