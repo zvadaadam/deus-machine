@@ -1,10 +1,10 @@
-import React from "react";
+import React, { useState } from "react";
 import { match } from "ts-pattern";
 import { Archive, Loader2 } from "lucide-react";
 import NumberFlow from "@number-flow/react";
 
 import { cn } from "@/shared/lib/utils";
-import { useWorkingDuration, formatDuration } from "@/shared/hooks";
+import { useWorkingDuration, formatDuration, useIsMobile, useLongPress } from "@/shared/hooks";
 import { CircularPixelGrid } from "@/features/session/ui/CircularPixelGrid";
 import { useUnreadStore } from "@/features/session/store/unreadStore";
 import { useWorkspaceLayoutStore } from "@/features/workspace/store/workspaceLayoutStore";
@@ -14,6 +14,7 @@ import type { WorkspaceItemProps } from "../model/types";
 import { SidebarRow, SidebarRowIconSlot } from "./SidebarRow";
 import { WorkflowStatusIcon } from "./WorkflowStatusIcon";
 import { WorkspaceStatusMenu } from "./WorkspaceStatusMenu";
+import { WorkspaceActionSheet } from "./WorkspaceActionSheet";
 
 /**
  * WorkspaceItem — Sidebar workspace row
@@ -60,6 +61,11 @@ export const WorkspaceItem = React.memo(function WorkspaceItem({
         : [];
     return ids.some((sid) => s.unreadSessionIds[sid]);
   });
+
+  // Mobile: long-press opens action sheet instead of hover archive button
+  const isMobile = useIsMobile();
+  const [actionSheetOpen, setActionSheetOpen] = useState(false);
+  const longPress = useLongPress(() => setActionSheetOpen(true));
 
   // Initializing state: non-interactive row with loading animation
   if (isInitializing) {
@@ -194,28 +200,25 @@ export const WorkspaceItem = React.memo(function WorkspaceItem({
         className="cursor-pointer"
         aria-current={isActive ? "page" : undefined}
         aria-label={`Workspace ${displayName}`}
-        onClick={() => onClick(workspace)}
+        onClick={() => {
+          if (isMobile && longPress.didFire()) return;
+          onClick(workspace);
+        }}
         onKeyDown={(e) => {
           if (e.key === " ") e.preventDefault();
         }}
         onKeyUp={(e) => {
           if (e.key === "Enter" || e.key === " ") onClick(workspace);
         }}
+        {...(isMobile ? longPress.handlers : {})}
       >
         {/* Left: rows */}
         <div className="flex min-w-0 flex-1 flex-col gap-0.5">
           {/* Row 1: icon + display name (title > slug > branch) */}
           <div className="flex min-w-0 items-center gap-1.5">
-            <WorkspaceStatusMenu
-              currentStatus={workspace.status}
-              onStatusChange={(status) => onStatusChange?.(workspace.id, status)}
-            >
-              <button
-                type="button"
-                onClick={(e) => e.stopPropagation()}
-                className="flex h-5 w-5 shrink-0 items-center justify-center rounded transition-opacity hover:opacity-80"
-                aria-label={`Status: ${workspace.status}`}
-              >
+            {isMobile ? (
+              /* Mobile: status icon only — long-press action sheet owns status changes */
+              <span className="flex h-5 w-5 shrink-0 items-center justify-center">
                 {hasSessionIcon ? (
                   match(displayStatus)
                     .with("working", () => (
@@ -226,8 +229,31 @@ export const WorkspaceItem = React.memo(function WorkspaceItem({
                 ) : (
                   <WorkflowStatusIcon status={workspace.status} size={14} />
                 )}
-              </button>
-            </WorkspaceStatusMenu>
+              </span>
+            ) : (
+              <WorkspaceStatusMenu
+                currentStatus={workspace.status}
+                onStatusChange={(status) => onStatusChange?.(workspace.id, status)}
+              >
+                <button
+                  type="button"
+                  onClick={(e) => e.stopPropagation()}
+                  className="flex h-5 w-5 shrink-0 items-center justify-center rounded transition-opacity hover:opacity-80"
+                  aria-label={`Status: ${workspace.status}`}
+                >
+                  {hasSessionIcon ? (
+                    match(displayStatus)
+                      .with("working", () => (
+                        <CircularPixelGrid variant="working" size={14} resolution={8} />
+                      ))
+                      .with("error", () => <span className="bg-accent-red h-2 w-2 rounded-full" />)
+                      .otherwise(() => <span className="bg-accent-gold h-2 w-2 rounded-full" />)
+                  ) : (
+                    <WorkflowStatusIcon status={workspace.status} size={14} />
+                  )}
+                </button>
+              </WorkspaceStatusMenu>
+            )}
             <span
               className={cn(
                 "truncate text-base",
@@ -277,7 +303,7 @@ export const WorkspaceItem = React.memo(function WorkspaceItem({
           <div
             className={cn(
               "flex shrink-0 items-center gap-1.5 text-xs font-medium transition-opacity",
-              canArchive && "group-hover/sidebar-row:opacity-0"
+              canArchive && !isMobile && "group-hover/sidebar-row:opacity-0"
             )}
           >
             {additions > 0 && (
@@ -297,8 +323,8 @@ export const WorkspaceItem = React.memo(function WorkspaceItem({
           </div>
         ) : null}
 
-        {/* Archive button — hover reveal */}
-        {canArchive ? (
+        {/* Archive button — desktop hover reveal (hidden on mobile, use action sheet instead) */}
+        {canArchive && !isMobile ? (
           <button
             type="button"
             onClick={handleArchive}
@@ -314,6 +340,17 @@ export const WorkspaceItem = React.memo(function WorkspaceItem({
           </button>
         ) : null}
       </SidebarRow>
+
+      {/* Mobile action sheet — long-press to open */}
+      {isMobile && (
+        <WorkspaceActionSheet
+          workspace={workspace}
+          open={actionSheetOpen}
+          onOpenChange={setActionSheetOpen}
+          onArchive={onArchive}
+          onStatusChange={onStatusChange}
+        />
+      )}
     </div>
   );
 });

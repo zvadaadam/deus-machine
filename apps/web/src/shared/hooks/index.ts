@@ -8,3 +8,4 @@ export { useWindowDragZone } from "./useWindowDrag";
 export { useWindowResizing } from "./useWindowResizing";
 export { useWindowFocus, isWindowFocused } from "./useWindowFocus";
 export { useLastOpenInApp, getLastOpenInAppId, setLastOpenInAppId } from "./useLastOpenInApp";
+export { useLongPress } from "./useLongPress";

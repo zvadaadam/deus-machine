@@ -53,3 +53,21 @@ type: project
   them again before passing to `WorkspaceHeader`. The double guard is redundant but not harmful.
   **Why:** MobileLayoutProps declares both as `optional` and the component guards them again — this
   creates confusion about who owns the guard logic.
+
+## Long-Press Bottom Sheet Pattern (WorkspaceItem / WorkspaceActionSheet)
+
+- `useLongPress` hook: stable-callback-ref pattern (`callbackRef.current = onLongPress` on every
+  render, closure captures the ref not `.current`) — correct, no stale closure risk.
+- Long-press suppresses the subsequent `onClick` via `didFire()` ref check. On desktop the handlers
+  are not spread (gated by `isMobile`), so `didFireRef` is never set true — desktop click is safe.
+  The `didFire()` check in `onClick` is unconditional though — document with a comment or gate it
+  with `isMobile &&` for clarity.
+- `WorkspaceStatusMenu` (DropdownMenu) still renders on mobile — tapping the status icon opens the
+  dropdown popup, which is a duplicate of the sheet's status options and positions poorly inside a
+  bottom sheet. Should be conditionally suppressed when `isMobile`.
+- `pb-[env(safe-area-inset-bottom)]` pattern on `SheetContent` compresses inner content (same bug
+  as `MobileTabBar`). Use `pb-[max(env(safe-area-inset-bottom),_0.5rem)]` for minimum breathing room.
+- Sheet uses Radix `Dialog` under the hood — `Escape` closes it regardless of `hideClose=true`.
+  Tap-outside-to-close is provided by `SheetOverlay`. No drag-to-dismiss gesture is implemented.
+- `WorkspaceActionSheet` is correctly NOT rendered for initializing workspaces (the `isInitializing`
+  early return fires before the sheet JSX at the bottom of the render tree).
