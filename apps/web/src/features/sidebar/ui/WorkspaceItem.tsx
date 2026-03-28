@@ -216,44 +216,39 @@ export const WorkspaceItem = React.memo(function WorkspaceItem({
         <div className="flex min-w-0 flex-1 flex-col gap-0.5">
           {/* Row 1: icon + display name (title > slug > branch) */}
           <div className="flex min-w-0 items-center gap-1.5">
-            {isMobile ? (
-              /* Mobile: status icon only — long-press action sheet owns status changes */
-              <span className="flex h-5 w-5 shrink-0 items-center justify-center">
-                {hasSessionIcon ? (
-                  match(displayStatus)
-                    .with("working", () => (
-                      <CircularPixelGrid variant="working" size={14} resolution={8} />
-                    ))
-                    .with("error", () => <span className="bg-accent-red h-2 w-2 rounded-full" />)
-                    .otherwise(() => <span className="bg-accent-gold h-2 w-2 rounded-full" />)
-                ) : (
-                  <WorkflowStatusIcon status={workspace.status} size={14} />
-                )}
-              </span>
-            ) : (
-              <WorkspaceStatusMenu
-                currentStatus={workspace.status}
-                onStatusChange={(status) => onStatusChange?.(workspace.id, status)}
-              >
-                <button
-                  type="button"
-                  onClick={(e) => e.stopPropagation()}
-                  className="flex h-5 w-5 shrink-0 items-center justify-center rounded transition-opacity hover:opacity-80"
-                  aria-label={`Status: ${workspace.status}`}
+            {(() => {
+              const statusIcon = hasSessionIcon ? (
+                match(displayStatus)
+                  .with("working", () => (
+                    <CircularPixelGrid variant="working" size={14} resolution={8} />
+                  ))
+                  .with("error", () => <span className="bg-accent-red h-2 w-2 rounded-full" />)
+                  .otherwise(() => <span className="bg-accent-gold h-2 w-2 rounded-full" />)
+              ) : (
+                <WorkflowStatusIcon status={workspace.status} size={14} />
+              );
+
+              return isMobile ? (
+                /* Mobile: icon only — long-press action sheet owns status changes */
+                <span className="flex h-5 w-5 shrink-0 items-center justify-center">
+                  {statusIcon}
+                </span>
+              ) : (
+                <WorkspaceStatusMenu
+                  currentStatus={workspace.status}
+                  onStatusChange={(status) => onStatusChange?.(workspace.id, status)}
                 >
-                  {hasSessionIcon ? (
-                    match(displayStatus)
-                      .with("working", () => (
-                        <CircularPixelGrid variant="working" size={14} resolution={8} />
-                      ))
-                      .with("error", () => <span className="bg-accent-red h-2 w-2 rounded-full" />)
-                      .otherwise(() => <span className="bg-accent-gold h-2 w-2 rounded-full" />)
-                  ) : (
-                    <WorkflowStatusIcon status={workspace.status} size={14} />
-                  )}
-                </button>
-              </WorkspaceStatusMenu>
-            )}
+                  <button
+                    type="button"
+                    onClick={(e) => e.stopPropagation()}
+                    className="flex h-5 w-5 shrink-0 items-center justify-center rounded transition-opacity hover:opacity-80"
+                    aria-label={`Status: ${workspace.status}`}
+                  >
+                    {statusIcon}
+                  </button>
+                </WorkspaceStatusMenu>
+              );
+            })()}
             <span
               className={cn(
                 "truncate text-base",
