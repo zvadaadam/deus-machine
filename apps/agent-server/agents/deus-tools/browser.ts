@@ -242,7 +242,12 @@ Returns a page snapshot after clicking and the clicked element's bounding box (x
         sessionId,
         (args) => `target=${args.ref ?? `(${args.x}, ${args.y})`}`,
         async (args) => {
-          if (!args.ref && (args.x === undefined || args.y === undefined)) {
+          const hasRef = args.ref !== undefined;
+          const hasCoords = args.x !== undefined && args.y !== undefined;
+          if (hasRef && hasCoords) {
+            return textResult("Click requires either 'ref' or 'x'/'y' coordinates, not both.");
+          }
+          if (!hasRef && !hasCoords) {
             return textResult(
               "Click requires either 'ref' (e.g., '@e1') or both 'x' and 'y' coordinates."
             );
@@ -336,6 +341,9 @@ Returns a page snapshot and the input element's bounding box.`,
               return textResult(`Submit failed: ${submitResult.error ?? "unknown error"}`);
             }
             const snap = await getSnapshot(sessionId);
+            if (snap.error) {
+              return textResult(`Submit succeeded but snapshot failed: ${snap.error}`);
+            }
             finalResponse = { ...snap, elementBox: response.elementBox };
           }
 
@@ -473,7 +481,8 @@ Returns a page snapshot after the condition is met.`,
             waitArgs.push("--timeout", String(args.timeout * 1000));
           }
 
-          const response = await execWithSnapshot(sessionId, waitArgs, 35_000);
+          const outerTimeoutMs = Math.max((args.timeout ?? 30) * 1000, 0) + 5_000;
+          const response = await execWithSnapshot(sessionId, waitArgs, outerTimeoutMs);
 
           if (response.error) {
             return textResult(`Wait failed: ${response.error}`);
@@ -554,6 +563,9 @@ Returns a page snapshot after all actions complete.`,
           }
 
           const snap = await getSnapshot(sessionId);
+          if (snap.error) {
+            return textResult(`Batch executed but snapshot failed: ${snap.error}`);
+          }
           const actionSummary = args.actions
             .slice(0, 10)
             .map((a) => a.join(" "))
@@ -595,7 +607,11 @@ Use 'return' to get results. Example: 'return document.title'`,
             return textResult(`Evaluate failed: ${result.error}`);
           }
 
-          const evalResult = (result.data?.result as string) || JSON.stringify(result.data);
+          const rawResult =
+            result.data && Object.prototype.hasOwnProperty.call(result.data, "result")
+              ? (result.data as Record<string, unknown>).result
+              : result.data;
+          const evalResult = typeof rawResult === "string" ? rawResult : JSON.stringify(rawResult);
           return textResult(`Evaluation result: ${evalResult}`);
         }
       )
