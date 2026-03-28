@@ -2132,3 +2132,319 @@ The user has attached these files. Read them before proceeding.
 
 
 Fix the failing CI actions. I've attached the failure logs.
+
+---
+
+<system-instruction>
+The user has added 4 comments to the diff for this workspace. Please review and address these comments as part of your response. When addressing comments on the "original" side or on specific commits, read the file from that version (not the current version). Below are the comments, including metadata about what git state they were left on:
+
+Comment #1:
+
+File: apps/agent-server/agents/deus-tools/browser.ts
+Line: 247
+User comment: "_⚠️ Potential issue_ | _🟡 Minor_
+
+**Reject ambiguous click targets.**
+
+If a caller sends both `ref` and `x/y`, this branch silently prefers `ref`. Please require exactly one targeting mode so a malformed request cannot click the wrong thing and still look successful.
+
+<details>
+<summary>🤖 Prompt for AI Agents</summary>
+
+```
+Verify each finding against the current code and only fix it if needed.
+
+In `@apps/agent-server/agents/deus-tools/browser.ts` around lines 240 - 247,
+Current click handling silently prefers args.ref when both ref and x/y are
+provided; change the validation in the click dispatch (the block using args.ref,
+args.x, args.y and returning textResult) to require exactly one targeting mode
+(either ref XOR both x and y). If both ref and x/y are present or neither valid
+target mode is provided, return a descriptive textResult error (same shape as
+the existing message). Update the guard that now checks for missing coordinates
+to also reject the case where args.ref is present alongside args.x or args.y so
+the click path (the branch that starts with "if (args.ref)") only ever runs when
+ref is the sole target.
+```
+
+</details>
+
+<!-- fingerprinting:phantom:medusa:grasshopper -->
+
+<!-- This is an auto-generated comment by CodeRabbit -->"
+
+Comment metadata:
+This comment was left on the modified branch.
+This comment was left on GitHub by @coderabbitai.
+This comment is the start of thread PRRT_kwDOQEbULc53efzv. 
+
+
+Comment #2:
+
+File: apps/agent-server/agents/deus-tools/browser.ts
+Line: 342
+User comment: "_⚠️ Potential issue_ | _🟠 Major_
+
+**Don't report success when the follow-up snapshot failed.**
+
+`getSnapshot()` can return `{ error }` without throwing in `apps/agent-server/agents/deus-tools/agent-browser-client.ts:304-319`. These branches currently format a normal success response even when the post-submit/post-batch snapshot failed, so the caller silently loses the updated page state.
+
+<details>
+<summary>💡 Suggested fix</summary>
+
+```diff
+             const snap = await getSnapshot(sessionId);
++            if (snap.error) {
++              return textResult(`Submit succeeded but snapshot failed: ${snap.error}`);
++            }
+             finalResponse = { ...snap, elementBox: response.elementBox };
+```
+
+```diff
+           const snap = await getSnapshot(sessionId);
++          if (snap.error) {
++            return textResult(`Batch executed but snapshot failed: ${snap.error}`);
++          }
+           const actionSummary = args.actions
+             .slice(0, 10)
+             .map((a) => a.join(" "))
+             .join(", ");
+```
+</details>
+
+
+Also applies to: 554-572
+
+<details>
+<summary>🤖 Prompt for AI Agents</summary>
+
+```
+Verify each finding against the current code and only fix it if needed.
+
+In `@apps/agent-server/agents/deus-tools/browser.ts` around lines 340 - 342, The
+code assigns the result of getSnapshot(sessionId) to finalResponse without
+checking for errors, which can silently pass error-containing snapshots as
+successes. In the relevant blocks in the method handling snapshot responses
+(including the snippet near the assignment to finalResponse and also around
+lines 554-572), add conditional error checks after calling getSnapshot(). If the
+snapshot contains an error property, handle it explicitly (e.g., propagate the
+error or throw) instead of merging it as a successful response, ensuring the
+caller gets notified of snapshot failures.
+```
+
+</details>
+
+<!-- fingerprinting:phantom:medusa:grasshopper -->
+
+<!-- This is an auto-generated comment by CodeRabbit -->"
+
+Comment metadata:
+This comment was left on the modified branch.
+This comment was left on GitHub by @coderabbitai.
+This comment is the start of thread PRRT_kwDOQEbULc53efzw. 
+
+
+Comment #3:
+
+File: apps/agent-server/agents/deus-tools/browser.ts
+Line: 431
+User comment: "_⚠️ Potential issue_ | _🟠 Major_
+
+**Propagate the requested wait timeout to the outer process timeout too.**
+
+`--timeout` is forwarded to `agent-browser`, but `execWithSnapshot(..., 35_000)` still kills the call after 35s. Any `timeout > 30` can never succeed even though the schema exposes it.
+
+<details>
+<summary>💡 Suggested fix</summary>
+
+```diff
+-          const response = await execWithSnapshot(sessionId, waitArgs, 35_000);
++          const waitTimeoutMs = Math.max((args.timeout ?? 30) * 1000, 0);
++          const response = await execWithSnapshot(sessionId, waitArgs, waitTimeoutMs + 5_000);
+```
+</details>
+
+
+Also applies to: 478-482
+
+<details>
+<summary>🤖 Prompt for AI Agents</summary>
+
+```
+Verify each finding against the current code and only fix it if needed.
+
+In `@apps/agent-server/agents/deus-tools/browser.ts` around lines 428 - 431, The
+schema field "timeout" (z.number() optional) is forwarded to agent-browser but
+the outer execWithSnapshot calls still use a hardcoded 35_000 ms, so any timeout
+>30s will be killed; update the execWithSnapshot calls to use the requested
+timeout value (convert seconds to milliseconds) instead of the hardcoded 35_000
+(e.g., use (timeout ?? 30) * 1000 or Math.max(REQUESTED_MS, 35_000) as
+appropriate) for the execWithSnapshot invocation(s) referenced in this file
+(look for execWithSnapshot(..., 35_000) occurrences), and apply the same change
+to the second occurrence around the other execWithSnapshot call mentioned (lines
+~478-482).
+```
+
+</details>
+
+<!-- fingerprinting:phantom:medusa:grasshopper -->
+
+<!-- This is an auto-generated comment by CodeRabbit -->"
+
+Comment metadata:
+This comment was left on the modified branch.
+This comment was left on GitHub by @coderabbitai.
+This comment is the start of thread PRRT_kwDOQEbULc53efzx. 
+
+
+Comment #4:
+
+File: apps/agent-server/agents/deus-tools/browser.ts
+Line: 597
+User comment: "_⚠️ Potential issue_ | _🟠 Major_
+
+<details>
+<summary>🧩 Analysis chain</summary>
+
+🏁 Script executed:
+
+```shell
+cat -n apps/agent-server/agents/deus-tools/browser.ts | sed -n '580,610p'
+```
+
+Repository: zvadaadam/box-ide
+
+Length of output: 1318
+
+---
+
+🏁 Script executed:
+
+```shell
+rg "execAgentBrowser" apps/agent-server/agents/deus-tools/browser.ts -B 5 -A 5 | head -40
+```
+
+Repository: zvadaadam/box-ide
+
+Length of output: 1463
+
+---
+
+🏁 Script executed:
+
+```shell
+cat -n apps/agent-server/agents/deus-tools/agent-browser-client.ts | head -100
+```
+
+Repository: zvadaadam/box-ide
+
+Length of output: 3872
+
+---
+
+🏁 Script executed:
+
+```shell
+rg "result\.data" apps/agent-server/agents/deus-tools/browser.ts -B 2 -A 2
+```
+
+Repository: zvadaadam/box-ide
+
+Length of output: 779
+
+---
+
+🏁 Script executed:
+
+```shell
+rg "eval" apps/agent-server/agents/deus-tools/agent-browser-client.ts -B 3 -A 3 | head -60
+```
+
+Repository: zvadaadam/box-ide
+
+Length of output: 43
+
+---
+
+🏁 Script executed:
+
+```shell
+rg "result as string" apps/agent-server/agents/deus-tools/browser.ts -B 5 -A 5
+```
+
+Repository: zvadaadam/box-ide
+
+Length of output: 349
+
+---
+
+🏁 Script executed:
+
+```shell
+rg "textResult" apps/agent-server/agents/deus-tools/browser.ts | head -10
+```
+
+Repository: zvadaadam/box-ide
+
+Length of output: 689
+
+---
+
+</details>
+
+**Serialize evaluation results without `||` or a string cast.**
+
+The `||` operator loses valid falsy results like `0`, `false`, and `""` because they're falsy in JavaScript. The `as string` cast is compile-time only—at runtime, objects remain objects and will stringify to `[object Object]` when interpolated.
+
+Check if the `result` property exists explicitly, then conditionally serialize based on type:
+
+<details>
+<summary>Suggested fix</summary>
+
+```diff
+-        const evalResult = (result.data?.result as string) || JSON.stringify(result.data);
++        const rawResult =
++          result.data && Object.prototype.hasOwnProperty.call(result.data, "result")
++            ? (result.data as Record<string, unknown>).result
++            : result.data;
++        const evalResult =
++          typeof rawResult === "string" ? rawResult : JSON.stringify(rawResult);
+```
+</details>
+
+<details>
+<summary>🤖 Prompt for AI Agents</summary>
+
+```
+Verify each finding against the current code and only fix it if needed.
+
+In `@apps/agent-server/agents/deus-tools/browser.ts` around lines 596 - 597, The
+current assignment to evalResult uses `||` and a string cast which discards
+valid falsy values and mishandles non-string objects; update the logic around
+`result`/`result.data` in the block that sets `evalResult` so you first check
+whether `result.data` has its own `result` property (e.g., `'result' in
+result.data` or `Object.prototype.hasOwnProperty.call(result.data, 'result')`),
+then if present serialize by: if the value is a string leave it, if it's a
+primitive (number/boolean/null) convert via String(value) to preserve falsy
+values, and if it's an object/array use `JSON.stringify(value)` (with safe
+fallback on serialization error); then pass that serialized value to
+`textResult` instead of using `||` or a runtime cast—refer to the `evalResult`,
+`result`, `result.data`, and `textResult` identifiers when making the change.
+```
+
+</details>
+
+<!-- fingerprinting:phantom:medusa:grasshopper -->
+
+<!-- This is an auto-generated comment by CodeRabbit -->"
+
+Comment metadata:
+This comment was left on the modified branch.
+This comment was left on GitHub by @coderabbitai.
+This comment is the start of thread PRRT_kwDOQEbULc53efzz. 
+
+</system-instruction>
+
+I run AI code review, is it actionable? Wdyt? Explore in depth each problem.
+We want a clean, maintainable codebase, with proper best practices for the tech stack we use.
+Run subagents to verify, and if it should be fixed, try to merge some stuff together so it can be fixed together within one subagent. 
+If you can test something do it.
