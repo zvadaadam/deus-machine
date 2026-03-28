@@ -2448,3 +2448,299 @@ I run AI code review, is it actionable? Wdyt? Explore in depth each problem.
 We want a clean, maintainable codebase, with proper best practices for the tech stack we use.
 Run subagents to verify, and if it should be fixed, try to merge some stuff together so it can be fixed together within one subagent. 
 If you can test something do it.
+
+---
+
+<system-instruction>
+The user has added 3 comments to the diff for this workspace. Please review and address these comments as part of your response. When addressing comments on the "original" side or on specific commits, read the file from that version (not the current version). Below are the comments, including metadata about what git state they were left on:
+
+Comment #1:
+
+File: apps/agent-server/agents/deus-tools/agent-browser-client.ts
+Line: 77
+User comment: "_⚠️ Potential issue_ | _🟠 Major_
+
+**Treat parsed `error` payloads as failures.**
+
+This helper currently turns `{"error":"..."}` into `{ success: true, error: "..." }`. Most callers only branch on `success`, so an error-only JSON response will be handled like a good result.
+
+
+<details>
+<summary>💡 Suggested fix</summary>
+
+```diff
++        const error =
++          typeof parsed.error === "string" && parsed.error.length > 0 ? parsed.error : null;
+         return {
+-          success: parsed.success !== false,
++          success: parsed.success === false ? false : error == null,
+           data: parsed.data ?? parsed,
+-          error: parsed.error ?? null,
++          error,
+         };
+```
+</details>
+
+<!-- suggestion_start -->
+
+<details>
+<summary>📝 Committable suggestion</summary>
+
+> ‼️ **IMPORTANT**
+> Carefully review the code before committing. Ensure that it accurately replaces the highlighted code, contains no missing lines, and has no issues with indentation. Thoroughly test & benchmark the code to ensure it meets the requirements.
+
+```suggestion
+        const error =
+          typeof parsed.error === "string" && parsed.error.length > 0 ? parsed.error : null;
+        return {
+          success: parsed.success === false ? false : error == null,
+          data: parsed.data ?? parsed,
+          error,
+        };
+```
+
+</details>
+
+<!-- suggestion_end -->
+
+<details>
+<summary>🤖 Prompt for AI Agents</summary>
+
+```
+Verify each finding against the current code and only fix it if needed.
+
+In `@apps/agent-server/agents/deus-tools/agent-browser-client.ts` around lines 74
+- 77, The returned result currently treats responses with only an error payload
+as success; update the logic where the object is constructed (the block
+returning success/data/error in agent-browser-client.ts) so that success is
+false when parsed.error is present—i.e., compute success as parsed.success !==
+false && parsed.error == null (or equivalent), set error to parsed.error ??
+null, and ensure data is null/undefined when an error exists (use parsed.data
+only when parsed.error is absent) so callers that only check success will
+correctly treat error-only responses as failures.
+```
+
+</details>
+
+<!-- fingerprinting:phantom:medusa:grasshopper -->
+
+<!-- This is an auto-generated comment by CodeRabbit -->"
+
+Comment metadata:
+This comment was left on the modified branch.
+This comment was left on GitHub by @coderabbitai.
+This comment is the start of thread PRRT_kwDOQEbULc53ehsf. 
+
+
+Comment #2:
+
+File: apps/agent-server/agents/deus-tools/agent-browser-client.ts
+Line: 169
+User comment: "_⚠️ Potential issue_ | _🟠 Major_
+
+**Restore an output-size guard for batch mode.**
+
+`execFile()` still caps output at 10 MB, but this path buffers stdout/stderr into strings with no limit. A batch that returns large JSON can grow memory without bound inside the long-lived agent-server process.
+
+
+<details>
+<summary>💡 Suggested fix</summary>
+
+```diff
++const MAX_OUTPUT_BYTES = 10 * 1024 * 1024;
++
+ ...
+     let stdout = "";
+     let stderr = "";
++    let outputBytes = 0;
+     let settled = false;
+ ...
+     child.stdout.on("data", (chunk: Buffer) => {
++      outputBytes += chunk.length;
++      if (outputBytes > MAX_OUTPUT_BYTES) {
++        if (!settled) {
++          settled = true;
++          clearTimeout(timer);
++          child.kill("SIGTERM");
++          resolve({ success: false, data: null, error: "Batch output exceeded 10MB" });
++        }
++        return;
++      }
+       stdout += chunk.toString();
+     });
+     child.stderr.on("data", (chunk: Buffer) => {
++      outputBytes += chunk.length;
++      if (outputBytes > MAX_OUTPUT_BYTES) {
++        if (!settled) {
++          settled = true;
++          clearTimeout(timer);
++          child.kill("SIGTERM");
++          resolve({ success: false, data: null, error: "Batch output exceeded 10MB" });
++        }
++        return;
++      }
+       stderr += chunk.toString();
+     });
+```
+</details>
+
+<!-- suggestion_start -->
+
+<details>
+<summary>📝 Committable suggestion</summary>
+
+> ‼️ **IMPORTANT**
+> Carefully review the code before committing. Ensure that it accurately replaces the highlighted code, contains no missing lines, and has no issues with indentation. Thoroughly test & benchmark the code to ensure it meets the requirements.
+
+```suggestion
+    const MAX_OUTPUT_BYTES = 10 * 1024 * 1024;
+
+    let stdout = "";
+    let stderr = "";
+    let outputBytes = 0;
+    let settled = false;
+
+    const timer = setTimeout(() => {
+      if (!settled) {
+        settled = true;
+        child.kill("SIGTERM");
+        resolve({ success: false, data: null, error: "Batch timed out" });
+      }
+    }, timeoutMs);
+
+    child.stdout.on("data", (chunk: Buffer) => {
+      outputBytes += chunk.length;
+      if (outputBytes > MAX_OUTPUT_BYTES) {
+        if (!settled) {
+          settled = true;
+          clearTimeout(timer);
+          child.kill("SIGTERM");
+          resolve({ success: false, data: null, error: "Batch output exceeded 10MB" });
+        }
+        return;
+      }
+      stdout += chunk.toString();
+    });
+    child.stderr.on("data", (chunk: Buffer) => {
+      outputBytes += chunk.length;
+      if (outputBytes > MAX_OUTPUT_BYTES) {
+        if (!settled) {
+          settled = true;
+          clearTimeout(timer);
+          child.kill("SIGTERM");
+          resolve({ success: false, data: null, error: "Batch output exceeded 10MB" });
+        }
+        return;
+      }
+      stderr += chunk.toString();
+    });
+```
+
+</details>
+
+<!-- suggestion_end -->
+
+<details>
+<summary>🤖 Prompt for AI Agents</summary>
+
+```
+Verify each finding against the current code and only fix it if needed.
+
+In `@apps/agent-server/agents/deus-tools/agent-browser-client.ts` around lines 152
+- 169, The current buffering of stdout/stderr in agent-browser-client.ts
+(variables stdout, stderr and the child.stdout/child.stderr "data" listeners)
+has no size cap and can exhaust memory for large batch outputs; add a guarded
+max bytes constant (e.g., MAX_OUTPUT_BYTES) and track cumulative size in those
+"data" handlers, and if the limit is exceeded set settled = true, kill the child
+(child.kill("SIGTERM")), clear the timeout (timer), remove listeners, and
+resolve with success: false and an error like "Output size exceeded"; ensure the
+same cleanup path used by the timeout (settled flag, clearTimeout, listener
+cleanup) is reused to avoid leaks.
+```
+
+</details>
+
+<!-- fingerprinting:phantom:medusa:grasshopper -->
+
+<!-- This is an auto-generated comment by CodeRabbit -->"
+
+Comment metadata:
+This comment was left on the modified branch.
+This comment was left on GitHub by @coderabbitai.
+This comment is the start of thread PRRT_kwDOQEbULc53ehsi. 
+
+
+Comment #3:
+
+File: apps/agent-server/agents/deus-tools/browser.ts
+Line: 563
+User comment: "_⚠️ Potential issue_ | _🟠 Major_
+
+**Redact sensitive batch arguments before echoing them back.**
+
+These summaries currently use `join(" ")`, so `fill`/`type` actions will write raw emails, passwords, tokens, etc. into the tool response and failure list. That output is likely to be persisted in chat history and logs.
+
+
+<details>
+<summary>💡 Suggested fix</summary>
+
+```diff
++function summarizeBatchAction(action: string[]): string {
++  const [command, firstArg] = action;
++  if (command === "fill" || command === "type") {
++    return [command, firstArg ?? "<?>", "<redacted>"].join(" ");
++  }
++  return action.join(" ");
++}
++
+ ...
+                 failures.push(
+-                  `Action ${i + 1} (${args.actions[i]?.join(" ")}): ${r.error ?? "failed"}`
++                  `Action ${i + 1} (${summarizeBatchAction(args.actions[i] ?? [])}): ${r.error ?? "failed"}`
+                 );
+ ...
+           const actionSummary = args.actions
+             .slice(0, 10)
+-            .map((a) => a.join(" "))
++            .map((a) => summarizeBatchAction(a))
+             .join(", ");
+```
+</details>
+
+<details>
+<summary>🤖 Prompt for AI Agents</summary>
+
+```
+Verify each finding against the current code and only fix it if needed.
+
+In `@apps/agent-server/agents/deus-tools/browser.ts` around lines 547 - 563, The
+action summaries and failure messages currently echo raw action arguments (using
+args.actions[...] .join(" ")), which can leak sensitive data (emails, passwords,
+tokens); update the code paths that build failures and actionSummary to
+sanitize/redact sensitive arguments before joining: implement and call a helper
+(e.g., sanitizeAction or redactActionArgs) that detects sensitive action verbs
+like "fill", "type", "paste", "setValue" (and any custom input-like actions) and
+replaces their argument values with a masked placeholder (e.g., "<REDACTED>")
+while leaving non-sensitive actions intact; use this sanitizer in the
+failures.push construction and in the actionSummary mapping so both the failure
+list and the details summary never include raw sensitive values (apply to the
+batchData failure loop and the actionSummary mapping).
+```
+
+</details>
+
+<!-- fingerprinting:phantom:medusa:grasshopper -->
+
+<!-- This is an auto-generated comment by CodeRabbit -->"
+
+Comment metadata:
+This comment was left on the modified branch.
+This comment was left on GitHub by @coderabbitai.
+This comment is the start of thread PRRT_kwDOQEbULc53ehsl. 
+
+</system-instruction>
+
+I run AI code review, is it actionable? Wdyt? Explore in depth each problem.
+We want a clean, maintainable codebase, with proper best practices for the tech stack we use.
+Run subagents to verify, and if it should be fixed, try to merge some stuff together so it can be fixed together within one subagent. 
+If you can test something do it.
