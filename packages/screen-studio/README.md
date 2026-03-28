@@ -371,7 +371,7 @@ packages/screen-studio/
 │   ├── cli/              CLI entry point
 │   ├── types.ts          Core type definitions
 │   └── index.ts          Public API exports
-├── test/                 213 tests (vitest)
+├── test/                 243 tests (vitest)
 ├── demo/                 Interactive browser demo
 └── dist/                 Built output (ESM + CJS + DTS)
 ```

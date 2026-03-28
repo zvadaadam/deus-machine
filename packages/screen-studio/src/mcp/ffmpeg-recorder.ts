@@ -1,7 +1,7 @@
 import { spawn, execFileSync, type ChildProcess } from "node:child_process";
 import { platform } from "node:os";
 import { existsSync } from "node:fs";
-import { unlink } from "node:fs/promises";
+import { stat, unlink } from "node:fs/promises";
 import type { FfmpegCaptureConfig, FfmpegPostProcessConfig } from "./types.js";
 
 /**
@@ -228,6 +228,10 @@ export class FfmpegRecorder {
    * during startup, throws with the ffmpeg error.
    */
   async startCapture(config: FfmpegCaptureConfig): Promise<void> {
+    if (this.captureProcess) {
+      throw new Error("ffmpeg capture is already running");
+    }
+
     const args = buildCaptureArgs(config);
     this.rawCapturePath = config.outputPath;
     this.captureStderr = "";
@@ -277,18 +281,16 @@ export class FfmpegRecorder {
         }
       });
 
-      proc.on("close", (code) => {
+      proc.on("close", (code, signal) => {
         clearTimeout(startupTimer);
         this.captureProcess = null;
         if (!resolved) {
           resolved = true;
-          if (code !== 0 && code !== 255) {
-            reject(new Error(
-              `ffmpeg capture exited immediately with code ${code}.\n` +
-              `stderr: ${this.captureStderr.slice(-500)}\n` +
-              `Hint: Check that the capture device is accessible. On macOS, run 'ffmpeg -f avfoundation -list_devices true -i ""' to see available devices.`,
-            ));
-          }
+          reject(new Error(
+            `ffmpeg capture exited before startup completed (code ${code ?? "null"}, signal ${signal ?? "none"}).\n` +
+            `stderr: ${this.captureStderr.slice(-500)}\n` +
+            `Hint: Check that the capture device is accessible.`,
+          ));
         }
       });
     });
@@ -333,6 +335,18 @@ export class FfmpegRecorder {
         `ffmpeg stderr: ${this.captureStderr.slice(-300)}\n` +
         `Hint: On macOS, ensure Screen Recording permission is granted. On Linux, ensure Xvfb is running on the configured display.`,
       );
+    }
+
+    // Verify the raw file is not empty (e.g. permission denied produces 0-byte file)
+    if (path) {
+      const { size } = await stat(path);
+      if (size === 0) {
+        throw new Error(
+          `Screen capture failed: raw file at ${path} is empty.\n` +
+          `ffmpeg stderr: ${this.captureStderr.slice(-300)}\n` +
+          `Hint: On macOS, ensure Screen Recording permission is granted.`,
+        );
+      }
     }
 
     return path;

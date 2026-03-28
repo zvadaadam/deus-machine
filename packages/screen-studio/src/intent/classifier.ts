@@ -130,7 +130,10 @@ export class IntentClassifier {
     const intentType = this.eventTypeToIntentType(event.type);
 
     // Compatible intent types
-    if (intent.type !== intentType && !(intent.type === "clicking" && intentType === "typing")) {
+    const clickTypePair =
+      (intent.type === "clicking" && intentType === "typing") ||
+      (intent.type === "typing" && intentType === "clicking");
+    if (intent.type !== intentType && !clickTypePair) {
       return false;
     }
 
@@ -281,10 +284,10 @@ export class IntentClassifier {
     }
 
     const ex = event.elementRect;
-    const px = ex ? ex.x : event.x;
-    const py = ex ? ex.y : event.y;
-    const pw = ex ? ex.width : 0;
-    const ph = ex ? ex.height : 0;
+    const px = ex ? ex.x : event.x - 50;
+    const py = ex ? ex.y : event.y - 50;
+    const pw = ex ? ex.width : 100;
+    const ph = ex ? ex.height : 100;
 
     const minX = Math.min(existing.x, px);
     const minY = Math.min(existing.y, py);

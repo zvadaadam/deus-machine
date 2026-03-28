@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from "vitest";
+import { describe, it, expect, vi, beforeEach, afterAll } from "vitest";
 import { RecordingSession } from "../src/session/recording-session.js";
 import type { ElementResolver } from "../src/adapter/mcp-adapter.js";
 
@@ -11,6 +11,10 @@ vi.stubGlobal("performance", {
 describe("RecordingSession", () => {
   const sourceSize = { width: 1920, height: 1080 };
   const outputSize = { width: 1920, height: 1080 };
+
+  afterAll(() => {
+    vi.unstubAllGlobals();
+  });
 
   const mockResolver: ElementResolver = async (ref) => {
     const positions: Record<string, any> = {

@@ -66,11 +66,14 @@ export type ElementResolver = (
  */
 export class McpToolAdapter {
   private resolver: ElementResolver;
-  private lastKnownPosition = { x: 960, y: 540 };
+  private sourceCenter: { x: number; y: number };
+  private lastKnownPosition: { x: number; y: number };
   private startTime: number;
 
-  constructor(resolver: ElementResolver) {
+  constructor(resolver: ElementResolver, sourceSize = { width: 1920, height: 1080 }) {
     this.resolver = resolver;
+    this.sourceCenter = { x: sourceSize.width / 2, y: sourceSize.height / 2 };
+    this.lastKnownPosition = { ...this.sourceCenter };
     this.startTime = Date.now();
   }
 
@@ -92,15 +95,19 @@ export class McpToolAdapter {
     let elementRect: Rect | undefined;
 
     if (ref) {
-      const resolved = await this.resolver(ref, event.method);
-      if (resolved) {
-        position = { x: resolved.x, y: resolved.y };
-        elementRect = resolved.rect;
-        this.lastKnownPosition = position;
+      try {
+        const resolved = await this.resolver(ref, event.method);
+        if (resolved) {
+          position = { x: resolved.x, y: resolved.y };
+          elementRect = resolved.rect;
+          this.lastKnownPosition = position;
+        }
+      } catch {
+        // Resolver failed — fall back to lastKnownPosition (already set above)
       }
     } else if (event.method === "browserNavigate") {
       // Navigation: reset to viewport center
-      position = { x: 960, y: 540 };
+      position = { ...this.sourceCenter };
     }
 
     return {
