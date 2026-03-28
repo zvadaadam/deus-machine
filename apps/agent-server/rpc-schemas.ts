@@ -94,6 +94,8 @@ export const BrowserSnapshotResponseSchema = z.object({
 export const BrowserClickRequestSchema = z.object({
   sessionId: z.string(),
   ref: z.string().optional().describe("Element data-cursor-ref to click"),
+  x: z.number().optional().describe("X coordinate for coordinate-based click"),
+  y: z.number().optional().describe("Y coordinate for coordinate-based click"),
   doubleClick: z.boolean().optional(),
   webviewLabel: z.string().optional(),
 });
