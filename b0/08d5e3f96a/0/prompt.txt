@@ -1,0 +1,8 @@
+Review the current code changes in this workspace. Analyze the diff for:
+- Bugs, logic errors, or edge cases
+- Performance issues or unnecessary complexity
+- Security concerns (hardcoded secrets, injection, unsafe patterns)
+- Code style and consistency with the existing codebase
+- Missing error handling or tests
+
+Provide a concise summary of findings with specific file and line references.

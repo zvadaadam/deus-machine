@@ -1,0 +1,24 @@
+{
+  "cli_version": "0.5.0",
+  "checkpoint_id": "b008d5e3f96a",
+  "session_id": "e6142832-037a-4f1f-bcf5-fd75e146ee6e",
+  "strategy": "manual-commit",
+  "created_at": "2026-03-28T00:52:14.38828Z",
+  "branch": "adam-zvada/mercury",
+  "checkpoints_count": 2,
+  "files_touched": [],
+  "agent": "Claude Code",
+  "turn_id": "940e77c2a7ed",
+  "checkpoint_transcript_start": 273,
+  "transcript_lines_at_start": 273,
+  "token_usage": {
+    "input_tokens": 20,
+    "cache_creation_tokens": 12188,
+    "cache_read_tokens": 1960450,
+    "output_tokens": 4068,
+    "api_call_count": 16
+  },
+  "session_metrics": {
+    "turn_count": 10
+  }
+}
