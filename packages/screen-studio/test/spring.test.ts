@@ -74,6 +74,31 @@ describe("Spring", () => {
       expect(Math.abs(pos - target)).toBeLessThan(2);
     });
 
+    it("reports velocity consistent with numerical derivative of position", () => {
+      // Verify the analytical velocity matches the finite-difference derivative
+      // of position: v ≈ (x(t+dt) - x(t)) / dt
+      const s = new Spring({ omega: 10, zeta: 0.5 });
+      const dt = 1e-5; // very small step for accurate finite difference
+
+      // Start from a non-trivial state
+      let pos = 50;
+      let vel = -200;
+      const target = 100;
+
+      // Step to an arbitrary point to get away from initial conditions
+      for (let i = 0; i < 100; i++) {
+        [pos, vel] = s.step(pos, vel, target, 1 / 60);
+      }
+
+      // Now compare analytical velocity to finite difference
+      const [pos1, vel1] = s.step(pos, vel, target, dt);
+      const [pos2] = s.step(pos1, vel1, target, dt);
+      const numericalVelocity = (pos2 - pos1) / dt;
+
+      // The analytical velocity (vel1) should match the numerical derivative
+      expect(vel1).toBeCloseTo(numericalVelocity, 2);
+    });
+
     it("is stable with large dt", () => {
       // Analytical solution should be stable even with large timesteps
       const [pos, vel] = spring.step(0, 0, 100, 1.0); // 1 second step

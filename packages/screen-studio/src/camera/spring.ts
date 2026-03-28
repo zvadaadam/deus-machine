@@ -79,7 +79,7 @@ export class Spring {
     const newVelocity =
       decay *
       (velocity * cos -
-        (displacement * dampedOmega +
+        (displacement * omega * omega / dampedOmega +
           (velocity * zeta * omega) / dampedOmega) *
           sin);
 

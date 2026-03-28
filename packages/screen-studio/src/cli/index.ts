@@ -7,7 +7,7 @@
  * actionable errors, idempotent commands.
  *
  * Usage:
- *   screen-studio start [--capture x11grab|avfoundation|none] [--output path.mp4]
+ *   screen-studio start [--output path.mp4]
  *   screen-studio event <sessionId> --type click --x 500 --y 300
  *   screen-studio chapter <sessionId> --title "Login flow"
  *   screen-studio status <sessionId>
@@ -16,17 +16,14 @@
  */
 
 import { SessionManager } from "../mcp/session-manager.js";
-import { FfmpegRecorder, detectFfmpeg } from "../mcp/ffmpeg-recorder.js";
-import { generateFfmpegFilter, TimelineRecorder } from "../recorder/encoder.js";
-import { CameraEngine } from "../camera/engine.js";
 
 // ---------------------------------------------------------------------------
 // Globals
 // ---------------------------------------------------------------------------
 
 // Each CLI command is stateless. State is persisted to a JSON file so that
-// `stop` can reconstruct the session created by `start` and run ffmpeg
-// post-processing with the raw capture file.
+// `stop` can reconstruct the session created by `start`. The CLI runs in
+// events-only mode — capture is handled by the MCP server.
 
 import { existsSync, readFileSync, writeFileSync, mkdirSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -54,8 +51,6 @@ interface PersistedState {
       startTime: number;
       status: string;
       outputPath?: string;
-      /** Path to raw ffmpeg capture file (null if captureMethod was "none"). */
-      rawCapturePath?: string | null;
     }
   >;
 }
@@ -160,7 +155,6 @@ async function cmdStart(flags: Record<string, string | boolean>): Promise<void> 
   const outputHeight = typeof flags["output-height"] === "string" ? parseInt(flags["output-height"]) : 1080;
   const fps = typeof flags.fps === "string" ? parseInt(flags.fps) : 30;
   const deviceFrame = typeof flags["device-frame"] === "string" ? flags["device-frame"] as "browser-chrome" | "macos-window" | "none" : undefined;
-  const captureMethod = typeof flags.capture === "string" ? flags.capture as "x11grab" | "avfoundation" | "screenshot" | "none" : undefined;
 
   const sessionManager = new SessionManager();
   const sessionId = await sessionManager.create({
@@ -171,15 +165,9 @@ async function cmdStart(flags: Record<string, string | boolean>): Promise<void> 
     outputHeight,
     fps,
     deviceFrame,
-    captureMethod,
+    captureMethod: "none",
     display: typeof flags.display === "string" ? flags.display : undefined,
   });
-
-  // Determine rawCapturePath: only set if capture was started
-  const effectiveCapture = captureMethod ?? "none";
-  const rawCapturePath = (effectiveCapture !== "none" && effectiveCapture !== "screenshot")
-    ? join(tmpdir(), `raw-${sessionId}.mp4`)
-    : null;
 
   // Persist the session with resolved config for post-processing in cmdStop
   state.sessions[sessionId] = {
@@ -195,7 +183,6 @@ async function cmdStart(flags: Record<string, string | boolean>): Promise<void> 
     startTime: Date.now(),
     status: "recording",
     outputPath: typeof flags.output === "string" ? flags.output : join(tmpdir(), `recording-${sessionId}.mp4`),
-    rawCapturePath,
   };
   saveState(state);
 
@@ -313,7 +300,7 @@ function cmdStatus(positional: string[]): void {
   });
 }
 
-async function cmdStop(positional: string[], flags: Record<string, string | boolean>): Promise<void> {
+async function cmdStop(positional: string[]): Promise<void> {
   const sessionId = positional[0];
   if (!sessionId) {
     error("Missing session ID", "screen-studio stop <session_id>");
@@ -328,56 +315,7 @@ async function cmdStop(positional: string[], flags: Record<string, string | bool
     error(`Session ${sessionId} is not recording (status: ${session.status})`);
   }
 
-  const cfg = session.resolvedConfig;
   const duration = (Date.now() - session.startTime) / 1000;
-
-  // If the original start had a live capture, run ffmpeg post-processing
-  // using the persisted rawCapturePath and resolved config.
-  if (session.rawCapturePath && session.events.length > 0) {
-    // Replay events through a CameraEngine to generate the camera timeline
-    const engine = new CameraEngine({ sourceSize: cfg.sourceSize });
-    const timelineRecorder = new TimelineRecorder({ fps: cfg.fps });
-    timelineRecorder.start();
-
-    for (const event of session.events) {
-      const agentEvent = {
-        type: event.type as "click" | "type" | "scroll" | "navigate" | "screenshot" | "idle" | "drag",
-        t: event.t,
-        x: event.x,
-        y: event.y,
-        meta: event.meta,
-      };
-      engine.pushEvent(agentEvent);
-      engine.step(1 / cfg.fps);
-
-      const camera = engine.getTransform();
-      const cursor = engine.getCursorState();
-      timelineRecorder.captureFrame(event.t, camera, {
-        x: cursor.x,
-        y: cursor.y,
-        clicking: cursor.clicking,
-        visible: cursor.visible,
-      });
-    }
-
-    const timelineFrames = timelineRecorder.stop();
-    const filterComplex = generateFfmpegFilter(timelineFrames, cfg.sourceSize, cfg.outputSize);
-
-    if (filterComplex && existsSync(session.rawCapturePath)) {
-      const hasFfmpeg = await detectFfmpeg();
-      if (hasFfmpeg) {
-        const recorder = new FfmpegRecorder();
-        await recorder.postProcess({
-          inputPath: session.rawCapturePath,
-          outputPath: session.outputPath!,
-          filterComplex,
-          outputSize: cfg.outputSize,
-          addWatermark: flags.watermark !== undefined,
-          watermarkText: typeof flags.watermark === "string" ? flags.watermark : undefined,
-        });
-      }
-    }
-  }
 
   session.status = "done";
   saveState(state);
@@ -422,7 +360,7 @@ Commands:
 
 Examples:
   screen-studio start
-  screen-studio start --capture x11grab --output demo.mp4
+  screen-studio start --output demo.mp4
   screen-studio start --device-frame browser-chrome --fps 60
 
   screen-studio event rec_abc123 --type click --x 500 --y 300
@@ -440,7 +378,6 @@ Examples:
 
 Flags (start):
   --output <path>         Output MP4 path (default: /tmp/recording-{id}.mp4)
-  --capture <method>      x11grab | avfoundation | screenshot | none (default: none)
   --display <display>     X11 display for x11grab (default: :99)
   --fps <n>               Frame rate 1-120 (default: 30)
   --source-width <n>      Source width (default: 1920)
@@ -493,7 +430,7 @@ async function main(): Promise<void> {
       cmdStatus(positional);
       break;
     case "stop":
-      await cmdStop(positional, flags);
+      await cmdStop(positional);
       break;
     case "list":
       cmdList();
