@@ -59,6 +59,15 @@ function textResult(text: string): { content: [{ type: "text"; text: string }] }
   return { content: [{ type: "text", text }] };
 }
 
+/** Redact sensitive arguments (passwords, tokens) from batch action summaries */
+function summarizeBatchAction(action: string[]): string {
+  const [command, firstArg] = action;
+  if (command === "fill" || command === "type") {
+    return [command, firstArg ?? "<?>", "<redacted>"].join(" ");
+  }
+  return action.join(" ");
+}
+
 /**
  * Format a snapshot response with file-based fallback for large snapshots.
  * Optionally includes element bounding box for screen recording.
@@ -556,7 +565,7 @@ Returns a page snapshot after all actions complete.`,
             batchData.forEach((r, i) => {
               if (r && r.success === false) {
                 failures.push(
-                  `Action ${i + 1} (${args.actions[i]?.join(" ")}): ${r.error ?? "failed"}`
+                  `Action ${i + 1} (${summarizeBatchAction(args.actions[i] ?? [])}): ${r.error ?? "failed"}`
                 );
               }
             });
@@ -568,7 +577,7 @@ Returns a page snapshot after all actions complete.`,
           }
           const actionSummary = args.actions
             .slice(0, 10)
-            .map((a) => a.join(" "))
+            .map((a) => summarizeBatchAction(a))
             .join(", ");
           const details = [
             `Actions executed: ${args.actions.length}`,
