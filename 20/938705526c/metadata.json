@@ -3,7 +3,7 @@
   "checkpoint_id": "20938705526c",
   "strategy": "manual-commit",
   "branch": "zvadaadam/explore-screen-recording",
-  "checkpoints_count": 5,
+  "checkpoints_count": 42,
   "files_touched": [
     "packages/screen-studio/.gitignore",
     "packages/screen-studio/README.md",
@@ -68,13 +68,19 @@
       "transcript": "/20/938705526c/1/full.jsonl",
       "content_hash": "/20/938705526c/1/content_hash.txt",
       "prompt": "/20/938705526c/1/prompt.txt"
+    },
+    {
+      "metadata": "/20/938705526c/2/metadata.json",
+      "transcript": "/20/938705526c/2/full.jsonl",
+      "content_hash": "/20/938705526c/2/content_hash.txt",
+      "prompt": "/20/938705526c/2/prompt.txt"
     }
   ],
   "token_usage": {
-    "input_tokens": 56,
-    "cache_creation_tokens": 86557,
-    "cache_read_tokens": 1753019,
-    "output_tokens": 7661,
-    "api_call_count": 42
+    "input_tokens": 5017,
+    "cache_creation_tokens": 1509385,
+    "cache_read_tokens": 45954965,
+    "output_tokens": 191689,
+    "api_call_count": 369
   }
 }
