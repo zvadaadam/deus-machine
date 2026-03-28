@@ -1608,3 +1608,510 @@ The user has attached these files. Read them before proceeding.
 
 
 Create a PR
+
+---
+
+<system-instruction>
+The user has added 7 comments to the diff for this workspace. Please review and address these comments as part of your response. When addressing comments on the "original" side or on specific commits, read the file from that version (not the current version). Below are the comments, including metadata about what git state they were left on:
+
+Comment #1:
+
+File: 
+Line: undefined
+User comment: "<!-- This is an auto-generated comment: summarize by coderabbit.ai -->
+<!-- walkthrough_start -->
+
+<details>
+<summary>📝 Walkthrough</summary>
+
+## Walkthrough
+
+This pull request refactors the browser integration architecture by introducing batch command execution for agent-browser, restructuring native BrowserView lifecycle management (shifting from close/create to hide/recall patterns), consolidating polyfill injection to the main process, adding new IPC handlers/events for tab creation and view existence checks, and removing cookie-synchronization infrastructure across the desktop and web layers.
+
+## Changes
+
+|Cohort / File(s)|Summary|
+|---|---|
+|**Agent Browser CLI Enhancement** <br> `apps/agent-server/agents/deus-tools/agent-browser-client.ts`, `apps/agent-server/agents/deus-tools/browser.ts`|Added `ElementBox` interface, new exports (`execAgentBrowserWithStdin`, `getElementBox`, `executeBatch`), centralized JSON parsing and argument/environment building. Extended `execWithSnapshot` and `getSnapshot` signatures with optional parameters, implemented stdin-based batch execution with timeout/error handling, and added coordinate-based click support to agent-browser tools.|
+|**Browser Tools Expansion** <br> `apps/agent-server/test/deus-tools.test.ts`|Updated test expectations to reflect new `BrowserBatchActions` tool (total tool count 26→27).|
+|**Desktop Backend Configuration** <br> `apps/desktop/main/backend-process.ts`, `apps/desktop/main/index.ts`|Added fixed `CDP_PORT: "19222"` to backend environment and enabled Chrome DevTools Protocol (remote-debugging-port/remote-debugging-address) via Electron command-line switches for agent-browser connectivity.|
+|**Desktop Native Browser View Refactor** <br> `apps/desktop/main/browser-views.ts`, `apps/desktop/preload/browser-preload.ts`|Switched BrowserView sessions from per-view partitions to single shared partition; added `getMainWindow()` helper; removed cookie IPC handlers (`browser:cookies:set/get`, `browser:getURL`, `browser:getTitle`) and replaced with `browser_view_exists` handler; changed popup handling to forward to renderer via new `browser:new-tab-requested` event instead of opening system browser; moved WebAuthn/local-network-access polyfills from preload to main-process main-world injection; updated evaluation IPC to support optional timeout.|
+|**Desktop IPC Security** <br> `apps/desktop/preload/index.ts`|Extended `ALLOWED_INVOKE_CHANNELS` to permit `browser_view_exists` and `ALLOWED_EVENT_CHANNELS` to permit `browser:console-message` and `browser:new-tab-requested`.|
+|**Web Browser Store & Type System** <br> `apps/web/src/features/browser/store/browserWindowStore.ts`, `apps/web/src/features/browser/types.ts`|Removed `setDetachedWorkspace` state/action; revised `hydratePersistedTab` to remove workspace parameter and stabilize `webviewLabel` to persisted ID; removed `BrowserTabHandle.syncBounds` method.|
+|**Web Browser Panel Restructuring** <br> `apps/web/src/features/browser/ui/BrowserPanel.tsx`|Added `BROWSER_NEW_TAB_REQUESTED` event handler to create new tabs from main-process popups; refactored tab initialization via `loadWorkspaceTabs(wsId)`; centralized tab serialization into `serializeTabs(...)` helper; changed workspace switching to hide instead of close native webviews; removed cookie-related logic (loading/syncing); removed `onClose` prop; added Escape key handling and DevTools callback consolidation.|
+|**Web Browser Tab Lifecycle** <br> `apps/web/src/features/browser/ui/BrowserTab.tsx`|Updated webview creation to check `viewExists(label)` and recall/reposition existing parked views instead of creating fresh ones; changed unmount cleanup from `close(label)` to `hide(label)`; added `didFailForCurrentNav` tracking to preserve error state; removed `syncBounds` imperative handle; adjusted error overlay to show when `visible && tab.error` regardless of load state.|
+|**Web Browser UI Polish** <br> `apps/web/src/features/browser/ui/BrowserTabBar.tsx`|Minor refactoring: use `cn` utility for `className` composition and change transition easing from `ease` to `ease-out`.|
+|**Web Native Integration** <br> `apps/web/src/platform/native/browser-views.ts`|Added `viewExists(label)` helper; tightened `screenshot` options typing to explicit bounds fields; removed cookie-related exports (`getCookieBrowsers`, `syncCookies`, `injectCookies`).|
+|**Shared Event Types** <br> `shared/events.ts`|Added `BROWSER_NEW_TAB_REQUESTED` constant, `BrowserNewTabRequestedSchema`/`BrowserNewTabRequestedEvent` with `url`, optional `disposition`/`openerLabel`; updated `BrowserPageLoadSchema` to include optional `error` object.|
+
+## Sequence Diagram(s)
+
+```mermaid
+sequenceDiagram
+    actor User
+    participant MainProc as Main Process
+    participant Renderer as Renderer (BrowserPanel)
+    participant NativeView as Native BrowserView
+
+    User->>MainProc: Click link / OAuth popup
+    MainProc->>MainProc: Detect popup<br/>(web-contents prevented)
+    MainProc->>Renderer: Send BROWSER_NEW_TAB_REQUESTED<br/>(url, disposition, openerLabel)
+    
+    Renderer->>Renderer: Handle event in useEffect
+    Renderer->>Renderer: Create new BrowserTabState<br/>with currentUrl/title
+    Renderer->>Renderer: Append tab to React state
+    Renderer->>Renderer: Persist tabs to storage
+    Renderer->>Renderer: Set activeTabId to new tab
+    
+    Renderer->>NativeView: BrowserTab mounts<br/>calls viewExists(webviewLabel)
+    NativeView-->>Renderer: Returns true<br/>(view was parked)
+    
+    Renderer->>NativeView: Reposition/resize via setBounds
+    Renderer->>NativeView: Navigate to new URL
+    Renderer->>Renderer: Mark loaded, clear loading state
+    Renderer->>User: Display new tab in panel
+```
+
+## Estimated code review effort
+
+🎯 4 (Complex) | ⏱️ ~60 minutes
+
+## Poem
+
+> 🐰 *wiggles nose with glee*
+> Batches of commands hop-hop-hop down the wire,
+> Native views hide and recall—what a sight to admire!
+> Popups make tabs with a REQUESTED chime,
+> Polyfills waltz in main-world's paradigm,
+> Coordination blooms, efficiency takes flight! ✨
+
+</details>
+
+<!-- walkthrough_end -->
+
+
+<!-- tips_start -->
+
+---
+
+<sub>Comment `@coderabbitai help` to get the list of available commands and usage tips.</sub>
+
+<!-- tips_end -->
+
+<!-- internal state start -->
+
+
+<!-- REDACTED/REDACTED/REDACTED/REDACTED/REDACTED/REDACTED/REDACTED/DwU1bK2FXa/REDACTED/REDACTED/REDACTED/REDACTED/REDACTED/w/JpWFm/REDACTED/REDACTED/1QaCGRr1QQxNXVhYkmei9jDSP/x5AOS12clChQNRTh+OrdDSMm3cm/W+5XgSw7q5fgdoZNVddNmIwZg3Njbew/t/IR3QFnc/REDACTED/REDACTED/REDACTED/AKZAynq/5W7yELhKHCgkrmGSy85mG47OGrLhDAAFGDr/4AA+cB/wPhBIfhARCaMaVB1kNBdBURoRzBN4cRbB+aHBSRL+H+/B/REDACTED/REDACTED/REDACTED/REDACTED/REDACTED/REDACTED/REDACTED/REDACTED/REDACTED/REDACTED/REDACTED/REDACTED/REDACTED/sqxaPIgNAekxQJk0TTk/REDACTED/g4giQHjrnZvm2jvqqs/WHAfkoEfoBaSwqh/REDACTED/nSD2LZMkChA0JOP3c8g/U/REDACTED/REDACTED/HFQlXsgFRDAPRejXVhCJerCIx/REDACTED/REDACTED/REDACTED/0sAw0Jhfk/1/6vtmW81kAWn/REDACTED/REDACTED/ngXzwdyY5x5UX35PPsXAF+5wF9a/REDACTED/REDACTED/REDACTED/REDACTED/REDACTED/REDACTED/REDACTED/REDACTED/REDACTED/REDACTED/2OjkFTB4po9I3dY9GXwYz/REDACTED/REDACTED/REDACTED/gROvqUsLwsgUZt/B/DcRUc+wMFNlBhi+h/uBESAOyNkAFQ3Y1sGdHNkiA9w/REDACTED/REDACTED/REDACTED/REDACTED/REDACTED/REDACTED/REDACTED/REDACTED/REDACTED/REDACTED/IRsGgx/REDACTED/REDACTED/REDACTED/REDACTED/REDACTED/REDACTED/IdpYAXT4eb4MiJFitGqdiIDIh4FdgQNDW/REDACTED/REDACTED/REDACTED/REDACTED/REDACTED/REDACTED/REDACTED/REDACTED/REDACTED/REDACTED/REDACTED/0+oUZhM/QDIVMsvhA/EM9+pH5yEvJCVC6pO5X5/REDACTED/REDACTED/REDACTED/REDACTED/REDACTED/REDACTED/QoFlzrz133f7sFtmimfeBDP/Z54Ha6S+uFUvR2dL0xY5zxzf3AU/T3lIHcGnDi5XjAPoWY/JfgAkZCgBl/REDACTED/REDACTED/REDACTED/REDACTED/REDACTED/YBk+ngrbbgHxr5/cABfTIEX3/REDACTED/REDACTED/REDACTED/aFHBN7VMVQltuCv3TUTKD8z/g+/vy86H/n/99zfJdxV0T2R6T/2AU/REDACTED//REDACTED/REDACTED -->
+
+<!-- internal state end -->"
+
+Comment metadata:
+This comment was left on a file.
+This comment was left on GitHub by @coderabbitai.
+
+
+Comment #2:
+
+File: apps/agent-server/agents/deus-tools/browser.ts
+Line: 264
+User comment: "_⚠️ Potential issue_ | _🟠 Major_
+
+**Check the batch result before reporting a coordinate click as successful.**
+
+`executeBatch()` resolves `{ success: false }` on command failures; it does not throw. This branch ignores that result, then takes a follow-up snapshot, so a failed mouse sequence can still be reported as a successful click. Using `getSnapshot()` after a successful batch also avoids the redundant extra snapshot from `execWithSnapshot(["snapshot", "--json"])`.
+
+<details>
+<summary>💡 Suggested patch</summary>
+
+```diff
+-            await executeBatch(sessionId, cmds, { bail: true });
+-            response = await execWithSnapshot(sessionId, ["snapshot", "--json"]);
+-            response.elementBox = { x: args.x!, y: args.y!, width: 1, height: 1 };
++            const batchResult = await executeBatch(sessionId, cmds, { bail: true });
++            if (!batchResult.success) {
++              return textResult(`Click failed: ${batchResult.error ?? "unknown error"}`);
++            }
++
++            const snap = await getSnapshot(sessionId);
++            if (snap.error) {
++              return textResult(`Click succeeded but snapshot failed: ${snap.error}`);
++            }
++
++            response = { ...snap, elementBox: { x: args.x!, y: args.y!, width: 1, height: 1 } };
+```
+</details>
+
+<!-- suggestion_start -->
+
+<details>
+<summary>📝 Committable suggestion</summary>
+
+> ‼️ **IMPORTANT**
+> Carefully review the code before committing. Ensure that it accurately replaces the highlighted code, contains no missing lines, and has no issues with indentation. Thoroughly test & benchmark the code to ensure it meets the requirements.
+
+```suggestion
+            const cmds: string[][] = [
+              ["mouse", "move", String(args.x), String(args.y)],
+              ["mouse", "down"],
+              ["mouse", "up"],
+            ];
+            if (args.doubleClick) {
+              cmds.push(["mouse", "down"], ["mouse", "up"]);
+            }
+            const batchResult = await executeBatch(sessionId, cmds, { bail: true });
+            if (!batchResult.success) {
+              return textResult(`Click failed: ${batchResult.error ?? "unknown error"}`);
+            }
+
+            const snap = await getSnapshot(sessionId);
+            if (snap.error) {
+              return textResult(`Click succeeded but snapshot failed: ${snap.error}`);
+            }
+
+            response = { ...snap, elementBox: { x: args.x!, y: args.y!, width: 1, height: 1 } };
+          }
+```
+
+</details>
+
+<!-- suggestion_end -->
+
+<details>
+<summary>🤖 Prompt for AI Agents</summary>
+
+```
+Verify each finding against the current code and only fix it if needed.
+
+In `@apps/agent-server/agents/deus-tools/browser.ts` around lines 253 - 264, Check
+the result of executeBatch(sessionId, cmds, { bail: true }) and abort/return an
+error if it indicates success: false before taking a snapshot or marking the
+click successful; specifically, after building cmds (and handling
+args.doubleClick) inspect the resolved value from executeBatch and only proceed
+when result.success is true. Replace the subsequent execWithSnapshot(sessionId,
+["snapshot", "--json"]) call with getSnapshot(sessionId) (or the existing
+getSnapshot helper) to avoid an extra redundant snapshot, and ensure
+response.elementBox is only set when the batch succeeded and a valid snapshot
+was obtained.
+```
+
+</details>
+
+<!-- fingerprinting:phantom:medusa:grasshopper -->
+
+<!-- This is an auto-generated comment by CodeRabbit -->"
+
+Comment metadata:
+This comment was left on the modified branch.
+This comment was left on GitHub by @coderabbitai.
+This comment is the start of thread PRRT_kwDOQEbULc53eRMW. 
+
+
+Comment #3:
+
+File: apps/agent-server/agents/deus-tools/browser.ts
+Line: 465
+User comment: "_⚠️ Potential issue_ | _🟠 Major_
+
+**Validate exactly one primary wait condition.**
+
+This logic does not enforce the contract; it just picks the first truthy field. For example, `{ text: "Ready", networkIdle: true }` silently becomes a text wait, and `time: 0` is treated as "no mode". Count the selected modes explicitly and branch on `!== undefined` / `=== true` instead of truthiness.
+
+<details>
+<summary>💡 Suggested patch</summary>
+
+```diff
++          const selectedModes = [
++            args.text !== undefined,
++            args.textGone !== undefined,
++            args.time !== undefined,
++            args.networkIdle === true,
++            args.elementVisible !== undefined,
++            args.elementGone !== undefined,
++          ].filter(Boolean).length;
++
++          if (selectedModes !== 1) {
++            return textResult(
++              "Provide exactly one of: text, textGone, time, networkIdle, elementVisible, or elementGone."
++            );
++          }
++
+-          const mode = args.text
++          const mode = args.text !== undefined
+             ? "text"
+-            : args.textGone
++            : args.textGone !== undefined
+               ? "textGone"
+-              : args.time
++              : args.time !== undefined
+                 ? "time"
+```
+</details>
+
+<details>
+<summary>🤖 Prompt for AI Agents</summary>
+
+```
+Verify each finding against the current code and only fix it if needed.
+
+In `@apps/agent-server/agents/deus-tools/browser.ts` around lines 427 - 465, In
+the withBrowserTool handler for "BrowserWaitFor" (the mode-detection logic in
+both the preview and executor callbacks), replace the current truthy-selection
+logic with explicit checks that count how many primary wait conditions are
+provided (check args.text !== undefined, args.textGone !== undefined, args.time
+!== undefined, args.networkIdle === true, args.elementVisible !== undefined,
+args.elementGone !== undefined) so that numeric 0 and false/empty-string are
+handled correctly; if count !== 1 return the error message, otherwise derive the
+single mode from the explicitly-identified field and proceed (update both the
+summary lambda and the async executor that currently compute mode).
+```
+
+</details>
+
+<!-- fingerprinting:phantom:medusa:grasshopper -->
+
+<!-- This is an auto-generated comment by CodeRabbit -->"
+
+Comment metadata:
+This comment was left on the modified branch.
+This comment was left on GitHub by @coderabbitai.
+This comment is the start of thread PRRT_kwDOQEbULc53eRMX. 
+
+
+Comment #4:
+
+File: apps/agent-server/agents/deus-tools/browser.ts
+Line: 559
+User comment: "_⚠️ Potential issue_ | _🟠 Major_
+
+**Return per-action failures from batch mode.**
+
+`bail` defaults to `false`, so mixed success/error batches are a supported mode. This handler throws away `result.data` and only returns a final snapshot, which means the agent cannot tell which actions failed or whether the resulting page state is trustworthy. Please surface per-action results, or fail the tool when any subcommand reports an error.
+
+<details>
+<summary>🤖 Prompt for AI Agents</summary>
+
+```
+Verify each finding against the current code and only fix it if needed.
+
+In `@apps/agent-server/agents/deus-tools/browser.ts` around lines 538 - 559, The
+batch handler calls executeBatch(sessionId, args.actions, ...) but ignores
+per-action outcomes in result.data and always returns the final snapshot; update
+the post-execute logic in the block handling executeBatch/const result to either
+(A) abort and return an error when any per-action entry in result.data indicates
+failure (when you want strict behavior), or (B) include per-action statuses in
+the response when bail is false by iterating result.data to collect per-action
+success/failure messages and appending them to the details passed to
+formatSnapshotResponse (or returning a combined textResult that lists failed
+actions and the snapshot), ensuring you reference executeBatch, result.data,
+args.actions, textResult and formatSnapshotResponse when making the change.
+```
+
+</details>
+
+<!-- fingerprinting:phantom:medusa:grasshopper -->
+
+<!-- This is an auto-generated comment by CodeRabbit -->"
+
+Comment metadata:
+This comment was left on the modified branch.
+This comment was left on GitHub by @coderabbitai.
+This comment is the start of thread PRRT_kwDOQEbULc53eRMY. 
+
+
+Comment #5:
+
+File: apps/web/src/features/browser/ui/BrowserPanel.tsx
+Line: 236
+User comment: "_⚠️ Potential issue_ | _🟡 Minor_
+
+**Honor popup disposition before auto-activating the tab.**
+
+This listener always focuses the newly created tab, so `"background-tab"` and `"new-window"` requests lose their original behavior. At minimum, background-tab opens should stay in the current tab instead of stealing focus.
+
+<details>
+<summary>🤖 Prompt for AI Agents</summary>
+
+```
+Verify each finding against the current code and only fix it if needed.
+
+In `@apps/web/src/features/browser/ui/BrowserPanel.tsx` around lines 223 - 236,
+The listener unconditionally activates newly created tabs, breaking popup
+dispositions; update the handler registered with
+native.events.on(BROWSER_NEW_TAB_REQUESTED) to read data.disposition (or
+similar) from the event and branch: for "background-tab" just create and persist
+the tab via createBrowserTab and setTabs/persistTabs but do NOT call
+setActiveTabId, for "new-window" forward the URL to the window-opening pathway
+(e.g., call the existing new-window/openWindow/native API) instead of adding a
+tab, and for "foreground" or unspecified dispositions continue to
+setActiveTabId(newTab.id); keep using createBrowserTab, setTabs, persistTabs and
+only change where setActiveTabId is invoked.
+```
+
+</details>
+
+<!-- fingerprinting:phantom:medusa:grasshopper -->
+
+<!-- This is an auto-generated comment by CodeRabbit -->"
+
+Comment metadata:
+This comment was left on the modified branch.
+This comment was left on GitHub by @coderabbitai.
+This comment is the start of thread PRRT_kwDOQEbULc53eRMZ. 
+
+
+Comment #6:
+
+File: apps/web/src/features/browser/ui/BrowserTab.tsx
+Line: 152
+User comment: "_⚠️ Potential issue_ | _🟠 Major_
+
+**Don't reuse the normal “navigation finished” path for parked-view recall.**
+
+A recalled `WebContentsView` already has live URL/title/history state, but this branch only sends `{ loading: false }`. That runs the generic load-finished update logic in `BrowserPanel` and leaves the single-entry hydrated history intact, so recalled tabs can lose their real page title and come back with back/forward disabled even though the native session still has history. Re-sync the native metadata on recall, or use a separate update path that does not masquerade as a fresh navigation finish.
+
+<details>
+<summary>🤖 Prompt for AI Agents</summary>
+
+```
+Verify each finding against the current code and only fix it if needed.
+
+In `@apps/web/src/features/browser/ui/BrowserTab.tsx` around lines 132 - 152, The
+recall branch for parked views currently only calls onUpdateTab(tabId, {
+loading: false }) which triggers the normal “navigation finished” logic and
+overwrites the hydrated single-entry history; instead, after confirming the view
+exists and before returning, fetch and re-sync the native metadata (current URL,
+title, favicon, and navigation state like canGoBack/canGoForward or full
+history) from the native view (use the same native.browserViews API surface that
+provided viewExists/setBounds) and call onUpdateTab with those explicit fields
+plus loading: false so BrowserPanel gets the real native state rather than
+treating it as a fresh navigation; ensure you also update any local history
+store/state (e.g., the place where hydrated history is kept) rather than letting
+the generic navigation-finished path overwrite it.
+```
+
+</details>
+
+<!-- fingerprinting:phantom:medusa:grasshopper -->
+
+<!-- This is an auto-generated comment by CodeRabbit -->"
+
+Comment metadata:
+This comment was left on the modified branch.
+This comment was left on GitHub by @coderabbitai.
+This comment is the start of thread PRRT_kwDOQEbULc53eRMa. 
+
+
+Comment #7:
+
+File: apps/web/src/features/browser/ui/BrowserTabBar.tsx
+Line: 45
+User comment: "_⚠️ Potential issue_ | _🟡 Minor_
+
+**Revert `ease-out` back to `ease` for hover transitions.**
+
+The easing was changed from `ease` to `ease-out`, but the coding guidelines specify: "Never use built-in CSS easings (`ease-out`, `ease-in`) except `ease` for hover." The standard transition for simple hover/focus property changes should be `transition-colors duration-200 ease`.
+
+This also creates an inconsistency with the other buttons in this file (lines 60, 70, 82) which all correctly use `ease`.
+
+
+
+<details>
+<summary>Proposed fix</summary>
+
+```diff
+             className={cn(
+-              "flex items-center gap-1 rounded-md pr-1 text-xs whitespace-nowrap transition-colors duration-200 ease-out select-none",
++              "flex items-center gap-1 rounded-md pr-1 text-xs whitespace-nowrap transition-colors duration-200 ease select-none",
+               activeTabId === tab.id
+                 ? "bg-bg-raised text-text-secondary font-medium"
+                 : "text-text-muted hover:bg-foreground/5 hover:text-text-tertiary"
+             )}
+```
+</details>
+
+As per coding guidelines: "Standard transition for simple property changes: `transition-colors duration-200 ease`" and "Never use built-in CSS easings (`ease-out`, `ease-in`) except `ease` for hover."
+
+<!-- suggestion_start -->
+
+<details>
+<summary>📝 Committable suggestion</summary>
+
+> ‼️ **IMPORTANT**
+> Carefully review the code before committing. Ensure that it accurately replaces the highlighted code, contains no missing lines, and has no issues with indentation. Thoroughly test & benchmark the code to ensure it meets the requirements.
+
+```suggestion
+            className={cn(
+              "flex items-center gap-1 rounded-md pr-1 text-xs whitespace-nowrap transition-colors duration-200 ease select-none",
+              activeTabId === tab.id
+                ? "bg-bg-raised text-text-secondary font-medium"
+                : "text-text-muted hover:bg-foreground/5 hover:text-text-tertiary"
+            )}
+```
+
+</details>
+
+<!-- suggestion_end -->
+
+<details>
+<summary>🤖 Prompt for AI Agents</summary>
+
+```
+Verify each finding against the current code and only fix it if needed.
+
+In `@apps/web/src/features/browser/ui/BrowserTabBar.tsx` around lines 40 - 45, The
+hover transition easing in the BrowserTabBar component was changed to
+"ease-out"; revert it back to "ease" by updating the className string passed to
+cn(...) where activeTabId === tab.id (the tab button rendering logic) to use
+"transition-colors duration-200 ease" so it matches the other buttons and the
+project's coding guidelines.
+```
+
+</details>
+
+<!-- fingerprinting:phantom:poseidon:ocelot -->
+
+<!-- This is an auto-generated comment by CodeRabbit -->"
+
+Comment metadata:
+This comment was left on the modified branch.
+This comment was left on GitHub by @coderabbitai.
+This comment is the start of thread PRRT_kwDOQEbULc53eRMc. 
+
+</system-instruction>
+
+I run AI code review, is it actionable? Wdyt? Explore in depth each problem.
+We want a clean, maintainable codebase, with proper best practices for the tech stack we use.
+Run subagents to verify, and if it should be fixed, try to merge some stuff together so it can be fixed together within one subagent. 
+If you can test something do it.
+
+-----
+
+
+
+I now have all the information needed. Here's my review:
+---
+## Code Review: `zvadaadam/fix-browser-zoom-overflow`
+This is a substantial browser feature diff (~1200 insertions, ~1048 deletions) across 16 files. Key changes:
+- **Zoom fix**: CSS-pixel → window-point conversion using `zoomFactor` for correct BrowserView positioning at non-100% zoom
+- **CDP integration**: agent-browser connects to the IDE's own BrowserView via Chrome DevTools Protocol on port 19222
+- **View parking**: browser views persist across workspace switches (hidden, not destroyed) for instant recall
+- **Polyfill migration**: WebAuthn/local-network polyfills moved from preload (isolated world) to main-world injection
+- **New tools**: BrowserBatchActions, snapshot filtering, coordinate-based click, element bounding boxes
+- **Popup handling**: `window.open` / `target="_blank"` → new IDE tab instead of system browser
+- **Dead code removal**: cookie management IPC handlers, `syncBounds`, `setDetachedWorkspace`
+Overall the diff is well-structured with good comments explaining the "why." Three issues found:
+---
+### **#1 Wrong easing for hover transition**
+The diff changes the tab hover transition from `ease` (correct) to `ease-out` (violates CLAUDE.md).
+CLAUDE.md rule: *"Hover transitions: 200ms ease for simple color, background-color, opacity changes"* and *"Don't use built-in CSS easings (ease-out, ease-in, etc.) except ease for hover and linear for constant-speed."*
+File: `apps/web/src/features/browser/ui/BrowserTabBar.tsx:41`
+---
+### **#2 Unbounded WebContentsView accumulation from view parking**
+When switching workspaces, old views are hidden but never destroyed. Views are only cleaned up on explicit tab close or app quit. Each parked WebContentsView holds a Chromium renderer process (~50-200MB). A user working across 10+ workspaces with 2-3 tabs each accumulates 20-30 hidden renderers with no eviction policy.
+Consider adding an LRU eviction limit (e.g., max 10 parked views, destroy oldest on overflow).
+File: `apps/web/src/features/browser/ui/BrowserPanel.tsx:200-206` / `apps/desktop/main/browser-views.ts` (the `views` Map)
+---
+### **#3 CDP port 19222 hardcoded in two files with no shared constant**
+The port `"19222"` appears in both `apps/desktop/main/index.ts:42` and `apps/desktop/main/backend-process.ts:65`. If one is changed without the other, CDP silently fails. Additionally, if the port is already in use by another app, Chromium silently skips the debug listener — agent-browser fails with no clear error.
+Consider extracting to a shared constant and adding a startup log when CDP binds successfully.
+File: `apps/desktop/main/index.ts:42`, `apps/desktop/main/backend-process.ts:65`
