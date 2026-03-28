@@ -3,7 +3,7 @@
   "checkpoint_id": "61c3834f8ee2",
   "strategy": "manual-commit",
   "branch": "zvadaadam/fix-browser-zoom-overflow",
-  "checkpoints_count": 2,
+  "checkpoints_count": 4,
   "files_touched": null,
   "sessions": [
     {
@@ -11,13 +11,19 @@
       "transcript": "/61/c3834f8ee2/0/full.jsonl",
       "content_hash": "/61/c3834f8ee2/0/content_hash.txt",
       "prompt": "/61/c3834f8ee2/0/prompt.txt"
+    },
+    {
+      "metadata": "/61/c3834f8ee2/1/metadata.json",
+      "transcript": "/61/c3834f8ee2/1/full.jsonl",
+      "content_hash": "/61/c3834f8ee2/1/content_hash.txt",
+      "prompt": "/61/c3834f8ee2/1/prompt.txt"
     }
   ],
   "token_usage": {
-    "input_tokens": 3356,
-    "cache_creation_tokens": 1155673,
-    "cache_read_tokens": 52327866,
-    "output_tokens": 134745,
-    "api_call_count": 353
+    "input_tokens": 3367,
+    "cache_creation_tokens": 1188124,
+    "cache_read_tokens": 52490023,
+    "output_tokens": 137970,
+    "api_call_count": 359
   }
 }
