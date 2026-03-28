@@ -338,10 +338,15 @@ export class CameraEngine {
    * Check if the camera has settled (reached target, no velocity).
    */
   isSettled(threshold = 0.5): boolean {
+    const settledZoom = clamp(this.target.zoom, this.minZoom, this.maxZoom);
+    const halfViewW = this.sourceSize.width / (2 * settledZoom);
+    const halfViewH = this.sourceSize.height / (2 * settledZoom);
+    const settledX = clamp(this.target.x, halfViewW, this.sourceSize.width - halfViewW);
+    const settledY = clamp(this.target.y, halfViewH, this.sourceSize.height - halfViewH);
     return (
-      this.positionSpring.isSettled(this.state.x, this.state.vx, this.target.x, threshold) &&
-      this.positionSpring.isSettled(this.state.y, this.state.vy, this.target.y, threshold) &&
-      this.zoomSpring.isSettled(this.state.zoom, this.state.vzoom, this.target.zoom, 0.01)
+      this.positionSpring.isSettled(this.state.x, this.state.vx, settledX, threshold) &&
+      this.positionSpring.isSettled(this.state.y, this.state.vy, settledY, threshold) &&
+      this.zoomSpring.isSettled(this.state.zoom, this.state.vzoom, settledZoom, 0.01)
     );
   }
 
@@ -364,6 +369,15 @@ export class CameraEngine {
     const firstEvent = events[0];
     this.jumpTo({ x: firstEvent.x, y: firstEvent.y, zoom: 1 });
     this.time = firstEvent.t;
+
+    // Reset cursor state to match the first event
+    this.cursorTargetX = firstEvent.x;
+    this.cursorTargetY = firstEvent.y;
+    this.cursorVx = 0;
+    this.cursorVy = 0;
+    this.cursorState = {
+      x: firstEvent.x, y: firstEvent.y, clicking: false, clickAge: 0, visible: false, vx: 0, vy: 0,
+    };
 
     const dt = 1 / fps;
     const startT = firstEvent.t;

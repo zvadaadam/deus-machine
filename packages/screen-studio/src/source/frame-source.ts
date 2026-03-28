@@ -31,10 +31,10 @@ export interface FrameSource {
 export interface Frame {
   /** Raw image data. Varies by platform:
    *  - Browser: ImageBitmap
-   *  - Node.js: Buffer (JPEG/PNG bytes)
+   *  - Node.js: Buffer / Uint8Array (JPEG/PNG bytes)
    *  - Canvas: ImageData
    */
-  data: ImageBitmap | ImageData | ArrayBuffer;
+  data: ImageBitmap | ImageData | ArrayBuffer | Uint8Array;
 
   /** Frame timestamp in milliseconds (relative to source start). */
   timestamp: number;

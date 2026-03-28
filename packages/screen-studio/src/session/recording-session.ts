@@ -147,7 +147,7 @@ export class RecordingSession {
     // Adapter with resolver (or no-op fallback)
     const resolver: ElementResolver = config.elementResolver ??
       (async () => null);
-    this.adapter = new McpToolAdapter(resolver);
+    this.adapter = new McpToolAdapter(resolver, sourceSize);
   }
 
   /**

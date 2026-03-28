@@ -133,6 +133,35 @@ describe("catmullRomAt", () => {
     expect(p.x).toBe(0);
     expect(p.y).toBe(0);
   });
+
+  it("tension=1 produces linear interpolation", () => {
+    // With tension=1, result should be a linear blend between p1 and p2
+    const linearPoints = [
+      { x: 0, y: 0, t: 0 },
+      { x: 0, y: 0, t: 1000 },
+      { x: 100, y: 200, t: 2000 },
+      { x: 200, y: 400, t: 3000 },
+    ];
+
+    // Query at midpoint of segment [1]->[2] (t=1500)
+    const p = catmullRomAt(linearPoints, 1500, 1.0);
+
+    // Linear interpolation between (0,0) and (100,200) at t=0.5 → (50,100)
+    expect(p.x).toBeCloseTo(50, 1);
+    expect(p.y).toBeCloseTo(100, 1);
+  });
+
+  it("tension=1 does not collapse to constant", () => {
+    // Regression: tension=1 used to make s=0 which collapsed all terms,
+    // returning p1 regardless of t. Now it should give linear interpolation.
+    const p25 = catmullRomAt(points, 250, 1.0);  // 25% into first segment
+    const p75 = catmullRomAt(points, 750, 1.0);  // 75% into first segment
+
+    // Both should be between p1.x=0 and p2.x=100, and different from each other
+    expect(p25.x).toBeGreaterThan(0);
+    expect(p75.x).toBeGreaterThan(p25.x);
+    expect(p75.x).toBeLessThan(100);
+  });
 });
 
 describe("resamplePath", () => {
@@ -162,5 +191,21 @@ describe("resamplePath", () => {
   it("handles single point", () => {
     const resampled = resamplePath([{ x: 50, y: 50, t: 0 }], 100);
     expect(resampled.length).toBe(1);
+  });
+
+  it("throws on zero interval", () => {
+    expect(() => resamplePath(points, 0)).toThrow(RangeError);
+  });
+
+  it("throws on negative interval", () => {
+    expect(() => resamplePath(points, -100)).toThrow(RangeError);
+  });
+
+  it("throws on NaN interval", () => {
+    expect(() => resamplePath(points, NaN)).toThrow(RangeError);
+  });
+
+  it("throws on Infinity interval", () => {
+    expect(() => resamplePath(points, Infinity)).toThrow(RangeError);
   });
 });

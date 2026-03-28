@@ -63,9 +63,9 @@ export function catmullRomAt(
  * Uses the standard Catmull-Rom matrix form:
  * q(t) = 0.5 * [(2*p1) + (-p0+p2)*t + (2*p0-5*p1+4*p2-p3)*t² + (-p0+3*p1-3*p2+p3)*t³]
  *
- * tension controls the tangent magnitude:
- * tension = 0 → standard Catmull-Rom (passes through control points)
- * tension = 1 → no tangent influence (approaches linear)
+ * tension blends between Catmull-Rom and linear interpolation:
+ * tension = 0 → standard Catmull-Rom (passes through control points with curvature)
+ * tension = 1 → linear interpolation between p1 and p2
  */
 function catmullRom1D(
   p0: number,
@@ -75,15 +75,20 @@ function catmullRom1D(
   t: number,
   tension: number,
 ): number {
-  const s = (1 - tension) * 0.5;
   const t2 = t * t;
   const t3 = t2 * t;
 
-  // Standard Catmull-Rom matrix with tension scaling on tangent terms
-  return p1
-    + s * (-p0 + p2) * t
-    + s * (2 * p0 - 5 * p1 + 4 * p2 - p3) * t2
-    + s * (-p0 + 3 * p1 - 3 * p2 + p3) * t3;
+  // Standard Catmull-Rom (tension=0)
+  const catmull = p1
+    + 0.5 * (-p0 + p2) * t
+    + 0.5 * (2 * p0 - 5 * p1 + 4 * p2 - p3) * t2
+    + 0.5 * (-p0 + 3 * p1 - 3 * p2 + p3) * t3;
+
+  // Linear interpolation between p1 and p2
+  const linear = p1 + (p2 - p1) * t;
+
+  // Blend: tension=0 → pure catmull-rom, tension=1 → linear
+  return catmull * (1 - tension) + linear * tension;
 }
 
 /**
@@ -99,6 +104,10 @@ export function resamplePath(
   interval: number,
   tension = 0.2,
 ): Array<Point & { t: number }> {
+  if (!Number.isFinite(interval) || interval <= 0) {
+    throw new RangeError("interval must be a finite number > 0");
+  }
+
   if (points.length < 2) return [...points];
 
   const start = points[0].t;
