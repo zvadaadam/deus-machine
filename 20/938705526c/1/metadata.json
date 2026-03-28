@@ -1,0 +1,35 @@
+{
+  "cli_version": "0.5.0",
+  "checkpoint_id": "20938705526c",
+  "session_id": "53a4ff3e-a57c-4f43-a93f-0752e683dded",
+  "strategy": "manual-commit",
+  "created_at": "2026-03-28T20:31:04.367758Z",
+  "branch": "zvadaadam/explore-screen-recording",
+  "checkpoints_count": 5,
+  "files_touched": [
+    "packages/screen-studio/src/cli/index.ts",
+    "packages/screen-studio/test/cli.test.ts"
+  ],
+  "agent": "Claude Code",
+  "model": "claude-opus-4-6[1m]",
+  "turn_id": "aabb8f279f33",
+  "token_usage": {
+    "input_tokens": 50,
+    "cache_creation_tokens": 54181,
+    "cache_read_tokens": 1633228,
+    "output_tokens": 6912,
+    "api_call_count": 38
+  },
+  "session_metrics": {
+    "turn_count": 5
+  },
+  "initial_attribution": {
+    "calculated_at": "2026-03-28T20:31:04.349388Z",
+    "agent_lines": 790,
+    "human_added": 8950,
+    "human_modified": 0,
+    "human_removed": 0,
+    "total_committed": 9740,
+    "agent_percentage": 8.11088295687885
+  }
+}
