@@ -15,7 +15,7 @@
 import { app, BrowserWindow, ipcMain, shell } from "electron";
 import { join } from "path";
 import { is } from "@electron-toolkit/utils";
-import { spawnBackend, stopBackend } from "./backend-process";
+import { spawnBackend, stopBackend, CDP_PORT } from "./backend-process";
 // Agent-server is spawned by the backend process (via AGENT_SERVER_BUNDLE_PATH env var)
 import { registerNativeHandlers } from "./native-handlers";
 import { registerBrowserViewHandlers, destroyAllBrowserViews } from "./browser-views";
@@ -34,6 +34,13 @@ if (!app.requestSingleInstanceLock()) {
   app.quit();
   process.exit(0);
 }
+
+// Enable Chrome DevTools Protocol so agent-browser can connect to IDE browser views
+// via CDP instead of spawning a separate Chrome process. Listens on 127.0.0.1 only.
+// Agent tools use `agent-browser --cdp <port>` to interact with the same browser
+// the user sees — shared cookies, real-time visibility of agent actions.
+app.commandLine.appendSwitch("remote-debugging-port", CDP_PORT);
+app.commandLine.appendSwitch("remote-debugging-address", "127.0.0.1");
 
 let mainWindow: BrowserWindow | null = null;
 

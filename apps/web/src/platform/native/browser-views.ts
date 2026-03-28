@@ -71,6 +71,11 @@ export async function close(label: string): Promise<void> {
   await invoke("close_browser_webview", { label });
 }
 
+export async function viewExists(label: string): Promise<boolean> {
+  if (!capabilities.nativeBrowser) return false;
+  return (await invoke<boolean>("browser_view_exists", { label })) ?? false;
+}
+
 export async function setBounds(
   label: string,
   bounds: { x: number; y: number; width: number; height: number }
@@ -81,7 +86,7 @@ export async function setBounds(
 
 export async function screenshot(
   label: string,
-  opts?: Record<string, unknown>
+  opts?: { x?: number; y?: number; width?: number; height?: number }
 ): Promise<string | null> {
   if (!capabilities.nativeBrowser) return null;
   return invoke<string | null>("screenshot_browser_webview", { label, ...opts });
@@ -103,25 +108,6 @@ export async function openDevtools(
 export async function closeDevtools(label: string): Promise<void> {
   if (!capabilities.nativeBrowser) return;
   await invoke("close_browser_devtools", { label });
-}
-
-export async function getCookieBrowsers(): Promise<unknown[]> {
-  if (!capabilities.nativeBrowser) return [];
-  try {
-    return (await invoke<unknown[]>("get_cookie_browsers")) ?? [];
-  } catch {
-    return [];
-  }
-}
-
-export async function syncCookies(browserName: string, domain: string): Promise<unknown[]> {
-  if (!capabilities.nativeBrowser) return [];
-  return (await invoke<unknown[]>("sync_browser_cookies", { browserName, domain })) ?? [];
-}
-
-export async function injectCookies(label: string, cookies: unknown[]): Promise<number> {
-  if (!capabilities.nativeBrowser) return 0;
-  return (await invoke<number>("inject_browser_cookies", { label, cookies })) ?? 0;
 }
 
 export async function createDetachedWindow(params: {

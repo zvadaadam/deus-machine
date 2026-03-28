@@ -49,6 +49,7 @@ const ALLOWED_INVOKE_CHANNELS = new Set([
   "eval_browser_webview",
   "eval_browser_webview_with_result",
   "screenshot_browser_webview",
+  "browser_view_exists",
   "open_browser_devtools",
   "close_browser_devtools",
   "browser:back",
@@ -89,6 +90,8 @@ const ALLOWED_EVENT_CHANNELS = new Set([
   "browser-window:workspace-change",
   "browser:detached-closed",
   "browser:keyboard-shortcut",
+  "browser:console-message",
+  "browser:new-tab-requested",
 
   // Simulator events
   "sim:build-log",
