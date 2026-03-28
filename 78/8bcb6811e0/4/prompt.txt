@@ -1597,3 +1597,14 @@ No, I want to tackle it now and I want to think about the best developer experie
 ---
 
 /code-simplifier /deslop I want you to go through and over all the changes, but not just the changes, but like all through the browser capabilities, like all the components for the browser to make it work. I think there is a lot of code and we were building on top and maybe there are some like bad code structure because now if you look at it, it would make a better sense to pursue a different kind of layout and code structure. Maybe there is some dead code, maybe there is something, some over-engineering which can be very simplified. So I want you to go through this in depth and improve the code quality, maintainability, it should work, it should serve the purpose of this product, what we want from it.
+
+---
+
+<system_instruction>
+The user has attached these files. Read them before proceeding.
+- /Users/zvada/Developer/agent/box-ide/.conductor/cancun-v4/.context/attachments/PR instructions.md (960 B)
+</system_instruction>
+
+
+
+Create a PR
