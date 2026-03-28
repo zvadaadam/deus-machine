@@ -45,7 +45,7 @@ describe("createDeusMCPServer", () => {
   it("registers all workspace + browser + simulator tools", () => {
     const tools = getRegisteredTools(server.instance);
     const toolNames = Object.keys(tools);
-    expect(toolNames).toHaveLength(26);
+    expect(toolNames).toHaveLength(27);
     // Workspace tools
     expect(toolNames).toContain("AskUserQuestion");
     expect(toolNames).toContain("GetWorkspaceDiff");
@@ -57,6 +57,7 @@ describe("createDeusMCPServer", () => {
     expect(toolNames).toContain("BrowserType");
     expect(toolNames).toContain("BrowserNavigate");
     expect(toolNames).toContain("BrowserWaitFor");
+    expect(toolNames).toContain("BrowserBatchActions");
     expect(toolNames).toContain("BrowserEvaluate");
     expect(toolNames).toContain("BrowserPressKey");
     expect(toolNames).toContain("BrowserHover");

@@ -12,7 +12,6 @@ interface BrowserWindowState {
   detachedWindowOpen: boolean;
   detachedWorkspace: DetachedBrowserWorkspaceContext | null;
   setDetachedWindowOpen: (context: DetachedBrowserWorkspaceContext) => void;
-  setDetachedWorkspace: (context: DetachedBrowserWorkspaceContext) => void;
   clearDetachedWindow: () => void;
 }
 
@@ -30,19 +29,6 @@ export const useBrowserWindowStore = create<BrowserWindowState>()(
           },
           false,
           "browserWindow/setDetachedWindowOpen"
-        ),
-
-      setDetachedWorkspace: (context) =>
-        set(
-          (state) =>
-            state.detachedWindowOpen
-              ? { detachedWorkspace: context }
-              : {
-                  detachedWindowOpen: true,
-                  detachedWorkspace: context,
-                },
-          false,
-          "browserWindow/setDetachedWorkspace"
         ),
 
       clearDetachedWindow: () =>
@@ -65,7 +51,5 @@ export const useBrowserWindowStore = create<BrowserWindowState>()(
 export const browserWindowActions = {
   setDetachedWindowOpen: (context: DetachedBrowserWorkspaceContext) =>
     useBrowserWindowStore.getState().setDetachedWindowOpen(context),
-  setDetachedWorkspace: (context: DetachedBrowserWorkspaceContext) =>
-    useBrowserWindowStore.getState().setDetachedWorkspace(context),
   clearDetachedWindow: () => useBrowserWindowStore.getState().clearDetachedWindow(),
 };

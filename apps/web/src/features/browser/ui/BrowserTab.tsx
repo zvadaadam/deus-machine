@@ -44,6 +44,8 @@ import { VISUAL_EFFECTS_SETUP } from "../automation/visual-effects";
 
 /** How often to drain console logs from the webview (ms) */
 const CONSOLE_DRAIN_INTERVAL_MS = 1500;
+/** How often to drain inspect-mode events from the webview (ms) */
+const INSPECT_DRAIN_INTERVAL_MS = 200;
 
 interface BrowserTabProps {
   tab: BrowserTabState;
@@ -126,6 +128,57 @@ export const BrowserTab = forwardRef<BrowserTabHandle, BrowserTabProps>(function
       }
 
       const rect = el.getBoundingClientRect();
+
+      // Try to recall a parked view first (view parking keeps native views
+      // alive across workspace switches). If the view exists, just reposition
+      // and show it — no page reload, preserves scroll/form/login state.
+      try {
+        const exists = await native.browserViews.viewExists(webviewLabel);
+        if (exists) {
+          await native.browserViews.setBounds(webviewLabel, {
+            x: rect.x,
+            y: rect.y,
+            width: Math.max(rect.width, 100),
+            height: Math.max(rect.height, 100),
+          });
+          if (!mountedRef.current) return;
+          setWebviewReady(true);
+          setHasLoaded(true); // page is already loaded in the parked view
+          // Re-sync native metadata for parked views — the page may have
+          // navigated (redirects, SPA nav) while parked, so hydrated
+          // URL/title could be stale. Fetch current values from the view.
+          try {
+            const currentUrl = await native.browserViews.evaluateWithResult(
+              webviewLabel,
+              "window.location.href",
+              2000
+            );
+            const currentTitle = await native.browserViews.evaluateWithResult(
+              webviewLabel,
+              "document.title",
+              2000
+            );
+            if (currentUrl) {
+              onUpdateTab(tabId, {
+                loading: false,
+                currentUrl,
+                url: currentUrl,
+                title: currentTitle ?? tab.title,
+              });
+            } else {
+              onUpdateTab(tabId, { loading: false });
+            }
+          } catch {
+            onUpdateTab(tabId, { loading: false });
+          }
+          onAddLog(tabId, "info", `Recalled parked webview: ${webviewLabel}`);
+          return;
+        }
+      } catch (err) {
+        // viewExists failed — fall through to create (log for diagnostics)
+        onAddLog(tabId, "warn", `viewExists check failed (will create fresh): ${err}`);
+      }
+
       try {
         await native.browserViews.create({
           label: webviewLabel,
@@ -161,12 +214,15 @@ export const BrowserTab = forwardRef<BrowserTabHandle, BrowserTabProps>(function
   );
 
   // --- Cleanup on unmount ---
+  // Only hides the view — does NOT destroy it. Tab destruction is handled
+  // explicitly by closeTab() in BrowserPanel. This enables view parking:
+  // when switching workspaces, views are parked (hidden) and recalled later
+  // without losing page state.
   useEffect(() => {
     const label = webviewLabel;
     return () => {
       if (webviewCreatedRef.current) {
-        native.browserViews.close(label).catch(() => {});
-        webviewCreatedRef.current = false;
+        native.browserViews.hide(label).catch(() => {});
       }
     };
   }, [webviewLabel]);
@@ -297,6 +353,11 @@ export const BrowserTab = forwardRef<BrowserTabHandle, BrowserTabProps>(function
   useEffect(() => {
     const unlistenFns: Array<() => void> = [];
 
+    // Track whether did-fail-load fired for this navigation cycle.
+    // Electron fires events: did-start-loading → did-fail-load → did-stop-loading.
+    // Without this flag, "finished" (did-stop-loading) overwrites the error state.
+    let didFailForCurrentNav = false;
+
     // Page load events
     unlistenFns.push(
       native.events.on(BROWSER_PAGE_LOAD, (data) => {
@@ -304,6 +365,7 @@ export const BrowserTab = forwardRef<BrowserTabHandle, BrowserTabProps>(function
         if (label !== webviewLabel) return;
 
         if (eventType === "started") {
+          didFailForCurrentNav = false;
           // Clear any pending completion animation
           if (completingTimerRef.current) clearTimeout(completingTimerRef.current);
           setCompletingLoad(false);
@@ -314,12 +376,25 @@ export const BrowserTab = forwardRef<BrowserTabHandle, BrowserTabProps>(function
           // meta refresh) show the top loading bar, not the full-screen spinner.
           onUpdateTab(tabId, { loading: true });
         } else if (eventType === "finished") {
+          // Skip if did-fail-load already fired — don't overwrite error state.
+          // Electron always fires did-stop-loading after did-fail-load.
+          if (didFailForCurrentNav) return;
           setHasLoaded(true);
           // Trigger completion animation (bar fills to 100% → fades)
           setCompletingLoad(true);
           completingTimerRef.current = setTimeout(() => setCompletingLoad(false), 500);
           onUpdateTab(tabId, { loading: false, currentUrl: url, error: null });
           onAddLog(tabId, "info", `Page loaded: ${url}`);
+        } else if (eventType === "failed") {
+          didFailForCurrentNav = true;
+          // Clear loading bar animation
+          if (completingTimerRef.current) clearTimeout(completingTimerRef.current);
+          setCompletingLoad(false);
+          // Show error overlay instead of infinite spinner
+          setHasLoaded(true);
+          const errorDesc = data.error?.description ?? "Page failed to load";
+          onUpdateTab(tabId, { loading: false, error: errorDesc });
+          onAddLog(tabId, "error", `Page failed to load: ${errorDesc}`);
         }
       })
     );
@@ -459,10 +534,12 @@ export const BrowserTab = forwardRef<BrowserTabHandle, BrowserTabProps>(function
   // the title-channel for inspect events (see file-level comment).
   useEffect(() => {
     if (!visible || !webviewReady || !hasLoaded || !tab.selectorActive) return;
-    // Poll at 200ms — fast enough for responsive feel after click,
-    // cheap because eval_browser_webview_with_result returns immediately
-    // when the buffer is empty ("[]").
-    const INSPECT_DRAIN_MS = 200;
+
+    // Flush stale events accumulated while tab was hidden — prevents
+    // inserting unintended elements into chat on tab re-activation.
+    native.browserViews
+      .evaluateWithResult(webviewLabel, INSPECT_MODE_DRAIN_EVENTS, 2000)
+      .catch(() => {});
 
     // Track consecutive failures to avoid log spam (log first 3, then every 50th)
     let failCount = 0;
@@ -525,7 +602,7 @@ export const BrowserTab = forwardRef<BrowserTabHandle, BrowserTabProps>(function
       } finally {
         inFlight = false;
       }
-    }, INSPECT_DRAIN_MS);
+    }, INSPECT_DRAIN_INTERVAL_MS);
 
     return () => clearInterval(interval);
   }, [
@@ -599,8 +676,7 @@ export const BrowserTab = forwardRef<BrowserTabHandle, BrowserTabProps>(function
       await native.browserViews.evaluate(webviewLabel, INSPECT_MODE_SETUP);
       await native.browserViews.evaluate(webviewLabel, VISUAL_EFFECTS_SETUP);
 
-      // Wait a tick for the IIFEs to execute, then verify inspect mode
-      await new Promise((r) => setTimeout(r, 100));
+      // Verify inspect mode — evaluate() already waited for the IPC round-trip
       try {
         const verifyResult = await native.browserViews.evaluateWithResult(
           webviewLabel,
@@ -656,21 +732,6 @@ export const BrowserTab = forwardRef<BrowserTabHandle, BrowserTabProps>(function
     }
   }, [webviewLabel, tabId, tab.selectorActive, injectAutomation, onUpdateTab, onAddLog]);
 
-  const syncBounds = useCallback(() => {
-    const el = placeholderRef.current;
-    if (!el || !webviewCreatedRef.current) return;
-    const rect = el.getBoundingClientRect();
-    if (rect.width === 0 || rect.height === 0) return;
-    native.browserViews
-      .setBounds(webviewLabel, {
-        x: rect.x,
-        y: rect.y,
-        width: rect.width,
-        height: rect.height,
-      })
-      .catch(() => {});
-  }, [webviewLabel]);
-
   useImperativeHandle(
     ref,
     () => ({
@@ -680,9 +741,8 @@ export const BrowserTab = forwardRef<BrowserTabHandle, BrowserTabProps>(function
       reload,
       injectAutomation,
       toggleElementSelector,
-      syncBounds,
     }),
-    [navigateToUrl, goBack, goForward, reload, injectAutomation, toggleElementSelector, syncBounds]
+    [navigateToUrl, goBack, goForward, reload, injectAutomation, toggleElementSelector]
   );
 
   return (
@@ -740,8 +800,8 @@ export const BrowserTab = forwardRef<BrowserTabHandle, BrowserTabProps>(function
         </div>
       )}
 
-      {/* Error overlay: only if initial load failed */}
-      {visible && tab.error && !hasLoaded && (
+      {/* Error overlay: shown whenever the page has a load error */}
+      {visible && tab.error && (
         <div className="vibrancy-bg absolute inset-0 flex items-center justify-center">
           <div className="max-w-sm p-8 text-center">
             <div className="bg-destructive/10 mx-auto mb-4 flex h-10 w-10 items-center justify-center rounded-xl">

@@ -50,28 +50,16 @@ import { createBrowserTab, deriveTitleFromUrl, hydratePersistedTab } from "../ty
 import { workspaceLayoutActions } from "@/features/workspace/store/workspaceLayoutStore";
 import { chatInsertActions } from "@/shared/stores/chatInsertStore";
 import { native } from "@/platform";
+import { BROWSER_NEW_TAB_REQUESTED } from "@shared/events";
 
 const MAX_LOGS = 500;
 const PERSIST_DEBOUNCE_MS = 300;
 
-/** Browser info from get_cookie_browsers IPC command */
 interface InstalledBrowser {
   name: string;
   keychain_service: string;
   cookie_db_path: string;
   available: boolean;
-}
-
-/** Decrypted cookie from sync_browser_cookies IPC command */
-interface DecryptedCookie {
-  name: string;
-  value: string;
-  domain: string;
-  path: string;
-  secure: boolean;
-  http_only: boolean;
-  same_site: string;
-  expires: number;
 }
 
 interface BrowserPanelProps {
@@ -80,42 +68,47 @@ interface BrowserPanelProps {
    *  When false, the panel stays mounted (preserving webview instances)
    *  but all native BrowserViews are hidden via IPC. */
   panelVisible?: boolean;
-  onClose?: () => void;
   /** Pop-out callback — shown as a button in the tab bar */
   onDetach?: () => void;
   /** Which Electron window hosts the child BrowserViews. Defaults to "main". */
   windowLabel?: string;
 }
 
+/** Load or create browser tabs for a workspace from persisted layout state */
+function loadWorkspaceTabs(wsId: string | null): { tabs: BrowserTabState[]; activeTabId: string } {
+  if (wsId) {
+    const layout = workspaceLayoutActions.getLayout(wsId);
+    if (layout.browserTabs.length > 0) {
+      const tabs = layout.browserTabs.map((pt) => hydratePersistedTab(pt));
+      const persisted = layout.activeBrowserTabId
+        ? layout.browserTabs.find((t) => t.id === layout.activeBrowserTabId)
+        : null;
+      return { tabs, activeTabId: persisted?.id ?? tabs[0].id };
+    }
+  }
+  const tab = createBrowserTab(wsId);
+  return { tabs: [tab], activeTabId: tab.id };
+}
+
+/** Serialize tabs for persistence — only tabs with a loaded URL */
+function serializeTabs(tabs: BrowserTabState[]): PersistedBrowserTab[] {
+  return tabs
+    .filter((t) => t.currentUrl)
+    .map((t) => ({ id: t.id, url: t.currentUrl, title: t.title }));
+}
+
 export function BrowserPanel({
   workspaceId,
   panelVisible = true,
-  onClose: _onClose,
   onDetach,
   windowLabel,
 }: BrowserPanelProps) {
   // --- Initialize tabs from persisted state or create a fresh empty tab ---
-  const [tabs, setTabs] = useState<BrowserTabState[]>(() => {
-    if (workspaceId) {
-      const layout = workspaceLayoutActions.getLayout(workspaceId);
-      if (layout.browserTabs.length > 0) {
-        return layout.browserTabs.map((pt) => hydratePersistedTab(pt, workspaceId));
-      }
-    }
-    return [createBrowserTab(workspaceId)];
-  });
-
-  const [activeTabId, setActiveTabId] = useState<string>(() => {
-    if (workspaceId) {
-      const layout = workspaceLayoutActions.getLayout(workspaceId);
-      if (layout.activeBrowserTabId && layout.browserTabs.length > 0) {
-        // Find the tab with the persisted active ID
-        const persisted = layout.browserTabs.find((t) => t.id === layout.activeBrowserTabId);
-        if (persisted) return persisted.id;
-      }
-    }
-    return tabs[0]?.id ?? "";
-  });
+  const [{ tabs: initialTabs, activeTabId: initialActiveId }] = useState(() =>
+    loadWorkspaceTabs(workspaceId)
+  );
+  const [tabs, setTabs] = useState<BrowserTabState[]>(initialTabs);
+  const [activeTabId, setActiveTabId] = useState<string>(initialActiveId);
 
   // Imperative handles per tab
   const tabRefs = useRef<Map<string, BrowserTabHandle>>(new Map());
@@ -140,6 +133,8 @@ export function BrowserPanel({
   // the active tab or panel visibility changes — belt-and-suspenders.
   const tabInfoRef = useRef(tabs);
   tabInfoRef.current = tabs;
+  const activeTabIdRef = useRef(activeTabId);
+  activeTabIdRef.current = activeTabId;
 
   useEffect(() => {
     const currentTabs = tabInfoRef.current;
@@ -157,13 +152,8 @@ export function BrowserPanel({
 
       if (persistTimerRef.current) clearTimeout(persistTimerRef.current);
       persistTimerRef.current = setTimeout(() => {
-        // Only persist tabs that have a loaded URL (skip empty new tabs)
-        const persisted: PersistedBrowserTab[] = currentTabs
-          .filter((t) => t.currentUrl)
-          .map((t) => ({ id: t.id, url: t.currentUrl, title: t.title }));
-
         workspaceLayoutActions.setLayout(workspaceId, {
-          browserTabs: persisted,
+          browserTabs: serializeTabs(currentTabs),
           activeBrowserTabId: currentActiveId,
         });
       }, PERSIST_DEBOUNCE_MS);
@@ -195,48 +185,28 @@ export function BrowserPanel({
       clearTimeout(persistTimerRef.current);
       persistTimerRef.current = null;
     }
+    // Read refs unconditionally — always fresh, no stale closure risk
+    const currentTabs = tabInfoRef.current;
+    const currentActiveId = activeTabIdRef.current;
+
     if (prevId) {
-      // Persist current tabs to old workspace synchronously (no debounce)
-      const persisted: PersistedBrowserTab[] = tabs
-        .filter((t) => t.currentUrl)
-        .map((t) => ({ id: t.id, url: t.currentUrl, title: t.title }));
+      // Persist current tabs to old workspace
       workspaceLayoutActions.setLayout(prevId, {
-        browserTabs: persisted,
-        activeBrowserTabId: activeTabId,
+        browserTabs: serializeTabs(currentTabs),
+        activeBrowserTabId: currentActiveId,
       });
     }
 
-    // Hide then close ALL old native webviews immediately (don't wait for BrowserTab unmount).
-    // hide() is called first as a defensive measure — on macOS, WKWebView.close() may not
-    // immediately remove the native view from the NSView hierarchy, but hide() reliably
-    // sets [view setHidden:YES] which makes it invisible instantly.
-    for (const tab of tabs) {
+    // Park old views instead of destroying them — keeps native WebContentsViews
+    // alive so they can be recalled without page reload when switching back.
+    // Views are hidden immediately (WKWebView setHidden:YES) and stay in the
+    // main process views Map so existing IPC handlers still work.
+    for (const tab of currentTabs) {
       native.browserViews.hide(tab.webviewLabel).catch(() => {});
-      native.browserViews.close(tab.webviewLabel).catch(() => {});
     }
 
-    // Load tabs for the new workspace
-    let newTabs: BrowserTabState[];
-    let newActiveId: string;
-
-    if (workspaceId) {
-      const layout = workspaceLayoutActions.getLayout(workspaceId);
-      if (layout.browserTabs.length > 0) {
-        newTabs = layout.browserTabs.map((pt) => hydratePersistedTab(pt, workspaceId));
-        const persisted = layout.activeBrowserTabId
-          ? layout.browserTabs.find((t) => t.id === layout.activeBrowserTabId)
-          : null;
-        newActiveId = persisted ? persisted.id : newTabs[0].id;
-      } else {
-        const fresh = createBrowserTab(workspaceId);
-        newTabs = [fresh];
-        newActiveId = fresh.id;
-      }
-    } else {
-      const fresh = createBrowserTab(null);
-      newTabs = [fresh];
-      newActiveId = fresh.id;
-    }
+    // Load tabs for the new workspace (reuses loadWorkspaceTabs helper)
+    const { tabs: newTabs, activeTabId: newActiveId } = loadWorkspaceTabs(workspaceId);
 
     tabRefs.current.clear();
 
@@ -245,6 +215,28 @@ export function BrowserPanel({
     prevWorkspaceIdRef.current = workspaceId;
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [workspaceId]);
+
+  // --- Listen for popup/OAuth new-tab requests from the main process ---
+  // When a page calls window.open() or has target="_blank" links (e.g. Google
+  // OAuth), the main process sends "browser:new-tab-requested" instead of
+  // opening in the system browser. This keeps OAuth flows in-app so callbacks work.
+  useEffect(() => {
+    const unlisten = native.events.on(BROWSER_NEW_TAB_REQUESTED, (data) => {
+      const newTab = createBrowserTab(workspaceId);
+      newTab.url = data.url;
+      newTab.currentUrl = data.url;
+      setTabs((prev) => {
+        const next = [...prev, newTab];
+        persistTabs(next, newTab.id);
+        return next;
+      });
+      // Only activate the new tab for foreground dispositions
+      if (data.disposition !== "background-tab") {
+        setActiveTabId(newTab.id);
+      }
+    });
+    return unlisten;
+  }, [workspaceId, persistTabs]);
 
   // --- Tab operations ---
 
@@ -261,23 +253,20 @@ export function BrowserPanel({
 
   const closeTab = useCallback(
     (closingTabId: string) => {
-      // Close the native webview BEFORE removing from React state.
-      // BrowserTab's unmount cleanup also calls close, but it's async and
-      // races with re-render — the native WKWebView can remain visible
-      // during the gap because it renders above the DOM.
-      const closingTab = tabs.find((t) => t.id === closingTabId);
-      if (closingTab) {
-        native.browserViews.hide(closingTab.webviewLabel).catch(() => {});
-        native.browserViews.close(closingTab.webviewLabel).catch(() => {});
-      }
-
       setTabs((prev) => {
+        // Close the native webview — lookup from prev (always fresh, no stale closure).
+        const closingTab = prev.find((t) => t.id === closingTabId);
+        if (closingTab) {
+          native.browserViews.hide(closingTab.webviewLabel).catch(() => {});
+          native.browserViews.close(closingTab.webviewLabel).catch(() => {});
+        }
+
         const idx = prev.findIndex((t) => t.id === closingTabId);
         const newTabs = prev.filter((t) => t.id !== closingTabId);
 
-        let nextActiveId = activeTabId;
+        let nextActiveId = activeTabIdRef.current;
         // Select neighbor when closing the active tab
-        if (closingTabId === activeTabId) {
+        if (closingTabId === activeTabIdRef.current) {
           if (newTabs.length > 0) {
             const nextIdx = Math.min(idx, newTabs.length - 1);
             nextActiveId = newTabs[nextIdx].id;
@@ -293,7 +282,7 @@ export function BrowserPanel({
       });
       tabRefs.current.delete(closingTabId);
     },
-    [tabs, activeTabId, persistTabs]
+    [persistTabs]
   );
 
   /**
@@ -483,8 +472,12 @@ export function BrowserPanel({
   const handleKeyDown = useCallback(
     (e: React.KeyboardEvent<HTMLInputElement>) => {
       if (e.key === "Enter") handleNavigate();
+      if (e.key === "Escape" && activeTab) {
+        handleUpdateTab(activeTab.id, { url: activeTab.currentUrl });
+        e.currentTarget.blur();
+      }
     },
-    [handleNavigate]
+    [handleNavigate, activeTab, handleUpdateTab]
   );
 
   const handleUrlChange = useCallback(
@@ -505,6 +498,21 @@ export function BrowserPanel({
     [persistTabs]
   );
 
+  const handleToggleDevtools = useCallback(() => {
+    if (!activeTab?.webviewLabel) return;
+    if (activeTab.devtoolsOpen) {
+      native.browserViews
+        .closeDevtools(activeTab.webviewLabel)
+        .then(() => handleUpdateTab(activeTab.id, { devtoolsOpen: false }))
+        .catch((err) => handleAddLog(activeTab.id, "error", `Close devtools failed: ${err}`));
+    } else {
+      native.browserViews
+        .openDevtools(activeTab.webviewLabel)
+        .then(() => handleUpdateTab(activeTab.id, { devtoolsOpen: true }))
+        .catch((err) => handleAddLog(activeTab.id, "error", `Open devtools failed: ${err}`));
+    }
+  }, [activeTab, handleUpdateTab, handleAddLog]);
+
   // --- Cookie Sync ---
 
   const [cookieBrowsers, setCookieBrowsers] = useState<InstalledBrowser[]>([]);
@@ -513,73 +521,17 @@ export function BrowserPanel({
     null
   );
 
-  /** Fetch available browsers when dropdown opens.
-   *  Requires Electron native handler with macOS Keychain access for cookie decryption.
-   *  Degrades gracefully to empty list when unavailable (web dev mode). */
-  const handleCookieDropdownOpen = useCallback(async () => {
-    try {
-      const browsers = (await native.browserViews.getCookieBrowsers()) as InstalledBrowser[];
-      setCookieBrowsers(browsers);
-    } catch (err) {
-      console.warn("[Browser] Cookie import unavailable (requires Electron native handler):", err);
-      setCookieBrowsers([]);
-    }
+  // Cookie import requires macOS Keychain handlers (not yet implemented).
+  // The dropdown degrades gracefully to "No browsers detected" until wired up.
+  const handleCookieDropdownOpen = useCallback(() => {
+    setCookieBrowsers([]);
   }, []);
 
-  /** Sync cookies from a browser for the active tab's domain, inject natively, and reload.
-   *  Requires Electron native handlers: sync_browser_cookies (Keychain decryption)
-   *  and inject_browser_cookies (WKHTTPCookieStore injection). */
+  // Cookie sync requires macOS Keychain handlers (not yet implemented).
   const handleCookieSync = useCallback(
-    async (browserName: string) => {
+    (_browserName: string) => {
       if (!activeTab?.currentUrl) return;
-
-      let domain: string;
-      try {
-        domain = new URL(activeTab.currentUrl).hostname;
-      } catch {
-        handleAddLog(activeTab.id, "error", "Invalid URL — can't extract domain for cookie sync");
-        return;
-      }
-
-      setCookieSyncing(browserName);
-      handleAddLog(activeTab.id, "info", `Syncing cookies from ${browserName} for ${domain}...`);
-
-      try {
-        const cookies = (await native.browserViews.syncCookies(
-          browserName,
-          domain
-        )) as DecryptedCookie[];
-
-        if (cookies.length === 0) {
-          handleAddLog(activeTab.id, "warn", `No cookies found in ${browserName} for ${domain}`);
-          setCookieSyncing(null);
-          return;
-        }
-
-        // Inject ALL cookies (including HttpOnly) via native WKHTTPCookieStore
-        const injected = await native.browserViews.injectCookies(activeTab.webviewLabel, cookies);
-
-        handleAddLog(
-          activeTab.id,
-          "info",
-          `Injected ${injected}/${cookies.length} cookies from ${browserName}`
-        );
-
-        setLastSyncResult({ browser: browserName, count: injected });
-
-        // Reload the page so the browser sends cookies with new requests
-        if (injected > 0) {
-          tabRefs.current.get(activeTab.id)?.reload();
-          handleAddLog(activeTab.id, "info", "Reloading page with injected cookies...");
-        }
-      } catch (err) {
-        // Cookie sync requires Electron native handlers with Keychain access.
-        // In web dev mode, invoke() throws — log warning instead of error.
-        console.warn("[Browser] Cookie sync failed (requires Electron native handler):", err);
-        handleAddLog(activeTab.id, "error", `Cookie sync failed: ${err}`);
-      } finally {
-        setCookieSyncing(null);
-      }
+      handleAddLog(activeTab.id, "warn", "Cookie sync not yet available");
     },
     [activeTab, handleAddLog]
   );
@@ -613,6 +565,16 @@ export function BrowserPanel({
     },
     []
   );
+
+  // Derived: hostname of the active tab's URL for the cookie dropdown label
+  let cookieDropdownHostname: string | null = null;
+  if (activeTab?.currentUrl) {
+    try {
+      cookieDropdownHostname = new URL(activeTab.currentUrl).hostname;
+    } catch {
+      cookieDropdownHostname = null;
+    }
+  }
 
   return (
     <div className="flex h-full flex-col overflow-hidden">
@@ -777,18 +739,11 @@ export function BrowserPanel({
           </DropdownMenuTrigger>
           <DropdownMenuContent align="end" className="w-56">
             {/* Show target domain */}
-            {activeTab?.currentUrl &&
-              (() => {
-                try {
-                  return (
-                    <DropdownMenuLabel className="text-muted-foreground text-2xs truncate font-normal">
-                      {new URL(activeTab.currentUrl).hostname}
-                    </DropdownMenuLabel>
-                  );
-                } catch {
-                  return null;
-                }
-              })()}
+            {cookieDropdownHostname && (
+              <DropdownMenuLabel className="text-muted-foreground text-2xs truncate font-normal">
+                {cookieDropdownHostname}
+              </DropdownMenuLabel>
+            )}
 
             <DropdownMenuLabel className="text-xs">Import Cookies</DropdownMenuLabel>
             <DropdownMenuSeparator />
@@ -842,24 +797,7 @@ export function BrowserPanel({
           variant="ghost"
           size="icon"
           className="h-7 w-7"
-          onClick={() => {
-            if (!activeTab?.webviewLabel) return;
-            if (activeTab.devtoolsOpen) {
-              native.browserViews
-                .closeDevtools(activeTab.webviewLabel)
-                .then(() => handleUpdateTab(activeTab.id, { devtoolsOpen: false }))
-                .catch((err) =>
-                  handleAddLog(activeTab.id, "error", `Close devtools failed: ${err}`)
-                );
-            } else {
-              native.browserViews
-                .openDevtools(activeTab.webviewLabel)
-                .then(() => handleUpdateTab(activeTab.id, { devtoolsOpen: true }))
-                .catch((err) =>
-                  handleAddLog(activeTab.id, "error", `Open devtools failed: ${err}`)
-                );
-            }
-          }}
+          onClick={handleToggleDevtools}
           disabled={!activeTab?.currentUrl}
           aria-pressed={activeTab?.devtoolsOpen}
           title={activeTab?.devtoolsOpen ? "Close DevTools" : "Open DevTools"}

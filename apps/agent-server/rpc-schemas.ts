@@ -93,7 +93,9 @@ export const BrowserSnapshotResponseSchema = z.object({
 
 export const BrowserClickRequestSchema = z.object({
   sessionId: z.string(),
-  ref: z.string().describe("Element data-cursor-ref to click"),
+  ref: z.string().optional().describe("Element data-cursor-ref to click"),
+  x: z.number().optional().describe("X coordinate for coordinate-based click"),
+  y: z.number().optional().describe("Y coordinate for coordinate-based click"),
   doubleClick: z.boolean().optional(),
   webviewLabel: z.string().optional(),
 });
@@ -299,7 +301,7 @@ export const BrowserScreenshotRequestSchema = z.object({
 });
 
 export const BrowserScreenshotResponseSchema = z.object({
-  image: z.string().describe("Base64-encoded JPEG screenshot"),
+  image: z.string().describe("Base64-encoded PNG screenshot"),
   url: z.string().optional(),
   title: z.string().optional(),
   error: z.string().optional(),
@@ -314,7 +316,7 @@ export const SimScreenshotRequestSchema = z.object({
 });
 
 export const SimScreenshotResponseSchema = z.object({
-  image: z.string().describe("Base64-encoded JPEG screenshot"),
+  image: z.string().describe("Base64-encoded PNG screenshot"),
   error: z.string().optional(),
 });
 
