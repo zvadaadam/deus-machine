@@ -189,7 +189,7 @@ describe("buildPostProcessArgs", () => {
 
     const filterIdx = args.indexOf("-filter_complex");
     const filterValue = args[filterIdx + 1];
-    expect(filterValue).toContain("Time\\\\: 10\\\\:30");
+    expect(filterValue).toContain("Time\\: 10\\:30");
   });
 
   it("escapes all ffmpeg special characters in watermark text", () => {
@@ -207,10 +207,10 @@ describe("buildPostProcessArgs", () => {
     const filterValue = args[filterIdx + 1];
     // Percent becomes %%, semicolons/brackets/equals get backslash-escaped
     expect(filterValue).toContain("100%%");
-    expect(filterValue).toContain("\\\\;");
-    expect(filterValue).toContain("\\\\[");
-    expect(filterValue).toContain("\\\\]");
-    expect(filterValue).toContain("\\\\=");
+    expect(filterValue).toContain("\\;");
+    expect(filterValue).toContain("\\[");
+    expect(filterValue).toContain("\\]");
+    expect(filterValue).toContain("\\=");
   });
 
   it("strips newlines from watermark text", () => {
@@ -233,15 +233,15 @@ describe("buildPostProcessArgs", () => {
 
 describe("escapeDrawtext", () => {
   it("escapes backslashes", () => {
-    expect(escapeDrawtext("a\\b")).toBe("a\\\\\\\\b");
+    expect(escapeDrawtext("a\\b")).toBe("a\\\\b");
   });
 
   it("escapes single quotes", () => {
-    expect(escapeDrawtext("it's")).toBe("it'\\\\''s");
+    expect(escapeDrawtext("it's")).toBe("it'\\''s");
   });
 
   it("escapes colons", () => {
-    expect(escapeDrawtext("10:30")).toBe("10\\\\:30");
+    expect(escapeDrawtext("10:30")).toBe("10\\:30");
   });
 
   it("escapes percent signs", () => {
@@ -249,15 +249,15 @@ describe("escapeDrawtext", () => {
   });
 
   it("escapes semicolons", () => {
-    expect(escapeDrawtext("a;b")).toBe("a\\\\;b");
+    expect(escapeDrawtext("a;b")).toBe("a\\;b");
   });
 
   it("escapes brackets", () => {
-    expect(escapeDrawtext("[tag]")).toBe("\\\\[tag\\\\]");
+    expect(escapeDrawtext("[tag]")).toBe("\\[tag\\]");
   });
 
   it("escapes equals signs", () => {
-    expect(escapeDrawtext("key=val")).toBe("key\\\\=val");
+    expect(escapeDrawtext("key=val")).toBe("key\\=val");
   });
 
   it("strips newlines", () => {

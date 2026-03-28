@@ -39,6 +39,7 @@
     "test:agent-server:unit": "vitest run --config apps/agent-server/vitest.config.ts --exclude '**/e2e.test.ts'",
     "test:agent-server:e2e": "vitest run --config apps/agent-server/vitest.config.ts test/e2e.test.ts",
     "test:agent-server:watch": "vitest --config apps/agent-server/vitest.config.ts",
+    "test:screen-studio": "vitest run --config packages/screen-studio/vitest.config.ts",
     "typecheck": "tsc -b",
     "typecheck:backend": "tsc --noEmit --project apps/backend/tsconfig.json",
     "typecheck:agent-server": "tsc --noEmit --project apps/agent-server/tsconfig.json",

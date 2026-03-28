@@ -145,11 +145,11 @@ export function buildCaptureArgs(config: FfmpegCaptureConfig): string[] {
 }
 
 /**
- * Escape text for use in ffmpeg's drawtext filter.
+ * Escape text for use in ffmpeg's drawtext filter, for spawn (no shell).
  *
  * ffmpeg drawtext interprets several characters as special:
- * - Backslash: escape character (needs quadruple escaping for shell + ffmpeg)
- * - Single quote: text delimiter
+ * - Backslash: escape character (double-escaped for ffmpeg only)
+ * - Single quote: text delimiter (close-reopen quoting)
  * - Colon: drawtext option separator
  * - Percent: ffmpeg expression variable
  * - Semicolon: filter graph separator
@@ -159,15 +159,15 @@ export function buildCaptureArgs(config: FfmpegCaptureConfig): string[] {
  */
 export function escapeDrawtext(text: string): string {
   return text
-    .replace(/\\/g, "\\\\\\\\")  // Backslash (needs quadruple for shell + ffmpeg)
-    .replace(/'/g, "'\\\\''")     // Single quote
-    .replace(/:/g, "\\\\:")       // Colon (drawtext separator)
-    .replace(/%/g, "%%")          // Percent (ffmpeg expression)
-    .replace(/;/g, "\\\\;")      // Semicolon (filter separator)
-    .replace(/\[/g, "\\\\[")     // Open bracket (stream specifier)
-    .replace(/\]/g, "\\\\]")     // Close bracket (stream specifier)
-    .replace(/=/g, "\\\\=")      // Equals (option separator)
-    .replace(/\n/g, "");          // Newlines (drop them)
+    .replace(/\\/g, "\\\\")      // Backslash → \\
+    .replace(/'/g, "'\\''")       // Single quote → '\'' (close-reopen)
+    .replace(/:/g, "\\:")         // Colon → \:
+    .replace(/%/g, "%%")          // Percent → %% (ffmpeg expression)
+    .replace(/;/g, "\\;")        // Semicolon → \;
+    .replace(/\[/g, "\\[")       // Open bracket → \[
+    .replace(/\]/g, "\\]")       // Close bracket → \]
+    .replace(/=/g, "\\=")        // Equals → \=
+    .replace(/\n/g, "");          // Newlines → dropped
 }
 
 /**
