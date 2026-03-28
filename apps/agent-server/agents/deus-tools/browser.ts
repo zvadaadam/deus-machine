@@ -258,9 +258,15 @@ Returns a page snapshot after clicking and the clicked element's bounding box (x
             if (args.doubleClick) {
               cmds.push(["mouse", "down"], ["mouse", "up"]);
             }
-            await executeBatch(sessionId, cmds, { bail: true });
-            response = await execWithSnapshot(sessionId, ["snapshot", "--json"]);
-            response.elementBox = { x: args.x!, y: args.y!, width: 1, height: 1 };
+            const batchResult = await executeBatch(sessionId, cmds, { bail: true });
+            if (!batchResult.success) {
+              return textResult(`Click failed: ${batchResult.error ?? "unknown error"}`);
+            }
+            const snap = await getSnapshot(sessionId);
+            if (snap.error) {
+              return textResult(`Click succeeded but snapshot failed: ${snap.error}`);
+            }
+            response = { ...snap, elementBox: { x: args.x!, y: args.y!, width: 1, height: 1 } };
           }
 
           if (response.error) {
@@ -428,57 +434,48 @@ Returns a page snapshot after the condition is met.`,
         "BrowserWaitFor",
         sessionId,
         (args) => {
-          const mode = args.text
-            ? "text"
-            : args.textGone
-              ? "textGone"
-              : args.time
-                ? "time"
-                : args.networkIdle
-                  ? "networkIdle"
-                  : args.elementVisible
-                    ? "elementVisible"
-                    : args.elementGone
-                      ? "elementGone"
-                      : "unknown";
-          return `mode=${mode}`;
+          const selected = [
+            args.text !== undefined && "text",
+            args.textGone !== undefined && "textGone",
+            args.time !== undefined && "time",
+            args.networkIdle === true && "networkIdle",
+            args.elementVisible !== undefined && "elementVisible",
+            args.elementGone !== undefined && "elementGone",
+          ].filter(Boolean) as string[];
+          return `mode=${selected.length === 1 ? selected[0] : "invalid"}`;
         },
         async (args) => {
-          const mode = args.text
-            ? "text"
-            : args.textGone
-              ? "textGone"
-              : args.time
-                ? "time"
-                : args.networkIdle
-                  ? "networkIdle"
-                  : args.elementVisible
-                    ? "elementVisible"
-                    : args.elementGone
-                      ? "elementGone"
-                      : "unknown";
+          const selected = [
+            args.text !== undefined && "text",
+            args.textGone !== undefined && "textGone",
+            args.time !== undefined && "time",
+            args.networkIdle === true && "networkIdle",
+            args.elementVisible !== undefined && "elementVisible",
+            args.elementGone !== undefined && "elementGone",
+          ].filter(Boolean) as string[];
 
-          if (mode === "unknown") {
+          if (selected.length !== 1) {
             return textResult(
               "Provide exactly one of: text, textGone, time, networkIdle, elementVisible, or elementGone."
             );
           }
+          const mode = selected[0]!;
 
           const waitArgs: string[] = ["wait"];
-          if (args.text) {
+          if (args.text !== undefined) {
             waitArgs.push("--text", args.text);
-          } else if (args.textGone) {
+          } else if (args.textGone !== undefined) {
             waitArgs.push("--text-gone", args.textGone);
-          } else if (args.time) {
+          } else if (args.time !== undefined) {
             waitArgs.push("--time", String(args.time * 1000));
-          } else if (args.networkIdle) {
+          } else if (args.networkIdle === true) {
             waitArgs.push("--load", "networkidle");
-          } else if (args.elementVisible) {
+          } else if (args.elementVisible !== undefined) {
             waitArgs.push(args.elementVisible);
-          } else if (args.elementGone) {
+          } else if (args.elementGone !== undefined) {
             waitArgs.push(args.elementGone, "--state", "hidden");
           }
-          if (args.timeout) {
+          if (args.timeout !== undefined) {
             waitArgs.push("--timeout", String(args.timeout * 1000));
           }
 
@@ -544,6 +541,16 @@ Returns a page snapshot after all actions complete.`,
             return textResult(`Batch failed: ${result.error || "Unknown error"}`);
           }
 
+          const batchData = result.data?.results as Array<Record<string, unknown>> | undefined;
+          const failures: string[] = [];
+          if (Array.isArray(batchData)) {
+            batchData.forEach((r, i) => {
+              if (r && r.success === false) {
+                failures.push(`Action ${i + 1} (${args.actions[i]?.join(" ")}): ${r.error ?? "failed"}`);
+              }
+            });
+          }
+
           const snap = await getSnapshot(sessionId);
           const actionSummary = args.actions
             .slice(0, 10)
@@ -553,6 +560,12 @@ Returns a page snapshot after all actions complete.`,
             `Actions executed: ${args.actions.length}`,
             `Commands: ${actionSummary}${args.actions.length > 10 ? ` ... (+${args.actions.length - 10} more)` : ""}`,
           ];
+
+          if (failures.length > 0) {
+            details.push(`Failures: ${failures.length}`);
+            details.push(...failures.slice(0, 5));
+            if (failures.length > 5) details.push(`... (+${failures.length - 5} more)`);
+          }
 
           return textResult(
             formatSnapshotResponse("batch", snap.snapshot, snap.url, snap.title, details)

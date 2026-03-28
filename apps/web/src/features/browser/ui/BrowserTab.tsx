@@ -144,10 +144,33 @@ export const BrowserTab = forwardRef<BrowserTabHandle, BrowserTabProps>(function
           if (!mountedRef.current) return;
           setWebviewReady(true);
           setHasLoaded(true); // page is already loaded in the parked view
-          // Clear loading state — parked view is fully loaded already.
-          // Without this, recalled tabs show the loading spinner and
-          // the URL bar stays disabled until a new navigation event fires.
-          onUpdateTab(tabId, { loading: false });
+          // Re-sync native metadata for parked views — the page may have
+          // navigated (redirects, SPA nav) while parked, so hydrated
+          // URL/title could be stale. Fetch current values from the view.
+          try {
+            const currentUrl = await native.browserViews.evaluateWithResult(
+              webviewLabel,
+              "window.location.href",
+              2000
+            );
+            const currentTitle = await native.browserViews.evaluateWithResult(
+              webviewLabel,
+              "document.title",
+              2000
+            );
+            if (currentUrl) {
+              onUpdateTab(tabId, {
+                loading: false,
+                currentUrl,
+                url: currentUrl,
+                title: currentTitle ?? tab.title,
+              });
+            } else {
+              onUpdateTab(tabId, { loading: false });
+            }
+          } catch {
+            onUpdateTab(tabId, { loading: false });
+          }
           onAddLog(tabId, "info", `Recalled parked webview: ${webviewLabel}`);
           return;
         }
