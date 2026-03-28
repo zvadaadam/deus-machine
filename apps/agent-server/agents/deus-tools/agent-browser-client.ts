@@ -210,10 +210,7 @@ export async function execAgentBrowserWithStdin(
  * Get an element's bounding box (best-effort, returns null on failure).
  * Used for screen recording cursor animation.
  */
-export async function getElementBox(
-  sessionId: string,
-  ref: string
-): Promise<ElementBox | null> {
+export async function getElementBox(sessionId: string, ref: string): Promise<ElementBox | null> {
   try {
     const result = await execAgentBrowser(sessionId, ["get", "box", ref, "--json"], 5_000);
     if (!result.success || !result.data) return null;
@@ -246,7 +243,12 @@ export async function executeBatch(
   const args = ["batch", "--json"];
   if (options?.bail) args.push("--bail");
   const stdinData = JSON.stringify(commands);
-  return execAgentBrowserWithStdin(sessionId, args, stdinData, options?.timeoutMs ?? DEFAULT_TIMEOUT_MS);
+  return execAgentBrowserWithStdin(
+    sessionId,
+    args,
+    stdinData,
+    options?.timeoutMs ?? DEFAULT_TIMEOUT_MS
+  );
 }
 
 /**

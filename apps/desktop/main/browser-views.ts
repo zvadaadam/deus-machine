@@ -34,7 +34,10 @@ let detachedWindow: BrowserWindow | null = null;
 
 /** Centralized main window lookup — avoids repeating getAllWindows()[0] in every handler */
 function getMainWindow(): BrowserWindow | undefined {
-  return BrowserWindow.getAllWindows().find((w) => w !== detachedWindow) ?? BrowserWindow.getAllWindows()[0];
+  return (
+    BrowserWindow.getAllWindows().find((w) => w !== detachedWindow) ??
+    BrowserWindow.getAllWindows()[0]
+  );
 }
 
 // ---------------------------------------------------------------------------
@@ -383,10 +386,7 @@ export function registerBrowserViewHandlers(): void {
 
   ipcMain.handle(
     "eval_browser_webview_with_result",
-    async (
-      _e,
-      { label, js, timeout_ms }: { label: string; js: string; timeout_ms?: number }
-    ) => {
+    async (_e, { label, js, timeout_ms }: { label: string; js: string; timeout_ms?: number }) => {
       const view = views.get(label);
       if (!view) return null;
       try {
