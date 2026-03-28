@@ -230,7 +230,10 @@ export function BrowserPanel({
         persistTabs(next, newTab.id);
         return next;
       });
-      setActiveTabId(newTab.id);
+      // Only activate the new tab for foreground dispositions
+      if (data.disposition !== "background-tab") {
+        setActiveTabId(newTab.id);
+      }
     });
     return unlisten;
   }, [workspaceId, persistTabs]);

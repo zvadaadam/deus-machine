@@ -16,6 +16,11 @@ import { writeFileSync } from "fs";
 import { app, BrowserWindow } from "electron";
 import crypto from "crypto";
 
+// Chrome DevTools Protocol port for agent-browser CDP integration.
+// Shared with index.ts (remote-debugging-port switch) so the Electron
+// debug port and the CDP_PORT env var passed to the backend always match.
+export const CDP_PORT = "19222";
+
 let backendProcess: ChildProcess | null = null;
 let isQuitting = false;
 let restartAttempt = 0;
@@ -62,7 +67,7 @@ export async function spawnBackend(): Promise<{ port: number; authToken: string 
         NOTEBOOK_SERVER_BUNDLE_PATH: notebookPath,
         AUTH_TOKEN: authToken,
         PORT: "0", // Dynamic port allocation
-        CDP_PORT: "19222", // Chrome DevTools Protocol port for agent-browser integration
+        CDP_PORT, // Chrome DevTools Protocol port for agent-browser integration
       },
       stdio: ["ignore", "pipe", "pipe"],
     });
