@@ -1,0 +1,34 @@
+{
+  "cli_version": "0.5.0",
+  "checkpoint_id": "d407d6aedef1",
+  "session_id": "8b787eb2-e608-42a4-9663-b07de97ab213",
+  "strategy": "manual-commit",
+  "created_at": "2026-03-28T19:21:32.381518Z",
+  "branch": "zvadaadam/fix-browser-zoom-overflow",
+  "checkpoints_count": 3,
+  "files_touched": [
+    "apps/agent-server/agents/deus-tools/agent-browser-client.ts",
+    "apps/desktop/main/browser-views.ts"
+  ],
+  "agent": "Claude Code",
+  "turn_id": "9f7167f666da",
+  "token_usage": {
+    "input_tokens": 3305,
+    "cache_creation_tokens": 952476,
+    "cache_read_tokens": 43720926,
+    "output_tokens": 126087,
+    "api_call_count": 307
+  },
+  "session_metrics": {
+    "turn_count": 27
+  },
+  "initial_attribution": {
+    "calculated_at": "2026-03-28T19:21:30.917476Z",
+    "agent_lines": 0,
+    "human_added": 150,
+    "human_modified": 10,
+    "human_removed": 0,
+    "total_committed": 150,
+    "agent_percentage": 0
+  }
+}
