@@ -1,0 +1,44 @@
+{
+  "cli_version": "0.5.0",
+  "checkpoint_id": "788bcb6811e0",
+  "session_id": "458501e6-306e-4b0a-9fc1-e36387a22b19",
+  "strategy": "manual-commit",
+  "created_at": "2026-03-28T18:02:27.812695Z",
+  "branch": "zvadaadam/fix-browser-zoom-overflow",
+  "checkpoints_count": 0,
+  "files_touched": [
+    "apps/agent-server/agents/deus-tools/browser.ts",
+    "apps/desktop/preload/index.ts",
+    "apps/desktop/main/backend-process.ts",
+    "apps/desktop/main/browser-views.ts",
+    "apps/desktop/preload/browser-preload.ts",
+    "apps/web/src/features/browser/store/browserWindowStore.ts",
+    "apps/agent-server/agents/deus-tools/agent-browser-client.ts",
+    "apps/web/src/features/browser/ui/BrowserTab.tsx",
+    "apps/web/src/platform/native/browser-views.ts",
+    "shared/events.ts",
+    "apps/agent-server/test/deus-tools.test.ts",
+    "apps/desktop/main/index.ts",
+    "apps/web/src/features/browser/types.ts",
+    "apps/web/src/features/browser/ui/BrowserPanel.tsx",
+    "apps/web/src/features/browser/ui/BrowserTabBar.tsx"
+  ],
+  "agent": "Claude Code",
+  "turn_id": "c01afac88dc6",
+  "token_usage": {
+    "input_tokens": 9,
+    "cache_creation_tokens": 75945,
+    "cache_read_tokens": 287229,
+    "output_tokens": 1824,
+    "api_call_count": 7
+  },
+  "initial_attribution": {
+    "calculated_at": "2026-03-28T18:02:27.684853Z",
+    "agent_lines": 1183,
+    "human_added": 0,
+    "human_modified": 0,
+    "human_removed": 0,
+    "total_committed": 1183,
+    "agent_percentage": 100
+  }
+}
