@@ -164,7 +164,7 @@ export type WorkspaceProgressEvent = z.infer<typeof WorkspaceProgressSchema>;
 
 export const FileChangeSchema = z.object({
   workspace_path: z.string(),
-  change_type: z.enum(["fileschanged", "metadataonly"]),
+  change_type: z.enum(["add", "change", "unlink", "mixed", "metadataonly"]),
   affected_count: z.number(),
 });
 export type FileChangeEvent = z.infer<typeof FileChangeSchema>;
