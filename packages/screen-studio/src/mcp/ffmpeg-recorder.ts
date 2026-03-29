@@ -216,6 +216,7 @@ export class FfmpegRecorder {
   private captureProcess: ChildProcess | null = null;
   private rawCapturePath: string | null = null;
   private captureStderr = "";
+  private captureExitError: string | null = null;
 
   /**
    * Start screen capture.
@@ -291,6 +292,9 @@ export class FfmpegRecorder {
             `stderr: ${this.captureStderr.slice(-500)}\n` +
             `Hint: Check that the capture device is accessible.`,
           ));
+        } else if (code !== 0) {
+          // After startup resolved, capture unexpected exit
+          this.captureExitError = `ffmpeg capture exited unexpectedly (code ${code ?? "null"}).\nstderr: ${this.captureStderr.slice(-300)}`;
         }
       });
     });
@@ -305,7 +309,15 @@ export class FfmpegRecorder {
    * Throws if the raw file is missing or empty.
    */
   async stopCapture(): Promise<string | null> {
-    if (!this.captureProcess) return this.rawCapturePath;
+    if (!this.captureProcess) {
+      // Check if capture died while we weren't looking
+      if (this.captureExitError) {
+        const err = this.captureExitError;
+        this.captureExitError = null;
+        throw new Error(`Capture failed during recording: ${err}`);
+      }
+      return this.rawCapturePath;
+    }
 
     const path = await new Promise<string | null>((resolve) => {
       const proc = this.captureProcess!;

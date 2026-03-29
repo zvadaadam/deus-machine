@@ -104,14 +104,18 @@ const RecordingStartInputSchema = z
 const RecordingStopInputSchema = z
   .object({
     sessionId: SessionIdSchema,
-    addWatermark: z.boolean().optional().describe("Add a text watermark to the bottom-right"),
+    addWatermark: z.boolean().optional().default(false).describe("Add text watermark to bottom-right corner"),
     watermarkText: z
       .string()
       .max(200)
       .optional()
-      .describe("Watermark text content (required if addWatermark is true)"),
+      .describe("Watermark text content (required when addWatermark is true)"),
   })
-  .strict();
+  .strict()
+  .refine(
+    (data) => !data.addWatermark || (data.watermarkText && data.watermarkText.length > 0),
+    { message: "watermarkText is required when addWatermark is true" },
+  );
 
 const RecordingEventInputSchema = z
   .object({

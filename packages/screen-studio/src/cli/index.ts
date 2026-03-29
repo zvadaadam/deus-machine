@@ -49,6 +49,7 @@ interface PersistedState {
       events: Array<{ type: string; x: number; y: number; t: number; meta?: Record<string, unknown> }>;
       chapters: Array<{ title: string; timestamp: number; eventIndex: number }>;
       startTime: number;
+      endTime?: number;
       status: string;
       outputPath?: string;
     }
@@ -290,17 +291,18 @@ function cmdStatus(positional: string[]): void {
     error(`Session not found: ${sessionId}`, "Use 'screen-studio list' to see active sessions.");
   }
 
+  const endTime = session.endTime ?? Date.now();
   output({
     session_id: sessionId,
     status: session.status,
-    duration_s: (Date.now() - session.startTime) / 1000,
+    duration_s: (endTime - session.startTime) / 1000,
     event_count: session.events.length,
     chapter_count: session.chapters.length,
     output_path: session.outputPath,
   });
 }
 
-async function cmdStop(positional: string[]): Promise<void> {
+async function cmdStop(positional: string[], flags: Record<string, string | boolean>): Promise<void> {
   const sessionId = positional[0];
   if (!sessionId) {
     error("Missing session ID", "screen-studio stop <session_id>");
@@ -315,16 +317,51 @@ async function cmdStop(positional: string[]): Promise<void> {
     error(`Session ${sessionId} is not recording (status: ${session.status})`);
   }
 
-  const duration = (Date.now() - session.startTime) / 1000;
+  // Create a temporary manager and replay events through the engine
+  const manager = new SessionManager();
+  const cfg = session.resolvedConfig;
+  const tempId = await manager.create({
+    sourceWidth: cfg.sourceSize.width,
+    sourceHeight: cfg.sourceSize.height,
+    outputWidth: cfg.outputSize.width,
+    outputHeight: cfg.outputSize.height,
+    fps: cfg.fps,
+    deviceFrame: cfg.deviceFrame as "browser-chrome" | "macos-window" | "none",
+    outputPath: session.outputPath,
+    captureMethod: "none",
+  });
 
+  // Replay all stored events
+  for (const evt of session.events) {
+    manager.event(tempId, evt.type as import("../types.js").AgentEventType, evt.x, evt.y, {
+      text: evt.meta?.text as string | undefined,
+      url: evt.meta?.url as string | undefined,
+      direction: evt.meta?.direction as string | undefined,
+      elementRect: evt.meta?.elementRect as { x: number; y: number; width: number; height: number } | undefined,
+    });
+  }
+
+  // Replay chapters
+  for (const ch of session.chapters) {
+    manager.chapter(tempId, ch.title);
+  }
+
+  // Stop generates timeline + runs ffmpeg post-processing
+  const result = await manager.stop(tempId, {
+    addWatermark: typeof flags.watermark === "string",
+    watermarkText: typeof flags.watermark === "string" ? flags.watermark : undefined,
+  });
+
+  const endTime = Date.now();
   session.status = "done";
+  session.endTime = endTime;
   saveState(state);
 
   output({
     session_id: sessionId,
     status: "done",
-    output_path: session.outputPath,
-    duration_s: duration,
+    output_path: result.outputPath,
+    duration_s: result.duration,
     event_count: session.events.length,
     chapter_count: session.chapters.length,
   });
@@ -332,13 +369,16 @@ async function cmdStop(positional: string[]): Promise<void> {
 
 function cmdList(): void {
   const state = loadState();
-  const sessions = Object.entries(state.sessions).map(([id, s]) => ({
-    session_id: id,
-    status: s.status,
-    duration_s: Math.round((Date.now() - s.startTime) / 1000),
-    event_count: s.events.length,
-    chapter_count: s.chapters.length,
-  }));
+  const sessions = Object.entries(state.sessions).map(([id, s]) => {
+    const endTime = s.endTime ?? Date.now();
+    return {
+      session_id: id,
+      status: s.status,
+      duration_s: Math.round((endTime - s.startTime) / 1000),
+      event_count: s.events.length,
+      chapter_count: s.chapters.length,
+    };
+  });
 
   output({
     count: sessions.length,
@@ -430,7 +470,7 @@ async function main(): Promise<void> {
       cmdStatus(positional);
       break;
     case "stop":
-      await cmdStop(positional);
+      await cmdStop(positional, flags);
       break;
     case "list":
       cmdList();
