@@ -5,8 +5,12 @@ import { Textarea } from "@/components/ui/textarea";
 import { FileDiff } from "@pierre/diffs/react";
 import type { DiffLineAnnotation } from "@pierre/diffs/react";
 import { getSingularPatch, parseDiffFromFile } from "@pierre/diffs";
-import type { FileContents, FileDiffMetadata, HunkData } from "@pierre/diffs";
-import type { FileDiff as FileDiffInstance } from "@pierre/diffs/react";
+import type {
+  FileContents,
+  FileDiffMetadata,
+  HunkData,
+  FileDiff as FileDiffClass,
+} from "@pierre/diffs";
 import { useDiffOptions } from "@/shared/lib/diffOptions";
 import { chatInsertActions } from "@/shared/stores/chatInsertStore";
 import { useIsMobile } from "@/shared/hooks/use-mobile";
@@ -31,7 +35,7 @@ interface DiffViewerProps {
  * This replaces the entire row with a <button> so any click expands.
  * Defined outside the component for stable reference (no closure deps).
  */
-function renderHunkSeparator(hunk: HunkData, instance: FileDiffInstance): HTMLElement {
+function renderHunkSeparator(hunk: HunkData, instance: FileDiffClass): HTMLElement {
   const btn = document.createElement("button");
   btn.type = "button";
   btn.dataset.separator = "line-info";
