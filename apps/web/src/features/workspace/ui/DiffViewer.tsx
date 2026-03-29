@@ -126,7 +126,7 @@ export function DiffViewer({
       console.warn("Failed to parse patch diff", error);
       return null;
     }
-  }, [diff, embedded, filePath, newContent, oldContent]);
+  }, [diff, filePath, newContent, oldContent]);
 
   const canExpand = Boolean(displayFileDiff);
 
