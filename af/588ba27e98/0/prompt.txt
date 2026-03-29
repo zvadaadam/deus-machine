@@ -1037,3 +1037,74 @@ The user has attached these files. Read them before proceeding.
 
 
 Fix the failing CI actions. I've attached the failure logs.
+
+---
+
+<system-instruction>
+The user has added 1 comment to the diff for this workspace. Please review and address these comments as part of your response. When addressing comments on the "original" side or on specific commits, read the file from that version (not the current version). Below are the comments, including metadata about what git state they were left on:
+
+Comment #1:
+
+File: apps/web/src/features/workspace/ui/DiffViewer.tsx
+Line: 267
+User comment: "_⚠️ Potential issue_ | _🟡 Minor_
+
+**Cancel any existing long-press before arming a new one.**
+
+A second `touchstart` overwrites `longPressTimerRef.current` without clearing the first timeout. On multi-touch or pinch gestures, that orphaned timer can still fire and open a draft after the gesture has already been cancelled.
+
+
+<details>
+<summary>💡 Small guard to avoid orphan timers</summary>
+
+```diff
+   const handleTouchStart = useCallback((e: React.TouchEvent) => {
++    clearTimeout(longPressTimerRef.current);
++    if (e.touches.length !== 1) {
++      touchStartRef.current = null;
++      return;
++    }
++
+     const touch = e.touches[0];
+     touchStartRef.current = { x: touch.clientX, y: touch.clientY };
+     longPressTimerRef.current = setTimeout(() => {
+       if (lastEnteredLineRef.current) {
+         const { lineNumber, side } = lastEnteredLineRef.current;
+```
+</details>
+
+<details>
+<summary>🤖 Prompt for AI Agents</summary>
+
+```
+Verify each finding against the current code and only fix it if needed.
+
+In `@apps/web/src/features/workspace/ui/DiffViewer.tsx` around lines 256 - 267,
+handleTouchStart can arm multiple long-press timers because
+longPressTimerRef.current is overwritten without clearing an existing timeout;
+before setting a new timeout in handleTouchStart, check if
+longPressTimerRef.current exists and call
+clearTimeout(longPressTimerRef.current) (and optionally set it to null) to
+cancel any previous timer, then proceed to set the new timeout that uses
+lastEnteredLineRef and setDraftComment; update only longPressTimerRef and
+touchStartRef inside handleTouchStart so orphaned timers cannot fire after
+gestures are cancelled.
+```
+
+</details>
+
+<!-- fingerprinting:phantom:medusa:grasshopper -->
+
+<!-- This is an auto-generated comment by CodeRabbit -->"
+
+Comment metadata:
+This comment was left on the modified branch.
+This comment was left on GitHub by @coderabbitai.
+This comment is the start of thread PRRT_kwDOQEbULc53g-2K. 
+
+</system-instruction>
+
+I run AI code review, is it actionable? Wdyt? Explore in depth each problem.
+We want a clean, maintainable codebase, with proper best practices for the tech stack we use.
+Run subagents to verify, and if it should be fixed, try to merge some stuff together so it can be fixed together within one subagent. 
+If you can test something do it.
