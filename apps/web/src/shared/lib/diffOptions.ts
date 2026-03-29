@@ -43,6 +43,36 @@ const DIFF_UNSAFE_CSS = `
   [data-column-content] {
     transition: none;
   }
+
+  /* Hunk separator: make the expand button cover the full row so any click expands.
+     The built-in "line-info" separator puts a small icon in the gutter; this
+     stretches it edge-to-edge and adds a hover highlight. */
+  [data-separator-wrapper] {
+    position: relative;
+    cursor: pointer;
+    background: transparent;
+  }
+  [data-separator-wrapper]:hover {
+    background: color-mix(in oklch, var(--diffs-fg, currentColor) 4%, transparent);
+  }
+  [data-separator-wrapper] [data-expand-button] {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    display: flex;
+    align-items: center;
+    justify-content: flex-start;
+    padding-left: 10px;
+    background: transparent;
+    z-index: 2;
+  }
+  [data-separator-content] {
+    pointer-events: none;
+    position: relative;
+    z-index: 1;
+    padding-left: 28px;
+  }
 `;
 
 export function useDiffOptions<LAnnotation = undefined>(): DiffOptions<LAnnotation> {
