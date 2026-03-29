@@ -1,0 +1,23 @@
+{
+  "cli_version": "0.5.0",
+  "checkpoint_id": "1efdb163d519",
+  "strategy": "manual-commit",
+  "branch": "zvadaadam/fix-devview-files",
+  "checkpoints_count": 2,
+  "files_touched": null,
+  "sessions": [
+    {
+      "metadata": "/1e/fdb163d519/0/metadata.json",
+      "transcript": "/1e/fdb163d519/0/full.jsonl",
+      "content_hash": "/1e/fdb163d519/0/content_hash.txt",
+      "prompt": "/1e/fdb163d519/0/prompt.txt"
+    }
+  ],
+  "token_usage": {
+    "input_tokens": 351,
+    "cache_creation_tokens": 2218124,
+    "cache_read_tokens": 66649953,
+    "output_tokens": 150476,
+    "api_call_count": 297
+  }
+}
