@@ -1124,3 +1124,7 @@ Comment metadata:
 This comment was left on the modified branch.
 
 </system-instruction>
+
+---
+
+/Users/zvada/Developer/agent/box-ide/.conductor/tripoli-v4/.context/attachments/Screenshot 2026-03-29 at 1.23.42 PM.png but now w ehave teh prbelm taht teh diffs have this apding, epxlre epxlore gwo it shoydk be done the most ptoperly using diffs: https://github.com/pierrecomputer/pierre.git u can check the code of it if need to se ethe stuf worked and use it teh best it's in th epackages
