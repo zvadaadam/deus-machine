@@ -1108,3 +1108,19 @@ I run AI code review, is it actionable? Wdyt? Explore in depth each problem.
 We want a clean, maintainable codebase, with proper best practices for the tech stack we use.
 Run subagents to verify, and if it should be fixed, try to merge some stuff together so it can be fixed together within one subagent. 
 If you can test something do it.
+
+---
+
+<system-instruction>
+The user has added 1 comment to the diff for this workspace. Please review and address these comments as part of your response. When addressing comments on the "original" side or on specific commits, read the file from that version (not the current version). Below are the comments, including metadata about what git state they were left on:
+
+Comment #1:
+
+File: apps/web/src/features/workspace/ui/DiffViewer.tsx
+Line: 38
+User comment: "i thunk this is ugly pattern tehre gotta be something better to do here: https://diffs.com/"
+
+Comment metadata:
+This comment was left on the modified branch.
+
+</system-instruction>
