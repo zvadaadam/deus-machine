@@ -94,3 +94,14 @@ also when i click on the monitor icon in the brose rpanle the screen hides taht'
 ---
 
 okey but the probelm is that thr dropwdown is belwo teh web preveiw u know why>
+
+---
+
+<system_instruction>
+The user has attached these files. Read them before proceeding.
+- /Users/zvada/Developer/agent/box-ide/.conductor/rabat-v7/.context/attachments/PR instructions.md (954 B)
+</system_instruction>
+
+
+
+Create a PR
