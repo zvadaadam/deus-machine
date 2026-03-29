@@ -1,0 +1,60 @@
+{
+  "cli_version": "0.5.0",
+  "checkpoint_id": "6d631b362a51",
+  "session_id": "45596988-26f7-4c17-a2a3-37c79cb34ebd",
+  "strategy": "manual-commit",
+  "created_at": "2026-03-29T21:24:08.337946Z",
+  "branch": "zvadaadam/desktop-icon-guide",
+  "checkpoints_count": 2,
+  "files_touched": [
+    "apps/web/public/apple-touch-icon.png",
+    "apps/web/public/favicon-16x16.png",
+    "apps/web/public/favicon-32x32.png",
+    "apps/web/public/favicon.png",
+    "apps/web/public/icon.svg",
+    "apps/web/public/og-image.png",
+    "resources/icons/128x128.png",
+    "resources/icons/128x128@2x.png",
+    "resources/icons/16x16.png",
+    "resources/icons/24x24.png",
+    "resources/icons/256x256.png",
+    "resources/icons/32x32.png",
+    "resources/icons/48x48.png",
+    "resources/icons/512x512.png",
+    "resources/icons/64x64.png",
+    "resources/icons/ico-parts/16.png",
+    "resources/icons/ico-parts/24.png",
+    "resources/icons/ico-parts/256.png",
+    "resources/icons/ico-parts/32.png",
+    "resources/icons/ico-parts/48.png",
+    "resources/icons/ico-parts/64.png",
+    "resources/icons/icon-dev.png",
+    "resources/icons/icon.icns",
+    "resources/icons/icon.png",
+    "resources/icons/master-1024.png",
+    "resources/icons/tray-icon.png",
+    "resources/icons/tray-icon@2x.png",
+    "scripts/generate-icons.mjs"
+  ],
+  "agent": "Claude Code",
+  "turn_id": "99bc4da91371",
+  "token_usage": {
+    "input_tokens": 451,
+    "cache_creation_tokens": 136944,
+    "cache_read_tokens": 823937,
+    "output_tokens": 10518,
+    "api_call_count": 21
+  },
+  "session_metrics": {
+    "turn_count": 2
+  },
+  "initial_attribution": {
+    "calculated_at": "2026-03-29T21:24:08.275738Z",
+    "agent_lines": 295,
+    "human_added": 0,
+    "human_modified": 0,
+    "human_removed": 0,
+    "total_committed": 295,
+    "agent_percentage": 100
+  }
+}

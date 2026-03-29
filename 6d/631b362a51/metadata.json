@@ -1,0 +1,52 @@
+{
+  "cli_version": "0.5.0",
+  "checkpoint_id": "6d631b362a51",
+  "strategy": "manual-commit",
+  "branch": "zvadaadam/desktop-icon-guide",
+  "checkpoints_count": 2,
+  "files_touched": [
+    "apps/web/public/apple-touch-icon.png",
+    "apps/web/public/favicon-16x16.png",
+    "apps/web/public/favicon-32x32.png",
+    "apps/web/public/favicon.png",
+    "apps/web/public/icon.svg",
+    "apps/web/public/og-image.png",
+    "resources/icons/128x128.png",
+    "resources/icons/128x128@2x.png",
+    "resources/icons/16x16.png",
+    "resources/icons/24x24.png",
+    "resources/icons/256x256.png",
+    "resources/icons/32x32.png",
+    "resources/icons/48x48.png",
+    "resources/icons/512x512.png",
+    "resources/icons/64x64.png",
+    "resources/icons/ico-parts/16.png",
+    "resources/icons/ico-parts/24.png",
+    "resources/icons/ico-parts/256.png",
+    "resources/icons/ico-parts/32.png",
+    "resources/icons/ico-parts/48.png",
+    "resources/icons/ico-parts/64.png",
+    "resources/icons/icon-dev.png",
+    "resources/icons/icon.icns",
+    "resources/icons/icon.png",
+    "resources/icons/master-1024.png",
+    "resources/icons/tray-icon.png",
+    "resources/icons/tray-icon@2x.png",
+    "scripts/generate-icons.mjs"
+  ],
+  "sessions": [
+    {
+      "metadata": "/6d/631b362a51/0/metadata.json",
+      "transcript": "/6d/631b362a51/0/full.jsonl",
+      "content_hash": "/6d/631b362a51/0/content_hash.txt",
+      "prompt": "/6d/631b362a51/0/prompt.txt"
+    }
+  ],
+  "token_usage": {
+    "input_tokens": 451,
+    "cache_creation_tokens": 136944,
+    "cache_read_tokens": 823937,
+    "output_tokens": 10518,
+    "api_call_count": 21
+  }
+}
