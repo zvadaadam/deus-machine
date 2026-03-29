@@ -383,3 +383,15 @@ I run AI code review, is it actionable? Wdyt? Explore in depth each problem.
 We want a clean, maintainable codebase, with proper best practices for the tech stack we use.
 Run subagents to verify, and if it should be fixed, try to merge some stuff together so it can be fixed together within one subagent. 
 If you can test something do it.
+
+---
+
+<system_instruction>
+The user has attached these files. Read them before proceeding.
+- /Users/zvada/Developer/agent/box-ide/.conductor/tripoli-v4/.context/attachments/Lint__Format___Typecheck_69026480056.log (56.8 KB)
+- /Users/zvada/Developer/agent/box-ide/.conductor/tripoli-v4/.context/attachments/Fix errors instructions.md (430 B)
+</system_instruction>
+
+
+
+Fix the failing CI actions. I've attached the failure logs.
