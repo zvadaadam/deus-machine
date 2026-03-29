@@ -1,0 +1,26 @@
+{
+  "cli_version": "0.5.0",
+  "checkpoint_id": "ee56bb458ea6",
+  "strategy": "manual-commit",
+  "branch": "zvadaadam/explore-screen-recording",
+  "checkpoints_count": 2,
+  "files_touched": [
+    "packages/screen-studio/README.md",
+    "packages/screen-studio/src/camera/dead-zone.ts"
+  ],
+  "sessions": [
+    {
+      "metadata": "/ee/56bb458ea6/0/metadata.json",
+      "transcript": "/ee/56bb458ea6/0/full.jsonl",
+      "content_hash": "/ee/56bb458ea6/0/content_hash.txt",
+      "prompt": "/ee/56bb458ea6/0/prompt.txt"
+    }
+  ],
+  "token_usage": {
+    "input_tokens": 5041,
+    "cache_creation_tokens": 2279713,
+    "cache_read_tokens": 59090181,
+    "output_tokens": 207457,
+    "api_call_count": 394
+  }
+}
