@@ -1,0 +1,25 @@
+{
+  "cli_version": "0.5.0",
+  "checkpoint_id": "74cd3752f03c",
+  "strategy": "manual-commit",
+  "branch": "zvadaadam/browser-default-tab",
+  "checkpoints_count": 1,
+  "files_touched": [
+    "apps/web/src/features/browser/ui/BrowserPanel.tsx"
+  ],
+  "sessions": [
+    {
+      "metadata": "/74/cd3752f03c/0/metadata.json",
+      "transcript": "/74/cd3752f03c/0/full.jsonl",
+      "content_hash": "/74/cd3752f03c/0/content_hash.txt",
+      "prompt": "/74/cd3752f03c/0/prompt.txt"
+    }
+  ],
+  "token_usage": {
+    "input_tokens": 16,
+    "cache_creation_tokens": 41222,
+    "cache_read_tokens": 586719,
+    "output_tokens": 3737,
+    "api_call_count": 14
+  }
+}
