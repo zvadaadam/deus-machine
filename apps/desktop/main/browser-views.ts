@@ -28,6 +28,10 @@ import { is } from "@electron-toolkit/utils";
 
 const views = new Map<string, WebContentsView>();
 const viewBounds = new Map<string, Electron.Rectangle>();
+const viewEmulation = new Map<
+  string,
+  { width: number; height: number; deviceScaleFactor: number; mobile: boolean }
+>();
 
 /** Reference to the detached browser window (only one at a time) */
 let detachedWindow: BrowserWindow | null = null;
@@ -560,6 +564,7 @@ export function registerBrowserViewHandlers(): void {
     (view.webContents as any).destroy?.();
     views.delete(label);
     viewBounds.delete(label);
+    viewEmulation.delete(label);
   });
 
   ipcMain.handle("reload_browser_webview", (_e, { label }: { label: string }) => {
@@ -572,6 +577,96 @@ export function registerBrowserViewHandlers(): void {
 
   ipcMain.handle("browser_view_exists", (_e, { label }: { label: string }) => {
     return views.has(label);
+  });
+
+  // -------------------------------------------------------------------------
+  // Device emulation (CDP Emulation domain via webContents.debugger)
+  // -------------------------------------------------------------------------
+
+  ipcMain.handle(
+    "set_browser_emulation",
+    async (
+      _e,
+      {
+        label,
+        width,
+        height,
+        deviceScaleFactor,
+        mobile,
+        scale,
+      }: {
+        label: string;
+        width: number;
+        height: number;
+        deviceScaleFactor: number;
+        mobile: boolean;
+        scale?: number;
+      }
+    ) => {
+      const view = views.get(label);
+      if (!view) return { success: false, error: "View not found" };
+
+      try {
+        if (!view.webContents.debugger.isAttached()) {
+          view.webContents.debugger.attach("1.3");
+        }
+
+        if (scale !== undefined && scale < 1) {
+          // Oversized viewport — setDeviceMetricsOverride and setZoomFactor
+          // conflict (they both affect the layout viewport). Use zoom alone:
+          // innerWidth = physicalWidth / zoomFactor = desiredWidth.
+          // Clear any previous CDP override first.
+          await view.webContents.debugger.sendCommand(
+            "Emulation.clearDeviceMetricsOverride",
+            {}
+          );
+          view.webContents.setZoomFactor(scale);
+        } else {
+          // Viewport fits in panel — use CDP for proper device emulation
+          // (exact dimensions, DPR, mobile flag).
+          await view.webContents.debugger.sendCommand("Emulation.setDeviceMetricsOverride", {
+            width,
+            height,
+            deviceScaleFactor,
+            mobile,
+          });
+          view.webContents.setZoomFactor(1);
+        }
+
+        // Touch emulation works independently of device metrics.
+        // maxTouchPoints must be 1-16; omit when disabling.
+        await view.webContents.debugger.sendCommand("Emulation.setTouchEmulationEnabled", {
+          enabled: mobile,
+          ...(mobile ? { maxTouchPoints: 5 } : {}),
+        });
+
+        viewEmulation.set(label, { width, height, deviceScaleFactor, mobile });
+        return { success: true };
+      } catch (err) {
+        console.error(`[BrowserView] set_browser_emulation failed for "${label}":`, err);
+        return { success: false, error: String(err) };
+      }
+    }
+  );
+
+  ipcMain.handle("clear_browser_emulation", async (_e, { label }: { label: string }) => {
+    const view = views.get(label);
+    if (!view) return { success: false, error: "View not found" };
+
+    try {
+      if (view.webContents.debugger.isAttached()) {
+        await view.webContents.debugger.sendCommand("Emulation.clearDeviceMetricsOverride", {});
+        await view.webContents.debugger.sendCommand("Emulation.setTouchEmulationEnabled", {
+          enabled: false,
+        });
+      }
+      view.webContents.setZoomFactor(1);
+      viewEmulation.delete(label);
+      return { success: true };
+    } catch (err) {
+      console.error(`[BrowserView] clear_browser_emulation failed for "${label}":`, err);
+      return { success: false, error: String(err) };
+    }
   });
 
   // -------------------------------------------------------------------------
@@ -682,6 +777,7 @@ export function destroyAllBrowserViews(): void {
   }
   views.clear();
   viewBounds.clear();
+  viewEmulation.clear();
 
   if (detachedWindow && !detachedWindow.isDestroyed()) {
     detachedWindow.close();

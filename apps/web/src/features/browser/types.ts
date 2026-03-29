@@ -4,12 +4,20 @@ export interface ConsoleLog {
   message: string;
 }
 
+/** CDP device emulation state for a browser tab */
+export interface ViewportState {
+  width: number;
+  height: number;
+  deviceScaleFactor: number;
+}
+
 /** Lightweight tab state persisted in the workspace layout store.
  *  Only what's needed to restore a tab — webviews are destroyed/recreated. */
 export interface PersistedBrowserTab {
   id: string;
   url: string; // last loaded URL
   title: string; // display title
+  viewport?: ViewportState | null;
 }
 
 export interface BrowserTabState {
@@ -40,6 +48,8 @@ export interface BrowserTabState {
   devtoolsOpen: boolean;
   /** Console logs for this tab */
   consoleLogs: ConsoleLog[];
+  /** CDP device emulation — null means responsive (no emulation) */
+  viewport: ViewportState | null;
 }
 
 /** Data emitted when user selects an element in inspect mode */
@@ -123,6 +133,7 @@ export function createBrowserTab(workspaceId?: string | null): BrowserTabState {
     selectorActive: false,
     devtoolsOpen: false,
     consoleLogs: [],
+    viewport: null,
   };
 }
 
@@ -147,5 +158,6 @@ export function hydratePersistedTab(persisted: PersistedBrowserTab): BrowserTabS
     selectorActive: false,
     devtoolsOpen: false,
     consoleLogs: [],
+    viewport: persisted.viewport ?? null,
   };
 }

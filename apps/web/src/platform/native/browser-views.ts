@@ -110,6 +110,31 @@ export async function closeDevtools(label: string): Promise<void> {
   await invoke("close_browser_devtools", { label });
 }
 
+export async function setEmulation(
+  label: string,
+  params: { width: number; height: number; deviceScaleFactor: number; mobile: boolean; scale?: number }
+): Promise<{ success: boolean; error?: string }> {
+  if (!capabilities.nativeBrowser) return { success: false, error: "Not in Electron" };
+  return (
+    (await invoke<{ success: boolean; error?: string }>("set_browser_emulation", {
+      label,
+      ...params,
+    })) ?? { success: false, error: "No response" }
+  );
+}
+
+export async function clearEmulation(
+  label: string
+): Promise<{ success: boolean; error?: string }> {
+  if (!capabilities.nativeBrowser) return { success: false, error: "Not in Electron" };
+  return (
+    (await invoke<{ success: boolean; error?: string }>("clear_browser_emulation", { label })) ?? {
+      success: false,
+      error: "No response",
+    }
+  );
+}
+
 export async function createDetachedWindow(params: {
   url: string;
   title?: string;
