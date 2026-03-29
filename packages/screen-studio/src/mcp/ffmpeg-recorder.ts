@@ -185,6 +185,9 @@ export function buildPostProcessArgs(config: FfmpegPostProcessConfig): string[] 
 
   // Add watermark overlay if requested AND drawtext is available
   if (config.addWatermark && config.watermarkText && config.hasDrawtext) {
+    if (!filterComplex) {
+      throw new Error("Cannot add watermark: filterComplex is empty");
+    }
     const escapedText = escapeDrawtext(config.watermarkText);
     const watermarkFilter = `,drawtext=text='${escapedText}':fontsize=24:fontcolor=white@0.5:x=w-tw-20:y=h-th-20`;
     filterComplex += watermarkFilter;
@@ -461,6 +464,7 @@ export class FfmpegRecorder {
     if (this.captureProcess) {
       this.captureProcess.kill("SIGKILL");
       this.captureProcess = null;
+      this.captureExitError = null;
     }
   }
 }

@@ -41,7 +41,7 @@ export class Spring {
     target: number,
     dt: number,
   ): [number, number] {
-    if (dt <= 0) return [position, velocity];
+    if (!Number.isFinite(dt) || dt <= 0) return [position, velocity];
 
     const displacement = position - target;
 
