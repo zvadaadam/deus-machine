@@ -1,0 +1,23 @@
+{
+  "cli_version": "0.5.0",
+  "checkpoint_id": "be5bb8f7275f",
+  "strategy": "manual-commit",
+  "branch": "zvadaadam/explore-screen-recording",
+  "checkpoints_count": 2,
+  "files_touched": null,
+  "sessions": [
+    {
+      "metadata": "/be/5bb8f7275f/0/metadata.json",
+      "transcript": "/be/5bb8f7275f/0/full.jsonl",
+      "content_hash": "/be/5bb8f7275f/0/content_hash.txt",
+      "prompt": "/be/5bb8f7275f/0/prompt.txt"
+    }
+  ],
+  "token_usage": {
+    "input_tokens": 5031,
+    "cache_creation_tokens": 2012467,
+    "cache_read_tokens": 57229060,
+    "output_tokens": 205051,
+    "api_call_count": 385
+  }
+}
