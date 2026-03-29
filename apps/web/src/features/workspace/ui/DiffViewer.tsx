@@ -175,7 +175,12 @@ export function DiffViewer({
     if (oldFile && newFile) {
       try {
         const generated = parseDiffFromFile(oldFile, newFile);
-        return applyDisplayNames(generated, fallbackName);
+        // Only use the generated diff if it has hunks. Metadata-only changes
+        // (renames, chmod) produce zero hunks — the raw patch still contains
+        // the rename/mode headers that getSingularPatch can parse.
+        if (generated.hunks.length > 0) {
+          return applyDisplayNames(generated, fallbackName);
+        }
       } catch (error) {
         console.warn("Failed to generate full diff, falling back to patch diff", error);
       }
@@ -278,6 +283,9 @@ export function DiffViewer({
     clearTimeout(longPressTimerRef.current);
     touchStartRef.current = null;
   }, []);
+
+  // touchcancel fires during scroll handoff, incoming calls, etc. — same cleanup.
+  const handleTouchCancel = handleTouchEnd;
 
   // Clean up long-press timer on unmount
   useEffect(() => () => clearTimeout(longPressTimerRef.current), []);
@@ -526,6 +534,7 @@ export function DiffViewer({
           onTouchStart: handleTouchStart,
           onTouchMove: handleTouchMove,
           onTouchEnd: handleTouchEnd,
+          onTouchCancel: handleTouchCancel,
           onContextMenu: (e: React.MouseEvent) => {
             const target = e.target as HTMLElement;
             // Allow native context menu on form inputs (copy/paste in comment textarea)
