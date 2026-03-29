@@ -44,34 +44,11 @@ const DIFF_UNSAFE_CSS = `
     transition: none;
   }
 
-  /* Hunk separator: make the expand button cover the full row so any click expands.
-     The built-in "line-info" separator puts a small icon in the gutter; this
-     stretches it edge-to-edge and adds a hover highlight. */
-  [data-separator-wrapper] {
-    position: relative;
-    cursor: pointer;
-    background: transparent;
-  }
+  /* Hunk separator: hover highlight on the full row.
+     The library handles expand button layout internally via grid — don't
+     override positioning or the grid columns break. */
   [data-separator-wrapper]:hover {
     background: color-mix(in oklch, var(--diffs-fg, currentColor) 4%, transparent);
-  }
-  [data-separator-wrapper] [data-expand-button] {
-    position: absolute;
-    inset: 0;
-    width: 100%;
-    height: 100%;
-    display: flex;
-    align-items: center;
-    justify-content: flex-start;
-    padding-left: 10px;
-    background: transparent;
-    z-index: 2;
-  }
-  [data-separator-content] {
-    pointer-events: none;
-    position: relative;
-    z-index: 1;
-    padding-left: 28px;
   }
 `;
 
