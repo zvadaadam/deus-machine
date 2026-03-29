@@ -46,6 +46,8 @@ export interface RecordingSessionState {
   events: AgentEvent[];
   chapters: Chapter[];
   startTime: number;
+  /** Set when session leaves "recording" state, freezes duration. */
+  endTime?: number;
   outputPath?: string;
   error?: string;
 }

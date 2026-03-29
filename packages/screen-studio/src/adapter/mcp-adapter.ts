@@ -15,7 +15,9 @@ export interface McpToolEvent {
   requestId: string;
   /** Tool parameters. */
   params: Record<string, unknown>;
-  /** Timestamp (ms). If not provided, uses Date.now(). */
+  /** Timestamp in session-relative milliseconds. If not provided, computed
+   *  as elapsed time since adapter construction. Epoch timestamps (> 1e12)
+   *  are auto-converted to relative by subtracting adapter start time. */
   timestamp?: number;
 }
 
@@ -87,7 +89,14 @@ export class McpToolAdapter {
     const mapping = METHOD_MAP[event.method];
     if (!mapping) return null;
 
-    const t = event.timestamp ?? Date.now() - this.startTime;
+    // Normalize timestamp to session-relative ms.
+    // Auto-detect epoch timestamps (> 1e12) and convert to relative.
+    let t: number;
+    if (event.timestamp != null) {
+      t = event.timestamp > 1e12 ? event.timestamp - this.startTime : event.timestamp;
+    } else {
+      t = Date.now() - this.startTime;
+    }
     const ref = this.extractRef(event.params);
 
     // Resolve element position

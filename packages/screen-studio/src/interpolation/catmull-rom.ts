@@ -122,9 +122,9 @@ export function resamplePath(
     result.push({ ...p, t });
   }
 
-  // Always include the last point
+  // Include the exact endpoint unless it is already present
   const lastT = result[result.length - 1]?.t;
-  if (lastT !== undefined && Math.abs(lastT - end) > interval * 0.1) {
+  if (lastT === undefined || lastT < end - 1e-9) {
     const p = catmullRomAt(points, end, tension);
     result.push({ ...p, t: end });
   }

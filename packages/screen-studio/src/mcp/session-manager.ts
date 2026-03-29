@@ -231,6 +231,7 @@ export class SessionManager {
     }
 
     session.state.status = "processing";
+    session.state.endTime = Date.now();
 
     try {
       // Stop the timeline recorder
@@ -252,7 +253,7 @@ export class SessionManager {
       }
 
       const config = session.state.config;
-      const duration = (Date.now() - session.state.startTime) / 1000;
+      const duration = (session.state.endTime! - session.state.startTime) / 1000;
 
       // If we have a raw capture and timeline frames, run post-processing
       if (session.rawCapturePath && timelineFrames.length > 0) {
@@ -305,9 +306,10 @@ export class SessionManager {
     outputPath?: string;
   } {
     const session = this.getSession(sessionId);
+    const endTime = session.state.endTime ?? Date.now();
     return {
       status: session.state.status,
-      duration: (Date.now() - session.state.startTime) / 1000,
+      duration: (endTime - session.state.startTime) / 1000,
       eventCount: session.state.events.length,
       chapterCount: session.state.chapters.length,
       outputPath: session.state.outputPath,
