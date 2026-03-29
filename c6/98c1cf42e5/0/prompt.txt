@@ -1128,3 +1128,9 @@ This comment was left on the modified branch.
 ---
 
 /Users/zvada/Developer/agent/box-ide/.conductor/tripoli-v4/.context/attachments/Screenshot 2026-03-29 at 1.23.42 PM.png but now w ehave teh prbelm taht teh diffs have this apding, epxlre epxlore gwo it shoydk be done the most ptoperly using diffs: https://github.com/pierrecomputer/pierre.git u can check the code of it if need to se ethe stuf worked and use it teh best it's in th epackages
+
+---
+
+/Users/zvada/Developer/agent/box-ide/.conductor/tripoli-v4/.context/attachments/Screenshot 2026-03-29 at 1.28.01 PM.png Okay, before we wanted to make sure that it's also the unmodified lines part is also clickable, but like... Let's not use that. Let's be okay with it and just like when we do hover over it, it feels like it's highlighting all the part. Like, can you look at the hover? I gave you an image like when I hovered. It's not nice. How would you do it differently?
+
+So, since we decided to do this this way, is there some code simplification since we don't need the custom separators and the clicking and everything, we want to use the diffs library as it is now. /code-simplifier /deslop
