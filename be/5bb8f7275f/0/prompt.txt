@@ -3704,3 +3704,110 @@ I run AI code review, is it actionable? Wdyt? Explore in depth each problem.
 We want a clean, maintainable codebase, with proper best practices for the tech stack we use.
 Run subagents to verify, and if it should be fixed, try to merge some stuff together so it can be fixed together within one subagent. 
 If you can test something do it.
+
+---
+
+<system-instruction>
+The user has added 1 comment to the diff for this workspace. Please review and address these comments as part of your response. When addressing comments on the "original" side or on specific commits, read the file from that version (not the current version). Below are the comments, including metadata about what git state they were left on:
+
+Comment #1:
+
+File: packages/screen-studio/src/camera/spring.ts
+Line: 60
+User comment: "_⚠️ Potential issue_ | _🟡 Minor_
+
+**Guard non-finite state inputs in `step()` to fully block NaN propagation.**
+
+Line 44 validates `dt`, but non-finite `position`/`velocity`/`target` still flow through and return NaN outputs. Add a state-input guard before computing displacement.
+
+<details>
+<summary>Suggested patch</summary>
+
+```diff
+   ): [number, number] {
+     if (!Number.isFinite(dt) || dt <= 0) return [position, velocity];
++    if (
++      !Number.isFinite(position) ||
++      !Number.isFinite(velocity) ||
++      !Number.isFinite(target)
++    ) {
++      return [target, 0];
++    }
+ 
+     const displacement = position - target;
+```
+</details>
+
+<!-- suggestion_start -->
+
+<details>
+<summary>📝 Committable suggestion</summary>
+
+> ‼️ **IMPORTANT**
+> Carefully review the code before committing. Ensure that it accurately replaces the highlighted code, contains no missing lines, and has no issues with indentation. Thoroughly test & benchmark the code to ensure it meets the requirements.
+
+```suggestion
+  ): [number, number] {
+    if (!Number.isFinite(dt) || dt <= 0) return [position, velocity];
+    if (
+      !Number.isFinite(position) ||
+      !Number.isFinite(velocity) ||
+      !Number.isFinite(target)
+    ) {
+      return [target, 0];
+    }
+
+    const displacement = position - target;
+
+    // Early exit: already at rest
+    if (
+      Math.abs(displacement) < 1e-6 &&
+      Math.abs(velocity) < 1e-6
+    ) {
+      return [target, 0];
+    }
+
+    if (this.zeta >= 1) {
+      return this.stepOverdamped(displacement, velocity, target, dt);
+    }
+    return this.stepUnderdamped(displacement, velocity, target, dt);
+  }
+```
+
+</details>
+
+<!-- suggestion_end -->
+
+<details>
+<summary>🤖 Prompt for AI Agents</summary>
+
+```
+Verify each finding against the current code and only fix it if needed.
+
+In `@packages/screen-studio/src/camera/spring.ts` around lines 46 - 60, In step(),
+add a guard that validates state inputs (position, velocity, target) are finite
+before computing displacement to prevent NaN propagation: check
+Number.isFinite(position) && Number.isFinite(velocity) &&
+Number.isFinite(target) immediately at the top of step() (before const
+displacement = ...) and if any are non-finite return a safe resting state (e.g.,
+[target, 0]) so subsequent calls to stepOverdamped/stepUnderdamped never receive
+NaN inputs.
+```
+
+</details>
+
+<!-- fingerprinting:phantom:poseidon:hawk -->
+
+<!-- This is an auto-generated comment by CodeRabbit -->"
+
+Comment metadata:
+This comment was left on the modified branch.
+This comment was left on GitHub by @coderabbitai.
+This comment is the start of thread PRRT_kwDOQEbULc53g990. 
+
+</system-instruction>
+
+I run AI code review, is it actionable? Wdyt? Explore in depth each problem.
+We want a clean, maintainable codebase, with proper best practices for the tech stack we use.
+Run subagents to verify, and if it should be fixed, try to merge some stuff together so it can be fixed together within one subagent. 
+If you can test something do it.
