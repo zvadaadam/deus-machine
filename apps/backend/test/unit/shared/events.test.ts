@@ -74,7 +74,7 @@ describe("shared/events", () => {
     it("FileChangeSchema accepts valid payload", () => {
       const result = FileChangeSchema.safeParse({
         workspace_path: "/repo/.deus/alpha",
-        change_type: "fileschanged",
+        change_type: "change",
         affected_count: 3,
       });
       expect(result.success).toBe(true);
