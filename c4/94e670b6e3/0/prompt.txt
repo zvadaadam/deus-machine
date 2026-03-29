@@ -1,0 +1,127 @@
+<system_instruction>
+You are working inside OpenDevs, a Mac app that lets the user run many coding agents in parallel.
+Your work should take place in the /Users/zvada/Developer/agent/box-ide/.conductor/tripoli-v4 directory (unless otherwise directed), which has been set up for you to work in.
+Each workspace has a .context directory (gitignored) where you can save files to collaborate with other agents.
+DO NOT EVER read or write files at /Users/zvada/Developer/agent/box-ide.
+The target branch for this workspace is main. Use this for actions like creating new PRs, bisecting, etc., unless you're told otherwise.
+
+By default, the user will only see the last message that you send before stopping. Include all essential information in the last message. The intermediate messages will be collapsed and accessible by the user but not displayed by default.
+
+If the user asks you to work on several unrelated tasks, you can suggest they start new workspaces.
+Sometimes the user might send you a message they meant to send in a different workspace or a different chat. If something doesn't make sense in the context of your work, just ask. 
+If the user asks for help with OpenDevs, you can ask them to go to "Help -> Send Feedback" to get in touch with our team.
+</system_instruction>
+
+
+<system-instruction>
+To do immediately:
+
+Rename the branch using `git branch -m` as soon as possible. Do not check the current branch name.
+
+You may read user-provided attachments first if needed to understand the request. Otherwise, do this before using any skills or any other tools.
+
+Choosing a branch name: use concrete, specific language, avoid abstract nouns, and be concise (<30 characters). Use the prefix "zvadaadam/" before the name.
+
+</system-instruction>
+
+Okay, so I'm not sure if basically the file changes don't feel and they don't appear pretty good. They are not emitted, I think. I see that the coding agent changed something, but like, they are not updated and changed. And I want you to explore how it works now and if there are some errors. Also, the dev view doesn't really scroll for me. And there are other, like, visually not very nice things about the dev view and I want you to explore.
+
+---
+
+Okay, so... And all the schemas for the file changes, the depth, everything is all good and sound. Do you feel like it's pretty good?
+
+---
+
+/Users/zvada/Developer/agent/box-ide/.conductor/tripoli-v4/.context/attachments/Screenshot 2026-03-28 at 4.24.48 PM.png Okay, you can also see a problem here in the header that like the header won't fit. Is there something when you look at it in the desktop, in the web mobile app, like, that we have to do differently so the header can't fit? Like, basically the button overflows. So I think we will have to think about the proper structure or some hierarchy. Yeah? What do you think?
+
+---
+
+/Users/zvada/Developer/agent/box-ide/.conductor/tripoli-v4/.context/attachments/Screenshot 2026-03-28 at 4.25.58 PM.png Well, and we still also have the problem that like, when once there is no data inside the session, the desktop is has this very big, big large padding on the right. This is for like a version. And we were already iterating and trying to fix it in previous PR. So look at it. Can you explore like what's wrong?
+
+---
+
+/Users/zvada/Developer/agent/box-ide/.conductor/tripoli-v4/.context/attachments/Screenshot 2026-03-28 at 5.47.29 PM.png When I do the on-hover effect on the thing, on the header for the diff, it does the transparent thing. I feel like the hover effect shouldn't make it transparent. It should be slightly transparent with some blur, but not always, but the hover shouldn't change it before it was too much.
+
+---
+
+Also, can you tell me, also can you tell me how the updating of the file changes work? Like how frequently I feel like I saw that the AI made some changes, but the files are not updated immediately. Like, how does it work? What is the latency there?
+
+---
+
+Like 30 seconds at least, maybe more of delay, then we saw the changes.
+
+---
+
+But why? These are, like, I feel these are workarounds. I don't want this to actually, I want this to be done with the event-driven system, like, why it's not.
+
+---
+
+But the workspaces don't live inside .conductor, right? It's .duse or something else? Why do you think that?
+
+---
+
+Can we, is it possible to create tests for this for the fiel changes?
+
+---
+
+Okay, I hope this is going to be the last thing. In the package, Diff's from Pierre Company, the Diff's package we use. And there is this... In the Diff's there is the unmodified lines, but I want on a click to expand it. Can you explore? And there should be probably some strategy, like I'm not sure, like explore the package if there is something new or we should upgrade the package. It can simplify stuff, so can you explore, please? go indpeth Think about what we actually want to achieve and do it.
+
+---
+
+Okay, so can you upgrade to the latest Diff package from Pierre and explore what else is new if we can use something and simplify stuff? So, yeah, upgrade and make sure that this works.
+
+---
+
+Okay, I think the virtualizer is something that we want to use and think about how it could simplify, change, affect the codebase. I am definitely sure that this is something we need and we gotta use. So please explore and explore then. So implement this. But before you do, like explore how it works there and how we can update the codebase, drop some stuff, refactor so it very nicely fits. It's not like a workaround but like rethinking of how it should work. So do it and then explore if there are some more things we can add there to make it better.
+
+---
+
+Okay, now I'm testing it, but I don't see the content. Like, now the divs are not visualized, and they don't come. I don't know. I tested it, but it's empty./Users/zvada/Developer/agent/box-ide/.conductor/tripoli-v4/.context/attachments/Screenshot 2026-03-28 at 9.04.29 PM.png also on the dekstop
+
+---
+
+/Users/zvada/Developer/agent/box-ide/.conductor/tripoli-v4/.context/attachments/Screenshot 2026-03-28 at 9.07.31 PM.png Okay, so now sometimes it's there and basically like it feels like when it's the full file then it's there but like once we have these like see like We are missing the code there and also the theme was changed so explore that I think we dropped the theme used to have this more dark so explore
+
+---
+
+/Users/zvada/Developer/agent/box-ide/.conductor/tripoli-v4/.context/attachments/Screenshot 2026-03-28 at 9.12.47 PM.png Okay, I see the problem. When there are the changes and we have the thing to click on the modified files, it has some weird styling you see. So like, it's on the left side, not under the code. So there is something weird with the styling. And I think we still use the not correct color, some like blue shade. I don't think we should use it as a background.
+
+---
+
+/Users/zvada/Developer/agent/box-ide/.conductor/tripoli-v4/.context/attachments/Screenshot 2026-03-28 at 9.27.53 PM.png So if I click on the, I like before when it was like a capsule and it was visible, it was clickable. Now I have to click on the icons up and down to show, see the unmodified files. And if I click on the right side, like of the unmodified files on the text, it doesn't work. I think it should be like the whole thing and if we're going to click on it, it should work.
+
+----
+Also, the colors of the background still are having this blue shade. If you check it out, where it's not the text, the code that's not modified, it has this blue shade. And we don't like it. We want it before we had like this dark thing. So check it out.
+
+/Users/zvada/Developer/agent/box-ide/.conductor/tripoli-v4/.context/attachments/Screenshot 2026-03-28 at 9.28.47 PM.png
+
+---
+
+/Users/zvada/Developer/agent/box-ide/.conductor/tripoli-v4/.context/attachments/Screenshot 2026-03-28 at 9.31.55 PM.png Okay, again, problems. Please, no important shit stuff, these kind of things. That's not good. Also, the changes you made that we click on the unmodified lines. Again, we have offsetted the code. And there is something bad in the styling I want you to go through. Do you see the problems on the image? The code is offsetted to write and the unmodified lines, the thing isn't good. I need you to look at it. Maybe it needs some refactor because they are not proper styling. So that needs to be done. This is the first thing we get to make right. The colors are not that important, but they are important. But now we need to make sure that we do good. And explore more code. I think this is split into multiple things, also with proper using of the diffs package. So go.
+
+---
+
+/Users/zvada/Developer/agent/box-ide/.conductor/tripoli-v4/.context/attachments/Screenshot 2026-03-28 at 9.35.50 PM.png You changed that, but again, if I click on the other part of the unmodified lines, I think it's not responsive to the click explorer. why this nedd to be workign better
+
+---
+
+/Users/zvada/Developer/agent/box-ide/.conductor/tripoli-v4/.context/attachments/Screenshot 2026-03-28 at 9.37.39 PM.png Okay, but now again, it's offset it and you can see like there is something very bad with the styling. I think we need to explore more like more parts, not just like the div options, but also the components of the div, how the packages are used. There is something more to it. Explore more code, everything that is connected to the changes content view, the divs package, the divs component, all divs, everything like that. And you need to find it. The problem is obvious, right?
+
+---
+
+/Users/zvada/Developer/agent/box-ide/.conductor/tripoli-v4/.context/attachments/Screenshot 2026-03-28 at 9.41.38 PM.png There is still the problem, deconstruct it, understand it, explore it. This only happens when we have the separators to see the unmodified lines. What is happening, we can see that if we scroll to the left, we can see that there are these paddings, very weird. Go.
+
+---
+
+/Users/zvada/Developer/agent/box-ide/.conductor/tripoli-v4/.context/attachments/Screenshot 2026-03-28 at 9.45.33 PM.png We are running in circles. You already went through this. And once you change it, it's... So this state, it's good. The divs are shown correctly. The partial divs, when we have the unmodified lines between it. Now it's visually good. But the only thing which is clickable is the arrows icon. But I want also clickable the unmodified lines. To do it, it always breaks. So you need to look at the code base more in depth and fix that. But be sure, like, we don't want to go back into the incorrect states where the divs are offset to the right with the padding.
+
+---
+
+<system_instruction>
+The user has attached these files. Read them before proceeding.
+- /Users/zvada/Developer/agent/box-ide/.conductor/tripoli-v4/.context/attachments/PR instructions.md (952 B)
+</system_instruction>
+
+
+
+Create a PR

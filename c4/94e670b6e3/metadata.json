@@ -1,0 +1,26 @@
+{
+  "cli_version": "0.5.0",
+  "checkpoint_id": "c494e670b6e3",
+  "strategy": "manual-commit",
+  "branch": "zvadaadam/fix-devview-files",
+  "checkpoints_count": 23,
+  "files_touched": [
+    "apps/web/src/app/layouts/MobileLayout.tsx",
+    "apps/web/src/features/workspace/ui/DiffViewer.tsx"
+  ],
+  "sessions": [
+    {
+      "metadata": "/c4/94e670b6e3/0/metadata.json",
+      "transcript": "/c4/94e670b6e3/0/full.jsonl",
+      "content_hash": "/c4/94e670b6e3/0/content_hash.txt",
+      "prompt": "/c4/94e670b6e3/0/prompt.txt"
+    }
+  ],
+  "token_usage": {
+    "input_tokens": 317,
+    "cache_creation_tokens": 1901928,
+    "cache_read_tokens": 58284378,
+    "output_tokens": 139853,
+    "api_call_count": 266
+  }
+}
