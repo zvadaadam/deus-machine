@@ -33,3 +33,14 @@ can u make a script to genertae the icons from th emaste rpng with the too coman
 also can u genertae teh icon please let's do just black backgrond (but no black black but some balck we use in the product and with accent colort)
 
 and alsdo shoudl we use the rounded cornwrs somehtign for th icon?
+
+---
+
+<system_instruction>
+The user has attached these files. Read them before proceeding.
+- /Users/zvada/Developer/agent/box-ide/.conductor/sao-paulo-v2/.context/attachments/PR instructions.md (953 B)
+</system_instruction>
+
+
+
+Create a PR
