@@ -7,13 +7,13 @@
  *   node scripts/generate-icons.mjs --master-only             # only generate master icon
  *   node scripts/generate-icons.mjs --from resources/icons/master.png  # use existing master
  *
- * Requires: sharp (already in project deps via agent-sdk)
+ * Requires: sharp
  * macOS only: uses `iconutil` for .icns and `sips` as fallback
  */
 
 import sharp from "sharp";
 import { execSync } from "child_process";
-import { mkdirSync, existsSync, rmSync, copyFileSync } from "fs";
+import { mkdirSync, existsSync, rmSync, copyFileSync, writeFileSync } from "fs";
 import { join, resolve } from "path";
 
 const ROOT = resolve(import.meta.dirname, "..");
@@ -59,11 +59,6 @@ const WEB_SIZES = [
   { name: "favicon-16x16.png", size: 16 },
   { name: "favicon-32x32.png", size: 32 },
   { name: "apple-touch-icon.png", size: 180 },
-];
-
-const TRAY_SIZES = [
-  { name: "tray-icon.png", size: 18 },
-  { name: "tray-icon@2x.png", size: 36 },
 ];
 
 // ─── Generate master icon ─────────────────────────────────────────
@@ -132,14 +127,6 @@ async function generateAllSizes(masterPath) {
     console.log(`  -> ${name} (${size}x${size})`);
   }
 
-  // Tray icons
-  console.log("\nGenerating tray icons...");
-  for (const { name, size } of TRAY_SIZES) {
-    const out = join(ICONS_DIR, name);
-    await resizeTo(masterPath, out, size);
-    console.log(`  -> ${name} (${size}x${size})`);
-  }
-
   // Web icons
   console.log("\nGenerating web icons...");
   for (const { name, size } of WEB_SIZES) {
@@ -169,10 +156,6 @@ async function generateAllSizes(masterPath) {
   <circle cx="16" cy="16" r="5.75" fill="${ACCENT_COLOR}"/>
 </svg>`;
   const svgFaviconPath = join(WEB_PUBLIC, "icon.svg");
-  await sharp(Buffer.from(svgFavicon))
-    .toFile(svgFaviconPath);
-  // Also write the raw SVG for browsers that prefer it
-  const { writeFileSync } = await import("fs");
   writeFileSync(svgFaviconPath, svgFavicon.trim());
   console.log(`  -> apps/web/public/icon.svg`);
 
@@ -243,8 +226,12 @@ async function main() {
   const args = process.argv.slice(2);
   const masterOnly = args.includes("--master-only");
   const fromArg = args.indexOf("--from");
-  const customMaster =
-    fromArg !== -1 ? resolve(args[fromArg + 1]) : null;
+  const fromValue = fromArg !== -1 ? args[fromArg + 1] : null;
+  if (fromArg !== -1 && (!fromValue || fromValue.startsWith("-"))) {
+    console.error("--from requires a path argument");
+    process.exit(1);
+  }
+  const customMaster = fromValue ? resolve(fromValue) : null;
 
   console.log("=== Deus Icon Generator ===\n");
   console.log(`Colors: bg=${BG_COLOR}, accent=${ACCENT_COLOR}`);
@@ -275,7 +262,6 @@ async function main() {
   console.log("\n=== Done! ===");
   console.log("\nGenerated files:");
   console.log("  Desktop:  resources/icons/ (all sizes + .icns)");
-  console.log("  Tray:     resources/icons/tray-icon*.png");
   console.log("  Web:      apps/web/public/ (favicon, apple-touch, og, svg)");
   console.log("  Dev:      resources/icons/icon-dev.png (orange dot)");
   console.log("");
