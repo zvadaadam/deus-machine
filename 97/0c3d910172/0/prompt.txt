@@ -2213,3 +2213,856 @@ I run AI code review, is it actionable? Wdyt? Explore in depth each problem.
 We want a clean, maintainable codebase, with proper best practices for the tech stack we use.
 Run subagents to verify, and if it should be fixed, try to merge some stuff together so it can be fixed together within one subagent. 
 If you can test something do it.
+
+---
+
+<system-instruction>
+The user has added 16 comments to the diff for this workspace. Please review and address these comments as part of your response. When addressing comments on the "original" side or on specific commits, read the file from that version (not the current version). Below are the comments, including metadata about what git state they were left on:
+
+Comment #1:
+
+File: packages/screen-studio/src/adapter/mcp-adapter.ts
+Line: 111
+User comment: "_⚠️ Potential issue_ | _🟠 Major_
+
+**Reset and persist the center for every navigation method.**
+
+Line 187 maps `browserNavigateBack` to `navigate`, but this branch only recenters `browserNavigate`. Even for `browserNavigate`, `lastKnownPosition` is not updated, so the first unresolved event after a page change can still snap back to the previous page.
+
+
+<details>
+<summary>Suggested patch</summary>
+
+```diff
+-    } else if (event.method === "browserNavigate") {
++    } else if (
++      event.method === "browserNavigate" ||
++      event.method === "browserNavigateBack"
++    ) {
+       // Navigation: reset to viewport center
+       position = { ...this.sourceCenter };
++      this.lastKnownPosition = position;
+     }
+```
+</details>
+
+
+Also applies to: 187-187
+
+<details>
+<summary>🤖 Prompt for AI Agents</summary>
+
+```
+Verify each finding against the current code and only fix it if needed.
+
+In `@packages/screen-studio/src/adapter/mcp-adapter.ts` around lines 108 - 111,
+The navigation branch only recenters for event.method === "browserNavigate" and
+doesn't persist the new center, so mapped methods like "browserNavigateBack"
+(mapped to "navigate") and subsequent events can snap back; update the condition
+to include all navigation methods (e.g., "browserNavigate" and
+"browserNavigateBack"/"navigate" as used in your mapping) and after setting
+position = { ...this.sourceCenter } also update the persistent last-known
+position (e.g., this.lastKnownPosition or lastKnownPosition) so the recentered
+state is saved for future events.
+```
+
+</details>
+
+<!-- fingerprinting:phantom:medusa:grasshopper -->
+
+<!-- This is an auto-generated comment by CodeRabbit -->"
+
+Comment metadata:
+This comment was left on the modified branch.
+This comment was left on GitHub by @coderabbitai.
+This comment is the start of thread PRRT_kwDOQEbULc53e2vW. 
+
+
+Comment #2:
+
+File: packages/screen-studio/src/camera/spring.ts
+Line: 21
+User comment: "_⚠️ Potential issue_ | _🟠 Major_
+
+**Validate spring coefficients at construction.**
+
+`stepUnderdamped()` divides by `dampedOmega`, so `omega <= 0`, `NaN`, or a negative/non-finite `zeta` can turn the entire spring state into `NaN`/`Infinity` and poison every downstream transform. Since this class is exported and reachable from user-supplied camera config, it should fail fast here.
+
+
+<details>
+<summary>Suggested patch</summary>
+
+```diff
+ export class Spring {
+   readonly omega: number;
+   readonly zeta: number;
+ 
+   constructor(config: SpringConfig) {
++    if (!Number.isFinite(config.omega) || config.omega <= 0) {
++      throw new RangeError("Spring omega must be a finite number > 0");
++    }
++    if (!Number.isFinite(config.zeta) || config.zeta < 0) {
++      throw new RangeError("Spring zeta must be a finite number >= 0");
++    }
+     this.omega = config.omega;
+     this.zeta = config.zeta;
+   }
+```
+</details>
+
+<details>
+<summary>🤖 Prompt for AI Agents</summary>
+
+```
+Verify each finding against the current code and only fix it if needed.
+
+In `@packages/screen-studio/src/camera/spring.ts` around lines 18 - 21, Validate
+spring coefficients in the Spring constructor: check that config.omega is a
+finite number > 0 and config.zeta is a finite non-negative number (and not
+NaN/Infinity), and throw a clear Error if those conditions fail so invalid input
+cannot create a Spring instance; reference the Spring constructor and the
+dampedOmega usage in stepUnderdamped to locate where to add these guards and
+include a descriptive message like "Invalid Spring config: omega must be > 0 and
+zeta must be finite" when throwing.
+```
+
+</details>
+
+<!-- fingerprinting:phantom:medusa:grasshopper -->
+
+<!-- This is an auto-generated comment by CodeRabbit -->"
+
+Comment metadata:
+This comment was left on the modified branch.
+This comment was left on GitHub by @coderabbitai.
+This comment is the start of thread PRRT_kwDOQEbULc53e2vX. 
+
+
+Comment #3:
+
+File: packages/screen-studio/src/cli/index.ts
+Line: 80
+User comment: "_⚠️ Potential issue_ | _🟠 Major_
+
+**Sensitive event payloads are persisted longer than necessary.**
+
+`cmdEvent()` stores raw `text`, `url`, and element metadata in `sessions.json`, and I don’t see any cleanup/redaction path in this file once a recording is finished. That leaves browser-session data on disk after the artifact is produced, which is risky for typed secrets and other PII. Please either delete completed sessions or strip persisted events down to the minimum metadata you still need.
+
+
+
+Also applies to: 227-240
+
+<details>
+<summary>🤖 Prompt for AI Agents</summary>
+
+```
+Verify each finding against the current code and only fix it if needed.
+
+In `@packages/screen-studio/src/cli/index.ts` around lines 32 - 80, The persisted
+sessions may contain raw sensitive payloads (text, url, element meta) so update
+saveState (and the persisted shape produced by cmdStop flow) to sanitize or
+remove completed sessions before writing STATE_FILE: when iterating
+PersistedState.sessions in saveState, either delete sessions that are completed
+(e.g., status === "finished" or outputPath is set) or replace their events with
+a minimized redaction (keep only non-sensitive fields like type and t and strip
+text/url/meta/x/y unless strictly needed), and drop any resolvedConfig fields
+carrying PII; ensure the final object written by writeFileSync only contains the
+sanitized session entries.
+```
+
+</details>
+
+<!-- fingerprinting:phantom:medusa:grasshopper -->
+
+<!-- This is an auto-generated comment by CodeRabbit -->"
+
+Comment metadata:
+This comment was left on the modified branch.
+This comment was left on GitHub by @coderabbitai.
+This comment is the start of thread PRRT_kwDOQEbULc53e2vY. 
+
+
+Comment #4:
+
+File: packages/screen-studio/src/cli/index.ts
+Line: 118
+User comment: "_⚠️ Potential issue_ | _🟠 Major_
+
+**Reject malformed flags before persisting them.**
+
+The parser turns missing values into boolean `true`, and these handlers never validate the parsed result. Today inputs like `--fps nope`, `--x NaN`, `--device-frame arcade-cabinet`, or `--element-rect` with no value can still be accepted and written into session state. Please enforce numeric/range checks and explicit enum validation at the CLI boundary.
+
+
+
+Also applies to: 151-157, 214-236
+
+<details>
+<summary>🤖 Prompt for AI Agents</summary>
+
+```
+Verify each finding against the current code and only fix it if needed.
+
+In `@packages/screen-studio/src/cli/index.ts` around lines 93 - 118, The CLI flag
+parser currently accepts missing or malformed values (setting flags to true) and
+writes them through; update the parsing/validation in
+packages/screen-studio/src/cli/index.ts to reject malformed flags before
+persisting: in the arg-parsing loop that builds the flags object from args (the
+for loop over args / the flags and positional variables), do not coerce a bare
+flag with no value into true—treat missing values as an error or require
+explicit boolean syntax; after extracting a raw value run per-flag validations
+(e.g., parseInt/parseFloat and isFinite + range checks for numeric flags like
+fps and x, whitelist/enum check for device-frame and similar flags, and
+structured validation for compound values like element-rect ensuring four
+numeric components); on validation failure return/throw an error (or signal
+parse failure) instead of setting the malformed value on flags so callers cannot
+persist invalid state; apply the same validation approach to the other parsing
+blocks mentioned (lines ~151-157 and ~214-236) that handle flags to ensure
+consistency.
+```
+
+</details>
+
+<!-- fingerprinting:phantom:medusa:grasshopper -->
+
+<!-- This is an auto-generated comment by CodeRabbit -->"
+
+Comment metadata:
+This comment was left on the modified branch.
+This comment was left on GitHub by @coderabbitai.
+This comment is the start of thread PRRT_kwDOQEbULc53e2vZ. 
+
+
+Comment #5:
+
+File: packages/screen-studio/src/cli/index.ts
+Line: 186
+User comment: "_⚠️ Potential issue_ | _🟠 Major_
+
+**Persist the manager’s resolved config instead of recomputing it here.**
+
+`SessionManager.create()` already resolves and stores the session config, but this block writes a second copy with different rules. In `packages/screen-studio/src/mcp/session-manager.ts:19-65`, the default output path is `recording-${timestamp}.mp4`; here it becomes `recording-${sessionId}.mp4`, so `start` can report an `output_path` that never matches the manager’s real config. Please expose the resolved config/output path from `SessionManager.create()` (or a getter) and persist that exact value.
+
+<details>
+<summary>🤖 Prompt for AI Agents</summary>
+
+```
+Verify each finding against the current code and only fix it if needed.
+
+In `@packages/screen-studio/src/cli/index.ts` around lines 159 - 186, Session
+persistence currently recomputes the resolved config and outputPath instead of
+using the SessionManager's canonical values, causing mismatches (e.g. outputPath
+differs); update the flow so SessionManager.create(sessionOptions) (or a new
+getter on SessionManager) returns the created session object or its
+resolvedConfig/outputPath and then persist that returned resolvedConfig and
+outputPath into state.sessions[sessionId] (instead of recomputing
+sourceSize/outputSize/fps/deviceFrame/outputPath in
+packages/screen-studio/src/cli/index.ts); ensure you reference
+SessionManager.create and state.sessions[sessionId] and use the manager-provided
+deviceFrame/defaults and the exact outputPath the manager generated.
+```
+
+</details>
+
+<!-- fingerprinting:phantom:medusa:grasshopper -->
+
+<!-- This is an auto-generated comment by CodeRabbit -->"
+
+Comment metadata:
+This comment was left on the modified branch.
+This comment was left on GitHub by @coderabbitai.
+This comment is the start of thread PRRT_kwDOQEbULc53e2va. 
+
+
+Comment #6:
+
+File: packages/screen-studio/src/cli/index.ts
+Line: 279
+User comment: "_⚠️ Potential issue_ | _🟠 Major_
+
+**`event` and `chapter` never update the recording engine.**
+
+These handlers only append to `sessions.json`; they never call `SessionManager.event()` / `.chapter()`. `packages/screen-studio/src/mcp/session-manager.ts:141-215` is where the camera engine is stepped and timeline frames/chapters are captured, so the CLI path currently loses the zoom/pan timeline entirely. Either forward these commands to a long-lived manager/MCP process or rehydrate and replay the canonical session state before finalization.
+
+<details>
+<summary>🤖 Prompt for AI Agents</summary>
+
+```
+Verify each finding against the current code and only fix it if needed.
+
+In `@packages/screen-studio/src/cli/index.ts` around lines 196 - 279, cmdEvent and
+cmdChapter only mutate sessions.json via loadState/saveState and never notify
+the runtime engine, so the camera/timeline isn't updated; update these handlers
+to forward events/chapters to the live manager by calling
+SessionManager.event(...) and SessionManager.chapter(...) (or sending the
+equivalent MCP message) when a SessionManager is available, and fallback to
+rehydrating the session into a temporary SessionManager instance and
+replaying/applying the new event/chapter before persisting; use the existing
+symbols cmdEvent, cmdChapter, loadState, saveState and invoke
+SessionManager.event / SessionManager.chapter (or the MCP client API) so the
+engine captures zoom/pan and timeline frames prior to save/finalization.
+```
+
+</details>
+
+<!-- fingerprinting:phantom:medusa:grasshopper -->
+
+<!-- This is an auto-generated comment by CodeRabbit -->"
+
+Comment metadata:
+This comment was left on the modified branch.
+This comment was left on GitHub by @coderabbitai.
+This comment is the start of thread PRRT_kwDOQEbULc53e2vb. 
+
+
+Comment #7:
+
+File: packages/screen-studio/src/cli/index.ts
+Line: 301
+User comment: "_⚠️ Potential issue_ | _🟡 Minor_
+
+**Completed sessions keep growing in `status` and `list`.**
+
+`cmdStatus()` and `cmdList()` always compute `Date.now() - startTime`, but `cmdStop()` never stores an end timestamp. After a session is done, its reported duration keeps increasing forever instead of freezing at the actual recording length. Persist `endTime` during `stop` and use it whenever `status !== "recording"`.
+
+
+
+Also applies to: 320-321, 333-341
+
+<details>
+<summary>🤖 Prompt for AI Agents</summary>
+
+```
+Verify each finding against the current code and only fix it if needed.
+
+In `@packages/screen-studio/src/cli/index.ts` around lines 281 - 301, cmdStop
+currently never persists an end timestamp so cmdStatus and cmdList compute
+duration as Date.now() - session.startTime forever; update cmdStop (the stop
+handler) to set and persist session.endTime (e.g., Date.now()) when
+transitioning status from "recording" to stopped, and change duration
+calculations in cmdStatus, cmdList, and any other status display logic to use
+(session.endTime ? session.endTime : Date.now()) - session.startTime (or
+explicitly use session.endTime when session.status !== "recording") so completed
+sessions show a fixed duration. Ensure the session object is saved back into
+state after setting endTime.
+```
+
+</details>
+
+<!-- fingerprinting:phantom:medusa:grasshopper -->
+
+<!-- This is an auto-generated comment by CodeRabbit -->"
+
+Comment metadata:
+This comment was left on the modified branch.
+This comment was left on GitHub by @coderabbitai.
+This comment is the start of thread PRRT_kwDOQEbULc53e2vc. 
+
+
+Comment #8:
+
+File: packages/screen-studio/src/cli/index.ts
+Line: 330
+User comment: "_⚠️ Potential issue_ | _🔴 Critical_
+
+**`stop` never runs the finalize pipeline, and `--watermark` is ignored.**
+
+This command only flips the persisted status to `"done"` and returns metadata. It never calls `SessionManager.stop()`, which in `packages/screen-studio/src/mcp/session-manager.ts:217-295` is where capture shutdown, zoompan generation, ffmpeg post-processing, and cleanup happen; `main()` also discards the parsed flags when dispatching `stop`, so the documented `--watermark` option is silently dropped. As written, the CLI can report success even when no final video exists.
+
+
+
+
+Also applies to: 419-433
+
+<details>
+<summary>🤖 Prompt for AI Agents</summary>
+
+```
+Verify each finding against the current code and only fix it if needed.
+
+In `@packages/screen-studio/src/cli/index.ts` around lines 303 - 330, cmdStop
+currently only flips persisted session.status to "done" (via
+loadState/saveState) and returns metadata, but never invokes the finalize
+pipeline (SessionManager.stop) nor forwards CLI flags like --watermark; update
+cmdStop to accept and forward parsed flags from main (so stop receives watermark
+and any other options), load or construct the SessionManager for the sessionId
+and call SessionManager.stop(sessionId, {watermark: parsedFlag,...}) (or the
+appropriate stop API in packages/screen-studio/src/mcp/session-manager.ts)
+before mutating state/marking done, and ensure saveState/output happen after
+stop completes so that ffmpeg post-processing and output_path are valid; also
+update main’s dispatch to pass parsed flags into cmdStop if it currently
+discards them.
+```
+
+</details>
+
+<!-- fingerprinting:phantom:medusa:grasshopper -->
+
+<!-- This is an auto-generated comment by CodeRabbit -->"
+
+Comment metadata:
+This comment was left on the modified branch.
+This comment was left on GitHub by @coderabbitai.
+This comment is the start of thread PRRT_kwDOQEbULc53e2ve. 
+
+
+Comment #9:
+
+File: packages/screen-studio/src/interpolation/catmull-rom.ts
+Line: 9
+User comment: "_⚠️ Potential issue_ | _🟡 Minor_
+
+**Docstring overstates the interpolation mode.**
+
+The implementation uses a uniform Catmull-Rom basis with segment-time normalization, not centripetal parameterization (`alpha = 0.5`). Please align the comment with the actual math to avoid misleading consumers.
+
+
+<details>
+<summary>✏️ Suggested doc correction</summary>
+
+```diff
+- * interpolated positions at any time t. Uses centripetal parameterization
+- * (alpha = 0.5) to avoid cusps and self-intersections.
++ * interpolated positions at any time t using a uniform Catmull-Rom basis,
++ * with optional blending toward linear interpolation via `tension`.
+```
+</details>
+
+<details>
+<summary>🤖 Prompt for AI Agents</summary>
+
+```
+Verify each finding against the current code and only fix it if needed.
+
+In `@packages/screen-studio/src/interpolation/catmull-rom.ts` around lines 8 - 9,
+The top docstring in packages/screen-studio/src/interpolation/catmull-rom.ts
+incorrectly claims centripetal parameterization (alpha = 0.5); update the
+comment to state the implementation uses a uniform Catmull–Rom basis with
+segment-time normalization (not centripetal). Edit the module-level comment in
+catmull-rom.ts (the Catmull-Rom interpolation description) to accurately
+describe the math and behavior so consumers are not misled.
+```
+
+</details>
+
+<!-- fingerprinting:phantom:poseidon:hawk -->
+
+<!-- This is an auto-generated comment by CodeRabbit -->"
+
+Comment metadata:
+This comment was left on the modified branch.
+This comment was left on GitHub by @coderabbitai.
+This comment is the start of thread PRRT_kwDOQEbULc53e2vf. 
+
+
+Comment #10:
+
+File: packages/screen-studio/src/interpolation/catmull-rom.ts
+Line: 19
+User comment: "_⚠️ Potential issue_ | _🟠 Major_
+
+**Clamp/validate `tension` before blending.**
+
+`catmullRom1D` currently trusts `tension`; values outside `[0,1]` (or `NaN`) can yield extrapolated/invalid coordinates and propagate instability into camera targets.
+
+
+<details>
+<summary>🛡️ Suggested fix</summary>
+
+```diff
+ export function catmullRomAt(
+   points: Array<Point & { t: number }>,
+   t: number,
+   tension = 0.2,
+ ): Point {
++  const safeTension = Number.isFinite(tension) ? clamp(tension, 0, 1) : 0.2;
+   if (points.length === 0) return { x: 0, y: 0 };
+   if (points.length === 1) return { x: points[0].x, y: points[0].y };
+@@
+   return {
+-    x: catmullRom1D(p0.x, p1.x, p2.x, p3.x, segmentT, tension),
+-    y: catmullRom1D(p0.y, p1.y, p2.y, p3.y, segmentT, tension),
++    x: catmullRom1D(p0.x, p1.x, p2.x, p3.x, segmentT, safeTension),
++    y: catmullRom1D(p0.y, p1.y, p2.y, p3.y, segmentT, safeTension),
+   };
+ }
+```
+</details>
+
+
+Also applies to: 90-91
+
+<details>
+<summary>🤖 Prompt for AI Agents</summary>
+
+```
+Verify each finding against the current code and only fix it if needed.
+
+In `@packages/screen-studio/src/interpolation/catmull-rom.ts` around lines 16 -
+19, Clamp and validate the tension parameter before it's used: in catmullRomAt
+sanitize the incoming tension (e.g., if NaN or outside [0,1] set it to the
+default 0.2 or clamp to 0..1) and pass the clamped value into catmullRom1D; also
+add the same validation at the start of catmullRom1D so it never computes with
+invalid tension. Use the validated/clamped tension for all blending calculations
+to prevent extrapolation and instability.
+```
+
+</details>
+
+<!-- fingerprinting:phantom:poseidon:hawk -->
+
+<!-- This is an auto-generated comment by CodeRabbit -->"
+
+Comment metadata:
+This comment was left on the modified branch.
+This comment was left on GitHub by @coderabbitai.
+This comment is the start of thread PRRT_kwDOQEbULc53e2vg. 
+
+
+Comment #11:
+
+File: packages/screen-studio/src/mcp/ffmpeg-recorder.ts
+Line: 134
+User comment: "_⚠️ Potential issue_ | _🟠 Major_
+
+<details>
+<summary>🧩 Analysis chain</summary>
+
+🌐 Web query:
+
+`Does FFmpeg's avfoundation input support selecting screen-capture resolution with `-video_size`, and what capture resolution is used when `-video_size` is omitted?`
+
+💡 Result:
+
+No, FFmpeg's avfoundation input does not reliably support selecting screen-capture resolution with -video_size for screen devices ("Capture screen X"); attempts often fail with "Configuration of video device failed, falling back to default" and it uses the screen's native resolution instead. When -video_size is omitted, it captures at the full native resolution of the screen (including HiDPI/Retina scaled resolutions, e.g., 2560x1600, 2880x1800, 2848x1604 as seen in examples).
+
+Citations:
+
+- 1: https://ffmpeg.org/ffmpeg-devices.html
+- 2: https://stackoverflow.com/questions/46767758/ffmpeg-3-3-4-avfoundation-to-record-only-a-specific-section-of-the-screen-on-mac
+- 3: https://superuser.com/questions/1162961/screen-capture-using-ffmpeg-f-avfoundation-and-libvpx-too-many-problems
+- 4: https://superuser.com/questions/1392278/video-resolution-when-capturing-a-full-screen-recording-via-ffmpeg-on-mac-os-x
+- 5: https://www.reddit.com/r/ffmpeg/comments/1d6i51k/struggling_to_configure_screen_recording_in_macos/
+- 6: https://stackoverflow.com/questions/66644217/how-to-record-audio-and-video-on-macos-with-ffmpeg
+
+---
+
+</details>
+
+**Address macOS capture resolution mismatch with Linux branch.**
+
+FFmpeg's avfoundation input does not support custom screen-capture resolution via `-video_size`; it always captures at native screen resolution. However, `packages/screen-studio/src/mcp/session-manager.ts` uses `config.sourceSize` for event coordinate mapping and post-processing filters on both platforms. When macOS captures at native resolution while config expects a different `sourceSize`, coordinates drift and filters target the wrong dimensions.
+
+Align the macOS branch with the Linux branch's sizing model, or document the limitation and adjust coordinate transforms accordingly.
+
+<details>
+<summary>🤖 Prompt for AI Agents</summary>
+
+```
+Verify each finding against the current code and only fix it if needed.
+
+In `@packages/screen-studio/src/mcp/ffmpeg-recorder.ts` around lines 123 - 134,
+The macOS avfoundation branch currently captures at native resolution but does
+not enforce config.sourceSize, causing coordinate/filters mismatch; update the
+avfoundation branch in ffmpeg-recorder.ts (where screenDevice,
+detectScreenDevice(), args are used) to add a post-input video scaling filter
+that forces the capture to config.sourceSize when provided (e.g., append "-vf"
+with "scale=WIDTH:HEIGHT" derived from config.sourceSize.width/height), or
+alternatively ensure session-manager.ts reads the actual captured resolution and
+sets config.sourceSize accordingly — pick one approach and implement it so the
+macOS capture dimensions match the sizing model used elsewhere.
+```
+
+</details>
+
+<!-- fingerprinting:phantom:medusa:grasshopper -->
+
+<!-- This is an auto-generated comment by CodeRabbit -->"
+
+Comment metadata:
+This comment was left on the modified branch.
+This comment was left on GitHub by @coderabbitai.
+This comment is the start of thread PRRT_kwDOQEbULc53e2vh. 
+
+
+Comment #12:
+
+File: packages/screen-studio/src/mcp/ffmpeg-recorder.ts
+Line: 295
+User comment: "_⚠️ Potential issue_ | _🟠 Major_
+
+**Persist abnormal capture exits instead of silently downgrading to “not capturing.”**
+
+After startup has resolved, this `close` handler only nulls `captureProcess`. `packages/screen-studio/src/mcp/session-manager.ts` Lines 240-252 gate `stopCapture()` on `isCapturing()`, so if ffmpeg dies mid-session the recorder skips the raw-file validation path entirely and can still fall through to post-processing on a stale or empty capture. Please record the unexpected exit and surface it from the later stop path.
+
+
+
+
+Also applies to: 419-420
+
+<details>
+<summary>🤖 Prompt for AI Agents</summary>
+
+```
+Verify each finding against the current code and only fix it if needed.
+
+In `@packages/screen-studio/src/mcp/ffmpeg-recorder.ts` around lines 284 - 295,
+The close handler for the ffmpeg process currently just clears captureProcess
+and, if after startup, silently drops an unexpected exit; update the handler in
+ffmpeg-recorder (the proc.on("close") block around where captureProcess and
+captureStderr are referenced) to record the abnormal exit into a persistent
+field (e.g., this.captureExitError or this.captureExitInfo) that captures the
+exit code/signal and recent stderr (use the same message built in the reject
+case), leaving captureProcess null but saving the error; then ensure
+stopCapture() (and any logic that checks isCapturing()) will read that field and
+surface it (throw or return an error/mark validation failure) instead of
+proceeding with post-processing on a stale/empty capture.
+```
+
+</details>
+
+<!-- fingerprinting:phantom:medusa:grasshopper -->
+
+<!-- This is an auto-generated comment by CodeRabbit -->"
+
+Comment metadata:
+This comment was left on the modified branch.
+This comment was left on GitHub by @coderabbitai.
+This comment is the start of thread PRRT_kwDOQEbULc53e2vi. 
+
+
+Comment #13:
+
+File: packages/screen-studio/src/mcp/server.ts
+Line: 96
+User comment: "_⚠️ Potential issue_ | _🟠 Major_
+
+**Don’t advertise `{}` / `captureMethod: "none"` as a successful recording mode yet.**
+
+`packages/screen-studio/src/mcp/session-manager.ts` Leaves `rawCapturePath` null for `"none"` and only materializes the MP4 when a raw capture exists. In the current MCP flow, `recording_stop` can therefore return an `outputPath` for a file that was never written. Either add the render-only path or reject this mode in `recording_start`.
+
+
+
+
+Also applies to: 225-248
+
+<details>
+<summary>🤖 Prompt for AI Agents</summary>
+
+```
+Verify each finding against the current code and only fix it if needed.
+
+In `@packages/screen-studio/src/mcp/server.ts` around lines 91 - 96, The
+captureMethod enum in server.ts currently advertises "none" as a valid recording
+mode but session-manager.ts leaves rawCapturePath null for "none" so
+recording_stop may return an outputPath for a file that was never produced;
+update the MCP flow by either (A) rejecting "none" in recording_start (validate
+in the recording_start handler and return an error if captureMethod === "none")
+or (B) implement the render-only path in session-manager.ts by materializing an
+MP4 when no raw capture exists (ensure rawCapturePath/outputPath are set
+consistently and recording_stop only returns an actual file), touching the
+recording_start/recording_stop handlers and the rawCapturePath logic in
+session-manager.ts to keep behavior deterministic.
+```
+
+</details>
+
+<!-- fingerprinting:phantom:medusa:grasshopper -->
+
+<!-- This is an auto-generated comment by CodeRabbit -->"
+
+Comment metadata:
+This comment was left on the modified branch.
+This comment was left on GitHub by @coderabbitai.
+This comment is the start of thread PRRT_kwDOQEbULc53e2vj. 
+
+
+Comment #14:
+
+File: packages/screen-studio/src/mcp/server.ts
+Line: 114
+User comment: "_⚠️ Potential issue_ | _🟡 Minor_
+
+**Validate the documented watermark dependency.**
+
+The schema says `watermarkText` is required when `addWatermark` is true, but this combination is accepted and forwarded unchanged. `packages/screen-studio/src/mcp/ffmpeg-recorder.ts` only appends `drawtext` when both values are present, so the tool currently succeeds while silently dropping the requested watermark.
+
+
+
+
+Also applies to: 294-295
+
+<details>
+<summary>🤖 Prompt for AI Agents</summary>
+
+```
+Verify each finding against the current code and only fix it if needed.
+
+In `@packages/screen-studio/src/mcp/server.ts` around lines 104 - 114,
+RecordingStopInputSchema currently allows addWatermark=true without requiring
+watermarkText so requests can silently drop the watermark; update
+RecordingStopInputSchema to enforce the dependency by adding a .refine or
+.superRefine that checks if input.addWatermark === true then input.watermarkText
+is a non-empty string (and return a clear validation message like "watermarkText
+is required when addWatermark is true"); also apply the same refinement to the
+other similar schema instance in this file (the second schema around the bottom)
+so ffmpeg-recorder.ts’s drawtext path receives a guaranteed watermarkText when
+addWatermark is true.
+```
+
+</details>
+
+<!-- fingerprinting:phantom:medusa:grasshopper -->
+
+<!-- This is an auto-generated comment by CodeRabbit -->"
+
+Comment metadata:
+This comment was left on the modified branch.
+This comment was left on GitHub by @coderabbitai.
+This comment is the start of thread PRRT_kwDOQEbULc53e2vk. 
+
+
+Comment #15:
+
+File: packages/screen-studio/src/session/recording-session.ts
+Line: 150
+User comment: "_⚠️ Potential issue_ | _🟠 Major_
+
+**`reset()` doesn't fully reset the tool-adapter baseline.**
+
+`RecordingSession.reset()` clears the engine and clocks, but `McpToolAdapter` still holds the previous run's cached position and timestamp origin. Reusing the same session after a reset can therefore place unresolved tool events on stale coordinates and the old timebase.
+
+
+<details>
+<summary>Suggested patch</summary>
+
+```diff
+ export class RecordingSession {
+   private engine: CameraEngine;
+   private compositor: Compositor;
+   private recorder: TimelineRecorder;
+   private adapter: McpToolAdapter;
++  private readonly elementResolver: ElementResolver;
+   private config: Required<Pick<RecordingSessionConfig, "fps" | "sourceSize" | "outputSize">>;
+   private backgroundConfig: BackgroundConfig;
+   private deviceFrameConfig: DeviceFrameConfig;
+@@
+     const resolver: ElementResolver = config.elementResolver ??
+       (async () => null);
++    this.elementResolver = resolver;
+     this.adapter = new McpToolAdapter(resolver, sourceSize);
+   }
+@@
+   reset(): void {
+     this.engine.reset();
++    this.adapter = new McpToolAdapter(
++      this.elementResolver,
++      this.config.sourceSize,
++    );
+     this.status = "idle";
+     this.eventLog = [];
+     this.lastTickTime = 0;
+     this.sessionStartTime = 0;
+   }
+```
+</details>
+
+
+Also applies to: 313-319
+
+<details>
+<summary>🤖 Prompt for AI Agents</summary>
+
+```
+Verify each finding against the current code and only fix it if needed.
+
+In `@packages/screen-studio/src/session/recording-session.ts` around lines 147 -
+150, RecordingSession.reset() currently clears engine and clocks but leaves
+this.adapter (McpToolAdapter) with stale cached position and timestamp origin;
+update reset to also clear the adapter baseline by either calling a new reset
+method on McpToolAdapter (e.g., McpToolAdapter.reset()) that clears cached
+position/timestamp origin, or by recreating the adapter instance with the same
+resolver and sourceSize (the same construction used where resolver is set); make
+the same change for the other reset location mentioned (around lines 313-319) so
+reused sessions don't carry over tool coordinates or timebase.
+```
+
+</details>
+
+<!-- fingerprinting:phantom:medusa:grasshopper -->
+
+<!-- This is an auto-generated comment by CodeRabbit -->"
+
+Comment metadata:
+This comment was left on the modified branch.
+This comment was left on GitHub by @coderabbitai.
+This comment is the start of thread PRRT_kwDOQEbULc53e2vl. 
+
+
+Comment #16:
+
+File: packages/screen-studio/src/session/recording-session.ts
+Line: 204
+User comment: "_⚠️ Potential issue_ | _🟠 Major_
+
+**Don't ingest events while paused or stopped.**
+
+`pause()` only freezes `tick()`. These handlers still append to `eventLog` and mutate `CameraEngine`, so skipped interactions reappear on resume and in `renderTimeline()`.
+
+
+<details>
+<summary>Suggested patch</summary>
+
+```diff
+   async handleToolEvent(event: McpToolEvent): Promise<void> {
++    if (this.status !== "idle" && this.status !== "recording") return;
+     const agentEvent = await this.adapter.adapt(event);
+     if (!agentEvent) return;
+ 
+     this.eventLog.push(agentEvent);
+     this.engine.pushEvent(agentEvent);
+   }
+@@
+   handleAgentEvent(event: AgentEvent): void {
++    if (this.status !== "idle" && this.status !== "recording") return;
+     this.eventLog.push(event);
+     this.engine.pushEvent(event);
+   }
+```
+</details>
+
+
+Also applies to: 209-212
+
+<details>
+<summary>🤖 Prompt for AI Agents</summary>
+
+```
+Verify each finding against the current code and only fix it if needed.
+
+In `@packages/screen-studio/src/session/recording-session.ts` around lines 198 -
+204, The handlers (e.g., async handleToolEvent and the similar pointer event
+handler) are still ingesting events while the session is paused/stopped; add a
+guard at the top of each handler to check the session state (e.g.,
+isPaused/isStopped or this.state) and return early if paused or stopped so you
+don't call this.adapter.adapt, push into this.eventLog, or call
+this.engine.pushEvent; update handleToolEvent and the analogous handler (lines
+around 209-212) to perform this early-return check before adapting the event.
+```
+
+</details>
+
+<!-- fingerprinting:phantom:medusa:grasshopper -->
+
+<!-- This is an auto-generated comment by CodeRabbit -->"
+
+Comment metadata:
+This comment was left on the modified branch.
+This comment was left on GitHub by @coderabbitai.
+This comment is the start of thread PRRT_kwDOQEbULc53e2vm. 
+
+</system-instruction>
+
+I run AI code review, is it actionable? Wdyt? Explore in depth each problem.
+We want a clean, maintainable codebase, with proper best practices for the tech stack we use.
+Run subagents to verify, and if it should be fixed, try to merge some stuff together so it can be fixed together within one subagent. 
+If you can test something do it.
