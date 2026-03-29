@@ -20,11 +20,14 @@ function pushEvent(event: string, data: unknown): void {
 export async function watchWorkspace(workspacePath: string): Promise<void> {
   if (watchers.has(workspacePath)) return; // Already watching
 
-  const watcher = chokidar.watch(workspacePath, {
+  // Use cwd so chokidar tests ignore patterns against RELATIVE paths.
+  // Without this, the dotfile regex matches ".deus" in the absolute workspace
+  // path ({repo}/.deus/{slug}), silently ignoring every file.
+  const watcher = chokidar.watch(".", {
+    cwd: workspacePath,
     ignored: [
-      /(^|[/\\])\../, // dotfiles
+      /(^|[/\\])\../, // dotfiles/dirs (relative: .git, .env, .context)
       "**/node_modules/**",
-      "**/.git/**",
       "**/target/**",
       "**/dist/**",
       "**/build/**",

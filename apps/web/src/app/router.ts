@@ -21,6 +21,7 @@ import { ConnectPage } from "./routes/connect";
 import { ServerLayout } from "./shells/ServerLayout";
 import { WorkspaceRoute } from "./routes/workspace";
 import { SettingsRoute } from "./routes/settings";
+import { getDeploymentMode } from "@/shared/config/backend.config";
 
 // --- Root route ---
 const rootRoute = createRootRoute({
@@ -76,9 +77,11 @@ const indexRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: "/",
   beforeLoad: () => {
-    // In web mode, redirect root to /connect.
-    // Once the user has a stored server ID, we could redirect to /s/{id} instead.
-    // That enhancement comes in Phase 2 with relay connectivity.
+    // In web-dev mode, skip the connect screen — go straight to the app
+    // with a dummy serverId (the actual connection uses VITE_BACKEND_PORT).
+    if (getDeploymentMode() === "web-dev") {
+      throw redirect({ to: "/s/$serverId", params: { serverId: "local" } });
+    }
     throw redirect({ to: "/connect" });
   },
 });

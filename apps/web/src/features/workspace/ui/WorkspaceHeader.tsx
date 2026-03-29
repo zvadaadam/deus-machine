@@ -86,7 +86,10 @@ export function WorkspaceHeader({
   return (
     <div
       data-slot="workspace-header"
-      className="drag-region flex h-11 flex-shrink-0 items-center justify-between gap-4 px-4"
+      className={cn(
+        "drag-region flex h-11 items-center justify-between px-4",
+        mobile ? "min-w-0 gap-2" : "flex-shrink-0 gap-4"
+      )}
     >
       {/* Left: sidebar toggle + title + repo/branch */}
       <div className="flex min-w-0 items-center gap-[5px] overflow-hidden">
@@ -122,8 +125,8 @@ export function WorkspaceHeader({
         {title && (
           <span
             className={cn(
-              "text-foreground mr-0.5 truncate text-sm font-medium",
-              mobile ? "max-w-[120px]" : "max-w-[200px]"
+              "text-foreground mr-0.5 min-w-0 shrink truncate text-sm font-medium",
+              !mobile && "max-w-[200px]"
             )}
           >
             {title}
@@ -133,8 +136,8 @@ export function WorkspaceHeader({
         {subtitle && (
           <span
             className={cn(
-              "truncate text-sm font-medium",
-              mobile ? "max-w-[140px]" : "max-w-[200px]",
+              "min-w-0 shrink truncate text-sm font-medium",
+              !mobile && "max-w-[200px]",
               title ? "text-text-subtle" : "text-foreground"
             )}
             title={subtitle}

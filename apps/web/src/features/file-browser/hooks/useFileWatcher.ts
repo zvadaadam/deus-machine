@@ -34,7 +34,8 @@ export function useFileWatcher(workspacePath: string | null, workspaceId: string
     let isActive = true;
 
     if (!workspacePath || !workspaceId) {
-      setIsWatching(false);
+      // Previous effect cleanup already called setIsWatching(false).
+      // No need to set state synchronously here — just bail out.
       return;
     }
 
@@ -72,6 +73,9 @@ export function useFileWatcher(workspacePath: string | null, workspaceId: string
       queryClient.invalidateQueries({ queryKey: ["files", workspaceId] });
       queryClient.invalidateQueries({ queryKey: queryKeys.workspaces.diffStats(workspaceId) });
       queryClient.invalidateQueries({ queryKey: queryKeys.workspaces.diffFiles(workspaceId) });
+      // Invalidate individual file diffs — prefix match covers all files in the workspace.
+      // Without this, the diff viewer shows stale content after agent edits.
+      queryClient.invalidateQueries({ queryKey: ["workspaces", "diff-file", workspaceId] });
     });
 
     return () => {

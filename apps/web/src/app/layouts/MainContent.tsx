@@ -262,10 +262,16 @@ export function MainContent({
       <div
         data-slot="main-content"
         className={cn(
-          "bg-bg-surface flex h-full min-w-0 flex-1 overflow-hidden border transition-[border-radius,border-color,opacity] duration-[280ms] ease-[cubic-bezier(.19,1,.22,1)]",
-          sidebarOpen
-            ? "border-border-subtle rounded-l-xl border-r-0"
-            : "rounded-none border-transparent",
+          "bg-bg-surface flex h-full min-w-0 flex-1 overflow-hidden transition-[border-radius,border-color,opacity] duration-[280ms] ease-[cubic-bezier(.19,1,.22,1)]",
+          // Mobile: edge-to-edge, no border/rounding (sidebar is a Sheet overlay)
+          isMobile
+            ? "border-0"
+            : cn(
+                "border",
+                sidebarOpen
+                  ? "border-border-subtle rounded-l-xl border-r-0"
+                  : "rounded-none border-transparent"
+              ),
           isDisconnected && "opacity-60"
         )}
       >
