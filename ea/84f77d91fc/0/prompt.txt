@@ -1134,3 +1134,196 @@ This comment was left on the modified branch.
 /Users/zvada/Developer/agent/box-ide/.conductor/tripoli-v4/.context/attachments/Screenshot 2026-03-29 at 1.28.01 PM.png Okay, before we wanted to make sure that it's also the unmodified lines part is also clickable, but like... Let's not use that. Let's be okay with it and just like when we do hover over it, it feels like it's highlighting all the part. Like, can you look at the hover? I gave you an image like when I hovered. It's not nice. How would you do it differently?
 
 So, since we decided to do this this way, is there some code simplification since we don't need the custom separators and the clicking and everything, we want to use the diffs library as it is now. /code-simplifier /deslop
+
+---
+
+<system-instruction>
+The user has added 2 comments to the diff for this workspace. Please review and address these comments as part of your response. When addressing comments on the "original" side or on specific commits, read the file from that version (not the current version). Below are the comments, including metadata about what git state they were left on:
+
+Comment #1:
+
+File: apps/web/src/features/workspace/ui/DiffViewer.tsx
+Line: 182
+User comment: "_⚠️ Potential issue_ | _🟠 Major_
+
+**Track expandability separately from patch renderability.**
+
+The `getSingularPatch()` fallback still leaves `displayFileDiff` truthy, so `expandUnchanged` and the clickable separator stay enabled even when this branch has no hidden source lines to reveal. That produces a dead expand control for fallback cases, and in `apps/web/src/features/workspace/ui/AllDiffFileSection.tsx:131-140` the embedded view relies on that separator row as its only expansion affordance.
+
+
+<details>
+<summary>💡 One way to keep expand controls honest</summary>
+
+```diff
+-  const displayFileDiff = useMemo(() => {
+-    if (!diff.trim()) return null;
++  const { displayFileDiff, canExpand } = useMemo(() => {
++    if (!diff.trim()) return { displayFileDiff: null, canExpand: false };
+     const fallbackName = filePath || "file";
+     const diffPaths = extractDiffPaths(diff);
+     const oldName = diffPaths.oldPath || fallbackName;
+     const newName = diffPaths.newPath || fallbackName;
+@@
+     if (oldFile && newFile) {
+       try {
+         const generated = parseDiffFromFile(oldFile, newFile);
+         if (generated.hunks.length > 0) {
+-          return applyDisplayNames(generated, fallbackName);
++          return {
++            displayFileDiff: applyDisplayNames(generated, fallbackName),
++            canExpand: true,
++          };
+         }
+       } catch (error) {
+         console.warn("Failed to generate full diff, falling back to patch diff", error);
+       }
+     }
+ 
+     try {
+-      return applyDisplayNames(getSingularPatch(diff), fallbackName);
++      return {
++        displayFileDiff: applyDisplayNames(getSingularPatch(diff), fallbackName),
++        canExpand: false,
++      };
+     } catch (error) {
+       console.warn("Failed to parse patch diff", error);
+-      return null;
++      return { displayFileDiff: null, canExpand: false };
+     }
+   }, [diff, embedded, filePath, newContent, oldContent]);
+-
+-  const canExpand = Boolean(displayFileDiff);
+```
+
+```diff
+-      hunkSeparators: renderHunkSeparator as never,
++      ...(canExpand && { hunkSeparators: renderHunkSeparator as never }),
+```
+</details>
+
+
+Also applies to: 301-313
+
+<details>
+<summary>🤖 Prompt for AI Agents</summary>
+
+```
+Verify each finding against the current code and only fix it if needed.
+
+In `@apps/web/src/features/workspace/ui/DiffViewer.tsx` around lines 168 - 182,
+The fallback path mistakenly leaves displayFileDiff truthy so the UI shows an
+expand separator even when there are no hidden unchanged lines to reveal; modify
+the logic around parseDiffFromFile/getSingularPatch/applyDisplayNames to compute
+and return a separate expandability flag (e.g., hasExpandableUnchanged or
+expandUnchangedAvailable) based on whether the chosen diff (generated.hunks or
+the singular patch) actually contains hidden unchanged lines, and use that flag
+instead of displayFileDiff for enabling the separator and expandUnchanged
+behavior (update places referencing displayFileDiff/expandUnchanged such as
+displayFileDiff, parseDiffFromFile, getSingularPatch, and applyDisplayNames to
+consume the new flag).
+```
+
+</details>
+
+<!-- fingerprinting:phantom:medusa:grasshopper -->
+
+<!-- This is an auto-generated comment by CodeRabbit -->"
+
+Comment metadata:
+This comment was left on the modified branch.
+This comment was left on GitHub by @coderabbitai.
+This comment is the start of thread PRRT_kwDOQEbULc53hCXX. 
+
+
+Comment #2:
+
+File: apps/web/src/features/workspace/ui/DiffViewer.tsx
+Line: 296
+User comment: "_⚠️ Potential issue_ | _🟠 Major_
+
+**Don’t keep long-press handlers live without a current line target.**
+
+`onLineEnter` / `onLineLeave` are only wired when `hasContent`, but the wrapper touch handlers run on every mobile render. After one diff interaction, `lastEnteredLineRef` can leak into loading/empty/error states or the next file, so a long-press there can reopen a draft on a stale line.
+
+
+<details>
+<summary>💡 Tighten the long-press lifecycle</summary>
+
+```diff
+   const handleTouchMove = useCallback((e: React.TouchEvent) => {
+     if (!touchStartRef.current) return;
+     const touch = e.touches[0];
+     const dx = touch.clientX - touchStartRef.current.x;
+     const dy = touch.clientY - touchStartRef.current.y;
+     // Cancel long-press if finger moves more than 10px (user is scrolling)
+     if (Math.abs(dx) > 10 || Math.abs(dy) > 10) {
+       clearTimeout(longPressTimerRef.current);
+       touchStartRef.current = null;
++      lastEnteredLineRef.current = null;
+     }
+   }, []);
+ 
+   const handleTouchEnd = useCallback(() => {
+     clearTimeout(longPressTimerRef.current);
+     touchStartRef.current = null;
++    lastEnteredLineRef.current = null;
+   }, []);
+```
+
+```diff
+-        {...(isMobile && {
++        {...(isMobile &&
++          hasContent && {
+           onTouchStart: handleTouchStart,
+           onTouchMove: handleTouchMove,
+           onTouchEnd: handleTouchEnd,
+           onTouchCancel: handleTouchCancel,
+           onContextMenu: (e: React.MouseEvent) => {
+             const target = e.target as HTMLElement;
+             if (target.closest("textarea, input, [contenteditable]")) return;
+             e.preventDefault();
+           },
+-        })}
++        })}
+```
+</details>
+
+
+Also applies to: 315-320, 539-552
+
+<details>
+<summary>🤖 Prompt for AI Agents</summary>
+
+```
+Verify each finding against the current code and only fix it if needed.
+
+In `@apps/web/src/features/workspace/ui/DiffViewer.tsx` around lines 278 - 296,
+The long-press lifecycle is leaking because the wrapper touch handlers
+(handleTouchMove, handleTouchEnd, handleTouchCancel) run regardless of
+hasContent and can act on a stale lastEnteredLineRef; update these handlers to
+no-op unless hasContent is true and lastEnteredLineRef.current is set, and
+ensure they always clear longPressTimerRef.current and set
+lastEnteredLineRef.current = null when content becomes empty/changes or on
+unmount; also wire the same guard into whatever starts the long-press timer so
+the timer is only created when hasContent and lastEnteredLineRef is valid
+(references: handleTouchMove, handleTouchEnd, handleTouchCancel,
+lastEnteredLineRef, longPressTimerRef, onLineEnter/onLineLeave, hasContent).
+```
+
+</details>
+
+<!-- fingerprinting:phantom:medusa:grasshopper -->
+
+<!-- This is an auto-generated comment by CodeRabbit -->"
+
+Comment metadata:
+This comment was left on the modified branch.
+This comment was left on GitHub by @coderabbitai.
+This comment is the start of thread PRRT_kwDOQEbULc53hCXb. 
+
+</system-instruction>
+
+I run AI code review, is it actionable? Wdyt? Explore in depth each problem.
+We want a clean, maintainable codebase, with proper best practices for the tech stack we use.
+Run subagents to verify, and if it should be fixed, try to merge some stuff together so it can be fixed together within one subagent. 
+If you can test something do it.
