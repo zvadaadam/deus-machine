@@ -24,6 +24,12 @@ export class DeadZone {
   private insideY = true;
 
   constructor(config: DeadZoneConfig) {
+    if (!Number.isFinite(config.fraction) || config.fraction <= 0 || config.fraction >= 1) {
+      throw new RangeError("deadZone.fraction must be > 0 and < 1");
+    }
+    if (!Number.isFinite(config.hysteresis) || config.hysteresis < 0 || config.hysteresis >= config.fraction) {
+      throw new RangeError("deadZone.hysteresis must be >= 0 and < fraction");
+    }
     this.fraction = config.fraction;
     this.hysteresis = config.hysteresis;
   }

@@ -11,21 +11,22 @@ const SessionIdSchema = z
   .min(1, "sessionId is required")
   .describe("Session ID returned by recording_start (e.g. 'rec_a1b2c3')");
 
-const BackgroundSchema = z
+const GradientBackgroundSchema = z
   .object({
-    type: z.enum(["gradient", "solid"]).describe("Background type"),
-    colors: z
-      .tuple([z.string(), z.string()])
-      .optional()
-      .describe("Two hex colors for gradient (e.g. ['#0f0f23', '#1a1a3e'])"),
-    angle: z
-      .number()
-      .min(0)
-      .max(360)
-      .optional()
-      .describe("Gradient angle in degrees. Default: 135"),
+    type: z.literal("gradient"),
+    colors: z.tuple([z.string(), z.string()]).describe("Two hex colors (e.g. ['#0f0f23', '#1a1a3e'])"),
+    angle: z.number().min(0).max(360).optional().describe("Gradient angle in degrees. Default: 135"),
   })
   .strict();
+
+const SolidBackgroundSchema = z
+  .object({
+    type: z.literal("solid"),
+    colors: z.tuple([z.string(), z.string()]).describe("Single color repeated (e.g. ['#1a1a2e', '#1a1a2e'])"),
+  })
+  .strict();
+
+const BackgroundSchema = z.discriminatedUnion("type", [GradientBackgroundSchema, SolidBackgroundSchema]);
 
 const ElementRectSchema = z
   .object({

@@ -290,15 +290,25 @@ const filter = generateFfmpegFilter(timeline, sourceSize, outputSize);
 
 ## Frame capture
 
-The package defines frame source interfaces but doesn't implement platform-specific capture. Implementations live in the consuming app:
+### SDK frame source interfaces
+
+The SDK defines abstract `FrameSource` interfaces for embedding in your own app. Implementations are platform-specific:
 
 | Source | Platform | How |
 |--------|----------|-----|
 | CDP screencast | Electron | `Page.startScreencast` via BrowserView debugger |
 | VNC canvas | Cloud VMs | noVNC `canvas.captureStream()` |
 | Screenshot polling | Fallback | `webContents.capturePage()` at interval |
-| x11grab | Linux | `ffmpeg -f x11grab` from Xvfb |
-| avfoundation | macOS | `ffmpeg -f avfoundation` (requires Screen Recording permission) |
+
+### Built-in ffmpeg capture (CLI / MCP)
+
+The CLI and MCP server ship a built-in ffmpeg-based recorder (`src/mcp/ffmpeg-recorder.ts`) that handles screen capture directly:
+
+| Capture method | Platform | How |
+|----------------|----------|-----|
+| `x11grab` | Linux | `ffmpeg -f x11grab` from Xvfb (no permissions needed) |
+| `avfoundation` | macOS | `ffmpeg -f avfoundation` (requires Screen Recording permission) |
+| `none` | Any | Events-only mode — no capture, post-process later |
 
 ## Agent event types
 
