@@ -254,6 +254,14 @@ export function DiffViewer({
 
   // Long-press touch handlers
   const handleTouchStart = useCallback((e: React.TouchEvent) => {
+    // Cancel any existing timer before arming a new one — multi-touch
+    // (pinch-to-zoom) fires a second touchstart that would orphan the first.
+    clearTimeout(longPressTimerRef.current);
+    if (e.touches.length !== 1) {
+      touchStartRef.current = null;
+      return;
+    }
+
     const touch = e.touches[0];
     touchStartRef.current = { x: touch.clientX, y: touch.clientY };
     longPressTimerRef.current = setTimeout(() => {
