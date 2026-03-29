@@ -92,8 +92,8 @@ export function DiffViewer({
   const diffIsEmpty = diff.trim().length === 0;
   const hasContent = !isLoading && !errorProp && !diffIsEmpty;
 
-  const displayFileDiff = useMemo(() => {
-    if (!diff.trim()) return null;
+  const { displayFileDiff, canExpand } = useMemo(() => {
+    if (!diff.trim()) return { displayFileDiff: null, canExpand: false };
     const fallbackName = filePath || "file";
     const diffPaths = extractDiffPaths(diff);
     const oldName = diffPaths.oldPath || fallbackName;
@@ -101,7 +101,6 @@ export function DiffViewer({
 
     // Full-file parsing: when old + new content are available, use parseDiffFromFile
     // so the diff component has full context for expanding collapsed unchanged lines.
-    // Without this, separator click-to-expand has nothing to expand into.
     const oldFile: FileContents | null =
       oldContent != null ? { name: oldName, contents: oldContent } : null;
     const newFile: FileContents | null =
@@ -109,26 +108,27 @@ export function DiffViewer({
     if (oldFile && newFile) {
       try {
         const generated = parseDiffFromFile(oldFile, newFile);
-        // Only use the generated diff if it has hunks. Metadata-only changes
-        // (renames, chmod) produce zero hunks — the raw patch still contains
-        // the rename/mode headers that getSingularPatch can parse.
+        // Only use if it has hunks. Metadata-only changes (renames, chmod)
+        // produce zero hunks — fall back to getSingularPatch for those.
         if (generated.hunks.length > 0) {
-          return applyDisplayNames(generated, fallbackName);
+          return { displayFileDiff: applyDisplayNames(generated, fallbackName), canExpand: true };
         }
       } catch (error) {
         console.warn("Failed to generate full diff, falling back to patch diff", error);
       }
     }
 
+    // Patch-only fallback — no full file context, so expand controls are dead.
     try {
-      return applyDisplayNames(getSingularPatch(diff), fallbackName);
+      return {
+        displayFileDiff: applyDisplayNames(getSingularPatch(diff), fallbackName),
+        canExpand: false,
+      };
     } catch (error) {
       console.warn("Failed to parse patch diff", error);
-      return null;
+      return { displayFileDiff: null, canExpand: false };
     }
   }, [diff, filePath, newContent, oldContent]);
-
-  const canExpand = Boolean(displayFileDiff);
 
   useEffect(() => {
     // Reset comment state when file changes - intentional pattern for clearing related state
@@ -218,12 +218,14 @@ export function DiffViewer({
     if (Math.abs(dx) > 10 || Math.abs(dy) > 10) {
       clearTimeout(longPressTimerRef.current);
       touchStartRef.current = null;
+      lastEnteredLineRef.current = null;
     }
   }, []);
 
   const handleTouchEnd = useCallback(() => {
     clearTimeout(longPressTimerRef.current);
     touchStartRef.current = null;
+    lastEnteredLineRef.current = null;
   }, []);
 
   // touchcancel fires during scroll handoff, incoming calls, etc. — same cleanup.
@@ -470,18 +472,18 @@ export function DiffViewer({
       {/* Diff content */}
       <div
         className={embedded ? "relative" : "relative min-h-0 flex-1 overflow-hidden"}
-        {...(isMobile && {
-          onTouchStart: handleTouchStart,
-          onTouchMove: handleTouchMove,
-          onTouchEnd: handleTouchEnd,
-          onTouchCancel: handleTouchCancel,
-          onContextMenu: (e: React.MouseEvent) => {
-            const target = e.target as HTMLElement;
-            // Allow native context menu on form inputs (copy/paste in comment textarea)
-            if (target.closest("textarea, input, [contenteditable]")) return;
-            e.preventDefault();
-          },
-        })}
+        {...(isMobile &&
+          hasContent && {
+            onTouchStart: handleTouchStart,
+            onTouchMove: handleTouchMove,
+            onTouchEnd: handleTouchEnd,
+            onTouchCancel: handleTouchCancel,
+            onContextMenu: (e: React.MouseEvent) => {
+              const target = e.target as HTMLElement;
+              if (target.closest("textarea, input, [contenteditable]")) return;
+              e.preventDefault();
+            },
+          })}
       >
         {isLoading ? (
           <div className="flex h-full items-center justify-center px-6 py-10">
