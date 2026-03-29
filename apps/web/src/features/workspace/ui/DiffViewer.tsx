@@ -5,12 +5,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { FileDiff } from "@pierre/diffs/react";
 import type { DiffLineAnnotation } from "@pierre/diffs/react";
 import { getSingularPatch, parseDiffFromFile } from "@pierre/diffs";
-import type {
-  FileContents,
-  FileDiffMetadata,
-  HunkData,
-  FileDiff as FileDiffClass,
-} from "@pierre/diffs";
+import type { FileContents, FileDiffMetadata } from "@pierre/diffs";
 import { useDiffOptions } from "@/shared/lib/diffOptions";
 import { chatInsertActions } from "@/shared/stores/chatInsertStore";
 import { useIsMobile } from "@/shared/hooks/use-mobile";
@@ -27,67 +22,6 @@ interface DiffViewerProps {
   embedded?: boolean;
   /** Required for sending diff comments to the chat input */
   workspaceId?: string;
-}
-
-/**
- * Custom hunk separator: full-width clickable button.
- * The library's built-in separators only bind click to small gutter icons.
- * This replaces the entire row with a <button> so any click expands.
- * Defined outside the component for stable reference (no closure deps).
- */
-function renderHunkSeparator(hunk: HunkData, instance: FileDiffClass): HTMLElement {
-  const btn = document.createElement("button");
-  btn.type = "button";
-  btn.dataset.separator = "line-info";
-  Object.assign(btn.style, {
-    display: "flex",
-    alignItems: "center",
-    gap: "8px",
-    width: "100%",
-    padding: "6px 12px",
-    border: "none",
-    background: "transparent",
-    cursor: "pointer",
-    fontFamily: "inherit",
-    fontSize: "12px",
-    color: "var(--diffs-fg, inherit)",
-    opacity: "0.6",
-  });
-  btn.addEventListener("mouseenter", () => {
-    btn.style.opacity = "0.9";
-    btn.style.background = "color-mix(in oklch, var(--diffs-fg, currentColor) 5%, transparent)";
-  });
-  btn.addEventListener("mouseleave", () => {
-    btn.style.opacity = "0.6";
-    btn.style.background = "transparent";
-  });
-
-  // Expand-both SVG icon (unfold vertical)
-  const ns = "http://www.w3.org/2000/svg";
-  const svg = document.createElementNS(ns, "svg");
-  svg.setAttribute("width", "14");
-  svg.setAttribute("height", "14");
-  svg.setAttribute("viewBox", "0 0 24 24");
-  svg.setAttribute("fill", "none");
-  svg.setAttribute("stroke", "currentColor");
-  svg.setAttribute("stroke-width", "2");
-  svg.setAttribute("stroke-linecap", "round");
-  svg.setAttribute("stroke-linejoin", "round");
-  const path1 = document.createElementNS(ns, "path");
-  path1.setAttribute("d", "m7 15 5 5 5-5");
-  const path2 = document.createElementNS(ns, "path");
-  path2.setAttribute("d", "m7 9 5-5 5 5");
-  svg.appendChild(path1);
-  svg.appendChild(path2);
-
-  const text = document.createElement("span");
-  text.textContent = `${hunk.lines} unmodified lines`;
-
-  btn.appendChild(svg);
-  btn.appendChild(text);
-  btn.addEventListener("click", () => instance.expandHunk(hunk.hunkIndex, "both"));
-
-  return btn;
 }
 
 /**
@@ -308,8 +242,6 @@ export function DiffViewer({
       disableFileHeader: true,
       enableGutterUtility: hasContent,
       expandUnchanged: showAll && canExpand,
-      // Custom separator: full-width clickable button instead of just gutter icons
-      hunkSeparators: renderHunkSeparator as never,
       ...(isLargeDiff && { lineDiffType: "none" as const }),
       // Mobile: tap or long-press a line to open comment
       ...(isMobile &&
