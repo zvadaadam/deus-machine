@@ -52,6 +52,8 @@ const ALLOWED_INVOKE_CHANNELS = new Set([
   "browser_view_exists",
   "open_browser_devtools",
   "close_browser_devtools",
+  "set_browser_emulation",
+  "clear_browser_emulation",
   "browser:back",
   "browser:forward",
 
