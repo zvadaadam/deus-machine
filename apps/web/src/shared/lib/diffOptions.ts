@@ -44,12 +44,10 @@ const DIFF_UNSAFE_CSS = `
     transition: none;
   }
 
-  /* Hunk separator: hover highlight on the full row.
-     The library handles expand button layout internally via grid — don't
-     override positioning or the grid columns break. */
-  [data-separator-wrapper]:hover {
-    background: color-mix(in oklch, var(--diffs-fg, currentColor) 4%, transparent);
-  }
+  /* Hunk separator: subtle hover — only boost text opacity, no background.
+     A full-row background highlight is too harsh across the wide gutter. */
+  [data-separator-wrapper] { cursor: pointer; }
+  [data-separator-wrapper]:hover [data-separator-content] { opacity: 1; }
 `;
 
 export function useDiffOptions<LAnnotation = undefined>(): DiffOptions<LAnnotation> {
