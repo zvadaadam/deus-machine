@@ -1,0 +1,32 @@
+{
+  "cli_version": "0.5.0",
+  "checkpoint_id": "970c3d910172",
+  "strategy": "manual-commit",
+  "branch": "zvadaadam/explore-screen-recording",
+  "checkpoints_count": 2,
+  "files_touched": [
+    "packages/screen-studio/src/adapter/mcp-adapter.ts",
+    "packages/screen-studio/src/camera/spring.ts",
+    "packages/screen-studio/src/cli/index.ts",
+    "packages/screen-studio/src/interpolation/catmull-rom.ts",
+    "packages/screen-studio/src/mcp/ffmpeg-recorder.ts",
+    "packages/screen-studio/src/mcp/server.ts",
+    "packages/screen-studio/src/session/recording-session.ts",
+    "packages/screen-studio/test/spring.test.ts"
+  ],
+  "sessions": [
+    {
+      "metadata": "/97/0c3d910172/0/metadata.json",
+      "transcript": "/97/0c3d910172/0/full.jsonl",
+      "content_hash": "/97/0c3d910172/0/content_hash.txt",
+      "prompt": "/97/0c3d910172/0/prompt.txt"
+    }
+  ],
+  "token_usage": {
+    "input_tokens": 5001,
+    "cache_creation_tokens": 1749557,
+    "cache_read_tokens": 50612406,
+    "output_tokens": 198712,
+    "api_call_count": 358
+  }
+}
