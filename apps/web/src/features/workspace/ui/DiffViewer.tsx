@@ -1,4 +1,4 @@
-import { useState, useMemo, useEffect, useCallback, type CSSProperties } from "react";
+import { useState, useMemo, useEffect, useCallback, useRef, type CSSProperties } from "react";
 import { Copy, Check, Plus, X, MessageSquarePlus, ArrowRight } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
@@ -8,6 +8,7 @@ import { getSingularPatch, parseDiffFromFile } from "@pierre/diffs";
 import type { FileContents, FileDiffMetadata } from "@pierre/diffs";
 import { useDiffOptions } from "@/shared/lib/diffOptions";
 import { chatInsertActions } from "@/shared/stores/chatInsertStore";
+import { useIsMobile } from "@/shared/hooks/use-mobile";
 
 interface DiffViewerProps {
   filePath?: string;
@@ -69,6 +70,12 @@ export function DiffViewer({
   const [comments, setComments] = useState<DiffComment[]>([]);
   const [draftComment, setDraftComment] = useState<DiffCommentDraft | null>(null);
   const [showAll, setShowAll] = useState(false);
+  const isMobile = useIsMobile();
+
+  // Mobile long-press tracking
+  const longPressTimerRef = useRef<ReturnType<typeof setTimeout>>();
+  const touchStartRef = useRef<{ x: number; y: number } | null>(null);
+  const lastEnteredLineRef = useRef<{ lineNumber: number; side: CommentSide } | null>(null);
 
   const baseDiffOptions = useDiffOptions<DiffCommentMeta>();
 
@@ -85,39 +92,43 @@ export function DiffViewer({
   const diffIsEmpty = diff.trim().length === 0;
   const hasContent = !isLoading && !errorProp && !diffIsEmpty;
 
-  const displayFileDiff = useMemo(() => {
-    if (!diff.trim()) return null;
+  const { displayFileDiff, canExpand } = useMemo(() => {
+    if (!diff.trim()) return { displayFileDiff: null, canExpand: false };
     const fallbackName = filePath || "file";
     const diffPaths = extractDiffPaths(diff);
     const oldName = diffPaths.oldPath || fallbackName;
     const newName = diffPaths.newPath || fallbackName;
 
-    // Embedded mode (all-diffs view): lightweight patch-only parsing.
-    // Skips parseDiffFromFile which processes full file contents synchronously.
-    if (!embedded) {
-      const oldFile: FileContents | null =
-        oldContent != null ? { name: oldName, contents: oldContent } : null;
-      const newFile: FileContents | null =
-        newContent != null ? { name: newName, contents: newContent } : null;
-      if (oldFile && newFile) {
-        try {
-          const generated = parseDiffFromFile(oldFile, newFile);
-          return applyDisplayNames(generated, fallbackName);
-        } catch (error) {
-          console.warn("Failed to generate full diff, falling back to patch diff", error);
+    // Full-file parsing: when old + new content are available, use parseDiffFromFile
+    // so the diff component has full context for expanding collapsed unchanged lines.
+    const oldFile: FileContents | null =
+      oldContent != null ? { name: oldName, contents: oldContent } : null;
+    const newFile: FileContents | null =
+      newContent != null ? { name: newName, contents: newContent } : null;
+    if (oldFile && newFile) {
+      try {
+        const generated = parseDiffFromFile(oldFile, newFile);
+        // Only use if it has hunks. Metadata-only changes (renames, chmod)
+        // produce zero hunks — fall back to getSingularPatch for those.
+        if (generated.hunks.length > 0) {
+          return { displayFileDiff: applyDisplayNames(generated, fallbackName), canExpand: true };
         }
+      } catch (error) {
+        console.warn("Failed to generate full diff, falling back to patch diff", error);
       }
     }
 
+    // Patch-only fallback — no full file context, so expand controls are dead.
     try {
-      return applyDisplayNames(getSingularPatch(diff), fallbackName);
+      return {
+        displayFileDiff: applyDisplayNames(getSingularPatch(diff), fallbackName),
+        canExpand: false,
+      };
     } catch (error) {
       console.warn("Failed to parse patch diff", error);
-      return null;
+      return { displayFileDiff: null, canExpand: false };
     }
-  }, [diff, embedded, filePath, newContent, oldContent]);
-
-  const canExpand = Boolean(displayFileDiff);
+  }, [diff, filePath, newContent, oldContent]);
 
   useEffect(() => {
     // Reset comment state when file changes - intentional pattern for clearing related state
@@ -131,18 +142,6 @@ export function DiffViewer({
   const isLargeDiff = useMemo(
     () => displayFileDiff != null && countDiffLines(displayFileDiff) > LARGE_DIFF_LINE_THRESHOLD,
     [displayFileDiff]
-  );
-
-  const diffOptions = useMemo(
-    () => ({
-      ...baseDiffOptions,
-      overflow: "scroll" as const,
-      disableFileHeader: true,
-      enableHoverUtility: hasContent,
-      expandUnchanged: showAll && canExpand,
-      ...(isLargeDiff && { lineDiffType: "none" as const }),
-    }),
-    [baseDiffOptions, canExpand, embedded, hasContent, isLargeDiff, showAll]
   );
 
   const createCommentId = () =>
@@ -161,6 +160,110 @@ export function DiffViewer({
       });
     },
     []
+  );
+
+  // Mobile: open comment on line tap
+  const handleMobileLineClick = useCallback(
+    (props: { lineNumber: number; annotationSide: CommentSide }) => {
+      setDraftComment((current) => {
+        if (current?.lineNumber === props.lineNumber && current.side === props.annotationSide)
+          return current;
+        return { lineNumber: props.lineNumber, side: props.annotationSide, text: "" };
+      });
+    },
+    []
+  );
+
+  // Track which line the finger is over (for long-press)
+  const handleLineEnter = useCallback(
+    (props: { lineNumber: number; annotationSide: CommentSide }) => {
+      lastEnteredLineRef.current = { lineNumber: props.lineNumber, side: props.annotationSide };
+    },
+    []
+  );
+
+  const handleLineLeave = useCallback(() => {
+    lastEnteredLineRef.current = null;
+  }, []);
+
+  // Long-press touch handlers
+  const handleTouchStart = useCallback((e: React.TouchEvent) => {
+    // Cancel any existing timer before arming a new one — multi-touch
+    // (pinch-to-zoom) fires a second touchstart that would orphan the first.
+    clearTimeout(longPressTimerRef.current);
+    if (e.touches.length !== 1) {
+      touchStartRef.current = null;
+      return;
+    }
+
+    const touch = e.touches[0];
+    touchStartRef.current = { x: touch.clientX, y: touch.clientY };
+    longPressTimerRef.current = setTimeout(() => {
+      if (lastEnteredLineRef.current) {
+        const { lineNumber, side } = lastEnteredLineRef.current;
+        setDraftComment((current) => {
+          if (current?.lineNumber === lineNumber && current.side === side) return current;
+          return { lineNumber, side, text: "" };
+        });
+      }
+    }, 500);
+  }, []);
+
+  const handleTouchMove = useCallback((e: React.TouchEvent) => {
+    if (!touchStartRef.current) return;
+    const touch = e.touches[0];
+    const dx = touch.clientX - touchStartRef.current.x;
+    const dy = touch.clientY - touchStartRef.current.y;
+    // Cancel long-press if finger moves more than 10px (user is scrolling)
+    if (Math.abs(dx) > 10 || Math.abs(dy) > 10) {
+      clearTimeout(longPressTimerRef.current);
+      touchStartRef.current = null;
+      lastEnteredLineRef.current = null;
+    }
+  }, []);
+
+  const handleTouchEnd = useCallback(() => {
+    clearTimeout(longPressTimerRef.current);
+    touchStartRef.current = null;
+    lastEnteredLineRef.current = null;
+  }, []);
+
+  // touchcancel fires during scroll handoff, incoming calls, etc. — same cleanup.
+  const handleTouchCancel = handleTouchEnd;
+
+  // Clean up long-press timer on unmount
+  useEffect(() => () => clearTimeout(longPressTimerRef.current), []);
+
+  const diffOptions = useMemo(
+    () => ({
+      ...baseDiffOptions,
+      // Library-internal overflow: always "scroll" so the CSS grid computes
+      // column widths correctly. The CONTAINER div handles embedded vs standalone
+      // overflow separately via diffContainerStyle (height: auto + overflow: visible).
+      overflow: "scroll" as const,
+      disableFileHeader: true,
+      enableGutterUtility: hasContent,
+      expandUnchanged: showAll && canExpand,
+      ...(isLargeDiff && { lineDiffType: "none" as const }),
+      // Mobile: tap or long-press a line to open comment
+      ...(isMobile &&
+        hasContent && {
+          onLineClick: handleMobileLineClick,
+          onLineEnter: handleLineEnter,
+          onLineLeave: handleLineLeave,
+        }),
+    }),
+    [
+      baseDiffOptions,
+      canExpand,
+      handleLineEnter,
+      handleLineLeave,
+      handleMobileLineClick,
+      hasContent,
+      isMobile,
+      isLargeDiff,
+      showAll,
+    ]
   );
 
   const handleSaveDraft = useCallback(() => {
@@ -367,7 +470,21 @@ export function DiffViewer({
       )}
 
       {/* Diff content */}
-      <div className={embedded ? "relative" : "relative min-h-0 flex-1 overflow-hidden"}>
+      <div
+        className={embedded ? "relative" : "relative min-h-0 flex-1 overflow-hidden"}
+        {...(isMobile &&
+          hasContent && {
+            onTouchStart: handleTouchStart,
+            onTouchMove: handleTouchMove,
+            onTouchEnd: handleTouchEnd,
+            onTouchCancel: handleTouchCancel,
+            onContextMenu: (e: React.MouseEvent) => {
+              const target = e.target as HTMLElement;
+              if (target.closest("textarea, input, [contenteditable]")) return;
+              e.preventDefault();
+            },
+          })}
+      >
         {isLoading ? (
           <div className="flex h-full items-center justify-center px-6 py-10">
             <div className="w-full max-w-none animate-pulse space-y-3">
@@ -381,26 +498,33 @@ export function DiffViewer({
             </div>
           </div>
         ) : errorProp ? (
-          <div className="text-muted-foreground/60 flex h-64 items-center justify-center">
+          <div
+            className={`text-muted-foreground/60 flex items-center justify-center ${embedded ? "py-6" : "h-64"}`}
+          >
             <div className="flex max-w-sm flex-col items-center gap-2 text-center">
               <p className="text-sm">{errorProp}</p>
             </div>
           </div>
         ) : diffIsEmpty ? (
-          <div className="text-muted-foreground/60 flex h-64 items-center justify-center">
+          <div
+            className={`text-muted-foreground/60 flex items-center justify-center ${embedded ? "py-6" : "h-64"}`}
+          >
             <p className="text-sm">No changes</p>
           </div>
         ) : !displayFileDiff ? (
-          <div className="text-muted-foreground/60 flex h-64 items-center justify-center">
+          <div
+            className={`text-muted-foreground/60 flex items-center justify-center ${embedded ? "py-6" : "h-64"}`}
+          >
             <p className="text-sm">Unable to render diff</p>
           </div>
         ) : (
           <FileDiff<DiffCommentMeta>
             fileDiff={displayFileDiff}
             options={diffOptions}
+            disableWorkerPool
             lineAnnotations={lineAnnotations}
             renderAnnotation={renderAnnotation}
-            renderHoverUtility={(getHoveredLine) => (
+            renderGutterUtility={(getHoveredLine) => (
               <button
                 type="button"
                 onClick={(event) => {

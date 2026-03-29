@@ -6,11 +6,12 @@
  * Chat is the default -- "AI chat as a first-class citizen".
  */
 
-import { useState, useMemo } from "react";
+import { useState, useCallback, useMemo } from "react";
 import type { Dispatch, SetStateAction } from "react";
 import type { SessionPanelRef } from "@/features/session";
+import { REVIEW_CODE } from "@/features/session/lib/sessionPrompts";
 import { useFileChanges } from "@/features/workspace";
-import { AllFilesDiffViewer } from "@/features/workspace/ui/AllFilesDiffViewer";
+import { ChangesView } from "@/features/workspace/ui/ChangesView";
 import { WorkspaceHeader } from "@/features/workspace/ui/WorkspaceHeader";
 import type { Workspace, PRStatus, GhCliStatus } from "@/shared/types";
 import type { WorkspaceStatus } from "@shared/enums";
@@ -80,6 +81,12 @@ export function MobileLayout({
   );
   const fileChanges = useMemo(() => fileChangesData?.files ?? [], [fileChangesData]);
 
+  // Insert code review prompt into chat input and switch to chat tab
+  const handleInsertReviewPrompt = useCallback(() => {
+    workspaceChatPanelRef.current?.insertText(REVIEW_CODE);
+    setActiveTab("chat");
+  }, [workspaceChatPanelRef]);
+
   // Shared PR bar props -- avoids repeating the same prop bag twice.
   const prBarProps = {
     prStatus,
@@ -96,7 +103,7 @@ export function MobileLayout({
   return (
     <div className="flex h-dvh min-w-0 flex-col overflow-hidden">
       {/* Header row -- workspace title on left, compact Create PR pill on right */}
-      <div className="flex flex-shrink-0 items-center justify-between pr-2">
+      <div className="flex min-w-0 flex-shrink-0 items-center justify-between pr-2">
         <WorkspaceHeader
           title={workspace.title ?? undefined}
           repositoryName={workspace.repo_name}
@@ -139,23 +146,19 @@ export function MobileLayout({
         />
       </div>
 
-      {/* Code panel -- absolute positioning gives AllFilesDiffViewer's h-full a proper
-          height context (h-full doesn't resolve inside flex-grown parents). */}
+      {/* Code panel — reuses ChangesView in compact mode (no file tree, keeps header) */}
       <div
-        className={cn("relative min-h-0 flex-1", activeTab !== "code" && "hidden")}
+        className={cn("min-h-0 flex-1 overflow-hidden", activeTab !== "code" && "hidden")}
         id="mobile-panel-code"
         role="tabpanel"
         aria-labelledby="mobile-tab-code"
       >
-        {fileChanges.length === 0 ? (
-          <div className="flex h-full items-center justify-center">
-            <p className="text-text-muted text-sm">No file changes yet</p>
-          </div>
-        ) : (
-          <div className="absolute inset-0 overflow-x-hidden overflow-y-auto px-2 pt-2">
-            <AllFilesDiffViewer workspaceId={workspace.id} fileChanges={fileChanges} hideHeader />
-          </div>
-        )}
+        <ChangesView
+          workspace={workspace}
+          isWatched={isWatched}
+          onReview={handleInsertReviewPrompt}
+          compact
+        />
       </div>
 
       {/* Bottom tab bar */}

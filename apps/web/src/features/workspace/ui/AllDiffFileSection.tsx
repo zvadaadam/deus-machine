@@ -5,15 +5,12 @@
  * when the section approaches the viewport.
  *
  * Scroll-spy (active file tracking) is handled by the parent AllFilesDiffViewer
- * via a centralized scroll event listener — simpler and more reliable than
- * distributed observers across memoized children.
- *
- * CSS `content-visibility: auto` (via `.diff-section-contained`) lets the browser
- * skip layout/paint for offscreen sections.
+ * via a centralized scroll event listener.
  */
 
 import { useState, useRef, useEffect, useCallback, memo } from "react";
 import { ChevronDown, ChevronRight } from "lucide-react";
+import { cn } from "@/shared/lib/utils";
 import { DiffViewer } from "./DiffViewer";
 import { useFileDiff } from "../api/workspace.queries";
 import type { FileChange } from "@/shared/types";
@@ -80,25 +77,16 @@ function AllDiffFileSectionInner({
   );
 
   return (
-    <div
-      ref={refCallback}
-      data-diff-path={filePath}
-      className="diff-section-contained overflow-hidden rounded-lg md:rounded-none"
-    >
+    <div ref={refCallback} data-diff-path={filePath} className="overflow-clip">
       {/* Sticky file header — two sibling buttons to avoid nesting interactive elements */}
       <div
-        className={`flex w-full items-center gap-2 px-3 py-2.5 transition-colors duration-200 ease-[cubic-bezier(.165,.84,.44,1)] md:py-1.5 ${
+        className={`sticky top-0 z-[5] flex min-h-[44px] w-full items-center gap-2 px-3 py-1.5 transition-colors duration-200 ease-[cubic-bezier(.165,.84,.44,1)] ${
           isActive
-            ? "bg-muted/60"
+            ? "bg-muted"
             : collapsed
               ? "bg-muted/15 hover:bg-muted/30"
-              : "hover:bg-muted/50 bg-[var(--bg-elevated)]"
+              : "hover:bg-muted bg-[var(--bg-elevated)]"
         }`}
-        style={{
-          position: "sticky",
-          top: 0,
-          zIndex: 5,
-        }}
       >
         {/* Collapse toggle — covers chevron, path, and stats */}
         <button
@@ -118,9 +106,10 @@ function AllDiffFileSectionInner({
           )}
 
           <span
-            className={`min-w-0 flex-1 truncate text-sm font-medium${
-              collapsed ? "text-muted-foreground/70" : ""
-            }`}
+            className={cn(
+              "min-w-0 flex-1 truncate text-sm font-medium",
+              collapsed && "text-muted-foreground/70"
+            )}
           >
             {filePath}
           </span>
