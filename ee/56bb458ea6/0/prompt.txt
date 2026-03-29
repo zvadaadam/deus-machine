@@ -3811,3 +3811,216 @@ I run AI code review, is it actionable? Wdyt? Explore in depth each problem.
 We want a clean, maintainable codebase, with proper best practices for the tech stack we use.
 Run subagents to verify, and if it should be fixed, try to merge some stuff together so it can be fixed together within one subagent. 
 If you can test something do it.
+
+---
+
+<system-instruction>
+The user has added 5 comments to the diff for this workspace. Please review and address these comments as part of your response. When addressing comments on the "original" side or on specific commits, read the file from that version (not the current version). Below are the comments, including metadata about what git state they were left on:
+
+Comment #1:
+
+File: 
+Line: undefined
+User comment: "@coderabbit full review"
+
+Comment metadata:
+This comment was left on a file.
+This comment was left on GitHub by @zvadaadam.
+
+
+Comment #2:
+
+File: 
+Line: undefined
+User comment: "<!-- This is an auto-generated reply by CodeRabbit -->
+<details>
+<summary>✅ Actions performed</summary>
+
+Full review triggered.
+
+</details>"
+
+Comment metadata:
+This comment was left on a file.
+This comment was left on GitHub by @coderabbitai.
+
+
+Comment #3:
+
+File: packages/screen-studio/README.md
+Line: 301
+User comment: "_⚠️ Potential issue_ | _🟡 Minor_
+
+**Clarify that capture is built in for CLI/MCP flows.**
+
+This section says the package does not implement platform-specific capture, but the package now ships `src/mcp/ffmpeg-recorder.ts` and exposes `x11grab` / `avfoundation` through the CLI and MCP server. As written, readers will think capture is unavailable even though it is bundled for those flows. Reword this section so it only describes the SDK frame-source interfaces, and separately call out the built-in ffmpeg capture path.
+
+<details>
+<summary>🤖 Prompt for AI Agents</summary>
+
+```
+Verify each finding against the current code and only fix it if needed.
+
+In `@packages/screen-studio/README.md` around lines 291 - 301, The README
+currently implies the package never implements platform capture; update the
+Frame capture section to first describe only the SDK frame-source interfaces
+(e.g., the abstract interfaces/types for CDP screencast, VNC canvas, screenshot
+polling) and then add a separate subsection noting that the package does ship a
+built-in ffmpeg-based recorder used by CLI/MCP flows (referencing
+src/mcp/ffmpeg-recorder.ts) and that x11grab and avfoundation capture modes are
+exposed via the CLI/MCP server; ensure you mention that platform-specific
+capture implementations are still expected when embedding the SDK but that the
+ffmpeg recorder provides a bundled fallback for CLI/MCP consumers.
+```
+
+</details>
+
+<!-- fingerprinting:phantom:medusa:grasshopper -->
+
+<!-- This is an auto-generated comment by CodeRabbit -->"
+
+Comment metadata:
+This comment was left on the modified branch.
+This comment was left on GitHub by @coderabbitai.
+This comment is the start of thread PRRT_kwDOQEbULc53hVs2. 
+
+
+Comment #4:
+
+File: packages/screen-studio/src/camera/dead-zone.ts
+Line: 29
+User comment: "_⚠️ Potential issue_ | _🟡 Minor_
+
+**Validate `fraction` and `hysteresis` in the constructor.**
+
+Invalid public configs currently create broken state transitions instead of failing fast. For example, `hysteresis >= fraction` makes `exitThreshold` non-positive, so an axis can get stuck “outside”, and `fraction >= 1` collapses the gradient band passed to `smoothstep()`.
+
+
+
+<details>
+<summary>🛠️ Proposed fix</summary>
+
+```diff
+   constructor(config: DeadZoneConfig) {
++    if (!Number.isFinite(config.fraction) || config.fraction <= 0 || config.fraction >= 1) {
++      throw new RangeError("deadZone.fraction must be > 0 and < 1");
++    }
++    if (
++      !Number.isFinite(config.hysteresis) ||
++      config.hysteresis < 0 ||
++      config.hysteresis >= config.fraction
++    ) {
++      throw new RangeError(
++        "deadZone.hysteresis must be >= 0 and less than deadZone.fraction",
++      );
++    }
+     this.fraction = config.fraction;
+     this.hysteresis = config.hysteresis;
+   }
+```
+</details>
+
+<details>
+<summary>🤖 Prompt for AI Agents</summary>
+
+```
+Verify each finding against the current code and only fix it if needed.
+
+In `@packages/screen-studio/src/camera/dead-zone.ts` around lines 26 - 29,
+Validate and fail fast in the DeadZone constructor: check that config.fraction
+is > 0 and < 1 and that config.hysteresis is >= 0 and strictly < config.fraction
+(so exitThreshold and the smoothstep gradient remain positive); if any check
+fails, throw a clear RangeError (include values in the message). Update the
+constructor that accepts DeadZoneConfig to perform these checks before assigning
+this.fraction and this.hysteresis.
+```
+
+</details>
+
+<!-- fingerprinting:phantom:medusa:grasshopper -->
+
+<!-- This is an auto-generated comment by CodeRabbit -->"
+
+Comment metadata:
+This comment was left on the modified branch.
+This comment was left on GitHub by @coderabbitai.
+This comment is the start of thread PRRT_kwDOQEbULc53hVs3. 
+
+
+Comment #5:
+
+File: packages/screen-studio/src/mcp/server.ts
+Line: 28
+User comment: "_⚠️ Potential issue_ | _🟠 Major_
+
+**Make `background` type-specific.**
+
+`BackgroundSchema` currently allows `{ type: "gradient" }` through with no colors, and it rejects the documented solid form `{ type: "solid", colors: ["#1a1a2e"] }` because `colors` is always a 2-item tuple. That means invalid MCP payloads can pass validation while a valid solid-background request fails at the boundary.
+
+
+
+<details>
+<summary>🛠️ Proposed fix</summary>
+
+```diff
+-const BackgroundSchema = z
+-  .object({
+-    type: z.enum(["gradient", "solid"]).describe("Background type"),
+-    colors: z
+-      .tuple([z.string(), z.string()])
+-      .optional()
+-      .describe("Two hex colors for gradient (e.g. ['#0f0f23', '#1a1a3e'])"),
+-    angle: z
+-      .number()
+-      .min(0)
+-      .max(360)
+-      .optional()
+-      .describe("Gradient angle in degrees. Default: 135"),
+-  })
+-  .strict();
++const GradientBackgroundSchema = z
++  .object({
++    type: z.literal("gradient").describe("Background type"),
++    colors: z
++      .tuple([z.string(), z.string()])
++      .describe("Two hex colors for gradient (e.g. ['#0f0f23', '#1a1a3e'])"),
++    angle: z
++      .number()
++      .min(0)
++      .max(360)
++      .optional()
++      .describe("Gradient angle in degrees. Default: 135"),
++  })
++  .strict();
++
++const SolidBackgroundSchema = z
++  .object({
++    type: z.literal("solid").describe("Background type"),
++    colors: z
++      .tuple([z.string()])
++      .describe("Single hex color for solid backgrounds (e.g. ['#1a1a2e'])"),
++  })
++  .strict();
++
++const BackgroundSchema = z.discriminatedUnion("type", [
++  GradientBackgroundSchema,
++  SolidBackgroundSchema,
++]);
+```
+</details>
+
+<!-- fingerprinting:phantom:medusa:grasshopper -->
+
+<!-- This is an auto-generated comment by CodeRabbit -->"
+
+Comment metadata:
+This comment was left on the modified branch.
+This comment was left on GitHub by @coderabbitai.
+This comment is the start of thread PRRT_kwDOQEbULc53hVs4. 
+
+</system-instruction>
+
+I run AI code review, is it actionable? Wdyt? Explore in depth each problem.
+We want a clean, maintainable codebase, with proper best practices for the tech stack we use.
+Run subagents to verify, and if it should be fixed, try to merge some stuff together so it can be fixed together within one subagent. 
+If you can test something do it.
