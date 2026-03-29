@@ -1,0 +1,22 @@
+{
+  "cli_version": "0.5.0",
+  "checkpoint_id": "ea84f77d91fc",
+  "session_id": "85b30503-e8ba-4ccb-97e4-9e79f7897189",
+  "strategy": "manual-commit",
+  "created_at": "2026-03-29T11:38:29.011458Z",
+  "branch": "zvadaadam/fix-devview-files",
+  "checkpoints_count": 2,
+  "files_touched": [],
+  "agent": "Claude Code",
+  "turn_id": "86cac7bc0912",
+  "token_usage": {
+    "input_tokens": 414,
+    "cache_creation_tokens": 2261860,
+    "cache_read_tokens": 83173305,
+    "output_tokens": 164723,
+    "api_call_count": 349
+  },
+  "session_metrics": {
+    "turn_count": 31
+  }
+}
