@@ -125,3 +125,261 @@ The user has attached these files. Read them before proceeding.
 
 
 Create a PR
+
+---
+
+<system-instruction>
+The user has added 4 comments to the diff for this workspace. Please review and address these comments as part of your response. When addressing comments on the "original" side or on specific commits, read the file from that version (not the current version). Below are the comments, including metadata about what git state they were left on:
+
+Comment #1:
+
+File: 
+Line: undefined
+User comment: "<!-- This is an auto-generated comment: summarize by coderabbit.ai -->
+<!-- walkthrough_start -->
+
+<details>
+<summary>📝 Walkthrough</summary>
+
+## Walkthrough
+
+Changes span backend file watcher refactoring with comprehensive test coverage, frontend mobile-responsive UI adaptations across layout and sidebar components, enhanced diff viewer with touch interaction support, and a library upgrade for the diff rendering component.
+
+## Changes
+
+|Cohort / File(s)|Summary|
+|---|---|
+|**Backend File Watching** <br> `apps/backend/src/services/fs-watcher.service.ts`, `apps/backend/test/unit/services/fs-watcher.test.ts`|Refactored watcher configuration to use relative paths via `cwd` parameter instead of absolute paths. Added comprehensive unit test suite verifying watcher setup, event handler registration, debouncing behavior (aggregating rapid file events), and proper cleanup/re-watching behavior.|
+|**Frontend Routing & Layout** <br> `apps/web/src/app/router.ts`, `apps/web/src/app/layouts/MainContent.tsx`, `apps/web/src/app/layouts/MobileLayout.tsx`, `apps/web/src/app/layouts/WorkspaceHeader.tsx`|Updated root route to conditionally redirect to local server in web-dev mode. Adjusted MainContent and WorkspaceHeader styling for mobile responsiveness with reduced border/padding. Refactored MobileLayout to use new `ChangesView` component in compact mode with review callback support.|
+|**Sidebar Components** <br> `apps/web/src/features/sidebar/ui/AppSidebar.tsx`, `apps/web/src/features/settings/ui/SettingsSidebar.tsx`, `apps/web/src/components/ui/sidebar.tsx`|Added mobile-aware callbacks to close sidebar sheet on workspace/settings selection. Updated mobile sidebar width calculation from fixed to responsive (`calc(100vw - 3.5rem)`) and added `border-0` class.|
+|**Diff Viewer & Changes** <br> `apps/web/src/features/workspace/ui/DiffViewer.tsx`, `apps/web/src/features/workspace/ui/ChangesView.tsx`, `apps/web/src/features/workspace/ui/AllFilesDiffViewer.tsx`, `apps/web/src/features/workspace/ui/AllDiffFileSection.tsx`|Added mobile touch interaction support (long-press, tap) to DiffViewer for draft comments, hunk separator expansion button, and conditional rendering. Introduced `compact` mode to ChangesView for single-column layout. Simplified AllFilesDiffViewer layout with `divide-y` separator. Refined AllDiffFileSection styling and removed CSS containment references.|
+|**File Watching & Cache** <br> `apps/web/src/features/file-browser/hooks/useFileWatcher.ts`|Added React Query cache invalidation for individual file diffs (`["workspaces", "diff-file", workspaceId]`) on WebSocket file-change events.|
+|**Styling & Dependencies** <br> `apps/web/src/global.css`, `apps/web/src/shared/lib/diffOptions.ts`, `package.json`|Removed `.diff-section-contained` CSS class and updated diffs-theme custom property mappings (v1.1.7). Simplified `DIFF_UNSAFE_CSS` to remove broad Shadow DOM overrides while retaining header/line styling. Upgraded `@pierre/diffs` from `^1.0.10` to `^1.1.7`.|
+
+## Estimated code review effort
+
+🎯 4 (Complex) | ⏱️ ~60 minutes
+
+The changes span heterogeneous areas requiring separate reasoning: complex mobile touch handling in DiffViewer with multiple event handlers and state management, refactored file watcher logic with configuration changes, mobile-responsive UI adaptations across multiple interconnected layout/sidebar components, and coordinated CSS/styling updates tied to library version changes. High density of functional logic changes combined with broad file distribution.
+
+## Poem
+
+> 🐰 *A watcher springs forth with paths made right,*  
+> *Touch interactions bring diffs to light,*  
+> *Sidebars fold when mobiles take flight,*  
+> *Compact views dance, the layout's delight!*  
+> *From service to style, the changes take bite!* ✨
+
+</details>
+
+<!-- walkthrough_end -->
+
+
+<!-- tips_start -->
+
+---
+
+<sub>Comment `@coderabbitai help` to get the list of available commands and usage tips.</sub>
+
+<!-- tips_end -->
+
+<!-- internal state start -->
+
+
+<!-- REDACTED/REDACTED/REDACTED/REDACTED/REDACTED/REDACTED/r2VGsMZA6oFoAyiAgpqEU0ZQBgY/IKmQpK5ALHaRQGwwiIHgJZEgKQmD/REDACTED/REDACTED/REDACTED/REDACTED/REDACTED/btr1voOm7V3JyUKUghmx/REDACTED/REDACTED/KS2Ob6hQUAD3bovZeOxmE61/NZTHxwQzo/DyToae4DwQ+cBsNARB3y+iw/kE89gCyxAc4d/REDACTED/k+Cfrj2G9LYLVQNolyQKM/l4TstuZl/REDACTED/vs0+AuI6/REDACTED/REDACTED/p8B/REDACTED/REDACTED/REDACTED/REDACTED/REDACTED/REDACTED/REDACTED/REDACTED/Op8/REDACTED/REDACTED/REDACTED/REDACTED/MtHyunIRJnKRFwv/REDACTED/REDACTED/REDACTED/REDACTED/REDACTED/REDACTED/REDACTED/REDACTED/REDACTED/REDACTED/REDACTED/dmK5bGvTez9UDXU/fTvYmXvY84fb+zfUBh+0WeBrR8C/REDACTED/OSw/xmw8Jip8zQy1JvrJD/REDACTED/eYpTqMpVYTYaquk0qd0/YMU1VCt7iLyzT2qUF1t/REDACTED/REDACTED/REDACTED/REDACTED/REDACTED/yRT+xfIkZUMCDTGolweRGQF/jgKwAABeUXqUDoqb8wwW/REDACTED/adq0OwB0NTCRsCykuGsrnJmGH/E4gj2/REDACTED/REDACTED/q6PB5mUvAno02JLB9HydduUDb5lUU1H/REDACTED/REDACTED/REDACTED/REDACTED/rjStG/cbRl/REDACTED/REDACTED/REDACTED/REDACTED/FdYPQHSo9SqFGQGhRkvlF/REDACTED/REDACTED/REDACTED/REDACTED/olqnoSQGIEyJKmdMbEj+nXC+R/REDACTED/REDACTED/REDACTED/EokqGBk0ca/REDACTED/bHD3U37WgCupPqsjfJd/REDACTED/eDKyGQxcg8pc8/9bjUA2kYkWtoq/REDACTED/REDACTED/REDACTED/DHd+2g/REDACTED/REDACTED/REDACTED/REDACTED/REDACTED/REDACTED/QQi/0UAlF0dB0NvzHk0HQWz3doNjr/REDACTED/REDACTED/REDACTED/REDACTED/REDACTED/REDACTED/REDACTED -->
+
+<!-- internal state end -->"
+
+Comment metadata:
+This comment was left on a file.
+This comment was left on GitHub by @coderabbitai.
+
+
+Comment #2:
+
+File: apps/backend/test/unit/services/fs-watcher.test.ts
+Line: 197
+User comment: "_⚠️ Potential issue_ | _🟠 Major_
+
+**Align the asserted `change_type` with the shared contract.**
+
+These tests bake in `"change"`/`"mixed"`, but `shared/events.ts` still says `change_type` is `"fileschanged" | "metadataonly"`, and the frontend consumer still only checks for `"metadataonly"`. Either normalize the service back to the shared enum or update the schema and consumer in the same PR.
+
+
+
+Also applies to: 200-216
+
+<details>
+<summary>🤖 Prompt for AI Agents</summary>
+
+```
+Verify each finding against the current code and only fix it if needed.
+
+In `@apps/backend/test/unit/services/fs-watcher.test.ts` around lines 187 - 197,
+The tests in fs-watcher.test.ts assert change_type values ("change"/"mixed")
+that disagree with the shared/events.ts contract which expects "fileschanged" |
+"metadataonly"; update the tests (the assertions using mockBroadcast and
+JSON.parse of the broadcast frame, e.g., the block referencing
+mockBroadcast.mock.calls[0][0] and workspacePath) to assert the canonical
+change_type values ("fileschanged" or "metadataonly") consistent with
+shared/events.ts (and mirror the same fix in the other failing test block around
+lines 200-216), or alternatively update the shared/events enum and frontend
+consumer in the same PR so all three places (service, tests, and
+shared/events.ts) remain consistent.
+```
+
+</details>
+
+<!-- fingerprinting:phantom:medusa:grasshopper -->
+
+<!-- This is an auto-generated comment by CodeRabbit -->"
+
+Comment metadata:
+This comment was left on the modified branch.
+This comment was left on GitHub by @coderabbitai.
+This comment is the start of thread PRRT_kwDOQEbULc53e1lk. 
+
+
+Comment #3:
+
+File: apps/web/src/app/layouts/MobileLayout.tsx
+Line: 87
+User comment: "_⚠️ Potential issue_ | _🟠 Major_
+
+**Show the chat tab when "Review Changes" is tapped.**
+
+This callback now writes `REVIEW_CODE` into a hidden `ChatArea` and leaves the user on the Code tab, so the action looks like a no-op on mobile.
+
+<details>
+<summary>💡 Suggested fix</summary>
+
+```diff
+   const handleInsertReviewPrompt = useCallback(() => {
+     workspaceChatPanelRef.current?.insertText(REVIEW_CODE);
++    setActiveTab("chat");
+   }, [workspaceChatPanelRef]);
+```
+</details>
+
+<!-- suggestion_start -->
+
+<details>
+<summary>📝 Committable suggestion</summary>
+
+> ‼️ **IMPORTANT**
+> Carefully review the code before committing. Ensure that it accurately replaces the highlighted code, contains no missing lines, and has no issues with indentation. Thoroughly test & benchmark the code to ensure it meets the requirements.
+
+```suggestion
+  // Insert code review prompt into chat input
+  const handleInsertReviewPrompt = useCallback(() => {
+    workspaceChatPanelRef.current?.insertText(REVIEW_CODE);
+    setActiveTab("chat");
+  }, [workspaceChatPanelRef]);
+```
+
+</details>
+
+<!-- suggestion_end -->
+
+<details>
+<summary>🤖 Prompt for AI Agents</summary>
+
+```
+Verify each finding against the current code and only fix it if needed.
+
+In `@apps/web/src/app/layouts/MobileLayout.tsx` around lines 84 - 87,
+handleInsertReviewPrompt currently inserts REVIEW_CODE into
+workspaceChatPanelRef but leaves the UI on the Code tab; after calling
+workspaceChatPanelRef.current?.insertText(REVIEW_CODE) also programmatically
+switch the mobile UI to the Chat tab (for example by calling the app's tab
+switch handler or setter—e.g. setActiveTab('chat') or
+workspaceTabsRef.current?.setActive('chat')) and/or focus the chat input
+(workspaceChatPanelRef.current?.focus()) so the user sees the Chat view
+immediately; update handleInsertReviewPrompt to perform the insertText then
+switch/focus the chat panel using the app's existing tab API and
+workspaceChatPanelRef.
+```
+
+</details>
+
+<!-- fingerprinting:phantom:medusa:grasshopper -->
+
+<!-- This is an auto-generated comment by CodeRabbit -->"
+
+Comment metadata:
+This comment was left on the modified branch.
+This comment was left on GitHub by @coderabbitai.
+This comment is the start of thread PRRT_kwDOQEbULc53e1ln. 
+
+
+Comment #4:
+
+File: apps/web/src/features/workspace/ui/DiffViewer.tsx
+Line: 526
+User comment: "_⚠️ Potential issue_ | _🟠 Major_
+
+**Scope mobile gesture suppression to the diff surface, not the whole viewer.**
+
+`onContextMenu` on this wrapper also catches the draft `Textarea`, which blocks the OS copy/paste/select menu once a comment is open. Keep the prevention off interactive children or bind it closer to the rendered diff host.
+
+<details>
+<summary>💡 One way to scope it</summary>
+
+```diff
++  const handleMobileContextMenu = useCallback((event: React.MouseEvent<HTMLDivElement>) => {
++    const interactive = event.nativeEvent.composedPath().some(
++      (node) =>
++        node instanceof HTMLElement &&
++        node.matches("textarea, input, [contenteditable='true']")
++    );
++    if (!interactive) event.preventDefault();
++  }, []);
+...
+       <div
+         className={embedded ? "relative" : "relative min-h-0 flex-1 overflow-hidden"}
+         {...(isMobile && {
+           onTouchStart: handleTouchStart,
+           onTouchMove: handleTouchMove,
+           onTouchEnd: handleTouchEnd,
+-          onContextMenu: (e: React.MouseEvent) => e.preventDefault(),
++          onContextMenu: handleMobileContextMenu,
+         })}
+       >
+```
+</details>
+
+<details>
+<summary>🤖 Prompt for AI Agents</summary>
+
+```
+Verify each finding against the current code and only fix it if needed.
+
+In `@apps/web/src/features/workspace/ui/DiffViewer.tsx` around lines 519 - 526,
+The onContextMenu prevention is currently attached to the outer wrapper div in
+DiffViewer.tsx (the div using embedded/isMobile and touch handlers), which also
+blocks the draft Textarea; move the onContextMenu handling off the outer wrapper
+and scope it to the actual diff surface or host element instead (e.g., attach it
+to the rendered diff host component or use a guard in the handler to only
+preventDefault when the event target is inside the diff surface), keeping the
+existing touch handlers (handleTouchStart, handleTouchMove, handleTouchEnd) on
+the wrapper but ensuring interactive children like the comment Textarea are not
+suppressed by the context menu prevention.
+```
+
+</details>
+
+<!-- fingerprinting:phantom:medusa:grasshopper -->
+
+<!-- This is an auto-generated comment by CodeRabbit -->"
+
+Comment metadata:
+This comment was left on the modified branch.
+This comment was left on GitHub by @coderabbitai.
+This comment is the start of thread PRRT_kwDOQEbULc53e1ls. 
+
+</system-instruction>
+
+I run AI code review, is it actionable? Wdyt? Explore in depth each problem.
+We want a clean, maintainable codebase, with proper best practices for the tech stack we use.
+Run subagents to verify, and if it should be fixed, try to merge some stuff together so it can be fixed together within one subagent. 
+If you can test something do it.
