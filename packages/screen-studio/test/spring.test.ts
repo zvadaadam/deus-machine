@@ -194,6 +194,36 @@ describe("Spring", () => {
     });
   });
 
+  describe("constructor validation", () => {
+    it("throws RangeError for omega = 0", () => {
+      expect(() => new Spring({ omega: 0, zeta: 0.7 })).toThrow(RangeError);
+    });
+
+    it("throws RangeError for negative omega", () => {
+      expect(() => new Spring({ omega: -5, zeta: 0.7 })).toThrow(RangeError);
+    });
+
+    it("throws RangeError for NaN omega", () => {
+      expect(() => new Spring({ omega: NaN, zeta: 0.7 })).toThrow(RangeError);
+    });
+
+    it("throws RangeError for Infinity omega", () => {
+      expect(() => new Spring({ omega: Infinity, zeta: 0.7 })).toThrow(RangeError);
+    });
+
+    it("throws RangeError for negative zeta", () => {
+      expect(() => new Spring({ omega: 8, zeta: -0.1 })).toThrow(RangeError);
+    });
+
+    it("throws RangeError for NaN zeta", () => {
+      expect(() => new Spring({ omega: 8, zeta: NaN })).toThrow(RangeError);
+    });
+
+    it("allows zeta = 0 (undamped)", () => {
+      expect(() => new Spring({ omega: 8, zeta: 0 })).not.toThrow();
+    });
+  });
+
   describe("SPRING_PRESETS", () => {
     it("all presets produce valid springs", () => {
       for (const [name, config] of Object.entries(SPRING_PRESETS)) {

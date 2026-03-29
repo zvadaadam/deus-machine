@@ -5,8 +5,8 @@ import { clamp } from "./smoothstep.js";
  * Catmull-Rom spline interpolation for smooth cursor paths.
  *
  * Given a sequence of points with timestamps, produces smoothly
- * interpolated positions at any time t. Uses centripetal parameterization
- * (alpha = 0.5) to avoid cusps and self-intersections.
+ * interpolated positions at any time t using a uniform Catmull-Rom basis,
+ * with optional blending toward linear interpolation via `tension`.
  *
  * @param points    Array of { x, y, t } — must be sorted by t
  * @param t         Query timestamp
@@ -44,6 +44,9 @@ export function catmullRomAt(
   const p2 = points[Math.min(points.length - 1, i + 1)];
   const p3 = points[Math.min(points.length - 1, i + 2)];
 
+  // Sanitize tension to [0, 1] range
+  const safeTension = Number.isFinite(tension) ? Math.max(0, Math.min(1, tension)) : 0.2;
+
   // Normalized parameter within segment
   const segmentT = clamp(
     (t - p1.t) / (p2.t - p1.t || 1),
@@ -52,8 +55,8 @@ export function catmullRomAt(
   );
 
   return {
-    x: catmullRom1D(p0.x, p1.x, p2.x, p3.x, segmentT, tension),
-    y: catmullRom1D(p0.y, p1.y, p2.y, p3.y, segmentT, tension),
+    x: catmullRom1D(p0.x, p1.x, p2.x, p3.x, segmentT, safeTension),
+    y: catmullRom1D(p0.y, p1.y, p2.y, p3.y, segmentT, safeTension),
   };
 }
 

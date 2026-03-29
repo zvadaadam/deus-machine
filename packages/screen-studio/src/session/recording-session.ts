@@ -95,6 +95,7 @@ export class RecordingSession {
   private compositor: Compositor;
   private recorder: TimelineRecorder;
   private adapter: McpToolAdapter;
+  private elementResolver: ElementResolver;
   private config: Required<Pick<RecordingSessionConfig, "fps" | "sourceSize" | "outputSize">>;
   private backgroundConfig: BackgroundConfig;
   private deviceFrameConfig: DeviceFrameConfig;
@@ -147,6 +148,7 @@ export class RecordingSession {
     // Adapter with resolver (or no-op fallback)
     const resolver: ElementResolver = config.elementResolver ??
       (async () => null);
+    this.elementResolver = resolver;
     this.adapter = new McpToolAdapter(resolver, sourceSize);
   }
 
@@ -196,6 +198,8 @@ export class RecordingSession {
    * Call this whenever a tool.request arrives.
    */
   async handleToolEvent(event: McpToolEvent): Promise<void> {
+    if (this.status !== "idle" && this.status !== "recording") return;
+
     const agentEvent = await this.adapter.adapt(event);
     if (!agentEvent) return;
 
@@ -207,6 +211,8 @@ export class RecordingSession {
    * Handle a raw agent event (if you already have coordinates).
    */
   handleAgentEvent(event: AgentEvent): void {
+    if (this.status !== "idle" && this.status !== "recording") return;
+
     this.eventLog.push(event);
     this.engine.pushEvent(event);
   }
@@ -312,6 +318,7 @@ export class RecordingSession {
    */
   reset(): void {
     this.engine.reset();
+    this.adapter = new McpToolAdapter(this.elementResolver, this.config.sourceSize);
     this.status = "idle";
     this.eventLog = [];
     this.lastTickTime = 0;

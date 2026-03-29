@@ -16,6 +16,12 @@ export class Spring {
   readonly zeta: number;
 
   constructor(config: SpringConfig) {
+    if (!Number.isFinite(config.omega) || config.omega <= 0) {
+      throw new RangeError("Spring omega must be a finite number > 0");
+    }
+    if (!Number.isFinite(config.zeta) || config.zeta < 0) {
+      throw new RangeError("Spring zeta must be a finite number >= 0");
+    }
     this.omega = config.omega;
     this.zeta = config.zeta;
   }

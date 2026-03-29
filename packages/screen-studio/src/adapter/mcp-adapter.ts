@@ -105,9 +105,10 @@ export class McpToolAdapter {
       } catch {
         // Resolver failed — fall back to lastKnownPosition (already set above)
       }
-    } else if (event.method === "browserNavigate") {
+    } else if (event.method === "browserNavigate" || event.method === "browserNavigateBack") {
       // Navigation: reset to viewport center
       position = { ...this.sourceCenter };
+      this.lastKnownPosition = position;
     }
 
     return {
