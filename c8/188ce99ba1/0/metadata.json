@@ -1,0 +1,33 @@
+{
+  "cli_version": "0.5.0",
+  "checkpoint_id": "c8188ce99ba1",
+  "session_id": "85b30503-e8ba-4ccb-97e4-9e79f7897189",
+  "strategy": "manual-commit",
+  "created_at": "2026-03-29T11:26:32.80526Z",
+  "branch": "zvadaadam/fix-devview-files",
+  "checkpoints_count": 2,
+  "files_touched": [
+    "apps/web/src/shared/lib/diffOptions.ts"
+  ],
+  "agent": "Claude Code",
+  "turn_id": "fa97296768d0",
+  "token_usage": {
+    "input_tokens": 392,
+    "cache_creation_tokens": 2241101,
+    "cache_read_tokens": 77176057,
+    "output_tokens": 159745,
+    "api_call_count": 331
+  },
+  "session_metrics": {
+    "turn_count": 29
+  },
+  "initial_attribution": {
+    "calculated_at": "2026-03-29T11:26:31.825973Z",
+    "agent_lines": 0,
+    "human_added": 0,
+    "human_modified": 3,
+    "human_removed": 23,
+    "total_committed": 0,
+    "agent_percentage": 0
+  }
+}
