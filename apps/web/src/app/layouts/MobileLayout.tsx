@@ -81,9 +81,10 @@ export function MobileLayout({
   );
   const fileChanges = useMemo(() => fileChangesData?.files ?? [], [fileChangesData]);
 
-  // Insert code review prompt into chat input
+  // Insert code review prompt into chat input and switch to chat tab
   const handleInsertReviewPrompt = useCallback(() => {
     workspaceChatPanelRef.current?.insertText(REVIEW_CODE);
+    setActiveTab("chat");
   }, [workspaceChatPanelRef]);
 
   // Shared PR bar props -- avoids repeating the same prop bag twice.

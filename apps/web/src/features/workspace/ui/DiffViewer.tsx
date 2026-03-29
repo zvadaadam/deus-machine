@@ -522,7 +522,12 @@ export function DiffViewer({
           onTouchStart: handleTouchStart,
           onTouchMove: handleTouchMove,
           onTouchEnd: handleTouchEnd,
-          onContextMenu: (e: React.MouseEvent) => e.preventDefault(),
+          onContextMenu: (e: React.MouseEvent) => {
+            const target = e.target as HTMLElement;
+            // Allow native context menu on form inputs (copy/paste in comment textarea)
+            if (target.closest("textarea, input, [contenteditable]")) return;
+            e.preventDefault();
+          },
         })}
       >
         {isLoading ? (
