@@ -18,7 +18,11 @@ import { is } from "@electron-toolkit/utils";
 import { spawnBackend, stopBackend, CDP_PORT } from "./backend-process";
 // Agent-server is spawned by the backend process (via AGENT_SERVER_BUNDLE_PATH env var)
 import { registerNativeHandlers } from "./native-handlers";
-import { registerBrowserViewHandlers, destroyAllBrowserViews } from "./browser-views";
+import {
+  registerBrowserViewHandlers,
+  destroyAllBrowserViews,
+  ensureDefaultBrowserView,
+} from "./browser-views";
 // PTY, file watching, and browser server are now handled by the backend
 // via WebSocket commands — no Electron IPC needed for these.
 import { setupAutoUpdater } from "./auto-updater";
@@ -231,6 +235,10 @@ app.whenReady().then(async () => {
 
   await createWindow();
   debugLog("[main] Window created");
+
+  // Create a default hidden BrowserView so agent-browser (CDP) targets it
+  // instead of navigating the main renderer (localhost:1420) away.
+  ensureDefaultBrowserView();
 
   // Dev mode: swap dock icon so it's visually distinct from the production app
   if (is.dev && process.platform === "darwin") {

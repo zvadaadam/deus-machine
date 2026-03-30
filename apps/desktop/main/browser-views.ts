@@ -124,6 +124,39 @@ const AUTH_DOMAINS = [
   ".rippling.com",
 ];
 
+/**
+ * Create a default hidden BrowserView so agent-browser (via CDP) targets it
+ * instead of the main renderer (localhost:1420).
+ *
+ * Without this, agent-browser connects to CDP, finds localhost:1420 as the
+ * only page target, and navigates it — replacing the entire app UI with the
+ * target URL. By having a pre-existing BrowserView with about:blank,
+ * agent-browser picks that as its target instead.
+ */
+export function ensureDefaultBrowserView(): void {
+  const mainWindow = getMainWindow();
+  if (!mainWindow || views.has("__default")) return;
+
+  const view = new WebContentsView({
+    webPreferences: {
+      partition: "persist:browser",
+      contextIsolation: true,
+      nodeIntegration: false,
+      sandbox: false,
+      preload: join(__dirname, "../preload/browser-preload.mjs"),
+    },
+  });
+
+  // Start hidden with zero bounds — invisible but present as a CDP target
+  view.setBounds({ x: 0, y: 0, width: 0, height: 0 });
+  view.setVisible(false);
+  mainWindow.contentView.addChildView(view);
+  views.set("__default", view);
+
+  // Load about:blank so it shows up as a page target in CDP
+  view.webContents.loadURL("about:blank");
+}
+
 export function registerBrowserViewHandlers(): void {
   // -------------------------------------------------------------------------
   // Create a new browser view
@@ -192,12 +225,10 @@ export function registerBrowserViewHandlers(): void {
         },
       });
 
-      // Add as a child of contentView. Currently renders on top of main
-      // WebContents (same as old BrowserView behavior). To render BEHIND
-      // the DOM (like Cursor/VS Code), use addChildView(view, 0) and make
-      // the browser panel area transparent — tracked as a follow-up.
-      mainWindow.contentView.addChildView(view);
+      // Set bounds BEFORE adding to hierarchy to prevent fullscreen flash.
+      // addChildView without prior setBounds renders at full window size.
       view.setBounds(bounds);
+      mainWindow.contentView.addChildView(view);
       views.set(label, view);
 
       // Register event listeners BEFORE loadURL to avoid race conditions.
@@ -526,16 +557,18 @@ export function registerBrowserViewHandlers(): void {
     const mainWindow = getMainWindow();
     const view = views.get(label);
     if (mainWindow && view) {
-      // Ensure view is in the contentView hierarchy
+      // Apply bounds BEFORE adding to hierarchy or making visible.
+      // addChildView without prior setBounds renders the view at full
+      // window size for one frame, causing a fullscreen flash.
+      const savedBounds = viewBounds.get(label);
+      if (savedBounds) {
+        view.setBounds(savedBounds);
+      }
       const children = mainWindow.contentView.children;
       if (!children.includes(view)) {
         mainWindow.contentView.addChildView(view);
       }
       view.setVisible(true);
-      const savedBounds = viewBounds.get(label);
-      if (savedBounds) {
-        view.setBounds(savedBounds);
-      }
     }
   });
 
