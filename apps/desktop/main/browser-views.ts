@@ -125,15 +125,27 @@ const AUTH_DOMAINS = [
 ];
 
 /**
- * Create a permanently hidden BrowserView so agent-browser has a CDP page
- * target to navigate. Without this, the only CDP targets are devtools://
- * and localhost:1420 (the app renderer). Agent-browser would navigate the
- * renderer, replacing the entire app UI.
+ * Default BrowserView for CDP target discovery.
  *
- * This view is NEVER visible — it exists purely as a CDP target.
- * The frontend's BrowserPanel creates its own visible views separately.
+ * Agent-browser connects to CDP (port 19222), lists page targets, and
+ * navigates one. Without a dedicated target, it would navigate the Electron
+ * renderer (localhost:1420), replacing the entire app UI.
+ *
+ * Lifecycle:
+ *   1. App starts → hidden about:blank view created (CDP target)
+ *   2. First BrowserNavigate → agent-browser navigates hidden view
+ *   3. did-navigate fires → renderer gets browser:new-tab-requested
+ *   4. Renderer creates a VISIBLE BrowserView tab
+ *   5. Hidden view destroyed — no longer needed
+ *   6. Subsequent navigates → agent-browser targets the visible tab directly
+ *
+ * If all visible tabs are closed, the hidden view is re-created.
  */
+let defaultView: WebContentsView | null = null;
+
 export function ensureDefaultBrowserView(): void {
+  if (defaultView) return; // Already exists
+
   const mainWindow = getMainWindow();
   if (!mainWindow) return;
 
@@ -145,19 +157,13 @@ export function ensureDefaultBrowserView(): void {
     },
   });
 
-  // Keep it hidden and zero-sized — purely a CDP target
   view.setBounds({ x: 0, y: 0, width: 0, height: 0 });
   view.setVisible(false);
   mainWindow.contentView.addChildView(view);
-
-  // Load about:blank so it registers as a navigable CDP page target.
-  // Must be about:blank (not data: URL) — agent-browser skips data: targets.
   view.webContents.loadURL("about:blank");
 
-  // When agent-browser navigates this view to a real URL, tell the renderer
-  // to open a visible browser tab so the user can see the page.
-  // Do NOT reset to about:blank — agent-browser is still using this view
-  // for its snapshot. The view stays at the navigated URL until next navigation.
+  // First navigation: create a visible tab, then destroy this hidden view.
+  // After that, agent-browser targets the visible tab directly.
   view.webContents.on("did-navigate", (_event, url) => {
     if (url && url !== "about:blank" && !url.startsWith("data:")) {
       const mw = getMainWindow();
@@ -167,8 +173,26 @@ export function ensureDefaultBrowserView(): void {
           disposition: "foreground-tab",
         });
       }
+
+      // Destroy the hidden view after a delay so agent-browser can finish
+      // its snapshot. Future navigates go to the visible tab directly.
+      setTimeout(() => {
+        destroyDefaultView();
+      }, 3000);
     }
   });
+
+  defaultView = view;
+}
+
+function destroyDefaultView(): void {
+  if (!defaultView) return;
+  const mainWindow = getMainWindow();
+  if (mainWindow) {
+    mainWindow.contentView.removeChildView(defaultView);
+  }
+  (defaultView.webContents as any).destroy?.();
+  defaultView = null;
 }
 
 export function registerBrowserViewHandlers(): void {
@@ -614,6 +638,12 @@ export function registerBrowserViewHandlers(): void {
     views.delete(label);
     viewBounds.delete(label);
     viewEmulation.delete(label);
+
+    // If no more visible tabs exist, re-create the hidden CDP target
+    // so agent-browser has something to navigate on the next call.
+    if (views.size === 0) {
+      ensureDefaultBrowserView();
+    }
   });
 
   ipcMain.handle("reload_browser_webview", (_e, { label }: { label: string }) => {
