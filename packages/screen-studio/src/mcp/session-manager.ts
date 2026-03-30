@@ -422,19 +422,15 @@ export class SessionManager {
   /**
    * Resolve "auto" capture method.
    *
-   * Prefers CDP because it captures ONLY the browser page content —
-   * no app chrome, no IDE, just the web page the agent is demoing.
-   * avfoundation/x11grab capture the entire screen which is wrong
-   * for browser demos.
+   * In desktop mode (CDP_PORT set), agent-browser uses CDP for browser
+   * automation. The CDP recorder would conflict with it (same port,
+   * competing connections → 500 errors). So in desktop mode, "auto"
+   * resolves to "none" (events-only) to avoid breaking browser tools.
+   *
+   * For Linux VMs (no agent-browser), use x11grab.
+   * CDP capture is only used when explicitly requested.
    */
-  private async resolveAutoCapture(): Promise<"cdp" | "x11grab" | "none"> {
-    const cdpPort = parseInt(process.env.CDP_PORT || "19222", 10);
-    try {
-      const res = await fetch(`http://127.0.0.1:${cdpPort}/json`);
-      if (res.ok) return "cdp";
-    } catch {
-      /* no CDP */
-    }
+  private async resolveAutoCapture(): Promise<"x11grab" | "none"> {
     if (platform() === "linux") {
       return "x11grab";
     }

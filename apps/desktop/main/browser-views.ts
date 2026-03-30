@@ -125,36 +125,120 @@ const AUTH_DOMAINS = [
 ];
 
 /**
- * Create a default hidden BrowserView so agent-browser (via CDP) targets it
+ * Create a default BrowserView so agent-browser (via CDP) targets it
  * instead of the main renderer (localhost:1420).
  *
  * Without this, agent-browser connects to CDP, finds localhost:1420 as the
- * only page target, and navigates it — replacing the entire app UI with the
- * target URL. By having a pre-existing BrowserView with about:blank,
- * agent-browser picks that as its target instead.
+ * only page target, and navigates it — replacing the entire app UI.
+ *
+ * The view starts hidden. When agent-browser navigates it to a real URL,
+ * it becomes visible and the renderer is notified to show the browser panel.
  */
 export function ensureDefaultBrowserView(): void {
   const mainWindow = getMainWindow();
   if (!mainWindow || views.has("__default")) return;
+
+  const label = "__default";
 
   const view = new WebContentsView({
     webPreferences: {
       partition: "persist:browser",
       contextIsolation: true,
       nodeIntegration: false,
+      nodeIntegrationInSubFrames: false,
       sandbox: false,
+      webviewTag: false,
+      navigateOnDragDrop: false,
+      enableBlinkFeatures: "StandardizedBrowserZoom",
       preload: join(__dirname, "../preload/browser-preload.mjs"),
     },
   });
 
-  // Start hidden with zero bounds — invisible but present as a CDP target
+  // Start hidden — becomes visible when agent-browser navigates to a real URL
   view.setBounds({ x: 0, y: 0, width: 0, height: 0 });
   view.setVisible(false);
   mainWindow.contentView.addChildView(view);
-  views.set("__default", view);
+  views.set(label, view);
 
-  // Load about:blank so it shows up as a page target in CDP
-  view.webContents.loadURL("about:blank");
+  // Register the same event listeners as create_browser_webview so the
+  // frontend receives page-load, url-change, title-changed events.
+  view.webContents.on("did-start-loading", () => {
+    mainWindow.webContents.send("browser:page-load", {
+      label,
+      url: view.webContents.getURL(),
+      event: "started",
+    });
+  });
+
+  view.webContents.on("did-stop-loading", () => {
+    mainWindow.webContents.send("browser:page-load", {
+      label,
+      url: view.webContents.getURL(),
+      event: "finished",
+    });
+  });
+
+  view.webContents.on("page-title-updated", (_, title) => {
+    mainWindow.webContents.send("browser:title-changed", { label, title });
+  });
+
+  // When agent-browser navigates to a real URL, show the view.
+  // This is the key handler — it makes the view visible when the agent
+  // actually uses it (not when it's just sitting at data:text/html,...).
+  view.webContents.on("did-navigate", () => {
+    const url = view.webContents.getURL();
+    mainWindow.webContents.send("browser:url-change", { label, url });
+
+    // Show the view when navigated to a real URL (not our placeholder)
+    if (url.startsWith("http://") || url.startsWith("https://")) {
+      // Compute bounds — use right ~60% of the window for the browser
+      const windowBounds = mainWindow.getContentBounds();
+      const browserX = Math.round(windowBounds.width * 0.4);
+      const bounds = {
+        x: browserX,
+        y: 0,
+        width: windowBounds.width - browserX,
+        height: windowBounds.height,
+      };
+      view.setBounds(bounds);
+      viewBounds.set(label, bounds);
+      view.setVisible(true);
+
+      // Tell the renderer to open a browser tab for this view
+      mainWindow.webContents.send("browser:new-tab-requested", {
+        url,
+        disposition: "foreground-tab",
+        openerLabel: label,
+      });
+    }
+  });
+
+  view.webContents.on("did-navigate-in-page", () => {
+    mainWindow.webContents.send("browser:url-change", {
+      label,
+      url: view.webContents.getURL(),
+    });
+  });
+
+  view.webContents.setWindowOpenHandler(({ url: linkUrl, disposition }) => {
+    try {
+      const parsed = new URL(linkUrl);
+      if (parsed.protocol === "http:" || parsed.protocol === "https:") {
+        mainWindow.webContents.send("browser:new-tab-requested", {
+          url: linkUrl,
+          disposition,
+          openerLabel: label,
+        });
+      }
+    } catch {
+      // Ignore malformed URLs
+    }
+    return { action: "deny" };
+  });
+
+  // Load a data: URL (not about:blank) so agent-browser's target filter
+  // includes it. agent-browser skips about: and chrome:// URLs.
+  view.webContents.loadURL("data:text/html,<title>deus-browser</title>");
 }
 
 export function registerBrowserViewHandlers(): void {
