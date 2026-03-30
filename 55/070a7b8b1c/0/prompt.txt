@@ -582,3 +582,7 @@ Okay, I think we need to plan it more.
 ---
 
 But I mean, I would love to use the thing from another, for another projects, you know, and it feels like it would be amazing to just like bring the taste and everything like, hey, there is the MCP server, here is due the recording and stuff, but you have to hook up onto these things, you know, so I think it should be MCP server, right? What do you think? And the CLI, it can be a CLI also, but also it can be the library thing. The CLI thing would be maybe when I think about it. Imagine like just trying to connect it to a cloud code, we would do like a post tool hooks, and once the tool call is click browser thing, we call this recording thing, you know.
+
+---
+
+yes
