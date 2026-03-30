@@ -17,7 +17,6 @@ import { spawn, type ChildProcess } from "node:child_process";
 import { existsSync } from "node:fs";
 import { stat } from "node:fs/promises";
 
-const DEFAULT_CAPTURE_INTERVAL_MS = 100; // 10fps
 const DEFAULT_CAPTURE_FPS = 10;
 
 // ---------------------------------------------------------------------------
@@ -33,16 +32,17 @@ async function getPageTarget(cdpPort: number): Promise<string | null> {
       url?: string;
     }>;
 
-    // Find the BrowserView target (the web page the agent is browsing),
-    // NOT the Electron renderer (the app UI at localhost).
+    // Find the VISIBLE browser tab with a real URL.
+    // Skip: renderer (localhost), hidden CDP target (about:blank/data:),
+    // devtools, extensions.
     const page = targets.find(
       (t) =>
         t.type === "page" &&
         t.webSocketDebuggerUrl &&
-        !t.url?.startsWith("devtools://") &&
-        !t.url?.startsWith("chrome-extension://") &&
-        !t.url?.startsWith("http://localhost:") &&
-        !t.url?.startsWith("http://127.0.0.1:")
+        t.url &&
+        t.url.startsWith("http") &&
+        !t.url.startsWith("http://localhost:") &&
+        !t.url.startsWith("http://127.0.0.1:")
     );
     return page?.webSocketDebuggerUrl ?? null;
   } catch {
@@ -161,6 +161,7 @@ export class CdpRecorder {
   private intervalHandle: ReturnType<typeof setInterval> | null = null;
   private frameCount = 0;
   private capturing = false;
+  private reconnecting = false;
   private outputPath: string;
   private lastStderr = "";
 
@@ -176,18 +177,19 @@ export class CdpRecorder {
     const quality = this.config.quality ?? 80;
     const intervalMs = Math.round(1000 / fps);
 
-    // 1. Connect to CDP
+    // 1. Connect to CDP (lazy — if no visible page yet, reconnect loop handles it)
     const wsUrl = await getPageTarget(this.config.cdpPort);
-    if (!wsUrl) {
-      throw new Error(
-        `No browser page found on CDP port ${this.config.cdpPort}. ` +
-          `Ensure a browser is open with --remote-debugging-port=${this.config.cdpPort}`
-      );
+    if (wsUrl) {
+      try {
+        const cdp = new CdpConnection();
+        await cdp.connect(wsUrl);
+        this.cdp = cdp;
+      } catch {
+        console.error("[cdp-recorder] Initial CDP connect failed, will retry in capture loop");
+      }
+    } else {
+      console.error("[cdp-recorder] No visible page yet, will connect when one appears");
     }
-
-    const cdp = new CdpConnection();
-    await cdp.connect(wsUrl);
-    this.cdp = cdp;
 
     // 2. Spawn ffmpeg with piped stdin (agent-browser's pattern)
     const ffmpegArgs = [
@@ -254,7 +256,13 @@ export class CdpRecorder {
 
     this.intervalHandle = setInterval(async () => {
       // Skip if previous capture is still in flight (like MissedTickBehavior::Skip)
-      if (captureInFlight || !this.capturing || !this.cdp?.connected) return;
+      if (captureInFlight || !this.capturing || this.reconnecting) return;
+
+      // If CDP disconnected (e.g. page navigated), try reconnecting
+      if (!this.cdp?.connected) {
+        await this.tryReconnect();
+        return;
+      }
 
       captureInFlight = true;
       try {
@@ -281,10 +289,11 @@ export class CdpRecorder {
         this.frameCount++;
       } catch (err) {
         const msg = err instanceof Error ? err.message : String(err);
-        // Target closed or not found — stop cleanly
+        // Target closed during navigation — reconnect to the new target
         if (msg.includes("Target closed") || msg.includes("not found") || msg.includes("closed")) {
-          console.error("[cdp-recorder] Browser target closed, stopping capture");
-          this.stopCapture();
+          console.error("[cdp-recorder] Target closed (navigation?), will reconnect");
+          this.cdp?.close();
+          this.cdp = null;
         }
         // Other errors (timeout etc.) — skip this frame
       }
@@ -362,6 +371,43 @@ export class CdpRecorder {
     if (this.intervalHandle) {
       clearInterval(this.intervalHandle);
       this.intervalHandle = null;
+    }
+  }
+
+  /**
+   * Re-discover and reconnect to a CDP page target after navigation.
+   *
+   * When a page navigates, the old target closes and a new one opens.
+   * We poll briefly for the new target (up to 3 attempts, 500ms apart)
+   * and reconnect so capture continues seamlessly.
+   */
+  private async tryReconnect(): Promise<void> {
+    if (this.reconnecting || !this.capturing) return;
+    this.reconnecting = true;
+
+    const maxAttempts = 3;
+    const delayMs = 500;
+
+    try {
+      for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+        const wsUrl = await getPageTarget(this.config.cdpPort);
+        if (wsUrl) {
+          const cdp = new CdpConnection();
+          await cdp.connect(wsUrl);
+          this.cdp = cdp;
+          console.error(`[cdp-recorder] Reconnected to new target (attempt ${attempt})`);
+          return;
+        }
+        // Wait before retrying — new target may not be available yet
+        if (attempt < maxAttempts) {
+          await new Promise<void>((r) => setTimeout(r, delayMs));
+        }
+      }
+      console.error("[cdp-recorder] No page target found after navigation, capture paused");
+    } catch (err) {
+      console.error(`[cdp-recorder] Reconnect failed: ${err}`);
+    } finally {
+      this.reconnecting = false;
     }
   }
 

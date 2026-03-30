@@ -5,7 +5,7 @@ import { join } from "node:path";
 import type { AgentEvent, AgentEventType } from "../types.js";
 import { CameraEngine } from "../camera/engine.js";
 import { TimelineRecorder, generateFfmpegFilter } from "../recorder/encoder.js";
-import { FfmpegRecorder, detectCaptureMethod, detectFfmpeg } from "./ffmpeg-recorder.js";
+import { FfmpegRecorder, detectFfmpeg } from "./ffmpeg-recorder.js";
 import { CdpRecorder } from "./cdp-capture.js";
 import type {
   Chapter,
@@ -105,16 +105,6 @@ export class SessionManager {
     let method = config.captureMethod;
     if (method === "auto") {
       method = await this.resolveAutoCapture();
-    }
-
-    // Block CDP capture in desktop mode — agent-browser owns the CDP connection.
-    // Using CDP for both recording and browser automation causes 500 errors.
-    if (method === "cdp" && process.env.CDP_PORT) {
-      console.error(
-        "[session-manager] CDP capture blocked in desktop mode (conflicts with browser tools). " +
-          "Use captureMethod: 'none' or 'avfoundation'."
-      );
-      method = "none";
     }
 
     if (method === "cdp") {
@@ -432,17 +422,18 @@ export class SessionManager {
   /**
    * Resolve "auto" capture method.
    *
-   * In desktop mode (CDP_PORT set), agent-browser uses CDP for browser
-   * automation. The CDP recorder would conflict with it (same port,
-   * competing connections → 500 errors). So in desktop mode, "auto"
-   * resolves to "none" (events-only) to avoid breaking browser tools.
-   *
-   * For Linux VMs (no agent-browser), use x11grab.
-   * CDP capture is only used when explicitly requested.
+   * Priority:
+   *   1. Linux → x11grab (native screen capture)
+   *   2. CDP_PORT available → cdp (Page.captureScreenshot is read-only,
+   *      coexists with agent-browser's CDP navigation)
+   *   3. Fallback → none (events-only)
    */
-  private async resolveAutoCapture(): Promise<"x11grab" | "none"> {
+  private async resolveAutoCapture(): Promise<"cdp" | "x11grab" | "none"> {
     if (platform() === "linux") {
       return "x11grab";
+    }
+    if (process.env.CDP_PORT) {
+      return "cdp";
     }
     return "none";
   }

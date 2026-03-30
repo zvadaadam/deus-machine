@@ -125,41 +125,50 @@ const AUTH_DOMAINS = [
 ];
 
 /**
- * Create a hidden BrowserView as a CDP target for agent-browser.
+ * Create a permanently hidden BrowserView so agent-browser has a CDP page
+ * target to navigate. Without this, the only CDP targets are devtools://
+ * and localhost:1420 (the app renderer). Agent-browser would navigate the
+ * renderer, replacing the entire app UI.
  *
- * Without this, agent-browser connects to CDP port 19222, finds only
- * localhost:1420 (the Electron renderer) as a page target, and navigates
- * it — replacing the entire app UI with the target URL.
- *
- * This view stays permanently hidden with zero bounds. It exists only
- * so agent-browser has a non-renderer page target to connect to via CDP.
- * Agent-browser gets page content through CDP snapshots/screenshots —
- * no visual rendering needed. The frontend's BrowserPanel handles the
- * user-facing browser UI separately.
+ * This view is NEVER visible — it exists purely as a CDP target.
+ * The frontend's BrowserPanel creates its own visible views separately.
  */
 export function ensureDefaultBrowserView(): void {
   const mainWindow = getMainWindow();
-  if (!mainWindow || views.has("__default")) return;
+  if (!mainWindow) return;
 
   const view = new WebContentsView({
     webPreferences: {
-      partition: "persist:browser",
+      sandbox: true,
       contextIsolation: true,
       nodeIntegration: false,
-      sandbox: false,
-      preload: join(__dirname, "../preload/browser-preload.mjs"),
     },
   });
 
-  // Permanently hidden — exists only as a CDP target
+  // Keep it hidden and zero-sized — purely a CDP target
   view.setBounds({ x: 0, y: 0, width: 0, height: 0 });
   view.setVisible(false);
   mainWindow.contentView.addChildView(view);
-  views.set("__default", view);
 
-  // Load a data: URL (not about:blank) so agent-browser's target filter
-  // includes it. agent-browser skips about: and chrome:// URLs.
-  view.webContents.loadURL("data:text/html,<title>deus-browser</title>");
+  // Load about:blank so it registers as a navigable CDP page target.
+  // Must be about:blank (not data: URL) — agent-browser skips data: targets.
+  view.webContents.loadURL("about:blank");
+
+  // When agent-browser navigates this view to a real URL, tell the renderer
+  // to open a visible browser tab so the user can see the page.
+  // Do NOT reset to about:blank — agent-browser is still using this view
+  // for its snapshot. The view stays at the navigated URL until next navigation.
+  view.webContents.on("did-navigate", (_event, url) => {
+    if (url && url !== "about:blank" && !url.startsWith("data:")) {
+      const mw = getMainWindow();
+      if (mw) {
+        mw.webContents.send("browser:new-tab-requested", {
+          url,
+          disposition: "foreground-tab",
+        });
+      }
+    }
+  });
 }
 
 export function registerBrowserViewHandlers(): void {
