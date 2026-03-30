@@ -18,11 +18,7 @@ import { is } from "@electron-toolkit/utils";
 import { spawnBackend, stopBackend, CDP_PORT } from "./backend-process";
 // Agent-server is spawned by the backend process (via AGENT_SERVER_BUNDLE_PATH env var)
 import { registerNativeHandlers } from "./native-handlers";
-import {
-  registerBrowserViewHandlers,
-  destroyAllBrowserViews,
-  ensureDefaultBrowserView,
-} from "./browser-views";
+import { registerBrowserViewHandlers, destroyAllBrowserViews } from "./browser-views";
 // PTY, file watching, and browser server are now handled by the backend
 // via WebSocket commands — no Electron IPC needed for these.
 import { setupAutoUpdater } from "./auto-updater";
@@ -236,10 +232,9 @@ app.whenReady().then(async () => {
   await createWindow();
   debugLog("[main] Window created");
 
-  // Create a hidden BrowserView as a CDP target for agent-browser.
-  // Without this, agent-browser has no page to navigate (only devtools://
-  // and localhost:1420 exist as CDP targets).
-  ensureDefaultBrowserView();
+  // No hidden BrowserView needed — BrowserTab eagerly creates a native
+  // BrowserView (about:blank) on mount, giving agent-browser a CDP target
+  // to discover and navigate directly.
 
   // Dev mode: swap dock icon so it's visually distinct from the production app
   if (is.dev && process.platform === "darwin") {
