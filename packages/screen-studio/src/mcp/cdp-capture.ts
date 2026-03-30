@@ -33,13 +33,16 @@ async function getPageTarget(cdpPort: number): Promise<string | null> {
       url?: string;
     }>;
 
-    // Prefer a real page, not devtools or extension
+    // Find the BrowserView target (the web page the agent is browsing),
+    // NOT the Electron renderer (the app UI at localhost).
     const page = targets.find(
       (t) =>
         t.type === "page" &&
         t.webSocketDebuggerUrl &&
         !t.url?.startsWith("devtools://") &&
-        !t.url?.startsWith("chrome-extension://")
+        !t.url?.startsWith("chrome-extension://") &&
+        !t.url?.startsWith("http://localhost:") &&
+        !t.url?.startsWith("http://127.0.0.1:")
     );
     return page?.webSocketDebuggerUrl ?? null;
   } catch {
