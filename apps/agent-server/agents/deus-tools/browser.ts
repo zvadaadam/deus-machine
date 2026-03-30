@@ -956,9 +956,13 @@ Returns a fresh snapshot after scrolling.`,
             return textResult(`SetViewport failed: ${response.error}`);
           }
           return textResult(
-            formatSnapshotResponse("set_viewport", response.snapshot, response.url, response.title, [
-              `Viewport: ${args.width}x${args.height} @${scale}x`,
-            ])
+            formatSnapshotResponse(
+              "set_viewport",
+              response.snapshot,
+              response.url,
+              response.title,
+              [`Viewport: ${args.width}x${args.height} @${scale}x`]
+            )
           );
         }
       )
@@ -975,11 +979,7 @@ Returns a fresh snapshot after scrolling.`,
         sessionId,
         (args) => args.device,
         async (args) => {
-          const response = await execWithSnapshot(sessionId, [
-            "set",
-            "device",
-            args.device,
-          ]);
+          const response = await execWithSnapshot(sessionId, ["set", "device", args.device]);
           if (response.error) {
             return textResult(`SetDevice failed: ${response.error}`);
           }
@@ -996,14 +996,8 @@ Returns a fresh snapshot after scrolling.`,
       "BrowserSetMedia",
       "Emulate CSS media features for testing dark/light mode and accessibility preferences.",
       {
-        colorScheme: z
-          .enum(["dark", "light"])
-          .optional()
-          .describe("Emulated prefers-color-scheme"),
-        reducedMotion: z
-          .boolean()
-          .optional()
-          .describe("Emulate prefers-reduced-motion: reduce"),
+        colorScheme: z.enum(["dark", "light"]).optional().describe("Emulated prefers-color-scheme"),
+        reducedMotion: z.boolean().optional().describe("Emulate prefers-reduced-motion: reduce"),
       },
       withBrowserTool(
         "BrowserSetMedia",
@@ -1015,7 +1009,8 @@ Returns a fresh snapshot after scrolling.`,
           }
           const mediaArgs = ["set", "media"];
           if (args.colorScheme !== undefined) mediaArgs.push(args.colorScheme);
-          if (args.reducedMotion !== undefined) mediaArgs.push(args.reducedMotion ? "reduced-motion" : "no-reduced-motion");
+          if (args.reducedMotion !== undefined)
+            mediaArgs.push(args.reducedMotion ? "reduced-motion" : "no-reduced-motion");
           const result = await execAgentBrowser(sessionId, mediaArgs);
           if (!result.success) {
             return textResult(`SetMedia failed: ${result.error ?? "unknown error"}`);

@@ -616,10 +616,7 @@ export function registerBrowserViewHandlers(): void {
           // conflict (they both affect the layout viewport). Use zoom alone:
           // innerWidth = physicalWidth / zoomFactor = desiredWidth.
           // Clear any previous CDP override first.
-          await view.webContents.debugger.sendCommand(
-            "Emulation.clearDeviceMetricsOverride",
-            {}
-          );
+          await view.webContents.debugger.sendCommand("Emulation.clearDeviceMetricsOverride", {});
           view.webContents.setZoomFactor(scale);
         } else {
           // Viewport fits in panel — use CDP for proper device emulation
