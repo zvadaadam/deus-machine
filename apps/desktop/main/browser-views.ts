@@ -124,58 +124,6 @@ const AUTH_DOMAINS = [
   ".rippling.com",
 ];
 
-/**
- * Default BrowserView — permanent hidden CDP relay.
- *
- * Agent-browser connects to CDP, lists page targets, and navigates one.
- * This hidden view is always available as a CDP target so agent-browser
- * doesn't navigate the Electron renderer (localhost:1420).
- *
- * It acts as a relay:
- *   - First navigate (no visible tabs): creates a visible tab
- *   - Subsequent navigates (visible tab exists): forwards URL to existing tab
- *   - Never destroyed, never visible, never creates duplicate tabs
- */
-export function ensureDefaultBrowserView(): void {
-  const mainWindow = getMainWindow();
-  if (!mainWindow) return;
-
-  const view = new WebContentsView({
-    webPreferences: {
-      sandbox: true,
-      contextIsolation: true,
-      nodeIntegration: false,
-    },
-  });
-
-  // Proper viewport size so CDP interactions (clicks, typing, screenshots)
-  // work correctly. setVisible(false) hides it from the user but the
-  // webContents still renders at these dimensions internally.
-  view.setBounds({ x: 0, y: 0, width: 1280, height: 720 });
-  view.setVisible(false);
-  mainWindow.contentView.addChildView(view);
-  view.webContents.loadURL("about:blank");
-
-  view.webContents.on("did-navigate", (_event, url) => {
-    if (!url || url === "about:blank" || url.startsWith("data:")) return;
-
-    const mw = getMainWindow();
-    if (!mw) return;
-
-    if (views.size > 0) {
-      // Visible tab exists — navigate it directly (no new tab)
-      const existingView = [...views.values()].pop()!;
-      existingView.webContents.loadURL(url);
-    } else {
-      // No visible tabs — create one
-      mw.webContents.send("browser:new-tab-requested", {
-        url,
-        disposition: "foreground-tab",
-      });
-    }
-  });
-}
-
 export function registerBrowserViewHandlers(): void {
   // -------------------------------------------------------------------------
   // Create a new browser view
