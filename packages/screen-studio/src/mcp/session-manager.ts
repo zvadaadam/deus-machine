@@ -1,10 +1,12 @@
 import { randomBytes } from "node:crypto";
+import { platform } from "node:os";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { AgentEvent, AgentEventType } from "../types.js";
 import { CameraEngine } from "../camera/engine.js";
 import { TimelineRecorder, generateFfmpegFilter } from "../recorder/encoder.js";
 import { FfmpegRecorder, detectCaptureMethod, detectFfmpeg } from "./ffmpeg-recorder.js";
+import { CdpRecorder } from "./cdp-capture.js";
 import type {
   Chapter,
   RecordingResult,
@@ -46,29 +48,31 @@ function resolveConfig(params: RecordingStartParams): ResolvedRecordingConfig {
 }
 
 /**
- * Internal per-session state. Holds engine, recorder, and ffmpeg instances.
+ * Internal per-session state.
  */
 interface InternalSession {
   state: RecordingSessionState;
   engine: CameraEngine;
   timelineRecorder: TimelineRecorder;
+  /** avfoundation / x11grab recorder (two-pass: capture then post-process) */
   ffmpegRecorder: FfmpegRecorder;
-  /** Path to raw capture file (differs from final output). */
   rawCapturePath: string | null;
+  /** CDP pipe-to-ffmpeg recorder (produces raw MP4 directly) */
+  cdpRecorder: CdpRecorder | null;
 }
 
 /**
  * Manages multiple concurrent recording sessions.
  *
- * Each session gets its own CameraEngine + TimelineRecorder + FfmpegRecorder.
- * Sessions are identified by short random IDs (e.g. "rec_a1b2c3").
+ * Capture backends:
+ *   - "avfoundation": macOS native capture, 30fps, needs Screen Recording permission
+ *   - "cdp": CDP Page.captureScreenshot → pipe to ffmpeg, 10fps, no permission
+ *   - "x11grab": Linux Xvfb, 30fps
+ *   - "auto": try avfoundation first, fall back to cdp
+ *   - "none": events-only, no video capture
  *
- * Lifecycle per session:
- * 1. create() — initialize engine, optionally start ffmpeg capture
- * 2. event() — push agent events that drive camera zoom/pan
- * 3. chapter() — add chapter markers with timestamps
- * 4. stop() — stop capture, run post-processing, return MP4 path
- * 5. cleanup() — remove temp files and free resources
+ * All capture backends produce a raw MP4, which is then post-processed
+ * with camera effects (zoompan/crop filter) from the timeline.
  */
 export class SessionManager {
   private sessions = new Map<string, InternalSession>();
@@ -76,7 +80,6 @@ export class SessionManager {
 
   /**
    * Create a new recording session.
-   * Optionally starts ffmpeg screen capture if captureMethod is not "none".
    */
   async create(params: RecordingStartParams): Promise<string> {
     const id = generateSessionId();
@@ -96,29 +99,76 @@ export class SessionManager {
     };
 
     let rawCapturePath: string | null = null;
+    let cdpRecorder: CdpRecorder | null = null;
 
-    // Start ffmpeg capture if requested
-    if (config.captureMethod !== "none" && config.captureMethod !== "screenshot") {
-      // Check ffmpeg availability
+    // Resolve "auto" capture method
+    let method = config.captureMethod;
+    if (method === "auto") {
+      method = await this.resolveAutoCapture();
+    }
+
+    if (method === "cdp") {
+      // CDP pipe-to-ffmpeg — no OS permission, no temp files
+      const cdpPort = parseInt(process.env.CDP_PORT || "19222", 10);
+      rawCapturePath = join(tmpdir(), `raw-${id}.mp4`);
+
+      cdpRecorder = new CdpRecorder({
+        cdpPort,
+        outputPath: rawCapturePath,
+        fps: Math.min(config.fps, 15), // CDP caps at ~15fps practical
+        quality: 80,
+      });
+
+      try {
+        await cdpRecorder.start();
+      } catch (err) {
+        console.error(`[session-manager] CDP capture failed: ${err}`);
+        cdpRecorder = null;
+        rawCapturePath = null;
+        // Continue without capture — events still record
+      }
+    } else if (method === "avfoundation" || method === "x11grab") {
+      // Native ffmpeg capture
       if (this.ffmpegAvailable === null) {
         this.ffmpegAvailable = (await detectFfmpeg()) !== null;
       }
       if (!this.ffmpegAvailable) {
-        throw new Error("ffmpeg is not available on the system PATH. Install ffmpeg or use captureMethod: 'none'.");
+        throw new Error("ffmpeg is not available. Install ffmpeg or use captureMethod: 'none'.");
       }
 
       rawCapturePath = join(tmpdir(), `raw-${id}.mp4`);
-      const method = config.captureMethod === "x11grab" ? "x11grab"
-        : config.captureMethod === "avfoundation" ? "avfoundation"
-        : detectCaptureMethod();
+      const captureMethod = method === "avfoundation" ? "avfoundation" : "x11grab";
 
-      await ffmpegRecorder.startCapture({
-        method,
-        sourceSize: config.sourceSize,
-        fps: config.fps,
-        display: config.display,
-        outputPath: rawCapturePath,
-      });
+      try {
+        await ffmpegRecorder.startCapture({
+          method: captureMethod,
+          sourceSize: config.sourceSize,
+          fps: config.fps,
+          display: config.display,
+          outputPath: rawCapturePath,
+        });
+      } catch (err) {
+        // avfoundation failed (likely no permission) — try CDP fallback
+        if (method === "avfoundation" && config.captureMethod === "auto") {
+          console.error(`[session-manager] avfoundation failed, trying CDP fallback: ${err}`);
+          rawCapturePath = join(tmpdir(), `raw-${id}.mp4`);
+          const cdpPort = parseInt(process.env.CDP_PORT || "19222", 10);
+          cdpRecorder = new CdpRecorder({
+            cdpPort,
+            outputPath: rawCapturePath,
+            fps: Math.min(config.fps, 15),
+            quality: 80,
+          });
+          try {
+            await cdpRecorder.start();
+          } catch {
+            cdpRecorder = null;
+            rawCapturePath = null;
+          }
+        } else {
+          throw err;
+        }
+      }
     }
 
     timelineRecorder.start();
@@ -129,6 +179,7 @@ export class SessionManager {
       timelineRecorder,
       ffmpegRecorder,
       rawCapturePath,
+      cdpRecorder,
     });
 
     return id;
@@ -136,7 +187,7 @@ export class SessionManager {
 
   /**
    * Push an agent event into a recording session.
-   * The event drives the camera engine's auto-zoom/pan behavior.
+   * Drives the camera engine's auto-zoom/pan behavior.
    */
   event(
     sessionId: string,
@@ -148,7 +199,7 @@ export class SessionManager {
       text?: string;
       url?: string;
       direction?: string;
-    },
+    }
   ): number {
     const session = this.getSession(sessionId);
     if (session.state.status !== "recording") {
@@ -173,11 +224,8 @@ export class SessionManager {
 
     session.state.events.push(agentEvent);
     session.engine.pushEvent(agentEvent);
-
-    // Step the camera to process the event (small dt to update state)
     session.engine.step(1 / session.state.config.fps);
 
-    // Capture timeline frame
     const camera = session.engine.getTransform();
     const cursor = session.engine.getCursorState();
     session.timelineRecorder.captureFrame(t, camera, {
@@ -215,15 +263,16 @@ export class SessionManager {
   }
 
   /**
-   * Stop a recording session.
-   * 1. Stops ffmpeg capture (if running)
-   * 2. Generates the zoompan filter from the timeline
-   * 3. Runs ffmpeg post-processing (if raw capture exists)
-   * 4. Returns the final output path + metadata
+   * Stop a recording session and produce the final MP4.
+   *
+   * Pipeline:
+   *   1. Stop capture (CDP or avfoundation/x11grab)
+   *   2. Generate camera timeline from recorded events
+   *   3. Apply zoompan/crop filter to raw capture → final MP4
    */
   async stop(
     sessionId: string,
-    options?: { addWatermark?: boolean; watermarkText?: string },
+    options?: { addWatermark?: boolean; watermarkText?: string }
   ): Promise<RecordingResult> {
     const session = this.getSession(sessionId);
     if (session.state.status !== "recording") {
@@ -234,56 +283,71 @@ export class SessionManager {
     session.state.endTime = Date.now();
 
     try {
-      // Stop the timeline recorder
       const timelineFrames = session.timelineRecorder.stop();
+      const config = session.state.config;
+      const duration = (session.state.endTime! - session.state.startTime) / 1000;
+      let videoProduced = false;
 
-      // Stop ffmpeg capture if running — this verifies the raw file exists
+      // --- Stop CDP recorder ---
+      if (session.cdpRecorder) {
+        try {
+          const rawPath = await session.cdpRecorder.stop();
+          if (rawPath) {
+            session.rawCapturePath = rawPath;
+          }
+        } catch (err) {
+          console.error("[session-manager] CDP capture stop failed:", err);
+          session.rawCapturePath = null;
+        }
+      }
+
+      // --- Stop avfoundation/x11grab recorder ---
       if (session.ffmpegRecorder.isCapturing()) {
         try {
           await session.ffmpegRecorder.stopCapture();
-        } catch (captureErr) {
-          // Capture failed — raw file missing. Clear path so we skip post-processing.
+        } catch (err) {
+          console.error("[session-manager] ffmpeg capture stop failed:", err);
           session.rawCapturePath = null;
-          // Re-throw if no events recorded either (nothing to show for this session)
-          if (session.state.events.length === 0) {
-            throw captureErr;
-          }
-          // Otherwise continue — we can still return the event timeline
+          if (session.state.events.length === 0) throw err;
         }
       }
 
-      const config = session.state.config;
-      const duration = (session.state.endTime! - session.state.startTime) / 1000;
-
-      // If we have a raw capture and timeline frames, run post-processing
+      // --- Post-process: apply camera effects to raw capture ---
       if (session.rawCapturePath && timelineFrames.length > 0) {
-        // Generate the zoompan filter from the camera timeline
-        const filterComplex = generateFfmpegFilter(
-          timelineFrames,
-          config.sourceSize,
-          config.outputSize,
-        );
-
-        if (filterComplex) {
-          await session.ffmpegRecorder.postProcess({
-            inputPath: session.rawCapturePath,
-            outputPath: config.outputPath,
-            filterComplex,
-            outputSize: config.outputSize,
-            addWatermark: options?.addWatermark,
-            watermarkText: options?.watermarkText,
-          });
-
-          // Clean up raw capture
-          await session.ffmpegRecorder.cleanup();
+        if (this.ffmpegAvailable === null) {
+          this.ffmpegAvailable = (await detectFfmpeg()) !== null;
         }
+        if (this.ffmpegAvailable) {
+          const filterComplex = generateFfmpegFilter(
+            timelineFrames,
+            config.sourceSize,
+            config.outputSize
+          );
+
+          if (filterComplex) {
+            await session.ffmpegRecorder.postProcess({
+              inputPath: session.rawCapturePath,
+              outputPath: config.outputPath,
+              filterComplex,
+              outputSize: config.outputSize,
+              addWatermark: options?.addWatermark,
+              watermarkText: options?.watermarkText,
+            });
+            videoProduced = true;
+          }
+        }
+
+        // Clean up raw capture file
+        await session.ffmpegRecorder.cleanup();
       }
 
       session.state.status = "done";
-      session.state.outputPath = config.outputPath;
+      if (videoProduced) {
+        session.state.outputPath = config.outputPath;
+      }
 
       return {
-        outputPath: config.outputPath,
+        outputPath: videoProduced ? config.outputPath : "",
         duration,
         eventCount: session.state.events.length,
         chapterCount: session.state.chapters.length,
@@ -317,20 +381,20 @@ export class SessionManager {
   }
 
   /**
-   * Clean up a session — remove temp files and free memory.
+   * Clean up a session — remove temp files and free resources.
    */
   async cleanup(sessionId: string): Promise<void> {
     const session = this.sessions.get(sessionId);
     if (!session) return;
 
     session.ffmpegRecorder.kill();
+    session.cdpRecorder?.kill();
     await session.ffmpegRecorder.cleanup();
     this.sessions.delete(sessionId);
   }
 
   /**
    * Stop all active sessions and clean up.
-   * Call on SIGINT/SIGTERM for graceful shutdown.
    */
   async shutdownAll(): Promise<void> {
     const ids = [...this.sessions.keys()];
@@ -347,9 +411,6 @@ export class SessionManager {
     }
   }
 
-  /**
-   * Get the number of active sessions.
-   */
   get activeCount(): number {
     let count = 0;
     for (const session of this.sessions.values()) {
@@ -359,8 +420,31 @@ export class SessionManager {
   }
 
   /**
-   * Get a session or throw if not found.
+   * Resolve "auto" capture method:
+   *   macOS → try avfoundation (will fail at capture time if no permission)
+   *   Linux → x11grab
+   *   CDP available → cdp
+   *   Otherwise → none
    */
+  private async resolveAutoCapture(): Promise<"avfoundation" | "cdp" | "x11grab" | "none"> {
+    if (platform() === "darwin") {
+      // Try avfoundation first — if permission denied, create() handles fallback to CDP
+      return "avfoundation";
+    }
+    if (platform() === "linux") {
+      return "x11grab";
+    }
+    // Check if CDP is available
+    const cdpPort = parseInt(process.env.CDP_PORT || "19222", 10);
+    try {
+      const res = await fetch(`http://127.0.0.1:${cdpPort}/json`);
+      if (res.ok) return "cdp";
+    } catch {
+      /* no CDP */
+    }
+    return "none";
+  }
+
   private getSession(sessionId: string): InternalSession {
     const session = this.sessions.get(sessionId);
     if (!session) {
