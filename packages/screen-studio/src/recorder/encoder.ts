@@ -80,7 +80,7 @@ export class TimelineRecorder {
   captureFrame(
     t: number,
     camera: { x: number; y: number; zoom: number },
-    cursor: { x: number; y: number; clicking: boolean; visible: boolean },
+    cursor: { x: number; y: number; clicking: boolean; visible: boolean }
   ): void {
     if (!this.recording) return;
 
@@ -129,7 +129,7 @@ export class TimelineRecorder {
 export function generateFfmpegFilter(
   timeline: TimelineFrame[],
   sourceSize: Size,
-  outputSize: Size,
+  outputSize: Size
 ): string {
   if (timeline.length === 0) return "";
 
@@ -138,7 +138,7 @@ export function generateFfmpegFilter(
   // that interpolates between keyframes using the 'if(between(n,...))' pattern.
 
   const durationSec = (timeline[timeline.length - 1].t - timeline[0].t) / 1000;
-  const fps = durationSec > 0 ? Math.round(timeline.length / durationSec) : 30;
+  const fps = durationSec > 0 ? Math.max(1, Math.round(timeline.length / durationSec)) : 30;
 
   // Sample keyframes (every 10th frame to keep filter manageable)
   const step = Math.max(1, Math.floor(timeline.length / 100));
@@ -204,16 +204,22 @@ export function generateFfmpegFilter(
 export function generateCropScaleFilter(
   timeline: TimelineFrame[],
   sourceSize: Size,
-  outputSize: Size,
+  outputSize: Size
 ): string {
   if (timeline.length === 0) return "";
 
   const durationSec = (timeline[timeline.length - 1].t - timeline[0].t) / 1000;
-  const fps = durationSec > 0 ? Math.round(timeline.length / durationSec) : 30;
+  const fps = durationSec > 0 ? Math.max(1, Math.round(timeline.length / durationSec)) : 30;
 
   // Sample keyframes (every 10th frame to keep filter manageable)
   const step = Math.max(1, Math.floor(timeline.length / 100));
-  const keyframes: Array<{ n: number; cropW: number; cropH: number; cropX: number; cropY: number }> = [];
+  const keyframes: Array<{
+    n: number;
+    cropW: number;
+    cropH: number;
+    cropX: number;
+    cropY: number;
+  }> = [];
 
   for (let i = 0; i < timeline.length; i += step) {
     const f = timeline[i];
