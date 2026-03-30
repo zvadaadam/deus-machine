@@ -101,10 +101,20 @@ export class SessionManager {
     let rawCapturePath: string | null = null;
     let cdpRecorder: CdpRecorder | null = null;
 
-    // Resolve "auto" capture method
+    // Resolve capture method
     let method = config.captureMethod;
     if (method === "auto") {
       method = await this.resolveAutoCapture();
+    }
+
+    // Block CDP capture in desktop mode — agent-browser owns the CDP connection.
+    // Using CDP for both recording and browser automation causes 500 errors.
+    if (method === "cdp" && process.env.CDP_PORT) {
+      console.error(
+        "[session-manager] CDP capture blocked in desktop mode (conflicts with browser tools). " +
+          "Use captureMethod: 'none' or 'avfoundation'."
+      );
+      method = "none";
     }
 
     if (method === "cdp") {
