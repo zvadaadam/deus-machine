@@ -275,3 +275,9 @@ now we wnat in this workspace we need ot fix it and amek it work here
 ---
 
 Okay, so it feels weird to need the agent browser client and now when we click I tested it and when the browser agent called It actually Didn't open the page, you know, nothing was opened. It didn't work or maybe it did but like it wasn't visualized You see the logs you run it and I think it was even before The message turned before what changes you made it was the same Now the full screen wasn't a problem that like we would get the full screen But it wasn't shown in the content view the browser
+
+---
+
+/Users/zvada/Developer/agent/box-ide/.conductor/monrovia-v1/.context/attachments/pasted_text_2026-03-30_22-40-19.txt So it worked once when I opened a new tab, but then when there was already a running tab, so it worked, but replaced the tab. Now then it failed with this error. I'm not sure why, it still doesn't feel like it's working. And I need you to think about if we are not doing something like very anti-pattern explorer.
+
+also any inspo from cursor, they have many types of browse automation and one which is also inegrate din their product Cursor - /Applications/Cursor.app/
