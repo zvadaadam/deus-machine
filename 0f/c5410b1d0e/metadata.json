@@ -1,0 +1,28 @@
+{
+  "cli_version": "0.5.0",
+  "checkpoint_id": "0fc5410b1d0e",
+  "strategy": "manual-commit",
+  "branch": "zvadaadam/screen-studio-integration",
+  "checkpoints_count": 6,
+  "files_touched": [
+    "apps/desktop/main/browser-views.ts",
+    "apps/desktop/main/index.ts",
+    "packages/screen-studio/src/mcp/cdp-capture.ts",
+    "packages/screen-studio/src/mcp/session-manager.ts"
+  ],
+  "sessions": [
+    {
+      "metadata": "/0f/c5410b1d0e/0/metadata.json",
+      "transcript": "/0f/c5410b1d0e/0/full.jsonl",
+      "content_hash": "/0f/c5410b1d0e/0/content_hash.txt",
+      "prompt": "/0f/c5410b1d0e/0/prompt.txt"
+    }
+  ],
+  "token_usage": {
+    "input_tokens": 10324,
+    "cache_creation_tokens": 1162697,
+    "cache_read_tokens": 63844575,
+    "output_tokens": 161965,
+    "api_call_count": 449
+  }
+}
