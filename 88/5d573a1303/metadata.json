@@ -1,0 +1,23 @@
+{
+  "cli_version": "0.5.0",
+  "checkpoint_id": "885d573a1303",
+  "strategy": "manual-commit",
+  "branch": "zvadaadam/browser-default-tab",
+  "checkpoints_count": 2,
+  "files_touched": null,
+  "sessions": [
+    {
+      "metadata": "/88/5d573a1303/0/metadata.json",
+      "transcript": "/88/5d573a1303/0/full.jsonl",
+      "content_hash": "/88/5d573a1303/0/content_hash.txt",
+      "prompt": "/88/5d573a1303/0/prompt.txt"
+    }
+  ],
+  "token_usage": {
+    "input_tokens": 5788,
+    "cache_creation_tokens": 557100,
+    "cache_read_tokens": 32490720,
+    "output_tokens": 103513,
+    "api_call_count": 210
+  }
+}
