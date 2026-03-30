@@ -281,3 +281,7 @@ Okay, so it feels weird to need the agent browser client and now when we click I
 /Users/zvada/Developer/agent/box-ide/.conductor/monrovia-v1/.context/attachments/pasted_text_2026-03-30_22-40-19.txt So it worked once when I opened a new tab, but then when there was already a running tab, so it worked, but replaced the tab. Now then it failed with this error. I'm not sure why, it still doesn't feel like it's working. And I need you to think about if we are not doing something like very anti-pattern explorer.
 
 also any inspo from cursor, they have many types of browse automation and one which is also inegrate din their product Cursor - /Applications/Cursor.app/
+
+---
+
+/Users/zvada/Developer/agent/box-ide/.conductor/monrovia-v1/.context/attachments/pasted_text_2026-03-30_22-45-32.txt Okay, so I tried it again. When we opened our product, we already had one browser active, and then when it called browser navigation, it replaced the active tab, and it worked. But then we closed the tab and did the recording with that, and when the browser navigator was called, it failed. Do you see that?
