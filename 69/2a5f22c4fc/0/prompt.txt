@@ -457,3 +457,18 @@ Okay, now it feels That it works, the navigation, when it does the navigate, it 
 ---
 
 Okay, one thing also with the browser navigates I realized is that it doesn't know probably in which tab to go, right? Because like, every time it does navigate, it opens a new tab. We need to be able to like, open a new tab, or decide to replace and work with some given tab, you know, it's, This is tricky, how we should solve it.
+
+---
+
+nwo opened this first open browser anviaget wored secpdn crash:
+
+
+let's do a tets gaain opne senza,.cz
+1 message•1 tool call
+Done. Seznam.cz loaded fine.
+nwo open expo.dev
+Collapse
+Browser Navigate
+Navigation failed: [31m✗[0m CDP WebSocket connect failed: HTTP error: 500 Internal Server Error
+
+CDP crashed again after seznam.cz. That heavy page (1300+ lines) seems to break the CDP connection for subsequent navigations. The browser needs a restart to recover.
