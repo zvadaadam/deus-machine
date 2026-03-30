@@ -41,13 +41,72 @@ const DEFAULT_TIMEOUT_MS = 35_000;
  * separate Chrome process. This means:
  * - Agent and user see the same browser (shared cookies, real-time visibility)
  * - No separate Chrome daemon to manage
- * - `--cdp <port>` is prepended to all agent-browser commands
+ * - `--cdp <ws-url>` is prepended to all agent-browser commands
+ *
+ * We pass the BrowserView's full WebSocket debugger URL (not just the port)
+ * so agent-browser connects directly to the managed BrowserView page.
+ * Without this, agent-browser would discover ALL page targets (including the
+ * Electron renderer at localhost:1420) and navigate the renderer away,
+ * destroying the app UI.
  */
 const CDP_PORT = process.env.CDP_PORT;
 
-/** Build final args with optional CDP prefix */
-function buildArgs(args: string[]): string[] {
-  return CDP_PORT ? ["--cdp", CDP_PORT, ...args] : args;
+/** Cached WebSocket URL for the managed BrowserView target */
+let cachedCdpWsUrl: string | null = null;
+
+/**
+ * Find the managed BrowserView's CDP WebSocket URL.
+ * Queries the CDP /json endpoint and picks a page target that isn't
+ * the Electron renderer (localhost) or devtools.
+ */
+async function getCdpWsUrl(): Promise<string | null> {
+  if (!CDP_PORT) return null;
+  // Return cached URL if we have one
+  if (cachedCdpWsUrl) return cachedCdpWsUrl;
+
+  try {
+    const res = await fetch(`http://127.0.0.1:${CDP_PORT}/json`);
+    const targets = (await res.json()) as Array<{
+      type: string;
+      url?: string;
+      webSocketDebuggerUrl?: string;
+    }>;
+
+    // Find a page target that ISN'T the Electron renderer or devtools
+    const browserView = targets.find(
+      (t) =>
+        t.type === "page" &&
+        t.webSocketDebuggerUrl &&
+        !t.url?.startsWith("http://localhost:") &&
+        !t.url?.startsWith("http://127.0.0.1:") &&
+        !t.url?.startsWith("devtools://")
+    );
+
+    if (browserView?.webSocketDebuggerUrl) {
+      cachedCdpWsUrl = browserView.webSocketDebuggerUrl;
+      return cachedCdpWsUrl;
+    }
+  } catch {
+    // CDP not available
+  }
+  return null;
+}
+
+/** Invalidate cached CDP URL (call when BrowserView is recreated) */
+export function invalidateCdpCache(): void {
+  cachedCdpWsUrl = null;
+}
+
+/** Build final args with CDP prefix — uses BrowserView's WS URL if available */
+async function buildArgs(args: string[]): Promise<string[]> {
+  if (!CDP_PORT) return args;
+
+  // Try to get the specific BrowserView's WS URL
+  const wsUrl = await getCdpWsUrl();
+  if (wsUrl) return ["--cdp", wsUrl, ...args];
+
+  // Fallback to port (agent-browser will pick first target)
+  return ["--cdp", CDP_PORT, ...args];
 }
 
 /** Build env for agent-browser subprocess */
@@ -94,7 +153,7 @@ export async function execAgentBrowser(
   args: string[],
   timeoutMs = DEFAULT_TIMEOUT_MS
 ): Promise<AgentBrowserResult> {
-  const finalArgs = buildArgs(args);
+  const finalArgs = await buildArgs(args);
   const env = buildEnv(sessionId);
 
   return new Promise<AgentBrowserResult>((resolve, reject) => {
@@ -142,7 +201,7 @@ export async function execAgentBrowserWithStdin(
   stdinData: string,
   timeoutMs = DEFAULT_TIMEOUT_MS
 ): Promise<AgentBrowserResult> {
-  const finalArgs = buildArgs(args);
+  const finalArgs = await buildArgs(args);
   const env = buildEnv(sessionId);
 
   return new Promise<AgentBrowserResult>((resolve, reject) => {
