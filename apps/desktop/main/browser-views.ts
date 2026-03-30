@@ -160,6 +160,8 @@ export function registerBrowserViewHandlers(): void {
         mainWindow.contentView.removeChildView(existing);
         (existing.webContents as any).destroy?.();
         views.delete(label);
+        viewBounds.delete(label);
+        viewEmulation.delete(label);
       }
 
       // getBoundingClientRect() returns CSS-pixel coordinates, but

@@ -707,7 +707,7 @@ export function BrowserPanel({
           onOpenChange={(open) => {
             if (open && activeTab?.webviewLabel) {
               native.browserViews.hide(activeTab.webviewLabel).catch(() => {});
-            } else if (!open && activeTab?.webviewLabel && activeTab.currentUrl) {
+            } else if (!open && panelVisible && activeTab?.webviewLabel && activeTab.currentUrl) {
               native.browserViews.show(activeTab.webviewLabel).catch(() => {});
             }
           }}

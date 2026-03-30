@@ -30,17 +30,25 @@ function matchDevice(vp: ViewportState | null) {
   if (!vp) return null;
   return (
     DEVICES.find(
-      (d) => d.width === vp.width && d.height === vp.height && d.dpr === vp.deviceScaleFactor
+      (d) =>
+        d.width === vp.width &&
+        d.height === vp.height &&
+        d.dpr === vp.deviceScaleFactor &&
+        d.mobile === (vp.mobile ?? false)
     ) ?? null
   );
 }
 
-function deviceIcon(d: { mobile: boolean; width: number } | null) {
-  if (!d) return Monitor;
-  if (d.mobile && d.width < 500) return Smartphone;
-  if (d.mobile) return Tablet;
-  return Monitor;
+function getDeviceIconName(
+  d: { mobile: boolean; width: number } | null
+): "smartphone" | "tablet" | "monitor" {
+  if (!d) return "monitor";
+  if (d.mobile && d.width < 500) return "smartphone";
+  if (d.mobile) return "tablet";
+  return "monitor";
 }
+
+const ICON_MAP = { smartphone: Smartphone, tablet: Tablet, monitor: Monitor } as const;
 
 export function ViewportDropdown({
   viewport,
@@ -53,10 +61,11 @@ export function ViewportDropdown({
   const [customW, setCustomW] = useState("1280");
   const [customH, setCustomH] = useState("720");
 
-  const Icon = deviceIcon(
+  const iconName = getDeviceIconName(
     matchDevice(viewport) ??
       (viewport ? { mobile: viewport.mobile ?? false, width: viewport.width } : null)
   );
+  const Icon = ICON_MAP[iconName];
   const isResponsive = viewport === null;
 
   const closeMenu = () => {
@@ -100,8 +109,9 @@ export function ViewportDropdown({
           const active =
             viewport?.width === device.width &&
             viewport?.height === device.height &&
-            viewport?.deviceScaleFactor === device.dpr;
-          const DeviceIcon = deviceIcon(device);
+            viewport?.deviceScaleFactor === device.dpr &&
+            (viewport?.mobile ?? false) === device.mobile;
+          const DevIcon = ICON_MAP[getDeviceIconName(device)];
           return (
             <DropdownMenuItem
               key={device.label}
@@ -114,7 +124,7 @@ export function ViewportDropdown({
                 })
               }
             >
-              <DeviceIcon className="mr-2 h-3.5 w-3.5" />
+              <DevIcon className="mr-2 h-3.5 w-3.5" />
               {device.label}
               <span className="text-muted-foreground ml-auto text-xs">
                 {device.width}x{device.height}
@@ -127,6 +137,7 @@ export function ViewportDropdown({
         {customOpen ? (
           <div className="flex items-center gap-1.5 px-2 py-1.5">
             <Input
+              aria-label="Custom viewport width"
               className="h-6 w-16 px-1.5 text-xs"
               value={customW}
               onChange={(e) => setCustomW(e.target.value)}
@@ -135,6 +146,7 @@ export function ViewportDropdown({
             />
             <span className="text-muted-foreground text-xs">x</span>
             <Input
+              aria-label="Custom viewport height"
               className="h-6 w-16 px-1.5 text-xs"
               value={customH}
               onChange={(e) => setCustomH(e.target.value)}
