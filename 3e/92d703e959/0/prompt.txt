@@ -453,3 +453,7 @@ Want me to dig into the screen-studio server code and fix the CDP conflict?
 
 Okay, now it feels That it works, the navigation, when it does the navigate, it opens a new tab and it's shown, also the output is there, but the problem is that the recording doesn't work with the CDP method. Can you explain me why and should we then like drop this method if it doesn't work with it?
  /Users/zvada/Developer/agent/box-ide/.conductor/monrovia-v1/.context/attachments/pasted_text_2026-03-30_23-18-11.txt
+
+---
+
+Okay, one thing also with the browser navigates I realized is that it doesn't know probably in which tab to go, right? Because like, every time it does navigate, it opens a new tab. We need to be able to like, open a new tab, or decide to replace and work with some given tab, you know, it's, This is tricky, how we should solve it.
