@@ -502,3 +502,7 @@ No, we don't want the streaming feature. The streaming feature sucks. We need to
 ---
 
 Okay, again, explain it to me what is this and also explain it to me the recording, like why it's such a pain and like was this error also before we introduced the recording?
+
+---
+
+yes
