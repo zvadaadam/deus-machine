@@ -251,3 +251,7 @@ still the same issue
 ---
 
 still fullasvrenn atet the broswer avigate
+
+---
+
+/Users/zvada/Developer/agent/box-ide/.conductor/monrovia-v1/.context/attachments/pasted_text_2026-03-30_21-53-31.txt still the Still the problem when we call the browser tool, browser navigate, explore it, how actually this is happening. I think this was introduced in a couple of previous PRs this error. It's probably not related to recording because I tested other apps, other work trees or branches and they have the same error. Explore, think it's gonna be soft.
