@@ -1,0 +1,22 @@
+{
+  "cli_version": "0.5.0",
+  "checkpoint_id": "d44f77cede2a",
+  "session_id": "8c8027ed-1d5a-4c53-bf65-847fb278d4fb",
+  "strategy": "manual-commit",
+  "created_at": "2026-03-30T17:51:04.74311Z",
+  "branch": "zvadaadam/browser-default-tab",
+  "checkpoints_count": 2,
+  "files_touched": [],
+  "agent": "Claude Code",
+  "turn_id": "be2ea4f9b415",
+  "token_usage": {
+    "input_tokens": 5828,
+    "cache_creation_tokens": 648801,
+    "cache_read_tokens": 35656751,
+    "output_tokens": 112446,
+    "api_call_count": 245
+  },
+  "session_metrics": {
+    "turn_count": 17
+  }
+}
