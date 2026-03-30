@@ -148,7 +148,10 @@ export function ensureDefaultBrowserView(): void {
     },
   });
 
-  view.setBounds({ x: 0, y: 0, width: 0, height: 0 });
+  // Proper viewport size so CDP interactions (clicks, typing, screenshots)
+  // work correctly. setVisible(false) hides it from the user but the
+  // webContents still renders at these dimensions internally.
+  view.setBounds({ x: 0, y: 0, width: 1280, height: 720 });
   view.setVisible(false);
   mainWindow.contentView.addChildView(view);
   view.webContents.loadURL("about:blank");
