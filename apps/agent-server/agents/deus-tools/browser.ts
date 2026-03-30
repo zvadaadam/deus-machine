@@ -952,6 +952,9 @@ Returns a fresh snapshot after scrolling.`,
             String(args.height),
             String(scale),
           ]);
+          if (response.error) {
+            return textResult(`SetViewport failed: ${response.error}`);
+          }
           return textResult(
             formatSnapshotResponse("set_viewport", response.snapshot, response.url, response.title, [
               `Viewport: ${args.width}x${args.height} @${scale}x`,
@@ -977,6 +980,9 @@ Returns a fresh snapshot after scrolling.`,
             "device",
             args.device,
           ]);
+          if (response.error) {
+            return textResult(`SetDevice failed: ${response.error}`);
+          }
           return textResult(
             formatSnapshotResponse("set_device", response.snapshot, response.url, response.title, [
               `Device: ${args.device}`,
@@ -1004,13 +1010,16 @@ Returns a fresh snapshot after scrolling.`,
         sessionId,
         (args) => `scheme=${args.colorScheme ?? "default"}`,
         async (args) => {
-          if (!args.colorScheme && !args.reducedMotion) {
+          if (args.colorScheme === undefined && args.reducedMotion === undefined) {
             return textResult("Provide at least one of colorScheme or reducedMotion.");
           }
           const mediaArgs = ["set", "media"];
-          if (args.colorScheme) mediaArgs.push(args.colorScheme);
-          if (args.reducedMotion) mediaArgs.push("reduced-motion");
-          await execAgentBrowser(sessionId, mediaArgs);
+          if (args.colorScheme !== undefined) mediaArgs.push(args.colorScheme);
+          if (args.reducedMotion !== undefined) mediaArgs.push(args.reducedMotion ? "reduced-motion" : "no-reduced-motion");
+          const result = await execAgentBrowser(sessionId, mediaArgs);
+          if (!result.success) {
+            return textResult(`SetMedia failed: ${result.error ?? "unknown error"}`);
+          }
           return textResult(
             `Media emulation set: color-scheme=${args.colorScheme ?? "default"}, reduced-motion=${args.reducedMotion ?? false}`
           );

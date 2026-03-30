@@ -300,10 +300,11 @@ export function BrowserPanel({
           return updated;
         });
 
-        // Persist on URL or title changes (page load finish, title change, navigation)
+        // Persist on URL, title, or viewport changes (page load finish, navigation, device preset)
         if (
           updates.currentUrl !== undefined ||
           updates.title !== undefined ||
+          updates.viewport !== undefined ||
           (updates.loading === false && !updates.error)
         ) {
           persistTabs(next, activeTabId);
