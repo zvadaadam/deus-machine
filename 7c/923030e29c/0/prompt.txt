@@ -263,3 +263,7 @@ No, I want to fix it in this one. I need you to think about how to test it by yo
 ---
 
 Okay, this doesn't work again. This didn't work, but like maybe a hint there. I'm not sure if it's useful, but once the AI calls the open browser, we have no tab opened. So maybe the electron is not running or I don't know, but it doesn't work. And yeah, the browser won't help you because this is a desktop app, so you could use the computer use and open the echo backend workspace there and send a message there, but I'm not sure.
+
+---
+
+same prbelm still
