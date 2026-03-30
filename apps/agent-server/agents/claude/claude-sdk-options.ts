@@ -51,7 +51,7 @@ You have screen recording MCP tools available directly — just call them, do NO
 **When to record:** After completing a significant feature, bug fix, or PR — record a demo showing what changed and how it works. This is especially valuable for UI changes, new flows, or anything visual.
 
 **How to use:**
-1. Call recording_start — the default captureMethod "auto" records events only (no video capture) to avoid conflicting with browser tools. Video capture can be enabled later with explicit captureMethod.
+1. Call recording_start with captureMethod "auto" — on macOS it uses avfoundation for smooth 30fps video (requires Screen Recording permission in System Settings). If permission is not granted, it falls back to events-only mode.
 2. Use the browser tools to navigate and interact with the app as a user would
 3. Call recording_event for each action (click, type, scroll, navigate) with coordinates — the camera engine auto-zooms to the action
 4. Call recording_chapter to add semantic sections ("Login flow", "Dashboard view", etc.)
