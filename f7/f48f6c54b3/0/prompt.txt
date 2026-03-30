@@ -472,3 +472,7 @@ Browser Navigate
 Navigation failed: [31m✗[0m CDP WebSocket connect failed: HTTP error: 500 Internal Server Error
 
 CDP crashed again after seznam.cz. That heavy page (1300+ lines) seems to break the CDP connection for subsequent navigations. The browser needs a restart to recover.
+
+---
+
+/Users/zvada/Developer/agent/box-ide/.conductor/monrovia-v1/.context/attachments/pasted_text_2026-03-30_23-38-08.txt Okay, so I feel like the things work now. Like, I went to a page, it worked. It replaced the page, it was running, if it was running, it opened a new tab. It's not becoming full screener like before it was. But the problem is that the clicking and the interacting with the web doesn't work
