@@ -448,3 +448,8 @@ The cdp capture method is fundamentally incompatible with the browser tools �
 avfoundation capture — uses macOS screen recording instead of CDP, so no conflict
 Pipe screenshots from the browser tools — instead of the recording server taking its own CDP screenshots, have it receive frames from the existing browser CDP session
 Want me to dig into the screen-studio server code and fix the CDP conflict?
+
+---
+
+Okay, now it feels That it works, the navigation, when it does the navigate, it opens a new tab and it's shown, also the output is there, but the problem is that the recording doesn't work with the CDP method. Can you explain me why and should we then like drop this method if it doesn't work with it?
+ /Users/zvada/Developer/agent/box-ide/.conductor/monrovia-v1/.context/attachments/pasted_text_2026-03-30_23-18-11.txt
