@@ -1,0 +1,27 @@
+{
+  "cli_version": "0.5.0",
+  "checkpoint_id": "dd8c68563653",
+  "strategy": "manual-commit",
+  "branch": "zvadaadam/screen-studio-integration",
+  "checkpoints_count": 10,
+  "files_touched": [
+    "apps/agent-server/agents/claude/claude-sdk-options.ts",
+    "packages/screen-studio/src/mcp/cdp-capture.ts",
+    "packages/screen-studio/src/mcp/session-manager.ts"
+  ],
+  "sessions": [
+    {
+      "metadata": "/dd/8c68563653/0/metadata.json",
+      "transcript": "/dd/8c68563653/0/full.jsonl",
+      "content_hash": "/dd/8c68563653/0/content_hash.txt",
+      "prompt": "/dd/8c68563653/0/prompt.txt"
+    }
+  ],
+  "token_usage": {
+    "input_tokens": 10121,
+    "cache_creation_tokens": 628106,
+    "cache_read_tokens": 35846596,
+    "output_tokens": 100549,
+    "api_call_count": 279
+  }
+}

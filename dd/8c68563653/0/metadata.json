@@ -1,0 +1,35 @@
+{
+  "cli_version": "0.5.0",
+  "checkpoint_id": "dd8c68563653",
+  "session_id": "974e83b1-5d44-4282-8c2a-e2f70c81571b",
+  "strategy": "manual-commit",
+  "created_at": "2026-03-30T19:55:24.068321Z",
+  "branch": "zvadaadam/screen-studio-integration",
+  "checkpoints_count": 10,
+  "files_touched": [
+    "apps/agent-server/agents/claude/claude-sdk-options.ts",
+    "packages/screen-studio/src/mcp/cdp-capture.ts",
+    "packages/screen-studio/src/mcp/session-manager.ts"
+  ],
+  "agent": "Claude Code",
+  "turn_id": "2cc61f6dcf05",
+  "token_usage": {
+    "input_tokens": 10121,
+    "cache_creation_tokens": 628106,
+    "cache_read_tokens": 35846596,
+    "output_tokens": 100549,
+    "api_call_count": 279
+  },
+  "session_metrics": {
+    "turn_count": 37
+  },
+  "initial_attribution": {
+    "calculated_at": "2026-03-30T19:55:23.101639Z",
+    "agent_lines": 17,
+    "human_added": 0,
+    "human_modified": 0,
+    "human_removed": 0,
+    "total_committed": 17,
+    "agent_percentage": 100
+  }
+}
