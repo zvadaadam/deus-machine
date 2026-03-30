@@ -953,3 +953,407 @@ I run AI code review, is it actionable? Wdyt? Explore in depth each problem.
 We want a clean, maintainable codebase, with proper best practices for the tech stack we use.
 Run subagents to verify, and if it should be fixed, try to merge some stuff together so it can be fixed together within one subagent. 
 If you can test something do it.
+
+---
+
+<system-instruction>
+The user has added 6 comments to the diff for this workspace. Please review and address these comments as part of your response. When addressing comments on the "original" side or on specific commits, read the file from that version (not the current version). Below are the comments, including metadata about what git state they were left on:
+
+Comment #1:
+
+File: apps/desktop/main/browser-views.ts
+Line: 34
+User comment: "_⚠️ Potential issue_ | _🟡 Minor_
+
+**Clear stale emulation state when recycling a label.**
+
+The same-label cleanup path destroys the old `WebContentsView` but leaves its `viewEmulation` entry behind. If that label is recreated, any later read of the map will report a viewport that was never applied to the new view.
+
+<details>
+<summary>Suggested fix</summary>
+
+```diff
+       if (existing) {
+         mainWindow.contentView.removeChildView(existing);
+         (existing.webContents as any).destroy?.();
+         views.delete(label);
++        viewBounds.delete(label);
++        viewEmulation.delete(label);
+       }
+```
+</details>
+
+
+Also applies to: 157-163
+
+<details>
+<summary>🤖 Prompt for AI Agents</summary>
+
+```
+Verify each finding against the current code and only fix it if needed.
+
+In `@apps/desktop/main/browser-views.ts` around lines 31 - 34, When
+recycling/destroying a WebContentsView for a given label, also remove its stale
+emulation entry from the viewEmulation Map to avoid reusing obsolete viewport
+settings; specifically, in the same-label cleanup path where the old
+WebContentsView is destroyed, call viewEmulation.delete(label) (or delete by the
+view’s key) so any later creation of a new WebContentsView for that label starts
+with no leftover emulation state; apply the same deletion in the other cleanup
+branch handling WebContentsView disposal.
+```
+
+</details>
+
+<!-- fingerprinting:phantom:medusa:grasshopper -->
+
+<!-- This is an auto-generated comment by CodeRabbit -->"
+
+Comment metadata:
+This comment was left on the modified branch.
+This comment was left on GitHub by @coderabbitai.
+This comment is the start of thread PRRT_kwDOQEbULc53sWR8. 
+
+
+Comment #2:
+
+File: apps/desktop/main/browser-views.ts
+Line: 630
+User comment: "_⚠️ Potential issue_ | _🟠 Major_
+
+**Use CDP's scale parameter for oversized viewports instead of clearing device emulation.**
+
+The `Emulation.setDeviceMetricsOverride` CDP method supports a `scale` parameter that can handle fit-to-panel scaling while preserving `deviceScaleFactor`, `mobile` flag, and viewport-meta semantics. Currently, the oversized viewport branch (`scale < 1`) clears all CDP metrics and falls back to `setZoomFactor(scale)`, which is page-zoom only and loses device emulation properties that affect rendering and layout behavior. Try setting the `scale` parameter on `setDeviceMetricsOverride` instead of clearing it and using `setZoomFactor`, keeping page zoom as a tested fallback only if CDP scaling proves insufficient.
+
+Additionally, verify that `viewEmulation` entries are cleaned up when same-label views are replaced (line ~157), as the current replacement path may leave stale emulation state.
+
+<details>
+<summary>🤖 Prompt for AI Agents</summary>
+
+```
+Verify each finding against the current code and only fix it if needed.
+
+In `@apps/desktop/main/browser-views.ts` around lines 614 - 630, The
+oversized-viewport branch currently clears CDP metrics and uses
+view.webContents.setZoomFactor(scale), losing device emulation flags; instead
+call view.webContents.debugger.sendCommand("Emulation.setDeviceMetricsOverride",
+{ width, height, deviceScaleFactor, mobile, scale }) so CDP preserves
+DPR/mobile/viewport-meta semantics and only fall back to setZoomFactor(scale) if
+that CDP call fails; also ensure the viewEmulation map cleanup logic used when
+replacing views (the code that tracks per-view emulation state) removes entries
+for replaced/same-label views so stale emulation state is not retained.
+```
+
+</details>
+
+<!-- fingerprinting:phantom:medusa:grasshopper -->
+
+<!-- This is an auto-generated comment by CodeRabbit -->"
+
+Comment metadata:
+This comment was left on the modified branch.
+This comment was left on GitHub by @coderabbitai.
+This comment is the start of thread PRRT_kwDOQEbULc53sWSC. 
+
+
+Comment #3:
+
+File: apps/web/src/features/browser/ui/BrowserPanel.tsx
+Line: 713
+User comment: "_⚠️ Potential issue_ | _🟠 Major_
+
+**Don’t re-show the BrowserView after the panel has been hidden.**
+
+The close branch always calls `native.browserViews.show(...)`. If the user switches workspaces or hides the browser panel while this menu is open, the earlier hide effect has already run and this callback can resurrect a native view on top of unrelated UI. Gate the re-show on `panelVisible`.
+
+<details>
+<summary>Suggested fix</summary>
+
+```diff
+         onOpenChange={(open) => {
+           if (open && activeTab?.webviewLabel) {
+             native.browserViews.hide(activeTab.webviewLabel).catch(() => {});
+-          } else if (!open && activeTab?.webviewLabel && activeTab.currentUrl) {
++          } else if (
++            !open &&
++            panelVisible &&
++            activeTab?.webviewLabel &&
++            activeTab.currentUrl
++          ) {
+             native.browserViews.show(activeTab.webviewLabel).catch(() => {});
+           }
+         }}
+```
+</details>
+
+<!-- suggestion_start -->
+
+<details>
+<summary>📝 Committable suggestion</summary>
+
+> ‼️ **IMPORTANT**
+> Carefully review the code before committing. Ensure that it accurately replaces the highlighted code, contains no missing lines, and has no issues with indentation. Thoroughly test & benchmark the code to ensure it meets the requirements.
+
+```suggestion
+        <ViewportDropdown
+          viewport={activeTab?.viewport ?? null}
+          onChange={handleViewportChange}
+          onOpenChange={(open) => {
+            if (open && activeTab?.webviewLabel) {
+              native.browserViews.hide(activeTab.webviewLabel).catch(() => {});
+            } else if (
+              !open &&
+              panelVisible &&
+              activeTab?.webviewLabel &&
+              activeTab.currentUrl
+            ) {
+              native.browserViews.show(activeTab.webviewLabel).catch(() => {});
+            }
+          }}
+```
+
+</details>
+
+<!-- suggestion_end -->
+
+<details>
+<summary>🤖 Prompt for AI Agents</summary>
+
+```
+Verify each finding against the current code and only fix it if needed.
+
+In `@apps/web/src/features/browser/ui/BrowserPanel.tsx` around lines 704 - 713,
+The onOpenChange handler for ViewportDropdown currently always calls
+native.browserViews.show(...) when closing, which can resurrect a BrowserView
+after the panel was hidden; modify the handler (the onOpenChange inline function
+in BrowserPanel.tsx) to only call
+native.browserViews.show(activeTab.webviewLabel) when open is false AND
+panelVisible is true and activeTab?.webviewLabel and activeTab.currentUrl are
+present; keep the existing catch(() => {}) behavior and leave the hide call
+unchanged when opening.
+```
+
+</details>
+
+<!-- fingerprinting:phantom:medusa:grasshopper -->
+
+<!-- This is an auto-generated comment by CodeRabbit -->"
+
+Comment metadata:
+This comment was left on the modified branch.
+This comment was left on GitHub by @coderabbitai.
+This comment is the start of thread PRRT_kwDOQEbULc53sWSF. 
+
+
+Comment #4:
+
+File: apps/web/src/features/browser/ui/ViewportDropdown.tsx
+Line: 35
+User comment: "_⚠️ Potential issue_ | _🟡 Minor_
+
+**Treat `mobile` as part of the preset identity.**
+
+Right now a viewport only has to match width/height/DPR to light up a preset. With the new agent/browser sync path, that can mislabel states that share geometry but differ in touch/mobile mode. Include `mobile` in both `matchDevice()` and the `active` check so the dropdown only highlights an exact emulation match.
+
+<details>
+<summary>Suggested fix</summary>
+
+```diff
+ function matchDevice(vp: ViewportState | null) {
+   if (!vp) return null;
+   return (
+     DEVICES.find(
+-      (d) => d.width === vp.width && d.height === vp.height && d.dpr === vp.deviceScaleFactor
++      (d) =>
++        d.width === vp.width &&
++        d.height === vp.height &&
++        d.dpr === vp.deviceScaleFactor &&
++        d.mobile === vp.mobile
+     ) ?? null
+   );
+ }
+@@
+           const active =
+             viewport?.width === device.width &&
+             viewport?.height === device.height &&
+-            viewport?.deviceScaleFactor === device.dpr;
++            viewport?.deviceScaleFactor === device.dpr &&
++            viewport?.mobile === device.mobile;
+```
+</details>
+
+
+Also applies to: 100-103
+
+<details>
+<summary>🤖 Prompt for AI Agents</summary>
+
+```
+Verify each finding against the current code and only fix it if needed.
+
+In `@apps/web/src/features/browser/ui/ViewportDropdown.tsx` around lines 29 - 35,
+matchDevice currently only compares width/height/dpr and should also compare the
+mobile/touch flag so presets only match exact emulation; update the
+matchDevice(vp: ViewportState | null) function to include the mobile flag
+(compare DEVICES' mobile/touch property to vp.mobile or vp.isMobile as used in
+ViewportState) and also update the dropdown's active check (the code around the
+"active" determination at the block referenced by lines ~100-103) to include the
+same mobile equality check so the highlighted preset requires width, height, dpr
+and mobile to all match.
+```
+
+</details>
+
+<!-- fingerprinting:phantom:medusa:grasshopper -->
+
+<!-- This is an auto-generated comment by CodeRabbit -->"
+
+Comment metadata:
+This comment was left on the modified branch.
+This comment was left on GitHub by @coderabbitai.
+This comment is the start of thread PRRT_kwDOQEbULc53sWST. 
+
+
+Comment #5:
+
+File: apps/web/src/features/browser/ui/ViewportDropdown.tsx
+Line: 143
+User comment: "_⚠️ Potential issue_ | _🟡 Minor_
+
+**Label the custom width/height inputs.**
+
+These two number fields rely on placeholders only, so screen readers get very little context about which one is width vs. height.
+
+<details>
+<summary>Suggested fix</summary>
+
+```diff
+             <Input
++              aria-label="Custom viewport width"
+               className="h-6 w-16 px-1.5 text-xs"
+               value={customW}
+               onChange={(e) => setCustomW(e.target.value)}
+               placeholder="W"
+               type="number"
+             />
+@@
+             <Input
++              aria-label="Custom viewport height"
+               className="h-6 w-16 px-1.5 text-xs"
+               value={customH}
+               onChange={(e) => setCustomH(e.target.value)}
+               placeholder="H"
+               type="number"
+             />
+```
+</details>
+
+<!-- suggestion_start -->
+
+<details>
+<summary>📝 Committable suggestion</summary>
+
+> ‼️ **IMPORTANT**
+> Carefully review the code before committing. Ensure that it accurately replaces the highlighted code, contains no missing lines, and has no issues with indentation. Thoroughly test & benchmark the code to ensure it meets the requirements.
+
+```suggestion
+          <div className="flex items-center gap-1.5 px-2 py-1.5">
+            <Input
+              aria-label="Custom viewport width"
+              className="h-6 w-16 px-1.5 text-xs"
+              value={customW}
+              onChange={(e) => setCustomW(e.target.value)}
+              placeholder="W"
+              type="number"
+            />
+            <span className="text-muted-foreground text-xs">x</span>
+            <Input
+              aria-label="Custom viewport height"
+              className="h-6 w-16 px-1.5 text-xs"
+              value={customH}
+              onChange={(e) => setCustomH(e.target.value)}
+              placeholder="H"
+              type="number"
+            />
+```
+
+</details>
+
+<!-- suggestion_end -->
+
+<details>
+<summary>🤖 Prompt for AI Agents</summary>
+
+```
+Verify each finding against the current code and only fix it if needed.
+
+In `@apps/web/src/features/browser/ui/ViewportDropdown.tsx` around lines 128 -
+143, The custom width/height inputs in ViewportDropdown rely only on
+placeholders and lack accessible labels; update the two Input elements (the ones
+bound to customW/setCustomW and customH/setCustomH) to provide explicit
+accessible labels by adding either aria-label attributes like "Custom width" and
+"Custom height" or by associating each Input with a visible <label> element (or
+aria-labelledby) so screen readers can distinguish width vs height.
+```
+
+</details>
+
+<!-- fingerprinting:phantom:medusa:grasshopper -->
+
+<!-- This is an auto-generated comment by CodeRabbit -->"
+
+Comment metadata:
+This comment was left on the modified branch.
+This comment was left on GitHub by @coderabbitai.
+This comment is the start of thread PRRT_kwDOQEbULc53sWSY. 
+
+
+Comment #6:
+
+File: apps/web/src/features/browser/ui/BrowserTab.tsx
+Line: 517
+User comment: "_⚠️ Potential issue_ | _🟠 Major_
+
+**`innerWidth` / `innerHeight` aren't enough to sync agent-driven emulation.**
+
+This path only runs when `currentVp` is already non-null, so an agent-set device from Responsive (`tab.viewport === null`) never updates the dropdown. Even when it does run, `deviceScaleFactor` and `mobile` are copied from the old state, and a native clear cannot be represented as `null`, so the next resize/restore can replay the wrong emulation mode. You need the full native emulation payload here (`enabled`, `width`, `height`, `deviceScaleFactor`, `mobile`) instead of reconstructing state from dimensions.
+
+
+
+
+Also applies to: 552-565
+
+<details>
+<summary>🤖 Prompt for AI Agents</summary>
+
+```
+Verify each finding against the current code and only fix it if needed.
+
+In `@apps/web/src/features/browser/ui/BrowserTab.tsx` around lines 510 - 517, The
+CONSOLE_DRAIN_JS snippet returns only innerWidth/innerHeight which loses the
+full native emulation state and causes incorrect dropdown/emulation restores;
+update the injected JS (CONSOLE_DRAIN_JS and the equivalent at lines ~552-565)
+to return the complete native viewport/emulation payload instead of
+reconstructing from dimensions — include fields enabled, width, height,
+deviceScaleFactor, and mobile (sourced from the browser APIs that expose the
+current emulation/native viewport) alongside logs so currentVp and any logic
+reading tab.viewport can faithfully apply or clear the agent-set emulation
+state.
+```
+
+</details>
+
+<!-- fingerprinting:phantom:medusa:grasshopper -->
+
+<!-- This is an auto-generated comment by CodeRabbit -->"
+
+Comment metadata:
+This comment was left on the modified branch.
+This comment was left on GitHub by @coderabbitai.
+This comment is the start of thread PRRT_kwDOQEbULc53smYN. 
+
+</system-instruction>
+
+I run AI code review, is it actionable? Wdyt? Explore in depth each problem.
+We want a clean, maintainable codebase, with proper best practices for the tech stack we use.
+Run subagents to verify, and if it should be fixed, try to merge some stuff together so it can be fixed together within one subagent. 
+If you can test something do it.
