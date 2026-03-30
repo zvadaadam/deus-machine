@@ -1,0 +1,890 @@
+<system_instruction>
+You are working inside OpenDevs, a Mac app that lets the user run many coding agents in parallel.
+Your work should take place in the /Users/zvada/Developer/agent/box-ide/.conductor/rabat-v7 directory (unless otherwise directed), which has been set up for you to work in.
+Each workspace has a .context directory (gitignored) where you can save files to collaborate with other agents.
+DO NOT EVER read or write files at /Users/zvada/Developer/agent/box-ide.
+The target branch for this workspace is main. Use this for actions like creating new PRs, bisecting, etc., unless you're told otherwise.
+
+By default, the user will only see the last message that you send before stopping. Include all essential information in the last message. The intermediate messages will be collapsed and accessible by the user but not displayed by default.
+
+If the user asks you to work on several unrelated tasks, you can suggest they start new workspaces.
+Sometimes the user might send you a message they meant to send in a different workspace or a different chat. If something doesn't make sense in the context of your work, just ask. 
+If the user asks for help with OpenDevs, you can ask them to go to "Help -> Send Feedback" to get in touch with our team.
+</system_instruction>
+
+exple this:
+
+/tmp/attachments/pasted_text_2026-03-29_20-48-07.txt
+
+---
+
+explore ythen if tehy have evryign we need to maek it https://github.com/vercel-labs/agent-browser.git
+
+---
+
+okey so lan the work
+
+---
+
+reveiw the plan go more depth itrate epxlor eoptions and se it done the best most efective best code stcture not overgeingfed but avigin greta agent deveveloper epxirnnce prodyc being more suful eplxor eplan adn se if shodl go more deppt etc
+
+---
+
+do u think we need the VIEWPORT_PRESETS ? like aint taht oveegineing?
+
+---
+
+think abotu it what sshudl be best and do the plan again
+
+---
+
+<task-notification>
+<task-id>aa50b7bf4097a598b</task-id>
+<tool-use-id>toolu_013Z7rLG8tEj8HptnZy89wjS</tool-use-id>
+<output-file>/private/tmp/claude-501/-Users-zvada-Developer-agent-box-ide--conductor-rabat-v7/8c8027ed-1d5a-4c53-bf65-847fb278d4fb/tasks/aa50b7bf4097a598b.output</output-file>
+<status>completed</status>
+<summary>Agent "Add agent browser viewport tools" completed</summary>
+<result>I need file editing permissions to complete this task. Both the Edit tool and the Write tool have been denied.
+
+Here is what I'm trying to do: add 3 new browser tools (`BrowserSetViewport`, `BrowserSetDevice`, `BrowserSetMedia`) to the end of the return array in `createBrowserTools()` in the file:
+
+**`/Users/zvada/Developer/agent/box-ide/.conductor/rabat-v7/apps/agent-server/agents/deus-tools/browser.ts`**
+
+The change is at **line 925** -- after the closing `)` of the `BrowserScroll` tool and before the `];` that closes the array. The 3 new tool definitions would be inserted there as additional comma-separated array elements.
+
+Could you grant Edit or Write permissions so I can make this change?</result>
+<usage><total_tokens>51032</total_tokens><tool_uses>3</tool_uses><duration_ms>162739</duration_ms></usage>
+</task-notification>
+Full transcript available at: /private/tmp/claude-501/-Users-zvada-Developer-agent-box-ide--conductor-rabat-v7/8c8027ed-1d5a-4c53-bf65-847fb278d4fb/tasks/aa50b7bf4097a598b.output
+
+---
+
+can u try to tets it? hwo can we tets it is tehre somehtin a flow whcih i shodl tet ectacly?
+
+---
+
+/Users/zvada/Developer/agent/box-ide/.conductor/rabat-v7/.context/attachments/Screenshot 2026-03-29 at 11.45.29 PM.png /Users/zvada/Developer/agent/box-ide/.conductor/rabat-v7/.context/attachments/Screenshot 2026-03-29 at 11.45.38 PM.png Maybe I think it's missing the desktop and ultra wide screens and monitors like MacBook Pro 14, 16, you know, these kind of things, maybe. And also, and also like, see like when we open like a MacBook screen and on an image like the browser doesn't fit, like should we do something like the browser, like do aspect ratio fit in the content? What do you think, Explorer?
+
+---
+
+/Users/zvada/Developer/agent/box-ide/.conductor/rabat-v7/.context/attachments/Screenshot 2026-03-29 at 11.52.36 PM.png i but desktop and shoudl the dekstop be used to scale to fit so we se the full wdit and heigth mean wont fit in the abvabible conetx vie arwa wdyt?>>>>
+
+---
+
+but i did restared it can u explore and test by youself if works u have acccess to the claude code browser rght ao u cna tets it
+
+if u run the web version run /local s4erv and go to some workspac eu shoudl be able to tetx the berwiser why right
+
+---
+
+/Users/zvada/Developer/agent/box-ide/.conductor/rabat-v7/.context/attachments/Screenshot 2026-03-29 at 11.59.11 PM.png but i think we have soemthign inccirect right when u see itthe right side overflows
+
+---
+
+yeah taht work, nice do u need to /code-simplifier or /deslop btw
+
+also got this error deosn see to break somethign mabe it doe sidk but iddkn t fel just wana sare it:
+
+/Users/zvada/Developer/agent/box-ide/.conductor/rabat-v7/.context/attachments/pasted_text_2026-03-30_00-10-53.txt
+
+---
+
+also when i click on the monitor icon in the brose rpanle the screen hides taht's not secary right, it is hidden when i clcik on the icon and the drodown is hsow. u know do use eit?
+
+---
+
+okey but the probelm is that thr dropwdown is belwo teh web preveiw u know why>
+
+---
+
+<system_instruction>
+The user has attached these files. Read them before proceeding.
+- /Users/zvada/Developer/agent/box-ide/.conductor/rabat-v7/.context/attachments/PR instructions.md (954 B)
+</system_instruction>
+
+
+
+Create a PR
+
+---
+
+<system-instruction>
+The user has added 9 comments to the diff for this workspace. Please review and address these comments as part of your response. When addressing comments on the "original" side or on specific commits, read the file from that version (not the current version). Below are the comments, including metadata about what git state they were left on:
+
+Comment #1:
+
+File: 
+Line: undefined
+User comment: "<!-- This is an auto-generated comment: summarize by coderabbit.ai -->
+<!-- walkthrough_start -->
+
+<details>
+<summary>📝 Walkthrough</summary>
+
+## Walkthrough
+
+Added viewport device emulation support across agent server, desktop, and web platforms. Three new agent tools enable viewport/device preset selection and media emulation. Desktop IPC handlers manage CDP device metrics overrides and touch emulation. Web UI replaced mobile view toggle with a viewport dropdown selector, added viewport state to browser tabs, and integrated native emulation synchronization with bounds calculation.
+
+## Changes
+
+|Cohort / File(s)|Summary|
+|---|---|
+|**Agent Browser Tools** <br> `apps/agent-server/agents/deus-tools/browser.ts`, `apps/agent-server/test/deus-tools.test.ts`|Added three new tools (`BrowserSetViewport`, `BrowserSetDevice`, `BrowserSetMedia`) with validated input parameters; test expectation updated from 27 to 30 registered tools.|
+|**Desktop IPC Implementation** <br> `apps/desktop/main/browser-views.ts`, `apps/desktop/preload/index.ts`|Added per-view emulation state tracking and two IPC handlers (`set_browser_emulation`, `clear_browser_emulation`) to apply/clear CDP device metrics overrides, touch emulation, and zoom scaling. Enabled corresponding IPC invoke channels in preload allowlist.|
+|**Web Type Definitions** <br> `apps/web/src/features/browser/types.ts`|Added `ViewportState` interface (width, height, deviceScaleFactor); extended `PersistedBrowserTab` and `BrowserTabState` with optional `viewport` field; updated initialization and hydration logic.|
+|**Web UI Components** <br> `apps/web/src/features/browser/ui/BrowserPanel.tsx`, `apps/web/src/features/browser/ui/BrowserTab.tsx`, `apps/web/src/features/browser/ui/ViewportDropdown.tsx`|Replaced mobile view toggle with new `ViewportDropdown` component for preset/custom viewport selection. Updated tab persistence to serialize viewport. Modified tab closing to create new empty tab when last tab is closed. Enhanced BrowserTab bounds synchronization with viewport-driven emulation and console-drain viewport dimension detection.|
+|**Web Native Integration** <br> `apps/web/src/platform/native/browser-views.ts`|Added `setEmulation` and `clearEmulation` functions to invoke desktop IPC handlers with capability checks, returning typed `{ success, error }` results.|
+
+## Sequence Diagram(s)
+
+```mermaid
+sequenceDiagram
+    participant User as User
+    participant Panel as BrowserPanel
+    participant Dropdown as ViewportDropdown
+    participant Tab as BrowserTab
+    participant Native as native.browserViews
+    participant IPC as Electron IPC
+    participant Desktop as Desktop Handler
+    participant CDP as CDP Debugger
+
+    User->>Dropdown: Select viewport preset
+    Dropdown->>Panel: onChange(viewport)
+    Panel->>Tab: Update tab.viewport
+    Tab->>Tab: Compute emulation params<br/>& view bounds
+    Tab->>Native: setEmulation(label, params)
+    Native->>IPC: invoke('set_browser_emulation')
+    IPC->>Desktop: Handle emulation request
+    Desktop->>CDP: setDeviceMetricsOverride<br/>setTouchEmulationEnabled<br/>setZoomFactor
+    CDP-->>Desktop: Success
+    Desktop-->>IPC: {success: true}
+    IPC-->>Native: Result
+    Native-->>Tab: {success: true}
+    Tab->>Tab: Update BrowserView bounds<br/>& show view
+```
+
+## Estimated code review effort
+
+🎯 3 (Moderate) | ⏱️ ~20 minutes
+
+## Poem
+
+> 🐰 A viewport transforms the web,  
+> Devices dance at our behest,  
+> From mobile to desktop, each preset,  
+> Emulation flows through electron's thread,  
+> Bounds calculate, scale takes flight—  
+> *Responsive views now shining bright!* ✨
+
+</details>
+
+<!-- walkthrough_end -->
+
+
+<!-- tips_start -->
+
+---
+
+<sub>Comment `@coderabbitai help` to get the list of available commands and usage tips.</sub>
+
+<!-- tips_end -->
+
+<!-- internal state start -->
+
+
+<!-- REDACTED/REDACTED/REDACTED/REDACTED/REDACTED/fBuC/REDACTED/REDACTED/REDACTED/REDACTED/REDACTED/REDACTED/REDACTED/REDACTED/AMFkNzLmPMMDtq/REDACTED/REDACTED/BhwNT/REDACTED/REDACTED/REDACTED/REDACTED/REDACTED/fXUBF/REDACTED/REDACTED/REDACTED/REDACTED/REDACTED/REDACTED/REDACTED/REDACTED/REDACTED/REDACTED/REDACTED/ah5XGJDRfeQKa/REDACTED/REDACTED/Vl3/REDACTED/REDACTED/REDACTED/REDACTED/REDACTED/REDACTED/REDACTED/9RzteYN2Bk2g616BRzxz2+vfLe97W8/ey+uYC+gIA+OEJ2Q/m/REDACTED/REDACTED/REDACTED/F/REDACTED/REDACTED/SeoinvToAjgNoIntr2Cw/CBhXgPNrunN7ugZ2GAa/REDACTED/REDACTED/REDACTED/LwH+19HzljYFlakXZk8j/REDACTED/REDACTED/REDACTED -->
+
+<!-- internal state end -->"
+
+Comment metadata:
+This comment was left on a file.
+This comment was left on GitHub by @coderabbitai.
+
+
+Comment #2:
+
+File: apps/agent-server/agents/deus-tools/browser.ts
+Line: 959
+User comment: "_⚠️ Potential issue_ | _🟠 Major_
+
+**Propagate `execWithSnapshot()` failures before formatting a success response.**
+
+Both handlers currently call `formatSnapshotResponse(...)` even when `execWithSnapshot()` returns `{ error }`. That turns a failed emulation request into an apparently successful `set_*` action with “Page Snapshot: (not available)” instead of the real failure, which is especially misleading for invalid device names.
+
+<details>
+<summary>Suggested fix</summary>
+
+```diff
+         async (args) => {
+           const scale = args.deviceScaleFactor ?? 1;
+           const response = await execWithSnapshot(sessionId, [
+             "set",
+             "viewport",
+             String(args.width),
+             String(args.height),
+             String(scale),
+           ]);
++          if (response.error) {
++            return textResult(`SetViewport failed: ${response.error}`);
++          }
+           return textResult(
+             formatSnapshotResponse("set_viewport", response.snapshot, response.url, response.title, [
+               `Viewport: ${args.width}x${args.height} @${scale}x`,
+             ])
+           );
+@@
+         async (args) => {
+           const response = await execWithSnapshot(sessionId, [
+             "set",
+             "device",
+             args.device,
+           ]);
++          if (response.error) {
++            return textResult(`SetDevice failed: ${response.error}`);
++          }
+           return textResult(
+             formatSnapshotResponse("set_device", response.snapshot, response.url, response.title, [
+               `Device: ${args.device}`,
+             ])
+           );
+```
+</details>
+
+
+Also applies to: 975-984
+
+<details>
+<summary>🤖 Prompt for AI Agents</summary>
+
+```
+Verify each finding against the current code and only fix it if needed.
+
+In `@apps/agent-server/agents/deus-tools/browser.ts` around lines 947 - 959, The
+handler calls execWithSnapshot(...) and always returns a formatted success via
+formatSnapshotResponse even when execWithSnapshot returned an error; update the
+set_viewport handler (and the other similar handler around lines 975-984) to
+check the returned response for response.error immediately after
+execWithSnapshot(sessionId, ...) and propagate that failure (e.g., return/throw
+an error or return a textResult containing the error) instead of calling
+formatSnapshotResponse; specifically modify the code that invokes
+execWithSnapshot, formatSnapshotResponse, and textResult so that on
+response.error you return the error payload (preserving error details) and only
+call formatSnapshotResponse when response.error is absent.
+```
+
+</details>
+
+<!-- fingerprinting:phantom:medusa:grasshopper -->
+
+<!-- This is an auto-generated comment by CodeRabbit -->"
+
+Comment metadata:
+This comment was left on the modified branch.
+This comment was left on GitHub by @coderabbitai.
+This comment is the start of thread PRRT_kwDOQEbULc53jmaU. 
+
+
+Comment #3:
+
+File: apps/agent-server/agents/deus-tools/browser.ts
+Line: 1016
+User comment: "_⚠️ Potential issue_ | _🟠 Major_
+
+**`BrowserSetMedia` currently hides failures and never returns the post-action snapshot.**
+
+This path ignores the result of `execAgentBrowser(...)`, so an unsupported/failed media command still returns a success string. It also uses truthiness for validation, which treats `reducedMotion: false` as “not provided” and makes it impossible to clear a previous reduce setting through this tool. Please switch this to explicit `!== undefined` checks and the same snapshot/error flow used by the other new emulation tools.
+
+<details>
+<summary>🤖 Prompt for AI Agents</summary>
+
+```
+Verify each finding against the current code and only fix it if needed.
+
+In `@apps/agent-server/agents/deus-tools/browser.ts` around lines 1007 - 1016, The
+BrowserSetMedia branch currently treats args colorScheme/reducedMotion with
+truthiness and ignores execAgentBrowser's result; change the validation to use
+explicit checks (args.colorScheme !== undefined and args.reducedMotion !==
+undefined) so false is accepted, call execAgentBrowser(sessionId, mediaArgs) and
+capture its result/throw, and follow the same snapshot/error return flow used by
+the other emulation helpers (use the exec result to return a snapshot on success
+or propagate/log an error instead of always returning textResult success).
+Ensure you reference and update the logic around execAgentBrowser, the mediaArgs
+construction, and the final return that currently uses textResult.
+```
+
+</details>
+
+<!-- fingerprinting:phantom:medusa:grasshopper -->
+
+<!-- This is an auto-generated comment by CodeRabbit -->"
+
+Comment metadata:
+This comment was left on the modified branch.
+This comment was left on GitHub by @coderabbitai.
+This comment is the start of thread PRRT_kwDOQEbULc53jmaV. 
+
+
+Comment #4:
+
+File: apps/web/src/features/browser/ui/BrowserPanel.tsx
+Line: 393
+User comment: "_⚠️ Potential issue_ | _🟠 Major_
+
+**Viewport changes are not persisted by this new update path.**
+
+This callback only updates in-memory tab state. Since `handleUpdateTab()` still debounces persistence for URL/title/loading changes only, selecting a viewport preset can be lost on the next app reload unless some unrelated action happens to call `persistTabs()` afterward.
+
+<details>
+<summary>Suggested fix (outside this hunk, in <code>handleUpdateTab</code>)</summary>
+
+```diff
+         if (
+           updates.currentUrl !== undefined ||
+           updates.title !== undefined ||
++          updates.viewport !== undefined ||
+           (updates.loading === false && !updates.error)
+         ) {
+           persistTabs(next, activeTabId);
+         }
+```
+</details>
+
+<details>
+<summary>🤖 Prompt for AI Agents</summary>
+
+```
+Verify each finding against the current code and only fix it if needed.
+
+In `@apps/web/src/features/browser/ui/BrowserPanel.tsx` around lines 389 - 393,
+The viewport changes are only written to in-memory tab state via
+handleViewportChange calling handleUpdateTab(activeTab.id, { viewport }) but
+handleUpdateTab currently debounces persistence for URL/title/loading changes
+only, so viewport edits can be lost; update handleUpdateTab (and its debounce
+logic) to treat a viewport field as a persistent update—either include
+"viewport" in the set of fields that trigger immediate/persisted saves or, when
+update payload contains a viewport key, call persistTabs() (or the existing
+immediate-persist path) synchronously instead of deferring; ensure this change
+is centered on the handleUpdateTab function and its debounce/persistence branch
+so handleViewportChange continues to call handleUpdateTab unchanged.
+```
+
+</details>
+
+<!-- fingerprinting:phantom:medusa:grasshopper -->
+
+<!-- This is an auto-generated comment by CodeRabbit -->"
+
+Comment metadata:
+This comment was left on the modified branch.
+This comment was left on GitHub by @coderabbitai.
+This comment is the start of thread PRRT_kwDOQEbULc53jmaW. 
+
+
+Comment #5:
+
+File: apps/web/src/features/browser/ui/BrowserTab.tsx
+Line: 51
+User comment: "_⚠️ Potential issue_ | _🟠 Major_
+
+<details>
+<summary>🧩 Analysis chain</summary>
+
+🏁 Script executed:
+
+```shell
+# First, find the ViewportState type definition
+rg "ViewportState" --type ts --type tsx -B 2 -A 5 apps/web/src/features/browser/
+```
+
+Repository: zvadaadam/box-ide
+
+Length of output: 88
+
+---
+
+🏁 Script executed:
+
+```shell
+# Search for viewport preset definitions or device metadata
+rg "tablet|preset|device.*config" --type ts --type tsx -i apps/web/src/features/browser/ | head -30
+```
+
+Repository: zvadaadam/box-ide
+
+Length of output: 88
+
+---
+
+🏁 Script executed:
+
+```shell
+# Check the imports in BrowserTab.tsx to understand viewport source
+head -50 apps/web/src/features/browser/ui/BrowserTab.tsx
+```
+
+Repository: zvadaadam/box-ide
+
+Length of output: 1825
+
+---
+
+🏁 Script executed:
+
+```shell
+# Look for any explicit mobile/device field in viewport-related code
+rg "mobile|device.*scale|responsive" --type ts --type tsx -B 2 -A 2 apps/web/src/features/browser/ | head -40
+```
+
+Repository: zvadaadam/box-ide
+
+Length of output: 88
+
+---
+
+🏁 Script executed:
+
+```shell
+# Find the ViewportState type definition
+find apps/web/src/features/browser -name "*.ts" -o -name "*.tsx" | xargs grep -l "ViewportState" | head -5
+```
+
+Repository: zvadaadam/box-ide
+
+Length of output: 251
+
+---
+
+🏁 Script executed:
+
+```shell
+# Check the types.ts file for ViewportState definition
+cat apps/web/src/features/browser/types.ts | head -100
+```
+
+Repository: zvadaadam/box-ide
+
+Length of output: 3473
+
+---
+
+🏁 Script executed:
+
+```shell
+# Search for preset or device definitions
+find apps/web/src/features/browser -type f \( -name "*.ts" -o -name "*.tsx" \) | xargs grep -l "preset\|tablet\|device" | head -10
+```
+
+Repository: zvadaadam/box-ide
+
+Length of output: 201
+
+---
+
+🏁 Script executed:
+
+```shell
+# Look for viewport creation or initialization
+rg "ViewportState.*=" apps/web/src/features/browser --max-count 20
+```
+
+Repository: zvadaadam/box-ide
+
+Length of output: 260
+
+---
+
+🏁 Script executed:
+
+```shell
+# Check ViewportDropdown.tsx for viewport presets
+cat apps/web/src/features/browser/ui/ViewportDropdown.tsx
+```
+
+Repository: zvadaadam/box-ide
+
+Length of output: 4927
+
+---
+
+🏁 Script executed:
+
+```shell
+# Search for any hardcoded device/tablet preset data
+rg "tablet|ipad|device.*preset" -i apps/web/src/features/browser/ --max-count 30
+```
+
+Repository: zvadaadam/box-ide
+
+Length of output: 520
+
+---
+
+🏁 Script executed:
+
+```shell
+# Check how the viewport is created from DEVICES presets
+rg "onChange.*viewport" apps/web/src/features/browser/ui/ViewportDropdown.tsx -B 2 -A 2
+```
+
+Repository: zvadaadam/box-ide
+
+Length of output: 246
+
+---
+
+🏁 Script executed:
+
+```shell
+# Search for CDP Emulation.setDeviceMetricsOverride or setEmulation calls
+rg "setEmulation|setDeviceMetricsOverride" apps/web/src/features/browser/ -B 3 -A 3
+```
+
+Repository: zvadaadam/box-ide
+
+Length of output: 2530
+
+---
+
+🏁 Script executed:
+
+```shell
+# Check the main process code that applies emulation
+find . -name "*.ts" -o -name "*.js" | xargs rg "Emulation\.setDeviceMetricsOverride" 2>/dev/null | head -20
+```
+
+Repository: zvadaadam/box-ide
+
+Length of output: 191
+
+---
+
+🏁 Script executed:
+
+```shell
+# Check the main process browser-views.ts to see what's sent to CDP
+cat apps/desktop/main/browser-views.ts | grep -A 20 "setDeviceMetricsOverride"
+```
+
+Repository: zvadaadam/box-ide
+
+Length of output: 1508
+
+---
+
+🏁 Script executed:
+
+```shell
+# Check the full setEmulation function in browser-views.ts
+rg "setEmulation|clearEmulation" apps/desktop/main/browser-views.ts -B 5 -A 15
+```
+
+Repository: zvadaadam/box-ide
+
+Length of output: 43
+
+---
+
+</details>
+
+**Add `mobile` field to `ViewportState` or preserve device preset metadata.**
+
+`vp.width < 768` misclassifies the Tablet preset (820px width) as non-mobile when it should enable touch emulation and proper device behavior. The `DEVICES` array explicitly marks Tablet as `mobile: true`, but this metadata is lost when creating `ViewportState`. The `mobile` flag controls `Emulation.setTouchEmulationEnabled` and other CDP behavior beyond CSS width. Either add a `mobile` field to `ViewportState` or preserve the device preset's mobile metadata instead of deriving it from a breakpoint heuristic.
+
+<details>
+<summary>🤖 Prompt for AI Agents</summary>
+
+```
+Verify each finding against the current code and only fix it if needed.
+
+In `@apps/web/src/features/browser/ui/BrowserTab.tsx` around lines 43 - 51, The
+emulationParams function currently derives mobile from vp.width which loses
+device preset metadata and misclassifies Tablet; update the data model and usage
+so mobile is preserved: add a mobile:boolean to the ViewportState type (or keep
+the original device preset object on the state) and ensure emulationParams(vp:
+ViewportState, scale) uses vp.mobile instead of vp.width<768; update any
+constructors/creators that build ViewportState to copy the DEVICES[*].mobile
+flag into the state, and ensure callers that toggle touch emulation (e.g., where
+Emulation.setTouchEmulationEnabled is used) read the preserved vp.mobile
+property.
+```
+
+</details>
+
+<!-- fingerprinting:phantom:medusa:grasshopper -->
+
+<!-- This is an auto-generated comment by CodeRabbit -->"
+
+Comment metadata:
+This comment was left on the modified branch.
+This comment was left on GitHub by @coderabbitai.
+This comment is the start of thread PRRT_kwDOQEbULc53jmaY. 
+
+
+Comment #6:
+
+File: apps/web/src/features/browser/ui/BrowserTab.tsx
+Line: 133
+User comment: "_⚠️ Potential issue_ | _🟠 Major_
+
+**Viewport restores can get dropped before the BrowserView is ready.**
+
+`prevViewportRef` starts at `tab.viewport` and is updated before the visibility/load guards. Any viewport that already exists on mount—or changes while the tab is hidden or not loaded yet—gets marked as handled before `setEmulation()` can run. Because the resize path only reapplies emulation when `scale` changes, 1:1 presets never recover, which breaks the persisted viewport/workspace-switch flow.
+
+
+
+Also applies to: 327-329, 352-357
+
+<details>
+<summary>🤖 Prompt for AI Agents</summary>
+
+```
+Verify each finding against the current code and only fix it if needed.
+
+In `@apps/web/src/features/browser/ui/BrowserTab.tsx` around lines 132 - 133, The
+prevViewportRef is initialized from tab.viewport and updated too early, causing
+restores to be marked handled before the BrowserView is ready; change the logic
+in BrowserTab (affecting prevViewportRef usage around the effects at lines ~132,
+~327-329, ~352-357) so prevViewportRef is initialized to null/undefined (not
+tab.viewport) and only updated after the visibility/load guards and after
+setEmulation has been applied (or when the BrowserView is confirmed
+ready/visible), ensuring viewport changes that occur while hidden or unloaded
+are detected and reapplied later; update any effects that compare/update
+prevViewportRef to respect this null-initialized sentinel and only set
+prevViewportRef after successful emulation application.
+```
+
+</details>
+
+<!-- fingerprinting:phantom:medusa:grasshopper -->
+
+<!-- This is an auto-generated comment by CodeRabbit -->"
+
+Comment metadata:
+This comment was left on the modified branch.
+This comment was left on GitHub by @coderabbitai.
+This comment is the start of thread PRRT_kwDOQEbULc53jmaZ. 
+
+
+Comment #7:
+
+File: apps/web/src/features/browser/ui/BrowserTab.tsx
+Line: 365
+User comment: "_⚠️ Potential issue_ | _🟡 Minor_
+
+**Avoid hiding the view before the zero-size guard.**
+
+If the placeholder is transiently `0×0`, this returns after `hide()` and never reaches `show()`. The resize sync only updates bounds, so the BrowserView can stay blank until some later viewport or visibility change.
+
+<details>
+<summary>Small fix</summary>
+
+```diff
+-    native.browserViews.hide(webviewLabel).catch(() => {});
+-
+     const panelRect = el.getBoundingClientRect();
+     if (panelRect.width === 0 || panelRect.height === 0) return;
++    native.browserViews.hide(webviewLabel).catch(() => {});
+```
+</details>
+
+<!-- suggestion_start -->
+
+<details>
+<summary>📝 Committable suggestion</summary>
+
+> ‼️ **IMPORTANT**
+> Carefully review the code before committing. Ensure that it accurately replaces the highlighted code, contains no missing lines, and has no issues with indentation. Thoroughly test & benchmark the code to ensure it meets the requirements.
+
+```suggestion
+    const panelRect = el.getBoundingClientRect();
+    if (panelRect.width === 0 || panelRect.height === 0) return;
+    native.browserViews.hide(webviewLabel).catch(() => {});
+```
+
+</details>
+
+<!-- suggestion_end -->
+
+<details>
+<summary>🤖 Prompt for AI Agents</summary>
+
+```
+Verify each finding against the current code and only fix it if needed.
+
+In `@apps/web/src/features/browser/ui/BrowserTab.tsx` around lines 361 - 365, The
+code calls native.browserViews.hide(webviewLabel) before checking panel size,
+which can cause an early return and leave the BrowserView hidden; change the
+logic in BrowserTab (around native.browserViews.hide, webviewLabel,
+el.getBoundingClientRect, panelRect) to first compute panelRect and return if
+width/height are zero, and only call native.browserViews.hide(webviewLabel) (and
+native.browserViews.show(webviewLabel) as appropriate) after confirming non-zero
+dimensions so the view is not left hidden by the transient 0×0 guard.
+```
+
+</details>
+
+<!-- fingerprinting:phantom:medusa:grasshopper -->
+
+<!-- This is an auto-generated comment by CodeRabbit -->"
+
+Comment metadata:
+This comment was left on the modified branch.
+This comment was left on GitHub by @coderabbitai.
+This comment is the start of thread PRRT_kwDOQEbULc53jmaa. 
+
+
+Comment #8:
+
+File: apps/web/src/features/browser/ui/ViewportDropdown.tsx
+Line: 31
+User comment: "_⚠️ Potential issue_ | _🟡 Minor_
+
+**Include DPR in preset matching.**
+
+`matchDevice()` and the `active` check only compare width/height. A custom `393x852 `@1x`` viewport will therefore light up the Phone preset, even though the emulation mode is different.
+
+<details>
+<summary>Suggested fix</summary>
+
+```diff
+ function matchDevice(vp: ViewportState | null) {
+   if (!vp) return null;
+-  return DEVICES.find((d) => d.width === vp.width && d.height === vp.height) ?? null;
++  return (
++    DEVICES.find(
++      (d) =>
++        d.width === vp.width &&
++        d.height === vp.height &&
++        d.dpr === vp.deviceScaleFactor
++    ) ?? null
++  );
+ }
+@@
+-          const active = viewport?.width === device.width && viewport?.height === device.height;
++          const active =
++            viewport?.width === device.width &&
++            viewport?.height === device.height &&
++            viewport?.deviceScaleFactor === device.dpr;
+```
+</details>
+
+
+Also applies to: 79-85
+
+<details>
+<summary>🤖 Prompt for AI Agents</summary>
+
+```
+Verify each finding against the current code and only fix it if needed.
+
+In `@apps/web/src/features/browser/ui/ViewportDropdown.tsx` around lines 29 - 31,
+matchDevice currently only compares width/height so presets match incorrectly
+when DPR differs; update matchDevice (and the similar active check logic around
+the active preset comparison) to include devicePixelRatio in the equality check
+(compare DEVICES[*].devicePixelRatio to vp.devicePixelRatio, normalizing
+missing/undefined DPR to 1 if necessary) and return null when DPR does not
+match, ensuring both functions use the same DPR-aware matching logic.
+```
+
+</details>
+
+<!-- fingerprinting:phantom:medusa:grasshopper -->
+
+<!-- This is an auto-generated comment by CodeRabbit -->"
+
+Comment metadata:
+This comment was left on the modified branch.
+This comment was left on GitHub by @coderabbitai.
+This comment is the start of thread PRRT_kwDOQEbULc53jmac. 
+
+
+Comment #9:
+
+File: apps/web/src/features/browser/ui/ViewportDropdown.tsx
+Line: 55
+User comment: "_⚠️ Potential issue_ | _🟡 Minor_
+
+**Close the menu after applying custom dimensions.**
+
+The parent hides the native BrowserView while this dropdown is open. Because `Apply` is regular custom content, clicking it does not close the menu, so the webview stays hidden until the user clicks elsewhere.
+
+<details>
+<summary>Suggested fix</summary>
+
+```diff
+ export function ViewportDropdown({ viewport, onChange, onOpenChange, disabled }: ViewportDropdownProps) {
++  const [open, setOpen] = useState(false);
+   const [customOpen, setCustomOpen] = useState(false);
+   const [customW, setCustomW] = useState("1280");
+   const [customH, setCustomH] = useState("720");
+@@
+     <DropdownMenu
++      open={open}
+       onOpenChange={(open) => {
++        setOpen(open);
+         onOpenChange?.(open);
+         if (!open) setCustomOpen(false);
+       }}
+     >
+@@
+                 const w = parseInt(customW, 10);
+                 const h = parseInt(customH, 10);
+                 if (w >= 320 && h >= 240) {
+                   onChange({ width: w, height: h, deviceScaleFactor: 1 });
++                  setOpen(false);
+                 }
+               }}
+             >
+```
+</details>
+
+
+Also applies to: 98-129
+
+<details>
+<summary>🤖 Prompt for AI Agents</summary>
+
+```
+Verify each finding against the current code and only fix it if needed.
+
+In `@apps/web/src/features/browser/ui/ViewportDropdown.tsx` around lines 50 - 55,
+The dropdown remains open when users click the custom "Apply" action because the
+custom content handler doesn't close the DropdownMenu; update the Apply
+handler(s) inside ViewportDropdown so they explicitly close the menu by calling
+the same onOpenChange(false) used by the DropdownMenu open-change handler (and
+also setCustomOpen(false) if needed) after applying dimensions. Locate the
+DropdownMenu and the custom "Apply" button handlers in ViewportDropdown
+(references: DropdownMenu, onOpenChange, setCustomOpen, and the Apply button's
+click handler) and ensure the Apply flow invokes onOpenChange?.(false) (and
+setCustomOpen(false)) to close the menu immediately.
+```
+
+</details>
+
+<!-- fingerprinting:phantom:medusa:grasshopper -->
+
+<!-- This is an auto-generated comment by CodeRabbit -->"
+
+Comment metadata:
+This comment was left on the modified branch.
+This comment was left on GitHub by @coderabbitai.
+This comment is the start of thread PRRT_kwDOQEbULc53jmae. 
+
+</system-instruction>
+
+I run AI code review, is it actionable? Wdyt? Explore in depth each problem.
+We want a clean, maintainable codebase, with proper best practices for the tech stack we use.
+Run subagents to verify, and if it should be fixed, try to merge some stuff together so it can be fixed together within one subagent. 
+If you can test something do it.
+
+---
+
+<system_instruction>
+The user has attached these files. Read them before proceeding.
+- /Users/zvada/Developer/agent/box-ide/.conductor/rabat-v7/.context/attachments/Lint__Format___Typecheck_69178560588.log (58.8 KB)
+- /Users/zvada/Developer/agent/box-ide/.conductor/rabat-v7/.context/attachments/Fix errors instructions.md (430 B)
+</system_instruction>
+
+
+
+Fix the failing CI actions. I've attached the failure logs.
