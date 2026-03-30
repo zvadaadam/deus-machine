@@ -42,10 +42,10 @@ describe("createDeusMCPServer", () => {
     expect(info.version).toBe("1.0.0");
   });
 
-  it("registers all workspace + browser + simulator tools", () => {
+  it("registers all workspace + browser + simulator + recording tools", () => {
     const tools = getRegisteredTools(server.instance);
     const toolNames = Object.keys(tools);
-    expect(toolNames).toHaveLength(30);
+    expect(toolNames).toHaveLength(34);
     // Workspace tools
     expect(toolNames).toContain("AskUserQuestion");
     expect(toolNames).toContain("GetWorkspaceDiff");
@@ -76,6 +76,11 @@ describe("createDeusMCPServer", () => {
     expect(toolNames).toContain("iOSSimulatorTypeText");
     expect(toolNames).toContain("iOSSimulatorPressKey");
     expect(toolNames).toContain("iOSSimulatorBuildAndRun");
+    // Recording tools
+    expect(toolNames).toContain("recording_start");
+    expect(toolNames).toContain("recording_stop");
+    expect(toolNames).toContain("recording_chapter");
+    expect(toolNames).toContain("recording_status");
   });
 
   // ==========================================================================
