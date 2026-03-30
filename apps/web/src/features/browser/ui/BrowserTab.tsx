@@ -46,7 +46,7 @@ function emulationParams(vp: ViewportState, scale: number) {
     width: vp.width,
     height: vp.height,
     deviceScaleFactor: vp.deviceScaleFactor,
-    mobile: vp.width < 768,
+    mobile: vp.mobile ?? false,
     scale,
   };
 }
@@ -129,8 +129,9 @@ export const BrowserTab = forwardRef<BrowserTabHandle, BrowserTabProps>(function
   // Stable ref for onElementSelected callback (used by the inspect drain loop)
   const onElementSelectedRef = useRef(onElementSelected);
   onElementSelectedRef.current = onElementSelected;
-  // Track previous viewport to detect changes (vs initial mount)
-  const prevViewportRef = useRef(tab.viewport);
+  // Track previous viewport to detect changes. Initialized to `undefined`
+  // (not tab.viewport) so persisted viewports are applied on first mount.
+  const prevViewportRef = useRef<ViewportState | null | undefined>(undefined);
 
   const tabId = tab.id;
   const webviewLabel = tab.webviewLabel;
@@ -352,16 +353,25 @@ export const BrowserTab = forwardRef<BrowserTabHandle, BrowserTabProps>(function
   useLayoutEffect(() => {
     const prev = prevViewportRef.current;
     prevViewportRef.current = tab.viewport;
-    if (prev === tab.viewport) return; // skip initial mount
+    // Skip when nothing changed. On first mount prev is `undefined` — only
+    // skip if the tab has no viewport to apply (null === null won't match).
+    if (prev !== undefined && prev === tab.viewport) return;
+    // First mount with no emulation — nothing to apply
+    if (prev === undefined && tab.viewport === null) return;
 
-    if (!visible || !webviewReady || !hasLoaded) return;
+    if (!visible || !webviewReady || !hasLoaded) {
+      // Not ready yet — reset so it retries when deps change
+      prevViewportRef.current = undefined;
+      return;
+    }
     const el = placeholderRef.current;
     if (!el || !webviewCreatedRef.current) return;
 
-    native.browserViews.hide(webviewLabel).catch(() => {});
-
     const panelRect = el.getBoundingClientRect();
     if (panelRect.width === 0 || panelRect.height === 0) return;
+
+    // Hide after confirming non-zero bounds (avoids permanently hidden view)
+    native.browserViews.hide(webviewLabel).catch(() => {});
 
     const { bounds, scale } = computeViewBounds(panelRect, tab.viewport);
 

@@ -9,6 +9,9 @@ export interface ViewportState {
   width: number;
   height: number;
   deviceScaleFactor: number;
+  /** Whether to enable touch emulation + mobile UA. Preserved from device
+   *  preset metadata — width heuristics misclassify tablets (820px). */
+  mobile?: boolean;
 }
 
 /** Lightweight tab state persisted in the workspace layout store.

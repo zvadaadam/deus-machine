@@ -28,7 +28,11 @@ interface ViewportDropdownProps {
 
 function matchDevice(vp: ViewportState | null) {
   if (!vp) return null;
-  return DEVICES.find((d) => d.width === vp.width && d.height === vp.height) ?? null;
+  return (
+    DEVICES.find(
+      (d) => d.width === vp.width && d.height === vp.height && d.dpr === vp.deviceScaleFactor
+    ) ?? null
+  );
 }
 
 function deviceIcon(d: { mobile: boolean; width: number } | null) {
@@ -39,18 +43,27 @@ function deviceIcon(d: { mobile: boolean; width: number } | null) {
 }
 
 export function ViewportDropdown({ viewport, onChange, onOpenChange, disabled }: ViewportDropdownProps) {
+  const [open, setOpen] = useState(false);
   const [customOpen, setCustomOpen] = useState(false);
   const [customW, setCustomW] = useState("1280");
   const [customH, setCustomH] = useState("720");
 
-  const Icon = deviceIcon(matchDevice(viewport) ?? (viewport ? { mobile: viewport.width < 768, width: viewport.width } : null));
+  const Icon = deviceIcon(matchDevice(viewport) ?? (viewport ? { mobile: viewport.mobile ?? false, width: viewport.width } : null));
   const isResponsive = viewport === null;
+
+  const closeMenu = () => {
+    setOpen(false);
+    onOpenChange?.(false);
+    setCustomOpen(false);
+  };
 
   return (
     <DropdownMenu
-      onOpenChange={(open) => {
-        onOpenChange?.(open);
-        if (!open) setCustomOpen(false);
+      open={open}
+      onOpenChange={(o) => {
+        setOpen(o);
+        onOpenChange?.(o);
+        if (!o) setCustomOpen(false);
       }}
     >
       <DropdownMenuTrigger asChild>
@@ -76,13 +89,16 @@ export function ViewportDropdown({ viewport, onChange, onOpenChange, disabled }:
           Devices
         </DropdownMenuLabel>
         {DEVICES.map((device) => {
-          const active = viewport?.width === device.width && viewport?.height === device.height;
+          const active =
+            viewport?.width === device.width &&
+            viewport?.height === device.height &&
+            viewport?.deviceScaleFactor === device.dpr;
           const DeviceIcon = deviceIcon(device);
           return (
             <DropdownMenuItem
               key={device.label}
               onSelect={() =>
-                onChange({ width: device.width, height: device.height, deviceScaleFactor: device.dpr })
+                onChange({ width: device.width, height: device.height, deviceScaleFactor: device.dpr, mobile: device.mobile })
               }
             >
               <DeviceIcon className="mr-2 h-3.5 w-3.5" />
@@ -121,6 +137,7 @@ export function ViewportDropdown({ viewport, onChange, onOpenChange, disabled }:
                 const h = parseInt(customH, 10);
                 if (w >= 320 && h >= 240) {
                   onChange({ width: w, height: h, deviceScaleFactor: 1 });
+                  closeMenu();
                 }
               }}
             >
