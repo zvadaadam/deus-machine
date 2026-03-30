@@ -96,10 +96,11 @@ const RecordingStartInputSchema = z
       "Background behind the device frame. Default: gradient #0f0f23 → #1a1a3e"
     ),
     captureMethod: z
-      .enum(["avfoundation", "cdp", "auto", "x11grab", "none"])
+      .enum(["avfoundation", "cdp", "stream", "auto", "x11grab", "none"])
       .optional()
       .describe(
-        "Screen capture method. 'auto' = best available (avfoundation → cdp fallback). " +
+        "Screen capture method. 'auto' = best available (stream → avfoundation → none). " +
+          "'stream' = WebSocket stream from agent-browser, 10fps, no permission needed. " +
           "'avfoundation' = macOS 30fps (needs Screen Recording permission). " +
           "'cdp' = CDP screenshots piped to ffmpeg, 10fps, no permission needed. " +
           "'x11grab' = Linux/Xvfb. 'none' = events-only. Default: 'none'"

@@ -24,11 +24,12 @@ export interface RecordingStartParams {
   /** Screen capture method. Default: "none"
    * - "avfoundation": macOS native 30fps (needs Screen Recording permission)
    * - "cdp": CDP screenshots piped to ffmpeg, 10fps, no permission needed
+   * - "stream": WebSocket stream from agent-browser, 10fps, no permission needed
    * - "x11grab": Linux/Xvfb
-   * - "auto": try avfoundation, fall back to cdp
+   * - "auto": try stream (if available), then avfoundation, fall back to none
    * - "none": events-only (no video output)
    */
-  captureMethod?: "x11grab" | "avfoundation" | "cdp" | "auto" | "none";
+  captureMethod?: "x11grab" | "avfoundation" | "cdp" | "stream" | "auto" | "none";
   /** X11 display for x11grab capture. Default: ":99" */
   display?: string;
 }
@@ -65,7 +66,7 @@ export interface ResolvedRecordingConfig {
   fps: number;
   deviceFrame: DeviceFrameType;
   background: BackgroundConfig;
-  captureMethod: "x11grab" | "avfoundation" | "cdp" | "auto" | "none";
+  captureMethod: "x11grab" | "avfoundation" | "cdp" | "stream" | "auto" | "none";
   display: string;
 }
 
