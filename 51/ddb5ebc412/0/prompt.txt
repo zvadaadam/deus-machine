@@ -888,3 +888,68 @@ The user has attached these files. Read them before proceeding.
 
 
 Fix the failing CI actions. I've attached the failure logs.
+
+---
+
+<system-instruction>
+The user has added 1 comment to the diff for this workspace. Please review and address these comments as part of your response. When addressing comments on the "original" side or on specific commits, read the file from that version (not the current version). Below are the comments, including metadata about what git state they were left on:
+
+Comment #1:
+
+File: apps/web/src/features/browser/ui/BrowserTab.tsx
+Line: 555
+User comment: "_⚠️ Potential issue_ | _🟡 Minor_
+
+**Agent viewport sync loses the `mobile` field.**
+
+When detecting agent-initiated viewport changes via `innerWidth`/`innerHeight`, the code creates a new viewport object that preserves `deviceScaleFactor` but drops the `mobile` flag. This could cause touch emulation to be disabled unexpectedly after an agent viewport change.
+
+
+<details>
+<summary>🔧 Proposed fix to preserve mobile</summary>
+
+```diff
+         if (vw && vh && currentVp && (vw !== currentVp.width || vh !== currentVp.height)) {
+           // Agent changed viewport dimensions — sync dropdown
+           onUpdateTab(tabId, {
+-            viewport: { width: vw, height: vh, deviceScaleFactor: currentVp.deviceScaleFactor },
++            viewport: { width: vw, height: vh, deviceScaleFactor: currentVp.deviceScaleFactor, mobile: currentVp.mobile },
+           });
+         }
+```
+</details>
+
+<details>
+<summary>🤖 Prompt for AI Agents</summary>
+
+```
+Verify each finding against the current code and only fix it if needed.
+
+In `@apps/web/src/features/browser/ui/BrowserTab.tsx` around lines 547 - 555, The
+viewport update branch in BrowserTab (when parsed.vw/vh differ from
+tabRef.current.viewport) recreates viewport preserving deviceScaleFactor but
+omits the mobile flag; update the onUpdateTab call to include currentVp.mobile
+(or preserve whatever mobile property exists on tabRef.current.viewport) so the
+new viewport object passed to onUpdateTab contains width, height,
+deviceScaleFactor, and mobile, keeping touch emulation state intact; locate the
+block around tabRef.current.viewport, the parsed { vw, vh } check, and the
+onUpdateTab(tabId, { viewport: ... }) call to apply the fix.
+```
+
+</details>
+
+<!-- fingerprinting:phantom:medusa:ocelot -->
+
+<!-- This is an auto-generated comment by CodeRabbit -->"
+
+Comment metadata:
+This comment was left on the modified branch.
+This comment was left on GitHub by @coderabbitai.
+This comment is the start of thread PRRT_kwDOQEbULc53sBlj. 
+
+</system-instruction>
+
+I run AI code review, is it actionable? Wdyt? Explore in depth each problem.
+We want a clean, maintainable codebase, with proper best practices for the tech stack we use.
+Run subagents to verify, and if it should be fixed, try to merge some stuff together so it can be fixed together within one subagent. 
+If you can test something do it.
