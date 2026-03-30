@@ -21,8 +21,14 @@ export interface RecordingStartParams {
   deviceFrame?: DeviceFrameType;
   /** Background config. */
   background?: { type: "gradient" | "solid"; colors?: [string, string]; angle?: number };
-  /** Screen capture method. "none" = events only, post-process later. Default: "none" */
-  captureMethod?: "x11grab" | "avfoundation" | "screenshot" | "none";
+  /** Screen capture method. Default: "none"
+   * - "avfoundation": macOS native 30fps (needs Screen Recording permission)
+   * - "cdp": CDP screenshots piped to ffmpeg, 10fps, no permission needed
+   * - "x11grab": Linux/Xvfb
+   * - "auto": try avfoundation, fall back to cdp
+   * - "none": events-only (no video output)
+   */
+  captureMethod?: "x11grab" | "avfoundation" | "cdp" | "auto" | "none";
   /** X11 display for x11grab capture. Default: ":99" */
   display?: string;
 }
@@ -59,7 +65,7 @@ export interface ResolvedRecordingConfig {
   fps: number;
   deviceFrame: DeviceFrameType;
   background: BackgroundConfig;
-  captureMethod: "x11grab" | "avfoundation" | "screenshot" | "none";
+  captureMethod: "x11grab" | "avfoundation" | "cdp" | "auto" | "none";
   display: string;
 }
 
