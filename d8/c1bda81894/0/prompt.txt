@@ -214,3 +214,7 @@ idk why when the tool call run broesr naviagete the elctro mad ethe b rowser on 
 also got thie error: /Users/zvada/Developer/agent/box-ide/.conductor/monrovia-v1/.context/attachments/pasted_text_2026-03-30_21-09-24.txt 
 
 let's eplxo ebug in the eelctron and also why the screne recoding doens work
+
+---
+
+again it made the browser full screen
