@@ -122,8 +122,15 @@ export class StreamRecorder {
       this.ffmpeg = null;
     });
 
-    // 2. Connect to WebSocket stream
-    await this.connectWebSocket();
+    // 2. Connect to WebSocket stream (lazy — if not available yet, retry loop handles it)
+    try {
+      await this.connectWebSocket();
+    } catch {
+      console.error(
+        `[stream-recorder] Stream not available yet on port ${port}, will retry when it starts`
+      );
+      this.scheduleReconnect();
+    }
 
     console.error(
       `[stream-recorder] Started, stream port ${port}, ${this.fps}fps -> ${this.outputPath}`
