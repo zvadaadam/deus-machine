@@ -148,23 +148,13 @@ export class SessionManager {
           outputPath: rawCapturePath,
         });
       } catch (err) {
-        // avfoundation failed (likely no permission) — try CDP fallback
         if (method === "avfoundation" && config.captureMethod === "auto") {
-          console.error(`[session-manager] avfoundation failed, trying CDP fallback: ${err}`);
-          rawCapturePath = join(tmpdir(), `raw-${id}.mp4`);
-          const cdpPort = parseInt(process.env.CDP_PORT || "19222", 10);
-          cdpRecorder = new CdpRecorder({
-            cdpPort,
-            outputPath: rawCapturePath,
-            fps: Math.min(config.fps, 15),
-            quality: 80,
-          });
-          try {
-            await cdpRecorder.start();
-          } catch {
-            cdpRecorder = null;
-            rawCapturePath = null;
-          }
+          // avfoundation failed (likely no Screen Recording permission).
+          // Fall back to events-only — NOT CDP, which conflicts with agent-browser.
+          console.error(
+            `[session-manager] avfoundation failed (grant Screen Recording permission in System Settings): ${err}`
+          );
+          rawCapturePath = null;
         } else {
           throw err;
         }
