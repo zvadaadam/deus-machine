@@ -1,0 +1,36 @@
+{
+  "cli_version": "0.5.0",
+  "checkpoint_id": "6c5588377507",
+  "session_id": "974e83b1-5d44-4282-8c2a-e2f70c81571b",
+  "strategy": "manual-commit",
+  "created_at": "2026-03-30T22:43:25.101868Z",
+  "branch": "zvadaadam/screen-studio-integration",
+  "checkpoints_count": 3,
+  "files_touched": [
+    "packages/screen-studio/src/mcp/server.ts",
+    "packages/screen-studio/src/mcp/session-manager.ts",
+    "packages/screen-studio/src/mcp/stream-capture.ts",
+    "packages/screen-studio/src/mcp/types.ts"
+  ],
+  "agent": "Claude Code",
+  "turn_id": "337569825251",
+  "token_usage": {
+    "input_tokens": 10414,
+    "cache_creation_tokens": 1417438,
+    "cache_read_tokens": 75993497,
+    "output_tokens": 190628,
+    "api_call_count": 510
+  },
+  "session_metrics": {
+    "turn_count": 64
+  },
+  "initial_attribution": {
+    "calculated_at": "2026-03-30T22:43:23.187987Z",
+    "agent_lines": 464,
+    "human_added": 5,
+    "human_modified": 17,
+    "human_removed": 0,
+    "total_committed": 486,
+    "agent_percentage": 95.47325102880659
+  }
+}
