@@ -236,8 +236,9 @@ app.whenReady().then(async () => {
   await createWindow();
   debugLog("[main] Window created");
 
-  // Create a default hidden BrowserView so agent-browser (CDP) targets it
-  // instead of navigating the main renderer (localhost:1420) away.
+  // Create a hidden BrowserView as a CDP target for agent-browser.
+  // Without this, agent-browser has no page to navigate (only devtools://
+  // and localhost:1420 exist as CDP targets).
   ensureDefaultBrowserView();
 
   // Dev mode: swap dock icon so it's visually distinct from the production app
