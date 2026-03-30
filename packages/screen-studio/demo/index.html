@@ -1,0 +1,865 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Screen Studio SDK — Interactive Demo</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      background: #0a0a14;
+      color: #e0e0e0;
+      min-height: 100vh;
+      overflow-x: hidden;
+    }
+    .layout {
+      display: grid;
+      grid-template-columns: 1fr 320px;
+      gap: 16px;
+      padding: 16px;
+      max-width: 1600px;
+      margin: 0 auto;
+      min-height: 100vh;
+    }
+    .main {
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+    }
+    h1 {
+      font-size: 18px;
+      font-weight: 600;
+      color: #ffffff;
+      padding: 8px 0;
+    }
+    h1 span { color: #3b82f6; }
+
+    /* Source canvas (the "browser viewport" the agent is interacting with) */
+    .source-panel {
+      position: relative;
+      background: #1c1c1e;
+      border-radius: 12px;
+      overflow: hidden;
+      border: 1px solid rgba(255,255,255,0.06);
+    }
+    .source-panel .label {
+      position: absolute;
+      top: 8px;
+      left: 12px;
+      font-size: 11px;
+      color: rgba(255,255,255,0.4);
+      z-index: 10;
+      pointer-events: none;
+    }
+    #sourceCanvas {
+      display: block;
+      width: 100%;
+      cursor: crosshair;
+    }
+
+    /* Output canvas (the composited result) */
+    .output-panel {
+      background: #111118;
+      border-radius: 12px;
+      overflow: hidden;
+      border: 1px solid rgba(255,255,255,0.06);
+      position: relative;
+    }
+    .output-panel .label {
+      position: absolute;
+      top: 8px;
+      left: 12px;
+      font-size: 11px;
+      color: rgba(255,255,255,0.4);
+      z-index: 10;
+      pointer-events: none;
+    }
+    #outputCanvas {
+      display: block;
+      width: 100%;
+    }
+
+    /* Sidebar */
+    .sidebar {
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+    }
+    .panel {
+      background: #1c1c1e;
+      border-radius: 10px;
+      padding: 14px;
+      border: 1px solid rgba(255,255,255,0.06);
+    }
+    .panel h2 {
+      font-size: 12px;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      color: rgba(255,255,255,0.5);
+      margin-bottom: 10px;
+    }
+
+    /* Controls */
+    .btn-row {
+      display: flex;
+      gap: 6px;
+      flex-wrap: wrap;
+    }
+    .btn {
+      padding: 6px 12px;
+      border: 1px solid rgba(255,255,255,0.1);
+      background: rgba(255,255,255,0.05);
+      color: #e0e0e0;
+      border-radius: 6px;
+      font-size: 12px;
+      cursor: pointer;
+      transition: background 0.15s;
+    }
+    .btn:hover { background: rgba(255,255,255,0.12); }
+    .btn.active { background: #3b82f6; border-color: #3b82f6; color: white; }
+    .btn.primary { background: #3b82f6; border-color: #3b82f6; color: white; }
+    .btn.primary:hover { background: #2563eb; }
+    .btn.danger { background: #ef4444; border-color: #ef4444; color: white; }
+
+    /* Stats */
+    .stats {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 6px;
+    }
+    .stat {
+      background: rgba(0,0,0,0.3);
+      padding: 8px 10px;
+      border-radius: 6px;
+    }
+    .stat .label { font-size: 10px; color: rgba(255,255,255,0.4); }
+    .stat .value { font-size: 14px; font-weight: 600; font-family: 'SF Mono', 'Consolas', monospace; }
+
+    /* Event log */
+    .event-log {
+      max-height: 200px;
+      overflow-y: auto;
+      font-family: 'SF Mono', 'Consolas', monospace;
+      font-size: 11px;
+    }
+    .event-log::-webkit-scrollbar { width: 4px; }
+    .event-log::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.15); border-radius: 2px; }
+    .event-entry {
+      padding: 3px 0;
+      border-bottom: 1px solid rgba(255,255,255,0.03);
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    .event-entry .type { color: #3b82f6; }
+    .event-entry .pos { color: rgba(255,255,255,0.4); }
+
+    /* Slider */
+    .slider-row {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      margin-bottom: 6px;
+    }
+    .slider-row label {
+      font-size: 11px;
+      color: rgba(255,255,255,0.5);
+      min-width: 80px;
+    }
+    .slider-row input[type="range"] {
+      flex: 1;
+      accent-color: #3b82f6;
+    }
+    .slider-row .val {
+      font-size: 11px;
+      font-family: 'SF Mono', monospace;
+      color: rgba(255,255,255,0.6);
+      min-width: 40px;
+      text-align: right;
+    }
+
+    /* Scenario buttons */
+    .scenario-btn {
+      display: block;
+      width: 100%;
+      text-align: left;
+      padding: 8px 10px;
+      margin-bottom: 4px;
+    }
+    .scenario-btn .name { font-weight: 500; }
+    .scenario-btn .desc { font-size: 10px; color: rgba(255,255,255,0.4); margin-top: 2px; }
+  </style>
+</head>
+<body>
+  <div class="layout">
+    <div class="main">
+      <h1><span>Screen Studio SDK</span> — Interactive Demo</h1>
+
+      <div class="source-panel">
+        <div class="label">SOURCE (click to create events — this simulates a browser viewport)</div>
+        <canvas id="sourceCanvas" width="1280" height="720"></canvas>
+      </div>
+
+      <div class="output-panel">
+        <div class="label">OUTPUT (composited with camera engine + device frame)</div>
+        <canvas id="outputCanvas" width="1280" height="720"></canvas>
+      </div>
+    </div>
+
+    <div class="sidebar">
+      <div class="panel">
+        <h2>Video Source</h2>
+        <div class="btn-row" style="margin-bottom: 8px;">
+          <button class="btn active" id="srcFake">Fake Page</button>
+          <button class="btn primary" id="srcScreen">Capture Screen</button>
+          <button class="btn" id="srcVideo">Load Video</button>
+        </div>
+        <div id="captureStatus" style="font-size: 11px; color: rgba(255,255,255,0.4); margin-top: 4px;"></div>
+        <input type="file" id="videoFileInput" accept="video/*" style="display:none">
+        <video id="hiddenVideo" style="display:none" muted playsinline loop></video>
+      </div>
+
+      <div class="panel">
+        <h2>Tool Mode</h2>
+        <div class="btn-row">
+          <button class="btn active" data-mode="click" id="modeClick">Click</button>
+          <button class="btn" data-mode="type" id="modeType">Type</button>
+          <button class="btn" data-mode="scroll" id="modeScroll">Scroll</button>
+          <button class="btn" data-mode="navigate" id="modeNav">Navigate</button>
+        </div>
+      </div>
+
+      <div class="panel">
+        <h2>Camera State</h2>
+        <div class="stats">
+          <div class="stat">
+            <div class="label">X</div>
+            <div class="value" id="camX">960</div>
+          </div>
+          <div class="stat">
+            <div class="label">Y</div>
+            <div class="value" id="camY">540</div>
+          </div>
+          <div class="stat">
+            <div class="label">Zoom</div>
+            <div class="value" id="camZoom">1.00</div>
+          </div>
+          <div class="stat">
+            <div class="label">Intent</div>
+            <div class="value" id="camIntent">—</div>
+          </div>
+          <div class="stat">
+            <div class="label">Settled</div>
+            <div class="value" id="camSettled">yes</div>
+          </div>
+          <div class="stat">
+            <div class="label">FPS</div>
+            <div class="value" id="fpsValue">60</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="panel">
+        <h2>Spring Tuning</h2>
+        <div class="slider-row">
+          <label>Omega (ω)</label>
+          <input type="range" id="omega" min="2" max="20" step="0.5" value="8">
+          <span class="val" id="omegaVal">8.0</span>
+        </div>
+        <div class="slider-row">
+          <label>Zeta (ζ)</label>
+          <input type="range" id="zeta" min="0.2" max="1.5" step="0.05" value="0.7">
+          <span class="val" id="zetaVal">0.70</span>
+        </div>
+      </div>
+
+      <div class="panel">
+        <h2>Background</h2>
+        <div class="btn-row">
+          <button class="btn active" data-bg="gradient" id="bgGradient">Gradient</button>
+          <button class="btn" data-bg="solid" id="bgSolid">Solid</button>
+        </div>
+        <div style="margin-top: 8px;">
+          <div class="slider-row">
+            <label>Angle</label>
+            <input type="range" id="bgAngle" min="0" max="360" step="5" value="135">
+            <span class="val" id="bgAngleVal">135°</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="panel">
+        <h2>Scenarios (auto-play)</h2>
+        <button class="btn scenario-btn" id="scnFormFill">
+          <div class="name">Form Fill</div>
+          <div class="desc">Navigate → click field → type → click submit</div>
+        </button>
+        <button class="btn scenario-btn" id="scnBrowse">
+          <div class="name">Browse & Read</div>
+          <div class="desc">Click links → scroll down → click back</div>
+        </button>
+        <button class="btn scenario-btn" id="scnSearch">
+          <div class="name">Search Flow</div>
+          <div class="desc">Click search → type query → scroll results</div>
+        </button>
+        <button class="btn danger" id="resetBtn" style="width:100%; margin-top: 4px;">Reset</button>
+      </div>
+
+      <div class="panel">
+        <h2>Event Log</h2>
+        <div class="event-log" id="eventLog"></div>
+      </div>
+    </div>
+  </div>
+
+  <script type="module">
+    // ---------------------------------------------------------------------------
+    // Import from built SDK (run `bunx tsup` first)
+    // ---------------------------------------------------------------------------
+    import { CameraEngine, Compositor, CanvasRenderer } from "../dist/index.js";
+
+    console.log("[SDK] Loaded:", { CameraEngine, Compositor, CanvasRenderer });
+
+    // ---------------------------------------------------------------------------
+    // Setup
+    // ---------------------------------------------------------------------------
+    const SOURCE_W = 1920;
+    const SOURCE_H = 1080;
+    const OUTPUT_W = 1920;
+    const OUTPUT_H = 1080;
+
+    const sourceCanvas = document.getElementById("sourceCanvas");
+    const outputCanvas = document.getElementById("outputCanvas");
+    const sourceCtx = sourceCanvas.getContext("2d");
+    const outputCtx = outputCanvas.getContext("2d");
+
+    sourceCanvas.width = SOURCE_W;
+    sourceCanvas.height = SOURCE_H;
+    outputCanvas.width = OUTPUT_W;
+    outputCanvas.height = OUTPUT_H;
+
+    // State
+    let currentMode = "click";
+    let backgroundConfig = { type: "gradient", colors: ["#1a1a2e", "#16213e"], angle: 135 };
+    let eventCount = 0;
+    let lastFrameTime = performance.now();
+    let fps = 60;
+
+    // Video source: "fake" | "screen" | "video"
+    let videoSourceMode = "fake";
+    let mediaStream = null;
+    let videoElement = document.getElementById("hiddenVideo");
+    let videoFrameCanvas = null;
+    let videoFrameCtx = null;
+
+    // Camera engine (must be after state vars)
+    let engine = createEngine();
+    let compositor = createCompositor();
+    const renderer = new CanvasRenderer(outputCtx);
+
+    // Fake webpage content for the source canvas
+    const fakeElements = [];
+    generateFakePage();
+
+    function createEngine() {
+      return new CameraEngine({
+        sourceSize: { width: SOURCE_W, height: SOURCE_H },
+        positionSpring: {
+          omega: parseFloat(document.getElementById("omega").value),
+          zeta: parseFloat(document.getElementById("zeta").value),
+        },
+        zoomSpring: {
+          omega: parseFloat(document.getElementById("omega").value) * 0.6,
+          zeta: parseFloat(document.getElementById("zeta").value) + 0.1,
+        },
+      });
+    }
+
+    function createCompositor() {
+      return new Compositor({
+        output: { width: OUTPUT_W, height: OUTPUT_H },
+        source: { width: SOURCE_W, height: SOURCE_H },
+        deviceFrame: { type: "browser-chrome", title: "https://example.com — Demo Page" },
+        background: backgroundConfig,
+        cursor: { visible: true, size: 24, showClickRipple: true, rippleDuration: 400 },
+      });
+    }
+
+    // ---------------------------------------------------------------------------
+    // Fake webpage rendering (draws on source canvas)
+    // ---------------------------------------------------------------------------
+    function generateFakePage() {
+      fakeElements.length = 0;
+
+      // Header bar
+      fakeElements.push({ type: "rect", x: 0, y: 0, w: SOURCE_W, h: 60, color: "#1e293b" });
+      fakeElements.push({ type: "text", x: 24, y: 38, text: "ExampleApp", size: 22, color: "#f8fafc", bold: true });
+
+      // Nav links
+      const navItems = ["Dashboard", "Projects", "Settings", "Help"];
+      navItems.forEach((item, i) => {
+        const x = 200 + i * 120;
+        fakeElements.push({ type: "text", x, y: 38, text: item, size: 14, color: "#94a3b8" });
+        fakeElements.push({ type: "clickable", x: x - 8, y: 18, w: 100, h: 32, label: item });
+      });
+
+      // Search bar
+      fakeElements.push({ type: "rect", x: SOURCE_W - 350, y: 16, w: 280, h: 32, color: "#334155", radius: 8 });
+      fakeElements.push({ type: "text", x: SOURCE_W - 340, y: 37, text: "Search...", size: 13, color: "#64748b" });
+      fakeElements.push({ type: "clickable", x: SOURCE_W - 350, y: 16, w: 280, h: 32, label: "search" });
+
+      // Hero section
+      fakeElements.push({ type: "rect", x: 60, y: 100, w: SOURCE_W - 120, h: 200, color: "#0f172a", radius: 16 });
+      fakeElements.push({ type: "text", x: 100, y: 170, text: "Welcome to ExampleApp", size: 36, color: "#f1f5f9", bold: true });
+      fakeElements.push({ type: "text", x: 100, y: 210, text: "Build amazing products with our platform. Get started in minutes.", size: 16, color: "#94a3b8" });
+      fakeElements.push({ type: "rect", x: 100, y: 240, w: 140, h: 38, color: "#3b82f6", radius: 8 });
+      fakeElements.push({ type: "text", x: 132, y: 264, text: "Get Started", size: 14, color: "#ffffff", bold: true });
+      fakeElements.push({ type: "clickable", x: 100, y: 240, w: 140, h: 38, label: "get-started" });
+
+      // Cards
+      const cards = [
+        { title: "Analytics", desc: "Track your metrics in real-time", icon: "📊" },
+        { title: "Integrations", desc: "Connect 200+ tools seamlessly", icon: "🔗" },
+        { title: "Security", desc: "Enterprise-grade protection", icon: "🔒" },
+      ];
+      cards.forEach((card, i) => {
+        const cx = 60 + i * ((SOURCE_W - 120) / 3);
+        const cw = (SOURCE_W - 120) / 3 - 20;
+        fakeElements.push({ type: "rect", x: cx, y: 340, w: cw, h: 160, color: "#1e293b", radius: 12 });
+        fakeElements.push({ type: "text", x: cx + 20, y: 385, text: card.icon + " " + card.title, size: 18, color: "#f1f5f9", bold: true });
+        fakeElements.push({ type: "text", x: cx + 20, y: 415, text: card.desc, size: 13, color: "#94a3b8" });
+        fakeElements.push({ type: "rect", x: cx + 20, y: 450, w: 100, h: 30, color: "rgba(59,130,246,0.15)", radius: 6 });
+        fakeElements.push({ type: "text", x: cx + 40, y: 470, text: "Learn more", size: 12, color: "#3b82f6" });
+        fakeElements.push({ type: "clickable", x: cx + 20, y: 450, w: 100, h: 30, label: card.title });
+      });
+
+      // Form section
+      fakeElements.push({ type: "rect", x: 60, y: 540, w: SOURCE_W / 2 - 80, h: 420, color: "#1e293b", radius: 12 });
+      fakeElements.push({ type: "text", x: 90, y: 580, text: "Contact Us", size: 22, color: "#f1f5f9", bold: true });
+
+      // Form fields
+      const fields = [
+        { label: "Name", y: 610, placeholder: "Your full name" },
+        { label: "Email", y: 680, placeholder: "you@example.com" },
+        { label: "Message", y: 750, placeholder: "Tell us about your project..." },
+      ];
+      fields.forEach((field) => {
+        fakeElements.push({ type: "text", x: 90, y: field.y, text: field.label, size: 12, color: "#94a3b8" });
+        fakeElements.push({ type: "rect", x: 90, y: field.y + 10, w: SOURCE_W / 2 - 220, h: 36, color: "#0f172a", radius: 6 });
+        fakeElements.push({ type: "text", x: 100, y: field.y + 33, text: field.placeholder, size: 13, color: "#475569" });
+        fakeElements.push({ type: "clickable", x: 90, y: field.y + 10, w: SOURCE_W / 2 - 220, h: 36, label: field.label });
+      });
+
+      // Submit button
+      fakeElements.push({ type: "rect", x: 90, y: 840, w: 120, h: 36, color: "#3b82f6", radius: 8 });
+      fakeElements.push({ type: "text", x: 118, y: 863, text: "Submit", size: 14, color: "#ffffff", bold: true });
+      fakeElements.push({ type: "clickable", x: 90, y: 840, w: 120, h: 36, label: "submit" });
+
+      // Stats section
+      fakeElements.push({ type: "rect", x: SOURCE_W / 2 + 20, y: 540, w: SOURCE_W / 2 - 80, h: 420, color: "#1e293b", radius: 12 });
+      fakeElements.push({ type: "text", x: SOURCE_W / 2 + 50, y: 580, text: "Platform Stats", size: 22, color: "#f1f5f9", bold: true });
+
+      const stats = [
+        { label: "Active Users", value: "12,847" },
+        { label: "Projects", value: "3,291" },
+        { label: "Uptime", value: "99.97%" },
+        { label: "API Calls / Day", value: "4.2M" },
+      ];
+      stats.forEach((stat, i) => {
+        const sy = 610 + i * 70;
+        fakeElements.push({ type: "rect", x: SOURCE_W / 2 + 50, y: sy, w: SOURCE_W / 2 - 160, h: 55, color: "#0f172a", radius: 8 });
+        fakeElements.push({ type: "text", x: SOURCE_W / 2 + 70, y: sy + 22, text: stat.label, size: 12, color: "#64748b" });
+        fakeElements.push({ type: "text", x: SOURCE_W / 2 + 70, y: sy + 43, text: stat.value, size: 20, color: "#f1f5f9", bold: true });
+      });
+
+      // Footer
+      fakeElements.push({ type: "rect", x: 0, y: SOURCE_H - 60, w: SOURCE_W, h: 60, color: "#0f172a" });
+      fakeElements.push({ type: "text", x: 60, y: SOURCE_H - 30, text: "© 2026 ExampleApp Inc. All rights reserved.", size: 12, color: "#475569" });
+    }
+
+    function drawFakePage() {
+      sourceCtx.fillStyle = "#0f172a";
+      sourceCtx.fillRect(0, 0, SOURCE_W, SOURCE_H);
+
+      for (const el of fakeElements) {
+        if (el.type === "rect") {
+          sourceCtx.fillStyle = el.color;
+          if (el.radius) {
+            sourceCtx.beginPath();
+            sourceCtx.roundRect(el.x, el.y, el.w, el.h, el.radius);
+            sourceCtx.fill();
+          } else {
+            sourceCtx.fillRect(el.x, el.y, el.w, el.h);
+          }
+        } else if (el.type === "text") {
+          sourceCtx.fillStyle = el.color;
+          sourceCtx.font = `${el.bold ? "bold " : ""}${el.size}px -apple-system, BlinkMacSystemFont, sans-serif`;
+          sourceCtx.fillText(el.text, el.x, el.y);
+        }
+      }
+
+      // Draw agent cursor position indicator on source
+      const cursor = engine.getCursorState();
+      if (cursor.visible) {
+        sourceCtx.save();
+        sourceCtx.strokeStyle = "rgba(59, 130, 246, 0.6)";
+        sourceCtx.lineWidth = 2;
+        sourceCtx.setLineDash([4, 4]);
+        sourceCtx.beginPath();
+        sourceCtx.arc(cursor.x, cursor.y, 20, 0, Math.PI * 2);
+        sourceCtx.stroke();
+        sourceCtx.setLineDash([]);
+
+        // Camera viewport outline
+        const cam = engine.getTransform();
+        const vw = SOURCE_W / cam.zoom;
+        const vh = SOURCE_H / cam.zoom;
+        const vx = cam.x - vw / 2;
+        const vy = cam.y - vh / 2;
+        sourceCtx.strokeStyle = "rgba(251, 191, 36, 0.5)";
+        sourceCtx.lineWidth = 2;
+        sourceCtx.strokeRect(vx, vy, vw, vh);
+
+        // Label
+        sourceCtx.fillStyle = "rgba(251, 191, 36, 0.8)";
+        sourceCtx.font = "12px monospace";
+        sourceCtx.fillText(`viewport: ${Math.round(vw)}×${Math.round(vh)} @ ${cam.zoom.toFixed(2)}x`, vx + 4, vy - 6);
+        sourceCtx.restore();
+      }
+    }
+
+    // ---------------------------------------------------------------------------
+    // Event handling
+    // ---------------------------------------------------------------------------
+    function pushEvent(type, x, y) {
+      const t = performance.now();
+      engine.pushEvent({ type, x, y, t });
+      eventCount++;
+      logEvent(type, x, y);
+      console.log(`[EVENT] ${type} at (${Math.round(x)}, ${Math.round(y)})`);
+    }
+
+    function logEvent(type, x, y) {
+      const log = document.getElementById("eventLog");
+      const entry = document.createElement("div");
+      entry.className = "event-entry";
+      entry.innerHTML = `<span class="type">${type}</span> <span class="pos">(${Math.round(x)}, ${Math.round(y)})</span>`;
+      log.prepend(entry);
+      // Keep only last 50
+      while (log.children.length > 50) log.removeChild(log.lastChild);
+    }
+
+    // Source canvas click handler
+    sourceCanvas.addEventListener("click", (e) => {
+      const rect = sourceCanvas.getBoundingClientRect();
+      const scaleX = SOURCE_W / rect.width;
+      const scaleY = SOURCE_H / rect.height;
+      const x = (e.clientX - rect.left) * scaleX;
+      const y = (e.clientY - rect.top) * scaleY;
+
+      pushEvent(currentMode, x, y);
+    });
+
+    // Mode buttons
+    document.querySelectorAll("[data-mode]").forEach((btn) => {
+      btn.addEventListener("click", () => {
+        document.querySelectorAll("[data-mode]").forEach((b) => b.classList.remove("active"));
+        btn.classList.add("active");
+        currentMode = btn.dataset.mode;
+      });
+    });
+
+    // Background buttons
+    document.querySelectorAll("[data-bg]").forEach((btn) => {
+      btn.addEventListener("click", () => {
+        document.querySelectorAll("[data-bg]").forEach((b) => b.classList.remove("active"));
+        btn.classList.add("active");
+        backgroundConfig.type = btn.dataset.bg;
+        compositor.updateConfig({ background: { ...backgroundConfig } });
+      });
+    });
+
+    // Sliders
+    document.getElementById("omega").addEventListener("input", (e) => {
+      document.getElementById("omegaVal").textContent = parseFloat(e.target.value).toFixed(1);
+      engine = createEngine();
+    });
+    document.getElementById("zeta").addEventListener("input", (e) => {
+      document.getElementById("zetaVal").textContent = parseFloat(e.target.value).toFixed(2);
+      engine = createEngine();
+    });
+    document.getElementById("bgAngle").addEventListener("input", (e) => {
+      backgroundConfig.angle = parseInt(e.target.value);
+      document.getElementById("bgAngleVal").textContent = e.target.value + "°";
+      compositor.updateConfig({ background: { ...backgroundConfig } });
+    });
+
+    // Reset
+    document.getElementById("resetBtn").addEventListener("click", () => {
+      engine.reset();
+      document.getElementById("eventLog").innerHTML = "";
+      eventCount = 0;
+    });
+
+    // ---------------------------------------------------------------------------
+    // Video source controls
+    // ---------------------------------------------------------------------------
+    const captureStatus = document.getElementById("captureStatus");
+
+    function setSourceMode(mode) {
+      videoSourceMode = mode;
+      document.getElementById("srcFake").classList.toggle("active", mode === "fake");
+      document.getElementById("srcScreen").classList.toggle("active", mode === "screen");
+      document.getElementById("srcVideo").classList.toggle("active", mode === "video");
+
+      // Remove primary from screen button once active
+      if (mode === "screen") {
+        document.getElementById("srcScreen").classList.remove("primary");
+      }
+    }
+
+    function stopMediaStream() {
+      if (mediaStream) {
+        mediaStream.getTracks().forEach((t) => t.stop());
+        mediaStream = null;
+      }
+      videoElement.srcObject = null;
+      videoElement.src = "";
+    }
+
+    // Screen capture via getDisplayMedia
+    document.getElementById("srcScreen").addEventListener("click", async () => {
+      try {
+        captureStatus.textContent = "Requesting screen access...";
+        stopMediaStream();
+
+        mediaStream = await navigator.mediaDevices.getDisplayMedia({
+          video: { width: { ideal: 1920 }, height: { ideal: 1080 }, frameRate: { ideal: 30 } },
+          audio: false,
+        });
+
+        videoElement.srcObject = mediaStream;
+        await videoElement.play();
+
+        // Create offscreen canvas matching video dimensions
+        const vw = videoElement.videoWidth || SOURCE_W;
+        const vh = videoElement.videoHeight || SOURCE_H;
+
+        videoFrameCanvas = new OffscreenCanvas(SOURCE_W, SOURCE_H);
+        videoFrameCtx = videoFrameCanvas.getContext("2d");
+
+        // Update compositor source size to match
+        compositor.updateConfig({ source: { width: SOURCE_W, height: SOURCE_H } });
+
+        setSourceMode("screen");
+        captureStatus.textContent = `Capturing ${vw}x${vh} — click on source to create events`;
+
+        // Detect when user stops sharing
+        mediaStream.getVideoTracks()[0].addEventListener("ended", () => {
+          captureStatus.textContent = "Screen sharing stopped";
+          setSourceMode("fake");
+        });
+      } catch (err) {
+        captureStatus.textContent = `Error: ${err.message}`;
+        setSourceMode("fake");
+      }
+    });
+
+    // Load video file
+    const videoFileInput = document.getElementById("videoFileInput");
+    document.getElementById("srcVideo").addEventListener("click", () => {
+      videoFileInput.click();
+    });
+
+    videoFileInput.addEventListener("change", async (e) => {
+      const file = e.target.files?.[0];
+      if (!file) return;
+
+      try {
+        captureStatus.textContent = `Loading ${file.name}...`;
+        stopMediaStream();
+
+        const url = URL.createObjectURL(file);
+        videoElement.src = url;
+        await videoElement.play();
+
+        const vw = videoElement.videoWidth || SOURCE_W;
+        const vh = videoElement.videoHeight || SOURCE_H;
+
+        videoFrameCanvas = new OffscreenCanvas(SOURCE_W, SOURCE_H);
+        videoFrameCtx = videoFrameCanvas.getContext("2d");
+
+        setSourceMode("video");
+        captureStatus.textContent = `Playing ${file.name} (${vw}x${vh}) — click on source to create events`;
+      } catch (err) {
+        captureStatus.textContent = `Error: ${err.message}`;
+        setSourceMode("fake");
+      }
+    });
+
+    // Back to fake page
+    document.getElementById("srcFake").addEventListener("click", () => {
+      stopMediaStream();
+      setSourceMode("fake");
+      captureStatus.textContent = "";
+    });
+
+    /**
+     * Get the current source frame as a CanvasImageSource.
+     * - "fake" mode: returns sourceCanvas (with fake page drawn on it)
+     * - "screen"/"video" mode: captures current video frame to offscreen canvas,
+     *   draws it on sourceCanvas for the viewport overlay, and returns sourceCanvas
+     */
+    function getSourceFrame() {
+      if ((videoSourceMode === "screen" || videoSourceMode === "video") && videoFrameCtx && videoElement.readyState >= 2) {
+        // Draw video frame scaled to source dimensions
+        videoFrameCtx.drawImage(videoElement, 0, 0, SOURCE_W, SOURCE_H);
+
+        // Also draw to visible source canvas so user sees it + overlays
+        sourceCtx.drawImage(videoElement, 0, 0, SOURCE_W, SOURCE_H);
+
+        // Draw overlays (cursor indicator + viewport rect) on top
+        drawOverlays();
+
+        return sourceCanvas;
+      }
+
+      // Fake page mode — already drawn by drawFakePage()
+      return sourceCanvas;
+    }
+
+    /** Draw cursor + viewport overlays on source canvas (for all modes). */
+    function drawOverlays() {
+      const cursor = engine.getCursorState();
+      if (!cursor.visible) return;
+
+      sourceCtx.save();
+      // Cursor circle
+      sourceCtx.strokeStyle = "rgba(59, 130, 246, 0.6)";
+      sourceCtx.lineWidth = 2;
+      sourceCtx.setLineDash([4, 4]);
+      sourceCtx.beginPath();
+      sourceCtx.arc(cursor.x, cursor.y, 20, 0, Math.PI * 2);
+      sourceCtx.stroke();
+      sourceCtx.setLineDash([]);
+
+      // Camera viewport outline
+      const cam = engine.getTransform();
+      const vw = SOURCE_W / cam.zoom;
+      const vh = SOURCE_H / cam.zoom;
+      const vx = cam.x - vw / 2;
+      const vy = cam.y - vh / 2;
+      sourceCtx.strokeStyle = "rgba(251, 191, 36, 0.5)";
+      sourceCtx.lineWidth = 2;
+      sourceCtx.strokeRect(vx, vy, vw, vh);
+
+      sourceCtx.fillStyle = "rgba(251, 191, 36, 0.8)";
+      sourceCtx.font = "12px monospace";
+      sourceCtx.fillText(`viewport: ${Math.round(vw)}×${Math.round(vh)} @ ${cam.zoom.toFixed(2)}x`, vx + 4, vy - 6);
+      sourceCtx.restore();
+    }
+
+    // ---------------------------------------------------------------------------
+    // Scenarios (auto-play sequences)
+    // ---------------------------------------------------------------------------
+    async function playScenario(events) {
+      for (const { type, x, y, delay } of events) {
+        await new Promise((r) => setTimeout(r, delay));
+        pushEvent(type, x, y);
+      }
+    }
+
+    document.getElementById("scnFormFill").addEventListener("click", () => {
+      engine.reset();
+      playScenario([
+        { type: "navigate", x: 960, y: 540, delay: 300 },
+        { type: "click", x: 150, y: 625, delay: 800 },     // Click name field
+        { type: "type", x: 200, y: 625, delay: 400 },       // Type name
+        { type: "type", x: 250, y: 625, delay: 300 },
+        { type: "type", x: 300, y: 625, delay: 200 },
+        { type: "click", x: 150, y: 695, delay: 600 },     // Click email field
+        { type: "type", x: 200, y: 695, delay: 400 },       // Type email
+        { type: "type", x: 250, y: 695, delay: 200 },
+        { type: "type", x: 300, y: 695, delay: 200 },
+        { type: "click", x: 150, y: 765, delay: 600 },     // Click message field
+        { type: "type", x: 200, y: 765, delay: 300 },
+        { type: "type", x: 300, y: 765, delay: 200 },
+        { type: "type", x: 400, y: 765, delay: 200 },
+        { type: "click", x: 150, y: 858, delay: 800 },     // Click submit
+      ]);
+    });
+
+    document.getElementById("scnBrowse").addEventListener("click", () => {
+      engine.reset();
+      playScenario([
+        { type: "click", x: 200, y: 38, delay: 500 },       // Click "Dashboard"
+        { type: "scroll", x: 960, y: 400, delay: 1000 },     // Scroll down
+        { type: "scroll", x: 960, y: 600, delay: 600 },
+        { type: "click", x: 160, y: 470, delay: 800 },       // Click "Learn more" on first card
+        { type: "scroll", x: 960, y: 700, delay: 1000 },
+        { type: "scroll", x: 960, y: 800, delay: 500 },
+        { type: "navigate", x: 960, y: 400, delay: 800 },   // Navigate back
+        { type: "click", x: 740, y: 470, delay: 800 },       // Click second card
+      ]);
+    });
+
+    document.getElementById("scnSearch").addEventListener("click", () => {
+      engine.reset();
+      playScenario([
+        { type: "click", x: SOURCE_W - 210, y: 32, delay: 500 },  // Click search
+        { type: "type", x: SOURCE_W - 200, y: 32, delay: 400 },    // Type query
+        { type: "type", x: SOURCE_W - 180, y: 32, delay: 200 },
+        { type: "type", x: SOURCE_W - 160, y: 32, delay: 200 },
+        { type: "type", x: SOURCE_W - 140, y: 32, delay: 200 },
+        { type: "click", x: 400, y: 400, delay: 1000 },            // Click a result
+        { type: "scroll", x: 400, y: 500, delay: 800 },             // Scroll result
+        { type: "scroll", x: 400, y: 600, delay: 500 },
+        { type: "scroll", x: 400, y: 700, delay: 400 },
+        { type: "click", x: 800, y: 300, delay: 800 },             // Click something else
+      ]);
+    });
+
+    // ---------------------------------------------------------------------------
+    // Render loop
+    // ---------------------------------------------------------------------------
+    function render() {
+      const now = performance.now();
+      const dt = Math.min((now - lastFrameTime) / 1000, 0.1);
+      lastFrameTime = now;
+
+      // FPS tracking
+      fps = fps * 0.95 + (1 / dt) * 0.05;
+
+      // Step camera
+      const camera = engine.step(dt);
+      const cursor = engine.getCursorState();
+
+      // Draw source (fake page or video frame)
+      if (videoSourceMode === "fake") {
+        drawFakePage();
+      }
+      const sourceFrame = getSourceFrame();
+
+      // Compute + render output
+      const instructions = compositor.computeFrame(camera, cursor);
+      renderer.renderFrame(sourceFrame, instructions, backgroundConfig);
+
+      // Update stats
+      document.getElementById("camX").textContent = Math.round(camera.x);
+      document.getElementById("camY").textContent = Math.round(camera.y);
+      document.getElementById("camZoom").textContent = camera.zoom.toFixed(2);
+      document.getElementById("camSettled").textContent = engine.isSettled() ? "yes" : "no";
+      document.getElementById("fpsValue").textContent = Math.round(fps);
+
+      const intent = engine.getCurrentIntent();
+      document.getElementById("camIntent").textContent = intent?.type ?? "—";
+
+      requestAnimationFrame(render);
+    }
+
+    requestAnimationFrame(render);
+  </script>
+</body>
+</html>
