@@ -112,7 +112,13 @@ export async function closeDevtools(label: string): Promise<void> {
 
 export async function setEmulation(
   label: string,
-  params: { width: number; height: number; deviceScaleFactor: number; mobile: boolean; scale?: number }
+  params: {
+    width: number;
+    height: number;
+    deviceScaleFactor: number;
+    mobile: boolean;
+    scale?: number;
+  }
 ): Promise<{ success: boolean; error?: string }> {
   if (!capabilities.nativeBrowser) return { success: false, error: "Not in Electron" };
   return (
@@ -123,9 +129,7 @@ export async function setEmulation(
   );
 }
 
-export async function clearEmulation(
-  label: string
-): Promise<{ success: boolean; error?: string }> {
+export async function clearEmulation(label: string): Promise<{ success: boolean; error?: string }> {
   if (!capabilities.nativeBrowser) return { success: false, error: "Not in Electron" };
   return (
     (await invoke<{ success: boolean; error?: string }>("clear_browser_emulation", { label })) ?? {

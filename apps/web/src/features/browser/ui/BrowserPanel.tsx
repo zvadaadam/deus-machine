@@ -94,7 +94,12 @@ function loadWorkspaceTabs(wsId: string | null): { tabs: BrowserTabState[]; acti
 function serializeTabs(tabs: BrowserTabState[]): PersistedBrowserTab[] {
   return tabs
     .filter((t) => t.currentUrl)
-    .map((t) => ({ id: t.id, url: t.currentUrl, title: t.title, ...(t.viewport ? { viewport: t.viewport } : {}) }));
+    .map((t) => ({
+      id: t.id,
+      url: t.currentUrl,
+      title: t.title,
+      ...(t.viewport ? { viewport: t.viewport } : {}),
+    }));
 }
 
 export function BrowserPanel({
@@ -823,7 +828,9 @@ export function BrowserPanel({
        * parent containers restructure (mx-auto, flex centering). Grid stacking
        * keeps tabs in normal flow so they inherit w-[390px] naturally and
        * ResizeObserver fires on actual size changes. */}
-      <div className={`relative min-h-0 flex-1 overflow-hidden ${activeTab?.viewport ? "bg-muted/30" : ""}`}>
+      <div
+        className={`relative min-h-0 flex-1 overflow-hidden ${activeTab?.viewport ? "bg-muted/30" : ""}`}
+      >
         <div className="grid h-full w-full">
           {tabs.map((tab) => (
             <BrowserTab

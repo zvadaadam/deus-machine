@@ -42,13 +42,21 @@ function deviceIcon(d: { mobile: boolean; width: number } | null) {
   return Monitor;
 }
 
-export function ViewportDropdown({ viewport, onChange, onOpenChange, disabled }: ViewportDropdownProps) {
+export function ViewportDropdown({
+  viewport,
+  onChange,
+  onOpenChange,
+  disabled,
+}: ViewportDropdownProps) {
   const [open, setOpen] = useState(false);
   const [customOpen, setCustomOpen] = useState(false);
   const [customW, setCustomW] = useState("1280");
   const [customH, setCustomH] = useState("720");
 
-  const Icon = deviceIcon(matchDevice(viewport) ?? (viewport ? { mobile: viewport.mobile ?? false, width: viewport.width } : null));
+  const Icon = deviceIcon(
+    matchDevice(viewport) ??
+      (viewport ? { mobile: viewport.mobile ?? false, width: viewport.width } : null)
+  );
   const isResponsive = viewport === null;
 
   const closeMenu = () => {
@@ -98,7 +106,12 @@ export function ViewportDropdown({ viewport, onChange, onOpenChange, disabled }:
             <DropdownMenuItem
               key={device.label}
               onSelect={() =>
-                onChange({ width: device.width, height: device.height, deviceScaleFactor: device.dpr, mobile: device.mobile })
+                onChange({
+                  width: device.width,
+                  height: device.height,
+                  deviceScaleFactor: device.dpr,
+                  mobile: device.mobile,
+                })
               }
             >
               <DeviceIcon className="mr-2 h-3.5 w-3.5" />
@@ -145,7 +158,12 @@ export function ViewportDropdown({ viewport, onChange, onOpenChange, disabled }:
             </Button>
           </div>
         ) : (
-          <DropdownMenuItem onSelect={(e) => { e.preventDefault(); setCustomOpen(true); }}>
+          <DropdownMenuItem
+            onSelect={(e) => {
+              e.preventDefault();
+              setCustomOpen(true);
+            }}
+          >
             Custom...
           </DropdownMenuItem>
         )}

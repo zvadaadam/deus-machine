@@ -60,7 +60,10 @@ function computeViewBounds(
   vp: ViewportState | null
 ): { bounds: { x: number; y: number; width: number; height: number }; scale: number } {
   if (!vp) {
-    return { bounds: { x: panelRect.x, y: panelRect.y, width: panelRect.width, height: panelRect.height }, scale: 1 };
+    return {
+      bounds: { x: panelRect.x, y: panelRect.y, width: panelRect.width, height: panelRect.height },
+      scale: 1,
+    };
   }
   const scale = Math.min(panelRect.width / vp.width, panelRect.height / vp.height, 1);
   const scaledW = vp.width * scale;
@@ -327,7 +330,9 @@ export const BrowserTab = forwardRef<BrowserTabHandle, BrowserTabProps>(function
         const vp = tabRef.current.viewport;
         if (vp && Math.abs(scale - lastScale) > 0.01) {
           lastScale = scale;
-          native.browserViews.setEmulation(webviewLabel, emulationParams(vp, scale)).catch(() => {});
+          native.browserViews
+            .setEmulation(webviewLabel, emulationParams(vp, scale))
+            .catch(() => {});
         }
       });
     };
