@@ -109,12 +109,20 @@ async function buildArgs(args: string[]): Promise<string[]> {
   return ["--cdp", CDP_PORT, ...args];
 }
 
+/**
+ * Fixed stream port for agent-browser's WebSocket frame server.
+ * Screen-studio's StreamRecorder connects here to capture frames for recording.
+ * Hardcoded so both sides agree without manual env var configuration.
+ */
+const STREAM_PORT = "9223";
+
 /** Build env for agent-browser subprocess */
 function buildEnv(sessionId: string): NodeJS.ProcessEnv {
   return {
     ...process.env,
     AGENT_BROWSER_SESSION: sessionId,
     AGENT_BROWSER_HEADED: "1",
+    AGENT_BROWSER_STREAM_PORT: STREAM_PORT,
   };
 }
 

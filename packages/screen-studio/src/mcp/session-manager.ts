@@ -491,15 +491,10 @@ export class SessionManager {
 
   /**
    * Resolve the agent-browser stream port.
-   *
-   * Checks:
-   *   1. AGENT_BROWSER_STREAM_PORT env var (explicit override)
-   *   2. Agent-browser session metadata files at ~/.agent-browser/sessions/
-   *
-   * Returns the port number or null if not found.
+   * Default: 9223. Override via AGENT_BROWSER_STREAM_PORT env var.
    */
   private resolveStreamPort(): number | null {
-    // 1. Explicit env var
+    // 1. Explicit env var (set by agent-browser-client.ts or manually)
     const envPort = process.env.AGENT_BROWSER_STREAM_PORT;
     if (envPort) {
       const port = parseInt(envPort, 10);
@@ -508,13 +503,21 @@ export class SessionManager {
       }
     }
 
-    // 2. Try to discover from agent-browser session metadata
+    // 2. Default port (matches STREAM_PORT in agent-browser-client.ts)
+    return 9223;
+  }
+
+  /**
+   * Legacy: discover stream port from agent-browser session metadata
+   * Kept for standalone use outside of Deus where the default port
+   * might not be set
+   */
+  private discoverStreamPortFromMetadata(): number | null {
     try {
       const homedir = process.env.HOME || process.env.USERPROFILE || "";
       const sessionsDir = join(homedir, ".agent-browser", "sessions");
       if (existsSync(sessionsDir)) {
         const entries = readdirSync(sessionsDir, { encoding: "utf-8" }) as string[];
-        // Look for session metadata files — newest first
         for (const entry of entries.reverse()) {
           const metaPath = join(sessionsDir, entry, "metadata.json");
           if (existsSync(metaPath)) {
