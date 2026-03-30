@@ -34,8 +34,6 @@ import {
   Loader2,
   Trash2,
   Camera,
-  Smartphone,
-  Monitor,
 } from "lucide-react";
 import { BrowserTabBar } from "./BrowserTabBar";
 import { BrowserTab } from "./BrowserTab";
@@ -45,8 +43,10 @@ import type {
   ConsoleLog,
   PersistedBrowserTab,
   ElementSelectedEvent,
+  ViewportState,
 } from "../types";
 import { createBrowserTab, deriveTitleFromUrl, hydratePersistedTab } from "../types";
+import { ViewportDropdown } from "./ViewportDropdown";
 import { workspaceLayoutActions } from "@/features/workspace/store/workspaceLayoutStore";
 import { chatInsertActions } from "@/shared/stores/chatInsertStore";
 import { native } from "@/platform";
@@ -94,7 +94,12 @@ function loadWorkspaceTabs(wsId: string | null): { tabs: BrowserTabState[]; acti
 function serializeTabs(tabs: BrowserTabState[]): PersistedBrowserTab[] {
   return tabs
     .filter((t) => t.currentUrl)
-    .map((t) => ({ id: t.id, url: t.currentUrl, title: t.title }));
+    .map((t) => ({
+      id: t.id,
+      url: t.currentUrl,
+      title: t.title,
+      ...(t.viewport ? { viewport: t.viewport } : {}),
+    }));
 }
 
 export function BrowserPanel({
@@ -118,9 +123,6 @@ export function BrowserPanel({
 
   // Track previous workspaceId to detect switches
   const prevWorkspaceIdRef = useRef(workspaceId);
-
-  // Mobile viewport toggle — constrains webview width to 390px (iPhone 14 logical width)
-  const [mobileView, setMobileView] = useState(false);
 
   // Derived: active tab for nav bar state
   const activeTab = tabs.find((t) => t.id === activeTabId) ?? null;
@@ -262,19 +264,19 @@ export function BrowserPanel({
         }
 
         const idx = prev.findIndex((t) => t.id === closingTabId);
-        const newTabs = prev.filter((t) => t.id !== closingTabId);
+        let newTabs = prev.filter((t) => t.id !== closingTabId);
 
         let nextActiveId = activeTabIdRef.current;
-        // Select neighbor when closing the active tab
-        if (closingTabId === activeTabIdRef.current) {
-          if (newTabs.length > 0) {
-            const nextIdx = Math.min(idx, newTabs.length - 1);
-            nextActiveId = newTabs[nextIdx].id;
-            setActiveTabId(nextActiveId);
-          } else {
-            nextActiveId = "";
-            setActiveTabId("");
-          }
+        // When closing the last tab, create a fresh empty tab (like real browsers)
+        if (newTabs.length === 0) {
+          const freshTab = createBrowserTab(workspaceId);
+          newTabs = [freshTab];
+          nextActiveId = freshTab.id;
+          setActiveTabId(nextActiveId);
+        } else if (closingTabId === activeTabIdRef.current) {
+          const nextIdx = Math.min(idx, newTabs.length - 1);
+          nextActiveId = newTabs[nextIdx].id;
+          setActiveTabId(nextActiveId);
         }
 
         persistTabs(newTabs, nextActiveId);
@@ -282,7 +284,7 @@ export function BrowserPanel({
       });
       tabRefs.current.delete(closingTabId);
     },
-    [persistTabs]
+    [workspaceId, persistTabs]
   );
 
   /**
@@ -303,10 +305,11 @@ export function BrowserPanel({
           return updated;
         });
 
-        // Persist on URL or title changes (page load finish, title change, navigation)
+        // Persist on URL, title, or viewport changes (page load finish, navigation, device preset)
         if (
           updates.currentUrl !== undefined ||
           updates.title !== undefined ||
+          updates.viewport !== undefined ||
           (updates.loading === false && !updates.error)
         ) {
           persistTabs(next, activeTabId);
@@ -385,6 +388,17 @@ export function BrowserPanel({
       console.error("Browser screenshot failed:", err);
     }
   }, [activeTab?.webviewLabel, activeTab?.currentUrl, workspaceId]);
+
+  /** Set viewport emulation — state update only. BrowserTab's useLayoutEffect
+   *  handles the IPC (setEmulation/clearEmulation + setBounds) because it knows
+   *  the panel dimensions needed to compute scale-to-fit. */
+  const handleViewportChange = useCallback(
+    (viewport: ViewportState | null) => {
+      if (!activeTab?.id) return;
+      handleUpdateTab(activeTab.id, { viewport });
+    },
+    [activeTab?.id, handleUpdateTab]
+  );
 
   // --- Navigation (operates on active tab) ---
 
@@ -687,22 +701,18 @@ export function BrowserPanel({
           <Camera className="h-4 w-4" />
         </Button>
 
-        <Button
-          variant="ghost"
-          size="icon"
-          className="h-7 w-7"
-          onClick={() => setMobileView((v) => !v)}
+        <ViewportDropdown
+          viewport={activeTab?.viewport ?? null}
+          onChange={handleViewportChange}
+          onOpenChange={(open) => {
+            if (open && activeTab?.webviewLabel) {
+              native.browserViews.hide(activeTab.webviewLabel).catch(() => {});
+            } else if (!open && panelVisible && activeTab?.webviewLabel && activeTab.currentUrl) {
+              native.browserViews.show(activeTab.webviewLabel).catch(() => {});
+            }
+          }}
           disabled={!activeTab?.currentUrl}
-          aria-pressed={mobileView}
-          title={mobileView ? "Switch to desktop view" : "Switch to mobile view"}
-          aria-label={mobileView ? "Switch to desktop view" : "Switch to mobile view"}
-        >
-          {mobileView ? (
-            <Monitor className="text-primary h-4 w-4" />
-          ) : (
-            <Smartphone className="h-4 w-4" />
-          )}
-        </Button>
+        />
 
         <DropdownMenu
           onOpenChange={(open) => {
@@ -818,29 +828,22 @@ export function BrowserPanel({
        * parent containers restructure (mx-auto, flex centering). Grid stacking
        * keeps tabs in normal flow so they inherit w-[390px] naturally and
        * ResizeObserver fires on actual size changes. */}
-      <div className={`relative min-h-0 flex-1 overflow-hidden ${mobileView ? "bg-muted/30" : ""}`}>
-        <div
-          className={`grid h-full ${mobileView ? "border-border/40 mx-auto w-[390px] border-x" : "w-full"}`}
-        >
-          {tabs.length === 0 ? (
-            <div className="text-muted-foreground/50 flex h-full items-center justify-center text-xs">
-              Click + to open a browser tab
-            </div>
-          ) : (
-            tabs.map((tab) => (
-              <BrowserTab
-                key={tab.id}
-                ref={setTabRef(tab.id)}
-                tab={tab}
-                onUpdateTab={handleUpdateTab}
-                onAddLog={handleAddLog}
-                onElementSelected={handleElementSelected}
-                visible={tab.id === activeTabId && panelVisible}
-                windowLabel={windowLabel}
-                mobileView={mobileView}
-              />
-            ))
-          )}
+      <div
+        className={`relative min-h-0 flex-1 overflow-hidden ${activeTab?.viewport ? "bg-muted/30" : ""}`}
+      >
+        <div className="grid h-full w-full">
+          {tabs.map((tab) => (
+            <BrowserTab
+              key={tab.id}
+              ref={setTabRef(tab.id)}
+              tab={tab}
+              onUpdateTab={handleUpdateTab}
+              onAddLog={handleAddLog}
+              onElementSelected={handleElementSelected}
+              visible={tab.id === activeTabId && panelVisible}
+              windowLabel={windowLabel}
+            />
+          ))}
         </div>
       </div>
     </div>

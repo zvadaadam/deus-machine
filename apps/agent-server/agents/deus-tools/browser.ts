@@ -923,5 +923,103 @@ Returns a fresh snapshot after scrolling.`,
         }
       )
     ),
+
+    // --- Viewport / Device Emulation ---
+
+    tool(
+      "BrowserSetViewport",
+      "Set browser viewport to custom dimensions for responsive testing. Returns a page snapshot showing the new layout.",
+      {
+        width: z.number().min(320).max(3840).describe("Viewport width in CSS pixels"),
+        height: z.number().min(240).max(2160).describe("Viewport height in CSS pixels"),
+        deviceScaleFactor: z
+          .number()
+          .min(1)
+          .max(4)
+          .optional()
+          .describe("Device pixel ratio (default: 1)"),
+      },
+      withBrowserTool(
+        "BrowserSetViewport",
+        sessionId,
+        (args) => `${args.width}x${args.height}@${args.deviceScaleFactor ?? 1}x`,
+        async (args) => {
+          const scale = args.deviceScaleFactor ?? 1;
+          const response = await execWithSnapshot(sessionId, [
+            "set",
+            "viewport",
+            String(args.width),
+            String(args.height),
+            String(scale),
+          ]);
+          if (response.error) {
+            return textResult(`SetViewport failed: ${response.error}`);
+          }
+          return textResult(
+            formatSnapshotResponse(
+              "set_viewport",
+              response.snapshot,
+              response.url,
+              response.title,
+              [`Viewport: ${args.width}x${args.height} @${scale}x`]
+            )
+          );
+        }
+      )
+    ),
+
+    tool(
+      "BrowserSetDevice",
+      "Emulate a specific device (viewport, user agent, touch). Available: iPhone 15, iPhone 16, iPhone 16 Pro, iPad, iPad Pro, Pixel 9, Galaxy S25. Returns a page snapshot.",
+      {
+        device: z.string().describe("Device name, e.g. 'iPhone 16', 'iPad Pro', 'Pixel 9'"),
+      },
+      withBrowserTool(
+        "BrowserSetDevice",
+        sessionId,
+        (args) => args.device,
+        async (args) => {
+          const response = await execWithSnapshot(sessionId, ["set", "device", args.device]);
+          if (response.error) {
+            return textResult(`SetDevice failed: ${response.error}`);
+          }
+          return textResult(
+            formatSnapshotResponse("set_device", response.snapshot, response.url, response.title, [
+              `Device: ${args.device}`,
+            ])
+          );
+        }
+      )
+    ),
+
+    tool(
+      "BrowserSetMedia",
+      "Emulate CSS media features for testing dark/light mode and accessibility preferences.",
+      {
+        colorScheme: z.enum(["dark", "light"]).optional().describe("Emulated prefers-color-scheme"),
+        reducedMotion: z.boolean().optional().describe("Emulate prefers-reduced-motion: reduce"),
+      },
+      withBrowserTool(
+        "BrowserSetMedia",
+        sessionId,
+        (args) => `scheme=${args.colorScheme ?? "default"}`,
+        async (args) => {
+          if (args.colorScheme === undefined && args.reducedMotion === undefined) {
+            return textResult("Provide at least one of colorScheme or reducedMotion.");
+          }
+          const mediaArgs = ["set", "media"];
+          if (args.colorScheme !== undefined) mediaArgs.push(args.colorScheme);
+          if (args.reducedMotion !== undefined)
+            mediaArgs.push(args.reducedMotion ? "reduced-motion" : "no-reduced-motion");
+          const result = await execAgentBrowser(sessionId, mediaArgs);
+          if (!result.success) {
+            return textResult(`SetMedia failed: ${result.error ?? "unknown error"}`);
+          }
+          return textResult(
+            `Media emulation set: color-scheme=${args.colorScheme ?? "default"}, reduced-motion=${args.reducedMotion ?? false}`
+          );
+        }
+      )
+    ),
   ];
 }

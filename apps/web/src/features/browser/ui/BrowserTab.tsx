@@ -31,8 +31,50 @@ import { AlertCircle, Loader2, Globe } from "lucide-react";
 import { native } from "@/platform";
 import { BROWSER_PAGE_LOAD, BROWSER_TITLE_CHANGED, BROWSER_URL_CHANGE } from "@shared/events";
 import { getErrorMessage } from "@shared/lib/errors";
-import type { BrowserTabState, BrowserTabHandle, ConsoleLog, ElementSelectedEvent } from "../types";
+import type {
+  BrowserTabState,
+  BrowserTabHandle,
+  ConsoleLog,
+  ElementSelectedEvent,
+  ViewportState,
+} from "../types";
 import { deriveTitleFromUrl } from "../types";
+
+/** Build emulation params from viewport state + computed scale */
+function emulationParams(vp: ViewportState, scale: number) {
+  return {
+    width: vp.width,
+    height: vp.height,
+    deviceScaleFactor: vp.deviceScaleFactor,
+    mobile: vp.mobile ?? false,
+    scale,
+  };
+}
+
+/** Compute WebContentsView bounds and CDP visual scale.
+ *  - Viewport fits in panel → center at 1:1
+ *  - Viewport exceeds panel → scale to fit (CDP renders full layout, visually shrunk)
+ *  - No emulation → fill panel */
+function computeViewBounds(
+  panelRect: DOMRect,
+  vp: ViewportState | null
+): { bounds: { x: number; y: number; width: number; height: number }; scale: number } {
+  if (!vp) {
+    return {
+      bounds: { x: panelRect.x, y: panelRect.y, width: panelRect.width, height: panelRect.height },
+      scale: 1,
+    };
+  }
+  const scale = Math.min(panelRect.width / vp.width, panelRect.height / vp.height, 1);
+  const scaledW = vp.width * scale;
+  const scaledH = vp.height * scale;
+  const offsetX = (panelRect.width - scaledW) / 2;
+  const offsetY = (panelRect.height - scaledH) / 2;
+  return {
+    bounds: { x: panelRect.x + offsetX, y: panelRect.y + offsetY, width: scaledW, height: scaledH },
+    scale,
+  };
+}
 import {
   INSPECT_MODE_SETUP,
   INSPECT_MODE_ENABLE,
@@ -59,14 +101,10 @@ interface BrowserTabProps {
   onElementSelected?: (tabId: string, event: ElementSelectedEvent) => void;
   /** Which Electron window to create child BrowserViews in. Defaults to "main". */
   windowLabel?: string;
-  /** When true, the browser container is constrained to mobile width (390px).
-   *  Used to trigger a bounds sync — mx-auto centering shifts x-offset
-   *  and ResizeObserver may not catch position-only changes. */
-  mobileView?: boolean;
 }
 
 export const BrowserTab = forwardRef<BrowserTabHandle, BrowserTabProps>(function BrowserTab(
-  { tab, onUpdateTab, onAddLog, visible, onElementSelected, windowLabel, mobileView },
+  { tab, onUpdateTab, onAddLog, visible, onElementSelected, windowLabel },
   ref
 ) {
   const placeholderRef = useRef<HTMLDivElement>(null);
@@ -94,8 +132,9 @@ export const BrowserTab = forwardRef<BrowserTabHandle, BrowserTabProps>(function
   // Stable ref for onElementSelected callback (used by the inspect drain loop)
   const onElementSelectedRef = useRef(onElementSelected);
   onElementSelectedRef.current = onElementSelected;
-  // Track previous mobileView value to detect actual toggles (vs initial mount)
-  const prevMobileViewRef = useRef(mobileView);
+  // Track previous viewport to detect changes. Initialized to `undefined`
+  // (not tab.viewport) so persisted viewports are applied on first mount.
+  const prevViewportRef = useRef<ViewportState | null | undefined>(undefined);
 
   const tabId = tab.id;
   const webviewLabel = tab.webviewLabel;
@@ -276,19 +315,25 @@ export const BrowserTab = forwardRef<BrowserTabHandle, BrowserTabProps>(function
     const el = placeholderRef.current;
     if (!el) return;
 
+    // Track last applied scale so we only re-call setEmulation when it changes
+    let lastScale = 1;
+
     const syncBounds = () => {
       cancelAnimationFrame(rafRef.current);
       rafRef.current = requestAnimationFrame(() => {
         const rect = el.getBoundingClientRect();
         if (rect.width === 0 || rect.height === 0) return;
-        native.browserViews
-          .setBounds(webviewLabel, {
-            x: rect.x,
-            y: rect.y,
-            width: rect.width,
-            height: rect.height,
-          })
-          .catch(() => {});
+        const { bounds, scale } = computeViewBounds(rect, tabRef.current.viewport);
+        native.browserViews.setBounds(webviewLabel, bounds).catch(() => {});
+
+        // Re-apply emulation when scale changes (panel resized while viewport active)
+        const vp = tabRef.current.viewport;
+        if (vp && Math.abs(scale - lastScale) > 0.01) {
+          lastScale = scale;
+          native.browserViews
+            .setEmulation(webviewLabel, emulationParams(vp, scale))
+            .catch(() => {});
+        }
       });
     };
 
@@ -305,49 +350,46 @@ export const BrowserTab = forwardRef<BrowserTabHandle, BrowserTabProps>(function
     };
   }, [visible, webviewReady, hasLoaded, webviewLabel]);
 
-  // --- Re-sync bounds when mobile view toggles ---
-  // The container CSS changes (w-full ↔ w-[390px] + mx-auto centering) change
-  // BOTH the placeholder's size and its x-offset. ResizeObserver catches the
-  // size change asynchronously, but it fires between layout and paint — racing
-  // with effect-based sync can produce stale x-offsets.
-  //
-  // useLayoutEffect runs synchronously after React commits DOM but BEFORE the
-  // browser paints. Calling getBoundingClientRect() here forces a synchronous
-  // reflow that includes the newly committed CSS classes (w-[390px], mx-auto).
-  // This guarantees correct width AND x-position in a single measurement — no
-  // rAF, no race with ResizeObserver, no timing ambiguity.
-  //
-  // The hide → setBounds → show cycle ensures WKWebView's native compositor
-  // actually repositions the view (setBounds on an already-visible native view
-  // can be coalesced/ignored by the compositor in some environments).
+  // --- Re-sync bounds when viewport emulation changes ---
+  // When the user picks a device preset or clears emulation, the webview bounds
+  // need to update: either center the emulated viewport within the panel or fill
+  // the panel. The hide → setBounds → show cycle ensures the native compositor
+  // repositions the view (setBounds on an already-visible view can be coalesced).
   useLayoutEffect(() => {
-    const changed = prevMobileViewRef.current !== mobileView;
-    prevMobileViewRef.current = mobileView;
-    if (!changed) return; // skip initial mount — visibility effect handles it
+    const prev = prevViewportRef.current;
+    prevViewportRef.current = tab.viewport;
+    // Skip when nothing changed. On first mount prev is `undefined` — only
+    // skip if the tab has no viewport to apply (null === null won't match).
+    if (prev !== undefined && prev === tab.viewport) return;
+    // First mount with no emulation — nothing to apply
+    if (prev === undefined && tab.viewport === null) return;
 
-    if (!visible || !webviewReady || !hasLoaded) return;
+    if (!visible || !webviewReady || !hasLoaded) {
+      // Not ready yet — reset so it retries when deps change
+      prevViewportRef.current = undefined;
+      return;
+    }
     const el = placeholderRef.current;
     if (!el || !webviewCreatedRef.current) return;
 
-    // Hide so the stale-position webview isn't visible during the transition.
+    const panelRect = el.getBoundingClientRect();
+    if (panelRect.width === 0 || panelRect.height === 0) return;
+
+    // Hide after confirming non-zero bounds (avoids permanently hidden view)
     native.browserViews.hide(webviewLabel).catch(() => {});
 
-    // getBoundingClientRect() forces synchronous reflow — reads the post-toggle
-    // layout including mx-auto centering offsets. No rAF needed because React
-    // has already committed the DOM changes before useLayoutEffect runs.
-    const rect = el.getBoundingClientRect();
-    if (rect.width === 0 || rect.height === 0) return;
+    const { bounds, scale } = computeViewBounds(panelRect, tab.viewport);
 
-    native.browserViews
-      .setBounds(webviewLabel, {
-        x: rect.x,
-        y: rect.y,
-        width: rect.width,
-        height: rect.height,
-      })
+    // Apply emulation or clear it, then position the view
+    const applyEmulation = tab.viewport
+      ? native.browserViews.setEmulation(webviewLabel, emulationParams(tab.viewport, scale))
+      : native.browserViews.clearEmulation(webviewLabel);
+
+    applyEmulation
+      .then(() => native.browserViews.setBounds(webviewLabel, bounds))
       .then(() => native.browserViews.show(webviewLabel))
       .catch(() => {});
-  }, [mobileView, visible, webviewReady, hasLoaded, webviewLabel]);
+  }, [tab.viewport, visible, webviewReady, hasLoaded, webviewLabel]);
 
   // --- IPC event listeners (page load, title, SPA nav) ---
   useEffect(() => {
@@ -465,10 +507,13 @@ export const BrowserTab = forwardRef<BrowserTabHandle, BrowserTabProps>(function
   useEffect(() => {
     if (!visible || !webviewReady || !hasLoaded) return;
 
+    // Drain console logs AND detect agent-initiated viewport changes.
+    // Viewport dimensions (innerWidth/innerHeight) are piggybacked onto the
+    // existing 1500ms drain to avoid adding a separate polling interval.
     const CONSOLE_DRAIN_JS = `(function(){
       var b = window.__DEUS_LOGS__ || [];
       window.__DEUS_LOGS__ = [];
-      return JSON.stringify(b);
+      return JSON.stringify({logs:b,vw:window.innerWidth,vh:window.innerHeight});
     })()`;
 
     // Track consecutive failures for diagnostic logging
@@ -489,11 +534,11 @@ export const BrowserTab = forwardRef<BrowserTabHandle, BrowserTabProps>(function
         // Reset on success
         consoleDrainFails = 0;
 
-        if (!result || result === "[]" || result === "undefined") return;
+        if (!result || result === "{}" || result === "undefined") return;
 
-        let logs: Array<{ l: string; m: string; t: number }>;
+        let parsed: { logs?: Array<{ l: string; m: string; t: number }>; vw?: number; vh?: number };
         try {
-          logs = JSON.parse(result);
+          parsed = JSON.parse(result);
         } catch (parseErr) {
           console.error(
             "[BrowserTab] console drain: JSON.parse failed",
@@ -503,6 +548,24 @@ export const BrowserTab = forwardRef<BrowserTabHandle, BrowserTabProps>(function
           );
           return;
         }
+
+        // Detect agent-initiated viewport changes via innerWidth/innerHeight
+        const { vw, vh } = parsed;
+        const currentVp = tabRef.current.viewport;
+        if (vw && vh && currentVp && (vw !== currentVp.width || vh !== currentVp.height)) {
+          // Agent changed viewport dimensions — sync dropdown
+          onUpdateTab(tabId, {
+            viewport: {
+              width: vw,
+              height: vh,
+              deviceScaleFactor: currentVp.deviceScaleFactor,
+              mobile: currentVp.mobile,
+            },
+          });
+        }
+
+        const logs = parsed.logs;
+        if (!logs || logs.length === 0) return;
         for (const log of logs) {
           const level = match(log.l)
             .with("warn", () => "warn" as const)
@@ -525,7 +588,7 @@ export const BrowserTab = forwardRef<BrowserTabHandle, BrowserTabProps>(function
     }, CONSOLE_DRAIN_INTERVAL_MS);
 
     return () => clearInterval(interval);
-  }, [visible, webviewReady, hasLoaded, webviewLabel, tabId, onAddLog]);
+  }, [visible, webviewReady, hasLoaded, webviewLabel, tabId, onAddLog, onUpdateTab]);
 
   // --- Periodic inspect event drain (only when selector is active) ---
   // Drains buffered events from the inject script via
