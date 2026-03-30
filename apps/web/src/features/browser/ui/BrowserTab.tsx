@@ -555,7 +555,12 @@ export const BrowserTab = forwardRef<BrowserTabHandle, BrowserTabProps>(function
         if (vw && vh && currentVp && (vw !== currentVp.width || vh !== currentVp.height)) {
           // Agent changed viewport dimensions — sync dropdown
           onUpdateTab(tabId, {
-            viewport: { width: vw, height: vh, deviceScaleFactor: currentVp.deviceScaleFactor },
+            viewport: {
+              width: vw,
+              height: vh,
+              deviceScaleFactor: currentVp.deviceScaleFactor,
+              mobile: currentVp.mobile,
+            },
           });
         }
 
