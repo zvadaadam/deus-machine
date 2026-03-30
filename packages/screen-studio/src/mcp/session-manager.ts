@@ -423,17 +423,21 @@ export class SessionManager {
    * Resolve "auto" capture method.
    *
    * Priority:
-   *   1. Linux → x11grab (native screen capture)
-   *   2. CDP_PORT available → cdp (Page.captureScreenshot is read-only,
-   *      coexists with agent-browser's CDP navigation)
-   *   3. Fallback → none (events-only)
+   *   macOS → avfoundation (30fps, native quality, needs Screen Recording permission)
+   *   Linux → x11grab (Xvfb/X11 capture)
+   *   Fallback → none (events-only)
+   *
+   * CDP is NOT used on desktop because agent-browser also uses CDP for
+   * navigation — two CDP clients on the same target causes race conditions.
+   * CDP capture is available via explicit captureMethod: "cdp" for
+   * standalone use (cloud agents, other projects without agent-browser).
    */
-  private async resolveAutoCapture(): Promise<"cdp" | "x11grab" | "none"> {
+  private async resolveAutoCapture(): Promise<"avfoundation" | "x11grab" | "none"> {
+    if (platform() === "darwin") {
+      return "avfoundation";
+    }
     if (platform() === "linux") {
       return "x11grab";
-    }
-    if (process.env.CDP_PORT) {
-      return "cdp";
     }
     return "none";
   }
