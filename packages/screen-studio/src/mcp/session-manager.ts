@@ -466,18 +466,13 @@ export class SessionManager {
    * standalone use (cloud agents, other projects without agent-browser).
    */
   private async resolveAutoCapture(): Promise<"stream" | "avfoundation" | "x11grab" | "none"> {
-    // Stream is preferred when available — no OS permission needed, no CDP conflicts
+    // Stream is preferred — no OS permission needed, no CDP conflicts.
+    // Don't probe upfront: agent-browser's stream server may not be running
+    // yet (it starts when the first BrowserNavigate happens). StreamRecorder
+    // handles lazy connection with retries.
     const streamPort = this.resolveStreamPort();
     if (streamPort) {
-      try {
-        // Probe the stream port to verify it's actually running
-        const probeResult = await this.probeStreamPort(streamPort);
-        if (probeResult) {
-          return "stream";
-        }
-      } catch {
-        // Stream not available, continue to next method
-      }
+      return "stream";
     }
 
     if (platform() === "darwin") {
