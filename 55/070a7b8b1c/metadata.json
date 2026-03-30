@@ -1,0 +1,31 @@
+{
+  "cli_version": "0.5.0",
+  "checkpoint_id": "55070a7b8b1c",
+  "strategy": "manual-commit",
+  "branch": "zvadaadam/screen-studio-integration",
+  "checkpoints_count": 6,
+  "files_touched": [
+    "apps/agent-server/agents/claude/claude-sdk-options.ts",
+    "apps/agent-server/agents/deus-tools/browser.ts",
+    "apps/agent-server/agents/deus-tools/index.ts",
+    "apps/agent-server/agents/deus-tools/recording-bridge.ts",
+    "apps/agent-server/agents/deus-tools/recording.ts",
+    "apps/agent-server/agents/screen-studio-server.ts",
+    "apps/agent-server/test/deus-tools.test.ts"
+  ],
+  "sessions": [
+    {
+      "metadata": "/55/070a7b8b1c/0/metadata.json",
+      "transcript": "/55/070a7b8b1c/0/full.jsonl",
+      "content_hash": "/55/070a7b8b1c/0/content_hash.txt",
+      "prompt": "/55/070a7b8b1c/0/prompt.txt"
+    }
+  ],
+  "token_usage": {
+    "input_tokens": 10476,
+    "cache_creation_tokens": 1458122,
+    "cache_read_tokens": 87330771,
+    "output_tokens": 208531,
+    "api_call_count": 556
+  }
+}

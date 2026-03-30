@@ -1,0 +1,39 @@
+{
+  "cli_version": "0.5.0",
+  "checkpoint_id": "55070a7b8b1c",
+  "session_id": "974e83b1-5d44-4282-8c2a-e2f70c81571b",
+  "strategy": "manual-commit",
+  "created_at": "2026-03-30T23:48:19.476271Z",
+  "branch": "zvadaadam/screen-studio-integration",
+  "checkpoints_count": 6,
+  "files_touched": [
+    "apps/agent-server/agents/claude/claude-sdk-options.ts",
+    "apps/agent-server/agents/deus-tools/browser.ts",
+    "apps/agent-server/agents/deus-tools/index.ts",
+    "apps/agent-server/agents/deus-tools/recording-bridge.ts",
+    "apps/agent-server/agents/deus-tools/recording.ts",
+    "apps/agent-server/agents/screen-studio-server.ts",
+    "apps/agent-server/test/deus-tools.test.ts"
+  ],
+  "agent": "Claude Code",
+  "turn_id": "c1b1bae2c5fb",
+  "token_usage": {
+    "input_tokens": 10476,
+    "cache_creation_tokens": 1458122,
+    "cache_read_tokens": 87330771,
+    "output_tokens": 208531,
+    "api_call_count": 556
+  },
+  "session_metrics": {
+    "turn_count": 71
+  },
+  "initial_attribution": {
+    "calculated_at": "2026-03-30T23:48:17.35196Z",
+    "agent_lines": 569,
+    "human_added": 0,
+    "human_modified": 9,
+    "human_removed": 16,
+    "total_committed": 578,
+    "agent_percentage": 98.44290657439446
+  }
+}
