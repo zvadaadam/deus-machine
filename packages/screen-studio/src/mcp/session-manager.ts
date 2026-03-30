@@ -1,4 +1,5 @@
 import { randomBytes } from "node:crypto";
+import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { platform } from "node:os";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -7,6 +8,7 @@ import { CameraEngine } from "../camera/engine.js";
 import { TimelineRecorder, generateFfmpegFilter } from "../recorder/encoder.js";
 import { FfmpegRecorder, detectFfmpeg } from "./ffmpeg-recorder.js";
 import { CdpRecorder } from "./cdp-capture.js";
+import { StreamRecorder } from "./stream-capture.js";
 import type {
   Chapter,
   RecordingResult,
@@ -59,6 +61,8 @@ interface InternalSession {
   rawCapturePath: string | null;
   /** CDP pipe-to-ffmpeg recorder (produces raw MP4 directly) */
   cdpRecorder: CdpRecorder | null;
+  /** WebSocket stream recorder (agent-browser frame stream → ffmpeg) */
+  streamRecorder: StreamRecorder | null;
 }
 
 /**
@@ -67,8 +71,9 @@ interface InternalSession {
  * Capture backends:
  *   - "avfoundation": macOS native capture, 30fps, needs Screen Recording permission
  *   - "cdp": CDP Page.captureScreenshot → pipe to ffmpeg, 10fps, no permission
+ *   - "stream": WebSocket stream from agent-browser, 10fps, no permission, no CDP conflicts
  *   - "x11grab": Linux Xvfb, 30fps
- *   - "auto": try avfoundation first, fall back to cdp
+ *   - "auto": try stream (if available), then avfoundation, fall back to none
  *   - "none": events-only, no video capture
  *
  * All capture backends produce a raw MP4, which is then post-processed
@@ -100,6 +105,7 @@ export class SessionManager {
 
     let rawCapturePath: string | null = null;
     let cdpRecorder: CdpRecorder | null = null;
+    let streamRecorder: StreamRecorder | null = null;
 
     // Resolve capture method
     let method = config.captureMethod;
@@ -107,7 +113,28 @@ export class SessionManager {
       method = await this.resolveAutoCapture();
     }
 
-    if (method === "cdp") {
+    if (method === "stream") {
+      // WebSocket stream from agent-browser — no OS permission, no CDP conflicts
+      const streamPort = this.resolveStreamPort();
+      if (streamPort) {
+        rawCapturePath = join(tmpdir(), `raw-${id}.mp4`);
+        streamRecorder = new StreamRecorder({
+          outputPath: rawCapturePath,
+          fps: Math.min(config.fps, 15), // Stream caps at ~15fps practical
+        });
+
+        try {
+          await streamRecorder.start(streamPort);
+        } catch (err) {
+          console.error(`[session-manager] Stream capture failed: ${err}`);
+          streamRecorder = null;
+          rawCapturePath = null;
+          // Continue without capture — events still record
+        }
+      } else {
+        console.error("[session-manager] No stream port found, falling back to events-only");
+      }
+    } else if (method === "cdp") {
       // CDP pipe-to-ffmpeg — no OS permission, no temp files
       const cdpPort = parseInt(process.env.CDP_PORT || "19222", 10);
       rawCapturePath = join(tmpdir(), `raw-${id}.mp4`);
@@ -170,6 +197,7 @@ export class SessionManager {
       ffmpegRecorder,
       rawCapturePath,
       cdpRecorder,
+      streamRecorder,
     });
 
     return id;
@@ -278,6 +306,19 @@ export class SessionManager {
       const duration = (session.state.endTime! - session.state.startTime) / 1000;
       let videoProduced = false;
 
+      // --- Stop stream recorder ---
+      if (session.streamRecorder) {
+        try {
+          const rawPath = await session.streamRecorder.stop();
+          if (rawPath) {
+            session.rawCapturePath = rawPath;
+          }
+        } catch (err) {
+          console.error("[session-manager] Stream capture stop failed:", err);
+          session.rawCapturePath = null;
+        }
+      }
+
       // --- Stop CDP recorder ---
       if (session.cdpRecorder) {
         try {
@@ -379,6 +420,7 @@ export class SessionManager {
 
     session.ffmpegRecorder.kill();
     session.cdpRecorder?.kill();
+    session.streamRecorder?.kill();
     await session.ffmpegRecorder.cleanup();
     this.sessions.delete(sessionId);
   }
@@ -413,16 +455,31 @@ export class SessionManager {
    * Resolve "auto" capture method.
    *
    * Priority:
-   *   macOS → avfoundation (30fps, native quality, needs Screen Recording permission)
-   *   Linux → x11grab (Xvfb/X11 capture)
-   *   Fallback → none (events-only)
+   *   1. Stream (if agent-browser stream port is available — no permission, no CDP conflicts)
+   *   2. macOS → avfoundation (30fps, native quality, needs Screen Recording permission)
+   *   3. Linux → x11grab (Xvfb/X11 capture)
+   *   4. Fallback → none (events-only)
    *
    * CDP is NOT used on desktop because agent-browser also uses CDP for
    * navigation — two CDP clients on the same target causes race conditions.
    * CDP capture is available via explicit captureMethod: "cdp" for
    * standalone use (cloud agents, other projects without agent-browser).
    */
-  private async resolveAutoCapture(): Promise<"avfoundation" | "x11grab" | "none"> {
+  private async resolveAutoCapture(): Promise<"stream" | "avfoundation" | "x11grab" | "none"> {
+    // Stream is preferred when available — no OS permission needed, no CDP conflicts
+    const streamPort = this.resolveStreamPort();
+    if (streamPort) {
+      try {
+        // Probe the stream port to verify it's actually running
+        const probeResult = await this.probeStreamPort(streamPort);
+        if (probeResult) {
+          return "stream";
+        }
+      } catch {
+        // Stream not available, continue to next method
+      }
+    }
+
     if (platform() === "darwin") {
       return "avfoundation";
     }
@@ -430,6 +487,80 @@ export class SessionManager {
       return "x11grab";
     }
     return "none";
+  }
+
+  /**
+   * Resolve the agent-browser stream port.
+   *
+   * Checks:
+   *   1. AGENT_BROWSER_STREAM_PORT env var (explicit override)
+   *   2. Agent-browser session metadata files at ~/.agent-browser/sessions/
+   *
+   * Returns the port number or null if not found.
+   */
+  private resolveStreamPort(): number | null {
+    // 1. Explicit env var
+    const envPort = process.env.AGENT_BROWSER_STREAM_PORT;
+    if (envPort) {
+      const port = parseInt(envPort, 10);
+      if (!isNaN(port) && port > 0 && port < 65536) {
+        return port;
+      }
+    }
+
+    // 2. Try to discover from agent-browser session metadata
+    try {
+      const homedir = process.env.HOME || process.env.USERPROFILE || "";
+      const sessionsDir = join(homedir, ".agent-browser", "sessions");
+      if (existsSync(sessionsDir)) {
+        const entries = readdirSync(sessionsDir, { encoding: "utf-8" }) as string[];
+        // Look for session metadata files — newest first
+        for (const entry of entries.reverse()) {
+          const metaPath = join(sessionsDir, entry, "metadata.json");
+          if (existsSync(metaPath)) {
+            try {
+              const meta = JSON.parse(readFileSync(metaPath, "utf-8"));
+              if (meta.streamPort) {
+                return meta.streamPort;
+              }
+            } catch {
+              // Skip malformed metadata
+            }
+          }
+        }
+      }
+    } catch {
+      // Discovery failed — not critical
+    }
+
+    return null;
+  }
+
+  /**
+   * Quick probe to check if a WebSocket stream server is listening on the given port.
+   * Connects, waits briefly for any message, then disconnects.
+   */
+  private probeStreamPort(port: number): Promise<boolean> {
+    return new Promise((resolve) => {
+      const timeout = setTimeout(() => {
+        ws.close();
+        resolve(false);
+      }, 2_000);
+
+      const ws = new WebSocket(`ws://127.0.0.1:${port}`);
+
+      ws.onopen = () => {
+        // Server is listening — that's enough to confirm
+        clearTimeout(timeout);
+        ws.close();
+        resolve(true);
+      };
+
+      ws.onerror = () => {
+        clearTimeout(timeout);
+        resolve(false);
+      };
+    });
   }
 
   private getSession(sessionId: string): InternalSession {
