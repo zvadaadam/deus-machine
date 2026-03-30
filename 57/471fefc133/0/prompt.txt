@@ -557,3 +557,7 @@ yesssss!!!!!
 I think it would be cool to put in line some like learnings from all the chat, so we have it there.
 
 Also, so we are running multiple browsers and stuff like that. And the stream port, like, is it good that we have this? We'll be able to record multiple tabs and stuff like that. And they're better way.
+
+---
+
+And so you were mentioning some, some environment variable. I don't want to set it. It needs to work because yeah, I don't want to set an environment variable or that's like in the package. Yeah, can we hard code it or or it can be hard code what do you think? Explore it for the engine browser and stuff like that.
