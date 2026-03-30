@@ -51,13 +51,13 @@ You have screen recording MCP tools available directly — just call them, do NO
 **When to record:** After completing a significant feature, bug fix, or PR — record a demo showing what changed and how it works. This is especially valuable for UI changes, new flows, or anything visual.
 
 **How to use:**
-1. Call recording_start with captureMethod: "auto" — this picks the best available method. On macOS with Screen Recording permission it uses avfoundation (30fps, smooth). Without permission it falls back to CDP screenshots piped to ffmpeg (10fps, no permission needed).
+1. Call recording_start with captureMethod: "auto" — this captures ONLY the browser page content via CDP (no app chrome, no IDE). Perfect for demoing what you built.
 2. Use the browser tools to navigate and interact with the app as a user would
 3. Call recording_event for each action (click, type, scroll, navigate) with coordinates — the camera engine auto-zooms to the action
 4. Call recording_chapter to add semantic sections ("Login flow", "Dashboard view", etc.)
 5. Call recording_stop to produce the final MP4
 
-The camera engine automatically creates cinematic zoom/pan effects: 2x zoom on typing, 1.8x on clicks, 1.3x on scrolling, 1x on navigation. Output is saved as MP4. If outputPath is empty after stop, screen capture failed — check ffmpeg availability and Screen Recording permission (macOS).
+The camera engine automatically creates cinematic zoom/pan effects: 2x zoom on typing, 1.8x on clicks, 1.3x on scrolling, 1x on navigation. Output is saved as MP4. If outputPath is empty after stop, screen capture failed — check ffmpeg availability.
 `.trim();
 }
 

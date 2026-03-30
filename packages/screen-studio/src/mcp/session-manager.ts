@@ -420,27 +420,23 @@ export class SessionManager {
   }
 
   /**
-   * Resolve "auto" capture method:
-   *   macOS → try avfoundation (will fail at capture time if no permission)
-   *   Linux → x11grab
-   *   CDP available → cdp
-   *   Otherwise → none
+   * Resolve "auto" capture method.
+   *
+   * Prefers CDP because it captures ONLY the browser page content —
+   * no app chrome, no IDE, just the web page the agent is demoing.
+   * avfoundation/x11grab capture the entire screen which is wrong
+   * for browser demos.
    */
-  private async resolveAutoCapture(): Promise<"avfoundation" | "cdp" | "x11grab" | "none"> {
-    if (platform() === "darwin") {
-      // Try avfoundation first — if permission denied, create() handles fallback to CDP
-      return "avfoundation";
-    }
-    if (platform() === "linux") {
-      return "x11grab";
-    }
-    // Check if CDP is available
+  private async resolveAutoCapture(): Promise<"cdp" | "x11grab" | "none"> {
     const cdpPort = parseInt(process.env.CDP_PORT || "19222", 10);
     try {
       const res = await fetch(`http://127.0.0.1:${cdpPort}/json`);
       if (res.ok) return "cdp";
     } catch {
       /* no CDP */
+    }
+    if (platform() === "linux") {
+      return "x11grab";
     }
     return "none";
   }
