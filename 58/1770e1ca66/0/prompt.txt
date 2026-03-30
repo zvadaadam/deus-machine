@@ -200,3 +200,7 @@ Still nothing. The screen-studio MCP server isn't registering any tools. It's 
 ---
 
 how about tring it if you can callit it
+
+---
+
+Commit uncommitted changes, then rebase this branch onto origin/main. Then push --force-with-lease.
