@@ -285,3 +285,7 @@ also any inspo from cursor, they have many types of browse automation and one wh
 ---
 
 /Users/zvada/Developer/agent/box-ide/.conductor/monrovia-v1/.context/attachments/pasted_text_2026-03-30_22-45-32.txt Okay, so I tried it again. When we opened our product, we already had one browser active, and then when it called browser navigation, it replaced the active tab, and it worked. But then we closed the tab and did the recording with that, and when the browser navigator was called, it failed. Do you see that?
+
+---
+
+/Users/zvada/Developer/agent/box-ide/.conductor/monrovia-v1/.context/attachments/Screenshot 2026-03-30 at 10.48.27 PM.png Okay, but now you can see that there are two browser tabs open. I don't know why, but like the it was called and the expo is called was opened two times and one was half by a bit. Do you see that on the image? Why is that? We called it and we didn't have any tab already open. There was no page tab in the browser. So it was here to create a new one just FYI. And during the time there was no recording or cult.
