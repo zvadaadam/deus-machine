@@ -104,7 +104,7 @@ export function DiffFilesTree({ fileChanges, selectedFile, onFileClick }: DiffFi
   return (
     <div className="flex h-full flex-col overflow-hidden">
       {/* File list — no header, keeps it clean */}
-      <div className="scrollbar-vibrancy flex-1 overflow-y-auto py-1">
+      <div className="flex-1 overflow-y-auto py-1">
         {groups.map((group) => (
           <FolderGroupView
             key={group.folder || "__root__"}

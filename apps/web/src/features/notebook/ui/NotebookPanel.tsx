@@ -274,7 +274,7 @@ export function NotebookPanel({ workspaceId, sessionStatus }: NotebookPanelProps
 
       {/* Content */}
       {hasCells ? (
-        <div className="scrollbar-vibrancy flex-1 overflow-y-auto py-1">
+        <div className="flex-1 overflow-y-auto py-1">
           {cells.map((cell, i) => (
             <NotebookCellView key={i} cell={cell} index={i} />
           ))}

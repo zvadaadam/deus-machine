@@ -1811,30 +1811,45 @@ select {
   transition-duration: 200ms;
 }
 
-/* Scrollbar styles - Subtle scrollbar design */
-.scrollbar-vibrancy::-webkit-scrollbar {
-  width: 8px;
+/* Global scrollbar — one style for every scrollable container inside #root.
+ * Scoped to #root so we never replace the page-level browser scrollbar. */
+#root {
+  scrollbar-width: thin;
+  scrollbar-color: color-mix(in oklch, var(--muted-foreground) 15%, transparent) transparent;
 }
 
-.scrollbar-vibrancy::-webkit-scrollbar-track {
+#root ::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+#root ::-webkit-scrollbar-track {
   background: transparent;
 }
 
-.scrollbar-vibrancy::-webkit-scrollbar-thumb {
+#root ::-webkit-scrollbar-thumb {
   background: color-mix(in oklch, var(--muted-foreground) 12%, transparent);
   border-radius: var(--radius-sm);
   transition: background 200ms cubic-bezier(0.25, 0.46, 0.45, 0.94);
 }
 
-.scrollbar-vibrancy::-webkit-scrollbar-thumb:hover {
+#root ::-webkit-scrollbar-thumb:hover {
   background: color-mix(in oklch, var(--muted-foreground) 25%, transparent);
 }
 
-.scrollbar-vibrancy::-webkit-scrollbar-thumb:active {
+#root ::-webkit-scrollbar-thumb:active {
   background: color-mix(in oklch, var(--muted-foreground) 35%, transparent);
 }
 
-/* Hide scrollbars (keep scroll behavior) */
+#root ::-webkit-scrollbar-corner {
+  background: transparent;
+}
+
+#root ::-webkit-scrollbar-button {
+  display: none;
+}
+
+/* Hide scrollbars (keep scroll behavior) — opt-out from the global style */
 .scrollbar-hidden {
   scrollbar-width: none;
   -ms-overflow-style: none;
@@ -1845,58 +1860,6 @@ select {
   height: 0;
 }
 
-/* Scoped scrollbar styles — only for app scrollable containers, not page-level.
- * Per Emil's design principles: never replace page scrollbars. */
-[data-slot="sidebar"],
-[data-radix-scroll-area-viewport] {
-  scrollbar-width: thin;
-  scrollbar-color: color-mix(in oklch, var(--muted-foreground) 15%, transparent) transparent;
-}
-
-[data-slot="sidebar"]::-webkit-scrollbar,
-[data-radix-scroll-area-viewport]::-webkit-scrollbar {
-  width: 10px;
-  height: 10px;
-}
-
-[data-slot="sidebar"]::-webkit-scrollbar-track,
-[data-radix-scroll-area-viewport]::-webkit-scrollbar-track {
-  background: transparent;
-}
-
-[data-slot="sidebar"]::-webkit-scrollbar-thumb,
-[data-radix-scroll-area-viewport]::-webkit-scrollbar-thumb {
-  background: color-mix(in oklch, var(--muted-foreground) 15%, transparent);
-  border-radius: var(--radius-sm);
-  border: 2px solid transparent;
-  background-clip: padding-box;
-  transition: background 200ms cubic-bezier(0.25, 0.46, 0.45, 0.94);
-}
-
-[data-slot="sidebar"]::-webkit-scrollbar-thumb:hover,
-[data-radix-scroll-area-viewport]::-webkit-scrollbar-thumb:hover {
-  background: color-mix(in oklch, var(--muted-foreground) 28%, transparent);
-  border: 2px solid transparent;
-  background-clip: padding-box;
-}
-
-[data-slot="sidebar"]::-webkit-scrollbar-thumb:active,
-[data-radix-scroll-area-viewport]::-webkit-scrollbar-thumb:active {
-  background: color-mix(in oklch, var(--muted-foreground) 40%, transparent);
-  border: 2px solid transparent;
-  background-clip: padding-box;
-}
-
-[data-slot="sidebar"]::-webkit-scrollbar-corner,
-[data-radix-scroll-area-viewport]::-webkit-scrollbar-corner {
-  background: transparent;
-}
-
-[data-slot="sidebar"]::-webkit-scrollbar-button,
-[data-radix-scroll-area-viewport]::-webkit-scrollbar-button {
-  display: none;
-}
-
 /* Reduce motion support for vibrancy and scrollbars */
 @media (prefers-reduced-motion: reduce) {
   .vibrancy-bg,
@@ -1904,9 +1867,7 @@ select {
     transition: none;
   }
 
-  [data-slot="sidebar"]::-webkit-scrollbar-thumb,
-  [data-radix-scroll-area-viewport]::-webkit-scrollbar-thumb,
-  .scrollbar-vibrancy::-webkit-scrollbar-thumb {
+  #root ::-webkit-scrollbar-thumb {
     transition: none !important;
   }
 }
