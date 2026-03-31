@@ -149,10 +149,7 @@ export const BrowserTab = forwardRef<BrowserTabHandle, BrowserTabProps>(function
     };
   }, []);
 
-  // --- Create webview eagerly on mount ---
-  // Always create a native BrowserView, even for empty tabs (about:blank).
-  // This ensures every tab has a CDP target that agent-browser can discover
-  // and navigate directly — no hidden relay view needed.
+  // --- Create webview (lazy, on first navigation) ---
 
   const createWebviewIfNeeded = useCallback(
     async (url: string) => {
@@ -240,12 +237,6 @@ export const BrowserTab = forwardRef<BrowserTabHandle, BrowserTabProps>(function
 
         setWebviewReady(true);
 
-        // For about:blank (empty tab), mark as loaded immediately so the
-        // view is ready for CDP discovery. For real URLs, wait for page-load.
-        if (url === "about:blank") {
-          setHasLoaded(true);
-        }
-
         // Start hidden — will show after first page load completes
         native.browserViews.hide(webviewLabel).catch(() => {});
 
@@ -275,35 +266,27 @@ export const BrowserTab = forwardRef<BrowserTabHandle, BrowserTabProps>(function
     };
   }, [webviewLabel]);
 
-  // --- Eagerly create webview on mount ---
-  // Create the native BrowserView immediately on mount, even if the panel
-  // isn't visible yet. Empty tabs load about:blank so they exist as CDP
-  // targets — agent-browser discovers and navigates them directly.
-  // The view stays hidden until the panel is visible AND a real URL loads.
+  // --- Auto-navigate hydrated tabs (restored from workspace persistence) ---
+  // When a tab mounts with a persisted URL but no webview, auto-create it.
+  // This handles workspace-switch where old webviews are destroyed and new
+  // BrowserTab components mount with pre-filled URLs from the layout store.
   useEffect(() => {
-    if (webviewCreatedRef.current) return;
-    const url = tab.currentUrl || "about:blank";
+    if (!visible || webviewCreatedRef.current || !tab.currentUrl) return;
+    // Schedule async to avoid cascading renders from setState in effect
     const timer = setTimeout(() => {
-      if (tab.currentUrl) {
-        onUpdateTab(tabId, { loading: true });
-      }
-      createWebviewIfNeeded(url);
+      onUpdateTab(tabId, { loading: true });
+      createWebviewIfNeeded(tab.currentUrl);
     }, 0);
     return () => clearTimeout(timer);
-    // Only run on mount — webview creation is a one-time operation
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [visible, tab.currentUrl, tabId, createWebviewIfNeeded, onUpdateTab]);
 
   // --- Show/hide webview based on visibility + load state ---
   // Native webviews render ABOVE the DOM, so we hide them to reveal overlays.
-  // Show only when: visible, loaded, has a real URL, and no initial error.
-  // Empty tabs (about:blank) stay hidden so the placeholder UI is visible —
-  // the native BrowserView still exists as a CDP target for agent-browser.
-  const hasRealUrl = !!tab.currentUrl;
+  // Show only when: visible, loaded, and no initial error.
   useEffect(() => {
     if (!webviewReady) return;
 
-    if (visible && hasLoaded && hasRealUrl) {
+    if (visible && hasLoaded) {
       // Sync bounds before showing (layout may have changed while hidden)
       const el = placeholderRef.current;
       if (el) {
@@ -323,11 +306,11 @@ export const BrowserTab = forwardRef<BrowserTabHandle, BrowserTabProps>(function
     } else {
       native.browserViews.hide(webviewLabel).catch(() => {});
     }
-  }, [visible, webviewReady, hasLoaded, hasRealUrl, webviewLabel]);
+  }, [visible, webviewReady, hasLoaded, webviewLabel]);
 
-  // --- Sync bounds with ResizeObserver (only when visible & loaded with real URL) ---
+  // --- Sync bounds with ResizeObserver (only when visible & loaded) ---
   useEffect(() => {
-    if (!visible || !webviewReady || !hasLoaded || !hasRealUrl) return;
+    if (!visible || !webviewReady || !hasLoaded) return;
 
     const el = placeholderRef.current;
     if (!el) return;
@@ -365,7 +348,7 @@ export const BrowserTab = forwardRef<BrowserTabHandle, BrowserTabProps>(function
       window.removeEventListener("resize", syncBounds);
       cancelAnimationFrame(rafRef.current);
     };
-  }, [visible, webviewReady, hasLoaded, hasRealUrl, webviewLabel]);
+  }, [visible, webviewReady, hasLoaded, webviewLabel]);
 
   // --- Re-sync bounds when viewport emulation changes ---
   // When the user picks a device preset or clears emulation, the webview bounds
@@ -473,8 +456,6 @@ export const BrowserTab = forwardRef<BrowserTabHandle, BrowserTabProps>(function
       native.events.on(BROWSER_URL_CHANGE, (data) => {
         const { label, url } = data;
         if (label !== webviewLabel) return;
-        // Ignore about:blank — it's the initial empty tab state, not a real navigation
-        if (url === "about:blank") return;
 
         // Suppress history push from programmatic back/forward navigation
         if (suppressHistoryPushRef.current) {
@@ -854,10 +835,8 @@ export const BrowserTab = forwardRef<BrowserTabHandle, BrowserTabProps>(function
         />
       )}
 
-      {/* Empty state: no URL entered yet — minimal, engineer-friendly.
-       * The native BrowserView (about:blank) exists behind this overlay as a
-       * CDP target, but we show the placeholder UI until the user navigates. */}
-      {visible && !tab.currentUrl && (
+      {/* Empty state: no URL entered yet — minimal, engineer-friendly */}
+      {visible && !webviewReady && !tab.currentUrl && (
         <div className="flex h-full flex-col items-center justify-center gap-3">
           <div className="bg-muted/50 flex h-10 w-10 items-center justify-center rounded-xl">
             <Globe

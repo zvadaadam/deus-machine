@@ -454,32 +454,17 @@ export class SessionManager {
   /**
    * Resolve "auto" capture method.
    *
-   * Priority:
-   *   1. Stream (if agent-browser stream port is available — no permission, no CDP conflicts)
-   *   2. macOS → avfoundation (30fps, native quality, needs Screen Recording permission)
-   *   3. Linux → x11grab (Xvfb/X11 capture)
-   *   4. Fallback → none (events-only)
+   * Uses agent-browser's WebSocket stream — captures JPEG frames of the
+   * browser page only (not the app UI). No OS permission, no CDP conflicts.
+   * Falls back to events-only if stream port not configured.
    *
-   * CDP is NOT used on desktop because agent-browser also uses CDP for
-   * navigation — two CDP clients on the same target causes race conditions.
-   * CDP capture is available via explicit captureMethod: "cdp" for
-   * standalone use (cloud agents, other projects without agent-browser).
+   * Other methods (avfoundation, x11grab, cdp) available via explicit
+   * captureMethod for standalone/external use.
    */
-  private async resolveAutoCapture(): Promise<"stream" | "avfoundation" | "x11grab" | "none"> {
-    // Stream is preferred — no OS permission needed, no CDP conflicts.
-    // Don't probe upfront: agent-browser's stream server may not be running
-    // yet (it starts when the first BrowserNavigate happens). StreamRecorder
-    // handles lazy connection with retries.
+  private async resolveAutoCapture(): Promise<"stream" | "none"> {
     const streamPort = this.resolveStreamPort();
     if (streamPort) {
       return "stream";
-    }
-
-    if (platform() === "darwin") {
-      return "avfoundation";
-    }
-    if (platform() === "linux") {
-      return "x11grab";
     }
     return "none";
   }
