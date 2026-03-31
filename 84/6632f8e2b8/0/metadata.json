@@ -1,0 +1,33 @@
+{
+  "cli_version": "0.5.0",
+  "checkpoint_id": "846632f8e2b8",
+  "session_id": "83bccf19-ef08-46f3-8c42-6175aa48b9f1",
+  "strategy": "manual-commit",
+  "created_at": "2026-03-31T19:32:36.05675Z",
+  "branch": "zvadaadam/fix-scroll-indicator",
+  "checkpoints_count": 2,
+  "files_touched": [
+    "apps/web/src/global.css"
+  ],
+  "agent": "Claude Code",
+  "turn_id": "da18bd1e7056",
+  "token_usage": {
+    "input_tokens": 50,
+    "cache_creation_tokens": 85488,
+    "cache_read_tokens": 1649818,
+    "output_tokens": 9883,
+    "api_call_count": 39
+  },
+  "session_metrics": {
+    "turn_count": 4
+  },
+  "initial_attribution": {
+    "calculated_at": "2026-03-31T19:32:35.928248Z",
+    "agent_lines": 0,
+    "human_added": 1,
+    "human_modified": 3,
+    "human_removed": 0,
+    "total_committed": 1,
+    "agent_percentage": 0
+  }
+}
