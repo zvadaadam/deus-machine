@@ -1849,13 +1849,14 @@ select {
   display: none;
 }
 
-/* Hide scrollbars (keep scroll behavior) — opt-out from the global style */
-.scrollbar-hidden {
+/* Hide scrollbars (keep scroll behavior) — opt-out from the global style.
+ * Scoped to #root so specificity (1,1,0) beats the global rule (1,0,0). */
+#root .scrollbar-hidden {
   scrollbar-width: none;
   -ms-overflow-style: none;
 }
 
-.scrollbar-hidden::-webkit-scrollbar {
+#root .scrollbar-hidden::-webkit-scrollbar {
   width: 0;
   height: 0;
 }
