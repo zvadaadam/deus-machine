@@ -35,10 +35,7 @@ export function CodeBlock({
 
       {/* Code content with syntax highlighting */}
       <div
-        className={cn(
-          "bg-muted/70 m-0 overflow-x-auto rounded-lg p-3 font-mono text-xs leading-[18px]",
-          "scrollbar-vibrancy"
-        )}
+        className="bg-muted/70 m-0 overflow-x-auto rounded-lg p-3 font-mono text-xs leading-[18px]"
         style={{ maxHeight }}
       >
         <SyntaxHighlighter code={code} language={language} showLineNumbers={showLineNumbers} />

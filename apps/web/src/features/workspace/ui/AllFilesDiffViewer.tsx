@@ -224,7 +224,7 @@ export const AllFilesDiffViewer = forwardRef<AllFilesDiffViewerRef, AllFilesDiff
         {/* Scrollable file sections */}
         <div
           ref={scrollContainerRef}
-          className="scrollbar-vibrancy divide-border/40 flex flex-1 flex-col divide-y overflow-y-auto pb-3"
+          className="divide-border/40 flex flex-1 flex-col divide-y overflow-y-auto pb-3"
         >
           {fileChanges.map((fc) => {
             const path = fc.file || fc.file_path || "";

@@ -76,7 +76,7 @@ export function ProjectSelectionStep({ onBack, onNext }: ProjectSelectionStepPro
         </div>
       ) : (
         <div
-          className="scrollbar-vibrancy flex max-h-[320px] flex-col gap-2 overflow-y-auto pr-1"
+          className="flex max-h-[320px] flex-col gap-2 overflow-y-auto pr-1"
           style={{
             maskImage:
               "linear-gradient(to bottom, transparent, black 24px, black calc(100% - 32px), transparent)",
