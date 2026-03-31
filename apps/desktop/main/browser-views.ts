@@ -36,34 +36,6 @@ const viewEmulation = new Map<
 /** Reference to the detached browser window (only one at a time) */
 let detachedWindow: BrowserWindow | null = null;
 
-/**
- * Clamp BrowserView bounds to prevent fullscreen takeover.
- * If the view would cover more than 75% of the window in BOTH dimensions,
- * something is wrong (placeholder measured incorrectly). Reject the bounds
- * by returning the last known good bounds, or a safe default.
- */
-function clampBounds(
-  bounds: Electron.Rectangle,
-  windowWidth: number,
-  windowHeight: number
-): Electron.Rectangle {
-  const maxWidth = Math.round(windowWidth * 0.75);
-  const maxHeight = Math.round(windowHeight * 0.75);
-
-  if (bounds.width > maxWidth && bounds.height > maxHeight) {
-    // Suspiciously large — likely a measurement error. Use a safe default
-    // positioned in the right half of the window (where the browser panel is).
-    return {
-      x: Math.round(windowWidth * 0.35),
-      y: Math.round(windowHeight * 0.05),
-      width: Math.round(windowWidth * 0.6),
-      height: Math.round(windowHeight * 0.85),
-    };
-  }
-
-  return bounds;
-}
-
 /** Centralized main window lookup — avoids repeating getAllWindows()[0] in every handler */
 function getMainWindow(): BrowserWindow | undefined {
   return (
@@ -197,17 +169,12 @@ export function registerBrowserViewHandlers(): void {
       // space. When the user zooms the renderer (Cmd+/Cmd-), CSS pixels diverge
       // from window points by the zoom factor — multiply to correct.
       const zoomFactor = mainWindow.webContents.getZoomFactor();
-      const [winWidth, winHeight] = mainWindow.getContentSize();
-      const bounds = clampBounds(
-        {
-          x: Math.round(x * zoomFactor),
-          y: Math.round(y * zoomFactor),
-          width: Math.round(Math.max(width * zoomFactor, 100)),
-          height: Math.round(Math.max(height * zoomFactor, 100)),
-        },
-        winWidth,
-        winHeight
-      );
+      const bounds = {
+        x: Math.round(x * zoomFactor),
+        y: Math.round(y * zoomFactor),
+        width: Math.round(Math.max(width * zoomFactor, 100)),
+        height: Math.round(Math.max(height * zoomFactor, 100)),
+      };
 
       const view = new WebContentsView({
         webPreferences: {
@@ -225,10 +192,12 @@ export function registerBrowserViewHandlers(): void {
         },
       });
 
-      // Set bounds BEFORE adding to hierarchy — addChildView without prior
-      // setBounds defaults to full window size, causing a fullscreen flash.
-      view.setBounds(bounds);
+      // Add as a child of contentView. Currently renders on top of main
+      // WebContents (same as old BrowserView behavior). To render BEHIND
+      // the DOM (like Cursor/VS Code), use addChildView(view, 0) and make
+      // the browser panel area transparent — tracked as a follow-up.
       mainWindow.contentView.addChildView(view);
+      view.setBounds(bounds);
       views.set(label, view);
 
       // Register event listeners BEFORE loadURL to avoid race conditions.
@@ -537,20 +506,17 @@ export function registerBrowserViewHandlers(): void {
       // CSS-pixel → window-point conversion (see create_browser_webview comment)
       const mainWindow = getMainWindow();
       const zoomFactor = mainWindow?.webContents.getZoomFactor() ?? 1;
-      const [winWidth, winHeight] = mainWindow ? mainWindow.getContentSize() : [1920, 1080];
-      const bounds = clampBounds(
-        {
-          x: Math.round(x * zoomFactor),
-          y: Math.round(y * zoomFactor),
-          width: Math.round(width * zoomFactor),
-          height: Math.round(height * zoomFactor),
-        },
-        winWidth,
-        winHeight
-      );
+      const bounds = {
+        x: Math.round(x * zoomFactor),
+        y: Math.round(y * zoomFactor),
+        width: Math.round(width * zoomFactor),
+        height: Math.round(height * zoomFactor),
+      };
       const view = views.get(label);
       if (view) {
         view.setBounds(bounds);
+        // Also save to viewBounds so show() uses the latest position
+        // (important when setBounds is called while the view is hidden/detached)
         viewBounds.set(label, bounds);
       }
     }
@@ -560,18 +526,16 @@ export function registerBrowserViewHandlers(): void {
     const mainWindow = getMainWindow();
     const view = views.get(label);
     if (mainWindow && view) {
-      // Apply saved bounds BEFORE making visible or adding to hierarchy.
-      // Without this, addChildView defaults to full window size and
-      // setVisible(true) shows a fullscreen flash before setBounds corrects it.
-      const savedBounds = viewBounds.get(label);
-      if (savedBounds) {
-        view.setBounds(savedBounds);
-      }
+      // Ensure view is in the contentView hierarchy
       const children = mainWindow.contentView.children;
       if (!children.includes(view)) {
         mainWindow.contentView.addChildView(view);
       }
       view.setVisible(true);
+      const savedBounds = viewBounds.get(label);
+      if (savedBounds) {
+        view.setBounds(savedBounds);
+      }
     }
   });
 
