@@ -699,3 +699,7 @@ The error is still there, oh my god. Please explore in depth. We already solved 
 ---
 
 /Users/zvada/Developer/agent/box-ide/.conductor/monrovia-v1/.context/attachments/Screenshot 2026-03-31 at 2.44.18 AM.png Again, it went and no please no fucking workarounds. Think about it.
+
+---
+
+And don't touch the origin main. We are working in work tree here, so don't touch it. We need to make sure we need to make this work. So work in this branch and explore. We have already solved it in this conversation, but I'm not sure how, but like maybe a hint for you Maybe like before we used to have always like, I think the solution was that like, it has to have this running tab always some tabs needs to be run. Otherwise, it just like creates this view over the whole screen. And I can see like, if we close the, there is no tap running, then yeah. And maybe like the previous step, which we had, and it was like, the overlay, it was running previously, we just like restarted the app and it was running previously. I'm not sure if it's picking up. But maybe we couldn't get connected to it. Not sure. But still full screen, we have followed.
