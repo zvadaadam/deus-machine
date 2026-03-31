@@ -1,0 +1,33 @@
+{
+  "cli_version": "0.5.0",
+  "checkpoint_id": "092b8907d7f9",
+  "session_id": "974e83b1-5d44-4282-8c2a-e2f70c81571b",
+  "strategy": "manual-commit",
+  "created_at": "2026-03-31T00:59:18.617284Z",
+  "branch": "zvadaadam/screen-studio-integration",
+  "checkpoints_count": 2,
+  "files_touched": [
+    "apps/agent-server/agents/deus-tools/agent-browser-client.ts"
+  ],
+  "agent": "Claude Code",
+  "turn_id": "6b0f34460336",
+  "token_usage": {
+    "input_tokens": 10566,
+    "cache_creation_tokens": 1522805,
+    "cache_read_tokens": 108423452,
+    "output_tokens": 239215,
+    "api_call_count": 626
+  },
+  "session_metrics": {
+    "turn_count": 80
+  },
+  "initial_attribution": {
+    "calculated_at": "2026-03-31T00:59:16.225842Z",
+    "agent_lines": 0,
+    "human_added": 4,
+    "human_modified": 2,
+    "human_removed": 0,
+    "total_committed": 4,
+    "agent_percentage": 0
+  }
+}
