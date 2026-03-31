@@ -192,9 +192,10 @@ export function registerBrowserViewHandlers(): void {
         },
       });
 
-      // Set bounds BEFORE adding to hierarchy to prevent fullscreen flash.
-      // addChildView without prior setBounds renders at full window size.
+      // Start hidden — BrowserTab's show/hide effect controls visibility.
+      // Set bounds before adding to prevent fullscreen flash if shown immediately.
       view.setBounds(bounds);
+      view.setVisible(false);
       mainWindow.contentView.addChildView(view);
       views.set(label, view);
 
