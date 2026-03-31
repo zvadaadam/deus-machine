@@ -84,21 +84,21 @@ export function RepositoryItem({
               <span className="text-text-muted truncate text-xs font-medium uppercase tracking-tighter">{repoName}</span>
               <div className="relative flex h-4 w-4 shrink-0 items-center justify-center">
                 {workspaceCount > 0 && (
-                  <span className="text-text-disabled text-xs tabular-nums transition-opacity duration-150 group-hover/repository-item:opacity-0">
+                  <span className="text-text-disabled text-xs tabular-nums transition-opacity duration-150 group-hover/repository-item:opacity-0 group-focus-within/repository-item:opacity-0">
                     {workspaceCount}
                   </span>
                 )}
                 <ChevronRight
                   className={cn(
                     "absolute inset-0 m-auto h-3.5 w-3.5",
-                    "text-text-muted opacity-0 transition-[transform,opacity] duration-150 group-hover/repository-item:opacity-100",
+                    "text-text-muted opacity-0 transition-[transform,opacity] duration-150 group-hover/repository-item:opacity-100 group-focus-within/repository-item:opacity-100",
                     !isCollapsed && "rotate-90"
                   )}
                 />
               </div>
             </SidebarRowMain>
             {sidebarExpanded && (
-              <SidebarRowRight className="gap-2 opacity-0 transition-opacity duration-150 group-hover/repository-item:opacity-100">
+              <SidebarRowRight className="gap-2 opacity-0 transition-opacity duration-150 group-hover/repository-item:opacity-100 group-focus-within/repository-item:opacity-100">
                 {isGitHubUrl(repository.git_origin_url) && onNewWorkspaceFromGitHub && (
                   <Tooltip>
                     <TooltipTrigger asChild>
