@@ -1,0 +1,23 @@
+{
+  "cli_version": "0.5.0",
+  "checkpoint_id": "12cab80b39c4",
+  "strategy": "manual-commit",
+  "branch": "zvadaadam/fix-scroll-indicator",
+  "checkpoints_count": 3,
+  "files_touched": null,
+  "sessions": [
+    {
+      "metadata": "/12/cab80b39c4/0/metadata.json",
+      "transcript": "/12/cab80b39c4/0/full.jsonl",
+      "content_hash": "/12/cab80b39c4/0/content_hash.txt",
+      "prompt": "/12/cab80b39c4/0/prompt.txt"
+    }
+  ],
+  "token_usage": {
+    "input_tokens": 66,
+    "cache_creation_tokens": 100945,
+    "cache_read_tokens": 2307790,
+    "output_tokens": 12300,
+    "api_call_count": 51
+  }
+}
