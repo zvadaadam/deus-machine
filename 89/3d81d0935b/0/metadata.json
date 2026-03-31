@@ -1,0 +1,33 @@
+{
+  "cli_version": "0.5.0",
+  "checkpoint_id": "893d81d0935b",
+  "session_id": "73e84cc0-b0ff-4974-9346-b315e980ea96",
+  "strategy": "manual-commit",
+  "created_at": "2026-03-31T23:28:02.207771Z",
+  "branch": "zvadaadam/sidebar-repo-titles",
+  "checkpoints_count": 2,
+  "files_touched": [
+    "apps/web/src/features/sidebar/ui/RepositoryItem.tsx"
+  ],
+  "agent": "Claude Code",
+  "turn_id": "0383fe272f80",
+  "token_usage": {
+    "input_tokens": 121,
+    "cache_creation_tokens": 179263,
+    "cache_read_tokens": 4620993,
+    "output_tokens": 34060,
+    "api_call_count": 79
+  },
+  "session_metrics": {
+    "turn_count": 19
+  },
+  "initial_attribution": {
+    "calculated_at": "2026-03-31T23:28:01.913044Z",
+    "agent_lines": 3,
+    "human_added": 0,
+    "human_modified": 0,
+    "human_removed": 0,
+    "total_committed": 3,
+    "agent_percentage": 100
+  }
+}

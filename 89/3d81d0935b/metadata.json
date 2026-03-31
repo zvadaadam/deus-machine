@@ -1,0 +1,25 @@
+{
+  "cli_version": "0.5.0",
+  "checkpoint_id": "893d81d0935b",
+  "strategy": "manual-commit",
+  "branch": "zvadaadam/sidebar-repo-titles",
+  "checkpoints_count": 2,
+  "files_touched": [
+    "apps/web/src/features/sidebar/ui/RepositoryItem.tsx"
+  ],
+  "sessions": [
+    {
+      "metadata": "/89/3d81d0935b/0/metadata.json",
+      "transcript": "/89/3d81d0935b/0/full.jsonl",
+      "content_hash": "/89/3d81d0935b/0/content_hash.txt",
+      "prompt": "/89/3d81d0935b/0/prompt.txt"
+    }
+  ],
+  "token_usage": {
+    "input_tokens": 121,
+    "cache_creation_tokens": 179263,
+    "cache_read_tokens": 4620993,
+    "output_tokens": 34060,
+    "api_call_count": 79
+  }
+}
