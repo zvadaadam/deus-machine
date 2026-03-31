@@ -33,3 +33,14 @@ why we dont have one styling fo the scroll and used across all?
 ---
 
 yes
+
+---
+
+<system_instruction>
+The user has attached these files. Read them before proceeding.
+- /Users/zvada/Developer/agent/box-ide/.conductor/chicago-v6/.context/attachments/PR instructions.md (955 B)
+</system_instruction>
+
+
+
+Create a PR
