@@ -14,7 +14,7 @@ import type { RepositoryItemProps } from "../model/types";
 import type { Workspace, DiffStats, RepoGroup } from "@/shared/types";
 import type { WorkspaceStatus } from "@shared/enums";
 import { WorkspaceItem } from "./WorkspaceItem";
-import { RepoAvatar } from "./RepoAvatar";
+
 import { SidebarRow, SidebarRowMain, SidebarRowIconSlot, SidebarRowRight } from "./SidebarRow";
 import { DeusRepositoryBanner } from "./DeusRepositoryBanner";
 
@@ -24,15 +24,11 @@ function isGitHubUrl(url: string | null | undefined): boolean {
 }
 
 /**
- * RepositoryItem — V2: Jony Ive
+ * RepositoryItem — collapsible repo section header.
  *
  * Layout:
- *   [Badge 20×20] [RepoName]  ...  [PR] [+] [⋯]  (hover-reveal actions)
- *     └── [+ New workspace]
+ *   [REPO NAME] [count → chevron on hover]  ...  [PR] [+]  (hover-reveal actions)
  *     └── WorkspaceItem[]
- *
- * The repo header uses text-secondary (B0B0B0) 14px medium.
- * Action icons: text-muted (#787878), appear on hover.
  */
 export function RepositoryItem({
   repository,
@@ -84,23 +80,22 @@ export function RepositoryItem({
             aria-label={`Toggle ${repoName} workspaces`}
             className="cursor-grab"
           >
-            <SidebarRowMain className="gap-2">
-              <div className="relative flex-shrink-0">
-                <div className="transition-opacity duration-150 group-hover/repository-item:opacity-0">
-                  <RepoAvatar repoName={repository.repo_name} />
-                </div>
+            <SidebarRowMain className="gap-1.5">
+              <span className="text-text-muted truncate text-xs font-medium uppercase tracking-tighter">{repoName}</span>
+              <div className="relative flex h-4 w-4 shrink-0 items-center justify-center">
+                {workspaceCount > 0 && (
+                  <span className="text-text-disabled text-xs tabular-nums transition-opacity duration-150 group-hover/repository-item:opacity-0">
+                    {workspaceCount}
+                  </span>
+                )}
                 <ChevronRight
                   className={cn(
-                    "absolute inset-0 m-auto h-4 w-4",
+                    "absolute inset-0 m-auto h-3.5 w-3.5",
                     "text-text-muted opacity-0 transition-[transform,opacity] duration-150 group-hover/repository-item:opacity-100",
                     !isCollapsed && "rotate-90"
                   )}
                 />
               </div>
-              <span className="text-text-secondary truncate text-sm font-medium">{repoName}</span>
-              {workspaceCount > 0 && (
-                <span className="text-text-muted text-xs tabular-nums">{workspaceCount}</span>
-              )}
             </SidebarRowMain>
             {sidebarExpanded && (
               <SidebarRowRight className="gap-2 opacity-0 transition-opacity duration-150 group-hover/repository-item:opacity-100">
@@ -151,7 +146,7 @@ export function RepositoryItem({
             animate={{ height: "auto", opacity: 1 }}
             exit={reduceMotion ? { opacity: 0 } : { height: 0, opacity: 0 }}
             transition={{ duration: 0.22, ease: [0.165, 0.84, 0.44, 1] }}
-            className="flex min-w-0 flex-col overflow-hidden"
+            className="flex min-w-0 flex-col overflow-hidden pt-1 pb-2"
           >
             {sidebarExpanded && (
               <RepositoryWorkspaceList
