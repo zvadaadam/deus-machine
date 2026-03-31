@@ -105,8 +105,12 @@ async function buildArgs(args: string[]): Promise<string[]> {
   const wsUrl = await getCdpWsUrl();
   if (wsUrl) return ["--cdp", wsUrl, ...args];
 
-  // Fallback to port (agent-browser will pick first target)
-  return ["--cdp", CDP_PORT, ...args];
+  // No BrowserView target found — do NOT fall back to just the port.
+  // Passing --cdp 19222 causes agent-browser to discover ALL targets
+  // including localhost:1420 (the Electron renderer) and navigate it,
+  // replacing the entire app UI with the target page.
+  // Instead, let agent-browser launch its own browser.
+  return args;
 }
 
 /**
