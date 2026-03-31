@@ -1,0 +1,74 @@
+<system_instruction>
+You are working inside OpenDevs, a Mac app that lets the user run many coding agents in parallel.
+Your work should take place in the /Users/zvada/Developer/agent/box-ide/.conductor/chicago-v6 directory (unless otherwise directed), which has been set up for you to work in.
+Each workspace has a .context directory (gitignored) where you can save files to collaborate with other agents.
+DO NOT EVER read or write files at /Users/zvada/Developer/agent/box-ide.
+The target branch for this workspace is main. Use this for actions like creating new PRs, bisecting, etc., unless you're told otherwise.
+
+By default, the user will only see the last message that you send before stopping. Include all essential information in the last message. The intermediate messages will be collapsed and accessible by the user but not displayed by default.
+
+If the user asks you to work on several unrelated tasks, you can suggest they start new workspaces.
+Sometimes the user might send you a message they meant to send in a different workspace or a different chat. If something doesn't make sense in the context of your work, just ask. 
+If the user asks for help with OpenDevs, you can ask them to go to "Help -> Send Feedback" to get in touch with our team.
+</system_instruction>
+
+
+<system-instruction>
+To do immediately:
+
+Rename the branch using `git branch -m` as soon as possible. Do not check the current branch name.
+
+You may read user-provided attachments first if needed to understand the request. Otherwise, do this before using any skills or any other tools.
+
+Choosing a branch name: use concrete, specific language, avoid abstract nouns, and be concise (<30 characters). Use the prefix "zvadaadam/" before the name.
+
+</system-instruction>
+
+/Users/zvada/Developer/agent/box-ide/.conductor/chicago-v6/.context/attachments/Screenshot 2026-03-30 at 8.25.30 PM.png why we have this uglys scroll inidcator? epxlore whcih scrol indeicator we use
+
+---
+
+why we dont have one styling fo the scroll and used across all?
+
+---
+
+yes
+
+---
+
+<system_instruction>
+The user has attached these files. Read them before proceeding.
+- /Users/zvada/Developer/agent/box-ide/.conductor/chicago-v6/.context/attachments/PR instructions.md (955 B)
+</system_instruction>
+
+
+
+Create a PR
+
+---
+
+I run AI code review, is it actionable? Wdyt? Explore in depth each problem.
+We want a clean, maintainable codebase, with proper best practices for the tech stack we use.
+Run subagents to verify, and if it should be fixed, try to merge some stuff together so it can be fixed together within one subagent. 
+If you can test something do it.
+
+
+Review posted on PR #222. Here's the summary:
+---
+## Review: PR #222 — "fix: unify scrollbar styling with single global rule"
+**Overall:** Clean refactoring that removes ~50 lines of duplicate CSS and 11 class references. The approach of scoping to `#root` instead of per-element classes is sound. One bug found.
+### #1 `.scrollbar-hidden` is broken by `#root` specificity override
+The new `#root ::-webkit-scrollbar` rule (specificity `0,1,0,0`) overrides `.scrollbar-hidden::-webkit-scrollbar` (specificity `0,0,1,0`). This means `.scrollbar-hidden` no longer hides scrollbars in Chromium/Electron — the primary platform.
+**Affected:** App sidebar (`AppSidebar.tsx:124`), sidebar skeleton (`SidebarSkeleton.tsx:36`), tab bar (`MainContentTabs.tsx:133`) — all get unwanted 8px scrollbar gutters.
+**Fix:** Scope the hidden rule to `#root` too:
+```css
+#root .scrollbar-hidden::-webkit-scrollbar {
+  width: 0;
+  height: 0;
+}
+```
+File: `apps/web/src/global.css`
+
+---
+
+Commit and push all changes
