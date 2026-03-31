@@ -1,0 +1,41 @@
+{
+  "cli_version": "0.5.0",
+  "checkpoint_id": "668cfb653122",
+  "session_id": "56433046-85f2-4fc6-980b-10ff5a27fd22",
+  "strategy": "manual-commit",
+  "created_at": "2026-03-31T19:05:37.051466Z",
+  "branch": "zvadaadam/fix-scroll-indicator",
+  "checkpoints_count": 0,
+  "files_touched": [
+    "apps/web/src/features/session/ui/blocks/ToolResultBlock.tsx",
+    "apps/web/src/features/session/ui/tools/components/ToolError.tsx",
+    "apps/web/src/features/session/ui/tools/renderers/GrepToolRenderer.tsx",
+    "apps/web/src/features/file-browser/ui/FileBrowserPanel.tsx",
+    "apps/web/src/features/notebook/ui/NotebookPanel.tsx",
+    "apps/web/src/features/onboarding/ui/steps/ProjectSelectionStep.tsx",
+    "apps/web/src/features/repository/ui/HomeView.tsx",
+    "apps/web/src/features/session/ui/tools/components/CodeBlock.tsx",
+    "apps/web/src/features/workspace/ui/AllFilesDiffViewer.tsx",
+    "apps/web/src/features/workspace/ui/DiffFilesTree.tsx",
+    "apps/web/src/global.css",
+    "apps/web/src/features/session/ui/MessageInput.tsx"
+  ],
+  "agent": "Claude Code",
+  "turn_id": "e3f3bd42d14d",
+  "token_usage": {
+    "input_tokens": 0,
+    "cache_creation_tokens": 0,
+    "cache_read_tokens": 0,
+    "output_tokens": 0,
+    "api_call_count": 0
+  },
+  "initial_attribution": {
+    "calculated_at": "2026-03-31T19:05:37.036083Z",
+    "agent_lines": 37,
+    "human_added": 0,
+    "human_modified": 0,
+    "human_removed": 0,
+    "total_committed": 37,
+    "agent_percentage": 100
+  }
+}

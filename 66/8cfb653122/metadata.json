@@ -1,0 +1,36 @@
+{
+  "cli_version": "0.5.0",
+  "checkpoint_id": "668cfb653122",
+  "strategy": "manual-commit",
+  "branch": "zvadaadam/fix-scroll-indicator",
+  "checkpoints_count": 0,
+  "files_touched": [
+    "apps/web/src/features/file-browser/ui/FileBrowserPanel.tsx",
+    "apps/web/src/features/notebook/ui/NotebookPanel.tsx",
+    "apps/web/src/features/onboarding/ui/steps/ProjectSelectionStep.tsx",
+    "apps/web/src/features/repository/ui/HomeView.tsx",
+    "apps/web/src/features/session/ui/MessageInput.tsx",
+    "apps/web/src/features/session/ui/blocks/ToolResultBlock.tsx",
+    "apps/web/src/features/session/ui/tools/components/CodeBlock.tsx",
+    "apps/web/src/features/session/ui/tools/components/ToolError.tsx",
+    "apps/web/src/features/session/ui/tools/renderers/GrepToolRenderer.tsx",
+    "apps/web/src/features/workspace/ui/AllFilesDiffViewer.tsx",
+    "apps/web/src/features/workspace/ui/DiffFilesTree.tsx",
+    "apps/web/src/global.css"
+  ],
+  "sessions": [
+    {
+      "metadata": "/66/8cfb653122/0/metadata.json",
+      "transcript": "/66/8cfb653122/0/full.jsonl",
+      "content_hash": "/66/8cfb653122/0/content_hash.txt",
+      "prompt": "/66/8cfb653122/0/prompt.txt"
+    }
+  ],
+  "token_usage": {
+    "input_tokens": 0,
+    "cache_creation_tokens": 0,
+    "cache_read_tokens": 0,
+    "output_tokens": 0,
+    "api_call_count": 0
+  }
+}
