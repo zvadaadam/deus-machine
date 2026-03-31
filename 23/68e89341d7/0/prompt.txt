@@ -687,3 +687,7 @@ once the app is packaged. (renderer_init:2)
 we just want to get teh put[ut from the agent browswr usifn streaming: /Users/zvada/Developer/agent/box-ide/.conductor/monrovia-v1/.context/attachments/pasted_text_2026-03-31_02-23-10.txt 
 
 dont record tegh screen of the app and make sure teh broer doenst go fullscren we alreayd had this pribelm befopre u jnow
+
+---
+
+The error is still there, oh my god. Please explore in depth. We already solved this problem. If you can look at the history of this chat, maybe explore it, but I'm not sure if you can. But okay, yeah, when I got the video, it wasn't recording the app anymore. But the other thing was that again, it opened the browser and it opened like a... So basically, we already had a browser there. The browser tab open and it just like overlaid and created a new one, which was full screen. And there is some like big problem. But I think it's somewhere in the browser or like when we connect to the stream it's it cannot be that because if I'm going to try it without the stream and the streaming it does that also. Yeah, I can confirm that this problem was that the browser navigate actually does that pushes it to the full screen. And we already were solving this, so we have to solve it. I think maybe there are some like notes how this was done. Explore.
