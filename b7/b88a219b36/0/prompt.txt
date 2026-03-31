@@ -681,3 +681,9 @@ once the app is packaged. (renderer_init:2)
 [backend] [AgentEvent] message.assistant: session=019d31ed-fcd4-77e8-b933-b6a1e42d2e51 REDACTED
 [backend:stderr] [agent-server:stderr] [recording-bridge] Failed to emit idle event: Error: Session rec_879db8 is not recording (status: processing)
 [backend] [AgentEvent] message.tool_result: session=019d31ed-fcd4-77e8-b933-b6a1e42d2e51 msgId=unknown
+
+---
+
+we just want to get teh put[ut from the agent browswr usifn streaming: /Users/zvada/Developer/agent/box-ide/.conductor/monrovia-v1/.context/attachments/pasted_text_2026-03-31_02-23-10.txt 
+
+dont record tegh screen of the app and make sure teh broer doenst go fullscren we alreayd had this pribelm befopre u jnow
