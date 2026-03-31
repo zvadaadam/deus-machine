@@ -192,12 +192,10 @@ export function registerBrowserViewHandlers(): void {
         },
       });
 
-      // Add as a child of contentView. Currently renders on top of main
-      // WebContents (same as old BrowserView behavior). To render BEHIND
-      // the DOM (like Cursor/VS Code), use addChildView(view, 0) and make
-      // the browser panel area transparent — tracked as a follow-up.
-      mainWindow.contentView.addChildView(view);
+      // Set bounds BEFORE adding to hierarchy — addChildView without prior
+      // setBounds defaults to full window size, causing a fullscreen flash.
       view.setBounds(bounds);
+      mainWindow.contentView.addChildView(view);
       views.set(label, view);
 
       // Register event listeners BEFORE loadURL to avoid race conditions.
@@ -526,16 +524,18 @@ export function registerBrowserViewHandlers(): void {
     const mainWindow = getMainWindow();
     const view = views.get(label);
     if (mainWindow && view) {
-      // Ensure view is in the contentView hierarchy
+      // Apply saved bounds BEFORE making visible or adding to hierarchy.
+      // Without this, addChildView defaults to full window size and
+      // setVisible(true) shows a fullscreen flash before setBounds corrects it.
+      const savedBounds = viewBounds.get(label);
+      if (savedBounds) {
+        view.setBounds(savedBounds);
+      }
       const children = mainWindow.contentView.children;
       if (!children.includes(view)) {
         mainWindow.contentView.addChildView(view);
       }
       view.setVisible(true);
-      const savedBounds = viewBounds.get(label);
-      if (savedBounds) {
-        view.setBounds(savedBounds);
-      }
     }
   });
 
