@@ -333,7 +333,7 @@ export const MessageInput = forwardRef<MessageInputRef, MessageInputProps>(funct
       >
         {/* Pasted content cards (images + text + inspected elements) — unified horizontal scroll */}
         {(attachments.length > 0 || pastedTexts.length > 0 || inspectedElements.length > 0) && (
-          <div className="scrollbar-vibrancy flex w-full items-start gap-2 overflow-x-auto px-3 pt-3">
+          <div className="flex w-full items-start gap-2 overflow-x-auto px-3 pt-3">
             <AnimatePresence mode="popLayout">
               {inspectedElements.map((el) => (
                 <InspectedElementCard
@@ -378,7 +378,7 @@ export const MessageInput = forwardRef<MessageInputRef, MessageInputProps>(funct
           autoCapitalize="off"
           spellCheck={false}
           className={cn(
-            "scrollbar-vibrancy placeholder:text-placeholder max-h-48 min-h-10 overflow-y-auto pt-4 pl-4",
+            "placeholder:text-placeholder max-h-48 min-h-10 overflow-y-auto pt-4 pl-4",
             className
           )}
         />

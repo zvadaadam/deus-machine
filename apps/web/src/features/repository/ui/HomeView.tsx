@@ -451,7 +451,7 @@ export function HomeView({
                       </div>
 
                       {/* Repo list */}
-                      <div className="scrollbar-vibrancy max-h-[50vh] overflow-y-auto py-1">
+                      <div className="max-h-[50vh] overflow-y-auto py-1">
                         {filteredRepos.length === 0 && (
                           <div className="text-text-disabled px-3 py-3 text-center text-sm">
                             No repos match
@@ -549,7 +549,7 @@ export function HomeView({
                         </div>
 
                         {/* Repo list */}
-                        <div className="scrollbar-vibrancy max-h-[224px] overflow-y-auto py-1">
+                        <div className="max-h-[224px] overflow-y-auto py-1">
                           {filteredRepos.length === 0 && (
                             <div className="text-text-disabled px-3 py-3 text-center text-xs">
                               No repos match
@@ -702,7 +702,7 @@ export function HomeView({
             rows={3}
             className={cn(
               "text-text-primary placeholder:text-text-disabled w-full resize-none bg-transparent px-4 pt-3 pb-1 text-sm leading-relaxed outline-none",
-              "scrollbar-vibrancy max-h-48 min-h-[76px] overflow-y-auto",
+              "max-h-48 min-h-[76px] overflow-y-auto",
               !hasRepos && "pointer-events-none opacity-40"
             )}
           />
