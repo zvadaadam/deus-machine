@@ -276,14 +276,13 @@ export const BrowserTab = forwardRef<BrowserTabHandle, BrowserTabProps>(function
   }, [webviewLabel]);
 
   // --- Eagerly create webview on mount ---
-  // Always create a native BrowserView when the tab becomes visible, even
-  // if there's no URL yet. Empty tabs load about:blank so they exist as CDP
+  // Create the native BrowserView immediately on mount, even if the panel
+  // isn't visible yet. Empty tabs load about:blank so they exist as CDP
   // targets — agent-browser discovers and navigates them directly.
-  // For hydrated tabs (workspace restore), the persisted URL is used instead.
+  // The view stays hidden until the panel is visible AND a real URL loads.
   useEffect(() => {
-    if (!visible || webviewCreatedRef.current) return;
+    if (webviewCreatedRef.current) return;
     const url = tab.currentUrl || "about:blank";
-    // Schedule async to avoid cascading renders from setState in effect
     const timer = setTimeout(() => {
       if (tab.currentUrl) {
         onUpdateTab(tabId, { loading: true });
@@ -291,7 +290,9 @@ export const BrowserTab = forwardRef<BrowserTabHandle, BrowserTabProps>(function
       createWebviewIfNeeded(url);
     }, 0);
     return () => clearTimeout(timer);
-  }, [visible, tab.currentUrl, tabId, createWebviewIfNeeded, onUpdateTab]);
+    // Only run on mount — webview creation is a one-time operation
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   // --- Show/hide webview based on visibility + load state ---
   // Native webviews render ABOVE the DOM, so we hide them to reveal overlays.
