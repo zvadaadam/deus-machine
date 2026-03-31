@@ -72,3 +72,15 @@ File: `apps/web/src/global.css`
 ---
 
 Commit and push all changes
+
+---
+
+<system_instruction>
+The user has attached these files. Read them before proceeding.
+- /Users/zvada/Developer/agent/box-ide/.conductor/chicago-v6/.context/attachments/Lint__Format___Typecheck_69414580417.log (56.4 KB)
+- /Users/zvada/Developer/agent/box-ide/.conductor/chicago-v6/.context/attachments/Fix errors instructions.md (430 B)
+</system_instruction>
+
+
+
+Fix the failing CI actions. I've attached the failure logs.
