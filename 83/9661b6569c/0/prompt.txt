@@ -1,0 +1,95 @@
+<system_instruction>
+You are working inside OpenDevs, a Mac app that lets the user run many coding agents in parallel.
+Your work should take place in the /Users/zvada/Developer/agent/box-ide/.conductor/walla-walla-v1 directory (unless otherwise directed), which has been set up for you to work in.
+Each workspace has a .context directory (gitignored) where you can save files to collaborate with other agents.
+DO NOT EVER read or write files at /Users/zvada/Developer/agent/box-ide.
+The target branch for this workspace is main. Use this for actions like creating new PRs, bisecting, etc., unless you're told otherwise.
+
+By default, the user will only see the last message that you send before stopping. Include all essential information in the last message. The intermediate messages will be collapsed and accessible by the user but not displayed by default.
+
+If the user asks you to work on several unrelated tasks, you can suggest they start new workspaces.
+Sometimes the user might send you a message they meant to send in a different workspace or a different chat. If something doesn't make sense in the context of your work, just ask. 
+If the user asks for help with OpenDevs, you can ask them to go to "Help -> Send Feedback" to get in touch with our team.
+</system_instruction>
+
+
+<system-instruction>
+To do immediately:
+
+Rename the branch using `git branch -m` as soon as possible. Do not check the current branch name.
+
+You may read user-provided attachments first if needed to understand the request. Otherwise, do this before using any skills or any other tools.
+
+Choosing a branch name: use concrete, specific language, avoid abstract nouns, and be concise (<30 characters). Use the prefix "zvadaadam/" before the name.
+
+</system-instruction>
+
+So I want to explore in the sidebar. I feel like the titles for repository, it little like, it's not, it makes the full everything like big wall of text. Would you change the repositories a bit? So it's better visually, you would have a better visual feeling out of it? I don't know. What do you think? Can you explore a couple of variants with communicating the font, colors, size, stuff like that, design, use like CLI with info there to visualize it. Don't use the dot pan, just like you see why.
+
+---
+
+Well, well, I like the G but also I like the B plus F.
+
+---
+
+Well, you know what, let's pick the best option you feel like it is and let's update it in the code. And we will iterate from that.
+
+---
+
+okey wdyt do u think this is the best ux/ui produc wise? any feedback
+
+---
+
+okey let;s trying to it
+
+---
+
+/Users/zvada/Developer/agent/box-ide/.conductor/walla-walla-v1/.context/attachments/Screenshot 2026-03-31 at 10.40.46 PM.png okye cna u l;ook at teh iamge and the code whdyt nwo what si teh fecbak again frehs eeys of gertaa desinger
+
+---
+
+ok
+
+---
+
+I don't know, maybe in light mode it's too subtle. I don't know, maybe the text font is also too small for the label. I don't know, it still doesn't feel really good. And also the avatar, like the icon there, it's like very, very heavy now. What do you think?
+
+---
+
+I don't know, what if we would drop the avatar? And I feel it needs more padding. It needs to be a little bigger. More gap when we hover over the repository item. Yeah.
+
+---
+
+What do you think about the paddings now? I feel like there is a big gap between, if you look at the collapsed states of the repository items, the gap between them is too big. That is what I feel.
+
+---
+
+What do you think? Do you think a good idea would be to put the Chevron just on a hover instead of the number of workspaces number? So we move everything like the title repository to the left. What would it mean and like would it be good idea design wise and look better? What do you think?
+
+---
+
+But we want to show the number of workspaces inside the repository. That's very important. So, like, let's do... I want the number of the count. I think this is important. So, let's have it there. And just like on hover, we replace it with the Chevron to close and open, you know.
+
+---
+
+Okay, but now the number, there is a big gap, the number should be like right next to the text. Now it's right lined. I don't know the number, why?
+
+---
+
+Okay, in this case, should we do the uppercase maybe, but use what do you think for the repository title?
+
+---
+
+/Users/zvada/Developer/agent/box-ide/.conductor/walla-walla-v1/.context/attachments/Screenshot 2026-03-31 at 11.46.01 PM.png Oh, it feels like it doesn't go well with our product. What do you think? The uppercase? Or maybe if we would do like the tracking, not vibe, but like the opposite.
+
+---
+
+I'm not sure what would be what if we do uppercase but the tracking very tight
+
+---
+
+What? Oh, this is probably better. What do you think? I don't know. But like really, think about it as a designer. What do you feel? What do you see? If you look at it in all the combination of all the things there. The repository title. I feel like there should be a gap between when the workspace is open for sure, when the repository is expanded, and the gap between when we hover, it touches the first, when we hover over the repository title, and the first workspace is selected, they touch, there should be some padding between it. The first workspace and the repository title, some gap. But what do you think? What do you think?
+
+---
+
+Okay, we made some changes. Do we have something to like, like code simplify this lob or something? /code-simplifier /deslop
