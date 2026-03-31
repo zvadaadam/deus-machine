@@ -44,3 +44,27 @@ The user has attached these files. Read them before proceeding.
 
 
 Create a PR
+
+---
+
+I run AI code review, is it actionable? Wdyt? Explore in depth each problem.
+We want a clean, maintainable codebase, with proper best practices for the tech stack we use.
+Run subagents to verify, and if it should be fixed, try to merge some stuff together so it can be fixed together within one subagent. 
+If you can test something do it.
+
+
+Review posted on PR #222. Here's the summary:
+---
+## Review: PR #222 — "fix: unify scrollbar styling with single global rule"
+**Overall:** Clean refactoring that removes ~50 lines of duplicate CSS and 11 class references. The approach of scoping to `#root` instead of per-element classes is sound. One bug found.
+### #1 `.scrollbar-hidden` is broken by `#root` specificity override
+The new `#root ::-webkit-scrollbar` rule (specificity `0,1,0,0`) overrides `.scrollbar-hidden::-webkit-scrollbar` (specificity `0,0,1,0`). This means `.scrollbar-hidden` no longer hides scrollbars in Chromium/Electron — the primary platform.
+**Affected:** App sidebar (`AppSidebar.tsx:124`), sidebar skeleton (`SidebarSkeleton.tsx:36`), tab bar (`MainContentTabs.tsx:133`) — all get unwanted 8px scrollbar gutters.
+**Fix:** Scope the hidden rule to `#root` too:
+```css
+#root .scrollbar-hidden::-webkit-scrollbar {
+  width: 0;
+  height: 0;
+}
+```
+File: `apps/web/src/global.css`
