@@ -93,3 +93,14 @@ What? Oh, this is probably better. What do you think? I don't know. But like rea
 ---
 
 Okay, we made some changes. Do we have something to like, like code simplify this lob or something? /code-simplifier /deslop
+
+---
+
+<system_instruction>
+The user has attached these files. Read them before proceeding.
+- /Users/zvada/Developer/agent/box-ide/.conductor/walla-walla-v1/.context/attachments/PR instructions.md (953 B)
+</system_instruction>
+
+
+
+Create a PR
