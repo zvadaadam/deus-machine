@@ -104,3 +104,148 @@ The user has attached these files. Read them before proceeding.
 
 
 Create a PR
+
+---
+
+<system-instruction>
+The user has added 2 comments to the diff for this workspace. Please review and address these comments as part of your response. When addressing comments on the "original" side or on specific commits, read the file from that version (not the current version). Below are the comments, including metadata about what git state they were left on:
+
+Comment #1:
+
+File: 
+Line: undefined
+User comment: "<!-- This is an auto-generated comment: summarize by coderabbit.ai -->
+<!-- walkthrough_start -->
+
+<details>
+<summary>📝 Walkthrough</summary>
+
+## Walkthrough
+
+A UI layout refactor of the RepositoryItem sidebar component that replaces an avatar-based header with a text-first design, repositioning the workspace count into a fixed-size container, adjusting hover animations, and modifying vertical spacing.
+
+## Changes
+
+|Cohort / File(s)|Summary|
+|---|---|
+|**RepositoryItem Header Refactor** <br> `apps/web/src/features/sidebar/ui/RepositoryItem.tsx`|Removed avatar import; redesigned header from avatar-based to text-first layout with uppercase repo name, workspace count in fixed-size icon container with conditional rendering (>0 only), reduced chevron size, added fade-on-hover effects, and increased vertical padding for workspace list animation container.|
+
+## Estimated code review effort
+
+🎯 2 (Simple) | ⏱️ ~8 minutes
+
+## Poem
+
+> A rabbit's sidebar gets a fresh new glow ✨  
+> Avatar fades, let the repo names show  
+> Text takes the stage, workspace counts align  
+> In compact containers, they beautifully shine  
+> Padding adjusted, the spacing feels right  
+> Our sidebar hops lighter, cleaner, more bright! 🐰
+
+</details>
+
+<!-- walkthrough_end -->
+
+
+<!-- tips_start -->
+
+---
+
+<sub>Comment `@coderabbitai help` to get the list of available commands and usage tips.</sub>
+
+<!-- tips_end -->
+
+<!-- internal state start -->
+
+
+<!-- REDACTED/REDACTED/REDACTED/kB3H0LMFD5oRijSJRAAS/F8MFBqOW+XDtp2kCDgq/REDACTED/REDACTED/REDACTED/REDACTED/REDACTED/REDACTED/REDACTED/REDACTED/REDACTED/REDACTED/REDACTED -->
+
+<!-- internal state end -->"
+
+Comment metadata:
+This comment was left on a file.
+This comment was left on GitHub by @coderabbitai.
+
+
+Comment #2:
+
+File: apps/web/src/features/sidebar/ui/RepositoryItem.tsx
+Line: 97
+User comment: "_⚠️ Potential issue_ | _🟡 Minor_
+
+**Add focus state for chevron visibility to support keyboard navigation.**
+
+The chevron is only revealed on hover (`group-hover/repository-item:opacity-100`), making it invisible to keyboard users when the trigger is focused. Consider adding a focus-within state so the collapse indicator remains accessible:
+
+
+<details>
+<summary>🛡️ Proposed fix</summary>
+
+```diff
+ <ChevronRight
+   className={cn(
+     "absolute inset-0 m-auto h-3.5 w-3.5",
+-    "text-text-muted opacity-0 transition-[transform,opacity] duration-150 group-hover/repository-item:opacity-100",
++    "text-text-muted opacity-0 transition-[transform,opacity] duration-150 group-hover/repository-item:opacity-100 group-focus-within/repository-item:opacity-100",
+     !isCollapsed && "rotate-90"
+   )}
+ />
+```
+</details>
+
+<!-- suggestion_start -->
+
+<details>
+<summary>📝 Committable suggestion</summary>
+
+> ‼️ **IMPORTANT**
+> Carefully review the code before committing. Ensure that it accurately replaces the highlighted code, contains no missing lines, and has no issues with indentation. Thoroughly test & benchmark the code to ensure it meets the requirements.
+
+```suggestion
+                <ChevronRight
+                  className={cn(
+                    "absolute inset-0 m-auto h-3.5 w-3.5",
+                    "text-text-muted opacity-0 transition-[transform,opacity] duration-150 group-hover/repository-item:opacity-100 group-focus-within/repository-item:opacity-100",
+                    !isCollapsed && "rotate-90"
+                  )}
+                />
+```
+
+</details>
+
+<!-- suggestion_end -->
+
+<details>
+<summary>🤖 Prompt for AI Agents</summary>
+
+```
+Verify each finding against the current code and only fix it if needed.
+
+In `@apps/web/src/features/sidebar/ui/RepositoryItem.tsx` around lines 91 - 97,
+The chevron (ChevronRight) is only shown on hover via
+"group-hover/repository-item:opacity-100", which hides it for keyboard users;
+update the className on ChevronRight to also include a focus state (e.g. add
+"group-focus/repository-item:opacity-100" and/or
+"group-focus-within/repository-item:opacity-100") so the chevron becomes visible
+when the repository item receives keyboard focus, keeping the existing rotate
+logic with isCollapsed intact.
+```
+
+</details>
+
+<!-- fingerprinting:phantom:poseidon:ocelot -->
+
+<!-- This is an auto-generated comment by CodeRabbit -->"
+
+Comment metadata:
+This comment was left on the modified branch.
+This comment was left on GitHub by @coderabbitai.
+This comment is the start of thread PRRT_kwDOQEbULc54FKzD. 
+
+</system-instruction>
+
+I run AI code review, is it actionable? Wdyt? Explore in depth each problem.
+We want a clean, maintainable codebase, with proper best practices for the tech stack we use.
+Run subagents to verify, and if it should be fixed, try to merge some stuff together so it can be fixed together within one subagent. 
+If you can test something do it.
