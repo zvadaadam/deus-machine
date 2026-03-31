@@ -36,6 +36,34 @@ const viewEmulation = new Map<
 /** Reference to the detached browser window (only one at a time) */
 let detachedWindow: BrowserWindow | null = null;
 
+/**
+ * Clamp BrowserView bounds to prevent fullscreen takeover.
+ * If the view would cover more than 75% of the window in BOTH dimensions,
+ * something is wrong (placeholder measured incorrectly). Reject the bounds
+ * by returning the last known good bounds, or a safe default.
+ */
+function clampBounds(
+  bounds: Electron.Rectangle,
+  windowWidth: number,
+  windowHeight: number
+): Electron.Rectangle {
+  const maxWidth = Math.round(windowWidth * 0.75);
+  const maxHeight = Math.round(windowHeight * 0.75);
+
+  if (bounds.width > maxWidth && bounds.height > maxHeight) {
+    // Suspiciously large — likely a measurement error. Use a safe default
+    // positioned in the right half of the window (where the browser panel is).
+    return {
+      x: Math.round(windowWidth * 0.35),
+      y: Math.round(windowHeight * 0.05),
+      width: Math.round(windowWidth * 0.6),
+      height: Math.round(windowHeight * 0.85),
+    };
+  }
+
+  return bounds;
+}
+
 /** Centralized main window lookup — avoids repeating getAllWindows()[0] in every handler */
 function getMainWindow(): BrowserWindow | undefined {
   return (
@@ -169,12 +197,17 @@ export function registerBrowserViewHandlers(): void {
       // space. When the user zooms the renderer (Cmd+/Cmd-), CSS pixels diverge
       // from window points by the zoom factor — multiply to correct.
       const zoomFactor = mainWindow.webContents.getZoomFactor();
-      const bounds = {
-        x: Math.round(x * zoomFactor),
-        y: Math.round(y * zoomFactor),
-        width: Math.round(Math.max(width * zoomFactor, 100)),
-        height: Math.round(Math.max(height * zoomFactor, 100)),
-      };
+      const [winWidth, winHeight] = mainWindow.getContentSize();
+      const bounds = clampBounds(
+        {
+          x: Math.round(x * zoomFactor),
+          y: Math.round(y * zoomFactor),
+          width: Math.round(Math.max(width * zoomFactor, 100)),
+          height: Math.round(Math.max(height * zoomFactor, 100)),
+        },
+        winWidth,
+        winHeight
+      );
 
       const view = new WebContentsView({
         webPreferences: {
@@ -504,17 +537,20 @@ export function registerBrowserViewHandlers(): void {
       // CSS-pixel → window-point conversion (see create_browser_webview comment)
       const mainWindow = getMainWindow();
       const zoomFactor = mainWindow?.webContents.getZoomFactor() ?? 1;
-      const bounds = {
-        x: Math.round(x * zoomFactor),
-        y: Math.round(y * zoomFactor),
-        width: Math.round(width * zoomFactor),
-        height: Math.round(height * zoomFactor),
-      };
+      const [winWidth, winHeight] = mainWindow ? mainWindow.getContentSize() : [1920, 1080];
+      const bounds = clampBounds(
+        {
+          x: Math.round(x * zoomFactor),
+          y: Math.round(y * zoomFactor),
+          width: Math.round(width * zoomFactor),
+          height: Math.round(height * zoomFactor),
+        },
+        winWidth,
+        winHeight
+      );
       const view = views.get(label);
       if (view) {
         view.setBounds(bounds);
-        // Also save to viewBounds so show() uses the latest position
-        // (important when setBounds is called while the view is hidden/detached)
         viewBounds.set(label, bounds);
       }
     }
