@@ -695,3 +695,7 @@ The error is still there, oh my god. Please explore in depth. We already solved 
 ---
 
 /Users/zvada/Developer/agent/box-ide/.conductor/monrovia-v1/.context/attachments/Screenshot 2026-03-31 at 2.37.51 AM.png Yeah, but it's weird that like when the browser navigate tool hit, we saw two and it's still there. The error is still there. Oh my god, fucking god. We can see the previews because the tool call, the tool we called, there was already one page created. There is already a page there. And when this is called, it's just like adds another page of this electron view. But there is already previously one. So now if you see these are two web frames of, but I don't see the app, you know, it just like covers it the whole thing. But like on the right side, small, there is the previous one, which was there. And yeah, that's bad. But that wasn't the thing. Still, there is this problem. It's very tricky. And it's not because of the recording, because we haven't been recording, just the browser navigate was called.
+
+---
+
+/Users/zvada/Developer/agent/box-ide/.conductor/monrovia-v1/.context/attachments/Screenshot 2026-03-31 at 2.44.18 AM.png Again, it went and no please no fucking workarounds. Think about it.
