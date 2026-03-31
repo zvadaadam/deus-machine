@@ -612,3 +612,7 @@ stream: the agent-browser WebSocket stream isn't available
 avfoundation: needs Screen Recording permission granted in System Settings
 The screen-studio MCP server's stream capture method did work earlier and produced a 701KB file. The built-in Deus recording tools don't seem to have the stream capture working yet.
 Want me to try again using the screen-studio MCP stream method instead? That one successfully produced video earlier.
+
+---
+
+Okay, but now it has the problem actually with the full-screen thing.
