@@ -73,7 +73,7 @@ export function GrepToolRenderer({ toolUse, toolResult, isLoading }: ToolRendere
             <pre
               className={cn(
                 "overflow-x-auto rounded p-2 font-mono text-sm leading-relaxed break-words whitespace-pre-wrap",
-                "scrollbar-vibrancy chat-scroll-contain max-h-[300px] overflow-y-auto",
+                "chat-scroll-contain max-h-[300px] overflow-y-auto",
                 "bg-muted/50 text-foreground border-border border"
               )}
             >

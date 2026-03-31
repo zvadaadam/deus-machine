@@ -53,7 +53,7 @@ export function ToolResultBlock({ block }: ToolResultBlockProps) {
         aria-label={isError ? "Tool error" : "Tool result"}
         className={cn(
           "overflow-x-auto rounded p-2 font-mono text-sm leading-relaxed break-words whitespace-pre-wrap",
-          "scrollbar-vibrancy chat-scroll-contain max-h-[150px] overflow-y-auto",
+          "chat-scroll-contain max-h-[150px] overflow-y-auto",
           "bg-muted/40 text-foreground"
         )}
       >

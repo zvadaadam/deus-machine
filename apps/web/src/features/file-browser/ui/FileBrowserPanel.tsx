@@ -441,7 +441,7 @@ export function FileBrowserPanel({
       )}
 
       {/* File Tree */}
-      <div className="scrollbar-vibrancy flex-1 overflow-y-auto py-1">
+      <div className="flex-1 overflow-y-auto py-1">
         {filteredFiles.length > 0 ? (
           <FileTree
             key={filterMode}

@@ -25,7 +25,7 @@ export function ToolError({ content, className }: ToolErrorProps) {
 
   return (
     <div
-      className={cn("scrollbar-vibrancy chat-scroll-contain max-h-24 overflow-y-auto", className)}
+      className={cn("chat-scroll-contain max-h-24 overflow-y-auto", className)}
     >
       <pre className="text-muted-foreground m-0 font-mono text-xs leading-relaxed break-words whitespace-pre-wrap">
         {errorText}
