@@ -121,22 +121,13 @@ export function InteractiveDemo() {
               <Globe className="size-3" />
               Browser
             </ViewTab>
-            <div className="ml-auto flex items-center gap-2">
-              {workspace.diff && (
-                <div className="flex items-center gap-1.5 text-[10px]">
-                  <span className="text-muted-foreground/30 truncate">{workspace.diff.file}</span>
-                  <span className="text-[var(--status-active)]">+{workspace.diff.add}</span>
-                  <span className="text-[oklch(0.72_0.19_29)]">-{workspace.diff.del}</span>
-                </div>
-              )}
-              <button
-                type="button"
-                className="flex items-center gap-1 rounded-md bg-[var(--status-active)]/15 px-2 py-0.5 text-[10px] font-medium text-[var(--status-active)] transition-colors duration-100 outline-none hover:bg-[var(--status-active)]/25"
-              >
-                <GitPullRequestArrow className="size-2.5" />
-                Merge
-              </button>
-            </div>
+            <button
+              type="button"
+              className="ml-auto flex items-center gap-1 rounded-md bg-[var(--status-active)]/15 px-2 py-0.5 text-[10px] font-medium text-[var(--status-active)] transition-colors duration-100 outline-none hover:bg-[var(--status-active)]/25"
+            >
+              <GitPullRequestArrow className="size-2.5" />
+              Merge
+            </button>
           </div>
 
           {/* View content — keyed to force remount on workspace switch */}
