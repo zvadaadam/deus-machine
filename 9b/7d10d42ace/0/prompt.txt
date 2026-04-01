@@ -554,3 +554,7 @@ We want a clean, maintainable codebase, with proper best practices for the tech 
 Run subagents to verify, and if it should be fixed, try to merge some stuff together so it can be fixed together within one subagent. 
 If you can test something do it.
 Remember that we don't want to over engineer stuff. It should be a great code, very well structured, clean, maintainable for the future of use cases, but think about if anything is actionable from these code reviews.
+
+---
+
+/Users/zvada/Developer/agent/box-ide/.conductor/columbus-v5/.context/attachments/Screenshot 2026-04-01 at 9.06.00 PM.png Okay, when I'm looking at it, the layout is incorrect. The middle, the website, which is scrollable, it should be centered in the screen. And the sidebar, where is the logo and the things, should be like close. A little more with padding, but on the left, you know.
