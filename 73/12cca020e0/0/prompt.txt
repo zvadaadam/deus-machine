@@ -32,3 +32,7 @@ Fix: remove the `data` listener (or null out the buffer) after the regex matches
 | Unconsumed redirect responses (`desktop.ts`) | Technically correct but negligible impact — short-lived CLI command, 1-2 sockets cleaned up on exit |
 | Unbounded redirect following | Pedantic — GitHub redirects are 1-2 hops |
 | PID reuse in `readServerInfo` | Common CLI pattern; `deus status` already health-checks the port |
+
+---
+
+Can you improve the readme file for the CLI? I think, yeah, basically like the readme is a pretty stale. I want you to think and add like very simple description and stuff into the readme.
