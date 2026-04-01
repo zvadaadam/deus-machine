@@ -2009,3 +2009,59 @@ We want a clean, maintainable codebase, with proper best practices for the tech 
 Run subagents to verify, and if it should be fixed, try to merge some stuff together so it can be fixed together within one subagent. 
 If you can test something do it.
 Remember that we don't want to over engineer stuff. It should be a great code, very well structured, clean, maintainable for the future of use cases, but think about if anything is actionable from these code reviews.
+
+---
+
+<system-instruction>
+The user has added 1 comment to the diff for this workspace. Please review and address these comments as part of your response. When addressing comments on the "original" side or on specific commits, read the file from that version (not the current version). Below are the comments, including metadata about what git state they were left on:
+
+Comment #1:
+
+File: apps/agent-server/agents/deus-tools/browser.ts
+Line: 354
+User comment: "_⚠️ Potential issue_ | _🟡 Minor_
+
+**Normalize `ref` consistently outside `BrowserClick`.**
+
+`BrowserClick` now trims and empties `ref`, but these paths still forward raw strings. `" `@e3` "` or whitespace-only refs will fail differently depending on the tool and be much harder to diagnose.
+ 
+
+
+Also applies to: 662-667, 701-706, 790-792, 873-878
+
+<details>
+<summary>🤖 Prompt for AI Agents</summary>
+
+```
+Verify each finding against the current code and only fix it if needed.
+
+In `@apps/agent-server/agents/deus-tools/browser.ts` around lines 347 - 354, The
+code forwards raw ref strings into browser tools but BrowserClick now trims and
+converts whitespace-only refs to empty, so normalize ref consistently before
+calling execWithSnapshot (and other browser tool invocations): call .trim() on
+args.ref and if the trimmed string is empty set ref to undefined (or the same
+sentinel BrowserClick expects), then pass that normalized ref to
+execWithSnapshot (and any other calls inside withBrowserTool). Update the
+anonymous withBrowserTool callbacks that call execWithSnapshot (and the other
+listed call sites) to use the trimmed/normalized ref so whitespace-only refs
+behave the same as BrowserClick.
+```
+
+</details>
+
+<!-- fingerprinting:phantom:medusa:grasshopper -->
+
+<!-- This is an auto-generated comment by CodeRabbit -->"
+
+Comment metadata:
+This comment was left on the modified branch.
+This comment was left on GitHub by @coderabbitai.
+This comment is the start of thread PRRT_kwDOQEbULc54RmCM. 
+
+</system-instruction>
+
+I run AI code review, is it actionable? Wdyt? Explore in depth each problem.
+We want a clean, maintainable codebase, with proper best practices for the tech stack we use.
+Run subagents to verify, and if it should be fixed, try to merge some stuff together so it can be fixed together within one subagent. 
+If you can test something do it.
+Remember that we don't want to over engineer stuff. It should be a great code, very well structured, clean, maintainable for the future of use cases, but think about if anything is actionable from these code reviews.
