@@ -1,0 +1,22 @@
+{
+  "cli_version": "0.5.0",
+  "checkpoint_id": "2feb488e538c",
+  "session_id": "63eeb525-d1f3-4e02-8a86-ddb1c7ac5085",
+  "strategy": "manual-commit",
+  "created_at": "2026-04-01T22:24:33.762646Z",
+  "branch": "zvadaadam/screen-studio-integration",
+  "checkpoints_count": 2,
+  "files_touched": [],
+  "agent": "Claude Code",
+  "turn_id": "27f3b5fa9766",
+  "token_usage": {
+    "input_tokens": 3969,
+    "cache_creation_tokens": 1753699,
+    "cache_read_tokens": 108599865,
+    "output_tokens": 216072,
+    "api_call_count": 574
+  },
+  "session_metrics": {
+    "turn_count": 54
+  }
+}
