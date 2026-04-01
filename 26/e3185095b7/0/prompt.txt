@@ -92,3 +92,7 @@ here is teh page source to get layptu deisng isnpriation: /Users/zvada/Developer
 ---
 
 But I feel like it doesn't have the touch of very nice design. It's still a little vibe-coded and I want you to rethink it a little bit. I don't like the line separators, it should be like more subtle. Yeah. I don't know, like I want you to run sub-agent designers, give feedback and improve it. But remember we want this style of like the HTML I gave you before.
+
+---
+
+/Users/zvada/Developer/agent/box-ide/.conductor/columbus-v5/.context/attachments/Screenshot 2026-04-01 at 6.07.08 PM.png Basically, it's much better. And basically, this main thing, it's a code. So could we make it that you can actually click through the different kind of different kind of the work, workspaces. And also, maybe we could do that. There would be a button to show the browser and stuff like that. Would it be possible? Maybe what do you think? And it would be cool, like to be able to do that. To type message, send, and the agent would reply with like download, stuff like that. But this is actually like design wise, much better. So explore, think about it. How we can fit and run sub agents. How can we fit it into also the tint of the color? It's not the one we have. It's not bad, it's not bad.
