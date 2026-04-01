@@ -98,7 +98,21 @@ function eventLabel(event: MappedEvent): string {
   const base = EVENT_LABELS[event.type] ?? event.type;
   if (event.type === "navigate" && event.url) {
     try {
-      return `Navigate → ${new URL(event.url).hostname}`;
+      const parsed = new URL(event.url);
+      const path = parsed.pathname.replace(/\/$/, ""); // strip trailing slash
+      if (!path || path === "") {
+        return `Navigate → ${parsed.hostname}`;
+      }
+      const full = `${parsed.hostname}${path}`;
+      // Truncate long paths: keep hostname + first segment + ellipsis
+      if (full.length > 35) {
+        const segments = path.split("/").filter(Boolean);
+        if (segments.length > 1) {
+          return `Navigate → ${parsed.hostname}/${segments[0]}/…`;
+        }
+        return `Navigate → ${full.slice(0, 32)}…`;
+      }
+      return `Navigate → ${full}`;
     } catch {
       return base;
     }
