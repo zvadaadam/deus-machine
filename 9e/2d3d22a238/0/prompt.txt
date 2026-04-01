@@ -57,3 +57,7 @@ do this: shadcn/ui (Radix)Same as your IDE, official TanStack Start support, one
 ---
 
 yes
+
+---
+
+Can you check the ban log we are pushing it to get? Is it normal? Also, I see that some like in the git ignore in the landing pages, we are missing the dot entire. It should be git ignore. Are there any other things that should be git ignored?
