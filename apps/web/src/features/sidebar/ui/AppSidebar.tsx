@@ -156,7 +156,11 @@ export function AppSidebar({
         </SidebarContent>
       )}
 
-      <SidebarFooter onAddRepository={onAddRepository} onCloneRepository={onCloneRepository} onStartNewProject={onStartNewProject} />
+      <SidebarFooter
+        onAddRepository={onAddRepository}
+        onCloneRepository={onCloneRepository}
+        onStartNewProject={onStartNewProject}
+      />
     </Sidebar>
   );
 }

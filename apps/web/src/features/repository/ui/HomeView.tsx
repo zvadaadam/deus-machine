@@ -1,6 +1,15 @@
 import { useState, useCallback, useRef, useMemo, useEffect, createElement } from "react";
 import { AnimatePresence, motion } from "framer-motion";
-import { ArrowUp, ChevronDown, Check, FolderGit2, FolderOpen, GitBranch, Search, Upload } from "lucide-react";
+import {
+  ArrowUp,
+  ChevronDown,
+  Check,
+  FolderGit2,
+  FolderOpen,
+  GitBranch,
+  Search,
+  Upload,
+} from "lucide-react";
 import { capabilities } from "@/platform/capabilities";
 import { cn } from "@/shared/lib/utils";
 import { getAgentLogo } from "@/assets/agents";
@@ -974,9 +983,11 @@ export function HomeView({
                 </button>
               )}
 
-              {capabilities.nativeFolderPicker && onOpenProject && (onCloneRepository || onStartNewProject) && (
-                <div className="border-border-subtle/50 mx-4 border-t" />
-              )}
+              {capabilities.nativeFolderPicker &&
+                onOpenProject &&
+                (onCloneRepository || onStartNewProject) && (
+                  <div className="border-border-subtle/50 mx-4 border-t" />
+                )}
 
               {capabilities.nativeFolderPicker && onOpenProject && (
                 <button

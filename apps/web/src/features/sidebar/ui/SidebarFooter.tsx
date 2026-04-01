@@ -11,7 +11,11 @@ import type { SidebarFooterProps } from "../model/types";
  * SidebarFooter — "Add project" + ambient AI provider status indicator.
  * The status indicator renders nothing when all providers are healthy.
  */
-export function SidebarFooter({ onAddRepository, onCloneRepository, onStartNewProject }: SidebarFooterProps) {
+export function SidebarFooter({
+  onAddRepository,
+  onCloneRepository,
+  onStartNewProject,
+}: SidebarFooterProps) {
   const [open, setOpen] = useState(false);
 
   return (

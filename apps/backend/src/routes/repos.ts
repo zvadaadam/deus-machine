@@ -47,21 +47,30 @@ app.get("/git/user", async (c) => {
       timeout: 2000,
     });
     name = stdout.trim() || null;
-  } catch { /* not configured */ }
+  } catch {
+    /* not configured */
+  }
   try {
     const { stdout } = await execFileAsync("git", ["config", "--global", "user.email"], {
       encoding: "utf-8",
       timeout: 2000,
     });
     email = stdout.trim() || null;
-  } catch { /* not configured */ }
+  } catch {
+    /* not configured */
+  }
   // Try to get GitHub username via gh CLI (non-blocking, cosmetic only)
   try {
-    const result = await runGh(["api", "user", "--jq", ".login"], { cwd: os.homedir(), timeoutMs: 3000 });
+    const result = await runGh(["api", "user", "--jq", ".login"], {
+      cwd: os.homedir(),
+      timeoutMs: 3000,
+    });
     if (result.success && result.stdout?.trim()) {
       githubUsername = result.stdout.trim();
     }
-  } catch { /* gh not installed or not authenticated */ }
+  } catch {
+    /* gh not installed or not authenticated */
+  }
   return c.json({ name, email, githubUsername });
 });
 
