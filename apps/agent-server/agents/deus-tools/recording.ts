@@ -124,6 +124,9 @@ Returns a sessionId to use with recording_stop and recording_chapter.`,
           .describe("X11 display for x11grab capture (e.g. ':99'). Default: ':99'"),
       },
       async (args) => {
+        console.error(
+          `[recording_start] Called with captureMethod=${args.captureMethod ?? "auto"}`
+        );
         try {
           const recordingSessionId = await sessionManager.create(args);
           return {
@@ -173,6 +176,7 @@ Returns: { outputPath, duration, eventCount, chapterCount }`,
           .describe("Watermark text content (required when addWatermark is true)"),
       },
       async (args) => {
+        console.error(`[recording_stop] Called for session ${args.sessionId}`);
         try {
           if (args.addWatermark && (!args.watermarkText || args.watermarkText.length === 0)) {
             return {
