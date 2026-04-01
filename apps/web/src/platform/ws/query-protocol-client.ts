@@ -29,7 +29,12 @@ type SnapshotCallback = (data: unknown) => void;
 type DeltaCallback = (upserted?: unknown[], removed?: string[], cursor?: number) => void;
 type EventCallback = (event: string, data: unknown) => void;
 
-type CommandResult = { accepted: boolean; commandId?: string; error?: string; [key: string]: unknown };
+type CommandResult = {
+  accepted: boolean;
+  commandId?: string;
+  error?: string;
+  [key: string]: unknown;
+};
 
 interface PendingCommand {
   resolve: (result: CommandResult) => void;

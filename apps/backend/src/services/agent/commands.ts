@@ -111,7 +111,8 @@ export async function runCommand(
       .with("git:init", async () => {
         const projectName = readString(params, "projectName");
         const targetPath = readString(params, "targetPath");
-        if (!projectName || !targetPath) throw new Error("git:init requires projectName and targetPath");
+        if (!projectName || !targetPath)
+          throw new Error("git:init requires projectName and targetPath");
         const templateType = readString(params, "templateType");
         const templateUrl = readString(params, "templateUrl");
         const result = (await delegateToRoute("POST", "/api/repos/init", {

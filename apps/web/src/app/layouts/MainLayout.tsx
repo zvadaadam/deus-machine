@@ -1,6 +1,10 @@
 import { useState, useEffect, useRef, useCallback, useMemo } from "react";
 import type { SessionPanelRef } from "@/features/session";
-import { NewWorkspaceModal, CloneRepositoryModal, StartNewProjectModal } from "@/features/repository";
+import {
+  NewWorkspaceModal,
+  CloneRepositoryModal,
+  StartNewProjectModal,
+} from "@/features/repository";
 import { SystemPromptModal } from "@/features/session";
 import { SettingsSidebar, SettingsPage } from "@/features/settings";
 import {

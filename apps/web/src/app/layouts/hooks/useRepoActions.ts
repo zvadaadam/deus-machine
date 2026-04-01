@@ -97,7 +97,7 @@ export function useRepoActions({
         setCreating(false);
       }
     },
-    [createWorkspaceMutation, selectWorkspace, expandRepo]
+    [createWorkspaceAndSelect, selectWorkspace]
   );
 
   /** Create workspace from the new-workspace modal (validates repo selection). */

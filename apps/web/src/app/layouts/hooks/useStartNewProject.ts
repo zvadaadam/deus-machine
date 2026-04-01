@@ -71,7 +71,7 @@ export function useStartNewProject({
 
       // Phase 1: Create project via git:init command
       if (isStale()) return;
-      const initAck = await sendCommand(
+      const initAck = (await sendCommand(
         "git:init",
         {
           projectName: projectName.trim(),
@@ -79,7 +79,7 @@ export function useStartNewProject({
           ...(template ? { templateType: template.type, templateUrl: template.url } : {}),
         },
         120_000 // 2min timeout (template clone + gh repo create can take a bit)
-      ) as { accepted: boolean; error?: string; githubUrl?: string };
+      )) as { accepted: boolean; error?: string; githubUrl?: string };
       if (!initAck.accepted) {
         throw new Error(initAck.error || "Project creation failed");
       }

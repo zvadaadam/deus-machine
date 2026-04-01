@@ -80,7 +80,10 @@ export const InitProjectBody = z.object({
   template: z
     .object({
       type: z.enum(["empty", "github"]),
-      url: z.string().regex(/^https?:\/\/[^\s;|&`$()]+$/, "Only HTTPS URLs are allowed").optional(),
+      url: z
+        .string()
+        .regex(/^https?:\/\/[^\s;|&`$()]+$/, "Only HTTPS URLs are allowed")
+        .optional(),
     })
     .optional(),
 });
