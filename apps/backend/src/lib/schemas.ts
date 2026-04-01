@@ -71,6 +71,22 @@ export const CreateRepoBody = z.object({
   root_path: z.string().min(1, "root_path is required"),
 });
 
+const TemplateUrl = z.string().regex(/^https:\/\/[^\s;|&`$()]+$/, "Only HTTPS URLs are allowed");
+
+export const InitProjectBody = z.object({
+  projectName: z
+    .string()
+    .min(1)
+    .regex(/^[a-zA-Z0-9][a-zA-Z0-9._-]*$/, "Invalid project name"),
+  targetPath: z.string().min(1),
+  template: z
+    .discriminatedUnion("type", [
+      z.object({ type: z.literal("empty") }),
+      z.object({ type: z.literal("github"), url: TemplateUrl }),
+    ])
+    .optional(),
+});
+
 // ============================================================================
 // Workspace Schemas
 // ============================================================================

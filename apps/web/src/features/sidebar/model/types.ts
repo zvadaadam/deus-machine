@@ -18,6 +18,7 @@ export interface AppSidebarProps {
   onNewWorkspaceFromGitHub?: (repoId: string) => void;
   onAddRepository?: () => void;
   onCloneRepository?: () => void;
+  onStartNewProject?: () => void;
   onArchive?: (workspaceId: string) => void;
   onStatusChange?: (workspaceId: string, status: WorkspaceStatus) => void;
   onNewSession?: () => void;
@@ -77,4 +78,5 @@ export interface SidebarHeaderProps {
 export interface SidebarFooterProps {
   onAddRepository?: () => void;
   onCloneRepository?: () => void;
+  onStartNewProject?: () => void;
 }

@@ -58,6 +58,7 @@ interface MainContentProps {
   onCreateWorkspace: () => void;
   onOpenProject: () => void;
   onCloneRepository: () => void;
+  onStartNewProject: () => void;
   /** Repos for the home screen's repo picker */
   repos: import("@/features/repository/types").Repository[];
   /** Handler for sending the first message from the home screen.
@@ -73,6 +74,7 @@ export function MainContent({
   onCreateWorkspace: _onCreateWorkspace,
   onOpenProject,
   onCloneRepository,
+  onStartNewProject,
   repos,
   onStartWorkspace,
 }: MainContentProps) {
@@ -445,6 +447,7 @@ export function MainContent({
               onSendMessage={onStartWorkspace}
               onOpenProject={onOpenProject}
               onCloneRepository={onCloneRepository}
+              onStartNewProject={onStartNewProject}
             />
           </div>
         )}

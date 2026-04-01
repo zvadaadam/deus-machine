@@ -9,7 +9,7 @@ const execFileAsync = promisify(execFile);
 import { uuidv7 } from "@shared/lib/uuid";
 import { getDatabase } from "../lib/database";
 import { AppError, ValidationError, ConflictError, NotFoundError } from "../lib/errors";
-import { parseBody, CreateRepoBody } from "../lib/schemas";
+import { parseBody, CreateRepoBody, InitProjectBody } from "../lib/schemas";
 import { detectDefaultBranch } from "../services/git.service";
 import {
   getAllRepositories,
@@ -34,6 +34,23 @@ const app = new Hono();
 app.get("/repos", (c) => {
   const db = getDatabase();
   return c.json(getAllRepositories(db));
+});
+
+/** Global git + GitHub identity — used by the "Start New Project" modal. */
+app.get("/git/user", async (c) => {
+  let githubUsername: string | null = null;
+  try {
+    const result = await runGh(["api", "user", "--jq", ".login"], {
+      cwd: os.homedir(),
+      timeoutMs: 3000,
+    });
+    if (result.success && result.stdout?.trim()) {
+      githubUsername = result.stdout.trim();
+    }
+  } catch {
+    /* gh not installed or not authenticated */
+  }
+  return c.json({ githubUsername });
 });
 
 app.post("/repos", async (c) => {
@@ -139,19 +156,21 @@ app.post("/repos/clone", async (c) => {
     throw new ValidationError("Missing or invalid 'targetPath' parameter");
   }
 
-  // Path traversal guard — reject paths that escape the user's home directory
-  const resolvedPath = path.resolve(targetPath);
-  const homeDir = os.homedir();
-  if (!resolvedPath.startsWith(homeDir + path.sep) && resolvedPath !== homeDir) {
-    throw new ValidationError("Target path must be within the home directory");
-  }
-
   // Ensure parent directory exists
+  const resolvedPath = path.resolve(targetPath);
   const parentDir = path.dirname(resolvedPath);
   try {
     fs.mkdirSync(parentDir, { recursive: true });
   } catch (err) {
     throw new AppError(500, `Cannot create parent directory: ${(err as Error).message}`);
+  }
+
+  // Path traversal guard — resolve symlinks to prevent escaping home via symlinked parents
+  const realHome = fs.realpathSync(os.homedir());
+  const realParent = fs.realpathSync(parentDir);
+  const candidatePath = path.join(realParent, path.basename(resolvedPath));
+  if (!candidatePath.startsWith(realHome + path.sep) && candidatePath !== realHome) {
+    throw new ValidationError("Target path must be within the home directory");
   }
 
   // Check target doesn't already exist
@@ -196,6 +215,133 @@ app.post("/repos/clone", async (c) => {
       resolve(c.json({ error: `Failed to start git: ${err.message}` }, 500));
     });
   });
+});
+
+// ─── Init (create new project) Endpoint ──────────────────────
+
+/** Broadcast a git init progress line to all connected WS clients. */
+function pushInitLine(line: string): void {
+  broadcast(JSON.stringify({ type: "q:event", event: "git-init-progress", data: { line } }));
+}
+
+app.post("/repos/init", async (c) => {
+  const { projectName, targetPath, template } = parseBody(InitProjectBody, await c.req.json());
+
+  // Ensure parent exists, target does NOT exist
+  const resolvedPath = path.resolve(targetPath);
+  const parentDir = path.dirname(resolvedPath);
+  try {
+    fs.mkdirSync(parentDir, { recursive: true });
+  } catch (err) {
+    throw new AppError(500, `Cannot create parent directory: ${(err as Error).message}`);
+  }
+
+  // Path traversal guard — resolve symlinks to prevent escaping home via symlinked parents
+  const realHome = fs.realpathSync(os.homedir());
+  const realParent = fs.realpathSync(parentDir);
+  const candidatePath = path.join(realParent, path.basename(resolvedPath));
+  if (!candidatePath.startsWith(realHome + path.sep) && candidatePath !== realHome) {
+    throw new ValidationError("Target path must be within the home directory");
+  }
+  if (fs.existsSync(resolvedPath)) {
+    throw new ConflictError("Target directory already exists");
+  }
+
+  if (template?.type === "github") {
+    // Clone template repo, strip .git, re-init
+    pushInitLine("Downloading template...");
+    await new Promise<void>((resolve, reject) => {
+      const proc = spawn("git", ["clone", "--depth", "1", template.url, resolvedPath], {
+        stdio: ["ignore", "pipe", "pipe"],
+        timeout: 120_000,
+      });
+
+      let stderrBuffer = "";
+      proc.stderr?.on("data", (chunk: Buffer) => {
+        stderrBuffer += chunk.toString();
+        const lines = stderrBuffer.split(/[\r\n]+/);
+        stderrBuffer = lines.pop() || "";
+        for (const line of lines) {
+          const trimmed = line.trim();
+          if (trimmed) pushInitLine(trimmed);
+        }
+      });
+
+      proc.on("close", (code) => {
+        const remaining = stderrBuffer.trim();
+        if (remaining) pushInitLine(remaining);
+        if (code === 0) resolve();
+        else reject(new Error(remaining || `git clone exited with code ${code}`));
+      });
+
+      proc.on("error", (err) => reject(err));
+    });
+
+    // Strip template's .git and re-init as a fresh repo
+    pushInitLine("Initializing as new project...");
+    fs.rmSync(path.join(resolvedPath, ".git"), { recursive: true, force: true });
+    await execFileAsync("git", ["init"], { cwd: resolvedPath, timeout: 5000 });
+  } else {
+    // Empty project
+    pushInitLine("Creating project directory...");
+    fs.mkdirSync(resolvedPath, { recursive: true });
+
+    pushInitLine("Initializing git repository...");
+    await execFileAsync("git", ["init"], { cwd: resolvedPath, timeout: 5000 });
+
+    // Create README
+    fs.writeFileSync(path.join(resolvedPath, "README.md"), `# ${projectName}\n`);
+  }
+
+  // Initial commit
+  pushInitLine("Creating initial commit...");
+  await execFileAsync("git", ["add", "."], { cwd: resolvedPath, timeout: 5000 });
+  await execFileAsync("git", ["commit", "-m", "Initial commit"], {
+    cwd: resolvedPath,
+    timeout: 5000,
+  });
+
+  // Create GitHub repo (non-fatal — works without gh CLI or auth)
+  // Step 1: create the repo (without --push to avoid partial-failure losing the URL)
+  // Step 2: push separately (tolerates GitHub propagation delays)
+  let githubUrl: string | null = null;
+  try {
+    pushInitLine("Creating GitHub repository...");
+    const ghResult = await runGh(
+      ["repo", "create", projectName, "--private", "--source", resolvedPath, "--remote", "origin"],
+      { cwd: resolvedPath, timeoutMs: 30_000 }
+    );
+    if (ghResult.success && ghResult.stdout) {
+      const urlMatch = ghResult.stdout.match(/https:\/\/github\.com\/[^\s]+/);
+      if (urlMatch) {
+        githubUrl = urlMatch[0];
+        pushInitLine(`GitHub repository created: ${githubUrl}`);
+      }
+    } else if (!ghResult.success) {
+      console.warn("[repos/init] gh repo create failed:", ghResult.error, ghResult.message);
+      pushInitLine(`GitHub: ${ghResult.message || ghResult.error}`);
+    }
+
+    // Push initial commit (best-effort — repo link is valid even if push fails)
+    if (githubUrl) {
+      try {
+        pushInitLine("Pushing initial commit...");
+        await execFileAsync("git", ["push", "-u", "origin", "HEAD"], {
+          cwd: resolvedPath,
+          timeout: 15_000,
+        });
+      } catch (pushErr) {
+        console.warn("[repos/init] git push failed (repo still created):", pushErr);
+        pushInitLine("Push failed — you can push manually later.");
+      }
+    }
+  } catch (err) {
+    console.warn("[repos/init] gh repo create error:", err);
+    pushInitLine("Skipped GitHub — repository created locally.");
+  }
+
+  pushInitLine("Project created successfully.");
+  return c.json({ success: true, path: resolvedPath, githubUrl });
 });
 
 // ─── Manifest Endpoints (per-repo, settings UI) ─────────────
