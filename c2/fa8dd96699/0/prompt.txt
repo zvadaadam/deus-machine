@@ -1,0 +1,42 @@
+I run AI code review, is it actionable? Wdyt? Explore in depth each problem.
+We want a clean, maintainable codebase, with proper best practices for the tech stack we use.
+Run subagents to verify, and if it should be fixed, try to merge some stuff together so it can be fixed together within one subagent. 
+If you can test something do it.
+Remember that we don't want to over engineer stuff. It should be a great code, very well structured, clean, maintainable for the future of use cases, but think about if anything is actionable from these code reviews.
+
+
+No DiffComment tool available, so I'll present the findings directly.
+---
+## Code Review: `zvadaadam/npm-cli-installer`
+**Scope:** New `apps/cli` package — a CLI tool for Deus IDE providing headless server mode, desktop installer, remote pairing, auth setup, QR code generation, and terminal UI. Also adds `web-standalone` deployment mode and minor text changes.
+**Reviewed by:** 4 parallel agents (2x CLAUDE.md compliance, 1x bug scan, 1x security/logic), validated by 3 parallel agents.
+---
+### **#1 Shutdown exits immediately without waiting for children to drain**
+In `start.ts`, the `shutdown()` function sends `SIGTERM` to child processes then immediately calls `process.exit(0)`. The agent-server has graceful shutdown logic with 30s turn draining, but gets zero time to execute it. This can orphan processes, leave ports occupied on restart, and `clearServerInfo()` runs before children actually exit — causing `deus status` to report "not running" while processes are still alive.
+File: `apps/cli/src/start.ts:90-103`
+Fix: await child `exit` events (with a reasonable timeout) before calling `process.exit`.
+---
+### **#2 Memory leak: stdout listener never removed after pattern match**
+In `startProcess()`, the `child.stdout.on("data", ...)` listener appends to a `buffer` string indefinitely. After the `waitFor` regex matches and the promise resolves, the listener is never removed. For long-running processes (backend can run for days), the buffer grows without bound. Practical growth is slow (backend produces a few KB/hour of stdout), but it's an unbounded accumulation with no cleanup.
+File: `apps/cli/src/start.ts:312-329`
+Fix: remove the `data` listener (or null out the buffer) after the regex matches.
+---
+### Dismissed issues (false positives)
+| Issue | Reason |
+|-------|--------|
+| `npm` usage in `login.ts` (CLAUDE.md) | Rule applies to project dev workflow, not runtime CLI on user machines who may not have bun |
+| `npm publish` in `build.ts` comment | Same — publishing to npm registry, not managing project deps |
+| Command injection via `SHELL` env var | OS-controlled variable; attacker needs pre-existing code execution |
+| Command injection via `CLAUDE_CLI_PATH` | Dev-controlled env var; path passes `existsSync` check first |
+| Command injection via DMG volume name | DMG from project's own GitHub releases; trusted source |
+| Unconsumed redirect responses (`desktop.ts`) | Technically correct but negligible impact — short-lived CLI command, 1-2 sockets cleaned up on exit |
+| Unbounded redirect following | Pedantic — GitHub redirects are 1-2 hops |
+| PID reuse in `readServerInfo` | Common CLI pattern; `deus status` already health-checks the port |
+
+---
+
+Can you improve the readme file for the CLI? I think, yeah, basically like the readme is a pretty stale. I want you to think and add like very simple description and stuff into the readme.
+
+---
+
+Okay, so can I test it on my computer locally and from how we're gonna install it, like this is gonna be installing what? Exactly like the deployed app or what?
