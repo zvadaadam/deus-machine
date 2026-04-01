@@ -298,7 +298,7 @@ function ChatMessage({ message }: { message: Message }) {
   return (
     <div className="space-y-1 py-1">
       <div className="flex items-center gap-1.5 px-2">
-        <img src="/claude-code.svg" alt="" className="size-3.5 rounded-sm" />
+        <img src="/claude-code.svg" alt="" className="size-3.5 rounded-sm opacity-40" />
         <span className="text-muted-foreground/40 text-[10px] font-medium">Claude</span>
       </div>
       <div className="text-foreground/80 px-2 text-[12px] leading-relaxed">{message.content}</div>
