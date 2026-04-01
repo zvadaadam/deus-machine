@@ -177,6 +177,16 @@ export function createBrowserTools(
   sessionId: string,
   onAction?: OnBrowserAction
 ): SdkMcpToolDefinition<any>[] {
+  /** Best-effort action emitter — never lets recording failures break the tool result. */
+  const emitAction = (action: BrowserToolAction): void => {
+    if (!onAction) return;
+    try {
+      onAction(action);
+    } catch (err) {
+      console.warn(`[browser] Failed to emit action: ${err instanceof Error ? err.message : err}`);
+    }
+  };
+
   return [
     tool(
       "BrowserSnapshot",
@@ -297,7 +307,7 @@ Returns a page snapshot after clicking and the clicked element's bounding box (x
 
         const target = args.ref ?? `(${args.x}, ${args.y})`;
 
-        onAction?.({
+        emitAction({
           toolName: "BrowserClick",
           elementBox: response.elementBox,
           url: response.url,
@@ -367,10 +377,10 @@ Returns a page snapshot and the input element's bounding box.`,
         ];
         if (args.submit) details.push("Form submitted: yes");
 
-        onAction?.({
+        emitAction({
           toolName: "BrowserType",
           elementBox: finalResponse.elementBox,
-          text: args.text,
+          text: `[${args.text.length} chars]`,
         });
 
         return textResult(
@@ -400,7 +410,7 @@ Returns a page snapshot and the input element's bounding box.`,
           return textResult(`Navigation failed: ${response.error}`);
         }
 
-        onAction?.({
+        emitAction({
           toolName: "BrowserNavigate",
           url: response.url ?? args.url,
         });
@@ -574,7 +584,7 @@ Returns a page snapshot after all actions complete.`,
           if (failures.length > 5) details.push(`... (+${failures.length - 5} more)`);
         }
 
-        onAction?.({
+        emitAction({
           toolName: "BrowserBatchActions",
           url: snap.url,
         });
@@ -661,7 +671,7 @@ Returns a page snapshot after hovering and the element's bounding box.`,
           return textResult(`Hover failed: ${response.error}`);
         }
 
-        onAction?.({
+        emitAction({
           toolName: "BrowserHover",
           elementBox: response.elementBox,
         });
@@ -700,7 +710,7 @@ Returns a page snapshot after hovering and the element's bounding box.`,
           return textResult(`SelectOption failed: ${response.error}`);
         }
 
-        onAction?.({
+        emitAction({
           toolName: "BrowserSelectOption",
           elementBox: response.elementBox,
         });
@@ -730,7 +740,7 @@ Returns a page snapshot after hovering and the element's bounding box.`,
           return textResult(`NavigateBack failed: ${response.error}`);
         }
 
-        onAction?.({
+        emitAction({
           toolName: "BrowserNavigateBack",
           url: response.url,
         });
@@ -874,7 +884,7 @@ Returns a fresh snapshot after scrolling.`,
           ? `Scrolled element into view: ${args.ref}`
           : `Scrolled ${args.direction ?? "down"} by ${args.amount ?? 600}px`;
 
-        onAction?.({
+        emitAction({
           toolName: "BrowserScroll",
           scrollDirection: args.direction ?? "down",
         });
