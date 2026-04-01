@@ -367,7 +367,7 @@ async function renderVideoFallback(options: VideoRenderOptions): Promise<VideoRe
     } catch {
       // If probe fails, estimate from wall-clock events
       if (events.length > 0) {
-        rawDurationMs = events[events.length - 1].timestamp - events[0].timestamp + 2000;
+        rawDurationMs = events[events.length - 1].t - events[0].t + 2000;
       }
     }
 
