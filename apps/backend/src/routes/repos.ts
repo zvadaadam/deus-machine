@@ -270,7 +270,7 @@ app.post("/repos/init", async (c) => {
     // Clone template repo, strip .git, re-init
     pushInitLine("Downloading template...");
     await new Promise<void>((resolve, reject) => {
-      const proc = spawn("git", ["clone", "--depth", "1", template.url!, resolvedPath], {
+      const proc = spawn("git", ["clone", "--depth", "1", template.url, resolvedPath], {
         stdio: ["ignore", "pipe", "pipe"],
         timeout: 120_000,
       });

@@ -52,6 +52,7 @@ export const BACKEND_PORT_CHANGED = "backend:port-changed" as const;
 
 /** Git operations — main process → frontend */
 export const GIT_CLONE_PROGRESS = "git-clone-progress" as const;
+export const GIT_INIT_PROGRESS = "git-init-progress" as const;
 
 // ============================================================================
 // Domain Constants (queryable resources, mutations, agent-server notifications)
@@ -235,6 +236,12 @@ export const GitCloneProgressSchema = z.object({
 });
 export type GitCloneProgressEvent = z.infer<typeof GitCloneProgressSchema>;
 
+export const GitInitProgressSchema = z.object({
+  /** Progress line from git init / gh repo create */
+  line: z.string(),
+});
+export type GitInitProgressEvent = z.infer<typeof GitInitProgressSchema>;
+
 /** InspectElement schema — matches the shape emitted by the browser InSpec handler.
  *  Keep in sync with InspectElement in parseInspectTags.ts. */
 const InspectElementSchema = z.object({
@@ -304,6 +311,7 @@ export const AppEventSchemaMap = {
   [SIM_BUILD_LOG]: SimBuildLogSchema,
   [CHAT_INSERT]: ChatInsertSchema,
   [GIT_CLONE_PROGRESS]: GitCloneProgressSchema,
+  [GIT_INIT_PROGRESS]: GitInitProgressSchema,
 } as const satisfies Record<AppEventName, z.ZodTypeAny>;
 
 // ============================================================================
@@ -345,6 +353,7 @@ export interface AppEventMap {
 
   // Git
   [GIT_CLONE_PROGRESS]: GitCloneProgressEvent;
+  [GIT_INIT_PROGRESS]: GitInitProgressEvent;
 }
 
 /** Union of all known app event names */
