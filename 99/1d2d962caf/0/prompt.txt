@@ -299,3 +299,14 @@ Comment metadata:
 This comment was left on the modified branch.
 
 </system-instruction>
+
+---
+
+<system_instruction>
+The user has attached these files. Read them before proceeding.
+- /Users/zvada/Developer/agent/box-ide/.conductor/geneva-v1/.context/attachments/PR instructions.md (950 B)
+</system_instruction>
+
+
+
+Create a PR
