@@ -49,7 +49,7 @@ function getDeviceIcon(ua: string | null) {
 
 /** Build the full pairing URL for QR code. */
 function buildPairUrl(accessUrl: string, code: string): string {
-  // accessUrl is like https://app.rundeus.com/connect/{serverId}
+  // accessUrl is like https://app.deusmachine.ai/connect/{serverId}
   // Append ?pair=SOFT+TIGER (URL-encode the space as +)
   const encodedCode = code.replace(/ /g, "+");
   return `${accessUrl}?pair=${encodedCode}`;
@@ -429,7 +429,7 @@ export function AccessSection({ settings, saveSetting }: SettingsSectionProps) {
   const devices = devicesQuery.data ?? [];
 
   // Derive web app URL from relay WebSocket URL
-  // wss://relay.rundeus.com -> https://app.rundeus.com/connect/{serverId}
+  // wss://relay.deusmachine.ai -> https://app.deusmachine.ai/connect/{serverId}
   const accessUrl = (() => {
     if (!relayStatus?.relayUrl || !relayStatus.serverId) return null;
     try {

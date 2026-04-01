@@ -12,7 +12,7 @@ Desktop app built with Electron + React frontend + Node.js backend. Monorepo str
 
 **Package manager: Bun.** Always use `bun` for installing dependencies (`bun add`, `bun install`), running scripts (`bun run`), and executing tools (`bunx`). Never use `npm` or `yarn` — CI runs `bun install --frozen-lockfile` and will fail if `bun.lock` is out of sync.
 
-**Desktop + Mobile Web:** Primary target is the Electron desktop app. The web version (`app.rundeus.com`) also supports mobile browsers via `MobileLayout` (bottom tab bar with Chat/Code views, contextual PR bar). Mobile layout is detected with `useIsMobile()` and renders a simplified single-panel UI. Do not write browser-mode polling or `isElectronEnv` conditionals for feature parity — the HTTP/Node.js backend exists as a service layer accessed through the cloud relay in web mode. Electron IPC and WebSocket events are the primary data transport.
+**Desktop + Mobile Web:** Primary target is the Electron desktop app. The web version (`app.deusmachine.ai`) also supports mobile browsers via `MobileLayout` (bottom tab bar with Chat/Code views, contextual PR bar). Mobile layout is detected with `useIsMobile()` and renders a simplified single-panel UI. Do not write browser-mode polling or `isElectronEnv` conditionals for feature parity — the HTTP/Node.js backend exists as a service layer accessed through the cloud relay in web mode. Electron IPC and WebSocket events are the primary data transport.
 
 ### ts-pattern (Pattern Matching)
 

@@ -4,7 +4,7 @@
  * Determines how the frontend connects to the backend based on environment:
  * - Electron: localhost WS + HTTP via IPC-resolved port
  * - Web-dev: localhost WS + HTTP via VITE_BACKEND_PORT
- * - Web-production (relay): WS through relay.rundeus.com, HTTP tunneled over WS
+ * - Web-production (relay): WS through relay.deusmachine.ai, HTTP tunneled over WS
  *
  * The resolved endpoints are cached after first call.
  */
@@ -32,7 +32,7 @@ export interface BackendEndpoints {
 }
 
 export const RELAY_BASE_URL =
-  (import.meta.env.VITE_RELAY_URL as string | undefined) || "wss://relay.rundeus.com";
+  (import.meta.env.VITE_RELAY_URL as string | undefined) || "wss://relay.deusmachine.ai";
 
 let cachedEndpoints: BackendEndpoints | null = null;
 /** The serverId that the cached endpoints were built for (relay mode only). */
@@ -42,7 +42,7 @@ let cachedRelayServerId: string | null = null;
  * Resolve the backend's WebSocket and HTTP base URLs.
  *
  * - Electron/web-dev: ws://localhost:{port}/ws + http://localhost:{port}/api
- * - Web-production: wss://relay.rundeus.com/api/servers/{serverId}/connect
+ * - Web-production: wss://relay.deusmachine.ai/api/servers/{serverId}/connect
  *   (HTTP goes through WS bridge, so apiBase is unused in relay mode)
  */
 export async function resolveBackendEndpoints(serverId?: string): Promise<BackendEndpoints> {

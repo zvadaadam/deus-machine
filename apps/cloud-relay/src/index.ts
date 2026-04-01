@@ -14,7 +14,7 @@ const app = new Hono<{ Bindings: Bindings }>();
 app.use(
   "*",
   cors({
-    origin: ["https://app.rundeus.com", "http://localhost:3000", "http://localhost:5173"],
+    origin: ["https://app.deusmachine.ai", "http://localhost:3000", "http://localhost:5173"],
     allowMethods: ["GET", "POST", "OPTIONS"],
     allowHeaders: ["Content-Type", "Authorization"],
   })
@@ -78,7 +78,7 @@ app.get("/", (c) =>
   c.json({
     name: "deus-relay",
     version: "0.1.0",
-    docs: "https://app.rundeus.com",
+    docs: "https://app.deusmachine.ai",
   })
 );
 
