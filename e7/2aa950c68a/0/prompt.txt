@@ -384,3 +384,7 @@ Fix the failing CI actions. I've attached the failure logs.
 ---
 
 I mean, maybe we can drop the, from the demo, the routes, users from the line of chat, changes, browser and the merge button. And that can be kept. I'm not sure how it will look in, in browser mode, you know, mobile mode, mobile mode.
+
+---
+
+/Users/zvada/Developer/agent/box-ide/.conductor/columbus-v5/.context/attachments/Screenshot 2026-04-01 at 8.43.14 PM.png In the demo, the Claude Code thing is very dark, it should be grey or something, can you explore?/Users/zvada/Developer/agent/box-ide/.conductor/columbus-v5/.context/attachments/Screenshot 2026-04-01 at 8.43.28 PM.png Also, when you look at the whole layout, the menu on the left, the sidebar kind of menu, has like a very huge padding, or maybe it's very far from the actual thing. So I think it should be closer to the website, the main content. I think, yeah, so think about it, all the paddings, like the sidebar thing has a padding, horizontal padding, the main web has a padding, so standardize it and make it better.
