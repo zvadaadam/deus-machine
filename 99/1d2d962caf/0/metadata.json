@@ -1,0 +1,54 @@
+{
+  "cli_version": "0.5.0",
+  "checkpoint_id": "991d2d962caf",
+  "session_id": "a07fea74-0764-4498-b706-30b6fca4ec4f",
+  "strategy": "manual-commit",
+  "created_at": "2026-04-01T16:11:28.585128Z",
+  "branch": "zvadaadam/repo-create-new",
+  "checkpoints_count": 12,
+  "files_touched": [
+    ".claude/agent-memory/deep-reviewer/MEMORY.md",
+    "apps/backend/src/lib/schemas.ts",
+    "apps/backend/src/middleware/workspace-loader.ts",
+    "apps/backend/src/routes/repos.ts",
+    "apps/backend/src/routes/workspaces.ts",
+    "apps/backend/src/services/agent/commands.ts",
+    "apps/backend/test/unit/shared/events.test.ts",
+    "apps/web/src/app/layouts/MainContent.tsx",
+    "apps/web/src/app/layouts/MainLayout.tsx",
+    "apps/web/src/app/layouts/hooks/useCloneRepo.ts",
+    "apps/web/src/app/layouts/hooks/useRepoActions.ts",
+    "apps/web/src/app/layouts/hooks/useStartNewProject.ts",
+    "apps/web/src/features/command-palette/commands.ts",
+    "apps/web/src/features/repository/lib/templates.ts",
+    "apps/web/src/features/repository/ui/HomeView.tsx",
+    "apps/web/src/features/repository/ui/StartNewProjectModal.tsx",
+    "apps/web/src/features/repository/ui/index.ts",
+    "apps/web/src/features/sidebar/model/types.ts",
+    "apps/web/src/features/sidebar/ui/AppSidebar.tsx",
+    "apps/web/src/features/sidebar/ui/SidebarFooter.tsx",
+    "apps/web/src/platform/ws/query-protocol-client.ts",
+    "shared/events.ts"
+  ],
+  "agent": "Claude Code",
+  "turn_id": "f52e55a68a6e",
+  "token_usage": {
+    "input_tokens": 2613,
+    "cache_creation_tokens": 578259,
+    "cache_read_tokens": 62108274,
+    "output_tokens": 127879,
+    "api_call_count": 444
+  },
+  "session_metrics": {
+    "turn_count": 12
+  },
+  "initial_attribution": {
+    "calculated_at": "2026-04-01T16:11:27.18555Z",
+    "agent_lines": 994,
+    "human_added": 1,
+    "human_modified": 6,
+    "human_removed": 0,
+    "total_committed": 1001,
+    "agent_percentage": 99.3006993006993
+  }
+}
