@@ -1,0 +1,23 @@
+{
+  "cli_version": "0.5.0",
+  "checkpoint_id": "d17e4d1a30b9",
+  "strategy": "manual-commit",
+  "branch": "zvadaadam/domain-deusmachine",
+  "checkpoints_count": 3,
+  "files_touched": null,
+  "sessions": [
+    {
+      "metadata": "/d1/7e4d1a30b9/0/metadata.json",
+      "transcript": "/d1/7e4d1a30b9/0/full.jsonl",
+      "content_hash": "/d1/7e4d1a30b9/0/content_hash.txt",
+      "prompt": "/d1/7e4d1a30b9/0/prompt.txt"
+    }
+  ],
+  "token_usage": {
+    "input_tokens": 107,
+    "cache_creation_tokens": 119937,
+    "cache_read_tokens": 6037727,
+    "output_tokens": 20380,
+    "api_call_count": 84
+  }
+}
