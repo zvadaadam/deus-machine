@@ -41,43 +41,43 @@ function LandingPage() {
 
       <div className="mx-auto flex max-w-5xl">
         {/* Left sidebar */}
-        <aside className="sticky top-0 hidden h-screen w-44 shrink-0 md:block">
-          <div className="flex h-full flex-col px-4 py-8">
-            <a href="/" className="mb-10 flex items-center gap-2.5">
-              <div className="bg-foreground flex size-6 items-center justify-center rounded-[5px]">
-                <span className="text-background text-[10px] font-bold">D</span>
+        <aside className="sticky top-0 hidden h-screen w-40 shrink-0 md:block">
+          <div className="flex h-full flex-col py-10 pr-4 pl-6">
+            <a href="/" className="mb-8 flex items-center gap-2">
+              <div className="bg-foreground flex size-5 items-center justify-center rounded-[4px]">
+                <span className="text-background text-[9px] font-bold">D</span>
               </div>
-              <span className="text-[13px] font-bold tracking-[-0.01em]">Deus Machine</span>
+              <span className="text-[13px] font-semibold tracking-[-0.01em]">Deus Machine</span>
             </a>
-            <nav className="flex flex-col gap-0.5">
+            <nav className="flex flex-col gap-px">
               {NAV_ITEMS.map((item) => (
                 <a
                   key={item.id}
                   href={`#${item.id}`}
-                  className="text-muted-foreground hover:text-foreground rounded-md px-2 py-1.5 text-[13px] transition-colors duration-150"
+                  className="text-muted-foreground hover:text-foreground py-1.5 text-[13px] transition-colors duration-150"
                 >
                   {item.label}
                 </a>
               ))}
             </nav>
-            <div className="mt-auto flex flex-col gap-1">
+            <div className="mt-auto flex flex-col gap-0.5 pb-4">
               <a
                 href="https://github.com/zvadaadam/box-ide"
                 target="_blank"
                 rel="noopener noreferrer"
-                className="text-muted-foreground/60 hover:text-foreground px-2 py-1 text-[12px] transition-colors duration-150"
+                className="text-muted-foreground/40 hover:text-muted-foreground py-1 text-[12px] transition-colors duration-150"
               >
                 GitHub
               </a>
               <a
                 href="https://app.deusmachine.ai"
-                className="text-muted-foreground/60 hover:text-foreground px-2 py-1 text-[12px] transition-colors duration-150"
+                className="text-muted-foreground/40 hover:text-muted-foreground py-1 text-[12px] transition-colors duration-150"
               >
                 Web App
               </a>
               <a
                 href="mailto:hello@deusmachine.ai"
-                className="text-muted-foreground/60 hover:text-foreground px-2 py-1 text-[12px] transition-colors duration-150"
+                className="text-muted-foreground/40 hover:text-muted-foreground py-1 text-[12px] transition-colors duration-150"
               >
                 Contact
               </a>
@@ -86,31 +86,31 @@ function LandingPage() {
         </aside>
 
         {/* Main content */}
-        <main className="min-w-0 flex-1 px-6 py-12 md:px-10 md:py-20">
-          <article className="mx-auto max-w-[640px]">
-            <section id="overview" className="mb-20">
-              <h1 className="text-4xl font-semibold tracking-[-0.03em] sm:text-5xl">
+        <main className="min-w-0 flex-1 px-6 py-12 md:py-16">
+          <article className="max-w-[620px]">
+            {/* Hero */}
+            <section id="overview" className="mb-24">
+              <h1 className="text-[clamp(2.25rem,5vw,3.25rem)] leading-[1.08] font-semibold tracking-[-0.035em]">
                 Give your agents
                 <br />a place to build.
               </h1>
-              <p className="text-muted-foreground mt-4 max-w-[58ch] text-base leading-[1.65]">
+              <p className="text-muted-foreground mt-5 max-w-[54ch] text-[15px] leading-[1.7]">
                 You spend 80% of your time being a human clipboard between tools that should be
                 talking to each other. Deus closes the loop. Plan the work, approve the plan, walk
                 away. Come back to software.
               </p>
-              <div className="ring-foreground/[0.07] mt-10 rounded-xl shadow-[0_2px_4px_rgba(0,0,0,0.04),0_8px_24px_rgba(0,0,0,0.08),0_24px_48px_rgba(0,0,0,0.06)] ring-1 ring-inset">
+              <div className="mt-12 overflow-hidden rounded-xl shadow-[0_1px_2px_rgba(0,0,0,0.06),0_8px_24px_rgba(0,0,0,0.12)]">
                 <InteractiveDemo />
               </div>
-              <p className="text-muted-foreground/40 mt-3 text-center text-[11px]">
+              <p className="text-muted-foreground/30 mt-3 text-center text-[11px]">
                 Try it — click workspaces, toggle views, send a message
               </p>
             </section>
 
-            <section id="the-problem" className="mb-20">
-              <h2 className="text-muted-foreground text-xs font-semibold tracking-[0.1em] uppercase">
-                The problem
-              </h2>
-              <div className="text-muted-foreground mt-4 max-w-[58ch] space-y-4 text-sm leading-[1.7]">
+            {/* The problem */}
+            <section id="the-problem" className="mb-24">
+              <SectionLabel>The problem</SectionLabel>
+              <div className="text-muted-foreground mt-4 max-w-[54ch] space-y-4 text-[15px] leading-[1.7]">
                 <p>
                   Coding agents are brilliant inside a terminal and blind outside of it. They write
                   code that would take you hours, but they can't see what they built. Can't click a
@@ -127,11 +127,10 @@ function LandingPage() {
               </div>
             </section>
 
-            <section id="how-it-works" className="mb-20">
-              <h2 className="text-muted-foreground text-xs font-semibold tracking-[0.1em] uppercase">
-                Close the loop
-              </h2>
-              <ol className="mt-5 space-y-5">
+            {/* How it works */}
+            <section id="how-it-works" className="mb-24">
+              <SectionLabel>Close the loop</SectionLabel>
+              <ol className="mt-6 space-y-6">
                 {[
                   {
                     title: "Decide what to build.",
@@ -150,11 +149,11 @@ function LandingPage() {
                     text: "Get called in only when you're genuinely needed — a decision, a direction, a wall the agent can't get past. Otherwise, it's done.",
                   },
                 ].map((step, i) => (
-                  <li key={i} className="flex gap-3.5">
-                    <span className="text-muted-foreground/40 w-4 shrink-0 pt-px text-sm tabular-nums">
+                  <li key={i} className="flex gap-4">
+                    <span className="text-muted-foreground/25 w-5 shrink-0 pt-px text-[15px] tabular-nums">
                       {i + 1}.
                     </span>
-                    <span className="text-muted-foreground text-sm leading-[1.7]">
+                    <span className="text-muted-foreground text-[15px] leading-[1.7]">
                       <strong className="text-foreground font-medium">{step.title}</strong>{" "}
                       {step.text}
                     </span>
@@ -163,24 +162,23 @@ function LandingPage() {
               </ol>
               <a
                 href="https://app.deusmachine.ai"
-                className="text-foreground/70 hover:text-foreground mt-8 inline-flex items-center gap-1.5 text-sm transition-colors duration-150"
+                className="text-foreground/60 hover:text-foreground mt-10 inline-flex items-center gap-1.5 text-[15px] transition-colors duration-150"
               >
                 Open Deus Machine
                 <ArrowRight className="size-3.5" />
               </a>
             </section>
 
-            <section id="what-it-gives" className="mb-20">
-              <h2 className="text-muted-foreground text-xs font-semibold tracking-[0.1em] uppercase">
-                What it gives your agents
-              </h2>
-              <div className="mt-5 space-y-0.5">
+            {/* Features */}
+            <section id="what-it-gives" className="mb-24">
+              <SectionLabel>What it gives your agents</SectionLabel>
+              <div className="mt-6 space-y-1">
                 {FEATURES.map((f) => (
-                  <div key={f.title} className="flex gap-4 py-3">
-                    <f.icon className="text-muted-foreground/50 mt-0.5 size-4 shrink-0" />
+                  <div key={f.title} className="flex gap-4 py-3.5">
+                    <f.icon className="text-muted-foreground/30 mt-0.5 size-[18px] shrink-0" />
                     <div>
-                      <p className="text-sm font-medium">{f.title}</p>
-                      <p className="text-muted-foreground mt-0.5 text-sm leading-[1.7]">
+                      <p className="text-[15px] font-medium">{f.title}</p>
+                      <p className="text-muted-foreground mt-1 text-[14px] leading-[1.7]">
                         {f.description}
                       </p>
                     </div>
@@ -189,18 +187,17 @@ function LandingPage() {
               </div>
             </section>
 
-            <section id="install" className="mb-20">
-              <h2 className="text-muted-foreground text-xs font-semibold tracking-[0.1em] uppercase">
-                Get started
-              </h2>
-              <p className="text-muted-foreground mt-3 max-w-[58ch] text-sm leading-[1.7]">
+            {/* Install */}
+            <section id="install" className="mb-16">
+              <SectionLabel>Get started</SectionLabel>
+              <p className="text-muted-foreground mt-4 max-w-[54ch] text-[15px] leading-[1.7]">
                 Open source. Runs on your hardware. Your agents, your data, your machine. Download
                 the app or build from source — the box is yours to rebuild.
               </p>
-              <div className="mt-6 flex flex-col gap-3 sm:flex-row">
+              <div className="mt-8 flex flex-col gap-3 sm:flex-row">
                 <a
                   href="https://github.com/zvadaadam/box-ide/releases"
-                  className="bg-foreground text-background hover:bg-foreground/90 inline-flex h-9 items-center justify-center gap-2 rounded-lg px-4 text-sm font-medium transition-colors"
+                  className="bg-foreground text-background hover:bg-foreground/90 inline-flex h-10 items-center justify-center gap-2 rounded-lg px-5 text-sm font-medium transition-colors"
                 >
                   <Apple className="size-4" />
                   Download for macOS
@@ -209,17 +206,17 @@ function LandingPage() {
                   href="https://github.com/zvadaadam/box-ide"
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="bg-foreground/[0.06] text-foreground hover:bg-foreground/[0.1] inline-flex h-9 items-center justify-center gap-2 rounded-lg px-4 text-sm font-medium transition-colors"
+                  className="bg-foreground/[0.06] text-foreground hover:bg-foreground/[0.1] inline-flex h-10 items-center justify-center gap-2 rounded-lg px-5 text-sm font-medium transition-colors"
                 >
                   View source
                   <ArrowRight className="size-4" />
                 </a>
               </div>
-              <div className="ring-foreground/[0.06] mt-6 rounded-lg bg-[var(--code-surface)] p-4 ring-1 ring-inset">
-                <p className="text-muted-foreground/60 text-[10px] font-semibold tracking-[0.1em] uppercase">
+              <div className="mt-8 rounded-lg bg-[var(--code-surface)] p-5">
+                <p className="text-muted-foreground/40 text-[10px] font-semibold tracking-[0.1em] uppercase">
                   Build from source
                 </p>
-                <pre className="mt-2.5 overflow-x-auto text-[13px] leading-relaxed text-[var(--code-foreground)]">
+                <pre className="mt-3 overflow-x-auto text-[13px] leading-relaxed text-[var(--code-foreground)]">
                   <code>{`git clone https://github.com/zvadaadam/box-ide.git
 cd box-ide
 bun install
@@ -228,11 +225,12 @@ bun run dev`}</code>
               </div>
             </section>
 
-            <footer className="text-muted-foreground/50 flex items-center justify-between pt-8 text-[12px]">
+            {/* Footer */}
+            <footer className="text-muted-foreground/30 flex items-center justify-between py-8 text-[12px]">
               <span>Deus — same letters as Devs, different power dynamic</span>
               <a
                 href="mailto:hello@deusmachine.ai"
-                className="hover:text-foreground transition-colors duration-150"
+                className="hover:text-muted-foreground transition-colors duration-150"
               >
                 hello@deusmachine.ai
               </a>
@@ -241,6 +239,14 @@ bun run dev`}</code>
         </main>
       </div>
     </div>
+  );
+}
+
+function SectionLabel({ children }: { children: string }) {
+  return (
+    <h2 className="text-muted-foreground/60 text-[11px] font-medium tracking-[0.08em] uppercase">
+      {children}
+    </h2>
   );
 }
 
