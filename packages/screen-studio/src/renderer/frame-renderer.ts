@@ -73,13 +73,13 @@ const DEFAULT_BACKGROUND: BackgroundConfig = {
 
 const DEFAULT_CURSOR: CursorConfig = {
   visible: true,
-  size: 24,
+  size: 48,
   showClickRipple: true,
   rippleDuration: 400,
-  showSpotlight: false,
-  spotlightRadius: 40,
-  spotlightColor: "rgba(58, 150, 221, 0.15)",
-  dualRipple: false,
+  showSpotlight: true,
+  spotlightRadius: 60,
+  spotlightColor: "rgba(58, 150, 221, 0.12)",
+  dualRipple: true,
 };
 
 export async function createFrameRenderer(
