@@ -62,7 +62,10 @@ describe("SessionManager", () => {
 
       expect(id1).not.toBe(id2);
       expect(id2).not.toBe(id3);
-      expect(manager.activeCount).toBe(3);
+      // All 3 sessions should be in recording state
+      expect(manager.status(id1).status).toBe("recording");
+      expect(manager.status(id2).status).toBe("recording");
+      expect(manager.status(id3).status).toBe("recording");
     });
   });
 
@@ -163,7 +166,8 @@ describe("SessionManager", () => {
       expect(result.events).toHaveLength(2);
       expect(result.chapters).toHaveLength(1);
       expect(result.duration).toBeGreaterThanOrEqual(0);
-      expect(result.outputPath).toContain("recording-");
+      // captureMethod defaults to "none" — no video output without capture
+      expect(result.outputPath).toBe("");
     });
 
     it("transitions status from recording to done", async () => {
@@ -182,13 +186,14 @@ describe("SessionManager", () => {
       await expect(manager.stop(id)).rejects.toThrow(/not recording/);
     });
 
-    it("returns custom output path when specified", async () => {
+    it("returns empty output path without capture", async () => {
       const id = await manager.create({
         outputPath: "/tmp/custom-output.mp4",
       });
 
+      // Without capture, no video is produced even with custom outputPath
       const result = await manager.stop(id);
-      expect(result.outputPath).toBe("/tmp/custom-output.mp4");
+      expect(result.outputPath).toBe("");
     });
   });
 
@@ -203,7 +208,7 @@ describe("SessionManager", () => {
       expect(status.chapterCount).toBe(0);
     });
 
-    it("returns outputPath for completed session", async () => {
+    it("returns undefined outputPath for no-capture session", async () => {
       const id = await manager.create({
         outputPath: "/tmp/test-output.mp4",
       });
@@ -211,7 +216,8 @@ describe("SessionManager", () => {
 
       const status = manager.status(id);
       expect(status.status).toBe("done");
-      expect(status.outputPath).toBe("/tmp/test-output.mp4");
+      // No capture → no video → outputPath not set on state
+      expect(status.outputPath).toBeUndefined();
     });
 
     it("throws for non-existent session", () => {
@@ -239,32 +245,31 @@ describe("SessionManager", () => {
       const id2 = await manager.create({});
       const id3 = await manager.create({});
 
-      expect(manager.activeCount).toBe(3);
+      expect(manager.status(id1).status).toBe("recording");
 
       await manager.shutdownAll();
 
-      expect(manager.activeCount).toBe(0);
+      // All sessions should be cleaned up
       expect(() => manager.status(id1)).toThrow();
       expect(() => manager.status(id2)).toThrow();
       expect(() => manager.status(id3)).toThrow();
     });
   });
 
-  describe("activeCount", () => {
-    it("tracks active recording sessions", async () => {
-      expect(manager.activeCount).toBe(0);
-
+  describe("session lifecycle", () => {
+    it("tracks sessions through create → stop lifecycle", async () => {
       const id1 = await manager.create({});
-      expect(manager.activeCount).toBe(1);
-
       const id2 = await manager.create({});
-      expect(manager.activeCount).toBe(2);
+
+      expect(manager.status(id1).status).toBe("recording");
+      expect(manager.status(id2).status).toBe("recording");
 
       await manager.stop(id1);
-      expect(manager.activeCount).toBe(1);
+      expect(manager.status(id1).status).toBe("done");
+      expect(manager.status(id2).status).toBe("recording");
 
       await manager.stop(id2);
-      expect(manager.activeCount).toBe(0);
+      expect(manager.status(id2).status).toBe("done");
     });
   });
 

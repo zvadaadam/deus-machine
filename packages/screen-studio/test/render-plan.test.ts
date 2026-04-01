@@ -101,10 +101,12 @@ describe("createPlaybackPlan", () => {
 
     const longGap = plan.segments.find((s) => s.type === "gap" && s.sourceDurationMs > 50000);
     expect(longGap).toBeDefined();
-    // 60s gap at maxPlaybackRate=8 → output should be ~7500ms (60000/8)
-    // maxPlaybackRate is the hard ceiling — gaps may exceed maxGapOutputMs
-    const expectedMinOutput = longGap!.sourceDurationMs / DEFAULT_SPEED_RAMP_CONFIG.maxPlaybackRate;
-    expect(longGap!.outputDurationMs).toBeGreaterThanOrEqual(expectedMinOutput - 1);
+    // 60s gap: minRateForMaxWait = 60000/2000 = 30 (to keep under maxGapOutputMs)
+    // This exceeds maxPlaybackRate (8), but minRateForMaxWait takes priority
+    // Output = 60000/30 = 2000ms (respects maxGapOutputMs)
+    expect(longGap!.outputDurationMs).toBeLessThanOrEqual(
+      DEFAULT_SPEED_RAMP_CONFIG.maxGapOutputMs + 1
+    );
     // But it should still be compressed (faster than 1x)
     expect(longGap!.outputDurationMs).toBeLessThan(longGap!.sourceDurationMs);
   });
