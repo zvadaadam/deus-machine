@@ -73,3 +73,7 @@ ok
 ---
 
 How the landing page now looks and do we have there the Shazian components there installed?
+
+---
+
+Okay, so can you do a final review of the landing page? Like if it's everything is properly done like what 10-stack start project would need with all the deployments, proper code structure, everything, proper like tailwind things and yeah.
