@@ -1,0 +1,46 @@
+{
+  "cli_version": "0.5.0",
+  "checkpoint_id": "991d2d962caf",
+  "strategy": "manual-commit",
+  "branch": "zvadaadam/repo-create-new",
+  "checkpoints_count": 12,
+  "files_touched": [
+    ".claude/agent-memory/deep-reviewer/MEMORY.md",
+    "apps/backend/src/lib/schemas.ts",
+    "apps/backend/src/middleware/workspace-loader.ts",
+    "apps/backend/src/routes/repos.ts",
+    "apps/backend/src/routes/workspaces.ts",
+    "apps/backend/src/services/agent/commands.ts",
+    "apps/backend/test/unit/shared/events.test.ts",
+    "apps/web/src/app/layouts/MainContent.tsx",
+    "apps/web/src/app/layouts/MainLayout.tsx",
+    "apps/web/src/app/layouts/hooks/useCloneRepo.ts",
+    "apps/web/src/app/layouts/hooks/useRepoActions.ts",
+    "apps/web/src/app/layouts/hooks/useStartNewProject.ts",
+    "apps/web/src/features/command-palette/commands.ts",
+    "apps/web/src/features/repository/lib/templates.ts",
+    "apps/web/src/features/repository/ui/HomeView.tsx",
+    "apps/web/src/features/repository/ui/StartNewProjectModal.tsx",
+    "apps/web/src/features/repository/ui/index.ts",
+    "apps/web/src/features/sidebar/model/types.ts",
+    "apps/web/src/features/sidebar/ui/AppSidebar.tsx",
+    "apps/web/src/features/sidebar/ui/SidebarFooter.tsx",
+    "apps/web/src/platform/ws/query-protocol-client.ts",
+    "shared/events.ts"
+  ],
+  "sessions": [
+    {
+      "metadata": "/99/1d2d962caf/0/metadata.json",
+      "transcript": "/99/1d2d962caf/0/full.jsonl",
+      "content_hash": "/99/1d2d962caf/0/content_hash.txt",
+      "prompt": "/99/1d2d962caf/0/prompt.txt"
+    }
+  ],
+  "token_usage": {
+    "input_tokens": 2613,
+    "cache_creation_tokens": 578259,
+    "cache_read_tokens": 62108274,
+    "output_tokens": 127879,
+    "api_call_count": 444
+  }
+}
