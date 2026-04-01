@@ -51,3 +51,7 @@ Always start with exploring the problem, then defining a test cases. Without you
 ---
 
 Okay, and once we're gonna push it, like, how are we gonna get it to the MPM so we can do the MPM installs, these kind of things. How does that work?
+
+---
+
+Well, can we do this when we do the published workflow maybe? In the deployment where we build the app, but also we would build this CLI and deploy it.
