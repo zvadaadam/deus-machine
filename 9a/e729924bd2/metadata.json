@@ -1,0 +1,56 @@
+{
+  "cli_version": "0.5.0",
+  "checkpoint_id": "9ae729924bd2",
+  "strategy": "manual-commit",
+  "branch": "zvadaadam/screen-studio-integration",
+  "checkpoints_count": 33,
+  "files_touched": [
+    "apps/agent-server/agents/deus-tools/agent-browser-client.ts",
+    "apps/agent-server/agents/deus-tools/browser.ts",
+    "apps/agent-server/agents/deus-tools/recording.ts",
+    "apps/agent-server/build.ts",
+    "packages/screen-studio/src/adapter/index.ts",
+    "packages/screen-studio/src/adapter/mcp-adapter.ts",
+    "packages/screen-studio/src/index.ts",
+    "packages/screen-studio/src/mcp/cdp-capture.ts",
+    "packages/screen-studio/src/mcp/ffmpeg-recorder.ts",
+    "packages/screen-studio/src/mcp/server.ts",
+    "packages/screen-studio/src/mcp/session-manager.ts",
+    "packages/screen-studio/src/mcp/stream-capture.ts",
+    "packages/screen-studio/src/mcp/types.ts",
+    "packages/screen-studio/src/recorder/encoder.ts",
+    "packages/screen-studio/src/recorder/index.ts",
+    "packages/screen-studio/src/recorder/render-plan.ts",
+    "packages/screen-studio/src/renderer/frame-renderer.ts",
+    "packages/screen-studio/src/renderer/frame-source.ts",
+    "packages/screen-studio/src/renderer/index.ts",
+    "packages/screen-studio/src/renderer/video-renderer.ts",
+    "packages/screen-studio/src/session/index.ts",
+    "packages/screen-studio/src/session/recording-session.ts",
+    "packages/screen-studio/src/source/frame-source.ts",
+    "packages/screen-studio/src/source/index.ts",
+    "packages/screen-studio/test/ffmpeg-recorder.test.ts",
+    "packages/screen-studio/test/frame-source.test.ts",
+    "packages/screen-studio/test/mcp-adapter.test.ts",
+    "packages/screen-studio/test/mcp-server.test.ts",
+    "packages/screen-studio/test/recorder.test.ts",
+    "packages/screen-studio/test/recording-session.test.ts",
+    "packages/screen-studio/test/render-plan.test.ts",
+    "packages/screen-studio/test/session-manager.test.ts"
+  ],
+  "sessions": [
+    {
+      "metadata": "/9a/e729924bd2/0/metadata.json",
+      "transcript": "/9a/e729924bd2/0/full.jsonl",
+      "content_hash": "/9a/e729924bd2/0/content_hash.txt",
+      "prompt": "/9a/e729924bd2/0/prompt.txt"
+    }
+  ],
+  "token_usage": {
+    "input_tokens": 1431,
+    "cache_creation_tokens": 809056,
+    "cache_read_tokens": 51526088,
+    "output_tokens": 168599,
+    "api_call_count": 350
+  }
+}
