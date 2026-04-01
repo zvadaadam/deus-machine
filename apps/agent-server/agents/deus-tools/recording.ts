@@ -82,14 +82,14 @@ Returns a sessionId to use with recording_stop and recording_chapter.`,
           .positive()
           .max(7680)
           .optional()
-          .describe("Source capture width in pixels. Default: 1920"),
+          .describe("Source capture width in pixels. Default: 1280 (agent-browser viewport)"),
         sourceHeight: z
           .number()
           .int()
           .positive()
           .max(4320)
           .optional()
-          .describe("Source capture height in pixels. Default: 1080"),
+          .describe("Source capture height in pixels. Default: 720 (agent-browser viewport)"),
         outputWidth: z
           .number()
           .int()
@@ -113,7 +113,7 @@ Returns a sessionId to use with recording_stop and recording_chapter.`,
           "Background behind the device frame. Default: gradient #0f0f23 -> #1a1a3e"
         ),
         captureMethod: z
-          .enum(["avfoundation", "cdp", "stream", "auto", "x11grab", "none"])
+          .enum(["avfoundation", "stream", "auto", "x11grab", "none"])
           .optional()
           .describe(
             "Screen capture method. 'auto' (recommended) tries stream then avfoundation. Default: 'none'"
@@ -124,7 +124,6 @@ Returns a sessionId to use with recording_stop and recording_chapter.`,
           .describe("X11 display for x11grab capture (e.g. ':99'). Default: ':99'"),
       },
       async (args) => {
-        console.log(`[recording] recording_start invoked`);
         try {
           const recordingSessionId = await sessionManager.create(args);
           return {
@@ -174,7 +173,6 @@ Returns: { outputPath, duration, eventCount, chapterCount }`,
           .describe("Watermark text content (required when addWatermark is true)"),
       },
       async (args) => {
-        console.log(`[recording] recording_stop invoked for session ${args.sessionId}`);
         try {
           if (args.addWatermark && (!args.watermarkText || args.watermarkText.length === 0)) {
             return {
@@ -220,9 +218,6 @@ Returns: { chapterIndex, timestamp }`,
           .describe("Chapter title for navigation in the final video"),
       },
       async (args) => {
-        console.log(
-          `[recording] recording_chapter invoked for session ${args.sessionId}: "${args.title}"`
-        );
         try {
           const result = sessionManager.chapter(args.sessionId, args.title);
           return {
@@ -248,7 +243,6 @@ Returns: { status, duration, eventCount, chapterCount, outputPath? }`,
         sessionId: z.string().min(1).describe("Session ID returned by recording_start"),
       },
       async (args) => {
-        console.log(`[recording] recording_status invoked for session ${args.sessionId}`);
         try {
           const result = sessionManager.status(args.sessionId);
           return {

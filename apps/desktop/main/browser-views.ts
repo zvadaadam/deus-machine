@@ -556,6 +556,25 @@ export function registerBrowserViewHandlers(): void {
     }
   });
 
+  // Show ALL browser views — restores views hidden by hide_all_browser_webviews.
+  // Used when closing overlays (e.g., video player modal) that needed to cover native views.
+  ipcMain.handle("show_all_browser_webviews", () => {
+    const mainWindow = getMainWindow();
+    for (const [label, view] of views) {
+      if (mainWindow) {
+        const children = mainWindow.contentView.children;
+        if (!children.includes(view)) {
+          mainWindow.contentView.addChildView(view);
+        }
+      }
+      view.setVisible(true);
+      const savedBounds = viewBounds.get(label);
+      if (savedBounds) {
+        view.setBounds(savedBounds);
+      }
+    }
+  });
+
   ipcMain.handle("close_browser_webview", (_e, { label }: { label: string }) => {
     const view = views.get(label);
     if (!view) return;

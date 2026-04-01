@@ -10,7 +10,6 @@ vi.mock("../src/mcp/ffmpeg-recorder.js", async (importOriginal) => {
     FfmpegRecorder: vi.fn().mockImplementation(() => ({
       startCapture: vi.fn().mockResolvedValue(undefined),
       stopCapture: vi.fn().mockResolvedValue("/tmp/raw-test.mp4"),
-      postProcess: vi.fn().mockResolvedValue("/tmp/output.mp4"),
       isCapturing: vi.fn().mockReturnValue(false),
       cleanup: vi.fn().mockResolvedValue(undefined),
       kill: vi.fn(),
@@ -101,16 +100,16 @@ describe("SessionManager", () => {
     });
 
     it("throws when session is not found", () => {
-      expect(() => manager.event("nonexistent", "click", 0, 0))
-        .toThrow("Session not found: nonexistent");
+      expect(() => manager.event("nonexistent", "click", 0, 0)).toThrow(
+        "Session not found: nonexistent"
+      );
     });
 
     it("throws when session is not recording", async () => {
       const id = await manager.create({});
       await manager.stop(id);
 
-      expect(() => manager.event(id, "click", 0, 0))
-        .toThrow(/not recording/);
+      expect(() => manager.event(id, "click", 0, 0)).toThrow(/not recording/);
     });
   });
 
@@ -138,16 +137,16 @@ describe("SessionManager", () => {
     });
 
     it("throws when session is not found", () => {
-      expect(() => manager.chapter("nonexistent", "Test"))
-        .toThrow("Session not found: nonexistent");
+      expect(() => manager.chapter("nonexistent", "Test")).toThrow(
+        "Session not found: nonexistent"
+      );
     });
 
     it("throws when session is not recording", async () => {
       const id = await manager.create({});
       await manager.stop(id);
 
-      expect(() => manager.chapter(id, "Late Chapter"))
-        .toThrow(/not recording/);
+      expect(() => manager.chapter(id, "Late Chapter")).toThrow(/not recording/);
     });
   });
 
@@ -161,8 +160,8 @@ describe("SessionManager", () => {
       manager.chapter(id, "Test Chapter");
 
       const result = await manager.stop(id);
-      expect(result.eventCount).toBe(2);
-      expect(result.chapterCount).toBe(1);
+      expect(result.events).toHaveLength(2);
+      expect(result.chapters).toHaveLength(1);
       expect(result.duration).toBeGreaterThanOrEqual(0);
       expect(result.outputPath).toContain("recording-");
     });
@@ -216,8 +215,7 @@ describe("SessionManager", () => {
     });
 
     it("throws for non-existent session", () => {
-      expect(() => manager.status("nonexistent"))
-        .toThrow("Session not found: nonexistent");
+      expect(() => manager.status("nonexistent")).toThrow("Session not found: nonexistent");
     });
   });
 
@@ -226,8 +224,7 @@ describe("SessionManager", () => {
       const id = await manager.create({});
       await manager.cleanup(id);
 
-      expect(() => manager.status(id))
-        .toThrow("Session not found");
+      expect(() => manager.status(id)).toThrow("Session not found");
     });
 
     it("is idempotent for non-existent sessions", async () => {
@@ -298,8 +295,8 @@ describe("SessionManager", () => {
 
       // Stop
       const result = await manager.stop(id);
-      expect(result.eventCount).toBe(5);
-      expect(result.chapterCount).toBe(2);
+      expect(result.events).toHaveLength(5);
+      expect(result.chapters).toHaveLength(2);
       expect(result.duration).toBeGreaterThanOrEqual(0);
       expect(manager.status(id).status).toBe("done");
 

@@ -7,9 +7,9 @@ import type { AgentEvent, BackgroundConfig, DeviceFrameType, Size } from "../typ
 export interface RecordingStartParams {
   /** Where to write the final MP4. Default: /tmp/recording-{timestamp}.mp4 */
   outputPath?: string;
-  /** Source capture resolution width. Default: 1920 */
+  /** Source capture resolution width. Default: 1280 (agent-browser viewport) */
   sourceWidth?: number;
-  /** Source capture resolution height. Default: 1080 */
+  /** Source capture resolution height. Default: 720 (agent-browser viewport) */
   sourceHeight?: number;
   /** Output video width. Default: 1920 */
   outputWidth?: number;
@@ -23,13 +23,12 @@ export interface RecordingStartParams {
   background?: { type: "gradient" | "solid"; colors?: [string, string]; angle?: number };
   /** Screen capture method. Default: "none"
    * - "avfoundation": macOS native 30fps (needs Screen Recording permission)
-   * - "cdp": CDP screenshots piped to ffmpeg, 10fps, no permission needed
    * - "stream": WebSocket stream from agent-browser, 10fps, no permission needed
    * - "x11grab": Linux/Xvfb
    * - "auto": try stream (if available), then avfoundation, fall back to none
    * - "none": events-only (no video output)
    */
-  captureMethod?: "x11grab" | "avfoundation" | "cdp" | "stream" | "auto" | "none";
+  captureMethod?: "x11grab" | "avfoundation" | "stream" | "auto" | "none";
   /** X11 display for x11grab capture. Default: ":99" */
   display?: string;
 }
@@ -66,15 +65,17 @@ export interface ResolvedRecordingConfig {
   fps: number;
   deviceFrame: DeviceFrameType;
   background: BackgroundConfig;
-  captureMethod: "x11grab" | "avfoundation" | "cdp" | "stream" | "auto" | "none";
+  captureMethod: "x11grab" | "avfoundation" | "stream" | "auto" | "none";
   display: string;
 }
 
 export interface RecordingResult {
   outputPath: string;
+  /** Path to JPEG thumbnail (first frame). Empty string if unavailable. */
+  thumbnailPath: string;
   duration: number;
-  eventCount: number;
-  chapterCount: number;
+  chapters: { title: string; time: number }[];
+  events: { type: string; time: number; text?: string; url?: string; direction?: string }[];
 }
 
 // ---------------------------------------------------------------------------
@@ -89,15 +90,4 @@ export interface FfmpegCaptureConfig {
   outputPath: string;
   /** macOS: avfoundation screen device index (auto-detected if omitted). */
   screenDevice?: string;
-}
-
-export interface FfmpegPostProcessConfig {
-  inputPath: string;
-  outputPath: string;
-  filterComplex: string;
-  outputSize: Size;
-  addWatermark?: boolean;
-  watermarkText?: string;
-  /** Whether the drawtext filter is available in this ffmpeg build. */
-  hasDrawtext?: boolean;
 }

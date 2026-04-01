@@ -12,7 +12,7 @@
  *
  * Two-pass workflow:
  *   Pass 1: WebSocket frames → pipe → raw.mp4 (this module)
- *   Pass 2: raw.mp4 → zoompan/crop filter → final.mp4 (FfmpegRecorder.postProcess)
+ *   Pass 2: raw.mp4 → canvas renderer → final.mp4 (VideoRenderer)
  */
 
 import { spawn, type ChildProcess } from "node:child_process";
@@ -20,8 +20,11 @@ import { existsSync } from "node:fs";
 import { stat } from "node:fs/promises";
 
 const DEFAULT_STREAM_FPS = 10;
-const RECONNECT_MAX_ATTEMPTS = 5;
-const RECONNECT_DELAY_MS = 1000;
+const RECONNECT_MAX_ATTEMPTS = 15;
+const RECONNECT_DELAY_MS = 500;
+const FIRST_FRAME_TIMEOUT_MS = 15_000;
+/** Interval for sending keep-alive mouse moves to trigger CDP screencast frames. */
+const KEEPALIVE_INTERVAL_MS = 100;
 
 // ---------------------------------------------------------------------------
 // StreamRecorder — receive WebSocket frames and pipe to ffmpeg
@@ -30,40 +33,58 @@ const RECONNECT_DELAY_MS = 1000;
 export interface StreamRecorderConfig {
   outputPath: string;
   fps?: number;
+  /** Max time to wait for first frame in start(). Default: 15s. */
+  readyTimeout?: number;
 }
 
 /**
  * Stream-based recorder that connects to agent-browser's WebSocket stream
  * server and pipes received JPEG frames directly to ffmpeg.
  *
- * Simpler than CdpRecorder — no CDP commands, just WebSocket frame messages.
- * The stream server handles screencasting lifecycle automatically.
+ * Uses wallclock timestamps so raw video duration matches real session time,
+ * regardless of actual frame delivery rate (~10fps from agent-browser).
+ * Encodes with all I-frames for random access during post-processing.
  */
 export class StreamRecorder {
   private ws: WebSocket | null = null;
   private ffmpeg: ChildProcess | null = null;
   private frameCount = 0;
+  private droppedFrames = 0;
   private active = false;
   private reconnecting = false;
   private reconnectTimer: ReturnType<typeof setTimeout> | null = null;
+  /** Timer that sends periodic mouse moves to keep CDP screencast alive. */
+  private keepaliveTimer: ReturnType<typeof setInterval> | null = null;
+  private keepaliveTick = 0;
   private port: number = 0;
   private outputPath: string;
   private lastStderr = "";
   private fps: number;
+  private readyTimeout: number;
+  /** Detected frame dimensions from stream metadata (set on first frame). */
+  private detectedWidth: number | null = null;
+  private detectedHeight: number | null = null;
+  /** Timestamps for actual FPS computation. */
+  private firstFrameTime: number | null = null;
+  private lastFrameTime: number | null = null;
+  /** Resolves when first frame arrives — used by start() to wait for readiness. */
+  private readyResolve: (() => void) | null = null;
 
   constructor(config: StreamRecorderConfig) {
     this.outputPath = config.outputPath;
     this.fps = config.fps ?? DEFAULT_STREAM_FPS;
+    this.readyTimeout = config.readyTimeout ?? FIRST_FRAME_TIMEOUT_MS;
   }
 
   /**
    * Start capturing: connect to WebSocket stream, spawn ffmpeg, begin piping.
+   * Waits for the first frame to arrive (or readyTimeout) before returning.
    */
   async start(port: number): Promise<void> {
     this.port = port;
     this.active = true;
 
-    // 1. Spawn ffmpeg with piped stdin (same pattern as CdpRecorder)
+    // 1. Spawn ffmpeg with piped stdin — wallclock timestamps for correct duration
     const ffmpegArgs = [
       "-y",
       // Minimize probe/analysis for piped input
@@ -75,25 +96,28 @@ export class StreamRecorder {
       "32",
       "-analyzeduration",
       "0",
+      // Use wall clock timestamps — raw video duration matches real time
+      "-use_wallclock_as_timestamps",
+      "1",
       // Input: MJPEG stream from pipe
       "-f",
       "image2pipe",
       "-c:v",
       "mjpeg",
-      "-framerate",
-      String(this.fps),
       "-i",
       "pipe:0",
       // Pad to even dimensions (required for yuv420p)
       "-vf",
       "pad=ceil(iw/2)*2:ceil(ih/2)*2",
-      // Encode
+      // Encode with all I-frames for random access during post-processing
       "-c:v",
       "libx264",
       "-preset",
       "ultrafast",
       "-pix_fmt",
       "yuv420p",
+      "-x264opts",
+      "keyint=1:bframes=0",
       "-threads",
       "1",
       this.outputPath,
@@ -107,7 +131,6 @@ export class StreamRecorder {
 
     proc.stderr?.on("data", (chunk: Buffer) => {
       this.lastStderr += chunk.toString();
-      // Keep only last 2KB
       if (this.lastStderr.length > 2048) {
         this.lastStderr = this.lastStderr.slice(-2048);
       }
@@ -122,18 +145,38 @@ export class StreamRecorder {
       this.ffmpeg = null;
     });
 
-    // 2. Connect to WebSocket stream (lazy — if not available yet, retry loop handles it)
+    // 2. Connect to WebSocket stream
     try {
       await this.connectWebSocket();
     } catch {
-      console.error(
-        `[stream-recorder] Stream not available yet on port ${port}, will retry when it starts`
-      );
+      console.error(`[stream-recorder] Stream not available yet on port ${port}, will retry`);
       this.scheduleReconnect();
     }
 
+    // 3. Wait for first frame or timeout before returning
+    await new Promise<void>((resolve) => {
+      if (this.frameCount > 0) {
+        resolve();
+        return;
+      }
+
+      this.readyResolve = () => {
+        this.readyResolve = null;
+        resolve();
+      };
+
+      setTimeout(() => {
+        if (this.readyResolve) {
+          console.error(`[stream-recorder] No frames within ${this.readyTimeout}ms, continuing`);
+          const r = this.readyResolve;
+          this.readyResolve = null;
+          r();
+        }
+      }, this.readyTimeout);
+    });
+
     console.error(
-      `[stream-recorder] Started, stream port ${port}, ${this.fps}fps -> ${this.outputPath}`
+      `[stream-recorder] Started, port ${port}, ${this.frameCount} frames buffered -> ${this.outputPath}`
     );
   }
 
@@ -143,8 +186,14 @@ export class StreamRecorder {
    */
   async stop(): Promise<string | null> {
     this.active = false;
+    this.stopKeepalive();
 
-    // Clear any pending reconnect
+    // Clear any pending ready/reconnect
+    if (this.readyResolve) {
+      const r = this.readyResolve;
+      this.readyResolve = null;
+      r();
+    }
     if (this.reconnectTimer) {
       clearTimeout(this.reconnectTimer);
       this.reconnectTimer = null;
@@ -187,7 +236,11 @@ export class StreamRecorder {
       return null;
     }
 
-    console.error(`[stream-recorder] Stopped, ${this.frameCount} frames captured`);
+    console.error(
+      `[stream-recorder] Stopped, ${this.frameCount} frames captured` +
+        (this.droppedFrames > 0 ? `, ${this.droppedFrames} dropped` : "") +
+        (this.actualFps ? `, ${this.actualFps.toFixed(1)}fps actual` : "")
+    );
 
     // Verify output file exists and has content
     if (!existsSync(this.outputPath)) {
@@ -213,7 +266,13 @@ export class StreamRecorder {
    */
   kill(): void {
     this.active = false;
+    this.stopKeepalive();
 
+    if (this.readyResolve) {
+      const r = this.readyResolve;
+      this.readyResolve = null;
+      r();
+    }
     if (this.reconnectTimer) {
       clearTimeout(this.reconnectTimer);
       this.reconnectTimer = null;
@@ -239,8 +298,29 @@ export class StreamRecorder {
     return this.frameCount;
   }
 
+  /** Number of frames dropped due to ffmpeg backpressure. */
+  get dropped(): number {
+    return this.droppedFrames;
+  }
+
   get stderr(): string {
     return this.lastStderr;
+  }
+
+  /** Actual FPS computed from frame delivery timestamps. */
+  get actualFps(): number | null {
+    if (this.frameCount < 2 || !this.firstFrameTime || !this.lastFrameTime) return null;
+    const durationSec = (this.lastFrameTime - this.firstFrameTime) / 1000;
+    if (durationSec <= 0) return null;
+    return (this.frameCount - 1) / durationSec;
+  }
+
+  /** Returns the actual frame dimensions detected from stream metadata, or null if unknown. */
+  get detectedFrameSize(): { width: number; height: number } | null {
+    if (this.detectedWidth !== null && this.detectedHeight !== null) {
+      return { width: this.detectedWidth, height: this.detectedHeight };
+    }
+    return null;
   }
 
   // ---------------------------------------------------------------------------
@@ -271,8 +351,47 @@ export class StreamRecorder {
     });
   }
 
+  /**
+   * Start sending periodic mouse-move events on the WebSocket.
+   * CDP's Page.screencastFrame is event-driven — it only sends frames when
+   * the page visually changes. Without this, a static page produces 0 frames.
+   * Tiny 1px mouse moves are enough to trigger new screencast frames (~10fps).
+   */
+  private startKeepalive(): void {
+    this.stopKeepalive();
+    this.keepaliveTick = 0;
+    this.keepaliveTimer = setInterval(() => {
+      if (!this.ws || this.ws.readyState !== WebSocket.OPEN) return;
+      this.keepaliveTick++;
+      try {
+        this.ws.send(
+          JSON.stringify({
+            type: "input_mouse",
+            eventType: "mouseMoved",
+            x: 10 + (this.keepaliveTick % 2),
+            y: 10,
+            button: "none",
+            clickCount: 0,
+          })
+        );
+      } catch {
+        // WebSocket may have closed between the check and send
+      }
+    }, KEEPALIVE_INTERVAL_MS);
+  }
+
+  private stopKeepalive(): void {
+    if (this.keepaliveTimer) {
+      clearInterval(this.keepaliveTimer);
+      this.keepaliveTimer = null;
+    }
+  }
+
   private setupMessageHandler(): void {
     if (!this.ws) return;
+
+    // Start keepalive to ensure continuous frame delivery
+    this.startKeepalive();
 
     this.ws.onmessage = (event: MessageEvent) => {
       if (!this.active || !this.ffmpeg?.stdin?.writable) return;
@@ -282,15 +401,35 @@ export class StreamRecorder {
         const msg = JSON.parse(raw);
 
         if (msg.type === "frame" && msg.data) {
+          // Capture frame dimensions from metadata (first frame sets it)
+          if (this.detectedWidth === null && msg.metadata) {
+            const w = msg.metadata.deviceWidth;
+            const h = msg.metadata.deviceHeight;
+            if (typeof w === "number" && typeof h === "number" && w > 0 && h > 0) {
+              this.detectedWidth = w;
+              this.detectedHeight = h;
+              console.error(`[stream-recorder] Detected frame size: ${w}x${h}`);
+            }
+          }
+
           const bytes = Buffer.from(msg.data, "base64");
           const ok = this.ffmpeg.stdin.write(bytes);
-          if (!ok) {
-            // Backpressure — ffmpeg can't keep up, frame will be dropped
-            // (drain handling is async and we don't want to block the WS message loop)
+          if (ok) {
+            this.frameCount++;
+            const now = Date.now();
+            if (this.firstFrameTime === null) this.firstFrameTime = now;
+            this.lastFrameTime = now;
+
+            // Resolve ready promise on first frame
+            if (this.frameCount === 1 && this.readyResolve) {
+              const r = this.readyResolve;
+              this.readyResolve = null;
+              r();
+            }
+          } else {
+            this.droppedFrames++;
           }
-          this.frameCount++;
         }
-        // "status" messages are informational — log but don't act on them
         if (msg.type === "status") {
           console.error(
             `[stream-recorder] Status: connected=${msg.connected}, screencasting=${msg.screencasting}`
@@ -339,7 +478,6 @@ export class StreamRecorder {
           this.reconnecting = false;
         } catch {
           this.reconnecting = false;
-          // Exponential backoff capped at 5s
           this.scheduleReconnect(attempt + 1);
         }
       },
