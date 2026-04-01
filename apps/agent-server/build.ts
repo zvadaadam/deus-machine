@@ -39,6 +39,10 @@ build({
     //   to load it at runtime (CJS can dynamic-import ESM in modern Node.js).
     "@openai/codex",
     "@openai/codex-sdk",
+    // @napi-rs/canvas — native Skia binary for canvas rendering.
+    // Must be external since it contains platform-specific .node files.
+    "@napi-rs/canvas",
+    "@napi-rs/canvas-darwin-arm64",
     // ws — WebSocket library with optional native extensions (bufferutil,
     // utf-8-validate). Externalized so the runtime can resolve the correct
     // platform-specific binaries.

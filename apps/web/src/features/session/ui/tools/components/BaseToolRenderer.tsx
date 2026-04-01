@@ -33,6 +33,7 @@ export interface BaseToolRendererProps {
   defaultExpanded?: boolean;
   isLoading?: boolean; // True when tool result is pending (shimmer effect)
   showContentOnError?: boolean; // True for tools whose renderContent already displays error output (e.g. Bash)
+  fullWidthContent?: boolean; // Skip the ml-6 indent on expanded content (for prominent media like video cards)
 
   // Content rendering (choose one)
   children?: ReactNode; // NEW API: Single children slot
@@ -54,6 +55,7 @@ export function BaseToolRenderer({
   defaultExpanded = false, // Collapsed by default (explicit is better than implicit)
   isLoading = false,
   showContentOnError = false,
+  fullWidthContent = false,
   children,
   renderContent,
   renderSummary,
@@ -139,7 +141,7 @@ export function BaseToolRenderer({
             exit={{ height: 0, opacity: 0 }}
             transition={expandTransition}
             style={{ overflow: "hidden" }}
-            className="mt-0.5 ml-6"
+            className={cn("mt-0.5", !fullWidthContent && "ml-6")}
           >
             {isError && toolResult && !showContentOnError ? (
               <ToolError content={toolResult.content} />

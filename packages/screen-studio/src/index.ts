@@ -19,21 +19,23 @@ export { catmullRomAt, resamplePath } from "./interpolation/index.js";
 export { smoothstep, smootherstep, clamp, lerp } from "./interpolation/index.js";
 
 // Recording
-export { TimelineRecorder, generateFfmpegFilter, generateCropScaleFilter, type FrameEncoder, type TimelineFrame } from "./recorder/index.js";
+export { TimelineRecorder, type TimelineFrame } from "./recorder/index.js";
 
-// MCP adapter — maps browser tool events to camera events
-export { McpToolAdapter, RESOLVE_ELEMENT_JS, type McpToolEvent, type ResolvedElement, type ElementResolver } from "./adapter/index.js";
-
-// Frame source — abstract interface for frame capture
-export { DEFAULT_CDP_CONFIG, DEFAULT_SCREENSHOT_CONFIG, DEFAULT_VNC_CONFIG, type FrameSource, type Frame, type FrameCallback } from "./source/index.js";
-
-// Recording session — full pipeline orchestrator
-export { RecordingSession, type RecordingSessionConfig, type SessionStatus, type TickResult } from "./session/index.js";
+// Renderer — frame source and canvas-based post-processing pipeline
+export { FrameSource, splitJpegFrames, type FrameSourceInfo } from "./renderer/index.js";
 
 // MCP server
 export { createMcpServer } from "./mcp/server.js";
+export { extractThumbnail } from "./mcp/thumbnail.js";
 export { SessionManager } from "./mcp/session-manager.js";
-export { FfmpegRecorder, detectFfmpeg, detectCaptureMethod, detectScreenDevice, hasFilter, buildCaptureArgs, buildPostProcessArgs } from "./mcp/ffmpeg-recorder.js";
+export { FfmpegRecorder, detectFfmpeg, probeVideoDimensions } from "./mcp/ffmpeg-recorder.js";
+
+// Render plan — speed ramping and timeline mapping
+export {
+  mapTimelineToOutput,
+  type MappedEvent,
+  type MappedChapter,
+} from "./recorder/render-plan.js";
 
 // Types
 export type {

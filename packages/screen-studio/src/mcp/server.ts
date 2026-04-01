@@ -65,14 +65,14 @@ const RecordingStartInputSchema = z
       .positive()
       .max(7680)
       .optional()
-      .describe("Source capture width in pixels. Default: 1920"),
+      .describe("Source capture width in pixels. Default: 1280 (auto-detected from stream)"),
     sourceHeight: z
       .number()
       .int()
       .positive()
       .max(4320)
       .optional()
-      .describe("Source capture height in pixels. Default: 1080"),
+      .describe("Source capture height in pixels. Default: 720 (auto-detected from stream)"),
     outputWidth: z
       .number()
       .int()
@@ -96,13 +96,12 @@ const RecordingStartInputSchema = z
       "Background behind the device frame. Default: gradient #0f0f23 → #1a1a3e"
     ),
     captureMethod: z
-      .enum(["avfoundation", "cdp", "stream", "auto", "x11grab", "none"])
+      .enum(["avfoundation", "stream", "auto", "x11grab", "none"])
       .optional()
       .describe(
         "Screen capture method. 'auto' = best available (stream → avfoundation → none). " +
           "'stream' = WebSocket stream from agent-browser, 10fps, no permission needed. " +
           "'avfoundation' = macOS 30fps (needs Screen Recording permission). " +
-          "'cdp' = CDP screenshots piped to ffmpeg, 10fps, no permission needed. " +
           "'x11grab' = Linux/Xvfb. 'none' = events-only. Default: 'none'"
       ),
     display: z
@@ -176,9 +175,27 @@ const RecordingStartOutputSchema = z.object({
 
 const RecordingStopOutputSchema = z.object({
   outputPath: z.string().describe("Path to the final MP4 file"),
-  duration: z.number().describe("Recording duration in seconds"),
-  eventCount: z.number().describe("Total agent events recorded"),
-  chapterCount: z.number().describe("Total chapters added"),
+  thumbnailPath: z.string().describe("Path to JPEG thumbnail (first frame)"),
+  duration: z.number().describe("Recording duration in seconds (after speed ramping)"),
+  chapters: z
+    .array(
+      z.object({
+        title: z.string(),
+        time: z.number().describe("Time in output video seconds"),
+      })
+    )
+    .describe("Chapter markers with output video timestamps"),
+  events: z
+    .array(
+      z.object({
+        type: z.string().describe("Event type: click, type, scroll, navigate, etc."),
+        time: z.number().describe("Time in output video seconds"),
+        text: z.string().optional(),
+        url: z.string().optional(),
+        direction: z.string().optional(),
+      })
+    )
+    .describe("Agent action events with output video timestamps"),
 });
 
 const RecordingEventOutputSchema = z.object({
@@ -311,9 +328,10 @@ Args:
 Returns:
   {
     "outputPath": "/tmp/recording-rec_a1b2c3.mp4",
+    "thumbnailPath": "/tmp/recording-rec_a1b2c3-thumb.jpg",
     "duration": 12.5,
-    "eventCount": 15,
-    "chapterCount": 3
+    "chapters": [{ "title": "Login flow", "time": 2.3 }],
+    "events": [{ "type": "click", "time": 1.5 }, { "type": "type", "time": 3.0, "text": "hello" }]
   }
 
 Error Handling:

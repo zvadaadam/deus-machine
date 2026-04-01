@@ -45,6 +45,9 @@ import {
   GetWorkspaceDiffToolRenderer,
   DiffCommentToolRenderer,
   GetTerminalOutputToolRenderer,
+  // Deus MCP — Recording
+  RecordingStartToolRenderer,
+  RecordingStopToolRenderer,
 } from "./renderers";
 
 // Idempotency guard - prevent double registration during HMR/dev
@@ -103,6 +106,10 @@ export function registerAllTools() {
   toolRegistry.register("GetWorkspaceDiff", GetWorkspaceDiffToolRenderer);
   toolRegistry.register("DiffComment", DiffCommentToolRenderer);
   toolRegistry.register("GetTerminalOutput", GetTerminalOutputToolRenderer);
+
+  // Deus MCP — Recording tools
+  toolRegistry.register("recording_start", RecordingStartToolRenderer);
+  toolRegistry.register("recording_stop", RecordingStopToolRenderer);
 }
 
 // Auto-initialize on import (idempotent)

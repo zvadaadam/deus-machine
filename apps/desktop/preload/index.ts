@@ -43,6 +43,7 @@ const ALLOWED_INVOKE_CHANNELS = new Set([
   "show_browser_webview",
   "hide_browser_webview",
   "hide_all_browser_webviews",
+  "show_all_browser_webviews",
   "set_browser_webview_bounds",
   "navigate_browser_webview",
   "reload_browser_webview",

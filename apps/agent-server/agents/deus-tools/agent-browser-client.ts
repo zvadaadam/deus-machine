@@ -2,6 +2,16 @@
 // Executes commands via child_process and parses JSON responses.
 // The daemon auto-starts on the first command per session and maintains
 // browser state (refs, cookies, DOM) across calls.
+//
+// CDP SAFETY: agent-browser connects to Chrome DevTools Protocol to control
+// the browser. In Electron, CDP port 19222 exposes ALL page targets including
+// the renderer (localhost:1420). If agent-browser gets the raw port, it will
+// discover and navigate the renderer → ENTIRE APP UI REPLACED.
+//
+// Fix: getCdpWsUrl() finds the specific BrowserView's WebSocket URL and
+// passes that to --cdp instead of the port. If no BrowserView exists,
+// we omit --cdp entirely so agent-browser launches its own browser.
+// NEVER pass --cdp PORT_NUMBER — always use the specific WS URL.
 
 import { execFile, spawn } from "child_process";
 import { dirname, join } from "path";
