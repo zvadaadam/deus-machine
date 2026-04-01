@@ -558,3 +558,7 @@ Remember that we don't want to over engineer stuff. It should be a great code, v
 ---
 
 /Users/zvada/Developer/agent/box-ide/.conductor/columbus-v5/.context/attachments/Screenshot 2026-04-01 at 9.06.00 PM.png Okay, when I'm looking at it, the layout is incorrect. The middle, the website, which is scrollable, it should be centered in the screen. And the sidebar, where is the logo and the things, should be like close. A little more with padding, but on the left, you know.
+
+---
+
+/Users/zvada/Developer/agent/box-ide/.conductor/columbus-v5/.context/attachments/Screenshot 2026-04-01 at 9.17.07 PM.png Okay, but the sidebar should be right next to the text, very close. But it should not be inside, so the main middle part would be offset and not centered, you know?
