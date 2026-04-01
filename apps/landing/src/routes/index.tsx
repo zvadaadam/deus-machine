@@ -1,5 +1,4 @@
 import { createFileRoute } from '@tanstack/react-router'
-import { Button } from '@/components/ui/button'
 import { InteractiveDemo } from '@/components/demo/interactive-demo'
 import {
   ArrowRight,
@@ -33,9 +32,12 @@ function LandingPage() {
         <a href="/" className="text-[13px] font-bold tracking-[-0.01em]">
           Deus Machine
         </a>
-        <Button size="sm" asChild>
-          <a href="https://app.deusmachine.ai">Open App</a>
-        </Button>
+        <a
+          href="https://app.deusmachine.ai"
+          className="inline-flex h-7 items-center rounded-lg bg-foreground px-2.5 text-[0.8rem] font-medium text-background transition-colors hover:bg-foreground/90"
+        >
+          Open App
+        </a>
       </header>
 
       <div className="mx-auto flex max-w-6xl">
@@ -153,18 +155,22 @@ function LandingPage() {
                 yours to rebuild.
               </p>
               <div className="mt-6 flex flex-col gap-3 sm:flex-row">
-                <Button size="lg" asChild>
-                  <a href="https://github.com/zvadaadam/box-ide/releases">
-                    <Apple className="mr-2 size-4" />
-                    Download for macOS
-                  </a>
-                </Button>
-                <Button variant="outline" size="lg" asChild>
-                  <a href="https://github.com/zvadaadam/box-ide" target="_blank" rel="noopener noreferrer">
-                    View source
-                    <ArrowRight className="ml-2 size-4" />
-                  </a>
-                </Button>
+                <a
+                  href="https://github.com/zvadaadam/box-ide/releases"
+                  className="inline-flex h-9 items-center justify-center gap-2 rounded-lg bg-foreground px-4 text-sm font-medium text-background transition-colors hover:bg-foreground/90"
+                >
+                  <Apple className="size-4" />
+                  Download for macOS
+                </a>
+                <a
+                  href="https://github.com/zvadaadam/box-ide"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="inline-flex h-9 items-center justify-center gap-2 rounded-lg bg-foreground/[0.06] px-4 text-sm font-medium text-foreground transition-colors hover:bg-foreground/[0.1]"
+                >
+                  View source
+                  <ArrowRight className="size-4" />
+                </a>
               </div>
               <div className="mt-6 rounded-lg bg-[var(--code-surface)] p-4 ring-1 ring-inset ring-foreground/[0.06]">
                 <p className="text-[10px] font-semibold uppercase tracking-[0.1em] text-muted-foreground/60">Build from source</p>
