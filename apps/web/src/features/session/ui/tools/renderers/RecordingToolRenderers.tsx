@@ -297,9 +297,9 @@ function RecordingCard({
           <div
             className={cn(
               "flex h-14 w-14 items-center justify-center rounded-full",
-              "bg-white/15 backdrop-blur-md",
+              "bg-black/50 shadow-lg backdrop-blur-md",
               "transition-all duration-200 ease-out",
-              "group-hover:scale-110 group-hover:bg-white/25"
+              "group-hover:scale-110 group-hover:bg-black/60"
             )}
           >
             <Play className="ml-1 h-6 w-6 fill-white text-white" />
