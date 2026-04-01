@@ -357,9 +357,20 @@ export class SessionManager {
         try {
           const { renderVideo } = await import("../renderer/video-renderer.js");
 
+          // Offset events so t=0 aligns with video start (first frame),
+          // not session start. The stream may start late (WebSocket connect
+          // + first frame delay), so events before the first frame get t<0.
+          const videoStartOffset = session.streamRecorder?.firstFrameAt
+            ? session.streamRecorder.firstFrameAt - session.state.startTime
+            : 0;
+          const videoEvents = session.state.events.map((e) => ({
+            ...e,
+            t: e.t - videoStartOffset,
+          }));
+
           const result = await renderVideo({
             rawVideoPath: session.rawCapturePath,
-            events: session.state.events,
+            events: videoEvents,
             sourceSize: actualSourceSize,
             outputSize: config.outputSize,
             outputPath: config.outputPath,
@@ -398,12 +409,22 @@ export class SessionManager {
         thumbnailPath = (await extractThumbnail(config.outputPath)) ?? "";
       }
 
-      // Map events + chapters to output video timestamps
-      const mapped = mapTimelineToOutput(
-        session.state.events,
-        session.state.chapters,
-        playbackPlan
-      );
+      // Map events + chapters to output video timestamps.
+      // Use video-offset timestamps when a playback plan exists (plan was
+      // built from video-relative events, so mapping input must match).
+      const videoStartOffset = session.streamRecorder?.firstFrameAt
+        ? session.streamRecorder.firstFrameAt - session.state.startTime
+        : 0;
+      const mappingEvents = videoProduced
+        ? session.state.events.map((e) => ({ ...e, t: e.t - videoStartOffset }))
+        : session.state.events;
+      const mappingChapters = videoProduced
+        ? session.state.chapters.map((c) => ({
+            ...c,
+            timestamp: c.timestamp - videoStartOffset,
+          }))
+        : session.state.chapters;
+      const mapped = mapTimelineToOutput(mappingEvents, mappingChapters, playbackPlan);
 
       return {
         outputPath: videoProduced ? config.outputPath : "",

@@ -325,6 +325,11 @@ export class StreamRecorder {
     return this.lastStderr;
   }
 
+  /** Absolute timestamp (Date.now()) when the first frame was received. */
+  get firstFrameAt(): number | null {
+    return this.firstFrameTime;
+  }
+
   /** Actual FPS computed from frame delivery timestamps. */
   get actualFps(): number | null {
     if (this.frameCount < 2 || !this.firstFrameTime || !this.lastFrameTime) return null;

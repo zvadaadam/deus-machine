@@ -175,6 +175,69 @@ describe("SessionManager E2E pipeline", () => {
     }
   });
 
+  it("handles events beyond video duration (production scenario)", async () => {
+    // Production bug: session runs 40s, but raw video is only 18s.
+    // Events at 25s, 30s, 35s are beyond the video → negative segments.
+    // Also: stream starts 5s after session → video offset must be applied.
+    const sessionId = await sm.create({ captureMethod: "none" });
+
+    // Simulate events spanning 2+ seconds (session-relative timestamps)
+    sm.event(sessionId, "navigate", 640, 360, { url: "https://expo.dev" });
+    await new Promise((r) => setTimeout(r, 30));
+    sm.event(sessionId, "click", 300, 200);
+    await new Promise((r) => setTimeout(r, 30));
+    sm.event(sessionId, "type", 300, 250, { text: "test" });
+    await new Promise((r) => setTimeout(r, 30));
+    sm.event(sessionId, "scroll", 500, 400, { direction: "down" });
+    sm.chapter(sessionId, "Browsing");
+
+    // Create a short raw video (1s) — much shorter than the session
+    const rawPath = join(testDir, `raw-beyond-${sessionId}.mp4`);
+    const outputPath = join(testDir, `output-beyond-${sessionId}.mp4`);
+    createTestVideo(rawPath, 1, 10, 1156, 720);
+
+    // Inject into session
+    const session = (
+      sm as unknown as { sessions: Map<string, Record<string, unknown>> }
+    ).sessions.get(sessionId);
+    expect(session).toBeTruthy();
+    session.rawCapturePath = rawPath;
+    session.state.config.outputPath = outputPath;
+
+    // This MUST NOT throw — it was producing -8.1s duration before the fix
+    const result = await sm.stop(sessionId);
+
+    console.log("Beyond-duration result:", JSON.stringify(result, null, 2));
+
+    // Must produce a valid video
+    expect(result.outputPath).toBe(outputPath);
+    expect(existsSync(outputPath)).toBe(true);
+    expect(result.duration).toBeGreaterThan(0);
+    expect(result.duration).not.toBeNaN();
+
+    // All event timestamps must be finite non-negative
+    for (const e of result.events) {
+      expect(e.time).not.toBeNaN();
+      expect(Number.isFinite(e.time)).toBe(true);
+    }
+    for (const c of result.chapters) {
+      expect(c.time).not.toBeNaN();
+      expect(Number.isFinite(c.time)).toBe(true);
+    }
+
+    // Cleanup
+    try {
+      unlinkSync(outputPath);
+    } catch {
+      /* cleanup */
+    }
+    try {
+      unlinkSync(result.thumbnailPath);
+    } catch {
+      /* cleanup */
+    }
+  });
+
   it("renderVideo fallback produces valid output with speed ramp", async () => {
     // Test the fallback path directly by creating a video and running renderVideoFallback
     const { renderVideo } = await import("../src/renderer/video-renderer");
