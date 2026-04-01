@@ -1,0 +1,11 @@
+{
+	"$schema": "node_modules/wrangler/config-schema.json",
+	"name": "deus-landing",
+	"account_id": "e247e098b7e2f5bee57ae8cf303b97df",
+	"compatibility_date": "2026-04-01",
+	"compatibility_flags": ["nodejs_compat"],
+	"main": "@tanstack/react-start/server-entry",
+	"routes": [
+		{ "pattern": "deusmachine.ai", "custom_domain": true }
+	]
+}
