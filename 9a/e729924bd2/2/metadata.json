@@ -1,0 +1,57 @@
+{
+  "cli_version": "0.5.0",
+  "checkpoint_id": "9ae729924bd2",
+  "session_id": "832372c2-c648-4bc7-a4f4-4ad55e1cfb61",
+  "strategy": "manual-commit",
+  "created_at": "2026-04-01T12:58:58.804571Z",
+  "branch": "zvadaadam/screen-studio-integration",
+  "checkpoints_count": 2,
+  "files_touched": [
+    "apps/agent-server/agents/deus-tools/agent-browser-client.ts",
+    "apps/agent-server/agents/deus-tools/browser.ts",
+    "apps/agent-server/agents/deus-tools/recording.ts",
+    "apps/agent-server/build.ts",
+    "packages/screen-studio/src/adapter/index.ts",
+    "packages/screen-studio/src/adapter/mcp-adapter.ts",
+    "packages/screen-studio/src/index.ts",
+    "packages/screen-studio/src/mcp/cdp-capture.ts",
+    "packages/screen-studio/src/mcp/ffmpeg-recorder.ts",
+    "packages/screen-studio/src/mcp/server.ts",
+    "packages/screen-studio/src/mcp/session-manager.ts",
+    "packages/screen-studio/src/mcp/stream-capture.ts",
+    "packages/screen-studio/src/mcp/types.ts",
+    "packages/screen-studio/src/recorder/encoder.ts",
+    "packages/screen-studio/src/recorder/index.ts",
+    "packages/screen-studio/src/session/index.ts",
+    "packages/screen-studio/src/session/recording-session.ts",
+    "packages/screen-studio/src/source/frame-source.ts",
+    "packages/screen-studio/src/source/index.ts",
+    "packages/screen-studio/test/ffmpeg-recorder.test.ts",
+    "packages/screen-studio/test/mcp-adapter.test.ts",
+    "packages/screen-studio/test/mcp-server.test.ts",
+    "packages/screen-studio/test/recorder.test.ts",
+    "packages/screen-studio/test/recording-session.test.ts",
+    "packages/screen-studio/test/session-manager.test.ts"
+  ],
+  "agent": "Claude Code",
+  "turn_id": "949116603447",
+  "token_usage": {
+    "input_tokens": 2587,
+    "cache_creation_tokens": 67274,
+    "cache_read_tokens": 458174,
+    "output_tokens": 7536,
+    "api_call_count": 9
+  },
+  "session_metrics": {
+    "turn_count": 2
+  },
+  "initial_attribution": {
+    "calculated_at": "2026-04-01T12:58:58.625363Z",
+    "agent_lines": 0,
+    "human_added": 2179,
+    "human_modified": 603,
+    "human_removed": 0,
+    "total_committed": 2566,
+    "agent_percentage": 0
+  }
+}
