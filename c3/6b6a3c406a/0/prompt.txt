@@ -88,3 +88,7 @@ So basically on the landing page, what we want to do as like very simple things 
 
 
 here is teh page source to get layptu deisng isnpriation: /Users/zvada/Developer/agent/box-ide/.conductor/columbus-v5/.context/attachments/pasted_text_2026-04-01_17-51-49.txt
+
+---
+
+But I feel like it doesn't have the touch of very nice design. It's still a little vibe-coded and I want you to rethink it a little bit. I don't like the line separators, it should be like more subtle. Yeah. I don't know, like I want you to run sub-agent designers, give feedback and improve it. But remember we want this style of like the HTML I gave you before.
