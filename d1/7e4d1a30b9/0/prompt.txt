@@ -65,3 +65,7 @@ Can you check the ban log we are pushing it to get? Is it normal? Also, I see th
 ---
 
 Can you check what kind of icons we should replace, like the Fabia icons and stuff like that in the public page?
+
+---
+
+ok
