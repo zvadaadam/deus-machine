@@ -2340,3 +2340,7 @@ also /Users/zvada/Developer/agent/box-ide/.conductor/monrovia-v1/.context/attach
 ---
 
 /Users/zvada/Developer/agent/box-ide/.conductor/monrovia-v1/.context/attachments/Screenshot 2026-04-02 at 12.09.40 AM.png also teh color balchround of teh play button gota be dark so it's also viisble on lighter backgrounds
+
+---
+
+/Users/zvada/Developer/agent/box-ide/.conductor/monrovia-v1/.context/attachments/Screenshot 2026-04-02 at 12.17.23 AM.png it again did this fulls crenen things that the broswrr icon coneted into the locahost:1420
