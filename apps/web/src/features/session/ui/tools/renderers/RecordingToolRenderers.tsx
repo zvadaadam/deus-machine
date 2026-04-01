@@ -253,23 +253,16 @@ function RecordingCard({
   const thumbUrl = useStreamUrl(thumbnailPath);
 
   return (
-    <div
-      role="button"
-      tabIndex={0}
+    <button
+      type="button"
       className={cn(
-        "border-border/40 group relative overflow-hidden rounded-xl border",
-        "bg-black",
+        "border-border/40 group relative overflow-hidden rounded-xl border text-left",
+        "bg-background",
         "cursor-pointer transition-all duration-200",
         "hover:border-border/60 hover:shadow-lg"
       )}
       style={{ width: "100%", minWidth: "400px" }}
       onClick={onClick}
-      onKeyDown={(e) => {
-        if (e.key === "Enter" || e.key === " ") {
-          e.preventDefault();
-          onClick();
-        }
-      }}
       aria-label="Open recording player"
     >
       {/* Thumbnail container — 16:9 */}
@@ -282,7 +275,7 @@ function RecordingCard({
             className="absolute inset-0 h-full w-full object-cover transition-transform duration-300 ease-out group-hover:scale-[1.02]"
           />
         ) : (
-          <div className="absolute inset-0 bg-gradient-to-br from-neutral-800 to-neutral-950" />
+          <div className="bg-muted absolute inset-0" />
         )}
 
         {/* Center play button */}
@@ -300,28 +293,28 @@ function RecordingCard({
         </div>
 
         {/* Bottom gradient bar */}
-        <div className="absolute right-0 bottom-0 left-0 flex items-end justify-between bg-gradient-to-t from-black/80 via-black/40 to-transparent px-4 pt-10 pb-3">
+        <div className="from-background/90 via-background/50 absolute right-0 bottom-0 left-0 flex items-end justify-between bg-gradient-to-t to-transparent px-4 pt-10 pb-3">
           {/* Left: label + event count */}
           <div className="flex items-center gap-2">
-            <Film className="h-3.5 w-3.5 text-white/70" />
-            <span className="text-[13px] font-medium text-white/90">Screen Recording</span>
+            <Film className="text-muted-foreground h-3.5 w-3.5" />
+            <span className="text-foreground text-[13px] font-medium">Screen Recording</span>
             {eventCount > 0 && (
               <>
-                <span className="text-white/30">·</span>
-                <span className="text-[13px] text-white/60">{eventCount} events</span>
+                <span className="text-muted-foreground/50">·</span>
+                <span className="text-muted-foreground text-[13px]">{eventCount} events</span>
               </>
             )}
           </div>
 
           {/* Right: duration badge */}
           {duration != null && (
-            <span className="rounded-md bg-black/60 px-2 py-0.5 text-[13px] font-medium text-white/90 tabular-nums backdrop-blur-sm">
+            <span className="bg-muted/80 text-foreground rounded-md px-2 py-0.5 text-[13px] font-medium tabular-nums backdrop-blur-sm">
               {formatDuration(duration)}
             </span>
           )}
         </div>
       </div>
-    </div>
+    </button>
   );
 }
 

@@ -210,7 +210,7 @@ function buildGapSegment(
     const idealRate = gapSourceDuration / cfg.targetGapOutputMs;
     const minRateForMaxWait = maxGap === Number.POSITIVE_INFINITY ? 0 : gapSourceDuration / maxGap;
     const effectiveMax = cfg.maxPlaybackRate;
-    playbackRate = Math.min(idealRate, effectiveMax);
+    playbackRate = Math.max(Math.min(idealRate, effectiveMax), minRateForMaxWait);
     gapOutputDuration = gapSourceDuration / playbackRate;
   }
 

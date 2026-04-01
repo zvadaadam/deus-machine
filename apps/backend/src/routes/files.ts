@@ -120,13 +120,14 @@ app.get("/files/stream", (c) => {
     return c.json({ error: "access denied" }, 403);
   }
 
-  const ext = path.extname(filePath).toLowerCase();
+  // Use validated realPath for all subsequent operations (TOCTOU safety)
+  const ext = path.extname(realPath).toLowerCase();
   const mimeType = ALLOWED_MEDIA_EXT[ext];
   if (!mimeType) return c.json({ error: "unsupported file type" }, 400);
 
-  if (!fs.existsSync(filePath)) return c.json({ error: "file not found" }, 404);
+  if (!fs.existsSync(realPath)) return c.json({ error: "file not found" }, 404);
 
-  const stat = fs.statSync(filePath);
+  const stat = fs.statSync(realPath);
   if (!stat.isFile()) return c.json({ error: "not a file" }, 400);
 
   const fileSize = stat.size;
@@ -146,7 +147,7 @@ app.get("/files/stream", (c) => {
         });
       }
 
-      const stream = fs.createReadStream(filePath, { start, end });
+      const stream = fs.createReadStream(realPath, { start, end });
       return new Response(Readable.toWeb(stream) as ReadableStream, {
         status: 206,
         headers: {
@@ -161,7 +162,7 @@ app.get("/files/stream", (c) => {
   }
 
   // Full file
-  const stream = fs.createReadStream(filePath);
+  const stream = fs.createReadStream(realPath);
   return new Response(Readable.toWeb(stream) as ReadableStream, {
     status: 200,
     headers: {
