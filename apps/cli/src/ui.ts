@@ -44,11 +44,7 @@ export const c = {
   bgCyan: (t: string) => wrap("46", t),
   bgBlue: (t: string) => wrap("44", t),
 
-  // Combos
-  success: (t: string) => wrap("32", t), // green
-  error: (t: string) => wrap("31", t), // red
-  warn: (t: string) => wrap("33", t), // yellow
-  info: (t: string) => wrap("36", t), // cyan
+  // Combo
   label: (t: string) => wrap("1;36", t), // bold cyan
 };
 
@@ -410,10 +406,6 @@ export function info(text: string): void {
   console.log(`  ${c.blue(sym.info)} ${text}`);
 }
 
-export function step(text: string): void {
-  console.log(`  ${c.cyan(sym.diamond)} ${text}`);
-}
-
 export function hint(text: string): void {
   console.log(c.dim(`  ${text}`));
 }
@@ -508,7 +500,3 @@ export function sleep(ms: number): Promise<void> {
   return new Promise((r) => setTimeout(r, ms));
 }
 
-/** Get terminal width (with safe fallback) */
-export function termWidth(): number {
-  return process.stdout.columns || 80;
-}

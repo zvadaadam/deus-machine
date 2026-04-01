@@ -19,7 +19,7 @@ import {
   hint,
 } from "./ui.js";
 
-export interface OnboardingResult {
+interface OnboardingResult {
   auth: AuthResult;
   relayEnabled: boolean;
 }

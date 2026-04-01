@@ -25,14 +25,11 @@ import {
   animatedBanner,
   banner,
   c,
-  sym,
   blank,
   info,
   hint,
   success,
   error,
-  warn,
-  gradientText,
 } from "./ui.js";
 
 function printHelp(version: string) {

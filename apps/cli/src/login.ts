@@ -7,7 +7,7 @@
  * 3. Interactive prompt: install CLI / enter API key / skip
  */
 
-import { execSync, spawnSync, spawn } from "node:child_process";
+import { execSync, spawnSync } from "node:child_process";
 import { existsSync } from "node:fs";
 import { join } from "node:path";
 import { homedir, platform } from "node:os";

@@ -45,7 +45,7 @@ export async function select<T>(opts: {
       const isActive = i === selected;
       const pointer = isActive ? c.cyan(sym.pointer) : " ";
       const label = isActive ? c.cyan(opt.label) : c.dim(opt.label);
-      const hintText = opt.hint ? (isActive ? `  ${c.dim(opt.hint)}` : `  ${c.dim(opt.hint)}`) : "";
+      const hintText = opt.hint ? `  ${c.dim(opt.hint)}` : "";
       stream.write(`${ESC}2K  ${pointer} ${label}${hintText}\n`);
     }
   }
