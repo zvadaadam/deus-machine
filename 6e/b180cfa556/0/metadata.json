@@ -1,0 +1,38 @@
+{
+  "cli_version": "0.5.0",
+  "checkpoint_id": "6eb180cfa556",
+  "session_id": "75a3382b-db85-4609-9e59-f86cb39f97b4",
+  "strategy": "manual-commit",
+  "created_at": "2026-04-01T20:48:51.404005Z",
+  "branch": "zvadaadam/npm-cli-installer",
+  "checkpoints_count": 4,
+  "files_touched": [
+    "apps/cli/src/cli.ts",
+    "apps/cli/src/desktop.ts",
+    "apps/cli/src/login.ts",
+    "apps/cli/src/onboarding.ts",
+    "apps/cli/src/prompt.ts",
+    "apps/cli/src/ui.ts"
+  ],
+  "agent": "Claude Code",
+  "turn_id": "f128676216e5",
+  "token_usage": {
+    "input_tokens": 3907,
+    "cache_creation_tokens": 528429,
+    "cache_read_tokens": 29910203,
+    "output_tokens": 147658,
+    "api_call_count": 287
+  },
+  "session_metrics": {
+    "turn_count": 33
+  },
+  "initial_attribution": {
+    "calculated_at": "2026-04-01T20:48:50.402148Z",
+    "agent_lines": 0,
+    "human_added": 0,
+    "human_modified": 5,
+    "human_removed": 21,
+    "total_committed": 0,
+    "agent_percentage": 0
+  }
+}
