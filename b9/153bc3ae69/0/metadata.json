@@ -1,0 +1,22 @@
+{
+  "cli_version": "0.5.0",
+  "checkpoint_id": "b9153bc3ae69",
+  "session_id": "a07fea74-0764-4498-b706-30b6fca4ec4f",
+  "strategy": "manual-commit",
+  "created_at": "2026-04-01T18:04:17.471691Z",
+  "branch": "zvadaadam/repo-create-new",
+  "checkpoints_count": 2,
+  "files_touched": [],
+  "agent": "Claude Code",
+  "turn_id": "59ed97dc693a",
+  "token_usage": {
+    "input_tokens": 2679,
+    "cache_creation_tokens": 705411,
+    "cache_read_tokens": 68789825,
+    "output_tokens": 140273,
+    "api_call_count": 507
+  },
+  "session_metrics": {
+    "turn_count": 14
+  }
+}
