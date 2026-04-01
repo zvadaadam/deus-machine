@@ -294,3 +294,7 @@ a place to build.
 ----
 
 Also feedback to the preview of our app. Put back the Claude, I think this is nice, even though we don't show it, but it's nice. I like the design, the aesthetics, that's super good. But I would love that if we click browser, there would be a small browser window opened. That would be very dope. And think about it how actually this could be done. Could we do like iframe of this website maybe. Also, if we click to other workspaces in this small preview, we want to see the, see it changed the messages and stuff like that. Also, I won't be able to, I won't be able to send the message, but I cannot click it. So please explore. Also, do you think it requires different code structure to make it work this? And like better manage it? Maybe it's like all in one big file, but maybe we should split it to make it more maintainable.
+
+---
+
+Okay, here's a feedback. I think somewhere we have the Claude icon. Can we copy it into the landing public thing? So we have the agent icon there. It would be nice. I still cannot click on the browser icon. I cannot still click on the other things. I cannot still send a message. I'm not sure why. So can you explore in depth more?
