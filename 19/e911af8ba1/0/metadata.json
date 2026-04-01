@@ -1,0 +1,33 @@
+{
+  "cli_version": "0.5.0",
+  "checkpoint_id": "19e911af8ba1",
+  "session_id": "63eeb525-d1f3-4e02-8a86-ddb1c7ac5085",
+  "strategy": "manual-commit",
+  "created_at": "2026-04-01T15:29:20.808872Z",
+  "branch": "zvadaadam/screen-studio-integration",
+  "checkpoints_count": 2,
+  "files_touched": [
+    "apps/web/src/features/session/ui/tools/renderers/RecordingToolRenderers.tsx"
+  ],
+  "agent": "Claude Code",
+  "turn_id": "37ba344afce8",
+  "token_usage": {
+    "input_tokens": 3284,
+    "cache_creation_tokens": 874189,
+    "cache_read_tokens": 38755536,
+    "output_tokens": 136406,
+    "api_call_count": 274
+  },
+  "session_metrics": {
+    "turn_count": 31
+  },
+  "initial_attribution": {
+    "calculated_at": "2026-04-01T15:29:19.406033Z",
+    "agent_lines": 0,
+    "human_added": 12,
+    "human_modified": 19,
+    "human_removed": 0,
+    "total_committed": 12,
+    "agent_percentage": 0
+  }
+}
