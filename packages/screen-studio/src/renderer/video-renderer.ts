@@ -301,11 +301,62 @@ async function closeEncoder(proc: ChildProcess): Promise<void> {
 // ---------------------------------------------------------------------------
 
 async function renderVideoFallback(options: VideoRenderOptions): Promise<VideoRenderResult> {
-  const { rawVideoPath, outputSize, outputPath, outputFps = 30 } = options;
+  const {
+    rawVideoPath,
+    events,
+    outputSize,
+    outputPath,
+    outputFps = 30,
+    speedRamp = false,
+  } = options;
+
+  // Build playback plan for speed ramping (even without canvas)
+  let plan: PlaybackPlan | null = null;
+  let ptsFilter = "";
+
+  if (speedRamp && events.length > 0) {
+    // Probe raw video duration via ffprobe
+    const { execFileSync } = await import("node:child_process");
+    let rawDurationMs = 0;
+    try {
+      const probe = execFileSync(
+        "ffprobe",
+        [
+          "-v",
+          "error",
+          "-show_entries",
+          "format=duration",
+          "-of",
+          "default=noprint_wrappers=1:nokey=1",
+          rawVideoPath,
+        ],
+        { timeout: 10_000 }
+      );
+      rawDurationMs = parseFloat(probe.toString().trim()) * 1000;
+    } catch {
+      // If probe fails, estimate from wall-clock events
+      if (events.length > 0) {
+        rawDurationMs = events[events.length - 1].timestamp - events[0].timestamp + 2000;
+      }
+    }
+
+    if (rawDurationMs > 0) {
+      plan = createPlaybackPlan(events, rawDurationMs);
+      // Compute overall speed-up ratio for setpts filter
+      const ratio = plan.outputDurationMs / rawDurationMs;
+      ptsFilter = `setpts=${ratio.toFixed(4)}*PTS,`;
+      console.error(
+        `[video-renderer] Fallback speed ramp: ${(rawDurationMs / 1000).toFixed(1)}s → ` +
+          `${(plan.outputDurationMs / 1000).toFixed(1)}s (ratio: ${ratio.toFixed(3)})`
+      );
+    }
+  }
 
   console.error("[video-renderer] Canvas not available, using ffmpeg scale fallback");
 
   return new Promise<VideoRenderResult>((resolve, reject) => {
+    const vf = `${ptsFilter}scale=${outputSize.width}:${outputSize.height}:flags=lanczos`;
+
     const proc = spawn(
       "ffmpeg",
       [
@@ -313,7 +364,7 @@ async function renderVideoFallback(options: VideoRenderOptions): Promise<VideoRe
         "-i",
         rawVideoPath,
         "-vf",
-        `scale=${outputSize.width}:${outputSize.height}:flags=lanczos`,
+        vf,
         "-c:v",
         "libx264",
         "-preset",
@@ -335,10 +386,10 @@ async function renderVideoFallback(options: VideoRenderOptions): Promise<VideoRe
       if (code === 0) {
         resolve({
           outputPath,
-          durationSec: 0,
+          durationSec: plan ? plan.outputDurationMs / 1000 : 0,
           frameCount: 0,
           canvasRendered: false,
-          playbackPlan: null,
+          playbackPlan: plan,
         });
       } else {
         reject(new Error(`ffmpeg fallback exited with code ${code}`));

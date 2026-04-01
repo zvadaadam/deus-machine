@@ -108,15 +108,30 @@ app.get("/files/stream", (c) => {
     return c.json({ error: "path must be absolute" }, 400);
   }
 
-  // Path containment: only serve files from tmpdir to prevent arbitrary file reads
+  // Path containment: only serve files from allowed directories.
+  // Recordings may be in tmpdir() OR /tmp (macOS /tmp → /private/tmp).
   let realPath: string;
   try {
     realPath = fs.realpathSync(filePath);
   } catch {
     return c.json({ error: "file not found" }, 404);
   }
-  const realRoot = fs.realpathSync(tmpdir());
-  if (!realPath.startsWith(realRoot + path.sep)) {
+  const allowedRoots = [tmpdir()];
+  // macOS: /tmp symlinks to /private/tmp, but tmpdir() returns /var/folders/...
+  try {
+    allowedRoots.push(fs.realpathSync("/tmp"));
+  } catch {
+    // /tmp doesn't exist on this platform
+  }
+  const isAllowed = allowedRoots.some((root) => {
+    try {
+      const realRoot = fs.realpathSync(root);
+      return realPath.startsWith(realRoot + path.sep);
+    } catch {
+      return false;
+    }
+  });
+  if (!isAllowed) {
     return c.json({ error: "access denied" }, 403);
   }
 
