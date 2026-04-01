@@ -2133,3 +2133,24 @@ Test 18 result: FAILED — empty outputPath (0 usable frames)
 Only 1 frame received, 0 dropped. The stream barely delivered any frames this run, so ffmpeg gracefully returned empty output instead of crashing.
 TestFramesDroppedOutputSize1729332SUCCESS4.2MB, 85s1810FAILEDempty (graceful)
 The stream frame delivery is still inconsistent — sometimes it works, sometimes almost nothing comes through.
+
+---
+
+again failed: again
+Collapse
+Start Recordingrec_64e186
+Browser Navigateexpo.dev
+Browser Navigateexpo.dev/pricing
+Browser Clicke7
+Browser Scrolldown 500px
+All actions done (navigate home, navigate pricing, click blog, scroll down). Checking status and stopping.
+mcp__deus__recording_statusrec_64e186
+Screen Recording
+Test 19 result: FAILED — empty outputPath again (only 1 frame received, 0 dropped)
+Same pattern as test 18. The stream is barely delivering frames — only 1 frame over a 37s session. The WebSocket stream connection seems to be established but almost no pixel data is coming through.
+REDACTED.2MB, 85s1810FAILEDempty1910FAILEDempty
+The stream is consistently delivering only ~1 frame now. Something changed between test 17 (which got 29 frames) and 18-19 (which get just 1).
+
+---
+
+shoudlw e push some logs to be abel to tets it ? epxlor indepth do coupel pases epxlor code ind epth add logs
