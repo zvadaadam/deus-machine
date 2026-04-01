@@ -4,6 +4,7 @@
  * Determines how the frontend connects to the backend based on environment:
  * - Electron: localhost WS + HTTP via IPC-resolved port
  * - Web-dev: localhost WS + HTTP via VITE_BACKEND_PORT
+ * - Web-standalone: same-origin proxy (CLI server / self-hosted)
  * - Web-production (relay): WS through relay.deusmachine.ai, HTTP tunneled over WS
  *
  * The resolved endpoints are cached after first call.
@@ -12,12 +13,17 @@
 import { capabilities } from "@/platform/capabilities";
 import { getBackendPort } from "./api.config";
 
-export type DeploymentMode = "electron" | "web-dev" | "web-production";
+export type DeploymentMode = "electron" | "web-dev" | "web-standalone" | "web-production";
 
 /** Detect the current deployment mode. */
 export function getDeploymentMode(): DeploymentMode {
   if (capabilities.ipcInvoke) return "electron";
   if (import.meta.env.VITE_BACKEND_PORT) return "web-dev";
+
+  // Standalone mode: served from a CLI server that proxies /api and /ws to backend.
+  // Detected when there's no relay server ID in the URL (no /s/{id}/... path).
+  if (!getServerIdFromUrl()) return "web-standalone";
+
   return "web-production";
 }
 
@@ -42,6 +48,7 @@ let cachedRelayServerId: string | null = null;
  * Resolve the backend's WebSocket and HTTP base URLs.
  *
  * - Electron/web-dev: ws://localhost:{port}/ws + http://localhost:{port}/api
+ * - Web-standalone: same-origin proxy (ws://{host}/ws + http://{host}/api)
  * - Web-production: wss://relay.deusmachine.ai/api/servers/{serverId}/connect
  *   (HTTP goes through WS bridge, so apiBase is unused in relay mode)
  */
@@ -66,6 +73,18 @@ export async function resolveBackendEndpoints(serverId?: string): Promise<Backen
       // In relay mode, HTTP is tunneled over WS — apiBase is a placeholder
       // that should never be used directly (client.ts intercepts requests).
       apiBase: `${RELAY_BASE_URL}/api/servers/${encodedId}`,
+    };
+    return cachedEndpoints;
+  }
+
+  if (mode === "web-standalone") {
+    // Standalone mode: the CLI server proxies /api and /ws to the backend.
+    // Connect using the same origin the page was loaded from.
+    if (cachedEndpoints) return cachedEndpoints;
+    const wsProtocol = window.location.protocol === "https:" ? "wss:" : "ws:";
+    cachedEndpoints = {
+      wsUrl: `${wsProtocol}//${window.location.host}/ws`,
+      apiBase: `${window.location.origin}/api`,
     };
     return cachedEndpoints;
   }

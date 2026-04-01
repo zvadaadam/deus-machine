@@ -21,6 +21,11 @@ electron.vite.config.d.ts
 # Agent-server build artifact (built via `bun run build:sidecar`)
 apps/agent-server/dist/
 
+# CLI build artifacts
+apps/cli/bin/
+apps/cli/dist/
+apps/cli/bundles/
+
 # Misc
 .DS_Store
 *.log

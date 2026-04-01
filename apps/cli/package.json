@@ -1,0 +1,46 @@
+{
+  "name": "deus-machine",
+  "version": "0.2.0",
+  "description": "Run Deus IDE from the command line — headless server or desktop installer",
+  "license": "MIT",
+  "author": {
+    "name": "Deus",
+    "email": "hello@rundeus.com"
+  },
+  "homepage": "https://rundeus.com",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/zvadaadam/box-ide",
+    "directory": "apps/cli"
+  },
+  "keywords": [
+    "ide",
+    "ai",
+    "coding",
+    "agent",
+    "claude",
+    "agentic",
+    "desktop",
+    "headless"
+  ],
+  "bin": {
+    "deus": "./bin/deus.js"
+  },
+  "files": [
+    "bin/",
+    "dist/",
+    "bundles/"
+  ],
+  "type": "module",
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "build": "bun run ../../node_modules/.bin/tsx build.ts"
+  },
+  "dependencies": {
+    "better-sqlite3": "^12.4.1",
+    "node-pty": "^1.0.0",
+    "ws": "^8.19.0"
+  }
+}
