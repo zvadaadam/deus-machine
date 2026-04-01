@@ -1,0 +1,32 @@
+{
+  "cli_version": "0.5.0",
+  "checkpoint_id": "2003a757b58e",
+  "strategy": "manual-commit",
+  "branch": "zvadaadam/screen-studio-integration",
+  "checkpoints_count": 3,
+  "files_touched": [
+    "apps/agent-server/agents/deus-tools/browser.ts",
+    "apps/agent-server/agents/deus-tools/index.ts",
+    "apps/agent-server/agents/deus-tools/recording-bridge.ts",
+    "apps/backend/src/routes/files.ts",
+    "apps/desktop/main/browser-views.ts",
+    "packages/screen-studio/src/mcp/session-manager.ts",
+    "packages/screen-studio/src/mcp/thumbnail.ts",
+    "packages/screen-studio/test/mcp-server.test.ts"
+  ],
+  "sessions": [
+    {
+      "metadata": "/20/03a757b58e/0/metadata.json",
+      "transcript": "/20/03a757b58e/0/full.jsonl",
+      "content_hash": "/20/03a757b58e/0/content_hash.txt",
+      "prompt": "/20/03a757b58e/0/prompt.txt"
+    }
+  ],
+  "token_usage": {
+    "input_tokens": 52,
+    "cache_creation_tokens": 167666,
+    "cache_read_tokens": 6958002,
+    "output_tokens": 17940,
+    "api_call_count": 46
+  }
+}
