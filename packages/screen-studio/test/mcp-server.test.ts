@@ -138,7 +138,8 @@ describe("MCP Server (via SessionManager)", () => {
       expect(result.events).toHaveLength(1);
       expect(result.chapters).toHaveLength(1);
       expect(result.duration).toBeGreaterThanOrEqual(0);
-      expect(result.outputPath).toBeTruthy();
+      // No capture → empty outputPath
+      expect(result.outputPath).toBe("");
     });
 
     it("rejects watermark option (not yet supported)", async () => {
@@ -170,7 +171,8 @@ describe("MCP Server (via SessionManager)", () => {
 
       const status = sessionManager.status(id);
       expect(status.status).toBe("done");
-      expect(status.outputPath).toBeTruthy();
+      // No capture → outputPath not set
+      expect(status.outputPath).toBeUndefined();
     });
   });
 

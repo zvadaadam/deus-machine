@@ -97,7 +97,13 @@ console.log = (...args: any[]) => {
 
 console.error = (...args: any[]) => {
   const timestamp = new Date().toISOString();
-  writeLog(`[${timestamp}] ERROR: ${formatLogArgs(args)}\n`);
+  const formatted = formatLogArgs(args);
+  writeLog(`[${timestamp}] ERROR: ${formatted}\n`);
+  // Also write to real stderr so the backend child-process handler can
+  // capture and forward these lines to the Electron terminal.
+  // Without this, console.error() from bundled libraries (e.g. screen-studio)
+  // only lands in the log file and is invisible in the dev console.
+  process.stderr.write(`${formatted}\n`);
 };
 
 console.debug = (...args: any[]) => {
