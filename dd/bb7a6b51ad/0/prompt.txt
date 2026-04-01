@@ -354,3 +354,9 @@ main-PnU5o8rx.js:17 Uncaught ReferenceError: React is not defined
     at main-PnU5o8rx.js:17:36157
     at rt.startTransition (main-PnU5o8rx.js:1:6803)
     at main-PnU5o8rx.js:17:36112
+
+---
+
+/Users/zvada/Developer/agent/box-ide/.conductor/columbus-v5/.context/attachments/Screenshot 2026-04-01 at 8.17.45 PM.png Okay, now it worked. Let's optimize. Now this is a demo, download deus. I think the question, the answer should be, let's continue something like let's continue in deus and there would be the link to download it, but it's like, it's just like the text, nothing else, nothing more, you know? It should feel like the AI replied, not with the label there.
+
+Also to the far right, add button which will say merge or something like that. And also drop the stroke lines to the separators. We don't use them, so it's unnecessary. Okay.
