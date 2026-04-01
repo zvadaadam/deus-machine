@@ -55,9 +55,11 @@ export function createDeusMCPServer(sessionId: string) {
       };
     } else if (toolDef.name === "recording_stop") {
       toolDef.handler = async (args: any, extra: unknown) => {
-        const result = await originalHandler(args, extra);
-        bridge.setActiveSession(null);
-        return result;
+        try {
+          return await originalHandler(args, extra);
+        } finally {
+          bridge.setActiveSession(null);
+        }
       };
     }
     return toolDef;

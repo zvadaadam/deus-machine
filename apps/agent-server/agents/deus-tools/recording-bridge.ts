@@ -48,8 +48,8 @@ const TOOL_TO_EVENT_TYPE: Record<string, AgentEventType> = {
 };
 
 /** Default viewport center — used for idle events and tools without coordinates. */
-const VIEWPORT_CENTER_X = 960;
-const VIEWPORT_CENTER_Y = 540;
+const VIEWPORT_CENTER_X = 640;
+const VIEWPORT_CENTER_Y = 360;
 
 /** Idle timeout in milliseconds. If no browser action for this long, emit idle event. */
 const IDLE_TIMEOUT_MS = 3_000;

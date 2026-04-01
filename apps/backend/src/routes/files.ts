@@ -1,6 +1,7 @@
 import { Hono } from "hono";
 import path from "path";
 import fs from "fs";
+import { tmpdir } from "os";
 import { Readable } from "stream";
 import { withWorkspace } from "../middleware/workspace-loader";
 import { ValidationError } from "../lib/errors";
@@ -105,6 +106,18 @@ app.get("/files/stream", (c) => {
 
   if (!path.isAbsolute(filePath)) {
     return c.json({ error: "path must be absolute" }, 400);
+  }
+
+  // Path containment: only serve files from tmpdir to prevent arbitrary file reads
+  let realPath: string;
+  try {
+    realPath = fs.realpathSync(filePath);
+  } catch {
+    return c.json({ error: "file not found" }, 404);
+  }
+  const realRoot = fs.realpathSync(tmpdir());
+  if (!realPath.startsWith(realRoot + path.sep)) {
+    return c.json({ error: "access denied" }, 403);
   }
 
   const ext = path.extname(filePath).toLowerCase();

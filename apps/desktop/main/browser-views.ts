@@ -28,6 +28,8 @@ import { is } from "@electron-toolkit/utils";
 
 const views = new Map<string, WebContentsView>();
 const viewBounds = new Map<string, Electron.Rectangle>();
+/** Labels of views that were visible before hide_all — used to restore only those on show_all. */
+const previouslyVisibleLabels = new Set<string>();
 const viewEmulation = new Map<
   string,
   { width: number; height: number; deviceScaleFactor: number; mobile: boolean }
@@ -550,17 +552,24 @@ export function registerBrowserViewHandlers(): void {
   // Hide ALL browser views at once — called when switching workspaces
   // or navigating to the welcome screen to ensure no stale native overlays.
   ipcMain.handle("hide_all_browser_webviews", () => {
+    previouslyVisibleLabels.clear();
     for (const [label, view] of views) {
+      // Only track views that were attached and visible
+      const mainWindow = getMainWindow();
+      if (mainWindow && mainWindow.contentView.children.includes(view)) {
+        previouslyVisibleLabels.add(label);
+      }
       viewBounds.set(label, view.getBounds());
       view.setVisible(false);
     }
   });
 
-  // Show ALL browser views — restores views hidden by hide_all_browser_webviews.
-  // Used when closing overlays (e.g., video player modal) that needed to cover native views.
+  // Show browser views — restores only views that were visible before hide_all.
   ipcMain.handle("show_all_browser_webviews", () => {
     const mainWindow = getMainWindow();
-    for (const [label, view] of views) {
+    for (const label of previouslyVisibleLabels) {
+      const view = views.get(label);
+      if (!view) continue;
       if (mainWindow) {
         const children = mainWindow.contentView.children;
         if (!children.includes(view)) {
@@ -573,6 +582,7 @@ export function registerBrowserViewHandlers(): void {
         view.setBounds(savedBounds);
       }
     }
+    previouslyVisibleLabels.clear();
   });
 
   ipcMain.handle("close_browser_webview", (_e, { label }: { label: string }) => {

@@ -50,6 +50,7 @@ export class StreamRecorder {
   private ffmpeg: ChildProcess | null = null;
   private frameCount = 0;
   private droppedFrames = 0;
+  private encoderBackpressured = false;
   private active = false;
   private reconnecting = false;
   private reconnectTimer: ReturnType<typeof setTimeout> | null = null;
@@ -412,22 +413,33 @@ export class StreamRecorder {
             }
           }
 
+          // Skip frame if encoder can't keep up (backpressure)
+          if (this.encoderBackpressured) {
+            this.droppedFrames++;
+            return;
+          }
+
           const bytes = Buffer.from(msg.data, "base64");
           const ok = this.ffmpeg.stdin.write(bytes);
-          if (ok) {
-            this.frameCount++;
-            const now = Date.now();
-            if (this.firstFrameTime === null) this.firstFrameTime = now;
-            this.lastFrameTime = now;
+          // write() returning false means the chunk WAS buffered, not lost.
+          // Count it as delivered, but pause sending until drain.
+          this.frameCount++;
+          const now = Date.now();
+          if (this.firstFrameTime === null) this.firstFrameTime = now;
+          this.lastFrameTime = now;
 
-            // Resolve ready promise on first frame
-            if (this.frameCount === 1 && this.readyResolve) {
-              const r = this.readyResolve;
-              this.readyResolve = null;
-              r();
-            }
-          } else {
-            this.droppedFrames++;
+          // Resolve ready promise on first frame
+          if (this.frameCount === 1 && this.readyResolve) {
+            const r = this.readyResolve;
+            this.readyResolve = null;
+            r();
+          }
+
+          if (!ok) {
+            this.encoderBackpressured = true;
+            this.ffmpeg.stdin.once("drain", () => {
+              this.encoderBackpressured = false;
+            });
           }
         }
         if (msg.type === "status") {

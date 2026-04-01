@@ -141,16 +141,15 @@ describe("MCP Server (via SessionManager)", () => {
       expect(result.outputPath).toBeTruthy();
     });
 
-    it("supports watermark option", async () => {
+    it("rejects watermark option (not yet supported)", async () => {
       const id = await sessionManager.create({});
 
-      // Should not throw
-      const result = await sessionManager.stop(id, {
-        addWatermark: true,
-        watermarkText: "Test Watermark",
-      });
-
-      expect(result).toBeDefined();
+      await expect(
+        sessionManager.stop(id, {
+          addWatermark: true,
+          watermarkText: "Test Watermark",
+        })
+      ).rejects.toThrow("Watermarking is not yet supported");
     });
   });
 

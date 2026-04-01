@@ -5,6 +5,8 @@
 import { spawn } from "node:child_process";
 import { existsSync } from "node:fs";
 
+const TIMEOUT_MS = 10_000;
+
 /**
  * Extract the first frame from a video file as a JPEG thumbnail.
  *
@@ -21,8 +23,17 @@ export async function extractThumbnail(videoPath: string): Promise<string | null
       stdio: ["ignore", "ignore", "pipe"],
     });
 
-    proc.on("error", () => resolve(null));
+    const timer = setTimeout(() => {
+      proc.kill("SIGKILL");
+      resolve(null);
+    }, TIMEOUT_MS);
+
+    proc.on("error", () => {
+      clearTimeout(timer);
+      resolve(null);
+    });
     proc.on("close", (code) => {
+      clearTimeout(timer);
       if (code === 0 && existsSync(thumbPath)) {
         resolve(thumbPath);
       } else {

@@ -1,4 +1,5 @@
 import { randomBytes } from "node:crypto";
+import { unlink } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { AgentEvent, AgentEventType } from "../types.js";
@@ -266,8 +267,12 @@ export class SessionManager {
    */
   async stop(
     sessionId: string,
-    _options?: { addWatermark?: boolean; watermarkText?: string }
+    options?: { addWatermark?: boolean; watermarkText?: string }
   ): Promise<RecordingResult> {
+    if (options?.addWatermark) {
+      throw new Error("Watermarking is not yet supported by the current renderer.");
+    }
+
     const session = this.getSession(sessionId);
     if (session.state.status !== "recording") {
       throw new Error(`Session ${sessionId} is not recording (status: ${session.state.status})`);
@@ -372,8 +377,11 @@ export class SessionManager {
           console.error(`[session-manager] Video render failed: ${err}`);
         }
 
-        // Clean up raw capture file
+        // Clean up raw capture files
         await session.ffmpegRecorder.cleanup();
+        if (session.rawCapturePath) {
+          await unlink(session.rawCapturePath).catch(() => {});
+        }
       }
 
       session.state.status = "done";
@@ -443,6 +451,9 @@ export class SessionManager {
     session.ffmpegRecorder.kill();
     session.streamRecorder?.kill();
     await session.ffmpegRecorder.cleanup();
+    if (session.rawCapturePath) {
+      await unlink(session.rawCapturePath).catch(() => {});
+    }
     this.sessions.delete(sessionId);
   }
 
