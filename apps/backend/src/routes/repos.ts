@@ -177,19 +177,21 @@ app.post("/repos/clone", async (c) => {
     throw new ValidationError("Missing or invalid 'targetPath' parameter");
   }
 
-  // Path traversal guard — reject paths that escape the user's home directory
-  const resolvedPath = path.resolve(targetPath);
-  const homeDir = os.homedir();
-  if (!resolvedPath.startsWith(homeDir + path.sep) && resolvedPath !== homeDir) {
-    throw new ValidationError("Target path must be within the home directory");
-  }
-
   // Ensure parent directory exists
+  const resolvedPath = path.resolve(targetPath);
   const parentDir = path.dirname(resolvedPath);
   try {
     fs.mkdirSync(parentDir, { recursive: true });
   } catch (err) {
     throw new AppError(500, `Cannot create parent directory: ${(err as Error).message}`);
+  }
+
+  // Path traversal guard — resolve symlinks to prevent escaping home via symlinked parents
+  const realHome = fs.realpathSync(os.homedir());
+  const realParent = fs.realpathSync(parentDir);
+  const candidatePath = path.join(realParent, path.basename(resolvedPath));
+  if (!candidatePath.startsWith(realHome + path.sep) && candidatePath !== realHome) {
+    throw new ValidationError("Target path must be within the home directory");
   }
 
   // Check target doesn't already exist
@@ -246,19 +248,21 @@ function pushInitLine(line: string): void {
 app.post("/repos/init", async (c) => {
   const { projectName, targetPath, template } = parseBody(InitProjectBody, await c.req.json());
 
-  // Path validation — same guards as clone endpoint
-  const resolvedPath = path.resolve(targetPath);
-  const homeDir = os.homedir();
-  if (!resolvedPath.startsWith(homeDir + path.sep) && resolvedPath !== homeDir) {
-    throw new ValidationError("Target path must be within the home directory");
-  }
-
   // Ensure parent exists, target does NOT exist
+  const resolvedPath = path.resolve(targetPath);
   const parentDir = path.dirname(resolvedPath);
   try {
     fs.mkdirSync(parentDir, { recursive: true });
   } catch (err) {
     throw new AppError(500, `Cannot create parent directory: ${(err as Error).message}`);
+  }
+
+  // Path traversal guard — resolve symlinks to prevent escaping home via symlinked parents
+  const realHome = fs.realpathSync(os.homedir());
+  const realParent = fs.realpathSync(parentDir);
+  const candidatePath = path.join(realParent, path.basename(resolvedPath));
+  if (!candidatePath.startsWith(realHome + path.sep) && candidatePath !== realHome) {
+    throw new ValidationError("Target path must be within the home directory");
   }
   if (fs.existsSync(resolvedPath)) {
     throw new ConflictError("Target directory already exists");
