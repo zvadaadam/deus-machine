@@ -71,3 +71,7 @@ To upgrade, run: brew upgrade gh
 https://github.com/cli/cli/releases/tag/v2.89.0
 …/winnipeg-v2  zvadaadam/npm-cli-installer ≡? ⬢ v25.2.1 6s
 ❯
+
+---
+
+Okay, so now you can write code simplified to just see if there are not dead codes, something bad or bad code structure, stuff like that. /code-simplifier
