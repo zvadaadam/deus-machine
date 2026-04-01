@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, createElement } from "react";
+import { useState, useEffect, createElement } from "react";
 import { AlertCircle, FolderOpen, Loader2, Check } from "lucide-react";
 import {
   Dialog,
@@ -53,7 +53,7 @@ export function StartNewProjectModal({
   const [lines, setLines] = useState<string[]>([]);
   const [githubUsername, setGithubUsername] = useState<string | null>(null);
 
-  // Resolve default destination path + GitHub username on mount.
+  // Resolve default destination path on mount
   useEffect(() => {
     if (!show) return;
     (async () => {
@@ -65,6 +65,11 @@ export function StartNewProjectModal({
       }
       if (isMobile) setBasePath("");
     })();
+  }, [show, isMobile]);
+
+  // Fetch GitHub username (cosmetic only)
+  useEffect(() => {
+    if (!show) return;
     (async () => {
       try {
         const baseUrl = await getBackendUrl();
@@ -74,10 +79,10 @@ export function StartNewProjectModal({
           if (data.githubUsername) setGithubUsername(data.githubUsername);
         }
       } catch {
-        /* cosmetic — ignore errors */
+        /* gh not installed or not authenticated */
       }
     })();
-  }, [show, isMobile]);
+  }, [show]);
 
   // Listen for git-init-progress events while creating
   useEffect(() => {
@@ -96,7 +101,7 @@ export function StartNewProjectModal({
   const effectiveBasePath = isMobile ? defaultBasePath : basePath.trim() || defaultBasePath;
   const fullPath = projectName.trim() ? `${effectiveBasePath}/${projectName.trim()}` : "";
 
-  const handleCreate = useCallback(() => {
+  function handleCreate() {
     if (!projectName.trim()) return;
     onClearError();
     setLines([]);
@@ -105,7 +110,7 @@ export function StartNewProjectModal({
         ? undefined
         : { type: selectedTemplate.type, url: selectedTemplate.url };
     onCreateProject(projectName.trim(), fullPath, template);
-  }, [projectName, fullPath, selectedTemplate, onClearError, onCreateProject]);
+  }
 
   const handleNameChange = (value: string) => {
     // Allow alphanumeric, dashes, underscores, dots — strip other chars

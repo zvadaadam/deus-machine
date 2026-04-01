@@ -38,28 +38,7 @@ app.get("/repos", (c) => {
 
 /** Global git + GitHub identity — used by the "Start New Project" modal. */
 app.get("/git/user", async (c) => {
-  let name: string | null = null;
-  let email: string | null = null;
   let githubUsername: string | null = null;
-  try {
-    const { stdout } = await execFileAsync("git", ["config", "--global", "user.name"], {
-      encoding: "utf-8",
-      timeout: 2000,
-    });
-    name = stdout.trim() || null;
-  } catch {
-    /* not configured */
-  }
-  try {
-    const { stdout } = await execFileAsync("git", ["config", "--global", "user.email"], {
-      encoding: "utf-8",
-      timeout: 2000,
-    });
-    email = stdout.trim() || null;
-  } catch {
-    /* not configured */
-  }
-  // Try to get GitHub username via gh CLI (non-blocking, cosmetic only)
   try {
     const result = await runGh(["api", "user", "--jq", ".login"], {
       cwd: os.homedir(),
@@ -71,7 +50,7 @@ app.get("/git/user", async (c) => {
   } catch {
     /* gh not installed or not authenticated */
   }
-  return c.json({ name, email, githubUsername });
+  return c.json({ githubUsername });
 });
 
 app.post("/repos", async (c) => {
