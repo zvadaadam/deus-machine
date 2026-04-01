@@ -30,7 +30,7 @@
     "@/ui/*": ["apps/web/src/components/ui/*"],
     "@shared/*": ["shared/*"]
   },
-  "ignore": ["apps/cloud-relay/**", "packages/**"],
+  "ignore": ["apps/cloud-relay/**", "apps/landing/**", "packages/**"],
   "ignoreDependencies": [
     "yallist",
     "playwright",
