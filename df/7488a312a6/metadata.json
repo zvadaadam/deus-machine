@@ -1,0 +1,35 @@
+{
+  "cli_version": "0.5.0",
+  "checkpoint_id": "df7488a312a6",
+  "strategy": "manual-commit",
+  "branch": "zvadaadam/domain-deusmachine",
+  "checkpoints_count": 4,
+  "files_touched": [
+    ".github/workflows/deploy.yml",
+    "CLAUDE.md",
+    "apps/backend/src/lib/network.ts",
+    "apps/cloud-relay/src/index.ts",
+    "apps/cloud-relay/wrangler.toml",
+    "apps/desktop/main/app-menu.ts",
+    "apps/web/src/features/settings/ui/sections/AccessSection.tsx",
+    "apps/web/src/platform/ws/query-protocol-client.ts",
+    "apps/web/src/shared/config/backend.config.ts",
+    "package.json",
+    "shared/types/settings.ts"
+  ],
+  "sessions": [
+    {
+      "metadata": "/df/7488a312a6/0/metadata.json",
+      "transcript": "/df/7488a312a6/0/full.jsonl",
+      "content_hash": "/df/7488a312a6/0/content_hash.txt",
+      "prompt": "/df/7488a312a6/0/prompt.txt"
+    }
+  ],
+  "token_usage": {
+    "input_tokens": 31,
+    "cache_creation_tokens": 62917,
+    "cache_read_tokens": 721278,
+    "output_tokens": 5272,
+    "api_call_count": 19
+  }
+}
