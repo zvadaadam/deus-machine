@@ -128,6 +128,29 @@ const AUTH_DOMAINS = [
 
 export function registerBrowserViewHandlers(): void {
   // -------------------------------------------------------------------------
+  // Safety clamp: prevent BrowserView from covering > 80% of the window
+  // in both dimensions simultaneously (fullscreen takeover protection).
+  // getBoundingClientRect() can return wrong values during layout transitions.
+  // -------------------------------------------------------------------------
+  function clampBounds(
+    bounds: { x: number; y: number; width: number; height: number },
+    windowSize: { width: number; height: number }
+  ): { x: number; y: number; width: number; height: number } {
+    const maxW = windowSize.width * 0.8;
+    const maxH = windowSize.height * 0.8;
+    if (bounds.width > maxW && bounds.height > maxH) {
+      // Looks like a fullscreen takeover — clamp to safe right-panel default
+      return {
+        x: Math.round(windowSize.width * 0.35),
+        y: Math.round(windowSize.height * 0.05),
+        width: Math.round(windowSize.width * 0.6),
+        height: Math.round(windowSize.height * 0.85),
+      };
+    }
+    return bounds;
+  }
+
+  // -------------------------------------------------------------------------
   // Create a new browser view
   // Renderer calls: invoke("create_browser_webview", { label, url, x, y, width, height, windowLabel })
   // -------------------------------------------------------------------------
@@ -171,12 +194,16 @@ export function registerBrowserViewHandlers(): void {
       // space. When the user zooms the renderer (Cmd+/Cmd-), CSS pixels diverge
       // from window points by the zoom factor — multiply to correct.
       const zoomFactor = mainWindow.webContents.getZoomFactor();
-      const bounds = {
-        x: Math.round(x * zoomFactor),
-        y: Math.round(y * zoomFactor),
-        width: Math.round(Math.max(width * zoomFactor, 100)),
-        height: Math.round(Math.max(height * zoomFactor, 100)),
-      };
+      const windowSize = mainWindow.getBounds();
+      const bounds = clampBounds(
+        {
+          x: Math.round(x * zoomFactor),
+          y: Math.round(y * zoomFactor),
+          width: Math.round(Math.max(width * zoomFactor, 100)),
+          height: Math.round(Math.max(height * zoomFactor, 100)),
+        },
+        windowSize
+      );
 
       const view = new WebContentsView({
         webPreferences: {
@@ -508,12 +535,16 @@ export function registerBrowserViewHandlers(): void {
       // CSS-pixel → window-point conversion (see create_browser_webview comment)
       const mainWindow = getMainWindow();
       const zoomFactor = mainWindow?.webContents.getZoomFactor() ?? 1;
-      const bounds = {
-        x: Math.round(x * zoomFactor),
-        y: Math.round(y * zoomFactor),
-        width: Math.round(width * zoomFactor),
-        height: Math.round(height * zoomFactor),
-      };
+      const windowSize = mainWindow?.getBounds() ?? { width: 1920, height: 1080 };
+      const bounds = clampBounds(
+        {
+          x: Math.round(x * zoomFactor),
+          y: Math.round(y * zoomFactor),
+          width: Math.round(width * zoomFactor),
+          height: Math.round(height * zoomFactor),
+        },
+        windowSize
+      );
       const view = views.get(label);
       if (view) {
         view.setBounds(bounds);
