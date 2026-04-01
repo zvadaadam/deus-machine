@@ -1,0 +1,27 @@
+{
+  "cli_version": "0.5.0",
+  "checkpoint_id": "6e8f79365cf8",
+  "strategy": "manual-commit",
+  "branch": "zvadaadam/screen-studio-integration",
+  "checkpoints_count": 2,
+  "files_touched": [
+    "packages/screen-studio/src/mcp/session-manager.ts",
+    "packages/screen-studio/src/mcp/stream-capture.ts",
+    "packages/screen-studio/test/e2e-pipeline.test.ts"
+  ],
+  "sessions": [
+    {
+      "metadata": "/6e/8f79365cf8/0/metadata.json",
+      "transcript": "/6e/8f79365cf8/0/full.jsonl",
+      "content_hash": "/6e/8f79365cf8/0/content_hash.txt",
+      "prompt": "/6e/8f79365cf8/0/prompt.txt"
+    }
+  ],
+  "token_usage": {
+    "input_tokens": 3560,
+    "cache_creation_tokens": 1524490,
+    "cache_read_tokens": 95682639,
+    "output_tokens": 203218,
+    "api_call_count": 513
+  }
+}
