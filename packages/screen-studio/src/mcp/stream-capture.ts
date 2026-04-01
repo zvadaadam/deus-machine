@@ -22,7 +22,7 @@ import { stat } from "node:fs/promises";
 const DEFAULT_STREAM_FPS = 10;
 const RECONNECT_MAX_ATTEMPTS = 15;
 const RECONNECT_DELAY_MS = 500;
-const FIRST_FRAME_TIMEOUT_MS = 15_000;
+const FIRST_FRAME_TIMEOUT_MS = 5_000;
 /** Interval for sending keep-alive mouse moves to trigger CDP screencast frames. */
 const KEEPALIVE_INTERVAL_MS = 100;
 
@@ -158,32 +158,37 @@ export class StreamRecorder {
       this.scheduleReconnect();
     }
 
-    // 3. Wait for first frame or timeout before returning
+    // 3. Wait for first frame or timeout before returning.
+    // Skip waiting entirely if WebSocket never connected — frames can't arrive.
     const waitStart = Date.now();
-    await new Promise<void>((resolve) => {
-      if (this.frameCount > 0) {
-        resolve();
-        return;
-      }
-
-      this.readyResolve = () => {
-        this.readyResolve = null;
-        resolve();
-      };
-
-      setTimeout(() => {
-        if (this.readyResolve) {
-          const elapsed = Date.now() - waitStart;
-          console.error(
-            `[stream-recorder] No frames within ${elapsed}ms, ws=${this.ws ? "connected" : "NULL"}, ` +
-              `ffmpeg.stdin=${this.ffmpeg?.stdin?.writable ? "writable" : "closed"}, continuing anyway`
-          );
-          const r = this.readyResolve;
-          this.readyResolve = null;
-          r();
+    if (this.ws) {
+      await new Promise<void>((resolve) => {
+        if (this.frameCount > 0) {
+          resolve();
+          return;
         }
-      }, this.readyTimeout);
-    });
+
+        this.readyResolve = () => {
+          this.readyResolve = null;
+          resolve();
+        };
+
+        setTimeout(() => {
+          if (this.readyResolve) {
+            const elapsed = Date.now() - waitStart;
+            console.error(
+              `[stream-recorder] No frames within ${elapsed}ms, ws=${this.ws ? "connected" : "NULL"}, ` +
+                `ffmpeg.stdin=${this.ffmpeg?.stdin?.writable ? "writable" : "closed"}, continuing anyway`
+            );
+            const r = this.readyResolve;
+            this.readyResolve = null;
+            r();
+          }
+        }, this.readyTimeout);
+      });
+    } else {
+      console.error("[stream-recorder] WebSocket not connected, skipping frame wait");
+    }
 
     const waitElapsed = Date.now() - waitStart;
     console.error(
