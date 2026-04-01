@@ -1,44 +1,42 @@
-import { useState, useRef, useEffect, useCallback } from 'react'
+import { useState, useRef, useEffect } from 'react'
 import {
   Globe,
   MessageSquare,
   Send,
   Terminal,
   RefreshCw,
+  GitCommitHorizontal,
 } from 'lucide-react'
 import type { Message, Workspace } from './data'
 import { WORKSPACES, getAgentReply } from './data'
 
+// ─── Main Shell ───────────────────────────────────────────────────────────────
+
+type View = 'chat' | 'changes' | 'browser'
+
 export function InteractiveDemo() {
   const [activeWs, setActiveWs] = useState('auth')
-  const [view, setView] = useState<'chat' | 'browser'>('chat')
+  const [view, setView] = useState<View>('chat')
   const [extraMessages, setExtraMessages] = useState<Record<string, Message[]>>({})
   const [input, setInput] = useState('')
   const [isTyping, setIsTyping] = useState(false)
-  const [mounted, setMounted] = useState(false)
-  const inputRef = useRef<HTMLInputElement>(null)
-  const messagesEndRef = useRef<HTMLDivElement>(null)
-
-  // Ensure hydration completed
-  useEffect(() => setMounted(true), [])
 
   const workspace = WORKSPACES.find((w) => w.id === activeWs)!
   const allMessages = [...workspace.messages, ...(extraMessages[activeWs] ?? [])]
 
-  const scrollToBottom = useCallback(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
-  }, [])
+  function switchWorkspace(id: string) {
+    setActiveWs(id)
+    setView('chat')
+  }
 
-  useEffect(scrollToBottom, [allMessages.length, scrollToBottom])
-
-  const handleSend = () => {
+  function handleSend() {
     const text = input.trim()
     if (!text || isTyping) return
 
     setInput('')
     setExtraMessages((prev) => ({
       ...prev,
-      [activeWs]: [...(prev[activeWs] ?? []), { role: 'user', content: text }],
+      [activeWs]: [...(prev[activeWs] ?? []), { role: 'user' as const, content: text }],
     }))
 
     setIsTyping(true)
@@ -48,8 +46,8 @@ export function InteractiveDemo() {
         ...prev,
         [activeWs]: [
           ...(prev[activeWs] ?? []),
-          { role: 'assistant', content: reply },
-          { role: 'cta', content: '' },
+          { role: 'assistant' as const, content: reply },
+          { role: 'cta' as const, content: '' },
         ],
       }))
       setIsTyping(false)
@@ -60,7 +58,7 @@ export function InteractiveDemo() {
   const byRepo = (repo: string) => WORKSPACES.filter((w) => w.repo === repo)
 
   return (
-    <div className="bg-[var(--code-surface)]">
+    <div className="overflow-hidden rounded-xl bg-[var(--code-surface)]">
       {/* Window chrome */}
       <div className="flex items-center gap-1.5 px-3.5 py-2.5">
         <div className="size-2.5 rounded-full bg-[oklch(0.72_0.19_29)]" />
@@ -73,43 +71,46 @@ export function InteractiveDemo() {
 
       <div className="flex" style={{ height: 380 }}>
         {/* Sidebar */}
-        <div className="hidden w-44 shrink-0 bg-foreground/[0.02] p-2.5 sm:block">
-          {repos.map((repo) => (
-            <div key={repo} className="mb-3">
-              <div className="mb-1.5 px-1.5 text-[10px] font-semibold uppercase tracking-[0.08em] text-muted-foreground/30">
-                {repo}
+        <div className="hidden w-44 shrink-0 border-r border-foreground/[0.04] bg-foreground/[0.02] sm:block">
+          <div className="p-2.5">
+            {repos.map((repo) => (
+              <div key={repo} className="mb-3">
+                <div className="mb-1.5 px-1.5 text-[10px] font-semibold uppercase tracking-[0.08em] text-muted-foreground/30">
+                  {repo}
+                </div>
+                {byRepo(repo).map((ws) => (
+                  <button
+                    key={ws.id}
+                    type="button"
+                    onClick={() => switchWorkspace(ws.id)}
+                    data-active={ws.id === activeWs}
+                    className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-[12px] transition-colors duration-100 data-[active=false]:text-muted-foreground/50 data-[active=true]:bg-foreground/[0.06] data-[active=true]:text-foreground/80 data-[active=false]:hover:bg-foreground/[0.03] data-[active=false]:hover:text-muted-foreground/70"
+                  >
+                    <StatusDot status={ws.status} />
+                    <span className="truncate">{ws.name}</span>
+                    {ws.time && ws.id === activeWs && (
+                      <span className="ml-auto text-[10px] text-muted-foreground/30">
+                        {ws.time}
+                      </span>
+                    )}
+                  </button>
+                ))}
               </div>
-              {byRepo(repo).map((ws) => (
-                <button
-                  key={ws.id}
-                  type="button"
-                  onClick={(e) => { e.preventDefault(); e.stopPropagation(); setActiveWs(ws.id); setView('chat') }}
-                  className={`flex w-full cursor-pointer items-center gap-2 rounded-md px-2 py-1.5 text-left text-[12px] transition-colors duration-100 ${
-                    ws.id === activeWs
-                      ? 'bg-foreground/[0.06] text-foreground/80'
-                      : 'text-muted-foreground/50 hover:bg-foreground/[0.03] hover:text-muted-foreground/70'
-                  }`}
-                >
-                  <StatusDot status={ws.status} />
-                  <span className="truncate">{ws.name}</span>
-                  {ws.time && ws.id === activeWs && (
-                    <span className="ml-auto text-[10px] text-muted-foreground/30">
-                      {ws.time}
-                    </span>
-                  )}
-                </button>
-              ))}
-            </div>
-          ))}
+            ))}
+          </div>
         </div>
 
         {/* Main panel */}
-        <div className="flex flex-1 flex-col">
-          {/* View toggle bar */}
-          <div className="flex items-center gap-1 px-3 py-1.5">
+        <div className="flex min-w-0 flex-1 flex-col">
+          {/* Tab bar */}
+          <div className="flex items-center gap-1 border-b border-foreground/[0.04] px-3 py-1.5">
             <ViewTab active={view === 'chat'} onClick={() => setView('chat')}>
               <MessageSquare className="size-3" />
               Chat
+            </ViewTab>
+            <ViewTab active={view === 'changes'} onClick={() => setView('changes')}>
+              <GitCommitHorizontal className="size-3" />
+              Changes
             </ViewTab>
             <ViewTab active={view === 'browser'} onClick={() => setView('browser')}>
               <Globe className="size-3" />
@@ -124,61 +125,31 @@ export function InteractiveDemo() {
             )}
           </div>
 
-          {/* Chat view */}
-          {view === 'chat' && (
-            <div className="flex flex-1 flex-col overflow-hidden px-3 pb-2.5">
-              <div className="flex-1 space-y-1 overflow-y-auto pr-1">
-                {allMessages.map((msg, i) => (
-                  <ChatMessage key={`${activeWs}-${i}`} message={msg} />
-                ))}
-                {isTyping && (
-                  <div className="flex items-center gap-2 px-2 py-1">
-                    <div className="size-3 animate-spin rounded-full border border-muted-foreground/20 border-t-muted-foreground/50" />
-                    <span className="font-mono text-[10px] tabular-nums text-muted-foreground/40">
-                      thinking...
-                    </span>
-                  </div>
-                )}
-                <div ref={messagesEndRef} />
-              </div>
-              {/* Input */}
-              <div className="mt-2 rounded-2xl bg-accent shadow-sm">
-                <div className="flex items-center gap-2 px-3 py-2.5">
-                  <input
-                    ref={inputRef}
-                    type="text"
-                    value={input}
-                    onChange={(e) => setInput(e.target.value)}
-                    onKeyDown={(e) => e.key === 'Enter' && handleSend()}
-                    placeholder="Message agent..."
-                    className="flex-1 bg-transparent text-[12px] text-foreground/80 placeholder:text-muted-foreground/30 focus:outline-none"
-                  />
-                  <button
-                    type="button"
-                    onClick={(e) => { e.preventDefault(); handleSend() }}
-                    disabled={!input.trim() || isTyping}
-                    className={`flex size-5 cursor-pointer items-center justify-center rounded-full transition-colors duration-100 ${
-                      input.trim() && !isTyping
-                        ? 'bg-foreground text-background'
-                        : 'bg-foreground/10 text-muted-foreground/30'
-                    }`}
-                  >
-                    <Send className="size-2.5" />
-                  </button>
-                </div>
-              </div>
-            </div>
-          )}
-
-          {/* Browser view */}
-          {view === 'browser' && (
-            <BrowserPanel workspace={workspace} />
-          )}
+          {/* View content — keyed to force remount on workspace switch */}
+          <div key={activeWs} className="flex flex-1 flex-col overflow-hidden">
+            {view === 'chat' && (
+              <ChatView
+                messages={allMessages}
+                isTyping={isTyping}
+                input={input}
+                onInputChange={setInput}
+                onSend={handleSend}
+              />
+            )}
+            {view === 'changes' && (
+              <ChangesView workspace={workspace} />
+            )}
+            {view === 'browser' && (
+              <BrowserView workspace={workspace} />
+            )}
+          </div>
         </div>
       </div>
     </div>
   )
 }
+
+// ─── Sidebar Status Dot ───────────────────────────────────────────────────────
 
 function StatusDot({ status }: { status: Workspace['status'] }) {
   return (
@@ -194,17 +165,96 @@ function StatusDot({ status }: { status: Workspace['status'] }) {
   )
 }
 
-function ViewTab({ active, onClick, children }: { active: boolean; onClick: () => void; children: React.ReactNode }) {
+// ─── Tab Button ───────────────────────────────────────────────────────────────
+
+function ViewTab({
+  active,
+  onClick,
+  children,
+}: {
+  active: boolean
+  onClick: () => void
+  children: React.ReactNode
+}) {
   return (
     <button
       type="button"
-      onClick={(e) => { e.preventDefault(); e.stopPropagation(); onClick() }}
-      className={`flex cursor-pointer items-center gap-1 rounded-md px-2 py-1 text-[11px] transition-colors duration-100 ${
-        active ? 'bg-foreground/[0.06] text-foreground/70' : 'text-muted-foreground/35 hover:text-muted-foreground/50'
-      }`}
+      onClick={onClick}
+      data-active={active}
+      className="flex items-center gap-1 rounded-md px-2 py-1 text-[11px] transition-colors duration-100 data-[active=false]:text-muted-foreground/35 data-[active=true]:bg-foreground/[0.06] data-[active=true]:text-foreground/70 data-[active=false]:hover:text-muted-foreground/50"
     >
       {children}
     </button>
+  )
+}
+
+// ─── Chat View ────────────────────────────────────────────────────────────────
+
+function ChatView({
+  messages,
+  isTyping,
+  input,
+  onInputChange,
+  onSend,
+}: {
+  messages: Message[]
+  isTyping: boolean
+  input: string
+  onInputChange: (v: string) => void
+  onSend: () => void
+}) {
+  const scrollRef = useRef<HTMLDivElement>(null)
+  const inputRef = useRef<HTMLInputElement>(null)
+
+  useEffect(() => {
+    scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: 'smooth' })
+  }, [messages.length])
+
+  // Auto-focus the input when the chat view mounts
+  useEffect(() => {
+    inputRef.current?.focus()
+  }, [])
+
+  return (
+    <div className="flex flex-1 flex-col overflow-hidden px-3 pb-2.5">
+      <div ref={scrollRef} className="flex-1 space-y-1 overflow-y-auto pr-1">
+        {messages.map((msg, i) => (
+          <ChatMessage key={i} message={msg} />
+        ))}
+        {isTyping && (
+          <div className="flex items-center gap-2 px-2 py-1">
+            <div className="size-3 animate-spin rounded-full border border-muted-foreground/20 border-t-muted-foreground/50" />
+            <span className="font-mono text-[10px] tabular-nums text-muted-foreground/40">
+              thinking...
+            </span>
+          </div>
+        )}
+      </div>
+
+      {/* Input */}
+      <div className="mt-2 rounded-2xl bg-accent shadow-sm">
+        <div className="flex items-center gap-2 px-3 py-2.5">
+          <input
+            ref={inputRef}
+            type="text"
+            value={input}
+            onChange={(e) => onInputChange(e.target.value)}
+            onKeyDown={(e) => { if (e.key === 'Enter') onSend() }}
+            placeholder="Message agent..."
+            className="flex-1 bg-transparent text-[12px] text-foreground/80 placeholder:text-muted-foreground/30 focus:outline-none"
+          />
+          <button
+            type="button"
+            onClick={onSend}
+            disabled={!input.trim() || isTyping}
+            data-ready={!!(input.trim() && !isTyping)}
+            className="flex size-5 items-center justify-center rounded-full transition-colors duration-100 data-[ready=false]:bg-foreground/10 data-[ready=false]:text-muted-foreground/30 data-[ready=true]:bg-foreground data-[ready=true]:text-background"
+          >
+            <Send className="size-2.5" />
+          </button>
+        </div>
+      </div>
+    </div>
   )
 }
 
@@ -244,7 +294,7 @@ function ChatMessage({ message }: { message: Message }) {
       </div>
     )
   }
-  // Assistant — with Claude icon + label, no bubble
+  // Assistant
   return (
     <div className="space-y-1 py-1">
       <div className="flex items-center gap-1.5 px-2">
@@ -258,7 +308,72 @@ function ChatMessage({ message }: { message: Message }) {
   )
 }
 
-function BrowserPanel({ workspace }: { workspace: Workspace }) {
+// ─── Changes View ─────────────────────────────────────────────────────────────
+
+function ChangesView({ workspace }: { workspace: Workspace }) {
+  if (!workspace.diff) {
+    return (
+      <div className="flex flex-1 items-center justify-center">
+        <span className="text-[12px] text-muted-foreground/30">No changes yet</span>
+      </div>
+    )
+  }
+
+  const { diff } = workspace
+
+  return (
+    <div className="flex flex-1 flex-col overflow-hidden">
+      {/* File header */}
+      <div className="flex items-center gap-2 border-b border-foreground/[0.04] px-4 py-2">
+        <span className="font-mono text-[11px] text-foreground/70">{diff.file}</span>
+        <span className="ml-auto text-[10px] text-[var(--status-active)]">+{diff.add}</span>
+        <span className="text-[10px] text-[oklch(0.72_0.19_29)]">-{diff.del}</span>
+      </div>
+
+      {/* Diff lines */}
+      <div className="flex-1 overflow-y-auto font-mono text-[11px] leading-[1.7]">
+        {diff.lines.map((line, i) => (
+          <div
+            key={i}
+            className={`flex ${
+              line.type === 'add'
+                ? 'bg-[oklch(0.72_0.18_145/0.08)]'
+                : line.type === 'del'
+                  ? 'bg-[oklch(0.72_0.19_29/0.08)]'
+                  : ''
+            }`}
+          >
+            <span className="w-8 shrink-0 select-none text-right text-muted-foreground/20 pr-2">
+              {i + 1}
+            </span>
+            <span className={`w-4 shrink-0 select-none text-center ${
+              line.type === 'add'
+                ? 'text-[var(--status-active)]'
+                : line.type === 'del'
+                  ? 'text-[oklch(0.72_0.19_29)]'
+                  : 'text-transparent'
+            }`}>
+              {line.type === 'add' ? '+' : line.type === 'del' ? '-' : ' '}
+            </span>
+            <span className={`flex-1 whitespace-pre pr-4 ${
+              line.type === 'add'
+                ? 'text-[var(--status-active)]'
+                : line.type === 'del'
+                  ? 'text-[oklch(0.72_0.19_29)]'
+                  : 'text-foreground/50'
+            }`}>
+              {line.content}
+            </span>
+          </div>
+        ))}
+      </div>
+    </div>
+  )
+}
+
+// ─── Browser View ─────────────────────────────────────────────────────────────
+
+function BrowserView({ workspace }: { workspace: Workspace }) {
   const url = workspace.browserUrl ?? 'localhost:1420'
 
   return (
@@ -276,45 +391,26 @@ function BrowserPanel({ workspace }: { workspace: Workspace }) {
         </div>
         <RefreshCw className="size-3 text-muted-foreground/25" />
       </div>
-      {/* Browser content — wireframe mock */}
-      <div className="flex-1 overflow-hidden rounded-b-lg ring-1 ring-inset ring-foreground/[0.06]">
-        <div className="flex h-full items-center justify-center bg-foreground/[0.02]">
-          <BrowserWireframe />
-        </div>
+
+      {/* Browser content — iframe of our own site */}
+      <div className="relative flex-1 overflow-hidden rounded-b-lg ring-1 ring-inset ring-foreground/[0.06]">
+        <iframe
+          src="https://deusmachine.ai"
+          title="Browser preview"
+          className="h-full w-full border-0"
+          sandbox="allow-scripts allow-same-origin"
+          loading="lazy"
+        />
+        {/* Overlay to prevent interaction with iframe */}
+        <div className="absolute inset-0" />
       </div>
-      {/* Agent watching */}
+
+      {/* Agent watching indicator */}
       <div className="flex items-center justify-center gap-1.5 py-1.5">
         <div className="size-1.5 animate-pulse rounded-full bg-[var(--status-active)]" />
         <span className="text-[10px] text-muted-foreground/30">
           Agent watching {url}
         </span>
-      </div>
-    </div>
-  )
-}
-
-function BrowserWireframe() {
-  return (
-    <div className="w-full max-w-[260px] space-y-3 p-4">
-      <div className="flex items-center justify-between">
-        <div className="h-2 w-16 rounded-full bg-foreground/[0.08]" />
-        <div className="flex gap-2">
-          <div className="h-2 w-8 rounded-full bg-foreground/[0.06]" />
-          <div className="h-2 w-8 rounded-full bg-foreground/[0.06]" />
-        </div>
-      </div>
-      <div className="space-y-2 py-2">
-        <div className="mx-auto h-3 w-36 rounded-full bg-foreground/[0.08]" />
-        <div className="mx-auto h-2 w-48 rounded-full bg-foreground/[0.05]" />
-      </div>
-      <div className="grid grid-cols-2 gap-2">
-        {[1, 2, 3, 4].map((i) => (
-          <div key={i} className="space-y-1 rounded-md bg-foreground/[0.03] p-2">
-            <div className="h-1.5 w-10 rounded-full bg-foreground/[0.07]" />
-            <div className="h-1 w-full rounded-full bg-foreground/[0.04]" />
-            <div className="h-1 w-3/4 rounded-full bg-foreground/[0.04]" />
-          </div>
-        ))}
       </div>
     </div>
   )
