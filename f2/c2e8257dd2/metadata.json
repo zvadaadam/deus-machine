@@ -1,0 +1,25 @@
+{
+  "cli_version": "0.5.0",
+  "checkpoint_id": "f2c2e8257dd2",
+  "strategy": "manual-commit",
+  "branch": "zvadaadam/domain-deusmachine",
+  "checkpoints_count": 2,
+  "files_touched": [
+    "apps/landing/vite.config.ts"
+  ],
+  "sessions": [
+    {
+      "metadata": "/f2/c2e8257dd2/0/metadata.json",
+      "transcript": "/f2/c2e8257dd2/0/full.jsonl",
+      "content_hash": "/f2/c2e8257dd2/0/content_hash.txt",
+      "prompt": "/f2/c2e8257dd2/0/prompt.txt"
+    }
+  ],
+  "token_usage": {
+    "input_tokens": 353,
+    "cache_creation_tokens": 529599,
+    "cache_read_tokens": 38183628,
+    "output_tokens": 127137,
+    "api_call_count": 288
+  }
+}
