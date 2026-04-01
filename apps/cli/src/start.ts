@@ -40,6 +40,7 @@ import {
 } from "./config.js";
 import { runOnboarding } from "./onboarding.js";
 import { showPairCode } from "./pair.js";
+import { formatUptime } from "./lib/format.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -342,13 +343,3 @@ async function startProcess(opts: {
   });
 }
 
-// ── Utilities ────────────────────────────────────────────────────────
-
-function formatUptime(ms: number): string {
-  const s = Math.floor(ms / 1000);
-  if (s < 60) return `${s}s`;
-  const m = Math.floor(s / 60);
-  if (m < 60) return `${m}m ${s % 60}s`;
-  const h = Math.floor(m / 60);
-  return `${h}h ${m % 60}m`;
-}

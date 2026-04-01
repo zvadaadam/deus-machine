@@ -3,22 +3,21 @@
  * Used by the `deus status` command.
  */
 
-import { request } from "node:http";
 import {
   c,
   sym,
   blank,
   divider,
   kv,
-  success,
   error,
   hint,
 } from "./ui.js";
 import { readServerInfo } from "./config.js";
+import { httpGet } from "./lib/http.js";
+import { formatUptime, formatTimeAgo } from "./lib/format.js";
 
 interface HealthResponse {
   status: string;
-  [key: string]: unknown;
 }
 
 interface RelayStatusResponse {
@@ -44,32 +43,6 @@ interface AgentAuthResponse {
   }[];
 }
 
-/** GET request helper */
-function httpGet<T>(port: number, path: string): Promise<T | null> {
-  return new Promise((resolve) => {
-    const req = request(
-      { hostname: "localhost", port, path, method: "GET", timeout: 3000 },
-      (res) => {
-        let body = "";
-        res.on("data", (chunk: Buffer) => (body += chunk.toString()));
-        res.on("end", () => {
-          try {
-            resolve(JSON.parse(body) as T);
-          } catch {
-            resolve(null);
-          }
-        });
-      }
-    );
-    req.on("error", () => resolve(null));
-    req.on("timeout", () => {
-      req.destroy();
-      resolve(null);
-    });
-    req.end();
-  });
-}
-
 /** Show server status */
 export async function showStatus(): Promise<void> {
   const serverInfo = readServerInfo();
@@ -85,7 +58,7 @@ export async function showStatus(): Promise<void> {
   const port = serverInfo.backendPort;
 
   // Fetch all status info in parallel
-  const [health, relayStatus, devices, agentAuth] = await Promise.all([
+  const [health, relayStatus, devicesRes, agentAuth] = await Promise.all([
     httpGet<HealthResponse>(port, "/api/health"),
     httpGet<RelayStatusResponse>(port, "/api/settings/relay-status"),
     httpGet<{ devices: DeviceInfo[] }>(port, "/api/remote-auth/devices"),
@@ -108,11 +81,7 @@ export async function showStatus(): Promise<void> {
   divider("Remote Access");
   blank();
   if (relayStatus) {
-    kv(
-      "Relay",
-      relayStatus.connected ? c.green("connected") : c.yellow("disconnected"),
-      14
-    );
+    kv("Relay", relayStatus.connected ? c.green("connected") : c.yellow("disconnected"), 14);
     if (relayStatus.serverId) {
       kv("Server ID", c.dim(relayStatus.serverId.slice(0, 12) + "..."), 14);
     }
@@ -122,12 +91,12 @@ export async function showStatus(): Promise<void> {
   }
 
   // ── Paired Devices ──
-  const deviceList = devices?.devices || [];
-  if (deviceList.length > 0) {
+  const devices = devicesRes?.devices || [];
+  if (devices.length > 0) {
     blank();
     divider("Paired Devices");
     blank();
-    for (const device of deviceList) {
+    for (const device of devices) {
       const age = formatTimeAgo(device.last_seen_at || device.created_at);
       console.log(`    ${c.green(sym.dot)} ${device.name.padEnd(24)} ${c.dim(age)}`);
     }
@@ -155,24 +124,4 @@ export async function showStatus(): Promise<void> {
   blank();
   divider();
   blank();
-}
-
-function formatUptime(ms: number): string {
-  const s = Math.floor(ms / 1000);
-  if (s < 60) return `${s}s`;
-  const m = Math.floor(s / 60);
-  if (m < 60) return `${m}m ${s % 60}s`;
-  const h = Math.floor(m / 60);
-  return `${h}h ${m % 60}m`;
-}
-
-function formatTimeAgo(isoDate: string): string {
-  const diff = Date.now() - new Date(isoDate).getTime();
-  const mins = Math.floor(diff / 60_000);
-  if (mins < 1) return "just now";
-  if (mins < 60) return `${mins}m ago`;
-  const hours = Math.floor(mins / 60);
-  if (hours < 24) return `${hours}h ago`;
-  const days = Math.floor(hours / 24);
-  return `${days}d ago`;
 }
