@@ -2264,3 +2264,7 @@ REDACTED
 -
 
 We need to test, like, it felt again. I restarted and run it again and this was the output. I don't know, I think we don't see the logs again still. There is some problem with that. I don't see them in this console log. Yeah, in the console log there are no logs about this. And also, I want you to find a loop with mock data or something that you can test it without me running it all over again. We need, like, these are, like, simple commands, but, like, I want you to test it out, write some code to test it and validate it and see if everything is going to actually work out and it's going to produce a good thing. So, loop through it, fix it, think about, don't do workarounds, find, like, proper way how to test this. Think about how you could test without me always letting you know.
+
+---
+
+OK, I want you to continue in the rest of the issues. Always start with exploring the problem, then defining a test cases. Without you needing me to run the app, you should be able to write some test code, or some fmr code which you delete in order to achieve the test and achieve that the codebase will work once we gonna start it end to end. Be very creative, feel free to run sub-agents for this, and make sure you are 100% confident once you stop that this is gonna work. But don't take your word for granted, always test it.
