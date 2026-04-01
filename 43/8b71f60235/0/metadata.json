@@ -1,0 +1,22 @@
+{
+  "cli_version": "0.5.0",
+  "checkpoint_id": "438b71f60235",
+  "session_id": "21a10948-8bfe-4c72-95aa-4d7e9c207780",
+  "strategy": "manual-commit",
+  "created_at": "2026-04-01T16:52:09.39587Z",
+  "branch": "zvadaadam/domain-deusmachine",
+  "checkpoints_count": 2,
+  "files_touched": [],
+  "agent": "Claude Code",
+  "turn_id": "5d9803321843",
+  "token_usage": {
+    "input_tokens": 239,
+    "cache_creation_tokens": 355156,
+    "cache_read_tokens": 21186253,
+    "output_tokens": 84087,
+    "api_call_count": 190
+  },
+  "session_metrics": {
+    "turn_count": 18
+  }
+}
