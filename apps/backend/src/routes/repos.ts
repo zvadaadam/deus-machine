@@ -268,9 +268,7 @@ app.post("/repos/init", async (c) => {
     throw new ConflictError("Target directory already exists");
   }
 
-  const templateType = template?.type || "empty";
-
-  if (templateType === "github" && template?.url) {
+  if (template?.type === "github") {
     // Clone template repo, strip .git, re-init
     pushInitLine("Downloading template...");
     await new Promise<void>((resolve, reject) => {
