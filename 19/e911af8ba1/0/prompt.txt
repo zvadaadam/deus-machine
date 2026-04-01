@@ -1796,3 +1796,216 @@ We want a clean, maintainable codebase, with proper best practices for the tech 
 Run subagents to verify, and if it should be fixed, try to merge some stuff together so it can be fixed together within one subagent. 
 If you can test something do it.
 Remember that we don't want to over engineer stuff. It should be a great code, very well structured, clean, maintainable for the future of use cases, but think about if anything is actionable from these code reviews.
+
+---
+
+<system-instruction>
+The user has added 7 comments to the diff for this workspace. Please review and address these comments as part of your response. When addressing comments on the "original" side or on specific commits, read the file from that version (not the current version). Below are the comments, including metadata about what git state they were left on:
+
+Comment #1:
+
+File: apps/backend/src/routes/files.ts
+Line: 149
+User comment: "**Bug: TOCTOU path traversal — `filePath` used instead of validated `realPath`**
+
+The containment check at line 114-121 correctly resolves symlinks via `realpathSync(filePath)` and validates the result is under `tmpdir()`. But all subsequent operations (lines 123, 127, 129, 149, 164) use the **original** `filePath`, not the validated `realPath`.
+
+This creates a TOCTOU (time-of-check, time-of-use) race: a symlink at `filePath` could be swapped between the `realpathSync` security check and the `createReadStream` call, allowing reads outside `tmpdir()`.
+
+**Fix:** Use `realPath` for all operations after the containment check:
+```ts
+const ext = path.extname(realPath).toLowerCase();
+// ...
+if (!fs.existsSync(realPath)) ...
+const stat = fs.statSync(realPath);
+// ...
+const stream = fs.createReadStream(realPath, { start, end });
+```"
+
+Comment metadata:
+This comment was left on the modified branch.
+This comment was left on GitHub by @zvadaadam.
+This comment is the start of thread PRRT_kwDOQEbULc54Qkrm. 
+
+
+Comment #2:
+
+File: packages/screen-studio/src/recorder/render-plan.ts
+Line: 213
+User comment: "**Bug: `minRateForMaxWait` computed but never used — `maxGapOutputMs` is a no-op**
+
+Line 211 computes `minRateForMaxWait` (the minimum playback rate needed to keep a gap's output duration under `maxGapOutputMs`), but line 213 ignores it entirely. The `maxGapOutputMs` config option (default: 2000ms) therefore has zero effect on output.
+
+**Fix:** Incorporate the floor rate:
+```ts
+playbackRate = Math.max(Math.min(idealRate, effectiveMax), minRateForMaxWait);
+```
+
+This ensures that no gap segment exceeds `maxGapOutputMs` in the output video."
+
+Comment metadata:
+This comment was left on the modified branch.
+This comment was left on GitHub by @zvadaadam.
+This comment is the start of thread PRRT_kwDOQEbULc54Qks_. 
+
+
+Comment #3:
+
+File: packages/screen-studio/src/mcp/session-manager.ts
+Line: 491
+User comment: "**Bug: `resolveAutoCapture()` always returns `"stream"` — avfoundation fallback unreachable**
+
+`resolveStreamPort()` always returns 9223 (the hardcoded default at line 511), so this `if (streamPort)` branch is always taken. The `"auto"` capture method described in the class JSDoc (line 77: *"auto": try stream, then avfoundation, fall back to none*) never tries avfoundation.
+
+If the stream WebSocket isn't actually running on port 9223, the session silently degrades to events-only mode instead of trying avfoundation as intended.
+
+**Fix:** `resolveAutoCapture()` should actually probe whether the stream server is reachable before returning `"stream"`, and fall back to `"avfoundation"` (on macOS) before `"none"`."
+
+Comment metadata:
+This comment was left on the modified branch.
+This comment was left on GitHub by @zvadaadam.
+This comment is the start of thread PRRT_kwDOQEbULc54Qkzc. 
+
+
+Comment #4:
+
+File: apps/agent-server/agents/deus-tools/agent-browser-client.ts
+Line: 107
+User comment: "**Bug: `invalidateCdpCache()` exported but never called anywhere**
+
+This function is the only way to clear the module-level `cachedCdpWsUrl`, but it has zero call sites in the entire codebase. Once a CDP WebSocket URL is cached (line 96), it persists forever — even if the BrowserView is destroyed and recreated (new page target = new WebSocket URL).
+
+After a BrowserView recreation, all subsequent `buildArgs()` calls will use the stale URL, causing agent-browser to connect to a dead CDP target.
+
+**Fix:** Wire this into the BrowserView lifecycle — call `invalidateCdpCache()` when a BrowserView is closed/recreated. Alternatively, add a TTL or probe the cached URL before returning it."
+
+Comment metadata:
+This comment was left on the modified branch.
+This comment was left on GitHub by @zvadaadam.
+This comment is the start of thread PRRT_kwDOQEbULc54Qk56. 
+
+
+Comment #5:
+
+File: apps/web/src/features/session/ui/tools/renderers/RecordingToolRenderers.tsx
+Line: 256
+User comment: "**CLAUDE.md violation: `<div role=\"button\">` instead of `<button>`**
+
+CLAUDE.md rule ([Semantic HTML First, Styling Second](CLAUDE.md)): *"Use correct HTML elements: `<button>` not clickable `<div>`. Proper ARIA semantics reduce CSS you need to write. Example: `<button>` handles focus, keyboard, disabled states automatically."*
+
+This `<div role="button">` with manual `onKeyDown` (lines 267-271) and `tabIndex={0}` reimplements what `<button>` provides natively. Other interactive elements in this same file (close button at line 416, chapter/event buttons at lines 499, 510, 526) already correctly use `<button type="button">`.
+
+**Fix:** Replace with `<button type="button" className={cn("border-border/40 ...", ...)} ...>` and remove the manual `onKeyDown`, `tabIndex`, and `role` props."
+
+Comment metadata:
+This comment was left on the modified branch.
+This comment was left on GitHub by @zvadaadam.
+This comment is the start of thread PRRT_kwDOQEbULc54QlCj. 
+
+
+Comment #6:
+
+File: apps/web/src/features/session/ui/tools/renderers/RecordingToolRenderers.tsx
+Line: 285
+User comment: "**CLAUDE.md violation: Hardcoded colors in RecordingCard**
+
+CLAUDE.md rule ([Use CSS Variables for Everything](CLAUDE.md)): *"❌ Never hardcode: `bg-blue-500`, `#3b82f6` ... ✅ Always use tokens: `bg-primary`, `var(--primary)`"*
+
+Several hardcoded Tailwind palette colors in this component:
+- Line 261: `bg-black` (card background)
+- Line 285: `from-neutral-800 to-neutral-950` (placeholder gradient)
+- Line 303: `from-black/80 via-black/40` (bottom bar gradient)
+- Line 318: `bg-black/60` (duration badge)
+
+Note: `bg-black` on the `<video>` container (line 429) and modal backdrop (line 404) are defensible exceptions per video player conventions. But the card chrome and placeholder gradient should use semantic tokens like `bg-background`, `from-muted`, etc. to respond to theme switching."
+
+Comment metadata:
+This comment was left on the modified branch.
+This comment was left on GitHub by @zvadaadam.
+This comment is the start of thread PRRT_kwDOQEbULc54QlK7. 
+
+
+Comment #7:
+
+File: apps/agent-server/agents/deus-tools/browser.ts
+Line: 815
+User comment: "_⚠️ Potential issue_ | _🟡 Minor_
+
+**Always cleanup the temp screenshot file, even when image read fails.**
+
+Line 809 cleanup only runs on the successful read path. If `readFileSync` throws (Line 813), the temp file can be left behind.
+
+
+
+<details>
+<summary>Suggested fix</summary>
+
+```diff
+-        try {
+-          const imageBuffer = readFileSync(screenshotPath);
+-          parts.push({
+-            type: "image",
+-            data: imageBuffer.toString("base64"),
+-            mimeType: "image/png",
+-          });
+-          try {
+-            unlinkSync(screenshotPath);
+-          } catch {
+-            // Ignore cleanup errors
+-          }
+-        } catch {
+-          // File read failed — return text-only response
+-        }
++        try {
++          const imageBuffer = readFileSync(screenshotPath);
++          parts.push({
++            type: "image",
++            data: imageBuffer.toString("base64"),
++            mimeType: "image/png",
++          });
++        } catch {
++          // File read failed — return text-only response
++        } finally {
++          try {
++            unlinkSync(screenshotPath);
++          } catch {
++            // Ignore cleanup errors
++          }
++        }
+```
+</details>
+
+<details>
+<summary>🤖 Prompt for AI Agents</summary>
+
+```
+Verify each finding against the current code and only fix it if needed.
+
+In `@apps/agent-server/agents/deus-tools/browser.ts` around lines 800 - 815, The
+temp screenshot file is only deleted on the successful read path; ensure the
+temp file at screenshotPath is always unlinked even if readFileSync throws by
+moving the unlinkSync(screenshotPath) call into a finally block or a separate
+try/catch that runs regardless of read success; update the code around
+readFileSync and unlinkSync (referencing screenshotPath, readFileSync,
+unlinkSync, and the parts array) so that you still push the base64 image on
+success but always attempt cleanup and swallow any unlink errors.
+```
+
+</details>
+
+<!-- fingerprinting:phantom:poseidon:hawk -->
+
+<!-- This is an auto-generated comment by CodeRabbit -->"
+
+Comment metadata:
+This comment was left on the modified branch.
+This comment was left on GitHub by @coderabbitai.
+This comment is the start of thread PRRT_kwDOQEbULc54QtBn. 
+
+</system-instruction>
+
+I run AI code review, is it actionable? Wdyt? Explore in depth each problem.
+We want a clean, maintainable codebase, with proper best practices for the tech stack we use.
+Run subagents to verify, and if it should be fixed, try to merge some stuff together so it can be fixed together within one subagent. 
+If you can test something do it.
+Remember that we don't want to over engineer stuff. It should be a great code, very well structured, clean, maintainable for the future of use cases, but think about if anything is actionable from these code reviews.
