@@ -144,14 +144,20 @@ export async function renderVideo(options: VideoRenderOptions): Promise<VideoRen
     cursor: options.cursor,
   };
 
+  console.error(
+    `[video-renderer] Creating canvas renderer ${outputSize.width}x${outputSize.height}...`
+  );
   const rendererCtx = await createFrameRenderer(renderConfig);
   if (!rendererCtx) {
+    console.error("[video-renderer] Canvas renderer failed, falling back to ffmpeg");
     frameSource.close();
     return renderVideoFallback(options);
   }
+  console.error("[video-renderer] Canvas renderer created");
 
   // 7. Spawn ffmpeg encoder
   const ffmpeg = spawnEncoder(outputSize, outputFps, outputPath);
+  console.error(`[video-renderer] Encoder spawned, rendering ${totalOutputFrames} frames...`);
 
   // 8. Render loop
   let renderedCount = 0;
@@ -176,7 +182,24 @@ export async function renderVideo(options: VideoRenderOptions): Promise<VideoRen
 
       // Get source JPEG and render
       const sourceJpeg = frameSource.getFrame(sourceFrameIdx);
-      const renderedJpeg = await renderFrame(sourceJpeg, transform, renderConfig, rendererCtx);
+      if (i === 0) {
+        console.error(
+          `[video-renderer] First frame: sourceIdx=${sourceFrameIdx}, jpegSize=${sourceJpeg.length}B, ` +
+            `transform zoom=${transform.camera.zoom.toFixed(2)}`
+        );
+      }
+
+      let renderedJpeg: Buffer;
+      try {
+        renderedJpeg = await renderFrame(sourceJpeg, transform, renderConfig, rendererCtx);
+      } catch (frameErr) {
+        console.error(`[video-renderer] renderFrame FAILED at frame ${i}: ${frameErr}`);
+        throw frameErr;
+      }
+
+      if (i === 0) {
+        console.error(`[video-renderer] First rendered frame: ${renderedJpeg.length}B`);
+      }
 
       // Pipe to ffmpeg with backpressure handling
       const ok = ffmpeg.stdin!.write(renderedJpeg);
@@ -185,15 +208,19 @@ export async function renderVideo(options: VideoRenderOptions): Promise<VideoRen
       }
 
       renderedCount++;
-      if (onProgress && renderedCount % 30 === 0) {
-        onProgress(renderedCount, totalOutputFrames);
+      if (renderedCount % 100 === 0) {
+        console.error(`[video-renderer] Progress: ${renderedCount}/${totalOutputFrames} frames`);
       }
     }
+  } catch (loopErr) {
+    console.error(`[video-renderer] Render loop FAILED after ${renderedCount} frames: ${loopErr}`);
+    throw loopErr;
   } finally {
     frameSource.close();
   }
 
   // 9. Wait for ffmpeg to finish
+  console.error(`[video-renderer] Render complete, closing encoder (${renderedCount} frames)...`);
   await closeEncoder(ffmpeg);
 
   console.error(
