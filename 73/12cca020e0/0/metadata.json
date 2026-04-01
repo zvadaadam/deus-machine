@@ -1,0 +1,22 @@
+{
+  "cli_version": "0.5.0",
+  "checkpoint_id": "7312cca020e0",
+  "session_id": "75a3382b-db85-4609-9e59-f86cb39f97b4",
+  "strategy": "manual-commit",
+  "created_at": "2026-04-01T16:03:45.636616Z",
+  "branch": "zvadaadam/npm-cli-installer",
+  "checkpoints_count": 2,
+  "files_touched": [],
+  "agent": "Claude Code",
+  "turn_id": "2e18168fb632",
+  "token_usage": {
+    "input_tokens": 3849,
+    "cache_creation_tokens": 406425,
+    "cache_read_tokens": 26128407,
+    "output_tokens": 137413,
+    "api_call_count": 246
+  },
+  "session_metrics": {
+    "turn_count": 26
+  }
+}
