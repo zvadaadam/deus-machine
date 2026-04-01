@@ -36,7 +36,7 @@
     "node": ">=20"
   },
   "scripts": {
-    "build": "bun run ../../node_modules/.bin/tsx build.ts"
+    "build": "bunx tsx build.ts"
   },
   "dependencies": {
     "better-sqlite3": "^12.4.1",
