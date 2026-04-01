@@ -15,6 +15,7 @@ import {
   SIM_BUILD_LOG,
   CHAT_INSERT,
   GIT_CLONE_PROGRESS,
+  GIT_INIT_PROGRESS,
   // Schema map
   AppEventSchemaMap,
   // Individual schemas for targeted tests
@@ -49,6 +50,7 @@ describe("shared/events", () => {
       SIM_BUILD_LOG,
       CHAT_INSERT,
       GIT_CLONE_PROGRESS,
+      GIT_INIT_PROGRESS,
     ];
 
     it("has a Zod schema for every event name constant", () => {

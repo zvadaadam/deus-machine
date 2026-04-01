@@ -12,6 +12,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
 import { onEvent } from "@/platform/ws/query-protocol-client";
+import { GIT_INIT_PROGRESS, type GitInitProgressEvent } from "@shared/events";
 import { native, capabilities } from "@/platform";
 import { getBackendUrl } from "@/shared/config/api.config";
 import { useIsMobile } from "@/shared/hooks/use-mobile";
@@ -82,8 +83,8 @@ export function StartNewProjectModal({
   useEffect(() => {
     if (!creating) return;
     const unlisten = onEvent((event, data) => {
-      if (event === "git-init-progress") {
-        const { line } = data as { line: string };
+      if (event === GIT_INIT_PROGRESS) {
+        const { line } = data as GitInitProgressEvent;
         if (line) {
           setLines((prev) => [...prev, line].slice(-MAX_LINES));
         }

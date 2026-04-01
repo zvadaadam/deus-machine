@@ -71,6 +71,8 @@ export const CreateRepoBody = z.object({
   root_path: z.string().min(1, "root_path is required"),
 });
 
+const TemplateUrl = z.string().regex(/^https:\/\/[^\s;|&`$()]+$/, "Only HTTPS URLs are allowed");
+
 export const InitProjectBody = z.object({
   projectName: z
     .string()
@@ -78,13 +80,10 @@ export const InitProjectBody = z.object({
     .regex(/^[a-zA-Z0-9][a-zA-Z0-9._-]*$/, "Invalid project name"),
   targetPath: z.string().min(1),
   template: z
-    .object({
-      type: z.enum(["empty", "github"]),
-      url: z
-        .string()
-        .regex(/^https?:\/\/[^\s;|&`$()]+$/, "Only HTTPS URLs are allowed")
-        .optional(),
-    })
+    .discriminatedUnion("type", [
+      z.object({ type: z.literal("empty") }),
+      z.object({ type: z.literal("github"), url: TemplateUrl }),
+    ])
     .optional(),
 });
 
