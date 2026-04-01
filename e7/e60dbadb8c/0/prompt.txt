@@ -2113,3 +2113,23 @@ So you are, so tell me exactly what we are using it for and what and how so I ca
 ---
 
 I think we want to add it and actually I don't see in the produce video the cursor and We want that right and the cursor is done with this or what do you think?
+
+---
+
+FYI it failed now: test it again
+Collapse
+ToolSearchselect:mcp__deus__recording_start,mcp__d
+Start Recordingrec_76f454
+Browser Navigateexpo.dev
+Browser Navigateexpo.dev/pricing
+On pricing page. Now click Blog link.
+Browser Clicke7
+On blog page. Now scroll down.
+Browser Scrolldown 500px
+All actions done. Now checking status and stopping.
+mcp__deus__recording_statusrec_76f454
+Screen Recordingevents-only, no video
+Test 18 result: FAILED — empty outputPath (0 usable frames)
+Only 1 frame received, 0 dropped. The stream barely delivered any frames this run, so ffmpeg gracefully returned empty output instead of crashing.
+TestFramesDroppedOutputSize1729332SUCCESS4.2MB, 85s1810FAILEDempty (graceful)
+The stream frame delivery is still inconsistent — sometimes it works, sometimes almost nothing comes through.
