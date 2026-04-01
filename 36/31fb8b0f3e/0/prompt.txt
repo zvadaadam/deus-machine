@@ -310,3 +310,15 @@ The user has attached these files. Read them before proceeding.
 
 
 Create a PR
+
+---
+
+<system_instruction>
+The user has attached these files. Read them before proceeding.
+- /Users/zvada/Developer/agent/box-ide/.conductor/geneva-v1/.context/attachments/Lint__Format___Typecheck_69558728951.log (57.5 KB)
+- /Users/zvada/Developer/agent/box-ide/.conductor/geneva-v1/.context/attachments/Fix errors instructions.md (430 B)
+</system_instruction>
+
+
+
+Fix the failing CI actions. I've attached the failure logs.
