@@ -565,17 +565,12 @@ export function registerBrowserViewHandlers(): void {
   });
 
   // Show browser views — restores only views that were visible before hide_all.
+  // Only toggles visibility — does NOT re-add views as children (that can
+  // cause navigation resets to localhost:1420).
   ipcMain.handle("show_all_browser_webviews", () => {
-    const mainWindow = getMainWindow();
     for (const label of previouslyVisibleLabels) {
       const view = views.get(label);
       if (!view) continue;
-      if (mainWindow) {
-        const children = mainWindow.contentView.children;
-        if (!children.includes(view)) {
-          mainWindow.contentView.addChildView(view);
-        }
-      }
       view.setVisible(true);
       const savedBounds = viewBounds.get(label);
       if (savedBounds) {
