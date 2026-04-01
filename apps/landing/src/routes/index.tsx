@@ -39,10 +39,10 @@ function LandingPage() {
         </a>
       </header>
 
-      <div className="mx-auto flex max-w-5xl">
+      <div className="flex">
         {/* Left sidebar */}
-        <aside className="sticky top-0 hidden h-screen w-40 shrink-0 md:block">
-          <div className="flex h-full flex-col py-10 pr-4 pl-6">
+        <aside className="sticky top-0 hidden h-screen w-48 shrink-0 md:block">
+          <div className="flex h-full flex-col px-6 py-10">
             <a href="/" className="mb-8 flex items-center gap-2">
               <div className="bg-foreground flex size-5 items-center justify-center rounded-[4px]">
                 <span className="text-background text-[9px] font-bold">D</span>
@@ -86,8 +86,8 @@ function LandingPage() {
         </aside>
 
         {/* Main content */}
-        <main className="min-w-0 flex-1 px-6 py-12 md:py-16">
-          <article className="max-w-[620px]">
+        <main className="flex min-w-0 flex-1 justify-center px-6 py-12 md:py-16">
+          <article className="w-full max-w-[620px]">
             {/* Hero */}
             <section id="overview" className="mb-24">
               <h1 className="text-[clamp(2.25rem,5vw,3.25rem)] leading-[1.08] font-semibold tracking-[-0.035em]">
