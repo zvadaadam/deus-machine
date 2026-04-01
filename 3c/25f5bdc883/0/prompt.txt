@@ -368,3 +368,15 @@ Also to the far right, add button which will say merge or something like that. A
 ---
 
 Also, we need somewhere a call to action, which will say like open machine, which will transfer you to the app.dusemachine.ai, you know, right? Where to put it? Explore.
+
+---
+
+<system_instruction>
+The user has attached these files. Read them before proceeding.
+- /Users/zvada/Developer/agent/box-ide/.conductor/columbus-v5/.context/attachments/Lint__Format___Typecheck_69578743773.log (58.4 KB)
+- /Users/zvada/Developer/agent/box-ide/.conductor/columbus-v5/.context/attachments/Fix errors instructions.md (430 B)
+</system_instruction>
+
+
+
+Fix the failing CI actions. I've attached the failure logs.
