@@ -2214,3 +2214,26 @@ Test 21 was an anomaly with 320 frames but still failed to produce output — wh
 
 
 /Users/zvada/Developer/agent/box-ide/.conductor/monrovia-v1/.context/attachments/pasted_text_2026-04-01_20-49-56.txt
+
+---
+
+again
+Collapse
+Start Recordingrec_c2a9e6
+Browser Navigateexpo.dev
+Browser Navigateexpo.dev/pricing
+Browser Clicke7
+Browser Scrolldown 500px
+mcp__deus__recording_statusrec_c2a9e6
+Screen Recordingevents-only, no video
+Test 23: FAILED — 1 frame, empty output.
+Consistently getting only 1 frame now. The stream connection seems to establish but isn't delivering continuous frames during browser interactions.
+REDACTED
+Two issues remain:
+Stream frame delivery is mostly stuck at 1 frame (with rare spikes like test 21's 320)
+Post-processing failed even with 320 frames (test 21), suggesting a separate ffmpeg pipeline bug
+
+
+----
+
+/Users/zvada/Developer/agent/box-ide/.conductor/monrovia-v1/.context/attachments/pasted_text_2026-04-01_21-07-02.txt
