@@ -816,3 +816,84 @@ Fix the failing CI actions. I've attached the failure logs.
 ---
 
 /code-simplifier I think it seems like everything is working, it's good, but I want you to run a code simplifier, check if the code structure is good, not no dead code, nothing that is over-engineering stuff, something to simplify improved, yeah, explore it please in depth, through multiple perspectives. We want really good, maintainable or clean codebase.
+
+---
+
+<system-instruction>
+The user has added 1 comment to the diff for this workspace. Please review and address these comments as part of your response. When addressing comments on the "original" side or on specific commits, read the file from that version (not the current version). Below are the comments, including metadata about what git state they were left on:
+
+Comment #1:
+
+File: apps/web/src/features/repository/ui/StartNewProjectModal.tsx
+Line: 68
+User comment: "_⚠️ Potential issue_ | _🟡 Minor_
+
+**Tilde fallback paths won't work on the backend.**
+
+If `native.dialog.getHomeDir()` fails, the fallback uses `"~/Developer"` which the backend's `path.resolve()` won't expand — it would create a literal `~` subdirectory in CWD. While this would fail the home directory containment check (so no security issue), users would see a confusing validation error.
+
+Consider either disabling the create action if home resolution fails, or surfacing an explicit error message.
+
+
+
+<details>
+<summary>🛡️ Suggested approach</summary>
+
+```diff
++  const [homeResolved, setHomeResolved] = useState(false);
++
+   useEffect(() => {
+     if (!show) return;
+     (async () => {
+       try {
+         const home = await native.dialog.getHomeDir();
+         setDefaultBasePath(isMobile ? `${home}/.deus/repos` : `${home}/Developer`);
++        setHomeResolved(true);
+       } catch {
+-        setDefaultBasePath(isMobile ? "~/.deus/repos" : "~/Developer");
++        setHomeResolved(false);
+       }
+       if (isMobile) setBasePath("");
+     })();
+   }, [show, isMobile]);
+```
+
+Then disable the Create button when `!homeResolved`.
+</details>
+
+<details>
+<summary>🤖 Prompt for AI Agents</summary>
+
+```
+Verify each finding against the current code and only fix it if needed.
+
+In `@apps/web/src/features/repository/ui/StartNewProjectModal.tsx` around lines 57
+- 68, The fallback using "~" must be removed and the component should track
+whether home resolution succeeded; in StartNewProjectModal update the useEffect
+that calls native.dialog.getHomeDir to set a new boolean state (e.g.,
+homeResolved) true on success and false on catch and avoid calling
+setDefaultBasePath with tilde paths (set to "" or leave untouched on failure),
+and then disable the Create action/button (and surface an explicit
+validation/error message) when homeResolved is false; reference the existing
+useEffect, native.dialog.getHomeDir, setDefaultBasePath, setBasePath and the
+Create button handler to implement the check and UI disablement.
+```
+
+</details>
+
+<!-- fingerprinting:phantom:medusa:ocelot -->
+
+<!-- This is an auto-generated comment by CodeRabbit -->"
+
+Comment metadata:
+This comment was left on the modified branch.
+This comment was left on GitHub by @coderabbitai.
+This comment is the start of thread PRRT_kwDOQEbULc54Ue5M. 
+
+</system-instruction>
+
+I run AI code review, is it actionable? Wdyt? Explore in depth each problem.
+We want a clean, maintainable codebase, with proper best practices for the tech stack we use.
+Run subagents to verify, and if it should be fixed, try to merge some stuff together so it can be fixed together within one subagent. 
+If you can test something do it.
+Remember that we don't want to over engineer stuff. It should be a great code, very well structured, clean, maintainable for the future of use cases, but think about if anything is actionable from these code reviews.
