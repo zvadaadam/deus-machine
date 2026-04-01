@@ -83,12 +83,16 @@ export async function renderVideo(options: VideoRenderOptions): Promise<VideoRen
   try {
     sourceInfo = await frameSource.open();
   } catch (err) {
-    throw new Error(`Failed to decode raw video: ${err instanceof Error ? err.message : err}`);
+    // Canvas decode failed — fall back to ffmpeg-only path
+    console.error(`[video-renderer] Frame decode failed, falling back: ${err}`);
+    return renderVideoFallback(options);
   }
 
   if (sourceInfo.frameCount === 0) {
     frameSource.close();
-    throw new Error("Raw video has 0 frames");
+    // No frames to render — fall back to ffmpeg-only path
+    console.error("[video-renderer] Raw video has 0 decoded frames, falling back");
+    return renderVideoFallback(options);
   }
 
   const actualSourceSize: Size = {
