@@ -2154,3 +2154,7 @@ The stream is consistently delivering only ~1 frame now. Something changed betwe
 ---
 
 shoudlw e push some logs to be abel to tets it ? epxlor indepth do coupel pases epxlor code ind epth add logs
+
+---
+
+can also epxlore why teh startbrcoridnfg take sliek 30sec?
