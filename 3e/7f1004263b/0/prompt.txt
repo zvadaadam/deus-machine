@@ -901,3 +901,7 @@ Remember that we don't want to over engineer stuff. It should be a great code, v
 ---
 
 Commit and push all changes
+
+---
+
+There was a small thing that when we run the startGit, start in the modelView, when we define the name and we started the new repository, when we have the preview of what was running. I think when it's the line very long, it gets out of the modelView sometimes. What do you think? Can you explore it if it's true?
