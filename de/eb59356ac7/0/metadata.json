@@ -1,0 +1,55 @@
+{
+  "cli_version": "0.5.0",
+  "checkpoint_id": "deeb59356ac7",
+  "session_id": "75a3382b-db85-4609-9e59-f86cb39f97b4",
+  "strategy": "manual-commit",
+  "created_at": "2026-04-01T15:28:47.351217Z",
+  "branch": "zvadaadam/npm-cli-installer",
+  "checkpoints_count": 24,
+  "files_touched": [
+    ".gitignore",
+    ".husky/_/commit-msg",
+    ".husky/_/post-commit",
+    ".husky/_/pre-push",
+    ".husky/_/prepare-commit-msg",
+    "apps/cli/build.ts",
+    "apps/cli/package.json",
+    "apps/cli/src/cli.ts",
+    "apps/cli/src/config.ts",
+    "apps/cli/src/desktop.ts",
+    "apps/cli/src/login.ts",
+    "apps/cli/src/onboarding.ts",
+    "apps/cli/src/pair.ts",
+    "apps/cli/src/prompt.ts",
+    "apps/cli/src/qr.ts",
+    "apps/cli/src/serve.ts",
+    "apps/cli/src/start.ts",
+    "apps/cli/src/status.ts",
+    "apps/cli/src/ui.ts",
+    "apps/cli/tsconfig.json",
+    "apps/web/index.html",
+    "apps/web/src/shared/config/backend.config.ts",
+    "package.json"
+  ],
+  "agent": "Claude Code",
+  "turn_id": "642f59139fda",
+  "token_usage": {
+    "input_tokens": 3814,
+    "cache_creation_tokens": 383070,
+    "cache_read_tokens": 21109925,
+    "output_tokens": 126782,
+    "api_call_count": 215
+  },
+  "session_metrics": {
+    "turn_count": 24
+  },
+  "initial_attribution": {
+    "calculated_at": "2026-04-01T15:28:46.646581Z",
+    "agent_lines": 3773,
+    "human_added": 16,
+    "human_modified": 0,
+    "human_removed": 0,
+    "total_committed": 3789,
+    "agent_percentage": 99.57772499340194
+  }
+}
