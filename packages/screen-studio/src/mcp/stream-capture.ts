@@ -147,14 +147,19 @@ export class StreamRecorder {
     });
 
     // 2. Connect to WebSocket stream
+    console.error(`[stream-recorder] Connecting to ws://127.0.0.1:${port}...`);
     try {
       await this.connectWebSocket();
-    } catch {
-      console.error(`[stream-recorder] Stream not available yet on port ${port}, will retry`);
+      console.error(`[stream-recorder] WebSocket connected, keepalive started`);
+    } catch (err) {
+      console.error(
+        `[stream-recorder] Initial connect failed: ${err instanceof Error ? err.message : err}, will retry`
+      );
       this.scheduleReconnect();
     }
 
     // 3. Wait for first frame or timeout before returning
+    const waitStart = Date.now();
     await new Promise<void>((resolve) => {
       if (this.frameCount > 0) {
         resolve();
@@ -168,7 +173,11 @@ export class StreamRecorder {
 
       setTimeout(() => {
         if (this.readyResolve) {
-          console.error(`[stream-recorder] No frames within ${this.readyTimeout}ms, continuing`);
+          const elapsed = Date.now() - waitStart;
+          console.error(
+            `[stream-recorder] No frames within ${elapsed}ms, ws=${this.ws ? "connected" : "NULL"}, ` +
+              `ffmpeg.stdin=${this.ffmpeg?.stdin?.writable ? "writable" : "closed"}, continuing anyway`
+          );
           const r = this.readyResolve;
           this.readyResolve = null;
           r();
@@ -176,8 +185,11 @@ export class StreamRecorder {
       }, this.readyTimeout);
     });
 
+    const waitElapsed = Date.now() - waitStart;
     console.error(
-      `[stream-recorder] Started, port ${port}, ${this.frameCount} frames buffered -> ${this.outputPath}`
+      `[stream-recorder] Started in ${waitElapsed}ms, port ${port}, ` +
+        `frames=${this.frameCount}, ws=${this.ws ? "connected" : "NULL"}, ` +
+        `ffmpeg=${this.ffmpeg ? "running" : "dead"} -> ${this.outputPath}`
     );
   }
 
@@ -330,23 +342,29 @@ export class StreamRecorder {
 
   private async connectWebSocket(): Promise<void> {
     const url = `ws://127.0.0.1:${this.port}`;
+    const connectStart = Date.now();
 
     return new Promise<void>((resolve, reject) => {
       const ws = new WebSocket(url);
       const timeout = setTimeout(() => {
+        console.error(`[stream-recorder] Connect timeout after 5s for ${url}`);
         ws.close();
         reject(new Error(`Stream connect timeout: ${url}`));
       }, 5_000);
 
       ws.onopen = () => {
         clearTimeout(timeout);
+        console.error(`[stream-recorder] WebSocket open in ${Date.now() - connectStart}ms: ${url}`);
         this.ws = ws;
         this.setupMessageHandler();
         resolve();
       };
 
-      ws.onerror = () => {
+      ws.onerror = (err) => {
         clearTimeout(timeout);
+        console.error(
+          `[stream-recorder] WebSocket error after ${Date.now() - connectStart}ms: ${url} — ${err}`
+        );
         reject(new Error(`Stream WebSocket error: ${url}`));
       };
     });
@@ -394,7 +412,16 @@ export class StreamRecorder {
     // Start keepalive to ensure continuous frame delivery
     this.startKeepalive();
 
+    let messageCount = 0;
     this.ws.onmessage = (event: MessageEvent) => {
+      messageCount++;
+      if (messageCount <= 3) {
+        const preview =
+          typeof event.data === "string"
+            ? event.data.slice(0, 120)
+            : `[binary ${event.data.length}B]`;
+        console.error(`[stream-recorder] Message #${messageCount}: ${preview}`);
+      }
       if (!this.active || !this.ffmpeg?.stdin?.writable) return;
 
       try {
@@ -428,11 +455,21 @@ export class StreamRecorder {
           if (this.firstFrameTime === null) this.firstFrameTime = now;
           this.lastFrameTime = now;
 
-          // Resolve ready promise on first frame
-          if (this.frameCount === 1 && this.readyResolve) {
-            const r = this.readyResolve;
-            this.readyResolve = null;
-            r();
+          // Log first frame and periodic updates
+          if (this.frameCount === 1) {
+            console.error(
+              `[stream-recorder] First frame received! size=${bytes.length}B, ` +
+                `detected=${this.detectedWidth ?? "?"}x${this.detectedHeight ?? "?"}`
+            );
+            if (this.readyResolve) {
+              const r = this.readyResolve;
+              this.readyResolve = null;
+              r();
+            }
+          } else if (this.frameCount % 50 === 0) {
+            console.error(
+              `[stream-recorder] Frame ${this.frameCount}, dropped=${this.droppedFrames}`
+            );
           }
 
           if (!ok) {
@@ -447,8 +484,8 @@ export class StreamRecorder {
             `[stream-recorder] Status: connected=${msg.connected}, screencasting=${msg.screencasting}`
           );
         }
-      } catch {
-        // Malformed message — skip
+      } catch (parseErr) {
+        console.error(`[stream-recorder] Message parse error: ${parseErr}`);
       }
     };
 
