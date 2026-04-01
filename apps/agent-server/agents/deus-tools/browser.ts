@@ -41,6 +41,12 @@ function withBrowserTool<TArgs>(
   fn: (args: TArgs) => Promise<{ content: Array<{ type: string; [key: string]: unknown }> }>
 ): (args: TArgs) => Promise<{ content: Array<{ type: string; [key: string]: unknown }> }> {
   return async (args: TArgs) => {
+    // Normalize ref: trim whitespace, convert empty strings to undefined
+    const normalized = args as Record<string, unknown>;
+    if (typeof normalized.ref === "string") {
+      const trimmed = normalized.ref.trim();
+      normalized.ref = trimmed || undefined;
+    }
     try {
       return await fn(args);
     } catch (err: unknown) {
@@ -264,8 +270,7 @@ Returns a page snapshot after clicking and the clicked element's bounding box (x
         doubleClick: z.boolean().optional().describe("Whether to perform a double click"),
       },
       withBrowserTool(async (args) => {
-        const ref = args.ref?.trim() || undefined;
-        const hasRef = ref !== undefined;
+        const hasRef = args.ref !== undefined;
         const hasCoords = args.x !== undefined && args.y !== undefined;
         if (hasRef && hasCoords) {
           return textResult("Click requires either 'ref' or 'x'/'y' coordinates, not both.");
@@ -277,9 +282,11 @@ Returns a page snapshot after clicking and the clicked element's bounding box (x
         }
 
         let response;
-        if (ref) {
-          const clickArgs = args.doubleClick ? ["click", "--double", ref] : ["click", ref];
-          response = await execWithSnapshot(sessionId, clickArgs, undefined, ref);
+        if (args.ref) {
+          const clickArgs = args.doubleClick
+            ? ["click", "--double", args.ref]
+            : ["click", args.ref];
+          response = await execWithSnapshot(sessionId, clickArgs, undefined, args.ref);
         } else {
           const cmds: string[][] = [
             ["mouse", "move", String(args.x), String(args.y)],
@@ -304,7 +311,7 @@ Returns a page snapshot after clicking and the clicked element's bounding box (x
           return textResult(`Click failed: ${response.error}`);
         }
 
-        const target = ref ?? `(${args.x}, ${args.y})`;
+        const target = args.ref ?? `(${args.x}, ${args.y})`;
 
         emitAction({
           toolName: "BrowserClick",
