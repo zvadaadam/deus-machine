@@ -5,8 +5,7 @@
 
 @custom-variant dark (&:is(.dark *));
 
-
-@theme inline {
+@theme {
   --font-heading: var(--font-sans);
   --font-sans: 'Geist Variable', sans-serif;
   --color-sidebar-ring: var(--sidebar-ring);
@@ -118,14 +117,18 @@
   --sidebar-ring: oklch(0.556 0 0);
 }
 
-@layer base {
-  * {
-    @apply border-border outline-ring/50;
-  }
-  body {
-    @apply bg-background text-foreground;
-  }
-  html {
-    @apply font-sans;
-  }
+*,
+*::before,
+*::after {
+  border-color: var(--color-border);
+  outline-color: color-mix(in oklch, var(--color-ring) 50%, transparent);
+}
+
+body {
+  background-color: var(--color-background);
+  color: var(--color-foreground);
+}
+
+html {
+  font-family: var(--font-sans);
 }

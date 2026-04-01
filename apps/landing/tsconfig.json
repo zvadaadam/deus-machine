@@ -10,7 +10,6 @@
     },
     "lib": ["ES2022", "DOM", "DOM.Iterable"],
     "types": [
-        "./worker-configuration.d.ts",
         "node",
         "vite/client"
     ],
