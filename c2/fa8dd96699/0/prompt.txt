@@ -40,3 +40,10 @@ Can you improve the readme file for the CLI? I think, yeah, basically like the r
 ---
 
 Okay, so can I test it on my computer locally and from how we're gonna install it, like this is gonna be installing what? Exactly like the deployed app or what?
+
+---
+
+I want you to go through and test it and see if everything is going to work well. You should be able to test it, think about the test cases. we need to tehn make it work
+
+
+Always start with exploring the problem, then defining a test cases. Without you needing me to run the app, you should be able to write some test code, or some fmr code which you delete in order to achieve the test and achieve that the codebase will work once we gonna start it end to end. Be very creative, feel free to run sub-agents for this, and make sure you are 100% confident once you stop that this is gonna work. But don't take your word for granted, always test it.
