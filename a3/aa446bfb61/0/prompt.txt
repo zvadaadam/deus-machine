@@ -77,3 +77,14 @@ How the landing page now looks and do we have there the Shazian components there
 ---
 
 Okay, so can you do a final review of the landing page? Like if it's everything is properly done like what 10-stack start project would need with all the deployments, proper code structure, everything, proper like tailwind things and yeah.
+
+---
+
+Basically, I want to do the design of the landing page a little different. And I would love to do it more like this docs, a little similar to it, more educational wise than landing page hype wise.
+
+https://www.agentation.com/
+
+So basically on the landing page, what we want to do as like very simple things like some, some text, there will be a screenshot of the product for now put there a placeholder you generate and how to download it, install it. And on the bottom there would be a footer. But but the menu is on the left right this. Yeah. So there will be link to do you think and maybe we can like try to adopt some design. Yeah, like, it will be very cool to adopt some design from the desktop app from from the web. Like when you look at the sidebar, how we have it visualized the workspace stuff like that. So combine it our design and the pasted HTML with that.
+
+
+here is teh page source to get layptu deisng isnpriation: /Users/zvada/Developer/agent/box-ide/.conductor/columbus-v5/.context/attachments/pasted_text_2026-04-01_17-51-49.txt
