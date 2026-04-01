@@ -32,6 +32,7 @@ export function AppSidebar({
   onNewWorkspaceFromGitHub,
   onAddRepository,
   onCloneRepository,
+  onStartNewProject,
   onArchive,
   onStatusChange,
   onNewSession,
@@ -155,7 +156,7 @@ export function AppSidebar({
         </SidebarContent>
       )}
 
-      <SidebarFooter onAddRepository={onAddRepository} onCloneRepository={onCloneRepository} />
+      <SidebarFooter onAddRepository={onAddRepository} onCloneRepository={onCloneRepository} onStartNewProject={onStartNewProject} />
     </Sidebar>
   );
 }

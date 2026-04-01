@@ -127,6 +127,7 @@ export const COMMAND_NAMES = [
   "fs:unwatch",
   // Git commands
   "git:clone",
+  "git:init",
   // New commands
   "createWorkspace",
   "retrySetup",
@@ -147,6 +148,7 @@ export const PROTOCOL_EVENTS = [
   "fs:changed",
   // Git events
   "git-clone-progress",
+  "git-init-progress",
   // Agent-server bidirectional RPC
   "agent-server:request",
 ] as const;
