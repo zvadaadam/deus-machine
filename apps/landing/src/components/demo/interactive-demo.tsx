@@ -7,6 +7,7 @@ import {
   Terminal,
   RefreshCw,
   GitCommitHorizontal,
+  GitPullRequestArrow,
 } from 'lucide-react'
 import type { Message, Workspace } from './data'
 import { WORKSPACES, getAgentReply } from './data'
@@ -72,7 +73,7 @@ export function InteractiveDemo() {
 
       <div className="flex" style={{ height: 380 }}>
         {/* Sidebar */}
-        <div className="hidden w-44 shrink-0 border-r border-foreground/[0.04] bg-foreground/[0.02] sm:block">
+        <div className="hidden w-44 shrink-0 bg-foreground/[0.02] sm:block">
           <div className="p-2.5">
             {repos.map((repo) => (
               <div key={repo} className="mb-3">
@@ -104,7 +105,7 @@ export function InteractiveDemo() {
         {/* Main panel */}
         <div className="flex min-w-0 flex-1 flex-col">
           {/* Tab bar */}
-          <div className="flex items-center gap-1 border-b border-foreground/[0.04] px-3 py-1.5">
+          <div className="flex items-center gap-1 px-3 py-1.5">
             <ViewTab active={view === 'chat'} onClick={() => setView('chat')}>
               <MessageSquare className="size-3" />
               Chat
@@ -117,13 +118,22 @@ export function InteractiveDemo() {
               <Globe className="size-3" />
               Browser
             </ViewTab>
-            {workspace.diff && (
-              <div className="ml-auto flex items-center gap-1.5 text-[10px]">
-                <span className="truncate text-muted-foreground/30">{workspace.diff.file}</span>
-                <span className="text-[var(--status-active)]">+{workspace.diff.add}</span>
-                <span className="text-[oklch(0.72_0.19_29)]">-{workspace.diff.del}</span>
-              </div>
-            )}
+            <div className="ml-auto flex items-center gap-2">
+              {workspace.diff && (
+                <div className="flex items-center gap-1.5 text-[10px]">
+                  <span className="truncate text-muted-foreground/30">{workspace.diff.file}</span>
+                  <span className="text-[var(--status-active)]">+{workspace.diff.add}</span>
+                  <span className="text-[oklch(0.72_0.19_29)]">-{workspace.diff.del}</span>
+                </div>
+              )}
+              <button
+                type="button"
+                className="flex items-center gap-1 rounded-md bg-[var(--status-active)]/15 px-2 py-0.5 text-[10px] font-medium text-[var(--status-active)] outline-none transition-colors duration-100 hover:bg-[var(--status-active)]/25"
+              >
+                <GitPullRequestArrow className="size-2.5" />
+                Merge
+              </button>
+            </div>
           </div>
 
           {/* View content — keyed to force remount on workspace switch */}
@@ -279,19 +289,16 @@ function ChatMessage({ message }: { message: Message }) {
   }
   if (message.role === 'cta') {
     return (
-      <div className="mt-1 rounded-xl bg-foreground/[0.04] px-3 py-3 text-center">
-        <p className="text-[11px] leading-relaxed text-muted-foreground/60">
-          This is a demo.{' '}
-          <a
-            href="https://github.com/zvadaadam/box-ide/releases"
-            target="_blank"
-            rel="noopener noreferrer"
-            className="font-medium text-foreground/80 underline underline-offset-2 transition-colors hover:text-foreground"
-          >
-            Download Deus
-          </a>
-          {' '}to close the loop for real.
-        </p>
+      <div className="px-2 pt-1 text-[12px] leading-relaxed text-foreground/60">
+        Want to keep going?{' '}
+        <a
+          href="https://github.com/zvadaadam/box-ide/releases"
+          target="_blank"
+          rel="noopener noreferrer"
+          className="text-foreground/80 underline underline-offset-2 transition-colors hover:text-foreground"
+        >
+          Continue in Deus
+        </a>
       </div>
     )
   }
@@ -325,7 +332,7 @@ function ChangesView({ workspace }: { workspace: Workspace }) {
   return (
     <div className="flex flex-1 flex-col overflow-hidden">
       {/* File header */}
-      <div className="flex items-center gap-2 border-b border-foreground/[0.04] px-4 py-2">
+      <div className="flex items-center gap-2 px-4 py-2">
         <span className="font-mono text-[11px] text-foreground/70">{diff.file}</span>
         <span className="ml-auto text-[10px] text-[var(--status-active)]">+{diff.add}</span>
         <span className="text-[10px] text-[oklch(0.72_0.19_29)]">-{diff.del}</span>
