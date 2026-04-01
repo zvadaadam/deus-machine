@@ -1,9 +1,11 @@
 {
   "cli_version": "0.5.0",
   "checkpoint_id": "9ae729924bd2",
+  "session_id": "63eeb525-d1f3-4e02-8a86-ddb1c7ac5085",
   "strategy": "manual-commit",
+  "created_at": "2026-04-01T12:58:58.588782Z",
   "branch": "zvadaadam/screen-studio-integration",
-  "checkpoints_count": 58,
+  "checkpoints_count": 25,
   "files_touched": [
     "apps/agent-server/agents/deus-tools/agent-browser-client.ts",
     "apps/agent-server/agents/deus-tools/browser.ts",
@@ -31,42 +33,37 @@
     "packages/screen-studio/src/recorder/encoder.ts",
     "packages/screen-studio/src/recorder/index.ts",
     "packages/screen-studio/src/recorder/render-plan.ts",
-    "packages/screen-studio/src/renderer/frame-renderer.ts",
-    "packages/screen-studio/src/renderer/frame-source.ts",
-    "packages/screen-studio/src/renderer/index.ts",
     "packages/screen-studio/src/renderer/video-renderer.ts",
     "packages/screen-studio/src/session/index.ts",
     "packages/screen-studio/src/session/recording-session.ts",
     "packages/screen-studio/src/source/frame-source.ts",
     "packages/screen-studio/src/source/index.ts",
     "packages/screen-studio/test/ffmpeg-recorder.test.ts",
-    "packages/screen-studio/test/frame-source.test.ts",
     "packages/screen-studio/test/mcp-adapter.test.ts",
     "packages/screen-studio/test/mcp-server.test.ts",
     "packages/screen-studio/test/recorder.test.ts",
     "packages/screen-studio/test/recording-session.test.ts",
-    "packages/screen-studio/test/render-plan.test.ts",
     "packages/screen-studio/test/session-manager.test.ts"
   ],
-  "sessions": [
-    {
-      "metadata": "/9a/e729924bd2/0/metadata.json",
-      "transcript": "/9a/e729924bd2/0/full.jsonl",
-      "content_hash": "/9a/e729924bd2/0/content_hash.txt",
-      "prompt": "/9a/e729924bd2/0/prompt.txt"
-    },
-    {
-      "metadata": "/9a/e729924bd2/1/metadata.json",
-      "transcript": "/9a/e729924bd2/1/full.jsonl",
-      "content_hash": "/9a/e729924bd2/1/content_hash.txt",
-      "prompt": "/9a/e729924bd2/1/prompt.txt"
-    }
-  ],
+  "agent": "Claude Code",
+  "turn_id": "cb26c0889565",
   "token_usage": {
-    "input_tokens": 4632,
-    "cache_creation_tokens": 1361689,
-    "cache_read_tokens": 79426210,
-    "output_tokens": 278945,
-    "api_call_count": 552
+    "input_tokens": 3201,
+    "cache_creation_tokens": 552633,
+    "cache_read_tokens": 27900122,
+    "output_tokens": 110346,
+    "api_call_count": 202
+  },
+  "session_metrics": {
+    "turn_count": 25
+  },
+  "initial_attribution": {
+    "calculated_at": "2026-04-01T12:58:57.830696Z",
+    "agent_lines": 1132,
+    "human_added": 718,
+    "human_modified": 716,
+    "human_removed": 0,
+    "total_committed": 2565,
+    "agent_percentage": 44.13255360623782
   }
 }
