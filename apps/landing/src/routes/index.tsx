@@ -20,7 +20,7 @@ function Nav() {
   return (
     <nav className="fixed top-0 inset-x-0 z-50 border-b border-border/50 bg-background/80 backdrop-blur-xl">
       <div className="mx-auto flex h-14 max-w-5xl items-center justify-between px-6">
-        <span className="text-lg font-semibold tracking-tight">Deus Machine</span>
+        <a href="/" className="text-lg font-semibold tracking-tight">Deus Machine</a>
         <div className="flex items-center gap-4">
           <a
             href="https://github.com/zvadaadam/box-ide"
@@ -42,7 +42,7 @@ function Nav() {
 function Hero() {
   return (
     <section className="relative flex min-h-[80vh] flex-col items-center justify-center px-6 pt-14 text-center">
-      <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_center,_var(--tw-gradient-stops))] from-primary/5 via-transparent to-transparent" />
+      <div className="absolute inset-0 bg-radial-[at_center] from-primary/5 via-transparent to-transparent" />
       <div className="relative max-w-3xl">
         <div className="mb-6 inline-flex items-center gap-2 rounded-full border border-border/60 bg-muted/50 px-4 py-1.5 text-sm text-muted-foreground">
           <Sparkles className="size-3.5" />
