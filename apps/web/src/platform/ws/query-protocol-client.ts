@@ -11,7 +11,7 @@
  *   Client responds to ping with pong
  *
  * Relay mode (web-production):
- *   Connects through cloud relay at wss://relay.rundeus.com/api/servers/{id}/connect
+ *   Connects through cloud relay at wss://relay.deusmachine.ai/api/servers/{id}/connect
  *   Sends { type: "authenticate", token } on open for device token auth.
  *   Handles relay control frames: authenticated, auth_failed, server_reconnecting, server_connected.
  *
