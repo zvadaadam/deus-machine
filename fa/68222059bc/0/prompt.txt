@@ -49,3 +49,11 @@ commit deploy all, is it live?
 I think we need to also do just like a deus page, deus machine AI, I have a landing page.
 
 so i guess we wouel ad another app which would be ladnign page? we wnat tanstack start with base ui taileind jsut epxlore  what we can ad tehre
+
+---
+
+do this: shadcn/ui (Radix)Same as your IDE, official TanStack Start support, one-command setupYou already know it well
+
+---
+
+yes
