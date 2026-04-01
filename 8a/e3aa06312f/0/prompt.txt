@@ -2237,3 +2237,7 @@ Post-processing failed even with 320 frames (test 21), suggesting a separate ff
 ----
 
 /Users/zvada/Developer/agent/box-ide/.conductor/monrovia-v1/.context/attachments/pasted_text_2026-04-01_21-07-02.txt
+
+---
+
+I mean, we definitely did the start and maybe you know what, you do the bundles and starts, so you can be sure, because we've done it and just not there, you will have access to the logs and you can do it automatically. We need to find a feedback loop so you can test stuff by yourself, maybe find a way to separately test the flow, not needing us to always start to think. Maybe you find some mock data or something so you can test it out and feel that like everything is actually going to work, so create tests for the recording to make sure it works.
