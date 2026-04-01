@@ -1,0 +1,23 @@
+{
+  "cli_version": "0.5.0",
+  "checkpoint_id": "933acf964733",
+  "strategy": "manual-commit",
+  "branch": "zvadaadam/npm-cli-installer",
+  "checkpoints_count": 2,
+  "files_touched": null,
+  "sessions": [
+    {
+      "metadata": "/93/3acf964733/0/metadata.json",
+      "transcript": "/93/3acf964733/0/full.jsonl",
+      "content_hash": "/93/3acf964733/0/content_hash.txt",
+      "prompt": "/93/3acf964733/0/prompt.txt"
+    }
+  ],
+  "token_usage": {
+    "input_tokens": 3842,
+    "cache_creation_tokens": 404032,
+    "cache_read_tokens": 25276183,
+    "output_tokens": 136178,
+    "api_call_count": 241
+  }
+}
