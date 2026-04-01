@@ -87,19 +87,46 @@ export async function start(options: StartOptions): Promise<void> {
   const children: ProcessInfo[] = [];
   let status: ReturnType<typeof statusLine> | null = null;
 
+  let shuttingDown = false;
   function shutdown() {
+    if (shuttingDown) return; // Prevent double-shutdown from rapid Ctrl+C
+    shuttingDown = true;
+
     if (status) status.stop();
-    clearServerInfo();
     blank();
 
-    const msg = gradientText("Thanks for using Deus!", [167, 139, 250], [34, 211, 238]);
+    const msg = gradientText("Shutting down...", [167, 139, 250], [34, 211, 238]);
     console.log(`  ${msg}`);
-    blank();
 
+    // Send SIGTERM and wait for children to exit (up to 5s)
+    const exitPromises: Promise<void>[] = [];
     for (const child of children) {
-      if (!child.process.killed) child.process.kill("SIGTERM");
+      if (!child.process.killed) {
+        exitPromises.push(
+          new Promise<void>((resolve) => {
+            child.process.on("exit", resolve);
+            child.process.kill("SIGTERM");
+          })
+        );
+      }
     }
-    process.exit(0);
+
+    const drainTimeout = setTimeout(() => {
+      // Force kill after 5s if children haven't exited
+      for (const child of children) {
+        if (!child.process.killed) child.process.kill("SIGKILL");
+      }
+    }, 5000);
+
+    Promise.all(exitPromises).finally(() => {
+      clearTimeout(drainTimeout);
+      clearServerInfo();
+      blank();
+      const bye = gradientText("Thanks for using Deus!", [167, 139, 250], [34, 211, 238]);
+      console.log(`  ${bye}`);
+      blank();
+      process.exit(0);
+    });
   }
   process.on("SIGINT", shutdown);
   process.on("SIGTERM", shutdown);
@@ -319,19 +346,20 @@ async function startProcess(opts: {
       }
     }, timeoutMs);
 
-    child.stdout?.on("data", (data: Buffer) => {
+    function onStdout(data: Buffer) {
       buffer += data.toString();
       const match = buffer.match(waitFor);
       if (match && !resolved) {
         resolved = true;
         clearTimeout(timeout);
+        // Stop listening and release the buffer — process may run for days
+        child.stdout?.removeListener("data", onStdout);
+        buffer = "";
         resolve(match[1]);
       }
-    });
+    }
 
-    child.stderr?.on("data", () => {
-      // Suppress stderr in normal mode
-    });
+    child.stdout?.on("data", onStdout);
 
     child.on("exit", () => {
       if (!resolved) {
