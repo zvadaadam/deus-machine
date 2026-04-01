@@ -2344,3 +2344,7 @@ also /Users/zvada/Developer/agent/box-ide/.conductor/monrovia-v1/.context/attach
 ---
 
 /Users/zvada/Developer/agent/box-ide/.conductor/monrovia-v1/.context/attachments/Screenshot 2026-04-02 at 12.17.23 AM.png it again did this fulls crenen things that the broswrr icon coneted into the locahost:1420
+
+---
+
+stil the same problem i want yu tot rea dteh docs it fhtinkw e aded this ifnro tehre why this fulslcren rpibelm whappens weh teh browser navoaget is called u know becasue there is this prbelm where if th browseer rnto working or simehtign the brwoser conect to runing lcolahsot of the app
