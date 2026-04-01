@@ -1,0 +1,33 @@
+{
+  "cli_version": "0.5.0",
+  "checkpoint_id": "f2c2e8257dd2",
+  "session_id": "21a10948-8bfe-4c72-95aa-4d7e9c207780",
+  "strategy": "manual-commit",
+  "created_at": "2026-04-01T18:09:40.096056Z",
+  "branch": "zvadaadam/domain-deusmachine",
+  "checkpoints_count": 2,
+  "files_touched": [
+    "apps/landing/vite.config.ts"
+  ],
+  "agent": "Claude Code",
+  "turn_id": "a97dbbd8334e",
+  "token_usage": {
+    "input_tokens": 353,
+    "cache_creation_tokens": 529599,
+    "cache_read_tokens": 38183628,
+    "output_tokens": 127137,
+    "api_call_count": 288
+  },
+  "session_metrics": {
+    "turn_count": 23
+  },
+  "initial_attribution": {
+    "calculated_at": "2026-04-01T18:09:39.179858Z",
+    "agent_lines": 0,
+    "human_added": 2,
+    "human_modified": 0,
+    "human_removed": 0,
+    "total_committed": 2,
+    "agent_percentage": 0
+  }
+}
