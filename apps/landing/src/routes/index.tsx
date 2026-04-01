@@ -237,9 +237,8 @@ const FEATURES = [
 // --- Interactive Demo ---
 
 interface Message {
-  role: 'user' | 'assistant' | 'tool'
+  role: 'user' | 'assistant' | 'tool' | 'cta'
   content: string
-  typing?: boolean
 }
 
 interface Workspace {
@@ -363,12 +362,16 @@ function InteractiveDemo() {
 
     setIsTyping(true)
 
-    // Simulate typing delay
+    // Simulate typing delay, then reply + CTA
     setTimeout(() => {
       const reply = getAgentReply(text)
       setExtraMessages((prev) => ({
         ...prev,
-        [activeWs]: [...(prev[activeWs] ?? []), { role: 'assistant', content: reply }],
+        [activeWs]: [
+          ...(prev[activeWs] ?? []),
+          { role: 'assistant', content: reply },
+          { role: 'cta', content: '' },
+        ],
       }))
       setIsTyping(false)
     }, 800 + Math.random() * 600)
@@ -466,38 +469,45 @@ function InteractiveDemo() {
           {/* Chat view */}
           {view === 'chat' && (
             <div className="flex flex-1 flex-col overflow-hidden px-3 pb-2.5">
-              <div className="flex-1 space-y-2.5 overflow-y-auto pr-1">
+              <div className="flex-1 space-y-1 overflow-y-auto pr-1">
                 {allMessages.map((msg, i) => (
                   <ChatMessage key={i} message={msg} />
                 ))}
                 {isTyping && (
-                  <div className="flex items-center gap-1.5">
-                    <div className="size-3.5 rounded-sm bg-foreground/[0.08]" />
-                    <span className="text-[10px] text-muted-foreground/40">Claude is typing</span>
-                    <span className="animate-pulse text-[10px] text-muted-foreground/30">...</span>
+                  <div className="flex items-center gap-2 px-2 py-1">
+                    <div className="size-3 animate-spin rounded-full border border-muted-foreground/20 border-t-muted-foreground/50" />
+                    <span className="font-mono text-[10px] tabular-nums text-muted-foreground/40">
+                      thinking...
+                    </span>
                   </div>
                 )}
                 <div ref={messagesEndRef} />
               </div>
-              {/* Input */}
-              <div className="mt-2 flex items-center gap-2 rounded-lg bg-foreground/[0.03] px-3 py-2 ring-1 ring-inset ring-foreground/[0.05]">
-                <input
-                  ref={inputRef}
-                  type="text"
-                  value={input}
-                  onChange={(e) => setInput(e.target.value)}
-                  onKeyDown={(e) => e.key === 'Enter' && handleSend()}
-                  placeholder="Message agent..."
-                  className="flex-1 bg-transparent text-[12px] text-foreground/80 placeholder:text-muted-foreground/25 focus:outline-none"
-                />
-                <button
-                  type="button"
-                  onClick={handleSend}
-                  disabled={!input.trim() || isTyping}
-                  className="text-muted-foreground/30 transition-colors duration-100 hover:text-foreground/60 disabled:opacity-30"
-                >
-                  <Send className="size-3.5" />
-                </button>
+              {/* Input — matches real app: rounded-2xl, shadow, no ring */}
+              <div className="mt-2 rounded-2xl bg-accent shadow-sm">
+                <div className="flex items-center gap-2 px-3 py-2.5">
+                  <input
+                    ref={inputRef}
+                    type="text"
+                    value={input}
+                    onChange={(e) => setInput(e.target.value)}
+                    onKeyDown={(e) => e.key === 'Enter' && handleSend()}
+                    placeholder="Message agent..."
+                    className="flex-1 bg-transparent text-[12px] text-foreground/80 placeholder:text-muted-foreground/30 focus:outline-none"
+                  />
+                  <button
+                    type="button"
+                    onClick={handleSend}
+                    disabled={!input.trim() || isTyping}
+                    className={`flex size-5 items-center justify-center rounded-full transition-colors duration-100 ${
+                      input.trim() && !isTyping
+                        ? 'bg-foreground text-background'
+                        : 'bg-foreground/10 text-muted-foreground/30'
+                    }`}
+                  >
+                    <Send className="size-2.5" />
+                  </button>
+                </div>
               </div>
             </div>
           )}
@@ -527,8 +537,8 @@ function InteractiveDemo() {
 function ChatMessage({ message }: { message: Message }) {
   if (message.role === 'user') {
     return (
-      <div className="flex justify-end">
-        <div className="max-w-[75%] rounded-xl rounded-tr-sm bg-foreground/[0.07] px-3 py-2 text-[12px] text-foreground/80">
+      <div className="flex justify-end pt-4">
+        <div className="max-w-[85%] rounded-xl bg-accent px-3 py-2 text-[12px] text-foreground">
           {message.content}
         </div>
       </div>
@@ -536,21 +546,32 @@ function ChatMessage({ message }: { message: Message }) {
   }
   if (message.role === 'tool') {
     return (
-      <div className="flex items-center gap-1.5 text-[10px] text-muted-foreground/40">
-        <div className="size-3 rounded-sm ring-1 ring-inset ring-foreground/[0.08]" />
-        <span>{message.content}</span>
+      <div className="flex items-center gap-2 px-2 py-1 text-[12px] opacity-70">
+        <Terminal className="size-3 text-amber-500/70" />
+        <span className="font-medium text-foreground/60">{message.content}</span>
       </div>
     )
   }
+  if (message.role === 'cta') {
+    return (
+      <div className="mt-1 rounded-xl bg-foreground/[0.04] px-3 py-3 text-center">
+        <p className="text-[11px] leading-relaxed text-muted-foreground/60">
+          This is a demo.{' '}
+          <a
+            href="https://github.com/zvadaadam/box-ide/releases"
+            className="font-medium text-foreground/80 underline underline-offset-2 transition-colors hover:text-foreground"
+          >
+            Download Deus
+          </a>
+          {' '}to close the loop for real.
+        </p>
+      </div>
+    )
+  }
+  // Assistant — no bubble, just text (matches real app)
   return (
-    <div className="max-w-[85%] space-y-1.5">
-      <div className="flex items-center gap-1.5">
-        <div className="size-3.5 rounded-sm bg-foreground/[0.08]" />
-        <span className="text-[10px] font-medium text-muted-foreground/40">Claude</span>
-      </div>
-      <div className="rounded-xl rounded-tl-sm bg-foreground/[0.04] px-3 py-2 text-[12px] leading-relaxed text-foreground/70">
-        {message.content}
-      </div>
+    <div className="max-w-full px-2 py-1.5 text-[12px] leading-relaxed text-foreground/80">
+      {message.content}
     </div>
   )
 }
