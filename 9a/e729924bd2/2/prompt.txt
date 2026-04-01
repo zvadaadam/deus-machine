@@ -1,0 +1,59 @@
+<system_instruction>
+You are working inside OpenDevs, a Mac app that lets the user run many coding agents in parallel.
+Your work should take place in the /Users/zvada/Developer/agent/box-ide/.conductor/monrovia-v1 directory (unless otherwise directed), which has been set up for you to work in.
+Each workspace has a .context directory (gitignored) where you can save files to collaborate with other agents.
+DO NOT EVER read or write files at /Users/zvada/Developer/agent/box-ide.
+The target branch for this workspace is main. Use this for actions like creating new PRs, bisecting, etc., unless you're told otherwise.
+
+By default, the user will only see the last message that you send before stopping. Include all essential information in the last message. The intermediate messages will be collapsed and accessible by the user but not displayed by default.
+
+If the user asks you to work on several unrelated tasks, you can suggest they start new workspaces.
+Sometimes the user might send you a message they meant to send in a different workspace or a different chat. If something doesn't make sense in the context of your work, just ask. 
+If the user asks for help with OpenDevs, you can ask them to go to "Help -> Send Feedback" to get in touch with our team.
+</system_instruction>
+
+Can you explore this product? Maybe you can get cloned somewhere and explore it in depth. They are using this recording RR web. Would it be possible to reuse? We don't want to build stuff from scratch, so would it be possible to reuse something what they have for the recording? I don't know if it fits in this use case of Agent Browser and the streaming, but like, might be good to explore.
+
+
+https://github.com/millionco/expect
+
+## How Recording Works
+The recording system has three layers: **rrweb capture in the browser**, **event collection in Node.js**, and **replay/viewing**.
+### 1. rrweb Injection
+A runtime script (`packages/browser/src/runtime/index.ts`) is compiled into an IIFE at build time and injected into every page via Playwright's `context.addInitScript()`. This exposes `globalThis.__EXPECT_RUNTIME__` with functions like `startRecording()` and `getEvents()`.
+When recording starts, rrweb captures DOM mutations, mouse movements, and input changes. Events accumulate in an in-browser buffer with checkpoints every 10 seconds.
+### 2. Event Collection (Node.js side)
+The MCP session (`packages/browser/src/mcp/mcp-session.ts`) polls the browser every **250ms**, calling `evaluateRuntime(page, "getEvents")` which destructively drains the buffer. Events accumulate on the Node.js side.
+Two modes:
+- **Live view** — Events are broadcast via an SSE server (`/packages/browser/src/mcp/live-view-server.ts`) so a web viewer can show the test in real-time
+- **Offline** — Events are just accumulated in memory
+### 3. Saving on Session Close
+When `close()` is called on the MCP session, it:
+1. Does a final `collectAllEvents()` drain
+2. Writes **4 files** to `.expect/replays/{planId}.*`:
+   - `.ndjson` — one rrweb event per line (newline-delimited JSON)
+   - `.html` — self-contained viewer with embedded rrweb-player
+   - `.ndjson.js` — JS wrapper for single-file deployments
+   - Playwright's native `.webm` video
+3. Copies everything to `/tmp/expect-replays/` as well
+### 4. Replay Viewer
+The generated HTML (`packages/browser/src/replay-viewer.ts`) supports two modes:
+- **SSE/live mode** — Fetches `/latest.json` for initial events, then subscribes to `/events` SSE stream. Uses `rrweb-player` with `liveMode: true` and dynamically adds events
+- **NDJSON mode** — Loads the `.ndjson` file, parses line-by-line, and renders with standard playback controls
+### 5. The `--replay-host` Proxy
+The CLI spins up a local Hono HTTP server (`apps/cli/src/utils/replay-proxy-server.ts`) that reverse-proxies to the remote host (default: `expect.dev`). It caches events/steps locally for offline fallback and intercepts `/latest.json` and `/steps` endpoints.
+### 6. Bonus: Performance Metrics
+The runtime also sets up `PerformanceObserver`s to capture FCP, LCP, CLS, and INP — so the test report can include web vitals alongside functional results.
+### Data Flow
+```
+Browser (rrweb)
+  → globalThis.__EXPECT_RUNTIME__.getEvents()  [every 250ms]
+  → Node.js MCP session accumulates events
+  → Live: SSE broadcast to viewer
+  → Close: write .ndjson + .html + .ndjson.js + .webm
+  → CLI shows replay URL or file paths in results
+```
+
+---
+
+I want to know if it's a good idea to adopt this and use and if it's going to elevate some experience and make it better and yeah. Which parts we should use, which people should not think about it by understanding our code base and theirs.
