@@ -375,6 +375,9 @@ export class SessionManager {
           );
         } catch (err) {
           console.error(`[session-manager] Video render failed: ${err}`);
+          if (err instanceof Error && err.stack) {
+            console.error(`[session-manager] Stack: ${err.stack}`);
+          }
         }
 
         // Clean up raw capture files
