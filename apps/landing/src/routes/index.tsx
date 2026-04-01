@@ -81,7 +81,7 @@ function LandingPage() {
                 that should be talking to each other. Deus closes the loop. Plan
                 the work, approve the plan, walk away. Come back to software.
               </p>
-              <div className="mt-10 overflow-hidden rounded-xl ring-1 ring-inset ring-foreground/[0.07] shadow-[0_2px_4px_rgba(0,0,0,0.04),0_8px_24px_rgba(0,0,0,0.08),0_24px_48px_rgba(0,0,0,0.06)]">
+              <div className="mt-10 rounded-xl ring-1 ring-inset ring-foreground/[0.07] shadow-[0_2px_4px_rgba(0,0,0,0.04),0_8px_24px_rgba(0,0,0,0.08),0_24px_48px_rgba(0,0,0,0.06)]">
                 <InteractiveDemo />
               </div>
               <p className="mt-3 text-center text-[11px] text-muted-foreground/40">
