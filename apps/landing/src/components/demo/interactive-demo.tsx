@@ -15,8 +15,12 @@ export function InteractiveDemo() {
   const [extraMessages, setExtraMessages] = useState<Record<string, Message[]>>({})
   const [input, setInput] = useState('')
   const [isTyping, setIsTyping] = useState(false)
+  const [mounted, setMounted] = useState(false)
   const inputRef = useRef<HTMLInputElement>(null)
   const messagesEndRef = useRef<HTMLDivElement>(null)
+
+  // Ensure hydration completed
+  useEffect(() => setMounted(true), [])
 
   const workspace = WORKSPACES.find((w) => w.id === activeWs)!
   const allMessages = [...workspace.messages, ...(extraMessages[activeWs] ?? [])]
@@ -79,8 +83,8 @@ export function InteractiveDemo() {
                 <button
                   key={ws.id}
                   type="button"
-                  onClick={() => { setActiveWs(ws.id); setView('chat') }}
-                  className={`flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-[12px] transition-colors duration-100 ${
+                  onClick={(e) => { e.preventDefault(); e.stopPropagation(); setActiveWs(ws.id); setView('chat') }}
+                  className={`flex w-full cursor-pointer items-center gap-2 rounded-md px-2 py-1.5 text-left text-[12px] transition-colors duration-100 ${
                     ws.id === activeWs
                       ? 'bg-foreground/[0.06] text-foreground/80'
                       : 'text-muted-foreground/50 hover:bg-foreground/[0.03] hover:text-muted-foreground/70'
@@ -151,9 +155,9 @@ export function InteractiveDemo() {
                   />
                   <button
                     type="button"
-                    onClick={handleSend}
+                    onClick={(e) => { e.preventDefault(); handleSend() }}
                     disabled={!input.trim() || isTyping}
-                    className={`flex size-5 items-center justify-center rounded-full transition-colors duration-100 ${
+                    className={`flex size-5 cursor-pointer items-center justify-center rounded-full transition-colors duration-100 ${
                       input.trim() && !isTyping
                         ? 'bg-foreground text-background'
                         : 'bg-foreground/10 text-muted-foreground/30'
@@ -194,8 +198,8 @@ function ViewTab({ active, onClick, children }: { active: boolean; onClick: () =
   return (
     <button
       type="button"
-      onClick={onClick}
-      className={`flex items-center gap-1 rounded-md px-2 py-1 text-[11px] transition-colors duration-100 ${
+      onClick={(e) => { e.preventDefault(); e.stopPropagation(); onClick() }}
+      className={`flex cursor-pointer items-center gap-1 rounded-md px-2 py-1 text-[11px] transition-colors duration-100 ${
         active ? 'bg-foreground/[0.06] text-foreground/70' : 'text-muted-foreground/35 hover:text-muted-foreground/50'
       }`}
     >
@@ -240,11 +244,11 @@ function ChatMessage({ message }: { message: Message }) {
       </div>
     )
   }
-  // Assistant — with Claude label, no bubble
+  // Assistant — with Claude icon + label, no bubble
   return (
     <div className="space-y-1 py-1">
       <div className="flex items-center gap-1.5 px-2">
-        <div className="size-3.5 rounded-sm bg-foreground/[0.08]" />
+        <img src="/claude-code.svg" alt="" className="size-3.5 rounded-sm" />
         <span className="text-[10px] font-medium text-muted-foreground/40">Claude</span>
       </div>
       <div className="px-2 text-[12px] leading-relaxed text-foreground/80">
@@ -256,7 +260,6 @@ function ChatMessage({ message }: { message: Message }) {
 
 function BrowserPanel({ workspace }: { workspace: Workspace }) {
   const url = workspace.browserUrl ?? 'localhost:1420'
-  const isExternal = url.includes('3001')
 
   return (
     <div className="flex flex-1 flex-col overflow-hidden px-3 pb-2.5">
@@ -273,21 +276,11 @@ function BrowserPanel({ workspace }: { workspace: Workspace }) {
         </div>
         <RefreshCw className="size-3 text-muted-foreground/25" />
       </div>
-      {/* Browser content — iframe for deusmachine.ai, wireframe for others */}
+      {/* Browser content — wireframe mock */}
       <div className="flex-1 overflow-hidden rounded-b-lg ring-1 ring-inset ring-foreground/[0.06]">
-        {!isExternal ? (
-          <iframe
-            src="https://deusmachine.ai"
-            title="Browser preview"
-            className="h-full w-full border-0"
-            sandbox="allow-scripts allow-same-origin"
-            loading="lazy"
-          />
-        ) : (
-          <div className="flex h-full items-center justify-center bg-foreground/[0.02]">
-            <BrowserWireframe />
-          </div>
-        )}
+        <div className="flex h-full items-center justify-center bg-foreground/[0.02]">
+          <BrowserWireframe />
+        </div>
       </div>
       {/* Agent watching */}
       <div className="flex items-center justify-center gap-1.5 py-1.5">
