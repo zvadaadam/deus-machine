@@ -130,6 +130,13 @@ function LandingPage() {
                   </li>
                 ))}
               </ol>
+              <a
+                href="https://app.deusmachine.ai"
+                className="mt-8 inline-flex items-center gap-1.5 text-sm text-foreground/70 transition-colors duration-150 hover:text-foreground"
+              >
+                Open Deus Machine
+                <ArrowRight className="size-3.5" />
+              </a>
             </section>
 
             <section id="what-it-gives" className="mb-20">
