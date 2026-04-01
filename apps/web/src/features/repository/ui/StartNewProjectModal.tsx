@@ -57,11 +57,10 @@ export function StartNewProjectModal({
   useEffect(() => {
     if (!show) return;
     (async () => {
-      try {
-        const home = await native.dialog.getHomeDir();
+      const home = await native.dialog.getHomeDir();
+      // getHomeDir returns "~" in web mode (no IPC) — don't use tilde as a path
+      if (home && home !== "~") {
         setDefaultBasePath(isMobile ? `${home}/.deus/repos` : `${home}/Developer`);
-      } catch {
-        setDefaultBasePath(isMobile ? "~/.deus/repos" : "~/Developer");
       }
       if (isMobile) setBasePath("");
     })();
@@ -292,7 +291,7 @@ export function StartNewProjectModal({
           <Button variant="outline" onClick={handleClose}>
             Cancel
           </Button>
-          <Button onClick={handleCreate} disabled={creating || !projectName.trim()}>
+          <Button onClick={handleCreate} disabled={creating || !fullPath}>
             {creating ? (
               <>
                 <Loader2 className="h-4 w-4 animate-spin" />
