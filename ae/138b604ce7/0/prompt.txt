@@ -2167,3 +2167,31 @@ also this: Test 20: FAILED — empty outputPath despite 18 frames received (8 d
 18 frames got through the stream but still not enough for a usable video. For comparison, test 17 had 29 frames and succeeded (4.2MB). Seems like there's a minimum frame threshold — 18 isn't enough, 29 is.
 TestFramesDroppedResult1729332SUCCESS (4.2MB)1810FAILED1910FAILED20188FAILED
 The stream is delivering more frames than tests 18-19 but still not crossing whatever threshold produces a valid output. The frame count is trending upward though (1 → 1 → 18).
+
+---
+
+btwL try again
+9 messages•7 tool calls
+Test 20: FAILED — empty outputPath despite 18 frames received (8 dropped).
+18 frames got through the stream but still not enough for a usable video. For comparison, test 17 had 29 frames and succeeded (4.2MB). Seems like there's a minimum frame threshold — 18 isn't enough, 29 is.
+TestFramesDroppedResult1729332SUCCESS (4.2MB)1810FAILED1910FAILED20188FAILED
+The stream is delivering more frames than tests 18-19 but still not crossing whatever threshold produces a valid output. The frame count is trending upward though (1 → 1 → 18).
+again
+Collapse
+Start Recordingrec_1296d4
+Browser Navigateexpo.dev
+Browser Navigateexpo.dev/pricing
+Browser Clicke7
+Browser Scrolldown 500px
+All actions complete. Checking status and stopping.
+mcp__deus__recording_statusrec_1296d4
+320 frames, only 3 dropped! Best result in a while. Stopping.
+Screen Recordingevents-only, no video
+Test 21: FAILED — empty outputPath despite 320 frames received and only 3 dropped.
+This is very strange. 320 frames is more than enough (test 11 succeeded with 472, test 17 with 29). The stream delivered plenty of data but the post-processing still produced nothing.
+TestFramesDroppedResult1729332SUCCESS (4.2MB)1810FAILED1910FAILED20188FAILED213203FAILED
+The problem has shifted — it's no longer about frame delivery (320 frames is great). Something in the ffmpeg post-processing pipeline is failing to produce output even with plenty of input frames. Could be a resolution mismatch, filter chain issue, or 
+
+-----
+
+also logs: /Users/zvada/Developer/agent/box-ide/.conductor/monrovia-v1/.context/attachments/pasted_text_2026-04-01_20-33-54.txt
