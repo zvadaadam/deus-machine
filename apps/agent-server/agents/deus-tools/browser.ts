@@ -264,7 +264,8 @@ Returns a page snapshot after clicking and the clicked element's bounding box (x
         doubleClick: z.boolean().optional().describe("Whether to perform a double click"),
       },
       withBrowserTool(async (args) => {
-        const hasRef = args.ref !== undefined;
+        const ref = args.ref?.trim() || undefined;
+        const hasRef = ref !== undefined;
         const hasCoords = args.x !== undefined && args.y !== undefined;
         if (hasRef && hasCoords) {
           return textResult("Click requires either 'ref' or 'x'/'y' coordinates, not both.");
@@ -276,11 +277,9 @@ Returns a page snapshot after clicking and the clicked element's bounding box (x
         }
 
         let response;
-        if (args.ref) {
-          const clickArgs = args.doubleClick
-            ? ["click", "--double", args.ref]
-            : ["click", args.ref];
-          response = await execWithSnapshot(sessionId, clickArgs, undefined, args.ref);
+        if (ref) {
+          const clickArgs = args.doubleClick ? ["click", "--double", ref] : ["click", ref];
+          response = await execWithSnapshot(sessionId, clickArgs, undefined, ref);
         } else {
           const cmds: string[][] = [
             ["mouse", "move", String(args.x), String(args.y)],
@@ -305,7 +304,7 @@ Returns a page snapshot after clicking and the clicked element's bounding box (x
           return textResult(`Click failed: ${response.error}`);
         }
 
-        const target = args.ref ?? `(${args.x}, ${args.y})`;
+        const target = ref ?? `(${args.x}, ${args.y})`;
 
         emitAction({
           toolName: "BrowserClick",
@@ -874,7 +873,7 @@ Returns a fresh snapshot after scrolling.`,
           ? ["scroll", "--to", args.ref]
           : ["scroll", args.direction ?? "down", String(args.amount ?? 600)];
 
-        const response = await execWithSnapshot(sessionId, scrollArgs);
+        const response = await execWithSnapshot(sessionId, scrollArgs, undefined, args.ref);
 
         if (response.error) {
           return textResult(`Scroll failed: ${response.error}`);
@@ -884,10 +883,11 @@ Returns a fresh snapshot after scrolling.`,
           ? `Scrolled element into view: ${args.ref}`
           : `Scrolled ${args.direction ?? "down"} by ${args.amount ?? 600}px`;
 
-        emitAction({
-          toolName: "BrowserScroll",
-          scrollDirection: args.direction ?? "down",
-        });
+        emitAction(
+          args.ref
+            ? { toolName: "BrowserScroll", elementBox: response.elementBox }
+            : { toolName: "BrowserScroll", scrollDirection: args.direction ?? "down" }
+        );
 
         return textResult(
           formatSnapshotResponse("scroll", response.snapshot, response.url, response.title, [
