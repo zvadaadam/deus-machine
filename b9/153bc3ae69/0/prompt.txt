@@ -322,3 +322,396 @@ The user has attached these files. Read them before proceeding.
 
 
 Fix the failing CI actions. I've attached the failure logs.
+
+---
+
+<system-instruction>
+The user has added 4 comments to the diff for this workspace. Please review and address these comments as part of your response. When addressing comments on the "original" side or on specific commits, read the file from that version (not the current version). Below are the comments, including metadata about what git state they were left on:
+
+Comment #1:
+
+File: 
+Line: undefined
+User comment: "<!-- This is an auto-generated comment: summarize by coderabbit.ai -->
+<!-- walkthrough_start -->
+
+<details>
+<summary>📝 Walkthrough</summary>
+
+## Walkthrough
+
+This PR introduces a complete "start new project" feature enabling users to initialize new git repositories with optional GitHub template support. It adds backend validation schemas, new API endpoints (`POST /repos/init` and `GET /git/user`), command handlers for project initialization, a modal UI, integrated progress streaming via WebSocket events, and refactored React hooks for orchestrating the workflow across frontend and backend.
+
+## Changes
+
+|Cohort / File(s)|Summary|
+|---|---|
+|**Backend Validation & Schemas** <br> `apps/backend/src/lib/schemas.ts`|Added `InitProjectBody` Zod schema with validation for `projectName` (non-empty, alphanumeric+punctuation), `targetPath`, and optional `template` object supporting `type` ("empty"/"github") and optional HTTPS `url`.|
+|**Backend Git & Repository Endpoints** <br> `apps/backend/src/routes/repos.ts`|Added `GET /git/user` endpoint to fetch git identity and GitHub username; added `POST /repos/init` endpoint orchestrating project initialization including optional template cloning, git setup, initial commit, and GitHub repository creation with progress broadcasting via `git-init-progress` WebSocket events.|
+|**Backend Command Handling** <br> `apps/backend/src/services/agent/commands.ts`|Extended `CommandResult` interface with index signature to support arbitrary return fields; added `git:init` command handler that delegates to `POST /repos/init` and returns `githubUrl` in the response.|
+|**Backend Middleware & Routes** <br> `apps/backend/src/routes/workspaces.ts`, `apps/backend/src/middleware/workspace-loader.ts`|Minor code formatting refactor in `worktreeBase` resolver; updated `computeWorkspacePath` validation documentation (behavior unchanged).|
+|**Frontend Modal Component** <br> `apps/web/src/features/repository/ui/StartNewProjectModal.tsx`|New modal component managing project creation workflow including `projectName` and destination path inputs, template selection, progress line streaming from `git-init-progress` events, error handling, and GitHub URL link generation.|
+|**Frontend Hooks: Repository Actions** <br> `apps/web/src/app/layouts/hooks/useRepoActions.ts`, `apps/web/src/app/layouts/hooks/useCloneRepo.ts`, `apps/web/src/app/layouts/hooks/useStartNewProject.ts`|Refactored `useRepoActions` into thin coordinator; extracted clone logic into new `useCloneRepo` hook with generation counter for staleness guarding; added new `useStartNewProject` hook managing project initialization phases (validation → git init → workspace creation) with optional template and GitHub integration.|
+|**Frontend Layout Components** <br> `apps/web/src/app/layouts/MainLayout.tsx`, `apps/web/src/app/layouts/MainContent.tsx`|Added `StartNewProjectModal` rendering and modal-open gating; added `start-new-project` command-palette action override; extended layout props to pass `onStartNewProject` callback through component hierarchy.|
+|**Frontend UI Components** <br> `apps/web/src/features/repository/ui/HomeView.tsx`, `apps/web/src/features/sidebar/ui/AppSidebar.tsx`, `apps/web/src/features/sidebar/ui/SidebarFooter.tsx`|Updated `HomeView` to accept `onStartNewProject` callback and rewired action cards/footer links; extended `AppSidebar` and `SidebarFooter` to accept and forward `onStartNewProject` handler with new popover action button.|
+|**Frontend Configuration & Types** <br> `apps/web/src/features/repository/lib/templates.ts`, `apps/web/src/features/repository/ui/index.ts`, `apps/web/src/features/sidebar/model/types.ts`, `apps/web/src/features/command-palette/commands.ts`|Added `ProjectTemplate` interface and initial `PROJECT_TEMPLATES` list with "Empty Project" template; exported `StartNewProjectModal` from repository UI module; added optional `onStartNewProject` props to `AppSidebarProps` and `SidebarFooterProps`; added `start-new-project` command to command palette.|
+|**WebSocket Protocol & Events** <br> `apps/web/src/platform/ws/query-protocol-client.ts`, `shared/events.ts`|Introduced `CommandResult` type with open-ended fields to support arbitrary server response data; updated WebSocket ACK handling to spread all returned fields (excluding metadata); added `"git:init"` to `COMMAND_NAMES` and `"git-init-progress"` to `PROTOCOL_EVENTS`.|
+|**Documentation & Tests** <br> `.claude/agent-memory/deep-reviewer/MEMORY.md`, `apps/backend/test/unit/shared/events.test.ts`|Added review entry and "Recurring Patterns" documentation; updated unit test assertions for new command (`git:init`) and protocol event (`git-init-progress`).|
+
+## Sequence Diagram
+
+```mermaid
+sequenceDiagram
+    actor User
+    participant Frontend as Frontend<br/>(useStartNewProject)
+    participant WS as WebSocket
+    participant Backend as Backend<br/>(/repos/init)
+    participant Git as Git/GitHub
+
+    User->>Frontend: Click "Start New Project"
+    activate Frontend
+    Frontend->>Frontend: Validate projectName
+    Frontend->>WS: Connect if needed
+    
+    rect rgba(100, 149, 237, 0.5)
+    note over Frontend,Git: Project Initialization
+    Frontend->>WS: Send git:init command<br/>(projectName, targetPath, template)
+    WS->>Backend: Route to POST /repos/init
+    activate Backend
+    
+    alt Template Type = "github"
+        Backend->>Git: git clone <template.url>
+        Git-->>Backend: Clone complete
+        Backend->>Git: Strip .git, git init
+    else Empty Template
+        Backend->>Git: mkdir, git init
+    end
+    
+    Backend->>Git: Create initial commit
+    Git-->>Backend: Commit created
+    
+    Backend->>Git: gh repo create + git push
+    Git-->>Backend: GitHub repo created (or skipped)
+    Backend-->>WS: Send git-init-progress events
+    end
+    
+    WS->>Frontend: Stream progress lines
+    Frontend->>Frontend: Update status/progress UI
+    
+    Backend->>Backend: Return { githubUrl? }
+    WS-->>Frontend: Command acknowledged with result
+    deactivate Backend
+    
+    Frontend->>Frontend: addRepoOrUseExisting(targetPath)
+    Frontend->>Frontend: createWorkspaceAndSelect(repoId)
+    Frontend->>Frontend: Show success toast with GitHub link
+    deactivate Frontend
+    User-->>Frontend: View new project in workspace
+```
+
+## Estimated code review effort
+
+🎯 4 (Complex) | ⏱️ ~50 minutes
+
+## Poem
+
+> 🐰 *Hops excitedly with a carrot*
+> A new project sprouting from the ground,
+> With templates, git, and GitHub bound,
+> Progress whispers through the streams,
+> Building workspaces and developer dreams! 🌱✨
+
+</details>
+
+<!-- walkthrough_end -->
+
+
+<!-- tips_start -->
+
+---
+
+<sub>Comment `@coderabbitai help` to get the list of available commands and usage tips.</sub>
+
+<!-- tips_end -->
+
+<!-- internal state start -->
+
+
+<!-- REDACTED/REDACTED/REDACTED/Kr+SnetEKOQAAGREqK2n90/REDACTED/REDACTED/REDACTED/REDACTED/REDACTED/MgpQtCtSwuYPEjQLIlVYLQvQyAIpe/REDACTED/REDACTED/REDACTED/REDACTED/REDACTED/REDACTED/REDACTED/REDACTED/REDACTED/REDACTED/REDACTED/REDACTED/REDACTED/VhvSOB8B/REDACTED/HQobboPwME2g9fIAAF8+brYux4Hnb/REDACTED/REDACTED/REDACTED/BDw0NwHsKzC/0WA0CUFOEWBD30OwCIC/0/HEitn0ltSdG0MqEkNRX2kyH2DCI/REDACTED/REDACTED/REDACTED/CvGDPwXUEIRVRRynGOQW3vXJQjj1HjCdG/REDACTED/REDACTED/y9zwl1VpBUApIlT9K1zU2dniADi7DzQLWiE/REDACTED/K1GlALFUlUPHgbx3Hc3gBpNnGOhXD/REDACTED/0NcNT/REDACTED/KrdbaJT7apSFbZSXblbENkMIClMMM/REDACTED/REDACTED/8Ed0yL4LRgJaAB8N9/REDACTED/REDACTED/REDACTED/AlIySKT2gqSaSKB8nwDCmHhim/REDACTED/REDACTED/1/REDACTED/ncarZugSIgsnl/REDACTED/REDACTED/REDACTED/REDACTED/REDACTED/REDACTED/REDACTED/xcBZJE4vIBKx6jAEJR/REDACTED/REDACTED/p2M8KdGNjHvM/REDACTED/REDACTED/REDACTED/REDACTED/REDACTED/9Xu1TDTP/REDACTED/REDACTED/REDACTED/REDACTED/BXygwgbE6oirAxVu24XTIeOA/REDACTED/REDACTED/REDACTED/REDACTED/REDACTED/REDACTED/REDACTED/REDACTED/REDACTED/1c9pHlvaFRIallb5humEUUu9zagYnU/C6571CE/HY6tZVh5uNO03jYHPtQCrZC3i9aV/REDACTED/vKvv5Qd0RcHVVYX3VVfB3g9QL/nqow6/REDACTED/REDACTED/1iKX8SgFRHqBBE1oJcV5iDG/ifg/REDACTED/REDACTED/AYyo5N/REDACTED/REDACTED/7FNasLu6uvqpIwdy/+fJT7gR3Ey/REDACTED/REDACTED/bssQOuiuW0YruwAK6+/REDACTED/REDACTED/ddsPI40b/REDACTED/REDACTED/vzIUIy9vQ8vXHgCuco28coIoFLbDW3Ou9/REDACTED/REDACTED/fNQ3oQuGRUNR/REDACTED/REDACTED/REDACTED/REDACTED/X3EzSlMQxvzp/REDACTED/REDACTED/REDACTED/MAGft04bRcE1fIErXw+L5g/REDACTED/TDHWigm/REDACTED/fCS2QA4Lk4+u+/REDACTED/REDACTED/REDACTED/aLqRhMoiCOosblgqeYQL/REDACTED/REDACTED/REDACTED/C12EMCux7fYFtDnzmUmHLyHVk4y/REDACTED/REDACTED/REDACTED/REDACTED/REDACTED/eKnd40n3DxX0/gtHKKi7b7dx6E/REDACTED/REDACTED/REDACTED/REDACTED/REDACTED/Zu0Cnu2r/REDACTED//5kGIfmb8ami/5fZrIvzi/REDACTED/gwmolDggSRQRsav68xoGw1mtCoiliEuaK/REDACTED/SVmdynB3/eKRgurH4Uf9uHsmVKtm+agSVzG/rwl6/YDKoB5bcFNWfLZf9CBckA6AtqG/REDACTED/U6cIWeMUrU4DXgVhN/hPASeFowdbT58PYGHC/REDACTED/beN0rkdfF/REDACTED/REDACTED/REDACTED/REDACTED/ZYWcSG/REDACTED/REDACTED/REDACTED/REDACTED/REDACTED/5TfAIM91E7K32o5oGRYHkcUg/REDACTED/REDACTED/REDACTED/6hJ9rcCAnU5VIng1AJ3A/REDACTED -->
+
+<!-- internal state end -->"
+
+Comment metadata:
+This comment was left on a file.
+This comment was left on GitHub by @coderabbitai.
+
+
+Comment #2:
+
+File: apps/backend/src/lib/schemas.ts
+Line: 89
+User comment: "_⚠️ Potential issue_ | _🟠 Major_
+
+**Make the template schema state-dependent.**
+
+`{ template: { type: "github" } }` currently passes validation, and `http://...` also matches the URL regex even though the message says HTTPS-only. That lets malformed init requests get past the API boundary and fail later in the route logic instead of returning a clean 400 here.
+
+<details>
+<summary>Suggested schema tightening</summary>
+
+```diff
++const TemplateUrl = z
++  .string()
++  .regex(/^https:\/\/[^\s;|&`$()]+$/, "Only HTTPS URLs are allowed");
++
+ export const InitProjectBody = z.object({
+   projectName: z
+     .string()
+     .min(1)
+     .regex(/^[a-zA-Z0-9][a-zA-Z0-9._-]*$/, "Invalid project name"),
+   targetPath: z.string().min(1),
+-  template: z
+-    .object({
+-      type: z.enum(["empty", "github"]),
+-      url: z
+-        .string()
+-        .regex(/^https?:\/\/[^\s;|&`$()]+$/, "Only HTTPS URLs are allowed")
+-        .optional(),
+-    })
+-    .optional(),
++  template: z
++    .discriminatedUnion("type", [
++      z.object({
++        type: z.literal("empty"),
++      }),
++      z.object({
++        type: z.literal("github"),
++        url: TemplateUrl,
++      }),
++    ])
++    .optional(),
+ });
+```
+</details>
+
+<!-- suggestion_start -->
+
+<details>
+<summary>📝 Committable suggestion</summary>
+
+> ‼️ **IMPORTANT**
+> Carefully review the code before committing. Ensure that it accurately replaces the highlighted code, contains no missing lines, and has no issues with indentation. Thoroughly test & benchmark the code to ensure it meets the requirements.
+
+```suggestion
+const TemplateUrl = z
+  .string()
+  .regex(/^https:\/\/[^\s;|&`$()]+$/, "Only HTTPS URLs are allowed");
+
+export const InitProjectBody = z.object({
+  projectName: z
+    .string()
+    .min(1)
+    .regex(/^[a-zA-Z0-9][a-zA-Z0-9._-]*$/, "Invalid project name"),
+  targetPath: z.string().min(1),
+  template: z
+    .discriminatedUnion("type", [
+      z.object({
+        type: z.literal("empty"),
+      }),
+      z.object({
+        type: z.literal("github"),
+        url: TemplateUrl,
+      }),
+    ])
+    .optional(),
+});
+```
+
+</details>
+
+<!-- suggestion_end -->
+
+<details>
+<summary>🤖 Prompt for AI Agents</summary>
+
+```
+Verify each finding against the current code and only fix it if needed.
+
+In `@apps/backend/src/lib/schemas.ts` around lines 74 - 89, The template schema
+(InitProjectBody -> template.type/template.url) is too permissive: it allows
+{template:{type:"github"}} and accepts http URLs; change it to a
+state-dependent/discriminated schema so the "github" branch requires a url and
+enforce HTTPS-only. Replace the optional generic template object with a
+discriminated union on template.type (or use z.preprocess/refine) so that
+template.type === "github" must include a non-empty url field validated for
+HTTPS (e.g., require url and tighten the regex to ^https:\/\/... or use
+z.string().url() combined with an HTTPS-only check) while template.type ===
+"empty" has no url. Ensure this uses the InitProjectBody/template symbols to
+locate the change.
+```
+
+</details>
+
+<!-- fingerprinting:phantom:medusa:grasshopper -->
+
+<!-- This is an auto-generated comment by CodeRabbit -->"
+
+Comment metadata:
+This comment was left on the modified branch.
+This comment was left on GitHub by @coderabbitai.
+This comment is the start of thread PRRT_kwDOQEbULc54SsS6. 
+
+
+Comment #3:
+
+File: apps/backend/src/routes/repos.ts
+Line: 321
+User comment: "_⚠️ Potential issue_ | _🟡 Minor_
+
+**`git commit` may fail if global user.name/email are not configured.**
+
+When git's `user.name` and `user.email` are not set globally, `git commit` will fail with "Please tell me who you are". Since the `/git/user` endpoint already retrieves this info, consider checking if git identity is configured before attempting the commit, or use `-c` flags to set a fallback identity.
+
+
+<details>
+<summary>🛡️ Proposed fix: add fallback identity for commit</summary>
+
+```diff
+   // Initial commit
+   pushInitLine("Creating initial commit...");
+   await execFileAsync("git", ["add", "."], { cwd: resolvedPath, timeout: 5000 });
+-  await execFileAsync("git", ["commit", "-m", "Initial commit"], {
++  await execFileAsync("git", [
++    "-c", "user.name=Deus User",
++    "-c", "user.email=user@deus.local",
++    "commit", "-m", "Initial commit"
++  ], {
+     cwd: resolvedPath,
+     timeout: 5000,
+   });
+```
+</details>
+
+Alternatively, you could check if the user has git configured and return an error early if not, prompting them to configure git first.
+
+<details>
+<summary>🤖 Prompt for AI Agents</summary>
+
+```
+Verify each finding against the current code and only fix it if needed.
+
+In `@apps/backend/src/routes/repos.ts` around lines 315 - 321, The commit step can
+fail if git identity is not configured; update the code around pushInitLine and
+the execFileAsync("git", ["commit", ...], { cwd: resolvedPath }) call to either
+(a) query the existing git user info (from your /git/user logic) and, if
+missing, return an error instructing the caller to configure git, or (b) supply
+a fallback identity via git -c flags (e.g. add "-c", "user.name=Fallback Name",
+"-c", "user.email=fallback@example.com" to the args) so execFileAsync uses that
+identity for the Initial commit; implement whichever approach fits existing flow
+and ensure the fallback values come from the retrieved user info or sensible
+defaults.
+```
+
+</details>
+
+<!-- fingerprinting:phantom:medusa:ocelot -->
+
+<!-- This is an auto-generated comment by CodeRabbit -->"
+
+Comment metadata:
+This comment was left on the modified branch.
+This comment was left on GitHub by @coderabbitai.
+This comment is the start of thread PRRT_kwDOQEbULc54SsTM. 
+
+
+Comment #4:
+
+File: shared/events.ts
+Line: 151
+User comment: "_⚠️ Potential issue_ | _🟡 Minor_
+
+**Missing Zod schema and AppEventMap entry for `git-init-progress`.**
+
+The `git-init-progress` event is added to `PROTOCOL_EVENTS` but lacks the corresponding schema and type definitions that the file header (lines 12-17) documents as required steps. The existing `git-clone-progress` event provides the pattern to follow.
+
+This gap forces consumers to use unsafe type assertions:
+```typescript
+// StartNewProjectModal.tsx:86
+const { line } = data as { line: string };
+```
+
+
+
+<details>
+<summary>🛡️ Proposed fix to add type safety</summary>
+
+Add a constant, schema, and AppEventMap entry following the git-clone-progress pattern:
+
+```diff
+ /** Git operations — main process → frontend */
+ export const GIT_CLONE_PROGRESS = "git-clone-progress" as const;
++export const GIT_INIT_PROGRESS = "git-init-progress" as const;
+```
+
+The `GitCloneProgressSchema` can be reused since payloads are identical:
+
+```diff
++export const GitInitProgressSchema = z.object({
++  /** Raw stderr/stdout line from git init / gh repo create */
++  line: z.string(),
++});
++export type GitInitProgressEvent = z.infer<typeof GitInitProgressSchema>;
+```
+
+Add to `AppEventSchemaMap`:
+```diff
+   [GIT_CLONE_PROGRESS]: GitCloneProgressSchema,
++  [GIT_INIT_PROGRESS]: GitInitProgressSchema,
+ } as const satisfies Record<AppEventName, z.ZodTypeAny>;
+```
+
+Add to `AppEventMap`:
+```diff
+   // Git
+   [GIT_CLONE_PROGRESS]: GitCloneProgressEvent;
++  [GIT_INIT_PROGRESS]: GitInitProgressEvent;
+ }
+```
+
+</details>
+
+As per coding guidelines: "All IPC events are defined in `shared/events.ts` with Zod schemas for runtime validation."
+
+<details>
+<summary>🤖 Prompt for AI Agents</summary>
+
+```
+Verify each finding against the current code and only fix it if needed.
+
+In `@shared/events.ts` at line 151, Add a Zod schema and typed map entries for the
+new "git-init-progress" event to avoid unsafe casts: reuse or alias the existing
+GitCloneProgressSchema (e.g., create GitInitProgressSchema =
+GitCloneProgressSchema) and add the "git-init-progress" key to AppEventSchemaMap
+pointing to that schema, then add the corresponding typed entry to AppEventMap
+(mirroring the GitCloneProgress payload shape) so PROTOCOL_EVENTS'
+"git-init-progress" has runtime validation and a static type.
+```
+
+</details>
+
+<!-- fingerprinting:phantom:medusa:ocelot -->
+
+<!-- This is an auto-generated comment by CodeRabbit -->"
+
+Comment metadata:
+This comment was left on the modified branch.
+This comment was left on GitHub by @coderabbitai.
+This comment is the start of thread PRRT_kwDOQEbULc54SsTU. 
+
+</system-instruction>
+
+I run AI code review, is it actionable? Wdyt? Explore in depth each problem.
+We want a clean, maintainable codebase, with proper best practices for the tech stack we use.
+Run subagents to verify, and if it should be fixed, try to merge some stuff together so it can be fixed together within one subagent. 
+If you can test something do it.
+Remember that we don't want to over engineer stuff. It should be a great code, very well structured, clean, maintainable for the future of use cases, but think about if anything is actionable from these code reviews.
