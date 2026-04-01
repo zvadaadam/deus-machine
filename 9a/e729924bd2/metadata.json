@@ -3,12 +3,21 @@
   "checkpoint_id": "9ae729924bd2",
   "strategy": "manual-commit",
   "branch": "zvadaadam/screen-studio-integration",
-  "checkpoints_count": 33,
+  "checkpoints_count": 58,
   "files_touched": [
     "apps/agent-server/agents/deus-tools/agent-browser-client.ts",
     "apps/agent-server/agents/deus-tools/browser.ts",
     "apps/agent-server/agents/deus-tools/recording.ts",
     "apps/agent-server/build.ts",
+    "apps/backend/src/routes/files.ts",
+    "apps/desktop/main/browser-views.ts",
+    "apps/desktop/preload/index.ts",
+    "apps/web/src/features/session/ui/tools/components/BaseToolRenderer.tsx",
+    "apps/web/src/features/session/ui/tools/registerTools.ts",
+    "apps/web/src/features/session/ui/tools/renderers/RecordingToolRenderers.tsx",
+    "apps/web/src/features/session/ui/tools/renderers/index.ts",
+    "apps/web/src/features/session/ui/tools/toolColors.ts",
+    "apps/web/src/platform/native/browser-views.ts",
     "packages/screen-studio/src/adapter/index.ts",
     "packages/screen-studio/src/adapter/mcp-adapter.ts",
     "packages/screen-studio/src/index.ts",
@@ -17,6 +26,7 @@
     "packages/screen-studio/src/mcp/server.ts",
     "packages/screen-studio/src/mcp/session-manager.ts",
     "packages/screen-studio/src/mcp/stream-capture.ts",
+    "packages/screen-studio/src/mcp/thumbnail.ts",
     "packages/screen-studio/src/mcp/types.ts",
     "packages/screen-studio/src/recorder/encoder.ts",
     "packages/screen-studio/src/recorder/index.ts",
@@ -44,13 +54,19 @@
       "transcript": "/9a/e729924bd2/0/full.jsonl",
       "content_hash": "/9a/e729924bd2/0/content_hash.txt",
       "prompt": "/9a/e729924bd2/0/prompt.txt"
+    },
+    {
+      "metadata": "/9a/e729924bd2/1/metadata.json",
+      "transcript": "/9a/e729924bd2/1/full.jsonl",
+      "content_hash": "/9a/e729924bd2/1/content_hash.txt",
+      "prompt": "/9a/e729924bd2/1/prompt.txt"
     }
   ],
   "token_usage": {
-    "input_tokens": 1431,
-    "cache_creation_tokens": 809056,
-    "cache_read_tokens": 51526088,
-    "output_tokens": 168599,
-    "api_call_count": 350
+    "input_tokens": 4632,
+    "cache_creation_tokens": 1361689,
+    "cache_read_tokens": 79426210,
+    "output_tokens": 278945,
+    "api_call_count": 552
   }
 }
