@@ -482,8 +482,9 @@ export class SessionManager {
    * browser page only (not the app UI). No OS permission, no CDP conflicts.
    * Falls back to events-only if stream port not configured.
    *
-   * Other methods (avfoundation, x11grab) available via explicit
-   * captureMethod for standalone/external use.
+   * Stream capture is the only auto-resolved method since it doesn't
+   * require screen recording permissions and doesn't conflict with CDP.
+   * Other methods (avfoundation, x11grab) available via explicit captureMethod.
    */
   private async resolveAutoCapture(): Promise<"stream" | "none"> {
     const streamPort = this.resolveStreamPort();

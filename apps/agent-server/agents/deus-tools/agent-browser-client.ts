@@ -102,7 +102,12 @@ async function getCdpWsUrl(): Promise<string | null> {
   return null;
 }
 
-/** Invalidate cached CDP URL (call when BrowserView is recreated) */
+/**
+ * Invalidate cached CDP URL (call when BrowserView is recreated).
+ * TODO: Wire into BrowserView lifecycle via IPC so stale URLs don't
+ * persist after view recreation. Low-risk since views are rarely
+ * recreated during an agent session.
+ */
 export function invalidateCdpCache(): void {
   cachedCdpWsUrl = null;
 }

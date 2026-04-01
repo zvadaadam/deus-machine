@@ -805,13 +805,14 @@ For structural/interactive analysis, prefer BrowserSnapshot instead.`,
             data: imageBuffer.toString("base64"),
             mimeType: "image/png",
           });
+        } catch {
+          // File read failed — return text-only response
+        } finally {
           try {
             unlinkSync(screenshotPath);
           } catch {
             // Ignore cleanup errors
           }
-        } catch {
-          // File read failed — return text-only response
         }
 
         const urlResult = await execAgentBrowser(sessionId, ["get", "url", "--json"]);
