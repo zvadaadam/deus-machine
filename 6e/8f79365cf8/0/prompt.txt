@@ -2294,3 +2294,10 @@ also logs:
 We can see the output there, some logs, but it still doesn't work. I want you to be more explore why. No workarounds, feel free to refactor to make things work and explore why this happens. You should not want me to like always like test and you just like judge one thing. You need to be thinking and testing and validating, not stopping once you are 100% confident and you have tested that the whole loop of this will work without running it. Without me running the full app, you need to create tests to make it right.
 
  Always start with exploring the problem, then defining a test cases. Without you needing me to run the app, you should be able to write some test code, or some fmr code which you delete in order to achieve the test and achieve that the codebase will work once we gonna start it end to end. Be very creative, feel free to run sub-agents for this, and make sure you are 100% confident once you stop that this is gonna work. But don't take your word for granted, always test it.
+
+---
+
+Are you sure? Can you review, run test, explore options and be very confident that this is going to work and everything is proper?
+
+
+ Always start with exploring the problem, then defining a test cases. Without you needing me to run the app, you should be able to write some test code, or some fmr code which you delete in order to achieve the test and achieve that the codebase will work once we gonna start it end to end. Be very creative, feel free to run sub-agents for this, and make sure you are 100% confident once you stop that this is gonna work. But don't take your word for granted, always test it.
