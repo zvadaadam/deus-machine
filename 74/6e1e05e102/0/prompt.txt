@@ -1648,3 +1648,151 @@ These are the minimal targeted edits for the two CodeRabbit review fixes. Could 
 <usage><total_tokens>43181</total_tokens><tool_uses>7</tool_uses><duration_ms>38557</duration_ms></usage>
 </task-notification>
 Full transcript available at: /private/tmp/claude-501/-Users-zvada-Developer-agent-box-ide--conductor-monrovia-v1/f7a67c65-cb55-418c-be9d-ba56c6211889/tasks/ae5a0629282a8da78.output
+
+---
+
+<system-instruction>
+The user has added 2 comments to the diff for this workspace. Please review and address these comments as part of your response. When addressing comments on the "original" side or on specific commits, read the file from that version (not the current version). Below are the comments, including metadata about what git state they were left on:
+
+Comment #1:
+
+File: apps/agent-server/agents/deus-tools/browser.ts
+Line: 301
+User comment: "_⚠️ Potential issue_ | _🟡 Minor_
+
+**Normalize `ref` once before validating and branching.**
+
+Validation treats `ref: ""` as present (`!== undefined`), but execution treats it as absent (`if (args.ref)`). That falls through to the coordinate-click path and can issue `mouse move undefined undefined` instead of returning the existing validation error.
+
+
+<details>
+<summary>Suggested fix</summary>
+
+```diff
+-        const hasRef = args.ref !== undefined;
++        const ref = args.ref?.trim();
++        const hasRef = Boolean(ref);
+         const hasCoords = args.x !== undefined && args.y !== undefined;
+@@
+-        if (args.ref) {
++        if (ref) {
+           const clickArgs = args.doubleClick
+-            ? ["click", "--double", args.ref]
+-            : ["click", args.ref];
+-          response = await execWithSnapshot(sessionId, clickArgs, undefined, args.ref);
++            ? ["click", "--double", ref]
++            : ["click", ref];
++          response = await execWithSnapshot(sessionId, clickArgs, undefined, ref);
+         } else {
+@@
+-        const target = args.ref ?? `(${args.x}, ${args.y})`;
++        const target = ref ?? `(${args.x}, ${args.y})`;
+```
+</details>
+
+<details>
+<summary>🤖 Prompt for AI Agents</summary>
+
+```
+Verify each finding against the current code and only fix it if needed.
+
+In `@apps/agent-server/agents/deus-tools/browser.ts` around lines 267 - 301,
+Normalize the incoming ref before any validation and branching so an empty
+string isn't treated as present; e.g., derive a local normalizedRef =
+args.ref?.trim() ?? undefined and use that in hasRef and later branches instead
+of args.ref, then pass normalizedRef into execWithSnapshot (and into the error
+messages) while leaving the coordinate path to run only when normalizedRef is
+undefined; update references to
+hasRef/execWithSnapshot/executeBatch/getSnapshot/textResult accordingly to avoid
+issuing mouse commands with undefined coordinates.
+```
+
+</details>
+
+<!-- fingerprinting:phantom:medusa:grasshopper -->
+
+<!-- This is an auto-generated comment by CodeRabbit -->"
+
+Comment metadata:
+This comment was left on the modified branch.
+This comment was left on GitHub by @coderabbitai.
+This comment is the start of thread PRRT_kwDOQEbULc54QeTw. 
+
+
+Comment #2:
+
+File: apps/agent-server/agents/deus-tools/browser.ts
+Line: 890
+User comment: "_⚠️ Potential issue_ | _🟡 Minor_
+
+**Preserve the target context for `ref`-based scrolls.**
+
+This path is the odd one out: other ref-based tools pass the ref into `execWithSnapshot`, but here the ref is dropped and the emitted action still defaults to `scrollDirection: "down"`. `RecordingBridge` will therefore record “scroll into view” as a generic downward viewport scroll instead of a scroll-to-element event.
+
+
+<details>
+<summary>Suggested fix</summary>
+
+```diff
+-        const response = await execWithSnapshot(sessionId, scrollArgs);
++        const response = await execWithSnapshot(
++          sessionId,
++          scrollArgs,
++          undefined,
++          args.ref
++        );
+@@
+-        emitAction({
+-          toolName: "BrowserScroll",
+-          scrollDirection: args.direction ?? "down",
+-        });
++        emitAction(
++          args.ref
++            ? {
++                toolName: "BrowserScroll",
++                elementBox: response.elementBox,
++              }
++            : {
++                toolName: "BrowserScroll",
++                scrollDirection: args.direction ?? "down",
++              }
++        );
+```
+</details>
+
+<details>
+<summary>🤖 Prompt for AI Agents</summary>
+
+```
+Verify each finding against the current code and only fix it if needed.
+
+In `@apps/agent-server/agents/deus-tools/browser.ts` around lines 873 - 890, The
+ref-based scroll path drops the ref and emits a generic down scroll; update the
+scroll handling so that when args.ref is present you include that ref in the
+execWithSnapshot call (use the same scrollArgs variable or build a ref-inclusive
+args list passed to execWithSnapshot) and change the emitAction call for
+BrowserScroll to include the ref (and not default scrollDirection:"down") — keep
+scrollDirection only for non-ref scrolls and ensure emitAction contains either {
+toolName: "BrowserScroll", ref: args.ref } or { toolName: "BrowserScroll",
+scrollDirection: args.direction ?? "down", amount: String(args.amount ?? 600) }
+to match the behavior of other ref-based tools.
+```
+
+</details>
+
+<!-- fingerprinting:phantom:medusa:grasshopper -->
+
+<!-- This is an auto-generated comment by CodeRabbit -->"
+
+Comment metadata:
+This comment was left on the modified branch.
+This comment was left on GitHub by @coderabbitai.
+This comment is the start of thread PRRT_kwDOQEbULc54QeT8. 
+
+</system-instruction>
+
+I run AI code review, is it actionable? Wdyt? Explore in depth each problem.
+We want a clean, maintainable codebase, with proper best practices for the tech stack we use.
+Run subagents to verify, and if it should be fixed, try to merge some stuff together so it can be fixed together within one subagent. 
+If you can test something do it.
+Remember that we don't want to over engineer stuff. It should be a great code, very well structured, clean, maintainable for the future of use cases, but think about if anything is actionable from these code reviews.
