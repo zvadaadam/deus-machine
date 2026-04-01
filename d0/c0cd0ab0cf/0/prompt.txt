@@ -2328,3 +2328,11 @@ Excellent result -- 371 frames with only 1 dropped, and the ffmpeg pipeline prod
 ------
 
 Okay, so it seems like it works. Good job. But it was pain. It was tough. You see, we did a lot of iterations. But what I see is that we don't see the movement of the cursor icons. That's what we are not seeing. And the cursor is very short or small. It should be way bigger because the cursor, like small cursor, is not here visible, so we should like increase it.
+
+---
+
+do u have tets that woudl verify if yteh cursor icon movment works?
+
+ Always start with exploring the problem, then defining a test cases. Without you needing me to run the app, you should be able to write some test code, or some fmr code which you delete in order to achieve the test and achieve that the codebase will work once we gonna start it end to end. Be very creative, feel free to run sub-agents for this, and make sure you are 100% confident once you stop that this is gonna work. But don't take your word for granted, always test it.
+
+also /Users/zvada/Developer/agent/box-ide/.conductor/monrovia-v1/.context/attachments/image-v1.png in this view where we have teh suammriy in teh ful scrne modal view of teh video if naviaget but we shoudk also show teh sub path of the url u know
