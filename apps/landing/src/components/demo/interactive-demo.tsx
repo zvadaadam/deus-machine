@@ -1,3 +1,4 @@
+import type { ReactNode } from 'react'
 import { useState, useRef, useEffect } from 'react'
 import {
   Globe,
@@ -84,7 +85,7 @@ export function InteractiveDemo() {
                     type="button"
                     onClick={() => switchWorkspace(ws.id)}
                     data-active={ws.id === activeWs}
-                    className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-[12px] transition-colors duration-100 data-[active=false]:text-muted-foreground/50 data-[active=true]:bg-foreground/[0.06] data-[active=true]:text-foreground/80 data-[active=false]:hover:bg-foreground/[0.03] data-[active=false]:hover:text-muted-foreground/70"
+                    className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-[12px] outline-none transition-colors duration-100 data-[active=false]:text-muted-foreground/50 data-[active=true]:bg-foreground/[0.06] data-[active=true]:text-foreground/80 data-[active=false]:hover:bg-foreground/[0.03] data-[active=false]:hover:text-muted-foreground/70"
                   >
                     <StatusDot status={ws.status} />
                     <span className="truncate">{ws.name}</span>
@@ -174,14 +175,14 @@ function ViewTab({
 }: {
   active: boolean
   onClick: () => void
-  children: React.ReactNode
+  children: ReactNode
 }) {
   return (
     <button
       type="button"
       onClick={onClick}
       data-active={active}
-      className="flex items-center gap-1 rounded-md px-2 py-1 text-[11px] transition-colors duration-100 data-[active=false]:text-muted-foreground/35 data-[active=true]:bg-foreground/[0.06] data-[active=true]:text-foreground/70 data-[active=false]:hover:text-muted-foreground/50"
+      className="flex items-center gap-1 rounded-md px-2 py-1 text-[11px] outline-none transition-colors duration-100 data-[active=false]:text-muted-foreground/35 data-[active=true]:bg-foreground/[0.06] data-[active=true]:text-foreground/70 data-[active=false]:hover:text-muted-foreground/50"
     >
       {children}
     </button>
@@ -248,7 +249,7 @@ function ChatView({
             onClick={onSend}
             disabled={!input.trim() || isTyping}
             data-ready={!!(input.trim() && !isTyping)}
-            className="flex size-5 items-center justify-center rounded-full transition-colors duration-100 data-[ready=false]:bg-foreground/10 data-[ready=false]:text-muted-foreground/30 data-[ready=true]:bg-foreground data-[ready=true]:text-background"
+            className="flex size-5 items-center justify-center rounded-full outline-none transition-colors duration-100 data-[ready=false]:bg-foreground/10 data-[ready=false]:text-muted-foreground/30 data-[ready=true]:bg-foreground data-[ready=true]:text-background"
           >
             <Send className="size-2.5" />
           </button>

@@ -1,3 +1,4 @@
+import type { ReactNode } from 'react'
 import { HeadContent, Outlet, Scripts, createRootRoute } from '@tanstack/react-router'
 
 import appCss from '../styles.css?url'
@@ -34,7 +35,7 @@ function RootComponent() {
   return <Outlet />
 }
 
-function RootDocument({ children }: { children: React.ReactNode }) {
+function RootDocument({ children }: { children: ReactNode }) {
   return (
     <html lang="en" className="dark">
       <head>
