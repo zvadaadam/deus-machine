@@ -80,7 +80,7 @@ export function setupAppMenu(): void {
       submenu: [
         {
           label: "Documentation",
-          click: () => shell.openExternal("https://rundeus.com/docs"),
+          click: () => shell.openExternal("https://deusmachine.ai/docs"),
         },
         {
           label: "Report Issue",

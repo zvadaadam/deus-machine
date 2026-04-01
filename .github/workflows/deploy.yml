@@ -3,8 +3,8 @@
 # Can also be triggered manually via workflow_dispatch.
 #
 # Services:
-#   relay — Cloudflare Worker (relay.rundeus.com)
-#   web   — Cloudflare Pages (app.rundeus.com)
+#   relay — Cloudflare Worker (relay.deusmachine.ai)
+#   web   — Cloudflare Pages (app.deusmachine.ai)
 #
 # Required GitHub Secrets:
 #   CLOUDFLARE_API_TOKEN     — Cloudflare API token with Workers/Pages deploy permissions
@@ -101,7 +101,7 @@ jobs:
       - name: Health check
         run: |
           sleep 5
-          STATUS=$(curl -sf https://relay.rundeus.com/health | jq -r '.status')
+          STATUS=$(curl -sf https://relay.deusmachine.ai/health | jq -r '.status')
           if [ "$STATUS" != "ok" ]; then
             echo "::warning::Health check returned status: $STATUS"
           else

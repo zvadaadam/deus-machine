@@ -1,4 +1,4 @@
-export const DEFAULT_RELAY_URL = "wss://relay.rundeus.com";
+export const DEFAULT_RELAY_URL = "wss://relay.deusmachine.ai";
 
 export function isLocalhost(ip: string | undefined): boolean {
   if (!ip) return false;

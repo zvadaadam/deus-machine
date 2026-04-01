@@ -5,7 +5,7 @@
   "description": "AI-powered IDE for managing multiple parallel coding agents",
   "author": {
     "name": "Deus",
-    "email": "hello@rundeus.com"
+    "email": "hello@deusmachine.ai"
   },
   "repository": "github:zvadaadam/box-ide",
   "packageManager": "bun@1.2.19",
