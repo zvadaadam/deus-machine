@@ -235,10 +235,7 @@ app.post("/workspaces", async (c) => {
       await execFileAsync(
         "git",
         ["show-ref", "--verify", "--quiet", `refs/remotes/origin/${parent_branch}`],
-        {
-          cwd: repo.root_path!,
-          timeout: 2000,
-        }
+        { cwd: repo.root_path!, timeout: 2000 }
       );
       return `origin/${parent_branch}`;
     } catch {

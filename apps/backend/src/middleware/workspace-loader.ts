@@ -12,13 +12,14 @@ export interface WorkspaceContext {
 
 /**
  * Compute the filesystem path for a workspace.
- * All Deus workspaces live at {root_path}/.deus/{slug}.
+ * All workspaces live at {root_path}/.deus/{slug}.
  */
 export function computeWorkspacePath(ws: {
   root_path?: string | null;
   slug?: string | null;
 }): string {
-  if (!ws.root_path || !ws.slug) return "";
+  if (!ws.root_path) return "";
+  if (!ws.slug) return "";
   return path.join(ws.root_path, ".deus", ws.slug);
 }
 

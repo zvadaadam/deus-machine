@@ -29,8 +29,10 @@ type SnapshotCallback = (data: unknown) => void;
 type DeltaCallback = (upserted?: unknown[], removed?: string[], cursor?: number) => void;
 type EventCallback = (event: string, data: unknown) => void;
 
+type CommandResult = { accepted: boolean; commandId?: string; error?: string; [key: string]: unknown };
+
 interface PendingCommand {
-  resolve: (result: { accepted: boolean; commandId?: string; error?: string }) => void;
+  resolve: (result: CommandResult) => void;
   reject: (err: Error) => void;
 }
 
@@ -210,7 +212,7 @@ export function sendCommand(
   command: CommandName,
   params: Record<string, unknown>,
   timeoutMs = 30_000
-): Promise<{ accepted: boolean; commandId?: string; error?: string }> {
+): Promise<CommandResult> {
   const id = `cmd_${++commandCounter}`;
 
   return new Promise((resolve, reject) => {
@@ -541,11 +543,10 @@ async function openSocket(serverId?: string): Promise<void> {
         const pending = pendingCommands.get(msg.id as string);
         if (pending) {
           pendingCommands.delete(msg.id as string);
-          pending.resolve({
-            accepted: msg.accepted as boolean,
-            commandId: msg.commandId as string | undefined,
-            error: msg.error as string | undefined,
-          });
+          // Spread all fields from the ACK so commands can return extra data
+          // (e.g. githubUrl from git:init)
+          const { type: _t, id: _id, ...rest } = msg as Record<string, unknown>;
+          pending.resolve(rest as CommandResult);
         }
       })
       .with("q:event", () => {

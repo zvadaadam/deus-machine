@@ -43,4 +43,10 @@
 ## Review Infrastructure
 
 - Reviews go to `.context/reviews/review-NN.md`
-- review-01: 2026-02-21, review-02: 2026-03-03 (session cache/event review), review-03: 2026-03-15 (WS query protocol migration), review-04: 2026-03-20 (Tauri-to-Electron migration pre-merge review)
+- review-01: 2026-02-21, review-02: 2026-03-03 (session cache/event review), review-03: 2026-03-15 (WS query protocol migration), review-04: 2026-03-20 (Tauri-to-Electron migration pre-merge review), review-05: 2026-04-01 (Start New Project feature pre-merge)
+
+## Recurring Patterns
+
+- `useCreateWorkspace` mutationFn manually lists option fields instead of spreading -- any new field added to CreateWorkspaceParams type must ALSO be added to the mutationFn destructuring, otherwise it is silently dropped
+- `workspace-init.service.ts` cleanup stages don't guard against isRootWorkspace -- any new init stage with cleanup must check ctx.isRootWorkspace to avoid deleting repo root
+- Endpoint URL validation is inconsistent: /repos/clone has SAFE_GIT_URL_PATTERN but /repos/init does not -- always check new endpoints that accept URLs

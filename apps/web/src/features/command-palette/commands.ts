@@ -2,6 +2,7 @@ import type { LucideIcon } from "lucide-react";
 import {
   Plus,
   FolderOpen,
+  FolderGit2,
   GitBranch,
   GitPullRequest,
   Settings,
@@ -85,6 +86,14 @@ export const staticCommands: CommandDefinition[] = [
     icon: GitBranch,
     group: "project",
     keywords: ["git", "clone", "github", "repo"],
+    action: () => {},
+  },
+  {
+    id: "start-new-project",
+    label: "Start New Project",
+    icon: FolderGit2,
+    group: "project",
+    keywords: ["create", "new", "init", "template", "scratch", "blank"],
     action: () => {},
   },
 

@@ -28,6 +28,7 @@ type QueryParams = Record<string, unknown>;
 
 interface CommandResult {
   commandId?: string;
+  [key: string]: unknown;
 }
 
 // ---- Command Dispatch ----
@@ -106,6 +107,20 @@ export async function runCommand(
         })) as { success?: boolean; path?: string; error?: string };
         if (result.error) throw new Error(result.error);
         return {};
+      })
+      .with("git:init", async () => {
+        const projectName = readString(params, "projectName");
+        const targetPath = readString(params, "targetPath");
+        if (!projectName || !targetPath) throw new Error("git:init requires projectName and targetPath");
+        const templateType = readString(params, "templateType");
+        const templateUrl = readString(params, "templateUrl");
+        const result = (await delegateToRoute("POST", "/api/repos/init", {
+          projectName,
+          targetPath,
+          ...(templateType ? { template: { type: templateType, url: templateUrl } } : {}),
+        })) as { success?: boolean; path?: string; githubUrl?: string; error?: string };
+        if (result.error) throw new Error(result.error);
+        return { githubUrl: result.githubUrl };
       })
       // ---- Route-delegated commands ----
       .with("createWorkspace", async () => {

@@ -213,11 +213,12 @@ describe("shared/events", () => {
       expect(COMMAND_NAMES).toContain("fs:watch");
       expect(COMMAND_NAMES).toContain("fs:unwatch");
       expect(COMMAND_NAMES).toContain("git:clone");
+      expect(COMMAND_NAMES).toContain("git:init");
       // New commands
       expect(COMMAND_NAMES).toContain("createWorkspace");
       expect(COMMAND_NAMES).toContain("retrySetup");
       expect(COMMAND_NAMES).toContain("openPenFile");
-      expect(COMMAND_NAMES).toHaveLength(12);
+      expect(COMMAND_NAMES).toHaveLength(13);
     });
 
     it("REQUEST_RESOURCES contains the expected request-only resources", () => {
@@ -258,8 +259,9 @@ describe("shared/events", () => {
       expect(PROTOCOL_EVENTS).toContain("pty-exit");
       expect(PROTOCOL_EVENTS).toContain("fs:changed");
       expect(PROTOCOL_EVENTS).toContain("git-clone-progress");
+      expect(PROTOCOL_EVENTS).toContain("git-init-progress");
       expect(PROTOCOL_EVENTS).toContain("agent-server:request");
-      expect(PROTOCOL_EVENTS).toHaveLength(9);
+      expect(PROTOCOL_EVENTS).toHaveLength(10);
     });
   });
 });

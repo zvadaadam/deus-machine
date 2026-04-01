@@ -1,6 +1,6 @@
 import { useState, useCallback, useRef, useMemo, useEffect, createElement } from "react";
 import { AnimatePresence, motion } from "framer-motion";
-import { ArrowUp, ChevronDown, Check, FolderOpen, GitBranch, Search, Upload } from "lucide-react";
+import { ArrowUp, ChevronDown, Check, FolderGit2, FolderOpen, GitBranch, Search, Upload } from "lucide-react";
 import { capabilities } from "@/platform/capabilities";
 import { cn } from "@/shared/lib/utils";
 import { getAgentLogo } from "@/assets/agents";
@@ -78,6 +78,7 @@ interface HomeViewProps {
   onSendMessage: (repoId: string, message: string, model: string, branch?: string) => void;
   onOpenProject?: () => void;
   onCloneRepository?: () => void;
+  onStartNewProject?: () => void;
 }
 
 // ── Agent Logo Helper ───────────────────────────────────────────────
@@ -114,6 +115,7 @@ export function HomeView({
   onSendMessage,
   onOpenProject,
   onCloneRepository,
+  onStartNewProject,
 }: HomeViewProps) {
   const hasRepos = repos.length > 0;
   const isMobile = useIsMobile();
@@ -491,17 +493,17 @@ export function HomeView({
 
                       {/* Add repo actions */}
                       <div className="border-border-subtle border-t py-1">
-                        {capabilities.nativeFolderPicker && onOpenProject && (
+                        {onStartNewProject && (
                           <button
                             type="button"
                             onClick={() => {
                               closeRepoPicker();
-                              onOpenProject();
+                              onStartNewProject();
                             }}
                             className="text-text-muted hover:text-text-secondary hover:bg-bg-raised/45 flex w-full items-center gap-2 px-3 py-2.5 text-sm transition-colors duration-100"
                           >
-                            <FolderOpen className="size-4 shrink-0" />
-                            <span>Open local...</span>
+                            <FolderGit2 className="size-4 shrink-0" />
+                            <span>Start new project</span>
                           </button>
                         )}
                         {onCloneRepository && (
@@ -515,6 +517,19 @@ export function HomeView({
                           >
                             <GitBranch className="size-4 shrink-0" />
                             <span>Clone from GitHub</span>
+                          </button>
+                        )}
+                        {capabilities.nativeFolderPicker && onOpenProject && (
+                          <button
+                            type="button"
+                            onClick={() => {
+                              closeRepoPicker();
+                              onOpenProject();
+                            }}
+                            className="text-text-muted hover:text-text-secondary hover:bg-bg-raised/45 flex w-full items-center gap-2 px-3 py-2.5 text-sm transition-colors duration-100"
+                          >
+                            <FolderOpen className="size-4 shrink-0" />
+                            <span>Open local...</span>
                           </button>
                         )}
                       </div>
@@ -594,17 +609,17 @@ export function HomeView({
 
                         {/* Add repo actions */}
                         <div className="border-border-subtle border-t py-1">
-                          {capabilities.nativeFolderPicker && onOpenProject && (
+                          {onStartNewProject && (
                             <button
                               type="button"
                               onClick={() => {
                                 closeRepoPicker();
-                                onOpenProject();
+                                onStartNewProject();
                               }}
                               className="text-text-muted hover:text-text-secondary hover:bg-bg-raised/45 flex w-full items-center gap-2 px-3 py-1.5 text-xs transition-colors duration-100"
                             >
-                              <FolderOpen className="size-3 shrink-0" />
-                              <span>Open local...</span>
+                              <FolderGit2 className="size-3 shrink-0" />
+                              <span>Start new project</span>
                             </button>
                           )}
                           {onCloneRepository && (
@@ -618,6 +633,19 @@ export function HomeView({
                             >
                               <GitBranch className="size-3 shrink-0" />
                               <span>Clone from GitHub</span>
+                            </button>
+                          )}
+                          {capabilities.nativeFolderPicker && onOpenProject && (
+                            <button
+                              type="button"
+                              onClick={() => {
+                                closeRepoPicker();
+                                onOpenProject();
+                              }}
+                              className="text-text-muted hover:text-text-secondary hover:bg-bg-raised/45 flex w-full items-center gap-2 px-3 py-1.5 text-xs transition-colors duration-100"
+                            >
+                              <FolderOpen className="size-3 shrink-0" />
+                              <span>Open local...</span>
                             </button>
                           )}
                         </div>
@@ -906,25 +934,25 @@ export function HomeView({
             </p>
 
             <div className="border-border-subtle bg-bg-elevated/60 overflow-hidden rounded-xl border">
-              {capabilities.nativeFolderPicker && onOpenProject && (
+              {onStartNewProject && (
                 <button
                   type="button"
-                  onClick={onOpenProject}
+                  onClick={onStartNewProject}
                   className="hover:bg-bg-raised/40 flex w-full items-start gap-3.5 px-4 py-3.5 text-left transition-colors duration-150"
                 >
                   <div className="bg-bg-muted mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-lg">
-                    <FolderOpen className="text-text-tertiary h-4 w-4" />
+                    <FolderGit2 className="text-text-tertiary h-4 w-4" />
                   </div>
                   <div>
-                    <h3 className="text-text-primary text-sm font-medium">Open a local project</h3>
+                    <h3 className="text-text-primary text-sm font-medium">Start a new project</h3>
                     <p className="text-text-muted mt-0.5 text-xs">
-                      Browse your filesystem for an existing codebase
+                      Create a project from scratch or a template
                     </p>
                   </div>
                 </button>
               )}
 
-              {capabilities.nativeFolderPicker && onOpenProject && onCloneRepository && (
+              {onStartNewProject && onCloneRepository && (
                 <div className="border-border-subtle/50 mx-4 border-t" />
               )}
 
@@ -941,6 +969,28 @@ export function HomeView({
                     <h3 className="text-text-primary text-sm font-medium">Clone from GitHub</h3>
                     <p className="text-text-muted mt-0.5 text-xs">
                       Paste a repository URL or search your GitHub repos
+                    </p>
+                  </div>
+                </button>
+              )}
+
+              {capabilities.nativeFolderPicker && onOpenProject && (onCloneRepository || onStartNewProject) && (
+                <div className="border-border-subtle/50 mx-4 border-t" />
+              )}
+
+              {capabilities.nativeFolderPicker && onOpenProject && (
+                <button
+                  type="button"
+                  onClick={onOpenProject}
+                  className="hover:bg-bg-raised/40 flex w-full items-start gap-3.5 px-4 py-3.5 text-left transition-colors duration-150"
+                >
+                  <div className="bg-bg-muted mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-lg">
+                    <FolderOpen className="text-text-tertiary h-4 w-4" />
+                  </div>
+                  <div>
+                    <h3 className="text-text-primary text-sm font-medium">Open a local project</h3>
+                    <p className="text-text-muted mt-0.5 text-xs">
+                      Browse your filesystem for an existing codebase
                     </p>
                   </div>
                 </button>
@@ -965,27 +1015,41 @@ export function HomeView({
             className="pb-8"
           >
             <div className="flex items-center gap-3">
-              {capabilities.nativeFolderPicker && onOpenProject && (
+              {onStartNewProject && (
                 <>
                   <button
                     type="button"
-                    onClick={onOpenProject}
+                    onClick={onStartNewProject}
                     className="text-text-disabled hover:text-text-muted text-xs underline-offset-4 transition-colors duration-150 hover:underline"
                   >
-                    Open local project
+                    Start new project
                   </button>
-                  {onCloneRepository && (
+                  {(onCloneRepository || (capabilities.nativeFolderPicker && onOpenProject)) && (
                     <span className="bg-foreground/10 inline-block h-1 w-1 rounded-full" />
                   )}
                 </>
               )}
               {onCloneRepository && (
+                <>
+                  <button
+                    type="button"
+                    onClick={onCloneRepository}
+                    className="text-text-disabled hover:text-text-muted text-xs underline-offset-4 transition-colors duration-150 hover:underline"
+                  >
+                    Clone from GitHub
+                  </button>
+                  {capabilities.nativeFolderPicker && onOpenProject && (
+                    <span className="bg-foreground/10 inline-block h-1 w-1 rounded-full" />
+                  )}
+                </>
+              )}
+              {capabilities.nativeFolderPicker && onOpenProject && (
                 <button
                   type="button"
-                  onClick={onCloneRepository}
+                  onClick={onOpenProject}
                   className="text-text-disabled hover:text-text-muted text-xs underline-offset-4 transition-colors duration-150 hover:underline"
                 >
-                  Clone from GitHub
+                  Open local project
                 </button>
               )}
             </div>

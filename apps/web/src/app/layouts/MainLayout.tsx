@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef, useCallback, useMemo } from "react";
 import type { SessionPanelRef } from "@/features/session";
-import { NewWorkspaceModal, CloneRepositoryModal } from "@/features/repository";
+import { NewWorkspaceModal, CloneRepositoryModal, StartNewProjectModal } from "@/features/repository";
 import { SystemPromptModal } from "@/features/session";
 import { SettingsSidebar, SettingsPage } from "@/features/settings";
 import {
@@ -231,7 +231,8 @@ export function MainLayout() {
     showSystemPromptModal ||
     commandPaletteOpen ||
     !!githubPickerRepoId ||
-    repoActions.showCloneModal;
+    repoActions.showCloneModal ||
+    repoActions.showStartNewModal;
   useEffect(() => {
     if (anyDialogOpen) {
       native.browserViews.hideAll().catch(() => {});
@@ -446,6 +447,7 @@ export function MainLayout() {
           onNewWorkspaceFromGitHub={setGithubPickerRepoId}
           onAddRepository={repoActions.handleOpenProject}
           onCloneRepository={() => repoActions.setShowCloneModal(true)}
+          onStartNewProject={() => repoActions.setShowStartNewModal(true)}
           onArchive={archiveWorkspace}
           onStatusChange={handleStatusChange}
           onNewSession={() => selectWorkspace(null)}
@@ -468,6 +470,7 @@ export function MainLayout() {
           onCreateWorkspace={openNewWorkspaceModal}
           onOpenProject={repoActions.handleOpenProject}
           onCloneRepository={() => repoActions.setShowCloneModal(true)}
+          onStartNewProject={() => repoActions.setShowStartNewModal(true)}
           repos={repos}
           onStartWorkspace={handleStartWorkspace}
         />
@@ -517,6 +520,16 @@ export function MainLayout() {
         onClearError={repoActions.clearCloneError}
       />
 
+      <StartNewProjectModal
+        show={repoActions.showStartNewModal}
+        creating={repoActions.startingNew}
+        error={repoActions.startNewError}
+        statusMessage={repoActions.startNewStatus}
+        onClose={repoActions.closeStartNewModal}
+        onCreateProject={repoActions.handleStartNewProject}
+        onClearError={repoActions.clearStartNewError}
+      />
+
       <GitHubPickerModal
         open={!!githubPickerRepoId}
         onOpenChange={(open) => !open && setGithubPickerRepoId(null)}
@@ -530,6 +543,7 @@ export function MainLayout() {
         actionOverrides={{
           "open-project": repoActions.handleOpenProject,
           "clone-repository": () => repoActions.setShowCloneModal(true),
+          "start-new-project": () => repoActions.setShowStartNewModal(true),
           "open-in-app": openInLastApp,
         }}
       />
