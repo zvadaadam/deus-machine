@@ -39,3 +39,7 @@ So we don't need to change the bundle.com.duse.app is good. So we want to keep i
 ---
 
 i add the app.deusmachine.ai manualyy can u do the rest by yosuelf?
+
+---
+
+commit deploy all, is it live?
