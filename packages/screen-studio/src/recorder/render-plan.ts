@@ -102,10 +102,13 @@ export function createPlaybackPlan(
 ): PlaybackPlan {
   const cfg = { ...DEFAULT_SPEED_RAMP_CONFIG, ...config };
 
-  // Extract and sort meaningful action timestamps
+  // Extract and sort meaningful action timestamps, clamped to source duration.
+  // Event timestamps are relative to session start, but the raw video may be
+  // shorter than the session (frames only arrive while streaming is active).
   const timestamps = events
     .filter(isMeaningfulAction)
     .map((e) => e.t)
+    .filter((t) => t < sourceDurationMs)
     .sort((a, b) => a - b);
 
   // No actions — single segment at 1x

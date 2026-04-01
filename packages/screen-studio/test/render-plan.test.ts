@@ -144,6 +144,35 @@ describe("createPlaybackPlan", () => {
     expect(plan.outputDurationMs).toBeLessThan(57000);
   });
 
+  it("filters events beyond source duration (no negative segments)", () => {
+    // Regression: events at 25s, 30s, 35s with 18.6s video caused negative
+    // action durations and negative outputDurationMs (-8100ms)
+    const events = [
+      makeEvent("navigate", 5000),
+      makeEvent("click", 8000),
+      makeEvent("type", 12000),
+      makeEvent("scroll", 15000),
+      makeEvent("click", 25000), // Beyond 18.6s source
+      makeEvent("navigate", 30000), // Beyond 18.6s source
+      makeEvent("scroll", 35000), // Beyond 18.6s source
+    ];
+
+    const plan = createPlaybackPlan(events, 18600);
+
+    // All durations must be positive
+    expect(plan.outputDurationMs).toBeGreaterThan(0);
+    for (const s of plan.segments) {
+      expect(s.outputDurationMs).toBeGreaterThanOrEqual(0);
+      expect(s.sourceDurationMs).toBeGreaterThanOrEqual(0);
+      expect(s.sourceEndMs).toBeGreaterThanOrEqual(s.sourceStartMs);
+      expect(s.outputEndMs).toBeGreaterThanOrEqual(s.outputStartMs);
+    }
+
+    // Events beyond source should be excluded
+    const maxSourceEnd = Math.max(...plan.segments.map((s) => s.sourceEndMs));
+    expect(maxSourceEnd).toBeLessThanOrEqual(18600);
+  });
+
   it("ignores idle and screenshot events", () => {
     const plan = createPlaybackPlan(
       [makeEvent("idle", 1000), makeEvent("screenshot", 2000), makeEvent("click", 5000)],
