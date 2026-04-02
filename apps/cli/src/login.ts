@@ -13,16 +13,7 @@ import { join } from "node:path";
 import { homedir, platform } from "node:os";
 import { select, input } from "./prompt.js";
 import { loadConfig, saveConfig } from "./config.js";
-import {
-  spinner as createSpinner,
-  c,
-  sym,
-  blank,
-  success,
-  error,
-  warn,
-  hint,
-} from "./ui.js";
+import { spinner as createSpinner, c, sym, blank, success, error, warn, hint } from "./ui.js";
 
 // ── Types ────────────────────────────────────────────────────────────
 
@@ -53,13 +44,13 @@ function getClaudeCliCandidates(): string[] {
     candidates.push(
       "/opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js",
       "/usr/local/lib/node_modules/@anthropic-ai/claude-code/cli.js",
-      join(homedir(), ".npm/lib/node_modules/@anthropic-ai/claude-code/cli.js"),
+      join(homedir(), ".npm/lib/node_modules/@anthropic-ai/claude-code/cli.js")
     );
   } else if (os === "linux") {
     candidates.push(
       "/usr/lib/node_modules/@anthropic-ai/claude-code/cli.js",
       "/usr/local/lib/node_modules/@anthropic-ai/claude-code/cli.js",
-      join(homedir(), ".npm/lib/node_modules/@anthropic-ai/claude-code/cli.js"),
+      join(homedir(), ".npm/lib/node_modules/@anthropic-ai/claude-code/cli.js")
     );
   }
 
@@ -85,12 +76,20 @@ export function detectClaudeCli(): ClaudeCliInfo {
 
   // Try PATH discovery
   try {
-    const shell = process.env.SHELL || "/bin/sh";
-    const claudePath = execSync(`${shell} -lc "command -v claude"`, {
-      encoding: "utf-8",
-      timeout: 5000,
-      stdio: ["pipe", "pipe", "pipe"],
-    }).trim();
+    const claudePath =
+      platform() === "win32"
+        ? execSync("where claude", {
+            encoding: "utf-8",
+            timeout: 5000,
+            stdio: ["pipe", "pipe", "pipe"],
+          })
+            .trim()
+            .split(/\r?\n/)[0]
+        : execSync(`${process.env.SHELL || "/bin/sh"} -lc "command -v claude"`, {
+            encoding: "utf-8",
+            timeout: 5000,
+            stdio: ["pipe", "pipe", "pipe"],
+          }).trim();
 
     if (claudePath) {
       try {
@@ -126,6 +125,14 @@ function isClaudeAuthenticated(): boolean {
   return false;
 }
 
+/** Save auth result and clear stale API key when switching to a non-api_key method. */
+function persistAuth(result: AuthResult): void {
+  const config = loadConfig();
+  config.auth_method = result.method;
+  config.anthropic_api_key = result.method === "api_key" ? result.apiKey : undefined;
+  saveConfig(config);
+}
+
 // ── Auth Setup Flow ──────────────────────────────────────────────────
 
 export async function runAuthSetup(opts?: { force?: boolean }): Promise<AuthResult> {
@@ -144,8 +151,7 @@ export async function runAuthSetup(opts?: { force?: boolean }): Promise<AuthResu
     success("ANTHROPIC_API_KEY detected in environment");
     blank();
     const result: AuthResult = { method: "env" };
-    config.auth_method = "env";
-    saveConfig(config);
+    persistAuth(result);
     return result;
   }
 
@@ -161,8 +167,7 @@ export async function runAuthSetup(opts?: { force?: boolean }): Promise<AuthResu
     blank();
 
     const result: AuthResult = { method: "claude_cli" };
-    config.auth_method = "claude_cli";
-    saveConfig(config);
+    persistAuth(result);
     return result;
   }
 
@@ -199,7 +204,11 @@ export async function runAuthSetup(opts?: { force?: boolean }): Promise<AuthResu
   const choice = await select({
     message: "How would you like to set it up?",
     options: [
-      { label: "Install Claude Code", value: "install" as const, hint: "npm install -g @anthropic-ai/claude-code" },
+      {
+        label: "Install Claude Code",
+        value: "install" as const,
+        hint: "npm install -g @anthropic-ai/claude-code",
+      },
       { label: "Enter API key manually", value: "api_key" as const },
       { label: "Skip for now", value: "skip" as const },
     ],
@@ -232,9 +241,7 @@ async function runClaudeLogin(cliPath: string): Promise<AuthResult> {
     success("Authenticated successfully!");
     blank();
 
-    const config = loadConfig();
-    config.auth_method = "claude_cli";
-    saveConfig(config);
+    persistAuth({ method: "claude_cli" });
     return { method: "claude_cli" };
   }
 
@@ -307,18 +314,12 @@ async function promptForApiKey(): Promise<AuthResult> {
   success("API key saved");
   blank();
 
-  const config = loadConfig();
-  config.auth_method = "api_key";
-  config.anthropic_api_key = trimmed;
-  saveConfig(config);
-
+  persistAuth({ method: "api_key", apiKey: trimmed });
   return { method: "api_key", apiKey: trimmed };
 }
 
 function skipAuth(): AuthResult {
-  const config = loadConfig();
-  config.auth_method = "skipped";
-  saveConfig(config);
+  persistAuth({ method: "skipped" });
 
   hint(`You can configure this later with ${c.cyan("deus login")}`);
   blank();

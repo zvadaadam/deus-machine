@@ -64,22 +64,22 @@ function rsEncode(data: Uint8Array, ecCount: number): Uint8Array {
 
 // [total codewords, ec codewords per block, num blocks] for Level L
 const VERSION_INFO: [number, number, number][] = [
-  [0, 0, 0],       // v0 placeholder
-  [26, 7, 1],      // v1: 26 total, 7 EC, 1 block → 19 data
-  [44, 10, 1],     // v2: 44 total, 10 EC → 34 data
-  [70, 15, 1],     // v3: 70 total, 15 EC → 55 data
-  [100, 20, 1],    // v4: 100 total, 20 EC → 80 data
-  [134, 26, 1],    // v5: 134 total, 26 EC → 108 data
+  [0, 0, 0], // v0 placeholder
+  [26, 7, 1], // v1: 26 total, 7 EC, 1 block → 19 data
+  [44, 10, 1], // v2: 44 total, 10 EC → 34 data
+  [70, 15, 1], // v3: 70 total, 15 EC → 55 data
+  [100, 20, 1], // v4: 100 total, 20 EC → 80 data
+  [134, 26, 1], // v5: 134 total, 26 EC → 108 data
 ];
 
 // Alignment pattern positions by version (v2+)
 const ALIGNMENT_POS: number[][] = [
-  [],          // v0
-  [],          // v1
-  [6, 18],     // v2
-  [6, 22],     // v3
-  [6, 26],     // v4
-  [6, 30],     // v5
+  [], // v0
+  [], // v1
+  [6, 18], // v2
+  [6, 22], // v3
+  [6, 26], // v4
+  [6, 30], // v5
 ];
 
 function getVersion(dataLen: number): number {
@@ -251,7 +251,12 @@ const MASKS: MaskFn[] = [
   (r, c) => (((r + c) % 2) + ((r * c) % 3)) % 2 === 0,
 ];
 
-function applyMask(matrix: number[][], reserved: boolean[][], size: number, maskIdx: number): number[][] {
+function applyMask(
+  matrix: number[][],
+  reserved: boolean[][],
+  size: number,
+  maskIdx: number
+): number[][] {
   const masked = matrix.map((r) => [...r]);
   const fn = MASKS[maskIdx];
 
@@ -299,9 +304,13 @@ function scoreMask(matrix: number[][], size: number): number {
   for (let r = 0; r < size; r++) {
     for (let c = 0; c <= size - 7; c++) {
       if (
-        matrix[r][c] === 1 && matrix[r][c+1] === 0 && matrix[r][c+2] === 1 &&
-        matrix[r][c+3] === 1 && matrix[r][c+4] === 1 && matrix[r][c+5] === 0 &&
-        matrix[r][c+6] === 1
+        matrix[r][c] === 1 &&
+        matrix[r][c + 1] === 0 &&
+        matrix[r][c + 2] === 1 &&
+        matrix[r][c + 3] === 1 &&
+        matrix[r][c + 4] === 1 &&
+        matrix[r][c + 5] === 0 &&
+        matrix[r][c + 6] === 1
       ) {
         score += 40;
       }
@@ -315,9 +324,7 @@ function scoreMask(matrix: number[][], size: number): number {
 
 // Pre-computed format info strings for Level L (EC=01), masks 0-7
 // Format: EC level (2 bits) + mask (3 bits) + BCH error correction (10 bits)
-const FORMAT_STRINGS: number[] = [
-  0x77c4, 0x72f3, 0x7daa, 0x789d, 0x662f, 0x6318, 0x6c41, 0x6976,
-];
+const FORMAT_STRINGS: number[] = [0x77c4, 0x72f3, 0x7daa, 0x789d, 0x662f, 0x6318, 0x6c41, 0x6976];
 
 function placeFormatInfo(matrix: number[][], size: number, maskIdx: number) {
   const bits = FORMAT_STRINGS[maskIdx];
@@ -325,15 +332,38 @@ function placeFormatInfo(matrix: number[][], size: number, maskIdx: number) {
   // Bits 0-7 along left column (bottom to top at col 8)
   // Bits 8-14 along top row (left to right at row 8)
   const positions1: [number, number][] = [
-    [8, 0], [8, 1], [8, 2], [8, 3], [8, 4], [8, 5],
-    [8, 7], [8, 8], [7, 8],
-    [5, 8], [4, 8], [3, 8], [2, 8], [1, 8], [0, 8],
+    [8, 0],
+    [8, 1],
+    [8, 2],
+    [8, 3],
+    [8, 4],
+    [8, 5],
+    [8, 7],
+    [8, 8],
+    [7, 8],
+    [5, 8],
+    [4, 8],
+    [3, 8],
+    [2, 8],
+    [1, 8],
+    [0, 8],
   ];
   const positions2: [number, number][] = [
-    [size - 1, 8], [size - 2, 8], [size - 3, 8], [size - 4, 8],
-    [size - 5, 8], [size - 6, 8], [size - 7, 8],
-    [8, size - 8], [8, size - 7], [8, size - 6], [8, size - 5],
-    [8, size - 4], [8, size - 3], [8, size - 2], [8, size - 1],
+    [size - 1, 8],
+    [size - 2, 8],
+    [size - 3, 8],
+    [size - 4, 8],
+    [size - 5, 8],
+    [size - 6, 8],
+    [size - 7, 8],
+    [8, size - 8],
+    [8, size - 7],
+    [8, size - 6],
+    [8, size - 5],
+    [8, size - 4],
+    [8, size - 3],
+    [8, size - 2],
+    [8, size - 1],
   ];
 
   for (let i = 0; i < 15; i++) {
@@ -422,8 +452,9 @@ export function generateQR(data: string): string[] {
   const final = applyMask(matrix, reserved, size, bestMask);
   placeFormatInfo(final, size, bestMask);
 
-  // Render with quiet zone (1 module border)
-  const qSize = size + 2;
+  // Render with spec-compliant quiet zone (4 modules per ISO 18004)
+  const QUIET = 4;
+  const qSize = size + QUIET * 2;
   const lines: string[] = [];
 
   // Use half-block rendering: two QR rows per terminal line
@@ -434,12 +465,12 @@ export function generateQR(data: string): string[] {
   for (let r = 0; r < qSize; r += 2) {
     let line = "";
     for (let c = 0; c < qSize; c++) {
-      const topR = r - 1;
-      const botR = r;
-      const col = c - 1;
+      const topR = r - QUIET;
+      const botR = r - QUIET + 1;
+      const col = c - QUIET;
 
-      const top = (topR >= 0 && topR < size && col >= 0 && col < size) ? final[topR][col] : 0;
-      const bot = (botR >= 0 && botR < size && col >= 0 && col < size) ? final[botR][col] : 0;
+      const top = topR >= 0 && topR < size && col >= 0 && col < size ? final[topR][col] : 0;
+      const bot = botR >= 0 && botR < size && col >= 0 && col < size ? final[botR][col] : 0;
 
       if (top && bot) {
         line += "\u2588"; // █ full block
@@ -466,6 +497,7 @@ export function printQR(data: string, indent = 4): void {
       console.log(pad + line);
     }
   } catch {
-    // If QR generation fails (data too long), just skip it silently
+    // QR generation failed (data too long for v1-5)
+    console.log(pad + "(QR code unavailable \u2014 use the link below)");
   }
 }

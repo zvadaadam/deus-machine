@@ -32,12 +32,7 @@ import {
   kv,
   gradientText,
 } from "./ui.js";
-import {
-  loadConfig,
-  hasCompletedOnboarding,
-  writeServerInfo,
-  clearServerInfo,
-} from "./config.js";
+import { loadConfig, hasCompletedOnboarding, writeServerInfo, clearServerInfo } from "./config.js";
 import { runOnboarding } from "./onboarding.js";
 import { showPairCode } from "./pair.js";
 import { formatUptime } from "./lib/format.js";
@@ -101,10 +96,10 @@ export async function start(options: StartOptions): Promise<void> {
     // Send SIGTERM and wait for children to exit (up to 5s)
     const exitPromises: Promise<void>[] = [];
     for (const child of children) {
-      if (!child.process.killed) {
+      if (child.process.exitCode === null && child.process.signalCode === null) {
         exitPromises.push(
           new Promise<void>((resolve) => {
-            child.process.on("exit", resolve);
+            child.process.once("exit", resolve);
             child.process.kill("SIGTERM");
           })
         );
@@ -114,7 +109,9 @@ export async function start(options: StartOptions): Promise<void> {
     const drainTimeout = setTimeout(() => {
       // Force kill after 5s if children haven't exited
       for (const child of children) {
-        if (!child.process.killed) child.process.kill("SIGKILL");
+        if (child.process.exitCode === null && child.process.signalCode === null) {
+          child.process.kill("SIGKILL");
+        }
       }
     }, 5000);
 
@@ -290,7 +287,7 @@ function resolveNodeBinary(): string {
 
   try {
     const electronPath = execSync(
-      'node -e "try { console.log(require(\'electron\')) } catch { process.exit(1) }"',
+      "node -e \"try { console.log(require('electron')) } catch { process.exit(1) }\"",
       { encoding: "utf-8", timeout: 5000, stdio: ["pipe", "pipe", "pipe"] }
     ).trim();
 
@@ -305,7 +302,9 @@ function resolveNodeBinary(): string {
         return electronPath;
       }
     }
-  } catch {}
+  } catch {
+    // ignore — fall through to default
+  }
 
   return process.execPath;
 }
@@ -342,6 +341,7 @@ async function startProcess(opts: {
     const timeout = setTimeout(() => {
       if (!resolved) {
         resolved = true;
+        child.kill("SIGTERM");
         resolve(null);
       }
     }, timeoutMs);
@@ -370,4 +370,3 @@ async function startProcess(opts: {
     });
   });
 }
-

@@ -21,16 +21,7 @@ import { installDesktop, hasDisplay, findInstalledApp, launchDesktop } from "./d
 import { pair } from "./pair.js";
 import { runAuthSetup } from "./login.js";
 import { showStatus } from "./status.js";
-import {
-  animatedBanner,
-  banner,
-  c,
-  blank,
-  info,
-  hint,
-  success,
-  error,
-} from "./ui.js";
+import { animatedBanner, banner, c, blank, info, hint, success, error } from "./ui.js";
 
 function printHelp(version: string) {
   banner(version);
@@ -39,7 +30,9 @@ function printHelp(version: string) {
 
   console.log(`  ${c.bold("Commands:")}`);
   console.log(`    ${c.cyan("(none)")}        Auto-detect: launch desktop app or start server`);
-  console.log(`    ${c.cyan("start")}        Start headless server ${c.dim("(backend + agent-server)")}`);
+  console.log(
+    `    ${c.cyan("start")}        Start headless server ${c.dim("(backend + agent-server)")}`
+  );
   console.log(`    ${c.cyan("install")}      Download and install the desktop app`);
   console.log(`    ${c.cyan("pair")}         Generate a pairing code for remote access`);
   console.log(`    ${c.cyan("login")}        Configure AI agent authentication`);
@@ -51,7 +44,9 @@ function printHelp(version: string) {
   blank();
 
   console.log(`  ${c.bold("Options")} ${c.dim("(install):")}`);
-  console.log(`    ${c.cyan("--version")}    Install a specific version ${c.dim("(default: latest)")}`);
+  console.log(
+    `    ${c.cyan("--version")}    Install a specific version ${c.dim("(default: latest)")}`
+  );
   blank();
 
   console.log(`  ${c.bold("Examples:")}`);
@@ -64,7 +59,9 @@ function printHelp(version: string) {
   blank();
 
   console.log(`  ${c.bold("Quick start:")}`);
-  console.log(`    ${c.dim("$")} npx deus-machine          ${c.dim("# just works, no install needed")}`);
+  console.log(
+    `    ${c.dim("$")} npx deus-machine          ${c.dim("# just works, no install needed")}`
+  );
   blank();
 }
 
@@ -101,7 +98,8 @@ async function main() {
   switch (resolvedCommand) {
     // ── Start headless server ──────────────────────────────────────
     case "start":
-    case "serve": { // backward compat
+    case "serve": {
+      // backward compat
       const { values } = parseArgs({
         args: commandArgs,
         options: {
@@ -118,7 +116,8 @@ async function main() {
 
     // ── Install desktop app ────────────────────────────────────────
     case "install":
-    case "desktop": { // backward compat
+    case "desktop": {
+      // backward compat
       // Check if already installed — just launch
       const installedPath = findInstalledApp();
       if (installedPath) {

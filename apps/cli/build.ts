@@ -47,11 +47,9 @@ async function main() {
   // Step 2: Create bin/ entry point
   console.log("\n2. Creating bin/deus.js...");
   mkdirSync(join(cliDir, "bin"), { recursive: true });
-  writeFileSync(
-    join(cliDir, "bin/deus.js"),
-    `#!/usr/bin/env node\nimport "../dist/cli.js";\n`,
-    { mode: 0o755 }
-  );
+  writeFileSync(join(cliDir, "bin/deus.js"), `#!/usr/bin/env node\nimport "../dist/cli.js";\n`, {
+    mode: 0o755,
+  });
 
   // Step 3: Copy bundles for distribution
   console.log("\n3. Copying bundles...");

@@ -32,11 +32,7 @@ const INSTALL_PATHS: Record<string, string[]> = {
     `${process.env.LOCALAPPDATA || ""}\\Programs\\Deus\\Deus.exe`,
     `${process.env.PROGRAMFILES || ""}\\Deus\\Deus.exe`,
   ],
-  linux: [
-    `${homedir()}/.local/bin/Deus.AppImage`,
-    "/usr/local/bin/Deus.AppImage",
-    "/usr/bin/deus",
-  ],
+  linux: [`${homedir()}/.local/bin/Deus.AppImage`, "/usr/local/bin/Deus.AppImage", "/usr/bin/deus"],
 };
 
 export interface DesktopOptions {
@@ -145,7 +141,9 @@ export async function installDesktop(options: DesktopOptions): Promise<void> {
   // Cleanup temp file
   try {
     unlinkSync(downloadPath);
-  } catch {}
+  } catch {
+    // ignore cleanup failure
+  }
 
   if (installed) {
     blank();
@@ -197,15 +195,26 @@ async function fetchRelease(version: string): Promise<GithubRelease | null> {
           if (loc) {
             get(loc, { headers: { "User-Agent": "deus-cli" } }, (r) => {
               collectBody(r).then((b) => {
-                try { resolve(JSON.parse(b)); } catch { resolve(null); }
+                try {
+                  resolve(JSON.parse(b));
+                } catch {
+                  resolve(null);
+                }
               });
             }).on("error", () => resolve(null));
             return;
           }
         }
-        if (res.statusCode !== 200) { resolve(null); return; }
+        if (res.statusCode !== 200) {
+          resolve(null);
+          return;
+        }
         collectBody(res).then((b) => {
-          try { resolve(JSON.parse(b)); } catch { resolve(null); }
+          try {
+            resolve(JSON.parse(b));
+          } catch {
+            resolve(null);
+          }
         });
       }
     ).on("error", () => resolve(null));
@@ -227,7 +236,10 @@ async function downloadFile(url: string, dest: string): Promise<void> {
       get(downloadUrl, { headers: { "User-Agent": "deus-cli" } }, (res) => {
         if (res.statusCode === 302 || res.statusCode === 301) {
           const loc = res.headers.location;
-          if (loc) { download(loc); return; }
+          if (loc) {
+            download(loc);
+            return;
+          }
         }
 
         if (res.statusCode !== 200) {
@@ -242,7 +254,11 @@ async function downloadFile(url: string, dest: string): Promise<void> {
         res.on("data", (chunk: Buffer) => {
           downloaded += chunk.length;
           if (totalSize > 0) {
-            progressBar(downloaded, totalSize, formatBytes(downloaded) + " / " + formatBytes(totalSize));
+            progressBar(
+              downloaded,
+              totalSize,
+              formatBytes(downloaded) + " / " + formatBytes(totalSize)
+            );
           }
         });
         res.pipe(file);
@@ -312,15 +328,20 @@ async function installForPlatform(
     }
 
     case "linux": {
-      execSync(`chmod +x "${filePath}"`);
-      const installDir = join(homedir(), ".local", "bin");
-      mkdirSync(installDir, { recursive: true });
-      const destPath = join(installDir, "Deus.AppImage");
-      execSync(`cp "${filePath}" "${destPath}"`);
-      s.succeed(`Installed to ${c.dim(destPath)}`);
+      try {
+        execSync(`chmod +x "${filePath}"`);
+        const installDir = join(homedir(), ".local", "bin");
+        mkdirSync(installDir, { recursive: true });
+        const destPath = join(installDir, "Deus.AppImage");
+        execSync(`cp "${filePath}" "${destPath}"`);
+        s.succeed(`Installed to ${c.dim(destPath)}`);
 
-      launchDesktop(destPath);
-      return true;
+        launchDesktop(destPath);
+        return true;
+      } catch {
+        s.fail("Installation failed — check permissions");
+        return false;
+      }
     }
 
     default:

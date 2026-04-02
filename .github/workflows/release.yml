@@ -20,6 +20,8 @@
 #   SENTRY_DSN_NODE                    — Sentry DSN for backend error tracking
 #   VITE_SENTRY_DSN                    — Sentry DSN for frontend error tracking
 #   SENTRY_AUTH_TOKEN                  — Sentry auth token for source map upload
+#
+# Required for CLI publishing:
 #   NPM_TOKEN                         — npm access token for publishing deus-machine CLI
 
 name: Release
@@ -267,6 +269,15 @@ jobs:
     if: ${{ inputs.dry_run == false }}
     runs-on: ubuntu-latest
     steps:
+      - name: Validate npm token
+        run: |
+          if [ -z "$NODE_AUTH_TOKEN" ]; then
+            echo "::error::NPM_TOKEN secret is not configured. Cannot publish CLI."
+            exit 1
+          fi
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+
       - uses: actions/checkout@v4
         with:
           ref: ${{ needs.validate-and-bump.outputs.tag }}

@@ -21,12 +21,14 @@ export interface SelectOption<T> {
  * Arrow-key single-select from a list of options.
  * Returns the selected value.
  */
-export async function select<T>(opts: {
-  message: string;
-  options: SelectOption<T>[];
-}): Promise<T> {
+export async function select<T>(opts: { message: string; options: SelectOption<T>[] }): Promise<T> {
   const { message, options } = opts;
   const stdin = process.stdin;
+  if (!stdin.isTTY) {
+    throw new Error(
+      "Interactive prompts require a TTY. Run in a terminal or set ANTHROPIC_API_KEY env var."
+    );
+  }
   const stream = process.stderr;
 
   let selected = 0;
@@ -120,6 +122,11 @@ export async function input(opts: {
 }): Promise<string> {
   const { message, placeholder, mask } = opts;
   const stdin = process.stdin;
+  if (!stdin.isTTY) {
+    throw new Error(
+      "Interactive prompts require a TTY. Run in a terminal or set ANTHROPIC_API_KEY env var."
+    );
+  }
   const stream = process.stderr;
 
   let value = "";
@@ -194,12 +201,14 @@ export async function input(opts: {
 /**
  * Yes/No confirmation prompt.
  */
-export async function confirm(opts: {
-  message: string;
-  default?: boolean;
-}): Promise<boolean> {
+export async function confirm(opts: { message: string; default?: boolean }): Promise<boolean> {
   const { message, default: defaultValue = true } = opts;
   const stdin = process.stdin;
+  if (!stdin.isTTY) {
+    throw new Error(
+      "Interactive prompts require a TTY. Run in a terminal or set ANTHROPIC_API_KEY env var."
+    );
+  }
   const stream = process.stderr;
 
   const hint = defaultValue ? `[${c.bold("Y")}/n]` : `[y/${c.bold("N")}]`;

@@ -83,38 +83,10 @@ export const sym = {
 // ── Logo / Banner ────────────────────────────────────────────────────
 
 // DEUS in block characters (ANSI Shadow style), per-letter for gradient coloring
-const LOGO_D = [
-  "██████╗ ",
-  "██╔══██╗",
-  "██║  ██║",
-  "██║  ██║",
-  "██████╔╝",
-  "╚═════╝ ",
-];
-const LOGO_E = [
-  "███████╗",
-  "██╔════╝",
-  "█████╗  ",
-  "██╔══╝  ",
-  "███████╗",
-  "╚══════╝",
-];
-const LOGO_U = [
-  "██╗   ██╗",
-  "██║   ██║",
-  "██║   ██║",
-  "██║   ██║",
-  "╚██████╔╝",
-  " ╚═════╝ ",
-];
-const LOGO_S = [
-  "███████╗",
-  "██╔════╝",
-  "███████╗",
-  "╚════██║",
-  "███████║",
-  "╚══════╝",
-];
+const LOGO_D = ["██████╗ ", "██╔══██╗", "██║  ██║", "██║  ██║", "██████╔╝", "╚═════╝ "];
+const LOGO_E = ["███████╗", "██╔════╝", "█████╗  ", "██╔══╝  ", "███████╗", "╚══════╝"];
+const LOGO_U = ["██╗   ██╗", "██║   ██║", "██║   ██║", "██║   ██║", "╚██████╔╝", " ╚═════╝ "];
+const LOGO_S = ["███████╗", "██╔════╝", "███████╗", "╚════██║", "███████║", "╚══════╝"];
 
 const LETTERS = [LOGO_D, LOGO_E, LOGO_U, LOGO_S];
 
@@ -360,9 +332,7 @@ export function box(
   for (let i = 0; i < lines.length; i++) {
     const visible = stripped[i].length;
     const rightPad = " ".repeat(Math.max(0, contentWidth - visible));
-    console.log(
-      borderColor(`  ${sym.v}`) + pad + lines[i] + rightPad + pad + borderColor(sym.v)
-    );
+    console.log(borderColor(`  ${sym.v}`) + pad + lines[i] + rightPad + pad + borderColor(sym.v));
   }
   console.log(empty);
   console.log(bot);
@@ -499,4 +469,3 @@ export function stripAnsi(str: string): string {
 export function sleep(ms: number): Promise<void> {
   return new Promise((r) => setTimeout(r, ms));
 }
-

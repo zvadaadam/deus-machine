@@ -6,7 +6,15 @@
  * completion, auth method choice, and server runtime info.
  */
 
-import { readFileSync, writeFileSync, existsSync, unlinkSync, renameSync, mkdirSync } from "node:fs";
+import {
+  readFileSync,
+  writeFileSync,
+  existsSync,
+  unlinkSync,
+  renameSync,
+  mkdirSync,
+  chmodSync,
+} from "node:fs";
 import { join } from "node:path";
 import { homedir, platform } from "node:os";
 import { randomBytes } from "node:crypto";
@@ -80,10 +88,15 @@ export function saveConfig(config: DeusConfig): void {
 
   try {
     writeFileSync(tmp, JSON.stringify(config, null, 2) + "\n", "utf-8");
+    chmodSync(tmp, 0o600);
     renameSync(tmp, path);
   } catch {
     // Clean up temp file on failure
-    try { unlinkSync(tmp); } catch {}
+    try {
+      unlinkSync(tmp);
+    } catch {
+      // ignore cleanup failure
+    }
     throw new Error(`Failed to save config to ${path}`);
   }
 }
@@ -100,6 +113,7 @@ export function writeServerInfo(info: ServerInfo): void {
 
   const path = getServerInfoPath();
   writeFileSync(path, JSON.stringify(info, null, 2) + "\n", "utf-8");
+  chmodSync(path, 0o600);
 }
 
 export function readServerInfo(): ServerInfo | null {

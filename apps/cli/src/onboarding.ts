@@ -11,13 +11,7 @@
 import { runAuthSetup, type AuthResult } from "./login.js";
 import { loadConfig, saveConfig, hasCompletedOnboarding } from "./config.js";
 import { confirm } from "./prompt.js";
-import {
-  c,
-  divider,
-  blank,
-  success,
-  hint,
-} from "./ui.js";
+import { c, divider, blank, success, hint } from "./ui.js";
 
 interface OnboardingResult {
   auth: AuthResult;

@@ -3,15 +3,7 @@
  * with a QR code for easy remote access.
  */
 
-import {
-  c,
-  sym,
-  box,
-  blank,
-  error,
-  hint,
-  divider,
-} from "./ui.js";
+import { c, sym, box, blank, error, hint, divider } from "./ui.js";
 import { readServerInfo } from "./config.js";
 import { printQR } from "./qr.js";
 import { httpPost, httpGet } from "./lib/http.js";

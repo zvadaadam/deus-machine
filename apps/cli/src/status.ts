@@ -3,15 +3,7 @@
  * Used by the `deus status` command.
  */
 
-import {
-  c,
-  sym,
-  blank,
-  divider,
-  kv,
-  error,
-  hint,
-} from "./ui.js";
+import { c, sym, blank, divider, kv, error, hint } from "./ui.js";
 import { readServerInfo } from "./config.js";
 import { httpGet } from "./lib/http.js";
 import { formatUptime, formatTimeAgo } from "./lib/format.js";
