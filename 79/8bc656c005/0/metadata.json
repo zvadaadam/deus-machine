@@ -1,0 +1,50 @@
+{
+  "cli_version": "0.5.0",
+  "checkpoint_id": "798bc656c005",
+  "session_id": "8f398579-1716-43f2-9512-91b25621a2b7",
+  "strategy": "manual-commit",
+  "created_at": "2026-04-02T12:37:15.365804Z",
+  "branch": "zvadaadam/npm-cli-installer",
+  "checkpoints_count": 16,
+  "files_touched": [
+    ".github/workflows/release.yml",
+    ".husky/_/commit-msg",
+    ".husky/_/post-commit",
+    ".husky/_/pre-push",
+    ".husky/_/prepare-commit-msg",
+    "apps/cli/build.ts",
+    "apps/cli/src/cli.ts",
+    "apps/cli/src/config.ts",
+    "apps/cli/src/desktop.ts",
+    "apps/cli/src/login.ts",
+    "apps/cli/src/onboarding.ts",
+    "apps/cli/src/pair.ts",
+    "apps/cli/src/prompt.ts",
+    "apps/cli/src/qr.ts",
+    "apps/cli/src/start.ts",
+    "apps/cli/src/status.ts",
+    "apps/cli/src/ui.ts",
+    "knip.json"
+  ],
+  "agent": "Claude Code",
+  "turn_id": "619922be3b27",
+  "token_usage": {
+    "input_tokens": 2625,
+    "cache_creation_tokens": 361390,
+    "cache_read_tokens": 10567049,
+    "output_tokens": 38600,
+    "api_call_count": 119
+  },
+  "session_metrics": {
+    "turn_count": 16
+  },
+  "initial_attribution": {
+    "calculated_at": "2026-04-02T12:37:14.86487Z",
+    "agent_lines": 208,
+    "human_added": 2486,
+    "human_modified": 16,
+    "human_removed": 0,
+    "total_committed": 2694,
+    "agent_percentage": 7.720861172976985
+  }
+}
