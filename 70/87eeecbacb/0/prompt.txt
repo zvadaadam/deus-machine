@@ -2348,3 +2348,7 @@ also /Users/zvada/Developer/agent/box-ide/.conductor/monrovia-v1/.context/attach
 ---
 
 stil the same problem i want yu tot rea dteh docs it fhtinkw e aded this ifnro tehre why this fulslcren rpibelm whappens weh teh browser navoaget is called u know becasue there is this prbelm where if th browseer rnto working or simehtign the brwoser conect to runing lcolahsot of the app
+
+---
+
+Okay, let me tell you, maybe you changed some code, because we always have to have a tab ready. And I think when the website fails, then we have this problem that Because the problem is that we got into the situation that the browser keeps changing. And it's taking maybe there is no tab available. So what it does, the browser tab, it hooks up to the localhost browser. We used to have a note in the code there, why this happens. So explore it and find a note. Maybe we stored it in memory. It was a very painful problem. So I don't think that these clamps and the bounding box and these kind of things get us anywhere. I think this is not necessary code. We need to find a better solution, always be able to give available tab to the When we do browse and navigate it needs to have a tab available or fail. And what we did is that we tried to always create the tab, you know.
