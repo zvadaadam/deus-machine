@@ -1,0 +1,36 @@
+{
+  "cli_version": "0.5.0",
+  "checkpoint_id": "643c2e45b0ad",
+  "strategy": "manual-commit",
+  "branch": "zvadaadam/file-tree-collapse",
+  "checkpoints_count": 1,
+  "files_touched": [
+    "apps/web/src/app/layouts/MobileLayout.tsx",
+    "apps/web/src/features/workspace/hooks/useWorkspaceLayout.ts",
+    "apps/web/src/features/workspace/lib/workspace.utils.ts",
+    "apps/web/src/features/workspace/store/workspaceLayoutStore.ts",
+    "apps/web/src/features/workspace/ui/AllDiffFileSection.tsx",
+    "apps/web/src/features/workspace/ui/AllFilesDiffViewer.tsx",
+    "apps/web/src/features/workspace/ui/ChangesDiffSection.tsx",
+    "apps/web/src/features/workspace/ui/ChangesDiffViewer.tsx",
+    "apps/web/src/features/workspace/ui/ChangesFilesPanel.tsx",
+    "apps/web/src/features/workspace/ui/ChangesView.tsx",
+    "apps/web/src/features/workspace/ui/DiffFilesTree.tsx",
+    "apps/web/src/features/workspace/ui/index.ts"
+  ],
+  "sessions": [
+    {
+      "metadata": "/64/3c2e45b0ad/0/metadata.json",
+      "transcript": "/64/3c2e45b0ad/0/full.jsonl",
+      "content_hash": "/64/3c2e45b0ad/0/content_hash.txt",
+      "prompt": "/64/3c2e45b0ad/0/prompt.txt"
+    }
+  ],
+  "token_usage": {
+    "input_tokens": 2244,
+    "cache_creation_tokens": 69535,
+    "cache_read_tokens": 306387,
+    "output_tokens": 6133,
+    "api_call_count": 8
+  }
+}
