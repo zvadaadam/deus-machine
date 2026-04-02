@@ -38,7 +38,7 @@ const panelVariants = {
 
 const panelTransition = {
   duration: 0.15,
-  ease: [0.165, 0.84, 0.44, 1], // ease-out-quart
+  ease: [0.165, 0.84, 0.44, 1] as const, // ease-out-quart
 };
 
 export function ChangesMinimap({
@@ -107,12 +107,12 @@ export function ChangesMinimap({
         onMouseEnter={handleMouseEnter}
         onMouseLeave={handleMouseLeave}
       >
-        {fileChanges.map((fc) => {
+        {fileChanges.map((fc, index) => {
           const path = fileChangePath(fc);
           const status = getChangeStatus(fc);
           return (
             <button
-              key={path}
+              key={path || `file-${index}`}
               type="button"
               onClick={() => handleFileClickAndPin(path)}
               className={cn(

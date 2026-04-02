@@ -173,6 +173,7 @@ export function ChangesView({ workspace, isWatched = false, onReview, compact }:
                   <button
                     type="button"
                     onClick={handleUnpin}
+                    aria-label="Collapse file tree to minimap"
                     className="text-text-muted hover:text-text-secondary hover:bg-muted/50 ease flex h-5 w-5 items-center justify-center rounded-md transition-colors duration-150"
                     title="Collapse to minimap"
                   >
