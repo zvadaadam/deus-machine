@@ -83,9 +83,11 @@ export async function start(options: StartOptions): Promise<void> {
   let status: ReturnType<typeof statusLine> | null = null;
 
   let shuttingDown = false;
-  function shutdown() {
+  let exitCode = 0;
+  function shutdown(code = 0) {
     if (shuttingDown) return; // Prevent double-shutdown from rapid Ctrl+C
     shuttingDown = true;
+    exitCode = code;
 
     if (status) status.stop();
     blank();
@@ -122,7 +124,7 @@ export async function start(options: StartOptions): Promise<void> {
       const bye = gradientText("Thanks for using Deus!", [167, 139, 250], [34, 211, 238]);
       console.log(`  ${bye}`);
       blank();
-      process.exit(0);
+      process.exit(exitCode);
     });
   }
   process.on("SIGINT", shutdown);
@@ -147,8 +149,8 @@ export async function start(options: StartOptions): Promise<void> {
 
   if (!agentServerUrl) {
     s1.fail("Agent server failed to start");
-    blank();
-    process.exit(1);
+    shutdown(1);
+    return;
   }
   s1.succeed(`Agent server ${c.dim("ready")}`);
 
@@ -170,8 +172,8 @@ export async function start(options: StartOptions): Promise<void> {
 
   if (!backendPort) {
     s2.fail("Backend failed to start");
-    blank();
-    process.exit(1);
+    shutdown(1);
+    return;
   }
   s2.succeed(`Backend ${c.dim("ready")}`);
 
@@ -223,6 +225,19 @@ export async function start(options: StartOptions): Promise<void> {
     const elapsed = formatUptime(Date.now() - startedAt.getTime());
     return `${c.dim(`Running for ${elapsed}`)}  ${c.dim(`${sym.bullet} Ctrl+C to stop`)}`;
   }, 2000);
+
+  // Supervise children — if either crashes after startup, tear down and exit
+  for (const child of children) {
+    child.process.on("exit", (code, signal) => {
+      if (!shuttingDown) {
+        blank();
+        warn(
+          `${child.name} exited unexpectedly${signal ? ` (${signal})` : code ? ` (code ${code})` : ""}`
+        );
+        shutdown(1);
+      }
+    });
+  }
 
   // Keep the process alive
   await new Promise(() => {});

@@ -290,12 +290,13 @@ async function installForPlatform(
 ): Promise<boolean> {
   switch (os) {
     case "darwin": {
+      let mountPoint: string | undefined;
       try {
         const mountOutput = execSync(`hdiutil attach "${filePath}" -nobrowse`, {
           encoding: "utf-8",
         });
 
-        const mountPoint = mountOutput
+        mountPoint = mountOutput
           .split("\n")
           .filter((line) => line.includes("/Volumes/"))
           .map((line) => line.trim().split("\t").pop()?.trim())
@@ -320,12 +321,19 @@ async function installForPlatform(
           s.warn("DMG mounted — drag Deus to Applications to finish");
         }
 
-        execSync(`hdiutil detach "${mountPoint}" -quiet`, { stdio: "pipe" });
         return true;
       } catch {
         s.fail("Auto-install failed — opening DMG manually");
         execSync(`open "${filePath}"`);
         return false;
+      } finally {
+        if (mountPoint) {
+          try {
+            execSync(`hdiutil detach "${mountPoint}" -quiet`, { stdio: "pipe" });
+          } catch {
+            // Detach may fail if already unmounted — ignore
+          }
+        }
       }
     }
 

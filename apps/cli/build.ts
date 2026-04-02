@@ -12,7 +12,7 @@
  */
 
 import { build } from "esbuild";
-import { cpSync, existsSync, mkdirSync, writeFileSync, readFileSync } from "fs";
+import { cpSync, existsSync, mkdirSync, writeFileSync } from "fs";
 import { resolve, join, dirname } from "path";
 import { fileURLToPath } from "url";
 
@@ -91,15 +91,6 @@ async function main() {
     // No web frontend needed — headless mode uses app.rundeus.com via relay
     process.exit(1);
   }
-
-  // Step 4: Generate a standalone package.json for the published CLI
-  console.log("\n4. Generating publish-ready package.json...");
-  const pkg = JSON.parse(readFileSync(join(cliDir, "package.json"), "utf-8"));
-  // Ensure we don't ship "private: true" or monorepo-specific fields
-  delete pkg.scripts;
-  pkg.main = "dist/cli.js";
-  pkg.type = "module";
-  // Note: we don't overwrite — the original is fine for publishing
 
   console.log("\n✓ Build complete!");
   console.log(`  CLI: ${join(cliDir, "dist/cli.js")}`);
