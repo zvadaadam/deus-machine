@@ -43,6 +43,7 @@ interface WorkspaceLayoutState {
   activeBrowserTabId: string | null; // Which browser tab was last active
   chatPanelCollapsed: boolean;
   contentPanelCollapsed: boolean;
+  fileTreePinned: boolean; // true = expanded file tree panel, false = minimap strip + hover
   chatTabSessionIds: string[]; // Ordered session IDs for open chat tabs
   activeChatTabSessionId: string | null; // Which chat tab is active
   pendingTerminalCommand: string | null; // Command to auto-run in a new terminal tab (e.g. "claude login")
@@ -89,6 +90,7 @@ export const defaultLayout: WorkspaceLayoutState = {
   activeBrowserTabId: null,
   chatPanelCollapsed: false,
   contentPanelCollapsed: false,
+  fileTreePinned: true,
   chatTabSessionIds: [],
   activeChatTabSessionId: null,
   pendingTerminalCommand: null,

@@ -1,7 +1,7 @@
 /**
- * AllFilesDiffViewer — Scrollable container for all changed files' diffs.
+ * ChangesDiffViewer — Scrollable container for all changed files' diffs.
  *
- * Renders each changed file as an AllDiffFileSection with lazy loading.
+ * Renders each changed file as a ChangesDiffSection with lazy loading.
  * Exposes `scrollToFile(path)` via ref for bidirectional sync with the file tree.
  * Tracks which file is currently visible and reports it via `onActiveFileChange`.
  *
@@ -14,15 +14,17 @@
 
 import { forwardRef, useImperativeHandle, useRef, useCallback, useState, useEffect } from "react";
 import { ChevronsUpDown } from "lucide-react";
-import { AllDiffFileSection } from "./AllDiffFileSection";
+import { cn } from "@/shared/lib/utils";
+import { ChangesDiffSection } from "./ChangesDiffSection";
+import { fileChangePath } from "../lib/workspace.utils";
 import { workspaceLayoutActions } from "../store";
 import type { FileChange } from "@/shared/types";
 
-export interface AllFilesDiffViewerRef {
+export interface ChangesDiffViewerRef {
   scrollToFile: (path: string) => void;
 }
 
-interface AllFilesDiffViewerProps {
+interface ChangesDiffViewerProps {
   workspaceId: string;
   fileChanges: FileChange[];
   /** Hide the header bar (file count, collapse/expand). Used when
@@ -31,11 +33,13 @@ interface AllFilesDiffViewerProps {
   onActiveFileChange?: (filePath: string | null) => void;
   /** File to scroll to on mount (one-shot) */
   initialScrollTarget?: string;
+  /** Additional class names for the root container */
+  className?: string;
 }
 
-export const AllFilesDiffViewer = forwardRef<AllFilesDiffViewerRef, AllFilesDiffViewerProps>(
-  function AllFilesDiffViewer(
-    { workspaceId, fileChanges, hideHeader, onActiveFileChange, initialScrollTarget },
+export const ChangesDiffViewer = forwardRef<ChangesDiffViewerRef, ChangesDiffViewerProps>(
+  function ChangesDiffViewer(
+    { workspaceId, fileChanges, hideHeader, onActiveFileChange, initialScrollTarget, className },
     ref
   ) {
     const sectionRefsMap = useRef(new Map<string, HTMLDivElement>());
@@ -71,10 +75,7 @@ export const AllFilesDiffViewer = forwardRef<AllFilesDiffViewerRef, AllFilesDiff
       );
     }, []);
 
-    // --- Scroll-spy: centralized scroll event listener ---
-    // Finds the topmost section whose top edge is at or above the container's
-    // vertical midpoint. More reliable than distributed IntersectionObservers
-    // in memoized children with content-visibility: auto.
+    // Scroll-spy: find topmost visible section and sync to store.
     const activeFileRef = useRef<{ workspaceId: string; path: string | null }>({
       workspaceId,
       path: null,
@@ -111,7 +112,7 @@ export const AllFilesDiffViewer = forwardRef<AllFilesDiffViewerRef, AllFilesDiff
         let best: string | null = null;
 
         for (const fc of changes) {
-          const path = fc.file || fc.file_path || "";
+          const path = fileChangePath(fc);
           const el = sectionRefsMap.current.get(path);
           if (!el) continue;
 
@@ -127,7 +128,7 @@ export const AllFilesDiffViewer = forwardRef<AllFilesDiffViewerRef, AllFilesDiff
         // pick the last section that's at least partially visible.
         if (best === null) {
           for (let i = changes.length - 1; i >= 0; i--) {
-            const path = changes[i].file || changes[i].file_path || "";
+            const path = fileChangePath(changes[i]);
             const el = sectionRefsMap.current.get(path);
             if (!el) continue;
             const rect = el.getBoundingClientRect();
@@ -203,7 +204,7 @@ export const AllFilesDiffViewer = forwardRef<AllFilesDiffViewerRef, AllFilesDiff
     }, []);
 
     return (
-      <div className="flex h-full flex-col overflow-hidden">
+      <div className={cn("flex h-full flex-col overflow-hidden", className)}>
         {/* Header bar — hidden when embedded in ChangesView */}
         {!hideHeader && (
           <div className="bg-muted/20 border-border/40 flex h-8 flex-shrink-0 items-center justify-between border-b px-3">
@@ -227,9 +228,9 @@ export const AllFilesDiffViewer = forwardRef<AllFilesDiffViewerRef, AllFilesDiff
           className="divide-border/40 flex flex-1 flex-col divide-y overflow-y-auto pb-3"
         >
           {fileChanges.map((fc) => {
-            const path = fc.file || fc.file_path || "";
+            const path = fileChangePath(fc);
             return (
-              <AllDiffFileSection
+              <ChangesDiffSection
                 key={path}
                 workspaceId={workspaceId}
                 fileChange={fc}

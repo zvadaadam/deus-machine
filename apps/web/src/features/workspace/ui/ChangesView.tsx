@@ -1,15 +1,22 @@
 /**
  * Changes View — Self-contained diff viewer for the Changes content tab.
  *
- * Shows an infinite-scroll diff viewer (left) + changed files tree (right)
- * with a filter dropdown (All Changes / Uncommitted / Last Turn) and
- * a "Review Changes" button in the header bar.
+ * Two layout modes (persisted per workspace):
+ * - Pinned (default): resizable two-panel layout with permanent file tree sidebar.
+ * - Minimap: full-width diff viewer + thin colored strip; hover reveals file tree.
  *
- * Fetches its own file change data — the parent just provides workspace + context.
+ * Also supports compact mode (mobile) — diff viewer only.
  */
 
 import { useRef, useMemo, useCallback, useState } from "react";
-import { GitBranch, SlidersHorizontal, ChevronDown, Check, ScanText } from "lucide-react";
+import {
+  GitBranch,
+  SlidersHorizontal,
+  ChevronDown,
+  Check,
+  ScanText,
+  PanelRight,
+} from "lucide-react";
 import {
   DropdownMenu,
   DropdownMenuTrigger,
@@ -20,8 +27,9 @@ import { ResizablePanelGroup, ResizablePanel, ResizableHandle } from "@/componen
 import { cn } from "@/shared/lib/utils";
 import { useWorkspaceLayout } from "../hooks/useWorkspaceLayout";
 import { useFileChanges } from "../api/workspace.queries";
-import { AllFilesDiffViewer, type AllFilesDiffViewerRef } from "./AllFilesDiffViewer";
-import { DiffFilesTree } from "./DiffFilesTree";
+import { ChangesDiffViewer, type ChangesDiffViewerRef } from "./ChangesDiffViewer";
+import { ChangesFilesPanel } from "./ChangesFilesPanel";
+import { ChangesMinimap } from "./ChangesMinimap";
 import {
   CHANGES_FILTER_OPTIONS,
   changesFilterLabel,
@@ -40,8 +48,8 @@ interface ChangesViewProps {
 }
 
 export function ChangesView({ workspace, isWatched = false, onReview, compact }: ChangesViewProps) {
-  const { selectedFilePath } = useWorkspaceLayout(workspace.id);
-  const diffViewerRef = useRef<AllFilesDiffViewerRef>(null);
+  const { selectedFilePath, fileTreePinned, setFileTreePinned } = useWorkspaceLayout(workspace.id);
+  const diffViewerRef = useRef<ChangesDiffViewerRef>(null);
   const [changesFilter, setChangesFilter] = useState<ChangesFilter>("all-changes");
 
   const isReady = workspace.state === "ready";
@@ -55,16 +63,15 @@ export function ChangesView({ workspace, isWatched = false, onReview, compact }:
   );
   const fileChanges = useMemo(() => fileChangesData?.files ?? [], [fileChangesData]);
 
-  // TODO: Wire up uncommitted/last-turn filters when backend endpoints exist.
-  // For now, changesFilter is always "all-changes" (other options are commented out
-  // in CHANGES_FILTER_OPTIONS). When adding new filters, fetch the extra data here
-  // and use a match() to select the active list.
-  const filteredFileChanges = fileChanges;
+  const filteredFileChanges = fileChanges; // TODO: apply filter when backend supports it
 
   // Scroll the diff viewer to the clicked file
   const handleFileClick = useCallback((path: string) => {
     diffViewerRef.current?.scrollToFile(path);
   }, []);
+
+  const handlePin = useCallback(() => setFileTreePinned(true), [setFileTreePinned]);
+  const handleUnpin = useCallback(() => setFileTreePinned(false), [setFileTreePinned]);
 
   const activeFilterLabel = changesFilterLabel(changesFilter);
 
@@ -126,16 +133,17 @@ export function ChangesView({ workspace, isWatched = false, onReview, compact }:
           </p>
         </div>
       ) : compact ? (
-        <AllFilesDiffViewer
+        <ChangesDiffViewer
           ref={diffViewerRef}
           workspaceId={workspace.id}
           fileChanges={filteredFileChanges}
           hideHeader
         />
-      ) : (
+      ) : fileTreePinned ? (
+        /* Pinned mode — resizable two-panel layout with permanent file tree */
         <ResizablePanelGroup direction="horizontal" className="min-h-0 flex-1">
           <ResizablePanel defaultSize={75} minSize={30}>
-            <AllFilesDiffViewer
+            <ChangesDiffViewer
               ref={diffViewerRef}
               workspaceId={workspace.id}
               fileChanges={filteredFileChanges}
@@ -145,14 +153,59 @@ export function ChangesView({ workspace, isWatched = false, onReview, compact }:
 
           <ResizableHandle />
 
-          <ResizablePanel defaultSize={25} minSize={15}>
-            <DiffFilesTree
-              fileChanges={filteredFileChanges}
-              selectedFile={selectedFilePath ?? null}
-              onFileClick={handleFileClick}
-            />
+          <ResizablePanel
+            defaultSize={25}
+            minSize={15}
+            collapsible
+            collapsedSize={0}
+            onCollapse={handleUnpin}
+          >
+            <div className="flex h-full flex-col overflow-hidden">
+              {/* Pinned panel header with collapse button */}
+              <div className="border-border/30 flex h-8 flex-shrink-0 items-center justify-between border-b px-3">
+                <div className="flex items-center gap-1.5">
+                  <span className="text-text-muted text-xs">Files</span>
+                  <span className="text-text-muted/60 text-[10px] tabular-nums">
+                    {filteredFileChanges.length}
+                  </span>
+                </div>
+                <div className="flex items-center">
+                  <button
+                    type="button"
+                    onClick={handleUnpin}
+                    aria-label="Collapse file tree to minimap"
+                    className="text-text-muted hover:text-text-secondary hover:bg-muted/50 ease flex h-5 w-5 items-center justify-center rounded-md transition-colors duration-150"
+                    title="Collapse to minimap"
+                  >
+                    <PanelRight className="h-3 w-3" />
+                  </button>
+                </div>
+              </div>
+              <ChangesFilesPanel
+                fileChanges={filteredFileChanges}
+                selectedFile={selectedFilePath ?? null}
+                onFileClick={handleFileClick}
+              />
+            </div>
           </ResizablePanel>
         </ResizablePanelGroup>
+      ) : (
+        /* Minimap mode — full-width diff viewer + thin strip on right */
+        <div className="flex min-h-0 flex-1">
+          <ChangesDiffViewer
+            ref={diffViewerRef}
+            workspaceId={workspace.id}
+            fileChanges={filteredFileChanges}
+            hideHeader
+            className="min-w-0 flex-1"
+          />
+          <ChangesMinimap
+            fileChanges={filteredFileChanges}
+            selectedFile={selectedFilePath ?? null}
+            onFileClick={handleFileClick}
+            onPin={handlePin}
+          />
+        </div>
       )}
     </div>
   );

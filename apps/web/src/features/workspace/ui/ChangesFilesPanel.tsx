@@ -1,7 +1,7 @@
 /**
- * Diff Files Tree — Compact file tree showing only changed files.
+ * ChangesFilesPanel — Compact file panel showing only changed files.
  *
- * Renders inside the Code panel's "Changes" view.
+ * Renders inside the Code panel's "Changes" view (pinned mode + minimap hover).
  * Files are grouped by directory with collapsible folder headers.
  * Color dots indicate change status: green=added, yellow=modified, red=deleted.
  */
@@ -9,9 +9,10 @@
 import { useState, useMemo, useCallback } from "react";
 import { ChevronDown, ChevronRight, Folder } from "lucide-react";
 import { cn } from "@/shared/lib/utils";
+import { getChangeStatus, STATUS_BG, fileChangePath } from "../lib/workspace.utils";
 import type { FileChange } from "@/shared/types";
 
-interface DiffFilesTreeProps {
+interface ChangesFilesPanelProps {
   fileChanges: FileChange[];
   selectedFile: string | null;
   onFileClick: (path: string) => void;
@@ -30,26 +31,12 @@ interface FolderGroup {
   files: FileEntry[];
 }
 
-/** Determine change status from additions/deletions */
-function getChangeStatus(change: FileChange): "added" | "modified" | "deleted" {
-  if (change.additions > 0 && change.deletions === 0) return "added";
-  if (change.deletions > 0 && change.additions === 0) return "deleted";
-  return "modified";
-}
-
-/** Color for status dot — uses semantic tokens for light/dark compatibility */
-const STATUS_COLORS: Record<string, string> = {
-  added: "bg-success",
-  modified: "bg-warning",
-  deleted: "bg-destructive",
-};
-
 /** Group flat file changes into folder groups */
 function groupByFolder(fileChanges: FileChange[]): FolderGroup[] {
   const folderMap = new Map<string, FileEntry[]>();
 
   for (const change of fileChanges) {
-    const path = change.file || change.file_path || "";
+    const path = fileChangePath(change);
     if (!path) continue;
 
     const lastSlash = path.lastIndexOf("/");
@@ -84,7 +71,11 @@ function groupByFolder(fileChanges: FileChange[]): FolderGroup[] {
   return groups;
 }
 
-export function DiffFilesTree({ fileChanges, selectedFile, onFileClick }: DiffFilesTreeProps) {
+export function ChangesFilesPanel({
+  fileChanges,
+  selectedFile,
+  onFileClick,
+}: ChangesFilesPanelProps) {
   const [collapsedFolders, setCollapsedFolders] = useState<Set<string>>(new Set());
 
   const groups = useMemo(() => groupByFolder(fileChanges), [fileChanges]);
@@ -170,7 +161,7 @@ function FolderGroupView({
             )}
           >
             <span
-              className={cn("h-1.5 w-1.5 flex-shrink-0 rounded-full", STATUS_COLORS[file.status])}
+              className={cn("h-1.5 w-1.5 flex-shrink-0 rounded-full", STATUS_BG[file.status])}
             />
             <span
               className={cn(
