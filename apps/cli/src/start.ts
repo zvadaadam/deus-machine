@@ -127,8 +127,8 @@ export async function start(options: StartOptions): Promise<void> {
       process.exit(exitCode);
     });
   }
-  process.on("SIGINT", shutdown);
-  process.on("SIGTERM", shutdown);
+  process.on("SIGINT", () => shutdown());
+  process.on("SIGTERM", () => shutdown());
 
   // Build extra env vars from config
   const extraEnv: Record<string, string> = {};

@@ -258,6 +258,7 @@ async function downloadFile(url: string, dest: string): Promise<void> {
         let downloaded = 0;
 
         const file = createWriteStream(dest);
+        res.on("error", (err) => file.destroy(err));
         res.on("data", (chunk: Buffer) => {
           downloaded += chunk.length;
           if (totalSize > 0) {
@@ -270,6 +271,10 @@ async function downloadFile(url: string, dest: string): Promise<void> {
         });
         res.pipe(file);
         file.on("close", () => {
+          if (!res.complete || (totalSize > 0 && downloaded !== totalSize)) {
+            reject(new Error("Download incomplete"));
+            return;
+          }
           progressBarDone(`Downloaded ${c.dim(formatBytes(totalSize))}`);
           resolve();
         });

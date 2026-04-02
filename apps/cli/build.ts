@@ -99,7 +99,7 @@ async function main() {
   console.log("\nTo test locally:");
   console.log("  node apps/cli/bin/deus.js start");
   console.log("\nTo publish:");
-  console.log("  cd apps/cli && npm publish");
+  console.log("  cd apps/cli && bun publish");
 }
 
 main().catch((err) => {
