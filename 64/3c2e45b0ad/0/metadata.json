@@ -1,0 +1,44 @@
+{
+  "cli_version": "0.5.0",
+  "checkpoint_id": "643c2e45b0ad",
+  "session_id": "2e08d913-4177-478f-9cd9-b77c68df2a51",
+  "strategy": "manual-commit",
+  "created_at": "2026-04-02T18:29:40.225625Z",
+  "branch": "zvadaadam/file-tree-collapse",
+  "checkpoints_count": 1,
+  "files_touched": [
+    "apps/web/src/app/layouts/MobileLayout.tsx",
+    "apps/web/src/features/workspace/hooks/useWorkspaceLayout.ts",
+    "apps/web/src/features/workspace/lib/workspace.utils.ts",
+    "apps/web/src/features/workspace/store/workspaceLayoutStore.ts",
+    "apps/web/src/features/workspace/ui/AllDiffFileSection.tsx",
+    "apps/web/src/features/workspace/ui/AllFilesDiffViewer.tsx",
+    "apps/web/src/features/workspace/ui/ChangesDiffSection.tsx",
+    "apps/web/src/features/workspace/ui/ChangesDiffViewer.tsx",
+    "apps/web/src/features/workspace/ui/ChangesFilesPanel.tsx",
+    "apps/web/src/features/workspace/ui/ChangesView.tsx",
+    "apps/web/src/features/workspace/ui/DiffFilesTree.tsx",
+    "apps/web/src/features/workspace/ui/index.ts"
+  ],
+  "agent": "Claude Code",
+  "turn_id": "1c762af1f92f",
+  "token_usage": {
+    "input_tokens": 2244,
+    "cache_creation_tokens": 69535,
+    "cache_read_tokens": 306387,
+    "output_tokens": 6133,
+    "api_call_count": 8
+  },
+  "session_metrics": {
+    "turn_count": 1
+  },
+  "initial_attribution": {
+    "calculated_at": "2026-04-02T18:29:40.158602Z",
+    "agent_lines": 681,
+    "human_added": 190,
+    "human_modified": 6,
+    "human_removed": 0,
+    "total_committed": 877,
+    "agent_percentage": 77.65108323831242
+  }
+}
