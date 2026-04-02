@@ -14,6 +14,8 @@
     "shared/session-events.ts",
     "shared/enums.ts",
     "shared/lib/*.ts",
+    "apps/cli/src/cli.ts",
+    "apps/cli/build.ts",
     "apps/**/test/**/*.ts",
     "test/**/*.ts"
   ],

@@ -17,9 +17,17 @@ REPO_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 
 echo "Bumping version to $VERSION..."
 
-# 1. package.json
+# 1. package.json (root — electron-builder reads this)
 jq --arg v "$VERSION" '.version = $v' "$REPO_ROOT/package.json" > "$REPO_ROOT/package.json.tmp"
 mv "$REPO_ROOT/package.json.tmp" "$REPO_ROOT/package.json"
 echo "  package.json -> $VERSION"
+
+# 2. apps/cli/package.json (npm publish uses this)
+CLI_PKG="$REPO_ROOT/apps/cli/package.json"
+if [ -f "$CLI_PKG" ]; then
+  jq --arg v "$VERSION" '.version = $v' "$CLI_PKG" > "$CLI_PKG.tmp"
+  mv "$CLI_PKG.tmp" "$CLI_PKG"
+  echo "  apps/cli/package.json -> $VERSION"
+fi
 
 echo "Done. All files bumped to $VERSION"
