@@ -2,7 +2,7 @@
   "name": "deus",
   "private": true,
   "version": "0.2.0",
-  "description": "AI-powered IDE for managing multiple parallel coding agents",
+  "description": "Agentic engineering platform for managing multiple parallel coding agents",
   "author": {
     "name": "Deus",
     "email": "hello@deusmachine.ai"
@@ -23,6 +23,7 @@
     "build:relay": "cd apps/cloud-relay && wrangler deploy --dry-run --outdir dist",
     "deploy:relay": "cd apps/cloud-relay && wrangler deploy",
     "build:web": "vite build --config apps/web/vite.config.ts --outDir dist/web",
+    "build:cli": "bun run build:agent-server && bun run build:backend && bun run build:web && bunx tsx apps/cli/build.ts",
     "build:all": "bun run build:agent-server && bun run build:backend && bun run build",
     "package:mac": "bun run build:all && electron-builder --mac",
     "package:win": "bun run build:all && electron-builder --win",
