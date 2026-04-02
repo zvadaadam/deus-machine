@@ -1,9 +1,11 @@
 {
   "cli_version": "0.5.0",
   "checkpoint_id": "643c2e45b0ad",
+  "session_id": "7dea8d67-62ad-4826-ba59-91fe8f574173",
   "strategy": "manual-commit",
+  "created_at": "2026-04-02T18:29:43.91002Z",
   "branch": "zvadaadam/file-tree-collapse",
-  "checkpoints_count": 20,
+  "checkpoints_count": 19,
   "files_touched": [
     "apps/web/src/app/layouts/MobileLayout.tsx",
     "apps/web/src/features/workspace/hooks/useWorkspaceLayout.ts",
@@ -19,25 +21,25 @@
     "apps/web/src/features/workspace/ui/DiffFilesTree.tsx",
     "apps/web/src/features/workspace/ui/index.ts"
   ],
-  "sessions": [
-    {
-      "metadata": "/64/3c2e45b0ad/0/metadata.json",
-      "transcript": "/64/3c2e45b0ad/0/full.jsonl",
-      "content_hash": "/64/3c2e45b0ad/0/content_hash.txt",
-      "prompt": "/64/3c2e45b0ad/0/prompt.txt"
-    },
-    {
-      "metadata": "/64/3c2e45b0ad/1/metadata.json",
-      "transcript": "/64/3c2e45b0ad/1/full.jsonl",
-      "content_hash": "/64/3c2e45b0ad/1/content_hash.txt",
-      "prompt": "/64/3c2e45b0ad/1/prompt.txt"
-    }
-  ],
+  "agent": "Claude Code",
+  "turn_id": "09082ef2ba5c",
   "token_usage": {
-    "input_tokens": 8392,
-    "cache_creation_tokens": 392539,
-    "cache_read_tokens": 21727113,
-    "output_tokens": 83615,
-    "api_call_count": 214
+    "input_tokens": 6148,
+    "cache_creation_tokens": 323004,
+    "cache_read_tokens": 21420726,
+    "output_tokens": 77482,
+    "api_call_count": 206
+  },
+  "session_metrics": {
+    "turn_count": 19
+  },
+  "initial_attribution": {
+    "calculated_at": "2026-04-02T18:29:43.284413Z",
+    "agent_lines": 857,
+    "human_added": 13,
+    "human_modified": 7,
+    "human_removed": 0,
+    "total_committed": 877,
+    "agent_percentage": 97.71949828962371
   }
 }

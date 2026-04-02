@@ -1,0 +1,129 @@
+<system_instruction>
+You are working inside OpenDevs, a Mac app that lets the user run many coding agents in parallel.
+Your work should take place in the /Users/zvada/Developer/agent/box-ide/.conductor/san-jose-v4 directory (unless otherwise directed), which has been set up for you to work in.
+Each workspace has a .context directory (gitignored) where you can save files to collaborate with other agents.
+DO NOT EVER read or write files at /Users/zvada/Developer/agent/box-ide.
+The target branch for this workspace is main. Use this for actions like creating new PRs, bisecting, etc., unless you're told otherwise.
+
+By default, the user will only see the last message that you send before stopping. Include all essential information in the last message. The intermediate messages will be collapsed and accessible by the user but not displayed by default.
+
+If the user asks you to work on several unrelated tasks, you can suggest they start new workspaces.
+Sometimes the user might send you a message they meant to send in a different workspace or a different chat. If something doesn't make sense in the context of your work, just ask. 
+If the user asks for help with OpenDevs, you can ask them to go to "Help -> Send Feedback" to get in touch with our team.
+</system_instruction>
+
+
+<system-instruction>
+To do immediately:
+
+Rename the branch using `git branch -m` as soon as possible. Do not check the current branch name.
+
+You may read user-provided attachments first if needed to understand the request. Otherwise, do this before using any skills or any other tools.
+
+Choosing a branch name: use concrete, specific language, avoid abstract nouns, and be concise (<30 characters). Use the prefix "zvadaadam/" before the name.
+
+</system-instruction>
+
+What I want to do is to look at how actually the file divs, in the content view, the file divs, it's a little under optimized for usage. What I would need is to be able to /Users/zvada/Developer/agent/box-ide/.conductor/san-jose-v4/.context/attachments/Screenshot 2026-04-02 at 2.39.51 PM.png To collapse the sidebar, the sidebar of the all files. I mean, yes, the sidebar of all the file changes, the file tree, or I don't know how we call it. But I feel like for now, at least one thing is it's very small. Maybe we need like a little bigger, bigger font sizes. What do you think? And it's not very performant. Yeah, so how would you go about it? How would you collapse it? And then how would people uncollapse it, the file tree?
+
+---
+
+/Users/zvada/Developer/agent/box-ide/.conductor/san-jose-v4/.context/attachments/Screenshot 2026-04-02 at 2.45.12 PM.png But I got an idea. So imagine that on the site, if we would collapse the files, they would become these lines. These very simple lines. I think it's in the notion this is a photo from Graphite AI Code Reviews. And we would put it like on the side, but like, so basically the file tree would be collapsed, crazily collapsing to just these lines. And each line would represent one like file, I guess. We can have a colors for like, if it's created new file or edited or deleted. And these can be like corral files. And on a hover, we would get a pop-up of actually the file tree in which we can work in liek this /Users/zvada/Developer/agent/box-ide/.conductor/san-jose-v4/.context/attachments/Screenshot 2026-04-02 at 2.46.21 PM.png 
+
+camn u epxlore
+
+---
+
+Okay, I don't want to bump. Let's keep it smaller for now. Let's not change the design the sizes. Let's focus only solely on adding this, this minimap and the hover effect which would show the file system, file changes. And I think this will need some refactor, right? And we don't want like iteratively add more code, but we need to rethink if something can be reused. Definitely like the hover effect and which will show the file changes this is going to be reused. So let's go, let's dig deeper into the code, how this should be done and to achieve good code structure, code maintainability,
+
+---
+
+<task-notification>
+<task-id>biz8ipn9q</task-id>
+<tool-use-id>toolu_01U1zSPwSwdPqnxtNtF8gWHH</tool-use-id>
+<output-file>/private/tmp/claude-501/-Users-zvada-Developer-agent-box-ide--conductor-san-jose-v4/7dea8d67-62ad-4826-ba59-91fe8f574173/tasks/biz8ipn9q.output</output-file>
+<status>completed</status>
+<summary>Background command "Quick vite dev check for compilation errors" completed (exit code 0)</summary>
+</task-notification>
+Read the output file to retrieve the result: /private/tmp/claude-501/-Users-zvada-Developer-agent-box-ide--conductor-san-jose-v4/7dea8d67-62ad-4826-ba59-91fe8f574173/tasks/biz8ipn9q.output
+
+---
+
+But we need also ability to expand and not have this minimap but like full thing, right? Now when we hover over the minimap we get full file tree of the changes but like we need the ability to have it there also to switch between this.
+
+---
+
+<task-notification>
+<task-id>bpfkuhbj5</task-id>
+<tool-use-id>toolu_01TrZx9XnKoUd17irTxDh9Fj</tool-use-id>
+<output-file>/private/tmp/claude-501/-Users-zvada-Developer-agent-box-ide--conductor-san-jose-v4/7dea8d67-62ad-4826-ba59-91fe8f574173/tasks/bpfkuhbj5.output</output-file>
+<status>completed</status>
+<summary>Background command "Quick vite dev check after portal refactor" completed (exit code 0)</summary>
+</task-notification>
+Read the output file to retrieve the result: /private/tmp/claude-501/-Users-zvada-Developer-agent-box-ide--conductor-san-jose-v4/7dea8d67-62ad-4826-ba59-91fe8f574173/tasks/bpfkuhbj5.output
+
+---
+
+Also, when I'm with like a drag when I have a run, I'm trying to resize the file changes file tree. I should be able to drag it into the minimap collapse state, you know.
+
+---
+
+Also, the number of changed files should be right next to the files title.
+
+---
+
+Also, I feel that in the minimap, if we would click on the minimap or the panel, we should be able to with the click expand it. Does it make sense this UX?
+
+---
+
+And also, what is the default state, how we should show it? I think the default state should be uncollapsed, fully visible, right?
+
+---
+
+Also, when we click on a file, the Minimab highlights the viewed file. It would be very cool if we scroll through it, these highlights would move into the file that is focused.
+
+---
+
+No, I don't see that it would work. Can you review more?
+
+---
+
+<system-instruction>
+The user has added 1 comment to the diff for this workspace. Please review and address these comments as part of your response. When addressing comments on the "original" side or on specific commits, read the file from that version (not the current version). Below are the comments, including metadata about what git state they were left on:
+
+Comment #1:
+
+File: apps/web/src/features/workspace/ui/FileChangeMinimap.tsx
+Lines: 22-48
+User comment: "I'm wondering if we don't have any stuff that actually are somewhere defined, especially like the schemas. I feel like these schemas, at least the file changes, file change status is probably defined somewhere with the colors."
+
+Comment metadata:
+This comment was left on the modified branch.
+
+</system-instruction>
+
+??
+
+---
+
+Okay, and I feel like we have a little inconsistency in namings like I mean the the file changes the devs like look at the content view and What is the content for the file changes and what we are using there inside and like should we rename the The file structure to better fit it or there is there some over engineering some complexity something that should be splitted or improved.
+
+---
+
+reviw again pela ein depth if make sense and do the renames
+
+---
+
+is this all now all concetts and nice?
+
+---
+
+do we have some betetr icon for the sidebar collapseing /Users/zvada/Developer/agent/box-ide/.conductor/san-jose-v4/.context/attachments/image.png what is the options i dont liek it;s very complex with the wrrow etc? mauybe some mor eliek this?/Users/zvada/Developer/agent/box-ide/.conductor/san-jose-v4/.context/attachments/Screenshot 2026-04-02 at 7.33.57 PM.png
+
+---
+
+oh i find a problem taht if we click on a changed file in the hover tree of file changes pnael and it switch into the ecxtanded view which w edont wnat rigt?
+
+---
+
+run please /code-simplifier /deslop epxlore if any antipatterns and of bad code statrcur edead epxlore it in pdeth and revie win depth
