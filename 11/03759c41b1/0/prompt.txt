@@ -4407,3 +4407,359 @@ is this ready for production when we bhit the run release will eveythign work?
 ---
 
 yes
+
+---
+
+<system-instruction>
+The user has added 3 comments to the diff for this workspace. Please review and address these comments as part of your response. When addressing comments on the "original" side or on specific commits, read the file from that version (not the current version). Below are the comments, including metadata about what git state they were left on:
+
+Comment #1:
+
+File: apps/cli/build.ts
+Line: 102
+User comment: "_⚠️ Potential issue_ | _🟡 Minor_
+
+**Use `bun publish` in the release hint.**
+
+This prints `npm publish`, which conflicts with the repo’s Bun-only workflow and is easy to copy verbatim during release work.
+
+As per coding guidelines, "Always use bun for package management (`bun add`, `bun install`), running scripts (`bun run`), and executing tools (`bunx`). Never use `npm` or `yarn`."
+
+<details>
+<summary>🤖 Prompt for AI Agents</summary>
+
+```
+Verify each finding against the current code and only fix it if needed.
+
+In `@apps/cli/build.ts` around lines 101 - 102, Update the release hint strings in
+build.ts so they recommend Bun instead of npm: replace the two console.log calls
+that output "cd apps/cli && npm publish" (and the preceding "To publish:" block)
+to print the Bun equivalent "cd apps/cli && bun publish" to match the
+repository's Bun-only workflow; locate the console.log calls in build.ts that
+emit the publish hint and change the message text accordingly.
+```
+
+</details>
+
+<!-- fingerprinting:phantom:medusa:grasshopper -->
+
+<!-- This is an auto-generated comment by CodeRabbit -->"
+
+Comment metadata:
+This comment was left on the modified branch.
+This comment was left on GitHub by @coderabbitai.
+This comment is the start of thread PRRT_kwDOQEbULc54iQUf. 
+
+
+Comment #2:
+
+File: apps/cli/src/desktop.ts
+Line: 279
+User comment: "_⚠️ Potential issue_ | _🟠 Major_
+
+<details>
+<summary>🧩 Analysis chain</summary>
+
+🏁 Script executed:
+
+```shell
+find . -name "desktop.ts" -path "*/cli/src/*"
+```
+
+Repository: zvadaadam/box-ide
+
+Length of output: 86
+
+---
+
+🏁 Script executed:
+
+```shell
+cat -n apps/cli/src/desktop.ts | sed -n '240,290p'
+```
+
+Repository: zvadaadam/box-ide
+
+Length of output: 1949
+
+---
+
+🏁 Script executed:
+
+```shell
+cat -n apps/cli/src/desktop.ts | sed -n '1,100p'
+```
+
+Repository: zvadaadam/box-ide
+
+Length of output: 3730
+
+---
+
+🏁 Script executed:
+
+```shell
+cat apps/cli/package.json | grep -A 5 "engines"
+```
+
+Repository: zvadaadam/box-ide
+
+Length of output: 152
+
+---
+
+🏁 Script executed:
+
+```shell
+cat -n apps/cli/src/desktop.ts | sed -n '235,285p'
+```
+
+Repository: zvadaadam/box-ide
+
+Length of output: 1941
+
+---
+
+🏁 Script executed:
+
+```shell
+rg "res.complete|aborted|IncomingMessage" apps/cli/src/ -A 2 -B 2
+```
+
+Repository: zvadaadam/box-ide
+
+Length of output: 598
+
+---
+
+🏁 Script executed:
+
+```shell
+rg "unlinkSync|unlink|remove" apps/cli/src/desktop.ts -B 3 -A 3
+```
+
+Repository: zvadaadam/box-ide
+
+Length of output: 437
+
+---
+
+🏁 Script executed:
+
+```shell
+rg "downloadFile" apps/cli/src/desktop.ts -A 5 -B 2
+```
+
+Repository: zvadaadam/box-ide
+
+Length of output: 674
+
+---
+
+🌐 Web query:
+
+`Node.js 20 IncomingMessage res.complete res.aborted stream abort handling`
+
+💡 Result:
+
+In Node.js 20, the http.IncomingMessage (req) has two relevant properties for handling request completion and abortion: req.complete and req.aborted. req.complete (added v0.3.0): Boolean, true if a complete HTTP message has been received and successfully parsed. Useful to check if the client fully transmitted the message before connection termination. Example from docs: const req = http.request({ host: '127.0.0.1', port: 8080, method: 'POST' }, (res) => { res.resume; res.on('end', => { if (!res.complete) console.error('The connection was terminated while the message was still being sent'); }); }); req.aborted (deprecated since v17.0.0, v16.12.0): Boolean, true if the request has been aborted. Docs recommend checking message.destroyed from stream.Readable instead. The 'aborted' event on IncomingMessage is also deprecated (since v17.0.0, v16.12.0); listen for 'close' event instead. However, GitHub issues (`#46666`, `#41117`, `#40775`) report that 'aborted' event/property often fails to work reliably in v16+ for detecting client aborts (e.g., browser cancel during proxying or long requests). 'close' emits after body read, not specifically for aborts. Recommended modern approach to detect client request aborts (server-side): - Listen to res.on('close', => { if (!res.writableFinished) { /* client aborted before response fully sent */ } }) - This checks if response stream finished writing when connection closes. No direct res.complete exists; ServerResponse uses writableFinished (v12.7.0, true if all data flushed before 'finish'). There is no res.complete method or property. ServerResponse extends OutgoingMessage; use res.writableEnded or res.finished for completion checks. For stream handling during potential aborts, consume req fully (req.resume) and use higher-level stream.pipeline or stream.finished which handle errors on premature close/abort. Code example for server detecting client abort: const http = require('http'); const server = http.createServer((req, res) => { req.resume; // consume request body res.on('close', => { if (!res.writableFinished) { console.log('Client aborted'); // cleanup } }); // slow response setTimeout( => res.end('done'), 5000); }); Test by requesting and canceling client-side (e.g., curl --max-time 1). Official docs: https://nodejs.org/docs/latest-v20.x/api/http.html#messagecomplete, https://nodejs.org/docs/latest-v20.x/api/http.html#messageaborted
+
+Citations:
+
+- 1: https://nodejs.org/docs/latest-v20.x/api/http.html
+- 2: https://docs.deno.com/api/node/http/~/IncomingMessage
+- 3: https://github.com/nodejs/node/issues/46666
+- 4: https://github.com/nodejs/node/issues/40775
+- 5: https://wh0.github.io/2024/01/21/http-truncate.html
+- 6: https://fastify.io/docs/latest/Guides/Detecting-When-Clients-Abort/
+
+---
+
+</details>
+
+**Check that the download completes fully before resolving the promise.**
+
+Waiting for `file.on("close")` does not guarantee the HTTP body finished. If the peer aborts mid-transfer, the file descriptor can close cleanly and this promise will resolve with a truncated installer.
+
+Add completeness validation: check `res.complete`, verify `downloaded === totalSize` when `content-length` is present, and destroy the file stream on response errors. For Node.js 20+, use `res.complete` and handle response errors rather than the deprecated `res.aborted` event.
+
+<details>
+<summary>🛡️ Suggested hardening</summary>
+
+```diff
+         const totalSize = parseInt(res.headers["content-length"] || "0", 10);
+         let downloaded = 0;
+
+         const file = createWriteStream(dest);
++        res.on("error", (err) => file.destroy(err));
+         res.on("data", (chunk: Buffer) => {
+           downloaded += chunk.length;
+           if (totalSize > 0) {
+             progressBar(
+               downloaded,
+               totalSize,
+               formatBytes(downloaded) + " / " + formatBytes(totalSize)
+             );
+           }
+         });
+         res.pipe(file);
+         file.on("close", () => {
++          if (!res.complete || (totalSize > 0 && downloaded !== totalSize)) {
++            reject(new Error("Download incomplete"));
++            return;
++          }
+           progressBarDone(`Downloaded ${c.dim(formatBytes(totalSize))}`);
+           resolve();
+         });
+```
+</details>
+
+<details>
+<summary>🤖 Prompt for AI Agents</summary>
+
+```
+Verify each finding against the current code and only fix it if needed.
+
+In `@apps/cli/src/desktop.ts` around lines 257 - 279, The current download promise
+resolves on file.on("close") which can still occur for a truncated transfer;
+modify the logic around res, file, req, downloaded and totalSize so the promise
+only resolves after the HTTP response is fully complete and the expected bytes
+were written: listen for response errors (res.on("error")) and destroy/close the
+file stream and reject on those errors, wait for both the response
+end/completion (check res.complete or res.on("end")) and file.close, and when
+content-length is present assert downloaded === totalSize before calling resolve
+(otherwise destroy the file and reject). Also ensure req errors/timeouts still
+destroy the file stream to avoid leaving truncated files and use
+progressBar/progressBarDone the same way but only after the completeness checks
+pass.
+```
+
+</details>
+
+<!-- fingerprinting:phantom:medusa:grasshopper -->
+
+<!-- This is an auto-generated comment by CodeRabbit -->"
+
+Comment metadata:
+This comment was left on the modified branch.
+This comment was left on GitHub by @coderabbitai.
+This comment is the start of thread PRRT_kwDOQEbULc54iQUk. 
+
+
+Comment #3:
+
+File: apps/cli/src/start.ts
+Line: 90
+User comment: "_⚠️ Potential issue_ | _🔴 Critical_
+
+<details>
+<summary>🧩 Analysis chain</summary>
+
+🏁 Script executed:
+
+```shell
+cat -n apps/cli/src/start.ts | sed -n '80,135p'
+```
+
+Repository: zvadaadam/box-ide
+
+Length of output: 2196
+
+---
+
+🌐 Web query:
+
+`Node.js process signal event listener first argument SIGINT SIGTERM`
+
+💡 Result:
+
+The first argument to the event listener callback for Node.js process signal events like 'SIGINT' and 'SIGTERM' is the signal name as a string (e.g., 'SIGINT' or 'SIGTERM').
+
+Citations:
+
+- 1: https://nodejs.org/api/process.html
+- 2: https://nodejs.org/docs/latest-v18.x/api/process.html
+- 3: https://nodejs.org/docs/latest-v25.x/api/process.html
+
+---
+
+🌐 Web query:
+
+`Node.js process.exit() non-numeric code behavior string`
+
+💡 Result:
+
+In Node.js v20.0.0 and later (including current v25.x as of 2026), process.exit(code) only accepts a numeric code or a string that represents an integer (e.g., '1'). Non-integer strings (e.g., 'abc') are not allowed and will throw a TypeError. Prior to v20, behavior for non-numeric strings was unspecified but typically resulted in exit code 0 or 1.
+
+Citations:
+
+- 1: https://nodejs.org/api/process.html
+- 2: https://nodejs.org/docs/latest-v25.x/api/process.html
+
+---
+
+🏁 Script executed:
+
+```shell
+rg "process\.on\(" apps/cli/src/start.ts -n
+```
+
+Repository: zvadaadam/box-ide
+
+Length of output: 190
+
+---
+
+</details>
+
+**Wrap signal handlers to prevent passing signal name as exit code.**
+
+Signal event listeners receive the signal name as their first argument (e.g., `"SIGINT"`, `"SIGTERM"`). Passing `shutdown` directly causes these strings to be assigned to `exitCode`, triggering a `TypeError` in `process.exit()` since Node.js v20+ only accepts numeric codes.
+
+<details>
+<summary>Suggested fix</summary>
+
+```diff
+-  process.on("SIGINT", shutdown);
+-  process.on("SIGTERM", shutdown);
++  process.on("SIGINT", () => shutdown());
++  process.on("SIGTERM", () => shutdown());
+```
+</details>
+
+Also applies to: 127-131
+
+<details>
+<summary>🤖 Prompt for AI Agents</summary>
+
+```
+Verify each finding against the current code and only fix it if needed.
+
+In `@apps/cli/src/start.ts` around lines 87 - 90, The signal handlers are passing
+the signal string into shutdown, causing exitCode to become non-numeric; update
+the listeners so they call shutdown with a numeric code (e.g., 0 or a mapped
+code) instead of passing the signal argument directly, or wrap them to ignore
+the handler argument and call shutdown(Number) — apply this change for the
+shutdown function usage in start.ts (referenced as shutdown and the signal event
+listeners around the second occurrence noted at lines 127-131) so exitCode is
+always a number before calling process.exit().
+```
+
+</details>
+
+<!-- fingerprinting:phantom:medusa:grasshopper -->
+
+<!-- This is an auto-generated comment by CodeRabbit -->"
+
+Comment metadata:
+This comment was left on the modified branch.
+This comment was left on GitHub by @coderabbitai.
+This comment is the start of thread PRRT_kwDOQEbULc54iQUv. 
+
+</system-instruction>
+
+I run AI code review, is it actionable? Wdyt? Explore in depth each problem.
+We want a clean, maintainable codebase, with proper best practices for the tech stack we use.
+Run subagents to verify, and if it should be fixed, try to merge some stuff together so it can be fixed together within one subagent. 
+If you can test something do it.
+Remember that we don't want to over engineer stuff. It should be a great code, very well structured, clean, maintainable for the future of use cases, but think about if anything is actionable from these code reviews.
