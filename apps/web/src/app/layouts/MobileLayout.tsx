@@ -2,7 +2,7 @@
  * MobileLayout -- single-panel mobile layout with bottom tab bar.
  *
  * Replaces the desktop ResizablePanelGroup on screens < 768px.
- * Two views: Chat (full-width ChatArea) and Code (full-width AllFilesDiffViewer).
+ * Two views: Chat (full-width ChatArea) and Code (full-width ChangesDiffViewer).
  * Chat is the default -- "AI chat as a first-class citizen".
  */
 
@@ -71,7 +71,7 @@ export function MobileLayout({
   const [activeTab, setActiveTab] = useState<MobileTab>("chat");
 
   // File changes -- always queried for the badge count on the code tab,
-  // and used by AllFilesDiffViewer when the code tab is active.
+  // and used by ChangesDiffViewer when the code tab is active.
   const isReady = workspace.state === "ready";
   const { data: fileChangesData } = useFileChanges(
     isReady ? workspace.id : null,

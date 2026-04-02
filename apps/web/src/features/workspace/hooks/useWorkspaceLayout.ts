@@ -35,6 +35,8 @@ interface UseWorkspaceLayoutResult {
   chatPanelCollapsed: boolean;
   /** Whether content panel is collapsed */
   contentPanelCollapsed: boolean;
+  /** Whether file tree is pinned open (vs minimap mode) */
+  fileTreePinned: boolean;
 
   /** Set the active content tab */
   setContentTab: (tab: ContentTab) => void;
@@ -46,6 +48,8 @@ interface UseWorkspaceLayoutResult {
   setChatPanelCollapsed: (collapsed: boolean) => void;
   /** Set content panel collapsed state */
   setContentPanelCollapsed: (collapsed: boolean) => void;
+  /** Set file tree pinned state */
+  setFileTreePinned: (pinned: boolean) => void;
   /** Update multiple layout properties at once */
   updateLayout: (updates: {
     contentTab?: ContentTab;
@@ -107,6 +111,15 @@ export function useWorkspaceLayout(workspaceId: string | null): UseWorkspaceLayo
     [workspaceId, setLayout]
   );
 
+  const setFileTreePinned = useCallback(
+    (pinned: boolean) => {
+      if (workspaceId) {
+        setLayout(workspaceId, { fileTreePinned: pinned });
+      }
+    },
+    [workspaceId, setLayout]
+  );
+
   const updateLayout = useCallback(
     (updates: {
       contentTab?: ContentTab;
@@ -138,12 +151,14 @@ export function useWorkspaceLayout(workspaceId: string | null): UseWorkspaceLayo
     sidebarCollapsed: layout.sidebarCollapsed,
     chatPanelCollapsed: layout.chatPanelCollapsed ?? false,
     contentPanelCollapsed: layout.contentPanelCollapsed ?? false,
+    fileTreePinned: layout.fileTreePinned ?? defaultLayout.fileTreePinned,
 
     setContentTab,
     setSelectedFilePath,
     setSidebarCollapsed,
     setChatPanelCollapsed,
     setContentPanelCollapsed,
+    setFileTreePinned,
     updateLayout,
   };
 }

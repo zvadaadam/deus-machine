@@ -1,21 +1,22 @@
 /**
- * AllDiffFileSection — Memoized per-file section for the all-diffs view.
+ * ChangesDiffSection — Memoized per-file section for the changes diff view.
  *
  * Uses IntersectionObserver with 600px rootMargin for lazy-loading diff data
  * when the section approaches the viewport.
  *
- * Scroll-spy (active file tracking) is handled by the parent AllFilesDiffViewer
+ * Scroll-spy (active file tracking) is handled by the parent ChangesDiffViewer
  * via a centralized scroll event listener.
  */
 
 import { useState, useRef, useEffect, useCallback, memo } from "react";
 import { ChevronDown, ChevronRight } from "lucide-react";
 import { cn } from "@/shared/lib/utils";
+import { fileChangePath } from "../lib/workspace.utils";
 import { DiffViewer } from "./DiffViewer";
 import { useFileDiff } from "../api/workspace.queries";
 import type { FileChange } from "@/shared/types";
 
-interface AllDiffFileSectionProps {
+interface ChangesDiffSectionProps {
   workspaceId: string;
   fileChange: FileChange;
   isActive: boolean;
@@ -24,24 +25,19 @@ interface AllDiffFileSectionProps {
   expandStateKey: number;
 }
 
-function AllDiffFileSectionInner({
+function ChangesDiffSectionInner({
   workspaceId,
   fileChange,
   isActive,
   sectionRef,
   expandStateKey,
-}: AllDiffFileSectionProps) {
-  const filePath = fileChange.file || fileChange.file_path || "";
-  const [collapsedState, setCollapsedState] = useState({
-    value: false,
-    expandStateKey,
-  });
+}: ChangesDiffSectionProps) {
+  const filePath = fileChangePath(fileChange);
+  // Collapse resets to false when expandStateKey changes (parent collapse-all/expand-all)
+  const [collapsedState, setCollapsedState] = useState({ value: false, key: expandStateKey });
+  const collapsed = collapsedState.key === expandStateKey ? collapsedState.value : false;
   const [isNearVisible, setIsNearVisible] = useState(false);
   const containerRef = useRef<HTMLDivElement | null>(null);
-
-  // Collapse state resets to expanded whenever expandStateKey changes,
-  // without requiring a state update from an effect.
-  const collapsed = collapsedState.expandStateKey === expandStateKey ? collapsedState.value : false;
 
   // Register ref for scroll-to-file and parent scroll-spy
   const refCallback = useCallback(
@@ -80,21 +76,20 @@ function AllDiffFileSectionInner({
     <div ref={refCallback} data-diff-path={filePath} className="overflow-clip">
       {/* Sticky file header — two sibling buttons to avoid nesting interactive elements */}
       <div
-        className={`sticky top-0 z-[5] flex min-h-[44px] w-full items-center gap-2 px-3 py-1.5 transition-colors duration-200 ease-[cubic-bezier(.165,.84,.44,1)] ${
-          isActive
-            ? "bg-muted"
-            : collapsed
-              ? "bg-muted/15 hover:bg-muted/30"
-              : "hover:bg-muted bg-[var(--bg-elevated)]"
-        }`}
+        className={cn(
+          "sticky top-0 z-[5] flex min-h-[44px] w-full items-center gap-2 px-3 py-1.5 transition-colors duration-200 ease-[cubic-bezier(.165,.84,.44,1)]",
+          isActive && "bg-muted",
+          !isActive && collapsed && "bg-muted/15 hover:bg-muted/30",
+          !isActive && !collapsed && "hover:bg-muted bg-[var(--bg-elevated)]"
+        )}
       >
         {/* Collapse toggle — covers chevron, path, and stats */}
         <button
           type="button"
           onClick={() =>
             setCollapsedState((prev) => ({
-              value: prev.expandStateKey === expandStateKey ? !prev.value : true,
-              expandStateKey,
+              value: prev.key === expandStateKey ? !prev.value : true,
+              key: expandStateKey,
             }))
           }
           className="flex min-w-0 flex-1 items-center gap-2 text-left"
@@ -143,11 +138,9 @@ function AllDiffFileSectionInner({
   );
 }
 
-export const AllDiffFileSection = memo(AllDiffFileSectionInner, (prev, next) => {
-  const prevPath = prev.fileChange.file || prev.fileChange.file_path || "";
-  const nextPath = next.fileChange.file || next.fileChange.file_path || "";
+export const ChangesDiffSection = memo(ChangesDiffSectionInner, (prev, next) => {
   return (
-    prevPath === nextPath &&
+    fileChangePath(prev.fileChange) === fileChangePath(next.fileChange) &&
     prev.fileChange.additions === next.fileChange.additions &&
     prev.fileChange.deletions === next.fileChange.deletions &&
     prev.isActive === next.isActive &&

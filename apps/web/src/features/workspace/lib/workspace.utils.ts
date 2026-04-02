@@ -1,4 +1,22 @@
-import type { Workspace, RepoGroup } from "@/shared/types";
+import type { Workspace, RepoGroup, FileChange } from "@/shared/types";
+
+export type ChangeStatus = "added" | "modified" | "deleted";
+
+export function getChangeStatus(change: FileChange): ChangeStatus {
+  if (change.additions > 0 && change.deletions === 0) return "added";
+  if (change.deletions > 0 && change.additions === 0) return "deleted";
+  return "modified";
+}
+
+export const STATUS_BG: Record<ChangeStatus, string> = {
+  added: "bg-success",
+  modified: "bg-warning",
+  deleted: "bg-destructive",
+};
+
+export function fileChangePath(fc: FileChange): string {
+  return fc.file || fc.file_path || "";
+}
 
 /**
  * Create an optimistic (placeholder) Workspace object for instant UI feedback
