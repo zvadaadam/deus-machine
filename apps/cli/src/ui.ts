@@ -196,7 +196,7 @@ export function banner(version?: string): void {
  * Falls back to static banner in no-color or non-unicode terminals.
  */
 export async function animatedBanner(version?: string): Promise<void> {
-  if (!isUnicode || noColor) {
+  if (!isUnicode || noColor || !process.stdout.isTTY) {
     banner(version);
     return;
   }
@@ -260,11 +260,32 @@ export interface Spinner {
 }
 
 export function spinner(text: string): Spinner {
+  const stream = process.stderr;
+
+  // Non-TTY: print once without escape codes
+  if (!stream.isTTY) {
+    const write = (symbol: string, finalText: string) => stream.write(`  ${symbol} ${finalText}\n`);
+    return {
+      update() {},
+      succeed(t?: string) {
+        write(c.green(sym.tick), t ?? text);
+      },
+      fail(t?: string) {
+        write(c.red(sym.cross), t ?? text);
+      },
+      warn(t?: string) {
+        write(c.yellow(sym.warning), t ?? text);
+      },
+      info(t?: string) {
+        write(c.blue(sym.info), t ?? text);
+      },
+      stop() {},
+    };
+  }
+
   let frameIdx = 0;
   let currentText = text;
   let stopped = false;
-
-  const stream = process.stderr;
 
   function render() {
     if (stopped) return;
@@ -412,6 +433,13 @@ export function gradientText(
  */
 export function statusLine(getText: () => string, intervalMs = 1000): { stop: () => void } {
   const stream = process.stderr;
+
+  // Non-TTY: print once without escape codes
+  if (!stream.isTTY) {
+    stream.write(`  ${c.dim(sym.dot)} ${getText()}\n`);
+    return { stop() {} };
+  }
+
   let stopped = false;
   let dotCount = 0;
   const dots = ["   ", ".  ", ".. ", "..."];
@@ -443,6 +471,7 @@ const BAR_FILLED = isUnicode ? "█" : "#";
 const BAR_EMPTY = isUnicode ? "░" : ".";
 
 export function progressBar(current: number, total: number, label?: string): void {
+  if (!process.stderr.isTTY) return;
   const pct = Math.min(1, current / total);
   const filled = Math.round(pct * BAR_WIDTH);
   const empty = BAR_WIDTH - filled;
@@ -453,7 +482,9 @@ export function progressBar(current: number, total: number, label?: string): voi
 }
 
 export function progressBarDone(text: string): void {
-  process.stderr.write(`\r${ESC}2K`);
+  if (process.stderr.isTTY) {
+    process.stderr.write(`\r${ESC}2K`);
+  }
   success(text);
 }
 

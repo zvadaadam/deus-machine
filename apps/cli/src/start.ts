@@ -212,7 +212,7 @@ export async function start(options: StartOptions): Promise<void> {
     }
   } else {
     blank();
-    hint(`Remote access is disabled. Run ${c.cyan("deus pair")} to enable it.`);
+    hint(`Remote access is disabled. Run ${c.cyan("deus login")} to re-run setup and enable it.`);
     blank();
   }
 

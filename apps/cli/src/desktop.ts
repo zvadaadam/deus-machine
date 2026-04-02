@@ -32,7 +32,7 @@ const INSTALL_PATHS: Record<string, string[]> = {
     `${process.env.LOCALAPPDATA || ""}\\Programs\\Deus\\Deus.exe`,
     `${process.env.PROGRAMFILES || ""}\\Deus\\Deus.exe`,
   ],
-  linux: [`${homedir()}/.local/bin/Deus.AppImage`, "/usr/local/bin/Deus.AppImage", "/usr/bin/deus"],
+  linux: [`${homedir()}/.local/bin/Deus.AppImage`, "/usr/local/bin/Deus.AppImage"],
 };
 
 export interface DesktopOptions {
@@ -48,8 +48,9 @@ interface GithubRelease {
 export function hasDisplay(): boolean {
   const os = platform();
   if (process.env.CI || process.env.DOCKER || existsSync("/.dockerenv")) return false;
+  if (process.env.SSH_CONNECTION || process.env.SSH_TTY) return false;
   if (os === "darwin") return true;
-  if (os === "win32") return !process.env.SSH_CONNECTION;
+  if (os === "win32") return true;
   if (os === "linux") return !!(process.env.DISPLAY || process.env.WAYLAND_DISPLAY);
   return false;
 }
@@ -185,15 +186,16 @@ async function fetchRelease(version: string): Promise<GithubRelease | null> {
       ? `https://api.github.com/repos/${GITHUB_REPO}/releases/latest`
       : `https://api.github.com/repos/${GITHUB_REPO}/releases/tags/${version}`;
 
+  const TIMEOUT = 30_000;
   return new Promise((resolve) => {
-    get(
+    const req = get(
       endpoint,
       { headers: { "User-Agent": "deus-cli", Accept: "application/vnd.github.v3+json" } },
       (res) => {
         if (res.statusCode === 302 || res.statusCode === 301) {
           const loc = res.headers.location;
           if (loc) {
-            get(loc, { headers: { "User-Agent": "deus-cli" } }, (r) => {
+            const req2 = get(loc, { headers: { "User-Agent": "deus-cli" } }, (r) => {
               collectBody(r).then((b) => {
                 try {
                   resolve(JSON.parse(b));
@@ -201,7 +203,9 @@ async function fetchRelease(version: string): Promise<GithubRelease | null> {
                   resolve(null);
                 }
               });
-            }).on("error", () => resolve(null));
+            });
+            req2.setTimeout(TIMEOUT, () => req2.destroy());
+            req2.on("error", () => resolve(null));
             return;
           }
         }
@@ -217,7 +221,9 @@ async function fetchRelease(version: string): Promise<GithubRelease | null> {
           }
         });
       }
-    ).on("error", () => resolve(null));
+    );
+    req.setTimeout(TIMEOUT, () => req.destroy());
+    req.on("error", () => resolve(null));
   });
 }
 
@@ -233,9 +239,10 @@ function collectBody(res: IncomingMessage): Promise<string> {
 async function downloadFile(url: string, dest: string): Promise<void> {
   return new Promise((resolve, reject) => {
     const download = (downloadUrl: string) => {
-      get(downloadUrl, { headers: { "User-Agent": "deus-cli" } }, (res) => {
+      const req = get(downloadUrl, { headers: { "User-Agent": "deus-cli" } }, (res) => {
         if (res.statusCode === 302 || res.statusCode === 301) {
           const loc = res.headers.location;
+          res.resume(); // consume redirect response to free socket
           if (loc) {
             download(loc);
             return;
@@ -262,13 +269,14 @@ async function downloadFile(url: string, dest: string): Promise<void> {
           }
         });
         res.pipe(file);
-        file.on("finish", () => {
-          file.close();
+        file.on("close", () => {
           progressBarDone(`Downloaded ${c.dim(formatBytes(totalSize))}`);
           resolve();
         });
         file.on("error", reject);
-      }).on("error", reject);
+      });
+      req.setTimeout(120_000, () => req.destroy(new Error("Download timed out")));
+      req.on("error", reject);
     };
 
     download(url);
@@ -303,6 +311,7 @@ async function installForPlatform(
         const destPath = `/Applications/${appName}`;
 
         if (existsSync(appPath)) {
+          execSync(`rm -rf "${destPath}"`, { stdio: "pipe" });
           execSync(`cp -R "${appPath}" "${destPath}"`, { stdio: "pipe" });
           s.succeed(`Installed to ${c.dim("/Applications/Deus.app")}`);
 
