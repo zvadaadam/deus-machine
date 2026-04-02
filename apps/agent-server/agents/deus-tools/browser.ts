@@ -36,16 +36,17 @@ const BROWSER_LOGS_DIR = join(homedir(), ".deus", "browser-logs");
 // Shared response helpers
 // ============================================================================
 
-/** Wrap a tool handler with standard [browser] logging and error catch */
+/** Wrap a tool handler with error catch for browser unavailability */
 function withBrowserTool<TArgs>(
-  name: string,
-  sessionId: string,
-  logExtra: (args: TArgs) => string,
   fn: (args: TArgs) => Promise<{ content: Array<{ type: string; [key: string]: unknown }> }>
 ): (args: TArgs) => Promise<{ content: Array<{ type: string; [key: string]: unknown }> }> {
   return async (args: TArgs) => {
-    const extra = logExtra(args);
-    console.log(`[browser] ${name} invoked for session ${sessionId}${extra ? `: ${extra}` : ""}`);
+    // Normalize ref: trim whitespace, convert empty strings to undefined
+    const normalized = args as Record<string, unknown>;
+    if (typeof normalized.ref === "string") {
+      const trimmed = normalized.ref.trim();
+      normalized.ref = trimmed || undefined;
+    }
     try {
       return await fn(args);
     } catch (err: unknown) {
@@ -161,10 +162,37 @@ function formatSnapshotResponse(
   return sections.join("\n");
 }
 
+/** Structured data emitted after each browser tool execution for recording. */
+export interface BrowserToolAction {
+  toolName: string;
+  elementBox?: ElementBox | null;
+  url?: string;
+  text?: string;
+  scrollDirection?: string;
+}
+
+/** Callback type for the recording bridge to snoop on browser tool executions. */
+export type OnBrowserAction = (action: BrowserToolAction) => void;
+
 /**
  * Creates the browser automation tool definitions for a given session.
+ * @param onAction Optional callback fired after each successful browser tool
+ *   execution with structured data for the recording bridge.
  */
-export function createBrowserTools(sessionId: string): SdkMcpToolDefinition<any>[] {
+export function createBrowserTools(
+  sessionId: string,
+  onAction?: OnBrowserAction
+): SdkMcpToolDefinition<any>[] {
+  /** Best-effort action emitter — never lets recording failures break the tool result. */
+  const emitAction = (action: BrowserToolAction): void => {
+    if (!onAction) return;
+    try {
+      onAction(action);
+    } catch (err) {
+      console.warn(`[browser] Failed to emit action: ${err instanceof Error ? err.message : err}`);
+    }
+  };
+
   return [
     tool(
       "BrowserSnapshot",
@@ -191,34 +219,29 @@ For large pages, the snapshot is saved to a file and a preview is returned.`,
           .optional()
           .describe("CSS selector to scope snapshot to a subtree (e.g., '#main')"),
       },
-      withBrowserTool(
-        "BrowserSnapshot",
-        sessionId,
-        () => "",
-        async (args) => {
-          const response = await getSnapshot(sessionId, 20_000, {
-            interactive: args.filter === "interactive",
-            compact: args.filter === "compact",
-            depth: args.depth,
-            selector: args.selector,
-          });
+      withBrowserTool(async (args) => {
+        const response = await getSnapshot(sessionId, 20_000, {
+          interactive: args.filter === "interactive",
+          compact: args.filter === "compact",
+          depth: args.depth,
+          selector: args.selector,
+        });
 
-          if (response.error) {
-            return textResult(`Error capturing snapshot: ${response.error}`);
-          }
-
-          return textResult(
-            formatSnapshotResponse(
-              "snapshot",
-              response.snapshot,
-              response.url,
-              response.title,
-              args.filter ? [`Filter: ${args.filter}`] : undefined,
-              SNAPSHOT_SIZE_THRESHOLD_LARGE
-            )
-          );
+        if (response.error) {
+          return textResult(`Error capturing snapshot: ${response.error}`);
         }
-      )
+
+        return textResult(
+          formatSnapshotResponse(
+            "snapshot",
+            response.snapshot,
+            response.url,
+            response.title,
+            args.filter ? [`Filter: ${args.filter}`] : undefined,
+            SNAPSHOT_SIZE_THRESHOLD_LARGE
+          )
+        );
+      })
     ),
 
     tool(
@@ -246,69 +269,71 @@ Returns a page snapshot after clicking and the clicked element's bounding box (x
           .describe("Y coordinate in pixels for coordinate-based click. Use with x."),
         doubleClick: z.boolean().optional().describe("Whether to perform a double click"),
       },
-      withBrowserTool(
-        "BrowserClick",
-        sessionId,
-        (args) => `target=${args.ref ?? `(${args.x}, ${args.y})`}`,
-        async (args) => {
-          const hasRef = args.ref !== undefined;
-          const hasCoords = args.x !== undefined && args.y !== undefined;
-          if (hasRef && hasCoords) {
-            return textResult("Click requires either 'ref' or 'x'/'y' coordinates, not both.");
-          }
-          if (!hasRef && !hasCoords) {
-            return textResult(
-              "Click requires either 'ref' (e.g., '@e1') or both 'x' and 'y' coordinates."
-            );
-          }
-
-          let response;
-          if (args.ref) {
-            const clickArgs = args.doubleClick
-              ? ["click", "--double", args.ref]
-              : ["click", args.ref];
-            response = await execWithSnapshot(sessionId, clickArgs, undefined, args.ref);
-          } else {
-            const cmds: string[][] = [
-              ["mouse", "move", String(args.x), String(args.y)],
-              ["mouse", "down"],
-              ["mouse", "up"],
-            ];
-            if (args.doubleClick) {
-              cmds.push(["mouse", "down"], ["mouse", "up"]);
-            }
-            const batchResult = await executeBatch(sessionId, cmds, { bail: true });
-            if (!batchResult.success) {
-              return textResult(`Click failed: ${batchResult.error ?? "unknown error"}`);
-            }
-            const snap = await getSnapshot(sessionId);
-            if (snap.error) {
-              return textResult(`Click succeeded but snapshot failed: ${snap.error}`);
-            }
-            response = { ...snap, elementBox: { x: args.x!, y: args.y!, width: 1, height: 1 } };
-          }
-
-          if (response.error) {
-            return textResult(`Click failed: ${response.error}`);
-          }
-
-          const target = args.ref ?? `(${args.x}, ${args.y})`;
+      withBrowserTool(async (args) => {
+        const hasRef = args.ref !== undefined;
+        const hasCoords = args.x !== undefined && args.y !== undefined;
+        if (hasRef && hasCoords) {
+          return textResult("Click requires either 'ref' or 'x'/'y' coordinates, not both.");
+        }
+        if (!hasRef && !hasCoords) {
           return textResult(
-            formatSnapshotResponse(
-              "click",
-              response.snapshot,
-              response.url,
-              response.title,
-              [
-                `Click type: ${args.doubleClick ? "double-click" : "single-click"}`,
-                `Target: ${target}`,
-              ],
-              SNAPSHOT_SIZE_THRESHOLD,
-              response.elementBox
-            )
+            "Click requires either 'ref' (e.g., '@e1') or both 'x' and 'y' coordinates."
           );
         }
-      )
+
+        let response;
+        if (args.ref) {
+          const clickArgs = args.doubleClick
+            ? ["click", "--double", args.ref]
+            : ["click", args.ref];
+          response = await execWithSnapshot(sessionId, clickArgs, undefined, args.ref);
+        } else {
+          const cmds: string[][] = [
+            ["mouse", "move", String(args.x), String(args.y)],
+            ["mouse", "down"],
+            ["mouse", "up"],
+          ];
+          if (args.doubleClick) {
+            cmds.push(["mouse", "down"], ["mouse", "up"]);
+          }
+          const batchResult = await executeBatch(sessionId, cmds, { bail: true });
+          if (!batchResult.success) {
+            return textResult(`Click failed: ${batchResult.error ?? "unknown error"}`);
+          }
+          const snap = await getSnapshot(sessionId);
+          if (snap.error) {
+            return textResult(`Click succeeded but snapshot failed: ${snap.error}`);
+          }
+          response = { ...snap, elementBox: { x: args.x!, y: args.y!, width: 1, height: 1 } };
+        }
+
+        if (response.error) {
+          return textResult(`Click failed: ${response.error}`);
+        }
+
+        const target = args.ref ?? `(${args.x}, ${args.y})`;
+
+        emitAction({
+          toolName: "BrowserClick",
+          elementBox: response.elementBox,
+          url: response.url,
+        });
+
+        return textResult(
+          formatSnapshotResponse(
+            "click",
+            response.snapshot,
+            response.url,
+            response.title,
+            [
+              `Click type: ${args.doubleClick ? "double-click" : "single-click"}`,
+              `Target: ${target}`,
+            ],
+            SNAPSHOT_SIZE_THRESHOLD,
+            response.elementBox
+          )
+        );
+      })
     ),
 
     tool(
@@ -326,55 +351,56 @@ Returns a page snapshot and the input element's bounding box.`,
           .optional()
           .describe("Type character by character (useful for autocomplete or key handlers)"),
       },
-      withBrowserTool(
-        "BrowserType",
-        sessionId,
-        (args) => `ref=${args.ref}`,
-        async (args) => {
-          const cmd = args.slowly ? "type" : "fill";
-          const response = await execWithSnapshot(
-            sessionId,
-            [cmd, args.ref, args.text],
-            undefined,
-            args.ref
-          );
+      withBrowserTool(async (args) => {
+        const cmd = args.slowly ? "type" : "fill";
+        const response = await execWithSnapshot(
+          sessionId,
+          [cmd, args.ref, args.text],
+          undefined,
+          args.ref
+        );
 
-          if (response.error) {
-            return textResult(`Type failed: ${response.error}`);
-          }
-
-          let finalResponse = response;
-          if (args.submit) {
-            const submitResult = await execAgentBrowser(sessionId, ["press", "Enter"]);
-            if (!submitResult.success) {
-              return textResult(`Submit failed: ${submitResult.error ?? "unknown error"}`);
-            }
-            const snap = await getSnapshot(sessionId);
-            if (snap.error) {
-              return textResult(`Submit succeeded but snapshot failed: ${snap.error}`);
-            }
-            finalResponse = { ...snap, elementBox: response.elementBox };
-          }
-
-          const details = [
-            `Characters typed: ${args.text.length}`,
-            `Mode: ${args.slowly ? "slow (character-by-character)" : "fast (batch fill)"}`,
-          ];
-          if (args.submit) details.push("Form submitted: yes");
-
-          return textResult(
-            formatSnapshotResponse(
-              "type",
-              finalResponse.snapshot,
-              finalResponse.url,
-              finalResponse.title,
-              details,
-              SNAPSHOT_SIZE_THRESHOLD,
-              finalResponse.elementBox
-            )
-          );
+        if (response.error) {
+          return textResult(`Type failed: ${response.error}`);
         }
-      )
+
+        let finalResponse = response;
+        if (args.submit) {
+          const submitResult = await execAgentBrowser(sessionId, ["press", "Enter"]);
+          if (!submitResult.success) {
+            return textResult(`Submit failed: ${submitResult.error ?? "unknown error"}`);
+          }
+          const snap = await getSnapshot(sessionId);
+          if (snap.error) {
+            return textResult(`Submit succeeded but snapshot failed: ${snap.error}`);
+          }
+          finalResponse = { ...snap, elementBox: response.elementBox };
+        }
+
+        const details = [
+          `Characters typed: ${args.text.length}`,
+          `Mode: ${args.slowly ? "slow (character-by-character)" : "fast (batch fill)"}`,
+        ];
+        if (args.submit) details.push("Form submitted: yes");
+
+        emitAction({
+          toolName: "BrowserType",
+          elementBox: finalResponse.elementBox,
+          text: `[${args.text.length} chars]`,
+        });
+
+        return textResult(
+          formatSnapshotResponse(
+            "type",
+            finalResponse.snapshot,
+            finalResponse.url,
+            finalResponse.title,
+            details,
+            SNAPSHOT_SIZE_THRESHOLD,
+            finalResponse.elementBox
+          )
+        );
+      })
     ),
 
     tool(
@@ -383,29 +409,22 @@ Returns a page snapshot and the input element's bounding box.`,
       {
         url: z.string().describe("The URL to navigate to"),
       },
-      withBrowserTool(
-        "BrowserNavigate",
-        sessionId,
-        (args) => {
-          try {
-            const u = new URL(args.url);
-            return `url=${u.origin}${u.pathname}`;
-          } catch {
-            return `url=${args.url.replace(/[?#].*$/, "")}`;
-          }
-        },
-        async (args) => {
-          const response = await execWithSnapshot(sessionId, ["open", args.url], 30_000);
+      withBrowserTool(async (args) => {
+        const response = await execWithSnapshot(sessionId, ["open", args.url], 30_000);
 
-          if (response.error) {
-            return textResult(`Navigation failed: ${response.error}`);
-          }
-
-          return textResult(
-            formatSnapshotResponse("navigate", response.snapshot, response.url, response.title)
-          );
+        if (response.error) {
+          return textResult(`Navigation failed: ${response.error}`);
         }
-      )
+
+        emitAction({
+          toolName: "BrowserNavigate",
+          url: response.url ?? args.url,
+        });
+
+        return textResult(
+          formatSnapshotResponse("navigate", response.snapshot, response.url, response.title)
+        );
+      })
     ),
 
     tool(
@@ -441,81 +460,66 @@ Returns a page snapshot after the condition is met.`,
           ),
         timeout: z.number().optional().describe("Maximum wait time in seconds (default: 30)"),
       },
-      withBrowserTool(
-        "BrowserWaitFor",
-        sessionId,
-        (args) => {
-          const selected = [
-            args.text !== undefined && "text",
-            args.textGone !== undefined && "textGone",
-            args.time !== undefined && "time",
-            args.networkIdle === true && "networkIdle",
-            args.elementVisible !== undefined && "elementVisible",
-            args.elementGone !== undefined && "elementGone",
-          ].filter(Boolean) as string[];
-          return `mode=${selected.length === 1 ? selected[0] : "invalid"}`;
-        },
-        async (args) => {
-          const selected = [
-            args.text !== undefined && "text",
-            args.textGone !== undefined && "textGone",
-            args.time !== undefined && "time",
-            args.networkIdle === true && "networkIdle",
-            args.elementVisible !== undefined && "elementVisible",
-            args.elementGone !== undefined && "elementGone",
-          ].filter(Boolean) as string[];
+      withBrowserTool(async (args) => {
+        const selected = [
+          args.text !== undefined && "text",
+          args.textGone !== undefined && "textGone",
+          args.time !== undefined && "time",
+          args.networkIdle === true && "networkIdle",
+          args.elementVisible !== undefined && "elementVisible",
+          args.elementGone !== undefined && "elementGone",
+        ].filter(Boolean) as string[];
 
-          if (selected.length !== 1) {
-            return textResult(
-              "Provide exactly one of: text, textGone, time, networkIdle, elementVisible, or elementGone."
-            );
-          }
-          const mode = selected[0]!;
-
-          const waitArgs: string[] = ["wait"];
-          if (args.text !== undefined) {
-            waitArgs.push("--text", args.text);
-          } else if (args.textGone !== undefined) {
-            waitArgs.push("--text-gone", args.textGone);
-          } else if (args.time !== undefined) {
-            waitArgs.push("--time", String(args.time * 1000));
-          } else if (args.networkIdle === true) {
-            waitArgs.push("--load", "networkidle");
-          } else if (args.elementVisible !== undefined) {
-            waitArgs.push(args.elementVisible);
-          } else if (args.elementGone !== undefined) {
-            waitArgs.push(args.elementGone, "--state", "hidden");
-          }
-          if (args.timeout !== undefined) {
-            waitArgs.push("--timeout", String(args.timeout * 1000));
-          }
-
-          const outerTimeoutMs = Math.max((args.timeout ?? 30) * 1000, 0) + 5_000;
-          const response = await execWithSnapshot(sessionId, waitArgs, outerTimeoutMs);
-
-          if (response.error) {
-            return textResult(`Wait failed: ${response.error}`);
-          }
-
-          const details: string[] = [`Wait mode: ${mode}`];
-          if (args.text) details.push(`Waited for text: "${args.text}"`);
-          if (args.textGone) details.push(`Waited for text to disappear: "${args.textGone}"`);
-          if (args.time) details.push(`Waited: ${args.time}s`);
-          if (args.networkIdle) details.push("Waited for network idle");
-          if (args.elementVisible) details.push(`Waited for visible: ${args.elementVisible}`);
-          if (args.elementGone) details.push(`Waited for gone: ${args.elementGone}`);
-
+        if (selected.length !== 1) {
           return textResult(
-            formatSnapshotResponse(
-              "wait_for",
-              response.snapshot,
-              response.url,
-              response.title,
-              details
-            )
+            "Provide exactly one of: text, textGone, time, networkIdle, elementVisible, or elementGone."
           );
         }
-      )
+        const mode = selected[0]!;
+
+        const waitArgs: string[] = ["wait"];
+        if (args.text !== undefined) {
+          waitArgs.push("--text", args.text);
+        } else if (args.textGone !== undefined) {
+          waitArgs.push("--text-gone", args.textGone);
+        } else if (args.time !== undefined) {
+          waitArgs.push("--time", String(args.time * 1000));
+        } else if (args.networkIdle === true) {
+          waitArgs.push("--load", "networkidle");
+        } else if (args.elementVisible !== undefined) {
+          waitArgs.push(args.elementVisible);
+        } else if (args.elementGone !== undefined) {
+          waitArgs.push(args.elementGone, "--state", "hidden");
+        }
+        if (args.timeout !== undefined) {
+          waitArgs.push("--timeout", String(args.timeout * 1000));
+        }
+
+        const outerTimeoutMs = Math.max((args.timeout ?? 30) * 1000, 0) + 5_000;
+        const response = await execWithSnapshot(sessionId, waitArgs, outerTimeoutMs);
+
+        if (response.error) {
+          return textResult(`Wait failed: ${response.error}`);
+        }
+
+        const details: string[] = [`Wait mode: ${mode}`];
+        if (args.text) details.push(`Waited for text: "${args.text}"`);
+        if (args.textGone) details.push(`Waited for text to disappear: "${args.textGone}"`);
+        if (args.time) details.push(`Waited: ${args.time}s`);
+        if (args.networkIdle) details.push("Waited for network idle");
+        if (args.elementVisible) details.push(`Waited for visible: ${args.elementVisible}`);
+        if (args.elementGone) details.push(`Waited for gone: ${args.elementGone}`);
+
+        return textResult(
+          formatSnapshotResponse(
+            "wait_for",
+            response.snapshot,
+            response.url,
+            response.title,
+            details
+          )
+        );
+      })
     ),
 
     tool(
@@ -545,56 +549,56 @@ Returns a page snapshot after all actions complete.`,
           .optional()
           .describe("Stop on first error (default: false). Remaining actions are skipped."),
       },
-      withBrowserTool(
-        "BrowserBatchActions",
-        sessionId,
-        (args) => `${args.actions.length} actions`,
-        async (args) => {
-          const result = await executeBatch(sessionId, args.actions, {
-            bail: args.bail,
-            timeoutMs: 60_000,
-          });
+      withBrowserTool(async (args) => {
+        const result = await executeBatch(sessionId, args.actions, {
+          bail: args.bail,
+          timeoutMs: 60_000,
+        });
 
-          if (!result.success) {
-            return textResult(`Batch failed: ${result.error || "Unknown error"}`);
-          }
-
-          const batchData = result.data?.results as Array<Record<string, unknown>> | undefined;
-          const failures: string[] = [];
-          if (Array.isArray(batchData)) {
-            batchData.forEach((r, i) => {
-              if (r && r.success === false) {
-                failures.push(
-                  `Action ${i + 1} (${summarizeBatchAction(args.actions[i] ?? [])}): ${r.error ?? "failed"}`
-                );
-              }
-            });
-          }
-
-          const snap = await getSnapshot(sessionId);
-          if (snap.error) {
-            return textResult(`Batch executed but snapshot failed: ${snap.error}`);
-          }
-          const actionSummary = args.actions
-            .slice(0, 10)
-            .map((a) => summarizeBatchAction(a))
-            .join(", ");
-          const details = [
-            `Actions executed: ${args.actions.length}`,
-            `Commands: ${actionSummary}${args.actions.length > 10 ? ` ... (+${args.actions.length - 10} more)` : ""}`,
-          ];
-
-          if (failures.length > 0) {
-            details.push(`Failures: ${failures.length}`);
-            details.push(...failures.slice(0, 5));
-            if (failures.length > 5) details.push(`... (+${failures.length - 5} more)`);
-          }
-
-          return textResult(
-            formatSnapshotResponse("batch", snap.snapshot, snap.url, snap.title, details)
-          );
+        if (!result.success) {
+          return textResult(`Batch failed: ${result.error || "Unknown error"}`);
         }
-      )
+
+        const batchData = result.data?.results as Array<Record<string, unknown>> | undefined;
+        const failures: string[] = [];
+        if (Array.isArray(batchData)) {
+          batchData.forEach((r, i) => {
+            if (r && r.success === false) {
+              failures.push(
+                `Action ${i + 1} (${summarizeBatchAction(args.actions[i] ?? [])}): ${r.error ?? "failed"}`
+              );
+            }
+          });
+        }
+
+        const snap = await getSnapshot(sessionId);
+        if (snap.error) {
+          return textResult(`Batch executed but snapshot failed: ${snap.error}`);
+        }
+        const actionSummary = args.actions
+          .slice(0, 10)
+          .map((a) => summarizeBatchAction(a))
+          .join(", ");
+        const details = [
+          `Actions executed: ${args.actions.length}`,
+          `Commands: ${actionSummary}${args.actions.length > 10 ? ` ... (+${args.actions.length - 10} more)` : ""}`,
+        ];
+
+        if (failures.length > 0) {
+          details.push(`Failures: ${failures.length}`);
+          details.push(...failures.slice(0, 5));
+          if (failures.length > 5) details.push(`... (+${failures.length - 5} more)`);
+        }
+
+        emitAction({
+          toolName: "BrowserBatchActions",
+          url: snap.url,
+        });
+
+        return textResult(
+          formatSnapshotResponse("batch", snap.snapshot, snap.url, snap.title, details)
+        );
+      })
     ),
 
     tool(
@@ -605,25 +609,20 @@ Use 'return' to get results. Example: 'return document.title'`,
       {
         code: z.string().describe("JavaScript code to execute. Use 'return' to get results."),
       },
-      withBrowserTool(
-        "BrowserEvaluate",
-        sessionId,
-        () => "",
-        async (args) => {
-          const result = await execAgentBrowser(sessionId, ["eval", args.code]);
+      withBrowserTool(async (args) => {
+        const result = await execAgentBrowser(sessionId, ["eval", args.code]);
 
-          if (!result.success) {
-            return textResult(`Evaluate failed: ${result.error}`);
-          }
-
-          const rawResult =
-            result.data && Object.prototype.hasOwnProperty.call(result.data, "result")
-              ? (result.data as Record<string, unknown>).result
-              : result.data;
-          const evalResult = typeof rawResult === "string" ? rawResult : JSON.stringify(rawResult);
-          return textResult(`Evaluation result: ${evalResult}`);
+        if (!result.success) {
+          return textResult(`Evaluate failed: ${result.error}`);
         }
-      )
+
+        const rawResult =
+          result.data && Object.prototype.hasOwnProperty.call(result.data, "result")
+            ? (result.data as Record<string, unknown>).result
+            : result.data;
+        const evalResult = typeof rawResult === "string" ? rawResult : JSON.stringify(rawResult);
+        return textResult(`Evaluation result: ${evalResult}`);
+      })
     ),
 
     tool(
@@ -639,28 +638,23 @@ Use for keyboard shortcuts, form submission (Enter), navigation (Tab), dismissin
         alt: z.boolean().optional().describe("Hold Alt/Option key"),
         meta: z.boolean().optional().describe("Hold Meta/Cmd key"),
       },
-      withBrowserTool(
-        "BrowserPressKey",
-        sessionId,
-        (args) => `key=${args.key}`,
-        async (args) => {
-          const parts: string[] = [];
-          if (args.ctrl) parts.push("Control");
-          if (args.shift) parts.push("Shift");
-          if (args.alt) parts.push("Alt");
-          if (args.meta) parts.push("Meta");
-          parts.push(args.key);
-          const keyCombo = parts.join("+");
+      withBrowserTool(async (args) => {
+        const parts: string[] = [];
+        if (args.ctrl) parts.push("Control");
+        if (args.shift) parts.push("Shift");
+        if (args.alt) parts.push("Alt");
+        if (args.meta) parts.push("Meta");
+        parts.push(args.key);
+        const keyCombo = parts.join("+");
 
-          const result = await execAgentBrowser(sessionId, ["press", keyCombo]);
+        const result = await execAgentBrowser(sessionId, ["press", keyCombo]);
 
-          if (!result.success) {
-            return textResult(`PressKey failed: ${result.error}`);
-          }
-
-          return textResult(`Pressed key: ${keyCombo}`);
+        if (!result.success) {
+          return textResult(`PressKey failed: ${result.error}`);
         }
-      )
+
+        return textResult(`Pressed key: ${keyCombo}`);
+      })
     ),
 
     tool(
@@ -671,35 +665,35 @@ Returns a page snapshot after hovering and the element's bounding box.`,
         element: z.string().describe("Human-readable element description"),
         ref: z.string().describe("Element reference from the snapshot (e.g., '@e3')"),
       },
-      withBrowserTool(
-        "BrowserHover",
-        sessionId,
-        (args) => `ref=${args.ref}`,
-        async (args) => {
-          const response = await execWithSnapshot(
-            sessionId,
-            ["hover", args.ref],
-            undefined,
-            args.ref
-          );
+      withBrowserTool(async (args) => {
+        const response = await execWithSnapshot(
+          sessionId,
+          ["hover", args.ref],
+          undefined,
+          args.ref
+        );
 
-          if (response.error) {
-            return textResult(`Hover failed: ${response.error}`);
-          }
-
-          return textResult(
-            formatSnapshotResponse(
-              "hover",
-              response.snapshot,
-              response.url,
-              response.title,
-              [`Element: ${args.element}`],
-              SNAPSHOT_SIZE_THRESHOLD,
-              response.elementBox
-            )
-          );
+        if (response.error) {
+          return textResult(`Hover failed: ${response.error}`);
         }
-      )
+
+        emitAction({
+          toolName: "BrowserHover",
+          elementBox: response.elementBox,
+        });
+
+        return textResult(
+          formatSnapshotResponse(
+            "hover",
+            response.snapshot,
+            response.url,
+            response.title,
+            [`Element: ${args.element}`],
+            SNAPSHOT_SIZE_THRESHOLD,
+            response.elementBox
+          )
+        );
+      })
     ),
 
     tool(
@@ -710,57 +704,57 @@ Returns a page snapshot after hovering and the element's bounding box.`,
         ref: z.string().describe("Element reference for the <select> element"),
         values: z.array(z.string()).describe("Values to select (option values or visible text)"),
       },
-      withBrowserTool(
-        "BrowserSelectOption",
-        sessionId,
-        (args) => `ref=${args.ref}`,
-        async (args) => {
-          const response = await execWithSnapshot(
-            sessionId,
-            ["select", args.ref, ...args.values],
-            undefined,
-            args.ref
-          );
+      withBrowserTool(async (args) => {
+        const response = await execWithSnapshot(
+          sessionId,
+          ["select", args.ref, ...args.values],
+          undefined,
+          args.ref
+        );
 
-          if (response.error) {
-            return textResult(`SelectOption failed: ${response.error}`);
-          }
-
-          return textResult(
-            formatSnapshotResponse(
-              "select_option",
-              response.snapshot,
-              response.url,
-              response.title,
-              [`Dropdown: ${args.element}`, `Selected: ${args.values.join(", ")}`],
-              SNAPSHOT_SIZE_THRESHOLD,
-              response.elementBox
-            )
-          );
+        if (response.error) {
+          return textResult(`SelectOption failed: ${response.error}`);
         }
-      )
+
+        emitAction({
+          toolName: "BrowserSelectOption",
+          elementBox: response.elementBox,
+        });
+
+        return textResult(
+          formatSnapshotResponse(
+            "select_option",
+            response.snapshot,
+            response.url,
+            response.title,
+            [`Dropdown: ${args.element}`, `Selected: ${args.values.join(", ")}`],
+            SNAPSHOT_SIZE_THRESHOLD,
+            response.elementBox
+          )
+        );
+      })
     ),
 
     tool(
       "BrowserNavigateBack",
       `Go back to the previous page in browser history. Returns a snapshot of the page.`,
       {},
-      withBrowserTool(
-        "BrowserNavigateBack",
-        sessionId,
-        () => "",
-        async () => {
-          const response = await execWithSnapshot(sessionId, ["back"]);
+      withBrowserTool(async () => {
+        const response = await execWithSnapshot(sessionId, ["back"]);
 
-          if (response.error) {
-            return textResult(`NavigateBack failed: ${response.error}`);
-          }
-
-          return textResult(
-            formatSnapshotResponse("navigate_back", response.snapshot, response.url, response.title)
-          );
+        if (response.error) {
+          return textResult(`NavigateBack failed: ${response.error}`);
         }
-      )
+
+        emitAction({
+          toolName: "BrowserNavigateBack",
+          url: response.url,
+        });
+
+        return textResult(
+          formatSnapshotResponse("navigate_back", response.snapshot, response.url, response.title)
+        );
+      })
     ),
 
     tool(
@@ -768,26 +762,21 @@ Returns a page snapshot after hovering and the element's bounding box.`,
       `Returns console messages (log, warn, error) captured since the page loaded.
 Use to check for JavaScript errors or debug application behavior.`,
       {},
-      withBrowserTool(
-        "BrowserConsoleMessages",
-        sessionId,
-        () => "",
-        async () => {
-          const result = await execAgentBrowser(sessionId, ["console", "--json"]);
+      withBrowserTool(async () => {
+        const result = await execAgentBrowser(sessionId, ["console", "--json"]);
 
-          if (!result.success) {
-            return textResult(`ConsoleMessages failed: ${result.error}`);
-          }
-
-          const messages = (result.data?.messages as string) || JSON.stringify(result.data);
-
-          if (!messages || messages === "[]" || messages === "null") {
-            return textResult("No console messages captured.");
-          }
-
-          return textResult(`Console messages:\n${messages}`);
+        if (!result.success) {
+          return textResult(`ConsoleMessages failed: ${result.error}`);
         }
-      )
+
+        const messages = (result.data?.messages as string) || JSON.stringify(result.data);
+
+        if (!messages || messages === "[]" || messages === "null") {
+          return textResult("No console messages captured.");
+        }
+
+        return textResult(`Console messages:\n${messages}`);
+      })
     ),
 
     tool(
@@ -802,75 +791,66 @@ For structural/interactive analysis, prefer BrowserSnapshot instead.`,
           .optional()
           .describe("Element ref to screenshot just that element (e.g., '@e5')"),
       },
-      withBrowserTool(
-        "BrowserScreenshot",
-        sessionId,
-        () => "",
-        async (args) => {
-          const screenshotPath = join(tmpdir(), `deus-screenshot-${sessionId}-${Date.now()}.png`);
-          const screenshotArgs = ["screenshot", screenshotPath];
-          if (args.ref) {
-            screenshotArgs.push("--selector", args.ref);
-          }
-
-          const result = await execAgentBrowser(sessionId, screenshotArgs, 15_000);
-
-          if (!result.success) {
-            return textResult(`Screenshot failed: ${result.error}`);
-          }
-
-          const parts: Array<{ type: string; [key: string]: unknown }> = [];
-          try {
-            const imageBuffer = readFileSync(screenshotPath);
-            parts.push({
-              type: "image",
-              data: imageBuffer.toString("base64"),
-              mimeType: "image/png",
-            });
-            try {
-              unlinkSync(screenshotPath);
-            } catch {
-              // Ignore cleanup errors
-            }
-          } catch {
-            // File read failed — return text-only response
-          }
-
-          const urlResult = await execAgentBrowser(sessionId, ["get", "url", "--json"]);
-          const url = (urlResult.data?.url as string) || "";
-          let context = url ? `Screenshot of ${url}` : "Screenshot captured.";
-          if (args.ref) context += ` (element: ${args.ref})`;
-          parts.push({ type: "text", text: context });
-
-          return { content: parts };
+      withBrowserTool(async (args) => {
+        const screenshotPath = join(tmpdir(), `deus-screenshot-${sessionId}-${Date.now()}.png`);
+        const screenshotArgs = ["screenshot", screenshotPath];
+        if (args.ref) {
+          screenshotArgs.push("--selector", args.ref);
         }
-      )
+
+        const result = await execAgentBrowser(sessionId, screenshotArgs, 15_000);
+
+        if (!result.success) {
+          return textResult(`Screenshot failed: ${result.error}`);
+        }
+
+        const parts: Array<{ type: string; [key: string]: unknown }> = [];
+        try {
+          const imageBuffer = readFileSync(screenshotPath);
+          parts.push({
+            type: "image",
+            data: imageBuffer.toString("base64"),
+            mimeType: "image/png",
+          });
+        } catch {
+          // File read failed — return text-only response
+        } finally {
+          try {
+            unlinkSync(screenshotPath);
+          } catch {
+            // Ignore cleanup errors
+          }
+        }
+
+        const urlResult = await execAgentBrowser(sessionId, ["get", "url", "--json"]);
+        const url = (urlResult.data?.url as string) || "";
+        let context = url ? `Screenshot of ${url}` : "Screenshot captured.";
+        if (args.ref) context += ` (element: ${args.ref})`;
+        parts.push({ type: "text", text: context });
+
+        return { content: parts };
+      })
     ),
 
     tool(
       "BrowserNetworkRequests",
       `Returns network requests made since the page loaded. Use to debug API calls and check response status codes.`,
       {},
-      withBrowserTool(
-        "BrowserNetworkRequests",
-        sessionId,
-        () => "",
-        async () => {
-          const result = await execAgentBrowser(sessionId, ["network", "--json"]);
+      withBrowserTool(async () => {
+        const result = await execAgentBrowser(sessionId, ["network", "--json"]);
 
-          if (!result.success) {
-            return textResult(`NetworkRequests failed: ${result.error}`);
-          }
-
-          const requests = (result.data?.requests as string) || JSON.stringify(result.data);
-
-          if (!requests || requests === "[]" || requests === "null") {
-            return textResult("No network requests captured.");
-          }
-
-          return textResult(`Network requests:\n${requests}`);
+        if (!result.success) {
+          return textResult(`NetworkRequests failed: ${result.error}`);
         }
-      )
+
+        const requests = (result.data?.requests as string) || JSON.stringify(result.data);
+
+        if (!requests || requests === "[]" || requests === "null") {
+          return textResult("No network requests captured.");
+        }
+
+        return textResult(`Network requests:\n${requests}`);
+      })
     ),
 
     tool(
@@ -896,32 +876,33 @@ Returns a fresh snapshot after scrolling.`,
           .optional()
           .describe("Element ref to scroll into view. If provided, direction/amount are ignored."),
       },
-      withBrowserTool(
-        "BrowserScroll",
-        sessionId,
-        (args) => `dir=${args.direction} ref=${args.ref}`,
-        async (args) => {
-          const scrollArgs = args.ref
-            ? ["scroll", "--to", args.ref]
-            : ["scroll", args.direction ?? "down", String(args.amount ?? 600)];
+      withBrowserTool(async (args) => {
+        const scrollArgs = args.ref
+          ? ["scroll", "--to", args.ref]
+          : ["scroll", args.direction ?? "down", String(args.amount ?? 600)];
 
-          const response = await execWithSnapshot(sessionId, scrollArgs);
+        const response = await execWithSnapshot(sessionId, scrollArgs, undefined, args.ref);
 
-          if (response.error) {
-            return textResult(`Scroll failed: ${response.error}`);
-          }
-
-          const detail = args.ref
-            ? `Scrolled element into view: ${args.ref}`
-            : `Scrolled ${args.direction ?? "down"} by ${args.amount ?? 600}px`;
-
-          return textResult(
-            formatSnapshotResponse("scroll", response.snapshot, response.url, response.title, [
-              detail,
-            ])
-          );
+        if (response.error) {
+          return textResult(`Scroll failed: ${response.error}`);
         }
-      )
+
+        const detail = args.ref
+          ? `Scrolled element into view: ${args.ref}`
+          : `Scrolled ${args.direction ?? "down"} by ${args.amount ?? 600}px`;
+
+        emitAction(
+          args.ref
+            ? { toolName: "BrowserScroll", elementBox: response.elementBox }
+            : { toolName: "BrowserScroll", scrollDirection: args.direction ?? "down" }
+        );
+
+        return textResult(
+          formatSnapshotResponse("scroll", response.snapshot, response.url, response.title, [
+            detail,
+          ])
+        );
+      })
     ),
 
     // --- Viewport / Device Emulation ---
@@ -939,33 +920,24 @@ Returns a fresh snapshot after scrolling.`,
           .optional()
           .describe("Device pixel ratio (default: 1)"),
       },
-      withBrowserTool(
-        "BrowserSetViewport",
-        sessionId,
-        (args) => `${args.width}x${args.height}@${args.deviceScaleFactor ?? 1}x`,
-        async (args) => {
-          const scale = args.deviceScaleFactor ?? 1;
-          const response = await execWithSnapshot(sessionId, [
-            "set",
-            "viewport",
-            String(args.width),
-            String(args.height),
-            String(scale),
-          ]);
-          if (response.error) {
-            return textResult(`SetViewport failed: ${response.error}`);
-          }
-          return textResult(
-            formatSnapshotResponse(
-              "set_viewport",
-              response.snapshot,
-              response.url,
-              response.title,
-              [`Viewport: ${args.width}x${args.height} @${scale}x`]
-            )
-          );
+      withBrowserTool(async (args) => {
+        const scale = args.deviceScaleFactor ?? 1;
+        const response = await execWithSnapshot(sessionId, [
+          "set",
+          "viewport",
+          String(args.width),
+          String(args.height),
+          String(scale),
+        ]);
+        if (response.error) {
+          return textResult(`SetViewport failed: ${response.error}`);
         }
-      )
+        return textResult(
+          formatSnapshotResponse("set_viewport", response.snapshot, response.url, response.title, [
+            `Viewport: ${args.width}x${args.height} @${scale}x`,
+          ])
+        );
+      })
     ),
 
     tool(
@@ -974,22 +946,17 @@ Returns a fresh snapshot after scrolling.`,
       {
         device: z.string().describe("Device name, e.g. 'iPhone 16', 'iPad Pro', 'Pixel 9'"),
       },
-      withBrowserTool(
-        "BrowserSetDevice",
-        sessionId,
-        (args) => args.device,
-        async (args) => {
-          const response = await execWithSnapshot(sessionId, ["set", "device", args.device]);
-          if (response.error) {
-            return textResult(`SetDevice failed: ${response.error}`);
-          }
-          return textResult(
-            formatSnapshotResponse("set_device", response.snapshot, response.url, response.title, [
-              `Device: ${args.device}`,
-            ])
-          );
+      withBrowserTool(async (args) => {
+        const response = await execWithSnapshot(sessionId, ["set", "device", args.device]);
+        if (response.error) {
+          return textResult(`SetDevice failed: ${response.error}`);
         }
-      )
+        return textResult(
+          formatSnapshotResponse("set_device", response.snapshot, response.url, response.title, [
+            `Device: ${args.device}`,
+          ])
+        );
+      })
     ),
 
     tool(
@@ -999,27 +966,22 @@ Returns a fresh snapshot after scrolling.`,
         colorScheme: z.enum(["dark", "light"]).optional().describe("Emulated prefers-color-scheme"),
         reducedMotion: z.boolean().optional().describe("Emulate prefers-reduced-motion: reduce"),
       },
-      withBrowserTool(
-        "BrowserSetMedia",
-        sessionId,
-        (args) => `scheme=${args.colorScheme ?? "default"}`,
-        async (args) => {
-          if (args.colorScheme === undefined && args.reducedMotion === undefined) {
-            return textResult("Provide at least one of colorScheme or reducedMotion.");
-          }
-          const mediaArgs = ["set", "media"];
-          if (args.colorScheme !== undefined) mediaArgs.push(args.colorScheme);
-          if (args.reducedMotion !== undefined)
-            mediaArgs.push(args.reducedMotion ? "reduced-motion" : "no-reduced-motion");
-          const result = await execAgentBrowser(sessionId, mediaArgs);
-          if (!result.success) {
-            return textResult(`SetMedia failed: ${result.error ?? "unknown error"}`);
-          }
-          return textResult(
-            `Media emulation set: color-scheme=${args.colorScheme ?? "default"}, reduced-motion=${args.reducedMotion ?? false}`
-          );
+      withBrowserTool(async (args) => {
+        if (args.colorScheme === undefined && args.reducedMotion === undefined) {
+          return textResult("Provide at least one of colorScheme or reducedMotion.");
         }
-      )
+        const mediaArgs = ["set", "media"];
+        if (args.colorScheme !== undefined) mediaArgs.push(args.colorScheme);
+        if (args.reducedMotion !== undefined)
+          mediaArgs.push(args.reducedMotion ? "reduced-motion" : "no-reduced-motion");
+        const result = await execAgentBrowser(sessionId, mediaArgs);
+        if (!result.success) {
+          return textResult(`SetMedia failed: ${result.error ?? "unknown error"}`);
+        }
+        return textResult(
+          `Media emulation set: color-scheme=${args.colorScheme ?? "default"}, reduced-motion=${args.reducedMotion ?? false}`
+        );
+      })
     ),
   ];
 }

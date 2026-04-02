@@ -10,7 +10,6 @@ vi.mock("../src/mcp/ffmpeg-recorder.js", async (importOriginal) => {
     FfmpegRecorder: vi.fn().mockImplementation(() => ({
       startCapture: vi.fn().mockResolvedValue(undefined),
       stopCapture: vi.fn().mockResolvedValue("/tmp/raw-test.mp4"),
-      postProcess: vi.fn().mockResolvedValue("/tmp/output.mp4"),
       isCapturing: vi.fn().mockReturnValue(false),
       cleanup: vi.fn().mockResolvedValue(undefined),
       kill: vi.fn(),
@@ -63,7 +62,10 @@ describe("SessionManager", () => {
 
       expect(id1).not.toBe(id2);
       expect(id2).not.toBe(id3);
-      expect(manager.activeCount).toBe(3);
+      // All 3 sessions should be in recording state
+      expect(manager.status(id1).status).toBe("recording");
+      expect(manager.status(id2).status).toBe("recording");
+      expect(manager.status(id3).status).toBe("recording");
     });
   });
 
@@ -101,16 +103,16 @@ describe("SessionManager", () => {
     });
 
     it("throws when session is not found", () => {
-      expect(() => manager.event("nonexistent", "click", 0, 0))
-        .toThrow("Session not found: nonexistent");
+      expect(() => manager.event("nonexistent", "click", 0, 0)).toThrow(
+        "Session not found: nonexistent"
+      );
     });
 
     it("throws when session is not recording", async () => {
       const id = await manager.create({});
       await manager.stop(id);
 
-      expect(() => manager.event(id, "click", 0, 0))
-        .toThrow(/not recording/);
+      expect(() => manager.event(id, "click", 0, 0)).toThrow(/not recording/);
     });
   });
 
@@ -138,16 +140,16 @@ describe("SessionManager", () => {
     });
 
     it("throws when session is not found", () => {
-      expect(() => manager.chapter("nonexistent", "Test"))
-        .toThrow("Session not found: nonexistent");
+      expect(() => manager.chapter("nonexistent", "Test")).toThrow(
+        "Session not found: nonexistent"
+      );
     });
 
     it("throws when session is not recording", async () => {
       const id = await manager.create({});
       await manager.stop(id);
 
-      expect(() => manager.chapter(id, "Late Chapter"))
-        .toThrow(/not recording/);
+      expect(() => manager.chapter(id, "Late Chapter")).toThrow(/not recording/);
     });
   });
 
@@ -161,10 +163,11 @@ describe("SessionManager", () => {
       manager.chapter(id, "Test Chapter");
 
       const result = await manager.stop(id);
-      expect(result.eventCount).toBe(2);
-      expect(result.chapterCount).toBe(1);
+      expect(result.events).toHaveLength(2);
+      expect(result.chapters).toHaveLength(1);
       expect(result.duration).toBeGreaterThanOrEqual(0);
-      expect(result.outputPath).toContain("recording-");
+      // captureMethod defaults to "none" — no video output without capture
+      expect(result.outputPath).toBe("");
     });
 
     it("transitions status from recording to done", async () => {
@@ -183,13 +186,14 @@ describe("SessionManager", () => {
       await expect(manager.stop(id)).rejects.toThrow(/not recording/);
     });
 
-    it("returns custom output path when specified", async () => {
+    it("returns empty output path without capture", async () => {
       const id = await manager.create({
         outputPath: "/tmp/custom-output.mp4",
       });
 
+      // Without capture, no video is produced even with custom outputPath
       const result = await manager.stop(id);
-      expect(result.outputPath).toBe("/tmp/custom-output.mp4");
+      expect(result.outputPath).toBe("");
     });
   });
 
@@ -204,7 +208,7 @@ describe("SessionManager", () => {
       expect(status.chapterCount).toBe(0);
     });
 
-    it("returns outputPath for completed session", async () => {
+    it("returns undefined outputPath for no-capture session", async () => {
       const id = await manager.create({
         outputPath: "/tmp/test-output.mp4",
       });
@@ -212,12 +216,12 @@ describe("SessionManager", () => {
 
       const status = manager.status(id);
       expect(status.status).toBe("done");
-      expect(status.outputPath).toBe("/tmp/test-output.mp4");
+      // No capture → no video → outputPath not set on state
+      expect(status.outputPath).toBeUndefined();
     });
 
     it("throws for non-existent session", () => {
-      expect(() => manager.status("nonexistent"))
-        .toThrow("Session not found: nonexistent");
+      expect(() => manager.status("nonexistent")).toThrow("Session not found: nonexistent");
     });
   });
 
@@ -226,8 +230,7 @@ describe("SessionManager", () => {
       const id = await manager.create({});
       await manager.cleanup(id);
 
-      expect(() => manager.status(id))
-        .toThrow("Session not found");
+      expect(() => manager.status(id)).toThrow("Session not found");
     });
 
     it("is idempotent for non-existent sessions", async () => {
@@ -242,32 +245,31 @@ describe("SessionManager", () => {
       const id2 = await manager.create({});
       const id3 = await manager.create({});
 
-      expect(manager.activeCount).toBe(3);
+      expect(manager.status(id1).status).toBe("recording");
 
       await manager.shutdownAll();
 
-      expect(manager.activeCount).toBe(0);
+      // All sessions should be cleaned up
       expect(() => manager.status(id1)).toThrow();
       expect(() => manager.status(id2)).toThrow();
       expect(() => manager.status(id3)).toThrow();
     });
   });
 
-  describe("activeCount", () => {
-    it("tracks active recording sessions", async () => {
-      expect(manager.activeCount).toBe(0);
-
+  describe("session lifecycle", () => {
+    it("tracks sessions through create → stop lifecycle", async () => {
       const id1 = await manager.create({});
-      expect(manager.activeCount).toBe(1);
-
       const id2 = await manager.create({});
-      expect(manager.activeCount).toBe(2);
+
+      expect(manager.status(id1).status).toBe("recording");
+      expect(manager.status(id2).status).toBe("recording");
 
       await manager.stop(id1);
-      expect(manager.activeCount).toBe(1);
+      expect(manager.status(id1).status).toBe("done");
+      expect(manager.status(id2).status).toBe("recording");
 
       await manager.stop(id2);
-      expect(manager.activeCount).toBe(0);
+      expect(manager.status(id2).status).toBe("done");
     });
   });
 
@@ -298,8 +300,8 @@ describe("SessionManager", () => {
 
       // Stop
       const result = await manager.stop(id);
-      expect(result.eventCount).toBe(5);
-      expect(result.chapterCount).toBe(2);
+      expect(result.events).toHaveLength(5);
+      expect(result.chapters).toHaveLength(2);
       expect(result.duration).toBeGreaterThanOrEqual(0);
       expect(manager.status(id).status).toBe("done");
 

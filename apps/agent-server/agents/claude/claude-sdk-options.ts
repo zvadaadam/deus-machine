@@ -42,6 +42,22 @@ ${workspaceContext}
 # Persistent Notebook REPL
 
 You have a stateful JavaScript notebook (notebook_execute, notebook_inspect, notebook_list_cells, notebook_read, notebook_reset). Variables, imports, and functions persist across calls and survive context window compressions. Use it instead of Bash when experimenting, exploring data, or iterating — fix one cell without re-running everything. Use notebook_list_cells after context compression to recover your state. Cells are auto-saved to .context/notebook.ipynb and visible to the user. Use Bash for CLI tools, shell scripts, and test suites.
+
+# Screen Recording
+
+You have screen recording tools available directly — just call them, do NOT search for them with ToolSearch. The tools are: recording_start, recording_chapter, recording_status, recording_stop.
+
+**Events are captured automatically.** When a recording is active, every browser tool you use (BrowserClick, BrowserType, BrowserNavigate, BrowserScroll, etc.) automatically feeds the camera engine. You do NOT need to call recording_event — just use browser tools normally.
+
+**When to record:** After completing a significant feature, bug fix, or PR — record a demo showing what changed and how it works. This is especially valuable for UI changes, new flows, or anything visual.
+
+**How to use:**
+1. Call recording_start with captureMethod "auto" — on macOS it uses avfoundation for smooth 30fps video (requires Screen Recording permission in System Settings). If permission is not granted, it falls back to events-only mode.
+2. Use the browser tools to navigate and interact with the app as a user would — events are recorded automatically
+3. Call recording_chapter to add semantic sections ("Login flow", "Dashboard view", etc.)
+4. Call recording_stop to produce the final MP4
+
+The camera engine automatically creates cinematic zoom/pan effects: 2x zoom on typing, 1.8x on clicks, 1.3x on scrolling, 1x on navigation. Output is saved as MP4. If outputPath is empty after stop, screen capture failed — check ffmpeg availability.
 `.trim();
 }
 

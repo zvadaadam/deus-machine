@@ -1,10 +1,14 @@
 import { randomBytes } from "node:crypto";
+import { unlink } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { AgentEvent, AgentEventType } from "../types.js";
 import { CameraEngine } from "../camera/engine.js";
-import { TimelineRecorder, generateFfmpegFilter } from "../recorder/encoder.js";
-import { FfmpegRecorder, detectCaptureMethod, detectFfmpeg } from "./ffmpeg-recorder.js";
+import { TimelineRecorder } from "../recorder/encoder.js";
+import { FfmpegRecorder, detectFfmpeg, probeVideoDimensions } from "./ffmpeg-recorder.js";
+import { StreamRecorder } from "./stream-capture.js";
+import { mapTimelineToOutput } from "../recorder/render-plan.js";
+import { extractThumbnail } from "./thumbnail.js";
 import type {
   Chapter,
   RecordingResult,
@@ -24,14 +28,18 @@ function generateSessionId(): string {
 
 /**
  * Resolve user-provided params into a fully resolved config with defaults.
+ *
+ * Source size defaults to 1280x720 (agent-browser's default viewport).
+ * When using stream capture, the actual frame dimensions are auto-detected
+ * from the stream metadata and override this at post-processing time.
  */
 function resolveConfig(params: RecordingStartParams): ResolvedRecordingConfig {
   const timestamp = Date.now();
   return {
     outputPath: params.outputPath ?? join(tmpdir(), `recording-${timestamp}.mp4`),
     sourceSize: {
-      width: params.sourceWidth ?? 1920,
-      height: params.sourceHeight ?? 1080,
+      width: params.sourceWidth ?? 1280,
+      height: params.sourceHeight ?? 720,
     },
     outputSize: {
       width: params.outputWidth ?? 1920,
@@ -46,29 +54,31 @@ function resolveConfig(params: RecordingStartParams): ResolvedRecordingConfig {
 }
 
 /**
- * Internal per-session state. Holds engine, recorder, and ffmpeg instances.
+ * Internal per-session state.
  */
 interface InternalSession {
   state: RecordingSessionState;
   engine: CameraEngine;
   timelineRecorder: TimelineRecorder;
+  /** avfoundation / x11grab recorder (two-pass: capture then post-process) */
   ffmpegRecorder: FfmpegRecorder;
-  /** Path to raw capture file (differs from final output). */
   rawCapturePath: string | null;
+  /** WebSocket stream recorder (agent-browser frame stream → ffmpeg) */
+  streamRecorder: StreamRecorder | null;
 }
 
 /**
  * Manages multiple concurrent recording sessions.
  *
- * Each session gets its own CameraEngine + TimelineRecorder + FfmpegRecorder.
- * Sessions are identified by short random IDs (e.g. "rec_a1b2c3").
+ * Capture backends:
+ *   - "stream": WebSocket stream from agent-browser, 10fps, no permission, no CDP conflicts
+ *   - "avfoundation": macOS native capture, 30fps, needs Screen Recording permission
+ *   - "x11grab": Linux Xvfb, 30fps
+ *   - "auto": try stream (if available), then avfoundation, fall back to none
+ *   - "none": events-only, no video capture
  *
- * Lifecycle per session:
- * 1. create() — initialize engine, optionally start ffmpeg capture
- * 2. event() — push agent events that drive camera zoom/pan
- * 3. chapter() — add chapter markers with timestamps
- * 4. stop() — stop capture, run post-processing, return MP4 path
- * 5. cleanup() — remove temp files and free resources
+ * All capture backends produce a raw MP4, which is then post-processed
+ * with camera effects (zoompan/crop filter) from the timeline.
  */
 export class SessionManager {
   private sessions = new Map<string, InternalSession>();
@@ -76,7 +86,6 @@ export class SessionManager {
 
   /**
    * Create a new recording session.
-   * Optionally starts ffmpeg screen capture if captureMethod is not "none".
    */
   async create(params: RecordingStartParams): Promise<string> {
     const id = generateSessionId();
@@ -96,29 +105,65 @@ export class SessionManager {
     };
 
     let rawCapturePath: string | null = null;
+    let streamRecorder: StreamRecorder | null = null;
 
-    // Start ffmpeg capture if requested
-    if (config.captureMethod !== "none" && config.captureMethod !== "screenshot") {
-      // Check ffmpeg availability
+    // Resolve capture method
+    let method = config.captureMethod;
+    if (method === "auto") {
+      method = await this.resolveAutoCapture();
+    }
+
+    if (method === "stream") {
+      // WebSocket stream from agent-browser — no OS permission, no CDP conflicts
+      const streamPort = this.resolveStreamPort();
+      if (streamPort) {
+        rawCapturePath = join(tmpdir(), `raw-${id}.mp4`);
+        streamRecorder = new StreamRecorder({
+          outputPath: rawCapturePath,
+        });
+
+        try {
+          await streamRecorder.start(streamPort);
+        } catch (err) {
+          console.error(`[session-manager] Stream capture failed: ${err}`);
+          streamRecorder = null;
+          rawCapturePath = null;
+          // Continue without capture — events still record
+        }
+      } else {
+        console.error("[session-manager] No stream port found, falling back to events-only");
+      }
+    } else if (method === "avfoundation" || method === "x11grab") {
+      // Native ffmpeg capture
       if (this.ffmpegAvailable === null) {
         this.ffmpegAvailable = (await detectFfmpeg()) !== null;
       }
       if (!this.ffmpegAvailable) {
-        throw new Error("ffmpeg is not available on the system PATH. Install ffmpeg or use captureMethod: 'none'.");
+        throw new Error("ffmpeg is not available. Install ffmpeg or use captureMethod: 'none'.");
       }
 
       rawCapturePath = join(tmpdir(), `raw-${id}.mp4`);
-      const method = config.captureMethod === "x11grab" ? "x11grab"
-        : config.captureMethod === "avfoundation" ? "avfoundation"
-        : detectCaptureMethod();
 
-      await ffmpegRecorder.startCapture({
-        method,
-        sourceSize: config.sourceSize,
-        fps: config.fps,
-        display: config.display,
-        outputPath: rawCapturePath,
-      });
+      try {
+        await ffmpegRecorder.startCapture({
+          method,
+          sourceSize: config.sourceSize,
+          fps: config.fps,
+          display: config.display,
+          outputPath: rawCapturePath,
+        });
+      } catch (err) {
+        if (method === "avfoundation" && config.captureMethod === "auto") {
+          // avfoundation failed (likely no Screen Recording permission).
+          // Fall back to events-only.
+          console.error(
+            `[session-manager] avfoundation failed (grant Screen Recording permission in System Settings): ${err}`
+          );
+          rawCapturePath = null;
+        } else {
+          throw err;
+        }
+      }
     }
 
     timelineRecorder.start();
@@ -129,6 +174,7 @@ export class SessionManager {
       timelineRecorder,
       ffmpegRecorder,
       rawCapturePath,
+      streamRecorder,
     });
 
     return id;
@@ -136,7 +182,7 @@ export class SessionManager {
 
   /**
    * Push an agent event into a recording session.
-   * The event drives the camera engine's auto-zoom/pan behavior.
+   * Drives the camera engine's auto-zoom/pan behavior.
    */
   event(
     sessionId: string,
@@ -148,7 +194,7 @@ export class SessionManager {
       text?: string;
       url?: string;
       direction?: string;
-    },
+    }
   ): number {
     const session = this.getSession(sessionId);
     if (session.state.status !== "recording") {
@@ -173,11 +219,8 @@ export class SessionManager {
 
     session.state.events.push(agentEvent);
     session.engine.pushEvent(agentEvent);
-
-    // Step the camera to process the event (small dt to update state)
     session.engine.step(1 / session.state.config.fps);
 
-    // Capture timeline frame
     const camera = session.engine.getTransform();
     const cursor = session.engine.getCursorState();
     session.timelineRecorder.captureFrame(t, camera, {
@@ -215,16 +258,21 @@ export class SessionManager {
   }
 
   /**
-   * Stop a recording session.
-   * 1. Stops ffmpeg capture (if running)
-   * 2. Generates the zoompan filter from the timeline
-   * 3. Runs ffmpeg post-processing (if raw capture exists)
-   * 4. Returns the final output path + metadata
+   * Stop a recording session and produce the final MP4.
+   *
+   * Pipeline:
+   *   1. Stop capture (stream or avfoundation/x11grab)
+   *   2. Generate camera timeline from recorded events
+   *   3. Apply zoompan/crop filter to raw capture → final MP4
    */
   async stop(
     sessionId: string,
-    options?: { addWatermark?: boolean; watermarkText?: string },
+    options?: { addWatermark?: boolean; watermarkText?: string }
   ): Promise<RecordingResult> {
+    if (options?.addWatermark) {
+      throw new Error("Watermarking is not yet supported by the current renderer.");
+    }
+
     const session = this.getSession(sessionId);
     if (session.state.status !== "recording") {
       throw new Error(`Session ${sessionId} is not recording (status: ${session.state.status})`);
@@ -234,59 +282,156 @@ export class SessionManager {
     session.state.endTime = Date.now();
 
     try {
-      // Stop the timeline recorder
-      const timelineFrames = session.timelineRecorder.stop();
+      // Stop the event-driven timeline recorder (we'll regenerate a continuous
+      // timeline below using processTimeline at the raw video's fps).
+      session.timelineRecorder.stop();
+      const config = session.state.config;
+      const duration = (session.state.endTime! - session.state.startTime) / 1000;
+      let videoProduced = false;
+      let playbackPlan: import("../recorder/render-plan.js").PlaybackPlan | null = null;
 
-      // Stop ffmpeg capture if running — this verifies the raw file exists
-      if (session.ffmpegRecorder.isCapturing()) {
+      // The raw video's fps: use measured delivery rate for stream, config for native.
+      const _rawFps = session.streamRecorder
+        ? (session.streamRecorder.actualFps ?? 10)
+        : config.fps;
+
+      // --- Stop stream recorder ---
+      let actualSourceSize = config.sourceSize;
+      if (session.streamRecorder) {
         try {
-          await session.ffmpegRecorder.stopCapture();
-        } catch (captureErr) {
-          // Capture failed — raw file missing. Clear path so we skip post-processing.
-          session.rawCapturePath = null;
-          // Re-throw if no events recorded either (nothing to show for this session)
-          if (session.state.events.length === 0) {
-            throw captureErr;
+          const rawPath = await session.streamRecorder.stop();
+          if (rawPath) {
+            session.rawCapturePath = rawPath;
+          } else {
+            // stop() returned null → 0 frames captured
+            console.error(
+              "[session-manager] Stream recorder captured 0 frames, skipping post-process"
+            );
+            session.rawCapturePath = null;
           }
-          // Otherwise continue — we can still return the event timeline
+        } catch (err) {
+          console.error("[session-manager] Stream capture stop failed:", err);
+          session.rawCapturePath = null;
+        }
+
+        // Warn if frame count is too low for the session duration
+        const expectedMin = Math.max(1, Math.floor(duration * 5));
+        if (session.streamRecorder.frames > 0 && session.streamRecorder.frames < expectedMin) {
+          console.error(
+            `[session-manager] Low frame count: ${session.streamRecorder.frames} frames for ${duration.toFixed(1)}s ` +
+              `(expected >= ${expectedMin}, dropped: ${session.streamRecorder.dropped})`
+          );
         }
       }
 
-      const config = session.state.config;
-      const duration = (session.state.endTime! - session.state.startTime) / 1000;
+      // --- Stop avfoundation/x11grab recorder ---
+      if (session.ffmpegRecorder.isCapturing()) {
+        try {
+          await session.ffmpegRecorder.stopCapture();
+        } catch (err) {
+          console.error("[session-manager] ffmpeg capture stop failed:", err);
+          session.rawCapturePath = null;
+          if (session.state.events.length === 0) throw err;
+        }
+      }
 
-      // If we have a raw capture and timeline frames, run post-processing
-      if (session.rawCapturePath && timelineFrames.length > 0) {
-        // Generate the zoompan filter from the camera timeline
-        const filterComplex = generateFfmpegFilter(
-          timelineFrames,
-          config.sourceSize,
-          config.outputSize,
-        );
+      // --- Detect actual raw video dimensions via ffprobe ---
+      if (session.rawCapturePath) {
+        const probed = await probeVideoDimensions(session.rawCapturePath);
+        if (probed) {
+          actualSourceSize = probed;
+          console.error(`[session-manager] Probed raw video: ${probed.width}x${probed.height}`);
+        } else {
+          const detected = session.streamRecorder?.detectedFrameSize;
+          if (detected) {
+            actualSourceSize = detected;
+            console.error(
+              `[session-manager] ffprobe failed, using stream metadata: ${detected.width}x${detected.height}`
+            );
+          }
+        }
+      }
 
-        if (filterComplex) {
-          await session.ffmpegRecorder.postProcess({
-            inputPath: session.rawCapturePath,
-            outputPath: config.outputPath,
-            filterComplex,
+      // --- Post-process: canvas-based rendering with cursor, zoom, effects ---
+      if (session.rawCapturePath) {
+        try {
+          const { renderVideo } = await import("../renderer/video-renderer.js");
+
+          // Offset events so t=0 aligns with video start (first frame),
+          // not session start. The stream may start late (WebSocket connect
+          // + first frame delay), so events before the first frame get t<0.
+          const videoStartOffset = session.streamRecorder?.firstFrameAt
+            ? session.streamRecorder.firstFrameAt - session.state.startTime
+            : 0;
+          const videoEvents = session.state.events.map((e) => ({
+            ...e,
+            t: e.t - videoStartOffset,
+          }));
+
+          const result = await renderVideo({
+            rawVideoPath: session.rawCapturePath,
+            events: videoEvents,
+            sourceSize: actualSourceSize,
             outputSize: config.outputSize,
-            addWatermark: options?.addWatermark,
-            watermarkText: options?.watermarkText,
+            outputPath: config.outputPath,
+            outputFps: Math.min(config.fps, 30),
+            speedRamp: true,
           });
 
-          // Clean up raw capture
-          await session.ffmpegRecorder.cleanup();
+          videoProduced = true;
+          playbackPlan = result.playbackPlan;
+          console.error(
+            `[session-manager] Render: ${result.frameCount} frames, ` +
+              `${result.durationSec.toFixed(1)}s, canvas=${result.canvasRendered}`
+          );
+        } catch (err) {
+          console.error(`[session-manager] Video render failed: ${err}`);
+          if (err instanceof Error && err.stack) {
+            console.error(`[session-manager] Stack: ${err.stack}`);
+          }
+        }
+
+        // Clean up raw capture files
+        await session.ffmpegRecorder.cleanup();
+        if (session.rawCapturePath) {
+          await unlink(session.rawCapturePath).catch(() => {});
         }
       }
 
       session.state.status = "done";
-      session.state.outputPath = config.outputPath;
+      if (videoProduced) {
+        session.state.outputPath = config.outputPath;
+      }
+
+      // Extract first-frame thumbnail (non-blocking — empty string on failure)
+      let thumbnailPath = "";
+      if (videoProduced) {
+        thumbnailPath = (await extractThumbnail(config.outputPath)) ?? "";
+      }
+
+      // Map events + chapters to output video timestamps.
+      // Use video-offset timestamps when a playback plan exists (plan was
+      // built from video-relative events, so mapping input must match).
+      const videoStartOffset = session.streamRecorder?.firstFrameAt
+        ? session.streamRecorder.firstFrameAt - session.state.startTime
+        : 0;
+      const mappingEvents = videoProduced
+        ? session.state.events.map((e) => ({ ...e, t: e.t - videoStartOffset }))
+        : session.state.events;
+      const mappingChapters = videoProduced
+        ? session.state.chapters.map((c) => ({
+            ...c,
+            timestamp: c.timestamp - videoStartOffset,
+          }))
+        : session.state.chapters;
+      const mapped = mapTimelineToOutput(mappingEvents, mappingChapters, playbackPlan);
 
       return {
-        outputPath: config.outputPath,
-        duration,
-        eventCount: session.state.events.length,
-        chapterCount: session.state.chapters.length,
+        outputPath: videoProduced ? config.outputPath : "",
+        thumbnailPath,
+        duration: playbackPlan ? playbackPlan.outputDurationMs / 1000 : duration,
+        chapters: mapped.chapters,
+        events: mapped.events,
       };
     } catch (err) {
       session.state.status = "error";
@@ -303,6 +448,8 @@ export class SessionManager {
     duration: number;
     eventCount: number;
     chapterCount: number;
+    frameCount: number;
+    droppedFrames: number;
     outputPath?: string;
   } {
     const session = this.getSession(sessionId);
@@ -312,25 +459,30 @@ export class SessionManager {
       duration: (endTime - session.state.startTime) / 1000,
       eventCount: session.state.events.length,
       chapterCount: session.state.chapters.length,
+      frameCount: session.streamRecorder?.frames ?? 0,
+      droppedFrames: session.streamRecorder?.dropped ?? 0,
       outputPath: session.state.outputPath,
     };
   }
 
   /**
-   * Clean up a session — remove temp files and free memory.
+   * Clean up a session — remove temp files and free resources.
    */
   async cleanup(sessionId: string): Promise<void> {
     const session = this.sessions.get(sessionId);
     if (!session) return;
 
     session.ffmpegRecorder.kill();
+    session.streamRecorder?.kill();
     await session.ffmpegRecorder.cleanup();
+    if (session.rawCapturePath) {
+      await unlink(session.rawCapturePath).catch(() => {});
+    }
     this.sessions.delete(sessionId);
   }
 
   /**
    * Stop all active sessions and clean up.
-   * Call on SIGINT/SIGTERM for graceful shutdown.
    */
   async shutdownAll(): Promise<void> {
     const ids = [...this.sessions.keys()];
@@ -348,19 +500,42 @@ export class SessionManager {
   }
 
   /**
-   * Get the number of active sessions.
+   * Resolve "auto" capture method.
+   *
+   * Uses agent-browser's WebSocket stream — captures JPEG frames of the
+   * browser page only (not the app UI). No OS permission, no CDP conflicts.
+   * Falls back to events-only if stream port not configured.
+   *
+   * Stream capture is the only auto-resolved method since it doesn't
+   * require screen recording permissions and doesn't conflict with CDP.
+   * Other methods (avfoundation, x11grab) available via explicit captureMethod.
    */
-  get activeCount(): number {
-    let count = 0;
-    for (const session of this.sessions.values()) {
-      if (session.state.status === "recording") count++;
+  private async resolveAutoCapture(): Promise<"stream" | "none"> {
+    const streamPort = this.resolveStreamPort();
+    if (streamPort) {
+      return "stream";
     }
-    return count;
+    return "none";
   }
 
   /**
-   * Get a session or throw if not found.
+   * Resolve the agent-browser stream port.
+   * Default: 9223. Override via AGENT_BROWSER_STREAM_PORT env var.
    */
+  private resolveStreamPort(): number | null {
+    // 1. Explicit env var (set by agent-browser-client.ts or manually)
+    const envPort = process.env.AGENT_BROWSER_STREAM_PORT;
+    if (envPort) {
+      const port = parseInt(envPort, 10);
+      if (!isNaN(port) && port > 0 && port < 65536) {
+        return port;
+      }
+    }
+
+    // 2. Default port (matches STREAM_PORT in agent-browser-client.ts)
+    return 9223;
+  }
+
   private getSession(sessionId: string): InternalSession {
     const session = this.sessions.get(sessionId);
     if (!session) {

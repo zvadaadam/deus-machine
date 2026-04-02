@@ -14,19 +14,31 @@ const SessionIdSchema = z
 const GradientBackgroundSchema = z
   .object({
     type: z.literal("gradient"),
-    colors: z.tuple([z.string(), z.string()]).describe("Two hex colors (e.g. ['#0f0f23', '#1a1a3e'])"),
-    angle: z.number().min(0).max(360).optional().describe("Gradient angle in degrees. Default: 135"),
+    colors: z
+      .tuple([z.string(), z.string()])
+      .describe("Two hex colors (e.g. ['#0f0f23', '#1a1a3e'])"),
+    angle: z
+      .number()
+      .min(0)
+      .max(360)
+      .optional()
+      .describe("Gradient angle in degrees. Default: 135"),
   })
   .strict();
 
 const SolidBackgroundSchema = z
   .object({
     type: z.literal("solid"),
-    colors: z.tuple([z.string(), z.string()]).describe("Single color repeated (e.g. ['#1a1a2e', '#1a1a2e'])"),
+    colors: z
+      .tuple([z.string(), z.string()])
+      .describe("Single color repeated (e.g. ['#1a1a2e', '#1a1a2e'])"),
   })
   .strict();
 
-const BackgroundSchema = z.discriminatedUnion("type", [GradientBackgroundSchema, SolidBackgroundSchema]);
+const BackgroundSchema = z.discriminatedUnion("type", [
+  GradientBackgroundSchema,
+  SolidBackgroundSchema,
+]);
 
 const ElementRectSchema = z
   .object({
@@ -53,14 +65,14 @@ const RecordingStartInputSchema = z
       .positive()
       .max(7680)
       .optional()
-      .describe("Source capture width in pixels. Default: 1920"),
+      .describe("Source capture width in pixels. Default: 1280 (auto-detected from stream)"),
     sourceHeight: z
       .number()
       .int()
       .positive()
       .max(4320)
       .optional()
-      .describe("Source capture height in pixels. Default: 1080"),
+      .describe("Source capture height in pixels. Default: 720 (auto-detected from stream)"),
     outputWidth: z
       .number()
       .int()
@@ -75,25 +87,22 @@ const RecordingStartInputSchema = z
       .max(4320)
       .optional()
       .describe("Output video height in pixels. Default: 1080"),
-    fps: z
-      .number()
-      .int()
-      .min(1)
-      .max(120)
-      .optional()
-      .describe("Frame rate. Default: 30"),
+    fps: z.number().int().min(1).max(120).optional().describe("Frame rate. Default: 30"),
     deviceFrame: z
       .enum(["browser-chrome", "macos-window", "none"])
       .optional()
       .describe("Device frame overlay style. Default: 'none'"),
     background: BackgroundSchema.optional().describe(
-      "Background behind the device frame. Default: gradient #0f0f23 → #1a1a3e",
+      "Background behind the device frame. Default: gradient #0f0f23 → #1a1a3e"
     ),
     captureMethod: z
-      .enum(["x11grab", "avfoundation", "screenshot", "none"])
+      .enum(["avfoundation", "stream", "auto", "x11grab", "none"])
       .optional()
       .describe(
-        "Screen capture method. 'x11grab' for Linux/Xvfb, 'avfoundation' for macOS, 'none' for events-only. Default: 'none'",
+        "Screen capture method. 'auto' = best available (stream → avfoundation → none). " +
+          "'stream' = WebSocket stream from agent-browser, 10fps, no permission needed. " +
+          "'avfoundation' = macOS 30fps (needs Screen Recording permission). " +
+          "'x11grab' = Linux/Xvfb. 'none' = events-only. Default: 'none'"
       ),
     display: z
       .string()
@@ -105,18 +114,18 @@ const RecordingStartInputSchema = z
 const RecordingStopInputSchema = z
   .object({
     sessionId: SessionIdSchema,
-    addWatermark: z.boolean().optional().default(false).describe("Add text watermark to bottom-right corner"),
+    addWatermark: z
+      .boolean()
+      .optional()
+      .default(false)
+      .describe("Add text watermark to bottom-right corner"),
     watermarkText: z
       .string()
       .max(200)
       .optional()
       .describe("Watermark text content (required when addWatermark is true)"),
   })
-  .strict()
-  .refine(
-    (data) => !data.addWatermark || (data.watermarkText && data.watermarkText.length > 0),
-    { message: "watermarkText is required when addWatermark is true" },
-  );
+  .strict();
 
 const RecordingEventInputSchema = z
   .object({
@@ -127,7 +136,7 @@ const RecordingEventInputSchema = z
     x: z.number().min(0).describe("X coordinate of the action in source pixels"),
     y: z.number().min(0).describe("Y coordinate of the action in source pixels"),
     elementRect: ElementRectSchema.optional().describe(
-      "Bounding box of the interacted element. Helps camera frame the element precisely.",
+      "Bounding box of the interacted element. Helps camera frame the element precisely."
     ),
     text: z.string().optional().describe("Text content for 'type' events"),
     url: z.string().optional().describe("URL for 'navigate' events"),
@@ -166,9 +175,27 @@ const RecordingStartOutputSchema = z.object({
 
 const RecordingStopOutputSchema = z.object({
   outputPath: z.string().describe("Path to the final MP4 file"),
-  duration: z.number().describe("Recording duration in seconds"),
-  eventCount: z.number().describe("Total agent events recorded"),
-  chapterCount: z.number().describe("Total chapters added"),
+  thumbnailPath: z.string().describe("Path to JPEG thumbnail (first frame)"),
+  duration: z.number().describe("Recording duration in seconds (after speed ramping)"),
+  chapters: z
+    .array(
+      z.object({
+        title: z.string(),
+        time: z.number().describe("Time in output video seconds"),
+      })
+    )
+    .describe("Chapter markers with output video timestamps"),
+  events: z
+    .array(
+      z.object({
+        type: z.string().describe("Event type: click, type, scroll, navigate, etc."),
+        time: z.number().describe("Time in output video seconds"),
+        text: z.string().optional(),
+        url: z.string().optional(),
+        direction: z.string().optional(),
+      })
+    )
+    .describe("Agent action events with output video timestamps"),
 });
 
 const RecordingEventOutputSchema = z.object({
@@ -200,7 +227,6 @@ function toolError(err: unknown): { content: [{ type: "text"; text: string }]; i
     isError: true,
   };
 }
-
 
 // ---------------------------------------------------------------------------
 // Server factory
@@ -275,7 +301,7 @@ Error Handling:
       } catch (err) {
         return toolError(err);
       }
-    },
+    }
   );
 
   // -----------------------------------------------------------------------
@@ -302,9 +328,10 @@ Args:
 Returns:
   {
     "outputPath": "/tmp/recording-rec_a1b2c3.mp4",
+    "thumbnailPath": "/tmp/recording-rec_a1b2c3-thumb.jpg",
     "duration": 12.5,
-    "eventCount": 15,
-    "chapterCount": 3
+    "chapters": [{ "title": "Login flow", "time": 2.3 }],
+    "events": [{ "type": "click", "time": 1.5 }, { "type": "type", "time": 3.0, "text": "hello" }]
   }
 
 Error Handling:
@@ -322,6 +349,9 @@ Error Handling:
     },
     async (params) => {
       try {
+        if (params.addWatermark && (!params.watermarkText || params.watermarkText.length === 0)) {
+          return toolError(new Error("watermarkText is required when addWatermark is true"));
+        }
         const result = await sessionManager.stop(params.sessionId, {
           addWatermark: params.addWatermark,
           watermarkText: params.watermarkText,
@@ -333,7 +363,7 @@ Error Handling:
       } catch (err) {
         return toolError(err);
       }
-    },
+    }
   );
 
   // -----------------------------------------------------------------------
@@ -402,7 +432,7 @@ Error Handling:
       } catch (err) {
         return toolError(err);
       }
-    },
+    }
   );
 
   // -----------------------------------------------------------------------
@@ -450,7 +480,7 @@ Error Handling:
       } catch (err) {
         return toolError(err);
       }
-    },
+    }
   );
 
   // -----------------------------------------------------------------------
@@ -498,7 +528,7 @@ Error Handling:
       } catch (err) {
         return toolError(err);
       }
-    },
+    }
   );
 
   return { server, sessionManager };

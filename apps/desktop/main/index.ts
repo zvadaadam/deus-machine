@@ -232,6 +232,10 @@ app.whenReady().then(async () => {
   await createWindow();
   debugLog("[main] Window created");
 
+  // No hidden BrowserView needed — BrowserTab eagerly creates a native
+  // BrowserView (about:blank) on mount, giving agent-browser a CDP target
+  // to discover and navigate directly.
+
   // Dev mode: swap dock icon so it's visually distinct from the production app
   if (is.dev && process.platform === "darwin") {
     try {

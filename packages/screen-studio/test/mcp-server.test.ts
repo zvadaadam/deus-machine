@@ -11,7 +11,6 @@ vi.mock("../src/mcp/ffmpeg-recorder.js", async (importOriginal) => {
     FfmpegRecorder: vi.fn().mockImplementation(() => ({
       startCapture: vi.fn().mockResolvedValue(undefined),
       stopCapture: vi.fn().mockResolvedValue("/tmp/raw-test.mp4"),
-      postProcess: vi.fn().mockResolvedValue("/tmp/output.mp4"),
       isCapturing: vi.fn().mockReturnValue(false),
       cleanup: vi.fn().mockResolvedValue(undefined),
       kill: vi.fn(),
@@ -136,22 +135,22 @@ describe("MCP Server (via SessionManager)", () => {
       sessionManager.chapter(id, "Test");
 
       const result = await sessionManager.stop(id);
-      expect(result.eventCount).toBe(1);
-      expect(result.chapterCount).toBe(1);
+      expect(result.events).toHaveLength(1);
+      expect(result.chapters).toHaveLength(1);
       expect(result.duration).toBeGreaterThanOrEqual(0);
-      expect(result.outputPath).toBeTruthy();
+      // No capture → empty outputPath
+      expect(result.outputPath).toBe("");
     });
 
-    it("supports watermark option", async () => {
+    it("rejects watermark option (not yet supported)", async () => {
       const id = await sessionManager.create({});
 
-      // Should not throw
-      const result = await sessionManager.stop(id, {
-        addWatermark: true,
-        watermarkText: "Test Watermark",
-      });
-
-      expect(result).toBeDefined();
+      await expect(
+        sessionManager.stop(id, {
+          addWatermark: true,
+          watermarkText: "Test Watermark",
+        })
+      ).rejects.toThrow("Watermarking is not yet supported");
     });
   });
 
@@ -172,45 +171,40 @@ describe("MCP Server (via SessionManager)", () => {
 
       const status = sessionManager.status(id);
       expect(status.status).toBe("done");
-      expect(status.outputPath).toBeTruthy();
+      // No capture → outputPath not set
+      expect(status.outputPath).toBeUndefined();
     });
   });
 
   describe("error handling", () => {
     it("rejects events for non-existent sessions", () => {
-      expect(() => sessionManager.event("nonexistent", "click", 0, 0))
-        .toThrow("Session not found");
+      expect(() => sessionManager.event("nonexistent", "click", 0, 0)).toThrow("Session not found");
     });
 
     it("rejects chapters for non-existent sessions", () => {
-      expect(() => sessionManager.chapter("nonexistent", "Test"))
-        .toThrow("Session not found");
+      expect(() => sessionManager.chapter("nonexistent", "Test")).toThrow("Session not found");
     });
 
     it("rejects stop for non-existent sessions", async () => {
-      await expect(sessionManager.stop("nonexistent"))
-        .rejects.toThrow("Session not found");
+      await expect(sessionManager.stop("nonexistent")).rejects.toThrow("Session not found");
     });
 
     it("rejects status for non-existent sessions", () => {
-      expect(() => sessionManager.status("nonexistent"))
-        .toThrow("Session not found");
+      expect(() => sessionManager.status("nonexistent")).toThrow("Session not found");
     });
 
     it("rejects events after session is stopped", async () => {
       const id = await sessionManager.create({});
       await sessionManager.stop(id);
 
-      expect(() => sessionManager.event(id, "click", 0, 0))
-        .toThrow(/not recording/);
+      expect(() => sessionManager.event(id, "click", 0, 0)).toThrow(/not recording/);
     });
 
     it("rejects double stop", async () => {
       const id = await sessionManager.create({});
       await sessionManager.stop(id);
 
-      await expect(sessionManager.stop(id))
-        .rejects.toThrow(/not recording/);
+      await expect(sessionManager.stop(id)).rejects.toThrow(/not recording/);
     });
   });
 

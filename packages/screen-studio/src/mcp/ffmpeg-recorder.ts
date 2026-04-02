@@ -2,7 +2,57 @@ import { spawn, execFileSync, type ChildProcess } from "node:child_process";
 import { platform } from "node:os";
 import { existsSync } from "node:fs";
 import { stat, unlink } from "node:fs/promises";
-import type { FfmpegCaptureConfig, FfmpegPostProcessConfig } from "./types.js";
+import type { FfmpegCaptureConfig } from "./types.js";
+
+/**
+ * Probe a video file's actual dimensions using ffprobe.
+ * Returns { width, height } or null if ffprobe fails or file doesn't exist.
+ *
+ * This is the only reliable way to know what ffmpeg will actually decode,
+ * since stream metadata (deviceWidth/deviceHeight) may differ from actual
+ * JPEG pixel dimensions (e.g., retina scaling, scrollbar offsets).
+ */
+export async function probeVideoDimensions(
+  filePath: string
+): Promise<{ width: number; height: number } | null> {
+  return new Promise((resolve) => {
+    const proc = spawn(
+      "ffprobe",
+      [
+        "-v",
+        "error",
+        "-select_streams",
+        "v:0",
+        "-show_entries",
+        "stream=width,height",
+        "-of",
+        "csv=p=0",
+        filePath,
+      ],
+      { stdio: ["ignore", "pipe", "pipe"] }
+    );
+
+    let output = "";
+    proc.stdout.on("data", (chunk: Buffer) => {
+      output += chunk.toString();
+    });
+
+    proc.on("error", () => resolve(null));
+    proc.on("close", (code) => {
+      if (code !== 0) return resolve(null);
+      // Output format: "width,height\n" e.g. "1280,720\n"
+      const parts = output.trim().split(",");
+      if (parts.length >= 2) {
+        const width = parseInt(parts[0], 10);
+        const height = parseInt(parts[1], 10);
+        if (width > 0 && height > 0) {
+          return resolve({ width, height });
+        }
+      }
+      resolve(null);
+    });
+  });
+}
 
 /**
  * Check if ffmpeg is available on the system PATH.
@@ -30,35 +80,6 @@ export async function detectFfmpeg(): Promise<string | null> {
 }
 
 /**
- * Check if a specific ffmpeg filter is available.
- * Returns true if the filter exists in this ffmpeg build.
- */
-export async function hasFilter(filterName: string): Promise<boolean> {
-  return new Promise((resolve) => {
-    const proc = spawn("ffmpeg", ["-filters"], { stdio: ["ignore", "pipe", "ignore"] });
-    let output = "";
-
-    proc.stdout.on("data", (chunk: Buffer) => {
-      output += chunk.toString();
-    });
-
-    proc.on("error", () => resolve(false));
-    proc.on("close", () => {
-      // ffmpeg -filters output: " T.. drawtext  V->V  Draw text..."
-      resolve(output.includes(` ${filterName} `) || output.includes(` ${filterName}\t`));
-    });
-  });
-}
-
-/**
- * Detect the current platform's preferred capture method.
- * Returns "x11grab" on Linux, "avfoundation" on macOS.
- */
-export function detectCaptureMethod(): "x11grab" | "avfoundation" {
-  return platform() === "darwin" ? "avfoundation" : "x11grab";
-}
-
-/**
  * Auto-detect the screen capture device index for avfoundation on macOS.
  *
  * Runs `ffmpeg -f avfoundation -list_devices true -i ""` and parses
@@ -71,11 +92,15 @@ export function detectScreenDevice(): string | null {
 
   try {
     // ffmpeg -list_devices writes to stderr and exits with code 1 (expected)
-    const output = execFileSync("ffmpeg", ["-f", "avfoundation", "-list_devices", "true", "-i", ""], {
-      encoding: "utf-8",
-      stdio: ["ignore", "pipe", "pipe"],
-      timeout: 5000,
-    });
+    const output = execFileSync(
+      "ffmpeg",
+      ["-f", "avfoundation", "-list_devices", "true", "-i", ""],
+      {
+        encoding: "utf-8",
+        stdio: ["ignore", "pipe", "pipe"],
+        timeout: 5000,
+      }
+    );
     return parseScreenDevice(output);
   } catch (err: unknown) {
     // ffmpeg writes device list to stderr and exits 1 — that's normal
@@ -115,10 +140,14 @@ export function buildCaptureArgs(config: FfmpegCaptureConfig): string[] {
 
   if (config.method === "x11grab") {
     args.push(
-      "-f", "x11grab",
-      "-video_size", `${config.sourceSize.width}x${config.sourceSize.height}`,
-      "-framerate", String(config.fps),
-      "-i", config.display,
+      "-f",
+      "x11grab",
+      "-video_size",
+      `${config.sourceSize.width}x${config.sourceSize.height}`,
+      "-framerate",
+      String(config.fps),
+      "-i",
+      config.display
     );
   } else {
     // avfoundation (macOS)
@@ -126,94 +155,30 @@ export function buildCaptureArgs(config: FfmpegCaptureConfig): string[] {
     const screenDevice = config.screenDevice ?? detectScreenDevice() ?? "1";
 
     args.push(
-      "-f", "avfoundation",
-      "-framerate", String(config.fps),
-      "-capture_cursor", "1",
+      "-f",
+      "avfoundation",
+      "-framerate",
+      String(config.fps),
+      "-capture_cursor",
+      "1",
       // "N:none" = video device N, no audio
-      "-i", `${screenDevice}:none`,
+      "-i",
+      `${screenDevice}:none`
     );
   }
 
-  args.push(
-    "-c:v", "libx264",
-    "-preset", "ultrafast",
-    "-crf", "18",
-    config.outputPath,
-  );
+  args.push("-c:v", "libx264", "-preset", "ultrafast", "-crf", "18", config.outputPath);
 
   return args;
 }
 
 /**
- * Escape text for use in ffmpeg's drawtext filter, for spawn (no shell).
- *
- * ffmpeg drawtext interprets several characters as special:
- * - Backslash: escape character (double-escaped for ffmpeg only)
- * - Single quote: text delimiter (close-reopen quoting)
- * - Colon: drawtext option separator
- * - Percent: ffmpeg expression variable
- * - Semicolon: filter graph separator
- * - Brackets: stream specifier syntax
- * - Equals: option key=value separator
- * - Newlines: not supported in drawtext, dropped
- */
-export function escapeDrawtext(text: string): string {
-  return text
-    .replace(/\\/g, "\\\\")      // Backslash → \\
-    .replace(/'/g, "'\\''")       // Single quote → '\'' (close-reopen)
-    .replace(/:/g, "\\:")         // Colon → \:
-    .replace(/%/g, "%%")          // Percent → %% (ffmpeg expression)
-    .replace(/;/g, "\\;")        // Semicolon → \;
-    .replace(/\[/g, "\\[")       // Open bracket → \[
-    .replace(/\]/g, "\\]")       // Close bracket → \]
-    .replace(/=/g, "\\=")        // Equals → \=
-    .replace(/\n/g, "");          // Newlines → dropped
-}
-
-/**
- * Build ffmpeg args for post-processing (compositing the zoompan filter).
- *
- * ffmpeg -i raw.mp4 -filter_complex "[zoompan filter]" -c:v libx264 -preset slow -crf 22 output.mp4
- *
- * If addWatermark is true but drawtext filter is unavailable, the watermark
- * is silently skipped (no error).
- */
-export function buildPostProcessArgs(config: FfmpegPostProcessConfig): string[] {
-  const args: string[] = ["-y", "-i", config.inputPath];
-
-  let filterComplex = config.filterComplex;
-
-  // Add watermark overlay if requested AND drawtext is available
-  if (config.addWatermark && config.watermarkText && config.hasDrawtext) {
-    if (!filterComplex) {
-      throw new Error("Cannot add watermark: filterComplex is empty");
-    }
-    const escapedText = escapeDrawtext(config.watermarkText);
-    const watermarkFilter = `,drawtext=text='${escapedText}':fontsize=24:fontcolor=white@0.5:x=w-tw-20:y=h-th-20`;
-    filterComplex += watermarkFilter;
-  }
-
-  args.push("-filter_complex", filterComplex);
-
-  args.push(
-    "-c:v", "libx264",
-    "-preset", "slow",
-    "-crf", "22",
-    "-s", `${config.outputSize.width}x${config.outputSize.height}`,
-    config.outputPath,
-  );
-
-  return args;
-}
-
-/**
- * Manages ffmpeg child processes for screen capture and post-processing.
+ * Manages ffmpeg child processes for screen capture.
  *
  * Lifecycle:
  * 1. startCapture() — spawns ffmpeg to record the screen
  * 2. stopCapture() — sends 'q' to ffmpeg stdin to stop gracefully
- * 3. postProcess() — runs zoompan + compositing filter on the raw capture
- * 4. cleanup() — removes temp files
+ * 3. cleanup() — removes temp files
  */
 export class FfmpegRecorder {
   private captureProcess: ChildProcess | null = null;
@@ -267,11 +232,13 @@ export class FfmpegRecorder {
             // don't write "frame=" immediately)
             resolve();
           } else {
-            reject(new Error(
-              `ffmpeg capture failed to start within 2s.\n` +
-              `Last stderr: ${this.captureStderr.slice(-300)}\n` +
-              `Hint: On macOS, ensure Screen Recording permission is granted in System Settings → Privacy & Security.`,
-            ));
+            reject(
+              new Error(
+                `ffmpeg capture failed to start within 2s.\n` +
+                  `Last stderr: ${this.captureStderr.slice(-300)}\n` +
+                  `Hint: On macOS, ensure Screen Recording permission is granted in System Settings → Privacy & Security.`
+              )
+            );
           }
         }
       }, 2000);
@@ -290,11 +257,13 @@ export class FfmpegRecorder {
         this.captureProcess = null;
         if (!resolved) {
           resolved = true;
-          reject(new Error(
-            `ffmpeg capture exited before startup completed (code ${code ?? "null"}, signal ${signal ?? "none"}).\n` +
-            `stderr: ${this.captureStderr.slice(-500)}\n` +
-            `Hint: Check that the capture device is accessible.`,
-          ));
+          reject(
+            new Error(
+              `ffmpeg capture exited before startup completed (code ${code ?? "null"}, signal ${signal ?? "none"}).\n` +
+                `stderr: ${this.captureStderr.slice(-500)}\n` +
+                `Hint: Check that the capture device is accessible.`
+            )
+          );
         } else if (code !== 0) {
           // After startup resolved, capture unexpected exit
           this.captureExitError = `ffmpeg capture exited unexpectedly (code ${code ?? "null"}).\nstderr: ${this.captureStderr.slice(-300)}`;
@@ -347,8 +316,8 @@ export class FfmpegRecorder {
     if (path && !existsSync(path)) {
       throw new Error(
         `Screen capture failed: raw file not found at ${path}.\n` +
-        `ffmpeg stderr: ${this.captureStderr.slice(-300)}\n` +
-        `Hint: On macOS, ensure Screen Recording permission is granted. On Linux, ensure Xvfb is running on the configured display.`,
+          `ffmpeg stderr: ${this.captureStderr.slice(-300)}\n` +
+          `Hint: On macOS, ensure Screen Recording permission is granted. On Linux, ensure Xvfb is running on the configured display.`
       );
     }
 
@@ -358,8 +327,8 @@ export class FfmpegRecorder {
       if (size === 0) {
         throw new Error(
           `Screen capture failed: raw file at ${path} is empty.\n` +
-          `ffmpeg stderr: ${this.captureStderr.slice(-300)}\n` +
-          `Hint: On macOS, ensure Screen Recording permission is granted.`,
+            `ffmpeg stderr: ${this.captureStderr.slice(-300)}\n` +
+            `Hint: On macOS, ensure Screen Recording permission is granted.`
         );
       }
     }
@@ -368,79 +337,10 @@ export class FfmpegRecorder {
   }
 
   /**
-   * Run post-processing on a raw capture file.
-   * Applies the zoompan filter + optional watermark.
-   *
-   * Verifies the input file exists before starting.
-   * If watermark is requested, checks if drawtext filter is available
-   * and silently skips it if not.
-   */
-  async postProcess(config: FfmpegPostProcessConfig): Promise<string> {
-    // Verify input exists
-    if (!existsSync(config.inputPath)) {
-      throw new Error(
-        `Cannot post-process: raw capture file not found at ${config.inputPath}.\n` +
-        `Hint: The screen capture may have failed. Check capture permissions and device availability.`,
-      );
-    }
-
-    // Check if drawtext is available when watermark is requested
-    let effectiveConfig = config;
-    if (config.addWatermark && config.watermarkText) {
-      const drawtext = await hasFilter("drawtext");
-      effectiveConfig = { ...config, hasDrawtext: drawtext };
-      if (!drawtext) {
-        // Log warning to stderr (not stdout — agent reads stdout)
-        process.stderr?.write?.(
-          `[screen-studio] Warning: drawtext filter not available in this ffmpeg build. ` +
-          `Watermark skipped. Install ffmpeg with --enable-libfreetype for watermark support.\n`,
-        );
-      }
-    }
-
-    const args = buildPostProcessArgs(effectiveConfig);
-
-    return new Promise<string>((resolve, reject) => {
-      const proc = spawn("ffmpeg", args, {
-        stdio: ["ignore", "pipe", "pipe"],
-      });
-
-      let stderr = "";
-      proc.stderr?.on("data", (chunk: Buffer) => {
-        stderr += chunk.toString();
-      });
-
-      proc.on("error", (err) => {
-        reject(new Error(`Failed to start ffmpeg post-processing: ${err.message}`));
-      });
-
-      proc.on("close", (code) => {
-        if (code === 0) {
-          resolve(config.outputPath);
-        } else {
-          reject(new Error(
-            `ffmpeg post-processing exited with code ${code}.\n` +
-            `stderr: ${stderr.slice(-500)}\n` +
-            `Hint: Check the filter syntax and input file format.`,
-          ));
-        }
-      });
-    });
-  }
-
-  /**
    * Check if a capture is currently running.
    */
   isCapturing(): boolean {
     return this.captureProcess !== null;
-  }
-
-  /**
-   * Get the last stderr output from the capture process.
-   * Useful for diagnostics when capture fails.
-   */
-  getLastStderr(): string {
-    return this.captureStderr;
   }
 
   /**

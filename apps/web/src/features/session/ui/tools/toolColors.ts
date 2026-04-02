@@ -54,6 +54,10 @@ export const TOOL_COLORS: Record<string, string> = {
   GetWorkspaceDiff: "text-info",
   DiffComment: "text-warning",
   GetTerminalOutput: "text-info",
+
+  // Recording MCP
+  recording_start: "text-muted-foreground",
+  recording_stop: "text-primary",
 } as const;
 
 /** Standard icon sizing for tool headers */

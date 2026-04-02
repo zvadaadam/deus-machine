@@ -2,6 +2,16 @@
 // Executes commands via child_process and parses JSON responses.
 // The daemon auto-starts on the first command per session and maintains
 // browser state (refs, cookies, DOM) across calls.
+//
+// CDP SAFETY: agent-browser connects to Chrome DevTools Protocol to control
+// the browser. In Electron, CDP port 19222 exposes ALL page targets including
+// the renderer (localhost:1420). If agent-browser gets the raw port, it will
+// discover and navigate the renderer → ENTIRE APP UI REPLACED.
+//
+// Fix: getCdpWsUrl() finds the specific BrowserView's WebSocket URL and
+// passes that to --cdp instead of the port. If no BrowserView exists,
+// we omit --cdp entirely so agent-browser launches its own browser.
+// NEVER pass --cdp PORT_NUMBER — always use the specific WS URL.
 
 import { execFile, spawn } from "child_process";
 import { dirname, join } from "path";
@@ -41,14 +51,89 @@ const DEFAULT_TIMEOUT_MS = 35_000;
  * separate Chrome process. This means:
  * - Agent and user see the same browser (shared cookies, real-time visibility)
  * - No separate Chrome daemon to manage
- * - `--cdp <port>` is prepended to all agent-browser commands
+ * - `--cdp <ws-url>` is prepended to all agent-browser commands
+ *
+ * We pass the BrowserView's full WebSocket debugger URL (not just the port)
+ * so agent-browser connects directly to the managed BrowserView page.
+ * Without this, agent-browser would discover ALL page targets (including the
+ * Electron renderer at localhost:1420) and navigate the renderer away,
+ * destroying the app UI.
  */
 const CDP_PORT = process.env.CDP_PORT;
 
-/** Build final args with optional CDP prefix */
-function buildArgs(args: string[]): string[] {
-  return CDP_PORT ? ["--cdp", CDP_PORT, ...args] : args;
+/** Cached WebSocket URL for the managed BrowserView target */
+let cachedCdpWsUrl: string | null = null;
+
+/**
+ * Find the managed BrowserView's CDP WebSocket URL.
+ * Queries the CDP /json endpoint and picks a page target that isn't
+ * the Electron renderer (localhost) or devtools.
+ */
+async function getCdpWsUrl(): Promise<string | null> {
+  if (!CDP_PORT) return null;
+  // Return cached URL if we have one
+  if (cachedCdpWsUrl) return cachedCdpWsUrl;
+
+  try {
+    const res = await fetch(`http://127.0.0.1:${CDP_PORT}/json`);
+    const targets = (await res.json()) as Array<{
+      type: string;
+      url?: string;
+      webSocketDebuggerUrl?: string;
+    }>;
+
+    // Find a page target that ISN'T the Electron renderer or devtools
+    const browserView = targets.find(
+      (t) =>
+        t.type === "page" &&
+        t.webSocketDebuggerUrl &&
+        !t.url?.startsWith("http://localhost:") &&
+        !t.url?.startsWith("http://127.0.0.1:") &&
+        !t.url?.startsWith("devtools://")
+    );
+
+    if (browserView?.webSocketDebuggerUrl) {
+      cachedCdpWsUrl = browserView.webSocketDebuggerUrl;
+      return cachedCdpWsUrl;
+    }
+  } catch {
+    // CDP not available
+  }
+  return null;
 }
+
+/**
+ * Invalidate cached CDP URL (call when BrowserView is recreated).
+ * TODO: Wire into BrowserView lifecycle via IPC so stale URLs don't
+ * persist after view recreation. Low-risk since views are rarely
+ * recreated during an agent session.
+ */
+export function invalidateCdpCache(): void {
+  cachedCdpWsUrl = null;
+}
+
+/** Build final args with CDP prefix — uses BrowserView's WS URL if available */
+async function buildArgs(args: string[]): Promise<string[]> {
+  if (!CDP_PORT) return args;
+
+  // Try to get the specific BrowserView's WS URL
+  const wsUrl = await getCdpWsUrl();
+  if (wsUrl) return ["--cdp", wsUrl, ...args];
+
+  // No BrowserView target found — do NOT fall back to just the port.
+  // Passing --cdp 19222 causes agent-browser to discover ALL targets
+  // including localhost:1420 (the Electron renderer) and navigate it,
+  // replacing the entire app UI with the target page.
+  // Instead, let agent-browser launch its own browser.
+  return args;
+}
+
+/**
+ * Fixed stream port for agent-browser's WebSocket frame server.
+ * Screen-studio's StreamRecorder connects here to capture frames for recording.
+ * Hardcoded so both sides agree without manual env var configuration.
+ */
+const STREAM_PORT = "9223";
 
 /** Build env for agent-browser subprocess */
 function buildEnv(sessionId: string): NodeJS.ProcessEnv {
@@ -56,6 +141,7 @@ function buildEnv(sessionId: string): NodeJS.ProcessEnv {
     ...process.env,
     AGENT_BROWSER_SESSION: sessionId,
     AGENT_BROWSER_HEADED: "1",
+    AGENT_BROWSER_STREAM_PORT: STREAM_PORT,
   };
 }
 
@@ -94,7 +180,7 @@ export async function execAgentBrowser(
   args: string[],
   timeoutMs = DEFAULT_TIMEOUT_MS
 ): Promise<AgentBrowserResult> {
-  const finalArgs = buildArgs(args);
+  const finalArgs = await buildArgs(args);
   const env = buildEnv(sessionId);
 
   return new Promise<AgentBrowserResult>((resolve, reject) => {
@@ -142,7 +228,7 @@ export async function execAgentBrowserWithStdin(
   stdinData: string,
   timeoutMs = DEFAULT_TIMEOUT_MS
 ): Promise<AgentBrowserResult> {
-  const finalArgs = buildArgs(args);
+  const finalArgs = await buildArgs(args);
   const env = buildEnv(sessionId);
 
   return new Promise<AgentBrowserResult>((resolve, reject) => {

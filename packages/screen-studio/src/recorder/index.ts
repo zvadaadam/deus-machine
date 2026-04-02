@@ -1,7 +1,12 @@
+export { TimelineRecorder, type TimelineFrame } from "./encoder.js";
+
 export {
-  TimelineRecorder,
-  generateFfmpegFilter,
-  generateCropScaleFilter,
-  type FrameEncoder,
-  type TimelineFrame,
-} from "./encoder.js";
+  createPlaybackPlan,
+  sourceToOutputTime,
+  outputToSourceTime,
+  isMeaningfulAction,
+  DEFAULT_SPEED_RAMP_CONFIG,
+  type PlaybackSegment,
+  type PlaybackPlan,
+  type SpeedRampConfig,
+} from "./render-plan.js";

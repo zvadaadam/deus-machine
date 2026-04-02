@@ -40,3 +40,6 @@ export {
   DiffCommentToolRenderer,
   GetTerminalOutputToolRenderer,
 } from "./WorkspaceToolRenderers";
+
+// Deus MCP tools — Recording
+export { RecordingStartToolRenderer, RecordingStopToolRenderer } from "./RecordingToolRenderers";
