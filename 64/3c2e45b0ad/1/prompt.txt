@@ -127,3 +127,14 @@ oh i find a problem taht if we click on a changed file in the hover tree of file
 ---
 
 run please /code-simplifier /deslop epxlore if any antipatterns and of bad code statrcur edead epxlore it in pdeth and revie win depth
+
+---
+
+<system_instruction>
+The user has attached these files. Read them before proceeding.
+- /Users/zvada/Developer/agent/box-ide/.conductor/san-jose-v4/.context/attachments/PR instructions.md (953 B)
+</system_instruction>
+
+
+
+Create a PR
