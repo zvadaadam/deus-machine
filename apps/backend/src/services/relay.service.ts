@@ -8,7 +8,7 @@ import { hostname, userInfo, platform } from "os";
 import { WebSocket } from "ws";
 import { match } from "ts-pattern";
 import type { ServerFrame, RelayFrame } from "@shared/types/relay";
-import { getSetting, saveSetting } from "./settings.service";
+import { getSetting } from "./settings.service";
 import {
   getRelayCredentials,
   generateRelayCredentials,
@@ -101,11 +101,7 @@ setProtocolHandlers({
 // ---- Public API ----
 
 export function ensureRelayConnected(): void {
-  let url = getSetting("relay_url") as string | null;
-  if (!url) {
-    url = DEFAULT_RELAY_URL;
-    saveSetting("relay_url", url);
-  }
+  const url = DEFAULT_RELAY_URL;
   let creds = getRelayCredentials();
   if (!creds) {
     creds = generateRelayCredentials();
@@ -157,7 +153,7 @@ export function getRelayStatus(): {
   serverId: string | null;
   relayUrl: string | null;
 } {
-  const effectiveUrl = relayUrl ?? (getSetting("relay_url") as string | undefined) ?? null;
+  const effectiveUrl = relayUrl ?? DEFAULT_RELAY_URL;
   const creds = serverId ? null : getRelayCredentials();
   const effectiveServerId = serverId ?? creds?.serverId ?? null;
 

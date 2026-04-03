@@ -12,15 +12,13 @@ import { setApp } from "./services/route-delegate";
 import { invalidate } from "./services/query-engine";
 
 // Initialize Sentry before anything else.
-// DSN passed as env var from Electron main process (not hardcoded — open source repo).
-if (process.env.SENTRY_DSN) {
-  Sentry.init({
-    dsn: process.env.SENTRY_DSN,
-    environment: process.env.NODE_ENV === "production" ? "production" : "development",
-    sendDefaultPii: false,
-    initialScope: { tags: { process: "backend" } },
-  });
-}
+// DSN is a public, write-only ingest token — safe to hardcode.
+Sentry.init({
+  dsn: "https://7d01f9d51458e372a7e6f48649842653@o4510970844020736.ingest.us.sentry.io/4510971283898368",
+  environment: process.env.NODE_ENV === "production" ? "production" : "development",
+  sendDefaultPii: false,
+  initialScope: { tags: { process: "backend" } },
+});
 
 /**
  * Deus Backend Server
