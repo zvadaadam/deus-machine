@@ -59,7 +59,7 @@ export function InteractiveDemo() {
     );
   }
 
-  const repos = ["box-ide", "api-server"] as const;
+  const repos = ["deus-machine", "api-server"] as const;
   const byRepo = (repo: string) => WORKSPACES.filter((w) => w.repo === repo);
 
   return (
@@ -284,7 +284,7 @@ function ChatMessage({ message }: { message: Message }) {
       <div className="text-foreground/60 px-2 pt-1 text-[12px] leading-relaxed">
         Want to keep going?{" "}
         <a
-          href="https://github.com/zvadaadam/box-ide/releases"
+          href="https://github.com/zvadaadam/deus-machine/releases"
           target="_blank"
           rel="noopener noreferrer"
           className="text-foreground/80 hover:text-foreground underline underline-offset-2 transition-colors"

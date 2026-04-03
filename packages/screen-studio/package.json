@@ -52,6 +52,6 @@
       "optional": true
     }
   },
-  "license": "MIT",
+  "license": "Elastic-2.0",
   "keywords": ["screen-recording", "camera-engine", "auto-zoom", "spring-physics", "compositing", "mcp"]
 }

@@ -231,14 +231,18 @@ export const BrowserTab = forwardRef<BrowserTabHandle, BrowserTabProps>(function
 
         // Guard: component may have unmounted during await
         if (!mountedRef.current) {
-          native.browserViews.close(webviewLabel).catch(() => {});
+          native.browserViews.close(webviewLabel).catch(() => {
+            /* Expected: component unmounted during create; view may not fully exist */
+          });
           return;
         }
 
         setWebviewReady(true);
 
         // Start hidden — will show after first page load completes
-        native.browserViews.hide(webviewLabel).catch(() => {});
+        native.browserViews.hide(webviewLabel).catch(() => {
+          /* Expected: fire-and-forget; view starts hidden until first page load */
+        });
 
         onAddLog(tabId, "info", `Native webview created: ${webviewLabel}`);
       } catch (err) {

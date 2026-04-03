@@ -12,9 +12,8 @@
 import { AnimatePresence, m, useReducedMotion } from "framer-motion";
 import { match } from "ts-pattern";
 import { cn } from "@/shared/lib/utils";
+import { EASE_OUT_QUART } from "@/shared/lib/animation";
 import { useConnectionState, type ConnectionState } from "../hooks/useConnectionState";
-
-const EASE_OUT_QUART = [0.165, 0.84, 0.44, 1] as const;
 
 function getAriaLabel(state: ConnectionState): string {
   return match(state)

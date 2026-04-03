@@ -229,7 +229,9 @@ export function MainContent({
   // the previous workspace would remain visible. Hide them immediately;
   // the new workspace's BrowserTab will re-show its own view when ready.
   useEffect(() => {
-    native.browserViews.hideAll().catch(() => {});
+    native.browserViews.hideAll().catch(() => {
+      /* Expected: IPC may be unavailable in web mode; stale views are harmless */
+    });
   }, [selectedWorkspaceId]);
 
   // --- Sync workspace changes to detached browser window ---

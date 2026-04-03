@@ -31,7 +31,6 @@ export interface Settings {
   // Experimental (default: false when absent — opt-in for new users)
   experimental_simulator?: boolean;
   experimental_browser?: boolean;
-  experimental_notebooks?: boolean;
   experimental_design?: boolean;
 
   // Remote Access

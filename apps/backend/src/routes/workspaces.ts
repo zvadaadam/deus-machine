@@ -17,6 +17,7 @@ import {
   getDeusEnv,
   getNormalizedTasks,
   runSetupScript,
+  isManifestCommandSafe,
 } from "../services/manifest.service";
 import { initializeWorkspace } from "../services/workspace-init.service";
 import { autoProgressStatus, setWorkspaceStatus } from "../services/workspace-status.service";
@@ -117,21 +118,27 @@ app.patch("/workspaces/:id", async (c) => {
           const manifest = readManifestWithFallback(wsPath, ws.root_path);
           const archiveCmd = manifest ? getArchiveCommand(manifest) : null;
           if (archiveCmd) {
-            const archiveEnv = getDeusEnv(manifest!, {
-              id: ws.id,
-              rootPath: ws.root_path,
-              workspacePath: wsPath,
-            });
-            const archiveProc = spawn("sh", ["-c", archiveCmd], {
-              cwd: wsPath,
-              env: { ...process.env, ...archiveEnv },
-              stdio: "ignore",
-              detached: false,
-            });
-            archiveProc.on("error", (err) => {
-              console.error(`Archive hook error for workspace ${id}:`, err.message);
-            });
-            archiveProc.unref();
+            if (!isManifestCommandSafe(archiveCmd)) {
+              console.warn(
+                `[MANIFEST] Rejected unsafe archive command for workspace ${id}: ${archiveCmd}`
+              );
+            } else {
+              const archiveEnv = getDeusEnv(manifest!, {
+                id: ws.id,
+                rootPath: ws.root_path,
+                workspacePath: wsPath,
+              });
+              const archiveProc = spawn("sh", ["-c", archiveCmd], {
+                cwd: wsPath,
+                env: { ...process.env, ...archiveEnv },
+                stdio: "ignore",
+                detached: false,
+              });
+              archiveProc.on("error", (err) => {
+                console.error(`Archive hook error for workspace ${id}:`, err.message);
+              });
+              archiveProc.unref();
+            }
           }
         }
       } catch (err) {

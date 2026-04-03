@@ -84,7 +84,7 @@ export function setupAppMenu(): void {
         },
         {
           label: "Report Issue",
-          click: () => shell.openExternal("https://github.com/zvadaadam/box-ide/issues"),
+          click: () => shell.openExternal("https://github.com/zvadaadam/deus-machine/issues"),
         },
         { type: "separator" },
         {

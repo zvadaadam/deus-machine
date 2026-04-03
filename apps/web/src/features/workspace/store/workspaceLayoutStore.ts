@@ -25,7 +25,6 @@ export type ContentTab =
   | "files"
   | "config"
   | "terminal"
-  | "notebook"
   | "design"
   | "browser"
   | "simulator";

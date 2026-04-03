@@ -11,10 +11,9 @@ import { AnimatePresence, m, useReducedMotion } from "framer-motion";
 import { ArrowUpRight } from "lucide-react";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { cn } from "@/shared/lib/utils";
+import { EASE_OUT_QUART } from "@/shared/lib/animation";
 import { useProviderStatuses, type ProviderStatusEntry } from "../api/ai-status.queries";
 import { PROVIDER_REGISTRY, getIndicatorVisuals } from "../lib/providers";
-
-const EASE_OUT_QUART = [0.165, 0.84, 0.44, 1] as const;
 
 export function AIStatusIndicator() {
   const { statuses, worst } = useProviderStatuses();

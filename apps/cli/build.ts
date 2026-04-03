@@ -88,7 +88,7 @@ async function main() {
     console.error("\nMissing required bundles. Run these first:");
     console.error("  bun run build:agent-server");
     console.error("  bun run build:backend");
-    // No web frontend needed — headless mode uses app.rundeus.com via relay
+    // No web frontend needed — headless mode uses app.deusmachine.ai via relay
     process.exit(1);
   }
 
