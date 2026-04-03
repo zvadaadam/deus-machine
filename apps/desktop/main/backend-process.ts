@@ -51,11 +51,6 @@ export async function spawnBackend(): Promise<{ port: number; authToken: string 
     ? join(process.resourcesPath, "bin", "index.bundled.cjs")
     : join(projectRoot, "apps/agent-server/dist/index.bundled.cjs");
 
-  // Notebook server bundle path
-  const notebookPath = app.isPackaged
-    ? join(process.resourcesPath, "bin", "notebook-server.bundled.cjs")
-    : join(projectRoot, "packages/mcp-notebook/dist/notebook-server.bundled.cjs");
-
   return new Promise((resolve, reject) => {
     backendProcess = spawn(backendRuntime, [backendEntry], {
       cwd: app.isPackaged ? process.resourcesPath : join(projectRoot, "apps/backend"),
@@ -64,7 +59,6 @@ export async function spawnBackend(): Promise<{ port: number; authToken: string 
         ELECTRON_RUN_AS_NODE: "1",
         DATABASE_PATH: dbPath,
         AGENT_SERVER_BUNDLE_PATH: agentServerPath,
-        NOTEBOOK_SERVER_BUNDLE_PATH: notebookPath,
         AUTH_TOKEN: authToken,
         PORT: "0", // Dynamic port allocation
         CDP_PORT, // Chrome DevTools Protocol port for agent-browser integration

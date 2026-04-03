@@ -239,7 +239,9 @@ export function MainLayout() {
     repoActions.showStartNewModal;
   useEffect(() => {
     if (anyDialogOpen) {
-      native.browserViews.hideAll().catch(() => {});
+      native.browserViews.hideAll().catch(() => {
+        /* Expected: IPC may be unavailable in web mode or during shutdown */
+      });
     }
   }, [anyDialogOpen]);
 
@@ -353,7 +355,9 @@ export function MainLayout() {
     const path = selectedWorkspace?.workspace_path;
     if (lastAppId && path) {
       track("open_in_app", { app_id: lastAppId });
-      native.apps.openIn(lastAppId, path).catch(() => {});
+      native.apps.openIn(lastAppId, path).catch((err) => {
+        console.warn("[MainLayout] Failed to open workspace in external app:", err);
+      });
     }
   }
 

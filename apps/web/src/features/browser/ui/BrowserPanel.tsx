@@ -142,7 +142,9 @@ export function BrowserPanel({
     const currentTabs = tabInfoRef.current;
     for (const tab of currentTabs) {
       if (tab.id !== activeTabId || !panelVisible) {
-        native.browserViews.hide(tab.webviewLabel).catch(() => {});
+        native.browserViews.hide(tab.webviewLabel).catch(() => {
+          /* Expected: view may not exist yet or IPC unavailable */
+        });
       }
     }
   }, [activeTabId, panelVisible]);
@@ -204,7 +206,9 @@ export function BrowserPanel({
     // Views are hidden immediately (WKWebView setHidden:YES) and stay in the
     // main process views Map so existing IPC handlers still work.
     for (const tab of currentTabs) {
-      native.browserViews.hide(tab.webviewLabel).catch(() => {});
+      native.browserViews.hide(tab.webviewLabel).catch(() => {
+        /* Expected: view may already be destroyed during workspace switch */
+      });
     }
 
     // Load tabs for the new workspace (reuses loadWorkspaceTabs helper)
@@ -259,8 +263,12 @@ export function BrowserPanel({
         // Close the native webview — lookup from prev (always fresh, no stale closure).
         const closingTab = prev.find((t) => t.id === closingTabId);
         if (closingTab) {
-          native.browserViews.hide(closingTab.webviewLabel).catch(() => {});
-          native.browserViews.close(closingTab.webviewLabel).catch(() => {});
+          native.browserViews.hide(closingTab.webviewLabel).catch(() => {
+            /* Expected: view may already be hidden or destroyed */
+          });
+          native.browserViews.close(closingTab.webviewLabel).catch(() => {
+            /* Expected: view may already be closed by unmount cleanup */
+          });
         }
 
         const idx = prev.findIndex((t) => t.id === closingTabId);
@@ -706,9 +714,13 @@ export function BrowserPanel({
           onChange={handleViewportChange}
           onOpenChange={(open) => {
             if (open && activeTab?.webviewLabel) {
-              native.browserViews.hide(activeTab.webviewLabel).catch(() => {});
+              native.browserViews.hide(activeTab.webviewLabel).catch(() => {
+                /* Expected: fire-and-forget; view may not exist if tab has no URL */
+              });
             } else if (!open && panelVisible && activeTab?.webviewLabel && activeTab.currentUrl) {
-              native.browserViews.show(activeTab.webviewLabel).catch(() => {});
+              native.browserViews.show(activeTab.webviewLabel).catch(() => {
+                /* Expected: fire-and-forget; view may have been destroyed while dropdown was open */
+              });
             }
           }}
           disabled={!activeTab?.currentUrl}
@@ -721,12 +733,16 @@ export function BrowserPanel({
               // Hide native webview so the dropdown isn't rendered behind it
               // (WKWebView floats above all DOM layers including portals)
               if (activeTab?.webviewLabel) {
-                native.browserViews.hide(activeTab.webviewLabel).catch(() => {});
+                native.browserViews.hide(activeTab.webviewLabel).catch(() => {
+                  /* Expected: fire-and-forget; view may not exist if tab has no URL */
+                });
               }
             } else {
               // Re-show webview when dropdown closes
               if (activeTab?.webviewLabel && activeTab.currentUrl) {
-                native.browserViews.show(activeTab.webviewLabel).catch(() => {});
+                native.browserViews.show(activeTab.webviewLabel).catch(() => {
+                  /* Expected: fire-and-forget; view may have been destroyed while dropdown was open */
+                });
               }
             }
           }}

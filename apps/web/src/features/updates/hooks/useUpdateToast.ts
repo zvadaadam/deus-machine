@@ -7,7 +7,7 @@ import { toast } from "sonner";
 import type { UseAutoUpdateReturn } from "./useAutoUpdate";
 
 const TOAST_ID = "update-ready";
-const RELEASES_URL = "https://github.com/zvadaadam/box-ide/releases";
+const RELEASES_URL = "https://github.com/zvadaadam/deus-machine/releases";
 
 export function useUpdateToast({ state, install }: UseAutoUpdateReturn) {
   const shownForVersionRef = useRef<string | null>(null);

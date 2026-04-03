@@ -210,7 +210,9 @@ export function Terminal({ id, workspacePath, initialCommand, visible = true }: 
       inputDisposable.dispose();
       unlistenData();
       unlistenExit();
-      ptyCommands.kill(ptyId).catch(() => {});
+      ptyCommands.kill(ptyId).catch(() => {
+        /* Expected: PTY process may already be dead or cleaned up */
+      });
       xterm.dispose();
     };
   }, [id, workspacePath, initialCommand]);

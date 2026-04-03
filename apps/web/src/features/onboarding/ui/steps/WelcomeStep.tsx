@@ -1,5 +1,6 @@
 import { useState, useCallback, useRef } from "react";
 import { cn } from "@/shared/lib/utils";
+import { EASE_OUT_QUART_CSS } from "@/shared/lib/animation";
 
 interface WelcomeStepProps {
   onNext: () => void;
@@ -23,8 +24,6 @@ const MANIFESTO =
   "You describe what you want. The machines figure out how. " +
   "This is not an IDE. This is how I build now. " +
   "Deus machine.";
-
-const EASE_OUT_QUART = "cubic-bezier(0.165, 0.84, 0.44, 1)";
 
 export function WelcomeStep({ onNext }: WelcomeStepProps) {
   const [phase, setPhase] = useState<Phase>("idle");
@@ -74,8 +73,8 @@ export function WelcomeStep({ onNext }: WelcomeStepProps) {
         style={{
           transition:
             phase === "exit"
-              ? `transform 600ms ${EASE_OUT_QUART}, opacity 500ms ${EASE_OUT_QUART}`
-              : `transform 700ms ${EASE_OUT_QUART}`,
+              ? `transform 600ms ${EASE_OUT_QUART_CSS}, opacity 500ms ${EASE_OUT_QUART_CSS}`
+              : `transform 700ms ${EASE_OUT_QUART_CSS}`,
           ...(phase === "center" || phase === "swap"
             ? { transform: `translateY(${titleOffset}px)` }
             : phase === "exit"
@@ -88,7 +87,7 @@ export function WelcomeStep({ onNext }: WelcomeStepProps) {
             {/* Deus — fades out */}
             <span
               style={{
-                transition: `opacity 400ms ${EASE_OUT_QUART}`,
+                transition: `opacity 400ms ${EASE_OUT_QUART_CSS}`,
                 opacity: showDevs ? 0 : 1,
               }}
             >
@@ -98,7 +97,7 @@ export function WelcomeStep({ onNext }: WelcomeStepProps) {
             <span
               className="absolute inset-0"
               style={{
-                transition: `opacity 400ms ${EASE_OUT_QUART}`,
+                transition: `opacity 400ms ${EASE_OUT_QUART_CSS}`,
                 opacity: showDevs ? 1 : 0,
               }}
             >
@@ -119,7 +118,7 @@ export function WelcomeStep({ onNext }: WelcomeStepProps) {
             "linear-gradient(to bottom, transparent 0%, black 8%, black 85%, transparent 100%)",
           WebkitMaskImage:
             "linear-gradient(to bottom, transparent 0%, black 8%, black 85%, transparent 100%)",
-          transition: `opacity 400ms ${EASE_OUT_QUART}, transform 400ms ${EASE_OUT_QUART}`,
+          transition: `opacity 400ms ${EASE_OUT_QUART_CSS}, transform 400ms ${EASE_OUT_QUART_CSS}`,
           ...(isAnimating ? { opacity: 0, transform: "translateY(12px)" } : {}),
         }}
       >
@@ -136,7 +135,7 @@ export function WelcomeStep({ onNext }: WelcomeStepProps) {
       <div
         className="shrink-0 pt-4 pb-4"
         style={{
-          transition: `opacity 400ms ${EASE_OUT_QUART}, transform 400ms ${EASE_OUT_QUART}`,
+          transition: `opacity 400ms ${EASE_OUT_QUART_CSS}, transform 400ms ${EASE_OUT_QUART_CSS}`,
           ...(isAnimating ? { opacity: 0, transform: "translateY(12px)" } : {}),
         }}
       >
@@ -146,8 +145,8 @@ export function WelcomeStep({ onNext }: WelcomeStepProps) {
           style={{
             boxShadow: "0 0 30px -4px oklch(0.65 0.15 264 / 0.3), 0 2px 12px oklch(0 0 0 / 0.2)",
             transition: isAnimating
-              ? `opacity 400ms ${EASE_OUT_QUART}, transform 400ms ${EASE_OUT_QUART}`
-              : `scale 250ms ${EASE_OUT_QUART}, opacity 200ms ${EASE_OUT_QUART}`,
+              ? `opacity 400ms ${EASE_OUT_QUART_CSS}, transform 400ms ${EASE_OUT_QUART_CSS}`
+              : `scale 250ms ${EASE_OUT_QUART_CSS}, opacity 200ms ${EASE_OUT_QUART_CSS}`,
           }}
         >
           Run Deus

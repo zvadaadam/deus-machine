@@ -11,7 +11,6 @@ import {
   FolderOpen,
   Bot,
   Terminal,
-  BookOpen,
   PenTool,
   Globe,
   Smartphone,
@@ -34,7 +33,6 @@ export const CONTENT_TABS: ContentTabItem[] = [
   { id: "changes", label: "Changes", icon: GitBranch },
   { id: "files", label: "Files", icon: FolderOpen },
   { id: "terminal", label: "Terminal", icon: Terminal, capabilityGate: "nativeTerminal" },
-  { id: "notebook", label: "Notebook", icon: BookOpen, visibilityKey: "experimental_notebooks" },
   { id: "design", label: "Design", icon: PenTool, visibilityKey: "experimental_design" },
   {
     id: "browser",

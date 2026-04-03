@@ -63,7 +63,7 @@ function LandingPage() {
             </nav>
             <div className="mt-auto flex flex-col gap-0.5 pb-4">
               <a
-                href="https://github.com/zvadaadam/box-ide"
+                href="https://github.com/zvadaadam/deus-machine"
                 target="_blank"
                 rel="noopener noreferrer"
                 className="text-muted-foreground/40 hover:text-muted-foreground py-1 text-[12px] transition-colors duration-150"
@@ -192,14 +192,14 @@ function LandingPage() {
           </p>
           <div className="mt-8 flex flex-col gap-3 sm:flex-row">
             <a
-              href="https://github.com/zvadaadam/box-ide/releases"
+              href="https://github.com/zvadaadam/deus-machine/releases"
               className="bg-foreground text-background hover:bg-foreground/90 inline-flex h-10 items-center justify-center gap-2 rounded-lg px-5 text-sm font-medium transition-colors"
             >
               <Apple className="size-4" />
               Download for macOS
             </a>
             <a
-              href="https://github.com/zvadaadam/box-ide"
+              href="https://github.com/zvadaadam/deus-machine"
               target="_blank"
               rel="noopener noreferrer"
               className="bg-foreground/[0.06] text-foreground hover:bg-foreground/[0.1] inline-flex h-10 items-center justify-center gap-2 rounded-lg px-5 text-sm font-medium transition-colors"
@@ -213,8 +213,8 @@ function LandingPage() {
               Build from source
             </p>
             <pre className="mt-3 overflow-x-auto text-[13px] leading-relaxed text-[var(--code-foreground)]">
-              <code>{`git clone https://github.com/zvadaadam/box-ide.git
-cd box-ide
+              <code>{`git clone https://github.com/zvadaadam/deus-machine.git
+cd deus-machine
 bun install
 bun run dev`}</code>
             </pre>

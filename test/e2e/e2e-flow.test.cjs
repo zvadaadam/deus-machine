@@ -139,11 +139,11 @@ async function testCreateWorkspace() {
   try {
     // Get repository from database
     const db = new Database(DB_PATH, { readonly: true });
-    const repo = db.prepare("SELECT * FROM repositories WHERE name = 'box-ide' LIMIT 1").get();
+    const repo = db.prepare("SELECT * FROM repositories WHERE name = 'deus-machine' LIMIT 1").get();
     db.close();
 
     if (!repo) {
-      logError('box-ide repository not found in database');
+      logError('deus-machine repository not found in database');
       return false;
     }
 

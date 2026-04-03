@@ -85,6 +85,25 @@ export function getDeusEnv(
 }
 
 /**
+ * Dangerous shell metacharacters that indicate command injection.
+ * We allow simple commands like `bun install` or `npm run build` but reject
+ * anything that chains, pipes, substitutes, or redirects — these have no
+ * legitimate use in a deus.json lifecycle/setup command.
+ */
+const DANGEROUS_SHELL_PATTERN = /[;|&`$><\n]|\$\(|\)\s*\{/;
+
+/**
+ * Validate a manifest command string for dangerous shell metacharacters.
+ * Returns true if the command is safe to execute, false otherwise.
+ *
+ * Rejects: ; && || | $() `` > < \n and other shell injection vectors.
+ * Allows: simple commands with flags and arguments (e.g. "bun install", "cargo build --release").
+ */
+export function isManifestCommandSafe(cmd: string): boolean {
+  return !DANGEROUS_SHELL_PATTERN.test(cmd);
+}
+
+/**
  * Read manifest with repo-root fallback.
  * Workspace worktrees may not have deus.json if it was added after creation.
  * Checks the worktree first (agent may have modified it), then falls back to repo root.
@@ -257,6 +276,17 @@ export function runSetupScript(
   setupEnv: Record<string, string>,
   workspacePath: string
 ): void {
+  if (!isManifestCommandSafe(setupCmd)) {
+    console.warn(
+      `[MANIFEST] Rejected unsafe setup command for workspace ${workspaceId}: ${setupCmd}`
+    );
+    db.prepare(
+      "UPDATE workspaces SET setup_status = 'failed', error_message = ?, updated_at = datetime('now') WHERE id = ?"
+    ).run("Setup command rejected: contains dangerous shell metacharacters", workspaceId);
+    emitProgress(workspaceId, "setup_failed", "Setup failed: command rejected for safety");
+    return;
+  }
+
   const setupLogPath = path.join(os.tmpdir(), `deus-${workspaceId}-setup.log`);
   const setupLog = fs.createWriteStream(setupLogPath);
 

@@ -2,7 +2,7 @@
  * Content View — thin router for the active content tab.
  *
  * Each tab is either:
- *   - Lazy: mounted/unmounted on tab switch (Changes, Files, Notebook, Config, Design)
+ *   - Lazy: mounted/unmounted on tab switch (Changes, Files, Config, Design)
  *   - Persistent: always mounted, hidden when inactive (Terminal, Browser, Simulator)
  *     These preserve native state (PTY sessions, WebView instances).
  *
@@ -10,7 +10,6 @@
  */
 
 import { TerminalPanel } from "@/features/terminal";
-import { NotebookPanel } from "@/features/notebook";
 import { ChangesView } from "@/features/workspace/ui/ChangesView";
 import { FilesView } from "@/features/workspace/ui/FilesView";
 import { AgentConfigPanel } from "@/features/agent-config/ui/AgentConfigPanel";
@@ -58,10 +57,6 @@ export function ContentView({
       )}
 
       {activeTab === "files" && <FilesView workspace={workspace} isWatched={isWatched} />}
-
-      {activeTab === "notebook" && (
-        <NotebookPanel workspaceId={workspace.id} sessionStatus={workspace.session_status} />
-      )}
 
       {activeTab === "config" && <AgentConfigPanel workspace={workspace} />}
 

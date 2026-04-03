@@ -1,7 +1,7 @@
 /**
  * Headless start mode — starts agent-server and backend.
  *
- * No web UI is served — remote users connect through app.rundeus.com via
+ * No web UI is served — remote users connect through app.deusmachine.ai via
  * the cloud relay. This keeps the headless CLI minimal.
  *
  * Process orchestration:
