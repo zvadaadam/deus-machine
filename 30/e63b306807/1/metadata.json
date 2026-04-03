@@ -1,0 +1,40 @@
+{
+  "cli_version": "0.5.0",
+  "checkpoint_id": "30e63b306807",
+  "session_id": "e6329998-8f0c-4ea5-80a3-4a77e2f84a00",
+  "strategy": "manual-commit",
+  "created_at": "2026-04-03T09:50:27.465973Z",
+  "branch": "zvadaadam/relay-url-sentry-fix",
+  "checkpoints_count": 0,
+  "files_touched": [
+    "apps/agent-server/index.ts",
+    "apps/web/src/app/main.tsx",
+    "apps/web/src/env.d.ts",
+    "apps/web/src/platform/analytics/events.ts",
+    ".github/workflows/deploy.yml",
+    "apps/backend/src/server.ts",
+    "apps/backend/src/services/relay.service.ts",
+    "apps/web/src/components/ui/dialog.tsx",
+    "shared/types/settings.ts",
+    ".env.example",
+    ".github/workflows/release.yml"
+  ],
+  "agent": "Claude Code",
+  "turn_id": "ebd7efe340e7",
+  "token_usage": {
+    "input_tokens": 7,
+    "cache_creation_tokens": 25808,
+    "cache_read_tokens": 154456,
+    "output_tokens": 961,
+    "api_call_count": 5
+  },
+  "initial_attribution": {
+    "calculated_at": "2026-04-03T09:50:27.457094Z",
+    "agent_lines": 45,
+    "human_added": 0,
+    "human_modified": 0,
+    "human_removed": 0,
+    "total_committed": 45,
+    "agent_percentage": 100
+  }
+}
