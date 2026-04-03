@@ -17,8 +17,6 @@
 #   APPLE_TEAM_ID                      — 10-character Apple Developer Team ID
 #
 # Optional GitHub Secrets:
-#   SENTRY_DSN_NODE                    — Sentry DSN for backend error tracking
-#   VITE_SENTRY_DSN                    — Sentry DSN for frontend error tracking
 #   SENTRY_AUTH_TOKEN                  — Sentry auth token for source map upload
 #
 # Required for CLI publishing:
@@ -110,8 +108,6 @@ jobs:
     needs: validate-and-bump
     runs-on: macos-14
     env:
-      SENTRY_DSN_NODE: ${{ secrets.SENTRY_DSN_NODE }}
-      VITE_SENTRY_DSN: ${{ secrets.VITE_SENTRY_DSN }}
       SENTRY_AUTH_TOKEN: ${{ secrets.SENTRY_AUTH_TOKEN }}
     steps:
       - uses: actions/checkout@v4
@@ -156,8 +152,6 @@ jobs:
     needs: validate-and-bump
     runs-on: windows-latest
     env:
-      SENTRY_DSN_NODE: ${{ secrets.SENTRY_DSN_NODE }}
-      VITE_SENTRY_DSN: ${{ secrets.VITE_SENTRY_DSN }}
       SENTRY_AUTH_TOKEN: ${{ secrets.SENTRY_AUTH_TOKEN }}
     steps:
       - uses: actions/checkout@v4
@@ -195,8 +189,6 @@ jobs:
     needs: validate-and-bump
     runs-on: ubuntu-latest
     env:
-      SENTRY_DSN_NODE: ${{ secrets.SENTRY_DSN_NODE }}
-      VITE_SENTRY_DSN: ${{ secrets.VITE_SENTRY_DSN }}
       SENTRY_AUTH_TOKEN: ${{ secrets.SENTRY_AUTH_TOKEN }}
     steps:
       - uses: actions/checkout@v4

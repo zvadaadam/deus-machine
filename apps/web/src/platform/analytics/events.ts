@@ -58,8 +58,6 @@ export type AnalyticsEventMap = {
   // ── Repository ─────────────────────────────────────────────────────────
   /** repo_name derived from path — useful for filtering demo repo usage. */
   repo_added: { repo_name?: string };
-  /** TODO: wire when repo removal UI is implemented. */
-  repo_removed: { repo_id: string; repo_name?: string };
 
   // ── Workspace ──────────────────────────────────────────────────────────
   workspace_created: { repository_id: string };

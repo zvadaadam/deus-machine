@@ -9,11 +9,6 @@
 # Required GitHub Secrets:
 #   CLOUDFLARE_API_TOKEN     — Cloudflare API token with Workers/Pages deploy permissions
 #   CLOUDFLARE_ACCOUNT_ID    — Cloudflare account ID
-#
-# Optional GitHub Secrets:
-#   VITE_SENTRY_DSN          — Sentry DSN for frontend error tracking
-#   VITE_PUBLIC_POSTHOG_KEY  — PostHog analytics API key
-#   VITE_PUBLIC_POSTHOG_HOST — PostHog analytics host
 
 name: Deploy
 
@@ -128,10 +123,6 @@ jobs:
         run: bun install --frozen-lockfile
 
       - name: Build web app
-        env:
-          VITE_SENTRY_DSN: ${{ secrets.VITE_SENTRY_DSN }}
-          VITE_PUBLIC_POSTHOG_KEY: ${{ secrets.VITE_PUBLIC_POSTHOG_KEY }}
-          VITE_PUBLIC_POSTHOG_HOST: ${{ secrets.VITE_PUBLIC_POSTHOG_HOST }}
         run: bun run build:web
 
       - name: Deploy to Cloudflare Pages
