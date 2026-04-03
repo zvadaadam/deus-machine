@@ -20,23 +20,23 @@ function DialogClose({ ...props }: React.ComponentProps<typeof DialogPrimitive.C
   return <DialogPrimitive.Close data-slot="dialog-close" {...props} />;
 }
 
-function DialogOverlay({
-  className,
-  ...props
-}: React.ComponentProps<typeof DialogPrimitive.Overlay>) {
-  return (
-    <DialogPrimitive.Overlay
-      data-slot="dialog-overlay"
-      className={cn(
-        "fixed inset-0 z-50 bg-black/50 will-change-[opacity]",
-        "data-[state=open]:animate-[overlay-enter_200ms_cubic-bezier(.215,.61,.355,1)]",
-        "data-[state=closed]:animate-[overlay-exit_150ms_cubic-bezier(.215,.61,.355,1)]",
-        className
-      )}
-      {...props}
-    />
-  );
-}
+const DialogOverlay = React.forwardRef<
+  React.ComponentRef<typeof DialogPrimitive.Overlay>,
+  React.ComponentProps<typeof DialogPrimitive.Overlay>
+>(({ className, ...props }, ref) => (
+  <DialogPrimitive.Overlay
+    ref={ref}
+    data-slot="dialog-overlay"
+    className={cn(
+      "fixed inset-0 z-50 bg-black/50 will-change-[opacity]",
+      "data-[state=open]:animate-[overlay-enter_200ms_cubic-bezier(.215,.61,.355,1)]",
+      "data-[state=closed]:animate-[overlay-exit_150ms_cubic-bezier(.215,.61,.355,1)]",
+      className
+    )}
+    {...props}
+  />
+));
+DialogOverlay.displayName = "DialogOverlay";
 
 function DialogContent({
   className,

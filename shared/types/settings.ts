@@ -40,7 +40,6 @@ export interface Settings {
   // Relay
   relay_server_id?: string;
   relay_token?: string;
-  relay_url?: string; // e.g., "wss://relay.deusmachine.ai"
 }
 
 // Config item types (MCPServer, Command, Agent) moved to shared/types/agent-config.ts
