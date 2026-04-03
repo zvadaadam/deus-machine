@@ -1,0 +1,35 @@
+{
+  "cli_version": "0.5.0",
+  "checkpoint_id": "30e63b306807",
+  "strategy": "manual-commit",
+  "branch": "zvadaadam/relay-url-sentry-fix",
+  "checkpoints_count": 8,
+  "files_touched": [
+    ".env.example",
+    ".github/workflows/deploy.yml",
+    ".github/workflows/release.yml",
+    "apps/agent-server/index.ts",
+    "apps/backend/src/server.ts",
+    "apps/backend/src/services/relay.service.ts",
+    "apps/web/src/app/main.tsx",
+    "apps/web/src/components/ui/dialog.tsx",
+    "apps/web/src/env.d.ts",
+    "apps/web/src/platform/analytics/events.ts",
+    "shared/types/settings.ts"
+  ],
+  "sessions": [
+    {
+      "metadata": "/30/e63b306807/0/metadata.json",
+      "transcript": "/30/e63b306807/0/full.jsonl",
+      "content_hash": "/30/e63b306807/0/content_hash.txt",
+      "prompt": "/30/e63b306807/0/prompt.txt"
+    }
+  ],
+  "token_usage": {
+    "input_tokens": 708,
+    "cache_creation_tokens": 420293,
+    "cache_read_tokens": 4239633,
+    "output_tokens": 17840,
+    "api_call_count": 80
+  }
+}

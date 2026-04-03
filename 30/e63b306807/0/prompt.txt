@@ -1,0 +1,132 @@
+<system_instruction>
+You are working inside Conductor, a Mac app that lets the user run many coding agents in parallel.
+Your work should take place in the /Users/zvada/conductor/workspaces/deus-machine/manama-v2 directory (unless otherwise directed), which has been set up for you to work in.
+Each workspace has a .context directory (gitignored) where you can save files to collaborate with other agents.
+The target branch for this workspace is main. Use this for actions like creating new PRs, bisecting, etc., unless you're told otherwise.
+
+By default, the user will only see the last message that you send before stopping. Include all essential information in the last message. The intermediate messages will be collapsed and accessible by the user but not displayed by default.
+
+If the user asks you to work on several unrelated tasks, you can suggest they start new workspaces.
+Sometimes the user might send you a message they meant to send in a different workspace or a different chat. If something doesn't make sense in the context of your work, just ask. 
+If the user asks for help with Conductor, you can ask them to go to "Help -> Send Feedback" to get in touch with our team.
+</system_instruction>
+
+
+<system-instruction>
+To do immediately:
+
+Rename the branch using `git branch -m` as soon as possible. Do not check the current branch name.
+
+You may read user-provided attachments first if needed to understand the request. Otherwise, do this before using any skills or any other tools.
+
+Choosing a branch name: use concrete, specific language, avoid abstract nouns, and be concise (<30 characters). Use the prefix "zvadaadam/" before the name.
+
+</system-instruction>
+
+i have some stf to fix in here becasue i delete old agent convo and here is teh coieis form it
+
+
+/Users/zvada/conductor/workspaces/deus-machine/manama-v2/.context/attachments/pasted_text_2026-04-03_00-33-08.txt The code already has `wss://relay.deusmachine.ai` as the default. The log shows `relay.rundeus.com` — that means your local SQLite database has the old URL saved in the `settings` table from before the migration.
+The relay service at `apps/backend/src/services/relay.service.ts:104-107` reads `relay_url` from settings, and only writes the default if it's not already set. Since the old value `wss://relay.rundeus.com` was persisted, it keeps using that.
+**Quick fix:** Reset the setting in your local database. You can either:
+1. **Delete the stale setting** from the SQLite DB:
+   ```sql
+   -- In ~/Library/Application Support/com.deus.app/deus.db
+   DELETE FROM settings WHERE key = 'relay_url';
+   ```
+   On next startup, it'll pick up the new default `wss://relay.deusmachine.ai`.
+2. **Or update it directly:**
+   ```sql
+   UPDATE settings SET value = '"wss://relay.deusmachine.ai"' WHERE key = 'relay_url';
+   ```
+The app settings UI (Access section) should also let you change this. Want me to look into making the migration automatic so other users don't hit this too?
+
+Done. The relay URL is now always `DEFAULT_RELAY_URL` (`wss://relay.deusmachine.ai`) from the constant in `lib/network.ts`. No more stale DB values — if the URL ever needs to change, you change the constant and every user gets it on the next update.
+
+
+----
+
+deus frontend:
+import * as Sentry from "@sentry/react";
+Sentry.init({
+  dsn: "https://2c44c31c34c36fea97c1cc9aa2c8992c@o4510970844020736.ingest.us.sentry.io/4510971280097280",
+  // Setting this option to true will send default PII data to Sentry.
+  // For example, automatic IP address collection on events
+  sendDefaultPii: true
+});
+const container = document.getElementById("app");
+const root = createRoot(container);
+root.render(<App />);
+------
+deus-node
+## Install
+Add the Sentry Node SDK as a dependency:
+```bash
+npm install @sentry/node --save
+```
+## Configure SDK
+Initialize Sentry as early as possible in your application's lifecycle.
+To initialize the SDK before everything else, create an external file called `instrument.js/mjs`.
+```javascript
+// instrument.(js|mjs)
+// Import with `import * as Sentry from "@sentry/node"` if you are using ESM
+const Sentry = require("@sentry/node");
+Sentry.init({
+  dsn: "https://7d01f9d51458e372a7e6f48649842653@o4510970844020736.ingest.us.sentry.io/4510971283898368",
+  // Setting this option to true will send default PII data to Sentry.
+  // For example, automatic IP address collection on events
+  sendDefaultPii: true,
+  });
+```
+Make sure to import `instrument.js/mjs` at the top of your file. Set up the error handler after all controllers and before any other error middleware. This setup is typically done in your application's entry point file, which is usually `index.(js|ts)`. If you're running your application in ESM mode, or looking for alternative ways to set up Sentry, read about [installation methods in our docs](https://docs.sentry.io/platforms/javascript/guides/node/install/).
+```javascript
+// instrument.(js|mjs)
+// IMPORTANT: Make sure to import `instrument.js` at the top of your file.
+// If you're using ECMAScript Modules (ESM) syntax, use `import "./instrument.js";`
+require("./instrument.js");
+// All other imports below
+const { createServer } = require("node:http");
+const server = createServer((req, res) => {
+  // server code
+});
+server.listen(3000, "127.0.0.1");
+```
+## Verify
+This snippet contains an intentional error and can be used as a test to make sure that everything's working as expected.
+```javascript
+const Sentry = require("@sentry/node");
+try {
+  foo();
+} catch (e) {
+  Sentry.captureException(e);
+}
+```
+
+---
+
+where is teh default define? w dont wat store it in th db that bulshit it's okey to hard code
+
+---
+
+can u clena up then now?
+
+---
+
+okey and the posthog and sentry is it confired?
+
+---
+
+but od we have teh env varubles? fels liek it's not tehre and if we gonan releas etehy app wil there be somehtign
+
+---
+
+but we can bake it right into the bianry rigth with sentry and posthog it's okey right and it woudl siolify stuff rigth wdyt?
+
+---
+
+okey is tehre soemhtign ot siplify some deadcode or somethign becaue udpatign nwo the posthog pr sentry etc epxlor ein depthj
+
+---
+
+deleet: Very clean. One unused event:
+repo_removed event — defined in events.ts but never tracked anywhere. Has a TODO comment saying “wire when repo removal UI is implemented.”
