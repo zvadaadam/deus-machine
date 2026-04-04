@@ -88,6 +88,17 @@ function getTerminalTheme() {
   return base;
 }
 
+/** Safely call fitAddon.fit() — xterm's internal render service may not be
+ *  fully initialized during rapid mount/unmount cycles, causing a
+ *  "Cannot read properties of undefined (reading 'dimensions')" error. */
+function safeFit(fitAddon: FitAddon): void {
+  try {
+    fitAddon.fit();
+  } catch {
+    // fit() will succeed on the next resize or visibility change
+  }
+}
+
 export function Terminal({ id, workspacePath, initialCommand, visible = true }: TerminalProps) {
   const terminalRef = useRef<HTMLDivElement>(null);
   const xtermRef = useRef<XTerm | null>(null);
@@ -120,7 +131,7 @@ export function Terminal({ id, workspacePath, initialCommand, visible = true }: 
 
     // Open terminal
     xterm.open(terminalRef.current);
-    fitAddon.fit();
+    safeFit(fitAddon);
 
     xtermRef.current = xterm;
     fitAddonRef.current = fitAddon;
@@ -195,7 +206,7 @@ export function Terminal({ id, workspacePath, initialCommand, visible = true }: 
       if (disposed) return;
       const el = terminalRef.current;
       if (!el || el.offsetWidth === 0 || el.offsetHeight === 0) return;
-      fitAddon.fit();
+      safeFit(fitAddon);
       if (ready) {
         ptyCommands.resize(ptyId, xterm.cols, xterm.rows).catch((err) => {
           console.error("Failed to resize PTY:", err);
@@ -221,7 +232,7 @@ export function Terminal({ id, workspacePath, initialCommand, visible = true }: 
   useEffect(() => {
     if (!visible || !fitAddonRef.current || !xtermRef.current) return;
     const frame = requestAnimationFrame(() => {
-      fitAddonRef.current?.fit();
+      if (fitAddonRef.current) safeFit(fitAddonRef.current);
     });
     return () => cancelAnimationFrame(frame);
   }, [visible]);
