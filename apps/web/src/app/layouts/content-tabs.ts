@@ -6,15 +6,7 @@
  * is one entry here + the component in its feature folder.
  */
 
-import {
-  GitBranch,
-  FolderOpen,
-  Bot,
-  Terminal,
-  PenTool,
-  Globe,
-  Smartphone,
-} from "lucide-react";
+import { GitBranch, FolderOpen, Bot, Terminal, PenTool, Globe, Smartphone } from "lucide-react";
 import type { ContentTab } from "@/features/workspace/store";
 import type { Settings } from "@shared/types/settings";
 import { capabilities, type CapabilityName } from "@/platform/capabilities";
