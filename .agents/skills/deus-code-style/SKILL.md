@@ -43,7 +43,7 @@ Feature hooks: `src/features/{feature}/api/{feature}.queries.ts` and `.service.t
 
 ### File Organization
 
-```
+```text
 src/features/{feature}/ui/    # Feature-scoped components (default)
 src/shared/components/         # Cross-feature reusable compositions
 src/components/ui/             # Shadcn base primitives (edit freely)
