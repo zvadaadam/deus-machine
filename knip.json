@@ -55,7 +55,6 @@
     "apps/web/src/features/agent-config/index.ts",
     "apps/web/src/features/session/ui/tools/index.ts",
     "apps/web/src/features/sidebar/lib/index.ts",
-    "apps/web/src/**/*.stories.tsx",
     "apps/web/src/features/session/ui/PixelGrid.tsx"
   ],
   "ignoreUnresolved": [
