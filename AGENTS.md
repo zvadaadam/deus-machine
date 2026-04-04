@@ -26,7 +26,7 @@ Never run `bun run dev:frontend` alone — it skips the backend.
 
 ## Architecture (3 Processes)
 
-```
+```text
 Frontend (React)
   ├── WebSocket → Backend (apps/backend/) — all data + commands
   ├── Electron IPC → Desktop Main (apps/desktop/) — native ops only

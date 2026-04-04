@@ -31,7 +31,7 @@ See [DEVELOPMENT.md](DEVELOPMENT.md) for detailed setup, port configuration, and
 
 ## Project Structure
 
-```
+```text
 apps/
   desktop/        Electron main process (window lifecycle, native OS)
   web/src/        React frontend (features/, components/, shared/)
