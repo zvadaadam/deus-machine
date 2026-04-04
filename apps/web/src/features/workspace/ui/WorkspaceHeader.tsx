@@ -248,7 +248,9 @@ function HeaderOpenButton({ workspacePath }: { workspacePath: string }) {
     native.apps
       .getInstalled()
       .then(setApps)
-      .catch(() => {})
+      .catch((err) => {
+        console.warn("[WorkspaceHeader] Failed to fetch installed apps:", err);
+      })
       .finally(() => setLoading(false));
   }, []);
 
@@ -260,7 +262,9 @@ function HeaderOpenButton({ workspacePath }: { workspacePath: string }) {
     setOpen(false);
     setLastAppId(appId);
     track("open_in_app", { app_id: appId });
-    native.apps.openIn(appId, workspacePath).catch(() => {});
+    native.apps.openIn(appId, workspacePath).catch((err) => {
+      console.warn("[WorkspaceHeader] Failed to open in app:", err);
+    });
   }
 
   function handleQuickOpen() {
@@ -279,7 +283,9 @@ function HeaderOpenButton({ workspacePath }: { workspacePath: string }) {
         setCopied(true);
         setTimeout(() => setCopied(false), 2000);
       })
-      .catch(() => {});
+      .catch((err) => {
+        console.warn("[WorkspaceHeader] Failed to copy path to clipboard:", err);
+      });
     setOpen(false);
   }
 

@@ -15,7 +15,6 @@
     "shared/enums.ts",
     "shared/lib/*.ts",
     "apps/cli/src/cli.ts",
-    "apps/cli/build.ts",
     "apps/**/test/**/*.ts",
     "test/**/*.ts"
   ],
@@ -32,7 +31,7 @@
     "@/ui/*": ["apps/web/src/components/ui/*"],
     "@shared/*": ["shared/*"]
   },
-  "ignore": ["apps/cloud-relay/**", "apps/landing/**", "packages/**"],
+  "ignore": ["apps/cloud-relay/**", "apps/landing/**"],
   "ignoreDependencies": [
     "yallist",
     "playwright",
@@ -41,7 +40,9 @@
     "tailwindcss",
     "esbuild",
     "@electron/rebuild",
-    "@openai/codex"
+    "@openai/codex",
+    "@napi-rs/canvas",
+    "sharp"
   ],
   "ignoreBinaries": ["wrangler"],
   "ignoreExportsUsedInFile": true,
@@ -53,7 +54,8 @@
     "apps/web/src/components/ui/kbd.tsx",
     "apps/web/src/features/agent-config/index.ts",
     "apps/web/src/features/session/ui/tools/index.ts",
-    "apps/web/src/features/sidebar/lib/index.ts"
+    "apps/web/src/features/sidebar/lib/index.ts",
+    "apps/web/src/features/session/ui/PixelGrid.tsx"
   ],
   "ignoreUnresolved": [
     "../../../src/features/simulator/machine",
@@ -75,6 +77,7 @@
     "apps/web/src/features/simulator/**": ["exports"],
     "apps/web/src/features/repository/ui/RepoGroup.tsx": ["exports"],
     "apps/web/src/features/session/ui/blocks/ToolResultBlock.tsx": ["exports"],
+    "apps/agent-server/agents/deus-tools/agent-browser-client.ts": ["exports"],
     "apps/agent-server/rpc-schemas.ts": ["exports", "types"],
     "apps/backend/src/middleware/workspace-loader.ts": ["types"],
     "apps/web/src/features/ai-status/lib/providers.ts": ["types"],

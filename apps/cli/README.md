@@ -34,7 +34,7 @@ deus status         Show server info and connected devices
 
 ## Headless Server
 
-Run Deus on a remote machine and access it from anywhere via [app.rundeus.com](https://app.rundeus.com).
+Run Deus on a remote machine and access it from anywhere via [app.deusmachine.ai](https://app.deusmachine.ai).
 
 ```bash
 deus start
@@ -69,7 +69,7 @@ Generate a new pairing code for a running server:
 deus pair
 ```
 
-Shows a QR code and a text code. Open [app.rundeus.com](https://app.rundeus.com), scan or enter the code, and you're connected.
+Shows a QR code and a text code. Open [app.deusmachine.ai](https://app.deusmachine.ai), scan or enter the code, and you're connected.
 
 ## Docker
 

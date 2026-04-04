@@ -8,7 +8,6 @@ import type { Options, PermissionMode, SettingSource } from "@anthropic-ai/claud
 import { EventBroadcaster } from "../../event-broadcaster";
 import { createCheckpoint } from "./checkpoint";
 import { createDeusMCPServer } from "../deus-tools";
-import { createNotebookMCPServer } from "../notebook-server";
 import { getClaudeExecutablePath } from "./claude-discovery";
 import { mapModelForProvider } from "./claude-models";
 import { claudeSessions } from "./claude-session";
@@ -38,10 +37,6 @@ export function buildAppendSystemPrompt(cwd?: string): string {
 
   return `
 ${workspaceContext}
-
-# Persistent Notebook REPL
-
-You have a stateful JavaScript notebook (notebook_execute, notebook_inspect, notebook_list_cells, notebook_read, notebook_reset). Variables, imports, and functions persist across calls and survive context window compressions. Use it instead of Bash when experimenting, exploring data, or iterating — fix one cell without re-running everything. Use notebook_list_cells after context compression to recover your state. Cells are auto-saved to .context/notebook.ipynb and visible to the user. Use Bash for CLI tools, shell scripts, and test suites.
 
 # Screen Recording
 
@@ -280,7 +275,6 @@ export function buildSdkOptions(
   if (!options?.strictDataPrivacy) {
     sdkOptions.mcpServers = {
       deus: createDeusMCPServer(sessionId),
-      ...createNotebookMCPServer(workingDirectory),
     };
   }
 

@@ -6,6 +6,10 @@ import { useWorkspaceLayoutStore, workspaceLayoutActions } from "@/features/work
 import type { PersistedTerminalTab } from "@/features/workspace/store/workspaceLayoutStore";
 import { Terminal } from "./Terminal";
 
+// Stable reference for empty terminal tabs — avoids Zustand getSnapshot infinite loop
+// when the selector fallback `?? []` creates a new array on every render.
+const EMPTY_TABS: PersistedTerminalTab[] = [];
+
 // Cap the number of workspaces whose terminals stay alive simultaneously.
 // Beyond this, the oldest non-current workspace is evicted — its Terminal
 // components unmount, killing PTYs, disposing xterm, and tearing down
@@ -41,7 +45,7 @@ function WorkspaceTerminals({
   panelVisible: boolean;
   initialCommandsRef: React.MutableRefObject<Map<string, string>>;
 }) {
-  const tabs = useWorkspaceLayoutStore((s) => s.layouts[workspaceId]?.terminalTabs ?? []);
+  const tabs = useWorkspaceLayoutStore((s) => s.layouts[workspaceId]?.terminalTabs ?? EMPTY_TABS);
   const activeTabId = useWorkspaceLayoutStore(
     (s) => s.layouts[workspaceId]?.activeTerminalTabId ?? null
   );
@@ -118,7 +122,7 @@ export function TerminalPanel({
   }, [workspaceId, workspacePath]);
 
   // Read terminal tab state for the CURRENT workspace (tab bar rendering only)
-  const tabs = useWorkspaceLayoutStore((s) => s.layouts[workspaceId]?.terminalTabs ?? []);
+  const tabs = useWorkspaceLayoutStore((s) => s.layouts[workspaceId]?.terminalTabs ?? EMPTY_TABS);
   const activeTabId = useWorkspaceLayoutStore(
     (s) => s.layouts[workspaceId]?.activeTerminalTabId ?? null
   );

@@ -32,9 +32,7 @@ import {
 } from "@/components/ui/sheet";
 import { useIsMobile } from "@/shared/hooks/use-mobile";
 import type { Repository } from "../types";
-
-// ── Easing ──────────────────────────────────────────────────────────
-const EASE_OUT_QUART: [number, number, number, number] = [0.165, 0.84, 0.44, 1];
+import { EASE_OUT_QUART } from "@/shared/lib/animation";
 
 // ── Persistence ─────────────────────────────────────────────────────
 const LAST_REPO_KEY = "deus:welcome-last-repo";

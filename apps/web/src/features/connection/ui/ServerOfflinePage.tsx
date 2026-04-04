@@ -12,9 +12,8 @@
 
 import { m, useReducedMotion } from "framer-motion";
 import { Button } from "@/components/ui/button";
+import { EASE_OUT_QUART } from "@/shared/lib/animation";
 import { ConnectionIllustration } from "./ConnectionIllustration";
-
-const EASE_OUT_QUART = [0.165, 0.84, 0.44, 1] as const;
 
 interface ServerOfflinePageProps {
   onRetry: () => void;

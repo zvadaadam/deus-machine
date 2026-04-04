@@ -84,7 +84,9 @@ export function useWorkspaceActions({
     // otherwise leak in the HashMap until app close (no lifecycle hook exists).
     const simSession = simulatorStoreActions.getSession(selectedWorkspace.id);
     if (simSession.phase !== "idle") {
-      simulatorService.stopStreaming(selectedWorkspace.id).catch(() => {});
+      simulatorService.stopStreaming(selectedWorkspace.id).catch(() => {
+        /* Expected: streaming may already be stopped or session may not exist */
+      });
       simulatorStoreActions.clearWorkspaceSession(selectedWorkspace.id);
     }
     archiveWorkspace(selectedWorkspace.id);

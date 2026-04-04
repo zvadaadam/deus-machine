@@ -172,7 +172,6 @@ export const PreferencesFile = z
     custom_endpoint: z.string().optional(),
     experimental_simulator: z.boolean().optional(),
     experimental_browser: z.boolean().optional(),
-    experimental_notebooks: z.boolean().optional(),
     experimental_design: z.boolean().optional(),
   })
   .passthrough();

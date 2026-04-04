@@ -2,15 +2,15 @@
   "name": "deus-machine",
   "version": "0.3.0",
   "description": "Run Deus IDE from the command line — headless server or desktop installer",
-  "license": "MIT",
+  "license": "Elastic-2.0",
   "author": {
     "name": "Deus",
-    "email": "hello@rundeus.com"
+    "email": "hello@deusmachine.ai"
   },
-  "homepage": "https://rundeus.com",
+  "homepage": "https://deusmachine.ai",
   "repository": {
     "type": "git",
-    "url": "https://github.com/zvadaadam/box-ide",
+    "url": "https://github.com/zvadaadam/deus-machine",
     "directory": "apps/cli"
   },
   "keywords": [

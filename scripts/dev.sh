@@ -43,7 +43,7 @@ if [ -n "$STALE_PID" ]; then
     sleep 0.3
 fi
 
-# Build agent-server + notebook if bundle doesn't exist
+# Build agent-server if bundle doesn't exist
 if [ ! -f "apps/agent-server/dist/index.bundled.cjs" ]; then
     echo -e "${BLUE}Building agent-server (first run)...${NC}"
     bun run build:agent-server
