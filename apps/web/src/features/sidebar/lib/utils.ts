@@ -11,8 +11,8 @@ import { getDisplayStatus } from "./status";
 
 /**
  * Get repository initials for display
- * @param repoName - Repository name (e.g., "box-ide" or "owner/repo")
- * @returns Uppercase initials (e.g., "BI" or "OR")
+ * @param repoName - Repository name (e.g., "deus-machine" or "owner/repo")
+ * @returns Uppercase initials (e.g., "DM" or "OR")
  */
 export function getRepoInitials(repoName: string): string {
   const parts = repoName.split(/[-_\s]/);
@@ -42,8 +42,8 @@ export function getRepoColor(repoName: string): { bg: string; text: string } {
 
 /**
  * Clean repository display name by removing username prefix
- * @param repoName - Full repository name (e.g., "zvadaadam/overlay" or "box-ide")
- * @returns Clean display name (e.g., "overlay" or "box-ide")
+ * @param repoName - Full repository name (e.g., "zvadaadam/overlay" or "deus-machine")
+ * @returns Clean display name (e.g., "overlay" or "deus-machine")
  */
 export function getCleanRepoName(repoName: string): string {
   // Check if repo name contains username prefix (format: "username/repo")

@@ -29,7 +29,9 @@ export function on<K extends AppEventName>(
         cleanup = unlisten;
       }
     })
-    .catch(() => {});
+    .catch(() => {
+      /* Expected: IPC listener registration can fail in web mode or if bridge is unavailable */
+    });
 
   return () => {
     cancelled = true;

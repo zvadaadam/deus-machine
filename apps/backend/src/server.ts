@@ -165,8 +165,6 @@ async function spawnAgentServerAndConnect(bundlePath: string): Promise<void> {
       ...process.env,
       // Forward database path so agent-server can pass it to agents
       DATABASE_PATH: process.env.DATABASE_PATH,
-      // Forward notebook server path
-      NOTEBOOK_SERVER_BUNDLE_PATH: process.env.NOTEBOOK_SERVER_BUNDLE_PATH,
     },
   });
 

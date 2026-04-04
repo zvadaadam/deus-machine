@@ -30,7 +30,7 @@ export const WORKSPACES: Workspace[] = [
   {
     id: "auth",
     name: "feat/auth-flow",
-    repo: "box-ide",
+    repo: "deus-machine",
     status: "active",
     time: "2m",
     messages: [
@@ -67,7 +67,7 @@ export const WORKSPACES: Workspace[] = [
   {
     id: "sidebar",
     name: "fix/sidebar-bug",
-    repo: "box-ide",
+    repo: "deus-machine",
     status: "pending",
     messages: [
       { role: "user", content: "The sidebar collapses on hover instead of click" },
@@ -102,7 +102,7 @@ export const WORKSPACES: Workspace[] = [
   {
     id: "refactor",
     name: "refactor/api",
-    repo: "box-ide",
+    repo: "deus-machine",
     status: "idle",
     messages: [
       { role: "user", content: "Extract the query builder into a shared utility" },

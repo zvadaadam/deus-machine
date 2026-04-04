@@ -27,7 +27,7 @@ export async function showPairCode(backendPort: number): Promise<void> {
     backendPort,
     "/api/remote-auth/generate-pair-code"
   );
-  const pairingUrl = `https://app.rundeus.com/pair?code=${encodeURIComponent(pairData.code)}`;
+  const pairingUrl = `https://app.deusmachine.ai/pair?code=${encodeURIComponent(pairData.code)}`;
   const expiresMin = Math.floor(pairData.expires_in_seconds / 60);
 
   blank();

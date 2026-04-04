@@ -51,25 +51,6 @@ export function ExperimentalSection({ settings, saveSetting }: SettingsSectionPr
 
       <Separator />
 
-      {/* Notebooks */}
-      <div className="flex items-center justify-between">
-        <div className="space-y-0.5">
-          <Label htmlFor="experimental-notebooks" className="text-sm">
-            Notebooks
-          </Label>
-          <p className="text-muted-foreground text-base">
-            Give the AI agent a notebook to run code snippets and visualize results.
-          </p>
-        </div>
-        <Switch
-          id="experimental-notebooks"
-          checked={settings.experimental_notebooks === true}
-          onCheckedChange={(checked) => saveSetting("experimental_notebooks", checked)}
-        />
-      </div>
-
-      <Separator />
-
       {/* Design */}
       <div className="flex items-center justify-between">
         <div className="space-y-0.5">

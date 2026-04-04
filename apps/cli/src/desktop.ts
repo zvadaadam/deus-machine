@@ -24,7 +24,7 @@ import {
 } from "./ui.js";
 import { formatBytes } from "./lib/format.js";
 
-const GITHUB_REPO = "zvadaadam/box-ide";
+const GITHUB_REPO = "zvadaadam/deus-machine";
 
 const INSTALL_PATHS: Record<string, string[]> = {
   darwin: ["/Applications/Deus.app", `${homedir()}/Applications/Deus.app`],

@@ -45,7 +45,7 @@ export async function runOnboarding(): Promise<OnboardingResult> {
   blank();
 
   hint("Access Deus from your phone or another");
-  hint(`computer via ${c.cyan(c.underline("app.rundeus.com"))}`);
+  hint(`computer via ${c.cyan(c.underline("app.deusmachine.ai"))}`);
   blank();
 
   const relayEnabled = await confirm({

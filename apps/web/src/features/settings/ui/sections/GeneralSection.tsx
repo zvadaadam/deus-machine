@@ -30,7 +30,9 @@ export function GeneralSection({ settings, saveSetting, theme, setTheme }: Gener
       window.electronAPI
         .getAppVersion()
         .then(setCurrentVersion)
-        .catch(() => {});
+        .catch(() => {
+          /* Expected: electronAPI may exist but getAppVersion can fail in non-Electron environments */
+        });
     }
   }, []);
 

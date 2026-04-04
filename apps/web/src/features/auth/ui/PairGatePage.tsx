@@ -16,12 +16,12 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Check } from "lucide-react";
 import { isRelayMode, RELAY_BASE_URL } from "@/shared/config/backend.config";
+import { EASE_OUT_QUART } from "@/shared/lib/animation";
 
 // ---------------------------------------------------------------------------
 // Constants
 // ---------------------------------------------------------------------------
 
-const EASE_OUT_QUART = [0.165, 0.84, 0.44, 1] as const;
 const SPRING_OVERSHOOT = { type: "spring", stiffness: 300, damping: 20 } as const;
 const SUCCESS_HOLD_MS = 1500;
 

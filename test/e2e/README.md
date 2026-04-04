@@ -33,7 +33,7 @@ BACKEND_PORT=60068 bun run test:e2e
 
 **What it does:**
 
-1. Creates a fresh workspace in the box-ide repository
+1. Creates a fresh workspace in the deus-machine repository
 2. Waits for workspace to become ready
 3. Sends a test message to Claude
 4. Verifies Claude responds

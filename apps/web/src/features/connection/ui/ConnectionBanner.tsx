@@ -10,9 +10,8 @@
  */
 
 import { AnimatePresence, m, useReducedMotion } from "framer-motion";
+import { EASE_OUT_QUART } from "@/shared/lib/animation";
 import { useConnectionState } from "../hooks/useConnectionState";
-
-const EASE_OUT_QUART = [0.165, 0.84, 0.44, 1] as const;
 
 export function ConnectionBanner() {
   const { state, sendAttemptFailed, retry } = useConnectionState();
