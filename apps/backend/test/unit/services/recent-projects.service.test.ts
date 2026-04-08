@@ -2,12 +2,20 @@ import { execFileSync } from "node:child_process";
 import { mkdtempSync, mkdirSync, rmSync, utimesSync, writeFileSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
+import { pathToFileURL } from "node:url";
 import { afterEach, describe, expect, it, vi } from "vitest";
+
+const { mockRecentlyOpenedValue } = vi.hoisted(() => ({
+  mockRecentlyOpenedValue: { value: undefined as string | undefined },
+}));
 
 vi.mock("better-sqlite3", () => ({
   default: class MockDatabase {
     prepare() {
-      return { get: () => undefined };
+      return {
+        get: () =>
+          mockRecentlyOpenedValue.value ? { value: mockRecentlyOpenedValue.value } : undefined,
+      };
     }
 
     close() {}
@@ -17,6 +25,7 @@ vi.mock("better-sqlite3", () => ({
 import {
   interleaveRecentProjects,
   isIgnoredRecentProjectPath,
+  listRecentProjects,
   readClaudeProjects,
 } from "../../../src/services/recent-projects.service";
 
@@ -28,7 +37,34 @@ function createTempRoot(): string {
   return tempRoot;
 }
 
+function getEditorStateDbPath(homeDir: string, appName: string): string {
+  if (process.platform === "win32") {
+    return path.join(
+      process.env.APPDATA || path.join(homeDir, "AppData", "Roaming"),
+      appName,
+      "User",
+      "globalStorage",
+      "state.vscdb"
+    );
+  }
+
+  if (process.platform === "darwin") {
+    return path.join(
+      homeDir,
+      "Library",
+      "Application Support",
+      appName,
+      "User",
+      "globalStorage",
+      "state.vscdb"
+    );
+  }
+
+  return path.join(homeDir, ".config", appName, "User", "globalStorage", "state.vscdb");
+}
+
 afterEach(() => {
+  mockRecentlyOpenedValue.value = undefined;
   for (const tempRoot of tempRoots.splice(0)) {
     rmSync(tempRoot, { recursive: true, force: true });
   }
@@ -138,6 +174,41 @@ describe("recent-projects.service", () => {
       { path: canonicalProjectA, name: "project-a", source: "claude" },
       { path: canonicalProjectB, name: "project-b", source: "claude" },
     ]);
+  });
+
+  it("reads editor workspace entries from recent projects", () => {
+    const tempRoot = createTempRoot();
+    const homeDir = path.join(tempRoot, "home");
+    const projectRoot = path.join(homeDir, "Developer", "workspace-project");
+    const workspaceConfigPath = path.join(projectRoot, "workspace.code-workspace");
+    const cursorDbPath = getEditorStateDbPath(homeDir, "Cursor");
+
+    mkdirSync(projectRoot, { recursive: true });
+    execFileSync("git", ["init"], { cwd: projectRoot });
+    writeFileSync(workspaceConfigPath, "{}");
+    mkdirSync(path.dirname(cursorDbPath), { recursive: true });
+    writeFileSync(cursorDbPath, "");
+
+    mockRecentlyOpenedValue.value = JSON.stringify({
+      entries: [
+        {
+          workspace: {
+            configPath: pathToFileURL(workspaceConfigPath).href,
+          },
+        },
+      ],
+    });
+
+    const canonicalProjectRoot = execFileSync("git", ["rev-parse", "--show-toplevel"], {
+      cwd: projectRoot,
+      encoding: "utf8",
+    }).trim();
+
+    expect(listRecentProjects({ homeDir, limit: 5 })).toContainEqual({
+      path: canonicalProjectRoot,
+      name: "workspace-project",
+      source: "cursor",
+    });
   });
 
   it("filters obvious non-project paths from onboarding discovery", () => {

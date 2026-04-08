@@ -26,6 +26,7 @@ let isQuitting = false;
 let startupInProgress = false;
 let restartAttempt = 0;
 let restartTimer: ReturnType<typeof setTimeout> | null = null;
+let pendingRestartHooks: BackendSpawnHooks | null = null;
 const expectedExitPids = new Set<number>();
 const MAX_RESTART_ATTEMPTS = 5;
 const STARTUP_TIMEOUT_MS = 30_000;
@@ -106,6 +107,15 @@ function consumeExpectedExit(child: ChildProcess): boolean {
   return child.pid != null ? expectedExitPids.delete(child.pid) : false;
 }
 
+function setProcessRef(name: RuntimeProcessName, child: ChildProcess): void {
+  if (name === "backend") {
+    backendProcess = child;
+    return;
+  }
+
+  agentServerProcess = child;
+}
+
 function clearProcessRef(name: RuntimeProcessName, child: ChildProcess): void {
   if (name === "backend" && backendProcess === child) {
     backendProcess = null;
@@ -117,30 +127,47 @@ function clearProcessRef(name: RuntimeProcessName, child: ChildProcess): void {
   }
 }
 
-function terminateManagedProcess(child: ChildProcess | null): void {
-  if (!child || child.exitCode !== null || child.signalCode !== null) return;
+function terminateManagedProcess(child: ChildProcess | null): Promise<void> {
+  if (!child || child.exitCode !== null || child.signalCode !== null) {
+    return Promise.resolve();
+  }
 
-  markExpectedExit(child);
-  child.kill("SIGTERM");
+  return new Promise((resolve) => {
+    let finished = false;
 
-  const forceTimer = setTimeout(() => {
-    if (child.exitCode === null && child.signalCode === null) {
-      child.kill("SIGKILL");
-    }
-  }, 5_000);
+    const finish = () => {
+      if (finished) return;
+      finished = true;
+      clearTimeout(forceTimer);
+      resolve();
+    };
 
-  child.once("exit", () => {
-    clearTimeout(forceTimer);
+    markExpectedExit(child);
+    child.once("exit", finish);
+    child.kill("SIGTERM");
+
+    const forceTimer = setTimeout(() => {
+      if (child.exitCode === null && child.signalCode === null) {
+        child.kill("SIGKILL");
+      }
+    }, 5_000);
   });
 }
 
-function stopRuntimeChildren(): void {
-  terminateManagedProcess(backendProcess);
-  terminateManagedProcess(agentServerProcess);
+async function stopRuntimeChildren(): Promise<void> {
+  await Promise.all([
+    terminateManagedProcess(backendProcess),
+    terminateManagedProcess(agentServerProcess),
+  ]);
 }
 
 function scheduleRestart(hooks: BackendSpawnHooks): void {
-  if (isQuitting || startupInProgress || restartTimer || restartAttempt >= MAX_RESTART_ATTEMPTS) {
+  if (isQuitting || restartTimer || restartAttempt >= MAX_RESTART_ATTEMPTS) {
+    return;
+  }
+
+  if (startupInProgress) {
+    pendingRestartHooks = hooks;
     return;
   }
 
@@ -148,12 +175,12 @@ function scheduleRestart(hooks: BackendSpawnHooks): void {
   const delay = Math.min(1000 * Math.pow(2, restartAttempt - 1), 30_000);
   console.log(`[runtime] Restart attempt ${restartAttempt} in ${delay}ms`);
 
-  stopRuntimeChildren();
-
   restartTimer = setTimeout(() => {
     restartTimer = null;
-    spawnBackend(hooks)
-      .then(({ port, authToken }) => {
+    void (async () => {
+      try {
+        await stopRuntimeChildren();
+        const { port, authToken } = await spawnBackend(hooks);
         process.env.DEUS_BACKEND_PORT = String(port);
         process.env.DEUS_AUTH_TOKEN = authToken;
 
@@ -161,10 +188,11 @@ function scheduleRestart(hooks: BackendSpawnHooks): void {
           win.webContents.send("backend:port-changed", { port });
         }
         console.log(`[runtime] Restarted on port ${port}, notified renderer`);
-      })
-      .catch((err) => {
+      } catch (err) {
         console.error("[runtime] Restart failed:", err);
-      });
+        scheduleRestart(hooks);
+      }
+    })();
   }, delay);
 }
 
@@ -194,6 +222,7 @@ async function startManagedProcess(opts: {
       },
       stdio: ["ignore", "pipe", "pipe"],
     });
+    setProcessRef(name, child);
 
     let settled = false;
     let stdoutBuffer = "";
@@ -229,7 +258,7 @@ async function startManagedProcess(opts: {
 
         hooks.onStdoutLine?.(name, trimmed);
 
-        if (!app.isPackaged) {
+        if (!hooks.onStdoutLine && !app.isPackaged) {
           console.log(`[${name}]`, trimmed);
         }
 
@@ -249,7 +278,9 @@ async function startManagedProcess(opts: {
         const trimmed = line.trim();
         if (!trimmed) continue;
         hooks.onStderrLine?.(name, trimmed);
-        console.error(`[${name}:stderr]`, trimmed);
+        if (!hooks.onStderrLine) {
+          console.error(`[${name}:stderr]`, trimmed);
+        }
       }
     });
 
@@ -257,7 +288,9 @@ async function startManagedProcess(opts: {
       const expected = consumeExpectedExit(child);
       hooks.onExit?.(name, code, signal);
       clearProcessRef(name, child);
-      console.log(`[${name}] Exited with code=${code} signal=${signal}`);
+      if (!hooks.onExit) {
+        console.log(`[${name}] Exited with code=${code} signal=${signal}`);
+      }
 
       if (!settled) {
         fail(
@@ -295,7 +328,7 @@ export async function spawnBackend(
   startupInProgress = true;
 
   try {
-    const { child: agentChild, value: agentServerUrl } = await startManagedProcess({
+    const { value: agentServerUrl } = await startManagedProcess({
       name: "agent-server",
       entry: runtime.agentServerEntry,
       cwd: runtime.agentServerCwd,
@@ -303,9 +336,8 @@ export async function spawnBackend(
       waitFor: /LISTEN_URL=(.+)/,
       hooks,
     });
-    agentServerProcess = agentChild;
 
-    const { child: backendChild, value: backendPortValue } = await startManagedProcess({
+    const { value: backendPortValue } = await startManagedProcess({
       name: "backend",
       entry: runtime.backendEntry,
       cwd: runtime.backendCwd,
@@ -319,25 +351,30 @@ export async function spawnBackend(
       waitFor: /^\[BACKEND_PORT\](\d+)$/,
       hooks,
     });
-    backendProcess = backendChild;
 
     restartAttempt = 0;
     const port = parseInt(backendPortValue, 10);
     writeBackendPortFile(port);
     return { port, authToken };
   } catch (error) {
-    stopRuntimeChildren();
+    await stopRuntimeChildren();
     throw error;
   } finally {
     startupInProgress = false;
+    if (pendingRestartHooks && !restartTimer && !isQuitting) {
+      const queuedHooks = pendingRestartHooks;
+      pendingRestartHooks = null;
+      scheduleRestart(queuedHooks);
+    }
   }
 }
 
 export function stopBackend(): void {
   isQuitting = true;
+  pendingRestartHooks = null;
   if (restartTimer) {
     clearTimeout(restartTimer);
     restartTimer = null;
   }
-  stopRuntimeChildren();
+  void stopRuntimeChildren();
 }
