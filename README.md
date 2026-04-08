@@ -23,7 +23,9 @@ Deus runs in three modes depending on your setup:
 
 ### Desktop app
 
-Download the macOS app from [GitHub Releases](https://github.com/zvadaadam/deus-machine/releases). Open it, point it at a repo, and start spinning up workspaces.
+Download the macOS app from [GitHub Releases](https://github.com/zvadaadam/deus-machine/releases). Open the DMG, drag `Deus.app` into `Applications`, then launch it from `Applications`.
+
+If Deus detects that it is running from a disk image, Downloads, or another transient location, it will ask to move itself into `Applications` before continuing.
 
 ### Headless server (CLI)
 

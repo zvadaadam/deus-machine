@@ -124,82 +124,16 @@ if (remoteEnabled === true) {
 
 // Connect to agent-server.
 //
-// Two bootstrap paths:
-// 1. AGENT_SERVER_URL is set (dev.sh): agent-server already running, connect directly.
-// 2. AGENT_SERVER_BUNDLE_PATH is set (Electron): spawn agent-server as child process,
-//    parse LISTEN_URL from its stdout, then connect.
+// Launchers (Electron main, CLI, dev.sh) own the runtime topology and always
+// provide AGENT_SERVER_URL. The backend only connects.
 const agentServerUrl = process.env.AGENT_SERVER_URL;
-const agentServerBundlePath = process.env.AGENT_SERVER_BUNDLE_PATH;
 
 if (agentServerUrl) {
-  // Path 1: Direct connection (dev.sh spawned the agent-server externally)
   agentService.init(agentServerUrl);
-} else if (agentServerBundlePath) {
-  // Path 2: Spawn agent-server and connect (Electron desktop mode)
-  void spawnAgentServerAndConnect(agentServerBundlePath);
-}
-
-// Track agent-server child process for cleanup on shutdown
-let agentServerChild: import("child_process").ChildProcess | null = null;
-
-function killAgentServer(): void {
-  if (agentServerChild && !agentServerChild.killed) {
-    agentServerChild.kill("SIGTERM");
-    agentServerChild = null;
-  }
-}
-
-/** Spawn the agent-server bundle as a child process and connect to its WebSocket. */
-async function spawnAgentServerAndConnect(bundlePath: string): Promise<void> {
-  const { spawn } = await import("child_process");
-  const fs = await import("fs");
-
-  if (!fs.existsSync(bundlePath)) {
-    console.error(`[server] Agent-server bundle not found: ${bundlePath}`);
-    return;
-  }
-
-  agentServerChild = spawn(process.execPath, [bundlePath], {
-    stdio: ["ignore", "pipe", "pipe"],
-    env: {
-      ...process.env,
-      // Forward database path so agent-server can pass it to agents
-      DATABASE_PATH: process.env.DATABASE_PATH,
-    },
-  });
-
-  const agentServer = agentServerChild!;
-  let stdoutBuffer = "";
-
-  agentServer.stdout?.on("data", (data: Buffer) => {
-    stdoutBuffer += data.toString();
-    const lines = stdoutBuffer.split("\n");
-    stdoutBuffer = lines.pop() ?? "";
-
-    for (const line of lines) {
-      const trimmed = line.trim();
-      if (!trimmed) continue;
-      console.log("[agent-server]", trimmed);
-
-      // Capture the LISTEN_URL and connect
-      if (trimmed.startsWith("LISTEN_URL=")) {
-        const url = trimmed.slice("LISTEN_URL=".length);
-        console.log(`[server] Agent-server spawned and listening at ${url}`);
-        agentService.init(url);
-      }
-    }
-  });
-
-  agentServer.stderr?.on("data", (data: Buffer) => {
-    for (const line of data.toString().split("\n")) {
-      if (line.trim()) console.error("[agent-server:stderr]", line.trim());
-    }
-  });
-
-  agentServer.on("exit", (code, signal) => {
-    console.log(`[agent-server] Exited with code=${code} signal=${signal}`);
-    agentServerChild = null;
-  });
+} else {
+  console.warn(
+    "[server] AGENT_SERVER_URL is not set; agent features will remain disconnected until a launcher provides one"
+  );
 }
 
 // Global error handlers
@@ -209,7 +143,6 @@ process.on("uncaughtException", (error, origin) => {
   Sentry.close(2000).finally(() => {
     destroyAllPtySessions();
     destroyAllWatchers();
-    killAgentServer();
     try {
       closeDatabase();
     } catch {}
@@ -229,7 +162,6 @@ function shutdown() {
   agentService.shutdown();
   destroyAllPtySessions();
   destroyAllWatchers();
-  killAgentServer();
   disconnectFromRelay();
   closeAllWsConnections();
   closeDatabase();

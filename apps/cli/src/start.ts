@@ -15,8 +15,13 @@ import { spawn, execSync, type ChildProcess } from "node:child_process";
 import { existsSync } from "node:fs";
 import { join, resolve, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
-import { platform, homedir } from "node:os";
+import { homedir } from "node:os";
 import { mkdirSync } from "node:fs";
+import {
+  DEUS_DB_FILENAME,
+  resolveDefaultDataDir,
+  resolveRuntimeStagePaths,
+} from "../../../shared/runtime";
 import {
   spinner as createSpinner,
   statusLine,
@@ -262,11 +267,16 @@ function resolveBundlePaths(): {
 
   // Dev mode (monorepo)
   const monorepoRoot = resolve(cliRoot, "../..");
-  const agentServer = join(monorepoRoot, "apps/agent-server/dist/index.bundled.cjs");
-  const backend = join(monorepoRoot, "apps/backend/dist/server.bundled.cjs");
+  const runtimePaths = resolveRuntimeStagePaths(monorepoRoot);
 
-  if (existsSync(agentServer) && existsSync(backend)) {
-    return { agentServer, backend };
+  if (
+    existsSync(runtimePaths.common.agentServerBundle) &&
+    existsSync(runtimePaths.common.backendBundle)
+  ) {
+    return {
+      agentServer: runtimePaths.common.agentServerBundle,
+      backend: runtimePaths.common.backendBundle,
+    };
   }
 
   return null;
@@ -275,24 +285,17 @@ function resolveBundlePaths(): {
 // ── Data directory ───────────────────────────────────────────────────
 
 function resolveDataDir(customDir?: string): string {
-  if (customDir) {
-    mkdirSync(customDir, { recursive: true });
-    return join(customDir, "deus.db");
-  }
-
-  const os = platform();
-  let dir: string;
-
-  if (os === "darwin") {
-    dir = join(homedir(), "Library/Application Support/com.deus.app");
-  } else if (os === "win32") {
-    dir = join(process.env.APPDATA || join(homedir(), "AppData/Roaming"), "com.deus.app");
-  } else {
-    dir = join(process.env.XDG_DATA_HOME || join(homedir(), ".local/share"), "deus");
-  }
+  const dir =
+    customDir ??
+    resolveDefaultDataDir({
+      platform: process.platform,
+      homeDir: homedir(),
+      appData: process.env.APPDATA,
+      xdgDataHome: process.env.XDG_DATA_HOME,
+    });
 
   mkdirSync(dir, { recursive: true });
-  return join(dir, "deus.db");
+  return join(dir, DEUS_DB_FILENAME);
 }
 
 // ── Node binary resolution ───────────────────────────────────────────

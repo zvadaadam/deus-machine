@@ -4,6 +4,7 @@ directories:
   buildResources: resources
   output: dist-electron
 electronLanguages: [en]
+beforePack: "apps/runtime/electron-builder-before-pack.cjs"
 files:
   - "out/**/*"
   - "resources/**/*"
@@ -13,11 +14,11 @@ asarUnpack:
   - "node_modules/better-sqlite3/**"
   - "node_modules/node-pty/**"
 extraResources:
-  - from: "apps/backend/dist"
+  - from: "dist/runtime/electron/backend"
     to: "backend"
     filter:
       - "**/*"
-  - from: "apps/agent-server/dist/index.bundled.cjs"
+  - from: "dist/runtime/electron/bin/index.bundled.cjs"
     to: "bin/index.bundled.cjs"
 mac:
   category: public.app-category.developer-tools

@@ -318,7 +318,7 @@ async function installForPlatform(
 
         if (existsSync(appPath)) {
           execSync(`rm -rf "${destPath}"`, { stdio: "pipe" });
-          execSync(`cp -R "${appPath}" "${destPath}"`, { stdio: "pipe" });
+          execSync(`ditto "${appPath}" "${destPath}"`, { stdio: "pipe" });
           s.succeed(`Installed to ${c.dim("/Applications/Deus.app")}`);
 
           launchDesktop(destPath);
@@ -330,6 +330,7 @@ async function installForPlatform(
       } catch {
         s.fail("Auto-install failed — opening DMG manually");
         execSync(`open "${filePath}"`);
+        hint("Drag Deus.app to Applications, then launch it from Applications.");
         return false;
       } finally {
         if (mountPoint) {

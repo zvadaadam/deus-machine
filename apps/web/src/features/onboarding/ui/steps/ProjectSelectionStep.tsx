@@ -1,4 +1,5 @@
 import { useState, useCallback } from "react";
+import { toast } from "sonner";
 import { Loader2, FolderOpen } from "lucide-react";
 import { useRecentProjects } from "../../api";
 import { useAddRepo } from "@/features/repository/api";
@@ -35,7 +36,21 @@ export function ProjectSelectionStep({ onBack, onNext }: ProjectSelectionStepPro
     if (selectedPaths.size === 0) return;
     setImporting(true);
     try {
-      await Promise.allSettled([...selectedPaths].map((p) => addRepoMutation.mutateAsync(p)));
+      const results = await Promise.allSettled(
+        [...selectedPaths].map((projectPath) => addRepoMutation.mutateAsync(projectPath))
+      );
+      const succeeded = results.filter((result) => result.status === "fulfilled").length;
+      const failed = results.length - succeeded;
+
+      if (succeeded === 0) {
+        toast.error("Couldn’t add any of the selected projects.");
+        return;
+      }
+
+      if (failed > 0) {
+        toast.error(`Added ${succeeded} project${succeeded > 1 ? "s" : ""}, but ${failed} failed.`);
+      }
+
       onNext();
     } finally {
       setImporting(false);
@@ -50,7 +65,7 @@ export function ProjectSelectionStep({ onBack, onNext }: ProjectSelectionStepPro
       await addRepoMutation.mutateAsync(folderPath);
       onNext();
     } catch {
-      // Dialog cancelled or failed
+      toast.error("Couldn’t add that folder. Make sure it’s a git repository.");
     } finally {
       setImporting(false);
     }

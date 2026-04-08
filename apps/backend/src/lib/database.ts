@@ -2,12 +2,15 @@ import Database from "better-sqlite3";
 import path from "path";
 import fs from "fs";
 import os from "os";
+import { resolveDefaultDatabasePath } from "../../../../shared/runtime";
 import { SCHEMA_SQL, MIGRATIONS } from "@shared/schema";
 
-const DEFAULT_DB_PATH = path.join(
-  process.env.HOME || os.homedir(),
-  "Library/Application Support/com.deus.app/deus.db"
-);
+const DEFAULT_DB_PATH = resolveDefaultDatabasePath({
+  platform: process.platform,
+  homeDir: process.env.HOME || os.homedir(),
+  appData: process.env.APPDATA,
+  xdgDataHome: process.env.XDG_DATA_HOME,
+});
 
 const DB_PATH = process.env.DATABASE_PATH || DEFAULT_DB_PATH;
 
