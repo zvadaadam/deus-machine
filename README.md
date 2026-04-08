@@ -21,11 +21,13 @@
 
 Deus runs in three modes depending on your setup:
 
-### Desktop app
+### Desktop app (macOS)
 
 Download the macOS app from [GitHub Releases](https://github.com/zvadaadam/deus-machine/releases). Open the DMG, drag `Deus.app` into `Applications`, then launch it from `Applications`.
 
 If Deus detects that it is running from a disk image, Downloads, or another transient location, it will ask to move itself into `Applications` before continuing.
+
+Linux and Windows users: download the desktop package for your platform from the same Releases page.
 
 ### Headless server (CLI)
 

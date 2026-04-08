@@ -10,7 +10,8 @@ import {
   type Dirent,
 } from "node:fs";
 import { homedir } from "node:os";
-import { basename, join } from "node:path";
+import { fileURLToPath } from "node:url";
+import { basename, dirname, join } from "node:path";
 import type { RecentProject } from "@shared/types/onboarding";
 
 export const RECENT_PROJECT_LIMIT = 100;
@@ -70,11 +71,9 @@ function isAbsoluteNormalizedPath(normalizedPath: string): boolean {
 
 function parseFileUriPath(uri: string): string | null {
   try {
-    let fsPath = decodeURIComponent(new URL(uri).pathname);
-    if (process.platform === "win32" && /^\/[A-Za-z]:\//.test(fsPath)) {
-      fsPath = fsPath.slice(1);
-    }
-    return fsPath;
+    const parsed = new URL(uri);
+    const isUncPath = parsed.host !== "" && parsed.host !== "localhost";
+    return fileURLToPath(parsed, isUncPath ? { windows: true } : undefined);
   } catch {
     return null;
   }
@@ -172,16 +171,37 @@ function readVscdbProjects(
 
     const seenPaths = new Set<string>();
     const projects: RecentProject[] = [];
-    const data = JSON.parse(row.value) as { entries?: Array<{ folderUri?: string }> };
+    const data = JSON.parse(row.value) as {
+      entries?: Array<{ folderUri?: string; workspace?: { configPath?: string } }>;
+    };
 
     for (const entry of data.entries ?? []) {
-      const uri = entry.folderUri;
-      if (!uri || !uri.startsWith("file://")) continue;
+      const folderUri = entry.folderUri;
+      if (folderUri && folderUri.startsWith("file://")) {
+        const fsPath = parseFileUriPath(folderUri);
+        if (fsPath) {
+          pushProject(
+            projects,
+            seenPaths,
+            { path: fsPath, name: basename(fsPath), source },
+            options
+          );
+        }
+      }
 
-      const fsPath = parseFileUriPath(uri);
-      if (!fsPath) continue;
+      const workspaceUri = entry.workspace?.configPath;
+      if (!workspaceUri || !workspaceUri.startsWith("file://")) continue;
 
-      pushProject(projects, seenPaths, { path: fsPath, name: basename(fsPath), source }, options);
+      const workspaceConfigPath = parseFileUriPath(workspaceUri);
+      if (!workspaceConfigPath) continue;
+
+      const workspaceRoot = dirname(workspaceConfigPath);
+      pushProject(
+        projects,
+        seenPaths,
+        { path: workspaceRoot, name: basename(workspaceRoot), source },
+        options
+      );
     }
 
     return projects;
