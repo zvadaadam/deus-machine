@@ -79,6 +79,32 @@ export function launchDesktop(appPath: string): void {
   }
 }
 
+function replaceInstalledMacApp(appPath: string, destPath: string): void {
+  const stagedPath = `${destPath}.staged`;
+  const backupPath = `${destPath}.backup`;
+  const hadExistingInstall = existsSync(destPath);
+
+  execSync(`rm -rf "${stagedPath}" "${backupPath}"`, { stdio: "pipe" });
+  execSync(`ditto "${appPath}" "${stagedPath}"`, { stdio: "pipe" });
+
+  if (hadExistingInstall) {
+    execSync(`mv "${destPath}" "${backupPath}"`, { stdio: "pipe" });
+  }
+
+  try {
+    execSync(`mv "${stagedPath}" "${destPath}"`, { stdio: "pipe" });
+    if (hadExistingInstall) {
+      execSync(`rm -rf "${backupPath}"`, { stdio: "pipe" });
+    }
+  } catch (error) {
+    execSync(`rm -rf "${stagedPath}"`, { stdio: "pipe" });
+    if (hadExistingInstall && existsSync(backupPath) && !existsSync(destPath)) {
+      execSync(`mv "${backupPath}" "${destPath}"`, { stdio: "pipe" });
+    }
+    throw error;
+  }
+}
+
 export async function installDesktop(options: DesktopOptions): Promise<void> {
   const { version } = options;
   const os = platform();
@@ -317,8 +343,7 @@ async function installForPlatform(
         const destPath = `/Applications/${appName}`;
 
         if (existsSync(appPath)) {
-          execSync(`rm -rf "${destPath}"`, { stdio: "pipe" });
-          execSync(`ditto "${appPath}" "${destPath}"`, { stdio: "pipe" });
+          replaceInstalledMacApp(appPath, destPath);
           s.succeed(`Installed to ${c.dim("/Applications/Deus.app")}`);
 
           launchDesktop(destPath);

@@ -22,6 +22,7 @@ import {
   resolveDefaultDataDir,
   resolveRuntimeStagePaths,
 } from "../../../shared/runtime";
+import { validateRuntimeStage } from "../../runtime/validate";
 import {
   spinner as createSpinner,
   statusLine,
@@ -269,14 +270,16 @@ function resolveBundlePaths(): {
   const monorepoRoot = resolve(cliRoot, "../..");
   const runtimePaths = resolveRuntimeStagePaths(monorepoRoot);
 
-  if (
-    existsSync(runtimePaths.common.agentServerBundle) &&
-    existsSync(runtimePaths.common.backendBundle)
-  ) {
+  try {
+    validateRuntimeStage({ projectRoot: monorepoRoot, log: () => {} });
     return {
       agentServer: runtimePaths.common.agentServerBundle,
       backend: runtimePaths.common.backendBundle,
     };
+  } catch (error) {
+    warn(
+      `Staged runtime is missing or stale in monorepo mode: ${error instanceof Error ? error.message : String(error)}`
+    );
   }
 
   return null;
