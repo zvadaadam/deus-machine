@@ -14,7 +14,7 @@ import { basename, join } from "node:path";
 import type { RecentProject } from "@shared/types/onboarding";
 
 export const RECENT_PROJECT_LIMIT = 100;
-const CLAUDE_JSONL_PREFIX_BYTES = 16 * 1024;
+const CLAUDE_JSONL_SCAN_BYTES = 16 * 1024;
 const GIT_ROOT_TIMEOUT_MS = 1500;
 const IGNORED_PATH_SEGMENTS = [
   "/.deus/",
@@ -41,8 +41,69 @@ interface ListRecentProjectsOptions extends ReaderOptions {
   };
 }
 
+interface JsonlSuffixRead {
+  contents: string;
+  truncated: boolean;
+}
+
+interface ClaudeSessionFile {
+  path: string;
+  mtimeMs: number;
+}
+
+interface ResolvedClaudeProject {
+  path: string;
+  activityMtimeMs: number;
+}
+
 function normalizePathForMatching(fsPath: string): string {
   return fsPath.replace(/\\/g, "/");
+}
+
+function isAbsoluteNormalizedPath(normalizedPath: string): boolean {
+  return (
+    normalizedPath.startsWith("/") ||
+    normalizedPath.startsWith("//") ||
+    /^[A-Za-z]:\//.test(normalizedPath)
+  );
+}
+
+function parseFileUriPath(uri: string): string | null {
+  try {
+    let fsPath = decodeURIComponent(new URL(uri).pathname);
+    if (process.platform === "win32" && /^\/[A-Za-z]:\//.test(fsPath)) {
+      fsPath = fsPath.slice(1);
+    }
+    return fsPath;
+  } catch {
+    return null;
+  }
+}
+
+function getEditorStateDbPath(appName: string, homeDir: string): string {
+  if (process.platform === "win32") {
+    return join(
+      process.env.APPDATA || join(homeDir, "AppData", "Roaming"),
+      appName,
+      "User",
+      "globalStorage",
+      "state.vscdb"
+    );
+  }
+
+  if (process.platform === "darwin") {
+    return join(
+      homeDir,
+      "Library",
+      "Application Support",
+      appName,
+      "User",
+      "globalStorage",
+      "state.vscdb"
+    );
+  }
+
+  return join(homeDir, ".config", appName, "User", "globalStorage", "state.vscdb");
 }
 
 export function isIgnoredRecentProjectPath(fsPath: string, options: ReaderOptions = {}): boolean {
@@ -51,7 +112,7 @@ export function isIgnoredRecentProjectPath(fsPath: string, options: ReaderOption
   const normalizedPath = normalizePathForMatching(fsPath);
   const normalizedHome = normalizePathForMatching(options.homeDir ?? homedir());
 
-  if (!normalizedPath.startsWith("/")) return true;
+  if (!isAbsoluteNormalizedPath(normalizedPath)) return true;
   if (normalizedPath === "/" || normalizedPath === normalizedHome) return true;
   if (normalizedPath.endsWith(".app")) return true;
 
@@ -117,7 +178,9 @@ function readVscdbProjects(
       const uri = entry.folderUri;
       if (!uri || !uri.startsWith("file://")) continue;
 
-      const fsPath = decodeURIComponent(uri.replace("file://", ""));
+      const fsPath = parseFileUriPath(uri);
+      if (!fsPath) continue;
+
       pushProject(projects, seenPaths, { path: fsPath, name: basename(fsPath), source }, options);
     }
 
@@ -137,12 +200,18 @@ function sortDirentsByMtime(dirents: Dirent[], parentDir: string): Dirent[] {
   });
 }
 
-function readJsonlPrefix(filePath: string, maxBytes = CLAUDE_JSONL_PREFIX_BYTES): string {
+function readJsonlSuffix(filePath: string, maxBytes = CLAUDE_JSONL_SCAN_BYTES): JsonlSuffixRead {
+  const fileSize = statSync(filePath).size;
+  const start = Math.max(0, fileSize - maxBytes);
   const fileDescriptor = openSync(filePath, "r");
+
   try {
     const buffer = Buffer.alloc(maxBytes);
-    const bytesRead = readSync(fileDescriptor, buffer, 0, maxBytes, 0);
-    return buffer.subarray(0, bytesRead).toString("utf8");
+    const bytesRead = readSync(fileDescriptor, buffer, 0, maxBytes, start);
+    return {
+      contents: buffer.subarray(0, bytesRead).toString("utf8"),
+      truncated: start > 0,
+    };
   } finally {
     closeSync(fileDescriptor);
   }
@@ -150,63 +219,21 @@ function readJsonlPrefix(filePath: string, maxBytes = CLAUDE_JSONL_PREFIX_BYTES)
 
 function extractClaudeCwdFromJsonl(filePath: string): string | null {
   try {
-    const match = readJsonlPrefix(filePath).match(/"cwd":"((?:[^"\\]|\\.)+)"/);
-    return match ? JSON.parse(`"${match[1]}"`) : null;
-  } catch {
-    return null;
-  }
-}
+    const { contents, truncated } = readJsonlSuffix(filePath);
+    const lines = contents.split("\n").filter(Boolean);
 
-function getClaudeSessionJsonlFiles(sessionDir: string): string[] {
-  const directEntries = sortDirentsByMtime(
-    readdirSync(sessionDir, { withFileTypes: true }),
-    sessionDir
-  );
-  const files: string[] = [];
-
-  for (const entry of directEntries) {
-    if (entry.isFile() && entry.name.endsWith(".jsonl")) {
-      files.push(join(sessionDir, entry.name));
+    if (truncated && lines.length > 0) {
+      lines.shift();
     }
-  }
 
-  const subagentsDir = join(sessionDir, "subagents");
-  if (existsSync(subagentsDir)) {
-    const subagentEntries = sortDirentsByMtime(
-      readdirSync(subagentsDir, { withFileTypes: true }).filter((entry) => entry.isFile()),
-      subagentsDir
-    );
-
-    for (const entry of subagentEntries) {
-      if (entry.name.endsWith(".jsonl")) {
-        files.push(join(subagentsDir, entry.name));
-      }
-    }
-  }
-
-  return files;
-}
-
-export function resolveClaudeProjectPath(
-  projectDir: string,
-  options: ReaderOptions = {}
-): string | null {
-  if (!existsSync(projectDir)) return null;
-
-  try {
-    const sessionDirs = sortDirentsByMtime(
-      readdirSync(projectDir, { withFileTypes: true }).filter((entry) => entry.isDirectory()),
-      projectDir
-    );
-
-    for (const sessionDir of sessionDirs) {
-      const fullSessionDir = join(projectDir, sessionDir.name);
-      for (const jsonlFile of getClaudeSessionJsonlFiles(fullSessionDir)) {
-        const cwd = extractClaudeCwdFromJsonl(jsonlFile);
-        if (!cwd) continue;
-        if (isIgnoredRecentProjectPath(cwd, options)) continue;
-        if (!existsSync(cwd)) continue;
-        return cwd;
+    for (const line of lines.reverse()) {
+      try {
+        const record = JSON.parse(line) as { cwd?: string };
+        if (typeof record.cwd === "string" && record.cwd.length > 0) {
+          return record.cwd;
+        }
+      } catch {
+        // Ignore partial or malformed lines
       }
     }
   } catch {
@@ -214,6 +241,63 @@ export function resolveClaudeProjectPath(
   }
 
   return null;
+}
+
+function getClaudeSessionJsonlFiles(sessionDir: string): ClaudeSessionFile[] {
+  const files: ClaudeSessionFile[] = [];
+  const candidateDirs = [sessionDir, join(sessionDir, "subagents")];
+
+  for (const candidateDir of candidateDirs) {
+    if (!existsSync(candidateDir)) continue;
+
+    for (const entry of readdirSync(candidateDir, { withFileTypes: true })) {
+      if (!entry.isFile() || !entry.name.endsWith(".jsonl")) continue;
+
+      const filePath = join(candidateDir, entry.name);
+      files.push({ path: filePath, mtimeMs: statSync(filePath).mtimeMs });
+    }
+  }
+
+  return files.sort((left, right) => right.mtimeMs - left.mtimeMs);
+}
+
+function resolveClaudeProject(
+  projectDir: string,
+  options: ReaderOptions = {}
+): ResolvedClaudeProject | null {
+  if (!existsSync(projectDir)) return null;
+
+  try {
+    const sessionEntries = readdirSync(projectDir, { withFileTypes: true }).filter((entry) =>
+      entry.isDirectory()
+    );
+    const jsonlFiles = sessionEntries
+      .flatMap((entry) => getClaudeSessionJsonlFiles(join(projectDir, entry.name)))
+      .sort((left, right) => right.mtimeMs - left.mtimeMs);
+
+    for (const jsonlFile of jsonlFiles) {
+      const cwd = extractClaudeCwdFromJsonl(jsonlFile.path);
+      if (!cwd) continue;
+      if (isIgnoredRecentProjectPath(cwd, options)) continue;
+      if (!existsSync(cwd)) continue;
+
+      return {
+        path: cwd,
+        activityMtimeMs: jsonlFile.mtimeMs,
+      };
+    }
+  } catch {
+    return null;
+  }
+
+  return null;
+}
+
+export function resolveClaudeProjectPath(
+  projectDir: string,
+  options: ReaderOptions = {}
+): string | null {
+  return resolveClaudeProject(projectDir, options)?.path ?? null;
 }
 
 export function readClaudeProjects(dir: string, options: ReaderOptions = {}): RecentProject[] {
@@ -227,15 +311,16 @@ export function readClaudeProjects(dir: string, options: ReaderOptions = {}): Re
       readdirSync(dir, { withFileTypes: true }).filter((entry) => entry.isDirectory()),
       dir
     );
+    const resolvedProjects = entries
+      .map((entry) => resolveClaudeProject(join(dir, entry.name), options))
+      .filter((project): project is ResolvedClaudeProject => project !== null)
+      .sort((left, right) => right.activityMtimeMs - left.activityMtimeMs);
 
-    for (const entry of entries) {
-      const projectPath = resolveClaudeProjectPath(join(dir, entry.name), options);
-      if (!projectPath) continue;
-
+    for (const project of resolvedProjects) {
       pushProject(
         projects,
         seenPaths,
-        { path: projectPath, name: basename(projectPath), source: "claude" },
+        { path: project.path, name: basename(project.path), source: "claude" },
         options
       );
     }
@@ -278,19 +363,11 @@ export function listRecentProjects(options: ListRecentProjectsOptions = {}): Rec
 
   const cursorProjects =
     options.readers?.cursor?.() ??
-    readVscdbProjects(
-      join(homeDir, "Library/Application Support/Cursor/User/globalStorage/state.vscdb"),
-      "cursor",
-      readerOptions
-    );
+    readVscdbProjects(getEditorStateDbPath("Cursor", homeDir), "cursor", readerOptions);
 
   const vscodeProjects =
     options.readers?.vscode?.() ??
-    readVscdbProjects(
-      join(homeDir, "Library/Application Support/Code/User/globalStorage/state.vscdb"),
-      "vscode",
-      readerOptions
-    );
+    readVscdbProjects(getEditorStateDbPath("Code", homeDir), "vscode", readerOptions);
 
   const claudeProjects =
     options.readers?.claude?.() ??

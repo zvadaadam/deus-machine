@@ -92,6 +92,16 @@ export function getServerPort() {
 
 // Start server with dynamic port allocation
 const PORT = process.env.PORT ? parseInt(process.env.PORT) : 0;
+const agentServerUrl = process.env.AGENT_SERVER_URL;
+const allowAgentless =
+  process.env.AGENT_ALLOW_AGENTLESS === "1" || process.env.AGENT_ALLOW_AGENTLESS === "true";
+
+if (!agentServerUrl && !allowAgentless) {
+  console.error(
+    "[server] AGENT_SERVER_URL is required. Launch the backend through Electron, the CLI, or dev.sh. To debug without an agent-server, set AGENT_ALLOW_AGENTLESS=true explicitly."
+  );
+  process.exit(1);
+}
 
 // Bind 0.0.0.0 to accept connections from all interfaces.
 // Remote access is gated by remoteGateMiddleware (rejects non-localhost when disabled).
@@ -126,14 +136,10 @@ if (remoteEnabled === true) {
 //
 // Launchers (Electron main, CLI, dev.sh) own the runtime topology and always
 // provide AGENT_SERVER_URL. The backend only connects.
-const agentServerUrl = process.env.AGENT_SERVER_URL;
-
 if (agentServerUrl) {
   agentService.init(agentServerUrl);
 } else {
-  console.warn(
-    "[server] AGENT_SERVER_URL is not set; agent features will remain disconnected until a launcher provides one"
-  );
+  console.warn("[server] Starting in explicit agentless mode (AGENT_ALLOW_AGENTLESS=true)");
 }
 
 // Global error handlers

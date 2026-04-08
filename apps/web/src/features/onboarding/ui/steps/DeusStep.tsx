@@ -9,11 +9,18 @@ import { WorkspaceService } from "@/features/workspace/api/workspace.service";
 import { queryClient } from "@/shared/api/queryClient";
 import { queryKeys } from "@/shared/api/queryKeys";
 import { useCompleteOnboarding } from "../../api";
-import { classifyCloneConflict } from "../../lib/deus-import";
+import { classifyCloneConflict, isMatchingGitHubRepo } from "../../lib/deus-import";
 
 interface DeusStepProps {
   onBack: () => void;
   onComplete: () => void;
+}
+
+interface InspectedRepository {
+  root_path: string;
+  name: string;
+  git_default_branch: string;
+  git_origin_url?: string | null;
 }
 
 const REPO = {
@@ -26,6 +33,26 @@ const REPO = {
 
 function getNonGitTargetMessage(targetPath: string): string {
   return `${targetPath} already exists, but it isn't a git repository. Remove it or add the repo manually.`;
+}
+
+function getUnexpectedRepoMessage(targetPath: string): string {
+  return `${targetPath} already contains a different repository. Remove it or add Deus manually from the sidebar.`;
+}
+
+async function inspectRepository(rootPath: string): Promise<InspectedRepository> {
+  const baseUrl = await getBackendUrl();
+  const res = await fetch(`${baseUrl}/api/repos/inspect`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ root_path: rootPath }),
+  });
+
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({ error: "Inspect failed" }));
+    throw new Error(err.error || `HTTP ${res.status}`);
+  }
+
+  return (await res.json()) as InspectedRepository;
 }
 
 async function resolveExistingRepoId(targetPath: string): Promise<string | null> {
@@ -52,6 +79,8 @@ async function cloneAndRegisterInBackground() {
     const target = `${home}/Developer/${REPO.name}`;
 
     let alreadyCloned = false;
+    let repoRoot = target;
+
     try {
       const baseUrl = await getBackendUrl();
       const res = await fetch(`${baseUrl}/api/repos/clone`, {
@@ -68,7 +97,19 @@ async function cloneAndRegisterInBackground() {
       const conflictKind = classifyCloneConflict(message);
 
       if (conflictKind === "already_cloned") {
-        alreadyCloned = true;
+        try {
+          const inspectedRepo = await inspectRepository(target);
+          if (!isMatchingGitHubRepo(inspectedRepo.git_origin_url, REPO.url)) {
+            toast.error(getUnexpectedRepoMessage(target));
+            return;
+          }
+          repoRoot = inspectedRepo.root_path;
+          alreadyCloned = true;
+        } catch (inspectError) {
+          console.error("[Deus] Inspect failed:", inspectError);
+          toast.error("Deus is already there, but we couldn’t verify the repository.");
+          return;
+        }
       } else if (conflictKind === "non_git_target") {
         toast.error(getNonGitTargetMessage(target));
         return;
@@ -81,21 +122,21 @@ async function cloneAndRegisterInBackground() {
 
     let repoId: string | null = null;
     try {
-      const repo = await RepoService.add(target);
+      const repo = await RepoService.add(repoRoot);
       repoId = repo.id;
     } catch (err) {
       const message = getErrorMessage(err);
       const conflictKind = classifyCloneConflict(message);
 
       if (conflictKind === "non_git_target") {
-        toast.error(getNonGitTargetMessage(target));
+        toast.error(getNonGitTargetMessage(repoRoot));
         return;
       }
 
       if (conflictKind === "already_cloned") {
-        repoId = await resolveExistingRepoId(target);
+        repoId = await resolveExistingRepoId(repoRoot);
         if (!repoId) {
-          console.warn("[Deus] Repo already existed but no matching repo ID was found:", target);
+          console.warn("[Deus] Repo already existed but no matching repo ID was found:", repoRoot);
         }
       } else {
         console.error("[Deus] Register failed:", err);

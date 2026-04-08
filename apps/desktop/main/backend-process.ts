@@ -75,9 +75,10 @@ function relayWorkspaceProgress(line: string): void {
   const jsonStr = line.slice("DEUS_WORKSPACE_PROGRESS:".length);
   try {
     const payload = JSON.parse(jsonStr);
-    const win = BrowserWindow.getAllWindows()[0];
-    if (win) {
-      win.webContents.send("workspace:progress", payload);
+    for (const win of BrowserWindow.getAllWindows()) {
+      if (!win.isDestroyed()) {
+        win.webContents.send("workspace:progress", payload);
+      }
     }
   } catch {
     // Ignore malformed progress lines
