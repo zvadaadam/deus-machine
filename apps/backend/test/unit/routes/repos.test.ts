@@ -1,5 +1,6 @@
 import { vi, describe, it, expect, beforeEach } from "vitest";
 import { Hono } from "hono";
+import os from "os";
 import { errorHandler } from "../../../src/middleware/error-handler";
 
 const mockStmt = {
@@ -31,16 +32,25 @@ vi.mock("child_process", () => ({
   execFile: vi.fn(),
 }));
 
+const { mockFsExistsSync, mockFsMkdirSync } = vi.hoisted(() => ({
+  mockFsExistsSync: vi.fn(() => false),
+  mockFsMkdirSync: vi.fn(),
+}));
+
 vi.mock("fs", () => ({
   default: {
     realpathSync: vi.fn((p: string) => p),
     accessSync: vi.fn(),
     statSync: vi.fn(() => ({ isDirectory: () => true })),
+    existsSync: mockFsExistsSync,
+    mkdirSync: mockFsMkdirSync,
     constants: { R_OK: 4, X_OK: 1 },
   },
   realpathSync: vi.fn((p: string) => p),
   accessSync: vi.fn(),
   statSync: vi.fn(() => ({ isDirectory: () => true })),
+  existsSync: mockFsExistsSync,
+  mkdirSync: mockFsMkdirSync,
   constants: { R_OK: 4, X_OK: 1 },
 }));
 
@@ -64,6 +74,7 @@ beforeEach(() => {
   vi.clearAllMocks();
   mockDb.prepare.mockReturnValue(mockStmt);
   mockDb.transaction.mockImplementation((fn: Function) => fn);
+  mockFsExistsSync.mockReturnValue(false);
 });
 
 describe("GET /repos", () => {
@@ -158,5 +169,41 @@ describe("POST /repos", () => {
     });
 
     expect(detectDefaultBranch).toHaveBeenCalledWith("/path/to/repo");
+  });
+});
+
+describe("POST /repos/clone", () => {
+  it("returns a specific error when the target exists but is not a git repo", async () => {
+    const targetPath = `${os.homedir()}/deus`;
+    mockFsExistsSync.mockImplementation((target: string) => target === targetPath);
+
+    const res = await app.request("/repos/clone", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ url: "https://github.com/example/deus", targetPath }),
+    });
+
+    expect(res.status).toBe(409);
+    await expect(res.json()).resolves.toMatchObject({
+      error: "Target directory already exists and is not a git repository",
+    });
+  });
+
+  it("returns an already-cloned error when the target already has .git", async () => {
+    const targetPath = `${os.homedir()}/deus`;
+    mockFsExistsSync.mockImplementation(
+      (target: string) => target === targetPath || target === `${targetPath}/.git`
+    );
+
+    const res = await app.request("/repos/clone", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ url: "https://github.com/example/deus", targetPath }),
+    });
+
+    expect(res.status).toBe(409);
+    await expect(res.json()).resolves.toMatchObject({
+      error: "Target already contains a git repository",
+    });
   });
 });

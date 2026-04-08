@@ -39,6 +39,11 @@
     "build": "bunx tsx build.ts"
   },
   "dependencies": {
+    "@napi-rs/canvas": "^0.1.97",
+    "@openai/codex": "^0.101.0",
+    "@openai/codex-sdk": "^0.101.0",
+    "@sentry/node": "^10.40.0",
+    "agent-browser": "^0.21.4",
     "better-sqlite3": "^12.4.1",
     "node-pty": "^1.0.0",
     "ws": "^8.19.0"

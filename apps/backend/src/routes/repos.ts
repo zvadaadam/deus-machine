@@ -175,7 +175,12 @@ app.post("/repos/clone", async (c) => {
 
   // Check target doesn't already exist
   if (fs.existsSync(resolvedPath)) {
-    throw new ConflictError("Target directory already exists");
+    const gitMetadataPath = path.join(resolvedPath, ".git");
+    if (fs.existsSync(gitMetadataPath)) {
+      throw new ConflictError("Target already contains a git repository");
+    }
+
+    throw new ConflictError("Target directory already exists and is not a git repository");
   }
 
   // Run git clone with progress, forward raw stderr lines to frontend
