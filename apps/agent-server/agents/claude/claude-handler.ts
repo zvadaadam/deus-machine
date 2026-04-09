@@ -3,6 +3,7 @@
 // Orchestrates the generator lifecycle, delegates to focused modules.
 
 import { query as claudeSDK, type PermissionMode } from "@anthropic-ai/claude-agent-sdk";
+import * as fs from "fs";
 import { getErrorMessage } from "@shared/lib/errors";
 import { createCheckpoint } from "./checkpoint";
 import { AsyncQueue } from "../async-queue";
@@ -54,6 +55,18 @@ interface WorkspaceInitOptions {
  * expected by the Claude Agent SDK. Handles both plain text and JSON-encoded
  * content blocks (when user attaches images).
  */
+function getInvalidWorkspacePathError(cwd: string | undefined): string | null {
+  if (!cwd) {
+    return "Workspace path is missing for this Claude session.";
+  }
+
+  if (!fs.existsSync(cwd)) {
+    return `Workspace path does not exist: ${cwd}. This workspace likely points to a deleted or transient folder. Remove and recreate it.`;
+  }
+
+  return null;
+}
+
 function buildPromptIterable(queue: AsyncQueue<string>, sessionId: string) {
   return (async function* () {
     for await (const message of queue) {
@@ -421,6 +434,11 @@ export class ClaudeAgentHandler implements AgentHandler {
     const ctx = createStreamContext();
 
     try {
+      const invalidWorkspacePathError = getInvalidWorkspacePathError(options.cwd);
+      if (invalidWorkspacePathError) {
+        throw new Error(invalidWorkspacePathError);
+      }
+
       // Build environment using shared env-builder
       const tEnvStart = Date.now();
       const envForClaude = buildAgentEnvironment({
