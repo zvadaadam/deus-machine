@@ -1,5 +1,7 @@
-import { vi, describe, it, expect, beforeEach } from "vitest";
+import path from "node:path";
+import os from "os";
 import { Hono } from "hono";
+import { vi, describe, it, expect, beforeEach } from "vitest";
 import { errorHandler } from "../../../src/middleware/error-handler";
 
 const mockStmt = {
@@ -21,14 +23,23 @@ vi.mock("../../../src/services/git.service", () => ({
 }));
 
 vi.mock("child_process", () => ({
-  execFileSync: vi.fn((cmd: string, args: string[], opts?: { cwd?: string }) => {
-    // --show-toplevel returns the repo root path (echo back the cwd)
+  execFileSync: vi.fn((cmd: string, args: string[], opts?: { cwd?: string; encoding?: string }) => {
     if (cmd === "git" && args?.includes("--show-toplevel")) {
       return Buffer.from((opts?.cwd ?? "") + "\n");
+    }
+    if (cmd === "git" && args?.[0] === "remote" && args?.[1] === "get-url") {
+      return opts?.encoding
+        ? "https://github.com/zvadaadam/deus.git"
+        : Buffer.from("https://github.com/zvadaadam/deus.git\n");
     }
     return Buffer.from("");
   }),
   execFile: vi.fn(),
+}));
+
+const { mockFsExistsSync, mockFsMkdirSync } = vi.hoisted(() => ({
+  mockFsExistsSync: vi.fn(() => false),
+  mockFsMkdirSync: vi.fn(),
 }));
 
 vi.mock("fs", () => ({
@@ -36,11 +47,15 @@ vi.mock("fs", () => ({
     realpathSync: vi.fn((p: string) => p),
     accessSync: vi.fn(),
     statSync: vi.fn(() => ({ isDirectory: () => true })),
+    existsSync: mockFsExistsSync,
+    mkdirSync: mockFsMkdirSync,
     constants: { R_OK: 4, X_OK: 1 },
   },
   realpathSync: vi.fn((p: string) => p),
   accessSync: vi.fn(),
   statSync: vi.fn(() => ({ isDirectory: () => true })),
+  existsSync: mockFsExistsSync,
+  mkdirSync: mockFsMkdirSync,
   constants: { R_OK: 4, X_OK: 1 },
 }));
 
@@ -64,6 +79,7 @@ beforeEach(() => {
   vi.clearAllMocks();
   mockDb.prepare.mockReturnValue(mockStmt);
   mockDb.transaction.mockImplementation((fn: Function) => fn);
+  mockFsExistsSync.mockReturnValue(false);
 });
 
 describe("GET /repos", () => {
@@ -105,13 +121,10 @@ describe("POST /repos", () => {
       git_default_branch: "main",
     };
 
-    // First call: check existing (none found)
-    // Second call: get max sort_order
-    // Third call: get created repo
     mockStmt.get
-      .mockReturnValueOnce(undefined) // no existing repo
-      .mockReturnValueOnce({ max: 0 }) // max sort_order
-      .mockReturnValueOnce(createdRepo); // newly created
+      .mockReturnValueOnce(undefined)
+      .mockReturnValueOnce({ max: 0 })
+      .mockReturnValueOnce(createdRepo);
 
     const res = await app.request("/repos", {
       method: "POST",
@@ -132,7 +145,6 @@ describe("POST /repos", () => {
       root_path: "/path/to/existing",
     };
 
-    // The transaction function throws ConflictError when existing repo is found
     mockStmt.get.mockReturnValueOnce(existingRepo);
 
     const res = await app.request("/repos", {
@@ -158,5 +170,61 @@ describe("POST /repos", () => {
     });
 
     expect(detectDefaultBranch).toHaveBeenCalledWith("/path/to/repo");
+  });
+});
+
+describe("POST /repos/inspect", () => {
+  it("returns normalized repo metadata without registering it", async () => {
+    const res = await app.request("/repos/inspect", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ root_path: "/path/to/deus" }),
+    });
+
+    expect(res.status).toBe(200);
+    await expect(res.json()).resolves.toMatchObject({
+      root_path: "/path/to/deus",
+      name: "deus",
+      git_default_branch: "main",
+      git_origin_url: "https://github.com/zvadaadam/deus.git",
+    });
+    expect(mockStmt.run).not.toHaveBeenCalled();
+  });
+});
+
+describe("POST /repos/clone", () => {
+  it("returns a specific error when the target exists but is not a git repo", async () => {
+    const targetPath = path.join(os.homedir(), "deus");
+    mockFsExistsSync.mockImplementation((target: string) => target === targetPath);
+
+    const res = await app.request("/repos/clone", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ url: "https://github.com/example/deus", targetPath }),
+    });
+
+    expect(res.status).toBe(409);
+    await expect(res.json()).resolves.toMatchObject({
+      error: "Target directory already exists and is not a git repository",
+    });
+  });
+
+  it("returns an already-cloned error when the target already has .git", async () => {
+    const targetPath = path.join(os.homedir(), "deus");
+    const gitPath = path.join(targetPath, ".git");
+    mockFsExistsSync.mockImplementation(
+      (target: string) => target === targetPath || target === gitPath
+    );
+
+    const res = await app.request("/repos/clone", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ url: "https://github.com/example/deus", targetPath }),
+    });
+
+    expect(res.status).toBe(409);
+    await expect(res.json()).resolves.toMatchObject({
+      error: "Target already contains a git repository",
+    });
   });
 });

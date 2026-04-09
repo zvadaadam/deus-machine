@@ -8,23 +8,6 @@ interface WelcomeStepProps {
 
 type Phase = "idle" | "fade-content" | "center" | "swap" | "exit";
 
-const MANIFESTO =
-  "For a decade, designing and building software products was how I expressed myself. " +
-  "A slow but fulfilling journey. " +
-  "Then the world changed. " +
-  "AI got good enough to build whatever I imagine. " +
-  "I got completely addicted. It's never been more fun to build. " +
-  "There are amazing tools for managing agents. My favorites OpenDevs and Cursor. " +
-  "But I wanted to do some things differently. " +
-  "We have godlike machines now. Why wouldn't I? " +
-  "How should a machine that writes software look today? How will it evolve? " +
-  "It's funny that one person can even try to answer that. " +
-  "So I built this. " +
-  "Many agents. Many branches. All at once. " +
-  "You describe what you want. The machines figure out how. " +
-  "This is not an IDE. This is how I build now. " +
-  "Deus machine.";
-
 export function WelcomeStep({ onNext }: WelcomeStepProps) {
   const [phase, setPhase] = useState<Phase>("idle");
   const [titleOffset, setTitleOffset] = useState(0);
@@ -47,7 +30,7 @@ export function WelcomeStep({ onNext }: WelcomeStepProps) {
       setTitleOffset(viewportCenter - titleCenter);
     }
 
-    // Phase 1: fade out button + manifesto
+    // Phase 1: fade out button
     setPhase("fade-content");
 
     // Phase 2: title floats to true center
@@ -65,11 +48,11 @@ export function WelcomeStep({ onNext }: WelcomeStepProps) {
   const showDevs = phase === "swap" || phase === "exit";
 
   return (
-    <div className="relative flex h-full w-full flex-col items-center">
+    <div className="relative flex h-full w-full flex-col items-center justify-center">
       {/* Brand title */}
       <div
         ref={titleRef}
-        className={cn("mt-4 text-center select-none", isAnimating && "z-10")}
+        className={cn("text-center select-none", isAnimating && "z-10")}
         style={{
           transition:
             phase === "exit"
@@ -110,30 +93,9 @@ export function WelcomeStep({ onNext }: WelcomeStepProps) {
         </span>
       </div>
 
-      {/* Scrolling manifesto */}
-      <div
-        className="relative min-h-0 w-full max-w-[360px] flex-1 overflow-hidden"
-        style={{
-          maskImage:
-            "linear-gradient(to bottom, transparent 0%, black 8%, black 85%, transparent 100%)",
-          WebkitMaskImage:
-            "linear-gradient(to bottom, transparent 0%, black 8%, black 85%, transparent 100%)",
-          transition: `opacity 400ms ${EASE_OUT_QUART_CSS}, transform 400ms ${EASE_OUT_QUART_CSS}`,
-          ...(isAnimating ? { opacity: 0, transform: "translateY(12px)" } : {}),
-        }}
-      >
-        <div style={{ animation: "manifesto-crawl 25s linear infinite" }}>
-          {[MANIFESTO, MANIFESTO].map((text, i) => (
-            <p key={i} className="pb-4 text-center text-xs leading-5 text-white/20">
-              {text}
-            </p>
-          ))}
-        </div>
-      </div>
-
       {/* CTA */}
       <div
-        className="shrink-0 pt-4 pb-4"
+        className="mt-8"
         style={{
           transition: `opacity 400ms ${EASE_OUT_QUART_CSS}, transform 400ms ${EASE_OUT_QUART_CSS}`,
           ...(isAnimating ? { opacity: 0, transform: "translateY(12px)" } : {}),

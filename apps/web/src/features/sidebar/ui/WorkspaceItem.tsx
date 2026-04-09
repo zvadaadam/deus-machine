@@ -2,12 +2,14 @@ import React from "react";
 import { match } from "ts-pattern";
 import { Archive, Loader2 } from "lucide-react";
 import NumberFlow from "@number-flow/react";
+import { useQueryClient } from "@tanstack/react-query";
 
 import { cn } from "@/shared/lib/utils";
 import { useWorkingDuration, formatDuration } from "@/shared/hooks";
 import { CircularPixelGrid } from "@/features/session/ui/CircularPixelGrid";
 import { useUnreadStore } from "@/features/session/store/unreadStore";
 import { useWorkspaceLayoutStore } from "@/features/workspace/store/workspaceLayoutStore";
+import { prefetchWorkspace } from "@/features/workspace/api/prefetch";
 import { getDisplayStatus, STATUS_CONFIG } from "../lib/status";
 import { getWorkspaceDisplayName, getWorkspaceSecondaryText } from "../lib/utils";
 import type { WorkspaceItemProps } from "../model/types";
@@ -42,6 +44,7 @@ export const WorkspaceItem = React.memo(function WorkspaceItem({
   onStatusChange,
 }: WorkspaceItemProps) {
   const isInitializing = workspace.state === "initializing";
+  const queryClient = useQueryClient();
 
   // Hooks must be called unconditionally (React rules of hooks)
   const { duration } = useWorkingDuration({
@@ -51,15 +54,24 @@ export const WorkspaceItem = React.memo(function WorkspaceItem({
 
   // Check all sessions in this workspace's tabs for unseen activity,
   // not just current_session_id — the user may have multiple tabs open.
-  const tabSessionIds = useWorkspaceLayoutStore((s) => s.layouts[workspace.id]?.chatTabSessionIds);
+  const activeChatTabSessionId = useWorkspaceLayoutStore(
+    (s) => s.layouts[workspace.id]?.activeChatTabSessionId ?? null
+  );
+  const chatTabSessionIds = useWorkspaceLayoutStore(
+    (s) => s.layouts[workspace.id]?.chatTabSessionIds
+  );
   const hasUnseenActivity = useUnreadStore((s) => {
-    const ids = tabSessionIds?.length
-      ? tabSessionIds
+    const ids = chatTabSessionIds?.length
+      ? chatTabSessionIds
       : workspace.current_session_id
         ? [workspace.current_session_id]
         : [];
     return ids.some((sid) => s.unreadSessionIds[sid]);
   });
+  const shouldRefreshPrefetch =
+    hasUnseenActivity ||
+    workspace.session_status === "working" ||
+    (!!activeChatTabSessionId && activeChatTabSessionId !== workspace.current_session_id);
 
   // Initializing state: non-interactive row with loading animation
   if (isInitializing) {
@@ -195,6 +207,12 @@ export const WorkspaceItem = React.memo(function WorkspaceItem({
         aria-current={isActive ? "page" : undefined}
         aria-label={`Workspace ${displayName}`}
         onClick={() => onClick(workspace)}
+        onMouseEnter={() =>
+          prefetchWorkspace(queryClient, workspace, {
+            activeSessionId: activeChatTabSessionId,
+            refreshIfCached: shouldRefreshPrefetch,
+          })
+        }
         onKeyDown={(e) => {
           if (e.key === " ") e.preventDefault();
         }}
