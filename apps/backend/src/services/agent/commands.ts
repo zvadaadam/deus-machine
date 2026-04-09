@@ -188,6 +188,8 @@ function handleSendMessage(params: QueryParams): CommandResult {
   const existingAgentSessionId = session?.agent_session_id ?? null;
 
   // Resolve cwd server-side from session → workspace → repo.
+  // Clear any caller-provided value so the server is authoritative.
+  delete params.cwd;
   if (session) {
     const workspace = getWorkspaceForMiddleware(db, session.workspace_id);
     if (workspace) {
