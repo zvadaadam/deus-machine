@@ -99,4 +99,4 @@ Data flows through WebSocket push subscriptions (`q:subscribe` / `q:delta` / `q:
 
 ## License
 
-By contributing, you agree that your contributions will be licensed under the [Elastic License 2.0](LICENSE).
+By contributing, you agree that your contributions will be licensed under the [MIT License](LICENSE).

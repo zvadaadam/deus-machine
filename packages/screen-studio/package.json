@@ -27,7 +27,10 @@
       "require": "./dist/mcp/index.cjs"
     }
   },
-  "files": ["dist", "README.md"],
+  "files": [
+    "dist",
+    "README.md"
+  ],
   "scripts": {
     "build": "tsup",
     "test": "vitest run",
@@ -52,6 +55,13 @@
       "optional": true
     }
   },
-  "license": "Elastic-2.0",
-  "keywords": ["screen-recording", "camera-engine", "auto-zoom", "spring-physics", "compositing", "mcp"]
+  "license": "MIT",
+  "keywords": [
+    "screen-recording",
+    "camera-engine",
+    "auto-zoom",
+    "spring-physics",
+    "compositing",
+    "mcp"
+  ]
 }
