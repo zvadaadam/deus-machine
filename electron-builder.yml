@@ -31,6 +31,7 @@ mac:
   entitlementsInherit: resources/entitlements.mac.plist
   darkModeSupport: true
   icon: resources/icons/icon.icns
+  notarize: true
 win:
   target:
     - target: nsis
