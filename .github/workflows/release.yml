@@ -137,6 +137,108 @@ jobs:
           APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_PASSWORD }}
           APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
 
+      - name: Verify macOS artifacts
+        if: ${{ inputs.dry_run == false }}
+        run: |
+          set -euo pipefail
+
+          while IFS= read -r app_path; do
+            echo "Verifying signature for $app_path"
+            codesign --verify --deep --strict --verbose=2 "$app_path"
+          done < <(find dist-electron -maxdepth 2 -path '*/Deus.app' -type d | sort)
+
+          while IFS= read -r dmg_path; do
+            echo "Validating notarization for $dmg_path"
+            xcrun stapler validate "$dmg_path"
+            spctl --assess --type open --verbose=4 "$dmg_path"
+          done < <(find dist-electron -maxdepth 1 -name '*.dmg' -type f | sort)
+
+      - name: Smoke test packaged runtime from DMG copy
+        if: ${{ inputs.dry_run == false }}
+        run: |
+          set -euo pipefail
+
+          dmg_path="$(find dist-electron -maxdepth 1 -name '*arm64.dmg' -type f | head -n 1)"
+          if [[ -z "$dmg_path" ]]; then
+            dmg_path="$(find dist-electron -maxdepth 1 -name '*.dmg' -type f | head -n 1)"
+          fi
+
+          mount_dir="$(mktemp -d "${RUNNER_TEMP}/deus-dmg.XXXXXX")"
+          copied_root="$(mktemp -d "${RUNNER_TEMP}/deus-app.XXXXXX")"
+          copied_app="$copied_root/Deus.app"
+          smoke_log="$(mktemp "${RUNNER_TEMP}/deus-smoke.XXXXXX.log")"
+          agent_log="$(mktemp "${RUNNER_TEMP}/deus-agent.XXXXXX.log")"
+          smoke_db="$(mktemp "${RUNNER_TEMP}/deus-smoke.XXXXXX.db")"
+          attached=0
+          backend_pid=""
+          agent_pid=""
+
+          cleanup() {
+            if [[ -n "$backend_pid" ]]; then
+              kill "$backend_pid" 2>/dev/null || true
+              wait "$backend_pid" 2>/dev/null || true
+            fi
+            if [[ -n "$agent_pid" ]]; then
+              kill "$agent_pid" 2>/dev/null || true
+              wait "$agent_pid" 2>/dev/null || true
+            fi
+            if [[ "$attached" -eq 1 ]]; then
+              hdiutil detach "$mount_dir" -quiet || true
+            fi
+          }
+          trap cleanup EXIT
+
+          hdiutil attach "$dmg_path" -mountpoint "$mount_dir" -nobrowse
+          attached=1
+          ditto "$mount_dir/Deus.app" "$copied_app"
+          hdiutil detach "$mount_dir" -quiet
+          attached=0
+
+          app_bin="$copied_app/Contents/MacOS/Deus"
+          resources_dir="$copied_app/Contents/Resources"
+
+          ELECTRON_RUN_AS_NODE=1 \
+          DATABASE_PATH="$smoke_db" \
+          NODE_PATH="$resources_dir/app.asar/node_modules" \
+          "$app_bin" "$resources_dir/bin/index.bundled.cjs" >"$agent_log" 2>&1 &
+          agent_pid=$!
+
+          agent_url=""
+          for _ in {1..30}; do
+            if grep -q '^LISTEN_URL=' "$agent_log"; then
+              agent_url="$(grep '^LISTEN_URL=' "$agent_log" | head -n 1 | sed 's/^LISTEN_URL=//')"
+              break
+            fi
+            if ! kill -0 "$agent_pid" 2>/dev/null; then
+              break
+            fi
+            sleep 1
+          done
+
+          [[ -n "$agent_url" ]]
+
+          ELECTRON_RUN_AS_NODE=1 \
+          DATABASE_PATH="$smoke_db" \
+          AGENT_SERVER_URL="$agent_url" \
+          AUTH_TOKEN=smoke \
+          PORT=0 \
+          CDP_PORT=19222 \
+          NODE_PATH="$resources_dir/app.asar/node_modules" \
+          "$app_bin" "$resources_dir/backend/server.bundled.cjs" >"$smoke_log" 2>&1 &
+          backend_pid=$!
+
+          for _ in {1..30}; do
+            if grep -q '^\[BACKEND_PORT\]' "$smoke_log"; then
+              break
+            fi
+            if ! kill -0 "$backend_pid" 2>/dev/null; then
+              break
+            fi
+            sleep 1
+          done
+
+          grep -q '^\[BACKEND_PORT\]' "$smoke_log"
+
       - uses: actions/upload-artifact@v4
         with:
           name: macos
@@ -288,8 +390,7 @@ jobs:
 
       - name: Build CLI
         run: |
-          bun run build:agent-server
-          bun run build:backend
+          bun run build:runtime
           cd apps/cli && bun run build
 
       - name: Publish to npm
