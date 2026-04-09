@@ -384,58 +384,61 @@ function handleToolResponse(msg: QueryParams): void {
 
 // ---- Query Dispatch ----
 
+/** Group workspaces by repo, backfill empty repos, return sorted RepoGroup[]. */
+function groupWorkspacesByRepo(db: ReturnType<typeof getDatabase>, state: string) {
+  const workspaces = getWorkspacesByRepo(db, state);
+
+  const grouped: Record<
+    string,
+    {
+      repo_id: string;
+      repo_name: string;
+      sort_order: number;
+      git_origin_url?: string | null;
+      workspaces: unknown[];
+    }
+  > = {};
+
+  for (const workspace of workspaces) {
+    const repoId = workspace.repository_id || "unknown";
+    if (!grouped[repoId]) {
+      grouped[repoId] = {
+        repo_id: repoId,
+        repo_name: workspace.repo_name || "Unknown",
+        sort_order: workspace.repo_sort_order ?? 999,
+        git_origin_url: workspace.git_origin_url ?? null,
+        workspaces: [],
+      };
+    }
+    grouped[repoId].workspaces.push({
+      ...workspace,
+      workspace_path: computeWorkspacePath(workspace),
+    });
+  }
+
+  // Backfill repos that have no matching workspaces (e.g. all archived)
+  for (const repo of getAllRepositorySummaries(db)) {
+    if (!grouped[repo.id]) {
+      grouped[repo.id] = {
+        repo_id: repo.id,
+        repo_name: repo.name,
+        sort_order: repo.sort_order ?? 999,
+        git_origin_url: repo.git_origin_url ?? null,
+        workspaces: [],
+      };
+    }
+  }
+
+  return Object.values(grouped).sort((a, b) => a.sort_order - b.sort_order);
+}
+
 function runQuery(resource: QueryResource, params: QueryParams): unknown {
   const db = getDatabase();
 
   return match(resource)
-    .with("workspaces", () => {
-      // Return RepoGroup[] shape matching GET /workspaces/by-repo
-      const state = readStringParam(params, "state") ?? "ready,initializing";
-      const workspaces = getWorkspacesByRepo(db, state);
-
-      const grouped: Record<
-        string,
-        {
-          repo_id: string;
-          repo_name: string;
-          sort_order: number;
-          git_origin_url?: string | null;
-          workspaces: unknown[];
-        }
-      > = {};
-      workspaces.forEach((workspace) => {
-        const repoId = workspace.repository_id || "unknown";
-        if (!grouped[repoId]) {
-          grouped[repoId] = {
-            repo_id: repoId,
-            repo_name: workspace.repo_name || "Unknown",
-            sort_order: workspace.repo_sort_order ?? 999,
-            git_origin_url: workspace.git_origin_url ?? null,
-            workspaces: [],
-          };
-        }
-        grouped[repoId].workspaces.push({
-          ...workspace,
-          workspace_path: computeWorkspacePath(workspace),
-        });
-      });
-
-      // Backfill repos that have no matching workspaces (e.g. all archived)
-      const allRepos = getAllRepositorySummaries(db);
-      for (const repo of allRepos) {
-        if (!grouped[repo.id]) {
-          grouped[repo.id] = {
-            repo_id: repo.id,
-            repo_name: repo.name,
-            sort_order: repo.sort_order ?? 999,
-            git_origin_url: repo.git_origin_url ?? null,
-            workspaces: [],
-          };
-        }
-      }
-
-      return Object.values(grouped).sort((a, b) => a.sort_order - b.sort_order);
-    })
+    .with("workspaces", () =>
+      groupWorkspacesByRepo(db, readStringParam(params, "state") ?? "ready,initializing")
+    )
     .with("stats", () => getStats(db))
     .with("sessions", () =>
       getSessionsByWorkspaceId(db, requireParam(params, "workspaceId", "sessions"))

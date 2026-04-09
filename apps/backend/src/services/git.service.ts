@@ -93,47 +93,35 @@ export function resolveParentBranch(
     return cached.branch;
   }
 
+  const cacheAndReturn = (branch: string): string => {
+    parentBranchCache.set(cacheKey, { branch, expiresAt: Date.now() + PARENT_BRANCH_CACHE_TTL_MS });
+    return branch;
+  };
+
   const candidates = [parentBranch, defaultBranch, "main", "master", "develop"].filter(
     Boolean
   ) as string[];
 
-  // Try remote branches first — this is intentional, see docstring above
-  for (const branch of candidates) {
-    const ref = branch.startsWith("origin/") ? branch : `origin/${branch}`;
+  // Build ref list: all remote refs first (intentional — see docstring), then local
+  const refs = [
+    ...candidates.map((b) => {
+      const remote = b.startsWith("origin/") ? b : `origin/${b}`;
+      return { refPath: `refs/remotes/${remote}`, result: remote };
+    }),
+    ...candidates.map((b) => ({ refPath: `refs/heads/${b}`, result: b })),
+  ];
+
+  for (const { refPath, result } of refs) {
     try {
-      execFileSync("git", ["show-ref", "--verify", "--quiet", `refs/remotes/${ref}`], {
+      execFileSync("git", ["show-ref", "--verify", "--quiet", refPath], {
         cwd: workspacePath,
         timeout: 2000,
       });
-      parentBranchCache.set(cacheKey, {
-        branch: ref,
-        expiresAt: Date.now() + PARENT_BRANCH_CACHE_TTL_MS,
-      });
-      return ref;
+      return cacheAndReturn(result);
     } catch {}
   }
 
-  // Try local branches
-  for (const branch of candidates) {
-    try {
-      execFileSync("git", ["show-ref", "--verify", "--quiet", `refs/heads/${branch}`], {
-        cwd: workspacePath,
-        timeout: 2000,
-      });
-      parentBranchCache.set(cacheKey, {
-        branch,
-        expiresAt: Date.now() + PARENT_BRANCH_CACHE_TTL_MS,
-      });
-      return branch;
-    } catch {}
-  }
-
-  const fallback = defaultBranch || "main";
-  parentBranchCache.set(cacheKey, {
-    branch: fallback,
-    expiresAt: Date.now() + PARENT_BRANCH_CACHE_TTL_MS,
-  });
-  return fallback;
+  return cacheAndReturn(defaultBranch || "main");
 }
 
 export function resolveWorkspaceRelativePath(
