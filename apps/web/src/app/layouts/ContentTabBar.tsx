@@ -3,14 +3,13 @@
  *
  * Renders inside the content panel's header bar (36px), left-aligned.
  * Active tab: filled pill (bg-bg-raised) with icon + text label.
- * Inactive tabs: icon only with tooltip on hover.
+ * Inactive tabs: icon only with native title on hover.
  *
  * Tab definitions and visibility logic live in content-tabs.ts.
  * This component is pure presentation — it renders icons/pills and fires onTabChange.
  */
 
 import { useMemo } from "react";
-import { Tooltip, TooltipTrigger, TooltipContent } from "@/components/ui/tooltip";
 import { cn } from "@/shared/lib/utils";
 import { useSettings } from "@/features/settings/api/settings.queries";
 import { useSimulatorStatusStore } from "@/features/simulator/store";
@@ -70,30 +69,25 @@ export function ContentTabBar({ activeTab, onTabChange, workspaceId }: ContentTa
             )}
           </button>
         ) : (
-          <Tooltip key={item.id} delayDuration={300}>
-            <TooltipTrigger asChild>
-              <button
-                type="button"
-                role="tab"
-                aria-label={item.label}
-                aria-selected={false}
-                onClick={() => onTabChange(item.id)}
-                className={cn(
-                  "text-text-muted hover:text-text-secondary hover:bg-bg-muted",
-                  "relative flex h-7 items-center justify-center rounded-lg px-2",
-                  "transition-colors duration-150"
-                )}
-              >
-                <Icon className="h-3.5 w-3.5" />
-                {showDot && (
-                  <span className="bg-success absolute -top-0.5 -right-0.5 h-2 w-2 rounded-full" />
-                )}
-              </button>
-            </TooltipTrigger>
-            <TooltipContent side="bottom" sideOffset={8}>
-              <p className="text-xs">{item.label}</p>
-            </TooltipContent>
-          </Tooltip>
+          <button
+            key={item.id}
+            type="button"
+            role="tab"
+            title={item.label}
+            aria-label={item.label}
+            aria-selected={false}
+            onClick={() => onTabChange(item.id)}
+            className={cn(
+              "text-text-muted hover:text-text-secondary hover:bg-bg-muted",
+              "relative flex h-7 items-center justify-center rounded-lg px-2",
+              "transition-colors duration-150"
+            )}
+          >
+            <Icon className="h-3.5 w-3.5" />
+            {showDot && (
+              <span className="bg-success absolute -top-0.5 -right-0.5 h-2 w-2 rounded-full" />
+            )}
+          </button>
         );
       })}
     </div>

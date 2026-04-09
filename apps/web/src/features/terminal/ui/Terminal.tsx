@@ -1,4 +1,4 @@
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Terminal as XTerm } from "@xterm/xterm";
 import { FitAddon } from "@xterm/addon-fit";
 import { WebLinksAddon } from "@xterm/addon-web-links";
@@ -99,18 +99,43 @@ function safeFit(fitAddon: FitAddon): void {
   }
 }
 
+function hasTerminalSize(element: HTMLElement | null): element is HTMLElement {
+  return !!element && element.offsetWidth > 0 && element.offsetHeight > 0;
+}
+
 export function Terminal({ id, workspacePath, initialCommand, visible = true }: TerminalProps) {
   const terminalRef = useRef<HTMLDivElement>(null);
   const xtermRef = useRef<XTerm | null>(null);
   const fitAddonRef = useRef<FitAddon | null>(null);
+  const ptyIdRef = useRef<string | null>(null);
+  const readyRef = useRef(false);
+  const openedRef = useRef(false);
+  const [shouldStart, setShouldStart] = useState(visible);
+
+  // Hidden tabs should be cheap: don't create xterm, spawn a PTY, or attach
+  // global WS listeners until the terminal becomes visible at least once.
+  useEffect(() => {
+    if (!visible || shouldStart) return;
+
+    const frame = requestAnimationFrame(() => {
+      setShouldStart(true);
+    });
+
+    return () => cancelAnimationFrame(frame);
+  }, [shouldStart, visible]);
 
   useEffect(() => {
-    if (!terminalRef.current) return;
+    if (!shouldStart || !terminalRef.current) return;
 
     // Unique PTY id per effect invocation so StrictMode double-fire doesn't collide
     const ptyId = `${id}-${Date.now()}`;
+    const textEncoder = new TextEncoder();
+    const textDecoder = new TextDecoder();
     let disposed = false;
-    let ready = false;
+
+    ptyIdRef.current = ptyId;
+    readyRef.current = false;
+    openedRef.current = false;
 
     // Create xterm instance with theme-aware colors
     const xterm = new XTerm({
@@ -129,17 +154,13 @@ export function Terminal({ id, workspacePath, initialCommand, visible = true }: 
     xterm.loadAddon(fitAddon);
     xterm.loadAddon(new WebLinksAddon());
 
-    // Open terminal
-    xterm.open(terminalRef.current);
-    safeFit(fitAddon);
-
     xtermRef.current = xterm;
     fitAddonRef.current = fitAddon;
 
     // Forward terminal input to PTY
     const inputDisposable = xterm.onData((data) => {
-      if (ready && !disposed) {
-        ptyCommands.write(ptyId, Array.from(new TextEncoder().encode(data))).catch((err) => {
+      if (readyRef.current && !disposed) {
+        ptyCommands.write(ptyId, Array.from(textEncoder.encode(data))).catch((err) => {
           console.error("Failed to write to PTY:", err);
         });
       }
@@ -158,12 +179,12 @@ export function Terminal({ id, workspacePath, initialCommand, visible = true }: 
       })
       .then(() => {
         if (!disposed) {
-          ready = true;
+          readyRef.current = true;
           // Auto-run initial command after shell init settles
           if (initialCommand) {
             setTimeout(() => {
               if (!disposed) {
-                const encoded = Array.from(new TextEncoder().encode(initialCommand + "\n"));
+                const encoded = Array.from(textEncoder.encode(initialCommand + "\n"));
                 ptyCommands.write(ptyId, encoded).catch((err) => {
                   console.error("Failed to write initial command:", err);
                 });
@@ -179,21 +200,16 @@ export function Terminal({ id, workspacePath, initialCommand, visible = true }: 
         }
       });
 
-    // Listen for PTY data via WS q:event
-    const unlistenData = onEvent((event, data) => {
+    // Single WS listener per terminal instance — hidden terminals already stay
+    // mounted, so keep fan-out minimal.
+    const unlisten = onEvent((event, data) => {
       if (disposed) return;
       if (event === "pty-data") {
         const payload = data as { id: string; data: number[] };
         if (payload.id === ptyId) {
-          xterm.write(new TextDecoder().decode(new Uint8Array(payload.data)));
+          xterm.write(textDecoder.decode(new Uint8Array(payload.data)));
         }
-      }
-    });
-
-    // Listen for PTY exit via WS q:event
-    const unlistenExit = onEvent((event, data) => {
-      if (disposed) return;
-      if (event === "pty-exit") {
+      } else if (event === "pty-exit") {
         const payload = data as { id: string };
         if (payload.id === ptyId) {
           xterm.write("\r\n\x1b[90mSession ended\x1b[0m\r\n");
@@ -201,41 +217,66 @@ export function Terminal({ id, workspacePath, initialCommand, visible = true }: 
       }
     });
 
-    // Handle resize — skip when container is CSS-hidden (reports 0 dimensions)
-    const resizeObserver = new ResizeObserver(() => {
-      if (disposed) return;
-      const el = terminalRef.current;
-      if (!el || el.offsetWidth === 0 || el.offsetHeight === 0) return;
-      safeFit(fitAddon);
-      if (ready) {
-        ptyCommands.resize(ptyId, xterm.cols, xterm.rows).catch((err) => {
-          console.error("Failed to resize PTY:", err);
-        });
-      }
-    });
-    resizeObserver.observe(terminalRef.current);
-
     return () => {
       disposed = true;
-      resizeObserver.disconnect();
+      readyRef.current = false;
+      openedRef.current = false;
+      ptyIdRef.current = null;
+      xtermRef.current = null;
+      fitAddonRef.current = null;
       inputDisposable.dispose();
-      unlistenData();
-      unlistenExit();
+      unlisten();
       ptyCommands.kill(ptyId).catch(() => {
         /* Expected: PTY process may already be dead or cleaned up */
       });
       xterm.dispose();
     };
-  }, [id, workspacePath, initialCommand]);
+  }, [id, initialCommand, shouldStart, workspacePath]);
 
-  // Refit terminal when becoming visible — container may have resized while hidden
   useEffect(() => {
-    if (!visible || !fitAddonRef.current || !xtermRef.current) return;
-    const frame = requestAnimationFrame(() => {
-      if (fitAddonRef.current) safeFit(fitAddonRef.current);
-    });
-    return () => cancelAnimationFrame(frame);
-  }, [visible]);
+    if (!visible || !shouldStart || !terminalRef.current) return;
+
+    let frame = 0;
+    const terminalEl = terminalRef.current;
+
+    const syncSize = () => {
+      const currentEl = terminalRef.current;
+      const currentXterm = xtermRef.current;
+      const currentFitAddon = fitAddonRef.current;
+      const currentPtyId = ptyIdRef.current;
+
+      if (!currentEl || !currentXterm || !currentFitAddon || !currentPtyId) return;
+      if (!hasTerminalSize(currentEl)) return;
+
+      if (!openedRef.current) {
+        currentXterm.open(currentEl);
+        openedRef.current = true;
+      }
+
+      safeFit(currentFitAddon);
+
+      if (readyRef.current) {
+        ptyCommands.resize(currentPtyId, currentXterm.cols, currentXterm.rows).catch((err) => {
+          console.error("Failed to resize PTY:", err);
+        });
+      }
+    };
+
+    const scheduleSync = () => {
+      cancelAnimationFrame(frame);
+      frame = requestAnimationFrame(syncSize);
+    };
+
+    scheduleSync();
+
+    const resizeObserver = new ResizeObserver(scheduleSync);
+    resizeObserver.observe(terminalEl);
+
+    return () => {
+      resizeObserver.disconnect();
+      cancelAnimationFrame(frame);
+    };
+  }, [shouldStart, visible]);
 
   return (
     <div className="terminal-container">
