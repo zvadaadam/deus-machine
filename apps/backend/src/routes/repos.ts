@@ -31,6 +31,15 @@ import type { QueryResource } from "@shared/types/query-protocol";
 
 const app = new Hono();
 
+/** Expand leading `~` to home directory — Node's path APIs treat it as literal. */
+function expandTilde(filePath: string): string {
+  if (filePath === "~") return os.homedir();
+  if (filePath.startsWith("~/") || filePath.startsWith("~\\")) {
+    return path.join(os.homedir(), filePath.slice(2));
+  }
+  return filePath;
+}
+
 interface InspectedRepository {
   rootPath: string;
   repoName: string;
@@ -39,7 +48,7 @@ interface InspectedRepository {
 }
 
 function inspectRepositoryRoot(rootPath: string): InspectedRepository {
-  let normalizedRootPath = rootPath;
+  let normalizedRootPath = expandTilde(rootPath);
 
   try {
     normalizedRootPath = fs.realpathSync(normalizedRootPath);
@@ -191,7 +200,7 @@ app.post("/repos/clone", async (c) => {
   }
 
   // Ensure parent directory exists
-  const resolvedPath = path.resolve(targetPath);
+  const resolvedPath = path.resolve(expandTilde(targetPath));
   const parentDir = path.dirname(resolvedPath);
   try {
     fs.mkdirSync(parentDir, { recursive: true });
@@ -267,7 +276,7 @@ app.post("/repos/init", async (c) => {
   const { projectName, targetPath, template } = parseBody(InitProjectBody, await c.req.json());
 
   // Ensure parent exists, target does NOT exist
-  const resolvedPath = path.resolve(targetPath);
+  const resolvedPath = path.resolve(expandTilde(targetPath));
   const parentDir = path.dirname(resolvedPath);
   try {
     fs.mkdirSync(parentDir, { recursive: true });

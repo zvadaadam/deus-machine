@@ -12,7 +12,8 @@
 
 import { match } from "ts-pattern";
 import { getDatabase } from "../../lib/database";
-import { getSessionRaw } from "../../db";
+import { getSessionRaw, getWorkspaceForMiddleware } from "../../db";
+import { computeWorkspacePath } from "../../middleware/workspace-loader";
 import { writeUserMessage } from "../message-writer";
 import { spawnPty, writeToPty, resizePty, killPty } from "../pty.service";
 import { watchWorkspace, unwatchWorkspace } from "../fs-watcher.service";
@@ -185,6 +186,14 @@ function handleSendMessage(params: QueryParams): CommandResult {
   const db = getDatabase();
   const session = getSessionRaw(db, sessionId);
   const existingAgentSessionId = session?.agent_session_id ?? null;
+
+  // Resolve cwd server-side from session → workspace → repo.
+  if (session) {
+    const workspace = getWorkspaceForMiddleware(db, session.workspace_id);
+    if (workspace) {
+      params.cwd = computeWorkspacePath(workspace);
+    }
+  }
 
   if (!agentService.isConnected()) {
     handleAgentError(sessionId, agentType, new Error("Agent server is disconnected"));

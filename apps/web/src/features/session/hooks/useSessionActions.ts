@@ -22,7 +22,6 @@ import { COMPACT_CONVERSATION, createPRPrompt } from "../lib/sessionPrompts";
 interface UseSessionActionsProps {
   sessionId: string;
   workspaceId?: string;
-  workspacePath: string;
   messageInput: string;
   model?: string;
   agentType?: RuntimeAgentType;
@@ -45,7 +44,6 @@ interface UseSessionActionsReturn {
 export function useSessionActions({
   sessionId,
   workspaceId,
-  workspacePath,
   messageInput,
   model,
   agentType = "claude",
@@ -68,7 +66,6 @@ export function useSessionActions({
           sessionId,
           content,
           model,
-          cwd: workspacePath,
           agentType,
           permissionMode,
         });
@@ -87,16 +84,7 @@ export function useSessionActions({
         console.error("[useSessionActions] onMessageSent callback failed:", callbackError);
       }
     },
-    [
-      messageInput,
-      model,
-      sendMessageMutation,
-      sessionId,
-      workspacePath,
-      agentType,
-      permissionMode,
-      onMessageSent,
-    ]
+    [messageInput, model, sendMessageMutation, sessionId, agentType, permissionMode, onMessageSent]
   );
 
   const stopSession = useCallback(async () => {
