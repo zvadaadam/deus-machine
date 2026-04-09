@@ -2,7 +2,7 @@
   "name": "deus-machine",
   "version": "0.3.1",
   "description": "Run Deus IDE from the command line — headless server or desktop installer",
-  "license": "Elastic-2.0",
+  "license": "MIT",
   "author": {
     "name": "Deus",
     "email": "hello@deusmachine.ai"
