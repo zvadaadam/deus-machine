@@ -3,7 +3,6 @@ import { Plus, ChevronRight, ChevronDown, GitPullRequest } from "lucide-react";
 import { AnimatePresence, m, useReducedMotion } from "framer-motion";
 import { SidebarMenuItem } from "@/components/ui/sidebar";
 import { Collapsible, CollapsibleTrigger } from "@/components/ui/collapsible";
-import { Tooltip, TooltipTrigger, TooltipContent } from "@/components/ui/tooltip";
 import { cn } from "@/shared/lib/utils";
 import { useUnreadStore } from "@/features/session/store/unreadStore";
 import { useWorkspaceLayoutStore } from "@/features/workspace/store/workspaceLayoutStore";
@@ -102,39 +101,31 @@ export function RepositoryItem({
             {sidebarExpanded && (
               <SidebarRowRight className="gap-2 opacity-0 transition-opacity duration-150 group-focus-within/repository-item:opacity-100 group-hover/repository-item:opacity-100">
                 {isGitHubUrl(repository.git_origin_url) && onNewWorkspaceFromGitHub && (
-                  <Tooltip>
-                    <TooltipTrigger asChild>
-                      <button
-                        type="button"
-                        aria-label={`New workspace from PR or branch in ${repoName}`}
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          onNewWorkspaceFromGitHub(repository.repo_id);
-                        }}
-                        className="text-text-muted hover:text-text-tertiary cursor-pointer [&_*]:cursor-pointer"
-                      >
-                        <GitPullRequest className="h-4 w-4" />
-                      </button>
-                    </TooltipTrigger>
-                    <TooltipContent side="bottom">New from PR or branch</TooltipContent>
-                  </Tooltip>
+                  <button
+                    type="button"
+                    title="New from PR or branch"
+                    aria-label={`New workspace from PR or branch in ${repoName}`}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      onNewWorkspaceFromGitHub(repository.repo_id);
+                    }}
+                    className="text-text-muted hover:text-text-tertiary cursor-pointer [&_*]:cursor-pointer"
+                  >
+                    <GitPullRequest className="h-4 w-4" />
+                  </button>
                 )}
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <button
-                      type="button"
-                      aria-label={`New workspace in ${repoName}`}
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        onNewWorkspace(repository.repo_id);
-                      }}
-                      className="text-text-muted hover:text-text-tertiary cursor-pointer [&_*]:cursor-pointer"
-                    >
-                      <Plus className="h-4 w-4" />
-                    </button>
-                  </TooltipTrigger>
-                  <TooltipContent side="bottom">New workspace</TooltipContent>
-                </Tooltip>
+                <button
+                  type="button"
+                  title="New workspace"
+                  aria-label={`New workspace in ${repoName}`}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onNewWorkspace(repository.repo_id);
+                  }}
+                  className="text-text-muted hover:text-text-tertiary cursor-pointer [&_*]:cursor-pointer"
+                >
+                  <Plus className="h-4 w-4" />
+                </button>
               </SidebarRowRight>
             )}
           </SidebarRow>
