@@ -16,16 +16,14 @@ build({
   format: "cjs",
   outfile: path.join(backendDir, "dist/server.bundled.cjs"),
   external: [
-    // Native modules — must be resolved at runtime
+    // Native modules — must be resolved at runtime (compiled against Electron's ABI)
     "better-sqlite3",
     "node-pty",
     // WebSocket library with optional native extensions
     "ws",
-    // Sentry — optional, loaded at runtime if DSN is configured
+    // Sentry — uses native crash-reporter hooks, must match runtime
     "@sentry/node",
   ],
-  // Mark all Node.js built-ins as external
-  packages: "external",
   minify: false,
   sourcemap: false,
   logLevel: "info",

@@ -2,19 +2,16 @@
  * Build script for @deus/cli
  *
  * 1. Bundle the CLI TypeScript → dist/cli.js (esbuild)
- * 2. Copy pre-built bundles into bundles/ for distribution:
- *    - agent-server.bundled.cjs (from apps/agent-server/dist/)
- *    - server.bundled.cjs (from apps/backend/dist/)
- *
- * Prerequisites: run these from the monorepo root before building the CLI:
- *   bun run build:agent-server
- *   bun run build:backend
+ * 2. Stage the shared runtime artifact (backend + agent-server bundles)
+ * 3. Copy the staged runtime bundles into bundles/ for npm distribution
  */
 
 import { build } from "esbuild";
-import { cpSync, existsSync, mkdirSync, writeFileSync } from "fs";
+import { cpSync, existsSync, mkdirSync, rmSync, writeFileSync } from "fs";
 import { resolve, join, dirname } from "path";
 import { fileURLToPath } from "url";
+import { stageRuntime } from "../runtime/stage";
+import { resolveRuntimeStagePaths } from "../../shared/runtime";
 
 const __filename = fileURLToPath(import.meta.url);
 const cliDir = dirname(__filename);
@@ -33,10 +30,14 @@ async function main() {
     format: "esm",
     outfile: join(cliDir, "dist/cli.js"),
     external: [
-      // Native modules resolved at runtime
       "better-sqlite3",
       "node-pty",
       "ws",
+      "@sentry/node",
+      "@openai/codex",
+      "@openai/codex-sdk",
+      "@napi-rs/canvas",
+      "agent-browser",
     ],
     packages: "external",
     minify: false,
@@ -51,45 +52,37 @@ async function main() {
     mode: 0o755,
   });
 
-  // Step 3: Copy bundles for distribution
-  console.log("\n3. Copying bundles...");
+  // Step 3: Stage shared runtime
+  console.log("\n3. Staging shared runtime...");
+  stageRuntime({ log: (line) => console.log(`   ${line}`) });
+  const runtimePaths = resolveRuntimeStagePaths(monorepoRoot);
+
+  // Step 4: Copy staged bundles for distribution
+  console.log("\n4. Copying runtime bundles...");
   const bundlesDir = join(cliDir, "bundles");
+  rmSync(bundlesDir, { recursive: true, force: true });
   mkdirSync(bundlesDir, { recursive: true });
 
-  const copies: { src: string; dest: string; name: string; required: boolean }[] = [
+  const copies = [
     {
-      src: join(monorepoRoot, "apps/agent-server/dist/index.bundled.cjs"),
+      src: runtimePaths.common.agentServerBundle,
       dest: join(bundlesDir, "agent-server.bundled.cjs"),
       name: "agent-server bundle",
-      required: true,
     },
     {
-      src: join(monorepoRoot, "apps/backend/dist/server.bundled.cjs"),
+      src: runtimePaths.common.backendBundle,
       dest: join(bundlesDir, "server.bundled.cjs"),
       name: "backend bundle",
-      required: true,
     },
   ];
 
-  let hasErrors = false;
   for (const copy of copies) {
-    if (existsSync(copy.src)) {
-      cpSync(copy.src, copy.dest, { recursive: true });
-      console.log(`   ✓ ${copy.name}`);
-    } else if (copy.required) {
+    if (!existsSync(copy.src)) {
       console.error(`   ✗ ${copy.name} not found: ${copy.src}`);
-      hasErrors = true;
-    } else {
-      console.log(`   - ${copy.name} not found (optional, server will work without UI)`);
+      process.exit(1);
     }
-  }
-
-  if (hasErrors) {
-    console.error("\nMissing required bundles. Run these first:");
-    console.error("  bun run build:agent-server");
-    console.error("  bun run build:backend");
-    // No web frontend needed — headless mode uses app.deusmachine.ai via relay
-    process.exit(1);
+    cpSync(copy.src, copy.dest, { recursive: true });
+    console.log(`   ✓ ${copy.name}`);
   }
 
   console.log("\n✓ Build complete!");

@@ -41,6 +41,7 @@ deus start
 ```
 
 First run walks you through setup:
+
 1. **AI Agent** — detects Claude Code CLI or prompts for an API key
 2. **Remote Access** — connects to the relay and generates a pairing code with QR
 
@@ -59,7 +60,7 @@ deus install                  # download and install
 deus install --version v0.1.5 # specific version
 ```
 
-After installing, `deus` launches the app directly.
+On macOS, `deus install` copies `Deus.app` into `/Applications` and launches it from there.
 
 ## Remote Pairing
 

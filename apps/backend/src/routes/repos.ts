@@ -31,6 +31,67 @@ import type { QueryResource } from "@shared/types/query-protocol";
 
 const app = new Hono();
 
+interface InspectedRepository {
+  rootPath: string;
+  repoName: string;
+  defaultBranch: string;
+  originUrl: string | null;
+}
+
+function inspectRepositoryRoot(rootPath: string): InspectedRepository {
+  let normalizedRootPath = rootPath;
+
+  try {
+    normalizedRootPath = fs.realpathSync(normalizedRootPath);
+  } catch {
+    throw new ValidationError("Path does not exist or is inaccessible");
+  }
+
+  try {
+    fs.accessSync(normalizedRootPath, fs.constants.R_OK | fs.constants.X_OK);
+  } catch {
+    throw new AppError(403, "Path is not accessible (permission denied)");
+  }
+
+  const stats = fs.statSync(normalizedRootPath);
+  if (!stats.isDirectory()) {
+    throw new ValidationError("Path is not a directory");
+  }
+
+  try {
+    normalizedRootPath = execFileSync("git", ["rev-parse", "--show-toplevel"], {
+      cwd: normalizedRootPath,
+      timeout: 2000,
+    })
+      .toString()
+      .trim();
+  } catch {
+    throw new ValidationError("Path is not a git repository");
+  }
+
+  const repoName = path.basename(normalizedRootPath);
+  const defaultBranch = detectDefaultBranch(normalizedRootPath);
+
+  let originUrl: string | null = null;
+  try {
+    originUrl =
+      execFileSync("git", ["remote", "get-url", "origin"], {
+        cwd: normalizedRootPath,
+        encoding: "utf-8",
+        timeout: 2000,
+      }).trim() || null;
+  } catch {
+    // No origin remote — that's fine
+  }
+
+  return {
+    rootPath: normalizedRootPath,
+    repoName,
+    defaultBranch,
+    originUrl,
+  };
+}
+
 app.get("/repos", (c) => {
   const db = getDatabase();
   return c.json(getAllRepositories(db));
@@ -55,52 +116,8 @@ app.get("/git/user", async (c) => {
 
 app.post("/repos", async (c) => {
   const db = getDatabase();
-  let { root_path } = parseBody(CreateRepoBody, await c.req.json());
-
-  // Normalize path
-  try {
-    root_path = fs.realpathSync(root_path);
-  } catch {
-    throw new ValidationError("Path does not exist or is inaccessible");
-  }
-
-  // Verify permissions
-  try {
-    fs.accessSync(root_path, fs.constants.R_OK | fs.constants.X_OK);
-  } catch {
-    throw new AppError(403, "Path is not accessible (permission denied)");
-  }
-
-  const stats = fs.statSync(root_path);
-  if (!stats.isDirectory()) throw new ValidationError("Path is not a directory");
-
-  // Check git repo and resolve to repo root
-  try {
-    root_path = execFileSync("git", ["rev-parse", "--show-toplevel"], {
-      cwd: root_path,
-      timeout: 2000,
-    })
-      .toString()
-      .trim();
-  } catch {
-    throw new ValidationError("Path is not a git repository");
-  }
-
-  const repoName = path.basename(root_path);
-  const defaultBranch = detectDefaultBranch(root_path);
-
-  // Resolve origin URL (non-fatal — repos without remotes should still work)
-  let gitOriginUrl: string | null = null;
-  try {
-    gitOriginUrl =
-      execFileSync("git", ["remote", "get-url", "origin"], {
-        cwd: root_path,
-        encoding: "utf-8",
-        timeout: 2000,
-      }).trim() || null;
-  } catch {
-    // No origin remote — that's fine
-  }
+  const { root_path } = parseBody(CreateRepoBody, await c.req.json());
+  const inspectedRepo = inspectRepositoryRoot(root_path);
 
   const insertRepo = db.transaction(
     (
@@ -127,9 +144,26 @@ app.post("/repos", async (c) => {
   );
 
   const repoId = uuidv7();
-  const repo = insertRepo(root_path, repoId, repoName, defaultBranch, gitOriginUrl);
+  const repo = insertRepo(
+    inspectedRepo.rootPath,
+    repoId,
+    inspectedRepo.repoName,
+    inspectedRepo.defaultBranch,
+    inspectedRepo.originUrl
+  );
   invalidate(["stats"] as QueryResource[]);
   return c.json(repo, 201);
+});
+
+app.post("/repos/inspect", async (c) => {
+  const { root_path } = parseBody(CreateRepoBody, await c.req.json());
+  const inspectedRepo = inspectRepositoryRoot(root_path);
+  return c.json({
+    root_path: inspectedRepo.rootPath,
+    name: inspectedRepo.repoName,
+    git_default_branch: inspectedRepo.defaultBranch,
+    git_origin_url: inspectedRepo.originUrl,
+  });
 });
 
 // ─── Clone Endpoint ──────────────────────────────────────────
@@ -175,7 +209,12 @@ app.post("/repos/clone", async (c) => {
 
   // Check target doesn't already exist
   if (fs.existsSync(resolvedPath)) {
-    throw new ConflictError("Target directory already exists");
+    const gitMetadataPath = path.join(resolvedPath, ".git");
+    if (fs.existsSync(gitMetadataPath)) {
+      throw new ConflictError("Target already contains a git repository");
+    }
+
+    throw new ConflictError("Target directory already exists and is not a git repository");
   }
 
   // Run git clone with progress, forward raw stderr lines to frontend

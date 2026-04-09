@@ -14,9 +14,9 @@
 
 import { app, BrowserWindow, ipcMain, shell } from "electron";
 import { join } from "path";
+import { homedir } from "os";
 import { is } from "@electron-toolkit/utils";
 import { spawnBackend, stopBackend, CDP_PORT } from "./backend-process";
-// Agent-server is spawned by the backend process (via AGENT_SERVER_BUNDLE_PATH env var)
 import { registerNativeHandlers } from "./native-handlers";
 import { registerBrowserViewHandlers, destroyAllBrowserViews } from "./browser-views";
 // PTY, file watching, and browser server are now handled by the backend
@@ -25,10 +25,26 @@ import { setupAutoUpdater } from "./auto-updater";
 import { syncShellEnvironment } from "./shell-env";
 import { setupAppMenu } from "./app-menu";
 import { setupTray, destroyTray } from "./tray";
+import { ensureInstalledInApplications } from "./install-preflight";
+import {
+  formatStartupFailureDetail,
+  getMainLogPath,
+  initMainProcessLogging,
+  logMainProcess,
+} from "./startup-diagnostics";
+import { resolveDefaultDataDir } from "../../../shared/runtime";
 
 // ---------------------------------------------------------------------------
 // Single Instance Lock
 // ---------------------------------------------------------------------------
+
+const canonicalUserDataPath = resolveDefaultDataDir({
+  platform: process.platform,
+  homeDir: process.env.HOME || homedir(),
+  appData: process.env.APPDATA,
+  xdgDataHome: process.env.XDG_DATA_HOME,
+});
+app.setPath("userData", canonicalUserDataPath);
 
 if (!app.requestSingleInstanceLock()) {
   app.quit();
@@ -151,19 +167,13 @@ async function createWindow(): Promise<void> {
 // ---------------------------------------------------------------------------
 
 app.whenReady().then(async () => {
-  // Debug logging to file (Electron swallows stdout/stderr in dev mode)
-  const fs = await import("fs");
-  const debugLogPath = join(app.getPath("temp"), "deus-debug.log");
-  const debugLog = (msg: string) => {
-    try {
-      fs.appendFileSync(debugLogPath, `${new Date().toISOString()} ${msg}\n`);
-    } catch {
-      // Never block boot on diagnostics
-    }
-    console.error(msg);
-  };
-  debugLog("[main] App ready, starting initialization...");
-  debugLog("[main] __dirname: " + __dirname);
+  initMainProcessLogging();
+  logMainProcess("[main] App ready, starting initialization...");
+  logMainProcess("[main] __dirname: " + __dirname);
+
+  if (await ensureInstalledInApplications()) {
+    return;
+  }
 
   // Set up the native app menu (File, Edit, View, Window, Help)
   setupAppMenu();
@@ -172,17 +182,30 @@ app.whenReady().then(async () => {
     try {
       await syncShellEnvironment();
     } catch (err) {
-      debugLog(
+      logMainProcess(
         "[main] syncShellEnvironment failed: " + (err instanceof Error ? err.message : String(err))
       );
     }
   }
 
-  // Spawn backend as child process
-  debugLog("[main] Spawning backend...");
+  // Spawn runtime children as child processes
+  logMainProcess("[main] Spawning runtime stack...");
   try {
-    const { port: backendPort, authToken } = await spawnBackend();
-    debugLog("[main] Backend started on port: " + backendPort);
+    const { port: backendPort, authToken } = await spawnBackend({
+      onStdoutLine: (source, line) => {
+        if (source === "backend" && line.startsWith("DEUS_WORKSPACE_PROGRESS:")) {
+          return;
+        }
+        logMainProcess(`[${source}] ${line}`);
+      },
+      onStderrLine: (source, line) => {
+        logMainProcess(`[${source}:stderr] ${line}`);
+      },
+      onExit: (source, code, signal) => {
+        logMainProcess(`[${source}] Exited with code=${code} signal=${signal}`);
+      },
+    });
+    logMainProcess("[main] Backend started on port: " + backendPort);
 
     // Expose backend connection info so IPC handlers can return it to renderer
     process.env.DEUS_BACKEND_PORT = String(backendPort);
@@ -191,18 +214,27 @@ app.whenReady().then(async () => {
     // System tray icon with backend health status
     setupTray(backendPort);
   } catch (err) {
-    debugLog("[main] Backend spawn FAILED: " + (err instanceof Error ? err.message : String(err)));
-    const { dialog } = await import("electron");
-    dialog.showErrorBox(
-      "Failed to Start",
-      `The application backend failed to start.\n\n${err instanceof Error ? err.message : String(err)}`
+    logMainProcess(
+      "[main] Backend spawn FAILED: " + (err instanceof Error ? err.message : String(err))
     );
+    const { dialog } = await import("electron");
+    const { response } = await dialog.showMessageBox({
+      type: "error",
+      buttons: ["Show Logs", "OK"],
+      defaultId: 1,
+      cancelId: 1,
+      noLink: true,
+      message: "Failed to Start",
+      detail: formatStartupFailureDetail(err),
+    });
+    if (response === 0) {
+      shell.showItemInFolder(getMainLogPath());
+    }
     app.quit();
     return;
   }
 
-  // Agent-server is spawned by the backend process (via AGENT_SERVER_BUNDLE_PATH env var)
-  // when AGENT_SERVER_BUNDLE_PATH env var is present.
+  // Electron owns both runtime children directly: agent-server first, then backend.
 
   // Register IPC handlers before window creation so they're ready immediately
   registerNativeHandlers();
@@ -226,11 +258,11 @@ app.whenReady().then(async () => {
     });
   }
 
-  debugLog("[main] Creating window...");
+  logMainProcess("[main] Creating window...");
   // PTY, FS watching, browser server — all handled by backend now
 
   await createWindow();
-  debugLog("[main] Window created");
+  logMainProcess("[main] Window created");
 
   // No hidden BrowserView needed — BrowserTab eagerly creates a native
   // BrowserView (about:blank) on mount, giving agent-browser a CDP target
@@ -244,10 +276,10 @@ app.whenReady().then(async () => {
       const devIcon = nativeImage.createFromPath(devIconPath);
       if (!devIcon.isEmpty()) {
         app.dock?.setIcon(devIcon);
-        debugLog("[main] Dev dock icon set (orange dot)");
+        logMainProcess("[main] Dev dock icon set (orange dot)");
       }
     } catch (err) {
-      debugLog(
+      logMainProcess(
         "[main] Failed to set dev dock icon: " + (err instanceof Error ? err.message : String(err))
       );
     }
