@@ -159,6 +159,19 @@ class AgentServer {
     process.on("SIGTERM", () => gracefulShutdown("SIGTERM"));
   }
 
+  private getInitializedAgents() {
+    const agents: { type: string; capabilities: unknown; initialized: boolean }[] = [];
+    for (const [agentType, handler] of [
+      ["claude", getAgent("claude")],
+      ["codex", getAgent("codex")],
+    ] as const) {
+      if (handler && this.initializedAgents.has(agentType)) {
+        agents.push({ type: agentType, capabilities: handler.capabilities, initialized: true });
+      }
+    }
+    return agents;
+  }
+
   /**
    * Wires up all JSON-RPC methods and notifications on a new connection.
    */
@@ -166,22 +179,10 @@ class AgentServer {
     EventBroadcaster.attachTunnel(rpcTunnel);
 
     // --- Initialize handshake (backend agent-client sends this) ---
-    rpcTunnel.addMethod("initialize", () => {
-      const agents = [];
-      for (const [agentType, handler] of [
-        ["claude", getAgent("claude")],
-        ["codex", getAgent("codex")],
-      ] as const) {
-        if (handler && this.initializedAgents.has(agentType)) {
-          agents.push({
-            type: agentType,
-            capabilities: handler.capabilities,
-            initialized: true,
-          });
-        }
-      }
-      return { version: "1.0", agents };
-    });
+    rpcTunnel.addMethod("initialize", () => ({
+      version: "1.0",
+      agents: this.getInitializedAgents(),
+    }));
 
     // --- Initialized notification (backend confirms handshake) ---
     rpcTunnel.addMethod("initialized", () => {
@@ -332,18 +333,9 @@ class AgentServer {
     });
 
     // --- agent/list (introspection: list available agents) ---
-    rpcTunnel.addMethod("agent/list", () => {
-      const agents = [];
-      for (const [agentType, handler] of [
-        ["claude", getAgent("claude")],
-        ["codex", getAgent("codex")],
-      ] as const) {
-        if (handler && this.initializedAgents.has(agentType)) {
-          agents.push({ type: agentType, capabilities: handler.capabilities });
-        }
-      }
-      return { agents };
-    });
+    rpcTunnel.addMethod("agent/list", () => ({
+      agents: this.getInitializedAgents(),
+    }));
   }
 
   /**

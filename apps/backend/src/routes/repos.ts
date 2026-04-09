@@ -28,8 +28,59 @@ import { invalidate } from "../services/query-engine";
 import { runGh, parseGitHubRepo } from "../services/gh.service";
 import { broadcast } from "../services/ws.service";
 import type { QueryResource } from "@shared/types/query-protocol";
+import type { ChildProcess } from "child_process";
 
 const app = new Hono();
+
+/**
+ * Resolve target path, ensure parent directory exists, and guard against
+ * path traversal via symlinks outside the home directory.
+ */
+function resolveTargetPath(targetPath: string): string {
+  const resolvedPath = path.resolve(targetPath);
+  const parentDir = path.dirname(resolvedPath);
+  try {
+    fs.mkdirSync(parentDir, { recursive: true });
+  } catch (err) {
+    throw new AppError(500, `Cannot create parent directory: ${(err as Error).message}`);
+  }
+
+  const realHome = fs.realpathSync(os.homedir());
+  const realParent = fs.realpathSync(parentDir);
+  const candidatePath = path.join(realParent, path.basename(resolvedPath));
+  if (!candidatePath.startsWith(realHome + path.sep) && candidatePath !== realHome) {
+    throw new ValidationError("Target path must be within the home directory");
+  }
+  return resolvedPath;
+}
+
+/**
+ * Forward git stderr progress lines to a callback, handling \r-based
+ * in-place updates. Returns a flush() that drains and returns any
+ * remaining buffered text.
+ */
+function pipeGitStderr(
+  proc: ChildProcess,
+  onLine: (line: string) => void
+): { flush: () => string } {
+  let buffer = "";
+  proc.stderr?.on("data", (chunk: Buffer) => {
+    buffer += chunk.toString();
+    const lines = buffer.split(/[\r\n]+/);
+    buffer = lines.pop() || "";
+    for (const line of lines) {
+      const trimmed = line.trim();
+      if (trimmed) onLine(trimmed);
+    }
+  });
+  return {
+    flush() {
+      const remaining = buffer.trim();
+      buffer = "";
+      return remaining;
+    },
+  };
+}
 
 interface InspectedRepository {
   rootPath: string;
@@ -190,22 +241,7 @@ app.post("/repos/clone", async (c) => {
     throw new ValidationError("Missing or invalid 'targetPath' parameter");
   }
 
-  // Ensure parent directory exists
-  const resolvedPath = path.resolve(targetPath);
-  const parentDir = path.dirname(resolvedPath);
-  try {
-    fs.mkdirSync(parentDir, { recursive: true });
-  } catch (err) {
-    throw new AppError(500, `Cannot create parent directory: ${(err as Error).message}`);
-  }
-
-  // Path traversal guard — resolve symlinks to prevent escaping home via symlinked parents
-  const realHome = fs.realpathSync(os.homedir());
-  const realParent = fs.realpathSync(parentDir);
-  const candidatePath = path.join(realParent, path.basename(resolvedPath));
-  if (!candidatePath.startsWith(realHome + path.sep) && candidatePath !== realHome) {
-    throw new ValidationError("Target path must be within the home directory");
-  }
+  const resolvedPath = resolveTargetPath(targetPath);
 
   // Check target doesn't already exist
   if (fs.existsSync(resolvedPath)) {
@@ -224,22 +260,10 @@ app.post("/repos/clone", async (c) => {
       timeout: 300_000, // 5 minute timeout
     });
 
-    let stderrBuffer = "";
-
-    proc.stderr?.on("data", (chunk: Buffer) => {
-      stderrBuffer += chunk.toString();
-      // Git progress uses \r for in-place updates within a phase
-      const lines = stderrBuffer.split(/[\r\n]+/);
-      stderrBuffer = lines.pop() || "";
-      for (const line of lines) {
-        const trimmed = line.trim();
-        if (trimmed) pushCloneLine(trimmed);
-      }
-    });
+    const { flush } = pipeGitStderr(proc, pushCloneLine);
 
     proc.on("close", (code) => {
-      // Flush remaining buffer
-      const remaining = stderrBuffer.trim();
+      const remaining = flush();
       if (remaining) pushCloneLine(remaining);
 
       if (code === 0) {
@@ -266,22 +290,7 @@ function pushInitLine(line: string): void {
 app.post("/repos/init", async (c) => {
   const { projectName, targetPath, template } = parseBody(InitProjectBody, await c.req.json());
 
-  // Ensure parent exists, target does NOT exist
-  const resolvedPath = path.resolve(targetPath);
-  const parentDir = path.dirname(resolvedPath);
-  try {
-    fs.mkdirSync(parentDir, { recursive: true });
-  } catch (err) {
-    throw new AppError(500, `Cannot create parent directory: ${(err as Error).message}`);
-  }
-
-  // Path traversal guard — resolve symlinks to prevent escaping home via symlinked parents
-  const realHome = fs.realpathSync(os.homedir());
-  const realParent = fs.realpathSync(parentDir);
-  const candidatePath = path.join(realParent, path.basename(resolvedPath));
-  if (!candidatePath.startsWith(realHome + path.sep) && candidatePath !== realHome) {
-    throw new ValidationError("Target path must be within the home directory");
-  }
+  const resolvedPath = resolveTargetPath(targetPath);
   if (fs.existsSync(resolvedPath)) {
     throw new ConflictError("Target directory already exists");
   }
@@ -295,19 +304,10 @@ app.post("/repos/init", async (c) => {
         timeout: 120_000,
       });
 
-      let stderrBuffer = "";
-      proc.stderr?.on("data", (chunk: Buffer) => {
-        stderrBuffer += chunk.toString();
-        const lines = stderrBuffer.split(/[\r\n]+/);
-        stderrBuffer = lines.pop() || "";
-        for (const line of lines) {
-          const trimmed = line.trim();
-          if (trimmed) pushInitLine(trimmed);
-        }
-      });
+      const { flush } = pipeGitStderr(proc, pushInitLine);
 
       proc.on("close", (code) => {
-        const remaining = stderrBuffer.trim();
+        const remaining = flush();
         if (remaining) pushInitLine(remaining);
         if (code === 0) resolve();
         else reject(new Error(remaining || `git clone exited with code ${code}`));
