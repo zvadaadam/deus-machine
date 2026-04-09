@@ -254,37 +254,25 @@ class AgentServer {
       console.log(`[AgentServer] turn/respond received (requestId=${requestId})`);
     });
 
-    // --- turn/cancel (new wire protocol method, maps to cancel dispatch) ---
-    rpcTunnel.addMethod("turn/cancel", async (params: any) => {
+    // --- turn/cancel & session/stop both cancel across all agents ---
+    const cancelAll = async (params: any) => {
       const sessionId = params?.sessionId;
       if (!sessionId) return;
-
-      // Try all registered agents — the backend may not send agentType for cancel
       for (const agentType of ["claude", "codex"] as const) {
         const agent = getAgent(agentType);
         if (agent) void agent.cancel(sessionId);
       }
-    });
+    };
+    rpcTunnel.addMethod("turn/cancel", cancelAll);
+    rpcTunnel.addMethod("session/stop", cancelAll);
 
     // --- session/reset (new wire protocol method) ---
     rpcTunnel.addMethod("session/reset", (params: any) => {
       const sessionId = params?.sessionId;
       if (!sessionId) return;
-
       for (const agentType of ["claude", "codex"] as const) {
         const agent = getAgent(agentType);
         if (agent) agent.reset(sessionId);
-      }
-    });
-
-    // --- session/stop (stop a running session) ---
-    rpcTunnel.addMethod("session/stop", async (params: any) => {
-      const sessionId = params?.sessionId;
-      if (!sessionId) return;
-
-      for (const agentType of ["claude", "codex"] as const) {
-        const agent = getAgent(agentType);
-        if (agent) void agent.cancel(sessionId);
       }
     });
 
