@@ -135,6 +135,33 @@ describe("recent-projects.service", () => {
     ]);
   });
 
+  it("keeps the first full JSONL record when the suffix starts on a newline", () => {
+    const tempRoot = createTempRoot();
+    const homeDir = path.join(tempRoot, "home");
+    const projectsDir = path.join(homeDir, ".claude", "projects");
+    const boundaryProject = path.join(homeDir, "Developer", "boundary-project");
+    const sessionDir = path.join(projectsDir, "project-boundary", "session-1");
+    const sessionFile = path.join(sessionDir, "agent.jsonl");
+
+    mkdirSync(boundaryProject, { recursive: true });
+    execFileSync("git", ["init"], { cwd: boundaryProject });
+    mkdirSync(sessionDir, { recursive: true });
+
+    const cwdLine = JSON.stringify({ cwd: boundaryProject, type: "assistant" });
+    const suffixPrefix = `\n${cwdLine}\n`;
+    const filler = "x".repeat(16 * 1024 - suffixPrefix.length);
+    writeFileSync(sessionFile, "p".repeat(32) + suffixPrefix + filler);
+
+    const canonicalProject = execFileSync("git", ["rev-parse", "--show-toplevel"], {
+      cwd: boundaryProject,
+      encoding: "utf8",
+    }).trim();
+
+    expect(readClaudeProjects(projectsDir, { homeDir })).toEqual([
+      { path: canonicalProject, name: "boundary-project", source: "claude" },
+    ]);
+  });
+
   it("orders Claude projects by newest session activity, not project directory mtime", () => {
     const tempRoot = createTempRoot();
     const homeDir = path.join(tempRoot, "home");

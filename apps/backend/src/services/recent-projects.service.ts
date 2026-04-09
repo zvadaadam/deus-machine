@@ -31,6 +31,9 @@ const IGNORED_PATH_SEGMENTS = [
 
 interface ReaderOptions {
   homeDir?: string;
+  maxProjects?: number;
+  maxGitProbes?: number;
+  gitProbeState?: { count: number };
 }
 
 interface ListRecentProjectsOptions extends ReaderOptions {
@@ -45,6 +48,27 @@ interface ListRecentProjectsOptions extends ReaderOptions {
 interface JsonlSuffixRead {
   contents: string;
   truncated: boolean;
+}
+
+function hasProjectCapacity(projects: RecentProject[], options: ReaderOptions): boolean {
+  return projects.length < (options.maxProjects ?? RECENT_PROJECT_LIMIT);
+}
+
+function hasGitProbeBudgetRemaining(options: ReaderOptions): boolean {
+  if (options.maxGitProbes == null) return true;
+  return (options.gitProbeState?.count ?? 0) < options.maxGitProbes;
+}
+
+function consumeGitProbeBudget(options: ReaderOptions): boolean {
+  if (options.maxGitProbes == null) return true;
+
+  const probeState = options.gitProbeState;
+  if (!probeState || probeState.count >= options.maxGitProbes) {
+    return false;
+  }
+
+  probeState.count += 1;
+  return true;
 }
 
 interface ClaudeSessionFile {
@@ -139,6 +163,12 @@ function pushProject(
   project: RecentProject,
   options: ReaderOptions = {}
 ): void {
+  if (!hasProjectCapacity(projects, options)) return;
+  if (seenPaths.has(project.path)) return;
+  if (isIgnoredRecentProjectPath(project.path, options)) return;
+  if (!existsSync(project.path)) return;
+  if (!consumeGitProbeBudget(options)) return;
+
   const projectRoot = resolveGitProjectRoot(project.path);
   if (!projectRoot) return;
   if (seenPaths.has(projectRoot)) return;
@@ -159,6 +189,7 @@ function readVscdbProjects(
   options: ReaderOptions
 ): RecentProject[] {
   if (!existsSync(dbPath)) return [];
+  if (!hasGitProbeBudgetRemaining(options)) return [];
 
   let db: InstanceType<typeof Database> | undefined;
   try {
@@ -176,6 +207,10 @@ function readVscdbProjects(
     };
 
     for (const entry of data.entries ?? []) {
+      if (!hasProjectCapacity(projects, options) || !hasGitProbeBudgetRemaining(options)) {
+        break;
+      }
+
       const folderUri = entry.folderUri;
       if (folderUri && folderUri.startsWith("file://")) {
         const fsPath = parseFileUriPath(folderUri);
@@ -242,7 +277,7 @@ function extractClaudeCwdFromJsonl(filePath: string): string | null {
     const { contents, truncated } = readJsonlSuffix(filePath);
     const lines = contents.split("\n").filter(Boolean);
 
-    if (truncated && lines.length > 0) {
+    if (truncated && !contents.startsWith("\n") && lines.length > 0) {
       lines.shift();
     }
 
@@ -322,6 +357,7 @@ export function resolveClaudeProjectPath(
 
 export function readClaudeProjects(dir: string, options: ReaderOptions = {}): RecentProject[] {
   if (!existsSync(dir)) return [];
+  if (!hasGitProbeBudgetRemaining(options)) return [];
 
   const seenPaths = new Set<string>();
   const projects: RecentProject[] = [];
@@ -337,6 +373,10 @@ export function readClaudeProjects(dir: string, options: ReaderOptions = {}): Re
       .sort((left, right) => right.activityMtimeMs - left.activityMtimeMs);
 
     for (const project of resolvedProjects) {
+      if (!hasProjectCapacity(projects, options) || !hasGitProbeBudgetRemaining(options)) {
+        break;
+      }
+
       pushProject(
         projects,
         seenPaths,
@@ -379,7 +419,12 @@ export function interleaveRecentProjects(
 export function listRecentProjects(options: ListRecentProjectsOptions = {}): RecentProject[] {
   const homeDir = options.homeDir ?? homedir();
   const limit = options.limit ?? RECENT_PROJECT_LIMIT;
-  const readerOptions = { homeDir };
+  const readerOptions = {
+    homeDir,
+    maxProjects: Math.max(limit * 2, 20),
+    maxGitProbes: Math.max(limit * 3, 30),
+    gitProbeState: { count: 0 },
+  } satisfies ReaderOptions;
 
   const cursorProjects =
     options.readers?.cursor?.() ??
