@@ -1,4 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
+import * as fs from "fs";
 
 // ============================================================================
 // Mock setup — must come before importing the module under test
@@ -165,6 +166,23 @@ describe("claude-handler", () => {
           id: "sess-1",
           type: "error",
           agentType: "claude",
+        })
+      );
+    });
+
+    it("sends a clear error when the workspace path is missing", async () => {
+      vi.mocked(fs.existsSync).mockImplementation((value: fs.PathLike) => value !== "/missing");
+
+      await handler.query("sess-missing-cwd", "hello", { cwd: "/missing", turnId: "turn-1" });
+
+      await new Promise((r) => setTimeout(r, 50));
+
+      expect(mockClaudeSDK).not.toHaveBeenCalled();
+      expect(mockFrontendAPI.sendError).toHaveBeenCalledWith(
+        expect.objectContaining({
+          id: "sess-missing-cwd",
+          type: "error",
+          error: expect.stringContaining("Workspace path does not exist: /missing"),
         })
       );
     });
