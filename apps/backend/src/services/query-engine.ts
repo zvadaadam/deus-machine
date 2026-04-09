@@ -160,7 +160,6 @@ export function invalidate(resources: QueryResource[], ctx?: InvalidateContext):
     resetStatsCache();
   }
 
-  // Phase 1: Push fresh data to active subscribers
   for (const [connectionId, connSubs] of subs) {
     if (!getConnection(connectionId)) {
       removeSubs(connectionId);
@@ -171,68 +170,61 @@ export function invalidate(resources: QueryResource[], ctx?: InvalidateContext):
       if (!resources.includes(sub.resource)) continue;
 
       if (sub.resource === "messages") {
-        // Messages: push delta (new messages since last cursor)
         pushMessageDelta(connectionId, subId, sub.params);
-      } else if (sub.resource === "workspaces" && ctx?.sessionIds?.length) {
-        // Workspaces with session context: try targeted delta
-        try {
-          const db = getDatabase();
-          const stateFilter = readStringParam(sub.params, "state") ?? "ready,initializing";
-          const allowedStates = new Set(stateFilter.split(",").map((s) => s.trim()));
-          const changedWorkspaces = getWorkspacesBySessionIds(db, ctx.sessionIds).filter((ws) =>
-            allowedStates.has(ws.state)
-          );
-          if (changedWorkspaces.length > 0) {
-            const withPaths = changedWorkspaces.map((ws) => ({
-              ...ws,
-              workspace_path: computeWorkspacePath(ws),
-            }));
-            sendFrame(connectionId, {
-              type: "q:delta",
-              id: subId,
-              upserted: withPaths,
-            });
-          } else {
-            // Session IDs didn't match any workspaces — fall back to full snapshot
-            const data = runQuery(sub.resource, sub.params);
-            sendFrame(connectionId, { type: "q:snapshot", id: subId, data });
-          }
-        } catch (err) {
-          // Delta lookup failed — fall back to full snapshot
-          console.error(`[QueryEngine] Workspace delta failed, falling back to snapshot:`, err);
-          try {
-            const data = runQuery(sub.resource, sub.params);
-            sendFrame(connectionId, { type: "q:snapshot", id: subId, data });
-          } catch (snapErr) {
-            console.error(`[QueryEngine] Snapshot fallback also failed:`, snapErr);
-          }
-        }
-      } else if (sub.resource === "session" && ctx?.sessionIds?.length) {
-        // Session with context: only push if this subscription's session is in the changed set
-        const subscribedSessionId = readStringParam(sub.params, "sessionId");
-        if (subscribedSessionId && ctx.sessionIds.includes(subscribedSessionId)) {
-          try {
-            const data = runQuery(sub.resource, sub.params);
-            sendFrame(connectionId, { type: "q:snapshot", id: subId, data });
-          } catch (err) {
-            console.error(`[QueryEngine] Session snapshot push failed:`, err);
-          }
-        }
-        // If session not in changed set, skip the push
-      } else {
-        // Other resources: push full snapshot
-        try {
-          const data = runQuery(sub.resource, sub.params);
-          sendFrame(connectionId, {
-            type: "q:snapshot",
-            id: subId,
-            data,
-          });
-        } catch (err) {
-          console.error(`[QueryEngine] Snapshot push failed for ${sub.resource}:`, err);
-        }
+        continue;
       }
+
+      // Session with context: only push if this subscription's session changed
+      if (sub.resource === "session" && ctx?.sessionIds?.length) {
+        const sid = readStringParam(sub.params, "sessionId");
+        if (!sid || !ctx.sessionIds.includes(sid)) continue;
+      }
+
+      // Workspaces with session context: try targeted delta first
+      if (sub.resource === "workspaces" && ctx?.sessionIds?.length) {
+        if (pushWorkspaceDelta(connectionId, subId, sub, ctx.sessionIds)) continue;
+      }
+
+      pushSnapshot(connectionId, subId, sub);
     }
+  }
+}
+
+/** Try a targeted workspace delta; return true if pushed, false to fall back to snapshot. */
+function pushWorkspaceDelta(
+  connectionId: string,
+  subId: string,
+  sub: Sub,
+  sessionIds: string[]
+): boolean {
+  try {
+    const db = getDatabase();
+    const stateFilter = readStringParam(sub.params, "state") ?? "ready,initializing";
+    const allowedStates = new Set(stateFilter.split(",").map((s) => s.trim()));
+    const changed = getWorkspacesBySessionIds(db, sessionIds).filter((ws) =>
+      allowedStates.has(ws.state)
+    );
+    if (changed.length === 0) return false;
+
+    sendFrame(connectionId, {
+      type: "q:delta",
+      id: subId,
+      upserted: changed.map((ws) => ({ ...ws, workspace_path: computeWorkspacePath(ws) })),
+    });
+    return true;
+  } catch (err) {
+    console.error(`[QueryEngine] Workspace delta failed, falling back to snapshot:`, err);
+    return false;
+  }
+}
+
+/** Push a full snapshot for a subscription; log and swallow errors. */
+function pushSnapshot(connectionId: string, subId: string, sub: Sub): void {
+  try {
+    const data = runQuery(sub.resource, sub.params);
+    sendFrame(connectionId, { type: "q:snapshot", id: subId, data });
+  } catch (err) {
+    console.error(`[QueryEngine] Snapshot push failed for ${sub.resource}:`, err);
   }
 }
 
