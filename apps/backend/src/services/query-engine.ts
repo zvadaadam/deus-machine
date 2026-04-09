@@ -445,19 +445,12 @@ function runQuery(resource: QueryResource, params: QueryParams): unknown {
       return Object.values(grouped).sort((a, b) => a.sort_order - b.sort_order);
     })
     .with("stats", () => getStats(db))
-    .with("sessions", () => {
-      const workspaceId = readStringParam(params, "workspaceId");
-      if (!workspaceId) throw new Error("sessions requires workspaceId param");
-      return getSessionsByWorkspaceId(db, workspaceId);
-    })
-    .with("session", () => {
-      const sessionId = readStringParam(params, "sessionId");
-      if (!sessionId) throw new Error("session requires sessionId param");
-      return getSessionById(db, sessionId);
-    })
+    .with("sessions", () =>
+      getSessionsByWorkspaceId(db, requireParam(params, "workspaceId", "sessions"))
+    )
+    .with("session", () => getSessionById(db, requireParam(params, "sessionId", "session")))
     .with("messages", () => {
-      const sessionId = readStringParam(params, "sessionId");
-      if (!sessionId) throw new Error("messages requires sessionId param");
+      const sessionId = requireParam(params, "sessionId", "messages");
 
       const rows = getMessages(db, sessionId, {
         limit: readNumberParam(params, "limit") ?? 50,
@@ -487,19 +480,24 @@ function isRequestResource(value: string): value is RequestResourceName {
  * Uses delegateToRoute() so all business logic stays in the route handlers.
  */
 async function runRequest(resource: RequestResourceName, params: QueryParams): Promise<unknown> {
+  /** GET /api/workspaces/:id{path} — covers the 10+ workspace-scoped reads. */
+  const wsGet = (path = "") =>
+    delegateToRoute(
+      "GET",
+      `/api/workspaces/${encodeURIComponent(requireParam(params, "workspaceId", resource))}${path}`
+    );
+  /** GET /api/repos/:id{path} — covers repo-scoped reads. */
+  const repoGet = (path = "") =>
+    delegateToRoute(
+      "GET",
+      `/api/repos/${encodeURIComponent(requireParam(params, "repoId", resource))}${path}`
+    );
+
   return match(resource)
     .with("settings", () => delegateToRoute("GET", "/api/settings"))
     .with("repos", () => delegateToRoute("GET", "/api/repos"))
-    .with("repoManifest", () => {
-      const repoId = readStringParam(params, "repoId");
-      if (!repoId) throw new Error("repoManifest requires repoId");
-      return delegateToRoute("GET", `/api/repos/${encodeURIComponent(repoId)}/manifest`);
-    })
-    .with("detectManifest", () => {
-      const repoId = readStringParam(params, "repoId");
-      if (!repoId) throw new Error("detectManifest requires repoId");
-      return delegateToRoute("GET", `/api/repos/${encodeURIComponent(repoId)}/detect-manifest`);
-    })
+    .with("repoManifest", () => repoGet("/manifest"))
+    .with("detectManifest", () => repoGet("/detect-manifest"))
     .with("agentConfig", () => {
       const section = readStringParam(params, "section") ?? "agents";
       const scope = readStringParam(params, "scope") ?? "global";
@@ -512,102 +510,46 @@ async function runRequest(resource: RequestResourceName, params: QueryParams): P
       );
     })
     .with("ghStatus", () => delegateToRoute("GET", "/api/gh-status"))
-    .with("prStatus", () => {
-      const workspaceId = readStringParam(params, "workspaceId");
-      if (!workspaceId) throw new Error("prStatus requires workspaceId");
-      return delegateToRoute("GET", `/api/workspaces/${encodeURIComponent(workspaceId)}/pr-status`);
-    })
-    .with("workspace", () => {
-      const workspaceId = readStringParam(params, "workspaceId");
-      if (!workspaceId) throw new Error("workspace requires workspaceId");
-      return delegateToRoute("GET", `/api/workspaces/${encodeURIComponent(workspaceId)}`);
-    })
+    .with("prStatus", () => wsGet("/pr-status"))
+    .with("workspace", () => wsGet())
     .with("allWorkspaces", () => delegateToRoute("GET", "/api/workspaces"))
-    .with("workspaceManifest", () => {
-      const workspaceId = readStringParam(params, "workspaceId");
-      if (!workspaceId) throw new Error("workspaceManifest requires workspaceId");
-      return delegateToRoute("GET", `/api/workspaces/${encodeURIComponent(workspaceId)}/manifest`);
-    })
-    .with("setupLogs", () => {
-      const workspaceId = readStringParam(params, "workspaceId");
-      if (!workspaceId) throw new Error("setupLogs requires workspaceId");
-      return delegateToRoute(
-        "GET",
-        `/api/workspaces/${encodeURIComponent(workspaceId)}/setup-logs`
-      );
-    })
-    .with("diffStats", () => {
-      const workspaceId = readStringParam(params, "workspaceId");
-      if (!workspaceId) throw new Error("diffStats requires workspaceId");
-      return delegateToRoute(
-        "GET",
-        `/api/workspaces/${encodeURIComponent(workspaceId)}/diff-stats`
-      );
-    })
-    .with("diffFiles", () => {
-      const workspaceId = readStringParam(params, "workspaceId");
-      if (!workspaceId) throw new Error("diffFiles requires workspaceId");
-      return delegateToRoute(
-        "GET",
-        `/api/workspaces/${encodeURIComponent(workspaceId)}/diff-files`
-      );
-    })
+    .with("workspaceManifest", () => wsGet("/manifest"))
+    .with("setupLogs", () => wsGet("/setup-logs"))
+    .with("diffStats", () => wsGet("/diff-stats"))
+    .with("diffFiles", () => wsGet("/diff-files"))
     .with("diffFile", () => {
-      const workspaceId = readStringParam(params, "workspaceId");
-      const file = readStringParam(params, "file");
-      if (!workspaceId || !file) throw new Error("diffFile requires workspaceId and file");
+      const wsId = requireParam(params, "workspaceId", "diffFile");
+      const file = requireParam(params, "file", "diffFile");
       return delegateToRoute(
         "GET",
-        `/api/workspaces/${encodeURIComponent(workspaceId)}/diff-file?file=${encodeURIComponent(file)}`
+        `/api/workspaces/${encodeURIComponent(wsId)}/diff-file?file=${encodeURIComponent(file)}`
       );
     })
-    .with("penFiles", () => {
-      const workspaceId = readStringParam(params, "workspaceId");
-      if (!workspaceId) throw new Error("penFiles requires workspaceId");
-      return delegateToRoute("GET", `/api/workspaces/${encodeURIComponent(workspaceId)}/pen-files`);
-    })
-    .with("workspaceFiles", () => {
-      const workspaceId = readStringParam(params, "workspaceId");
-      if (!workspaceId) throw new Error("workspaceFiles requires workspaceId");
-      return delegateToRoute("GET", `/api/workspaces/${encodeURIComponent(workspaceId)}/files`);
-    })
+    .with("penFiles", () => wsGet("/pen-files"))
+    .with("workspaceFiles", () => wsGet("/files"))
     .with("fileContent", () => {
-      const workspaceId = readStringParam(params, "workspaceId");
-      const filePath = readStringParam(params, "path");
-      if (!workspaceId || !filePath) throw new Error("fileContent requires workspaceId and path");
+      const wsId = requireParam(params, "workspaceId", "fileContent");
+      const filePath = requireParam(params, "path", "fileContent");
       return delegateToRoute(
         "GET",
-        `/api/workspaces/${encodeURIComponent(workspaceId)}/file-content?path=${encodeURIComponent(filePath)}`
+        `/api/workspaces/${encodeURIComponent(wsId)}/file-content?path=${encodeURIComponent(filePath)}`
       );
     })
     .with("fileSearch", () => {
-      const workspaceId = readStringParam(params, "workspaceId");
-      const query = readStringParam(params, "query");
-      if (!workspaceId || !query) throw new Error("fileSearch requires workspaceId and query");
+      const wsId = requireParam(params, "workspaceId", "fileSearch");
+      const query = requireParam(params, "query", "fileSearch");
       const limit = readNumberParam(params, "limit");
-      return delegateToRoute(
-        "POST",
-        `/api/workspaces/${encodeURIComponent(workspaceId)}/files/search`,
-        {
-          query,
-          ...(limit !== undefined ? { limit } : {}),
-        }
-      );
+      return delegateToRoute("POST", `/api/workspaces/${encodeURIComponent(wsId)}/files/search`, {
+        query,
+        ...(limit !== undefined ? { limit } : {}),
+      });
     })
     .with("recentProjects", () => delegateToRoute("GET", "/api/onboarding/recent-projects"))
     .with("pairedDevices", () => delegateToRoute("GET", "/api/remote-auth/devices"))
     .with("relayStatus", () => delegateToRoute("GET", "/api/relay/status"))
     .with("allSessions", () => delegateToRoute("GET", "/api/sessions"))
-    .with("repoPrs", () => {
-      const repoId = readStringParam(params, "repoId");
-      if (!repoId) throw new Error("repoPrs requires repoId");
-      return delegateToRoute("GET", `/api/repos/${encodeURIComponent(repoId)}/prs`);
-    })
-    .with("repoBranches", () => {
-      const repoId = readStringParam(params, "repoId");
-      if (!repoId) throw new Error("repoBranches requires repoId");
-      return delegateToRoute("GET", `/api/repos/${encodeURIComponent(repoId)}/branches`);
-    })
+    .with("repoPrs", () => repoGet("/prs"))
+    .with("repoBranches", () => repoGet("/branches"))
     .with("agentAuth", () => delegateToRoute("GET", "/api/settings/agent-auth"))
     .exhaustive();
 }
@@ -621,8 +563,7 @@ async function runMutation(action: string, params: QueryParams): Promise<unknown
     match(typedAction)
       .with("archiveWorkspace", () => {
         const db = getDatabase();
-        const workspaceId = readStringParam(params, "workspaceId");
-        if (!workspaceId) throw new Error("archiveWorkspace requires workspaceId");
+        const workspaceId = requireParam(params, "workspaceId", "archiveWorkspace");
 
         const workspace = getWorkspaceRaw(db, workspaceId);
         if (!workspace) throw new Error("Workspace not found");
@@ -634,11 +575,9 @@ async function runMutation(action: string, params: QueryParams): Promise<unknown
       })
       .with("updateWorkspaceTitle", () => {
         const db = getDatabase();
-        const workspaceId = readStringParam(params, "workspaceId");
+        const workspaceId = requireParam(params, "workspaceId", "updateWorkspaceTitle");
         const title = readStringParam(params, "title");
-        if (!workspaceId || title === undefined) {
-          throw new Error("updateWorkspaceTitle requires workspaceId and title");
-        }
+        if (title === undefined) throw new Error("updateWorkspaceTitle requires title");
 
         const workspace = getWorkspaceRaw(db, workspaceId);
         if (!workspace) throw new Error("Workspace not found");
@@ -649,27 +588,20 @@ async function runMutation(action: string, params: QueryParams): Promise<unknown
       })
       // ---- New mutations delegated to existing routes ----
       .with("updateWorkspace", () => {
-        const workspaceId = readStringParam(params, "workspaceId");
-        if (!workspaceId) throw new Error("updateWorkspace requires workspaceId");
+        const workspaceId = requireParam(params, "workspaceId", "updateWorkspace");
         const { workspaceId: _, ...body } = params;
         return delegateToRoute("PATCH", `/api/workspaces/${encodeURIComponent(workspaceId)}`, body);
       })
       .with("createSession", () => {
-        const workspaceId = readStringParam(params, "workspaceId");
-        if (!workspaceId) throw new Error("createSession requires workspaceId");
-        return delegateToRoute(
-          "POST",
-          `/api/workspaces/${encodeURIComponent(workspaceId)}/sessions`
-        );
+        const wsId = requireParam(params, "workspaceId", "createSession");
+        return delegateToRoute("POST", `/api/workspaces/${encodeURIComponent(wsId)}/sessions`);
       })
       .with("addRepo", () => {
-        const rootPath = readStringParam(params, "root_path");
-        if (!rootPath) throw new Error("addRepo requires root_path");
+        const rootPath = requireParam(params, "root_path", "addRepo");
         return delegateToRoute("POST", "/api/repos", { root_path: rootPath });
       })
       .with("saveRepoManifest", () => {
-        const repoId = readStringParam(params, "repoId");
-        if (!repoId) throw new Error("saveRepoManifest requires repoId");
+        const repoId = requireParam(params, "repoId", "saveRepoManifest");
         const { repoId: _, ...manifest } = params;
         return delegateToRoute(
           "POST",
@@ -692,8 +624,7 @@ async function runMutation(action: string, params: QueryParams): Promise<unknown
       })
       .with("deleteAgentConfig", () => {
         const section = readStringParam(params, "section") ?? "agents";
-        const itemId = readStringParam(params, "itemId");
-        if (!itemId) throw new Error("deleteAgentConfig requires itemId");
+        const itemId = requireParam(params, "itemId", "deleteAgentConfig");
         const scope = readStringParam(params, "scope") ?? "global";
         const repoPath = readStringParam(params, "repoPath");
         const qs = new URLSearchParams({ scope });
@@ -704,41 +635,34 @@ async function runMutation(action: string, params: QueryParams): Promise<unknown
         );
       })
       .with("saveSetting", () => {
-        const key = readStringParam(params, "key");
-        if (!key) throw new Error("saveSetting requires key");
+        const key = requireParam(params, "key", "saveSetting");
         return delegateToRoute("POST", "/api/settings", { key, value: params.value });
       })
       .with("invalidateFileCache", () => {
-        const workspaceId = readStringParam(params, "workspaceId");
-        if (!workspaceId) throw new Error("invalidateFileCache requires workspaceId");
+        const wsId = requireParam(params, "workspaceId", "invalidateFileCache");
         return delegateToRoute(
           "POST",
-          `/api/workspaces/${encodeURIComponent(workspaceId)}/files/invalidate-cache`
+          `/api/workspaces/${encodeURIComponent(wsId)}/files/invalidate-cache`
         );
       })
       .with("runTask", () => {
-        const workspaceId = readStringParam(params, "workspaceId");
-        const taskName = readStringParam(params, "taskName");
-        if (!workspaceId || !taskName) throw new Error("runTask requires workspaceId and taskName");
+        const wsId = requireParam(params, "workspaceId", "runTask");
+        const taskName = requireParam(params, "taskName", "runTask");
         return delegateToRoute(
           "POST",
-          `/api/workspaces/${encodeURIComponent(workspaceId)}/tasks/${encodeURIComponent(taskName)}/run`
+          `/api/workspaces/${encodeURIComponent(wsId)}/tasks/${encodeURIComponent(taskName)}/run`
         );
       })
       .with("revokeDevice", () => {
-        const deviceId = readStringParam(params, "deviceId");
-        if (!deviceId) throw new Error("revokeDevice requires deviceId");
+        const deviceId = requireParam(params, "deviceId", "revokeDevice");
         return delegateToRoute(
           "DELETE",
           `/api/remote-auth/devices/${encodeURIComponent(deviceId)}`
         );
       })
       .with("updateWorkspaceStatus", () => {
-        const workspaceId = readStringParam(params, "workspaceId");
-        const status = readStringParam(params, "status");
-        if (!workspaceId || !status) {
-          throw new Error("updateWorkspaceStatus requires workspaceId and status");
-        }
+        const workspaceId = requireParam(params, "workspaceId", "updateWorkspaceStatus");
+        const status = requireParam(params, "status", "updateWorkspaceStatus");
         const parsed = WorkspaceStatusSchema.parse(status);
         setWorkspaceStatus(workspaceId, parsed);
         invalidate(["workspaces", "stats"]);
@@ -840,6 +764,13 @@ function readStringParam(params: QueryParams, key: string): string | undefined {
 function readNumberParam(params: QueryParams, key: string): number | undefined {
   const value = params[key];
   return typeof value === "number" ? value : undefined;
+}
+
+/** Read a required string param, throwing a descriptive error if missing. */
+function requireParam(params: QueryParams, key: string, context = "resource"): string {
+  const value = readStringParam(params, key);
+  if (!value) throw new Error(`${context} requires ${key}`);
+  return value;
 }
 
 function isQueryResource(value: string): value is QueryResource {
