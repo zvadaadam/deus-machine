@@ -8,9 +8,11 @@
 // The runtime Codex class is loaded via dynamic import() in processQuery()
 // because @openai/codex-sdk is ESM-only and uses import.meta.url at module
 // init, which can't be shimmed in esbuild's CJS output.
-import type { ThreadItem, ThreadOptions } from "@openai/codex-sdk";
+import type { ThreadEvent, ThreadItem, ThreadOptions } from "@openai/codex-sdk";
 import { match, P } from "ts-pattern";
+import { uuidv7 } from "@shared/lib/uuid";
 import { EventBroadcaster } from "../../event-broadcaster";
+import { codexSdkAdapter } from "../../messages/codex-sdk-adapter";
 import { classifyError, handleCancellation, handleQueryError } from "../lifecycle";
 import type { AgentCapabilities, AgentHandler, QueryOptions } from "../registry";
 import { buildAgentEnvironment, buildWorkspaceContext } from "../environment";
@@ -237,8 +239,16 @@ export class CodexAgentHandler implements AgentHandler {
         signal: abortController.signal,
       });
 
+      // Unified Part transformer: runs alongside the legacy event path.
+      const messageId = uuidv7();
+      const transformer = codexSdkAdapter.createTransformer({ sessionId, messageId });
+
       for await (const event of events) {
         if (abortController.signal.aborted) break;
+
+        // Dual-write: transform into Parts and emit alongside legacy events
+        const parts = transformer.process(event as ThreadEvent);
+        EventBroadcaster.emitMessageParts(sessionId, "codex", messageId, parts);
 
         match(event)
           .with({ type: "thread.started" }, (e) => {
@@ -322,6 +332,17 @@ export class CodexAgentHandler implements AgentHandler {
             console.warn(`[codex] Unknown ThreadEvent type: ${(e as any).type}`);
           });
       }
+
+      // Finalize the transformer: close open parts, emit usage
+      const finished = transformer.finish();
+      EventBroadcaster.emitMessagePartsFinished(
+        sessionId,
+        "codex",
+        messageId,
+        finished.usage,
+        undefined,
+        finished.finishReason
+      );
 
       // Only update status if this processQuery still owns the session —
       // a rapid re-query can replace the session before we reach this point.
