@@ -52,4 +52,8 @@ export {
   // Part type enum
   type PartType,
   PartTypeSchema,
+  // Message parts envelope (DB JSON column)
+  type MessagePartsEnvelope,
+  MessagePartsEnvelopeSchema,
+  parseMessageParts,
 } from "./types";
