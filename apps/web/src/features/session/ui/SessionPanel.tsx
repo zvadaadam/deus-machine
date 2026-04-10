@@ -121,6 +121,7 @@ export const SessionPanel = forwardRef<SessionPanelRef, SessionPanelProps>(
       toolResultMap,
       parentToolUseMap,
       subagentMessages,
+      partsMap,
     } = useSessionWithMessages(sessionId);
 
     // Load-older pagination
@@ -342,6 +343,7 @@ export const SessionPanel = forwardRef<SessionPanelRef, SessionPanelProps>(
           toolResultMap={toolResultMap}
           parentToolUseMap={parentToolUseMap}
           subagentMessages={subagentMessages}
+          partsMap={partsMap}
           sessionStatus={sessionStatus}
           renderBlock={renderBlock}
         >
@@ -457,6 +459,7 @@ export const SessionPanel = forwardRef<SessionPanelRef, SessionPanelProps>(
                 toolResultMap={toolResultMap}
                 parentToolUseMap={parentToolUseMap}
                 subagentMessages={subagentMessages}
+                partsMap={partsMap}
                 sessionStatus={sessionStatus}
                 renderBlock={renderBlock}
               >

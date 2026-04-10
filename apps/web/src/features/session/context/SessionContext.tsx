@@ -16,12 +16,14 @@
 import { createContext, useContext, ReactNode, useMemo } from "react";
 import type { ContentBlock, Message, MessageRole, SessionStatus } from "../types";
 import type { ToolResultMap } from "../ui/chat-types";
+import type { MessagePartsEnvelope } from "@shared/messages";
 
 interface SessionContextValue {
   parseContent: (content: string) => (ContentBlock | string)[] | string;
   toolResultMap: ToolResultMap;
   parentToolUseMap: Map<string, string>; // messageId → parentToolUseId
   subagentMessages: Map<string, Message[]>; // toolUseId → child messages
+  partsMap: Map<string, MessagePartsEnvelope>; // messageId → parsed Parts envelope
   sessionStatus: SessionStatus;
   /** Renders a content block via BlockRenderer. Injected to break circular imports. */
   renderBlock: (
@@ -39,6 +41,7 @@ interface SessionProviderProps {
   toolResultMap: ToolResultMap;
   parentToolUseMap: Map<string, string>;
   subagentMessages: Map<string, Message[]>;
+  partsMap: Map<string, MessagePartsEnvelope>;
   sessionStatus: SessionStatus;
   /** Renders a content block via BlockRenderer. Injected to break circular imports. */
   renderBlock: (
@@ -55,6 +58,7 @@ export function SessionProvider({
   toolResultMap,
   parentToolUseMap,
   subagentMessages,
+  partsMap,
   sessionStatus,
   renderBlock,
   children,
@@ -67,10 +71,19 @@ export function SessionProvider({
       toolResultMap,
       parentToolUseMap,
       subagentMessages,
+      partsMap,
       sessionStatus,
       renderBlock,
     }),
-    [parseContent, toolResultMap, parentToolUseMap, subagentMessages, sessionStatus, renderBlock]
+    [
+      parseContent,
+      toolResultMap,
+      parentToolUseMap,
+      subagentMessages,
+      partsMap,
+      sessionStatus,
+      renderBlock,
+    ]
   );
 
   return <SessionContext.Provider value={value}>{children}</SessionContext.Provider>;
