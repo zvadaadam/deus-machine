@@ -129,6 +129,7 @@ export interface MessageRow {
   sent_at: string | null;
   cancelled_at: string | null;
   parent_tool_use_id: string | null;
+  parts: string | null;
 }
 
 // ─── stats ───────────────────────────────────────────────────

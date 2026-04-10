@@ -9,6 +9,7 @@ const {
   mockPersistToolResultMessage,
   mockPersistMessageResult,
   mockPersistMessageCancelled,
+  mockPersistMessagePartsFinished,
   mockPersistSessionStarted,
   mockPersistSessionIdle,
   mockPersistSessionError,
@@ -23,6 +24,7 @@ const {
   mockPersistToolResultMessage: vi.fn(() => ({ ok: true, value: "msg-id" })),
   mockPersistMessageResult: vi.fn(),
   mockPersistMessageCancelled: vi.fn(() => ({ ok: true, value: "msg-id" })),
+  mockPersistMessagePartsFinished: vi.fn(() => ({ ok: true, value: "updated" })),
   mockPersistSessionStarted: vi.fn(() => ({ ok: true, value: undefined })),
   mockPersistSessionIdle: vi.fn(() => ({ ok: true, value: undefined })),
   mockPersistSessionError: vi.fn(() => ({ ok: true, value: undefined })),
@@ -39,6 +41,7 @@ vi.mock("../../../src/services/agent/persistence", () => ({
   persistToolResultMessage: mockPersistToolResultMessage,
   persistMessageResult: mockPersistMessageResult,
   persistMessageCancelled: mockPersistMessageCancelled,
+  persistMessagePartsFinished: mockPersistMessagePartsFinished,
   persistSessionStarted: mockPersistSessionStarted,
   persistSessionIdle: mockPersistSessionIdle,
   persistSessionError: mockPersistSessionError,
@@ -258,6 +261,105 @@ describe("handleAgentEvent", () => {
   });
 
   // ==========================================================================
+  // Unified parts
+  // ==========================================================================
+
+  describe("message.parts", () => {
+    it("accumulates parts without persisting or invalidating", () => {
+      const event: AgentEvent = {
+        type: "message.parts",
+        sessionId: "sess-1",
+        agentType: "claude",
+        messageId: "msg-parts-1",
+        parts: [
+          { type: "TEXT", id: "p1", sessionId: "sess-1", messageId: "msg-parts-1", text: "Hi" },
+        ],
+      };
+
+      handleAgentEvent(event);
+
+      expect(mockPersistMessagePartsFinished).not.toHaveBeenCalled();
+      expect(mockInvalidate).not.toHaveBeenCalled();
+    });
+  });
+
+  describe("message.parts_finished", () => {
+    it("flushes accumulated parts and persists them", () => {
+      const partsEvent: AgentEvent = {
+        type: "message.parts",
+        sessionId: "sess-1",
+        agentType: "claude",
+        messageId: "msg-parts-2",
+        parts: [
+          { type: "TEXT", id: "p1", sessionId: "sess-1", messageId: "msg-parts-2", text: "Hello" },
+        ],
+      };
+
+      const finishedEvent: AgentEvent = {
+        type: "message.parts_finished",
+        sessionId: "sess-1",
+        agentType: "claude",
+        messageId: "msg-parts-2",
+        usage: { input: 100, output: 50 },
+        finishReason: "end_turn",
+      };
+
+      handleAgentEvent(partsEvent);
+      handleAgentEvent(finishedEvent);
+
+      expect(mockPersistMessagePartsFinished).toHaveBeenCalledWith(finishedEvent, [
+        expect.objectContaining({ type: "TEXT", id: "p1", text: "Hello" }),
+      ]);
+      expect(mockInvalidate).toHaveBeenCalledWith(["messages", "session"], {
+        sessionIds: ["sess-1"],
+      });
+    });
+
+    it("skips persistence when no parts were accumulated", () => {
+      const finishedEvent: AgentEvent = {
+        type: "message.parts_finished",
+        sessionId: "sess-1",
+        agentType: "claude",
+        messageId: "msg-empty",
+        usage: { input: 0, output: 0 },
+      };
+
+      handleAgentEvent(finishedEvent);
+
+      expect(mockPersistMessagePartsFinished).not.toHaveBeenCalled();
+      expect(mockInvalidate).not.toHaveBeenCalled();
+    });
+
+    it("skips invalidation on persistence failure", () => {
+      const partsEvent: AgentEvent = {
+        type: "message.parts",
+        sessionId: "sess-1",
+        agentType: "claude",
+        messageId: "msg-fail",
+        parts: [
+          { type: "TEXT", id: "p1", sessionId: "sess-1", messageId: "msg-fail", text: "text" },
+        ],
+      };
+
+      const finishedEvent: AgentEvent = {
+        type: "message.parts_finished",
+        sessionId: "sess-1",
+        agentType: "claude",
+        messageId: "msg-fail",
+        usage: { input: 0, output: 0 },
+      };
+
+      mockPersistMessagePartsFinished.mockReturnValue({ ok: false, error: "DB error" });
+
+      handleAgentEvent(partsEvent);
+      handleAgentEvent(finishedEvent);
+
+      expect(mockPersistMessagePartsFinished).toHaveBeenCalled();
+      expect(mockInvalidate).not.toHaveBeenCalled();
+    });
+  });
+
+  // ==========================================================================
   // Interaction requests (no DB write, no invalidation)
   // ==========================================================================
 
@@ -431,6 +533,20 @@ describe("handleAgentEvent", () => {
         },
         { type: "message.result", sessionId: "s", agentType: "claude", subtype: "success" },
         { type: "message.cancelled", sessionId: "s", agentType: "claude" },
+        {
+          type: "message.parts",
+          sessionId: "s",
+          agentType: "claude",
+          messageId: "m",
+          parts: [],
+        },
+        {
+          type: "message.parts_finished",
+          sessionId: "s",
+          agentType: "claude",
+          messageId: "m",
+          usage: { input: 0, output: 0 },
+        },
         {
           type: "request.opened",
           requestId: "r",

@@ -18,6 +18,7 @@ import {
   persistToolResultMessage,
   persistMessageResult,
   persistMessageCancelled,
+  persistMessagePartsFinished,
   persistSessionStarted,
   persistSessionIdle,
   persistSessionError,
@@ -26,6 +27,7 @@ import {
   persistSessionTitle,
   type WriteResult,
 } from "./persistence";
+import { PartsAccumulator } from "./parts-accumulator";
 
 // ---- Types ----
 
@@ -68,6 +70,7 @@ export function createAgentEventHandler(deps: {
   respondToAgent: RespondToAgentFn;
 }): AgentEventHandler {
   const { respondToAgent } = deps;
+  const partsAccumulator = new PartsAccumulator();
 
   return function handleAgentEvent(event: AgentEvent): void {
     match(event)
@@ -113,16 +116,22 @@ export function createAgentEventHandler(deps: {
         );
       })
 
-      // ── Unified parts (dual-write period — log only, persistence TBD) ──
+      // ── Unified parts (dual-write: accumulate + attach to last assistant message) ──
       .with({ type: "message.parts" }, (e) => {
-        console.log(
-          `[AgentEvent] message.parts: session=${e.sessionId} messageId=${e.messageId} parts=${e.parts.length}`
-        );
+        partsAccumulator.accumulate(e.messageId, e.parts);
       })
       .with({ type: "message.parts_finished" }, (e) => {
+        const parts = partsAccumulator.flush(e.messageId);
         console.log(
-          `[AgentEvent] message.parts_finished: session=${e.sessionId} messageId=${e.messageId} finishReason=${e.finishReason ?? "none"}`
+          `[AgentEvent] message.parts_finished: session=${e.sessionId} messageId=${e.messageId} parts=${parts.length} finishReason=${e.finishReason ?? "none"}`
         );
+        if (parts.length > 0) {
+          persistAndInvalidate(
+            persistMessagePartsFinished(e, parts),
+            MESSAGE_RESOURCES,
+            e.sessionId
+          );
+        }
       })
 
       // ── Interaction requests ──────────────────────────────────────────

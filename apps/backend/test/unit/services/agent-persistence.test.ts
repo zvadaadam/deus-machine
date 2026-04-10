@@ -28,6 +28,7 @@ import {
   persistToolResultMessage,
   persistMessageResult,
   persistMessageCancelled,
+  persistMessagePartsFinished,
   persistSessionStarted,
   persistSessionIdle,
   persistSessionError,
@@ -40,6 +41,7 @@ import type {
   MessageToolResultEvent,
   MessageResultEvent,
   MessageCancelledEvent,
+  MessagePartsFinishedEvent,
   SessionStartedEvent,
   SessionIdleEvent,
   SessionErrorEvent,
@@ -47,6 +49,7 @@ import type {
   AgentSessionIdEvent,
   SessionTitleEvent,
 } from "../../../../shared/agent-events";
+import type { Part } from "../../../../shared/messages";
 
 // ============================================================================
 // Tests
@@ -269,6 +272,99 @@ describe("agent-persistence", () => {
 
       expect(result.ok).toBe(false);
       if (!result.ok) expect(result.error).toContain("transaction failed");
+    });
+  });
+
+  describe("persistMessagePartsFinished", () => {
+    const baseEvent: MessagePartsFinishedEvent = {
+      type: "message.parts_finished",
+      sessionId: "sess-1",
+      agentType: "claude",
+      messageId: "msg-parts-1",
+      usage: { input: 100, output: 50 },
+      finishReason: "end_turn",
+      cost: 0.003,
+    };
+
+    const parts: Part[] = [
+      { type: "TEXT", id: "p1", sessionId: "sess-1", messageId: "msg-parts-1", text: "Hello!" },
+      {
+        type: "TOOL",
+        id: "p2",
+        sessionId: "sess-1",
+        messageId: "msg-parts-1",
+        toolCallId: "tc-1",
+        toolName: "bash",
+        state: {
+          status: "COMPLETED",
+          input: "ls",
+          output: "file.ts",
+          time: { start: "t0", end: "t1" },
+        },
+      },
+    ];
+
+    it("updates the most recent assistant message with parts JSON", () => {
+      const result = persistMessagePartsFinished(baseEvent, parts);
+
+      expect(result.ok).toBe(true);
+      expect(mockPrepare).toHaveBeenCalledWith(
+        expect.stringContaining("UPDATE messages SET parts")
+      );
+
+      const partsArg = mockRun.mock.calls[0][0] as string;
+      const parsed = JSON.parse(partsArg);
+      expect(parsed.parts).toHaveLength(2);
+      expect(parsed.parts[0].type).toBe("TEXT");
+      expect(parsed.parts[1].type).toBe("TOOL");
+      expect(parsed.usage).toEqual({ input: 100, output: 50 });
+      expect(parsed.finishReason).toBe("end_turn");
+      expect(parsed.cost).toBe(0.003);
+    });
+
+    it("queries by session_id and role='assistant' ordered by seq DESC", () => {
+      persistMessagePartsFinished(baseEvent, parts);
+
+      const sql = mockPrepare.mock.calls[0][0] as string;
+      expect(sql).toContain("session_id = ?");
+      expect(sql).toContain("role = 'assistant'");
+      expect(sql).toContain("ORDER BY seq DESC LIMIT 1");
+    });
+
+    it("passes sessionId as the WHERE parameter", () => {
+      persistMessagePartsFinished(baseEvent, parts);
+
+      expect(mockRun).toHaveBeenCalledWith(expect.any(String), "sess-1");
+    });
+
+    it("stores null for optional fields when absent", () => {
+      const minimalEvent: MessagePartsFinishedEvent = {
+        type: "message.parts_finished",
+        sessionId: "sess-1",
+        agentType: "claude",
+        messageId: "msg-parts-2",
+        usage: { input: 0, output: 0 },
+      };
+
+      persistMessagePartsFinished(minimalEvent, []);
+
+      const partsArg = mockRun.mock.calls[0][0] as string;
+      const parsed = JSON.parse(partsArg);
+      expect(parsed.finishReason).toBeNull();
+      expect(parsed.cost).toBeNull();
+    });
+
+    it("returns error on DB failure", () => {
+      mockPrepare.mockReturnValue({
+        run: vi.fn(() => {
+          throw new Error("DB locked");
+        }),
+      });
+
+      const result = persistMessagePartsFinished(baseEvent, parts);
+
+      expect(result.ok).toBe(false);
+      if (!result.ok) expect(result.error).toContain("DB locked");
     });
   });
 

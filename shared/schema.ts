@@ -24,6 +24,8 @@ export const MIGRATIONS: string[] = [
   // workspaces: Workflow status (backlog/in-progress/in-review/done/canceled)
   `ALTER TABLE workspaces ADD COLUMN status TEXT NOT NULL DEFAULT 'in-progress'`,
   `CREATE INDEX IF NOT EXISTS idx_workspaces_status ON workspaces(status)`,
+  // messages: unified Parts data (JSON) alongside legacy content column
+  `ALTER TABLE messages ADD COLUMN parts TEXT`,
 ];
 
 export const SCHEMA_SQL = `
@@ -92,7 +94,8 @@ export const SCHEMA_SQL = `
     agent_message_id TEXT,
     sent_at TEXT,
     cancelled_at TEXT,
-    parent_tool_use_id TEXT
+    parent_tool_use_id TEXT,
+    parts TEXT
   );
 
   -- Paired devices for remote access authentication
