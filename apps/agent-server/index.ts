@@ -255,7 +255,7 @@ class AgentServer {
     });
 
     // --- turn/cancel & session/stop both cancel across all agents ---
-    const cancelAll = async (params: any) => {
+    const cancelAll = (params: any) => {
       const sessionId = params?.sessionId;
       if (!sessionId) return;
       for (const agentType of ["claude", "codex"] as const) {
