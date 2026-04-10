@@ -12,9 +12,9 @@
 # Required GitHub Secrets:
 #   APPLE_CERTIFICATE                  — Base64-encoded .p12 Developer ID Application certificate
 #   APPLE_CERTIFICATE_PASSWORD         — Password for the .p12 file
-#   APPLE_ID                           — Apple ID email for notarization
-#   APPLE_PASSWORD                     — App-specific password (NOT your Apple ID password)
-#   APPLE_TEAM_ID                      — 10-character Apple Developer Team ID
+#   APPLE_API_KEY                      — App Store Connect API key (.p8 file contents)
+#   APPLE_API_KEY_ID                   — Key ID from App Store Connect
+#   APPLE_API_ISSUER                   — Issuer ID from App Store Connect
 #
 # Optional GitHub Secrets:
 #   SENTRY_AUTH_TOKEN                  — Sentry auth token for source map upload
@@ -107,6 +107,7 @@ jobs:
   build-macos:
     needs: validate-and-bump
     runs-on: macos-14
+    timeout-minutes: 45
     env:
       SENTRY_AUTH_TOKEN: ${{ secrets.SENTRY_AUTH_TOKEN }}
     steps:
@@ -128,17 +129,58 @@ jobs:
       - name: Build all
         run: bun run build:all
 
+      - name: Prepare Apple API key for notarization
+        run: |
+          if [[ -z "$APPLE_API_KEY" || -z "$APPLE_API_KEY_ID" || -z "$APPLE_API_ISSUER" ]]; then
+            echo "::error::APPLE_API_KEY, APPLE_API_KEY_ID, and APPLE_API_ISSUER secrets must be set"
+            exit 1
+          fi
+          key_path="${RUNNER_TEMP}/AuthKey_${APPLE_API_KEY_ID}.p8"
+          printf '%s\n' "$APPLE_API_KEY" > "$key_path"
+          echo "APPLE_API_KEY_PATH=$key_path" >> "$GITHUB_ENV"
+        env:
+          APPLE_API_KEY: ${{ secrets.APPLE_API_KEY }}
+          APPLE_API_KEY_ID: ${{ secrets.APPLE_API_KEY_ID }}
+          APPLE_API_ISSUER: ${{ secrets.APPLE_API_ISSUER }}
+
       - name: Package macOS (arm64 + x64)
         run: bunx electron-builder --mac --publish never
         env:
           CSC_LINK: ${{ secrets.APPLE_CERTIFICATE }}
           CSC_KEY_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
-          APPLE_ID: ${{ secrets.APPLE_ID }}
-          APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_PASSWORD }}
-          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+          APPLE_API_KEY: ${{ env.APPLE_API_KEY_PATH }}
+          APPLE_API_KEY_ID: ${{ secrets.APPLE_API_KEY_ID }}
+          APPLE_API_ISSUER: ${{ secrets.APPLE_API_ISSUER }}
+
+      - name: Notarize macOS distribution artifacts
+        run: |
+          set -euo pipefail
+
+          # electron-builder's notarize:true only covers the .app bundle.
+          # DMG/ZIP wrappers must be submitted separately so Gatekeeper
+          # trusts them and `xcrun stapler validate` passes.
+          for artifact in dist-electron/*.dmg dist-electron/*.zip; do
+            [ -f "$artifact" ] || continue
+            echo "Submitting ${artifact} for notarization..."
+            xcrun notarytool submit "$artifact" \
+              --key "$APPLE_API_KEY_PATH" \
+              --key-id "$APPLE_API_KEY_ID" \
+              --issuer "$APPLE_API_ISSUER" \
+              --wait
+          done
+
+          # Staple tickets to DMGs (ZIPs cannot be stapled; Gatekeeper
+          # checks online for those)
+          for dmg in dist-electron/*.dmg; do
+            [ -f "$dmg" ] || continue
+            echo "Stapling ticket to ${dmg}..."
+            xcrun stapler staple "$dmg"
+          done
+        env:
+          APPLE_API_KEY_ID: ${{ secrets.APPLE_API_KEY_ID }}
+          APPLE_API_ISSUER: ${{ secrets.APPLE_API_ISSUER }}
 
       - name: Verify macOS artifacts
-        if: ${{ inputs.dry_run == false }}
         run: |
           set -euo pipefail
 
@@ -150,11 +192,9 @@ jobs:
           while IFS= read -r dmg_path; do
             echo "Validating notarization for $dmg_path"
             xcrun stapler validate "$dmg_path"
-            spctl --assess --type open --verbose=4 "$dmg_path"
           done < <(find dist-electron -maxdepth 1 -name '*.dmg' -type f | sort)
 
       - name: Smoke test packaged runtime from DMG copy
-        if: ${{ inputs.dry_run == false }}
         run: |
           set -euo pipefail
 
@@ -238,6 +278,12 @@ jobs:
           done
 
           grep -q '^\[BACKEND_PORT\]' "$smoke_log"
+
+      - name: Clean up Apple API key
+        if: always()
+        run: rm -f "${RUNNER_TEMP}/AuthKey_${APPLE_API_KEY_ID}.p8"
+        env:
+          APPLE_API_KEY_ID: ${{ secrets.APPLE_API_KEY_ID }}
 
       - uses: actions/upload-artifact@v4
         with:
@@ -362,6 +408,9 @@ jobs:
     needs: [validate-and-bump, create-release]
     if: ${{ inputs.dry_run == false }}
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
     steps:
       - name: Validate npm token
         run: |
@@ -395,6 +444,6 @@ jobs:
 
       - name: Publish to npm
         working-directory: apps/cli
-        run: npm publish --access public
+        run: npm publish --access public --provenance
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
