@@ -160,7 +160,7 @@ jobs:
           # trusts them and `xcrun stapler validate` passes.
           for artifact in dist-electron/*.dmg dist-electron/*.zip; do
             [ -f "$artifact" ] || continue
-            echo "Submitting $artifact for notarization…"
+            echo "Submitting ${artifact} for notarization..."
             xcrun notarytool submit "$artifact" \
               --key "$APPLE_API_KEY_PATH" \
               --key-id "$APPLE_API_KEY_ID" \
@@ -172,7 +172,7 @@ jobs:
           # checks online for those)
           for dmg in dist-electron/*.dmg; do
             [ -f "$dmg" ] || continue
-            echo "Stapling ticket to $dmg…"
+            echo "Stapling ticket to ${dmg}..."
             xcrun stapler staple "$dmg"
           done
         env:
