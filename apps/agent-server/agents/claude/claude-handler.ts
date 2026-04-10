@@ -5,6 +5,7 @@
 import { query as claudeSDK, type PermissionMode } from "@anthropic-ai/claude-agent-sdk";
 import * as fs from "fs";
 import { getErrorMessage } from "@shared/lib/errors";
+import { uuidv7 } from "@shared/lib/uuid";
 import { createCheckpoint } from "./checkpoint";
 import { AsyncQueue } from "../async-queue";
 import { createStreamContext } from "./stream-context";
@@ -14,6 +15,9 @@ import {
   processMessage,
   type ProcessMessageOptions,
 } from "./message-processor";
+import { EventBroadcaster } from "../../event-broadcaster";
+import { claudeCodeAdapter } from "../../messages/claude-adapter";
+import type { ClaudeCodeEvent } from "../../messages/claude-events";
 import type {
   AgentCapabilities,
   AgentHandler,
@@ -490,6 +494,12 @@ export class ClaudeAgentHandler implements AgentHandler {
         isResume: !!options.resume,
       };
 
+      // Unified Part transformer: runs alongside the legacy event path.
+      // Each SDK event is fed through the transformer, producing Parts that
+      // are emitted as `message.parts` canonical events.
+      const messageId = uuidv7();
+      const transformer = claudeCodeAdapter.createTransformer({ sessionId, messageId });
+
       // Stream messages back to the frontend and persist to DB.
       // IMPORTANT: Persist to DB BEFORE notifying frontend, so messages
       // are in the DB when the frontend receives the event and fetches them.
@@ -510,6 +520,10 @@ export class ClaudeAgentHandler implements AgentHandler {
 
           processMessage(cleanMessage, ctx, session, msgOpts);
 
+          // Dual-write: transform into Parts and emit alongside legacy events
+          const parts = transformer.process(cleanMessage as unknown as ClaudeCodeEvent);
+          EventBroadcaster.emitMessageParts(sessionId, "claude", messageId, parts);
+
           // Log per-message timing for first 5 messages, then every 10th
           if (ctx.messageCount <= 5 || ctx.messageCount % 10 === 0) {
             console.log(
@@ -518,6 +532,17 @@ export class ClaudeAgentHandler implements AgentHandler {
           }
         }
       }
+
+      // Finalize the transformer: close open parts, emit usage/cost
+      const finished = transformer.finish();
+      EventBroadcaster.emitMessagePartsFinished(
+        sessionId,
+        "claude",
+        messageId,
+        finished.usage,
+        finished.cost,
+        finished.finishReason
+      );
 
       console.log(
         `[TIMING][${generatorId}] STREAM_COMPLETE messages=${ctx.messageCount} totalStreamTime=${Date.now() - tStreamStart}ms totalProcessTime=${Date.now() - tProcessStart}ms`

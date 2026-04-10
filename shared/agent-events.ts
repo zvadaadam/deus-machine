@@ -9,6 +9,7 @@
 import { z } from "zod";
 
 import { AgentTypeSchema, ErrorCategorySchema } from "./enums";
+import { PartSchema, TokenUsageSchema, FinishReasonSchema } from "./messages";
 
 // ============================================================================
 // Event Name Constants
@@ -26,6 +27,10 @@ export const AGENT_EVENT_NAMES = {
   MESSAGE_TOOL_RESULT: "message.tool_result",
   MESSAGE_RESULT: "message.result",
   MESSAGE_CANCELLED: "message.cancelled",
+
+  // Unified parts (transformed SDK events → canonical Part types)
+  MESSAGE_PARTS: "message.parts",
+  MESSAGE_PARTS_FINISHED: "message.parts_finished",
 
   // Interaction requests (agent needs client/user action)
   REQUEST_OPENED: "request.opened",
@@ -322,6 +327,28 @@ export const MessageCancelledEventSchema = z.object({
 });
 export type MessageCancelledEvent = z.infer<typeof MessageCancelledEventSchema>;
 
+// ── Unified Parts ───────────────────────────────────────────────────
+
+export const MessagePartsEventSchema = z.object({
+  type: z.literal("message.parts"),
+  sessionId: z.string(),
+  agentType: AgentTypeSchema,
+  messageId: z.string(),
+  parts: z.array(PartSchema),
+});
+export type MessagePartsEvent = z.infer<typeof MessagePartsEventSchema>;
+
+export const MessagePartsFinishedEventSchema = z.object({
+  type: z.literal("message.parts_finished"),
+  sessionId: z.string(),
+  agentType: AgentTypeSchema,
+  messageId: z.string(),
+  usage: TokenUsageSchema,
+  cost: z.number().optional(),
+  finishReason: FinishReasonSchema.optional(),
+});
+export type MessagePartsFinishedEvent = z.infer<typeof MessagePartsFinishedEventSchema>;
+
 // ── Interaction Requests ──────────────────────────────────────────────
 
 /** Types of interaction the agent can request from the client/user. */
@@ -389,11 +416,14 @@ export const AgentEventSchema = z.discriminatedUnion("type", [
   SessionIdleEventSchema,
   SessionErrorEventSchema,
   SessionCancelledEventSchema,
-  // Messages
+  // Messages (legacy — raw SDK content blocks)
   MessageAssistantEventSchema,
   MessageToolResultEventSchema,
   MessageResultEventSchema,
   MessageCancelledEventSchema,
+  // Unified parts (transformed into canonical Part types)
+  MessagePartsEventSchema,
+  MessagePartsFinishedEventSchema,
   // Interaction requests
   RequestOpenedEventSchema,
   RequestResolvedEventSchema,
