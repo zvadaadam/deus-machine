@@ -32,12 +32,21 @@ import type { ChildProcess } from "child_process";
 
 const app = new Hono();
 
+/** Expand leading `~` to home directory — Node's path APIs treat it as literal. */
+function expandTilde(filePath: string): string {
+  if (filePath === "~") return os.homedir();
+  if (filePath.startsWith("~/") || filePath.startsWith("~\\")) {
+    return path.join(os.homedir(), filePath.slice(2));
+  }
+  return filePath;
+}
+
 /**
  * Resolve target path, ensure parent directory exists, and guard against
  * path traversal via symlinks outside the home directory.
  */
 function resolveTargetPath(targetPath: string): string {
-  const resolvedPath = path.resolve(targetPath);
+  const resolvedPath = path.resolve(expandTilde(targetPath));
   const parentDir = path.dirname(resolvedPath);
   try {
     fs.mkdirSync(parentDir, { recursive: true });
@@ -81,7 +90,6 @@ function pipeGitStderr(
     },
   };
 }
-
 interface InspectedRepository {
   rootPath: string;
   repoName: string;
@@ -90,7 +98,7 @@ interface InspectedRepository {
 }
 
 function inspectRepositoryRoot(rootPath: string): InspectedRepository {
-  let normalizedRootPath = rootPath;
+  let normalizedRootPath = expandTilde(rootPath);
 
   try {
     normalizedRootPath = fs.realpathSync(normalizedRootPath);
