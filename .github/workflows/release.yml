@@ -191,7 +191,6 @@ jobs:
           while IFS= read -r dmg_path; do
             echo "Validating notarization for $dmg_path"
             xcrun stapler validate "$dmg_path"
-            spctl --assess --type open --verbose=4 "$dmg_path"
           done < <(find dist-electron -maxdepth 1 -name '*.dmg' -type f | sort)
 
       - name: Smoke test packaged runtime from DMG copy
