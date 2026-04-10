@@ -159,6 +159,19 @@ class AgentServer {
     process.on("SIGTERM", () => gracefulShutdown("SIGTERM"));
   }
 
+  private getInitializedAgents() {
+    const agents: { type: string; capabilities: unknown; initialized: boolean }[] = [];
+    for (const [agentType, handler] of [
+      ["claude", getAgent("claude")],
+      ["codex", getAgent("codex")],
+    ] as const) {
+      if (handler && this.initializedAgents.has(agentType)) {
+        agents.push({ type: agentType, capabilities: handler.capabilities, initialized: true });
+      }
+    }
+    return agents;
+  }
+
   /**
    * Wires up all JSON-RPC methods and notifications on a new connection.
    */
@@ -166,22 +179,10 @@ class AgentServer {
     EventBroadcaster.attachTunnel(rpcTunnel);
 
     // --- Initialize handshake (backend agent-client sends this) ---
-    rpcTunnel.addMethod("initialize", () => {
-      const agents = [];
-      for (const [agentType, handler] of [
-        ["claude", getAgent("claude")],
-        ["codex", getAgent("codex")],
-      ] as const) {
-        if (handler && this.initializedAgents.has(agentType)) {
-          agents.push({
-            type: agentType,
-            capabilities: handler.capabilities,
-            initialized: true,
-          });
-        }
-      }
-      return { version: "1.0", agents };
-    });
+    rpcTunnel.addMethod("initialize", () => ({
+      version: "1.0",
+      agents: this.getInitializedAgents(),
+    }));
 
     // --- Initialized notification (backend confirms handshake) ---
     rpcTunnel.addMethod("initialized", () => {
@@ -253,37 +254,25 @@ class AgentServer {
       console.log(`[AgentServer] turn/respond received (requestId=${requestId})`);
     });
 
-    // --- turn/cancel (new wire protocol method, maps to cancel dispatch) ---
-    rpcTunnel.addMethod("turn/cancel", async (params: any) => {
+    // --- turn/cancel & session/stop both cancel across all agents ---
+    const cancelAll = (params: any) => {
       const sessionId = params?.sessionId;
       if (!sessionId) return;
-
-      // Try all registered agents — the backend may not send agentType for cancel
       for (const agentType of ["claude", "codex"] as const) {
         const agent = getAgent(agentType);
         if (agent) void agent.cancel(sessionId);
       }
-    });
+    };
+    rpcTunnel.addMethod("turn/cancel", cancelAll);
+    rpcTunnel.addMethod("session/stop", cancelAll);
 
     // --- session/reset (new wire protocol method) ---
     rpcTunnel.addMethod("session/reset", (params: any) => {
       const sessionId = params?.sessionId;
       if (!sessionId) return;
-
       for (const agentType of ["claude", "codex"] as const) {
         const agent = getAgent(agentType);
         if (agent) agent.reset(sessionId);
-      }
-    });
-
-    // --- session/stop (stop a running session) ---
-    rpcTunnel.addMethod("session/stop", async (params: any) => {
-      const sessionId = params?.sessionId;
-      if (!sessionId) return;
-
-      for (const agentType of ["claude", "codex"] as const) {
-        const agent = getAgent(agentType);
-        if (agent) void agent.cancel(sessionId);
       }
     });
 
@@ -332,18 +321,9 @@ class AgentServer {
     });
 
     // --- agent/list (introspection: list available agents) ---
-    rpcTunnel.addMethod("agent/list", () => {
-      const agents = [];
-      for (const [agentType, handler] of [
-        ["claude", getAgent("claude")],
-        ["codex", getAgent("codex")],
-      ] as const) {
-        if (handler && this.initializedAgents.has(agentType)) {
-          agents.push({ type: agentType, capabilities: handler.capabilities });
-        }
-      }
-      return { agents };
-    });
+    rpcTunnel.addMethod("agent/list", () => ({
+      agents: this.getInitializedAgents(),
+    }));
   }
 
   /**

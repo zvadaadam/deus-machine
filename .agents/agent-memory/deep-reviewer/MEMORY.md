@@ -43,7 +43,7 @@
 ## Review Infrastructure
 
 - Reviews go to `.context/reviews/review-NN.md`
-- review-01: 2026-02-21, review-02: 2026-03-03 (session cache/event review), review-03: 2026-03-15 (WS query protocol migration), review-04: 2026-03-20 (Tauri-to-Electron migration pre-merge review), review-05: 2026-04-01 (Start New Project feature pre-merge)
+- review-01: 2026-02-21, review-02: 2026-03-03 (session cache/event review), review-03: 2026-03-15 (WS query protocol migration), review-04: 2026-03-20 (Tauri-to-Electron migration pre-merge review), review-05: 2026-04-01 (Start New Project feature pre-merge), review-06: 2026-04-10 (AI-generated complexity reduction refactors -- APPROVED)
 
 ## Recurring Patterns
 
