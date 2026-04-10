@@ -11,6 +11,7 @@ export type { Adapter, EventTransformer, StreamContext } from "./adapter";
 // Provider adapters
 export { claudeCodeAdapter } from "./claude-adapter";
 export { codexAdapter } from "./codex-adapter";
+export { codexSdkAdapter } from "./codex-sdk-adapter";
 
 // Raw event types
 export type { ClaudeCodeEvent } from "./claude-events";
