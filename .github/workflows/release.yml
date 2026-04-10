@@ -43,7 +43,6 @@ on:
 
 permissions:
   contents: write
-  id-token: write
 
 jobs:
   # ── Step 1: Validate version & bump files ───────────────────────────
@@ -132,8 +131,8 @@ jobs:
 
       - name: Prepare Apple API key for notarization
         run: |
-          if [[ -z "$APPLE_API_KEY" || -z "$APPLE_API_KEY_ID" ]]; then
-            echo "::error::APPLE_API_KEY and APPLE_API_KEY_ID secrets must be set"
+          if [[ -z "$APPLE_API_KEY" || -z "$APPLE_API_KEY_ID" || -z "$APPLE_API_ISSUER" ]]; then
+            echo "::error::APPLE_API_KEY, APPLE_API_KEY_ID, and APPLE_API_ISSUER secrets must be set"
             exit 1
           fi
           key_path="${RUNNER_TEMP}/AuthKey_${APPLE_API_KEY_ID}.p8"
@@ -142,6 +141,7 @@ jobs:
         env:
           APPLE_API_KEY: ${{ secrets.APPLE_API_KEY }}
           APPLE_API_KEY_ID: ${{ secrets.APPLE_API_KEY_ID }}
+          APPLE_API_ISSUER: ${{ secrets.APPLE_API_ISSUER }}
 
       - name: Package macOS (arm64 + x64)
         run: bunx electron-builder --mac --publish never
@@ -408,6 +408,9 @@ jobs:
     needs: [validate-and-bump, create-release]
     if: ${{ inputs.dry_run == false }}
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
     steps:
       - name: Validate npm token
         run: |
