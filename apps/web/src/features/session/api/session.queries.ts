@@ -262,26 +262,23 @@ export function useSendMessage() {
       sessionId,
       content,
       model,
-      cwd,
       agentType,
       permissionMode,
     }: {
       sessionId: string;
       content: string;
       model?: string;
-      cwd?: string;
       agentType?: RuntimeAgentType;
       permissionMode?: string;
     }): Promise<Message | void> => {
       // Send message via WS command: backend saves user message to DB,
       // forwards to agent-server, and pushes q:delta to subscribers.
-      if (cwd) {
+      try {
         if (!isConnected()) await connect();
         const ack = await sendCommand("sendMessage", {
           sessionId,
           content,
           model,
-          cwd,
           agentType: agentType || "claude",
           permissionMode,
         });
@@ -290,9 +287,10 @@ export function useSendMessage() {
         }
         // No return value needed — WS q:delta handles message reconciliation.
         return;
+      } catch {
+        // Gateway/web fallback: HTTP POST to backend
+        return SessionService.sendMessage(sessionId, content, model);
       }
-      // Gateway/web fallback: HTTP POST to backend
-      return SessionService.sendMessage(sessionId, content, model);
     },
 
     // Optimistic update: show user message immediately.

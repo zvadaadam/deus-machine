@@ -219,7 +219,6 @@ export const SessionPanel = forwardRef<SessionPanelRef, SessionPanelProps>(
     const { sendMessage, stopSession, compactConversation, createPR, sending } = useSessionActions({
       sessionId,
       workspaceId,
-      workspacePath,
       messageInput,
       model: runtimeModelId,
       agentType: modelAgentType,
