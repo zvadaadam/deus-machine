@@ -18,6 +18,7 @@ import type {
   MessageToolResultEvent,
   MessageResultEvent,
   MessageCancelledEvent,
+  MessagePartsFinishedEvent,
   SessionStartedEvent,
   SessionIdleEvent,
   SessionErrorEvent,
@@ -25,6 +26,7 @@ import type {
   AgentSessionIdEvent,
   SessionTitleEvent,
 } from "@shared/agent-events";
+import type { Part } from "@shared/messages";
 
 // ============================================================================
 // WriteResult type (mirrors agent-server's pattern)
@@ -151,6 +153,52 @@ export function persistMessageCancelled(event: MessageCancelledEvent): WriteResu
   } catch (error) {
     const msg = getErrorMessage(error);
     console.error(`[AgentPersistence] Failed to persist message.cancelled:`, msg);
+    return { ok: false, error: msg };
+  }
+}
+
+/**
+ * Attach accumulated Parts to the most recent assistant message in a session.
+ *
+ * Called on message.parts_finished — by this point all legacy message.assistant
+ * events for the turn have already been persisted, so the most recent assistant
+ * row by seq is the correct target. Stores the full Parts array + usage as JSON
+ * in the `parts` column alongside the legacy `content` column.
+ */
+export function persistMessagePartsFinished(
+  event: MessagePartsFinishedEvent,
+  parts: Part[]
+): WriteResult {
+  const db = getDatabase();
+  const partsJson = JSON.stringify({
+    parts,
+    usage: event.usage,
+    finishReason: event.finishReason ?? null,
+    cost: event.cost ?? null,
+  });
+
+  try {
+    const result = db
+      .prepare(
+        `UPDATE messages SET parts = ?
+       WHERE id = (
+         SELECT id FROM messages
+         WHERE session_id = ? AND role = 'assistant'
+         ORDER BY seq DESC LIMIT 1
+       )`
+      )
+      .run(partsJson, event.sessionId);
+
+    if ((result as { changes: number }).changes === 0) {
+      console.warn(
+        `[AgentPersistence] No assistant message found to attach parts: session=${event.sessionId}`
+      );
+    }
+
+    return { ok: true, value: "updated" };
+  } catch (error) {
+    const msg = getErrorMessage(error);
+    console.error(`[AgentPersistence] Failed to persist message parts:`, msg);
     return { ok: false, error: msg };
   }
 }
