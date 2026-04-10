@@ -26,7 +26,7 @@ import type {
   AgentSessionIdEvent,
   SessionTitleEvent,
 } from "@shared/agent-events";
-import type { Part } from "@shared/messages";
+import type { Part, MessagePartsEnvelope } from "@shared/messages";
 
 // ============================================================================
 // WriteResult type (mirrors agent-server's pattern)
@@ -170,12 +170,13 @@ export function persistMessagePartsFinished(
   parts: Part[]
 ): WriteResult {
   const db = getDatabase();
-  const partsJson = JSON.stringify({
+  const envelope: MessagePartsEnvelope = {
     parts,
     usage: event.usage,
     finishReason: event.finishReason ?? null,
     cost: event.cost ?? null,
-  });
+  };
+  const partsJson = JSON.stringify(envelope);
 
   try {
     const result = db

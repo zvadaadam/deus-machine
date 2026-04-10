@@ -259,3 +259,25 @@ export type Part = z.infer<typeof PartSchema>;
 
 export const PartTypeSchema = z.enum(["TEXT", "REASONING", "TOOL", "STEP", "COMPACTION"]);
 export type PartType = z.infer<typeof PartTypeSchema>;
+
+// ============================================================================
+// Message Parts Envelope (DB JSON column shape)
+// ============================================================================
+
+export const MessagePartsEnvelopeSchema = z.object({
+  parts: z.array(PartSchema),
+  usage: TokenUsageSchema.optional(),
+  finishReason: FinishReasonSchema.nullable().optional(),
+  cost: z.number().nullable().optional(),
+});
+export type MessagePartsEnvelope = z.infer<typeof MessagePartsEnvelopeSchema>;
+
+export function parseMessageParts(raw: string | null | undefined): MessagePartsEnvelope | null {
+  if (!raw) return null;
+  try {
+    const parsed = JSON.parse(raw);
+    return MessagePartsEnvelopeSchema.parse(parsed);
+  } catch {
+    return null;
+  }
+}
