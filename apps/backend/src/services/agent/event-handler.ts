@@ -113,6 +113,18 @@ export function createAgentEventHandler(deps: {
         );
       })
 
+      // ── Unified parts (dual-write period — log only, persistence TBD) ──
+      .with({ type: "message.parts" }, (e) => {
+        console.log(
+          `[AgentEvent] message.parts: session=${e.sessionId} messageId=${e.messageId} parts=${e.parts.length}`
+        );
+      })
+      .with({ type: "message.parts_finished" }, (e) => {
+        console.log(
+          `[AgentEvent] message.parts_finished: session=${e.sessionId} messageId=${e.messageId} finishReason=${e.finishReason ?? "none"}`
+        );
+      })
+
       // ── Interaction requests ──────────────────────────────────────────
       .with({ type: "request.opened" }, (e) => {
         console.log(

@@ -1,2 +1,9 @@
-#!/usr/bin/env sh
-. "$(dirname "$0")/h"
+#!/bin/sh
+# Entire CLI hooks
+# Commit-msg hook: strip trailer if no user content (allows aborting empty commits)
+entire hooks git commit-msg "$1" || exit 1
+# Chain: run pre-existing hook
+_entire_hook_dir="$(dirname "$0")"
+if [ -x "$_entire_hook_dir/commit-msg.pre-entire" ]; then
+    "$_entire_hook_dir/commit-msg.pre-entire" "$@"
+fi

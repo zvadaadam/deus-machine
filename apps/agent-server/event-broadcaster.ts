@@ -9,6 +9,7 @@ import { FRONTEND_NOTIFICATIONS, FRONTEND_RPC_METHODS } from "./protocol";
 import { AGENT_EVENT_NAMES } from "@shared/agent-events";
 import type { AgentEvent, InteractionRequestType } from "@shared/agent-events";
 import type { AgentType, ErrorCategory } from "@shared/enums";
+import type { FinishReason, Part, TokenUsage } from "@shared/messages";
 import type {
   MessageResponse,
   ErrorResponse,
@@ -239,6 +240,43 @@ class EventBroadcasterClass {
       type: AGENT_EVENT_NAMES.MESSAGE_CANCELLED,
       sessionId,
       agentType,
+    });
+  }
+
+  // --- Unified parts ---
+
+  emitMessageParts(
+    sessionId: string,
+    agentType: AgentType,
+    messageId: string,
+    parts: Part[]
+  ): void {
+    if (parts.length === 0) return;
+    this.emitEvent({
+      type: AGENT_EVENT_NAMES.MESSAGE_PARTS,
+      sessionId,
+      agentType,
+      messageId,
+      parts,
+    });
+  }
+
+  emitMessagePartsFinished(
+    sessionId: string,
+    agentType: AgentType,
+    messageId: string,
+    usage: TokenUsage,
+    cost?: number,
+    finishReason?: FinishReason
+  ): void {
+    this.emitEvent({
+      type: AGENT_EVENT_NAMES.MESSAGE_PARTS_FINISHED,
+      sessionId,
+      agentType,
+      messageId,
+      usage,
+      ...(cost != null ? { cost } : {}),
+      ...(finishReason ? { finishReason } : {}),
     });
   }
 

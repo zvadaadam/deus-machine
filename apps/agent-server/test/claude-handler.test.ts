@@ -24,6 +24,8 @@ const { mockClaudeSDK, mockFrontendAPI, mockExecSync, mockExecFileSync } = vi.ho
     emitToolResultMessage: vi.fn(),
     emitMessageResult: vi.fn(),
     emitMessageCancelled: vi.fn(),
+    emitMessageParts: vi.fn(),
+    emitMessagePartsFinished: vi.fn(),
     emitAgentSessionId: vi.fn(),
   },
   mockExecSync: vi.fn(),
@@ -744,6 +746,69 @@ describe("claude-handler", () => {
 
       // No unexpected errors sent to frontend during push-after-close
       expect(mockFrontendAPI.sendError).not.toHaveBeenCalled();
+    });
+
+    it("emits message.parts alongside legacy events during streaming", async () => {
+      const mockMessages = [
+        {
+          type: "assistant",
+          message: {
+            id: "msg_1",
+            role: "assistant",
+            content: [{ type: "text", text: "Hello from Parts" }],
+          },
+          parent_tool_use_id: null,
+          session_id: "sdk-parts",
+        },
+        { type: "result", subtype: "success", session_id: "sdk-parts" },
+      ];
+      let idx = 0;
+      const mockQuery = {
+        [Symbol.asyncIterator]: () => ({
+          next: async () => {
+            if (idx < mockMessages.length) {
+              return { value: mockMessages[idx++], done: false };
+            }
+            return { value: undefined, done: true };
+          },
+        }),
+        interrupt: vi.fn().mockResolvedValue(undefined),
+        setPermissionMode: vi.fn().mockResolvedValue(undefined),
+        setModel: vi.fn().mockResolvedValue(undefined),
+        setMaxThinkingTokens: vi.fn().mockResolvedValue(undefined),
+      };
+      mockClaudeSDK.mockReturnValue(mockQuery);
+
+      await handler.query("sess-parts", "hello", {
+        cwd: "/test",
+        turnId: "turn-parts",
+      });
+
+      await new Promise((r) => setTimeout(r, 200));
+
+      // Legacy events should still fire
+      expect(mockFrontendAPI.emitAssistantMessage).toHaveBeenCalled();
+      expect(mockFrontendAPI.sendMessage).toHaveBeenCalled();
+
+      // Parts events should also fire
+      expect(mockFrontendAPI.emitMessageParts).toHaveBeenCalled();
+
+      // Verify the Parts contain a TextPart with the right content
+      const partsCalls = mockFrontendAPI.emitMessageParts.mock.calls;
+      const allParts = partsCalls.flatMap((call: unknown[]) => call[3]);
+      const textParts = allParts.filter((p: { type: string }) => p.type === "TEXT");
+      expect(textParts.length).toBeGreaterThanOrEqual(1);
+      expect(textParts[0].text).toBe("Hello from Parts");
+
+      // Finished event should fire with usage info
+      expect(mockFrontendAPI.emitMessagePartsFinished).toHaveBeenCalledWith(
+        "sess-parts",
+        "claude",
+        expect.any(String),
+        expect.objectContaining({ input: expect.any(Number), output: expect.any(Number) }),
+        undefined,
+        expect.any(String)
+      );
     });
   });
 
