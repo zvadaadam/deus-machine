@@ -100,7 +100,7 @@ export class RpcConnection {
   }
 
   /** Register a method handler that the remote side can call */
-  addMethod(name: string, method: (params: unknown) => Promise<unknown>): void {
+  addMethod(name: string, method: (params: unknown) => unknown | Promise<unknown>): void {
     this.peer.addMethod(name, (params) => method(params));
   }
 
