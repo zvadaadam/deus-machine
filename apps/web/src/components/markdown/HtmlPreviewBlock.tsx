@@ -11,41 +11,56 @@
 
 import { useRef, useEffect, useState } from "react";
 
+/** Elements that create nested browsing contexts capable of executing scripts */
+const BLOCKED_ELEMENTS = new Set([
+  "script",
+  "iframe",
+  "object",
+  "embed",
+  "frame",
+  "frameset",
+  "portal",
+  "base",
+]);
+
+/** Attributes that carry URIs which could execute code or load external content */
+const URI_ATTRS = new Set(["href", "src", "action", "formaction", "data", "srcdoc", "xlink:href"]);
+
+/** Matches dangerous URI schemes that can execute scripts */
+const DANGEROUS_URI = /^\s*(javascript|data\s*:\s*text\/html)\s*:/i;
+
 /**
  * Sanitize HTML using DOMParser. Strips all JavaScript execution vectors:
- * - <script> elements
+ * - Elements that create nested browsing contexts (script, iframe, object, embed, etc.)
  * - on* event handler attributes (onclick, onerror, onload, etc.)
- * - javascript: URIs in href, src, action, formaction
+ * - Dangerous URI schemes in link/resource attributes (javascript:, data:text/html)
  */
 function sanitizeHtml(html: string): string {
   const doc = new DOMParser().parseFromString(html, "text/html");
 
-  const walk = (root: Element) => {
-    // Remove all <script> elements first
-    for (const script of Array.from(root.querySelectorAll("script"))) {
-      script.remove();
+  // Remove all elements that can create nested browsing contexts or execute code
+  for (const el of Array.from(doc.body.querySelectorAll("*"))) {
+    if (BLOCKED_ELEMENTS.has(el.tagName.toLowerCase())) {
+      el.remove();
     }
+  }
 
-    // Walk every element and strip dangerous attributes
-    for (const el of Array.from(root.querySelectorAll("*"))) {
-      for (const attr of Array.from(el.attributes)) {
-        // Strip all on* event handlers (onclick, onerror, onload, onfocus, etc.)
-        if (attr.name.toLowerCase().startsWith("on")) {
-          el.removeAttribute(attr.name);
-          continue;
-        }
-        // Strip javascript: URIs in link/resource attributes
-        const linkAttrs = ["href", "src", "action", "formaction"];
-        if (linkAttrs.includes(attr.name.toLowerCase())) {
-          if (/^\s*javascript\s*:/i.test(attr.value)) {
-            el.removeAttribute(attr.name);
-          }
-        }
+  // Strip dangerous attributes from remaining elements
+  for (const el of Array.from(doc.body.querySelectorAll("*"))) {
+    for (const attr of Array.from(el.attributes)) {
+      const name = attr.name.toLowerCase();
+
+      if (name.startsWith("on") || name === "srcdoc") {
+        el.removeAttribute(attr.name);
+        continue;
+      }
+
+      if (URI_ATTRS.has(name) && DANGEROUS_URI.test(attr.value)) {
+        el.removeAttribute(attr.name);
       }
     }
-  };
+  }
 
-  walk(doc.body);
   return doc.body.innerHTML;
 }
 
