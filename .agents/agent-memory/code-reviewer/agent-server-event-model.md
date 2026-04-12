@@ -11,15 +11,9 @@ type: project
 Refactored from batch `message.parts` + `message.parts_finished` emissions to granular lifecycle events:
 `turn.started` → `message.created` → (`part.created` / `part.delta` / `part.done`)\* → `message.done` → `turn.completed`
 
-## Critical gap (unresolved as of PR review 2026-04-11)
+## Critical gap (RESOLVED — 2026-04-11)
 
-The new events (`turn.started`, `message.created`, `part.created`, `part.delta`, `part.done`, `message.done`, `turn.completed`) are emitted via `EventBroadcaster.emitPartEvent()` → `emitEvent(AgentEvent)`, but these 7 event schemas are **NOT** in the `AgentEventSchema` discriminated union in `shared/agent-events.ts`. This causes:
-
-1. TypeScript compile errors on `event-broadcaster.ts` lines 272, 281, 290, 300, 309, 319, 329
-2. The backend `event-handler.ts` uses `.exhaustive()` — if these events ever reach the backend handler via the AgentEvent type, it would throw. Currently they bypass Zod validation (the broadcaster serializes them directly as JSON-RPC notifications without Zod parsing).
-3. The backend `event-handler.ts` still handles `message.parts` and `message.parts_finished` but the agent-server no longer emits them — so the backend accumulator is now dead code.
-
-**Fix:** Add Zod schemas for all 7 new event types to `shared/agent-events.ts` and add them to `AgentEventSchema`.
+All 7 new event types (`turn.started`, `message.created`, `part.created`, `part.delta`, `part.done`, `message.done`, `turn.completed`) were added to `AgentEventSchema` in `shared/agent-events.ts`. The backend `event-handler.ts` now handles them via `.exhaustive()`. The legacy `message.parts` and `message.parts_finished` events and the `PartsAccumulator` have been removed as dead code.
 
 ## FinishReason import missing in codex-adapter.ts
 
