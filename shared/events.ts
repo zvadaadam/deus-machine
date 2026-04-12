@@ -142,6 +142,10 @@ export const PROTOCOL_EVENTS = [
   "session:error",
   "session:progress",
   "tool:request",
+  // Part lifecycle events (streaming, high-throughput)
+  "part:created",
+  "part:delta",
+  "part:done",
   // PTY events (high-throughput)
   "pty-data",
   "pty-exit",

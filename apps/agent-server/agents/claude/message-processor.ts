@@ -62,11 +62,10 @@ export function deserializeMessage(
  *
  * Side effects (in critical order):
  * 1. Capture agent_session_id (one-shot, first message only, skip on resume)
- * 2. Emit canonical message events (assistant, tool_result)
- * 3. Send to frontend via JSON-RPC notification
- * 4. Classify stop_reason and send error (AFTER sendMessage — content before error banner)
- * 5. Detect result/success → set ctx.querySucceeded, emit session.idle
- * 6. Detect result/error_during_execution → set ctx.lastResultError
+ * 2. Emit canonical system message event
+ * 3. Classify stop_reason and emit canonical error if needed
+ * 4. Detect result/success → set ctx.querySucceeded, emit session.idle
+ * 5. Detect result/error_during_execution → set ctx.lastResultError
  *
  * The agent-server is stateless — no DB writes. The backend persists messages
  * and updates session status by consuming canonical events via the WS tunnel.
@@ -83,8 +82,6 @@ export function processMessage(
   const msg = cleanMessage.message as
     | { id?: string; role?: string; content?: unknown; stop_reason?: string }
     | undefined;
-  const parentToolUseId =
-    typeof cleanMessage.parent_tool_use_id === "string" ? cleanMessage.parent_tool_use_id : null;
 
   // 1. One-shot: capture SDK session_id on the first message.
   // CRITICAL: Skip capture during resume attempts. When a resume
@@ -108,83 +105,21 @@ export function processMessage(
     }
   }
 
-  // 2. Emit canonical message events for assistant and tool_result messages
-  if (cleanMessage.type === "assistant" && msg) {
-    const assistantMsgId = msg.id || "unknown";
-    EventBroadcaster.emitAssistantMessage(
-      opts.sessionId,
-      "claude",
-      {
-        id: assistantMsgId,
-        role: "assistant",
-        content: msg.content,
-        stop_reason: msg.stop_reason ?? null,
-        parent_tool_use_id: parentToolUseId,
-      },
-      opts.model
-    );
+  // 2. Emit canonical message events for system messages
+  if (cleanMessage.type === "system") {
+    EventBroadcaster.emitSystemMessage(opts.sessionId, "claude", cleanMessage);
   }
 
-  if (cleanMessage.type === "user" && msg) {
-    const content = msg.content;
-    const hasToolResult =
-      Array.isArray(content) && content.some((b: any) => b?.type === "tool_result");
-    if (hasToolResult) {
-      const toolResultMsgId = msg.id || "unknown";
-      EventBroadcaster.emitToolResultMessage(
-        opts.sessionId,
-        "claude",
-        {
-          id: toolResultMsgId,
-          role: "user",
-          content: msg.content,
-          parent_tool_use_id: parentToolUseId,
-        },
-        opts.model
-      );
-    }
-  }
-
-  // 3. Send to frontend via JSON-RPC notification
-  const tSend = Date.now();
-  EventBroadcaster.sendMessage({
-    id: opts.sessionId,
-    type: "message",
-    agentType: "claude",
-    data: cleanMessage,
-  });
-  const sendMs = Date.now() - tSend;
-  if (sendMs > 5) {
-    console.log(`[TIMING][${opts.generatorId}] sendMessage took ${sendMs}ms`);
-  }
-
-  // 4. Classify stop_reason (after sendMessage — content before error banner)
+  // 3. Classify stop_reason and emit canonical error if needed
   if (cleanMessage.type === "assistant" && msg) {
     const stopError = classifyStopReason(msg.stop_reason);
     if (stopError) {
-      // Emit canonical session.error FIRST — backend handles DB status update.
-      // This must succeed even if the frontend tunnel is down.
       EventBroadcaster.emitSessionError(
         opts.sessionId,
         "claude",
         stopError.message,
         stopError.category
       );
-      // Then notify frontend (best-effort — don't let this block the canonical event)
-      try {
-        EventBroadcaster.sendError({
-          id: opts.sessionId,
-          type: "error",
-          error: stopError.message,
-          agentType: "claude",
-          category: stopError.category,
-        });
-      } catch (error) {
-        console.warn(
-          `[${opts.generatorId}] Failed to send frontend error:`,
-          getErrorMessage(error)
-        );
-      }
       ctx.stopReasonError = true;
     }
   }
@@ -196,9 +131,6 @@ export function processMessage(
   // until the entire conversation ends.
   if (cleanMessage.type === "result" && cleanMessage.subtype === "success") {
     ctx.querySucceeded = true;
-
-    // Emit canonical message.result event
-    EventBroadcaster.emitMessageResult(opts.sessionId, "claude", "success");
 
     if (!ctx.stopReasonError) {
       // Emit canonical session.idle — backend handles DB status update

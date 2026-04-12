@@ -27,6 +27,7 @@ export type {
   ThinkingBlock,
   Session,
   SessionStatus,
+  PartRow,
   Repository,
   Stats,
   Settings,

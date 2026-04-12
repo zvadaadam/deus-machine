@@ -352,3 +352,4 @@
 
 - `patterns-deep.md` — overflow notes: error classification, chat virtualization, PRStatus, border radius, agent-server resume
 - `message-envelope-pattern.md` — session message envelope/flat array patterns
+- `agent-server-event-model.md` — granular turn/message/part lifecycle events; critical gaps vs AgentEvent schema; dual-write assumptions

@@ -10,14 +10,15 @@
 
 import { match } from "ts-pattern";
 import type { AgentEvent } from "@shared/agent-events";
-import type { QueryResource } from "@shared/types/query-protocol";
+import type { QueryResource, QServerFrame } from "@shared/types/query-protocol";
 import { invalidate } from "../query-engine";
+import { broadcast } from "../ws.service";
 import { relay } from "./tool-relay";
 import {
-  persistAssistantMessage,
-  persistToolResultMessage,
-  persistMessageResult,
   persistMessageCancelled,
+  persistMessageCreated,
+  persistPartDone,
+  persistMessageDone,
   persistSessionStarted,
   persistSessionIdle,
   persistSessionError,
@@ -55,6 +56,16 @@ function persistAndInvalidate(
   }
 }
 
+/** Push a Part lifecycle event to all frontend connections as a q:event frame.
+ *  The frontend filters by sessionId to route events to the correct session view. */
+function pushPartEvent(
+  event: "part:created" | "part:delta" | "part:done",
+  data: Omit<AgentEvent, "type">
+): void {
+  const frame: QServerFrame = { type: "q:event", event, data };
+  broadcast(JSON.stringify(frame));
+}
+
 // ---- Factory ----
 
 /**
@@ -89,21 +100,11 @@ export function createAgentEventHandler(deps: {
         persistAndInvalidate(persistSessionCancelled(e), SESSION_RESOURCES, e.sessionId);
       })
 
-      // ── Messages ──────────────────────────────────────────────────────
-      .with({ type: "message.assistant" }, (e) => {
-        console.log(`[AgentEvent] message.assistant: session=${e.sessionId} msgId=${e.message.id}`);
-        persistAndInvalidate(persistAssistantMessage(e), MESSAGE_RESOURCES, e.sessionId);
-      })
-      .with({ type: "message.tool_result" }, (e) => {
-        console.log(
-          `[AgentEvent] message.tool_result: session=${e.sessionId} msgId=${e.message.id}`
-        );
-        persistAndInvalidate(persistToolResultMessage(e), MESSAGE_RESOURCES, e.sessionId);
-      })
-      .with({ type: "message.result" }, (e) => {
-        console.log(`[AgentEvent] message.result: session=${e.sessionId} subtype=${e.subtype}`);
-        persistMessageResult(e);
-      })
+      // ── SDK passthrough events (no persistence — Parts handle content) ──
+      .with({ type: "message.system" }, () => {})
+      .with({ type: "message.assistant" }, () => {})
+      .with({ type: "message.tool_result" }, () => {})
+      .with({ type: "message.result" }, () => {})
       .with({ type: "message.cancelled" }, (e) => {
         console.log(`[AgentEvent] message.cancelled: session=${e.sessionId}`);
         persistAndInvalidate(
@@ -111,6 +112,51 @@ export function createAgentEventHandler(deps: {
           ["messages", "sessions", "session", "stats"],
           e.sessionId
         );
+      })
+
+      // ── Turn, message & part lifecycle ────────────────────────────────
+      .with({ type: "turn.started" }, (e) => {
+        console.log(
+          `[AgentEvent] turn.started: session=${e.sessionId} turnId=${e.turnId ?? "none"}`
+        );
+      })
+      .with({ type: "message.created" }, (e) => {
+        console.log(
+          `[AgentEvent] message.created: session=${e.sessionId} messageId=${e.messageId}`
+        );
+        persistAndInvalidate(persistMessageCreated(e), MESSAGE_RESOURCES, e.sessionId);
+      })
+      .with({ type: "part.created" }, (e) => {
+        console.log(
+          `[AgentEvent] part.created: session=${e.sessionId} partId=${e.partId} type=${e.part.type}`
+        );
+        const { type: _, ...data } = e;
+        pushPartEvent("part:created", data);
+      })
+      .with({ type: "part.delta" }, (e) => {
+        // High-frequency streaming event — no log, no persistence, just forward
+        const { type: _, ...data } = e;
+        pushPartEvent("part:delta", data);
+      })
+      .with({ type: "part.done" }, (e) => {
+        console.log(
+          `[AgentEvent] part.done: session=${e.sessionId} partId=${e.partId} type=${e.part.type}`
+        );
+        persistAndInvalidate(persistPartDone(e), MESSAGE_RESOURCES, e.sessionId);
+        const { type: _, ...data } = e;
+        pushPartEvent("part:done", data);
+      })
+      .with({ type: "message.done" }, (e) => {
+        console.log(
+          `[AgentEvent] message.done: session=${e.sessionId} messageId=${e.messageId} stopReason=${e.stopReason ?? "none"}`
+        );
+        persistAndInvalidate(persistMessageDone(e), MESSAGE_RESOURCES, e.sessionId);
+      })
+      .with({ type: "turn.completed" }, (e) => {
+        console.log(
+          `[AgentEvent] turn.completed: session=${e.sessionId} finishReason=${e.finishReason ?? "none"} cost=${e.cost ?? 0}`
+        );
+        invalidate(MESSAGE_RESOURCES, { sessionIds: [e.sessionId] });
       })
 
       // ── Interaction requests ──────────────────────────────────────────

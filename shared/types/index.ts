@@ -28,6 +28,7 @@ export type {
   ThinkingBlock,
   Session,
   SessionStatus,
+  PartRow,
   SessionMessageEvent,
   SessionErrorEvent,
   SessionEnterPlanModeEvent,

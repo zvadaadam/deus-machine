@@ -44,6 +44,9 @@ export interface SessionState {
   currentModel?: string;
   currentMaxThinkingTokens?: number;
   turnId?: string;
+  /** Monotonically increasing counter — incremented on every query() call.
+   *  Used by the streaming loop to detect turn boundaries when the generator is reused. */
+  turnVersion: number;
   cwd?: string;
   /** One-shot flag: true after the first SDK message's session_id has been persisted to DB */
   agentSessionIdCaptured?: boolean;

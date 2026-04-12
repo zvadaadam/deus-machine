@@ -13,6 +13,8 @@ import type {
   SessionRow,
   SessionWithDetailsRow,
   MessageRow,
+  MessageRowWithParts,
+  PartRow,
   StatsRow,
 } from "./types";
 
@@ -322,6 +324,49 @@ export function getMessagesDelta(
   return db
     .prepare("SELECT * FROM messages WHERE session_id = ? AND seq > ? ORDER BY seq ASC")
     .all(sessionId, afterSeq) as MessageRow[];
+}
+
+// ─── Parts Queries ──────────────────────────────────────────
+
+/**
+ * Batch-fetch parts for a set of message IDs.
+ * Returns all parts ordered by message_id, seq (for stable ordering).
+ * Uses SQLite's IN clause — safe for typical message page sizes (50-500).
+ */
+export function getPartsByMessageIds(db: Database.Database, messageIds: string[]): PartRow[] {
+  if (messageIds.length === 0) return [];
+  const placeholders = messageIds.map(() => "?").join(",");
+  return db
+    .prepare(`SELECT * FROM parts WHERE message_id IN (${placeholders}) ORDER BY message_id, seq`)
+    .all(...messageIds) as PartRow[];
+}
+
+/**
+ * Enrich message rows with their parts from the parts table.
+ * Does a single batch query for all message IDs, then groups by message_id.
+ * Messages with no parts get an empty array.
+ */
+export function attachParts(db: Database.Database, messages: MessageRow[]): MessageRowWithParts[] {
+  if (messages.length === 0) return [];
+
+  const messageIds = messages.map((m) => m.id);
+  const allParts = getPartsByMessageIds(db, messageIds);
+
+  // Group parts by message_id
+  const partsByMessageId = new Map<string, PartRow[]>();
+  for (const part of allParts) {
+    const existing = partsByMessageId.get(part.message_id);
+    if (existing) {
+      existing.push(part);
+    } else {
+      partsByMessageId.set(part.message_id, [part]);
+    }
+  }
+
+  return messages.map((msg) => ({
+    ...msg,
+    parts: partsByMessageId.get(msg.id) ?? [],
+  }));
 }
 
 // ─── Repository Queries ─────────────────────────────────────

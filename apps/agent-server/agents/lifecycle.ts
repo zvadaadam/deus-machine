@@ -174,14 +174,6 @@ export function classifyStopReason(stopReason: string | undefined): ClassifiedEr
  * - codex-handler.ts catch abort path
  */
 export function persistCancellation(sessionId: string, agentType: AgentType, _model: string): void {
-  EventBroadcaster.sendMessage({
-    id: sessionId,
-    type: "message",
-    agentType,
-    data: { type: "cancelled" },
-  });
-
-  // Emit canonical session lifecycle events — backend handles DB writes
   EventBroadcaster.emitSessionCancelled(sessionId, agentType);
   EventBroadcaster.emitMessageCancelled(sessionId, agentType);
 }
@@ -207,15 +199,6 @@ export function notifyAndRecordError(
 ): void {
   const errorMessage = enrichMessage ? enrichMessage(classified) : classified.message;
 
-  EventBroadcaster.sendError({
-    id: sessionId,
-    type: "error",
-    error: errorMessage,
-    agentType,
-    category: classified.category,
-  });
-
-  // Emit canonical session.error event — backend handles DB status update
   EventBroadcaster.emitSessionError(
     sessionId,
     agentType,

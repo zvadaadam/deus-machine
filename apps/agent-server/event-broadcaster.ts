@@ -9,6 +9,8 @@ import { FRONTEND_NOTIFICATIONS, FRONTEND_RPC_METHODS } from "./protocol";
 import { AGENT_EVENT_NAMES } from "@shared/agent-events";
 import type { AgentEvent, InteractionRequestType } from "@shared/agent-events";
 import type { AgentType, ErrorCategory } from "@shared/enums";
+import type { FinishReason, Part, TokenUsage } from "@shared/messages";
+import type { PartEvent } from "./messages/adapter";
 import type {
   MessageResponse,
   ErrorResponse,
@@ -183,6 +185,15 @@ class EventBroadcasterClass {
 
   // --- Messages ---
 
+  emitSystemMessage(sessionId: string, agentType: AgentType, data: unknown): void {
+    this.emitEvent({
+      type: AGENT_EVENT_NAMES.MESSAGE_SYSTEM,
+      sessionId,
+      agentType,
+      data,
+    });
+  }
+
   emitAssistantMessage(
     sessionId: string,
     agentType: AgentType,
@@ -240,6 +251,88 @@ class EventBroadcasterClass {
       sessionId,
       agentType,
     });
+  }
+
+  // --- Turn & part lifecycle ---
+
+  /** Dispatch a single PartEvent from an adapter. */
+  emitPartEvent(
+    sessionId: string,
+    agentType: AgentType,
+    messageId: string,
+    event: PartEvent
+  ): void {
+    switch (event.type) {
+      case "turn.started":
+        this.emitEvent({
+          type: AGENT_EVENT_NAMES.TURN_STARTED,
+          sessionId,
+          agentType,
+          messageId,
+          turnId: event.turnId,
+        });
+        break;
+      case "message.created":
+        this.emitEvent({
+          type: AGENT_EVENT_NAMES.MESSAGE_CREATED,
+          sessionId,
+          agentType,
+          messageId: event.messageId,
+          role: event.role,
+        });
+        break;
+      case "part.created":
+        this.emitEvent({
+          type: AGENT_EVENT_NAMES.PART_CREATED,
+          sessionId,
+          agentType,
+          messageId,
+          partId: event.part.id,
+          part: event.part,
+        });
+        break;
+      case "part.delta":
+        this.emitEvent({
+          type: AGENT_EVENT_NAMES.PART_DELTA,
+          sessionId,
+          agentType,
+          partId: event.partId,
+          delta: event.delta,
+        });
+        break;
+      case "part.done":
+        this.emitEvent({
+          type: AGENT_EVENT_NAMES.PART_DONE,
+          sessionId,
+          agentType,
+          messageId,
+          partId: event.part.id,
+          part: event.part,
+        });
+        break;
+      case "message.done":
+        this.emitEvent({
+          type: AGENT_EVENT_NAMES.MESSAGE_DONE,
+          sessionId,
+          agentType,
+          messageId: event.messageId,
+          ...(event.stopReason ? { stopReason: event.stopReason } : {}),
+          parts: event.parts,
+        });
+        break;
+      case "turn.completed":
+        this.emitEvent({
+          type: AGENT_EVENT_NAMES.TURN_COMPLETED,
+          sessionId,
+          agentType,
+          messageId,
+          turnId: event.turnId,
+          ...(event.finishReason ? { finishReason: event.finishReason } : {}),
+          ...(event.tokens ? { tokens: event.tokens } : {}),
+          ...(event.cost != null ? { cost: event.cost } : {}),
+        });
+        break;
+    }
   }
 
   // --- Interaction requests ---

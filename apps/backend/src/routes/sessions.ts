@@ -10,6 +10,7 @@ import {
   hasOlderMessages,
   hasNewerMessages,
   getMessageById,
+  attachParts,
 } from "../db";
 import { invalidate } from "../services/query-engine";
 import { writeUserMessage } from "../services/message-writer";
@@ -61,7 +62,7 @@ app.get("/sessions/:id/messages", (c) => {
   const has_older = oldestSeq != null ? hasOlderMessages(db, sessionId, oldestSeq) : false;
   const has_newer = newestSeq != null ? hasNewerMessages(db, sessionId, newestSeq) : false;
 
-  return c.json({ messages, has_older, has_newer });
+  return c.json({ messages: attachParts(db, messages), has_older, has_newer });
 });
 
 /**
