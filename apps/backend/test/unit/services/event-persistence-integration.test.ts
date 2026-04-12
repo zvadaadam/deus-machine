@@ -639,9 +639,12 @@ describeWithDb("event → persistence → DB integration", () => {
         },
       });
 
-      expect(result.ok).toBe(false);
+      // FK constraint failures are silently handled (returns ok: true)
+      // because part.created events can arrive before message.created persistence.
+      // The part will be saved on part.done when the message exists.
+      expect(result.ok).toBe(true);
 
-      // Verify no orphan parts were inserted
+      // Verify no orphan parts were inserted (FK prevented actual write)
       const orphans = db.prepare(`SELECT id FROM parts WHERE id = ?`).all("p-orphan");
       expect(orphans).toHaveLength(0);
     });

@@ -10,7 +10,7 @@
 
 import { match } from "ts-pattern";
 import type { AgentEvent } from "@shared/agent-events";
-import type { QueryResource, QServerFrame } from "@shared/types/query-protocol";
+import type { QueryResource, QServerFrame, ProtocolEvent } from "@shared/types/query-protocol";
 import { invalidate } from "../query-engine";
 import { broadcast } from "../ws.service";
 import { relay } from "./tool-relay";
@@ -65,12 +65,9 @@ function persistOnly(result: WriteResult<unknown>): void {
   }
 }
 
-/** Push a Part lifecycle event to all frontend connections as a q:event frame.
+/** Push a lifecycle event to all frontend connections as a q:event frame.
  *  The frontend filters by sessionId to route events to the correct session view. */
-function pushPartEvent(
-  event: "part:created" | "part:delta" | "part:done",
-  data: Omit<AgentEvent, "type">
-): void {
+function pushEvent(event: ProtocolEvent, data: Omit<AgentEvent, "type">): void {
   const frame: QServerFrame = { type: "q:event", event, data };
   broadcast(JSON.stringify(frame));
 }
@@ -137,7 +134,7 @@ export function createAgentEventHandler(deps: {
         // Also push as q:event so frontend creates the message shell
         // BEFORE part events arrive (avoids race condition).
         const { type: _, ...data } = e;
-        pushPartEvent("message:created", data);
+        pushEvent("message:created", data);
       })
       .with({ type: "part.created" }, (e) => {
         console.log(
@@ -147,12 +144,12 @@ export function createAgentEventHandler(deps: {
         // Uses INSERT OR REPLACE — safe for repeated part.created (state transitions).
         persistOnly(persistPartDone(e));
         const { type: _, ...data } = e;
-        pushPartEvent("part:created", data);
+        pushEvent("part:created", data);
       })
       .with({ type: "part.delta" }, (e) => {
         // High-frequency streaming event — no log, no persistence, just forward
         const { type: _, ...data } = e;
-        pushPartEvent("part:delta", data);
+        pushEvent("part:delta", data);
       })
       .with({ type: "part.done" }, (e) => {
         console.log(
@@ -162,7 +159,7 @@ export function createAgentEventHandler(deps: {
         // the frontend receives part data via q:event, not q:delta.
         persistOnly(persistPartDone(e));
         const { type: _, ...data } = e;
-        pushPartEvent("part:done", data);
+        pushEvent("part:done", data);
       })
       .with({ type: "message.done" }, (e) => {
         console.log(
@@ -171,7 +168,7 @@ export function createAgentEventHandler(deps: {
         persistOnly(persistMessageDone(e));
         // Push as q:event so frontend can set stop_reason on the message
         const { type: _, ...data } = e;
-        pushPartEvent("message:done", data);
+        pushEvent("message:done", data);
       })
       .with({ type: "turn.completed" }, (e) => {
         console.log(
