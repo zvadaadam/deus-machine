@@ -5,11 +5,10 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 // ============================================================================
 
 const {
-  mockPersistAssistantMessage,
-  mockPersistToolResultMessage,
-  mockPersistMessageResult,
   mockPersistMessageCancelled,
-  mockPersistMessagePartsFinished,
+  mockPersistMessageCreated,
+  mockPersistPartDone,
+  mockPersistMessageDone,
   mockPersistSessionStarted,
   mockPersistSessionIdle,
   mockPersistSessionError,
@@ -17,14 +16,14 @@ const {
   mockPersistAgentSessionId,
   mockPersistSessionTitle,
   mockInvalidate,
+  mockBroadcast,
   mockRelay,
   mockRespondToAgent,
 } = vi.hoisted(() => ({
-  mockPersistAssistantMessage: vi.fn(() => ({ ok: true, value: "msg-id" })),
-  mockPersistToolResultMessage: vi.fn(() => ({ ok: true, value: "msg-id" })),
-  mockPersistMessageResult: vi.fn(),
+  mockPersistMessageCreated: vi.fn(() => ({ ok: true, value: "msg-id" })),
   mockPersistMessageCancelled: vi.fn(() => ({ ok: true, value: "msg-id" })),
-  mockPersistMessagePartsFinished: vi.fn(() => ({ ok: true, value: "updated" })),
+  mockPersistPartDone: vi.fn(() => ({ ok: true, value: "part-id" })),
+  mockPersistMessageDone: vi.fn(() => ({ ok: true, value: "msg-id" })),
   mockPersistSessionStarted: vi.fn(() => ({ ok: true, value: undefined })),
   mockPersistSessionIdle: vi.fn(() => ({ ok: true, value: undefined })),
   mockPersistSessionError: vi.fn(() => ({ ok: true, value: undefined })),
@@ -32,16 +31,16 @@ const {
   mockPersistAgentSessionId: vi.fn(() => ({ ok: true, value: undefined })),
   mockPersistSessionTitle: vi.fn(() => ({ ok: true, value: undefined })),
   mockInvalidate: vi.fn(),
+  mockBroadcast: vi.fn(),
   mockRelay: vi.fn(() => Promise.resolve({ diff: "ok" })),
   mockRespondToAgent: vi.fn(() => Promise.resolve()),
 }));
 
 vi.mock("../../../src/services/agent/persistence", () => ({
-  persistAssistantMessage: mockPersistAssistantMessage,
-  persistToolResultMessage: mockPersistToolResultMessage,
-  persistMessageResult: mockPersistMessageResult,
   persistMessageCancelled: mockPersistMessageCancelled,
-  persistMessagePartsFinished: mockPersistMessagePartsFinished,
+  persistMessageCreated: mockPersistMessageCreated,
+  persistPartDone: mockPersistPartDone,
+  persistMessageDone: mockPersistMessageDone,
   persistSessionStarted: mockPersistSessionStarted,
   persistSessionIdle: mockPersistSessionIdle,
   persistSessionError: mockPersistSessionError,
@@ -52,6 +51,10 @@ vi.mock("../../../src/services/agent/persistence", () => ({
 
 vi.mock("../../../src/services/query-engine", () => ({
   invalidate: mockInvalidate,
+}));
+
+vi.mock("../../../src/services/ws.service", () => ({
+  broadcast: mockBroadcast,
 }));
 
 vi.mock("../../../src/services/agent/tool-relay", () => ({
@@ -174,71 +177,41 @@ describe("handleAgentEvent", () => {
   // Messages
   // ==========================================================================
 
-  describe("message.assistant", () => {
-    const event: AgentEvent = {
-      type: "message.assistant",
-      sessionId: "sess-1",
-      agentType: "claude",
-      message: {
-        id: "msg-1",
-        role: "assistant",
-        content: [{ type: "text", text: "Hello" }],
-      },
-      model: "opus",
-    };
-
-    it("persists and invalidates messages + session", () => {
+  describe("message.assistant (SDK passthrough — no persistence)", () => {
+    it("does not persist or invalidate", () => {
+      const event: AgentEvent = {
+        type: "message.assistant",
+        sessionId: "sess-1",
+        agentType: "claude",
+        message: { id: "msg-1", role: "assistant", content: [] },
+      };
       handleAgentEvent(event);
-
-      expect(mockPersistAssistantMessage).toHaveBeenCalledWith(event);
-      expect(mockInvalidate).toHaveBeenCalledWith(["messages", "session"], {
-        sessionIds: ["sess-1"],
-      });
-    });
-
-    it("skips invalidation on persistence failure", () => {
-      mockPersistAssistantMessage.mockReturnValue({ ok: false, error: "insert failed" });
-
-      handleAgentEvent(event);
-
       expect(mockInvalidate).not.toHaveBeenCalled();
     });
   });
 
-  describe("message.tool_result", () => {
-    const event: AgentEvent = {
-      type: "message.tool_result",
-      sessionId: "sess-1",
-      agentType: "claude",
-      message: {
-        id: "msg-2",
-        role: "user",
-        content: [{ type: "tool_result", tool_use_id: "tu-1" }],
-      },
-    };
-
-    it("persists and invalidates messages + session", () => {
+  describe("message.tool_result (SDK passthrough — no persistence)", () => {
+    it("does not persist or invalidate", () => {
+      const event: AgentEvent = {
+        type: "message.tool_result",
+        sessionId: "sess-1",
+        agentType: "claude",
+        message: { id: "msg-2", role: "user", content: [] },
+      };
       handleAgentEvent(event);
-
-      expect(mockPersistToolResultMessage).toHaveBeenCalledWith(event);
-      expect(mockInvalidate).toHaveBeenCalledWith(["messages", "session"], {
-        sessionIds: ["sess-1"],
-      });
+      expect(mockInvalidate).not.toHaveBeenCalled();
     });
   });
 
-  describe("message.result", () => {
-    const event: AgentEvent = {
-      type: "message.result",
-      sessionId: "sess-1",
-      agentType: "claude",
-      subtype: "success",
-    };
-
-    it("calls persistMessageResult but does not invalidate", () => {
+  describe("message.result (SDK passthrough — no persistence)", () => {
+    it("does not persist or invalidate", () => {
+      const event: AgentEvent = {
+        type: "message.result",
+        sessionId: "sess-1",
+        agentType: "claude",
+        subtype: "success",
+      };
       handleAgentEvent(event);
-
-      expect(mockPersistMessageResult).toHaveBeenCalledWith(event);
       expect(mockInvalidate).not.toHaveBeenCalled();
     });
   });
@@ -261,101 +234,219 @@ describe("handleAgentEvent", () => {
   });
 
   // ==========================================================================
-  // Unified parts
+  // Turn, message & part lifecycle
   // ==========================================================================
 
-  describe("message.parts", () => {
-    it("accumulates parts without persisting or invalidating", () => {
+  describe("turn.started", () => {
+    it("logs without persisting or invalidating", () => {
       const event: AgentEvent = {
-        type: "message.parts",
+        type: "turn.started",
         sessionId: "sess-1",
         agentType: "claude",
-        messageId: "msg-parts-1",
-        parts: [
-          { type: "TEXT", id: "p1", sessionId: "sess-1", messageId: "msg-parts-1", text: "Hi" },
-        ],
+        messageId: "msg-1",
+        turnId: "turn-1",
       };
 
       handleAgentEvent(event);
 
-      expect(mockPersistMessagePartsFinished).not.toHaveBeenCalled();
       expect(mockInvalidate).not.toHaveBeenCalled();
     });
   });
 
-  describe("message.parts_finished", () => {
-    it("flushes accumulated parts and persists them", () => {
-      const partsEvent: AgentEvent = {
-        type: "message.parts",
+  describe("message.created", () => {
+    it("persists message row and invalidates", () => {
+      const event: AgentEvent = {
+        type: "message.created",
         sessionId: "sess-1",
         agentType: "claude",
-        messageId: "msg-parts-2",
-        parts: [
-          { type: "TEXT", id: "p1", sessionId: "sess-1", messageId: "msg-parts-2", text: "Hello" },
-        ],
+        messageId: "msg-1",
+        role: "assistant",
       };
 
-      const finishedEvent: AgentEvent = {
-        type: "message.parts_finished",
+      handleAgentEvent(event);
+
+      expect(mockPersistMessageCreated).toHaveBeenCalledWith(event);
+      expect(mockInvalidate).toHaveBeenCalled();
+    });
+  });
+
+  describe("part.created", () => {
+    const event: AgentEvent = {
+      type: "part.created",
+      sessionId: "sess-1",
+      agentType: "claude",
+      messageId: "msg-1",
+      partId: "p1",
+      part: { type: "TEXT", id: "p1", sessionId: "sess-1", messageId: "msg-1", text: "" },
+    };
+
+    it("does not persist or invalidate", () => {
+      handleAgentEvent(event);
+
+      expect(mockInvalidate).not.toHaveBeenCalled();
+      expect(mockPersistPartDone).not.toHaveBeenCalled();
+    });
+
+    it("broadcasts part:created q:event to frontend", () => {
+      handleAgentEvent(event);
+
+      expect(mockBroadcast).toHaveBeenCalledTimes(1);
+      const frame = JSON.parse(mockBroadcast.mock.calls[0][0]);
+      expect(frame).toEqual({
+        type: "q:event",
+        event: "part:created",
+        data: {
+          sessionId: "sess-1",
+          agentType: "claude",
+          messageId: "msg-1",
+          partId: "p1",
+          part: { type: "TEXT", id: "p1", sessionId: "sess-1", messageId: "msg-1", text: "" },
+        },
+      });
+    });
+  });
+
+  describe("part.delta", () => {
+    const event: AgentEvent = {
+      type: "part.delta",
+      sessionId: "sess-1",
+      agentType: "claude",
+      partId: "p1",
+      delta: "Hello",
+    };
+
+    it("does not persist or invalidate (streaming event)", () => {
+      handleAgentEvent(event);
+
+      expect(mockInvalidate).not.toHaveBeenCalled();
+      expect(mockPersistPartDone).not.toHaveBeenCalled();
+    });
+
+    it("broadcasts part:delta q:event to frontend", () => {
+      handleAgentEvent(event);
+
+      expect(mockBroadcast).toHaveBeenCalledTimes(1);
+      const frame = JSON.parse(mockBroadcast.mock.calls[0][0]);
+      expect(frame).toEqual({
+        type: "q:event",
+        event: "part:delta",
+        data: {
+          sessionId: "sess-1",
+          agentType: "claude",
+          partId: "p1",
+          delta: "Hello",
+        },
+      });
+    });
+  });
+
+  describe("part.done", () => {
+    const event: AgentEvent = {
+      type: "part.done",
+      sessionId: "sess-1",
+      agentType: "claude",
+      messageId: "msg-1",
+      partId: "p1",
+      part: {
+        type: "TEXT",
+        id: "p1",
         sessionId: "sess-1",
-        agentType: "claude",
-        messageId: "msg-parts-2",
-        usage: { input: 100, output: 50 },
-        finishReason: "end_turn",
-      };
+        messageId: "msg-1",
+        text: "Hello world",
+      },
+    };
 
-      handleAgentEvent(partsEvent);
-      handleAgentEvent(finishedEvent);
+    it("persists the part and invalidates messages", () => {
+      handleAgentEvent(event);
 
-      expect(mockPersistMessagePartsFinished).toHaveBeenCalledWith(finishedEvent, [
-        expect.objectContaining({ type: "TEXT", id: "p1", text: "Hello" }),
-      ]);
+      expect(mockPersistPartDone).toHaveBeenCalledWith(event);
       expect(mockInvalidate).toHaveBeenCalledWith(["messages", "session"], {
         sessionIds: ["sess-1"],
       });
     });
 
-    it("skips persistence when no parts were accumulated", () => {
-      const finishedEvent: AgentEvent = {
-        type: "message.parts_finished",
-        sessionId: "sess-1",
-        agentType: "claude",
-        messageId: "msg-empty",
-        usage: { input: 0, output: 0 },
-      };
+    it("broadcasts part:done q:event to frontend", () => {
+      handleAgentEvent(event);
 
-      handleAgentEvent(finishedEvent);
+      expect(mockBroadcast).toHaveBeenCalledTimes(1);
+      const frame = JSON.parse(mockBroadcast.mock.calls[0][0]);
+      expect(frame).toEqual({
+        type: "q:event",
+        event: "part:done",
+        data: {
+          sessionId: "sess-1",
+          agentType: "claude",
+          messageId: "msg-1",
+          partId: "p1",
+          part: {
+            type: "TEXT",
+            id: "p1",
+            sessionId: "sess-1",
+            messageId: "msg-1",
+            text: "Hello world",
+          },
+        },
+      });
+    });
 
-      expect(mockPersistMessagePartsFinished).not.toHaveBeenCalled();
+    it("broadcasts even when persistence fails", () => {
+      mockPersistPartDone.mockReturnValue({ ok: false, error: "DB error" });
+
+      handleAgentEvent(event);
+
+      expect(mockPersistPartDone).toHaveBeenCalledWith(event);
       expect(mockInvalidate).not.toHaveBeenCalled();
+      // Broadcast should still happen — the frontend needs the event for streaming UI
+      expect(mockBroadcast).toHaveBeenCalledTimes(1);
+    });
+  });
+
+  describe("message.done", () => {
+    const event: AgentEvent = {
+      type: "message.done",
+      sessionId: "sess-1",
+      agentType: "claude",
+      messageId: "msg-1",
+      stopReason: "end_turn",
+      parts: [],
+    };
+
+    it("persists stop_reason and invalidates messages", () => {
+      handleAgentEvent(event);
+
+      expect(mockPersistMessageDone).toHaveBeenCalledWith(event);
+      expect(mockInvalidate).toHaveBeenCalledWith(["messages", "session"], {
+        sessionIds: ["sess-1"],
+      });
     });
 
     it("skips invalidation on persistence failure", () => {
-      const partsEvent: AgentEvent = {
-        type: "message.parts",
-        sessionId: "sess-1",
-        agentType: "claude",
-        messageId: "msg-fail",
-        parts: [
-          { type: "TEXT", id: "p1", sessionId: "sess-1", messageId: "msg-fail", text: "text" },
-        ],
-      };
+      mockPersistMessageDone.mockReturnValue({ ok: false, error: "DB error" });
 
-      const finishedEvent: AgentEvent = {
-        type: "message.parts_finished",
-        sessionId: "sess-1",
-        agentType: "claude",
-        messageId: "msg-fail",
-        usage: { input: 0, output: 0 },
-      };
+      handleAgentEvent(event);
 
-      mockPersistMessagePartsFinished.mockReturnValue({ ok: false, error: "DB error" });
-
-      handleAgentEvent(partsEvent);
-      handleAgentEvent(finishedEvent);
-
-      expect(mockPersistMessagePartsFinished).toHaveBeenCalled();
+      expect(mockPersistMessageDone).toHaveBeenCalledWith(event);
       expect(mockInvalidate).not.toHaveBeenCalled();
+    });
+  });
+
+  describe("turn.completed", () => {
+    it("invalidates messages without persisting", () => {
+      const event: AgentEvent = {
+        type: "turn.completed",
+        sessionId: "sess-1",
+        agentType: "claude",
+        messageId: "msg-1",
+        finishReason: "end_turn",
+        tokens: { input: 100, output: 50 },
+        cost: 0.003,
+      };
+
+      handleAgentEvent(event);
+
+      expect(mockInvalidate).toHaveBeenCalledWith(["messages", "session"], {
+        sessionIds: ["sess-1"],
+      });
     });
   });
 
@@ -378,7 +469,6 @@ describe("handleAgentEvent", () => {
 
       expect(mockInvalidate).not.toHaveBeenCalled();
       // None of the persistence functions should be called
-      expect(mockPersistAssistantMessage).not.toHaveBeenCalled();
       expect(mockPersistSessionStarted).not.toHaveBeenCalled();
     });
   });
@@ -419,7 +509,6 @@ describe("handleAgentEvent", () => {
     it("does not persist or invalidate", () => {
       handleAgentEvent(event);
       expect(mockInvalidate).not.toHaveBeenCalled();
-      expect(mockPersistAssistantMessage).not.toHaveBeenCalled();
     });
 
     it("sends result back to agent-server via agentService.respondToAgent when relay resolves", async () => {
@@ -531,22 +620,51 @@ describe("handleAgentEvent", () => {
           agentType: "claude",
           message: { id: "m", role: "user", content: [] },
         },
+        { type: "message.system", sessionId: "s", agentType: "claude", data: {} },
         { type: "message.result", sessionId: "s", agentType: "claude", subtype: "success" },
         { type: "message.cancelled", sessionId: "s", agentType: "claude" },
+        // Turn, message & part lifecycle
+        { type: "turn.started", sessionId: "s", agentType: "claude", messageId: "m" },
         {
-          type: "message.parts",
+          type: "message.created",
           sessionId: "s",
           agentType: "claude",
           messageId: "m",
+          role: "assistant",
+        },
+        {
+          type: "part.created",
+          sessionId: "s",
+          agentType: "claude",
+          messageId: "m",
+          partId: "p",
+          part: { type: "TEXT", id: "p", sessionId: "s", messageId: "m", text: "" },
+        },
+        { type: "part.delta", sessionId: "s", agentType: "claude", partId: "p", delta: "x" },
+        {
+          type: "part.done",
+          sessionId: "s",
+          agentType: "claude",
+          messageId: "m",
+          partId: "p",
+          part: { type: "TEXT", id: "p", sessionId: "s", messageId: "m", text: "x" },
+        },
+        {
+          type: "message.done",
+          sessionId: "s",
+          agentType: "claude",
+          messageId: "m",
+          stopReason: "end_turn",
           parts: [],
         },
         {
-          type: "message.parts_finished",
+          type: "turn.completed",
           sessionId: "s",
           agentType: "claude",
           messageId: "m",
-          usage: { input: 0, output: 0 },
+          finishReason: "end_turn",
         },
+        // Interaction requests
         {
           type: "request.opened",
           requestId: "r",

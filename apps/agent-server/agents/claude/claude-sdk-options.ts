@@ -258,6 +258,7 @@ export function buildSdkOptions(
     disallowedTools: ["AskUserQuestion"],
     permissionMode,
     hooks: createHooks(sessionId),
+    includePartialMessages: true,
   };
 
   if (options?.chromeEnabled) {

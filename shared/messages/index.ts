@@ -41,10 +41,6 @@ export {
   ReasoningPartSchema,
   type ToolPart,
   ToolPartSchema,
-  type StepStartPart,
-  StepStartPartSchema,
-  type StepFinishPart,
-  StepFinishPartSchema,
   type CompactionPart,
   CompactionPartSchema,
   type Part,
@@ -52,8 +48,4 @@ export {
   // Part type enum
   type PartType,
   PartTypeSchema,
-  // Message parts envelope (DB JSON column)
-  type MessagePartsEnvelope,
-  MessagePartsEnvelopeSchema,
-  parseMessageParts,
 } from "./types";

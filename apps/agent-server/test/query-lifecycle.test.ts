@@ -31,17 +31,6 @@ describe("persistCancellation", () => {
     vi.clearAllMocks();
   });
 
-  it("sends a cancelled notification to the frontend", () => {
-    persistCancellation("session-1", "claude", "opus");
-
-    expect(mockSendMessage).toHaveBeenCalledWith({
-      id: "session-1",
-      type: "message",
-      agentType: "claude",
-      data: { type: "cancelled" },
-    });
-  });
-
   it("emits canonical session.cancelled and message.cancelled events", () => {
     persistCancellation("session-1", "claude", "opus");
 
@@ -52,7 +41,6 @@ describe("persistCancellation", () => {
   it("works with codex agent type", () => {
     persistCancellation("session-2", "codex", "o3-mini");
 
-    expect(mockSendMessage).toHaveBeenCalledWith(expect.objectContaining({ agentType: "codex" }));
     expect(mockEmitSessionCancelled).toHaveBeenCalledWith("session-2", "codex");
     expect(mockEmitMessageCancelled).toHaveBeenCalledWith("session-2", "codex");
   });
@@ -60,7 +48,7 @@ describe("persistCancellation", () => {
   it("does not send any error notifications", () => {
     persistCancellation("session-1", "claude", "opus");
 
-    expect(mockSendError).not.toHaveBeenCalled();
+    expect(mockEmitSessionError).not.toHaveBeenCalled();
   });
 });
 
@@ -69,20 +57,19 @@ describe("notifyAndRecordError", () => {
     vi.clearAllMocks();
   });
 
-  it("sends error to frontend", () => {
+  it("emits canonical session.error event", () => {
     const classified: ClassifiedError = { category: "auth", message: "Unauthorized" };
     notifyAndRecordError("session-1", "claude", classified);
 
-    expect(mockSendError).toHaveBeenCalledWith({
-      id: "session-1",
-      type: "error",
-      error: "Unauthorized",
-      agentType: "claude",
-      category: "auth",
-    });
+    expect(mockEmitSessionError).toHaveBeenCalledWith(
+      "session-1",
+      "claude",
+      "Unauthorized",
+      "auth"
+    );
   });
 
-  it("emits canonical session.error event", () => {
+  it("emits canonical session.error for network errors", () => {
     const classified: ClassifiedError = { category: "network", message: "Connection failed" };
     notifyAndRecordError("session-1", "claude", classified);
 
@@ -100,9 +87,6 @@ describe("notifyAndRecordError", () => {
 
     notifyAndRecordError("session-1", "claude", classified, enrichFn);
 
-    expect(mockSendError).toHaveBeenCalledWith(
-      expect.objectContaining({ error: "Process exited (enriched)" })
-    );
     expect(mockEmitSessionError).toHaveBeenCalledWith(
       "session-1",
       "claude",
@@ -115,17 +99,20 @@ describe("notifyAndRecordError", () => {
     const classified: ClassifiedError = { category: "rate_limit", message: "Too many requests" };
     notifyAndRecordError("session-1", "codex", classified);
 
-    expect(mockSendError).toHaveBeenCalledWith(
-      expect.objectContaining({ error: "Too many requests" })
+    expect(mockEmitSessionError).toHaveBeenCalledWith(
+      "session-1",
+      "codex",
+      "Too many requests",
+      "rate_limit"
     );
   });
 
-  it("only sends one error notification (no secondary db_write error)", () => {
+  it("only emits one session.error event (no secondary db_write error)", () => {
     const classified: ClassifiedError = { category: "internal", message: "Something broke" };
     notifyAndRecordError("session-1", "claude", classified);
 
     // Only one error call — no DB writes means no DB failure path
-    expect(mockSendError).toHaveBeenCalledTimes(1);
+    expect(mockEmitSessionError).toHaveBeenCalledTimes(1);
   });
 });
 

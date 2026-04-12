@@ -20,7 +20,7 @@ import type { RepoGroup } from "@shared/types/workspace";
 import { useEffect, useMemo, useCallback } from "react";
 import { track } from "@/platform/analytics";
 import { parseContentBlocks } from "../lib/contentParser";
-import { parseMessageParts, type MessagePartsEnvelope } from "@shared/messages";
+
 import { sendCommand, connect, isConnected, subscribe } from "@/platform/ws";
 import { emitSendAttemptFailed } from "@/features/connection";
 import type { RuntimeAgentType } from "../lib/agentRuntime";
@@ -197,21 +197,6 @@ export function useSessionWithMessages(sessionId: string | null) {
     return map;
   }, [messages, parentToolUseMap]);
 
-  // Parse unified Parts from the `parts` column (populated by agent-server dual-write).
-  // Returns a map of messageId → parsed envelope for messages that have Parts data.
-  const partsMap = useMemo(() => {
-    const map = new Map<string, MessagePartsEnvelope>();
-    if (!messages.length) return map;
-
-    for (const msg of messages) {
-      if (!msg.parts) continue;
-      const envelope = parseMessageParts(msg.parts);
-      if (envelope) map.set(msg.id, envelope);
-    }
-
-    return map;
-  }, [messages]);
-
   // Get latest user message's sent_at for duration tracking
   const latestMessageSentAt = useMemo(() => {
     if (!messages.length) return null;
@@ -234,7 +219,6 @@ export function useSessionWithMessages(sessionId: string | null) {
     toolResultMap,
     parentToolUseMap,
     subagentMessages,
-    partsMap,
   };
 }
 

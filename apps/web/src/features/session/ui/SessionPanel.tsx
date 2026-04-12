@@ -10,7 +10,7 @@ import {
 import { Chat } from "./Chat";
 import { MessageInput } from "./MessageInput";
 import type { MessageInputRef } from "./MessageInput";
-import { useSessionActions } from "../hooks";
+import { useSessionActions, useStreamingParts } from "../hooks";
 import { useAgentRpcHandler } from "../hooks/useAgentRpcHandler";
 import { SessionProvider } from "../context";
 import { useSessionWithMessages, useLoadOlderMessages } from "../api/session.queries";
@@ -112,7 +112,7 @@ export const SessionPanel = forwardRef<SessionPanelRef, SessionPanelProps>(
     // TanStack Query hooks
     const {
       session,
-      messages,
+      messages: dbMessages,
       hasOlder,
       sessionStatus,
       latestMessageSentAt,
@@ -121,8 +121,58 @@ export const SessionPanel = forwardRef<SessionPanelRef, SessionPanelProps>(
       toolResultMap,
       parentToolUseMap,
       subagentMessages,
-      partsMap,
     } = useSessionWithMessages(sessionId);
+
+    // ── Streaming Parts (real-time Part events via WS) ────────────────
+    // Accumulates part:created/delta/done events into PartRow[] per messageId.
+    // During active streaming, these parts are more up-to-date than DB parts.
+    // After streaming completes, the finalized parts (from part:done) persist
+    // in the store until the session changes — this avoids a gap where DB
+    // parts haven't been synced to the message cache yet.
+    const { getPartsForMessage, hasStreamingParts, getStreamingMessageIds } =
+      useStreamingParts(sessionId);
+
+    // Merge streaming parts into messages: overlay streaming parts onto
+    // DB-backed messages, and inject synthetic messages for IDs that
+    // exist in the streaming store but haven't appeared in the DB yet.
+    const messages = useMemo(() => {
+      if (!hasStreamingParts()) return dbMessages;
+
+      const dbMessageIds = new Set(dbMessages.map((m) => m.id));
+
+      // Update existing messages with streaming parts
+      const merged = dbMessages.map((msg) => {
+        if (msg.role !== "assistant") return msg;
+        const streamingParts = getPartsForMessage(msg.id);
+        if (!streamingParts) return msg;
+        if (msg.parts && msg.parts.length > 0) return msg;
+        return { ...msg, parts: streamingParts };
+      });
+
+      // Inject streaming-only messages (not yet in DB)
+      for (const msgId of getStreamingMessageIds()) {
+        if (dbMessageIds.has(msgId)) continue;
+        const streamingParts = getPartsForMessage(msgId);
+        if (!streamingParts || streamingParts.length === 0) continue;
+        merged.push({
+          id: msgId,
+          session_id: sessionId,
+          seq: 999999, // sort at end
+          role: "assistant",
+          content: null,
+          turn_id: null,
+          model: null,
+          agent_message_id: null,
+          sent_at: new Date().toISOString(),
+          cancelled_at: null,
+          parent_tool_use_id: null,
+          stop_reason: null,
+          parts: streamingParts,
+        });
+      }
+
+      return merged;
+    }, [dbMessages, sessionId, getPartsForMessage, hasStreamingParts, getStreamingMessageIds]);
 
     // Load-older pagination
     const loadOlderMutation = useLoadOlderMessages();
@@ -343,7 +393,6 @@ export const SessionPanel = forwardRef<SessionPanelRef, SessionPanelProps>(
           toolResultMap={toolResultMap}
           parentToolUseMap={parentToolUseMap}
           subagentMessages={subagentMessages}
-          partsMap={partsMap}
           sessionStatus={sessionStatus}
           renderBlock={renderBlock}
         >
@@ -459,7 +508,6 @@ export const SessionPanel = forwardRef<SessionPanelRef, SessionPanelProps>(
                 toolResultMap={toolResultMap}
                 parentToolUseMap={parentToolUseMap}
                 subagentMessages={subagentMessages}
-                partsMap={partsMap}
                 sessionStatus={sessionStatus}
                 renderBlock={renderBlock}
               >

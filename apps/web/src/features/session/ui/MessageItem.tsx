@@ -8,7 +8,7 @@
 import type { Message } from "@/shared/types";
 import type { ContentBlock } from "@/features/session/types";
 import { isImageBlock, isTextBlock, isToolUseBlock } from "@/features/session/types";
-import { BlockRenderer, ToolGroupBlock } from "./blocks";
+import { BlockRenderer, ToolGroupBlock, PartsRenderer } from "./blocks";
 import { groupToolStreaks, type GroupedItem } from "./utils/groupTools";
 import { match } from "ts-pattern";
 
@@ -183,6 +183,37 @@ export const MessageItem = memo(function MessageItem({
     if (message.role !== "assistant" || !Array.isArray(contentBlocks)) return null;
     return groupToolStreaks(contentBlocks as (ContentBlock | string)[]);
   }, [message.role, contentBlocks]);
+
+  // ── Parts-based rendering (new unified model) ──────────────────────
+  // If the assistant message has parts from the parts table, render from
+  // those instead of parsing the legacy content JSON. This is the primary
+  // rendering path for new messages; legacy content is the fallback for
+  // historical messages that predate the parts migration.
+  const hasParts = message.role === "assistant" && message.parts && message.parts.length > 0;
+
+  if (hasParts) {
+    return (
+      <div
+        key={message.id}
+        className={cn(
+          "group relative",
+          roleStyles.maxWidth,
+          roleStyles.container,
+          "flex min-w-0 flex-col gap-2 overflow-x-hidden",
+          "transition-colors duration-100 ease-in motion-reduce:transition-none"
+        )}
+      >
+        <PartsRenderer parts={message.parts!} isStreamingTurn={isStreamingTurn && isLastInTurn} />
+      </div>
+    );
+  }
+
+  // ── Legacy content-based rendering (fallback) ─────────────────────
+  // Skip rendering if assistant message has no content and no parts
+  // (message.created was received but parts haven't arrived yet)
+  if (message.role === "assistant" && !message.content) {
+    return null;
+  }
 
   // Assistant messages - grouped tool streaks + individual blocks
   if (message.role === "assistant") {

@@ -11,16 +11,10 @@ import type {
   ToolPart,
 } from "@shared/messages";
 import { emptyTokenUsage } from "@shared/messages";
-import type { Adapter, EventTransformer, StreamContext } from "./adapter";
+import type { FinishReason } from "@shared/messages";
+import type { Adapter, EventTransformer, PartEvent, StreamContext } from "./adapter";
 import type { CodexEvent } from "./codex-events";
-import {
-  completeToolPart,
-  createReasoningPart,
-  createStepFinishPart,
-  createStepStartPart,
-  createTextPart,
-  createToolPart,
-} from "./parts";
+import { completeToolPart, createReasoningPart, createTextPart, createToolPart } from "./parts";
 
 // ---------------------------------------------------------------------------
 // Codex Transformer
@@ -38,7 +32,9 @@ class CodexTransformer implements EventTransformer<CodexEvent> {
     this.ctx = ctx;
   }
 
-  process(event: CodexEvent): Part[] {
+  private turnCompletedEmitted = false;
+
+  process(event: CodexEvent): PartEvent[] {
     switch (event.type) {
       case "agent_message_delta":
         return this.handleTextDelta(event.delta);
@@ -78,10 +74,20 @@ class CodexTransformer implements EventTransformer<CodexEvent> {
     }
   }
 
-  finish(): { parts: Part[]; usage: TokenUsage } {
-    this.finalizeCurrentTextPart();
-    this.finalizeCurrentReasoningPart();
-    return { parts: this.getParts(), usage: this.totalUsage };
+  finish(): { events: PartEvent[]; parts: Part[]; usage: TokenUsage } {
+    const events: PartEvent[] = [
+      ...this.finalizeCurrentTextPart(),
+      ...this.finalizeCurrentReasoningPart(),
+    ];
+    if (!this.turnCompletedEmitted) {
+      events.push({
+        type: "turn.completed",
+        turnId: this.ctx.turnId,
+        finishReason: "end_turn",
+        tokens: { ...this.totalUsage },
+      });
+    }
+    return { events, parts: this.getParts(), usage: this.totalUsage };
   }
 
   getParts(): Part[] {
@@ -92,26 +98,26 @@ class CodexTransformer implements EventTransformer<CodexEvent> {
   // Text streaming
   // -------------------------------------------------------------------------
 
-  private handleTextDelta(delta: string): Part[] {
-    this.finalizeCurrentReasoningPart();
+  private handleTextDelta(delta: string): PartEvent[] {
+    const reasoningDone = this.finalizeCurrentReasoningPart();
 
     if (this.currentTextPart) {
       const existing = this.parts.get(this.currentTextPart);
       if (existing && existing.type === "TEXT") {
-        const updated: Part = { ...existing, text: existing.text + delta, state: "STREAMING" };
-        this.parts.set(existing.id, updated);
-        return [updated];
+        const accumulated: Part = { ...existing, text: existing.text + delta, state: "STREAMING" };
+        this.parts.set(existing.id, accumulated);
+        return [...reasoningDone, { type: "part.delta", partId: accumulated.id, delta }];
       }
     }
 
     const part = createTextPart(this.ctx.sessionId, this.ctx.messageId, delta, "STREAMING");
     this.parts.set(part.id, part);
     this.currentTextPart = part.id;
-    return [part];
+    return [...reasoningDone, { type: "part.created", part }];
   }
 
-  private handleTextComplete(message: string): Part[] {
-    this.finalizeCurrentReasoningPart();
+  private handleTextComplete(message: string): PartEvent[] {
+    const reasoningDone = this.finalizeCurrentReasoningPart();
 
     if (this.currentTextPart) {
       const existing = this.parts.get(this.currentTextPart);
@@ -119,60 +125,59 @@ class CodexTransformer implements EventTransformer<CodexEvent> {
         const updated: Part = { ...existing, text: message, state: "DONE" };
         this.parts.set(existing.id, updated);
         this.currentTextPart = null;
-        return [updated];
+        return [...reasoningDone, { type: "part.done", part: updated }];
       }
     }
 
     const part = createTextPart(this.ctx.sessionId, this.ctx.messageId, message, "DONE");
     this.parts.set(part.id, part);
     this.currentTextPart = null;
-    return [part];
+    return [...reasoningDone, { type: "part.done", part }];
   }
 
   // -------------------------------------------------------------------------
   // Reasoning
   // -------------------------------------------------------------------------
 
-  private handleReasoningDelta(delta: string): Part[] {
+  private handleReasoningDelta(delta: string): PartEvent[] {
     if (this.currentReasoningPart) {
       const existing = this.parts.get(this.currentReasoningPart);
       if (existing && existing.type === "REASONING") {
-        const updated: Part = { ...existing, text: existing.text + delta, state: "STREAMING" };
-        this.parts.set(existing.id, updated);
-        return [updated];
+        const accumulated: Part = { ...existing, text: existing.text + delta, state: "STREAMING" };
+        this.parts.set(existing.id, accumulated);
+        return [{ type: "part.delta", partId: accumulated.id, delta }];
       }
     }
 
     const part = createReasoningPart(this.ctx.sessionId, this.ctx.messageId, delta, "STREAMING");
     this.parts.set(part.id, part);
     this.currentReasoningPart = part.id;
-    return [part];
+    return [{ type: "part.created", part }];
   }
 
-  private handleReasoningComplete(text: string): Part[] {
+  private handleReasoningComplete(text: string): PartEvent[] {
     if (this.currentReasoningPart) {
       const existing = this.parts.get(this.currentReasoningPart);
       if (existing && existing.type === "REASONING") {
         const updated: Part = { ...existing, text, state: "DONE" };
         this.parts.set(existing.id, updated);
         this.currentReasoningPart = null;
-        return [updated];
+        return [{ type: "part.done", part: updated }];
       }
     }
 
     const part = createReasoningPart(this.ctx.sessionId, this.ctx.messageId, text, "DONE");
     this.parts.set(part.id, part);
     this.currentReasoningPart = null;
-    return [part];
+    return [{ type: "part.done", part }];
   }
 
   // -------------------------------------------------------------------------
   // Shell commands → ToolPart (kind: "bash")
   // -------------------------------------------------------------------------
 
-  private handleExecBegin(event: Extract<CodexEvent, { type: "exec_command_begin" }>): Part[] {
-    this.finalizeCurrentTextPart();
-    this.finalizeCurrentReasoningPart();
+  private handleExecBegin(event: Extract<CodexEvent, { type: "exec_command_begin" }>): PartEvent[] {
+    const finalized = this.finalizeStreaming();
 
     const commandStr = event.command.join(" ");
     const part = createToolPart(this.ctx.sessionId, this.ctx.messageId, {
@@ -191,10 +196,10 @@ class CodexTransformer implements EventTransformer<CodexEvent> {
 
     this.parts.set(part.id, part);
     this.toolParts.set(event.call_id, part.id);
-    return [part];
+    return [...finalized, { type: "part.created", part }];
   }
 
-  private handleExecEnd(event: Extract<CodexEvent, { type: "exec_command_end" }>): Part[] {
+  private handleExecEnd(event: Extract<CodexEvent, { type: "exec_command_end" }>): PartEvent[] {
     const partId = this.toolParts.get(event.call_id);
     if (!partId) return [];
 
@@ -225,14 +230,13 @@ class CodexTransformer implements EventTransformer<CodexEvent> {
     }
 
     this.parts.set(partId, updated);
-    return [updated];
+    return [{ type: "part.done", part: updated }];
   }
 
   private handleExecApproval(
     event: Extract<CodexEvent, { type: "exec_approval_request" }>
-  ): Part[] {
-    this.finalizeCurrentTextPart();
-    this.finalizeCurrentReasoningPart();
+  ): PartEvent[] {
+    const finalized = this.finalizeStreaming();
 
     const existingPartId = this.toolParts.get(event.call_id);
     if (existingPartId) {
@@ -246,7 +250,7 @@ class CodexTransformer implements EventTransformer<CodexEvent> {
           } satisfies PendingToolState,
         };
         this.parts.set(existingPartId, updated);
-        return [updated];
+        return [...finalized, { type: "part.created", part: updated }];
       }
     }
 
@@ -263,16 +267,15 @@ class CodexTransformer implements EventTransformer<CodexEvent> {
 
     this.parts.set(part.id, part);
     this.toolParts.set(event.call_id, part.id);
-    return [part];
+    return [...finalized, { type: "part.created", part }];
   }
 
   // -------------------------------------------------------------------------
   // File patches → ToolPart (kind: "write")
   // -------------------------------------------------------------------------
 
-  private handlePatchBegin(event: Extract<CodexEvent, { type: "patch_apply_begin" }>): Part[] {
-    this.finalizeCurrentTextPart();
-    this.finalizeCurrentReasoningPart();
+  private handlePatchBegin(event: Extract<CodexEvent, { type: "patch_apply_begin" }>): PartEvent[] {
+    const finalized = this.finalizeStreaming();
 
     const paths = Object.keys(event.changes);
     const title = paths.length === 1 ? `Edit ${paths[0]}` : `Edit ${paths.length} files`;
@@ -293,10 +296,10 @@ class CodexTransformer implements EventTransformer<CodexEvent> {
 
     this.parts.set(part.id, part);
     this.toolParts.set(event.call_id, part.id);
-    return [part];
+    return [...finalized, { type: "part.created", part }];
   }
 
-  private handlePatchEnd(event: Extract<CodexEvent, { type: "patch_apply_end" }>): Part[] {
+  private handlePatchEnd(event: Extract<CodexEvent, { type: "patch_apply_end" }>): PartEvent[] {
     const partId = this.toolParts.get(event.call_id);
     if (!partId) return [];
 
@@ -326,14 +329,13 @@ class CodexTransformer implements EventTransformer<CodexEvent> {
     }
 
     this.parts.set(partId, updated);
-    return [updated];
+    return [{ type: "part.done", part: updated }];
   }
 
   private handlePatchApproval(
     event: Extract<CodexEvent, { type: "apply_patch_approval_request" }>
-  ): Part[] {
-    this.finalizeCurrentTextPart();
-    this.finalizeCurrentReasoningPart();
+  ): PartEvent[] {
+    const finalized = this.finalizeStreaming();
 
     const paths = Object.keys(event.changes);
     const title = paths.length === 1 ? `Edit ${paths[0]}` : `Edit ${paths.length} files`;
@@ -352,16 +354,15 @@ class CodexTransformer implements EventTransformer<CodexEvent> {
 
     this.parts.set(part.id, part);
     this.toolParts.set(event.call_id, part.id);
-    return [part];
+    return [...finalized, { type: "part.created", part }];
   }
 
   // -------------------------------------------------------------------------
   // MCP tool calls → ToolPart (kind: "mcp")
   // -------------------------------------------------------------------------
 
-  private handleMcpBegin(event: Extract<CodexEvent, { type: "mcp_tool_call_begin" }>): Part[] {
-    this.finalizeCurrentTextPart();
-    this.finalizeCurrentReasoningPart();
+  private handleMcpBegin(event: Extract<CodexEvent, { type: "mcp_tool_call_begin" }>): PartEvent[] {
+    const finalized = this.finalizeStreaming();
 
     const toolName = `${event.invocation.server}/${event.invocation.tool}`;
     const part = createToolPart(this.ctx.sessionId, this.ctx.messageId, {
@@ -379,10 +380,10 @@ class CodexTransformer implements EventTransformer<CodexEvent> {
 
     this.parts.set(part.id, part);
     this.toolParts.set(event.call_id, part.id);
-    return [part];
+    return [...finalized, { type: "part.created", part }];
   }
 
-  private handleMcpEnd(event: Extract<CodexEvent, { type: "mcp_tool_call_end" }>): Part[] {
+  private handleMcpEnd(event: Extract<CodexEvent, { type: "mcp_tool_call_end" }>): PartEvent[] {
     const partId = this.toolParts.get(event.call_id);
     if (!partId) return [];
 
@@ -398,48 +399,71 @@ class CodexTransformer implements EventTransformer<CodexEvent> {
 
     const updated = completeToolPart(existing, output, mcpIsError);
     this.parts.set(partId, updated);
-    return [updated];
+    return [{ type: "part.done", part: updated }];
   }
 
   // -------------------------------------------------------------------------
   // Turn lifecycle
   // -------------------------------------------------------------------------
 
-  private handleTurnStarted(): Part[] {
-    const part = createStepStartPart(this.ctx.sessionId, this.ctx.messageId);
-    this.parts.set(part.id, part);
-    return [part];
+  private handleTurnStarted(): PartEvent[] {
+    return [
+      { type: "turn.started", turnId: this.ctx.turnId },
+      { type: "message.created", messageId: this.ctx.messageId, role: "assistant" },
+    ];
   }
 
-  private handleTurnComplete(): Part[] {
-    this.finalizeCurrentTextPart();
-    this.finalizeCurrentReasoningPart();
-
-    const part = createStepFinishPart(this.ctx.sessionId, this.ctx.messageId, {
-      finishReason: "end_turn",
-      tokens: { ...this.totalUsage },
-    });
-    this.parts.set(part.id, part);
-    return [part];
+  private handleTurnComplete(): PartEvent[] {
+    const finalized = this.finalizeStreaming();
+    this.turnCompletedEmitted = true;
+    return [
+      ...finalized,
+      {
+        type: "message.done",
+        messageId: this.ctx.messageId,
+        stopReason: "end_turn",
+        parts: this.getParts(),
+      },
+      {
+        type: "turn.completed",
+        turnId: this.ctx.turnId,
+        finishReason: "end_turn",
+        tokens: { ...this.totalUsage },
+      },
+    ];
   }
 
-  private handleTurnAborted(event: Extract<CodexEvent, { type: "turn_aborted" }>): Part[] {
-    this.finalizeCurrentTextPart();
-    this.finalizeCurrentReasoningPart();
+  private handleTurnAborted(event: Extract<CodexEvent, { type: "turn_aborted" }>): PartEvent[] {
+    const finalized = this.finalizeStreaming();
+    const reason = event.reason === "interrupted" ? "cancelled" : "end_turn";
+    this.turnCompletedEmitted = true;
+    return [
+      ...finalized,
+      {
+        type: "message.done",
+        messageId: this.ctx.messageId,
+        stopReason: reason,
+        parts: this.getParts(),
+      },
+      {
+        type: "turn.completed",
+        turnId: this.ctx.turnId,
+        finishReason: reason,
+        tokens: { ...this.totalUsage },
+      },
+    ];
+  }
 
-    const part = createStepFinishPart(this.ctx.sessionId, this.ctx.messageId, {
-      finishReason: event.reason === "interrupted" ? "cancelled" : "end_turn",
-      tokens: { ...this.totalUsage },
-    });
-    this.parts.set(part.id, part);
-    return [part];
+  /** Finalize any open text/reasoning parts, returning their DONE events. */
+  private finalizeStreaming(): PartEvent[] {
+    return [...this.finalizeCurrentTextPart(), ...this.finalizeCurrentReasoningPart()];
   }
 
   // -------------------------------------------------------------------------
   // Token counting
   // -------------------------------------------------------------------------
 
-  private handleTokenCount(event: Extract<CodexEvent, { type: "token_count" }>): Part[] {
+  private handleTokenCount(event: Extract<CodexEvent, { type: "token_count" }>): PartEvent[] {
     if (!event.info) return [];
 
     const usage = event.info.last_token_usage;
@@ -461,22 +485,30 @@ class CodexTransformer implements EventTransformer<CodexEvent> {
   // Helpers
   // -------------------------------------------------------------------------
 
-  private finalizeCurrentTextPart(): void {
-    if (!this.currentTextPart) return;
+  private finalizeCurrentTextPart(): PartEvent[] {
+    if (!this.currentTextPart) return [];
     const part = this.parts.get(this.currentTextPart);
     if (part && part.type === "TEXT" && part.state === "STREAMING") {
-      this.parts.set(part.id, { ...part, state: "DONE" });
+      const donePart: Part = { ...part, state: "DONE" };
+      this.parts.set(part.id, donePart);
+      this.currentTextPart = null;
+      return [{ type: "part.done", part: donePart }];
     }
     this.currentTextPart = null;
+    return [];
   }
 
-  private finalizeCurrentReasoningPart(): void {
-    if (!this.currentReasoningPart) return;
+  private finalizeCurrentReasoningPart(): PartEvent[] {
+    if (!this.currentReasoningPart) return [];
     const part = this.parts.get(this.currentReasoningPart);
     if (part && part.type === "REASONING" && part.state === "STREAMING") {
-      this.parts.set(part.id, { ...part, state: "DONE" });
+      const donePart: Part = { ...part, state: "DONE" };
+      this.parts.set(part.id, donePart);
+      this.currentReasoningPart = null;
+      return [{ type: "part.done", part: donePart }];
     }
     this.currentReasoningPart = null;
+    return [];
   }
 }
 

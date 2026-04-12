@@ -1,5 +1,5 @@
 // agent-server/messages/claude-adapter.ts
-// Transforms raw Claude Code SDK events into unified Parts.
+// Transforms raw Claude Code SDK events into PartEvents.
 //
 // Handles both streaming (content_block_start/delta/stop) and non-streaming
 // (complete assistant messages) paths. Tracks subagent contexts via
@@ -16,7 +16,7 @@ import type {
   ToolPart,
 } from "@shared/messages";
 import { addTokenUsage, emptyTokenUsage } from "@shared/messages";
-import type { Adapter, EventTransformer, StreamContext } from "./adapter";
+import type { Adapter, EventTransformer, PartEvent, StreamContext } from "./adapter";
 import type {
   ClaudeAssistantEvent,
   ClaudeCodeEvent,
@@ -31,12 +31,10 @@ import type {
   ClaudeUserEvent,
 } from "./claude-events";
 import {
-  appendToolInput,
   completeToolPart,
   createCompactionPart,
   createPendingToolPart,
   createReasoningPart,
-  createStepFinishPart,
   createTextPart,
   createToolPart,
   startToolPart,
@@ -74,6 +72,14 @@ function extractSubagentMetadata(input: Record<string, unknown>): SubagentMetada
   };
 }
 
+/** Wrap a Part in a PartEvent. */
+function created(part: Part): PartEvent {
+  return { type: "part.created", part };
+}
+function partDone(part: Part): PartEvent {
+  return { type: "part.done", part };
+}
+
 // ---------------------------------------------------------------------------
 // Subagent context tracking
 // ---------------------------------------------------------------------------
@@ -104,6 +110,12 @@ class ClaudeCodeTransformer implements EventTransformer<ClaudeCodeEvent> {
   private hasReceivedStreamEvents = false;
   private totalCostUsd: number | undefined;
   private lastFinishReason: FinishReason | undefined;
+  private turnCompletedEmitted = false;
+
+  // Message lifecycle tracking
+  private currentMessageId: string | null = null;
+  private messagePartsStart = 0; // index into this.parts when message opened
+  private messageCounter = 0;
 
   private activeSubagents = new Map<string, SubagentContext>();
   private lastParentToolCallId: string | undefined;
@@ -112,7 +124,7 @@ class ClaudeCodeTransformer implements EventTransformer<ClaudeCodeEvent> {
     this.ctx = ctx;
   }
 
-  process(event: ClaudeCodeEvent): Part[] {
+  process(event: ClaudeCodeEvent): PartEvent[] {
     const parentToolCallId = this.extractParentToolCallId(event);
 
     if (parentToolCallId !== this.lastParentToolCallId) {
@@ -121,7 +133,7 @@ class ClaudeCodeTransformer implements EventTransformer<ClaudeCodeEvent> {
       this.lastParentToolCallId = parentToolCallId;
     }
 
-    let emitted: Part[];
+    let emitted: PartEvent[] = [];
     switch (event.type) {
       case "system":
         return this.handleSystem(event);
@@ -136,6 +148,8 @@ class ClaudeCodeTransformer implements EventTransformer<ClaudeCodeEvent> {
         break;
       case "result":
         return this.handleResult(event);
+      default:
+        return [];
     }
 
     if (parentToolCallId) {
@@ -145,16 +159,28 @@ class ClaudeCodeTransformer implements EventTransformer<ClaudeCodeEvent> {
     return emitted;
   }
 
-  finish(): { parts: Part[]; usage: TokenUsage; cost?: number; finishReason?: FinishReason } {
-    this.closeText();
-    this.closeThinking();
+  finish(): { events: PartEvent[]; parts: Part[]; usage: TokenUsage; cost?: number } {
+    const events: PartEvent[] = [];
+
+    const doneText = this.closeText();
+    if (doneText) events.push(doneText);
+    const doneThinking = this.closeThinking();
+    if (doneThinking) events.push(doneThinking);
+
     const usage = this.resultUsage.input > 0 ? this.resultUsage : this.accumulatedUsage;
-    return {
-      parts: this.getParts(),
-      usage,
-      cost: this.totalCostUsd,
-      finishReason: this.lastFinishReason,
-    };
+
+    // Emit turn.completed if not already emitted during process()
+    if (!this.turnCompletedEmitted) {
+      events.push({
+        type: "turn.completed",
+        turnId: this.ctx.turnId,
+        finishReason: this.lastFinishReason,
+        tokens: usage,
+        cost: this.totalCostUsd,
+      });
+    }
+
+    return { events, parts: this.getParts(), usage, cost: this.totalCostUsd };
   }
 
   getParts(): Part[] {
@@ -180,24 +206,23 @@ class ClaudeCodeTransformer implements EventTransformer<ClaudeCodeEvent> {
   // Subagent part tagging
   // -------------------------------------------------------------------------
 
-  private applyParentTag(parts: Part[], parentToolCallId: string): Part[] {
-    return parts.map((part) => {
+  private applyParentTag(events: PartEvent[], parentToolCallId: string): PartEvent[] {
+    return events.map((evt) => {
+      if (evt.type !== "part.created" && evt.type !== "part.done") return evt;
+
+      const part = evt.part;
       const tagged = { ...part, parentToolCallId } as Part;
 
       const idx = this.parts.findIndex((p) => p.id === part.id);
       if (idx !== -1) this.parts[idx] = tagged;
 
-      if (tagged.type === "TOOL") {
-        this.toolParts.set(tagged.toolCallId, tagged);
-      }
-      if (tagged.type === "TEXT" && this.currentTextPart?.id === tagged.id) {
+      if (tagged.type === "TOOL") this.toolParts.set(tagged.toolCallId, tagged);
+      if (tagged.type === "TEXT" && this.currentTextPart?.id === tagged.id)
         this.currentTextPart = tagged;
-      }
-      if (tagged.type === "REASONING" && this.currentThinkingPart?.id === tagged.id) {
+      if (tagged.type === "REASONING" && this.currentThinkingPart?.id === tagged.id)
         this.currentThinkingPart = tagged;
-      }
 
-      return tagged;
+      return { ...evt, part: tagged } as PartEvent;
     });
   }
 
@@ -222,9 +247,9 @@ class ClaudeCodeTransformer implements EventTransformer<ClaudeCodeEvent> {
   // Top-level event handlers
   // -------------------------------------------------------------------------
 
-  private handleUser(event: ClaudeUserEvent): Part[] {
-    const changed: Part[] = [];
-    if (typeof event.message.content === "string") return changed;
+  private handleUser(event: ClaudeUserEvent): PartEvent[] {
+    const events: PartEvent[] = [];
+    if (typeof event.message.content === "string") return events;
 
     for (const block of event.message.content) {
       if (block.type !== "tool_result") continue;
@@ -236,23 +261,23 @@ class ClaudeCodeTransformer implements EventTransformer<ClaudeCodeEvent> {
       const updated = completeToolPart(existing, output, tr.is_error ?? false);
       this.replacePart(existing, updated);
       this.toolParts.set(tr.tool_use_id, updated);
-      changed.push(updated);
+      events.push(partDone(updated));
 
       if (this.activeSubagents.has(tr.tool_use_id)) {
         this.unregisterSubagent(tr.tool_use_id);
       }
     }
 
-    return changed;
+    return events;
   }
 
-  private handleAssistant(event: ClaudeAssistantEvent): Part[] {
+  private handleAssistant(event: ClaudeAssistantEvent): PartEvent[] {
     if (this.hasReceivedStreamEvents) return [];
 
-    const changed: Part[] = [];
+    const events: PartEvent[] = [this.openMessage()];
     for (const block of event.message.content) {
       const part = this.processContentBlock(block);
-      if (part) changed.push(part);
+      if (part) events.push(part);
     }
 
     if (event.message.usage) {
@@ -262,17 +287,23 @@ class ClaudeCodeTransformer implements EventTransformer<ClaudeCodeEvent> {
       );
     }
 
-    return changed;
+    const msgDone = this.closeMessage((event.message as any).stop_reason ?? undefined);
+    if (msgDone) events.push(msgDone);
+
+    return events;
   }
 
-  private handleStream(event: ClaudeStreamEvent): Part[] {
+  private handleStream(event: ClaudeStreamEvent): PartEvent[] {
     this.hasReceivedStreamEvents = true;
     return this.processStreamEvent(event.event);
   }
 
-  private handleResult(event: ClaudeResultEvent): Part[] {
-    this.closeText();
-    this.closeThinking();
+  private handleResult(event: ClaudeResultEvent): PartEvent[] {
+    const events: PartEvent[] = [];
+    const doneText = this.closeText();
+    if (doneText) events.push(doneText);
+    const doneThinking = this.closeThinking();
+    if (doneThinking) events.push(doneThinking);
 
     if (event.usage) {
       this.resultUsage = mapSdkUsage(event.usage);
@@ -281,40 +312,38 @@ class ClaudeCodeTransformer implements EventTransformer<ClaudeCodeEvent> {
       this.totalCostUsd = event.total_cost_usd;
     }
 
-    const activeCount = this.activeSubagents.size;
-    if (activeCount >= 2) return [];
-
     const usage = this.resultUsage.input > 0 ? this.resultUsage : this.accumulatedUsage;
     const finishReason = mapResultSubtype(event.subtype, event.is_error);
-    if (activeCount === 0) {
-      this.lastFinishReason = finishReason;
-    }
+    this.lastFinishReason = finishReason;
 
-    const step = createStepFinishPart(this.ctx.sessionId, this.ctx.messageId, {
-      finishReason,
-      tokens: usage,
-      cost: this.totalCostUsd,
-    });
+    const activeCount = this.activeSubagents.size;
+    if (activeCount >= 2) return events;
 
     if (activeCount === 1) {
       const ctx = [...this.activeSubagents.values()][0]!;
       if (!ctx.hasReceivedResult) {
         ctx.hasReceivedResult = true;
-        const tagged = { ...step, parentToolCallId: ctx.toolCallId };
-        this.parts.push(tagged);
-        return [tagged];
+        // Subagent result — don't emit turn.completed, it belongs to the parent
+        return events;
       }
     }
 
-    this.parts.push(step);
-    return [step];
+    this.turnCompletedEmitted = true;
+    events.push({
+      type: "turn.completed",
+      turnId: this.ctx.turnId,
+      finishReason,
+      tokens: usage,
+      cost: this.totalCostUsd,
+    });
+    return events;
   }
 
   // -------------------------------------------------------------------------
   // System event handling
   // -------------------------------------------------------------------------
 
-  private handleSystem(event: ClaudeSystemEvent): Part[] {
+  private handleSystem(event: ClaudeSystemEvent): PartEvent[] {
     if (event.subtype === "compact_boundary") {
       this.closeText();
       this.closeThinking();
@@ -326,7 +355,7 @@ class ClaudeCodeTransformer implements EventTransformer<ClaudeCodeEvent> {
         event.compact_metadata.pre_tokens
       );
       this.parts.push(part);
-      return [part];
+      return [created(part), partDone(part)];
     }
     return [];
   }
@@ -335,7 +364,7 @@ class ClaudeCodeTransformer implements EventTransformer<ClaudeCodeEvent> {
   // Content block processing (non-streaming path)
   // -------------------------------------------------------------------------
 
-  private processContentBlock(block: ClaudeContentBlock): Part | null {
+  private processContentBlock(block: ClaudeContentBlock): PartEvent | null {
     switch (block.type) {
       case "text": {
         this.closeThinking();
@@ -346,12 +375,12 @@ class ClaudeCodeTransformer implements EventTransformer<ClaudeCodeEvent> {
           };
           this.replacePart(this.currentTextPart, updated);
           this.currentTextPart = updated;
-          return updated;
+          return partDone(updated);
         }
         const part = createTextPart(this.ctx.sessionId, this.ctx.messageId, block.text, "DONE");
         this.parts.push(part);
         this.currentTextPart = part;
-        return part;
+        return partDone(part);
       }
 
       case "thinking": {
@@ -363,7 +392,7 @@ class ClaudeCodeTransformer implements EventTransformer<ClaudeCodeEvent> {
           };
           this.replacePart(this.currentThinkingPart, updated);
           this.currentThinkingPart = updated;
-          return updated;
+          return partDone(updated);
         }
         const part = createReasoningPart(
           this.ctx.sessionId,
@@ -373,7 +402,7 @@ class ClaudeCodeTransformer implements EventTransformer<ClaudeCodeEvent> {
         );
         this.parts.push(part);
         this.currentThinkingPart = part;
-        return part;
+        return partDone(part);
       }
 
       case "tool_use": {
@@ -398,7 +427,7 @@ class ClaudeCodeTransformer implements EventTransformer<ClaudeCodeEvent> {
           this.registerSubagent(block.id, part.id, part.subagent?.type ?? "unknown");
         }
 
-        return part;
+        return created(part);
       }
     }
   }
@@ -407,7 +436,7 @@ class ClaudeCodeTransformer implements EventTransformer<ClaudeCodeEvent> {
   // Stream event processing
   // -------------------------------------------------------------------------
 
-  private processStreamEvent(event: ClaudeRawStreamEvent): Part[] {
+  private processStreamEvent(event: ClaudeRawStreamEvent): PartEvent[] {
     switch (event.type) {
       case "content_block_start":
         return this.onBlockStart(event);
@@ -426,7 +455,7 @@ class ClaudeCodeTransformer implements EventTransformer<ClaudeCodeEvent> {
 
   private onBlockStart(
     event: Extract<ClaudeRawStreamEvent, { type: "content_block_start" }>
-  ): Part[] {
+  ): PartEvent[] {
     const block = event.content_block;
     if (block.type === "tool_use") {
       this.closeText();
@@ -441,27 +470,30 @@ class ClaudeCodeTransformer implements EventTransformer<ClaudeCodeEvent> {
       this.toolParts.set(block.id, part);
       this.toolInputBuffers.set(block.id, "");
       this.blockIndexToToolId.set(event.index, block.id);
-      return [part];
+      return [created(part)];
     }
     return [];
   }
 
   private onBlockDelta(
     event: Extract<ClaudeRawStreamEvent, { type: "content_block_delta" }>
-  ): Part[] {
+  ): PartEvent[] {
     const delta: ClaudeDelta = event.delta;
     switch (delta.type) {
       case "text_delta": {
-        this.closeThinking();
+        const closed: PartEvent[] = [];
+        const dt = this.closeThinking();
+        if (dt) closed.push(dt);
+
         if (this.currentTextPart) {
-          const updated: TextPart = {
+          const accumulated: TextPart = {
             ...this.currentTextPart,
             text: this.currentTextPart.text + delta.text,
             state: "STREAMING",
           };
-          this.replacePart(this.currentTextPart, updated);
-          this.currentTextPart = updated;
-          return [updated];
+          this.replacePart(this.currentTextPart, accumulated);
+          this.currentTextPart = accumulated;
+          return [...closed, { type: "part.delta", partId: accumulated.id, delta: delta.text }];
         }
         const part = createTextPart(
           this.ctx.sessionId,
@@ -471,20 +503,23 @@ class ClaudeCodeTransformer implements EventTransformer<ClaudeCodeEvent> {
         );
         this.parts.push(part);
         this.currentTextPart = part;
-        return [part];
+        return [...closed, created(part)];
       }
 
       case "thinking_delta": {
-        this.closeText();
+        const closed: PartEvent[] = [];
+        const dt = this.closeText();
+        if (dt) closed.push(dt);
+
         if (this.currentThinkingPart) {
-          const updated: ReasoningPart = {
+          const accumulated: ReasoningPart = {
             ...this.currentThinkingPart,
             text: this.currentThinkingPart.text + delta.thinking,
             state: "STREAMING",
           };
-          this.replacePart(this.currentThinkingPart, updated);
-          this.currentThinkingPart = updated;
-          return [updated];
+          this.replacePart(this.currentThinkingPart, accumulated);
+          this.currentThinkingPart = accumulated;
+          return [...closed, { type: "part.delta", partId: accumulated.id, delta: delta.thinking }];
         }
         const part = createReasoningPart(
           this.ctx.sessionId,
@@ -494,7 +529,7 @@ class ClaudeCodeTransformer implements EventTransformer<ClaudeCodeEvent> {
         );
         this.parts.push(part);
         this.currentThinkingPart = part;
-        return [part];
+        return [...closed, created(part)];
       }
 
       case "input_json_delta": {
@@ -504,13 +539,6 @@ class ClaudeCodeTransformer implements EventTransformer<ClaudeCodeEvent> {
           toolId,
           (this.toolInputBuffers.get(toolId) ?? "") + delta.partial_json
         );
-        const existing = this.toolParts.get(toolId);
-        if (existing) {
-          const updated = appendToolInput(existing, delta.partial_json);
-          this.replacePart(existing, updated);
-          this.toolParts.set(toolId, updated);
-          return [updated];
-        }
         return [];
       }
 
@@ -521,9 +549,12 @@ class ClaudeCodeTransformer implements EventTransformer<ClaudeCodeEvent> {
 
   private onBlockStop(
     event: Extract<ClaudeRawStreamEvent, { type: "content_block_stop" }>
-  ): Part[] {
-    this.closeText();
-    this.closeThinking();
+  ): PartEvent[] {
+    const closed: PartEvent[] = [];
+    const dt = this.closeText();
+    if (dt) closed.push(dt);
+    const dr = this.closeThinking();
+    if (dr) closed.push(dr);
 
     const toolId = this.blockIndexToToolId.get(event.index);
     if (toolId) {
@@ -549,24 +580,28 @@ class ClaudeCodeTransformer implements EventTransformer<ClaudeCodeEvent> {
         this.toolParts.set(toolId, updated);
         this.toolInputBuffers.delete(toolId);
         this.blockIndexToToolId.delete(event.index);
-        return [updated];
+        return [...closed, created(updated)];
       }
     }
 
-    return [];
+    return closed;
   }
 
-  private onMessageStart(event: Extract<ClaudeRawStreamEvent, { type: "message_start" }>): Part[] {
+  private onMessageStart(
+    event: Extract<ClaudeRawStreamEvent, { type: "message_start" }>
+  ): PartEvent[] {
     if (event.message.usage) {
       this.accumulatedUsage = addTokenUsage(
         this.accumulatedUsage,
         mapSdkUsage(event.message.usage)
       );
     }
-    return [];
+    return [this.openMessage()];
   }
 
-  private onMessageDelta(event: Extract<ClaudeRawStreamEvent, { type: "message_delta" }>): Part[] {
+  private onMessageDelta(
+    event: Extract<ClaudeRawStreamEvent, { type: "message_delta" }>
+  ): PartEvent[] {
     if (event.usage?.output_tokens) {
       this.accumulatedUsage = addTokenUsage(this.accumulatedUsage, {
         input: 0,
@@ -576,34 +611,65 @@ class ClaudeCodeTransformer implements EventTransformer<ClaudeCodeEvent> {
     return [];
   }
 
-  private onMessageStop(): Part[] {
-    this.closeText();
-    this.closeThinking();
-    return [];
+  private onMessageStop(): PartEvent[] {
+    const events: PartEvent[] = [];
+    const dt = this.closeText();
+    if (dt) events.push(dt);
+    const dr = this.closeThinking();
+    if (dr) events.push(dr);
+    const msgDone = this.closeMessage();
+    if (msgDone) events.push(msgDone);
+    return events;
   }
 
   // -------------------------------------------------------------------------
   // Helpers
   // -------------------------------------------------------------------------
 
-  private closeText(): void {
-    if (!this.currentTextPart) return;
-    if (this.currentTextPart.state === "STREAMING") {
-      const updated: TextPart = { ...this.currentTextPart, state: "DONE" };
-      this.replacePart(this.currentTextPart, updated);
-      this.currentTextPart = updated;
-    }
-    this.currentTextPart = null;
+  /** Open a new assistant message, returning a message.created event. */
+  private openMessage(): PartEvent {
+    this.messageCounter++;
+    this.currentMessageId = `${this.ctx.messageId}-${this.messageCounter}`;
+    this.messagePartsStart = this.parts.length;
+    return { type: "message.created", messageId: this.currentMessageId, role: "assistant" };
   }
 
-  private closeThinking(): void {
-    if (!this.currentThinkingPart) return;
+  /** Close the current message, returning a message.done event with accumulated parts. */
+  private closeMessage(stopReason?: string): PartEvent | null {
+    if (!this.currentMessageId) return null;
+    const msgParts = this.parts.slice(this.messagePartsStart);
+    const evt: PartEvent = {
+      type: "message.done",
+      messageId: this.currentMessageId,
+      stopReason,
+      parts: msgParts,
+    };
+    this.currentMessageId = null;
+    return evt;
+  }
+
+  private closeText(): PartEvent | null {
+    if (!this.currentTextPart) return null;
+    if (this.currentTextPart.state === "STREAMING") {
+      const donePart: TextPart = { ...this.currentTextPart, state: "DONE" };
+      this.replacePart(this.currentTextPart, donePart);
+      this.currentTextPart = null;
+      return partDone(donePart);
+    }
+    this.currentTextPart = null;
+    return null;
+  }
+
+  private closeThinking(): PartEvent | null {
+    if (!this.currentThinkingPart) return null;
     if (this.currentThinkingPart.state === "STREAMING") {
-      const updated: ReasoningPart = { ...this.currentThinkingPart, state: "DONE" };
-      this.replacePart(this.currentThinkingPart, updated);
-      this.currentThinkingPart = updated;
+      const donePart: ReasoningPart = { ...this.currentThinkingPart, state: "DONE" };
+      this.replacePart(this.currentThinkingPart, donePart);
+      this.currentThinkingPart = null;
+      return partDone(donePart);
     }
     this.currentThinkingPart = null;
+    return null;
   }
 
   private replacePart(old: Part, next: Part): void {

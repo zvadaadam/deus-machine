@@ -6,7 +6,7 @@
 // without any provider-specific parsing.
 
 // Adapter interface
-export type { Adapter, EventTransformer, StreamContext } from "./adapter";
+export type { Adapter, EventTransformer, PartEvent, StreamContext } from "./adapter";
 
 // Provider adapters
 export { claudeCodeAdapter } from "./claude-adapter";
@@ -20,13 +20,10 @@ export { CodexEventSchema } from "./codex-events";
 
 // Part factories and helpers
 export {
-  appendToolInput,
   completeToolPart,
   createCompactionPart,
   createPendingToolPart,
   createReasoningPart,
-  createStepFinishPart,
-  createStepStartPart,
   createTextPart,
   createToolPart,
   startToolPart,

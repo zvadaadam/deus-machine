@@ -1,36 +1,53 @@
 import { describe, expect, it } from "vitest";
 import { codexAdapter } from "../messages/codex-adapter";
 import type { CodexEvent } from "../messages/codex-events";
-import type { StreamContext } from "../messages/adapter";
+import type { StreamContext, PartEvent } from "../messages/adapter";
 
 function makeCtx(): StreamContext {
   return { sessionId: "sess-1", messageId: "msg-1" };
 }
 
+/** Extract part from a part.created or part.done event */
+function partFrom(evt: PartEvent) {
+  if (evt.type === "part.created" || evt.type === "part.done") return evt.part;
+  return undefined;
+}
+
 describe("CodexAdapter", () => {
   describe("text streaming", () => {
-    it("accumulates text deltas", () => {
+    it("emits part.created on first delta, then part.delta on subsequent", () => {
+      const transformer = codexAdapter.createTransformer(makeCtx());
+
+      const first = transformer.process({ type: "agent_message_delta", delta: "Hello" });
+      expect(first).toHaveLength(1);
+      expect(first[0]).toMatchObject({ type: "part.created" });
+      expect(partFrom(first[0])).toMatchObject({ type: "TEXT", text: "Hello", state: "STREAMING" });
+
+      const second = transformer.process({ type: "agent_message_delta", delta: " world" });
+      expect(second).toHaveLength(1);
+      expect(second[0]).toMatchObject({ type: "part.delta", delta: " world" });
+    });
+
+    it("accumulates text internally for getParts()", () => {
       const transformer = codexAdapter.createTransformer(makeCtx());
 
       transformer.process({ type: "agent_message_delta", delta: "Hello" });
-      const parts = transformer.process({ type: "agent_message_delta", delta: " world" });
+      transformer.process({ type: "agent_message_delta", delta: " world" });
 
-      expect(parts).toHaveLength(1);
-      expect(parts[0]).toMatchObject({
-        type: "TEXT",
-        text: "Hello world",
-        state: "STREAMING",
-      });
+      const allParts = transformer.getParts();
+      const text = allParts.find((p) => p.type === "TEXT");
+      expect(text).toMatchObject({ text: "Hello world", state: "STREAMING" });
     });
 
-    it("finalizes text on agent_message", () => {
+    it("finalizes text on agent_message via part.done", () => {
       const transformer = codexAdapter.createTransformer(makeCtx());
 
       transformer.process({ type: "agent_message_delta", delta: "Hel" });
-      const parts = transformer.process({ type: "agent_message", message: "Hello world" });
+      const events = transformer.process({ type: "agent_message", message: "Hello world" });
 
-      expect(parts).toHaveLength(1);
-      expect(parts[0]).toMatchObject({
+      expect(events).toHaveLength(1);
+      expect(events[0]).toMatchObject({ type: "part.done" });
+      expect(partFrom(events[0])).toMatchObject({
         type: "TEXT",
         text: "Hello world",
         state: "DONE",
@@ -39,18 +56,32 @@ describe("CodexAdapter", () => {
   });
 
   describe("reasoning", () => {
-    it("accumulates reasoning deltas", () => {
+    it("emits part.created on first reasoning delta, then part.delta on subsequent", () => {
+      const transformer = codexAdapter.createTransformer(makeCtx());
+
+      const first = transformer.process({ type: "agent_reasoning_delta", delta: "Let me " });
+      expect(first).toHaveLength(1);
+      expect(first[0]).toMatchObject({ type: "part.created" });
+      expect(partFrom(first[0])).toMatchObject({
+        type: "REASONING",
+        text: "Let me ",
+        state: "STREAMING",
+      });
+
+      const second = transformer.process({ type: "agent_reasoning_delta", delta: "think..." });
+      expect(second).toHaveLength(1);
+      expect(second[0]).toMatchObject({ type: "part.delta", delta: "think..." });
+    });
+
+    it("accumulates reasoning internally for getParts()", () => {
       const transformer = codexAdapter.createTransformer(makeCtx());
 
       transformer.process({ type: "agent_reasoning_delta", delta: "Let me " });
-      const parts = transformer.process({ type: "agent_reasoning_delta", delta: "think..." });
+      transformer.process({ type: "agent_reasoning_delta", delta: "think..." });
 
-      expect(parts).toHaveLength(1);
-      expect(parts[0]).toMatchObject({
-        type: "REASONING",
-        text: "Let me think...",
-        state: "STREAMING",
-      });
+      const allParts = transformer.getParts();
+      const reasoning = allParts.find((p) => p.type === "REASONING");
+      expect(reasoning).toMatchObject({ text: "Let me think...", state: "STREAMING" });
     });
 
     it("finalizes reasoning when text starts", () => {
@@ -66,10 +97,10 @@ describe("CodexAdapter", () => {
   });
 
   describe("shell commands", () => {
-    it("creates a running tool part on exec_command_begin", () => {
+    it("creates a running tool part on exec_command_begin via part.created", () => {
       const transformer = codexAdapter.createTransformer(makeCtx());
 
-      const parts = transformer.process({
+      const events = transformer.process({
         type: "exec_command_begin",
         call_id: "call_1",
         turn_id: "turn_1",
@@ -77,21 +108,23 @@ describe("CodexAdapter", () => {
         cwd: "/home/user",
       });
 
-      expect(parts).toHaveLength(1);
-      expect(parts[0]).toMatchObject({
+      expect(events).toHaveLength(1);
+      const partCreated = events.find((e) => e.type === "part.created");
+      expect(partCreated).toBeDefined();
+      expect(partFrom(partCreated!)).toMatchObject({
         type: "TOOL",
         toolCallId: "call_1",
         toolName: "shell",
         kind: "bash",
         title: "ls -la",
-        state: {
+        state: expect.objectContaining({
           status: "RUNNING",
           input: { command: "ls -la", cwd: "/home/user" },
-        },
+        }),
       });
     });
 
-    it("completes tool part on exec_command_end", () => {
+    it("completes tool part on exec_command_end via part.done", () => {
       const transformer = codexAdapter.createTransformer(makeCtx());
 
       transformer.process({
@@ -102,7 +135,7 @@ describe("CodexAdapter", () => {
         cwd: "/home",
       });
 
-      const parts = transformer.process({
+      const events = transformer.process({
         type: "exec_command_end",
         call_id: "call_1",
         turn_id: "turn_1",
@@ -113,10 +146,11 @@ describe("CodexAdapter", () => {
         exit_code: 0,
       });
 
-      expect(parts).toHaveLength(1);
-      expect(parts[0]).toMatchObject({
+      expect(events).toHaveLength(1);
+      expect(events[0]).toMatchObject({ type: "part.done" });
+      expect(partFrom(events[0])).toMatchObject({
         type: "TOOL",
-        state: { status: "COMPLETED" },
+        state: expect.objectContaining({ status: "COMPLETED" }),
       });
     });
 
@@ -131,7 +165,7 @@ describe("CodexAdapter", () => {
         cwd: "/home",
       });
 
-      const parts = transformer.process({
+      const events = transformer.process({
         type: "exec_command_end",
         call_id: "call_1",
         turn_id: "turn_1",
@@ -142,10 +176,10 @@ describe("CodexAdapter", () => {
         exit_code: 127,
       });
 
-      expect(parts).toHaveLength(1);
-      expect(parts[0]).toMatchObject({
+      expect(events).toHaveLength(1);
+      expect(partFrom(events[0])).toMatchObject({
         type: "TOOL",
-        state: { status: "ERROR", error: "command not found" },
+        state: expect.objectContaining({ status: "ERROR", error: "command not found" }),
       });
     });
   });
@@ -161,7 +195,7 @@ describe("CodexAdapter", () => {
         changes: { "src/foo.ts": { type: "update", unified_diff: "+new line" } },
       });
 
-      const parts = transformer.process({
+      const events = transformer.process({
         type: "patch_apply_end",
         call_id: "call_2",
         turn_id: "turn_1",
@@ -169,12 +203,12 @@ describe("CodexAdapter", () => {
         changes: { "src/foo.ts": { type: "update", unified_diff: "+new line" } },
       });
 
-      expect(parts).toHaveLength(1);
-      expect(parts[0]).toMatchObject({
+      expect(events).toHaveLength(1);
+      expect(partFrom(events[0])).toMatchObject({
         type: "TOOL",
         toolName: "apply_patch",
         kind: "write",
-        state: { status: "COMPLETED" },
+        state: expect.objectContaining({ status: "COMPLETED" }),
       });
     });
   });
@@ -189,60 +223,63 @@ describe("CodexAdapter", () => {
         invocation: { server: "github", tool: "list_repos", arguments: {} },
       });
 
-      const parts = transformer.process({
+      const events = transformer.process({
         type: "mcp_tool_call_end",
         call_id: "call_3",
         invocation: { server: "github", tool: "list_repos", arguments: {} },
         result: { Ok: { content: [{ type: "text", text: "repo1, repo2" }] } },
       });
 
-      expect(parts).toHaveLength(1);
-      expect(parts[0]).toMatchObject({
+      expect(events).toHaveLength(1);
+      expect(partFrom(events[0])).toMatchObject({
         type: "TOOL",
         toolName: "github/list_repos",
         kind: "mcp",
-        state: { status: "COMPLETED" },
+        state: expect.objectContaining({ status: "COMPLETED" }),
       });
     });
   });
 
   describe("turn lifecycle", () => {
-    it("emits StepStartPart on task_started", () => {
+    it("emits turn.started and message.created on task_started", () => {
       const transformer = codexAdapter.createTransformer(makeCtx());
 
-      const parts = transformer.process({ type: "task_started", turn_id: "turn_1" });
+      const events = transformer.process({ type: "task_started", turn_id: "turn_1" });
 
-      expect(parts).toHaveLength(1);
-      expect(parts[0]).toMatchObject({ type: "STEP_START" });
+      expect(events).toHaveLength(2);
+      expect(events[0]).toMatchObject({ type: "turn.started" });
+      expect(events[1]).toMatchObject({ type: "message.created" });
     });
 
-    it("emits StepFinishPart on task_complete", () => {
+    it("emits message.done and turn.completed on task_complete", () => {
       const transformer = codexAdapter.createTransformer(makeCtx());
 
-      const parts = transformer.process({
+      const events = transformer.process({
         type: "task_complete",
         turn_id: "turn_1",
       });
 
-      expect(parts).toHaveLength(1);
-      expect(parts[0]).toMatchObject({
-        type: "STEP_FINISH",
+      expect(events).toHaveLength(2);
+      expect(events[0]).toMatchObject({ type: "message.done" });
+      expect(events[1]).toMatchObject({
+        type: "turn.completed",
         finishReason: "end_turn",
       });
     });
 
-    it("emits cancelled finish on turn_aborted with interrupted", () => {
+    it("emits message.done and cancelled turn.completed on turn_aborted with interrupted", () => {
       const transformer = codexAdapter.createTransformer(makeCtx());
 
-      const parts = transformer.process({
+      const events = transformer.process({
         type: "turn_aborted",
         turn_id: "turn_1",
         reason: "interrupted",
       });
 
-      expect(parts).toHaveLength(1);
-      expect(parts[0]).toMatchObject({
-        type: "STEP_FINISH",
+      expect(events).toHaveLength(2);
+      expect(events[0]).toMatchObject({ type: "message.done" });
+      expect(events[1]).toMatchObject({
+        type: "turn.completed",
         finishReason: "cancelled",
       });
     });

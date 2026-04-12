@@ -10,6 +10,38 @@ import { z } from "zod";
 
 import { AgentTypeSchema, ErrorCategorySchema } from "./enums";
 import { PartSchema, TokenUsageSchema, FinishReasonSchema } from "./messages";
+import type { FinishReason, Part, TokenUsage } from "./messages";
+
+// ============================================================================
+// Part Event Types
+// ============================================================================
+//
+// PartEvents are the canonical events emitted by the agent-server adapters.
+// They describe the full lifecycle of a turn:
+//
+//   turn.started       — a new turn begins
+//   message.created    — a new assistant message begins (1+ per turn for Claude, 1 for Codex)
+//   part.created       — a new part appeared (text, reasoning, tool, compaction)
+//   part.delta         — streaming text token (append to existing part)
+//   part.done          — part is finalized (full data, ready to persist)
+//   message.done       — assistant message complete (carries all parts for batch persistence)
+//   turn.completed     — turn is done (carries usage, cost, finishReason)
+//
+
+export type PartEvent =
+  | { type: "turn.started"; turnId?: string }
+  | { type: "message.created"; messageId: string; role: "assistant" }
+  | { type: "part.created"; part: Part }
+  | { type: "part.delta"; partId: string; delta: string }
+  | { type: "part.done"; part: Part }
+  | { type: "message.done"; messageId: string; stopReason?: string; parts: Part[] }
+  | {
+      type: "turn.completed";
+      turnId?: string;
+      finishReason?: FinishReason;
+      tokens?: TokenUsage;
+      cost?: number;
+    };
 
 // ============================================================================
 // Event Name Constants
@@ -23,14 +55,20 @@ export const AGENT_EVENT_NAMES = {
   SESSION_CANCELLED: "session.cancelled",
 
   // Messages (one per SDK message)
+  MESSAGE_SYSTEM: "message.system",
   MESSAGE_ASSISTANT: "message.assistant",
   MESSAGE_TOOL_RESULT: "message.tool_result",
   MESSAGE_RESULT: "message.result",
   MESSAGE_CANCELLED: "message.cancelled",
 
-  // Unified parts (transformed SDK events → canonical Part types)
-  MESSAGE_PARTS: "message.parts",
-  MESSAGE_PARTS_FINISHED: "message.parts_finished",
+  // Turn, message & part lifecycle
+  TURN_STARTED: "turn.started",
+  MESSAGE_CREATED: "message.created",
+  PART_CREATED: "part.created",
+  PART_DELTA: "part.delta",
+  PART_DONE: "part.done",
+  MESSAGE_DONE: "message.done",
+  TURN_COMPLETED: "turn.completed",
 
   // Interaction requests (agent needs client/user action)
   REQUEST_OPENED: "request.opened",
@@ -282,6 +320,14 @@ export type SessionCancelledEvent = z.infer<typeof SessionCancelledEventSchema>;
 
 // ── Messages ──────────────────────────────────────────────────────────
 
+export const MessageSystemEventSchema = z.object({
+  type: z.literal("message.system"),
+  sessionId: z.string(),
+  agentType: AgentTypeSchema,
+  data: z.unknown(),
+});
+export type MessageSystemEvent = z.infer<typeof MessageSystemEventSchema>;
+
 export const MessageAssistantEventSchema = z.object({
   type: z.literal("message.assistant"),
   sessionId: z.string(),
@@ -327,27 +373,76 @@ export const MessageCancelledEventSchema = z.object({
 });
 export type MessageCancelledEvent = z.infer<typeof MessageCancelledEventSchema>;
 
-// ── Unified Parts ───────────────────────────────────────────────────
+// ── Turn, Message & Part Lifecycle ───────────────────────────────────
 
-export const MessagePartsEventSchema = z.object({
-  type: z.literal("message.parts"),
+export const TurnStartedEventSchema = z.object({
+  type: z.literal("turn.started"),
   sessionId: z.string(),
   agentType: AgentTypeSchema,
   messageId: z.string(),
+  turnId: z.string().optional(),
+});
+export type TurnStartedEvent = z.infer<typeof TurnStartedEventSchema>;
+
+export const MessageCreatedEventSchema = z.object({
+  type: z.literal("message.created"),
+  sessionId: z.string(),
+  agentType: AgentTypeSchema,
+  messageId: z.string(),
+  role: z.literal("assistant"),
+});
+export type MessageCreatedEvent = z.infer<typeof MessageCreatedEventSchema>;
+
+export const PartCreatedEventSchema = z.object({
+  type: z.literal("part.created"),
+  sessionId: z.string(),
+  agentType: AgentTypeSchema,
+  messageId: z.string(),
+  partId: z.string(),
+  part: PartSchema,
+});
+export type PartCreatedEvent = z.infer<typeof PartCreatedEventSchema>;
+
+export const PartDeltaEventSchema = z.object({
+  type: z.literal("part.delta"),
+  sessionId: z.string(),
+  agentType: AgentTypeSchema,
+  partId: z.string(),
+  delta: z.string(),
+});
+export type PartDeltaEvent = z.infer<typeof PartDeltaEventSchema>;
+
+export const PartDoneEventSchema = z.object({
+  type: z.literal("part.done"),
+  sessionId: z.string(),
+  agentType: AgentTypeSchema,
+  messageId: z.string(),
+  partId: z.string(),
+  part: PartSchema,
+});
+export type PartDoneEvent = z.infer<typeof PartDoneEventSchema>;
+
+export const MessageDoneEventSchema = z.object({
+  type: z.literal("message.done"),
+  sessionId: z.string(),
+  agentType: AgentTypeSchema,
+  messageId: z.string(),
+  stopReason: z.string().optional(),
   parts: z.array(PartSchema),
 });
-export type MessagePartsEvent = z.infer<typeof MessagePartsEventSchema>;
+export type MessageDoneEvent = z.infer<typeof MessageDoneEventSchema>;
 
-export const MessagePartsFinishedEventSchema = z.object({
-  type: z.literal("message.parts_finished"),
+export const TurnCompletedEventSchema = z.object({
+  type: z.literal("turn.completed"),
   sessionId: z.string(),
   agentType: AgentTypeSchema,
   messageId: z.string(),
-  usage: TokenUsageSchema,
-  cost: z.number().optional(),
+  turnId: z.string().optional(),
   finishReason: FinishReasonSchema.optional(),
+  tokens: TokenUsageSchema.optional(),
+  cost: z.number().optional(),
 });
-export type MessagePartsFinishedEvent = z.infer<typeof MessagePartsFinishedEventSchema>;
+export type TurnCompletedEvent = z.infer<typeof TurnCompletedEventSchema>;
 
 // ── Interaction Requests ──────────────────────────────────────────────
 
@@ -417,13 +512,19 @@ export const AgentEventSchema = z.discriminatedUnion("type", [
   SessionErrorEventSchema,
   SessionCancelledEventSchema,
   // Messages (legacy — raw SDK content blocks)
+  MessageSystemEventSchema,
   MessageAssistantEventSchema,
   MessageToolResultEventSchema,
   MessageResultEventSchema,
   MessageCancelledEventSchema,
-  // Unified parts (transformed into canonical Part types)
-  MessagePartsEventSchema,
-  MessagePartsFinishedEventSchema,
+  // Turn, message & part lifecycle
+  TurnStartedEventSchema,
+  MessageCreatedEventSchema,
+  PartCreatedEventSchema,
+  PartDeltaEventSchema,
+  PartDoneEventSchema,
+  MessageDoneEventSchema,
+  TurnCompletedEventSchema,
   // Interaction requests
   RequestOpenedEventSchema,
   RequestResolvedEventSchema,

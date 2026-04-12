@@ -211,27 +211,6 @@ export const ToolPartSchema = z.object({
 });
 export type ToolPart = z.infer<typeof ToolPartSchema>;
 
-export const StepStartPartSchema = z.object({
-  type: z.literal("STEP_START"),
-  id: z.string(),
-  sessionId: z.string(),
-  messageId: z.string(),
-  parentToolCallId: z.string().optional(),
-});
-export type StepStartPart = z.infer<typeof StepStartPartSchema>;
-
-export const StepFinishPartSchema = z.object({
-  type: z.literal("STEP_FINISH"),
-  id: z.string(),
-  sessionId: z.string(),
-  messageId: z.string(),
-  finishReason: FinishReasonSchema.optional(),
-  tokens: TokenUsageSchema.optional(),
-  cost: z.number().optional(),
-  parentToolCallId: z.string().optional(),
-});
-export type StepFinishPart = z.infer<typeof StepFinishPartSchema>;
-
 export const CompactionPartSchema = z.object({
   type: z.literal("COMPACTION"),
   id: z.string(),
@@ -247,8 +226,6 @@ export const PartSchema = z.discriminatedUnion("type", [
   TextPartSchema,
   ReasoningPartSchema,
   ToolPartSchema,
-  StepStartPartSchema,
-  StepFinishPartSchema,
   CompactionPartSchema,
 ]);
 export type Part = z.infer<typeof PartSchema>;
@@ -257,27 +234,5 @@ export type Part = z.infer<typeof PartSchema>;
 // Part Type Enum (for DB storage)
 // ============================================================================
 
-export const PartTypeSchema = z.enum(["TEXT", "REASONING", "TOOL", "STEP", "COMPACTION"]);
+export const PartTypeSchema = z.enum(["TEXT", "REASONING", "TOOL", "COMPACTION"]);
 export type PartType = z.infer<typeof PartTypeSchema>;
-
-// ============================================================================
-// Message Parts Envelope (DB JSON column shape)
-// ============================================================================
-
-export const MessagePartsEnvelopeSchema = z.object({
-  parts: z.array(PartSchema),
-  usage: TokenUsageSchema.optional(),
-  finishReason: FinishReasonSchema.nullable().optional(),
-  cost: z.number().nullable().optional(),
-});
-export type MessagePartsEnvelope = z.infer<typeof MessagePartsEnvelopeSchema>;
-
-export function parseMessageParts(raw: string | null | undefined): MessagePartsEnvelope | null {
-  if (!raw) return null;
-  try {
-    const parsed = JSON.parse(raw);
-    return MessagePartsEnvelopeSchema.parse(parsed);
-  } catch {
-    return null;
-  }
-}
