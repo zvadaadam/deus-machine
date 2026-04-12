@@ -80,12 +80,20 @@ class CodexTransformer implements EventTransformer<CodexEvent> {
       ...this.finalizeCurrentReasoningPart(),
     ];
     if (!this.turnCompletedEmitted) {
-      events.push({
-        type: "turn.completed",
-        turnId: this.ctx.turnId,
-        finishReason: "end_turn",
-        tokens: { ...this.totalUsage },
-      });
+      events.push(
+        {
+          type: "message.done",
+          messageId: this.ctx.messageId,
+          stopReason: "end_turn",
+          parts: this.getParts(),
+        },
+        {
+          type: "turn.completed",
+          turnId: this.ctx.turnId,
+          finishReason: "end_turn",
+          tokens: { ...this.totalUsage },
+        }
+      );
     }
     return { events, parts: this.getParts(), usage: this.totalUsage };
   }

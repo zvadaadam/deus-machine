@@ -262,7 +262,6 @@ export class CodexAgentHandler implements AgentHandler {
             console.log(
               `[${queryId}] Turn completed. Tokens: in=${e.usage.input_tokens}, out=${e.usage.output_tokens}`
             );
-            EventBroadcaster.emitMessageResult(sessionId, "codex", "success", e.usage);
             EventBroadcaster.emitSessionIdle(sessionId, "codex");
           })
           .with({ type: "turn.failed" }, (e) => {

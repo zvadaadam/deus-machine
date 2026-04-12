@@ -140,16 +140,20 @@ export const SessionPanel = forwardRef<SessionPanelRef, SessionPanelProps>(
 
       const dbMessageIds = new Set(dbMessages.map((m) => m.id));
 
-      // Update existing messages with streaming parts
+      // Update existing messages with streaming parts.
+      // Prefer streaming parts when they are ahead of DB (more parts = streaming is live).
+      // Once DB catches up (dbCount >= streamingCount), fall back to persisted parts.
       const merged = dbMessages.map((msg) => {
         if (msg.role !== "assistant") return msg;
         const streamingParts = getPartsForMessage(msg.id);
         if (!streamingParts) return msg;
-        if (msg.parts && msg.parts.length > 0) return msg;
+        const dbCount = msg.parts?.length ?? 0;
+        if (streamingParts.length <= dbCount) return msg;
         return { ...msg, parts: streamingParts };
       });
 
       // Inject streaming-only messages (not yet in DB)
+      let syntheticOffset = 0;
       for (const msgId of getStreamingMessageIds()) {
         if (dbMessageIds.has(msgId)) continue;
         const streamingParts = getPartsForMessage(msgId);
@@ -157,7 +161,7 @@ export const SessionPanel = forwardRef<SessionPanelRef, SessionPanelProps>(
         merged.push({
           id: msgId,
           session_id: sessionId,
-          seq: 999999, // sort at end
+          seq: 999999 + syntheticOffset, // sort at end, unique per synthetic message
           role: "assistant",
           content: "",
           turn_id: null,
@@ -166,9 +170,9 @@ export const SessionPanel = forwardRef<SessionPanelRef, SessionPanelProps>(
           sent_at: new Date().toISOString(),
           cancelled_at: null,
           parent_tool_use_id: null,
-          stop_reason: null,
           parts: streamingParts,
         });
+        syntheticOffset++;
       }
 
       return merged;

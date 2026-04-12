@@ -68,12 +68,20 @@ class CodexSdkTransformer implements EventTransformer<ThreadEvent> {
   finish(): { events: PartEvent[]; parts: Part[]; usage: TokenUsage; cost?: number } {
     const events: PartEvent[] = [];
     if (!this.turnCompletedEmitted) {
-      events.push({
-        type: "turn.completed",
-        turnId: this.ctx.turnId,
-        finishReason: this.lastFinishReason,
-        tokens: { ...this.totalUsage },
-      });
+      events.push(
+        {
+          type: "message.done",
+          messageId: this.ctx.messageId,
+          stopReason: this.lastFinishReason ?? "end_turn",
+          parts: this.getParts(),
+        },
+        {
+          type: "turn.completed",
+          turnId: this.ctx.turnId,
+          finishReason: this.lastFinishReason,
+          tokens: { ...this.totalUsage },
+        }
+      );
     }
     return { events, parts: this.getParts(), usage: this.totalUsage };
   }
