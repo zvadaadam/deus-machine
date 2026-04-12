@@ -18,7 +18,6 @@
 import { createElement, memo, useMemo } from "react";
 import { match } from "ts-pattern";
 import type { ToolPart } from "@shared/messages/types";
-import type { PartRow } from "@/shared/types";
 import type { ToolUseBlock, ToolResultBlock } from "@/shared/types";
 import { toolRegistry } from "../tools/ToolRegistry";
 import { SubagentGroupBlock } from "./SubagentGroupBlock";
@@ -29,7 +28,6 @@ import "../tools/registerTools";
 
 interface ToolPartBlockProps {
   part: ToolPart;
-  partRow: PartRow;
 }
 
 /**
@@ -116,11 +114,8 @@ function ToolRendererBridge({
   return createElement(Renderer, { toolUse, toolResult, isLoading });
 }
 
-export const ToolPartBlock = memo(function ToolPartBlock({
-  part,
-  partRow: _partRow,
-}: ToolPartBlockProps) {
-  const { subagentMessages } = useSession();
+export const ToolPartBlock = memo(function ToolPartBlock({ part }: ToolPartBlockProps) {
+  const { subagentMessages, insideSubagent } = useSession();
 
   const toolUse = useMemo(() => toToolUseBlock(part), [part]);
   const toolResult = useMemo(() => toToolResultBlock(part), [part]);
@@ -128,8 +123,9 @@ export const ToolPartBlock = memo(function ToolPartBlock({
   const isLoading = part.state.status === "PENDING" || part.state.status === "RUNNING";
 
   // Route Task/Agent blocks with child messages to SubagentGroupBlock
+  // but NOT when already inside a subagent (prevents recursive nesting)
   const isAgentTool = part.toolName === "Task" || part.toolName === "Agent";
-  if (isAgentTool && subagentMessages.has(part.toolCallId)) {
+  if (isAgentTool && !insideSubagent && subagentMessages.has(part.toolCallId)) {
     return (
       <div className="my-1">
         <SubagentGroupBlock

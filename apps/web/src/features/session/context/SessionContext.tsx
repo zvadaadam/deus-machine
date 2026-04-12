@@ -1,76 +1,39 @@
 /**
  * Session Context
  *
- * Provides session-level data (parseContent, toolResultMap) to all child components.
- * Eliminates props drilling through Chat → MessageItem → BlockRenderer.
- *
- * Usage:
- *   <SessionProvider parseContent={parseContent} toolResultMap={toolResultMap}>
- *     <Chat messages={messages} ... />
- *   </SessionProvider>
- *
- *   // In child components:
- *   const { parseContent, toolResultMap } = useSession();
+ * Provides session-level data to all child components.
+ * Eliminates props drilling through Chat → MessageItem → blocks.
  */
 
-import { createContext, useContext, ReactNode, useMemo } from "react";
-import type { ContentBlock, Message, MessageRole, SessionStatus } from "../types";
-import type { ToolResultMap } from "../ui/chat-types";
+import { createContext, useContext, type ReactNode, useMemo } from "react";
+import type { Message, SessionStatus } from "../types";
 
 interface SessionContextValue {
-  parseContent: (content: string) => (ContentBlock | string)[] | string;
-  toolResultMap: ToolResultMap;
-  parentToolUseMap: Map<string, string>; // messageId → parentToolUseId
-  subagentMessages: Map<string, Message[]>; // toolUseId → child messages
   sessionStatus: SessionStatus;
-  /** Renders a content block via BlockRenderer. Injected to break circular imports. */
-  renderBlock: (
-    block: ContentBlock | string,
-    index: number,
-    role?: MessageRole,
-    isStreaming?: boolean
-  ) => ReactNode;
+  /** Subagent child messages grouped by parent tool_use_id */
+  subagentMessages: Map<string, Message[]>;
+  /** True when rendering inside a subagent — prevents recursive nesting */
+  insideSubagent: boolean;
 }
 
 const SessionContext = createContext<SessionContextValue | null>(null);
 
 interface SessionProviderProps {
-  parseContent: (content: string) => (ContentBlock | string)[] | string;
-  toolResultMap: ToolResultMap;
-  parentToolUseMap: Map<string, string>;
-  subagentMessages: Map<string, Message[]>;
   sessionStatus: SessionStatus;
-  /** Renders a content block via BlockRenderer. Injected to break circular imports. */
-  renderBlock: (
-    block: ContentBlock | string,
-    index: number,
-    role?: MessageRole,
-    isStreaming?: boolean
-  ) => ReactNode;
+  subagentMessages: Map<string, Message[]>;
+  insideSubagent?: boolean;
   children: ReactNode;
 }
 
 export function SessionProvider({
-  parseContent,
-  toolResultMap,
-  parentToolUseMap,
-  subagentMessages,
   sessionStatus,
-  renderBlock,
+  subagentMessages,
+  insideSubagent = false,
   children,
 }: SessionProviderProps) {
-  // Memoize context value to prevent unnecessary re-renders
-  // React uses Object.is() to compare values, so new object {} !== {} even if contents are same
   const value = useMemo(
-    () => ({
-      parseContent,
-      toolResultMap,
-      parentToolUseMap,
-      subagentMessages,
-      sessionStatus,
-      renderBlock,
-    }),
-    [parseContent, toolResultMap, parentToolUseMap, subagentMessages, sessionStatus, renderBlock]
+    () => ({ sessionStatus, subagentMessages, insideSubagent }),
+    [sessionStatus, subagentMessages, insideSubagent]
   );
 
   return <SessionContext.Provider value={value}>{children}</SessionContext.Provider>;

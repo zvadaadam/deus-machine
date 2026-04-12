@@ -142,6 +142,9 @@ export const PROTOCOL_EVENTS = [
   "session:error",
   "session:progress",
   "tool:request",
+  // Message lifecycle events
+  "message:created",
+  "message:done",
   // Part lifecycle events (streaming, high-throughput)
   "part:created",
   "part:delta",

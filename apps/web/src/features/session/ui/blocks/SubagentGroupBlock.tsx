@@ -4,12 +4,7 @@
  * Collapsible container for a single subagent (Task tool_use) that shows
  * the agent's internal work — tool calls, text, thinking — grouped together.
  *
- * Visual pattern matches BaseToolRenderer (same px-2 py-1.5, icon, chevron)
- * but renders child messages via SubagentMessageList instead of raw tool content.
- *
  * Header: Cpu icon + description + subagent_type badge + tool count + status
- * - Always starts collapsed (user controls expand/collapse)
- * - Spinner stays visible during hover when running (no chevron swap)
  */
 
 import { useState, useMemo } from "react";
@@ -17,16 +12,15 @@ import { ChevronRight, Cpu, Loader2 } from "lucide-react";
 import NumberFlow from "@number-flow/react";
 import { AnimatePresence, motion } from "framer-motion";
 import { cn } from "@/shared/lib/utils";
-import type { ToolUseBlock, ToolResultBlock, Message } from "@/shared/types";
-import type { ContentBlock } from "@/features/session/types";
+import type { ToolUseBlock, ToolResultBlock } from "@/shared/types";
 
 import { SubagentMessageList } from "./SubagentMessageList";
-import { useSession } from "../../context";
+import { useSession, SessionProvider } from "../../context";
 
 interface SubagentGroupBlockProps {
   toolUse: ToolUseBlock;
   toolResult?: ToolResultBlock;
-  childMessages: Message[];
+  childMessages: Array<{ id: string; role: string; parts?: any[]; content?: string }>;
 }
 
 const expandTransition = { duration: 0.15, ease: [0.165, 0.84, 0.44, 1] as const };
@@ -36,40 +30,30 @@ export function SubagentGroupBlock({
   toolResult,
   childMessages,
 }: SubagentGroupBlockProps) {
-  const { parseContent, sessionStatus } = useSession();
+  const { sessionStatus, subagentMessages } = useSession();
   const { description, subagent_type } = toolUse.input ?? {};
 
-  // Agent-server only persists assistant messages — tool_results for Task blocks
-  // are never saved to DB. Use sessionStatus as the completion signal instead.
   const isRunning = sessionStatus === "working" && !toolResult;
   const isError = toolResult?.is_error;
 
-  // Always start collapsed — let the user decide when to expand.
-  // No auto-expand on spawn, no auto-collapse on completion.
   const [isExpanded, setIsExpanded] = useState(false);
 
-  // Count tool calls across child messages for the summary
+  // Count TOOL parts across child messages
   const toolCount = useMemo(() => {
     let count = 0;
     childMessages.forEach((msg) => {
-      const blocks = parseContent(msg.content);
-      if (!Array.isArray(blocks)) return;
-      blocks.forEach((b: ContentBlock | string) => {
-        if (typeof b === "object" && b?.type === "tool_use") count++;
-      });
+      if (msg.parts) {
+        count += msg.parts.filter((p: any) => p.type === "TOOL").length;
+      }
     });
     return count;
-  }, [childMessages, parseContent]);
+  }, [childMessages]);
 
   return (
     <div className="flex flex-col gap-1">
-      {/* Header — matches BaseToolRenderer alignment exactly.
-          Uses CSS group hover instead of React state for icon swap (no re-renders). */}
       <button
         type="button"
-        onClick={() => {
-          setIsExpanded(!isExpanded);
-        }}
+        onClick={() => setIsExpanded(!isExpanded)}
         className={cn(
           "group flex items-center gap-2 px-2 py-1.5 text-sm",
           "w-full cursor-pointer text-left",
@@ -81,15 +65,11 @@ export function SubagentGroupBlock({
         aria-label={`${isExpanded ? "Collapse" : "Expand"} agent: ${description || "subagent"}`}
       >
         <div className="flex min-w-0 flex-1 items-center gap-2">
-          {/* Icon container — 14x14px.
-              When running: spinner always visible (no chevron swap on hover).
-              When idle: icon/chevron swap on hover like BaseToolRenderer. */}
           <div className="relative h-3.5 w-3.5 flex-shrink-0">
             {isRunning ? (
               <Loader2 className="text-muted-foreground/70 h-3.5 w-3.5 animate-spin" />
             ) : (
               <>
-                {/* Cpu icon — hides on hover or expanded */}
                 <div
                   className={cn(
                     "absolute top-0 left-0 transition-opacity duration-150 ease-out",
@@ -98,8 +78,6 @@ export function SubagentGroupBlock({
                 >
                   <Cpu className="text-muted-foreground/70 h-3.5 w-3.5" />
                 </div>
-
-                {/* Chevron — shows on hover or expanded */}
                 <ChevronRight
                   className={cn(
                     "text-muted-foreground/50 absolute top-0 left-0 h-3.5 w-3.5 transition-[transform,opacity] duration-150 ease-out",
@@ -112,19 +90,16 @@ export function SubagentGroupBlock({
             )}
           </div>
 
-          {/* Description */}
           <span className="text-muted-foreground truncate font-medium">
             {description || "Agent"}
           </span>
 
-          {/* Subagent type badge */}
           {subagent_type && (
             <span className="bg-muted text-muted-foreground/70 text-2xs flex-shrink-0 rounded-md px-1.5 py-0.5 font-mono leading-none">
               {subagent_type}
             </span>
           )}
 
-          {/* Tool count summary (collapsed only) */}
           {!isExpanded && toolCount > 0 && (
             <>
               <span className="text-muted-foreground/30" aria-hidden="true">
@@ -139,14 +114,10 @@ export function SubagentGroupBlock({
             </>
           )}
 
-          {/* Error status */}
           {isError && <span className="text-destructive/70 font-normal">Error</span>}
         </div>
       </button>
 
-      {/* Expanded content — AnimatePresence for smooth height + opacity transition.
-          SubagentMessageList mounts/unmounts on toggle. Eliminates DOM bloat
-          from always-mounted recursive message trees. */}
       <AnimatePresence initial={false}>
         {isExpanded && childMessages.length > 0 && (
           <motion.div
@@ -157,7 +128,13 @@ export function SubagentGroupBlock({
             style={{ overflow: "hidden" }}
             className="mt-0.5 ml-6"
           >
-            <SubagentMessageList messages={childMessages} />
+            <SessionProvider
+              sessionStatus={sessionStatus}
+              subagentMessages={subagentMessages}
+              insideSubagent={true}
+            >
+              <SubagentMessageList messages={childMessages} />
+            </SessionProvider>
           </motion.div>
         )}
       </AnimatePresence>

@@ -98,6 +98,7 @@ export type ToolLocation = z.infer<typeof ToolLocationSchema>;
 
 export const SubagentMetadataSchema = z.object({
   type: z.string(),
+  description: z.string().optional(),
   model: z.string().optional(),
   agentId: z.string().optional(),
 });
@@ -177,6 +178,7 @@ export const TextPartSchema = z.object({
   id: z.string(),
   sessionId: z.string(),
   messageId: z.string(),
+  partIndex: z.number().optional(),
   text: z.string(),
   state: z.enum(["STREAMING", "DONE"]).optional(),
   parentToolCallId: z.string().optional(),
@@ -188,6 +190,7 @@ export const ReasoningPartSchema = z.object({
   id: z.string(),
   sessionId: z.string(),
   messageId: z.string(),
+  partIndex: z.number().optional(),
   text: z.string(),
   state: z.enum(["STREAMING", "DONE"]).optional(),
   providerMetadata: z.record(z.string(), z.unknown()).optional(),
@@ -200,6 +203,7 @@ export const ToolPartSchema = z.object({
   id: z.string(),
   sessionId: z.string(),
   messageId: z.string(),
+  partIndex: z.number().optional(),
   toolCallId: z.string(),
   toolName: z.string(),
   state: RuntimeToolStateSchema,
@@ -216,6 +220,7 @@ export const CompactionPartSchema = z.object({
   id: z.string(),
   sessionId: z.string(),
   messageId: z.string(),
+  partIndex: z.number().optional(),
   auto: z.boolean(),
   preTokens: z.number().optional(),
   parentToolCallId: z.string().optional(),

@@ -35,13 +35,17 @@ function makeMessage(overrides: Partial<MessageRow> = {}): MessageRow {
 }
 
 function makePart(overrides: Partial<PartRow> = {}): PartRow {
+  const id = overrides.id ?? "part-1";
+  const messageId = overrides.message_id ?? "msg-1";
+  const sessionId = overrides.session_id ?? "sess-1";
+  const type = overrides.type ?? "TEXT";
   return {
-    id: "part-1",
-    message_id: "msg-1",
-    session_id: "sess-1",
+    id,
+    message_id: messageId,
+    session_id: sessionId,
     seq: 0,
-    type: "TEXT",
-    data: '{"type":"TEXT","text":"Hello"}',
+    type,
+    data: JSON.stringify({ type, id, messageId, sessionId, text: "Hello" }),
     tool_call_id: null,
     tool_name: null,
     parent_tool_call_id: null,

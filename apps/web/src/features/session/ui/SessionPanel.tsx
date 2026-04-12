@@ -10,14 +10,14 @@ import {
 import { Chat } from "./Chat";
 import { MessageInput } from "./MessageInput";
 import type { MessageInputRef } from "./MessageInput";
-import { useSessionActions, useStreamingParts } from "../hooks";
+import { useSessionActions } from "../hooks";
+import { usePartEvents } from "../hooks/usePartEvents";
 import { useAgentRpcHandler } from "../hooks/useAgentRpcHandler";
 import { SessionProvider } from "../context";
 import { useSessionWithMessages, useLoadOlderMessages } from "../api/session.queries";
 import { useManifestTasks } from "@/features/workspace/api/workspace.queries";
 import { PlanApprovalOverlay } from "./PlanApprovalOverlay";
 import { AgentQuestionOverlay } from "./AgentQuestionOverlay";
-import { BlockRenderer } from "./blocks/BlockRenderer";
 import { Button } from "@/components/ui/button";
 import { X, Upload } from "lucide-react";
 import {
@@ -27,7 +27,6 @@ import {
 } from "../lib/agentRuntime";
 import { workspaceLayoutActions } from "@/features/workspace/store";
 import type { InspectedElement } from "./InspectedElementCard";
-import type { ContentBlock, MessageRole } from "../types";
 
 const CONTENT_WIDTH_CLASSES = "w-full max-w-[960px] mx-auto min-w-0";
 
@@ -115,68 +114,42 @@ export const SessionPanel = forwardRef<SessionPanelRef, SessionPanelProps>(
       messages: dbMessages,
       hasOlder,
       sessionStatus,
-      latestMessageSentAt,
       loading,
-      parseContent,
-      toolResultMap,
-      parentToolUseMap,
-      subagentMessages,
     } = useSessionWithMessages(sessionId);
 
-    // ── Streaming Parts (real-time Part events via WS) ────────────────
-    // Accumulates part:created/delta/done events into PartRow[] per messageId.
-    // During active streaming, these parts are more up-to-date than DB parts.
-    // After streaming completes, the finalized parts (from part:done) persist
-    // in the store until the session changes — this avoids a gap where DB
-    // parts haven't been synced to the message cache yet.
-    const { getPartsForMessage, hasStreamingParts, getStreamingMessageIds } =
-      useStreamingParts(sessionId);
+    // ── Part Events → direct cache mutation (single-store model) ──────
+    // WS part events mutate the TanStack Query cache directly.
+    // No parallel store, no merge function. One source of truth.
+    usePartEvents(sessionId);
 
-    // Merge streaming parts into messages: overlay streaming parts onto
-    // DB-backed messages, and inject synthetic messages for IDs that
-    // exist in the streaming store but haven't appeared in the DB yet.
-    const messages = useMemo(() => {
-      if (!hasStreamingParts()) return dbMessages;
+    // Messages come directly from TanStack cache (populated by DB load + WS mutations)
+    const messages = dbMessages;
 
-      const dbMessageIds = new Set(dbMessages.map((m) => m.id));
-
-      // Update existing messages with streaming parts.
-      // Prefer streaming parts when they are ahead of DB (more parts = streaming is live).
-      // Once DB catches up (dbCount >= streamingCount), fall back to persisted parts.
-      const merged = dbMessages.map((msg) => {
-        if (msg.role !== "assistant") return msg;
-        const streamingParts = getPartsForMessage(msg.id);
-        if (!streamingParts) return msg;
-        const dbCount = msg.parts?.length ?? 0;
-        if (streamingParts.length <= dbCount) return msg;
-        return { ...msg, parts: streamingParts };
-      });
-
-      // Inject streaming-only messages (not yet in DB)
-      let syntheticOffset = 0;
-      for (const msgId of getStreamingMessageIds()) {
-        if (dbMessageIds.has(msgId)) continue;
-        const streamingParts = getPartsForMessage(msgId);
-        if (!streamingParts || streamingParts.length === 0) continue;
-        merged.push({
-          id: msgId,
-          session_id: sessionId,
-          seq: 999999 + syntheticOffset, // sort at end, unique per synthetic message
-          role: "assistant",
-          content: "",
-          turn_id: null,
-          model: null,
-          agent_message_id: null,
-          sent_at: new Date().toISOString(),
-          cancelled_at: null,
-          parent_tool_use_id: null,
-          parts: streamingParts,
-        });
-        syntheticOffset++;
+    // Subagent groups: derive from message.parent_tool_use_id
+    const subagentMessages = useMemo(() => {
+      const map = new Map<string, typeof messages>();
+      for (const msg of messages) {
+        if (msg.parent_tool_use_id) {
+          let group = map.get(msg.parent_tool_use_id);
+          if (!group) {
+            group = [];
+            map.set(msg.parent_tool_use_id, group);
+          }
+          group.push(msg);
+        }
       }
+      return map;
+    }, [messages]);
 
-      return merged;
-    }, [dbMessages, sessionId, getPartsForMessage, hasStreamingParts, getStreamingMessageIds]);
+    // Latest user message sent_at for turn duration tracking
+    const latestMessageSentAt = useMemo(() => {
+      for (let i = messages.length - 1; i >= 0; i--) {
+        if (messages[i].role === "user" && messages[i].sent_at) {
+          return messages[i].sent_at;
+        }
+      }
+      return null;
+    }, [messages]);
 
     // Load-older pagination
     const loadOlderMutation = useLoadOlderMessages();
@@ -367,15 +340,6 @@ export const SessionPanel = forwardRef<SessionPanelRef, SessionPanelProps>(
       resolveQuestion(sessionId, ["USER_CANCELLED"]);
     }, [resolveQuestion, sessionId]);
 
-    // Stable renderBlock callback injected into SessionContext to break the circular import:
-    // BlockRenderer → ToolUseBlock → SubagentGroupBlock → SubagentMessageList → BlockRenderer
-    const renderBlock = useCallback(
-      (block: ContentBlock | string, index: number, role?: MessageRole, isStreaming?: boolean) => (
-        <BlockRenderer block={block} index={index} role={role} isStreaming={isStreaming} />
-      ),
-      []
-    );
-
     // Drop overlay shared between embedded and dialog layouts
     const dropOverlay = isDragging && (
       <div className="animate-drop-overlay-enter absolute inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm">
@@ -392,14 +356,7 @@ export const SessionPanel = forwardRef<SessionPanelRef, SessionPanelProps>(
     // If embedded, render without overlay but with message input
     if (embedded) {
       return (
-        <SessionProvider
-          parseContent={parseContent}
-          toolResultMap={toolResultMap}
-          parentToolUseMap={parentToolUseMap}
-          subagentMessages={subagentMessages}
-          sessionStatus={sessionStatus}
-          renderBlock={renderBlock}
-        >
+        <SessionProvider sessionStatus={sessionStatus} subagentMessages={subagentMessages}>
           <div
             className={`${CONTENT_WIDTH_CLASSES} relative flex min-h-0 flex-1 flex-col`}
             onDragOver={handleDragOver}
@@ -507,14 +464,7 @@ export const SessionPanel = forwardRef<SessionPanelRef, SessionPanelProps>(
 
             {/* Main Content Area */}
             <div className="flex min-h-0 flex-1 flex-col">
-              <SessionProvider
-                parseContent={parseContent}
-                toolResultMap={toolResultMap}
-                parentToolUseMap={parentToolUseMap}
-                subagentMessages={subagentMessages}
-                sessionStatus={sessionStatus}
-                renderBlock={renderBlock}
-              >
+              <SessionProvider sessionStatus={sessionStatus} subagentMessages={subagentMessages}>
                 <div className={`${CONTENT_WIDTH_CLASSES} mx-auto flex min-h-0 flex-1 flex-col`}>
                   <Chat
                     messages={messages}

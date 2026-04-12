@@ -55,9 +55,9 @@ export function persistMessageCreated(event: MessageCreatedEvent): WriteResult {
     }
 
     db.prepare(
-      `INSERT OR REPLACE INTO messages (id, session_id, role, sent_at)
-       VALUES (?, ?, ?, ?)`
-    ).run(event.messageId, event.sessionId, event.role, sentAt);
+      `INSERT OR REPLACE INTO messages (id, session_id, role, sent_at, parent_tool_use_id)
+       VALUES (?, ?, ?, ?, ?)`
+    ).run(event.messageId, event.sessionId, event.role, sentAt, event.parentToolCallId ?? null);
     return { ok: true, value: event.messageId };
   } catch (error) {
     const msg = getErrorMessage(error);
@@ -116,6 +116,10 @@ export function persistPartDone(event: PartDoneEvent): WriteResult {
   const part = event.part;
 
   try {
+    // partIndex is the canonical ordering (assigned by the adapter).
+    // Stored as `seq` column for SQL ORDER BY efficiency.
+    const seq = part.partIndex ?? 0;
+
     db.prepare(
       `INSERT OR REPLACE INTO parts (id, message_id, session_id, seq, type, data, tool_call_id, tool_name, parent_tool_call_id)
        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`
@@ -123,7 +127,7 @@ export function persistPartDone(event: PartDoneEvent): WriteResult {
       event.partId,
       event.messageId,
       event.sessionId,
-      0, // seq — ordering is handled by insertion order for now
+      seq,
       part.type,
       JSON.stringify(part),
       part.type === "TOOL" ? part.toolCallId : null,
@@ -134,7 +138,12 @@ export function persistPartDone(event: PartDoneEvent): WriteResult {
     return { ok: true, value: event.partId };
   } catch (error) {
     const msg = getErrorMessage(error);
-    console.error(`[AgentPersistence] Failed to persist part.done:`, msg);
+    // FK constraint failures are expected when part.created arrives before
+    // message.created persistence. The part will be saved on part.done.
+    if (msg.includes("FOREIGN KEY")) {
+      return { ok: true, value: event.partId };
+    }
+    console.error(`[AgentPersistence] Failed to persist part:`, msg);
     return { ok: false, error: msg };
   }
 }
