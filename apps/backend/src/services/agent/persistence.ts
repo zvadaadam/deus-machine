@@ -16,6 +16,7 @@ import { getErrorMessage } from "@shared/lib/errors";
 import type {
   MessageCancelledEvent,
   MessageCreatedEvent,
+  PartCreatedEvent,
   PartDoneEvent,
   MessageDoneEvent,
   SessionStartedEvent,
@@ -111,7 +112,7 @@ export function persistMessageCancelled(event: MessageCancelledEvent): WriteResu
  * full part data. For TOOL parts, extracts toolCallId and toolName into
  * their own columns for efficient querying.
  */
-export function persistPartDone(event: PartDoneEvent): WriteResult {
+export function persistPartDone(event: PartDoneEvent | PartCreatedEvent): WriteResult {
   const db = getDatabase();
   const part = event.part;
 
