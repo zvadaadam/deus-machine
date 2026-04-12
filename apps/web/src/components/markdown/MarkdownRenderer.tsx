@@ -30,6 +30,7 @@ import rehypeSanitize, { defaultSchema } from "rehype-sanitize";
 import { cn } from "@/shared/lib/utils";
 import { ShikiCodeBlock } from "./ShikiCodeBlock";
 import { LazyMermaidDiagram } from "./LazyMermaidDiagram";
+import { HtmlPreviewBlock } from "./HtmlPreviewBlock";
 
 interface MarkdownRendererProps {
   children: string;
@@ -112,12 +113,17 @@ function CopyButton({ getText }: { getText: () => string }) {
 
 // Stable component for code blocks — module-level to avoid remounts on parent re-render
 function MarkdownCode({ className, children, ...props }: any) {
-  const match = /language-(\w+)/.exec(className || "");
+  const match = /language-([\w-]+)/.exec(className || "");
   const lang = match?.[1];
 
   if (lang === "mermaid") {
     const chart = String(children).replace(/\n$/, "");
     return <LazyMermaidDiagram chart={chart} />;
+  }
+
+  if (lang === "html-preview") {
+    const code = String(children).replace(/\n$/, "");
+    return <HtmlPreviewBlock code={code} />;
   }
 
   // Fenced code block — progressive Shiki highlighting
@@ -139,11 +145,11 @@ function MarkdownPre({ children, ...props }: any) {
   const ref = useRef<HTMLPreElement>(null);
 
   // react-markdown passes <code> as a React element (type=MarkdownCode), not its
-  // rendered output. For mermaid blocks, MarkdownCode returns <LazyMermaidDiagram>,
-  // but we must detect it here via className before React renders the child.
+  // rendered output. For mermaid/html-preview blocks, MarkdownCode returns a custom
+  // component — detect it here via className and skip the <pre> wrapper.
   if (
     isValidElement(children) &&
-    /language-mermaid/.test(String((children.props as any)?.className || ""))
+    /language-(mermaid|html-preview)/.test(String((children.props as any)?.className || ""))
   ) {
     return <>{children}</>;
   }
