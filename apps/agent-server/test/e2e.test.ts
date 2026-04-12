@@ -447,47 +447,40 @@ describe.skipIf(!bundleExists || !claudeCliAvailable)("E2E: Real Claude Integrat
       },
     });
 
-    // Wait for a "result" notification (query completion) or an error
-    // The agent-server sends messages as JSON-RPC notifications with method "message"
-    // Messages arrive as: { jsonrpc: "2.0", method: "message", params: { id, type, data } }
-    const isSessionMessage = (msg: any) => msg.method === "message" && msg.params?.id === sessionId;
-
+    // Wait for session.idle or session.error (canonical lifecycle events)
+    const isSessionIdle = (msg: any) =>
+      msg.method === "session.idle" && msg.params?.sessionId === sessionId;
     const isSessionError = (msg: any) =>
-      msg.method === "queryError" && msg.params?.id === sessionId;
+      msg.method === "session.error" && msg.params?.sessionId === sessionId;
 
-    const isSessionResult = (msg: any) =>
-      isSessionMessage(msg) && msg.params?.data?.type === "result";
-
-    // Wait for either a result or error (up to 60s for Claude to respond)
     const terminalMessage = await waitForMessage(
       client,
-      (msg) => isSessionResult(msg) || isSessionError(msg),
+      (msg) => isSessionIdle(msg) || isSessionError(msg),
       60_000
     );
 
-    // Collect all session-related messages
-    const sessionMessages = messageCollector.filter(
-      (msg: any) => isSessionMessage(msg) || isSessionError(msg)
+    // Collect all part events for this session
+    const partEvents = messageCollector.filter(
+      (msg: any) =>
+        (msg.method === "part.created" || msg.method === "part.done") &&
+        msg.params?.sessionId === sessionId
     );
 
     if (isSessionError(terminalMessage)) {
-      // If we got an error, it should be a structured error (not a crash)
       expect(terminalMessage.params.error).toBeDefined();
       expect(typeof terminalMessage.params.error).toBe("string");
     } else {
-      // If we got a result, verify the message stream structure
-      expect(terminalMessage.params.data.type).toBe("result");
+      // Session completed successfully — verify part events were emitted
+      expect(terminalMessage.method).toBe("session.idle");
 
-      // Should have received at least one assistant message before the result
-      const assistantMessages = sessionMessages.filter(
-        (msg: any) => msg.params?.data?.type === "assistant"
-      );
-      expect(assistantMessages.length).toBeGreaterThanOrEqual(1);
+      // Should have received at least one part.done event
+      const partDoneEvents = partEvents.filter((msg: any) => msg.method === "part.done");
+      expect(partDoneEvents.length).toBeGreaterThanOrEqual(1);
 
-      // Each assistant message should have valid structure
-      for (const msg of assistantMessages) {
-        expect(msg.params.data.message).toBeDefined();
-        expect(msg.params.data.message.role).toBe("assistant");
+      // Each part.done should have valid structure
+      for (const msg of partDoneEvents) {
+        expect(msg.params.part).toBeDefined();
+        expect(msg.params.part.type).toBeDefined();
       }
     }
   }, 90_000);
@@ -522,23 +515,15 @@ describe.skipIf(!bundleExists || !claudeCliAvailable)("E2E: Real Claude Integrat
     });
 
     // Should receive either:
-    // 1. A cancel RPC response (method result)
-    // 2. A queryError notification with "aborted by user"
-    // 3. A result if the query finished before cancel arrived
+    // 1. A cancel RPC response
+    // 2. session.cancelled / session.error / session.idle (canonical events)
     const terminalMessage = await waitForMessage(
       client,
       (msg) => {
-        // Cancel RPC response
         if (msg.jsonrpc === "2.0" && msg.id === cancelId) return true;
-        // Error notification for this session
-        if (msg.method === "queryError" && msg.params?.id === sessionId) return true;
-        // Query result (completed before cancel)
-        if (
-          msg.method === "message" &&
-          msg.params?.id === sessionId &&
-          msg.params?.data?.type === "result"
-        )
-          return true;
+        if (msg.method === "session.cancelled" && msg.params?.sessionId === sessionId) return true;
+        if (msg.method === "session.error" && msg.params?.sessionId === sessionId) return true;
+        if (msg.method === "session.idle" && msg.params?.sessionId === sessionId) return true;
         return false;
       },
       30_000

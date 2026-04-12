@@ -11,6 +11,16 @@
 
 import Database from "better-sqlite3";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+
+// better-sqlite3 may be compiled for Electron's Node ABI — skip if unavailable
+let canUseDatabase = true;
+try {
+  new Database(":memory:").close();
+} catch {
+  canUseDatabase = false;
+}
+
+const describeWithDb = canUseDatabase ? describe : describe.skip;
 import { SCHEMA_SQL, MIGRATIONS } from "@shared/schema";
 import { uuidv7 } from "@shared/lib/uuid";
 
@@ -125,7 +135,7 @@ interface PartRow {
 // Tests
 // ============================================================================
 
-describe("event → persistence → DB integration", () => {
+describeWithDb("event → persistence → DB integration", () => {
   let db: Database.Database;
   const sessionId = "sess-integration-1";
 

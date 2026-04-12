@@ -159,7 +159,7 @@ export const SessionPanel = forwardRef<SessionPanelRef, SessionPanelProps>(
           session_id: sessionId,
           seq: 999999, // sort at end
           role: "assistant",
-          content: null,
+          content: "",
           turn_id: null,
           model: null,
           agent_message_id: null,

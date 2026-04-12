@@ -43,7 +43,7 @@
 ## Review Infrastructure
 
 - Reviews go to `.context/reviews/review-NN.md`
-- review-01: 2026-02-21, review-02: 2026-03-03 (session cache/event review), review-03: 2026-03-15 (WS query protocol migration), review-04: 2026-03-20 (Tauri-to-Electron migration pre-merge review), review-05: 2026-04-01 (Start New Project feature pre-merge), review-06: 2026-04-10 (AI-generated complexity reduction refactors -- APPROVED), review-07: 2026-04-11 (Message system deep audit -- REQUEST_CHANGES)
+- review-01: 2026-02-21, review-02: 2026-03-03 (session cache/event review), review-03: 2026-03-15 (WS query protocol migration), review-04: 2026-03-20 (Tauri-to-Electron migration pre-merge review), review-05: 2026-04-01 (Start New Project feature pre-merge), review-06: 2026-04-10 (AI-generated complexity reduction refactors -- APPROVED), review-07: 2026-04-11 (Message system deep audit -- REQUEST_CHANGES), review-08: 2026-04-11 (Unified Parts transformation layer -- REQUEST_CHANGES)
 
 ## Recurring Patterns
 
@@ -60,3 +60,17 @@
 - Optimistic messages use `seq: MAX_SAFE_INTEGER` which can break scroll restoration logic
 - No Zod validation at the backend boundary for incoming agent events (only ts-pattern type matching)
 - `EventBroadcaster.requireTunnel()` always picks first tunnel for RPC requests -- no session routing
+
+## Unified Parts System (review-08, branch gnhf/i-would-love-to-impr-9017a3)
+
+- Reference project: abuja-v2 at `/Users/zvada/conductor/workspaces/agnt/abuja-v2/`
+- Parts types live in `shared/messages/types.ts`, factories in `apps/agent-server/messages/parts.ts`
+- Three adapters: claude-adapter (streaming), codex-adapter (CLI begin/end), codex-sdk-adapter (ThreadEvent lifecycle)
+- Dual-write: handlers emit `message.parts` + `message.parts_finished` alongside legacy events
+- Backend accumulates via `PartsAccumulator` (Map<messageId, Map<partId, Part>>), flushes on `parts_finished`
+- `persistMessagePartsFinished` targets "most recent assistant row by seq" -- no direct messageId correlation (known issue)
+- Single messageId per query lifecycle (not per turn) -- diverges from reference, will need fixing for Parts-first rendering
+- Frontend: `partsMap` (Map<string, MessagePartsEnvelope>) in SessionContext, parsed via `parseMessageParts()` with Zod validation
+- `parts TEXT` column added to messages table via migration in `shared/schema.ts`
+- `TerminalContent` in ToolOutputContent union is novel to chengdu-v3, not in reference, currently unused
+- `prevText` map in codex-sdk-adapter is dead code (populated but never read)

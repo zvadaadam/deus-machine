@@ -15,7 +15,7 @@
  * existing 15+ specialized tool renderers without rewriting them.
  */
 
-import { memo, useMemo } from "react";
+import { createElement, memo, useMemo } from "react";
 import { match } from "ts-pattern";
 import type { ToolPart } from "@shared/messages/types";
 import type { PartRow } from "@/shared/types";
@@ -112,8 +112,8 @@ function ToolRendererBridge({
   toolResult?: ToolResultBlock;
   isLoading: boolean;
 }) {
-  const renderer = toolRegistry.getRenderer(toolUse.name);
-  return renderer({ toolUse, toolResult, isLoading });
+  const Renderer = toolRegistry.getRenderer(toolUse.name);
+  return createElement(Renderer, { toolUse, toolResult, isLoading });
 }
 
 export const ToolPartBlock = memo(function ToolPartBlock({
