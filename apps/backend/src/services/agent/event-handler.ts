@@ -56,6 +56,15 @@ function persistAndInvalidate(
   }
 }
 
+/** Persist without invalidation. Used for part events where the frontend
+ *  receives data via q:event (real-time) — the q:delta system would just
+ *  run a wasted DB query since message seq doesn't change on part writes. */
+function persistOnly(result: WriteResult<unknown>): void {
+  if (!result.ok) {
+    console.warn(`[AgentEvent] Persistence failed:`, result.error);
+  }
+}
+
 /** Push a Part lifecycle event to all frontend connections as a q:event frame.
  *  The frontend filters by sessionId to route events to the correct session view. */
 function pushPartEvent(
@@ -125,11 +134,18 @@ export function createAgentEventHandler(deps: {
           `[AgentEvent] message.created: session=${e.sessionId} messageId=${e.messageId}`
         );
         persistAndInvalidate(persistMessageCreated(e), MESSAGE_RESOURCES, e.sessionId);
+        // Also push as q:event so frontend creates the message shell
+        // BEFORE part events arrive (avoids race condition).
+        const { type: _, ...data } = e;
+        pushPartEvent("message:created", data);
       })
       .with({ type: "part.created" }, (e) => {
         console.log(
           `[AgentEvent] part.created: session=${e.sessionId} partId=${e.partId} type=${e.part.type}`
         );
+        // Persist on first creation so in-flight parts survive session switches.
+        // Uses INSERT OR REPLACE — safe for repeated part.created (state transitions).
+        persistOnly(persistPartDone(e));
         const { type: _, ...data } = e;
         pushPartEvent("part:created", data);
       })
@@ -142,7 +158,9 @@ export function createAgentEventHandler(deps: {
         console.log(
           `[AgentEvent] part.done: session=${e.sessionId} partId=${e.partId} type=${e.part.type}`
         );
-        persistAndInvalidate(persistPartDone(e), MESSAGE_RESOURCES, e.sessionId);
+        // Persist to DB (for page refresh). No invalidation needed —
+        // the frontend receives part data via q:event, not q:delta.
+        persistOnly(persistPartDone(e));
         const { type: _, ...data } = e;
         pushPartEvent("part:done", data);
       })
@@ -150,13 +168,17 @@ export function createAgentEventHandler(deps: {
         console.log(
           `[AgentEvent] message.done: session=${e.sessionId} messageId=${e.messageId} stopReason=${e.stopReason ?? "none"}`
         );
-        persistAndInvalidate(persistMessageDone(e), MESSAGE_RESOURCES, e.sessionId);
+        persistOnly(persistMessageDone(e));
+        // Push as q:event so frontend can set stop_reason on the message
+        const { type: _, ...data } = e;
+        pushPartEvent("message:done", data);
       })
       .with({ type: "turn.completed" }, (e) => {
         console.log(
           `[AgentEvent] turn.completed: session=${e.sessionId} finishReason=${e.finishReason ?? "none"} cost=${e.cost ?? 0}`
         );
-        invalidate(MESSAGE_RESOURCES, { sessionIds: [e.sessionId] });
+        // No message invalidation — all part data already streamed via q:event.
+        // Session status change (session.idle) handles the UI update.
       })
 
       // ── Interaction requests ──────────────────────────────────────────

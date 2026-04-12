@@ -14,7 +14,6 @@ export type {
   ThinkingBlock,
   Session,
   SessionStatus,
-  PartRow,
 } from "@shared/types/session";
 
 export {

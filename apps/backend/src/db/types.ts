@@ -144,9 +144,9 @@ export interface PartRow {
   parent_tool_call_id: string | null;
 }
 
-/** MessageRow enriched with its parts from the parts table. */
+/** MessageRow enriched with parsed Part objects from the parts table. */
 export interface MessageRowWithParts extends MessageRow {
-  parts: PartRow[];
+  parts: import("@shared/messages/types").Part[];
 }
 
 // ─── stats ───────────────────────────────────────────────────

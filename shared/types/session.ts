@@ -6,6 +6,7 @@
 // Canonical enum types — defined as Zod schemas in shared/enums.ts,
 // imported here for local use and re-exported for backwards compat.
 import type { MessageRole, SessionStatus } from "../enums";
+import type { Part } from "../messages/types";
 import type {
   EnterPlanModeNotification as SessionEnterPlanModeEvent,
   ErrorResponse as SessionErrorEvent,
@@ -21,22 +22,6 @@ export type {
   SessionStatusEvent,
   SessionNotification,
 };
-
-/**
- * Part row as sent by the backend (from the parts table).
- * Each row's `data` field contains a JSON-stringified Part (TEXT, REASONING, TOOL, COMPACTION).
- */
-export interface PartRow {
-  id: string;
-  message_id: string;
-  session_id: string;
-  seq: number;
-  type: string; // "TEXT" | "REASONING" | "TOOL" | "COMPACTION"
-  data: string; // JSON string of the full Part object
-  tool_call_id: string | null;
-  tool_name: string | null;
-  parent_tool_call_id: string | null;
-}
 
 /**
  * Base message entity
@@ -55,7 +40,8 @@ export interface Message {
   model?: string | null; // Claude model used (e.g., 'sonnet')
   agent_message_id?: string | null; // Agent SDK-provided message identifier
   parent_tool_use_id?: string | null; // Subagent parent task ID (promoted from JSON envelope)
-  parts?: PartRow[]; // Part rows from the parts table (attached by backend via attachParts)
+  stop_reason?: string | null; // "end_turn", "tool_use", "cancelled", etc. (set by message.done)
+  parts?: Part[]; // Parsed Part objects (attached by backend, mutated by streaming events)
 }
 
 /**

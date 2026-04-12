@@ -47,7 +47,7 @@ describe("ClaudeCodeAdapter", () => {
           text: "Hello world",
           state: "DONE",
           sessionId: "sess-1",
-          messageId: "msg-1",
+          messageId: "msg-1-1",
         }),
       });
       expect(events[2]).toMatchObject({ type: "message.done" });
@@ -452,6 +452,170 @@ describe("ClaudeCodeAdapter", () => {
   });
 
   describe("subagent tracking", () => {
+    it("detects Agent tool (real SDK name) and sets subagent metadata", () => {
+      const transformer = claudeCodeAdapter.createTransformer(makeCtx());
+
+      const events = transformer.process({
+        type: "assistant",
+        message: {
+          id: "msg_1",
+          role: "assistant",
+          content: [
+            {
+              type: "tool_use",
+              id: "agent_1",
+              name: "Agent",
+              input: {
+                description: "Read file",
+                subagent_type: "Explore",
+                prompt: "Read shared/agent-events.ts",
+              },
+            },
+          ],
+        },
+        parent_tool_use_id: null,
+        session_id: "s_123",
+      });
+
+      expect(events).toHaveLength(3);
+      const partEvt = events.find((e) => e.type === "part.created");
+      expect(partEvt).toMatchObject({
+        type: "part.created",
+        part: expect.objectContaining({
+          type: "TOOL",
+          toolName: "Agent",
+          kind: "task",
+          subagent: expect.objectContaining({ type: "Explore" }),
+        }),
+      });
+    });
+
+    it("detects Agent tool via streaming path", () => {
+      const transformer = claudeCodeAdapter.createTransformer(makeCtx());
+
+      transformer.process({
+        type: "stream_event",
+        event: {
+          type: "content_block_start",
+          index: 0,
+          content_block: { type: "tool_use", id: "agent_1", name: "Agent", input: {} },
+        },
+        parent_tool_use_id: null,
+        session_id: "s_123",
+      });
+      transformer.process({
+        type: "stream_event",
+        event: {
+          type: "content_block_delta",
+          index: 0,
+          delta: {
+            type: "input_json_delta",
+            partial_json: '{"subagent_type":"dev","prompt":"do stuff"}',
+          },
+        },
+        parent_tool_use_id: null,
+        session_id: "s_123",
+      });
+      const events = transformer.process({
+        type: "stream_event",
+        event: { type: "content_block_stop", index: 0 },
+        parent_tool_use_id: null,
+        session_id: "s_123",
+      });
+
+      const toolEvent = events.find((e) => e.type === "part.created" && e.part.type === "TOOL");
+      expect(toolEvent).toBeDefined();
+      expect(partFrom(toolEvent!)).toMatchObject({
+        type: "TOOL",
+        toolName: "Agent",
+        kind: "task",
+        subagent: { type: "dev" },
+      });
+    });
+
+    it("updates tool part title from task_started system event", () => {
+      const transformer = claudeCodeAdapter.createTransformer(makeCtx());
+
+      // Create Agent tool via assistant event
+      transformer.process({
+        type: "assistant",
+        message: {
+          id: "msg_1",
+          role: "assistant",
+          content: [
+            {
+              type: "tool_use",
+              id: "agent_1",
+              name: "Agent",
+              input: { subagent_type: "Explore", prompt: "Read file" },
+            },
+          ],
+        },
+        parent_tool_use_id: null,
+        session_id: "s_123",
+      });
+
+      // Task started system event
+      const events = transformer.process({
+        type: "system",
+        subtype: "task_started",
+        task_id: "t1",
+        tool_use_id: "agent_1",
+        description: "Reading shared/agent-events.ts",
+        task_type: "local_agent",
+        prompt: "Read file",
+        session_id: "s_123",
+      } as any);
+
+      expect(events).toHaveLength(1);
+      expect(events[0]).toMatchObject({
+        type: "part.created",
+        part: expect.objectContaining({
+          type: "TOOL",
+          toolCallId: "agent_1",
+          state: expect.objectContaining({
+            status: "RUNNING",
+            title: "Reading shared/agent-events.ts",
+          }),
+        }),
+      });
+    });
+
+    it("updates tool part title from task_progress system event", () => {
+      const transformer = claudeCodeAdapter.createTransformer(makeCtx());
+
+      transformer.process({
+        type: "assistant",
+        message: {
+          id: "msg_1",
+          role: "assistant",
+          content: [
+            { type: "tool_use", id: "agent_1", name: "Agent", input: { subagent_type: "dev" } },
+          ],
+        },
+        parent_tool_use_id: null,
+        session_id: "s_123",
+      });
+
+      const events = transformer.process({
+        type: "system",
+        subtype: "task_progress",
+        task_id: "t1",
+        tool_use_id: "agent_1",
+        description: "Writing tests...",
+        usage: { total_tokens: 5000, tool_uses: 3, duration_ms: 2000 },
+        last_tool_name: "Write",
+        session_id: "s_123",
+      } as any);
+
+      expect(events).toHaveLength(1);
+      expect(partFrom(events[0]!)).toMatchObject({
+        state: expect.objectContaining({
+          title: "Writing tests...",
+        }),
+      });
+    });
+
     it("detects Task tool and sets subagent metadata", () => {
       const transformer = claudeCodeAdapter.createTransformer(makeCtx());
 
@@ -482,7 +646,7 @@ describe("ClaudeCodeAdapter", () => {
           type: "TOOL",
           toolName: "Task",
           kind: "task",
-          subagent: { type: "code-reviewer", model: "sonnet" },
+          subagent: expect.objectContaining({ type: "code-reviewer", model: "sonnet" }),
         }),
       });
     });
@@ -525,6 +689,374 @@ describe("ClaudeCodeAdapter", () => {
         text: "Working on it...",
         parentToolCallId: "task_1",
       });
+    });
+
+    it("propagates parentToolCallId on message.created for subagent messages", () => {
+      const transformer = claudeCodeAdapter.createTransformer(makeCtx());
+
+      // Parent creates Task tool
+      transformer.process({
+        type: "assistant",
+        message: {
+          id: "msg_1",
+          role: "assistant",
+          content: [
+            { type: "tool_use", id: "task_1", name: "Task", input: { subagent_type: "dev" } },
+          ],
+        },
+        parent_tool_use_id: null,
+        session_id: "s_123",
+      });
+
+      // Subagent produces text — message.created should carry parentToolCallId
+      const events = transformer.process({
+        type: "assistant",
+        message: {
+          id: "msg_2",
+          role: "assistant",
+          content: [{ type: "text", text: "Subagent output" }],
+        },
+        parent_tool_use_id: "task_1",
+        session_id: "s_123",
+      });
+
+      const msgCreated = events.find((e) => e.type === "message.created");
+      expect(msgCreated).toMatchObject({
+        type: "message.created",
+        role: "assistant",
+        parentToolCallId: "task_1",
+      });
+    });
+
+    it("propagates parentToolCallId on message.done for subagent messages", () => {
+      const transformer = claudeCodeAdapter.createTransformer(makeCtx());
+
+      // Parent creates Task tool
+      transformer.process({
+        type: "assistant",
+        message: {
+          id: "msg_1",
+          role: "assistant",
+          content: [
+            { type: "tool_use", id: "task_1", name: "Task", input: { subagent_type: "dev" } },
+          ],
+        },
+        parent_tool_use_id: null,
+        session_id: "s_123",
+      });
+
+      // Subagent produces text — message.done should carry parentToolCallId
+      const events = transformer.process({
+        type: "assistant",
+        message: {
+          id: "msg_2",
+          role: "assistant",
+          content: [{ type: "text", text: "Done working" }],
+        },
+        parent_tool_use_id: "task_1",
+        session_id: "s_123",
+      });
+
+      const msgDone = events.find((e) => e.type === "message.done");
+      expect(msgDone).toMatchObject({
+        type: "message.done",
+        parentToolCallId: "task_1",
+      });
+    });
+
+    it("does NOT set parentToolCallId on parent-level messages", () => {
+      const transformer = claudeCodeAdapter.createTransformer(makeCtx());
+
+      // Parent message with no parent_tool_use_id
+      const events = transformer.process({
+        type: "assistant",
+        message: {
+          id: "msg_1",
+          role: "assistant",
+          content: [{ type: "text", text: "Parent text" }],
+        },
+        parent_tool_use_id: null,
+        session_id: "s_123",
+      });
+
+      const msgCreated = events.find((e) => e.type === "message.created");
+      expect(msgCreated).toMatchObject({ type: "message.created", role: "assistant" });
+      expect((msgCreated as any).parentToolCallId).toBeUndefined();
+
+      const msgDone = events.find((e) => e.type === "message.done");
+      expect((msgDone as any).parentToolCallId).toBeUndefined();
+    });
+
+    it("handles streaming subagent events with parentToolCallId on messages", () => {
+      const transformer = claudeCodeAdapter.createTransformer(makeCtx());
+
+      // Parent creates Task tool via streaming
+      transformer.process({
+        type: "stream_event",
+        event: {
+          type: "message_start",
+          message: {
+            id: "msg_s1",
+            role: "assistant",
+            content: [],
+            usage: { input_tokens: 10, output_tokens: 0 },
+          },
+        },
+        parent_tool_use_id: null,
+        session_id: "s_123",
+      });
+
+      transformer.process({
+        type: "stream_event",
+        event: {
+          type: "content_block_start",
+          index: 0,
+          content_block: { type: "tool_use", id: "task_1", name: "Task", input: {} },
+        },
+        parent_tool_use_id: null,
+        session_id: "s_123",
+      });
+      transformer.process({
+        type: "stream_event",
+        event: {
+          type: "content_block_delta",
+          index: 0,
+          delta: { type: "input_json_delta", partial_json: '{"subagent_type":"dev"}' },
+        },
+        parent_tool_use_id: null,
+        session_id: "s_123",
+      });
+      transformer.process({
+        type: "stream_event",
+        event: { type: "content_block_stop", index: 0 },
+        parent_tool_use_id: null,
+        session_id: "s_123",
+      });
+      transformer.process({
+        type: "stream_event",
+        event: { type: "message_stop" },
+        parent_tool_use_id: null,
+        session_id: "s_123",
+      });
+
+      // Now subagent starts streaming with parent_tool_use_id set
+      const subagentEvents = transformer.process({
+        type: "stream_event",
+        event: {
+          type: "message_start",
+          message: {
+            id: "msg_s2",
+            role: "assistant",
+            content: [],
+            usage: { input_tokens: 5, output_tokens: 0 },
+          },
+        },
+        parent_tool_use_id: "task_1",
+        session_id: "s_123",
+      });
+
+      // message.created should carry parentToolCallId
+      const msgCreated = subagentEvents.find((e) => e.type === "message.created");
+      expect(msgCreated).toMatchObject({
+        type: "message.created",
+        parentToolCallId: "task_1",
+      });
+    });
+
+    it("suppresses turn.completed for active subagents", () => {
+      const transformer = claudeCodeAdapter.createTransformer(makeCtx());
+
+      // Parent creates Task tool
+      transformer.process({
+        type: "assistant",
+        message: {
+          id: "msg_1",
+          role: "assistant",
+          content: [
+            { type: "tool_use", id: "task_1", name: "Task", input: { subagent_type: "dev" } },
+          ],
+        },
+        parent_tool_use_id: null,
+        session_id: "s_123",
+      });
+
+      // Subagent result event — should NOT emit turn.completed
+      const resultEvents = transformer.process({
+        type: "result",
+        subtype: "success",
+        session_id: "s_123",
+        usage: { input_tokens: 100, output_tokens: 50 },
+      });
+
+      const turnCompleted = resultEvents.find((e) => e.type === "turn.completed");
+      expect(turnCompleted).toBeUndefined();
+    });
+
+    it("emits turn.completed after subagent tool result completes", () => {
+      const transformer = claudeCodeAdapter.createTransformer(makeCtx());
+
+      // Parent creates Task tool
+      transformer.process({
+        type: "assistant",
+        message: {
+          id: "msg_1",
+          role: "assistant",
+          content: [
+            { type: "tool_use", id: "task_1", name: "Task", input: { subagent_type: "dev" } },
+          ],
+        },
+        parent_tool_use_id: null,
+        session_id: "s_123",
+      });
+
+      // First result — subagent finished internally
+      transformer.process({
+        type: "result",
+        subtype: "success",
+        session_id: "s_123",
+        usage: { input_tokens: 100, output_tokens: 50 },
+      });
+
+      // Tool result arrives — unregisters subagent
+      transformer.process({
+        type: "user",
+        message: {
+          id: "msg_3",
+          role: "user",
+          content: [{ type: "tool_result", tool_use_id: "task_1", content: "Subagent done" }],
+        },
+        parent_tool_use_id: null,
+        session_id: "s_123",
+      });
+
+      // Final result — now turn.completed should fire
+      const finalEvents = transformer.process({
+        type: "result",
+        subtype: "success",
+        session_id: "s_123",
+        usage: { input_tokens: 200, output_tokens: 100 },
+        total_cost_usd: 0.01,
+      });
+
+      const turnCompleted = finalEvents.find((e) => e.type === "turn.completed");
+      expect(turnCompleted).toBeDefined();
+      expect(turnCompleted).toMatchObject({
+        type: "turn.completed",
+        finishReason: "end_turn",
+      });
+    });
+
+    it("handles multiple subagents in parallel", () => {
+      const transformer = claudeCodeAdapter.createTransformer(makeCtx());
+
+      // Parent creates two Task tools
+      transformer.process({
+        type: "assistant",
+        message: {
+          id: "msg_1",
+          role: "assistant",
+          content: [
+            { type: "tool_use", id: "task_1", name: "Task", input: { subagent_type: "dev" } },
+            { type: "tool_use", id: "task_2", name: "Task", input: { subagent_type: "reviewer" } },
+          ],
+        },
+        parent_tool_use_id: null,
+        session_id: "s_123",
+      });
+
+      // Result while 2 subagents active — should NOT emit turn.completed
+      const events1 = transformer.process({
+        type: "result",
+        subtype: "success",
+        session_id: "s_123",
+        usage: { input_tokens: 100, output_tokens: 50 },
+      });
+      expect(events1.find((e) => e.type === "turn.completed")).toBeUndefined();
+
+      // First subagent tool result arrives
+      transformer.process({
+        type: "user",
+        message: {
+          id: "msg_2",
+          role: "user",
+          content: [{ type: "tool_result", tool_use_id: "task_1", content: "Done 1" }],
+        },
+        parent_tool_use_id: null,
+        session_id: "s_123",
+      });
+
+      // Result with 1 subagent still active — still should NOT emit turn.completed
+      const events2 = transformer.process({
+        type: "result",
+        subtype: "success",
+        session_id: "s_123",
+        usage: { input_tokens: 150, output_tokens: 75 },
+      });
+      expect(events2.find((e) => e.type === "turn.completed")).toBeUndefined();
+
+      // Second subagent tool result
+      transformer.process({
+        type: "user",
+        message: {
+          id: "msg_3",
+          role: "user",
+          content: [{ type: "tool_result", tool_use_id: "task_2", content: "Done 2" }],
+        },
+        parent_tool_use_id: null,
+        session_id: "s_123",
+      });
+
+      // Final result — all subagents done, should emit turn.completed
+      const events3 = transformer.process({
+        type: "result",
+        subtype: "success",
+        session_id: "s_123",
+        usage: { input_tokens: 200, output_tokens: 100 },
+        total_cost_usd: 0.02,
+      });
+      expect(events3.find((e) => e.type === "turn.completed")).toBeDefined();
+    });
+
+    it("subagent text and tool parts within same message get tagged", () => {
+      const transformer = claudeCodeAdapter.createTransformer(makeCtx());
+
+      // Parent creates Task tool
+      transformer.process({
+        type: "assistant",
+        message: {
+          id: "msg_1",
+          role: "assistant",
+          content: [
+            { type: "tool_use", id: "task_1", name: "Task", input: { subagent_type: "dev" } },
+          ],
+        },
+        parent_tool_use_id: null,
+        session_id: "s_123",
+      });
+
+      // Subagent produces mixed content
+      const events = transformer.process({
+        type: "assistant",
+        message: {
+          id: "msg_2",
+          role: "assistant",
+          content: [
+            { type: "thinking", thinking: "Subagent thinking..." },
+            { type: "text", text: "Let me read the file" },
+            { type: "tool_use", id: "tool_inner", name: "Read", input: { path: "/foo" } },
+          ],
+        },
+        parent_tool_use_id: "task_1",
+        session_id: "s_123",
+      });
+
+      // All parts should have parentToolCallId
+      const partEvents = events.filter((e) => e.type === "part.created" || e.type === "part.done");
+      expect(partEvents.length).toBeGreaterThanOrEqual(3);
+      for (const pe of partEvents) {
+        const part = partFrom(pe);
+        expect(part?.parentToolCallId).toBe("task_1");
+      }
     });
   });
 });

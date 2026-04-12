@@ -8,8 +8,8 @@
  * Used by AssistantTurn component to display collapsed summary.
  */
 
-import type { Message, ContentBlock } from "@/shared/types";
-import { isToolUseBlock } from "@shared/types/session";
+import type { Message } from "@/shared/types";
+import type { ToolPart } from "@shared/messages/types";
 
 export interface TurnStats {
   toolCount: number;
@@ -17,64 +17,26 @@ export interface TurnStats {
   filesChanged: number;
 }
 
-interface ParseContentFn {
-  (content: string): (ContentBlock | string)[] | string | null;
-}
-
-/**
- * Calculate statistics for an assistant turn
- *
- * @param messages - Array of assistant messages in this turn
- * @param parseContent - Function to parse message content JSON
- * @returns Aggregated statistics for the turn
- */
-export function calculateTurnStats(messages: Message[], parseContent: ParseContentFn): TurnStats {
+export function calculateTurnStats(messages: Message[]): TurnStats {
   let toolCount = 0;
   let subagentCount = 0;
   const fileSet = new Set<string>();
 
   for (const message of messages) {
-    // Parts-based counting (new unified model)
-    if (message.parts && message.parts.length > 0) {
-      for (const partRow of message.parts) {
-        if (partRow.type !== "TOOL") continue;
-        toolCount++;
+    if (!message.parts) continue;
 
-        const toolName = partRow.tool_name;
-        if (toolName === "Task" || toolName === "Agent") {
-          subagentCount++;
-        }
-
-        // Extract file path from part data for file change tracking
-        try {
-          const data = JSON.parse(partRow.data);
-          const input = data?.state?.input;
-          const filePath = input?.file_path;
-          if (typeof filePath === "string" && filePath.length > 0) {
-            fileSet.add(filePath);
-          }
-        } catch {
-          // Ignore parse errors
-        }
-      }
-      continue;
-    }
-
-    // Legacy content-based counting (fallback)
-    const contentBlocks = parseContent(message.content);
-    if (!Array.isArray(contentBlocks)) continue;
-
-    for (const block of contentBlocks) {
-      if (typeof block === "string") continue;
-      if (!isToolUseBlock(block)) continue;
-
+    for (const part of message.parts) {
+      if (part.type !== "TOOL") continue;
       toolCount++;
 
-      if (block.name === "Task" || block.name === "Agent") {
+      const toolPart = part as ToolPart;
+      if (toolPart.toolName === "Task" || toolPart.toolName === "Agent") {
         subagentCount++;
       }
 
-      const filePath = block.input?.file_path;
+      // Extract file path from tool input for file change tracking
+      const input = toolPart.state.status !== "PENDING" ? (toolPart.state as any).input : null;
+      const filePath = input?.file_path;
       if (typeof filePath === "string" && filePath.length > 0) {
         fileSet.add(filePath);
       }
