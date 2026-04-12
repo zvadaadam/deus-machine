@@ -63,9 +63,11 @@ export const AssistantTurn = memo(function AssistantTurn({
   // Split messages: all except the last are hidden (collapsible), last is the summary.
   const { summaryMessage, hiddenMessages } = useMemo(() => {
     if (isCancelled) {
-      // Strip the cancellation sentinel; everything else is collapsible
-      const real = messages.length > 1 ? messages.slice(0, -1) : [];
-      return { summaryMessage: null, hiddenMessages: real };
+      // Keep the last real message visible (partial response) with badge below it
+      return {
+        summaryMessage: messages[messages.length - 1],
+        hiddenMessages: messages.slice(0, -1),
+      };
     }
     return {
       summaryMessage: messages[messages.length - 1],
@@ -117,15 +119,14 @@ export const AssistantTurn = memo(function AssistantTurn({
             )}
           </AnimatePresence>
 
-          {/* Summary slot: either the last real message or the cancelled badge */}
-          {isCancelled ? (
+          {/* Summary: last message + stopped badge if cancelled */}
+          {summaryMessage && <MessageItem message={summaryMessage} isLastInTurn={true} />}
+          {isCancelled && (
             <div className="border-warning/20 border-l-warning bg-warning/5 mx-2 flex items-center gap-2.5 rounded-lg border border-l-2 px-3 py-2">
               <Square className="text-warning/60 h-3.5 w-3.5 shrink-0 fill-current" />
               <span className="text-warning text-sm font-medium">Response stopped</span>
             </div>
-          ) : summaryMessage ? (
-            <MessageItem message={summaryMessage} isLastInTurn={true} />
-          ) : null}
+          )}
         </>
       )}
     </div>

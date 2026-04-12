@@ -183,11 +183,13 @@ function onMessageCreated(
   });
 }
 
-/** Update stop_reason on a completed message. */
+/** Update stop_reason and repair parts on a completed message.
+ *  message:done carries the final parts array — use it to fill gaps
+ *  for clients that subscribed mid-stream and missed some part events. */
 function onMessageDone(
   qc: QueryClient,
   sessionId: string,
-  data: { messageId: string; stopReason?: string }
+  data: { messageId: string; stopReason?: string; parts?: Part[]; parentToolCallId?: string }
 ): void {
   const key = queryKeys.sessions.messages(sessionId);
 
@@ -198,10 +200,18 @@ function onMessageDone(
     if (msgIndex === -1) return old;
 
     const msg = old.messages[msgIndex];
-    if (msg.stop_reason === data.stopReason) return old;
+    const updates: Partial<Message> = { stop_reason: data.stopReason ?? null };
+
+    // Repair parts if message:done carries more than the cache has
+    if (data.parts && data.parts.length > (msg.parts?.length ?? 0)) {
+      updates.parts = data.parts;
+    }
+    if (data.parentToolCallId) {
+      updates.parent_tool_use_id = data.parentToolCallId;
+    }
 
     const newMessages = [...old.messages];
-    newMessages[msgIndex] = { ...msg, stop_reason: data.stopReason ?? null };
+    newMessages[msgIndex] = { ...msg, ...updates };
     return { ...old, messages: newMessages };
   });
 }
