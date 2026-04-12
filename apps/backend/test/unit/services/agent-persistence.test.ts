@@ -24,11 +24,9 @@ vi.mock("../../../src/lib/database", () => ({
 // ============================================================================
 
 import {
-  persistAssistantMessage,
-  persistToolResultMessage,
-  persistMessageResult,
   persistMessageCancelled,
-  persistMessagePartsFinished,
+  persistPartDone,
+  persistMessageDone,
   persistSessionStarted,
   persistSessionIdle,
   persistSessionError,
@@ -37,11 +35,9 @@ import {
   persistSessionTitle,
 } from "../../../src/services/agent/persistence";
 import type {
-  MessageAssistantEvent,
-  MessageToolResultEvent,
-  MessageResultEvent,
   MessageCancelledEvent,
-  MessagePartsFinishedEvent,
+  PartDoneEvent,
+  MessageDoneEvent,
   SessionStartedEvent,
   SessionIdleEvent,
   SessionErrorEvent,
@@ -49,7 +45,6 @@ import type {
   AgentSessionIdEvent,
   SessionTitleEvent,
 } from "../../../../shared/agent-events";
-import type { Part } from "../../../../shared/messages";
 
 // ============================================================================
 // Tests
@@ -65,166 +60,6 @@ describe("agent-persistence", () => {
   // ==========================================================================
   // Message writes
   // ==========================================================================
-
-  describe("persistAssistantMessage", () => {
-    const baseEvent: MessageAssistantEvent = {
-      type: "message.assistant",
-      sessionId: "sess-1",
-      agentType: "claude",
-      message: {
-        id: "msg-sdk-1",
-        role: "assistant",
-        content: [{ type: "text", text: "Hello!" }],
-      },
-      model: "opus",
-    };
-
-    it("inserts an assistant message with correct parameters", () => {
-      const result = persistAssistantMessage(baseEvent);
-
-      expect(result.ok).toBe(true);
-      if (result.ok) expect(result.value).toEqual(expect.any(String)); // UUID7 message ID
-      expect(mockPrepare).toHaveBeenCalledWith(expect.stringContaining("INSERT INTO messages"));
-      expect(mockRun).toHaveBeenCalledWith(
-        expect.any(String), // messageId
-        "sess-1", // sessionId
-        expect.any(String), // content JSON
-        expect.any(String), // sentAt
-        "opus", // model
-        "msg-sdk-1", // agent_message_id
-        null // parent_tool_use_id
-      );
-    });
-
-    it("stores flat content for normal messages", () => {
-      persistAssistantMessage(baseEvent);
-
-      const contentArg = mockRun.mock.calls[0][2] as string;
-      const parsed = JSON.parse(contentArg);
-      expect(parsed).toEqual([{ type: "text", text: "Hello!" }]);
-    });
-
-    it("stores envelope format for cancelled messages", () => {
-      const cancelledEvent: MessageAssistantEvent = {
-        ...baseEvent,
-        message: {
-          ...baseEvent.message,
-          stop_reason: "cancelled",
-        },
-      };
-
-      persistAssistantMessage(cancelledEvent);
-
-      const contentArg = mockRun.mock.calls[0][2] as string;
-      const parsed = JSON.parse(contentArg);
-      expect(parsed).toEqual({
-        message: { stop_reason: "cancelled" },
-        blocks: [{ type: "text", text: "Hello!" }],
-      });
-    });
-
-    it("handles parent_tool_use_id", () => {
-      const eventWithParent: MessageAssistantEvent = {
-        ...baseEvent,
-        message: {
-          ...baseEvent.message,
-          parent_tool_use_id: "tool-use-123",
-        },
-      };
-
-      persistAssistantMessage(eventWithParent);
-
-      // parent_tool_use_id is the last argument
-      expect(mockRun).toHaveBeenCalledWith(
-        expect.any(String),
-        "sess-1",
-        expect.any(String),
-        expect.any(String),
-        "opus",
-        "msg-sdk-1",
-        "tool-use-123"
-      );
-    });
-
-    it("returns error on DB failure", () => {
-      mockPrepare.mockReturnValue({
-        run: vi.fn(() => {
-          throw new Error("DB locked");
-        }),
-      });
-
-      const result = persistAssistantMessage(baseEvent);
-
-      expect(result.ok).toBe(false);
-      if (!result.ok) expect(result.error).toContain("DB locked");
-    });
-  });
-
-  describe("persistToolResultMessage", () => {
-    const baseEvent: MessageToolResultEvent = {
-      type: "message.tool_result",
-      sessionId: "sess-1",
-      agentType: "claude",
-      message: {
-        id: "msg-sdk-2",
-        role: "user",
-        content: [{ type: "tool_result", tool_use_id: "tu-1", content: "output" }],
-        parent_tool_use_id: "tu-1",
-      },
-    };
-
-    it("inserts a tool_result message with role=user", () => {
-      const result = persistToolResultMessage(baseEvent);
-
-      expect(result.ok).toBe(true);
-      expect(mockPrepare).toHaveBeenCalledWith(expect.stringContaining("INSERT INTO messages"));
-      expect(mockRun).toHaveBeenCalledWith(
-        expect.any(String), // messageId
-        "sess-1", // sessionId
-        expect.any(String), // content JSON
-        expect.any(String), // sentAt
-        "msg-sdk-2", // agent_message_id
-        "tu-1" // parent_tool_use_id
-      );
-    });
-
-    it("stores content blocks directly (no envelope)", () => {
-      persistToolResultMessage(baseEvent);
-
-      const contentArg = mockRun.mock.calls[0][2] as string;
-      const parsed = JSON.parse(contentArg);
-      expect(parsed).toEqual([{ type: "tool_result", tool_use_id: "tu-1", content: "output" }]);
-    });
-
-    it("returns error on DB failure", () => {
-      mockPrepare.mockReturnValue({
-        run: vi.fn(() => {
-          throw new Error("constraint violation");
-        }),
-      });
-
-      const result = persistToolResultMessage(baseEvent);
-
-      expect(result.ok).toBe(false);
-      if (!result.ok) expect(result.error).toContain("constraint violation");
-    });
-  });
-
-  describe("persistMessageResult", () => {
-    it("is a no-op (informational only)", () => {
-      const event: MessageResultEvent = {
-        type: "message.result",
-        sessionId: "sess-1",
-        agentType: "claude",
-        subtype: "success",
-      };
-
-      // Should not throw and not call DB
-      persistMessageResult(event);
-
-      expect(mockPrepare).not.toHaveBeenCalled();
-    });
-  });
 
   describe("persistMessageCancelled", () => {
     const event: MessageCancelledEvent = {
@@ -275,83 +110,122 @@ describe("agent-persistence", () => {
     });
   });
 
-  describe("persistMessagePartsFinished", () => {
-    const baseEvent: MessagePartsFinishedEvent = {
-      type: "message.parts_finished",
+  describe("persistPartDone", () => {
+    const textEvent: PartDoneEvent = {
+      type: "part.done",
       sessionId: "sess-1",
       agentType: "claude",
-      messageId: "msg-parts-1",
-      usage: { input: 100, output: 50 },
-      finishReason: "end_turn",
-      cost: 0.003,
+      messageId: "msg-1",
+      partId: "p1",
+      part: {
+        type: "TEXT",
+        id: "p1",
+        sessionId: "sess-1",
+        messageId: "msg-1",
+        text: "Hello!",
+      },
     };
 
-    const parts: Part[] = [
-      { type: "TEXT", id: "p1", sessionId: "sess-1", messageId: "msg-parts-1", text: "Hello!" },
-      {
-        type: "TOOL",
-        id: "p2",
-        sessionId: "sess-1",
-        messageId: "msg-parts-1",
-        toolCallId: "tc-1",
-        toolName: "bash",
-        state: {
-          status: "COMPLETED",
-          input: "ls",
-          output: "file.ts",
-          time: { start: "t0", end: "t1" },
-        },
-      },
-    ];
-
-    it("updates the most recent assistant message with parts JSON", () => {
-      const result = persistMessagePartsFinished(baseEvent, parts);
+    it("inserts a part row with correct parameters", () => {
+      const result = persistPartDone(textEvent);
 
       expect(result.ok).toBe(true);
+      if (result.ok) expect(result.value).toBe("p1");
       expect(mockPrepare).toHaveBeenCalledWith(
-        expect.stringContaining("UPDATE messages SET parts")
+        expect.stringContaining("INSERT OR REPLACE INTO parts")
       );
-
-      const partsArg = mockRun.mock.calls[0][0] as string;
-      const parsed = JSON.parse(partsArg);
-      expect(parsed.parts).toHaveLength(2);
-      expect(parsed.parts[0].type).toBe("TEXT");
-      expect(parsed.parts[1].type).toBe("TOOL");
-      expect(parsed.usage).toEqual({ input: 100, output: 50 });
-      expect(parsed.finishReason).toBe("end_turn");
-      expect(parsed.cost).toBe(0.003);
+      expect(mockRun).toHaveBeenCalledWith(
+        "p1", // id
+        "msg-1", // message_id
+        "sess-1", // session_id
+        0, // seq
+        "TEXT", // type
+        expect.any(String), // data (JSON)
+        null, // tool_call_id (not a TOOL part)
+        null, // tool_name (not a TOOL part)
+        null // parent_tool_call_id
+      );
     });
 
-    it("queries by session_id and role='assistant' ordered by seq DESC", () => {
-      persistMessagePartsFinished(baseEvent, parts);
+    it("stores the full part as JSON in data column", () => {
+      persistPartDone(textEvent);
 
-      const sql = mockPrepare.mock.calls[0][0] as string;
-      expect(sql).toContain("session_id = ?");
-      expect(sql).toContain("role = 'assistant'");
-      expect(sql).toContain("ORDER BY seq DESC LIMIT 1");
+      const dataArg = mockRun.mock.calls[0][5] as string;
+      const parsed = JSON.parse(dataArg);
+      expect(parsed.type).toBe("TEXT");
+      expect(parsed.text).toBe("Hello!");
+      expect(parsed.id).toBe("p1");
     });
 
-    it("passes sessionId as the WHERE parameter", () => {
-      persistMessagePartsFinished(baseEvent, parts);
-
-      expect(mockRun).toHaveBeenCalledWith(expect.any(String), "sess-1");
-    });
-
-    it("stores null for optional fields when absent", () => {
-      const minimalEvent: MessagePartsFinishedEvent = {
-        type: "message.parts_finished",
+    it("extracts toolCallId and toolName for TOOL parts", () => {
+      const toolEvent: PartDoneEvent = {
+        type: "part.done",
         sessionId: "sess-1",
         agentType: "claude",
-        messageId: "msg-parts-2",
-        usage: { input: 0, output: 0 },
+        messageId: "msg-1",
+        partId: "p2",
+        part: {
+          type: "TOOL",
+          id: "p2",
+          sessionId: "sess-1",
+          messageId: "msg-1",
+          toolCallId: "tc-1",
+          toolName: "bash",
+          state: {
+            status: "COMPLETED",
+            input: "ls",
+            output: "file.ts",
+            time: { start: "t0", end: "t1" },
+          },
+        },
       };
 
-      persistMessagePartsFinished(minimalEvent, []);
+      persistPartDone(toolEvent);
 
-      const partsArg = mockRun.mock.calls[0][0] as string;
-      const parsed = JSON.parse(partsArg);
-      expect(parsed.finishReason).toBeNull();
-      expect(parsed.cost).toBeNull();
+      expect(mockRun).toHaveBeenCalledWith(
+        "p2", // id
+        "msg-1", // message_id
+        "sess-1", // session_id
+        0, // seq
+        "TOOL", // type
+        expect.any(String), // data
+        "tc-1", // tool_call_id
+        "bash", // tool_name
+        null // parent_tool_call_id
+      );
+    });
+
+    it("stores parentToolCallId when present", () => {
+      const nestedEvent: PartDoneEvent = {
+        type: "part.done",
+        sessionId: "sess-1",
+        agentType: "claude",
+        messageId: "msg-1",
+        partId: "p3",
+        part: {
+          type: "TEXT",
+          id: "p3",
+          sessionId: "sess-1",
+          messageId: "msg-1",
+          text: "nested text",
+          parentToolCallId: "tc-parent",
+        },
+      };
+
+      persistPartDone(nestedEvent);
+
+      // parent_tool_call_id is the last argument
+      expect(mockRun).toHaveBeenCalledWith(
+        "p3",
+        "msg-1",
+        "sess-1",
+        0,
+        "TEXT",
+        expect.any(String),
+        null,
+        null,
+        "tc-parent"
+      );
     });
 
     it("returns error on DB failure", () => {
@@ -361,7 +235,63 @@ describe("agent-persistence", () => {
         }),
       });
 
-      const result = persistMessagePartsFinished(baseEvent, parts);
+      const result = persistPartDone(textEvent);
+
+      expect(result.ok).toBe(false);
+      if (!result.ok) expect(result.error).toContain("DB locked");
+    });
+  });
+
+  describe("persistMessageDone", () => {
+    const event: MessageDoneEvent = {
+      type: "message.done",
+      sessionId: "sess-1",
+      agentType: "claude",
+      messageId: "msg-1",
+      stopReason: "end_turn",
+      parts: [],
+    };
+
+    it("updates stop_reason on the message row", () => {
+      const result = persistMessageDone(event);
+
+      expect(result.ok).toBe(true);
+      if (result.ok) expect(result.value).toBe("msg-1");
+      expect(mockPrepare).toHaveBeenCalledWith(
+        expect.stringContaining("UPDATE messages SET stop_reason")
+      );
+      expect(mockRun).toHaveBeenCalledWith("end_turn", "msg-1");
+    });
+
+    it("matches on id column", () => {
+      persistMessageDone(event);
+
+      const sql = mockPrepare.mock.calls[0][0] as string;
+      expect(sql).toContain("WHERE id =");
+    });
+
+    it("stores null when stopReason is absent", () => {
+      const noReasonEvent: MessageDoneEvent = {
+        type: "message.done",
+        sessionId: "sess-1",
+        agentType: "claude",
+        messageId: "msg-2",
+        parts: [],
+      };
+
+      persistMessageDone(noReasonEvent);
+
+      expect(mockRun).toHaveBeenCalledWith(null, "msg-2");
+    });
+
+    it("returns error on DB failure", () => {
+      mockPrepare.mockReturnValue({
+        run: vi.fn(() => {
+          throw new Error("DB locked");
+        }),
+      });
+
+      const result = persistMessageDone(event);
 
       expect(result.ok).toBe(false);
       if (!result.ok) expect(result.error).toContain("DB locked");

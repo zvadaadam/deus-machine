@@ -23,6 +23,22 @@ export type {
 };
 
 /**
+ * Part row as sent by the backend (from the parts table).
+ * Each row's `data` field contains a JSON-stringified Part (TEXT, REASONING, TOOL, COMPACTION).
+ */
+export interface PartRow {
+  id: string;
+  message_id: string;
+  session_id: string;
+  seq: number;
+  type: string; // "TEXT" | "REASONING" | "TOOL" | "COMPACTION"
+  data: string; // JSON string of the full Part object
+  tool_call_id: string | null;
+  tool_name: string | null;
+  parent_tool_call_id: string | null;
+}
+
+/**
  * Base message entity
  * Core structure for all chat messages in a session
  * Matches the messages database table schema (id = UUID7, embeds created_at)
@@ -39,7 +55,7 @@ export interface Message {
   model?: string | null; // Claude model used (e.g., 'sonnet')
   agent_message_id?: string | null; // Agent SDK-provided message identifier
   parent_tool_use_id?: string | null; // Subagent parent task ID (promoted from JSON envelope)
-  parts?: string | null; // JSON-stringified MessagePartsEnvelope (unified Part[] + usage)
+  parts?: PartRow[]; // Part rows from the parts table (attached by backend via attachParts)
 }
 
 /**

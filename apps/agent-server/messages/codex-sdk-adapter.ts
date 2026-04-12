@@ -23,15 +23,8 @@ import type {
   ToolPart,
 } from "@shared/messages";
 import { emptyTokenUsage } from "@shared/messages";
-import type { Adapter, EventTransformer, StreamContext } from "./adapter";
-import {
-  completeToolPart,
-  createReasoningPart,
-  createStepFinishPart,
-  createStepStartPart,
-  createTextPart,
-  createToolPart,
-} from "./parts";
+import type { Adapter, EventTransformer, PartEvent, StreamContext } from "./adapter";
+import { completeToolPart, createReasoningPart, createTextPart, createToolPart } from "./parts";
 
 // ---------------------------------------------------------------------------
 // CodexSdkTransformer
@@ -41,7 +34,7 @@ class CodexSdkTransformer implements EventTransformer<ThreadEvent> {
   private ctx: StreamContext;
   private parts = new Map<string, Part>();
   private itemParts = new Map<string, string>(); // item.id → part.id
-  private prevText = new Map<string, string>(); // item.id → last seen text
+  private prevTextLength = new Map<string, number>(); // item.id → last emitted text length
   private totalUsage: TokenUsage = { ...emptyTokenUsage };
   private lastFinishReason: FinishReason | undefined;
 
@@ -49,7 +42,9 @@ class CodexSdkTransformer implements EventTransformer<ThreadEvent> {
     this.ctx = ctx;
   }
 
-  process(event: ThreadEvent): Part[] {
+  private turnCompletedEmitted = false;
+
+  process(event: ThreadEvent): PartEvent[] {
     switch (event.type) {
       case "thread.started":
         return [];
@@ -70,12 +65,17 @@ class CodexSdkTransformer implements EventTransformer<ThreadEvent> {
     }
   }
 
-  finish(): { parts: Part[]; usage: TokenUsage; finishReason?: FinishReason } {
-    return {
-      parts: this.getParts(),
-      usage: this.totalUsage,
-      finishReason: this.lastFinishReason,
-    };
+  finish(): { events: PartEvent[]; parts: Part[]; usage: TokenUsage; cost?: number } {
+    const events: PartEvent[] = [];
+    if (!this.turnCompletedEmitted) {
+      events.push({
+        type: "turn.completed",
+        turnId: this.ctx.turnId,
+        finishReason: this.lastFinishReason,
+        tokens: { ...this.totalUsage },
+      });
+    }
+    return { events, parts: this.getParts(), usage: this.totalUsage };
   }
 
   getParts(): Part[] {
@@ -86,43 +86,58 @@ class CodexSdkTransformer implements EventTransformer<ThreadEvent> {
   // Turn lifecycle
   // -------------------------------------------------------------------------
 
-  private handleTurnStarted(): Part[] {
-    const part = createStepStartPart(this.ctx.sessionId, this.ctx.messageId);
-    this.parts.set(part.id, part);
-    return [part];
+  private handleTurnStarted(): PartEvent[] {
+    return [
+      { type: "turn.started", turnId: this.ctx.turnId },
+      { type: "message.created", messageId: this.ctx.messageId, role: "assistant" },
+    ];
   }
 
-  private handleTurnCompleted(usage: Usage): Part[] {
+  private handleTurnCompleted(usage: Usage): PartEvent[] {
     this.totalUsage = {
       input: this.totalUsage.input + usage.input_tokens,
       output: this.totalUsage.output + usage.output_tokens,
       cacheRead: (this.totalUsage.cacheRead ?? 0) + usage.cached_input_tokens,
     };
     this.lastFinishReason = "end_turn";
+    this.turnCompletedEmitted = true;
 
-    const part = createStepFinishPart(this.ctx.sessionId, this.ctx.messageId, {
-      finishReason: "end_turn",
-      tokens: { ...this.totalUsage },
-    });
-    this.parts.set(part.id, part);
-    return [part];
+    return [
+      {
+        type: "message.done",
+        messageId: this.ctx.messageId,
+        stopReason: "end_turn",
+        parts: this.getParts(),
+      },
+      {
+        type: "turn.completed",
+        turnId: this.ctx.turnId,
+        finishReason: "end_turn",
+        tokens: { ...this.totalUsage },
+      },
+    ];
   }
 
-  private handleTurnFailed(): Part[] {
+  private handleTurnFailed(): PartEvent[] {
     this.lastFinishReason = "error";
+    this.turnCompletedEmitted = true;
 
-    const part = createStepFinishPart(this.ctx.sessionId, this.ctx.messageId, {
-      finishReason: "error",
-    });
-    this.parts.set(part.id, part);
-    return [part];
+    return [
+      {
+        type: "message.done",
+        messageId: this.ctx.messageId,
+        stopReason: "error",
+        parts: this.getParts(),
+      },
+      { type: "turn.completed", turnId: this.ctx.turnId, finishReason: "error" },
+    ];
   }
 
   // -------------------------------------------------------------------------
   // Item lifecycle dispatch
   // -------------------------------------------------------------------------
 
-  private handleItemStarted(item: ThreadItem): Part[] {
+  private handleItemStarted(item: ThreadItem): PartEvent[] {
     switch (item.type) {
       case "agent_message":
         return this.upsertTextPart(item.id, item.text, "STREAMING");
@@ -141,7 +156,7 @@ class CodexSdkTransformer implements EventTransformer<ThreadEvent> {
     }
   }
 
-  private handleItemUpdated(item: ThreadItem): Part[] {
+  private handleItemUpdated(item: ThreadItem): PartEvent[] {
     switch (item.type) {
       case "agent_message":
         return this.upsertTextPart(item.id, item.text, "STREAMING");
@@ -152,7 +167,7 @@ class CodexSdkTransformer implements EventTransformer<ThreadEvent> {
     }
   }
 
-  private handleItemCompleted(item: ThreadItem): Part[] {
+  private handleItemCompleted(item: ThreadItem): PartEvent[] {
     switch (item.type) {
       case "agent_message":
         return this.upsertTextPart(item.id, item.text, "DONE");
@@ -175,7 +190,7 @@ class CodexSdkTransformer implements EventTransformer<ThreadEvent> {
   // Text
   // -------------------------------------------------------------------------
 
-  private upsertTextPart(itemId: string, text: string, state: "STREAMING" | "DONE"): Part[] {
+  private upsertTextPart(itemId: string, text: string, state: "STREAMING" | "DONE"): PartEvent[] {
     const partId = this.itemParts.get(itemId);
 
     if (partId) {
@@ -183,25 +198,40 @@ class CodexSdkTransformer implements EventTransformer<ThreadEvent> {
       if (existing && existing.type === "TEXT") {
         const updated: Part = { ...existing, text, state };
         this.parts.set(partId, updated);
-        if (state === "DONE") this.prevText.delete(itemId);
-        else this.prevText.set(itemId, text);
-        return [updated];
+
+        if (state === "DONE") {
+          this.prevTextLength.delete(itemId);
+          return [{ type: "part.done", part: updated }];
+        }
+
+        const prevLen = this.prevTextLength.get(itemId) ?? 0;
+        const deltaText = text.slice(prevLen);
+        this.prevTextLength.set(itemId, text.length);
+        return [{ type: "part.delta", partId: updated.id, delta: deltaText }];
       }
     }
 
     const part = createTextPart(this.ctx.sessionId, this.ctx.messageId, text, state);
     this.parts.set(part.id, part);
     this.itemParts.set(itemId, part.id);
-    this.prevText.set(itemId, text);
-    if (state === "DONE") this.prevText.delete(itemId);
-    return [part];
+
+    if (state === "DONE") {
+      this.prevTextLength.delete(itemId);
+      return [{ type: "part.done", part }];
+    }
+    this.prevTextLength.set(itemId, text.length);
+    return [{ type: "part.created", part }];
   }
 
   // -------------------------------------------------------------------------
   // Reasoning
   // -------------------------------------------------------------------------
 
-  private upsertReasoningPart(itemId: string, text: string, state: "STREAMING" | "DONE"): Part[] {
+  private upsertReasoningPart(
+    itemId: string,
+    text: string,
+    state: "STREAMING" | "DONE"
+  ): PartEvent[] {
     const partId = this.itemParts.get(itemId);
 
     if (partId) {
@@ -209,25 +239,36 @@ class CodexSdkTransformer implements EventTransformer<ThreadEvent> {
       if (existing && existing.type === "REASONING") {
         const updated: Part = { ...existing, text, state };
         this.parts.set(partId, updated);
-        if (state === "DONE") this.prevText.delete(itemId);
-        else this.prevText.set(itemId, text);
-        return [updated];
+
+        if (state === "DONE") {
+          this.prevTextLength.delete(itemId);
+          return [{ type: "part.done", part: updated }];
+        }
+
+        const prevLen = this.prevTextLength.get(itemId) ?? 0;
+        const deltaText = text.slice(prevLen);
+        this.prevTextLength.set(itemId, text.length);
+        return [{ type: "part.delta", partId: updated.id, delta: deltaText }];
       }
     }
 
     const part = createReasoningPart(this.ctx.sessionId, this.ctx.messageId, text, state);
     this.parts.set(part.id, part);
     this.itemParts.set(itemId, part.id);
-    if (state === "DONE") this.prevText.delete(itemId);
-    else this.prevText.set(itemId, text);
-    return [part];
+
+    if (state === "DONE") {
+      this.prevTextLength.delete(itemId);
+      return [{ type: "part.done", part }];
+    }
+    this.prevTextLength.set(itemId, text.length);
+    return [{ type: "part.created", part }];
   }
 
   // -------------------------------------------------------------------------
   // Shell commands -> ToolPart (kind: "bash")
   // -------------------------------------------------------------------------
 
-  private startCommandPart(item: CommandExecutionItem): Part[] {
+  private startCommandPart(item: CommandExecutionItem): PartEvent[] {
     const part = createToolPart(this.ctx.sessionId, this.ctx.messageId, {
       toolCallId: item.id,
       toolName: "shell",
@@ -243,10 +284,10 @@ class CodexSdkTransformer implements EventTransformer<ThreadEvent> {
 
     this.parts.set(part.id, part);
     this.itemParts.set(item.id, part.id);
-    return [part];
+    return [{ type: "part.created", part }];
   }
 
-  private completeCommandPart(item: CommandExecutionItem): Part[] {
+  private completeCommandPart(item: CommandExecutionItem): PartEvent[] {
     const partId = this.itemParts.get(item.id);
     if (!partId) return [];
 
@@ -275,14 +316,14 @@ class CodexSdkTransformer implements EventTransformer<ThreadEvent> {
     }
 
     this.parts.set(partId, updated);
-    return [updated];
+    return [{ type: "part.done", part: updated }];
   }
 
   // -------------------------------------------------------------------------
   // File changes -> ToolPart (kind: "write")
   // -------------------------------------------------------------------------
 
-  private startFileChangePart(item: FileChangeItem): Part[] {
+  private startFileChangePart(item: FileChangeItem): PartEvent[] {
     const paths = item.changes.map((c) => c.path);
     const title = paths.length === 1 ? `Edit ${paths[0]}` : `Edit ${paths.length} files`;
 
@@ -302,10 +343,10 @@ class CodexSdkTransformer implements EventTransformer<ThreadEvent> {
 
     this.parts.set(part.id, part);
     this.itemParts.set(item.id, part.id);
-    return [part];
+    return [{ type: "part.created", part }];
   }
 
-  private completeFileChangePart(item: FileChangeItem): Part[] {
+  private completeFileChangePart(item: FileChangeItem): PartEvent[] {
     const partId = this.itemParts.get(item.id);
     if (!partId) return [];
 
@@ -327,14 +368,14 @@ class CodexSdkTransformer implements EventTransformer<ThreadEvent> {
     }
 
     this.parts.set(partId, updated);
-    return [updated];
+    return [{ type: "part.done", part: updated }];
   }
 
   // -------------------------------------------------------------------------
   // MCP tool calls -> ToolPart (kind: "mcp")
   // -------------------------------------------------------------------------
 
-  private startMcpPart(item: McpToolCallItem): Part[] {
+  private startMcpPart(item: McpToolCallItem): PartEvent[] {
     const toolName = `${item.server}/${item.tool}`;
     const part = createToolPart(this.ctx.sessionId, this.ctx.messageId, {
       toolCallId: item.id,
@@ -351,10 +392,10 @@ class CodexSdkTransformer implements EventTransformer<ThreadEvent> {
 
     this.parts.set(part.id, part);
     this.itemParts.set(item.id, part.id);
-    return [part];
+    return [{ type: "part.created", part }];
   }
 
-  private completeMcpPart(item: McpToolCallItem): Part[] {
+  private completeMcpPart(item: McpToolCallItem): PartEvent[] {
     const partId = this.itemParts.get(item.id);
     if (!partId) return [];
 
@@ -366,7 +407,7 @@ class CodexSdkTransformer implements EventTransformer<ThreadEvent> {
 
     const updated = completeToolPart(existing, output, isError);
     this.parts.set(partId, updated);
-    return [updated];
+    return [{ type: "part.done", part: updated }];
   }
 }
 

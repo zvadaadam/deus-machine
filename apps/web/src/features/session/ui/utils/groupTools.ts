@@ -139,6 +139,15 @@ export function groupMessageToolStreaks(
   };
 
   for (const msg of messages) {
+    // Parts-based messages render internally via PartsRenderer — skip grouping.
+    // They contain all content (text + tools) in one message, unlike the legacy
+    // model where each tool call was a separate message row.
+    if (msg.parts && msg.parts.length > 0) {
+      flushStreak();
+      result.push({ kind: "message", message: msg });
+      continue;
+    }
+
     const blocks = parseContent(msg.content);
 
     if (!Array.isArray(blocks) || blocks.length === 0) {

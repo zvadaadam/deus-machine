@@ -24,8 +24,23 @@ export const MIGRATIONS: string[] = [
   // workspaces: Workflow status (backlog/in-progress/in-review/done/canceled)
   `ALTER TABLE workspaces ADD COLUMN status TEXT NOT NULL DEFAULT 'in-progress'`,
   `CREATE INDEX IF NOT EXISTS idx_workspaces_status ON workspaces(status)`,
-  // messages: unified Parts data (JSON) alongside legacy content column
-  `ALTER TABLE messages ADD COLUMN parts TEXT`,
+  // messages: stop_reason column (replaces old parts JSON column)
+  `ALTER TABLE messages ADD COLUMN stop_reason TEXT`,
+  // parts: separate table for part persistence (append-only)
+  `CREATE TABLE IF NOT EXISTS parts (
+    id TEXT PRIMARY KEY NOT NULL,
+    message_id TEXT NOT NULL REFERENCES messages(id) ON DELETE CASCADE,
+    session_id TEXT NOT NULL,
+    seq INTEGER NOT NULL DEFAULT 0,
+    type TEXT NOT NULL,
+    data TEXT NOT NULL DEFAULT '{}',
+    tool_call_id TEXT,
+    tool_name TEXT,
+    parent_tool_call_id TEXT
+  )`,
+  `CREATE INDEX IF NOT EXISTS idx_parts_message_id ON parts(message_id, seq)`,
+  `CREATE INDEX IF NOT EXISTS idx_parts_session_type ON parts(session_id, type)`,
+  `CREATE INDEX IF NOT EXISTS idx_parts_tool_call_id ON parts(tool_call_id)`,
 ];
 
 export const SCHEMA_SQL = `
@@ -95,7 +110,21 @@ export const SCHEMA_SQL = `
     sent_at TEXT,
     cancelled_at TEXT,
     parent_tool_use_id TEXT,
-    parts TEXT
+    stop_reason TEXT
+  );
+
+  -- Parts: individual content units within assistant messages.
+  -- Each part.done event → one INSERT. Append-only, crash-safe.
+  CREATE TABLE IF NOT EXISTS parts (
+    id TEXT PRIMARY KEY NOT NULL,
+    message_id TEXT NOT NULL REFERENCES messages(id) ON DELETE CASCADE,
+    session_id TEXT NOT NULL,
+    seq INTEGER NOT NULL DEFAULT 0,
+    type TEXT NOT NULL,
+    data TEXT NOT NULL DEFAULT '{}',
+    tool_call_id TEXT,
+    tool_name TEXT,
+    parent_tool_call_id TEXT
   );
 
   -- Paired devices for remote access authentication
@@ -119,6 +148,9 @@ export const SCHEMA_SQL = `
   CREATE INDEX IF NOT EXISTS idx_messages_session_role ON messages(session_id, role, id DESC);
   CREATE INDEX IF NOT EXISTS idx_messages_turn_id ON messages(session_id, turn_id);
   CREATE INDEX IF NOT EXISTS idx_messages_parent_tool_use ON messages(parent_tool_use_id);
+  CREATE INDEX IF NOT EXISTS idx_parts_message_id ON parts(message_id, seq);
+  CREATE INDEX IF NOT EXISTS idx_parts_session_type ON parts(session_id, type);
+  CREATE INDEX IF NOT EXISTS idx_parts_tool_call_id ON parts(tool_call_id);
   CREATE INDEX IF NOT EXISTS idx_paired_devices_token_hash ON paired_devices(token_hash);
 
   -- Triggers: auto-update updated_at (3)

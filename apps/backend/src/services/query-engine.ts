@@ -24,6 +24,7 @@ import {
   getWorkspacesByRepo,
   getWorkspacesBySessionIds,
   getAllRepositorySummaries,
+  attachParts,
 } from "../db";
 import { computeWorkspacePath } from "../middleware/workspace-loader";
 import { getConnection } from "./ws.service";
@@ -457,7 +458,7 @@ function runQuery(resource: QueryResource, params: QueryParams): unknown {
       const hasNewer =
         rows.length > 0 ? hasNewerMessages(db, sessionId, rows[rows.length - 1].seq) : false;
 
-      return { messages: rows, has_older: hasOlder, has_newer: hasNewer };
+      return { messages: attachParts(db, rows), has_older: hasOlder, has_newer: hasNewer };
     })
     .exhaustive();
 }
@@ -688,7 +689,7 @@ function pushMessageDelta(connectionId: string, subId: string, params: QueryPara
     sendFrame(connectionId, {
       type: "q:delta",
       id: subId,
-      upserted: newMessages,
+      upserted: attachParts(db, newMessages),
       cursor: maxSeq,
     });
   } catch (err) {

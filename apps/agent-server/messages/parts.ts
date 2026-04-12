@@ -6,16 +6,12 @@ import type {
   CompactionPart,
   CompletedToolState,
   ErrorToolState,
-  FinishReason,
   PendingToolState,
   ReasoningPart,
   RunningToolState,
   RuntimeToolState,
-  StepFinishPart,
-  StepStartPart,
   SubagentMetadata,
   TextPart,
-  TokenUsage,
   ToolKind,
   ToolPart,
 } from "@shared/messages";
@@ -79,26 +75,6 @@ export function createPendingToolPart(
   });
 }
 
-export function createStepStartPart(sessionId: string, messageId: string): StepStartPart {
-  return { id: uuidv7(), sessionId, messageId, type: "STEP_START" };
-}
-
-export function createStepFinishPart(
-  sessionId: string,
-  messageId: string,
-  opts?: { finishReason?: FinishReason; tokens?: TokenUsage; cost?: number }
-): StepFinishPart {
-  return {
-    id: uuidv7(),
-    sessionId,
-    messageId,
-    type: "STEP_FINISH",
-    finishReason: opts?.finishReason,
-    tokens: opts?.tokens,
-    cost: opts?.cost,
-  };
-}
-
 export function createCompactionPart(
   sessionId: string,
   messageId: string,
@@ -122,14 +98,6 @@ export function startToolPart(part: ToolPart, input: unknown, title?: string): T
       title,
       time: { start: new Date().toISOString() },
     } satisfies RunningToolState,
-  };
-}
-
-export function appendToolInput(part: ToolPart, delta: string): ToolPart {
-  if (part.state.status !== "PENDING") return part;
-  return {
-    ...part,
-    state: { ...part.state, partialInput: part.state.partialInput + delta },
   };
 }
 

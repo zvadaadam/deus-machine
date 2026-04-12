@@ -194,14 +194,8 @@ export class CodexAgentHandler implements AgentHandler {
         ghToken: options?.ghToken,
       });
 
-      // Extract API key from environment
+      // API key from environment (optional — Codex CLI also supports `codex login` auth)
       const apiKey = env.OPENAI_API_KEY || env.CODEX_API_KEY;
-      if (!apiKey) {
-        throw new Error(
-          "OPENAI_API_KEY or CODEX_API_KEY not found in environment. " +
-            "Set it in Settings → Environment Variables."
-        );
-      }
 
       const model = resolveCodexModel(options?.model);
       const codexPath = getCodexExecutablePath();
@@ -241,73 +235,33 @@ export class CodexAgentHandler implements AgentHandler {
 
       // Unified Part transformer: runs alongside the legacy event path.
       const messageId = uuidv7();
-      const transformer = codexSdkAdapter.createTransformer({ sessionId, messageId });
+      const transformer = codexSdkAdapter.createTransformer({
+        sessionId,
+        messageId,
+        turnId: options.turnId,
+      });
 
       for await (const event of events) {
         if (abortController.signal.aborted) break;
 
-        // Dual-write: transform into Parts and emit alongside legacy events
-        const parts = transformer.process(event as ThreadEvent);
-        EventBroadcaster.emitMessageParts(sessionId, "codex", messageId, parts);
+        // Transform into PartEvents and emit each individually
+        const partEvents = transformer.process(event as ThreadEvent);
+        for (const evt of partEvents) {
+          EventBroadcaster.emitPartEvent(sessionId, "codex", messageId, evt);
+        }
 
         match(event)
           .with({ type: "thread.started" }, (e) => {
             session.threadId = e.thread_id;
             console.log(`[${queryId}] Thread started: ${e.thread_id}`);
           })
-          .with({ type: P.union("item.started", "item.updated", "item.completed") }, (e) => {
-            const blocks = mapItemToContentBlocks(e.item);
-            if (blocks.length === 0) return;
-
-            // Stable ID per item — same across started/updated/completed phases
-            const msgId = `codex-${e.item.id}`;
-
-            // Send real-time update to frontend (every event, not just completed)
-            EventBroadcaster.sendMessage({
-              id: sessionId,
-              type: "message",
-              agentType: "codex",
-              data: {
-                type: "assistant" as const,
-                message: {
-                  id: msgId,
-                  role: "assistant" as const,
-                  content: blocks,
-                },
-              },
-            });
-
-            // Only emit canonical event on item.completed to avoid duplicate DB records
-            if (e.type === "item.completed") {
-              EventBroadcaster.emitAssistantMessage(
-                sessionId,
-                "codex",
-                {
-                  id: msgId,
-                  role: "assistant",
-                  content: blocks,
-                },
-                model
-              );
-            }
+          .with({ type: P.union("item.started", "item.updated", "item.completed") }, () => {
+            // Content handled by Part events via the transformer
           })
           .with({ type: "turn.completed" }, (e) => {
             console.log(
               `[${queryId}] Turn completed. Tokens: in=${e.usage.input_tokens}, out=${e.usage.output_tokens}`
             );
-
-            EventBroadcaster.sendMessage({
-              id: sessionId,
-              type: "message",
-              agentType: "codex",
-              data: {
-                type: "result",
-                subtype: "success",
-                usage: e.usage,
-              },
-            });
-
-            // Emit canonical events — backend handles DB status update
             EventBroadcaster.emitMessageResult(sessionId, "codex", "success", e.usage);
             EventBroadcaster.emitSessionIdle(sessionId, "codex");
           })
@@ -333,16 +287,11 @@ export class CodexAgentHandler implements AgentHandler {
           });
       }
 
-      // Finalize the transformer: close open parts, emit usage
+      // Finalize the transformer: close open parts, emit turn.completed
       const finished = transformer.finish();
-      EventBroadcaster.emitMessagePartsFinished(
-        sessionId,
-        "codex",
-        messageId,
-        finished.usage,
-        undefined,
-        finished.finishReason
-      );
+      for (const evt of finished.events) {
+        EventBroadcaster.emitPartEvent(sessionId, "codex", messageId, evt);
+      }
 
       // Only update status if this processQuery still owns the session —
       // a rapid re-query can replace the session before we reach this point.
