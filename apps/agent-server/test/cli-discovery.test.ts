@@ -279,7 +279,7 @@ describe("blockIfNotInitialized", () => {
     vi.clearAllMocks();
   });
 
-  it("returns true and sends error when initialization failed", () => {
+  it("returns true and emits session error when initialization failed", () => {
     const state: DiscoveryState = {
       executablePath: "",
       result: { success: false, error: "Not found" },
@@ -288,14 +288,11 @@ describe("blockIfNotInitialized", () => {
     const blocked = blockIfNotInitialized(state, "claude", "session-1");
 
     expect(blocked).toBe(true);
-    expect(mockSendError).toHaveBeenCalledWith(
-      expect.objectContaining({
-        id: "session-1",
-        type: "error",
-        agentType: "claude",
-        category: "internal",
-        error: expect.stringContaining("Not found"),
-      })
+    expect(mockEmitSessionError).toHaveBeenCalledWith(
+      "session-1",
+      "claude",
+      expect.stringContaining("Not found"),
+      "internal"
     );
   });
 
@@ -321,23 +318,24 @@ describe("blockIfNotInitialized", () => {
     const blocked = blockIfNotInitialized(state, "codex", "session-2");
 
     expect(blocked).toBe(true);
-    expect(mockSendError).toHaveBeenCalled();
+    expect(mockEmitSessionError).toHaveBeenCalled();
   });
 
-  it("still emits session error event when sendError throws", () => {
+  it("emits session error event even if first emit throws", () => {
     const state: DiscoveryState = {
       executablePath: "",
       result: { success: false, error: "Not found" },
     };
 
-    mockSendError.mockImplementationOnce(() => {
+    // First emitSessionError call throws — second should still succeed
+    mockEmitSessionError.mockImplementationOnce(() => {
       throw new Error("No tunnel attached");
     });
 
     const blocked = blockIfNotInitialized(state, "claude", "session-1");
 
     expect(blocked).toBe(true);
-    // emitSessionError must still be called despite sendError throwing
+    // emitSessionError is called twice (wrapped in try/catch), so at least one succeeds
     expect(mockEmitSessionError).toHaveBeenCalledWith(
       "session-1",
       "claude",
@@ -355,6 +353,6 @@ describe("blockIfNotInitialized", () => {
     const blocked = blockIfNotInitialized(state, "claude", "session-3");
 
     expect(blocked).toBe(false);
-    expect(mockSendError).not.toHaveBeenCalled();
+    expect(mockEmitSessionError).not.toHaveBeenCalled();
   });
 });

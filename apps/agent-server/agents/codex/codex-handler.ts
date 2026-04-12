@@ -8,9 +8,11 @@
 // The runtime Codex class is loaded via dynamic import() in processQuery()
 // because @openai/codex-sdk is ESM-only and uses import.meta.url at module
 // init, which can't be shimmed in esbuild's CJS output.
-import type { ThreadItem, ThreadOptions } from "@openai/codex-sdk";
+import type { ThreadEvent, ThreadItem, ThreadOptions } from "@openai/codex-sdk";
 import { match, P } from "ts-pattern";
+import { uuidv7 } from "@shared/lib/uuid";
 import { EventBroadcaster } from "../../event-broadcaster";
+import { codexSdkAdapter } from "../../messages/codex-sdk-adapter";
 import { classifyError, handleCancellation, handleQueryError } from "../lifecycle";
 import type { AgentCapabilities, AgentHandler, QueryOptions } from "../registry";
 import { buildAgentEnvironment, buildWorkspaceContext } from "../environment";
@@ -192,14 +194,8 @@ export class CodexAgentHandler implements AgentHandler {
         ghToken: options?.ghToken,
       });
 
-      // Extract API key from environment
+      // API key from environment (optional — Codex CLI also supports `codex login` auth)
       const apiKey = env.OPENAI_API_KEY || env.CODEX_API_KEY;
-      if (!apiKey) {
-        throw new Error(
-          "OPENAI_API_KEY or CODEX_API_KEY not found in environment. " +
-            "Set it in Settings → Environment Variables."
-        );
-      }
 
       const model = resolveCodexModel(options?.model);
       const codexPath = getCodexExecutablePath();
@@ -237,68 +233,35 @@ export class CodexAgentHandler implements AgentHandler {
         signal: abortController.signal,
       });
 
+      // Unified Part transformer: runs alongside the legacy event path.
+      const messageId = uuidv7();
+      const transformer = codexSdkAdapter.createTransformer({
+        sessionId,
+        messageId,
+        turnId: options.turnId,
+      });
+
       for await (const event of events) {
         if (abortController.signal.aborted) break;
+
+        // Transform into PartEvents and emit each individually
+        const partEvents = transformer.process(event as ThreadEvent);
+        for (const evt of partEvents) {
+          EventBroadcaster.emitPartEvent(sessionId, "codex", messageId, evt);
+        }
 
         match(event)
           .with({ type: "thread.started" }, (e) => {
             session.threadId = e.thread_id;
             console.log(`[${queryId}] Thread started: ${e.thread_id}`);
           })
-          .with({ type: P.union("item.started", "item.updated", "item.completed") }, (e) => {
-            const blocks = mapItemToContentBlocks(e.item);
-            if (blocks.length === 0) return;
-
-            // Stable ID per item — same across started/updated/completed phases
-            const msgId = `codex-${e.item.id}`;
-
-            // Send real-time update to frontend (every event, not just completed)
-            EventBroadcaster.sendMessage({
-              id: sessionId,
-              type: "message",
-              agentType: "codex",
-              data: {
-                type: "assistant" as const,
-                message: {
-                  id: msgId,
-                  role: "assistant" as const,
-                  content: blocks,
-                },
-              },
-            });
-
-            // Only emit canonical event on item.completed to avoid duplicate DB records
-            if (e.type === "item.completed") {
-              EventBroadcaster.emitAssistantMessage(
-                sessionId,
-                "codex",
-                {
-                  id: msgId,
-                  role: "assistant",
-                  content: blocks,
-                },
-                model
-              );
-            }
+          .with({ type: P.union("item.started", "item.updated", "item.completed") }, () => {
+            // Content handled by Part events via the transformer
           })
           .with({ type: "turn.completed" }, (e) => {
             console.log(
               `[${queryId}] Turn completed. Tokens: in=${e.usage.input_tokens}, out=${e.usage.output_tokens}`
             );
-
-            EventBroadcaster.sendMessage({
-              id: sessionId,
-              type: "message",
-              agentType: "codex",
-              data: {
-                type: "result",
-                subtype: "success",
-                usage: e.usage,
-              },
-            });
-
-            // Emit canonical events — backend handles DB status update
-            EventBroadcaster.emitMessageResult(sessionId, "codex", "success", e.usage);
             EventBroadcaster.emitSessionIdle(sessionId, "codex");
           })
           .with({ type: "turn.failed" }, (e) => {
@@ -321,6 +284,12 @@ export class CodexAgentHandler implements AgentHandler {
             // External SDK types can gain new variants — gracefully skip unknown events
             console.warn(`[codex] Unknown ThreadEvent type: ${(e as any).type}`);
           });
+      }
+
+      // Finalize the transformer: close open parts, emit turn.completed
+      const finished = transformer.finish();
+      for (const evt of finished.events) {
+        EventBroadcaster.emitPartEvent(sessionId, "codex", messageId, evt);
       }
 
       // Only update status if this processQuery still owns the session —

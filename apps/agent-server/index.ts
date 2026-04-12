@@ -219,13 +219,6 @@ class AgentServer {
         .catch((err) => {
           console.error(`[turn/start] Unhandled error in ${agentType} query:`, err);
           const classified = classifyError(err);
-          EventBroadcaster.sendError({
-            id: sessionId,
-            type: "error",
-            error: classified.message,
-            agentType,
-            category: classified.category,
-          });
           EventBroadcaster.emitSessionError(
             sessionId,
             agentType,

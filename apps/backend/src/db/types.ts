@@ -129,6 +129,24 @@ export interface MessageRow {
   sent_at: string | null;
   cancelled_at: string | null;
   parent_tool_use_id: string | null;
+  stop_reason: string | null;
+}
+
+export interface PartRow {
+  id: string;
+  message_id: string;
+  session_id: string;
+  seq: number;
+  type: string;
+  data: string;
+  tool_call_id: string | null;
+  tool_name: string | null;
+  parent_tool_call_id: string | null;
+}
+
+/** MessageRow enriched with its parts from the parts table. */
+export interface MessageRowWithParts extends MessageRow {
+  parts: PartRow[];
 }
 
 // ─── stats ───────────────────────────────────────────────────

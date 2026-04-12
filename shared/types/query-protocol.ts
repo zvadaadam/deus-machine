@@ -172,3 +172,17 @@ export type QServerFrame =
  *  Derived from the canonical ToolRequestEvent (shared/agent-events.ts) minus the
  *  discriminator field — the WS frame wraps this in q:event, not as a standalone event. */
 export type ToolRequestEventData = Omit<import("../agent-events").ToolRequestEvent, "type">;
+
+// ---- Part Lifecycle Event Payloads ----
+
+/** Payload shape for q:event with event: "part:created".
+ *  Pushed by the backend when a new part begins streaming. */
+export type PartCreatedEventData = Omit<import("../agent-events").PartCreatedEvent, "type">;
+
+/** Payload shape for q:event with event: "part:delta".
+ *  Pushed by the backend for each streaming text token. High-frequency, not persisted. */
+export type PartDeltaEventData = Omit<import("../agent-events").PartDeltaEvent, "type">;
+
+/** Payload shape for q:event with event: "part:done".
+ *  Pushed by the backend when a part is finalized. Also persisted to DB. */
+export type PartDoneEventData = Omit<import("../agent-events").PartDoneEvent, "type">;

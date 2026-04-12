@@ -226,6 +226,9 @@ export function Chat({
       // Skip subagent messages — they render nested under Task tool blocks
       if (parentToolUseMap.has(message.id)) return false;
 
+      // Messages with parts always render (new unified model)
+      if (message.parts && message.parts.length > 0) return true;
+
       // Keep cancellation sentinels — they trigger "Response stopped" in AssistantTurn
       if (isCancelledMessage(message.content)) return true;
 
@@ -245,10 +248,10 @@ export function Chat({
   /**
    * Derive agent sub-state from the last content block in the message stream.
    * Maps to CircularPixelGrid animation variant:
-   * - thinking: last block is ThinkingBlock (extended reasoning)
-   * - generating: last block is TextBlock (streaming text)
-   * - toolExecuting: last block is ToolUseBlock with no result yet
-   * - error: last tool result has is_error=true
+   * - thinking: last block is ThinkingBlock / REASONING part
+   * - generating: last block is TextBlock / TEXT part
+   * - toolExecuting: last block is ToolUseBlock with no result / TOOL part PENDING/RUNNING
+   * - error: last tool result has is_error / TOOL part ERROR
    */
   const agentSubState = useMemo((): CircularPixelGridVariant => {
     if (sessionStatus !== "working") return "generating";
@@ -257,6 +260,31 @@ export function Chat({
       const msg = renderableMessages[i];
       if (msg.role !== "assistant") continue;
 
+      // Parts-based detection (new unified model)
+      if (msg.parts && msg.parts.length > 0) {
+        // Find the last part by seq order
+        const sorted = [...msg.parts].sort((a, b) => a.seq - b.seq);
+        const lastPart = sorted[sorted.length - 1];
+        if (!lastPart) return "generating";
+
+        return match(lastPart.type)
+          .with("REASONING", () => "thinking" as const)
+          .with("TEXT", () => "generating" as const)
+          .with("TOOL", () => {
+            try {
+              const data = JSON.parse(lastPart.data);
+              const status = data?.state?.status;
+              if (status === "ERROR") return "error" as const;
+              if (status === "PENDING" || status === "RUNNING") return "toolExecuting" as const;
+              return "generating" as const;
+            } catch {
+              return "toolExecuting" as const;
+            }
+          })
+          .otherwise(() => "generating" as const);
+      }
+
+      // Legacy content-based detection (fallback)
       const blocks = parseContent(msg.content);
       if (!Array.isArray(blocks) || blocks.length === 0) continue;
 

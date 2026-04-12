@@ -5,6 +5,7 @@
 import { query as claudeSDK, type PermissionMode } from "@anthropic-ai/claude-agent-sdk";
 import * as fs from "fs";
 import { getErrorMessage } from "@shared/lib/errors";
+import { uuidv7 } from "@shared/lib/uuid";
 import { createCheckpoint } from "./checkpoint";
 import { AsyncQueue } from "../async-queue";
 import { createStreamContext } from "./stream-context";
@@ -14,6 +15,9 @@ import {
   processMessage,
   type ProcessMessageOptions,
 } from "./message-processor";
+import { EventBroadcaster } from "../../event-broadcaster";
+import { claudeCodeAdapter } from "../../messages/claude-adapter";
+import type { ClaudeCodeEvent } from "../../messages/claude-events";
 import type {
   AgentCapabilities,
   AgentHandler,
@@ -125,6 +129,7 @@ export class ClaudeAgentHandler implements AgentHandler {
 
     if (session) {
       session.turnId = options.turnId;
+      session.turnVersion += 1;
       session.cwd = options.cwd;
     }
 
@@ -204,6 +209,7 @@ export class ClaudeAgentHandler implements AgentHandler {
         currentModel: options.model,
         currentMaxThinkingTokens: options.maxThinkingTokens,
         turnId: options.turnId,
+        turnVersion: 1,
         cwd: options.cwd,
       };
       claudeSessions.set(sessionId, newSession);
@@ -490,9 +496,40 @@ export class ClaudeAgentHandler implements AgentHandler {
         isResume: !!options.resume,
       };
 
+      // Unified Part transformer: runs alongside the legacy event path.
+      // Each SDK event is fed through the transformer, producing PartEvents
+      // that are emitted individually as canonical lifecycle events.
+      //
+      // The transformer and messageId are recreated per turn so that
+      // multi-turn sessions (generator reuse) get fresh IDs.
+      let currentTurnVersion = session.turnVersion;
+      let currentTurnId = session.turnId;
+      let messageId = uuidv7();
+      let transformer = claudeCodeAdapter.createTransformer({
+        sessionId,
+        messageId,
+        turnId: currentTurnId,
+      });
+
+      // Emit turn.started for the initial turn
+      EventBroadcaster.emitPartEvent(sessionId, "claude", messageId, {
+        type: "turn.started",
+        turnId: currentTurnId,
+      });
+
+      // Track the current sub-message ID (updated by message.created events from the adapter)
+      let currentSubMessageId = messageId;
+
+      /** Emit a PartEvent, using the sub-message ID from message.created for proper FK linking. */
+      function emitEvt(evt: import("../../messages/adapter").PartEvent) {
+        // message.created / message.done carry their own messageId (the sub-message ID)
+        if (evt.type === "message.created" || evt.type === "message.done") {
+          currentSubMessageId = evt.messageId;
+        }
+        EventBroadcaster.emitPartEvent(sessionId, "claude", currentSubMessageId, evt);
+      }
+
       // Stream messages back to the frontend and persist to DB.
-      // IMPORTANT: Persist to DB BEFORE notifying frontend, so messages
-      // are in the DB when the frontend receives the event and fetches them.
       const tStreamStart = Date.now();
       for await (const message of queryResult) {
         ctx.messageCount++;
@@ -502,13 +539,36 @@ export class ClaudeAgentHandler implements AgentHandler {
             `[TIMING][${generatorId}] FIRST_MESSAGE received after ${ctx.firstMessageTime - tSdkSpawn}ms (type=${(message as any)?.type})`
           );
         }
+
+        // Detect turn boundary: session.turnVersion is incremented by query()
+        // on each new turn, so when it changes we need a fresh transformer.
+        if (session.turnVersion !== currentTurnVersion) {
+          const prevFinished = transformer.finish();
+          for (const evt of prevFinished.events) emitEvt(evt);
+
+          currentTurnVersion = session.turnVersion;
+          currentTurnId = session.turnId;
+          messageId = uuidv7();
+          currentSubMessageId = messageId;
+          transformer = claudeCodeAdapter.createTransformer({
+            sessionId,
+            messageId,
+            turnId: currentTurnId,
+          });
+
+          emitEvt({ type: "turn.started", turnId: currentTurnId });
+        }
+
         // Deserialize, persist, and forward to frontend.
-        // See message-processor.ts for the critical side-effect ordering.
         if (message) {
           const cleanMessage = deserializeMessage(message, generatorId);
           if (!cleanMessage) continue;
 
           processMessage(cleanMessage, ctx, session, msgOpts);
+
+          // Transform into PartEvents and emit each individually
+          const events = transformer.process(cleanMessage as unknown as ClaudeCodeEvent);
+          for (const evt of events) emitEvt(evt);
 
           // Log per-message timing for first 5 messages, then every 10th
           if (ctx.messageCount <= 5 || ctx.messageCount % 10 === 0) {
@@ -518,6 +578,10 @@ export class ClaudeAgentHandler implements AgentHandler {
           }
         }
       }
+
+      // Finalize the last turn's transformer
+      const finished = transformer.finish();
+      for (const evt of finished.events) emitEvt(evt);
 
       console.log(
         `[TIMING][${generatorId}] STREAM_COMPLETE messages=${ctx.messageCount} totalStreamTime=${Date.now() - tStreamStart}ms totalProcessTime=${Date.now() - tProcessStart}ms`

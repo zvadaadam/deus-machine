@@ -9,3 +9,4 @@ export type {
   AskQuestionRequest,
   AgentRpcContext,
 } from "./useAgentRpcHandler";
+export { useStreamingParts } from "./useStreamingParts";

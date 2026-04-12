@@ -14,10 +14,10 @@ import { getDatabase } from "../../lib/database";
 import { uuidv7 } from "@shared/lib/uuid";
 import { getErrorMessage } from "@shared/lib/errors";
 import type {
-  MessageAssistantEvent,
-  MessageToolResultEvent,
-  MessageResultEvent,
   MessageCancelledEvent,
+  MessageCreatedEvent,
+  PartDoneEvent,
+  MessageDoneEvent,
   SessionStartedEvent,
   SessionIdleEvent,
   SessionErrorEvent,
@@ -37,84 +37,33 @@ export type WriteResult<T = string> = { ok: true; value: T } | { ok: false; erro
 // ============================================================================
 
 /**
- * Save an assistant message to the messages table.
- * Mirrors agent-server saveAssistantMessage() logic:
- * - Generates a local UUID7 message ID
- * - Stores flat content array, except for cancelled messages which get an envelope
- * - Records the agent_message_id and parent_tool_use_id for linking
+ * Create a message row from a message.created event.
+ * This pre-creates the row so that part.done INSERTs have a valid FK target.
  */
-export function persistAssistantMessage(event: MessageAssistantEvent): WriteResult {
+export function persistMessageCreated(event: MessageCreatedEvent): WriteResult {
   const db = getDatabase();
-  const messageId = uuidv7();
   const sentAt = new Date().toISOString();
 
-  // Store flat content array for normal messages. For "cancelled" messages,
-  // write envelope so the frontend can detect cancellation from DB content.
-  const contentPayload =
-    event.message.stop_reason === "cancelled"
-      ? { message: { stop_reason: "cancelled" }, blocks: event.message.content ?? [] }
-      : (event.message.content ?? []);
-  const content = JSON.stringify(contentPayload);
-
   try {
+    // Check if session exists — if not, we can't create the message
+    const session = db.prepare(`SELECT id FROM sessions WHERE id = ?`).get(event.sessionId);
+    if (!session) {
+      console.warn(
+        `[AgentPersistence] message.created: session ${event.sessionId} not found, skipping`
+      );
+      return { ok: false, error: "session not found" };
+    }
+
     db.prepare(
-      `INSERT INTO messages (id, session_id, role, content, sent_at, model, agent_message_id, parent_tool_use_id)
-       VALUES (?, ?, 'assistant', ?, ?, ?, ?, ?)`
-    ).run(
-      messageId,
-      event.sessionId,
-      content,
-      sentAt,
-      event.model || null,
-      event.message.id || null,
-      event.message.parent_tool_use_id || null
-    );
-    return { ok: true, value: messageId };
+      `INSERT OR REPLACE INTO messages (id, session_id, role, sent_at)
+       VALUES (?, ?, ?, ?)`
+    ).run(event.messageId, event.sessionId, event.role, sentAt);
+    return { ok: true, value: event.messageId };
   } catch (error) {
     const msg = getErrorMessage(error);
-    console.error(`[AgentPersistence] Failed to save assistant message:`, msg);
+    console.error(`[AgentPersistence] Failed to persist message.created:`, msg);
     return { ok: false, error: msg };
   }
-}
-
-/**
- * Save a tool_result message (role='user') to the messages table.
- * These contain tool execution results that link tool_use blocks to their outputs.
- */
-export function persistToolResultMessage(event: MessageToolResultEvent): WriteResult {
-  const db = getDatabase();
-  const messageId = uuidv7();
-  const sentAt = new Date().toISOString();
-  const content = JSON.stringify(event.message.content ?? []);
-
-  try {
-    db.prepare(
-      `INSERT INTO messages (id, session_id, role, content, sent_at, agent_message_id, parent_tool_use_id)
-       VALUES (?, ?, 'user', ?, ?, ?, ?)`
-    ).run(
-      messageId,
-      event.sessionId,
-      content,
-      sentAt,
-      event.message.id || null,
-      event.message.parent_tool_use_id || null
-    );
-    return { ok: true, value: messageId };
-  } catch (error) {
-    const msg = getErrorMessage(error);
-    console.error(`[AgentPersistence] Failed to save tool_result message:`, msg);
-    return { ok: false, error: msg };
-  }
-}
-
-/**
- * Handle message.result events. No DB write needed — this is informational
- * (success/error_during_execution subtypes). Session status transitions are
- * handled by separate session.idle / session.error events.
- */
-export function persistMessageResult(_event: MessageResultEvent): void {
-  // No-op: message.result is informational only.
-  // Session status is managed by session.idle / session.error events.
 }
 
 /**
@@ -151,6 +100,65 @@ export function persistMessageCancelled(event: MessageCancelledEvent): WriteResu
   } catch (error) {
     const msg = getErrorMessage(error);
     console.error(`[AgentPersistence] Failed to persist message.cancelled:`, msg);
+    return { ok: false, error: msg };
+  }
+}
+
+/**
+ * Persist a finalized part to the parts table.
+ *
+ * Called on part.done — inserts a row into the `parts` table with the
+ * full part data. For TOOL parts, extracts toolCallId and toolName into
+ * their own columns for efficient querying.
+ */
+export function persistPartDone(event: PartDoneEvent): WriteResult {
+  const db = getDatabase();
+  const part = event.part;
+
+  try {
+    db.prepare(
+      `INSERT OR REPLACE INTO parts (id, message_id, session_id, seq, type, data, tool_call_id, tool_name, parent_tool_call_id)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`
+    ).run(
+      event.partId,
+      event.messageId,
+      event.sessionId,
+      0, // seq — ordering is handled by insertion order for now
+      part.type,
+      JSON.stringify(part),
+      part.type === "TOOL" ? part.toolCallId : null,
+      part.type === "TOOL" ? part.toolName : null,
+      part.parentToolCallId ?? null
+    );
+
+    return { ok: true, value: event.partId };
+  } catch (error) {
+    const msg = getErrorMessage(error);
+    console.error(`[AgentPersistence] Failed to persist part.done:`, msg);
+    return { ok: false, error: msg };
+  }
+}
+
+/**
+ * Set the stop_reason on a completed message.
+ *
+ * Called on message.done — updates the messages row with the stop reason
+ * (e.g. "end_turn", "tool_use"). The parts are already persisted
+ * individually via part.done events.
+ */
+export function persistMessageDone(event: MessageDoneEvent): WriteResult {
+  const db = getDatabase();
+
+  try {
+    db.prepare(`UPDATE messages SET stop_reason = ? WHERE id = ?`).run(
+      event.stopReason ?? null,
+      event.messageId
+    );
+
+    return { ok: true, value: event.messageId };
+  } catch (error) {
+    const msg = getErrorMessage(error);
+    console.error(`[AgentPersistence] Failed to persist message.done:`, msg);
     return { ok: false, error: msg };
   }
 }

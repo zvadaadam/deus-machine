@@ -6,3 +6,5 @@ export { ThinkingBlock } from "./ThinkingBlock";
 export { SubagentGroupBlock } from "./SubagentGroupBlock";
 export { SubagentMessageList } from "./SubagentMessageList";
 export { ToolGroupBlock } from "./ToolGroupBlock";
+export { PartsRenderer } from "./PartsRenderer";
+export { ToolPartBlock } from "./ToolPartBlock";

@@ -24,6 +24,7 @@ const { mockClaudeSDK, mockFrontendAPI, mockExecSync, mockExecFileSync } = vi.ho
     emitToolResultMessage: vi.fn(),
     emitMessageResult: vi.fn(),
     emitMessageCancelled: vi.fn(),
+    emitPartEvent: vi.fn(),
     emitAgentSessionId: vi.fn(),
   },
   mockExecSync: vi.fn(),
@@ -161,12 +162,11 @@ describe("claude-handler", () => {
 
       await handler.query("sess-1", "hello", { cwd: "/test" });
 
-      expect(mockFrontendAPI.sendError).toHaveBeenCalledWith(
-        expect.objectContaining({
-          id: "sess-1",
-          type: "error",
-          agentType: "claude",
-        })
+      expect(mockFrontendAPI.emitSessionError).toHaveBeenCalledWith(
+        "sess-1",
+        "claude",
+        expect.any(String),
+        "internal"
       );
     });
 
@@ -178,12 +178,11 @@ describe("claude-handler", () => {
       await new Promise((r) => setTimeout(r, 50));
 
       expect(mockClaudeSDK).not.toHaveBeenCalled();
-      expect(mockFrontendAPI.sendError).toHaveBeenCalledWith(
-        expect.objectContaining({
-          id: "sess-missing-cwd",
-          type: "error",
-          error: expect.stringContaining("Workspace path does not exist: /missing"),
-        })
+      expect(mockFrontendAPI.emitSessionError).toHaveBeenCalledWith(
+        "sess-missing-cwd",
+        "claude",
+        expect.stringContaining("Workspace path does not exist: /missing"),
+        expect.any(String)
       );
     });
 
@@ -306,10 +305,10 @@ describe("claude-handler", () => {
       expect(sdkCall.options.mcpServers).toBeUndefined();
     });
 
-    it("streams messages back to frontend via EventBroadcaster.sendMessage", async () => {
+    it("streams messages and emits canonical events during streaming", async () => {
       const mockMessages = [
         { type: "assistant", message: { role: "assistant", content: "Hello" } },
-        { type: "result", session_id: "sdk-123" },
+        { type: "result", subtype: "success", session_id: "sdk-123" },
       ];
       const mockQuery = {
         [Symbol.asyncIterator]: () => {
@@ -335,16 +334,10 @@ describe("claude-handler", () => {
       // Wait for the generator to complete
       await new Promise((r) => setTimeout(r, 200));
 
-      expect(mockFrontendAPI.sendMessage).toHaveBeenCalledWith(
-        expect.objectContaining({
-          id: "sess-stream",
-          type: "message",
-          agentType: "claude",
-        })
-      );
+      expect(mockFrontendAPI.emitPartEvent).toHaveBeenCalled();
     });
 
-    it("sends error to frontend when SDK throws", async () => {
+    it("emits session.error when SDK throws", async () => {
       mockClaudeSDK.mockImplementation(() => {
         throw new Error("SDK initialization failed");
       });
@@ -353,12 +346,11 @@ describe("claude-handler", () => {
 
       await new Promise((r) => setTimeout(r, 100));
 
-      expect(mockFrontendAPI.sendError).toHaveBeenCalledWith(
-        expect.objectContaining({
-          id: "sess-err",
-          type: "error",
-          error: "SDK initialization failed",
-        })
+      expect(mockFrontendAPI.emitSessionError).toHaveBeenCalledWith(
+        "sess-err",
+        "claude",
+        "SDK initialization failed",
+        expect.any(String)
       );
     });
 
@@ -388,7 +380,7 @@ describe("claude-handler", () => {
       expect(mockFrontendAPI.sendError).not.toHaveBeenCalled();
     });
 
-    it("sends error when process exits before query succeeds (no result/success received)", async () => {
+    it("emits session.error when process exits before query succeeds (no result/success received)", async () => {
       const mockQuery = {
         [Symbol.asyncIterator]: () => ({
           next: async () => {
@@ -406,12 +398,11 @@ describe("claude-handler", () => {
 
       await new Promise((r) => setTimeout(r, 100));
 
-      expect(mockFrontendAPI.sendError).toHaveBeenCalledWith(
-        expect.objectContaining({
-          id: "sess-sigint-err",
-          type: "error",
-          error: expect.stringContaining("Claude Code process terminated by signal SIGINT"),
-        })
+      expect(mockFrontendAPI.emitSessionError).toHaveBeenCalledWith(
+        "sess-sigint-err",
+        "claude",
+        expect.stringContaining("Claude Code process terminated by signal SIGINT"),
+        expect.any(String)
       );
     });
 
@@ -500,15 +491,6 @@ describe("claude-handler", () => {
       });
 
       await new Promise((r) => setTimeout(r, 200));
-
-      // Should have sent an error event for max_tokens
-      expect(mockFrontendAPI.sendError).toHaveBeenCalledWith(
-        expect.objectContaining({
-          id: "sess-max-tokens",
-          type: "error",
-          category: "context_limit",
-        })
-      );
 
       // emitSessionError should have been called for stop_reason error
       expect(mockFrontendAPI.emitSessionError).toHaveBeenCalledWith(
@@ -650,12 +632,12 @@ describe("claude-handler", () => {
       // Should NOT have emitted session.idle — there was an error
       expect(mockFrontendAPI.emitSessionIdle).not.toHaveBeenCalled();
 
-      // Should have sent an error notification
-      expect(mockFrontendAPI.sendError).toHaveBeenCalledWith(
-        expect.objectContaining({
-          id: "sess-exec-err",
-          type: "error",
-        })
+      // Should have emitted a canonical session.error event
+      expect(mockFrontendAPI.emitSessionError).toHaveBeenCalledWith(
+        "sess-exec-err",
+        "claude",
+        expect.any(String),
+        expect.any(String)
       );
     });
 
@@ -745,6 +727,68 @@ describe("claude-handler", () => {
       // No unexpected errors sent to frontend during push-after-close
       expect(mockFrontendAPI.sendError).not.toHaveBeenCalled();
     });
+
+    it("emits PartEvents alongside legacy events during streaming", async () => {
+      const mockMessages = [
+        {
+          type: "assistant",
+          message: {
+            id: "msg_1",
+            role: "assistant",
+            content: [{ type: "text", text: "Hello from Parts" }],
+          },
+          parent_tool_use_id: null,
+          session_id: "sdk-parts",
+        },
+        { type: "result", subtype: "success", session_id: "sdk-parts" },
+      ];
+      let idx = 0;
+      const mockQuery = {
+        [Symbol.asyncIterator]: () => ({
+          next: async () => {
+            if (idx < mockMessages.length) {
+              return { value: mockMessages[idx++], done: false };
+            }
+            return { value: undefined, done: true };
+          },
+        }),
+        interrupt: vi.fn().mockResolvedValue(undefined),
+        setPermissionMode: vi.fn().mockResolvedValue(undefined),
+        setModel: vi.fn().mockResolvedValue(undefined),
+        setMaxThinkingTokens: vi.fn().mockResolvedValue(undefined),
+      };
+      mockClaudeSDK.mockReturnValue(mockQuery);
+
+      await handler.query("sess-parts", "hello", {
+        cwd: "/test",
+        turnId: "turn-parts",
+      });
+
+      await new Promise((r) => setTimeout(r, 200));
+
+      // PartEvents should fire via emitPartEvent
+      expect(mockFrontendAPI.emitPartEvent).toHaveBeenCalled();
+
+      // Verify emitPartEvent was called with turn.started, part events, and turn.completed
+      const partEventCalls = mockFrontendAPI.emitPartEvent.mock.calls;
+      const allEvents = partEventCalls.map((call: unknown[]) => call[3]);
+
+      // Should have a turn.started event
+      const turnStarted = allEvents.find((e: { type: string }) => e.type === "turn.started");
+      expect(turnStarted).toBeDefined();
+
+      // Should have part events with TEXT content
+      const partDoneEvents = allEvents.filter(
+        (e: { type: string; part?: { type: string } }) =>
+          (e.type === "part.created" || e.type === "part.done") && e.part?.type === "TEXT"
+      );
+      expect(partDoneEvents.length).toBeGreaterThanOrEqual(1);
+      expect(partDoneEvents[0].part.text).toBe("Hello from Parts");
+
+      // Should have a turn.completed event
+      const turnCompleted = allEvents.find((e: { type: string }) => e.type === "turn.completed");
+      expect(turnCompleted).toBeDefined();
+    });
   });
 
   // ==========================================================================
@@ -773,7 +817,7 @@ describe("claude-handler", () => {
       initializeClaude();
 
       await handler.cancel("sess-1");
-      expect(mockFrontendAPI.sendError).toHaveBeenCalled();
+      expect(mockFrontendAPI.emitSessionError).toHaveBeenCalled();
     });
   });
 
