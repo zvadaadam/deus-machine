@@ -31,6 +31,7 @@ import type {
   ClaudeUserEvent,
 } from "./claude-events";
 import {
+  completeReasoningPart,
   completeToolPart,
   createCompactionPart,
   createPendingToolPart,
@@ -443,10 +444,10 @@ class ClaudeCodeTransformer implements EventTransformer<ClaudeCodeEvent> {
       case "thinking": {
         this.closeText();
         if (this.currentThinkingPart) {
-          const updated: ReasoningPart = {
-            ...this.currentThinkingPart,
-            text: this.currentThinkingPart.text + block.thinking,
-          };
+          const updated = completeReasoningPart(
+            this.currentThinkingPart,
+            this.currentThinkingPart.text + block.thinking
+          );
           this.replacePart(this.currentThinkingPart, updated);
           this.currentThinkingPart = updated;
           return partDone(updated);
@@ -736,7 +737,7 @@ class ClaudeCodeTransformer implements EventTransformer<ClaudeCodeEvent> {
   private closeThinking(): PartEvent | null {
     if (!this.currentThinkingPart) return null;
     if (this.currentThinkingPart.state === "STREAMING") {
-      const donePart: ReasoningPart = { ...this.currentThinkingPart, state: "DONE" };
+      const donePart = completeReasoningPart(this.currentThinkingPart);
       this.replacePart(this.currentThinkingPart, donePart);
       this.currentThinkingPart = null;
       return partDone(donePart);

@@ -41,8 +41,8 @@ const AssistantMessage = memo(function AssistantMessage({
       <div
         className={cn(
           "relative",
-          "mr-auto max-w-full",
-          "flex min-w-0 flex-col gap-2 overflow-x-hidden"
+          "mr-auto w-full max-w-full",
+          "flex min-w-0 flex-col gap-1 overflow-x-hidden"
         )}
       >
         <PartsRenderer parts={message.parts!} isStreamingTurn={isStreamingTurn && isLastInTurn} />

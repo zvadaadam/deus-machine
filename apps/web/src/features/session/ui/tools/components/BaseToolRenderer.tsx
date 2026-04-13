@@ -13,7 +13,7 @@
  * - Backward compatible with existing tool renderers
  */
 
-import { useState, type ReactNode } from "react";
+import { useCallback, useState, type KeyboardEvent, type ReactNode } from "react";
 import { ChevronRight, X } from "lucide-react";
 import { AnimatePresence, motion } from "framer-motion";
 import { cn } from "@/shared/lib/utils";
@@ -33,16 +33,10 @@ export interface BaseToolRendererProps {
   defaultExpanded?: boolean;
   isLoading?: boolean; // True when tool result is pending (shimmer effect)
   showContentOnError?: boolean; // True for tools whose renderContent already displays error output (e.g. Bash)
-  fullWidthContent?: boolean; // Skip the ml-6 indent on expanded content (for prominent media like video cards)
-
   // Content rendering (choose one)
   children?: ReactNode; // NEW API: Single children slot
-  renderContent?: (props: {
-    toolUse: ToolUseBlock;
-    toolResult?: ToolResultBlock;
-    isExpanded: boolean;
-  }) => ReactNode; // OLD API
-  renderSummary?: (props: { toolUse: ToolUseBlock }) => ReactNode; // Preview when collapsed
+  renderContent?: (props: { toolUse: ToolUseBlock; toolResult?: ToolResultBlock }) => ReactNode; // OLD API
+  renderSummary?: () => ReactNode; // Persistent context shown in header
 }
 
 const expandTransition = { duration: 0.15, ease: [0.165, 0.84, 0.44, 1] as const };
@@ -55,7 +49,6 @@ export function BaseToolRenderer({
   defaultExpanded = false, // Collapsed by default (explicit is better than implicit)
   isLoading = false,
   showContentOnError = false,
-  fullWidthContent = false,
   children,
   renderContent,
   renderSummary,
@@ -66,16 +59,28 @@ export function BaseToolRenderer({
   // The X icon swap on the collapsed row is the error signal; users expand when they want details.
   const [manualExpanded, setManualExpanded] = useState<boolean | null>(null);
   const isExpanded = manualExpanded !== null ? manualExpanded : defaultExpanded;
+  const toggleExpanded = useCallback(() => {
+    setManualExpanded(!isExpanded);
+  }, [isExpanded]);
+
+  const handleKeyDown = useCallback(
+    (event: KeyboardEvent<HTMLDivElement>) => {
+      if (event.key !== "Enter" && event.key !== " ") return;
+      event.preventDefault();
+      toggleExpanded();
+    },
+    [toggleExpanded]
+  );
 
   return (
-    <div className="flex flex-col gap-1">
+    <div className="flex w-full min-w-0 flex-col gap-0.5">
       {/* Header - Minimal, no borders or backgrounds.
           Uses CSS group hover for icon swap (no re-renders on mouse enter/leave). */}
-      <button
-        type="button"
-        onClick={() => {
-          setManualExpanded(!isExpanded);
-        }}
+      <div
+        role="button"
+        tabIndex={0}
+        onClick={toggleExpanded}
+        onKeyDown={handleKeyDown}
         className={cn(
           "group flex items-center gap-2 px-2 py-1.5 text-sm",
           "w-full cursor-pointer text-left",
@@ -125,12 +130,12 @@ export function BaseToolRenderer({
             {toolName}
           </span>
 
-          {/* Preview when collapsed */}
-          {!isExpanded && renderSummary && (
-            <span className="text-muted-foreground truncate">{renderSummary({ toolUse })}</span>
-          )}
+          {/* Header context — stays visible when expanded so users keep orientation.
+              Wrapped in a truncating span so the row never wraps: rightmost content
+              (e.g. command preview) truncates first, then description. */}
+          {renderSummary && <span className="min-w-0 flex-1 truncate">{renderSummary()}</span>}
         </div>
-      </button>
+      </div>
 
       {/* Expanded content — AnimatePresence for smooth height + opacity transition. */}
       <AnimatePresence initial={false}>
@@ -141,14 +146,14 @@ export function BaseToolRenderer({
             exit={{ height: 0, opacity: 0 }}
             transition={expandTransition}
             style={{ overflow: "hidden" }}
-            className={cn("mt-0.5", !fullWidthContent && "ml-6")}
+            className="mt-0.5 w-full min-w-0"
           >
             {isError && toolResult && !showContentOnError ? (
               <ToolError content={toolResult.content} />
             ) : (
               <>
                 {children}
-                {!children && renderContent && renderContent({ toolUse, toolResult, isExpanded })}
+                {!children && renderContent && renderContent({ toolUse, toolResult })}
               </>
             )}
           </motion.div>

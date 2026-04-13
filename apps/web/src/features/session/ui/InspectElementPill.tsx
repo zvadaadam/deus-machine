@@ -71,7 +71,7 @@ export function InspectElementPill({ element }: InspectElementPillProps) {
     <TooltipProvider delayDuration={200}>
       <Tooltip>
         <TooltipTrigger asChild>
-          <span className="bg-primary/12 border-primary/20 text-foreground inline-flex items-center gap-1 rounded-md border px-1.5 py-0.5 align-baseline text-xs leading-tight font-medium">
+          <span className="bg-primary/12 border-primary/20 text-foreground inline-flex cursor-help items-center gap-1 rounded-md border px-1.5 py-0.5 align-baseline text-xs leading-tight font-medium">
             <Icon className="text-primary inline-block h-3 w-3 shrink-0" />
             <span className="text-foreground/60 text-2xs font-mono">{`<${element.tagName}>`}</span>
             {element.innerText && <span className="max-w-[120px] truncate">{label}</span>}

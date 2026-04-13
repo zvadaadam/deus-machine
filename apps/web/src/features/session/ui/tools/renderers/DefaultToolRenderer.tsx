@@ -1,13 +1,3 @@
-/**
- * Default Tool Renderer (REFACTORED with BaseToolRenderer)
- *
- * Fallback renderer for unknown/unsupported tools.
- * Supports MCP server tools with mixed content (text + images).
- *
- * BEFORE: 70 LOC
- * AFTER: ~25 LOC → Now ~80 LOC (with content block rendering)
- */
-
 import { match } from "ts-pattern";
 import { Wrench } from "lucide-react";
 import { BaseToolRenderer } from "../components";
@@ -15,9 +5,6 @@ import { TOOL_ICON_CLS } from "../toolColors";
 import { cn } from "@/shared/lib/utils";
 import type { ToolRendererProps } from "../../chat-types";
 
-/**
- * Content block types from MCP server tools
- */
 type TextContentBlock = {
   type: "text";
   text: string;
@@ -34,41 +21,53 @@ type ImageContentBlock = {
 
 type ContentBlock = TextContentBlock | ImageContentBlock;
 
-/**
- * Type guard: Check if content is an array of content blocks
- */
-function isContentBlockArray(content: any): content is ContentBlock[] {
+function isTextContentBlock(block: unknown): block is TextContentBlock {
+  if (!block || typeof block !== "object") return false;
+  const record = block as Record<string, unknown>;
+  return record.type === "text" && typeof record.text === "string";
+}
+
+function isImageContentBlock(block: unknown): block is ImageContentBlock {
+  if (!block || typeof block !== "object") return false;
+  const record = block as Record<string, unknown>;
+  if (record.type !== "image" || !record.source || typeof record.source !== "object") {
+    return false;
+  }
+
+  const source = record.source as Record<string, unknown>;
   return (
-    Array.isArray(content) &&
-    content.length > 0 &&
-    content.every((item) => item && typeof item === "object" && "type" in item)
+    source.type === "base64" &&
+    typeof source.data === "string" &&
+    typeof source.media_type === "string"
   );
 }
 
-/**
- * Render individual content block (text or image)
- */
+function isContentBlockArray(content: unknown): content is ContentBlock[] {
+  return (
+    Array.isArray(content) &&
+    content.length > 0 &&
+    content.every((item) => isTextContentBlock(item) || isImageContentBlock(item))
+  );
+}
+
 function ContentBlockRenderer({ block }: { block: ContentBlock }) {
   return match(block)
-    .with({ type: "text" }, (b) => (
-      <div className="text-foreground text-sm leading-relaxed whitespace-pre-wrap">{b.text}</div>
+    .with({ type: "text" }, (textBlock) => (
+      <div className="text-foreground text-sm leading-relaxed whitespace-pre-wrap">
+        {textBlock.text}
+      </div>
     ))
-    .with({ type: "image" }, (b) => (
+    .with({ type: "image" }, (imageBlock) => (
       <img
-        src={`data:${b.source.media_type};base64,${b.source.data}`}
+        src={`data:${imageBlock.source.media_type};base64,${imageBlock.source.data}`}
         alt="Tool output"
         className="border-border/40 max-w-full rounded-lg border shadow-sm"
       />
     ))
-    .otherwise((b) => (
-      <pre className="bg-muted/60 border-border/60 overflow-x-auto rounded-lg border p-3 font-mono text-xs">
-        {JSON.stringify(b, null, 2)}
-      </pre>
-    ));
+    .exhaustive();
 }
 
 export function DefaultToolRenderer({ toolUse, toolResult, isLoading }: ToolRendererProps) {
-  // Extract first input value as preview (if available)
   const firstInputKey = Object.keys(toolUse.input || {})[0];
   const firstInputValue = firstInputKey
     ? String(toolUse.input[firstInputKey]).substring(0, 40)
@@ -89,38 +88,35 @@ export function DefaultToolRenderer({ toolUse, toolResult, isLoading }: ToolRend
           </span>
         ) : undefined
       }
-      renderContent={({ toolUse, toolResult }) => {
-        // Check if output is content block array (MCP tools with text/images)
-        const hasContentBlocks = toolResult && isContentBlockArray(toolResult.content);
+      renderContent={({ toolUse: currentToolUse, toolResult: currentToolResult }) => {
+        const contentBlocks = isContentBlockArray(currentToolResult?.content)
+          ? currentToolResult.content
+          : null;
 
         return (
           <div className="space-y-3 px-2 pb-2">
-            {/* Input */}
             <div>
               <div className="text-muted-foreground mb-1 text-xs font-semibold">Input:</div>
               <pre className="bg-muted/60 border-border/60 chat-scroll-contain max-h-[200px] overflow-x-auto overflow-y-auto rounded-lg border p-3 font-mono text-xs">
-                {JSON.stringify(toolUse.input, null, 2)}
+                {JSON.stringify(currentToolUse.input, null, 2)}
               </pre>
             </div>
 
-            {/* Output */}
-            {toolResult && (
+            {currentToolResult && (
               <div>
                 <div className="text-muted-foreground mb-1 text-xs font-semibold">Output:</div>
 
-                {hasContentBlocks ? (
-                  // Render content blocks (text + images)
+                {contentBlocks ? (
                   <div className="space-y-3">
-                    {(toolResult.content as ContentBlock[]).map((block, index) => (
+                    {contentBlocks.map((block, index) => (
                       <ContentBlockRenderer key={index} block={block} />
                     ))}
                   </div>
                 ) : (
-                  // Fallback: Show JSON for unknown structure
                   <pre className="bg-muted/60 border-border/60 chat-scroll-contain max-h-[200px] overflow-x-auto overflow-y-auto rounded-lg border p-3 font-mono text-xs">
-                    {typeof toolResult.content === "object"
-                      ? JSON.stringify(toolResult.content, null, 2)
-                      : toolResult.content}
+                    {typeof currentToolResult.content === "object"
+                      ? JSON.stringify(currentToolResult.content, null, 2)
+                      : currentToolResult.content}
                   </pre>
                 )}
               </div>

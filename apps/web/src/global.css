@@ -1762,6 +1762,11 @@ select {
   touch-action: manipulation;
 }
 
+button:not(:disabled),
+[role="button"]:not([aria-disabled="true"]) {
+  cursor: pointer;
+}
+
 /* Theme switching: suppress color transitions during theme toggle */
 [data-theme-switching],
 [data-theme-switching] * {
@@ -2277,6 +2282,36 @@ diffs-container.diffs-theme-compact {
 .markdown-content em {
   font-style: italic;
   color: color-mix(in oklch, var(--foreground) 90%, transparent);
+}
+
+/* Thinking markdown — quieter than normal assistant prose */
+.thinking-markdown,
+.thinking-markdown p,
+.thinking-markdown li,
+.thinking-markdown blockquote,
+.thinking-markdown table,
+.thinking-markdown td {
+  color: color-mix(in oklch, var(--foreground) 62%, transparent);
+}
+
+.thinking-markdown h1,
+.thinking-markdown h2,
+.thinking-markdown h3,
+.thinking-markdown h4,
+.thinking-markdown h5,
+.thinking-markdown h6,
+.thinking-markdown strong {
+  color: color-mix(in oklch, var(--foreground) 72%, transparent);
+}
+
+.thinking-markdown em,
+.thinking-markdown li::marker {
+  color: color-mix(in oklch, var(--foreground) 56%, transparent);
+}
+
+.thinking-markdown code:not(pre code),
+.thinking-markdown pre code {
+  color: color-mix(in oklch, var(--foreground) 66%, transparent);
 }
 
 /* Links */

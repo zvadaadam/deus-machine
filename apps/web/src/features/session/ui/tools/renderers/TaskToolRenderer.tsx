@@ -1,13 +1,3 @@
-/**
- * Task Tool Renderer (REFACTORED with BaseToolRenderer)
- *
- * Specialized renderer for the Task tool (Agent spawning)
- * Displays sub-agent tasks with description and detailed prompt
- *
- * BEFORE: 141 LOC
- * AFTER: ~85 LOC
- */
-
 import { Bot } from "lucide-react";
 import { BaseToolRenderer } from "../components";
 import type { ToolRendererProps } from "../../chat-types";

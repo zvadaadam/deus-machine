@@ -98,7 +98,7 @@ function renderPart(part: Part, lastTextPartId: string | null, isStreamingTurn: 
       if (isActivelyStreaming) {
         return <StreamingReasoningBlock key={p.id} text={p.text} />;
       }
-      return <ThinkingBlock key={p.id} block={{ type: "thinking", thinking: p.text }} />;
+      return <ThinkingBlock key={p.id} part={p} durationSec={getReasoningDurationSec(p)} />;
     })
     .with({ type: "TOOL" }, (p: ToolPart) => <ToolPartBlock key={p.id} part={p} />)
     .with({ type: "COMPACTION" }, (p: CompactionPart) => (
@@ -108,4 +108,16 @@ function renderPart(part: Part, lastTextPartId: string | null, isStreamingTurn: 
       </div>
     ))
     .exhaustive();
+}
+
+function getReasoningDurationSec(part: ReasoningPart): number | undefined {
+  const start = part.time?.start;
+  const end = part.time?.end;
+
+  if (!start || !end) return undefined;
+
+  const durationMs = Date.parse(end) - Date.parse(start);
+  if (!Number.isFinite(durationMs) || durationMs < 0) return undefined;
+
+  return Math.max(2, Math.round(durationMs / 1_000));
 }

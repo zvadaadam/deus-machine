@@ -191,6 +191,15 @@ export function MainContent({
     setContentPanelCollapsed(false);
   }, [setContentPanelCollapsed]);
 
+  useEffect(() => {
+    if (!selectedWorkspaceId) return;
+    if (contentPanelCollapsed) {
+      contentPanelRef.current?.collapse();
+    } else {
+      contentPanelRef.current?.expand();
+    }
+  }, [contentPanelCollapsed, selectedWorkspaceId]);
+
   // --- Keyboard shortcuts ---
   usePanelShortcuts({
     enabled: selectedWorkspace !== null && !isMobile,

@@ -704,7 +704,7 @@ export function SimulatorPanel({ workspaceId, workspacePath }: SimulatorPanelPro
           {isLive && !hidAvailable && (
             <Tooltip>
               <TooltipTrigger asChild>
-                <span className="text-warning flex items-center gap-1">
+                <span className="text-warning flex cursor-help items-center gap-1">
                   <AlertCircle className="h-3 w-3" />
                   <span className="text-xs">No touch</span>
                 </span>
@@ -741,7 +741,7 @@ export function SimulatorPanel({ workspaceId, workspacePath }: SimulatorPanelPro
               ) : hasProject === false ? (
                 <Tooltip>
                   <TooltipTrigger asChild>
-                    <span className="inline-flex">
+                    <span className="inline-flex cursor-not-allowed">
                       <Button
                         variant="ghost"
                         size="sm"
