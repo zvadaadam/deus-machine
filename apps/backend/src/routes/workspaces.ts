@@ -34,6 +34,7 @@ import {
 } from "../db";
 import type { WorkspaceWithDetailsRow } from "../db";
 import { invalidate } from "../services/query-engine";
+import { groupWorkspacesByRepo } from "../lib/workspace-grouping";
 
 const execFileAsync = promisify(execFile);
 
@@ -49,43 +50,9 @@ app.get("/workspaces", (c) => {
 app.get("/workspaces/by-repo", (c) => {
   const db = getDatabase();
   const stateParam = c.req.query("state");
-  const workspaces = getWorkspacesByRepo(db, stateParam);
-
-  const grouped: Record<string, any> = {};
-  workspaces.forEach((workspace) => {
-    const repoId = workspace.repository_id || "unknown";
-    if (!grouped[repoId]) {
-      grouped[repoId] = {
-        repo_id: repoId,
-        repo_name: workspace.repo_name || "Unknown",
-        sort_order: workspace.repo_sort_order || 999,
-        git_origin_url: workspace.git_origin_url ?? null,
-        workspaces: [],
-      };
-    }
-    grouped[repoId].workspaces.push({
-      ...workspace,
-      workspace_path: computeWorkspacePath(workspace),
-    });
-  });
-
-  // Backfill repos that have no matching workspaces (e.g. all archived)
-  // so they still appear in the sidebar.
-  const allRepos = getAllRepositorySummaries(db);
-  for (const repo of allRepos) {
-    if (!grouped[repo.id]) {
-      grouped[repo.id] = {
-        repo_id: repo.id,
-        repo_name: repo.name,
-        sort_order: repo.sort_order ?? 999,
-        git_origin_url: repo.git_origin_url ?? null,
-        workspaces: [],
-      };
-    }
-  }
-
-  const result = Object.values(grouped).sort((a: any, b: any) => a.sort_order - b.sort_order);
-  return c.json(result);
+  return c.json(
+    groupWorkspacesByRepo(getWorkspacesByRepo(db, stateParam), getAllRepositorySummaries(db))
+  );
 });
 
 app.get("/workspaces/:id", (c) => {

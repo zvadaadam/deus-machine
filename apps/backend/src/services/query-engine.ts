@@ -43,10 +43,15 @@ import {
   type RequestResource,
   type QServerFrame,
 } from "@shared/types/query-protocol";
+import {
+  type QueryParams,
+  readStringParam,
+  readNumberParam,
+  requireParam,
+} from "../lib/query-params";
+import { groupWorkspacesByRepo } from "../lib/workspace-grouping";
 
 // ---- Subscription State ----
-
-type QueryParams = Record<string, unknown>;
 
 interface ResourceFrameInput {
   id: string;
@@ -385,61 +390,14 @@ function handleToolResponse(msg: QueryParams): void {
 
 // ---- Query Dispatch ----
 
-/** Group workspaces by repo, backfill empty repos, return sorted RepoGroup[]. */
-function groupWorkspacesByRepo(db: ReturnType<typeof getDatabase>, state: string) {
-  const workspaces = getWorkspacesByRepo(db, state);
-
-  const grouped: Record<
-    string,
-    {
-      repo_id: string;
-      repo_name: string;
-      sort_order: number;
-      git_origin_url?: string | null;
-      workspaces: unknown[];
-    }
-  > = {};
-
-  for (const workspace of workspaces) {
-    const repoId = workspace.repository_id || "unknown";
-    if (!grouped[repoId]) {
-      grouped[repoId] = {
-        repo_id: repoId,
-        repo_name: workspace.repo_name || "Unknown",
-        sort_order: workspace.repo_sort_order ?? 999,
-        git_origin_url: workspace.git_origin_url ?? null,
-        workspaces: [],
-      };
-    }
-    grouped[repoId].workspaces.push({
-      ...workspace,
-      workspace_path: computeWorkspacePath(workspace),
-    });
-  }
-
-  // Backfill repos that have no matching workspaces (e.g. all archived)
-  for (const repo of getAllRepositorySummaries(db)) {
-    if (!grouped[repo.id]) {
-      grouped[repo.id] = {
-        repo_id: repo.id,
-        repo_name: repo.name,
-        sort_order: repo.sort_order ?? 999,
-        git_origin_url: repo.git_origin_url ?? null,
-        workspaces: [],
-      };
-    }
-  }
-
-  return Object.values(grouped).sort((a, b) => a.sort_order - b.sort_order);
-}
-
 function runQuery(resource: QueryResource, params: QueryParams): unknown {
   const db = getDatabase();
 
   return match(resource)
-    .with("workspaces", () =>
-      groupWorkspacesByRepo(db, readStringParam(params, "state") ?? "ready,initializing")
-    )
+    .with("workspaces", () => {
+      const state = readStringParam(params, "state") ?? "ready,initializing";
+      return groupWorkspacesByRepo(getWorkspacesByRepo(db, state), getAllRepositorySummaries(db));
+    })
     .with("stats", () => getStats(db))
     .with("sessions", () =>
       getSessionsByWorkspaceId(db, requireParam(params, "workspaceId", "sessions"))
@@ -750,23 +708,6 @@ function getFrameId(msg: QueryParams): string {
 
 function isRecord(value: unknown): value is QueryParams {
   return typeof value === "object" && value !== null && !Array.isArray(value);
-}
-
-function readStringParam(params: QueryParams, key: string): string | undefined {
-  const value = params[key];
-  return typeof value === "string" ? value : undefined;
-}
-
-function readNumberParam(params: QueryParams, key: string): number | undefined {
-  const value = params[key];
-  return typeof value === "number" ? value : undefined;
-}
-
-/** Read a required string param, throwing a descriptive error if missing. */
-function requireParam(params: QueryParams, key: string, context = "resource"): string {
-  const value = readStringParam(params, key);
-  if (!value) throw new Error(`${context} requires ${key}`);
-  return value;
 }
 
 function isQueryResource(value: string): value is QueryResource {
