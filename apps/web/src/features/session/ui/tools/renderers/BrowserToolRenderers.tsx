@@ -34,6 +34,21 @@ import { cn } from "@/shared/lib/utils";
 import { extractText, OutputBlock, ICON_CLS } from "./shared";
 import type { ToolRendererProps } from "../../chat-types";
 
+type BrowserImageBlock = {
+  type: "image";
+  data?: string;
+  mimeType?: string;
+  source?: {
+    data?: string;
+    media_type?: string;
+  };
+};
+
+function isBrowserImageBlock(block: unknown): block is BrowserImageBlock {
+  if (!block || typeof block !== "object") return false;
+  return (block as Record<string, unknown>).type === "image";
+}
+
 // ---------------------------------------------------------------------------
 // Browser-specific helpers
 // ---------------------------------------------------------------------------
@@ -42,7 +57,7 @@ import type { ToolRendererProps } from "../../chat-types";
  *  Handles both MCP format (data + mimeType) and Anthropic API format (source.data). */
 function extractImage(content: unknown): { data: string; mediaType: string } | null {
   if (!Array.isArray(content)) return null;
-  const img = content.find((b: any) => b?.type === "image");
+  const img = content.find(isBrowserImageBlock);
   if (!img) return null;
   // MCP ImageContent format: { type: "image", data: "...", mimeType: "image/jpeg" }
   if (img.data && typeof img.data === "string") {

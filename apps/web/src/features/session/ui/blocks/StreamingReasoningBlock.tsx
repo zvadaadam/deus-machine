@@ -1,47 +1,76 @@
 /**
  * Streaming Reasoning Block
  *
- * Shows reasoning text visibly during active streaming, instead of
- * collapsing it behind a ThinkingBlock header. This lets users see
- * what the model is thinking in real-time.
+ * Shows reasoning text in real-time during active thinking.
+ * Renders a "Thinking" header with shimmer + pulsing dot,
+ * and a constrained preview window with a longer top gradient fade
+ * (the "peephole" effect). Text auto-scrolls
+ * to the bottom as new tokens arrive.
  *
- * Displays the last ~4 lines of reasoning text with a subtle style
- * (muted, italic, brain icon). When the reasoning part transitions
- * to DONE, PartsRenderer switches to the collapsed ThinkingBlock.
+ * When the reasoning part transitions to DONE, PartsRenderer
+ * switches to the collapsed ThinkingBlock.
  */
 
-import { useMemo } from "react";
-import { Brain } from "lucide-react";
-import { cn } from "@/shared/lib/utils";
+import { useLayoutEffect, useRef } from "react";
+import { motion, useReducedMotion } from "framer-motion";
 
 interface StreamingReasoningBlockProps {
   text: string;
 }
 
-/** Max visible lines during streaming */
-const MAX_VISIBLE_LINES = 4;
+const PREVIEW_HEIGHT_PX = 104;
+const PREVIEW_FADE_HEIGHT_PX = 40;
 
 export function StreamingReasoningBlock({ text }: StreamingReasoningBlockProps) {
-  // Show only the tail of reasoning text (last N lines)
-  const visibleText = useMemo(() => {
-    if (!text) return "";
-    const lines = text.split("\n");
-    if (lines.length <= MAX_VISIBLE_LINES) return text;
-    return lines.slice(-MAX_VISIBLE_LINES).join("\n");
+  const scrollRef = useRef<HTMLDivElement>(null);
+  const reduceMotion = useReducedMotion();
+  const previewMask = `linear-gradient(to bottom, var(--mask-transparent) 0, var(--mask-solid) ${PREVIEW_FADE_HEIGHT_PX}px, var(--mask-solid) 100%)`;
+
+  // Auto-scroll to bottom as new text arrives
+  useLayoutEffect(() => {
+    const el = scrollRef.current;
+    if (el) el.scrollTop = el.scrollHeight;
   }, [text]);
 
-  if (!visibleText.trim()) return null;
+  if (!text.trim()) return null;
 
   return (
-    <div
-      className={cn(
-        "flex items-start gap-2 px-2 py-1.5",
-        "text-muted-foreground/60 text-sm italic",
-        "tool-loading-shimmer"
-      )}
-    >
-      <Brain className="mt-0.5 h-3.5 w-3.5 flex-shrink-0 opacity-50" />
-      <p className="min-w-0 font-mono text-xs leading-relaxed whitespace-pre-wrap">{visibleText}</p>
+    <div className="flex flex-col gap-1">
+      {/* Header: pulsing dot + shimmering label */}
+      <div className="flex items-center gap-2 px-2 py-1">
+        <motion.span
+          className="bg-primary/70 h-1.5 w-1.5 shrink-0 rounded-full"
+          animate={reduceMotion ? undefined : { opacity: [0.45, 1], scale: [0.92, 1] }}
+          transition={
+            reduceMotion
+              ? undefined
+              : {
+                  duration: 1,
+                  repeat: Infinity,
+                  repeatType: "reverse",
+                  ease: [0.37, 0, 0.63, 1],
+                }
+          }
+        />
+        <span className="text-muted-foreground tool-loading-shimmer text-sm font-medium">
+          Thinking
+        </span>
+      </div>
+
+      {/* Preview window with top fade */}
+      <div
+        ref={scrollRef}
+        className="chat-scroll-contain scrollbar-hidden mx-2 max-h-[104px] overflow-x-hidden overflow-y-auto"
+        style={{
+          maxHeight: PREVIEW_HEIGHT_PX,
+          WebkitMaskImage: previewMask,
+          maskImage: previewMask,
+        }}
+      >
+        <p className="text-muted-foreground/50 min-w-0 py-1 font-mono text-xs leading-5 break-words whitespace-pre-wrap">
+          {text}
+        </p>
+      </div>
     </div>
   );
 }

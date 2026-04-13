@@ -44,6 +44,29 @@ const DIFF_UNSAFE_CSS = `
     transition: none;
   }
 
+  :host,
+  pre,
+  [data-diff],
+  [data-file] {
+    inline-size: 100%;
+    max-inline-size: 100%;
+    min-inline-size: 0;
+  }
+
+  [data-code] {
+    inline-size: 100%;
+    min-inline-size: 100%;
+    max-inline-size: 100%;
+    justify-self: stretch;
+    align-self: stretch;
+  }
+
+  [data-content] {
+    inline-size: 100%;
+    max-inline-size: 100%;
+    min-inline-size: 0;
+  }
+
   /* Hunk separator: subtle hover — only boost text opacity, no background.
      A full-row background highlight is too harsh across the wide gutter. */
   [data-separator-wrapper] { cursor: pointer; }

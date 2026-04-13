@@ -8,7 +8,7 @@
  * Also supports compact mode (mobile) — diff viewer only.
  */
 
-import { useRef, useMemo, useCallback, useState } from "react";
+import { useRef, useMemo, useCallback, useState, useEffect } from "react";
 import {
   GitBranch,
   SlidersHorizontal,
@@ -26,6 +26,7 @@ import {
 import { ResizablePanelGroup, ResizablePanel, ResizableHandle } from "@/components/ui/resizable";
 import { cn } from "@/shared/lib/utils";
 import { useWorkspaceLayout } from "../hooks/useWorkspaceLayout";
+import { useWorkspaceLayoutStore, workspaceLayoutActions } from "../store/workspaceLayoutStore";
 import { useFileChanges } from "../api/workspace.queries";
 import { ChangesDiffViewer, type ChangesDiffViewerRef } from "./ChangesDiffViewer";
 import { ChangesFilesPanel } from "./ChangesFilesPanel";
@@ -35,6 +36,7 @@ import {
   changesFilterLabel,
   type ChangesFilter,
 } from "../lib/changesFilter";
+import { fileChangePath } from "../lib/workspace.utils";
 import type { Workspace } from "@/shared/types";
 
 interface ChangesViewProps {
@@ -49,6 +51,11 @@ interface ChangesViewProps {
 
 export function ChangesView({ workspace, isWatched = false, onReview, compact }: ChangesViewProps) {
   const { selectedFilePath, fileTreePinned, setFileTreePinned } = useWorkspaceLayout(workspace.id);
+  const pendingFileNavigation = useWorkspaceLayoutStore(
+    (state) => state.layouts[workspace.id]?.pendingFileNavigation ?? null
+  );
+  const navigationRequest =
+    pendingFileNavigation?.target === "changes" ? pendingFileNavigation : null;
   const diffViewerRef = useRef<ChangesDiffViewerRef>(null);
   const [changesFilter, setChangesFilter] = useState<ChangesFilter>("all-changes");
 
@@ -64,6 +71,16 @@ export function ChangesView({ workspace, isWatched = false, onReview, compact }:
   const fileChanges = useMemo(() => fileChangesData?.files ?? [], [fileChangesData]);
 
   const filteredFileChanges = fileChanges; // TODO: apply filter when backend supports it
+
+  useEffect(() => {
+    if (!navigationRequest) return;
+    const targetExists = filteredFileChanges.some(
+      (fileChange) => fileChangePath(fileChange) === navigationRequest.path
+    );
+    if (!targetExists) return;
+    diffViewerRef.current?.scrollToFile(navigationRequest.path);
+    workspaceLayoutActions.setPendingFileNavigation(workspace.id, null);
+  }, [filteredFileChanges, navigationRequest, workspace.id]);
 
   // Scroll the diff viewer to the clicked file
   const handleFileClick = useCallback((path: string) => {

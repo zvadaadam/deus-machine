@@ -9,12 +9,12 @@ import { useState, useMemo, memo } from "react";
 import { ChevronRight, Layers } from "lucide-react";
 import { AnimatePresence, m } from "framer-motion";
 import { cn } from "@/shared/lib/utils";
-import type { Part, ToolPart } from "@shared/messages/types";
+import type { ToolPart } from "@shared/messages/types";
 
 import { ToolPartBlock } from "./ToolPartBlock";
 
 interface PartToolGroupBlockProps {
-  parts: Part[];
+  parts: ToolPart[];
   isSealed: boolean;
 }
 
@@ -31,12 +31,12 @@ export const PartToolGroupBlock = memo(function PartToolGroupBlock({
   const isOpen = showHeader ? isExpanded : true;
 
   const toolSummary = useMemo(() => {
-    const names = new Set(parts.map((p) => (p as ToolPart).toolName));
+    const names = new Set(parts.map((p) => p.toolName));
     return [...names].join(", ");
   }, [parts]);
 
   return (
-    <div className="flex flex-col" style={{ contain: "layout style" }}>
+    <div className="flex w-full min-w-0 flex-col" style={{ contain: "layout style" }}>
       {showHeader && (
         <div className="tool-group-header-enter">
           <button
@@ -76,7 +76,7 @@ export const PartToolGroupBlock = memo(function PartToolGroupBlock({
                 {parts.length} tool call{parts.length !== 1 ? "s" : ""}
               </span>
 
-              {!isExpanded && (
+              {toolSummary && (
                 <>
                   <span className="text-muted-foreground/30" aria-hidden="true">
                     ·
@@ -99,7 +99,7 @@ export const PartToolGroupBlock = memo(function PartToolGroupBlock({
             className="flex flex-col gap-0.5 overflow-hidden"
           >
             {parts.map((p) => (
-              <ToolPartBlock key={p.id} part={p as ToolPart} />
+              <ToolPartBlock key={p.id} part={p} />
             ))}
           </m.div>
         )}

@@ -37,7 +37,38 @@ export function createReasoningPart(
   state?: "STREAMING" | "DONE",
   partIndex?: number
 ): ReasoningPart {
-  return { id: uuidv7(), sessionId, messageId, type: "REASONING", partIndex, text, state };
+  const now = new Date().toISOString();
+
+  return {
+    id: uuidv7(),
+    sessionId,
+    messageId,
+    type: "REASONING",
+    partIndex,
+    text,
+    state,
+    time: {
+      start: now,
+      ...(state === "DONE" ? { end: now } : {}),
+    },
+  };
+}
+
+export function completeReasoningPart(
+  part: ReasoningPart,
+  text: string = part.text
+): ReasoningPart {
+  const end = new Date().toISOString();
+
+  return {
+    ...part,
+    text,
+    state: "DONE",
+    time: {
+      start: part.time?.start ?? end,
+      end,
+    },
+  };
 }
 
 export function createToolPart(

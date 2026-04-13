@@ -10,7 +10,7 @@ import { Video, Play, Pause, X, Film } from "lucide-react";
 import { AnimatePresence, motion } from "framer-motion";
 import { createPortal } from "react-dom";
 import { BaseToolRenderer } from "../components";
-import { TOOL_ICON_CLS } from "../toolColors";
+import { TOOL_ICON_CLS, TOOL_ICON_MUTED_CLS } from "../toolColors";
 import { cn } from "@/shared/lib/utils";
 import { getBaseURL } from "@/shared/config/api.config";
 import * as browserViews from "@/platform/native/browser-views";
@@ -138,7 +138,7 @@ export function RecordingStartToolRenderer({ toolUse, toolResult, isLoading }: T
   return (
     <BaseToolRenderer
       toolName="Start Recording"
-      icon={<Video className={cn(TOOL_ICON_CLS, "text-muted-foreground")} />}
+      icon={<Video className={cn(TOOL_ICON_CLS, TOOL_ICON_MUTED_CLS)} />}
       toolUse={toolUse}
       toolResult={toolResult}
       isLoading={isLoading}
@@ -172,7 +172,7 @@ export function RecordingStopToolRenderer({ toolUse, toolResult, isLoading }: To
     return (
       <BaseToolRenderer
         toolName="Screen Recording"
-        icon={<Video className={cn(TOOL_ICON_CLS, "text-primary")} />}
+        icon={<Video className={cn(TOOL_ICON_CLS, TOOL_ICON_MUTED_CLS)} />}
         toolUse={toolUse}
         toolResult={toolResult}
         isLoading={isLoading}
@@ -185,7 +185,7 @@ export function RecordingStopToolRenderer({ toolUse, toolResult, isLoading }: To
     return (
       <BaseToolRenderer
         toolName="Screen Recording"
-        icon={<Video className={cn(TOOL_ICON_CLS, "text-primary")} />}
+        icon={<Video className={cn(TOOL_ICON_CLS, TOOL_ICON_MUTED_CLS)} />}
         toolUse={toolUse}
         toolResult={toolResult}
         showContentOnError
@@ -198,7 +198,7 @@ export function RecordingStopToolRenderer({ toolUse, toolResult, isLoading }: To
     return (
       <BaseToolRenderer
         toolName="Screen Recording"
-        icon={<Video className={cn(TOOL_ICON_CLS, "text-primary")} />}
+        icon={<Video className={cn(TOOL_ICON_CLS, TOOL_ICON_MUTED_CLS)} />}
         toolUse={toolUse}
         toolResult={toolResult}
         renderSummary={() => (
@@ -214,11 +214,10 @@ export function RecordingStopToolRenderer({ toolUse, toolResult, isLoading }: To
   return (
     <BaseToolRenderer
       toolName="Screen Recording"
-      icon={<Film className={cn(TOOL_ICON_CLS, "text-primary")} />}
+      icon={<Film className={cn(TOOL_ICON_CLS, TOOL_ICON_MUTED_CLS)} />}
       toolUse={toolUse}
       toolResult={toolResult}
       defaultExpanded
-      fullWidthContent
       renderSummary={() =>
         duration != null ? (
           <span className="text-muted-foreground text-sm">{formatDuration(duration)}</span>

@@ -10,6 +10,8 @@ import type { Message, SessionStatus } from "../types";
 
 interface SessionContextValue {
   sessionStatus: SessionStatus;
+  workspaceId: string | null;
+  workspacePath: string | null;
   /** Subagent child messages grouped by parent tool_use_id */
   subagentMessages: Map<string, Message[]>;
   /** True when rendering inside a subagent — prevents recursive nesting */
@@ -20,6 +22,8 @@ const SessionContext = createContext<SessionContextValue | null>(null);
 
 interface SessionProviderProps {
   sessionStatus: SessionStatus;
+  workspaceId?: string | null;
+  workspacePath?: string | null;
   subagentMessages: Map<string, Message[]>;
   insideSubagent?: boolean;
   children: ReactNode;
@@ -27,13 +31,15 @@ interface SessionProviderProps {
 
 export function SessionProvider({
   sessionStatus,
+  workspaceId = null,
+  workspacePath = null,
   subagentMessages,
   insideSubagent = false,
   children,
 }: SessionProviderProps) {
   const value = useMemo(
-    () => ({ sessionStatus, subagentMessages, insideSubagent }),
-    [sessionStatus, subagentMessages, insideSubagent]
+    () => ({ sessionStatus, workspaceId, workspacePath, subagentMessages, insideSubagent }),
+    [sessionStatus, workspaceId, workspacePath, subagentMessages, insideSubagent]
   );
 
   return <SessionContext.Provider value={value}>{children}</SessionContext.Provider>;

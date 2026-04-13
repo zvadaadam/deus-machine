@@ -1,13 +1,3 @@
-/**
- * KillShell Tool Renderer (REFACTORED with BaseToolRenderer)
- *
- * Specialized renderer for the KillShell tool
- * Terminates background shell processes
- *
- * BEFORE: 94 LOC
- * AFTER: ~55 LOC
- */
-
 import { XCircle } from "lucide-react";
 import { BaseToolRenderer } from "../components";
 import type { ToolRendererProps } from "../../chat-types";
