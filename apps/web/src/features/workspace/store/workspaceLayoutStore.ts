@@ -19,6 +19,7 @@
 import { create } from "zustand";
 import { devtools, persist } from "zustand/middleware";
 import type { PersistedBrowserTab } from "@/features/browser/types";
+import { normalizeWorkspaceRelativePath } from "@/features/workspace/lib/normalizeWorkspaceRelativePath";
 
 export type ContentTab =
   | "changes"
@@ -368,7 +369,9 @@ export const workspaceLayoutActions = {
     useWorkspaceLayoutStore.getState().clearWorkspaceLayout(workspaceId),
   resetAll: () => useWorkspaceLayoutStore.getState().resetAll(),
   openFileInContent: (workspaceId: string, path: string, target: FileNavigationTarget) => {
-    const normalizedPath = path.replace(/\\/g, "/").replace(/^\.\//, "").replace(/^\/+/, "");
+    const normalizedPath = normalizeWorkspaceRelativePath(path);
+    if (!normalizedPath) return;
+
     useWorkspaceLayoutStore.getState().setLayout(workspaceId, {
       activeContentTab: target,
       selectedFilePath: normalizedPath,

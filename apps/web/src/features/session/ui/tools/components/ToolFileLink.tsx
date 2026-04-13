@@ -1,6 +1,7 @@
 import { ArrowUpRight } from "lucide-react";
 import { useMemo } from "react";
 import { useSession } from "@/features/session/context";
+import { normalizeWorkspaceRelativePath } from "@/features/workspace/lib/normalizeWorkspaceRelativePath";
 import {
   workspaceLayoutActions,
   type FileNavigationTarget,
@@ -22,10 +23,9 @@ function normalizeToolFilePath(path: string, workspacePath: string | null): stri
 
   if (normalizedWorkspacePath) {
     if (normalizedPath.startsWith(`${normalizedWorkspacePath}/`)) {
-      const relativePath = normalizedPath
-        .slice(normalizedWorkspacePath.length + 1)
-        .replace(/^\/+/, "");
-      return relativePath || null;
+      return normalizeWorkspaceRelativePath(
+        normalizedPath.slice(normalizedWorkspacePath.length + 1)
+      );
     }
 
     if (isAbsolutePath) {
@@ -37,8 +37,7 @@ function normalizeToolFilePath(path: string, workspacePath: string | null): stri
     return null;
   }
 
-  const relativePath = normalizedPath.replace(/^\.\//, "").replace(/^\/+/, "");
-  return relativePath || null;
+  return normalizeWorkspaceRelativePath(normalizedPath);
 }
 
 export function ToolFileLink({ path, target, className }: ToolFileLinkProps) {
