@@ -233,9 +233,10 @@ export function FileBrowserPanel({
   }, [filterMode]);
 
   useEffect(() => {
-    if (!revealRequest?.requestId || !data) return;
-    onRevealConsumed?.(revealRequest.requestId);
-  }, [data, onRevealConsumed, revealRequest?.requestId]);
+    if (!revealRequest?.requestId) return;
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- reveal requests intentionally clear stale search filters
+    setSearchQuery("");
+  }, [revealRequest?.requestId]);
 
   // Clear search when switching away from All tab
   useEffect(() => {
@@ -444,13 +445,13 @@ export function FileBrowserPanel({
       <div className="flex-1 overflow-y-auto py-1">
         {filteredFiles.length > 0 ? (
           <FileTree
-            key={`${filterMode}:${revealRequest?.requestId ?? "default"}`}
             nodes={filteredFiles}
             selectedPath={selectedFilePath}
             onFileClick={handleFileClick}
             defaultExpanded={filterMode === "changes"}
             revealPath={revealRequest?.path ?? null}
             revealRequestId={revealRequest?.requestId ?? null}
+            onRevealConsumed={onRevealConsumed}
           />
         ) : (
           <div className="animate-fade-in-up flex flex-col items-center justify-center gap-3 py-12">

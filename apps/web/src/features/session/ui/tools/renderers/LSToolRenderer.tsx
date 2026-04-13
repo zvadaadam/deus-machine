@@ -56,8 +56,9 @@ export function LSToolRenderer({ toolUse, toolResult, isLoading }: ToolRendererP
         return (
           <ToolResultList>
             {listings.map((item, index) => {
-              const isDirectory = item.endsWith("/");
-              const cleanItem = item.replace(/\/$/, "");
+              const normalizedItem = item.replace(/\\/g, "/");
+              const isDirectory = normalizedItem.endsWith("/");
+              const cleanItem = normalizedItem.replace(/\/$/, "");
 
               return (
                 <ToolResultRow key={item + index} title={item}>

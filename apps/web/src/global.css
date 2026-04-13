@@ -1183,6 +1183,8 @@
   --control-surface-hover: var(--accent);
   --checked-tint: color-mix(in oklch, var(--primary) 5%, transparent);
   --tooltip-kbd: color-mix(in oklch, var(--background) 20%, transparent);
+  --mask-transparent: rgb(0 0 0 / 0);
+  --mask-solid: rgb(0 0 0 / 1);
 
   /* --- Accent palette (reference semantic tokens) --- */
   --accent-blue: var(--primary);

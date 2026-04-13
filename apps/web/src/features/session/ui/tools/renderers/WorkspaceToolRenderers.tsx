@@ -6,22 +6,45 @@ import type { ToolRendererProps } from "../../chat-types";
 import { getPathLeaf } from "../utils/getPathLeaf";
 
 type AskUserQuestionInput = {
-  question?: string;
-  options?: unknown;
+  question: string;
+  options: string[];
+  multiSelect?: boolean;
 };
 
 type DiffCommentInput = {
-  file?: string;
-  lineNumber?: number;
-  body?: string;
+  file: string;
+  lineNumber: number;
+  body: string;
 };
 
+function isStringArray(value: unknown): value is string[] {
+  return Array.isArray(value) && value.every((item) => typeof item === "string");
+}
+
 function isQuestionInput(value: unknown): value is AskUserQuestionInput {
-  return !!value && typeof value === "object";
+  if (!value || typeof value !== "object") return false;
+  const candidate = value as Record<string, unknown>;
+
+  return (
+    typeof candidate.question === "string" &&
+    candidate.question.trim().length > 0 &&
+    isStringArray(candidate.options) &&
+    (candidate.multiSelect === undefined || typeof candidate.multiSelect === "boolean")
+  );
 }
 
 function isDiffCommentInput(value: unknown): value is DiffCommentInput {
-  return !!value && typeof value === "object";
+  if (!value || typeof value !== "object") return false;
+  const candidate = value as Record<string, unknown>;
+
+  return (
+    typeof candidate.file === "string" &&
+    candidate.file.trim().length > 0 &&
+    typeof candidate.body === "string" &&
+    candidate.body.trim().length > 0 &&
+    typeof candidate.lineNumber === "number" &&
+    Number.isFinite(candidate.lineNumber)
+  );
 }
 
 function toQuestionList(questions: unknown): AskUserQuestionInput[] {
