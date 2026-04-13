@@ -1,13 +1,3 @@
-/**
- * BashOutput Tool Renderer (REFACTORED with BaseToolRenderer)
- *
- * Specialized renderer for the BashOutput tool
- * Monitors and displays output from background bash processes
- *
- * BEFORE: 140 LOC
- * AFTER: ~75 LOC
- */
-
 import { Activity } from "lucide-react";
 import { BaseToolRenderer } from "../components";
 import { cn } from "@/shared/lib/utils";

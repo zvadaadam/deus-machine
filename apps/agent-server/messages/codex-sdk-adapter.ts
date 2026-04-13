@@ -24,7 +24,13 @@ import type {
 } from "@shared/messages";
 import { emptyTokenUsage } from "@shared/messages";
 import type { Adapter, EventTransformer, PartEvent, StreamContext } from "./adapter";
-import { completeToolPart, createReasoningPart, createTextPart, createToolPart } from "./parts";
+import {
+  completeReasoningPart,
+  completeToolPart,
+  createReasoningPart,
+  createTextPart,
+  createToolPart,
+} from "./parts";
 
 // ---------------------------------------------------------------------------
 // CodexSdkTransformer
@@ -245,7 +251,8 @@ class CodexSdkTransformer implements EventTransformer<ThreadEvent> {
     if (partId) {
       const existing = this.parts.get(partId);
       if (existing && existing.type === "REASONING") {
-        const updated: Part = { ...existing, text, state };
+        const updated: Part =
+          state === "DONE" ? completeReasoningPart(existing, text) : { ...existing, text, state };
         this.parts.set(partId, updated);
 
         if (state === "DONE") {

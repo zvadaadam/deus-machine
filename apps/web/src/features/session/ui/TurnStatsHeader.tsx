@@ -60,54 +60,45 @@ export const TurnStatsHeader = memo(function TurnStatsHeader({
           />
         </div>
 
-        {isExpanded ? (
-          // Expanded state: Show clear action
-          <span className="text-muted-foreground truncate">Collapse</span>
-        ) : (
-          // Collapsed state: Show metrics breakdown
-          <>
-            {/* Primary metric: Message count (always shown) */}
-            <span className="text-muted-foreground truncate tabular-nums">
-              {hiddenMessageCount} message{hiddenMessageCount !== 1 ? "s" : ""}
-            </span>
+        {/* Metrics stay visible in both states — expansion should add detail, not remove context. */}
+        <>
+          <span className="text-muted-foreground truncate tabular-nums">
+            {hiddenMessageCount} message{hiddenMessageCount !== 1 ? "s" : ""}
+          </span>
 
-            {/* Subagent count (only if > 0) */}
-            {subagentCount > 0 && (
-              <>
-                <span className="text-muted-foreground/30" aria-hidden="true">
-                  •
-                </span>
-                <span className="text-muted-foreground truncate tabular-nums">
-                  {subagentCount} subagent{subagentCount !== 1 ? "s" : ""}
-                </span>
-              </>
-            )}
+          {subagentCount > 0 && (
+            <>
+              <span className="text-muted-foreground/30" aria-hidden="true">
+                •
+              </span>
+              <span className="text-muted-foreground truncate tabular-nums">
+                {subagentCount} subagent{subagentCount !== 1 ? "s" : ""}
+              </span>
+            </>
+          )}
 
-            {/* Secondary metric: Tool calls (only if > 0) */}
-            {toolCount > 0 && (
-              <>
-                <span className="text-muted-foreground/30" aria-hidden="true">
-                  •
-                </span>
-                <span className="text-muted-foreground truncate tabular-nums">
-                  {toolCount} tool call{toolCount !== 1 ? "s" : ""}
-                </span>
-              </>
-            )}
+          {toolCount > 0 && (
+            <>
+              <span className="text-muted-foreground/30" aria-hidden="true">
+                •
+              </span>
+              <span className="text-muted-foreground truncate tabular-nums">
+                {toolCount} tool call{toolCount !== 1 ? "s" : ""}
+              </span>
+            </>
+          )}
 
-            {/* Tertiary metric: Files changed (only if > 0) */}
-            {filesChanged > 0 && (
-              <>
-                <span className="text-muted-foreground/30" aria-hidden="true">
-                  •
-                </span>
-                <span className="text-muted-foreground truncate tabular-nums">
-                  {filesChanged} file{filesChanged !== 1 ? "s" : ""} changed
-                </span>
-              </>
-            )}
-          </>
-        )}
+          {filesChanged > 0 && (
+            <>
+              <span className="text-muted-foreground/30" aria-hidden="true">
+                •
+              </span>
+              <span className="text-muted-foreground truncate tabular-nums">
+                {filesChanged} file{filesChanged !== 1 ? "s" : ""} changed
+              </span>
+            </>
+          )}
+        </>
       </div>
     </button>
   );

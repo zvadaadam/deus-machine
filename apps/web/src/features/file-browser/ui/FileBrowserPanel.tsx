@@ -34,6 +34,7 @@ import {
 } from "@/features/workspace/lib/changesFilter";
 import type { Workspace, FileChange } from "@/shared/types";
 import type { FileTreeNode } from "../types";
+import type { PendingFileNavigation } from "@/features/workspace/store/workspaceLayoutStore";
 
 type FilterMode = "all" | "changes";
 
@@ -55,6 +56,10 @@ interface FileBrowserPanelProps {
   selectedFilePath?: string | null;
   /** Called when any file is clicked */
   onFileClick?: (path: string) => void;
+  /** Optional one-shot request to reveal a file in the tree */
+  revealRequest?: PendingFileNavigation | null;
+  /** Called after a reveal request has been applied to the tree */
+  onRevealConsumed?: (requestId: string) => void;
   /** Optional header slot rendered above the panel */
   headerSlot?: React.ReactNode;
   /** Controlled filter mode — when provided, component uses this instead of local state */
@@ -172,16 +177,6 @@ function filterTreeBySearch(nodes: FileTreeNode[], query: string): FileTreeNode[
   }, [] as FileTreeNode[]);
 }
 
-/** Count changed files in tree (only diff-confirmed changes, not scanner git_status) */
-function countChangedFiles(nodes: FileTreeNode[]): number {
-  let count = 0;
-  for (const node of nodes) {
-    if (node.type === "file" && node.change_status) count++;
-    if (node.children) count += countChangedFiles(node.children);
-  }
-  return count;
-}
-
 /** Build a Set of file paths from a FileChange array */
 function buildPathSet(changes: FileChange[]): Set<string> {
   const set = new Set<string>();
@@ -201,6 +196,8 @@ export function FileBrowserPanel({
   fileChangesTotalCount,
   selectedFilePath,
   onFileClick: onFileClickProp,
+  revealRequest,
+  onRevealConsumed,
   headerSlot,
   filterMode: controlledFilterMode,
   onFilterModeChange,
@@ -235,6 +232,11 @@ export function FileBrowserPanel({
     }
   }, [filterMode]);
 
+  useEffect(() => {
+    if (!revealRequest?.requestId || !data) return;
+    onRevealConsumed?.(revealRequest.requestId);
+  }, [data, onRevealConsumed, revealRequest?.requestId]);
+
   // Clear search when switching away from All tab
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect -- intentional: clear search on filter change
@@ -267,8 +269,6 @@ export function FileBrowserPanel({
 
     return enrichTreeWithChanges(data.files, taggedChanges);
   }, [data, fileChanges, uncommittedPaths]);
-
-  const changedCount = useMemo(() => countChangedFiles(enrichedTree), [enrichedTree]);
 
   // Apply filter mode + sub-filter + search
   const filteredFiles = useMemo(() => {
@@ -444,11 +444,13 @@ export function FileBrowserPanel({
       <div className="flex-1 overflow-y-auto py-1">
         {filteredFiles.length > 0 ? (
           <FileTree
-            key={filterMode}
+            key={`${filterMode}:${revealRequest?.requestId ?? "default"}`}
             nodes={filteredFiles}
             selectedPath={selectedFilePath}
             onFileClick={handleFileClick}
             defaultExpanded={filterMode === "changes"}
+            revealPath={revealRequest?.path ?? null}
+            revealRequestId={revealRequest?.requestId ?? null}
           />
         ) : (
           <div className="animate-fade-in-up flex flex-col items-center justify-center gap-3 py-12">

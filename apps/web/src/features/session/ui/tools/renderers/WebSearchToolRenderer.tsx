@@ -1,13 +1,3 @@
-/**
- * WebSearch Tool Renderer (REFACTORED with BaseToolRenderer)
- *
- * Specialized renderer for the WebSearch tool
- * Displays web search queries and results
- *
- * BEFORE: 161 LOC
- * AFTER: ~90 LOC
- */
-
 import { Search } from "lucide-react";
 import { BaseToolRenderer } from "../components";
 import { cn } from "@/shared/lib/utils";

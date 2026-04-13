@@ -1,13 +1,3 @@
-/**
- * TodoWrite Tool Renderer (REFACTORED with BaseToolRenderer)
- *
- * Specialized renderer for the TodoWrite tool (task tracking)
- * Displays todos with status indicators: pending, in_progress, completed
- *
- * BEFORE: 177 LOC
- * AFTER: ~120 LOC
- */
-
 import { match } from "ts-pattern";
 import { ListChecks, Circle, Loader2, CheckCircle2 } from "lucide-react";
 import { BaseToolRenderer } from "../components";

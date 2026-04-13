@@ -34,11 +34,14 @@ export function calculateTurnStats(messages: Message[]): TurnStats {
         subagentCount++;
       }
 
-      // Extract file path from tool input for file change tracking
-      const input = toolPart.state.status !== "PENDING" ? (toolPart.state as any).input : null;
-      const filePath = input?.file_path;
-      if (typeof filePath === "string" && filePath.length > 0) {
-        fileSet.add(filePath);
+      // Only count tools that actually modify files
+      const FILE_MODIFYING_TOOLS = ["Edit", "Write", "MultiEdit", "NotebookEdit"];
+      if (FILE_MODIFYING_TOOLS.includes(toolPart.toolName)) {
+        const input = toolPart.state.status !== "PENDING" ? (toolPart.state as any).input : null;
+        const filePath = input?.file_path;
+        if (typeof filePath === "string" && filePath.length > 0) {
+          fileSet.add(filePath);
+        }
       }
     }
   }

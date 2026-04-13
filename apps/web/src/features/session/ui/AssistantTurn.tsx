@@ -24,6 +24,7 @@ import { useMemo, useState, memo } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import type { Message } from "@/shared/types";
 import { MessageItem } from "./MessageItem";
+import { TurnFooter } from "./TurnFooter";
 import { TurnStatsHeader } from "./TurnStatsHeader";
 import { calculateTurnStats } from "./utils";
 import { Square } from "lucide-react";
@@ -32,6 +33,7 @@ interface AssistantTurnProps {
   messages: Message[];
   isLatest: boolean;
   isWorking: boolean;
+  startedAt?: string | null;
 }
 
 /**
@@ -42,6 +44,7 @@ export const AssistantTurn = memo(function AssistantTurn({
   messages,
   isLatest,
   isWorking,
+  startedAt,
 }: AssistantTurnProps) {
   const [isManuallyExpanded, setIsManuallyExpanded] = useState<boolean | null>(null);
   const isExpanded = isManuallyExpanded !== null ? isManuallyExpanded : isLatest;
@@ -56,7 +59,7 @@ export const AssistantTurn = memo(function AssistantTurn({
     const lastMsg = messages[messages.length - 1];
     if (!lastMsg) return false;
     if (lastMsg.cancelled_at) return true;
-    if ((lastMsg as any).stop_reason === "cancelled") return true;
+    if (lastMsg.stop_reason === "cancelled") return true;
     return false;
   }, [messages]);
 
@@ -76,7 +79,10 @@ export const AssistantTurn = memo(function AssistantTurn({
   }, [messages, isCancelled]);
 
   return (
-    <div className="assistant-turn flex min-w-0 flex-col" style={{ contain: "layout style" }}>
+    <div
+      className="assistant-turn flex w-full min-w-0 flex-col"
+      style={{ contain: "layout style" }}
+    >
       {/* Stats header — visible for multi-message turns (completed only) */}
       {!isStreaming && hiddenMessages.length > 0 && (
         <TurnStatsHeader
@@ -127,6 +133,7 @@ export const AssistantTurn = memo(function AssistantTurn({
               <span className="text-warning text-sm font-medium">Response stopped</span>
             </div>
           )}
+          <TurnFooter messages={messages} startedAt={startedAt} />
         </>
       )}
     </div>

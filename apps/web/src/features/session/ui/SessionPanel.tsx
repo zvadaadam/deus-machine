@@ -356,7 +356,12 @@ export const SessionPanel = forwardRef<SessionPanelRef, SessionPanelProps>(
     // If embedded, render without overlay but with message input
     if (embedded) {
       return (
-        <SessionProvider sessionStatus={sessionStatus} subagentMessages={subagentMessages}>
+        <SessionProvider
+          sessionStatus={sessionStatus}
+          workspaceId={workspaceId ?? null}
+          workspacePath={workspacePath}
+          subagentMessages={subagentMessages}
+        >
           <div
             className={`${CONTENT_WIDTH_CLASSES} relative flex min-h-0 flex-1 flex-col`}
             onDragOver={handleDragOver}
@@ -464,7 +469,12 @@ export const SessionPanel = forwardRef<SessionPanelRef, SessionPanelProps>(
 
             {/* Main Content Area */}
             <div className="flex min-h-0 flex-1 flex-col">
-              <SessionProvider sessionStatus={sessionStatus} subagentMessages={subagentMessages}>
+              <SessionProvider
+                sessionStatus={sessionStatus}
+                workspaceId={workspaceId ?? null}
+                workspacePath={workspacePath}
+                subagentMessages={subagentMessages}
+              >
                 <div className={`${CONTENT_WIDTH_CLASSES} mx-auto flex min-h-0 flex-1 flex-col`}>
                   <Chat
                     messages={messages}

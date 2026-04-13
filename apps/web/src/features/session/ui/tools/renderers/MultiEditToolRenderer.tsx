@@ -1,16 +1,9 @@
-/**
- * MultiEdit Tool Renderer
- *
- * Renders multiple edits to one file, each as a proper unified diff
- * powered by @pierre/diffs.
- */
-
 import { FilePenLine } from "lucide-react";
-import { BaseToolRenderer } from "../components";
+import { BaseToolRenderer, ToolFileLink } from "../components";
 import { UnifiedDiff } from "../components/UnifiedDiff";
 import { cn } from "@/shared/lib/utils";
 import type { ToolRendererProps } from "../../chat-types";
-import { TOOL_COLORS, TOOL_ICON_CLS } from "../toolColors";
+import { TOOL_ICON_CLS, TOOL_ICON_MUTED_CLS } from "../toolColors";
 import { computeDiffStats } from "../utils/computeDiffStats";
 
 interface Edit {
@@ -31,9 +24,6 @@ export function MultiEditToolRenderer({ toolUse, toolResult, isLoading }: ToolRe
       )
     : [];
   const editCount = safeEdits.length;
-  const fileName = safeFilePath ? safeFilePath.split("/").pop() || safeFilePath : "unknown";
-
-  // Aggregate diff stats across all edits
   const totalStats = safeEdits.reduce(
     (acc, edit) => {
       const stats = computeDiffStats(edit.old_string, edit.new_string);
@@ -45,20 +35,13 @@ export function MultiEditToolRenderer({ toolUse, toolResult, isLoading }: ToolRe
   return (
     <BaseToolRenderer
       toolName="MultiEdit"
-      icon={<FilePenLine className={cn(TOOL_ICON_CLS, TOOL_COLORS.MultiEdit)} />}
+      icon={<FilePenLine className={cn(TOOL_ICON_CLS, TOOL_ICON_MUTED_CLS)} />}
       toolUse={toolUse}
       toolResult={toolResult}
       isLoading={isLoading}
       renderSummary={() => (
         <>
-          <span
-            className={cn(
-              "text-foreground/80 rounded-sm px-1.5 py-0.5 font-mono text-sm font-normal",
-              "bg-muted/60 rounded-md px-1.5 py-0.5 font-mono"
-            )}
-          >
-            {fileName}
-          </span>
+          <ToolFileLink path={safeFilePath} target="changes" />
           <span className="text-muted-foreground text-sm font-normal">
             {" "}
             • {editCount} edit{editCount !== 1 ? "s" : ""}
@@ -79,11 +62,11 @@ export function MultiEditToolRenderer({ toolUse, toolResult, isLoading }: ToolRe
         }
 
         return (
-          <div className="space-y-3 px-2 pb-2">
-            {safeEdits.map((edit: Edit, index: number) => (
-              <div key={index} className="space-y-1">
+          <div className="w-full space-y-4 pb-1">
+            {safeEdits.map((edit, index) => (
+              <div key={index} className="w-full space-y-1.5">
                 {editCount > 1 && (
-                  <div className="text-muted-foreground flex items-center gap-2 text-xs font-medium">
+                  <div className="text-muted-foreground flex items-center gap-2 px-1 text-xs font-medium">
                     <span className="bg-muted rounded-md px-1.5 py-0.5">
                       Edit {index + 1}/{editCount}
                     </span>
@@ -93,7 +76,8 @@ export function MultiEditToolRenderer({ toolUse, toolResult, isLoading }: ToolRe
                   oldString={edit.old_string}
                   newString={edit.new_string}
                   fileName={safeFilePath}
-                  maxHeight="300px"
+                  maxHeight="320px"
+                  className="w-full"
                 />
               </div>
             ))}
