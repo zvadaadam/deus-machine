@@ -5,6 +5,7 @@
  * Route handlers call these functions instead of inline SQL.
  */
 import type Database from "better-sqlite3";
+import type { Part } from "@shared/messages/types";
 import type {
   RepositoryRow,
   RepositoryWithCountsRow,
@@ -342,8 +343,8 @@ export function getPartsByMessageIds(db: Database.Database, messageIds: string[]
 }
 
 /**
- * Enrich message rows with their parts from the parts table.
- * Does a single batch query for all message IDs, then groups by message_id.
+ * Enrich message rows with parsed Part objects from the parts table.
+ * Parses the JSON `data` field once here so the frontend never sees PartRow.
  * Messages with no parts get an empty array.
  */
 export function attachParts(db: Database.Database, messages: MessageRow[]): MessageRowWithParts[] {
@@ -352,14 +353,21 @@ export function attachParts(db: Database.Database, messages: MessageRow[]): Mess
   const messageIds = messages.map((m) => m.id);
   const allParts = getPartsByMessageIds(db, messageIds);
 
-  // Group parts by message_id
-  const partsByMessageId = new Map<string, PartRow[]>();
-  for (const part of allParts) {
-    const existing = partsByMessageId.get(part.message_id);
-    if (existing) {
-      existing.push(part);
-    } else {
-      partsByMessageId.set(part.message_id, [part]);
+  // Parse JSON and group by message_id
+  const partsByMessageId = new Map<string, Part[]>();
+  for (const row of allParts) {
+    try {
+      const part = JSON.parse(row.data) as Part;
+      // Backfill partIndex from DB seq for older rows that predate partIndex
+      if (part.partIndex == null) part.partIndex = row.seq;
+      const existing = partsByMessageId.get(row.message_id);
+      if (existing) {
+        existing.push(part);
+      } else {
+        partsByMessageId.set(row.message_id, [part]);
+      }
+    } catch {
+      console.error(`[attachParts] Failed to parse part ${row.id}:`, row.data?.slice(0, 100));
     }
   }
 

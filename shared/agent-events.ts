@@ -30,11 +30,17 @@ import type { FinishReason, Part, TokenUsage } from "./messages";
 
 export type PartEvent =
   | { type: "turn.started"; turnId?: string }
-  | { type: "message.created"; messageId: string; role: "assistant" }
+  | { type: "message.created"; messageId: string; role: "assistant"; parentToolCallId?: string }
   | { type: "part.created"; part: Part }
   | { type: "part.delta"; partId: string; delta: string }
   | { type: "part.done"; part: Part }
-  | { type: "message.done"; messageId: string; stopReason?: string; parts: Part[] }
+  | {
+      type: "message.done";
+      messageId: string;
+      stopReason?: string;
+      parts: Part[];
+      parentToolCallId?: string;
+    }
   | {
       type: "turn.completed";
       turnId?: string;
@@ -390,6 +396,7 @@ export const MessageCreatedEventSchema = z.object({
   agentType: AgentTypeSchema,
   messageId: z.string(),
   role: z.literal("assistant"),
+  parentToolCallId: z.string().optional(),
 });
 export type MessageCreatedEvent = z.infer<typeof MessageCreatedEventSchema>;
 
@@ -429,6 +436,7 @@ export const MessageDoneEventSchema = z.object({
   messageId: z.string(),
   stopReason: z.string().optional(),
   parts: z.array(PartSchema),
+  parentToolCallId: z.string().optional(),
 });
 export type MessageDoneEvent = z.infer<typeof MessageDoneEventSchema>;
 

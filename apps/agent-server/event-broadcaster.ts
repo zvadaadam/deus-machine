@@ -279,6 +279,7 @@ class EventBroadcasterClass {
           agentType,
           messageId: event.messageId,
           role: event.role,
+          ...(event.parentToolCallId ? { parentToolCallId: event.parentToolCallId } : {}),
         });
         break;
       case "part.created":
@@ -286,7 +287,7 @@ class EventBroadcasterClass {
           type: AGENT_EVENT_NAMES.PART_CREATED,
           sessionId,
           agentType,
-          messageId,
+          messageId: event.part.messageId,
           partId: event.part.id,
           part: event.part,
         });
@@ -305,7 +306,7 @@ class EventBroadcasterClass {
           type: AGENT_EVENT_NAMES.PART_DONE,
           sessionId,
           agentType,
-          messageId,
+          messageId: event.part.messageId,
           partId: event.part.id,
           part: event.part,
         });
@@ -318,6 +319,7 @@ class EventBroadcasterClass {
           messageId: event.messageId,
           ...(event.stopReason ? { stopReason: event.stopReason } : {}),
           parts: event.parts,
+          ...(event.parentToolCallId ? { parentToolCallId: event.parentToolCallId } : {}),
         });
         break;
       case "turn.completed":

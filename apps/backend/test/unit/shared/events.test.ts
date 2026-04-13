@@ -257,6 +257,9 @@ describe("shared/events", () => {
       expect(PROTOCOL_EVENTS).toContain("session:error");
       expect(PROTOCOL_EVENTS).toContain("session:progress");
       expect(PROTOCOL_EVENTS).toContain("tool:request");
+      // Message lifecycle events
+      expect(PROTOCOL_EVENTS).toContain("message:created");
+      expect(PROTOCOL_EVENTS).toContain("message:done");
       // Part lifecycle events
       expect(PROTOCOL_EVENTS).toContain("part:created");
       expect(PROTOCOL_EVENTS).toContain("part:delta");
@@ -267,7 +270,7 @@ describe("shared/events", () => {
       expect(PROTOCOL_EVENTS).toContain("git-clone-progress");
       expect(PROTOCOL_EVENTS).toContain("git-init-progress");
       expect(PROTOCOL_EVENTS).toContain("agent-server:request");
-      expect(PROTOCOL_EVENTS).toHaveLength(13);
+      expect(PROTOCOL_EVENTS).toHaveLength(15);
     });
   });
 });

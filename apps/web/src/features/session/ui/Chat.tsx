@@ -1,8 +1,5 @@
 import { match } from "ts-pattern";
 import type { Message, SessionStatus } from "@/shared/types";
-import type { ContentBlock } from "@/features/session/types";
-import { isToolResultBlock } from "@/features/session/types";
-import { isCancelledMessage } from "../lib/contentParser";
 import { MessageItem } from "./MessageItem";
 import { AssistantTurn } from "./AssistantTurn";
 import { WorkspaceEmptyState } from "./WorkspaceEmptyState";
@@ -13,9 +10,8 @@ import { cn } from "@/shared/lib/utils";
 
 import { useWorkingDuration } from "@/shared/hooks";
 import { useAutoScroll } from "../hooks";
-import { useSession } from "../context";
 import { useVirtualizer } from "@tanstack/react-virtual";
-import { useCallback, useMemo, useRef, useEffect, useLayoutEffect, useState } from "react";
+import { useCallback, useMemo, useRef, useEffect, useLayoutEffect } from "react";
 import { AnimatePresence, m } from "framer-motion";
 import { CircularPixelGrid, type CircularPixelGridVariant } from "./CircularPixelGrid";
 
@@ -141,8 +137,6 @@ export function Chat({
   userSendCount = 0,
   className,
 }: ChatProps) {
-  const { parseContent, toolResultMap, parentToolUseMap } = useSession();
-
   // Chat owns its scroll behavior entirely — refs, hook, and button.
   const messagesContainerRef = useRef<HTMLDivElement>(null);
 
@@ -221,29 +215,21 @@ export function Chat({
   });
 
   // Memoize message filtering to avoid re-parsing JSON on every render
+  // Filter messages: skip subagent children (they render nested under Task tool blocks)
   const renderableMessages = useMemo(() => {
     return messages.filter((message) => {
-      // Skip subagent messages — they render nested under Task tool blocks
-      if (parentToolUseMap.has(message.id)) return false;
-
-      // Messages with parts always render (new unified model)
+      // Skip subagent messages
+      if (message.parent_tool_use_id) return false;
+      // User messages always render
+      if (message.role === "user") return true;
+      // Assistant messages with parts render
       if (message.parts && message.parts.length > 0) return true;
-
-      // Keep cancellation sentinels — they trigger "Response stopped" in AssistantTurn
-      if (isCancelledMessage(message.content)) return true;
-
-      const contentBlocks = parseContent(message.content);
-      const isArray = Array.isArray(contentBlocks);
-      const onlyToolResults =
-        isArray &&
-        contentBlocks.length > 0 &&
-        contentBlocks.every((block: ContentBlock | string) => isToolResultBlock(block));
-      const isEmpty =
-        (isArray && contentBlocks.length === 0) ||
-        (!isArray && (contentBlocks == null || String(contentBlocks).trim() === ""));
-      return !(onlyToolResults || isEmpty);
+      // Keep cancelled messages for "Response stopped" badge
+      if (message.cancelled_at) return true;
+      // Skip empty messages (message.created arrived but no parts yet — will appear once parts come)
+      return false;
     });
-  }, [messages, parseContent, parentToolUseMap]);
+  }, [messages]);
 
   /**
    * Derive agent sub-state from the last content block in the message stream.
@@ -259,52 +245,26 @@ export function Chat({
     for (let i = renderableMessages.length - 1; i >= 0; i--) {
       const msg = renderableMessages[i];
       if (msg.role !== "assistant") continue;
+      if (!msg.parts || msg.parts.length === 0) continue;
 
-      // Parts-based detection (new unified model)
-      if (msg.parts && msg.parts.length > 0) {
-        // Find the last part by seq order
-        const sorted = [...msg.parts].sort((a, b) => a.seq - b.seq);
-        const lastPart = sorted[sorted.length - 1];
-        if (!lastPart) return "generating";
+      const sorted = [...msg.parts].sort((a, b) => (a.partIndex ?? 0) - (b.partIndex ?? 0));
+      const lastPart = sorted[sorted.length - 1];
+      if (!lastPart) return "generating";
 
-        return match(lastPart.type)
-          .with("REASONING", () => "thinking" as const)
-          .with("TEXT", () => "generating" as const)
-          .with("TOOL", () => {
-            try {
-              const data = JSON.parse(lastPart.data);
-              const status = data?.state?.status;
-              if (status === "ERROR") return "error" as const;
-              if (status === "PENDING" || status === "RUNNING") return "toolExecuting" as const;
-              return "generating" as const;
-            } catch {
-              return "toolExecuting" as const;
-            }
-          })
-          .otherwise(() => "generating" as const);
-      }
-
-      // Legacy content-based detection (fallback)
-      const blocks = parseContent(msg.content);
-      if (!Array.isArray(blocks) || blocks.length === 0) continue;
-
-      const lastBlock = blocks[blocks.length - 1];
-      if (!lastBlock || typeof lastBlock === "string") return "generating";
-
-      return match(lastBlock)
-        .with({ type: "thinking" }, () => "thinking" as const)
-        .with({ type: "text" }, () => "generating" as const)
-        .with({ type: "tool_use" }, (b) => {
-          const result = toolResultMap.get(b.id);
-          if (result?.is_error) return "error" as const;
-          if (!result) return "toolExecuting" as const;
+      return match(lastPart.type)
+        .with("REASONING", () => "thinking" as const)
+        .with("TEXT", () => "generating" as const)
+        .with("TOOL", () => {
+          const status = (lastPart as import("@shared/messages/types").ToolPart).state.status;
+          if (status === "ERROR") return "error" as const;
+          if (status === "PENDING" || status === "RUNNING") return "toolExecuting" as const;
           return "generating" as const;
         })
         .otherwise(() => "generating" as const);
     }
 
     return "generating";
-  }, [sessionStatus, renderableMessages, parseContent, toolResultMap]);
+  }, [sessionStatus, renderableMessages]);
 
   /**
    * Group consecutive messages into turns
@@ -575,12 +535,7 @@ export function Chat({
                         )}
                       >
                         {turn.type === "user" ? (
-                          <MessageItem
-                            message={turn.message}
-                            isLatestAssistant={false}
-                            isLastInTurn={true}
-                            isWorking={sessionStatus === "working"}
-                          />
+                          <MessageItem message={turn.message} isLastInTurn={true} />
                         ) : (
                           <AssistantTurn
                             messages={turn.messages}

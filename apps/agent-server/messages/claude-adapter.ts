@@ -68,8 +68,14 @@ function mapSdkUsage(u: ClaudeUsage): TokenUsage {
 function extractSubagentMetadata(input: Record<string, unknown>): SubagentMetadata {
   return {
     type: typeof input.subagent_type === "string" ? input.subagent_type : "unknown",
+    description: typeof input.description === "string" ? input.description : undefined,
     model: typeof input.model === "string" ? input.model : undefined,
   };
+}
+
+/** Both "Task" and "Agent" tool names spawn subagents in Claude Code. */
+function isSubagentTool(toolName: string): boolean {
+  return toolName === "Task" || toolName === "Agent";
 }
 
 /** Wrap a Part in a PartEvent. */
@@ -117,8 +123,20 @@ class ClaudeCodeTransformer implements EventTransformer<ClaudeCodeEvent> {
   private messagePartsStart = 0; // index into this.parts when message opened
   private messageCounter = 0;
 
+  /** Next part index within the current message. */
+  private get nextPartIndex(): number {
+    return this.parts.length - this.messagePartsStart;
+  }
+
+  /** Current message ID (with suffix). Falls back to base if no message opened yet. */
+  private get activeMessageId(): string {
+    return this.currentMessageId ?? this.ctx.messageId;
+  }
+
   private activeSubagents = new Map<string, SubagentContext>();
   private lastParentToolCallId: string | undefined;
+  /** Usage data from task_notification events, keyed by tool_use_id */
+  private taskUsage = new Map<string, Record<string, unknown>>();
 
   constructor(ctx: StreamContext) {
     this.ctx = ctx;
@@ -258,13 +276,15 @@ class ClaudeCodeTransformer implements EventTransformer<ClaudeCodeEvent> {
       if (!existing) continue;
 
       const output = typeof tr.content === "string" ? tr.content : JSON.stringify(tr.content);
-      const updated = completeToolPart(existing, output, tr.is_error ?? false);
+      const metadata = this.taskUsage.get(tr.tool_use_id);
+      const updated = completeToolPart(existing, output, tr.is_error ?? false, metadata);
       this.replacePart(existing, updated);
       this.toolParts.set(tr.tool_use_id, updated);
       events.push(partDone(updated));
 
       if (this.activeSubagents.has(tr.tool_use_id)) {
         this.unregisterSubagent(tr.tool_use_id);
+        this.taskUsage.delete(tr.tool_use_id);
       }
     }
 
@@ -272,7 +292,10 @@ class ClaudeCodeTransformer implements EventTransformer<ClaudeCodeEvent> {
   }
 
   private handleAssistant(event: ClaudeAssistantEvent): PartEvent[] {
-    if (this.hasReceivedStreamEvents) return [];
+    // Skip non-streaming assistant events when we're in streaming mode —
+    // EXCEPT for subagent responses which always arrive as complete assistant events.
+    const isSubagentResponse = !!event.parent_tool_use_id;
+    if (this.hasReceivedStreamEvents && !isSubagentResponse) return [];
 
     const events: PartEvent[] = [this.openMessage()];
     for (const block of event.message.content) {
@@ -350,13 +373,41 @@ class ClaudeCodeTransformer implements EventTransformer<ClaudeCodeEvent> {
       const auto = event.compact_metadata.trigger === "auto";
       const part = createCompactionPart(
         this.ctx.sessionId,
-        this.ctx.messageId,
+        this.activeMessageId,
         auto,
-        event.compact_metadata.pre_tokens
+        event.compact_metadata.pre_tokens,
+        this.nextPartIndex
       );
       this.parts.push(part);
       return [created(part), partDone(part)];
     }
+
+    // Task lifecycle events — update the corresponding tool part with progress info
+    if (event.subtype === "task_started" || event.subtype === "task_progress") {
+      const toolPart = this.toolParts.get(event.tool_use_id);
+      if (toolPart && toolPart.state.status === "RUNNING") {
+        const updated: ToolPart = {
+          ...toolPart,
+          state: {
+            ...toolPart.state,
+            title: event.description,
+          },
+        };
+        this.replacePart(toolPart, updated);
+        this.toolParts.set(event.tool_use_id, updated);
+        return [created(updated)];
+      }
+    }
+
+    // task_notification — stash usage data so it can be attached when the tool result arrives
+    if (event.subtype === "task_notification" && event.usage) {
+      this.taskUsage.set(event.tool_use_id, {
+        totalTokens: event.usage.total_tokens,
+        toolUses: event.usage.tool_uses,
+        durationMs: event.usage.duration_ms,
+      });
+    }
+
     return [];
   }
 
@@ -377,7 +428,13 @@ class ClaudeCodeTransformer implements EventTransformer<ClaudeCodeEvent> {
           this.currentTextPart = updated;
           return partDone(updated);
         }
-        const part = createTextPart(this.ctx.sessionId, this.ctx.messageId, block.text, "DONE");
+        const part = createTextPart(
+          this.ctx.sessionId,
+          this.activeMessageId,
+          block.text,
+          "DONE",
+          this.nextPartIndex
+        );
         this.parts.push(part);
         this.currentTextPart = part;
         return partDone(part);
@@ -396,9 +453,10 @@ class ClaudeCodeTransformer implements EventTransformer<ClaudeCodeEvent> {
         }
         const part = createReasoningPart(
           this.ctx.sessionId,
-          this.ctx.messageId,
+          this.activeMessageId,
           block.thinking,
-          "DONE"
+          "DONE",
+          this.nextPartIndex
         );
         this.parts.push(part);
         this.currentThinkingPart = part;
@@ -408,22 +466,23 @@ class ClaudeCodeTransformer implements EventTransformer<ClaudeCodeEvent> {
       case "tool_use": {
         this.closeText();
         this.closeThinking();
-        const isTask = block.name === "Task";
-        const part = createToolPart(this.ctx.sessionId, this.ctx.messageId, {
+        const isAgent = isSubagentTool(block.name);
+        const part = createToolPart(this.ctx.sessionId, this.activeMessageId, {
           toolCallId: block.id,
           toolName: block.name,
-          kind: isTask ? "task" : undefined,
+          kind: isAgent ? "task" : undefined,
+          partIndex: this.nextPartIndex,
           state: {
             status: "RUNNING",
             input: block.input,
             time: { start: new Date().toISOString() },
           } satisfies RunningToolState,
-          subagent: isTask ? extractSubagentMetadata(block.input) : undefined,
+          subagent: isAgent ? extractSubagentMetadata(block.input) : undefined,
         });
         this.parts.push(part);
         this.toolParts.set(block.id, part);
 
-        if (isTask) {
+        if (isAgent) {
           this.registerSubagent(block.id, part.id, part.subagent?.type ?? "unknown");
         }
 
@@ -462,9 +521,10 @@ class ClaudeCodeTransformer implements EventTransformer<ClaudeCodeEvent> {
       this.closeThinking();
       const part = createPendingToolPart(
         this.ctx.sessionId,
-        this.ctx.messageId,
+        this.activeMessageId,
         block.id,
-        block.name
+        block.name,
+        this.nextPartIndex
       );
       this.parts.push(part);
       this.toolParts.set(block.id, part);
@@ -497,9 +557,10 @@ class ClaudeCodeTransformer implements EventTransformer<ClaudeCodeEvent> {
         }
         const part = createTextPart(
           this.ctx.sessionId,
-          this.ctx.messageId,
+          this.activeMessageId,
           delta.text,
-          "STREAMING"
+          "STREAMING",
+          this.nextPartIndex
         );
         this.parts.push(part);
         this.currentTextPart = part;
@@ -523,9 +584,10 @@ class ClaudeCodeTransformer implements EventTransformer<ClaudeCodeEvent> {
         }
         const part = createReasoningPart(
           this.ctx.sessionId,
-          this.ctx.messageId,
+          this.activeMessageId,
           delta.thinking,
-          "STREAMING"
+          "STREAMING",
+          this.nextPartIndex
         );
         this.parts.push(part);
         this.currentThinkingPart = part;
@@ -570,7 +632,7 @@ class ClaudeCodeTransformer implements EventTransformer<ClaudeCodeEvent> {
 
         let updated = startToolPart(existing, input);
 
-        if (existing.toolName === "Task") {
+        if (isSubagentTool(existing.toolName)) {
           const subagent = extractSubagentMetadata(input);
           updated = { ...updated, kind: "task", subagent } as ToolPart;
           this.registerSubagent(toolId, updated.id, subagent.type);
@@ -631,7 +693,15 @@ class ClaudeCodeTransformer implements EventTransformer<ClaudeCodeEvent> {
     this.messageCounter++;
     this.currentMessageId = `${this.ctx.messageId}-${this.messageCounter}`;
     this.messagePartsStart = this.parts.length;
-    return { type: "message.created", messageId: this.currentMessageId, role: "assistant" };
+    const evt: PartEvent = {
+      type: "message.created",
+      messageId: this.currentMessageId,
+      role: "assistant",
+    };
+    if (this.lastParentToolCallId) {
+      evt.parentToolCallId = this.lastParentToolCallId;
+    }
+    return evt;
   }
 
   /** Close the current message, returning a message.done event with accumulated parts. */
@@ -644,6 +714,9 @@ class ClaudeCodeTransformer implements EventTransformer<ClaudeCodeEvent> {
       stopReason,
       parts: msgParts,
     };
+    if (this.lastParentToolCallId) {
+      evt.parentToolCallId = this.lastParentToolCallId;
+    }
     this.currentMessageId = null;
     return evt;
   }
