@@ -56,4 +56,10 @@ describe("workspaceLayoutStore", () => {
     });
     expect(secondLayout.pendingFileNavigation?.requestId).not.toBe(firstRequestId);
   });
+
+  it("ignores invalid traversal paths", () => {
+    workspaceLayoutActions.openFileInContent("ws-123", "../outside.ts", "files");
+
+    expect(useWorkspaceLayoutStore.getState().layouts["ws-123"]).toBeUndefined();
+  });
 });

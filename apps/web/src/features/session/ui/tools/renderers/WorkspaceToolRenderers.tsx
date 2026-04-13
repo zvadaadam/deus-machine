@@ -56,9 +56,12 @@ function toDiffCommentList(comments: unknown): DiffCommentInput[] {
 }
 
 function toStringList(values: unknown): string[] {
-  return Array.isArray(values)
-    ? values.filter((value): value is string => typeof value === "string")
-    : [];
+  if (!Array.isArray(values)) return [];
+
+  return values
+    .filter((value): value is string => typeof value === "string")
+    .map((value) => value.trim())
+    .filter((value) => value.length > 0);
 }
 
 export function AskUserQuestionToolRenderer({ toolUse, toolResult }: ToolRendererProps) {
