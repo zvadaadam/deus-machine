@@ -5,6 +5,7 @@ import NumberFlow from "@number-flow/react";
 import { useQueryClient } from "@tanstack/react-query";
 
 import { cn } from "@/shared/lib/utils";
+import { formatTimeAgo } from "@/shared/lib/formatters";
 import { useWorkingDuration, formatDuration } from "@/shared/hooks";
 import { CircularPixelGrid } from "@/features/session/ui/CircularPixelGrid";
 import { useUnreadStore } from "@/features/session/store/unreadStore";
@@ -117,22 +118,6 @@ export const WorkspaceItem = React.memo(function WorkspaceItem({
     );
   }
 
-  const formatTime = (timestamp: string) => {
-    const date = new Date(timestamp);
-    const now = new Date();
-    const diffMs = now.getTime() - date.getTime();
-    const diffMins = Math.floor(diffMs / 60000);
-    const diffHours = Math.floor(diffMins / 60);
-    const diffDays = Math.floor(diffHours / 24);
-    const diffMonths = Math.floor(diffDays / 30);
-
-    if (diffMins < 1) return "now";
-    if (diffMins < 60) return `${diffMins}m ago`;
-    if (diffHours < 24) return `${diffHours}h ago`;
-    if (diffDays < 30) return `${diffDays}d ago`;
-    return `${diffMonths}mo ago`;
-  };
-
   const displayStatus = getDisplayStatus(workspace, hasUnseenActivity);
   const statusConfig = STATUS_CONFIG[displayStatus];
   // Session activity icons take priority over workflow status
@@ -156,10 +141,10 @@ export const WorkspaceItem = React.memo(function WorkspaceItem({
     if (isSetupRunning) return "Installing...";
     if (isSetupFailed) return "Setup failed";
     if (workspace.state === "archived") return "Archived";
-    if (!workspace.session_status) return formatTime(workspace.updated_at);
+    if (!workspace.session_status) return formatTimeAgo(workspace.updated_at);
 
     return match(displayStatus)
-      .with("idle", () => formatTime(workspace.updated_at))
+      .with("idle", () => formatTimeAgo(workspace.updated_at))
       .with("unread", () => {
         const sessionStatus = workspace.session_status;
         if (sessionStatus === "needs_response" || sessionStatus === "needs_plan_response") {
