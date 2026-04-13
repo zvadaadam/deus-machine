@@ -1,6 +1,6 @@
 {
   "name": "deus-machine",
-  "version": "0.3.2",
+  "version": "0.3.3",
   "description": "Run Deus IDE from the command line — headless server or desktop installer",
   "license": "MIT",
   "author": {
