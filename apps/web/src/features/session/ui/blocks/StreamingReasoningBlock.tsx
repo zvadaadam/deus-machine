@@ -24,7 +24,7 @@ const PREVIEW_FADE_HEIGHT_PX = 40;
 export function StreamingReasoningBlock({ text }: StreamingReasoningBlockProps) {
   const scrollRef = useRef<HTMLDivElement>(null);
   const reduceMotion = useReducedMotion();
-  const previewMask = `linear-gradient(to bottom, transparent 0, black ${PREVIEW_FADE_HEIGHT_PX}px, black 100%)`;
+  const previewMask = `linear-gradient(to bottom, var(--mask-transparent) 0, var(--mask-solid) ${PREVIEW_FADE_HEIGHT_PX}px, var(--mask-solid) 100%)`;
 
   // Auto-scroll to bottom as new text arrives
   useLayoutEffect(() => {

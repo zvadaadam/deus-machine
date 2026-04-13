@@ -15,4 +15,9 @@ describe("formatTurnDurationLabel", () => {
     expect(formatTurnDurationLabel(3_600_000)).toBe("1h");
     expect(formatTurnDurationLabel(3_665_000)).toBe("1h 1m");
   });
+
+  it("falls back to zero for non-finite durations", () => {
+    expect(formatTurnDurationLabel(Number.NaN)).toBe("0s");
+    expect(formatTurnDurationLabel(Number.POSITIVE_INFINITY)).toBe("0s");
+  });
 });

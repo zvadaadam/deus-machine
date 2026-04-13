@@ -66,7 +66,6 @@ export function FilesView({ workspace, isWatched = false }: FilesViewProps) {
 
       <ResizablePanel defaultSize={25} minSize={15}>
         <FileBrowserPanel
-          key={revealRequest?.requestId ?? "files-browser"}
           selectedWorkspace={workspace}
           fileChanges={fileChanges}
           selectedFilePath={selectedFilePath}

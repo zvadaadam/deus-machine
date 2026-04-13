@@ -13,15 +13,32 @@ interface ToolFileLinkProps {
   className?: string;
 }
 
-function normalizeToolFilePath(path: string, workspacePath: string | null): string {
+function normalizeToolFilePath(path: string, workspacePath: string | null): string | null {
   const normalizedPath = path.replace(/\\/g, "/").trim();
   const normalizedWorkspacePath = workspacePath?.replace(/\\/g, "/").replace(/\/$/, "") ?? null;
+  const isAbsolutePath = /^(?:[A-Za-z]:\/|\/)/.test(normalizedPath);
 
-  if (normalizedWorkspacePath && normalizedPath.startsWith(`${normalizedWorkspacePath}/`)) {
-    return normalizedPath.slice(normalizedWorkspacePath.length + 1);
+  if (!normalizedPath) return null;
+
+  if (normalizedWorkspacePath) {
+    if (normalizedPath.startsWith(`${normalizedWorkspacePath}/`)) {
+      const relativePath = normalizedPath
+        .slice(normalizedWorkspacePath.length + 1)
+        .replace(/^\/+/, "");
+      return relativePath || null;
+    }
+
+    if (isAbsolutePath) {
+      return null;
+    }
   }
 
-  return normalizedPath.replace(/^\.\//, "").replace(/^\/+/, "");
+  if (isAbsolutePath) {
+    return null;
+  }
+
+  const relativePath = normalizedPath.replace(/^\.\//, "").replace(/^\/+/, "");
+  return relativePath || null;
 }
 
 export function ToolFileLink({ path, target, className }: ToolFileLinkProps) {
@@ -32,7 +49,7 @@ export function ToolFileLink({ path, target, className }: ToolFileLinkProps) {
     [path, workspacePath]
   );
 
-  if (!normalizedPath) {
+  if (!workspaceId || !normalizedPath) {
     return null;
   }
 
@@ -44,7 +61,6 @@ export function ToolFileLink({ path, target, className }: ToolFileLinkProps) {
       onClick={(event) => {
         event.preventDefault();
         event.stopPropagation();
-        if (!workspaceId) return;
         workspaceLayoutActions.openFileInContent(workspaceId, normalizedPath, target);
       }}
       onKeyDown={(event) => {

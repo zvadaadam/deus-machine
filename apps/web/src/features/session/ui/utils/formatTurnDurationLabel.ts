@@ -1,5 +1,6 @@
 export function formatTurnDurationLabel(durationMs: number): string {
-  const totalSeconds = Math.max(0, Math.floor(durationMs / 1000));
+  const safeDurationMs = Number.isFinite(durationMs) ? durationMs : 0;
+  const totalSeconds = Math.max(0, Math.floor(safeDurationMs / 1000));
   const hours = Math.floor(totalSeconds / 3600);
   const minutes = Math.floor(totalSeconds / 60) % 60;
   const seconds = totalSeconds % 60;

@@ -29,6 +29,7 @@ interface FileTreeProps {
   defaultExpanded?: boolean;
   revealPath?: string | null;
   revealRequestId?: string | null;
+  onRevealConsumed?: (requestId: string) => void;
 }
 
 function pathContainsTarget(nodePath: string, targetPath: string | null | undefined) {
@@ -73,6 +74,7 @@ export function FileTree({
   defaultExpanded,
   revealPath,
   revealRequestId,
+  onRevealConsumed,
 }: FileTreeProps) {
   return (
     <div className={cn(level === 0 && "group/tree")} role={level === 0 ? "tree" : "group"}>
@@ -86,6 +88,7 @@ export function FileTree({
           defaultExpanded={defaultExpanded}
           revealPath={revealPath}
           revealRequestId={revealRequestId}
+          onRevealConsumed={onRevealConsumed}
         />
       ))}
     </div>
@@ -100,6 +103,7 @@ const TreeNode = memo(function TreeNode({
   defaultExpanded,
   revealPath,
   revealRequestId,
+  onRevealConsumed,
 }: {
   node: FileTreeNode;
   level: number;
@@ -108,6 +112,7 @@ const TreeNode = memo(function TreeNode({
   defaultExpanded?: boolean;
   revealPath?: string | null;
   revealRequestId?: string | null;
+  onRevealConsumed?: (requestId: string) => void;
 }) {
   const [manualExpanded, setManualExpanded] = useState<boolean | null>(null);
   const itemRef = useRef<HTMLDivElement>(null);
@@ -151,10 +156,20 @@ const TreeNode = memo(function TreeNode({
   );
 
   useEffect(() => {
+    if (!isDirectory || !revealRequestId || !shouldRevealNode) return;
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- reveal requests intentionally persist expanded ancestors after navigation
+    setManualExpanded(true);
+  }, [isDirectory, revealRequestId, shouldRevealNode]);
+
+  useEffect(() => {
     if (isDirectory || !revealRequestId || !shouldRevealNode) return;
 
-    itemRef.current?.scrollIntoView({ behavior: "smooth", block: "nearest" });
-  }, [isDirectory, revealRequestId, shouldRevealNode]);
+    const target = itemRef.current;
+    if (!target) return;
+
+    target.scrollIntoView({ behavior: "smooth", block: "nearest" });
+    onRevealConsumed?.(revealRequestId);
+  }, [isDirectory, onRevealConsumed, revealRequestId, shouldRevealNode]);
 
   // Indent guide lines (visible on tree hover)
   const indentGuides: React.ReactElement[] = [];
@@ -262,6 +277,7 @@ const TreeNode = memo(function TreeNode({
           defaultExpanded={defaultExpanded}
           revealPath={revealPath}
           revealRequestId={revealRequestId}
+          onRevealConsumed={onRevealConsumed}
         />
       )}
     </div>
