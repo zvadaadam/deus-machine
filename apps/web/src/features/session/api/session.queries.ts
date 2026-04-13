@@ -14,12 +14,10 @@ import {
   INITIAL_MESSAGE_PAGE_SIZE,
   mergeMessageDelta,
 } from "../lib/messageCache";
-import type { ContentBlock, Message, Session, SessionStatus } from "../types";
-import { isToolResultBlock } from "../types";
+import type { Message, Session, SessionStatus } from "../types";
 import type { RepoGroup } from "@shared/types/workspace";
-import { useEffect, useMemo, useCallback } from "react";
+import { useEffect, useMemo } from "react";
 import { track } from "@/platform/analytics";
-import { parseContentBlocks } from "../lib/contentParser";
 
 import { sendCommand, connect, isConnected, subscribe } from "@/platform/ws";
 import { emitSendAttemptFailed } from "@/features/connection";
@@ -148,77 +146,16 @@ export function useSessionWithMessages(sessionId: string | null) {
   const sessionQuery = useSession(sessionId);
   const messagesQuery = useMessages(sessionId);
 
-  // Unwrap messages from PaginatedMessages (select was removed to expose has_older)
   const messages = messagesQuery.data?.messages ?? [];
   const hasOlder = messagesQuery.data?.has_older ?? false;
-
-  // Parse content helper — delegates to pure function in lib/contentParser.ts
-  // Memoized to prevent Context cascade re-renders
-  const parseContent = useCallback(
-    (content: string): (ContentBlock | string)[] | string => parseContentBlocks(content),
-    []
-  );
-
-  // Build tool result map and parent_tool_use_id map in a single pass.
-  const { toolResultMap, parentToolUseMap } = useMemo(() => {
-    const resultMap = new Map();
-    const parentMap = new Map<string, string>();
-    if (!messages.length) return { toolResultMap: resultMap, parentToolUseMap: parentMap };
-
-    messages.forEach((msg: Message) => {
-      if (msg.parent_tool_use_id) {
-        parentMap.set(msg.id, msg.parent_tool_use_id);
-      }
-
-      const blocks = parseContent(msg.content);
-      if (Array.isArray(blocks)) {
-        blocks.filter(isToolResultBlock).forEach((block) => {
-          resultMap.set(block.tool_use_id, block);
-        });
-      }
-    });
-
-    return { toolResultMap: resultMap, parentToolUseMap: parentMap };
-  }, [messages, parseContent]);
-
-  // Group subagent messages by their parent Task tool_use_id
-  const subagentMessages = useMemo(() => {
-    const map = new Map<string, Message[]>();
-    if (!messages.length) return map;
-
-    messages.forEach((msg: Message) => {
-      const parentId = parentToolUseMap.get(msg.id);
-      if (parentId) {
-        if (!map.has(parentId)) map.set(parentId, []);
-        map.get(parentId)!.push(msg);
-      }
-    });
-
-    return map;
-  }, [messages, parentToolUseMap]);
-
-  // Get latest user message's sent_at for duration tracking
-  const latestMessageSentAt = useMemo(() => {
-    if (!messages.length) return null;
-
-    // Find the latest user message
-    const latestUserMessage = [...messages].reverse().find((msg: Message) => msg.role === "user");
-
-    return latestUserMessage?.sent_at || null;
-  }, [messages]);
 
   return {
     session: sessionQuery.data,
     messages,
     hasOlder,
     sessionStatus: (sessionQuery.data?.status as SessionStatus) || "idle",
-    latestMessageSentAt,
     loading: sessionQuery.isLoading || messagesQuery.isLoading,
     error: sessionQuery.error || messagesQuery.error,
-    parseContent,
-    toolResultMap,
-    parentToolUseMap,
-    subagentMessages,
   };
 }
 

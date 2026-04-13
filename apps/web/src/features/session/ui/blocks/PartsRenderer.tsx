@@ -1,73 +1,59 @@
 /**
  * Parts Renderer
  *
- * Renders assistant messages from the unified Parts model instead of
- * legacy content blocks. Each PartRow's `data` field is parsed into
- * a typed Part object and dispatched to the appropriate renderer.
+ * Renders assistant messages from the unified Parts model.
+ * Receives Part[] directly (not PartRow[]) — no JSON parsing needed.
  *
- * Part types:
- * - TEXT     -> ChatMarkdown (reuses existing TextBlock style)
- * - REASONING -> ThinkingBlock (reuses existing component)
- * - TOOL    -> ToolPartBlock (new, renders from TOOL Part state machine)
- * - COMPACTION -> subtle indicator (or null)
+ * Features:
+ * - Tool grouping: consecutive read-only tools collapse into a header
+ * - Streaming text: buffered typewriter via BufferedTextBlock
+ * - Reasoning: visible during streaming, collapsed when done
  */
 
 import { memo, useMemo } from "react";
 import { match } from "ts-pattern";
-import type { PartRow } from "@/shared/types";
-import type { TextPart, ReasoningPart, ToolPart, CompactionPart } from "@shared/messages/types";
+import type {
+  Part,
+  TextPart,
+  ReasoningPart,
+  ToolPart,
+  CompactionPart,
+} from "@shared/messages/types";
 import { TextBlock } from "./TextBlock";
 import { ThinkingBlock } from "./ThinkingBlock";
+import { StreamingReasoningBlock } from "./StreamingReasoningBlock";
+import { BufferedTextBlock } from "./BufferedTextBlock";
 import { ToolPartBlock } from "./ToolPartBlock";
+import { PartToolGroupBlock } from "./PartToolGroupBlock";
+import { groupPartItems } from "../utils/groupParts";
 import { Layers } from "lucide-react";
 
 interface PartsRendererProps {
-  parts: PartRow[];
-  /** True only for the last text part in the actively-streaming turn. */
+  parts: Part[];
   isStreamingTurn?: boolean;
 }
 
-type ParsedPart =
-  | { type: "TEXT"; part: TextPart; row: PartRow }
-  | { type: "REASONING"; part: ReasoningPart; row: PartRow }
-  | { type: "TOOL"; part: ToolPart; row: PartRow }
-  | { type: "COMPACTION"; part: CompactionPart; row: PartRow };
-
-function parsePart(row: PartRow): ParsedPart | null {
-  try {
-    const part = JSON.parse(row.data);
-    return { type: row.type as ParsedPart["type"], part, row };
-  } catch {
-    if (import.meta.env.DEV) {
-      console.warn("[PartsRenderer] Failed to parse part data:", row.id, row.data);
-    }
-    return null;
-  }
-}
-
-/**
- * Memoized: parts array reference changes when new data arrives from WS delta.
- */
 export const PartsRenderer = memo(function PartsRenderer({
   parts,
   isStreamingTurn = false,
 }: PartsRendererProps) {
-  const parsed = useMemo(() => {
-    return parts
-      .slice()
-      .sort((a, b) => a.seq - b.seq)
-      .map(parsePart)
-      .filter((p): p is ParsedPart => p !== null);
-  }, [parts]);
+  // Sort by partIndex (assigned by adapter at creation time)
+  const sorted = useMemo(
+    () => [...parts].sort((a, b) => (a.partIndex ?? 0) - (b.partIndex ?? 0)),
+    [parts]
+  );
 
-  if (parsed.length === 0) return null;
+  // Group consecutive read-only tool parts into collapsible streaks
+  const grouped = useMemo(() => groupPartItems(sorted, isStreamingTurn), [sorted, isStreamingTurn]);
 
-  // Find the last TEXT part index for streaming dimming
-  let lastTextIndex = -1;
+  if (grouped.length === 0) return null;
+
+  // Find the last TEXT part for streaming dimming
+  let lastTextPartId: string | null = null;
   if (isStreamingTurn) {
-    for (let i = parsed.length - 1; i >= 0; i--) {
-      if (parsed[i].type === "TEXT") {
-        lastTextIndex = i;
+    for (let i = sorted.length - 1; i >= 0; i--) {
+      if (sorted[i].type === "TEXT") {
+        lastTextPartId = sorted[i].id;
         break;
       }
     }
@@ -75,33 +61,51 @@ export const PartsRenderer = memo(function PartsRenderer({
 
   return (
     <>
-      {parsed.map((item, index) =>
-        match(item)
-          .with({ type: "TEXT" }, ({ part, row }) => {
-            const isStreaming = isStreamingTurn && index === lastTextIndex;
-            return (
-              <TextBlock
-                key={row.id}
-                block={{ type: "text", text: part.text }}
-                role="assistant"
-                weight={isStreaming ? "muted" : "normal"}
-              />
-            );
-          })
-          .with({ type: "REASONING" }, ({ part, row }) => (
-            <ThinkingBlock key={row.id} block={{ type: "thinking", thinking: part.text }} />
+      {grouped.map((groupedItem) =>
+        match(groupedItem)
+          .with({ kind: "tool-streak" }, (streak) => (
+            <PartToolGroupBlock
+              key={`streak:${streak.firstPartId}`}
+              parts={streak.parts}
+              isSealed={streak.isSealed}
+            />
           ))
-          .with({ type: "TOOL" }, ({ part, row }) => (
-            <ToolPartBlock key={row.id} part={part} partRow={row} />
-          ))
-          .with({ type: "COMPACTION" }, ({ part, row }) => (
-            <div key={row.id} className="flex items-center gap-2 px-2 py-1 text-xs opacity-50">
-              <Layers className="h-3 w-3" />
-              <span>{part.auto ? "Auto-compacted" : "Compacted"}</span>
-            </div>
-          ))
+          .with({ kind: "part" }, ({ item }) => renderPart(item, lastTextPartId, isStreamingTurn))
           .exhaustive()
       )}
     </>
   );
 });
+
+function renderPart(part: Part, lastTextPartId: string | null, isStreamingTurn: boolean) {
+  return match(part)
+    .with({ type: "TEXT" }, (p: TextPart) => {
+      const isActivelyStreaming = isStreamingTurn && p.id === lastTextPartId;
+      if (isActivelyStreaming) {
+        return <BufferedTextBlock key={p.id} text={p.text} isStreaming={true} />;
+      }
+      return (
+        <TextBlock
+          key={p.id}
+          block={{ type: "text", text: p.text }}
+          role="assistant"
+          weight="normal"
+        />
+      );
+    })
+    .with({ type: "REASONING" }, (p: ReasoningPart) => {
+      const isActivelyStreaming = isStreamingTurn && p.state === "STREAMING";
+      if (isActivelyStreaming) {
+        return <StreamingReasoningBlock key={p.id} text={p.text} />;
+      }
+      return <ThinkingBlock key={p.id} block={{ type: "thinking", thinking: p.text }} />;
+    })
+    .with({ type: "TOOL" }, (p: ToolPart) => <ToolPartBlock key={p.id} part={p} />)
+    .with({ type: "COMPACTION" }, (p: CompactionPart) => (
+      <div key={p.id} className="flex items-center gap-2 px-2 py-1 text-xs opacity-50">
+        <Layers className="h-3 w-3" />
+        <span>{p.auto ? "Auto-compacted" : "Compacted"}</span>
+      </div>
+    ))
+    .exhaustive();
+}

@@ -84,6 +84,36 @@ export type ClaudeSystemEvent =
       subtype: "compact_boundary";
       compact_metadata: { trigger: "manual" | "auto"; pre_tokens: number };
       session_id: string;
+    }
+  | {
+      type: "system";
+      subtype: "task_started";
+      task_id: string;
+      tool_use_id: string;
+      description: string;
+      task_type: string;
+      prompt: string;
+      session_id: string;
+    }
+  | {
+      type: "system";
+      subtype: "task_progress";
+      task_id: string;
+      tool_use_id: string;
+      description: string;
+      usage?: { total_tokens?: number; tool_uses?: number; duration_ms?: number };
+      last_tool_name?: string;
+      session_id: string;
+    }
+  | {
+      type: "system";
+      subtype: "task_notification";
+      task_id: string;
+      tool_use_id: string;
+      status: string;
+      summary: string;
+      usage?: { total_tokens?: number; tool_uses?: number; duration_ms?: number };
+      session_id: string;
     };
 
 export interface ClaudeUserEvent {

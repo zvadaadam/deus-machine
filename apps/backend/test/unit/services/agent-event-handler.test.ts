@@ -280,11 +280,11 @@ describe("handleAgentEvent", () => {
       part: { type: "TEXT", id: "p1", sessionId: "sess-1", messageId: "msg-1", text: "" },
     };
 
-    it("does not persist or invalidate", () => {
+    it("persists the part so in-flight parts survive session switches", () => {
       handleAgentEvent(event);
 
+      expect(mockPersistPartDone).toHaveBeenCalledWith(event);
       expect(mockInvalidate).not.toHaveBeenCalled();
-      expect(mockPersistPartDone).not.toHaveBeenCalled();
     });
 
     it("broadcasts part:created q:event to frontend", () => {
@@ -356,13 +356,11 @@ describe("handleAgentEvent", () => {
       },
     };
 
-    it("persists the part and invalidates messages", () => {
+    it("persists the part without invalidating (frontend gets data via q:event)", () => {
       handleAgentEvent(event);
 
       expect(mockPersistPartDone).toHaveBeenCalledWith(event);
-      expect(mockInvalidate).toHaveBeenCalledWith(["messages", "session"], {
-        sessionIds: ["sess-1"],
-      });
+      expect(mockInvalidate).not.toHaveBeenCalled();
     });
 
     it("broadcasts part:done q:event to frontend", () => {
@@ -411,13 +409,11 @@ describe("handleAgentEvent", () => {
       parts: [],
     };
 
-    it("persists stop_reason and invalidates messages", () => {
+    it("persists stop_reason without invalidating (frontend already has data)", () => {
       handleAgentEvent(event);
 
       expect(mockPersistMessageDone).toHaveBeenCalledWith(event);
-      expect(mockInvalidate).toHaveBeenCalledWith(["messages", "session"], {
-        sessionIds: ["sess-1"],
-      });
+      expect(mockInvalidate).not.toHaveBeenCalled();
     });
 
     it("skips invalidation on persistence failure", () => {
@@ -444,9 +440,9 @@ describe("handleAgentEvent", () => {
 
       handleAgentEvent(event);
 
-      expect(mockInvalidate).toHaveBeenCalledWith(["messages", "session"], {
-        sessionIds: ["sess-1"],
-      });
+      // No invalidation — all part data already streamed via q:event.
+      // Session status change (session.idle) handles UI update.
+      expect(mockInvalidate).not.toHaveBeenCalled();
     });
   });
 

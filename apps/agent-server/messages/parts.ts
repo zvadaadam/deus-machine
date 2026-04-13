@@ -24,18 +24,20 @@ export function createTextPart(
   sessionId: string,
   messageId: string,
   text: string,
-  state?: "STREAMING" | "DONE"
+  state?: "STREAMING" | "DONE",
+  partIndex?: number
 ): TextPart {
-  return { id: uuidv7(), sessionId, messageId, type: "TEXT", text, state };
+  return { id: uuidv7(), sessionId, messageId, type: "TEXT", partIndex, text, state };
 }
 
 export function createReasoningPart(
   sessionId: string,
   messageId: string,
   text: string,
-  state?: "STREAMING" | "DONE"
+  state?: "STREAMING" | "DONE",
+  partIndex?: number
 ): ReasoningPart {
-  return { id: uuidv7(), sessionId, messageId, type: "REASONING", text, state };
+  return { id: uuidv7(), sessionId, messageId, type: "REASONING", partIndex, text, state };
 }
 
 export function createToolPart(
@@ -47,6 +49,7 @@ export function createToolPart(
     kind?: ToolKind;
     state: RuntimeToolState;
     subagent?: SubagentMetadata;
+    partIndex?: number;
   }
 ): ToolPart {
   return {
@@ -54,6 +57,7 @@ export function createToolPart(
     sessionId,
     messageId,
     type: "TOOL",
+    partIndex: opts.partIndex,
     toolCallId: opts.toolCallId,
     toolName: opts.toolName,
     kind: opts.kind,
@@ -66,11 +70,13 @@ export function createPendingToolPart(
   sessionId: string,
   messageId: string,
   toolCallId: string,
-  toolName: string
+  toolName: string,
+  partIndex?: number
 ): ToolPart {
   return createToolPart(sessionId, messageId, {
     toolCallId,
     toolName,
+    partIndex,
     state: { status: "PENDING", partialInput: "" } satisfies PendingToolState,
   });
 }
@@ -79,9 +85,10 @@ export function createCompactionPart(
   sessionId: string,
   messageId: string,
   auto = true,
-  preTokens?: number
+  preTokens?: number,
+  partIndex?: number
 ): CompactionPart {
-  return { id: uuidv7(), sessionId, messageId, type: "COMPACTION", auto, preTokens };
+  return { id: uuidv7(), sessionId, messageId, type: "COMPACTION", partIndex, auto, preTokens };
 }
 
 // ---------------------------------------------------------------------------
@@ -101,7 +108,12 @@ export function startToolPart(part: ToolPart, input: unknown, title?: string): T
   };
 }
 
-export function completeToolPart(part: ToolPart, output: unknown, isError: boolean): ToolPart {
+export function completeToolPart(
+  part: ToolPart,
+  output: unknown,
+  isError: boolean,
+  metadata?: Record<string, unknown>
+): ToolPart {
   const now = new Date().toISOString();
   const startTime = part.state.status === "RUNNING" ? part.state.time.start : now;
 
@@ -124,6 +136,7 @@ export function completeToolPart(part: ToolPart, output: unknown, isError: boole
       input: part.state.status === "RUNNING" ? part.state.input : undefined,
       output,
       title: part.title,
+      metadata,
       time: { start: startTime, end: now },
     } satisfies CompletedToolState,
   };
