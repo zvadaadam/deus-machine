@@ -22,10 +22,11 @@ import { persistSessionError } from "./persistence";
 import { invalidate } from "../query-engine";
 import * as agentService from "./service";
 import type { CommandName } from "@shared/types/query-protocol";
-
-// ---- Types ----
-
-type QueryParams = Record<string, unknown>;
+import {
+  type QueryParams,
+  readStringParam as readString,
+  readNumberParam as readNumber,
+} from "../../lib/query-params";
 
 interface CommandResult {
   commandId?: string;
@@ -299,14 +300,4 @@ function handleAgentError(sessionId: string, agentType: string, err: unknown): v
     category: "internal",
   });
   invalidate(["workspaces", "sessions", "session", "stats"], { sessionIds: [sessionId] });
-}
-
-function readString(params: QueryParams, key: string): string | undefined {
-  const value = params[key];
-  return typeof value === "string" ? value : undefined;
-}
-
-function readNumber(params: QueryParams, key: string): number | undefined {
-  const value = params[key];
-  return typeof value === "number" ? value : undefined;
 }
