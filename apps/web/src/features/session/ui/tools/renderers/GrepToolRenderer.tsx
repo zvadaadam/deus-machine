@@ -1,34 +1,25 @@
-/**
- * Grep Tool Renderer (REFACTORED with BaseToolRenderer)
- *
- * Specialized renderer for the Grep tool (search results)
- *
- * BEFORE: 138 LOC
- * AFTER: ~65 LOC
- */
-
 import { SearchCode } from "lucide-react";
-import { BaseToolRenderer } from "../components";
+import { BaseToolRenderer, ToolSummaryChip } from "../components";
 import { TOOL_COLORS, TOOL_ICON_CLS } from "../toolColors";
+import { getPathLeaf } from "../utils/getPathLeaf";
 import { cn } from "@/shared/lib/utils";
 import type { ToolRendererProps } from "../../chat-types";
 
 export function GrepToolRenderer({ toolUse, toolResult, isLoading }: ToolRendererProps) {
   const { pattern, path, output_mode, glob, type: fileType } = toolUse.input ?? {};
+  const patternText = typeof pattern === "string" ? pattern : "pattern";
+  const pathPreview = getPathLeaf(typeof path === "string" ? path : undefined, "all files");
+  const scopeLabel =
+    typeof glob === "string" && glob
+      ? glob
+      : typeof fileType === "string" && fileType
+        ? fileType
+        : pathPreview;
 
-  // Count matches from result
   const getMatchCount = () => {
     if (!toolResult || toolResult.is_error) return null;
     const content = typeof toolResult.content === "string" ? toolResult.content : "";
     if (!content) return 0;
-    // For files_with_matches mode, count lines (each line is a file)
-    if (output_mode === "files_with_matches") {
-      return content
-        .trim()
-        .split("\n")
-        .filter((line) => line.trim()).length;
-    }
-    // For content mode, count non-empty lines
     return content
       .trim()
       .split("\n")
@@ -36,7 +27,6 @@ export function GrepToolRenderer({ toolUse, toolResult, isLoading }: ToolRendere
   };
 
   const matchCount = getMatchCount();
-  const pathPreview = path ? path.split("/").pop() || path : "all files";
 
   return (
     <BaseToolRenderer
@@ -47,24 +37,18 @@ export function GrepToolRenderer({ toolUse, toolResult, isLoading }: ToolRendere
       isLoading={isLoading}
       renderSummary={() => (
         <>
-          <span
-            className={cn(
-              "text-foreground/80 rounded-sm px-1.5 py-0.5 font-mono text-sm font-normal",
-              "bg-info/15 text-info rounded-md px-2 py-0.5 font-mono"
-            )}
-          >
-            {pattern}
-          </span>
+          <ToolSummaryChip tone="info" className="px-2">
+            {patternText}
+          </ToolSummaryChip>
           <span className="text-muted-foreground text-sm font-normal">
             {" "}
-            in {glob || fileType || pathPreview}
+            in {scopeLabel}
             {matchCount !== null && ` • ${matchCount} match${matchCount !== 1 ? "es" : ""}`}
           </span>
         </>
       )}
-      renderContent={({ toolResult }) => {
-        // Guard against undefined toolResult
-        if (!toolResult || !toolResult.content) {
+      renderContent={({ toolResult: currentToolResult }) => {
+        if (!currentToolResult?.content) {
           return null;
         }
 
@@ -77,9 +61,9 @@ export function GrepToolRenderer({ toolUse, toolResult, isLoading }: ToolRendere
                 "bg-muted/50 text-foreground border-border border"
               )}
             >
-              {typeof toolResult.content === "object"
-                ? JSON.stringify(toolResult.content, null, 2)
-                : toolResult.content}
+              {typeof currentToolResult.content === "object"
+                ? JSON.stringify(currentToolResult.content, null, 2)
+                : currentToolResult.content}
             </pre>
           </div>
         );

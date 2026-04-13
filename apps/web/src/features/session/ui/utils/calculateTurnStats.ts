@@ -17,6 +17,14 @@ export interface TurnStats {
   filesChanged: number;
 }
 
+const FILE_MODIFYING_TOOLS = new Set(["Edit", "Write", "MultiEdit", "NotebookEdit"]);
+
+function getToolInputFilePath(input: unknown): string | null {
+  if (!input || typeof input !== "object") return null;
+  const filePath = (input as { file_path?: unknown }).file_path;
+  return typeof filePath === "string" && filePath.length > 0 ? filePath : null;
+}
+
 export function calculateTurnStats(messages: Message[]): TurnStats {
   let toolCount = 0;
   let subagentCount = 0;
@@ -34,11 +42,11 @@ export function calculateTurnStats(messages: Message[]): TurnStats {
         subagentCount++;
       }
 
-      // Extract file path from tool input for file change tracking
-      const input = toolPart.state.status !== "PENDING" ? (toolPart.state as any).input : null;
-      const filePath = input?.file_path;
-      if (typeof filePath === "string" && filePath.length > 0) {
-        fileSet.add(filePath);
+      if (FILE_MODIFYING_TOOLS.has(toolPart.toolName) && toolPart.state.status === "COMPLETED") {
+        const filePath = getToolInputFilePath(toolPart.state.input);
+        if (filePath) {
+          fileSet.add(filePath);
+        }
       }
     }
   }

@@ -193,6 +193,12 @@ export const ReasoningPartSchema = z.object({
   partIndex: z.number().optional(),
   text: z.string(),
   state: z.enum(["STREAMING", "DONE"]).optional(),
+  time: z
+    .object({
+      start: z.string(),
+      end: z.string().optional(),
+    })
+    .optional(),
   providerMetadata: z.record(z.string(), z.unknown()).optional(),
   parentToolCallId: z.string().optional(),
 });

@@ -37,7 +37,7 @@ export interface SinglePartItem {
 
 export interface PartToolStreak {
   kind: "tool-streak";
-  parts: Part[];
+  parts: ToolPart[];
   firstPartId: string;
   isSealed: boolean;
 }
@@ -46,16 +46,15 @@ export type GroupedPartItem = SinglePartItem | PartToolStreak;
 
 // ---- Grouping ----
 
-function isGroupableToolPart(part: Part): boolean {
-  if (part.type !== "TOOL") return false;
-  return GROUPABLE_TOOL_NAMES.has((part as ToolPart).toolName);
+function isGroupableToolPart(part: Part): part is ToolPart {
+  return part.type === "TOOL" && GROUPABLE_TOOL_NAMES.has(part.toolName);
 }
 
 export function groupPartItems(parts: Part[], isStreamingTurn: boolean): GroupedPartItem[] {
   if (parts.length === 0) return [];
 
   const result: GroupedPartItem[] = [];
-  let streak: Part[] = [];
+  let streak: ToolPart[] = [];
 
   const flushStreak = (isTrailing: boolean) => {
     if (streak.length === 0) return;

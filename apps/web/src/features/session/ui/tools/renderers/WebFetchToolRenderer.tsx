@@ -1,13 +1,3 @@
-/**
- * WebFetch Tool Renderer (REFACTORED with BaseToolRenderer)
- *
- * Specialized renderer for the WebFetch tool
- * Fetches and processes web content with AI prompts
- *
- * BEFORE: 158 LOC
- * AFTER: ~85 LOC
- */
-
 import { Globe } from "lucide-react";
 import { BaseToolRenderer } from "../components";
 import { cn } from "@/shared/lib/utils";

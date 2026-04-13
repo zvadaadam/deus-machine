@@ -1,34 +1,79 @@
-/**
- * Workspace MCP Tool Renderers
- *
- * Specialized renderers for the 4 workspace tools:
- * - AskUserQuestion: Shows questions asked and user responses
- * - GetWorkspaceDiff: Shows diff output
- * - DiffComment: Shows comments posted on diff
- * - GetTerminalOutput: Shows terminal output
- */
-
 import { HelpCircle, GitCompare, MessageCircle, Terminal } from "lucide-react";
 import { BaseToolRenderer } from "../components";
 import { cn } from "@/shared/lib/utils";
 import { extractText, OutputBlock, ICON_CLS } from "./shared";
 import type { ToolRendererProps } from "../../chat-types";
+import { getPathLeaf } from "../utils/getPathLeaf";
 
-// ---------------------------------------------------------------------------
-// AskUserQuestion
-// ---------------------------------------------------------------------------
+type AskUserQuestionInput = {
+  question: string;
+  options: string[];
+  multiSelect?: boolean;
+};
+
+type DiffCommentInput = {
+  file: string;
+  lineNumber: number;
+  body: string;
+};
+
+function isStringArray(value: unknown): value is string[] {
+  return Array.isArray(value) && value.every((item) => typeof item === "string");
+}
+
+function isQuestionInput(value: unknown): value is AskUserQuestionInput {
+  if (!value || typeof value !== "object") return false;
+  const candidate = value as Record<string, unknown>;
+
+  return (
+    typeof candidate.question === "string" &&
+    candidate.question.trim().length > 0 &&
+    isStringArray(candidate.options) &&
+    (candidate.multiSelect === undefined || typeof candidate.multiSelect === "boolean")
+  );
+}
+
+function isDiffCommentInput(value: unknown): value is DiffCommentInput {
+  if (!value || typeof value !== "object") return false;
+  const candidate = value as Record<string, unknown>;
+
+  return (
+    typeof candidate.file === "string" &&
+    candidate.file.trim().length > 0 &&
+    typeof candidate.body === "string" &&
+    candidate.body.trim().length > 0 &&
+    typeof candidate.lineNumber === "number" &&
+    Number.isFinite(candidate.lineNumber)
+  );
+}
+
+function toQuestionList(questions: unknown): AskUserQuestionInput[] {
+  return Array.isArray(questions) ? questions.filter(isQuestionInput) : [];
+}
+
+function toDiffCommentList(comments: unknown): DiffCommentInput[] {
+  return Array.isArray(comments) ? comments.filter(isDiffCommentInput) : [];
+}
+
+function toStringList(values: unknown): string[] {
+  if (!Array.isArray(values)) return [];
+
+  return values
+    .filter((value): value is string => typeof value === "string")
+    .map((value) => value.trim())
+    .filter((value) => value.length > 0);
+}
 
 export function AskUserQuestionToolRenderer({ toolUse, toolResult }: ToolRendererProps) {
   const { questions } = toolUse.input ?? {};
+  const questionList = toQuestionList(questions);
   const output = toolResult ? extractText(toolResult.content) : "";
   const isCancelled = output.includes("cancelled");
 
-  // Build preview from first question
-  const firstQuestion =
-    Array.isArray(questions) && questions.length > 0 ? questions[0].question : "";
+  const firstQuestion = questionList.length > 0 ? (questionList[0].question ?? "") : "";
   const preview = firstQuestion
     ? firstQuestion.length > 50
-      ? firstQuestion.slice(0, 50) + "..."
+      ? `${firstQuestion.slice(0, 50)}...`
       : firstQuestion
     : "";
 
@@ -43,27 +88,27 @@ export function AskUserQuestionToolRenderer({ toolUse, toolResult }: ToolRendere
       }
       renderContent={() => (
         <div className="space-y-2 px-2 pb-2">
-          {/* Questions */}
-          {Array.isArray(questions) &&
-            questions.map((q: any, i: number) => (
-              <div key={i} className="space-y-1">
-                <div className="text-foreground text-sm">{q.question}</div>
-                {Array.isArray(q.options) && q.options.length > 0 && (
+          {questionList.map((question, index) => {
+            const options = toStringList(question.options);
+            return (
+              <div key={index} className="space-y-1">
+                <div className="text-foreground text-sm">{question.question}</div>
+                {options.length > 0 && (
                   <div className="flex flex-wrap gap-1.5">
-                    {q.options.map((opt: string, j: number) => (
+                    {options.map((option, optionIndex) => (
                       <span
-                        key={j}
+                        key={optionIndex}
                         className="bg-muted/60 text-muted-foreground rounded-md px-2 py-0.5 text-xs"
                       >
-                        {opt}
+                        {option}
                       </span>
                     ))}
                   </div>
                 )}
               </div>
-            ))}
+            );
+          })}
 
-          {/* Response */}
           {output && (
             <div
               className={cn(
@@ -82,16 +127,11 @@ export function AskUserQuestionToolRenderer({ toolUse, toolResult }: ToolRendere
   );
 }
 
-// ---------------------------------------------------------------------------
-// GetWorkspaceDiff
-// ---------------------------------------------------------------------------
-
 export function GetWorkspaceDiffToolRenderer({ toolUse, toolResult }: ToolRendererProps) {
   const { file, stat } = toolUse.input ?? {};
+  const safeFile = typeof file === "string" ? file : "";
   const output = toolResult ? extractText(toolResult.content) : "";
-
-  // Build preview
-  const preview = file ? file.split("/").pop() || file : stat ? "stat" : "all changes";
+  const preview = safeFile ? getPathLeaf(safeFile, "all changes") : stat ? "stat" : "all changes";
 
   return (
     <BaseToolRenderer
@@ -113,14 +153,11 @@ export function GetWorkspaceDiffToolRenderer({ toolUse, toolResult }: ToolRender
   );
 }
 
-// ---------------------------------------------------------------------------
-// DiffComment
-// ---------------------------------------------------------------------------
-
 export function DiffCommentToolRenderer({ toolUse, toolResult }: ToolRendererProps) {
   const { comments } = toolUse.input ?? {};
+  const commentList = toDiffCommentList(comments);
   const output = toolResult ? extractText(toolResult.content) : "";
-  const count = Array.isArray(comments) ? comments.length : 0;
+  const count = commentList.length;
 
   return (
     <BaseToolRenderer
@@ -137,18 +174,15 @@ export function DiffCommentToolRenderer({ toolUse, toolResult }: ToolRendererPro
       }
       renderContent={() => (
         <div className="space-y-2 px-2 pb-2">
-          {/* Comment list */}
-          {Array.isArray(comments) &&
-            comments.map((c: any, i: number) => (
-              <div key={i} className="bg-muted/30 rounded-md px-3 py-2 text-xs">
-                <span className="text-muted-foreground font-mono">
-                  {c.file}:{c.lineNumber}
-                </span>
-                <div className="text-foreground mt-1">{c.body}</div>
-              </div>
-            ))}
+          {commentList.map((comment, index) => (
+            <div key={index} className="bg-muted/30 rounded-md px-3 py-2 text-xs">
+              <span className="text-muted-foreground font-mono">
+                {comment.file}:{comment.lineNumber}
+              </span>
+              <div className="text-foreground mt-1">{comment.body}</div>
+            </div>
+          ))}
 
-          {/* Result */}
           {output && <div className="text-muted-foreground text-xs">{output}</div>}
         </div>
       )}
@@ -156,15 +190,9 @@ export function DiffCommentToolRenderer({ toolUse, toolResult }: ToolRendererPro
   );
 }
 
-// ---------------------------------------------------------------------------
-// GetTerminalOutput
-// ---------------------------------------------------------------------------
-
 export function GetTerminalOutputToolRenderer({ toolUse, toolResult }: ToolRendererProps) {
   const { source } = toolUse.input ?? {};
   const output = toolResult ? extractText(toolResult.content) : "";
-
-  // Extract source label from output header (format: "[Terminal - running]")
   const headerMatch = output.match(/^\[(.+?)\]/);
   const sourceLabel = headerMatch?.[1] || source || "auto";
 

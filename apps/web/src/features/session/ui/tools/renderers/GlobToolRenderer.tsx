@@ -1,24 +1,25 @@
-/**
- * Glob Tool Renderer (REFACTORED with BaseToolRenderer)
- *
- * Specialized renderer for the Glob tool (file pattern matching)
- * Shows matched file paths from glob patterns
- *
- * BEFORE: 147 LOC
- * AFTER: ~90 LOC
- */
-
 import { FileSearch } from "lucide-react";
-import { BaseToolRenderer } from "../components";
+import { BaseToolRenderer, ToolResultList, ToolResultRow, ToolSummaryChip } from "../components";
 import type { ToolRendererProps } from "../../chat-types";
 import { TOOL_COLORS, TOOL_ICON_CLS } from "../toolColors";
+import { getPathLeaf } from "../utils/getPathLeaf";
 import { cn } from "@/shared/lib/utils";
+
+function splitPathForDisplay(path: string) {
+  const normalized = path.replace(/\/$/, "");
+  const parts = normalized.split("/").filter(Boolean);
+  const name = parts[parts.length - 1] || normalized;
+  const parent = parts.slice(0, -1).join("/");
+  return { name, parent };
+}
 
 export function GlobToolRenderer({ toolUse, toolResult, isLoading }: ToolRendererProps) {
   const { pattern, path } = toolUse.input ?? {};
+  const patternText = typeof pattern === "string" ? pattern : "*";
+  const scopedPath = typeof path === "string" ? path : "";
+  const scopeName = scopedPath ? getPathLeaf(scopedPath, scopedPath) : "";
   const isError = toolResult?.is_error;
 
-  // Parse results - Glob returns newline-separated file paths or "No files found"
   const parseResults = (content: string): string[] => {
     if (!content || content.trim() === "" || content.includes("No files found")) {
       return [];
@@ -47,22 +48,15 @@ export function GlobToolRenderer({ toolUse, toolResult, isLoading }: ToolRendere
       isLoading={isLoading}
       renderSummary={() => (
         <>
-          <span
-            className={cn(
-              "text-foreground/80 rounded-sm px-1.5 py-0.5 font-mono text-sm font-normal",
-              "bg-info/15 text-info rounded-md px-1.5 py-0.5 font-mono"
-            )}
-          >
-            {pattern}
-          </span>
-          <span className="text-muted-foreground text-sm font-normal">
-            {path && ` in ${path}`} •{" "}
-            {hasResults ? `${resultCount} file${resultCount !== 1 ? "s" : ""}` : "no files"}
+          <ToolSummaryChip tone="info">{patternText}</ToolSummaryChip>
+          {scopeName && <ToolSummaryChip>{scopeName}</ToolSummaryChip>}
+          <span className="text-muted-foreground text-sm font-normal tabular-nums">
+            {" "}
+            • {hasResults ? `${resultCount} file${resultCount !== 1 ? "s" : ""}` : "no files"}
           </span>
         </>
       )}
       renderContent={() => {
-        // No results message
         if (!hasResults) {
           return (
             <div className="text-muted-foreground px-2 pb-2 text-xs italic">
@@ -71,21 +65,28 @@ export function GlobToolRenderer({ toolUse, toolResult, isLoading }: ToolRendere
           );
         }
 
-        // File list
         return (
-          <div className="chat-scroll-contain max-h-60 space-y-0.5 overflow-y-auto">
-            {files.map((file, index) => (
-              <div
-                key={index}
-                className="bg-muted/50 hover:bg-muted group flex items-center gap-2 rounded-md px-2 py-1 font-mono text-xs transition-colors"
-              >
-                <span className="text-muted-foreground opacity-60 transition-opacity group-hover:opacity-100">
-                  {index + 1}.
-                </span>
-                <span className="flex-1 break-all">{file}</span>
-              </div>
-            ))}
-          </div>
+          <ToolResultList>
+            {files.map((file, index) => {
+              const { name, parent } = splitPathForDisplay(file);
+
+              return (
+                <ToolResultRow key={file + index} title={file}>
+                  <span className="text-muted-foreground w-5 shrink-0 text-right font-mono text-[11px] tabular-nums">
+                    {index + 1}
+                  </span>
+                  <div className="min-w-0 flex-1 font-mono">
+                    <div className="text-foreground truncate text-xs leading-5">{name}</div>
+                    {parent && (
+                      <div className="text-muted-foreground/70 truncate text-[11px] leading-4">
+                        {parent}
+                      </div>
+                    )}
+                  </div>
+                </ToolResultRow>
+              );
+            })}
+          </ToolResultList>
         );
       }}
     />

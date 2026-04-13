@@ -1,28 +1,29 @@
-/**
- * Shared helpers for MCP tool renderers.
- *
- * Used by BrowserToolRenderers and WorkspaceToolRenderers to avoid
- * duplicating the common extractText / OutputBlock / ICON_CLS patterns.
- */
-
+import type { ReactNode } from "react";
 import { cn } from "@/shared/lib/utils";
 
-/** Extract text from MCP content blocks */
+type TextResultBlock = {
+  type: "text";
+  text: string;
+};
+
+function isTextResultBlock(block: unknown): block is TextResultBlock {
+  if (!block || typeof block !== "object") return false;
+  const record = block as Record<string, unknown>;
+  return record.type === "text" && typeof record.text === "string";
+}
+
 export function extractText(content: unknown): string {
   if (typeof content === "string") return content;
   if (Array.isArray(content)) {
     return content
-      .filter((b: any) => b?.type === "text")
-      .map((b: any) => b.text)
+      .filter(isTextResultBlock)
+      .map((block) => block.text)
       .join("\n");
   }
   return JSON.stringify(content, null, 2);
 }
 
-/** Scrollable pre block for snapshot/log output.
- * Error styling is handled by BaseToolRenderer (X icon swap) — OutputBlock
- * uses uniform styling regardless of error state. */
-export function OutputBlock({ children }: { children: React.ReactNode; isError?: boolean }) {
+export function OutputBlock({ children }: { children: ReactNode }) {
   return (
     <pre
       className={cn(

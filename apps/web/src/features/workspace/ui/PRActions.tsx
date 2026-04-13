@@ -214,7 +214,7 @@ function GhWarning({ reason }: { reason: "not_installed" | "not_authenticated" }
         <button
           type="button"
           aria-label="PR actions unavailable"
-          className="bg-warning/10 text-warning flex items-center gap-1 rounded-lg px-2 py-1"
+          className="bg-warning/10 text-warning flex cursor-help items-center gap-1 rounded-lg px-2 py-1"
         >
           <AlertTriangle className="h-3 w-3" />
           <span className="text-sm font-medium">PR</span>
@@ -242,7 +242,7 @@ function ErrorWarning({ reason }: { reason: "timeout" | "network" }) {
         <button
           type="button"
           aria-label="GitHub unreachable"
-          className="bg-destructive/10 text-destructive flex items-center gap-1 rounded-lg px-2 py-1"
+          className="bg-destructive/10 text-destructive flex cursor-help items-center gap-1 rounded-lg px-2 py-1"
         >
           <WifiOff className="h-3 w-3" />
           <span className="text-sm font-medium">PR</span>

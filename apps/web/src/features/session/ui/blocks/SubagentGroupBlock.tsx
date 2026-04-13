@@ -12,7 +12,7 @@ import { ChevronRight, Cpu, Loader2 } from "lucide-react";
 import NumberFlow from "@number-flow/react";
 import { AnimatePresence, motion } from "framer-motion";
 import { cn } from "@/shared/lib/utils";
-import type { ToolUseBlock, ToolResultBlock } from "@/shared/types";
+import type { Message, ToolUseBlock, ToolResultBlock } from "../../types";
 
 import { SubagentMessageList } from "./SubagentMessageList";
 import { useSession, SessionProvider } from "../../context";
@@ -20,7 +20,7 @@ import { useSession, SessionProvider } from "../../context";
 interface SubagentGroupBlockProps {
   toolUse: ToolUseBlock;
   toolResult?: ToolResultBlock;
-  childMessages: Array<{ id: string; role: string; parts?: any[]; content?: string }>;
+  childMessages: Message[];
 }
 
 const expandTransition = { duration: 0.15, ease: [0.165, 0.84, 0.44, 1] as const };
@@ -30,7 +30,7 @@ export function SubagentGroupBlock({
   toolResult,
   childMessages,
 }: SubagentGroupBlockProps) {
-  const { sessionStatus, subagentMessages } = useSession();
+  const { sessionStatus, workspaceId, workspacePath, subagentMessages } = useSession();
   const { description, subagent_type } = toolUse.input ?? {};
 
   const isRunning = sessionStatus === "working" && !toolResult;
@@ -43,14 +43,14 @@ export function SubagentGroupBlock({
     let count = 0;
     childMessages.forEach((msg) => {
       if (msg.parts) {
-        count += msg.parts.filter((p: any) => p.type === "TOOL").length;
+        count += msg.parts.filter((part) => part.type === "TOOL").length;
       }
     });
     return count;
   }, [childMessages]);
 
   return (
-    <div className="flex flex-col gap-1">
+    <div className="flex flex-col gap-0.5">
       <button
         type="button"
         onClick={() => setIsExpanded(!isExpanded)}
@@ -130,6 +130,8 @@ export function SubagentGroupBlock({
           >
             <SessionProvider
               sessionStatus={sessionStatus}
+              workspaceId={workspaceId}
+              workspacePath={workspacePath}
               subagentMessages={subagentMessages}
               insideSubagent={true}
             >

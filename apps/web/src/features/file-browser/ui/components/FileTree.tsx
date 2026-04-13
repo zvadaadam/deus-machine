@@ -4,7 +4,7 @@
  * selection highlighting, and indent guides.
  */
 
-import { useState, memo, useCallback } from "react";
+import { useState, memo, useCallback, useEffect, useRef } from "react";
 import {
   ChevronRight,
   ChevronDown,
@@ -27,6 +27,14 @@ interface FileTreeProps {
   level?: number;
   /** When true, all directories start expanded. When false, all start collapsed. */
   defaultExpanded?: boolean;
+  revealPath?: string | null;
+  revealRequestId?: string | null;
+  onRevealConsumed?: (requestId: string) => void;
+}
+
+function pathContainsTarget(nodePath: string, targetPath: string | null | undefined) {
+  if (!targetPath) return false;
+  return targetPath === nodePath || targetPath.startsWith(`${nodePath}/`);
 }
 
 /** File icon + color by extension */
@@ -64,6 +72,9 @@ export function FileTree({
   onFileClick,
   level = 0,
   defaultExpanded,
+  revealPath,
+  revealRequestId,
+  onRevealConsumed,
 }: FileTreeProps) {
   return (
     <div className={cn(level === 0 && "group/tree")} role={level === 0 ? "tree" : "group"}>
@@ -75,6 +86,9 @@ export function FileTree({
           selectedPath={selectedPath}
           onFileClick={onFileClick}
           defaultExpanded={defaultExpanded}
+          revealPath={revealPath}
+          revealRequestId={revealRequestId}
+          onRevealConsumed={onRevealConsumed}
         />
       ))}
     </div>
@@ -87,14 +101,21 @@ const TreeNode = memo(function TreeNode({
   selectedPath,
   onFileClick,
   defaultExpanded,
+  revealPath,
+  revealRequestId,
+  onRevealConsumed,
 }: {
   node: FileTreeNode;
   level: number;
   selectedPath?: string | null;
   onFileClick?: (path: string) => void;
   defaultExpanded?: boolean;
+  revealPath?: string | null;
+  revealRequestId?: string | null;
+  onRevealConsumed?: (requestId: string) => void;
 }) {
-  const [isExpanded, setIsExpanded] = useState(defaultExpanded ?? false);
+  const [manualExpanded, setManualExpanded] = useState<boolean | null>(null);
+  const itemRef = useRef<HTMLDivElement>(null);
 
   const isDirectory = node.type === "directory";
   const hasChildren = node.children && node.children.length > 0;
@@ -104,14 +125,16 @@ const TreeNode = memo(function TreeNode({
   const fileConfig = !isDirectory ? getFileIconConfig(node.name) : null;
   const FileIcon = fileConfig?.icon;
   const folderHasChanges = isDirectory && hasChanges(node);
+  const shouldRevealNode = pathContainsTarget(node.path, revealPath);
+  const isExpanded = manualExpanded ?? (shouldRevealNode || (defaultExpanded ?? false));
 
   const handleClick = useCallback(() => {
     if (isDirectory) {
-      setIsExpanded((prev) => !prev);
+      setManualExpanded(!isExpanded);
     } else {
       onFileClick?.(node.path);
     }
-  }, [isDirectory, node.path, onFileClick]);
+  }, [isDirectory, isExpanded, node.path, onFileClick]);
 
   const handleKeyDown = useCallback(
     (e: React.KeyboardEvent) => {
@@ -122,15 +145,31 @@ const TreeNode = memo(function TreeNode({
       if (isDirectory) {
         if (e.key === "ArrowLeft" && isExpanded) {
           e.preventDefault();
-          setIsExpanded(false);
+          setManualExpanded(false);
         } else if (e.key === "ArrowRight" && !isExpanded) {
           e.preventDefault();
-          setIsExpanded(true);
+          setManualExpanded(true);
         }
       }
     },
     [isDirectory, isExpanded, handleClick]
   );
+
+  useEffect(() => {
+    if (!isDirectory || !revealRequestId || !shouldRevealNode) return;
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- reveal requests intentionally persist expanded ancestors after navigation
+    setManualExpanded(true);
+  }, [isDirectory, revealRequestId, shouldRevealNode]);
+
+  useEffect(() => {
+    if (isDirectory || !revealRequestId || !shouldRevealNode) return;
+
+    const target = itemRef.current;
+    if (!target) return;
+
+    target.scrollIntoView({ behavior: "smooth", block: "nearest" });
+    onRevealConsumed?.(revealRequestId);
+  }, [isDirectory, onRevealConsumed, revealRequestId, shouldRevealNode]);
 
   // Indent guide lines (visible on tree hover)
   const indentGuides: React.ReactElement[] = [];
@@ -151,6 +190,7 @@ const TreeNode = memo(function TreeNode({
       className="[contain-intrinsic-size:auto_24px] [content-visibility:auto]"
     >
       <div
+        ref={itemRef}
         tabIndex={0}
         className={cn(
           "relative flex cursor-pointer items-center gap-1.5 py-[3px] pr-3 text-xs",
@@ -235,6 +275,9 @@ const TreeNode = memo(function TreeNode({
           selectedPath={selectedPath}
           onFileClick={onFileClick}
           defaultExpanded={defaultExpanded}
+          revealPath={revealPath}
+          revealRequestId={revealRequestId}
+          onRevealConsumed={onRevealConsumed}
         />
       )}
     </div>

@@ -36,6 +36,7 @@ type AssistantTurnData = {
   messages: Message[];
   firstMessageIndex: number;
   isLatest: boolean;
+  startedAt: string | null;
 };
 
 type Turn = UserTurn | AssistantTurnData;
@@ -278,6 +279,8 @@ export function Chat({
   const turns = useMemo(() => {
     const turnList: Turn[] = [];
     let currentAssistantTurn: Message[] | null = null;
+    let currentAssistantTurnStartedAt: string | null = null;
+    let latestUserSentAt: string | null = null;
     let firstAssistantIndex = -1;
 
     renderableMessages.forEach((message, index) => {
@@ -285,6 +288,7 @@ export function Chat({
         // Start or continue assistant turn
         if (!currentAssistantTurn) {
           currentAssistantTurn = [message];
+          currentAssistantTurnStartedAt = latestUserSentAt;
           firstAssistantIndex = index;
         } else {
           currentAssistantTurn.push(message);
@@ -297,9 +301,13 @@ export function Chat({
             messages: currentAssistantTurn,
             firstMessageIndex: firstAssistantIndex,
             isLatest: false, // Will be updated later
+            startedAt: currentAssistantTurnStartedAt,
           });
           currentAssistantTurn = null;
+          currentAssistantTurnStartedAt = null;
         }
+
+        latestUserSentAt = message.sent_at ?? null;
 
         // Add user turn
         turnList.push({
@@ -317,6 +325,7 @@ export function Chat({
         messages: currentAssistantTurn,
         firstMessageIndex: firstAssistantIndex,
         isLatest: false, // Will be updated later
+        startedAt: currentAssistantTurnStartedAt,
       });
     }
 
@@ -541,6 +550,7 @@ export function Chat({
                             messages={turn.messages}
                             isLatest={turn.isLatest}
                             isWorking={sessionStatus === "working"}
+                            startedAt={turn.startedAt}
                           />
                         )}
                       </div>

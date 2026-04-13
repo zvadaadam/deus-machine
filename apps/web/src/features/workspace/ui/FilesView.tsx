@@ -6,13 +6,14 @@
  * Fetches its own file change data for marking modified files.
  */
 
-import { useMemo } from "react";
+import { useCallback, useMemo } from "react";
 import { FileText } from "lucide-react";
 import { ResizablePanelGroup, ResizablePanel, ResizableHandle } from "@/components/ui/resizable";
 import { useWorkspaceLayout } from "../hooks/useWorkspaceLayout";
 import { useFileChanges } from "../api/workspace.queries";
 import { FileBrowserPanel, FileViewer } from "@/features/file-browser";
 import type { Workspace } from "@/shared/types";
+import { useWorkspaceLayoutStore, workspaceLayoutActions } from "../store/workspaceLayoutStore";
 
 interface FilesViewProps {
   workspace: Workspace;
@@ -22,6 +23,10 @@ interface FilesViewProps {
 
 export function FilesView({ workspace, isWatched = false }: FilesViewProps) {
   const { selectedFilePath, setSelectedFilePath } = useWorkspaceLayout(workspace.id);
+  const pendingFileNavigation = useWorkspaceLayoutStore(
+    (state) => state.layouts[workspace.id]?.pendingFileNavigation ?? null
+  );
+  const revealRequest = pendingFileNavigation?.target === "files" ? pendingFileNavigation : null;
   const isReady = workspace.state === "ready";
 
   const { data: fileChangesData } = useFileChanges(
@@ -31,6 +36,16 @@ export function FilesView({ workspace, isWatched = false }: FilesViewProps) {
     workspace.state
   );
   const fileChanges = useMemo(() => fileChangesData?.files ?? [], [fileChangesData]);
+
+  const handleRevealConsumed = useCallback(
+    (requestId: string) => {
+      const currentRequest =
+        useWorkspaceLayoutStore.getState().layouts[workspace.id]?.pendingFileNavigation;
+      if (currentRequest?.requestId !== requestId) return;
+      workspaceLayoutActions.setPendingFileNavigation(workspace.id, null);
+    },
+    [workspace.id]
+  );
 
   return (
     <ResizablePanelGroup direction="horizontal" className="min-h-0 flex-1">
@@ -55,6 +70,8 @@ export function FilesView({ workspace, isWatched = false }: FilesViewProps) {
           fileChanges={fileChanges}
           selectedFilePath={selectedFilePath}
           onFileClick={setSelectedFilePath}
+          revealRequest={revealRequest}
+          onRevealConsumed={handleRevealConsumed}
           filterMode="all"
           hideTabToggle
         />

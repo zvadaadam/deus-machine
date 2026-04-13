@@ -1,64 +1,61 @@
 /**
- * Semantic icon colors by tool action type.
+ * Tool header icons are intentionally muted.
  *
- * Read/search tools → info (violet)
- * Write/create tools → success (green)
- * Edit/modify tools → warning (amber)
- * Execute/run tools → primary (copper)
- * Destructive tools → destructive (red)
+ * Color is reserved for higher-signal UI: file pills, diff counts,
+ * status badges, and actual error states.
  */
+export const TOOL_ICON_CLS = "h-3.5 w-3.5 flex-shrink-0";
+export const TOOL_ICON_MUTED_CLS = "text-muted-foreground/55";
+
 export const TOOL_COLORS: Record<string, string> = {
   // Information gathering
-  Read: "text-info",
-  Grep: "text-info",
-  Glob: "text-info",
-  LS: "text-info",
-  BashOutput: "text-info",
+  Read: TOOL_ICON_MUTED_CLS,
+  Grep: TOOL_ICON_MUTED_CLS,
+  Glob: TOOL_ICON_MUTED_CLS,
+  LS: TOOL_ICON_MUTED_CLS,
+  BashOutput: TOOL_ICON_MUTED_CLS,
 
   // Creation
-  Write: "text-success",
+  Write: TOOL_ICON_MUTED_CLS,
 
   // Modification
-  Edit: "text-warning",
-  MultiEdit: "text-warning",
+  Edit: TOOL_ICON_MUTED_CLS,
+  MultiEdit: TOOL_ICON_MUTED_CLS,
 
   // Execution
-  Bash: "text-primary",
-  Task: "text-primary",
-  TodoWrite: "text-primary",
+  Bash: TOOL_ICON_MUTED_CLS,
+  Task: TOOL_ICON_MUTED_CLS,
+  TodoWrite: TOOL_ICON_MUTED_CLS,
 
   // Destructive
-  KillShell: "text-destructive",
+  KillShell: TOOL_ICON_MUTED_CLS,
 
   // Network
-  WebFetch: "text-info",
-  WebSearch: "text-info",
+  WebFetch: TOOL_ICON_MUTED_CLS,
+  WebSearch: TOOL_ICON_MUTED_CLS,
 
   // Browser MCP
-  BrowserSnapshot: "text-info",
-  BrowserNavigate: "text-primary",
-  BrowserNavigateBack: "text-primary",
-  BrowserClick: "text-warning",
-  BrowserType: "text-warning",
-  BrowserPressKey: "text-warning",
-  BrowserHover: "text-info",
-  BrowserSelectOption: "text-warning",
-  BrowserWaitFor: "text-info",
-  BrowserEvaluate: "text-primary",
-  BrowserConsoleMessages: "text-info",
-  BrowserScreenshot: "text-info",
-  BrowserNetworkRequests: "text-info",
+  BrowserSnapshot: TOOL_ICON_MUTED_CLS,
+  BrowserNavigate: TOOL_ICON_MUTED_CLS,
+  BrowserNavigateBack: TOOL_ICON_MUTED_CLS,
+  BrowserClick: TOOL_ICON_MUTED_CLS,
+  BrowserType: TOOL_ICON_MUTED_CLS,
+  BrowserPressKey: TOOL_ICON_MUTED_CLS,
+  BrowserHover: TOOL_ICON_MUTED_CLS,
+  BrowserSelectOption: TOOL_ICON_MUTED_CLS,
+  BrowserWaitFor: TOOL_ICON_MUTED_CLS,
+  BrowserEvaluate: TOOL_ICON_MUTED_CLS,
+  BrowserConsoleMessages: TOOL_ICON_MUTED_CLS,
+  BrowserScreenshot: TOOL_ICON_MUTED_CLS,
+  BrowserNetworkRequests: TOOL_ICON_MUTED_CLS,
 
   // Workspace MCP
-  AskUserQuestion: "text-primary",
-  GetWorkspaceDiff: "text-info",
-  DiffComment: "text-warning",
-  GetTerminalOutput: "text-info",
+  AskUserQuestion: TOOL_ICON_MUTED_CLS,
+  GetWorkspaceDiff: TOOL_ICON_MUTED_CLS,
+  DiffComment: TOOL_ICON_MUTED_CLS,
+  GetTerminalOutput: TOOL_ICON_MUTED_CLS,
 
   // Recording MCP
-  recording_start: "text-muted-foreground",
-  recording_stop: "text-primary",
+  recording_start: TOOL_ICON_MUTED_CLS,
+  recording_stop: TOOL_ICON_MUTED_CLS,
 } as const;
-
-/** Standard icon sizing for tool headers */
-export const TOOL_ICON_CLS = "h-3.5 w-3.5 flex-shrink-0";

@@ -14,7 +14,13 @@ import { emptyTokenUsage } from "@shared/messages";
 import type { FinishReason } from "@shared/messages";
 import type { Adapter, EventTransformer, PartEvent, StreamContext } from "./adapter";
 import type { CodexEvent } from "./codex-events";
-import { completeToolPart, createReasoningPart, createTextPart, createToolPart } from "./parts";
+import {
+  completeReasoningPart,
+  completeToolPart,
+  createReasoningPart,
+  createTextPart,
+  createToolPart,
+} from "./parts";
 
 // ---------------------------------------------------------------------------
 // Codex Transformer
@@ -167,7 +173,7 @@ class CodexTransformer implements EventTransformer<CodexEvent> {
     if (this.currentReasoningPart) {
       const existing = this.parts.get(this.currentReasoningPart);
       if (existing && existing.type === "REASONING") {
-        const updated: Part = { ...existing, text, state: "DONE" };
+        const updated: Part = completeReasoningPart(existing, text);
         this.parts.set(existing.id, updated);
         this.currentReasoningPart = null;
         return [{ type: "part.done", part: updated }];
@@ -510,7 +516,7 @@ class CodexTransformer implements EventTransformer<CodexEvent> {
     if (!this.currentReasoningPart) return [];
     const part = this.parts.get(this.currentReasoningPart);
     if (part && part.type === "REASONING" && part.state === "STREAMING") {
-      const donePart: Part = { ...part, state: "DONE" };
+      const donePart: Part = completeReasoningPart(part);
       this.parts.set(part.id, donePart);
       this.currentReasoningPart = null;
       return [{ type: "part.done", part: donePart }];

@@ -1,14 +1,5 @@
-/**
- * Bash Tool Renderer (REFACTORED with BaseToolRenderer)
- *
- * Specialized renderer for the Bash tool (shell commands).
- *
- * BEFORE: 100 LOC
- * AFTER: ~40 LOC
- */
-
 import { Terminal } from "lucide-react";
-import { BaseToolRenderer } from "../components";
+import { BaseToolRenderer, ToolSummaryChip } from "../components";
 import { cn } from "@/shared/lib/utils";
 import type { ToolRendererProps } from "../../chat-types";
 import { TOOL_COLORS, TOOL_ICON_CLS } from "../toolColors";
@@ -16,12 +7,8 @@ import { TOOL_COLORS, TOOL_ICON_CLS } from "../toolColors";
 export function BashToolRenderer({ toolUse, toolResult, isLoading }: ToolRendererProps) {
   const { command, description } = toolUse.input ?? {};
   const commandText = typeof command === "string" ? command : "";
-
-  // Truncate command more aggressively when description exists (command is secondary)
-  const commandPreview = (() => {
-    if (!commandText) return "...";
-    return commandText.length > 35 ? `${commandText.slice(0, 35)}...` : commandText;
-  })();
+  const descriptionText = typeof description === "string" ? description : "";
+  const commandPreview = commandText || "...";
 
   return (
     <BaseToolRenderer
@@ -33,38 +20,26 @@ export function BashToolRenderer({ toolUse, toolResult, isLoading }: ToolRendere
       showContentOnError
       renderSummary={() => (
         <>
-          {description ? (
-            // Description exists: Description is hero, command is metadata
+          {descriptionText ? (
             <>
-              <span className="text-foreground/80 rounded-sm px-1.5 py-0.5 font-mono text-sm font-normal">
-                {description}
-              </span>
+              <ToolSummaryChip tone="bare">{descriptionText}</ToolSummaryChip>
               <span className={cn("text-muted-foreground text-sm font-normal", "font-mono")}>
                 {" → "}
                 {commandPreview}
               </span>
             </>
           ) : (
-            // No description: Command is hero
-            <span
-              className={cn(
-                "text-foreground/80 rounded-sm px-1.5 py-0.5 font-mono text-sm font-normal",
-                "bg-primary/15 text-primary rounded-md px-2 py-0.5 font-mono"
-              )}
-            >
-              {commandPreview}
-            </span>
+            <ToolSummaryChip tone="primary">{commandPreview}</ToolSummaryChip>
           )}
         </>
       )}
-      renderContent={({ toolResult }) => {
-        if (!toolResult) return null;
+      renderContent={({ toolResult: currentToolResult }) => {
+        if (!currentToolResult) return null;
 
-        // Extract output content
         const output =
-          typeof toolResult.content === "object"
-            ? JSON.stringify(toolResult.content, null, 2)
-            : toolResult.content;
+          typeof currentToolResult.content === "object"
+            ? JSON.stringify(currentToolResult.content, null, 2)
+            : currentToolResult.content;
 
         return (
           <pre

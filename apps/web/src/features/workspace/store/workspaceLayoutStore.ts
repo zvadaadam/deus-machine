@@ -19,6 +19,7 @@
 import { create } from "zustand";
 import { devtools, persist } from "zustand/middleware";
 import type { PersistedBrowserTab } from "@/features/browser/types";
+import { normalizeWorkspaceRelativePath } from "@/features/workspace/lib/normalizeWorkspaceRelativePath";
 
 export type ContentTab =
   | "changes"
@@ -34,9 +35,18 @@ export interface PersistedTerminalTab {
   title: string;
 }
 
+export type FileNavigationTarget = "files" | "changes";
+
+export interface PendingFileNavigation {
+  requestId: string;
+  path: string;
+  target: FileNavigationTarget;
+}
+
 interface WorkspaceLayoutState {
   activeContentTab: ContentTab;
   selectedFilePath: string | null;
+  pendingFileNavigation: PendingFileNavigation | null;
   sidebarCollapsed: boolean;
   browserTabs: PersistedBrowserTab[]; // Persisted browser tab URLs/titles
   activeBrowserTabId: string | null; // Which browser tab was last active
@@ -60,6 +70,7 @@ interface WorkspaceLayoutStore {
 
   setActiveContentTab: (workspaceId: string, tab: ContentTab) => void;
   setSelectedFilePath: (workspaceId: string, path: string | null) => void;
+  setPendingFileNavigation: (workspaceId: string, navigation: PendingFileNavigation | null) => void;
   setSidebarCollapsed: (workspaceId: string, collapsed: boolean) => void;
   setChatPanelCollapsed: (workspaceId: string, collapsed: boolean) => void;
   setContentPanelCollapsed: (workspaceId: string, collapsed: boolean) => void;
@@ -84,6 +95,7 @@ interface WorkspaceLayoutStore {
 export const defaultLayout: WorkspaceLayoutState = {
   activeContentTab: "changes",
   selectedFilePath: null,
+  pendingFileNavigation: null,
   sidebarCollapsed: false,
   browserTabs: [],
   activeBrowserTabId: null,
@@ -154,6 +166,21 @@ export const useWorkspaceLayoutStore = create<WorkspaceLayoutStore>()(
             }),
             false,
             "workspaceLayout/setSelectedFilePath"
+          ),
+
+        setPendingFileNavigation: (workspaceId, navigation) =>
+          set(
+            (state) => ({
+              layouts: {
+                ...state.layouts,
+                [workspaceId]: {
+                  ...(state.layouts[workspaceId] || defaultLayout),
+                  pendingFileNavigation: navigation,
+                },
+              },
+            }),
+            false,
+            "workspaceLayout/setPendingFileNavigation"
           ),
 
         setSidebarCollapsed: (workspaceId, collapsed) =>
@@ -286,6 +313,7 @@ export const useWorkspaceLayoutStore = create<WorkspaceLayoutStore>()(
               id,
               {
                 ...layout,
+                pendingFileNavigation: null,
                 pendingTerminalCommand: null,
                 terminalTabs: [],
                 activeTerminalTabId: null,
@@ -316,6 +344,8 @@ export const workspaceLayoutActions = {
     useWorkspaceLayoutStore.getState().setActiveContentTab(workspaceId, tab),
   setSelectedFilePath: (workspaceId: string, path: string | null) =>
     useWorkspaceLayoutStore.getState().setSelectedFilePath(workspaceId, path),
+  setPendingFileNavigation: (workspaceId: string, navigation: PendingFileNavigation | null) =>
+    useWorkspaceLayoutStore.getState().setPendingFileNavigation(workspaceId, navigation),
   setSidebarCollapsed: (workspaceId: string, collapsed: boolean) =>
     useWorkspaceLayoutStore.getState().setSidebarCollapsed(workspaceId, collapsed),
   setChatPanelCollapsed: (workspaceId: string, collapsed: boolean) =>
@@ -338,4 +368,19 @@ export const workspaceLayoutActions = {
   clearWorkspaceLayout: (workspaceId: string) =>
     useWorkspaceLayoutStore.getState().clearWorkspaceLayout(workspaceId),
   resetAll: () => useWorkspaceLayoutStore.getState().resetAll(),
+  openFileInContent: (workspaceId: string, path: string, target: FileNavigationTarget) => {
+    const normalizedPath = normalizeWorkspaceRelativePath(path);
+    if (!normalizedPath) return;
+
+    useWorkspaceLayoutStore.getState().setLayout(workspaceId, {
+      activeContentTab: target,
+      selectedFilePath: normalizedPath,
+      contentPanelCollapsed: false,
+      pendingFileNavigation: {
+        requestId: crypto.randomUUID(),
+        path: normalizedPath,
+        target,
+      },
+    });
+  },
 };
