@@ -73,8 +73,19 @@ tmp/
 temp/
 *.tmp
 
-# Claude Code
-.claude/settings.local.json
+# AI tools — session logs, transcripts, agent memory
+.entire/
+.agents/
+.claude/
+.context/
+.prompts/
+.cursor/
+.windsurf/
+.copilot/
+.aider*
+
+# Entire checkpoint data (hash-prefix dirs at repo root)
+[0-9a-f][0-9a-f]/
 
 # MCP Configuration (user-specific)
 .mcp.json
