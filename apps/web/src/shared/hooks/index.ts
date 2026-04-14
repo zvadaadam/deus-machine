@@ -1,10 +1,7 @@
 export { useCopyToClipboard } from "./useCopyToClipboard";
 export { useKeyboardShortcuts } from "./useKeyboardShortcuts";
-export { useIsMobile } from "./use-mobile";
 export { useWorkingDuration, formatDuration } from "./useWorkingDuration";
 export { useZoom } from "./useZoom";
 export { useIsFullscreen } from "./useIsFullscreen";
 export { useWindowDragZone } from "./useWindowDrag";
 export { useWindowResizing } from "./useWindowResizing";
-export { useWindowFocus, isWindowFocused } from "./useWindowFocus";
-export { useLastOpenInApp, getLastOpenInAppId } from "./useLastOpenInApp";
