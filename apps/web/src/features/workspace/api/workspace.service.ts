@@ -76,22 +76,6 @@ export const WorkspaceService = {
   },
 
   /**
-   * Fetch uncommitted files (HEAD -> workdir diff).
-   * TODO: Add backend endpoint for uncommitted files. Currently returns [].
-   */
-  fetchUncommittedFiles: async (_id: string): Promise<FileChange[]> => {
-    return [];
-  },
-
-  /**
-   * Fetch last-turn files (checkpoint -> workdir diff).
-   * TODO: Add backend endpoint for last-turn files. Currently returns [].
-   */
-  fetchLastTurnFiles: async (_id: string, _sessionId?: string): Promise<FileChange[]> => {
-    return [];
-  },
-
-  /**
    * Create a new workspace.
    * Optionally accepts source_branch / PR metadata to create from a
    * specific branch or pull request instead of the repo default branch.

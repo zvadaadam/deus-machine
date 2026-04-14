@@ -4,5 +4,4 @@ export { useConnectionStateInit } from "./hooks/useConnectionStateInit";
 export { ConnectionOrb } from "./ui/ConnectionOrb";
 export { ConnectionBanner } from "./ui/ConnectionBanner";
 export { ServerOfflinePage } from "./ui/ServerOfflinePage";
-export { ConnectionIllustration } from "./ui/ConnectionIllustration";
 export { emitSendAttemptFailed } from "./lib/connectionEvents";

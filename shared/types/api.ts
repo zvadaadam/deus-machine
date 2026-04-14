@@ -3,9 +3,3 @@ export interface ApiError {
   message: string;
   details?: any;
 }
-
-export interface PaginationParams {
-  page?: number;
-  limit?: number;
-  offset?: number;
-}
