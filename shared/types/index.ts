@@ -28,7 +28,6 @@ export type {
   ThinkingBlock,
   Session,
   SessionStatus,
-  SessionNotification,
 } from "./session";
 
 // Session type guards

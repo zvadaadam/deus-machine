@@ -6,12 +6,11 @@
 // shared/protocol.ts. MCP-facing RPC schemas (browser, simulator, diff,
 // terminal, plan mode) live in rpc-schemas.ts; re-exported here.
 
-import { AgentTypeSchema, ErrorCategorySchema, SessionStatusSchema } from "@shared/enums";
+import { AgentTypeSchema, ErrorCategorySchema } from "@shared/enums";
 import {
   EnterPlanModeNotificationSchema,
   ErrorResponseSchema,
   MessageResponseSchema,
-  StatusChangedNotificationSchema,
 } from "@shared/session-events";
 
 // Canonical schemas — re-exported for existing agent-server imports.
@@ -28,7 +27,6 @@ export const FRONTEND_NOTIFICATIONS = {
   MESSAGE: "message",
   QUERY_ERROR: "queryError",
   ENTER_PLAN_MODE: "enterPlanModeNotification",
-  STATUS_CHANGED: "statusChanged",
 } as const;
 
 /** RPC methods the agent-server can call on the frontend (request/response).
@@ -47,8 +45,6 @@ export {
   ErrorCategorySchema,
   ErrorResponseSchema,
   MessageResponseSchema,
-  SessionStatusSchema,
-  StatusChangedNotificationSchema,
 };
 
 // ============================================================================
@@ -62,7 +58,6 @@ export type ErrorCategory = z.infer<typeof ErrorCategorySchema>;
 export type MessageResponse = z.infer<typeof MessageResponseSchema>;
 export type ErrorResponse = z.infer<typeof ErrorResponseSchema>;
 export type EnterPlanModeNotification = z.infer<typeof EnterPlanModeNotificationSchema>;
-export type StatusChangedNotification = z.infer<typeof StatusChangedNotificationSchema>;
 
 // ============================================================================
 // MCP-Facing RPC Schemas — re-exported from rpc-schemas.ts
