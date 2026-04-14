@@ -24,6 +24,13 @@ import {
   type ClassifiedError,
 } from "../agents/lifecycle";
 
+// ── Helpers ────────────────────────────────────────────────────────────────
+
+function expectCancellationEvents(sessionId: string, agentType: string) {
+  expect(mockEmitSessionCancelled).toHaveBeenCalledWith(sessionId, agentType);
+  expect(mockEmitMessageCancelled).toHaveBeenCalledWith(sessionId, agentType);
+}
+
 // ── Tests ──────────────────────────────────────────────────────────────────
 
 describe("persistCancellation", () => {
@@ -33,16 +40,12 @@ describe("persistCancellation", () => {
 
   it("emits canonical session.cancelled and message.cancelled events", () => {
     persistCancellation("session-1", "claude");
-
-    expect(mockEmitSessionCancelled).toHaveBeenCalledWith("session-1", "claude");
-    expect(mockEmitMessageCancelled).toHaveBeenCalledWith("session-1", "claude");
+    expectCancellationEvents("session-1", "claude");
   });
 
   it("works with codex agent type", () => {
     persistCancellation("session-2", "codex");
-
-    expect(mockEmitSessionCancelled).toHaveBeenCalledWith("session-2", "codex");
-    expect(mockEmitMessageCancelled).toHaveBeenCalledWith("session-2", "codex");
+    expectCancellationEvents("session-2", "codex");
   });
 
   it("does not send any error notifications", () => {
@@ -123,22 +126,11 @@ describe("persistCancellation canonical events", () => {
     vi.clearAllMocks();
   });
 
-  it("emits session.cancelled event", () => {
-    persistCancellation("session-1", "claude");
-
-    expect(mockEmitSessionCancelled).toHaveBeenCalledWith("session-1", "claude");
-  });
-
-  it("emits message.cancelled event", () => {
-    persistCancellation("session-1", "claude");
-
-    expect(mockEmitMessageCancelled).toHaveBeenCalledWith("session-1", "claude");
-  });
-
-  it("emits canonical events for codex agent type", () => {
-    persistCancellation("session-2", "codex");
-
-    expect(mockEmitSessionCancelled).toHaveBeenCalledWith("session-2", "codex");
-    expect(mockEmitMessageCancelled).toHaveBeenCalledWith("session-2", "codex");
+  it.each([
+    ["claude", "session-1"],
+    ["codex", "session-2"],
+  ] as const)("emits both cancellation events for %s agent type", (agentType, sessionId) => {
+    persistCancellation(sessionId, agentType);
+    expectCancellationEvents(sessionId, agentType);
   });
 });
