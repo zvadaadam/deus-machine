@@ -17,4 +17,3 @@ export {
 
 export { runCommand } from "./commands";
 export { resolve as resolveToolRelay, reject as rejectToolRelay } from "./tool-relay";
-export { createAgentEventHandler, type AgentEventHandler } from "./event-handler";

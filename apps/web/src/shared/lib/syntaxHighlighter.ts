@@ -44,7 +44,7 @@ const pendingLangLoads = new Map<string, Promise<void>>();
  * Initialize or get cached Shiki highlighter instance.
  * Race condition prevention: concurrent calls share the same promise.
  */
-export async function getHighlighter(): Promise<Highlighter> {
+async function getHighlighter(): Promise<Highlighter> {
   if (highlighterInstance) return highlighterInstance;
   if (highlighterPromise) return highlighterPromise;
 
@@ -93,25 +93,6 @@ async function ensureLanguage(highlighter: Highlighter, language: string): Promi
 }
 
 /**
- * Highlight code string with syntax highlighting.
- * Returns HTML string with inline styles.
- */
-export async function highlightCode(
-  code: string,
-  language: string,
-  theme: "github-dark" | "github-light" = "github-dark"
-): Promise<string> {
-  try {
-    const highlighter = await getHighlighter();
-    const lang = await ensureLanguage(highlighter, language);
-    return highlighter.codeToHtml(code, { lang, theme });
-  } catch (error) {
-    console.error("Syntax highlighting failed:", error);
-    return `<pre><code>${escapeHtml(code)}</code></pre>`;
-  }
-}
-
-/**
  * Highlight code and return only the inner token HTML (no <pre>/<code> wrappers).
  * Used by chat code blocks where the wrapper elements already exist.
  *
@@ -148,35 +129,6 @@ export async function highlightCodeTokens(
     return tokens;
   } catch {
     return null;
-  }
-}
-
-/**
- * Highlight a single line of code — used by FileViewer for per-line rendering
- */
-export async function highlightDiffLine(
-  content: string,
-  language: string,
-  theme: "github-dark" | "github-light" = "github-dark"
-): Promise<string> {
-  if (content.trim().length === 0) {
-    return "&nbsp;";
-  }
-
-  try {
-    const highlighter = await getHighlighter();
-    const lang = await ensureLanguage(highlighter, language);
-
-    const html = highlighter.codeToHtml(content, { lang, theme });
-
-    const codeMatch = html.match(/<code[^>]*>(.*?)<\/code>/s);
-    let highlightedCode = codeMatch ? codeMatch[1] : escapeHtml(content);
-    highlightedCode = highlightedCode.replace(/background-color:[^;"]*;?/gi, "");
-
-    return highlightedCode;
-  } catch (error) {
-    console.error("Line highlighting failed:", error);
-    return escapeHtml(content);
   }
 }
 

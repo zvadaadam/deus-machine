@@ -28,6 +28,7 @@ import { execFile } from "child_process";
 import { promisify } from "util";
 import { uuidv7 } from "@shared/lib/uuid";
 import { getDatabase } from "../lib/database";
+import { detectInstallCommand } from "../lib/package-manager";
 import { invalidate } from "./query-engine";
 
 const execFileAsync = promisify(execFile);
@@ -67,38 +68,6 @@ export function emitProgress(workspaceId: string, step: string, label: string): 
 function updateInitStage(workspaceId: string, stage: string): void {
   const db = getDatabase();
   db.prepare("UPDATE workspaces SET init_stage = ? WHERE id = ?").run(stage, workspaceId);
-}
-
-// ─── Package Manager Detection ──────────────────────────────────
-
-interface PackageManager {
-  command: string;
-  args: string[];
-}
-
-/**
- * Detect the package manager from lockfile presence in the workspace.
- * Returns null if no package.json exists (nothing to install).
- */
-export function detectPackageManager(dir: string): PackageManager | null {
-  // Check lockfiles in priority order (bun first — project default)
-  if (fs.existsSync(path.join(dir, "bun.lock")) || fs.existsSync(path.join(dir, "bun.lockb"))) {
-    return { command: "bun", args: ["install", "--frozen-lockfile"] };
-  }
-  if (fs.existsSync(path.join(dir, "yarn.lock"))) {
-    return { command: "yarn", args: ["install", "--frozen-lockfile"] };
-  }
-  if (fs.existsSync(path.join(dir, "pnpm-lock.yaml"))) {
-    return { command: "pnpm", args: ["install", "--frozen-lockfile"] };
-  }
-  if (fs.existsSync(path.join(dir, "package-lock.json"))) {
-    return { command: "npm", args: ["ci"] };
-  }
-  // package.json exists but no lockfile — try npm install
-  if (fs.existsSync(path.join(dir, "package.json"))) {
-    return { command: "npm", args: ["install"] };
-  }
-  return null;
 }
 
 // ─── Cleanup ────────────────────────────────────────────────────
@@ -185,7 +154,7 @@ const STAGES: InitStage[] = [
     label: "Installing dependencies...",
     fatal: false,
     async run(ctx) {
-      const pm = detectPackageManager(ctx.workspacePath);
+      const pm = detectInstallCommand(ctx.workspacePath);
       if (!pm) {
         console.log("[WORKSPACE] No package.json found, skipping dependency install");
         return;

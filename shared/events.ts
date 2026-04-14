@@ -191,25 +191,25 @@ export const PtyExitSchema = z.object({
 });
 export type PtyExitEvent = z.infer<typeof PtyExitSchema>;
 
-export const BrowserPageLoadSchema = z.object({
+const BrowserPageLoadSchema = z.object({
   label: z.string(),
   url: z.string(),
   event: z.string(),
   error: z.object({ code: z.number(), description: z.string() }).optional(),
 });
-export type BrowserPageLoadEvent = z.infer<typeof BrowserPageLoadSchema>;
+type BrowserPageLoadEvent = z.infer<typeof BrowserPageLoadSchema>;
 
-export const BrowserTitleChangedSchema = z.object({
+const BrowserTitleChangedSchema = z.object({
   label: z.string(),
   title: z.string(),
 });
-export type BrowserTitleChangedEvent = z.infer<typeof BrowserTitleChangedSchema>;
+type BrowserTitleChangedEvent = z.infer<typeof BrowserTitleChangedSchema>;
 
-export const BrowserUrlChangeSchema = z.object({
+const BrowserUrlChangeSchema = z.object({
   label: z.string(),
   url: z.string(),
 });
-export type BrowserUrlChangeEvent = z.infer<typeof BrowserUrlChangeSchema>;
+type BrowserUrlChangeEvent = z.infer<typeof BrowserUrlChangeSchema>;
 
 export const BrowserWorkspaceChangeSchema = z.object({
   workspaceId: z.string(),
@@ -219,23 +219,23 @@ export const BrowserWorkspaceChangeSchema = z.object({
 });
 export type BrowserWorkspaceChangeEvent = z.infer<typeof BrowserWorkspaceChangeSchema>;
 
-export const BrowserNewTabRequestedSchema = z.object({
+const BrowserNewTabRequestedSchema = z.object({
   url: z.string(),
   disposition: z.string().optional(),
   openerLabel: z.string().optional(),
 });
-export type BrowserNewTabRequestedEvent = z.infer<typeof BrowserNewTabRequestedSchema>;
+type BrowserNewTabRequestedEvent = z.infer<typeof BrowserNewTabRequestedSchema>;
 
-export const SimBuildLogSchema = z.object({
+const SimBuildLogSchema = z.object({
   workspaceId: z.string(),
   line: z.string(),
 });
-export type SimBuildLogEvent = z.infer<typeof SimBuildLogSchema>;
+type SimBuildLogEvent = z.infer<typeof SimBuildLogSchema>;
 
-export const BackendPortChangedSchema = z.object({
+const BackendPortChangedSchema = z.object({
   port: z.number(),
 });
-export type BackendPortChangedEvent = z.infer<typeof BackendPortChangedSchema>;
+type BackendPortChangedEvent = z.infer<typeof BackendPortChangedSchema>;
 
 export const GitCloneProgressSchema = z.object({
   /** Raw stderr line from git clone --progress */

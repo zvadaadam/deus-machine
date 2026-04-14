@@ -18,64 +18,29 @@ import { parseEnvString, buildAgentEnvironment } from "../agents/environment";
 // ============================================================================
 
 describe("parseEnvString", () => {
-  it("parses simple KEY=value pairs", () => {
-    const result = parseEnvString("FOO=bar\nBAZ=qux");
-    expect(result).toEqual({ FOO: "bar", BAZ: "qux" });
-  });
-
-  it("handles export prefix", () => {
-    const result = parseEnvString("export FOO=bar\nexport BAZ=qux");
-    expect(result).toEqual({ FOO: "bar", BAZ: "qux" });
-  });
-
-  it("ignores comment lines", () => {
-    const result = parseEnvString("# This is a comment\nFOO=bar\n# Another comment\nBAZ=qux");
-    expect(result).toEqual({ FOO: "bar", BAZ: "qux" });
-  });
-
-  it("ignores empty lines", () => {
-    const result = parseEnvString("\nFOO=bar\n\n\nBAZ=qux\n");
-    expect(result).toEqual({ FOO: "bar", BAZ: "qux" });
-  });
-
-  it("handles double-quoted values", () => {
-    const result = parseEnvString('FOO="hello world"');
-    expect(result).toEqual({ FOO: "hello world" });
-  });
-
-  it("handles single-quoted values", () => {
-    const result = parseEnvString("FOO='hello world'");
-    expect(result).toEqual({ FOO: "hello world" });
-  });
-
-  it("handles multi-line quoted values", () => {
-    const result = parseEnvString('FOO="line1\nline2"');
-    expect(result).toEqual({ FOO: "line1\nline2" });
-  });
-
-  it("skips lines without equals sign", () => {
-    const result = parseEnvString("FOO=bar\nINVALID_LINE\nBAZ=qux");
-    expect(result).toEqual({ FOO: "bar", BAZ: "qux" });
-  });
-
-  it("handles values with equals signs", () => {
-    const result = parseEnvString("FOO=bar=baz=qux");
-    expect(result).toEqual({ FOO: "bar=baz=qux" });
-  });
-
-  it("handles empty values", () => {
-    const result = parseEnvString("FOO=");
-    expect(result).toEqual({ FOO: "" });
-  });
-
-  it("handles empty input", () => {
-    const result = parseEnvString("");
-    expect(result).toEqual({});
-  });
-
-  it("trims whitespace from keys and values", () => {
-    const result = parseEnvString("  FOO  =  bar  ");
-    expect(result).toEqual({ FOO: "bar" });
+  it.each([
+    ["simple KEY=value pairs", "FOO=bar\nBAZ=qux", { FOO: "bar", BAZ: "qux" }],
+    ["export prefix", "export FOO=bar\nexport BAZ=qux", { FOO: "bar", BAZ: "qux" }],
+    [
+      "comment lines (ignored)",
+      "# This is a comment\nFOO=bar\n# Another comment\nBAZ=qux",
+      { FOO: "bar", BAZ: "qux" },
+    ],
+    ["empty lines (ignored)", "\nFOO=bar\n\n\nBAZ=qux\n", { FOO: "bar", BAZ: "qux" }],
+    ["double-quoted values", 'FOO="hello world"', { FOO: "hello world" }],
+    ["single-quoted values", "FOO='hello world'", { FOO: "hello world" }],
+    ["multi-line quoted values", 'FOO="line1\nline2"', { FOO: "line1\nline2" }],
+    [
+      "lines without equals sign (skipped)",
+      "FOO=bar\nINVALID_LINE\nBAZ=qux",
+      { FOO: "bar", BAZ: "qux" },
+    ],
+    ["values with equals signs", "FOO=bar=baz=qux", { FOO: "bar=baz=qux" }],
+    ["empty values", "FOO=", { FOO: "" }],
+    ["empty input", "", {}],
+    ["whitespace trimming", "  FOO  =  bar  ", { FOO: "bar" }],
+  ] as const)("handles %s", (_label, input, expected) => {
+    expect(parseEnvString(input as string)).toEqual(expected);
   });
 });
 

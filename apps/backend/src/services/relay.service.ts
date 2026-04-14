@@ -120,7 +120,7 @@ export function ensureRelayConnected(): void {
   connectToRelay(url, creds.serverId, creds.relayToken);
 }
 
-export function connectToRelay(url: string, id: string, token: string): void {
+function connectToRelay(url: string, id: string, token: string): void {
   relayUrl = url;
   serverId = id;
   relayToken = token;

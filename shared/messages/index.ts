@@ -11,7 +11,6 @@ export {
   type ToolKind,
   ToolKindSchema,
   // Tool location
-  type ToolLocation,
   ToolLocationSchema,
   // Subagent
   type SubagentMetadata,
@@ -32,7 +31,6 @@ export {
   TextContentSchema,
   type DiffContent,
   DiffContentSchema,
-  type ToolOutputContent,
   ToolOutputContentSchema,
   // Parts
   type TextPart,
@@ -45,7 +43,4 @@ export {
   CompactionPartSchema,
   type Part,
   PartSchema,
-  // Part type enum
-  type PartType,
-  PartTypeSchema,
 } from "./types";

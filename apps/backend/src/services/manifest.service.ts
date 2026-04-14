@@ -4,6 +4,7 @@ import os from "os";
 import { spawn } from "child_process";
 import type BetterSqlite3 from "better-sqlite3";
 import { DeusManifestSchema, type DeusManifest, type NormalizedTask } from "../lib/deus-manifest";
+import { detectPackageManager, getRunPrefix } from "../lib/package-manager";
 import { emitProgress } from "./workspace-init.service";
 
 /**
@@ -144,16 +145,8 @@ export function detectManifestFromProject(
   if (fs.existsSync(pkgJsonPath)) {
     try {
       const pkg = JSON.parse(fs.readFileSync(pkgJsonPath, "utf-8"));
-      const pm =
-        fs.existsSync(path.join(rootPath, "bun.lock")) ||
-        fs.existsSync(path.join(rootPath, "bun.lockb"))
-          ? "bun"
-          : fs.existsSync(path.join(rootPath, "pnpm-lock.yaml"))
-            ? "pnpm"
-            : fs.existsSync(path.join(rootPath, "yarn.lock"))
-              ? "yarn"
-              : "npm";
-      const run = pm === "npm" ? "npm run" : `${pm} run`;
+      const pm = detectPackageManager(rootPath) ?? "npm";
+      const run = getRunPrefix(pm);
 
       requires[pm] = ">= 1.0";
       if (pm !== "bun") requires.node = ">= 18";

@@ -15,7 +15,6 @@ import type {
   MessageResponse,
   ErrorResponse,
   EnterPlanModeNotification,
-  StatusChangedNotification,
   AskUserQuestionRequest,
   AskUserQuestionResponse,
   GetDiffRequest,
@@ -117,14 +116,6 @@ class EventBroadcasterClass {
       FRONTEND_NOTIFICATIONS.ENTER_PLAN_MODE,
       response,
       "sendEnterPlanModeNotification"
-    );
-  }
-
-  sendStatusChanged(notification: StatusChangedNotification): void {
-    this.broadcastNotification(
-      FRONTEND_NOTIFICATIONS.STATUS_CHANGED,
-      notification,
-      "sendStatusChanged"
     );
   }
 

@@ -19,14 +19,9 @@ vi.mock("../agents/lifecycle", () => ({
   persistCancellation: mockPersistCancellation,
   notifyAndRecordError: mockNotifyAndRecordError,
   classifyError: mockClassifyError,
-  handleCancellation: (
-    sessionId: string,
-    agentType: string,
-    model: string,
-    wasCancelled: boolean
-  ) => {
+  handleCancellation: (sessionId: string, agentType: string, wasCancelled: boolean) => {
     if (!wasCancelled) return false;
-    mockPersistCancellation(sessionId, agentType, model);
+    mockPersistCancellation(sessionId, agentType);
     return true;
   },
   handleQueryError: (
@@ -61,20 +56,20 @@ describe("query-completion", () => {
 
   describe("handleCancellation", () => {
     it("returns false and does nothing when wasCancelled is false", () => {
-      const result = handleCancellation("sess-1", "claude", "sonnet", false);
+      const result = handleCancellation("sess-1", "claude", false);
       expect(result).toBe(false);
       expect(mockPersistCancellation).not.toHaveBeenCalled();
     });
 
     it("returns true and calls persistCancellation when wasCancelled is true", () => {
-      const result = handleCancellation("sess-1", "claude", "opus", true);
+      const result = handleCancellation("sess-1", "claude", true);
       expect(result).toBe(true);
-      expect(mockPersistCancellation).toHaveBeenCalledWith("sess-1", "claude", "opus");
+      expect(mockPersistCancellation).toHaveBeenCalledWith("sess-1", "claude");
     });
 
     it("passes correct agentType for codex", () => {
-      handleCancellation("sess-2", "codex", "codex-mini", true);
-      expect(mockPersistCancellation).toHaveBeenCalledWith("sess-2", "codex", "codex-mini");
+      handleCancellation("sess-2", "codex", true);
+      expect(mockPersistCancellation).toHaveBeenCalledWith("sess-2", "codex");
     });
   });
 

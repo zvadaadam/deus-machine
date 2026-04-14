@@ -14,7 +14,7 @@ import { fileURLToPath } from "node:url";
 import { basename, dirname, join } from "node:path";
 import type { RecentProject } from "@shared/types/onboarding";
 
-export const RECENT_PROJECT_LIMIT = 100;
+const RECENT_PROJECT_LIMIT = 100;
 const CLAUDE_JSONL_SCAN_BYTES = 16 * 1024;
 const GIT_ROOT_TIMEOUT_MS = 1500;
 const IGNORED_PATH_SEGMENTS = [
@@ -142,7 +142,7 @@ export function isIgnoredRecentProjectPath(fsPath: string, options: ReaderOption
   return IGNORED_PATH_SEGMENTS.some((segment) => normalizedPath.includes(segment));
 }
 
-export function resolveGitProjectRoot(fsPath: string): string | null {
+function resolveGitProjectRoot(fsPath: string): string | null {
   try {
     const rootPath = execFileSync("git", ["rev-parse", "--show-toplevel"], {
       cwd: fsPath,
@@ -346,13 +346,6 @@ function resolveClaudeProject(
   }
 
   return null;
-}
-
-export function resolveClaudeProjectPath(
-  projectDir: string,
-  options: ReaderOptions = {}
-): string | null {
-  return resolveClaudeProject(projectDir, options)?.path ?? null;
 }
 
 export function readClaudeProjects(dir: string, options: ReaderOptions = {}): RecentProject[] {

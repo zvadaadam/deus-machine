@@ -34,9 +34,7 @@ const db = initDatabase();
 // Runs once at startup (fire-and-forget) so WS subscribers get the data
 // on their first snapshot instead of waiting for GET /repos.
 async function backfillGitOriginUrls(): Promise<void> {
-  const { execFile } = await import("child_process");
-  const { promisify } = await import("util");
-  const execFileAsync = promisify(execFile);
+  const { getGitRemoteUrl } = await import("./lib/git-remotes");
 
   try {
     const nullUrlRepos = db
@@ -51,12 +49,7 @@ async function backfillGitOriginUrls(): Promise<void> {
       const batch = nullUrlRepos.slice(i, i + BATCH_SIZE);
       const results = await Promise.allSettled(
         batch.map(async (repo) => {
-          const { stdout } = await execFileAsync("git", ["remote", "get-url", "origin"], {
-            cwd: repo.root_path,
-            encoding: "utf-8",
-            timeout: 2000,
-          });
-          const url = stdout.trim();
+          const url = await getGitRemoteUrl(repo.root_path);
           if (url) {
             db.prepare("UPDATE repositories SET git_origin_url = ? WHERE id = ?").run(url, repo.id);
             return true;

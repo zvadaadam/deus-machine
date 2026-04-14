@@ -1,7 +1,6 @@
 import path from "node:path";
 
 export const DEUS_APP_ID = "com.deus.app";
-export const DEUS_PRODUCT_NAME = "Deus";
 export const DEUS_DB_FILENAME = "deus.db";
 export const DEUS_PREFERENCES_FILENAME = "preferences.json";
 export const RUNTIME_MANIFEST_VERSION = 1;

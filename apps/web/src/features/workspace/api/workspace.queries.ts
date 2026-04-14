@@ -7,7 +7,6 @@ import { useQuery, useMutation, useQueryClient, keepPreviousData } from "@tansta
 import { useMemo } from "react";
 import { produce } from "immer";
 import { WorkspaceService } from "./workspace.service";
-import { RepoService } from "@/features/repository/api/repository.service";
 import { queryKeys } from "@/shared/api/queryKeys";
 import { useQuerySubscription } from "@/shared/hooks/useQuerySubscription";
 import type { RepoGroup, DiffStats } from "../types";
@@ -33,25 +32,6 @@ export function useWorkspacesByRepo(state: string = "ready,initializing") {
   return useQuery({
     queryKey: queryKeys.workspaces.byRepo(state),
     queryFn: () => WorkspaceService.fetchByRepo(state),
-    staleTime: Infinity, // WS subscription keeps data fresh
-    refetchOnWindowFocus: false, // Subscription handles freshness
-  });
-}
-
-/**
- * Fetch global stats.
- *
- * WS subscription pushes data directly into cache via q:snapshot.
- * HTTP queryFn is fallback for initial load before WS connects.
- */
-export function useStats() {
-  useQuerySubscription("stats", {
-    queryKey: queryKeys.stats.all,
-  });
-
-  return useQuery({
-    queryKey: queryKeys.stats.all,
-    queryFn: () => RepoService.fetchStats(),
     staleTime: Infinity, // WS subscription keeps data fresh
     refetchOnWindowFocus: false, // Subscription handles freshness
   });
@@ -198,47 +178,6 @@ export function useFileChanges(
     staleTime: 30000,
     // Events handle invalidation when watched; fall back to polling otherwise
     refetchInterval: isWatched ? false : sessionStatus === "working" ? 5000 : false,
-    refetchOnMount: "always",
-    refetchOnWindowFocus: true,
-  });
-}
-
-/**
- * Fetch uncommitted files for a workspace (HEAD → workdir).
- * TODO: Backend endpoint not yet implemented — returns empty array.
- */
-export function useUncommittedFiles(
-  workspaceId: string | null,
-  sessionStatus?: string | null,
-  workspaceState?: string | null
-) {
-  return useQuery({
-    queryKey: queryKeys.workspaces.uncommittedFiles(workspaceId || ""),
-    queryFn: () => WorkspaceService.fetchUncommittedFiles(workspaceId!),
-    enabled: !!workspaceId && workspaceState === "ready",
-    staleTime: 30000,
-    refetchInterval: sessionStatus === "working" ? 5000 : false,
-    refetchOnMount: "always",
-    refetchOnWindowFocus: true,
-  });
-}
-
-/**
- * Fetch last-turn files for a workspace (checkpoint → workdir).
- * TODO: Backend endpoint not yet implemented — returns empty array.
- */
-export function useLastTurnFiles(
-  workspaceId: string | null,
-  sessionId: string | null | undefined,
-  sessionStatus?: string | null,
-  workspaceState?: string | null
-) {
-  return useQuery({
-    queryKey: queryKeys.workspaces.lastTurnFiles(workspaceId || "", sessionId || undefined),
-    queryFn: () => WorkspaceService.fetchLastTurnFiles(workspaceId!, sessionId || undefined),
-    enabled: !!workspaceId && !!sessionId && workspaceState === "ready",
-    staleTime: 30000,
-    refetchInterval: sessionStatus === "working" ? 5000 : false,
     refetchOnMount: "always",
     refetchOnWindowFocus: true,
   });

@@ -20,7 +20,7 @@ const SETTINGS_PATH = path.join(CLAUDE_DIR, "settings.json");
  * Global: ~/.claude/    Project: {projectPath}/.claude/
  * Validates that projectPath is an absolute path to prevent traversal attacks.
  */
-export function resolveClaudeDir(projectPath?: string): string {
+function resolveClaudeDir(projectPath?: string): string {
   if (!projectPath) return CLAUDE_DIR;
   if (!path.isAbsolute(projectPath)) {
     throw new Error("projectPath must be an absolute path");

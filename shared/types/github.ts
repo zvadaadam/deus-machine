@@ -44,17 +44,6 @@ export interface GhCliStatus {
 }
 
 /**
- * Development server information
- * Local dev servers detected in workspace
- */
-export interface DevServer {
-  port: number;
-  url: string;
-  type: "vite" | "webpack" | "angular" | "node" | "other";
-  name: string;
-}
-
-/**
  * Summary of an open GitHub Pull Request
  * Used by the "Create Workspace from PR" picker
  */

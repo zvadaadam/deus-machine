@@ -17,9 +17,6 @@ export const queryKeys = {
     detail: (id: string) => ["workspaces", "detail", id] as const,
     diffStats: (id: string) => ["workspaces", "diff-stats", id] as const,
     diffFiles: (id: string) => ["workspaces", "diff-files", id] as const,
-    uncommittedFiles: (id: string) => ["workspaces", "uncommitted-files", id] as const,
-    lastTurnFiles: (id: string, sessionId?: string) =>
-      ["workspaces", "last-turn-files", id, sessionId] as const,
     diffFile: (id: string, file: string) => ["workspaces", "diff-file", id, file] as const,
     prStatus: (id: string) => ["workspaces", "pr-status", id] as const,
     penFiles: (id: string) => ["workspaces", "pen-files", id] as const,
