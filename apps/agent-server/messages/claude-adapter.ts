@@ -149,6 +149,8 @@ class ClaudeCodeTransformer implements EventTransformer<ClaudeCodeEvent> {
 
     if (parentToolCallId !== this.lastParentToolCallId) {
       boundaryEvents.push(...this.closeActiveParts());
+      const boundaryMessageDone = this.closeMessage();
+      if (boundaryMessageDone) boundaryEvents.push(boundaryMessageDone);
       this.lastParentToolCallId = parentToolCallId;
     }
 

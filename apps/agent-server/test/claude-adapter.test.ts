@@ -735,6 +735,75 @@ describe("ClaudeCodeAdapter", () => {
       });
     });
 
+    it("closes the parent message before opening a subagent message on handoff", () => {
+      const transformer = claudeCodeAdapter.createTransformer(makeCtx());
+
+      transformer.process({
+        type: "stream_event",
+        event: {
+          type: "message_start",
+          message: {
+            id: "msg_parent",
+            role: "assistant",
+            content: [],
+            usage: { input_tokens: 10, output_tokens: 0 },
+          },
+        },
+        parent_tool_use_id: null,
+        session_id: "s_123",
+      });
+
+      transformer.process({
+        type: "stream_event",
+        event: {
+          type: "content_block_delta",
+          index: 0,
+          delta: { type: "text_delta", text: "Parent streaming text" },
+        },
+        parent_tool_use_id: null,
+        session_id: "s_123",
+      });
+
+      const events = transformer.process({
+        type: "assistant",
+        message: {
+          id: "msg_child",
+          role: "assistant",
+          content: [{ type: "text", text: "Subagent output" }],
+        },
+        parent_tool_use_id: "task_1",
+        session_id: "s_123",
+      });
+
+      expect(events[0]).toMatchObject({
+        type: "part.done",
+        part: expect.objectContaining({
+          type: "TEXT",
+          text: "Parent streaming text",
+          state: "DONE",
+        }),
+      });
+      expect((events[0] as any).part.parentToolCallId).toBeUndefined();
+
+      expect(events[1]).toMatchObject({
+        type: "message.done",
+        messageId: "msg-1-1",
+        parts: [
+          expect.objectContaining({
+            type: "TEXT",
+            text: "Parent streaming text",
+            state: "DONE",
+          }),
+        ],
+      });
+      expect((events[1] as any).parentToolCallId).toBeUndefined();
+
+      expect(events[2]).toMatchObject({
+        type: "message.created",
+        parentToolCallId: "task_1",
+      });
+    });
+
     it("propagates parentToolCallId on message.created for subagent messages", () => {
       const transformer = claudeCodeAdapter.createTransformer(makeCtx());
 
