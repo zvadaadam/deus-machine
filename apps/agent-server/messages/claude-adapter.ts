@@ -145,16 +145,18 @@ class ClaudeCodeTransformer implements EventTransformer<ClaudeCodeEvent> {
 
   process(event: ClaudeCodeEvent): PartEvent[] {
     const parentToolCallId = this.extractParentToolCallId(event);
+    const boundaryEvents: PartEvent[] = [];
 
     if (parentToolCallId !== this.lastParentToolCallId) {
-      this.closeActiveParts();
+      boundaryEvents.push(...this.closeActiveParts());
       this.lastParentToolCallId = parentToolCallId;
     }
 
     let emitted: PartEvent[] = [];
     switch (event.type) {
       case "system":
-        return this.handleSystem(event);
+        emitted = this.handleSystem(event);
+        break;
       case "user":
         emitted = this.handleUser(event);
         break;
@@ -165,16 +167,17 @@ class ClaudeCodeTransformer implements EventTransformer<ClaudeCodeEvent> {
         emitted = this.handleStream(event);
         break;
       case "result":
-        return this.handleResult(event);
+        emitted = this.handleResult(event);
+        break;
       default:
-        return [];
+        return boundaryEvents;
     }
 
     if (parentToolCallId) {
       emitted = this.applyParentTag(emitted, parentToolCallId);
     }
 
-    return emitted;
+    return [...boundaryEvents, ...emitted];
   }
 
   finish(): { events: PartEvent[]; parts: Part[]; usage: TokenUsage; cost?: number } {

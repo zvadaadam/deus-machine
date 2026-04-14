@@ -49,7 +49,21 @@ app.get("/workspaces/:id/file-content", withWorkspace, (c) => {
     throw new ValidationError("File not found");
   }
 
-  const content = filesService.readTextFile(absolutePath);
+  let realWorkspacePath: string;
+  let realPath: string;
+  try {
+    realWorkspacePath = fs.realpathSync(workspacePath);
+    realPath = fs.realpathSync(absolutePath);
+  } catch {
+    throw new ValidationError("File not found");
+  }
+
+  const relativeRealPath = path.relative(realWorkspacePath, realPath);
+  if (relativeRealPath.startsWith("..") || path.isAbsolute(relativeRealPath)) {
+    throw new ValidationError("Invalid file path");
+  }
+
+  const content = filesService.readTextFile(realPath);
   if (content === null) {
     return c.json({ error: "binary_file", message: "File appears to be binary" }, 422);
   }

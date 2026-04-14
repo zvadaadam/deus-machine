@@ -164,7 +164,7 @@ describe("classifyError", () => {
     ])("classifies plain object with %s", (_label, input, expectedCategory, expectedMessage?) => {
       const result = classifyError(input);
       expect(result.category).toBe(expectedCategory);
-      if (expectedMessage) {
+      if (expectedMessage !== undefined) {
         expect(result.message).toBe(expectedMessage);
       }
     });

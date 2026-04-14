@@ -691,6 +691,50 @@ describe("ClaudeCodeAdapter", () => {
       });
     });
 
+    it("emits untagged boundary part.done events when parent context changes", () => {
+      const transformer = claudeCodeAdapter.createTransformer(makeCtx());
+
+      transformer.process({
+        type: "stream_event",
+        event: {
+          type: "content_block_delta",
+          index: 0,
+          delta: { type: "text_delta", text: "Parent streaming text" },
+        },
+        parent_tool_use_id: null,
+        session_id: "s_123",
+      });
+
+      const events = transformer.process({
+        type: "assistant",
+        message: {
+          id: "msg_2",
+          role: "assistant",
+          content: [{ type: "text", text: "Subagent output" }],
+        },
+        parent_tool_use_id: "task_1",
+        session_id: "s_123",
+      });
+
+      expect(events[0]).toMatchObject({
+        type: "part.done",
+        part: expect.objectContaining({
+          type: "TEXT",
+          text: "Parent streaming text",
+          state: "DONE",
+        }),
+      });
+      expect((events[0] as any).part.parentToolCallId).toBeUndefined();
+
+      const subagentPart = events.find(
+        (e) =>
+          (e.type === "part.created" || e.type === "part.done") && e.part.text === "Subagent output"
+      );
+      expect(subagentPart).toMatchObject({
+        part: expect.objectContaining({ parentToolCallId: "task_1" }),
+      });
+    });
+
     it("propagates parentToolCallId on message.created for subagent messages", () => {
       const transformer = claudeCodeAdapter.createTransformer(makeCtx());
 
