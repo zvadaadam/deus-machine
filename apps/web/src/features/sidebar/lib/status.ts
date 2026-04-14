@@ -19,7 +19,7 @@ export type DisplayStatus = "idle" | "working" | "error" | "unread";
 /**
  * Priority levels for sorting (higher = more urgent)
  */
-export enum StatusPriority {
+enum StatusPriority {
   ERROR = 4, // Critical - something broke
   UNREAD = 3, // Important - needs review / response
   WORKING = 2, // Active - in progress
@@ -42,7 +42,7 @@ export enum StatusPriority {
  * 🟣 Purple (compacting) = Transient, maintenance, ignore
  * ⚪ Gray (idle) = Dormant, background, low priority
  */
-export interface StatusConfig {
+interface StatusConfig {
   priority: StatusPriority;
   label: string;
   labelActive: string; // Present continuous form (e.g., "Working...")
@@ -105,7 +105,7 @@ export const STATUS_CONFIG: Record<DisplayStatus, StatusConfig> = {
 // Separate from DisplayStatus which shows real-time agent activity.
 // Rendered as a small icon to the left of the workspace title.
 
-export interface WorkflowStatusConfig {
+interface WorkflowStatusConfig {
   label: string;
   color: string;
 }
