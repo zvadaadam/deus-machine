@@ -31,16 +31,18 @@ vi.mock("../../../src/db", () => ({
 }));
 
 // Mock fs.existsSync for file-content validation
-const { mockExistsSync } = vi.hoisted(() => ({
+const { mockExistsSync, mockRealpathSync } = vi.hoisted(() => ({
   mockExistsSync: vi.fn(() => true),
+  mockRealpathSync: vi.fn((p: string) => p),
 }));
 
 vi.mock("fs", async (importOriginal) => {
   const actual = (await importOriginal()) as any;
   return {
     ...actual,
-    default: { ...actual.default, existsSync: mockExistsSync },
+    default: { ...actual.default, existsSync: mockExistsSync, realpathSync: mockRealpathSync },
     existsSync: mockExistsSync,
+    realpathSync: mockRealpathSync,
   };
 });
 
@@ -49,6 +51,7 @@ import app from "../../../src/routes/files";
 beforeEach(() => {
   vi.clearAllMocks();
   mockExistsSync.mockReturnValue(true);
+  mockRealpathSync.mockImplementation((p: string) => p);
 });
 
 describe("GET /workspaces/:id/files", () => {
@@ -113,6 +116,17 @@ describe("GET /workspaces/:id/file-content", () => {
 
   it("rejects absolute paths", async () => {
     const res = await app.request("/workspaces/ws-123/file-content?path=/etc/passwd");
+    expect(res.status).toBeGreaterThanOrEqual(400);
+  });
+
+  it("rejects symlink escapes outside the workspace", async () => {
+    mockRealpathSync.mockImplementation((p: string) => {
+      if (p === "/repos/myrepo/.deus/test-ws") return p;
+      if (p === "/repos/myrepo/.deus/test-ws/src/link.txt") return "/etc/passwd";
+      return p;
+    });
+
+    const res = await app.request("/workspaces/ws-123/file-content?path=src/link.txt");
     expect(res.status).toBeGreaterThanOrEqual(400);
   });
 

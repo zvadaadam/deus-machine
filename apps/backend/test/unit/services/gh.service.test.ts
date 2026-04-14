@@ -90,7 +90,7 @@ describe("classifyCheck", () => {
       ["PENDING", "pending"],
       ["EXPECTED", "pending"],
       ["SUCCESS", "passing"],
-    ] as const)("returns %s for state %s", (state, expected) => {
+    ] as const)("state %s returns %s", (state, expected) => {
       expect(classifyCheck({ __typename: "StatusContext", state })).toBe(expected);
     });
   });

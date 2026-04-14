@@ -20,6 +20,10 @@ function hasAnyFile(dirPath: string, fileNames: string[]): boolean {
   return fileNames.some((f) => fs.existsSync(path.join(dirPath, f)));
 }
 
+function hasPackageJson(dirPath: string): boolean {
+  return fs.existsSync(path.join(dirPath, "package.json"));
+}
+
 /** Detect package manager from lockfile presence. Returns null if no lockfile found. */
 export function detectPackageManagerFromLockfile(dirPath: string): NodePackageManager | null {
   return CANDIDATES.find(({ lockfiles }) => hasAnyFile(dirPath, lockfiles))?.packageManager ?? null;
@@ -30,9 +34,8 @@ export function detectPackageManagerFromLockfile(dirPath: string): NodePackageMa
  * Returns null if no package.json exists at all.
  */
 export function detectPackageManager(dirPath: string): NodePackageManager | null {
-  const fromLockfile = detectPackageManagerFromLockfile(dirPath);
-  if (fromLockfile) return fromLockfile;
-  return fs.existsSync(path.join(dirPath, "package.json")) ? "npm" : null;
+  if (!hasPackageJson(dirPath)) return null;
+  return detectPackageManagerFromLockfile(dirPath) ?? "npm";
 }
 
 export interface PackageManagerCommand {
@@ -63,10 +66,7 @@ export function getRunPrefix(pm: NodePackageManager): string {
  * Returns null if no package.json exists. Uses frozen-lockfile/ci flags when a lockfile is present.
  */
 export function detectInstallCommand(dirPath: string): PackageManagerCommand | null {
+  if (!hasPackageJson(dirPath)) return null;
   const fromLockfile = detectPackageManagerFromLockfile(dirPath);
-  if (fromLockfile) return getInstallCommand(fromLockfile, true);
-  if (fs.existsSync(path.join(dirPath, "package.json"))) {
-    return getInstallCommand("npm", false);
-  }
-  return null;
+  return fromLockfile ? getInstallCommand(fromLockfile, true) : getInstallCommand("npm", false);
 }
