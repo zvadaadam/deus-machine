@@ -88,16 +88,12 @@ export const AGENT_EVENT_NAMES = {
   SESSION_TITLE: "session.title",
 } as const;
 
-export type AgentEventName = (typeof AGENT_EVENT_NAMES)[keyof typeof AGENT_EVENT_NAMES];
-
 // ============================================================================
 // Capabilities (returned in initialize handshake, per agent)
 // ============================================================================
 
 /** How model switching works for this agent. */
 export const ModelSwitchModeSchema = z.enum(["in-session", "restart-session", "unsupported"]);
-export type ModelSwitchMode = z.infer<typeof ModelSwitchModeSchema>;
-
 export const AgentCapabilitiesSchema = z.object({
   // Per-agent feature support
   auth: z.boolean(),
@@ -332,7 +328,6 @@ export const MessageSystemEventSchema = z.object({
   agentType: AgentTypeSchema,
   data: z.unknown(),
 });
-export type MessageSystemEvent = z.infer<typeof MessageSystemEventSchema>;
 
 export const MessageAssistantEventSchema = z.object({
   type: z.literal("message.assistant"),
@@ -347,7 +342,6 @@ export const MessageAssistantEventSchema = z.object({
   }),
   model: z.string().optional(),
 });
-export type MessageAssistantEvent = z.infer<typeof MessageAssistantEventSchema>;
 
 export const MessageToolResultEventSchema = z.object({
   type: z.literal("message.tool_result"),
@@ -361,7 +355,6 @@ export const MessageToolResultEventSchema = z.object({
   }),
   model: z.string().optional(),
 });
-export type MessageToolResultEvent = z.infer<typeof MessageToolResultEventSchema>;
 
 export const MessageResultEventSchema = z.object({
   type: z.literal("message.result"),
@@ -370,7 +363,6 @@ export const MessageResultEventSchema = z.object({
   subtype: z.string(),
   usage: z.unknown().optional(),
 });
-export type MessageResultEvent = z.infer<typeof MessageResultEventSchema>;
 
 export const MessageCancelledEventSchema = z.object({
   type: z.literal("message.cancelled"),
@@ -388,7 +380,6 @@ export const TurnStartedEventSchema = z.object({
   messageId: z.string(),
   turnId: z.string().optional(),
 });
-export type TurnStartedEvent = z.infer<typeof TurnStartedEventSchema>;
 
 export const MessageCreatedEventSchema = z.object({
   type: z.literal("message.created"),
@@ -450,7 +441,6 @@ export const TurnCompletedEventSchema = z.object({
   tokens: TokenUsageSchema.optional(),
   cost: z.number().optional(),
 });
-export type TurnCompletedEvent = z.infer<typeof TurnCompletedEventSchema>;
 
 // ── Interaction Requests ──────────────────────────────────────────────
 
@@ -471,14 +461,12 @@ export const RequestOpenedEventSchema = z.object({
   requestType: InteractionRequestTypeSchema,
   data: z.unknown(),
 });
-export type RequestOpenedEvent = z.infer<typeof RequestOpenedEventSchema>;
 
 export const RequestResolvedEventSchema = z.object({
   type: z.literal("request.resolved"),
   requestId: z.string(),
   sessionId: z.string(),
 });
-export type RequestResolvedEvent = z.infer<typeof RequestResolvedEventSchema>;
 
 // ── Tool Relay ────────────────────────────────────────────────────────
 
