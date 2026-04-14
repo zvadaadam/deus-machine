@@ -172,24 +172,24 @@ export const TurnStartResponseSchema = z.object({
 });
 export type TurnStartResponse = z.infer<typeof TurnStartResponseSchema>;
 
-export const TurnCancelRequestSchema = z.object({
+const TurnCancelRequestSchema = z.object({
   sessionId: z.string().min(1),
 });
 export type TurnCancelRequest = z.infer<typeof TurnCancelRequestSchema>;
 
-export const TurnRespondRequestSchema = z.object({
+const TurnRespondRequestSchema = z.object({
   sessionId: z.string().min(1),
   requestId: z.string().min(1),
   result: z.unknown(),
 });
 export type TurnRespondRequest = z.infer<typeof TurnRespondRequestSchema>;
 
-export const SessionResetRequestSchema = z.object({
+const SessionResetRequestSchema = z.object({
   sessionId: z.string().min(1),
 });
 export type SessionResetRequest = z.infer<typeof SessionResetRequestSchema>;
 
-export const SessionStopRequestSchema = z.object({
+const SessionStopRequestSchema = z.object({
   sessionId: z.string().min(1),
 });
 export type SessionStopRequest = z.infer<typeof SessionStopRequestSchema>;
@@ -198,13 +198,13 @@ export type SessionStopRequest = z.infer<typeof SessionStopRequestSchema>;
 // Provider Operation Schemas
 // ============================================================================
 
-export const ProviderAuthRequestSchema = z.object({
+const ProviderAuthRequestSchema = z.object({
   agentType: AgentTypeSchema,
   cwd: z.string().min(1),
 });
 export type ProviderAuthRequest = z.infer<typeof ProviderAuthRequestSchema>;
 
-export const ProviderInitWorkspaceRequestSchema = z.object({
+const ProviderInitWorkspaceRequestSchema = z.object({
   agentType: AgentTypeSchema,
   cwd: z.string().min(1),
   ghToken: z.string().optional(),
@@ -212,13 +212,13 @@ export const ProviderInitWorkspaceRequestSchema = z.object({
 });
 export type ProviderInitWorkspaceRequest = z.infer<typeof ProviderInitWorkspaceRequestSchema>;
 
-export const ProviderContextUsageRequestSchema = z.object({
+const ProviderContextUsageRequestSchema = z.object({
   sessionId: z.string().min(1),
   agentSessionId: z.string().min(1),
 });
 export type ProviderContextUsageRequest = z.infer<typeof ProviderContextUsageRequestSchema>;
 
-export const ProviderUpdateModeRequestSchema = z.object({
+const ProviderUpdateModeRequestSchema = z.object({
   sessionId: z.string().min(1),
   permissionMode: z.string().min(1),
 });
