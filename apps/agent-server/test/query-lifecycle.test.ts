@@ -32,21 +32,21 @@ describe("persistCancellation", () => {
   });
 
   it("emits canonical session.cancelled and message.cancelled events", () => {
-    persistCancellation("session-1", "claude", "opus");
+    persistCancellation("session-1", "claude");
 
     expect(mockEmitSessionCancelled).toHaveBeenCalledWith("session-1", "claude");
     expect(mockEmitMessageCancelled).toHaveBeenCalledWith("session-1", "claude");
   });
 
   it("works with codex agent type", () => {
-    persistCancellation("session-2", "codex", "o3-mini");
+    persistCancellation("session-2", "codex");
 
     expect(mockEmitSessionCancelled).toHaveBeenCalledWith("session-2", "codex");
     expect(mockEmitMessageCancelled).toHaveBeenCalledWith("session-2", "codex");
   });
 
   it("does not send any error notifications", () => {
-    persistCancellation("session-1", "claude", "opus");
+    persistCancellation("session-1", "claude");
 
     expect(mockEmitSessionError).not.toHaveBeenCalled();
   });
@@ -124,19 +124,19 @@ describe("persistCancellation canonical events", () => {
   });
 
   it("emits session.cancelled event", () => {
-    persistCancellation("session-1", "claude", "opus");
+    persistCancellation("session-1", "claude");
 
     expect(mockEmitSessionCancelled).toHaveBeenCalledWith("session-1", "claude");
   });
 
   it("emits message.cancelled event", () => {
-    persistCancellation("session-1", "claude", "opus");
+    persistCancellation("session-1", "claude");
 
     expect(mockEmitMessageCancelled).toHaveBeenCalledWith("session-1", "claude");
   });
 
   it("emits canonical events for codex agent type", () => {
-    persistCancellation("session-2", "codex", "o3-mini");
+    persistCancellation("session-2", "codex");
 
     expect(mockEmitSessionCancelled).toHaveBeenCalledWith("session-2", "codex");
     expect(mockEmitMessageCancelled).toHaveBeenCalledWith("session-2", "codex");

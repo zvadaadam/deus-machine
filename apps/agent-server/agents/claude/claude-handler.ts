@@ -590,18 +590,14 @@ export class ClaudeAgentHandler implements AgentHandler {
       // Post-loop: stream ended cleanly (prompt queue closed or SDK finished).
       // Turn-level idle is already set by processMessage on result/success.
       // This handles conversation-end: cancel persistence only.
-      if (
-        handleCancellation(sessionId, "claude", options.model || "opus", !!session.cancelledByUser)
-      ) {
+      if (handleCancellation(sessionId, "claude", !!session.cancelledByUser)) {
         console.log(`[${generatorId}] Session cancelled by user: ${sessionId}`);
         return;
       }
       console.log(`[${generatorId}] Stream completed: ${sessionId}`);
     } catch (error) {
       // Cancel takes priority — abort signal can surface as a thrown error.
-      if (
-        handleCancellation(sessionId, "claude", options.model || "opus", !!session.cancelledByUser)
-      ) {
+      if (handleCancellation(sessionId, "claude", !!session.cancelledByUser)) {
         console.log(`[${generatorId}] Session cancelled by user (catch): ${sessionId}`);
         return;
       }
