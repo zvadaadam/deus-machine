@@ -26,6 +26,7 @@ import {
   type QueryParams,
   readStringParam as readString,
   readNumberParam as readNumber,
+  requireParam,
 } from "../../lib/query-params";
 
 interface CommandResult {
@@ -45,20 +46,18 @@ export async function runCommand(
       .with("stopSession", () => handleStopSession(params))
       // ---- PTY commands ----
       .with("pty:spawn", () => {
-        const id = readString(params, "id");
+        const id = requireParam(params, "id", "pty:spawn");
         const cmd = readString(params, "command") ?? "bash";
         const args = Array.isArray(params.args) ? (params.args as string[]) : [];
         const cols = readNumber(params, "cols") ?? 80;
         const rows = readNumber(params, "rows") ?? 24;
         const cwd = readString(params, "cwd");
-        if (!id) throw new Error("pty:spawn requires id");
 
         const ptyId = spawnPty({ id, command: cmd, args, cols, rows, cwd });
         return { commandId: ptyId };
       })
       .with("pty:write", () => {
-        const id = readString(params, "id");
-        if (!id) throw new Error("pty:write requires id");
+        const id = requireParam(params, "id", "pty:write");
         const data = Array.isArray(params.data) ? (params.data as number[]) : undefined;
         if (!data) throw new Error("pty:write requires data (number[])");
 
@@ -77,23 +76,20 @@ export async function runCommand(
         return {};
       })
       .with("pty:kill", () => {
-        const id = readString(params, "id");
-        if (!id) throw new Error("pty:kill requires id");
+        const id = requireParam(params, "id", "pty:kill");
 
         killPty(id);
         return {};
       })
       // ---- File system commands ----
       .with("fs:watch", async () => {
-        const workspacePath = readString(params, "workspacePath");
-        if (!workspacePath) throw new Error("fs:watch requires workspacePath");
+        const workspacePath = requireParam(params, "workspacePath", "fs:watch");
 
         await watchWorkspace(workspacePath);
         return {};
       })
       .with("fs:unwatch", async () => {
-        const workspacePath = readString(params, "workspacePath");
-        if (!workspacePath) throw new Error("fs:unwatch requires workspacePath");
+        const workspacePath = requireParam(params, "workspacePath", "fs:unwatch");
 
         await unwatchWorkspace(workspacePath);
         return {};
@@ -127,8 +123,7 @@ export async function runCommand(
       })
       // ---- Route-delegated commands ----
       .with("createWorkspace", async () => {
-        const repositoryId = readString(params, "repository_id");
-        if (!repositoryId) throw new Error("createWorkspace requires repository_id");
+        const repositoryId = requireParam(params, "repository_id", "createWorkspace");
         const body: Record<string, unknown> = { repository_id: repositoryId };
         const sourceBranch = readString(params, "source_branch");
         const prUrl = readString(params, "pr_url");
@@ -143,8 +138,7 @@ export async function runCommand(
         return { commandId: result.id };
       })
       .with("retrySetup", async () => {
-        const workspaceId = readString(params, "workspaceId");
-        if (!workspaceId) throw new Error("retrySetup requires workspaceId");
+        const workspaceId = requireParam(params, "workspaceId", "retrySetup");
         await delegateToRoute("POST", `/api/workspaces/${workspaceId}/retry-setup`);
         return {};
       })
@@ -165,12 +159,9 @@ export async function runCommand(
 // ---- sendMessage ----
 
 function handleSendMessage(params: QueryParams): CommandResult {
-  const sessionId = readString(params, "sessionId");
-  const content = readString(params, "content");
+  const sessionId = requireParam(params, "sessionId", "sendMessage");
+  const content = requireParam(params, "content", "sendMessage");
   const model = readString(params, "model");
-  if (!sessionId || !content) {
-    throw new Error("sendMessage requires sessionId and content");
-  }
 
   // 1. Persist the user message
   const result = writeUserMessage(sessionId, content, model);
@@ -227,8 +218,7 @@ function handleSendMessage(params: QueryParams): CommandResult {
 // ---- stopSession ----
 
 async function handleStopSession(params: QueryParams): Promise<CommandResult> {
-  const sessionId = readString(params, "sessionId");
-  if (!sessionId) throw new Error("stopSession requires sessionId");
+  const sessionId = requireParam(params, "sessionId", "stopSession");
 
   const db = getDatabase();
   const session = getSessionRaw(db, sessionId);
