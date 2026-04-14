@@ -85,7 +85,7 @@ temp/
 .aider*
 
 # Entire checkpoint data (hash-prefix dirs at repo root)
-[0-9a-f][0-9a-f]/
+/[0-9a-f][0-9a-f]/
 
 # MCP Configuration (user-specific)
 .mcp.json
