@@ -90,7 +90,7 @@ export const ToolLocationSchema = z.object({
     })
     .optional(),
 });
-export type ToolLocation = z.infer<typeof ToolLocationSchema>;
+type ToolLocation = z.infer<typeof ToolLocationSchema>;
 
 // ============================================================================
 // Subagent Metadata
@@ -140,7 +140,7 @@ export const ToolOutputContentSchema = z.discriminatedUnion("type", [
 ]);
 export type TextContent = z.infer<typeof TextContentSchema>;
 export type DiffContent = z.infer<typeof DiffContentSchema>;
-export type ToolOutputContent = z.infer<typeof ToolOutputContentSchema>;
+type ToolOutputContent = z.infer<typeof ToolOutputContentSchema>;
 
 export const CompletedToolStateSchema = z.object({
   status: z.literal("COMPLETED"),
@@ -245,5 +245,5 @@ export type Part = z.infer<typeof PartSchema>;
 // Part Type Enum (for DB storage)
 // ============================================================================
 
-export const PartTypeSchema = z.enum(["TEXT", "REASONING", "TOOL", "COMPACTION"]);
-export type PartType = z.infer<typeof PartTypeSchema>;
+const PartTypeSchema = z.enum(["TEXT", "REASONING", "TOOL", "COMPACTION"]);
+type PartType = z.infer<typeof PartTypeSchema>;
