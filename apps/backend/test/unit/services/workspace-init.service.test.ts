@@ -47,10 +47,10 @@ vi.mock("../../../src/services/query-engine", () => ({
 }));
 
 import {
-  detectPackageManager,
   initializeWorkspace,
   type InitContext,
 } from "../../../src/services/workspace-init.service";
+import { detectInstallCommand } from "../../../src/lib/package-manager";
 
 // ─── Helpers ──────────────────────────────────────────────────────
 
@@ -86,49 +86,28 @@ beforeEach(() => {
   mockFs.existsSync.mockReturnValue(false);
 });
 
-// ─── detectPackageManager ─────────────────────────────────────────
+// ─── detectInstallCommand ─────────────────────────────────────────
 
-describe("detectPackageManager", () => {
-  it("returns bun for bun.lock", () => {
-    mockFs.existsSync.mockImplementation((p: unknown) => String(p).endsWith("bun.lock"));
-    const pm = detectPackageManager("/workspace");
-    expect(pm).toEqual({ command: "bun", args: ["install", "--frozen-lockfile"] });
-  });
-
-  it("returns bun for bun.lockb (binary lockfile)", () => {
-    mockFs.existsSync.mockImplementation((p: unknown) => String(p).endsWith("bun.lockb"));
-    const pm = detectPackageManager("/workspace");
-    expect(pm).toEqual({ command: "bun", args: ["install", "--frozen-lockfile"] });
-  });
-
-  it("returns yarn for yarn.lock", () => {
-    mockFs.existsSync.mockImplementation((p: unknown) => String(p).endsWith("yarn.lock"));
-    const pm = detectPackageManager("/workspace");
-    expect(pm).toEqual({ command: "yarn", args: ["install", "--frozen-lockfile"] });
-  });
-
-  it("returns pnpm for pnpm-lock.yaml", () => {
-    mockFs.existsSync.mockImplementation((p: unknown) => String(p).endsWith("pnpm-lock.yaml"));
-    const pm = detectPackageManager("/workspace");
-    expect(pm).toEqual({ command: "pnpm", args: ["install", "--frozen-lockfile"] });
-  });
-
-  it("returns npm ci for package-lock.json", () => {
-    mockFs.existsSync.mockImplementation((p: unknown) => String(p).endsWith("package-lock.json"));
-    const pm = detectPackageManager("/workspace");
-    expect(pm).toEqual({ command: "npm", args: ["ci"] });
+describe("detectInstallCommand", () => {
+  it.each([
+    ["bun.lock", { command: "bun", args: ["install", "--frozen-lockfile"] }],
+    ["bun.lockb", { command: "bun", args: ["install", "--frozen-lockfile"] }],
+    ["yarn.lock", { command: "yarn", args: ["install", "--frozen-lockfile"] }],
+    ["pnpm-lock.yaml", { command: "pnpm", args: ["install", "--frozen-lockfile"] }],
+    ["package-lock.json", { command: "npm", args: ["ci"] }],
+  ] as const)("returns correct command for %s", (lockfile, expected) => {
+    mockFs.existsSync.mockImplementation((p: unknown) => String(p).endsWith(lockfile));
+    expect(detectInstallCommand("/workspace")).toEqual(expected);
   });
 
   it("returns npm install for package.json without lockfile", () => {
     mockFs.existsSync.mockImplementation((p: unknown) => String(p).endsWith("package.json"));
-    const pm = detectPackageManager("/workspace");
-    expect(pm).toEqual({ command: "npm", args: ["install"] });
+    expect(detectInstallCommand("/workspace")).toEqual({ command: "npm", args: ["install"] });
   });
 
   it("returns null when no package.json exists", () => {
     mockFs.existsSync.mockReturnValue(false);
-    const pm = detectPackageManager("/workspace");
-    expect(pm).toBeNull();
+    expect(detectInstallCommand("/workspace")).toBeNull();
   });
 
   it("prioritizes bun over yarn when both lockfiles exist", () => {
@@ -136,8 +115,7 @@ describe("detectPackageManager", () => {
       const s = String(p);
       return s.endsWith("bun.lock") || s.endsWith("yarn.lock");
     });
-    const pm = detectPackageManager("/workspace");
-    expect(pm!.command).toBe("bun");
+    expect(detectInstallCommand("/workspace")!.command).toBe("bun");
   });
 });
 

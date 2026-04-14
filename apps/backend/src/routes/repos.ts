@@ -6,6 +6,7 @@ import { spawn, execFile, execFileSync } from "child_process";
 import { promisify } from "util";
 
 const execFileAsync = promisify(execFile);
+import { getGitRemoteUrlSync } from "../lib/git-remotes";
 import { uuidv7 } from "@shared/lib/uuid";
 import { getDatabase } from "../lib/database";
 import { AppError, ValidationError, ConflictError, NotFoundError } from "../lib/errors";
@@ -131,17 +132,7 @@ function inspectRepositoryRoot(rootPath: string): InspectedRepository {
   const repoName = path.basename(normalizedRootPath);
   const defaultBranch = detectDefaultBranch(normalizedRootPath);
 
-  let originUrl: string | null = null;
-  try {
-    originUrl =
-      execFileSync("git", ["remote", "get-url", "origin"], {
-        cwd: normalizedRootPath,
-        encoding: "utf-8",
-        timeout: 2000,
-      }).trim() || null;
-  } catch {
-    // No origin remote — that's fine
-  }
+  const originUrl = getGitRemoteUrlSync(normalizedRootPath);
 
   return {
     rootPath: normalizedRootPath,
@@ -427,19 +418,7 @@ app.get("/repos/:id/prs", async (c) => {
   const repo = requireRepo(c.req.param("id"));
 
   // Resolve origin URL (prefer stored value, fall back to git)
-  let originUrl: string | null = repo.git_origin_url;
-  if (!originUrl) {
-    try {
-      originUrl =
-        execFileSync("git", ["remote", "get-url", "origin"], {
-          cwd: repo.root_path,
-          encoding: "utf-8",
-          timeout: 2000,
-        }).trim() || null;
-    } catch {
-      // No origin remote
-    }
-  }
+  const originUrl = repo.git_origin_url ?? getGitRemoteUrlSync(repo.root_path);
 
   if (!originUrl) return c.json([]);
 
