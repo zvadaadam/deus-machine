@@ -348,13 +348,6 @@ function resolveClaudeProject(
   return null;
 }
 
-export function resolveClaudeProjectPath(
-  projectDir: string,
-  options: ReaderOptions = {}
-): string | null {
-  return resolveClaudeProject(projectDir, options)?.path ?? null;
-}
-
 export function readClaudeProjects(dir: string, options: ReaderOptions = {}): RecentProject[] {
   if (!existsSync(dir)) return [];
   if (!hasGitProbeBudgetRemaining(options)) return [];

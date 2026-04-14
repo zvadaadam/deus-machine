@@ -16,17 +16,6 @@ export function getErrorMessage(err: unknown): string {
   return String(err);
 }
 
-/**
- * Safely extract .code from a thrown value (e.g., Node.js ENOENT, EACCES).
- */
-export function getErrorCode(err: unknown): string | undefined {
-  if (typeof err === "object" && err !== null && "code" in err) {
-    const code = (err as { code: unknown }).code;
-    return typeof code === "string" ? code : undefined;
-  }
-  return undefined;
-}
-
 export type ExecErrorLike = Error & {
   killed?: boolean;
   code?: string | number | null;
