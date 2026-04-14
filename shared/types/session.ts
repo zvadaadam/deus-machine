@@ -7,21 +7,9 @@
 // imported here for local use and re-exported for backwards compat.
 import type { MessageRole, SessionStatus } from "../enums";
 import type { Part } from "../messages/types";
-import type {
-  EnterPlanModeNotification as SessionEnterPlanModeEvent,
-  ErrorResponse as SessionErrorEvent,
-  MessageResponse as SessionMessageEvent,
-  SessionNotification,
-  StatusChangedNotification as SessionStatusEvent,
-} from "../session-events";
+import type { SessionNotification } from "../session-events";
 export type { MessageRole, SessionStatus };
-export type {
-  SessionMessageEvent,
-  SessionErrorEvent,
-  SessionEnterPlanModeEvent,
-  SessionStatusEvent,
-  SessionNotification,
-};
+export type { SessionNotification };
 
 /**
  * Base message entity
