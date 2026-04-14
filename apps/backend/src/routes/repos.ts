@@ -227,10 +227,18 @@ app.post("/repos/inspect", async (c) => {
 
 // ─── Clone Endpoint ──────────────────────────────────────────
 
-/** Broadcast a raw git stderr line to all connected WS clients. */
-function pushCloneLine(line: string): void {
-  broadcast(JSON.stringify({ type: "q:event", event: "git-clone-progress", data: { line } }));
+function requireRepo(id: string) {
+  const db = getDatabase();
+  const repo = getRepositoryById(db, id);
+  if (!repo) throw new NotFoundError("Repository not found");
+  return repo;
 }
+
+function pushGitProgress(event: string, line: string): void {
+  broadcast(JSON.stringify({ type: "q:event", event, data: { line } }));
+}
+const pushCloneLine = (line: string) => pushGitProgress("git-clone-progress", line);
+const pushInitLine = (line: string) => pushGitProgress("git-init-progress", line);
 
 app.post("/repos/clone", async (c) => {
   const body = await c.req.json();
@@ -289,11 +297,6 @@ app.post("/repos/clone", async (c) => {
 });
 
 // ─── Init (create new project) Endpoint ──────────────────────
-
-/** Broadcast a git init progress line to all connected WS clients. */
-function pushInitLine(line: string): void {
-  broadcast(JSON.stringify({ type: "q:event", event: "git-init-progress", data: { line } }));
-}
 
 app.post("/repos/init", async (c) => {
   const { projectName, targetPath, template } = parseBody(InitProjectBody, await c.req.json());
@@ -395,10 +398,7 @@ app.post("/repos/init", async (c) => {
 
 // Read manifest from repo root
 app.get("/repos/:id/manifest", (c) => {
-  const db = getDatabase();
-  const repo = getRepositoryById(db, c.req.param("id"));
-  if (!repo) throw new NotFoundError("Repository not found");
-
+  const repo = requireRepo(c.req.param("id"));
   const manifest = readManifest(repo.root_path);
   if (!manifest) return c.json({ manifest: null, tasks: [] });
   const tasks = getNormalizedTasks(manifest);
@@ -407,10 +407,7 @@ app.get("/repos/:id/manifest", (c) => {
 
 // Write manifest to repo root
 app.post("/repos/:id/manifest", async (c) => {
-  const db = getDatabase();
-  const repo = getRepositoryById(db, c.req.param("id"));
-  if (!repo) throw new NotFoundError("Repository not found");
-
+  const repo = requireRepo(c.req.param("id"));
   const manifest = parseBody(DeusManifestSchema, await c.req.json());
   const success = writeManifest(repo.root_path, manifest);
   if (!success) return c.json({ error: "Failed to write manifest" }, 500);
@@ -419,10 +416,7 @@ app.post("/repos/:id/manifest", async (c) => {
 
 // Auto-detect manifest from project files (package.json, Cargo.toml, etc.)
 app.get("/repos/:id/detect-manifest", (c) => {
-  const db = getDatabase();
-  const repo = getRepositoryById(db, c.req.param("id"));
-  if (!repo) throw new NotFoundError("Repository not found");
-
+  const repo = requireRepo(c.req.param("id"));
   const manifest = detectManifestFromProject(repo.root_path, repo.name);
   return c.json({ manifest });
 });
@@ -430,9 +424,7 @@ app.get("/repos/:id/detect-manifest", (c) => {
 // ─── PR and Branch List Endpoints ─────────────────────────────
 
 app.get("/repos/:id/prs", async (c) => {
-  const db = getDatabase();
-  const repo = getRepositoryById(db, c.req.param("id"));
-  if (!repo) throw new NotFoundError("Repository not found");
+  const repo = requireRepo(c.req.param("id"));
 
   // Resolve origin URL (prefer stored value, fall back to git)
   let originUrl: string | null = repo.git_origin_url;
@@ -495,10 +487,7 @@ app.get("/repos/:id/prs", async (c) => {
 });
 
 app.get("/repos/:id/branches", async (c) => {
-  const db = getDatabase();
-  const repo = getRepositoryById(db, c.req.param("id"));
-  if (!repo) throw new NotFoundError("Repository not found");
-
+  const repo = requireRepo(c.req.param("id"));
   let output: string;
   try {
     const { stdout } = await execFileAsync(
