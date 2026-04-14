@@ -75,7 +75,6 @@
     "apps/web/src/features/workspace/api/workspace.queries.ts": ["exports"],
     "apps/web/src/features/sidebar/lib/**": ["exports"],
     "apps/web/src/features/simulator/**": ["exports"],
-    "apps/web/src/features/repository/ui/RepoGroup.tsx": ["exports"],
     "apps/web/src/features/session/ui/blocks/ToolResultBlock.tsx": ["exports"],
     "apps/agent-server/agents/deus-tools/agent-browser-client.ts": ["exports"],
     "apps/agent-server/rpc-schemas.ts": ["exports", "types"],
