@@ -28,10 +28,6 @@ export type {
   ThinkingBlock,
   Session,
   SessionStatus,
-  SessionMessageEvent,
-  SessionErrorEvent,
-  SessionEnterPlanModeEvent,
-  SessionStatusEvent,
   SessionNotification,
 } from "./session";
 
@@ -62,13 +58,7 @@ export type {
 } from "./agent-config";
 
 // API types
-export type {
-  ApiResponse,
-  ApiError,
-  PaginationParams,
-  PaginatedResponse,
-  WorkspaceQueryParams,
-} from "./api";
+export type { ApiError, PaginationParams } from "./api";
 
 // Manifest types (shared between frontend and backend)
 export type { NormalizedTask, ManifestResponse, TaskRunResponse } from "./manifest";
