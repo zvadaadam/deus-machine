@@ -10,37 +10,6 @@ import type { Workspace } from "@/features/workspace/types";
 import { getDisplayStatus } from "./status";
 
 /**
- * Get repository initials for display
- * @param repoName - Repository name (e.g., "deus-machine" or "owner/repo")
- * @returns Uppercase initials (e.g., "DM" or "OR")
- */
-export function getRepoInitials(repoName: string): string {
-  const parts = repoName.split(/[-_\s]/);
-  if (parts.length >= 2) {
-    return (parts[0][0] + parts[1][0]).toUpperCase();
-  }
-  return repoName.slice(0, 2).toUpperCase();
-}
-
-/**
- * Get color scheme for repository badge based on name hash
- * @param repoName - Repository name
- * @returns Semantic design token classes
- */
-export function getRepoColor(repoName: string): { bg: string; text: string } {
-  const hash = repoName.split("").reduce((acc, char) => acc + char.charCodeAt(0), 0);
-  // Use semantic tokens so colors follow the design system theme.
-  const schemes = [
-    { bg: "bg-primary/20", text: "text-primary" },
-    { bg: "bg-secondary/30", text: "text-secondary-foreground" },
-    { bg: "bg-accent/30", text: "text-accent-foreground" },
-    { bg: "bg-muted", text: "text-muted-foreground" },
-    { bg: "bg-sidebar-accent", text: "text-sidebar-foreground" },
-  ];
-  return schemes[hash % schemes.length];
-}
-
-/**
  * Clean repository display name by removing username prefix
  * @param repoName - Full repository name (e.g., "zvadaadam/overlay" or "deus-machine")
  * @returns Clean display name (e.g., "overlay" or "deus-machine")

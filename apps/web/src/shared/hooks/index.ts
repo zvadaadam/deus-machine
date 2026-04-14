@@ -7,4 +7,4 @@ export { useIsFullscreen } from "./useIsFullscreen";
 export { useWindowDragZone } from "./useWindowDrag";
 export { useWindowResizing } from "./useWindowResizing";
 export { useWindowFocus, isWindowFocused } from "./useWindowFocus";
-export { useLastOpenInApp, getLastOpenInAppId, setLastOpenInAppId } from "./useLastOpenInApp";
+export { useLastOpenInApp, getLastOpenInAppId } from "./useLastOpenInApp";
