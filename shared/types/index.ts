@@ -28,11 +28,6 @@ export type {
   ThinkingBlock,
   Session,
   SessionStatus,
-  SessionMessageEvent,
-  SessionErrorEvent,
-  SessionEnterPlanModeEvent,
-  SessionStatusEvent,
-  SessionNotification,
 } from "./session";
 
 // Session type guards
@@ -62,13 +57,7 @@ export type {
 } from "./agent-config";
 
 // API types
-export type {
-  ApiResponse,
-  ApiError,
-  PaginationParams,
-  PaginatedResponse,
-  WorkspaceQueryParams,
-} from "./api";
+export type { ApiError } from "./api";
 
 // Manifest types (shared between frontend and backend)
 export type { NormalizedTask, ManifestResponse, TaskRunResponse } from "./manifest";
@@ -77,14 +66,7 @@ export type { NormalizedTask, ManifestResponse, TaskRunResponse } from "./manife
 export type { RecentProject } from "./onboarding";
 
 // GitHub types
-export type {
-  PRStatus,
-  GhCliStatus,
-  DevServer,
-  CheckDetail,
-  PRSummary,
-  BranchSummary,
-} from "./github";
+export type { PRStatus, GhCliStatus, CheckDetail, PRSummary, BranchSummary } from "./github";
 
 // Query protocol types
 export type {

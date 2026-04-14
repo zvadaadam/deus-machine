@@ -297,7 +297,7 @@ export class CodexAgentHandler implements AgentHandler {
       if (codexSessions.owns(sessionId, session)) {
         if (abortController.signal.aborted) {
           // Abort break path: notify frontend + emit canonical events
-          handleCancellation(sessionId, "codex", resolveCodexModel(options?.model), true);
+          handleCancellation(sessionId, "codex", true);
         }
         // Note: no fallback idle emission here — turn.completed already emits it.
         // Emitting again would give the backend duplicate terminal lifecycle events.
@@ -317,7 +317,7 @@ export class CodexAgentHandler implements AgentHandler {
       // Only update status if this processQuery still owns the session.
       if (codexSessions.owns(sessionId, session)) {
         if (isAbort) {
-          handleCancellation(sessionId, "codex", resolveCodexModel(options?.model), true);
+          handleCancellation(sessionId, "codex", true);
         } else {
           handleQueryError(sessionId, "codex", error);
         }

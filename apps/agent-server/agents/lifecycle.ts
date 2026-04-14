@@ -173,7 +173,7 @@ export function classifyStopReason(stopReason: string | undefined): ClassifiedEr
  * - codex-handler.ts post-loop abort path
  * - codex-handler.ts catch abort path
  */
-export function persistCancellation(sessionId: string, agentType: AgentType, _model: string): void {
+export function persistCancellation(sessionId: string, agentType: AgentType): void {
   EventBroadcaster.emitSessionCancelled(sessionId, agentType);
   EventBroadcaster.emitMessageCancelled(sessionId, agentType);
 }
@@ -219,18 +219,17 @@ export function notifyAndRecordError(
  *
  * Replaces the duplicated pattern:
  *   if (session.cancelledByUser) {
- *     persistCancellation(sessionId, agentType, model);
+ *     persistCancellation(sessionId, agentType);
  *     return;
  *   }
  */
 export function handleCancellation(
   sessionId: string,
   agentType: AgentType,
-  model: string,
   wasCancelled: boolean
 ): boolean {
   if (!wasCancelled) return false;
-  persistCancellation(sessionId, agentType, model);
+  persistCancellation(sessionId, agentType);
   return true; // signals early exit
 }
 

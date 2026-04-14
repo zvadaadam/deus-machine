@@ -20,7 +20,7 @@ export const SessionStatusSchema = z.enum([
 ]);
 export type SessionStatus = z.infer<typeof SessionStatusSchema>;
 
-export const MessageRoleSchema = z.enum(["user", "assistant"]);
+const MessageRoleSchema = z.enum(["user", "assistant"]);
 export type MessageRole = z.infer<typeof MessageRoleSchema>;
 
 // ── Workspace ────────────────────────────────────────────────────────────
@@ -30,7 +30,7 @@ export const WorkspaceStateSchema = z.enum(["ready", "initializing", "archived",
 export type WorkspaceState = z.infer<typeof WorkspaceStateSchema>;
 
 /** Workspace initialization progress. */
-export const SetupStatusSchema = z.enum(["none", "running", "completed", "failed"]);
+const SetupStatusSchema = z.enum(["none", "running", "completed", "failed"]);
 export type SetupStatus = z.infer<typeof SetupStatusSchema>;
 
 /** Workflow states for workspaces. */

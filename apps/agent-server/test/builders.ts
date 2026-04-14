@@ -44,16 +44,6 @@ export function buildEnterPlanModeNotification(overrides?: Record<string, any>) 
   };
 }
 
-export function buildStatusChangedNotification(overrides?: Record<string, any>) {
-  return {
-    type: "status_changed" as const,
-    id: `sess_${randomUUID().slice(0, 8)}`,
-    agentType: "claude" as const,
-    status: "working" as const,
-    ...overrides,
-  };
-}
-
 // ============================================================================
 // JSON-RPC helpers
 // ============================================================================

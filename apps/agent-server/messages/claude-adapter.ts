@@ -145,17 +145,20 @@ class ClaudeCodeTransformer implements EventTransformer<ClaudeCodeEvent> {
 
   process(event: ClaudeCodeEvent): PartEvent[] {
     const parentToolCallId = this.extractParentToolCallId(event);
+    const boundaryEvents: PartEvent[] = [];
 
     if (parentToolCallId !== this.lastParentToolCallId) {
-      this.closeText();
-      this.closeThinking();
+      boundaryEvents.push(...this.closeActiveParts());
+      const boundaryMessageDone = this.closeMessage();
+      if (boundaryMessageDone) boundaryEvents.push(boundaryMessageDone);
       this.lastParentToolCallId = parentToolCallId;
     }
 
     let emitted: PartEvent[] = [];
     switch (event.type) {
       case "system":
-        return this.handleSystem(event);
+        emitted = this.handleSystem(event);
+        break;
       case "user":
         emitted = this.handleUser(event);
         break;
@@ -166,25 +169,21 @@ class ClaudeCodeTransformer implements EventTransformer<ClaudeCodeEvent> {
         emitted = this.handleStream(event);
         break;
       case "result":
-        return this.handleResult(event);
+        emitted = this.handleResult(event);
+        break;
       default:
-        return [];
+        return boundaryEvents;
     }
 
     if (parentToolCallId) {
       emitted = this.applyParentTag(emitted, parentToolCallId);
     }
 
-    return emitted;
+    return [...boundaryEvents, ...emitted];
   }
 
   finish(): { events: PartEvent[]; parts: Part[]; usage: TokenUsage; cost?: number } {
-    const events: PartEvent[] = [];
-
-    const doneText = this.closeText();
-    if (doneText) events.push(doneText);
-    const doneThinking = this.closeThinking();
-    if (doneThinking) events.push(doneThinking);
+    const events: PartEvent[] = [...this.closeActiveParts()];
 
     const usage = this.resultUsage.input > 0 ? this.resultUsage : this.accumulatedUsage;
 
@@ -323,11 +322,7 @@ class ClaudeCodeTransformer implements EventTransformer<ClaudeCodeEvent> {
   }
 
   private handleResult(event: ClaudeResultEvent): PartEvent[] {
-    const events: PartEvent[] = [];
-    const doneText = this.closeText();
-    if (doneText) events.push(doneText);
-    const doneThinking = this.closeThinking();
-    if (doneThinking) events.push(doneThinking);
+    const events: PartEvent[] = [...this.closeActiveParts()];
 
     if (event.usage) {
       this.resultUsage = mapSdkUsage(event.usage);
@@ -541,59 +536,10 @@ class ClaudeCodeTransformer implements EventTransformer<ClaudeCodeEvent> {
   ): PartEvent[] {
     const delta: ClaudeDelta = event.delta;
     switch (delta.type) {
-      case "text_delta": {
-        const closed: PartEvent[] = [];
-        const dt = this.closeThinking();
-        if (dt) closed.push(dt);
-
-        if (this.currentTextPart) {
-          const accumulated: TextPart = {
-            ...this.currentTextPart,
-            text: this.currentTextPart.text + delta.text,
-            state: "STREAMING",
-          };
-          this.replacePart(this.currentTextPart, accumulated);
-          this.currentTextPart = accumulated;
-          return [...closed, { type: "part.delta", partId: accumulated.id, delta: delta.text }];
-        }
-        const part = createTextPart(
-          this.ctx.sessionId,
-          this.activeMessageId,
-          delta.text,
-          "STREAMING",
-          this.nextPartIndex
-        );
-        this.parts.push(part);
-        this.currentTextPart = part;
-        return [...closed, created(part)];
-      }
-
-      case "thinking_delta": {
-        const closed: PartEvent[] = [];
-        const dt = this.closeText();
-        if (dt) closed.push(dt);
-
-        if (this.currentThinkingPart) {
-          const accumulated: ReasoningPart = {
-            ...this.currentThinkingPart,
-            text: this.currentThinkingPart.text + delta.thinking,
-            state: "STREAMING",
-          };
-          this.replacePart(this.currentThinkingPart, accumulated);
-          this.currentThinkingPart = accumulated;
-          return [...closed, { type: "part.delta", partId: accumulated.id, delta: delta.thinking }];
-        }
-        const part = createReasoningPart(
-          this.ctx.sessionId,
-          this.activeMessageId,
-          delta.thinking,
-          "STREAMING",
-          this.nextPartIndex
-        );
-        this.parts.push(part);
-        this.currentThinkingPart = part;
-        return [...closed, created(part)];
-      }
+      case "text_delta":
+        return this.accumulateStreamDelta("text", delta.text);
+      case "thinking_delta":
+        return this.accumulateStreamDelta("reasoning", delta.thinking);
 
       case "input_json_delta": {
         const toolId = this.blockIndexToToolId.get(event.index);
@@ -613,11 +559,7 @@ class ClaudeCodeTransformer implements EventTransformer<ClaudeCodeEvent> {
   private onBlockStop(
     event: Extract<ClaudeRawStreamEvent, { type: "content_block_stop" }>
   ): PartEvent[] {
-    const closed: PartEvent[] = [];
-    const dt = this.closeText();
-    if (dt) closed.push(dt);
-    const dr = this.closeThinking();
-    if (dr) closed.push(dr);
+    const closed = this.closeActiveParts();
 
     const toolId = this.blockIndexToToolId.get(event.index);
     if (toolId) {
@@ -675,11 +617,7 @@ class ClaudeCodeTransformer implements EventTransformer<ClaudeCodeEvent> {
   }
 
   private onMessageStop(): PartEvent[] {
-    const events: PartEvent[] = [];
-    const dt = this.closeText();
-    if (dt) events.push(dt);
-    const dr = this.closeThinking();
-    if (dr) events.push(dr);
+    const events = this.closeActiveParts();
     const msgDone = this.closeMessage();
     if (msgDone) events.push(msgDone);
     return events;
@@ -744,6 +682,55 @@ class ClaudeCodeTransformer implements EventTransformer<ClaudeCodeEvent> {
     }
     this.currentThinkingPart = null;
     return null;
+  }
+
+  private closeActiveParts(): PartEvent[] {
+    const events: PartEvent[] = [];
+    const dt = this.closeText();
+    if (dt) events.push(dt);
+    const dr = this.closeThinking();
+    if (dr) events.push(dr);
+    return events;
+  }
+
+  /** Accumulate a streaming text or reasoning delta, closing the other part type first. */
+  private accumulateStreamDelta(kind: "text" | "reasoning", deltaText: string): PartEvent[] {
+    const closed = kind === "text" ? this.closeThinking() : this.closeText();
+    const events: PartEvent[] = closed ? [closed] : [];
+    const current = kind === "text" ? this.currentTextPart : this.currentThinkingPart;
+
+    if (current) {
+      const accumulated = {
+        ...current,
+        text: current.text + deltaText,
+        state: "STREAMING" as const,
+      };
+      this.replacePart(current, accumulated as Part);
+      if (kind === "text") this.currentTextPart = accumulated as TextPart;
+      else this.currentThinkingPart = accumulated as ReasoningPart;
+      return [...events, { type: "part.delta" as const, partId: accumulated.id, delta: deltaText }];
+    }
+
+    const part =
+      kind === "text"
+        ? createTextPart(
+            this.ctx.sessionId,
+            this.activeMessageId,
+            deltaText,
+            "STREAMING",
+            this.nextPartIndex
+          )
+        : createReasoningPart(
+            this.ctx.sessionId,
+            this.activeMessageId,
+            deltaText,
+            "STREAMING",
+            this.nextPartIndex
+          );
+    this.parts.push(part);
+    if (kind === "text") this.currentTextPart = part as TextPart;
+    else this.currentThinkingPart = part as ReasoningPart;
+    return [...events, created(part)];
   }
 
   private replacePart(old: Part, next: Part): void {

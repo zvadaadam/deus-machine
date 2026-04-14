@@ -14,76 +14,26 @@
  * (e.g., `bun run dev:web`).
  */
 
-import { useSyncExternalStore } from "react";
 import { capabilities } from "@/platform/capabilities";
 
-// Assume focused on startup — the app window is in the foreground when it launches
 let focused = true;
 
-// Subscribers for useSyncExternalStore notifications
-const subscribers = new Set<() => void>();
-
-function notifySubscribers() {
-  for (const callback of subscribers) {
-    callback();
-  }
-}
-
-/**
- * Set up window focus/blur listeners at module level.
- * These fire on OS-level focus changes — not just tab visibility.
- *
- * Intentionally module-level (no cleanup): This is a process-lifetime singleton.
- * The focused state is shared across all React component instances via
- * useSyncExternalStore. The listeners live for the app's entire lifetime,
- * matching the lifetime of the window they track. Cleaning them up
- * would break isWindowFocused() calls from non-React code (e.g., notification
- * handlers in useGlobalSessionNotifications).
- */
 if (capabilities.nativeWindowChrome) {
-  // Electron: use standard window focus/blur events (reliable at OS level)
   window.addEventListener("focus", () => {
     focused = true;
-    notifySubscribers();
   });
 
   window.addEventListener("blur", () => {
     focused = false;
-    notifySubscribers();
   });
 } else {
-  // Fallback for dev mode (bun run dev:web) — use visibilitychange
   focused = !document.hidden;
 
   document.addEventListener("visibilitychange", () => {
     focused = !document.hidden;
-    notifySubscribers();
   });
 }
 
-// useSyncExternalStore requires subscribe + getSnapshot
-function subscribe(callback: () => void) {
-  subscribers.add(callback);
-  return () => {
-    subscribers.delete(callback);
-  };
-}
-
-function getSnapshot() {
-  return focused;
-}
-
-/**
- * Returns true when the app window is focused (OS-level).
- * Uses useSyncExternalStore for tear-free reads.
- */
-export function useWindowFocus(): boolean {
-  return useSyncExternalStore(subscribe, getSnapshot);
-}
-
-/**
- * Non-hook version for use outside React components (e.g., event handlers).
- */
 export function isWindowFocused(): boolean {
   return focused;
 }

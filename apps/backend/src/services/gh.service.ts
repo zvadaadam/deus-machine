@@ -1,6 +1,9 @@
 import { promisify } from "util";
 import { execFile } from "child_process";
 import { getErrorMessage, isExecError } from "@shared/lib/errors";
+import { parseGitHubRepo } from "@shared/lib/github";
+import { getGitRemoteUrl } from "../lib/git-remotes";
+export { parseGitHubRepo };
 
 const execFileAsync = promisify(execFile);
 
@@ -98,17 +101,6 @@ export function classifyCheck(check: any): "passing" | "failing" | "pending" {
   return "passing";
 }
 
-/** Parse a git remote URL (SSH or HTTPS) into OWNER/REPO format for gh --repo. */
-export function parseGitHubRepo(url: string): string | null {
-  // SSH: git@github.com:owner/repo.git
-  const sshMatch = url.match(/git@github\.com:([^/]+\/[^/]+?)(?:\.git)?$/);
-  if (sshMatch) return sshMatch[1];
-  // HTTPS: https://github.com/owner/repo.git
-  const httpsMatch = url.match(/https?:\/\/github\.com\/([^/]+\/[^/]+?)(?:\.git)?$/);
-  if (httpsMatch) return httpsMatch[1];
-  return null;
-}
-
 export interface PrStatusResponse {
   has_pr: boolean;
   pr_number?: number;
@@ -148,24 +140,8 @@ export async function getPrStatus(workspacePath: string): Promise<PrStatusRespon
   if (!headBranch || headBranch === "HEAD") return { has_pr: false, error: null };
 
   // Resolve origin and upstream remotes for fork support
-  let originUrl: string | null = null;
-  let upstreamUrl: string | null = null;
-  try {
-    const { stdout } = await execFileAsync("git", ["remote", "get-url", "origin"], {
-      cwd: workspacePath,
-      encoding: "utf-8",
-      timeout: 2000,
-    });
-    originUrl = stdout.trim() || null;
-  } catch {}
-  try {
-    const { stdout } = await execFileAsync("git", ["remote", "get-url", "upstream"], {
-      cwd: workspacePath,
-      encoding: "utf-8",
-      timeout: 2000,
-    });
-    upstreamUrl = stdout.trim() || null;
-  } catch {}
+  const originUrl = await getGitRemoteUrl(workspacePath, "origin");
+  const upstreamUrl = await getGitRemoteUrl(workspacePath, "upstream");
 
   const isFork = upstreamUrl != null && originUrl != null && upstreamUrl !== originUrl;
 

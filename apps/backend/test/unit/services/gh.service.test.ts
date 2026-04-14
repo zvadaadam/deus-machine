@@ -30,62 +30,21 @@ beforeEach(() => {
 // ─── Constants ────────────────────────────────────────────────────
 
 describe("FAILING_CONCLUSIONS", () => {
-  it("contains FAILURE", () => {
-    expect(FAILING_CONCLUSIONS.has("FAILURE")).toBe(true);
-  });
+  it.each(["FAILURE", "ERROR", "TIMED_OUT", "STARTUP_FAILURE", "ACTION_REQUIRED", "CANCELLED"])(
+    "contains %s",
+    (conclusion) => {
+      expect(FAILING_CONCLUSIONS.has(conclusion)).toBe(true);
+    }
+  );
 
-  it("contains ERROR", () => {
-    expect(FAILING_CONCLUSIONS.has("ERROR")).toBe(true);
-  });
-
-  it("contains TIMED_OUT", () => {
-    expect(FAILING_CONCLUSIONS.has("TIMED_OUT")).toBe(true);
-  });
-
-  it("contains STARTUP_FAILURE", () => {
-    expect(FAILING_CONCLUSIONS.has("STARTUP_FAILURE")).toBe(true);
-  });
-
-  it("contains ACTION_REQUIRED", () => {
-    expect(FAILING_CONCLUSIONS.has("ACTION_REQUIRED")).toBe(true);
-  });
-
-  it("contains CANCELLED", () => {
-    expect(FAILING_CONCLUSIONS.has("CANCELLED")).toBe(true);
-  });
-
-  it("does not contain SUCCESS", () => {
-    expect(FAILING_CONCLUSIONS.has("SUCCESS")).toBe(false);
-  });
-
-  it("does not contain NEUTRAL (intentionally non-blocking)", () => {
-    expect(FAILING_CONCLUSIONS.has("NEUTRAL")).toBe(false);
-  });
-
-  it("does not contain SKIPPED (intentionally non-blocking)", () => {
-    expect(FAILING_CONCLUSIONS.has("SKIPPED")).toBe(false);
+  it.each(["SUCCESS", "NEUTRAL", "SKIPPED"])("does not contain %s", (conclusion) => {
+    expect(FAILING_CONCLUSIONS.has(conclusion)).toBe(false);
   });
 });
 
 describe("PENDING_STATUSES", () => {
-  it("contains PENDING", () => {
-    expect(PENDING_STATUSES.has("PENDING")).toBe(true);
-  });
-
-  it("contains QUEUED", () => {
-    expect(PENDING_STATUSES.has("QUEUED")).toBe(true);
-  });
-
-  it("contains IN_PROGRESS", () => {
-    expect(PENDING_STATUSES.has("IN_PROGRESS")).toBe(true);
-  });
-
-  it("contains WAITING", () => {
-    expect(PENDING_STATUSES.has("WAITING")).toBe(true);
-  });
-
-  it("contains REQUESTED", () => {
-    expect(PENDING_STATUSES.has("REQUESTED")).toBe(true);
+  it.each(["PENDING", "QUEUED", "IN_PROGRESS", "WAITING", "REQUESTED"])("contains %s", (status) => {
+    expect(PENDING_STATUSES.has(status)).toBe(true);
   });
 
   it("does not contain COMPLETED", () => {
@@ -97,66 +56,42 @@ describe("PENDING_STATUSES", () => {
 
 describe("classifyCheck", () => {
   describe("CheckRun (default __typename)", () => {
-    it("returns failing for conclusion FAILURE", () => {
-      expect(classifyCheck({ conclusion: "FAILURE" })).toBe("failing");
+    it.each([
+      ["FAILURE", "failing"],
+      ["TIMED_OUT", "failing"],
+      ["CANCELLED", "failing"],
+    ] as const)("returns failing for conclusion %s", (conclusion, expected) => {
+      expect(classifyCheck({ conclusion })).toBe(expected);
     });
 
-    it("returns failing for conclusion TIMED_OUT", () => {
-      expect(classifyCheck({ conclusion: "TIMED_OUT" })).toBe("failing");
+    it.each([
+      ["null (still running)", null],
+      ["STALE", "STALE"],
+    ] as const)("returns pending for conclusion %s", (_label, conclusion) => {
+      expect(classifyCheck({ conclusion })).toBe("pending");
     });
 
-    it("returns failing for conclusion CANCELLED", () => {
-      expect(classifyCheck({ conclusion: "CANCELLED" })).toBe("failing");
+    it.each(["IN_PROGRESS", "QUEUED"])("returns pending for status %s", (status) => {
+      expect(classifyCheck({ status })).toBe("pending");
     });
 
-    it("returns pending for conclusion null (still running)", () => {
-      expect(classifyCheck({ conclusion: null })).toBe("pending");
-    });
-
-    it("returns pending for conclusion STALE", () => {
-      expect(classifyCheck({ conclusion: "STALE" })).toBe("pending");
-    });
-
-    it("returns pending for status IN_PROGRESS", () => {
-      expect(classifyCheck({ status: "IN_PROGRESS" })).toBe("pending");
-    });
-
-    it("returns pending for status QUEUED", () => {
-      expect(classifyCheck({ status: "QUEUED" })).toBe("pending");
-    });
-
-    it("returns passing for conclusion SUCCESS", () => {
-      expect(classifyCheck({ conclusion: "SUCCESS" })).toBe("passing");
-    });
-
-    it("returns passing for conclusion NEUTRAL (intentionally non-blocking)", () => {
-      expect(classifyCheck({ conclusion: "NEUTRAL" })).toBe("passing");
-    });
-
-    it("returns passing for conclusion SKIPPED (intentionally non-blocking)", () => {
-      expect(classifyCheck({ conclusion: "SKIPPED" })).toBe("passing");
-    });
+    it.each(["SUCCESS", "NEUTRAL", "SKIPPED"])(
+      "returns passing for conclusion %s",
+      (conclusion) => {
+        expect(classifyCheck({ conclusion })).toBe("passing");
+      }
+    );
   });
 
   describe('StatusContext (__typename: "StatusContext")', () => {
-    it("returns failing for state FAILURE", () => {
-      expect(classifyCheck({ __typename: "StatusContext", state: "FAILURE" })).toBe("failing");
-    });
-
-    it("returns failing for state ERROR", () => {
-      expect(classifyCheck({ __typename: "StatusContext", state: "ERROR" })).toBe("failing");
-    });
-
-    it("returns pending for state PENDING", () => {
-      expect(classifyCheck({ __typename: "StatusContext", state: "PENDING" })).toBe("pending");
-    });
-
-    it("returns pending for state EXPECTED", () => {
-      expect(classifyCheck({ __typename: "StatusContext", state: "EXPECTED" })).toBe("pending");
-    });
-
-    it("returns passing for state SUCCESS", () => {
-      expect(classifyCheck({ __typename: "StatusContext", state: "SUCCESS" })).toBe("passing");
+    it.each([
+      ["FAILURE", "failing"],
+      ["ERROR", "failing"],
+      ["PENDING", "pending"],
+      ["EXPECTED", "pending"],
+      ["SUCCESS", "passing"],
+    ] as const)("state %s returns %s", (state, expected) => {
+      expect(classifyCheck({ __typename: "StatusContext", state })).toBe(expected);
     });
   });
 });

@@ -6,6 +6,7 @@ import { Readable } from "stream";
 import { withWorkspace } from "../middleware/workspace-loader";
 import { ValidationError } from "../lib/errors";
 import * as filesService from "../services/files.service";
+import * as gitService from "../services/git.service";
 import type { WorkspaceWithDetailsRow } from "../db";
 
 type Env = { Variables: { workspace: WorkspaceWithDetailsRow; workspacePath: string } };
@@ -40,23 +41,29 @@ app.get("/workspaces/:id/file-content", withWorkspace, (c) => {
 
   const workspacePath = c.get("workspacePath");
 
-  // Validate the path is within the workspace (prevent directory traversal)
-  const normalized = path.normalize(filePath);
-  if (path.isAbsolute(normalized) || normalized.startsWith("..")) {
-    throw new ValidationError("Invalid file path");
-  }
+  const safeRelativePath = gitService.resolveWorkspaceRelativePath(workspacePath, filePath);
+  if (!safeRelativePath) throw new ValidationError("Invalid file path");
 
-  const absolutePath = path.resolve(workspacePath, normalized);
-  const relative = path.relative(workspacePath, absolutePath);
-  if (!relative || relative.startsWith("..") || path.isAbsolute(relative)) {
-    throw new ValidationError("File path escapes workspace");
-  }
-
+  const absolutePath = path.resolve(workspacePath, safeRelativePath);
   if (!fs.existsSync(absolutePath)) {
     throw new ValidationError("File not found");
   }
 
-  const content = filesService.readTextFile(absolutePath);
+  let realWorkspacePath: string;
+  let realPath: string;
+  try {
+    realWorkspacePath = fs.realpathSync(workspacePath);
+    realPath = fs.realpathSync(absolutePath);
+  } catch {
+    throw new ValidationError("File not found");
+  }
+
+  const relativeRealPath = path.relative(realWorkspacePath, realPath);
+  if (relativeRealPath.startsWith("..") || path.isAbsolute(relativeRealPath)) {
+    throw new ValidationError("Invalid file path");
+  }
+
+  const content = filesService.readTextFile(realPath);
   if (content === null) {
     return c.json({ error: "binary_file", message: "File appears to be binary" }, 422);
   }

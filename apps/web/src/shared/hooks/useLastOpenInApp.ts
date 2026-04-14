@@ -12,7 +12,7 @@ export function getLastOpenInAppId(): string | null {
 }
 
 /** Write last-used app ID to localStorage. */
-export function setLastOpenInAppId(appId: string): void {
+function setLastOpenInAppId(appId: string): void {
   try {
     localStorage.setItem(STORAGE_KEY, appId);
   } catch {

@@ -54,9 +54,6 @@ export function useWorkspaceInitEvents() {
         queryClient.removeQueries({
           queryKey: queryKeys.workspaces.diffFiles(workspaceId),
         });
-        queryClient.removeQueries({
-          queryKey: queryKeys.workspaces.uncommittedFiles(workspaceId),
-        });
         queryClient.invalidateQueries({
           queryKey: queryKeys.workspaces.all,
         });

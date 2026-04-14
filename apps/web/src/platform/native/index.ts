@@ -13,7 +13,6 @@ import * as apps from "./apps";
 import * as cli from "./cli";
 import * as dialog from "./dialog";
 import * as browserViews from "./browser-views";
-import * as updates from "./updates";
 import * as events from "./events";
 
 export const native = {
@@ -22,7 +21,6 @@ export const native = {
   cli,
   dialog,
   browserViews,
-  updates,
   events,
 } as const;
 

@@ -88,46 +88,23 @@ describe("validatePairCode", () => {
     expect(validatePairCode("NONEXISTENT UNKNOWN")).toBe(false);
   });
 
-  it("is case-insensitive", () => {
+  it.each([
+    ["is case-insensitive", (code: string) => code.toLowerCase()],
+    ["trims whitespace", (code: string) => `  ${code}  `],
+    ["normalizes dashes to spaces", (code: string) => code.replace(" ", "-")],
+    ["normalizes underscores to spaces", (code: string) => code.replace(" ", "_")],
+    ["collapses multiple spaces", (code: string) => code.replace(" ", "   ")],
+    [
+      "handles mixed separators and case",
+      (code: string) => {
+        const [w1, w2] = code.split(" ");
+        return `${w1.toLowerCase()}-${w2.toLowerCase()}`;
+      },
+    ],
+    ["handles URL-encoded plus sign as space", (code: string) => code.replace(" ", "+")],
+  ] as const)("%s", (_label, transform) => {
     const { code } = generatePairCode();
-    expect(validatePairCode(code.toLowerCase())).toBe(true);
-  });
-
-  it("trims whitespace", () => {
-    const { code } = generatePairCode();
-    expect(validatePairCode(`  ${code}  `)).toBe(true);
-  });
-
-  it("normalizes dashes to spaces", () => {
-    const { code } = generatePairCode();
-    const dashed = code.replace(" ", "-");
-    expect(validatePairCode(dashed)).toBe(true);
-  });
-
-  it("normalizes underscores to spaces", () => {
-    const { code } = generatePairCode();
-    const underscored = code.replace(" ", "_");
-    expect(validatePairCode(underscored)).toBe(true);
-  });
-
-  it("collapses multiple spaces", () => {
-    const { code } = generatePairCode();
-    const extraSpaces = code.replace(" ", "   ");
-    expect(validatePairCode(extraSpaces)).toBe(true);
-  });
-
-  it("handles mixed separators and case", () => {
-    const { code } = generatePairCode();
-    const [w1, w2] = code.split(" ");
-    // e.g. "soft-tiger" from "SOFT TIGER"
-    const mangled = `${w1.toLowerCase()}-${w2.toLowerCase()}`;
-    expect(validatePairCode(mangled)).toBe(true);
-  });
-
-  it("handles URL-encoded plus sign as space", () => {
-    const { code } = generatePairCode();
-    const plusSeparated = code.replace(" ", "+");
-    expect(validatePairCode(plusSeparated)).toBe(true);
+    expect(validatePairCode(transform(code))).toBe(true);
   });
 });
 

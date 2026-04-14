@@ -7,12 +7,6 @@
 import type { ToolUseBlock, ToolResultBlock } from "@/shared/types";
 
 /**
- * Map of tool_use_id to ToolResultBlock
- * Used to link tool_use blocks with their corresponding tool_result blocks
- */
-export type ToolResultMap = Map<string, ToolResultBlock>;
-
-/**
  * Props for tool renderer components
  */
 export interface ToolRendererProps {

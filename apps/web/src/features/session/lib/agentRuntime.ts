@@ -77,7 +77,7 @@ const AGENT_CONFIGS = {
 } satisfies Record<RuntimeAgentType, AgentConfig>;
 
 /** Get the config for an agent type. Falls back to "claude" for unrecognized types. */
-export function getAgentConfig(agentType: string): AgentConfig {
+function getAgentConfig(agentType: string): AgentConfig {
   const normalized = agentType.toLowerCase() as RuntimeAgentType;
   return AGENT_CONFIGS[normalized] ?? AGENT_CONFIGS.claude;
 }

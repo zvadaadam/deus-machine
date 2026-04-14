@@ -1,4 +1,5 @@
 import { useState, useRef, useEffect, useCallback } from "react";
+import { formatTimeAgo } from "@/shared/lib/formatters";
 import { QRCodeSVG } from "qrcode.react";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
@@ -26,17 +27,6 @@ import type { SettingsSectionProps } from "./types";
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
-
-function timeAgo(dateStr: string): string {
-  const diff = Date.now() - new Date(dateStr).getTime();
-  const minutes = Math.floor(diff / 60_000);
-  if (minutes < 1) return "just now";
-  if (minutes < 60) return `${minutes}m ago`;
-  const hours = Math.floor(minutes / 60);
-  if (hours < 24) return `${hours}h ago`;
-  const days = Math.floor(hours / 24);
-  return `${days}d ago`;
-}
 
 function getDeviceIcon(ua: string | null) {
   if (!ua) return Monitor;
@@ -325,7 +315,7 @@ function DevicesList({
               <div>
                 <p className="text-sm font-medium">{device.name}</p>
                 <p className="text-muted-foreground text-xs">
-                  {timeAgo(device.last_seen_at)}
+                  {formatTimeAgo(device.last_seen_at)}
                   {device.ip_address ? ` \u00b7 ${device.ip_address}` : ""}
                 </p>
               </div>

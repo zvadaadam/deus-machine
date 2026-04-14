@@ -36,7 +36,7 @@ type AppCategory = "editor" | "terminal" | "system";
 const TERMINAL_IDS = new Set(["terminal", "iterm", "warp"]);
 const SYSTEM_IDS = new Set(["finder"]);
 
-export function getAppCategory(appId: string): AppCategory {
+function getAppCategory(appId: string): AppCategory {
   if (TERMINAL_IDS.has(appId)) return "terminal";
   if (SYSTEM_IDS.has(appId)) return "system";
   return "editor";
