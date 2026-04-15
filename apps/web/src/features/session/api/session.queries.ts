@@ -9,11 +9,7 @@ import { SessionService } from "./session.service";
 import type { PaginatedMessages } from "./session.service";
 import { queryKeys } from "@/shared/api/queryKeys";
 import { useQuerySubscription } from "@/shared/hooks/useQuerySubscription";
-import {
-  MESSAGE_PAGE_SIZE,
-  INITIAL_MESSAGE_PAGE_SIZE,
-  mergeMessageDelta,
-} from "../lib/messageCache";
+import { mergeMessageDelta } from "../lib/messageCache";
 import type { Message, Session, SessionStatus } from "../types";
 import type { RepoGroup } from "@shared/types/workspace";
 import { useEffect, useMemo } from "react";
@@ -116,7 +112,8 @@ export function useWorkingSessionIds(sessionIds: string[]): Set<string> {
  * WS subscription pushes q:delta frames with new messages since last cursor.
  * mergeMessageDelta handles the PaginatedMessages shape, deduplication,
  * and optimistic placeholder cleanup.
- * HTTP queryFn is fallback for initial load before WS connects.
+ * HTTP queryFn loads all messages (backend caps at 2000). No pagination —
+ * the virtualizer handles render-level windowing.
  */
 export function useMessages(sessionId: string | null) {
   useQuerySubscription("messages", {
@@ -128,7 +125,7 @@ export function useMessages(sessionId: string | null) {
 
   const query = useQuery({
     queryKey: queryKeys.sessions.messages(sessionId || ""),
-    queryFn: () => SessionService.fetchMessages(sessionId!, { limit: INITIAL_MESSAGE_PAGE_SIZE }),
+    queryFn: () => SessionService.fetchMessages(sessionId!),
     enabled: !!sessionId,
     refetchInterval: false,
     staleTime: Infinity,
@@ -140,7 +137,6 @@ export function useMessages(sessionId: string | null) {
 
 /**
  * Combined hook for session + messages + status
- * Replaces the complex useMessages hook
  */
 export function useSessionWithMessages(sessionId: string | null) {
   const sessionQuery = useSession(sessionId);
@@ -160,20 +156,19 @@ export function useSessionWithMessages(sessionId: string | null) {
 }
 
 /**
- * Load older messages (scroll-up pagination).
- * Prepends older messages to the cache while preserving has_newer from current cache.
+ * Load older messages — button-triggered, not scroll-triggered.
+ * Prepends older messages to the cache. No cooldown, no scroll restoration.
  */
 export function useLoadOlderMessages() {
   const queryClient = useQueryClient();
 
   return useMutation({
     mutationFn: ({ sessionId, beforeSeq }: { sessionId: string; beforeSeq: number }) =>
-      SessionService.fetchMessages(sessionId, { before: beforeSeq, limit: MESSAGE_PAGE_SIZE }),
+      SessionService.fetchMessages(sessionId, { before: beforeSeq }),
 
     onSuccess: (olderPage, { sessionId }) => {
       queryClient.setQueryData<PaginatedMessages>(queryKeys.sessions.messages(sessionId), (old) => {
         if (!old) return olderPage;
-        // Deduplicate by id (shouldn't happen, but safety first)
         const existingIds = new Set(old.messages.map((m) => m.id));
         const newMessages = olderPage.messages.filter((m) => !existingIds.has(m.id));
         return {
