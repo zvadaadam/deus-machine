@@ -266,18 +266,18 @@ function handleSubscribe(connectionId: string, msg: ResourceFrameInput): void {
   const typedResource = toQueryResource(resource);
 
   try {
+    // Register subscription (shared for all resource types)
+    let connSubs = subs.get(connectionId);
+    if (!connSubs) {
+      connSubs = new Map();
+      subs.set(connectionId, connSubs);
+    }
+    connSubs.set(id, { id, resource: typedResource, params });
+
     // Messages: delta-only subscription. The HTTP queryFn loads the full set.
-    // Sending a q:snapshot here would overwrite the larger HTTP-loaded cache
-    // (snapshot defaults to 50 messages vs HTTP's full load).
+    // Sending a q:snapshot here would overwrite the larger HTTP-loaded cache.
     if (typedResource === "messages") {
       const sessionId = readStringParam(params, "sessionId");
-
-      let connSubs = subs.get(connectionId);
-      if (!connSubs) {
-        connSubs = new Map();
-        subs.set(connectionId, connSubs);
-      }
-      connSubs.set(id, { id, resource: typedResource, params });
 
       // Initialize cursor to current max seq — only NEW messages get pushed via delta
       const cursorKey = `${connectionId}:${id}`;
@@ -290,24 +290,13 @@ function handleSubscribe(connectionId: string, msg: ResourceFrameInput): void {
         }
       }
 
-      // Send null snapshot as subscription ack — client skips null data
+      // Null snapshot = subscription ack. Client skips null data.
       sendFrame(connectionId, { type: "q:snapshot", id, data: null });
       return;
     }
 
-    // All other resources: send initial snapshot as before
+    // All other resources: send initial snapshot
     const data = runQuery(typedResource, params);
-
-    // Get or create subscription map for this connection
-    let connSubs = subs.get(connectionId);
-    if (!connSubs) {
-      connSubs = new Map();
-      subs.set(connectionId, connSubs);
-    }
-
-    // Store subscription by client-assigned ID (replaces if same ID reused on reconnect)
-    connSubs.set(id, { id, resource: typedResource, params });
-
     sendFrame(connectionId, { type: "q:snapshot", id, data });
   } catch (err) {
     sendFrame(connectionId, {
