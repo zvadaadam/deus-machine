@@ -12,10 +12,10 @@ import { useQuerySubscription } from "@/shared/hooks/useQuerySubscription";
 import { mergeMessageDelta } from "../lib/messageCache";
 import type { Message, Session, SessionStatus } from "../types";
 import type { RepoGroup } from "@shared/types/workspace";
-import { useEffect, useMemo } from "react";
+import { useEffect, useMemo, useRef } from "react";
 import { track } from "@/platform/analytics";
 
-import { sendCommand, connect, isConnected, subscribe } from "@/platform/ws";
+import { sendCommand, connect, isConnected, subscribe, onConnectionChange } from "@/platform/ws";
 import { emitSendAttemptFailed } from "@/features/connection";
 import type { RuntimeAgentType } from "../lib/agentRuntime";
 
@@ -116,12 +116,31 @@ export function useWorkingSessionIds(sessionIds: string[]): Set<string> {
  * the virtualizer handles render-level windowing.
  */
 export function useMessages(sessionId: string | null) {
+  const queryClient = useQueryClient();
+
   useQuerySubscription("messages", {
     queryKey: queryKeys.sessions.messages(sessionId || ""),
     params: { sessionId: sessionId || "" },
     enabled: !!sessionId,
     mergeDelta: mergeMessageDelta,
   });
+
+  // On WS reconnect, refetch messages to catch up on anything missed
+  // while disconnected. The delta-only subscription resets its cursor
+  // to MAX(seq) on re-subscribe, so messages written during downtime
+  // would be permanently skipped without this.
+  const hasConnectedOnce = useRef(false);
+  useEffect(() => {
+    if (!sessionId) return;
+    return onConnectionChange((connected) => {
+      if (connected) {
+        if (hasConnectedOnce.current) {
+          queryClient.invalidateQueries({ queryKey: queryKeys.sessions.messages(sessionId) });
+        }
+        hasConnectedOnce.current = true;
+      }
+    });
+  }, [sessionId, queryClient]);
 
   const query = useQuery({
     queryKey: queryKeys.sessions.messages(sessionId || ""),
