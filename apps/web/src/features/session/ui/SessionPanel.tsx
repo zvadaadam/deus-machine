@@ -125,6 +125,15 @@ export const SessionPanel = forwardRef<SessionPanelRef, SessionPanelProps>(
     // Messages come directly from TanStack cache (populated by DB load + WS mutations)
     const messages = dbMessages;
 
+    // Load-older: button-triggered, not scroll-triggered
+    const loadOlderMutation = useLoadOlderMessages();
+    const handleLoadOlder = useCallback(() => {
+      if (loadOlderMutation.isPending || !messages.length) return;
+      const firstSeq = messages[0]?.seq;
+      if (firstSeq == null) return;
+      loadOlderMutation.mutate({ sessionId, beforeSeq: firstSeq });
+    }, [loadOlderMutation, messages, sessionId]);
+
     // Subagent groups: derive from message.parent_tool_use_id
     const subagentMessages = useMemo(() => {
       const map = new Map<string, typeof messages>();
@@ -150,15 +159,6 @@ export const SessionPanel = forwardRef<SessionPanelRef, SessionPanelProps>(
       }
       return null;
     }, [messages]);
-
-    // Load-older pagination
-    const loadOlderMutation = useLoadOlderMessages();
-    const handleLoadOlder = useCallback(() => {
-      if (loadOlderMutation.isPending || !messages.length) return;
-      const firstSeq = messages[0]?.seq;
-      if (firstSeq == null) return;
-      loadOlderMutation.mutate({ sessionId, beforeSeq: firstSeq });
-    }, [loadOlderMutation, messages, sessionId]);
 
     // DEBUG: disabled — was flooding console, making [autoscroll] logs unreadable
     // if (import.meta.env.DEV) {

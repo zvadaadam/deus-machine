@@ -8,12 +8,6 @@
 import type { PaginatedMessages } from "../api/session.service";
 import type { Message } from "../types";
 
-/** Initial load: larger page so tool-heavy turns (20-30 rows/turn) show enough context */
-export const INITIAL_MESSAGE_PAGE_SIZE = 100;
-
-/** Load-older and incremental fetches: smaller for snappy pagination */
-export const MESSAGE_PAGE_SIZE = 50;
-
 /**
  * Custom delta merge for PaginatedMessages cache.
  * Used by useQuerySubscription's mergeDelta option so q:delta frames
@@ -42,6 +36,6 @@ export function mergeMessageDelta(
   return {
     messages: [...realMessages, ...newMessages],
     has_older: paginated.has_older,
-    has_newer: false, // We just received the latest via delta
+    has_newer: false,
   };
 }
