@@ -89,6 +89,7 @@ export function FileMentionPopover({
 
             return (
               <button
+                type="button"
                 key={result.path}
                 data-selected={isSelected ? "true" : undefined}
                 className={cn(

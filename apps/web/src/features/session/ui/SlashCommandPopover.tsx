@@ -123,6 +123,7 @@ export function SlashCommandPopover({
 
                   return (
                     <button
+                      type="button"
                       key={`${item.kind}-${item.name}`}
                       data-selected={isSelected ? "true" : undefined}
                       className={cn(

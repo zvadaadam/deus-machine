@@ -64,16 +64,16 @@ export function useSlashCommand({
   const [isOpen, setIsOpen] = useState(false);
   const [selectedIndex, setSelectedIndex] = useState(0);
 
-  // Cached items from backend (fetched once, filtered client-side)
+  // Cached items from backend (fetched per workspace, filtered client-side)
   const [allItems, setAllItems] = useState<SlashCommandItem[]>([]);
   const [loading, setLoading] = useState(false);
-  const fetchedRef = useRef(false);
+  const fetchedWorkspaceRef = useRef<string | null>(null);
 
   // Detect trigger
   const triggerActive = isSlashTriggerActive(value);
   const query = triggerActive ? value.slice(1) : "";
 
-  // Open/close based on trigger
+  // Open/close based on trigger — query in deps so Escape → continued typing reopens
   useEffect(() => {
     if (triggerActive) {
       setIsOpen(true);
@@ -81,12 +81,14 @@ export function useSlashCommand({
     } else {
       setIsOpen(false);
     }
-  }, [triggerActive]);
+  }, [triggerActive, query]);
 
-  // Fetch skills + commands once when popover first opens
+  // Fetch skills + commands when popover first opens (re-fetches on workspace change)
   useEffect(() => {
-    if (!isOpen || fetchedRef.current) return;
-    fetchedRef.current = true;
+    if (!isOpen) return;
+    const cacheKey = workspacePath ?? "__global__";
+    if (fetchedWorkspaceRef.current === cacheKey) return;
+    fetchedWorkspaceRef.current = cacheKey;
 
     const fetchItems = async () => {
       setLoading(true);
