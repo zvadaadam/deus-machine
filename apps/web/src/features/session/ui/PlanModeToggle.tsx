@@ -22,7 +22,7 @@ export function PlanModeToggle({ enabled, onClick, disabled }: PlanModeTogglePro
           aria-pressed={enabled}
           aria-label={enabled ? "Plan mode (active)" : "Plan mode"}
           className={cn(
-            "flex h-8 items-center gap-1 rounded-lg px-2",
+            "flex h-8 items-center justify-center rounded-lg px-2",
             "ease transition-colors duration-200",
             "hover:bg-accent",
             "focus-visible:ring-ring focus-visible:ring-1 focus-visible:outline-none",
@@ -31,15 +31,14 @@ export function PlanModeToggle({ enabled, onClick, disabled }: PlanModeTogglePro
           )}
         >
           <ClipboardList className="h-3.5 w-3.5" />
-          <span className="text-xs select-none">Plan</span>
         </button>
       </TooltipTrigger>
       <TooltipContent side="bottom">
         {disabled
           ? "Plan mode not available for this model"
           : enabled
-            ? "Plan mode (active)"
-            : "Plan mode"}
+            ? "Disable plan mode"
+            : "Enable plan mode"}
       </TooltipContent>
     </Tooltip>
   );
