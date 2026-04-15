@@ -4,8 +4,10 @@ import { useIsMobile } from "@/shared/hooks/use-mobile";
 import { AnimatePresence, motion } from "framer-motion";
 import { Minimize2, ArrowUp, Square, Wrench } from "lucide-react";
 import { useFileMention } from "../hooks/useFileMention";
+import { useSlashCommand } from "../hooks/useSlashCommand";
 import { useImageAttachments } from "../hooks/useImageAttachments";
 import { FileMentionPopover } from "./FileMentionPopover";
+import { SlashCommandPopover } from "./SlashCommandPopover";
 import { GENERATE_HIVE_JSON } from "../lib/sessionPrompts";
 import {
   InputGroup,
@@ -208,11 +210,23 @@ export const MessageInput = forwardRef<MessageInputRef, MessageInputProps>(funct
     onChange: onMessageChange,
   });
 
-  // Keyboard shortcut — file mention gets first pass for arrow/enter/escape
+  // / slash command support (skills + commands picker)
+  const slashCommand = useSlashCommand({
+    value: messageInput,
+    workspacePath,
+    onChange: onMessageChange,
+  });
+
+  // Keyboard shortcut — popovers get first pass for arrow/enter/escape
   // Desktop: Enter sends, Shift+Enter inserts newline
   // Mobile: Enter inserts newline, send button sends (standard mobile UX)
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
-    // Let file mention popover handle navigation keys first
+    // Let slash command popover handle navigation keys first
+    if (slashCommand.handleKeyDown(e)) {
+      e.preventDefault();
+      return;
+    }
+    // Then file mention popover
     if (fileMention.handleKeyDown(e)) {
       e.preventDefault();
       return;
@@ -306,27 +320,6 @@ export const MessageInput = forwardRef<MessageInputRef, MessageInputProps>(funct
         )}
       </AnimatePresence>
 
-      {/* File mention popover — anchored above the input group */}
-      <AnimatePresence>
-        {fileMention.isOpen && (
-          <motion.div
-            key="file-mention-popover"
-            initial={{ opacity: 0, scale: 0.96, y: 4 }}
-            animate={{ opacity: 1, scale: 1, y: 0 }}
-            exit={{ opacity: 0, scale: 0.96, y: 4 }}
-            transition={{ duration: 0.15, ease: [0.215, 0.61, 0.355, 1] }}
-            className="absolute right-4 bottom-full left-4 z-50 mb-2 flex justify-start"
-          >
-            <FileMentionPopover
-              results={fileMention.results}
-              loading={fileMention.loading}
-              selectedIndex={fileMention.selectedIndex}
-              query={fileMention.query}
-              onSelect={fileMention.selectFile}
-            />
-          </motion.div>
-        )}
-      </AnimatePresence>
       <InputGroup
         data-no-ring={true}
         className="bg-input-surface relative overflow-visible rounded-2xl border-0 shadow-xs transition-colors duration-200"
@@ -361,6 +354,50 @@ export const MessageInput = forwardRef<MessageInputRef, MessageInputProps>(funct
           </div>
         )}
 
+        {/* Slash command sheet — slides out above textarea */}
+        <AnimatePresence initial={false}>
+          {slashCommand.isOpen && (
+            <motion.div
+              key="slash-command-sheet"
+              initial={{ height: 0, opacity: 0 }}
+              animate={{ height: "auto", opacity: 1 }}
+              exit={{ height: 0, opacity: 0 }}
+              transition={{ duration: 0.18, ease: [0.215, 0.61, 0.355, 1] }}
+              className="w-full overflow-hidden"
+            >
+              <SlashCommandPopover
+                results={slashCommand.results}
+                loading={slashCommand.loading}
+                selectedIndex={slashCommand.selectedIndex}
+                query={slashCommand.query}
+                onSelect={slashCommand.selectItem}
+              />
+            </motion.div>
+          )}
+        </AnimatePresence>
+
+        {/* File mention sheet — slides out above textarea */}
+        <AnimatePresence initial={false}>
+          {fileMention.isOpen && (
+            <motion.div
+              key="file-mention-sheet"
+              initial={{ height: 0, opacity: 0 }}
+              animate={{ height: "auto", opacity: 1 }}
+              exit={{ height: 0, opacity: 0 }}
+              transition={{ duration: 0.18, ease: [0.215, 0.61, 0.355, 1] }}
+              className="w-full overflow-hidden"
+            >
+              <FileMentionPopover
+                results={fileMention.results}
+                loading={fileMention.loading}
+                selectedIndex={fileMention.selectedIndex}
+                query={fileMention.query}
+                onSelect={fileMention.selectFile}
+              />
+            </motion.div>
+          )}
+        </AnimatePresence>
+
         {/* Textarea */}
         <InputGroupTextarea
           value={messageInput}
@@ -369,7 +406,7 @@ export const MessageInput = forwardRef<MessageInputRef, MessageInputProps>(funct
             fileMention.handleCursorChange(e);
           }}
           onPaste={handlePaste}
-          placeholder="Ask a follow-up ... (type @ to mention a file)"
+          placeholder="Ask a follow-up ... (@ files, / skills)"
           disabled={sending}
           onKeyDown={handleKeyDown}
           onSelect={fileMention.handleCursorChange}
@@ -390,13 +427,6 @@ export const MessageInput = forwardRef<MessageInputRef, MessageInputProps>(funct
         >
           {/* Controls group (left) */}
           <div className="flex items-center gap-0.5">
-            {onPlanModeToggle && (
-              <PlanModeToggle
-                enabled={planModeEnabled}
-                onClick={onPlanModeToggle}
-                disabled={planModeDisabled}
-              />
-            )}
             <ModelPicker
               model={model}
               hasMessages={hasMessages}
@@ -409,6 +439,14 @@ export const MessageInput = forwardRef<MessageInputRef, MessageInputProps>(funct
               level={thinkingLevel as ThinkingLevel}
               onClick={handleCycleThinking}
             />
+
+            {onPlanModeToggle && (
+              <PlanModeToggle
+                enabled={planModeEnabled}
+                onClick={onPlanModeToggle}
+                disabled={planModeDisabled}
+              />
+            )}
           </div>
 
           {/* Actions group (right) */}

@@ -131,24 +131,20 @@ export function useFileMention({
       clearTimeout(searchTimerRef.current);
     }
 
-    // Empty query → no results
-    if (!query) {
-      setResults([]);
-      setLoading(false);
-      return;
-    }
-
     setLoading(true);
 
     // Bump search ID so in-flight HTTP calls from earlier keystrokes are discarded
     const currentSearchId = ++searchIdRef.current;
 
     // Debounce search by 80ms to avoid hammering the backend on every keystroke
+    // Empty query is sent immediately (no debounce) to show default files fast
+    const delay = query ? 80 : 0;
+
     searchTimerRef.current = setTimeout(async () => {
       try {
         const searchResults = await sendRequest<FuzzyFileResult[]>("fileSearch", {
           workspaceId,
-          query,
+          query: query || "",
           limit: 15,
         });
         // Only apply results if this is still the latest search
@@ -163,7 +159,7 @@ export function useFileMention({
           setLoading(false);
         }
       }
-    }, 80);
+    }, delay);
 
     return () => {
       if (searchTimerRef.current) {

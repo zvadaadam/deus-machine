@@ -298,7 +298,6 @@ export function getSkills(projectPath?: string): SkillItem[] {
   const skills: SkillItem[] = [];
 
   entries.forEach((entry) => {
-    if (!entry.isDirectory()) return;
     const skillMdPath = path.join(skillsDir, entry.name, "SKILL.md");
     if (!fs.existsSync(skillMdPath)) return;
 

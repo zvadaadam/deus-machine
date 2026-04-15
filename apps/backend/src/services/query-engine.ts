@@ -491,7 +491,7 @@ async function runRequest(resource: RequestResourceName, params: QueryParams): P
     })
     .with("fileSearch", () => {
       const wsId = requireParam(params, "workspaceId", "fileSearch");
-      const query = requireParam(params, "query", "fileSearch");
+      const query = readStringParam(params, "query") ?? "";
       const limit = readNumberParam(params, "limit");
       return delegateToRoute("POST", `/api/workspaces/${encodeURIComponent(wsId)}/files/search`, {
         query,
