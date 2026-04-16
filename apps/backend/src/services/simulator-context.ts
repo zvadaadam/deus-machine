@@ -608,7 +608,8 @@ export async function buildAndRun(
   let schemeName = scheme;
   if (!schemeName) {
     const { stdout: listOut } = await execFileAsync(
-      "xcodebuild", [...projectArg, "-list", "-json"],
+      "xcodebuild",
+      [...projectArg, "-list", "-json"],
       { cwd: workspacePath, timeout: 30_000, env: SIM_ENV }
     );
     const parsed = JSON.parse(listOut) as {
@@ -621,9 +622,7 @@ export async function buildAndRun(
     } else if (schemes.length === 0) {
       throw new Error("No schemes found in Xcode project");
     } else {
-      throw new Error(
-        `Multiple schemes found (${schemes.join(", ")}). Specify one explicitly.`
-      );
+      throw new Error(`Multiple schemes found (${schemes.join(", ")}). Specify one explicitly.`);
     }
   }
 
@@ -631,9 +630,12 @@ export async function buildAndRun(
   const derivedData = join(workspacePath, "build");
   const buildArgs = [
     ...projectArg,
-    "-scheme", schemeName,
-    "-destination", destination,
-    "-derivedDataPath", derivedData,
+    "-scheme",
+    schemeName,
+    "-destination",
+    destination,
+    "-derivedDataPath",
+    derivedData,
     "build",
   ];
 
@@ -674,9 +676,12 @@ export async function buildAndRun(
     "xcodebuild",
     [
       ...projectArg,
-      "-scheme", schemeName!,
-      "-destination", destination,
-      "-derivedDataPath", derivedData,
+      "-scheme",
+      schemeName!,
+      "-destination",
+      destination,
+      "-derivedDataPath",
+      derivedData,
       "-showBuildSettings",
       "-json",
     ],
@@ -696,7 +701,8 @@ export async function buildAndRun(
 
   // Extract bundle ID — required for launch
   const { stdout: plistOut } = await execFileAsync("/usr/libexec/PlistBuddy", [
-    "-c", "Print :CFBundleIdentifier",
+    "-c",
+    "Print :CFBundleIdentifier",
     join(appPath, "Info.plist"),
   ]).catch((err) => {
     throw new Error(`Failed to read CFBundleIdentifier from ${appPath}: ${err.message}`);
