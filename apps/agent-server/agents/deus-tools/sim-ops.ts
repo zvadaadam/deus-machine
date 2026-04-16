@@ -155,7 +155,9 @@ export async function resolveDevice(destination?: string, sessionId?: string): P
   // use that workspace's simulator. Falling back to "first booted" would break
   // per-workspace isolation in multi-simulator scenarios.
   if (sessionId) {
-    const ctx = await EventBroadcaster.requestSimulatorContext({ sessionId }).catch(() => null);
+    // Let RPC errors (timeout, disconnect) propagate so the agent sees the
+    // real problem. Only a `null` response means "no workspace binding yet".
+    const ctx = await EventBroadcaster.requestSimulatorContext({ sessionId });
     if (ctx?.udid) return ctx.udid;
     throw new Error(
       "No simulator assigned to this workspace. Start one via the Simulator panel " +
