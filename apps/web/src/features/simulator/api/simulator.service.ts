@@ -60,18 +60,12 @@ export const simulatorService = {
       }, 30_000);
 
       const cleanup = onEvent((event, data) => {
-        // Debug: log ALL events while waiting for sim:streamReady
-        if (event.startsWith("sim:")) {
-          console.log("[Simulator] Received event:", event, data);
-        }
-
         const d = data as any;
         if (d?.workspaceId !== workspaceId) return;
 
         if (event === "sim:streamReady") {
           clearTimeout(timeout);
           cleanup();
-          console.log("[Simulator] Stream ready, resolving:", d.url);
           resolve({
             url: d.url,
             port: d.port,
@@ -85,7 +79,6 @@ export const simulatorService = {
         }
       });
 
-      console.log("[Simulator] Sending sim:start command for", udid);
       // Send the start command AFTER listener is registered
       sendCommand("sim:start", { workspaceId, udid, skipBootCheck }).catch((err) => {
         clearTimeout(timeout);

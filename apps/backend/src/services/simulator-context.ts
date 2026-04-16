@@ -82,7 +82,7 @@ function pushEvent(event: string, data: unknown): void {
 
 let cachedHelperPath: string | null | undefined;
 
-export function findSimHelperPath(): string | null {
+function findSimHelperPath(): string | null {
   if (cachedHelperPath !== undefined) return cachedHelperPath;
 
   const candidates = [
@@ -372,11 +372,6 @@ export async function startStream(
   udid: string,
   skipBootCheck = false
 ): Promise<void> {
-  console.log(
-    `[Simulator] startStream: workspace=${workspaceId} udid=${udid} skipBoot=${skipBootCheck}`
-  );
-  console.log(`[Simulator] sim-helper path: ${findSimHelperPath() ?? "NOT FOUND"}`);
-
   // Boot if needed
   if (!skipBootCheck) {
     try {
@@ -459,7 +454,6 @@ export async function startStream(
     deviceName: deviceInfo?.name ?? udid,
     udid,
   };
-  console.log("[Simulator] Pushing sim:streamReady:", JSON.stringify(streamReadyPayload));
   pushEvent("sim:streamReady", streamReadyPayload);
 }
 
@@ -485,20 +479,6 @@ export function stopStream(workspaceId: string): void {
   }
 
   pushEvent("sim:stopped", { workspaceId });
-}
-
-export function getStreamInfo(workspaceId: string): {
-  url: string;
-  port: number;
-  hid_available: boolean;
-} | null {
-  const session = sessions.get(workspaceId);
-  if (!session?.streaming || !session.streamPort) return null;
-  return {
-    url: `http://localhost:${session.streamPort}/stream.mjpeg`,
-    port: session.streamPort,
-    hid_available: session.hidWs?.readyState === WebSocket.OPEN,
-  };
 }
 
 // ---------------------------------------------------------------------------
@@ -712,37 +692,6 @@ export async function buildAndRun(
   pushEvent("sim:buildComplete", { workspaceId, bundleId, appName, appPath });
 
   return { bundle_id: bundleId, name: appName, app_path: appPath };
-}
-
-// ---------------------------------------------------------------------------
-// Public API — claim/release (used by Electron sync during transition)
-// ---------------------------------------------------------------------------
-
-export function claim(workspaceId: string, udid: string): void {
-  const existing = sessions.get(workspaceId);
-  if (existing) {
-    existing.udid = udid;
-  } else {
-    sessions.set(workspaceId, {
-      workspaceId,
-      udid,
-      deviceName: "",
-      runtime: "",
-      streaming: false,
-      streamPid: null,
-      streamPort: null,
-      hidWs: null,
-      hidConnected: false,
-      appBundleId: null,
-      appName: null,
-      bootedAt: Date.now(),
-      streamStartedAt: null,
-    });
-  }
-}
-
-export function release(workspaceId: string): void {
-  sessions.delete(workspaceId);
 }
 
 // ---------------------------------------------------------------------------

@@ -183,31 +183,43 @@ export async function runCommand(
       })
       .with("sim:touch", () => {
         const workspaceId = requireParam(params, "workspaceId", "sim:touch");
-        const x = readNumber(params, "x") ?? 0;
-        const y = readNumber(params, "y") ?? 0;
+        const x = readNumber(params, "x");
+        const y = readNumber(params, "y");
+        if (x === undefined || y === undefined) {
+          throw new Error("sim:touch requires numeric x and y");
+        }
         const touchType = readString(params, "touchType") ?? "began";
         simulator.sendTouch(workspaceId, x, y, touchType);
         return {};
       })
       .with("sim:key", () => {
         const workspaceId = requireParam(params, "workspaceId", "sim:key");
-        const keycode = readNumber(params, "keycode") ?? 0;
+        const keycode = readNumber(params, "keycode");
+        if (keycode === undefined) {
+          throw new Error("sim:key requires a numeric keycode");
+        }
         const direction = readString(params, "direction") ?? "down";
         simulator.sendKey(workspaceId, keycode, direction);
         return {};
       })
       .with("sim:scroll", () => {
         const workspaceId = requireParam(params, "workspaceId", "sim:scroll");
-        const x = readNumber(params, "x") ?? 0;
-        const y = readNumber(params, "y") ?? 0;
-        const dx = readNumber(params, "dx") ?? 0;
-        const dy = readNumber(params, "dy") ?? 0;
+        const x = readNumber(params, "x");
+        const y = readNumber(params, "y");
+        const dx = readNumber(params, "dx");
+        const dy = readNumber(params, "dy");
+        if (x === undefined || y === undefined || dx === undefined || dy === undefined) {
+          throw new Error("sim:scroll requires numeric x, y, dx, dy");
+        }
         simulator.sendScroll(workspaceId, x, y, dx, dy);
         return {};
       })
       .with("sim:button", () => {
         const workspaceId = requireParam(params, "workspaceId", "sim:button");
-        const buttonType = readString(params, "buttonType") ?? "home";
+        const buttonType = readString(params, "buttonType");
+        if (!buttonType) {
+          throw new Error("sim:button requires buttonType");
+        }
         simulator.sendButton(workspaceId, buttonType);
         return {};
       })
