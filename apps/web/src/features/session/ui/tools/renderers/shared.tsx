@@ -12,6 +12,38 @@ function isTextResultBlock(block: unknown): block is TextResultBlock {
   return record.type === "text" && typeof record.text === "string";
 }
 
+type ImageResultBlock = {
+  type: "image";
+  data?: string;
+  mimeType?: string;
+  source?: {
+    data?: string;
+    media_type?: string;
+  };
+};
+
+function isImageResultBlock(block: unknown): block is ImageResultBlock {
+  if (!block || typeof block !== "object") return false;
+  return (block as Record<string, unknown>).type === "image";
+}
+
+export function extractImage(content: unknown): { data: string; mediaType: string } | null {
+  if (!Array.isArray(content)) return null;
+
+  const image = content.find(isImageResultBlock);
+  if (!image) return null;
+
+  if (typeof image.data === "string") {
+    return { data: image.data, mediaType: image.mimeType || "image/jpeg" };
+  }
+
+  if (typeof image.source?.data === "string") {
+    return { data: image.source.data, mediaType: image.source.media_type || "image/jpeg" };
+  }
+
+  return null;
+}
+
 export function extractText(content: unknown): string {
   if (typeof content === "string") return content;
   if (Array.isArray(content)) {
