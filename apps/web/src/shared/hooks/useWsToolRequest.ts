@@ -4,9 +4,9 @@
 // q:event channel. Dispatches to a handler callback and sends responses back
 // via q:tool_response.
 //
-// Multiple hook instances (useAgentRpcHandler, useSimulatorRpcHandler)
-// may be mounted simultaneously. A module-level Set prevents duplicate
-// responses to the same requestId.
+// Multiple hook instances (e.g. useAgentRpcHandler) may be mounted
+// simultaneously. A module-level Set prevents duplicate responses to
+// the same requestId.
 //
 // Usage in RPC handler hooks:
 //   useWsToolRequest((method, requestId, params, respond) => {

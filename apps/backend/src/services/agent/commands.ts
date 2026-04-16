@@ -21,6 +21,8 @@ import { delegateToRoute } from "../route-delegate";
 import { persistSessionError } from "./persistence";
 import { invalidate } from "../query-engine";
 import * as agentService from "./service";
+import * as simulator from "../simulator-context";
+import { broadcast as wsBroadcast } from "../ws.service";
 import type { CommandName } from "@shared/types/query-protocol";
 import {
   type QueryParams,
@@ -149,6 +151,122 @@ export async function runCommand(
           throw new Error("openPenFile requires workspaceId and filePath");
         await delegateToRoute("POST", `/api/workspaces/${workspaceId}/open-pen-file`, {
           filePath,
+        });
+        return {};
+      })
+      // ---- Simulator commands ----
+      .with("sim:listDevices", async () => {
+        const devices = await simulator.listDevices();
+        return { devices };
+      })
+      .with("sim:start", async () => {
+        const workspaceId = requireParam(params, "workspaceId", "sim:start");
+        const udid = requireParam(params, "udid", "sim:start");
+        const skipBootCheck = params.skipBootCheck === true;
+        // Async: start returns immediately, pushes sim:streamReady event when ready
+        simulator.startStream(workspaceId, udid, skipBootCheck).catch((err) => {
+          console.error("[Simulator] startStream failed:", err);
+          wsBroadcast(
+            JSON.stringify({
+              type: "q:event",
+              event: "sim:buildFailed",
+              data: { workspaceId, error: err instanceof Error ? err.message : String(err) },
+            })
+          );
+        });
+        return {};
+      })
+      .with("sim:stop", () => {
+        const workspaceId = requireParam(params, "workspaceId", "sim:stop");
+        simulator.stopStream(workspaceId);
+        return {};
+      })
+      .with("sim:touch", () => {
+        const workspaceId = requireParam(params, "workspaceId", "sim:touch");
+        const x = readNumber(params, "x") ?? 0;
+        const y = readNumber(params, "y") ?? 0;
+        const touchType = readString(params, "touchType") ?? "began";
+        simulator.sendTouch(workspaceId, x, y, touchType);
+        return {};
+      })
+      .with("sim:key", () => {
+        const workspaceId = requireParam(params, "workspaceId", "sim:key");
+        const keycode = readNumber(params, "keycode") ?? 0;
+        const direction = readString(params, "direction") ?? "down";
+        simulator.sendKey(workspaceId, keycode, direction);
+        return {};
+      })
+      .with("sim:scroll", () => {
+        const workspaceId = requireParam(params, "workspaceId", "sim:scroll");
+        const x = readNumber(params, "x") ?? 0;
+        const y = readNumber(params, "y") ?? 0;
+        const dx = readNumber(params, "dx") ?? 0;
+        const dy = readNumber(params, "dy") ?? 0;
+        simulator.sendScroll(workspaceId, x, y, dx, dy);
+        return {};
+      })
+      .with("sim:button", () => {
+        const workspaceId = requireParam(params, "workspaceId", "sim:button");
+        const buttonType = readString(params, "buttonType") ?? "home";
+        simulator.sendButton(workspaceId, buttonType);
+        return {};
+      })
+      .with("sim:screenshot", async () => {
+        const workspaceId = requireParam(params, "workspaceId", "sim:screenshot");
+        const bytes = await simulator.takeScreenshot(workspaceId);
+        return { bytes };
+      })
+      .with("sim:buildAndRun", async () => {
+        const workspaceId = requireParam(params, "workspaceId", "sim:buildAndRun");
+        const workspacePath = requireParam(params, "workspacePath", "sim:buildAndRun");
+        const scheme = readString(params, "scheme");
+        // Async: pushes sim:buildLog, sim:buildComplete or sim:buildFailed events
+        simulator.buildAndRun(workspaceId, workspacePath, scheme ?? undefined).catch((err) => {
+          wsBroadcast(
+            JSON.stringify({
+              type: "q:event",
+              event: "sim:buildFailed",
+              data: { workspaceId, error: err instanceof Error ? err.message : String(err) },
+            })
+          );
+        });
+        return {};
+      })
+      .with("sim:hasXcodeProject", async () => {
+        const workspacePath = requireParam(params, "workspacePath", "sim:hasXcodeProject");
+        const hasProject = await simulator.hasXcodeProject(workspacePath);
+        return { hasProject };
+      })
+      .with("sim:launchApp", async () => {
+        const workspaceId = requireParam(params, "workspaceId", "sim:launchApp");
+        const bundleId = requireParam(params, "bundleId", "sim:launchApp");
+        const session = simulator.getContextForWorkspace(workspaceId);
+        if (!session) throw new Error("No active simulator session");
+        await import("child_process").then(({ execFile }) => {
+          const { promisify } = require("util");
+          return promisify(execFile)("xcrun", ["simctl", "launch", session.udid, bundleId]);
+        });
+        return {};
+      })
+      .with("sim:terminateApp", async () => {
+        const workspaceId = requireParam(params, "workspaceId", "sim:terminateApp");
+        const bundleId = requireParam(params, "bundleId", "sim:terminateApp");
+        const session = simulator.getContextForWorkspace(workspaceId);
+        if (!session) throw new Error("No active simulator session");
+        await import("child_process").then(({ execFile }) => {
+          const { promisify } = require("util");
+          return promisify(execFile)("xcrun", ["simctl", "terminate", session.udid, bundleId]);
+        });
+        return {};
+      })
+      .with("sim:uninstallApp", async () => {
+        const workspaceId = requireParam(params, "workspaceId", "sim:uninstallApp");
+        const bundleId = requireParam(params, "bundleId", "sim:uninstallApp");
+        const session = simulator.getContextForWorkspace(workspaceId);
+        if (!session) throw new Error("No active simulator session");
+        await import("child_process").then(({ execFile }) => {
+          const { promisify } = require("util");
+          return promisify(execFile)("xcrun", ["simctl", "uninstall", session.udid, bundleId]);
         });
         return {};
       })

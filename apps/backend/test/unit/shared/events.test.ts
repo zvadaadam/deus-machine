@@ -12,7 +12,6 @@ import {
   BROWSER_WORKSPACE_CHANGE,
   BROWSER_DETACHED_CLOSED,
   BROWSER_NEW_TAB_REQUESTED,
-  SIM_BUILD_LOG,
   CHAT_INSERT,
   GIT_CLONE_PROGRESS,
   GIT_INIT_PROGRESS,
@@ -47,7 +46,6 @@ describe("shared/events", () => {
       BROWSER_WORKSPACE_CHANGE,
       BROWSER_DETACHED_CLOSED,
       BROWSER_NEW_TAB_REQUESTED,
-      SIM_BUILD_LOG,
       CHAT_INSERT,
       GIT_CLONE_PROGRESS,
       GIT_INIT_PROGRESS,
@@ -220,7 +218,14 @@ describe("shared/events", () => {
       expect(COMMAND_NAMES).toContain("createWorkspace");
       expect(COMMAND_NAMES).toContain("retrySetup");
       expect(COMMAND_NAMES).toContain("openPenFile");
-      expect(COMMAND_NAMES).toHaveLength(13);
+      // Simulator commands
+      expect(COMMAND_NAMES).toContain("sim:listDevices");
+      expect(COMMAND_NAMES).toContain("sim:start");
+      expect(COMMAND_NAMES).toContain("sim:stop");
+      expect(COMMAND_NAMES).toContain("sim:touch");
+      expect(COMMAND_NAMES).toContain("sim:screenshot");
+      expect(COMMAND_NAMES).toContain("sim:buildAndRun");
+      expect(COMMAND_NAMES).toHaveLength(26);
     });
 
     it("REQUEST_RESOURCES contains the expected request-only resources", () => {
@@ -270,7 +275,13 @@ describe("shared/events", () => {
       expect(PROTOCOL_EVENTS).toContain("git-clone-progress");
       expect(PROTOCOL_EVENTS).toContain("git-init-progress");
       expect(PROTOCOL_EVENTS).toContain("agent-server:request");
-      expect(PROTOCOL_EVENTS).toHaveLength(15);
+      // Simulator events
+      expect(PROTOCOL_EVENTS).toContain("sim:streamReady");
+      expect(PROTOCOL_EVENTS).toContain("sim:stopped");
+      expect(PROTOCOL_EVENTS).toContain("sim:buildLog");
+      expect(PROTOCOL_EVENTS).toContain("sim:buildComplete");
+      expect(PROTOCOL_EVENTS).toContain("sim:buildFailed");
+      expect(PROTOCOL_EVENTS).toHaveLength(20);
     });
   });
 });

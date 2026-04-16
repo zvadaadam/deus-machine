@@ -28,9 +28,11 @@ export const capabilities = {
   /** Embedded browser webview (requires Electron BrowserView) */
   nativeBrowser: isElectron,
 
-  /** iOS simulator panel (requires Electron + Xcode tooling).
-   *  Currently disabled — IPC handlers not yet migrated from Tauri. */
-  nativeSimulator: false,
+  /** iOS simulator panel — stream management lives in backend, works in
+   *  both desktop and web modes. Desktop connects to MJPEG directly;
+   *  web/relay mode shows panel but no live stream until relay proxy is built.
+   *  TODO(relay-streaming): change to `true` once MJPEG frame proxy is implemented */
+  nativeSimulator: isElectron,
 
   /** Auto-update check/download/install (requires Electron updater) */
   autoUpdate: isElectron,

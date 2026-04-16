@@ -13,11 +13,20 @@
  * canvas's rendered bounding rect. The <canvas> uses max-h-full/max-w-full
  * so getBoundingClientRect() returns the actual rendered rect — no
  * letterboxing mismatch.
+ *
+ * TODO(relay-streaming): In web/relay mode the MJPEG URL is not directly
+ * accessible (it's on the remote Mac). To support relay streaming:
+ *   1. Backend subscribes to sim-helper MJPEG HTTP, parses multipart frames
+ *   2. Pushes frames via `q:event sim:frame { base64 }` to frontend
+ *   3. This component renders WS-pushed frames instead of <img> MJPEG source
+ *   4. Add frame rate/quality negotiation for bandwidth control
+ *   5. Detect relay mode: if stream URL is not localhost, use WS frame path
  */
 
 import { useCallback, useEffect, useRef } from "react";
 import { cn } from "@/shared/lib/utils";
 import { simulatorService } from "../api/simulator.service";
+import { DeviceFrame } from "./DeviceFrame";
 
 // ---------------------------------------------------------------------------
 // USB HID usage codes — KeyboardEvent.code → HID keycode (u16)
@@ -108,6 +117,8 @@ interface SimulatorStreamViewerProps {
   isLive: boolean;
   hidAvailable: boolean;
   onScreenshot: () => void;
+  /** device_type from SimulatorInfo — drives device frame rendering */
+  deviceType?: string | null;
   children?: React.ReactNode;
 }
 
@@ -121,6 +132,7 @@ export function SimulatorStreamViewer({
   isLive,
   hidAvailable,
   onScreenshot,
+  deviceType,
   children,
 }: SimulatorStreamViewerProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -145,7 +157,21 @@ export function SimulatorStreamViewer({
     if (!streamUrl) return;
 
     const img = new Image();
+    img.crossOrigin = "anonymous"; // Allow cross-origin MJPEG loading
+
+    let frameCount = 0;
+    img.onload = () => {
+      frameCount++;
+      if (frameCount === 1) {
+        console.log("[SimStream] First frame loaded:", img.naturalWidth, "x", img.naturalHeight);
+      }
+    };
+    img.onerror = (e) => {
+      console.error("[SimStream] Image load error:", e);
+    };
+
     img.src = streamUrl;
+    console.log("[SimStream] Connecting to MJPEG:", streamUrl);
 
     const canvas = canvasRef.current;
     if (!canvas) return;
@@ -155,11 +181,16 @@ export function SimulatorStreamViewer({
     let animId: number;
     let prevW = 0;
     let prevH = 0;
+    let loggedFirstDraw = false;
 
     const draw = () => {
       const w = img.naturalWidth;
       const h = img.naturalHeight;
       if (w > 0 && h > 0) {
+        if (!loggedFirstDraw) {
+          console.log("[SimStream] First canvas draw:", w, "x", h);
+          loggedFirstDraw = true;
+        }
         if (w !== prevW || h !== prevH) {
           canvas.width = w;
           canvas.height = h;
@@ -331,7 +362,9 @@ export function SimulatorStreamViewer({
       tabIndex={isLive ? 0 : -1}
       className={cn(
         "bg-bg-base relative flex flex-1 cursor-default items-center justify-center overflow-hidden outline-none select-none",
-        isLive && "focus-visible:ring-primary/30 focus-visible:ring-1 focus-visible:ring-inset"
+        isLive &&
+          !deviceType &&
+          "focus-visible:ring-primary/30 focus-visible:ring-1 focus-visible:ring-inset"
       )}
       onMouseDown={handleMouseDown}
       onMouseMove={handleMouseMove}
@@ -342,7 +375,12 @@ export function SimulatorStreamViewer({
       onKeyUp={handleKeyUp}
     >
       {streamUrl && (
-        <canvas ref={canvasRef} className="pointer-events-none max-h-full max-w-full select-none" />
+        <DeviceFrame deviceType={deviceType}>
+          <canvas
+            ref={canvasRef}
+            className="pointer-events-none absolute inset-0 block h-full w-full select-none"
+          />
+        </DeviceFrame>
       )}
       {children}
     </div>
