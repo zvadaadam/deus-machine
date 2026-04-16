@@ -60,15 +60,16 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { cn } from "@/shared/lib/utils";
 import { getErrorMessage } from "@shared/lib/errors";
-import { listen, SIM_BUILD_LOG } from "@/platform/electron";
+import { onEvent } from "@/platform/ws/query-protocol-client";
 import { simulatorService } from "../api/simulator.service";
-import { useSimulatorRpcHandler } from "../automation/useSimulatorRpcHandler";
+
 import { useSimulatorStatusStore, simulatorStoreActions } from "../store";
 import { hasStream } from "../machine";
 import type { SimPhase } from "../store";
 import { workspaceLayoutActions } from "@/features/workspace/store/workspaceLayoutStore";
 import { chatInsertActions } from "@/shared/stores/chatInsertStore";
 import type { SimulatorInfo } from "../types";
+import { ensureManifestLoaded } from "../device-chrome";
 import { SimulatorStreamViewer } from "./SimulatorStreamViewer";
 import { SimulatorAppBar } from "./SimulatorAppBar";
 
@@ -192,8 +193,16 @@ export function SimulatorPanel({ workspaceId, workspacePath }: SimulatorPanelPro
     // persisted UDID or null. Without this, the always-mounted component retains
     // the previous workspace's UDID, causing loadSimulators to skip re-selection
     // and default to a sim that's already in use by another workspace.
+    //
+    // If this workspace's persisted UDID is already streaming in another workspace,
+    // clear it to force re-selection of a different device (multi-simulator support).
     const persistedUdid = layout.simulatorUdid ?? null;
-    updateSelectedUdid(persistedUdid);
+    const inUse = simulatorStoreActions.getInUseUdids(workspaceId);
+    const effectiveUdid = persistedUdid && inUse.has(persistedUdid) ? null : persistedUdid;
+    if (effectiveUdid !== persistedUdid) {
+      workspaceLayoutActions.setSimulatorUdid(workspaceId, null);
+    }
+    updateSelectedUdid(effectiveUdid);
 
     // Probe backend if the display plane shows idle OR stuck at booting.
     // Idle: normal first-mount or app-restart where backend may already have a session.
@@ -221,51 +230,6 @@ export function SimulatorPanel({ workspaceId, workspacePath }: SimulatorPanelPro
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [workspaceId]);
 
-  // -- Agent-driven boot callback (used by SimulatorStart RPC) --
-  // Extracted so the RPC handler can trigger panel state transitions
-  // when the agent calls SimulatorStart. Same flow as handleStart()
-  // but returns StreamInfo for the RPC response.
-  const handleBootSimulator = useCallback(
-    async (udid: string) => {
-      // Reassign: release device from any other workspace first.
-      const ownerWsId = simulatorStoreActions.getWorkspaceByUdid(udid, workspaceId);
-      if (ownerWsId) {
-        simulatorService.stopStreaming(ownerWsId).catch(() => {});
-        simulatorStoreActions.clearWorkspaceSession(ownerWsId);
-      }
-      updateSelectedUdid(udid);
-      workspaceLayoutActions.setSimulatorUdid(workspaceId, udid);
-      // Single write — setSession updates both the full session and the label.
-      simulatorStoreActions.setSession(workspaceId, { phase: "booting", udid });
-      // Auto-switch to simulator tab so the user sees the stream
-      // (same pattern as BrowserPanel's onAutoCreateTab)
-      workspaceLayoutActions.setActiveContentTab(workspaceId, "simulator");
-
-      try {
-        // Skip boot check — agent-driven boot has already verified the UDID.
-        const stream = await simulatorService.startStreaming(workspaceId, udid, true);
-        simulatorStoreActions.setSession(workspaceId, { phase: "streaming", udid, stream });
-        return stream;
-      } catch (e) {
-        const msg = getErrorMessage(e);
-        simulatorStoreActions.setSession(workspaceId, {
-          phase: "error",
-          message: `Failed to start: ${msg}`,
-          canRetry: true,
-        });
-        return null;
-      }
-    },
-    [updateSelectedUdid, workspaceId]
-  );
-
-  // Listen for simulator RPC requests from the agent-server (agent tools)
-  useSimulatorRpcHandler({
-    workspaceId,
-    onBootSimulator: handleBootSimulator,
-    getSimulators: useCallback(() => simulators, [simulators]),
-  });
-
   // Probe for Xcode project on mount and when workspace changes.
   // Fast filesystem scan via IPC — no xcodebuild, no side effects.
   useEffect(() => {
@@ -289,33 +253,34 @@ export function SimulatorPanel({ workspaceId, workspacePath }: SimulatorPanelPro
   const [buildLogs, setBuildLogs] = useState<string[]>([]);
   const buildLogEndRef = useRef<HTMLDivElement>(null);
 
-  // Listen for build log events streamed from Electron main during xcodebuild.
-  // Payload is { workspaceId, line } — filter to only this workspace so
-  // concurrent builds in different workspaces don't interleave logs.
+  // Listen for build log events streamed from backend via q:event.
+  // Filter to only this workspace so concurrent builds don't interleave.
   useEffect(() => {
     if (state.phase !== "building") {
       setBuildLogs([]);
       return;
     }
-    let unlisten: (() => void) | null = null;
-    listen(SIM_BUILD_LOG, (event) => {
-      if (event.payload.workspaceId !== workspaceId) return;
+    const cleanup = onEvent((event, data) => {
+      if (event !== "sim:buildLog") return;
+      const d = data as { workspaceId: string; line: string };
+      if (d.workspaceId !== workspaceId) return;
       setBuildLogs((prev) => {
-        const next = [...prev, event.payload.line];
+        const next = [...prev, d.line];
         return next.length > MAX_BUILD_LOG_LINES ? next.slice(-MAX_BUILD_LOG_LINES) : next;
       });
-    }).then((fn) => {
-      unlisten = fn;
     });
-    return () => {
-      unlisten?.();
-    };
+    return cleanup;
   }, [state.phase, workspaceId]);
 
   // Auto-scroll build log to bottom when new lines arrive
   useEffect(() => {
     buildLogEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [buildLogs]);
+
+  // Warm the device chrome manifest cache on mount
+  useEffect(() => {
+    ensureManifestLoaded();
+  }, []);
 
   // Filter to iOS-capable simulators
   const iosSimulators = useMemo(
@@ -843,6 +808,7 @@ export function SimulatorPanel({ workspaceId, workspacePath }: SimulatorPanelPro
         isLive={isLive}
         hidAvailable={hidAvailable}
         onScreenshot={handleScreenshot}
+        deviceType={selectedSim?.device_type}
       >
         {/* Overlay states on top of (or instead of) the stream */}
         {match(state)

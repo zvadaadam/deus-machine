@@ -8,6 +8,7 @@ import { validateDeviceToken } from "./services/remote-auth.service";
 import { addConnection, removeConnection, handleProtocolMessage } from "./services/ws.service";
 import { removeSubs as removeQuerySubs } from "./services/query-engine";
 import { getRelayStatus } from "./services/relay.service";
+// Simulator context is accessed via q:command handlers in commands.ts
 import { isLocalhost, getClientIp } from "./lib/network";
 import healthRoutes from "./routes/health";
 import workspaceRoutes from "./routes/workspaces";
@@ -53,6 +54,11 @@ export function createApp() {
   app.get("/api/relay/status", (c) => {
     return c.json(getRelayStatus());
   });
+
+  // Simulator operations are handled via q:command protocol (sim:start,
+  // sim:stop, etc.) which works in both desktop and relay mode.
+  // No HTTP endpoints needed — the backend's simulator-context.ts service
+  // is called directly from the command dispatch layer.
 
   // WebSocket route for remote access.
   // Localhost connections are auto-authenticated. Remote clients must send

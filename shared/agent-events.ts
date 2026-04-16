@@ -274,14 +274,6 @@ export const FRONTEND_RPC_METHODS = {
   BROWSER_NETWORK_REQUESTS: "browserNetworkRequests",
   BROWSER_SCREENSHOT: "browserScreenshot",
   BROWSER_SCROLL: "browserScroll",
-  SIM_SCREENSHOT: "simScreenshot",
-  SIM_TAP: "simTap",
-  SIM_SWIPE: "simSwipe",
-  SIM_TYPE_TEXT: "simTypeText",
-  SIM_PRESS_KEY: "simPressKey",
-  SIM_BUILD_AND_RUN: "simBuildAndRun",
-  SIM_LIST_DEVICES: "simListDevices",
-  SIM_START: "simStart",
 } as const;
 
 // ============================================================================

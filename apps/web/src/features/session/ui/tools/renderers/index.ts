@@ -1,4 +1,5 @@
 export { DefaultToolRenderer } from "./DefaultToolRenderer";
+export { ToolSearchToolRenderer } from "./ToolSearchToolRenderer";
 export { EditToolRenderer } from "./EditToolRenderer";
 export { WriteToolRenderer } from "./WriteToolRenderer";
 export { BashToolRenderer } from "./BashToolRenderer";
@@ -32,6 +33,21 @@ export {
   BrowserNetworkRequestsToolRenderer,
   BrowserScrollToolRenderer,
 } from "./BrowserToolRenderers";
+
+// xcode-mcp tools — iOS Simulator
+export {
+  XcodeMcpScreenshotToolRenderer,
+  XcodeMcpTapToolRenderer,
+  XcodeMcpTypeTextToolRenderer,
+  XcodeMcpSwipeToolRenderer,
+  XcodeMcpPressKeyToolRenderer,
+  XcodeMcpBuildToolRenderer,
+  XcodeMcpLaunchToolRenderer,
+  XcodeMcpReadScreenToolRenderer,
+  XcodeMcpWaitForToolRenderer,
+  XcodeMcpGetProjectInfoToolRenderer,
+  XcodeMcpRefreshDestinationsToolRenderer,
+} from "./XcodeMcpToolRenderers";
 
 // Deus MCP tools — Workspace
 export {

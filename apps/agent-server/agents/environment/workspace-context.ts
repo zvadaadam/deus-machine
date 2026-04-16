@@ -30,7 +30,7 @@ export function buildWorkspaceContext(cwd?: string): string {
     `Project: **${projectName}**. ` +
     `Your working directory is a git worktree at \`${cwd}\` — the directory name is the workspace name, not the project name. ` +
     `You can only edit files within this worktree. Each workspace has a .context directory (gitignored) for cross-agent collaboration.\n` +
-    `A built-in browser and iOS Simulator are available for visually testing UI changes. If you don't see these tools, ask the user to enable them in Settings > Experimental Features.\n` +
+    `A built-in browser and iOS Simulator are available for testing UI changes. Simulator tools (SimulatorScreenshot, SimulatorTap, SimulatorTypeText, SimulatorSwipe, SimulatorBuild, SimulatorReadScreen, SimulatorListDevices) are built-in. If you don't see these tools, ask the user to enable them in Settings > Experimental Features.\n` +
     `You can render live HTML+CSS previews inline in chat using the \`html-preview\` code fence — it renders in an isolated Shadow DOM instead of showing code. Use this naturally whenever showing is clearer than describing (design options, component variations, layout ideas).`
   );
 }
