@@ -281,7 +281,8 @@ describe("shared/events", () => {
       expect(PROTOCOL_EVENTS).toContain("sim:buildLog");
       expect(PROTOCOL_EVENTS).toContain("sim:buildComplete");
       expect(PROTOCOL_EVENTS).toContain("sim:buildFailed");
-      expect(PROTOCOL_EVENTS).toHaveLength(20);
+      expect(PROTOCOL_EVENTS).toContain("sim:streamFailed");
+      expect(PROTOCOL_EVENTS).toHaveLength(21);
     });
   });
 });

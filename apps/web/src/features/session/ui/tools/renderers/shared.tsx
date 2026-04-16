@@ -30,15 +30,17 @@ function isImageResultBlock(block: unknown): block is ImageResultBlock {
 export function extractImage(content: unknown): { data: string; mediaType: string } | null {
   if (!Array.isArray(content)) return null;
 
-  const image = content.find(isImageResultBlock);
-  if (!image) return null;
+  // Iterate through all image blocks — don't stop at the first one if its
+  // payload is incomplete, since later valid images would be skipped.
+  for (const block of content) {
+    if (!isImageResultBlock(block)) continue;
 
-  if (typeof image.data === "string") {
-    return { data: image.data, mediaType: image.mimeType || "image/jpeg" };
-  }
-
-  if (typeof image.source?.data === "string") {
-    return { data: image.source.data, mediaType: image.source.media_type || "image/jpeg" };
+    if (typeof block.data === "string") {
+      return { data: block.data, mediaType: block.mimeType || "image/jpeg" };
+    }
+    if (typeof block.source?.data === "string") {
+      return { data: block.source.data, mediaType: block.source.media_type || "image/jpeg" };
+    }
   }
 
   return null;

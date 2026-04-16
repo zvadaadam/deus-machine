@@ -148,6 +148,7 @@ process.on("uncaughtException", (error, origin) => {
   console.error("[FATAL] Uncaught Exception:", origin, error);
   Sentry.captureException(error);
   Sentry.close(2000).finally(() => {
+    destroyAllSimulators();
     destroyAllPtySessions();
     destroyAllWatchers();
     try {

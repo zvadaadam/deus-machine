@@ -178,8 +178,8 @@ export const PROTOCOL_EVENTS = [
   "sim:buildLog",
   "sim:buildComplete",
   "sim:buildFailed",
+  "sim:streamFailed",
 ] as const;
-// NOTE: sim:buildFailed is used in commands.ts error handlers and simulator.service.ts listeners
 export type ProtocolEvent = (typeof PROTOCOL_EVENTS)[number];
 
 // ============================================================================

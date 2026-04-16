@@ -169,7 +169,7 @@ export async function runCommand(
           wsBroadcast(
             JSON.stringify({
               type: "q:event",
-              event: "sim:buildFailed",
+              event: "sim:streamFailed",
               data: { workspaceId, error: err instanceof Error ? err.message : String(err) },
             })
           );
