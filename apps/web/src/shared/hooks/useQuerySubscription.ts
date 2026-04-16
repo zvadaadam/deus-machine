@@ -74,8 +74,10 @@ export function useQuerySubscription(
     const unsubscribe = subscribe(
       resource,
       params,
-      // onSnapshot: replace entire cache entry
+      // onSnapshot: replace entire cache entry.
+      // Null data = subscription ack from delta-only resources (messages).
       (data) => {
+        if (data === null) return;
         queryClientRef.current.setQueryData(queryKeyRef.current, data);
       },
       // onDelta: merge incremental updates (for list resources like messages)

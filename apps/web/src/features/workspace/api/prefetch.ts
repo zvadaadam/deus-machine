@@ -19,7 +19,6 @@
 import type { QueryClient, QueryKey } from "@tanstack/react-query";
 import { queryKeys } from "@/shared/api/queryKeys";
 import { SessionService } from "@/features/session/api/session.service";
-import { INITIAL_MESSAGE_PAGE_SIZE } from "@/features/session/lib/messageCache";
 import type { WorkspaceState } from "@shared/enums";
 
 const HOVER_REFRESH_WINDOW_MS = 5_000;
@@ -98,8 +97,7 @@ export function prefetchWorkspace(
       queryClient,
       {
         queryKey: queryKeys.sessions.messages(sessionId),
-        queryFn: () =>
-          SessionService.fetchMessages(sessionId, { limit: INITIAL_MESSAGE_PAGE_SIZE }),
+        queryFn: () => SessionService.fetchMessages(sessionId),
       },
       refreshIfCached
     );

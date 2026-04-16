@@ -453,7 +453,7 @@ describe("q:subscribe → initial q:snapshot", () => {
     }
   });
 
-  it("returns snapshot for messages with pagination hints", async () => {
+  it("sends null snapshot for messages (delta-only subscription)", async () => {
     const { ws } = await connectAndAuth();
     try {
       const snap = await sendAndReceive(
@@ -468,9 +468,9 @@ describe("q:subscribe → initial q:snapshot", () => {
       );
 
       expect(snap.id).toBe("sub_msg_1");
-      expect(snap.data.messages).toHaveLength(3);
-      expect(snap.data.has_older).toBe(false);
-      expect(snap.data.has_newer).toBe(false);
+      // Messages subscription is delta-only: sends null snapshot as ack.
+      // The HTTP queryFn loads the full set; WS only pushes deltas.
+      expect(snap.data).toBeNull();
     } finally {
       ws.close();
     }
