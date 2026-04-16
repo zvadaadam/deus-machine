@@ -78,7 +78,7 @@ export const simulatorService = {
             hid_available: d.hidAvailable ?? false,
           });
         }
-        if (event === "sim:buildFailed") {
+        if (event === "sim:streamFailed") {
           clearTimeout(timeout);
           cleanup();
           reject(new Error(d.error ?? "Failed to start simulator"));

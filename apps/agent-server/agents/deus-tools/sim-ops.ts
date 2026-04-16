@@ -150,17 +150,20 @@ export async function resolveDevice(destination?: string, sessionId?: string): P
     throw new Error(`Simulator "${destination}" not found`);
   }
 
-  // 2. Backend context (workspace-specific UDID)
+  // 2. Backend context (workspace-specific UDID).
+  // When sessionId is present, the session is bound to a workspace — we MUST
+  // use that workspace's simulator. Falling back to "first booted" would break
+  // per-workspace isolation in multi-simulator scenarios.
   if (sessionId) {
-    try {
-      const ctx = await EventBroadcaster.requestSimulatorContext({ sessionId });
-      if (ctx?.udid) return ctx.udid;
-    } catch {
-      // Backend not available or no context — fall through
-    }
+    const ctx = await EventBroadcaster.requestSimulatorContext({ sessionId }).catch(() => null);
+    if (ctx?.udid) return ctx.udid;
+    throw new Error(
+      "No simulator assigned to this workspace. Start one via the Simulator panel " +
+        "or specify a destination (simulator name or UDID)."
+    );
   }
 
-  // 3. First booted simulator
+  // 3. No session context — fall back to first booted simulator.
   const devices = await listDevices();
   const booted = devices.find((d) => d.state === "Booted");
   if (booted) return booted.udid;

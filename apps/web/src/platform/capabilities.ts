@@ -30,9 +30,10 @@ export const capabilities = {
 
   /** iOS simulator panel — stream management lives in backend, works in
    *  both desktop and web modes. Desktop connects to MJPEG directly;
-   *  web/relay mode shows panel but no live stream until relay proxy is built.
-   *  TODO(relay-streaming): change to `true` once MJPEG frame proxy is implemented */
-  nativeSimulator: isElectron,
+   *  web/relay mode shows the panel (no live stream until relay proxy is built —
+   *  user can still trigger builds, see logs, take screenshots).
+   *  TODO(relay-streaming): when MJPEG frame proxy lands, live stream works too. */
+  nativeSimulator: true,
 
   /** Auto-update check/download/install (requires Electron updater) */
   autoUpdate: isElectron,

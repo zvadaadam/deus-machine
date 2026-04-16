@@ -10,7 +10,7 @@
 
 import { execFile, execFileSync, spawn, type ChildProcess } from "child_process";
 import { promisify } from "util";
-import { existsSync, mkdirSync, readFileSync, writeFileSync, unlinkSync } from "fs";
+import { existsSync, mkdirSync, readFileSync, realpathSync, writeFileSync, unlinkSync } from "fs";
 import { readdir } from "fs/promises";
 import { createServer } from "net";
 import { tmpdir, homedir } from "os";
@@ -102,11 +102,12 @@ export function findSimHelperPath(): string | null {
     }
   }
 
-  // Try resolving via `which`
+  // Try resolving via `which` — use Node's realpathSync for cross-platform
+  // symlink resolution (readlink -f is GNU-only, not on default macOS BSD).
   try {
     const cliPath = execFileSync("which", ["agent-simulator"], { encoding: "utf-8" }).trim();
     if (cliPath) {
-      const realPath = execFileSync("readlink", ["-f", cliPath], { encoding: "utf-8" }).trim();
+      const realPath = realpathSync(cliPath);
       const helperPath = join(realPath, "../../native/.build/release/sim-helper");
       if (existsSync(helperPath)) {
         cachedHelperPath = helperPath;
@@ -432,9 +433,18 @@ export async function startStream(
     streamStartedAt: Date.now(),
   });
 
-  // Release any previous claim on this UDID by other workspaces
+  // Release any previous claim on this UDID by other workspaces.
+  // Close their HID WebSocket (the stream process is shared since we look it
+  // up by UDID, so we don't kill the stream — just release the other claim).
   for (const [wsId, s] of sessions.entries()) {
     if (s.udid === udid && wsId !== workspaceId) {
+      if (s.hidWs) {
+        try {
+          s.hidWs.close();
+        } catch {
+          /* already closed */
+        }
+      }
       sessions.delete(wsId);
       pushEvent("sim:stopped", { workspaceId: wsId });
     }
@@ -627,26 +637,29 @@ export async function buildAndRun(
     "build",
   ];
 
-  // Stream build logs line by line
+  // Stream build logs line by line. Chunk boundaries are arbitrary, so we
+  // keep a carry buffer per stream and only emit completed lines — avoids
+  // truncated or merged log lines in the frontend.
   await new Promise<void>((resolve, reject) => {
     const child = spawn("xcodebuild", buildArgs, {
       cwd: workspacePath,
       env: SIM_ENV,
     });
 
-    child.stdout?.on("data", (data: Buffer) => {
-      const lines = data.toString().split("\n").filter(Boolean);
-      for (const line of lines) {
-        pushEvent("sim:buildLog", { workspaceId, line });
-      }
-    });
+    const makeLineBuffer = () => {
+      let buffer = "";
+      return (data: Buffer) => {
+        buffer += data.toString();
+        const lines = buffer.split("\n");
+        buffer = lines.pop() ?? ""; // keep incomplete trailing line
+        for (const line of lines) {
+          if (line) pushEvent("sim:buildLog", { workspaceId, line });
+        }
+      };
+    };
 
-    child.stderr?.on("data", (data: Buffer) => {
-      const lines = data.toString().split("\n").filter(Boolean);
-      for (const line of lines) {
-        pushEvent("sim:buildLog", { workspaceId, line });
-      }
-    });
+    child.stdout?.on("data", makeLineBuffer());
+    child.stderr?.on("data", makeLineBuffer());
 
     child.on("exit", (code) => {
       if (code === 0) resolve();

@@ -58,7 +58,14 @@ function renderWithImage({
 // -- Screenshot ---------------------------------------------------------------
 
 export function XcodeMcpScreenshotToolRenderer({ toolUse, toolResult }: ToolRendererProps) {
-  const { type: format } = toolUse.input ?? {};
+  // Built-in SimulatorScreenshot tool uses `format`; xcode-mcp uses `type` — accept both.
+  const input = (toolUse.input ?? {}) as { format?: unknown; type?: unknown };
+  const format =
+    typeof input.format === "string"
+      ? input.format
+      : typeof input.type === "string"
+        ? input.type
+        : undefined;
   const image = toolResult ? extractImage(toolResult.content) : null;
 
   return (
