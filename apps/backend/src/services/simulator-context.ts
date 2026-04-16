@@ -603,17 +603,37 @@ export async function buildAndRun(
 
   if (!projectArg) throw new Error("No Xcode project found in workspace");
 
-  const schemeName =
-    scheme ?? (xcworkspace ?? xcodeproj)!.replace(/\.(xcworkspace|xcodeproj)$/, "");
+  // Resolve scheme: explicit wins, else use the single shared scheme.
+  // Multiple schemes without an explicit choice is an error — don't guess.
+  let schemeName = scheme;
+  if (!schemeName) {
+    const { stdout: listOut } = await execFileAsync(
+      "xcodebuild", [...projectArg, "-list", "-json"],
+      { cwd: workspacePath, timeout: 30_000, env: SIM_ENV }
+    );
+    const parsed = JSON.parse(listOut) as {
+      workspace?: { schemes?: string[] };
+      project?: { schemes?: string[] };
+    };
+    const schemes = parsed.workspace?.schemes ?? parsed.project?.schemes ?? [];
+    if (schemes.length === 1) {
+      schemeName = schemes[0];
+    } else if (schemes.length === 0) {
+      throw new Error("No schemes found in Xcode project");
+    } else {
+      throw new Error(
+        `Multiple schemes found (${schemes.join(", ")}). Specify one explicitly.`
+      );
+    }
+  }
 
+  const destination = `platform=iOS Simulator,id=${session.udid}`;
+  const derivedData = join(workspacePath, "build");
   const buildArgs = [
     ...projectArg,
-    "-scheme",
-    schemeName,
-    "-destination",
-    `platform=iOS Simulator,id=${session.udid}`,
-    "-derivedDataPath",
-    join(workspacePath, "build"),
+    "-scheme", schemeName,
+    "-destination", destination,
+    "-derivedDataPath", derivedData,
     "build",
   ];
 
@@ -648,40 +668,48 @@ export async function buildAndRun(
     child.on("error", reject);
   });
 
-  // Find built .app
-  const { stdout: findOutput } = await execFileAsync("find", [
-    join(workspacePath, "build"),
-    "-name",
-    "*.app",
-    "-type",
-    "d",
-    "-maxdepth",
-    "6",
-  ]);
-  const appPath = findOutput.trim().split("\n")[0];
-  if (!appPath) throw new Error("Built .app bundle not found");
-
-  // Extract bundle ID
-  let bundleId = "";
-  try {
-    const { stdout: plistOut } = await execFileAsync("/usr/libexec/PlistBuddy", [
-      "-c",
-      "Print :CFBundleIdentifier",
-      join(appPath, "Info.plist"),
-    ]);
-    bundleId = plistOut.trim();
-  } catch {
-    /* */
+  // Find built .app via xcodebuild's TARGET_BUILD_DIR + FULL_PRODUCT_NAME —
+  // more reliable than `find` which can pick the wrong bundle.
+  const { stdout: settingsOut } = await execFileAsync(
+    "xcodebuild",
+    [
+      ...projectArg,
+      "-scheme", schemeName!,
+      "-destination", destination,
+      "-derivedDataPath", derivedData,
+      "-showBuildSettings",
+      "-json",
+    ],
+    { cwd: workspacePath, timeout: 60_000, env: SIM_ENV, maxBuffer: 20 * 1024 * 1024 }
+  );
+  const settings = JSON.parse(settingsOut) as Array<{ buildSettings?: Record<string, string> }>;
+  const s = settings[0]?.buildSettings ?? {};
+  const targetDir = s.TARGET_BUILD_DIR;
+  const productName = s.FULL_PRODUCT_NAME;
+  if (!targetDir || !productName) {
+    throw new Error("Could not determine built .app path from xcodebuild settings");
   }
+  const appPath = join(targetDir, productName);
+  if (!existsSync(appPath)) {
+    throw new Error(`Built .app bundle not found at ${appPath}`);
+  }
+
+  // Extract bundle ID — required for launch
+  const { stdout: plistOut } = await execFileAsync("/usr/libexec/PlistBuddy", [
+    "-c", "Print :CFBundleIdentifier",
+    join(appPath, "Info.plist"),
+  ]).catch((err) => {
+    throw new Error(`Failed to read CFBundleIdentifier from ${appPath}: ${err.message}`);
+  });
+  const bundleId = plistOut.trim();
+  if (!bundleId) throw new Error(`Empty CFBundleIdentifier in ${appPath}/Info.plist`);
 
   // Install and launch
   await execFileAsync("xcrun", ["simctl", "install", session.udid, appPath], {
     env: SIM_ENV,
     timeout: 60_000,
   });
-  if (bundleId) {
-    await execFileAsync("xcrun", ["simctl", "launch", session.udid, bundleId], { env: SIM_ENV });
-  }
+  await execFileAsync("xcrun", ["simctl", "launch", session.udid, bundleId], { env: SIM_ENV });
 
   const appName = appPath.split("/").pop()?.replace(".app", "") ?? "App";
 

@@ -384,6 +384,75 @@ export async function launch(udid: string, bundleId: string): Promise<string> {
 // Build (xcodebuild)
 // ---------------------------------------------------------------------------
 
+/** Resolve the build scheme: explicit opts.scheme wins, otherwise use the
+ *  single shared scheme if the project has exactly one. Multiple schemes
+ *  without an explicit choice is an error — don't guess. */
+async function resolveScheme(
+  cwd: string,
+  projectArg: string[],
+  explicitScheme: string | undefined
+): Promise<string> {
+  if (explicitScheme) return explicitScheme;
+
+  const { stdout } = await execFileAsync("xcodebuild", [...projectArg, "-list", "-json"], {
+    cwd,
+    timeout: 30_000,
+    env: SIM_ENV,
+  });
+  const parsed = JSON.parse(stdout) as {
+    workspace?: { schemes?: string[] };
+    project?: { schemes?: string[] };
+  };
+  const schemes = parsed.workspace?.schemes ?? parsed.project?.schemes ?? [];
+
+  if (schemes.length === 1) return schemes[0]!;
+  if (schemes.length === 0) throw new Error("No schemes found in Xcode project");
+  throw new Error(
+    `Multiple schemes found (${schemes.join(", ")}). Specify one via the 'scheme' option.`
+  );
+}
+
+/** Locate the built .app bundle by querying xcodebuild's build settings
+ *  (TARGET_BUILD_DIR + FULL_PRODUCT_NAME). More reliable than `find`,
+ *  which can return the wrong .app when multiple targets produce bundles. */
+async function resolveBuiltAppPath(
+  cwd: string,
+  projectArg: string[],
+  scheme: string,
+  destination: string,
+  derivedData: string
+): Promise<string> {
+  const { stdout } = await execFileAsync(
+    "xcodebuild",
+    [
+      ...projectArg,
+      "-scheme", scheme,
+      "-destination", destination,
+      "-derivedDataPath", derivedData,
+      "-showBuildSettings",
+      "-json",
+    ],
+    { cwd, timeout: 60_000, env: SIM_ENV, maxBuffer: 20 * 1024 * 1024 }
+  );
+
+  const settings = JSON.parse(stdout) as Array<{
+    buildSettings?: Record<string, string>;
+  }>;
+  const s = settings[0]?.buildSettings ?? {};
+  const targetDir = s.TARGET_BUILD_DIR;
+  const productName = s.FULL_PRODUCT_NAME;
+  if (!targetDir || !productName) {
+    throw new Error("Could not determine built .app path from xcodebuild settings");
+  }
+
+  const { existsSync } = await import("fs");
+  const appPath = join(targetDir, productName);
+  if (!existsSync(appPath)) {
+    throw new Error(`Built .app bundle not found at ${appPath}`);
+  }
+  return appPath;
+}
+
 export async function build(
   udid: string,
   opts: { workingDirectory: string; scheme?: string }
@@ -401,9 +470,7 @@ export async function build(
 
   if (!projectArg) throw new Error("No .xcworkspace or .xcodeproj found in " + cwd);
 
-  const schemeName =
-    opts.scheme ?? (xcworkspace ?? xcodeproj)!.replace(/\.(xcworkspace|xcodeproj)$/, "");
-
+  const schemeName = await resolveScheme(cwd, projectArg, opts.scheme);
   const destination = `platform=iOS Simulator,id=${udid}`;
   const derivedData = join(cwd, "build");
 
@@ -413,12 +480,9 @@ export async function build(
     "xcodebuild",
     [
       ...projectArg,
-      "-scheme",
-      schemeName,
-      "-destination",
-      destination,
-      "-derivedDataPath",
-      derivedData,
+      "-scheme", schemeName,
+      "-destination", destination,
+      "-derivedDataPath", derivedData,
       "build",
     ],
     {
@@ -429,29 +493,16 @@ export async function build(
     }
   );
 
-  const { stdout: findOutput } = await execFileAsync("find", [
-    derivedData,
-    "-name",
-    "*.app",
-    "-type",
-    "d",
-    "-maxdepth",
-    "6",
-  ]);
-  const appPath = findOutput.trim().split("\n")[0];
-  if (!appPath) throw new Error("Built .app bundle not found");
+  const appPath = await resolveBuiltAppPath(cwd, projectArg, schemeName, destination, derivedData);
 
-  let bundleId = "";
-  try {
-    const { stdout: plistOut } = await execFileAsync("/usr/libexec/PlistBuddy", [
-      "-c",
-      "Print :CFBundleIdentifier",
-      join(appPath, "Info.plist"),
-    ]);
-    bundleId = plistOut.trim();
-  } catch {
-    // bundle ID extraction is best-effort
-  }
+  const { stdout: plistOut } = await execFileAsync("/usr/libexec/PlistBuddy", [
+    "-c", "Print :CFBundleIdentifier",
+    join(appPath, "Info.plist"),
+  ]).catch((err) => {
+    throw new Error(`Failed to extract CFBundleIdentifier from ${appPath}: ${err.message}`);
+  });
+  const bundleId = plistOut.trim();
+  if (!bundleId) throw new Error(`Empty CFBundleIdentifier in ${appPath}/Info.plist`);
 
   const appName = appPath.split("/").pop()?.replace(".app", "") ?? "App";
   return { bundleId, appName, appPath };
@@ -463,9 +514,7 @@ export async function buildAndRun(
 ): Promise<BuildResult> {
   const result = await build(udid, opts);
   await install(udid, result.appPath);
-  if (result.bundleId) {
-    await launch(udid, result.bundleId);
-  }
+  await launch(udid, result.bundleId);
   return result;
 }
 
@@ -543,16 +592,14 @@ export async function getProjectInfo(
 
   if (!projectArg) return { schemes: [], workspace: xcworkspace, project: xcodeproj };
 
-  try {
-    const { stdout } = await execFileAsync("xcodebuild", [...projectArg, "-list", "-json"], {
-      cwd: workingDirectory,
-      timeout: 30_000,
-      env: SIM_ENV,
-    });
-    const parsed = JSON.parse(stdout);
-    const schemes: string[] = parsed.workspace?.schemes ?? parsed.project?.schemes ?? [];
-    return { schemes, workspace: xcworkspace, project: xcodeproj };
-  } catch {
-    return { schemes: [], workspace: xcworkspace, project: xcodeproj };
-  }
+  // Let xcodebuild failures surface — silently returning an empty schemes list
+  // hides real errors (malformed project, missing dependencies, etc.)
+  const { stdout } = await execFileAsync("xcodebuild", [...projectArg, "-list", "-json"], {
+    cwd: workingDirectory,
+    timeout: 30_000,
+    env: SIM_ENV,
+  });
+  const parsed = JSON.parse(stdout);
+  const schemes: string[] = parsed.workspace?.schemes ?? parsed.project?.schemes ?? [];
+  return { schemes, workspace: xcworkspace, project: xcodeproj };
 }
