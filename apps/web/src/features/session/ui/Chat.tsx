@@ -11,7 +11,7 @@ import { cn } from "@/shared/lib/utils";
 import { useWorkingDuration } from "@/shared/hooks";
 import { useAutoScroll } from "../hooks";
 import { useVirtualizer } from "@tanstack/react-virtual";
-import { useCallback, useMemo, useRef, useEffect, useLayoutEffect } from "react";
+import { useCallback, useMemo, useRef, useEffect } from "react";
 import { AnimatePresence, m } from "framer-motion";
 import { CircularPixelGrid, type CircularPixelGridVariant } from "./CircularPixelGrid";
 
@@ -108,8 +108,11 @@ interface ChatProps {
   onStop?: () => void; // Callback to stop/cancel the session
   onOpenLoginTerminal?: () => void;
   onRetryInNewChat?: () => void;
+  /** True when there are older messages beyond the loaded window */
   hasOlder?: boolean;
+  /** True when a load-older request is in flight */
   loadingOlder?: boolean;
+  /** Callback to load older messages (button-triggered) */
   onLoadOlder?: () => void;
   workspaceRepoName?: string | null;
   workspaceParentBranch?: string | null;
@@ -141,7 +144,7 @@ export function Chat({
   // Chat owns its scroll behavior entirely — refs, hook, and button.
   const messagesContainerRef = useRef<HTMLDivElement>(null);
 
-  const { showScrollButton, handleScrollToBottomClick, syncGeometry } = useAutoScroll({
+  const { showScrollButton, handleScrollToBottomClick } = useAutoScroll({
     messages,
     messagesContainerRef,
     userSendCount,
@@ -163,51 +166,6 @@ export function Chat({
   // class applied across re-renders so streaming updates don't interrupt the
   // 400ms chatItemEnter animation mid-play (which causes visible jumps).
   const animatedTurnsRef = useRef(new Set<number>());
-
-  // ── Load-older cooldown ─────────────────────────────────────────────────
-  // Ref-based guard prevents rapid re-triggering when collapsed content
-  // produces too little visual height to push the scroll position away
-  // from the trigger zone. Cleared via rAF after prepend scroll restoration.
-  const loadOlderCooldownRef = useRef(false);
-
-  // ── Prepend scroll restoration (offset-delta approach) ──────────────────
-  //
-  // With virtualization, items are absolutely positioned so DOM queries
-  // (offsetTop) don't work. Instead, track the virtualizer's getTotalSize()
-  // before and after prepend. The delta = height added by prepended items.
-  // scrollTop += delta keeps the visual position stable.
-  const prevFirstSeqRef = useRef<number | null>(null);
-  const prevTotalSizeRef = useRef<number | undefined>(undefined);
-
-  // ── Scroll-position-based load-older (replaces IntersectionObserver) ────
-  // Scroll-position math instead of a sentinel div.
-  // Fires when scrollTop < TRIGGER_DISTANCE and no cooldown/loading active.
-  // The cooldown ref prevents the infinite loop where collapsed tool groups
-  // produce too little visual height to push scrollTop above the trigger zone.
-  useEffect(() => {
-    const container = messagesContainerRef.current;
-    if (!container || !hasOlder || !onLoadOlder) return;
-
-    const TRIGGER_DISTANCE = 200; // px from top
-    let ticking = false;
-
-    const handleScroll = () => {
-      if (ticking) return;
-      ticking = true;
-      requestAnimationFrame(() => {
-        ticking = false;
-        if (loadingOlder || loadOlderCooldownRef.current) return;
-        if (container.scrollTop < TRIGGER_DISTANCE) {
-          // Set cooldown synchronously — prevents re-entry before React re-renders.
-          loadOlderCooldownRef.current = true;
-          onLoadOlder();
-        }
-      });
-    };
-
-    container.addEventListener("scroll", handleScroll, { passive: true });
-    return () => container.removeEventListener("scroll", handleScroll);
-  }, [messagesContainerRef, hasOlder, loadingOlder, onLoadOlder]);
 
   // Track working duration
   const { formattedDuration } = useWorkingDuration({
@@ -420,36 +378,6 @@ export function Chat({
     getItemKey,
   });
 
-  // ── Prepend scroll restoration (offset-delta) ──────────────────────────
-  // When older messages are prepended, the virtualizer's total size grows
-  // by the estimated height of the new items. Adding that delta to scrollTop
-  // keeps the viewport position stable. No DOM queries needed.
-  useLayoutEffect(() => {
-    if (!messages.length) return;
-
-    const currentFirstSeq = messages[0].seq;
-    const prevFirstSeq = prevFirstSeqRef.current;
-
-    if (prevFirstSeq !== null && currentFirstSeq < prevFirstSeq) {
-      const newTotalSize = virtualizer.getTotalSize();
-      const prevTotalSize = prevTotalSizeRef.current;
-      if (prevTotalSize !== undefined) {
-        const delta = newTotalSize - prevTotalSize;
-        const container = messagesContainerRef.current;
-        if (container && delta > 0) {
-          container.scrollTop += delta;
-          syncGeometry();
-          requestAnimationFrame(() => {
-            loadOlderCooldownRef.current = false;
-          });
-        }
-      }
-    }
-
-    prevFirstSeqRef.current = currentFirstSeq;
-    prevTotalSizeRef.current = virtualizer.getTotalSize();
-  }, [messages, virtualizer, syncGeometry]);
-
   // Calculate indicator margin based on last message role
   const indicatorMarginClass = useMemo(() => {
     const lastRenderableRole = renderableMessages.length
@@ -484,13 +412,24 @@ export function Chat({
         ) : (
           <>
             <div className="flex min-h-0 min-w-0 flex-col pb-32">
-              {/* Load-older spinner — outside virtualizer, at physical top */}
-              {hasOlder && loadingOlder && (
+              {/* Load-older button — shown at the top when there are older messages */}
+              {hasOlder && (
                 <div className="flex h-10 items-center justify-center">
-                  <div className="bg-muted/50 flex items-center gap-2 rounded-full px-3 py-1.5">
-                    <div className="border-foreground/20 border-t-foreground/60 h-3.5 w-3.5 animate-spin rounded-full border-2" />
-                    <span className="text-muted-foreground text-xs">Loading earlier messages</span>
-                  </div>
+                  <button
+                    type="button"
+                    className="text-muted-foreground hover:text-foreground bg-muted/50 hover:bg-muted flex items-center gap-2 rounded-full px-3 py-1.5 text-xs transition-colors"
+                    onClick={onLoadOlder}
+                    disabled={loadingOlder}
+                  >
+                    {loadingOlder ? (
+                      <>
+                        <div className="border-foreground/20 border-t-foreground/60 h-3.5 w-3.5 animate-spin rounded-full border-2" />
+                        <span>Loading earlier messages</span>
+                      </>
+                    ) : (
+                      <span>Load earlier messages</span>
+                    )}
+                  </button>
                 </div>
               )}
               {/* Virtual container — only visible turns + overscan are in the DOM.

@@ -16,7 +16,6 @@ import {
   getSessionById,
   getMessages,
   hasOlderMessages,
-  hasNewerMessages,
   getWorkspaceRaw,
   getMaxMessageSeq,
   getMessagesDelta,
@@ -266,24 +265,21 @@ function handleSubscribe(connectionId: string, msg: ResourceFrameInput): void {
   // Validate resource upfront — fail fast before running query
   const typedResource = toQueryResource(resource);
 
-  // Send initial snapshot — only register subscription if query succeeds
-  // (avoids zombie subscriptions when runQuery throws on invalid params)
   try {
-    const data = runQuery(typedResource, params);
-
-    // Get or create subscription map for this connection
+    // Register subscription (shared for all resource types)
     let connSubs = subs.get(connectionId);
     if (!connSubs) {
       connSubs = new Map();
       subs.set(connectionId, connSubs);
     }
-
-    // Store subscription by client-assigned ID (replaces if same ID reused on reconnect)
     connSubs.set(id, { id, resource: typedResource, params });
 
-    // For messages: initialize cursor to current max seq
+    // Messages: delta-only subscription. The HTTP queryFn loads the full set.
+    // Sending a q:snapshot here would overwrite the larger HTTP-loaded cache.
     if (typedResource === "messages") {
       const sessionId = readStringParam(params, "sessionId");
+
+      // Initialize cursor to current max seq — only NEW messages get pushed via delta
       const cursorKey = `${connectionId}:${id}`;
       if (sessionId) {
         try {
@@ -293,8 +289,14 @@ function handleSubscribe(connectionId: string, msg: ResourceFrameInput): void {
           messageCursors.set(cursorKey, 0);
         }
       }
+
+      // Null snapshot = subscription ack. Client skips null data.
+      sendFrame(connectionId, { type: "q:snapshot", id, data: null });
+      return;
     }
 
+    // All other resources: send initial snapshot
+    const data = runQuery(typedResource, params);
     sendFrame(connectionId, { type: "q:snapshot", id, data });
   } catch (err) {
     sendFrame(connectionId, {
@@ -405,18 +407,16 @@ function runQuery(resource: QueryResource, params: QueryParams): unknown {
     .with("session", () => getSessionById(db, requireParam(params, "sessionId", "session")))
     .with("messages", () => {
       const sessionId = requireParam(params, "sessionId", "messages");
+      const before = readNumberParam(params, "before");
 
       const rows = getMessages(db, sessionId, {
-        limit: readNumberParam(params, "limit") ?? 50,
-        before: readNumberParam(params, "before"),
-        after: readNumberParam(params, "after"),
+        limit: readNumberParam(params, "limit") ?? 2000,
+        before,
       });
 
       const hasOlder = rows.length > 0 ? hasOlderMessages(db, sessionId, rows[0].seq) : false;
-      const hasNewer =
-        rows.length > 0 ? hasNewerMessages(db, sessionId, rows[rows.length - 1].seq) : false;
 
-      return { messages: attachParts(db, rows), has_older: hasOlder, has_newer: hasNewer };
+      return { messages: attachParts(db, rows), has_older: hasOlder, has_newer: false };
     })
     .exhaustive();
 }
