@@ -426,9 +426,12 @@ async function resolveBuiltAppPath(
     "xcodebuild",
     [
       ...projectArg,
-      "-scheme", scheme,
-      "-destination", destination,
-      "-derivedDataPath", derivedData,
+      "-scheme",
+      scheme,
+      "-destination",
+      destination,
+      "-derivedDataPath",
+      derivedData,
       "-showBuildSettings",
       "-json",
     ],
@@ -480,9 +483,12 @@ export async function build(
     "xcodebuild",
     [
       ...projectArg,
-      "-scheme", schemeName,
-      "-destination", destination,
-      "-derivedDataPath", derivedData,
+      "-scheme",
+      schemeName,
+      "-destination",
+      destination,
+      "-derivedDataPath",
+      derivedData,
       "build",
     ],
     {
@@ -496,7 +502,8 @@ export async function build(
   const appPath = await resolveBuiltAppPath(cwd, projectArg, schemeName, destination, derivedData);
 
   const { stdout: plistOut } = await execFileAsync("/usr/libexec/PlistBuddy", [
-    "-c", "Print :CFBundleIdentifier",
+    "-c",
+    "Print :CFBundleIdentifier",
     join(appPath, "Info.plist"),
   ]).catch((err) => {
     throw new Error(`Failed to extract CFBundleIdentifier from ${appPath}: ${err.message}`);
