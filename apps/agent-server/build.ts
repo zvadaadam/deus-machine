@@ -49,6 +49,10 @@ build({
     "ws",
     // Sentry — optional dependency, loaded at runtime if DSN is configured
     "@sentry/node",
+    // agent-simulator — ESM-only package with native Swift binary (sim-helper).
+    // Uses import.meta.url internally which fails in CJS. Loaded via dynamic
+    // import() in sim-ops.ts at runtime. May not be installed in CI.
+    "agent-simulator",
   ],
   minify: false,
   sourcemap: false,
