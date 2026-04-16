@@ -32,7 +32,7 @@ import {
   blockIfNotInitialized,
   getClaudeExecutablePath,
 } from "./claude-discovery";
-import { mapModelForProvider } from "./claude-models";
+import { mapModelForProvider, parseModelSpec } from "./claude-models";
 import { buildSdkOptions, DEFAULT_PROMPT, DEFAULT_SETTING_SOURCES } from "./claude-sdk-options";
 import {
   claudeSessions,
@@ -127,6 +127,16 @@ export class ClaudeAgentHandler implements AgentHandler {
       session?.currentMaxThinkingTokens !== options.maxThinkingTokens;
     const settingsChangedFlag = settingsChanged(session?.currentSettings, options);
 
+    // Beta flags (e.g. 1M context) are set at session creation and cannot be
+    // updated via setModel(). Force a new session when the extended-context
+    // flag changes (e.g. opus ↔ opus-1m) to avoid silently running without
+    // the requested context window.
+    const betaChanged =
+      modelChanged &&
+      session?.currentModel != null &&
+      parseModelSpec(session.currentModel).extended !==
+        parseModelSpec(options.model ?? "").extended;
+
     if (session) {
       session.turnId = options.turnId;
       session.turnVersion += 1;
@@ -134,7 +144,10 @@ export class ClaudeAgentHandler implements AgentHandler {
     }
 
     const canReuse =
-      isSessionActive(session) && options.shouldResetGenerator !== true && !settingsChangedFlag;
+      isSessionActive(session) &&
+      options.shouldResetGenerator !== true &&
+      !settingsChangedFlag &&
+      !betaChanged;
 
     if (canReuse) {
       console.log(
@@ -190,7 +203,9 @@ export class ClaudeAgentHandler implements AgentHandler {
           ? "no active generator"
           : options.shouldResetGenerator
             ? "should reset generator"
-            : "settings changed";
+            : betaChanged
+              ? "beta flags changed"
+              : "settings changed";
       console.log(
         `[TIMING][query] NEW_GENERATOR session=${sessionId} reason="${reason}" decisionTime=${Date.now() - tQueryStart}ms`
       );

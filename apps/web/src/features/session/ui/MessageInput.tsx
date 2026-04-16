@@ -210,11 +210,13 @@ export const MessageInput = forwardRef<MessageInputRef, MessageInputProps>(funct
     onChange: onMessageChange,
   });
 
-  // / slash command support (skills + commands picker)
+  // / slash command support (skills + commands picker, Claude only)
+  const isClaudeAgent = (getRuntimeModelOption(model)?.agentType ?? "claude") === "claude";
   const slashCommand = useSlashCommand({
     value: messageInput,
     workspacePath,
     onChange: onMessageChange,
+    enabled: isClaudeAgent,
   });
 
   // Keyboard shortcut — popovers get first pass for arrow/enter/escape

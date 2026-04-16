@@ -24,6 +24,8 @@ interface UseSlashCommandOptions {
   workspacePath?: string | null;
   /** Callback to update the textarea value after inserting a command */
   onChange: (newValue: string) => void;
+  /** Disable the hook entirely (e.g. for Codex which doesn't support skills) */
+  enabled?: boolean;
 }
 
 interface UseSlashCommandReturn {
@@ -60,6 +62,7 @@ export function useSlashCommand({
   value,
   workspacePath,
   onChange,
+  enabled = true,
 }: UseSlashCommandOptions): UseSlashCommandReturn {
   const [isOpen, setIsOpen] = useState(false);
   const [selectedIndex, setSelectedIndex] = useState(0);
@@ -69,8 +72,8 @@ export function useSlashCommand({
   const [loading, setLoading] = useState(false);
   const fetchedWorkspaceRef = useRef<string | null>(null);
 
-  // Detect trigger
-  const triggerActive = isSlashTriggerActive(value);
+  // Detect trigger (disabled entirely for agents that don't support skills)
+  const triggerActive = enabled && isSlashTriggerActive(value);
   const query = triggerActive ? value.slice(1) : "";
 
   // Open/close based on trigger — query in deps so Escape → continued typing reopens
