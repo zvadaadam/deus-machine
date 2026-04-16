@@ -158,20 +158,7 @@ export function SimulatorStreamViewer({
 
     const img = new Image();
     img.crossOrigin = "anonymous"; // Allow cross-origin MJPEG loading
-
-    let frameCount = 0;
-    img.onload = () => {
-      frameCount++;
-      if (frameCount === 1) {
-        console.log("[SimStream] First frame loaded:", img.naturalWidth, "x", img.naturalHeight);
-      }
-    };
-    img.onerror = (e) => {
-      console.error("[SimStream] Image load error:", e);
-    };
-
     img.src = streamUrl;
-    console.log("[SimStream] Connecting to MJPEG:", streamUrl);
 
     const canvas = canvasRef.current;
     if (!canvas) return;
@@ -181,16 +168,11 @@ export function SimulatorStreamViewer({
     let animId: number;
     let prevW = 0;
     let prevH = 0;
-    let loggedFirstDraw = false;
 
     const draw = () => {
       const w = img.naturalWidth;
       const h = img.naturalHeight;
       if (w > 0 && h > 0) {
-        if (!loggedFirstDraw) {
-          console.log("[SimStream] First canvas draw:", w, "x", h);
-          loggedFirstDraw = true;
-        }
         if (w !== prevW || h !== prevH) {
           canvas.width = w;
           canvas.height = h;

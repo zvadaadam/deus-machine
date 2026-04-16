@@ -189,15 +189,6 @@ export async function listDevices(): Promise<SimDevice[]> {
 }
 
 // ---------------------------------------------------------------------------
-// Boot
-// ---------------------------------------------------------------------------
-
-export async function boot(udid: string): Promise<void> {
-  const { engine, executor } = await getEngine();
-  await engine.bootSimulator(executor, udid);
-}
-
-// ---------------------------------------------------------------------------
 // Screenshot
 // ---------------------------------------------------------------------------
 
@@ -377,7 +368,7 @@ export async function pressKey(udid: string, key: string): Promise<void> {
 // App lifecycle
 // ---------------------------------------------------------------------------
 
-export async function install(udid: string, appPath: string): Promise<void> {
+async function install(udid: string, appPath: string): Promise<void> {
   const { engine, executor } = await getEngine();
   await engine.installApp(executor, udid, appPath);
 }
@@ -385,16 +376,6 @@ export async function install(udid: string, appPath: string): Promise<void> {
 export async function launch(udid: string, bundleId: string): Promise<string> {
   const { engine, executor } = await getEngine();
   return await engine.launchApp(executor, udid, bundleId);
-}
-
-export async function terminate(udid: string, bundleId: string): Promise<void> {
-  const { engine, executor } = await getEngine();
-  await engine.terminateApp(executor, udid, bundleId);
-}
-
-export async function uninstall(udid: string, bundleId: string): Promise<void> {
-  const { engine, executor } = await getEngine();
-  await engine.uninstallApp(executor, udid, bundleId);
 }
 
 // ---------------------------------------------------------------------------
