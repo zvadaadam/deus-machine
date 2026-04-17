@@ -61,8 +61,8 @@ export default defineConfig({
           // Keep it external so Node resolves them at runtime instead of Vite
           // inlining a stub that throws during Electron startup.
           "ws",
-          "agent-simulator",
-          "agent-simulator/engine",
+          "device-use",
+          "device-use/engine",
         ],
       },
       outDir: "out/main",

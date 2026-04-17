@@ -77,7 +77,9 @@ export interface ToolUseBlock {
 export interface ToolResultBlock {
   type: "tool_result";
   tool_use_id: string;
-  content: string | Record<string, any>;
+  // Arrays preserve multi-part MCP tool responses (text + image blocks).
+  // Renderers use extractText / extractImage to pull the right piece.
+  content: string | Record<string, any> | unknown[];
   is_error?: boolean;
 }
 

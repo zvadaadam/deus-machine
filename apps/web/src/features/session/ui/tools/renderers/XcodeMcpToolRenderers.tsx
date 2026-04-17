@@ -40,11 +40,13 @@ function renderWithImage({
   return (
     <div className="space-y-2">
       {image && (
-        <img
-          src={`data:${image.mediaType};base64,${image.data}`}
-          alt="Simulator screenshot"
-          className="border-border/40 max-w-full rounded-lg border shadow-sm"
-        />
+        <div className="bg-muted/40 flex items-center justify-center rounded-xl p-5">
+          <img
+            src={`data:${image.mediaType};base64,${image.data}`}
+            alt="Simulator screenshot"
+            className="max-h-80 w-auto rounded-lg shadow-sm"
+          />
+        </div>
       )}
       {output ? (
         <OutputBlock>{output}</OutputBlock>
@@ -66,7 +68,6 @@ export function XcodeMcpScreenshotToolRenderer({ toolUse, toolResult }: ToolRend
       : typeof input.type === "string"
         ? input.type
         : undefined;
-  const image = toolResult ? extractImage(toolResult.content) : null;
 
   return (
     <BaseToolRenderer
@@ -74,7 +75,6 @@ export function XcodeMcpScreenshotToolRenderer({ toolUse, toolResult }: ToolRend
       icon={<Camera className={ICON_CLS} />}
       toolUse={toolUse}
       toolResult={toolResult}
-      defaultExpanded={!!image}
       renderSummary={() =>
         format ? <span className="text-muted-foreground">{format}</span> : null
       }
@@ -86,7 +86,9 @@ export function XcodeMcpScreenshotToolRenderer({ toolUse, toolResult }: ToolRend
 // -- Tap ----------------------------------------------------------------------
 
 export function XcodeMcpTapToolRenderer({ toolUse, toolResult }: ToolRendererProps) {
-  const { x, y, label, longPress, doubleTap } = toolUse.input ?? {};
+  const { ref, identifier, x, y, label, longPress, doubleTap } = toolUse.input ?? {};
+  const safeRef = typeof ref === "string" ? ref : "";
+  const safeId = typeof identifier === "string" ? truncate(identifier, 30) : "";
   const safeLabel = typeof label === "string" ? truncate(label, 30) : "";
   const hasCoords = typeof x === "number" && typeof y === "number";
   const flags = [longPress && "long", doubleTap && "double"].filter(Boolean).join(", ");
@@ -98,7 +100,17 @@ export function XcodeMcpTapToolRenderer({ toolUse, toolResult }: ToolRendererPro
       toolUse={toolUse}
       toolResult={toolResult}
       renderSummary={() =>
-        safeLabel ? (
+        safeRef ? (
+          <span className="text-muted-foreground font-mono">
+            {safeRef}
+            {flags ? ` (${flags})` : ""}
+          </span>
+        ) : safeId ? (
+          <span className="text-muted-foreground truncate font-mono">
+            #{safeId}
+            {flags ? ` (${flags})` : ""}
+          </span>
+        ) : safeLabel ? (
           <span className="text-muted-foreground truncate">
             "{safeLabel}"{flags ? ` (${flags})` : ""}
           </span>
@@ -257,7 +269,6 @@ export function XcodeMcpReadScreenToolRenderer({ toolUse, toolResult }: ToolRend
       icon={<ScanEye className={ICON_CLS} />}
       toolUse={toolUse}
       toolResult={toolResult}
-      defaultExpanded={true}
       renderSummary={() =>
         safeFilter ? <span className="text-muted-foreground">{safeFilter}</span> : null
       }

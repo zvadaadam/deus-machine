@@ -1,12 +1,12 @@
 // agent-server/agents/deus-tools/sim-ops.ts
 //
 // Pure simulator operations library. Module-level functions wrapping
-// agent-simulator/engine + xcodebuild. Every function takes a UDID and
+// device-use/engine + xcodebuild. Every function takes a UDID and
 // returns a result — no sessions, no transport awareness.
 //
-// IMPORTANT: agent-simulator/engine uses import.meta.url (ESM) but the
-// agent-server bundles to CJS. All imports from agent-simulator/engine
-// MUST be lazy (dynamic import) to avoid crashing at module load time.
+// IMPORTANT: device-use/engine is ESM-only. The agent-server bundles to CJS.
+// All imports from device-use/engine MUST be lazy (dynamic import) to avoid
+// crashing at module load time.
 //
 // Used by: MCP tool definitions (simulator.ts) for agent headless control.
 // NOT used by: Simulator Panel (that goes through the backend service).
@@ -18,17 +18,17 @@ import { execFile } from "child_process";
 import { promisify } from "util";
 import { readdir } from "fs/promises";
 import { tmpdir } from "os";
-import { join } from "path";
+import { dirname, join } from "path";
 import { EventBroadcaster } from "../../event-broadcaster";
 
 const execFileAsync = promisify(execFile);
 
 // ---------------------------------------------------------------------------
-// Lazy engine import — agent-simulator/engine uses import.meta.url which
+// Lazy engine import — device-use/engine uses import.meta.url which
 // fails in CJS. We load it on first use instead of at module load time.
 // ---------------------------------------------------------------------------
 
-let _engine: Awaited<typeof import("agent-simulator/engine")> | null = null;
+let _engine: Awaited<typeof import("device-use/engine")> | null = null;
 let _executor: any = null;
 
 const SIM_ENV: Record<string, string | undefined> = {
@@ -38,57 +38,84 @@ const SIM_ENV: Record<string, string | undefined> = {
 
 async function getEngine() {
   if (!_engine) {
-    _engine = await import("agent-simulator/engine");
+    _engine = await import("device-use/engine");
     _executor = _engine.createExecutor({ env: SIM_ENV });
   }
   return { engine: _engine, executor: _executor };
 }
 
 // ---------------------------------------------------------------------------
-// Direct sim-helper invocation — bypasses the engine's findHelperPath()
-// which breaks in CJS bundles (import.meta.url → undefined → wrong __dirname).
-// We resolve the binary ourselves and call it with the same JSON protocol.
+// Direct simbridge invocation — bypasses the engine's findBridgePath()
+// which uses import.meta.url (fails in CJS bundles). We resolve the binary
+// ourselves and call it with the same JSON command protocol.
 // ---------------------------------------------------------------------------
 
 import { existsSync } from "fs";
-import { homedir } from "os";
-import { dirname } from "path";
 
-let _simHelperPath: string | null | undefined; // undefined = not yet resolved
+let _simBridgePath: string | null | undefined; // undefined = not yet resolved
 
-function resolveSimHelperPath(): string | null {
-  if (_simHelperPath !== undefined) return _simHelperPath;
+function findUpwards(startDir: string, rel: string): string | null {
+  let dir = startDir;
+  while (true) {
+    const candidate = join(dir, rel);
+    if (existsSync(candidate)) return candidate;
+    const parent = dirname(dir);
+    if (parent === dir) return null;
+    dir = parent;
+  }
+}
 
-  const candidates = [
-    join(process.cwd(), "node_modules/agent-simulator/native/.build/release/sim-helper"),
-    "/opt/homebrew/lib/node_modules/agent-simulator/native/.build/release/sim-helper",
-    "/usr/local/lib/node_modules/agent-simulator/native/.build/release/sim-helper",
-    join(
-      homedir(),
-      ".bun/install/global/node_modules/agent-simulator/native/.build/release/sim-helper"
-    ),
-  ];
+function resolveSimBridgePath(): string | null {
+  if (_simBridgePath !== undefined) return _simBridgePath;
 
-  for (const c of candidates) {
-    if (existsSync(c)) {
-      _simHelperPath = c;
-      return c;
+  // 1. Explicit override — set by Electron main when packaged, or by devs.
+  const envOverride = process.env["DEVICE_USE_SIMBRIDGE"];
+  if (envOverride && existsSync(envOverride)) {
+    _simBridgePath = envOverride;
+    return envOverride;
+  }
+
+  // 2. Packaged Electron app — extraResources drops simbridge here.
+  //    resourcesPath is Electron-only, not in NodeJS.Process types.
+  const resourcesPath = (process as { resourcesPath?: string }).resourcesPath;
+  if (resourcesPath) {
+    const packaged = join(resourcesPath, "simulator", "simbridge");
+    if (existsSync(packaged)) {
+      _simBridgePath = packaged;
+      return packaged;
     }
   }
 
-  _simHelperPath = null;
+  // 3. Dev mode — walk up from cwd. Agent-server runs with cwd=apps/agent-server,
+  //    so plain cwd-relative paths miss the workspace copy.
+  const devCandidates = [
+    "packages/device-use/bin/simbridge",
+    "node_modules/device-use/bin/simbridge",
+    "packages/device-use/native/.build/release/simbridge",
+    "packages/device-use/native/.build/arm64-apple-macosx/release/simbridge",
+  ];
+
+  for (const rel of devCandidates) {
+    const found = findUpwards(process.cwd(), rel);
+    if (found) {
+      _simBridgePath = found;
+      return found;
+    }
+  }
+
+  _simBridgePath = null;
   return null;
 }
 
-async function callSimHelper(request: Record<string, unknown>): Promise<void> {
-  const helperPath = resolveSimHelperPath();
-  if (!helperPath) {
+async function callSimBridge(request: Record<string, unknown>): Promise<void> {
+  const bridgePath = resolveSimBridgePath();
+  if (!bridgePath) {
     throw new Error(
-      "sim-helper binary not found. Install agent-simulator or run: cd native && swift build -c release"
+      "simbridge binary not found. Run `bun install` or `bun run prepare:device-use` in repo root."
     );
   }
 
-  await execFileAsync(helperPath, [JSON.stringify(request)], {
+  await execFileAsync(bridgePath, [JSON.stringify(request)], {
     timeout: 30_000,
     env: SIM_ENV,
     maxBuffer: 10 * 1024 * 1024,
@@ -216,6 +243,74 @@ export async function screenshot(
 // Accessibility / screen reading
 // ---------------------------------------------------------------------------
 
+// Ref cache — populated by readScreen, read by tap({ ref }). Lives for the
+// whole session so agents can chain `readScreen → tap @e3 → tap @e5` without
+// re-reading. New readScreen overwrites (refs are position-sensitive and
+// expected to be consumed promptly).
+interface RefEntry {
+  ref: string;
+  center: { x: number; y: number };
+  label?: string;
+  identifier?: string;
+  type?: string;
+}
+const refCache = new Map<string, Map<string, RefEntry>>();
+
+// Device screen bounds — for off-screen tap validation. Filled lazily and
+// reused; doesn't change during a run (ignoring rotation, which is rare).
+const screenBoundsCache = new Map<string, { width: number; height: number }>();
+
+function refCacheKey(sessionKey: string | undefined, udid: string): string {
+  return `${sessionKey ?? "__no_session__"}:${udid}`;
+}
+
+function recordRefs(
+  sessionKey: string | undefined,
+  udid: string,
+  entries: Array<{
+    ref: string;
+    center: { x: number; y: number };
+    label?: string;
+    identifier?: string;
+    type?: string;
+  }>,
+  rootFrame?: { width?: number; height?: number }
+): void {
+  const key = refCacheKey(sessionKey, udid);
+  const map = new Map<string, RefEntry>();
+  for (const e of entries) {
+    map.set(e.ref, {
+      ref: e.ref,
+      center: e.center,
+      label: e.label,
+      identifier: e.identifier,
+      type: e.type,
+    });
+  }
+  refCache.set(key, map);
+  if (rootFrame?.width && rootFrame?.height) {
+    screenBoundsCache.set(udid, { width: rootFrame.width, height: rootFrame.height });
+  }
+}
+
+async function fetchScreenBounds(udid: string): Promise<{ width: number; height: number } | null> {
+  const cached = screenBoundsCache.get(udid);
+  if (cached) return cached;
+  try {
+    const { engine } = await getEngine();
+    const tree = await engine.fetchAccessibilityTree(udid);
+    const app = tree.find((n: any) => n.type === "Application") ?? tree[0];
+    if (app?.frame?.width && app?.frame?.height) {
+      const bounds = { width: app.frame.width, height: app.frame.height };
+      screenBoundsCache.set(udid, bounds);
+      return bounds;
+    }
+  } catch {
+    /* tree fetch failed — skip bounds check */
+  }
+  return null;
+}
+
 export async function readScreen(
   udid: string,
   opts: {
@@ -224,32 +319,26 @@ export async function readScreen(
     includeScreenshot?: boolean;
   }
 ): Promise<ScreenReadResult> {
-  // Fetch accessibility tree via sim-helper directly
-  const helperPath = resolveSimHelperPath();
-  let formatted = "[accessibility tree unavailable — sim-helper not found]";
+  // Walks the nested describe-ui tree via device-use's buildSnapshot so
+  // interactive nodes get @eN refs the agent can reuse for subsequent taps.
+  let formatted = "[accessibility tree unavailable]";
 
-  if (helperPath) {
-    try {
-      const { stdout } = await execFileAsync(
-        helperPath,
-        [JSON.stringify({ command: "describe-ui", udid })],
-        { timeout: 15_000, env: SIM_ENV, maxBuffer: 10 * 1024 * 1024 }
-      );
-      const result = JSON.parse(stdout);
-      // Format the tree as compact text
-      if (result.success && result.data?.elements) {
-        formatted = result.data.elements
-          .map(
-            (e: any) =>
-              `${e.role ?? ""}${e.label ? ` "${e.label}"` : ""}${e.value ? ` [${e.value}]` : ""} (${Math.round(e.frame?.x ?? 0)},${Math.round(e.frame?.y ?? 0)})`
-          )
-          .join("\n");
-      } else {
-        formatted = stdout;
-      }
-    } catch {
-      formatted = "[failed to read accessibility tree]";
+  try {
+    const { engine } = await getEngine();
+    const tree = await engine.fetchAccessibilityTree(udid);
+    const snapshot = engine.buildSnapshot(tree, {
+      interactiveOnly: opts.filter !== "all",
+    });
+    formatted = engine.formatTree(snapshot.tree);
+    if (!formatted) {
+      formatted = "[no elements matched filter]";
     }
+    // Populate ref cache so `tap({ ref: "@e3" })` can resolve coords from
+    // the snapshot the agent just saw.
+    const rootApp = tree.find((n: any) => n.type === "Application") ?? tree[0];
+    recordRefs(opts.sessionKey, udid, snapshot.refs ?? [], rootApp?.frame);
+  } catch (err) {
+    formatted = `[failed to read accessibility tree: ${err instanceof Error ? err.message : String(err)}]`;
   }
 
   let screenshotData: ScreenshotResult | undefined;
@@ -266,31 +355,100 @@ export async function readScreen(
 
 export async function tap(
   udid: string,
-  opts: { x?: number; y?: number; label?: string }
+  opts: {
+    ref?: string;
+    identifier?: string;
+    label?: string;
+    x?: number;
+    y?: number;
+    sessionKey?: string;
+  }
 ): Promise<void> {
-  if (typeof opts.label === "string" && opts.label) {
-    // Label-based tap: fetch accessibility tree, find element, tap its center
+  // Resolution is explicit — we take exactly one selector and fail loudly if
+  // it doesn't match. No silent fallback chain (identifier → label → coord)
+  // because that hides precision bugs: the agent says "tap NameField" and
+  // we'd guess whether that's a ref, an identifier, or a label.
+
+  if (opts.ref) {
+    const map = refCache.get(refCacheKey(opts.sessionKey, udid));
+    const normalized = opts.ref.startsWith("@") ? opts.ref : `@${opts.ref}`;
+    const entry = map?.get(normalized);
+    if (!entry) {
+      throw new Error(
+        `Ref ${normalized} not found. Call SimulatorReadScreen first — refs live only until the next screen read, and must come from its output.`
+      );
+    }
+    await callSimBridge({ command: "tap", udid, x: entry.center.x, y: entry.center.y });
+    return;
+  }
+
+  if (opts.identifier) {
     const { engine } = await getEngine();
     const tree = await engine.fetchAccessibilityTree(udid);
-    const el = findInTreeByLabel(tree, opts.label);
-    if (!el) throw new Error(`Element with label "${opts.label}" not found`);
-    await callSimHelper({ command: "tap", udid, x: el.center.x, y: el.center.y });
-  } else if (typeof opts.x === "number" && typeof opts.y === "number") {
-    await callSimHelper({ command: "tap", udid, x: opts.x, y: opts.y });
-  } else {
-    throw new Error("tap requires either (x, y) coordinates or a label");
+    const el = findInTreeBy(tree, (n) => n.identifier === opts.identifier);
+    if (!el) {
+      throw new Error(
+        `Element with identifier "${opts.identifier}" not found. Identifiers come from app code (accessibilityIdentifier in SwiftUI, accessibilityIdentifier in UIKit).`
+      );
+    }
+    await callSimBridge({ command: "tap", udid, x: el.center.x, y: el.center.y });
+    return;
   }
+
+  if (opts.label) {
+    const { engine } = await getEngine();
+    const tree = await engine.fetchAccessibilityTree(udid);
+    const el = findInTreeBy(tree, (n) => n.label === opts.label);
+    if (!el) {
+      const available = collectLabels(tree).slice(0, 15);
+      const hint = available.length > 0 ? ` Available labels: ${available.join(", ")}.` : "";
+      throw new Error(
+        `Element with label "${opts.label}" not found. ` +
+          `Matches iOS accessibility label, not placeholder/visible text.${hint}`
+      );
+    }
+    await callSimBridge({ command: "tap", udid, x: el.center.x, y: el.center.y });
+    return;
+  }
+
+  if (typeof opts.x === "number" && typeof opts.y === "number") {
+    const bounds = await fetchScreenBounds(udid);
+    if (bounds) {
+      if (opts.x < 0 || opts.y < 0 || opts.x > bounds.width || opts.y > bounds.height) {
+        throw new Error(
+          `(${opts.x}, ${opts.y}) is off-screen — device is ${Math.round(bounds.width)}x${Math.round(bounds.height)} logical points.`
+        );
+      }
+    }
+    await callSimBridge({ command: "tap", udid, x: opts.x, y: opts.y });
+    return;
+  }
+
+  throw new Error("tap requires one of: ref, identifier, label, or (x, y) coordinates");
 }
 
-function findInTreeByLabel(nodes: any[], label: string): any | null {
+function findInTreeBy(nodes: any[], predicate: (n: any) => boolean): any | null {
   for (const n of nodes) {
-    if (n.label === label) return n;
+    if (predicate(n)) return n;
     if (n.children) {
-      const found = findInTreeByLabel(n.children, label);
+      const found = findInTreeBy(n.children, predicate);
       if (found) return found;
     }
   }
   return null;
+}
+
+/** Walk the tree and collect all non-empty labels (for error hints). */
+function collectLabels(nodes: any[]): string[] {
+  const labels: string[] = [];
+  const walk = (list: any[]) => {
+    for (const n of list) {
+      if (typeof n.label === "string" && n.label.length > 0) labels.push(n.label);
+      if (n.children) walk(n.children);
+    }
+  };
+  walk(nodes);
+  return [...new Set(labels)];
 }
 
 export async function typeText(
@@ -298,7 +456,7 @@ export async function typeText(
   text: string,
   opts?: { submit?: boolean }
 ): Promise<void> {
-  await callSimHelper({ command: "type", udid, text, submit: opts?.submit ?? false });
+  await callSimBridge({ command: "type", udid, text, submit: opts?.submit ?? false });
 }
 
 export async function swipe(
@@ -335,7 +493,7 @@ export async function swipe(
     throw new Error("swipe requires either direction or start/end coordinates");
   }
 
-  await callSimHelper({
+  await callSimBridge({
     command: "swipe",
     udid,
     startX: sx,
@@ -348,7 +506,7 @@ export async function swipe(
 
 export async function pressKey(udid: string, key: string): Promise<void> {
   if (key === "home") {
-    await callSimHelper({ command: "button", udid, button: "home" });
+    await callSimBridge({ command: "button", udid, button: "home" });
     return;
   }
   const keyMap: Record<string, number> = {
@@ -360,7 +518,7 @@ export async function pressKey(udid: string, key: string): Promise<void> {
   };
   const code = keyMap[key];
   if (code != null) {
-    await callSimHelper({ command: "key", udid, keyCode: code });
+    await callSimBridge({ command: "key", udid, keyCode: code });
   } else {
     throw new Error(`Unknown key: ${key}`);
   }
@@ -378,6 +536,27 @@ async function install(udid: string, appPath: string): Promise<void> {
 export async function launch(udid: string, bundleId: string): Promise<string> {
   const { engine, executor } = await getEngine();
   return await engine.launchApp(executor, udid, bundleId);
+}
+
+export interface SimApp {
+  bundleId: string;
+  name: string;
+  version?: string;
+  type: "User" | "System";
+}
+
+export async function listApps(
+  udid: string,
+  opts?: { type?: "User" | "System" | "all" }
+): Promise<SimApp[]> {
+  const { engine, executor } = await getEngine();
+  const apps = await engine.listApps(executor, udid, { type: opts?.type ?? "User" });
+  return apps.map((a: any) => ({
+    bundleId: a.bundleId,
+    name: a.name,
+    version: a.version,
+    type: a.type,
+  }));
 }
 
 // ---------------------------------------------------------------------------
@@ -538,9 +717,19 @@ export async function waitFor(
     timeout?: number;
   }
 ): Promise<{ found: boolean; elapsedMs: number }> {
+  // Max wait: 5 minutes. Prevents runaway waits from unit confusion
+  // (e.g., agent passing 1500 thinking ms when the param is seconds).
+  const MAX_WAIT_SECONDS = 300;
+
   if (typeof opts.time === "number") {
-    await new Promise((r) => setTimeout(r, opts.time! * 1000));
-    return { found: true, elapsedMs: opts.time! * 1000 };
+    if (opts.time > MAX_WAIT_SECONDS) {
+      throw new Error(
+        `time=${opts.time}s exceeds max ${MAX_WAIT_SECONDS}s. The 'time' parameter is in seconds — did you mean ${opts.time / 1000}?`
+      );
+    }
+    const ms = Math.max(0, opts.time * 1000);
+    await new Promise((r) => setTimeout(r, ms));
+    return { found: true, elapsedMs: ms };
   }
 
   if (opts.label) {
@@ -587,17 +776,25 @@ export async function waitFor(
 export async function getProjectInfo(
   workingDirectory: string
 ): Promise<{ schemes: string[]; workspace: string | null; project: string | null }> {
-  const entries = await readdir(workingDirectory);
+  let entries: string[];
+  try {
+    entries = await readdir(workingDirectory);
+  } catch (err: any) {
+    throw new Error(`Cannot read directory ${workingDirectory}: ${err.message}`);
+  }
   const xcworkspace = entries.find((e) => e.endsWith(".xcworkspace")) ?? null;
   const xcodeproj = entries.find((e) => e.endsWith(".xcodeproj")) ?? null;
 
+  if (!xcworkspace && !xcodeproj) {
+    throw new Error(
+      `No .xcworkspace or .xcodeproj found in ${workingDirectory}. ` +
+        `Check the path — the Xcode project may be in a subdirectory (e.g., ${workingDirectory}/ios).`
+    );
+  }
+
   const projectArg = xcworkspace
     ? ["-workspace", join(workingDirectory, xcworkspace)]
-    : xcodeproj
-      ? ["-project", join(workingDirectory, xcodeproj)]
-      : null;
-
-  if (!projectArg) return { schemes: [], workspace: xcworkspace, project: xcodeproj };
+    : ["-project", join(workingDirectory, xcodeproj!)];
 
   // Let xcodebuild failures surface — silently returning an empty schemes list
   // hides real errors (malformed project, missing dependencies, etc.)

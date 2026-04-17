@@ -126,6 +126,7 @@ export function registerAllTools() {
   toolRegistry.register("SimulatorPressKey", XcodeMcpPressKeyToolRenderer);
   toolRegistry.register("SimulatorBuild", XcodeMcpBuildToolRenderer);
   toolRegistry.register("SimulatorLaunch", XcodeMcpLaunchToolRenderer);
+  toolRegistry.register("SimulatorListApps", XcodeMcpRefreshDestinationsToolRenderer);
   toolRegistry.register("SimulatorReadScreen", XcodeMcpReadScreenToolRenderer);
   toolRegistry.register("SimulatorWaitFor", XcodeMcpWaitForToolRenderer);
   toolRegistry.register("SimulatorGetProjectInfo", XcodeMcpGetProjectInfoToolRenderer);
@@ -139,6 +140,7 @@ export function registerAllTools() {
   toolRegistry.register("mcp__deus__SimulatorPressKey", XcodeMcpPressKeyToolRenderer);
   toolRegistry.register("mcp__deus__SimulatorBuild", XcodeMcpBuildToolRenderer);
   toolRegistry.register("mcp__deus__SimulatorLaunch", XcodeMcpLaunchToolRenderer);
+  toolRegistry.register("mcp__deus__SimulatorListApps", XcodeMcpRefreshDestinationsToolRenderer);
   toolRegistry.register("mcp__deus__SimulatorReadScreen", XcodeMcpReadScreenToolRenderer);
   toolRegistry.register("mcp__deus__SimulatorWaitFor", XcodeMcpWaitForToolRenderer);
   toolRegistry.register("mcp__deus__SimulatorGetProjectInfo", XcodeMcpGetProjectInfoToolRenderer);

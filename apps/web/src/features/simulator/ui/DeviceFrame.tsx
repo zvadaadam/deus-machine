@@ -32,16 +32,15 @@ export function DeviceFrame({ deviceType, children }: DeviceFrameProps) {
 
   return (
     <div className="flex h-full w-full items-center justify-center overflow-hidden p-6">
-      {/* The trick: a wrapper that has both max-h and max-w set to the
-          available space. The inner div uses aspect-ratio to compute
-          its size. height:100% fills vertically, aspect-ratio computes
-          width, max-width:100% constrains it when panel is narrow. */}
+      {/* Cap the device at 80% of each axis so there's breathing room
+          around the frame. max-h/max-w both capped to 80%; aspect-ratio
+          ensures the constrained axis drives overall size. */}
       <div
         style={{
           position: "relative",
-          height: "100%",
-          maxWidth: "100%",
-          maxHeight: "100%",
+          height: "80%",
+          maxWidth: "80%",
+          maxHeight: "80%",
           aspectRatio: spec.aspectRatio,
           flexShrink: 1,
         }}

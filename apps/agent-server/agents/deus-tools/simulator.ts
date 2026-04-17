@@ -2,7 +2,7 @@
 //
 // Built-in iOS Simulator MCP tools for the Deus MCP server.
 // Replaces the external xcode-mcp dependency with in-process tools
-// backed by agent-simulator/engine.
+// backed by device-use/engine.
 //
 // These tools run headlessly in the agent-server — no Electron, no frontend.
 // The Simulator Panel is a separate visualization concern (backend-managed).
@@ -89,16 +89,36 @@ export function createSimulatorTools(sessionId: string): SdkMcpToolDefinition<an
     // -- Tap ------------------------------------------------------------------
     tool(
       "SimulatorTap",
-      `Tap on the iOS simulator screen. Provide (x, y) coordinates in iOS logical points, or a label to tap by accessibility label.
+      `Tap on the iOS simulator screen. Pass EXACTLY ONE of:
+- 'ref': a @eN reference from the most recent SimulatorReadScreen output (preferred — most precise)
+- 'identifier': the accessibilityIdentifier set in app code (e.g., 'SubmitButton')
+- 'label': the iOS accessibility label (e.g., 'Submit'). Not placeholder text.
+- 'x' + 'y': logical-point coordinates, origin top-left (last resort — fragile)
 
-Use SimulatorReadScreen or SimulatorScreenshot first to identify element positions.`,
+Prefer ref when you just ran ReadScreen; prefer identifier when you know the
+app's code; fall back to label for system UI. Coordinates are unreliable
+because layouts shift between reads.`,
       {
-        x: z.number().optional().describe("X coordinate in iOS points"),
-        y: z.number().optional().describe("Y coordinate in iOS points"),
+        ref: z
+          .string()
+          .optional()
+          .describe("@eN reference from the most recent SimulatorReadScreen output (e.g., '@e3')"),
+        identifier: z
+          .string()
+          .optional()
+          .describe("accessibilityIdentifier from app code (e.g., 'SubmitButton', 'NameField')"),
         label: z
           .string()
           .optional()
-          .describe("Accessibility label to tap (e.g., 'Sign In', 'Continue')"),
+          .describe("iOS accessibility label (e.g., 'Address' for Safari URL bar)"),
+        x: z
+          .number()
+          .optional()
+          .describe("X coordinate in iOS logical points (must also provide y)"),
+        y: z
+          .number()
+          .optional()
+          .describe("Y coordinate in iOS logical points (must also provide x)"),
         destination: z.string().optional().describe("Simulator name or UDID"),
         includeScreenshot: z
           .boolean()
@@ -107,9 +127,22 @@ Use SimulatorReadScreen or SimulatorScreenshot first to identify element positio
       },
       withSimulator(async (args) => {
         const udid = await SimOps.resolveDevice(args.destination, sessionId);
-        await SimOps.tap(udid, { x: args.x, y: args.y, label: args.label });
+        await SimOps.tap(udid, {
+          ref: args.ref,
+          identifier: args.identifier,
+          label: args.label,
+          x: args.x,
+          y: args.y,
+          sessionKey: sessionId,
+        });
 
-        const tapDesc = args.label ? `"${args.label}"` : `(${args.x}, ${args.y})`;
+        const tapDesc = args.ref
+          ? args.ref
+          : args.identifier
+            ? `#${args.identifier}`
+            : args.label
+              ? `"${args.label}"`
+              : `(${args.x}, ${args.y})`;
 
         if (args.includeScreenshot === false) {
           return textResult(`Tapped ${tapDesc}. Use SimulatorScreenshot to see the result.`);
@@ -123,10 +156,18 @@ Use SimulatorReadScreen or SimulatorScreenshot first to identify element positio
     // -- TypeText --------------------------------------------------------------
     tool(
       "SimulatorTypeText",
-      `Type text into the currently focused field in the iOS simulator. Tap a text field first to focus it.`,
+      `Type text into the currently focused field in the iOS simulator. Tap a text field first to focus it.
+
+The screenshot returned may be captured BEFORE page loads / async side-effects
+complete. Use SimulatorWaitFor(stabilize=true) afterward if you need the result.`,
       {
         text: z.string().describe("The text to type"),
-        submit: z.boolean().optional().describe("Press Return after typing to submit"),
+        submit: z
+          .boolean()
+          .optional()
+          .describe(
+            "Send Return keypress after typing. For search fields this triggers submission, but the page may not have loaded when the response returns."
+          ),
         destination: z.string().optional().describe("Simulator name or UDID"),
         includeScreenshot: z
           .boolean()
@@ -230,7 +271,7 @@ The simulator must be booted first. The build may take several minutes for large
     // -- Launch ---------------------------------------------------------------
     tool(
       "SimulatorLaunch",
-      `Launch an app on the simulator by bundle ID. The app must already be installed.`,
+      `Launch an app on the simulator by bundle ID. The app must already be installed. Use SimulatorListApps to discover installed bundle IDs.`,
       {
         bundleId: z.string().describe("Bundle identifier (e.g., com.example.MyApp)"),
         destination: z.string().optional().describe("Simulator name or UDID"),
@@ -239,6 +280,30 @@ The simulator must be booted first. The build may take several minutes for large
         const udid = await SimOps.resolveDevice(args.destination, sessionId);
         await SimOps.launch(udid, args.bundleId);
         return textResult(`Launched ${args.bundleId}`);
+      })
+    ),
+
+    // -- ListApps -------------------------------------------------------------
+    tool(
+      "SimulatorListApps",
+      `List apps installed on the simulator. Returns bundle IDs you can pass to SimulatorLaunch. Defaults to user-installed apps; pass type="all" to include system apps.`,
+      {
+        destination: z.string().optional().describe("Simulator name or UDID"),
+        type: z
+          .enum(["User", "System", "all"])
+          .optional()
+          .describe("Which apps to list (default: User)"),
+      },
+      withSimulator(async (args) => {
+        const udid = await SimOps.resolveDevice(args.destination, sessionId);
+        const apps = await SimOps.listApps(udid, { type: args.type });
+        if (apps.length === 0) {
+          return textResult("No apps found on this simulator.");
+        }
+        const lines = apps.map(
+          (a) => `${a.name}${a.version ? ` (${a.version})` : ""} — ${a.bundleId} [${a.type}]`
+        );
+        return textResult(`Found ${apps.length} app(s):\n${lines.join("\n")}`);
       })
     ),
 
@@ -289,7 +354,13 @@ Use refs with SimulatorTap to tap elements by label. Use filter "interactive" to
       "SimulatorWaitFor",
       `Wait for a condition on the simulator. Useful for waiting for animations, loading states, or specific UI elements to appear.`,
       {
-        time: z.number().optional().describe("Wait for a fixed duration in seconds"),
+        time: z
+          .number()
+          .max(300)
+          .optional()
+          .describe(
+            "Wait for a fixed duration in SECONDS (not milliseconds). Accepts decimals (e.g. 1.5). Max 300s."
+          ),
         stabilize: z
           .boolean()
           .optional()
@@ -298,7 +369,11 @@ Use refs with SimulatorTap to tap elements by label. Use filter "interactive" to
           .string()
           .optional()
           .describe("Wait for an element with this accessibility label to appear"),
-        timeout: z.number().optional().describe("Maximum wait time in seconds (default: 30)"),
+        timeout: z
+          .number()
+          .max(300)
+          .optional()
+          .describe("Maximum wait time in SECONDS (default: 30, max: 300)"),
         destination: z.string().optional().describe("Simulator name or UDID"),
       },
       withSimulator(async (args) => {

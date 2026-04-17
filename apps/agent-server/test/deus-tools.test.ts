@@ -14,8 +14,8 @@ vi.mock("../event-broadcaster", () => ({
   EventBroadcaster: mockFrontendAPI,
 }));
 
-// Mock agent-simulator/engine — the package only exports ESM, tests run in CJS context.
-vi.mock("agent-simulator/engine", () => ({
+// Mock device-use/engine — the package is ESM-only, tests run in CJS context.
+vi.mock("device-use/engine", () => ({
   createExecutor: vi.fn(() => ({})),
   listSimulators: vi.fn(async () => []),
   bootSimulator: vi.fn(async () => {}),
@@ -70,7 +70,7 @@ describe("createDeusMCPServer", () => {
   it("registers all workspace + browser + simulator + recording tools", () => {
     const tools = getRegisteredTools(server.instance);
     const toolNames = Object.keys(tools);
-    expect(toolNames).toHaveLength(37);
+    expect(toolNames).toHaveLength(38);
     // Workspace tools
     expect(toolNames).toContain("AskUserQuestion");
     expect(toolNames).toContain("GetWorkspaceDiff");
@@ -101,6 +101,7 @@ describe("createDeusMCPServer", () => {
     expect(toolNames).toContain("SimulatorPressKey");
     expect(toolNames).toContain("SimulatorBuild");
     expect(toolNames).toContain("SimulatorLaunch");
+    expect(toolNames).toContain("SimulatorListApps");
     expect(toolNames).toContain("SimulatorReadScreen");
     expect(toolNames).toContain("SimulatorWaitFor");
     expect(toolNames).toContain("SimulatorGetProjectInfo");

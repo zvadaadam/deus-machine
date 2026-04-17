@@ -8,13 +8,13 @@
 //
 // TODO(relay-streaming): Add MJPEG frame proxy for web/relay mode.
 
-import { execFile, execFileSync, spawn, type ChildProcess } from "child_process";
+import { execFile, spawn } from "child_process";
 import { promisify } from "util";
-import { existsSync, mkdirSync, readFileSync, realpathSync, writeFileSync, unlinkSync } from "fs";
+import { existsSync } from "fs";
 import { readdir } from "fs/promises";
 import { createServer } from "net";
-import { tmpdir, homedir } from "os";
-import { join } from "path";
+import { tmpdir } from "os";
+import { dirname, join } from "path";
 import WebSocket from "ws";
 import { getDatabase } from "../lib/database";
 import { getSessionRaw } from "../db/queries";
@@ -77,48 +77,66 @@ function pushEvent(event: string, data: unknown): void {
 }
 
 // ---------------------------------------------------------------------------
-// sim-helper binary resolution
+// simbridge binary resolution (from device-use workspace package)
 // ---------------------------------------------------------------------------
 
-let cachedHelperPath: string | null | undefined;
+let cachedBridgePath: string | null | undefined;
 
-function findSimHelperPath(): string | null {
-  if (cachedHelperPath !== undefined) return cachedHelperPath;
+/**
+ * Walk up from startDir looking for a relative file. Returns the first match
+ * or null. Used to find workspace files regardless of cwd.
+ */
+function findUpwards(startDir: string, rel: string): string | null {
+  let dir = startDir;
+  while (true) {
+    const candidate = join(dir, rel);
+    if (existsSync(candidate)) return candidate;
+    const parent = dirname(dir);
+    if (parent === dir) return null;
+    dir = parent;
+  }
+}
 
-  const candidates = [
-    join(process.cwd(), "node_modules/agent-simulator/native/.build/release/sim-helper"),
-    "/opt/homebrew/lib/node_modules/agent-simulator/native/.build/release/sim-helper",
-    "/usr/local/lib/node_modules/agent-simulator/native/.build/release/sim-helper",
-    join(
-      homedir(),
-      ".bun/install/global/node_modules/agent-simulator/native/.build/release/sim-helper"
-    ),
+function findSimBridgePath(): string | null {
+  if (cachedBridgePath !== undefined) return cachedBridgePath;
+
+  // 1. Explicit override (set by the Electron main process when packaged,
+  //    or by developers for ad-hoc testing).
+  const envOverride = process.env["DEVICE_USE_SIMBRIDGE"];
+  if (envOverride && existsSync(envOverride)) {
+    cachedBridgePath = envOverride;
+    return envOverride;
+  }
+
+  // 2. Packaged Electron app — extraResources copies simbridge here.
+  //    resourcesPath is Electron-only, not in NodeJS.Process types.
+  const resourcesPath = (process as { resourcesPath?: string }).resourcesPath;
+  if (resourcesPath) {
+    const packaged = join(resourcesPath, "simulator", "simbridge");
+    if (existsSync(packaged)) {
+      cachedBridgePath = packaged;
+      return packaged;
+    }
+  }
+
+  // 3. Dev mode — walk up from cwd to find the workspace copy. Backend runs
+  //    with cwd=apps/backend, so a plain join(process.cwd(), ...) misses it.
+  const devCandidates = [
+    "packages/device-use/bin/simbridge",
+    "node_modules/device-use/bin/simbridge",
+    "packages/device-use/native/.build/release/simbridge",
+    "packages/device-use/native/.build/arm64-apple-macosx/release/simbridge",
   ];
 
-  for (const c of candidates) {
-    if (existsSync(c)) {
-      cachedHelperPath = c;
-      return c;
+  for (const rel of devCandidates) {
+    const found = findUpwards(process.cwd(), rel);
+    if (found) {
+      cachedBridgePath = found;
+      return found;
     }
   }
 
-  // Try resolving via `which` — use Node's realpathSync for cross-platform
-  // symlink resolution (readlink -f is GNU-only, not on default macOS BSD).
-  try {
-    const cliPath = execFileSync("which", ["agent-simulator"], { encoding: "utf-8" }).trim();
-    if (cliPath) {
-      const realPath = realpathSync(cliPath);
-      const helperPath = join(realPath, "../../native/.build/release/sim-helper");
-      if (existsSync(helperPath)) {
-        cachedHelperPath = helperPath;
-        return helperPath;
-      }
-    }
-  } catch {
-    /* not found */
-  }
-
-  cachedHelperPath = null;
+  cachedBridgePath = null;
   return null;
 }
 
@@ -151,7 +169,7 @@ async function reservePort(preferred: number): Promise<number> {
 }
 
 // ---------------------------------------------------------------------------
-// Stream lifecycle — spawn sim-helper for MJPEG + HID
+// Stream lifecycle — spawn simbridge for MJPEG + HID
 // ---------------------------------------------------------------------------
 
 /** Active stream processes keyed by UDID (multiple sims can stream simultaneously). */
@@ -172,11 +190,9 @@ async function spawnStream(
     }
   }
 
-  const helperPath = findSimHelperPath();
+  const helperPath = findSimBridgePath();
   if (!helperPath) {
-    throw new Error(
-      "sim-helper binary not found. Install agent-simulator globally or run bun install."
-    );
+    throw new Error("simbridge binary not found. Run `bun install` in repo root to build it.");
   }
 
   return new Promise((resolve, reject) => {
@@ -263,7 +279,7 @@ function killStream(udid: string): void {
 }
 
 // ---------------------------------------------------------------------------
-// HID WebSocket connection to sim-helper
+// HID WebSocket connection to simbridge
 // ---------------------------------------------------------------------------
 
 function connectHidWs(port: number): Promise<WebSocket> {
@@ -497,8 +513,8 @@ export function sendKey(workspaceId: string, keycode: number, direction: string)
   const session = sessions.get(workspaceId);
   if (!session) throw new Error("No active simulator session");
 
-  const helperPath = findSimHelperPath();
-  if (!helperPath) throw new Error("sim-helper not found");
+  const helperPath = findSimBridgePath();
+  if (!helperPath) throw new Error("simbridge not found");
 
   execFile(
     helperPath,
