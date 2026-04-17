@@ -37,6 +37,8 @@ export interface ClosedTab {
   label: string;
   sessionId: string;
   agentHarness?: string;
+  /** Preserved so restore can re-create a tab with the same model selection */
+  initialModel?: string;
   closedAt: number;
 }
 

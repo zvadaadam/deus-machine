@@ -249,13 +249,15 @@ export function useChatTabs({ workspaceId, activeSessionId }: UseChatTabsOptions
         const currentIndex = prev.findIndex((t) => t.id === tabId);
         const newTabs = prev.filter((t) => t.id !== tabId);
 
-        // Save closed tab for restore
+        // Save closed tab for restore — preserve initialModel so restoring
+        // an unopened tab keeps the user's model choice (required downstream).
         if (closingTab?.data?.sessionId) {
           setClosedTabs((prevClosed) => {
             const entry: ClosedTab = {
               label: closingTab.label,
               sessionId: closingTab.data!.sessionId!,
               agentHarness: closingTab.data?.agentHarness,
+              initialModel: closingTab.data?.initialModel,
               closedAt: Date.now(),
             };
             return [entry, ...prevClosed].slice(0, MAX_CLOSED_TABS);
@@ -308,6 +310,7 @@ export function useChatTabs({ workspaceId, activeSessionId }: UseChatTabsOptions
         sessionId: closedTab.sessionId,
         agentHarness: closedTab.agentHarness,
         hasStarted: closedTab.label !== NEW_CHAT_LABEL,
+        initialModel: closedTab.initialModel,
       },
     };
 
@@ -330,20 +333,17 @@ export function useChatTabs({ workspaceId, activeSessionId }: UseChatTabsOptions
       const tab = prevTabs[tabIndex];
       if (tab.data?.agentHarness === nextAgentHarness) return prevTabs;
 
-      const hasStarted = Boolean(tab.data?.hasStarted);
-
-      let nextLabel = hasStarted ? tab.label : NEW_CHAT_LABEL;
-
-      if (hasStarted) {
-        const sequence = countStartedTabsOfHarness(prevTabs, nextAgentHarness, tabId) + 1;
-        nextLabel = buildStartedChatLabel(nextAgentHarness, sequence);
-      }
+      // Harness lock: once a session has messages, its harness is bound to a
+      // specific SDK process (enforced server-side in handleSendMessage).
+      // Ignore local harness changes on started tabs — otherwise the UI drifts
+      // from the persisted session and the next send will be rejected anyway.
+      if (tab.data?.hasStarted) return prevTabs;
 
       const updatedTabs = [...prevTabs];
       updatedTabs[tabIndex] = {
         ...tab,
-        label: nextLabel,
-        data: { ...tab.data, agentHarness: nextAgentHarness, hasStarted },
+        label: NEW_CHAT_LABEL,
+        data: { ...tab.data, agentHarness: nextAgentHarness, hasStarted: false },
       };
       return updatedTabs;
     });

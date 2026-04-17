@@ -19,7 +19,7 @@ import type { AgentHarness } from "../../protocol";
  * Each agent provides one of these — the only thing that varies between agents.
  */
 export interface DiscoveryConfig {
-  /** Agent type for error messages (e.g. "claude", "codex") */
+  /** Agent harness for error messages (e.g. "claude", "codex") */
   agentHarness: AgentHarness;
   /** Human-readable name for log messages (e.g. "Claude", "Codex") */
   displayName: string;
