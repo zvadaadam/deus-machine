@@ -7,14 +7,14 @@ import { api } from "../lib/api";
 export function Sidebar() {
   const events = useActivityStore((s) => s.events);
   const { refs, foreground, loading, refresh } = useRefsStore();
-  const streamInfo = useSimStore((s) => s.streamInfo);
+  const streamUdid = useSimStore((s) => s.streamInfo?.udid ?? null);
 
   // Take an initial snapshot once the stream is live.
   useEffect(() => {
-    if (streamInfo && refs.length === 0) {
+    if (streamUdid && refs.length === 0) {
       void useRefsStore.getState().refresh();
     }
-  }, [streamInfo, refs.length]);
+  }, [streamUdid, refs.length]);
 
   const onRefClick = async (ref: string) => {
     await api.tap({ ref });
