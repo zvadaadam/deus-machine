@@ -7,9 +7,9 @@ import {
   type AgentHandler,
 } from "../agents/registry";
 
-function createMockHandler(agentType: "claude" | "codex" = "claude"): AgentHandler {
+function createMockHandler(agentHarness: "claude" | "codex" = "claude"): AgentHandler {
   return {
-    agentType,
+    agentHarness,
     capabilities: {
       auth: false,
       workspaceInit: false,

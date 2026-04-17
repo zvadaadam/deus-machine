@@ -125,8 +125,7 @@ export interface ThinkingBlock {
 export interface Session {
   id: string;
   workspace_id: string;
-  agent_type: import("../enums").AgentType;
-  model: string;
+  agent_harness: import("../enums").AgentHarness;
   agent_session_id?: string | null;
   title?: string | null;
   status: SessionStatus;

@@ -67,7 +67,7 @@ function makeOpts(overrides: Partial<ProcessMessageOptions> = {}): ProcessMessag
   return {
     sessionId: "sess-1",
     generatorId: "sess-1/123",
-    model: "sonnet",
+    model: "claude-sonnet-4-6",
     isResume: false,
     ...overrides,
   };

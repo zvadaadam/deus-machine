@@ -206,7 +206,7 @@ function printEvent(method: string, params: any, agentLabel: string) {
   );
 
   // Strip envelope fields we already show in the header
-  const { type: _t, sessionId: _s, agentType: _a, ...payload } = params;
+  const { type: _t, sessionId: _s, agentHarness: _a, ...payload } = params;
 
   // Show the raw JSON payload with long strings truncated
   if (Object.keys(payload).length > 0) {
@@ -379,9 +379,9 @@ async function main() {
       const method = msg.method;
       const params = msg.params || {};
 
-      // Derive provider label from agentType in the event
-      const agentType = params.agentType || opts.agent;
-      const agentLabel = agentType === "codex" ? "CODEX" : "CLAUDE";
+      // Derive provider label from agentHarness in the event
+      const agentHarness = params.agentHarness || opts.agent;
+      const agentLabel = agentHarness === "codex" ? "CODEX" : "CLAUDE";
 
       printEvent(method, params, agentLabel);
 
@@ -424,7 +424,7 @@ async function main() {
 
     sendNotification(ws, "turn/start", {
       sessionId: opts.session,
-      agentType: opts.agent,
+      agentHarness: opts.agent,
       prompt,
       options: {
         cwd: opts.cwd,

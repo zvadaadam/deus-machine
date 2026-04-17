@@ -14,12 +14,12 @@ import { capabilities } from "@/platform/capabilities";
 import { cn } from "@/shared/lib/utils";
 import { getAgentLogo } from "@/assets/agents";
 import {
-  getRuntimeModelLabel,
-  getRuntimeModelOption,
-  RUNTIME_MODEL_OPTIONS,
+  getModelLabel,
+  getModelOption,
+  MODEL_OPTIONS,
   MODEL_PICKER_GROUPS,
-  type RuntimeAgentType,
-} from "@/features/session/lib/agentRuntime";
+  type AgentHarness,
+} from "@/shared/agents";
 import { useImageAttachments } from "@/features/session/hooks/useImageAttachments";
 import { PastedImageCard } from "@/features/session/ui/PastedImageCard";
 import { BranchSelector } from "@/features/workspace/ui/BranchSelector";
@@ -91,7 +91,7 @@ interface HomeViewProps {
 // ── Agent Logo Helper ───────────────────────────────────────────────
 // Render agent logo by type. Uses createElement to avoid React Compiler's
 // static-components rule (dynamic <Logo /> references are flagged).
-function AgentLogo({ type, className }: { type: RuntimeAgentType; className?: string }) {
+function AgentLogo({ type, className }: { type: AgentHarness; className?: string }) {
   const Logo = getAgentLogo(type);
   if (!Logo) {
     return <span className={cn("bg-muted-foreground/80 inline-flex rounded-full", className)} />;
@@ -251,8 +251,8 @@ export function HomeView({
     return () => document.removeEventListener("mousedown", handleClick);
   }, [isMobile, modelPickerOpen]);
 
-  const modelLabel = getRuntimeModelLabel(model);
-  const selectedModelOption = getRuntimeModelOption(model);
+  const modelLabel = getModelLabel(model);
+  const selectedModelOption = getModelOption(model);
 
   const handleSelectModel = useCallback((value: string) => {
     setModel(value);
@@ -751,7 +751,7 @@ export function HomeView({
                 onClick={() => setModelPickerOpen(!modelPickerOpen)}
                 className="text-text-muted hover:text-text-secondary flex items-center gap-1.5 rounded-lg px-2 py-1.5 text-xs transition-colors duration-150"
               >
-                <AgentLogo type={selectedModelOption?.agentType ?? "claude"} className="h-3 w-3" />
+                <AgentLogo type={selectedModelOption?.agentHarness ?? "claude"} className="h-3 w-3" />
                 <span className="font-medium">{modelLabel}</span>
                 <ChevronDown
                   className={cn(
@@ -778,7 +778,7 @@ export function HomeView({
                           <div className="text-text-muted/90 px-2 py-1.5 text-xs font-normal tracking-wide">
                             {agentConfig.groupLabel}
                           </div>
-                          {RUNTIME_MODEL_OPTIONS.filter((o) => o.group === agentConfig.id).map(
+                          {MODEL_OPTIONS.filter((o) => o.agentHarness === agentConfig.id).map(
                             (option) => {
                               const isSelected = selectedModelOption?.value === option.value;
                               return (
@@ -792,7 +792,7 @@ export function HomeView({
                                     isSelected ? "text-text-primary" : "text-text-secondary"
                                   )}
                                 >
-                                  <AgentLogo type={option.agentType} className="h-4 w-4" />
+                                  <AgentLogo type={option.agentHarness} className="h-4 w-4" />
                                   <span className="font-normal">{option.label}</span>
                                   {option.isNew && (
                                     <span className="border-accent-red-muted/60 bg-accent-red-muted/20 text-accent-red-muted text-2xs rounded-xs border px-1 py-px tracking-wide uppercase">
@@ -832,7 +832,7 @@ export function HomeView({
                           <div className="text-text-muted/90 text-2xs px-2 py-1 font-normal tracking-wide">
                             {agentConfig.groupLabel}
                           </div>
-                          {RUNTIME_MODEL_OPTIONS.filter((o) => o.group === agentConfig.id).map(
+                          {MODEL_OPTIONS.filter((o) => o.agentHarness === agentConfig.id).map(
                             (option) => {
                               const isSelected = selectedModelOption?.value === option.value;
                               return (
@@ -846,7 +846,7 @@ export function HomeView({
                                     isSelected ? "text-text-primary" : "text-text-secondary"
                                   )}
                                 >
-                                  <AgentLogo type={option.agentType} className="h-3.5 w-3.5" />
+                                  <AgentLogo type={option.agentHarness} className="h-3.5 w-3.5" />
                                   <span className="font-normal">{option.label}</span>
                                   {option.isNew && (
                                     <span className="border-accent-red-muted/60 bg-accent-red-muted/20 text-accent-red-muted text-2xs rounded-xs border px-1 py-px tracking-wide uppercase">

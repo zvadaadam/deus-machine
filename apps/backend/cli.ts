@@ -275,7 +275,7 @@ async function main() {
   );
   sqlRun(
     dbPath,
-    `INSERT INTO sessions (id, workspace_id, agent_type, status) VALUES ('${sessionId}', '${workspaceId}', '${opts.agent}', 'idle');`
+    `INSERT INTO sessions (id, workspace_id, agent_harness, status) VALUES ('${sessionId}', '${workspaceId}', '${opts.agent}', 'idle');`
   );
 
   // Insert user message
@@ -428,7 +428,7 @@ async function main() {
       method: "turn/start",
       params: {
         sessionId,
-        agentType: opts.agent,
+        agentHarness: opts.agent,
         prompt: opts.prompt,
         options: { cwd: opts.cwd, permissionMode: "default" },
       },

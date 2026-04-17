@@ -57,23 +57,10 @@ describe("writeUserMessage", () => {
     expect(mockRun).toHaveBeenNthCalledWith(2, expect.any(String), "sess-123");
   });
 
-  it("uses opus when no model is provided", () => {
-    writeUserMessage("sess-123", "hello world");
-
-    const insertArgs = mockRun.mock.calls[0];
-    expect(insertArgs).toEqual([
-      expect.any(String),
-      "sess-123",
-      "hello world",
-      expect.any(String),
-      "opus",
-    ]);
-  });
-
   it("returns an error when the session is missing", () => {
     mockGetSessionRaw.mockReturnValue(undefined);
 
-    const result = writeUserMessage("missing-session", "hello world");
+    const result = writeUserMessage("missing-session", "hello world", "claude-opus-4-7");
 
     expect(result).toEqual({ success: false, error: "Session not found" });
     expect(mockTransaction).not.toHaveBeenCalled();

@@ -65,7 +65,7 @@ describe("agent-persistence", () => {
     const event: MessageCancelledEvent = {
       type: "message.cancelled",
       sessionId: "sess-1",
-      agentType: "claude",
+      agentHarness: "claude",
     };
 
     it("inserts a cancelled message marker and sets session to idle", () => {
@@ -114,7 +114,7 @@ describe("agent-persistence", () => {
     const textEvent: PartDoneEvent = {
       type: "part.done",
       sessionId: "sess-1",
-      agentType: "claude",
+      agentHarness: "claude",
       messageId: "msg-1",
       partId: "p1",
       part: {
@@ -161,7 +161,7 @@ describe("agent-persistence", () => {
       const toolEvent: PartDoneEvent = {
         type: "part.done",
         sessionId: "sess-1",
-        agentType: "claude",
+        agentHarness: "claude",
         messageId: "msg-1",
         partId: "p2",
         part: {
@@ -199,7 +199,7 @@ describe("agent-persistence", () => {
       const nestedEvent: PartDoneEvent = {
         type: "part.done",
         sessionId: "sess-1",
-        agentType: "claude",
+        agentHarness: "claude",
         messageId: "msg-1",
         partId: "p3",
         part: {
@@ -246,7 +246,7 @@ describe("agent-persistence", () => {
     const event: MessageDoneEvent = {
       type: "message.done",
       sessionId: "sess-1",
-      agentType: "claude",
+      agentHarness: "claude",
       messageId: "msg-1",
       stopReason: "end_turn",
       parts: [],
@@ -274,7 +274,7 @@ describe("agent-persistence", () => {
       const noReasonEvent: MessageDoneEvent = {
         type: "message.done",
         sessionId: "sess-1",
-        agentType: "claude",
+        agentHarness: "claude",
         messageId: "msg-2",
         parts: [],
       };
@@ -306,7 +306,7 @@ describe("agent-persistence", () => {
     const event: SessionStartedEvent = {
       type: "session.started",
       sessionId: "sess-1",
-      agentType: "claude",
+      agentHarness: "claude",
     };
 
     it("updates session to working status (idempotent)", () => {
@@ -337,7 +337,7 @@ describe("agent-persistence", () => {
       const event: SessionIdleEvent = {
         type: "session.idle",
         sessionId: "sess-1",
-        agentType: "claude",
+        agentHarness: "claude",
       };
 
       const result = persistSessionIdle(event);
@@ -353,7 +353,7 @@ describe("agent-persistence", () => {
       const event: SessionErrorEvent = {
         type: "session.error",
         sessionId: "sess-1",
-        agentType: "claude",
+        agentHarness: "claude",
         error: "Rate limit exceeded",
         category: "rate_limit",
       };
@@ -371,7 +371,7 @@ describe("agent-persistence", () => {
       const event: SessionCancelledEvent = {
         type: "session.cancelled",
         sessionId: "sess-1",
-        agentType: "claude",
+        agentHarness: "claude",
       };
 
       const result = persistSessionCancelled(event);
@@ -424,7 +424,7 @@ describe("agent-persistence", () => {
     const event: SessionTitleEvent = {
       type: "session.title",
       sessionId: "sess-1",
-      agentType: "claude",
+      agentHarness: "claude",
       title: "Fix login page CSS",
     };
 

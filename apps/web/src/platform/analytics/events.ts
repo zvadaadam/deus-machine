@@ -12,7 +12,7 @@
  *            so nesting just adds indirection with zero analytical benefit.
  *            Optional fields use `?` — callers omit when context is unavailable.
  *
- *   Context: Session context (model, agent_type) lives on events where it's
+ *   Context: Session context (model, agent_harness) lives on events where it's
  *            analytically useful — message_sent, turn_completed, session_created.
  *            NOT on every event. PostHog person properties carry the "current"
  *            provider/theme/plan. Event properties carry per-action context.
@@ -73,23 +73,23 @@ export type AnalyticsEventMap = {
 
   // ── Session (AI Chat) ──────────────────────────────────────────────────
   session_created: WithWorkspace & {
-    agent_type?: string;
+    agent_harness?: string;
     model?: string;
   };
   session_message_sent: WithSession & {
     has_images: boolean;
     model?: string;
-    agent_type?: string;
+    agent_harness?: string;
     /** How many messages existed in this session before this one. */
     message_count?: number;
     /** 0–100: how full the context window is. Signals "about to compact". */
     context_used_percent?: number;
   };
-  session_stopped: WithSession & { agent_type?: string };
+  session_stopped: WithSession & { agent_harness?: string };
   /** Agent finished a turn (working → idle transition).
    *  Detected via session status change in useGlobalSessionNotifications. */
   ai_turn_completed: WithSession & {
-    agent_type?: string;
+    agent_harness?: string;
     model?: string;
     context_used_percent?: number;
   };

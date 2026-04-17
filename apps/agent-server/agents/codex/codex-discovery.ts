@@ -32,7 +32,7 @@ export function getCodexExecutablePath(): string {
 export function initializeCodex(): { success: boolean; error?: string } {
   return discoverExecutable(
     {
-      agentType: "codex",
+      agentHarness: "codex",
       displayName: "Codex",
       envVar: "CODEX_CLI_PATH",
       staticCandidates: ["/opt/homebrew/lib/node_modules/@openai/codex/bin/codex.js"],

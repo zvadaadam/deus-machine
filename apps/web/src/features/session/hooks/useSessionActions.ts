@@ -16,16 +16,17 @@ import { toast } from "sonner";
 import { useSendMessage, useStopSession } from "../api/session.queries";
 import { sendCommand, connect, isConnected } from "@/platform/ws";
 import { track } from "@/platform/analytics";
-import { type RuntimeAgentType } from "../lib/agentRuntime";
+import { type AgentHarness, type ThinkingLevel } from "@/shared/agents";
 import { COMPACT_CONVERSATION, createPRPrompt } from "../lib/sessionPrompts";
 
 interface UseSessionActionsProps {
   sessionId: string;
   workspaceId?: string;
   messageInput: string;
-  model?: string;
-  agentType?: RuntimeAgentType;
+  model: string;
+  agentHarness: AgentHarness;
   permissionMode?: string;
+  thinkingLevel?: ThinkingLevel;
   onMessageSent?: () => void;
   targetBranch?: string;
 }
@@ -46,8 +47,9 @@ export function useSessionActions({
   workspaceId,
   messageInput,
   model,
-  agentType = "claude",
+  agentHarness,
   permissionMode,
+  thinkingLevel,
   onMessageSent,
   targetBranch = "main",
 }: UseSessionActionsProps): UseSessionActionsReturn {
@@ -62,12 +64,15 @@ export function useSessionActions({
       try {
         // Single atomic call: agent-server saves message + starts agent.
         // Optimistic UI fires in onMutate, rollback fires in onError.
+        // thinkingLevel is sent as a string — agent-server translates it to
+        // SDK options (maxThinkingTokens today, `effort` when SDK supports it).
         await sendMessageMutation.mutateAsync({
           sessionId,
           content,
           model,
-          agentType,
+          agentHarness,
           permissionMode,
+          thinkingLevel,
         });
       } catch (error) {
         console.error("Failed to send message:", error);
@@ -84,7 +89,16 @@ export function useSessionActions({
         console.error("[useSessionActions] onMessageSent callback failed:", callbackError);
       }
     },
-    [messageInput, model, sendMessageMutation, sessionId, agentType, permissionMode, onMessageSent]
+    [
+      messageInput,
+      model,
+      sendMessageMutation,
+      sessionId,
+      agentHarness,
+      permissionMode,
+      thinkingLevel,
+      onMessageSent,
+    ]
   );
 
   const stopSession = useCallback(async () => {
@@ -101,7 +115,7 @@ export function useSessionActions({
     } catch (error) {
       console.error("Failed to stop session:", error);
     }
-  }, [stopSessionMutation, sessionId, agentType]);
+  }, [stopSessionMutation, sessionId, agentHarness]);
 
   const compactConversation = useCallback(() => {
     return sendMessage(COMPACT_CONVERSATION);

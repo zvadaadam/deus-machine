@@ -43,8 +43,8 @@ app.get("/settings/agent-auth", async (c) => {
 
   const cwd = process.cwd();
   const [claudeResult, codexResult] = await Promise.allSettled([
-    claudeInstalled ? checkAuth({ agentType: "claude", cwd }) : Promise.resolve(null),
-    codexInstalled ? checkAuth({ agentType: "codex", cwd }) : Promise.resolve(null),
+    claudeInstalled ? checkAuth({ agentHarness: "claude", cwd }) : Promise.resolve(null),
+    codexInstalled ? checkAuth({ agentHarness: "codex", cwd }) : Promise.resolve(null),
   ]);
 
   return c.json({

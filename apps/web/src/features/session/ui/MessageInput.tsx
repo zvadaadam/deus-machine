@@ -20,11 +20,12 @@ import { PastedImageCard } from "./PastedImageCard";
 import { InspectedElementCard, type InspectedElement } from "./InspectedElementCard";
 import { serializeInspectElement } from "../lib/parseInspectTags";
 import {
-  getRuntimeModelOption,
+  getModelOption,
   cycleThinkingLevel,
-  type RuntimeAgentType,
+  getThinkingLevelsForModel,
+  type AgentHarness,
   type ThinkingLevel,
-} from "../lib/agentRuntime";
+} from "@/shared/agents";
 import { ThinkingIndicator } from "./ThinkingIndicator";
 import { ModelPicker } from "./ModelPicker";
 import { PlanModeToggle } from "./PlanModeToggle";
@@ -86,7 +87,7 @@ export const MessageInput = forwardRef<MessageInputRef, MessageInputProps>(funct
     messageInput,
     sending,
     sessionStatus,
-    model = "opus",
+    model = "claude:claude-opus-4-7",
     thinkingLevel = "NONE",
     showCompactButton = false,
     contextTokenCount = 0,
@@ -267,11 +268,14 @@ export const MessageInput = forwardRef<MessageInputRef, MessageInputProps>(funct
   };
 
   // Thinking cycle — derive agent type from selected model
-  const selectedOption = getRuntimeModelOption(model);
-  const agentType: RuntimeAgentType = selectedOption?.agentType ?? "claude";
+  const selectedOption = getModelOption(model);
+  const agentHarness: AgentHarness = selectedOption?.agentHarness ?? "claude";
+  const modelId = selectedOption?.model ?? model;
+  const modelThinkingLevels = getThinkingLevelsForModel(agentHarness, modelId);
+  const showThinkingIndicator = modelThinkingLevels.length > 0;
 
   const handleCycleThinking = () => {
-    const next = cycleThinkingLevel(thinkingLevel as ThinkingLevel, agentType);
+    const next = cycleThinkingLevel(thinkingLevel as ThinkingLevel, agentHarness, modelId);
     onThinkingLevelChange?.(next);
   };
 
@@ -404,11 +408,14 @@ export const MessageInput = forwardRef<MessageInputRef, MessageInputProps>(funct
               onOpenNewTab={onOpenNewTab}
             />
 
-            {/* Thinking effort — text label cycles through agent-specific levels */}
-            <ThinkingIndicator
-              level={thinkingLevel as ThinkingLevel}
-              onClick={handleCycleThinking}
-            />
+            {/* Thinking effort — text label cycles through model-specific levels.
+                Hidden for models that don't support thinking (e.g. Haiku). */}
+            {showThinkingIndicator && (
+              <ThinkingIndicator
+                level={thinkingLevel as ThinkingLevel}
+                onClick={handleCycleThinking}
+              />
+            )}
           </div>
 
           {/* Actions group (right) */}

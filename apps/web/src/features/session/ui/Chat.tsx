@@ -103,7 +103,7 @@ interface ChatProps {
   errorMessage?: string | null;
   /** Structured error category from classifyError (e.g. "auth", "rate_limit") */
   errorCategory?: string;
-  agentType?: string | null;
+  agentHarness?: string | null;
   latestMessageSentAt?: string | null;
   onStop?: () => void; // Callback to stop/cancel the session
   onOpenLoginTerminal?: () => void;
@@ -128,7 +128,7 @@ export function Chat({
   sessionStatus,
   errorMessage,
   errorCategory,
-  agentType,
+  agentHarness,
   latestMessageSentAt,
   onOpenLoginTerminal,
   onRetryInNewChat,
@@ -521,8 +521,8 @@ export function Chat({
                             .with("db_write", () => "Database Error")
                             .with("process_exit", () => "Process Crashed")
                             .otherwise(() =>
-                              agentType
-                                ? `${agentType.charAt(0).toUpperCase() + agentType.slice(1)} Error`
+                              agentHarness
+                                ? `${agentHarness.charAt(0).toUpperCase() + agentHarness.slice(1)} Error`
                                 : "Error"
                             )}
                         </p>

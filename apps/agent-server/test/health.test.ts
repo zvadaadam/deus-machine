@@ -4,22 +4,22 @@ import { WebSocketServer } from "ws";
 
 // ── Mocks ──────────────────────────────────────────────────────────────────
 
-const mockGetRegisteredAgentTypes = vi.fn((): string[] => ["claude", "codex"]);
+const mockGetRegisteredAgentHarnesses = vi.fn((): string[] => ["claude", "codex"]);
 const mockEmitSessionCancelled = vi.fn();
 const mockEmitMessageCancelled = vi.fn();
 const mockGetAgent = vi.fn(() => undefined);
 
 vi.mock("../agents/registry", () => ({
-  getRegisteredAgentTypes: () => mockGetRegisteredAgentTypes(),
+  getRegisteredAgentHarnesses: () => mockGetRegisteredAgentHarnesses(),
   getAgent: (...args: unknown[]) => mockGetAgent(args[0]),
 }));
 
 vi.mock("../event-broadcaster", () => ({
   EventBroadcaster: {
-    emitSessionCancelled: (sessionId: string, agentType: string) =>
-      mockEmitSessionCancelled(sessionId, agentType),
-    emitMessageCancelled: (sessionId: string, agentType: string) =>
-      mockEmitMessageCancelled(sessionId, agentType),
+    emitSessionCancelled: (sessionId: string, agentHarness: string) =>
+      mockEmitSessionCancelled(sessionId, agentHarness),
+    emitMessageCancelled: (sessionId: string, agentHarness: string) =>
+      mockEmitMessageCancelled(sessionId, agentHarness),
   },
 }));
 
@@ -102,13 +102,13 @@ describe("health module", () => {
     });
 
     it("uses agent types from the registry", () => {
-      mockGetRegisteredAgentTypes.mockReturnValueOnce(["claude"]);
+      mockGetRegisteredAgentHarnesses.mockReturnValueOnce(["claude"]);
       const response = buildHealthResponse(null);
       expect(response.agents).toEqual(["claude"]);
     });
 
     it("returns empty agents array when none registered", () => {
-      mockGetRegisteredAgentTypes.mockReturnValueOnce([]);
+      mockGetRegisteredAgentHarnesses.mockReturnValueOnce([]);
       const response = buildHealthResponse(null);
       expect(response.agents).toEqual([]);
     });
