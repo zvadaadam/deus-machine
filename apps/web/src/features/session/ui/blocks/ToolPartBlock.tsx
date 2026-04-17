@@ -45,7 +45,7 @@ function toToolUseBlock(part: ToolPart): ToolUseBlock {
 
 function getCompletedToolResultContent(
   state: CompletedToolState
-): string | Record<string, unknown> {
+): string | Record<string, unknown> | unknown[] {
   if (state.content && state.content.length > 0) {
     const textParts = state.content
       .filter((content): content is TextContent => content.type === "text")
@@ -54,7 +54,11 @@ function getCompletedToolResultContent(
   }
 
   if (state.output != null) {
-    return typeof state.output === "string" ? state.output : JSON.stringify(state.output, null, 2);
+    // Pass arrays through so image blocks reach renderers (e.g. simulator
+    // screenshots). Stringifying here would flatten them to plain text.
+    if (typeof state.output === "string") return state.output;
+    if (Array.isArray(state.output)) return state.output;
+    return JSON.stringify(state.output, null, 2);
   }
 
   return "";

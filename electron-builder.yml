@@ -20,8 +20,8 @@ extraResources:
       - "**/*"
   - from: "dist/runtime/electron/bin/index.bundled.cjs"
     to: "bin/index.bundled.cjs"
-  - from: "node_modules/agent-simulator/native/.build/release/sim-helper"
-    to: "simulator/sim-helper"
+  - from: "packages/device-use/bin/simbridge"
+    to: "simulator/simbridge"
 mac:
   category: public.app-category.developer-tools
   target:

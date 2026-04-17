@@ -1,0 +1,13 @@
+node_modules/
+dist/
+bin/
+.context/
+native/.build/
+native/.swiftpm/
+test-apps/*/build/
+test-apps/*/DerivedData/
+test-apps/*/.build/
+*.log
+.DS_Store
+.env
+.env.local
