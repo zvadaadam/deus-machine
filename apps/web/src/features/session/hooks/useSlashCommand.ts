@@ -26,6 +26,13 @@ interface UseSlashCommandOptions {
   onChange: (newValue: string) => void;
   /** Disable the hook entirely (e.g. for Codex which doesn't support skills) */
   enabled?: boolean;
+  /**
+   * When provided, selecting a skill adds a structured mention via this callback
+   * instead of inserting `/name ` text inline. The `/query` the user typed is
+   * removed. Commands still use the legacy text-insertion path since they're
+   * typically one-off actions (e.g. /clear).
+   */
+  onAddSkill?: (skill: SlashCommandItem) => void;
 }
 
 interface UseSlashCommandReturn {
@@ -63,6 +70,7 @@ export function useSlashCommand({
   workspacePath,
   onChange,
   enabled = true,
+  onAddSkill,
 }: UseSlashCommandOptions): UseSlashCommandReturn {
   const [isOpen, setIsOpen] = useState(false);
   const [selectedIndex, setSelectedIndex] = useState(0);
@@ -174,14 +182,22 @@ export function useSlashCommand({
     setSelectedIndex(0);
   }, [results.length]);
 
-  // Select an item: replace /query with /name
+  // Select an item: for skills with pill mode, surface as a chip above input;
+  // for commands (or skills without pill mode), insert `/name ` text inline.
   const selectItem = useCallback(
     (name: string) => {
-      const newValue = `/${name} `;
-      onChange(newValue);
+      const item = allItems.find((i) => i.name === name);
+      if (onAddSkill && item?.kind === "skill") {
+        onAddSkill(item);
+        // Remove the typed `/query` — the whole textarea starts with `/` and
+        // contains no spaces when the trigger is active, so clearing is safe.
+        onChange("");
+      } else {
+        onChange(`/${name} `);
+      }
       setIsOpen(false);
     },
-    [onChange]
+    [onChange, onAddSkill, allItems]
   );
 
   // Dismiss the popover
