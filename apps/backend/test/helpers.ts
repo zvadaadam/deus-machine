@@ -37,7 +37,7 @@ export function createMockSession(overrides: Record<string, any> = {}) {
   return {
     id: "sess-test-001",
     status: "idle",
-    model: "sonnet",
+    agent_harness: "claude",
     message_count: 0,
     context_token_count: 0,
     context_used_percent: 0,

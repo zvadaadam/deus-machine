@@ -32,7 +32,7 @@ export function getClaudeExecutablePath(): string {
 export function initializeClaude(): { success: boolean; error?: string } {
   return discoverExecutable(
     {
-      agentType: "claude",
+      agentHarness: "claude",
       displayName: "Claude",
       envVar: "CLAUDE_CLI_PATH",
       staticCandidates: [

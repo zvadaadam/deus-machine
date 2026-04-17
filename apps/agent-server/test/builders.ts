@@ -13,7 +13,7 @@ export function buildMessageResponse(overrides?: Record<string, any>) {
   return {
     id: `sess_${randomUUID().slice(0, 8)}`,
     type: "message" as const,
-    agentType: "claude" as const,
+    agentHarness: "claude" as const,
     data: {
       type: "assistant",
       message: {
@@ -30,7 +30,7 @@ export function buildErrorResponse(overrides?: Record<string, any>) {
     id: `sess_${randomUUID().slice(0, 8)}`,
     type: "error" as const,
     error: "Test error",
-    agentType: "claude" as const,
+    agentHarness: "claude" as const,
     ...overrides,
   };
 }
@@ -39,7 +39,7 @@ export function buildEnterPlanModeNotification(overrides?: Record<string, any>) 
   return {
     type: "enter_plan_mode_notification" as const,
     id: `sess_${randomUUID().slice(0, 8)}`,
-    agentType: "claude" as const,
+    agentHarness: "claude" as const,
     ...overrides,
   };
 }

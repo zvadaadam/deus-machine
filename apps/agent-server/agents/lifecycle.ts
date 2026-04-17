@@ -4,7 +4,7 @@
 // query-completion.ts into a single module.
 
 import { EventBroadcaster } from "../event-broadcaster";
-import type { AgentType, ErrorCategory } from "../protocol";
+import type { AgentHarness, ErrorCategory } from "../protocol";
 
 // ============================================================================
 // Error Classification
@@ -173,9 +173,9 @@ export function classifyStopReason(stopReason: string | undefined): ClassifiedEr
  * - codex-handler.ts post-loop abort path
  * - codex-handler.ts catch abort path
  */
-export function persistCancellation(sessionId: string, agentType: AgentType): void {
-  EventBroadcaster.emitSessionCancelled(sessionId, agentType);
-  EventBroadcaster.emitMessageCancelled(sessionId, agentType);
+export function persistCancellation(sessionId: string, agentHarness: AgentHarness): void {
+  EventBroadcaster.emitSessionCancelled(sessionId, agentHarness);
+  EventBroadcaster.emitMessageCancelled(sessionId, agentHarness);
 }
 
 // ============================================================================
@@ -193,7 +193,7 @@ export function persistCancellation(sessionId: string, agentType: AgentType): vo
  */
 export function notifyAndRecordError(
   sessionId: string,
-  agentType: AgentType,
+  agentHarness: AgentHarness,
   classified: ClassifiedError,
   enrichMessage?: (classified: ClassifiedError) => string
 ): void {
@@ -201,7 +201,7 @@ export function notifyAndRecordError(
 
   EventBroadcaster.emitSessionError(
     sessionId,
-    agentType,
+    agentHarness,
     errorMessage,
     classified.category as ErrorCategory
   );
@@ -219,17 +219,17 @@ export function notifyAndRecordError(
  *
  * Replaces the duplicated pattern:
  *   if (session.cancelledByUser) {
- *     persistCancellation(sessionId, agentType);
+ *     persistCancellation(sessionId, agentHarness);
  *     return;
  *   }
  */
 export function handleCancellation(
   sessionId: string,
-  agentType: AgentType,
+  agentHarness: AgentHarness,
   wasCancelled: boolean
 ): boolean {
   if (!wasCancelled) return false;
-  persistCancellation(sessionId, agentType);
+  persistCancellation(sessionId, agentHarness);
   return true; // signals early exit
 }
 
@@ -241,14 +241,14 @@ export function handleCancellation(
  *
  * Replaces the duplicated pattern:
  *   const classified = classifyError(error);
- *   notifyAndRecordError(sessionId, agentType, classified, enrichFn);
+ *   notifyAndRecordError(sessionId, agentHarness, classified, enrichFn);
  */
 export function handleQueryError(
   sessionId: string,
-  agentType: AgentType,
+  agentHarness: AgentHarness,
   error: unknown,
   enrichMessage?: (classified: ClassifiedError) => string
 ): void {
   const classified = classifyError(error);
-  notifyAndRecordError(sessionId, agentType, classified, enrichMessage);
+  notifyAndRecordError(sessionId, agentHarness, classified, enrichMessage);
 }

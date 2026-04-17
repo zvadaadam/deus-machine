@@ -83,7 +83,6 @@ export interface WorkspaceWithDetailsRow {
 
   // From sessions JOIN (null when no active session)
   session_status: string | null;
-  model: string | null;
   session_error_category: string | null;
   session_error_message: string | null;
   latest_message_sent_at: string | null;
@@ -94,8 +93,7 @@ export interface WorkspaceWithDetailsRow {
 export interface SessionRow {
   id: string;
   workspace_id: string;
-  agent_type: string;
-  model: string;
+  agent_harness: string;
   agent_session_id: string | null;
   title: string | null;
   status: string;

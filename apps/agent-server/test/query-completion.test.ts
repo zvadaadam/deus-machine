@@ -19,19 +19,19 @@ vi.mock("../agents/lifecycle", () => ({
   persistCancellation: mockPersistCancellation,
   notifyAndRecordError: mockNotifyAndRecordError,
   classifyError: mockClassifyError,
-  handleCancellation: (sessionId: string, agentType: string, wasCancelled: boolean) => {
+  handleCancellation: (sessionId: string, agentHarness: string, wasCancelled: boolean) => {
     if (!wasCancelled) return false;
-    mockPersistCancellation(sessionId, agentType);
+    mockPersistCancellation(sessionId, agentHarness);
     return true;
   },
   handleQueryError: (
     sessionId: string,
-    agentType: string,
+    agentHarness: string,
     error: unknown,
     enrichMessage?: (classified: { message: string }) => string
   ) => {
     const classified = mockClassifyError(error);
-    mockNotifyAndRecordError(sessionId, agentType, classified, enrichMessage);
+    mockNotifyAndRecordError(sessionId, agentHarness, classified, enrichMessage);
   },
 }));
 
@@ -67,7 +67,7 @@ describe("query-completion", () => {
       expect(mockPersistCancellation).toHaveBeenCalledWith("sess-1", "claude");
     });
 
-    it("passes correct agentType for codex", () => {
+    it("passes correct agentHarness for codex", () => {
       handleCancellation("sess-2", "codex", true);
       expect(mockPersistCancellation).toHaveBeenCalledWith("sess-2", "codex");
     });

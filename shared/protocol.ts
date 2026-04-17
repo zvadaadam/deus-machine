@@ -9,7 +9,7 @@
 
 import { z } from "zod";
 
-import { AgentTypeSchema } from "./enums";
+import { AgentHarnessSchema } from "./enums";
 
 // ============================================================================
 // Shared Field Schemas
@@ -29,11 +29,20 @@ export type PermissionMode = z.infer<typeof PermissionModeSchema>;
 // Query Options & Request (used by agent handler interface)
 // ============================================================================
 
+/**
+ * User intent for how hard the model should think.
+ * Agent-server translates this into SDK-specific options (maxThinkingTokens
+ * today, `effort` once the SDK typedef catches up to Opus 4.7's xhigh).
+ * Keeps the wire protocol stable across SDK version changes.
+ */
+export const ThinkingLevelSchema = z.enum(["NONE", "LOW", "MEDIUM", "HIGH", "XHIGH"]);
+export type ThinkingLevel = z.infer<typeof ThinkingLevelSchema>;
+
 /** Options passed alongside a query/turn request. */
 export const QueryOptionsSchema = z.object({
   cwd: z.string().min(1),
   model: z.string().min(1).optional(),
-  maxThinkingTokens: z.number().int().positive().optional(),
+  thinkingLevel: ThinkingLevelSchema.optional(),
   maxTurns: z.number().int().positive().optional(),
   turnId: z.string().min(1).optional(),
   permissionMode: PermissionModeSchema.optional(),
@@ -52,7 +61,7 @@ export type QueryOptions = z.infer<typeof QueryOptionsSchema>;
 export const QueryRequestSchema = z.object({
   type: z.literal("query"),
   id: z.string().min(1),
-  agentType: AgentTypeSchema,
+  agentHarness: AgentHarnessSchema,
   prompt: z.string().min(1),
   options: QueryOptionsSchema,
 });

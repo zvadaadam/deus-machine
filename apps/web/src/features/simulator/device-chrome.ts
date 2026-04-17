@@ -34,17 +34,44 @@ export interface DeviceChromeSpec {
 
 let manifestPromise: Promise<Record<string, DeviceChromeSpec>> | null = null;
 let manifestCache: Record<string, DeviceChromeSpec> | null = null;
+let warnedMissingManifest = false;
+const warnedUnsupportedDevices = new Set<string>();
+
+function warnMissingManifest(): void {
+  if (!import.meta.env.DEV || warnedMissingManifest) return;
+  warnedMissingManifest = true;
+  console.warn(
+    "[DeviceChrome] device-chrome manifest missing. Run `bun run prepare:device-chrome` on a macOS machine with Xcode installed to enable native simulator bezels. Falling back to the generic device shell."
+  );
+}
+
+function warnUnsupportedDevice(deviceType: string): void {
+  if (!import.meta.env.DEV || warnedUnsupportedDevices.has(deviceType)) return;
+  warnedUnsupportedDevices.add(deviceType);
+  console.warn(
+    `[DeviceChrome] No generated bezel found for "${deviceType}". Falling back to the generic device shell.`
+  );
+}
 
 async function loadManifest(): Promise<Record<string, DeviceChromeSpec>> {
   if (manifestCache) return manifestCache;
 
   try {
     const res = await fetch("/device-chrome/manifest.json");
-    if (!res.ok) return {};
-    manifestCache = await res.json();
-    return manifestCache!;
+    if (!res.ok) {
+      manifestCache = {};
+      warnMissingManifest();
+      return manifestCache ?? {};
+    }
+    const parsed = (await res.json()) as Record<string, DeviceChromeSpec> | null;
+    manifestCache = parsed ?? {};
+    if (Object.keys(manifestCache).length === 0) {
+      warnMissingManifest();
+    }
+    return manifestCache;
   } catch {
     manifestCache = {};
+    warnMissingManifest();
     return manifestCache;
   }
 }
@@ -60,6 +87,11 @@ function getManifest(): Promise<Record<string, DeviceChromeSpec>> {
 // Public API
 // ---------------------------------------------------------------------------
 
+/** Returns true once the generated manifest has loaded and contains entries. */
+export function hasDeviceChromeManifest(): boolean {
+  return !!manifestCache && Object.keys(manifestCache).length > 0;
+}
+
 /**
  * Resolve a device_type string to its chrome spec.
  * Returns null if the manifest hasn't loaded yet or the device is unknown.
@@ -68,7 +100,11 @@ export function resolveDeviceChrome(
   deviceType: string | null | undefined
 ): DeviceChromeSpec | null {
   if (!deviceType || !manifestCache) return null;
-  return manifestCache[deviceType] ?? null;
+  const spec = manifestCache[deviceType] ?? null;
+  if (!spec && hasDeviceChromeManifest()) {
+    warnUnsupportedDevice(deviceType);
+  }
+  return spec;
 }
 
 /**

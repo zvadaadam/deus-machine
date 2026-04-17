@@ -8,7 +8,7 @@ import type { RpcConnection } from "./rpc-connection";
 import { FRONTEND_NOTIFICATIONS, FRONTEND_RPC_METHODS } from "./protocol";
 import { AGENT_EVENT_NAMES } from "@shared/agent-events";
 import type { AgentEvent, InteractionRequestType } from "@shared/agent-events";
-import type { AgentType, ErrorCategory } from "@shared/enums";
+import type { AgentHarness, ErrorCategory } from "@shared/enums";
 import type { FinishReason, Part, TokenUsage } from "@shared/messages";
 import type { PartEvent } from "./messages/adapter";
 import type {
@@ -103,59 +103,59 @@ class EventBroadcasterClass {
 
   // --- Session lifecycle ---
 
-  emitSessionStarted(sessionId: string, agentType: AgentType): void {
+  emitSessionStarted(sessionId: string, agentHarness: AgentHarness): void {
     this.emitEvent({
       type: AGENT_EVENT_NAMES.SESSION_STARTED,
       sessionId,
-      agentType,
+      agentHarness,
     });
   }
 
-  emitSessionIdle(sessionId: string, agentType: AgentType): void {
+  emitSessionIdle(sessionId: string, agentHarness: AgentHarness): void {
     this.emitEvent({
       type: AGENT_EVENT_NAMES.SESSION_IDLE,
       sessionId,
-      agentType,
+      agentHarness,
     });
   }
 
   emitSessionError(
     sessionId: string,
-    agentType: AgentType,
+    agentHarness: AgentHarness,
     error: string,
     category: ErrorCategory
   ): void {
     this.emitEvent({
       type: AGENT_EVENT_NAMES.SESSION_ERROR,
       sessionId,
-      agentType,
+      agentHarness,
       error,
       category,
     });
   }
 
-  emitSessionCancelled(sessionId: string, agentType: AgentType): void {
+  emitSessionCancelled(sessionId: string, agentHarness: AgentHarness): void {
     this.emitEvent({
       type: AGENT_EVENT_NAMES.SESSION_CANCELLED,
       sessionId,
-      agentType,
+      agentHarness,
     });
   }
 
   // --- Messages ---
 
-  emitSystemMessage(sessionId: string, agentType: AgentType, data: unknown): void {
+  emitSystemMessage(sessionId: string, agentHarness: AgentHarness, data: unknown): void {
     this.emitEvent({
       type: AGENT_EVENT_NAMES.MESSAGE_SYSTEM,
       sessionId,
-      agentType,
+      agentHarness,
       data,
     });
   }
 
   emitAssistantMessage(
     sessionId: string,
-    agentType: AgentType,
+    agentHarness: AgentHarness,
     message: {
       id: string;
       role: "assistant";
@@ -168,7 +168,7 @@ class EventBroadcasterClass {
     this.emitEvent({
       type: AGENT_EVENT_NAMES.MESSAGE_ASSISTANT,
       sessionId,
-      agentType,
+      agentHarness,
       message,
       ...(model ? { model } : {}),
     });
@@ -176,14 +176,14 @@ class EventBroadcasterClass {
 
   emitToolResultMessage(
     sessionId: string,
-    agentType: AgentType,
+    agentHarness: AgentHarness,
     message: { id: string; role: "user"; content: unknown; parent_tool_use_id?: string | null },
     model?: string
   ): void {
     this.emitEvent({
       type: AGENT_EVENT_NAMES.MESSAGE_TOOL_RESULT,
       sessionId,
-      agentType,
+      agentHarness,
       message,
       ...(model ? { model } : {}),
     });
@@ -191,24 +191,24 @@ class EventBroadcasterClass {
 
   emitMessageResult(
     sessionId: string,
-    agentType: AgentType,
+    agentHarness: AgentHarness,
     subtype: string,
     usage?: unknown
   ): void {
     this.emitEvent({
       type: AGENT_EVENT_NAMES.MESSAGE_RESULT,
       sessionId,
-      agentType,
+      agentHarness,
       subtype,
       ...(usage !== undefined ? { usage } : {}),
     });
   }
 
-  emitMessageCancelled(sessionId: string, agentType: AgentType): void {
+  emitMessageCancelled(sessionId: string, agentHarness: AgentHarness): void {
     this.emitEvent({
       type: AGENT_EVENT_NAMES.MESSAGE_CANCELLED,
       sessionId,
-      agentType,
+      agentHarness,
     });
   }
 
@@ -217,7 +217,7 @@ class EventBroadcasterClass {
   /** Dispatch a single PartEvent from an adapter. */
   emitPartEvent(
     sessionId: string,
-    agentType: AgentType,
+    agentHarness: AgentHarness,
     messageId: string,
     event: PartEvent
   ): void {
@@ -226,7 +226,7 @@ class EventBroadcasterClass {
         this.emitEvent({
           type: AGENT_EVENT_NAMES.TURN_STARTED,
           sessionId,
-          agentType,
+          agentHarness,
           messageId,
           turnId: event.turnId,
         });
@@ -235,7 +235,7 @@ class EventBroadcasterClass {
         this.emitEvent({
           type: AGENT_EVENT_NAMES.MESSAGE_CREATED,
           sessionId,
-          agentType,
+          agentHarness,
           messageId: event.messageId,
           role: event.role,
           ...(event.parentToolCallId ? { parentToolCallId: event.parentToolCallId } : {}),
@@ -245,7 +245,7 @@ class EventBroadcasterClass {
         this.emitEvent({
           type: AGENT_EVENT_NAMES.PART_CREATED,
           sessionId,
-          agentType,
+          agentHarness,
           messageId: event.part.messageId,
           partId: event.part.id,
           part: event.part,
@@ -255,7 +255,7 @@ class EventBroadcasterClass {
         this.emitEvent({
           type: AGENT_EVENT_NAMES.PART_DELTA,
           sessionId,
-          agentType,
+          agentHarness,
           partId: event.partId,
           delta: event.delta,
         });
@@ -264,7 +264,7 @@ class EventBroadcasterClass {
         this.emitEvent({
           type: AGENT_EVENT_NAMES.PART_DONE,
           sessionId,
-          agentType,
+          agentHarness,
           messageId: event.part.messageId,
           partId: event.part.id,
           part: event.part,
@@ -274,7 +274,7 @@ class EventBroadcasterClass {
         this.emitEvent({
           type: AGENT_EVENT_NAMES.MESSAGE_DONE,
           sessionId,
-          agentType,
+          agentHarness,
           messageId: event.messageId,
           ...(event.stopReason ? { stopReason: event.stopReason } : {}),
           parts: event.parts,
@@ -285,7 +285,7 @@ class EventBroadcasterClass {
         this.emitEvent({
           type: AGENT_EVENT_NAMES.TURN_COMPLETED,
           sessionId,
-          agentType,
+          agentHarness,
           messageId,
           turnId: event.turnId,
           ...(event.finishReason ? { finishReason: event.finishReason } : {}),
@@ -301,7 +301,7 @@ class EventBroadcasterClass {
   emitRequestOpened(
     requestId: string,
     sessionId: string,
-    agentType: AgentType,
+    agentHarness: AgentHarness,
     requestType: InteractionRequestType,
     data: unknown
   ): void {
@@ -309,7 +309,7 @@ class EventBroadcasterClass {
       type: AGENT_EVENT_NAMES.REQUEST_OPENED,
       requestId,
       sessionId,
-      agentType,
+      agentHarness,
       requestType,
       data,
     });
@@ -336,11 +336,11 @@ class EventBroadcasterClass {
 
   // --- Metadata ---
 
-  emitSessionTitle(sessionId: string, agentType: AgentType, title: string): void {
+  emitSessionTitle(sessionId: string, agentHarness: AgentHarness, title: string): void {
     this.emitEvent({
       type: AGENT_EVENT_NAMES.SESSION_TITLE,
       sessionId,
-      agentType,
+      agentHarness,
       title,
     });
   }

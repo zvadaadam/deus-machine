@@ -1,19 +1,21 @@
 /**
  * ThinkingIndicator — text label that cycles thinking effort on click.
  *
- * No icon, no pips — just the word. Click cycles through levels:
- *   Claude: Low → High → Low  (2 states, binary extended thinking)
- *   Codex:  Low → Medium → High → Low  (3 states, graduated reasoning)
+ * No icon, no pips — just the word. Click cycles through model-specific levels:
+ *   Claude (default):  Low → Med → High → Low
+ *   Opus 4.7:          Low → Med → High → X-High → Low
+ *   Codex:             Low → Med → High → Low
  *
- * Thinking level cycle is defined in agentRuntime's AgentConfig — the
- * component itself is agent-agnostic. Visual weight increases with level
- * via font-weight + opacity, so the word communicates intensity at a glance.
+ * Thinking level cycle is defined per-model in shared/agents/catalog. The
+ * component itself is agent-agnostic. Visual weight increases with level via
+ * font-weight + opacity, so the word communicates intensity at a glance.
+ * X-High gets a tinted gold pill to signal the top gear.
  */
 
 import { motion, AnimatePresence } from "framer-motion";
 import { cn } from "@/shared/lib/utils";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
-import type { ThinkingLevel } from "../lib/agentRuntime";
+import type { ThinkingLevel } from "@/shared/agents";
 
 /** Display label for each level */
 const LEVEL_DISPLAY: Record<ThinkingLevel, string> = {
@@ -21,14 +23,16 @@ const LEVEL_DISPLAY: Record<ThinkingLevel, string> = {
   LOW: "Low",
   MEDIUM: "Med",
   HIGH: "High",
+  XHIGH: "X-High",
 };
 
 /** Visual treatment per level — font weight and opacity */
 const LEVEL_STYLE: Record<ThinkingLevel, { weight: number; opacity: number }> = {
   NONE: { weight: 400, opacity: 0.4 },
   LOW: { weight: 400, opacity: 0.6 },
-  MEDIUM: { weight: 500, opacity: 0.8 },
-  HIGH: { weight: 600, opacity: 1 },
+  MEDIUM: { weight: 500, opacity: 0.75 },
+  HIGH: { weight: 600, opacity: 0.9 },
+  XHIGH: { weight: 700, opacity: 1 },
 };
 
 interface ThinkingIndicatorProps {
@@ -40,6 +44,7 @@ interface ThinkingIndicatorProps {
 export function ThinkingIndicator({ level, onClick, className }: ThinkingIndicatorProps) {
   const style = LEVEL_STYLE[level];
   const displayLabel = LEVEL_DISPLAY[level];
+  const isXHigh = level === "XHIGH";
 
   return (
     <Tooltip delayDuration={200}>
@@ -49,9 +54,10 @@ export function ThinkingIndicator({ level, onClick, className }: ThinkingIndicat
           onClick={onClick}
           aria-label={`Thinking: ${displayLabel}`}
           className={cn(
-            "flex h-8 items-center rounded-lg px-2",
-            "ease transition-colors duration-200",
-            "hover:bg-accent",
+            // Button provides hit-area + focus ring only — no hover background.
+            // The only visible pill is X-High's persistent gold tint on the
+            // inner span, so the indicator stays quiet at rest.
+            "flex h-8 items-center rounded-lg px-0.5",
             "focus-visible:ring-ring focus-visible:ring-1 focus-visible:outline-none",
             className
           )}
@@ -68,9 +74,17 @@ export function ThinkingIndicator({ level, onClick, className }: ThinkingIndicat
                 originX: 0.5,
               }}
               className={cn(
-                "text-muted-foreground text-xs select-none",
-                // Minimum width so the button doesn't jump between "Low" and "High"
-                "inline-block min-w-7 text-center"
+                "text-xs transition-colors duration-200 select-none",
+                // Fixed width accommodates the widest label ("X-High") + the
+                // X-High pill padding. whitespace-nowrap guards against wrap
+                // on compact themes.
+                "inline-block w-14 text-center whitespace-nowrap",
+                // Only X-High gets a background — a subtle gold pill to signal
+                // the top gear. Other levels render as plain muted text with
+                // no background or hover treatment (indicator stays quiet).
+                isXHigh
+                  ? "text-accent-gold bg-accent-gold/8 rounded-md px-1 py-px"
+                  : "text-muted-foreground"
               )}
             >
               {displayLabel}

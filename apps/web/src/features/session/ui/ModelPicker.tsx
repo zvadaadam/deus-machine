@@ -11,12 +11,12 @@ import {
 import { cn } from "@/shared/lib/utils";
 import { getAgentLogo } from "@/assets/agents";
 import {
-  getRuntimeModelLabel,
-  getRuntimeModelOption,
-  RUNTIME_MODEL_OPTIONS,
+  getModelLabel,
+  getModelOption,
+  MODEL_OPTIONS,
   MODEL_PICKER_GROUPS,
-  type RuntimeAgentType,
-} from "../lib/agentRuntime";
+  type AgentHarness,
+} from "@/shared/agents";
 
 interface ModelPickerProps {
   model: string;
@@ -26,7 +26,7 @@ interface ModelPickerProps {
   onOpenNewTab?: (initialModel?: string) => void;
 }
 
-function renderAgentLogo(type: RuntimeAgentType, sizeClass: string) {
+function renderAgentLogo(type: AgentHarness, sizeClass: string) {
   const Logo = getAgentLogo(type);
   if (!Logo) {
     return <span className={cn("bg-muted-foreground/80 inline-flex rounded-full", sizeClass)} />;
@@ -35,10 +35,10 @@ function renderAgentLogo(type: RuntimeAgentType, sizeClass: string) {
 }
 
 export function ModelPicker({ model, hasMessages, onModelChange, onOpenNewTab }: ModelPickerProps) {
-  const modelLabel = getRuntimeModelLabel(model);
-  const selectedOption = getRuntimeModelOption(model);
+  const modelLabel = getModelLabel(model);
+  const selectedOption = getModelOption(model);
   const selectedOptionValue = selectedOption?.value;
-  const currentGroup = selectedOption?.group ?? "claude";
+  const currentGroup = selectedOption?.agentHarness ?? "claude";
 
   return (
     <DropdownMenu>
@@ -50,7 +50,7 @@ export function ModelPicker({ model, hasMessages, onModelChange, onOpenNewTab }:
           aria-label={`Select model, currently ${modelLabel}`}
           className="group gap-1.5 rounded-lg focus-visible:ring-0"
         >
-          {renderAgentLogo(selectedOption?.agentType ?? "claude", "h-3.5 w-3.5")}
+          {renderAgentLogo(selectedOption?.agentHarness ?? "claude", "h-3.5 w-3.5")}
           <span className="text-text-muted text-xs font-medium">{modelLabel}</span>
           <ChevronDown className="text-text-disabled size-3 transition-transform duration-200 group-data-[state=open]:rotate-180" />
         </Button>
@@ -80,7 +80,7 @@ export function ModelPicker({ model, hasMessages, onModelChange, onOpenNewTab }:
                   {agentConfig.groupLabel}
                 </span>
               </DropdownMenuLabel>
-              {RUNTIME_MODEL_OPTIONS.filter((o) => o.group === agentConfig.id).map((option) => {
+              {MODEL_OPTIONS.filter((o) => o.agentHarness === agentConfig.id).map((option) => {
                 const isSelected = selectedOptionValue === option.value;
                 return (
                   <DropdownMenuItem
@@ -94,7 +94,7 @@ export function ModelPicker({ model, hasMessages, onModelChange, onOpenNewTab }:
                       "flex items-center gap-2 rounded-lg px-2 py-1.5 text-xs"
                     )}
                   >
-                    {renderAgentLogo(option.agentType, "h-4 w-4")}
+                    {renderAgentLogo(option.agentHarness, "h-4 w-4")}
                     <span className="font-normal">{option.label}</span>
                     {option.isNew && (
                       <span className="border-accent-red-muted/60 bg-accent-red-muted/20 text-accent-red-muted text-2xs rounded-xs border px-1 py-px tracking-wide uppercase">

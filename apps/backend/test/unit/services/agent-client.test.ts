@@ -222,14 +222,14 @@ describe("AgentClient", () => {
       sendNotification(server.lastClient!, AGENT_EVENT_NAMES.SESSION_STARTED, {
         type: "session.started",
         sessionId: "sess-1",
-        agentType: "claude",
+        agentHarness: "claude",
       });
 
       await waitFor(() => events.length > 0);
       expect(events[0]).toEqual({
         type: "session.started",
         sessionId: "sess-1",
-        agentType: "claude",
+        agentHarness: "claude",
       });
     });
 
@@ -242,7 +242,7 @@ describe("AgentClient", () => {
       sendNotification(server.lastClient!, AGENT_EVENT_NAMES.MESSAGE_ASSISTANT, {
         type: "message.assistant",
         sessionId: "sess-1",
-        agentType: "claude",
+        agentHarness: "claude",
         message: {
           id: "msg-1",
           role: "assistant",
@@ -264,7 +264,7 @@ describe("AgentClient", () => {
       // Send an invalid event (missing required fields)
       sendNotification(server.lastClient!, AGENT_EVENT_NAMES.SESSION_STARTED, {
         type: "session.started",
-        // missing sessionId and agentType
+        // missing sessionId and agentHarness
       });
 
       // Give time for processing
@@ -311,7 +311,7 @@ describe("AgentClient", () => {
 
       const result = await client.sendTurnStart({
         sessionId: "sess-1",
-        agentType: "claude",
+        agentHarness: "claude",
         prompt: "Hello",
         options: { cwd: "/tmp" },
       });
@@ -327,7 +327,7 @@ describe("AgentClient", () => {
       await expect(
         client.sendTurnStart({
           sessionId: "sess-1",
-          agentType: "claude",
+          agentHarness: "claude",
           prompt: "Hello",
           options: { cwd: "/tmp" },
         })

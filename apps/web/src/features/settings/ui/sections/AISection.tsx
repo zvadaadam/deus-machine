@@ -226,8 +226,6 @@ export function AISection({ settings, saveSetting }: SettingsSectionProps) {
             <SelectContent>
               <SelectItem value="anthropic">Anthropic (Official)</SelectItem>
               <SelectItem value="custom">Custom Endpoint</SelectItem>
-              <SelectItem value="bedrock">AWS Bedrock</SelectItem>
-              <SelectItem value="vertex">Google Vertex AI</SelectItem>
             </SelectContent>
           </Select>
         </div>
@@ -239,16 +237,41 @@ export function AISection({ settings, saveSetting }: SettingsSectionProps) {
           </Label>
           <p className="text-muted-foreground text-sm">The model used for new conversations.</p>
           <Select
-            value={settings.claude_model ?? "opus"}
+            value={settings.claude_model ?? "claude-opus-4-7"}
             onValueChange={(value) => saveSetting("claude_model", value)}
           >
             <SelectTrigger id="model" className="w-full">
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="sonnet">Claude Sonnet 4.6</SelectItem>
-              <SelectItem value="opus">Claude Opus 4.6</SelectItem>
-              <SelectItem value="haiku">Claude Haiku 4.5</SelectItem>
+              <SelectItem value="claude-opus-4-7">Claude Opus 4.7</SelectItem>
+              <SelectItem value="claude-opus-4-6">Claude Opus 4.6</SelectItem>
+              <SelectItem value="claude-sonnet-4-6">Claude Sonnet 4.6</SelectItem>
+              <SelectItem value="claude-haiku-4-5">Claude Haiku 4.5</SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
+
+        {/* Default thinking level */}
+        <div className="space-y-2">
+          <Label htmlFor="thinking-level" className="text-sm">
+            Default thinking
+          </Label>
+          <p className="text-muted-foreground text-sm">
+            How hard the model should think by default. Individual turns can still be adjusted via
+            the thinking indicator next to the model picker.
+          </p>
+          <Select
+            value={settings.default_thinking_level ?? "HIGH"}
+            onValueChange={(value) => saveSetting("default_thinking_level", value)}
+          >
+            <SelectTrigger id="thinking-level" className="w-full">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="LOW">Low</SelectItem>
+              <SelectItem value="MEDIUM">Medium</SelectItem>
+              <SelectItem value="HIGH">High</SelectItem>
             </SelectContent>
           </Select>
         </div>

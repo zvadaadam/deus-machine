@@ -8,7 +8,7 @@ import * as path from "path";
 import * as fs from "fs";
 import { execSync, execFileSync } from "child_process";
 import { EventBroadcaster } from "../../event-broadcaster";
-import type { AgentType } from "../../protocol";
+import type { AgentHarness } from "../../protocol";
 
 // ============================================================================
 // Types
@@ -19,8 +19,8 @@ import type { AgentType } from "../../protocol";
  * Each agent provides one of these — the only thing that varies between agents.
  */
 export interface DiscoveryConfig {
-  /** Agent type for error messages (e.g. "claude", "codex") */
-  agentType: AgentType;
+  /** Agent harness for error messages (e.g. "claude", "codex") */
+  agentHarness: AgentHarness;
   /** Human-readable name for log messages (e.g. "Claude", "Codex") */
   displayName: string;
   /** Env var override (e.g. "CLAUDE_CLI_PATH", "CODEX_CLI_PATH") */
@@ -172,24 +172,19 @@ function verifyCandidate(candidate: string, versionFlag: string): string {
  */
 export function blockIfNotInitialized(
   state: DiscoveryState,
-  agentType: AgentType,
+  agentHarness: AgentHarness,
   sessionId: string
 ): boolean {
   if (!state.result?.success) {
     const errorMsg = `Cannot process request: ${state.result?.error || "Initialization failed"}`;
-    try {
-      EventBroadcaster.emitSessionError(sessionId, agentType, errorMsg, "internal");
-    } catch (error) {
-      console.warn(`[CLI-DISCOVERY] Failed to emit init error:`, error);
-    }
     // Emit canonical error event so the backend updates session status.
     // The backend set status='working' before forwarding turn/start to the agent-server.
     try {
-      EventBroadcaster.emitSessionError(sessionId, agentType, errorMsg, "internal");
+      EventBroadcaster.emitSessionError(sessionId, agentHarness, errorMsg, "internal");
     } catch (error) {
       console.warn(`[CLI-DISCOVERY] Failed to emit session error:`, error);
     }
-    console.log(`Blocked ${agentType} request due to initialization failure`);
+    console.log(`Blocked ${agentHarness} request due to initialization failure`);
     return true;
   }
   return false;

@@ -33,7 +33,7 @@ const WORKSPACE_DETAILS_SELECT = `
     w.setup_status, w.error_message, w.init_stage,
     w.updated_at,
     r.name as repo_name, r.root_path, r.git_default_branch, r.git_origin_url,
-    s.status as session_status, s.model,
+    s.status as session_status,
     s.error_category as session_error_category,
     s.error_message as session_error_message,
     s.last_user_message_at as latest_message_sent_at
@@ -77,7 +77,7 @@ export function getWorkspacesByRepo(
       w.updated_at,
       r.name as repo_name, r.sort_order as repo_sort_order, r.root_path,
       r.git_default_branch, r.git_origin_url,
-      s.status as session_status, s.model,
+      s.status as session_status,
       s.error_category as session_error_category,
       s.error_message as session_error_message,
       s.last_user_message_at as latest_message_sent_at
@@ -148,7 +148,7 @@ export function getWorkspacesBySessionIds(
       w.updated_at,
       r.name as repo_name, r.sort_order as repo_sort_order, r.root_path,
       r.git_default_branch, r.git_origin_url,
-      s.status as session_status, s.model,
+      s.status as session_status,
       s.error_category as session_error_category,
       s.error_message as session_error_message,
       s.last_user_message_at as latest_message_sent_at
