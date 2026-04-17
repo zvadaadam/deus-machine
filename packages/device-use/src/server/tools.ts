@@ -108,22 +108,40 @@ const list_devices = tool({
 
 const boot = tool({
   name: "boot",
-  description: "Boot an iOS simulator by UDID. No-op if already booted.",
+  description:
+    "Boot an iOS simulator by UDID. No-op if already booted. Starts the MJPEG stream for the booted sim.",
   schema: z.object({ udid: z.string() }),
   handler: async (ctx, params) => {
     await bootSimulator(ctx.executor, params.udid);
-    return { ok: true, udid: params.udid };
+    // Also (re)start the stream so /stream.mjpeg is ready for the viewer.
+    // Failures are logged but don't fail the boot — CLI users may boot without needing a stream.
+    try {
+      await ctx.stream.start(params.udid);
+    } catch (err) {
+      console.warn(`[boot] stream.start failed for ${params.udid}:`, (err as Error).message);
+    }
+    return { ok: true, udid: params.udid, stream: ctx.stream.getInfo() };
   },
 });
 
 const set_active_simulator = tool({
   name: "set_active_simulator",
   description:
-    "Pin a simulator UDID as the workspace default. Future tool calls without an explicit udid will use this one.",
+    "Pin a simulator UDID as the workspace default. Future tool calls without an explicit udid will use this one. If the sim is already booted, starts the stream too.",
   schema: z.object({ udid: z.string() }),
   handler: async (ctx, params) => {
     await ctx.state.update({ simulator: { udid: params.udid } });
-    return { ok: true, udid: params.udid };
+    // If this sim is already booted, start the stream so the viewer
+    // renders the phone without requiring the user to re-boot.
+    try {
+      const sims = await listSimulators(ctx.executor, { booted: true });
+      if (sims.some((s) => s.udid === params.udid)) {
+        await ctx.stream.start(params.udid);
+      }
+    } catch (err) {
+      console.warn(`[set_active_simulator] stream autostart failed:`, (err as Error).message);
+    }
+    return { ok: true, udid: params.udid, stream: ctx.stream.getInfo() };
   },
 });
 
