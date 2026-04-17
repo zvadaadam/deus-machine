@@ -49,7 +49,7 @@ interface MessageInputProps {
   messageInput: string;
   sending: boolean;
   sessionStatus?: SessionStatus;
-  model?: string;
+  model: string;
   thinkingLevel?: string;
   showCompactButton?: boolean;
   contextTokenCount?: number;
@@ -87,7 +87,7 @@ export const MessageInput = forwardRef<MessageInputRef, MessageInputProps>(funct
     messageInput,
     sending,
     sessionStatus,
-    model = "claude:claude-opus-4-7",
+    model,
     thinkingLevel = "NONE",
     showCompactButton = false,
     contextTokenCount = 0,

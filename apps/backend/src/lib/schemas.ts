@@ -60,7 +60,7 @@ export const SaveSkillBody = z.object({
 
 export const CreateMessageBody = z.object({
   content: z.string().min(1, "content is required"),
-  model: z.string().min(1, "model is required"),
+  model: z.string().trim().min(1, "model is required"),
 });
 
 // ============================================================================

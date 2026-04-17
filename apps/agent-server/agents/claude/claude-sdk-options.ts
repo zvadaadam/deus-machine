@@ -38,8 +38,12 @@ export const DEFAULT_SETTING_SOURCES: SettingSource[] = ["user", "project", "loc
 
 type ThinkingLevel = "NONE" | "LOW" | "MEDIUM" | "HIGH" | "XHIGH";
 
-const LEVEL_TO_MAX_TOKENS: Record<ThinkingLevel, number | undefined> = {
-  NONE: undefined,
+// NONE uses 0 to explicitly disable thinking on Opus 4.6+ (where the SDK
+// treats maxThinkingTokens as on/off: 0 = disabled, any non-zero = adaptive
+// enabled). Leaving it undefined would fall through to the SDK default
+// behavior (thinking ON), which is the opposite of the user's intent.
+const LEVEL_TO_MAX_TOKENS: Record<ThinkingLevel, number> = {
+  NONE: 0,
   LOW: 4096,
   MEDIUM: 8192,
   HIGH: 16384,
@@ -48,7 +52,9 @@ const LEVEL_TO_MAX_TOKENS: Record<ThinkingLevel, number | undefined> = {
 
 /**
  * Resolves the Claude SDK options that realize a given thinking level.
- * Returns `{ maxThinkingTokens: undefined }` for NONE or when no level given.
+ * Returns `{ maxThinkingTokens: undefined }` only when no level given — the
+ * SDK then uses its default. When NONE is explicitly chosen, returns 0 so the
+ * SDK disables thinking rather than falling back to its default.
  */
 export function resolveThinkingOptions(thinkingLevel: string | undefined): {
   maxThinkingTokens: number | undefined;

@@ -395,20 +395,26 @@ export const SessionPanel = forwardRef<SessionPanelRef, SessionPanelProps>(
               userSendCount={userSendCount}
             />
 
-            {/* Agent-initiated interaction overlays — appear above MessageInput */}
-            <PlanApprovalOverlay
-              request={pendingPlan}
-              agentHarness={session?.agent_harness}
-              onApprove={handlePlanApprove}
-              onReject={handlePlanReject}
-            />
-            <AgentQuestionOverlay
-              key={pendingQuestion?.wsRequestId}
-              request={pendingQuestion}
-              agentHarness={session?.agent_harness}
-              onSubmit={handleQuestionSubmit}
-              onDismiss={handleQuestionDismiss}
-            />
+            {/* Agent-initiated interaction overlays — appear above MessageInput.
+                Render only when session has loaded (overlays are irrelevant
+                before that, and `agent_harness` is session-derived). */}
+            {session && (
+              <>
+                <PlanApprovalOverlay
+                  request={pendingPlan}
+                  agentHarness={session.agent_harness}
+                  onApprove={handlePlanApprove}
+                  onReject={handlePlanReject}
+                />
+                <AgentQuestionOverlay
+                  key={pendingQuestion?.wsRequestId}
+                  request={pendingQuestion}
+                  agentHarness={session.agent_harness}
+                  onSubmit={handleQuestionSubmit}
+                  onDismiss={handleQuestionDismiss}
+                />
+              </>
+            )}
 
             <MessageInput
               ref={messageInputRef}
@@ -500,20 +506,25 @@ export const SessionPanel = forwardRef<SessionPanelRef, SessionPanelProps>(
                     userSendCount={userSendCount}
                   />
 
-                  {/* Agent-initiated interaction overlays — appear above MessageInput */}
-                  <PlanApprovalOverlay
-                    request={pendingPlan}
-                    agentHarness={session?.agent_harness}
-                    onApprove={handlePlanApprove}
-                    onReject={handlePlanReject}
-                  />
-                  <AgentQuestionOverlay
-                    key={pendingQuestion?.wsRequestId}
-                    request={pendingQuestion}
-                    agentHarness={session?.agent_harness}
-                    onSubmit={handleQuestionSubmit}
-                    onDismiss={handleQuestionDismiss}
-                  />
+                  {/* Agent-initiated interaction overlays — appear above MessageInput.
+                      Render only when session has loaded. */}
+                  {session && (
+                    <>
+                      <PlanApprovalOverlay
+                        request={pendingPlan}
+                        agentHarness={session.agent_harness}
+                        onApprove={handlePlanApprove}
+                        onReject={handlePlanReject}
+                      />
+                      <AgentQuestionOverlay
+                        key={pendingQuestion?.wsRequestId}
+                        request={pendingQuestion}
+                        agentHarness={session.agent_harness}
+                        onSubmit={handleQuestionSubmit}
+                        onDismiss={handleQuestionDismiss}
+                      />
+                    </>
+                  )}
 
                   <MessageInput
                     ref={messageInputRef}

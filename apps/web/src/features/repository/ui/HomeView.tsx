@@ -54,12 +54,19 @@ function setStoredRepoId(id: string) {
   }
 }
 
+const DEFAULT_HOME_MODEL = "claude:claude-opus-4-7";
+
 function getStoredModel(): string {
+  // Validate against the catalog — stale localStorage (old aliases like
+  // "claude:sonnet", removed models, renamed formats) falls back to the
+  // current default instead of silently sending an unknown model.
   try {
-    return localStorage.getItem(LAST_MODEL_KEY) ?? "claude:sonnet";
+    const stored = localStorage.getItem(LAST_MODEL_KEY);
+    if (stored && getModelOption(stored)) return stored;
   } catch {
-    return "claude:sonnet";
+    /* localStorage unavailable */
   }
+  return DEFAULT_HOME_MODEL;
 }
 
 function setStoredModel(model: string) {
