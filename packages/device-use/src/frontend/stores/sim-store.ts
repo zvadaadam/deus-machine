@@ -11,7 +11,27 @@ interface SimState {
   setPinned: (udid: string) => Promise<void>;
 }
 
-export const useSimStore = create<SimState>((set) => ({
+/** True iff two stream infos describe the same underlying stream. */
+function sameStream(a: StreamInfo | null, b: StreamInfo | null): boolean {
+  if (a === b) return true;
+  if (!a || !b) return false;
+  return a.udid === b.udid && a.port === b.port;
+}
+
+/** True iff two sim arrays have the same entries in the same states. */
+function sameSims(a: Simulator[], b: Simulator[]): boolean {
+  if (a === b) return true;
+  if (a.length !== b.length) return false;
+  for (let i = 0; i < a.length; i++) {
+    const x = a[i];
+    const y = b[i];
+    if (!x || !y) return false;
+    if (x.udid !== y.udid || x.state !== y.state || x.name !== y.name) return false;
+  }
+  return true;
+}
+
+export const useSimStore = create<SimState>((set, get) => ({
   sims: [],
   pinnedUdid: null,
   streamInfo: null,
@@ -25,10 +45,15 @@ export const useSimStore = create<SimState>((set) => ({
         api.getState(),
         api.getStream(),
       ]);
+      const prev = get();
+      const newSims: Simulator[] = list.success ? (list.result?.devices ?? []) : [];
+      const newUdid = state.simulator?.udid ?? null;
+      // Preserve identity when nothing materially changed — any field we
+      // overwrite with a new reference will re-fire downstream effects.
       set({
-        sims: list.success ? (list.result?.devices ?? []) : [],
-        pinnedUdid: state.simulator?.udid ?? null,
-        streamInfo: stream,
+        sims: sameSims(prev.sims, newSims) ? prev.sims : newSims,
+        pinnedUdid: prev.pinnedUdid === newUdid ? prev.pinnedUdid : newUdid,
+        streamInfo: sameStream(prev.streamInfo, stream) ? prev.streamInfo : stream,
         loading: false,
         error: list.success ? null : (list.error ?? "failed to list devices"),
       });
