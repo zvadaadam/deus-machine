@@ -25,6 +25,7 @@ import {
   swipe as engineSwipe,
   takeScreenshot,
   tap as engineTap,
+  tapEntry,
   terminateApp,
   typeText,
   waitFor,
@@ -386,7 +387,10 @@ const tap = tool({
     if (params.ref) {
       const entry = ctx.refMap.resolve(params.ref);
       if (!entry) throw new Error(`ref ${params.ref} not found — call snapshot first`);
-      await engineTap(udid, entry.center.x, entry.center.y);
+      // tapEntry tries identifier → label → coords. Needed for things
+      // like switches/checkboxes whose bounding-box center is not where
+      // the actual hit target lives.
+      await tapEntry(udid, entry);
       return { ok: true, via: "ref", ref: params.ref };
     }
     if (typeof params.x === "number" && typeof params.y === "number") {
