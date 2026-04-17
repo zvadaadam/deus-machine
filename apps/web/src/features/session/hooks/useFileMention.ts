@@ -24,6 +24,12 @@ interface UseFileMentionOptions {
   workspaceId: string | null;
   /** Callback to update the textarea value after inserting a mention */
   onChange: (newValue: string) => void;
+  /**
+   * When provided, selecting a file adds a structured mention via this callback
+   * instead of inserting `@path ` text inline. The `@query` the user typed is
+   * removed from the textarea, and the file is surfaced as a pill above it.
+   */
+  onAddMention?: (result: FuzzyFileResult) => void;
 }
 
 interface UseFileMentionReturn {
@@ -78,6 +84,7 @@ export function useFileMention({
   value,
   workspaceId,
   onChange,
+  onAddMention,
 }: UseFileMentionOptions): UseFileMentionReturn {
   const [isOpen, setIsOpen] = useState(false);
   const [query, setQuery] = useState("");
@@ -168,31 +175,43 @@ export function useFileMention({
     };
   }, [query, isOpen, workspaceId]);
 
-  // Select a file: replace @query with the file path
+  // Select a file: either add as a structured pill (pill mode) or insert inline text
   const selectFile = useCallback(
     (filePath: string) => {
       const atIndex = triggerIndexRef.current;
       if (atIndex === -1) return;
 
-      // Replace @query with @filepath (keep the @ prefix for visibility)
       const before = value.slice(0, atIndex);
       const after = value.slice(cursorPos);
-      const mention = `@${filePath} `;
-      const newValue = before + mention + after;
 
-      // Update cursorPos BEFORE onChange so the detection effect (which depends
-      // on [value, cursorPos]) sees the new cursor after the mention. Without
-      // this, cursorPos stays stale and findMentionTrigger re-detects the @
-      // inside the inserted text, immediately reopening the popover.
-      const newCursorPos = before.length + mention.length;
-      setCursorPos(newCursorPos);
+      if (onAddMention) {
+        // Pill mode: remove the @query the user typed, surface mention above input
+        const result = results.find((r) => r.path === filePath);
+        if (result) {
+          onAddMention(result);
+        }
+        const newValue = before + after;
+        const newCursorPos = before.length;
+        setCursorPos(newCursorPos);
+        onChange(newValue);
+      } else {
+        // Text mode: insert @filepath inline (legacy behavior)
+        const mention = `@${filePath} `;
+        const newValue = before + mention + after;
+        // Update cursorPos BEFORE onChange so the detection effect (which depends
+        // on [value, cursorPos]) sees the new cursor after the mention. Without
+        // this, cursorPos stays stale and findMentionTrigger re-detects the @
+        // inside the inserted text, immediately reopening the popover.
+        const newCursorPos = before.length + mention.length;
+        setCursorPos(newCursorPos);
+        onChange(newValue);
+      }
 
-      onChange(newValue);
       setIsOpen(false);
       setQuery("");
       triggerIndexRef.current = -1;
     },
-    [value, cursorPos, onChange]
+    [value, cursorPos, onChange, onAddMention, results]
   );
 
   // Dismiss the popover

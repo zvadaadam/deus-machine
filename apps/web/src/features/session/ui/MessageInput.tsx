@@ -20,6 +20,7 @@ import { cn } from "@/shared/lib/utils";
 import { PastedTextCard } from "./PastedTextCard";
 import { PastedImageCard } from "./PastedImageCard";
 import { InspectedElementCard, type InspectedElement } from "./InspectedElementCard";
+import { FileMentionCard, type FileMention } from "./FileMentionCard";
 import { serializeInspectElement } from "../lib/parseInspectTags";
 import {
   getRuntimeModelOption,
@@ -130,6 +131,9 @@ export const MessageInput = forwardRef<MessageInputRef, MessageInputProps>(funct
   // Inspected elements from InSpec mode (shown as pill cards)
   const [inspectedElements, setInspectedElements] = useState<InspectedElement[]>([]);
 
+  // File mentions picked from the @ picker (shown as pill cards above textarea)
+  const [fileMentions, setFileMentions] = useState<FileMention[]>([]);
+
   // Expose addFiles + clearPastedContent + addInspectedElement for parent-level interactions
   useImperativeHandle(
     ref,
@@ -139,6 +143,7 @@ export const MessageInput = forwardRef<MessageInputRef, MessageInputProps>(funct
         setPastedTexts([]);
         clearAttachments();
         setInspectedElements([]);
+        setFileMentions([]);
       },
       addInspectedElement: (element: Omit<InspectedElement, "id">) => {
         setInspectedElements((prev) => [...prev, { ...element, id: crypto.randomUUID() }]);
@@ -159,6 +164,12 @@ export const MessageInput = forwardRef<MessageInputRef, MessageInputProps>(funct
     // Inspected elements go first so the AI has element context before user's question
     for (const el of inspectedElements) {
       textParts.push(serializeInspectElement(el));
+    }
+
+    // File mentions serialize as `@path` tokens — Claude Code natively resolves them.
+    // Joined on one line to read like a natural reference list.
+    if (fileMentions.length > 0) {
+      textParts.push(fileMentions.map((fm) => `@${fm.path}`).join(" "));
     }
 
     for (const paste of pastedTexts) {
@@ -189,7 +200,8 @@ export const MessageInput = forwardRef<MessageInputRef, MessageInputProps>(funct
     messageInput.trim().length > 0 ||
     pastedTexts.length > 0 ||
     attachments.length > 0 ||
-    inspectedElements.length > 0;
+    inspectedElements.length > 0 ||
+    fileMentions.length > 0;
 
   // Send with combined content (pasted texts + typed input + images)
   // Pasted content is NOT cleared here — it's cleared by the parent via
@@ -204,10 +216,17 @@ export const MessageInput = forwardRef<MessageInputRef, MessageInputProps>(funct
   };
 
   // @ file mention support (fuzzy search via backend HTTP endpoint)
+  // Selected files surface as pills above the textarea instead of inline text.
   const fileMention = useFileMention({
     value: messageInput,
     workspaceId: workspaceId ?? null,
     onChange: onMessageChange,
+    onAddMention: (result) => {
+      setFileMentions((prev) => [
+        ...prev,
+        { id: crypto.randomUUID(), path: result.path, name: result.name },
+      ]);
+    },
   });
 
   // / slash command support (skills + commands picker, Claude only)
@@ -282,6 +301,10 @@ export const MessageInput = forwardRef<MessageInputRef, MessageInputProps>(funct
     setInspectedElements((prev) => prev.filter((el) => el.id !== id));
   };
 
+  const removeFileMention = (id: string) => {
+    setFileMentions((prev) => prev.filter((fm) => fm.id !== id));
+  };
+
   // Thinking cycle — derive agent type from selected model
   const selectedOption = getRuntimeModelOption(model);
   const agentType: RuntimeAgentType = selectedOption?.agentType ?? "claude";
@@ -326,8 +349,11 @@ export const MessageInput = forwardRef<MessageInputRef, MessageInputProps>(funct
         data-no-ring={true}
         className="bg-input-surface relative overflow-visible rounded-2xl border-0 shadow-xs transition-colors duration-200"
       >
-        {/* Pasted content cards (images + text + inspected elements) — unified horizontal scroll */}
-        {(attachments.length > 0 || pastedTexts.length > 0 || inspectedElements.length > 0) && (
+        {/* Pasted content cards (images + text + inspected elements + file mentions) — unified horizontal scroll */}
+        {(attachments.length > 0 ||
+          pastedTexts.length > 0 ||
+          inspectedElements.length > 0 ||
+          fileMentions.length > 0) && (
           <div className="flex w-full items-start gap-2 overflow-x-auto px-3 pt-3">
             <AnimatePresence mode="popLayout">
               {inspectedElements.map((el) => (
@@ -335,6 +361,13 @@ export const MessageInput = forwardRef<MessageInputRef, MessageInputProps>(funct
                   key={el.id}
                   element={el}
                   onRemove={() => removeInspectedElement(el.id)}
+                />
+              ))}
+              {fileMentions.map((fm) => (
+                <FileMentionCard
+                  key={fm.id}
+                  mention={fm}
+                  onRemove={() => removeFileMention(fm.id)}
                 />
               ))}
               {attachments.map((attachment) => (
