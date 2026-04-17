@@ -24,6 +24,12 @@ interface UseFileMentionOptions {
   workspaceId: string | null;
   /** Callback to update the textarea value after inserting a mention */
   onChange: (newValue: string) => void;
+  /**
+   * When provided, selecting a file adds a structured mention via this callback
+   * instead of inserting `@path ` text inline. The `@query` the user typed is
+   * removed from the textarea, and the file is surfaced as a pill above it.
+   */
+  onAddMention?: (result: FuzzyFileResult) => void;
 }
 
 interface UseFileMentionReturn {
@@ -78,6 +84,7 @@ export function useFileMention({
   value,
   workspaceId,
   onChange,
+  onAddMention,
 }: UseFileMentionOptions): UseFileMentionReturn {
   const [isOpen, setIsOpen] = useState(false);
   const [query, setQuery] = useState("");
@@ -131,24 +138,20 @@ export function useFileMention({
       clearTimeout(searchTimerRef.current);
     }
 
-    // Empty query → no results
-    if (!query) {
-      setResults([]);
-      setLoading(false);
-      return;
-    }
-
     setLoading(true);
 
     // Bump search ID so in-flight HTTP calls from earlier keystrokes are discarded
     const currentSearchId = ++searchIdRef.current;
 
     // Debounce search by 80ms to avoid hammering the backend on every keystroke
+    // Empty query is sent immediately (no debounce) to show default files fast
+    const delay = query ? 80 : 0;
+
     searchTimerRef.current = setTimeout(async () => {
       try {
         const searchResults = await sendRequest<FuzzyFileResult[]>("fileSearch", {
           workspaceId,
-          query,
+          query: query || "",
           limit: 15,
         });
         // Only apply results if this is still the latest search
@@ -163,7 +166,7 @@ export function useFileMention({
           setLoading(false);
         }
       }
-    }, 80);
+    }, delay);
 
     return () => {
       if (searchTimerRef.current) {
@@ -172,31 +175,50 @@ export function useFileMention({
     };
   }, [query, isOpen, workspaceId]);
 
-  // Select a file: replace @query with the file path
+  // Select a file: either add as a structured pill (pill mode) or insert inline text
   const selectFile = useCallback(
     (filePath: string) => {
       const atIndex = triggerIndexRef.current;
       if (atIndex === -1) return;
 
-      // Replace @query with @filepath (keep the @ prefix for visibility)
       const before = value.slice(0, atIndex);
       const after = value.slice(cursorPos);
-      const mention = `@${filePath} `;
-      const newValue = before + mention + after;
 
-      // Update cursorPos BEFORE onChange so the detection effect (which depends
-      // on [value, cursorPos]) sees the new cursor after the mention. Without
-      // this, cursorPos stays stale and findMentionTrigger re-detects the @
-      // inside the inserted text, immediately reopening the popover.
-      const newCursorPos = before.length + mention.length;
-      setCursorPos(newCursorPos);
+      if (onAddMention) {
+        // Pill mode: remove the @query the user typed, surface mention above input.
+        // Derive the result from filePath directly — the results array may have
+        // mutated between render and click (async search), so find() can miss.
+        // Falling back to a synthesized result guarantees we never clear the
+        // @query without also surfacing a pill.
+        const fromResults = results.find((r) => r.path === filePath);
+        const result = fromResults ?? {
+          path: filePath,
+          name: filePath.split("/").pop() || filePath,
+          score: 0,
+        };
+        onAddMention(result);
+        const newValue = before + after;
+        const newCursorPos = before.length;
+        setCursorPos(newCursorPos);
+        onChange(newValue);
+      } else {
+        // Text mode: insert @filepath inline (legacy behavior)
+        const mention = `@${filePath} `;
+        const newValue = before + mention + after;
+        // Update cursorPos BEFORE onChange so the detection effect (which depends
+        // on [value, cursorPos]) sees the new cursor after the mention. Without
+        // this, cursorPos stays stale and findMentionTrigger re-detects the @
+        // inside the inserted text, immediately reopening the popover.
+        const newCursorPos = before.length + mention.length;
+        setCursorPos(newCursorPos);
+        onChange(newValue);
+      }
 
-      onChange(newValue);
       setIsOpen(false);
       setQuery("");
       triggerIndexRef.current = -1;
     },
-    [value, cursorPos, onChange]
+    [value, cursorPos, onChange, onAddMention, results]
   );
 
   // Dismiss the popover

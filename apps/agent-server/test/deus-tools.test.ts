@@ -7,10 +7,35 @@ const { mockFrontendAPI } = vi.hoisted(() => ({
     requestGetDiff: vi.fn(),
     requestDiffComment: vi.fn(),
     requestGetTerminalOutput: vi.fn(),
+    requestSimulatorContext: vi.fn(),
   },
 }));
 vi.mock("../event-broadcaster", () => ({
   EventBroadcaster: mockFrontendAPI,
+}));
+
+// Mock device-use/engine — the package is ESM-only, tests run in CJS context.
+vi.mock("device-use/engine", () => ({
+  createExecutor: vi.fn(() => ({})),
+  listSimulators: vi.fn(async () => []),
+  bootSimulator: vi.fn(async () => {}),
+  takeScreenshot: vi.fn(async () => {}),
+  installApp: vi.fn(async () => {}),
+  launchApp: vi.fn(async () => ""),
+  terminateApp: vi.fn(async () => {}),
+  uninstallApp: vi.fn(async () => {}),
+  tap: vi.fn(async () => {}),
+  tapByLabel: vi.fn(async () => {}),
+  typeText: vi.fn(async () => {}),
+  swipe: vi.fn(async () => {}),
+  pressKey: vi.fn(async () => {}),
+  pressButton: vi.fn(async () => {}),
+  fetchAccessibilityTree: vi.fn(async () => []),
+  filterInteractive: vi.fn(() => []),
+  waitFor: vi.fn(async () => ({ found: true })),
+  waitForLabel: vi.fn(async () => ({ found: true })),
+  RefMap: vi.fn().mockImplementation(() => ({ assign: vi.fn(() => []) })),
+  formatCompact: vi.fn(() => ""),
 }));
 
 import { createDeusMCPServer } from "../agents/deus-tools";
@@ -45,7 +70,7 @@ describe("createDeusMCPServer", () => {
   it("registers all workspace + browser + simulator + recording tools", () => {
     const tools = getRegisteredTools(server.instance);
     const toolNames = Object.keys(tools);
-    expect(toolNames).toHaveLength(34);
+    expect(toolNames).toHaveLength(38);
     // Workspace tools
     expect(toolNames).toContain("AskUserQuestion");
     expect(toolNames).toContain("GetWorkspaceDiff");
@@ -67,15 +92,19 @@ describe("createDeusMCPServer", () => {
     expect(toolNames).toContain("BrowserScreenshot");
     expect(toolNames).toContain("BrowserNetworkRequests");
     expect(toolNames).toContain("BrowserScroll");
-    // iOS Simulator tools
-    expect(toolNames).toContain("iOSSimulatorListDevices");
-    expect(toolNames).toContain("iOSSimulatorStart");
-    expect(toolNames).toContain("iOSSimulatorScreenshot");
-    expect(toolNames).toContain("iOSSimulatorTap");
-    expect(toolNames).toContain("iOSSimulatorSwipe");
-    expect(toolNames).toContain("iOSSimulatorTypeText");
-    expect(toolNames).toContain("iOSSimulatorPressKey");
-    expect(toolNames).toContain("iOSSimulatorBuildAndRun");
+    // Simulator tools
+    expect(toolNames).toContain("SimulatorListDevices");
+    expect(toolNames).toContain("SimulatorScreenshot");
+    expect(toolNames).toContain("SimulatorTap");
+    expect(toolNames).toContain("SimulatorTypeText");
+    expect(toolNames).toContain("SimulatorSwipe");
+    expect(toolNames).toContain("SimulatorPressKey");
+    expect(toolNames).toContain("SimulatorBuild");
+    expect(toolNames).toContain("SimulatorLaunch");
+    expect(toolNames).toContain("SimulatorListApps");
+    expect(toolNames).toContain("SimulatorReadScreen");
+    expect(toolNames).toContain("SimulatorWaitFor");
+    expect(toolNames).toContain("SimulatorGetProjectInfo");
     // Recording tools
     expect(toolNames).toContain("recording_start");
     expect(toolNames).toContain("recording_stop");

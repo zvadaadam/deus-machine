@@ -54,7 +54,16 @@ export default defineConfig({
         input: {
           index: resolve(__dirname, "apps/desktop/main/index.ts"),
         },
-        external: ["better-sqlite3", "node-pty"],
+        external: [
+          "better-sqlite3",
+          "node-pty",
+          // `ws` has optional native peer deps (`bufferutil`, `utf-8-validate`).
+          // Keep it external so Node resolves them at runtime instead of Vite
+          // inlining a stub that throws during Electron startup.
+          "ws",
+          "device-use",
+          "device-use/engine",
+        ],
       },
       outDir: "out/main",
     },

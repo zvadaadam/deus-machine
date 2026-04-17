@@ -240,6 +240,33 @@ function sortTree(nodes: FileTreeNode[]): FileTreeNode[] {
 }
 
 /**
+ * Return the top N files, preferring shorter paths (more prominent files).
+ * Used when the user opens the @ mention popover without typing a query yet.
+ */
+export function listTopFiles(
+  workspacePath: string,
+  limit: number = 15
+): Array<{ path: string; name: string; score: number }> {
+  let filePaths: string[];
+  try {
+    filePaths = scanWithGit(workspacePath);
+  } catch {
+    filePaths = scanWithReaddir(workspacePath);
+  }
+
+  // Score by path depth (fewer segments = higher score) and shorter names
+  const scored = filePaths.map((filePath) => {
+    const name = filePath.split("/").pop() || filePath;
+    const depth = filePath.split("/").length;
+    const score = 100 - depth * 10 - filePath.length * 0.1;
+    return { path: filePath, name, score };
+  });
+
+  scored.sort((a, b) => b.score - a.score);
+  return scored.slice(0, limit);
+}
+
+/**
  * Fuzzy search files by name/path.
  * Uses the cached flat file list from scanWorkspaceFiles and scores
  * each path against the query using a simple substring + position scoring.

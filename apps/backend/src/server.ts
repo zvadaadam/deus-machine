@@ -8,6 +8,10 @@ import { getSetting } from "./services/settings.service";
 import * as agentService from "./services/agent";
 import { destroyAllPtySessions } from "./services/pty.service";
 import { destroyAllWatchers } from "./services/fs-watcher.service";
+import {
+  reconcile as reconcileSimulators,
+  destroyAll as destroyAllSimulators,
+} from "./services/simulator-context";
 import { setApp } from "./services/route-delegate";
 import { invalidate } from "./services/query-engine";
 
@@ -135,11 +139,16 @@ if (agentServerUrl) {
   console.warn("[server] Starting in explicit agentless mode (AGENT_ALLOW_AGENTLESS=true)");
 }
 
+// Discover booted simulators on startup (fire-and-forget).
+// Restores awareness of running simulators after a backend restart.
+void reconcileSimulators();
+
 // Global error handlers
 process.on("uncaughtException", (error, origin) => {
   console.error("[FATAL] Uncaught Exception:", origin, error);
   Sentry.captureException(error);
   Sentry.close(2000).finally(() => {
+    destroyAllSimulators();
     destroyAllPtySessions();
     destroyAllWatchers();
     try {
@@ -159,6 +168,7 @@ process.on("unhandledRejection", (reason) => {
 function shutdown() {
   console.log("\nShutting down...");
   agentService.shutdown();
+  destroyAllSimulators();
   destroyAllPtySessions();
   destroyAllWatchers();
   disconnectFromRelay();

@@ -263,14 +263,9 @@ export const FRONTEND_RPC_METHODS = {
   BROWSER_NETWORK_REQUESTS: "browserNetworkRequests",
   BROWSER_SCREENSHOT: "browserScreenshot",
   BROWSER_SCROLL: "browserScroll",
-  SIM_SCREENSHOT: "simScreenshot",
-  SIM_TAP: "simTap",
-  SIM_SWIPE: "simSwipe",
-  SIM_TYPE_TEXT: "simTypeText",
-  SIM_PRESS_KEY: "simPressKey",
-  SIM_BUILD_AND_RUN: "simBuildAndRun",
-  SIM_LIST_DEVICES: "simListDevices",
-  SIM_START: "simStart",
+  // Simulator context — backend-only method (handled in onFrontendRpc before
+  // the frontend relay). Resolves the agent's session to its workspace's UDID.
+  GET_SIMULATOR_CONTEXT: "getSimulatorContext",
 } as const;
 
 // ============================================================================

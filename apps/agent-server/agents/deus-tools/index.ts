@@ -6,6 +6,7 @@
 import { createSdkMcpServer } from "@anthropic-ai/claude-agent-sdk";
 import { createWorkspaceTools } from "./workspace";
 import { createBrowserTools } from "./browser";
+
 import { createSimulatorTools } from "./simulator";
 import { createRecordingTools, getSessionManager } from "./recording";
 import { RecordingBridge } from "./recording-bridge";

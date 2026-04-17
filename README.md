@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="assets/logo.png" alt="Deus Machine" width="80" />
+  <img src="assets/logo.png" alt="Deus Machine" width="400" />
 </p>
 
 <h3 align="center">
