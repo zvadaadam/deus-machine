@@ -39,14 +39,22 @@ function initDatabase(): Database.Database {
     // Create all tables, indexes, and triggers (idempotent)
     dbInstance.exec(SCHEMA_SQL);
 
-    // Post-launch migrations: add new columns to existing tables.
-    // Each ALTER TABLE may fail with "duplicate column" if already applied — skip those.
+    // Post-launch migrations: add/rename/drop columns on existing tables.
+    // An ALTER that's already been applied (fresh install created the final
+    // schema directly) surfaces as "duplicate column" / "no such column" /
+    // "no such table" — tolerate those so migrations remain idempotent.
     for (const sql of MIGRATIONS) {
       try {
         dbInstance.exec(sql);
       } catch (e: unknown) {
         const msg = e instanceof Error ? e.message : "";
-        if (!msg.includes("duplicate column") && !msg.includes("no such table")) throw e;
+        if (
+          !msg.includes("duplicate column") &&
+          !msg.includes("no such column") &&
+          !msg.includes("no such table")
+        ) {
+          throw e;
+        }
       }
     }
 

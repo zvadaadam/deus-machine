@@ -70,7 +70,13 @@ function createTestDb(): Database.Database {
       db.exec(sql);
     } catch (e: unknown) {
       const msg = e instanceof Error ? e.message : "";
-      if (!msg.includes("duplicate column") && !msg.includes("already exists")) throw e;
+      if (
+        !msg.includes("duplicate column") &&
+        !msg.includes("no such column") &&
+        !msg.includes("already exists")
+      ) {
+        throw e;
+      }
     }
   }
 
