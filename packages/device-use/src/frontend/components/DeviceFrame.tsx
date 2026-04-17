@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useSimStore } from "../stores/sim-store";
 import { useRefsStore } from "../stores/refs-store";
+import { api } from "../lib/api";
 
 interface Ripple {
   id: number;
@@ -177,6 +178,64 @@ export function DeviceFrame() {
     ws.send(encodeButton(button));
     useRefsStore.getState().scheduleRefresh();
   }, []);
+
+  // --- Keyboard → type_text -----------------------------------------------
+  // simbridge's /ws protocol has no key opcode — we go through the REST
+  // type_text tool instead. To avoid one HTTP round-trip per keystroke,
+  // keys are buffered and flushed after a short idle or on Enter.
+  const typedRef = useRef("");
+  const flushTimerRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
+
+  const flushTyped = useCallback(async (opts: { submit?: boolean } = {}) => {
+    if (flushTimerRef.current) {
+      clearTimeout(flushTimerRef.current);
+      flushTimerRef.current = undefined;
+    }
+    const text = typedRef.current;
+    typedRef.current = "";
+    if (!text && !opts.submit) return;
+    await api.typeText({ text, submit: opts.submit });
+    useRefsStore.getState().scheduleRefresh();
+  }, []);
+
+  useEffect(() => {
+    if (!booted || !streamUdid) return;
+    const onKey = (ev: KeyboardEvent) => {
+      // Respect focus: let the top-bar inputs handle their own keystrokes.
+      const tag = (ev.target as HTMLElement)?.tagName;
+      if (tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT") return;
+      // Hardware button shortcuts (Cmd+H / Cmd+L) are handled elsewhere.
+      if (ev.metaKey || ev.ctrlKey) return;
+      if (ev.key === "Enter") {
+        ev.preventDefault();
+        void flushTyped({ submit: true });
+        return;
+      }
+      if (ev.key === "Backspace") {
+        ev.preventDefault();
+        // Backspace only trims chars still queued on the client — it can't
+        // undo characters already dispatched to the sim. Good enough for
+        // typo-correction during fast typing; add a dedicated backspace
+        // command if/when simbridge grows a key opcode.
+        if (typedRef.current.length > 0) {
+          typedRef.current = typedRef.current.slice(0, -1);
+        }
+        return;
+      }
+      if (ev.key.length === 1) {
+        ev.preventDefault();
+        typedRef.current += ev.key;
+        if (flushTimerRef.current) clearTimeout(flushTimerRef.current);
+        flushTimerRef.current = setTimeout(() => void flushTyped(), 150);
+      }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => {
+      window.removeEventListener("keydown", onKey);
+      // Flush anything still queued on teardown.
+      void flushTyped();
+    };
+  }, [booted, streamUdid, flushTyped]);
 
   // Keyboard shortcuts for the hardware buttons (Cmd+H → home, Cmd+L → lock).
   useEffect(() => {
