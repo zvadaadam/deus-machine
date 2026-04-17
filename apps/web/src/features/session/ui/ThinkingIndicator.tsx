@@ -1,13 +1,15 @@
 /**
  * ThinkingIndicator — text label that cycles thinking effort on click.
  *
- * No icon, no pips — just the word. Click cycles through levels:
- *   Claude: Low → High → Low  (2 states, binary extended thinking)
- *   Codex:  Low → Medium → High → Low  (3 states, graduated reasoning)
+ * No icon, no pips — just the word. Click cycles through model-specific levels:
+ *   Claude (default):  Low → Med → High → Low
+ *   Opus 4.7:          Low → Med → High → X-High → Low
+ *   Codex:             Low → Med → High → Low
  *
- * Thinking level cycle is defined in agentRuntime's AgentConfig — the
- * component itself is agent-agnostic. Visual weight increases with level
- * via font-weight + opacity, so the word communicates intensity at a glance.
+ * Thinking level cycle is defined per-model in shared/agents/catalog. The
+ * component itself is agent-agnostic. Visual weight increases with level via
+ * font-weight + opacity, so the word communicates intensity at a glance.
+ * X-High gets a tinted gold pill to signal the top gear.
  */
 
 import { motion, AnimatePresence } from "framer-motion";
@@ -42,6 +44,7 @@ interface ThinkingIndicatorProps {
 export function ThinkingIndicator({ level, onClick, className }: ThinkingIndicatorProps) {
   const style = LEVEL_STYLE[level];
   const displayLabel = LEVEL_DISPLAY[level];
+  const isXHigh = level === "XHIGH";
 
   return (
     <Tooltip delayDuration={200}>
@@ -53,8 +56,11 @@ export function ThinkingIndicator({ level, onClick, className }: ThinkingIndicat
           className={cn(
             "flex h-8 items-center rounded-lg px-2",
             "ease transition-colors duration-200",
-            "hover:bg-accent",
             "focus-visible:ring-ring focus-visible:ring-1 focus-visible:outline-none",
+            // X-High: subtle gold-tinted pill to signal "top gear" — matches
+            // the "New" badge treatment (muted-accent/20 bg, accent text).
+            // Other levels stay flat and use the standard hover treatment.
+            isXHigh ? "bg-accent-gold/15 hover:bg-accent-gold/20" : "hover:bg-accent",
             className
           )}
         >
@@ -70,11 +76,11 @@ export function ThinkingIndicator({ level, onClick, className }: ThinkingIndicat
                 originX: 0.5,
               }}
               className={cn(
-                "text-muted-foreground text-xs select-none",
-                // Minimum width so the button doesn't jump between "Low" and "High"
+                "text-xs select-none",
                 // Fixed width accommodates the widest label (X-High) so the
                 // button doesn't jump between levels.
-                "inline-block w-10 text-center"
+                "inline-block w-10 text-center",
+                isXHigh ? "text-accent-gold" : "text-muted-foreground"
               )}
             >
               {displayLabel}

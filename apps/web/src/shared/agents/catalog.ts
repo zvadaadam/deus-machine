@@ -15,13 +15,13 @@ export const AGENT_CONFIGS = {
     id: "claude" as const,
     label: "Claude",
     groupLabel: "Claude Code",
-    thinkingLevels: ["LOW", "HIGH"] as const,
+    thinkingLevels: ["LOW", "MEDIUM", "HIGH"] as const,
     models: [
       {
         model: "claude-opus-4-7",
         label: "Opus 4.7",
         isNew: true,
-        thinkingLevels: ["LOW", "HIGH", "XHIGH"] as const,
+        thinkingLevels: ["LOW", "MEDIUM", "HIGH", "XHIGH"] as const,
       },
       { model: "claude-opus-4-6", label: "Opus 4.6" },
       { model: "claude-sonnet-4-6", label: "Sonnet 4.6", isNew: true },
