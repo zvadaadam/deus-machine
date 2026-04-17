@@ -1,37 +1,32 @@
-import { useEffect, useState } from "react";
-
-type HealthResponse = { ok: boolean; uptime: number };
+import { useEffect } from "react";
+import "./styles.css";
+import { TopBar } from "./components/TopBar";
+import { DeviceFrame } from "./components/DeviceFrame";
+import { Sidebar } from "./components/Sidebar";
+import { LogsDrawer } from "./components/LogsDrawer";
+import { Toasts } from "./components/Toasts";
+import { useEventsWs } from "./lib/ws";
+import { useSimStore } from "./stores/sim-store";
+import { useProjectStore } from "./stores/project-store";
 
 export function App() {
-  const [health, setHealth] = useState<HealthResponse | null>(null);
+  useEventsWs();
 
   useEffect(() => {
-    fetch("/health")
-      .then((r) => r.json())
-      .then(setHealth)
-      .catch(() => setHealth(null));
+    useSimStore.getState().refresh();
+    useProjectStore.getState().refresh();
+    // Refresh sim list every 10s (catches external simctl boot/shutdown).
+    const t = setInterval(() => useSimStore.getState().refresh(), 10_000);
+    return () => clearInterval(t);
   }, []);
 
   return (
-    <main
-      style={{
-        fontFamily: "-apple-system, BlinkMacSystemFont, sans-serif",
-        padding: "48px",
-        color: "#111",
-      }}
-    >
-      <h1 style={{ margin: 0 }}>device-use</h1>
-      <p style={{ color: "#666", margin: "4px 0 32px" }}>v2 scaffold — Phase 1</p>
-      <pre
-        style={{
-          background: "#f4f4f5",
-          padding: "12px 16px",
-          borderRadius: 6,
-          fontSize: 13,
-        }}
-      >
-        {health ? JSON.stringify(health, null, 2) : "fetching /health..."}
-      </pre>
-    </main>
+    <div className="app">
+      <TopBar />
+      <DeviceFrame />
+      <Sidebar />
+      <LogsDrawer />
+      <Toasts />
+    </div>
   );
 }
