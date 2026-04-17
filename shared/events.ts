@@ -41,8 +41,7 @@ export const BROWSER_WORKSPACE_CHANGE = "browser-window:workspace-change" as con
 export const BROWSER_DETACHED_CLOSED = "browser:detached-closed" as const;
 export const BROWSER_NEW_TAB_REQUESTED = "browser:new-tab-requested" as const;
 
-/** Simulator events — main process → frontend */
-export const SIM_BUILD_LOG = "sim:build-log" as const;
+// Simulator build logs now use q:event "sim:buildLog" via WebSocket protocol.
 
 /** Chat insert events — main process → frontend */
 export const CHAT_INSERT = "chat-insert" as const;
@@ -133,6 +132,20 @@ export const COMMAND_NAMES = [
   "createWorkspace",
   "retrySetup",
   "openPenFile",
+  // Simulator commands
+  "sim:listDevices",
+  "sim:start",
+  "sim:stop",
+  "sim:touch",
+  "sim:key",
+  "sim:scroll",
+  "sim:button",
+  "sim:screenshot",
+  "sim:buildAndRun",
+  "sim:hasXcodeProject",
+  "sim:launchApp",
+  "sim:terminateApp",
+  "sim:uninstallApp",
 ] as const;
 export type CommandName = (typeof COMMAND_NAMES)[number];
 
@@ -159,6 +172,13 @@ export const PROTOCOL_EVENTS = [
   "git-init-progress",
   // Agent-server bidirectional RPC
   "agent-server:request",
+  // Simulator events
+  "sim:streamReady",
+  "sim:stopped",
+  "sim:buildLog",
+  "sim:buildComplete",
+  "sim:buildFailed",
+  "sim:streamFailed",
 ] as const;
 export type ProtocolEvent = (typeof PROTOCOL_EVENTS)[number];
 
@@ -225,12 +245,6 @@ const BrowserNewTabRequestedSchema = z.object({
   openerLabel: z.string().optional(),
 });
 type BrowserNewTabRequestedEvent = z.infer<typeof BrowserNewTabRequestedSchema>;
-
-const SimBuildLogSchema = z.object({
-  workspaceId: z.string(),
-  line: z.string(),
-});
-type SimBuildLogEvent = z.infer<typeof SimBuildLogSchema>;
 
 const BackendPortChangedSchema = z.object({
   port: z.number(),
@@ -315,7 +329,6 @@ export const AppEventSchemaMap = {
   [BROWSER_WORKSPACE_CHANGE]: BrowserWorkspaceChangeSchema,
   [BROWSER_DETACHED_CLOSED]: z.undefined(),
   [BROWSER_NEW_TAB_REQUESTED]: BrowserNewTabRequestedSchema,
-  [SIM_BUILD_LOG]: SimBuildLogSchema,
   [CHAT_INSERT]: ChatInsertSchema,
   [GIT_CLONE_PROGRESS]: GitCloneProgressSchema,
   [GIT_INIT_PROGRESS]: GitInitProgressSchema,
@@ -351,9 +364,6 @@ export interface AppEventMap {
   [BROWSER_WORKSPACE_CHANGE]: BrowserWorkspaceChangeEvent;
   [BROWSER_DETACHED_CLOSED]: undefined;
   [BROWSER_NEW_TAB_REQUESTED]: BrowserNewTabRequestedEvent;
-
-  // Simulator
-  [SIM_BUILD_LOG]: SimBuildLogEvent;
 
   // Chat
   [CHAT_INSERT]: SerializedChatInsertPayload;

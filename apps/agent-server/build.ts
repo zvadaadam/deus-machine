@@ -49,6 +49,10 @@ build({
     "ws",
     // Sentry — optional dependency, loaded at runtime if DSN is configured
     "@sentry/node",
+    // device-use — ESM-only package with native Swift binary (simbridge).
+    // Uses import.meta.url internally which fails in CJS. Loaded via dynamic
+    // import() in sim-ops.ts at runtime.
+    "device-use",
   ],
   minify: false,
   sourcemap: false,

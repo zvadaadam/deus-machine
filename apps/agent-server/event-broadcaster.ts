@@ -25,22 +25,6 @@ import type {
   GetTerminalOutputResponse,
   ExitPlanModeRequest,
   ExitPlanModeResponse,
-  SimScreenshotRequest,
-  SimScreenshotResponse,
-  SimTapRequest,
-  SimTapResponse,
-  SimSwipeRequest,
-  SimSwipeResponse,
-  SimTypeTextRequest,
-  SimTypeTextResponse,
-  SimPressKeyRequest,
-  SimPressKeyResponse,
-  SimBuildAndRunRequest,
-  SimBuildAndRunResponse,
-  SimListDevicesRequest,
-  SimListDevicesResponse,
-  SimStartRequest,
-  SimStartResponse,
 } from "./protocol";
 
 // ============================================================================
@@ -54,22 +38,6 @@ const USER_FACING_TIMEOUT_MS = 120_000;
 
 /** Timeout for data-fetching requests that should resolve quickly */
 const DATA_QUERY_TIMEOUT_MS = 10_000;
-
-/** Timeout for simulator screenshot — native capture + JPEG
- *  encoding + base64 transfer. Typically <2s but allow headroom. */
-const SIMULATOR_SCREENSHOT_TIMEOUT_MS = 10_000;
-
-/** Timeout for simulator interactions (tap, swipe, type, key press) — HID
- *  injection through the ObjC bridge is fast but include IPC buffer. */
-const SIMULATOR_INTERACTION_TIMEOUT_MS = 10_000;
-
-/** Timeout for simulator boot — booting a simulator and starting the MJPEG
- *  stream + ObjC bridge can take 15-20s on cold boot. */
-const SIMULATOR_BOOT_TIMEOUT_MS = 30_000;
-
-/** Timeout for build-and-run — xcodebuild can take minutes for large projects.
- *  10 minutes matches the existing builder.ts timeout. */
-const SIMULATOR_BUILD_TIMEOUT_MS = 600_000;
 
 // ============================================================================
 // EventBroadcaster class
@@ -423,58 +391,21 @@ class EventBroadcasterClass {
     );
   }
 
-  // --- Simulator automation RPCs ---
-  requestSimScreenshot(r: SimScreenshotRequest) {
-    return this.rpc<SimScreenshotResponse>(
-      FRONTEND_RPC_METHODS.SIM_SCREENSHOT,
-      r,
-      SIMULATOR_SCREENSHOT_TIMEOUT_MS
-    );
-  }
-  requestSimTap(r: SimTapRequest) {
-    return this.rpc<SimTapResponse>(
-      FRONTEND_RPC_METHODS.SIM_TAP,
-      r,
-      SIMULATOR_INTERACTION_TIMEOUT_MS
-    );
-  }
-  requestSimSwipe(r: SimSwipeRequest) {
-    return this.rpc<SimSwipeResponse>(
-      FRONTEND_RPC_METHODS.SIM_SWIPE,
-      r,
-      SIMULATOR_INTERACTION_TIMEOUT_MS
-    );
-  }
-  requestSimTypeText(r: SimTypeTextRequest) {
-    return this.rpc<SimTypeTextResponse>(
-      FRONTEND_RPC_METHODS.SIM_TYPE_TEXT,
-      r,
-      SIMULATOR_INTERACTION_TIMEOUT_MS
-    );
-  }
-  requestSimPressKey(r: SimPressKeyRequest) {
-    return this.rpc<SimPressKeyResponse>(
-      FRONTEND_RPC_METHODS.SIM_PRESS_KEY,
-      r,
-      SIMULATOR_INTERACTION_TIMEOUT_MS
-    );
-  }
-  requestSimBuildAndRun(r: SimBuildAndRunRequest) {
-    return this.rpc<SimBuildAndRunResponse>(
-      FRONTEND_RPC_METHODS.SIM_BUILD_AND_RUN,
-      r,
-      SIMULATOR_BUILD_TIMEOUT_MS
-    );
-  }
-  requestSimListDevices(r: SimListDevicesRequest) {
-    return this.rpc<SimListDevicesResponse>(
-      FRONTEND_RPC_METHODS.SIM_LIST_DEVICES,
+  // --- Simulator context RPC (handled by backend, not forwarded to frontend) ---
+
+  /**
+   * Query the backend for the simulator UDID assigned to this session's workspace.
+   * The backend handles this directly from its in-memory simulator context map.
+   * Returns null if no simulator is assigned to the workspace.
+   */
+  requestSimulatorContext(r: {
+    sessionId: string;
+  }): Promise<{ udid: string; port?: number; streaming: boolean } | null> {
+    return this.rpc<{ udid: string; port?: number; streaming: boolean } | null>(
+      "getSimulatorContext",
       r,
       DATA_QUERY_TIMEOUT_MS
     );
-  }
-  requestSimStart(r: SimStartRequest) {
-    return this.rpc<SimStartResponse>(FRONTEND_RPC_METHODS.SIM_START, r, SIMULATOR_BOOT_TIMEOUT_MS);
   }
 
   // ==========================================================================

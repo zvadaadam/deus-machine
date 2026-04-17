@@ -100,6 +100,9 @@ const ALLOWED_MEDIA_EXT: Record<string, string> = {
   ".png": "image/png",
 };
 
+const toResponseBody = (stream: fs.ReadStream): BodyInit =>
+  Readable.toWeb(stream) as unknown as BodyInit;
+
 /**
  * GET /files/stream — Stream a local media file.
  * Query param: ?path=/tmp/recording-rec_a1b2c3.mp4
@@ -170,7 +173,7 @@ app.get("/files/stream", (c) => {
       }
 
       const stream = fs.createReadStream(realPath, { start, end });
-      return new Response(Readable.toWeb(stream) as ReadableStream, {
+      return new Response(toResponseBody(stream), {
         status: 206,
         headers: {
           "Content-Type": mimeType,
@@ -185,7 +188,7 @@ app.get("/files/stream", (c) => {
 
   // Full file
   const stream = fs.createReadStream(realPath);
-  return new Response(Readable.toWeb(stream) as ReadableStream, {
+  return new Response(toResponseBody(stream), {
     status: 200,
     headers: {
       "Content-Type": mimeType,

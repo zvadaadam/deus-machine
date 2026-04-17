@@ -12,6 +12,40 @@ function isTextResultBlock(block: unknown): block is TextResultBlock {
   return record.type === "text" && typeof record.text === "string";
 }
 
+type ImageResultBlock = {
+  type: "image";
+  data?: string;
+  mimeType?: string;
+  source?: {
+    data?: string;
+    media_type?: string;
+  };
+};
+
+function isImageResultBlock(block: unknown): block is ImageResultBlock {
+  if (!block || typeof block !== "object") return false;
+  return (block as Record<string, unknown>).type === "image";
+}
+
+export function extractImage(content: unknown): { data: string; mediaType: string } | null {
+  if (!Array.isArray(content)) return null;
+
+  // Iterate through all image blocks — don't stop at the first one if its
+  // payload is incomplete, since later valid images would be skipped.
+  for (const block of content) {
+    if (!isImageResultBlock(block)) continue;
+
+    if (typeof block.data === "string") {
+      return { data: block.data, mediaType: block.mimeType || "image/jpeg" };
+    }
+    if (typeof block.source?.data === "string") {
+      return { data: block.source.data, mediaType: block.source.media_type || "image/jpeg" };
+    }
+  }
+
+  return null;
+}
+
 export function extractText(content: unknown): string {
   if (typeof content === "string") return content;
   if (Array.isArray(content)) {
