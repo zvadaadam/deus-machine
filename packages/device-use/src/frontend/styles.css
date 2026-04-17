@@ -124,11 +124,44 @@ body,
 .stage {
   grid-area: stage;
   display: flex;
+  flex-direction: column;
   align-items: center;
   justify-content: center;
   background: #06060a;
   overflow: hidden;
   position: relative;
+  gap: 12px;
+}
+
+.device-buttons {
+  display: flex;
+  gap: 8px;
+}
+
+.hw-button {
+  background: var(--surface-2);
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  padding: 6px 14px;
+  font-family: var(--mono);
+  font-size: 11px;
+  cursor: pointer;
+  letter-spacing: 0.02em;
+  transition:
+    background 0.1s ease,
+    border-color 0.1s ease;
+}
+
+.hw-button:hover {
+  background: var(--surface);
+  border-color: var(--muted);
+}
+
+.hw-button:active {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: white;
 }
 
 .device-frame {
