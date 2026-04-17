@@ -18,6 +18,7 @@ export interface StreamInfo {
   udid: string;
   port: number;
   url: string;
+  size?: { pxW: number; pxH: number; ptW: number; ptH: number };
 }
 
 export interface InvokeResult<T = unknown> {

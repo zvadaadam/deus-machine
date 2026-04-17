@@ -16,7 +16,17 @@ export interface StreamInfo {
   udid: string;
   port: number;
   url: string;
+  /** Raw pixel + logical point dimensions of the simulator screen. */
+  size?: { pxW: number; pxH: number; ptW: number; ptH: number };
 }
+
+/**
+ * Heuristic pixel-to-point scale. Every shipping iPhone since ~2014 is 3x;
+ * older/SE devices and iPads vary. We default to 3 and fall back to
+ * dividing the pixel width by common point widths if needed.
+ * A future refinement would query `xcrun simctl` for the device type.
+ */
+const DEFAULT_SCALE = 3;
 
 async function pickFreePort(): Promise<number> {
   return new Promise<number>((resolve, reject) => {
@@ -62,6 +72,7 @@ export class StreamManager {
     });
 
     // Wait for the upstream to begin listening — a very short readiness probe.
+    let size: StreamInfo["size"];
     await new Promise<void>((resolve, reject) => {
       const timer = setTimeout(() => {
         reject(new Error(`simbridge stream timed out on port ${port}`));
@@ -71,6 +82,17 @@ export class StreamManager {
           const res = await fetch(`http://127.0.0.1:${port}/config`);
           if (res.ok) {
             clearTimeout(timer);
+            try {
+              const cfg = (await res.json()) as { width: number; height: number };
+              size = {
+                pxW: cfg.width,
+                pxH: cfg.height,
+                ptW: Math.round(cfg.width / DEFAULT_SCALE),
+                ptH: Math.round(cfg.height / DEFAULT_SCALE),
+              };
+            } catch {
+              // /config didn't return expected shape — leave size undefined
+            }
             resolve();
             return;
           }
@@ -95,7 +117,7 @@ export class StreamManager {
     });
 
     this.child = child;
-    this.info = { udid, port, url: `http://127.0.0.1:${port}` };
+    this.info = { udid, port, url: `http://127.0.0.1:${port}`, ...(size && { size }) };
     return this.info;
   }
 
