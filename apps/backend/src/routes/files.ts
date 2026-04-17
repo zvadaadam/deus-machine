@@ -78,11 +78,14 @@ app.get("/workspaces/:id/file-content", withWorkspace, (c) => {
  */
 app.post("/workspaces/:id/files/search", withWorkspace, async (c) => {
   const { query, limit = 15 } = await c.req.json<{ query: string; limit?: number }>();
+  const workspacePath = c.get("workspacePath");
+
+  // Empty query → return top-level files (short paths first)
   if (!query || typeof query !== "string") {
-    return c.json([]);
+    const results = filesService.listTopFiles(workspacePath, limit);
+    return c.json(results);
   }
 
-  const workspacePath = c.get("workspacePath");
   const results = filesService.fuzzySearchFiles(workspacePath, query, limit);
   return c.json(results);
 });

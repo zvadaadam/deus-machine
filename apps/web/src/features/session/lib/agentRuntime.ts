@@ -58,8 +58,9 @@ const AGENT_CONFIGS = {
     groupLabel: "Claude Code",
     thinkingLevels: ["LOW", "HIGH"] as const,
     models: [
+      { model: "opus-1m", label: "Opus 4.6 (1M)" },
       { model: "opus", label: "Opus 4.6" },
-      { model: "sonnet", label: "Sonnet 4.6", isNew: true },
+      { model: "sonnet", label: "Sonnet 4.6" },
       { model: "haiku", label: "Haiku 4.5" },
     ],
   },
@@ -69,8 +70,8 @@ const AGENT_CONFIGS = {
     groupLabel: "Codex",
     thinkingLevels: ["LOW", "MEDIUM", "HIGH"] as const,
     models: [
-      { model: "gpt-5.3-codex", label: "GPT-5.3 Codex", isNew: true },
-      { model: "gpt-5.2-codex", label: "GPT-5.2 Codex" },
+      { model: "gpt-5.4-codex", label: "GPT-5.4 Codex" },
+      { model: "gpt-5.3-codex", label: "GPT-5.3 Codex" },
       { model: "gpt-5.3-codex-spark", label: "Codex Spark" },
     ],
   },
@@ -153,7 +154,7 @@ export function getRuntimeModelOption(model: string): RuntimeModelOption | undef
 
   // Backward compatibility for persisted values
   if (normalized === "codex") {
-    return RUNTIME_MODEL_OPTIONS.find((option) => option.value === "codex:gpt-5.3-codex");
+    return RUNTIME_MODEL_OPTIONS.find((option) => option.value === "codex:gpt-5.4-codex");
   }
 
   // Legacy plain model values default to Claude harness

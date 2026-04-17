@@ -1,13 +1,12 @@
 /**
- * FileMentionPopover — Floating file search results for @ mentions
+ * FileMentionPopover — Sheet list of file search results for @ mentions
  *
- * Renders a compact popover anchored above the textarea when the user
- * types @ to mention a file. Uses the same visual language as the
- * command palette but in a lightweight inline popover.
+ * Renders inside the InputGroup as a sheet that slides out above the textarea
+ * when the user types @ to mention a file. Matches the SlashCommandPopover style.
  */
 
 import { useEffect, useRef } from "react";
-import { File, Loader2 } from "lucide-react";
+import { Loader2 } from "lucide-react";
 import { cn } from "@/shared/lib/utils";
 import type { FuzzyFileResult } from "../hooks/useFileMention";
 
@@ -25,7 +24,7 @@ function getDirectory(path: string): string {
   return lastSlash > 0 ? path.slice(0, lastSlash) : "";
 }
 
-/** Highlight matched characters in filename (simple substring highlight) */
+/** Highlight matched substring in filename */
 function highlightMatch(text: string, query: string) {
   if (!query) return text;
 
@@ -56,57 +55,82 @@ export function FileMentionPopover({
   // Auto-scroll selected item into view
   useEffect(() => {
     if (!listRef.current) return;
-    const selectedEl = listRef.current.children[selectedIndex] as HTMLElement | undefined;
+    const selectedEl = listRef.current.querySelector<HTMLElement>('[data-selected="true"]');
     selectedEl?.scrollIntoView({ block: "nearest" });
   }, [selectedIndex]);
 
   if (results.length === 0 && !loading) {
-    if (!query) return null;
     return (
-      <div className="border-border/50 bg-popover/95 w-[340px] rounded-lg border p-2.5 shadow-lg backdrop-blur-xl">
-        <p className="text-muted-foreground text-center text-xs">No files found</p>
+      <div className="border-border/50 bg-muted/20 w-full border-b">
+        <div className="text-foreground/80 px-4 py-3 text-sm font-medium">Files</div>
+        <div className="px-4 pb-4">
+          <p className="text-muted-foreground text-xs">
+            {query ? "No files found" : "Type to search files"}
+          </p>
+        </div>
       </div>
     );
   }
 
   return (
-    <div className="border-border/50 bg-popover/95 w-[340px] overflow-hidden rounded-lg border shadow-lg backdrop-blur-xl">
-      {loading && results.length === 0 && (
-        <div className="flex items-center justify-center gap-1.5 p-2.5">
-          <Loader2 className="text-muted-foreground h-3 w-3 animate-spin" />
-          <span className="text-muted-foreground text-xs">Searching...</span>
+    <div className="border-border/50 bg-muted/20 w-full border-b">
+      <div className="text-foreground/80 px-4 py-3 text-sm font-medium">Files</div>
+
+      {loading && results.length === 0 ? (
+        <div className="text-muted-foreground flex items-center gap-1.5 px-4 pb-4 text-xs">
+          <Loader2 className="h-3 w-3 animate-spin" />
+          <span>Searching...</span>
+        </div>
+      ) : (
+        <div ref={listRef} className="max-h-[320px] overflow-y-auto px-2 pb-2">
+          {results.map((result, index) => {
+            const dir = getDirectory(result.path);
+            const isSelected = index === selectedIndex;
+
+            return (
+              <button
+                type="button"
+                key={result.path}
+                data-selected={isSelected ? "true" : undefined}
+                className={cn(
+                  "flex w-full items-start rounded-xl px-3 py-2 text-left transition-colors duration-150 ease-out",
+                  isSelected ? "bg-accent text-accent-foreground" : "hover:bg-accent/40"
+                )}
+                onMouseDown={(e) => {
+                  e.preventDefault();
+                  onSelect(result.path);
+                }}
+              >
+                <div className="min-w-0 flex-1">
+                  <div className="flex min-w-0 items-center gap-2">
+                    <span
+                      className={cn(
+                        "text-muted-foreground shrink-0 text-sm leading-none",
+                        isSelected && "text-accent-foreground/65"
+                      )}
+                    >
+                      @
+                    </span>
+                    <div className="truncate text-sm leading-tight font-medium">
+                      {highlightMatch(result.name, query)}
+                    </div>
+                    {dir && (
+                      <span
+                        className={cn(
+                          "text-muted-foreground min-w-0 truncate text-xs",
+                          isSelected && "text-accent-foreground/60"
+                        )}
+                      >
+                        {dir}
+                      </span>
+                    )}
+                  </div>
+                </div>
+              </button>
+            );
+          })}
         </div>
       )}
-
-      <div ref={listRef} className="max-h-[200px] overflow-y-auto py-0.5">
-        {results.map((result, index) => {
-          const dir = getDirectory(result.path);
-          const isSelected = index === selectedIndex;
-
-          return (
-            <button
-              key={result.path}
-              className={cn(
-                "flex w-full items-center gap-2 px-2.5 py-1 text-left transition-colors duration-75",
-                isSelected
-                  ? "bg-accent text-accent-foreground"
-                  : "text-foreground hover:bg-accent/50"
-              )}
-              onMouseDown={(e) => {
-                // Use mouseDown (not click) to fire before textarea blur
-                e.preventDefault();
-                onSelect(result.path);
-              }}
-            >
-              <File className="text-muted-foreground h-3 w-3 shrink-0" />
-              <div className="min-w-0 flex-1">
-                <span className="text-xs leading-tight">{highlightMatch(result.name, query)}</span>
-                {dir && <span className="text-muted-foreground text-2xs ml-1.5">{dir}</span>}
-              </div>
-            </button>
-          );
-        })}
-      </div>
     </div>
   );
 }

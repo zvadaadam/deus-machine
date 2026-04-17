@@ -9,7 +9,7 @@ import { EventBroadcaster } from "../../event-broadcaster";
 import { createCheckpoint } from "./checkpoint";
 import { createDeusMCPServer } from "../deus-tools";
 import { getClaudeExecutablePath } from "./claude-discovery";
-import { mapModelForProvider } from "./claude-models";
+import { mapModelForProvider, parseModelSpec } from "./claude-models";
 import { claudeSessions } from "./claude-session";
 import type { QueryOptions } from "../registry";
 import { buildWorkspaceContext } from "../environment";
@@ -235,6 +235,7 @@ export function buildSdkOptions(
   options: QueryOptions
 ): Options {
   const modelToUse = mapModelForProvider(options?.model, env);
+  const { extended: use1MContext } = parseModelSpec(options?.model ?? "");
   const workingDirectory = options?.cwd;
   const permissionMode = (options?.permissionMode ?? "default") as PermissionMode;
 
@@ -243,6 +244,7 @@ export function buildSdkOptions(
   const sdkOptions: Partial<Options> = {
     maxTurns: options?.maxTurns || 1_000,
     model: modelToUse,
+    ...(use1MContext ? { betas: ["context-1m-2025-08-07" as const] } : {}),
     maxThinkingTokens: options?.maxThinkingTokens,
     cwd: workingDirectory,
     pathToClaudeCodeExecutable: getClaudeExecutablePath(),
