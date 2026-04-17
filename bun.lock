@@ -131,11 +131,13 @@
         "device-use": "./dist/cli.js",
       },
       "dependencies": {
+        "@modelcontextprotocol/sdk": "^1.29.0",
         "hono": "^4.6.0",
         "jimp": "^1.6.1",
         "react": "^19.0.0",
         "react-dom": "^19.0.0",
         "zod": "^3.24.0",
+        "zod-to-json-schema": "^3.25.2",
       },
       "devDependencies": {
         "@types/bun": "^1.1.0",
