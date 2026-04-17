@@ -9,11 +9,7 @@
 import { useState, useEffect, useRef, useCallback, useMemo } from "react";
 import { toast } from "sonner";
 import { useCreateSession, useWorkspaceSessions } from "@/features/session/api/session.queries";
-import {
-  getAgentLabel,
-  getAgentHarnessForModel,
-  type AgentHarness,
-} from "@/shared/agents";
+import { getAgentLabel, getAgentHarnessForModel, type AgentHarness } from "@/shared/agents";
 import { workspaceLayoutActions } from "@/features/workspace/store/workspaceLayoutStore";
 import type { Tab, ClosedTab } from "@/features/workspace/ui/MainContentTabs";
 import type { Session } from "@/features/session/types";
@@ -40,7 +36,11 @@ function sessionToTab(session: Session, sequence: number): Tab {
 }
 
 /** Count started tabs of a given agent type, excluding a specific tab. */
-function countStartedTabsOfHarness(tabs: Tab[], agentHarness: string, excludeTabId: string): number {
+function countStartedTabsOfHarness(
+  tabs: Tab[],
+  agentHarness: string,
+  excludeTabId: string
+): number {
   return tabs.filter(
     (t) => t.id !== excludeTabId && t.data?.hasStarted && t.data?.agentHarness === agentHarness
   ).length;
@@ -180,7 +180,11 @@ export function useChatTabs({ workspaceId, activeSessionId }: UseChatTabsOptions
           : {
               id: fallbackId ? `tab-${fallbackId}` : "tab-default",
               label: NEW_CHAT_LABEL,
-              data: { sessionId: fallbackId ?? undefined, agentHarness: "claude", hasStarted: false },
+              data: {
+                sessionId: fallbackId ?? undefined,
+                agentHarness: "claude",
+                hasStarted: false,
+              },
             };
         setActiveMainTabId(tab.id);
         return [tab];

@@ -758,7 +758,12 @@ describe("q:command → q:command_ack", () => {
           type: "q:command",
           id: "cmd-1",
           command: "sendMessage",
-          params: { sessionId: SESS_ID, content: "command test", model: "sonnet" },
+          params: {
+            sessionId: SESS_ID,
+            content: "command test",
+            model: "sonnet",
+            agentHarness: "claude",
+          },
         },
         "q:command_ack"
       );
@@ -865,7 +870,12 @@ describe("q:command → q:command_ack", () => {
           type: "q:command",
           id: "cmd-delta-1",
           command: "sendMessage",
-          params: { sessionId: SESS_ID, content: "delta check" },
+          params: {
+            sessionId: SESS_ID,
+            content: "delta check",
+            model: "claude-sonnet-4-6",
+            agentHarness: "claude",
+          },
         })
       );
 

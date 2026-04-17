@@ -751,7 +751,10 @@ export function HomeView({
                 onClick={() => setModelPickerOpen(!modelPickerOpen)}
                 className="text-text-muted hover:text-text-secondary flex items-center gap-1.5 rounded-lg px-2 py-1.5 text-xs transition-colors duration-150"
               >
-                <AgentLogo type={selectedModelOption?.agentHarness ?? "claude"} className="h-3 w-3" />
+                <AgentLogo
+                  type={selectedModelOption?.agentHarness ?? "claude"}
+                  className="h-3 w-3"
+                />
                 <span className="font-medium">{modelLabel}</span>
                 <ChevronDown
                   className={cn(
