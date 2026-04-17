@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useSimStore } from "../stores/sim-store";
+import { useRefsStore } from "../stores/refs-store";
 
 interface Ripple {
   id: number;
@@ -123,6 +124,8 @@ export function DeviceFrame() {
       if (ev.button !== 0 || !dragRef.current) return;
       dragRef.current = false;
       sendTouch("end", ev);
+      // Screen likely changed — refresh the refs sidebar.
+      useRefsStore.getState().scheduleRefresh(500);
     },
     [sendTouch]
   );
@@ -140,6 +143,7 @@ export function DeviceFrame() {
       const nx = Math.max(0, Math.min(1, (ev.clientX - rect.left) / rect.width));
       const ny = Math.max(0, Math.min(1, (ev.clientY - rect.top) / rect.height));
       ws.send(encodeTouch("end", nx, ny));
+      useRefsStore.getState().scheduleRefresh(500);
     };
     window.addEventListener("mouseup", onWindowMouseUp);
     return () => window.removeEventListener("mouseup", onWindowMouseUp);

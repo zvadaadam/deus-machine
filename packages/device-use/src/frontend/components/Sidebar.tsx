@@ -1,52 +1,59 @@
-import { useState } from "react";
+import { useEffect } from "react";
 import { useActivityStore } from "../stores/activity-store";
+import { useRefsStore } from "../stores/refs-store";
+import { useSimStore } from "../stores/sim-store";
 import { api } from "../lib/api";
-
-interface Ref {
-  ref: string;
-  label?: string;
-  type?: string;
-  identifier?: string;
-}
 
 export function Sidebar() {
   const events = useActivityStore((s) => s.events);
-  const [refs, setRefs] = useState<Ref[]>([]);
-  const [snapshotLoading, setSnapshotLoading] = useState(false);
+  const { refs, foreground, loading, refresh } = useRefsStore();
+  const streamInfo = useSimStore((s) => s.streamInfo);
 
-  const onSnapshot = async () => {
-    setSnapshotLoading(true);
-    try {
-      const res = await api.snapshot();
-      if (res.success && res.result) {
-        setRefs(res.result.refs as Ref[]);
-      }
-    } finally {
-      setSnapshotLoading(false);
+  // Take an initial snapshot once the stream is live.
+  useEffect(() => {
+    if (streamInfo && refs.length === 0) {
+      void useRefsStore.getState().refresh();
     }
-  };
+  }, [streamInfo, refs.length]);
 
   const onRefClick = async (ref: string) => {
     await api.tap({ ref });
+    useRefsStore.getState().scheduleRefresh(500);
   };
 
   return (
     <aside className="sidebar">
       <div className="section" style={{ flex: 1 }}>
         <div className="section-header">
-          <span>elements</span>
+          <span>
+            elements
+            {foreground && (
+              <span
+                style={{
+                  marginLeft: 8,
+                  color: "var(--accent-2)",
+                  textTransform: "none",
+                  letterSpacing: 0,
+                }}
+              >
+                · {foreground}
+              </span>
+            )}
+          </span>
           <button
             className="clear-btn"
             style={{ fontSize: 10, padding: "2px 6px" }}
-            onClick={onSnapshot}
-            disabled={snapshotLoading}
+            onClick={refresh}
+            disabled={loading}
           >
-            {snapshotLoading ? "…" : "snapshot"}
+            {loading ? "…" : "snapshot"}
           </button>
         </div>
         <div className="section-body">
           {refs.length === 0 ? (
-            <div className="empty">click snapshot to load a11y tree</div>
+            <div className="empty">
+              {loading ? "loading…" : "no interactive elements on this screen"}
+            </div>
           ) : (
             refs.map((r) => (
               <div key={r.ref} className="ref-item" onClick={() => onRefClick(r.ref)}>
