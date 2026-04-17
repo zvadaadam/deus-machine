@@ -39,7 +39,7 @@ export function FileMentionCard({ mention, onRemove }: FileMentionCardProps) {
         type="button"
         onClick={onRemove}
         className="text-foreground/30 hover:text-foreground/60 ease ml-0.5 flex h-4 w-4 shrink-0 items-center justify-center rounded-full transition-colors duration-200"
-        aria-label="Remove file mention"
+        aria-label={`Remove file mention ${mention.name}`}
       >
         <X className="h-3 w-3" />
       </button>

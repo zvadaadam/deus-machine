@@ -185,11 +185,18 @@ export function useFileMention({
       const after = value.slice(cursorPos);
 
       if (onAddMention) {
-        // Pill mode: remove the @query the user typed, surface mention above input
-        const result = results.find((r) => r.path === filePath);
-        if (result) {
-          onAddMention(result);
-        }
+        // Pill mode: remove the @query the user typed, surface mention above input.
+        // Derive the result from filePath directly — the results array may have
+        // mutated between render and click (async search), so find() can miss.
+        // Falling back to a synthesized result guarantees we never clear the
+        // @query without also surfacing a pill.
+        const fromResults = results.find((r) => r.path === filePath);
+        const result = fromResults ?? {
+          path: filePath,
+          name: filePath.split("/").pop() || filePath,
+          score: 0,
+        };
+        onAddMention(result);
         const newValue = before + after;
         const newCursorPos = before.length;
         setCursorPos(newCursorPos);
