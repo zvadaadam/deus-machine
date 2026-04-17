@@ -16,13 +16,10 @@ export function TopBar() {
 
   const onRun = async () => {
     if (!project.path || !project.scheme) return;
-    project.setStatus("building");
-    const buildRes = await api.build();
-    if (!buildRes.success) {
-      project.setStatus("failed");
-      return;
-    }
-    project.setStatus("done");
+    project.setStatus("running");
+    // `run` is the composite: build → install → launch.
+    const res = await api.run();
+    project.setStatus(res.success ? "done" : "failed");
   };
 
   const onProjectPath = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -82,11 +79,11 @@ export function TopBar() {
       <span className="spacer" />
 
       <button
-        className={`primary ${project.buildStatus === "building" ? "running" : ""}`}
+        className={`primary ${project.buildStatus === "running" ? "running" : ""}`}
         onClick={onRun}
-        disabled={!project.path || !project.scheme || !booted || project.buildStatus === "building"}
+        disabled={!project.path || !project.scheme || !booted || project.buildStatus === "running"}
       >
-        {project.buildStatus === "building" ? "building…" : "▶ run"}
+        {project.buildStatus === "running" ? "running…" : "▶ run"}
       </button>
     </header>
   );

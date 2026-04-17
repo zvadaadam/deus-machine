@@ -49,11 +49,20 @@ export const serveCommand: CommandDefinition<Params> = {
     });
 
     if (params.open) {
-      // Defer opening the browser until the server says it's listening.
-      setTimeout(() => {
+      // Poll /health until the server says it's listening, then open.
+      (async () => {
+        for (let i = 0; i < 30; i++) {
+          try {
+            const res = await fetch(`${url}health`);
+            if (res.ok) break;
+          } catch {
+            // server not up yet — keep waiting
+          }
+          await new Promise((r) => setTimeout(r, 200));
+        }
         const opener = process.platform === "darwin" ? "open" : "xdg-open";
         spawn(opener, [url], { detached: true, stdio: "ignore" }).unref();
-      }, 1500);
+      })();
     }
 
     await new Promise<void>((resolve) => child.once("exit", () => resolve()));

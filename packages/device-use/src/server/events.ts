@@ -28,10 +28,17 @@ export type BusEvent = ToolEvent | ToolLog;
 
 export type Subscriber = (event: BusEvent) => void;
 
+export interface LogHandle {
+  stop: () => void;
+}
+
 export class EventBus {
   private readonly subscribers = new Set<Subscriber>();
   private readonly history: BusEvent[] = [];
   private readonly maxHistory: number;
+  /** Active log subscriptions — keyed by the subscription id baked into
+   *  each tool-log frame. stream_logs parks a handle; stop_logs finds it. */
+  readonly logHandles = new Map<string, LogHandle>();
 
   constructor(maxHistory = 200) {
     this.maxHistory = maxHistory;

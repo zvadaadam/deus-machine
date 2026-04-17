@@ -29,17 +29,16 @@ export const useRefsStore = create<RefsState>((set, get) => ({
     try {
       const res = await api.snapshot();
       if (res.success && res.result) {
-        const tree = res.result.tree as Array<{ label?: string }> | undefined;
         set({
           refs: res.result.refs as Ref[],
-          foreground: tree?.[0]?.label ?? null,
+          foreground: res.result.foreground ?? null,
         });
       }
     } finally {
       set({ loading: false });
     }
   },
-  scheduleRefresh: (delayMs = 400) => {
+  scheduleRefresh: (delayMs = 500) => {
     if (scheduleTimer) clearTimeout(scheduleTimer);
     scheduleTimer = setTimeout(() => {
       scheduleTimer = undefined;

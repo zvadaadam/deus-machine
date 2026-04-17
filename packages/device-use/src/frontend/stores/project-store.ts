@@ -1,15 +1,17 @@
 import { create } from "zustand";
 import { api } from "../lib/api";
 
+export type BuildStatus = "idle" | "running" | "done" | "failed";
+
 interface ProjectState {
   path: string | null;
   scheme: string | null;
   configuration: string | null;
   schemes: string[];
-  buildStatus: "idle" | "building" | "installing" | "launching" | "done" | "failed";
+  buildStatus: BuildStatus;
   setProject: (path: string, scheme?: string, configuration?: string) => Promise<void>;
   refresh: () => Promise<void>;
-  setStatus: (status: ProjectState["buildStatus"]) => void;
+  setStatus: (status: BuildStatus) => void;
 }
 
 export const useProjectStore = create<ProjectState>((set) => ({
