@@ -32,6 +32,7 @@ import {
   RefMap,
   getProjectInfo,
   build as engineBuild,
+  resolveAppPath,
   streamLogs,
 } from "../engine/index.js";
 import type { CommandExecutor, PermissionAction, PermissionService } from "../engine/index.js";
@@ -193,6 +194,89 @@ const install = tool({
     const udid = await resolveUdid(ctx, params.udid);
     await installApp(ctx.executor, udid, params.appPath);
     return { ok: true, udid, appPath: params.appPath };
+  },
+});
+
+/**
+ * Composite: build → resolve .app path → install → launch.
+ * This is the "▶ Run" button behind the scenes. Agent can invoke directly
+ * when it knows the project + scheme; or call the three steps separately
+ * if it wants intermediate visibility.
+ */
+const run = tool({
+  name: "run",
+  description:
+    "Composite: build → install → launch. Requires project + scheme (pass explicitly or set via set_active_project) and a pinned/booted simulator.",
+  schema: z.object({
+    project: z.string().optional(),
+    scheme: z.string().optional(),
+    udid: z.string().optional(),
+    configuration: z.string().optional(),
+    bundleId: z.string().optional(),
+  }),
+  handler: async (ctx, params) => {
+    const projectPath = params.project ?? ctx.state.get().project?.path;
+    const scheme = params.scheme ?? ctx.state.get().project?.scheme;
+    if (!projectPath) throw new Error("project path is required");
+    if (!scheme) throw new Error("scheme is required");
+    const udid = await resolveUdid(ctx, params.udid);
+    const destination = `platform=iOS Simulator,id=${udid}`;
+    const configuration = params.configuration ?? ctx.state.get().project?.configuration ?? "Debug";
+
+    // 1. build
+    const logId = ctx.events.newId();
+    const buildResult = await engineBuild({
+      project: projectPath,
+      scheme,
+      destination,
+      configuration,
+      onLog: (line, stream) => ctx.events.emit({ type: "tool-log", id: logId, stream, text: line }),
+    });
+    if (!buildResult.success) {
+      throw new Error(
+        `build failed (exit ${buildResult.exitCode}):\n${buildResult.stderrTail.split("\n").slice(-20).join("\n")}`
+      );
+    }
+
+    // 2. resolve app path via -showBuildSettings (handles default DerivedData)
+    const appPath = await resolveAppPath(
+      { project: projectPath, scheme, destination, configuration },
+      ctx.executor
+    );
+    if (!appPath) {
+      throw new Error("build succeeded but could not locate the built .app bundle");
+    }
+
+    // 3. install
+    await installApp(ctx.executor, udid, appPath);
+
+    // 4. launch — resolve bundleId from Info.plist if not given
+    let bundleId = params.bundleId;
+    if (!bundleId) {
+      const plistResult = await ctx.executor([
+        "defaults",
+        "read",
+        `${appPath}/Info.plist`,
+        "CFBundleIdentifier",
+      ]);
+      if (!plistResult.success) {
+        throw new Error(
+          "could not read CFBundleIdentifier from Info.plist; pass bundleId explicitly"
+        );
+      }
+      bundleId = plistResult.output.trim();
+    }
+    const pid = await launchApp(ctx.executor, udid, bundleId);
+
+    return {
+      success: true,
+      udid,
+      scheme,
+      configuration,
+      appPath,
+      bundleId,
+      pid,
+    };
   },
 });
 
@@ -480,6 +564,7 @@ export const TOOLS: ToolDefinition[] = [
   get_project_info,
   buildTool,
   install,
+  run,
   launch_app,
   terminate_app,
   list_apps,

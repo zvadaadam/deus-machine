@@ -2,6 +2,7 @@ node_modules/
 dist/
 bin/
 .context/
+.device-use/
 native/.build/
 native/.swiftpm/
 test-apps/*/build/

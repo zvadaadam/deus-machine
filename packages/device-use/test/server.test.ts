@@ -55,8 +55,8 @@ async function makeCtx(overrides?: Partial<Context>): Promise<Context> {
 }
 
 describe("tool registry", () => {
-  test("registers exactly 23 tools", () => {
-    expect(TOOLS.length).toBe(23);
+  test("registers exactly 24 tools", () => {
+    expect(TOOLS.length).toBe(24);
   });
 
   test("every tool has a unique name", () => {
