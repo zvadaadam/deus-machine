@@ -9,7 +9,6 @@ import { EventBroadcaster } from "../../event-broadcaster";
 import { createCheckpoint } from "./checkpoint";
 import { createDeusMCPServer } from "../deus-tools";
 import { getClaudeExecutablePath } from "./claude-discovery";
-import { mapModelForProvider } from "./claude-models";
 import { claudeSessions } from "./claude-session";
 import type { QueryOptions } from "../registry";
 import { buildWorkspaceContext } from "../environment";
@@ -24,6 +23,40 @@ export const DEFAULT_PROMPT = {
 };
 
 export const DEFAULT_SETTING_SOURCES: SettingSource[] = ["user", "project", "local"];
+
+// ============================================================================
+// Thinking level → SDK options
+// ============================================================================
+//
+// Translates the wire-protocol ThinkingLevel into Claude Agent SDK options.
+// Centralizing here means adding a new SDK parameter (e.g. `effort: "xhigh"`
+// once the SDK typedef catches up to Opus 4.7) is a one-line change.
+//
+// On Opus 4.6+ the SDK currently treats maxThinkingTokens as on/off
+// (0 = disabled, any non-zero = adaptive enabled). The graduated numbers
+// still differentiate on older models and preserve intent.
+
+type ThinkingLevel = "NONE" | "LOW" | "MEDIUM" | "HIGH" | "XHIGH";
+
+const LEVEL_TO_MAX_TOKENS: Record<ThinkingLevel, number | undefined> = {
+  NONE: undefined,
+  LOW: 4096,
+  MEDIUM: 8192,
+  HIGH: 16384,
+  XHIGH: 32768,
+};
+
+/**
+ * Resolves the Claude SDK options that realize a given thinking level.
+ * Returns `{ maxThinkingTokens: undefined }` for NONE or when no level given.
+ */
+export function resolveThinkingOptions(
+  thinkingLevel: string | undefined
+): { maxThinkingTokens: number | undefined } {
+  if (!thinkingLevel) return { maxThinkingTokens: undefined };
+  const level = thinkingLevel.toUpperCase() as ThinkingLevel;
+  return { maxThinkingTokens: LEVEL_TO_MAX_TOKENS[level] };
+}
 
 /**
  * Builds the append system prompt with dynamic workspace context.
@@ -212,7 +245,7 @@ export function createHooks(sessionId: string) {
             EventBroadcaster.sendEnterPlanModeNotification({
               type: "enter_plan_mode_notification",
               id: sessionId,
-              agentType: "claude",
+              agentHarness: "claude",
             });
             return Promise.resolve({});
           },
@@ -234,16 +267,16 @@ export function buildSdkOptions(
   env: Record<string, string>,
   options: QueryOptions
 ): Options {
-  const modelToUse = mapModelForProvider(options?.model, env);
   const workingDirectory = options?.cwd;
   const permissionMode = (options?.permissionMode ?? "default") as PermissionMode;
+  const thinking = resolveThinkingOptions(options?.thinkingLevel);
 
   // Built as Partial<Options> and conditionally extended.
   // Cast to Options at return — the SDK validates at runtime.
   const sdkOptions: Partial<Options> = {
     maxTurns: options?.maxTurns || 1_000,
-    model: modelToUse,
-    maxThinkingTokens: options?.maxThinkingTokens,
+    model: options?.model,
+    maxThinkingTokens: thinking.maxThinkingTokens,
     cwd: workingDirectory,
     pathToClaudeCodeExecutable: getClaudeExecutablePath(),
     systemPrompt: {

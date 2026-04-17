@@ -88,8 +88,8 @@ function seedTestData() {
   testDb
     .prepare(
       `
-    INSERT INTO sessions (id, workspace_id, agent_type, model, status)
-    VALUES (?, ?, 'claude', 'opus', 'idle')
+    INSERT INTO sessions (id, workspace_id, agent_harness, status)
+    VALUES (?, ?, 'claude', 'idle')
   `
     )
     .run(SESS_ID, WS_ID);

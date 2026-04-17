@@ -4,7 +4,7 @@
 // registers itself in the registry during agent-server startup.
 
 import { getErrorMessage } from "@shared/lib/errors";
-import type { AgentType } from "../protocol";
+import type { AgentHarness } from "../protocol";
 import type { AgentCapabilities } from "@shared/agent-events";
 import type { QueryOptions } from "@shared/protocol";
 
@@ -47,7 +47,7 @@ export interface ContextUsageParams {
  * - updatePermissionMode() — hot-swap permission mode on active query
  */
 export interface AgentHandler {
-  readonly agentType: AgentType;
+  readonly agentHarness: AgentHarness;
   readonly capabilities: AgentCapabilities;
 
   initialize(): { success: boolean; error?: string };
@@ -69,21 +69,21 @@ export interface AgentHandler {
 // Agent Registry
 // ============================================================================
 
-const registry = new Map<AgentType, AgentHandler>();
+const registry = new Map<AgentHarness, AgentHandler>();
 
 /**
  * Registers an agent handler in the registry.
- * Overwrites any existing handler for the same agentType.
+ * Overwrites any existing handler for the same agentHarness.
  */
 export function registerAgent(handler: AgentHandler): void {
-  registry.set(handler.agentType, handler);
+  registry.set(handler.agentHarness, handler);
 }
 
 /**
  * Retrieves the agent handler for a given type.
  * Returns undefined if no handler is registered for that type.
  */
-export function getAgent(type: AgentType): AgentHandler | undefined {
+export function getAgent(type: AgentHarness): AgentHandler | undefined {
   return registry.get(type);
 }
 
@@ -91,8 +91,8 @@ export function getAgent(type: AgentType): AgentHandler | undefined {
  * Initializes all registered agents and returns their results.
  * Called once during agent-server startup after all agents are registered.
  */
-export function initializeAllAgents(): Map<AgentType, { success: boolean; error?: string }> {
-  const results = new Map<AgentType, { success: boolean; error?: string }>();
+export function initializeAllAgents(): Map<AgentHarness, { success: boolean; error?: string }> {
+  const results = new Map<AgentHarness, { success: boolean; error?: string }>();
   for (const [type, handler] of registry) {
     try {
       const result = handler.initialize();
@@ -111,7 +111,7 @@ export function initializeAllAgents(): Map<AgentType, { success: boolean; error?
  * Returns the list of registered agent type names.
  * Used by the health endpoint to report available agents.
  */
-export function getRegisteredAgentTypes(): AgentType[] {
+export function getRegisteredAgentHarnesses(): AgentHarness[] {
   return Array.from(registry.keys());
 }
 

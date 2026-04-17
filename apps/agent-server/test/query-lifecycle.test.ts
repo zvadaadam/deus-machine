@@ -26,9 +26,9 @@ import {
 
 // ── Helpers ────────────────────────────────────────────────────────────────
 
-function expectCancellationEvents(sessionId: string, agentType: string) {
-  expect(mockEmitSessionCancelled).toHaveBeenCalledWith(sessionId, agentType);
-  expect(mockEmitMessageCancelled).toHaveBeenCalledWith(sessionId, agentType);
+function expectCancellationEvents(sessionId: string, agentHarness: string) {
+  expect(mockEmitSessionCancelled).toHaveBeenCalledWith(sessionId, agentHarness);
+  expect(mockEmitMessageCancelled).toHaveBeenCalledWith(sessionId, agentHarness);
 }
 
 // ── Tests ──────────────────────────────────────────────────────────────────
@@ -129,8 +129,8 @@ describe("persistCancellation canonical events", () => {
   it.each([
     ["claude", "session-1"],
     ["codex", "session-2"],
-  ] as const)("emits both cancellation events for %s agent type", (agentType, sessionId) => {
-    persistCancellation(sessionId, agentType);
-    expectCancellationEvents(sessionId, agentType);
+  ] as const)("emits both cancellation events for %s agent type", (agentHarness, sessionId) => {
+    persistCancellation(sessionId, agentHarness);
+    expectCancellationEvents(sessionId, agentHarness);
   });
 });

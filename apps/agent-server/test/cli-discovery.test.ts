@@ -36,7 +36,7 @@ import {
 
 function makeConfig(overrides?: Partial<DiscoveryConfig>): DiscoveryConfig {
   return {
-    agentType: "claude",
+    agentHarness: "claude",
     displayName: "TestCLI",
     envVar: "TEST_CLI_PATH",
     staticCandidates: [],

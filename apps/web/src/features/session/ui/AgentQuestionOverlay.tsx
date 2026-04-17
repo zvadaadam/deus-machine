@@ -25,14 +25,14 @@ import type { AskQuestionRequest } from "../hooks/useAgentRpcHandler";
 
 interface AgentQuestionOverlayProps {
   request: AskQuestionRequest | null;
-  agentType?: string;
+  agentHarness?: string;
   onSubmit: (answers: (string | string[])[]) => void;
   onDismiss: () => void;
 }
 
 export function AgentQuestionOverlay({
   request,
-  agentType,
+  agentHarness,
   onSubmit,
   onDismiss,
 }: AgentQuestionOverlayProps) {
@@ -219,7 +219,7 @@ export function AgentQuestionOverlay({
           {/* Question text with agent logo */}
           <div className="mb-3 flex items-start gap-2.5">
             {(() => {
-              const Logo = getAgentLogo(agentType || "claude");
+              const Logo = getAgentLogo(agentHarness || "claude");
               return Logo ? <Logo className="mt-0.5 h-4 w-4 shrink-0" aria-hidden="true" /> : null;
             })()}
             <p className="text-foreground min-w-0 text-sm font-medium">

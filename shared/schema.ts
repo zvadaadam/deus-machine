@@ -80,8 +80,7 @@ export const SCHEMA_SQL = `
   CREATE TABLE IF NOT EXISTS sessions (
     id TEXT PRIMARY KEY NOT NULL,
     workspace_id TEXT NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
-    agent_type TEXT NOT NULL DEFAULT 'claude',
-    model TEXT NOT NULL DEFAULT 'opus',
+    agent_harness TEXT NOT NULL DEFAULT 'claude',
     agent_session_id TEXT,
     title TEXT,
     status TEXT NOT NULL DEFAULT 'idle',

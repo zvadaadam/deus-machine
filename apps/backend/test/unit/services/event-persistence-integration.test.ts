@@ -100,11 +100,10 @@ function seedSession(
     "test-ws"
   );
 
-  db.prepare(`INSERT INTO sessions (id, workspace_id, agent_type, model) VALUES (?, ?, ?, ?)`).run(
+  db.prepare(`INSERT INTO sessions (id, workspace_id, agent_harness) VALUES (?, ?, ?)`).run(
     sessionId,
     workspaceId,
-    "claude",
-    "opus"
+    "claude"
   );
 
   return { repositoryId, workspaceId };
@@ -160,7 +159,7 @@ describeWithDb("event → persistence → DB integration", () => {
       const created: MessageCreatedEvent = {
         type: "message.created",
         sessionId,
-        agentType: "claude",
+        agentHarness: "claude",
         messageId: "msg-1",
         role: "assistant",
       };
@@ -171,7 +170,7 @@ describeWithDb("event → persistence → DB integration", () => {
       const partDone: PartDoneEvent = {
         type: "part.done",
         sessionId,
-        agentType: "claude",
+        agentHarness: "claude",
         messageId: "msg-1",
         partId: "p1",
         part: {
@@ -190,7 +189,7 @@ describeWithDb("event → persistence → DB integration", () => {
       const done: MessageDoneEvent = {
         type: "message.done",
         sessionId,
-        agentType: "claude",
+        agentHarness: "claude",
         messageId: "msg-1",
         stopReason: "end_turn",
         parts: [],
@@ -241,7 +240,7 @@ describeWithDb("event → persistence → DB integration", () => {
       persistMessageCreated({
         type: "message.created",
         sessionId,
-        agentType: "claude",
+        agentHarness: "claude",
         messageId: "msg-1",
         role: "assistant",
       });
@@ -250,7 +249,7 @@ describeWithDb("event → persistence → DB integration", () => {
       persistPartDone({
         type: "part.done",
         sessionId,
-        agentType: "claude",
+        agentHarness: "claude",
         messageId: "msg-1",
         partId: "p1",
         part: {
@@ -267,7 +266,7 @@ describeWithDb("event → persistence → DB integration", () => {
       persistPartDone({
         type: "part.done",
         sessionId,
-        agentType: "claude",
+        agentHarness: "claude",
         messageId: "msg-1",
         partId: "p2",
         part: {
@@ -289,7 +288,7 @@ describeWithDb("event → persistence → DB integration", () => {
       persistMessageDone({
         type: "message.done",
         sessionId,
-        agentType: "claude",
+        agentHarness: "claude",
         messageId: "msg-1",
         stopReason: "tool_use",
         parts: [],
@@ -299,7 +298,7 @@ describeWithDb("event → persistence → DB integration", () => {
       persistMessageCreated({
         type: "message.created",
         sessionId,
-        agentType: "claude",
+        agentHarness: "claude",
         messageId: "msg-2",
         role: "assistant",
       });
@@ -307,7 +306,7 @@ describeWithDb("event → persistence → DB integration", () => {
       persistPartDone({
         type: "part.done",
         sessionId,
-        agentType: "claude",
+        agentHarness: "claude",
         messageId: "msg-2",
         partId: "p3",
         part: {
@@ -323,7 +322,7 @@ describeWithDb("event → persistence → DB integration", () => {
       persistMessageDone({
         type: "message.done",
         sessionId,
-        agentType: "claude",
+        agentHarness: "claude",
         messageId: "msg-2",
         stopReason: "end_turn",
         parts: [],
@@ -384,7 +383,7 @@ describeWithDb("event → persistence → DB integration", () => {
       persistMessageCreated({
         type: "message.created",
         sessionId,
-        agentType: "claude",
+        agentHarness: "claude",
         messageId: "msg-1",
         role: "assistant",
       });
@@ -392,7 +391,7 @@ describeWithDb("event → persistence → DB integration", () => {
       persistPartDone({
         type: "part.done",
         sessionId,
-        agentType: "claude",
+        agentHarness: "claude",
         messageId: "msg-1",
         partId: "p1",
         part: {
@@ -408,7 +407,7 @@ describeWithDb("event → persistence → DB integration", () => {
       persistPartDone({
         type: "part.done",
         sessionId,
-        agentType: "claude",
+        agentHarness: "claude",
         messageId: "msg-1",
         partId: "p2",
         part: {
@@ -430,7 +429,7 @@ describeWithDb("event → persistence → DB integration", () => {
       persistPartDone({
         type: "part.done",
         sessionId,
-        agentType: "claude",
+        agentHarness: "claude",
         messageId: "msg-1",
         partId: "p3",
         part: {
@@ -452,7 +451,7 @@ describeWithDb("event → persistence → DB integration", () => {
       persistPartDone({
         type: "part.done",
         sessionId,
-        agentType: "claude",
+        agentHarness: "claude",
         messageId: "msg-1",
         partId: "p4",
         part: {
@@ -474,7 +473,7 @@ describeWithDb("event → persistence → DB integration", () => {
       persistMessageDone({
         type: "message.done",
         sessionId,
-        agentType: "claude",
+        agentHarness: "claude",
         messageId: "msg-1",
         stopReason: "tool_use",
         parts: [],
@@ -484,7 +483,7 @@ describeWithDb("event → persistence → DB integration", () => {
       persistMessageCreated({
         type: "message.created",
         sessionId,
-        agentType: "claude",
+        agentHarness: "claude",
         messageId: "msg-2",
         role: "assistant",
       });
@@ -492,7 +491,7 @@ describeWithDb("event → persistence → DB integration", () => {
       persistPartDone({
         type: "part.done",
         sessionId,
-        agentType: "claude",
+        agentHarness: "claude",
         messageId: "msg-2",
         partId: "p5",
         part: {
@@ -508,7 +507,7 @@ describeWithDb("event → persistence → DB integration", () => {
       persistMessageDone({
         type: "message.done",
         sessionId,
-        agentType: "claude",
+        agentHarness: "claude",
         messageId: "msg-2",
         stopReason: "end_turn",
         parts: [],
@@ -563,14 +562,14 @@ describeWithDb("event → persistence → DB integration", () => {
       persistMessageCreated({
         type: "message.created",
         sessionId,
-        agentType: "claude",
+        agentHarness: "claude",
         messageId: "msg-1",
         role: "assistant",
       });
       persistPartDone({
         type: "part.done",
         sessionId,
-        agentType: "claude",
+        agentHarness: "claude",
         messageId: "msg-1",
         partId: "p1",
         part: {
@@ -586,14 +585,14 @@ describeWithDb("event → persistence → DB integration", () => {
       persistMessageCreated({
         type: "message.created",
         sessionId,
-        agentType: "claude",
+        agentHarness: "claude",
         messageId: "msg-2",
         role: "assistant",
       });
       persistPartDone({
         type: "part.done",
         sessionId,
-        agentType: "claude",
+        agentHarness: "claude",
         messageId: "msg-2",
         partId: "p2",
         part: {
@@ -626,7 +625,7 @@ describeWithDb("event → persistence → DB integration", () => {
       const result = persistPartDone({
         type: "part.done",
         sessionId,
-        agentType: "claude",
+        agentHarness: "claude",
         messageId: "non-existent-msg",
         partId: "p-orphan",
         part: {
@@ -659,7 +658,7 @@ describeWithDb("event → persistence → DB integration", () => {
       persistMessageCreated({
         type: "message.created",
         sessionId,
-        agentType: "codex",
+        agentHarness: "codex",
         messageId: "codex-msg-1",
         role: "assistant",
       });
@@ -668,7 +667,7 @@ describeWithDb("event → persistence → DB integration", () => {
       persistPartDone({
         type: "part.done",
         sessionId,
-        agentType: "codex",
+        agentHarness: "codex",
         messageId: "codex-msg-1",
         partId: "cp1",
         part: {
@@ -685,7 +684,7 @@ describeWithDb("event → persistence → DB integration", () => {
       persistPartDone({
         type: "part.done",
         sessionId,
-        agentType: "codex",
+        agentHarness: "codex",
         messageId: "codex-msg-1",
         partId: "cp2",
         part: {
@@ -702,7 +701,7 @@ describeWithDb("event → persistence → DB integration", () => {
       persistPartDone({
         type: "part.done",
         sessionId,
-        agentType: "codex",
+        agentHarness: "codex",
         messageId: "codex-msg-1",
         partId: "cp3",
         part: {
@@ -725,7 +724,7 @@ describeWithDb("event → persistence → DB integration", () => {
       persistPartDone({
         type: "part.done",
         sessionId,
-        agentType: "codex",
+        agentHarness: "codex",
         messageId: "codex-msg-1",
         partId: "cp4",
         part: {
@@ -741,7 +740,7 @@ describeWithDb("event → persistence → DB integration", () => {
       persistMessageDone({
         type: "message.done",
         sessionId,
-        agentType: "codex",
+        agentHarness: "codex",
         messageId: "codex-msg-1",
         stopReason: "end_turn",
         parts: [],
@@ -791,7 +790,7 @@ describeWithDb("event → persistence → DB integration", () => {
       persistMessageCreated({
         type: "message.created",
         sessionId,
-        agentType: "claude",
+        agentHarness: "claude",
         messageId: "msg-done-test",
         role: "assistant",
       });
@@ -799,7 +798,7 @@ describeWithDb("event → persistence → DB integration", () => {
       const result = persistMessageDone({
         type: "message.done",
         sessionId,
-        agentType: "claude",
+        agentHarness: "claude",
         messageId: "msg-done-test",
         stopReason: "end_turn",
         parts: [],
@@ -820,7 +819,7 @@ describeWithDb("event → persistence → DB integration", () => {
       persistMessageCreated({
         type: "message.created",
         sessionId,
-        agentType: "claude",
+        agentHarness: "claude",
         messageId: "msg-id-match",
         role: "assistant",
       });
@@ -828,7 +827,7 @@ describeWithDb("event → persistence → DB integration", () => {
       persistMessageDone({
         type: "message.done",
         sessionId,
-        agentType: "claude",
+        agentHarness: "claude",
         messageId: "msg-id-match",
         stopReason: "tool_use",
         parts: [],
@@ -857,14 +856,14 @@ describeWithDb("event → persistence → DB integration", () => {
       persistMessageCreated({
         type: "message.created",
         sessionId,
-        agentType: "claude",
+        agentHarness: "claude",
         messageId: "msg-count-1",
         role: "assistant",
       });
       persistMessageCreated({
         type: "message.created",
         sessionId,
-        agentType: "claude",
+        agentHarness: "claude",
         messageId: "msg-count-2",
         role: "assistant",
       });
@@ -885,7 +884,7 @@ describeWithDb("event → persistence → DB integration", () => {
       persistMessageCreated({
         type: "message.created",
         sessionId,
-        agentType: "claude",
+        agentHarness: "claude",
         messageId: "msg-json",
         role: "assistant",
       });
@@ -911,7 +910,7 @@ describeWithDb("event → persistence → DB integration", () => {
       persistPartDone({
         type: "part.done",
         sessionId,
-        agentType: "claude",
+        agentHarness: "claude",
         messageId: "msg-json",
         partId: "pj1",
         part: toolPart,
@@ -943,7 +942,7 @@ describeWithDb("event → persistence → DB integration", () => {
       const result = persistMessageCreated({
         type: "message.created",
         sessionId: "no-such-session",
-        agentType: "claude",
+        agentHarness: "claude",
         messageId: "msg-orphan",
         role: "assistant",
       });
@@ -968,7 +967,7 @@ describeWithDb("event → persistence → DB integration", () => {
       persistMessageCreated({
         type: "message.created",
         sessionId,
-        agentType: "claude",
+        agentHarness: "claude",
         messageId: "msg-nested",
         role: "assistant",
       });
@@ -977,7 +976,7 @@ describeWithDb("event → persistence → DB integration", () => {
       persistPartDone({
         type: "part.done",
         sessionId,
-        agentType: "claude",
+        agentHarness: "claude",
         messageId: "msg-nested",
         partId: "p-nested",
         part: {

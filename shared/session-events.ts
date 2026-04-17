@@ -1,6 +1,6 @@
 import { z } from "zod";
 
-import { AgentTypeSchema, ErrorCategorySchema } from "./enums";
+import { AgentHarnessSchema, ErrorCategorySchema } from "./enums";
 
 // Canonical agent-server → frontend session notification payloads.
 // These are emitted by the agent-server, forwarded through the Electron main process as IPC events,
@@ -9,7 +9,7 @@ import { AgentTypeSchema, ErrorCategorySchema } from "./enums";
 export const MessageResponseSchema = z.object({
   id: z.string(),
   type: z.literal("message"),
-  agentType: AgentTypeSchema,
+  agentHarness: AgentHarnessSchema,
   data: z.unknown(),
 });
 export type MessageResponse = z.infer<typeof MessageResponseSchema>;
@@ -18,7 +18,7 @@ export const ErrorResponseSchema = z.object({
   id: z.string(),
   type: z.literal("error"),
   error: z.string(),
-  agentType: AgentTypeSchema,
+  agentHarness: AgentHarnessSchema,
   category: ErrorCategorySchema.optional(),
 });
 export type ErrorResponse = z.infer<typeof ErrorResponseSchema>;
@@ -26,6 +26,6 @@ export type ErrorResponse = z.infer<typeof ErrorResponseSchema>;
 export const EnterPlanModeNotificationSchema = z.object({
   type: z.literal("enter_plan_mode_notification"),
   id: z.string(),
-  agentType: AgentTypeSchema,
+  agentHarness: AgentHarnessSchema,
 });
 export type EnterPlanModeNotification = z.infer<typeof EnterPlanModeNotificationSchema>;

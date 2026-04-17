@@ -17,7 +17,7 @@ import { track } from "@/platform/analytics";
 
 import { sendCommand, connect, isConnected, subscribe, onConnectionChange } from "@/platform/ws";
 import { emitSendAttemptFailed } from "@/features/connection";
-import type { RuntimeAgentType } from "../lib/agentRuntime";
+import type { AgentHarness } from "@/shared/agents";
 
 /**
  * Fetch all sessions for a workspace (used by chat tab reconstruction).
@@ -214,14 +214,16 @@ export function useSendMessage() {
       sessionId,
       content,
       model,
-      agentType,
+      agentHarness,
       permissionMode,
+      thinkingLevel,
     }: {
       sessionId: string;
       content: string;
-      model?: string;
-      agentType?: RuntimeAgentType;
+      model: string;
+      agentHarness: AgentHarness;
       permissionMode?: string;
+      thinkingLevel?: string;
     }): Promise<Message | void> => {
       // Send message via WS command: backend saves user message to DB,
       // forwards to agent-server, and pushes q:delta to subscribers.
@@ -231,8 +233,9 @@ export function useSendMessage() {
           sessionId,
           content,
           model,
-          agentType: agentType || "claude",
+          agentHarness,
           permissionMode,
+          thinkingLevel,
         });
         if (!ack.accepted) {
           throw new Error(ack.error || "Agent rejected the query");
@@ -375,7 +378,7 @@ export function useSendMessage() {
           session_id: variables.sessionId,
           has_images: hasImages,
           model: variables.model,
-          agent_type: session?.agent_type,
+          agent_harness: session?.agent_harness,
           message_count: session?.message_count,
           context_used_percent: session?.context_used_percent,
         });
@@ -398,7 +401,7 @@ export function useStopSession() {
       const session = queryClient.getQueryData<Session>(queryKeys.sessions.detail(sessionId));
       track("session_stopped", {
         session_id: sessionId,
-        agent_type: session?.agent_type,
+        agent_harness: session?.agent_harness,
       });
       // Immediate invalidation for snappy UI feedback.
       // Backend also pushes via WS q:invalidate. React Query deduplicates.
@@ -425,8 +428,7 @@ export function useCreateSession() {
     onSuccess: (newSession, workspaceId) => {
       track("session_created", {
         workspace_id: workspaceId,
-        agent_type: newSession?.agent_type,
-        model: newSession?.model,
+        agent_harness: newSession?.agent_harness,
       });
       // Immediate invalidation for snappy UI feedback.
       // Backend also pushes via WS q:invalidate. React Query deduplicates.

@@ -2,7 +2,7 @@
  * useChatTabs — manages chat tab lifecycle with persistence across workspace switches.
  *
  * Tab order and active tab are persisted in workspaceLayoutStore (localStorage).
- * Full tab metadata (agentType, hasStarted, label) is reconstructed from session
+ * Full tab metadata (agentHarness, hasStarted, label) is reconstructed from session
  * records fetched via useWorkspaceSessions.
  */
 
@@ -10,10 +10,10 @@ import { useState, useEffect, useRef, useCallback, useMemo } from "react";
 import { toast } from "sonner";
 import { useCreateSession, useWorkspaceSessions } from "@/features/session/api/session.queries";
 import {
-  getRuntimeAgentLabel,
-  getRuntimeAgentTypeForModel,
-  type RuntimeAgentType,
-} from "@/features/session/lib/agentRuntime";
+  getAgentLabel,
+  getAgentHarnessForModel,
+  type AgentHarness,
+} from "@/shared/agents";
 import { workspaceLayoutActions } from "@/features/workspace/store/workspaceLayoutStore";
 import type { Tab, ClosedTab } from "@/features/workspace/ui/MainContentTabs";
 import type { Session } from "@/features/session/types";
@@ -21,41 +21,39 @@ import type { Session } from "@/features/session/types";
 const NEW_CHAT_LABEL = "New chat";
 const MAX_CLOSED_TABS = 20;
 
-function buildStartedChatLabel(agentType: string, sequence: number): string {
-  return `${getRuntimeAgentLabel(agentType)} #${sequence}`;
+function buildStartedChatLabel(agentHarness: string, sequence: number): string {
+  return `${getAgentLabel(agentHarness)} #${sequence}`;
 }
 
 /** Build a Tab from a session record. Sequence is computed externally. */
 function sessionToTab(session: Session, sequence: number): Tab {
   const hasStarted = session.message_count > 0;
-  const agentType = session.agent_type || "claude";
   return {
     id: `tab-${session.id}`,
-    label: hasStarted ? buildStartedChatLabel(agentType, sequence) : NEW_CHAT_LABEL,
+    label: hasStarted ? buildStartedChatLabel(session.agent_harness, sequence) : NEW_CHAT_LABEL,
     data: {
       sessionId: session.id,
-      agentType,
+      agentHarness: session.agent_harness,
       hasStarted,
     },
   };
 }
 
 /** Count started tabs of a given agent type, excluding a specific tab. */
-function countStartedTabsOfType(tabs: Tab[], agentType: string, excludeTabId: string): number {
+function countStartedTabsOfHarness(tabs: Tab[], agentHarness: string, excludeTabId: string): number {
   return tabs.filter(
-    (t) => t.id !== excludeTabId && t.data?.hasStarted && t.data?.agentType === agentType
+    (t) => t.id !== excludeTabId && t.data?.hasStarted && t.data?.agentHarness === agentHarness
   ).length;
 }
 
-/** Compute per-agent-type sequence numbers for a list of sessions (in order). */
+/** Compute per-harness sequence numbers for a list of sessions (in order). */
 function computeSequences(sessions: Session[]): Map<string, number> {
   const counters = new Map<string, number>();
   const result = new Map<string, number>();
   for (const s of sessions) {
     if (s.message_count > 0) {
-      const at = s.agent_type || "claude";
-      const next = (counters.get(at) ?? 0) + 1;
-      counters.set(at, next);
+      const next = (counters.get(s.agent_harness) ?? 0) + 1;
+      counters.set(s.agent_harness, next);
       result.set(s.id, next);
     }
   }
@@ -94,7 +92,7 @@ export function useChatTabs({ workspaceId, activeSessionId }: UseChatTabsOptions
           label: NEW_CHAT_LABEL,
           data: {
             sessionId: activeSessionId ?? undefined,
-            agentType: "claude",
+            agentHarness: "claude",
             hasStarted: false,
           },
         },
@@ -107,7 +105,7 @@ export function useChatTabs({ workspaceId, activeSessionId }: UseChatTabsOptions
       label: NEW_CHAT_LABEL,
       data: {
         sessionId,
-        agentType: "claude",
+        agentHarness: "claude",
         hasStarted: false,
       },
     }));
@@ -137,6 +135,7 @@ export function useChatTabs({ workspaceId, activeSessionId }: UseChatTabsOptions
     // Only act when transitioning from null/undefined → real session ID
     if (prev || !activeSessionId) return;
 
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- one-time patch when workspace init completes
     setMainTabs((tabs) => {
       const defaultIdx = tabs.findIndex((t) => t.id === "tab-default");
       if (defaultIdx === -1) return tabs;
@@ -181,7 +180,7 @@ export function useChatTabs({ workspaceId, activeSessionId }: UseChatTabsOptions
           : {
               id: fallbackId ? `tab-${fallbackId}` : "tab-default",
               label: NEW_CHAT_LABEL,
-              data: { sessionId: fallbackId ?? undefined, agentType: "claude", hasStarted: false },
+              data: { sessionId: fallbackId ?? undefined, agentHarness: "claude", hasStarted: false },
             };
         setActiveMainTabId(tab.id);
         return [tab];
@@ -252,7 +251,7 @@ export function useChatTabs({ workspaceId, activeSessionId }: UseChatTabsOptions
             const entry: ClosedTab = {
               label: closingTab.label,
               sessionId: closingTab.data!.sessionId!,
-              agentType: closingTab.data?.agentType,
+              agentHarness: closingTab.data?.agentHarness,
               closedAt: Date.now(),
             };
             return [entry, ...prevClosed].slice(0, MAX_CLOSED_TABS);
@@ -273,14 +272,14 @@ export function useChatTabs({ workspaceId, activeSessionId }: UseChatTabsOptions
     async (initialModel?: string) => {
       try {
         const newSession = await createSessionMutation.mutateAsync(workspaceId);
-        const agentType = initialModel ? getRuntimeAgentTypeForModel(initialModel) : "claude";
+        const agentHarness = initialModel ? getAgentHarnessForModel(initialModel) : "claude";
         const newId = `tab-${newSession.id}`;
         const newTab: Tab = {
           id: newId,
           label: NEW_CHAT_LABEL,
           data: {
             sessionId: newSession.id,
-            agentType,
+            agentHarness,
             hasStarted: false,
             initialModel,
           },
@@ -303,7 +302,7 @@ export function useChatTabs({ workspaceId, activeSessionId }: UseChatTabsOptions
       label: closedTab.label,
       data: {
         sessionId: closedTab.sessionId,
-        agentType: closedTab.agentType,
+        agentHarness: closedTab.agentHarness,
         hasStarted: closedTab.label !== NEW_CHAT_LABEL,
       },
     };
@@ -319,28 +318,28 @@ export function useChatTabs({ workspaceId, activeSessionId }: UseChatTabsOptions
     setClosedTabs((prev) => prev.filter((ct) => ct.sessionId !== closedTab.sessionId));
   }, []);
 
-  const updateChatTabAgentType = useCallback((tabId: string, nextAgentType: RuntimeAgentType) => {
+  const updateChatTabAgentHarness = useCallback((tabId: string, nextAgentHarness: AgentHarness) => {
     setMainTabs((prevTabs) => {
       const tabIndex = prevTabs.findIndex((tab) => tab.id === tabId);
       if (tabIndex === -1) return prevTabs;
 
       const tab = prevTabs[tabIndex];
-      if (tab.data?.agentType === nextAgentType) return prevTabs;
+      if (tab.data?.agentHarness === nextAgentHarness) return prevTabs;
 
       const hasStarted = Boolean(tab.data?.hasStarted);
 
       let nextLabel = hasStarted ? tab.label : NEW_CHAT_LABEL;
 
       if (hasStarted) {
-        const sequence = countStartedTabsOfType(prevTabs, nextAgentType, tabId) + 1;
-        nextLabel = buildStartedChatLabel(nextAgentType, sequence);
+        const sequence = countStartedTabsOfHarness(prevTabs, nextAgentHarness, tabId) + 1;
+        nextLabel = buildStartedChatLabel(nextAgentHarness, sequence);
       }
 
       const updatedTabs = [...prevTabs];
       updatedTabs[tabIndex] = {
         ...tab,
         label: nextLabel,
-        data: { ...tab.data, agentType: nextAgentType, hasStarted },
+        data: { ...tab.data, agentHarness: nextAgentHarness, hasStarted },
       };
       return updatedTabs;
     });
@@ -354,14 +353,14 @@ export function useChatTabs({ workspaceId, activeSessionId }: UseChatTabsOptions
       const tab = prevTabs[tabIndex];
       if (tab.data?.hasStarted) return prevTabs;
 
-      const agentType = (tab.data?.agentType as RuntimeAgentType | undefined) ?? "claude";
-      const sequence = countStartedTabsOfType(prevTabs, agentType, tabId) + 1;
+      const agentHarness = (tab.data?.agentHarness as AgentHarness | undefined) ?? "claude";
+      const sequence = countStartedTabsOfHarness(prevTabs, agentHarness, tabId) + 1;
 
       const updatedTabs = [...prevTabs];
       updatedTabs[tabIndex] = {
         ...tab,
-        label: buildStartedChatLabel(agentType, sequence),
-        data: { ...tab.data, agentType, hasStarted: true },
+        label: buildStartedChatLabel(agentHarness, sequence),
+        data: { ...tab.data, agentHarness, hasStarted: true },
       };
       return updatedTabs;
     });
@@ -423,7 +422,7 @@ export function useChatTabs({ workspaceId, activeSessionId }: UseChatTabsOptions
     handleTabAdd,
     handleTabReorder,
     handleTabRestore,
-    updateChatTabAgentType,
+    updateChatTabAgentHarness,
     markChatTabStarted,
   };
 }

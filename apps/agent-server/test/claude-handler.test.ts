@@ -160,7 +160,7 @@ describe("claude-handler", () => {
       });
       initializeClaude();
 
-      await handler.query("sess-1", "hello", { cwd: "/test" });
+      await handler.query("sess-1", "hello", { cwd: "/test", model: "claude-sonnet-4-6" });
 
       expect(mockFrontendAPI.emitSessionError).toHaveBeenCalledWith(
         "sess-1",
@@ -173,7 +173,7 @@ describe("claude-handler", () => {
     it("sends a clear error when the workspace path is missing", async () => {
       vi.mocked(fs.existsSync).mockImplementation((value: fs.PathLike) => value !== "/missing");
 
-      await handler.query("sess-missing-cwd", "hello", { cwd: "/missing", turnId: "turn-1" });
+      await handler.query("sess-missing-cwd", "hello", { cwd: "/missing", model: "claude-sonnet-4-6", turnId: "turn-1" });
 
       await new Promise((r) => setTimeout(r, 50));
 
@@ -210,7 +210,7 @@ describe("claude-handler", () => {
 
       await handler.query("sess-new", "hello", {
         cwd: "/test",
-        model: "sonnet",
+       model: "claude-sonnet-4-6",
         turnId: "turn-1",
       });
 
@@ -221,6 +221,7 @@ describe("claude-handler", () => {
         expect.objectContaining({
           options: expect.objectContaining({
             cwd: "/test",
+          model: "claude-sonnet-4-6",
           }),
         })
       );
@@ -240,10 +241,10 @@ describe("claude-handler", () => {
 
       await handler.query("sess-opts", "hello", {
         cwd: "/test",
-        model: "sonnet",
+       model: "claude-sonnet-4-6",
         permissionMode: "plan",
         maxTurns: 50,
-        maxThinkingTokens: 8000,
+        thinkingLevel: "MEDIUM",
         turnId: "turn-1",
       });
 
@@ -253,7 +254,8 @@ describe("claude-handler", () => {
       expect(sdkCall.options.disallowedTools).toContain("AskUserQuestion");
       expect(sdkCall.options.permissionMode).toBe("plan");
       expect(sdkCall.options.maxTurns).toBe(50);
-      expect(sdkCall.options.maxThinkingTokens).toBe(8000);
+      // MEDIUM → 8192 per resolveThinkingOptions; see agents/claude/thinking.ts
+      expect(sdkCall.options.maxThinkingTokens).toBe(8192);
     });
 
     it("includes MCP server when strictDataPrivacy is false", async () => {
@@ -270,6 +272,7 @@ describe("claude-handler", () => {
 
       await handler.query("sess-mcp", "hello", {
         cwd: "/test",
+        model: "claude-sonnet-4-6",
         strictDataPrivacy: false,
         turnId: "turn-1",
       });
@@ -295,6 +298,7 @@ describe("claude-handler", () => {
 
       await handler.query("sess-privacy", "hello", {
         cwd: "/test",
+        model: "claude-sonnet-4-6",
         strictDataPrivacy: true,
         turnId: "turn-1",
       });
@@ -329,7 +333,7 @@ describe("claude-handler", () => {
       };
       mockClaudeSDK.mockReturnValue(mockQuery);
 
-      await handler.query("sess-stream", "hello", { cwd: "/test", turnId: "turn-1" });
+      await handler.query("sess-stream", "hello", { cwd: "/test", model: "claude-sonnet-4-6", turnId: "turn-1" });
 
       // Wait for the generator to complete
       await new Promise((r) => setTimeout(r, 200));
@@ -342,7 +346,7 @@ describe("claude-handler", () => {
         throw new Error("SDK initialization failed");
       });
 
-      await handler.query("sess-err", "hello", { cwd: "/test", turnId: "turn-1" });
+      await handler.query("sess-err", "hello", { cwd: "/test", model: "claude-sonnet-4-6", turnId: "turn-1" });
 
       await new Promise((r) => setTimeout(r, 100));
 
@@ -373,7 +377,7 @@ describe("claude-handler", () => {
       };
       mockClaudeSDK.mockReturnValue(mockQuery);
 
-      await handler.query("sess-sigint", "hello", { cwd: "/test", turnId: "turn-1" });
+      await handler.query("sess-sigint", "hello", { cwd: "/test", model: "claude-sonnet-4-6", turnId: "turn-1" });
 
       await new Promise((r) => setTimeout(r, 100));
 
@@ -394,7 +398,7 @@ describe("claude-handler", () => {
       };
       mockClaudeSDK.mockReturnValue(mockQuery);
 
-      await handler.query("sess-sigint-err", "hello", { cwd: "/test", turnId: "turn-1" });
+      await handler.query("sess-sigint-err", "hello", { cwd: "/test", model: "claude-sonnet-4-6", turnId: "turn-1" });
 
       await new Promise((r) => setTimeout(r, 100));
 
@@ -420,6 +424,7 @@ describe("claude-handler", () => {
 
       await handler.query("sess-env", "hello", {
         cwd: "/test",
+        model: "claude-sonnet-4-6",
         providerEnvVars: "CUSTOM_VAR=custom_value\nANOTHER=123",
         turnId: "turn-1",
       });
@@ -445,6 +450,7 @@ describe("claude-handler", () => {
 
       await handler.query("sess-gh", "hello", {
         cwd: "/test",
+        model: "claude-sonnet-4-6",
         ghToken: "my-gh-token",
         turnId: "turn-1",
       });
@@ -487,6 +493,7 @@ describe("claude-handler", () => {
 
       await handler.query("sess-max-tokens", "hello", {
         cwd: "/test",
+        model: "claude-sonnet-4-6",
         turnId: "turn-1",
       });
 
@@ -545,6 +552,7 @@ describe("claude-handler", () => {
 
       await handler.query("sess-resume", "hello", {
         cwd: "/test",
+        model: "claude-sonnet-4-6",
         resume: "original-agent-sess-id",
         turnId: "turn-1",
       });
@@ -584,6 +592,7 @@ describe("claude-handler", () => {
 
       await handler.query("sess-capture", "hello", {
         cwd: "/test",
+        model: "claude-sonnet-4-6",
         turnId: "turn-1",
       });
 
@@ -624,6 +633,7 @@ describe("claude-handler", () => {
 
       await handler.query("sess-exec-err", "hello", {
         cwd: "/test",
+        model: "claude-sonnet-4-6",
         turnId: "turn-1",
       });
 
@@ -660,6 +670,7 @@ describe("claude-handler", () => {
 
       await handler.query("sess-cancel-throw", "hello", {
         cwd: "/test",
+        model: "claude-sonnet-4-6",
         turnId: "turn-1",
       });
 
@@ -703,6 +714,7 @@ describe("claude-handler", () => {
 
       await handler.query("sess-push-closed", "hello", {
         cwd: "/test",
+        model: "claude-sonnet-4-6",
         turnId: "turn-1",
       });
 
@@ -761,6 +773,7 @@ describe("claude-handler", () => {
 
       await handler.query("sess-parts", "hello", {
         cwd: "/test",
+        model: "claude-sonnet-4-6",
         turnId: "turn-parts",
       });
 

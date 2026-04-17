@@ -21,10 +21,11 @@ import { AgentQuestionOverlay } from "./AgentQuestionOverlay";
 import { Button } from "@/components/ui/button";
 import { X, Upload } from "lucide-react";
 import {
-  getRuntimeAgentTypeForModel,
-  getRuntimeModelId,
-  type RuntimeAgentType,
-} from "../lib/agentRuntime";
+  getAgentHarnessForModel,
+  getModelId,
+  type AgentHarness,
+  type ThinkingLevel,
+} from "@/shared/agents";
 import { workspaceLayoutActions } from "@/features/workspace/store";
 import type { InspectedElement } from "./InspectedElementCard";
 
@@ -45,7 +46,7 @@ interface SessionPanelProps {
   onCreatePR?: (handler: () => void) => void;
   onSendAgentMessage?: (handler: (text: string) => Promise<void>) => void;
   onStop?: (handler: () => void) => void;
-  onAgentTypeChange?: (agentType: RuntimeAgentType) => void;
+  onAgentHarnessChange?: (agentHarness: AgentHarness) => void;
   onSessionStarted?: () => void;
   /** Opens a new chat tab with the given model pre-selected */
   onOpenNewTab?: (initialModel?: string) => void;
@@ -76,7 +77,7 @@ export const SessionPanel = forwardRef<SessionPanelRef, SessionPanelProps>(
       onCreatePR,
       onSendAgentMessage,
       onStop,
-      onAgentTypeChange,
+      onAgentHarnessChange,
       onOpenNewTab,
       onSessionStarted,
       initialModel,
@@ -212,13 +213,13 @@ export const SessionPanel = forwardRef<SessionPanelRef, SessionPanelProps>(
 
     // Local state for message input
     const [messageInput, setMessageInput] = useState("");
-    const [thinkingLevel, setThinkingLevel] = useState("NONE");
-    const [model, setModel] = useState(initialModel ?? "opus");
+    const [thinkingLevel, setThinkingLevel] = useState<ThinkingLevel>("NONE");
+    const [model, setModel] = useState(initialModel ?? "claude:claude-opus-4-7");
     const [planModeEnabled, setPlanModeEnabled] = useState(false);
     // Counter incremented when the human clicks Send — triggers auto-scroll resume
     const [userSendCount, setUserSendCount] = useState(0);
-    const runtimeModelId = getRuntimeModelId(model);
-    const modelAgentType: RuntimeAgentType = getRuntimeAgentTypeForModel(model);
+    const runtimeModelId = getModelId(model);
+    const modelAgentHarness: AgentHarness = getAgentHarnessForModel(model);
 
     // Handlers for MessageInput controls
     const handleModelChange = (newModel: string) => {
@@ -227,12 +228,15 @@ export const SessionPanel = forwardRef<SessionPanelRef, SessionPanelProps>(
     };
 
     useEffect(() => {
-      onAgentTypeChange?.(getRuntimeAgentTypeForModel(model));
-    }, [model, onAgentTypeChange]);
+      onAgentHarnessChange?.(getAgentHarnessForModel(model));
+    }, [model, onAgentHarnessChange]);
 
     const handleThinkingLevelChange = (level: string) => {
-      setThinkingLevel(level);
-      // TODO: Implement API call to update session thinking level
+      setThinkingLevel(level as ThinkingLevel);
+      // The level is sent as a string with the next message via the sendMessage
+      // command (useSessionActions → useSendMessage). Agent-server translates
+      // it to SDK options (see agents/claude/thinking.ts) and hot-swaps on the
+      // next user turn without restarting the generator.
     };
 
     // Manifest status — cache-only read (staleTime: Infinity, already fetched by MainContent)
@@ -249,8 +253,9 @@ export const SessionPanel = forwardRef<SessionPanelRef, SessionPanelProps>(
       workspaceId,
       messageInput,
       model: runtimeModelId,
-      agentType: modelAgentType,
+      agentHarness: modelAgentHarness,
       permissionMode: planModeEnabled ? "plan" : undefined,
+      thinkingLevel,
       targetBranch: workspaceParentBranch ?? "main",
       onMessageSent: () => {
         setMessageInput("");
@@ -376,7 +381,7 @@ export const SessionPanel = forwardRef<SessionPanelRef, SessionPanelProps>(
               sessionStatus={sessionStatus}
               errorMessage={session?.error_message}
               errorCategory={session?.error_category ?? undefined}
-              agentType={session?.agent_type}
+              agentHarness={session?.agent_harness}
               latestMessageSentAt={latestMessageSentAt}
               hasOlder={hasOlder}
               loadingOlder={loadOlderMutation.isPending}
@@ -393,14 +398,14 @@ export const SessionPanel = forwardRef<SessionPanelRef, SessionPanelProps>(
             {/* Agent-initiated interaction overlays — appear above MessageInput */}
             <PlanApprovalOverlay
               request={pendingPlan}
-              agentType={session?.agent_type}
+              agentHarness={session?.agent_harness}
               onApprove={handlePlanApprove}
               onReject={handlePlanReject}
             />
             <AgentQuestionOverlay
               key={pendingQuestion?.wsRequestId}
               request={pendingQuestion}
-              agentType={session?.agent_type}
+              agentHarness={session?.agent_harness}
               onSubmit={handleQuestionSubmit}
               onDismiss={handleQuestionDismiss}
             />
@@ -426,7 +431,7 @@ export const SessionPanel = forwardRef<SessionPanelRef, SessionPanelProps>(
               onThinkingLevelChange={handleThinkingLevelChange}
               planModeEnabled={planModeEnabled}
               onPlanModeToggle={() => setPlanModeEnabled((p) => !p)}
-              planModeDisabled={modelAgentType === "codex"}
+              planModeDisabled={modelAgentHarness === "codex"}
               hasPendingPlan={!!pendingPlan}
             />
           </div>
@@ -482,7 +487,7 @@ export const SessionPanel = forwardRef<SessionPanelRef, SessionPanelProps>(
                     sessionStatus={sessionStatus}
                     errorMessage={session?.error_message}
                     errorCategory={session?.error_category ?? undefined}
-                    agentType={session?.agent_type}
+                    agentHarness={session?.agent_harness}
                     latestMessageSentAt={latestMessageSentAt}
                     hasOlder={hasOlder}
                     loadingOlder={loadOlderMutation.isPending}
@@ -498,14 +503,14 @@ export const SessionPanel = forwardRef<SessionPanelRef, SessionPanelProps>(
                   {/* Agent-initiated interaction overlays — appear above MessageInput */}
                   <PlanApprovalOverlay
                     request={pendingPlan}
-                    agentType={session?.agent_type}
+                    agentHarness={session?.agent_harness}
                     onApprove={handlePlanApprove}
                     onReject={handlePlanReject}
                   />
                   <AgentQuestionOverlay
                     key={pendingQuestion?.wsRequestId}
                     request={pendingQuestion}
-                    agentType={session?.agent_type}
+                    agentHarness={session?.agent_harness}
                     onSubmit={handleQuestionSubmit}
                     onDismiss={handleQuestionDismiss}
                   />
@@ -533,7 +538,7 @@ export const SessionPanel = forwardRef<SessionPanelRef, SessionPanelProps>(
                     onThinkingLevelChange={handleThinkingLevelChange}
                     planModeEnabled={planModeEnabled}
                     onPlanModeToggle={() => setPlanModeEnabled((p) => !p)}
-                    planModeDisabled={modelAgentType === "codex"}
+                    planModeDisabled={modelAgentHarness === "codex"}
                     hasPendingPlan={!!pendingPlan}
                   />
                 </div>

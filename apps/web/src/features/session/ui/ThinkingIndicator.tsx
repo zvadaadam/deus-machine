@@ -13,7 +13,7 @@
 import { motion, AnimatePresence } from "framer-motion";
 import { cn } from "@/shared/lib/utils";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
-import type { ThinkingLevel } from "../lib/agentRuntime";
+import type { ThinkingLevel } from "@/shared/agents";
 
 /** Display label for each level */
 const LEVEL_DISPLAY: Record<ThinkingLevel, string> = {
@@ -21,14 +21,16 @@ const LEVEL_DISPLAY: Record<ThinkingLevel, string> = {
   LOW: "Low",
   MEDIUM: "Med",
   HIGH: "High",
+  XHIGH: "X-High",
 };
 
 /** Visual treatment per level — font weight and opacity */
 const LEVEL_STYLE: Record<ThinkingLevel, { weight: number; opacity: number }> = {
   NONE: { weight: 400, opacity: 0.4 },
   LOW: { weight: 400, opacity: 0.6 },
-  MEDIUM: { weight: 500, opacity: 0.8 },
-  HIGH: { weight: 600, opacity: 1 },
+  MEDIUM: { weight: 500, opacity: 0.75 },
+  HIGH: { weight: 600, opacity: 0.9 },
+  XHIGH: { weight: 700, opacity: 1 },
 };
 
 interface ThinkingIndicatorProps {

@@ -161,12 +161,12 @@ class AgentServer {
 
   private getInitializedAgents() {
     const agents: { type: string; capabilities: unknown; initialized: boolean }[] = [];
-    for (const [agentType, handler] of [
+    for (const [agentHarness, handler] of [
       ["claude", getAgent("claude")],
       ["codex", getAgent("codex")],
     ] as const) {
-      if (handler && this.initializedAgents.has(agentType)) {
-        agents.push({ type: agentType, capabilities: handler.capabilities, initialized: true });
+      if (handler && this.initializedAgents.has(agentHarness)) {
+        agents.push({ type: agentHarness, capabilities: handler.capabilities, initialized: true });
       }
     }
     return agents;
@@ -193,7 +193,7 @@ class AgentServer {
     // --- turn/start (new wire protocol method, maps to query dispatch) ---
     rpcTunnel.addMethod("turn/start", async (params: any) => {
       const sessionId = params?.sessionId;
-      const agentType = params?.agentType || "claude";
+      const agentHarness = params?.agentHarness;
       const prompt = params?.prompt;
       const options = params?.options || {};
 
@@ -202,26 +202,29 @@ class AgentServer {
         return { accepted: false, reason: "shutting down" };
       }
 
-      if (!sessionId || !prompt) {
-        return { accepted: false, reason: "turn/start requires sessionId and prompt" };
+      if (!sessionId || !prompt || !agentHarness) {
+        return {
+          accepted: false,
+          reason: "turn/start requires sessionId, agentHarness, and prompt",
+        };
       }
 
-      const agent = getAgent(agentType);
+      const agent = getAgent(agentHarness);
       if (!agent) {
-        return { accepted: false, reason: `No agent registered for type: ${agentType}` };
+        return { accepted: false, reason: `No agent registered for type: ${agentHarness}` };
       }
 
       // Track this session for graceful shutdown draining
-      trackSession(sessionId, agentType);
+      trackSession(sessionId, agentHarness);
 
       agent
         .query(sessionId, prompt, options)
         .catch((err) => {
-          console.error(`[turn/start] Unhandled error in ${agentType} query:`, err);
+          console.error(`[turn/start] Unhandled error in ${agentHarness} query:`, err);
           const classified = classifyError(err);
           EventBroadcaster.emitSessionError(
             sessionId,
-            agentType,
+            agentHarness,
             classified.message,
             classified.category
           );
@@ -231,7 +234,7 @@ class AgentServer {
           untrackSession(sessionId);
         });
 
-      EventBroadcaster.emitSessionStarted(sessionId, agentType);
+      EventBroadcaster.emitSessionStarted(sessionId, agentHarness);
 
       console.log(`[TIMING][turn/start] DISPATCHED session=${sessionId}`);
       return { accepted: true };
@@ -251,8 +254,8 @@ class AgentServer {
     const cancelAll = (params: any) => {
       const sessionId = params?.sessionId;
       if (!sessionId) return;
-      for (const agentType of ["claude", "codex"] as const) {
-        const agent = getAgent(agentType);
+      for (const agentHarness of ["claude", "codex"] as const) {
+        const agent = getAgent(agentHarness);
         if (agent) void agent.cancel(sessionId);
       }
     };
@@ -263,26 +266,28 @@ class AgentServer {
     rpcTunnel.addMethod("session/reset", (params: any) => {
       const sessionId = params?.sessionId;
       if (!sessionId) return;
-      for (const agentType of ["claude", "codex"] as const) {
-        const agent = getAgent(agentType);
+      for (const agentHarness of ["claude", "codex"] as const) {
+        const agent = getAgent(agentHarness);
         if (agent) agent.reset(sessionId);
       }
     });
 
     // --- provider/auth (check agent authentication) ---
     rpcTunnel.addMethod("provider/auth", async (params: any) => {
-      const agentType = params?.agentType || "claude";
-      const agent = getAgent(agentType);
-      if (!agent?.auth) throw new Error(`Agent "${agentType}" does not support auth`);
+      const agentHarness = params?.agentHarness;
+      if (!agentHarness) throw new Error("provider/auth requires agentHarness");
+      const agent = getAgent(agentHarness);
+      if (!agent?.auth) throw new Error(`Agent "${agentHarness}" does not support auth`);
       return agent.auth({ cwd: params?.cwd });
     });
 
     // --- provider/initWorkspace (slash commands, MCP servers) ---
     rpcTunnel.addMethod("provider/initWorkspace", async (params: any) => {
-      const agentType = params?.agentType || "claude";
-      const agent = getAgent(agentType);
+      const agentHarness = params?.agentHarness;
+      if (!agentHarness) throw new Error("provider/initWorkspace requires agentHarness");
+      const agent = getAgent(agentHarness);
       if (!agent?.initWorkspace)
-        throw new Error(`Agent "${agentType}" does not support workspace init`);
+        throw new Error(`Agent "${agentHarness}" does not support workspace init`);
       return agent.initWorkspace({
         cwd: params?.cwd,
         ghToken: params?.ghToken,
@@ -292,22 +297,23 @@ class AgentServer {
 
     // --- provider/contextUsage (token usage stats) ---
     rpcTunnel.addMethod("provider/contextUsage", async (params: any) => {
-      const agentType = params?.agentType || "claude";
-      const agent = getAgent(agentType);
+      const agentHarness = params?.agentHarness;
+      const cwd = params?.cwd;
+      const agentSessionId = params?.agentSessionId;
+      if (!agentHarness || !cwd || !agentSessionId) {
+        throw new Error("provider/contextUsage requires agentHarness, cwd, and agentSessionId");
+      }
+      const agent = getAgent(agentHarness);
       if (!agent?.getContextUsage)
-        throw new Error(`Agent "${agentType}" does not support context usage`);
-      return agent.getContextUsage({
-        options: {
-          cwd: params?.cwd ?? "",
-          agentSessionId: params?.agentSessionId ?? "",
-        },
-      });
+        throw new Error(`Agent "${agentHarness}" does not support context usage`);
+      return agent.getContextUsage({ options: { cwd, agentSessionId } });
     });
 
     // --- provider/updateMode (runtime permission mode change) ---
     rpcTunnel.addMethod("provider/updateMode", (params: any) => {
-      const agentType = params?.agentType || "claude";
-      const agent = getAgent(agentType);
+      const agentHarness = params?.agentHarness;
+      if (!agentHarness) throw new Error("provider/updateMode requires agentHarness");
+      const agent = getAgent(agentHarness);
       if (agent?.updatePermissionMode) {
         void agent.updatePermissionMode(params?.sessionId, params?.permissionMode);
       }
@@ -418,12 +424,12 @@ class AgentServer {
     console.log("Initializing agent handlers...");
     this.initializedAgents.clear();
     const initResults = initializeAllAgents();
-    for (const [agentType, result] of initResults) {
+    for (const [agentHarness, result] of initResults) {
       if (!result.success) {
-        console.error(`${agentType} initialization failed:`, result.error);
+        console.error(`${agentHarness} initialization failed:`, result.error);
       } else {
-        console.log(`${agentType} handler initialized successfully`);
-        this.initializedAgents.add(agentType);
+        console.log(`${agentHarness} handler initialized successfully`);
+        this.initializedAgents.add(agentHarness);
       }
     }
 
