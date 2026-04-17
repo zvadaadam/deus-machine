@@ -1,23 +1,23 @@
 {
   "name": "device-use",
   "version": "0.1.0",
-  "description": "iOS Simulator automation for AI agents — CLI, SDK, and engine.",
+  "description": "iOS Simulator workbench — standalone viewer + MCP server + CLI. Agent-drivable via /mcp; human-usable at localhost.",
   "type": "module",
   "bin": {
     "device-use": "./dist/cli.js"
   },
   "exports": {
     ".": {
-      "import": "./dist/sdk.js",
-      "types": "./dist/sdk.d.ts"
+      "import": "./dist/engine.js",
+      "types": "./dist/engine.d.ts"
     },
     "./engine": {
       "import": "./dist/engine.js",
       "types": "./dist/engine.d.ts"
     }
   },
-  "main": "./dist/sdk.js",
-  "types": "./dist/sdk.d.ts",
+  "main": "./dist/engine.js",
+  "types": "./dist/engine.d.ts",
   "files": [
     "dist",
     "bin",
