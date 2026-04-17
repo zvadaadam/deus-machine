@@ -8,9 +8,8 @@
 import { Server } from "@modelcontextprotocol/sdk/server/index.js";
 import { WebStandardStreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/webStandardStreamableHttp.js";
 import { CallToolRequestSchema, ListToolsRequestSchema } from "@modelcontextprotocol/sdk/types.js";
-import { zodToJsonSchema } from "zod-to-json-schema";
 import { invokeTool } from "./invoker.js";
-import { TOOLS, type Context } from "./tools.js";
+import { toolInputSchema, TOOLS, type Context } from "./tools.js";
 
 export function createMcpHandler(ctx: Context): (req: Request) => Promise<Response> {
   return async (req: Request) => {
@@ -23,9 +22,7 @@ export function createMcpHandler(ctx: Context): (req: Request) => Promise<Respon
       tools: TOOLS.map((t) => ({
         name: t.name,
         description: t.description,
-        inputSchema: zodToJsonSchema(t.schema as any, { target: "jsonSchema7" }) as unknown as {
-          type: "object";
-        },
+        inputSchema: toolInputSchema(t.schema) as unknown as { type: "object" },
       })),
     }));
 

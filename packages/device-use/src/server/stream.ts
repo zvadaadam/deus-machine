@@ -104,10 +104,8 @@ export class StreamManager {
       tryProbe();
     });
 
-    child.stderr?.on("data", (buf: Buffer) => {
-      // Drop stderr — simbridge is noisy about private-framework warnings.
-      void buf;
-    });
+    // Drop simbridge's stderr — it's noisy about private-framework loads.
+    child.stderr?.on("data", () => {});
 
     child.once("exit", () => {
       if (this.child === child) {

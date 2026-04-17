@@ -68,11 +68,21 @@ export function createContext(overrides: {
 
 // ------------------------------- Types -----------------------------------
 
+import { zodToJsonSchema } from "zod-to-json-schema";
+
 export interface ToolDefinition {
   name: string;
   description: string;
   schema: z.ZodTypeAny;
   handler: (ctx: Context, params: any) => Promise<unknown>;
+}
+
+/** JSON-Schema for a tool's Zod schema. Used by both the REST /api/tools
+ *  listing and the MCP tools/list response. `as any` is the least bad
+ *  option here: zod's schema types are too deep for zod-to-json-schema's
+ *  inferred parameter type, and widening to a compatible alias leaks. */
+export function toolInputSchema(schema: z.ZodTypeAny): Record<string, unknown> {
+  return zodToJsonSchema(schema as any, { target: "jsonSchema7" }) as Record<string, unknown>;
 }
 
 function tool<S extends z.ZodTypeAny>(def: {
@@ -366,6 +376,8 @@ const snapshot = tool({
     return {
       counts: snap.counts,
       refs: snap.refs,
+      // Root accessibility node is an Application whose label = app name.
+      foreground: snap.tree[0]?.label ?? null,
       tree: format === "json" ? snap.tree : undefined,
       rendered,
     };
@@ -546,10 +558,7 @@ const stream_logs = tool({
       ...(params.bundleId ? { bundleId: params.bundleId } : {}),
       onLine: (line) => ctx.events.emit({ type: "tool-log", id, stream: "stdout", text: line }),
     });
-    // Park the handle on the event bus so stop_logs can find it.
-    const bus = ctx.events as unknown as { _logHandles?: Map<string, { stop: () => void }> };
-    bus._logHandles ??= new Map();
-    bus._logHandles.set(id, handle);
+    ctx.events.logHandles.set(id, handle);
     return { subscriptionId: id };
   },
 });
@@ -559,12 +568,10 @@ const stop_logs = tool({
   description: "Stop a log stream started by stream_logs.",
   schema: z.object({ subscriptionId: z.string() }),
   handler: async (ctx, params) => {
-    const bus = ctx.events as unknown as { _logHandles?: Map<string, { stop: () => void }> };
-    const map = bus._logHandles;
-    const h = map?.get(params.subscriptionId);
+    const h = ctx.events.logHandles.get(params.subscriptionId);
     if (!h) throw new Error(`no log stream with id ${params.subscriptionId}`);
     h.stop();
-    map!.delete(params.subscriptionId);
+    ctx.events.logHandles.delete(params.subscriptionId);
     return { ok: true };
   },
 });

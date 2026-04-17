@@ -18,7 +18,7 @@ export function Sidebar() {
 
   const onRefClick = async (ref: string) => {
     await api.tap({ ref });
-    useRefsStore.getState().scheduleRefresh(500);
+    useRefsStore.getState().scheduleRefresh();
   };
 
   return (

@@ -22,8 +22,7 @@ import { invokeTool } from "./invoker.js";
 import { createMcpHandler } from "./mcp.js";
 import { StateStore, resolveStorageDir } from "./state.js";
 import { StreamManager } from "./stream.js";
-import { TOOLS, type Context } from "./tools.js";
-import { zodToJsonSchema } from "zod-to-json-schema";
+import { toolInputSchema, TOOLS, type Context } from "./tools.js";
 
 const IS_DEV = process.env.NODE_ENV !== "production";
 
@@ -72,7 +71,7 @@ app.get("/api/tools", (c) =>
     tools: TOOLS.map((t) => ({
       name: t.name,
       description: t.description,
-      inputSchema: zodToJsonSchema(t.schema as any, { target: "jsonSchema7" }),
+      inputSchema: toolInputSchema(t.schema),
     })),
   })
 );
@@ -94,7 +93,7 @@ app.get("/api/stream", (c) => c.json(stream.getInfo() ?? null));
 
 // --- WebSocket via Bun.serve.upgrade ------------------------------------
 
-const WS_SUBSCRIBERS = new Map<object, { unsubscribe: () => void; ws: unknown }>();
+const WS_SUBSCRIBERS = new Map<object, () => void>();
 const WS_UPSTREAMS = new Map<object, { upstream: WebSocket; buffered: Array<ArrayBufferLike> }>();
 
 app.get("/ws", (c) => {
@@ -179,7 +178,7 @@ export default {
             // client gone; ignore
           }
         });
-        WS_SUBSCRIBERS.set(ws as unknown as object, { unsubscribe, ws });
+        WS_SUBSCRIBERS.set(ws as unknown as object, unsubscribe);
         // Send recent history so the client can hydrate.
         for (const event of events.snapshot()) {
           ws.send(JSON.stringify(event));
@@ -260,9 +259,9 @@ export default {
         }
         return;
       }
-      const sub = WS_SUBSCRIBERS.get(ws as unknown as object);
-      if (sub) {
-        sub.unsubscribe();
+      const unsubscribe = WS_SUBSCRIBERS.get(ws as unknown as object);
+      if (unsubscribe) {
+        unsubscribe();
         WS_SUBSCRIBERS.delete(ws as unknown as object);
       }
     },

@@ -53,15 +53,18 @@ export const api = {
     ),
   build: (params?: { project?: string; scheme?: string; udid?: string; configuration?: string }) =>
     postTool("build", params ?? {}),
+  run: (params?: { project?: string; scheme?: string; udid?: string; configuration?: string }) =>
+    postTool<{ bundleId: string; pid: number; appPath: string }>("run", params ?? {}),
   install: (appPath: string, udid?: string) => postTool("install", { appPath, udid }),
   launchApp: (bundleId: string, udid?: string) => postTool("launch_app", { bundleId, udid }),
   snapshot: () =>
     postTool<{
       counts: { total: number; interactive: number };
       refs: Array<{ ref: string; label?: string; type?: string; identifier?: string }>;
+      foreground: string | null;
       tree?: unknown;
       rendered?: string;
-    }>("snapshot", { format: "json", interactiveOnly: false }),
+    }>("snapshot", { format: "compact", interactiveOnly: true }),
   tap: (params: { ref?: string; x?: number; y?: number; label?: string; udid?: string }) =>
     postTool("tap", params),
 };

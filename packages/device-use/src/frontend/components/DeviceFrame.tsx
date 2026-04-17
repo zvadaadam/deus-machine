@@ -103,22 +103,37 @@ export function DeviceFrame() {
   }, [booted, streamInfo]);
 
   // --- Coordinate normalization + touch dispatch --------------------------
-  const sendTouch = useCallback((type: "begin" | "move" | "end", ev: React.MouseEvent) => {
+  /** Returns click-fractional coords [0..1] + the canvas rect, or null if
+   *  the canvas/ws isn't ready. Works for both React.MouseEvent and
+   *  native MouseEvent (window-level listener). */
+  const normalize = useCallback((clientX: number, clientY: number) => {
     const canvas = canvasRef.current;
-    const ws = wsRef.current;
-    if (!canvas || !ws || ws.readyState !== WebSocket.OPEN) return null;
+    if (!canvas) return null;
     const rect = canvas.getBoundingClientRect();
     if (rect.width === 0 || rect.height === 0) return null;
-    const nx = Math.max(0, Math.min(1, (ev.clientX - rect.left) / rect.width));
-    const ny = Math.max(0, Math.min(1, (ev.clientY - rect.top) / rect.height));
-    ws.send(encodeTouch(type, nx, ny));
-    return { nx, ny, rect };
+    return {
+      nx: Math.max(0, Math.min(1, (clientX - rect.left) / rect.width)),
+      ny: Math.max(0, Math.min(1, (clientY - rect.top) / rect.height)),
+      rect,
+    };
   }, []);
+
+  const sendTouch = useCallback(
+    (type: "begin" | "move" | "end", clientX: number, clientY: number) => {
+      const ws = wsRef.current;
+      if (!ws || ws.readyState !== WebSocket.OPEN) return null;
+      const pt = normalize(clientX, clientY);
+      if (!pt) return null;
+      ws.send(encodeTouch(type, pt.nx, pt.ny));
+      return pt;
+    },
+    [normalize]
+  );
 
   const onMouseDown = useCallback(
     (ev: React.MouseEvent<HTMLCanvasElement>) => {
       if (ev.button !== 0) return;
-      const info = sendTouch("begin", ev);
+      const info = sendTouch("begin", ev.clientX, ev.clientY);
       if (info) {
         dragRef.current = true;
         // Local ripple, immediate feedback — don't wait for round-trip.
@@ -135,7 +150,7 @@ export function DeviceFrame() {
   const onMouseMove = useCallback(
     (ev: React.MouseEvent<HTMLCanvasElement>) => {
       if (!dragRef.current || ev.buttons !== 1) return;
-      sendTouch("move", ev);
+      sendTouch("move", ev.clientX, ev.clientY);
     },
     [sendTouch]
   );
@@ -144,9 +159,9 @@ export function DeviceFrame() {
     (ev: React.MouseEvent<HTMLCanvasElement>) => {
       if (ev.button !== 0 || !dragRef.current) return;
       dragRef.current = false;
-      sendTouch("end", ev);
+      sendTouch("end", ev.clientX, ev.clientY);
       // Screen likely changed — refresh the refs sidebar.
-      useRefsStore.getState().scheduleRefresh(500);
+      useRefsStore.getState().scheduleRefresh();
     },
     [sendTouch]
   );
@@ -156,7 +171,7 @@ export function DeviceFrame() {
     const ws = wsRef.current;
     if (!ws || ws.readyState !== WebSocket.OPEN) return;
     ws.send(encodeButton(button));
-    useRefsStore.getState().scheduleRefresh(500);
+    useRefsStore.getState().scheduleRefresh();
   }, []);
 
   // Keyboard shortcuts for the hardware buttons (Cmd+H → home, Cmd+L → lock).
@@ -178,24 +193,17 @@ export function DeviceFrame() {
     return () => window.removeEventListener("keydown", onKey);
   }, [pressButton]);
 
-  // Window-level mouseup in case the cursor leaves the canvas mid-drag.
+  // Window-level mouseup catches drag-release that exits the canvas.
   useEffect(() => {
     const onWindowMouseUp = (ev: MouseEvent) => {
       if (!dragRef.current) return;
       dragRef.current = false;
-      const canvas = canvasRef.current;
-      const ws = wsRef.current;
-      if (!canvas || !ws || ws.readyState !== WebSocket.OPEN) return;
-      const rect = canvas.getBoundingClientRect();
-      if (rect.width === 0 || rect.height === 0) return;
-      const nx = Math.max(0, Math.min(1, (ev.clientX - rect.left) / rect.width));
-      const ny = Math.max(0, Math.min(1, (ev.clientY - rect.top) / rect.height));
-      ws.send(encodeTouch("end", nx, ny));
-      useRefsStore.getState().scheduleRefresh(500);
+      sendTouch("end", ev.clientX, ev.clientY);
+      useRefsStore.getState().scheduleRefresh();
     };
     window.addEventListener("mouseup", onWindowMouseUp);
     return () => window.removeEventListener("mouseup", onWindowMouseUp);
-  }, []);
+  }, [sendTouch]);
 
   return (
     <div className="stage">
