@@ -36,8 +36,6 @@ interface HardwareButton {
 const HARDWARE_BUTTONS: HardwareButton[] = [
   { label: "Home", button: "home", key: ["h", "H"] },
   { label: "Lock", button: "lock", key: ["l", "L"] },
-  { label: "Vol +", button: "volumeup" },
-  { label: "Vol −", button: "volumedown" },
 ];
 
 export function DeviceFrame() {
