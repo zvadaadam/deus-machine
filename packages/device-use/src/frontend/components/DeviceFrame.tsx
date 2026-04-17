@@ -42,6 +42,10 @@ export function DeviceFrame() {
   const { pinnedUdid, sims, streamInfo } = useSimStore();
   const pinnedSim = sims.find((s) => s.udid === pinnedUdid);
   const booted = pinnedSim?.state === "Booted";
+  // Primitive deps so the render + WS effects don't retear every time
+  // sim-store polls /api/stream and writes a new streamInfo reference.
+  const streamUdid = streamInfo?.udid;
+  const streamPort = streamInfo?.port;
 
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const wsRef = useRef<WebSocket | null>(null);
@@ -51,7 +55,7 @@ export function DeviceFrame() {
 
   // --- MJPEG → canvas rendering -------------------------------------------
   useEffect(() => {
-    if (!booted || !streamInfo) return;
+    if (!booted || !streamUdid) return;
     const canvas = canvasRef.current;
     if (!canvas) return;
     const ctx = canvas.getContext("2d");
@@ -59,7 +63,7 @@ export function DeviceFrame() {
 
     const img = new Image();
     img.crossOrigin = "anonymous";
-    img.src = `/stream.mjpeg?ts=${streamInfo.udid}`;
+    img.src = `/stream.mjpeg?ts=${streamUdid}`;
 
     let animId = 0;
     let prevW = 0;
@@ -85,11 +89,13 @@ export function DeviceFrame() {
       img.src = "";
       ctx.clearRect(0, 0, canvas.width, canvas.height);
     };
-  }, [booted, streamInfo]);
+    // Depend on primitive identity only — full streamInfo is a fresh
+    // object on each /api/stream poll and would retear the canvas.
+  }, [booted, streamUdid]);
 
   // --- WebSocket to /sim-input --------------------------------------------
   useEffect(() => {
-    if (!booted || !streamInfo) return;
+    if (!booted || !streamUdid) return;
     const proto = location.protocol === "https:" ? "wss:" : "ws:";
     const ws = new WebSocket(`${proto}//${location.host}/sim-input`);
     ws.binaryType = "arraybuffer";
@@ -98,7 +104,7 @@ export function DeviceFrame() {
       wsRef.current = null;
       ws.close();
     };
-  }, [booted, streamInfo]);
+  }, [booted, streamUdid, streamPort]);
 
   // --- Coordinate normalization + touch dispatch --------------------------
   /** Returns click-fractional coords [0..1] + the canvas rect, or null if
