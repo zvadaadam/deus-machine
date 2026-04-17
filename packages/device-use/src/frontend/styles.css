@@ -141,12 +141,21 @@ body,
 }
 
 .device-frame img,
+.device-frame .device-canvas,
 .device-frame .phone-placeholder {
   display: block;
   border-radius: 28px;
   background: #000;
   object-fit: contain;
   max-height: 70vh;
+}
+
+.device-frame .device-canvas {
+  /* Canvas natural size is the sim's pixel resolution; cap to viewport */
+  max-width: 100%;
+  height: auto;
+  cursor: crosshair;
+  user-select: none;
 }
 
 .device-frame .phone-placeholder {

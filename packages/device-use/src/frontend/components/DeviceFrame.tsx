@@ -1,127 +1,159 @@
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useSimStore } from "../stores/sim-store";
-import { useActivityStore } from "../stores/activity-store";
-import { api } from "../lib/api";
 
 interface Ripple {
-  id: string;
+  id: number;
   x: number;
   y: number;
-  ts: number;
+}
+
+// Binary framing for simbridge's /ws protocol:
+//   byte 0: message type (0x03 = touch, 0x04 = button)
+//   bytes 1..: JSON payload
+function encodeTouch(type: "begin" | "move" | "end", x: number, y: number): Uint8Array {
+  const payload = new TextEncoder().encode(JSON.stringify({ type, x, y }));
+  const buf = new Uint8Array(1 + payload.length);
+  buf[0] = 0x03;
+  buf.set(payload, 1);
+  return buf;
 }
 
 export function DeviceFrame() {
   const { pinnedUdid, sims, streamInfo } = useSimStore();
   const pinnedSim = sims.find((s) => s.udid === pinnedUdid);
   const booted = pinnedSim?.state === "Booted";
-  const size = streamInfo?.size;
 
-  const imgRef = useRef<HTMLImageElement>(null);
-  const imgRectRef = useRef<DOMRect | null>(null);
+  const canvasRef = useRef<HTMLCanvasElement>(null);
+  const wsRef = useRef<WebSocket | null>(null);
+  const dragRef = useRef(false);
+  const rippleIdRef = useRef(0);
   const [ripples, setRipples] = useState<Ripple[]>([]);
-  const [dragStart, setDragStart] = useState<{ x: number; y: number } | null>(null);
 
-  // Track image bounds for ripple positioning — kept in a ref (no render on change).
+  // --- MJPEG → canvas rendering -------------------------------------------
   useEffect(() => {
-    const img = imgRef.current;
-    if (!img) return;
-    imgRectRef.current = img.getBoundingClientRect();
-    const obs = new ResizeObserver(() => {
-      imgRectRef.current = img.getBoundingClientRect();
-    });
-    obs.observe(img);
-    return () => obs.disconnect();
-  }, [streamInfo]);
+    if (!booted || !streamInfo) return;
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const ctx = canvas.getContext("2d");
+    if (!ctx) return;
 
-  // Subscribe to new tap events via Zustand. setState inside a subscription
-  // callback is fine; ESLint's set-state-in-effect only flags direct calls.
-  useEffect(() => {
-    const seenIds = new Set<string>();
-    const unsubscribe = useActivityStore.subscribe((state) => {
-      const taps = state.events.filter(
-        (e) => e.tool === "tap" && e.status === "started" && !seenIds.has(e.id)
-      );
-      for (const e of taps) {
-        seenIds.add(e.id);
-        const params = e.params as { x?: number; y?: number; ref?: string };
-        const rect = imgRectRef.current;
-        const ptW = useSimStore.getState().streamInfo?.size?.ptW;
-        if (typeof params.x !== "number" || typeof params.y !== "number" || !rect || !ptW) continue;
-        const scale = rect.width / ptW;
-        const ripple: Ripple = {
-          id: e.id,
-          x: params.x * scale,
-          y: params.y * scale,
-          ts: Date.now(),
-        };
-        setRipples((r) => [...r, ripple].slice(-8));
-        setTimeout(() => setRipples((r) => r.filter((x) => x.id !== ripple.id)), 800);
+    const img = new Image();
+    img.crossOrigin = "anonymous";
+    img.src = `/stream.mjpeg?ts=${streamInfo.udid}`;
+
+    let animId = 0;
+    let prevW = 0;
+    let prevH = 0;
+    const draw = () => {
+      const w = img.naturalWidth;
+      const h = img.naturalHeight;
+      if (w > 0 && h > 0) {
+        if (w !== prevW || h !== prevH) {
+          canvas.width = w;
+          canvas.height = h;
+          prevW = w;
+          prevH = h;
+        }
+        ctx.drawImage(img, 0, 0);
       }
-    });
-    return unsubscribe;
+      animId = requestAnimationFrame(draw);
+    };
+    draw();
+
+    return () => {
+      cancelAnimationFrame(animId);
+      img.src = "";
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+    };
+  }, [booted, streamInfo]);
+
+  // --- WebSocket to /sim-input --------------------------------------------
+  useEffect(() => {
+    if (!booted || !streamInfo) return;
+    const proto = location.protocol === "https:" ? "wss:" : "ws:";
+    const ws = new WebSocket(`${proto}//${location.host}/sim-input`);
+    ws.binaryType = "arraybuffer";
+    wsRef.current = ws;
+    return () => {
+      wsRef.current = null;
+      ws.close();
+    };
+  }, [booted, streamInfo]);
+
+  // --- Coordinate normalization + touch dispatch --------------------------
+  const sendTouch = useCallback((type: "begin" | "move" | "end", ev: React.MouseEvent) => {
+    const canvas = canvasRef.current;
+    const ws = wsRef.current;
+    if (!canvas || !ws || ws.readyState !== WebSocket.OPEN) return null;
+    const rect = canvas.getBoundingClientRect();
+    if (rect.width === 0 || rect.height === 0) return null;
+    const nx = Math.max(0, Math.min(1, (ev.clientX - rect.left) / rect.width));
+    const ny = Math.max(0, Math.min(1, (ev.clientY - rect.top) / rect.height));
+    ws.send(encodeTouch(type, nx, ny));
+    return { nx, ny, rect };
   }, []);
 
-  // Convert a click event on the image into simulator point coordinates.
-  function cssToPoint(ev: React.MouseEvent<HTMLImageElement>): { x: number; y: number } | null {
-    if (!size || !pinnedUdid) return null;
-    const rect = ev.currentTarget.getBoundingClientRect();
-    const cssX = ev.clientX - rect.left;
-    const cssY = ev.clientY - rect.top;
-    return {
-      x: (cssX / rect.width) * size.ptW,
-      y: (cssY / rect.height) * size.ptH,
-    };
-  }
-
-  async function onMouseDown(ev: React.MouseEvent<HTMLImageElement>) {
-    if (ev.button !== 0) return;
-    const p = cssToPoint(ev);
-    if (!p) return;
-    setDragStart(p);
-  }
-
-  async function onMouseUp(ev: React.MouseEvent<HTMLImageElement>) {
-    if (ev.button !== 0 || !dragStart) return;
-    const end = cssToPoint(ev);
-    setDragStart(null);
-    if (!end || !pinnedUdid) return;
-    const dx = end.x - dragStart.x;
-    const dy = end.y - dragStart.y;
-    const dist = Math.hypot(dx, dy);
-    try {
-      if (dist < 8) {
-        // Treat as tap — sub-8pt movement is noise.
-        await api.tap({ x: dragStart.x, y: dragStart.y, udid: pinnedUdid });
-      } else {
-        // Swipe.
-        await fetch("/api/tools/swipe", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            fromX: dragStart.x,
-            fromY: dragStart.y,
-            toX: end.x,
-            toY: end.y,
-            udid: pinnedUdid,
-          }),
-        });
+  const onMouseDown = useCallback(
+    (ev: React.MouseEvent<HTMLCanvasElement>) => {
+      if (ev.button !== 0) return;
+      const info = sendTouch("begin", ev);
+      if (info) {
+        dragRef.current = true;
+        // Local ripple, immediate feedback — don't wait for round-trip.
+        const id = ++rippleIdRef.current;
+        const x = info.nx * info.rect.width;
+        const y = info.ny * info.rect.height;
+        setRipples((r) => [...r, { id, x, y }].slice(-8));
+        setTimeout(() => setRipples((r) => r.filter((rr) => rr.id !== id)), 800);
       }
-    } catch {
-      // Tool errors surface via the activity feed; swallow here.
-    }
-  }
+    },
+    [sendTouch]
+  );
+
+  const onMouseMove = useCallback(
+    (ev: React.MouseEvent<HTMLCanvasElement>) => {
+      if (!dragRef.current || ev.buttons !== 1) return;
+      sendTouch("move", ev);
+    },
+    [sendTouch]
+  );
+
+  const onMouseUp = useCallback(
+    (ev: React.MouseEvent<HTMLCanvasElement>) => {
+      if (ev.button !== 0 || !dragRef.current) return;
+      dragRef.current = false;
+      sendTouch("end", ev);
+    },
+    [sendTouch]
+  );
+
+  // Window-level mouseup in case the cursor leaves the canvas mid-drag.
+  useEffect(() => {
+    const onWindowMouseUp = (ev: MouseEvent) => {
+      if (!dragRef.current) return;
+      dragRef.current = false;
+      const canvas = canvasRef.current;
+      const ws = wsRef.current;
+      if (!canvas || !ws || ws.readyState !== WebSocket.OPEN) return;
+      const rect = canvas.getBoundingClientRect();
+      if (rect.width === 0 || rect.height === 0) return;
+      const nx = Math.max(0, Math.min(1, (ev.clientX - rect.left) / rect.width));
+      const ny = Math.max(0, Math.min(1, (ev.clientY - rect.top) / rect.height));
+      ws.send(encodeTouch("end", nx, ny));
+    };
+    window.addEventListener("mouseup", onWindowMouseUp);
+    return () => window.removeEventListener("mouseup", onWindowMouseUp);
+  }, []);
 
   return (
     <div className="stage">
       <div className="device-frame">
         {booted && streamInfo ? (
-          <img
-            ref={imgRef}
-            src={`/stream.mjpeg?ts=${streamInfo.udid}`}
-            alt="simulator stream"
-            style={{ cursor: size ? "crosshair" : "default" }}
-            draggable={false}
+          <canvas
+            ref={canvasRef}
+            className="device-canvas"
             onMouseDown={onMouseDown}
+            onMouseMove={onMouseMove}
             onMouseUp={onMouseUp}
           />
         ) : (
