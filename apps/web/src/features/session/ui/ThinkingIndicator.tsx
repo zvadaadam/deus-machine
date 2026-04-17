@@ -54,12 +54,12 @@ export function ThinkingIndicator({ level, onClick, className }: ThinkingIndicat
           onClick={onClick}
           aria-label={`Thinking: ${displayLabel}`}
           className={cn(
-            // Button keeps consistent hit-area; the pill lives on the inner
-            // span so the background tint hugs just the text, not the full
-            // 32px button chrome.
-            "flex h-8 items-center rounded-lg px-1.5",
+            // Button keeps consistent hit-area; the pill (background) lives on
+            // the inner span so the tint hugs just the text. `group` lets the
+            // span react to hover anywhere inside the button's hit area, so
+            // the pill highlights even when the cursor is on button padding.
+            "group flex h-8 items-center rounded-lg px-1.5",
             "focus-visible:ring-ring focus-visible:ring-1 focus-visible:outline-none",
-            "hover:bg-accent",
             className
           )}
         >
@@ -76,15 +76,16 @@ export function ThinkingIndicator({ level, onClick, className }: ThinkingIndicat
               }}
               className={cn(
                 "text-xs transition-colors duration-200 select-none",
-                // Fixed width accommodates the widest label ("X-High") + the
-                // X-High pill padding. whitespace-nowrap guards against wrap
-                // if the pill pushes content past w-14 on compact themes.
-                "inline-block w-14 text-center whitespace-nowrap",
-                // X-High: tiny gold-tinted pill hugging the text only. Other
-                // levels render as plain muted text with no background.
+                // Fixed width accommodates the widest label ("X-High") + pill
+                // padding. whitespace-nowrap guards against wrap on compact
+                // themes. Always shaped as a pill so the hover and the X-High
+                // "top gear" states share the same silhouette.
+                "inline-block w-14 rounded-md px-1 py-px text-center whitespace-nowrap",
+                // X-High: persistent gold-tinted pill signals the top gear.
+                // Other levels render flat and only show the pill on hover.
                 isXHigh
-                  ? "text-accent-gold bg-accent-gold/8 rounded-md px-1 py-px"
-                  : "text-muted-foreground"
+                  ? "text-accent-gold bg-accent-gold/8 group-hover:bg-accent-gold/12"
+                  : "text-muted-foreground group-hover:bg-accent"
               )}
             >
               {displayLabel}
