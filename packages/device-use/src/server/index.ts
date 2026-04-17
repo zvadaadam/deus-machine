@@ -130,7 +130,11 @@ if (IS_DEV) {
 // --- Bun.serve with WebSocket upgrade -----------------------------------
 
 const port = Number(process.env.PORT ?? 3100);
-const host = process.env.HOST ?? "127.0.0.1";
+// Bind to 0.0.0.0 so localhost resolves to our listener regardless of
+// whether the client uses IPv4 (127.0.0.1) or IPv6 (::1 → falls back to
+// IPv4 via happy-eyeballs). 127.0.0.1-only binding can be shadowed by
+// any IPv6 listener on the same port.
+const host = process.env.HOST ?? "0.0.0.0";
 
 console.log(`device-use server listening on http://${host}:${port} (${IS_DEV ? "dev" : "prod"})`);
 
