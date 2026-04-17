@@ -41,6 +41,13 @@ export const MIGRATIONS: string[] = [
   `CREATE INDEX IF NOT EXISTS idx_parts_message_id ON parts(message_id, seq)`,
   `CREATE INDEX IF NOT EXISTS idx_parts_session_type ON parts(session_id, type)`,
   `CREATE INDEX IF NOT EXISTS idx_parts_tool_call_id ON parts(tool_call_id)`,
+  // sessions: rename agent_type → agent_harness to match the type name
+  // (AgentHarness) and the "harness lock" concept. Safe no-op when the
+  // column has already been renamed or the DB is a fresh install.
+  `ALTER TABLE sessions RENAME COLUMN agent_type TO agent_harness`,
+  // sessions: drop the `model` column. Never read by the frontend; the
+  // per-turn model lives on messages.model instead.
+  `ALTER TABLE sessions DROP COLUMN model`,
 ];
 
 export const SCHEMA_SQL = `
