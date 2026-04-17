@@ -3,7 +3,7 @@ import path from "path";
 import fs from "fs";
 import os from "os";
 import { resolveDefaultDatabasePath } from "../../../../shared/runtime";
-import { SCHEMA_SQL, MIGRATIONS } from "@shared/schema";
+import { SCHEMA_SQL, MIGRATIONS, isExpectedMigrationError } from "@shared/schema";
 
 const DEFAULT_DB_PATH = resolveDefaultDatabasePath({
   platform: process.platform,
@@ -39,20 +39,15 @@ function initDatabase(): Database.Database {
     // Create all tables, indexes, and triggers (idempotent)
     dbInstance.exec(SCHEMA_SQL);
 
-    // Post-launch migrations: add/rename/drop columns on existing tables.
-    // An ALTER that's already been applied (fresh install created the final
-    // schema directly) surfaces as "duplicate column" / "no such column" /
-    // "no such table" — tolerate those so migrations remain idempotent.
+    // Post-launch migrations: tolerate only the specific no-op failures that
+    // happen when a database already reflects the final schema. Anything else
+    // should fail fast so we don't silently continue with a partial migration.
     for (const sql of MIGRATIONS) {
       try {
         dbInstance.exec(sql);
       } catch (e: unknown) {
         const msg = e instanceof Error ? e.message : "";
-        if (
-          !msg.includes("duplicate column") &&
-          !msg.includes("no such column") &&
-          !msg.includes("no such table")
-        ) {
+        if (!isExpectedMigrationError(sql, msg)) {
           throw e;
         }
       }

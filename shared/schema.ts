@@ -11,12 +11,11 @@
 
 /**
  * Post-launch migrations.
- * Each statement is an ALTER TABLE ADD COLUMN that may already exist.
- * Run each individually — catch "duplicate column" errors and skip.
- * Runs AFTER SCHEMA_SQL so tables already exist.
  *
- * Currently empty — SCHEMA_SQL defines the full schema for fresh installs.
- * Add ALTER TABLE statements here when the schema changes post-launch.
+ * Run each statement individually after SCHEMA_SQL. Fresh installs already
+ * have the final schema, so some ALTER statements become harmless no-ops
+ * (for example: adding an existing column, renaming an already-renamed
+ * column, or dropping a column that was already removed).
  */
 export const MIGRATIONS: string[] = [
   // sessions: structured error category for category-aware UI
@@ -49,6 +48,33 @@ export const MIGRATIONS: string[] = [
   // per-turn model lives on messages.model instead.
   `ALTER TABLE sessions DROP COLUMN model`,
 ];
+
+function normalizeMigrationSql(sql: string): string {
+  return sql.trim().replace(/\s+/g, " ").toUpperCase();
+}
+
+/**
+ * Only tolerate migration errors that are expected for an already-migrated DB.
+ * Everything else should fail fast so we don't hide a broken migration.
+ */
+export function isExpectedMigrationError(sql: string, message: string): boolean {
+  const normalizedSql = normalizeMigrationSql(sql);
+  const normalizedMessage = message.toLowerCase();
+
+  if (normalizedSql.includes(" ADD COLUMN ")) {
+    return normalizedMessage.includes("duplicate column");
+  }
+
+  if (normalizedSql.includes(" RENAME COLUMN ")) {
+    return normalizedMessage.includes("no such column");
+  }
+
+  if (normalizedSql.includes(" DROP COLUMN ")) {
+    return normalizedMessage.includes("no such column");
+  }
+
+  return false;
+}
 
 export const SCHEMA_SQL = `
   -- Repositories tracked by the app (id = UUID7, embeds created_at)
