@@ -1,0 +1,3526 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>AAP v1 — Agentic Apps Protocol</title>
+    <meta
+      name="description"
+      content="Agentic Apps Protocol — a protocol for agent-drivable app previews in Deus."
+    />
+
+    <link rel="preconnect" href="https://cdn.jsdelivr.net" />
+    <link
+      rel="stylesheet"
+      href="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/themes/prism-tomorrow.min.css"
+    />
+
+    <style>
+      :root {
+        --bg: #0a0a0d;
+        --surface: #121218;
+        --surface-2: #1a1a22;
+        --border: #26262f;
+        --text: #e8e8ea;
+        --muted: #8b8b94;
+        --dim: #5c5c66;
+        --accent: #8b5cf6;
+        --accent-2: #a78bfa;
+        --success: #10b981;
+        --warning: #f59e0b;
+        --danger: #ef4444;
+        --cyan: #06b6d4;
+        --radius: 8px;
+        --mono:
+          ui-monospace, "SF Mono", Menlo, Monaco, "Cascadia Mono", "Roboto Mono", Consolas,
+          monospace;
+        --sans:
+          -apple-system, BlinkMacSystemFont, "Inter", "Segoe UI", Roboto, Helvetica, Arial,
+          sans-serif;
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      html,
+      body {
+        margin: 0;
+        padding: 0;
+        background: var(--bg);
+        color: var(--text);
+        font-family: var(--sans);
+        font-size: 15px;
+        line-height: 1.65;
+        -webkit-font-smoothing: antialiased;
+      }
+
+      .container {
+        max-width: 920px;
+        margin: 0 auto;
+        padding: 72px 32px 120px;
+      }
+
+      /* Header */
+      .masthead {
+        border-bottom: 1px solid var(--border);
+        padding-bottom: 32px;
+        margin-bottom: 48px;
+      }
+
+      .eyebrow {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        font-family: var(--mono);
+        font-size: 11px;
+        text-transform: uppercase;
+        letter-spacing: 0.08em;
+        color: var(--accent-2);
+        background: rgba(139, 92, 246, 0.08);
+        border: 1px solid rgba(139, 92, 246, 0.25);
+        padding: 4px 10px;
+        border-radius: 999px;
+        margin-bottom: 20px;
+      }
+      .eyebrow .dot {
+        width: 6px;
+        height: 6px;
+        border-radius: 50%;
+        background: var(--accent);
+        box-shadow: 0 0 8px var(--accent);
+      }
+
+      h1 {
+        font-size: 40px;
+        line-height: 1.1;
+        letter-spacing: -0.02em;
+        margin: 0 0 12px 0;
+        font-weight: 700;
+      }
+      h1 .version {
+        color: var(--muted);
+        font-weight: 500;
+        letter-spacing: 0;
+      }
+
+      .tagline {
+        font-size: 18px;
+        color: var(--muted);
+        max-width: 640px;
+        margin: 0;
+      }
+
+      /* Sections */
+      h2 {
+        font-size: 24px;
+        letter-spacing: -0.01em;
+        margin: 64px 0 8px;
+        font-weight: 650;
+        scroll-margin-top: 24px;
+      }
+      h2 .num {
+        display: inline-block;
+        width: 32px;
+        color: var(--dim);
+        font-family: var(--mono);
+        font-size: 16px;
+        font-weight: 500;
+      }
+
+      h3 {
+        font-size: 17px;
+        font-weight: 600;
+        margin: 32px 0 8px;
+        letter-spacing: -0.005em;
+      }
+
+      p {
+        margin: 12px 0;
+        color: var(--text);
+      }
+      p.lead {
+        color: var(--muted);
+        margin-top: 0;
+      }
+
+      .section {
+        margin-bottom: 16px;
+      }
+
+      /* Inline code */
+      code:not([class*="language-"]) {
+        font-family: var(--mono);
+        font-size: 0.88em;
+        background: var(--surface-2);
+        padding: 1px 6px;
+        border-radius: 4px;
+        border: 1px solid var(--border);
+        color: #d1b3ff;
+      }
+
+      /* Code blocks */
+      pre[class*="language-"] {
+        background: var(--surface) !important;
+        border: 1px solid var(--border);
+        border-radius: var(--radius);
+        padding: 16px 18px;
+        font-size: 13px;
+        line-height: 1.55;
+        overflow-x: auto;
+        margin: 16px 0;
+      }
+
+      .code-label {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        margin: 20px 0 -12px;
+        font-family: var(--mono);
+        font-size: 11px;
+        text-transform: uppercase;
+        letter-spacing: 0.06em;
+        color: var(--muted);
+      }
+      .code-label .badge {
+        background: var(--surface-2);
+        border: 1px solid var(--border);
+        padding: 2px 8px;
+        border-radius: 4px;
+        color: var(--muted);
+      }
+
+      /* Callouts */
+      .callout {
+        border-left: 2px solid var(--accent);
+        background: rgba(139, 92, 246, 0.05);
+        padding: 14px 18px;
+        margin: 20px 0;
+        border-radius: 0 6px 6px 0;
+      }
+      .callout.warning {
+        border-color: var(--warning);
+        background: rgba(245, 158, 11, 0.05);
+      }
+      .callout.success {
+        border-color: var(--success);
+        background: rgba(16, 185, 129, 0.05);
+      }
+      .callout-title {
+        font-family: var(--mono);
+        font-size: 11px;
+        text-transform: uppercase;
+        letter-spacing: 0.08em;
+        color: var(--accent-2);
+        margin-bottom: 4px;
+      }
+      .callout.warning .callout-title {
+        color: var(--warning);
+      }
+      .callout.success .callout-title {
+        color: var(--success);
+      }
+
+      /* Field table */
+      .fields {
+        border: 1px solid var(--border);
+        border-radius: var(--radius);
+        overflow: hidden;
+        margin: 16px 0 24px;
+      }
+      .field {
+        display: grid;
+        grid-template-columns: 200px 1fr;
+        gap: 20px;
+        padding: 14px 18px;
+        border-bottom: 1px solid var(--border);
+      }
+      .field:last-child {
+        border-bottom: none;
+      }
+      .field-name {
+        font-family: var(--mono);
+        font-size: 13px;
+        color: var(--accent-2);
+        font-weight: 500;
+      }
+      .field-type {
+        font-family: var(--mono);
+        font-size: 11px;
+        color: var(--dim);
+        margin-top: 2px;
+      }
+      .field-desc {
+        color: var(--text);
+        font-size: 14px;
+      }
+      .field-desc .note {
+        display: block;
+        color: var(--muted);
+        font-size: 13px;
+        margin-top: 4px;
+      }
+
+      /* Architecture diagram */
+      .diagram {
+        background: var(--surface);
+        border: 1px solid var(--border);
+        border-radius: var(--radius);
+        padding: 28px 20px;
+        margin: 24px 0;
+        overflow-x: auto;
+      }
+      .diagram svg {
+        display: block;
+        margin: 0 auto;
+        max-width: 100%;
+        height: auto;
+      }
+
+      /* Sidebar mockup */
+      .sidebar-mock-wrap {
+        background: var(--surface);
+        border: 1px solid var(--border);
+        border-radius: var(--radius);
+        padding: 28px 24px;
+        margin: 20px 0 28px;
+        display: flex;
+        justify-content: center;
+      }
+      .sidebar-mock {
+        width: 260px;
+        background: #0e0e14;
+        border: 1px solid var(--border);
+        border-radius: 8px;
+        padding: 10px 6px 14px;
+        font-family: var(--sans);
+        font-size: 12.5px;
+      }
+      .sidebar-mock-header {
+        font-weight: 600;
+        color: var(--text);
+        padding: 6px 10px 12px;
+        border-bottom: 1px solid var(--border);
+        margin-bottom: 8px;
+        display: flex;
+        align-items: center;
+        gap: 8px;
+      }
+      .sidebar-mock-header::before {
+        content: "";
+        width: 14px;
+        height: 14px;
+        background: var(--accent);
+        border-radius: 3px;
+      }
+      .sidebar-mock-section-label {
+        font-family: var(--mono);
+        font-size: 10px;
+        text-transform: uppercase;
+        letter-spacing: 0.1em;
+        color: var(--muted);
+        padding: 12px 10px 4px;
+        display: flex;
+        align-items: center;
+        gap: 8px;
+      }
+      .sidebar-mock-section-label.highlight {
+        color: var(--accent-2);
+      }
+      .sidebar-mock-new-badge {
+        background: rgba(139, 92, 246, 0.15);
+        color: var(--accent-2);
+        border: 1px solid rgba(139, 92, 246, 0.3);
+        padding: 1px 6px;
+        border-radius: 999px;
+        font-family: var(--mono);
+        font-size: 9px;
+        text-transform: uppercase;
+        letter-spacing: 0.08em;
+      }
+      .sidebar-mock-row {
+        display: flex;
+        align-items: center;
+        padding: 5px 10px;
+        gap: 8px;
+        color: var(--text);
+        border-radius: 4px;
+      }
+      .sidebar-mock-row.active {
+        background: rgba(139, 92, 246, 0.08);
+      }
+      .sidebar-mock-row .grid {
+        width: 12px;
+        height: 12px;
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        grid-template-rows: 1fr 1fr;
+        gap: 2px;
+      }
+      .sidebar-mock-row .grid span {
+        background: var(--muted);
+        border-radius: 1px;
+      }
+      .sidebar-mock-row .folder {
+        width: 12px;
+        height: 12px;
+        background: var(--muted);
+        opacity: 0.5;
+        border-radius: 2px;
+      }
+      .sidebar-mock-row .dot {
+        margin-left: auto;
+        width: 6px;
+        height: 6px;
+        border-radius: 50%;
+        background: var(--dim);
+      }
+      .sidebar-mock-row .dot.green {
+        background: var(--success);
+        box-shadow: 0 0 6px var(--success);
+      }
+      .sidebar-mock-row .dot.pulse {
+        background: var(--warning);
+        animation: pulse 1.4s ease-in-out infinite;
+      }
+      @keyframes pulse {
+        0%,
+        100% {
+          opacity: 1;
+          transform: scale(1);
+        }
+        50% {
+          opacity: 0.35;
+          transform: scale(0.85);
+        }
+      }
+      .sidebar-mock-row.sub {
+        padding-left: 28px;
+        color: var(--muted);
+        font-size: 12px;
+      }
+      .sidebar-mock-row.sub .dot {
+        margin-left: auto;
+        width: 5px;
+        height: 5px;
+      }
+      .sidebar-mock-row .chev {
+        margin-left: auto;
+        color: var(--dim);
+        font-family: var(--mono);
+        font-size: 11px;
+      }
+
+      /* Content-view (launcher) mockup */
+      .content-mock-wrap {
+        background: var(--surface);
+        border: 1px solid var(--border);
+        border-radius: var(--radius);
+        padding: 24px 24px 28px;
+        margin: 20px 0 28px;
+      }
+      .content-mock-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: flex-end;
+        padding-bottom: 14px;
+        border-bottom: 1px solid var(--border);
+        margin-bottom: 18px;
+      }
+      .content-mock-title {
+        font-size: 18px;
+        font-weight: 650;
+        letter-spacing: -0.005em;
+        color: var(--text);
+      }
+      .content-mock-subtitle {
+        font-size: 12.5px;
+        color: var(--muted);
+        margin-top: 3px;
+      }
+      .content-mock-cta {
+        font-family: var(--mono);
+        font-size: 11px;
+        padding: 6px 12px;
+        border: 1px solid var(--border);
+        background: var(--surface-2);
+        border-radius: 5px;
+        color: var(--muted);
+      }
+      .content-mock-grid {
+        display: grid;
+        grid-template-columns: repeat(3, 1fr);
+        gap: 12px;
+      }
+      @media (max-width: 700px) {
+        .content-mock-grid {
+          grid-template-columns: 1fr;
+        }
+      }
+      .content-mock-card {
+        background: #0e0e14;
+        border: 1px solid var(--border);
+        border-radius: 6px;
+        padding: 14px 14px 12px;
+        display: flex;
+        flex-direction: column;
+        gap: 10px;
+        min-height: 130px;
+      }
+      .content-mock-card.running {
+        border-color: rgba(16, 185, 129, 0.35);
+        background: linear-gradient(180deg, rgba(16, 185, 129, 0.04) 0%, #0e0e14 100%);
+      }
+      .content-mock-card-head {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+      }
+      .content-mock-card-icon {
+        width: 22px;
+        height: 22px;
+        background: linear-gradient(135deg, var(--accent) 0%, var(--cyan) 100%);
+        border-radius: 5px;
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        grid-template-rows: 1fr 1fr;
+        gap: 2px;
+        padding: 4px;
+      }
+      .content-mock-card-icon span {
+        background: rgba(255, 255, 255, 0.4);
+        border-radius: 1px;
+      }
+      .content-mock-card-title {
+        font-size: 13px;
+        font-weight: 600;
+        color: var(--text);
+      }
+      .content-mock-card-desc {
+        font-size: 11.5px;
+        color: var(--muted);
+        line-height: 1.5;
+        flex: 1;
+      }
+      .content-mock-card-foot {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        padding-top: 8px;
+        border-top: 1px solid var(--border);
+      }
+      .content-mock-card-status {
+        font-family: var(--mono);
+        font-size: 10px;
+        color: var(--muted);
+        text-transform: uppercase;
+        letter-spacing: 0.1em;
+        display: flex;
+        align-items: center;
+        gap: 6px;
+      }
+      .content-mock-card-status.running {
+        color: var(--success);
+      }
+      .content-mock-card-status .dot {
+        width: 5px;
+        height: 5px;
+        border-radius: 50%;
+        background: var(--dim);
+      }
+      .content-mock-card-status.running .dot {
+        background: var(--success);
+        box-shadow: 0 0 5px var(--success);
+      }
+      .content-mock-card-btn {
+        font-family: var(--mono);
+        font-size: 10px;
+        color: var(--accent-2);
+        text-transform: uppercase;
+        letter-spacing: 0.1em;
+        padding: 2px 8px;
+        border: 1px solid rgba(139, 92, 246, 0.25);
+        background: rgba(139, 92, 246, 0.08);
+        border-radius: 4px;
+      }
+
+      /* Use-case gallery */
+      .use-cases {
+        margin-top: 24px;
+      }
+      .category {
+        margin: 32px 0 12px;
+        display: flex;
+        align-items: center;
+        gap: 12px;
+      }
+      .category-label {
+        font-family: var(--mono);
+        font-size: 11px;
+        text-transform: uppercase;
+        letter-spacing: 0.1em;
+        color: var(--accent-2);
+      }
+      .category-rule {
+        flex: 1;
+        height: 1px;
+        background: var(--border);
+      }
+      .case-grid {
+        display: grid;
+        grid-template-columns: repeat(3, 1fr);
+        gap: 14px;
+        margin: 12px 0 8px;
+      }
+      @media (max-width: 900px) {
+        .case-grid {
+          grid-template-columns: repeat(2, 1fr);
+        }
+      }
+      @media (max-width: 640px) {
+        .case-grid {
+          grid-template-columns: 1fr;
+        }
+      }
+      .case-card {
+        background: var(--surface);
+        border: 1px solid var(--border);
+        border-radius: var(--radius);
+        padding: 16px 18px;
+        display: flex;
+        flex-direction: column;
+        gap: 8px;
+        transition: border-color 0.15s ease;
+      }
+      .case-card:hover {
+        border-color: rgba(139, 92, 246, 0.35);
+      }
+      .case-tag {
+        font-family: var(--mono);
+        font-size: 10px;
+        text-transform: uppercase;
+        letter-spacing: 0.08em;
+        color: var(--muted);
+      }
+      .case-title {
+        font-size: 15px;
+        font-weight: 600;
+        color: var(--text);
+        letter-spacing: -0.005em;
+      }
+      .case-hook {
+        font-size: 13.5px;
+        color: var(--muted);
+        line-height: 1.55;
+        margin: 0;
+      }
+      .case-magic {
+        font-size: 12.5px;
+        color: var(--text);
+        border-top: 1px solid var(--border);
+        padding-top: 10px;
+        margin-top: auto;
+      }
+      .case-magic::before {
+        content: "Why it's different ";
+        font-family: var(--mono);
+        font-size: 10px;
+        text-transform: uppercase;
+        letter-spacing: 0.08em;
+        color: var(--accent-2);
+        display: block;
+        margin-bottom: 4px;
+      }
+
+      /* Flagship card */
+      .flagship {
+        background: linear-gradient(
+          135deg,
+          rgba(139, 92, 246, 0.08) 0%,
+          rgba(6, 182, 212, 0.04) 100%
+        );
+        border: 1px solid rgba(139, 92, 246, 0.3);
+        border-radius: var(--radius);
+        padding: 24px 28px;
+        margin: 20px 0 32px;
+        display: grid;
+        grid-template-columns: 1.2fr 1fr;
+        gap: 28px;
+      }
+      @media (max-width: 800px) {
+        .flagship {
+          grid-template-columns: 1fr;
+        }
+      }
+      .flagship-tag {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        font-family: var(--mono);
+        font-size: 10px;
+        text-transform: uppercase;
+        letter-spacing: 0.1em;
+        color: var(--accent-2);
+        background: rgba(139, 92, 246, 0.12);
+        padding: 3px 9px;
+        border-radius: 999px;
+        margin-bottom: 10px;
+      }
+      .flagship-title {
+        font-size: 22px;
+        font-weight: 650;
+        letter-spacing: -0.01em;
+        margin: 0 0 10px;
+      }
+      .flagship-body p {
+        font-size: 14px;
+        color: var(--muted);
+        line-height: 1.6;
+        margin: 0 0 10px;
+      }
+      .flagship-roles {
+        font-family: var(--mono);
+        font-size: 12px;
+        background: rgba(0, 0, 0, 0.3);
+        border: 1px solid var(--border);
+        border-radius: 6px;
+        padding: 14px 16px;
+        line-height: 1.7;
+      }
+      .flagship-roles .role {
+        color: var(--accent-2);
+        display: inline-block;
+        width: 72px;
+      }
+      .flagship-roles .arr {
+        color: var(--dim);
+        margin: 0 4px;
+      }
+
+      /* Pattern closer */
+      .pattern-box {
+        margin-top: 32px;
+        padding: 20px 24px;
+        border-top: 1px solid var(--border);
+        border-bottom: 1px solid var(--border);
+        text-align: center;
+      }
+      .pattern-box .pattern-kicker {
+        font-family: var(--mono);
+        font-size: 11px;
+        text-transform: uppercase;
+        letter-spacing: 0.1em;
+        color: var(--muted);
+        margin-bottom: 6px;
+      }
+      .pattern-box .pattern-quote {
+        font-size: 17px;
+        font-weight: 500;
+        color: var(--text);
+        letter-spacing: -0.005em;
+        max-width: 620px;
+        margin: 0 auto;
+        line-height: 1.5;
+      }
+      .pattern-box .pattern-quote em {
+        font-style: normal;
+        color: var(--accent-2);
+      }
+
+      /* Scope lists */
+      .scope-grid {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 16px;
+        margin: 20px 0;
+      }
+      @media (max-width: 700px) {
+        .scope-grid {
+          grid-template-columns: 1fr;
+        }
+      }
+      .scope-card {
+        border: 1px solid var(--border);
+        border-radius: var(--radius);
+        padding: 16px 18px;
+        background: var(--surface);
+      }
+      .scope-card.in {
+        border-color: rgba(16, 185, 129, 0.35);
+      }
+      .scope-card.out {
+        border-color: rgba(239, 68, 68, 0.25);
+      }
+      .scope-card h4 {
+        margin: 0 0 10px;
+        font-size: 13px;
+        text-transform: uppercase;
+        letter-spacing: 0.08em;
+        font-family: var(--mono);
+        font-weight: 500;
+      }
+      .scope-card.in h4 {
+        color: var(--success);
+      }
+      .scope-card.out h4 {
+        color: var(--danger);
+      }
+      .scope-card ul {
+        margin: 0;
+        padding-left: 18px;
+        font-size: 14px;
+        color: var(--muted);
+      }
+      .scope-card ul li {
+        margin: 4px 0;
+      }
+
+      /* Timeline (lifecycle) */
+      .timeline {
+        position: relative;
+        margin: 24px 0;
+        padding-left: 28px;
+      }
+      .timeline::before {
+        content: "";
+        position: absolute;
+        left: 8px;
+        top: 4px;
+        bottom: 4px;
+        width: 1px;
+        background: var(--border);
+      }
+      .step {
+        position: relative;
+        margin-bottom: 18px;
+      }
+      .step::before {
+        content: "";
+        position: absolute;
+        left: -24px;
+        top: 6px;
+        width: 10px;
+        height: 10px;
+        border-radius: 50%;
+        background: var(--accent);
+        box-shadow:
+          0 0 0 3px var(--bg),
+          0 0 0 4px var(--accent);
+      }
+      .step-label {
+        font-family: var(--mono);
+        font-size: 11px;
+        color: var(--muted);
+        text-transform: uppercase;
+        letter-spacing: 0.08em;
+      }
+      .step-body {
+        font-size: 14px;
+        color: var(--text);
+        margin-top: 2px;
+      }
+      .step-body code:not([class*="language-"]) {
+        font-size: 12px;
+      }
+
+      /* Compare */
+      .compare {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 0;
+        margin: 20px 0;
+        border: 1px solid var(--border);
+        border-radius: var(--radius);
+        overflow: hidden;
+      }
+      @media (max-width: 700px) {
+        .compare {
+          grid-template-columns: 1fr;
+        }
+      }
+      .compare-col {
+        padding: 18px 20px;
+        background: var(--surface);
+      }
+      .compare-col.before {
+        border-right: 1px solid var(--border);
+      }
+      .compare-col h4 {
+        margin: 0 0 12px;
+        font-family: var(--mono);
+        font-size: 11px;
+        text-transform: uppercase;
+        letter-spacing: 0.08em;
+        color: var(--muted);
+      }
+      .compare-col.before h4 {
+        color: var(--danger);
+      }
+      .compare-col.after h4 {
+        color: var(--success);
+      }
+      .compare-col ul {
+        margin: 0;
+        padding-left: 18px;
+        font-size: 13px;
+        color: var(--muted);
+      }
+      .compare-col .big {
+        font-size: 20px;
+        color: var(--text);
+        font-weight: 600;
+        margin: 0 0 6px;
+      }
+
+      /* TOC */
+      .toc {
+        border: 1px solid var(--border);
+        border-radius: var(--radius);
+        background: var(--surface);
+        padding: 16px 20px;
+        margin: 24px 0 40px;
+      }
+      .toc-title {
+        font-family: var(--mono);
+        font-size: 11px;
+        text-transform: uppercase;
+        letter-spacing: 0.08em;
+        color: var(--muted);
+        margin-bottom: 10px;
+      }
+      .toc ol {
+        margin: 0;
+        padding-left: 20px;
+        columns: 2;
+        column-gap: 28px;
+        font-size: 14px;
+      }
+      @media (max-width: 700px) {
+        .toc ol {
+          columns: 1;
+        }
+      }
+      .toc a {
+        color: var(--text);
+        text-decoration: none;
+        line-height: 1.8;
+      }
+      .toc a:hover {
+        color: var(--accent-2);
+      }
+
+      /* Annotations over manifest */
+      .annotated {
+        border: 1px solid var(--border);
+        border-radius: var(--radius);
+        overflow: hidden;
+        margin: 16px 0 24px;
+      }
+      .annotated-row {
+        display: grid;
+        grid-template-columns: 1.3fr 1fr;
+        gap: 0;
+        border-bottom: 1px solid var(--border);
+      }
+      .annotated-row:last-child {
+        border-bottom: none;
+      }
+      .annotated-row pre[class*="language-"] {
+        margin: 0 !important;
+        border: none !important;
+        border-right: 1px solid var(--border) !important;
+        border-radius: 0 !important;
+        background: #0e0e14 !important;
+      }
+      .annotation {
+        padding: 16px 20px;
+        background: var(--surface);
+        font-size: 13.5px;
+        color: var(--muted);
+      }
+      .annotation strong {
+        color: var(--text);
+        font-weight: 600;
+        display: block;
+        margin-bottom: 4px;
+        font-size: 14px;
+      }
+      @media (max-width: 820px) {
+        .annotated-row {
+          grid-template-columns: 1fr;
+        }
+        .annotated-row pre {
+          border-right: none !important;
+          border-bottom: 1px solid var(--border) !important;
+        }
+      }
+
+      /* Misc */
+      a {
+        color: var(--accent-2);
+      }
+      hr {
+        border: none;
+        border-top: 1px solid var(--border);
+        margin: 48px 0;
+      }
+
+      /* Footer */
+      .footer {
+        margin-top: 96px;
+        padding-top: 24px;
+        border-top: 1px solid var(--border);
+        font-family: var(--mono);
+        font-size: 12px;
+        color: var(--dim);
+        display: flex;
+        justify-content: space-between;
+        flex-wrap: wrap;
+        gap: 8px;
+      }
+
+      /* Stat blocks */
+      .stats {
+        display: grid;
+        grid-template-columns: repeat(3, 1fr);
+        gap: 12px;
+        margin: 20px 0 24px;
+      }
+      @media (max-width: 700px) {
+        .stats {
+          grid-template-columns: 1fr;
+        }
+      }
+      .stat {
+        background: var(--surface);
+        border: 1px solid var(--border);
+        border-radius: var(--radius);
+        padding: 14px 16px;
+      }
+      .stat-num {
+        font-family: var(--mono);
+        font-size: 22px;
+        font-weight: 600;
+        color: var(--accent-2);
+      }
+      .stat-label {
+        font-size: 12px;
+        color: var(--muted);
+        margin-top: 2px;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="container">
+      <!-- ============ MASTHEAD ============ -->
+      <header class="masthead">
+        <div class="eyebrow"><span class="dot"></span>Protocol draft · v1</div>
+        <h1>Agentic Apps Protocol <span class="version">(AAP)</span></h1>
+        <div
+          style="
+            font-family: var(--mono);
+            font-size: 12px;
+            color: var(--muted);
+            margin: -4px 0 16px;
+          "
+        >
+          Deus is the first host. The protocol is portable — any IDE, any agent runtime can adopt
+          it.
+        </div>
+        <p class="tagline">
+          The protocol for
+          <strong style="color: var(--text); font-weight: 600">agentic apps</strong> — regular web
+          apps augmented so an AI agent can see them, operate them, and collaborate inside them
+          alongside you. One URL, one tool surface, one lifecycle.
+        </p>
+      </header>
+
+      <!-- ============ TOC ============ -->
+      <nav class="toc">
+        <div class="toc-title">Contents</div>
+        <ol>
+          <li><a href="#pitch">The pitch</a></li>
+          <li><a href="#shift">Before &amp; after</a></li>
+          <li><a href="#what-you-can-build">What you can build</a></li>
+          <li><a href="#how">How an app plugs in</a></li>
+          <li><a href="#manifest">The manifest, annotated</a></li>
+          <li><a href="#launch">Launch contract</a></li>
+          <li><a href="#ui">UI contract</a></li>
+          <li><a href="#agent">Agent surface</a></li>
+          <li><a href="#storage">Storage</a></li>
+          <li><a href="#lifecycle">Lifecycle</a></li>
+          <li><a href="#events">Events (optional)</a></li>
+          <li><a href="#capabilities">Capabilities</a></li>
+          <li><a href="#sequence">Launch sequence</a></li>
+          <li><a href="#paper">Paper exercise: Drizzle Studio</a></li>
+          <li><a href="#scope">In scope / out of scope</a></li>
+          <li><a href="#inside">Inside Deus</a></li>
+          <li><a href="#path">Implementation path</a></li>
+          <li><a href="#test">Testing the protocol</a></li>
+        </ol>
+      </nav>
+
+      <!-- ============ PITCH ============ -->
+      <section id="pitch">
+        <h2><span class="num">01</span>The pitch</h2>
+        <p class="lead">
+          Deus today has simulator-specific panels, simulator-specific state, simulator-specific
+          tools. Every new preview (mobile, DB, web, 3D) would mean writing another panel, another
+          state machine, another tool set. AAP inverts this: the app ships its own viewer, its own
+          tools, and its own skill — Deus becomes the launcher, the scheduler, and the bridge.
+        </p>
+
+        <p class="lead">
+          We call these <strong style="color: var(--text); font-weight: 600">agentic apps</strong>:
+          normal web apps — React dashboards, PDF viewers, 3D canvases, DB browsers — augmented with
+          a small contract so an AI can operate them the way you do. The app keeps its UI, keeps its
+          users, keeps its own repo. AAP is just the handshake.
+        </p>
+
+        <div class="stats">
+          <div class="stat">
+            <div class="stat-num">~2,300</div>
+            <div class="stat-label">lines of simulator-specific UI &amp; state deletable</div>
+          </div>
+          <div class="stat">
+            <div class="stat-num">~1,500</div>
+            <div class="stat-label">lines of new generic apps plumbing</div>
+          </div>
+          <div class="stat">
+            <div class="stat-num">1</div>
+            <div class="stat-label">JSON file to add a new app</div>
+          </div>
+        </div>
+
+        <div class="callout">
+          <div class="callout-title">Design stance</div>
+          Not a spec for the ecosystem. An internal contract that <em>could</em>
+          become one. Keep it boring, keep it small, keep it localhost-only until real usage pulls
+          it outward.
+        </div>
+      </section>
+
+      <!-- ============ SHIFT ============ -->
+      <section id="shift">
+        <h2><span class="num">02</span>Before &amp; after</h2>
+
+        <div class="compare">
+          <div class="compare-col before">
+            <h4>Before — simulator-specific</h4>
+            <p class="big">Deus owns the preview.</p>
+            <ul>
+              <li><code>apps/web/src/features/simulator/ui/</code> — 1,636 LOC</li>
+              <li><code>apps/backend/src/services/simulator-context.ts</code> — 795 LOC</li>
+              <li>Typed tools hand-registered in <code>deus-tools/simulator.ts</code></li>
+              <li>Adding a DB browser means a whole new feature folder</li>
+              <li>Cross-cutting concerns (lifecycle, state, stream) reinvented per preview</li>
+            </ul>
+          </div>
+          <div class="compare-col after">
+            <h4>After — AAP-driven</h4>
+            <p class="big">The app owns the preview.</p>
+            <ul>
+              <li>Simulator UI &amp; stream live in <code>packages/device-use</code></li>
+              <li>Deus renders its URL in a browser tab — same tab infra for every app</li>
+              <li>Tools registered dynamically from the app's own MCP endpoint</li>
+              <li>New app = one <code>agentic-app.json</code> + its own viewer</li>
+              <li>Lifecycle, storage, events are shared plumbing once, not per app</li>
+            </ul>
+          </div>
+        </div>
+      </section>
+
+      <!-- ============ WHAT YOU CAN BUILD ============ -->
+      <section id="what-you-can-build">
+        <h2><span class="num">03</span>What you can build</h2>
+        <p class="lead">
+          Text-out chat is great for Q&amp;A. It's the wrong UI for anything spatial, temporal, or
+          stateful — a song wants to be heard, a graph wants to be walked, a map wants to be
+          dragged. Agentic apps let the agent step
+          <em>into</em> a real medium and be useful there. Here's what that unlocks.
+        </p>
+
+        <!-- Flagship: the user's ComfyUI-style idea -->
+        <div class="flagship">
+          <div class="flagship-body">
+            <span class="flagship-tag">Flagship use case</span>
+            <h3 class="flagship-title">Gen-AI node-graph studio</h3>
+            <p>
+              A ComfyUI-style canvas where every node is an AI model — a video model, a music model,
+              an image model, an LLM, a ControlNet, a custom Python cell. You describe what you
+              want; the agent drags nodes in, wires them, and hits <em>run</em>. You watch the graph
+              assemble, frames render, waveforms appear.
+            </p>
+            <p>
+              When a flow works, you save the graph. When you want a variant, you ask. When you want
+              to remix, you grab a node and drop it elsewhere — the agent adapts the wiring around
+              your change. You stop <em>writing prompts</em> and start <em>composing</em>
+              with an AI that can see your work.
+            </p>
+            <p style="color: var(--text)">
+              <strong>Why this is the killer app.</strong> ComfyUI exists today, but the agent lives
+              outside it with no shared state. With AAP, the agent sees node positions, edits graphs
+              by reference, explains why a flow produces the look it does, and can propose three
+              alternatives you actually see rendered.
+            </p>
+          </div>
+          <div class="flagship-roles">
+            <div>
+              <span class="role">agent →</span> <span class="arr">sees</span> graph JSON, node
+              params, render status
+            </div>
+            <div>
+              <span class="role">agent →</span> <span class="arr">calls</span> add_node, connect,
+              set_param, run
+            </div>
+            <div>
+              <span class="role">user &nbsp;→</span> <span class="arr">drags</span> nodes, rewires,
+              previews outputs
+            </div>
+            <div>
+              <span class="role">both &nbsp;→</span> <span class="arr">share</span> graph state in
+              real time
+            </div>
+            <div style="margin-top: 10px; color: var(--muted)">
+              // the AAP manifest is ~30 lines.<br />
+              // the rest is just a web app that speaks MCP.
+            </div>
+          </div>
+        </div>
+
+        <!-- ========= CATEGORY 1: CREATIVE & GEN AI ========= -->
+        <div class="category">
+          <div class="category-label">Creative &amp; Gen AI</div>
+          <div class="category-rule"></div>
+        </div>
+        <div class="case-grid">
+          <div class="case-card">
+            <span class="case-tag">video</span>
+            <div class="case-title">AI video editor</div>
+            <p class="case-hook">
+              Timeline viewer with live preview. Agent scrubs, cuts, adds b-roll, writes captions,
+              generates transitions.
+            </p>
+            <div class="case-magic">
+              You reject a cut and see three alternatives rendered, not described. Ends the loop of
+              explaining video edits in prose.
+            </div>
+          </div>
+
+          <div class="case-card">
+            <span class="case-tag">audio</span>
+            <div class="case-title">Music studio</div>
+            <p class="case-hook">
+              In-browser DAW. Agent lays chord progressions, drums, solos. Solo a track, ask for a
+              different mood, agent regenerates just that region.
+            </p>
+            <div class="case-magic">
+              Hum into the mic → agent transcribes to MIDI → builds a full arrangement around it.
+              Chat can't hum back.
+            </div>
+          </div>
+
+          <div class="case-card">
+            <span class="case-tag">comics</span>
+            <div class="case-title">Storyboard builder</div>
+            <p class="case-hook">
+              Panel-by-panel canvas. Agent writes the script, generates panels, swaps angles on
+              request. Drag to reorder.
+            </p>
+            <div class="case-magic">
+              Continuity across panels (same character, same lighting) only works when the agent can
+              <em>see</em> the whole board.
+            </div>
+          </div>
+        </div>
+
+        <!-- ========= CATEGORY 2: DATA & RESEARCH ========= -->
+        <div class="category">
+          <div class="category-label">Data &amp; research</div>
+          <div class="category-rule"></div>
+        </div>
+        <div class="case-grid">
+          <div class="case-card">
+            <span class="case-tag">notebook</span>
+            <div class="case-title">Live data notebook</div>
+            <p class="case-hook">
+              Observable-style cells. Agent writes SQL, Python, Mermaid; charts render inline. Click
+              a bar → agent filters everything downstream.
+            </p>
+            <div class="case-magic">
+              Tables in chat are unreadable past 10 rows. Live charts with brushing, hover, and
+              linked views are another universe.
+            </div>
+          </div>
+
+          <div class="case-card">
+            <span class="case-tag">dashboard</span>
+            <div class="case-title">Dashboard composer</div>
+            <p class="case-hook">
+              Drag-drop widgets. Agent picks the metric, queries the source, lays out the board.
+              Move a widget → agent rebalances.
+            </p>
+            <div class="case-magic">
+              "Here's a dashboard for our Q2 churn" is meaningless as text. As a live grid with real
+              queries, it's a deliverable.
+            </div>
+          </div>
+
+          <div class="case-card">
+            <span class="case-tag">research</span>
+            <div class="case-title">Paper reader</div>
+            <p class="case-hook">
+              PDF viewer with an annotation column. Agent margin-notes as you read — "claim on p.7
+              contradicts figure 4." Highlight anything, ask for context.
+            </p>
+            <div class="case-magic">
+              Reading is a spatial act. Annotations belong next to the sentence, not in a separate
+              chat thread you have to context-switch to.
+            </div>
+          </div>
+        </div>
+
+        <!-- ========= CATEGORY 3: DESIGN & PROTOTYPING ========= -->
+        <div class="category">
+          <div class="category-label">Design &amp; prototyping</div>
+          <div class="category-rule"></div>
+        </div>
+        <div class="case-grid">
+          <div class="case-card">
+            <span class="case-tag">wireframe</span>
+            <div class="case-title">Wireframe canvas</div>
+            <p class="case-hook">
+              Figma-lite embedded. Agent sketches screens, wires flows, labels components. Move a
+              box → adjacent screens adapt.
+            </p>
+            <div class="case-magic">
+              Shippable UX before a line of code. Agent knows the whole flow, not just the screen
+              you asked about.
+            </div>
+          </div>
+
+          <div class="case-card">
+            <span class="case-tag">3d</span>
+            <div class="case-title">3D scene builder</div>
+            <p class="case-hook">
+              Three.js canvas. Agent places assets, lights, cameras. You orbit, agent adjusts
+              composition from your current angle.
+            </p>
+            <div class="case-magic">
+              Product shots, architectural walkthroughs, game scenes. Agent "seeing" your viewport
+              is the whole trick.
+            </div>
+          </div>
+
+          <div class="case-card">
+            <span class="case-tag">brand</span>
+            <div class="case-title">Brand system explorer</div>
+            <p class="case-hook">
+              Grid of type pairings, palettes, real mockups (cards, pages, ads). Agent generates
+              variations; filter by "more editorial."
+            </p>
+            <div class="case-magic">
+              Naming a color is a lossy compression. Seeing 20 palettes applied to real UI collapses
+              the iteration loop 100×.
+            </div>
+          </div>
+        </div>
+
+        <!-- ========= CATEGORY 4: SCIENTIFIC & SIMULATION ========= -->
+        <div class="category">
+          <div class="category-label">Scientific &amp; simulation</div>
+          <div class="category-rule"></div>
+        </div>
+        <div class="case-grid">
+          <div class="case-card">
+            <span class="case-tag">chem</span>
+            <div class="case-title">Molecule workbench</div>
+            <p class="case-hook">
+              3D molecule viewer. Agent builds structures, predicts properties, runs docking
+              simulations. You rotate, mutate residues, ask why.
+            </p>
+            <div class="case-magic">
+              Chemistry is spatial. SMILES in chat is illegible; a rotating structure with agent
+              annotations is a research tool.
+            </div>
+          </div>
+
+          <div class="case-card">
+            <span class="case-tag">physics</span>
+            <div class="case-title">Physics sandbox</div>
+            <p class="case-hook">
+              2D/3D sim (pendulums, circuits, fluids). Agent tunes parameters, runs to steady state,
+              explains the behavior you see.
+            </p>
+            <div class="case-magic">
+              "Why does it oscillate?" becomes a shared experiment, not a textbook paragraph.
+            </div>
+          </div>
+
+          <div class="case-card">
+            <span class="case-tag">robotics</span>
+            <div class="case-title">Robotics playground</div>
+            <p class="case-hook">
+              Embedded Gazebo-lite. Agent writes a controller, runs it, you watch the robot try —
+              and fail. Agent iterates until it works.
+            </p>
+            <div class="case-magic">
+              The reward loop is <em>seeing the behavior</em>. Text logs lose 95% of the signal a
+              human gets in 2 seconds of watching.
+            </div>
+          </div>
+        </div>
+
+        <!-- ========= CATEGORY 5: LIFE & PROFESSIONAL ========= -->
+        <div class="category">
+          <div class="category-label">Life &amp; professional</div>
+          <div class="category-rule"></div>
+        </div>
+        <div class="case-grid">
+          <div class="case-card">
+            <span class="case-tag">travel</span>
+            <div class="case-title">Travel planner</div>
+            <p class="case-hook">
+              Live map with pins, routes, availability. Agent researches, drops pins, optimizes the
+              order. Drag a pin → agent rebalances the whole trip.
+            </p>
+            <div class="case-magic">
+              Itineraries are inherently spatial. "Lisbon day 3: beach" means nothing without seeing
+              the beach is 40 min away.
+            </div>
+          </div>
+
+          <div class="case-card">
+            <span class="case-tag">legal</span>
+            <div class="case-title">Contract reviewer</div>
+            <p class="case-hook">
+              PDF with a redline column. Agent flags risky clauses, proposes edits, explains why
+              each one matters. Accept, reject, or drill in.
+            </p>
+            <div class="case-magic">
+              Lawyers already do this in Word. The bottleneck is the first pass. An agent that
+              annotates at reading speed is a 10×.
+            </div>
+          </div>
+
+          <div class="case-card">
+            <span class="case-tag">learning</span>
+            <div class="case-title">Interactive tutor</div>
+            <p class="case-hook">
+              Subject-specific workspace — math canvas, Python sandbox, language drill. Agent sets
+              exercises, checks your work, adjusts difficulty live.
+            </p>
+            <div class="case-magic">
+              Duolingo-shape, for anything. The medium <em>is</em> the pedagogy; chat alone can't be
+              a workbook.
+            </div>
+          </div>
+        </div>
+
+        <!-- ========= CATEGORY 6: MORE ========= -->
+        <div class="category">
+          <div class="category-label">More game-changers</div>
+          <div class="category-rule"></div>
+        </div>
+        <div class="case-grid">
+          <div class="case-card">
+            <span class="case-tag">spreadsheet</span>
+            <div class="case-title">Reasoning spreadsheet</div>
+            <p class="case-hook">
+              Cells with live values and agent-written formulas. Hover a cell → see the agent's
+              reasoning chain that produced it.
+            </p>
+            <div class="case-magic">
+              Excel with citations. Agent answers aren't vibes; they're auditable, re-runnable,
+              editable by you.
+            </div>
+          </div>
+
+          <div class="case-card">
+            <span class="case-tag">product</span>
+            <div class="case-title">Kanban that thinks</div>
+            <p class="case-hook">
+              Board of cards. Agent reads your repo, Slack, PRs, and moves cards for you. Briefs
+              stand-up. Surfaces blockers.
+            </p>
+            <div class="case-magic">
+              PMs already live in boards. Putting the agent <em>inside</em>
+              the board beats "generate a status update" prompts.
+            </div>
+          </div>
+
+          <div class="case-card">
+            <span class="case-tag">api</span>
+            <div class="case-title">API playground</div>
+            <p class="case-hook">
+              OpenAPI spec in, live request builder out. Agent crafts calls, shows responses, diffs
+              auth flows. Tweak and re-run.
+            </p>
+            <div class="case-magic">
+              Postman with an agent riding shotgun. Every request becomes an auditable experiment,
+              not a one-off chat output.
+            </div>
+          </div>
+
+          <div class="case-card">
+            <span class="case-tag">maps</span>
+            <div class="case-title">Geospatial analyst</div>
+            <p class="case-hook">
+              Map with layers. Agent loads GeoJSON, runs spatial queries ("parcels within 500m of
+              flood zone"), renders results.
+            </p>
+            <div class="case-magic">
+              GIS in chat is unusable. The map IS the answer — agent just drives it for you.
+            </div>
+          </div>
+
+          <div class="case-card">
+            <span class="case-tag">finance</span>
+            <div class="case-title">Scenario modeler</div>
+            <p class="case-hook">
+              DCF / pricing / cohort grid. Agent builds the model, you drag sliders (discount rate,
+              churn), agent explains the output.
+            </p>
+            <div class="case-magic">
+              Sensitivity analysis is the whole point of a model. Sliders + live recompute + agent
+              commentary is a different category.
+            </div>
+          </div>
+
+          <div class="case-card">
+            <span class="case-tag">logs</span>
+            <div class="case-title">Log &amp; trace explorer</div>
+            <p class="case-hook">
+              Streamed logs with inline flame graphs. Agent highlights suspicious patterns, clusters
+              errors, explains root cause candidates.
+            </p>
+            <div class="case-magic">
+              Debugging is pattern-recognition on a timeline. Text tail ≠ interactive timeline with
+              agent hints.
+            </div>
+          </div>
+        </div>
+
+        <div class="pattern-box">
+          <div class="pattern-kicker">The pattern</div>
+          <div class="pattern-quote">
+            Chat is a <em>medium for words</em>. Agentic apps give the agent a
+            <em>medium for anything</em> — canvases, timelines, maps, graphs, scenes, boards — and
+            let you be in there with it.
+          </div>
+        </div>
+
+        <div class="callout">
+          <div class="callout-title">The 80/20 insight</div>
+          Most of these apps <em>already exist</em> as open-source localhost tools — ComfyUI,
+          Drizzle Studio, Observable, CesiumJS, three.js-editor, DaVinci-lite forks. AAP's leverage
+          is not inventing these apps. It's giving them a shared way to be <em>agent-drivable</em>.
+          Ship the protocol; the ecosystem writes the apps.
+        </div>
+      </section>
+
+      <!-- ============ HOW ============ -->
+      <section id="how">
+        <h2><span class="num">04</span>How an app plugs in</h2>
+        <p class="lead">
+          Three processes, one manifest. Deus reads the manifest, spawns the app, proxies agent tool
+          calls to it, and points the UI at the app's URL.
+        </p>
+
+        <div class="diagram">
+          <svg
+            viewBox="0 0 760 360"
+            xmlns="http://www.w3.org/2000/svg"
+            role="img"
+            aria-label="AAP architecture diagram"
+          >
+            <defs>
+              <marker
+                id="arrow"
+                viewBox="0 0 10 10"
+                refX="9"
+                refY="5"
+                markerWidth="7"
+                markerHeight="7"
+                orient="auto-start-reverse"
+              >
+                <path d="M0,0 L10,5 L0,10 z" fill="#8b8b94" />
+              </marker>
+              <style>
+                .box-fill {
+                  fill: #16161d;
+                  stroke: #26262f;
+                  stroke-width: 1;
+                }
+                .box-accent {
+                  fill: rgba(139, 92, 246, 0.08);
+                  stroke: #8b5cf6;
+                  stroke-width: 1;
+                }
+                .box-cyan {
+                  fill: rgba(6, 182, 212, 0.08);
+                  stroke: #06b6d4;
+                  stroke-width: 1;
+                }
+                .label-title {
+                  font: 600 13px var(--sans);
+                  fill: #e8e8ea;
+                }
+                .label-sub {
+                  font: 500 11px var(--sans);
+                  fill: #8b8b94;
+                }
+                .label-line {
+                  font:
+                    500 11px ui-monospace,
+                    Menlo,
+                    monospace;
+                  fill: #a78bfa;
+                }
+                .arrow {
+                  stroke: #8b8b94;
+                  stroke-width: 1.2;
+                  fill: none;
+                }
+              </style>
+            </defs>
+
+            <!-- Deus Frontend -->
+            <rect x="24" y="30" width="200" height="90" rx="8" class="box-fill" />
+            <text x="124" y="60" text-anchor="middle" class="label-title">Deus Frontend</text>
+            <text x="124" y="80" text-anchor="middle" class="label-sub">
+              Browser tab renders app URL
+            </text>
+            <text x="124" y="100" text-anchor="middle" class="label-sub">
+              Apps sidebar lists running apps
+            </text>
+
+            <!-- Deus Backend -->
+            <rect x="24" y="150" width="200" height="180" rx="8" class="box-accent" />
+            <text x="124" y="180" text-anchor="middle" class="label-title">Deus Backend</text>
+            <text x="124" y="200" text-anchor="middle" class="label-sub">apps.service.ts</text>
+            <text x="124" y="222" text-anchor="middle" class="label-line">
+              spawn · probe · track
+            </text>
+            <text x="124" y="244" text-anchor="middle" class="label-line">mcp-proxy</text>
+            <text x="124" y="266" text-anchor="middle" class="label-line">skill-loader</text>
+            <text x="124" y="288" text-anchor="middle" class="label-line">
+              running_apps (SQLite)
+            </text>
+            <text x="124" y="314" text-anchor="middle" class="label-sub">
+              Workspace-scoped lifecycle
+            </text>
+
+            <!-- Agent Server -->
+            <rect x="280" y="150" width="200" height="180" rx="8" class="box-fill" />
+            <text x="380" y="180" text-anchor="middle" class="label-title">Agent Server</text>
+            <text x="380" y="200" text-anchor="middle" class="label-sub">Claude / Codex SDK</text>
+            <text x="380" y="230" text-anchor="middle" class="label-line">
+              tools.list → registers
+            </text>
+            <text x="380" y="252" text-anchor="middle" class="label-line">{app}.{tool}</text>
+            <text x="380" y="280" text-anchor="middle" class="label-sub">
+              Skill in system prompt
+            </text>
+            <text x="380" y="302" text-anchor="middle" class="label-sub">while app is running</text>
+
+            <!-- App Process -->
+            <rect x="536" y="150" width="200" height="180" rx="8" class="box-cyan" />
+            <text x="636" y="180" text-anchor="middle" class="label-title">App Process</text>
+            <text x="636" y="200" text-anchor="middle" class="label-sub">
+              Spawned child process
+            </text>
+            <text x="636" y="226" text-anchor="middle" class="label-line">GET /viewer (HTML)</text>
+            <text x="636" y="248" text-anchor="middle" class="label-line">POST /mcp (tools)</text>
+            <text x="636" y="270" text-anchor="middle" class="label-line">GET /health (ready)</text>
+            <text x="636" y="296" text-anchor="middle" class="label-sub">Owns its storage dir</text>
+            <text x="636" y="316" text-anchor="middle" class="label-sub">Owns its UI</text>
+
+            <!-- Manifest -->
+            <rect x="536" y="30" width="200" height="90" rx="8" class="box-fill" />
+            <text x="636" y="60" text-anchor="middle" class="label-title">agentic-app.json</text>
+            <text x="636" y="80" text-anchor="middle" class="label-sub">
+              Shipped inside the app package
+            </text>
+            <text x="636" y="100" text-anchor="middle" class="label-sub">
+              Discovered by Deus registry
+            </text>
+
+            <!-- Arrows -->
+            <path d="M 224 75 L 536 75" class="arrow" marker-end="url(#arrow)" />
+            <text x="380" y="66" text-anchor="middle" class="label-sub">reads</text>
+
+            <path d="M 124 150 L 124 120" class="arrow" marker-end="url(#arrow)" />
+            <text x="154" y="138" class="label-sub">url + state</text>
+
+            <path d="M 224 220 L 280 220" class="arrow" marker-end="url(#arrow)" />
+            <text x="252" y="212" text-anchor="middle" class="label-sub">MCP proxy</text>
+
+            <path d="M 480 220 L 536 220" class="arrow" marker-end="url(#arrow)" />
+            <text x="508" y="212" text-anchor="middle" class="label-sub">tools/call</text>
+
+            <path d="M 224 260 L 536 260" class="arrow" marker-end="url(#arrow)" opacity="0.6" />
+            <text x="380" y="253" text-anchor="middle" class="label-sub">spawn + signals</text>
+          </svg>
+        </div>
+
+        <p class="lead">
+          The app is <em>just a process</em>. It serves three HTTP endpoints (viewer, MCP, health)
+          and owns whatever it needs underneath — a Swift binary, a Python CLI, a headless Chrome,
+          doesn't matter. Deus stays ignorant of the internals.
+        </p>
+      </section>
+
+      <!-- ============ MANIFEST ============ -->
+      <section id="manifest">
+        <h2><span class="num">05</span>The manifest, annotated</h2>
+        <p class="lead">
+          Everything about an app is declared in <code>agentic-app.json</code>, shipped at the root
+          of the app package. Deus discovers it by path reference from its registry.
+        </p>
+
+        <div class="code-label">
+          <span><code>packages/device-use/agentic-app.json</code></span>
+          <span class="badge">AAP v1</span>
+        </div>
+
+        <div class="annotated">
+          <div class="annotated-row">
+            <pre class="language-json"><code>{
+  "$schema": "https://agenticapps.dev/schema/v1.json",
+  "protocolVersion": "1",
+
+  "id": "deus.mobile-use",
+  "name": "Mobile Use",
+  "description": "iOS simulator with agent-drivable tap/type/inspect.",
+  "version": "0.1.0",
+  "icon": "./assets/icon.svg",</code></pre>
+            <div class="annotation">
+              <strong>Identity</strong>
+              Reverse-DNS <code>id</code> is the permanent handle — never rename it.
+              <code>version</code> is the app's version; <code>protocolVersion</code>
+              is the AAP version the app targets (the key future-proofing lever).
+            </div>
+          </div>
+
+          <div class="annotated-row">
+            <pre class="language-json"><code>  "launch": {
+    "command": "device-use",
+    "args": ["serve", "--port", "{port}"],
+    "cwd": "{workspace}",
+    "env": { "DEUS_STORAGE": "{storage.workspace}" },
+    "ready": {
+      "type": "http",
+      "path": "/health",
+      "timeoutMs": 30000
+    }
+  },</code></pre>
+            <div class="annotation">
+              <strong>Launch</strong>
+              Template vars: <code>{port}</code>, <code>{workspace}</code>,
+              <code>{storage.workspace}</code>, <code>{storage.global}</code>,
+              <code>{userData}</code>, <code>{sessionId}</code>. Explicit ready probe:
+              <code>http</code>, <code>tcp</code>, or <code>stdout-pattern</code>. No more "process
+              alive but not serving."
+            </div>
+          </div>
+
+          <div class="annotated-row">
+            <pre class="language-json"><code>  "ui": {
+    "url": "http://localhost:{port}/viewer",
+    "surface": "browser-tab",
+    "preferredSize": { "w": 400, "h": 800 },
+    "theme": "inherit"
+  },</code></pre>
+            <div class="annotation">
+              <strong>UI</strong>
+              Just a URL — no HTML ships through AAP. App owns its viewer in whatever stack it
+              wants.
+              <code>surface</code> is reserved for future panel/modal modes. v1 is always a browser
+              tab.
+            </div>
+          </div>
+
+          <div class="annotated-row">
+            <pre class="language-json"><code>  "agent": {
+    "tools": {
+      "type": "mcp-http",
+      "url": "http://localhost:{port}/mcp"
+    },
+    "bootstrap": "Call help for usage. Always snapshot before tapping."
+  },</code></pre>
+            <div class="annotation">
+              <strong>Agent surface</strong>
+              Tools come from the app's own MCP server. Deus registers it dynamically via the Claude
+              Agent SDK's <code>setMcpServers</code>
+              — no hand-written proxy. Tools become
+              <code>mcp__{server-name}__{tool-name}</code> automatically. <code>bootstrap</code> is
+              a one-liner returned from <code>launch_app</code>. The full skill lives inside the
+              app's own MCP (expose a <code>help</code> tool) — Deus doesn't handle skill files.
+            </div>
+          </div>
+
+          <div class="annotated-row">
+            <pre class="language-json"><code>  "storage": {
+    "workspace": "{workspace}/.deus/apps/{id}",
+    "global":    "{userData}/apps/{id}"
+  },</code></pre>
+            <div class="annotation">
+              <strong>Storage</strong>
+              Two scopes. Deus guarantees dirs exist, gitignores them, cleans on delete. App picks
+              its own format (SQLite, JSON, files). Workspace = per-repo state; global = per-user
+              prefs.
+            </div>
+          </div>
+
+          <div class="annotated-row">
+            <pre class="language-json"><code>  "lifecycle": {
+    "scope": "workspace",
+    "dedupe": "by-workspace",
+    "stopSignal": "SIGTERM",
+    "stopTimeoutMs": 5000
+  },</code></pre>
+            <div class="annotation">
+              <strong>Lifecycle</strong>
+              <code>scope</code> = when does it die (workspace | session | global).
+              <code>dedupe</code> = reuse instances or spawn fresh. Stop = SIGTERM → wait → SIGKILL.
+            </div>
+          </div>
+
+          <div class="annotated-row">
+            <pre class="language-json"><code>  "commands": [
+    {
+      "name": "snapshot",
+      "path": "/commands/snapshot",
+      "description": "Capture the UI tree",
+      "palette": true
+    },
+    {
+      "name": "tap",
+      "path": "/commands/tap",
+      "description": "Tap a UI element by @ref",
+      "palette": true
+    }
+  ],</code></pre>
+            <div class="annotation">
+              <strong>Commands <span style="color: var(--accent-2)">(Pi-inspired)</span></strong>
+              User-facing slash commands — appear in Deus's command palette
+              <em>and</em> become typed tools the agent can call. Same HTTP handler, two access
+              paths. Lets the user invoke app actions without going through the agent.
+            </div>
+          </div>
+
+          <div class="annotated-row">
+            <pre class="language-json"><code>  "requires": [
+    {
+      "type": "cli",
+      "name": "xcrun",
+      "install": "Install Xcode from the App Store"
+    },
+    { "type": "platform", "os": "darwin" }
+  ],</code></pre>
+            <div class="annotation">
+              <strong>Requires <span style="color: var(--accent-2)">(Pi-inspired)</span></strong>
+              Declared prerequisites. Deus checks them <em>before</em> launch and surfaces a clear
+              error with the install hint — no mystery process crashes. Types: <code>cli</code>,
+              <code>platform</code>, <code>env</code>, <code>port</code>.
+            </div>
+          </div>
+
+          <div class="annotated-row">
+            <pre class="language-json"><code>  "events": {
+    "channel": "ws",
+    "url": "ws://localhost:{port}/deus-events"
+  },
+
+  "capabilities": [
+    "filesystem:workspace",
+    "process:spawn",
+    "network:local"
+  ]
+}</code></pre>
+            <div class="annotation">
+              <strong>Events &amp; capabilities</strong>
+              <code>events</code> is optional — a back-channel for <code>state-changed</code>,
+              <code>notification</code>, <code>request-attention</code>.
+              <code>capabilities</code> is documentary in v1 (all apps are first-party); becomes a
+              consent prompt in v2 when workspace-local manifests land.
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ============ LAUNCH ============ -->
+      <section id="launch">
+        <h2><span class="num">06</span>Launch contract</h2>
+
+        <div class="fields">
+          <div class="field">
+            <div>
+              <div class="field-name">command</div>
+              <div class="field-type">string, required</div>
+            </div>
+            <div class="field-desc">
+              Binary or resolvable name. Deus looks up on <code>PATH</code>, then in the app
+              package's <code>bin/</code>.
+            </div>
+          </div>
+
+          <div class="field">
+            <div>
+              <div class="field-name">args</div>
+              <div class="field-type">string[]</div>
+            </div>
+            <div class="field-desc">
+              Template substitution happens per-arg. Unknown vars throw at launch.
+            </div>
+          </div>
+
+          <div class="field">
+            <div>
+              <div class="field-name">cwd</div>
+              <div class="field-type">string</div>
+            </div>
+            <div class="field-desc">
+              Working dir. Defaults to the app package root, not the workspace — override with
+              <code>{workspace}</code> if the app needs it.
+            </div>
+          </div>
+
+          <div class="field">
+            <div>
+              <div class="field-name">env</div>
+              <div class="field-type">Record&lt;string, string&gt;</div>
+            </div>
+            <div class="field-desc">
+              Templated. Deus always injects <code>DEUS_APP_ID</code>,
+              <code>DEUS_WORKSPACE_ID</code>, <code>DEUS_SESSION_ID</code>, <code>DEUS_PORT</code>.
+            </div>
+          </div>
+
+          <div class="field">
+            <div>
+              <div class="field-name">ready.type</div>
+              <div class="field-type">"http" | "tcp" | "stdout-pattern"</div>
+            </div>
+            <div class="field-desc">
+              How Deus decides the app is serving. Defaults to <code>tcp</code> on the allocated
+              port.
+              <span class="note"
+                >Pick <code>http</code> when the server has a real startup phase (compilation)
+                before it's usable.</span
+              >
+            </div>
+          </div>
+
+          <div class="field">
+            <div>
+              <div class="field-name">ready.path</div>
+              <div class="field-type">string (http only)</div>
+            </div>
+            <div class="field-desc">Path to GET. Any 2xx response = ready.</div>
+          </div>
+
+          <div class="field">
+            <div>
+              <div class="field-name">ready.timeoutMs</div>
+              <div class="field-type">number, default 30000</div>
+            </div>
+            <div class="field-desc">
+              After this, Deus kills the process and surfaces a launch error to the user and the
+              agent.
+            </div>
+          </div>
+
+          <div class="field">
+            <div>
+              <div class="field-name">requires</div>
+              <div class="field-type">
+                Requirement[], optional <span style="color: var(--accent-2)">(Pi-inspired)</span>
+              </div>
+            </div>
+            <div class="field-desc">
+              External prerequisites Deus validates before spawn. Missing deps surface as actionable
+              errors with install hints — no cryptic exit-1 crashes.
+              <span class="note"
+                >Types: <code>cli</code> (binary on PATH), <code>platform</code> (os / arch match),
+                <code>env</code> (env var must be set), <code>port</code> (specific port
+                available).</span
+              >
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ============ UI ============ -->
+      <section id="ui">
+        <h2><span class="num">07</span>UI contract</h2>
+        <p class="lead">
+          Deliberately thin. One URL, one optional size hint. The app owns its viewer stack.
+        </p>
+
+        <h3>Constraints in v1</h3>
+        <ul>
+          <li>URL must be <code>http://localhost:{port}/*</code> — no remote origins.</li>
+          <li>
+            Desktop renders via the existing <code>BrowserView</code> infra (same as the browser
+            feature) — cookie partitioning, inspect-mode, devtools all inherit for free.
+          </li>
+          <li>
+            Web renders via <code>&lt;iframe&gt;</code> with
+            <code>sandbox="allow-scripts allow-same-origin"</code>. Apps that need MJPEG / streaming
+            must host the stream inside an HTML viewer the app controls, not expose the raw stream
+            URL.
+          </li>
+          <li>
+            Mobile web: apps opt into a <code>mobileSupported: true</code> flag. Un-opted apps are
+            hidden on the mobile layout.
+          </li>
+        </ul>
+
+        <div class="callout warning">
+          <div class="callout-title">Gotcha — MJPEG &amp; Safari</div>
+          Native MJPEG decoding is unreliable in Safari. Any app that streams frames must embed them
+          inside an HTML page it serves (canvas or img polling), not rely on the browser's MJPEG
+          support.
+        </div>
+      </section>
+
+      <!-- ============ AGENT ============ -->
+      <section id="agent">
+        <h2><span class="num">08</span>Agent surface</h2>
+        <p class="lead">
+          How the agent discovers, launches, and uses agentic apps. Two layers: Deus-level lifecycle
+          tools (always present) and per-app tools (registered dynamically when an app launches).
+        </p>
+
+        <h3>Deus-level lifecycle tools</h3>
+        <p>
+          Four tools live in the built-in <code>deus</code> MCP server. Always visible to the agent,
+          regardless of what's installed or running.
+        </p>
+
+        <div class="fields">
+          <div class="field">
+            <div>
+              <div class="field-name">list_apps()</div>
+              <div class="field-type">discovery</div>
+            </div>
+            <div class="field-desc">
+              Returns all installed agentic apps with id, name, description, and current status.
+            </div>
+          </div>
+          <div class="field">
+            <div>
+              <div class="field-name">launch_app(id)</div>
+              <div class="field-type">lifecycle</div>
+            </div>
+            <div class="field-desc">
+              Spawns the app (if not already running) and registers its MCP server with the Claude
+              SDK via <code>setMcpServers</code>. Returns
+              <code>{ url, bootstrap, tools: [...] }</code>.
+              <span class="note"
+                >The app's own <code>help</code>/skill tool becomes available in the returned tool
+                list. Agent calls it if it needs full usage guidance.</span
+              >
+            </div>
+          </div>
+          <div class="field">
+            <div>
+              <div class="field-name">stop_app(id)</div>
+              <div class="field-type">lifecycle</div>
+            </div>
+            <div class="field-desc">
+              Unregisters the MCP server, sends SIGTERM, waits
+              <code>stopTimeoutMs</code>, SIGKILL on timeout.
+            </div>
+          </div>
+          <div class="field">
+            <div>
+              <div class="field-name">app_status(id)</div>
+              <div class="field-type">introspection</div>
+            </div>
+            <div class="field-desc">
+              Current state + URL + last error (if crashed). Lets the agent diagnose without reading
+              the UI.
+            </div>
+          </div>
+        </div>
+
+        <h3>Per-app tools — SDK-native dynamic registration</h3>
+        <p>
+          Each running app hosts an MCP server (HTTP transport). On
+          <code>launch_app</code>, Deus calls the Claude Agent SDK's <code>setMcpServers</code> with
+          the app's endpoint added. Claude sees the app's tools appear, namespaced automatically as
+          <code>mcp__{server}__{tool}</code>.
+        </p>
+
+        <pre class="language-typescript"><code>// agent-server side — per-app MCP registration
+await session.setMcpServers({
+  deus: deusServerInstance,                       // lifecycle tools (always)
+  deus_mobile_use: {                              // newly launched app
+    type: "http",
+    url: "http://localhost:47831/mcp",
+  },
+});
+// Claude now sees: mcp__deus_mobile_use__tap, mcp__deus_mobile_use__snapshot, ...
+// On stop_app → omit the entry, tools disappear.</code></pre>
+
+        <h3>Tool naming</h3>
+        <p>Two rules, strictly enforced at manifest-registration time:</p>
+        <ol>
+          <li>
+            <strong>Server name</strong> = manifest <code>id</code> with <code>.</code> and
+            <code>-</code> replaced by <code>_</code>. (<code>deus.mobile-use</code> →
+            <code>deus_mobile_use</code>.)
+          </li>
+          <li>
+            <strong>Final tool name</strong> = SDK-generated <code>mcp__{server}__{tool}</code>.
+            Matches Claude Desktop's convention exactly. We don't hand-concatenate.
+          </li>
+        </ol>
+        <p>
+          Validate <code>total length ≤ 64 chars</code> at manifest load — fail fast if an app's id
+          + longest tool name would exceed the Claude tool-name limit.
+        </p>
+
+        <h3>Three tool transports</h3>
+        <p>
+          The manifest's <code>agent.tools.type</code> picks how the app exposes its MCP server.
+        </p>
+
+        <div class="fields">
+          <div class="field">
+            <div>
+              <div class="field-name">
+                mcp-http <span style="color: var(--success)">(preferred)</span>
+              </div>
+              <div class="field-type">HTTP on the app's port</div>
+            </div>
+            <div class="field-desc">
+              App hosts an MCP server at an HTTP path. Deus adds it via
+              <code>setMcpServers({ type: "http", url })</code>.
+              <span class="note"
+                >Used by any app that runs an HTTP server anyway (most of them — the viewer already
+                needs HTTP).</span
+              >
+            </div>
+          </div>
+          <div class="field">
+            <div>
+              <div class="field-name">mcp-stdio</div>
+              <div class="field-type">separate process</div>
+            </div>
+            <div class="field-desc">
+              Deus spawns a second child process whose stdin/stdout speaks MCP. For apps that can't
+              host HTTP.
+            </div>
+          </div>
+          <div class="field">
+            <div>
+              <div class="field-name">cli</div>
+              <div class="field-type">fallback</div>
+            </div>
+            <div class="field-desc">
+              App ships only a CLI; agent drives via Bash. Zero integration work — suitable for
+              bringing in existing tooling (<code>drizzle-kit</code>, <code>supabase</code>) before
+              they add MCP.
+            </div>
+          </div>
+        </div>
+
+        <h3>Skills — deferred, owned by the app</h3>
+        <p>
+          The agent's <em>full</em> usage guide (mental model, workflows, common pitfalls) is
+          <strong>not</strong> injected into the system prompt. Instead, the app's own MCP server
+          exposes a <code>help</code> tool. Agent pulls the guide on demand.
+        </p>
+
+        <p>Why deferred, not eager:</p>
+        <ul>
+          <li>
+            <strong>Context-compaction-safe.</strong> If the conversation compacts and the skill
+            falls out, the agent can <code>help</code> again.
+          </li>
+          <li>
+            <strong>Relaunch-safe.</strong> Stop + start re-exposes the tool; no state to re-inject.
+          </li>
+          <li>
+            <strong>Flexible.</strong> Each app owns its own skill format — Deus doesn't need to
+            know about markdown, YAML frontmatter, or Claude skill conventions.
+          </li>
+          <li>
+            <strong>Respects SDK constraints.</strong> The Claude Agent SDK's
+            <code>systemPrompt</code> is fixed at session start; we can't dynamically inject anyway.
+          </li>
+        </ul>
+
+        <p>
+          The <code>bootstrap</code> field in the manifest is a short always-on hint (returned from
+          <code>launch_app</code> as text). That's the one-liner; <code>help</code> is the full doc.
+        </p>
+
+        <h3>
+          Slash commands — palette dual surface
+          <span
+            style="
+              font-size: 12px;
+              font-family: var(--mono);
+              color: var(--accent-2);
+              font-weight: 500;
+              letter-spacing: 0.08em;
+              text-transform: uppercase;
+              margin-left: 8px;
+            "
+            >Pi-inspired</span
+          >
+        </h3>
+        <p>
+          The manifest's <code>commands</code> field produces entries that are <em>both</em> typed
+          MCP tools (for the agent) <em>and</em> entries in Deus's existing command palette
+          (<code>apps/web/src/features/command-palette/</code>). One handler in the app, two
+          invocation paths.
+        </p>
+
+        <div class="compare">
+          <div class="compare-col before" style="border-right-color: var(--border)">
+            <h4 style="color: var(--accent-2)">User invokes</h4>
+            <p class="big">/mobile-use.snapshot</p>
+            <ul>
+              <li>Palette entry added to <code>staticCommands</code> per running app</li>
+              <li>Format: <code>/{app-short-name}.{command}</code> — avoids collisions</li>
+              <li>cmd+K palette search resolves it</li>
+              <li>Handler calls <code>POST {app-url}/commands/snapshot</code></li>
+            </ul>
+          </div>
+          <div class="compare-col after" style="border-right: none">
+            <h4 style="color: var(--accent-2)">Agent invokes</h4>
+            <p class="big">mcp__deus_mobile_use__snapshot</p>
+            <ul>
+              <li>Registered as MCP tool by the app's own server</li>
+              <li>Same HTTP handler fires</li>
+              <li>Typed schema from MCP <code>tools/list</code></li>
+              <li>No duplicate code in the app</li>
+            </ul>
+          </div>
+        </div>
+      </section>
+
+      <!-- ============ STORAGE ============ -->
+      <section id="storage">
+        <h2><span class="num">09</span>Storage</h2>
+        <p class="lead">Two scopes. Managed by Deus, used by the app.</p>
+
+        <div class="fields">
+          <div class="field">
+            <div>
+              <div class="field-name">storage.workspace</div>
+              <div class="field-type">{workspace}/.deus/apps/{id}/</div>
+            </div>
+            <div class="field-desc">
+              Per-workspace. Gitignored. Dies with the workspace.
+              <span class="note"
+                >Use for: pinned simulator UDID, cached screenshots, per-project settings.</span
+              >
+            </div>
+          </div>
+          <div class="field">
+            <div>
+              <div class="field-name">storage.global</div>
+              <div class="field-type">{userData}/apps/{id}/</div>
+            </div>
+            <div class="field-desc">
+              Per-user. Survives workspaces.
+              <span class="note"
+                >Use for: user's default preferences, cached downloads, auth tokens (later).</span
+              >
+            </div>
+          </div>
+        </div>
+
+        <h3>Contract</h3>
+
+        <div class="scope-grid">
+          <div class="scope-card in">
+            <h4>Deus guarantees</h4>
+            <ul>
+              <li>Both dirs exist before <code>launch.command</code> runs</li>
+              <li>Paths are passed via <code>env</code> template vars</li>
+              <li>Workspace storage is gitignored by default</li>
+              <li>Dirs are cleaned on workspace-delete / app-uninstall</li>
+            </ul>
+          </div>
+          <div class="scope-card out">
+            <h4>App agrees to</h4>
+            <ul>
+              <li>Write only inside its allocated paths</li>
+              <li>Handle either dir being empty (first-run)</li>
+              <li>No hardcoded absolute paths</li>
+              <li>Survive storage being cleared between launches</li>
+            </ul>
+          </div>
+        </div>
+      </section>
+
+      <!-- ============ LIFECYCLE ============ -->
+      <section id="lifecycle">
+        <h2><span class="num">10</span>Lifecycle</h2>
+
+        <h3><code>scope</code> — when it dies</h3>
+        <div class="fields">
+          <div class="field">
+            <div>
+              <div class="field-name">workspace</div>
+              <div class="field-type">default</div>
+            </div>
+            <div class="field-desc">
+              One instance per workspace. Dies on workspace close.
+              <span class="note">Right for: mobile-use, db-browser, web-preview.</span>
+            </div>
+          </div>
+          <div class="field">
+            <div>
+              <div class="field-name">session</div>
+              <div class="field-type"></div>
+            </div>
+            <div class="field-desc">
+              One per chat session. Dies when session ends.
+              <span class="note">Right for: disposable sandboxes, scratch environments.</span>
+            </div>
+          </div>
+          <div class="field">
+            <div>
+              <div class="field-name">global</div>
+              <div class="field-type"></div>
+            </div>
+            <div class="field-desc">
+              Long-lived singleton. Survives workspace switches.
+              <span class="note"
+                >Rare. Right for: heavyweight local servers you don't want to cold-start (local
+                LLMs, vector DBs).</span
+              >
+            </div>
+          </div>
+        </div>
+
+        <h3>State machine</h3>
+        <p>Five states, enforced by the backend's <code>apps.service.ts</code>.</p>
+
+        <pre
+          class="language-text"
+          style="font-size: 12px; line-height: 1.4"
+        ><code>           ┌──────────────────────────────────┐
+   spawn   ▼                                  │
+  ─────► starting ──[ready probe]──► ready ───┤
+           │                          │       │
+     [probe timeout]             [stop req]   │
+           │                          │       │
+           ▼                          ▼       │
+         crashed                   stopping   │
+                                      │       │
+                              [exit ≤ timeout]│
+                                      ▼       │
+                                   stopped    │
+                                              │
+            [unexpected exit from ready] ─────┘
+                         │
+                         ▼
+                      crashed</code></pre>
+
+        <h3>Persistence — the SQLite table</h3>
+        <pre class="language-sql"><code>CREATE TABLE running_apps (
+  id           TEXT PRIMARY KEY,        -- uuid
+  app_id       TEXT NOT NULL,           -- "deus.mobile-use"
+  workspace_id TEXT,                    -- null for scope=global
+  session_id   TEXT,                    -- only for scope=session
+  pid          INTEGER NOT NULL,
+  port         INTEGER NOT NULL,
+  url          TEXT NOT NULL,
+  status       TEXT NOT NULL,           -- "starting" | "ready" | "stopping" | "stopped" | "crashed"
+  started_at   INTEGER NOT NULL,
+  last_seen_at INTEGER NOT NULL,
+  exit_code    INTEGER,                 -- populated on stopped/crashed
+  stderr_tail  TEXT                     -- last ~1KB of stderr on crash (for card hover)
+);
+
+CREATE INDEX idx_running_apps_workspace ON running_apps(workspace_id);
+CREATE INDEX idx_running_apps_app_scope ON running_apps(app_id, workspace_id);</code></pre>
+
+        <h3>State transitions — every change fires three effects</h3>
+        <div class="scope-grid">
+          <div class="scope-card in">
+            <h4>Always, in parallel</h4>
+            <ul>
+              <li>
+                <strong>DB write</strong> — update <code>status</code> and, on exit,
+                <code>exit_code</code> + <code>stderr_tail</code>
+              </li>
+              <li>
+                <strong>WS delta</strong> — broadcast to frontend so launcher cards + sidebar dot
+                update
+              </li>
+              <li>
+                <strong>RPC to agent-server</strong> — call <code>setMcpServers</code> to register
+                or unregister the app's MCP server
+              </li>
+            </ul>
+          </div>
+          <div class="scope-card out" style="border-color: rgba(6, 182, 212, 0.3)">
+            <h4 style="color: var(--cyan)">Watchdog — no polling</h4>
+            <ul>
+              <li>Backend retains the spawned child-process reference</li>
+              <li>Native Node <code>child.on("exit")</code> is the source of truth</li>
+              <li>No heartbeats, no health checks — exit event ⇒ state change</li>
+              <li>If an app hangs without crashing (alive but frozen), the user clicks Stop</li>
+            </ul>
+          </div>
+        </div>
+
+        <h3>Cleanup — four triggers</h3>
+        <div class="timeline">
+          <div class="step">
+            <div class="step-label">Trigger 1 · Backend boot</div>
+            <div class="step-body">
+              Scan <code>running_apps</code>. For each row, check <code>kill -0 pid</code>. Any
+              alive process orphaned by a crashed backend is killed — fresh start = clean state.
+              Dead rows are deleted.
+            </div>
+          </div>
+          <div class="step">
+            <div class="step-label">Trigger 2 · Workspace close / archive</div>
+            <div class="step-body">
+              Hook into <code>workspace.service.ts</code>. Kill all apps where
+              <code>workspace_id = X</code>. SIGTERM → wait <code>stopTimeoutMs</code> → SIGKILL.
+            </div>
+          </div>
+          <div class="step">
+            <div class="step-label">Trigger 3 · Explicit stop</div>
+            <div class="step-body">
+              <code>stop_app</code> agent tool, or the Stop button on a launcher card. Fires the
+              same shutdown sequence.
+            </div>
+          </div>
+          <div class="step">
+            <div class="step-label">Trigger 4 · Process crash mid-session</div>
+            <div class="step-body">
+              Watchdog catches <code>child.on("exit")</code> while <code>status = "ready"</code>.
+              Transition to <code>crashed</code>, capture <code>exit_code</code> and
+              <code>stderr_tail</code>. In-flight tool calls get a structured error so the agent can
+              relaunch or surface the failure to the user. Launcher card goes red.
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ============ EVENTS ============ -->
+      <section id="events">
+        <h2><span class="num">11</span>Events (optional)</h2>
+        <p class="lead">
+          A small WebSocket back-channel for apps that need to push state to Deus asynchronously.
+          Apps that don't need it skip the <code>events</code> field.
+        </p>
+
+        <h3>App → Deus</h3>
+        <pre class="language-json"><code>{ "type": "state-changed",     "resource": "snapshot" }
+{ "type": "notification",      "level": "info", "text": "Build finished" }
+{ "type": "request-attention" }</code></pre>
+
+        <h3>Deus → App</h3>
+        <pre class="language-json"><code>{ "type": "workspace-changed", "workspaceId": "..." }
+{ "type": "session-started",   "sessionId": "..." }
+{ "type": "session-ended",     "sessionId": "..." }
+{ "type": "theme-changed",     "theme": "dark" }
+{ "type": "stop" }              // graceful shutdown request</code></pre>
+
+        <div class="callout">
+          <div class="callout-title">Why not postMessage?</div>
+          Two reasons: <b>(1)</b> MCP Apps use postMessage because they ship HTML inside the host —
+          we don't, we point at a localhost URL. <b>(2)</b> Same-origin iframe → host postMessage
+          works fine, but HTTP is easier to debug (curl, network panel, replayable). Reserved as a
+          future transport when AAP v2 adds cross-origin apps.
+        </div>
+      </section>
+
+      <!-- ============ CAPABILITIES ============ -->
+      <section id="capabilities">
+        <h2><span class="num">12</span>Capabilities</h2>
+        <p class="lead">
+          Documentary in v1. Becomes a real permission model in v2 when workspace-local manifests
+          land.
+        </p>
+
+        <div class="fields">
+          <div class="field">
+            <div>
+              <div class="field-name">filesystem:workspace</div>
+              <div class="field-type">v1 granted</div>
+            </div>
+            <div class="field-desc">Read/write inside the current workspace path.</div>
+          </div>
+          <div class="field">
+            <div>
+              <div class="field-name">filesystem:global</div>
+              <div class="field-type">v1 granted</div>
+            </div>
+            <div class="field-desc">Read/write in <code>storage.global</code> only.</div>
+          </div>
+          <div class="field">
+            <div>
+              <div class="field-name">process:spawn</div>
+              <div class="field-type">v1 granted</div>
+            </div>
+            <div class="field-desc">Spawn subprocesses (e.g. <code>xcrun simctl</code>).</div>
+          </div>
+          <div class="field">
+            <div>
+              <div class="field-name">network:local</div>
+              <div class="field-type">v1 granted</div>
+            </div>
+            <div class="field-desc">Bind localhost ports only.</div>
+          </div>
+          <div class="field">
+            <div>
+              <div class="field-name">network:remote</div>
+              <div class="field-type">v2</div>
+            </div>
+            <div class="field-desc">Outbound to arbitrary hosts. Denied in v1.</div>
+          </div>
+          <div class="field">
+            <div>
+              <div class="field-name">secrets:read</div>
+              <div class="field-type">v2</div>
+            </div>
+            <div class="field-desc">Access to Keychain-backed secrets. Out of scope now.</div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ============ SEQUENCE ============ -->
+      <section id="sequence">
+        <h2><span class="num">13</span>Launch sequence</h2>
+        <p class="lead">
+          Two converging paths — agent-initiated and user-initiated — both end at the same backend
+          method. Source of truth = backend's
+          <code>apps.service.ts</code>. Agent-server and frontend are notified on completion.
+        </p>
+
+        <h3>Path A — agent calls <code>launch_app("deus.mobile-use")</code></h3>
+        <div class="timeline">
+          <div class="step">
+            <div class="step-label">A1 · agent-server receives tool call</div>
+            <div class="step-body">
+              The built-in <code>launch_app</code> tool (in the <code>deus</code> MCP server) fires.
+              Agent-server sends an RPC to the backend:
+              <code>LaunchAppRequest { app_id, workspace_id, session_id }</code>.
+            </div>
+          </div>
+          <div class="step">
+            <div class="step-label">A2 → converge</div>
+            <div class="step-body">Backend runs the shared spawn method. See below.</div>
+          </div>
+        </div>
+
+        <h3>Path B — user clicks Launch on a launcher card</h3>
+        <div class="timeline">
+          <div class="step">
+            <div class="step-label">B1 · frontend sends WS command</div>
+            <div class="step-body">
+              <code>q:command { cmd: "launchApp", app_id, workspace_id }</code>
+              over the existing WS query protocol. Backend's command handler calls the shared spawn
+              method.
+            </div>
+          </div>
+          <div class="step">
+            <div class="step-label">B2 → converge</div>
+            <div class="step-body">Same shared spawn. See below.</div>
+          </div>
+        </div>
+
+        <h3>Shared spawn in <code>apps.service.ts</code></h3>
+        <div class="timeline">
+          <div class="step">
+            <div class="step-label">1 · Resolve manifest</div>
+            <div class="step-body">
+              Look up <code>app_id</code> in the registry
+              (<code>apps/backend/src/config/apps.ts</code>), read the manifest JSON.
+            </div>
+          </div>
+          <div class="step">
+            <div class="step-label">2 · Dedupe check</div>
+            <div class="step-body">
+              Query <code>running_apps</code> WHERE <code>app_id</code> AND
+              <code>workspace_id</code> match. If row exists and PID alive, return its URL + skip
+              spawn (and still RPC the agent-server to <code>setMcpServers</code> if it wasn't
+              already registered for this session).
+            </div>
+          </div>
+          <div class="step">
+            <div class="step-label">3 · Validate <code>requires</code></div>
+            <div class="step-body">
+              Check declared prerequisites (cli, platform, env, port). If any fail → return error
+              with install hint. No spawn.
+            </div>
+          </div>
+          <div class="step">
+            <div class="step-label">4 · Allocate port</div>
+            <div class="step-body">
+              Bind <code>0.0.0.0:0</code>, capture assigned port, release. Accept the (rare) race —
+              retry once on EADDRINUSE.
+            </div>
+          </div>
+          <div class="step">
+            <div class="step-label">5 · Ensure storage</div>
+            <div class="step-body">
+              <code>mkdir -p</code> both <code>storage.workspace</code> and
+              <code>storage.global</code>. Add <code>.deus/</code> to the workspace's gitignore if
+              missing.
+            </div>
+          </div>
+          <div class="step">
+            <div class="step-label">6 · Spawn + persist</div>
+            <div class="step-body">
+              <code>spawn(command, args, { cwd, env })</code>. Insert row with
+              <code>status = "starting"</code>. Retain the child-process reference in-memory. Attach
+              <code>child.on("exit")</code>
+              watchdog immediately.
+            </div>
+          </div>
+          <div class="step">
+            <div class="step-label">7 · Ready probe</div>
+            <div class="step-body">
+              Poll <code>ready.path</code> every 200ms up to <code>timeoutMs</code>. On success →
+              <code>status = "ready"</code>. On timeout → SIGKILL, mark <code>crashed</code>, emit
+              error.
+            </div>
+          </div>
+          <div class="step">
+            <div class="step-label">8 · Notify</div>
+            <div class="step-body">
+              Three parallel effects:
+              <br />
+              — <strong>WS delta</strong> to all frontend subscribers:
+              <code>running_apps</code> updated.
+              <br />
+              — <strong>RPC to agent-server</strong>: call <code>setMcpServers</code> with the new
+              app added. Claude sees tools appear.
+              <br />
+              — <strong>Response to caller</strong> (Path A = RPC reply, Path B = command ack):
+              <code>{ url, bootstrap, tools: [...] }</code>.
+            </div>
+          </div>
+          <div class="step">
+            <div class="step-label">9 · Frontend opens the tab</div>
+            <div class="step-body">
+              On launcher-card click (Path B), the frontend opens a new Browser content-tab pointing
+              at <code>url</code>. For Path A, the agent gets the URL in its tool result and decides
+              whether to also trigger a tab-open via a follow-up action.
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ============ PAPER EXERCISE ============ -->
+      <section id="paper">
+        <h2><span class="num">14</span>Paper exercise: Drizzle Studio</h2>
+        <p class="lead">
+          Does AAP v1 fit a totally different kind of app? Let's write the manifest without touching
+          code — if we don't need to add fields, the protocol is right.
+        </p>
+
+        <div class="code-label">
+          <span><code>integrations/drizzle-studio/agentic-app.json</code></span>
+          <span class="badge">Paper draft</span>
+        </div>
+
+        <pre class="language-json"><code>{
+  "$schema": "https://agenticapps.dev/schema/v1.json",
+  "protocolVersion": "1",
+
+  "id": "drizzle.studio",
+  "name": "Drizzle Studio",
+  "description": "Browse and edit your SQLite/Postgres schema &amp; data.",
+  "version": "0.1.0",
+
+  "launch": {
+    "command": "bunx",
+    "args": ["drizzle-kit", "studio", "--port", "{port}"],
+    "cwd": "{workspace}",
+    "env": {
+      "DATABASE_URL": "file:{workspace}/dev.db"
+    },
+    "ready": {
+      "type": "http",
+      "path": "/",
+      "timeoutMs": 20000
+    }
+  },
+
+  "ui": {
+    "url": "http://localhost:{port}/",
+    "surface": "browser-tab"
+  },
+
+  "agent": {
+    "tools": { "type": "cli" },
+    "skill": "./skills/drizzle-studio.md",
+    "bootstrap": "Use `drizzle-kit` CLI via Bash for schema ops; viewer is read-only for browsing."
+  },
+
+  "storage": {
+    "workspace": "{workspace}/.deus/apps/{id}"
+  },
+
+  "lifecycle": {
+    "scope": "workspace",
+    "dedupe": "by-workspace",
+    "stopSignal": "SIGTERM",
+    "stopTimeoutMs": 3000
+  },
+
+  "capabilities": ["filesystem:workspace", "process:spawn", "network:local"]
+}</code></pre>
+
+        <div class="callout success">
+          <div class="callout-title">Result</div>
+          Fit in AAP v1 without adding fields. Agent surface uses
+          <code>tools: cli</code> since <code>drizzle-kit</code> has a good CLI and no MCP server —
+          one of the three supported transports, no stretch. The skill documents the subset of CLI
+          commands the agent should use.
+        </div>
+
+        <h3>What didn't fit</h3>
+        <p>Nothing blocking. Two v2 wishes surfaced during the exercise:</p>
+        <ul>
+          <li>
+            <b>Secrets</b>: real-world Drizzle uses remote DBs. Needs
+            <code>secrets.DATABASE_URL</code> with Keychain backing — confirmed deferred.
+          </li>
+          <li>
+            <b>Conditional launch</b>: the user might want the app gated on "a
+            <code>drizzle.config.ts</code> exists in workspace." Add
+            <code>availability: { type: "file-exists", path: "..." }</code>
+            in v2.
+          </li>
+        </ul>
+      </section>
+
+      <!-- ============ SCOPE ============ -->
+      <section id="scope">
+        <h2><span class="num">15</span>In scope / out of scope for v1</h2>
+        <div class="scope-grid">
+          <div class="scope-card in">
+            <h4>In scope — v1</h4>
+            <ul>
+              <li>Single manifest format (<code>agentic-app.json</code>)</li>
+              <li>Hardcoded app registry in TS (1–2 apps)</li>
+              <li>Workspace-scoped lifecycle, SQLite-persisted</li>
+              <li>MCP-HTTP / MCP-stdio / CLI tool transports</li>
+              <li>Markdown skills, loaded-on-launch</li>
+              <li>Two storage scopes (workspace + global)</li>
+              <li>BrowserView / iframe rendering</li>
+              <li>Optional WebSocket events channel</li>
+              <li>
+                Slash commands → command palette
+                <span style="color: var(--accent-2); font-size: 11px">(Pi)</span>
+              </li>
+              <li>
+                <code>requires</code> prereq validation
+                <span style="color: var(--accent-2); font-size: 11px">(Pi)</span>
+              </li>
+            </ul>
+          </div>
+          <div class="scope-card out">
+            <h4>Out of scope — v2+</h4>
+            <ul>
+              <li>Remote (non-localhost) apps</li>
+              <li>Third-party / workspace-local manifests</li>
+              <li>Permission prompts &amp; capability enforcement</li>
+              <li>Secrets / Keychain integration</li>
+              <li>postMessage cross-origin bridge</li>
+              <li>Multi-instance (same app, two copies per workspace)</li>
+              <li>Hot reload on manifest change</li>
+              <li><code>deus app install</code> CLI (lands with 3rd-party)</li>
+              <li>App marketplace / discovery UI</li>
+            </ul>
+          </div>
+        </div>
+      </section>
+
+      <!-- ============ INSIDE DEUS ============ -->
+      <section id="inside">
+        <h2><span class="num">16</span>Inside Deus</h2>
+        <p class="lead">
+          The protocol above is the contract agentic apps speak. This section is the part
+          <strong style="color: var(--text); font-weight: 600">Deus itself</strong> implements — the
+          sidebar, the naming, the file layout. A handoff spec for the PR that builds the IDE side.
+        </p>
+
+        <h3>Everything lives in the Browser content tab</h3>
+        <p class="lead">
+          Apps are websites. So the launcher and the apps themselves both live as
+          <strong>Browser tabs</strong>, using Deus's existing Browser content tab and its
+          tab-registry. No new content-tab primitive.
+        </p>
+        <p>The flow:</p>
+        <ol>
+          <li>
+            Sidebar <strong>Apps</strong> entry → click → activates the
+            <strong>Browser</strong> content tab and opens/focuses an internal Apps launcher tab
+            (served by an internal <code>deus://apps</code> URL or a special tab-type marker;
+            React-rendered, not an iframe).
+          </li>
+          <li>
+            Launcher tab shows a grid of cards (one per installed app). Click
+            <strong>Launch</strong> → opens a <em>new Browser tab</em>
+            pointing at the app's localhost URL (e.g.
+            <code>http://localhost:47831/viewer</code>).
+          </li>
+          <li>
+            The launcher tab and each app tab are peers in the Browser tab strip. Users can close
+            any independently.
+          </li>
+        </ol>
+        <p class="lead">
+          The sidebar <strong>Apps</strong> entry is therefore a <em>navigation action</em>, not a
+          view: its click handler activates Browser + focuses the Apps launcher tab. It carries no
+          launcher UI itself.
+        </p>
+
+        <h3>Sidebar entry</h3>
+
+        <div class="sidebar-mock-wrap">
+          <div class="sidebar-mock">
+            <div class="sidebar-mock-header">Deus</div>
+
+            <div class="sidebar-mock-row active">
+              <div class="grid"><span></span><span></span><span></span><span></span></div>
+              Apps
+              <div class="dot green" title="1 app running in this workspace"></div>
+            </div>
+            <div class="sidebar-mock-row sub">
+              Mobile Use
+              <div class="dot green"></div>
+            </div>
+
+            <div class="sidebar-mock-section-label">Repositories</div>
+            <div class="sidebar-mock-row">
+              <div class="folder"></div>
+              my-app
+            </div>
+            <div class="sidebar-mock-row">
+              <div class="folder"></div>
+              landing-page
+            </div>
+          </div>
+        </div>
+
+        <div class="fields">
+          <div class="field">
+            <div>
+              <div class="field-name">Primary row</div>
+              <div class="field-type">always visible</div>
+            </div>
+            <div class="field-desc">
+              <strong>Apps</strong> + 2×2 grid icon. Click → navigate to the launcher in content
+              view.
+              <span class="note"
+                >A small trailing dot indicates at least one app is running in the current
+                workspace. No count, no expansion — just presence.</span
+              >
+            </div>
+          </div>
+          <div class="field">
+            <div>
+              <div class="field-name">Active sub-row</div>
+              <div class="field-type">conditional, optional</div>
+            </div>
+            <div class="field-desc">
+              When an app's viewer is currently <em>focused</em> (the tab the user is looking at),
+              show its name nested under Apps — same pattern a browser uses for "active tab."
+              <span class="note"
+                >Shows only one app at a time, not every running one. If zero apps focused, this row
+                is hidden. Keeps the sidebar's signal-to-noise high.</span
+              >
+            </div>
+          </div>
+        </div>
+
+        <h3>Content-view launcher</h3>
+        <p>
+          Click the sidebar Apps entry → content view switches to the launcher. Grid of cards, one
+          per installed app. Status and launch actions live
+          <em>here</em>, not in the sidebar.
+        </p>
+
+        <div class="content-mock-wrap">
+          <div class="content-mock-header">
+            <div>
+              <div class="content-mock-title">Apps</div>
+              <div class="content-mock-subtitle">Agentic apps installed in this workspace</div>
+            </div>
+            <div class="content-mock-cta">+ Install</div>
+          </div>
+          <div class="content-mock-grid">
+            <!-- Running card -->
+            <div class="content-mock-card running">
+              <div class="content-mock-card-head">
+                <div class="content-mock-card-icon">
+                  <span></span><span></span><span></span><span></span>
+                </div>
+                <div class="content-mock-card-title">Mobile Use</div>
+              </div>
+              <div class="content-mock-card-desc">
+                iOS simulator with agent-drivable tap, type, and inspect.
+              </div>
+              <div class="content-mock-card-foot">
+                <div class="content-mock-card-status running"><span class="dot"></span>Running</div>
+                <div class="content-mock-card-btn">Open</div>
+              </div>
+            </div>
+
+            <!-- Idle card -->
+            <div class="content-mock-card">
+              <div class="content-mock-card-head">
+                <div class="content-mock-card-icon">
+                  <span></span><span></span><span></span><span></span>
+                </div>
+                <div class="content-mock-card-title">Web Preview</div>
+              </div>
+              <div class="content-mock-card-desc">
+                Headless Chrome for live preview of Vite, Next, or any dev server.
+              </div>
+              <div class="content-mock-card-foot">
+                <div class="content-mock-card-status"><span class="dot"></span>Idle</div>
+                <div class="content-mock-card-btn">Launch</div>
+              </div>
+            </div>
+
+            <!-- Idle card -->
+            <div class="content-mock-card">
+              <div class="content-mock-card-head">
+                <div class="content-mock-card-icon">
+                  <span></span><span></span><span></span><span></span>
+                </div>
+                <div class="content-mock-card-title">Drizzle Studio</div>
+              </div>
+              <div class="content-mock-card-desc">
+                Browse and edit your SQLite or Postgres schema and data.
+              </div>
+              <div class="content-mock-card-foot">
+                <div class="content-mock-card-status"><span class="dot"></span>Idle</div>
+                <div class="content-mock-card-btn">Launch</div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <h3>The naming stack</h3>
+        <p class="lead">
+          One product, five surfaces, three labels. Get this right and nothing reads like marketing
+          copy.
+        </p>
+
+        <div class="fields">
+          <div class="field">
+            <div>
+              <div class="field-name">Sidebar header</div>
+              <div class="field-type">UI chrome</div>
+            </div>
+            <div class="field-desc">
+              <strong>Apps</strong>
+              <span class="note"
+                >Plain noun, Linear-style. "Agentic" is implicit inside Deus — never prefix it
+                here.</span
+              >
+            </div>
+          </div>
+
+          <div class="field">
+            <div>
+              <div class="field-name">Card title (launcher)</div>
+              <div class="field-type">content view</div>
+            </div>
+            <div class="field-desc">
+              <strong>Mobile Use</strong>, <strong>Drizzle Studio</strong>, ...
+              <span class="note"
+                >Each app's own <code>manifest.name</code>. Lives on the card in the launcher, not
+                in the sidebar.</span
+              >
+            </div>
+          </div>
+
+          <div class="field">
+            <div>
+              <div class="field-name">Empty state teaser</div>
+              <div class="field-type">one-time teach</div>
+            </div>
+            <div class="field-desc">
+              "No apps installed. <strong>Agentic apps</strong> extend your agents with live,
+              drivable surfaces."
+              <span class="note"
+                >The single place we land the concept for new users. After that, they just see
+                Apps.</span
+              >
+            </div>
+          </div>
+
+          <div class="field">
+            <div>
+              <div class="field-name">Blog / docs / landing</div>
+              <div class="field-type">external</div>
+            </div>
+            <div class="field-desc">
+              "<strong>agentic apps</strong>"
+              <span class="note"
+                >Ecosystem-facing concept noun. Never prefixed with "Deus" — frames the category,
+                not our product.</span
+              >
+            </div>
+          </div>
+
+          <div class="field">
+            <div>
+              <div class="field-name">Spec / technical docs</div>
+              <div class="field-type">protocol</div>
+            </div>
+            <div class="field-desc">
+              <strong>AAP — Agentic Apps Protocol</strong>
+              <span class="note">Schema URL, MCP proxy logs, developer guides.</span>
+            </div>
+          </div>
+        </div>
+
+        <h3>App card anatomy (in the launcher)</h3>
+        <p class="lead" style="margin-bottom: 8px">
+          Each card in the launcher grid holds everything a user needs to decide about one app.
+          Cards — not sidebar rows — are where status and actions live.
+        </p>
+
+        <div class="fields">
+          <div class="field">
+            <div>
+              <div class="field-name">Icon</div>
+              <div class="field-type">22×22 card header</div>
+            </div>
+            <div class="field-desc">
+              From <code>manifest.icon</code>. Fallback: lucide <code>layout-grid</code> — the same
+              2×2 glyph used by macOS Launchpad, iOS Home, Raycast.
+            </div>
+          </div>
+          <div class="field">
+            <div>
+              <div class="field-name">Title</div>
+              <div class="field-type">manifest.name</div>
+            </div>
+            <div class="field-desc">Bold, single line.</div>
+          </div>
+          <div class="field">
+            <div>
+              <div class="field-name">Description</div>
+              <div class="field-type">manifest.description</div>
+            </div>
+            <div class="field-desc">
+              Two-line muted body. Taken verbatim from the manifest — write it like a one-sentence
+              pitch.
+            </div>
+          </div>
+          <div class="field">
+            <div>
+              <div class="field-name">Status chip</div>
+              <div class="field-type">footer left, 5 states</div>
+            </div>
+            <div class="field-desc">
+              <span style="display: inline-flex; align-items: center; gap: 6px"
+                ><span
+                  style="
+                    display: inline-block;
+                    width: 8px;
+                    height: 8px;
+                    border-radius: 50%;
+                    background: var(--dim);
+                  "
+                ></span>
+                <code>IDLE</code> — installed, not running</span
+              ><br />
+              <span style="display: inline-flex; align-items: center; gap: 6px"
+                ><span
+                  style="
+                    display: inline-block;
+                    width: 8px;
+                    height: 8px;
+                    border-radius: 50%;
+                    background: var(--warning);
+                  "
+                ></span>
+                <code>STARTING</code> — pulsing during ready probe</span
+              ><br />
+              <span style="display: inline-flex; align-items: center; gap: 6px"
+                ><span
+                  style="
+                    display: inline-block;
+                    width: 8px;
+                    height: 8px;
+                    border-radius: 50%;
+                    background: var(--success);
+                    box-shadow: 0 0 6px var(--success);
+                  "
+                ></span>
+                <code>RUNNING</code> — agent can call tools, user can open viewer</span
+              ><br />
+              <span style="display: inline-flex; align-items: center; gap: 6px"
+                ><span
+                  style="
+                    display: inline-block;
+                    width: 8px;
+                    height: 8px;
+                    border-radius: 50%;
+                    background: var(--warning);
+                  "
+                ></span>
+                <code>STOPPING</code></span
+              ><br />
+              <span style="display: inline-flex; align-items: center; gap: 6px"
+                ><span
+                  style="
+                    display: inline-block;
+                    width: 8px;
+                    height: 8px;
+                    border-radius: 50%;
+                    background: var(--danger);
+                  "
+                ></span>
+                <code>CRASHED</code> — hover → last error</span
+              >
+            </div>
+          </div>
+          <div class="field">
+            <div>
+              <div class="field-name">Primary button</div>
+              <div class="field-type">footer right</div>
+            </div>
+            <div class="field-desc">
+              Idle → <code>Launch</code>. Running → <code>Open</code> (focuses the browser tab).
+              Crashed → <code>Retry</code>.
+            </div>
+          </div>
+          <div class="field">
+            <div>
+              <div class="field-name">Right-click / ⋮</div>
+              <div class="field-type">context menu on card</div>
+            </div>
+            <div class="field-desc">Start · Stop · Restart · View logs · Uninstall.</div>
+          </div>
+        </div>
+
+        <h3>Frontend file structure</h3>
+
+        <pre class="language-bash"><code>apps/web/src/features/apps/
+├── ui/
+│   ├── AppsSidebarEntry.tsx        # single sidebar row — "Apps" + nav action
+│   ├── AppsActiveSubRow.tsx        # nested row for focused AAP Browser tab
+│   ├── AppCard.tsx                 # one installed app, used by the launcher
+│   ├── AppStatusChip.tsx           # 5-state chip
+│   ├── AppContextMenu.tsx          # ⋮ / right-click menu
+│   └── AppsEmptyState.tsx          # no-apps teaser (for launcher)
+├── hooks/
+│   ├── useInstalledApps.ts         # WS subscription: "apps"
+│   ├── useRunningApps.ts           # WS subscription: "running_apps"
+│   └── useFocusedApp.ts            # focused Browser tab URL → running_apps match
+├── store/
+│   └── appsStore.ts                # Zustand — selected card, menu state
+├── types.ts
+└── index.ts
+
+# Launcher is *mounted inside* the Browser feature's tab registry:
+apps/web/src/features/browser/tabs/internal/
+└── AppsLauncherTab.tsx             # composes AppCard[] + AppsEmptyState
+                                    # opens when user navigates to deus://apps
+                                    # or the sidebar entry triggers it</code></pre>
+
+        <p>
+          <strong>Sidebar mount</strong>: wherever the existing Repositories section lives (likely
+          <code>apps/web/src/app/layouts/</code>). Insert <code>&lt;AppsSidebarEntry /&gt;</code>
+          <em>above</em> the repositories section.
+        </p>
+        <p>
+          <strong>Launcher mount</strong>: registered as an internal tab type in the Browser
+          feature's tab registry. No layout-level routing. The sidebar
+          <code>AppsSidebarEntry</code> click handler: (1) activates the Browser content tab, (2)
+          opens or focuses the <code>deus://apps</code> internal tab inside it.
+        </p>
+        <p>
+          <strong>App tabs</strong>: when a user launches an app from the launcher, the Browser
+          feature opens a new browser tab pointed at the app's <code>url</code>. Nothing
+          AAP-specific about the tab itself — it's a regular Browser tab.
+        </p>
+
+        <h3>Backend wiring (at-a-glance)</h3>
+
+        <div class="fields">
+          <div class="field">
+            <div>
+              <div class="field-name">WS resources</div>
+              <div class="field-type">shared/events.ts</div>
+            </div>
+            <div class="field-desc">
+              Add to <code>QUERY_RESOURCES</code>: <code>apps</code> (read-only registry) and
+              <code>running_apps</code> (live, workspace-scoped).
+              <span class="note"
+                >Consumed via <code>useQuerySubscription()</code> with
+                <code>staleTime: Infinity</code> — WS handles freshness per CLAUDE.md.</span
+              >
+            </div>
+          </div>
+          <div class="field">
+            <div>
+              <div class="field-name">Service</div>
+              <div class="field-type">backend</div>
+            </div>
+            <div class="field-desc">
+              <code>apps/backend/src/services/apps.service.ts</code> — spawn, probe, track, kill,
+              MCP proxy, skill loader.
+            </div>
+          </div>
+          <div class="field">
+            <div>
+              <div class="field-name">Registry</div>
+              <div class="field-type">v1 hardcoded</div>
+            </div>
+            <div class="field-desc">
+              <code>apps/backend/src/config/apps.ts</code> — exports a <code>TypeScript</code> array
+              pointing at manifests inside <code>packages/*/agentic-app.json</code>. Workspace-local
+              manifests are v2.
+            </div>
+          </div>
+          <div class="field">
+            <div>
+              <div class="field-name">Agent tools</div>
+              <div class="field-type">agent-server</div>
+            </div>
+            <div class="field-desc">
+              <code>apps/agent-server/agents/deus-tools/apps.ts</code> — <code>list_apps</code>,
+              <code>launch_app</code>, <code>stop_app</code>. Per-app tools are registered
+              dynamically via MCP proxy.
+            </div>
+          </div>
+        </div>
+
+        <h3>Empty state (in the launcher)</h3>
+        <p>
+          Shown only when the launcher has zero installed apps. The
+          <em>sidebar entry</em> is always present — no empty state there; it's just "Apps" with no
+          status dot.
+        </p>
+        <div class="callout">
+          <div class="callout-title">One-time teach — content view only</div>
+          <div style="font-size: 16px; font-weight: 600; color: var(--text); margin-bottom: 4px">
+            No apps installed
+          </div>
+          <div style="color: var(--muted); margin-bottom: 12px">
+            Agentic apps extend your agents with live, drivable surfaces — simulators, dashboards,
+            databases, design canvases. Install one to start.
+          </div>
+          <div
+            style="
+              font-family: var(--mono);
+              font-size: 12px;
+              color: var(--accent-2);
+              background: rgba(139, 92, 246, 0.12);
+              display: inline-block;
+              padding: 5px 12px;
+              border-radius: 4px;
+              border: 1px solid rgba(139, 92, 246, 0.3);
+            "
+          >
+            Browse apps
+          </div>
+        </div>
+        <p style="color: var(--muted); font-size: 14px">
+          This is the <em>only</em> place the phrase "agentic apps" appears inside Deus's UI chrome.
+          After a user installs one, they see "Apps" and move on.
+        </p>
+      </section>
+
+      <!-- ============ PATH ============ -->
+      <section id="path">
+        <h2><span class="num">17</span>Implementation path</h2>
+
+        <p class="lead">
+          Six PRs, shippable in sequence. Each lists <span style="color: var(--success)">NEW</span>,
+          <span style="color: var(--warning)">MODIFY</span>, and
+          <span style="color: var(--danger)">DELETE</span> file paths so the next agent can plan
+          diffs precisely.
+        </p>
+
+        <div class="timeline">
+          <div class="step">
+            <div class="step-label">PR 1 · Core plumbing</div>
+            <div class="step-body">
+              Schema, spawn/track/kill service, WS subscriptions. Nothing user-visible yet — ships
+              the foundation.
+              <pre
+                class="language-bash"
+                style="margin: 10px 0 4px; font-size: 12px"
+              ><code><span style="color: #10b981;"># NEW</span>
+shared/aap.ts                                   # Zod schema, types, template substitution
+apps/backend/src/services/apps.service.ts       # spawn, probe, track, kill, MCP proxy client
+
+<span style="color: #f59e0b;"># MODIFY</span>
+shared/schema.ts                                # add `running_apps` table + indexes
+shared/events.ts                                # add `apps`, `running_apps` to QUERY_RESOURCES
+apps/backend/src/services/query-engine.ts       # runQuery match for new resources
+apps/backend/src/services/workspace.service.ts  # kill apps on workspace close
+apps/backend/src/index.ts                       # boot-time orphan cleanup</code></pre>
+            </div>
+          </div>
+
+          <div class="step">
+            <div class="step-label">PR 2 · Agent bridge — SDK-native registration</div>
+            <div class="step-body">
+              Four lifecycle tools + thin adapter that calls the SDK's
+              <code>setMcpServers</code> in response to backend RPCs.
+              <strong>No hand-written MCP proxy, no skill loader</strong>
+              — SDK does the proxying, apps serve their own skills via a <code>help</code> tool.
+              <pre
+                class="language-bash"
+                style="margin: 10px 0 4px; font-size: 12px"
+              ><code><span style="color: #10b981;"># NEW</span>
+apps/agent-server/agents/deus-tools/apps.ts      # list_apps, launch_app, stop_app, app_status
+apps/agent-server/src/app-registrar.ts           # thin wrapper around setMcpServers; handles backend RPCs
+
+<span style="color: #f59e0b;"># MODIFY</span>
+apps/agent-server/agents/deus-tools/index.ts     # register the 4 lifecycle tools
+apps/agent-server/rpc-schemas.ts                 # add LaunchAppRequest/Response, StopAppRequest/Response schemas</code></pre>
+              <div style="margin-top: 8px; color: var(--muted); font-size: 13px">
+                End of PR 2: agent can call <code>launch_app</code>, backend spawns a stub app,
+                tools appear in Claude via <code>setMcpServers</code>. Skill loading is whatever the
+                app's own MCP server returns — not Deus's problem.
+              </div>
+            </div>
+          </div>
+
+          <div class="step">
+            <div class="step-label">PR 3 · device-use as first AAP provider</div>
+            <div class="step-body">
+              <code>packages/device-use</code> becomes the reference implementation of an agentic
+              app. <strong>Full internal refactor</strong> — the existing
+              <code>stream</code> command gets absorbed into a unified <code>serve</code> subcommand
+              that hosts viewer + MCP + health on one port. Exact shape of that refactor is designed
+              in the PR itself; this doc just requires that the final output conforms to AAP v1.
+              <br /><br />
+              Outputs required for AAP conformance:
+              <br />
+              <pre
+                class="language-bash"
+                style="margin: 10px 0 4px; font-size: 12px"
+              ><code>packages/device-use/
+├── agentic-app.json                  # manifest at package root
+├── (new server entrypoint)           # HTTP routes: /viewer, /mcp, /health, /commands/*
+└── (the app's own help/skill)        # exposed as an MCP tool, not a filesystem path
+
+<span style="color: #f59e0b;"># MODIFY</span>
+apps/backend/src/config/apps.ts                  # hardcoded registry points at packages/device-use</code></pre>
+            </div>
+          </div>
+
+          <div class="step">
+            <div class="step-label">PR 4 · Frontend — sidebar entry + Browser-tab launcher</div>
+            <div class="step-body">
+              The sidebar Apps entry (a navigation trigger, not a view) plus the launcher mounted as
+              an internal tab inside the existing Browser content tab. App tabs are just regular
+              Browser tabs.
+              <pre
+                class="language-bash"
+                style="margin: 10px 0 4px; font-size: 12px"
+              ><code><span style="color: #10b981;"># NEW</span>
+apps/web/src/features/apps/
+├── ui/AppsSidebarEntry.tsx             # nav trigger: activates Browser + focuses launcher tab
+├── ui/AppsActiveSubRow.tsx             # optional nested row for currently-focused AAP tab
+├── ui/AppCard.tsx                      # card used by AppsLauncherTab
+├── ui/AppStatusChip.tsx
+├── ui/AppContextMenu.tsx
+├── ui/AppsEmptyState.tsx
+├── hooks/useInstalledApps.ts
+├── hooks/useRunningApps.ts
+├── hooks/useFocusedApp.ts
+├── store/appsStore.ts
+├── types.ts
+└── index.ts
+
+apps/web/src/features/browser/tabs/internal/
+└── AppsLauncherTab.tsx                 # internal Browser tab: renders the cards grid
+
+<span style="color: #f59e0b;"># MODIFY</span>
+apps/web/src/features/browser/ ...                         # register deus://apps as an internal tab type
+apps/web/src/app/layouts/... (main sidebar)                # mount &lt;AppsSidebarEntry/&gt; above repositories
+apps/web/src/features/browser/store/browserWindowStore.ts  # openTab() called on launch_app success</code></pre>
+              <div style="margin-top: 8px; color: var(--muted); font-size: 13px">
+                End-to-end demo at this point: click sidebar
+                <strong>Apps</strong> → Browser content tab activates → Apps launcher tab
+                opens/focuses → click <strong>Launch</strong> on Mobile Use → chip
+                <code>STARTING</code> (pulsing) → <code>RUNNING</code> (green) → new Browser tab
+                opens with the app's viewer → sidebar shows "Mobile Use" as active sub-row → agent
+                can call <code>mcp__deus_mobile_use__snapshot</code>.
+              </div>
+            </div>
+          </div>
+
+          <div class="step">
+            <div class="step-label">PR 5 · Deletion — net-negative diff</div>
+            <div class="step-body">
+              Simulator code moves behind the AAP seam. Net ~2,300 LOC removed. Simulator content
+              tab is retired — mobile-use now lives as a Browser tab like any other AAP app.
+              <pre
+                class="language-bash"
+                style="margin: 10px 0 4px; font-size: 12px"
+              ><code><span style="color: #ef4444;"># DELETE</span>
+apps/web/src/features/simulator/                          # ~1,636 LOC
+apps/backend/src/services/simulator-context.ts            # ~795 LOC
+apps/agent-server/agents/deus-tools/simulator.ts          # tools move to packages/device-use's MCP server
+apps/agent-server/agents/deus-tools/sim-ops.ts            # same
+
+<span style="color: #f59e0b;"># MODIFY</span>
+apps/web/src/app/layouts/content-tabs.ts                  # remove { id: "simulator", ... }
+apps/agent-server/agents/deus-tools/index.ts              # drop simulator tool registrations
+shared/agent-events.ts                                    # remove simulator-specific event types (if safe)</code></pre>
+            </div>
+          </div>
+
+          <div class="step">
+            <div class="step-label">PR 6 · Second app — web-preview</div>
+            <div class="step-body">
+              Validate the protocol with a second concrete. Headless Chrome wrapper modeled after
+              Claude Desktop's <code>preview_start</code>.
+              <pre
+                class="language-bash"
+                style="margin: 10px 0 4px; font-size: 12px"
+              ><code><span style="color: #10b981;"># NEW</span>
+packages/web-preview/
+├── agentic-app.json                            # manifest
+├── src/server.ts                               # Playwright wrapper + MCP endpoint
+├── src/viewer/                                 # live page with inspect overlay
+└── (app's own help tool in MCP)
+
+<span style="color: #f59e0b;"># MODIFY</span>
+apps/backend/src/config/apps.ts                 # register web-preview</code></pre>
+              <div style="margin-top: 8px; color: var(--muted); font-size: 13px">
+                If PR 6 doesn't surface any protocol deficiencies, AAP v1 is ready to be called
+                done.
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <h3 style="margin-top: 32px">Cross-cutting checklist</h3>
+        <div class="fields">
+          <div class="field">
+            <div>
+              <div class="field-name">Migrations</div>
+              <div class="field-type">PR 1</div>
+            </div>
+            <div class="field-desc">
+              New SQLite table via <code>shared/schema.ts</code>. No data migration needed (new
+              table). Add indexes for <code>workspace_id</code> and
+              <code>(app_id, workspace_id)</code>.
+            </div>
+          </div>
+          <div class="field">
+            <div>
+              <div class="field-name">CLAUDE.md hard rules</div>
+              <div class="field-type">all PRs</div>
+            </div>
+            <div class="field-desc">
+              All colors via CSS variables (no hardcoded hex in components). WS subscriptions use
+              <code>staleTime: Infinity</code>, <code>refetchOnWindowFocus: false</code>. Bun only
+              (no npm/yarn).
+            </div>
+          </div>
+          <div class="field">
+            <div>
+              <div class="field-name">Tests</div>
+              <div class="field-type">PR 1, 2, 3</div>
+            </div>
+            <div class="field-desc">
+              <code>apps/backend/test/unit/apps.service.test.ts</code> (spawn lifecycle + orphan
+              cleanup), <code>apps/agent-server/test/mcp-proxy.test.ts</code> (proxy forwarding),
+              <code>packages/device-use/test/mcp-server.test.ts</code>.
+            </div>
+          </div>
+          <div class="field">
+            <div>
+              <div class="field-name">Feature flag</div>
+              <div class="field-type">optional</div>
+            </div>
+            <div class="field-desc">
+              If PR 4 ships before PR 5, gate the old simulator panel on a
+              <code>DEUS_LEGACY_SIMULATOR</code> flag so you can A/B the new Apps path in production
+              before deleting the old code.
+            </div>
+          </div>
+        </div>
+
+        <div class="callout" style="margin-top: 24px">
+          <div class="callout-title">
+            v2 · One-line install
+            <span style="color: var(--accent-2); opacity: 0.7">(Pi-inspired)</span>
+          </div>
+          Once the in-code registry earns its keep, open it up:
+          <pre
+            class="language-bash"
+            style="margin: 10px 0 4px; background: rgba(0, 0, 0, 0.3) !important"
+          ><code>deus app install git:github.com/planetscale/visualizer
+deus app install ./local-path
+deus app list
+deus app remove deus.mobile-use</code></pre>
+          Resolves the repo, reads <code>agentic-app.json</code>, validates schema, registers the
+          app. Pi uses the same pattern (<code>pi install git:...</code>) and it's the single
+          biggest ecosystem-adoption lever. Ship the CLI the same day you open workspace-local
+          manifests.
+        </div>
+      </section>
+
+      <!-- ============ TEST ============ -->
+      <section id="test">
+        <h2><span class="num">18</span>Testing the protocol</h2>
+        <p class="lead">How we know AAP v1 is right before writing code.</p>
+
+        <div class="callout">
+          <div class="callout-title">The paper-exercise rule</div>
+          Draft <code>agentic-app.json</code> for three candidate apps on paper before merging PR 1:
+          <br />
+          <b>1.</b> <code>deus.mobile-use</code> — today's simulator<br />
+          <b>2.</b> <code>drizzle.studio</code> — a DB browser<br />
+          <b>3.</b> <code>deus.web-preview</code> — a Vite-app viewer<br />
+          <br />
+          If all three fit without adding fields, ship v1. If any requires an addition, that field
+          belongs in v1. If any requires two+ additions, the abstraction is wrong — revisit before
+          coding.
+        </div>
+
+        <h3>Not negotiable in v1</h3>
+        <ul>
+          <li>Schema validation at launch — bad manifests fail fast</li>
+          <li>SQLite-backed lifecycle — in-memory will leak zombies</li>
+          <li>
+            Typed MCP tools for the simulator — don't regress drivability to CLI-via-Bash just to
+            prove the protocol works
+          </li>
+          <li>
+            Orphan cleanup on backend boot — the single biggest reliability win of formalizing
+            lifecycle
+          </li>
+        </ul>
+      </section>
+
+      <hr />
+
+      <footer class="footer">
+        <span>AAP · Agentic Apps Protocol · Draft v1 · 2026-04-17</span>
+        <span>docs/aap-v1-design.html</span>
+      </footer>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/components/prism-core.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/plugins/autoloader/prism-autoloader.min.js"></script>
+  </body>
+</html>
