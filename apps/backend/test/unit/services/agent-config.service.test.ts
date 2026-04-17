@@ -12,6 +12,7 @@ const mockFs = vi.hoisted(() => ({
   mkdirSync: vi.fn(),
   readdirSync: vi.fn(() => [] as string[]),
   unlinkSync: vi.fn(),
+  rmSync: vi.fn(),
 }));
 
 vi.mock("fs", () => ({
@@ -22,6 +23,7 @@ vi.mock("fs", () => ({
   mkdirSync: (...args: any[]) => mockFs.mkdirSync(...args),
   readdirSync: (...args: any[]) => mockFs.readdirSync(...args),
   unlinkSync: (...args: any[]) => mockFs.unlinkSync(...args),
+  rmSync: (...args: any[]) => mockFs.rmSync(...args),
 }));
 
 // Import after mock so ensureDirectories() runs with mocked fs
@@ -36,6 +38,9 @@ import {
   deleteAgent,
   getHooks,
   saveHooks,
+  getSkills,
+  saveSkill,
+  deleteSkill,
   CLAUDE_DIR,
   COMMANDS_DIR,
   AGENTS_DIR,
@@ -262,5 +267,85 @@ describe("saveHooks", () => {
     const [, content] = mockFs.writeFileSync.mock.calls[0];
     const parsed = JSON.parse(content as string);
     expect(parsed.hooks).toEqual({ prePush: "test" });
+  });
+});
+
+describe("getSkills", () => {
+  it("reads skills from directories containing SKILL.md", () => {
+    mockFs.readdirSync.mockReturnValue([{ name: "code-simplifier" }, { name: "notes.txt" }] as any);
+    mockFs.existsSync.mockImplementation((target: any) => {
+      if (target === path.join(CLAUDE_DIR, "skills")) return true;
+      if (target === path.join(CLAUDE_DIR, "skills", "code-simplifier", "SKILL.md")) return true;
+      if (target === path.join(CLAUDE_DIR, "skills", "notes.txt", "SKILL.md")) return false;
+      return true;
+    });
+    mockFs.readFileSync.mockReturnValue(`---\ndescription: Simplifies code\n---\n# Skill`);
+
+    const skills = getSkills();
+
+    expect(skills).toEqual([
+      {
+        name: "code-simplifier",
+        description: "Simplifies code",
+        content: `---\ndescription: Simplifies code\n---\n# Skill`,
+      },
+    ]);
+  });
+
+  it("supports symlinked skill directories", () => {
+    mockFs.readdirSync.mockReturnValue([{ name: "frontend-developer" }] as any);
+    mockFs.existsSync.mockImplementation((target: any) => {
+      if (target === path.join(CLAUDE_DIR, "skills")) return true;
+      if (target === path.join(CLAUDE_DIR, "skills", "frontend-developer", "SKILL.md")) {
+        return true;
+      }
+      return true;
+    });
+    mockFs.readFileSync.mockReturnValue(`---\ndescription: Build React UIs\n---\n# Skill`);
+
+    const skills = getSkills();
+
+    expect(skills).toHaveLength(1);
+    expect(skills[0]).toMatchObject({
+      name: "frontend-developer",
+      description: "Build React UIs",
+    });
+  });
+
+  it("returns empty array when skills directory does not exist", () => {
+    mockFs.existsSync.mockImplementation(
+      (target: any) => target !== path.join(CLAUDE_DIR, "skills")
+    );
+
+    expect(getSkills()).toEqual([]);
+  });
+});
+
+describe("saveSkill", () => {
+  it("writes SKILL.md inside the skill directory", () => {
+    saveSkill("test-skill", "# Test Skill");
+
+    expect(mockFs.writeFileSync).toHaveBeenCalledWith(
+      path.join(CLAUDE_DIR, "skills", "test-skill", "SKILL.md"),
+      "# Test Skill"
+    );
+  });
+});
+
+describe("deleteSkill", () => {
+  it("removes the skill directory when it exists", () => {
+    mockFs.existsSync.mockImplementation((target: any) => {
+      return target === path.join(CLAUDE_DIR, "skills", "test-skill");
+    });
+
+    const result = deleteSkill("test-skill");
+
+    expect(result).toBe(true);
+  });
+
+  it("returns false when the skill directory does not exist", () => {
+    mockFs.existsSync.mockReturnValue(false);
+
+    expect(deleteSkill("missing-skill")).toBe(false);
   });
 });

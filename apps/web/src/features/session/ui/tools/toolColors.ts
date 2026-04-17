@@ -30,6 +30,9 @@ export const TOOL_COLORS: Record<string, string> = {
   // Destructive
   KillShell: TOOL_ICON_MUTED_CLS,
 
+  // Tool discovery
+  ToolSearch: TOOL_ICON_MUTED_CLS,
+
   // Network
   WebFetch: TOOL_ICON_MUTED_CLS,
   WebSearch: TOOL_ICON_MUTED_CLS,

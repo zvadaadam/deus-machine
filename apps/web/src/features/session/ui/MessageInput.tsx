@@ -4,8 +4,10 @@ import { useIsMobile } from "@/shared/hooks/use-mobile";
 import { AnimatePresence, motion } from "framer-motion";
 import { Minimize2, ArrowUp, Square, Wrench } from "lucide-react";
 import { useFileMention } from "../hooks/useFileMention";
+import { useSlashCommand } from "../hooks/useSlashCommand";
 import { useImageAttachments } from "../hooks/useImageAttachments";
 import { FileMentionPopover } from "./FileMentionPopover";
+import { SlashCommandPopover } from "./SlashCommandPopover";
 import { GENERATE_HIVE_JSON } from "../lib/sessionPrompts";
 import {
   InputGroup,
@@ -18,8 +20,11 @@ import { cn } from "@/shared/lib/utils";
 import { PastedTextCard } from "./PastedTextCard";
 import { PastedImageCard } from "./PastedImageCard";
 import { InspectedElementCard, type InspectedElement } from "./InspectedElementCard";
+import { FileMentionCard, type FileMention } from "./FileMentionCard";
+import { SkillMentionCard, type SkillMention } from "./SkillMentionCard";
 import { serializeInspectElement } from "../lib/parseInspectTags";
 import {
+  getAgentHarnessForModel,
   getModelOption,
   cycleThinkingLevel,
   getThinkingLevelsForModel,
@@ -129,6 +134,12 @@ export const MessageInput = forwardRef<MessageInputRef, MessageInputProps>(funct
   // Inspected elements from InSpec mode (shown as pill cards)
   const [inspectedElements, setInspectedElements] = useState<InspectedElement[]>([]);
 
+  // File mentions picked from the @ picker (shown as pill cards above textarea)
+  const [fileMentions, setFileMentions] = useState<FileMention[]>([]);
+
+  // Skill mentions picked from the / picker (orange pills, serialize as /<name>)
+  const [skillMentions, setSkillMentions] = useState<SkillMention[]>([]);
+
   // Expose addFiles + clearPastedContent + addInspectedElement for parent-level interactions
   useImperativeHandle(
     ref,
@@ -138,6 +149,8 @@ export const MessageInput = forwardRef<MessageInputRef, MessageInputProps>(funct
         setPastedTexts([]);
         clearAttachments();
         setInspectedElements([]);
+        setFileMentions([]);
+        setSkillMentions([]);
       },
       addInspectedElement: (element: Omit<InspectedElement, "id">) => {
         setInspectedElements((prev) => [...prev, { ...element, id: crypto.randomUUID() }]);
@@ -155,9 +168,21 @@ export const MessageInput = forwardRef<MessageInputRef, MessageInputProps>(funct
     // Combine all text sources (inspected elements serialized as <inspect> XML tags)
     const textParts: string[] = [];
 
+    // Skill mentions must come FIRST — Claude Code only parses slash commands
+    // at position 0 of the message. Join with spaces on one line.
+    if (skillMentions.length > 0) {
+      textParts.push(skillMentions.map((s) => `/${s.name}`).join(" "));
+    }
+
     // Inspected elements go first so the AI has element context before user's question
     for (const el of inspectedElements) {
       textParts.push(serializeInspectElement(el));
+    }
+
+    // File mentions serialize as `@path` tokens — Claude Code natively resolves them.
+    // Joined on one line to read like a natural reference list.
+    if (fileMentions.length > 0) {
+      textParts.push(fileMentions.map((fm) => `@${fm.path}`).join(" "));
     }
 
     for (const paste of pastedTexts) {
@@ -188,7 +213,9 @@ export const MessageInput = forwardRef<MessageInputRef, MessageInputProps>(funct
     messageInput.trim().length > 0 ||
     pastedTexts.length > 0 ||
     attachments.length > 0 ||
-    inspectedElements.length > 0;
+    inspectedElements.length > 0 ||
+    fileMentions.length > 0 ||
+    skillMentions.length > 0;
 
   // Send with combined content (pasted texts + typed input + images)
   // Pasted content is NOT cleared here — it's cleared by the parent via
@@ -203,17 +230,48 @@ export const MessageInput = forwardRef<MessageInputRef, MessageInputProps>(funct
   };
 
   // @ file mention support (fuzzy search via backend HTTP endpoint)
+  // Selected files surface as pills above the textarea instead of inline text.
   const fileMention = useFileMention({
     value: messageInput,
     workspaceId: workspaceId ?? null,
     onChange: onMessageChange,
+    onAddMention: (result) => {
+      setFileMentions((prev) => [
+        ...prev,
+        { id: crypto.randomUUID(), path: result.path, name: result.name },
+      ]);
+    },
   });
 
-  // Keyboard shortcut — file mention gets first pass for arrow/enter/escape
+  // / slash command support (skills + commands picker, Claude only).
+  // Skills surface as orange pills; commands still insert `/name ` inline.
+  const selectedOption = getModelOption(model);
+  const agentHarness: AgentHarness = selectedOption?.agentHarness ?? getAgentHarnessForModel(model);
+  const modelId = selectedOption?.model ?? model;
+  const isClaudeAgent = agentHarness === "claude";
+  const slashCommand = useSlashCommand({
+    value: messageInput,
+    workspacePath,
+    onChange: onMessageChange,
+    enabled: isClaudeAgent,
+    onAddSkill: (skill) => {
+      setSkillMentions((prev) => [
+        ...prev,
+        { id: crypto.randomUUID(), name: skill.name, description: skill.description },
+      ]);
+    },
+  });
+
+  // Keyboard shortcut — popovers get first pass for arrow/enter/escape
   // Desktop: Enter sends, Shift+Enter inserts newline
   // Mobile: Enter inserts newline, send button sends (standard mobile UX)
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
-    // Let file mention popover handle navigation keys first
+    // Let slash command popover handle navigation keys first
+    if (slashCommand.handleKeyDown(e)) {
+      e.preventDefault();
+      return;
+    }
+    // Then file mention popover
     if (fileMention.handleKeyDown(e)) {
       e.preventDefault();
       return;
@@ -267,10 +325,15 @@ export const MessageInput = forwardRef<MessageInputRef, MessageInputProps>(funct
     setInspectedElements((prev) => prev.filter((el) => el.id !== id));
   };
 
+  const removeFileMention = (id: string) => {
+    setFileMentions((prev) => prev.filter((fm) => fm.id !== id));
+  };
+
+  const removeSkillMention = (id: string) => {
+    setSkillMentions((prev) => prev.filter((s) => s.id !== id));
+  };
+
   // Thinking cycle — derive agent type from selected model
-  const selectedOption = getModelOption(model);
-  const agentHarness: AgentHarness = selectedOption?.agentHarness ?? "claude";
-  const modelId = selectedOption?.model ?? model;
   const modelThinkingLevels = getThinkingLevelsForModel(agentHarness, modelId);
   const showThinkingIndicator = modelThinkingLevels.length > 0;
 
@@ -285,7 +348,7 @@ export const MessageInput = forwardRef<MessageInputRef, MessageInputProps>(funct
   const handleSetupEnvironment = () => onSend(GENERATE_HIVE_JSON);
 
   return (
-    <div className={cn("relative z-20 shrink-0 px-3 pb-3 md:px-4 md:pb-4", className)}>
+    <div className={cn("relative z-20 shrink-0 px-2 pb-2", className)}>
       {/* Environment setup nudge — visible when no deus.json and chat is empty */}
       <AnimatePresence>
         {showSetupNudge && (
@@ -310,40 +373,37 @@ export const MessageInput = forwardRef<MessageInputRef, MessageInputProps>(funct
         )}
       </AnimatePresence>
 
-      {/* File mention popover — anchored above the input group */}
-      <AnimatePresence>
-        {fileMention.isOpen && (
-          <motion.div
-            key="file-mention-popover"
-            initial={{ opacity: 0, scale: 0.96, y: 4 }}
-            animate={{ opacity: 1, scale: 1, y: 0 }}
-            exit={{ opacity: 0, scale: 0.96, y: 4 }}
-            transition={{ duration: 0.15, ease: [0.215, 0.61, 0.355, 1] }}
-            className="absolute right-4 bottom-full left-4 z-50 mb-2 flex justify-start"
-          >
-            <FileMentionPopover
-              results={fileMention.results}
-              loading={fileMention.loading}
-              selectedIndex={fileMention.selectedIndex}
-              query={fileMention.query}
-              onSelect={fileMention.selectFile}
-            />
-          </motion.div>
-        )}
-      </AnimatePresence>
       <InputGroup
         data-no-ring={true}
         className="bg-input-surface relative overflow-visible rounded-2xl border-0 shadow-xs transition-colors duration-200"
       >
-        {/* Pasted content cards (images + text + inspected elements) — unified horizontal scroll */}
-        {(attachments.length > 0 || pastedTexts.length > 0 || inspectedElements.length > 0) && (
+        {/* Pasted content cards (images + text + inspects + file/skill mentions) — unified horizontal scroll */}
+        {(attachments.length > 0 ||
+          pastedTexts.length > 0 ||
+          inspectedElements.length > 0 ||
+          fileMentions.length > 0 ||
+          skillMentions.length > 0) && (
           <div className="flex w-full items-start gap-2 overflow-x-auto px-3 pt-3">
             <AnimatePresence mode="popLayout">
+              {skillMentions.map((s) => (
+                <SkillMentionCard
+                  key={s.id}
+                  mention={s}
+                  onRemove={() => removeSkillMention(s.id)}
+                />
+              ))}
               {inspectedElements.map((el) => (
                 <InspectedElementCard
                   key={el.id}
                   element={el}
                   onRemove={() => removeInspectedElement(el.id)}
+                />
+              ))}
+              {fileMentions.map((fm) => (
+                <FileMentionCard
+                  key={fm.id}
+                  mention={fm}
+                  onRemove={() => removeFileMention(fm.id)}
                 />
               ))}
               {attachments.map((attachment) => (
@@ -365,6 +425,50 @@ export const MessageInput = forwardRef<MessageInputRef, MessageInputProps>(funct
           </div>
         )}
 
+        {/* Slash command sheet — slides out above textarea */}
+        <AnimatePresence initial={false}>
+          {slashCommand.isOpen && (
+            <motion.div
+              key="slash-command-sheet"
+              initial={{ height: 0, opacity: 0 }}
+              animate={{ height: "auto", opacity: 1 }}
+              exit={{ height: 0, opacity: 0 }}
+              transition={{ duration: 0.18, ease: [0.215, 0.61, 0.355, 1] }}
+              className="w-full overflow-hidden"
+            >
+              <SlashCommandPopover
+                results={slashCommand.results}
+                loading={slashCommand.loading}
+                selectedIndex={slashCommand.selectedIndex}
+                query={slashCommand.query}
+                onSelect={slashCommand.selectItem}
+              />
+            </motion.div>
+          )}
+        </AnimatePresence>
+
+        {/* File mention sheet — slides out above textarea */}
+        <AnimatePresence initial={false}>
+          {fileMention.isOpen && (
+            <motion.div
+              key="file-mention-sheet"
+              initial={{ height: 0, opacity: 0 }}
+              animate={{ height: "auto", opacity: 1 }}
+              exit={{ height: 0, opacity: 0 }}
+              transition={{ duration: 0.18, ease: [0.215, 0.61, 0.355, 1] }}
+              className="w-full overflow-hidden"
+            >
+              <FileMentionPopover
+                results={fileMention.results}
+                loading={fileMention.loading}
+                selectedIndex={fileMention.selectedIndex}
+                query={fileMention.query}
+                onSelect={fileMention.selectFile}
+              />
+            </motion.div>
+          )}
+        </AnimatePresence>
+
         {/* Textarea */}
         <InputGroupTextarea
           value={messageInput}
@@ -373,7 +477,7 @@ export const MessageInput = forwardRef<MessageInputRef, MessageInputProps>(funct
             fileMention.handleCursorChange(e);
           }}
           onPaste={handlePaste}
-          placeholder="Ask a follow-up ... (type @ to mention a file)"
+          placeholder="Ask a follow-up ... (@ files, / skills)"
           disabled={sending}
           onKeyDown={handleKeyDown}
           onSelect={fileMention.handleCursorChange}
@@ -394,13 +498,6 @@ export const MessageInput = forwardRef<MessageInputRef, MessageInputProps>(funct
         >
           {/* Controls group (left) */}
           <div className="flex items-center gap-0.5">
-            {onPlanModeToggle && (
-              <PlanModeToggle
-                enabled={planModeEnabled}
-                onClick={onPlanModeToggle}
-                disabled={planModeDisabled}
-              />
-            )}
             <ModelPicker
               model={model}
               hasMessages={hasMessages}
@@ -414,6 +511,13 @@ export const MessageInput = forwardRef<MessageInputRef, MessageInputProps>(funct
               <ThinkingIndicator
                 level={thinkingLevel as ThinkingLevel}
                 onClick={handleCycleThinking}
+              />
+            )}
+            {onPlanModeToggle && (
+              <PlanModeToggle
+                enabled={planModeEnabled}
+                onClick={onPlanModeToggle}
+                disabled={planModeDisabled}
               />
             )}
           </div>

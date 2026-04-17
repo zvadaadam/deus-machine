@@ -273,7 +273,13 @@ class ClaudeCodeTransformer implements EventTransformer<ClaudeCodeEvent> {
       const existing = this.toolParts.get(tr.tool_use_id);
       if (!existing) continue;
 
-      const output = typeof tr.content === "string" ? tr.content : JSON.stringify(tr.content);
+      // Preserve array content verbatim so downstream renderers can read
+      // image blocks (screenshots). Stringifying here collapses images to
+      // a JSON string and the UI loses them.
+      const output =
+        typeof tr.content === "string" || Array.isArray(tr.content)
+          ? tr.content
+          : JSON.stringify(tr.content);
       const metadata = this.taskUsage.get(tr.tool_use_id);
       const updated = completeToolPart(existing, output, tr.is_error ?? false, metadata);
       this.replacePart(existing, updated);

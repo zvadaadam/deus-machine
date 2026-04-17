@@ -20,6 +20,8 @@ extraResources:
       - "**/*"
   - from: "dist/runtime/electron/bin/index.bundled.cjs"
     to: "bin/index.bundled.cjs"
+  - from: "packages/device-use/bin/simbridge"
+    to: "simulator/simbridge"
 mac:
   category: public.app-category.developer-tools
   target:

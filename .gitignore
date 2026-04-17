@@ -73,6 +73,9 @@ tmp/
 temp/
 *.tmp
 
+# Generated device chrome assets (built via `bun run prepare:device-chrome`)
+apps/web/public/device-chrome/
+
 # AI tools — session logs, transcripts, agent memory
 .entire/
 .agents/

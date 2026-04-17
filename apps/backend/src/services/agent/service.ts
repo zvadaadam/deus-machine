@@ -23,6 +23,7 @@ import {
   persistSessionBackToWorking,
 } from "./persistence";
 import { invalidate } from "../query-engine";
+import { getContextForSession } from "../simulator-context";
 import type {
   TurnStartRequest,
   TurnStartResponse,
@@ -58,8 +59,14 @@ export function init(agentServerUrl: string): void {
       console.log("[AgentService] Disconnected from agent-server");
     },
 
-    // Relay agent-server's frontend-facing RPC requests (browser, sim, diff, plan)
+    // Relay agent-server's frontend-facing RPC requests (browser, diff, plan)
     onFrontendRpc: async (requestId, sessionId, method, params) => {
+      // Handle simulator context locally — the backend owns this state,
+      // no need to relay to the frontend.
+      if (method === "getSimulatorContext") {
+        return getContextForSession(sessionId);
+      }
+
       const isUserFacing = method === "exitPlanMode" || method === "askUserQuestion";
       const sessionResources = ["workspaces", "sessions", "session", "stats"] as const;
 

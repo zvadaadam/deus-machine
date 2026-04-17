@@ -78,11 +78,14 @@ app.get("/workspaces/:id/file-content", withWorkspace, (c) => {
  */
 app.post("/workspaces/:id/files/search", withWorkspace, async (c) => {
   const { query, limit = 15 } = await c.req.json<{ query: string; limit?: number }>();
+  const workspacePath = c.get("workspacePath");
+
+  // Empty query → return top-level files (short paths first)
   if (!query || typeof query !== "string") {
-    return c.json([]);
+    const results = filesService.listTopFiles(workspacePath, limit);
+    return c.json(results);
   }
 
-  const workspacePath = c.get("workspacePath");
   const results = filesService.fuzzySearchFiles(workspacePath, query, limit);
   return c.json(results);
 });
@@ -99,6 +102,9 @@ const ALLOWED_MEDIA_EXT: Record<string, string> = {
   ".jpeg": "image/jpeg",
   ".png": "image/png",
 };
+
+const toResponseBody = (stream: fs.ReadStream): BodyInit =>
+  Readable.toWeb(stream) as unknown as BodyInit;
 
 /**
  * GET /files/stream — Stream a local media file.
@@ -170,7 +176,7 @@ app.get("/files/stream", (c) => {
       }
 
       const stream = fs.createReadStream(realPath, { start, end });
-      return new Response(Readable.toWeb(stream) as ReadableStream, {
+      return new Response(toResponseBody(stream), {
         status: 206,
         headers: {
           "Content-Type": mimeType,
@@ -185,7 +191,7 @@ app.get("/files/stream", (c) => {
 
   // Full file
   const stream = fs.createReadStream(realPath);
-  return new Response(Readable.toWeb(stream) as ReadableStream, {
+  return new Response(toResponseBody(stream), {
     status: 200,
     headers: {
       "Content-Type": mimeType,
