@@ -127,7 +127,9 @@ export class ClaudeAgentHandler implements AgentHandler {
 
     const session = claudeSessions.get(sessionId);
     const modelChanged = session?.currentModel !== options.model;
-    const requestedMaxThinkingTokens = resolveThinkingOptions(options.thinkingLevel).maxThinkingTokens;
+    const requestedMaxThinkingTokens = resolveThinkingOptions(
+      options.thinkingLevel
+    ).maxThinkingTokens;
     const maxThinkingTokensChanged =
       session?.currentMaxThinkingTokens !== requestedMaxThinkingTokens;
     const settingsChangedFlag = settingsChanged(session?.currentSettings, options);

@@ -173,7 +173,11 @@ describe("claude-handler", () => {
     it("sends a clear error when the workspace path is missing", async () => {
       vi.mocked(fs.existsSync).mockImplementation((value: fs.PathLike) => value !== "/missing");
 
-      await handler.query("sess-missing-cwd", "hello", { cwd: "/missing", model: "claude-sonnet-4-6", turnId: "turn-1" });
+      await handler.query("sess-missing-cwd", "hello", {
+        cwd: "/missing",
+        model: "claude-sonnet-4-6",
+        turnId: "turn-1",
+      });
 
       await new Promise((r) => setTimeout(r, 50));
 
@@ -210,7 +214,7 @@ describe("claude-handler", () => {
 
       await handler.query("sess-new", "hello", {
         cwd: "/test",
-       model: "claude-sonnet-4-6",
+        model: "claude-sonnet-4-6",
         turnId: "turn-1",
       });
 
@@ -221,7 +225,7 @@ describe("claude-handler", () => {
         expect.objectContaining({
           options: expect.objectContaining({
             cwd: "/test",
-          model: "claude-sonnet-4-6",
+            model: "claude-sonnet-4-6",
           }),
         })
       );
@@ -241,7 +245,7 @@ describe("claude-handler", () => {
 
       await handler.query("sess-opts", "hello", {
         cwd: "/test",
-       model: "claude-sonnet-4-6",
+        model: "claude-sonnet-4-6",
         permissionMode: "plan",
         maxTurns: 50,
         thinkingLevel: "MEDIUM",
@@ -333,7 +337,11 @@ describe("claude-handler", () => {
       };
       mockClaudeSDK.mockReturnValue(mockQuery);
 
-      await handler.query("sess-stream", "hello", { cwd: "/test", model: "claude-sonnet-4-6", turnId: "turn-1" });
+      await handler.query("sess-stream", "hello", {
+        cwd: "/test",
+        model: "claude-sonnet-4-6",
+        turnId: "turn-1",
+      });
 
       // Wait for the generator to complete
       await new Promise((r) => setTimeout(r, 200));
@@ -346,7 +354,11 @@ describe("claude-handler", () => {
         throw new Error("SDK initialization failed");
       });
 
-      await handler.query("sess-err", "hello", { cwd: "/test", model: "claude-sonnet-4-6", turnId: "turn-1" });
+      await handler.query("sess-err", "hello", {
+        cwd: "/test",
+        model: "claude-sonnet-4-6",
+        turnId: "turn-1",
+      });
 
       await new Promise((r) => setTimeout(r, 100));
 
@@ -377,7 +389,11 @@ describe("claude-handler", () => {
       };
       mockClaudeSDK.mockReturnValue(mockQuery);
 
-      await handler.query("sess-sigint", "hello", { cwd: "/test", model: "claude-sonnet-4-6", turnId: "turn-1" });
+      await handler.query("sess-sigint", "hello", {
+        cwd: "/test",
+        model: "claude-sonnet-4-6",
+        turnId: "turn-1",
+      });
 
       await new Promise((r) => setTimeout(r, 100));
 
@@ -398,7 +414,11 @@ describe("claude-handler", () => {
       };
       mockClaudeSDK.mockReturnValue(mockQuery);
 
-      await handler.query("sess-sigint-err", "hello", { cwd: "/test", model: "claude-sonnet-4-6", turnId: "turn-1" });
+      await handler.query("sess-sigint-err", "hello", {
+        cwd: "/test",
+        model: "claude-sonnet-4-6",
+        turnId: "turn-1",
+      });
 
       await new Promise((r) => setTimeout(r, 100));
 

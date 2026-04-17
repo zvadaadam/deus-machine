@@ -50,9 +50,9 @@ const LEVEL_TO_MAX_TOKENS: Record<ThinkingLevel, number | undefined> = {
  * Resolves the Claude SDK options that realize a given thinking level.
  * Returns `{ maxThinkingTokens: undefined }` for NONE or when no level given.
  */
-export function resolveThinkingOptions(
-  thinkingLevel: string | undefined
-): { maxThinkingTokens: number | undefined } {
+export function resolveThinkingOptions(thinkingLevel: string | undefined): {
+  maxThinkingTokens: number | undefined;
+} {
   if (!thinkingLevel) return { maxThinkingTokens: undefined };
   const level = thinkingLevel.toUpperCase() as ThinkingLevel;
   return { maxThinkingTokens: LEVEL_TO_MAX_TOKENS[level] };
