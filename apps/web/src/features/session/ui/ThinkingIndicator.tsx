@@ -76,9 +76,10 @@ export function ThinkingIndicator({ level, onClick, className }: ThinkingIndicat
               }}
               className={cn(
                 "text-xs transition-colors duration-200 select-none",
-                // Fixed width accommodates the widest label (X-High) so the
-                // indicator doesn't jump between levels.
-                "inline-block w-10 text-center",
+                // Fixed width accommodates the widest label ("X-High") + the
+                // X-High pill padding. whitespace-nowrap guards against wrap
+                // if the pill pushes content past w-14 on compact themes.
+                "inline-block w-14 text-center whitespace-nowrap",
                 // X-High: tiny gold-tinted pill hugging the text only. Other
                 // levels render as plain muted text with no background.
                 isXHigh
