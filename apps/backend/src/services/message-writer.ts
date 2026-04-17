@@ -14,7 +14,7 @@ import { uuidv7 } from "@shared/lib/uuid";
 export function writeUserMessage(
   sessionId: string,
   content: string,
-  model?: string
+  model: string
 ): { success: true; messageId: string } | { success: false; error: string } {
   const db = getDatabase();
   const session = getSessionRaw(db, sessionId);
@@ -24,7 +24,6 @@ export function writeUserMessage(
 
   const messageId = uuidv7();
   const sentAt = new Date().toISOString();
-  const messageModel = model || "opus";
 
   db.transaction(() => {
     db.prepare(
@@ -32,7 +31,7 @@ export function writeUserMessage(
       INSERT INTO messages (id, session_id, role, content, sent_at, model)
       VALUES (?, ?, 'user', ?, ?, ?)
     `
-    ).run(messageId, sessionId, content, sentAt, messageModel);
+    ).run(messageId, sessionId, content, sentAt, model);
 
     db.prepare(
       "UPDATE sessions SET status = 'working', last_user_message_at = ?, error_message = NULL, error_category = NULL, updated_at = datetime('now') WHERE id = ?"

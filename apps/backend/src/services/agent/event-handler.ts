@@ -90,7 +90,7 @@ export function createAgentEventHandler(deps: {
     match(event)
       // ── Session lifecycle ─────────────────────────────────────────────
       .with({ type: "session.started" }, (e) => {
-        console.log(`[AgentEvent] session.started: session=${e.sessionId} agent=${e.agentType}`);
+        console.log(`[AgentEvent] session.started: session=${e.sessionId} agent=${e.agentHarness}`);
         persistAndInvalidate(persistSessionStarted(e), SESSION_RESOURCES, e.sessionId);
       })
       .with({ type: "session.idle" }, (e) => {

@@ -17,7 +17,6 @@ import { classifyError, handleCancellation, handleQueryError } from "../lifecycl
 import type { AgentCapabilities, AgentHandler, QueryOptions } from "../registry";
 import { buildAgentEnvironment, buildWorkspaceContext } from "../environment";
 import { initializeCodex, blockIfNotInitialized, getCodexExecutablePath } from "./codex-discovery";
-import { resolveCodexModel } from "./codex-models";
 import { codexSessions, abortCodexSession, type CodexSessionState } from "./codex-session";
 
 // ============================================================================
@@ -119,7 +118,7 @@ function mapItemToContentBlocks(item: ThreadItem): unknown[] {
 // ============================================================================
 
 export class CodexAgentHandler implements AgentHandler {
-  readonly agentType = "codex" as const;
+  readonly agentHarness = "codex" as const;
   readonly capabilities: AgentCapabilities = {
     auth: false,
     workspaceInit: false,
@@ -174,6 +173,12 @@ export class CodexAgentHandler implements AgentHandler {
     options: QueryOptions,
     existingThreadId?: string
   ): Promise<void> {
+    // Model is required — backend forwards the client's choice. A missing
+    // value means a bug upstream; fail loud rather than picking a silent default.
+    if (!options.model) {
+      throw new Error(`[codex-handler] options.model is required (session=${sessionId})`);
+    }
+
     const queryId = `${sessionId}/${Date.now()}`;
     const abortController = new AbortController();
 
@@ -197,7 +202,7 @@ export class CodexAgentHandler implements AgentHandler {
       // API key from environment (optional — Codex CLI also supports `codex login` auth)
       const apiKey = env.OPENAI_API_KEY || env.CODEX_API_KEY;
 
-      const model = resolveCodexModel(options?.model);
+      const model = options.model;
       const codexPath = getCodexExecutablePath();
 
       // Dynamic import — @openai/codex-sdk is ESM-only, can't be require()'d from CJS

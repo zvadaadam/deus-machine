@@ -40,7 +40,6 @@ export function createOptimisticWorkspace(repoId: string, repoName: string): Wor
     status: "in-progress",
     current_session_id: null,
     session_status: null,
-    model: null,
     session_error_category: null,
     session_error_message: null,
     latest_message_sent_at: null,

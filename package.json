@@ -34,6 +34,7 @@
     "package:linux": "bun run build:all && electron-builder --linux",
     "postinstall": "electron-builder install-app-deps && bun run prepare:device-use",
     "prepare:device-use": "node scripts/prepare-device-use.mjs",
+    "prepare:device-chrome": "node scripts/prepare-device-chrome.mjs",
     "preview": "vite preview",
     "test": "vitest run --config apps/backend/vitest.config.ts && vitest run --config apps/agent-server/vitest.config.ts && vitest run --config test/vitest.config.ts",
     "test:simulator": "vitest run --config test/vitest.config.ts",

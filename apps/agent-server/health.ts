@@ -7,8 +7,8 @@
 
 import type { IncomingMessage, ServerResponse } from "http";
 import type { WebSocketServer } from "ws";
-import { getRegisteredAgentTypes, getAgent } from "./agents/registry";
-import type { AgentType } from "@shared/enums";
+import { getRegisteredAgentHarnesses, getAgent } from "./agents/registry";
+import type { AgentHarness } from "@shared/enums";
 import { EventBroadcaster } from "./event-broadcaster";
 
 // ============================================================================
@@ -44,7 +44,7 @@ let agentsInitialized = false;
 /** Set to true when shutdown has been signaled */
 let shuttingDown = false;
 
-/** Active sessions (sessionId -> agentType). Add on turn/start, remove on idle/error/cancelled. */
+/** Active sessions (sessionId -> agentHarness). Add on turn/start, remove on idle/error/cancelled. */
 const activeSessions = new Map<string, string>();
 
 /** Process start time, used for uptime calculation */
@@ -74,8 +74,8 @@ export function getActiveSessions(): Map<string, string> {
   return activeSessions;
 }
 
-export function trackSession(sessionId: string, agentType: string): void {
-  activeSessions.set(sessionId, agentType);
+export function trackSession(sessionId: string, agentHarness: string): void {
+  activeSessions.set(sessionId, agentHarness);
 }
 
 export function untrackSession(sessionId: string): void {
@@ -97,7 +97,7 @@ export function getActiveSessionCount(): number {
 export function buildHealthResponse(wss: WebSocketServer | null): HealthResponse {
   const uptimeSeconds = (Date.now() - startTime) / 1000;
   const memoryMb = Math.round((process.memoryUsage.rss() / 1024 / 1024) * 100) / 100;
-  const agents = getRegisteredAgentTypes();
+  const agents = getRegisteredAgentHarnesses();
   const connections = wss ? wss.clients.size : 0;
 
   return {
@@ -191,9 +191,9 @@ export function waitForDrain(config: ShutdownConfig = DEFAULT_SHUTDOWN_CONFIG): 
  */
 export async function cancelRemainingSessions(): Promise<void> {
   const entries = [...activeSessions];
-  for (const [sessionId, agentType] of entries) {
-    console.log(`[SHUTDOWN] Force-cancelling session ${sessionId} (agent=${agentType})`);
-    const agent = getAgent(agentType as AgentType);
+  for (const [sessionId, agentHarness] of entries) {
+    console.log(`[SHUTDOWN] Force-cancelling session ${sessionId} (agent=${agentHarness})`);
+    const agent = getAgent(agentHarness as AgentHarness);
     if (agent) {
       try {
         await agent.cancel(sessionId);
@@ -202,12 +202,12 @@ export async function cancelRemainingSessions(): Promise<void> {
           `[SHUTDOWN] agent.cancel() failed for ${sessionId}, emitting events directly:`,
           err
         );
-        EventBroadcaster.emitMessageCancelled(sessionId, agentType as any);
-        EventBroadcaster.emitSessionCancelled(sessionId, agentType as any);
+        EventBroadcaster.emitMessageCancelled(sessionId, agentHarness as any);
+        EventBroadcaster.emitSessionCancelled(sessionId, agentHarness as any);
       }
     } else {
-      EventBroadcaster.emitMessageCancelled(sessionId, agentType as any);
-      EventBroadcaster.emitSessionCancelled(sessionId, agentType as any);
+      EventBroadcaster.emitMessageCancelled(sessionId, agentHarness as any);
+      EventBroadcaster.emitSessionCancelled(sessionId, agentHarness as any);
     }
   }
   activeSessions.clear();

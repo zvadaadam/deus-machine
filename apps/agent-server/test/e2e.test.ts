@@ -274,7 +274,7 @@ describe.skipIf(!bundleExists)("E2E: Agent Server Process", () => {
 
   it("responds to valid JSON-RPC requests on registered methods", async () => {
     const id = sendRequest(client, "provider/auth", {
-      agentType: "claude",
+      agentHarness: "claude",
       id: "test-session",
       cwd: "/tmp",
     });
@@ -295,7 +295,7 @@ describe.skipIf(!bundleExists)("E2E: Agent Server Process", () => {
     client.send("{ incomplete");
 
     const id = sendRequest(client, "provider/auth", {
-      agentType: "claude",
+      agentHarness: "claude",
       id: "test-after-garbage",
       cwd: "/tmp",
     });
@@ -314,7 +314,7 @@ describe.skipIf(!bundleExists)("E2E: Agent Server Process", () => {
     client.send(JSON.stringify({ foo: "bar", not: "jsonrpc" }));
 
     const id = sendRequest(client, "provider/auth", {
-      agentType: "claude",
+      agentHarness: "claude",
       id: "test-after-nonjsonrpc",
       cwd: "/tmp",
     });
@@ -368,7 +368,7 @@ describe.skipIf(!bundleExists || !claudeCliAvailable)("E2E: Real Claude Integrat
 
   it("returns real account info via claudeAuth", async () => {
     const id = sendRequest(client, "provider/auth", {
-      agentType: "claude",
+      agentHarness: "claude",
       id: "test-auth-real",
       cwd: WORKSPACE_ROOT,
     });
@@ -384,7 +384,7 @@ describe.skipIf(!bundleExists || !claudeCliAvailable)("E2E: Real Claude Integrat
     // Should have a result (not an error) if Claude is authenticated
     expect(response.result).toBeDefined();
     expect(response.result.type).toBe("claude_auth_output");
-    expect(response.result.agentType).toBe("claude");
+    expect(response.result.agentHarness).toBe("claude");
     // accountInfo should have real data (email, org, etc.) or an error string
     const hasAccountInfo = response.result.accountInfo !== undefined;
     const hasError = response.result.error !== undefined;
@@ -397,7 +397,7 @@ describe.skipIf(!bundleExists || !claudeCliAvailable)("E2E: Real Claude Integrat
 
   it("returns slash commands and MCP servers via workspaceInit", async () => {
     const id = sendRequest(client, "provider/initWorkspace", {
-      agentType: "claude",
+      agentHarness: "claude",
       id: "test-workspace-init",
       cwd: WORKSPACE_ROOT,
     });
@@ -412,7 +412,7 @@ describe.skipIf(!bundleExists || !claudeCliAvailable)("E2E: Real Claude Integrat
     expect(response.id).toBe(id);
     expect(response.result).toBeDefined();
     expect(response.result.type).toBe("workspace_init_output");
-    expect(response.result.agentType).toBe("claude");
+    expect(response.result.agentHarness).toBe("claude");
 
     // Should return either real data or an error
     if (!response.result.error) {
@@ -437,7 +437,7 @@ describe.skipIf(!bundleExists || !claudeCliAvailable)("E2E: Real Claude Integrat
     // Send a minimal query (short prompt to get a quick response)
     sendNotification(client, "turn/start", {
       sessionId,
-      agentType: "claude",
+      agentHarness: "claude",
       prompt: "Reply with exactly: PONG",
       options: {
         cwd: WORKSPACE_ROOT,
@@ -495,7 +495,7 @@ describe.skipIf(!bundleExists || !claudeCliAvailable)("E2E: Real Claude Integrat
     // Start a query that will take a while (ask for a long response)
     sendNotification(client, "turn/start", {
       sessionId,
-      agentType: "claude",
+      agentHarness: "claude",
       prompt:
         "Write a 500-word essay about the history of computing. Be very thorough and detailed.",
       options: {
@@ -587,7 +587,7 @@ describe.skipIf(!bundleExists || !hasOpenAIKey)("E2E: Real Codex Integration", (
     // Send a minimal query (short prompt for a quick response)
     sendNotification(client, "turn/start", {
       sessionId,
-      agentType: "codex",
+      agentHarness: "codex",
       prompt: "Reply with exactly: PONG",
       options: {
         cwd: WORKSPACE_ROOT,
@@ -643,7 +643,7 @@ describe.skipIf(!bundleExists || !hasOpenAIKey)("E2E: Real Codex Integration", (
     // Start a query that will take a while
     sendNotification(client, "turn/start", {
       sessionId,
-      agentType: "codex",
+      agentHarness: "codex",
       prompt:
         "Write a 500-word essay about the history of computing. Be very thorough and detailed.",
       options: {

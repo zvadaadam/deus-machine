@@ -88,8 +88,8 @@ function seedTestData() {
   testDb
     .prepare(
       `
-    INSERT INTO sessions (id, workspace_id, agent_type, model, status)
-    VALUES (?, ?, 'claude', 'opus', 'idle')
+    INSERT INTO sessions (id, workspace_id, agent_harness, status)
+    VALUES (?, ?, 'claude', 'idle')
   `
     )
     .run(SESS_ID, WS_ID);
@@ -758,7 +758,12 @@ describe("q:command → q:command_ack", () => {
           type: "q:command",
           id: "cmd-1",
           command: "sendMessage",
-          params: { sessionId: SESS_ID, content: "command test", model: "sonnet" },
+          params: {
+            sessionId: SESS_ID,
+            content: "command test",
+            model: "sonnet",
+            agentHarness: "claude",
+          },
         },
         "q:command_ack"
       );
@@ -865,7 +870,12 @@ describe("q:command → q:command_ack", () => {
           type: "q:command",
           id: "cmd-delta-1",
           command: "sendMessage",
-          params: { sessionId: SESS_ID, content: "delta check" },
+          params: {
+            sessionId: SESS_ID,
+            content: "delta check",
+            model: "claude-sonnet-4-6",
+            agentHarness: "claude",
+          },
         })
       );
 

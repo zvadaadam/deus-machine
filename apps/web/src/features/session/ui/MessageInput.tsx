@@ -24,11 +24,13 @@ import { FileMentionCard, type FileMention } from "./FileMentionCard";
 import { SkillMentionCard, type SkillMention } from "./SkillMentionCard";
 import { serializeInspectElement } from "../lib/parseInspectTags";
 import {
-  getRuntimeModelOption,
+  getAgentHarnessForModel,
+  getModelOption,
   cycleThinkingLevel,
-  type RuntimeAgentType,
+  getThinkingLevelsForModel,
+  type AgentHarness,
   type ThinkingLevel,
-} from "../lib/agentRuntime";
+} from "@/shared/agents";
 import { ThinkingIndicator } from "./ThinkingIndicator";
 import { ModelPicker } from "./ModelPicker";
 import { PlanModeToggle } from "./PlanModeToggle";
@@ -52,7 +54,7 @@ interface MessageInputProps {
   messageInput: string;
   sending: boolean;
   sessionStatus?: SessionStatus;
-  model?: string;
+  model: string;
   thinkingLevel?: string;
   showCompactButton?: boolean;
   contextTokenCount?: number;
@@ -90,7 +92,7 @@ export const MessageInput = forwardRef<MessageInputRef, MessageInputProps>(funct
     messageInput,
     sending,
     sessionStatus,
-    model = "opus",
+    model,
     thinkingLevel = "NONE",
     showCompactButton = false,
     contextTokenCount = 0,
@@ -243,7 +245,10 @@ export const MessageInput = forwardRef<MessageInputRef, MessageInputProps>(funct
 
   // / slash command support (skills + commands picker, Claude only).
   // Skills surface as orange pills; commands still insert `/name ` inline.
-  const isClaudeAgent = (getRuntimeModelOption(model)?.agentType ?? "claude") === "claude";
+  const selectedOption = getModelOption(model);
+  const agentHarness: AgentHarness = selectedOption?.agentHarness ?? getAgentHarnessForModel(model);
+  const modelId = selectedOption?.model ?? model;
+  const isClaudeAgent = agentHarness === "claude";
   const slashCommand = useSlashCommand({
     value: messageInput,
     workspacePath,
@@ -329,11 +334,11 @@ export const MessageInput = forwardRef<MessageInputRef, MessageInputProps>(funct
   };
 
   // Thinking cycle — derive agent type from selected model
-  const selectedOption = getRuntimeModelOption(model);
-  const agentType: RuntimeAgentType = selectedOption?.agentType ?? "claude";
+  const modelThinkingLevels = getThinkingLevelsForModel(agentHarness, modelId);
+  const showThinkingIndicator = modelThinkingLevels.length > 0;
 
   const handleCycleThinking = () => {
-    const next = cycleThinkingLevel(thinkingLevel as ThinkingLevel, agentType);
+    const next = cycleThinkingLevel(thinkingLevel as ThinkingLevel, agentHarness, modelId);
     onThinkingLevelChange?.(next);
   };
 
@@ -500,12 +505,14 @@ export const MessageInput = forwardRef<MessageInputRef, MessageInputProps>(funct
               onOpenNewTab={onOpenNewTab}
             />
 
-            {/* Thinking effort — text label cycles through agent-specific levels */}
-            <ThinkingIndicator
-              level={thinkingLevel as ThinkingLevel}
-              onClick={handleCycleThinking}
-            />
-
+            {/* Thinking effort — text label cycles through model-specific levels.
+                Hidden for models that don't support thinking (e.g. Haiku). */}
+            {showThinkingIndicator && (
+              <ThinkingIndicator
+                level={thinkingLevel as ThinkingLevel}
+                onClick={handleCycleThinking}
+              />
+            )}
             {onPlanModeToggle && (
               <PlanModeToggle
                 enabled={planModeEnabled}

@@ -256,7 +256,7 @@ describe("EventBroadcaster", () => {
       const event = {
         type: AGENT_EVENT_NAMES.SESSION_STARTED,
         sessionId: "sess-1",
-        agentType: "claude",
+        agentHarness: "claude",
       };
       EventBroadcaster.emitEvent(event);
 
@@ -268,7 +268,7 @@ describe("EventBroadcaster", () => {
         EventBroadcaster.emitEvent({
           type: AGENT_EVENT_NAMES.SESSION_IDLE,
           sessionId: "sess-1",
-          agentType: "claude",
+          agentHarness: "claude",
         })
       ).not.toThrow();
     });
@@ -281,7 +281,7 @@ describe("EventBroadcaster", () => {
       const event = {
         type: AGENT_EVENT_NAMES.SESSION_ERROR,
         sessionId: "sess-1",
-        agentType: "claude",
+        agentHarness: "claude",
         error: "something broke",
         category: "internal",
       };
@@ -302,7 +302,7 @@ describe("EventBroadcaster", () => {
         expect.objectContaining({
           type: AGENT_EVENT_NAMES.SESSION_STARTED,
           sessionId: "sess-1",
-          agentType: "claude",
+          agentHarness: "claude",
         })
       );
     });
@@ -318,7 +318,7 @@ describe("EventBroadcaster", () => {
         expect.objectContaining({
           type: AGENT_EVENT_NAMES.SESSION_IDLE,
           sessionId: "sess-1",
-          agentType: "codex",
+          agentHarness: "codex",
         })
       );
     });
@@ -334,7 +334,7 @@ describe("EventBroadcaster", () => {
         expect.objectContaining({
           type: AGENT_EVENT_NAMES.SESSION_ERROR,
           sessionId: "sess-1",
-          agentType: "claude",
+          agentHarness: "claude",
           error: "API key invalid",
           category: "auth",
         })
@@ -352,7 +352,7 @@ describe("EventBroadcaster", () => {
         expect.objectContaining({
           type: AGENT_EVENT_NAMES.SESSION_CANCELLED,
           sessionId: "sess-1",
-          agentType: "claude",
+          agentHarness: "claude",
         })
       );
     });
@@ -373,7 +373,7 @@ describe("EventBroadcaster", () => {
         expect.objectContaining({
           type: AGENT_EVENT_NAMES.MESSAGE_ASSISTANT,
           sessionId: "sess-1",
-          agentType: "claude",
+          agentHarness: "claude",
           message,
           model: "sonnet",
         })
@@ -451,7 +451,7 @@ describe("EventBroadcaster", () => {
         expect.objectContaining({
           type: AGENT_EVENT_NAMES.MESSAGE_CANCELLED,
           sessionId: "sess-1",
-          agentType: "claude",
+          agentHarness: "claude",
         })
       );
     });
@@ -486,7 +486,7 @@ describe("EventBroadcaster", () => {
           type: AGENT_EVENT_NAMES.REQUEST_OPENED,
           requestId: "req-1",
           sessionId: "sess-1",
-          agentType: "claude",
+          agentHarness: "claude",
           requestType: "tool_approval",
           data: { tool: "bash" },
         })

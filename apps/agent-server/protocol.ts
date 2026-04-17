@@ -6,7 +6,7 @@
 // shared/protocol.ts. MCP-facing RPC schemas (browser, simulator, diff,
 // terminal, plan mode) live in rpc-schemas.ts; re-exported here.
 
-import { AgentTypeSchema, ErrorCategorySchema } from "@shared/enums";
+import { AgentHarnessSchema, ErrorCategorySchema } from "@shared/enums";
 import {
   EnterPlanModeNotificationSchema,
   ErrorResponseSchema,
@@ -40,7 +40,7 @@ export { FRONTEND_RPC_METHODS } from "@shared/agent-events";
 // Canonical shared schemas — re-exported here for backwards compatibility with
 // existing agent-server imports.
 export {
-  AgentTypeSchema,
+  AgentHarnessSchema,
   EnterPlanModeNotificationSchema,
   ErrorCategorySchema,
   ErrorResponseSchema,
@@ -53,7 +53,7 @@ export {
 
 import { z } from "zod";
 
-export type AgentType = z.infer<typeof AgentTypeSchema>;
+export type AgentHarness = z.infer<typeof AgentHarnessSchema>;
 export type ErrorCategory = z.infer<typeof ErrorCategorySchema>;
 export type MessageResponse = z.infer<typeof MessageResponseSchema>;
 export type ErrorResponse = z.infer<typeof ErrorResponseSchema>;

@@ -291,7 +291,21 @@ export async function runCommand(
 function handleSendMessage(params: QueryParams): CommandResult {
   const sessionId = requireParam(params, "sessionId", "sendMessage");
   const content = requireParam(params, "content", "sendMessage");
-  const model = readString(params, "model");
+  const model = requireParam(params, "model", "sendMessage");
+  const agentHarness = requireParam(params, "agentHarness", "sendMessage") as "claude" | "codex";
+
+  const db = getDatabase();
+  const session = getSessionRaw(db, sessionId);
+
+  // Harness lock: once a session has messages, its agent harness is bound to
+  // a specific SDK process. Reject cross-harness switches to keep the server
+  // authoritative; the UI disables these options too, but this is the source
+  // of truth.
+  if (session && session.message_count > 0 && session.agent_harness !== agentHarness) {
+    throw new Error(
+      `Cannot switch agent from ${session.agent_harness} to ${agentHarness} on a session with messages. Open a new chat tab instead.`
+    );
+  }
 
   // 1. Persist the user message
   const result = writeUserMessage(sessionId, content, model);
@@ -301,12 +315,6 @@ function handleSendMessage(params: QueryParams): CommandResult {
   });
 
   // 2. Forward to agent-server (fire-and-forget — ACK already sent)
-  const agentType = (readString(params, "agentType") || "claude") as "claude" | "codex";
-
-  // Look up the existing agent_session_id so the SDK resumes the same
-  // conversation rather than starting a new one.
-  const db = getDatabase();
-  const session = getSessionRaw(db, sessionId);
   const existingAgentSessionId = session?.agent_session_id ?? null;
 
   // Resolve cwd server-side from session → workspace → repo.
@@ -320,14 +328,14 @@ function handleSendMessage(params: QueryParams): CommandResult {
   }
 
   if (!agentService.isConnected()) {
-    handleAgentError(sessionId, agentType, new Error("Agent server is disconnected"));
+    handleAgentError(sessionId, agentHarness, new Error("Agent server is disconnected"));
     return { commandId: result.messageId };
   }
 
   agentService
     .forwardTurn({
       sessionId,
-      agentType,
+      agentHarness,
       prompt: content,
       options: buildTurnOptions(params, model, existingAgentSessionId) as Parameters<
         typeof agentService.forwardTurn
@@ -335,11 +343,11 @@ function handleSendMessage(params: QueryParams): CommandResult {
     })
     .then((response) => {
       if (!response.accepted) {
-        handleAgentRejection(sessionId, agentType, response.reason);
+        handleAgentRejection(sessionId, agentHarness, response.reason);
       }
     })
     .catch((err) => {
-      handleAgentError(sessionId, agentType, err);
+      handleAgentError(sessionId, agentHarness, err);
     });
 
   return { commandId: result.messageId };
@@ -380,7 +388,7 @@ function buildTurnOptions(
   return {
     cwd: readString(params, "cwd") || "",
     model,
-    maxThinkingTokens: params.maxThinkingTokens as number | undefined,
+    thinkingLevel: readString(params, "thinkingLevel"),
     maxTurns: params.maxTurns as number | undefined,
     turnId: readString(params, "turnId"),
     permissionMode: readString(params, "permissionMode"),
@@ -396,26 +404,26 @@ function buildTurnOptions(
   };
 }
 
-function handleAgentRejection(sessionId: string, agentType: string, reason?: string): void {
+function handleAgentRejection(sessionId: string, agentHarness: string, reason?: string): void {
   const msg = reason || "Agent rejected the message";
   console.error(`[CommandHandler] Agent rejected sendMessage for session=${sessionId}: ${msg}`);
   persistSessionError({
     type: "session.error",
     sessionId,
-    agentType: agentType as "claude",
+    agentHarness: agentHarness as "claude",
     error: msg,
     category: "internal",
   });
   invalidate(["workspaces", "sessions", "session", "stats"], { sessionIds: [sessionId] });
 }
 
-function handleAgentError(sessionId: string, agentType: string, err: unknown): void {
+function handleAgentError(sessionId: string, agentHarness: string, err: unknown): void {
   const errorMsg = err instanceof Error ? err.message : String(err);
   console.error("[CommandHandler] Failed to forward to agent-server:", errorMsg);
   persistSessionError({
     type: "session.error",
     sessionId,
-    agentType: agentType as "claude",
+    agentHarness: agentHarness as "claude",
     error: `Agent server communication failed: ${errorMsg}`,
     category: "internal",
   });

@@ -43,7 +43,7 @@ export function ChatArea({
     handleTabAdd,
     handleTabReorder,
     handleTabRestore,
-    updateChatTabAgentType,
+    updateChatTabAgentHarness,
     markChatTabStarted,
   } = useChatTabs({
     workspaceId: workspace.id,
@@ -130,8 +130,8 @@ export function ChatArea({
             isFirstSession={workspace.latest_message_sent_at === null}
             embedded={true}
             initialModel={activeTab?.data?.initialModel}
-            onAgentTypeChange={(agentType) =>
-              activeTab && updateChatTabAgentType(activeTab.id, agentType)
+            onAgentHarnessChange={(agentHarness) =>
+              activeTab && updateChatTabAgentHarness(activeTab.id, agentHarness)
             }
             onSessionStarted={() => activeTab && markChatTabStarted(activeTab.id)}
             onOpenNewTab={handleTabAdd}

@@ -94,7 +94,6 @@ function partDone(part: Part): PartEvent {
 interface SubagentContext {
   toolCallId: string;
   toolPartId: string;
-  subagentType: string;
   hasReceivedResult: boolean;
 }
 
@@ -248,11 +247,10 @@ class ClaudeCodeTransformer implements EventTransformer<ClaudeCodeEvent> {
   // Subagent lifecycle
   // -------------------------------------------------------------------------
 
-  private registerSubagent(toolCallId: string, toolPartId: string, subagentType: string): void {
+  private registerSubagent(toolCallId: string, toolPartId: string): void {
     this.activeSubagents.set(toolCallId, {
       toolCallId,
       toolPartId,
-      subagentType,
       hasReceivedResult: false,
     });
   }
@@ -485,7 +483,7 @@ class ClaudeCodeTransformer implements EventTransformer<ClaudeCodeEvent> {
         this.toolParts.set(block.id, part);
 
         if (isAgent) {
-          this.registerSubagent(block.id, part.id, part.subagent?.type ?? "unknown");
+          this.registerSubagent(block.id, part.id);
         }
 
         return created(part);
@@ -584,7 +582,7 @@ class ClaudeCodeTransformer implements EventTransformer<ClaudeCodeEvent> {
         if (isSubagentTool(existing.toolName)) {
           const subagent = extractSubagentMetadata(input);
           updated = { ...updated, kind: "task", subagent } as ToolPart;
-          this.registerSubagent(toolId, updated.id, subagent.type);
+          this.registerSubagent(toolId, updated.id);
         }
 
         this.replacePart(existing, updated);

@@ -11,12 +11,11 @@
 
 /**
  * Post-launch migrations.
- * Each statement is an ALTER TABLE ADD COLUMN that may already exist.
- * Run each individually — catch "duplicate column" errors and skip.
- * Runs AFTER SCHEMA_SQL so tables already exist.
  *
- * Currently empty — SCHEMA_SQL defines the full schema for fresh installs.
- * Add ALTER TABLE statements here when the schema changes post-launch.
+ * Run each statement individually after SCHEMA_SQL. Fresh installs already
+ * have the final schema, so some ALTER statements become harmless no-ops
+ * (for example: adding an existing column, renaming an already-renamed
+ * column, or dropping a column that was already removed).
  */
 export const MIGRATIONS: string[] = [
   // sessions: structured error category for category-aware UI
@@ -41,7 +40,41 @@ export const MIGRATIONS: string[] = [
   `CREATE INDEX IF NOT EXISTS idx_parts_message_id ON parts(message_id, seq)`,
   `CREATE INDEX IF NOT EXISTS idx_parts_session_type ON parts(session_id, type)`,
   `CREATE INDEX IF NOT EXISTS idx_parts_tool_call_id ON parts(tool_call_id)`,
+  // sessions: rename agent_type → agent_harness to match the type name
+  // (AgentHarness) and the "harness lock" concept. Safe no-op when the
+  // column has already been renamed or the DB is a fresh install.
+  `ALTER TABLE sessions RENAME COLUMN agent_type TO agent_harness`,
+  // sessions: drop the `model` column. Never read by the frontend; the
+  // per-turn model lives on messages.model instead.
+  `ALTER TABLE sessions DROP COLUMN model`,
 ];
+
+function normalizeMigrationSql(sql: string): string {
+  return sql.trim().replace(/\s+/g, " ").toUpperCase();
+}
+
+/**
+ * Only tolerate migration errors that are expected for an already-migrated DB.
+ * Everything else should fail fast so we don't hide a broken migration.
+ */
+export function isExpectedMigrationError(sql: string, message: string): boolean {
+  const normalizedSql = normalizeMigrationSql(sql);
+  const normalizedMessage = message.toLowerCase();
+
+  if (normalizedSql.includes(" ADD COLUMN ")) {
+    return normalizedMessage.includes("duplicate column");
+  }
+
+  if (normalizedSql.includes(" RENAME COLUMN ")) {
+    return normalizedMessage.includes("no such column");
+  }
+
+  if (normalizedSql.includes(" DROP COLUMN ")) {
+    return normalizedMessage.includes("no such column");
+  }
+
+  return false;
+}
 
 export const SCHEMA_SQL = `
   -- Repositories tracked by the app (id = UUID7, embeds created_at)
@@ -80,8 +113,7 @@ export const SCHEMA_SQL = `
   CREATE TABLE IF NOT EXISTS sessions (
     id TEXT PRIMARY KEY NOT NULL,
     workspace_id TEXT NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
-    agent_type TEXT NOT NULL DEFAULT 'claude',
-    model TEXT NOT NULL DEFAULT 'opus',
+    agent_harness TEXT NOT NULL DEFAULT 'claude',
     agent_session_id TEXT,
     title TEXT,
     status TEXT NOT NULL DEFAULT 'idle',

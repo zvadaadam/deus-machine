@@ -90,7 +90,7 @@ describe("handleAgentEvent", () => {
     const event: AgentEvent = {
       type: "session.started",
       sessionId: "sess-1",
-      agentType: "claude",
+      agentHarness: "claude",
     };
 
     it("persists and invalidates on success", () => {
@@ -116,7 +116,7 @@ describe("handleAgentEvent", () => {
     const event: AgentEvent = {
       type: "session.idle",
       sessionId: "sess-1",
-      agentType: "claude",
+      agentHarness: "claude",
     };
 
     it("persists and invalidates workspaces, sessions, session, stats", () => {
@@ -141,7 +141,7 @@ describe("handleAgentEvent", () => {
     const event: AgentEvent = {
       type: "session.error",
       sessionId: "sess-1",
-      agentType: "claude",
+      agentHarness: "claude",
       error: "Rate limit",
       category: "rate_limit",
     };
@@ -160,7 +160,7 @@ describe("handleAgentEvent", () => {
     const event: AgentEvent = {
       type: "session.cancelled",
       sessionId: "sess-1",
-      agentType: "claude",
+      agentHarness: "claude",
     };
 
     it("persists and invalidates", () => {
@@ -182,7 +182,7 @@ describe("handleAgentEvent", () => {
       const event: AgentEvent = {
         type: "message.assistant",
         sessionId: "sess-1",
-        agentType: "claude",
+        agentHarness: "claude",
         message: { id: "msg-1", role: "assistant", content: [] },
       };
       handleAgentEvent(event);
@@ -195,7 +195,7 @@ describe("handleAgentEvent", () => {
       const event: AgentEvent = {
         type: "message.tool_result",
         sessionId: "sess-1",
-        agentType: "claude",
+        agentHarness: "claude",
         message: { id: "msg-2", role: "user", content: [] },
       };
       handleAgentEvent(event);
@@ -208,7 +208,7 @@ describe("handleAgentEvent", () => {
       const event: AgentEvent = {
         type: "message.result",
         sessionId: "sess-1",
-        agentType: "claude",
+        agentHarness: "claude",
         subtype: "success",
       };
       handleAgentEvent(event);
@@ -220,7 +220,7 @@ describe("handleAgentEvent", () => {
     const event: AgentEvent = {
       type: "message.cancelled",
       sessionId: "sess-1",
-      agentType: "claude",
+      agentHarness: "claude",
     };
 
     it("persists and invalidates messages, sessions, session, stats", () => {
@@ -242,7 +242,7 @@ describe("handleAgentEvent", () => {
       const event: AgentEvent = {
         type: "turn.started",
         sessionId: "sess-1",
-        agentType: "claude",
+        agentHarness: "claude",
         messageId: "msg-1",
         turnId: "turn-1",
       };
@@ -258,7 +258,7 @@ describe("handleAgentEvent", () => {
       const event: AgentEvent = {
         type: "message.created",
         sessionId: "sess-1",
-        agentType: "claude",
+        agentHarness: "claude",
         messageId: "msg-1",
         role: "assistant",
       };
@@ -274,7 +274,7 @@ describe("handleAgentEvent", () => {
     const event: AgentEvent = {
       type: "part.created",
       sessionId: "sess-1",
-      agentType: "claude",
+      agentHarness: "claude",
       messageId: "msg-1",
       partId: "p1",
       part: { type: "TEXT", id: "p1", sessionId: "sess-1", messageId: "msg-1", text: "" },
@@ -297,7 +297,7 @@ describe("handleAgentEvent", () => {
         event: "part:created",
         data: {
           sessionId: "sess-1",
-          agentType: "claude",
+          agentHarness: "claude",
           messageId: "msg-1",
           partId: "p1",
           part: { type: "TEXT", id: "p1", sessionId: "sess-1", messageId: "msg-1", text: "" },
@@ -310,7 +310,7 @@ describe("handleAgentEvent", () => {
     const event: AgentEvent = {
       type: "part.delta",
       sessionId: "sess-1",
-      agentType: "claude",
+      agentHarness: "claude",
       partId: "p1",
       delta: "Hello",
     };
@@ -332,7 +332,7 @@ describe("handleAgentEvent", () => {
         event: "part:delta",
         data: {
           sessionId: "sess-1",
-          agentType: "claude",
+          agentHarness: "claude",
           partId: "p1",
           delta: "Hello",
         },
@@ -344,7 +344,7 @@ describe("handleAgentEvent", () => {
     const event: AgentEvent = {
       type: "part.done",
       sessionId: "sess-1",
-      agentType: "claude",
+      agentHarness: "claude",
       messageId: "msg-1",
       partId: "p1",
       part: {
@@ -373,7 +373,7 @@ describe("handleAgentEvent", () => {
         event: "part:done",
         data: {
           sessionId: "sess-1",
-          agentType: "claude",
+          agentHarness: "claude",
           messageId: "msg-1",
           partId: "p1",
           part: {
@@ -403,7 +403,7 @@ describe("handleAgentEvent", () => {
     const event: AgentEvent = {
       type: "message.done",
       sessionId: "sess-1",
-      agentType: "claude",
+      agentHarness: "claude",
       messageId: "msg-1",
       stopReason: "end_turn",
       parts: [],
@@ -431,7 +431,7 @@ describe("handleAgentEvent", () => {
       const event: AgentEvent = {
         type: "turn.completed",
         sessionId: "sess-1",
-        agentType: "claude",
+        agentHarness: "claude",
         messageId: "msg-1",
         finishReason: "end_turn",
         tokens: { input: 100, output: 50 },
@@ -456,7 +456,7 @@ describe("handleAgentEvent", () => {
         type: "request.opened",
         requestId: "req-1",
         sessionId: "sess-1",
-        agentType: "claude",
+        agentHarness: "claude",
         requestType: "tool_approval",
         data: { tool: "bash" },
       };
@@ -561,7 +561,7 @@ describe("handleAgentEvent", () => {
     const event: AgentEvent = {
       type: "session.title",
       sessionId: "sess-1",
-      agentType: "claude",
+      agentHarness: "claude",
       title: "Fix login page CSS",
     };
 
@@ -594,53 +594,53 @@ describe("handleAgentEvent", () => {
       // handleAgentEvent with every event type. If a new event type is added
       // to AgentEvent but not handled, TypeScript compilation will fail.
       const events: AgentEvent[] = [
-        { type: "session.started", sessionId: "s", agentType: "claude" },
-        { type: "session.idle", sessionId: "s", agentType: "claude" },
+        { type: "session.started", sessionId: "s", agentHarness: "claude" },
+        { type: "session.idle", sessionId: "s", agentHarness: "claude" },
         {
           type: "session.error",
           sessionId: "s",
-          agentType: "claude",
+          agentHarness: "claude",
           error: "e",
           category: "internal",
         },
-        { type: "session.cancelled", sessionId: "s", agentType: "claude" },
+        { type: "session.cancelled", sessionId: "s", agentHarness: "claude" },
         {
           type: "message.assistant",
           sessionId: "s",
-          agentType: "claude",
+          agentHarness: "claude",
           message: { id: "m", role: "assistant", content: [] },
         },
         {
           type: "message.tool_result",
           sessionId: "s",
-          agentType: "claude",
+          agentHarness: "claude",
           message: { id: "m", role: "user", content: [] },
         },
-        { type: "message.system", sessionId: "s", agentType: "claude", data: {} },
-        { type: "message.result", sessionId: "s", agentType: "claude", subtype: "success" },
-        { type: "message.cancelled", sessionId: "s", agentType: "claude" },
+        { type: "message.system", sessionId: "s", agentHarness: "claude", data: {} },
+        { type: "message.result", sessionId: "s", agentHarness: "claude", subtype: "success" },
+        { type: "message.cancelled", sessionId: "s", agentHarness: "claude" },
         // Turn, message & part lifecycle
-        { type: "turn.started", sessionId: "s", agentType: "claude", messageId: "m" },
+        { type: "turn.started", sessionId: "s", agentHarness: "claude", messageId: "m" },
         {
           type: "message.created",
           sessionId: "s",
-          agentType: "claude",
+          agentHarness: "claude",
           messageId: "m",
           role: "assistant",
         },
         {
           type: "part.created",
           sessionId: "s",
-          agentType: "claude",
+          agentHarness: "claude",
           messageId: "m",
           partId: "p",
           part: { type: "TEXT", id: "p", sessionId: "s", messageId: "m", text: "" },
         },
-        { type: "part.delta", sessionId: "s", agentType: "claude", partId: "p", delta: "x" },
+        { type: "part.delta", sessionId: "s", agentHarness: "claude", partId: "p", delta: "x" },
         {
           type: "part.done",
           sessionId: "s",
-          agentType: "claude",
+          agentHarness: "claude",
           messageId: "m",
           partId: "p",
           part: { type: "TEXT", id: "p", sessionId: "s", messageId: "m", text: "x" },
@@ -648,7 +648,7 @@ describe("handleAgentEvent", () => {
         {
           type: "message.done",
           sessionId: "s",
-          agentType: "claude",
+          agentHarness: "claude",
           messageId: "m",
           stopReason: "end_turn",
           parts: [],
@@ -656,7 +656,7 @@ describe("handleAgentEvent", () => {
         {
           type: "turn.completed",
           sessionId: "s",
-          agentType: "claude",
+          agentHarness: "claude",
           messageId: "m",
           finishReason: "end_turn",
         },
@@ -665,7 +665,7 @@ describe("handleAgentEvent", () => {
           type: "request.opened",
           requestId: "r",
           sessionId: "s",
-          agentType: "claude",
+          agentHarness: "claude",
           requestType: "tool_approval",
           data: {},
         },
@@ -679,7 +679,7 @@ describe("handleAgentEvent", () => {
           timeoutMs: 1000,
         },
         { type: "agent.session_id", sessionId: "s", agentSessionId: "a" },
-        { type: "session.title", sessionId: "s", agentType: "claude", title: "Fix bug" },
+        { type: "session.title", sessionId: "s", agentHarness: "claude", title: "Fix bug" },
       ];
 
       for (const event of events) {

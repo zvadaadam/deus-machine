@@ -26,14 +26,18 @@ import type {
   InitWorkspaceParams,
   QueryOptions,
 } from "../registry";
-import { buildAgentEnvironment, parseEnvString } from "../environment";
+import { buildAgentEnvironment } from "../environment";
 import {
   initializeClaude,
   blockIfNotInitialized,
   getClaudeExecutablePath,
 } from "./claude-discovery";
-import { mapModelForProvider, parseModelSpec } from "./claude-models";
-import { buildSdkOptions, DEFAULT_PROMPT, DEFAULT_SETTING_SOURCES } from "./claude-sdk-options";
+import {
+  buildSdkOptions,
+  DEFAULT_PROMPT,
+  DEFAULT_SETTING_SOURCES,
+  resolveThinkingOptions,
+} from "./claude-sdk-options";
 import {
   claudeSessions,
   claudeQueries,
@@ -101,7 +105,7 @@ function buildPromptIterable(queue: AsyncQueue<string>, sessionId: string) {
 // ============================================================================
 
 export class ClaudeAgentHandler implements AgentHandler {
-  readonly agentType = "claude" as const;
+  readonly agentHarness = "claude" as const;
   readonly capabilities: AgentCapabilities = {
     auth: true,
     workspaceInit: true,
@@ -123,19 +127,12 @@ export class ClaudeAgentHandler implements AgentHandler {
 
     const session = claudeSessions.get(sessionId);
     const modelChanged = session?.currentModel !== options.model;
+    const requestedMaxThinkingTokens = resolveThinkingOptions(
+      options.thinkingLevel
+    ).maxThinkingTokens;
     const maxThinkingTokensChanged =
-      session?.currentMaxThinkingTokens !== options.maxThinkingTokens;
+      session?.currentMaxThinkingTokens !== requestedMaxThinkingTokens;
     const settingsChangedFlag = settingsChanged(session?.currentSettings, options);
-
-    // Beta flags (e.g. 1M context) are set at session creation and cannot be
-    // updated via setModel(). Force a new session when the extended-context
-    // flag changes (e.g. opus ↔ opus-1m) to avoid silently running without
-    // the requested context window.
-    const betaChanged =
-      modelChanged &&
-      session?.currentModel != null &&
-      parseModelSpec(session.currentModel).extended !==
-        parseModelSpec(options.model ?? "").extended;
 
     if (session) {
       session.turnId = options.turnId;
@@ -144,10 +141,7 @@ export class ClaudeAgentHandler implements AgentHandler {
     }
 
     const canReuse =
-      isSessionActive(session) &&
-      options.shouldResetGenerator !== true &&
-      !settingsChangedFlag &&
-      !betaChanged;
+      isSessionActive(session) && options.shouldResetGenerator !== true && !settingsChangedFlag;
 
     if (canReuse) {
       console.log(
@@ -158,13 +152,11 @@ export class ClaudeAgentHandler implements AgentHandler {
       if (modelChanged && session) {
         const query = claudeQueries.get(sessionId);
         if (query) {
-          const envVars = options.providerEnvVars ? parseEnvString(options.providerEnvVars) : {};
-          const mappedModel = mapModelForProvider(options.model, envVars);
           console.log(
             `Model changed from ${session.currentModel} to ${options.model}, using setModel callback`
           );
           try {
-            await query.setModel(mappedModel);
+            await query.setModel(options.model);
             const updatedSession = claudeSessions.get(sessionId);
             if (updatedSession) updatedSession.currentModel = options.model;
           } catch (error) {
@@ -177,8 +169,8 @@ export class ClaudeAgentHandler implements AgentHandler {
       const query = claudeQueries.get(sessionId);
       if (maxThinkingTokensChanged && session && query) {
         try {
-          await query.setMaxThinkingTokens(options.maxThinkingTokens ?? null);
-          session.currentMaxThinkingTokens = options.maxThinkingTokens;
+          await query.setMaxThinkingTokens(requestedMaxThinkingTokens ?? null);
+          session.currentMaxThinkingTokens = requestedMaxThinkingTokens;
         } catch (error) {
           console.error(`Failed to update maxThinkingTokens: ${getErrorMessage(error)}`);
         }
@@ -203,9 +195,7 @@ export class ClaudeAgentHandler implements AgentHandler {
           ? "no active generator"
           : options.shouldResetGenerator
             ? "should reset generator"
-            : betaChanged
-              ? "beta flags changed"
-              : "settings changed";
+            : "settings changed";
       console.log(
         `[TIMING][query] NEW_GENERATOR session=${sessionId} reason="${reason}" decisionTime=${Date.now() - tQueryStart}ms`
       );
@@ -222,7 +212,7 @@ export class ClaudeAgentHandler implements AgentHandler {
           strictDataPrivacy: options.strictDataPrivacy,
         },
         currentModel: options.model,
-        currentMaxThinkingTokens: options.maxThinkingTokens,
+        currentMaxThinkingTokens: requestedMaxThinkingTokens,
         turnId: options.turnId,
         turnVersion: 1,
         cwd: options.cwd,
@@ -278,7 +268,7 @@ export class ClaudeAgentHandler implements AgentHandler {
     const { accountInfo, error } = await this.getClaudeAccountInfo(params.cwd);
     return {
       type: "claude_auth_output",
-      agentType: "claude",
+      agentHarness: "claude",
       accountInfo,
       error,
     };
@@ -292,7 +282,7 @@ export class ClaudeAgentHandler implements AgentHandler {
     });
     return {
       type: "workspace_init_output",
-      agentType: "claude",
+      agentHarness: "claude",
       slashCommands,
       mcpServers,
       error,
@@ -346,7 +336,7 @@ export class ClaudeAgentHandler implements AgentHandler {
         return {
           type: "context_usage",
           id: sessionId,
-          agentType: "claude",
+          agentHarness: "claude",
           contextUsageData: message,
         };
       }
@@ -503,11 +493,17 @@ export class ClaudeAgentHandler implements AgentHandler {
       claudeQueries.set(sessionId, queryResult);
       session.generator = queryResult[Symbol.asyncIterator]();
 
-      // Per-message options (constant for the lifetime of this generator)
+      // Per-message options (constant for the lifetime of this generator).
+      // Model is required — the backend forwards the client's choice and
+      // a missing value means a bug upstream. Fail loud rather than silently
+      // picking a default that could mislead billing and audit logs.
+      if (!options.model) {
+        throw new Error(`[claude-handler] options.model is required (session=${sessionId})`);
+      }
       const msgOpts: ProcessMessageOptions = {
         sessionId,
         generatorId,
-        model: options.model || "opus",
+        model: options.model,
         isResume: !!options.resume,
       };
 

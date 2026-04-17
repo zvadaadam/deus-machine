@@ -11,7 +11,7 @@ export type {
 /** Auth status returned by the agent-server for each provider */
 export interface AgentProviderAuth {
   type: string;
-  agentType: string;
+  agentHarness: string;
   accountInfo?: {
     email?: string;
     orgName?: string;

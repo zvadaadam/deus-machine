@@ -8,9 +8,10 @@
 
 import { z } from "zod";
 
-import { AgentTypeSchema, ErrorCategorySchema } from "./enums";
+import { AgentHarnessSchema, ErrorCategorySchema } from "./enums";
 import { PartSchema, TokenUsageSchema, FinishReasonSchema } from "./messages";
 import type { FinishReason, Part, TokenUsage } from "./messages";
+import { QueryOptionsSchema } from "./protocol";
 
 // ============================================================================
 // Part Event Types
@@ -115,7 +116,7 @@ export type AgentCapabilities = z.infer<typeof AgentCapabilitiesSchema>;
 // ============================================================================
 
 export const AgentInfoSchema = z.object({
-  type: AgentTypeSchema,
+  type: AgentHarnessSchema,
   capabilities: AgentCapabilitiesSchema,
   initialized: z.boolean(),
 });
@@ -130,25 +131,13 @@ export type InitializeResult = z.infer<typeof InitializeResultSchema>;
 // ============================================================================
 // Turn Options (params for turn/start RPC)
 // ============================================================================
+//
+// Re-exported from shared/protocol.ts. The turn/start RPC and query-engine
+// queries share the same option shape — there's no semantic reason for a
+// separate schema here.
 
-export const TurnOptionsSchema = z.object({
-  cwd: z.string().min(1),
-  model: z.string().min(1).optional(),
-  maxThinkingTokens: z.number().int().positive().optional(),
-  maxTurns: z.number().int().positive().optional(),
-  turnId: z.string().min(1).optional(),
-  permissionMode: z.string().optional(),
-  providerEnvVars: z.string().optional(),
-  ghToken: z.string().optional(),
-  deusEnv: z.record(z.string(), z.string()).optional(),
-  additionalDirectories: z.array(z.string()).optional(),
-  chromeEnabled: z.boolean().optional(),
-  strictDataPrivacy: z.boolean().optional(),
-  shouldResetGenerator: z.boolean().optional(),
-  resume: z.string().min(1).optional(),
-  resumeSessionAt: z.string().min(1).optional(),
-});
-export type TurnOptions = z.infer<typeof TurnOptionsSchema>;
+export { QueryOptionsSchema as TurnOptionsSchema } from "./protocol";
+export type { QueryOptions as TurnOptions } from "./protocol";
 
 // ============================================================================
 // RPC Request/Response Schemas (client → agent-server)
@@ -156,9 +145,9 @@ export type TurnOptions = z.infer<typeof TurnOptionsSchema>;
 
 export const TurnStartRequestSchema = z.object({
   sessionId: z.string().min(1),
-  agentType: AgentTypeSchema,
+  agentHarness: AgentHarnessSchema,
   prompt: z.string().min(1),
-  options: TurnOptionsSchema,
+  options: QueryOptionsSchema,
 });
 export type TurnStartRequest = z.infer<typeof TurnStartRequestSchema>;
 
@@ -195,13 +184,13 @@ export type SessionStopRequest = z.infer<typeof SessionStopRequestSchema>;
 // ============================================================================
 
 const ProviderAuthRequestSchema = z.object({
-  agentType: AgentTypeSchema,
+  agentHarness: AgentHarnessSchema,
   cwd: z.string().min(1),
 });
 export type ProviderAuthRequest = z.infer<typeof ProviderAuthRequestSchema>;
 
 const ProviderInitWorkspaceRequestSchema = z.object({
-  agentType: AgentTypeSchema,
+  agentHarness: AgentHarnessSchema,
   cwd: z.string().min(1),
   ghToken: z.string().optional(),
   providerEnvVars: z.string().optional(),
@@ -288,21 +277,21 @@ export const FRONTEND_RPC_METHODS = {
 export const SessionStartedEventSchema = z.object({
   type: z.literal("session.started"),
   sessionId: z.string(),
-  agentType: AgentTypeSchema,
+  agentHarness: AgentHarnessSchema,
 });
 export type SessionStartedEvent = z.infer<typeof SessionStartedEventSchema>;
 
 export const SessionIdleEventSchema = z.object({
   type: z.literal("session.idle"),
   sessionId: z.string(),
-  agentType: AgentTypeSchema,
+  agentHarness: AgentHarnessSchema,
 });
 export type SessionIdleEvent = z.infer<typeof SessionIdleEventSchema>;
 
 export const SessionErrorEventSchema = z.object({
   type: z.literal("session.error"),
   sessionId: z.string(),
-  agentType: AgentTypeSchema,
+  agentHarness: AgentHarnessSchema,
   error: z.string(),
   category: ErrorCategorySchema,
 });
@@ -311,7 +300,7 @@ export type SessionErrorEvent = z.infer<typeof SessionErrorEventSchema>;
 export const SessionCancelledEventSchema = z.object({
   type: z.literal("session.cancelled"),
   sessionId: z.string(),
-  agentType: AgentTypeSchema,
+  agentHarness: AgentHarnessSchema,
 });
 export type SessionCancelledEvent = z.infer<typeof SessionCancelledEventSchema>;
 
@@ -320,14 +309,14 @@ export type SessionCancelledEvent = z.infer<typeof SessionCancelledEventSchema>;
 export const MessageSystemEventSchema = z.object({
   type: z.literal("message.system"),
   sessionId: z.string(),
-  agentType: AgentTypeSchema,
+  agentHarness: AgentHarnessSchema,
   data: z.unknown(),
 });
 
 export const MessageAssistantEventSchema = z.object({
   type: z.literal("message.assistant"),
   sessionId: z.string(),
-  agentType: AgentTypeSchema,
+  agentHarness: AgentHarnessSchema,
   message: z.object({
     id: z.string(),
     role: z.literal("assistant"),
@@ -341,7 +330,7 @@ export const MessageAssistantEventSchema = z.object({
 export const MessageToolResultEventSchema = z.object({
   type: z.literal("message.tool_result"),
   sessionId: z.string(),
-  agentType: AgentTypeSchema,
+  agentHarness: AgentHarnessSchema,
   message: z.object({
     id: z.string(),
     role: z.literal("user"),
@@ -354,7 +343,7 @@ export const MessageToolResultEventSchema = z.object({
 export const MessageResultEventSchema = z.object({
   type: z.literal("message.result"),
   sessionId: z.string(),
-  agentType: AgentTypeSchema,
+  agentHarness: AgentHarnessSchema,
   subtype: z.string(),
   usage: z.unknown().optional(),
 });
@@ -362,7 +351,7 @@ export const MessageResultEventSchema = z.object({
 export const MessageCancelledEventSchema = z.object({
   type: z.literal("message.cancelled"),
   sessionId: z.string(),
-  agentType: AgentTypeSchema,
+  agentHarness: AgentHarnessSchema,
 });
 export type MessageCancelledEvent = z.infer<typeof MessageCancelledEventSchema>;
 
@@ -371,7 +360,7 @@ export type MessageCancelledEvent = z.infer<typeof MessageCancelledEventSchema>;
 export const TurnStartedEventSchema = z.object({
   type: z.literal("turn.started"),
   sessionId: z.string(),
-  agentType: AgentTypeSchema,
+  agentHarness: AgentHarnessSchema,
   messageId: z.string(),
   turnId: z.string().optional(),
 });
@@ -379,7 +368,7 @@ export const TurnStartedEventSchema = z.object({
 export const MessageCreatedEventSchema = z.object({
   type: z.literal("message.created"),
   sessionId: z.string(),
-  agentType: AgentTypeSchema,
+  agentHarness: AgentHarnessSchema,
   messageId: z.string(),
   role: z.literal("assistant"),
   parentToolCallId: z.string().optional(),
@@ -389,7 +378,7 @@ export type MessageCreatedEvent = z.infer<typeof MessageCreatedEventSchema>;
 export const PartCreatedEventSchema = z.object({
   type: z.literal("part.created"),
   sessionId: z.string(),
-  agentType: AgentTypeSchema,
+  agentHarness: AgentHarnessSchema,
   messageId: z.string(),
   partId: z.string(),
   part: PartSchema,
@@ -399,7 +388,7 @@ export type PartCreatedEvent = z.infer<typeof PartCreatedEventSchema>;
 export const PartDeltaEventSchema = z.object({
   type: z.literal("part.delta"),
   sessionId: z.string(),
-  agentType: AgentTypeSchema,
+  agentHarness: AgentHarnessSchema,
   partId: z.string(),
   delta: z.string(),
 });
@@ -408,7 +397,7 @@ export type PartDeltaEvent = z.infer<typeof PartDeltaEventSchema>;
 export const PartDoneEventSchema = z.object({
   type: z.literal("part.done"),
   sessionId: z.string(),
-  agentType: AgentTypeSchema,
+  agentHarness: AgentHarnessSchema,
   messageId: z.string(),
   partId: z.string(),
   part: PartSchema,
@@ -418,7 +407,7 @@ export type PartDoneEvent = z.infer<typeof PartDoneEventSchema>;
 export const MessageDoneEventSchema = z.object({
   type: z.literal("message.done"),
   sessionId: z.string(),
-  agentType: AgentTypeSchema,
+  agentHarness: AgentHarnessSchema,
   messageId: z.string(),
   stopReason: z.string().optional(),
   parts: z.array(PartSchema),
@@ -429,7 +418,7 @@ export type MessageDoneEvent = z.infer<typeof MessageDoneEventSchema>;
 export const TurnCompletedEventSchema = z.object({
   type: z.literal("turn.completed"),
   sessionId: z.string(),
-  agentType: AgentTypeSchema,
+  agentHarness: AgentHarnessSchema,
   messageId: z.string(),
   turnId: z.string().optional(),
   finishReason: FinishReasonSchema.optional(),
@@ -452,7 +441,7 @@ export const RequestOpenedEventSchema = z.object({
   type: z.literal("request.opened"),
   requestId: z.string(),
   sessionId: z.string(),
-  agentType: AgentTypeSchema,
+  agentHarness: AgentHarnessSchema,
   requestType: InteractionRequestTypeSchema,
   data: z.unknown(),
 });
@@ -487,7 +476,7 @@ export type AgentSessionIdEvent = z.infer<typeof AgentSessionIdEventSchema>;
 export const SessionTitleEventSchema = z.object({
   type: z.literal("session.title"),
   sessionId: z.string(),
-  agentType: AgentTypeSchema,
+  agentHarness: AgentHarnessSchema,
   title: z.string(),
 });
 export type SessionTitleEvent = z.infer<typeof SessionTitleEventSchema>;

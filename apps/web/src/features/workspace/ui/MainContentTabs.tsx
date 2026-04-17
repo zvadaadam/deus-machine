@@ -25,7 +25,7 @@ export interface Tab {
   label: string;
   data?: {
     sessionId?: string;
-    agentType?: string;
+    agentHarness?: string;
     hasStarted?: boolean;
     /** Pre-selected model when tab is created from locked-group picker */
     initialModel?: string;
@@ -36,7 +36,9 @@ export interface Tab {
 export interface ClosedTab {
   label: string;
   sessionId: string;
-  agentType?: string;
+  agentHarness?: string;
+  /** Preserved so restore can re-create a tab with the same model selection */
+  initialModel?: string;
   closedAt: number;
 }
 
@@ -67,15 +69,15 @@ function getTabIcon(tab: Tab, isWorking: boolean, isUnread: boolean) {
   if (isUnread) {
     return <span className="bg-accent-gold h-2 w-2 flex-shrink-0 rounded-full" />;
   }
-  const LogoComponent = getAgentLogo(tab.data?.agentType || "claude");
+  const LogoComponent = getAgentLogo(tab.data?.agentHarness || "claude");
   if (LogoComponent) {
     return <LogoComponent className={cn(ICON_SIZE, "flex-shrink-0")} />;
   }
   return null;
 }
 
-function getClosedTabIcon(agentType?: string) {
-  const LogoComponent = getAgentLogo(agentType || "claude");
+function getClosedTabIcon(agentHarness?: string) {
+  const LogoComponent = getAgentLogo(agentHarness || "claude");
   if (LogoComponent) {
     return <LogoComponent className={cn(ICON_SIZE, "flex-shrink-0")} />;
   }
@@ -284,7 +286,7 @@ export function MainContentTabBar({
                     "hover:bg-bg-raised"
                   )}
                 >
-                  {getClosedTabIcon(ct.agentType)}
+                  {getClosedTabIcon(ct.agentHarness)}
                   <span className="min-w-0 flex-1 truncate">{ct.label}</span>
                 </button>
               ))}

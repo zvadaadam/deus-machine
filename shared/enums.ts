@@ -58,8 +58,16 @@ export const STATUS_RANK: Record<WorkspaceStatus, number> = {
 
 // ── Agent ────────────────────────────────────────────────────────────────
 
-export const AgentTypeSchema = z.enum(["claude", "codex"]);
-export type AgentType = z.infer<typeof AgentTypeSchema>;
+/**
+ * The agent harness bound to a session: the SDK/CLI wrapper that owns
+ * the agent process lifecycle (Claude Code CLI vs. OpenAI Codex CLI).
+ *
+ * Once a session has messages, its harness is fixed — the agent-server
+ * binds to a specific SDK on first query and cannot switch mid-session.
+ * See the harness-lock guard in apps/backend/src/services/agent/commands.ts.
+ */
+export const AgentHarnessSchema = z.enum(["claude", "codex"]);
+export type AgentHarness = z.infer<typeof AgentHarnessSchema>;
 
 /** Structured error categories for agent error responses. */
 export const ErrorCategorySchema = z.enum([
