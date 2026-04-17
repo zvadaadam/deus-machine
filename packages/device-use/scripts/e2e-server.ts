@@ -8,7 +8,8 @@
  *   MCP HTTP transport → state persistence → graceful shutdown.
  *
  * Run: bun scripts/e2e-server.ts
- * Requires: Xcode installed, iPhone 17 Pro simulator available.
+ * Requires: Xcode installed, an iPhone simulator available.
+ * Honors $E2E_SIM_UDID to target a specific UDID (used by CI).
  */
 
 import { spawn, type ChildProcess } from "node:child_process";
@@ -222,10 +223,23 @@ async function run(): Promise<void> {
   const listDev = await invoke<{ devices: Array<{ udid: string; name: string; state: string }> }>(
     "list_devices"
   );
-  const iphone = listDev.devices.find(
-    (d) => d.name.startsWith("iPhone 17 Pro") && !d.name.includes("radon")
-  );
-  if (!iphone) fail("pick-sim", `no iPhone 17 Pro found among ${listDev.devices.length} devices`);
+  // Honor $E2E_SIM_UDID when set (CI); else prefer a booted iPhone; else
+  // any iPhone. Excludes leftover test-pool names (e.g. "radon-…").
+  const envUdid = process.env.E2E_SIM_UDID;
+  const iphone =
+    (envUdid && listDev.devices.find((d) => d.udid === envUdid)) ||
+    listDev.devices.find(
+      (d) => d.name.startsWith("iPhone") && d.state === "Booted" && !d.name.includes("radon")
+    ) ||
+    listDev.devices.find((d) => d.name.startsWith("iPhone") && !d.name.includes("radon"));
+  if (!iphone) {
+    fail(
+      "pick-sim",
+      envUdid
+        ? `E2E_SIM_UDID ${envUdid} not found among ${listDev.devices.length} devices`
+        : `no iPhone found among ${listDev.devices.length} devices`
+    );
+  }
   log("  pick", `${iphone.name} ${iphone.udid} (state: ${iphone.state})`);
   await invoke("set_active_simulator", { udid: iphone.udid });
   log("  set_active_simulator", "ok");

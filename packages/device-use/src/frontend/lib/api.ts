@@ -67,4 +67,6 @@ export const api = {
     }>("snapshot", { format: "compact", interactiveOnly: true }),
   tap: (params: { ref?: string; x?: number; y?: number; label?: string; udid?: string }) =>
     postTool("tap", params),
+  typeText: (params: { text: string; submit?: boolean; udid?: string }) =>
+    postTool("type_text", params),
 };
