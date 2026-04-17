@@ -9,6 +9,10 @@
 //   /stream.mjpeg — MJPEG passthrough from simbridge
 //   /mcp          — MCP HTTP transport for agents
 //   /ws           — WebSocket: events out, optional tool invocations in
+//   /sim-input    — WebSocket: binary passthrough to simbridge /ws
+//                   for low-latency human touch input (matches simbridge's
+//                   native protocol: 0x03 + JSON{type,x,y} for touch,
+//                   0x04 + JSON{button} for hardware buttons)
 
 import { Hono } from "hono";
 import { createExecutor } from "../engine/index.js";
@@ -91,11 +95,14 @@ app.get("/api/stream", (c) => c.json(stream.getInfo() ?? null));
 // --- WebSocket via Bun.serve.upgrade ------------------------------------
 
 const WS_SUBSCRIBERS = new Map<object, { unsubscribe: () => void; ws: unknown }>();
+const WS_UPSTREAMS = new Map<object, { upstream: WebSocket; buffered: Array<ArrayBufferLike> }>();
 
 app.get("/ws", (c) => {
   // Placeholder — actual upgrade happens in the Bun server wrapper below.
   return c.text("upgrade required", 426);
 });
+
+app.get("/sim-input", (c) => c.text("upgrade required", 426));
 
 // --- Frontend (dev proxy or prod static) --------------------------------
 
@@ -144,27 +151,94 @@ export default {
   fetch(req: Request, server: any): Response | Promise<Response> {
     const url = new URL(req.url);
     if (url.pathname === "/ws") {
-      if (server.upgrade(req)) return new Response(null, { status: 101 });
+      if (server.upgrade(req, { data: { kind: "events" } }))
+        return new Response(null, { status: 101 });
+      return new Response("upgrade failed", { status: 400 });
+    }
+    if (url.pathname === "/sim-input") {
+      const info = stream.getInfo();
+      if (!info) return new Response("no active simulator stream", { status: 503 });
+      const wsUrl = `ws://127.0.0.1:${info.port}/ws`;
+      if (server.upgrade(req, { data: { kind: "sim-input", wsUrl } }))
+        return new Response(null, { status: 101 });
       return new Response("upgrade failed", { status: 400 });
     }
     return app.fetch(req);
   },
   websocket: {
-    open(ws: { data: unknown; send: (data: string) => void }) {
-      const unsubscribe = events.subscribe((event) => {
-        try {
+    open(ws: {
+      data: { kind: string; wsUrl?: string };
+      send: (data: string | Uint8Array | ArrayBuffer) => void;
+      close: () => void;
+    }) {
+      if (ws.data.kind === "events") {
+        const unsubscribe = events.subscribe((event) => {
+          try {
+            ws.send(JSON.stringify(event));
+          } catch {
+            // client gone; ignore
+          }
+        });
+        WS_SUBSCRIBERS.set(ws as unknown as object, { unsubscribe, ws });
+        // Send recent history so the client can hydrate.
+        for (const event of events.snapshot()) {
           ws.send(JSON.stringify(event));
-        } catch {
-          // client gone; ignore
         }
-      });
-      WS_SUBSCRIBERS.set(ws as unknown as object, { unsubscribe, ws });
-      // Send recent history so the client can hydrate.
-      for (const event of events.snapshot()) {
-        ws.send(JSON.stringify(event));
+        return;
+      }
+
+      if (ws.data.kind === "sim-input" && ws.data.wsUrl) {
+        // Open an upstream WS to simbridge and attach it to the client WS.
+        // Messages are forwarded one-way (browser → simbridge) as raw binary.
+        const upstream = new WebSocket(ws.data.wsUrl);
+        upstream.binaryType = "arraybuffer";
+        const buffered: Array<ArrayBufferLike> = [];
+        upstream.addEventListener("open", () => {
+          for (const buf of buffered) upstream.send(buf);
+          buffered.length = 0;
+        });
+        upstream.addEventListener("error", (err) => {
+          console.warn(`[sim-input] upstream error:`, String(err));
+        });
+        upstream.addEventListener("close", () => {
+          try {
+            ws.close();
+          } catch {
+            // already closed
+          }
+        });
+        WS_UPSTREAMS.set(ws as unknown as object, { upstream, buffered });
+        return;
       }
     },
-    async message(ws: { send: (data: string) => void }, message: string | Buffer) {
+    async message(
+      ws: {
+        data: { kind: string };
+        send: (data: string | Uint8Array) => void;
+      },
+      message: string | Buffer | ArrayBuffer
+    ) {
+      if (ws.data.kind === "sim-input") {
+        const bundle = WS_UPSTREAMS.get(ws as unknown as object);
+        if (!bundle) return;
+        // Normalize to ArrayBuffer for WebSocket.send.
+        let ab: ArrayBufferLike;
+        if (message instanceof ArrayBuffer) {
+          ab = message;
+        } else if (message instanceof Buffer) {
+          ab = message.buffer.slice(message.byteOffset, message.byteOffset + message.byteLength);
+        } else {
+          // string message on sim-input channel — wrap in UTF-8 bytes
+          ab = new TextEncoder().encode(String(message)).buffer as ArrayBuffer;
+        }
+        if (bundle.upstream.readyState === WebSocket.OPEN) {
+          bundle.upstream.send(ab);
+        } else if (bundle.upstream.readyState === WebSocket.CONNECTING) {
+          bundle.buffered.push(ab);
+        }
+        return;
+      }
+      // events channel — existing handler
       try {
         const data = JSON.parse(typeof message === "string" ? message : message.toString());
         if (data.type === "invoke" && typeof data.tool === "string") {
@@ -177,7 +251,15 @@ export default {
         ws.send(JSON.stringify({ type: "error", error: (err as Error).message }));
       }
     },
-    close(ws: { data: unknown }) {
+    close(ws: { data: { kind: string } }) {
+      if (ws.data.kind === "sim-input") {
+        const bundle = WS_UPSTREAMS.get(ws as unknown as object);
+        if (bundle) {
+          bundle.upstream.close();
+          WS_UPSTREAMS.delete(ws as unknown as object);
+        }
+        return;
+      }
       const sub = WS_SUBSCRIBERS.get(ws as unknown as object);
       if (sub) {
         sub.unsubscribe();
