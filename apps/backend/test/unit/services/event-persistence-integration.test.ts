@@ -21,7 +21,7 @@ try {
 }
 
 const describeWithDb = canUseDatabase ? describe : describe.skip;
-import { SCHEMA_SQL, MIGRATIONS } from "@shared/schema";
+import { SCHEMA_SQL, MIGRATIONS, isExpectedMigrationError } from "@shared/schema";
 import { uuidv7 } from "@shared/lib/uuid";
 
 // ============================================================================
@@ -70,11 +70,7 @@ function createTestDb(): Database.Database {
       db.exec(sql);
     } catch (e: unknown) {
       const msg = e instanceof Error ? e.message : "";
-      if (
-        !msg.includes("duplicate column") &&
-        !msg.includes("no such column") &&
-        !msg.includes("already exists")
-      ) {
+      if (!isExpectedMigrationError(sql, msg)) {
         throw e;
       }
     }
