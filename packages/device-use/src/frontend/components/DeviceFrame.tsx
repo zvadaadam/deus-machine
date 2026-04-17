@@ -19,6 +19,27 @@ function encodeTouch(type: "begin" | "move" | "end", x: number, y: number): Uint
   return buf;
 }
 
+function encodeButton(button: string): Uint8Array {
+  const payload = new TextEncoder().encode(JSON.stringify({ button }));
+  const buf = new Uint8Array(1 + payload.length);
+  buf[0] = 0x04;
+  buf.set(payload, 1);
+  return buf;
+}
+
+interface HardwareButton {
+  label: string;
+  button: string;
+  key?: string[];
+}
+
+const HARDWARE_BUTTONS: HardwareButton[] = [
+  { label: "Home", button: "home", key: ["h", "H"] },
+  { label: "Lock", button: "lock", key: ["l", "L"] },
+  { label: "Vol +", button: "volumeup" },
+  { label: "Vol −", button: "volumedown" },
+];
+
 export function DeviceFrame() {
   const { pinnedUdid, sims, streamInfo } = useSimStore();
   const pinnedSim = sims.find((s) => s.udid === pinnedUdid);
@@ -130,6 +151,33 @@ export function DeviceFrame() {
     [sendTouch]
   );
 
+  // Hardware-button press — sends 0x04 binary frame to simbridge.
+  const pressButton = useCallback((button: string) => {
+    const ws = wsRef.current;
+    if (!ws || ws.readyState !== WebSocket.OPEN) return;
+    ws.send(encodeButton(button));
+    useRefsStore.getState().scheduleRefresh(500);
+  }, []);
+
+  // Keyboard shortcuts for the hardware buttons (Cmd+H → home, Cmd+L → lock).
+  useEffect(() => {
+    const onKey = (ev: KeyboardEvent) => {
+      // Ignore keys while typing in inputs.
+      const tag = (ev.target as HTMLElement)?.tagName;
+      if (tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT") return;
+      if (!(ev.metaKey || ev.ctrlKey)) return;
+      for (const b of HARDWARE_BUTTONS) {
+        if (b.key && b.key.includes(ev.key)) {
+          ev.preventDefault();
+          pressButton(b.button);
+          return;
+        }
+      }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [pressButton]);
+
   // Window-level mouseup in case the cursor leaves the canvas mid-drag.
   useEffect(() => {
     const onWindowMouseUp = (ev: MouseEvent) => {
@@ -159,6 +207,7 @@ export function DeviceFrame() {
             onMouseDown={onMouseDown}
             onMouseMove={onMouseMove}
             onMouseUp={onMouseUp}
+            onContextMenu={(e) => e.preventDefault()}
           />
         ) : (
           <div className="phone-placeholder">
@@ -175,6 +224,20 @@ export function DeviceFrame() {
           <span key={r.id} className="ripple" style={{ left: r.x, top: r.y }} />
         ))}
       </div>
+      {booted && streamInfo && (
+        <div className="device-buttons">
+          {HARDWARE_BUTTONS.map((b) => (
+            <button
+              key={b.button}
+              className="hw-button"
+              onClick={() => pressButton(b.button)}
+              title={b.key ? `${b.label} (⌘${b.key[0]?.toUpperCase()})` : b.label}
+            >
+              {b.label}
+            </button>
+          ))}
+        </div>
+      )}
     </div>
   );
 }
