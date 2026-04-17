@@ -54,11 +54,13 @@ export function ThinkingIndicator({ level, onClick, className }: ThinkingIndicat
           onClick={onClick}
           aria-label={`Thinking: ${displayLabel}`}
           className={cn(
-            // Button keeps consistent hit-area; the pill (background) lives on
+            // Button keeps a click hit-area; the pill (background) lives on
             // the inner span so the tint hugs just the text. `group` lets the
             // span react to hover anywhere inside the button's hit area, so
             // the pill highlights even when the cursor is on button padding.
-            "group flex h-8 items-center rounded-lg px-1.5",
+            // Minimal horizontal padding pulls the indicator tight against the
+            // model picker (now that the pill is small).
+            "group flex h-8 items-center rounded-lg px-0.5",
             "focus-visible:ring-ring focus-visible:ring-1 focus-visible:outline-none",
             className
           )}
