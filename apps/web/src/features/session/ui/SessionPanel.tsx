@@ -23,9 +23,11 @@ import { X, Upload } from "lucide-react";
 import {
   getAgentHarnessForModel,
   getModelId,
+  clampThinkingLevel,
   type AgentHarness,
   type ThinkingLevel,
 } from "@/shared/agents";
+import { useSettings } from "@/features/settings/api";
 import { workspaceLayoutActions } from "@/features/workspace/store";
 import type { InspectedElement } from "./InspectedElementCard";
 
@@ -211,9 +213,15 @@ export const SessionPanel = forwardRef<SessionPanelRef, SessionPanelProps>(
     // so no special IPC is needed.
     // Standard HTML5 drag-drop is handled by MessageInput's existing drop handler.
 
+    // User-configured default thinking level (Settings → AI) for new sessions
+    // and as the clamp target when switching to a model that doesn't support
+    // the current level. Falls back to HIGH if unset.
+    const { data: settings } = useSettings();
+    const defaultThinkingLevel: ThinkingLevel = settings?.default_thinking_level ?? "HIGH";
+
     // Local state for message input
     const [messageInput, setMessageInput] = useState("");
-    const [thinkingLevel, setThinkingLevel] = useState<ThinkingLevel>("NONE");
+    const [thinkingLevel, setThinkingLevel] = useState<ThinkingLevel>(defaultThinkingLevel);
     const [model, setModel] = useState(initialModel ?? "claude:claude-opus-4-7");
     const [planModeEnabled, setPlanModeEnabled] = useState(false);
     // Counter incremented when the human clicks Send — triggers auto-scroll resume
@@ -224,7 +232,15 @@ export const SessionPanel = forwardRef<SessionPanelRef, SessionPanelProps>(
     // Handlers for MessageInput controls
     const handleModelChange = (newModel: string) => {
       setModel(newModel);
-      // TODO: Implement API call to update session model
+      // Clamp thinking level to what the new model supports. E.g. if the user
+      // was on XHIGH with Opus 4.7 and switches to Opus 4.6 (no XHIGH), we
+      // quietly snap to the user's default (or HIGH) rather than sending an
+      // unsupported level on the next turn.
+      setThinkingLevel((prev) => {
+        const harness = getAgentHarnessForModel(newModel);
+        const modelId = getModelId(newModel);
+        return clampThinkingLevel(prev, harness, modelId, defaultThinkingLevel);
+      });
     };
 
     useEffect(() => {

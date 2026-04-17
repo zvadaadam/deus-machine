@@ -28,9 +28,9 @@ export function getThinkingLevelsForModel(
  * Walks the model's thinkingLevels array, wrapping at the end.
  * NONE is normalized to the first entry (thinking is always "on").
  *
- * Opus 4.7: ["LOW", "HIGH", "XHIGH"] → 3-step with Opus-4.7-era xhigh
- * Claude (default): ["LOW", "HIGH"] → LOW ↔ HIGH (binary toggle)
- * Codex: ["LOW", "MEDIUM", "HIGH"] → 3-step graduated reasoning
+ * Opus 4.7: ["LOW", "MEDIUM", "HIGH", "XHIGH"] — full ladder incl. xhigh
+ * Claude (default): ["LOW", "MEDIUM", "HIGH"] — shared by Opus 4.6 / Sonnet 4.6
+ * Codex: ["LOW", "MEDIUM", "HIGH"] — graduated reasoning
  * Haiku: [] → indicator hidden; callers receive NONE
  */
 export function cycleThinkingLevel(
@@ -44,4 +44,25 @@ export function cycleThinkingLevel(
   const idx = thinkingLevels.indexOf(normalized);
   const safeIdx = idx === -1 ? 0 : idx;
   return thinkingLevels[(safeIdx + 1) % thinkingLevels.length];
+}
+
+/**
+ * Snap a thinking level into what the target model actually supports.
+ *
+ * Use on model change: e.g. Opus 4.7 user on XHIGH switches to Opus 4.6,
+ * which doesn't expose XHIGH — snap to `fallback` (or the model's top level
+ * if the fallback isn't supported either). Returns "NONE" when the model
+ * declares no thinking levels (Haiku).
+ */
+export function clampThinkingLevel(
+  current: ThinkingLevel,
+  agentHarness: AgentHarness,
+  model: string,
+  fallback: ThinkingLevel = "HIGH"
+): ThinkingLevel {
+  const supported = getThinkingLevelsForModel(agentHarness, model);
+  if (supported.length === 0) return "NONE";
+  if (supported.includes(current)) return current;
+  if (supported.includes(fallback)) return fallback;
+  return supported[supported.length - 1];
 }

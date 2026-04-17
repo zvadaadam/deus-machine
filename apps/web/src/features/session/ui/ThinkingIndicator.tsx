@@ -54,13 +54,12 @@ export function ThinkingIndicator({ level, onClick, className }: ThinkingIndicat
           onClick={onClick}
           aria-label={`Thinking: ${displayLabel}`}
           className={cn(
-            "flex h-8 items-center rounded-lg px-2",
-            "ease transition-colors duration-200",
+            // Button keeps consistent hit-area; the pill lives on the inner
+            // span so the background tint hugs just the text, not the full
+            // 32px button chrome.
+            "flex h-8 items-center rounded-lg px-1.5",
             "focus-visible:ring-ring focus-visible:ring-1 focus-visible:outline-none",
-            // X-High: subtle gold-tinted pill to signal "top gear" — matches
-            // the "New" badge treatment (muted-accent/20 bg, accent text).
-            // Other levels stay flat and use the standard hover treatment.
-            isXHigh ? "bg-accent-gold/15 hover:bg-accent-gold/20" : "hover:bg-accent",
+            "hover:bg-accent",
             className
           )}
         >
@@ -76,11 +75,15 @@ export function ThinkingIndicator({ level, onClick, className }: ThinkingIndicat
                 originX: 0.5,
               }}
               className={cn(
-                "text-xs select-none",
+                "text-xs transition-colors duration-200 select-none",
                 // Fixed width accommodates the widest label (X-High) so the
-                // button doesn't jump between levels.
+                // indicator doesn't jump between levels.
                 "inline-block w-10 text-center",
-                isXHigh ? "text-accent-gold" : "text-muted-foreground"
+                // X-High: tiny gold-tinted pill hugging the text only. Other
+                // levels render as plain muted text with no background.
+                isXHigh
+                  ? "text-accent-gold bg-accent-gold/8 rounded-md px-1 py-px"
+                  : "text-muted-foreground"
               )}
             >
               {displayLabel}
