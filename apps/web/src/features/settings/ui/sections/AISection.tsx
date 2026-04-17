@@ -252,6 +252,30 @@ export function AISection({ settings, saveSetting }: SettingsSectionProps) {
           </Select>
         </div>
 
+        {/* Default thinking level */}
+        <div className="space-y-2">
+          <Label htmlFor="thinking-level" className="text-sm">
+            Default thinking
+          </Label>
+          <p className="text-muted-foreground text-sm">
+            How hard the model should think by default. Individual turns can still be adjusted via
+            the thinking indicator next to the model picker.
+          </p>
+          <Select
+            value={settings.default_thinking_level ?? "HIGH"}
+            onValueChange={(value) => saveSetting("default_thinking_level", value)}
+          >
+            <SelectTrigger id="thinking-level" className="w-full">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="LOW">Low</SelectItem>
+              <SelectItem value="MEDIUM">Medium</SelectItem>
+              <SelectItem value="HIGH">High</SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
+
         {/* Custom endpoint (conditional) */}
         {settings.claude_provider === "custom" && (
           <div className="space-y-2">

@@ -21,6 +21,13 @@ export interface Settings {
   claude_provider?: string;
   claude_model?: string;
   custom_endpoint?: string;
+  /**
+   * Default thinking effort for new sessions and model switches.
+   * XHIGH is intentionally excluded — not all models support it, so the global
+   * default needs to be a level every model can honor. Per-model upgrades
+   * (XHIGH on Opus 4.7) happen by the user cycling the indicator.
+   */
+  default_thinking_level?: "LOW" | "MEDIUM" | "HIGH";
 
   // AI — Codex
   openai_api_key?: string;

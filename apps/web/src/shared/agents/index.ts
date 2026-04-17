@@ -21,4 +21,4 @@ export {
   getModelId,
 } from "./lookup";
 
-export { cycleThinkingLevel, getThinkingLevelsForModel } from "./thinking";
+export { cycleThinkingLevel, getThinkingLevelsForModel, clampThinkingLevel } from "./thinking";
