@@ -1,466 +1,421 @@
 // agent-server/agents/deus-tools/simulator.ts
-// iOS Simulator automation tools: list devices, start, screenshot, tap, swipe, type text, press key, build & run.
-// These tools proxy through EventBroadcaster over backend-routed WebSocket flow,
-// then reach the simulator control path used by existing sim-core commands.
 //
-// Named "iOSSimulator*" to distinguish from external xcode-mcp tools.
-// These tools control the in-app Simulator panel (MJPEG stream + HID input).
+// Built-in iOS Simulator MCP tools for the Deus MCP server.
+// Replaces the external xcode-mcp dependency with in-process tools
+// backed by device-use/engine.
+//
+// These tools run headlessly in the agent-server — no Electron, no frontend.
+// The Simulator Panel is a separate visualization concern (backend-managed).
+//
+// Tool naming convention: SimulatorXxx (matches BrowserXxx pattern).
 
 import { tool } from "@anthropic-ai/claude-agent-sdk";
 import type { SdkMcpToolDefinition } from "@anthropic-ai/claude-agent-sdk";
 import { z } from "zod";
-import { EventBroadcaster } from "../../event-broadcaster";
+import * as SimOps from "./sim-ops";
 import { getErrorMessage } from "@shared/lib/errors";
 
+function textResult(text: string) {
+  return { content: [{ type: "text" as const, text }] };
+}
+
+function imageResult(base64: string, mimeType: string, caption?: string) {
+  const parts: Array<{ type: string; [k: string]: unknown }> = [];
+  if (caption) parts.push({ type: "text", text: caption });
+  parts.push({ type: "image", data: base64, mimeType });
+  return { content: parts };
+}
+
 /**
- * Creates the iOS simulator automation tool definitions for a given session.
- * These tools control the iOS simulator via the Electron main process
- * (MJPEG streaming, HID input, xcodebuild).
+ * Wraps a tool handler with error catching. Returns error text instead
+ * of throwing — same pattern as browser tools.
+ */
+function withSimulator<T>(
+  fn: (args: T) => Promise<{ content: Array<{ type: string; [k: string]: unknown }> }>
+) {
+  return async (args: T) => {
+    try {
+      return await fn(args);
+    } catch (err) {
+      return textResult(`Simulator error: ${getErrorMessage(err)}`);
+    }
+  };
+}
+
+/**
+ * Creates the simulator tool definitions for a given session.
+ * Injected into the Deus MCP server alongside browser/workspace/recording tools.
  */
 export function createSimulatorTools(sessionId: string): SdkMcpToolDefinition<any>[] {
   return [
-    // ====================================================================
-    // iOSSimulatorListDevices
-    // ====================================================================
+    // -- ListDevices ----------------------------------------------------------
     tool(
-      "iOSSimulatorListDevices",
-      `List all available iOS simulators installed on the system.
-
-Returns each simulator's name, UDID, state (Booted/Shutdown), runtime (iOS version), and device type. Use this to find a simulator to boot with iOSSimulatorStart.
-
-Example output:
-- iPhone 16 Pro (UDID: ABC123) - Shutdown - iOS-18-2
-- iPhone 16e (UDID: DEF456) - Booted - iOS-26-1`,
+      "SimulatorListDevices",
+      `List all available iOS simulators. Returns each simulator's name, UDID, state (Booted/Shutdown), and runtime version. Use this to find a simulator to work with.`,
       {},
-      async () => {
-        console.log(`[deusMCPServer] iOSSimulatorListDevices invoked for session ${sessionId}`);
-
-        try {
-          const response = await EventBroadcaster.requestSimListDevices({ sessionId });
-
-          if (response.error) {
-            return {
-              content: [{ type: "text", text: `Failed to list devices: ${response.error}` }],
-            };
-          }
-
-          if (response.devices.length === 0) {
-            return {
-              content: [
-                {
-                  type: "text",
-                  text: "No iOS simulators found. Install simulators via Xcode → Settings → Platforms.",
-                },
-              ],
-            };
-          }
-
-          const lines = response.devices.map(
-            (d) =>
-              `- ${d.name} (${d.udid}) — ${d.state} — ${d.runtime}${d.deviceType ? ` — ${d.deviceType}` : ""}`
+      withSimulator(async () => {
+        const devices = await SimOps.listDevices();
+        if (devices.length === 0) {
+          return textResult(
+            "No simulators found. Install simulators via Xcode > Settings > Platforms."
           );
-
-          return {
-            content: [
-              {
-                type: "text",
-                text: `Found ${response.devices.length} simulator(s):\n${lines.join("\n")}\n\nUse iOSSimulatorStart with a UDID to boot and start streaming a simulator.`,
-              },
-            ],
-          };
-        } catch (err: unknown) {
-          return {
-            content: [{ type: "text", text: `Failed to list simulators: ${getErrorMessage(err)}` }],
-          };
         }
-      }
+        const lines = devices.map(
+          (d) => `${d.state === "Booted" ? "[BOOTED] " : ""}${d.name} (${d.runtime}) — ${d.udid}`
+        );
+        return textResult(`Found ${devices.length} simulator(s):\n${lines.join("\n")}`);
+      })
     ),
 
-    // ====================================================================
-    // iOSSimulatorStart
-    // ====================================================================
+    // -- Screenshot -----------------------------------------------------------
     tool(
-      "iOSSimulatorStart",
-      `Boot an iOS simulator and start MJPEG streaming in the app's Simulator panel.
-
-This makes the simulator visible in the Simulator panel and enables all other iOSSimulator tools (Screenshot, Tap, Swipe, TypeText, PressKey, BuildAndRun).
-
-Use iOSSimulatorListDevices first to find available simulators and their UDIDs.
-
-After starting, the simulator stream will appear in the app's Simulator panel. Use iOSSimulatorScreenshot to see the screen and interact with it.`,
+      "SimulatorScreenshot",
+      `Capture a screenshot of the running iOS simulator. Returns the image as base64. Use to see what the app looks like and identify UI elements before interacting.`,
       {
-        udid: z
+        destination: z
           .string()
-          .describe("UDID of the simulator to boot (get from iOSSimulatorListDevices)"),
+          .optional()
+          .describe("Simulator name or UDID (optional, uses active)"),
+        format: z.enum(["png", "jpeg"]).optional().describe("Image format (default: jpeg)"),
       },
-      async (args) => {
-        console.log(
-          `[deusMCPServer] iOSSimulatorStart invoked for session ${sessionId}: udid=${args.udid}`
-        );
-
-        try {
-          const response = await EventBroadcaster.requestSimStart({
-            sessionId,
-            udid: args.udid,
-          });
-
-          if (response.error) {
-            return {
-              content: [{ type: "text", text: `Failed to start simulator: ${response.error}` }],
-            };
-          }
-
-          const details = [
-            `Simulator started and streaming.`,
-            response.url ? `Stream URL: ${response.url}` : null,
-            response.hidAvailable === false
-              ? `Warning: HID not available — touch/key input may not work.`
-              : null,
-            `Use iOSSimulatorScreenshot to see the screen.`,
-          ]
-            .filter(Boolean)
-            .join("\n");
-
-          return {
-            content: [{ type: "text", text: details }],
-          };
-        } catch (err: unknown) {
-          return {
-            content: [
-              {
-                type: "text",
-                text: `Failed to start simulator: ${getErrorMessage(err)}. Make sure the UDID is valid (use iOSSimulatorListDevices to check).`,
-              },
-            ],
-          };
-        }
-      }
+      withSimulator(async (args) => {
+        const udid = await SimOps.resolveDevice(args.destination, sessionId);
+        const format = args.format ?? "jpeg";
+        const img = await SimOps.screenshot(udid, format);
+        return imageResult(img.base64, img.mimeType, "Simulator screenshot captured.");
+      })
     ),
 
-    // ====================================================================
-    // iOSSimulatorScreenshot
-    // ====================================================================
+    // -- Tap ------------------------------------------------------------------
     tool(
-      "iOSSimulatorScreenshot",
-      `Capture a screenshot of the currently running iOS simulator. Returns a JPEG image of the simulator screen.
+      "SimulatorTap",
+      `Tap on the iOS simulator screen. Pass EXACTLY ONE of:
+- 'ref': a @eN reference from the most recent SimulatorReadScreen output (preferred — most precise)
+- 'identifier': the accessibilityIdentifier set in app code (e.g., 'SubmitButton')
+- 'label': the iOS accessibility label (e.g., 'Submit'). Not placeholder text.
+- 'x' + 'y': logical-point coordinates, origin top-left (last resort — fragile)
 
-Use this to see the current state of the app running in the simulator before interacting with it. The screenshot shows exactly what the user would see on the device screen.
-
-The simulator must be booted and streaming (use iOSSimulatorStart first).`,
-      {},
-      async () => {
-        console.log(`[deusMCPServer] iOSSimulatorScreenshot invoked for session ${sessionId}`);
-
-        try {
-          const response = await EventBroadcaster.requestSimScreenshot({ sessionId });
-
-          if (response.error) {
-            return {
-              content: [{ type: "text", text: `Screenshot failed: ${response.error}` }],
-            };
-          }
-
-          return {
-            content: [
-              {
-                type: "image",
-                data: response.image,
-                mimeType: "image/jpeg",
-              },
-            ],
-          };
-        } catch (err: unknown) {
-          return {
-            content: [
-              {
-                type: "text",
-                text: `Simulator not available: ${getErrorMessage(err)}. Use iOSSimulatorStart to boot a simulator first.`,
-              },
-            ],
-          };
-        }
-      }
-    ),
-
-    // ====================================================================
-    // iOSSimulatorTap
-    // ====================================================================
-    tool(
-      "iOSSimulatorTap",
-      `Tap on the iOS simulator screen at the specified coordinates.
-
-Coordinates are normalized (0.0 to 1.0) where:
-- (0.0, 0.0) is the top-left corner
-- (1.0, 1.0) is the bottom-right corner
-- (0.5, 0.5) is the center of the screen
-
-Use iOSSimulatorScreenshot first to see the current screen, then estimate the coordinates of the element you want to tap.`,
+Prefer ref when you just ran ReadScreen; prefer identifier when you know the
+app's code; fall back to label for system UI. Coordinates are unreliable
+because layouts shift between reads.`,
       {
-        x: z.number().min(0).max(1).describe("Normalized X coordinate (0.0–1.0, left to right)"),
-        y: z.number().min(0).max(1).describe("Normalized Y coordinate (0.0–1.0, top to bottom)"),
-      },
-      async (args) => {
-        console.log(
-          `[deusMCPServer] iOSSimulatorTap invoked for session ${sessionId}: (${args.x}, ${args.y})`
-        );
-
-        try {
-          const response = await EventBroadcaster.requestSimTap({
-            sessionId,
-            x: args.x,
-            y: args.y,
-          });
-
-          if (response.error) {
-            return {
-              content: [{ type: "text", text: `Tap failed: ${response.error}` }],
-            };
-          }
-
-          return {
-            content: [
-              {
-                type: "text",
-                text: `Tapped at (${args.x.toFixed(2)}, ${args.y.toFixed(2)}). Use iOSSimulatorScreenshot to see the result.`,
-              },
-            ],
-          };
-        } catch (err: unknown) {
-          return {
-            content: [{ type: "text", text: `Simulator not available: ${getErrorMessage(err)}` }],
-          };
-        }
-      }
-    ),
-
-    // ====================================================================
-    // iOSSimulatorSwipe
-    // ====================================================================
-    tool(
-      "iOSSimulatorSwipe",
-      `Perform a swipe gesture on the iOS simulator screen.
-
-Coordinates are normalized (0.0 to 1.0). Common swipe patterns:
-- Scroll down: startY=0.7, endY=0.3 (finger moves up)
-- Scroll up: startY=0.3, endY=0.7 (finger moves down)
-- Swipe left: startX=0.8, endX=0.2
-- Swipe right: startX=0.2, endX=0.8`,
-      {
-        startX: z.number().min(0).max(1).describe("Start X coordinate (0.0–1.0)"),
-        startY: z.number().min(0).max(1).describe("Start Y coordinate (0.0–1.0)"),
-        endX: z.number().min(0).max(1).describe("End X coordinate (0.0–1.0)"),
-        endY: z.number().min(0).max(1).describe("End Y coordinate (0.0–1.0)"),
-        durationMs: z
+        ref: z
+          .string()
+          .optional()
+          .describe("@eN reference from the most recent SimulatorReadScreen output (e.g., '@e3')"),
+        identifier: z
+          .string()
+          .optional()
+          .describe("accessibilityIdentifier from app code (e.g., 'SubmitButton', 'NameField')"),
+        label: z
+          .string()
+          .optional()
+          .describe("iOS accessibility label (e.g., 'Address' for Safari URL bar)"),
+        x: z
           .number()
           .optional()
-          .describe("Duration of the swipe in milliseconds (default: 300)"),
-      },
-      async (args) => {
-        console.log(
-          `[deusMCPServer] iOSSimulatorSwipe invoked for session ${sessionId}: ` +
-            `(${args.startX}, ${args.startY}) → (${args.endX}, ${args.endY})`
-        );
-
-        try {
-          const response = await EventBroadcaster.requestSimSwipe({
-            sessionId,
-            startX: args.startX,
-            startY: args.startY,
-            endX: args.endX,
-            endY: args.endY,
-            durationMs: args.durationMs,
-          });
-
-          if (response.error) {
-            return {
-              content: [{ type: "text", text: `Swipe failed: ${response.error}` }],
-            };
-          }
-
-          return {
-            content: [
-              {
-                type: "text",
-                text: `Swiped from (${args.startX.toFixed(2)}, ${args.startY.toFixed(2)}) to (${args.endX.toFixed(2)}, ${args.endY.toFixed(2)}). Use iOSSimulatorScreenshot to see the result.`,
-              },
-            ],
-          };
-        } catch (err: unknown) {
-          return {
-            content: [{ type: "text", text: `Simulator not available: ${getErrorMessage(err)}` }],
-          };
-        }
-      }
-    ),
-
-    // ====================================================================
-    // iOSSimulatorTypeText
-    // ====================================================================
-    tool(
-      "iOSSimulatorTypeText",
-      `Type text into the currently focused field in the iOS simulator.
-
-Make sure an input field is focused first (tap on it using iOSSimulatorTap). The text is typed character by character using HID key injection, simulating a real keyboard.`,
-      {
-        text: z.string().describe("The text to type into the focused field"),
-      },
-      async (args) => {
-        const preview = args.text.length > 30 ? `${args.text.slice(0, 30)}...` : args.text;
-        console.log(
-          `[deusMCPServer] iOSSimulatorTypeText invoked for session ${sessionId}: "${preview}"`
-        );
-
-        try {
-          const response = await EventBroadcaster.requestSimTypeText({
-            sessionId,
-            text: args.text,
-          });
-
-          if (!response.success) {
-            return {
-              content: [
-                {
-                  type: "text",
-                  text: `Type failed: ${response.error ?? "Unknown error"}`,
-                },
-              ],
-            };
-          }
-
-          const warning = response.error ? `\nWarning: ${response.error}` : "";
-          return {
-            content: [
-              {
-                type: "text",
-                text: `Typed "${args.text.length > 50 ? args.text.slice(0, 50) + "..." : args.text}".${warning} Use iOSSimulatorScreenshot to see the result.`,
-              },
-            ],
-          };
-        } catch (err: unknown) {
-          return {
-            content: [{ type: "text", text: `Simulator not available: ${getErrorMessage(err)}` }],
-          };
-        }
-      }
-    ),
-
-    // ====================================================================
-    // iOSSimulatorPressKey
-    // ====================================================================
-    tool(
-      "iOSSimulatorPressKey",
-      `Press a specific key on the iOS simulator using USB HID usage codes.
-
-Common keycodes (USB HID):
-- Return/Enter: 0x28 (40)
-- Delete/Backspace: 0x2A (42)
-- Escape: 0x29 (41)
-- Tab: 0x2B (43)
-- Space: 0x2C (44)
-- Arrow Up: 0x52 (82), Down: 0x51 (81), Left: 0x50 (80), Right: 0x4F (79)
-- Left Shift: 0xE1 (225)
-
-By default, sends both key-down and key-up. Use direction to send only one.`,
-      {
-        keycode: z.number().describe("USB HID usage code (e.g., 40 for Return, 42 for Backspace)"),
-        direction: z
-          .enum(["down", "up"])
+          .describe("X coordinate in iOS logical points (must also provide y)"),
+        y: z
+          .number()
           .optional()
-          .describe("Send only key-down or key-up. Omit for a full key press (down + up)."),
+          .describe("Y coordinate in iOS logical points (must also provide x)"),
+        destination: z.string().optional().describe("Simulator name or UDID"),
+        includeScreenshot: z
+          .boolean()
+          .optional()
+          .describe("Include screenshot after tap (default: true)"),
       },
-      async (args) => {
-        console.log(
-          `[deusMCPServer] iOSSimulatorPressKey invoked for session ${sessionId}: keycode=${args.keycode}`
-        );
+      withSimulator(async (args) => {
+        const udid = await SimOps.resolveDevice(args.destination, sessionId);
+        await SimOps.tap(udid, {
+          ref: args.ref,
+          identifier: args.identifier,
+          label: args.label,
+          x: args.x,
+          y: args.y,
+          sessionKey: sessionId,
+        });
 
-        try {
-          const response = await EventBroadcaster.requestSimPressKey({
-            sessionId,
-            keycode: args.keycode,
-            direction: args.direction,
-          });
+        const tapDesc = args.ref
+          ? args.ref
+          : args.identifier
+            ? `#${args.identifier}`
+            : args.label
+              ? `"${args.label}"`
+              : `(${args.x}, ${args.y})`;
 
-          if (response.error) {
-            return {
-              content: [{ type: "text", text: `Key press failed: ${response.error}` }],
-            };
-          }
-
-          return {
-            content: [
-              {
-                type: "text",
-                text: `Pressed key ${args.keycode}${args.direction ? ` (${args.direction})` : ""}. Use iOSSimulatorScreenshot to see the result.`,
-              },
-            ],
-          };
-        } catch (err: unknown) {
-          return {
-            content: [{ type: "text", text: `Simulator not available: ${getErrorMessage(err)}` }],
-          };
+        if (args.includeScreenshot === false) {
+          return textResult(`Tapped ${tapDesc}. Use SimulatorScreenshot to see the result.`);
         }
-      }
+
+        const img = await SimOps.screenshot(udid, "jpeg");
+        return imageResult(img.base64, img.mimeType, `Tapped ${tapDesc}`);
+      })
     ),
 
-    // ====================================================================
-    // iOSSimulatorBuildAndRun
-    // ====================================================================
+    // -- TypeText --------------------------------------------------------------
     tool(
-      "iOSSimulatorBuildAndRun",
-      `Build an Xcode project and install + launch the app on the currently booted iOS simulator.
+      "SimulatorTypeText",
+      `Type text into the currently focused field in the iOS simulator. Tap a text field first to focus it.
 
-This tool:
-1. Detects the Xcode project in the workspace
-2. Runs xcodebuild to compile the project
-3. Installs the built .app on the booted simulator
-4. Launches the app
-
-The simulator must be booted and streaming (use iOSSimulatorStart first). The build may take several minutes for large projects.`,
+The screenshot returned may be captured BEFORE page loads / async side-effects
+complete. Use SimulatorWaitFor(stabilize=true) afterward if you need the result.`,
       {
-        workspacePath: z
-          .string()
-          .describe("Absolute path to the workspace directory containing the Xcode project"),
+        text: z.string().describe("The text to type"),
+        submit: z
+          .boolean()
+          .optional()
+          .describe(
+            "Send Return keypress after typing. For search fields this triggers submission, but the page may not have loaded when the response returns."
+          ),
+        destination: z.string().optional().describe("Simulator name or UDID"),
+        includeScreenshot: z
+          .boolean()
+          .optional()
+          .describe("Include screenshot after typing (default: true)"),
       },
-      async (args) => {
-        console.log(
-          `[deusMCPServer] iOSSimulatorBuildAndRun invoked for session ${sessionId}: ${args.workspacePath}`
-        );
+      withSimulator(async (args) => {
+        const udid = await SimOps.resolveDevice(args.destination, sessionId);
+        await SimOps.typeText(udid, args.text, { submit: args.submit });
 
-        try {
-          const response = await EventBroadcaster.requestSimBuildAndRun({
-            sessionId,
-            workspacePath: args.workspacePath,
-          });
+        const preview = args.text.length > 40 ? args.text.slice(0, 40) + "..." : args.text;
 
-          if (response.error) {
-            return {
-              content: [{ type: "text", text: `Build & run failed: ${response.error}` }],
-            };
-          }
-
-          const details = [
-            `Build & run succeeded.`,
-            response.appName ? `App: ${response.appName}` : null,
-            response.bundleId ? `Bundle ID: ${response.bundleId}` : null,
-            `Use iOSSimulatorScreenshot to see the running app.`,
-          ]
-            .filter(Boolean)
-            .join("\n");
-
-          return {
-            content: [{ type: "text", text: details }],
-          };
-        } catch (err: unknown) {
-          return {
-            content: [
-              {
-                type: "text",
-                text: `Build & run failed: ${getErrorMessage(err)}. Make sure a simulator is booted (use iOSSimulatorStart) and the workspace contains an Xcode project.`,
-              },
-            ],
-          };
+        if (args.includeScreenshot === false) {
+          return textResult(`Typed "${preview}". Use SimulatorScreenshot to see the result.`);
         }
-      }
+
+        const img = await SimOps.screenshot(udid, "jpeg");
+        return imageResult(img.base64, img.mimeType, `Typed "${preview}"`);
+      })
+    ),
+
+    // -- Swipe ----------------------------------------------------------------
+    tool(
+      "SimulatorSwipe",
+      `Swipe on the iOS simulator. Use direction (up/down/left/right) for simple scrolling, or explicit start/end coordinates for precise control.
+
+Direction semantics: "up" scrolls content down (finger moves up), "down" scrolls content up.`,
+      {
+        direction: z.enum(["up", "down", "left", "right"]).optional().describe("Swipe direction"),
+        distance: z
+          .number()
+          .optional()
+          .describe("Distance in points for direction-based swipe (default: 300)"),
+        startX: z.number().optional().describe("Starting X coordinate in iOS points"),
+        startY: z.number().optional().describe("Starting Y coordinate in iOS points"),
+        endX: z.number().optional().describe("Ending X coordinate in iOS points"),
+        endY: z.number().optional().describe("Ending Y coordinate in iOS points"),
+        duration: z.number().optional().describe("Swipe duration in milliseconds (default: 300)"),
+        destination: z.string().optional().describe("Simulator name or UDID"),
+        includeScreenshot: z
+          .boolean()
+          .optional()
+          .describe("Include screenshot after swipe (default: true)"),
+      },
+      withSimulator(async (args) => {
+        const udid = await SimOps.resolveDevice(args.destination, sessionId);
+        await SimOps.swipe(udid, args);
+
+        const label = args.direction ?? "custom";
+
+        if (args.includeScreenshot === false) {
+          return textResult(`Swiped ${label}. Use SimulatorScreenshot to see the result.`);
+        }
+
+        const img = await SimOps.screenshot(udid, "jpeg");
+        return imageResult(img.base64, img.mimeType, `Swiped ${label}`);
+      })
+    ),
+
+    // -- PressKey -------------------------------------------------------------
+    tool(
+      "SimulatorPressKey",
+      `Press a special key on the iOS simulator. "home" triggers the home button.`,
+      {
+        key: z
+          .enum(["return", "delete", "escape", "tab", "home", "space"])
+          .describe("The key to press"),
+        destination: z.string().optional().describe("Simulator name or UDID"),
+      },
+      withSimulator(async (args) => {
+        const udid = await SimOps.resolveDevice(args.destination, sessionId);
+        await SimOps.pressKey(udid, args.key);
+        return textResult(`Pressed ${args.key}`);
+      })
+    ),
+
+    // -- Build ----------------------------------------------------------------
+    tool(
+      "SimulatorBuild",
+      `Build the Xcode project, install it on the simulator, and launch the app. Returns build result with bundle ID and app name.
+
+The simulator must be booted first. The build may take several minutes for large projects.`,
+      {
+        workingDirectory: z.string().describe("Path to the directory containing the Xcode project"),
+        scheme: z.string().optional().describe("Build scheme name (auto-detected if not provided)"),
+        destination: z.string().optional().describe("Simulator name or UDID to build for"),
+      },
+      withSimulator(async (args) => {
+        const udid = await SimOps.resolveDevice(args.destination, sessionId);
+        const result = await SimOps.buildAndRun(udid, {
+          workingDirectory: args.workingDirectory,
+          scheme: args.scheme,
+        });
+
+        return textResult(
+          `Build succeeded.\nApp: ${result.appName}\nBundle ID: ${result.bundleId || "(unknown)"}\nInstalled and launched on simulator.`
+        );
+      })
+    ),
+
+    // -- Launch ---------------------------------------------------------------
+    tool(
+      "SimulatorLaunch",
+      `Launch an app on the simulator by bundle ID. The app must already be installed. Use SimulatorListApps to discover installed bundle IDs.`,
+      {
+        bundleId: z.string().describe("Bundle identifier (e.g., com.example.MyApp)"),
+        destination: z.string().optional().describe("Simulator name or UDID"),
+      },
+      withSimulator(async (args) => {
+        const udid = await SimOps.resolveDevice(args.destination, sessionId);
+        await SimOps.launch(udid, args.bundleId);
+        return textResult(`Launched ${args.bundleId}`);
+      })
+    ),
+
+    // -- ListApps -------------------------------------------------------------
+    tool(
+      "SimulatorListApps",
+      `List apps installed on the simulator. Returns bundle IDs you can pass to SimulatorLaunch. Defaults to user-installed apps; pass type="all" to include system apps.`,
+      {
+        destination: z.string().optional().describe("Simulator name or UDID"),
+        type: z
+          .enum(["User", "System", "all"])
+          .optional()
+          .describe("Which apps to list (default: User)"),
+      },
+      withSimulator(async (args) => {
+        const udid = await SimOps.resolveDevice(args.destination, sessionId);
+        const apps = await SimOps.listApps(udid, { type: args.type });
+        if (apps.length === 0) {
+          return textResult("No apps found on this simulator.");
+        }
+        const lines = apps.map(
+          (a) => `${a.name}${a.version ? ` (${a.version})` : ""} — ${a.bundleId} [${a.type}]`
+        );
+        return textResult(`Found ${apps.length} app(s):\n${lines.join("\n")}`);
+      })
+    ),
+
+    // -- ReadScreen -----------------------------------------------------------
+    tool(
+      "SimulatorReadScreen",
+      `Read the current screen state of the iOS simulator. Returns the accessibility tree with element refs (@e1, @e2) and optionally a screenshot.
+
+Use refs with SimulatorTap to tap elements by label. Use filter "interactive" to see only tappable elements.`,
+      {
+        destination: z.string().optional().describe("Simulator name or UDID"),
+        filter: z
+          .enum(["interactive", "all"])
+          .optional()
+          .describe(
+            "Filter: 'interactive' shows only tappable elements, 'all' shows everything (default)"
+          ),
+        includeScreenshot: z
+          .boolean()
+          .optional()
+          .describe("Include screenshot in response (default: true)"),
+      },
+      withSimulator(async (args) => {
+        const udid = await SimOps.resolveDevice(args.destination, sessionId);
+        const result = await SimOps.readScreen(udid, {
+          sessionKey: sessionId,
+          filter: args.filter,
+          includeScreenshot: args.includeScreenshot,
+        });
+
+        const parts: Array<{ type: string; [k: string]: unknown }> = [];
+
+        if (result.screenshot) {
+          parts.push({
+            type: "image",
+            data: result.screenshot.base64,
+            mimeType: result.screenshot.mimeType,
+          });
+        }
+
+        parts.push({ type: "text", text: result.formatted });
+        return { content: parts };
+      })
+    ),
+
+    // -- WaitFor --------------------------------------------------------------
+    tool(
+      "SimulatorWaitFor",
+      `Wait for a condition on the simulator. Useful for waiting for animations, loading states, or specific UI elements to appear.`,
+      {
+        time: z
+          .number()
+          .max(300)
+          .optional()
+          .describe(
+            "Wait for a fixed duration in SECONDS (not milliseconds). Accepts decimals (e.g. 1.5). Max 300s."
+          ),
+        stabilize: z
+          .boolean()
+          .optional()
+          .describe("Wait for UI to stop changing (animations complete)"),
+        label: z
+          .string()
+          .optional()
+          .describe("Wait for an element with this accessibility label to appear"),
+        timeout: z
+          .number()
+          .max(300)
+          .optional()
+          .describe("Maximum wait time in SECONDS (default: 30, max: 300)"),
+        destination: z.string().optional().describe("Simulator name or UDID"),
+      },
+      withSimulator(async (args) => {
+        const udid = await SimOps.resolveDevice(args.destination, sessionId);
+        const result = await SimOps.waitFor(udid, args);
+
+        if (args.time) {
+          return textResult(`Waited ${args.time}s`);
+        }
+
+        return textResult(
+          result.found
+            ? `Condition met (${result.elapsedMs}ms)`
+            : `Timed out after ${result.elapsedMs}ms`
+        );
+      })
+    ),
+
+    // -- GetProjectInfo -------------------------------------------------------
+    tool(
+      "SimulatorGetProjectInfo",
+      `Get available build schemes and project files for an Xcode project. Use this before SimulatorBuild to discover available schemes.`,
+      {
+        workingDirectory: z.string().optional().describe("Path to the Xcode project directory"),
+      },
+      withSimulator(async (args) => {
+        const cwd = args.workingDirectory;
+        if (!cwd) return textResult("Provide a workingDirectory to inspect.");
+
+        const info = await SimOps.getProjectInfo(cwd);
+
+        const lines: string[] = [];
+        if (info.workspace) lines.push(`Workspace: ${info.workspace}`);
+        if (info.project) lines.push(`Project: ${info.project}`);
+        if (info.schemes.length > 0) {
+          lines.push(`\nSchemes:\n${info.schemes.map((s) => `  - ${s}`).join("\n")}`);
+        } else {
+          lines.push("\nNo schemes found.");
+        }
+
+        return textResult(lines.join("\n"));
+      })
     ),
   ];
 }

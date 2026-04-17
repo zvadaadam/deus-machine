@@ -67,6 +67,9 @@ const ALLOWED_INVOKE_CHANNELS = new Set([
   "native:setZoom",
   "native:setTitle",
   "native:homeDir",
+
+  // iOS Simulator — all operations moved to backend (q:command protocol).
+  // No IPC channels needed.
 ]);
 
 const ALLOWED_EVENT_CHANNELS = new Set([
@@ -96,8 +99,7 @@ const ALLOWED_EVENT_CHANNELS = new Set([
   "browser:console-message",
   "browser:new-tab-requested",
 
-  // Simulator events
-  "sim:build-log",
+  // Simulator events — all moved to backend WS (q:event protocol)
 
   // Chat insert events
   "chat-insert",

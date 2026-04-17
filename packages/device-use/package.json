@@ -1,0 +1,50 @@
+{
+  "name": "device-use",
+  "version": "0.1.0",
+  "description": "iOS Simulator automation for AI agents — CLI, SDK, and engine.",
+  "type": "module",
+  "bin": {
+    "device-use": "./dist/cli.js"
+  },
+  "exports": {
+    ".": {
+      "import": "./dist/sdk.js",
+      "types": "./dist/sdk.d.ts"
+    },
+    "./engine": {
+      "import": "./dist/engine.js",
+      "types": "./dist/engine.d.ts"
+    }
+  },
+  "main": "./dist/sdk.js",
+  "types": "./dist/sdk.d.ts",
+  "files": [
+    "dist",
+    "bin",
+    "native/.build/release/simbridge",
+    "skills",
+    "LICENSE"
+  ],
+  "scripts": {
+    "dev": "bun run src/cli/index.ts",
+    "build:native": "bun run scripts/build-native.ts",
+    "build:ts": "bun run scripts/build-ts.ts",
+    "build": "bun run build:native && bun run build:ts",
+    "compile": "bun run scripts/compile-bin.ts",
+    "test": "bun test",
+    "typecheck": "tsc --noEmit",
+    "lint": "echo 'no linter configured'"
+  },
+  "engines": {
+    "bun": ">=1.1"
+  },
+  "license": "MIT",
+  "devDependencies": {
+    "@types/bun": "^1.1.0",
+    "typescript": "^5.8.0"
+  },
+  "dependencies": {
+    "jimp": "^1.6.1",
+    "zod": "^3.24.0"
+  }
+}
