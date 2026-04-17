@@ -298,15 +298,18 @@ class AgentServer {
     // --- provider/contextUsage (token usage stats) ---
     rpcTunnel.addMethod("provider/contextUsage", async (params: any) => {
       const agentHarness = params?.agentHarness;
+      const sessionId = params?.sessionId;
       const cwd = params?.cwd;
       const agentSessionId = params?.agentSessionId;
-      if (!agentHarness || !cwd || !agentSessionId) {
-        throw new Error("provider/contextUsage requires agentHarness, cwd, and agentSessionId");
+      if (!agentHarness || !sessionId || !cwd || !agentSessionId) {
+        throw new Error(
+          "provider/contextUsage requires agentHarness, sessionId, cwd, and agentSessionId"
+        );
       }
       const agent = getAgent(agentHarness);
       if (!agent?.getContextUsage)
         throw new Error(`Agent "${agentHarness}" does not support context usage`);
-      return agent.getContextUsage({ options: { cwd, agentSessionId } });
+      return agent.getContextUsage({ id: sessionId, options: { cwd, agentSessionId } });
     });
 
     // --- provider/updateMode (runtime permission mode change) ---

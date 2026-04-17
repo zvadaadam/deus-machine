@@ -177,11 +177,6 @@ export function blockIfNotInitialized(
 ): boolean {
   if (!state.result?.success) {
     const errorMsg = `Cannot process request: ${state.result?.error || "Initialization failed"}`;
-    try {
-      EventBroadcaster.emitSessionError(sessionId, agentHarness, errorMsg, "internal");
-    } catch (error) {
-      console.warn(`[CLI-DISCOVERY] Failed to emit init error:`, error);
-    }
     // Emit canonical error event so the backend updates session status.
     // The backend set status='working' before forwarding turn/start to the agent-server.
     try {

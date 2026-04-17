@@ -72,7 +72,9 @@ export function ThinkingIndicator({ level, onClick, className }: ThinkingIndicat
               className={cn(
                 "text-muted-foreground text-xs select-none",
                 // Minimum width so the button doesn't jump between "Low" and "High"
-                "inline-block min-w-7 text-center"
+                // Fixed width accommodates the widest label (X-High) so the
+                // button doesn't jump between levels.
+                "inline-block w-10 text-center"
               )}
             >
               {displayLabel}

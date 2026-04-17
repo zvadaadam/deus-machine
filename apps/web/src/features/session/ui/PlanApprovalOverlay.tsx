@@ -10,7 +10,7 @@ import type { PlanModeRequest } from "../hooks/useAgentRpcHandler";
 
 interface PlanApprovalOverlayProps {
   request: PlanModeRequest | null;
-  agentHarness?: string;
+  agentHarness: string;
   onApprove: () => void;
   onReject: () => void;
 }
@@ -21,7 +21,7 @@ export function PlanApprovalOverlay({
   onApprove,
   onReject,
 }: PlanApprovalOverlayProps) {
-  const Logo = getAgentLogo(agentHarness || "claude");
+  const Logo = getAgentLogo(agentHarness);
 
   return (
     <AnimatePresence>

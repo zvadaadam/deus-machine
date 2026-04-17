@@ -45,6 +45,15 @@ export function getAgentHarnessForModel(model: string): AgentHarness {
   return model.toLowerCase().startsWith("codex:") ? "codex" : "claude";
 }
 
+/**
+ * Extract the bare model ID from a `harness:model` picker value.
+ * Throws if the value isn't in the catalog — callers should pass validated
+ * picker values, so a miss here means stale localStorage or a bug.
+ */
 export function getModelId(model: string): string {
-  return getModelOption(model)?.model ?? "claude-opus-4-7";
+  const option = getModelOption(model);
+  if (!option) {
+    throw new Error(`[agents] Unknown model "${model}" — not in catalog`);
+  }
+  return option.model;
 }
