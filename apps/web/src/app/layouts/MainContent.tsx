@@ -282,7 +282,7 @@ export function MainContent({
             : cn(
                 "border",
                 sidebarOpen
-                  ? "border-border-subtle rounded-l-xl border-r-0"
+                  ? "border-border-subtle rounded-tl-xl border-r-0"
                   : "rounded-none border-transparent"
               ),
           isDisconnected && "opacity-60"
