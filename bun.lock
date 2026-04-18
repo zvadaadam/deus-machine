@@ -138,6 +138,7 @@
         "react-dom": "^19.0.0",
         "zod": "^3.24.0",
         "zod-to-json-schema": "^3.25.2",
+        "zustand": "^5.0.12",
       },
       "devDependencies": {
         "@types/bun": "^1.1.0",
