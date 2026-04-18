@@ -322,33 +322,6 @@ body,
   pointer-events: none;
 }
 
-.device-dynamic-island {
-  position: absolute;
-  top: 2.35%;
-  left: 50%;
-  transform: translateX(-50%);
-  width: 38%;
-  height: 4.1%;
-  background: var(--bg-base);
-  border-radius: var(--radius-full);
-  pointer-events: none;
-  z-index: 2;
-}
-
-.device-camera-dot {
-  position: absolute;
-  top: 1.45%;
-  left: 50%;
-  transform: translateX(-50%);
-  width: 10px;
-  height: 10px;
-  background: var(--bg-base);
-  border-radius: var(--radius-full);
-  box-shadow: 0 0 0 2px color-mix(in oklch, var(--foreground) 4%, transparent);
-  pointer-events: none;
-  z-index: 2;
-}
-
 .device-screen {
   position: absolute;
   background: var(--canvas-bg);
