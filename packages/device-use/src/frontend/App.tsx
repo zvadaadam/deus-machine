@@ -8,9 +8,11 @@ import { Toasts } from "./components/Toasts";
 import { useEventsWs } from "./lib/ws";
 import { useSimStore } from "./stores/sim-store";
 import { useProjectStore } from "./stores/project-store";
+import { useUiStore } from "./stores/ui-store";
 
 export function App() {
   useEventsWs();
+  const sidebarCollapsed = useUiStore((s) => s.sidebarCollapsed);
 
   useEffect(() => {
     useSimStore.getState().refresh();
@@ -21,7 +23,7 @@ export function App() {
   }, []);
 
   return (
-    <div className="app">
+    <div className={`app ${sidebarCollapsed ? "sidebar-collapsed" : ""}`}>
       <TopBar />
       <DeviceFrame />
       <Sidebar />
