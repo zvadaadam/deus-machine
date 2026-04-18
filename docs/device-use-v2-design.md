@@ -158,19 +158,19 @@ Total: **~18 tools**. Plus `help` (returns inline usage guide, deferred loading 
 
 ## Remaining small decisions (locked by implementer, 2026-04-17)
 
-| Topic                | Decision                                                                                                                                                                     |
-| -------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Auto-boot pinned sim | **Yes.** On server start, read `state.json`; if UDID pinned and valid, `simctl boot UDID`. If sim was deleted or empty, show picker in viewer.                               |
-| MJPEG defaults       | Keep perth-v2 defaults (30fps, native sim resolution). Don't tune in v1.                                                                                                     |
-| WS reconnect         | **Start fresh.** No replay buffer. Frontend re-fetches state via `GET /api/state` on reconnect, resumes listening.                                                           |
-| Logs drawer          | 10MB in-memory ring buffer. Manual Clear button. No filtering in v1. Source: `simctl spawn booted log stream` scoped to launched app's PID.                                  |
-| Inspector            | **V1 = read-only.** Hover element → highlight on phone + properties sidebar (label, role, frame, attributes). Click → copy `@ref` to clipboard. No editing.                  |
-| Dev / prod modes     | `bun run dev` = Vite HMR + `tsx watch` for server. `bun run start` = bundled frontend + compiled server. Standard TanStack Start.                                            |
-| Test strategy        | Engine: unit tests (extend existing). Server: HTTP API + WS integration tests. Frontend: component tests only, no e2e. Manual smoke: build→install→launch→tap on a demo app. |
-| Package name         | Stay `packages/device-use`. No rename.                                                                                                                                       |
-| Build output parsing | V1 = capture raw stdout/stderr, stream via `tool-log`, store last 50 lines on failure for tool result. No structured parsing.                                                |
-| Physical devices     | V2. Simulators only in v1.                                                                                                                                                   |
-| Stream ownership     | Server owns the long-lived `simbridge --stream` subprocess. CLI never streams (it's stateless).                                                                              |
+| Topic                | Decision                                                                                                                                                                               |
+| -------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Auto-boot pinned sim | **Yes.** On server start, read `state.json`; if UDID pinned and valid, `simctl boot UDID`. If sim was deleted or empty, show picker in viewer.                                         |
+| MJPEG defaults       | Keep perth-v2 defaults (30fps, native sim resolution). Don't tune in v1.                                                                                                               |
+| WS reconnect         | **Start fresh.** No replay buffer. Frontend re-fetches state via `GET /api/state` on reconnect, resumes listening.                                                                     |
+| Logs drawer          | 10MB in-memory ring buffer. Manual Clear button. No filtering in v1. Source: `simctl spawn booted log stream` scoped to launched app's PID.                                            |
+| Inspector            | **V1 = read-only.** Hover element → highlight on phone + properties sidebar (label, role, frame, attributes). Click → copy `@ref` to clipboard. No editing.                            |
+| Dev / prod modes     | `bun run dev` = Hono server with `--hot`; `bun run dev:frontend` = Vite for HMR (separate terminal). `bun run start` = bundled frontend + the same Hono server in NODE_ENV=production. |
+| Test strategy        | Engine: unit tests (extend existing). Server: HTTP API + WS integration tests. Frontend: component tests only, no e2e. Manual smoke: build→install→launch→tap on a demo app.           |
+| Package name         | Stay `packages/device-use`. No rename.                                                                                                                                                 |
+| Build output parsing | V1 = capture raw stdout/stderr, stream via `tool-log`, store last 50 lines on failure for tool result. No structured parsing.                                                          |
+| Physical devices     | V2. Simulators only in v1.                                                                                                                                                             |
+| Stream ownership     | Server owns the long-lived `simbridge --stream` subprocess. CLI never streams (it's stateless).                                                                                        |
 
 ---
 

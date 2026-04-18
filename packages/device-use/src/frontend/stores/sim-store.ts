@@ -11,11 +11,17 @@ interface SimState {
   setPinned: (udid: string) => Promise<void>;
 }
 
-/** True iff two stream infos describe the same underlying stream. */
+/** True iff two stream infos describe the same underlying stream + metadata. */
 function sameStream(a: StreamInfo | null, b: StreamInfo | null): boolean {
   if (a === b) return true;
   if (!a || !b) return false;
-  return a.udid === b.udid && a.port === b.port;
+  if (a.udid !== b.udid || a.port !== b.port || a.url !== b.url) return false;
+  // size is optional; compare structurally
+  const as = a.size;
+  const bs = b.size;
+  if (!as && !bs) return true;
+  if (!as || !bs) return false;
+  return as.pxW === bs.pxW && as.pxH === bs.pxH && as.ptW === bs.ptW && as.ptH === bs.ptH;
 }
 
 /** True iff two sim arrays have the same entries in the same states. */
@@ -26,7 +32,9 @@ function sameSims(a: Simulator[], b: Simulator[]): boolean {
     const x = a[i];
     const y = b[i];
     if (!x || !y) return false;
-    if (x.udid !== y.udid || x.state !== y.state || x.name !== y.name) return false;
+    if (x.udid !== y.udid || x.state !== y.state || x.name !== y.name || x.runtime !== y.runtime) {
+      return false;
+    }
   }
   return true;
 }
