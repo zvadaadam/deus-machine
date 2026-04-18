@@ -27,7 +27,7 @@ Design philosophy: **dumb executor, smart caller.** device-use takes explicit pr
 | 9   | **Project discovery**                             | device-use does **not** auto-discover. Agent finds `.xcodeproj`, lists schemes, picks one, calls `build({project, scheme})` with explicit paths. Human UI does a trivial `find cwd -name "*.xcodeproj"` once on first open to offer a default. No deep parsing in device-use.                                                                                                                                                                                                                                                                                                |
 | 10  | **Event protocol (WS)**                           | Reuse the MCP tool-call schema — no parallel `ToolEvent` type. Every handler emits `{tool, params, status: "started"\|"completed"\|"failed", result?, error?, id, at}`. Plus optional `tool-log` for build stdout/stderr streaming, correlated by id.                                                                                                                                                                                                                                                                                                                        |
 | 11  | **AAP back-channel (deferred)**                   | When AAP lands, device-use → Deus envelopes use MCP Apps naming: `ui/message` (inject into agent context) and `notifications/message` (surface in IDE chrome). Not built in PR 1.                                                                                                                                                                                                                                                                                                                                                                                            |
-| 12  | **Storage format**                                | JSON file: `{storage.workspace}/.device-use/state.json`. Contents: pinned UDID, project path, scheme name, updatedAt. No SQLite. Recent tool-events and logs live in-memory only.                                                                                                                                                                                                                                                                                                                                                                                            |
+| 12  | **Storage format**                                | JSON file: `{storage.workspace}/state.json` (where `storage.workspace = {workspace}/.device-use`). Contents: pinned UDID, project path, scheme name, updatedAt. No SQLite. Recent tool-events and logs live in-memory only.                                                                                                                                                                                                                                                                                                                                                  |
 | 13  | **Multi-instance model**                          | One device-use server per workspace. macOS's CoreSimulator is the underlying daemon; simctl is authoritative for sim state. device-use instances are thin because the heavy state is already shared host-level.                                                                                                                                                                                                                                                                                                                                                              |
 | 14  | **Simulator conflicts**                           | Not a thing. Two instances can point at the same UDID simultaneously — they're both clients of CoreSimulator. Rare user-coordination issue, not framework-level lockout.                                                                                                                                                                                                                                                                                                                                                                                                     |
 | 15  | **Architecture — engine/server/CLI relationship** | **Peer model.** Engine is a shared TS library. CLI and Server both import it directly. They are independent consumers — neither knows nor cares about the other. No auto-start, no magic. CLI works standalone (CI, terminals). Server is launched by AAP or explicit `device-use serve`. Known limitation: CLI actions while server is running don't populate the viewer's activity overlay (the physical tap still shows via MJPEG because sim state is host-level). Acceptable.                                                                                           |
@@ -36,7 +36,7 @@ Design philosophy: **dumb executor, smart caller.** device-use takes explicit pr
 
 ## Architecture
 
-```
+```text
 ┌─────────────────────────────────────────────────────────────┐
 │  packages/device-use/                                       │
 │                                                             │
@@ -82,7 +82,7 @@ KEPT but refactored:
 
 - Spawn + own the `simbridge` stream subprocess
 - Expose `/mcp` (MCP HTTP transport) — Claude Code + other MCP clients
-- Expose `/ws` — bidirectional events (frontend subscribes, CLI commands visible live)
+- Expose `/ws` — bidirectional events for subscribed frontends. Note: only actions routed through the server (REST `/api/tools/*`, `/mcp`, the viewer's canvas) populate this stream; standalone CLI commands run via the engine directly and do not appear in the server/viewer activity feed (peer model, by design).
 - Serve `/` — the React viewer
 - Persist `state.json` — pinned UDID, project, scheme
 - Tail `simctl spawn booted log stream` — logs buffer (in-memory ring)
@@ -180,10 +180,10 @@ Estimated ~9-13 focused days. Shipped as one large PR on `zvadaadam/agent-app-pr
 
 ### Phase 1 — Scaffold the new server + frontend (~1 day)
 
-- Add TanStack Start to `packages/device-use` (new deps, tsconfig adjustments).
-- `src/server/` — minimal Nitro server with `/health` route.
-- `src/frontend/` — minimal React app served at `/`.
-- `bun run dev` / `bun run build` / `bun run start` wire-up.
+- Add Vite + React + Hono + Bun-server deps to `packages/device-use` (tsconfig adjustments for JSX + DOM lib).
+- `src/server/` — minimal Hono on Bun.serve with a `/health` route.
+- `src/frontend/` — minimal React app bundled by Vite, served at `/`.
+- `bun run dev` (server with --hot) / `bun run dev:frontend` (Vite HMR) / `bun run build` / `bun run start` wire-up.
 - **Exit criterion:** `bun run dev` → open `localhost:3100/` → "device-use v2" heading renders; `GET /health` returns 200.
 
 ### Phase 2 — Expand the engine (~1-2 days)
@@ -200,7 +200,7 @@ Estimated ~9-13 focused days. Shipped as one large PR on `zvadaadam/agent-app-pr
 - `src/server/routes/api/` — REST endpoints wrapping each engine primitive.
 - `src/server/mcp.ts` — MCP HTTP transport at `/mcp`. All 18 tools defined, handlers call engine directly.
 - `src/server/ws.ts` — `/ws` endpoint. Broadcasts `tool-event` + `tool-log` from a central emitter. Every engine-calling handler wraps its work in `emit({status: started})` / `emit({status: completed|failed, result|error})`.
-- `src/server/state.ts` — JSON file at `{storage.workspace}/.device-use/state.json`. Read on startup (auto-boot pinned sim), write on mutations.
+- `src/server/state.ts` — JSON file at `{storage.workspace}/state.json`. Read on startup (auto-boot pinned sim), write on mutations.
 - `src/server/stream.ts` — owns the long-lived `simbridge --stream` subprocess. Serves MJPEG at `/stream.mjpeg`.
 - **Exit criterion:** `curl localhost:3100/api/list-devices` works. `curl localhost:3100/mcp` returns MCP tool list. WebSocket at `/ws` streams events when engine is called.
 
@@ -239,8 +239,8 @@ Adapt from current `apps/web/src/features/simulator/ui/` where useful; don't por
 
 ## Out of scope for this PR (explicitly)
 
-- AAP protocol itself (`agentic-app.json`, registry, lifecycle in Deus backend). Separate PR.
-- Deletion of `apps/web/src/features/simulator/` and `apps/backend/src/services/simulator-context.ts`. Separate PR (after AAP lands).
+- AAP host-side integration in Deus (registry, spawner, MCP registrar, lifecycle). The `agentic-app.json` manifest IS included in this PR — it's the contract; the host that consumes it is the next PR.
+- Deletion of `apps/web/src/features/simulator/` and `apps/backend/src/services/simulator-context.ts`. Separate PR (after AAP host lands).
 - `apps/agent-server/agents/deus-tools/simulator.ts` removal. Deleted when AAP PR lands and Deus starts using device-use via MCP instead.
 - Physical device support.
 - Build output structured parsing.
@@ -250,7 +250,7 @@ Adapt from current `apps/web/src/features/simulator/ui/` where useful; don't por
 
 ---
 
-## AAP manifest (when AAP lands — not PR 1)
+## AAP manifest (shipped in this PR; Deus host integration is the next PR)
 
 ```json
 {
