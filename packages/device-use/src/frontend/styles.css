@@ -285,37 +285,91 @@ body,
   gap: 14px;
 }
 
-.device-frame {
-  display: inline-block;
-  border-radius: var(--radius-4xl);
-  padding: 12px;
+/* Device frame — fills vertical space while respecting the sim's aspect
+ * ratio (iPhone ~430/932, iPad ~834/1194). Structure mirrors the generic
+ * fallback in apps/web's DeviceFrame: shell + inner ring + dynamic island
+ * + inset screen. */
+
+.device-container {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  height: 100%;
+  padding: 24px;
+  flex: 1;
+  min-height: 0;
+}
+
+.device-shell {
+  position: relative;
+  height: 100%;
+  max-height: 92%;
+  max-width: 92%;
+  aspect-ratio: 430 / 932; /* overridden inline per device */
   background: var(--device-frame-bg);
   box-shadow: var(--shadow-frame);
-  position: relative;
   border: 1px solid var(--border);
+  overflow: hidden;
+  flex-shrink: 1;
 }
 
-.device-frame img,
-.device-frame .device-canvas,
-.device-frame .phone-placeholder {
-  display: block;
-  border-radius: var(--radius-3xl);
+.device-shell-ring {
+  position: absolute;
+  inset: 0.6%;
+  border: 1px solid color-mix(in oklch, var(--foreground) 3%, transparent);
+  border-radius: inherit;
+  pointer-events: none;
+}
+
+.device-dynamic-island {
+  position: absolute;
+  top: 2.35%;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 38%;
+  height: 4.1%;
+  background: var(--bg-base);
+  border-radius: var(--radius-full);
+  pointer-events: none;
+  z-index: 2;
+}
+
+.device-camera-dot {
+  position: absolute;
+  top: 1.45%;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 10px;
+  height: 10px;
+  background: var(--bg-base);
+  border-radius: var(--radius-full);
+  box-shadow: 0 0 0 2px color-mix(in oklch, var(--foreground) 4%, transparent);
+  pointer-events: none;
+  z-index: 2;
+}
+
+.device-screen {
+  position: absolute;
   background: var(--canvas-bg);
-  object-fit: contain;
-  max-height: 70vh;
+  overflow: hidden;
+  z-index: 1;
 }
 
-.device-frame .device-canvas {
-  max-width: 100%;
-  height: auto;
+.device-canvas {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
   cursor: crosshair;
   user-select: none;
+  background: var(--canvas-bg);
 }
 
-.device-frame .phone-placeholder {
-  width: 320px;
-  height: 568px;
+.phone-placeholder {
   display: flex;
+  width: 100%;
+  height: 100%;
   align-items: center;
   justify-content: center;
   color: var(--text-tertiary);
@@ -324,6 +378,7 @@ body,
   font-size: var(--text-sm);
   line-height: 1.5;
   letter-spacing: -0.005em;
+  background: var(--canvas-bg);
 }
 
 /* Hardware-button row */
