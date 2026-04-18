@@ -31,7 +31,7 @@ export function Sidebar() {
               <span
                 style={{
                   marginLeft: 8,
-                  color: "var(--accent-2)",
+                  color: "var(--primary)",
                   textTransform: "none",
                   letterSpacing: 0,
                 }}
@@ -81,7 +81,9 @@ export function Sidebar() {
                 <div key={`${e.id}-${e.status}`} className="activity-item">
                   <span className="tool">{e.tool}</span>{" "}
                   <span className={`status-${e.status}`}>{e.status}</span>
-                  {e.error && <div style={{ color: "var(--danger)", marginTop: 2 }}>{e.error}</div>}
+                  {e.error && (
+                    <div style={{ color: "var(--destructive)", marginTop: 2 }}>{e.error}</div>
+                  )}
                 </div>
               ))
           )}

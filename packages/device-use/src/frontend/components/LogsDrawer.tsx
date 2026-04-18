@@ -18,7 +18,7 @@ export function LogsDrawer() {
         </button>
       </div>
       {lines.length === 0 ? (
-        <div style={{ color: "var(--dim)", fontStyle: "italic" }}>
+        <div style={{ color: "var(--text-muted-foreground)", fontStyle: "italic" }}>
           nothing yet — build logs and simulator app logs appear here
         </div>
       ) : (
