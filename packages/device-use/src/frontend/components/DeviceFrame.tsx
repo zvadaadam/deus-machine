@@ -39,6 +39,40 @@ const HARDWARE_BUTTONS: HardwareButton[] = [
   { label: "Lock", button: "lock", key: ["l", "L"] },
 ];
 
+/** Visual shell spec — ported from apps/web/src/features/simulator/ui/DeviceFrame.tsx
+ *  (the generic fallback used when Apple-derived bezel assets aren't bundled).
+ *  Percentages are relative to the shell box, radii in rem. */
+interface ShellSpec {
+  aspectRatio: string;
+  shellRadius: string;
+  screenRadius: string;
+  screenInsets: { top: string; left: string; right: string; bottom: string };
+  showDynamicIsland: boolean;
+  showCameraDot: boolean;
+}
+
+function getShellSpec(deviceName: string | null | undefined): ShellSpec {
+  const isTablet = deviceName?.includes("iPad") ?? false;
+  if (isTablet) {
+    return {
+      aspectRatio: "834 / 1194",
+      shellRadius: "2.75rem",
+      screenRadius: "2.1rem",
+      screenInsets: { top: "2.1%", left: "2.2%", right: "2.2%", bottom: "2.1%" },
+      showDynamicIsland: false,
+      showCameraDot: true,
+    };
+  }
+  return {
+    aspectRatio: "430 / 932",
+    shellRadius: "3.25rem",
+    screenRadius: "2.6rem",
+    screenInsets: { top: "1.7%", left: "2.5%", right: "2.5%", bottom: "1.9%" },
+    showDynamicIsland: true,
+    showCameraDot: false,
+  };
+}
+
 export function DeviceFrame() {
   const { pinnedUdid, sims, streamInfo } = useSimStore();
   const pinnedSim = sims.find((s) => s.udid === pinnedUdid);
@@ -268,32 +302,59 @@ export function DeviceFrame() {
     return () => window.removeEventListener("mouseup", onWindowMouseUp);
   }, [sendTouch]);
 
+  const shell = getShellSpec(pinnedSim?.name);
+
   return (
     <div className="stage">
-      <div className="device-frame">
-        {booted && streamInfo ? (
-          <canvas
-            ref={canvasRef}
-            className="device-canvas"
-            onMouseDown={onMouseDown}
-            onMouseMove={onMouseMove}
-            onMouseUp={onMouseUp}
-            onContextMenu={(e) => e.preventDefault()}
+      <div className="device-container">
+        <div
+          className="device-shell"
+          style={{ aspectRatio: shell.aspectRatio, borderRadius: shell.shellRadius }}
+        >
+          {/* Subtle inner ring — catches light, hints at bezel thickness */}
+          <div
+            className="device-shell-ring"
+            style={{ borderRadius: shell.shellRadius }}
+            aria-hidden
           />
-        ) : (
-          <div className="phone-placeholder">
-            {sims.length === 0
-              ? "No simulators found. Install iOS simulators via Xcode → Settings → Platforms."
-              : !pinnedUdid
-                ? "Pick a simulator from the top bar."
-                : !booted
-                  ? "Click boot to start the simulator."
-                  : "Waiting for stream…"}
+          {shell.showDynamicIsland && <div className="device-dynamic-island" aria-hidden />}
+          {shell.showCameraDot && <div className="device-camera-dot" aria-hidden />}
+
+          <div
+            className="device-screen"
+            style={{
+              top: shell.screenInsets.top,
+              left: shell.screenInsets.left,
+              right: shell.screenInsets.right,
+              bottom: shell.screenInsets.bottom,
+              borderRadius: shell.screenRadius,
+            }}
+          >
+            {booted && streamInfo ? (
+              <canvas
+                ref={canvasRef}
+                className="device-canvas"
+                onMouseDown={onMouseDown}
+                onMouseMove={onMouseMove}
+                onMouseUp={onMouseUp}
+                onContextMenu={(e) => e.preventDefault()}
+              />
+            ) : (
+              <div className="phone-placeholder">
+                {sims.length === 0
+                  ? "No simulators found. Install iOS simulators via Xcode → Settings → Platforms."
+                  : !pinnedUdid
+                    ? "Pick a simulator from the top bar."
+                    : !booted
+                      ? "Click boot to start the simulator."
+                      : "Waiting for stream…"}
+              </div>
+            )}
+            {ripples.map((r) => (
+              <span key={r.id} className="ripple" style={{ left: r.x, top: r.y }} />
+            ))}
           </div>
-        )}
-        {ripples.map((r) => (
-          <span key={r.id} className="ripple" style={{ left: r.x, top: r.y }} />
-        ))}
+        </div>
       </div>
       {booted && streamInfo && (
         <div className="device-buttons">
