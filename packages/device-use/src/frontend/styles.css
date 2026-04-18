@@ -127,7 +127,7 @@ body,
 .app {
   display: grid;
   grid-template-columns: 1fr 320px;
-  grid-template-rows: 52px 1fr 220px;
+  grid-template-rows: 52px 1fr auto;
   grid-template-areas:
     "topbar topbar"
     "stage  sidebar"
@@ -475,12 +475,75 @@ body,
   grid-area: logs;
   background: var(--bg-surface);
   border-top: 1px solid var(--border);
-  overflow-y: auto;
   font-family: var(--font-mono);
   font-size: var(--text-xs);
-  line-height: 1.55;
-  padding: 8px 16px;
   color: var(--text-secondary);
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+
+.logs.collapsed {
+  /* Header only — ~32px row */
+}
+
+.logs.expanded {
+  height: 220px;
+}
+
+.logs .log-header {
+  all: unset; /* reset <button> */
+  box-sizing: border-box;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  width: 100%;
+  padding: 8px 16px;
+  font-family: var(--font-mono);
+  font-size: var(--text-2xs);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--text-tertiary);
+  cursor: pointer;
+  user-select: none;
+  border-bottom: 1px solid transparent;
+  transition:
+    color 0.12s ease,
+    border-color 0.12s ease,
+    background 0.12s ease;
+}
+
+.logs.expanded .log-header {
+  border-bottom-color: var(--border);
+}
+
+.logs .log-header:hover {
+  color: var(--text-secondary);
+  background: var(--bg-elevated);
+}
+
+.logs .log-header:focus-visible {
+  outline: 2px solid var(--ring);
+  outline-offset: -2px;
+}
+
+.logs .log-header-left {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.logs .log-chevron {
+  font-size: 10px;
+  opacity: 0.7;
+}
+
+.logs .log-body {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 8px 16px;
+  line-height: 1.55;
 }
 
 .logs .log-line {
@@ -491,23 +554,6 @@ body,
 
 .logs .log-line.stderr {
   color: var(--warning);
-}
-
-.logs .log-header {
-  font-family: var(--font-mono);
-  font-size: var(--text-2xs);
-  text-transform: uppercase;
-  letter-spacing: 0.08em;
-  color: var(--text-tertiary);
-  padding: 0 0 6px;
-  border-bottom: 1px solid var(--border);
-  margin-bottom: 6px;
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  position: sticky;
-  top: 0;
-  background: var(--bg-surface);
 }
 
 .logs .clear-btn {
@@ -529,7 +575,7 @@ body,
 .logs .clear-btn:hover {
   color: var(--text-primary);
   border-color: var(--border-strong);
-  background: var(--bg-elevated);
+  background: var(--bg-raised);
 }
 
 /* ──────────────────────── Toast ───────────────────────────────────── */
@@ -567,18 +613,18 @@ body,
 /* Subtle, themed scrollbars to match Deus's restrained aesthetic */
 
 .sidebar .section-body::-webkit-scrollbar,
-.logs::-webkit-scrollbar {
+.logs .log-body::-webkit-scrollbar {
   width: 8px;
   height: 8px;
 }
 
 .sidebar .section-body::-webkit-scrollbar-track,
-.logs::-webkit-scrollbar-track {
+.logs .log-body::-webkit-scrollbar-track {
   background: transparent;
 }
 
 .sidebar .section-body::-webkit-scrollbar-thumb,
-.logs::-webkit-scrollbar-thumb {
+.logs .log-body::-webkit-scrollbar-thumb {
   background: var(--bg-raised);
   border-radius: var(--radius-full);
   border: 2px solid transparent;
@@ -586,7 +632,7 @@ body,
 }
 
 .sidebar .section-body::-webkit-scrollbar-thumb:hover,
-.logs::-webkit-scrollbar-thumb:hover {
+.logs .log-body::-webkit-scrollbar-thumb:hover {
   background: var(--bg-overlay);
   background-clip: padding-box;
 }
