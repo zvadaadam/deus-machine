@@ -135,6 +135,11 @@ body,
   height: 100vh;
   width: 100vw;
   overflow: hidden;
+  transition: grid-template-columns 0.18s ease;
+}
+
+.app.sidebar-collapsed {
+  grid-template-columns: 1fr 0px;
 }
 
 /* ──────────────────────── Top bar ─────────────────────────────────── */
@@ -435,18 +440,91 @@ body,
   overflow: hidden;
 }
 
-.sidebar .section {
+.app.sidebar-collapsed .sidebar {
+  display: none;
+}
+
+/* Small rail button that replaces the sidebar when collapsed. */
+.sidebar-rail {
+  grid-area: sidebar;
+  position: absolute;
+  top: 60px;
+  right: 8px;
+  width: 28px;
+  height: 32px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--bg-elevated);
+  color: var(--text-tertiary);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  z-index: 5;
+  transition:
+    background 0.12s ease,
+    color 0.12s ease,
+    border-color 0.12s ease;
+}
+
+.sidebar-rail:hover {
+  background: var(--bg-raised);
+  color: var(--text-primary);
+  border-color: var(--border-strong);
+}
+
+.sidebar-rail:focus-visible {
+  outline: 2px solid var(--ring);
+  outline-offset: 1px;
+}
+
+/* Header strip with the collapse chevron (right-aligned). */
+.sidebar-chrome {
+  display: flex;
+  justify-content: flex-end;
+  padding: 8px 8px 4px;
+  border-bottom: 1px solid var(--border);
+}
+
+.sidebar-collapse {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  background: transparent;
+  color: var(--text-tertiary);
+  border: 1px solid transparent;
+  border-radius: var(--radius-xs);
+  cursor: pointer;
+  transition:
+    background 0.12s ease,
+    color 0.12s ease;
+}
+
+.sidebar-collapse:hover {
+  background: var(--bg-elevated);
+  color: var(--text-primary);
+}
+
+.sidebar-collapse:focus-visible {
+  outline: 2px solid var(--ring);
+  outline-offset: 1px;
+}
+
+/* Panel — reusable wrapper used by ElementsPanel + ActivityPanel. */
+.sidebar-panel {
   border-bottom: 1px solid var(--border);
   display: flex;
   flex-direction: column;
   min-height: 0;
 }
 
-.sidebar .section:last-child {
+.sidebar-panel:last-child {
   border-bottom: none;
 }
 
-.sidebar .section-header {
+.sidebar-panel-header {
   padding: 10px 14px;
   font-family: var(--font-mono);
   font-size: var(--text-2xs);
@@ -456,9 +534,22 @@ body,
   display: flex;
   justify-content: space-between;
   align-items: center;
+  gap: 8px;
 }
 
-.sidebar .section-body {
+.sidebar-panel-title {
+  display: inline-flex;
+  align-items: center;
+}
+
+.sidebar-panel-subtitle {
+  margin-left: 8px;
+  color: var(--primary);
+  text-transform: none;
+  letter-spacing: 0;
+}
+
+.sidebar-panel-body {
   overflow-y: auto;
   padding: 0 14px 12px;
   flex: 1;
@@ -466,7 +557,42 @@ body,
   line-height: 1.5;
 }
 
-.sidebar .activity-item {
+.sidebar-panel-action {
+  background: transparent;
+  color: var(--text-tertiary);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-xs);
+  padding: 2px 8px;
+  font-family: var(--font-mono);
+  font-size: var(--text-2xs);
+  letter-spacing: 0.04em;
+  cursor: pointer;
+  transition:
+    color 0.1s ease,
+    border-color 0.1s ease,
+    background 0.1s ease;
+}
+
+.sidebar-panel-action:hover:not(:disabled) {
+  color: var(--text-primary);
+  border-color: var(--border-strong);
+  background: var(--bg-elevated);
+}
+
+.sidebar-panel-action:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.sidebar-empty {
+  color: var(--text-muted-foreground);
+  font-style: italic;
+  padding: 10px 0;
+  font-size: var(--text-sm);
+}
+
+/* Activity list */
+.activity-item {
   padding: 6px 0;
   border-bottom: 1px solid var(--border);
   font-family: var(--font-mono);
@@ -474,27 +600,33 @@ body,
   color: var(--text-secondary);
 }
 
-.sidebar .activity-item:last-child {
+.activity-item:last-child {
   border-bottom: none;
 }
 
-.sidebar .activity-item .tool {
+.activity-item .tool {
   color: var(--primary);
 }
 
-.sidebar .activity-item .status-started {
+.activity-item .status-started {
   color: var(--warning);
 }
 
-.sidebar .activity-item .status-completed {
+.activity-item .status-completed {
   color: var(--success);
 }
 
-.sidebar .activity-item .status-failed {
+.activity-item .status-failed {
   color: var(--destructive);
 }
 
-.sidebar .ref-item {
+.activity-error {
+  color: var(--destructive);
+  margin-top: 2px;
+}
+
+/* Element (ref) list */
+.ref-item {
   padding: 4px 6px;
   margin: 0 -6px;
   border-radius: var(--radius-xs);
@@ -505,29 +637,22 @@ body,
   transition: background 0.1s ease;
 }
 
-.sidebar .ref-item:hover {
+.ref-item:hover {
   background: var(--bg-elevated);
   color: var(--text-primary);
 }
 
-.sidebar .ref-item .ref-id {
+.ref-item .ref-id {
   color: var(--primary);
   margin-right: 8px;
 }
 
-.sidebar .ref-item .ref-label {
+.ref-item .ref-label {
   color: var(--text-primary);
 }
 
-.sidebar .ref-item .ref-type {
+.ref-item .ref-type {
   color: var(--text-tertiary);
-}
-
-.sidebar .empty {
-  color: var(--text-muted-foreground);
-  font-style: italic;
-  padding: 10px 0;
-  font-size: var(--text-sm);
 }
 
 /* ──────────────────────── Logs drawer ─────────────────────────────── */
@@ -805,18 +930,18 @@ body,
 /* ──────────────────────── Scrollbar polish ────────────────────────── */
 /* Subtle, themed scrollbars to match Deus's restrained aesthetic */
 
-.sidebar .section-body::-webkit-scrollbar,
+.sidebar-panel-body::-webkit-scrollbar,
 .logs .log-body::-webkit-scrollbar {
   width: 8px;
   height: 8px;
 }
 
-.sidebar .section-body::-webkit-scrollbar-track,
+.sidebar-panel-body::-webkit-scrollbar-track,
 .logs .log-body::-webkit-scrollbar-track {
   background: transparent;
 }
 
-.sidebar .section-body::-webkit-scrollbar-thumb,
+.sidebar-panel-body::-webkit-scrollbar-thumb,
 .logs .log-body::-webkit-scrollbar-thumb {
   background: var(--bg-raised);
   border-radius: var(--radius-full);
@@ -824,7 +949,7 @@ body,
   background-clip: padding-box;
 }
 
-.sidebar .section-body::-webkit-scrollbar-thumb:hover,
+.sidebar-panel-body::-webkit-scrollbar-thumb:hover,
 .logs .log-body::-webkit-scrollbar-thumb:hover {
   background: var(--bg-overlay);
   background-clip: padding-box;
