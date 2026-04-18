@@ -557,6 +557,15 @@ const stream_logs = tool({
       udid,
       ...(params.bundleId ? { bundleId: params.bundleId } : {}),
       onLine: (line) => ctx.events.emit({ type: "tool-log", id, stream: "stdout", text: line }),
+      // Self-clean on either failure path so logHandles never accumulates
+      // dead subscriptions (would leak in long-running servers).
+      onError: (err) => {
+        console.warn(`[stream_logs ${id}] error:`, err.message);
+        ctx.events.logHandles.delete(id);
+      },
+      onExit: () => {
+        ctx.events.logHandles.delete(id);
+      },
     });
     ctx.events.logHandles.set(id, handle);
     return { subscriptionId: id };

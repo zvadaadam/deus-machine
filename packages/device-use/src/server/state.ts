@@ -64,12 +64,21 @@ export class StateStore {
   }
 
   private async persist(): Promise<void> {
-    // Chain writes so we never clobber a previous write.
-    this.writeChain = this.writeChain.then(async () => {
-      await mkdir(this.storageDir, { recursive: true });
-      await writeFile(this.file, JSON.stringify(this.state, null, 2), "utf8");
+    // Chain writes so we never clobber a previous write. Catch failures
+    // inside the chain so a single transient error (disk full, permissions
+    // hiccup) doesn't poison the chain and silently disable persistence
+    // for the rest of the server's lifetime.
+    const next = this.writeChain.then(async () => {
+      try {
+        await mkdir(this.storageDir, { recursive: true });
+        await writeFile(this.file, JSON.stringify(this.state, null, 2), "utf8");
+      } catch (err) {
+        console.warn(`[state] write to ${this.file} failed:`, (err as Error).message);
+        // swallow — next persist() will try again from scratch
+      }
     });
-    return this.writeChain;
+    this.writeChain = next;
+    return next;
   }
 }
 

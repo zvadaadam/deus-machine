@@ -39,7 +39,8 @@ export class XcodebuildError extends DeviceUseError {
 
 function detectKind(projectPath: string): "xcodeproj" | "workspace" {
   if (projectPath.endsWith(".xcworkspace")) return "workspace";
-  return "xcodeproj";
+  if (projectPath.endsWith(".xcodeproj")) return "xcodeproj";
+  throw new XcodebuildError(`Project path must end in .xcodeproj or .xcworkspace: ${projectPath}`);
 }
 
 /**

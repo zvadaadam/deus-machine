@@ -44,3 +44,5 @@ ws.addEventListener("error", (e) => {
 setTimeout(() => {
   finish(1, `FAIL — timeout after ${seen.length} events`);
 }, 5000);
+
+export {};

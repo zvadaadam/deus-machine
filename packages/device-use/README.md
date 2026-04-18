@@ -62,7 +62,7 @@ Full command list: `device-use help`.
 
 ## Architecture
 
-```
+```text
 ┌──────────────────────────────────────────────────────────────────┐
 │  packages/device-use/                                            │
 │                                                                  │

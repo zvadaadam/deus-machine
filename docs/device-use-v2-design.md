@@ -53,7 +53,7 @@ Design philosophy: **dumb executor, smart caller.** device-use takes explicit pr
 │   ┌────┴──────────────┐     ┌────────────────────────────┐  │
 │   │  src/cli/         │     │  src/server/               │  │
 │   │  stateless,       │     │  long-lived Bun process    │  │
-│   │  per-command      │     │  TanStack Start on Nitro   │  │
+│   │  per-command      │     │  Hono on Bun.serve         │  │
 │   │  (today's shape)  │     │  routes: /, /mcp, /ws,     │  │
 │   │                   │     │          /health, /api/*   │  │
 │   └───────────────────┘     └──────────┬─────────────────┘  │
@@ -61,7 +61,7 @@ Design philosophy: **dumb executor, smart caller.** device-use takes explicit pr
 │                                        │ serves              │
 │                                        ▼                     │
 │                              src/frontend/                   │
-│                              TanStack Start React viewer     │
+│                              Vite + React viewer             │
 │                              (WS client of server)           │
 │                                                             │
 │  CLI and Server are independent peers. They share the       │
