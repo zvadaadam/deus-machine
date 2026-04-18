@@ -280,6 +280,82 @@ Adapt from current `apps/web/src/features/simulator/ui/` where useful; don't por
 
 ---
 
+## Handoff to next PR — AAP host integration in Deus
+
+device-use is now a complete AAP-shaped app. The next PR is the **Deus side**: the IDE learns to consume `agentic-app.json`, spawn AAP apps, register their MCP servers with Claude Agent SDK, and embed their viewers. This section is a brief for that work.
+
+### What to build in Deus
+
+| Surface               | Where                                               | Notes                                                                                                                                                                                                              |
+| --------------------- | --------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| **App registry**      | `apps/backend/src/services/apps.service.ts` (new)   | Reads `agentic-app.json` from a config path or workspace `deus-apps/`. v1: hardcode `packages/device-use` as the only entry.                                                                                       |
+| **App spawner**       | same service                                        | `spawn(launch.command, launch.args)` with template substitution (`{port}`, `{workspace}`, `{storage.workspace}`). Allocate free port via `Bun.serve(0)` then close. Probe `launch.ready` (`http`/`tcp`) until 2xx. |
+| **State persistence** | `running_apps` table in `shared/schema.ts`          | `id, app_id, workspace_id, pid, port, url, status, started_at, exit_code, stderr_tail`. Boot-time orphan sweep via `kill -0 pid`.                                                                                  |
+| **MCP registration**  | `apps/agent-server/src/app-registrar.ts` (new)      | On `launch_app` success, call SDK's `setMcpServers({ deus_mobile_use: { type: "http", url } })`. On `stop_app`, omit. SDK handles connect/disconnect.                                                              |
+| **Lifecycle tools**   | `apps/agent-server/agents/deus-tools/apps.ts` (new) | 4 tools: `list_apps`, `launch_app`, `stop_app`, `app_status`. Each does one RPC to backend.                                                                                                                        |
+| **WS resources**      | `shared/events.ts`                                  | Add `apps`, `running_apps` to `QUERY_RESOURCES`. Frontend subscribes via `useQuerySubscription`.                                                                                                                   |
+| **Frontend launcher** | `apps/web/src/features/apps/` (new)                 | Sidebar nav entry "Apps" + content-tab launcher with one card per installed app. Status chip (idle/starting/running/crashed) + Open/Launch/Retry button.                                                           |
+| **App tab**           | piggyback on `apps/web/src/features/browser/`       | When a launched app emits `status: ready`, open a Browser tab pointing at its `url`. AAP viewer renders inside via `BrowserView` (desktop) or iframe (web).                                                        |
+
+### What to delete (after AAP works)
+
+Net ~2,500 LOC of dead code once Deus consumes device-use via AAP:
+
+- `apps/web/src/features/simulator/` — ~1,664 LOC (replaced by AAP-launched device-use viewer in a Browser tab)
+- `apps/backend/src/services/simulator-context.ts` — 793 LOC (replaced by `apps.service.ts`)
+- `apps/agent-server/agents/deus-tools/simulator.ts` + `sim-ops.ts` — the 12 simulator tools (now served by device-use's own MCP endpoint)
+
+Suggested order: ship AAP behind a feature flag → soak 1-2 weeks → delete simulator code in a follow-up PR.
+
+### Things device-use learned that should shape the AAP protocol
+
+Real lessons from building the reference impl, worth respecting in the host:
+
+1. **Manifests need `requires` validation before spawn.** xcrun-missing or wrong-OS errors should surface as actionable messages, not cryptic exit codes. We declared `requires: [{type: "cli", name: "xcrun"}, {type: "platform", os: "darwin"}]` in our manifest — Deus should check these before running `launch.command`.
+
+2. **`{port}` substitution is essential.** Apps must accept the host-allocated port — never hard-code 3100. Our launch args do `["serve", "--port", "{port}"]`.
+
+3. **Health probe is non-optional.** Even fast-starting Bun servers take 200-500ms to bind. Without `launch.ready.http`, the host races against the process and connections fail randomly. Our probe path `/health` returns `{ok:true}` instantly once the server is ready.
+
+4. **`{storage.workspace}` env var works.** We pass `DEUS_STORAGE` and the app writes `state.json` there. Survives restarts cleanly. Host should `mkdir -p` the storage dir before spawn.
+
+5. **Process lifetime = `child.on("exit")`, no polling.** Our server exits cleanly on SIGTERM. The host's watchdog should be the native exit event, not a heartbeat. Hung-but-not-exited processes are a user-explicit-stop concern, not framework concern.
+
+6. **Iframe needs an extra-low-latency back-channel for input.** Our `/sim-input` WS proxy passing binary frames bypasses HTTP entirely so taps feel instant. Generic AAP apps may want similar — perhaps the manifest should declare `additionalChannels: [{path: "/sim-input", proto: "ws-binary"}]` that the host transparently proxies. Defer until a second app actually needs it.
+
+7. **External MCP server registration must use `setMcpServers` at runtime.** Verified — SDK's `Query.setMcpServers()` works for dynamic add/remove during a session. No need to restart the session when launching/stopping apps.
+
+8. **The frontend should be free to use any framework.** device-use uses Vite + React + Zustand — none of which Deus cares about. The host only sees `ui.url`. No framework constraint imposed.
+
+### Things deferred from device-use (not blockers)
+
+For Deus AAP host to be aware of, but not handle directly:
+
+- **Wheel→scroll mapping**: device-use UI doesn't intercept wheel. Could be a host-level affordance (intercept wheel in BrowserView, forward to app's `/sim-input` WS as `move` events).
+- **CLI-action visibility in `/ws`**: documented; will likely add `--via-server` opt-in flag in a v1.1 of device-use.
+- **Multi-sim side-by-side**: not supported — needs a host-level "open two AAP iframes" model, not an app-level one. Defer to AAP v2.
+
+### Open questions to answer before merging the Deus AAP PR
+
+These need a design pass during that PR — not pre-decidable now:
+
+- **Where in the Deus UI does the launcher live?** Sidebar entry vs. content tab vs. command palette. Design doc has a sketch ("Apps" sidebar entry → launcher tab in Browser).
+- **What's the per-workspace lifetime?** App stays running across session reloads? Dies on workspace close? Both? (`lifecycle.scope: workspace` already implies workspace-bounded but Deus needs to enforce.)
+- **Activity feed from app → Deus chat?** Use `ui/message` envelope (we drafted but didn't implement). When build fails inside device-use, should the failure summary auto-inject into the agent's conversation context?
+
+### Concrete first commit for the Deus PR
+
+Smallest meaningful slice that proves the host machinery works:
+
+1. `shared/schema.ts` — add `running_apps` table
+2. `apps/backend/src/services/apps.service.ts` — minimal: read one hardcoded manifest, spawn, probe `/health`, persist row
+3. `apps/agent-server/agents/deus-tools/apps.ts` — `list_apps` + `launch_app` only (no stop yet)
+4. Smoke test: `device-use` launches via the new path; `/api/state` reachable from Deus's tools
+
+If that ships green, the rest (frontend launcher, lifecycle scope, deletion of legacy simulator code) is mechanical.
+
+---
+
 ## Interview rounds (log)
 
 - **R1** Goal framing → user prefers end-to-end big PR with device-use as reference implementation.
