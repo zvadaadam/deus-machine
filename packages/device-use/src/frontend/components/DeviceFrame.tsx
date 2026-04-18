@@ -39,16 +39,19 @@ const HARDWARE_BUTTONS: HardwareButton[] = [
   { label: "Lock", button: "lock", key: ["l", "L"] },
 ];
 
-/** Visual shell spec — ported from apps/web/src/features/simulator/ui/DeviceFrame.tsx
- *  (the generic fallback used when Apple-derived bezel assets aren't bundled).
- *  Percentages are relative to the shell box, radii in rem. */
+/** Visual shell spec — bezel dimensions per device class.
+ *  Percentages are relative to the shell box, radii in rem.
+ *
+ *  Note on the dynamic island / camera hole: we do NOT draw them as
+ *  overlays because the simulator's MJPEG stream already includes iOS's
+ *  native status bar (with its own dynamic island / camera cutout). Drawing
+ *  a second pill on top caused a visible "two islands stacked" artifact.
+ *  The shell is the bezel only; the stream is the screen content. */
 interface ShellSpec {
   aspectRatio: string;
   shellRadius: string;
   screenRadius: string;
   screenInsets: { top: string; left: string; right: string; bottom: string };
-  showDynamicIsland: boolean;
-  showCameraDot: boolean;
 }
 
 function getShellSpec(deviceName: string | null | undefined): ShellSpec {
@@ -59,8 +62,6 @@ function getShellSpec(deviceName: string | null | undefined): ShellSpec {
       shellRadius: "2.75rem",
       screenRadius: "2.1rem",
       screenInsets: { top: "2.1%", left: "2.2%", right: "2.2%", bottom: "2.1%" },
-      showDynamicIsland: false,
-      showCameraDot: true,
     };
   }
   return {
@@ -68,8 +69,6 @@ function getShellSpec(deviceName: string | null | undefined): ShellSpec {
     shellRadius: "3.25rem",
     screenRadius: "2.6rem",
     screenInsets: { top: "1.7%", left: "2.5%", right: "2.5%", bottom: "1.9%" },
-    showDynamicIsland: true,
-    showCameraDot: false,
   };
 }
 
@@ -317,8 +316,6 @@ export function DeviceFrame() {
             style={{ borderRadius: shell.shellRadius }}
             aria-hidden
           />
-          {shell.showDynamicIsland && <div className="device-dynamic-island" aria-hidden />}
-          {shell.showCameraDot && <div className="device-camera-dot" aria-hidden />}
 
           <div
             className="device-screen"
