@@ -333,7 +333,8 @@ body,
   display: block;
   width: 100%;
   height: 100%;
-  object-fit: contain;
+  /* The shell's aspect ratio is derived from the stream so the canvas
+     fills the screen exactly; no letterboxing, no stretching. */
   cursor: crosshair;
   user-select: none;
   background: var(--canvas-bg);
