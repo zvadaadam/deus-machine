@@ -129,6 +129,20 @@ if (IS_DEV) {
   });
 } else {
   const { serveStatic } = await import("hono/bun");
+  // Cache policy: hashed assets under /assets/* are immutable
+  // (Vite fingerprints them, so the name changes whenever the content does),
+  // so max-age a year. Everything else (including the HTML shell that
+  // references those assets) must re-fetch on every load — otherwise the
+  // HTML keeps pointing at old bundle hashes after a deploy.
+  app.use("*", async (c, next) => {
+    await next();
+    const path = new URL(c.req.url).pathname;
+    if (path.startsWith("/assets/")) {
+      c.header("Cache-Control", "public, max-age=31536000, immutable");
+    } else {
+      c.header("Cache-Control", "no-cache");
+    }
+  });
   app.use("*", serveStatic({ root: "./dist/frontend" }));
   app.get("*", serveStatic({ path: "./dist/frontend/index.html" }));
 }
