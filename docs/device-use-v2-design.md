@@ -315,7 +315,7 @@ Real lessons from building the reference impl, worth respecting in the host:
 
 2. **`{port}` substitution is essential.** Apps must accept the host-allocated port — never hard-code 3100. Our launch args do `["serve", "--port", "{port}"]`.
 
-3. **Health probe is non-optional.** Even fast-starting Bun servers take 200-500ms to bind. Without `launch.ready.http`, the host races against the process and connections fail randomly. Our probe path `/health` returns `{ok:true}` instantly once the server is ready.
+3. **Health probe is non-optional.** Even fast-starting Bun servers take 200-500ms to bind. Without a `launch.ready` probe (e.g. `{type: "http", path: "/health"}`), the host races against the process and connections fail randomly. Our probe path `/health` returns `{ok:true}` instantly once the server is ready.
 
 4. **`{storage.workspace}` env var works.** We pass `DEUS_STORAGE` and the app writes `state.json` there. Survives restarts cleanly. Host should `mkdir -p` the storage dir before spawn.
 
