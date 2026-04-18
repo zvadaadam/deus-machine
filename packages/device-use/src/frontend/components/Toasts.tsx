@@ -10,7 +10,7 @@ export function Toasts() {
     <div className="toast">
       <strong>{latest.tool}</strong> {latest.status}
       {latest.error && (
-        <span style={{ color: "var(--danger)" }}> — {latest.error.slice(0, 80)}</span>
+        <span style={{ color: "var(--destructive)" }}> — {latest.error.slice(0, 80)}</span>
       )}
     </div>
   );
