@@ -19,9 +19,9 @@ import { permissionCommand } from "./commands/permission.js";
 import { queryCommand } from "./commands/query.js";
 import { screenshotCommand } from "./commands/screenshot.js";
 import { sessionCommand } from "./commands/session.js";
+import { serveCommand } from "./commands/serve.js";
 import { shutdownCommand } from "./commands/shutdown.js";
 import { snapshotCommand } from "./commands/snapshot.js";
-import { streamCommand } from "./commands/stream.js";
 import { swipeCommand } from "./commands/swipe.js";
 import { tapCommand } from "./commands/tap.js";
 import { terminateCommand } from "./commands/terminate.js";
@@ -41,7 +41,7 @@ for (const cmd of [
   typeCommand,
   fillCommand,
   screenshotCommand,
-  streamCommand,
+  serveCommand,
   waitForCommand,
   openUrlCommand,
   appsCommand,

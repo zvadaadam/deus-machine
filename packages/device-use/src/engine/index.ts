@@ -76,3 +76,12 @@ export { waitFor, waitForLabel, waitForId, waitForType } from "./wait-for.js";
 export type { WaitForOptions, WaitForResult, WaitForPredicate } from "./wait-for.js";
 
 export { createExecutor } from "./utils/exec.js";
+
+export { getProjectInfo, XcodebuildError } from "./project-info.js";
+export type { ProjectInfo } from "./project-info.js";
+
+export { build, resolveAppPath, BuildError } from "./xcodebuild.js";
+export type { BuildOptions, BuildResult, Spawner as BuildSpawner } from "./xcodebuild.js";
+
+export { streamLogs } from "./logs.js";
+export type { StreamLogsOptions, LogStreamHandle, Spawner as LogSpawner } from "./logs.js";

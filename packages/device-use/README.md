@@ -1,82 +1,109 @@
 # device-use
 
-iOS Simulator automation for AI agents — CLI, SDK, and engine.
+Standalone iOS Simulator workbench for humans and agents.
 
-Ported from [`expo/agent-simulator`](https://github.com/expo/agent-simulator), refactored
-for [Bun](https://bun.sh) with a single-file compiled binary.
+- **Viewer** — open `localhost:3100` to see a live phone screen, boot sims, build + run your Xcode project, inspect the a11y tree.
+- **MCP server** — `/mcp` exposes 23 tools (build, install, launch, tap, type, snapshot, …). Any MCP-speaking client (Claude Code, Claude Desktop, Cursor, …) can drive the simulator.
+- **CLI** — `device-use list`, `device-use tap @e1`, `device-use serve`, etc. Works standalone, no server required.
 
-## Install (from source)
+Under the hood: a Bun server hosting a React viewer, an HTTP MCP transport, a WebSocket event bus, and a Swift `simbridge` binary that talks to private CoreSimulator + AccessibilityPlatform frameworks.
+
+## Install from source
 
 ```bash
 bun install
-bun run build:native   # Builds simbridge Swift binary (requires Xcode)
-bun run compile        # Produces ./bin/device-use + ./bin/simbridge
-./bin/device-use install   # Installs the Claude skill
+bun run build:native      # Builds the Swift simbridge binary (requires Xcode)
 ```
 
-## Quick start
+## Run the server
+
+```bash
+bun run dev               # Hono server on 3100 (proxies to Vite for HMR)
+bun run dev:frontend      # Vite dev server on 5173 (second terminal)
+# or, from the CLI:
+bunx device-use serve --port 3100 --open
+```
+
+Open [http://localhost:3100](http://localhost:3100). Pick a simulator, paste a `.xcodeproj`/`.xcworkspace` path, click **▶ Run**.
+
+For production: `bun run build && bun run start`.
+
+## MCP endpoint
+
+Point any MCP client at `http://localhost:3100/mcp`. Example — Claude Desktop's `.claude/mcp.json`:
+
+```json
+{
+  "mcpServers": {
+    "device-use": {
+      "type": "http",
+      "url": "http://localhost:3100/mcp"
+    }
+  }
+}
+```
+
+Tools available: `list_devices`, `boot`, `set_active_simulator`, `set_active_project`, `get_project_info`, `build`, `install`, `launch_app`, `terminate_app`, `list_apps`, `app_state`, `snapshot`, `tap`, `type_text`, `swipe`, `press_button`, `screenshot`, `wait_for`, `open_url`, `grant_permission`, `stream_logs`, `stop_logs`, `get_state`.
+
+## CLI
 
 ```bash
 device-use list                      # List simulators
 device-use boot "iPhone 17 Pro"      # Boot by name
-device-use snapshot -i               # Dump interactive UI with @refs
+device-use snapshot -i               # Accessibility tree with @refs
 device-use tap @e1                   # Tap by ref
 device-use type "hello@example.com"  # Type into focused field
 device-use screenshot result.png     # Capture screen
+device-use serve --open              # Start server + open viewer
 device-use doctor                    # Verify environment
 ```
 
+Full command list: `device-use help`.
+
 ## Architecture
 
-- **`native/`** — Swift package (`simbridge`) that talks to private CoreSimulator
-  and AccessibilityPlatform frameworks. Handles HID injection, accessibility
-  queries, and MJPEG streaming.
-- **`src/engine/`** — TypeScript primitives wrapping `xcrun simctl` and
-  `simbridge` IPC. No CLI or SDK imports.
-- **`src/cli/`** — Hand-rolled CLI with flat commands and JSON-when-piped.
-- **`src/sdk/`** — Fluent `session()` builder for programmatic automation.
-- **`skills/device-use/SKILL.md`** — Claude Code skill definition.
-
-## Commands
-
-| Command                      | Purpose                                                                           |
-| ---------------------------- | --------------------------------------------------------------------------------- |
-| `list`                       | List available simulators                                                         |
-| `boot` / `shutdown` / `open` | Simulator lifecycle                                                               |
-| `snapshot`                   | Accessibility tree with `@refs` (`-i` for interactive only, `--diff` for changes) |
-| `screenshot`                 | PNG/JPEG capture, optionally base64                                               |
-| `tap`                        | By `@ref`, `--id`, `--label`, or `-x -y`                                          |
-| `type`                       | Into focused field, optional `--submit`                                           |
-| `wait-for`                   | Poll until element appears/disappears                                             |
-| `stream`                     | MJPEG screen server (`enable`/`disable`/`status`)                                 |
-| `open-url`                   | Deep link / URL                                                                   |
-| `session`                    | Manage default simulator + ref state                                              |
-| `doctor`                     | Environment check                                                                 |
-| `install`                    | Verify setup + install Claude skill                                               |
-
-## SDK
-
-```ts
-import { session } from "device-use";
-
-await session("iPhone 17 Pro").app("Maps").snapshot().tapOn("@e1").inputText("Coffee").run();
+```text
+┌──────────────────────────────────────────────────────────────────┐
+│  packages/device-use/                                            │
+│                                                                  │
+│   native/      — Swift simbridge binary (unchanged)              │
+│                                                                  │
+│   src/engine/  — TS primitives: simctl + simbridge IPC +         │
+│                  xcodebuild + logs. Pure, injectable executors.  │
+│       ▲                                                           │
+│       │ imported by                                               │
+│       │                                                           │
+│   ┌───┴────────────┐       ┌────────────────────────────┐        │
+│   │  src/cli/      │       │  src/server/               │        │
+│   │  per-command,  │       │  long-lived Bun.serve      │        │
+│   │  stateless     │       │  /  /mcp  /ws  /health     │        │
+│   └────────────────┘       │  /stream.mjpeg  /api/*     │        │
+│                            └──────────┬─────────────────┘        │
+│                                       │ serves                    │
+│                                       ▼                           │
+│                            src/frontend/  (Vite + React)          │
+│                            TopBar, DeviceFrame, Sidebar,          │
+│                            LogsDrawer — WS client of server       │
+└──────────────────────────────────────────────────────────────────┘
 ```
 
-## Distribution
+CLI and server share the engine but are independent peers — neither needs the other to work.
 
-The compiled `./bin/device-use` is a single ~58 MB Bun executable. Ship
-it alongside `./bin/simbridge` (~1.6 MB) — the CLI looks for `simbridge` as a
-sibling of its own binary (or via `$DEVICE_USE_SIMBRIDGE` override).
+## Agentic Apps Protocol
 
-## Requirements
+device-use is the reference implementation of an AAP app. The `agentic-app.json` at the package root declares how a host IDE (Deus, any MCP-speaking IDE) should launch and embed it.
 
-- macOS 14+ with Xcode installed
-- Bun 1.1+ (dev only — compiled binary has no runtime dep)
-
-## Testing
+## Develop
 
 ```bash
-bun test                   # Unit tests
-bun run typecheck          # TS check
-./bin/device-use doctor    # End-to-end env check
+bun test                  # 86 unit + integration tests, no real sim needed
+bun run typecheck         # tsc --noEmit
+bun run build             # simbridge + ts bundles + frontend bundle
+bun run compile           # single-file bin/device-use + bin/simbridge
 ```
+
+Tests live in `test/` — never colocated with `src/`. `packages/device-use/scripts/ws-smoke.ts` is a manual WS sanity check (server must be running).
+
+## License
+
+MIT
