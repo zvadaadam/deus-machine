@@ -267,8 +267,8 @@ Adapt from current `apps/web/src/features/simulator/ui/` where useful; don't por
     "env": { "DEUS_STORAGE": "{storage.workspace}" },
     "ready": { "type": "http", "path": "/health", "timeoutMs": 30000 }
   },
-  "ui": { "url": "http://localhost:{port}/" },
-  "agent": { "tools": { "type": "mcp-http", "url": "http://localhost:{port}/mcp" } },
+  "ui": { "url": "http://127.0.0.1:{port}/" },
+  "agent": { "tools": { "type": "mcp-http", "url": "http://127.0.0.1:{port}/mcp" } },
   "storage": { "workspace": "{workspace}/.device-use" },
   "lifecycle": { "scope": "workspace", "stopSignal": "SIGTERM", "stopTimeoutMs": 5000 },
   "requires": [
