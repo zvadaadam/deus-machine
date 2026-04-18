@@ -40,13 +40,17 @@ const HARDWARE_BUTTONS: HardwareButton[] = [
 ];
 
 /** Visual shell spec — bezel dimensions per device class.
- *  Percentages are relative to the shell box, radii in rem.
  *
- *  Note on the dynamic island / camera hole: we do NOT draw them as
- *  overlays because the simulator's MJPEG stream already includes iOS's
- *  native status bar (with its own dynamic island / camera cutout). Drawing
- *  a second pill on top caused a visible "two islands stacked" artifact.
- *  The shell is the bezel only; the stream is the screen content. */
+ *  The shell's aspect ratio is derived from the stream's point dimensions
+ *  (streamInfo.size.ptW/ptH) so the content fills the screen box exactly
+ *  regardless of which iPhone/iPad model is pinned. A fixed
+ *  `430 / 932` looked wrong on iPhone Air (420×912) and iPhone 17 Pro Max
+ *  (440×956). Percentage insets + rem radii scale automatically.
+ *
+ *  We do NOT draw dynamic island / camera hole overlays — the simulator's
+ *  MJPEG stream already includes iOS's native status bar (with its own
+ *  cutout). Drawing a second pill on top caused the "two islands stacked"
+ *  artifact. The shell is the bezel only; the stream is the screen. */
 interface ShellSpec {
   aspectRatio: string;
   shellRadius: string;
@@ -54,21 +58,38 @@ interface ShellSpec {
   screenInsets: { top: string; left: string; right: string; bottom: string };
 }
 
-function getShellSpec(deviceName: string | null | undefined): ShellSpec {
+const PHONE_INSETS = { top: 1.7, left: 2.5, right: 2.5, bottom: 1.9 }; // %
+const TABLET_INSETS = { top: 2.1, left: 2.2, right: 2.2, bottom: 2.1 }; // %
+
+function getShellSpec(
+  deviceName: string | null | undefined,
+  size: { ptW: number; ptH: number } | undefined
+): ShellSpec {
   const isTablet = deviceName?.includes("iPad") ?? false;
-  if (isTablet) {
-    return {
-      aspectRatio: "834 / 1194",
-      shellRadius: "2.75rem",
-      screenRadius: "2.1rem",
-      screenInsets: { top: "2.1%", left: "2.2%", right: "2.2%", bottom: "2.1%" },
-    };
-  }
+  const insets = isTablet ? TABLET_INSETS : PHONE_INSETS;
+
+  // Derive shell aspect ratio from the stream so the screen box matches
+  // the stream's native ratio after subtracting the bezel insets.
+  //
+  //   shellW × (1 − (insetL+insetR)/100) = screenW
+  //   shellH × (1 − (insetT+insetB)/100) = screenH
+  //   screenAR = ptW / ptH   (from streamInfo.size)
+  //   shellAR  = screenAR × (widthFrac / heightFrac)
+  const widthFrac = 1 - (insets.left + insets.right) / 100;
+  const heightFrac = 1 - (insets.top + insets.bottom) / 100;
+  const screenAR = size ? size.ptW / size.ptH : isTablet ? 834 / 1194 : 430 / 932;
+  const shellAR = (screenAR * widthFrac) / heightFrac;
+
   return {
-    aspectRatio: "430 / 932",
-    shellRadius: "3.25rem",
-    screenRadius: "2.6rem",
-    screenInsets: { top: "1.7%", left: "2.5%", right: "2.5%", bottom: "1.9%" },
+    aspectRatio: `${shellAR}`,
+    shellRadius: isTablet ? "2.75rem" : "3.25rem",
+    screenRadius: isTablet ? "2.1rem" : "2.6rem",
+    screenInsets: {
+      top: `${insets.top}%`,
+      left: `${insets.left}%`,
+      right: `${insets.right}%`,
+      bottom: `${insets.bottom}%`,
+    },
   };
 }
 
@@ -301,7 +322,7 @@ export function DeviceFrame() {
     return () => window.removeEventListener("mouseup", onWindowMouseUp);
   }, [sendTouch]);
 
-  const shell = getShellSpec(pinnedSim?.name);
+  const shell = getShellSpec(pinnedSim?.name, streamInfo?.size);
 
   return (
     <div className="stage">
