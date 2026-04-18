@@ -1,5 +1,6 @@
 import { useSimStore } from "../stores/sim-store";
 import { useProjectStore } from "../stores/project-store";
+import { useActivityStore } from "../stores/activity-store";
 import { api } from "../lib/api";
 
 export function TopBar() {
@@ -10,7 +11,19 @@ export function TopBar() {
 
   const onBoot = async () => {
     if (!pinnedUdid) return;
-    await api.boot(pinnedUdid);
+    const res = await api.boot(pinnedUdid);
+    if (!res.success) {
+      // Surface boot failures via the activity store's toast channel.
+      useActivityStore.getState().push({
+        type: "tool-event",
+        id: res.id ?? `boot-${Date.now()}`,
+        at: Date.now(),
+        tool: "boot",
+        params: { udid: pinnedUdid },
+        status: "failed",
+        error: res.error ?? "boot failed",
+      });
+    }
     useSimStore.getState().refresh();
   };
 

@@ -62,7 +62,11 @@ export const useSimStore = create<SimState>((set, get) => ({
     }
   },
   setPinned: async (udid) => {
-    await api.setActiveSimulator(udid);
-    set({ pinnedUdid: udid });
+    const res = await api.setActiveSimulator(udid);
+    if (!res.success) {
+      set({ error: res.error ?? "failed to pin simulator" });
+      return;
+    }
+    set({ pinnedUdid: udid, error: null });
   },
 }));

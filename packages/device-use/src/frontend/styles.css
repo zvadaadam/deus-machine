@@ -14,6 +14,14 @@
   --warning: #f59e0b;
   --danger: #ef4444;
   --cyan: #06b6d4;
+  /* Backgrounds + chrome — used by the stage and device frame */
+  --on-accent: #ffffff;
+  --stage-bg: #06060a;
+  --frame-bg: #1a1a22;
+  --canvas-bg: #000000;
+  --shadow-strong: rgba(0, 0, 0, 0.6);
+  --shadow-card: rgba(0, 0, 0, 0.5);
+  --shadow-frame-overlay: rgba(0, 0, 0, 0.3);
   --radius: 8px;
   --mono: ui-monospace, "SF Mono", Menlo, Monaco, Consolas, monospace;
   --sans:
@@ -82,7 +90,7 @@ body,
 .topbar button.primary {
   background: var(--accent);
   border-color: var(--accent);
-  color: white;
+  color: var(--on-accent);
   font-weight: 600;
   cursor: pointer;
   padding: 6px 14px;
@@ -127,7 +135,7 @@ body,
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  background: #06060a;
+  background: var(--stage-bg);
   overflow: hidden;
   position: relative;
   gap: 12px;
@@ -161,15 +169,15 @@ body,
 .hw-button:active {
   background: var(--accent);
   border-color: var(--accent);
-  color: white;
+  color: var(--on-accent);
 }
 
 .device-frame {
   display: inline-block;
   border-radius: 40px;
   padding: 12px;
-  background: #1a1a22;
-  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.6);
+  background: var(--frame-bg);
+  box-shadow: 0 20px 60px var(--shadow-strong);
   position: relative;
 }
 
@@ -178,7 +186,7 @@ body,
 .device-frame .phone-placeholder {
   display: block;
   border-radius: 28px;
-  background: #000;
+  background: var(--canvas-bg);
   object-fit: contain;
   max-height: 70vh;
 }
@@ -342,7 +350,9 @@ body,
 
 .logs .log-line {
   white-space: pre-wrap;
-  word-break: break-word;
+  /* `overflow-wrap: anywhere` is the modern replacement for the deprecated
+     `word-break: break-word` — same intent, current spec. */
+  overflow-wrap: anywhere;
   color: var(--text);
 }
 
@@ -395,7 +405,7 @@ body,
   font-size: 12px;
   font-family: var(--mono);
   color: var(--text);
-  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5);
+  box-shadow: 0 10px 30px var(--shadow-card);
   pointer-events: none;
   z-index: 10;
   animation: toast-in 0.2s ease-out;

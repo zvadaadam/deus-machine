@@ -166,11 +166,22 @@ async function stopServer(): Promise<void> {
   }
   if (!serverProc) return;
   return new Promise<void>((resolve) => {
-    serverProc!.once("exit", () => resolve());
-    serverProc!.kill("SIGTERM");
-    setTimeout(() => {
-      if (!serverProc!.killed) serverProc!.kill("SIGKILL");
+    const proc = serverProc!;
+    let exited = false;
+    // Always clear the timer on exit so we don't fire SIGKILL after a
+    // clean exit. ChildProcess.killed is set the moment SIGTERM is
+    // *delivered*, not when the process actually exits — using it as a
+    // termination check would skip the SIGKILL path against a
+    // SIGTERM-ignoring child.
+    const timer = setTimeout(() => {
+      if (!exited) proc.kill("SIGKILL");
     }, 3000);
+    proc.once("exit", () => {
+      exited = true;
+      clearTimeout(timer);
+      resolve();
+    });
+    proc.kill("SIGTERM");
   });
 }
 

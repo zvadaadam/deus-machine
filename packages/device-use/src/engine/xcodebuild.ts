@@ -32,12 +32,6 @@ export interface BuildResult {
   stdoutTail: string;
   /** Last N lines of stderr. */
   stderrTail: string;
-  /**
-   * Path to the built `.app` bundle. Only set when `success && derivedDataPath`
-   * is provided (so we can predict the output path). When DerivedData is default,
-   * callers should use xcodebuild's `-showBuildSettings` to locate `BUILT_PRODUCTS_DIR`.
-   */
-  appPath?: string;
 }
 
 /**
@@ -141,23 +135,17 @@ export async function build(options: BuildOptions, spawner: Spawner = spawn): Pr
         if (stderrPartial.value) options.onLog(stderrPartial.value, "stderr");
       }
 
-      const result: BuildResult = {
+      // Don't synthesize an `appPath` from `scheme` — it's wrong whenever
+      // a target's product name differs from the scheme name, and a wrong
+      // appPath is worse than none (callers will fail later during install).
+      // Use `resolveAppPath()` after a successful build to get the real path
+      // from xcodebuild's own settings.
+      resolve({
         success: exitCode === 0,
         exitCode,
         stdoutTail,
         stderrTail,
-      };
-      if (result.success && options.derivedDataPath) {
-        // Predict app path. Actual product location depends on the target's
-        // product name; for the common case where product == scheme, this is right.
-        result.appPath = path.join(
-          options.derivedDataPath,
-          "Build/Products",
-          `${options.configuration ?? "Debug"}-iphonesimulator`,
-          `${options.scheme}.app`
-        );
-      }
-      resolve(result);
+      });
     });
   });
 }

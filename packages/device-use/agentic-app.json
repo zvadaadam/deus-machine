@@ -22,13 +22,13 @@
   },
 
   "ui": {
-    "url": "http://localhost:{port}/"
+    "url": "http://127.0.0.1:{port}/"
   },
 
   "agent": {
     "tools": {
       "type": "mcp-http",
-      "url": "http://localhost:{port}/mcp"
+      "url": "http://127.0.0.1:{port}/mcp"
     },
     "bootstrap": "Use `set_active_simulator` and `set_active_project` to pin per-workspace defaults. The agent finds .xcodeproj paths via its own tools; device-use is a dumb executor. Call `snapshot` before `tap` to get @ref targets. Build/install/launch can be chained via the composite `run` tool."
   },

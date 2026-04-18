@@ -152,11 +152,11 @@ describe("build", () => {
     ).rejects.toBeInstanceOf(BuildError);
   });
 
-  test("predicts appPath when derivedDataPath is provided and build succeeds", async () => {
-    const { spawner } = makeSpawner((child) => {
+  test("passes derivedDataPath through to xcodebuild", async () => {
+    const { spawner, calls } = makeSpawner((child) => {
       child.emit("close", 0);
     });
-    const result = await build(
+    await build(
       {
         project: "/tmp/MyApp.xcodeproj",
         scheme: "MyApp",
@@ -165,9 +165,8 @@ describe("build", () => {
       },
       spawner
     );
-    expect(result.appPath).toBe(
-      "/tmp/DerivedData/MyApp/Build/Products/Debug-iphonesimulator/MyApp.app"
-    );
+    expect(calls[0]!.args).toContain("-derivedDataPath");
+    expect(calls[0]!.args).toContain("/tmp/DerivedData/MyApp");
   });
 
   test("honors AbortSignal — sends SIGTERM when aborted", async () => {

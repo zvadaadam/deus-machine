@@ -16,20 +16,25 @@ type Params = z.infer<typeof schema>;
 export const serveCommand: CommandDefinition<Params> = {
   name: "serve",
   description: "Start the device-use server (viewer + MCP + WebSocket) on the given port.",
-  usage: "serve [--port 3100] [--host 127.0.0.1] [--open]",
+  usage: "serve [--port 3100] [--host 0.0.0.0] [--open]",
   examples: ["serve", "serve --port 4000", "serve --open"],
   schema,
   async handler(params): Promise<CommandResult> {
     const port = params.port ?? params.p ?? 3100;
-    const host = params.host ?? "127.0.0.1";
+    // Bind to 0.0.0.0 by default — matches the server's own default and
+    // avoids being shadowed by an IPv6 listener on the same port. Browser
+    // localhost-via-v6 then falls back to v4 cleanly.
+    const host = params.host ?? "0.0.0.0";
 
     const here = path.dirname(fileURLToPath(import.meta.url));
-    // When compiled (dist/cli.js), the server module lives in src/server/index.ts
-    // relative to the package root. Locate by walking up from __dirname.
+    // Locate the server entrypoint across dev + bundled layouts.
+    // From <pkg>/src/cli/commands/serve.{ts,js}: ../../server/index.ts (dev)
+    // From <pkg>/dist/cli.js (bundled): ../src/server/index.ts
+    // From <pkg>/dist/cli/<…>/serve.js (future split build): ../../../server/index.js
     const moduleCandidates = [
-      path.resolve(here, "../../server/index.ts"), // dev: src/cli/commands/ → src/server/index.ts
-      path.resolve(here, "../../../src/server/index.ts"), // dist/cli.js → package root → src/server/index.ts
-      path.resolve(here, "../server/index.js"), // future compiled layout (dist/cli + dist/server)
+      path.resolve(here, "../../server/index.ts"),
+      path.resolve(here, "../src/server/index.ts"),
+      path.resolve(here, "../../../server/index.js"),
     ];
     const { existsSync } = await import("node:fs");
     const serverModule = moduleCandidates.find((p) => existsSync(p));
@@ -40,7 +45,11 @@ export const serveCommand: CommandDefinition<Params> = {
       };
     }
 
-    const url = `http://${host}:${port}/`;
+    // For the URL we surface to the user (and probe), prefer 127.0.0.1
+    // when bound to 0.0.0.0 — wildcard isn't a fetchable host on its own.
+    const probeHost = host === "0.0.0.0" || host === "::" ? "127.0.0.1" : host;
+    const url = `http://${probeHost}:${port}/`;
+
     // Hand off to bun to run the server. We exec rather than import because
     // the server module takes over the process lifecycle (Bun.serve).
     const child = spawn(process.argv0, [serverModule], {
@@ -49,26 +58,39 @@ export const serveCommand: CommandDefinition<Params> = {
     });
 
     if (params.open) {
-      // Poll /health until the server says it's listening, then open.
+      // Only open the browser if /health actually responds. On startup
+      // failure (port in use, missing simbridge, etc.) we silently skip
+      // the open instead of pointing the user at a dead tab.
       (async () => {
         for (let i = 0; i < 30; i++) {
           try {
             const res = await fetch(`${url}health`);
-            if (res.ok) break;
+            if (res.ok) {
+              const opener = process.platform === "darwin" ? "open" : "xdg-open";
+              spawn(opener, [url], { detached: true, stdio: "ignore" }).unref();
+              return;
+            }
           } catch {
             // server not up yet — keep waiting
           }
           await new Promise((r) => setTimeout(r, 200));
         }
-        const opener = process.platform === "darwin" ? "open" : "xdg-open";
-        spawn(opener, [url], { detached: true, stdio: "ignore" }).unref();
       })();
     }
 
-    await new Promise<void>((resolve) => child.once("exit", () => resolve()));
+    const exitCode = await new Promise<number | null>((resolve) =>
+      child.once("exit", (code) => resolve(code))
+    );
+
+    if (exitCode !== 0 && exitCode !== null) {
+      return {
+        success: false,
+        message: `Server exited with code ${exitCode}.`,
+      };
+    }
     return {
       success: true,
-      message: `Server stopped.`,
+      message: "Server stopped.",
     };
   },
 };

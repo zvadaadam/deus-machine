@@ -9,12 +9,12 @@ export function Sidebar() {
   const { refs, foreground, loading, refresh } = useRefsStore();
   const streamUdid = useSimStore((s) => s.streamInfo?.udid ?? null);
 
-  // Take an initial snapshot once the stream is live.
+  // Refresh refs whenever the stream's UDID changes (initial connect or
+  // sim swap). Old refs from a previous sim must not linger.
   useEffect(() => {
-    if (streamUdid && refs.length === 0) {
-      void useRefsStore.getState().refresh();
-    }
-  }, [streamUdid, refs.length]);
+    if (!streamUdid) return;
+    void useRefsStore.getState().refresh();
+  }, [streamUdid]);
 
   const onRefClick = async (ref: string) => {
     await api.tap({ ref });
