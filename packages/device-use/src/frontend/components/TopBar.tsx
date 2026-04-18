@@ -2,6 +2,7 @@ import { useSimStore } from "../stores/sim-store";
 import { useProjectStore } from "../stores/project-store";
 import { useActivityStore } from "../stores/activity-store";
 import { api } from "../lib/api";
+import { Select } from "./Select";
 
 export function TopBar() {
   const { sims, pinnedUdid, loading, setPinned } = useSimStore();
@@ -41,26 +42,36 @@ export function TopBar() {
     await project.setProject(path);
   };
 
+  const simOptions = sims.map((s) => ({
+    value: s.udid,
+    label: (
+      <span>
+        <span className="sim-state-dot" data-booted={s.state === "Booted" ? "true" : "false"} />
+        {s.name}
+        <span className="sim-runtime"> · {s.runtime}</span>
+      </span>
+    ),
+  }));
+
   return (
     <header className="topbar">
       <span className="brand">device-use</span>
 
-      <label>
+      <span className="sim-picker">
         <span className={`status-dot ${booted ? "ready" : ""}`} />
-        <select
-          value={pinnedUdid ?? ""}
-          onChange={(e) => setPinned(e.target.value)}
-          disabled={loading || sims.length === 0}
-        >
-          {sims.length === 0 && <option value="">no simulators</option>}
-          {sims.map((s) => (
-            <option key={s.udid} value={s.udid}>
-              {s.state === "Booted" ? "● " : "○ "}
-              {s.name} · {s.runtime}
-            </option>
-          ))}
-        </select>
-      </label>
+        {sims.length === 0 ? (
+          <span className="sim-empty">no simulators</span>
+        ) : (
+          <Select
+            value={pinnedUdid ?? ""}
+            onValueChange={setPinned}
+            options={simOptions}
+            disabled={loading}
+            placeholder="Pick a simulator"
+            minWidth={220}
+          />
+        )}
+      </span>
 
       {pinnedUdid && !booted && (
         <button onClick={onBoot} title="Boot this simulator">
@@ -76,17 +87,14 @@ export function TopBar() {
         style={{ minWidth: 280 }}
       />
 
-      {project.schemes.length > 0 && (
-        <select
+      {project.schemes.length > 0 && project.path && (
+        <Select
           value={project.scheme ?? ""}
-          onChange={(e) => project.setProject(project.path!, e.target.value)}
-        >
-          {project.schemes.map((s) => (
-            <option key={s} value={s}>
-              {s}
-            </option>
-          ))}
-        </select>
+          onValueChange={(scheme) => project.setProject(project.path!, scheme)}
+          options={project.schemes.map((s) => ({ value: s, label: s }))}
+          placeholder="Pick a scheme"
+          minWidth={140}
+        />
       )}
 
       <span className="spacer" />
