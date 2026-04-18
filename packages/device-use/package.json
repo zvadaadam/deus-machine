@@ -1,23 +1,23 @@
 {
   "name": "device-use",
   "version": "0.1.0",
-  "description": "iOS Simulator automation for AI agents — CLI, SDK, and engine.",
+  "description": "iOS Simulator workbench — standalone viewer + MCP server + CLI. Agent-drivable via /mcp; human-usable at localhost.",
   "type": "module",
   "bin": {
     "device-use": "./dist/cli.js"
   },
   "exports": {
     ".": {
-      "import": "./dist/sdk.js",
-      "types": "./dist/sdk.d.ts"
+      "import": "./dist/engine.js",
+      "types": "./dist/engine.d.ts"
     },
     "./engine": {
       "import": "./dist/engine.js",
       "types": "./dist/engine.d.ts"
     }
   },
-  "main": "./dist/sdk.js",
-  "types": "./dist/sdk.d.ts",
+  "main": "./dist/engine.js",
+  "types": "./dist/engine.d.ts",
   "files": [
     "dist",
     "bin",
@@ -26,10 +26,14 @@
     "LICENSE"
   ],
   "scripts": {
-    "dev": "bun run src/cli/index.ts",
+    "cli": "bun run src/cli/index.ts",
+    "dev": "bun run --hot src/server/index.ts",
+    "dev:frontend": "vite",
     "build:native": "bun run scripts/build-native.ts",
     "build:ts": "bun run scripts/build-ts.ts",
-    "build": "bun run build:native && bun run build:ts",
+    "build:frontend": "vite build",
+    "build": "bun run build:native && bun run build:ts && bun run build:frontend",
+    "start": "NODE_ENV=production bun run src/server/index.ts",
     "compile": "bun run scripts/compile-bin.ts",
     "test": "bun test",
     "typecheck": "tsc --noEmit",
@@ -41,10 +45,22 @@
   "license": "MIT",
   "devDependencies": {
     "@types/bun": "^1.1.0",
-    "typescript": "^5.8.0"
+    "@types/react": "^19.0.0",
+    "@types/react-dom": "^19.0.0",
+    "@vitejs/plugin-react": "^4.3.0",
+    "typescript": "^5.8.0",
+    "vite": "^7.0.0"
   },
   "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.29.0",
+    "@radix-ui/react-select": "^2.2.6",
+    "hono": "^4.6.0",
     "jimp": "^1.6.1",
-    "zod": "^3.24.0"
+    "lucide-react": "^1.8.0",
+    "react": "^19.0.0",
+    "react-dom": "^19.0.0",
+    "zod": "^3.24.0",
+    "zod-to-json-schema": "^3.25.2",
+    "zustand": "^5.0.12"
   }
 }

@@ -1,0 +1,60 @@
+{
+  "$schema": "https://agenticapps.dev/schema/v1.json",
+  "protocolVersion": "1",
+
+  "id": "deus.mobile-use",
+  "name": "Mobile Use",
+  "description": "iOS simulator workbench with agent-drivable build, install, launch, and UI control.",
+  "version": "0.2.0",
+
+  "launch": {
+    "command": "device-use",
+    "args": ["serve", "--port", "{port}"],
+    "cwd": "{workspace}",
+    "env": {
+      "DEUS_STORAGE": "{storage.workspace}"
+    },
+    "ready": {
+      "type": "http",
+      "path": "/health",
+      "timeoutMs": 30000
+    }
+  },
+
+  "ui": {
+    "url": "http://127.0.0.1:{port}/"
+  },
+
+  "agent": {
+    "tools": {
+      "type": "mcp-http",
+      "url": "http://127.0.0.1:{port}/mcp"
+    },
+    "bootstrap": "Use `set_active_simulator` and `set_active_project` to pin per-workspace defaults. The agent finds .xcodeproj paths via its own tools; device-use is a dumb executor. Call `snapshot` before `tap` to get @ref targets. Build/install/launch can be chained via the composite `run` tool."
+  },
+
+  "storage": {
+    "workspace": "{workspace}/.device-use",
+    "global": "{userData}/device-use"
+  },
+
+  "lifecycle": {
+    "scope": "workspace",
+    "stopSignal": "SIGTERM",
+    "stopTimeoutMs": 5000
+  },
+
+  "requires": [
+    {
+      "type": "cli",
+      "name": "xcrun",
+      "install": "Install Xcode from the App Store and run `xcode-select --install`."
+    },
+    {
+      "type": "platform",
+      "os": "darwin"
+    }
+  ],
+
+  "capabilities": ["filesystem:workspace", "process:spawn", "network:local"]
+}

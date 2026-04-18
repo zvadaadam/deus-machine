@@ -1,0 +1,59 @@
+name: device-use e2e
+
+# Exercises the full device-use v2 stack against a real iOS simulator:
+# server spawn → /health → WS subscribe → REST + MCP tool-call →
+# xcodebuild → install → launch → snapshot → tap → state persistence.
+#
+# Schedule only — macOS minutes are 10× Linux, so we don't run per-PR.
+# Manual dispatch is available if you want to verify a branch before merge.
+on:
+  schedule:
+    - cron: "0 7 * * *" # 07:00 UTC nightly
+  workflow_dispatch:
+
+jobs:
+  e2e:
+    runs-on: macos-15
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+
+      - name: Install deps (also builds simbridge via prepare-device-use)
+        run: bun install --frozen-lockfile
+
+      - name: Pick + boot a simulator
+        id: sim
+        run: |
+          UDID=$(xcrun simctl list devices available --json \
+            | jq -r '.devices | to_entries[] | .value[] | select(.name | startswith("iPhone")) | select(.isAvailable == true) | .udid' \
+            | head -1)
+          if [ -z "$UDID" ]; then
+            echo "::error::No iPhone simulator available on this runner"
+            xcrun simctl list devices available
+            exit 1
+          fi
+          echo "Picked simulator: $UDID"
+          echo "udid=$UDID" >> "$GITHUB_OUTPUT"
+          xcrun simctl boot "$UDID" || true
+          # Wait until the sim actually reports Booted, max ~30s.
+          for _ in $(seq 1 30); do
+            STATE=$(xcrun simctl list devices | grep "$UDID" | grep -oE '\((Booted|Booting|Shutdown)\)' | tr -d '()')
+            [ "$STATE" = "Booted" ] && break
+            sleep 1
+          done
+          xcrun simctl list devices | grep "$UDID"
+
+      - name: Run e2e against the real sim
+        working-directory: packages/device-use
+        env:
+          E2E_SIM_UDID: ${{ steps.sim.outputs.udid }}
+        run: bun scripts/e2e-server.ts
+
+      - name: Shutdown simulator (cleanup)
+        if: always()
+        run: xcrun simctl shutdown "${{ steps.sim.outputs.udid }}" || true
