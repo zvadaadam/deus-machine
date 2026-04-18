@@ -220,6 +220,38 @@ body,
   flex: 1;
 }
 
+.topbar .sim-picker {
+  display: inline-flex;
+  align-items: center;
+  gap: 0;
+}
+
+.topbar .sim-empty {
+  font-size: var(--text-sm);
+  color: var(--text-muted-foreground);
+  font-style: italic;
+}
+
+.sim-state-dot {
+  display: inline-block;
+  width: 6px;
+  height: 6px;
+  border-radius: var(--radius-full);
+  background: var(--text-muted-foreground);
+  margin-right: 8px;
+  vertical-align: middle;
+}
+
+.sim-state-dot[data-booted="true"] {
+  background: var(--success);
+  box-shadow: var(--shadow-glow-success);
+}
+
+.sim-runtime {
+  color: var(--text-tertiary);
+  margin-left: 4px;
+}
+
 .topbar .status-dot {
   width: 7px;
   height: 7px;
@@ -607,6 +639,138 @@ body,
     opacity: 1;
     transform: translate(-50%, 0);
   }
+}
+
+/* ──────────────────────── Themed Select (Radix UI) ─────────────────── */
+
+.select-trigger {
+  background: var(--bg-elevated);
+  color: var(--text-primary);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  padding: 6px 10px;
+  font-family: var(--font-sans);
+  font-size: var(--text-sm);
+  letter-spacing: -0.005em;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  cursor: pointer;
+  transition:
+    border-color 0.12s ease,
+    background 0.12s ease;
+  /* Radix sets this role; keep focus/aria defaults */
+}
+
+.select-trigger:hover:not([data-disabled]) {
+  border-color: var(--border-strong);
+  background: var(--bg-raised);
+}
+
+.select-trigger:focus-visible {
+  outline: 2px solid var(--ring);
+  outline-offset: 1px;
+  border-color: transparent;
+}
+
+.select-trigger[data-disabled] {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.select-trigger[data-placeholder] {
+  color: var(--text-muted-foreground);
+}
+
+.select-chevron {
+  color: var(--text-tertiary);
+  transition: transform 0.18s ease;
+}
+
+.select-trigger[data-state="open"] .select-chevron {
+  transform: rotate(180deg);
+}
+
+.select-content {
+  background: var(--popover);
+  color: var(--popover-foreground);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-xl);
+  box-shadow: var(--shadow-elevated);
+  padding: 4px;
+  max-height: var(--radix-select-content-available-height);
+  min-width: var(--radix-select-trigger-width);
+  z-index: 50;
+  overflow-x: hidden;
+  overflow-y: auto;
+  animation: select-in 180ms cubic-bezier(0.215, 0.61, 0.355, 1);
+  transform-origin: var(--radix-select-content-transform-origin);
+}
+
+.select-content[data-state="closed"] {
+  animation: select-out 150ms cubic-bezier(0.215, 0.61, 0.355, 1);
+}
+
+@keyframes select-in {
+  from {
+    opacity: 0;
+    transform: translateY(-4px) scale(0.98);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+@keyframes select-out {
+  from {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+  to {
+    opacity: 0;
+    transform: translateY(-4px) scale(0.98);
+  }
+}
+
+.select-viewport {
+  padding: 2px;
+}
+
+.select-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 10px 6px 30px;
+  border-radius: var(--radius-sm);
+  font-size: var(--text-sm);
+  color: var(--text-primary);
+  cursor: pointer;
+  outline: none;
+  user-select: none;
+  position: relative;
+  letter-spacing: -0.005em;
+}
+
+.select-item[data-highlighted] {
+  background: var(--bg-elevated);
+  color: var(--text-primary);
+}
+
+.select-item[data-state="checked"] {
+  color: var(--text-primary);
+  font-weight: 500;
+}
+
+.select-item[data-disabled] {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.select-check {
+  position: absolute;
+  left: 8px;
+  color: var(--primary);
 }
 
 /* ──────────────────────── Scrollbar polish ────────────────────────── */
