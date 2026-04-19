@@ -99,6 +99,26 @@ describe("aap/lifecycle", () => {
       });
       expect(stderrTail).toContain("got 54321");
     });
+
+    it("anchors a relative launch.cwd to packageRoot, not the backend's process cwd", async () => {
+      // Regression: a manifest declaring `cwd: "."` (or any relative path)
+      // should resolve under the app's package directory. Without anchoring,
+      // Node would resolve it against process.cwd and the app would silently
+      // run in the wrong directory.
+      const manifest = shManifest("pwd 1>&2; exit 0");
+      manifest.launch.cwd = ".";
+      const packageRoot = "/tmp";
+      const { stderrTail } = await new Promise<{ stderrTail: string }>((resolve) => {
+        spawnApp({
+          manifest,
+          vars: { port: 0 },
+          packageRoot,
+          onExit: (_code, _signal, stderrTail) => resolve({ stderrTail }),
+        });
+      });
+      // macOS resolves /tmp via the /private/tmp symlink — accept either form.
+      expect(stderrTail.trim()).toMatch(/^(\/private)?\/tmp$/);
+    });
   });
 
   describe("waitForReady — http", () => {
