@@ -100,6 +100,7 @@ function serializeTabs(tabs: BrowserTabState[]): PersistedBrowserTab[] {
       url: t.currentUrl,
       title: t.title,
       ...(t.viewport ? { viewport: t.viewport } : {}),
+      ...(t.openedAt ? { openedAt: t.openedAt } : {}),
     }));
 }
 

@@ -11,6 +11,7 @@ const { mockFrontendAPI } = vi.hoisted(() => ({
     requestListApps: vi.fn(),
     requestLaunchApp: vi.fn(),
     requestStopApp: vi.fn(),
+    requestReadAppSkill: vi.fn(),
   },
 }));
 vi.mock("../event-broadcaster", () => ({
@@ -73,7 +74,7 @@ describe("createDeusMCPServer", () => {
   it("registers all workspace + browser + simulator + apps + recording tools", () => {
     const tools = getRegisteredTools(server.instance);
     const toolNames = Object.keys(tools);
-    expect(toolNames).toHaveLength(41);
+    expect(toolNames).toHaveLength(42);
     // Workspace tools
     expect(toolNames).toContain("AskUserQuestion");
     expect(toolNames).toContain("GetWorkspaceDiff");
@@ -83,6 +84,7 @@ describe("createDeusMCPServer", () => {
     expect(toolNames).toContain("list_apps");
     expect(toolNames).toContain("launch_app");
     expect(toolNames).toContain("stop_app");
+    expect(toolNames).toContain("read_app_skill");
     // Browser tools
     expect(toolNames).toContain("BrowserSnapshot");
     expect(toolNames).toContain("BrowserClick");
@@ -379,6 +381,40 @@ describe("createDeusMCPServer", () => {
       const result = await tool.handler({ runningAppId: "running-1" });
 
       expect(result.content[0].text).toMatch(/^AAP error: RPC timeout$/);
+    });
+  });
+
+  describe("read_app_skill", () => {
+    it("forwards appId and returns skill content", async () => {
+      mockFrontendAPI.requestReadAppSkill.mockResolvedValue({
+        content: "# Mobile Use Skill\n\nUse `snapshot` then `tap`...",
+      });
+
+      const tool = getRegisteredTools(server.instance)["read_app_skill"];
+      const result = await tool.handler({ appId: "deus.mobile-use" });
+
+      expect(mockFrontendAPI.requestReadAppSkill).toHaveBeenCalledWith({
+        appId: "deus.mobile-use",
+      });
+      expect(result.content[0].text).toContain("Mobile Use Skill");
+    });
+
+    it("renders a placeholder when the app declares no skills", async () => {
+      mockFrontendAPI.requestReadAppSkill.mockResolvedValue({ content: "" });
+
+      const tool = getRegisteredTools(server.instance)["read_app_skill"];
+      const result = await tool.handler({ appId: "deus.empty" });
+
+      expect(result.content[0].text).toBe("No skills declared for deus.empty.");
+    });
+
+    it("returns AAP error text on failure (does NOT throw)", async () => {
+      mockFrontendAPI.requestReadAppSkill.mockRejectedValue(new Error("manifest gone"));
+
+      const tool = getRegisteredTools(server.instance)["read_app_skill"];
+      const result = await tool.handler({ appId: "deus.x" });
+
+      expect(result.content[0].text).toMatch(/^AAP error: manifest gone$/);
     });
   });
 

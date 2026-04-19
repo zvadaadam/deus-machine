@@ -46,14 +46,18 @@ export function recordPid(pid: number): void {
   }
 }
 
-/** Read the journal, returning all valid pids. Missing file = []. */
+/** Read the journal, returning all valid pids. Missing file = []. Strict
+ *  digit-only parse — `parseInt("123abc")` would return 123 and could let
+ *  a corrupted journal target an unrelated PID. */
 export function readPids(): number[] {
   try {
     const content = readFileSync(getJournalPath(), "utf8");
     return content
       .split("\n")
-      .map((s) => parseInt(s.trim(), 10))
-      .filter((n) => Number.isFinite(n) && n > 0);
+      .map((s) => s.trim())
+      .filter((s) => /^\d+$/.test(s))
+      .map((s) => Number(s))
+      .filter((n) => Number.isSafeInteger(n) && n > 0);
   } catch {
     return [];
   }

@@ -5,7 +5,7 @@
 // workspace-local scanner in v2 without touching apps.service.
 
 import { existsSync, readFileSync } from "node:fs";
-import { dirname, isAbsolute, resolve as resolvePath } from "node:path";
+import { dirname, isAbsolute, relative as relativePath, resolve as resolvePath } from "node:path";
 
 import { parseManifest, type Manifest } from "@shared/aap/manifest";
 import { INSTALLED_APP_MANIFESTS } from "../../config/installed-apps";
@@ -38,6 +38,15 @@ export function loadInstalledApps(): InstalledAppEntry[] {
         );
       }
       const abs = resolvePath(packageRoot, rel);
+      // Containment check: a "../escape.md" entry would otherwise be exposed
+      // by `read_app_skill`. Manifests are trusted today, but this keeps the
+      // boundary explicit if v2 ever loads them from user-installable sources.
+      const inside = relativePath(packageRoot, abs);
+      if (inside.startsWith("..") || isAbsolute(inside)) {
+        throw new Error(
+          `aap: manifest ${manifest.id} declares skill "${rel}" outside the package root`
+        );
+      }
       if (!existsSync(abs)) {
         throw new Error(
           `aap: manifest ${manifest.id} declares skill "${rel}" but ${abs} does not exist`

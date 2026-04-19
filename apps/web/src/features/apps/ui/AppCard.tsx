@@ -129,9 +129,13 @@ export function AppCard({ app, running, workspaceId }: AppCardProps) {
               size="sm"
               onClick={handleLaunch}
               disabled={busy || isTransitioning}
-              aria-label={`Launch ${app.name}`}
+              aria-label={chipStatus === "stopping" ? `Stopping ${app.name}` : `Launch ${app.name}`}
             >
-              {chipStatus === "starting" ? "Starting..." : "Launch"}
+              {chipStatus === "starting"
+                ? "Starting..."
+                : chipStatus === "stopping"
+                  ? "Stopping..."
+                  : "Launch"}
             </Button>
           )}
 

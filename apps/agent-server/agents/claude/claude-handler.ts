@@ -446,6 +446,10 @@ export class ClaudeAgentHandler implements AgentHandler {
     // Mutable context accumulated during the streaming loop.
     const ctx = createStreamContext();
 
+    // Hoisted so the finally block can detach from the app-registrar even
+    // when an early throw (e.g. invalid cwd) happens before SDK construction.
+    let queryResult: ReturnType<typeof claudeSDK> | undefined;
+
     try {
       const invalidWorkspacePathError = getInvalidWorkspacePathError(options.cwd);
       if (invalidWorkspacePathError) {
@@ -487,7 +491,7 @@ export class ClaudeAgentHandler implements AgentHandler {
         `[RESUME-DEBUG][${generatorId}] SDK options: resume=${sdkOptions.resume ?? "none"} cwd=${sdkOptions.cwd} model=${sdkOptions.model} permissionMode=${sdkOptions.permissionMode}`
       );
       const tSdkSpawn = Date.now();
-      const queryResult = claudeSDK({ prompt: promptInput, options: sdkOptions });
+      queryResult = claudeSDK({ prompt: promptInput, options: sdkOptions });
       console.log(
         `[TIMING][${generatorId}] claudeSDK() constructor returned in ${Date.now() - tSdkSpawn}ms`
       );
@@ -682,7 +686,7 @@ export class ClaudeAgentHandler implements AgentHandler {
       // A rapid re-query can replace the session before this finally runs;
       // blindly deleting would wipe the new session's state.
       if (claudeSessions.owns(sessionId, session)) {
-        detachQuery(queryResult);
+        if (queryResult) detachQuery(queryResult);
         claudeQueries.delete(sessionId);
         claudeSessions.delete(sessionId);
       }

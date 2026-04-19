@@ -537,10 +537,17 @@ async function runMutation(action: string, params: QueryParams): Promise<unknown
         // an explicit stop gives clients a clean status transition in the UI
         // and frees the port immediately. Capped at 2s so a slow-to-exit
         // child can't make the Archive button hang; any survivor is caught
-        // by the next boot's orphan sweep.
+        // by the next boot's orphan sweep. Errors are swallowed for the
+        // same reason — the archive must succeed even if a child crash
+        // races with our SIGTERM.
         const ARCHIVE_STOP_CEILING_MS = 2_000;
         await Promise.race([
-          stopAppsForWorkspace(workspaceId),
+          stopAppsForWorkspace(workspaceId).catch((err) => {
+            console.warn(
+              `[QueryEngine] stopAppsForWorkspace failed during archive workspaceId=${workspaceId}`,
+              err
+            );
+          }),
           new Promise<void>((resolve) => setTimeout(resolve, ARCHIVE_STOP_CEILING_MS)),
         ]);
 

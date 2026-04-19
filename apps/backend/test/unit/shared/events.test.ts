@@ -290,7 +290,8 @@ describe("shared/events", () => {
       expect(PROTOCOL_EVENTS).toContain("sim:streamFailed");
       // AAP events
       expect(PROTOCOL_EVENTS).toContain("apps:launched");
-      expect(PROTOCOL_EVENTS).toHaveLength(22);
+      expect(PROTOCOL_EVENTS).toContain("apps:stopped");
+      expect(PROTOCOL_EVENTS).toHaveLength(23);
     });
   });
 });
