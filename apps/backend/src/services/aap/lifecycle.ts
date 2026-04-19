@@ -117,7 +117,10 @@ export function spawnApp(args: SpawnArgs): Spawned {
     finalizeExit(null, null, getStderr());
   });
 
-  child.once("exit", (code, signal) => {
+  // Use "close" instead of "exit" so all stdio is fully drained — pending
+  // stderr chunks can still arrive between exit and close, and missing those
+  // would gut the crash-context the ring buffer exists for.
+  child.once("close", (code, signal) => {
     finalizeExit(code, signal, getStderr());
   });
 
