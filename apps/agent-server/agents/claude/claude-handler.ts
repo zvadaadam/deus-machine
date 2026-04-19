@@ -46,6 +46,8 @@ import {
   isSessionActive,
   type SessionState,
 } from "./claude-session";
+import { attachQuery, detachQuery } from "../../app-registrar";
+import type { McpSdkServerConfigWithInstance } from "@anthropic-ai/claude-agent-sdk";
 
 // Internal-only type for the private workspace init helper
 interface WorkspaceInitOptions {
@@ -491,6 +493,16 @@ export class ClaudeAgentHandler implements AgentHandler {
       );
 
       claudeQueries.set(sessionId, queryResult);
+      // Pin the session's initial SDK servers (the `deus` tools) so any
+      // subsequent AAP-MCP broadcast preserves them. Without this, the SDK's
+      // setMcpServers would disconnect the deus transport and hang any
+      // tool call that's mid-flight on it (e.g. `launch_app` itself, which
+      // triggers the very broadcast that kills its own transport).
+      const sdkServers = (sdkOptions.mcpServers ?? {}) as Record<
+        string,
+        McpSdkServerConfigWithInstance
+      >;
+      attachQuery(queryResult, sdkServers);
       session.generator = queryResult[Symbol.asyncIterator]();
 
       // Per-message options (constant for the lifetime of this generator).
@@ -670,6 +682,7 @@ export class ClaudeAgentHandler implements AgentHandler {
       // A rapid re-query can replace the session before this finally runs;
       // blindly deleting would wipe the new session's state.
       if (claudeSessions.owns(sessionId, session)) {
+        detachQuery(queryResult);
         claudeQueries.delete(sessionId);
         claudeSessions.delete(sessionId);
       }

@@ -182,7 +182,10 @@ describe("shared/events", () => {
       expect(QUERY_RESOURCES).toContain("sessions");
       expect(QUERY_RESOURCES).toContain("session");
       expect(QUERY_RESOURCES).toContain("messages");
-      expect(QUERY_RESOURCES).toHaveLength(5);
+      // AAP resources
+      expect(QUERY_RESOURCES).toContain("apps");
+      expect(QUERY_RESOURCES).toContain("running_apps");
+      expect(QUERY_RESOURCES).toHaveLength(7);
     });
 
     it("MUTATION_NAMES contains the expected mutations", () => {
@@ -225,7 +228,10 @@ describe("shared/events", () => {
       expect(COMMAND_NAMES).toContain("sim:touch");
       expect(COMMAND_NAMES).toContain("sim:screenshot");
       expect(COMMAND_NAMES).toContain("sim:buildAndRun");
-      expect(COMMAND_NAMES).toHaveLength(26);
+      // AAP commands
+      expect(COMMAND_NAMES).toContain("launchApp");
+      expect(COMMAND_NAMES).toContain("stopApp");
+      expect(COMMAND_NAMES).toHaveLength(28);
     });
 
     it("REQUEST_RESOURCES contains the expected request-only resources", () => {
@@ -282,7 +288,9 @@ describe("shared/events", () => {
       expect(PROTOCOL_EVENTS).toContain("sim:buildComplete");
       expect(PROTOCOL_EVENTS).toContain("sim:buildFailed");
       expect(PROTOCOL_EVENTS).toContain("sim:streamFailed");
-      expect(PROTOCOL_EVENTS).toHaveLength(21);
+      // AAP events
+      expect(PROTOCOL_EVENTS).toContain("apps:launched");
+      expect(PROTOCOL_EVENTS).toHaveLength(22);
     });
   });
 });

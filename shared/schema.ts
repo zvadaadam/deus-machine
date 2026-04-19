@@ -4,8 +4,8 @@
  * Imported by backend/src/lib/schema.ts.
  * All statements are idempotent (IF NOT EXISTS).
  *
- * Tables: repositories, workspaces, sessions, messages, paired_devices
- * Indexes: 10
+ * Tables: repositories, workspaces, sessions, messages, parts, paired_devices
+ * Indexes: 13
  * Triggers: 5 (3 auto-update updated_at, 2 denormalized message_count + auto-seq)
  */
 

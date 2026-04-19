@@ -63,6 +63,10 @@ export interface AgentClientOptions {
     method: string,
     params: Record<string, unknown>
   ) => Promise<unknown>;
+  /** Called when the agent-server calls an AAP method (list-apps, launch-app,
+   *  stop-app). The backend handles these directly against apps.service — no
+   *  frontend relay. */
+  onAapRpc?: (method: string, params: Record<string, unknown>) => Promise<unknown>;
 }
 
 // ============================================================================
@@ -92,6 +96,7 @@ export class AgentClient {
     method: string,
     params: Record<string, unknown>
   ) => Promise<unknown>;
+  private onAapRpc: (method: string, params: Record<string, unknown>) => Promise<unknown>;
 
   private reconnectTimer: ReturnType<typeof setTimeout> | null = null;
   private reconnectAttempt = 0;
@@ -109,6 +114,8 @@ export class AgentClient {
     this.onFrontendRpc =
       options.onFrontendRpc ??
       (() => Promise.reject(new Error("No frontend RPC handler registered")));
+    this.onAapRpc =
+      options.onAapRpc ?? (() => Promise.reject(new Error("No AAP RPC handler registered")));
   }
 
   // ==========================================================================
@@ -186,6 +193,19 @@ export class AgentClient {
 
   async sendProviderUpdateMode(params: ProviderUpdateModeRequest): Promise<void> {
     this.notify(AGENT_RPC_METHODS.PROVIDER_UPDATE_MODE, params);
+  }
+
+  // ---- Generic outbound RPC (for AAP MCP bridge) ----
+
+  /**
+   * Send an arbitrary RPC request to the agent-server. Used by the AAP
+   * mcp-bridge to fire `aap/register-mcp` / `aap/unregister-mcp` on state
+   * transitions without polluting this file with per-method typed wrappers.
+   *
+   * Returns the raw response; callers are responsible for shape validation.
+   */
+  async sendRequest(method: string, params: unknown): Promise<unknown> {
+    return this.request(method, params);
   }
 
   // ---- Introspection ----
@@ -316,6 +336,20 @@ export class AgentClient {
       });
     }
     console.log(`[AgentClient] Registered ${frontendMethods.length} frontend RPC methods`);
+
+    // Register AAP methods. The agent-server's deus-tools (list_apps,
+    // launch_app, stop_app) call these via EventBroadcaster — the backend
+    // handles them directly from apps.service.
+    const aapMethods = ["aap/list-apps", "aap/launch-app", "aap/stop-app", "aap/read-app-skill"];
+    for (const method of aapMethods) {
+      this.peer.addMethod(method, async (params: unknown) => {
+        if (!params || typeof params !== "object") {
+          throw new Error(`${method} requires an object params payload`);
+        }
+        return this.onAapRpc(method, params as Record<string, unknown>);
+      });
+    }
+    console.log(`[AgentClient] Registered ${aapMethods.length} AAP RPC methods`);
   }
 
   private teardownPeer(): void {

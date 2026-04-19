@@ -43,6 +43,14 @@ export class SessionStore<T> {
   }
 
   /**
+   * Iterate all stored values. Used by AAP app-registrar to broadcast
+   * `setMcpServers` updates to every live Claude Query.
+   */
+  values(): IterableIterator<T> {
+    return this.sessions.values();
+  }
+
+  /**
    * Check if the session reference matches (for ownership guards).
    *
    * Returns true when it's safe for the caller to mutate/clean up the session:
