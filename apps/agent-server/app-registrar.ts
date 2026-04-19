@@ -26,11 +26,7 @@
 //   - Query lifecycle: claude-handler calls `attachQuery` after construction
 //     and `detachQuery` in the finally block.
 
-import type {
-  Query,
-  McpServerConfig,
-  McpSdkServerConfigWithInstance,
-} from "@anthropic-ai/claude-agent-sdk";
+import type { Query, McpServerConfig } from "@anthropic-ai/claude-agent-sdk";
 
 import { claudeQueries } from "./agents/claude/claude-session";
 import { getErrorMessage } from "@shared/lib/errors";
@@ -48,8 +44,9 @@ const registeredServers = new Map<string, McpServerConfig>();
  *  setMcpServers broadcast. The SDK disconnects any SDK server not in the
  *  input map, which would sever the transport mid-tool-call for in-flight
  *  invocations on those servers. Populated from `sdkOptions.mcpServers` when
- *  the Query is created. */
-const protectedByQuery = new Map<Query, Record<string, McpSdkServerConfigWithInstance>>();
+ *  the Query is created — typed as the SDK's input shape (the union) since
+ *  it gets re-broadcast through `setMcpServers` unchanged. */
+const protectedByQuery = new Map<Query, Record<string, McpServerConfig>>();
 
 // ----------------------------------------------------------------------------
 // Public API
@@ -90,10 +87,7 @@ export async function unregisterAppMcp(serverName: string): Promise<void> {
  * them. Call this immediately after `claudeQueries.set(sessionId, query)`
  * in claude-handler.
  */
-export function attachQuery(
-  query: Query,
-  sdkServers: Record<string, McpSdkServerConfigWithInstance>
-): void {
+export function attachQuery(query: Query, sdkServers: Record<string, McpServerConfig>): void {
   protectedByQuery.set(query, sdkServers);
 }
 
