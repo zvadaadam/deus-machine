@@ -25,6 +25,14 @@ import type {
   GetTerminalOutputResponse,
   ExitPlanModeRequest,
   ExitPlanModeResponse,
+  ListAppsRequest,
+  ListAppsResponse,
+  LaunchAppRequest,
+  LaunchAppResponse,
+  StopAppRequest,
+  StopAppResponse,
+  ReadAppSkillRequest,
+  ReadAppSkillResponse,
 } from "./protocol";
 
 // ============================================================================
@@ -38,6 +46,12 @@ const USER_FACING_TIMEOUT_MS = 120_000;
 
 /** Timeout for data-fetching requests that should resolve quickly */
 const DATA_QUERY_TIMEOUT_MS = 10_000;
+
+/** Timeout for AAP `launch_app`. The manifest's ready-probe caps at 30s and
+ *  the backend adds probe-setup + storage-dir work on top. 60s keeps first-
+ *  time launches (binary not yet downloaded) from tripping the tunnel timeout
+ *  while still bounded. */
+const AAP_LAUNCH_TIMEOUT_MS = 60_000;
 
 // ============================================================================
 // EventBroadcaster class
@@ -389,6 +403,25 @@ class EventBroadcasterClass {
       r,
       DATA_QUERY_TIMEOUT_MS
     );
+  }
+
+  // --- AAP (Agentic Apps) RPCs (handled by backend's apps.service) ---
+  //
+  // Method names are stringly-typed because FRONTEND_RPC_METHODS is a frozen
+  // enum canonical in shared/agent-events. AAP methods target the backend
+  // directly (not forwarded to frontend), so they don't belong there.
+  requestListApps(r: ListAppsRequest): Promise<ListAppsResponse> {
+    return this.rpc<ListAppsResponse>("aap/list-apps", r, DATA_QUERY_TIMEOUT_MS);
+  }
+  requestLaunchApp(r: LaunchAppRequest): Promise<LaunchAppResponse> {
+    // Bumped timeout: first-ever launch may need to download/compile a binary.
+    return this.rpc<LaunchAppResponse>("aap/launch-app", r, AAP_LAUNCH_TIMEOUT_MS);
+  }
+  requestStopApp(r: StopAppRequest): Promise<StopAppResponse> {
+    return this.rpc<StopAppResponse>("aap/stop-app", r, DATA_QUERY_TIMEOUT_MS);
+  }
+  requestReadAppSkill(r: ReadAppSkillRequest): Promise<ReadAppSkillResponse> {
+    return this.rpc<ReadAppSkillResponse>("aap/read-app-skill", r, DATA_QUERY_TIMEOUT_MS);
   }
 
   // --- Simulator context RPC (handled by backend, not forwarded to frontend) ---

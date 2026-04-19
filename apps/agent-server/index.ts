@@ -27,6 +27,8 @@ import { classifyError } from "./agents/lifecycle";
 import { registerAgent, getAgent, initializeAllAgents } from "./agents/registry";
 import { ClaudeAgentHandler } from "./agents/claude/claude-handler";
 import { CodexAgentHandler } from "./agents/codex/codex-handler";
+import { registerAppMcp, unregisterAppMcp } from "./app-registrar";
+import { RegisterAppMcpRequestSchema, UnregisterAppMcpRequestSchema } from "./rpc-schemas";
 import {
   handleHttpRequest,
   isShuttingDown,
@@ -326,6 +328,23 @@ class AgentServer {
     rpcTunnel.addMethod("agent/list", () => ({
       agents: this.getInitializedAgents(),
     }));
+
+    // --- AAP MCP bridge (backend → agent-server): dynamic-server registration
+    // Fired by apps.service's mcp-bridge when an app transitions to "ready"
+    // (register) or exits (unregister). Delegates to the registrar, which
+    // broadcasts the full current map to every active Claude Query.
+    rpcTunnel.addMethod("aap/register-mcp", async (params: unknown) => {
+      const parsed = RegisterAppMcpRequestSchema.parse(params);
+      await registerAppMcp(parsed.serverName, parsed.url);
+      // Returning added/errors here is advisory — the registrar itself swallows
+      // per-query errors. The backend doesn't currently consume this reply.
+      return { added: [parsed.serverName] };
+    });
+    rpcTunnel.addMethod("aap/unregister-mcp", async (params: unknown) => {
+      const parsed = UnregisterAppMcpRequestSchema.parse(params);
+      await unregisterAppMcp(parsed.serverName);
+      return { removed: [parsed.serverName] };
+    });
   }
 
   /**

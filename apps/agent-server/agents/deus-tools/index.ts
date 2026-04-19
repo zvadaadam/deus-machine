@@ -1,11 +1,13 @@
 // agent-server/agents/deus-tools/index.ts
-// Composes workspace + browser + simulator + recording tools into the Deus MCP server.
-// The RecordingBridge snoops on browser tool executions to automatically emit
-// recording events — the agent never needs to call recording_event manually.
+// Composes workspace + browser + simulator + recording + apps tools into the
+// Deus MCP server. The RecordingBridge snoops on browser tool executions to
+// automatically emit recording events — the agent never needs to call
+// recording_event manually.
 
 import { createSdkMcpServer } from "@anthropic-ai/claude-agent-sdk";
 import { createWorkspaceTools } from "./workspace";
 import { createBrowserTools } from "./browser";
+import { createAppsTools } from "./apps";
 
 import { createSimulatorTools } from "./simulator";
 import { createRecordingTools, getSessionManager } from "./recording";
@@ -75,6 +77,7 @@ export function createDeusMCPServer(sessionId: string) {
         bridge.onBrowserAction(action);
       }),
       ...createSimulatorTools(sessionId),
+      ...createAppsTools(sessionId),
       ...wrappedRecordingTools,
     ],
   });

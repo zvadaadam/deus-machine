@@ -21,7 +21,9 @@ import { delegateToRoute } from "../route-delegate";
 import { persistSessionError } from "./persistence";
 import { invalidate } from "../query-engine";
 import * as agentService from "./service";
+import { resolveAapPaths } from "./service";
 import * as simulator from "../simulator-context";
+import { launchApp, stopApp } from "../aap";
 import { broadcast as wsBroadcast } from "../ws.service";
 import type { CommandName } from "@shared/types/query-protocol";
 import {
@@ -282,6 +284,9 @@ export async function runCommand(
         });
         return {};
       })
+      // ---- AAP (agentic apps protocol) commands ----
+      .with("launchApp", () => handleLaunchApp(params))
+      .with("stopApp", () => handleStopApp(params))
       .exhaustive()
   );
 }
@@ -376,6 +381,37 @@ async function handleStopSession(params: QueryParams): Promise<CommandResult> {
   );
   invalidate(["workspaces", "sessions", "session", "stats"], { sessionIds: [sessionId] });
   return {};
+}
+
+// ---- AAP (agentic apps protocol) ----
+
+/**
+ * User-initiated launch from the Apps tab. Resolves workspaceId → workspacePath
+ * the same way the Phase 3 agent-server RPC bridge does (service.ts
+ * handleAapRpc) so both paths converge on identical inputs to apps.service.
+ *
+ * Returns the full LaunchAppResult so the q:command_ack carries runningAppId +
+ * url + bootstrap for any caller that wants to react before the apps:launched
+ * q:event arrives. The frontend's primary path is the event (it listens for
+ * all launches, including agent-initiated ones) — this return value is just
+ * belt-and-suspenders for the sync command-response path.
+ */
+async function handleLaunchApp(params: QueryParams): Promise<CommandResult> {
+  const appId = requireParam(params, "appId", "launchApp");
+  const workspaceId = requireParam(params, "workspaceId", "launchApp");
+
+  // Shared with the agent RPC path — both converge on identical inputs to
+  // apps.service.launchApp. Throws on missing workspace / unresolvable path.
+  const { workspacePath, userDataDir } = resolveAapPaths({ workspaceId });
+
+  const result = await launchApp({ appId, workspaceId, workspacePath, userDataDir });
+  return { ...result };
+}
+
+async function handleStopApp(params: QueryParams): Promise<CommandResult> {
+  const runningAppId = requireParam(params, "runningAppId", "stopApp");
+  await stopApp(runningAppId);
+  return { success: true };
 }
 
 // ---- Helpers ----

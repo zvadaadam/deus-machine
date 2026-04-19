@@ -8,6 +8,9 @@ const { mockFrontendAPI } = vi.hoisted(() => ({
     requestDiffComment: vi.fn(),
     requestGetTerminalOutput: vi.fn(),
     requestSimulatorContext: vi.fn(),
+    requestListApps: vi.fn(),
+    requestLaunchApp: vi.fn(),
+    requestStopApp: vi.fn(),
   },
 }));
 vi.mock("../event-broadcaster", () => ({
@@ -67,15 +70,19 @@ describe("createDeusMCPServer", () => {
     expect(info.version).toBe("1.0.0");
   });
 
-  it("registers all workspace + browser + simulator + recording tools", () => {
+  it("registers all workspace + browser + simulator + apps + recording tools", () => {
     const tools = getRegisteredTools(server.instance);
     const toolNames = Object.keys(tools);
-    expect(toolNames).toHaveLength(38);
+    expect(toolNames).toHaveLength(41);
     // Workspace tools
     expect(toolNames).toContain("AskUserQuestion");
     expect(toolNames).toContain("GetWorkspaceDiff");
     expect(toolNames).toContain("DiffComment");
     expect(toolNames).toContain("GetTerminalOutput");
+    // AAP lifecycle tools
+    expect(toolNames).toContain("list_apps");
+    expect(toolNames).toContain("launch_app");
+    expect(toolNames).toContain("stop_app");
     // Browser tools
     expect(toolNames).toContain("BrowserSnapshot");
     expect(toolNames).toContain("BrowserClick");
@@ -254,6 +261,124 @@ describe("createDeusMCPServer", () => {
       const result = await tool.handler({});
 
       expect(result.content[0].text).toBe("No changes found.");
+    });
+  });
+
+  // ==========================================================================
+  // AAP lifecycle tools — list_apps / launch_app / stop_app
+  // ==========================================================================
+
+  describe("list_apps", () => {
+    it("passes the session's sessionId to the backend and returns JSON", async () => {
+      mockFrontendAPI.requestListApps.mockResolvedValue({
+        apps: [
+          {
+            id: "deus.mobile-use",
+            name: "Mobile Use",
+            description: "iOS",
+            version: "0.2.0",
+          },
+        ],
+        runningAppIds: [],
+      });
+
+      const tool = getRegisteredTools(server.instance)["list_apps"];
+      // Claude sees an empty arg schema — no workspaceId required.
+      const result = await tool.handler({});
+
+      expect(mockFrontendAPI.requestListApps).toHaveBeenCalledWith({
+        sessionId: SESSION_ID,
+      });
+      const parsed = JSON.parse(result.content[0].text);
+      expect(parsed.apps[0].id).toBe("deus.mobile-use");
+      expect(parsed.runningAppIds).toEqual([]);
+    });
+
+    it("returns AAP error text on failure (does NOT throw)", async () => {
+      mockFrontendAPI.requestListApps.mockRejectedValue(new Error("backend gone"));
+
+      const tool = getRegisteredTools(server.instance)["list_apps"];
+      const result = await tool.handler({});
+
+      expect(result.content[0].text).toMatch(/^AAP error: backend gone$/);
+    });
+  });
+
+  describe("launch_app", () => {
+    it("forwards appId + sessionId and renders a launch summary", async () => {
+      mockFrontendAPI.requestLaunchApp.mockResolvedValue({
+        runningAppId: "running-1",
+        url: "http://127.0.0.1:45321/",
+        bootstrap: "Call tools like snapshot + tap to drive the sim.",
+      });
+
+      const tool = getRegisteredTools(server.instance)["launch_app"];
+      const result = await tool.handler({ appId: "deus.mobile-use" });
+
+      expect(mockFrontendAPI.requestLaunchApp).toHaveBeenCalledWith({
+        appId: "deus.mobile-use",
+        sessionId: SESSION_ID,
+      });
+      expect(result.content[0].text).toContain("Launched deus.mobile-use");
+      expect(result.content[0].text).toContain("runningAppId: running-1");
+      expect(result.content[0].text).toContain("http://127.0.0.1:45321/");
+      expect(result.content[0].text).toContain("App bootstrap hint");
+      expect(result.content[0].text).toContain("Call tools like snapshot");
+    });
+
+    it("omits the bootstrap section when the response has none", async () => {
+      mockFrontendAPI.requestLaunchApp.mockResolvedValue({
+        runningAppId: "running-1",
+        url: "http://127.0.0.1:45321/",
+      });
+
+      const tool = getRegisteredTools(server.instance)["launch_app"];
+      const result = await tool.handler({ appId: "x.y" });
+
+      expect(result.content[0].text).not.toContain("App bootstrap hint");
+    });
+
+    it("returns AAP error text on failure (does NOT throw)", async () => {
+      mockFrontendAPI.requestLaunchApp.mockRejectedValue(
+        new Error("failed to spawn — ENOENT device-use")
+      );
+
+      const tool = getRegisteredTools(server.instance)["launch_app"];
+      const result = await tool.handler({ appId: "x.y" });
+
+      expect(result.content[0].text).toMatch(/^AAP error: failed to spawn/);
+    });
+  });
+
+  describe("stop_app", () => {
+    it("forwards runningAppId and reports success", async () => {
+      mockFrontendAPI.requestStopApp.mockResolvedValue({ success: true });
+
+      const tool = getRegisteredTools(server.instance)["stop_app"];
+      const result = await tool.handler({ runningAppId: "running-1" });
+
+      expect(mockFrontendAPI.requestStopApp).toHaveBeenCalledWith({
+        runningAppId: "running-1",
+      });
+      expect(result.content[0].text).toBe("Stopped runningAppId running-1.");
+    });
+
+    it("reports failure when the backend returns success=false", async () => {
+      mockFrontendAPI.requestStopApp.mockResolvedValue({ success: false });
+
+      const tool = getRegisteredTools(server.instance)["stop_app"];
+      const result = await tool.handler({ runningAppId: "running-1" });
+
+      expect(result.content[0].text).toBe("Failed to stop runningAppId running-1.");
+    });
+
+    it("returns AAP error text on failure (does NOT throw)", async () => {
+      mockFrontendAPI.requestStopApp.mockRejectedValue(new Error("RPC timeout"));
+
+      const tool = getRegisteredTools(server.instance)["stop_app"];
+      const result = await tool.handler({ runningAppId: "running-1" });
+
+      expect(result.content[0].text).toMatch(/^AAP error: RPC timeout$/);
     });
   });
 

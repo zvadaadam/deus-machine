@@ -13,6 +13,7 @@ export {
   isConnected,
   checkAuth,
   getAgents,
+  sendRequestToAgent,
 } from "./service";
 
 export { runCommand } from "./commands";
