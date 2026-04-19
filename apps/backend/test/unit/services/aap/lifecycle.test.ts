@@ -145,21 +145,24 @@ describe("aap/lifecycle", () => {
 
     it("keeps polling when the server returns 5xx, then succeeds when it flips to 2xx", async () => {
       const { server, port, close } = await startProbeServer({ healthStatus: 503 });
+      // Flip the server to 200 after 400ms. Held outside the try so finally
+      // can clearTimeout — without it, an early throw leaves the timer alive
+      // and its callback runs against a closed server in the next test.
+      const flipTimer = setTimeout(() => {
+        server.removeAllListeners("request");
+        server.on("request", (_req, res) => {
+          res.writeHead(200);
+          res.end("ok");
+        });
+      }, 400);
       try {
-        // After 400ms, flip the server to respond 200.
-        setTimeout(() => {
-          server.removeAllListeners("request");
-          server.on("request", (_req, res) => {
-            res.writeHead(200);
-            res.end("ok");
-          });
-        }, 400);
         await waitForReady(
           { type: "http", path: "/health", timeoutMs: 3_000 },
           port,
           new AbortController().signal
         );
       } finally {
+        clearTimeout(flipTimer);
         await close();
       }
     });
@@ -188,22 +191,24 @@ describe("aap/lifecycle", () => {
     it("SIGTERMs a graceful child and returns its exit code", async () => {
       // A child that exits cleanly on SIGTERM. Shells default to 143 (128+15),
       // but Node reports signal='SIGTERM' and code=null — spec says we return code.
-      let exitCodeFromCallback: number | null = -1;
-      let exitSignalFromCallback: NodeJS.Signals | null = null;
+      // Wait on the onExit callback (wired to "close") rather than stopChild's
+      // return so the assertion doesn't race the post-close drain tick.
+      let resolveExit: (v: { code: number | null; signal: NodeJS.Signals | null }) => void;
+      const exited = new Promise<{ code: number | null; signal: NodeJS.Signals | null }>((r) => {
+        resolveExit = r;
+      });
       const spawned = spawnApp({
         manifest: shManifest("sleep 30"),
         vars: { port: 9999 },
         packageRoot: process.cwd(),
-        onExit: (code, signal) => {
-          exitCodeFromCallback = code;
-          exitSignalFromCallback = signal;
-        },
+        onExit: (code, signal) => resolveExit({ code, signal }),
       });
       // Give sleep a beat to start so SIGTERM actually reaches it.
       await new Promise((r) => setTimeout(r, 50));
       await stopChild(spawned.child, 2_000);
+      const { code, signal } = await exited;
       // Either SIGTERM-reported-as-signal or the shell's 143 exit code. Accept both.
-      expect(exitSignalFromCallback === "SIGTERM" || exitCodeFromCallback === 143).toBe(true);
+      expect(signal === "SIGTERM" || code === 143).toBe(true);
     });
 
     it("SIGKILLs a child that ignores SIGTERM", async () => {
