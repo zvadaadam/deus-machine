@@ -49,6 +49,30 @@ const registeredServers = new Map<string, McpServerConfig>();
 const protectedByQuery = new Map<Query, Record<string, McpServerConfig>>();
 
 // ----------------------------------------------------------------------------
+// Serialization
+// ----------------------------------------------------------------------------
+
+// Promise chain that serializes every mutate-then-broadcast operation. The
+// JSON-RPC plumbing in `index.ts` dispatches register/unregister handlers
+// without any locking, so two concurrent app state changes can race: the
+// later mutation may complete its broadcast first, then the earlier broadcast
+// finishes and overwrites the SDK's view with a stale snapshot. Funnelling
+// through one chain enforces FIFO order without taking a real mutex.
+let updateChain: Promise<void> = Promise.resolve();
+
+function enqueueRegistryUpdate<T>(fn: () => Promise<T>): Promise<T> {
+  // Both `then` callbacks are the same function so the chain advances even
+  // when an earlier op rejects (a single failure shouldn't permanently stall
+  // every later register/unregister).
+  const next = updateChain.then(fn, fn);
+  updateChain = next.then(
+    () => undefined,
+    () => undefined
+  );
+  return next as Promise<T>;
+}
+
+// ----------------------------------------------------------------------------
 // Public API
 // ----------------------------------------------------------------------------
 
@@ -60,13 +84,15 @@ const protectedByQuery = new Map<Query, Record<string, McpServerConfig>>();
  * results in two broadcasts of the same payload — the SDK treats it as a
  * re-set, not a duplicate.
  */
-export async function registerAppMcp(serverName: string, url: string): Promise<void> {
-  const config: McpServerConfig = { type: "http", url };
-  registeredServers.set(serverName, config);
-  console.log(
-    `[AAP-Registrar] Registered ${serverName} → ${url} (${registeredServers.size} total)`
-  );
-  await broadcast();
+export function registerAppMcp(serverName: string, url: string): Promise<void> {
+  return enqueueRegistryUpdate(async () => {
+    const config: McpServerConfig = { type: "http", url };
+    registeredServers.set(serverName, config);
+    console.log(
+      `[AAP-Registrar] Registered ${serverName} → ${url} (${registeredServers.size} total)`
+    );
+    await broadcast();
+  });
 }
 
 /**
@@ -74,11 +100,13 @@ export async function registerAppMcp(serverName: string, url: string): Promise<v
  * server wasn't registered, this is a silent no-op (no broadcast — we don't
  * thrash the SDK for a map that didn't actually change).
  */
-export async function unregisterAppMcp(serverName: string): Promise<void> {
-  const existed = registeredServers.delete(serverName);
-  if (!existed) return;
-  console.log(`[AAP-Registrar] Unregistered ${serverName} (${registeredServers.size} remaining)`);
-  await broadcast();
+export function unregisterAppMcp(serverName: string): Promise<void> {
+  return enqueueRegistryUpdate(async () => {
+    const existed = registeredServers.delete(serverName);
+    if (!existed) return;
+    console.log(`[AAP-Registrar] Unregistered ${serverName} (${registeredServers.size} remaining)`);
+    await broadcast();
+  });
 }
 
 /**
@@ -86,9 +114,18 @@ export async function unregisterAppMcp(serverName: string): Promise<void> {
  * own tools, etc.) so every subsequent setMcpServers broadcast includes
  * them. Call this immediately after `claudeQueries.set(sessionId, query)`
  * in claude-handler.
+ *
+ * If any AAP servers were registered before this query existed, push the
+ * current state to it now — fire-and-forget through the same update chain so
+ * the new query catches up FIFO with any in-flight register/unregister. Without
+ * this, apps launched before the session started stayed invisible until the
+ * next register/unregister event happened to fire.
  */
 export function attachQuery(query: Query, sdkServers: Record<string, McpServerConfig>): void {
   protectedByQuery.set(query, sdkServers);
+  if (registeredServers.size > 0) {
+    void enqueueRegistryUpdate(() => pushToQuery(query));
+  }
 }
 
 /** Symmetric counterpart to `attachQuery`. Call from claude-handler's
@@ -97,45 +134,46 @@ export function detachQuery(query: Query): void {
   protectedByQuery.delete(query);
 }
 
+/** Build the full setMcpServers payload for a single query: its protected
+ *  SDK servers merged with the current dynamic AAP map. Shared between the
+ *  per-query sync (attachQuery's catch-up) and the broadcast loop so they
+ *  can never disagree about merge order. */
+function buildPayloadForQuery(query: Query): Record<string, McpServerConfig> {
+  // Dynamic names and protected names don't collide in practice (AAP server
+  // names are normalized appIds like `deus_mobile_use`; protected is the
+  // single built-in `deus`), but if they ever do the dynamic entry wins —
+  // an AAP app can't shadow the host's own tools without an explicit
+  // override. That's the safer default.
+  const protectedSdkServers = protectedByQuery.get(query) ?? {};
+  const payload: Record<string, McpServerConfig> = { ...protectedSdkServers };
+  for (const [name, config] of registeredServers) {
+    payload[name] = config;
+  }
+  return payload;
+}
+
+async function pushToQuery(query: Query): Promise<void> {
+  try {
+    await query.setMcpServers(buildPayloadForQuery(query));
+  } catch (err) {
+    // Swallow per-query failures. Common causes: the Query has been disposed,
+    // the underlying CLI subprocess exited, the SDK transport closed. Logging
+    // is enough — nothing downstream cares.
+    console.warn(`[AAP-Registrar] setMcpServers failed on one query: ${getErrorMessage(err)}`);
+  }
+}
+
 /**
  * Push the current map to every active Query. Per-query errors are logged
  * and swallowed so a single dead Query can't block the others.
  */
 async function broadcast(): Promise<void> {
-  const dynamicPayload: Record<string, McpServerConfig> = {};
-  for (const [name, config] of registeredServers) {
-    dynamicPayload[name] = config;
-  }
-
   const queries: Query[] = [...claudeQueries.values()];
   if (queries.length === 0) {
     console.log(`[AAP-Registrar] No active queries to broadcast to (state stored for later)`);
     return;
   }
-
-  await Promise.all(
-    queries.map(async (query) => {
-      // Merge the dynamic AAP servers with this query's protected SDK servers.
-      // Dynamic names and protected names don't collide in practice (AAP
-      // server names are normalized appIds like `deus_mobile_use`; protected
-      // is the single built-in `deus`), but if they ever do the dynamic
-      // entry wins — an AAP app can't shadow the host's own tools without
-      // an explicit override. That's the safer default.
-      const protectedSdkServers = protectedByQuery.get(query) ?? {};
-      const payload: Record<string, McpServerConfig> = {
-        ...protectedSdkServers,
-        ...dynamicPayload,
-      };
-      try {
-        await query.setMcpServers(payload);
-      } catch (err) {
-        // Swallow per-query failures. Common causes: the Query has been
-        // disposed, the underlying CLI subprocess exited, the SDK transport
-        // closed. Logging is enough — nothing downstream cares.
-        console.warn(`[AAP-Registrar] setMcpServers failed on one query: ${getErrorMessage(err)}`);
-      }
-    })
-  );
+  await Promise.all(queries.map(pushToQuery));
 }
 
 // ----------------------------------------------------------------------------

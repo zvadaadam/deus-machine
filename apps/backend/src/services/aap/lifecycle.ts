@@ -61,7 +61,11 @@ export function spawnApp(args: SpawnArgs): Spawned {
   const { launch } = manifest;
 
   const cmdArgs = substituteArgs(launch.args, vars);
-  const cwd = launch.cwd ? substituteTemplate(launch.cwd, vars) : packageRoot;
+  // Anchor a relative `launch.cwd` (e.g. `"."` or `"./server"`) to the app's
+  // package root, NOT the backend's process cwd. Manifests are written
+  // relative to the package they live in.
+  const rawCwd = launch.cwd ? substituteTemplate(launch.cwd, vars) : packageRoot;
+  const cwd = isAbsolute(rawCwd) ? rawCwd : resolvePath(packageRoot, rawCwd);
   const resolvedCommand = resolveCommand(launch.command, packageRoot);
 
   const env: NodeJS.ProcessEnv = {
@@ -263,6 +267,13 @@ export async function stopChild(
  *  depend on the inherited PATH to find workspace binaries. */
 function resolveCommand(command: string, packageRoot: string): string {
   if (isAbsolute(command)) return command;
+
+  // (1.5) Path-form command (`./dist/cli.js`, `bin/foo`, etc.) — Node's spawn
+  // would resolve these against `process.cwd`, but the manifest writes them
+  // relative to the package, so anchor here too.
+  if (command.includes("/") || command.includes("\\")) {
+    return resolvePath(packageRoot, command);
+  }
 
   // (2) package.json bin entry
   try {
