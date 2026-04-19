@@ -21,6 +21,9 @@ export interface PersistedBrowserTab {
   url: string; // last loaded URL
   title: string; // display title
   viewport?: ViewportState | null;
+  /** Persisted so AAP `apps:stopped` can still match an app-owned tab after a
+   *  workspace reload; see BrowserTabState.openedAt for the full rationale. */
+  openedAt?: string;
 }
 
 export interface BrowserTabState {
@@ -170,5 +173,6 @@ export function hydratePersistedTab(persisted: PersistedBrowserTab): BrowserTabS
     devtoolsOpen: false,
     consoleLogs: [],
     viewport: persisted.viewport ?? null,
+    openedAt: persisted.openedAt,
   };
 }

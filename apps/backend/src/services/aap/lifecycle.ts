@@ -261,12 +261,13 @@ function resolveCommand(command: string, packageRoot: string): string {
   // (2) package.json bin entry
   try {
     const pj = JSON.parse(readFileSync(join(packageRoot, "package.json"), "utf8")) as {
+      name?: string;
       bin?: string | Record<string, string>;
-      main?: string;
     };
-    if (typeof pj.bin === "string" && pj.main) {
-      // `bin: "name"` shorthand: binary name equals package name, entry is `main`.
-      if (pj.bin === command) return resolvePath(packageRoot, pj.main);
+    if (typeof pj.bin === "string") {
+      // npm shorthand: `bin: "./path"` means the binary name is the package's
+      // own `name` and the entry is the bin value itself (NOT `main`).
+      if (pj.name === command) return resolvePath(packageRoot, pj.bin);
     } else if (typeof pj.bin === "object" && pj.bin !== null) {
       const entry = pj.bin[command];
       if (entry) return resolvePath(packageRoot, entry);
