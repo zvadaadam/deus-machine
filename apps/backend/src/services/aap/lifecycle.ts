@@ -10,6 +10,8 @@ import { createConnection } from "node:net";
 import { isAbsolute, join, resolve as resolvePath } from "node:path";
 import { setTimeout as sleep } from "node:timers/promises";
 
+import { match } from "ts-pattern";
+
 import type { Manifest, ReadyProbe } from "@shared/aap/manifest";
 import {
   substituteArgs,
@@ -49,7 +51,10 @@ export interface Spawned {
   getStderr(): string;
 }
 
-const RING_MAX_LINES = 50;
+/** Each "data" event is one chunk (a Buffer.toString()), not a line. The
+ *  ring caps chunk count so we don't buffer megabytes of stdout from a
+ *  chatty child while still preserving the most recent crash context. */
+const RING_MAX_CHUNKS = 50;
 
 export function spawnApp(args: SpawnArgs): Spawned {
   const { manifest, vars, packageRoot, onExit, onError } = args;
@@ -84,7 +89,7 @@ export function spawnApp(args: SpawnArgs): Spawned {
 
   const pushBounded = (ring: string[], chunk: Buffer): void => {
     ring.push(chunk.toString("utf8"));
-    while (ring.length > RING_MAX_LINES) ring.shift();
+    while (ring.length > RING_MAX_CHUNKS) ring.shift();
   };
 
   child.stdout?.on("data", (chunk: Buffer) => pushBounded(stdoutRing, chunk));
@@ -154,9 +159,10 @@ export async function waitForReady(
 
 async function probeOnce(probe: ReadyProbe, port: number): Promise<boolean> {
   try {
-    if (probe.type === "http") return await probeHttp(port, probe.path);
-    if (probe.type === "tcp") return await probeTcp(port);
-    return false;
+    return await match(probe)
+      .with({ type: "http" }, (p) => probeHttp(port, p.path))
+      .with({ type: "tcp" }, () => probeTcp(port))
+      .exhaustive();
   } catch {
     return false;
   }
