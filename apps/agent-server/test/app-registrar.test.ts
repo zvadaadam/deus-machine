@@ -97,7 +97,7 @@ describe("app-registrar", () => {
     expect(q1.setMcpServers).toHaveBeenCalledWith({});
   });
 
-  it("unregister an unknown server is a no-op for the map but still broadcasts current state", async () => {
+  it("unregister an unknown server is a silent no-op — no broadcast", async () => {
     const q1 = makeFakeQuery();
     claudeQueries.set("session-1", q1);
 

@@ -207,15 +207,19 @@ describe("aap/lifecycle", () => {
     });
 
     it("SIGKILLs a child that ignores SIGTERM", async () => {
-      let exitSignal: NodeJS.Signals | null = null;
+      // We wait on onExit (fired from the "close" event so all stdio is
+      // drained) rather than just stopChild's return — close lands a tick or
+      // two after exit and the test would race the callback otherwise.
+      let resolveExit: (signal: NodeJS.Signals | null) => void;
+      const exited = new Promise<NodeJS.Signals | null>((r) => {
+        resolveExit = r;
+      });
       const spawned = spawnApp({
         // trap "" TERM = ignore SIGTERM
         manifest: shManifest('trap "" TERM; while true; do sleep 1; done'),
         vars: { port: 9999 },
         packageRoot: process.cwd(),
-        onExit: (_code, signal) => {
-          exitSignal = signal;
-        },
+        onExit: (_code, signal) => resolveExit(signal),
       });
       await new Promise((r) => setTimeout(r, 100));
       const start = Date.now();
@@ -224,7 +228,7 @@ describe("aap/lifecycle", () => {
       // Should have waited ~300ms before escalating to SIGKILL.
       expect(elapsed).toBeGreaterThanOrEqual(250);
       // Final kill reason must be SIGKILL.
-      expect(exitSignal).toBe("SIGKILL");
+      expect(await exited).toBe("SIGKILL");
     });
 
     it("is a no-op when the child has already exited", async () => {
