@@ -453,10 +453,10 @@ describe("q:subscribe → initial q:snapshot", () => {
     }
   });
 
-  it("sends null snapshot for messages (delta-only subscription)", async () => {
+  it("acks messages subscribe with q:subscribed (delta-only resource)", async () => {
     const { ws } = await connectAndAuth();
     try {
-      const snap = await sendAndReceive(
+      const ack = await sendAndReceive(
         ws,
         {
           type: "q:subscribe",
@@ -464,13 +464,14 @@ describe("q:subscribe → initial q:snapshot", () => {
           resource: "messages",
           params: { sessionId: SESS_ID },
         },
-        "q:snapshot"
+        "q:subscribed"
       );
 
-      expect(snap.id).toBe("sub_msg_1");
-      // Messages subscription is delta-only: sends null snapshot as ack.
-      // The HTTP queryFn loads the full set; WS only pushes deltas.
-      expect(snap.data).toBeNull();
+      expect(ack.id).toBe("sub_msg_1");
+      // Delta-only: no data on subscribe. Clients load history via q:request (or HTTP).
+      // Cursor reflects current max seq — only newer messages come through q:delta.
+      expect(typeof ack.cursor).toBe("number");
+      expect(ack).not.toHaveProperty("data");
     } finally {
       ws.close();
     }
@@ -561,7 +562,7 @@ describe("q:subscribe → q:delta for messages", () => {
           resource: "messages",
           params: { sessionId: SESS_ID },
         },
-        "q:snapshot"
+        "q:subscribed"
       );
 
       // Insert a new message directly
@@ -600,7 +601,7 @@ describe("q:subscribe → q:delta for messages", () => {
           resource: "messages",
           params: { sessionId: SESS_ID },
         },
-        "q:snapshot"
+        "q:subscribed"
       );
 
       // First delta
