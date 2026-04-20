@@ -6,6 +6,7 @@
 // Extracted from protocol.ts for cleaner separation of constants vs schemas.
 
 import { z } from "zod";
+import type { InstalledApp } from "@shared/aap/types";
 
 // ============================================================================
 // MCP-Facing RPC Schemas (agent-server → frontend requests/responses)
@@ -308,6 +309,93 @@ export const BrowserScreenshotResponseSchema = z.object({
 });
 
 // ============================================================================
+// AAP (Agentic Apps) Schemas
+//
+// Two directions:
+//   - Outbound (agent-server → backend): the 3 deus-tools call into apps.service
+//     via these RPCs: `aap/list-apps`, `aap/launch-app`, `aap/stop-app`.
+//   - Inbound (backend → agent-server): `aap/register-mcp`, `aap/unregister-mcp`
+//     — the mcp-bridge fires these when an app transitions to "ready" / exits,
+//     and the registrar calls `query.setMcpServers` on every active Claude Query.
+// ============================================================================
+
+/** Wire-schema for one installed-app row. The `satisfies` clause binds it to
+ *  the canonical `InstalledApp` interface in `shared/aap/types.ts` — if the
+ *  interface grows a field, this schema must grow too or TypeScript fails
+ *  right here. Single source of truth is the TS interface; this is its
+ *  runtime-validated mirror for the agent-server RPC boundary. */
+export const InstalledAppSchema = z.object({
+  id: z.string(),
+  name: z.string(),
+  description: z.string(),
+  version: z.string(),
+  icon: z.string().optional(),
+  bootstrap: z.string().optional(),
+}) satisfies z.ZodType<InstalledApp>;
+
+// AAP RPCs carry `sessionId` — the agent always has it from the tool's
+// closure. The backend resolves it to the session's workspace, so Claude
+// never has to guess a workspaceId it doesn't have. Applies to list_apps
+// and launch_app.
+export const ListAppsRequestSchema = z.object({
+  sessionId: z.string(),
+});
+
+export const ListAppsResponseSchema = z.object({
+  apps: z.array(InstalledAppSchema),
+  runningAppIds: z.array(z.string()),
+});
+
+export const LaunchAppRequestSchema = z.object({
+  appId: z.string(),
+  sessionId: z.string(),
+});
+
+export const LaunchAppResponseSchema = z.object({
+  runningAppId: z.string(),
+  url: z.string(),
+  bootstrap: z.string().optional(),
+});
+
+export const StopAppRequestSchema = z.object({
+  runningAppId: z.string(),
+});
+
+export const StopAppResponseSchema = z.object({
+  success: z.boolean(),
+});
+
+export const ReadAppSkillRequestSchema = z.object({
+  appId: z.string(),
+});
+
+export const ReadAppSkillResponseSchema = z.object({
+  /** Concatenated markdown of every skill file the manifest declares, with
+   *  `# <path>` dividers. Empty string when the manifest has no skills. */
+  content: z.string(),
+});
+
+// --- Inbound (backend → agent-server) ---
+
+export const RegisterAppMcpRequestSchema = z.object({
+  serverName: z.string(),
+  url: z.string(),
+});
+
+export const RegisterAppMcpResponseSchema = z.object({
+  added: z.array(z.string()),
+  errors: z.record(z.string(), z.string()).optional(),
+});
+
+export const UnregisterAppMcpRequestSchema = z.object({
+  serverName: z.string(),
+});
+
+export const UnregisterAppMcpResponseSchema = z.object({
+  removed: z.array(z.string()),
+});
+
+// ============================================================================
 // Inferred Types (agent-server-local schemas only; RPC types re-exported in protocol.ts)
 // ============================================================================
 
@@ -351,3 +439,20 @@ export type BrowserScrollRequest = z.infer<typeof BrowserScrollRequestSchema>;
 export type BrowserScrollResponse = z.infer<typeof BrowserScrollResponseSchema>;
 export type BrowserScreenshotRequest = z.infer<typeof BrowserScreenshotRequestSchema>;
 export type BrowserScreenshotResponse = z.infer<typeof BrowserScreenshotResponseSchema>;
+
+// `InstalledApp` is canonical in shared/aap/types.ts — re-exported here so
+// existing `import { InstalledApp } from "./rpc-schemas"` call sites keep
+// working without a second source of truth.
+export type { InstalledApp } from "@shared/aap/types";
+export type ListAppsRequest = z.infer<typeof ListAppsRequestSchema>;
+export type ListAppsResponse = z.infer<typeof ListAppsResponseSchema>;
+export type LaunchAppRequest = z.infer<typeof LaunchAppRequestSchema>;
+export type LaunchAppResponse = z.infer<typeof LaunchAppResponseSchema>;
+export type StopAppRequest = z.infer<typeof StopAppRequestSchema>;
+export type StopAppResponse = z.infer<typeof StopAppResponseSchema>;
+export type ReadAppSkillRequest = z.infer<typeof ReadAppSkillRequestSchema>;
+export type ReadAppSkillResponse = z.infer<typeof ReadAppSkillResponseSchema>;
+export type RegisterAppMcpRequest = z.infer<typeof RegisterAppMcpRequestSchema>;
+export type RegisterAppMcpResponse = z.infer<typeof RegisterAppMcpResponseSchema>;
+export type UnregisterAppMcpRequest = z.infer<typeof UnregisterAppMcpRequestSchema>;
+export type UnregisterAppMcpResponse = z.infer<typeof UnregisterAppMcpResponseSchema>;

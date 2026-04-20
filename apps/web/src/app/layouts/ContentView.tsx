@@ -16,6 +16,7 @@ import { AgentConfigPanel } from "@/features/agent-config/ui/AgentConfigPanel";
 import { DesignPanel } from "@/features/workspace/ui/DesignPanel";
 import { BrowserPanel } from "@/features/browser";
 import { SimulatorPanel } from "@/features/simulator";
+import { AppsLauncher, useAppsLaunched, useAppsStopped } from "@/features/apps";
 import { capabilities } from "@/platform/capabilities";
 import { BrowserDetachedPlaceholder } from "@/features/browser/ui/BrowserDetachedPlaceholder";
 import { useBrowserDetach } from "@/features/browser/hooks/useBrowserDetach";
@@ -49,6 +50,13 @@ export function ContentView({
     branch: workspace.git_branch,
   });
 
+  // AAP lifecycle → Browser tabs: open on launch, close on stop/crash.
+  // Both hooks ignore events targeting other workspaces and always mount
+  // during a workspace session so a launch/stop completed while the user
+  // is on a different content tab still takes effect.
+  useAppsLaunched(workspace.id);
+  useAppsStopped(workspace.id);
+
   return (
     <div className="flex h-full min-w-0 flex-1 flex-col overflow-hidden">
       {/* Lazy tabs — mounted only when active */}
@@ -61,6 +69,8 @@ export function ContentView({
       {activeTab === "config" && <AgentConfigPanel workspace={workspace} />}
 
       {activeTab === "design" && <DesignPanel workspaceId={workspace.id} />}
+
+      {activeTab === "apps" && <AppsLauncher workspaceId={workspace.id} />}
 
       {/* Persistent tabs — always mounted, hidden when inactive */}
       <div

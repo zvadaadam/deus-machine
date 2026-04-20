@@ -12,7 +12,8 @@
     "args": ["serve", "--port", "{port}"],
     "cwd": "{workspace}",
     "env": {
-      "DEUS_STORAGE": "{storage.workspace}"
+      "DEUS_STORAGE": "{storage.workspace}",
+      "NODE_ENV": "production"
     },
     "ready": {
       "type": "http",
@@ -30,7 +31,7 @@
       "type": "mcp-http",
       "url": "http://127.0.0.1:{port}/mcp"
     },
-    "bootstrap": "Use `set_active_simulator` and `set_active_project` to pin per-workspace defaults. The agent finds .xcodeproj paths via its own tools; device-use is a dumb executor. Call `snapshot` before `tap` to get @ref targets. Build/install/launch can be chained via the composite `run` tool."
+    "bootstrap": "For detailed usage, call `mcp__deus__read_app_skill({ appId: 'deus.mobile-use' })`. Quick orientation: use `set_active_simulator` + `set_active_project` to pin per-workspace defaults, call `snapshot` before `tap` to get @ref targets, and chain build/install/launch via the composite `run` tool."
   },
 
   "storage": {
@@ -56,5 +57,7 @@
     }
   ],
 
-  "capabilities": ["filesystem:workspace", "process:spawn", "network:local"]
+  "capabilities": ["filesystem:workspace", "process:spawn", "network:local"],
+
+  "skills": ["skills/device-use/SKILL.md"]
 }

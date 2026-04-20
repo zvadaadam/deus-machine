@@ -28,7 +28,8 @@ export type ContentTab =
   | "terminal"
   | "design"
   | "browser"
-  | "simulator";
+  | "simulator"
+  | "apps";
 
 export interface PersistedTerminalTab {
   id: string;
