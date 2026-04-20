@@ -476,6 +476,28 @@ describe("q:subscribe → initial q:snapshot", () => {
       ws.close();
     }
   });
+
+  it("errors messages subscribe without sessionId instead of silently acking", async () => {
+    const { ws } = await connectAndAuth();
+    try {
+      const err = await sendAndReceive(
+        ws,
+        {
+          type: "q:subscribe",
+          id: "sub_msg_bad",
+          resource: "messages",
+          // sessionId intentionally missing
+        },
+        "q:error"
+      );
+
+      expect(err.id).toBe("sub_msg_bad");
+      expect(err.code).toBe("SUBSCRIBE_ERROR");
+      expect(err.message).toMatch(/sessionId/);
+    } finally {
+      ws.close();
+    }
+  });
 });
 
 describe("q:subscribe → live q:snapshot push", () => {

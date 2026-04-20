@@ -279,20 +279,20 @@ function handleSubscribe(connectionId: string, msg: ResourceFrameInput): void {
     // (or HTTP on web); WS only pushes NEW messages via q:delta. See the
     // doc comment on QSubscribeFrame.
     if (typedResource === "messages") {
-      const sessionId = readStringParam(params, "sessionId");
+      // Throw on missing sessionId — outer catch converts to q:error so clients
+      // don't silently create a dead subscription that never receives deltas.
+      const sessionId = requireParam(params, "sessionId", "messages");
 
       // Initialize cursor to current max seq — only NEW messages get pushed via delta
       const cursorKey = `${connectionId}:${id}`;
       let cursor = 0;
-      if (sessionId) {
-        try {
-          const db = getDatabase();
-          cursor = getMaxMessageSeq(db, sessionId);
-        } catch {
-          cursor = 0;
-        }
-        messageCursors.set(cursorKey, cursor);
+      try {
+        const db = getDatabase();
+        cursor = getMaxMessageSeq(db, sessionId);
+      } catch {
+        cursor = 0;
       }
+      messageCursors.set(cursorKey, cursor);
 
       sendFrame(connectionId, { type: "q:subscribed", id, cursor });
       return;
