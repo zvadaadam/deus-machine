@@ -30,6 +30,7 @@ import { getConnection } from "./ws.service";
 import { resolveToolRelay, rejectToolRelay, runCommand } from "./agent";
 import { delegateToRoute } from "./route-delegate";
 import { autoProgressStatus, setWorkspaceStatus } from "./workspace-status.service";
+import { getRunningApps, listApps, stopAppsForWorkspace } from "./aap";
 import { WorkspaceStatusSchema } from "@shared/enums";
 import {
   QUERY_RESOURCES,
@@ -395,30 +396,39 @@ function handleToolResponse(msg: QueryParams): void {
 function runQuery(resource: QueryResource, params: QueryParams): unknown {
   const db = getDatabase();
 
-  return match(resource)
-    .with("workspaces", () => {
-      const state = readStringParam(params, "state") ?? "ready,initializing";
-      return groupWorkspacesByRepo(getWorkspacesByRepo(db, state), getAllRepositorySummaries(db));
-    })
-    .with("stats", () => getStats(db))
-    .with("sessions", () =>
-      getSessionsByWorkspaceId(db, requireParam(params, "workspaceId", "sessions"))
-    )
-    .with("session", () => getSessionById(db, requireParam(params, "sessionId", "session")))
-    .with("messages", () => {
-      const sessionId = requireParam(params, "sessionId", "messages");
-      const before = readNumberParam(params, "before");
+  return (
+    match(resource)
+      .with("workspaces", () => {
+        const state = readStringParam(params, "state") ?? "ready,initializing";
+        return groupWorkspacesByRepo(getWorkspacesByRepo(db, state), getAllRepositorySummaries(db));
+      })
+      .with("stats", () => getStats(db))
+      .with("sessions", () =>
+        getSessionsByWorkspaceId(db, requireParam(params, "workspaceId", "sessions"))
+      )
+      .with("session", () => getSessionById(db, requireParam(params, "sessionId", "session")))
+      .with("messages", () => {
+        const sessionId = requireParam(params, "sessionId", "messages");
+        const before = readNumberParam(params, "before");
 
-      const rows = getMessages(db, sessionId, {
-        limit: readNumberParam(params, "limit") ?? 2000,
-        before,
-      });
+        const rows = getMessages(db, sessionId, {
+          limit: readNumberParam(params, "limit") ?? 2000,
+          before,
+        });
 
-      const hasOlder = rows.length > 0 ? hasOlderMessages(db, sessionId, rows[0].seq) : false;
+        const hasOlder = rows.length > 0 ? hasOlderMessages(db, sessionId, rows[0].seq) : false;
 
-      return { messages: attachParts(db, rows), has_older: hasOlder, has_newer: false };
-    })
-    .exhaustive();
+        return { messages: attachParts(db, rows), has_older: hasOlder, has_newer: false };
+      })
+      // AAP (agentic apps protocol) — real handlers. `apps` is the registry;
+      // `running_apps` is workspace-scoped live instances.
+      .with("apps", () => listApps())
+      .with("running_apps", () => {
+        const workspaceId = readStringParam(params, "workspaceId");
+        return getRunningApps(workspaceId ?? null);
+      })
+      .exhaustive()
+  );
 }
 
 // ---- Request Dispatch (one-shot reads via route delegation) ----
@@ -515,12 +525,31 @@ async function runMutation(action: string, params: QueryParams): Promise<unknown
 
   return (
     match(typedAction)
-      .with("archiveWorkspace", () => {
+      .with("archiveWorkspace", async () => {
         const db = getDatabase();
         const workspaceId = requireParam(params, "workspaceId", "archiveWorkspace");
 
         const workspace = getWorkspaceRaw(db, workspaceId);
         if (!workspace) throw new Error("Workspace not found");
+
+        // Stop AAP apps running in this workspace before we flip the archive
+        // flag — orphan sweep on next boot would catch them otherwise, but
+        // an explicit stop gives clients a clean status transition in the UI
+        // and frees the port immediately. Capped at 2s so a slow-to-exit
+        // child can't make the Archive button hang; any survivor is caught
+        // by the next boot's orphan sweep. Errors are swallowed for the
+        // same reason — the archive must succeed even if a child crash
+        // races with our SIGTERM.
+        const ARCHIVE_STOP_CEILING_MS = 2_000;
+        await Promise.race([
+          stopAppsForWorkspace(workspaceId).catch((err) => {
+            console.warn(
+              `[QueryEngine] stopAppsForWorkspace failed during archive workspaceId=${workspaceId}`,
+              err
+            );
+          }),
+          new Promise<void>((resolve) => setTimeout(resolve, ARCHIVE_STOP_CEILING_MS)),
+        ]);
 
         db.prepare("UPDATE workspaces SET state = 'archived' WHERE id = ?").run(workspaceId);
         autoProgressStatus(workspaceId, "done", { force: true });

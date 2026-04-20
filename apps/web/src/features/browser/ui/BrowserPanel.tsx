@@ -49,6 +49,7 @@ import { createBrowserTab, deriveTitleFromUrl, hydratePersistedTab } from "../ty
 import { ViewportDropdown } from "./ViewportDropdown";
 import { workspaceLayoutActions } from "@/features/workspace/store/workspaceLayoutStore";
 import { chatInsertActions } from "@/shared/stores/chatInsertStore";
+import { useBrowserWindowStore, browserWindowActions } from "../store/browserWindowStore";
 import { native } from "@/platform";
 import { BROWSER_NEW_TAB_REQUESTED } from "@shared/events";
 
@@ -99,6 +100,7 @@ function serializeTabs(tabs: BrowserTabState[]): PersistedBrowserTab[] {
       url: t.currentUrl,
       title: t.title,
       ...(t.viewport ? { viewport: t.viewport } : {}),
+      ...(t.openedAt ? { openedAt: t.openedAt } : {}),
     }));
 }
 
@@ -133,10 +135,18 @@ export function BrowserPanel({
   // race conditions during rapid tab switches can leave stale webviews
   // visible. This guard explicitly hides all non-active webviews whenever
   // the active tab or panel visibility changes — belt-and-suspenders.
+  // "Latest value" refs — intentionally updated during render so downstream
+  // effects / callbacks read the most recent tab list without re-subscribing.
+  // React 19's `react-hooks/refs` rule flags this pattern, but refactoring
+  // it into a post-commit effect breaks React Compiler's ability to preserve
+  // manual memoization of dependent callbacks below. Pre-existing; unrelated
+  // to AAP changes in this PR. Disable is scoped to this block only.
+  /* eslint-disable react-hooks/refs */
   const tabInfoRef = useRef(tabs);
   tabInfoRef.current = tabs;
   const activeTabIdRef = useRef(activeTabId);
   activeTabIdRef.current = activeTabId;
+  /* eslint-enable react-hooks/refs */
 
   useEffect(() => {
     const currentTabs = tabInfoRef.current;
@@ -219,7 +229,6 @@ export function BrowserPanel({
     setTabs(newTabs);
     setActiveTabId(newActiveId);
     prevWorkspaceIdRef.current = workspaceId;
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [workspaceId]);
 
   // --- Listen for popup/OAuth new-tab requests from the main process ---
@@ -243,6 +252,32 @@ export function BrowserPanel({
     });
     return unlisten;
   }, [workspaceId, persistTabs]);
+
+  // --- Consume pending new-tab requests from the browserWindow store ---
+  // Producers (AAP launcher, Phase-4 auto-open-on-launch hook) dispatch a
+  // URL via `browserWindowActions.requestNewTab(workspaceId, url)`. This
+  // effect creates a foreground tab for the matching workspace and consumes
+  // the request. Workspace filtering prevents stale requests from a former
+  // workspace leaking across a switch.
+  const pendingNewTab = useBrowserWindowStore((s) => s.pendingNewTab);
+  useEffect(() => {
+    if (!pendingNewTab) return;
+    if (pendingNewTab.workspaceId !== workspaceId) return;
+
+    const newTab = createBrowserTab(workspaceId);
+    newTab.url = pendingNewTab.url;
+    newTab.currentUrl = pendingNewTab.url;
+    // Stamp the opening URL so apps:stopped can match this tab even after
+    // Electron overwrites url/currentUrl on load failure (chrome-error).
+    newTab.openedAt = pendingNewTab.url;
+    setTabs((prev) => {
+      const next = [...prev, newTab];
+      persistTabs(next, newTab.id);
+      return next;
+    });
+    setActiveTabId(newTab.id);
+    browserWindowActions.consumePendingNewTab();
+  }, [pendingNewTab, workspaceId, persistTabs]);
 
   // --- Tab operations ---
 
@@ -294,6 +329,32 @@ export function BrowserPanel({
     },
     [workspaceId, persistTabs]
   );
+
+  // Close-tab request consumer — triggered by AAP's `apps:stopped` event
+  // via useAppsStopped. Matches any tab whose `currentUrl` shares the
+  // dead app's origin+port prefix (covers in-app client-side navigation)
+  // and closes it through the existing `closeTab` path so webview cleanup
+  // + next-active-tab selection are unified with the manual close flow.
+  const pendingCloseTab = useBrowserWindowStore((s) => s.pendingCloseTab);
+  useEffect(() => {
+    if (!pendingCloseTab) return;
+    if (pendingCloseTab.workspaceId !== workspaceId) return;
+
+    // Match on `openedAt` (the URL the tab was created for) rather than
+    // `currentUrl`. When an app stops, Electron's BrowserView hits
+    // ERR_CONNECTION_REFUSED on reload and transitions currentUrl to
+    // `chrome-error://chromewebdata/` — prefix matching on that would
+    // silently miss the tab we intended to close. `openedAt` is immutable.
+    //
+    // Snapshot ids before closing — closeTab mutates `tabs` and re-renders
+    // asynchronously, so iterating the live array mid-loop would skip or
+    // double-close entries.
+    const doomed = tabs.filter(
+      (t) => t.openedAt && t.openedAt.startsWith(pendingCloseTab.urlPrefix)
+    );
+    for (const t of doomed) closeTab(t.id);
+    browserWindowActions.consumePendingCloseTab();
+  }, [pendingCloseTab, workspaceId, tabs, closeTab]);
 
   /**
    * Stable callback for BrowserTab children to update their tab state.

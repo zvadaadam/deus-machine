@@ -50,12 +50,28 @@ export const serveCommand: CommandDefinition<Params> = {
     const probeHost = host === "0.0.0.0" || host === "::" ? "127.0.0.1" : host;
     const url = `http://${probeHost}:${port}/`;
 
-    // Hand off to bun to run the server. We exec rather than import because
-    // the server module takes over the process lifecycle (Bun.serve).
-    const child = spawn(process.argv0, [serverModule], {
-      env: { ...process.env, PORT: String(port), HOST: host },
-      stdio: "inherit",
-    });
+    // In-process serve: import the server module, then Bun.serve its default
+    // export. We used to spawn a child bun process for this, but that left
+    // an orphaned server grandchild whenever our parent (the AAP host's
+    // backend or a human's Ctrl-C'd cli.js) sent us SIGKILL or SIGHUP —
+    // SIGKILL can't be caught to forward, and even SIGTERM forwarding
+    // raced against the parent exiting first and reparenting the
+    // grandchild to init (PPID=1). Running in-process means one PID
+    // serves both the CLI and HTTP — kill it and the HTTP goes with it.
+    process.env.PORT = String(port);
+    process.env.HOST = host;
+
+    // Await the auto-boot side effects (state load, pinned-sim start) that
+    // run at module init. The default export is a Bun.serve spec.
+    const mod = (await import(serverModule)) as { default: Bun.ServeOptions };
+    const bunRuntime = (globalThis as { Bun?: { serve(spec: Bun.ServeOptions): Bun.Server } }).Bun;
+    if (!bunRuntime) {
+      return {
+        success: false,
+        message: "device-use `serve` requires the Bun runtime (Node is not supported).",
+      };
+    }
+    const server = bunRuntime.serve(mod.default);
 
     if (params.open) {
       // Only open the browser if /health actually responds. On startup
@@ -78,16 +94,31 @@ export const serveCommand: CommandDefinition<Params> = {
       })();
     }
 
-    const exitCode = await new Promise<number | null>((resolve) =>
-      child.once("exit", (code) => resolve(code))
-    );
-
-    if (exitCode !== 0 && exitCode !== null) {
-      return {
-        success: false,
-        message: `Server exited with code ${exitCode}.`,
+    // Park until a signal fires. Bun.serve keeps the event loop alive on its
+    // own, but we still need a promise to await so handler() doesn't return
+    // (and unwind CLI dispatch to exit 0 while the server is still running).
+    await new Promise<void>((resolve) => {
+      const shutdown = (sig: NodeJS.Signals) => {
+        // Graceful: stop accepting new requests, let in-flight ones finish.
+        // `true` = close existing connections too (matches what SIGTERM would
+        // imply — we're going away, clients should reconnect).
+        try {
+          server.stop(true);
+        } catch {
+          // already stopping
+        }
+        // Exit with conventional 128 + signum so the parent can tell the
+        // server was signalled vs. crashed. 143=SIGTERM, 130=SIGINT.
+        const code = sig === "SIGINT" ? 130 : 143;
+        resolve();
+        // Give microtasks a tick to flush; then hard-exit so any lingering
+        // timers (heartbeat, mjpeg poll) don't keep us up past the signal.
+        setTimeout(() => process.exit(code), 50);
       };
-    }
+      process.once("SIGTERM", () => shutdown("SIGTERM"));
+      process.once("SIGINT", () => shutdown("SIGINT"));
+    });
+
     return {
       success: true,
       message: "Server stopped.",

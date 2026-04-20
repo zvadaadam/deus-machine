@@ -60,7 +60,16 @@ export const GIT_INIT_PROGRESS = "git-init-progress" as const;
 /** Queryable resources — subscribable via q:subscribe for real-time push.
  *  Derive the type from the const array so runtime validators and
  *  compile-time checks always stay in sync. */
-export const QUERY_RESOURCES = ["workspaces", "stats", "sessions", "session", "messages"] as const;
+export const QUERY_RESOURCES = [
+  "workspaces",
+  "stats",
+  "sessions",
+  "session",
+  "messages",
+  // AAP (agentic apps protocol)
+  "apps",
+  "running_apps",
+] as const;
 export type QueryResource = (typeof QUERY_RESOURCES)[number];
 
 /** Request-only resources — one-shot reads via q:request, not subscribable.
@@ -146,6 +155,11 @@ export const COMMAND_NAMES = [
   "sim:launchApp",
   "sim:terminateApp",
   "sim:uninstallApp",
+  // AAP (agentic apps protocol) — user-initiated launch/stop from the Apps tab.
+  // Agent-initiated launches flow through the agent-server RPC path in Phase 3
+  // (not these commands), but both paths converge on apps.service.launchApp.
+  "launchApp",
+  "stopApp",
 ] as const;
 export type CommandName = (typeof COMMAND_NAMES)[number];
 
@@ -179,6 +193,13 @@ export const PROTOCOL_EVENTS = [
   "sim:buildComplete",
   "sim:buildFailed",
   "sim:streamFailed",
+  // AAP (agentic apps protocol) lifecycle — one-shot side effects around the
+  // Browser tab that mirrors an app's UI.
+  // Payload for both: { appId, workspaceId, runningAppId, url }.
+  //   apps:launched — new tab opens to the url
+  //   apps:stopped  — tabs pointing at the url are closed (the port is dead)
+  "apps:launched",
+  "apps:stopped",
 ] as const;
 export type ProtocolEvent = (typeof PROTOCOL_EVENTS)[number];
 

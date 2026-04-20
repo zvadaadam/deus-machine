@@ -6,7 +6,16 @@
  * is one entry here + the component in its feature folder.
  */
 
-import { GitBranch, FolderOpen, Bot, Terminal, PenTool, Globe, Smartphone } from "lucide-react";
+import {
+  GitBranch,
+  FolderOpen,
+  Bot,
+  Terminal,
+  PenTool,
+  Globe,
+  Smartphone,
+  LayoutGrid,
+} from "lucide-react";
 import type { ContentTab } from "@/features/workspace/store";
 import type { Settings } from "@shared/types/settings";
 import { capabilities, type CapabilityName } from "@/platform/capabilities";
@@ -40,6 +49,8 @@ export const CONTENT_TABS: ContentTabItem[] = [
     capabilityGate: "nativeSimulator",
     visibilityKey: "experimental_simulator",
   },
+  // AAP (agentic apps protocol) — always visible, no settings/capability gate.
+  { id: "apps", label: "Apps", icon: LayoutGrid },
   { id: "config", label: "Agent", icon: Bot },
 ];
 

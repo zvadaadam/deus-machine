@@ -129,6 +129,16 @@ if (IS_DEV) {
   });
 } else {
   const { serveStatic } = await import("hono/bun");
+  // Anchor the static root to THIS module's location, not process.cwd().
+  // AAP host spawns us with cwd={workspace} (the user's project), so
+  // relative `./dist/frontend` would resolve under the wrong tree and 404.
+  // Walk up from <pkg>/dist/server/index.js → <pkg> → dist/frontend.
+  const { dirname, resolve } = await import("node:path");
+  const { fileURLToPath } = await import("node:url");
+  const pkgRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..", "..");
+  const frontendDir = resolve(pkgRoot, "dist/frontend");
+  const indexPath = resolve(frontendDir, "index.html");
+
   // Cache policy: hashed assets under /assets/* are immutable
   // (Vite fingerprints them, so the name changes whenever the content does),
   // so max-age a year. Everything else (including the HTML shell that
@@ -143,8 +153,8 @@ if (IS_DEV) {
       c.header("Cache-Control", "no-cache");
     }
   });
-  app.use("*", serveStatic({ root: "./dist/frontend" }));
-  app.get("*", serveStatic({ path: "./dist/frontend/index.html" }));
+  app.use("*", serveStatic({ root: frontendDir }));
+  app.get("*", serveStatic({ path: indexPath }));
 }
 
 // --- Bun.serve with WebSocket upgrade -----------------------------------

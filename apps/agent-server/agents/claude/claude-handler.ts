@@ -46,6 +46,7 @@ import {
   isSessionActive,
   type SessionState,
 } from "./claude-session";
+import { attachQuery, detachQuery } from "../../app-registrar";
 
 // Internal-only type for the private workspace init helper
 interface WorkspaceInitOptions {
@@ -444,6 +445,10 @@ export class ClaudeAgentHandler implements AgentHandler {
     // Mutable context accumulated during the streaming loop.
     const ctx = createStreamContext();
 
+    // Hoisted so the finally block can detach from the app-registrar even
+    // when an early throw (e.g. invalid cwd) happens before SDK construction.
+    let queryResult: ReturnType<typeof claudeSDK> | undefined;
+
     try {
       const invalidWorkspacePathError = getInvalidWorkspacePathError(options.cwd);
       if (invalidWorkspacePathError) {
@@ -485,12 +490,18 @@ export class ClaudeAgentHandler implements AgentHandler {
         `[RESUME-DEBUG][${generatorId}] SDK options: resume=${sdkOptions.resume ?? "none"} cwd=${sdkOptions.cwd} model=${sdkOptions.model} permissionMode=${sdkOptions.permissionMode}`
       );
       const tSdkSpawn = Date.now();
-      const queryResult = claudeSDK({ prompt: promptInput, options: sdkOptions });
+      queryResult = claudeSDK({ prompt: promptInput, options: sdkOptions });
       console.log(
         `[TIMING][${generatorId}] claudeSDK() constructor returned in ${Date.now() - tSdkSpawn}ms`
       );
 
       claudeQueries.set(sessionId, queryResult);
+      // Pin the session's initial SDK servers (the `deus` tools) so any
+      // subsequent AAP-MCP broadcast preserves them. Without this, the SDK's
+      // setMcpServers would disconnect the deus transport and hang any
+      // tool call that's mid-flight on it (e.g. `launch_app` itself, which
+      // triggers the very broadcast that kills its own transport).
+      attachQuery(queryResult, sdkOptions.mcpServers ?? {});
       session.generator = queryResult[Symbol.asyncIterator]();
 
       // Per-message options (constant for the lifetime of this generator).
@@ -666,9 +677,15 @@ export class ClaudeAgentHandler implements AgentHandler {
         });
       }
     } finally {
-      // Only clean up if this generator still owns the session.
-      // A rapid re-query can replace the session before this finally runs;
-      // blindly deleting would wipe the new session's state.
+      // Detach unconditionally: the registrar's `protectedByQuery` map is keyed
+      // by Query identity, so even if a rapid re-query has already replaced
+      // this session, our specific Query handle still needs its entry cleared
+      // (otherwise it leaks for the rest of the process lifetime).
+      if (queryResult) detachQuery(queryResult);
+
+      // The session/query maps are keyed by sessionId, so we only delete them
+      // if THIS generator still owns the slot — a re-query may have already
+      // overwritten it with a fresh Query/SessionState we mustn't wipe.
       if (claudeSessions.owns(sessionId, session)) {
         claudeQueries.delete(sessionId);
         claudeSessions.delete(sessionId);
