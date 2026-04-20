@@ -117,10 +117,16 @@ export function spawnApp(args: SpawnArgs): Spawned {
     finalizeExit(null, null, getStderr());
   });
 
-  // Use "close" instead of "exit" so all stdio is fully drained — pending
-  // stderr chunks can still arrive between exit and close, and missing those
-  // would gut the crash-context the ring buffer exists for.
-  child.once("close", (code, signal) => {
+  // We finalize on "exit", NOT "close". Close is technically safer for
+  // flushing late stderr — but on Linux it only fires once EVERY writer to
+  // the pipe has closed, and an unkillable `sh -c "sleep 30"` leaves `sleep`
+  // as an orphan holding the fd open long after the shell exits. That
+  // blocks finalization forever (the SIGTERM lifecycle test hangs its 10s
+  // timeout on CI). The ring buffer already captures the chunks delivered
+  // up to the exit moment — for crash diagnostics, that's the material
+  // signal; a few trailing bytes from a flush that hasn't happened yet are
+  // not worth the cross-platform hang.
+  child.once("exit", (code, signal) => {
     finalizeExit(code, signal, getStderr());
   });
 
