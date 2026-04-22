@@ -22,7 +22,7 @@ Beyond the LOC, the file has three distinct problems:
 
 ## Incidental discovery
 
-`Session.title` already exists on `shared/types/session.ts:131` as `title?: string | null`. It's declared but **never read or written anywhere in the codebase**. A future "rename session" feature needs almost no new infra — just wire `session.title` into label resolution as a fallback override.
+`Session.title` already exists on `shared/types/session.ts:131` as `title?: string | null`. The backend persists and updates it (`apps/backend/src/services/agent/event-handler.ts:208`, `apps/backend/src/services/session/persistence.ts:339`), but the **frontend never reads it** — tab labels are always derived. A future "rename session" feature needs almost no new infra on the backend; the gap is just wiring `session.title` into the frontend label resolution as an override.
 
 ## Adjacent-pattern facts (from code exploration)
 
@@ -97,7 +97,7 @@ Ordered by user-observable impact:
 3. **Focus management on close** — closing a tab moves focus to the tab that becomes active (not lost to `<body>`).
 4. **`⌘W` close** — keyboard parity with every other tabbed app. Wire in `useChatTabs.ts` next to `⌘T` / `⌘⇧T`.
 5. **Icon-slot sizing to 7×7** (matches `BrowserTabBar`'s `w-7`) — fixes the spinner overflow (`CircularPixelGrid` is 14×14 in a 5×5 slot today) AND gives the close X the same hit target as browser tabs.
-6. **Bar height `h-10` → `h-9`** — matches `BrowserTabBar`; 7px tab inside 9px bar is optically centered (1px top, 1px bottom).
+6. **Bar height `h-10` → `h-9`** — matches `BrowserTabBar`. Both `h-7` and `h-9` are Tailwind scale classes (`1.75rem` = 28px tab inside `2.25rem` = 36px bar at the default root font size), so the tab pill gets 4px of vertical padding on each side — optical centering matching the browser tab row. Verify in a browser against actual design-token heights before landing.
 7. **Tooltip delay 300ms** everywhere (match the 2 sibling tab UIs).
 8. **Rename-ready label resolution.** In `useChatTabs.ts`, change one line:
    ```ts
