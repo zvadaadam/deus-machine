@@ -142,8 +142,13 @@ export const BrowserTab = forwardRef<BrowserTabHandle, BrowserTabProps>(function
   const onElementSelectedRef = useRef<BrowserTabProps["onElementSelected"]>(onElementSelected);
   onElementSelectedRef.current = onElementSelected;
 
-  // Suppress history push when navigation was triggered by back/forward
+  // Suppress history push when navigation was triggered by back/forward.
+  // `historyNavDeltaRef` tracks direction (-1 back, +1 forward) so we can
+  // advance `historyIndex` to match the actual position in the history
+  // array — otherwise the NEXT typed navigation would slice history from
+  // a stale index and keep dead forward entries alive.
   const suppressHistoryPushRef = useRef(false);
+  const historyNavDeltaRef = useRef<-1 | 0 | 1>(0);
 
   // Guard: prevent duplicate automation injection across page loads
   const automationInjectedRef = useRef(false);
@@ -232,7 +237,19 @@ export const BrowserTab = forwardRef<BrowserTabHandle, BrowserTabProps>(function
       if (isBlankUrl(url)) return;
       if (suppressHistoryPushRef.current) {
         suppressHistoryPushRef.current = false;
-        onUpdateTab(tabId, { url, currentUrl: url, title: deriveTitleFromUrl(url) });
+        const current = tabRef.current;
+        const delta = historyNavDeltaRef.current;
+        historyNavDeltaRef.current = 0;
+        const nextIndex = Math.max(
+          0,
+          Math.min(current.history.length - 1, current.historyIndex + delta)
+        );
+        onUpdateTab(tabId, {
+          url,
+          currentUrl: url,
+          title: deriveTitleFromUrl(url),
+          historyIndex: nextIndex,
+        });
         return;
       }
       const current = tabRef.current;
@@ -367,6 +384,7 @@ export const BrowserTab = forwardRef<BrowserTabHandle, BrowserTabProps>(function
     const wv = getWebview();
     if (!wv || !wv.canGoBack()) return;
     suppressHistoryPushRef.current = true;
+    historyNavDeltaRef.current = -1;
     wv.goBack();
   }, [getWebview]);
 
@@ -374,6 +392,7 @@ export const BrowserTab = forwardRef<BrowserTabHandle, BrowserTabProps>(function
     const wv = getWebview();
     if (!wv || !wv.canGoForward()) return;
     suppressHistoryPushRef.current = true;
+    historyNavDeltaRef.current = 1;
     wv.goForward();
   }, [getWebview]);
 
