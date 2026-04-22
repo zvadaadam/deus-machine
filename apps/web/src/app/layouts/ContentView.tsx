@@ -18,8 +18,6 @@ import { BrowserPanel } from "@/features/browser";
 import { SimulatorPanel } from "@/features/simulator";
 import { AppsLauncher, useAppsLaunched, useAppsStopped } from "@/features/apps";
 import { capabilities } from "@/platform/capabilities";
-import { BrowserDetachedPlaceholder } from "@/features/browser/ui/BrowserDetachedPlaceholder";
-import { useBrowserDetach } from "@/features/browser/hooks/useBrowserDetach";
 import { cn } from "@/shared/lib/utils";
 import type { ContentTab } from "@/features/workspace/store";
 import type { Workspace } from "@/shared/types";
@@ -39,17 +37,6 @@ export function ContentView({
   isWatched = false,
   onReview,
 }: ContentViewProps) {
-  const {
-    isDetached: isBrowserDetached,
-    detach: detachBrowser,
-    reattach: reattachBrowser,
-  } = useBrowserDetach({
-    workspaceId: workspace.id,
-    directoryName: workspace.slug,
-    repoName: workspace.repo_name,
-    branch: workspace.git_branch,
-  });
-
   // AAP lifecycle → Browser tabs: open on launch, close on stop/crash.
   // Both hooks ignore events targeting other workspaces and always mount
   // during a workspace session so a launch/stop completed while the user
@@ -75,19 +62,11 @@ export function ContentView({
       {/* Persistent tabs — always mounted, hidden when inactive */}
       <div
         className={cn(
-          "h-full w-full",
+          "h-full w-full min-w-0 overflow-hidden",
           activeTab !== "browser" && "pointer-events-none invisible absolute"
         )}
       >
-        {isBrowserDetached ? (
-          <BrowserDetachedPlaceholder onReattach={reattachBrowser} />
-        ) : (
-          <BrowserPanel
-            workspaceId={workspace.id}
-            panelVisible={activeTab === "browser"}
-            onDetach={detachBrowser}
-          />
-        )}
+        <BrowserPanel workspaceId={workspace.id} panelVisible={activeTab === "browser"} />
       </div>
 
       <div

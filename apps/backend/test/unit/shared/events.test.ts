@@ -6,11 +6,6 @@ import {
   FS_CHANGED,
   PTY_DATA,
   PTY_EXIT,
-  BROWSER_PAGE_LOAD,
-  BROWSER_TITLE_CHANGED,
-  BROWSER_URL_CHANGE,
-  BROWSER_WORKSPACE_CHANGE,
-  BROWSER_DETACHED_CLOSED,
   BROWSER_NEW_TAB_REQUESTED,
   CHAT_INSERT,
   GIT_CLONE_PROGRESS,
@@ -23,7 +18,6 @@ import {
   PtyDataSchema,
   ChatInsertSchema,
   GitCloneProgressSchema,
-  BrowserWorkspaceChangeSchema,
   // Domain constants
   QUERY_RESOURCES,
   REQUEST_RESOURCES,
@@ -40,11 +34,6 @@ describe("shared/events", () => {
       FS_CHANGED,
       PTY_DATA,
       PTY_EXIT,
-      BROWSER_PAGE_LOAD,
-      BROWSER_TITLE_CHANGED,
-      BROWSER_URL_CHANGE,
-      BROWSER_WORKSPACE_CHANGE,
-      BROWSER_DETACHED_CLOSED,
       BROWSER_NEW_TAB_REQUESTED,
       CHAT_INSERT,
       GIT_CLONE_PROGRESS,
@@ -126,15 +115,6 @@ describe("shared/events", () => {
     it("GitCloneProgressSchema accepts valid payload", () => {
       const result = GitCloneProgressSchema.safeParse({
         line: "Receiving objects:  42% (100/238), 50.00 KiB | 1.00 MiB/s",
-      });
-      expect(result.success).toBe(true);
-    });
-
-    it("BrowserWorkspaceChangeSchema accepts nullish fields", () => {
-      const result = BrowserWorkspaceChangeSchema.safeParse({
-        workspaceId: "ws-1",
-        directoryName: null,
-        repoName: undefined,
       });
       expect(result.success).toBe(true);
     });

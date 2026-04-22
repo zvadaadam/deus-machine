@@ -33,12 +33,10 @@ export const FS_CHANGED = "fs:changed" as const;
 export const PTY_DATA = "pty-data" as const;
 export const PTY_EXIT = "pty-exit" as const;
 
-/** Browser automation events — Electron BrowserView → frontend */
-export const BROWSER_PAGE_LOAD = "browser:page-load" as const;
-export const BROWSER_TITLE_CHANGED = "browser:title-changed" as const;
-export const BROWSER_URL_CHANGE = "browser:url-change" as const;
-export const BROWSER_WORKSPACE_CHANGE = "browser-window:workspace-change" as const;
-export const BROWSER_DETACHED_CLOSED = "browser:detached-closed" as const;
+/** Browser guest-page popup requests — main process → renderer.
+ *  Fired when a <webview>'s guest page calls window.open() or navigates a
+ *  `target="_blank"` link. The main renderer opens a new browser tab so the
+ *  flow (OAuth redirects, etc.) stays in-app. */
 export const BROWSER_NEW_TAB_REQUESTED = "browser:new-tab-requested" as const;
 
 // Simulator build logs now use q:event "sim:buildLog" via WebSocket protocol.
@@ -232,38 +230,9 @@ export const PtyExitSchema = z.object({
 });
 export type PtyExitEvent = z.infer<typeof PtyExitSchema>;
 
-const BrowserPageLoadSchema = z.object({
-  label: z.string(),
-  url: z.string(),
-  event: z.string(),
-  error: z.object({ code: z.number(), description: z.string() }).optional(),
-});
-type BrowserPageLoadEvent = z.infer<typeof BrowserPageLoadSchema>;
-
-const BrowserTitleChangedSchema = z.object({
-  label: z.string(),
-  title: z.string(),
-});
-type BrowserTitleChangedEvent = z.infer<typeof BrowserTitleChangedSchema>;
-
-const BrowserUrlChangeSchema = z.object({
-  label: z.string(),
-  url: z.string(),
-});
-type BrowserUrlChangeEvent = z.infer<typeof BrowserUrlChangeSchema>;
-
-export const BrowserWorkspaceChangeSchema = z.object({
-  workspaceId: z.string(),
-  directoryName: z.string().nullish(),
-  repoName: z.string().nullish(),
-  branch: z.string().nullish(),
-});
-export type BrowserWorkspaceChangeEvent = z.infer<typeof BrowserWorkspaceChangeSchema>;
-
 const BrowserNewTabRequestedSchema = z.object({
   url: z.string(),
   disposition: z.string().optional(),
-  openerLabel: z.string().optional(),
 });
 type BrowserNewTabRequestedEvent = z.infer<typeof BrowserNewTabRequestedSchema>;
 
@@ -344,11 +313,6 @@ export const AppEventSchemaMap = {
   [FS_CHANGED]: FileChangeSchema,
   [PTY_DATA]: PtyDataSchema,
   [PTY_EXIT]: PtyExitSchema,
-  [BROWSER_PAGE_LOAD]: BrowserPageLoadSchema,
-  [BROWSER_TITLE_CHANGED]: BrowserTitleChangedSchema,
-  [BROWSER_URL_CHANGE]: BrowserUrlChangeSchema,
-  [BROWSER_WORKSPACE_CHANGE]: BrowserWorkspaceChangeSchema,
-  [BROWSER_DETACHED_CLOSED]: z.undefined(),
   [BROWSER_NEW_TAB_REQUESTED]: BrowserNewTabRequestedSchema,
   [CHAT_INSERT]: ChatInsertSchema,
   [GIT_CLONE_PROGRESS]: GitCloneProgressSchema,
@@ -379,11 +343,6 @@ export interface AppEventMap {
   [PTY_EXIT]: PtyExitEvent;
 
   // Browser
-  [BROWSER_PAGE_LOAD]: BrowserPageLoadEvent;
-  [BROWSER_TITLE_CHANGED]: BrowserTitleChangedEvent;
-  [BROWSER_URL_CHANGE]: BrowserUrlChangeEvent;
-  [BROWSER_WORKSPACE_CHANGE]: BrowserWorkspaceChangeEvent;
-  [BROWSER_DETACHED_CLOSED]: undefined;
   [BROWSER_NEW_TAB_REQUESTED]: BrowserNewTabRequestedEvent;
 
   // Chat

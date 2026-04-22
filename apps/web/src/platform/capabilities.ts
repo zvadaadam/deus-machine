@@ -25,7 +25,10 @@ export const capabilities = {
   /** Native PTY terminal (requires Electron IPC for shell spawning) */
   nativeTerminal: isElectron,
 
-  /** Embedded browser webview (requires Electron BrowserView) */
+  /** Embedded browser — uses Electron's <webview> tag, which requires
+   *  `webPreferences.webviewTag: true` on the host window. Not available
+   *  in plain web mode (there's no equivalent DOM element for embedding
+   *  arbitrary cross-origin sites with CDP access). */
   nativeBrowser: isElectron,
 
   /** iOS simulator panel — stream management lives in backend, works in
@@ -53,7 +56,8 @@ export const capabilities = {
   /** Show/hide main window on boot (requires Electron BrowserWindow) */
   windowLifecycle: isElectron,
 
-  /** Create secondary windows (detached browser popup) */
+  /** Create secondary Electron BrowserWindows (reserved for future overlay /
+   *  popup windows; the detached browser popup feature was removed). */
   secondaryWindows: isElectron,
 
   /** OS-level notifications via Electron Notification API.

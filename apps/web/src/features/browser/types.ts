@@ -4,15 +4,28 @@ export interface ConsoleLog {
   message: string;
 }
 
-/** CDP device emulation state for a browser tab */
-export interface ViewportState {
-  width: number;
-  height: number;
-  deviceScaleFactor: number;
-  /** Whether to enable touch emulation + mobile UA. Preserved from device
-   *  preset metadata — width heuristics misclassify tablets (820px). */
-  mobile?: boolean;
+/** The guest-side blank page Electron's <webview> loads before any real
+ *  navigation. It's an implementation detail of the embedder, not a
+ *  user-facing URL — never show it in the URL bar, tab title, or history. */
+export const BLANK_URL = "about:blank";
+
+/** True for URLs that should be treated as "no page loaded yet" in the UI —
+ *  empty string or the webview's initial `about:blank`. */
+export function isBlankUrl(url: string | null | undefined): boolean {
+  return !url || url === BLANK_URL;
 }
+
+/** Window-level DOM event that asks the browser URL input to focus + select.
+ *  One channel, many triggers: Cmd+L from the guest preload and the "new tab"
+ *  button both fire it; the BrowserPanel's single listener handles them all. */
+export const FOCUS_URL_BAR_EVENT = "deus:browser:focus-url-bar";
+
+/** Mobile preview dimensions — a single fixed iPhone-class viewport used when
+ *  a tab toggles on mobile view. Not configurable by the user; the goal is
+ *  "do my mobile breakpoints fire?", not "pixel-match iPhone 14 Pro". */
+export const MOBILE_PREVIEW_WIDTH = 390;
+export const MOBILE_PREVIEW_HEIGHT = 852;
+export const MOBILE_PREVIEW_DPR = 3;
 
 /** Lightweight tab state persisted in the workspace layout store.
  *  Only what's needed to restore a tab — webviews are destroyed/recreated. */
@@ -20,7 +33,8 @@ export interface PersistedBrowserTab {
   id: string;
   url: string; // last loaded URL
   title: string; // display title
-  viewport?: ViewportState | null;
+  /** Tab is in mobile preview mode (narrow centered frame + mobile CDP). */
+  isMobileView?: boolean;
   /** Persisted so AAP `apps:stopped` can still match an app-owned tab after a
    *  workspace reload; see BrowserTabState.openedAt for the full rationale. */
   openedAt?: string;
@@ -28,9 +42,7 @@ export interface PersistedBrowserTab {
 
 export interface BrowserTabState {
   id: string;
-  /** Unique label for the native Electron BrowserView instance */
-  webviewLabel: string;
-  /** Display title: auto-derived from URL domain, overridden by native title events */
+  /** Display title: auto-derived from URL domain, overridden by webview title events */
   title: string;
   /** Value in URL input bar */
   url: string;
@@ -40,7 +52,8 @@ export interface BrowserTabState {
   history: string[];
   /** Current position in history */
   historyIndex: number;
-  /** Whether the native BrowserView is loading */
+  /** Whether the guest page is loading (derived from <webview> did-start /
+   *  did-stop-loading events) */
   loading: boolean;
   /** Error message if page load failed */
   error: string | null;
@@ -54,8 +67,10 @@ export interface BrowserTabState {
   devtoolsOpen: boolean;
   /** Console logs for this tab */
   consoleLogs: ConsoleLog[];
-  /** CDP device emulation — null means responsive (no emulation) */
-  viewport: ViewportState | null;
+  /** Mobile preview mode: narrow centered frame + CDP mobile emulation (UA,
+   *  touch, DPR). When false, the webview fills the panel and no emulation
+   *  is applied — the page sees the panel's actual pixel dimensions. */
+  isMobileView: boolean;
   /** The URL the tab was originally opened for, or undefined for tabs opened
    *  without a target (e.g. the "New Tab" button). Immutable once set —
    *  navigation and load failures never overwrite it. Used to match tabs
@@ -106,27 +121,37 @@ export interface BrowserTabHandle {
   /** Native session history forward — preserves scroll/form state */
   goForward: () => void;
   reload: () => void;
-  injectAutomation: () => Promise<void>;
+  /** Inject inspect-mode + visual-effects scripts. Returns true on success. */
+  injectAutomation: () => Promise<boolean>;
   toggleElementSelector: () => void;
+  /** Capture the current page as a PNG data URL (or null on failure). */
+  captureScreenshot?: () => Promise<string | null>;
+  /** Open devtools in the tab-owning web contents. */
+  openDevtools?: () => Promise<void>;
+  /** Close devtools. */
+  closeDevtools?: () => Promise<void>;
 }
 
 /** Extract a readable title from a URL (domain or localhost:port) */
 export function deriveTitleFromUrl(url: string): string {
-  if (!url) return "New Tab";
+  if (isBlankUrl(url)) return "New Tab";
   try {
     const parsed = new URL(url);
     if (parsed.hostname === "localhost") {
       return `localhost${parsed.port ? ":" + parsed.port : ""}`;
     }
+    // about:* and other non-http URLs parse but have empty hostnames — fall
+    // back to "New Tab" rather than showing a blank title.
+    if (!parsed.hostname) return "New Tab";
     return parsed.hostname.replace(/^www\./, "");
   } catch {
     return "New Tab";
   }
 }
 
-/** Create a fresh browser tab with default state.
- *  When workspaceId is provided, scopes the webview label to prevent
- *  collisions across workspaces. */
+/** Create a fresh browser tab with default state. Tab IDs are scoped to a
+ *  workspace so they don't collide across workspaces in the WebviewManager
+ *  (which keys <webview> instances by tab id). */
 export function createBrowserTab(workspaceId?: string | null): BrowserTabState {
   const rand = Math.random().toString(36).slice(2, 6);
   const id = workspaceId
@@ -134,7 +159,6 @@ export function createBrowserTab(workspaceId?: string | null): BrowserTabState {
     : `browser-tab-${Date.now()}-${rand}`;
   return {
     id,
-    webviewLabel: id,
     title: "New Tab",
     url: "",
     currentUrl: "",
@@ -147,24 +171,26 @@ export function createBrowserTab(workspaceId?: string | null): BrowserTabState {
     selectorActive: false,
     devtoolsOpen: false,
     consoleLogs: [],
-    viewport: null,
+    isMobileView: false,
   };
 }
 
 /** Hydrate a PersistedBrowserTab into a full BrowserTabState with
- *  ephemeral defaults (loading, history, consoleLogs, etc.) */
+ *  ephemeral defaults (loading, history, consoleLogs, etc.). Blank URLs
+ *  from legacy persistence are scrubbed here so they never re-surface in
+ *  the URL bar or history on reload. */
 export function hydratePersistedTab(persisted: PersistedBrowserTab): BrowserTabState {
-  // Use persisted.id as a stable webview label — same tab always maps to the
-  // same native view. This enables view parking: parked views can be recalled
-  // by label without creating a new native WebContentsView.
+  const storedUrl = isBlankUrl(persisted.url) ? "" : persisted.url;
   return {
     id: persisted.id,
-    webviewLabel: persisted.id,
-    title: persisted.title || deriveTitleFromUrl(persisted.url),
-    url: persisted.url,
-    currentUrl: persisted.url,
-    history: persisted.url ? [persisted.url] : [],
-    historyIndex: persisted.url ? 0 : -1,
+    title:
+      persisted.title && !isBlankUrl(persisted.title)
+        ? persisted.title
+        : deriveTitleFromUrl(storedUrl),
+    url: storedUrl,
+    currentUrl: storedUrl,
+    history: storedUrl ? [storedUrl] : [],
+    historyIndex: storedUrl ? 0 : -1,
     loading: false,
     error: null,
     injected: false,
@@ -172,7 +198,7 @@ export function hydratePersistedTab(persisted: PersistedBrowserTab): BrowserTabS
     selectorActive: false,
     devtoolsOpen: false,
     consoleLogs: [],
-    viewport: persisted.viewport ?? null,
+    isMobileView: persisted.isMobileView ?? false,
     openedAt: persisted.openedAt,
   };
 }
