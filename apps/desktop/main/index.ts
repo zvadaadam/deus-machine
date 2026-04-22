@@ -18,7 +18,7 @@ import { homedir } from "os";
 import { is } from "@electron-toolkit/utils";
 import { spawnBackend, stopBackend, CDP_PORT } from "./backend-process";
 import { registerNativeHandlers } from "./native-handlers";
-import { registerBrowserViewHandlers, destroyAllBrowserViews } from "./browser-views";
+import { registerBrowserEmulationHandlers } from "./browser-emulation";
 // PTY, file watching, and browser server are now handled by the backend
 // via WebSocket commands — no Electron IPC needed for these.
 import { setupAutoUpdater } from "./auto-updater";
@@ -85,7 +85,77 @@ async function createWindow(): Promise<void> {
       contextIsolation: true,
       nodeIntegration: false,
       sandbox: false, // ESM preload requires sandbox: false (package.json "type": "module")
+      webviewTag: true, // Phase 1 of WebContentsView→<webview> migration — enables <webview> for guest pages
     },
+  });
+
+  // Attach the guest-page preload whenever a <webview> element is mounted.
+  // The <webview> tag itself sets `partition` so all tabs share the
+  // `persist:browser` cookie jar; here we force-set the preload + isolation
+  // + strip any renderer-supplied params that could weaken the sandbox.
+  //
+  // SECURITY: renderer can set arbitrary webview attributes at attach time
+  // (including `src`, `nodeintegration`, `webpreferences`). We:
+  //   1. Override webPreferences with our hardened values (can't be opted out).
+  //   2. Validate `params.src` against http/https/about only — matches the
+  //      `setWindowOpenHandler` scheme allowlist below so attach-time and
+  //      runtime boundaries are consistent.
+  //   3. Strip disallowed guest-supplied webview attributes from params.
+  const ALLOWED_WEBVIEW_PARAM_KEYS = new Set(["src", "partition", "useragent"]);
+  mainWindow.webContents.on("will-attach-webview", (_event, webPreferences, params) => {
+    webPreferences.preload = join(__dirname, "../preload/browser-preload.mjs");
+    webPreferences.contextIsolation = true;
+    webPreferences.nodeIntegration = false;
+
+    // Validate src scheme. Unparseable / disallowed schemes fall back to
+    // about:blank rather than killing the attach — the guest still mounts,
+    // the renderer can then navigate via its URL bar.
+    const src = typeof params.src === "string" ? params.src : "";
+    if (src) {
+      try {
+        const { protocol } = new URL(src);
+        if (protocol !== "http:" && protocol !== "https:" && protocol !== "about:") {
+          params.src = "about:blank";
+        }
+      } catch {
+        params.src = "about:blank";
+      }
+    }
+
+    // Drop any webview attributes the renderer set that aren't on the
+    // allowlist — renderer should not be able to flip nodeIntegration,
+    // enableRemoteModule, or swap our preload via params.
+    for (const key of Object.keys(params)) {
+      if (!ALLOWED_WEBVIEW_PARAM_KEYS.has(key)) {
+        delete (params as Record<string, unknown>)[key];
+      }
+    }
+  });
+
+  // Keep popups in-app: when a guest calls window.open() or follows a
+  // `target="_blank"` link (common for OAuth redirects), forward the URL to
+  // the renderer which will open it as a new browser tab. Returning
+  // `{ action: "deny" }` stops Electron from spawning a standalone window.
+  //
+  // SECURITY: restrict forwarded URLs to http/https. `data:`, `javascript:`,
+  // `file:`, and `chrome:` schemes could be used to inject arbitrary code
+  // into the `persist:browser` partition, which is shared across tabs and
+  // inherits cookies from every legitimate site. Any non-http(s) scheme is
+  // silently dropped; the renderer never sees it, no new tab is spawned.
+  mainWindow.webContents.on("did-attach-webview", (_event, guestContents) => {
+    guestContents.setWindowOpenHandler(({ url, disposition }) => {
+      try {
+        const parsed = new URL(url);
+        if (parsed.protocol !== "http:" && parsed.protocol !== "https:") {
+          return { action: "deny" };
+        }
+      } catch {
+        // Unparseable URL — deny silently.
+        return { action: "deny" };
+      }
+      mainWindow?.webContents.send("browser:new-tab-requested", { url, disposition });
+      return { action: "deny" };
+    });
   });
 
   // Show window once renderer is ready (avoids white flash)
@@ -238,15 +308,11 @@ app.whenReady().then(async () => {
 
   // Register IPC handlers before window creation so they're ready immediately
   registerNativeHandlers();
-  registerBrowserViewHandlers();
+  registerBrowserEmulationHandlers();
 
-  // Cross-window event relay — when one renderer sends an event via ipcRenderer.send(),
-  // forward it to all OTHER windows. This enables the detached browser window to
-  // communicate with the main window (e.g., CHAT_INSERT events).
-  const RELAY_EVENTS = new Set([
-    "chat-insert", // Detached browser -> main window
-    "browser-window:workspace-change", // Main window → detached browser window
-  ]);
+  // Cross-window event relay — forwards a sender's event to all other windows.
+  // Used for chat-insert (e.g. terminal/simulator feeding the main composer).
+  const RELAY_EVENTS = new Set(["chat-insert"]);
 
   for (const channel of RELAY_EVENTS) {
     ipcMain.on(channel, (event, ...args) => {
@@ -263,10 +329,6 @@ app.whenReady().then(async () => {
 
   await createWindow();
   logMainProcess("[main] Window created");
-
-  // No hidden BrowserView needed — BrowserTab eagerly creates a native
-  // BrowserView (about:blank) on mount, giving agent-browser a CDP target
-  // to discover and navigate directly.
 
   // Dev mode: swap dock icon so it's visually distinct from the production app
   if (is.dev && process.platform === "darwin") {
@@ -308,7 +370,6 @@ app.on("window-all-closed", () => {
 
 app.on("before-quit", () => {
   destroyTray();
-  destroyAllBrowserViews();
   stopBackend();
 });
 

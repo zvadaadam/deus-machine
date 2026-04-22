@@ -11,6 +11,7 @@ import { toast } from "sonner";
 import { useCreateSession, useWorkspaceSessions } from "@/features/session/api/session.queries";
 import { getAgentLabel, getAgentHarnessForModel, type AgentHarness } from "@/shared/agents";
 import { workspaceLayoutActions } from "@/features/workspace/store/workspaceLayoutStore";
+import { sessionComposerActions } from "@/features/session/store/sessionComposerStore";
 import type { Tab, ClosedTab } from "@/features/workspace/ui/MainContentTabs";
 import type { Session } from "@/features/session/types";
 
@@ -262,6 +263,11 @@ export function useChatTabs({ workspaceId, activeSessionId }: UseChatTabsOptions
             };
             return [entry, ...prevClosed].slice(0, MAX_CLOSED_TABS);
           });
+          // Drop the session's composer slice so the store doesn't
+          // accumulate stale entries over long-running workspaces. Restore
+          // creates a fresh slice from session data if the user brings this
+          // tab back.
+          sessionComposerActions.discard(closingTab.data.sessionId);
         }
 
         if (tabId === activeMainTabId && newTabs.length > 0) {

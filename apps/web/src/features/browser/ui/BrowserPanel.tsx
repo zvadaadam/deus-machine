@@ -11,7 +11,7 @@
  * unmount and lazily recreated from persisted URLs on remount.
  */
 
-import { useState, useEffect, useRef, useCallback } from "react";
+import { useState, useEffect, useRef, useCallback, type ReactNode } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
@@ -22,33 +22,46 @@ import {
   DropdownMenuSeparator,
   DropdownMenuLabel,
 } from "@/components/ui/dropdown-menu";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import {
   RefreshCw,
   ChevronLeft,
   ChevronRight,
   Terminal,
   MousePointer2,
-  X,
   Cookie,
   Check,
   Loader2,
   Trash2,
   Camera,
+  Monitor,
+  Smartphone,
 } from "lucide-react";
 import { BrowserTabBar } from "./BrowserTabBar";
 import { BrowserTab } from "./BrowserTab";
+import { FocusModeOverlay } from "./FocusModeOverlay";
+import { webviewManager } from "../webview-manager";
+import { useSidebar } from "@/components/ui";
 import type {
   BrowserTabState,
   BrowserTabHandle,
   ConsoleLog,
   PersistedBrowserTab,
   ElementSelectedEvent,
-  ViewportState,
 } from "../types";
-import { createBrowserTab, deriveTitleFromUrl, hydratePersistedTab } from "../types";
-import { ViewportDropdown } from "./ViewportDropdown";
-import { workspaceLayoutActions } from "@/features/workspace/store/workspaceLayoutStore";
-import { chatInsertActions } from "@/shared/stores/chatInsertStore";
+import {
+  createBrowserTab,
+  deriveTitleFromUrl,
+  hydratePersistedTab,
+  isBlankUrl,
+  FOCUS_URL_BAR_EVENT,
+} from "../types";
+import {
+  workspaceLayoutActions,
+  useWorkspaceLayoutStore,
+} from "@/features/workspace/store/workspaceLayoutStore";
+import { sessionComposerActions } from "@/features/session/store/sessionComposerStore";
+import { processImageFiles } from "@/features/session/lib/imageAttachments";
 import { useBrowserWindowStore, browserWindowActions } from "../store/browserWindowStore";
 import { native } from "@/platform";
 import { BROWSER_NEW_TAB_REQUESTED } from "@shared/events";
@@ -65,14 +78,14 @@ interface InstalledBrowser {
 
 interface BrowserPanelProps {
   workspaceId: string | null;
-  /** Whether the browser panel is the active (visible) right-side tab.
-   *  When false, the panel stays mounted (preserving webview instances)
-   *  but all native BrowserViews are hidden via IPC. */
+  /** Whether the Browser content tab is currently the active one in the
+   *  workspace view. When false, the whole panel is hidden by its parent
+   *  wrapper (`invisible absolute`), but <webview> elements live in
+   *  document.body and don't see that CSS — we must forward this down so
+   *  the webviews hide themselves via the useWebview hook.
+   *
+   *  Defaults true so out-of-tree callers (storybook, tests) still work. */
   panelVisible?: boolean;
-  /** Pop-out callback — shown as a button in the tab bar */
-  onDetach?: () => void;
-  /** Which Electron window hosts the child BrowserViews. Defaults to "main". */
-  windowLabel?: string;
 }
 
 /** Load or create browser tabs for a workspace from persisted layout state */
@@ -91,31 +104,133 @@ function loadWorkspaceTabs(wsId: string | null): { tabs: BrowserTabState[]; acti
   return { tabs: [tab], activeTabId: tab.id };
 }
 
-/** Serialize tabs for persistence — only tabs with a loaded URL */
+/** Single-line wrapper that replaces the native `title=` attribute on every
+ *  toolbar button with the design-system Tooltip. All triggers below sit
+ *  under one TooltipProvider so hovering across siblings reuses the delay. */
+function IconTooltip({ label, children }: { label: ReactNode; children: ReactNode }) {
+  return (
+    <Tooltip>
+      <TooltipTrigger asChild>{children}</TooltipTrigger>
+      <TooltipContent side="bottom">{label}</TooltipContent>
+    </Tooltip>
+  );
+}
+
+/** Serialize tabs for persistence — only tabs with a real loaded URL.
+ *  Blank/about:blank tabs are ephemeral (always recreated on mount), so we
+ *  don't write them to localStorage. */
 function serializeTabs(tabs: BrowserTabState[]): PersistedBrowserTab[] {
   return tabs
-    .filter((t) => t.currentUrl)
+    .filter((t) => !isBlankUrl(t.currentUrl))
     .map((t) => ({
       id: t.id,
       url: t.currentUrl,
       title: t.title,
-      ...(t.viewport ? { viewport: t.viewport } : {}),
+      ...(t.isMobileView ? { isMobileView: true } : {}),
       ...(t.openedAt ? { openedAt: t.openedAt } : {}),
     }));
 }
 
-export function BrowserPanel({
-  workspaceId,
-  panelVisible = true,
-  onDetach,
-  windowLabel,
-}: BrowserPanelProps) {
+export function BrowserPanel({ workspaceId, panelVisible = true }: BrowserPanelProps) {
   // --- Initialize tabs from persisted state or create a fresh empty tab ---
   const [{ tabs: initialTabs, activeTabId: initialActiveId }] = useState(() =>
     loadWorkspaceTabs(workspaceId)
   );
   const [tabs, setTabs] = useState<BrowserTabState[]>(initialTabs);
   const [activeTabId, setActiveTabId] = useState<string>(initialActiveId);
+
+  // Focus mode — toggle lives in `browserWindowStore.focusModeByWorkspace`.
+  // When flipped ON, we stash the current layout and collapse chat + sidebar;
+  // flipped OFF, we restore. The ContentTabBar button drives this flag.
+  const focusMode = useBrowserWindowStore((s) =>
+    workspaceId ? (s.focusModeByWorkspace[workspaceId] ?? false) : false
+  );
+
+  // Chat-panel collapsed state. The overlay composer appears whenever
+  // chat is collapsed AND we're on the Browser tab — the user either
+  // dragged the splitter to collapse or clicked the focus button. Either
+  // way, we give them the floating composer so they can keep chatting
+  // without a visible chat panel.
+  const chatCollapsed = useWorkspaceLayoutStore((s) =>
+    workspaceId ? (s.layouts[workspaceId]?.chatPanelCollapsed ?? false) : false
+  );
+  const showFocusOverlay = (focusMode || chatCollapsed) && panelVisible && !!workspaceId;
+  const { open: sidebarOpen, setOpen: setSidebarOpen } = useSidebar();
+  const previousLayoutRef = useRef<{ chatCollapsed: boolean; sidebarOpen: boolean } | null>(null);
+
+  // Hold the latest values in refs so the focus-mode side-effect doesn't
+  // re-fire just because `setSidebarOpen` or `sidebarOpen` changed identity
+  // (useSidebar re-memoises setOpen on every open flip, which used to
+  // reset focus mode mid-entry).
+  const setSidebarOpenRef = useRef(setSidebarOpen);
+  const sidebarOpenRef = useRef(sidebarOpen);
+  useEffect(() => {
+    setSidebarOpenRef.current = setSidebarOpen;
+    sidebarOpenRef.current = sidebarOpen;
+  });
+
+  // Apply / revert the layout changes when focus mode toggles.
+  useEffect(() => {
+    if (!workspaceId) return;
+    if (focusMode) {
+      if (!previousLayoutRef.current) {
+        const layout = workspaceLayoutActions.getLayout(workspaceId);
+        previousLayoutRef.current = {
+          chatCollapsed: layout.chatPanelCollapsed,
+          sidebarOpen: sidebarOpenRef.current,
+        };
+      }
+      workspaceLayoutActions.setChatPanelCollapsed(workspaceId, true);
+      setSidebarOpenRef.current(false);
+    } else if (previousLayoutRef.current) {
+      workspaceLayoutActions.setChatPanelCollapsed(
+        workspaceId,
+        previousLayoutRef.current.chatCollapsed
+      );
+      setSidebarOpenRef.current(previousLayoutRef.current.sidebarOpen);
+      previousLayoutRef.current = null;
+    }
+  }, [focusMode, workspaceId]);
+
+  // On workspace switch: exit focus mode (so the overlay doesn't follow the
+  // user to a different workspace) and restore the previous layout.
+  useEffect(() => {
+    return () => {
+      if (!workspaceId) return;
+      if (previousLayoutRef.current) {
+        workspaceLayoutActions.setChatPanelCollapsed(
+          workspaceId,
+          previousLayoutRef.current.chatCollapsed
+        );
+        setSidebarOpenRef.current(previousLayoutRef.current.sidebarOpen);
+        previousLayoutRef.current = null;
+      }
+      browserWindowActions.setFocusMode(workspaceId, false);
+    };
+  }, [workspaceId]);
+
+  // Esc anywhere exits focus mode.
+  useEffect(() => {
+    if (!focusMode || !workspaceId) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") browserWindowActions.setFocusMode(workspaceId, false);
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [focusMode, workspaceId]);
+
+  // Auto-exit when the Browser content tab is no longer active — otherwise
+  // the portal-rendered overlay would keep floating over whatever tab the
+  // user switched to (Apps / Files / etc).
+  useEffect(() => {
+    if (!panelVisible && focusMode && workspaceId) {
+      browserWindowActions.setFocusMode(workspaceId, false);
+    }
+  }, [panelVisible, focusMode, workspaceId]);
+
+  const exitFocusMode = useCallback(() => {
+    if (workspaceId) browserWindowActions.setFocusMode(workspaceId, false);
+  }, [workspaceId]);
 
   // Imperative handles per tab
   const tabRefs = useRef<Map<string, BrowserTabHandle>>(new Map());
@@ -129,35 +244,54 @@ export function BrowserPanel({
   // Derived: active tab for nav bar state
   const activeTab = tabs.find((t) => t.id === activeTabId) ?? null;
 
-  // --- Centralized webview visibility guard ---
-  // Native WKWebViews render above the DOM, so CSS can't hide them.
-  // Individual BrowserTabs manage their own show/hide via effects, but
-  // race conditions during rapid tab switches can leave stale webviews
-  // visible. This guard explicitly hides all non-active webviews whenever
-  // the active tab or panel visibility changes — belt-and-suspenders.
-  // "Latest value" refs — intentionally updated during render so downstream
-  // effects / callbacks read the most recent tab list without re-subscribing.
-  // React 19's `react-hooks/refs` rule flags this pattern, but refactoring
-  // it into a post-commit effect breaks React Compiler's ability to preserve
-  // manual memoization of dependent callbacks below. Pre-existing; unrelated
-  // to AAP changes in this PR. Disable is scoped to this block only.
-  /* eslint-disable react-hooks/refs */
+  // "Latest value" refs used by stable callbacks (closeTab, handleTabSelect)
+  // — child event handlers read the most recent tab list without forcing
+  // the callback to re-memoize. Updated in an effect (not during render)
+  // to satisfy react-hooks/refs; event handlers fire after commit anyway.
   const tabInfoRef = useRef(tabs);
-  tabInfoRef.current = tabs;
   const activeTabIdRef = useRef(activeTabId);
-  activeTabIdRef.current = activeTabId;
-  /* eslint-enable react-hooks/refs */
-
   useEffect(() => {
-    const currentTabs = tabInfoRef.current;
-    for (const tab of currentTabs) {
-      if (tab.id !== activeTabId || !panelVisible) {
-        native.browserViews.hide(tab.webviewLabel).catch(() => {
-          /* Expected: view may not exist yet or IPC unavailable */
-        });
-      }
-    }
-  }, [activeTabId, panelVisible]);
+    tabInfoRef.current = tabs;
+    activeTabIdRef.current = activeTabId;
+  });
+
+  // URL bar focus — dispatched by BrowserTab when the guest preload sees Cmd+L.
+  const urlInputRef = useRef<HTMLInputElement | null>(null);
+
+  // The panel container that hosts browser tabs — used as the anchor rect
+  // for the portal-rendered FocusModeOverlay so it can sit visually over
+  // the browser view despite living outside the component tree. Held in
+  // state (via callback ref) rather than a plain ref so we can pass the
+  // element to the overlay without reading `.current` during render.
+  const [tabHostEl, setTabHostEl] = useState<HTMLDivElement | null>(null);
+  useEffect(() => {
+    const onFocus = () => {
+      urlInputRef.current?.focus();
+      urlInputRef.current?.select();
+    };
+    window.addEventListener(FOCUS_URL_BAR_EVENT, onFocus);
+    return () => window.removeEventListener(FOCUS_URL_BAR_EVENT, onFocus);
+  }, []);
+
+  // Fire the focus-url-bar event on the next frame — rAF lets React commit
+  // the new tab / activeTabId first so the <input> is enabled when the
+  // listener runs `urlInputRef.current?.focus()`.
+  const requestFocusUrlBar = useCallback(() => {
+    requestAnimationFrame(() => {
+      window.dispatchEvent(new CustomEvent(FOCUS_URL_BAR_EVENT));
+    });
+  }, []);
+
+  // Auto-focus the URL bar whenever the active tab has no real URL and the
+  // panel is visible — covers app launch, workspace switch, and tab switch
+  // landing on an empty tab. Explicit user actions (addTab, close-last-tab)
+  // also call requestFocusUrlBar(); this effect is the passive safety net.
+  const activeTabUrl = activeTab?.currentUrl ?? "";
+  useEffect(() => {
+    if (!panelVisible) return;
+    if (!isBlankUrl(activeTabUrl)) return;
+    requestFocusUrlBar();
+  }, [activeTabId, activeTabUrl, panelVisible, requestFocusUrlBar]);
 
   // --- Persist tab state to workspace layout store (debounced) ---
   const persistTabs = useCallback(
@@ -183,49 +317,33 @@ export function BrowserPanel({
   }, []);
 
   // --- Swap tabs when workspaceId changes (workspace switch) ---
-  // BrowserPanel stays mounted to preserve WKWebView lifecycle, so we
-  // manually swap tab state instead of relying on remount.
-  //
-  // CRITICAL: We must explicitly close old native webviews BEFORE setting
-  // new tabs. BrowserTab's unmount cleanup also calls close, but it's async
-  // and races with the new workspace's webviews — causing overlapping webviews
-  // (native webviews render above the DOM so CSS can't hide them).
+  // BrowserPanel stays mounted across workspace switches. The DOM-resident
+  // <webview> elements owned by webviewManager survive the swap too — tabs
+  // for other workspaces are simply hidden off-screen until their workspace
+  // is re-selected. No park/unpark / race-condition dance is needed: CSS
+  // visibility handles it naturally.
   useEffect(() => {
     const prevId = prevWorkspaceIdRef.current;
     if (prevId === workspaceId) return;
 
-    // Flush pending persistence for the old workspace immediately
     if (persistTimerRef.current) {
       clearTimeout(persistTimerRef.current);
       persistTimerRef.current = null;
     }
-    // Read refs unconditionally — always fresh, no stale closure risk
-    const currentTabs = tabInfoRef.current;
-    const currentActiveId = activeTabIdRef.current;
 
     if (prevId) {
-      // Persist current tabs to old workspace
       workspaceLayoutActions.setLayout(prevId, {
-        browserTabs: serializeTabs(currentTabs),
-        activeBrowserTabId: currentActiveId,
+        browserTabs: serializeTabs(tabInfoRef.current),
+        activeBrowserTabId: activeTabIdRef.current,
       });
     }
 
-    // Park old views instead of destroying them — keeps native WebContentsViews
-    // alive so they can be recalled without page reload when switching back.
-    // Views are hidden immediately (WKWebView setHidden:YES) and stay in the
-    // main process views Map so existing IPC handlers still work.
-    for (const tab of currentTabs) {
-      native.browserViews.hide(tab.webviewLabel).catch(() => {
-        /* Expected: view may already be destroyed during workspace switch */
-      });
-    }
-
-    // Load tabs for the new workspace (reuses loadWorkspaceTabs helper)
     const { tabs: newTabs, activeTabId: newActiveId } = loadWorkspaceTabs(workspaceId);
-
     tabRefs.current.clear();
-
+    // Sync tabs state to the new workspace — legitimate dependency-driven
+    // state update (workspaceId is the external signal, tabs are derived
+    // from persisted per-workspace layout).
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setTabs(newTabs);
     setActiveTabId(newActiveId);
     prevWorkspaceIdRef.current = workspaceId;
@@ -270,6 +388,10 @@ export function BrowserPanel({
     // Stamp the opening URL so apps:stopped can match this tab even after
     // Electron overwrites url/currentUrl on load failure (chrome-error).
     newTab.openedAt = pendingNewTab.url;
+    // Reacting to a consumer-side effect (new-tab request dispatched via
+    // the global browserWindowStore) — the setState IS the sync from that
+    // external store into this component's state.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setTabs((prev) => {
       const next = [...prev, newTab];
       persistTabs(next, newTab.id);
@@ -290,21 +412,18 @@ export function BrowserPanel({
       return next;
     });
     setActiveTabId(newTab.id);
-  }, [workspaceId, persistTabs]);
+    // New tabs always land on the empty state — put the cursor in the URL
+    // bar so the user can start typing immediately (matches Chrome/Safari).
+    requestFocusUrlBar();
+  }, [workspaceId, persistTabs, requestFocusUrlBar]);
 
   const closeTab = useCallback(
     (closingTabId: string) => {
       setTabs((prev) => {
-        // Close the native webview — lookup from prev (always fresh, no stale closure).
-        const closingTab = prev.find((t) => t.id === closingTabId);
-        if (closingTab) {
-          native.browserViews.hide(closingTab.webviewLabel).catch(() => {
-            /* Expected: view may already be hidden or destroyed */
-          });
-          native.browserViews.close(closingTab.webviewLabel).catch(() => {
-            /* Expected: view may already be closed by unmount cleanup */
-          });
-        }
+        // Dispose both the page <webview> and the companion DevTools host
+        // so their guest pages tear down. Keeps memory tight as tabs churn.
+        webviewManager.dispose(closingTabId);
+        webviewManager.dispose(`${closingTabId}__devtools`);
 
         const idx = prev.findIndex((t) => t.id === closingTabId);
         let newTabs = prev.filter((t) => t.id !== closingTabId);
@@ -316,6 +435,7 @@ export function BrowserPanel({
           newTabs = [freshTab];
           nextActiveId = freshTab.id;
           setActiveTabId(nextActiveId);
+          requestFocusUrlBar();
         } else if (closingTabId === activeTabIdRef.current) {
           const nextIdx = Math.min(idx, newTabs.length - 1);
           nextActiveId = newTabs[nextIdx].id;
@@ -327,7 +447,7 @@ export function BrowserPanel({
       });
       tabRefs.current.delete(closingTabId);
     },
-    [workspaceId, persistTabs]
+    [workspaceId, persistTabs, requestFocusUrlBar]
   );
 
   // Close-tab request consumer — triggered by AAP's `apps:stopped` event
@@ -341,7 +461,7 @@ export function BrowserPanel({
     if (pendingCloseTab.workspaceId !== workspaceId) return;
 
     // Match on `openedAt` (the URL the tab was created for) rather than
-    // `currentUrl`. When an app stops, Electron's BrowserView hits
+    // `currentUrl`. When an app stops, the <webview> hits
     // ERR_CONNECTION_REFUSED on reload and transitions currentUrl to
     // `chrome-error://chromewebdata/` — prefix matching on that would
     // silently miss the tab we intended to close. `openedAt` is immutable.
@@ -378,7 +498,7 @@ export function BrowserPanel({
         if (
           updates.currentUrl !== undefined ||
           updates.title !== undefined ||
-          updates.viewport !== undefined ||
+          updates.isMobileView !== undefined ||
           (updates.loading === false && !updates.error)
         ) {
           persistTabs(next, activeTabId);
@@ -404,14 +524,18 @@ export function BrowserPanel({
     );
   }, []);
 
-  /** Dispatch element selection to the chat input via chatInsertStore.
-   *  Only handles "element-selected" — "area-selected" is intentionally ignored
-   *  since area selections have no element metadata to reference. */
+  /** Push an inspected element into the active chat's composer. We go
+   *  straight to the session composer store — the workspace's active
+   *  chat-tab sessionId is looked up in workspaceLayoutStore. Only
+   *  "element-selected" is handled; "area-selected" is ignored (no
+   *  element metadata to reference). */
   const handleElementSelected = useCallback(
     (_tabId: string, event: ElementSelectedEvent) => {
       if (event.type !== "element-selected" || !event.element || !workspaceId) return;
+      const sid = workspaceLayoutActions.getLayout(workspaceId).activeChatTabSessionId;
+      if (!sid) return;
 
-      // Serialize Record<string, string> fields as semicolon-separated strings
+      // Serialize Record<string, string> fields as semicolon-separated strings.
       const serialize = (rec: Record<string, string> | undefined, sep: string) =>
         rec
           ? Object.entries(rec)
@@ -419,7 +543,7 @@ export function BrowserPanel({
               .join("; ")
           : undefined;
 
-      chatInsertActions.insertElement(workspaceId, {
+      sessionComposerActions.addInspectedElement(sid, {
         ref: event.ref ?? "",
         tagName: event.element.tagName,
         path: event.element.path,
@@ -437,37 +561,37 @@ export function BrowserPanel({
     [workspaceId]
   );
 
-  /** Capture the active tab's BrowserView as PNG and dispatch to chat input */
+  /** Capture the active tab's <webview> as PNG and attach it to the chat
+   *  composer. Routes through the session composer store so the image
+   *  card appears in every surface (main chat, focus overlay, modal). */
   const handleScreenshot = useCallback(async () => {
-    if (!activeTab?.webviewLabel || !activeTab.currentUrl || !workspaceId) return;
+    if (!activeTab?.currentUrl || !workspaceId) return;
+    const sid = workspaceLayoutActions.getLayout(workspaceId).activeChatTabSessionId;
+    if (!sid) return;
+    const handle = tabRefs.current.get(activeTab.id);
+    if (!handle?.captureScreenshot) return;
     try {
-      const dataUrl = await native.browserViews.screenshot(activeTab.webviewLabel);
+      const dataUrl = await handle.captureScreenshot();
       if (!dataUrl) return;
-      // capturePage().toDataURL() returns "data:image/png;base64,..." — strip prefix
       const base64 = dataUrl.replace(/^data:image\/\w+;base64,/, "");
       const binaryStr = atob(base64);
       const bytes = new Uint8Array(binaryStr.length);
-      for (let i = 0; i < binaryStr.length; i++) {
-        bytes[i] = binaryStr.charCodeAt(i);
-      }
+      for (let i = 0; i < binaryStr.length; i++) bytes[i] = binaryStr.charCodeAt(i);
       const blob = new Blob([bytes], { type: "image/png" });
       const file = new File([blob], `browser-screenshot-${Date.now()}.png`, { type: "image/png" });
-      chatInsertActions.insertFiles(workspaceId, [file]);
+      const processed = await processImageFiles([file]);
+      if (processed.length) sessionComposerActions.addImageAttachments(sid, processed);
     } catch (err) {
       console.error("Browser screenshot failed:", err);
     }
-  }, [activeTab?.webviewLabel, activeTab?.currentUrl, workspaceId]);
+  }, [activeTab, workspaceId]);
 
-  /** Set viewport emulation — state update only. BrowserTab's useLayoutEffect
-   *  handles the IPC (setEmulation/clearEmulation + setBounds) because it knows
-   *  the panel dimensions needed to compute scale-to-fit. */
-  const handleViewportChange = useCallback(
-    (viewport: ViewportState | null) => {
-      if (!activeTab?.id) return;
-      handleUpdateTab(activeTab.id, { viewport });
-    },
-    [activeTab?.id, handleUpdateTab]
-  );
+  /** Toggle between desktop (webview fills panel) and mobile preview
+   *  (390-wide centered frame + CDP mobile UA/touch). Per-tab state. */
+  const handleToggleMobileView = useCallback(() => {
+    if (!activeTab?.id) return;
+    handleUpdateTab(activeTab.id, { isMobileView: !activeTab.isMobileView });
+  }, [activeTab, handleUpdateTab]);
 
   // --- Navigation (operates on active tab) ---
 
@@ -582,18 +706,14 @@ export function BrowserPanel({
   );
 
   const handleToggleDevtools = useCallback(() => {
-    if (!activeTab?.webviewLabel) return;
-    if (activeTab.devtoolsOpen) {
-      native.browserViews
-        .closeDevtools(activeTab.webviewLabel)
-        .then(() => handleUpdateTab(activeTab.id, { devtoolsOpen: false }))
-        .catch((err) => handleAddLog(activeTab.id, "error", `Close devtools failed: ${err}`));
-    } else {
-      native.browserViews
-        .openDevtools(activeTab.webviewLabel)
-        .then(() => handleUpdateTab(activeTab.id, { devtoolsOpen: true }))
-        .catch((err) => handleAddLog(activeTab.id, "error", `Open devtools failed: ${err}`));
-    }
+    if (!activeTab) return;
+    const handle = tabRefs.current.get(activeTab.id);
+    if (!handle) return;
+    const action = activeTab.devtoolsOpen ? handle.closeDevtools : handle.openDevtools;
+    if (!action) return;
+    action()
+      .then(() => handleUpdateTab(activeTab.id, { devtoolsOpen: !activeTab.devtoolsOpen }))
+      .catch((err) => handleAddLog(activeTab.id, "error", `DevTools toggle failed: ${err}`));
   }, [activeTab, handleUpdateTab, handleAddLog]);
 
   // --- Cookie Sync ---
@@ -660,7 +780,7 @@ export function BrowserPanel({
   }
 
   return (
-    <div className="flex h-full flex-col overflow-hidden">
+    <div className="flex h-full min-w-0 flex-col overflow-hidden">
       {/* Tab Bar */}
       <BrowserTabBar
         tabs={tabs}
@@ -668,234 +788,237 @@ export function BrowserPanel({
         onTabSelect={handleTabSelect}
         onTabClose={closeTab}
         onTabAdd={addTab}
-        onDetach={onDetach}
+        workspaceId={workspaceId}
       />
 
-      {/* Navigation Bar — h-9 to align with chat tabs row */}
-      <div className="border-border-subtle flex h-9 flex-shrink-0 items-center gap-2 border-b px-2">
-        <Button
-          variant="ghost"
-          size="icon"
-          className="h-7 w-7"
-          onClick={handleGoBack}
-          disabled={!activeTab || activeTab.loading || activeTab.historyIndex <= 0}
-          title="Go back"
-          aria-label="Go back"
-        >
-          <ChevronLeft className="h-4 w-4" />
-        </Button>
-
-        <Button
-          variant="ghost"
-          size="icon"
-          className="h-7 w-7"
-          onClick={handleGoForward}
-          disabled={
-            !activeTab ||
-            activeTab.loading ||
-            activeTab.historyIndex >= activeTab.history.length - 1
-          }
-          title="Go forward"
-          aria-label="Go forward"
-        >
-          <ChevronRight className="h-4 w-4" />
-        </Button>
-
-        <Button
-          variant="ghost"
-          size="icon"
-          className="h-7 w-7"
-          onClick={handleReload}
-          disabled={!activeTab || activeTab.loading || !activeTab.currentUrl}
-          title="Reload"
-          aria-label="Reload"
-        >
-          <RefreshCw className={`h-4 w-4 ${activeTab?.loading ? "animate-spin" : ""}`} />
-        </Button>
-
-        <Input
-          type="text"
-          value={activeTab?.url ?? ""}
-          onChange={handleUrlChange}
-          onKeyDown={handleKeyDown}
-          onFocus={(e) => e.target.select()}
-          placeholder="Search or enter URL..."
-          autoComplete="off"
-          spellCheck={false}
-          data-1p-ignore
-          className="focus-visible:border-border h-7 min-w-0 flex-1 text-sm focus-visible:ring-0"
-          disabled={!activeTab || activeTab.loading}
-        />
-
-        {/* Injection failure indicator — red dot, only visible on error */}
-        {activeTab?.injectionFailed && (
-          <>
-            <span
-              className="bg-destructive h-2 w-2 shrink-0 rounded-full"
-              title="Automation injection failed — check console"
-              aria-hidden="true"
-            />
-            <span className="sr-only">Automation injection failed</span>
-          </>
-        )}
-
-        <Button
-          variant="ghost"
-          size="icon"
-          className="h-7 w-7"
-          onClick={handleToggleSelector}
-          disabled={!activeTab?.currentUrl || !activeTab?.injected}
-          aria-pressed={activeTab?.selectorActive}
-          title={
-            activeTab?.selectorActive ? "Exit element selector (Esc)" : "Select element to inspect"
-          }
-          aria-label={
-            activeTab?.selectorActive ? "Exit element selector" : "Select element to inspect"
-          }
-        >
-          <MousePointer2
-            className={`h-4 w-4 ${activeTab?.selectorActive ? "text-primary animate-pulse" : ""}`}
-          />
-        </Button>
-
-        <Button
-          variant="ghost"
-          size="icon"
-          className="h-7 w-7"
-          onClick={handleScreenshot}
-          disabled={!activeTab?.currentUrl}
-          title="Screenshot to chat"
-          aria-label="Screenshot to chat"
-        >
-          <Camera className="h-4 w-4" />
-        </Button>
-
-        <ViewportDropdown
-          viewport={activeTab?.viewport ?? null}
-          onChange={handleViewportChange}
-          onOpenChange={(open) => {
-            if (open && activeTab?.webviewLabel) {
-              native.browserViews.hide(activeTab.webviewLabel).catch(() => {
-                /* Expected: fire-and-forget; view may not exist if tab has no URL */
-              });
-            } else if (!open && panelVisible && activeTab?.webviewLabel && activeTab.currentUrl) {
-              native.browserViews.show(activeTab.webviewLabel).catch(() => {
-                /* Expected: fire-and-forget; view may have been destroyed while dropdown was open */
-              });
-            }
-          }}
-          disabled={!activeTab?.currentUrl}
-        />
-
-        <DropdownMenu
-          onOpenChange={(open) => {
-            if (open) {
-              handleCookieDropdownOpen();
-              // Hide native webview so the dropdown isn't rendered behind it
-              // (WKWebView floats above all DOM layers including portals)
-              if (activeTab?.webviewLabel) {
-                native.browserViews.hide(activeTab.webviewLabel).catch(() => {
-                  /* Expected: fire-and-forget; view may not exist if tab has no URL */
-                });
-              }
-            } else {
-              // Re-show webview when dropdown closes
-              if (activeTab?.webviewLabel && activeTab.currentUrl) {
-                native.browserViews.show(activeTab.webviewLabel).catch(() => {
-                  /* Expected: fire-and-forget; view may have been destroyed while dropdown was open */
-                });
-              }
-            }
-          }}
-        >
-          <DropdownMenuTrigger asChild>
+      {/* Navigation Bar — h-9 to align with chat tabs row.
+       *  One TooltipProvider shares the 400ms open-delay across all icon
+       *  triggers, so scanning across buttons after the first hover feels
+       *  instant (Radix skipDelayDuration default handles the handoff). */}
+      <TooltipProvider delayDuration={400}>
+        <div className="border-border-subtle flex h-9 flex-shrink-0 items-center gap-2 border-b px-2">
+          <IconTooltip label="Go back">
             <Button
               variant="ghost"
               size="icon"
-              className="h-7 w-7"
-              disabled={!activeTab?.currentUrl || !!cookieSyncing}
-              title="Import cookies from browser"
-              aria-label="Import cookies from browser"
+              className="text-text-muted hover:text-text-secondary aria-pressed:bg-primary/10 aria-pressed:text-primary aria-pressed:hover:text-primary h-7 w-7 transition-colors duration-150 ease-out"
+              onClick={handleGoBack}
+              disabled={!activeTab || activeTab.loading || activeTab.historyIndex <= 0}
+              aria-label="Go back"
             >
-              {cookieSyncing ? (
-                <Loader2 className="h-4 w-4 animate-spin" />
+              <ChevronLeft strokeWidth={1.75} className="h-3.5 w-3.5" />
+            </Button>
+          </IconTooltip>
+
+          <IconTooltip label="Go forward">
+            <Button
+              variant="ghost"
+              size="icon"
+              className="text-text-muted hover:text-text-secondary aria-pressed:bg-primary/10 aria-pressed:text-primary aria-pressed:hover:text-primary h-7 w-7 transition-colors duration-150 ease-out"
+              onClick={handleGoForward}
+              disabled={
+                !activeTab ||
+                activeTab.loading ||
+                activeTab.historyIndex >= activeTab.history.length - 1
+              }
+              aria-label="Go forward"
+            >
+              <ChevronRight strokeWidth={1.75} className="h-3.5 w-3.5" />
+            </Button>
+          </IconTooltip>
+
+          <IconTooltip label="Reload">
+            <Button
+              variant="ghost"
+              size="icon"
+              className="text-text-muted hover:text-text-secondary aria-pressed:bg-primary/10 aria-pressed:text-primary aria-pressed:hover:text-primary h-7 w-7 transition-colors duration-150 ease-out"
+              onClick={handleReload}
+              disabled={!activeTab || activeTab.loading || !activeTab.currentUrl}
+              aria-label="Reload"
+            >
+              <RefreshCw
+                strokeWidth={1.75}
+                className={`h-3.5 w-3.5 ${activeTab?.loading ? "animate-spin" : ""}`}
+              />
+            </Button>
+          </IconTooltip>
+
+          <Input
+            ref={urlInputRef}
+            type="text"
+            value={isBlankUrl(activeTab?.url) ? "" : (activeTab?.url ?? "")}
+            onChange={handleUrlChange}
+            onKeyDown={handleKeyDown}
+            onFocus={(e) => e.target.select()}
+            placeholder="Search or enter URL..."
+            autoComplete="off"
+            spellCheck={false}
+            data-1p-ignore
+            className="bg-bg-elevated focus-visible:border-border-strong h-7 min-w-0 flex-1 text-sm focus-visible:ring-0"
+            disabled={!activeTab || activeTab.loading}
+          />
+
+          {/* Injection failure indicator — red dot, only visible on error */}
+          {activeTab?.injectionFailed && (
+            <>
+              <span
+                className="bg-destructive h-2 w-2 shrink-0 rounded-full"
+                title="Automation injection failed — check console"
+                aria-hidden="true"
+              />
+              <span className="sr-only">Automation injection failed</span>
+            </>
+          )}
+
+          <IconTooltip
+            label={
+              activeTab?.selectorActive
+                ? "Exit element selector (Esc)"
+                : "Select element to inspect"
+            }
+          >
+            <Button
+              variant="ghost"
+              size="icon"
+              className="text-text-muted hover:text-text-secondary aria-pressed:bg-primary/10 aria-pressed:text-primary aria-pressed:hover:text-primary h-7 w-7 transition-colors duration-150 ease-out"
+              onClick={handleToggleSelector}
+              disabled={!activeTab?.currentUrl}
+              aria-pressed={activeTab?.selectorActive}
+              aria-label={
+                activeTab?.selectorActive ? "Exit element selector" : "Select element to inspect"
+              }
+            >
+              <MousePointer2 strokeWidth={1.75} className="h-3.5 w-3.5" />
+            </Button>
+          </IconTooltip>
+
+          <IconTooltip label="Screenshot to chat">
+            <Button
+              variant="ghost"
+              size="icon"
+              className="text-text-muted hover:text-text-secondary aria-pressed:bg-primary/10 aria-pressed:text-primary aria-pressed:hover:text-primary h-7 w-7 transition-colors duration-150 ease-out"
+              onClick={handleScreenshot}
+              disabled={!activeTab?.currentUrl}
+              aria-label="Screenshot to chat"
+            >
+              <Camera strokeWidth={1.75} className="h-3.5 w-3.5" />
+            </Button>
+          </IconTooltip>
+
+          <IconTooltip
+            label={activeTab?.isMobileView ? "Switch to desktop view" : "Switch to mobile view"}
+          >
+            <Button
+              variant="ghost"
+              size="icon"
+              className="text-text-muted hover:text-text-secondary aria-pressed:bg-primary/10 aria-pressed:text-primary aria-pressed:hover:text-primary h-7 w-7 transition-colors duration-150 ease-out"
+              onClick={handleToggleMobileView}
+              disabled={!activeTab?.currentUrl}
+              aria-pressed={!!activeTab?.isMobileView}
+              aria-label={
+                activeTab?.isMobileView ? "Switch to desktop view" : "Switch to mobile view"
+              }
+            >
+              {activeTab?.isMobileView ? (
+                <Smartphone strokeWidth={1.75} className="h-3.5 w-3.5" />
               ) : (
-                <Cookie className="h-4 w-4" />
+                <Monitor strokeWidth={1.75} className="h-3.5 w-3.5" />
               )}
             </Button>
-          </DropdownMenuTrigger>
-          <DropdownMenuContent align="end" className="w-56">
-            {/* Show target domain */}
-            {cookieDropdownHostname && (
-              <DropdownMenuLabel className="text-muted-foreground text-2xs truncate font-normal">
-                {cookieDropdownHostname}
-              </DropdownMenuLabel>
-            )}
+          </IconTooltip>
 
-            <DropdownMenuLabel className="text-xs">Import Cookies</DropdownMenuLabel>
-            <DropdownMenuSeparator />
-            {cookieBrowsers.length === 0 ? (
-              <DropdownMenuItem disabled className="text-xs">
-                No browsers detected
-              </DropdownMenuItem>
-            ) : (
-              cookieBrowsers.map((b) => (
-                <DropdownMenuItem
-                  key={b.name}
-                  disabled={!b.available || !!cookieSyncing}
-                  className="text-xs"
-                  onClick={() => handleCookieSync(b.name)}
+          <DropdownMenu onOpenChange={(open) => open && handleCookieDropdownOpen()}>
+            <IconTooltip label="Import cookies from browser">
+              <DropdownMenuTrigger asChild>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="text-text-muted hover:text-text-secondary aria-pressed:bg-primary/10 aria-pressed:text-primary aria-pressed:hover:text-primary h-7 w-7 transition-colors duration-150 ease-out"
+                  disabled={!activeTab?.currentUrl || !!cookieSyncing}
+                  aria-label="Import cookies from browser"
                 >
-                  <span className="flex-1">{b.name}</span>
-                  {!b.available && (
-                    <span className="text-muted-foreground text-2xs">Not installed</span>
+                  {cookieSyncing ? (
+                    <Loader2 strokeWidth={1.75} className="h-3.5 w-3.5 animate-spin" />
+                  ) : (
+                    <Cookie strokeWidth={1.75} className="h-3.5 w-3.5" />
                   )}
-                  {b.available && cookieSyncing === b.name && (
-                    <Loader2 className="h-3 w-3 animate-spin" />
-                  )}
-                  {b.available && !cookieSyncing && lastSyncResult?.browser === b.name && (
-                    <span className="text-success text-2xs">{lastSyncResult.count} synced</span>
-                  )}
-                  {b.available && !cookieSyncing && lastSyncResult?.browser !== b.name && (
-                    <Check className="text-muted-foreground/40 h-3 w-3" />
-                  )}
+                </Button>
+              </DropdownMenuTrigger>
+            </IconTooltip>
+            <DropdownMenuContent align="end" className="w-56">
+              {/* Show target domain */}
+              {cookieDropdownHostname && (
+                <DropdownMenuLabel className="text-muted-foreground text-2xs truncate font-normal">
+                  {cookieDropdownHostname}
+                </DropdownMenuLabel>
+              )}
+
+              <DropdownMenuLabel className="text-xs">Import Cookies</DropdownMenuLabel>
+              <DropdownMenuSeparator />
+              {cookieBrowsers.length === 0 ? (
+                <DropdownMenuItem disabled className="text-xs">
+                  No browsers detected
                 </DropdownMenuItem>
-              ))
-            )}
+              ) : (
+                cookieBrowsers.map((b) => (
+                  <DropdownMenuItem
+                    key={b.name}
+                    disabled={!b.available || !!cookieSyncing}
+                    className="text-xs"
+                    onClick={() => handleCookieSync(b.name)}
+                  >
+                    <span className="flex-1">{b.name}</span>
+                    {!b.available && (
+                      <span className="text-muted-foreground text-2xs">Not installed</span>
+                    )}
+                    {b.available && cookieSyncing === b.name && (
+                      <Loader2 className="h-3 w-3 animate-spin" />
+                    )}
+                    {b.available && !cookieSyncing && lastSyncResult?.browser === b.name && (
+                      <span className="text-success text-2xs">{lastSyncResult.count} synced</span>
+                    )}
+                    {b.available && !cookieSyncing && lastSyncResult?.browser !== b.name && (
+                      <Check className="text-muted-foreground/40 h-3 w-3" />
+                    )}
+                  </DropdownMenuItem>
+                ))
+              )}
 
-            {/* Clear cookies option */}
-            {activeTab?.currentUrl && (
-              <>
-                <DropdownMenuSeparator />
-                <DropdownMenuItem
-                  className="text-destructive text-xs"
-                  onClick={handleClearCookies}
-                  disabled={!!cookieSyncing}
-                >
-                  <Trash2 className="h-3.5 w-3.5" />
-                  <span>Clear Site Data</span>
-                </DropdownMenuItem>
-              </>
-            )}
-          </DropdownMenuContent>
-        </DropdownMenu>
+              {/* Clear cookies option */}
+              {activeTab?.currentUrl && (
+                <>
+                  <DropdownMenuSeparator />
+                  <DropdownMenuItem
+                    className="text-destructive text-xs"
+                    onClick={handleClearCookies}
+                    disabled={!!cookieSyncing}
+                  >
+                    <Trash2 className="h-3.5 w-3.5" />
+                    <span>Clear Site Data</span>
+                  </DropdownMenuItem>
+                </>
+              )}
+            </DropdownMenuContent>
+          </DropdownMenu>
 
-        <Button
-          variant="ghost"
-          size="icon"
-          className="h-7 w-7"
-          onClick={handleToggleDevtools}
-          disabled={!activeTab?.currentUrl}
-          aria-pressed={activeTab?.devtoolsOpen}
-          title={activeTab?.devtoolsOpen ? "Close DevTools" : "Open DevTools"}
-          aria-label={activeTab?.devtoolsOpen ? "Close DevTools" : "Open DevTools"}
-        >
-          <Terminal className={`h-4 w-4 ${activeTab?.devtoolsOpen ? "text-primary" : ""}`} />
-        </Button>
-      </div>
+          <IconTooltip label={activeTab?.devtoolsOpen ? "Close DevTools" : "Open DevTools"}>
+            <Button
+              variant="ghost"
+              size="icon"
+              className="text-text-muted hover:text-text-secondary aria-pressed:bg-primary/10 aria-pressed:text-primary aria-pressed:hover:text-primary h-7 w-7 transition-colors duration-150 ease-out"
+              onClick={handleToggleDevtools}
+              disabled={!activeTab?.currentUrl}
+              aria-pressed={activeTab?.devtoolsOpen}
+              aria-label={activeTab?.devtoolsOpen ? "Close DevTools" : "Open DevTools"}
+            >
+              <Terminal strokeWidth={1.75} className="h-3.5 w-3.5" />
+            </Button>
+          </IconTooltip>
+        </div>
+      </TooltipProvider>
 
-      {/* Tab content — devtools opens as floating window (docked not yet supported).
-       * See open_browser_devtools in webview.rs for full history of docking attempts.
+      {/* Tab content — DevTools docks inside the panel by routing its UI into
+       * a second <webview> (see BrowserTab's `getDevtoolsWebview`).
        *
        * Tab stacking uses CSS Grid (all tabs in [grid-area:1/1]) instead of
        * absolute positioning. Previous approach (absolute inset-0 on BrowserTab)
@@ -906,9 +1029,13 @@ export function BrowserPanel({
        * keeps tabs in normal flow so they inherit w-[390px] naturally and
        * ResizeObserver fires on actual size changes. */}
       <div
-        className={`relative min-h-0 flex-1 overflow-hidden ${activeTab?.viewport ? "bg-muted/30" : ""}`}
+        ref={setTabHostEl}
+        className={`relative min-h-0 flex-1 overflow-hidden ${activeTab?.isMobileView ? "bg-muted/30" : ""}`}
       >
-        <div className="grid h-full w-full">
+        {showFocusOverlay && workspaceId && (
+          <FocusModeOverlay anchorEl={tabHostEl} workspaceId={workspaceId} onExit={exitFocusMode} />
+        )}
+        <div className="grid h-full min-h-0 w-full min-w-0">
           {tabs.map((tab) => (
             <BrowserTab
               key={tab.id}
@@ -917,8 +1044,7 @@ export function BrowserPanel({
               onUpdateTab={handleUpdateTab}
               onAddLog={handleAddLog}
               onElementSelected={handleElementSelected}
-              visible={tab.id === activeTabId && panelVisible}
-              windowLabel={windowLabel}
+              visible={panelVisible && tab.id === activeTabId}
             />
           ))}
         </div>

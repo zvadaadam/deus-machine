@@ -16,7 +16,7 @@ export function PastedTextCard({ content, onRemove }: PastedTextCardProps) {
       animate={{ opacity: 1, scale: 1 }}
       exit={reduceMotion ? { opacity: 0 } : { opacity: 0, scale: 0.95 }}
       transition={{ duration: 0.2, ease: [0.165, 0.84, 0.44, 1] }}
-      className="group bg-muted/50 border-border/60 relative flex h-[80px] w-44 shrink-0 flex-col rounded-lg border p-2"
+      className="group bg-muted/50 border-border/60 relative flex h-[80px] w-44 shrink-0 flex-col rounded-md border p-2"
     >
       <p className="text-foreground/60 text-2xs line-clamp-3 min-h-0 flex-1 font-mono leading-snug">
         {content}

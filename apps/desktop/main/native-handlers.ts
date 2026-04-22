@@ -346,7 +346,6 @@ export function registerNativeHandlers(): void {
 
   // -------------------------------------------------------------------------
   // Window title — renderer calls invoke("native:setTitle", { title })
-  // Used by DetachedBrowserWindow to sync window title
   // -------------------------------------------------------------------------
 
   ipcMain.handle("native:setTitle", (_e, { title }: { title: string }) => {

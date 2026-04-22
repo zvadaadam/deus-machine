@@ -1,14 +1,39 @@
+/**
+ * MessageInput — the chat composer pill.
+ *
+ * Session-aware presentational view: all staged content (draft, pastes,
+ * inspected elements, file/skill mentions, image attachments, model,
+ * thinking level, plan mode) is read from `sessionComposerStore` keyed
+ * by `sessionId`. Two surfaces rendering with the same sessionId — main
+ * chat, focus-mode overlay, activity modal — see and mutate the same
+ * state in real time.
+ *
+ * What DOES live locally here:
+ *   - @ file-picker popover open/close + query + highlighted row
+ *   - / slash-command popover open/close + query + highlighted row
+ *   - textarea cursor / focus / scroll (implicit in DOM)
+ * These are per-interaction UI ephemera — they shouldn't cross surfaces.
+ *
+ * The only thing the parent still owns is the *send path*: we call
+ * `onSend(combinedContent)` and the parent (SessionComposer) wires it
+ * into the session mutation + clears store content on success.
+ */
+
 import type { SessionStatus } from "@/shared/types";
-import { useState, forwardRef, useImperativeHandle } from "react";
 import { useIsMobile } from "@/shared/hooks/use-mobile";
 import { AnimatePresence, motion } from "framer-motion";
 import { Minimize2, ArrowUp, Square, Wrench } from "lucide-react";
 import { useFileMention } from "../hooks/useFileMention";
 import { useSlashCommand } from "../hooks/useSlashCommand";
-import { useImageAttachments } from "../hooks/useImageAttachments";
+import { useSessionComposer } from "../hooks/useSessionComposer";
 import { FileMentionPopover } from "./FileMentionPopover";
 import { SlashCommandPopover } from "./SlashCommandPopover";
 import { GENERATE_HIVE_JSON } from "../lib/sessionPrompts";
+import {
+  extractImagesFromClipboard,
+  processImageFiles,
+  buildImageBlocks,
+} from "../lib/imageAttachments";
 import {
   InputGroup,
   InputGroupAddon,
@@ -19,11 +44,12 @@ import { Button } from "@/components/ui/button";
 import { cn } from "@/shared/lib/utils";
 import { PastedTextCard } from "./PastedTextCard";
 import { PastedImageCard } from "./PastedImageCard";
-import { InspectedElementCard, type InspectedElement } from "./InspectedElementCard";
-import { FileMentionCard, type FileMention } from "./FileMentionCard";
-import { SkillMentionCard, type SkillMention } from "./SkillMentionCard";
+import { InspectedElementCard } from "./InspectedElementCard";
+import { FileMentionCard } from "./FileMentionCard";
+import { SkillMentionCard } from "./SkillMentionCard";
 import { serializeInspectElement } from "../lib/parseInspectTags";
 import {
+  DEFAULT_MODEL,
   getAgentHarnessForModel,
   getModelOption,
   cycleThinkingLevel,
@@ -36,247 +62,164 @@ import { ModelPicker } from "./ModelPicker";
 import { PlanModeToggle } from "./PlanModeToggle";
 import { ContextTokenIndicator } from "./ContextTokenIndicator";
 
-interface PastedText {
-  id: string;
-  content: string;
-}
-
-export interface MessageInputRef {
-  addFiles: (files: File[]) => Promise<void>;
-  clearPastedContent: () => void;
-  addInspectedElement: (element: Omit<InspectedElement, "id">) => void;
-}
-
 // Long pastes (20+ lines) are shown as collapsed cards instead of inline text
 const PASTE_LINE_THRESHOLD = 20;
 
 interface MessageInputProps {
-  messageInput: string;
+  /** Active session — state lives in `sessionComposerStore[sessionId]`. */
+  sessionId: string;
+  /** Workspace ID for @ file fuzzy-search backend. */
+  workspaceId?: string | null;
+  /** Workspace root path for / slash-command discovery. */
+  workspacePath?: string | null;
+  /** Seed initial model on first mount if the store doesn't have this
+   *  session yet. Ignored afterwards. */
+  initialModel?: string;
+
   sending: boolean;
   sessionStatus?: SessionStatus;
-  model: string;
-  thinkingLevel?: string;
-  showCompactButton?: boolean;
   contextTokenCount?: number;
   contextUsedPercent?: number;
-  /** Workspace path for @ file mention search */
-  workspacePath?: string | null;
-  /** Workspace ID for the file search HTTP endpoint */
-  workspaceId?: string | null;
-  /**
-   * Whether the session already has messages.
-   * Once a session has messages, its agent type (claude/codex) is locked —
-   * the user can still switch models within the same agent type, but
-   * switching to a different agent type requires opening a new chat tab.
-   */
+  /** Whether the session already has messages (gates model-switch behaviour). */
   hasMessages?: boolean;
-  /** Whether a deus.json manifest exists for this workspace */
+  /** Whether a deus.json manifest exists for this workspace. */
   hasManifest?: boolean;
-  onMessageChange: (value: string) => void;
-  onSend: (content?: string) => void;
+  showCompactButton?: boolean;
+  hasPendingPlan?: boolean;
+
+  onSend: (content: string) => void;
   onCompact?: () => void;
   onStop?: () => void;
-  onModelChange?: (model: string) => void;
-  /** Called when user picks a model from a locked agent group (opens new tab) */
   onOpenNewTab?: (initialModel?: string) => void;
-  onThinkingLevelChange?: (level: string) => void;
-  planModeEnabled?: boolean;
-  onPlanModeToggle?: () => void;
-  planModeDisabled?: boolean;
-  hasPendingPlan?: boolean;
+
+  /** User setting — default thinking level for new sessions / clamp target
+   *  when switching to a model that doesn't support the current level. */
+  defaultThinking?: ThinkingLevel;
+
   className?: string;
 }
 
-export const MessageInput = forwardRef<MessageInputRef, MessageInputProps>(function MessageInput(
-  {
-    messageInput,
-    sending,
-    sessionStatus,
-    model,
-    thinkingLevel = "NONE",
-    showCompactButton = false,
-    contextTokenCount = 0,
-    contextUsedPercent = 0,
-    workspacePath = null,
-    workspaceId = null,
-    hasMessages = false,
-    hasManifest = true,
-    onMessageChange,
-    onSend,
-    onCompact,
-    onStop,
-    onModelChange,
-    onOpenNewTab,
-    onThinkingLevelChange,
-    planModeEnabled = false,
-    onPlanModeToggle,
-    planModeDisabled = false,
-    hasPendingPlan = false,
-    className,
-  },
-  ref
-) {
+export function MessageInput({
+  sessionId,
+  workspaceId = null,
+  workspacePath = null,
+  initialModel,
+  sending,
+  sessionStatus,
+  contextTokenCount = 0,
+  contextUsedPercent = 0,
+  hasMessages = false,
+  hasManifest = true,
+  showCompactButton = false,
+  hasPendingPlan = false,
+  onSend,
+  onCompact,
+  onStop,
+  onOpenNewTab,
+  defaultThinking = "HIGH",
+  className,
+}: MessageInputProps) {
   const isMobile = useIsMobile();
 
-  // Image attachments (shared hook with HomeView)
+  // Composer content — subscribed from the store, mutated via bound setters.
+  const composer = useSessionComposer(sessionId, {
+    initialModel: initialModel ?? DEFAULT_MODEL,
+    defaultThinking,
+  });
+
   const {
-    attachments,
-    processFiles,
-    removeAttachment,
-    clearAttachments,
-    extractImagesFromClipboard,
-    buildImageBlocks,
-  } = useImageAttachments();
+    draft,
+    model,
+    thinkingLevel,
+    planModeEnabled,
+    pastedTexts,
+    inspectedElements,
+    fileMentions,
+    skillMentions,
+    imageAttachments,
+  } = composer;
 
-  // Pasted text cards (long pastes shown as collapsed cards)
-  const [pastedTexts, setPastedTexts] = useState<PastedText[]>([]);
+  const selectedOption = getModelOption(model);
+  const agentHarness: AgentHarness = selectedOption?.agentHarness ?? getAgentHarnessForModel(model);
+  const modelId = selectedOption?.model ?? model;
+  const isClaudeAgent = agentHarness === "claude";
 
-  // Inspected elements from InSpec mode (shown as pill cards)
-  const [inspectedElements, setInspectedElements] = useState<InspectedElement[]>([]);
-
-  // File mentions picked from the @ picker (shown as pill cards above textarea)
-  const [fileMentions, setFileMentions] = useState<FileMention[]>([]);
-
-  // Skill mentions picked from the / picker (orange pills, serialize as /<name>)
-  const [skillMentions, setSkillMentions] = useState<SkillMention[]>([]);
-
-  // Expose addFiles + clearPastedContent + addInspectedElement for parent-level interactions
-  useImperativeHandle(
-    ref,
-    () => ({
-      addFiles: processFiles,
-      clearPastedContent: () => {
-        setPastedTexts([]);
-        clearAttachments();
-        setInspectedElements([]);
-        setFileMentions([]);
-        setSkillMentions([]);
-      },
-      addInspectedElement: (element: Omit<InspectedElement, "id">) => {
-        setInspectedElements((prev) => [...prev, { ...element, id: crypto.randomUUID() }]);
-      },
-    }),
-    [processFiles, clearAttachments]
-  );
-
-  /**
-   * Build combined content from pasted texts + inspected elements + typed input + images.
-   * When images are present, returns a JSON-stringified content blocks array
-   * (Anthropic API format). Otherwise returns plain text for backward compat.
-   */
+  // Build combined message content from all staged sources.
+  // See the big block-comment in the previous revision for ordering rationale
+  // (skills first → inspected elements → file mentions → pastes → typed text,
+  // then images appended as Anthropic content blocks).
   const buildCombinedContent = () => {
-    // Combine all text sources (inspected elements serialized as <inspect> XML tags)
     const textParts: string[] = [];
-
-    // Skill mentions must come FIRST — Claude Code only parses slash commands
-    // at position 0 of the message. Join with spaces on one line.
     if (skillMentions.length > 0) {
       textParts.push(skillMentions.map((s) => `/${s.name}`).join(" "));
     }
-
-    // Inspected elements go first so the AI has element context before user's question
     for (const el of inspectedElements) {
       textParts.push(serializeInspectElement(el));
     }
-
-    // File mentions serialize as `@path` tokens — Claude Code natively resolves them.
-    // Joined on one line to read like a natural reference list.
     if (fileMentions.length > 0) {
       textParts.push(fileMentions.map((fm) => `@${fm.path}`).join(" "));
     }
-
     for (const paste of pastedTexts) {
       textParts.push(paste.content);
     }
-    const typed = messageInput.trim();
-    if (typed) {
-      textParts.push(typed);
-    }
+    const typed = draft.trim();
+    if (typed) textParts.push(typed);
     const combinedText = textParts.join("\n\n");
 
-    // No images: return plain text string (backward compatible)
-    const imageBlocks = buildImageBlocks();
-    if (!imageBlocks) {
-      return combinedText;
-    }
+    const imageBlocks = buildImageBlocks(imageAttachments);
+    if (!imageBlocks) return combinedText;
 
-    // With images: build Anthropic API content blocks array, JSON-stringified.
     const blocks: Array<Record<string, unknown>> = [];
-    if (combinedText) {
-      blocks.push({ type: "text", text: combinedText });
-    }
+    if (combinedText) blocks.push({ type: "text", text: combinedText });
     blocks.push(...imageBlocks);
     return JSON.stringify(blocks);
   };
 
   const hasContent =
-    messageInput.trim().length > 0 ||
+    draft.trim().length > 0 ||
     pastedTexts.length > 0 ||
-    attachments.length > 0 ||
+    imageAttachments.length > 0 ||
     inspectedElements.length > 0 ||
     fileMentions.length > 0 ||
     skillMentions.length > 0;
 
-  // Send with combined content (pasted texts + typed input + images)
-  // Pasted content is NOT cleared here — it's cleared by the parent via
-  // ref.clearPastedContent() inside onMessageSent (only on success), mirroring
-  // how messageInput is cleared. This prevents data loss on send failure.
   const handleSend = () => {
     if (sending || !hasContent) return;
     const combined = buildCombinedContent();
-    if (combined) {
-      onSend(combined);
-    }
+    if (combined) onSend(combined);
+    // Parent clears store content on successful send (see SessionComposer
+    // onMessageSent → composer.clearContent).
   };
 
-  // @ file mention support (fuzzy search via backend HTTP endpoint)
-  // Selected files surface as pills above the textarea instead of inline text.
+  // @ file mention popover — local UI-ephemeral state (open/close, query,
+  // selected index). Picked files get pushed into the composer store.
   const fileMention = useFileMention({
-    value: messageInput,
+    value: draft,
     workspaceId: workspaceId ?? null,
-    onChange: onMessageChange,
-    onAddMention: (result) => {
-      setFileMentions((prev) => [
-        ...prev,
-        { id: crypto.randomUUID(), path: result.path, name: result.name },
-      ]);
-    },
+    onChange: composer.setDraft,
+    onAddMention: (result) => composer.addFileMention({ path: result.path, name: result.name }),
   });
 
-  // / slash command support (skills + commands picker, Claude only).
-  // Skills surface as orange pills; commands still insert `/name ` inline.
-  const selectedOption = getModelOption(model);
-  const agentHarness: AgentHarness = selectedOption?.agentHarness ?? getAgentHarnessForModel(model);
-  const modelId = selectedOption?.model ?? model;
-  const isClaudeAgent = agentHarness === "claude";
+  // / slash command popover — same pattern. Picked skills → store.
   const slashCommand = useSlashCommand({
-    value: messageInput,
+    value: draft,
     workspacePath,
-    onChange: onMessageChange,
+    onChange: composer.setDraft,
     enabled: isClaudeAgent,
-    onAddSkill: (skill) => {
-      setSkillMentions((prev) => [
-        ...prev,
-        { id: crypto.randomUUID(), name: skill.name, description: skill.description },
-      ]);
-    },
+    onAddSkill: (skill) =>
+      composer.addSkillMention({ name: skill.name, description: skill.description }),
   });
 
-  // Keyboard shortcut — popovers get first pass for arrow/enter/escape
-  // Desktop: Enter sends, Shift+Enter inserts newline
-  // Mobile: Enter inserts newline, send button sends (standard mobile UX)
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
-    // Let slash command popover handle navigation keys first
+    // Popovers get first pass at arrow/enter/escape.
     if (slashCommand.handleKeyDown(e)) {
       e.preventDefault();
       return;
     }
-    // Then file mention popover
     if (fileMention.handleKeyDown(e)) {
       e.preventDefault();
       return;
     }
-
     if (
       e.key === "Enter" &&
       !isMobile &&
@@ -291,66 +234,49 @@ export const MessageInput = forwardRef<MessageInputRef, MessageInputProps>(funct
   };
 
   const handlePaste = async (e: React.ClipboardEvent) => {
-    // Check for pasted images first
+    // Images first: preventDefault + process via store.
     const imageFiles = extractImagesFromClipboard(e);
     if (imageFiles.length > 0) {
       e.preventDefault();
-      processFiles(imageFiles);
+      const processed = await processImageFiles(imageFiles);
+      if (processed.length) composer.addImageAttachments(processed);
       return;
     }
-
-    // Check for long text pastes (20+ lines shown as collapsed cards)
+    // Long text paste: preventDefault + stash as a card. Short pastes fall
+    // through to native textarea handling.
     const text = e.clipboardData.getData("text/plain");
     if (!text) return;
-
     const lineCount = text.split("\n").length;
     if (lineCount >= PASTE_LINE_THRESHOLD) {
       e.preventDefault();
-      setPastedTexts((prev) => [
-        ...prev,
-        {
-          id: crypto.randomUUID(),
-          content: text,
-        },
-      ]);
+      composer.addPastedText(text);
     }
-    // Under threshold: native paste into textarea
   };
 
-  const removePastedText = (id: string) => {
-    setPastedTexts((prev) => prev.filter((p) => p.id !== id));
-  };
-
-  const removeInspectedElement = (id: string) => {
-    setInspectedElements((prev) => prev.filter((el) => el.id !== id));
-  };
-
-  const removeFileMention = (id: string) => {
-    setFileMentions((prev) => prev.filter((fm) => fm.id !== id));
-  };
-
-  const removeSkillMention = (id: string) => {
-    setSkillMentions((prev) => prev.filter((s) => s.id !== id));
-  };
-
-  // Thinking cycle — derive agent type from selected model
+  // Thinking cycle — derive supported levels from the selected model.
   const modelThinkingLevels = getThinkingLevelsForModel(agentHarness, modelId);
   const showThinkingIndicator = modelThinkingLevels.length > 0;
 
   const handleCycleThinking = () => {
-    const next = cycleThinkingLevel(thinkingLevel as ThinkingLevel, agentHarness, modelId);
-    onThinkingLevelChange?.(next);
+    const next = cycleThinkingLevel(thinkingLevel, agentHarness, modelId);
+    composer.setThinkingLevel(next);
   };
 
-  // Show "Set up your environment" nudge when no manifest and no messages yet
+  // "Set up your environment" nudge — visible when no deus.json + no history yet.
   const showSetupNudge = !hasManifest && !hasMessages;
-
   const handleSetupEnvironment = () => onSend(GENERATE_HIVE_JSON);
+
+  const planModeDisabled = agentHarness === "codex";
+  const hasStaged =
+    imageAttachments.length > 0 ||
+    pastedTexts.length > 0 ||
+    inspectedElements.length > 0 ||
+    fileMentions.length > 0 ||
+    skillMentions.length > 0;
 
   return (
     <div className={cn("relative z-20 shrink-0 px-2 pb-2", className)}>
-      {/* Environment setup nudge — visible when no deus.json and chat is empty */}
-      <AnimatePresence>
+      <AnimatePresence initial={false}>
         {showSetupNudge && (
           <motion.div
             key="setup-nudge"
@@ -363,7 +289,7 @@ export const MessageInput = forwardRef<MessageInputRef, MessageInputProps>(funct
             <button
               type="button"
               onClick={handleSetupEnvironment}
-              className="text-text-muted hover:text-text-secondary border-border-subtle hover:border-border hover:bg-bg-muted flex items-center gap-1.5 rounded-lg border border-dashed px-3 py-1.5 text-xs transition-colors duration-200"
+              className="text-text-muted hover:text-text-secondary border-border-subtle hover:border-border hover:bg-bg-muted flex items-center gap-1.5 rounded-lg border border-dashed px-3 py-1.5 text-xs transition-[color,background-color,border-color,scale] duration-200 active:scale-[0.97]"
             >
               <Wrench className="h-3 w-3 shrink-0" />
               <span>Set up your environment</span>
@@ -375,57 +301,55 @@ export const MessageInput = forwardRef<MessageInputRef, MessageInputProps>(funct
 
       <InputGroup
         data-no-ring={true}
-        className="bg-input-surface relative overflow-visible rounded-2xl border-0 shadow-xs transition-colors duration-200"
+        // Unified glass pill: translucent raised bg + backdrop blur + hairline
+        // ring + shadow. Reads as an elevated surface against the chat panel
+        // (which is ~#f5f5f4) and as a floating glass pill against a webpage
+        // in focus mode. Same styling in both contexts — no branching.
+        className="bg-bg-muted/75 ring-border-subtle relative overflow-visible rounded-2xl border-0 shadow-lg ring-1 backdrop-blur-xl"
       >
-        {/* Pasted content cards (images + text + inspects + file/skill mentions) — unified horizontal scroll */}
-        {(attachments.length > 0 ||
-          pastedTexts.length > 0 ||
-          inspectedElements.length > 0 ||
-          fileMentions.length > 0 ||
-          skillMentions.length > 0) && (
+        {hasStaged && (
           <div className="flex w-full items-start gap-2 overflow-x-auto px-3 pt-3">
-            <AnimatePresence mode="popLayout">
+            <AnimatePresence mode="popLayout" initial={false}>
               {skillMentions.map((s) => (
                 <SkillMentionCard
                   key={s.id}
                   mention={s}
-                  onRemove={() => removeSkillMention(s.id)}
+                  onRemove={() => composer.removeSkillMention(s.id)}
                 />
               ))}
               {inspectedElements.map((el) => (
                 <InspectedElementCard
                   key={el.id}
                   element={el}
-                  onRemove={() => removeInspectedElement(el.id)}
+                  onRemove={() => composer.removeInspectedElement(el.id)}
                 />
               ))}
               {fileMentions.map((fm) => (
                 <FileMentionCard
                   key={fm.id}
                   mention={fm}
-                  onRemove={() => removeFileMention(fm.id)}
+                  onRemove={() => composer.removeFileMention(fm.id)}
                 />
               ))}
-              {attachments.map((attachment) => (
+              {imageAttachments.map((attachment) => (
                 <PastedImageCard
                   key={attachment.id}
                   preview={attachment.preview}
                   fileName={attachment.file.name}
-                  onRemove={() => removeAttachment(attachment.id)}
+                  onRemove={() => composer.removeImageAttachment(attachment.id)}
                 />
               ))}
               {pastedTexts.map((paste) => (
                 <PastedTextCard
                   key={paste.id}
                   content={paste.content}
-                  onRemove={() => removePastedText(paste.id)}
+                  onRemove={() => composer.removePastedText(paste.id)}
                 />
               ))}
             </AnimatePresence>
           </div>
         )}
 
-        {/* Slash command sheet — slides out above textarea */}
         <AnimatePresence initial={false}>
           {slashCommand.isOpen && (
             <motion.div
@@ -447,7 +371,6 @@ export const MessageInput = forwardRef<MessageInputRef, MessageInputProps>(funct
           )}
         </AnimatePresence>
 
-        {/* File mention sheet — slides out above textarea */}
         <AnimatePresence initial={false}>
           {fileMention.isOpen && (
             <motion.div
@@ -469,11 +392,10 @@ export const MessageInput = forwardRef<MessageInputRef, MessageInputProps>(funct
           )}
         </AnimatePresence>
 
-        {/* Textarea */}
         <InputGroupTextarea
-          value={messageInput}
+          value={draft}
           onChange={(e) => {
-            onMessageChange(e.target.value);
+            composer.setDraft(e.target.value);
             fileMention.handleCursorChange(e);
           }}
           onPaste={handlePaste}
@@ -491,40 +413,29 @@ export const MessageInput = forwardRef<MessageInputRef, MessageInputProps>(funct
           )}
         />
 
-        {/* Bottom toolbar */}
         <InputGroupAddon
           align="block-end"
           className="flex w-full items-center justify-between px-2"
         >
-          {/* Controls group (left) */}
           <div className="flex items-center gap-0.5">
             <ModelPicker
               model={model}
               hasMessages={hasMessages}
-              onModelChange={onModelChange}
+              onModelChange={composer.setModel}
               onOpenNewTab={onOpenNewTab}
             />
 
-            {/* Thinking effort — text label cycles through model-specific levels.
-                Hidden for models that don't support thinking (e.g. Haiku). */}
             {showThinkingIndicator && (
-              <ThinkingIndicator
-                level={thinkingLevel as ThinkingLevel}
-                onClick={handleCycleThinking}
-              />
+              <ThinkingIndicator level={thinkingLevel} onClick={handleCycleThinking} />
             )}
-            {onPlanModeToggle && (
-              <PlanModeToggle
-                enabled={planModeEnabled}
-                onClick={onPlanModeToggle}
-                disabled={planModeDisabled}
-              />
-            )}
+            <PlanModeToggle
+              enabled={planModeEnabled}
+              onClick={composer.togglePlanMode}
+              disabled={planModeDisabled}
+            />
           </div>
 
-          {/* Actions group (right) */}
           <div className="flex items-center gap-1">
-            {/* Compact button - shown when enough messages to benefit */}
             {showCompactButton && (
               <Button
                 onClick={onCompact}
@@ -532,34 +443,31 @@ export const MessageInput = forwardRef<MessageInputRef, MessageInputProps>(funct
                 title="Compact conversation"
                 variant="ghost"
                 size="sm"
-                className="text-warning rounded-lg border"
+                className="text-warning rounded-lg border active:not-disabled:scale-[0.97]"
               >
                 <Minimize2 className="size-3.5" />
                 <span className="text-xs font-normal">Compact</span>
               </Button>
             )}
 
-            {/* Context window indicator — also acts as compact button when > 80% */}
             <ContextTokenIndicator
               contextTokenCount={contextTokenCount}
               contextUsedPercent={contextUsedPercent}
               onCompact={onCompact}
             />
 
-            {/* Stop button - hidden when plan approval is pending (agent is blocked, not working) */}
             {sessionStatus === "working" && !hasPendingPlan && (
               <InputGroupButton
                 onClick={onStop}
                 variant="default"
                 size="icon-sm"
                 title="Stop execution"
-                className="bg-foreground text-background hover:bg-foreground/90 rounded-full"
+                className="bg-foreground text-background hover:bg-foreground/90 rounded-full transition-[background-color,scale] duration-150 active:scale-[0.97]"
               >
                 <Square className="h-3.5 w-3.5 fill-current" />
               </InputGroupButton>
             )}
 
-            {/* Send button - always visible, highlighted when content exists */}
             <InputGroupButton
               onClick={handleSend}
               disabled={sending || !hasContent}
@@ -567,7 +475,7 @@ export const MessageInput = forwardRef<MessageInputRef, MessageInputProps>(funct
               size="icon-sm"
               title="Send message (Enter)"
               aria-label="Send message"
-              className="rounded-full"
+              className="rounded-full transition-[background-color,color,scale] duration-150 active:not-disabled:scale-[0.97]"
             >
               <ArrowUp className="h-4 w-4" />
             </InputGroupButton>
@@ -576,4 +484,4 @@ export const MessageInput = forwardRef<MessageInputRef, MessageInputProps>(funct
       </InputGroup>
     </div>
   );
-});
+}

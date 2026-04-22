@@ -22,9 +22,12 @@ import type { ImperativePanelHandle } from "react-resizable-panels";
 import type { SessionPanelRef } from "@/features/session";
 import { HomeView } from "@/features/repository";
 import { useWorkspaceLayout } from "@/features/workspace";
+import { webviewManager } from "@/features/browser/webview-manager";
 import { useCollapsedSizePercent } from "@/features/workspace/hooks/useCollapsedSizePercent";
 import type { ContentTab } from "@/features/workspace/store";
 import { useFileWatcher } from "@/features/file-browser/hooks/useFileWatcher";
+import { workspaceLayoutActions } from "@/features/workspace/store";
+import { sessionComposerActions } from "@/features/session/store/sessionComposerStore";
 import { WorkspaceHeader } from "@/features/workspace/ui/WorkspaceHeader";
 import { ContentTabBar } from "./ContentTabBar";
 import { isTabVisible } from "./content-tabs";
@@ -38,8 +41,6 @@ import type { Workspace, PRStatus, GhCliStatus } from "@/shared/types";
 import { useUpdateWorkspaceStatus } from "@/features/workspace/api";
 import { REVIEW_CODE } from "@/features/session/lib/sessionPrompts";
 import { native } from "@/platform";
-import { BROWSER_WORKSPACE_CHANGE } from "@shared/events";
-import { useBrowserWindowStore } from "@/features/browser/store";
 import { track } from "@/platform/analytics";
 import { ConnectionBanner, useConnectionState } from "@/features/connection";
 import { useIsMobile } from "@/shared/hooks/use-mobile";
@@ -97,7 +98,6 @@ export function MainContent({
     ? contentTab
     : "changes";
 
-  const isBrowserDetached = useBrowserWindowStore((s) => s.detachedWindowOpen);
   const connectionState = useConnectionState().state;
   const isDisconnected = connectionState === "disconnected";
 
@@ -200,6 +200,18 @@ export function MainContent({
     }
   }, [contentPanelCollapsed, selectedWorkspaceId]);
 
+  // Mirror chatPanelCollapsed state to the ResizablePanel ref so external
+  // callers (browser focus mode, keyboard shortcuts) can collapse/expand the
+  // chat by flipping the store state alone — no need to thread refs through.
+  useEffect(() => {
+    if (!selectedWorkspaceId) return;
+    if (chatPanelCollapsed) {
+      chatPanelRef.current?.collapse();
+    } else {
+      chatPanelRef.current?.expand();
+    }
+  }, [chatPanelCollapsed, selectedWorkspaceId]);
+
   // --- Keyboard shortcuts ---
   usePanelShortcuts({
     enabled: selectedWorkspace !== null && !isMobile,
@@ -232,40 +244,26 @@ export function MainContent({
     // eslint-disable-next-line react-hooks/exhaustive-deps -- only fire on workspace change, not on collapse toggles
   }, [selectedWorkspaceId]);
 
-  // --- Hide all native BrowserViews on workspace switch ---
-  // BrowserViews are native Electron overlays rendered ABOVE the DOM. When
-  // switching workspaces or going to the welcome screen, stale views from
-  // the previous workspace would remain visible. Hide them immediately;
-  // the new workspace's BrowserTab will re-show its own view when ready.
-  useEffect(() => {
-    native.browserViews.hideAll().catch(() => {
-      /* Expected: IPC may be unavailable in web mode; stale views are harmless */
-    });
+  // Note: <webview> elements stack normally in the DOM — no IPC hideAll
+  // dance is needed on workspace switch. CSS visibility handles per-tab
+  // hide/show inside BrowserPanel.
+
+  // Insert code review prompt into the active chat's composer. Goes
+  // straight through the composer store — no SessionPanel ref round-trip,
+  // which means it works even if the chat panel is collapsed.
+  const handleInsertReviewPrompt = useCallback(() => {
+    if (!selectedWorkspaceId) return;
+    const sid = workspaceLayoutActions.getLayout(selectedWorkspaceId).activeChatTabSessionId;
+    if (sid) sessionComposerActions.appendDraft(sid, REVIEW_CODE);
   }, [selectedWorkspaceId]);
 
-  // --- Sync workspace changes to detached browser window ---
-  const detachedWorkspaceContext = useMemo(
-    () =>
-      selectedWorkspace
-        ? {
-            workspaceId: selectedWorkspace.id,
-            directoryName: selectedWorkspace.slug,
-            repoName: selectedWorkspace.repo_name,
-            branch: selectedWorkspace.git_branch,
-          }
-        : null,
-    [selectedWorkspace]
-  );
-
+  // Guard against a panel unmount during a splitter drag — react-resizable-
+  // panels fires onDragging(false) on release but NOT when the component
+  // unmounts mid-drag (workspace switch, modal open, HMR). Without this
+  // cleanup, every live webview stays stuck at `pointer-events: none`.
   useEffect(() => {
-    if (!isBrowserDetached || !detachedWorkspaceContext) return;
-    void native.events.send(BROWSER_WORKSPACE_CHANGE, detachedWorkspaceContext);
-  }, [isBrowserDetached, detachedWorkspaceContext]);
-
-  // Insert code review prompt into chat input
-  const handleInsertReviewPrompt = useCallback(() => {
-    workspaceChatPanelRef.current?.insertText(REVIEW_CODE);
-  }, [workspaceChatPanelRef]);
+    return () => webviewManager.setPointerEventsEnabled(true);
+  }, []);
 
   return (
     <SidebarInset className="min-w-0">
@@ -396,7 +394,15 @@ export function MainContent({
                   )}
                 </ResizablePanel>
 
-                <ResizableHandle />
+                <ResizableHandle
+                  /* Toggle pointer-events on every live <webview> during
+                   * drag. Electron's webview guest eats pointermove before
+                   * they bubble to document; without this, dragging the
+                   * splitter rightward (cursor crosses into the webview)
+                   * freezes because react-resizable-panels loses its
+                   * document-level pointermove stream. */
+                  onDragging={(isDragging) => webviewManager.setPointerEventsEnabled(!isDragging)}
+                />
 
                 {/* ─── CONTENT PANEL (right, collapsible) ─── */}
                 <ResizablePanel
