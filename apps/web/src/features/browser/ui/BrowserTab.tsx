@@ -104,15 +104,36 @@ export const BrowserTab = forwardRef<BrowserTabHandle, BrowserTabProps>(function
   // its pointer events. Reserving 6px on each horizontal edge uncovers
   // the hit zone. The visual cost is a thin sliver of panel background.
   const SPLITTER_GUARD = 6;
-  const bounds: Bounds | null = (() => {
-    if (!panelRect) return null;
+  // DevTools docks into the bottom 40% of the panel — page shrinks to 60%
+  // so both are visible. Matches Chrome's default dock proportion.
+  const DEVTOOLS_SPLIT = 0.4;
+  const devtoolsOpen = !!tab.devtoolsOpen;
+  const { pageBounds: bounds, devtoolsBounds } = ((): {
+    pageBounds: Bounds | null;
+    devtoolsBounds: Bounds | null;
+  } => {
+    if (!panelRect) return { pageBounds: null, devtoolsBounds: null };
     const available = Math.max(0, panelRect.width - SPLITTER_GUARD * 2);
     const w = tab.isMobileView ? Math.min(MOBILE_PREVIEW_WIDTH, available) : available;
+    const x = panelRect.x + (panelRect.width - w) / 2;
+    if (!devtoolsOpen) {
+      return {
+        pageBounds: { x, y: panelRect.y, width: w, height: panelRect.height },
+        devtoolsBounds: null,
+      };
+    }
+    const dtHeight = Math.floor(panelRect.height * DEVTOOLS_SPLIT);
+    const pageHeight = panelRect.height - dtHeight;
     return {
-      x: panelRect.x + (panelRect.width - w) / 2,
-      y: panelRect.y,
-      width: w,
-      height: panelRect.height,
+      // DevTools docks full-width so the user can see the inspector
+      // regardless of whether the page is in mobile-preview mode.
+      pageBounds: { x, y: panelRect.y, width: w, height: pageHeight },
+      devtoolsBounds: {
+        x: panelRect.x + SPLITTER_GUARD,
+        y: panelRect.y + pageHeight,
+        width: Math.max(0, panelRect.width - SPLITTER_GUARD * 2),
+        height: dtHeight,
+      },
     };
   })();
 
@@ -121,6 +142,17 @@ export const BrowserTab = forwardRef<BrowserTabHandle, BrowserTabProps>(function
     initialUrl,
     bounds,
     isVisible: visible,
+  });
+
+  // Second <webview> hosts the DevTools UI when docked inside the panel.
+  // `about:blank` is fine as the initial URL — Electron's
+  // `setDevToolsWebContents` accepts it (what it rejects is a webContents
+  // that has loaded real content and is being repurposed).
+  const { getWebview: getDevtoolsWebview } = useWebview({
+    id: `${tabId}__devtools`,
+    initialUrl: "about:blank",
+    bounds: devtoolsBounds,
+    isVisible: visible && devtoolsOpen,
   });
 
   // Start false even for hydrated tabs — eagerly setting true from
@@ -551,17 +583,40 @@ export const BrowserTab = forwardRef<BrowserTabHandle, BrowserTabProps>(function
       onUpdateTab(tabId, { devtoolsOpen: true });
       return;
     }
-    const result = await openDevtoolsMain(webContentsId, "detach");
+    // Flip state first so the devtools <webview> grows to full size before
+    // Electron loads the DevTools bundle into it — otherwise the initial
+    // layout happens at the 1×1 hidden bounds and the UI looks wrong until
+    // the next resize. rAF lets the layout effect commit new bounds.
+    onUpdateTab(tabId, { devtoolsOpen: true });
+    await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
+    // Route DevTools UI into the companion <webview>. If the host isn't
+    // attached yet, fall back to a detached window so the click still does
+    // something useful.
+    const dtWv = getDevtoolsWebview();
+    let devtoolsWebContentsId: number | undefined;
+    if (dtWv) {
+      try {
+        devtoolsWebContentsId = dtWv.getWebContentsId();
+      } catch {
+        // host not attached yet — main side will open detached
+      }
+    }
+    const result = await openDevtoolsMain(webContentsId, { devtoolsWebContentsId });
     if (!result.success) {
       onAddLog(tabId, "error", `Open devtools failed: ${result.error ?? "unknown"}`);
-      return;
+      onUpdateTab(tabId, { devtoolsOpen: false });
     }
-    onUpdateTab(tabId, { devtoolsOpen: true });
-  }, [getWebview, tabId, onUpdateTab, onAddLog]);
+  }, [getWebview, getDevtoolsWebview, tabId, onUpdateTab, onAddLog]);
 
   const closeDevtools = useCallback(async () => {
     const wv = getWebview();
-    if (!wv) return;
+    if (!wv) {
+      onUpdateTab(tabId, { devtoolsOpen: false });
+      return;
+    }
+    // The companion DevTools <webview> is left alive — `setDevToolsWebContents`
+    // on the main side re-attaches onto the same guest when the user reopens
+    // DevTools. The browser panel wrapper hides it via `isVisible` below.
     let webContentsId: number;
     try {
       webContentsId = wv.getWebContentsId();
@@ -703,4 +758,5 @@ export const BrowserTab = forwardRef<BrowserTabHandle, BrowserTabProps>(function
 /** Dispose a tab's webview — called when the tab is closed. */
 export function disposeBrowserTab(tabId: string): void {
   webviewManager.dispose(tabId);
+  webviewManager.dispose(`${tabId}__devtools`);
 }

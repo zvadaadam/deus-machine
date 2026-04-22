@@ -420,9 +420,10 @@ export function BrowserPanel({ workspaceId, panelVisible = true }: BrowserPanelP
   const closeTab = useCallback(
     (closingTabId: string) => {
       setTabs((prev) => {
-        // Dispose the <webview> element for the closed tab so the guest
-        // page tears down. Keeps memory tight when many tabs are opened.
+        // Dispose both the page <webview> and the companion DevTools host
+        // so their guest pages tear down. Keeps memory tight as tabs churn.
         webviewManager.dispose(closingTabId);
+        webviewManager.dispose(`${closingTabId}__devtools`);
 
         const idx = prev.findIndex((t) => t.id === closingTabId);
         let newTabs = prev.filter((t) => t.id !== closingTabId);
@@ -1016,8 +1017,8 @@ export function BrowserPanel({ workspaceId, panelVisible = true }: BrowserPanelP
         </div>
       </TooltipProvider>
 
-      {/* Tab content — devtools opens as floating window (docked not yet supported).
-       * See open_browser_devtools in webview.rs for full history of docking attempts.
+      {/* Tab content — DevTools docks inside the panel by routing its UI into
+       * a second <webview> (see BrowserTab's `getDevtoolsWebview`).
        *
        * Tab stacking uses CSS Grid (all tabs in [grid-area:1/1]) instead of
        * absolute positioning. Previous approach (absolute inset-0 on BrowserTab)
