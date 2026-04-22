@@ -1,115 +1,58 @@
 /**
- * Browser View Preload Script
+ * Guest-page preload — attached to every <webview> via `will-attach-webview`.
  *
- * Injected into BrowserView content pages (the agent browser).
+ * Responsibilities are intentionally narrow; the host <webview> DOM events
+ * (`console-message`, `did-navigate`, `page-title-updated`, `did-fail-load`,
+ * `did-start-loading`, …) already give the renderer everything it needs, so
+ * we do NOT mirror those over IPC. What remains:
  *
- * Responsibilities:
- * 1. Console capture — forward to main process for the console panel
- * 2. Dialog override — alert/confirm/prompt are non-blocking (prevents app freeze)
- * 3. Keyboard shortcut routing — Cmd+R/L route back to IDE
- *
- * NOTE: WebAuthn and local-network-access polyfills are injected from the main
- * process via view.webContents.executeJavaScript() on `dom-ready`, which targets
- * the page's main world. The preload's webFrame.executeJavaScript() runs in the
- * isolated world and cannot override page-visible APIs.
+ *   1. Non-blocking dialog overrides — a page calling alert()/confirm()/prompt()
+ *      would otherwise freeze the guest thread.
+ *   2. Keyboard-shortcut routing — Cmd+R inside the guest should reload the
+ *      tab, Cmd+L should focus the URL bar in our shell. Sent via
+ *      `ipcRenderer.sendToHost(...)`, which delivers to the host webContents
+ *      as an `ipc-message` DOM event on the <webview> element.
  */
 
 import { ipcRenderer } from "electron";
 
-// ---------------------------------------------------------------------------
-// Console capture — forward to main process
-// ---------------------------------------------------------------------------
-
-const originalConsole = {
-  log: console.log.bind(console),
-  warn: console.warn.bind(console),
-  error: console.error.bind(console),
-  info: console.info.bind(console),
-};
-
-function forwardConsole(level: string, args: unknown[]): void {
-  try {
-    const serialized = args.map((arg) => {
-      if (typeof arg === "string") return arg;
-      try {
-        return JSON.stringify(arg);
-      } catch {
-        return String(arg);
-      }
-    });
-    ipcRenderer.send("browser:console-message", { level, args: serialized });
-  } catch {
-    // Swallow errors — never break page JS
-  }
-}
-
-console.log = (...args: unknown[]) => {
-  originalConsole.log(...args);
-  forwardConsole("log", args);
-};
-
-console.warn = (...args: unknown[]) => {
-  originalConsole.warn(...args);
-  forwardConsole("warn", args);
-};
-
-console.error = (...args: unknown[]) => {
-  originalConsole.error(...args);
-  forwardConsole("error", args);
-};
-
-console.info = (...args: unknown[]) => {
-  originalConsole.info(...args);
-  forwardConsole("info", args);
-};
-
-// ---------------------------------------------------------------------------
-// Override blocking dialogs to be non-blocking
-// (intentional for agent automation — prevents app freeze from page dialogs)
-// ---------------------------------------------------------------------------
+// -----------------------------------------------------------------------------
+// Override blocking dialogs — never freeze the app from guest JS.
+// -----------------------------------------------------------------------------
 
 window.alert = (message?: string) => {
-  originalConsole.log("[alert]", message);
+  console.log("[alert]", message);
 };
 
-window.confirm = (_message?: string) => {
-  originalConsole.log("[confirm]", _message);
-  return true; // Always confirm
+window.confirm = (message?: string) => {
+  console.log("[confirm]", message);
+  return true;
 };
 
-window.prompt = (_message?: string, _defaultValue?: string) => {
-  originalConsole.log("[prompt]", _message);
-  return _defaultValue ?? null;
+window.prompt = (message?: string, defaultValue?: string) => {
+  console.log("[prompt]", message);
+  return defaultValue ?? null;
 };
 
-// ---------------------------------------------------------------------------
-// Keyboard shortcut routing
-//
-// When the BrowserView is focused, browser shortcuts (Cmd+R, Cmd+L, etc.)
-// would be consumed by the webview. Route them to the IDE instead so the
-// user gets expected behavior regardless of focus state.
-// ---------------------------------------------------------------------------
+// -----------------------------------------------------------------------------
+// Keyboard shortcut routing — Cmd/Ctrl+R reload, Cmd/Ctrl+L focus URL bar.
+// Forwarded to the HOST webContents via sendToHost (no main process hop).
+// -----------------------------------------------------------------------------
+
+export type BrowserGuestShortcut = "reload" | "focus-url-bar";
 
 window.addEventListener(
   "keydown",
   (e: KeyboardEvent) => {
     const meta = e.metaKey || e.ctrlKey;
     if (!meta) return;
-
-    switch (e.key) {
-      case "r":
-        // Cmd+R → reload the BrowserView (not the IDE)
-        e.preventDefault();
-        e.stopPropagation();
-        ipcRenderer.send("browser:keyboard-shortcut", { shortcut: "reload" });
-        break;
-      case "l":
-        // Cmd+L → focus the URL bar in our IDE
-        e.preventDefault();
-        e.stopPropagation();
-        ipcRenderer.send("browser:keyboard-shortcut", { shortcut: "focus-url-bar" });
-        break;
-    }
+    let shortcut: BrowserGuestShortcut | null = null;
+    if (e.key === "r") shortcut = "reload";
+    else if (e.key === "l") shortcut = "focus-url-bar";
+    if (!shortcut) return;
+    e.preventDefault();
+    e.stopPropagation();
+    ipcRenderer.sendToHost("shortcut", shortcut);
   },
-  true // capture phase — intercept before page handlers
+  true // capture — intercept before page handlers
 );

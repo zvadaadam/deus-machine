@@ -10,6 +10,8 @@ import { useState, useCallback, useMemo } from "react";
 import type { Dispatch, SetStateAction } from "react";
 import type { SessionPanelRef } from "@/features/session";
 import { REVIEW_CODE } from "@/features/session/lib/sessionPrompts";
+import { sessionComposerActions } from "@/features/session/store/sessionComposerStore";
+import { workspaceLayoutActions } from "@/features/workspace/store";
 import { useFileChanges } from "@/features/workspace";
 import { ChangesView } from "@/features/workspace/ui/ChangesView";
 import { WorkspaceHeader } from "@/features/workspace/ui/WorkspaceHeader";
@@ -81,11 +83,14 @@ export function MobileLayout({
   );
   const fileChanges = useMemo(() => fileChangesData?.files ?? [], [fileChangesData]);
 
-  // Insert code review prompt into chat input and switch to chat tab
+  // Insert code review prompt into the active chat's composer and switch
+  // to the chat tab. Writes directly to the composer store so the prompt
+  // shows up regardless of whether the chat panel is mounted.
   const handleInsertReviewPrompt = useCallback(() => {
-    workspaceChatPanelRef.current?.insertText(REVIEW_CODE);
+    const sid = workspaceLayoutActions.getLayout(workspace.id).activeChatTabSessionId;
+    if (sid) sessionComposerActions.appendDraft(sid, REVIEW_CODE);
     setActiveTab("chat");
-  }, [workspaceChatPanelRef]);
+  }, [workspace.id]);
 
   // Shared PR bar props -- avoids repeating the same prop bag twice.
   const prBarProps = {

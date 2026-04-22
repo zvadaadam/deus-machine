@@ -1,13 +1,6 @@
 import { create } from "zustand";
 import { devtools } from "zustand/middleware";
 
-export interface DetachedBrowserWorkspaceContext {
-  workspaceId: string;
-  directoryName: string | null;
-  repoName: string | null;
-  branch: string | null;
-}
-
 /** Queue-style payload for requesting a Browser tab open with a pre-set URL.
  *  Workspace-scoped so a stale request from a different workspace can't
  *  open a tab in the current one. Pattern mirrors chatInsertStore — producer
@@ -31,45 +24,25 @@ export interface PendingCloseTabRequest {
 }
 
 interface BrowserWindowState {
-  detachedWindowOpen: boolean;
-  detachedWorkspace: DetachedBrowserWorkspaceContext | null;
   pendingNewTab: PendingNewTabRequest | null;
   pendingCloseTab: PendingCloseTabRequest | null;
-  setDetachedWindowOpen: (context: DetachedBrowserWorkspaceContext) => void;
-  clearDetachedWindow: () => void;
+  /** Focus mode per workspace — boolean toggle for the Codex-style overlay.
+   *  Not persisted (transient UI state); on app reload it resets to off. */
+  focusModeByWorkspace: Record<string, boolean>;
+
   requestNewTab: (workspaceId: string, url: string) => void;
   consumePendingNewTab: () => void;
   requestCloseTabByUrlPrefix: (workspaceId: string, urlPrefix: string) => void;
   consumePendingCloseTab: () => void;
+  setFocusMode: (workspaceId: string, enabled: boolean) => void;
 }
 
 export const useBrowserWindowStore = create<BrowserWindowState>()(
   devtools(
     (set) => ({
-      detachedWindowOpen: false,
-      detachedWorkspace: null,
       pendingNewTab: null,
       pendingCloseTab: null,
-
-      setDetachedWindowOpen: (context) =>
-        set(
-          {
-            detachedWindowOpen: true,
-            detachedWorkspace: context,
-          },
-          false,
-          "browserWindow/setDetachedWindowOpen"
-        ),
-
-      clearDetachedWindow: () =>
-        set(
-          {
-            detachedWindowOpen: false,
-            detachedWorkspace: null,
-          },
-          false,
-          "browserWindow/clearDetachedWindow"
-        ),
+      focusModeByWorkspace: {},
 
       requestNewTab: (workspaceId, url) =>
         set(
@@ -94,6 +67,15 @@ export const useBrowserWindowStore = create<BrowserWindowState>()(
 
       consumePendingCloseTab: () =>
         set({ pendingCloseTab: null }, false, "browserWindow/consumePendingCloseTab"),
+
+      setFocusMode: (workspaceId, enabled) =>
+        set(
+          (s) => ({
+            focusModeByWorkspace: { ...s.focusModeByWorkspace, [workspaceId]: enabled },
+          }),
+          false,
+          "browserWindow/setFocusMode"
+        ),
     }),
     {
       name: "browser-window-store",
@@ -103,13 +85,18 @@ export const useBrowserWindowStore = create<BrowserWindowState>()(
 );
 
 export const browserWindowActions = {
-  setDetachedWindowOpen: (context: DetachedBrowserWorkspaceContext) =>
-    useBrowserWindowStore.getState().setDetachedWindowOpen(context),
-  clearDetachedWindow: () => useBrowserWindowStore.getState().clearDetachedWindow(),
   requestNewTab: (workspaceId: string, url: string) =>
     useBrowserWindowStore.getState().requestNewTab(workspaceId, url),
   consumePendingNewTab: () => useBrowserWindowStore.getState().consumePendingNewTab(),
   requestCloseTabByUrlPrefix: (workspaceId: string, urlPrefix: string) =>
     useBrowserWindowStore.getState().requestCloseTabByUrlPrefix(workspaceId, urlPrefix),
   consumePendingCloseTab: () => useBrowserWindowStore.getState().consumePendingCloseTab(),
+  setFocusMode: (workspaceId: string, enabled: boolean) =>
+    useBrowserWindowStore.getState().setFocusMode(workspaceId, enabled),
+  toggleFocusMode: (workspaceId: string) => {
+    const current = useBrowserWindowStore.getState().focusModeByWorkspace[workspaceId] ?? false;
+    useBrowserWindowStore.getState().setFocusMode(workspaceId, !current);
+  },
+  isFocusMode: (workspaceId: string) =>
+    useBrowserWindowStore.getState().focusModeByWorkspace[workspaceId] ?? false,
 };

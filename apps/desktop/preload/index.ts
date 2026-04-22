@@ -37,30 +37,14 @@ const ALLOWED_INVOKE_CHANNELS = new Set([
   "get_installed_apps",
   "open_in_app",
 
-  // Browser webview management
-  "create_browser_webview",
-  "close_browser_webview",
-  "show_browser_webview",
-  "hide_browser_webview",
-  "hide_all_browser_webviews",
-  "show_all_browser_webviews",
-  "set_browser_webview_bounds",
-  "navigate_browser_webview",
-  "reload_browser_webview",
-  "eval_browser_webview",
-  "eval_browser_webview_with_result",
-  "screenshot_browser_webview",
-  "browser_view_exists",
-  "open_browser_devtools",
-  "close_browser_devtools",
-  "set_browser_emulation",
-  "clear_browser_emulation",
-  "browser:back",
-  "browser:forward",
-
-  // Browser detached windows
-  "browser:createDetachedWindow",
-  "browser:closeDetachedWindow",
+  // Browser <webview> — only pieces that must run on the main side.
+  //   - Emulation: needs `webContents.debugger.attach` + CDP commands.
+  //   - DevTools: the renderer-side <webview>.openDevTools() has no mode
+  //     parameter; opening docked requires webContents.openDevTools({mode}).
+  "browser_webview_emulation_set",
+  "browser_webview_emulation_clear",
+  "browser_webview_devtools_open",
+  "browser_webview_devtools_close",
 
   // Native operations (called via generic invoke from platform layer)
   "native:pickFolder",
@@ -89,14 +73,10 @@ const ALLOWED_EVENT_CHANNELS = new Set([
   "pty-data",
   "pty-exit",
 
-  // Browser automation events
-  "browser:page-load",
-  "browser:title-changed",
-  "browser:url-change",
-  "browser-window:workspace-change",
-  "browser:detached-closed",
-  "browser:keyboard-shortcut",
-  "browser:console-message",
+  // Browser — only popup requests (window.open / target="_blank") need
+  // main→renderer forwarding. Everything else about the <webview> (load,
+  // title, url, console, keyboard) is received directly as DOM events on
+  // the element in the renderer, with no main-process round-trip.
   "browser:new-tab-requested",
 
   // Simulator events — all moved to backend WS (q:event protocol)
@@ -146,18 +126,6 @@ const electronAPI = {
   isMaximized: (): Promise<boolean> => ipcRenderer.invoke("native:isMaximized"),
   isFullscreen: (): Promise<boolean> => ipcRenderer.invoke("native:isFullscreen"),
   toggleFullscreen: (): Promise<void> => ipcRenderer.invoke("native:toggleFullscreen"),
-
-  // ---------------------------------------------------------------------------
-  // Browser views (for agent browser automation)
-  // ---------------------------------------------------------------------------
-
-  browserInvoke: (method: string, args: unknown): Promise<unknown> =>
-    ipcRenderer.invoke(`browser:${method}`, args),
-  onBrowserEvent: (event: string, callback: (...args: unknown[]) => void): (() => void) => {
-    const listener = (_e: Electron.IpcRendererEvent, ...args: unknown[]): void => callback(...args);
-    ipcRenderer.on(event, listener);
-    return () => ipcRenderer.removeListener(event, listener);
-  },
 
   // ---------------------------------------------------------------------------
   // Auto-update

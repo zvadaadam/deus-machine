@@ -7,7 +7,8 @@ import type { DiffLineAnnotation } from "@pierre/diffs/react";
 import { getSingularPatch, parseDiffFromFile } from "@pierre/diffs";
 import type { FileContents, FileDiffMetadata } from "@pierre/diffs";
 import { useDiffOptions } from "@/shared/lib/diffOptions";
-import { chatInsertActions } from "@/shared/stores/chatInsertStore";
+import { sessionComposerActions } from "@/features/session/store/sessionComposerStore";
+import { workspaceLayoutActions } from "@/features/workspace/store";
 import { useIsMobile } from "@/shared/hooks/use-mobile";
 
 interface DiffViewerProps {
@@ -311,8 +312,10 @@ export function DiffViewer({
   const handleSendToChat = useCallback(
     (comment: DiffComment) => {
       if (!workspaceId) return;
+      const sid = workspaceLayoutActions.getLayout(workspaceId).activeChatTabSessionId;
+      if (!sid) return;
       const text = formatCommentForChat(comment, comment.lineNumber, comment.side);
-      chatInsertActions.insertText(workspaceId, text);
+      sessionComposerActions.appendDraft(sid, text);
     },
     [formatCommentForChat, workspaceId]
   );

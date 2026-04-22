@@ -28,7 +28,10 @@ export const PastedImageCard = forwardRef<HTMLDivElement, PastedImageCardProps>(
         exit={reduceMotion ? { opacity: 0 } : { opacity: 0, scale: 0.95 }}
         transition={{ duration: 0.2, ease: [0.165, 0.84, 0.44, 1] }}
         className={cn(
-          "group bg-muted/50 border-border/60 relative shrink-0 overflow-hidden border",
+          // Pure black/white outline at 10% opacity (the skill's image rule —
+          // never a tinted neutral, which picks up the surface color and
+          // reads as dirt on the image edge).
+          "group bg-muted/50 relative shrink-0 overflow-hidden border border-black/10 dark:border-white/10",
           SIZE_CLASSES[size]
         )}
       >

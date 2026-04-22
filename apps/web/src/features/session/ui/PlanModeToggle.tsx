@@ -23,8 +23,8 @@ export function PlanModeToggle({ enabled, onClick, disabled }: PlanModeTogglePro
           aria-label={enabled ? "Plan mode (active)" : "Plan mode"}
           className={cn(
             "flex h-8 items-center justify-center rounded-lg px-2",
-            "ease transition-colors duration-200",
-            "hover:bg-accent",
+            "transition-[color,background-color,scale] duration-200 ease-out",
+            "hover:bg-accent active:not-disabled:scale-[0.97]",
             "focus-visible:ring-ring focus-visible:ring-1 focus-visible:outline-none",
             enabled ? "text-amber-500" : "text-muted-foreground opacity-60",
             disabled && "pointer-events-none opacity-30"

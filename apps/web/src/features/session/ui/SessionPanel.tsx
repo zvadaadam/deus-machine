@@ -8,28 +8,19 @@ import {
   useImperativeHandle,
 } from "react";
 import { Chat } from "./Chat";
-import { MessageInput } from "./MessageInput";
-import type { MessageInputRef } from "./MessageInput";
-import { useSessionActions } from "../hooks";
+import { SessionComposer, type SessionComposerRef } from "./SessionComposer";
 import { usePartEvents } from "../hooks/usePartEvents";
 import { useAgentRpcHandler } from "../hooks/useAgentRpcHandler";
 import { SessionProvider } from "../context";
 import { useSessionWithMessages, useLoadOlderMessages } from "../api/session.queries";
-import { useManifestTasks } from "@/features/workspace/api/workspace.queries";
 import { PlanApprovalOverlay } from "./PlanApprovalOverlay";
 import { AgentQuestionOverlay } from "./AgentQuestionOverlay";
 import { Button } from "@/components/ui/button";
 import { X, Upload } from "lucide-react";
-import {
-  getAgentHarnessForModel,
-  getModelId,
-  clampThinkingLevel,
-  type AgentHarness,
-  type ThinkingLevel,
-} from "@/shared/agents";
-import { useSettings } from "@/features/settings/api";
+import type { AgentHarness } from "@/shared/agents";
 import { workspaceLayoutActions } from "@/features/workspace/store";
-import type { InspectedElement } from "./InspectedElementCard";
+import { sessionComposerActions } from "../store/sessionComposerStore";
+import { processImageFiles } from "../lib/imageAttachments";
 
 const CONTENT_WIDTH_CLASSES = "w-full max-w-[960px] mx-auto min-w-0";
 
@@ -57,9 +48,10 @@ interface SessionPanelProps {
 }
 
 export interface SessionPanelRef {
-  insertText: (text: string) => void;
-  addInspectedElement: (element: Omit<InspectedElement, "id">) => void;
-  addFiles: (files: File[]) => void;
+  /** Dispatch a message from outside the React tree — needed by the
+   *  home-screen welcome flow where the first send happens before the
+   *  composer is mounted. All other "push content into chat" flows go
+   *  directly through `sessionComposerActions`. */
   sendMessage: (content: string, model?: string) => Promise<void>;
 }
 
@@ -168,8 +160,13 @@ export const SessionPanel = forwardRef<SessionPanelRef, SessionPanelProps>(
     //   console.log("[SessionPanel] DEBUG:", { sessionId, messagesCount: messages.length, loading, sessionStatus });
     // }
 
-    // Ref to MessageInput for adding files from panel-level drag & drop
-    const messageInputRef = useRef<MessageInputRef>(null);
+    // Ref to the SessionComposer — parent (ChatArea) and imperative callers
+    // (browser element selector, welcome-flow sendMessage, drag & drop)
+    // drive the composer via this. addFiles / addInspectedElement /
+    // clearPastedContent forward to MessageInput's local state;
+    // sendMessage / stopSession / compactConversation / createPR fire the
+    // session actions.
+    const composerRef = useRef<SessionComposerRef>(null);
 
     // Full-panel drag & drop — uses dragOver (fires continuously) for reliable detection
     const [isDragging, setIsDragging] = useState(false);
@@ -198,129 +195,63 @@ export const SessionPanel = forwardRef<SessionPanelRef, SessionPanelProps>(
       }
     }, []);
 
-    const handleDrop = useCallback((e: React.DragEvent) => {
-      e.preventDefault();
-      e.stopPropagation();
-      setIsDragging(false);
-      const files = Array.from(e.dataTransfer.files);
-      if (files.length > 0) {
-        messageInputRef.current?.addFiles(files);
-      }
-    }, []);
+    const handleDrop = useCallback(
+      async (e: React.DragEvent) => {
+        e.preventDefault();
+        e.stopPropagation();
+        setIsDragging(false);
+        const files = Array.from(e.dataTransfer.files);
+        if (files.length > 0) {
+          const processed = await processImageFiles(files);
+          if (processed.length) {
+            sessionComposerActions.addImageAttachments(sessionId, processed);
+          }
+        }
+      },
+      [sessionId]
+    );
 
     // Native drag-drop — Electron handles file drops via standard HTML5 drag-drop
     // events. The renderer has full access to File objects from the drop event,
     // so no special IPC is needed.
     // Standard HTML5 drag-drop is handled by MessageInput's existing drop handler.
 
-    // User-configured default thinking level (Settings → AI) for new sessions
-    // and as the clamp target when switching to a model that doesn't support
-    // the current level. Falls back to HIGH if unset.
-    const { data: settings } = useSettings();
-    const defaultThinkingLevel: ThinkingLevel = settings?.default_thinking_level ?? "HIGH";
-
-    // Local state for message input
-    const [messageInput, setMessageInput] = useState("");
-    const [thinkingLevel, setThinkingLevel] = useState<ThinkingLevel>(defaultThinkingLevel);
-    const [model, setModel] = useState(initialModel ?? "claude:claude-opus-4-7");
-    const [planModeEnabled, setPlanModeEnabled] = useState(false);
     // Counter incremented when the human clicks Send — triggers auto-scroll resume
     const [userSendCount, setUserSendCount] = useState(0);
-    const runtimeModelId = getModelId(model);
-    const modelAgentHarness: AgentHarness = getAgentHarnessForModel(model);
-
-    // Handlers for MessageInput controls
-    const handleModelChange = (newModel: string) => {
-      setModel(newModel);
-      // Clamp thinking level to what the new model supports. E.g. if the user
-      // was on XHIGH with Opus 4.7 and switches to Opus 4.6 (no XHIGH), we
-      // quietly snap to the user's default (or HIGH) rather than sending an
-      // unsupported level on the next turn.
-      setThinkingLevel((prev) => {
-        const harness = getAgentHarnessForModel(newModel);
-        const modelId = getModelId(newModel);
-        return clampThinkingLevel(prev, harness, modelId, defaultThinkingLevel);
-      });
-    };
-
-    useEffect(() => {
-      onAgentHarnessChange?.(getAgentHarnessForModel(model));
-    }, [model, onAgentHarnessChange]);
-
-    const handleThinkingLevelChange = (level: string) => {
-      setThinkingLevel(level as ThinkingLevel);
-      // The level is sent as a string with the next message via the sendMessage
-      // command (useSessionActions → useSendMessage). Agent-server translates
-      // it to SDK options (see agents/claude/thinking.ts) and hot-swaps on the
-      // next user turn without restarting the generator.
-    };
-
-    // Manifest status — cache-only read (staleTime: Infinity, already fetched by MainContent)
-    // Default to true while loading to prevent the setup nudge from flashing briefly
-    const { data: manifestData } = useManifestTasks(workspaceId ?? null);
-    const hasManifest = manifestData === undefined ? true : manifestData?.manifest != null;
 
     // Show compact button when there are enough messages to benefit from compacting
     const showCompactButton = messages.length > 10;
 
-    // Session actions using custom hook
-    const { sendMessage, stopSession, compactConversation, createPR, sending } = useSessionActions({
-      sessionId,
-      workspaceId,
-      messageInput,
-      model: runtimeModelId,
-      agentHarness: modelAgentHarness,
-      permissionMode: planModeEnabled ? "plan" : undefined,
-      thinkingLevel,
-      targetBranch: workspaceParentBranch ?? "main",
-      onMessageSent: () => {
-        setMessageInput("");
-        messageInputRef.current?.clearPastedContent();
-        setUserSendCount((c) => c + 1);
-        onSessionStarted?.();
-      },
-    });
-
-    // Expose action handlers to parent
+    // Bridge parent's onCompact / onCreatePR / onSendAgentMessage / onStop
+    // callbacks to the composer ref. Each wrapper reads the ref at call
+    // time, so the handlers keep working across composer re-renders.
     useEffect(() => {
-      onCompact?.(compactConversation);
-      onCreatePR?.(createPR);
-      onSendAgentMessage?.(sendMessage);
-      onStop?.(stopSession);
-    }, [
-      compactConversation,
-      createPR,
-      sendMessage,
-      stopSession,
-      onCompact,
-      onCreatePR,
-      onSendAgentMessage,
-      onStop,
-    ]);
+      onCompact?.(() => composerRef.current?.compactConversation());
+      onCreatePR?.(() => composerRef.current?.createPR());
+      onSendAgentMessage?.(
+        (content: string) => composerRef.current?.sendMessage(content) ?? Promise.resolve()
+      );
+      onStop?.(() => composerRef.current?.stopSession());
+    }, [onCompact, onCreatePR, onSendAgentMessage, onStop]);
 
-    // Expose imperative methods for browser element selector and text insertion
+    // SessionPanelRef only exposes `sendMessage` — the welcome flow's
+    // sole external need. Content pushes (insertText, addInspectedElement,
+    // addFiles) go directly through `sessionComposerActions` from their
+    // call sites, which already have the workspaceId needed to resolve
+    // the active session.
     useImperativeHandle(
       ref,
       () => ({
-        insertText: (text: string) => {
-          setMessageInput((prev) => {
-            const separator = prev.trim() ? "\n\n" : "";
-            return prev + separator + text;
-          });
-        },
-        addInspectedElement: (element: Omit<InspectedElement, "id">) => {
-          messageInputRef.current?.addInspectedElement(element);
-        },
-        addFiles: (files: File[]) => {
-          messageInputRef.current?.addFiles(files);
-        },
-        sendMessage: (content: string, modelOverride?: string) => {
-          if (modelOverride) setModel(modelOverride);
-          return sendMessage(content);
-        },
+        sendMessage: (content: string, modelOverride?: string) =>
+          composerRef.current?.sendMessage(content, modelOverride) ?? Promise.resolve(),
       }),
-      [setMessageInput, sendMessage]
+      []
     );
+
+    const handleSendComplete = useCallback(() => {
+      setUserSendCount((c) => c + 1);
+      onSessionStarted?.();
+    }, [onSessionStarted]);
 
     // Error action handlers
     const handleOpenLoginTerminal = useCallback(() => {
@@ -402,7 +333,7 @@ export const SessionPanel = forwardRef<SessionPanelRef, SessionPanelProps>(
               hasOlder={hasOlder}
               loadingOlder={loadOlderMutation.isPending}
               onLoadOlder={handleLoadOlder}
-              onStop={stopSession}
+              onStop={() => composerRef.current?.stopSession()}
               onOpenLoginTerminal={workspaceId ? handleOpenLoginTerminal : undefined}
               onRetryInNewChat={handleRetryInNewChat}
               workspaceRepoName={workspaceRepoName}
@@ -411,9 +342,10 @@ export const SessionPanel = forwardRef<SessionPanelRef, SessionPanelProps>(
               userSendCount={userSendCount}
             />
 
-            {/* Agent-initiated interaction overlays — appear above MessageInput.
-                Render only when session has loaded (overlays are irrelevant
-                before that, and `agent_harness` is session-derived). */}
+            {/* Agent-initiated interaction overlays — appear above the
+                composer. Render only when session has loaded (overlays
+                are irrelevant before that, and `agent_harness` is
+                session-derived). */}
             {session && (
               <>
                 <PlanApprovalOverlay
@@ -432,29 +364,17 @@ export const SessionPanel = forwardRef<SessionPanelRef, SessionPanelProps>(
               </>
             )}
 
-            <MessageInput
-              ref={messageInputRef}
-              messageInput={messageInput}
-              sending={sending}
-              sessionStatus={sessionStatus}
-              model={model}
-              thinkingLevel={thinkingLevel}
-              contextTokenCount={session?.context_token_count ?? 0}
-              contextUsedPercent={session?.context_used_percent ?? 0}
-              workspacePath={workspacePath}
+            <SessionComposer
+              ref={composerRef}
+              sessionId={sessionId}
               workspaceId={workspaceId}
-              hasMessages={messages.length > 0}
-              hasManifest={hasManifest}
-              onMessageChange={setMessageInput}
-              onSend={(content) => sendMessage(content)}
-              onStop={stopSession}
-              onModelChange={handleModelChange}
-              onOpenNewTab={onOpenNewTab}
-              onThinkingLevelChange={handleThinkingLevelChange}
-              planModeEnabled={planModeEnabled}
-              onPlanModeToggle={() => setPlanModeEnabled((p) => !p)}
-              planModeDisabled={modelAgentHarness === "codex"}
+              workspacePath={workspacePath}
+              targetBranch={workspaceParentBranch ?? undefined}
+              initialModel={initialModel}
               hasPendingPlan={!!pendingPlan}
+              onOpenNewTab={onOpenNewTab}
+              onAgentHarnessChange={onAgentHarnessChange}
+              onSendComplete={handleSendComplete}
             />
           </div>
         </SessionProvider>
@@ -514,7 +434,7 @@ export const SessionPanel = forwardRef<SessionPanelRef, SessionPanelProps>(
                     hasOlder={hasOlder}
                     loadingOlder={loadOlderMutation.isPending}
                     onLoadOlder={handleLoadOlder}
-                    onStop={stopSession}
+                    onStop={() => composerRef.current?.stopSession()}
                     onOpenLoginTerminal={workspaceId ? handleOpenLoginTerminal : undefined}
                     onRetryInNewChat={handleRetryInNewChat}
                     workspaceRepoName={workspaceRepoName}
@@ -522,8 +442,8 @@ export const SessionPanel = forwardRef<SessionPanelRef, SessionPanelProps>(
                     userSendCount={userSendCount}
                   />
 
-                  {/* Agent-initiated interaction overlays — appear above MessageInput.
-                      Render only when session has loaded. */}
+                  {/* Agent-initiated interaction overlays — appear above the
+                      composer. Render only when session has loaded. */}
                   {session && (
                     <>
                       <PlanApprovalOverlay
@@ -542,31 +462,18 @@ export const SessionPanel = forwardRef<SessionPanelRef, SessionPanelProps>(
                     </>
                   )}
 
-                  <MessageInput
-                    ref={messageInputRef}
-                    messageInput={messageInput}
-                    sending={sending}
-                    sessionStatus={sessionStatus}
-                    model={model}
-                    thinkingLevel={thinkingLevel}
-                    showCompactButton={showCompactButton}
-                    contextTokenCount={session?.context_token_count ?? 0}
-                    contextUsedPercent={session?.context_used_percent ?? 0}
-                    workspacePath={workspacePath}
+                  <SessionComposer
+                    ref={composerRef}
+                    sessionId={sessionId}
                     workspaceId={workspaceId}
-                    hasMessages={messages.length > 0}
-                    hasManifest={hasManifest}
-                    onMessageChange={setMessageInput}
-                    onSend={(content) => sendMessage(content)}
-                    onCompact={compactConversation}
-                    onStop={stopSession}
-                    onModelChange={handleModelChange}
-                    onOpenNewTab={onOpenNewTab}
-                    onThinkingLevelChange={handleThinkingLevelChange}
-                    planModeEnabled={planModeEnabled}
-                    onPlanModeToggle={() => setPlanModeEnabled((p) => !p)}
-                    planModeDisabled={modelAgentHarness === "codex"}
+                    workspacePath={workspacePath}
+                    targetBranch={workspaceParentBranch ?? undefined}
+                    initialModel={initialModel}
+                    showCompactButton={showCompactButton}
                     hasPendingPlan={!!pendingPlan}
+                    onOpenNewTab={onOpenNewTab}
+                    onAgentHarnessChange={onAgentHarnessChange}
+                    onSendComplete={handleSendComplete}
                   />
                 </div>
               </SessionProvider>

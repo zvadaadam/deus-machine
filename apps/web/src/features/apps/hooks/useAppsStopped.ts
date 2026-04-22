@@ -35,7 +35,7 @@ export function useAppsStopped(currentWorkspaceId: string | null): void {
       if (typeof payload.url !== "string" || payload.url.length === 0) return;
 
       // Normalize to origin-only prefix (scheme+host+port, no trailing slash,
-      // no path). Electron's BrowserView drops the root-path trailing slash
+      // no path). The <webview>'s URL drops the root-path trailing slash
       // after load, so a tab opened at `http://127.0.0.1:49187/` ends up with
       // currentUrl = `http://127.0.0.1:49187` — a raw `startsWith` against the
       // manifest-provided url (which keeps the slash) would miss it. Comparing

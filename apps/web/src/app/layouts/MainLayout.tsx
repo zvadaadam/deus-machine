@@ -31,13 +31,6 @@ import { AppSidebar, SidebarSkeleton } from "@/features/sidebar";
 import { useWorkspaceStore, workspaceLayoutActions } from "@/features/workspace/store";
 import { useSidebarStore } from "@/features/sidebar/store";
 import { useUIStore } from "@/shared/stores/uiStore";
-import {
-  useChatInsertStore,
-  chatInsertActions,
-  deliverChatInsertPayload,
-  deserializeChatInsertPayload,
-  isChatInsertForWorkspace,
-} from "@/shared/stores/chatInsertStore";
 import { ResizeHandle } from "@/shared/components/ResizeHandle";
 import type { Workspace } from "@/shared/types";
 import { unreadActions } from "@/features/session/store/unreadStore";
@@ -45,7 +38,6 @@ import { native } from "@/platform";
 import { capabilities } from "@/platform/capabilities";
 import { getLastOpenInAppId } from "@/shared/hooks/useLastOpenInApp";
 import { track } from "@/platform/analytics";
-import { CHAT_INSERT } from "@shared/events";
 import { CommandPalette } from "@/features/command-palette";
 import { GitHubPickerModal } from "@/features/sidebar/ui/GitHubPickerModal";
 import { useConnectionStateInit } from "@/features/connection";
@@ -230,20 +222,8 @@ export function MainLayout() {
   // the DOM so dialogs would appear behind them. BrowserTab's own visible
   // effect handles re-showing when the dialog closes.
   const commandPaletteOpen = useUIStore((s) => s.commandPaletteOpen);
-  const anyDialogOpen =
-    showNewWorkspaceModal ||
-    showSystemPromptModal ||
-    commandPaletteOpen ||
-    !!githubPickerRepoId ||
-    repoActions.showCloneModal ||
-    repoActions.showStartNewModal;
-  useEffect(() => {
-    if (anyDialogOpen) {
-      native.browserViews.hideAll().catch(() => {
-        /* Expected: IPC may be unavailable in web mode or during shutdown */
-      });
-    }
-  }, [anyDialogOpen]);
+  // Note: <webview> elements stack normally under dialogs/modals — no
+  // hideAll IPC dance needed when dialogs open.
 
   // --- System prompt (inline — small scope, one modal) ---
 
@@ -383,36 +363,6 @@ export function MainLayout() {
       showSystemPromptModal,
     },
   });
-
-  // Subscribe to chatInsertStore for content dispatched from BrowserPanel / DiffViewer / SimulatorPanel
-  useEffect(() => {
-    const unsubStore = useChatInsertStore.subscribe((state, prevState) => {
-      if (!state.pending || state.pending === prevState.pending) return;
-
-      const payload = state.pending;
-      chatInsertActions.consume();
-
-      if (!workspaceChatPanelRef.current) return;
-      if (!isChatInsertForWorkspace(payload, selectedWorkspaceIdRef.current)) return;
-
-      deliverChatInsertPayload(workspaceChatPanelRef.current, payload);
-    });
-
-    const unlistenChat = native.events.on(CHAT_INSERT, (data) => {
-      void deserializeChatInsertPayload(data)
-        .then((payload) => {
-          chatInsertActions.dispatch(payload);
-        })
-        .catch((error) => {
-          console.error("Failed to deserialize detached chat insert:", error);
-        });
-    });
-
-    return () => {
-      unsubStore();
-      unlistenChat();
-    };
-  }, []);
 
   const handleWorkspaceClick = useCallback(
     (workspace: Workspace) => {
