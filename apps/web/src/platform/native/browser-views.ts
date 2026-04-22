@@ -3,11 +3,11 @@
  *
  * - Viewport emulation: needs CDP debugger attach (unreachable from the
  *   guest page's executeJavaScript).
- * - DevTools open: routed through the main side so we can manage state
- *   (close from our toolbar, track open/closed). Guest webContents always
- *   open detached — docked modes (`bottom`/`right`) silently fail because
- *   a <webview> guest doesn't own a BrowserWindow to dock into (see
- *   Electron docs on `webContents.openDevTools`).
+ * - DevTools open: routed through the main side so we can pass a custom
+ *   DevTools host webContents (a second <webview>) via
+ *   `setDevToolsWebContents`. That's what lets DevTools render inline
+ *   inside the browser panel; without it, guest DevTools always appear as
+ *   a separate window.
  */
 
 import { capabilities } from "../capabilities";
@@ -46,15 +46,27 @@ export async function clearEmulation(
 
 export type DevtoolsMode = "right" | "bottom" | "undocked" | "detach";
 
+export interface OpenDevtoolsOptions {
+  /** Render DevTools UI into this webContents (must be a fresh <webview>
+   *  that hasn't navigated). When set, the DevTools appear inline inside
+   *  whatever DOM the host webview lives in. `mode` is ignored. */
+  devtoolsWebContentsId?: number;
+  /** Dock mode for the default (no-custom-host) path. Ignored when
+   *  `devtoolsWebContentsId` is set. Defaults to `detach` because docked
+   *  modes silently fail for <webview> guests. */
+  mode?: DevtoolsMode;
+}
+
 export async function openDevtools(
   webContentsId: number,
-  mode: DevtoolsMode = "detach"
+  options: OpenDevtoolsOptions = {}
 ): Promise<{ success: boolean; error?: string }> {
   if (!capabilities.nativeBrowser) return { success: false, error: "Not in Electron" };
   return (
     (await invoke<{ success: boolean; error?: string }>("browser_webview_devtools_open", {
       webContentsId,
-      mode,
+      devtoolsWebContentsId: options.devtoolsWebContentsId,
+      mode: options.mode ?? "detach",
     })) ?? { success: false, error: "No response" }
   );
 }

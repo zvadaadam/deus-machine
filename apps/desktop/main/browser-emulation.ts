@@ -3,10 +3,12 @@
  *
  *   1. CDP viewport emulation (requires debugger attach — cannot be done
  *      from executeJavaScript, which runs in the guest page context).
- *   2. DevTools open/close. Routing through `webContents` pairs our toolbar
- *      toggle with an explicit close. Guest DevTools always open detached —
- *      docked modes (`bottom`/`right`) silently fail because the guest has
- *      no BrowserWindow to dock into.
+ *   2. DevTools open/close. To render DevTools inline inside the browser
+ *      panel we use Electron's `setDevToolsWebContents`: the renderer hosts
+ *      a second <webview> and passes its webContents id, then we attach the
+ *      page's DevTools UI into it. Without that custom host, guest DevTools
+ *      always open as a separate window — docked modes don't work because a
+ *      <webview> guest doesn't own a BrowserWindow to dock into.
  *
  * Both identify the target by `webContentsId`, which the renderer gets from
  * `webview.getWebContentsId()` after the guest page attaches.
@@ -131,12 +133,33 @@ export function registerBrowserEmulationHandlers(): void {
       _e,
       {
         webContentsId,
+        devtoolsWebContentsId,
         mode = "detach",
-      }: { webContentsId: number; mode?: "right" | "bottom" | "undocked" | "detach" }
+      }: {
+        webContentsId: number;
+        /** Optional. When present, DevTools render into that webContents
+         *  instead of Electron's default window — used by the renderer to
+         *  dock DevTools inside the browser panel via a second <webview>. */
+        devtoolsWebContentsId?: number;
+        mode?: "right" | "bottom" | "undocked" | "detach";
+      }
     ): { success: boolean; error?: string } => {
       const wc = webContents.fromId(webContentsId);
       if (!wc || wc.isDestroyed()) return { success: false, error: "webContents not found" };
       try {
+        if (devtoolsWebContentsId !== undefined) {
+          const dt = webContents.fromId(devtoolsWebContentsId);
+          if (!dt || dt.isDestroyed()) {
+            return { success: false, error: "devtools webContents not found" };
+          }
+          // setDevToolsWebContents only takes effect when DevTools aren't
+          // already attached to a different host — close any prior session
+          // so reopening into the panel works after a detached-open attempt.
+          if (wc.isDevToolsOpened()) wc.closeDevTools();
+          wc.setDevToolsWebContents(dt);
+          wc.openDevTools();
+          return { success: true };
+        }
         wc.openDevTools({ mode });
         return { success: true };
       } catch (err) {
