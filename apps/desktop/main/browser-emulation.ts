@@ -40,8 +40,15 @@ export function registerBrowserEmulationHandlers(): void {
       const wc = webContents.fromId(webContentsId);
       if (!wc || wc.isDestroyed()) return { success: false, error: "webContents not found" };
 
+      // Track what we did so a partial failure (attach OK but setDeviceMetrics
+      // throws, or zoom set but setTouchEmulation throws) doesn't leave the
+      // guest zoomed / attached with stale overrides. The next emulation call
+      // would then start from a corrupted state.
+      const attachedHere = !wc.debugger.isAttached();
+      let metricsApplied = false;
+      let zoomChanged = false;
       try {
-        if (!wc.debugger.isAttached()) wc.debugger.attach("1.3");
+        if (attachedHere) wc.debugger.attach("1.3");
 
         // Always apply device-metrics override so the page reflows for the
         // emulated device (mobile UA + breakpoints kick in from the `mobile`
@@ -54,7 +61,9 @@ export function registerBrowserEmulationHandlers(): void {
           deviceScaleFactor,
           mobile,
         });
+        metricsApplied = true;
         wc.setZoomFactor(scale !== undefined && scale < 1 ? scale : 1);
+        zoomChanged = true;
 
         await wc.debugger.sendCommand("Emulation.setTouchEmulationEnabled", {
           enabled: mobile,
@@ -64,6 +73,22 @@ export function registerBrowserEmulationHandlers(): void {
         emulatedIds.add(webContentsId);
         return { success: true };
       } catch (err) {
+        // Rollback: undo whatever partial work succeeded so the caller can
+        // retry from a clean slate instead of layering state onto a half-done
+        // emulation.
+        try {
+          if (metricsApplied && wc.debugger.isAttached()) {
+            await wc.debugger.sendCommand("Emulation.clearDeviceMetricsOverride", {});
+            await wc.debugger.sendCommand("Emulation.setTouchEmulationEnabled", {
+              enabled: false,
+            });
+          }
+          if (zoomChanged) wc.setZoomFactor(1);
+          if (attachedHere && wc.debugger.isAttached()) wc.debugger.detach();
+        } catch (rollbackErr) {
+          console.error("[browser-emulation] rollback failed:", rollbackErr);
+        }
+        emulatedIds.delete(webContentsId);
         return { success: false, error: String(err) };
       }
     }

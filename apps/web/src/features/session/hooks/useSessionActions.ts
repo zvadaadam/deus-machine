@@ -65,14 +65,17 @@ export function useSessionActions({
       const content = customContent || composer.draft.trim();
       if (!content) return;
 
-      // modelOverride wins for this send only; otherwise use the composer's
-      // currently-selected model. Splitting the full "harness:modelId" form
-      // into runtime id + harness happens here so callers never think about it.
-      const effectiveFull = modelOverride ?? composer.model;
-      const effectiveModel = getModelId(effectiveFull);
-      const effectiveHarness = getAgentHarnessForModel(effectiveFull);
-
       try {
+        // modelOverride wins for this send only; otherwise use the composer's
+        // currently-selected model. Splitting the full "harness:modelId" form
+        // into runtime id + harness happens here so callers never think about
+        // it. Kept INSIDE the try/catch because `getModelId` throws for
+        // unknown catalog entries — a stale stored model or bad override
+        // should surface a toast, not an unhandled promise rejection.
+        const effectiveFull = modelOverride ?? composer.model;
+        const effectiveModel = getModelId(effectiveFull);
+        const effectiveHarness = getAgentHarnessForModel(effectiveFull);
+
         await sendMessageMutation.mutateAsync({
           sessionId,
           content,

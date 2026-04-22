@@ -203,7 +203,16 @@ export const BrowserTab = forwardRef<BrowserTabHandle, BrowserTabProps>(function
       setCompletingLoad(false);
       setHasLoaded(true);
       const desc = e.errorDescription || "Page failed to load";
-      onUpdateTab(tabId, { loading: false, error: desc });
+      // Persist the target URL the user tried to load — otherwise
+      // `tab.currentUrl` still points at the previous page (or is blank
+      // for the very first nav) and the "Try Again" button reloads the
+      // wrong target. `validatedURL` is Electron's canonical form of the
+      // URL the navigation was attempting.
+      onUpdateTab(tabId, {
+        loading: false,
+        error: desc,
+        ...(e.validatedURL ? { url: e.validatedURL, currentUrl: e.validatedURL } : {}),
+      });
       onAddLog(tabId, "error", `Page failed to load: ${desc}`);
     };
 

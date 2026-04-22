@@ -49,6 +49,7 @@ import { FileMentionCard } from "./FileMentionCard";
 import { SkillMentionCard } from "./SkillMentionCard";
 import { serializeInspectElement } from "../lib/parseInspectTags";
 import {
+  DEFAULT_MODEL,
   getAgentHarnessForModel,
   getModelOption,
   cycleThinkingLevel,
@@ -63,8 +64,6 @@ import { ContextTokenIndicator } from "./ContextTokenIndicator";
 
 // Long pastes (20+ lines) are shown as collapsed cards instead of inline text
 const PASTE_LINE_THRESHOLD = 20;
-
-const FALLBACK_MODEL = "claude:claude-opus-4-7";
 
 interface MessageInputProps {
   /** Active session — state lives in `sessionComposerStore[sessionId]`. */
@@ -124,7 +123,7 @@ export function MessageInput({
 
   // Composer content — subscribed from the store, mutated via bound setters.
   const composer = useSessionComposer(sessionId, {
-    initialModel: initialModel ?? FALLBACK_MODEL,
+    initialModel: initialModel ?? DEFAULT_MODEL,
     defaultThinking,
   });
 
