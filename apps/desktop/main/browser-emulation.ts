@@ -1,13 +1,12 @@
 /**
  * Main-process helpers for the <webview>-based browser path.
  *
- * Two things need to reach the compositor side (outside the renderer):
  *   1. CDP viewport emulation (requires debugger attach — cannot be done
  *      from executeJavaScript, which runs in the guest page context).
- *   2. DevTools with a specific dock mode. `<webview>.openDevTools()` on the
- *      renderer element has no `mode` parameter and always opens detached;
- *      going through `webContents.openDevTools({ mode: "bottom" })` on the
- *      main side is the only way to dock.
+ *   2. DevTools open/close. Routing through `webContents` pairs our toolbar
+ *      toggle with an explicit close. Guest DevTools always open detached —
+ *      docked modes (`bottom`/`right`) silently fail because the guest has
+ *      no BrowserWindow to dock into.
  *
  * Both identify the target by `webContentsId`, which the renderer gets from
  * `webview.getWebContentsId()` after the guest page attaches.
@@ -107,7 +106,7 @@ export function registerBrowserEmulationHandlers(): void {
       _e,
       {
         webContentsId,
-        mode = "bottom",
+        mode = "detach",
       }: { webContentsId: number; mode?: "right" | "bottom" | "undocked" | "detach" }
     ): { success: boolean; error?: string } => {
       const wc = webContents.fromId(webContentsId);
