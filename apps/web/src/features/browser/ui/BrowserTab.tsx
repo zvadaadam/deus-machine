@@ -150,6 +150,12 @@ export const BrowserTab = forwardRef<BrowserTabHandle, BrowserTabProps>(function
   const suppressHistoryPushRef = useRef(false);
   const historyNavDeltaRef = useRef<-1 | 0 | 1>(0);
 
+  // Monotonic token so rapid mobile-view toggles don't race. The
+  // emulation effect captures the token at dispatch time and bails if a
+  // later toggle has incremented it — otherwise a slower earlier request
+  // could resolve last and leave the webview stuck in the wrong mode.
+  const emulationRequestRef = useRef(0);
+
   // Guard: prevent duplicate automation injection across page loads
   const automationInjectedRef = useRef(false);
 
@@ -337,7 +343,8 @@ export const BrowserTab = forwardRef<BrowserTabHandle, BrowserTabProps>(function
     const wv = getWebview();
     if (!wv) return;
 
-    let cancelled = false;
+    const requestId = ++emulationRequestRef.current;
+    const isStale = () => requestId !== emulationRequestRef.current;
     (async () => {
       let webContentsId: number;
       try {
@@ -345,7 +352,7 @@ export const BrowserTab = forwardRef<BrowserTabHandle, BrowserTabProps>(function
       } catch {
         return;
       }
-      if (cancelled) return;
+      if (isStale()) return;
 
       if (!tab.isMobileView) {
         await clearEmulation(webContentsId);
@@ -360,10 +367,16 @@ export const BrowserTab = forwardRef<BrowserTabHandle, BrowserTabProps>(function
         mobile: true,
         scale: 1,
       });
+      // If a newer toggle superseded us while the call was in flight,
+      // the next effect run will re-apply with the current state — we
+      // just need to bail here so we don't log / treat this as the
+      // authoritative result.
+      if (isStale()) return;
     })();
 
     return () => {
-      cancelled = true;
+      // Bump the token so any in-flight promise above sees isStale().
+      emulationRequestRef.current++;
     };
   }, [tab.isMobileView, hasLoaded, getWebview]);
 
