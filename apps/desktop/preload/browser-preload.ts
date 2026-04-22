@@ -20,18 +20,22 @@ import { ipcRenderer } from "electron";
 // Override blocking dialogs — never freeze the app from guest JS.
 // -----------------------------------------------------------------------------
 
+// Fail-safe: every override denies. Auto-confirming (true) or echoing
+// defaultValue could let a guest page auto-approve destructive actions
+// (e.g. "Delete this file?") or submit forms with values the user never
+// typed. Return the safest no-op for each API.
 window.alert = (message?: string) => {
   console.log("[alert]", message);
 };
 
 window.confirm = (message?: string) => {
   console.log("[confirm]", message);
-  return true;
+  return false;
 };
 
-window.prompt = (message?: string, defaultValue?: string) => {
+window.prompt = (message?: string, _defaultValue?: string) => {
   console.log("[prompt]", message);
-  return defaultValue ?? null;
+  return null;
 };
 
 // -----------------------------------------------------------------------------

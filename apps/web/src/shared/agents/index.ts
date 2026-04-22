@@ -103,6 +103,11 @@ export const MODEL_PICKER_GROUPS: readonly AgentConfig[] = [
   AGENT_CONFIGS.codex,
 ];
 
+/** App-wide default model (full "harness:modelId" form). Used to seed new
+ *  chat composers and the home-screen welcome input. Keep in sync with
+ *  `AGENT_CONFIGS.claude.models[0]`. */
+export const DEFAULT_MODEL = "claude:claude-opus-4-7";
+
 /** Flat model options array, derived from agent configs. */
 export const MODEL_OPTIONS: ModelOption[] = MODEL_PICKER_GROUPS.flatMap((config) =>
   config.models.map(

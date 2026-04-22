@@ -14,6 +14,7 @@ import { capabilities } from "@/platform/capabilities";
 import { cn } from "@/shared/lib/utils";
 import { getAgentLogo } from "@/assets/agents";
 import {
+  DEFAULT_MODEL,
   getModelLabel,
   getModelOption,
   MODEL_OPTIONS,
@@ -54,8 +55,6 @@ function setStoredRepoId(id: string) {
   }
 }
 
-const DEFAULT_HOME_MODEL = "claude:claude-opus-4-7";
-
 function getStoredModel(): string {
   // Validate against the catalog — stale localStorage (old aliases like
   // "claude:sonnet", removed models, renamed formats) falls back to the
@@ -66,7 +65,7 @@ function getStoredModel(): string {
   } catch {
     /* localStorage unavailable */
   }
-  return DEFAULT_HOME_MODEL;
+  return DEFAULT_MODEL;
 }
 
 function setStoredModel(model: string) {

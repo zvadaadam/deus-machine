@@ -91,11 +91,45 @@ async function createWindow(): Promise<void> {
 
   // Attach the guest-page preload whenever a <webview> element is mounted.
   // The <webview> tag itself sets `partition` so all tabs share the
-  // `persist:browser` cookie jar; here we only wire the preload + isolation.
-  mainWindow.webContents.on("will-attach-webview", (_event, webPreferences) => {
+  // `persist:browser` cookie jar; here we force-set the preload + isolation
+  // + strip any renderer-supplied params that could weaken the sandbox.
+  //
+  // SECURITY: renderer can set arbitrary webview attributes at attach time
+  // (including `src`, `nodeintegration`, `webpreferences`). We:
+  //   1. Override webPreferences with our hardened values (can't be opted out).
+  //   2. Validate `params.src` against http/https/about only — matches the
+  //      `setWindowOpenHandler` scheme allowlist below so attach-time and
+  //      runtime boundaries are consistent.
+  //   3. Strip disallowed guest-supplied webview attributes from params.
+  const ALLOWED_WEBVIEW_PARAM_KEYS = new Set(["src", "partition", "useragent"]);
+  mainWindow.webContents.on("will-attach-webview", (_event, webPreferences, params) => {
     webPreferences.preload = join(__dirname, "../preload/browser-preload.mjs");
     webPreferences.contextIsolation = true;
     webPreferences.nodeIntegration = false;
+
+    // Validate src scheme. Unparseable / disallowed schemes fall back to
+    // about:blank rather than killing the attach — the guest still mounts,
+    // the renderer can then navigate via its URL bar.
+    const src = typeof params.src === "string" ? params.src : "";
+    if (src) {
+      try {
+        const { protocol } = new URL(src);
+        if (protocol !== "http:" && protocol !== "https:" && protocol !== "about:") {
+          params.src = "about:blank";
+        }
+      } catch {
+        params.src = "about:blank";
+      }
+    }
+
+    // Drop any webview attributes the renderer set that aren't on the
+    // allowlist — renderer should not be able to flip nodeIntegration,
+    // enableRemoteModule, or swap our preload via params.
+    for (const key of Object.keys(params)) {
+      if (!ALLOWED_WEBVIEW_PARAM_KEYS.has(key)) {
+        delete (params as Record<string, unknown>)[key];
+      }
+    }
   });
 
   // Keep popups in-app: when a guest calls window.open() or follows a

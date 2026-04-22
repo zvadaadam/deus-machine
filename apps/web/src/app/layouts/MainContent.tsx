@@ -257,6 +257,14 @@ export function MainContent({
     if (sid) sessionComposerActions.appendDraft(sid, REVIEW_CODE);
   }, [selectedWorkspaceId]);
 
+  // Guard against a panel unmount during a splitter drag — react-resizable-
+  // panels fires onDragging(false) on release but NOT when the component
+  // unmounts mid-drag (workspace switch, modal open, HMR). Without this
+  // cleanup, every live webview stays stuck at `pointer-events: none`.
+  useEffect(() => {
+    return () => webviewManager.setPointerEventsEnabled(true);
+  }, []);
+
   return (
     <SidebarInset className="min-w-0">
       {/* Connection banner — appears at top of content area when WS is down */}

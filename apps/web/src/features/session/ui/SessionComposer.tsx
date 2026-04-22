@@ -23,7 +23,12 @@ import { useSessionActions } from "../hooks";
 import { useSessionWithMessages } from "../api/session.queries";
 import { useManifestTasks } from "@/features/workspace/api/workspace.queries";
 import { useSettings } from "@/features/settings/api";
-import { getAgentHarnessForModel, type AgentHarness, type ThinkingLevel } from "@/shared/agents";
+import {
+  DEFAULT_MODEL,
+  getAgentHarnessForModel,
+  type AgentHarness,
+  type ThinkingLevel,
+} from "@/shared/agents";
 import { sessionComposerActions, useSessionComposerStore } from "../store/sessionComposerStore";
 
 export interface SessionComposerRef {
@@ -64,8 +69,6 @@ type ActiveProps = Omit<SessionComposerProps, "sessionId" | "workspaceId"> & {
   sessionId: string;
   workspaceId: string | null;
 };
-
-const FALLBACK_MODEL = "claude:claude-opus-4-7";
 
 export const SessionComposer = forwardRef<SessionComposerRef, SessionComposerProps>(
   function SessionComposer(props, ref) {
@@ -114,7 +117,7 @@ const ActiveSessionComposer = forwardRef<SessionComposerRef, ActiveProps>(
     // We subscribe to just `model` (a string) to avoid re-renders on
     // unrelated staged-content changes like paste.
     const model = useSessionComposerStore(
-      (s) => s.composers[sessionId]?.model ?? initialModel ?? FALLBACK_MODEL
+      (s) => s.composers[sessionId]?.model ?? initialModel ?? DEFAULT_MODEL
     );
     const agentHarness = getAgentHarnessForModel(model);
     useEffect(() => {

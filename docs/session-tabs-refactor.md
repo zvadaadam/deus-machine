@@ -35,7 +35,7 @@ Beyond the LOC, the file has three distinct problems:
 
 Move from `features/workspace/ui/` to `features/session/ui/tabs/`. Parallel to `SessionComposer.tsx`, `SessionPanel.tsx`.
 
-```
+```text
 apps/web/src/features/session/ui/tabs/
 ├── index.ts                     — barrel export
 ├── SessionTabBar.tsx            — orchestrator (~130 LOC)

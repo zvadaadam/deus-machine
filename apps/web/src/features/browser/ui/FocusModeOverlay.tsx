@@ -50,17 +50,19 @@ export function FocusModeOverlay({ anchorEl, workspaceId, onExit }: FocusModeOve
   );
 
   // Track the anchor's bounds — stays in sync with splitter drags +
-  // window resize via ResizeObserver + scroll/resize listeners. All state
-  // updates happen inside RO / rAF / event callbacks, so the effect body
-  // itself never calls setState synchronously.
+  // window resize via ResizeObserver + scroll/resize listeners.
   useLayoutEffect(() => {
     if (!anchorEl) {
-      // React to anchor being detached — legitimate dependency-sync case
-      // where the rule's normal "update in callback" advice doesn't apply.
+      // React to anchor being detached — legitimate dependency-sync case.
       // eslint-disable-next-line react-hooks/set-state-in-effect
       setRect(null);
       return;
     }
+    // Read eagerly on anchor change. ResizeObserver only fires async (after
+    // layout, before paint), so without this the overlay renders one frame
+    // with the OLD anchor's rect — visible as a snap when the anchor swaps.
+
+    setRect(readRect(anchorEl));
     let rafId: number | null = null;
     const schedule = () => {
       if (rafId !== null) return;
@@ -69,9 +71,6 @@ export function FocusModeOverlay({ anchorEl, workspaceId, onExit }: FocusModeOve
         setRect(readRect(anchorEl));
       });
     };
-    // ResizeObserver fires synchronously on observe() with the current
-    // size — which drives the initial `setRect` through `schedule` →
-    // rAF. No explicit initial setState needed.
     const ro = new ResizeObserver(schedule);
     ro.observe(anchorEl);
     window.addEventListener("resize", schedule);
