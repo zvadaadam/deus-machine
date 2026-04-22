@@ -1,14 +1,17 @@
 /**
- * useSessionActions Hook
+ * useSessionActions — send/stop/compact/createPR for a session.
  *
- * Centralizes all session action handlers (send, stop, compact, create PR).
- * Extracted from SessionPanel to reduce component complexity.
+ * Reads composer state (draft, model, thinking level, plan mode) from
+ * `sessionComposerStore` at call time via getState(), so the hook's
+ * callbacks don't go stale when the user changes model mid-edit.
  *
- * Message Flow (agent-server-owns-send):
- * 1. User clicks send → useSendMessage routes through socket → agent-server
- * 2. Agent-server atomically: saves user message + sets status=working + dispatches agent
- * 3. Agent-server streams response → saves to DB → notifies backend
- * 4. Backend pushes q:snapshot/q:delta to WS subscribers → React Query cache → UI updates
+ * Message flow (agent-server-owns-send):
+ *   1. user clicks send → useSendMessage routes through socket → agent-server
+ *   2. agent-server atomically saves user message + sets status=working +
+ *      dispatches agent
+ *   3. agent-server streams response → saves to DB → notifies backend
+ *   4. backend pushes q:snapshot/q:delta to WS subscribers → React Query
+ *      cache → UI updates
  */
 
 import { useCallback } from "react";
@@ -16,70 +19,74 @@ import { toast } from "sonner";
 import { useSendMessage, useStopSession } from "../api/session.queries";
 import { sendCommand, connect, isConnected } from "@/platform/ws";
 import { track } from "@/platform/analytics";
-import { type AgentHarness, type ThinkingLevel } from "@/shared/agents";
+import { getAgentHarnessForModel, getModelId } from "@/shared/agents";
 import { COMPACT_CONVERSATION, createPRPrompt } from "../lib/sessionPrompts";
+import { useSessionComposerStore } from "../store/sessionComposerStore";
 
 interface UseSessionActionsProps {
   sessionId: string;
   workspaceId?: string;
-  messageInput: string;
-  model: string;
-  agentHarness: AgentHarness;
-  permissionMode?: string;
-  thinkingLevel?: ThinkingLevel;
-  onMessageSent?: () => void;
+  /** Branch PR prompts target (defaults to "main"). */
   targetBranch?: string;
+  /** Fires after a successful send. */
+  onMessageSent?: () => void;
 }
 
 interface UseSessionActionsReturn {
-  // Actions
-  sendMessage: (customContent?: string) => Promise<void>;
+  /**
+   * @param customContent Override the staged content (defaults to composer store's draft).
+   * @param modelOverride Full model id ("harness:modelId") — for THIS send only.
+   *   Used by the home-screen welcome flow where we dispatch the first
+   *   message before the user has a chance to interact with a composer.
+   */
+  sendMessage: (customContent?: string, modelOverride?: string) => Promise<void>;
   stopSession: () => Promise<void>;
   compactConversation: () => Promise<void>;
   createPR: () => Promise<void>;
-
-  // Status
   sending: boolean;
 }
 
 export function useSessionActions({
   sessionId,
   workspaceId,
-  messageInput,
-  model,
-  agentHarness,
-  permissionMode,
-  thinkingLevel,
-  onMessageSent,
   targetBranch = "main",
+  onMessageSent,
 }: UseSessionActionsProps): UseSessionActionsReturn {
   const sendMessageMutation = useSendMessage();
   const stopSessionMutation = useStopSession();
 
   const sendMessage = useCallback(
-    async (customContent?: string) => {
-      const content = customContent || messageInput.trim();
-      if (!content || sendMessageMutation.isPending) return;
+    async (customContent?: string, modelOverride?: string) => {
+      if (sendMessageMutation.isPending) return;
+
+      const composer = useSessionComposerStore.getState().composers[sessionId];
+      if (!composer) return;
+
+      const content = customContent || composer.draft.trim();
+      if (!content) return;
 
       try {
-        // Single atomic call: agent-server saves message + starts agent.
-        // Optimistic UI fires in onMutate, rollback fires in onError.
-        // thinkingLevel is sent as a string — agent-server translates it to
-        // SDK options (maxThinkingTokens today, `effort` when SDK supports it).
+        // modelOverride wins for this send only; otherwise use the composer's
+        // currently-selected model. Splitting the full "harness:modelId" form
+        // into runtime id + harness happens here so callers never think about
+        // it. Kept INSIDE the try/catch because `getModelId` throws for
+        // unknown catalog entries — a stale stored model or bad override
+        // should surface a toast, not an unhandled promise rejection.
+        const effectiveFull = modelOverride ?? composer.model;
+        const effectiveModel = getModelId(effectiveFull);
+        const effectiveHarness = getAgentHarnessForModel(effectiveFull);
+
         await sendMessageMutation.mutateAsync({
           sessionId,
           content,
-          model,
-          agentHarness,
-          permissionMode,
-          thinkingLevel,
+          model: effectiveModel,
+          agentHarness: effectiveHarness,
+          permissionMode: composer.planModeEnabled ? "plan" : undefined,
+          thinkingLevel: composer.thinkingLevel,
         });
       } catch (error) {
         console.error("Failed to send message:", error);
-        // onError already rolled back optimistic update.
-        // No stopSession cleanup needed — agent-server didn't persist anything on failure.
-        const reason = error instanceof Error ? error.message : "Failed to send message";
-        toast.error(reason);
+        toast.error(error instanceof Error ? error.message : "Failed to send message");
         return;
       }
 
@@ -89,37 +96,25 @@ export function useSessionActions({
         console.error("[useSessionActions] onMessageSent callback failed:", callbackError);
       }
     },
-    [
-      messageInput,
-      model,
-      sendMessageMutation,
-      sessionId,
-      agentHarness,
-      permissionMode,
-      thinkingLevel,
-      onMessageSent,
-    ]
+    [sessionId, sendMessageMutation, onMessageSent]
   );
 
   const stopSession = useCallback(async () => {
     try {
-      // Cancel the agent-server agent first so it stops consuming API tokens
+      // Cancel the agent first so it stops consuming API tokens.
       try {
         if (!isConnected()) await connect();
         await sendCommand("stopSession", { sessionId });
       } catch (cancelError) {
         console.error("[useSessionActions] Cancel query failed:", cancelError);
       }
-      // Then update DB status to idle
       await stopSessionMutation.mutateAsync(sessionId);
     } catch (error) {
       console.error("Failed to stop session:", error);
     }
-  }, [stopSessionMutation, sessionId, agentHarness]);
+  }, [stopSessionMutation, sessionId]);
 
-  const compactConversation = useCallback(() => {
-    return sendMessage(COMPACT_CONVERSATION);
-  }, [sendMessage]);
+  const compactConversation = useCallback(() => sendMessage(COMPACT_CONVERSATION), [sendMessage]);
 
   const createPR = useCallback(() => {
     if (workspaceId) {

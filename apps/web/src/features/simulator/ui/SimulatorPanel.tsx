@@ -67,7 +67,8 @@ import { useSimulatorStatusStore, simulatorStoreActions } from "../store";
 import { hasStream } from "../machine";
 import type { SimPhase } from "../store";
 import { workspaceLayoutActions } from "@/features/workspace/store/workspaceLayoutStore";
-import { chatInsertActions } from "@/shared/stores/chatInsertStore";
+import { sessionComposerActions } from "@/features/session/store/sessionComposerStore";
+import { processImageFiles } from "@/features/session/lib/imageAttachments";
 import type { SimulatorInfo } from "../types";
 import { ensureManifestLoaded } from "../device-chrome";
 import { SimulatorStreamViewer } from "./SimulatorStreamViewer";
@@ -554,12 +555,15 @@ export function SimulatorPanel({ workspaceId, workspacePath }: SimulatorPanelPro
 
   const handleScreenshot = useCallback(async () => {
     try {
+      const sid = workspaceLayoutActions.getLayout(workspaceId).activeChatTabSessionId;
+      if (!sid) return;
       const bytes = await simulatorService.takeScreenshot(workspaceId);
       const blob = new Blob([new Uint8Array(bytes)], { type: "image/png" });
       const file = new File([blob], `simulator-screenshot-${Date.now()}.png`, {
         type: "image/png",
       });
-      chatInsertActions.insertFiles(workspaceId, [file]);
+      const processed = await processImageFiles([file]);
+      if (processed.length) sessionComposerActions.addImageAttachments(sid, processed);
     } catch (e) {
       console.error("Screenshot failed:", e);
     }

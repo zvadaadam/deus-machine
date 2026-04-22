@@ -61,8 +61,15 @@ interface MainContentTabBarProps {
 const ICON_SIZE = "w-3.5 h-3.5";
 const EMPTY_CLOSED_TABS: ClosedTab[] = [];
 
-/** Render tab icon — spinner when working, gold dot when unread, agent logo otherwise. */
-function getTabIcon(tab: Tab, isWorking: boolean, isUnread: boolean) {
+// Icon cross-fade curve — matches BrowserTabBar. Both icons stay in the DOM
+// so enter + exit both animate without a motion dep; CSS transitions with
+// this ease give the skill's scale 0.25→1, opacity 0→1, blur 4→0 motion.
+const ICON_CROSS_FADE =
+  "transition-[opacity,filter,scale] duration-200 ease-[cubic-bezier(0.2,0,0,1)]";
+
+/** Render the rest-state tab icon — spinner when working, gold dot when
+ *  unread, agent logo otherwise. */
+function renderTabStatusIcon(tab: Tab, isWorking: boolean, isUnread: boolean) {
   if (isWorking) {
     return <CircularPixelGrid variant="generating" size={14} resolution={8} />;
   }
@@ -162,8 +169,8 @@ export function MainContentTabBar({
                       }
                     }}
                     className={cn(
-                      "group relative flex items-center gap-1.5 overflow-hidden",
-                      "h-7 max-w-[200px] min-w-[80px] rounded-lg px-2",
+                      "group relative flex items-center gap-1 overflow-hidden",
+                      "h-7 max-w-[200px] min-w-[80px] rounded-lg pr-2 pl-1",
                       "cursor-pointer text-base font-normal",
                       "transition-colors duration-150",
                       isActive
@@ -173,40 +180,56 @@ export function MainContentTabBar({
                           : "text-text-muted hover:text-text-tertiary"
                     )}
                   >
-                    {getTabIcon(tab, isWorking, isUnread)}
+                    {/* Left icon slot — status icon at rest, close X on tab
+                     *  hover. Same pattern as BrowserTabBar: both icons stay
+                     *  in the DOM, a CSS transition cross-fades them with
+                     *  scale + opacity + blur. Click the slot to close;
+                     *  click the label to select. */}
+                    {onTabClose && canCloseTabs ? (
+                      <button
+                        type="button"
+                        aria-label={`Close ${tab.label} tab`}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          onTabClose(tab.id);
+                        }}
+                        className={cn(
+                          "relative flex h-5 w-5 shrink-0 cursor-pointer items-center justify-center rounded-md border-none bg-transparent p-0",
+                          "transition-[background-color,scale] duration-150 ease-out",
+                          "hover:bg-foreground/10 active:scale-[0.96]"
+                        )}
+                      >
+                        {/* Status icon (rest) — agent logo / spinner / unread dot. */}
+                        <span
+                          className={cn(
+                            "absolute inset-0 grid place-items-center",
+                            ICON_CROSS_FADE,
+                            "group-hover:scale-[0.25] group-hover:opacity-0 group-hover:blur-[4px]"
+                          )}
+                        >
+                          {renderTabStatusIcon(tab, isWorking, isUnread)}
+                        </span>
+                        {/* Close X (hover) — pops in when the whole tab is hovered. */}
+                        <span
+                          className={cn(
+                            "absolute inset-0 grid scale-[0.25] place-items-center opacity-0 blur-[4px]",
+                            ICON_CROSS_FADE,
+                            "group-hover:scale-100 group-hover:opacity-100 group-hover:blur-none"
+                          )}
+                        >
+                          <X strokeWidth={1.75} className="h-3 w-3" />
+                        </span>
+                      </button>
+                    ) : (
+                      // Single-tab state (can't close): plain status icon, no button.
+                      <span className="flex h-5 w-5 shrink-0 items-center justify-center">
+                        {renderTabStatusIcon(tab, isWorking, isUnread)}
+                      </span>
+                    )}
 
                     <div className="min-w-0 flex-1">
                       <span className="block truncate">{tab.label}</span>
                     </div>
-
-                    {/* Close button — overlays right edge on hover, only when 2+ tabs */}
-                    {onTabClose && canCloseTabs && (
-                      <div
-                        className={cn(
-                          "absolute inset-y-0 right-0 flex items-center pr-1.5 pl-4",
-                          "opacity-0 transition-opacity duration-150 group-hover:opacity-100",
-                          isActive
-                            ? "from-bg-raised bg-gradient-to-l from-50% to-transparent"
-                            : "from-bg-surface group-hover:from-bg-surface bg-gradient-to-l from-50% to-transparent"
-                        )}
-                      >
-                        <button
-                          type="button"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            onTabClose(tab.id);
-                          }}
-                          className={cn(
-                            "flex h-4 w-4 items-center justify-center rounded-sm",
-                            "transition-colors duration-150",
-                            "hover:bg-bg-muted"
-                          )}
-                          aria-label={`Close ${tab.label} tab`}
-                        >
-                          <X className="h-2.5 w-2.5" />
-                        </button>
-                      </div>
-                    )}
                   </div>
                 </SortableTab>
               );

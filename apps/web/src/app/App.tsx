@@ -3,7 +3,6 @@ import { ErrorBoundary } from "react-error-boundary";
 import { QueryErrorResetBoundary } from "@tanstack/react-query";
 import { RouterProvider } from "@tanstack/react-router";
 import { LazyMotion, domAnimation } from "framer-motion";
-import { DetachedBrowserWindow } from "@/features/browser/ui/DetachedBrowserWindow";
 import { ErrorFallback } from "@/shared/components";
 import { createBoundaryErrorHandler } from "@/shared/utils/errorReporting";
 import { QueryClientProvider, ThemeProvider } from "./providers";
@@ -11,11 +10,6 @@ import { capabilities } from "@/platform";
 import { native } from "@/platform";
 import { DesktopShell } from "./shells/DesktopShell";
 import { webRouter } from "./router";
-
-// Detect if this window instance is the detached browser popup.
-// The main window creates it with ?window=browser-detached in the URL.
-const isDetachedBrowser =
-  new URLSearchParams(window.location.search).get("window") === "browser-detached";
 
 /**
  * Safety net: ensure the window always becomes visible.
@@ -51,14 +45,7 @@ function App() {
   // Safety net -- force-show window if nothing else does within 5s
   useWindowShowSafetyNet();
 
-  const content = isDetachedBrowser ? (
-    // Detached browser window: minimal shell with just the browser panel
-    <QueryClientProvider>
-      <ThemeProvider>
-        <DetachedBrowserWindow />
-      </ThemeProvider>
-    </QueryClientProvider>
-  ) : capabilities.isDesktop ? (
+  const content = capabilities.isDesktop ? (
     // Desktop (Electron): no router, direct MainLayout via DesktopShell
     <QueryClientProvider>
       <QueryErrorResetBoundary>

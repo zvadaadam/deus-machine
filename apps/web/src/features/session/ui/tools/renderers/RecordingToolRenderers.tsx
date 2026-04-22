@@ -13,7 +13,6 @@ import { BaseToolRenderer } from "../components";
 import { TOOL_ICON_CLS, TOOL_ICON_MUTED_CLS } from "../toolColors";
 import { cn } from "@/shared/lib/utils";
 import { getBaseURL } from "@/shared/config/api.config";
-import * as browserViews from "@/platform/native/browser-views";
 import type { ToolRendererProps } from "../../chat-types";
 
 // ---------------------------------------------------------------------------
@@ -361,14 +360,6 @@ function VideoModal({
   const totalDuration = duration ?? 0;
   const hasChapters = chapters.length > 0;
   const meaningfulEvents = events.filter((e) => e.type !== "idle" && e.type !== "screenshot");
-
-  // Hide native BrowserViews (they render above web content)
-  useEffect(() => {
-    browserViews.hideAll();
-    return () => {
-      browserViews.showAll();
-    };
-  }, []);
 
   // Auto-play
   useEffect(() => {
