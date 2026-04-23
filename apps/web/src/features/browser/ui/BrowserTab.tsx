@@ -38,6 +38,9 @@ import {
   INSPECT_MODE_DISABLE,
   INSPECT_MODE_DRAIN_EVENTS,
   INSPECT_MODE_VERIFY,
+  INSPECT_MODE_HIDE_OVERLAYS,
+  INSPECT_MODE_SHOW_OVERLAYS,
+  buildInspectModeClearSelection,
 } from "../automation/inspect-mode";
 import { VISUAL_EFFECTS_SETUP } from "../automation/visual-effects";
 import { getErrorMessage } from "@shared/lib/errors";
@@ -143,6 +146,13 @@ export const BrowserTab = forwardRef<BrowserTabHandle, BrowserTabProps>(function
     bounds,
     isVisible: visible,
   });
+
+  // Latest page bounds, read imperatively by consumers (InspectPromptOverlay
+  // needs them at click time to translate guest-viewport rects to screen
+  // coords). Kept in sync every render without forcing the handle identity
+  // to change.
+  const pageBoundsRef = useRef<Bounds | null>(null);
+  pageBoundsRef.current = bounds;
 
   // Second <webview> hosts the DevTools UI when docked inside the panel.
   // `about:blank` is fine as the initial URL — Electron's
@@ -633,17 +643,58 @@ export const BrowserTab = forwardRef<BrowserTabHandle, BrowserTabProps>(function
     onUpdateTab(tabId, { devtoolsOpen: false });
   }, [getWebview, tabId, onUpdateTab, onAddLog]);
 
-  const captureScreenshot = useCallback(async (): Promise<string | null> => {
-    const wv = getWebview();
-    if (!wv) return null;
-    try {
-      const image = await wv.capturePage();
-      return image.toDataURL();
-    } catch (err) {
-      onAddLog(tabId, "error", `Screenshot failed: ${getErrorMessage(err)}`);
-      return null;
-    }
-  }, [getWebview, tabId, onAddLog]);
+  const captureScreenshot = useCallback(
+    async (rect?: {
+      x: number;
+      y: number;
+      width: number;
+      height: number;
+    }): Promise<string | null> => {
+      const wv = getWebview();
+      if (!wv) return null;
+      try {
+        const image = rect ? await wv.capturePage(rect) : await wv.capturePage();
+        return image.toDataURL();
+      } catch (err) {
+        onAddLog(tabId, "error", `Screenshot failed: ${getErrorMessage(err)}`);
+        return null;
+      }
+    },
+    [getWebview, tabId, onAddLog]
+  );
+
+  const setInspectOverlaysVisible = useCallback(
+    async (visible: boolean): Promise<void> => {
+      const wv = getWebview();
+      if (!wv) return;
+      try {
+        await wv.executeJavaScript(
+          visible ? INSPECT_MODE_SHOW_OVERLAYS : INSPECT_MODE_HIDE_OVERLAYS
+        );
+      } catch {
+        // Best-effort: if the inject script hasn't attached (e.g. mid-nav),
+        // just swallow. The screenshot will still capture, just with the
+        // inspector chrome visible — acceptable degradation.
+      }
+    },
+    [getWebview]
+  );
+
+  const getWebviewBounds = useCallback((): Bounds | null => pageBoundsRef.current, []);
+
+  const clearInspectSelection = useCallback(
+    async (expectedSelectionKey?: string): Promise<void> => {
+      const wv = getWebview();
+      if (!wv) return;
+      try {
+        await wv.executeJavaScript(buildInspectModeClearSelection(expectedSelectionKey));
+      } catch {
+        // Same best-effort treatment as setInspectOverlaysVisible — when the
+        // inject script isn't live (mid-nav), silent no-op is fine.
+      }
+    },
+    [getWebview]
+  );
 
   useImperativeHandle(
     ref,
@@ -655,6 +706,9 @@ export const BrowserTab = forwardRef<BrowserTabHandle, BrowserTabProps>(function
       injectAutomation,
       toggleElementSelector,
       captureScreenshot,
+      setInspectOverlaysVisible,
+      clearInspectSelection,
+      getWebviewBounds,
       openDevtools,
       closeDevtools,
     }),
@@ -666,6 +720,9 @@ export const BrowserTab = forwardRef<BrowserTabHandle, BrowserTabProps>(function
       injectAutomation,
       toggleElementSelector,
       captureScreenshot,
+      setInspectOverlaysVisible,
+      clearInspectSelection,
+      getWebviewBounds,
       openDevtools,
       closeDevtools,
     ]

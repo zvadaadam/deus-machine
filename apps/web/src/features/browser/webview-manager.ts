@@ -115,7 +115,7 @@ export interface WebviewElement extends HTMLElement {
   isDevToolsOpened(): boolean;
   executeJavaScript(code: string, userGesture?: boolean): Promise<unknown>;
   insertCSS(css: string): Promise<string>;
-  capturePage(): Promise<{ toDataURL(): string }>;
+  capturePage(rect?: Bounds): Promise<{ toDataURL(): string }>;
   getWebContentsId(): number;
   getURL(): string;
   getTitle(): string;

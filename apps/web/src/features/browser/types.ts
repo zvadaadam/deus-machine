@@ -85,6 +85,7 @@ export interface BrowserTabState {
 export interface ElementSelectedEvent {
   type: "element-selected" | "area-selected";
   ref?: string;
+  selectionKey?: string;
   /** "local" = own dev server (localhost), "external" = any other website */
   context?: "local" | "external";
   element?: {
@@ -124,8 +125,29 @@ export interface BrowserTabHandle {
   /** Inject inspect-mode + visual-effects scripts. Returns true on success. */
   injectAutomation: () => Promise<boolean>;
   toggleElementSelector: () => void;
-  /** Capture the current page as a PNG data URL (or null on failure). */
-  captureScreenshot?: () => Promise<string | null>;
+  /** Capture the current page — or a sub-rect of it — as a PNG data URL.
+   *  `rect` is in webview-local pixels (same coord space Electron's
+   *  `webContents.capturePage` uses). Returns null on failure. */
+  captureScreenshot?: (rect?: {
+    x: number;
+    y: number;
+    width: number;
+    height: number;
+  }) => Promise<string | null>;
+  /** Hide or restore the inspect-mode visuals (blue hover border, element
+   *  label, custom cursor). Used to capture a clean screenshot of the
+   *  selected element without the inspector painting on top. No-op when
+   *  inspect mode isn't active or automation hasn't been injected. */
+  setInspectOverlaysVisible?: (visible: boolean) => Promise<void>;
+  /** Release the pinned selection border. When `expectedSelectionKey` is
+   *  provided, the guest only clears if that same click selection is still
+   *  pinned, preventing stale async cleanup from wiping out a newer one. */
+  clearInspectSelection?: (expectedSelectionKey?: string) => Promise<void>;
+  /** Current screen-space bounds of the webview's page area (accounts for
+   *  mobile-view centering + DevTools docking). Returns null if the tab
+   *  hasn't been measured yet. Read once at click time — the InspectPrompt
+   *  overlay uses it to translate guest-viewport rects into host coords. */
+  getWebviewBounds?: () => { x: number; y: number; width: number; height: number } | null;
   /** Open devtools in the tab-owning web contents. */
   openDevtools?: () => Promise<void>;
   /** Close devtools. */
