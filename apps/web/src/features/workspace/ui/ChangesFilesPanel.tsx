@@ -10,6 +10,7 @@ import { useState, useMemo, useCallback } from "react";
 import { ChevronDown, ChevronRight, Folder } from "lucide-react";
 import { cn } from "@/shared/lib/utils";
 import { getChangeStatus, STATUS_BG, fileChangePath } from "../lib/workspace.utils";
+import { PierreFileIcon } from "@/features/file-browser/lib/pierreIcons";
 import type { FileChange } from "@/shared/types";
 
 interface ChangesFilesPanelProps {
@@ -162,6 +163,11 @@ function FolderGroupView({
           >
             <span
               className={cn("h-1.5 w-1.5 flex-shrink-0 rounded-full", STATUS_BG[file.status])}
+            />
+            <PierreFileIcon
+              fileName={file.name}
+              size={13}
+              className="text-text-muted/70 flex-shrink-0"
             />
             <span
               className={cn(

@@ -1,285 +1,416 @@
 /**
- * Unified File Tree
- * Condensed tree with file type icons, change indicators,
- * selection highlighting, and indent guides.
+ * File Tree — thin wrapper over @pierre/trees/react.
+ *
+ * Pierre owns rendering, virtualization, keyboard nav, VS Code icons, and
+ * git-status badges. We flatten our hierarchical FileTreeNode[] into the
+ * string[] shape Pierre wants, push additions/deletions/committed markers
+ * via renderRowDecoration, and forward reveal + selection intents through
+ * the imperative model methods.
+ *
+ * Live agent-activity layer (flash + dirty-folder dot):
+ *   - Activity detection (write/edit/delete) runs at panel-level (see
+ *     FileBrowserPanel → useActivityDetector) against the unfiltered enriched
+ *     tree, so narrowing via search/sub-filter doesn't synthesize deletes.
+ *   - This component only subscribes to the resulting recentActivityStore.
+ *   - A short-lived CSS class is applied to the row's shadow-DOM button for
+ *     each new activity, driving the flash wash defined in FLASH_UNSAFE_CSS.
+ *   - When the touched file lives inside a collapsed folder, the flash rolls
+ *     up to the nearest visible ancestor and that folder is marked dirty so
+ *     renderRowDecoration can paint a persistent dot until the user expands.
  */
 
-import { useState, memo, useCallback, useEffect, useRef } from "react";
-import {
-  ChevronRight,
-  ChevronDown,
-  File,
-  FileText,
-  FileCode,
-  FileJson,
-  FileImage,
-  FileType,
-} from "lucide-react";
-import { cn } from "@/shared/lib/utils";
-import type { FileTreeNode } from "../../types";
+import { useEffect, useMemo, useRef } from "react";
+import type { CSSProperties } from "react";
+import { FileTree as PierreFileTree, useFileTree } from "@pierre/trees/react";
+import type {
+  FileTreeDirectoryHandle,
+  FileTreeItemHandle,
+  FileTreeRowDecorationRenderer,
+  GitStatusEntry,
+} from "@pierre/trees";
+import "@pierre/trees/web-components";
 
-const INDENT_PX = 16;
+import type { FileTreeNode } from "../../types";
+import {
+  useRecentActivityStore,
+  recentActivityActions,
+  type ActivityEntry,
+  type ActivityKind,
+} from "../../store/recentActivityStore";
 
 interface FileTreeProps {
   nodes: FileTreeNode[];
+  /** Required for workspace-scoped activity recording + dirty-folder state. */
+  workspaceId: string | null;
   selectedPath?: string | null;
   onFileClick?: (path: string) => void;
-  level?: number;
-  /** When true, all directories start expanded. When false, all start collapsed. */
+  /** When true directories start expanded; when false they start collapsed. */
   defaultExpanded?: boolean;
   revealPath?: string | null;
   revealRequestId?: string | null;
   onRevealConsumed?: (requestId: string) => void;
 }
 
-function pathContainsTarget(nodePath: string, targetPath: string | null | undefined) {
-  if (!targetPath) return false;
-  return targetPath === nodePath || targetPath.startsWith(`${nodePath}/`);
+// Files keep their raw path; directories get a trailing slash so Pierre
+// infers kind from the string without us shipping extra metadata.
+function flattenToPaths(nodes: FileTreeNode[]): string[] {
+  const out: string[] = [];
+  const visit = (list: FileTreeNode[]) => {
+    for (const node of list) {
+      out.push(node.type === "directory" ? `${node.path}/` : node.path);
+      if (node.children?.length) visit(node.children);
+    }
+  };
+  visit(nodes);
+  return out;
 }
 
-/** File icon + color by extension */
-function getFileIconConfig(filename: string): { icon: typeof File; color: string } {
-  const ext = filename.split(".").pop()?.toLowerCase() || "";
-
-  if (["ts", "tsx", "js", "jsx", "mjs", "cjs"].includes(ext))
-    return { icon: FileCode, color: "text-file-typescript" };
-  if (["rs", "toml"].includes(ext)) return { icon: FileCode, color: "text-file-rust" };
-  if (["json", "yaml", "yml", "xml"].includes(ext))
-    return { icon: FileJson, color: "text-file-data" };
-  if (["md", "mdx", "txt", "rst"].includes(ext)) return { icon: FileText, color: "text-file-docs" };
-  if (["css", "scss", "sass", "less"].includes(ext))
-    return { icon: FileCode, color: "text-file-styles" };
-  if (["html", "htm"].includes(ext)) return { icon: FileCode, color: "text-file-markup" };
-  if (["png", "jpg", "jpeg", "gif", "webp", "svg", "ico"].includes(ext))
-    return { icon: FileImage, color: "text-file-image" };
-  if (
-    ["env", "gitignore", "dockerignore", "editorconfig"].includes(ext) ||
-    filename.startsWith(".")
-  )
-    return { icon: FileType, color: "text-muted-foreground/50" };
-  return { icon: File, color: "text-muted-foreground/40" };
+function buildFileLookup(nodes: FileTreeNode[]): Map<string, FileTreeNode> {
+  const map = new Map<string, FileTreeNode>();
+  const visit = (list: FileTreeNode[]) => {
+    for (const node of list) {
+      if (node.type === "file") map.set(node.path, node);
+      if (node.children?.length) visit(node.children);
+    }
+  };
+  visit(nodes);
+  return map;
 }
 
-/** Check if folder contains any changed files recursively */
-function hasChanges(node: FileTreeNode): boolean {
-  if (node.type === "file") return !!node.git_status || !!node.change_status;
-  return node.children?.some((child) => hasChanges(child)) || false;
+// change_status (from diff) is authoritative when present; fall back
+// to git_status from the file scan.
+function buildGitStatus(nodes: FileTreeNode[]): GitStatusEntry[] {
+  const entries: GitStatusEntry[] = [];
+  const visit = (list: FileTreeNode[]) => {
+    for (const node of list) {
+      if (node.type === "file") {
+        const status = node.change_status ?? node.git_status;
+        if (status) entries.push({ path: node.path, status });
+      }
+      if (node.children?.length) visit(node.children);
+    }
+  };
+  visit(nodes);
+  return entries;
 }
+
+// Walk from leaf to root. If any ancestor directory is collapsed, return
+// that ancestor's path so the flash lands on a visible row. Otherwise return
+// the leaf path unchanged.
+function isDirectoryHandle(h: FileTreeItemHandle): h is FileTreeDirectoryHandle {
+  return h.isDirectory();
+}
+
+function resolveVisibleTarget(
+  leafPath: string,
+  model: ReturnType<typeof useFileTree>["model"]
+): string {
+  const segs = leafPath.split("/").filter(Boolean);
+  let acc = "";
+  for (let i = 0; i < segs.length - 1; i++) {
+    acc += segs[i] + "/";
+    const handle = model.getItem(acc);
+    if (!handle || !isDirectoryHandle(handle)) continue;
+    if (!handle.isExpanded()) return acc;
+  }
+  return leafPath;
+}
+
+// ActivityKind → CSS class. Kept in sync with FLASH_UNSAFE_CSS below.
+const KIND_CLASS: Record<ActivityKind, string> = {
+  write: "deus-flash-add",
+  edit: "deus-flash-edit",
+  delete: "deus-flash-delete",
+};
+const ALL_FLASH_CLASSES = Object.values(KIND_CLASS);
+
+// Stable empty references so Zustand selectors return referentially-equal
+// results when a workspace has no activity yet (avoids extra rerenders).
+const EMPTY_ACTIVITIES: readonly ActivityEntry[] = Object.freeze([]);
+const EMPTY_DIRTY: Readonly<Record<string, ActivityKind>> = Object.freeze({});
 
 export function FileTree({
   nodes,
+  workspaceId,
   selectedPath,
   onFileClick,
-  level = 0,
   defaultExpanded,
   revealPath,
   revealRequestId,
   onRevealConsumed,
 }: FileTreeProps) {
+  const { paths, gitStatus, fileLookup } = useMemo(
+    () => ({
+      paths: flattenToPaths(nodes),
+      gitStatus: buildGitStatus(nodes),
+      fileLookup: buildFileLookup(nodes),
+    }),
+    [nodes]
+  );
+
+  // Activity detection happens at panel-level (against the UNFILTERED enriched
+  // tree) so that narrowing via search/sub-filter doesn't look like deletions.
+  // This component just subscribes to the resulting activity stream below.
+
+  // Subscribe to the workspace's live activity stream and dirty-folder map.
+  const activities = useRecentActivityStore((s) =>
+    workspaceId ? (s.byWorkspace[workspaceId] ?? EMPTY_ACTIVITIES) : EMPTY_ACTIVITIES
+  );
+  const dirtyFolders = useRecentActivityStore((s) =>
+    workspaceId ? (s.dirtyByWorkspace[workspaceId] ?? EMPTY_DIRTY) : EMPTY_DIRTY
+  );
+
+  // Refs keep the latest callback/data reachable from Pierre's stable closures
+  // (onSelectionChange + renderRowDecoration are captured once at construction).
+  // Sync to refs in an effect so we don't mutate during render — closures read
+  // `.current` in response to user events, which always land post-commit.
+  const onFileClickRef = useRef(onFileClick);
+  const fileLookupRef = useRef(fileLookup);
+  const dirtyFoldersRef = useRef(dirtyFolders);
+  const workspaceIdRef = useRef(workspaceId);
+
+  useEffect(() => {
+    onFileClickRef.current = onFileClick;
+    fileLookupRef.current = fileLookup;
+    dirtyFoldersRef.current = dirtyFolders;
+    workspaceIdRef.current = workspaceId;
+  }, [onFileClick, fileLookup, dirtyFolders, workspaceId]);
+
+  // When we programmatically `.select()` a path to mirror controlled state,
+  // Pierre still emits onSelectionChange. Record the path we just pushed so
+  // we can ignore its echo and avoid an onFileClick loop.
+  const programmaticSelectRef = useRef<string | null>(null);
+
+  const handleSelectionChange = useMemo(
+    () => (selectedPaths: readonly string[]) => {
+      const path = selectedPaths[0];
+      if (!path || path.endsWith("/")) return;
+      if (programmaticSelectRef.current === path) {
+        programmaticSelectRef.current = null;
+        return;
+      }
+      onFileClickRef.current?.(path);
+    },
+    []
+  );
+
+  const renderRowDecoration: FileTreeRowDecorationRenderer = useMemo(
+    () =>
+      ({ row }) => {
+        // Collapsed folders with unseen activity carry a persistent dot.
+        if (row.kind === "directory") {
+          const dirty = dirtyFoldersRef.current;
+          if (!row.isExpanded) {
+            if (dirty[row.path]) {
+              return { text: "●", title: "Unseen activity inside" };
+            }
+            return null;
+          }
+          // Folder is expanded — if it was dirty, clear lazily. The microtask
+          // defers the mutation until after this render pass completes so we
+          // don't mutate store state from inside a render.
+          if (dirty[row.path]) {
+            const wsId = workspaceIdRef.current;
+            const target = row.path;
+            if (wsId) {
+              queueMicrotask(() => recentActivityActions.clearDirty(wsId, target));
+            }
+          }
+          return null;
+        }
+
+        // File decoration — +N/−N line counts plus uncommitted marker.
+        const node = fileLookupRef.current.get(row.path);
+        if (!node) return null;
+        const parts: string[] = [];
+        if (node.additions) parts.push(`+${node.additions}`);
+        if (node.deletions) parts.push(`-${node.deletions}`);
+        if (node.committed === false) parts.push("●");
+        if (parts.length === 0) return null;
+        return {
+          text: parts.join(" "),
+          title:
+            node.additions || node.deletions
+              ? `+${node.additions ?? 0} additions, -${node.deletions ?? 0} deletions`
+              : "Uncommitted",
+        };
+      },
+    []
+  );
+
+  const { model } = useFileTree({
+    paths,
+    initialExpansion: defaultExpanded ? "open" : "closed",
+    flattenEmptyDirectories: true,
+    // Monochrome icons — Pierre inherits `currentColor` from the host row
+    // foreground when `colored` is off, so the whole tree reads as a single
+    // neutral glyph weight instead of the vscode rainbow.
+    icons: { set: "standard", colored: false },
+    gitStatus,
+    renderRowDecoration,
+    onSelectionChange: handleSelectionChange,
+    unsafeCSS: FLASH_UNSAFE_CSS,
+  });
+
+  // useFileTree consumed the initial paths + gitStatus. Skip the first-render
+  // flush and only push imperative updates when deps actually change. Pierre
+  // dedupes at the signature level, so the occasional same-content re-push
+  // from a new useMemo reference is free.
+  const hasMountedRef = useRef(false);
+
+  useEffect(() => {
+    if (!hasMountedRef.current) return;
+    model.resetPaths(paths);
+  }, [paths, model]);
+
+  useEffect(() => {
+    if (!hasMountedRef.current) return;
+    model.setGitStatus(gitStatus);
+  }, [gitStatus, model]);
+
+  useEffect(() => {
+    hasMountedRef.current = true;
+  }, []);
+
+  useEffect(() => {
+    if (!selectedPath) return;
+    const handle = model.getItem(selectedPath);
+    if (!handle || handle.isSelected()) return;
+    programmaticSelectRef.current = selectedPath;
+    handle.select();
+  }, [selectedPath, model]);
+
+  // focusPath expands ancestors + emits a focus change; Pierre's scroll
+  // target helper then scrolls the row into view. We also select so the
+  // FileViewer switches to the revealed file.
+  useEffect(() => {
+    if (!revealRequestId || !revealPath) return;
+    model.focusPath(revealPath);
+    const handle = model.getItem(revealPath);
+    if (handle && !handle.isSelected()) {
+      programmaticSelectRef.current = revealPath;
+      handle.select();
+    }
+    onRevealConsumed?.(revealRequestId);
+  }, [revealRequestId, revealPath, model, onRevealConsumed]);
+
+  // Container ref so we can reach into Pierre's shadow root for the flash
+  // class application. Pierre's React component doesn't forward refs, so we
+  // query for the custom-element host from a wrapper div.
+  const containerRef = useRef<HTMLDivElement>(null);
+
+  // Tracks which (path, at) activity keys we've already applied a flash for
+  // — ensures each distinct event gets exactly one animation cycle even when
+  // the activities array reference changes for unrelated reasons.
+  const seenActivitiesRef = useRef<Set<string>>(new Set());
+
+  useEffect(() => {
+    if (!workspaceId) return;
+    const host =
+      (containerRef.current?.querySelector("file-tree-container") as HTMLElement | null) ?? null;
+    const shadowRoot = host?.shadowRoot ?? null;
+    if (!shadowRoot) return;
+
+    const live = new Set<string>();
+
+    for (const entry of activities) {
+      const key = `${entry.path}\u0000${entry.at}`;
+      live.add(key);
+      if (seenActivitiesRef.current.has(key)) continue;
+      seenActivitiesRef.current.add(key);
+
+      // Decide which row to flash. Collapsed ancestors absorb the signal.
+      const target = resolveVisibleTarget(entry.path, model);
+      if (target !== entry.path) {
+        recentActivityActions.markDirty(workspaceId, target, entry.kind);
+      }
+
+      const row = shadowRoot.querySelector(
+        `button[data-item-path="${CSS.escape(target)}"]`
+      ) as HTMLElement | null;
+      if (!row) continue;
+
+      // Hard-cancel any running animation so re-flashes on the same row
+      // always paint the peak again instead of being coalesced.
+      try {
+        row.getAnimations?.().forEach((a) => a.cancel());
+      } catch {
+        /* older engines — fall through to class toggle */
+      }
+      for (const cls of ALL_FLASH_CLASSES) row.classList.remove(cls);
+      // Defensive reflow — some engines coalesce class changes without it.
+      void row.offsetWidth;
+      row.classList.add(KIND_CLASS[entry.kind]);
+    }
+
+    // GC keys for entries that have expired out of the store so re-hitting
+    // the same path later produces a fresh flash (not deduped by stale key).
+    for (const k of seenActivitiesRef.current) {
+      if (!live.has(k)) seenActivitiesRef.current.delete(k);
+    }
+  }, [activities, workspaceId, model]);
+
+  // Nudge Pierre to repaint when the dirty-folder set changes so the
+  // decoration renderer re-runs and the dot appears/disappears promptly.
+  // setComposition is idempotent at the data level but always triggers a
+  // re-render of the row surface, which is exactly what we need.
+  useEffect(() => {
+    if (!hasMountedRef.current) return;
+    model.setComposition(model.getComposition());
+  }, [dirtyFolders, model]);
+
   return (
-    <div className={cn(level === 0 && "group/tree")} role={level === 0 ? "tree" : "group"}>
-      {nodes.map((node) => (
-        <TreeNode
-          key={node.path}
-          node={node}
-          level={level}
-          selectedPath={selectedPath}
-          onFileClick={onFileClick}
-          defaultExpanded={defaultExpanded}
-          revealPath={revealPath}
-          revealRequestId={revealRequestId}
-          onRevealConsumed={onRevealConsumed}
-        />
-      ))}
+    <div ref={containerRef} style={{ display: "block", height: "100%", width: "100%" }}>
+      <PierreFileTree model={model} style={themeStyles} />
     </div>
   );
 }
 
-const TreeNode = memo(function TreeNode({
-  node,
-  level,
-  selectedPath,
-  onFileClick,
-  defaultExpanded,
-  revealPath,
-  revealRequestId,
-  onRevealConsumed,
-}: {
-  node: FileTreeNode;
-  level: number;
-  selectedPath?: string | null;
-  onFileClick?: (path: string) => void;
-  defaultExpanded?: boolean;
-  revealPath?: string | null;
-  revealRequestId?: string | null;
-  onRevealConsumed?: (requestId: string) => void;
-}) {
-  const [manualExpanded, setManualExpanded] = useState<boolean | null>(null);
-  const itemRef = useRef<HTMLDivElement>(null);
+// Pierre reads theming from CSS custom properties on the host element.
+// These four overrides are enough to make the tree inherit our dark/light
+// theme: background stays default (transparent), foreground + borders use
+// the app tokens, and selection uses a primary-tinted surface with the
+// primary color itself as the selected text.
+const themeStyles: CSSProperties = {
+  display: "block",
+  height: "100%",
+  width: "100%",
+  ["--trees-fg-override" as never]: "var(--color-foreground)",
+  ["--trees-border-color-override" as never]: "var(--color-border)",
+  ["--trees-selected-bg-override" as never]:
+    "color-mix(in oklab, var(--color-primary) 14%, transparent)",
+  ["--trees-selected-fg-override" as never]: "var(--color-primary)",
+};
 
-  const isDirectory = node.type === "directory";
-  const hasChildren = node.children && node.children.length > 0;
-  const indentPx = level * INDENT_PX;
-  const isSelected = selectedPath === node.path;
-
-  const fileConfig = !isDirectory ? getFileIconConfig(node.name) : null;
-  const FileIcon = fileConfig?.icon;
-  const folderHasChanges = isDirectory && hasChanges(node);
-  const shouldRevealNode = pathContainsTarget(node.path, revealPath);
-  const isExpanded = manualExpanded ?? (shouldRevealNode || (defaultExpanded ?? false));
-
-  const handleClick = useCallback(() => {
-    if (isDirectory) {
-      setManualExpanded(!isExpanded);
-    } else {
-      onFileClick?.(node.path);
-    }
-  }, [isDirectory, isExpanded, node.path, onFileClick]);
-
-  const handleKeyDown = useCallback(
-    (e: React.KeyboardEvent) => {
-      if (e.key === "Enter" || e.key === " ") {
-        e.preventDefault();
-        handleClick();
-      }
-      if (isDirectory) {
-        if (e.key === "ArrowLeft" && isExpanded) {
-          e.preventDefault();
-          setManualExpanded(false);
-        } else if (e.key === "ArrowRight" && !isExpanded) {
-          e.preventDefault();
-          setManualExpanded(true);
-        }
-      }
-    },
-    [isDirectory, isExpanded, handleClick]
-  );
-
-  useEffect(() => {
-    if (!isDirectory || !revealRequestId || !shouldRevealNode) return;
-    // eslint-disable-next-line react-hooks/set-state-in-effect -- reveal requests intentionally persist expanded ancestors after navigation
-    setManualExpanded(true);
-  }, [isDirectory, revealRequestId, shouldRevealNode]);
-
-  useEffect(() => {
-    if (isDirectory || !revealRequestId || !shouldRevealNode) return;
-
-    const target = itemRef.current;
-    if (!target) return;
-
-    target.scrollIntoView({ behavior: "smooth", block: "nearest" });
-    onRevealConsumed?.(revealRequestId);
-  }, [isDirectory, onRevealConsumed, revealRequestId, shouldRevealNode]);
-
-  // Indent guide lines (visible on tree hover)
-  const indentGuides: React.ReactElement[] = [];
-  for (let i = 0; i < level; i++) {
-    indentGuides.push(
-      <span
-        key={i}
-        className="bg-border/50 absolute top-0 bottom-0 w-px opacity-0 transition-opacity duration-150 group-hover/tree:opacity-100"
-        style={{ left: `${i * INDENT_PX + 12}px` }}
-      />
-    );
+// Flash keyframes are injected into Pierre's shadow root via unsafeCSS.
+// They reference app-level CSS custom properties which inherit through
+// the shadow boundary, so themes (dark/light) stay consistent.
+const FLASH_UNSAFE_CSS = `
+  @keyframes deus-flash-add {
+    0%   { background: color-mix(in oklab, var(--color-success) 30%, transparent); }
+    35%  { background: color-mix(in oklab, var(--color-success) 10%, transparent); }
+    100% { background: transparent; }
   }
+  @keyframes deus-flash-edit {
+    0%   { background: color-mix(in oklab, var(--color-warning) 30%, transparent); }
+    35%  { background: color-mix(in oklab, var(--color-warning) 10%, transparent); }
+    100% { background: transparent; }
+  }
+  @keyframes deus-flash-delete {
+    0%   { background: color-mix(in oklab, var(--color-destructive) 30%, transparent); }
+    35%  { background: color-mix(in oklab, var(--color-destructive) 10%, transparent); }
+    100% { background: transparent; }
+  }
+  button[data-item-path].deus-flash-add    { animation: deus-flash-add    1600ms ease-out; }
+  button[data-item-path].deus-flash-edit   { animation: deus-flash-edit   1600ms ease-out; }
+  button[data-item-path].deus-flash-delete { animation: deus-flash-delete 1600ms ease-out; }
 
-  return (
-    <div
-      role="treeitem"
-      aria-expanded={isDirectory ? isExpanded : undefined}
-      className="[contain-intrinsic-size:auto_24px] [content-visibility:auto]"
-    >
-      <div
-        ref={itemRef}
-        tabIndex={0}
-        className={cn(
-          "relative flex cursor-pointer items-center gap-1.5 py-[3px] pr-3 text-xs",
-          "transition-colors duration-150 ease-out",
-          "focus-visible:ring-ring/50 focus-visible:ring-1 focus-visible:outline-none",
-          isSelected
-            ? "bg-primary/10 text-primary"
-            : "text-foreground/80 hover:bg-muted/30 hover:text-foreground",
-          // Committed files are muted — they're "done", less attention needed
-          !isDirectory && node.committed === true && "opacity-60"
-        )}
-        style={{ paddingLeft: `${indentPx + 8}px` }}
-        onClick={handleClick}
-        onKeyDown={handleKeyDown}
-      >
-        {indentGuides}
-
-        {/* Icon */}
-        <div className="flex h-3.5 w-3.5 flex-shrink-0 items-center justify-center">
-          {isDirectory ? (
-            hasChildren ? (
-              isExpanded ? (
-                <ChevronDown className="text-muted-foreground/40 h-3.5 w-3.5" />
-              ) : (
-                <ChevronRight className="text-muted-foreground/40 h-3.5 w-3.5" />
-              )
-            ) : (
-              <ChevronRight className="text-muted-foreground/15 h-3.5 w-3.5" />
-            )
-          ) : FileIcon ? (
-            <FileIcon className={cn("h-3.5 w-3.5 opacity-50", fileConfig?.color)} />
-          ) : (
-            <File className="text-muted-foreground/30 h-3.5 w-3.5" />
-          )}
-        </div>
-
-        {/* Name */}
-        <span
-          className={cn(
-            "min-w-0 flex-1 truncate font-normal",
-            isDirectory
-              ? folderHasChanges
-                ? "text-warning/60"
-                : "text-muted-foreground/60"
-              : "text-foreground/70",
-            // Change status from diff data takes priority
-            node.change_status === "deleted" && "line-through opacity-50",
-            node.change_status === "added" && "text-success/80",
-            // Fallback to git_status from file scan
-            !node.change_status && node.git_status === "deleted" && "line-through opacity-50",
-            !node.change_status && node.git_status === "added" && "text-success/80",
-            !node.change_status && node.git_status === "untracked" && "text-info/80"
-          )}
-        >
-          {node.name}
-        </span>
-
-        {/* Change stats (+N, -N) for files with diff data */}
-        {!isDirectory && (node.additions || node.deletions) && (
-          <div className="flex items-center gap-1 font-mono text-[11px] tabular-nums opacity-60">
-            {node.additions ? <span className="text-success/80">+{node.additions}</span> : null}
-            {node.deletions ? <span className="text-destructive/80">-{node.deletions}</span> : null}
-          </div>
-        )}
-
-        {/* Uncommitted indicator — small dot for files not yet committed */}
-        {!isDirectory && node.committed === false && (
-          <span
-            className="text-warning/70 flex-shrink-0 text-[8px] leading-none"
-            title="Uncommitted"
-          >
-            ●
-          </span>
-        )}
-      </div>
-
-      {/* Children */}
-      {isDirectory && isExpanded && hasChildren && (
-        <FileTree
-          nodes={node.children!}
-          level={level + 1}
-          selectedPath={selectedPath}
-          onFileClick={onFileClick}
-          defaultExpanded={defaultExpanded}
-          revealPath={revealPath}
-          revealRequestId={revealRequestId}
-          onRevealConsumed={onRevealConsumed}
-        />
-      )}
-    </div>
-  );
-});
+  @media (prefers-reduced-motion: reduce) {
+    button[data-item-path].deus-flash-add,
+    button[data-item-path].deus-flash-edit,
+    button[data-item-path].deus-flash-delete {
+      animation: none;
+      transition: background 1200ms;
+    }
+  }
+`.trim();

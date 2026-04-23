@@ -14,6 +14,7 @@ import { cn } from "@/shared/lib/utils";
 import { fileChangePath } from "../lib/workspace.utils";
 import { DiffViewer } from "./DiffViewer";
 import { useFileDiff } from "../api/workspace.queries";
+import { PierreFileIcon } from "@/features/file-browser/lib/pierreIcons";
 import type { FileChange } from "@/shared/types";
 
 interface ChangesDiffSectionProps {
@@ -33,6 +34,7 @@ function ChangesDiffSectionInner({
   expandStateKey,
 }: ChangesDiffSectionProps) {
   const filePath = fileChangePath(fileChange);
+  const fileName = filePath.slice(filePath.lastIndexOf("/") + 1) || filePath;
   // Collapse resets to false when expandStateKey changes (parent collapse-all/expand-all)
   const [collapsedState, setCollapsedState] = useState({ value: false, key: expandStateKey });
   const collapsed = collapsedState.key === expandStateKey ? collapsedState.value : false;
@@ -74,16 +76,18 @@ function ChangesDiffSectionInner({
 
   return (
     <div ref={refCallback} data-diff-path={filePath} className="overflow-clip">
-      {/* Sticky file header — two sibling buttons to avoid nesting interactive elements */}
+      {/* Sticky file header. The outer div is the hover-and-click surface:
+          `group/row` lets any hover within the 44px row drive the file-icon ↔
+          chevron swap below. The inner button stretches (`self-stretch`) so the
+          whole row is clickable — no dead zones around the centred content. */}
       <div
         className={cn(
-          "sticky top-0 z-[5] flex min-h-[44px] w-full items-center gap-2 px-3 py-1.5 transition-colors duration-200 ease-[cubic-bezier(.165,.84,.44,1)]",
+          "group/row sticky top-0 z-[5] flex min-h-[44px] w-full items-center gap-2 px-3 py-1.5 transition-colors duration-200 ease-[cubic-bezier(.165,.84,.44,1)]",
           isActive && "bg-muted",
           !isActive && collapsed && "bg-muted/15 hover:bg-muted/30",
           !isActive && !collapsed && "hover:bg-muted bg-[var(--bg-elevated)]"
         )}
       >
-        {/* Collapse toggle — covers chevron, path, and stats */}
         <button
           type="button"
           onClick={() =>
@@ -92,13 +96,24 @@ function ChangesDiffSectionInner({
               key: expandStateKey,
             }))
           }
-          className="flex min-w-0 flex-1 items-center gap-2 text-left"
+          className="flex min-w-0 flex-1 items-center gap-2 self-stretch text-left"
         >
-          {collapsed ? (
-            <ChevronRight className="text-muted-foreground/60 h-3.5 w-3.5 flex-shrink-0" />
-          ) : (
-            <ChevronDown className="text-muted-foreground/60 h-3.5 w-3.5 flex-shrink-0" />
-          )}
+          {/* Icon slot — Pierre file-type glyph at rest, chevron on row-hover.
+              Both live in the same 14×14 box to avoid layout shift. The swap
+              is driven by `group/row` on the outer div so it triggers from
+              anywhere in the row, not just over the icon. */}
+          <div className="relative h-3.5 w-3.5 flex-shrink-0">
+            <div className="absolute inset-0 flex items-center justify-center opacity-100 transition-opacity duration-150 ease-out group-hover/row:opacity-0">
+              <PierreFileIcon fileName={fileName} size={14} className="text-muted-foreground/70" />
+            </div>
+            <div className="absolute inset-0 opacity-0 transition-opacity duration-150 ease-out group-hover/row:opacity-100">
+              {collapsed ? (
+                <ChevronRight className="text-muted-foreground/60 h-3.5 w-3.5" />
+              ) : (
+                <ChevronDown className="text-muted-foreground/60 h-3.5 w-3.5" />
+              )}
+            </div>
+          </div>
 
           <span
             className={cn(

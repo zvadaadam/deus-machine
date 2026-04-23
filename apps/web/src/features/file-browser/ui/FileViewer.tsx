@@ -5,6 +5,7 @@ import { detectLanguageFromPath } from "@/features/session/ui/tools/utils/detect
 import { MarkdownRenderer } from "@/components/markdown/MarkdownRenderer";
 import { useTheme } from "@/app/providers";
 import { useFileContent } from "../api/useFileContent";
+import { PierreFileIcon } from "../lib/pierreIcons";
 import { useQuery } from "@tanstack/react-query";
 
 function isMarkdownFile(filePath: string): boolean {
@@ -113,7 +114,12 @@ export function FileViewer({ workspaceId, filePath, onClose }: FileViewerProps) 
       <div className="flex-shrink-0">
         <div className="flex h-10 items-center justify-between gap-4 px-4">
           {/* Left: File path hierarchy */}
-          <div className="min-w-0 flex-1 text-xs">
+          <div className="flex min-w-0 flex-1 items-center gap-1.5 text-xs">
+            <PierreFileIcon
+              fileName={filename || "file"}
+              size={13}
+              className="text-muted-foreground/70 flex-shrink-0"
+            />
             {pathContext && (
               <span className="text-muted-foreground/50 font-normal">{pathContext}</span>
             )}
