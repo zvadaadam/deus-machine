@@ -26,6 +26,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { useFiles, invalidateFileCache } from "../api/useFiles";
 import { FileTree } from "./components/FileTree";
+import { useActivityDetector } from "../hooks/useActivityDetector";
 import { cn } from "@/shared/lib/utils";
 import {
   CHANGES_FILTER_OPTIONS,
@@ -271,6 +272,11 @@ export function FileBrowserPanel({
     return enrichTreeWithChanges(data.files, taggedChanges);
   }, [data, fileChanges, uncommittedPaths]);
 
+  // Activity detection runs against the UNFILTERED enriched tree so that
+  // narrowing via search / sub-filter doesn't synthesize delete/edit flashes
+  // for paths the user merely filtered out of view.
+  useActivityDetector(workspaceId, enrichedTree);
+
   // Apply filter mode + sub-filter + search
   const filteredFiles = useMemo(() => {
     if (filterMode === "all") {
@@ -441,11 +447,14 @@ export function FileBrowserPanel({
         </div>
       )}
 
-      {/* File Tree */}
-      <div className="flex-1 overflow-y-auto py-1">
+      {/* File Tree — Pierre virtualizes internally; remount on mode change
+          so defaultExpanded takes effect at construction. */}
+      <div className="flex-1 overflow-hidden py-1">
         {filteredFiles.length > 0 ? (
           <FileTree
+            key={filterMode}
             nodes={filteredFiles}
+            workspaceId={workspaceId}
             selectedPath={selectedFilePath}
             onFileClick={handleFileClick}
             defaultExpanded={filterMode === "changes"}

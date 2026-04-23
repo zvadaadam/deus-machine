@@ -6,4 +6,5 @@ export { BaseToolRenderer } from "./BaseToolRenderer";
 export { UnifiedDiff } from "./UnifiedDiff";
 export { ToolSummaryChip } from "./ToolSummaryChip";
 export { ToolFileLink } from "./ToolFileLink";
+export { ToolFileTypeIcon } from "./ToolFileTypeIcon";
 export { ToolResultList, ToolResultRow } from "./ToolResultList";

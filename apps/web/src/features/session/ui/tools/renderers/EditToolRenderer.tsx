@@ -1,7 +1,4 @@
-import { FileEdit } from "lucide-react";
-import { BaseToolRenderer, ToolFileLink, UnifiedDiff } from "../components";
-import { TOOL_ICON_CLS, TOOL_ICON_MUTED_CLS } from "../toolColors";
-import { cn } from "@/shared/lib/utils";
+import { BaseToolRenderer, ToolFileLink, ToolFileTypeIcon, UnifiedDiff } from "../components";
 import type { ToolRendererProps } from "../../chat-types";
 import { computeDiffStats } from "../utils/computeDiffStats";
 
@@ -16,7 +13,7 @@ export function EditToolRenderer({ toolUse, toolResult, isLoading }: ToolRendere
   return (
     <BaseToolRenderer
       toolName="Edit"
-      icon={<FileEdit className={cn(TOOL_ICON_CLS, TOOL_ICON_MUTED_CLS)} />}
+      icon={<ToolFileTypeIcon path={filePath} />}
       toolUse={toolUse}
       toolResult={toolResult}
       isLoading={isLoading}
