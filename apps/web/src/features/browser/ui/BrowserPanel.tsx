@@ -75,7 +75,6 @@ interface PendingInspection {
   id: number;
   event: ElementSelectedEvent;
   tabId: string;
-  webviewBounds: Bounds | null;
 }
 
 function serializeInspectionRecord(
@@ -568,12 +567,10 @@ export function BrowserPanel({ workspaceId, panelVisible = true }: BrowserPanelP
   const handleElementSelected = useCallback(
     (tabId: string, event: ElementSelectedEvent) => {
       if (event.type !== "element-selected" || !event.element || !workspaceId) return;
-      const bounds = tabRefs.current.get(tabId)?.getWebviewBounds?.() ?? null;
       setPendingInspection({
         id: ++nextInspectionIdRef.current,
         event,
         tabId,
-        webviewBounds: bounds,
       });
     },
     [workspaceId]
@@ -663,6 +660,10 @@ export function BrowserPanel({ workspaceId, panelVisible = true }: BrowserPanelP
       clearPendingInspection(pendingInspection);
     }
   }, [pendingInspection, activeTabId, activeSelectorActive, clearPendingInspection]);
+
+  const pendingInspectionBounds: Bounds | null = pendingInspection
+    ? (tabRefs.current.get(pendingInspection.tabId)?.getWebviewBounds?.() ?? null)
+    : null;
 
   /** Capture the active tab's <webview> as PNG and attach it to the chat
    *  composer. Routes through the session composer store so the image
@@ -1129,7 +1130,7 @@ export function BrowserPanel({ workspaceId, panelVisible = true }: BrowserPanelP
         {pendingInspection && pendingInspection.tabId === activeTabId && panelVisible && (
           <InspectPromptOverlay
             event={pendingInspection.event}
-            webviewBounds={pendingInspection.webviewBounds}
+            webviewBounds={pendingInspectionBounds}
             onSubmit={handleInspectPromptSubmit}
             onDismiss={handleInspectPromptDismiss}
           />
