@@ -20,7 +20,6 @@
  */
 
 import { useEffect, useMemo, useRef } from "react";
-import type { CSSProperties } from "react";
 import { FileTree as PierreFileTree, useFileTree } from "@pierre/trees/react";
 import type {
   FileTreeDirectoryHandle,
@@ -31,6 +30,7 @@ import type {
 import "@pierre/trees/web-components";
 
 import type { FileTreeNode } from "../../types";
+import { FILE_TREE_FLASH_CSS, fileTreeThemeStyles } from "../../lib/fileTreeTheme";
 import {
   useRecentActivityStore,
   recentActivityActions,
@@ -116,7 +116,7 @@ function resolveVisibleTarget(
   return leafPath;
 }
 
-// ActivityKind → CSS class. Kept in sync with FLASH_UNSAFE_CSS below.
+// ActivityKind → CSS class. Kept in sync with FILE_TREE_FLASH_CSS in fileTreeTheme.ts.
 const KIND_CLASS: Record<ActivityKind, string> = {
   write: "deus-flash-add",
   edit: "deus-flash-edit",
@@ -249,7 +249,7 @@ export function FileTree({
     gitStatus,
     renderRowDecoration,
     onSelectionChange: handleSelectionChange,
-    unsafeCSS: FLASH_UNSAFE_CSS,
+    unsafeCSS: FILE_TREE_FLASH_CSS,
   });
 
   // useFileTree consumed the initial paths + gitStatus. Skip the first-render
@@ -361,56 +361,7 @@ export function FileTree({
 
   return (
     <div ref={containerRef} style={{ display: "block", height: "100%", width: "100%" }}>
-      <PierreFileTree model={model} style={themeStyles} />
+      <PierreFileTree model={model} style={fileTreeThemeStyles} />
     </div>
   );
 }
-
-// Pierre reads theming from CSS custom properties on the host element.
-// These four overrides are enough to make the tree inherit our dark/light
-// theme: background stays default (transparent), foreground + borders use
-// the app tokens, and selection uses a primary-tinted surface with the
-// primary color itself as the selected text.
-const themeStyles: CSSProperties = {
-  display: "block",
-  height: "100%",
-  width: "100%",
-  ["--trees-fg-override" as never]: "var(--color-foreground)",
-  ["--trees-border-color-override" as never]: "var(--color-border)",
-  ["--trees-selected-bg-override" as never]:
-    "color-mix(in oklab, var(--color-primary) 14%, transparent)",
-  ["--trees-selected-fg-override" as never]: "var(--color-primary)",
-};
-
-// Flash keyframes are injected into Pierre's shadow root via unsafeCSS.
-// They reference app-level CSS custom properties which inherit through
-// the shadow boundary, so themes (dark/light) stay consistent.
-const FLASH_UNSAFE_CSS = `
-  @keyframes deus-flash-add {
-    0%   { background: color-mix(in oklab, var(--color-success) 30%, transparent); }
-    35%  { background: color-mix(in oklab, var(--color-success) 10%, transparent); }
-    100% { background: transparent; }
-  }
-  @keyframes deus-flash-edit {
-    0%   { background: color-mix(in oklab, var(--color-warning) 30%, transparent); }
-    35%  { background: color-mix(in oklab, var(--color-warning) 10%, transparent); }
-    100% { background: transparent; }
-  }
-  @keyframes deus-flash-delete {
-    0%   { background: color-mix(in oklab, var(--color-destructive) 30%, transparent); }
-    35%  { background: color-mix(in oklab, var(--color-destructive) 10%, transparent); }
-    100% { background: transparent; }
-  }
-  button[data-item-path].deus-flash-add    { animation: deus-flash-add    1600ms ease-out; }
-  button[data-item-path].deus-flash-edit   { animation: deus-flash-edit   1600ms ease-out; }
-  button[data-item-path].deus-flash-delete { animation: deus-flash-delete 1600ms ease-out; }
-
-  @media (prefers-reduced-motion: reduce) {
-    button[data-item-path].deus-flash-add,
-    button[data-item-path].deus-flash-edit,
-    button[data-item-path].deus-flash-delete {
-      animation: none;
-      transition: background 1200ms;
-    }
-  }
-`.trim();
