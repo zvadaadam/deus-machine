@@ -306,6 +306,11 @@ export function FileTree({
 
   useEffect(() => {
     if (!workspaceId) return;
+    // Pierre mounts its tree as a <file-tree-container> custom element. We
+    // reach through that host into its shadow root to apply the flash class
+    // directly on a row's <button>. If Pierre renames this host in a future
+    // version, the null-guard below short-circuits and flashes stop painting
+    // (functionally graceful, visibly noticeable — we'll catch it on upgrade).
     const host =
       (containerRef.current?.querySelector("file-tree-container") as HTMLElement | null) ?? null;
     const shadowRoot = host?.shadowRoot ?? null;
