@@ -75,6 +75,7 @@ interface PendingInspection {
   id: number;
   event: ElementSelectedEvent;
   tabId: string;
+  boundsAtSelection: Bounds | null;
 }
 
 function serializeInspectionRecord(
@@ -99,6 +100,12 @@ function getInspectionScreenshotRect(rect: {
     width: rect.width + INSPECT_SCREENSHOT_PADDING * 2,
     height: rect.height + INSPECT_SCREENSHOT_PADDING * 2,
   };
+}
+
+function areBoundsEqual(a: Bounds | null, b: Bounds | null): boolean {
+  if (a === b) return true;
+  if (!a || !b) return false;
+  return a.x === b.x && a.y === b.y && a.width === b.width && a.height === b.height;
 }
 
 interface InstalledBrowser {
@@ -567,10 +574,13 @@ export function BrowserPanel({ workspaceId, panelVisible = true }: BrowserPanelP
   const handleElementSelected = useCallback(
     (tabId: string, event: ElementSelectedEvent) => {
       if (event.type !== "element-selected" || !event.element || !workspaceId) return;
+      const boundsAtSelection = tabRefs.current.get(tabId)?.getWebviewBounds?.() ?? null;
+      setPendingInspectionBounds(boundsAtSelection);
       setPendingInspection({
         id: ++nextInspectionIdRef.current,
         event,
         tabId,
+        boundsAtSelection,
       });
     },
     [workspaceId]
@@ -661,9 +671,43 @@ export function BrowserPanel({ workspaceId, panelVisible = true }: BrowserPanelP
     }
   }, [pendingInspection, activeTabId, activeSelectorActive, clearPendingInspection]);
 
-  const pendingInspectionBounds: Bounds | null = pendingInspection
-    ? (tabRefs.current.get(pendingInspection.tabId)?.getWebviewBounds?.() ?? null)
-    : null;
+  const [pendingInspectionBounds, setPendingInspectionBounds] = useState<Bounds | null>(null);
+  useEffect(() => {
+    if (!pendingInspection) return;
+    const handle = tabRefs.current.get(pendingInspection.tabId);
+    if (!handle?.getWebviewBounds) return;
+
+    const syncBounds = () => {
+      const nextBounds = handle.getWebviewBounds?.() ?? null;
+      setPendingInspectionBounds((current) =>
+        areBoundsEqual(current, nextBounds) ? current : nextBounds
+      );
+
+      if (
+        pendingInspection.boundsAtSelection &&
+        nextBounds &&
+        (nextBounds.width !== pendingInspection.boundsAtSelection.width ||
+          nextBounds.height !== pendingInspection.boundsAtSelection.height)
+      ) {
+        clearPendingInspection(pendingInspection);
+      }
+    };
+
+    const rafId = requestAnimationFrame(syncBounds);
+    const ro = tabHostEl ? new ResizeObserver(syncBounds) : null;
+    if (ro && tabHostEl) ro.observe(tabHostEl);
+
+    return () => {
+      cancelAnimationFrame(rafId);
+      ro?.disconnect();
+    };
+  }, [
+    pendingInspection,
+    tabHostEl,
+    activeTab?.isMobileView,
+    activeTab?.devtoolsOpen,
+    clearPendingInspection,
+  ]);
 
   /** Capture the active tab's <webview> as PNG and attach it to the chat
    *  composer. Routes through the session composer store so the image

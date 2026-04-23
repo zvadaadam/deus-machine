@@ -189,6 +189,7 @@ export function InspectPromptOverlay({
     (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
       if (e.key === "Escape") {
         e.preventDefault();
+        e.stopPropagation();
         onDismiss();
         return;
       }
