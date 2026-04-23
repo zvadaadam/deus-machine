@@ -1,9 +1,6 @@
-import { FilePlus } from "lucide-react";
-import { BaseToolRenderer, CodeBlock, ToolFileLink } from "../components";
+import { BaseToolRenderer, CodeBlock, ToolFileLink, ToolFileTypeIcon } from "../components";
 import type { ToolRendererProps } from "../../chat-types";
 import { detectLanguageFromPath } from "../utils/detectLanguage";
-import { TOOL_ICON_CLS, TOOL_ICON_MUTED_CLS } from "../toolColors";
-import { cn } from "@/shared/lib/utils";
 
 export function WriteToolRenderer({ toolUse, toolResult, isLoading }: ToolRendererProps) {
   const { file_path, content } = toolUse.input ?? {};
@@ -15,7 +12,7 @@ export function WriteToolRenderer({ toolUse, toolResult, isLoading }: ToolRender
   return (
     <BaseToolRenderer
       toolName="Write"
-      icon={<FilePlus className={cn(TOOL_ICON_CLS, TOOL_ICON_MUTED_CLS)} />}
+      icon={<ToolFileTypeIcon path={safeFilePath} />}
       toolUse={toolUse}
       toolResult={toolResult}
       isLoading={isLoading}

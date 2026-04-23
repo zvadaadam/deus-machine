@@ -1,9 +1,6 @@
-import { FilePenLine } from "lucide-react";
-import { BaseToolRenderer, ToolFileLink } from "../components";
+import { BaseToolRenderer, ToolFileLink, ToolFileTypeIcon } from "../components";
 import { UnifiedDiff } from "../components/UnifiedDiff";
-import { cn } from "@/shared/lib/utils";
 import type { ToolRendererProps } from "../../chat-types";
-import { TOOL_ICON_CLS, TOOL_ICON_MUTED_CLS } from "../toolColors";
 import { computeDiffStats } from "../utils/computeDiffStats";
 
 interface Edit {
@@ -35,7 +32,7 @@ export function MultiEditToolRenderer({ toolUse, toolResult, isLoading }: ToolRe
   return (
     <BaseToolRenderer
       toolName="MultiEdit"
-      icon={<FilePenLine className={cn(TOOL_ICON_CLS, TOOL_ICON_MUTED_CLS)} />}
+      icon={<ToolFileTypeIcon path={safeFilePath} />}
       toolUse={toolUse}
       toolResult={toolResult}
       isLoading={isLoading}
