@@ -31,7 +31,13 @@ import {
   closeDevtools as closeDevtoolsMain,
 } from "@/platform/native/browser-views";
 import type { BrowserTabHandle, BrowserTabState, ConsoleLog, ElementSelectedEvent } from "../types";
-import { BLANK_URL, deriveTitleFromUrl, isBlankUrl, FOCUS_URL_BAR_EVENT } from "../types";
+import {
+  BLANK_URL,
+  deriveTitleFromUrl,
+  isBlankUrl,
+  FOCUS_URL_BAR_EVENT,
+  TOGGLE_INSPECT_MODE_EVENT,
+} from "../types";
 import {
   INSPECT_MODE_SETUP,
   INSPECT_MODE_ENABLE,
@@ -330,7 +336,7 @@ export const BrowserTab = forwardRef<BrowserTabHandle, BrowserTabProps>(function
     };
 
     // Keyboard shortcuts forwarded from the guest preload via sendToHost.
-    // Channel is "shortcut"; args[0] is one of "reload" | "focus-url-bar".
+    // Channel is "shortcut"; args[0] is one of the shell-handled shortcuts.
     const onIpcMessage = (event: Event) => {
       const e = event as unknown as { channel: string; args: unknown[] };
       if (e.channel !== "shortcut") return;
@@ -340,6 +346,8 @@ export const BrowserTab = forwardRef<BrowserTabHandle, BrowserTabProps>(function
       } else if (shortcut === "focus-url-bar") {
         // Emit a renderer-global event for BrowserPanel to pick up.
         window.dispatchEvent(new CustomEvent(FOCUS_URL_BAR_EVENT));
+      } else if (shortcut === "toggle-inspect-mode") {
+        window.dispatchEvent(new CustomEvent(TOGGLE_INSPECT_MODE_EVENT));
       }
     };
 
@@ -514,22 +522,29 @@ export const BrowserTab = forwardRef<BrowserTabHandle, BrowserTabProps>(function
     };
   }, [getWebview, tabId, onUpdateTab]);
 
+  const setElementSelectorActive = useCallback(
+    async (active: boolean) => {
+      const wv = getWebview();
+      if (!wv) return;
+      if (active && !automationInjectedRef.current) {
+        const ok = await injectAutomation();
+        if (!ok) return;
+      }
+      if (tabRef.current.selectorActive === active) return;
+      try {
+        await wv.executeJavaScript(active ? INSPECT_MODE_ENABLE : INSPECT_MODE_DISABLE);
+        onAddLog(tabId, "info", active ? "Inspect mode activated" : "Inspect mode deactivated");
+        onUpdateTab(tabId, { selectorActive: active });
+      } catch (err) {
+        onAddLog(tabId, "error", `Inspect mode toggle failed: ${getErrorMessage(err)}`);
+      }
+    },
+    [getWebview, tabId, injectAutomation, onUpdateTab, onAddLog]
+  );
+
   const toggleElementSelector = useCallback(async () => {
-    const wv = getWebview();
-    if (!wv) return;
-    if (!automationInjectedRef.current) {
-      const ok = await injectAutomation();
-      if (!ok) return;
-    }
-    const enabling = !tabRef.current.selectorActive;
-    try {
-      await wv.executeJavaScript(enabling ? INSPECT_MODE_ENABLE : INSPECT_MODE_DISABLE);
-      onAddLog(tabId, "info", enabling ? "Inspect mode activated" : "Inspect mode deactivated");
-      onUpdateTab(tabId, { selectorActive: enabling });
-    } catch (err) {
-      onAddLog(tabId, "error", `Inspect mode toggle failed: ${getErrorMessage(err)}`);
-    }
-  }, [getWebview, tabId, injectAutomation, onUpdateTab, onAddLog]);
+    await setElementSelectorActive(!tabRef.current.selectorActive);
+  }, [setElementSelectorActive]);
 
   // Periodic drain of buffered inspect events (only while selector is active).
   useEffect(() => {
@@ -705,6 +720,7 @@ export const BrowserTab = forwardRef<BrowserTabHandle, BrowserTabProps>(function
       reload,
       injectAutomation,
       toggleElementSelector,
+      setElementSelectorActive,
       captureScreenshot,
       setInspectOverlaysVisible,
       clearInspectSelection,
@@ -719,6 +735,7 @@ export const BrowserTab = forwardRef<BrowserTabHandle, BrowserTabProps>(function
       reload,
       injectAutomation,
       toggleElementSelector,
+      setElementSelectorActive,
       captureScreenshot,
       setInspectOverlaysVisible,
       clearInspectSelection,

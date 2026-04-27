@@ -9,7 +9,8 @@
  *   1. Non-blocking dialog overrides — a page calling alert()/confirm()/prompt()
  *      would otherwise freeze the guest thread.
  *   2. Keyboard-shortcut routing — Cmd+R inside the guest should reload the
- *      tab, Cmd+L should focus the URL bar in our shell. Sent via
+ *      tab, Cmd+L should focus the URL bar in our shell, and Cmd+Shift+D
+ *      should toggle the shell's inspect mode. Sent via
  *      `ipcRenderer.sendToHost(...)`, which delivers to the host webContents
  *      as an `ipc-message` DOM event on the <webview> element.
  */
@@ -39,11 +40,12 @@ window.prompt = (message?: string, _defaultValue?: string) => {
 };
 
 // -----------------------------------------------------------------------------
-// Keyboard shortcut routing — Cmd/Ctrl+R reload, Cmd/Ctrl+L focus URL bar.
+// Keyboard shortcut routing — Cmd/Ctrl+R reload, Cmd/Ctrl+L focus URL bar,
+// Cmd/Ctrl+Shift+D toggles inspect mode.
 // Forwarded to the HOST webContents via sendToHost (no main process hop).
 // -----------------------------------------------------------------------------
 
-export type BrowserGuestShortcut = "reload" | "focus-url-bar";
+export type BrowserGuestShortcut = "reload" | "focus-url-bar" | "toggle-inspect-mode";
 
 window.addEventListener(
   "keydown",
@@ -51,8 +53,10 @@ window.addEventListener(
     const meta = e.metaKey || e.ctrlKey;
     if (!meta) return;
     let shortcut: BrowserGuestShortcut | null = null;
-    if (e.key === "r") shortcut = "reload";
-    else if (e.key === "l") shortcut = "focus-url-bar";
+    const key = e.key.toLowerCase();
+    if (e.shiftKey && key === "d") shortcut = "toggle-inspect-mode";
+    else if (key === "r") shortcut = "reload";
+    else if (key === "l") shortcut = "focus-url-bar";
     if (!shortcut) return;
     e.preventDefault();
     e.stopPropagation();

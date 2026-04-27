@@ -1,5 +1,5 @@
 /**
- * InspectPromptOverlay — Cursor-style floating prompt that appears after a
+ * InspectPromptOverlay — floating inspect prompt that appears after a
  * user clicks an element in browser inspect mode.
  *
  * Portaled to document.body above the webview (WEBVIEW_OVERLAY_Z). Anchors
@@ -210,7 +210,7 @@ export function InspectPromptOverlay({
     <m.div
       key={event.ref ?? event.timestamp}
       role="dialog"
-      aria-label="Describe this element"
+      aria-label="Describe change for selected element"
       initial={{ opacity: 0, scale: 0.96, y: placement.flippedAbove ? 4 : -4 }}
       animate={{ opacity: 1, scale: 1, y: 0 }}
       transition={{ duration: 0.18, ease: [0.215, 0.61, 0.355, 1] }}
@@ -240,7 +240,7 @@ export function InspectPromptOverlay({
           onKeyDown={handleKeyDown}
           onCompositionStart={() => setIsComposing(true)}
           onCompositionEnd={() => setIsComposing(false)}
-          placeholder="Describe the change…"
+          placeholder="Describe what to change…"
           rows={1}
           className="max-h-[200px] min-h-[48px] flex-1 resize-none rounded-none border-0 bg-transparent py-2 shadow-none focus-visible:ring-0"
           disabled={isSubmitting}
