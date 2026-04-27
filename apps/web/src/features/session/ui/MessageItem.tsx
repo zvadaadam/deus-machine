@@ -10,6 +10,7 @@ import type { Message } from "@/shared/types";
 import type { ContentBlock } from "@/features/session/types";
 import { isImageBlock, isTextBlock } from "@/features/session/types";
 import { PartsRenderer } from "./blocks";
+import { TextBlock } from "./blocks/TextBlock";
 
 import { cn } from "@/shared/lib/utils";
 import { Copy, ChevronDown, ChevronUp } from "lucide-react";
@@ -161,14 +162,7 @@ const UserMessage = memo(function UserMessage({ message }: { message: Message })
           >
             {textBlocks.map((block, idx) => {
               const text = typeof block === "string" ? block : isTextBlock(block) ? block.text : "";
-              return (
-                <p
-                  key={`${message.id}:text:${idx}`}
-                  className="text-foreground text-base font-normal whitespace-pre-wrap"
-                >
-                  {text}
-                </p>
-              );
+              return <TextBlock key={`${message.id}:text:${idx}`} block={text} role="user" />;
             })}
 
             {shouldCollapse && !isExpanded && (

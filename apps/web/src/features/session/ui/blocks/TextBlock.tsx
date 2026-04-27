@@ -25,7 +25,9 @@ import type { TextBlock as TextBlockType, MessageRole } from "@/shared/types";
 import { ChatMarkdown } from "@/components/markdown";
 import { cn } from "@/shared/lib/utils";
 import { parseInspectTags } from "../../lib/parseInspectTags";
+import { parseDiffCommentTags } from "../../lib/parseDiffCommentTags";
 import { InspectElementPill } from "../InspectElementPill";
+import { DiffCommentPill } from "../DiffCommentPill";
 
 export type TextWeight = "muted" | "normal";
 
@@ -47,6 +49,13 @@ export function TextBlock({ block, role = "assistant", weight = "normal" }: Text
         : [],
     [role, text]
   );
+  const diffCommentSegments = useMemo(
+    () =>
+      role === "user" && (text?.includes("<diff-comment") || text?.includes("Diff comment"))
+        ? parseDiffCommentTags(text)
+        : [],
+    [role, text]
+  );
 
   if (!text || text.trim() === "") {
     return null;
@@ -58,6 +67,20 @@ export function TextBlock({ block, role = "assistant", weight = "normal" }: Text
 
   // User messages: plain text with inline <inspect> pills
   if (role === "user") {
+    if (diffCommentSegments.length > 0) {
+      return (
+        <p className={cn("text-base whitespace-pre-wrap", "font-normal", "text-foreground")}>
+          {diffCommentSegments.map((segment, i) =>
+            typeof segment === "string" ? (
+              <span key={i}>{segment}</span>
+            ) : (
+              <DiffCommentPill key={`diff-comment-${i}`} comment={segment} />
+            )
+          )}
+        </p>
+      );
+    }
+
     // If <inspect> tags were found, render mixed text + pills
     if (inspectSegments.length > 0) {
       return (

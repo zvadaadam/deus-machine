@@ -76,7 +76,7 @@ function normalizeInspectMarkup(text: string): string {
  */
 export function parseInspectTags(text: string): InspectSegment[] {
   const source = normalizeInspectMarkup(text);
-  const tagRegex = /<inspect\s+([^>]+)>([\s\S]*?)<\/inspect>/g;
+  const tagRegex = /<inspect\s+((?:[^"'>]|"[^"]*")*)>([\s\S]*?)<\/inspect>/g;
   const segments: InspectSegment[] = [];
   let lastIndex = 0;
   let match: RegExpExecArray | null;
