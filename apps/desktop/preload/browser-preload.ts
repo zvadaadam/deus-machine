@@ -50,6 +50,7 @@ export type BrowserGuestShortcut = "reload" | "focus-url-bar" | "toggle-inspect-
 window.addEventListener(
   "keydown",
   (e: KeyboardEvent) => {
+    if (e.repeat) return;
     const meta = e.metaKey || e.ctrlKey;
     if (!meta) return;
     let shortcut: BrowserGuestShortcut | null = null;
