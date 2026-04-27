@@ -20,6 +20,10 @@ export function isBlankUrl(url: string | null | undefined): boolean {
  *  button both fire it; the BrowserPanel's single listener handles them all. */
 export const FOCUS_URL_BAR_EVENT = "deus:browser:focus-url-bar";
 
+/** Window-level DOM event that toggles browser inspect mode. Fired from both
+ *  host chrome shortcuts and guest-page forwarded shortcuts. */
+export const TOGGLE_INSPECT_MODE_EVENT = "deus:browser:toggle-inspect-mode";
+
 /** Mobile preview dimensions — a single fixed iPhone-class viewport used when
  *  a tab toggles on mobile view. Not configurable by the user; the goal is
  *  "do my mobile breakpoints fire?", not "pixel-match iPhone 14 Pro". */
@@ -125,6 +129,7 @@ export interface BrowserTabHandle {
   /** Inject inspect-mode + visual-effects scripts. Returns true on success. */
   injectAutomation: () => Promise<boolean>;
   toggleElementSelector: () => void;
+  setElementSelectorActive: (active: boolean) => Promise<void>;
   /** Capture the current page — or a sub-rect of it — as a PNG data URL.
    *  `rect` is in webview-local pixels (same coord space Electron's
    *  `webContents.capturePage` uses). Returns null on failure. */

@@ -56,6 +56,7 @@ import {
   hydratePersistedTab,
   isBlankUrl,
   FOCUS_URL_BAR_EVENT,
+  TOGGLE_INSPECT_MODE_EVENT,
 } from "../types";
 import {
   workspaceLayoutActions,
@@ -70,6 +71,11 @@ import { BROWSER_NEW_TAB_REQUESTED } from "@shared/events";
 const MAX_LOGS = 500;
 const PERSIST_DEBOUNCE_MS = 300;
 const INSPECT_SCREENSHOT_PADDING = 24;
+const INSPECT_SHORTCUT = "⌘⇧D";
+
+function isInspectShortcut(e: KeyboardEvent): boolean {
+  return (e.metaKey || e.ctrlKey) && e.shiftKey && !e.altKey && e.key.toLowerCase() === "d";
+}
 
 interface PendingInspection {
   id: number;
@@ -178,6 +184,10 @@ export function BrowserPanel({ workspaceId, panelVisible = true }: BrowserPanelP
   const [tabs, setTabs] = useState<BrowserTabState[]>(initialTabs);
   const [activeTabId, setActiveTabId] = useState<string>(initialActiveId);
 
+  // Derived: active tab for nav bar state
+  const activeTab = tabs.find((t) => t.id === activeTabId) ?? null;
+  const activeSelectorActive = !!activeTab?.selectorActive;
+
   // Focus mode — toggle lives in `browserWindowStore.focusModeByWorkspace`.
   // When flipped ON, we stash the current layout and collapse chat + sidebar;
   // flipped OFF, we restore. The ContentTabBar button drives this flag.
@@ -248,15 +258,17 @@ export function BrowserPanel({ workspaceId, panelVisible = true }: BrowserPanelP
     };
   }, [workspaceId]);
 
-  // Esc anywhere exits focus mode.
+  // Esc exits focus mode unless inspect mode is currently consuming it.
   useEffect(() => {
     if (!focusMode || !workspaceId) return;
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") browserWindowActions.setFocusMode(workspaceId, false);
+      if (e.key === "Escape" && !activeSelectorActive) {
+        browserWindowActions.setFocusMode(workspaceId, false);
+      }
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [focusMode, workspaceId]);
+  }, [focusMode, workspaceId, activeSelectorActive]);
 
   // Auto-exit when the Browser content tab is no longer active — otherwise
   // the portal-rendered overlay would keep floating over whatever tab the
@@ -279,9 +291,6 @@ export function BrowserPanel({ workspaceId, panelVisible = true }: BrowserPanelP
 
   // Track previous workspaceId to detect switches
   const prevWorkspaceIdRef = useRef(workspaceId);
-
-  // Derived: active tab for nav bar state
-  const activeTab = tabs.find((t) => t.id === activeTabId) ?? null;
 
   // "Latest value" refs used by stable callbacks (closeTab, handleTabSelect)
   // — child event handlers read the most recent tab list without forcing
@@ -563,12 +572,13 @@ export function BrowserPanel({ workspaceId, panelVisible = true }: BrowserPanelP
     );
   }, []);
 
-  /** Inline design-mode prompt: when the user clicks an element in inspect
+  /** Inspect prompt: when the user clicks an element in inspect
    *  mode we stash the event + webview bounds so InspectPromptOverlay can
    *  render anchored to the clicked element. Nothing is pushed to the
    *  composer yet — that happens on submit. A second click while the prompt
    *  is open replaces the target (user iterating). */
   const [pendingInspection, setPendingInspection] = useState<PendingInspection | null>(null);
+  const [pendingInspectionBounds, setPendingInspectionBounds] = useState<Bounds | null>(null);
   const nextInspectionIdRef = useRef(0);
 
   const handleElementSelected = useCallback(
@@ -597,9 +607,14 @@ export function BrowserPanel({ workspaceId, panelVisible = true }: BrowserPanelP
       ?.clearInspectSelection?.(inspection.event.selectionKey);
   }, []);
 
-  const handleInspectPromptDismiss = useCallback(() => {
+  const disableElementSelector = useCallback(() => {
     clearPendingInspection(pendingInspection);
-  }, [pendingInspection, clearPendingInspection]);
+    void tabRefs.current.get(activeTabId)?.setElementSelectorActive(false);
+  }, [activeTabId, pendingInspection, clearPendingInspection]);
+
+  const handleInspectPromptDismiss = useCallback(() => {
+    disableElementSelector();
+  }, [disableElementSelector]);
 
   const handleInspectPromptSubmit = useCallback(
     async (text: string) => {
@@ -663,7 +678,6 @@ export function BrowserPanel({ workspaceId, panelVisible = true }: BrowserPanelP
   //     selectorActive to false on did-start-loading).
   // Depending on the primitive `selectorActive` (not the `tabs` array)
   // keeps this effect from re-running on every log push.
-  const activeSelectorActive = !!activeTab?.selectorActive;
   useEffect(() => {
     if (!pendingInspection) return;
     if (pendingInspection.tabId !== activeTabId || !activeSelectorActive) {
@@ -671,7 +685,18 @@ export function BrowserPanel({ workspaceId, panelVisible = true }: BrowserPanelP
     }
   }, [pendingInspection, activeTabId, activeSelectorActive, clearPendingInspection]);
 
-  const [pendingInspectionBounds, setPendingInspectionBounds] = useState<Bounds | null>(null);
+  useEffect(() => {
+    if (!activeSelectorActive) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key !== "Escape") return;
+      e.preventDefault();
+      e.stopPropagation();
+      disableElementSelector();
+    };
+    window.addEventListener("keydown", onKey, true);
+    return () => window.removeEventListener("keydown", onKey, true);
+  }, [activeSelectorActive, disableElementSelector]);
+
   useEffect(() => {
     if (!pendingInspection) return;
     const handle = tabRefs.current.get(pendingInspection.tabId);
@@ -808,9 +833,26 @@ export function BrowserPanel({ workspaceId, panelVisible = true }: BrowserPanelP
   }, [activeTab]);
 
   const handleToggleSelector = useCallback(() => {
-    if (!activeTab) return;
+    if (!activeTab?.currentUrl) return;
     tabRefs.current.get(activeTab.id)?.toggleElementSelector();
   }, [activeTab]);
+
+  useEffect(() => {
+    if (!panelVisible) return;
+    const onToggleInspect = () => handleToggleSelector();
+    const onKey = (e: KeyboardEvent) => {
+      if (!isInspectShortcut(e)) return;
+      e.preventDefault();
+      e.stopPropagation();
+      handleToggleSelector();
+    };
+    window.addEventListener(TOGGLE_INSPECT_MODE_EVENT, onToggleInspect);
+    window.addEventListener("keydown", onKey, true);
+    return () => {
+      window.removeEventListener(TOGGLE_INSPECT_MODE_EVENT, onToggleInspect);
+      window.removeEventListener("keydown", onKey, true);
+    };
+  }, [panelVisible, handleToggleSelector]);
 
   const handleKeyDown = useCallback(
     (e: React.KeyboardEvent<HTMLInputElement>) => {
@@ -1008,9 +1050,14 @@ export function BrowserPanel({ workspaceId, panelVisible = true }: BrowserPanelP
 
           <IconTooltip
             label={
-              activeTab?.selectorActive
-                ? "Exit element selector (Esc)"
-                : "Select element to inspect"
+              <div className="flex items-center gap-3">
+                <span>
+                  {activeTab?.selectorActive ? "Exit inspect mode" : "Inspect an element"}
+                </span>
+                <span className="text-muted-foreground text-xs tracking-widest">
+                  {activeTab?.selectorActive ? "Esc" : INSPECT_SHORTCUT}
+                </span>
+              </div>
             }
           >
             <Button
@@ -1020,9 +1067,7 @@ export function BrowserPanel({ workspaceId, panelVisible = true }: BrowserPanelP
               onClick={handleToggleSelector}
               disabled={!activeTab?.currentUrl}
               aria-pressed={activeTab?.selectorActive}
-              aria-label={
-                activeTab?.selectorActive ? "Exit element selector" : "Select element to inspect"
-              }
+              aria-label={activeTab?.selectorActive ? "Exit inspect mode" : "Inspect an element"}
             >
               <MousePointer2 strokeWidth={1.75} className="h-3.5 w-3.5" />
             </Button>
