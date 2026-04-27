@@ -41,7 +41,10 @@ export function TextBlock({ block, role = "assistant", weight = "normal" }: Text
 
   // Parse <inspect> tags for user messages (memoized, short-circuits on no match)
   const inspectSegments = useMemo(
-    () => (role === "user" && text?.includes("<inspect") ? parseInspectTags(text) : []),
+    () =>
+      role === "user" && (text?.includes("<inspect") || text?.includes("&lt;inspect"))
+        ? parseInspectTags(text)
+        : [],
     [role, text]
   );
 

@@ -62,20 +62,29 @@ function parseAttributes(attrString: string): Record<string, string> {
 
 export type InspectSegment = string | InspectElement;
 
+function normalizeInspectMarkup(text: string): string {
+  if (!text.includes("&lt;inspect")) return text;
+  return text
+    .replace(/&lt;(\/?)inspect/g, "<$1inspect")
+    .replace(/&lt;\/inspect&gt;/g, "</inspect>")
+    .replace(/&gt;/g, ">");
+}
+
 /**
  * Split text into segments of plain text and InspectElement objects.
  * Returns empty array if no <inspect> tags found — caller should render raw text.
  */
 export function parseInspectTags(text: string): InspectSegment[] {
+  const source = normalizeInspectMarkup(text);
   const tagRegex = /<inspect\s+([^>]+)>([\s\S]*?)<\/inspect>/g;
   const segments: InspectSegment[] = [];
   let lastIndex = 0;
   let match: RegExpExecArray | null;
 
-  while ((match = tagRegex.exec(text)) !== null) {
+  while ((match = tagRegex.exec(source)) !== null) {
     // Add text before the tag
     if (match.index > lastIndex) {
-      segments.push(text.slice(lastIndex, match.index));
+      segments.push(source.slice(lastIndex, match.index));
     }
 
     const attrs = parseAttributes(match[1]);
@@ -101,8 +110,8 @@ export function parseInspectTags(text: string): InspectSegment[] {
   if (segments.length === 0) return [];
 
   // Add remaining text after last tag
-  if (lastIndex < text.length) {
-    segments.push(text.slice(lastIndex));
+  if (lastIndex < source.length) {
+    segments.push(source.slice(lastIndex));
   }
 
   return segments;
