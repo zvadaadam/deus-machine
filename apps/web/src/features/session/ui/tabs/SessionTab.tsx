@@ -63,7 +63,11 @@ export function SessionTab({
           type="button"
           tabIndex={-1}
           aria-label={`Close ${tab.label} tab`}
-          onClick={onClose}
+          onPointerDown={(event) => event.stopPropagation()}
+          onClick={(event) => {
+            event.stopPropagation();
+            onClose();
+          }}
           className={cn(
             "relative flex h-full w-7 shrink-0 items-center justify-center rounded-l-lg border-none bg-transparent p-0",
             "transition-[background-color,scale] duration-150 ease-out",
