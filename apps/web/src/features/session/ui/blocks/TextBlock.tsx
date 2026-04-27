@@ -61,6 +61,24 @@ export function TextBlock({ block, role = "assistant", weight = "normal" }: Text
     return null;
   }
 
+  const renderInspectAwareText = (segment: string, keyPrefix: string) => {
+    const nestedInspectSegments =
+      segment.includes("<inspect") || segment.includes("&lt;inspect")
+        ? parseInspectTags(segment)
+        : [];
+    if (nestedInspectSegments.length === 0) {
+      return <span key={`${keyPrefix}-text`}>{segment}</span>;
+    }
+
+    return nestedInspectSegments.map((nestedSegment, nestedIndex) =>
+      typeof nestedSegment === "string" ? (
+        <span key={`${keyPrefix}-text-${nestedIndex}`}>{nestedSegment}</span>
+      ) : (
+        <InspectElementPill key={`${keyPrefix}-inspect-${nestedIndex}`} element={nestedSegment} />
+      )
+    );
+  };
+
   // Weight-based styling
   // Note: For assistant messages, we use opacity wrapper (line 77) instead of text color
   // because .markdown-content in global.css has explicit colors that override utilities
@@ -72,7 +90,7 @@ export function TextBlock({ block, role = "assistant", weight = "normal" }: Text
         <p className={cn("text-base whitespace-pre-wrap", "font-normal", "text-foreground")}>
           {diffCommentSegments.map((segment, i) =>
             typeof segment === "string" ? (
-              <span key={i}>{segment}</span>
+              renderInspectAwareText(segment, `diff-text-${i}`)
             ) : (
               <DiffCommentPill key={`diff-comment-${i}`} comment={segment} />
             )
