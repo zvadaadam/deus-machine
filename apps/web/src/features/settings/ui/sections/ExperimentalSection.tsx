@@ -51,6 +51,25 @@ export function ExperimentalSection({ settings, saveSetting }: SettingsSectionPr
 
       <Separator />
 
+      {/* Apps */}
+      <div className="flex items-center justify-between">
+        <div className="space-y-0.5">
+          <Label htmlFor="experimental-apps" className="text-sm">
+            Apps
+          </Label>
+          <p className="text-muted-foreground text-base">
+            Launch and manage agentic apps inside the workspace.
+          </p>
+        </div>
+        <Switch
+          id="experimental-apps"
+          checked={settings.experimental_apps === true}
+          onCheckedChange={(checked) => saveSetting("experimental_apps", checked)}
+        />
+      </div>
+
+      <Separator />
+
       {/* Design */}
       <div className="flex items-center justify-between">
         <div className="space-y-0.5">

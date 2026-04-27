@@ -49,8 +49,7 @@ export const CONTENT_TABS: ContentTabItem[] = [
     capabilityGate: "nativeSimulator",
     visibilityKey: "experimental_simulator",
   },
-  // AAP (agentic apps protocol) — always visible, no settings/capability gate.
-  { id: "apps", label: "Apps", icon: LayoutGrid },
+  { id: "apps", label: "Apps", icon: LayoutGrid, visibilityKey: "experimental_apps" },
   { id: "config", label: "Agent", icon: Bot },
 ];
 
