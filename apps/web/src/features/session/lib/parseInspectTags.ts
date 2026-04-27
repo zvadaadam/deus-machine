@@ -64,10 +64,43 @@ export type InspectSegment = string | InspectElement;
 
 function normalizeInspectMarkup(text: string): string {
   if (!text.includes("&lt;inspect")) return text;
-  return text
+  const source = text
     .replace(/&lt;(\/?)inspect/g, "<$1inspect")
-    .replace(/&lt;\/inspect&gt;/g, "</inspect>")
-    .replace(/&gt;/g, ">");
+    .replace(/<\/inspect&gt;/g, "</inspect>");
+
+  let result = "";
+  let cursor = 0;
+  let searchIndex = 0;
+  while (true) {
+    const start = source.indexOf("<inspect", searchIndex);
+    if (start === -1) break;
+
+    let inQuote = false;
+    let replaced = false;
+    for (let index = start + "<inspect".length; index < source.length; index++) {
+      if (source[index] === '"') {
+        inQuote = !inQuote;
+        continue;
+      }
+      if (inQuote) continue;
+      if (source[index] === ">") {
+        searchIndex = index + 1;
+        replaced = true;
+        break;
+      }
+      if (source.startsWith("&gt;", index)) {
+        result += source.slice(cursor, index) + ">";
+        cursor = index + "&gt;".length;
+        searchIndex = cursor;
+        replaced = true;
+        break;
+      }
+    }
+
+    if (!replaced) break;
+  }
+
+  return result + source.slice(cursor);
 }
 
 /**

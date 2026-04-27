@@ -71,10 +71,15 @@ import { BROWSER_NEW_TAB_REQUESTED } from "@shared/events";
 const MAX_LOGS = 500;
 const PERSIST_DEBOUNCE_MS = 300;
 const INSPECT_SCREENSHOT_PADDING = 24;
-const INSPECT_SHORTCUT = "⌘⇧D";
+const INSPECT_SHORTCUT =
+  typeof navigator !== "undefined" && /Mac|iPhone|iPad|iPod/i.test(navigator.platform)
+    ? "⌘⇧D"
+    : "Ctrl⇧D";
 
 function isInspectShortcut(e: KeyboardEvent): boolean {
-  return (e.metaKey || e.ctrlKey) && e.shiftKey && !e.altKey && e.key.toLowerCase() === "d";
+  return (
+    !e.repeat && (e.metaKey || e.ctrlKey) && e.shiftKey && !e.altKey && e.key.toLowerCase() === "d"
+  );
 }
 
 interface PendingInspection {
