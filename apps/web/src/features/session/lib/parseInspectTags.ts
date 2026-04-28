@@ -1,3 +1,10 @@
+import {
+  escapeTagValue,
+  normalizeEscapedInspectTags,
+  parseTagAttributes,
+  unescapeTagValue,
+} from "./messageTagCodec";
+
 /**
  * Parse <inspect> XML tags in message text into structured segments.
  *
@@ -5,8 +12,7 @@
  *   Local:    <inspect ref="ref-abc" tag="button" path="body > div" context="local" react="Component" file="src/ui/Button.tsx" line="42">Label</inspect>
  *   External: <inspect ref="ref-abc" tag="button" path="body > div" context="external" styles="background-color: #635bff; border-radius: 8px; font-size: 16px">Label</inspect>
  *
- * Returns an array of plain text strings interspersed with InspectElement objects,
- * which the TextBlock component renders as inline pills.
+ * Returns an array of plain text strings interspersed with InspectElement objects.
  */
 
 export interface InspectElement {
@@ -31,76 +37,24 @@ export interface InspectElement {
   innerHTML?: string;
 }
 
-/** Escape special chars for safe embedding in XML attribute values */
-function escapeAttr(s: string): string {
-  return s
-    .replace(/&/g, "&amp;")
-    .replace(/"/g, "&quot;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;");
-}
-
-/** Unescape XML attribute values back to raw strings */
-function unescapeAttr(s: string): string {
-  return s
-    .replace(/&gt;/g, ">")
-    .replace(/&lt;/g, "<")
-    .replace(/&quot;/g, '"')
-    .replace(/&amp;/g, "&");
-}
-
-/** Parse a single <inspect> tag's attributes */
-function parseAttributes(attrString: string): Record<string, string> {
-  const attrs: Record<string, string> = {};
-  const attrRegex = /([a-zA-Z][\w-]*)="([^"]*)"/g;
-  let match: RegExpExecArray | null;
-  while ((match = attrRegex.exec(attrString)) !== null) {
-    attrs[match[1]] = unescapeAttr(match[2]);
-  }
-  return attrs;
-}
-
 export type InspectSegment = string | InspectElement;
 
-function normalizeInspectMarkup(text: string): string {
-  if (!text.includes("&lt;inspect")) return text;
-  const source = text
-    .replace(/&lt;(\/?)inspect/g, "<$1inspect")
-    .replace(/<\/inspect&gt;/g, "</inspect>");
-
-  let result = "";
-  let cursor = 0;
-  let searchIndex = 0;
-  while (true) {
-    const start = source.indexOf("<inspect", searchIndex);
-    if (start === -1) break;
-
-    let inQuote = false;
-    let replaced = false;
-    for (let index = start + "<inspect".length; index < source.length; index++) {
-      if (source[index] === '"') {
-        inQuote = !inQuote;
-        continue;
-      }
-      if (inQuote) continue;
-      if (source[index] === ">") {
-        searchIndex = index + 1;
-        replaced = true;
-        break;
-      }
-      if (source.startsWith("&gt;", index)) {
-        result += source.slice(cursor, index) + ">";
-        cursor = index + "&gt;".length;
-        searchIndex = cursor;
-        replaced = true;
-        break;
-      }
-    }
-
-    if (!replaced) break;
-  }
-
-  return result + source.slice(cursor);
+export function inspectElementFromTag(attrString: string, encodedText: string): InspectElement {
+  const attrs = parseTagAttributes(attrString);
+  return {
+    ref: attrs.ref ?? "",
+    tagName: attrs.tag ?? "div",
+    path: attrs.path ?? "",
+    innerText: unescapeTagValue(encodedText),
+    context: (attrs.context as "local" | "external") || undefined,
+    reactComponent: attrs.react || undefined,
+    file: attrs.file || undefined,
+    line: attrs.line || undefined,
+    styles: attrs.styles || undefined,
+    props: attrs.props || undefined,
+    attributes: attrs.attributes || undefined,
+    innerHTML: attrs.innerHTML || undefined,
+  };
 }
 
 /**
@@ -108,7 +62,7 @@ function normalizeInspectMarkup(text: string): string {
  * Returns empty array if no <inspect> tags found — caller should render raw text.
  */
 export function parseInspectTags(text: string): InspectSegment[] {
-  const source = normalizeInspectMarkup(text);
+  const source = normalizeEscapedInspectTags(text);
   const tagRegex = /<inspect\s+((?:[^"'>]|"[^"]*")*)>([\s\S]*?)<\/inspect>/g;
   const segments: InspectSegment[] = [];
   let lastIndex = 0;
@@ -120,21 +74,7 @@ export function parseInspectTags(text: string): InspectSegment[] {
       segments.push(source.slice(lastIndex, match.index));
     }
 
-    const attrs = parseAttributes(match[1]);
-    segments.push({
-      ref: attrs.ref ?? "",
-      tagName: attrs.tag ?? "div",
-      path: attrs.path ?? "",
-      innerText: unescapeAttr(match[2]),
-      context: (attrs.context as "local" | "external") || undefined,
-      reactComponent: attrs.react || undefined,
-      file: attrs.file || undefined,
-      line: attrs.line || undefined,
-      styles: attrs.styles || undefined,
-      props: attrs.props || undefined,
-      attributes: attrs.attributes || undefined,
-      innerHTML: attrs.innerHTML || undefined,
-    });
+    segments.push(inspectElementFromTag(match[1], match[2]));
 
     lastIndex = match.index + match[0].length;
   }
@@ -167,13 +107,13 @@ export function serializeInspectElement(el: {
   innerHTML?: string;
 }): string {
   const label = el.innerText?.slice(0, 80) ?? el.tagName;
-  const contextAttr = el.context ? ` context="${escapeAttr(el.context)}"` : "";
-  const reactAttr = el.reactComponent ? ` react="${escapeAttr(el.reactComponent)}"` : "";
-  const fileAttr = el.file ? ` file="${escapeAttr(el.file)}"` : "";
-  const lineAttr = el.line ? ` line="${escapeAttr(el.line)}"` : "";
-  const propsAttr = el.props ? ` props="${escapeAttr(el.props)}"` : "";
-  const attrsAttr = el.attributes ? ` attributes="${escapeAttr(el.attributes)}"` : "";
-  const stylesAttr = el.styles ? ` styles="${escapeAttr(el.styles)}"` : "";
-  const innerHTMLAttr = el.innerHTML ? ` innerHTML="${escapeAttr(el.innerHTML)}"` : "";
-  return `<inspect ref="${escapeAttr(el.ref)}" tag="${escapeAttr(el.tagName)}" path="${escapeAttr(el.path)}"${contextAttr}${reactAttr}${fileAttr}${lineAttr}${propsAttr}${attrsAttr}${stylesAttr}${innerHTMLAttr}>${escapeAttr(label)}</inspect>`;
+  const contextAttr = el.context ? ` context="${escapeTagValue(el.context)}"` : "";
+  const reactAttr = el.reactComponent ? ` react="${escapeTagValue(el.reactComponent)}"` : "";
+  const fileAttr = el.file ? ` file="${escapeTagValue(el.file)}"` : "";
+  const lineAttr = el.line ? ` line="${escapeTagValue(el.line)}"` : "";
+  const propsAttr = el.props ? ` props="${escapeTagValue(el.props)}"` : "";
+  const attrsAttr = el.attributes ? ` attributes="${escapeTagValue(el.attributes)}"` : "";
+  const stylesAttr = el.styles ? ` styles="${escapeTagValue(el.styles)}"` : "";
+  const innerHTMLAttr = el.innerHTML ? ` innerHTML="${escapeTagValue(el.innerHTML)}"` : "";
+  return `<inspect ref="${escapeTagValue(el.ref)}" tag="${escapeTagValue(el.tagName)}" path="${escapeTagValue(el.path)}"${contextAttr}${reactAttr}${fileAttr}${lineAttr}${propsAttr}${attrsAttr}${stylesAttr}${innerHTMLAttr}>${escapeTagValue(label)}</inspect>`;
 }
