@@ -24,8 +24,7 @@ import type { TextBlock as TextBlockType, MessageRole } from "@/shared/types";
 
 import { ChatMarkdown } from "@/components/markdown";
 import { cn } from "@/shared/lib/utils";
-import { parseInspectTags } from "../../lib/parseInspectTags";
-import { parseDiffCommentTags } from "../../lib/parseDiffCommentTags";
+import { parseUserMessageReferences } from "../../lib/parseUserMessageReferences";
 import { InspectElementPill } from "../InspectElementPill";
 import { DiffCommentPill } from "../DiffCommentPill";
 
@@ -41,18 +40,14 @@ export function TextBlock({ block, role = "assistant", weight = "normal" }: Text
   // Handle both TextBlock objects and plain strings
   const text = typeof block === "string" ? block : block.text;
 
-  // Parse <inspect> tags for user messages (memoized, short-circuits on no match)
-  const inspectSegments = useMemo(
+  const referenceSegments = useMemo(
     () =>
-      role === "user" && (text?.includes("<inspect") || text?.includes("&lt;inspect"))
-        ? parseInspectTags(text)
-        : [],
-    [role, text]
-  );
-  const diffCommentSegments = useMemo(
-    () =>
-      role === "user" && (text?.includes("<diff-comment") || text?.includes("Diff comment"))
-        ? parseDiffCommentTags(text)
+      role === "user" &&
+      (text?.includes("<inspect") ||
+        text?.includes("&lt;inspect") ||
+        text?.includes("<diff-comment") ||
+        text?.includes("Diff comment"))
+        ? parseUserMessageReferences(text)
         : [],
     [role, text]
   );
@@ -61,55 +56,22 @@ export function TextBlock({ block, role = "assistant", weight = "normal" }: Text
     return null;
   }
 
-  const renderInspectAwareText = (segment: string, keyPrefix: string) => {
-    const nestedInspectSegments =
-      segment.includes("<inspect") || segment.includes("&lt;inspect")
-        ? parseInspectTags(segment)
-        : [];
-    if (nestedInspectSegments.length === 0) {
-      return <span key={`${keyPrefix}-text`}>{segment}</span>;
-    }
-
-    return nestedInspectSegments.map((nestedSegment, nestedIndex) =>
-      typeof nestedSegment === "string" ? (
-        <span key={`${keyPrefix}-text-${nestedIndex}`}>{nestedSegment}</span>
-      ) : (
-        <InspectElementPill key={`${keyPrefix}-inspect-${nestedIndex}`} element={nestedSegment} />
-      )
-    );
-  };
-
   // Weight-based styling
   // Note: For assistant messages, we use opacity wrapper (line 77) instead of text color
   // because .markdown-content in global.css has explicit colors that override utilities
 
   // User messages: plain text with inline <inspect> pills
   if (role === "user") {
-    if (diffCommentSegments.length > 0) {
+    if (referenceSegments.length > 0) {
       return (
         <p className={cn("text-base whitespace-pre-wrap", "font-normal", "text-foreground")}>
-          {diffCommentSegments.map((segment, i) =>
-            typeof segment === "string" ? (
-              renderInspectAwareText(segment, `diff-text-${i}`)
-            ) : (
-              <DiffCommentPill key={`diff-comment-${i}`} comment={segment} />
-            )
-          )}
-        </p>
-      );
-    }
-
-    // If <inspect> tags were found, render mixed text + pills
-    if (inspectSegments.length > 0) {
-      return (
-        <p className={cn("text-base whitespace-pre-wrap", "font-normal", "text-foreground")}>
-          {inspectSegments.map((segment, i) =>
-            typeof segment === "string" ? (
-              <span key={i}>{segment}</span>
-            ) : (
-              <InspectElementPill key={`inspect-${i}`} element={segment} />
-            )
-          )}
+          {referenceSegments.map((segment, i) => {
+            if (segment.type === "text") return <span key={`text-${i}`}>{segment.text}</span>;
+            if (segment.type === "diff-comment") {
+              return <DiffCommentPill key={`diff-comment-${i}`} comment={segment.comment} />;
+            }
+            return <InspectElementPill key={`inspect-${i}`} element={segment.element} />;
+          })}
         </p>
       );
     }
