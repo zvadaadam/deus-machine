@@ -24,8 +24,9 @@ import type { TextBlock as TextBlockType, MessageRole } from "@/shared/types";
 
 import { ChatMarkdown } from "@/components/markdown";
 import { cn } from "@/shared/lib/utils";
-import { parseInspectTags } from "../../lib/parseInspectTags";
+import { parseUserMessageReferences } from "../../lib/parseUserMessageReferences";
 import { InspectElementPill } from "../InspectElementPill";
+import { DiffCommentPill } from "../DiffCommentPill";
 
 export type TextWeight = "muted" | "normal";
 
@@ -39,9 +40,15 @@ export function TextBlock({ block, role = "assistant", weight = "normal" }: Text
   // Handle both TextBlock objects and plain strings
   const text = typeof block === "string" ? block : block.text;
 
-  // Parse <inspect> tags for user messages (memoized, short-circuits on no match)
-  const inspectSegments = useMemo(
-    () => (role === "user" && text?.includes("<inspect") ? parseInspectTags(text) : []),
+  const referenceSegments = useMemo(
+    () =>
+      role === "user" &&
+      (text?.includes("<inspect") ||
+        text?.includes("&lt;inspect") ||
+        text?.includes("<diff-comment") ||
+        text?.includes("Diff comment"))
+        ? parseUserMessageReferences(text)
+        : [],
     [role, text]
   );
 
@@ -55,17 +62,16 @@ export function TextBlock({ block, role = "assistant", weight = "normal" }: Text
 
   // User messages: plain text with inline <inspect> pills
   if (role === "user") {
-    // If <inspect> tags were found, render mixed text + pills
-    if (inspectSegments.length > 0) {
+    if (referenceSegments.length > 0) {
       return (
         <p className={cn("text-base whitespace-pre-wrap", "font-normal", "text-foreground")}>
-          {inspectSegments.map((segment, i) =>
-            typeof segment === "string" ? (
-              <span key={i}>{segment}</span>
-            ) : (
-              <InspectElementPill key={`inspect-${i}`} element={segment} />
-            )
-          )}
+          {referenceSegments.map((segment, i) => {
+            if (segment.type === "text") return <span key={`text-${i}`}>{segment.text}</span>;
+            if (segment.type === "diff-comment") {
+              return <DiffCommentPill key={`diff-comment-${i}`} comment={segment.comment} />;
+            }
+            return <InspectElementPill key={`inspect-${i}`} element={segment.element} />;
+          })}
         </p>
       );
     }
