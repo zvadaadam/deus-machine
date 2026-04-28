@@ -147,7 +147,8 @@ export async function getPrStatus(workspacePath: string): Promise<PrStatusRespon
 
   // Build list of attempts: try upstream first (for forks), then origin.
   // Use plain branch name — gh pr list --head does NOT support "owner:branch" syntax.
-  // The --author @me flag already narrows results to the current user's PRs.
+  // The workspace branch is the identity here; agents may push PRs from org-owned
+  // branches or automation accounts, so author filtering is intentionally avoided.
   const attempts: { repoArg: string | null; headArg: string }[] = [];
   if (isFork) attempts.push({ repoArg: upstreamUrl, headArg: headBranch });
   attempts.push({ repoArg: originUrl, headArg: headBranch });
@@ -161,8 +162,6 @@ export async function getPrStatus(workspacePath: string): Promise<PrStatusRespon
       "list",
       "--head",
       headArg,
-      "--author",
-      "@me",
       "--state",
       "all",
       "--json",

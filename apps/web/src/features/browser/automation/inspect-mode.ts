@@ -38,6 +38,36 @@ export const INSPECT_MODE_VERIFY = `(function(){
   });
 })()`;
 
+/** Hide the inspect-mode visuals (hover overlay + label + custom cursor).
+ *  Use before `capturePage(rect)` so the screenshot shows only the element,
+ *  not the inspector chrome. No-op if inspect mode isn't active. */
+export const INSPECT_MODE_HIDE_OVERLAYS = `(function(){
+  if (window.__deusInspect && window.__deusInspect.setOverlaysVisible) {
+    window.__deusInspect.setOverlaysVisible(false);
+  }
+})()`;
+
+/** Restore the inspect-mode visuals hidden by INSPECT_MODE_HIDE_OVERLAYS. */
+export const INSPECT_MODE_SHOW_OVERLAYS = `(function(){
+  if (window.__deusInspect && window.__deusInspect.setOverlaysVisible) {
+    window.__deusInspect.setOverlaysVisible(true);
+  }
+})()`;
+
+/** Build a script that clears the pinned selection border. When
+ *  `expectedSelectionKey` is provided, the guest only clears if that same
+ *  click selection is still pinned — this prevents an older async submit
+ *  cleanup from wiping out a newer click on the same element. */
+export function buildInspectModeClearSelection(expectedSelectionKey?: string): string {
+  const selectionKeyArg =
+    expectedSelectionKey === undefined ? "undefined" : JSON.stringify(expectedSelectionKey);
+  return `(function(){
+    if (window.__deusInspect && window.__deusInspect.clearSelection) {
+      window.__deusInspect.clearSelection(${selectionKeyArg});
+    }
+  })()`;
+}
+
 /**
  * Drain buffered inspect events from the WKWebView.
  *
