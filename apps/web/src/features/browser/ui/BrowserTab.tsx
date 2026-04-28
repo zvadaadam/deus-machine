@@ -31,13 +31,22 @@ import {
   closeDevtools as closeDevtoolsMain,
 } from "@/platform/native/browser-views";
 import type { BrowserTabHandle, BrowserTabState, ConsoleLog, ElementSelectedEvent } from "../types";
-import { BLANK_URL, deriveTitleFromUrl, isBlankUrl, FOCUS_URL_BAR_EVENT } from "../types";
+import {
+  BLANK_URL,
+  deriveTitleFromUrl,
+  isBlankUrl,
+  FOCUS_URL_BAR_EVENT,
+  TOGGLE_INSPECT_MODE_EVENT,
+} from "../types";
 import {
   INSPECT_MODE_SETUP,
   INSPECT_MODE_ENABLE,
   INSPECT_MODE_DISABLE,
   INSPECT_MODE_DRAIN_EVENTS,
   INSPECT_MODE_VERIFY,
+  INSPECT_MODE_HIDE_OVERLAYS,
+  INSPECT_MODE_SHOW_OVERLAYS,
+  buildInspectModeClearSelection,
 } from "../automation/inspect-mode";
 import { VISUAL_EFFECTS_SETUP } from "../automation/visual-effects";
 import { getErrorMessage } from "@shared/lib/errors";
@@ -143,6 +152,13 @@ export const BrowserTab = forwardRef<BrowserTabHandle, BrowserTabProps>(function
     bounds,
     isVisible: visible,
   });
+
+  // Latest page bounds, read imperatively by consumers (InspectPromptOverlay
+  // needs them at click time to translate guest-viewport rects to screen
+  // coords). Kept in sync every render without forcing the handle identity
+  // to change.
+  const pageBoundsRef = useRef<Bounds | null>(null);
+  pageBoundsRef.current = bounds;
 
   // Second <webview> hosts the DevTools UI when docked inside the panel.
   // `about:blank` is fine as the initial URL — Electron's
@@ -320,7 +336,7 @@ export const BrowserTab = forwardRef<BrowserTabHandle, BrowserTabProps>(function
     };
 
     // Keyboard shortcuts forwarded from the guest preload via sendToHost.
-    // Channel is "shortcut"; args[0] is one of "reload" | "focus-url-bar".
+    // Channel is "shortcut"; args[0] is one of the shell-handled shortcuts.
     const onIpcMessage = (event: Event) => {
       const e = event as unknown as { channel: string; args: unknown[] };
       if (e.channel !== "shortcut") return;
@@ -330,6 +346,8 @@ export const BrowserTab = forwardRef<BrowserTabHandle, BrowserTabProps>(function
       } else if (shortcut === "focus-url-bar") {
         // Emit a renderer-global event for BrowserPanel to pick up.
         window.dispatchEvent(new CustomEvent(FOCUS_URL_BAR_EVENT));
+      } else if (shortcut === "toggle-inspect-mode") {
+        window.dispatchEvent(new CustomEvent(TOGGLE_INSPECT_MODE_EVENT));
       }
     };
 
@@ -504,22 +522,29 @@ export const BrowserTab = forwardRef<BrowserTabHandle, BrowserTabProps>(function
     };
   }, [getWebview, tabId, onUpdateTab]);
 
+  const setElementSelectorActive = useCallback(
+    async (active: boolean) => {
+      const wv = getWebview();
+      if (!wv) return;
+      if (active && !automationInjectedRef.current) {
+        const ok = await injectAutomation();
+        if (!ok) return;
+      }
+      if (tabRef.current.selectorActive === active) return;
+      try {
+        await wv.executeJavaScript(active ? INSPECT_MODE_ENABLE : INSPECT_MODE_DISABLE);
+        onAddLog(tabId, "info", active ? "Inspect mode activated" : "Inspect mode deactivated");
+        onUpdateTab(tabId, { selectorActive: active });
+      } catch (err) {
+        onAddLog(tabId, "error", `Inspect mode toggle failed: ${getErrorMessage(err)}`);
+      }
+    },
+    [getWebview, tabId, injectAutomation, onUpdateTab, onAddLog]
+  );
+
   const toggleElementSelector = useCallback(async () => {
-    const wv = getWebview();
-    if (!wv) return;
-    if (!automationInjectedRef.current) {
-      const ok = await injectAutomation();
-      if (!ok) return;
-    }
-    const enabling = !tabRef.current.selectorActive;
-    try {
-      await wv.executeJavaScript(enabling ? INSPECT_MODE_ENABLE : INSPECT_MODE_DISABLE);
-      onAddLog(tabId, "info", enabling ? "Inspect mode activated" : "Inspect mode deactivated");
-      onUpdateTab(tabId, { selectorActive: enabling });
-    } catch (err) {
-      onAddLog(tabId, "error", `Inspect mode toggle failed: ${getErrorMessage(err)}`);
-    }
-  }, [getWebview, tabId, injectAutomation, onUpdateTab, onAddLog]);
+    await setElementSelectorActive(!tabRef.current.selectorActive);
+  }, [setElementSelectorActive]);
 
   // Periodic drain of buffered inspect events (only while selector is active).
   useEffect(() => {
@@ -633,17 +658,58 @@ export const BrowserTab = forwardRef<BrowserTabHandle, BrowserTabProps>(function
     onUpdateTab(tabId, { devtoolsOpen: false });
   }, [getWebview, tabId, onUpdateTab, onAddLog]);
 
-  const captureScreenshot = useCallback(async (): Promise<string | null> => {
-    const wv = getWebview();
-    if (!wv) return null;
-    try {
-      const image = await wv.capturePage();
-      return image.toDataURL();
-    } catch (err) {
-      onAddLog(tabId, "error", `Screenshot failed: ${getErrorMessage(err)}`);
-      return null;
-    }
-  }, [getWebview, tabId, onAddLog]);
+  const captureScreenshot = useCallback(
+    async (rect?: {
+      x: number;
+      y: number;
+      width: number;
+      height: number;
+    }): Promise<string | null> => {
+      const wv = getWebview();
+      if (!wv) return null;
+      try {
+        const image = rect ? await wv.capturePage(rect) : await wv.capturePage();
+        return image.toDataURL();
+      } catch (err) {
+        onAddLog(tabId, "error", `Screenshot failed: ${getErrorMessage(err)}`);
+        return null;
+      }
+    },
+    [getWebview, tabId, onAddLog]
+  );
+
+  const setInspectOverlaysVisible = useCallback(
+    async (visible: boolean): Promise<void> => {
+      const wv = getWebview();
+      if (!wv) return;
+      try {
+        await wv.executeJavaScript(
+          visible ? INSPECT_MODE_SHOW_OVERLAYS : INSPECT_MODE_HIDE_OVERLAYS
+        );
+      } catch {
+        // Best-effort: if the inject script hasn't attached (e.g. mid-nav),
+        // just swallow. The screenshot will still capture, just with the
+        // inspector chrome visible — acceptable degradation.
+      }
+    },
+    [getWebview]
+  );
+
+  const getWebviewBounds = useCallback((): Bounds | null => pageBoundsRef.current, []);
+
+  const clearInspectSelection = useCallback(
+    async (expectedSelectionKey?: string): Promise<void> => {
+      const wv = getWebview();
+      if (!wv) return;
+      try {
+        await wv.executeJavaScript(buildInspectModeClearSelection(expectedSelectionKey));
+      } catch {
+        // Same best-effort treatment as setInspectOverlaysVisible — when the
+        // inject script isn't live (mid-nav), silent no-op is fine.
+      }
+    },
+    [getWebview]
+  );
 
   useImperativeHandle(
     ref,
@@ -654,7 +720,11 @@ export const BrowserTab = forwardRef<BrowserTabHandle, BrowserTabProps>(function
       reload,
       injectAutomation,
       toggleElementSelector,
+      setElementSelectorActive,
       captureScreenshot,
+      setInspectOverlaysVisible,
+      clearInspectSelection,
+      getWebviewBounds,
       openDevtools,
       closeDevtools,
     }),
@@ -665,7 +735,11 @@ export const BrowserTab = forwardRef<BrowserTabHandle, BrowserTabProps>(function
       reload,
       injectAutomation,
       toggleElementSelector,
+      setElementSelectorActive,
       captureScreenshot,
+      setInspectOverlaysVisible,
+      clearInspectSelection,
+      getWebviewBounds,
       openDevtools,
       closeDevtools,
     ]

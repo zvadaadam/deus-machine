@@ -2,9 +2,10 @@ import { vi, describe, it, expect, beforeEach } from "vitest";
 
 // ─── Hoisted mocks (vi.mock factories run before imports) ─────────
 
-const { mockExecFileAsync } = vi.hoisted(() => {
+const { mockExecFileAsync, mockGetGitRemoteUrl } = vi.hoisted(() => {
   const mockExecFileAsync = vi.fn(() => Promise.resolve({ stdout: "", stderr: "" }));
-  return { mockExecFileAsync };
+  const mockGetGitRemoteUrl = vi.fn();
+  return { mockExecFileAsync, mockGetGitRemoteUrl };
 });
 
 vi.mock("child_process", () => ({
@@ -15,8 +16,13 @@ vi.mock("util", () => ({
   promisify: () => mockExecFileAsync,
 }));
 
+vi.mock("../../../src/lib/git-remotes", () => ({
+  getGitRemoteUrl: mockGetGitRemoteUrl,
+}));
+
 import {
   classifyCheck,
+  getPrStatus,
   runGh,
   FAILING_CONCLUSIONS,
   PENDING_STATUSES,
@@ -25,6 +31,10 @@ import {
 beforeEach(() => {
   vi.clearAllMocks();
   mockExecFileAsync.mockResolvedValue({ stdout: "", stderr: "" });
+  mockGetGitRemoteUrl.mockImplementation(async (_workspacePath: string, remote: string) => {
+    if (remote === "origin") return "https://github.com/expo/echo-backend.git";
+    return null;
+  });
 });
 
 // ─── Constants ────────────────────────────────────────────────────
@@ -245,5 +255,42 @@ describe("runGh", () => {
       error: "unknown",
       message: "unexpected",
     });
+  });
+});
+
+// ─── getPrStatus ─────────────────────────────────────────────────
+
+describe("getPrStatus", () => {
+  it("looks up the PR by workspace branch without author filtering", async () => {
+    const pr = {
+      number: 720,
+      title: "feat(web): unify iOS popover styling",
+      url: "https://github.com/expo/echo-backend/pull/720",
+      state: "OPEN",
+      mergeable: "MERGEABLE",
+      mergeStateStatus: "CLEAN",
+      statusCheckRollup: [],
+      reviewDecision: null,
+      isDraft: false,
+    };
+    mockExecFileAsync
+      .mockResolvedValueOnce({ stdout: "adam-zvada/fe/popup-consistency\n", stderr: "" })
+      .mockResolvedValueOnce({ stdout: JSON.stringify([pr]), stderr: "" });
+
+    const result = await getPrStatus("/workspace");
+
+    expect(result).toMatchObject({
+      has_pr: true,
+      pr_number: 720,
+      pr_url: "https://github.com/expo/echo-backend/pull/720",
+      pr_state: "open",
+    });
+    expect(mockExecFileAsync).toHaveBeenNthCalledWith(
+      2,
+      "gh",
+      expect.arrayContaining(["--head", "adam-zvada/fe/popup-consistency"]),
+      expect.any(Object)
+    );
+    expect(mockExecFileAsync.mock.calls[1][1]).not.toContain("--author");
   });
 });
