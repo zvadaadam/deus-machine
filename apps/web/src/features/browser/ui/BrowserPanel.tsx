@@ -40,7 +40,8 @@ import {
 import { BrowserTabBar } from "./BrowserTabBar";
 import { BrowserTab } from "./BrowserTab";
 import { FocusModeOverlay } from "./FocusModeOverlay";
-import { webviewManager } from "../webview-manager";
+import { InspectPromptOverlay } from "./InspectPromptOverlay";
+import { webviewManager, type Bounds } from "../webview-manager";
 import { useSidebar } from "@/components/ui";
 import type {
   BrowserTabState,
@@ -55,19 +56,68 @@ import {
   hydratePersistedTab,
   isBlankUrl,
   FOCUS_URL_BAR_EVENT,
+  TOGGLE_INSPECT_MODE_EVENT,
 } from "../types";
 import {
   workspaceLayoutActions,
   useWorkspaceLayoutStore,
 } from "@/features/workspace/store/workspaceLayoutStore";
 import { sessionComposerActions } from "@/features/session/store/sessionComposerStore";
-import { processImageFiles } from "@/features/session/lib/imageAttachments";
+import { attachScreenshotToComposer } from "../lib/attachScreenshotToComposer";
 import { useBrowserWindowStore, browserWindowActions } from "../store/browserWindowStore";
 import { native } from "@/platform";
 import { BROWSER_NEW_TAB_REQUESTED } from "@shared/events";
 
 const MAX_LOGS = 500;
 const PERSIST_DEBOUNCE_MS = 300;
+const INSPECT_SCREENSHOT_PADDING = 24;
+const INSPECT_SHORTCUT =
+  typeof navigator !== "undefined" && /Mac|iPhone|iPad|iPod/i.test(navigator.platform)
+    ? "⌘⇧D"
+    : "Ctrl⇧D";
+
+function isInspectShortcut(e: KeyboardEvent): boolean {
+  return (
+    !e.repeat && (e.metaKey || e.ctrlKey) && e.shiftKey && !e.altKey && e.key.toLowerCase() === "d"
+  );
+}
+
+interface PendingInspection {
+  id: number;
+  event: ElementSelectedEvent;
+  tabId: string;
+  boundsAtSelection: Bounds | null;
+}
+
+function serializeInspectionRecord(
+  record: Record<string, string> | undefined,
+  separator: string
+): string | undefined {
+  if (!record) return undefined;
+  return Object.entries(record)
+    .map(([key, value]) => `${key}${separator}${value}`)
+    .join("; ");
+}
+
+function getInspectionScreenshotRect(rect: {
+  left: number;
+  top: number;
+  width: number;
+  height: number;
+}): { x: number; y: number; width: number; height: number } {
+  return {
+    x: Math.max(0, rect.left - INSPECT_SCREENSHOT_PADDING),
+    y: Math.max(0, rect.top - INSPECT_SCREENSHOT_PADDING),
+    width: rect.width + INSPECT_SCREENSHOT_PADDING * 2,
+    height: rect.height + INSPECT_SCREENSHOT_PADDING * 2,
+  };
+}
+
+function areBoundsEqual(a: Bounds | null, b: Bounds | null): boolean {
+  if (a === b) return true;
+  if (!a || !b) return false;
+  return a.x === b.x && a.y === b.y && a.width === b.width && a.height === b.height;
+}
 
 interface InstalledBrowser {
   name: string;
@@ -139,6 +189,10 @@ export function BrowserPanel({ workspaceId, panelVisible = true }: BrowserPanelP
   const [tabs, setTabs] = useState<BrowserTabState[]>(initialTabs);
   const [activeTabId, setActiveTabId] = useState<string>(initialActiveId);
 
+  // Derived: active tab for nav bar state
+  const activeTab = tabs.find((t) => t.id === activeTabId) ?? null;
+  const activeSelectorActive = !!activeTab?.selectorActive;
+
   // Focus mode — toggle lives in `browserWindowStore.focusModeByWorkspace`.
   // When flipped ON, we stash the current layout and collapse chat + sidebar;
   // flipped OFF, we restore. The ContentTabBar button drives this flag.
@@ -209,15 +263,17 @@ export function BrowserPanel({ workspaceId, panelVisible = true }: BrowserPanelP
     };
   }, [workspaceId]);
 
-  // Esc anywhere exits focus mode.
+  // Esc exits focus mode unless inspect mode is currently consuming it.
   useEffect(() => {
     if (!focusMode || !workspaceId) return;
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") browserWindowActions.setFocusMode(workspaceId, false);
+      if (e.key === "Escape" && !activeSelectorActive) {
+        browserWindowActions.setFocusMode(workspaceId, false);
+      }
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [focusMode, workspaceId]);
+  }, [focusMode, workspaceId, activeSelectorActive]);
 
   // Auto-exit when the Browser content tab is no longer active — otherwise
   // the portal-rendered overlay would keep floating over whatever tab the
@@ -240,9 +296,6 @@ export function BrowserPanel({ workspaceId, panelVisible = true }: BrowserPanelP
 
   // Track previous workspaceId to detect switches
   const prevWorkspaceIdRef = useRef(workspaceId);
-
-  // Derived: active tab for nav bar state
-  const activeTab = tabs.find((t) => t.id === activeTabId) ?? null;
 
   // "Latest value" refs used by stable callbacks (closeTab, handleTabSelect)
   // — child event handlers read the most recent tab list without forcing
@@ -343,7 +396,7 @@ export function BrowserPanel({ workspaceId, panelVisible = true }: BrowserPanelP
     // Sync tabs state to the new workspace — legitimate dependency-driven
     // state update (workspaceId is the external signal, tabs are derived
     // from persisted per-workspace layout).
-    // eslint-disable-next-line react-hooks/set-state-in-effect
+
     setTabs(newTabs);
     setActiveTabId(newActiveId);
     prevWorkspaceIdRef.current = workspaceId;
@@ -391,7 +444,7 @@ export function BrowserPanel({ workspaceId, panelVisible = true }: BrowserPanelP
     // Reacting to a consumer-side effect (new-tab request dispatched via
     // the global browserWindowStore) — the setState IS the sync from that
     // external store into this component's state.
-    // eslint-disable-next-line react-hooks/set-state-in-effect
+
     setTabs((prev) => {
       const next = [...prev, newTab];
       persistTabs(next, newTab.id);
@@ -524,42 +577,167 @@ export function BrowserPanel({ workspaceId, panelVisible = true }: BrowserPanelP
     );
   }, []);
 
-  /** Push an inspected element into the active chat's composer. We go
-   *  straight to the session composer store — the workspace's active
-   *  chat-tab sessionId is looked up in workspaceLayoutStore. Only
-   *  "element-selected" is handled; "area-selected" is ignored (no
-   *  element metadata to reference). */
+  /** Inspect prompt: when the user clicks an element in inspect
+   *  mode we stash the event + webview bounds so InspectPromptOverlay can
+   *  render anchored to the clicked element. Nothing is pushed to the
+   *  composer yet — that happens on submit. A second click while the prompt
+   *  is open replaces the target (user iterating). */
+  const [pendingInspection, setPendingInspection] = useState<PendingInspection | null>(null);
+  const [pendingInspectionBounds, setPendingInspectionBounds] = useState<Bounds | null>(null);
+  const nextInspectionIdRef = useRef(0);
+
   const handleElementSelected = useCallback(
-    (_tabId: string, event: ElementSelectedEvent) => {
+    (tabId: string, event: ElementSelectedEvent) => {
       if (event.type !== "element-selected" || !event.element || !workspaceId) return;
-      const sid = workspaceLayoutActions.getLayout(workspaceId).activeChatTabSessionId;
-      if (!sid) return;
-
-      // Serialize Record<string, string> fields as semicolon-separated strings.
-      const serialize = (rec: Record<string, string> | undefined, sep: string) =>
-        rec
-          ? Object.entries(rec)
-              .map(([k, v]) => `${k}${sep}${v}`)
-              .join("; ")
-          : undefined;
-
-      sessionComposerActions.addInspectedElement(sid, {
-        ref: event.ref ?? "",
-        tagName: event.element.tagName,
-        path: event.element.path,
-        innerText: event.element.innerText,
-        context: event.context,
-        reactComponent: event.reactComponent?.name,
-        file: event.reactComponent?.fileName ?? undefined,
-        line: event.reactComponent?.lineNumber?.toString() ?? undefined,
-        styles: serialize(event.element.styles, ": "),
-        props: serialize(event.element.props, "="),
-        attributes: serialize(event.element.attributes, "="),
-        innerHTML: event.element.innerHTML,
+      const boundsAtSelection = tabRefs.current.get(tabId)?.getWebviewBounds?.() ?? null;
+      setPendingInspectionBounds(boundsAtSelection);
+      setPendingInspection({
+        id: ++nextInspectionIdRef.current,
+        event,
+        tabId,
+        boundsAtSelection,
       });
     },
     [workspaceId]
   );
+
+  /** Clear a specific pending inspection. The id/ref guards matter because
+   *  submit is async: an older submit completion must not clear a newer
+   *  prompt or wipe out the newer pinned border. */
+  const clearPendingInspection = useCallback((inspection: PendingInspection | null) => {
+    if (!inspection) return;
+    setPendingInspection((current) => (current?.id === inspection.id ? null : current));
+    void tabRefs.current
+      .get(inspection.tabId)
+      ?.clearInspectSelection?.(inspection.event.selectionKey);
+  }, []);
+
+  const disableElementSelector = useCallback(() => {
+    clearPendingInspection(pendingInspection);
+    void tabRefs.current.get(activeTabId)?.setElementSelectorActive(false);
+  }, [activeTabId, pendingInspection, clearPendingInspection]);
+
+  const handleInspectPromptDismiss = useCallback(() => {
+    disableElementSelector();
+  }, [disableElementSelector]);
+
+  const handleInspectPromptSubmit = useCallback(
+    async (text: string) => {
+      const inspection = pendingInspection;
+      if (!inspection || !workspaceId) return;
+      const sid = workspaceLayoutActions.getLayout(workspaceId).activeChatTabSessionId;
+      const { event, tabId } = inspection;
+      const element = event.element;
+      if (!sid || !element) {
+        clearPendingInspection(inspection);
+        return;
+      }
+
+      try {
+        // 1. User-typed prompt — appended (preserves any in-progress draft).
+        sessionComposerActions.appendDraft(sid, text);
+
+        // 2. Element metadata card.
+        sessionComposerActions.addInspectedElement(sid, {
+          ref: event.ref ?? "",
+          tagName: element.tagName,
+          path: element.path,
+          innerText: element.innerText,
+          context: event.context,
+          reactComponent: event.reactComponent?.name,
+          file: event.reactComponent?.fileName ?? undefined,
+          line: event.reactComponent?.lineNumber?.toString() ?? undefined,
+          styles: serializeInspectionRecord(element.styles, ": "),
+          props: serializeInspectionRecord(element.props, "="),
+          attributes: serializeInspectionRecord(element.attributes, "="),
+          innerHTML: element.innerHTML,
+        });
+
+        // 3. Region screenshot with a little breathing room around the
+        //    element — raw element-sized crops are often too tight to read.
+        //    Left/top clamp to 0; Electron gracefully clips the right/bottom
+        //    when the padded rect extends past the viewport.
+        const handle = tabRefs.current.get(tabId);
+        if (handle?.captureScreenshot) {
+          try {
+            await handle.setInspectOverlaysVisible?.(false);
+            const dataUrl = await handle.captureScreenshot(
+              getInspectionScreenshotRect(element.rect)
+            );
+            await attachScreenshotToComposer(sid, dataUrl, `element-${event.ref ?? "region"}`);
+          } finally {
+            await handle.setInspectOverlaysVisible?.(true);
+          }
+        }
+      } finally {
+        clearPendingInspection(inspection);
+      }
+    },
+    [pendingInspection, workspaceId, clearPendingInspection]
+  );
+
+  // Auto-dismiss the inline prompt when:
+  //   - the user switches browser tabs (prompt was anchored to the old tab);
+  //   - inspect mode is toggled off on the active tab (toolbar button,
+  //     Escape inside the webview, or page nav — BrowserTab resets
+  //     selectorActive to false on did-start-loading).
+  // Depending on the primitive `selectorActive` (not the `tabs` array)
+  // keeps this effect from re-running on every log push.
+  useEffect(() => {
+    if (!pendingInspection) return;
+    if (pendingInspection.tabId !== activeTabId || !activeSelectorActive) {
+      clearPendingInspection(pendingInspection);
+    }
+  }, [pendingInspection, activeTabId, activeSelectorActive, clearPendingInspection]);
+
+  useEffect(() => {
+    if (!activeSelectorActive) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key !== "Escape") return;
+      e.preventDefault();
+      e.stopPropagation();
+      disableElementSelector();
+    };
+    window.addEventListener("keydown", onKey, true);
+    return () => window.removeEventListener("keydown", onKey, true);
+  }, [activeSelectorActive, disableElementSelector]);
+
+  useEffect(() => {
+    if (!pendingInspection) return;
+    const handle = tabRefs.current.get(pendingInspection.tabId);
+    if (!handle?.getWebviewBounds) return;
+
+    const syncBounds = () => {
+      const nextBounds = handle.getWebviewBounds?.() ?? null;
+      setPendingInspectionBounds((current) =>
+        areBoundsEqual(current, nextBounds) ? current : nextBounds
+      );
+
+      if (
+        pendingInspection.boundsAtSelection &&
+        nextBounds &&
+        (nextBounds.width !== pendingInspection.boundsAtSelection.width ||
+          nextBounds.height !== pendingInspection.boundsAtSelection.height)
+      ) {
+        clearPendingInspection(pendingInspection);
+      }
+    };
+
+    const rafId = requestAnimationFrame(syncBounds);
+    const ro = tabHostEl ? new ResizeObserver(syncBounds) : null;
+    if (ro && tabHostEl) ro.observe(tabHostEl);
+
+    return () => {
+      cancelAnimationFrame(rafId);
+      ro?.disconnect();
+    };
+  }, [
+    pendingInspection,
+    tabHostEl,
+    activeTab?.isMobileView,
+    activeTab?.devtoolsOpen,
+    clearPendingInspection,
+  ]);
 
   /** Capture the active tab's <webview> as PNG and attach it to the chat
    *  composer. Routes through the session composer store so the image
@@ -570,20 +748,8 @@ export function BrowserPanel({ workspaceId, panelVisible = true }: BrowserPanelP
     if (!sid) return;
     const handle = tabRefs.current.get(activeTab.id);
     if (!handle?.captureScreenshot) return;
-    try {
-      const dataUrl = await handle.captureScreenshot();
-      if (!dataUrl) return;
-      const base64 = dataUrl.replace(/^data:image\/\w+;base64,/, "");
-      const binaryStr = atob(base64);
-      const bytes = new Uint8Array(binaryStr.length);
-      for (let i = 0; i < binaryStr.length; i++) bytes[i] = binaryStr.charCodeAt(i);
-      const blob = new Blob([bytes], { type: "image/png" });
-      const file = new File([blob], `browser-screenshot-${Date.now()}.png`, { type: "image/png" });
-      const processed = await processImageFiles([file]);
-      if (processed.length) sessionComposerActions.addImageAttachments(sid, processed);
-    } catch (err) {
-      console.error("Browser screenshot failed:", err);
-    }
+    const dataUrl = await handle.captureScreenshot();
+    await attachScreenshotToComposer(sid, dataUrl, "full-page");
   }, [activeTab, workspaceId]);
 
   /** Toggle between desktop (webview fills panel) and mobile preview
@@ -672,9 +838,26 @@ export function BrowserPanel({ workspaceId, panelVisible = true }: BrowserPanelP
   }, [activeTab]);
 
   const handleToggleSelector = useCallback(() => {
-    if (!activeTab) return;
+    if (!activeTab?.currentUrl) return;
     tabRefs.current.get(activeTab.id)?.toggleElementSelector();
   }, [activeTab]);
+
+  useEffect(() => {
+    if (!panelVisible) return;
+    const onToggleInspect = () => handleToggleSelector();
+    const onKey = (e: KeyboardEvent) => {
+      if (!isInspectShortcut(e)) return;
+      e.preventDefault();
+      e.stopPropagation();
+      handleToggleSelector();
+    };
+    window.addEventListener(TOGGLE_INSPECT_MODE_EVENT, onToggleInspect);
+    window.addEventListener("keydown", onKey, true);
+    return () => {
+      window.removeEventListener(TOGGLE_INSPECT_MODE_EVENT, onToggleInspect);
+      window.removeEventListener("keydown", onKey, true);
+    };
+  }, [panelVisible, handleToggleSelector]);
 
   const handleKeyDown = useCallback(
     (e: React.KeyboardEvent<HTMLInputElement>) => {
@@ -872,9 +1055,14 @@ export function BrowserPanel({ workspaceId, panelVisible = true }: BrowserPanelP
 
           <IconTooltip
             label={
-              activeTab?.selectorActive
-                ? "Exit element selector (Esc)"
-                : "Select element to inspect"
+              <div className="flex items-center gap-3">
+                <span>
+                  {activeTab?.selectorActive ? "Exit inspect mode" : "Inspect an element"}
+                </span>
+                <span className="text-muted-foreground text-xs tracking-widest">
+                  {activeTab?.selectorActive ? "Esc" : INSPECT_SHORTCUT}
+                </span>
+              </div>
             }
           >
             <Button
@@ -884,9 +1072,7 @@ export function BrowserPanel({ workspaceId, panelVisible = true }: BrowserPanelP
               onClick={handleToggleSelector}
               disabled={!activeTab?.currentUrl}
               aria-pressed={activeTab?.selectorActive}
-              aria-label={
-                activeTab?.selectorActive ? "Exit element selector" : "Select element to inspect"
-              }
+              aria-label={activeTab?.selectorActive ? "Exit inspect mode" : "Inspect an element"}
             >
               <MousePointer2 strokeWidth={1.75} className="h-3.5 w-3.5" />
             </Button>
@@ -1034,6 +1220,14 @@ export function BrowserPanel({ workspaceId, panelVisible = true }: BrowserPanelP
       >
         {showFocusOverlay && workspaceId && (
           <FocusModeOverlay anchorEl={tabHostEl} workspaceId={workspaceId} onExit={exitFocusMode} />
+        )}
+        {pendingInspection && pendingInspection.tabId === activeTabId && panelVisible && (
+          <InspectPromptOverlay
+            event={pendingInspection.event}
+            webviewBounds={pendingInspectionBounds}
+            onSubmit={handleInspectPromptSubmit}
+            onDismiss={handleInspectPromptDismiss}
+          />
         )}
         <div className="grid h-full min-h-0 w-full min-w-0">
           {tabs.map((tab) => (

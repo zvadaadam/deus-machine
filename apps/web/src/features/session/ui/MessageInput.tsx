@@ -99,6 +99,105 @@ interface MessageInputProps {
   className?: string;
 }
 
+interface ComposerStagedContentProps {
+  skillMentions: ReturnType<typeof useSessionComposer>["skillMentions"];
+  inspectedElements: ReturnType<typeof useSessionComposer>["inspectedElements"];
+  fileMentions: ReturnType<typeof useSessionComposer>["fileMentions"];
+  imageAttachments: ReturnType<typeof useSessionComposer>["imageAttachments"];
+  pastedTexts: ReturnType<typeof useSessionComposer>["pastedTexts"];
+  onRemoveSkill: (id: string) => void;
+  onRemoveInspectedElement: (id: string) => void;
+  onRemoveFileMention: (id: string) => void;
+  onRemoveImage: (id: string) => void;
+  onRemovePastedText: (id: string) => void;
+}
+
+function ComposerStagedContent({
+  skillMentions,
+  inspectedElements,
+  fileMentions,
+  imageAttachments,
+  pastedTexts,
+  onRemoveSkill,
+  onRemoveInspectedElement,
+  onRemoveFileMention,
+  onRemoveImage,
+  onRemovePastedText,
+}: ComposerStagedContentProps) {
+  const hasPills =
+    skillMentions.length > 0 || inspectedElements.length > 0 || fileMentions.length > 0;
+  const hasImages = imageAttachments.length > 0;
+  const hasPastes = pastedTexts.length > 0;
+
+  if (!hasPills && !hasImages && !hasPastes) return null;
+
+  return (
+    <div className="w-full px-3 pt-3">
+      {hasPills && (
+        <div className="flex flex-wrap items-start gap-2">
+          <AnimatePresence mode="popLayout" initial={false}>
+            {skillMentions.map((mention) => (
+              <SkillMentionCard
+                key={mention.id}
+                mention={mention}
+                onRemove={() => onRemoveSkill(mention.id)}
+              />
+            ))}
+            {inspectedElements.map((element) => (
+              <InspectedElementCard
+                key={element.id}
+                element={element}
+                onRemove={() => onRemoveInspectedElement(element.id)}
+              />
+            ))}
+            {fileMentions.map((mention) => (
+              <FileMentionCard
+                key={mention.id}
+                mention={mention}
+                onRemove={() => onRemoveFileMention(mention.id)}
+              />
+            ))}
+          </AnimatePresence>
+        </div>
+      )}
+
+      {hasImages && (
+        <div className={cn("flex gap-2 overflow-x-auto pt-2 pb-0.5", !hasPills && "pt-0")}>
+          <AnimatePresence mode="popLayout" initial={false}>
+            {imageAttachments.map((attachment) => (
+              <PastedImageCard
+                key={attachment.id}
+                preview={attachment.preview}
+                fileName={attachment.file.name}
+                onRemove={() => onRemoveImage(attachment.id)}
+              />
+            ))}
+          </AnimatePresence>
+        </div>
+      )}
+
+      {hasPastes && (
+        <div
+          className={cn(
+            "flex gap-2 overflow-x-auto pt-2 pb-0.5",
+            !hasPills && !hasImages && "pt-0"
+          )}
+        >
+          <AnimatePresence mode="popLayout" initial={false}>
+            {pastedTexts.map((paste) => (
+              <PastedTextCard
+                key={paste.id}
+                content={paste.content}
+                onRemove={() => onRemovePastedText(paste.id)}
+              />
+            ))}
+          </AnimatePresence>
+        </div>
+      )}
+    </div>
+  );
+}
+
 export function MessageInput({
   sessionId,
   workspaceId = null,
@@ -267,13 +366,6 @@ export function MessageInput({
   const handleSetupEnvironment = () => onSend(GENERATE_HIVE_JSON);
 
   const planModeDisabled = agentHarness === "codex";
-  const hasStaged =
-    imageAttachments.length > 0 ||
-    pastedTexts.length > 0 ||
-    inspectedElements.length > 0 ||
-    fileMentions.length > 0 ||
-    skillMentions.length > 0;
-
   return (
     <div className={cn("relative z-20 shrink-0 px-2 pb-2", className)}>
       <AnimatePresence initial={false}>
@@ -307,48 +399,18 @@ export function MessageInput({
         // in focus mode. Same styling in both contexts — no branching.
         className="bg-bg-muted/75 ring-border-subtle relative overflow-visible rounded-2xl border-0 shadow-lg ring-1 backdrop-blur-xl"
       >
-        {hasStaged && (
-          <div className="flex w-full items-start gap-2 overflow-x-auto px-3 pt-3">
-            <AnimatePresence mode="popLayout" initial={false}>
-              {skillMentions.map((s) => (
-                <SkillMentionCard
-                  key={s.id}
-                  mention={s}
-                  onRemove={() => composer.removeSkillMention(s.id)}
-                />
-              ))}
-              {inspectedElements.map((el) => (
-                <InspectedElementCard
-                  key={el.id}
-                  element={el}
-                  onRemove={() => composer.removeInspectedElement(el.id)}
-                />
-              ))}
-              {fileMentions.map((fm) => (
-                <FileMentionCard
-                  key={fm.id}
-                  mention={fm}
-                  onRemove={() => composer.removeFileMention(fm.id)}
-                />
-              ))}
-              {imageAttachments.map((attachment) => (
-                <PastedImageCard
-                  key={attachment.id}
-                  preview={attachment.preview}
-                  fileName={attachment.file.name}
-                  onRemove={() => composer.removeImageAttachment(attachment.id)}
-                />
-              ))}
-              {pastedTexts.map((paste) => (
-                <PastedTextCard
-                  key={paste.id}
-                  content={paste.content}
-                  onRemove={() => composer.removePastedText(paste.id)}
-                />
-              ))}
-            </AnimatePresence>
-          </div>
-        )}
+        <ComposerStagedContent
+          skillMentions={skillMentions}
+          inspectedElements={inspectedElements}
+          fileMentions={fileMentions}
+          imageAttachments={imageAttachments}
+          pastedTexts={pastedTexts}
+          onRemoveSkill={composer.removeSkillMention}
+          onRemoveInspectedElement={composer.removeInspectedElement}
+          onRemoveFileMention={composer.removeFileMention}
+          onRemoveImage={composer.removeImageAttachment}
+          onRemovePastedText={composer.removePastedText}
+        />
 
         <AnimatePresence initial={false}>
           {slashCommand.isOpen && (

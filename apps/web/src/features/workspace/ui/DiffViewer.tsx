@@ -8,6 +8,7 @@ import { getSingularPatch, parseDiffFromFile } from "@pierre/diffs";
 import type { FileContents, FileDiffMetadata } from "@pierre/diffs";
 import { useDiffOptions } from "@/shared/lib/diffOptions";
 import { sessionComposerActions } from "@/features/session/store/sessionComposerStore";
+import { serializeDiffCommentReference } from "@/features/session/lib/parseDiffCommentTags";
 import { workspaceLayoutActions } from "@/features/workspace/store";
 import { useIsMobile } from "@/shared/hooks/use-mobile";
 
@@ -298,13 +299,12 @@ export function DiffViewer({
     (comment: DiffComment, lineNumber: number, side: CommentSide) => {
       const fileLabel = filePath || "file";
       const sideLabel = side === "additions" ? "addition" : "deletion";
-      return [
-        "### 💬 Diff comment",
-        `- **File:** \`${fileLabel}\``,
-        `- **Line:** ${lineNumber} (${sideLabel})`,
-        "",
-        comment.text,
-      ].join("\n");
+      return serializeDiffCommentReference({
+        file: fileLabel,
+        line: lineNumber,
+        side: sideLabel,
+        text: comment.text,
+      });
     },
     [filePath]
   );

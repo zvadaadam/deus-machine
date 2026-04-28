@@ -37,6 +37,13 @@ window.__deusInspectMode = true;
   var dragStartY = 0;
   var dragSelectionBox = null;
   var elementIdCounter = 0;
+  var selectionIdCounter = 0;
+  // Last-clicked element — the host's prompt overlay is anchored to it, so
+  // we keep the blue border painted around it instead of snapping back to
+  // mouse hover. Cleared on a fresh click (updated to the new element),
+  // on host-initiated clearSelection, or on disableSelectionMode.
+  var pinnedElement = null;
+  var pinnedSelectionKey = null;
 
   // ========================================================================
   // Event Buffer — sole communication path to React
@@ -77,6 +84,11 @@ window.__deusInspectMode = true;
     var id = "deus-" + elementIdCounter;
     el.setAttribute("data-deus-ref", id);
     return id;
+  }
+
+  function createSelectionKey(ref) {
+    selectionIdCounter++;
+    return ref + "@" + selectionIdCounter;
   }
 
   // ========================================================================
@@ -563,6 +575,8 @@ window.__deusInspectMode = true;
   function enableSelectionMode() {
     if (selectionMode) return;
     selectionMode = true;
+    pinnedElement = null;
+    pinnedSelectionKey = null;
     document.body.style.cursor = "none";
 
     if (!cursorStyleOverride) {
@@ -602,6 +616,8 @@ window.__deusInspectMode = true;
   function disableSelectionMode() {
     if (!selectionMode) return;
     selectionMode = false;
+    pinnedElement = null;
+    pinnedSelectionKey = null;
     document.body.style.cursor = "";
 
     if (cursorStyleOverride) {
@@ -682,7 +698,7 @@ window.__deusInspectMode = true;
       dragSelectionBox.style.top = top + "px";
       dragSelectionBox.style.width = width + "px";
       dragSelectionBox.style.height = height + "px";
-    } else if (!isDragging && overlay && overlayLabel) {
+    } else if (!isDragging && !pinnedElement && overlay && overlayLabel) {
       // Use composedPath() for shadow DOM support; fall back to elementFromPoint
       var composed = e.composedPath ? e.composedPath() : [];
       var element = null;
@@ -763,10 +779,10 @@ window.__deusInspectMode = true;
   function captureElement(clientX, clientY) {
     // Use elementFromPoint — reliable since we have exact coordinates
     var element = document.elementFromPoint(clientX, clientY);
-    if (!element || isInspectElement(element)) return;
+    if (!element || isInspectElement(element)) return null;
     // Walk up past text nodes or non-element nodes
     while (element && element.nodeType !== 1) element = element.parentElement;
-    if (!element || !element.tagName) return;
+    if (!element || !element.tagName) return null;
 
     var rect = element.getBoundingClientRect();
     var cs = window.getComputedStyle(element);
@@ -813,6 +829,7 @@ window.__deusInspectMode = true;
 
     // Counter-based stable element ID (replaces random refs)
     var ref = getOrAssignElementId(element);
+    var selectionKey = createSelectionKey(ref);
 
     // Only keep non-Tailwind semantic classes (Tailwind utilities are noise for the AI)
     var className = "";
@@ -931,6 +948,7 @@ window.__deusInspectMode = true;
     sendToFrontend("element-event", {
       type: "element-selected",
       ref: ref,
+      selectionKey: selectionKey,
       context: context,
       element: {
         tagName: element.tagName,
@@ -959,6 +977,7 @@ window.__deusInspectMode = true;
       url: window.location.href,
       timestamp: Date.now(),
     });
+    return { element: element, selectionKey: selectionKey };
   }
 
   function handleMouseUp(e) {
@@ -991,7 +1010,25 @@ window.__deusInspectMode = true;
         // Done here in mouseup instead of handleClick because WKWebView
         // may not synthesize a click event when mousedown and mouseup
         // targets differ (common with tiny trackpad movements).
-        captureElement(dragStartX, dragStartY);
+        var captured = captureElement(dragStartX, dragStartY);
+        if (captured) {
+          // Pin the blue border to the selected element so the user keeps
+          // a visible "this is what you're editing" anchor while the host
+          // prompt is open. Hover redraws are suppressed while pinned.
+          pinnedElement = captured.element;
+          pinnedSelectionKey = captured.selectionKey;
+          if (overlay) {
+            var pr = captured.element.getBoundingClientRect();
+            overlay.style.display = "";
+            overlay.style.left = pr.left + "px";
+            overlay.style.top = pr.top + "px";
+            overlay.style.width = pr.width + "px";
+            overlay.style.height = pr.height + "px";
+          }
+          // The host overlay shows the element identity — keep the guest
+          // dimension label hidden in pinned state.
+          if (overlayLabel) overlayLabel.style.display = "none";
+        }
       }
 
       if (dragSelectionBox) {
@@ -1036,6 +1073,39 @@ window.__deusInspectMode = true;
     drainEvents: function() {
       var events = eventBuffer.splice(0, eventBuffer.length);
       return JSON.stringify(events);
+    },
+    /** Hide or show the hover overlay + label + custom cursor. The host
+     *  toggles these OFF briefly before capturing a region screenshot so
+     *  the inspector's paint doesn't appear on top of the element, then
+     *  toggles them back ON. No-op if the elements don't exist (inspect
+     *  mode isn't active). Respects pinned state: when restoring, the
+     *  dimension label stays hidden so pinning reads clean. */
+    setOverlaysVisible: function(visible) {
+      if (!visible) {
+        if (overlay) overlay.style.display = "none";
+        if (overlayLabel) overlayLabel.style.display = "none";
+        if (selectionCursor) selectionCursor.style.display = "none";
+        return;
+      }
+      if (overlay) overlay.style.display = "";
+      if (selectionCursor) selectionCursor.style.display = "";
+      // Only un-hide the dimension label when there's no pinned selection;
+      // the host overlay already shows the element identity in pinned mode.
+      if (overlayLabel && !pinnedElement) overlayLabel.style.display = "";
+    },
+    /** Release the pinned selection so the blue border returns to
+     *  hover-tracking. When `expectedSelectionKey` is provided, only clear
+     *  if that same click selection is still pinned. This prevents an older
+     *  async host cleanup from erasing a newer click on the same element. */
+    clearSelection: function(expectedSelectionKey) {
+      if (pinnedElement && expectedSelectionKey !== undefined) {
+        if (pinnedSelectionKey !== expectedSelectionKey) return false;
+      }
+      pinnedElement = null;
+      pinnedSelectionKey = null;
+      if (overlay) overlay.style.display = "none";
+      if (overlayLabel) overlayLabel.style.display = "none";
+      return true;
     },
   };
 
