@@ -23,9 +23,10 @@
  *   5. Detect relay mode: if stream URL is not localhost, use WS frame path
  */
 
-import { useCallback, useEffect, useRef } from "react";
+import { useCallback, useEffect, useMemo, useRef } from "react";
 import { cn } from "@/shared/lib/utils";
 import { simulatorService } from "../api/simulator.service";
+import type { InspectorNode, InspectorSnapshot } from "../types";
 import { DeviceFrame } from "./DeviceFrame";
 
 // ---------------------------------------------------------------------------
@@ -119,7 +120,67 @@ interface SimulatorStreamViewerProps {
   onScreenshot: () => void;
   /** device_type from SimulatorInfo — drives device frame rendering */
   deviceType?: string | null;
+  inspectMode?: boolean;
+  inspectorSnapshot?: InspectorSnapshot | null;
+  hoveredInspectorNodeId?: string | null;
+  selectedInspectorNodeId?: string | null;
+  onInspectorHover?: (node: InspectorNode | null) => void;
+  onInspectorSelect?: (node: InspectorNode | null) => void;
   children?: React.ReactNode;
+}
+
+interface FlatInspectorNode {
+  node: InspectorNode;
+  depth: number;
+  order: number;
+  path: string[];
+}
+
+function flattenInspectorNodes(
+  snapshot: InspectorSnapshot | null | undefined
+): FlatInspectorNode[] {
+  const out: FlatInspectorNode[] = [];
+  let order = 0;
+  const walk = (node: InspectorNode, depth: number, path: string[]) => {
+    const nextPath = [...path, node.className];
+    out.push({ node, depth, order: order++, path: nextPath });
+    for (const child of node.children) walk(child, depth + 1, nextPath);
+  };
+  for (const root of snapshot?.roots ?? []) walk(root, 0, []);
+  return out;
+}
+
+function snapshotBounds(
+  snapshot: InspectorSnapshot | null | undefined
+): { width: number; height: number } | null {
+  const root = snapshot?.roots.find(
+    (node) => node.screenRect.width > 0 && node.screenRect.height > 0
+  );
+  if (!root) return null;
+  return { width: root.screenRect.width, height: root.screenRect.height };
+}
+
+function contains(node: InspectorNode, x: number, y: number): boolean {
+  const rect = node.screenRect;
+  return x >= rect.x && y >= rect.y && x <= rect.x + rect.width && y <= rect.y + rect.height;
+}
+
+function pickNodeAtPoint(nodes: FlatInspectorNode[], x: number, y: number): InspectorNode | null {
+  let best: FlatInspectorNode | null = null;
+  for (const item of nodes) {
+    const node = item.node;
+    if (node.hidden || node.alpha < 0.01) continue;
+    if (node.screenRect.width <= 1 || node.screenRect.height <= 1) continue;
+    if (!contains(node, x, y)) continue;
+    if (!best) {
+      best = item;
+      continue;
+    }
+    const area = node.screenRect.width * node.screenRect.height;
+    const bestArea = best.node.screenRect.width * best.node.screenRect.height;
+    if (area < bestArea || (area === bestArea && item.order > best.order)) best = item;
+  }
+  return best?.node ?? null;
 }
 
 // ---------------------------------------------------------------------------
@@ -133,12 +194,31 @@ export function SimulatorStreamViewer({
   hidAvailable,
   onScreenshot,
   deviceType,
+  inspectMode = false,
+  inspectorSnapshot = null,
+  hoveredInspectorNodeId = null,
+  selectedInspectorNodeId = null,
+  onInspectorHover,
+  onInspectorSelect,
   children,
 }: SimulatorStreamViewerProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const viewportRef = useRef<HTMLDivElement>(null);
   const touchWarnedRef = useRef(false);
   const lastCoordsRef = useRef<{ x: number; y: number } | null>(null);
+  const inspectorNodes = useMemo(
+    () => flattenInspectorNodes(inspectorSnapshot),
+    [inspectorSnapshot]
+  );
+  const inspectorBounds = useMemo(() => snapshotBounds(inspectorSnapshot), [inspectorSnapshot]);
+  const selectedInspectorNode = useMemo(
+    () => inspectorNodes.find((item) => item.node.id === selectedInspectorNodeId)?.node ?? null,
+    [inspectorNodes, selectedInspectorNodeId]
+  );
+  const hoveredInspectorNode = useMemo(
+    () => inspectorNodes.find((item) => item.node.id === hoveredInspectorNodeId)?.node ?? null,
+    [hoveredInspectorNodeId, inspectorNodes]
+  );
 
   // Stable ref for workspaceId (window-level mouseup needs current value)
   const workspaceIdRef = useRef(workspaceId);
@@ -219,6 +299,20 @@ export function SimulatorStreamViewer({
     []
   );
 
+  const getInspectorNode = useCallback(
+    (e: React.MouseEvent | MouseEvent): InspectorNode | null => {
+      if (!inspectorBounds) return null;
+      const coords = getNormalizedCoords(e, false);
+      if (!coords) return null;
+      return pickNodeAtPoint(
+        inspectorNodes,
+        coords.x * inspectorBounds.width,
+        coords.y * inspectorBounds.height
+      );
+    },
+    [getNormalizedCoords, inspectorBounds, inspectorNodes]
+  );
+
   const warnTouchFailed = useCallback((err: unknown) => {
     if (!touchWarnedRef.current) {
       touchWarnedRef.current = true;
@@ -234,25 +328,51 @@ export function SimulatorStreamViewer({
     (e: React.MouseEvent) => {
       if (!isLive) return;
       viewportRef.current?.focus();
+      if (inspectMode) {
+        e.preventDefault();
+        onInspectorSelect?.(getInspectorNode(e));
+        return;
+      }
       const coords = getNormalizedCoords(e);
       if (coords)
         simulatorService.sendTouch(workspaceId, coords.x, coords.y, "began").catch(warnTouchFailed);
     },
-    [isLive, workspaceId, getNormalizedCoords, warnTouchFailed]
+    [
+      getInspectorNode,
+      getNormalizedCoords,
+      inspectMode,
+      isLive,
+      onInspectorSelect,
+      warnTouchFailed,
+      workspaceId,
+    ]
   );
 
   const handleMouseMove = useCallback(
     (e: React.MouseEvent) => {
+      if (inspectMode) {
+        onInspectorHover?.(getInspectorNode(e));
+        return;
+      }
       if (!isLive || e.buttons !== 1) return;
       const coords = getNormalizedCoords(e);
       if (coords)
         simulatorService.sendTouch(workspaceId, coords.x, coords.y, "moved").catch(warnTouchFailed);
     },
-    [isLive, workspaceId, getNormalizedCoords, warnTouchFailed]
+    [
+      getInspectorNode,
+      getNormalizedCoords,
+      inspectMode,
+      isLive,
+      onInspectorHover,
+      warnTouchFailed,
+      workspaceId,
+    ]
   );
 
   const handleMouseUp = useCallback(
     (e: React.MouseEvent) => {
+      if (inspectMode) return;
       if (!isLive) return;
       const coords = getNormalizedCoords(e);
       if (coords) {
@@ -260,7 +380,7 @@ export function SimulatorStreamViewer({
         lastCoordsRef.current = null;
       }
     },
-    [isLive, workspaceId, getNormalizedCoords, warnTouchFailed]
+    [getNormalizedCoords, inspectMode, isLive, warnTouchFailed, workspaceId]
   );
 
   // Window-level mouseup — catches drag-release outside the canvas
@@ -285,6 +405,7 @@ export function SimulatorStreamViewer({
 
   const handleWheel = useCallback(
     (e: React.WheelEvent) => {
+      if (inspectMode) return;
       if (!isLive) return;
       const coords = getNormalizedCoords(e, false);
       if (!coords) return;
@@ -293,7 +414,7 @@ export function SimulatorStreamViewer({
         .sendScroll(workspaceId, coords.x, coords.y, -e.deltaX, -e.deltaY)
         .catch(() => {});
     },
-    [isLive, workspaceId, getNormalizedCoords]
+    [getNormalizedCoords, inspectMode, isLive, workspaceId]
   );
 
   // -------------------------------------------------------------------------
@@ -346,6 +467,7 @@ export function SimulatorStreamViewer({
       tabIndex={isLive ? 0 : -1}
       className={cn(
         "bg-bg-base relative flex flex-1 cursor-default items-center justify-center overflow-hidden outline-none select-none",
+        inspectMode && "cursor-crosshair",
         isLive &&
           !deviceType &&
           "focus-visible:ring-primary/30 focus-visible:ring-1 focus-visible:ring-inset"
@@ -353,7 +475,10 @@ export function SimulatorStreamViewer({
       onMouseDown={handleMouseDown}
       onMouseMove={handleMouseMove}
       onMouseUp={handleMouseUp}
-      onMouseLeave={handleMouseUp}
+      onMouseLeave={(event) => {
+        if (inspectMode) onInspectorHover?.(null);
+        else handleMouseUp(event);
+      }}
       onWheel={handleWheel}
       onKeyDown={handleKeyDown}
       onKeyUp={handleKeyUp}
@@ -364,9 +489,49 @@ export function SimulatorStreamViewer({
             ref={canvasRef}
             className="pointer-events-none absolute inset-0 block h-full w-full select-none"
           />
+          {inspectMode && inspectorBounds && (
+            <InspectorOverlay
+              node={selectedInspectorNode ?? hoveredInspectorNode}
+              bounds={inspectorBounds}
+            />
+          )}
         </DeviceFrame>
       )}
       {children}
+    </div>
+  );
+}
+
+function InspectorOverlay({
+  node,
+  bounds,
+}: {
+  node: InspectorNode | null;
+  bounds: { width: number; height: number };
+}) {
+  if (!node) return null;
+  const rect = node.screenRect;
+  const style = {
+    left: `${(rect.x / bounds.width) * 100}%`,
+    top: `${(rect.y / bounds.height) * 100}%`,
+    width: `${(rect.width / bounds.width) * 100}%`,
+    height: `${(rect.height / bounds.height) * 100}%`,
+  };
+  const label = node.label || node.identifier || node.className;
+
+  return (
+    <div className="pointer-events-none absolute inset-0 z-20">
+      <div className="border-primary bg-primary/10 absolute rounded-[3px] border" style={style} />
+      <div
+        className="bg-bg-base/95 border-border text-text-secondary absolute z-10 max-w-[220px] rounded-md border px-2 py-1 text-xs shadow-lg backdrop-blur"
+        style={{
+          left: `min(calc(${style.left} + 6px), calc(100% - 230px))`,
+          top: `min(calc(${style.top} + ${style.height} + 6px), calc(100% - 44px))`,
+        }}
+      >
+        <div className="truncate font-mono text-[11px]">{node.className}</div>
+        {label !== node.className && <div className="text-text-muted truncate">{label}</div>}
+      </div>
     </div>
   );
 }

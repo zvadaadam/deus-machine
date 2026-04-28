@@ -49,6 +49,9 @@ import {
   Camera,
   Check,
   ChevronDown,
+  Crosshair,
+  Send,
+  X,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
@@ -69,7 +72,7 @@ import type { SimPhase } from "../store";
 import { workspaceLayoutActions } from "@/features/workspace/store/workspaceLayoutStore";
 import { sessionComposerActions } from "@/features/session/store/sessionComposerStore";
 import { processImageFiles } from "@/features/session/lib/imageAttachments";
-import type { SimulatorInfo } from "../types";
+import type { InspectorNode, InspectorSnapshot, SimulatorInfo } from "../types";
 import { ensureManifestLoaded } from "../device-chrome";
 import { SimulatorStreamViewer } from "./SimulatorStreamViewer";
 import { SimulatorAppBar } from "./SimulatorAppBar";
@@ -88,6 +91,36 @@ interface SimulatorPanelProps {
 // ---------------------------------------------------------------------------
 
 const MAX_BUILD_LOG_LINES = 50;
+
+function inspectorPathForNode(snapshot: InspectorSnapshot | null, target: InspectorNode): string {
+  const parents = new Map<string, InspectorNode>();
+  const walk = (node: InspectorNode) => {
+    for (const child of node.children) {
+      parents.set(child.id, node);
+      walk(child);
+    }
+  };
+  for (const root of snapshot?.roots ?? []) walk(root);
+  const path = [target.className];
+  let current = parents.get(target.id);
+  while (current) {
+    path.unshift(current.className);
+    current = parents.get(current.id);
+  }
+  return path.slice(-6).join(" > ");
+}
+
+function inspectorPropsForNode(node: InspectorNode): string {
+  const props = node.properties ?? {};
+  const entries = Object.entries(props).slice(0, 12);
+  const rect = node.screenRect;
+  return [
+    `screenRect=${Math.round(rect.x)},${Math.round(rect.y)},${Math.round(rect.width)}×${Math.round(rect.height)}`,
+    `alpha=${node.alpha}`,
+    `hidden=${node.hidden}`,
+    ...entries.map(([key, value]) => `${key}=${value}`),
+  ].join("; ");
+}
 
 // ---------------------------------------------------------------------------
 // Device scoring — iPhones first, booted first, exclude pool/test devices
@@ -253,6 +286,22 @@ export function SimulatorPanel({ workspaceId, workspacePath }: SimulatorPanelPro
   // Build log accumulator — stores last N lines for the build drawer
   const [buildLogs, setBuildLogs] = useState<string[]>([]);
   const buildLogEndRef = useRef<HTMLDivElement>(null);
+  const [inspectMode, setInspectMode] = useState(false);
+  const [inspectorSnapshot, setInspectorSnapshot] = useState<InspectorSnapshot | null>(null);
+  const [hoveredInspectorNode, setHoveredInspectorNode] = useState<InspectorNode | null>(null);
+  const [selectedInspectorNode, setSelectedInspectorNode] = useState<InspectorNode | null>(null);
+  const [inspectError, setInspectError] = useState<string | null>(null);
+  const [inspectLoading, setInspectLoading] = useState(false);
+  const [inspectPrompt, setInspectPrompt] = useState("");
+
+  useEffect(() => {
+    setInspectMode(false);
+    setInspectorSnapshot(null);
+    setHoveredInspectorNode(null);
+    setSelectedInspectorNode(null);
+    setInspectError(null);
+    setInspectPrompt("");
+  }, [workspaceId]);
 
   // Listen for build log events streamed from backend via q:event.
   // Filter to only this workspace so concurrent builds don't interleave.
@@ -569,6 +618,69 @@ export function SimulatorPanel({ workspaceId, workspacePath }: SimulatorPanelPro
     }
   }, [workspaceId]);
 
+  const refreshInspectorSnapshot = useCallback(async () => {
+    const snapshot = await simulatorService.inspectSnapshot(workspaceId);
+    setInspectorSnapshot(snapshot);
+    return snapshot;
+  }, [workspaceId]);
+
+  const handleToggleInspect = useCallback(async () => {
+    if (inspectMode) {
+      setInspectMode(false);
+      setHoveredInspectorNode(null);
+      setSelectedInspectorNode(null);
+      setInspectError(null);
+      return;
+    }
+    setInspectLoading(true);
+    setInspectError(null);
+    try {
+      const snapshot = await simulatorService.startInspect(
+        workspaceId,
+        state.phase === "running" ? state.app.bundle_id : undefined
+      );
+      setInspectorSnapshot(snapshot);
+      setInspectMode(true);
+    } catch (err) {
+      setInspectError(getErrorMessage(err));
+      setInspectMode(false);
+    } finally {
+      setInspectLoading(false);
+    }
+  }, [inspectMode, state, workspaceId]);
+
+  useEffect(() => {
+    if (!inspectMode) return;
+    const timer = setInterval(() => {
+      refreshInspectorSnapshot().catch((err) => setInspectError(getErrorMessage(err)));
+    }, 1000);
+    return () => clearInterval(timer);
+  }, [inspectMode, refreshInspectorSnapshot]);
+
+  const handleInspectorSelect = useCallback((node: InspectorNode | null) => {
+    setSelectedInspectorNode(node);
+    if (node) setInspectPrompt(`Ask about ${node.label || node.className}`);
+  }, []);
+
+  const handleSendInspectToChat = useCallback(() => {
+    const node = selectedInspectorNode;
+    const sid = workspaceLayoutActions.getLayout(workspaceId).activeChatTabSessionId;
+    if (!node || !sid) return;
+    sessionComposerActions.addInspectedElement(sid, {
+      ref: node.id,
+      tagName: node.className,
+      path: inspectorPathForNode(inspectorSnapshot, node),
+      innerText: node.label || node.identifier || node.className,
+      context: "external",
+      props: inspectorPropsForNode(node),
+      attributes: node.identifier ? `accessibilityIdentifier=${node.identifier}` : undefined,
+    });
+    sessionComposerActions.appendDraft(
+      sid,
+      inspectPrompt.trim() || `Help me understand this iOS view: ${node.className}`
+    );
+  }, [inspectPrompt, inspectorSnapshot, selectedInspectorNode, workspaceId]);
+
   // -------------------------------------------------------------------------
   // Empty state — no simulators installed
   // -------------------------------------------------------------------------
@@ -802,6 +914,29 @@ export function SimulatorPanel({ workspaceId, workspacePath }: SimulatorPanelPro
               <TooltipContent side="bottom">Screenshot ⌘⇧S</TooltipContent>
             </Tooltip>
           )}
+
+          {isLive && (
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button
+                  variant={inspectMode ? "outline" : "ghost"}
+                  size="sm"
+                  onClick={handleToggleInspect}
+                  disabled={inspectLoading}
+                  className={cn("h-7 w-7 p-0", inspectMode && "border-primary/40 text-primary")}
+                >
+                  {inspectLoading ? (
+                    <Loader2 className="h-3 w-3 animate-spin" />
+                  ) : (
+                    <Crosshair className="h-3 w-3" />
+                  )}
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent side="bottom">
+                {inspectMode ? "Disable inspect mode" : "Inspect app views"}
+              </TooltipContent>
+            </Tooltip>
+          )}
         </TooltipProvider>
       </div>
 
@@ -813,7 +948,29 @@ export function SimulatorPanel({ workspaceId, workspacePath }: SimulatorPanelPro
         hidAvailable={hidAvailable}
         onScreenshot={handleScreenshot}
         deviceType={selectedSim?.device_type}
+        inspectMode={inspectMode}
+        inspectorSnapshot={inspectorSnapshot}
+        hoveredInspectorNodeId={hoveredInspectorNode?.id ?? null}
+        selectedInspectorNodeId={selectedInspectorNode?.id ?? null}
+        onInspectorHover={setHoveredInspectorNode}
+        onInspectorSelect={handleInspectorSelect}
       >
+        {inspectError && (
+          <div className="border-destructive/30 bg-bg-base/95 text-destructive absolute top-3 left-1/2 z-30 max-w-[360px] -translate-x-1/2 rounded-lg border px-3 py-2 text-xs shadow-lg backdrop-blur">
+            {inspectError}
+          </div>
+        )}
+
+        {inspectMode && selectedInspectorNode && (
+          <InspectorDetailsPanel
+            node={selectedInspectorNode}
+            prompt={inspectPrompt}
+            onPromptChange={setInspectPrompt}
+            onClose={() => setSelectedInspectorNode(null)}
+            onSendToChat={handleSendInspectToChat}
+          />
+        )}
+
         {/* Overlay states on top of (or instead of) the stream */}
         {match(state)
           .with({ phase: "idle" }, () => (
@@ -924,6 +1081,99 @@ export function SimulatorPanel({ workspaceId, workspacePath }: SimulatorPanelPro
         />
       )}
     </div>
+  );
+}
+
+function InspectorDetailsPanel({
+  node,
+  prompt,
+  onPromptChange,
+  onClose,
+  onSendToChat,
+}: {
+  node: InspectorNode;
+  prompt: string;
+  onPromptChange: (value: string) => void;
+  onClose: () => void;
+  onSendToChat: () => void;
+}) {
+  const rect = node.screenRect;
+  const properties = Object.entries(node.properties ?? {}).slice(0, 8);
+
+  return (
+    <aside className="border-border bg-bg-base/95 absolute top-3 right-3 z-30 flex max-h-[calc(100%-24px)] w-[320px] flex-col overflow-hidden rounded-xl border shadow-2xl backdrop-blur">
+      <div className="border-border-subtle flex items-start gap-3 border-b p-3">
+        <div className="bg-primary/10 text-primary flex h-7 w-7 shrink-0 items-center justify-center rounded-lg">
+          <Crosshair className="h-3.5 w-3.5" />
+        </div>
+        <div className="min-w-0 flex-1">
+          <p className="text-text-secondary truncate font-mono text-xs">{node.className}</p>
+          <p className="text-text-muted mt-0.5 truncate text-xs">
+            {node.label || node.identifier || "Native iOS view"}
+          </p>
+        </div>
+        <button
+          type="button"
+          onClick={onClose}
+          className="text-text-muted hover:text-text-secondary rounded-md p-1 transition-colors"
+          aria-label="Close inspector details"
+        >
+          <X className="h-3.5 w-3.5" />
+        </button>
+      </div>
+
+      <div className="flex-1 overflow-y-auto p-3">
+        {node.id.startsWith("ax-") && (
+          <div className="bg-warning/10 text-warning mb-3 rounded-lg px-2 py-1.5 text-xs">
+            Accessibility fallback — build/run an app for richer native properties.
+          </div>
+        )}
+
+        <div className="grid grid-cols-2 gap-2 text-xs">
+          <div className="bg-bg-surface rounded-lg p-2">
+            <p className="text-text-muted">Position</p>
+            <p className="text-text-secondary mt-1 font-mono tabular-nums">
+              {Math.round(rect.x)}, {Math.round(rect.y)}
+            </p>
+          </div>
+          <div className="bg-bg-surface rounded-lg p-2">
+            <p className="text-text-muted">Size</p>
+            <p className="text-text-secondary mt-1 font-mono tabular-nums">
+              {Math.round(rect.width)} × {Math.round(rect.height)}
+            </p>
+          </div>
+        </div>
+
+        {properties.length > 0 && (
+          <div className="mt-3 space-y-1.5">
+            <p className="text-text-muted text-xs font-medium">Properties</p>
+            {properties.map(([key, value]) => (
+              <div key={key} className="grid grid-cols-[110px_1fr] gap-2 text-xs">
+                <span className="text-text-muted truncate font-mono">{key}</span>
+                <span className="text-text-secondary truncate">{value}</span>
+              </div>
+            ))}
+          </div>
+        )}
+
+        <label className="mt-4 block">
+          <span className="text-text-muted text-xs font-medium">Ask about this view</span>
+          <textarea
+            value={prompt}
+            onChange={(event) => onPromptChange(event.target.value)}
+            className="border-border bg-bg-surface text-text-secondary placeholder:text-text-muted focus:border-primary/50 mt-1 min-h-20 w-full resize-none rounded-lg border px-2.5 py-2 text-xs outline-none"
+            placeholder="Why is this clipped? Make this label red..."
+          />
+        </label>
+      </div>
+
+      <div className="border-border-subtle flex justify-end border-t p-2">
+        <Button size="sm" onClick={onSendToChat} className="h-7 gap-1.5 px-2.5 text-xs">
+          <Send className="h-3 w-3" />
+          Add to Chat
+        </Button>
+      </div>
+    </aside>
   );
 }
 
