@@ -230,6 +230,17 @@ export async function runCommand(
         const bytes = await simulator.takeScreenshot(workspaceId);
         return { bytes };
       })
+      .with("sim:inspectStart", async () => {
+        const workspaceId = requireParam(params, "workspaceId", "sim:inspectStart");
+        const bundleId = readString(params, "bundleId");
+        const snapshot = await simulator.startInspector(workspaceId, bundleId ?? undefined);
+        return { snapshot };
+      })
+      .with("sim:inspectSnapshot", async () => {
+        const workspaceId = requireParam(params, "workspaceId", "sim:inspectSnapshot");
+        const snapshot = await simulator.inspectorSnapshot(workspaceId);
+        return { snapshot };
+      })
       .with("sim:buildAndRun", async () => {
         const workspaceId = requireParam(params, "workspaceId", "sim:buildAndRun");
         const workspacePath = requireParam(params, "workspacePath", "sim:buildAndRun");

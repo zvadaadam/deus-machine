@@ -77,6 +77,36 @@ export function findBridgePath(): string {
   }
 }
 
+/** Locate the siminspector dylib shipped next to simbridge. */
+export function findInspectorPath(): string {
+  const override = process.env["DEVICE_USE_SIMINSPECTOR"];
+  if (override && existsSync(override)) return override;
+
+  try {
+    const execDir = dirname(process.execPath);
+    const sibling = join(execDir, "siminspector.dylib");
+    if (existsSync(sibling)) return sibling;
+  } catch {
+    // ignore
+  }
+
+  try {
+    const here = dirname(fileURLToPath(import.meta.url));
+    const candidates = [
+      join(here, "../../native/.build/release/siminspector.dylib"),
+      join(here, "../native/.build/release/siminspector.dylib"),
+      join(here, "../../bin/siminspector.dylib"),
+      join(here, "../bin/siminspector.dylib"),
+    ];
+    for (const candidate of candidates) {
+      if (existsSync(candidate)) return candidate;
+    }
+    return candidates[0]!;
+  } catch {
+    return "siminspector.dylib";
+  }
+}
+
 const BRIDGE_PATH = findBridgePath();
 
 export async function callSimBridge(

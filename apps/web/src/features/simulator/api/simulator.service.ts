@@ -10,7 +10,7 @@
  */
 
 import { sendCommand, onEvent } from "@/platform/ws/query-protocol-client";
-import type { InstalledApp, SimulatorInfo, StreamInfo } from "../types";
+import type { InstalledApp, InspectorSnapshot, SimulatorInfo, StreamInfo } from "../types";
 
 export const simulatorService = {
   /** Fast probe: does this workspace contain a buildable Xcode project? */
@@ -107,6 +107,16 @@ export const simulatorService = {
   takeScreenshot: async (workspaceId: string): Promise<number[]> => {
     const result = await sendCommand("sim:screenshot", { workspaceId });
     return ((result as any)?.bytes ?? []) as number[];
+  },
+
+  startInspect: async (workspaceId: string, bundleId?: string): Promise<InspectorSnapshot> => {
+    const result = await sendCommand("sim:inspectStart", { workspaceId, bundleId });
+    return (result as any)?.snapshot as InspectorSnapshot;
+  },
+
+  inspectSnapshot: async (workspaceId: string): Promise<InspectorSnapshot> => {
+    const result = await sendCommand("sim:inspectSnapshot", { workspaceId });
+    return (result as any)?.snapshot as InspectorSnapshot;
   },
 
   pressHome: (workspaceId: string) =>

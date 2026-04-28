@@ -207,11 +207,13 @@ describe("shared/events", () => {
       expect(COMMAND_NAMES).toContain("sim:stop");
       expect(COMMAND_NAMES).toContain("sim:touch");
       expect(COMMAND_NAMES).toContain("sim:screenshot");
+      expect(COMMAND_NAMES).toContain("sim:inspectStart");
+      expect(COMMAND_NAMES).toContain("sim:inspectSnapshot");
       expect(COMMAND_NAMES).toContain("sim:buildAndRun");
       // AAP commands
       expect(COMMAND_NAMES).toContain("launchApp");
       expect(COMMAND_NAMES).toContain("stopApp");
-      expect(COMMAND_NAMES).toHaveLength(28);
+      expect(COMMAND_NAMES).toHaveLength(30);
     });
 
     it("REQUEST_RESOURCES contains the expected request-only resources", () => {

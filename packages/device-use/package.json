@@ -22,6 +22,7 @@
     "dist",
     "bin",
     "native/.build/release/simbridge",
+    "native/.build/release/siminspector.dylib",
     "skills",
     "LICENSE"
   ],

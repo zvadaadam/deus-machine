@@ -10,11 +10,12 @@
 
 import { execFile, spawn } from "child_process";
 import { promisify } from "util";
-import { existsSync } from "fs";
+import { existsSync, unlinkSync } from "fs";
 import { readdir } from "fs/promises";
-import { createServer } from "net";
+import { createConnection, createServer } from "net";
 import { tmpdir } from "os";
 import { dirname, join } from "path";
+import { createHash } from "crypto";
 import WebSocket from "ws";
 import { getDatabase } from "../lib/database";
 import { getSessionRaw } from "../db/queries";
@@ -35,6 +36,50 @@ export interface SimulatorContext {
   udid: string;
   port?: number;
   streaming: boolean;
+}
+
+export interface InspectorRect {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+}
+
+export interface InspectorNode {
+  id: string;
+  parentId?: string;
+  className: string;
+  label?: string;
+  identifier?: string;
+  frame: InspectorRect;
+  screenRect: InspectorRect;
+  alpha: number;
+  hidden: boolean;
+  userInteractionEnabled: boolean;
+  properties?: Record<string, string>;
+  children: InspectorNode[];
+}
+
+export interface InspectorSnapshot {
+  bundleId: string;
+  pid: number;
+  timestamp: number;
+  roots: InspectorNode[];
+  source?: "native" | "accessibility";
+}
+
+interface AccessibilityNodeLike {
+  role?: string;
+  type?: string;
+  label?: string;
+  identifier?: string;
+  value?: string;
+  frame?: InspectorRect;
+  center?: { x: number; y: number };
+  enabled?: boolean;
+  focused?: boolean;
+  traits?: string[];
+  children?: AccessibilityNodeLike[];
 }
 
 export interface SimulatorInfo {
@@ -58,6 +103,8 @@ interface SimulatorSession {
   hidConnected: boolean;
   appBundleId: string | null;
   appName: string | null;
+  inspectorSocketPath: string | null;
+  inspectorPid: number | null;
   bootedAt: number;
   streamStartedAt: number | null;
 }
@@ -81,6 +128,7 @@ function pushEvent(event: string, data: unknown): void {
 // ---------------------------------------------------------------------------
 
 let cachedBridgePath: string | null | undefined;
+let cachedInspectorPath: string | null | undefined;
 
 /**
  * Walk up from startDir looking for a relative file. Returns the first match
@@ -140,6 +188,42 @@ function findSimBridgePath(): string | null {
   return null;
 }
 
+function findSimInspectorPath(): string | null {
+  if (cachedInspectorPath !== undefined) return cachedInspectorPath;
+
+  const envOverride = process.env["DEVICE_USE_SIMINSPECTOR"];
+  if (envOverride && existsSync(envOverride)) {
+    cachedInspectorPath = envOverride;
+    return envOverride;
+  }
+
+  const resourcesPath = (process as { resourcesPath?: string }).resourcesPath;
+  if (resourcesPath) {
+    const packaged = join(resourcesPath, "simulator", "siminspector.dylib");
+    if (existsSync(packaged)) {
+      cachedInspectorPath = packaged;
+      return packaged;
+    }
+  }
+
+  const devCandidates = [
+    "packages/device-use/bin/siminspector.dylib",
+    "node_modules/device-use/bin/siminspector.dylib",
+    "packages/device-use/native/.build/release/siminspector.dylib",
+  ];
+
+  for (const rel of devCandidates) {
+    const found = findUpwards(process.cwd(), rel);
+    if (found) {
+      cachedInspectorPath = found;
+      return found;
+    }
+  }
+
+  cachedInspectorPath = null;
+  return null;
+}
+
 // ---------------------------------------------------------------------------
 // Port reservation
 // ---------------------------------------------------------------------------
@@ -174,6 +258,34 @@ async function reservePort(preferred: number): Promise<number> {
 
 /** Active stream processes keyed by UDID (multiple sims can stream simultaneously). */
 const activeStreams = new Map<string, { pid: number; port: number; udid: string }>();
+
+interface XcodeProjectRef {
+  path: string;
+  args: string[];
+}
+
+async function findXcodeProject(workspacePath: string): Promise<XcodeProjectRef | null> {
+  const roots = [workspacePath, join(workspacePath, "ios")];
+  for (const root of roots) {
+    try {
+      const entries = await readdir(root);
+      const xcworkspace = entries.find((entry) => entry.endsWith(".xcworkspace"));
+      if (xcworkspace) {
+        const projectPath = join(root, xcworkspace);
+        return { path: projectPath, args: ["-workspace", projectPath] };
+      }
+
+      const xcodeproj = entries.find((entry) => entry.endsWith(".xcodeproj"));
+      if (xcodeproj) {
+        const projectPath = join(root, xcodeproj);
+        return { path: projectPath, args: ["-project", projectPath] };
+      }
+    } catch {
+      // Try the next conventional location.
+    }
+  }
+  return null;
+}
 
 async function spawnStream(
   udid: string,
@@ -440,6 +552,8 @@ export async function startStream(
     hidConnected,
     appBundleId: null,
     appName: null,
+    inspectorSocketPath: null,
+    inspectorPid: null,
     bootedAt: Date.now(),
     streamStartedAt: Date.now(),
   });
@@ -563,6 +677,196 @@ export function sendButton(workspaceId: string, buttonType: string): void {
 }
 
 // ---------------------------------------------------------------------------
+// Public API — native inspect mode
+// ---------------------------------------------------------------------------
+
+function inspectorSocketPath(udid: string, bundleId: string): string {
+  const hash = createHash("sha1").update(`${udid}:${bundleId}`).digest("hex").slice(0, 20);
+  return join(tmpdir(), `deus-siminspector-${hash}.sock`);
+}
+
+function parseLaunchPid(stdout: string): number | null {
+  const pid = Number(stdout.trim().split(":").pop()?.trim());
+  return Number.isFinite(pid) && pid > 0 ? pid : null;
+}
+
+function callInspector<T>(socketPath: string, command: string, timeoutMs = 5000): Promise<T> {
+  return new Promise<T>((resolve, reject) => {
+    const socket = createConnection(socketPath);
+    let settled = false;
+    let buffer = "";
+    const timer = setTimeout(() => {
+      if (settled) return;
+      settled = true;
+      socket.destroy();
+      reject(new Error(`siminspector timed out for ${command}`));
+    }, timeoutMs);
+
+    const finish = (fn: () => void) => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timer);
+      socket.destroy();
+      fn();
+    };
+
+    socket.on("connect", () => {
+      socket.write(`${JSON.stringify({ command })}\n`);
+    });
+    socket.on("data", (chunk) => {
+      buffer += chunk.toString("utf8");
+      const newline = buffer.indexOf("\n");
+      if (newline === -1) return;
+      const line = buffer.slice(0, newline);
+      finish(() => {
+        try {
+          const parsed = JSON.parse(line) as { ok?: boolean; data?: T; error?: string };
+          if (!parsed.ok) reject(new Error(parsed.error ?? "siminspector request failed"));
+          else resolve(parsed.data as T);
+        } catch (err) {
+          reject(err);
+        }
+      });
+    });
+    socket.on("error", (err) => finish(() => reject(err)));
+  });
+}
+
+async function waitForInspector(socketPath: string): Promise<void> {
+  const deadline = Date.now() + 8000;
+  let lastError: unknown;
+  while (Date.now() < deadline) {
+    try {
+      await callInspector<{ pid: number }>(socketPath, "ping", 1000);
+      return;
+    } catch (err) {
+      lastError = err;
+      await new Promise((resolve) => setTimeout(resolve, 150));
+    }
+  }
+  throw new Error(
+    `siminspector did not become ready${lastError instanceof Error ? `: ${lastError.message}` : ""}`
+  );
+}
+
+async function callSimBridgeJson<T>(request: Record<string, unknown>): Promise<T> {
+  const bridgePath = findSimBridgePath();
+  if (!bridgePath) throw new Error("simbridge binary not found. Run `bun install`.");
+  const { stdout } = await execFileAsync(bridgePath, [JSON.stringify(request)], {
+    timeout: 30_000,
+    env: SIM_ENV,
+    maxBuffer: 20 * 1024 * 1024,
+  });
+  const parsed = JSON.parse(stdout) as { success: boolean; data?: T; error?: { message?: string } };
+  if (!parsed.success) throw new Error(parsed.error?.message ?? "simbridge request failed");
+  return parsed.data as T;
+}
+
+function accessibilityNodeToInspectorNode(
+  node: AccessibilityNodeLike,
+  indexPath: string,
+  parentId?: string
+): InspectorNode {
+  const id = `ax-${indexPath}`;
+  const frame = node.frame ?? { x: 0, y: 0, width: 0, height: 0 };
+  const properties: Record<string, string> = {};
+  if (node.role) properties.role = node.role;
+  if (node.value) properties.value = node.value;
+  if (node.enabled !== undefined) properties.enabled = String(node.enabled);
+  if (node.focused !== undefined) properties.focused = String(node.focused);
+  if (node.traits?.length) properties.traits = node.traits.join(", ");
+  if (node.identifier) properties.accessibilityIdentifier = node.identifier;
+  if (node.label) properties.accessibilityLabel = node.label;
+
+  return {
+    id,
+    ...(parentId ? { parentId } : {}),
+    className: node.type ?? node.role ?? "AccessibilityElement",
+    ...(node.label ? { label: node.label } : {}),
+    ...(node.identifier ? { identifier: node.identifier } : {}),
+    frame,
+    screenRect: frame,
+    alpha: 1,
+    hidden: false,
+    userInteractionEnabled: node.enabled ?? true,
+    ...(Object.keys(properties).length > 0 ? { properties } : {}),
+    children: (node.children ?? []).map((child, index) =>
+      accessibilityNodeToInspectorNode(child, `${indexPath}-${index}`, id)
+    ),
+  };
+}
+
+async function accessibilitySnapshot(workspaceId: string): Promise<InspectorSnapshot> {
+  const session = sessions.get(workspaceId);
+  if (!session) throw new Error("No active simulator session");
+  const data = await callSimBridgeJson<{ elements?: AccessibilityNodeLike[] }>({
+    command: "describe-ui",
+    udid: session.udid,
+  });
+  return {
+    bundleId: "accessibility-current-ui",
+    pid: 0,
+    timestamp: Date.now(),
+    source: "accessibility",
+    roots: (data.elements ?? []).map((node, index) =>
+      accessibilityNodeToInspectorNode(node, String(index))
+    ),
+  };
+}
+
+export async function startInspector(
+  workspaceId: string,
+  bundleIdOverride?: string
+): Promise<InspectorSnapshot> {
+  const session = sessions.get(workspaceId);
+  if (!session) throw new Error("No active simulator session");
+  const bundleId = bundleIdOverride ?? session.appBundleId;
+  if (!bundleId) {
+    session.inspectorSocketPath = null;
+    session.inspectorPid = null;
+    return accessibilitySnapshot(workspaceId);
+  }
+
+  const inspectorPath = findSimInspectorPath();
+  if (!inspectorPath) {
+    throw new Error("siminspector dylib not found. Run `bun run prepare:device-use`.");
+  }
+
+  const socketPath = inspectorSocketPath(session.udid, bundleId);
+  try {
+    unlinkSync(socketPath);
+  } catch {
+    /* ignore */
+  }
+
+  const env = {
+    ...SIM_ENV,
+    SIMCTL_CHILD_DYLD_INSERT_LIBRARIES: inspectorPath,
+    SIMCTL_CHILD_DEUS_SIMINSPECTOR_SOCKET: socketPath,
+  };
+  const { stdout } = await execFileAsync(
+    "xcrun",
+    ["simctl", "launch", "--terminate-running-process", session.udid, bundleId],
+    { env, timeout: 30_000 }
+  );
+
+  session.appBundleId = bundleId;
+  session.inspectorSocketPath = socketPath;
+  session.inspectorPid = parseLaunchPid(stdout);
+
+  await waitForInspector(socketPath);
+  return inspectorSnapshot(workspaceId);
+}
+
+export async function inspectorSnapshot(workspaceId: string): Promise<InspectorSnapshot> {
+  const session = sessions.get(workspaceId);
+  if (!session?.inspectorSocketPath) {
+    return accessibilitySnapshot(workspaceId);
+  }
+  return callInspector<InspectorSnapshot>(session.inspectorSocketPath, "snapshot", 8000);
+}
+
+// ---------------------------------------------------------------------------
 // Public API — screenshot
 // ---------------------------------------------------------------------------
 
@@ -588,12 +892,7 @@ export async function takeScreenshot(workspaceId: string): Promise<number[]> {
 // ---------------------------------------------------------------------------
 
 export async function hasXcodeProject(workspacePath: string): Promise<boolean> {
-  try {
-    const entries = await readdir(workspacePath);
-    return entries.some((e) => e.endsWith(".xcodeproj") || e.endsWith(".xcworkspace"));
-  } catch {
-    return false;
-  }
+  return (await findXcodeProject(workspacePath)) !== null;
 }
 
 // ---------------------------------------------------------------------------
@@ -608,16 +907,9 @@ export async function buildAndRun(
   const session = sessions.get(workspaceId);
   if (!session) throw new Error("No active simulator session");
 
-  const entries = await readdir(workspacePath);
-  const xcworkspace = entries.find((e) => e.endsWith(".xcworkspace"));
-  const xcodeproj = entries.find((e) => e.endsWith(".xcodeproj"));
-  const projectArg = xcworkspace
-    ? ["-workspace", join(workspacePath, xcworkspace)]
-    : xcodeproj
-      ? ["-project", join(workspacePath, xcodeproj)]
-      : null;
-
-  if (!projectArg) throw new Error("No Xcode project found in workspace");
+  const project = await findXcodeProject(workspacePath);
+  if (!project) throw new Error("No Xcode project found in workspace or ios/ subdirectory");
+  const projectArg = project.args;
 
   // Resolve scheme: explicit wins, else use the single shared scheme.
   // Multiple schemes without an explicit choice is an error — don't guess.

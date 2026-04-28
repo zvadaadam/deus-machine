@@ -148,6 +148,8 @@ export const COMMAND_NAMES = [
   "sim:scroll",
   "sim:button",
   "sim:screenshot",
+  "sim:inspectStart",
+  "sim:inspectSnapshot",
   "sim:buildAndRun",
   "sim:hasXcodeProject",
   "sim:launchApp",
