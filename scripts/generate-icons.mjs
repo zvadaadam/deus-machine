@@ -25,22 +25,47 @@ const MASTER_PATH = join(ICONS_DIR, "master-1024.png");
 // From global.css dark theme
 const BG_COLOR = "#0f0f0f"; // slightly lifted from #0b0b0b for icon visibility
 const ACCENT_COLOR = "#d4a0b8"; // oklch(0.78 0.09 345) ≈ cool rose
+const DEV_ACCENT = "#F59E0B"; // amber — visually distinct dev variant
 
-// ─── Icon sizes config ────────────────────────────────────────────
-const ELECTRON_SIZES = [
-  { name: "16x16.png", size: 16 },
-  { name: "24x24.png", size: 24 },
-  { name: "32x32.png", size: 32 },
-  { name: "48x48.png", size: 48 },
-  { name: "64x64.png", size: 64 },
-  { name: "128x128.png", size: 128 },
-  { name: "128x128@2x.png", size: 256 },
-  { name: "256x256.png", size: 256 },
-  { name: "512x512.png", size: 512 },
-  { name: "icon.png", size: 512 },
-];
+// ─── Icon shape ───────────────────────────────────────────────────
+// macOS squircle (continuous-curvature superellipse) on a 1024×1024 canvas.
+// Inner shape spans 100..920 (824px) leaving a 100px safe-area for the soft
+// drop shadow. macOS does NOT auto-mask app icons — the squircle, padding,
+// and shadow must be baked into the PNG so the dock displays them directly.
+const SQUIRCLE_PATH_1024 =
+  "M 512 100 C 720 100 820 100 870 150 C 920 200 920 300 920 512 " +
+  "C 920 720 920 820 870 870 C 820 920 720 920 512 920 " +
+  "C 300 920 200 920 150 870 C 100 820 100 720 100 512 " +
+  "C 100 300 100 200 150 150 C 200 100 300 100 512 100 Z";
 
-// macOS .icns requires these exact sizes in an .iconset folder
+// Drop-shadow filter — soft, slightly offset down. Baked into the master so
+// every downscaled variant retains the same grounded look.
+const DROP_SHADOW_FILTER = `
+  <filter id="drop" x="-15%" y="-15%" width="130%" height="130%">
+    <feGaussianBlur in="SourceAlpha" stdDeviation="14"/>
+    <feOffset dx="0" dy="10"/>
+    <feComponentTransfer><feFuncA type="linear" slope="0.55"/></feComponentTransfer>
+    <feMerge>
+      <feMergeNode/>
+      <feMergeNode in="SourceGraphic"/>
+    </feMerge>
+  </filter>
+`;
+
+function buildAppIconSvg(accent) {
+  return `
+    <svg width="1024" height="1024" xmlns="http://www.w3.org/2000/svg">
+      <defs>${DROP_SHADOW_FILTER}</defs>
+      <g filter="url(#drop)">
+        <path d="${SQUIRCLE_PATH_1024}" fill="${BG_COLOR}"/>
+        <circle cx="512" cy="512" r="180" fill="${accent}"/>
+      </g>
+    </svg>
+  `;
+}
+
+// macOS .icns requires these exact sizes in an .iconset folder.
+// Intermediate — written to a tmp dir, packed into icon.icns by iconutil, deleted.
 const ICONSET_SIZES = [
   { name: "icon_16x16.png", size: 16 },
   { name: "icon_16x16@2x.png", size: 32 },
@@ -63,50 +88,43 @@ const WEB_SIZES = [
 
 // ─── Generate master icon ─────────────────────────────────────────
 async function generateMaster() {
-  console.log("Generating master 1024x1024 icon...");
-
-  const size = 1024;
-  const circleRadius = Math.round(size * 0.18); // ~184px radius
-  const cx = size / 2;
-  const cy = size / 2;
-
-  // SVG with background + accent circle
-  // No rounded corners — macOS applies squircle mask automatically,
-  // Windows/Linux expect square icons
-  const svg = `
-    <svg width="${size}" height="${size}" xmlns="http://www.w3.org/2000/svg">
-      <rect width="${size}" height="${size}" fill="${BG_COLOR}" />
-      <circle cx="${cx}" cy="${cy}" r="${circleRadius}" fill="${ACCENT_COLOR}" />
-    </svg>
-  `;
-
+  console.log("Generating master 1024x1024 icon (squircle + soft shadow)...");
+  const svg = buildAppIconSvg(ACCENT_COLOR);
   await sharp(Buffer.from(svg))
     .png({ compressionLevel: 9 })
     .toFile(MASTER_PATH);
-
   console.log(`  -> ${MASTER_PATH}`);
   return MASTER_PATH;
 }
 
-// ─── Generate dev icon (orange dot variant) ───────────────────────
+// ─── Generate dev icon (orange accent variant) ────────────────────
 async function generateDevIcon() {
-  console.log("Generating dev icon (orange dot)...");
-  const size = 512;
-  const circleRadius = Math.round(size * 0.18);
-
-  const svg = `
-    <svg width="${size}" height="${size}" xmlns="http://www.w3.org/2000/svg">
-      <rect width="${size}" height="${size}" fill="${BG_COLOR}" />
-      <circle cx="${size / 2}" cy="${size / 2}" r="${circleRadius}" fill="#F59E0B" />
-    </svg>
-  `;
-
+  console.log("Generating dev icon (squircle + amber accent)...");
+  const svg = buildAppIconSvg(DEV_ACCENT);
   const devPath = join(ICONS_DIR, "icon-dev.png");
+  // Render at 1024 then downscale to 512 so the shadow stays sharp.
   await sharp(Buffer.from(svg))
+    .resize(512, 512, { kernel: sharp.kernel.lanczos3 })
     .png({ compressionLevel: 9 })
     .toFile(devPath);
-
   console.log(`  -> ${devPath}`);
+}
+
+// ─── Generate tray glyph ──────────────────────────────────────────
+// Monochrome alpha glyph for macOS template image (Tray.setTemplateImage(true)).
+// macOS tints it for light/dark menu bars; on Windows it shows as white-on-tray.
+async function generateTrayIcon() {
+  console.log("Generating tray glyph (monochrome, alpha-only)...");
+  const svg = `
+    <svg width="64" height="64" xmlns="http://www.w3.org/2000/svg">
+      <circle cx="32" cy="32" r="22" fill="#ffffff"/>
+    </svg>
+  `;
+  const trayPath = join(ICONS_DIR, "icon-tray.png");
+  await sharp(Buffer.from(svg))
+    .png({ compressionLevel: 9 })
+    .toFile(trayPath);
+  console.log(`  -> ${trayPath}`);
 }
 
 // ─── Resize helper ────────────────────────────────────────────────
@@ -119,13 +137,10 @@ async function resizeTo(masterPath, outputPath, size) {
 
 // ─── Generate all sizes ──────────────────────────────────────────
 async function generateAllSizes(masterPath) {
-  // Electron / desktop icons
-  console.log("\nGenerating desktop icons...");
-  for (const { name, size } of ELECTRON_SIZES) {
-    const out = join(ICONS_DIR, name);
-    await resizeTo(masterPath, out, size);
-    console.log(`  -> ${name} (${size}x${size})`);
-  }
+  // Single 512px icon.png — used by Windows/Linux packaging and the Linux
+  // BrowserWindow icon. electron-builder generates .ico from this directly.
+  console.log("\nGenerating icon.png (512x512)...");
+  await resizeTo(masterPath, join(ICONS_DIR, "icon.png"), 512);
 
   // Web icons
   console.log("\nGenerating web icons...");
@@ -161,6 +176,9 @@ async function generateAllSizes(masterPath) {
 
   // Dev icon
   await generateDevIcon();
+
+  // Tray glyph
+  await generateTrayIcon();
 }
 
 // ─── Generate .icns (macOS) ──────────────────────────────────────
@@ -195,30 +213,6 @@ async function generateIcns(masterPath) {
 
   // Clean up iconset directory
   rmSync(iconsetDir, { recursive: true });
-}
-
-// ─── Generate .ico (Windows) ─────────────────────────────────────
-async function generateIco(masterPath) {
-  console.log("\nGenerating .ico (Windows)...");
-
-  // .ico format: we'll create individual PNGs and note the limitation
-  // A proper .ico requires a tool like png-to-ico or ImageMagick
-  // For now, create the constituent PNGs; electron-builder handles .ico generation
-  const icoSizes = [16, 24, 32, 48, 64, 256];
-  const icoDir = join(ICONS_DIR, "ico-parts");
-  if (!existsSync(icoDir)) mkdirSync(icoDir, { recursive: true });
-
-  for (const size of icoSizes) {
-    await resizeTo(masterPath, join(icoDir, `${size}.png`), size);
-    console.log(`  -> ico-parts/${size}.png`);
-  }
-
-  console.log(
-    "  Note: electron-builder auto-generates .ico from icon.png during build."
-  );
-  console.log(
-    "  For a hand-crafted .ico: brew install imagemagick && magick ico-parts/*.png icon.ico"
-  );
 }
 
 // ─── Main ─────────────────────────────────────────────────────────
@@ -257,18 +251,11 @@ async function main() {
 
   await generateAllSizes(masterPath);
   await generateIcns(masterPath);
-  await generateIco(masterPath);
 
   console.log("\n=== Done! ===");
   console.log("\nGenerated files:");
-  console.log("  Desktop:  resources/icons/ (all sizes + .icns)");
-  console.log("  Web:      apps/web/public/ (favicon, apple-touch, og, svg)");
-  console.log("  Dev:      resources/icons/icon-dev.png (orange dot)");
-  console.log("");
-  console.log("Rounded corners: NOT baked in. Reasons:");
-  console.log("  - macOS auto-applies squircle mask to all app icons");
-  console.log("  - Windows/Linux expect square icons");
-  console.log("  - SVG favicon has rx=6 for browser tab display");
+  console.log("  Desktop:  resources/icons/{master-1024,icon,icon.icns,icon-dev,icon-tray}.png");
+  console.log("  Web:      apps/web/public/{favicon*,apple-touch-icon,og-image,icon}.{png,svg}");
 }
 
 main().catch((err) => {
