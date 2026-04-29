@@ -121,7 +121,7 @@ async function main() {
 
   await buildIcns(master);
 
-  console.log("Done. Wrote 11 files.");
+  console.log("Done.");
 }
 
 main().catch((err) => {
