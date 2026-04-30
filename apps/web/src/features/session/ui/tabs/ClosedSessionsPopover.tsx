@@ -45,7 +45,7 @@ export function ClosedSessionsPopover({ closedTabs, onTabRestore }: ClosedSessio
         </TooltipTrigger>
         {!open && (
           <TooltipContent side="bottom" sideOffset={8}>
-            <p className="text-xs">Restore closed session (⌘⇧T)</p>
+            <p className="text-xs">Restore closed session (Cmd/Ctrl+Shift+T)</p>
           </TooltipContent>
         )}
       </Tooltip>

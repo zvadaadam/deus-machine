@@ -316,9 +316,24 @@ function handleSendMessage(params: QueryParams): CommandResult {
   // the actual harness in the composer before the first send. Persist that
   // first-send choice so follow-up turns route to the same agent process.
   if (session && session.message_count === 0 && session.agent_harness !== agentHarness) {
-    db.prepare(
-      "UPDATE sessions SET agent_harness = ?, updated_at = datetime('now') WHERE id = ?"
-    ).run(agentHarness, sessionId);
+    const result = db
+      .prepare(
+        `
+        UPDATE sessions
+        SET agent_harness = ?, updated_at = datetime('now')
+        WHERE id = ? AND message_count = 0
+      `
+      )
+      .run(agentHarness, sessionId);
+
+    if (result.changes === 0) {
+      const current = getSessionRaw(db, sessionId);
+      if (current && current.agent_harness !== agentHarness) {
+        throw new Error(
+          `Cannot switch agent from ${current.agent_harness} to ${agentHarness} on a session with messages. Open a new chat tab instead.`
+        );
+      }
+    }
   }
 
   // 1. Persist the user message

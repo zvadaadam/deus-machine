@@ -56,7 +56,7 @@ export function useSessionComposer(
 ): UseSessionComposerReturn {
   const fallbackComposer = useMemo(
     () => emptyComposer(initialModel, defaultThinking),
-    [initialModel, defaultThinking]
+    [sessionId, initialModel, defaultThinking]
   );
 
   useEffect(() => {
