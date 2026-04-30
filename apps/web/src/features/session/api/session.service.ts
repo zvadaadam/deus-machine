@@ -8,6 +8,7 @@
 
 import { sendRequest, sendMutate, sendCommand } from "@/platform/ws";
 import type { Session, Message } from "../types";
+import type { AgentHarness } from "@/shared/agents";
 
 /** Pagination params for cursor-based message fetching (seq-based) */
 export interface MessagePaginationParams {
@@ -49,11 +50,17 @@ export const SessionService = {
   /**
    * Send a message to a session
    */
-  sendMessage: async (id: string, content: string, model?: string): Promise<Message> => {
+  sendMessage: async (
+    id: string,
+    content: string,
+    model: string,
+    agentHarness: AgentHarness
+  ): Promise<Message> => {
     const result = await sendCommand("sendMessage", {
       sessionId: id,
       content,
-      ...(model ? { model } : {}),
+      model,
+      agentHarness,
     });
     if (!result.accepted) throw new Error(result.error || "Failed to send message");
     return result as unknown as Message;
