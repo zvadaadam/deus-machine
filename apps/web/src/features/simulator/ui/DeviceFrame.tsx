@@ -28,8 +28,6 @@ interface GenericShellSpec {
     right: string;
     bottom: string;
   };
-  showDynamicIsland: boolean;
-  showCameraDot: boolean;
 }
 
 function getGenericShellSpec(deviceType: string | null | undefined): GenericShellSpec {
@@ -40,14 +38,7 @@ function getGenericShellSpec(deviceType: string | null | undefined): GenericShel
       aspectRatio: "834 / 1194",
       shellRadius: "2.75rem",
       screenRadius: "2.1rem",
-      screenInsets: {
-        top: "2.1%",
-        left: "2.2%",
-        right: "2.2%",
-        bottom: "2.1%",
-      },
-      showDynamicIsland: false,
-      showCameraDot: true,
+      screenInsets: { top: "2.1%", left: "2.2%", right: "2.2%", bottom: "2.1%" },
     };
   }
 
@@ -55,14 +46,7 @@ function getGenericShellSpec(deviceType: string | null | undefined): GenericShel
     aspectRatio: "430 / 932",
     shellRadius: "3.25rem",
     screenRadius: "2.6rem",
-    screenInsets: {
-      top: "1.7%",
-      left: "2.5%",
-      right: "2.5%",
-      bottom: "1.9%",
-    },
-    showDynamicIsland: true,
-    showCameraDot: false,
+    screenInsets: { top: "1.7%", left: "2.5%", right: "2.5%", bottom: "1.9%" },
   };
 }
 
@@ -93,6 +77,7 @@ function FrameContainer({
 
 function GenericDeviceFrame({ deviceType, children }: DeviceFrameProps) {
   const shell = useMemo(() => getGenericShellSpec(deviceType), [deviceType]);
+  const isTablet = deviceType?.includes("iPad") ?? false;
 
   return (
     <FrameContainer aspectRatio={shell.aspectRatio}>
@@ -105,14 +90,7 @@ function GenericDeviceFrame({ deviceType, children }: DeviceFrameProps) {
           aria-hidden="true"
         />
 
-        {shell.showDynamicIsland && (
-          <div
-            className="bg-bg-base pointer-events-none absolute top-[2.35%] left-1/2 z-20 h-[4.1%] w-[38%] -translate-x-1/2 rounded-full"
-            aria-hidden="true"
-          />
-        )}
-
-        {shell.showCameraDot && (
+        {isTablet && (
           <div
             className="bg-bg-base ring-border/40 pointer-events-none absolute top-[1.45%] left-1/2 z-20 h-2.5 w-2.5 -translate-x-1/2 rounded-full ring-2"
             aria-hidden="true"

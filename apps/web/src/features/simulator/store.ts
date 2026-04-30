@@ -81,6 +81,14 @@ interface SimulatorStore {
   phases: Record<string, SimPhaseLabel>;
 }
 
+// Drop both maps' entries for a workspace. Centralizes the "idle keys are
+// absent" invariant — every transition to idle must go through this.
+function withoutWorkspace(state: SimulatorStore, workspaceId: string): Partial<SimulatorStore> {
+  const { [workspaceId]: _s, ...sessions } = state.sessions;
+  const { [workspaceId]: _p, ...phases } = state.phases;
+  return { sessions, phases };
+}
+
 export const useSimulatorStatusStore = create<SimulatorStore>()((set, get) => ({
   sessions: {},
   phases: {},
@@ -96,13 +104,8 @@ export const useSimulatorStatusStore = create<SimulatorStore>()((set, get) => ({
       return false;
     }
 
-    // Idle entries are deleted rather than stored so the map stays small.
     if (next.phase === "idle") {
-      set((s) => {
-        const { [workspaceId]: _s, ...restSessions } = s.sessions;
-        const { [workspaceId]: _p, ...restPhases } = s.phases;
-        return { sessions: restSessions, phases: restPhases };
-      });
+      set((s) => withoutWorkspace(s, workspaceId));
     } else {
       set((s) => ({
         sessions: { ...s.sessions, [workspaceId]: next },
@@ -113,14 +116,8 @@ export const useSimulatorStatusStore = create<SimulatorStore>()((set, get) => ({
   },
 
   setSession: (workspaceId, phase) => {
-    // Respect the "idle keys are absent" invariant: when phase is idle,
-    // delete the key from both maps instead of writing it.
     if (phase.phase === "idle") {
-      set((s) => {
-        const { [workspaceId]: _s, ...restSessions } = s.sessions;
-        const { [workspaceId]: _p, ...restPhases } = s.phases;
-        return { sessions: restSessions, phases: restPhases };
-      });
+      set((s) => withoutWorkspace(s, workspaceId));
     } else {
       set((s) => ({
         sessions: { ...s.sessions, [workspaceId]: phase },
@@ -129,12 +126,7 @@ export const useSimulatorStatusStore = create<SimulatorStore>()((set, get) => ({
     }
   },
 
-  clearWorkspaceSession: (workspaceId) =>
-    set((s) => {
-      const { [workspaceId]: _s, ...restSessions } = s.sessions;
-      const { [workspaceId]: _p, ...restPhases } = s.phases;
-      return { sessions: restSessions, phases: restPhases };
-    }),
+  clearWorkspaceSession: (workspaceId) => set((s) => withoutWorkspace(s, workspaceId)),
 }));
 
 // ---------------------------------------------------------------------------
