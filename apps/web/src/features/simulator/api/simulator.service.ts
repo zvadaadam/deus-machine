@@ -34,13 +34,6 @@ export const simulatorService = {
     }
   },
 
-  /** Check if a streaming session is alive for this workspace.
-   *  Panel uses event-driven recovery now — this returns null.
-   *  The sim:streamReady event provides the stream URL on startup. */
-  getStreamInfo: async (_workspaceId: string): Promise<StreamInfo | null> => {
-    return null;
-  },
-
   /**
    * Start streaming from a simulator. Fires q:command sim:start which
    * returns immediately (ack). The actual stream URL arrives via
