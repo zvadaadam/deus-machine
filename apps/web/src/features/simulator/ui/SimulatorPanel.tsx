@@ -192,13 +192,6 @@ export function SimulatorPanel({ workspaceId, workspacePath }: SimulatorPanelPro
       workspaceLayoutActions.setSimulatorUdid(workspaceId, null);
     }
     updateSelectedUdid(effectiveUdid);
-
-    // Recover from stuck "booting" state — happens if the boot completion event
-    // was lost (e.g. app crashed mid-boot). Reset to idle so the user can retry.
-    const currentPhase = simulatorStoreActions.getSession(workspaceId).phase;
-    if (currentPhase === "booting" && layout.simulatorUdid) {
-      simulatorStoreActions.clearWorkspaceSession(workspaceId);
-    }
     // Runs on every workspace switch (workspaceId prop changes — always-mounted component).
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [workspaceId]);
@@ -753,7 +746,13 @@ export function SimulatorPanel({ workspaceId, workspacePath }: SimulatorPanelPro
             <div className="bg-bg-surface border-border flex items-center gap-0.5 rounded-lg border p-0.5 shadow-sm">
               <Tooltip>
                 <TooltipTrigger asChild>
-                  <Button variant="ghost" size="sm" onClick={handleHome} className="h-7 w-7 p-0">
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={handleHome}
+                    aria-label="Home"
+                    className="h-7 w-7 p-0"
+                  >
                     <Home className="h-3 w-3" />
                   </Button>
                 </TooltipTrigger>
@@ -765,6 +764,7 @@ export function SimulatorPanel({ workspaceId, workspacePath }: SimulatorPanelPro
                     variant="ghost"
                     size="sm"
                     onClick={handleScreenshot}
+                    aria-label="Screenshot"
                     className="h-7 w-7 p-0"
                   >
                     <Camera className="h-3 w-3" />
