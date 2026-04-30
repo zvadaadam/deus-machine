@@ -9,7 +9,7 @@
 import { useState, useEffect, useRef, useCallback, useMemo } from "react";
 import { toast } from "sonner";
 import { useCreateSession, useWorkspaceSessions } from "@/features/session/api/session.queries";
-import { getAgentLabel, getAgentHarnessForModel, type AgentHarness } from "@/shared/agents";
+import { getAgentHarnessForModel, type AgentHarness } from "@/shared/agents";
 import { workspaceLayoutActions } from "@/features/workspace/store/workspaceLayoutStore";
 import { sessionComposerActions } from "@/features/session/store/sessionComposerStore";
 import type { Session } from "@/features/session/types";
@@ -34,10 +34,6 @@ function getOpenSessionIds(tabs: ChatTab[]): Set<string> {
     if (isSessionChatTab(tab)) ids.add(tab.sessionId);
   }
   return ids;
-}
-
-function buildStartedChatLabel(agentHarness: AgentHarness, sequence: number): string {
-  return `${getAgentLabel(agentHarness)} #${sequence}`;
 }
 
 function createPendingTab(): PendingChatTab {
@@ -66,42 +62,23 @@ function createPlaceholderSessionTab(
   };
 }
 
-/** Build a tab from a session record. Sequence is computed externally. */
-function sessionToTab(session: Session, sequence: number): SessionChatTab {
+function getSessionTabLabel(session: Session): string {
+  const title = session.title?.trim();
+  if (title && title.toLowerCase() !== "(session)") return title;
+  return NEW_CHAT_LABEL;
+}
+
+/** Build a tab from a session record. */
+function sessionToTab(session: Session): SessionChatTab {
   const hasStarted = session.message_count > 0;
   return {
     kind: "session",
     id: `tab-${session.id}`,
     sessionId: session.id,
-    label: hasStarted ? buildStartedChatLabel(session.agent_harness, sequence) : NEW_CHAT_LABEL,
+    label: getSessionTabLabel(session),
     agentHarness: session.agent_harness,
     hasStarted,
   };
-}
-
-/** Count started tabs of a given agent type, excluding a specific tab. */
-function countStartedTabsOfHarness(
-  tabs: ChatTab[],
-  agentHarness: AgentHarness,
-  excludeTabId: string
-): number {
-  return tabs.filter(
-    (tab) => tab.id !== excludeTabId && tab.hasStarted && tab.agentHarness === agentHarness
-  ).length;
-}
-
-/** Compute per-harness sequence numbers for a list of sessions (in order). */
-function computeSequences(sessions: Session[]): Map<string, number> {
-  const counters = new Map<string, number>();
-  const result = new Map<string, number>();
-  for (const s of sessions) {
-    if (s.message_count > 0) {
-      const next = (counters.get(s.agent_harness) ?? 0) + 1;
-      counters.set(s.agent_harness, next);
-      result.set(s.id, next);
-    }
-  }
-  return result;
 }
 
 interface UseChatTabsOptions {
@@ -196,10 +173,9 @@ export function useChatTabs({ workspaceId, activeSessionId }: UseChatTabsOptions
         // All persisted sessions are gone — fall back to active session
         const fallbackId = activeSessionId;
         const fallbackSession = fallbackId ? sessionMap.get(fallbackId) : undefined;
-        const seq = fallbackSession ? computeSequences([fallbackSession]) : new Map();
         const tab =
           fallbackSession && fallbackId
-            ? sessionToTab(fallbackSession, seq.get(fallbackId) ?? 1)
+            ? sessionToTab(fallbackSession)
             : fallbackId
               ? createPlaceholderSessionTab(fallbackId)
               : createPendingTab();
@@ -207,18 +183,11 @@ export function useChatTabs({ workspaceId, activeSessionId }: UseChatTabsOptions
         return [tab];
       }
 
-      // Compute sequences across all valid sessions in tab order
-      const orderedSessions = validTabs
-        .filter(isSessionChatTab)
-        .map((tab) => sessionMap.get(tab.sessionId)!)
-        .filter(Boolean);
-      const sequences = computeSequences(orderedSessions);
-
       // Hydrate each placeholder with real session data
       const hydratedTabs = validTabs.map((t) => {
         if (!isSessionChatTab(t)) return t;
         const session = sessionMap.get(t.sessionId)!;
-        return sessionToTab(session, sequences.get(session.id) ?? 1);
+        return sessionToTab(session);
       });
 
       // Fix active tab if it was orphaned
@@ -230,6 +199,37 @@ export function useChatTabs({ workspaceId, activeSessionId }: UseChatTabsOptions
       return hydratedTabs;
     });
   }, [workspaceSessions, sessionMap, activeSessionId]);
+
+  // Keep tab labels fresh as session metadata changes after first send.
+  // The backend derives sessions.title from the first user message; this
+  // sync turns "New chat" into the real title as soon as the WS snapshot lands.
+  useEffect(() => {
+    if (!workspaceSessions) return;
+
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- sync tab metadata from WS-backed session snapshots
+    setMainTabs((prevTabs) => {
+      let changed = false;
+      const nextTabs = prevTabs.map((tab) => {
+        if (!isSessionChatTab(tab)) return tab;
+        const session = sessionMap.get(tab.sessionId);
+        if (!session) return tab;
+
+        const nextTab = sessionToTab(session);
+        if (
+          tab.label === nextTab.label &&
+          tab.agentHarness === nextTab.agentHarness &&
+          tab.hasStarted === nextTab.hasStarted
+        ) {
+          return tab;
+        }
+
+        changed = true;
+        return { ...tab, ...nextTab, initialModel: tab.initialModel };
+      });
+
+      return changed ? nextTabs : prevTabs;
+    });
+  }, [workspaceSessions, sessionMap]);
 
   // --- Persist tab state to localStorage on every change ---
   // Debounced to avoid writing on every intermediate state update.
@@ -375,13 +375,9 @@ export function useChatTabs({ workspaceId, activeSessionId }: UseChatTabsOptions
       const tab = prevTabs[tabIndex];
       if (tab.hasStarted) return prevTabs;
 
-      const agentHarness = tab.agentHarness;
-      const sequence = countStartedTabsOfHarness(prevTabs, agentHarness, tabId) + 1;
-
       const updatedTabs = [...prevTabs];
       updatedTabs[tabIndex] = {
         ...tab,
-        label: buildStartedChatLabel(agentHarness, sequence),
         hasStarted: true,
       };
       return updatedTabs;
