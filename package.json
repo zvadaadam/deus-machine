@@ -64,7 +64,8 @@
     "knip:fix": "knip --fix",
     "prepare": "husky",
     "build:runtime": "bun run build:agent-server && bun run build:backend && bunx tsx apps/runtime/build.ts",
-    "validate:runtime": "bunx tsx apps/runtime/validate.ts"
+    "validate:runtime": "bunx tsx apps/runtime/validate.ts",
+    "icons": "node scripts/generate-icons.mjs"
   },
   "dependencies": {
     "@anthropic-ai/claude-agent-sdk": "^0.2.63",
