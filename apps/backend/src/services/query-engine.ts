@@ -275,24 +275,26 @@ function handleSubscribe(connectionId: string, msg: ResourceFrameInput): void {
     }
     connSubs.set(id, { id, resource: typedResource, params });
 
-    // Messages: delta-only subscription. The HTTP queryFn loads the full set.
-    // Sending a q:snapshot here would overwrite the larger HTTP-loaded cache.
+    // Messages: delta-only subscription. Clients load history via q:request
+    // (or HTTP on web); WS only pushes NEW messages via q:delta. See the
+    // doc comment on QSubscribeFrame.
     if (typedResource === "messages") {
-      const sessionId = readStringParam(params, "sessionId");
+      // Throw on missing sessionId — outer catch converts to q:error so clients
+      // don't silently create a dead subscription that never receives deltas.
+      const sessionId = requireParam(params, "sessionId", "messages");
 
       // Initialize cursor to current max seq — only NEW messages get pushed via delta
       const cursorKey = `${connectionId}:${id}`;
-      if (sessionId) {
-        try {
-          const db = getDatabase();
-          messageCursors.set(cursorKey, getMaxMessageSeq(db, sessionId));
-        } catch {
-          messageCursors.set(cursorKey, 0);
-        }
+      let cursor = 0;
+      try {
+        const db = getDatabase();
+        cursor = getMaxMessageSeq(db, sessionId);
+      } catch {
+        cursor = 0;
       }
+      messageCursors.set(cursorKey, cursor);
 
-      // Null snapshot = subscription ack. Client skips null data.
-      sendFrame(connectionId, { type: "q:snapshot", id, data: null });
+      sendFrame(connectionId, { type: "q:subscribed", id, cursor });
       return;
     }
 
