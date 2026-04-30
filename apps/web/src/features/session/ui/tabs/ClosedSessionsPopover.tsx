@@ -55,7 +55,7 @@ export function ClosedSessionsPopover({ closedTabs, onTabRestore }: ClosedSessio
         <div className="max-h-48 overflow-y-auto">
           {closedTabs.map((closedTab) => (
             <button
-              key={`${closedTab.sessionId}-${closedTab.closedAt}`}
+              key={closedTab.id}
               type="button"
               onClick={() => {
                 onTabRestore(closedTab);
