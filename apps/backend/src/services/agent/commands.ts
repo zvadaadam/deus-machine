@@ -312,6 +312,15 @@ function handleSendMessage(params: QueryParams): CommandResult {
     );
   }
 
+  // New sessions default to Claude at creation time because the user may pick
+  // the actual harness in the composer before the first send. Persist that
+  // first-send choice so follow-up turns route to the same agent process.
+  if (session && session.message_count === 0 && session.agent_harness !== agentHarness) {
+    db.prepare(
+      "UPDATE sessions SET agent_harness = ?, updated_at = datetime('now') WHERE id = ?"
+    ).run(agentHarness, sessionId);
+  }
+
   // 1. Persist the user message
   const result = writeUserMessage(sessionId, content, model);
   if (!result.success) throw new Error(result.error);

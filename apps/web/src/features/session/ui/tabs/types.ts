@@ -20,6 +20,7 @@ export interface PendingChatTab extends BaseChatTab {
 export type ChatTab = SessionChatTab | PendingChatTab;
 
 export interface ClosedSessionTab {
+  id: string;
   label: string;
   sessionId: string;
   agentHarness: AgentHarness;

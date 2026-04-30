@@ -17,14 +17,14 @@ async function scanWorkspaceFiles(workspaceId: string): Promise<FileTreeResponse
 /**
  * TanStack Query hook for file scanning via q:request
  */
-export function useFiles(workspaceId: string | null) {
+export function useFiles(workspaceId: string | null, options?: { enabled?: boolean }) {
   return useQuery({
     queryKey: ["files", workspaceId],
     queryFn: () =>
       workspaceId
         ? scanWorkspaceFiles(workspaceId)
         : Promise.resolve({ files: [], totalFiles: 0, totalSize: 0 }),
-    enabled: !!workspaceId,
+    enabled: !!workspaceId && (options?.enabled ?? true),
     staleTime: 30000, // 30s cache
     refetchOnWindowFocus: false,
     gcTime: 5 * 60 * 1000, // 5 minutes

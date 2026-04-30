@@ -24,6 +24,18 @@ import { getChatTabSessionId, isSessionChatTab } from "@/features/session/ui/tab
 const NEW_CHAT_LABEL = "New chat";
 const MAX_CLOSED_TABS = 20;
 
+function createClosedTabId(sessionId: string): string {
+  return `${sessionId}-${Date.now()}-${crypto.randomUUID()}`;
+}
+
+function getOpenSessionIds(tabs: ChatTab[]): Set<string> {
+  const ids = new Set<string>();
+  for (const tab of tabs) {
+    if (isSessionChatTab(tab)) ids.add(tab.sessionId);
+  }
+  return ids;
+}
+
 function buildStartedChatLabel(agentHarness: AgentHarness, sequence: number): string {
   return `${getAgentLabel(agentHarness)} #${sequence}`;
 }
@@ -247,37 +259,47 @@ export function useChatTabs({ workspaceId, activeSessionId }: UseChatTabsOptions
 
   const handleTabClose = useCallback(
     (tabId: string) => {
-      setMainTabs((prev) => {
-        if (prev.length <= 1) return prev;
+      if (mainTabs.length <= 1) return;
 
-        const closingTab = prev.find((t) => t.id === tabId);
-        const currentIndex = prev.findIndex((t) => t.id === tabId);
-        const newTabs = prev.filter((t) => t.id !== tabId);
+      const closingTab = mainTabs.find((tab) => tab.id === tabId);
+      const currentIndex = mainTabs.findIndex((tab) => tab.id === tabId);
+      if (!closingTab || currentIndex === -1) return;
 
-        if (closingTab && isSessionChatTab(closingTab)) {
-          setClosedTabs((prevClosed) => {
-            const entry: ClosedSessionTab = {
-              label: closingTab.label,
-              sessionId: closingTab.sessionId,
-              agentHarness: closingTab.agentHarness,
-              hasStarted: closingTab.hasStarted,
-              initialModel: closingTab.initialModel,
-              closedAt: Date.now(),
-            };
-            return [entry, ...prevClosed].slice(0, MAX_CLOSED_TABS);
-          });
-          sessionComposerActions.discard(closingTab.sessionId);
-        }
+      const newTabs = mainTabs.filter((tab) => tab.id !== tabId);
+      const openSessionIds = getOpenSessionIds(newTabs);
 
-        if (tabId === activeMainTabId && newTabs.length > 0) {
-          const targetIndex = currentIndex > 0 ? currentIndex - 1 : 0;
-          setActiveMainTabId(newTabs[targetIndex].id);
-          setFocusActiveTabKey((prevKey) => prevKey + 1);
-        }
-        return newTabs;
-      });
+      setMainTabs(newTabs);
+
+      if (isSessionChatTab(closingTab)) {
+        const entry: ClosedSessionTab = {
+          id: createClosedTabId(closingTab.sessionId),
+          label: closingTab.label,
+          sessionId: closingTab.sessionId,
+          agentHarness: closingTab.agentHarness,
+          hasStarted: closingTab.hasStarted,
+          initialModel: closingTab.initialModel,
+          closedAt: Date.now(),
+        };
+        setClosedTabs((prevClosed) =>
+          [
+            entry,
+            ...prevClosed.filter(
+              (closedTab) =>
+                closedTab.sessionId !== closingTab.sessionId &&
+                !openSessionIds.has(closedTab.sessionId)
+            ),
+          ].slice(0, MAX_CLOSED_TABS)
+        );
+        sessionComposerActions.discard(closingTab.sessionId);
+      }
+
+      if (tabId === activeMainTabId && newTabs.length > 0) {
+        const targetIndex = currentIndex > 0 ? currentIndex - 1 : 0;
+        setActiveMainTabId(newTabs[targetIndex].id);
+        setFocusActiveTabKey((prevKey) => prevKey + 1);
+      }
     },
-    [activeMainTabId]
+    [activeMainTabId, mainTabs]
   );
 
   const handleTabAdd = useCallback(
@@ -370,6 +392,15 @@ export function useChatTabs({ workspaceId, activeSessionId }: UseChatTabsOptions
     setMainTabs(reorderedTabs);
   }, []);
 
+  // --- Derived state ---
+
+  const activeTab = mainTabs.find((t) => t.id === activeMainTabId);
+  const openSessionIds = useMemo(() => getOpenSessionIds(mainTabs), [mainTabs]);
+  const restorableClosedTabs = useMemo(
+    () => closedTabs.filter((closedTab) => !openSessionIds.has(closedTab.sessionId)),
+    [closedTabs, openSessionIds]
+  );
+
   // --- Keyboard shortcuts ---
 
   function isTextFieldFocused(): boolean {
@@ -390,14 +421,10 @@ export function useChatTabs({ workspaceId, activeSessionId }: UseChatTabsOptions
 
       // Cmd+Shift+T — restore last closed tab (check before Cmd+T)
       if (isModKey && e.shiftKey && key === "t") {
-        if (closedTabs.length === 0) return;
+        const latestClosedTab = restorableClosedTabs[0];
+        if (!latestClosedTab) return;
         e.preventDefault();
-        setClosedTabs((prev) => {
-          if (prev.length === 0) return prev;
-          const [latest, ...rest] = prev;
-          queueMicrotask(() => handleTabRestore(latest));
-          return rest;
-        });
+        handleTabRestore(latestClosedTab);
         return;
       }
 
@@ -422,22 +449,18 @@ export function useChatTabs({ workspaceId, activeSessionId }: UseChatTabsOptions
     return () => window.removeEventListener("keydown", handleKeyDown);
   }, [
     activeMainTabId,
-    closedTabs.length,
     handleTabAdd,
     handleTabClose,
     handleTabRestore,
     mainTabs.length,
+    restorableClosedTabs,
   ]);
-
-  // --- Derived state ---
-
-  const activeTab = mainTabs.find((t) => t.id === activeMainTabId);
 
   return {
     tabs: mainTabs,
     activeTabId: activeMainTabId,
     activeTab,
-    closedTabs,
+    closedTabs: restorableClosedTabs,
     focusActiveTabKey,
     handleTabChange,
     handleTabClose,
