@@ -47,6 +47,9 @@ export const MIGRATIONS: string[] = [
   // sessions: drop the `model` column. Never read by the frontend; the
   // per-turn model lives on messages.model instead.
   `ALTER TABLE sessions DROP COLUMN model`,
+  // Cleanup: old Claude SDK fallback titles polluted session/workspace labels.
+  `UPDATE sessions SET title = NULL WHERE title = '(session)'`,
+  `UPDATE workspaces SET title = NULL WHERE title = '(session)'`,
 ];
 
 function normalizeMigrationSql(sql: string): string {

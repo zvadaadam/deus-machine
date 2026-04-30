@@ -25,6 +25,7 @@ export interface Workspace {
   status: WorkspaceStatus;
   current_session_id: string | null;
   session_status: SessionStatus | null;
+  current_session_title?: string | null;
   session_error_category: string | null;
   session_error_message: string | null;
   latest_message_sent_at: string | null;

@@ -136,31 +136,6 @@ export function processMessage(
       // Emit canonical session.idle — backend handles DB status update
       EventBroadcaster.emitSessionIdle(opts.sessionId, "claude");
     }
-
-    // Best-effort title fetch: after the first successful turn, ask the SDK
-    // for its auto-generated session summary and emit it as a canonical event.
-    // Fire-and-forget — title is cosmetic, don't block the stream.
-    if (!ctx.titleFetched && session.cwd) {
-      ctx.titleFetched = true;
-      const sdkSessionId = cleanMessage.session_id ? String(cleanMessage.session_id) : null;
-
-      void (async () => {
-        try {
-          const { listSessions } = await import("@anthropic-ai/claude-agent-sdk");
-          const sessions = await listSessions({ dir: session.cwd, limit: 20 });
-          const matched = sdkSessionId ? sessions.find((s) => s.sessionId === sdkSessionId) : null;
-          const title = matched?.summary;
-          if (title) {
-            EventBroadcaster.emitSessionTitle(opts.sessionId, "claude", title);
-          }
-        } catch (error) {
-          console.error(
-            `[${opts.generatorId}] Failed to fetch session title:`,
-            getErrorMessage(error)
-          );
-        }
-      })();
-    }
   }
 
   // 6. result/error_during_execution → capture for error diagnostics

@@ -31,12 +31,13 @@ import { writeUserMessage } from "../../../src/services/message-writer";
 describe("writeUserMessage", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    mockRun.mockReturnValue({ changes: 1 });
     mockPrepare.mockReturnValue({ run: mockRun });
     mockTransaction.mockImplementation((fn: () => void) => fn);
-    mockGetSessionRaw.mockReturnValue({ id: "sess-123" });
+    mockGetSessionRaw.mockReturnValue({ id: "sess-123", message_count: 0, title: null });
   });
 
-  it("persists the message and updates session state", () => {
+  it("persists the message, updates session state, and derives first title", () => {
     const result = writeUserMessage("sess-123", "hello world", "sonnet");
 
     expect(result).toEqual({ success: true, messageId: expect.any(String) });
@@ -55,6 +56,20 @@ describe("writeUserMessage", () => {
       expect.stringContaining("UPDATE sessions SET status = 'working'")
     );
     expect(mockRun).toHaveBeenNthCalledWith(2, expect.any(String), "sess-123");
+    expect(mockPrepare).toHaveBeenNthCalledWith(
+      3,
+      expect.stringContaining("UPDATE sessions SET title")
+    );
+    expect(mockRun).toHaveBeenNthCalledWith(3, "hello world", "sess-123");
+  });
+
+  it("does not derive a title after the first message", () => {
+    mockGetSessionRaw.mockReturnValue({ id: "sess-123", message_count: 1, title: null });
+
+    const result = writeUserMessage("sess-123", "second message", "sonnet");
+
+    expect(result.success).toBe(true);
+    expect(mockPrepare).toHaveBeenCalledTimes(2);
   });
 
   it("returns an error when the session is missing", () => {

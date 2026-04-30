@@ -10,7 +10,6 @@ const {
   mockEmitAgentSessionId,
   mockEmitSessionIdle,
   mockEmitSessionError,
-  mockEmitSessionTitle,
   mockClassifyStopReason,
 } = vi.hoisted(() => ({
   mockSendMessage: vi.fn(),
@@ -18,7 +17,6 @@ const {
   mockEmitAgentSessionId: vi.fn(),
   mockEmitSessionIdle: vi.fn(),
   mockEmitSessionError: vi.fn(),
-  mockEmitSessionTitle: vi.fn(),
   mockClassifyStopReason: vi.fn(),
 }));
 
@@ -30,21 +28,11 @@ vi.mock("../event-broadcaster", () => ({
     emitAgentSessionId: mockEmitAgentSessionId,
     emitSessionIdle: mockEmitSessionIdle,
     emitSessionError: mockEmitSessionError,
-    emitSessionTitle: mockEmitSessionTitle,
   },
 }));
 
 vi.mock("../agents/lifecycle", () => ({
   classifyStopReason: mockClassifyStopReason,
-}));
-
-// Mock the Claude Agent SDK's listSessions (used via dynamic import in title fetch)
-const { mockListSessions } = vi.hoisted(() => ({
-  mockListSessions: vi.fn(() => Promise.resolve([])),
-}));
-
-vi.mock("@anthropic-ai/claude-agent-sdk", () => ({
-  listSessions: mockListSessions,
 }));
 
 // ============================================================================
@@ -346,91 +334,6 @@ describe("processMessage", () => {
       processMessage(msg, makeCtx(), makeSession(), makeOpts({ isResume: true }));
 
       expect(mockEmitAgentSessionId).not.toHaveBeenCalled();
-    });
-  });
-
-  // --------------------------------------------------------------------------
-  // Title emission on result/success
-  // --------------------------------------------------------------------------
-
-  describe("title emission", () => {
-    it("fetches and emits session title on first result/success", async () => {
-      mockListSessions.mockResolvedValue([
-        { sessionId: "sdk-sess-1", summary: "Fix login page CSS" },
-      ]);
-
-      const msg = { type: "result", subtype: "success", session_id: "sdk-sess-1" };
-      const ctx = makeCtx();
-      const session = makeSession({ cwd: "/path/to/project" });
-
-      processMessage(msg, ctx, session, makeOpts());
-
-      expect(ctx.titleFetched).toBe(true);
-
-      // Wait for the fire-and-forget async title fetch to complete
-      await vi.waitFor(() => {
-        expect(mockEmitSessionTitle).toHaveBeenCalledWith("sess-1", "claude", "Fix login page CSS");
-      });
-    });
-
-    it("does not emit title when titleFetched is already true", () => {
-      const msg = { type: "result", subtype: "success", session_id: "sdk-sess-1" };
-      const ctx = makeCtx({ titleFetched: true });
-      const session = makeSession({ cwd: "/path/to/project" });
-
-      processMessage(msg, ctx, session, makeOpts());
-
-      expect(mockListSessions).not.toHaveBeenCalled();
-    });
-
-    it("does not emit title when session has no cwd", () => {
-      const msg = { type: "result", subtype: "success", session_id: "sdk-sess-1" };
-      const ctx = makeCtx();
-      const session = makeSession(); // no cwd
-
-      processMessage(msg, ctx, session, makeOpts());
-
-      expect(ctx.titleFetched).toBe(false);
-      expect(mockListSessions).not.toHaveBeenCalled();
-    });
-
-    it("does not emit title when no matching SDK session is found", async () => {
-      mockListSessions.mockResolvedValue([
-        { sessionId: "other-session", summary: "Some other task" },
-      ]);
-
-      const msg = { type: "result", subtype: "success", session_id: "sdk-sess-1" };
-      const ctx = makeCtx();
-      const session = makeSession({ cwd: "/path/to/project" });
-
-      processMessage(msg, ctx, session, makeOpts());
-
-      // Wait for the async operation to complete
-      await vi.waitFor(() => {
-        expect(mockListSessions).toHaveBeenCalled();
-      });
-
-      expect(mockEmitSessionTitle).not.toHaveBeenCalled();
-    });
-
-    it("handles listSessions errors gracefully without blocking", async () => {
-      mockListSessions.mockRejectedValue(new Error("SDK unavailable"));
-
-      const msg = { type: "result", subtype: "success", session_id: "sdk-sess-1" };
-      const ctx = makeCtx();
-      const session = makeSession({ cwd: "/path/to/project" });
-
-      // Should not throw
-      processMessage(msg, ctx, session, makeOpts());
-
-      expect(ctx.titleFetched).toBe(true);
-
-      // Wait for the async operation to reject gracefully
-      await vi.waitFor(() => {
-        expect(mockListSessions).toHaveBeenCalled();
-      });
-
-      expect(mockEmitSessionTitle).not.toHaveBeenCalled();
     });
   });
 });

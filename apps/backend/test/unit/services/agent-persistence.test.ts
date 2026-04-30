@@ -53,6 +53,7 @@ import type {
 describe("agent-persistence", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    mockRun.mockReturnValue({ changes: 1 });
     mockPrepare.mockReturnValue({ run: mockRun });
     mockTransaction.mockImplementation((fn: () => void) => fn);
   });
@@ -428,36 +429,27 @@ describe("agent-persistence", () => {
       title: "Fix login page CSS",
     };
 
-    it("updates session title and workspace title in a transaction", () => {
+    it("updates session title only", () => {
       const result = persistSessionTitle(event);
 
       expect(result.ok).toBe(true);
-      expect(mockTransaction).toHaveBeenCalledTimes(1);
-
-      // First prepare: UPDATE sessions SET title
       expect(mockPrepare).toHaveBeenNthCalledWith(
         1,
         expect.stringContaining("UPDATE sessions SET title")
       );
       expect(mockRun).toHaveBeenNthCalledWith(1, "Fix login page CSS", "sess-1");
-
-      // Second prepare: UPDATE workspaces SET title ... AND title IS NULL
-      expect(mockPrepare).toHaveBeenNthCalledWith(
-        2,
-        expect.stringContaining("UPDATE workspaces SET title")
-      );
-      expect(mockRun).toHaveBeenNthCalledWith(2, "Fix login page CSS", "sess-1");
+      expect(mockPrepare).toHaveBeenCalledTimes(1);
     });
 
-    it("only sets workspace title when it is NULL (preserves user renames)", () => {
-      persistSessionTitle(event);
+    it("ignores unusable SDK fallback titles", () => {
+      const result = persistSessionTitle({ ...event, title: "(session)" });
 
-      // The second SQL statement should include AND title IS NULL
-      expect(mockPrepare).toHaveBeenNthCalledWith(2, expect.stringContaining("AND title IS NULL"));
+      expect(result.ok).toBe(true);
+      expect(mockPrepare).not.toHaveBeenCalled();
     });
 
     it("returns error on DB failure", () => {
-      mockTransaction.mockImplementation(() => {
+      mockRun.mockImplementation(() => {
         throw new Error("transaction failed");
       });
 

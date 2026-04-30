@@ -10,7 +10,6 @@
  * - messageCount:    incremented per SDK message
  * - lastResultError: set when result/error_during_execution is received
  * - firstMessageTime: timestamp of first SDK message (ms), null until set
- * - titleFetched: set once when the auto-generated session title has been fetched
  */
 export interface StreamContext {
   querySucceeded: boolean;
@@ -18,7 +17,6 @@ export interface StreamContext {
   messageCount: number;
   lastResultError: string | null;
   firstMessageTime: number | null;
-  titleFetched: boolean;
 }
 
 export function createStreamContext(): StreamContext {
@@ -28,6 +26,5 @@ export function createStreamContext(): StreamContext {
     messageCount: 0,
     lastResultError: null,
     firstMessageTime: null,
-    titleFetched: false,
   };
 }
