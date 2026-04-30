@@ -90,28 +90,22 @@ interface SimulatorPanelProps {
 const MAX_BUILD_LOG_LINES = 50;
 
 // ---------------------------------------------------------------------------
-// Device scoring — iPhones first, booted first, exclude pool/test devices
+// Device scoring — iPhones first, booted first, exclude pool/test devices.
+// `scoreSimulatorByType` skips the Booted bonus; used when a workspace has no
+// persisted UDID so we don't auto-select a sim booted by another workspace.
 // ---------------------------------------------------------------------------
 
-function scoreSimulator(sim: SimulatorInfo): number {
-  let score = 0;
-  if (sim.device_type.includes("iPhone")) score += 1000;
-  else if (sim.device_type.includes("iPad")) score += 100;
-  if (sim.state === "Booted") score += 500;
-  if (sim.name.toLowerCase().includes("pool") || sim.name.toLowerCase().includes("test"))
-    score -= 5000;
-  return score;
-}
-
-// Score by device type only — excludes Booted bonus. Used when a workspace has
-// no persisted UDID so we don't auto-select a sim booted by another workspace.
 function scoreSimulatorByType(sim: SimulatorInfo): number {
   let score = 0;
   if (sim.device_type.includes("iPhone")) score += 1000;
   else if (sim.device_type.includes("iPad")) score += 100;
-  if (sim.name.toLowerCase().includes("pool") || sim.name.toLowerCase().includes("test"))
-    score -= 5000;
+  const name = sim.name.toLowerCase();
+  if (name.includes("pool") || name.includes("test")) score -= 5000;
   return score;
+}
+
+function scoreSimulator(sim: SimulatorInfo): number {
+  return scoreSimulatorByType(sim) + (sim.state === "Booted" ? 500 : 0);
 }
 
 // Referentially stable idle sentinel — prevents spurious re-renders.
@@ -172,22 +166,16 @@ export function SimulatorPanel({ workspaceId, workspacePath }: SimulatorPanelPro
   // callbacks can detect if this component unmounted before they resolved.
   const workspaceGenerationRef = useRef(0);
 
-  // On mount: restore persisted UDID + probe backend for app-restart recovery.
-  //
-  // App-restart scenario: backend process was killed and restarted (no sessions),
-  // but the store still has { phase: "idle" } for this workspace. Meanwhile the
-  // simulator was left booted. We probe get_stream_info once (fast read,
-  // ~1ms) — if the backend already has a session we reconnect; if not, we stay idle
-  // and the auto-reconnect effect below will re-establish streaming if the
-  // selected sim is still "Booted".
+  // On workspace switch / mount: restore persisted UDID + recover stuck booting state.
   //
   // Normal workspace switch: the store already holds the correct phase from the
-  // previous visit.  The MJPEG effect reacts to the non-null streamUrl from the
-  // store and reconnects immediately.  This mount probe is then a no-op (the
-  // phase is not idle, so the getStreamInfo call is skipped).
+  // previous visit. The MJPEG effect reacts to the non-null streamUrl from the
+  // store and reconnects immediately — no IPC round-trip.
+  //
+  // Stream recovery on app-restart now flows through the sim:streamReady event
+  // pushed by the backend on reconnect, not a polled probe.
   useEffect(() => {
     workspaceGenerationRef.current += 1;
-    const gen = workspaceGenerationRef.current;
 
     const layout = workspaceLayoutActions.getLayout(workspaceId);
     // Always reset selectedUdid on workspace switch — either to this workspace's
@@ -204,29 +192,6 @@ export function SimulatorPanel({ workspaceId, workspacePath }: SimulatorPanelPro
       workspaceLayoutActions.setSimulatorUdid(workspaceId, null);
     }
     updateSelectedUdid(effectiveUdid);
-
-    // Probe backend if the display plane shows idle OR stuck at booting.
-    // Idle: normal first-mount or app-restart where backend may already have a session.
-    // Booting: recovery for rare edge case where the async completion was lost
-    // (e.g. app crashed mid-boot). If backend has a live stream, upgrade to streaming.
-    // If backend has nothing, reset to idle so the user can retry.
-    const currentPhase = simulatorStoreActions.getSession(workspaceId).phase;
-    if ((currentPhase === "idle" || currentPhase === "booting") && layout.simulatorUdid) {
-      simulatorService.getStreamInfo(workspaceId).then((stream) => {
-        if (workspaceGenerationRef.current !== gen) return;
-        if (stream) {
-          simulatorStoreActions.setSession(workspaceId, {
-            phase: "streaming",
-            udid: layout.simulatorUdid!,
-            stream,
-          });
-          updateSelectedUdid(layout.simulatorUdid!);
-        } else if (currentPhase === "booting") {
-          // Backend has no session but store says booting — stuck state, reset.
-          simulatorStoreActions.clearWorkspaceSession(workspaceId);
-        }
-      });
-    }
     // Runs on every workspace switch (workspaceId prop changes — always-mounted component).
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [workspaceId]);
@@ -373,8 +338,8 @@ export function SimulatorPanel({ workspaceId, workspacePath }: SimulatorPanelPro
   // -------------------------------------------------------------------------
   // Auto-reconnect to an already-booted simulator (app-restart recovery).
   //
-  // The mount effect above handles the fast path: if the backend already has a
-  // session in memory (normal run), it reconnects immediately via getStreamInfo.
+  // The fast path is the store itself: when the backend is alive it pushes
+  // sim:streamReady, and the MJPEG effect reconnects from the store's stream URL.
   //
   // This effect handles the slower path: backend was restarted (no sessions in
   // memory), but simctl still shows the simulator as "Booted". We re-establish
@@ -606,10 +571,10 @@ export function SimulatorPanel({ workspaceId, workspacePath }: SimulatorPanelPro
   const isBuilding = state.phase === "building";
 
   return (
-    <div className="flex h-full flex-col">
-      {/* ── Toolbar ─────────────────────────────────────────────── */}
-      <div className="border-border-subtle flex h-9 shrink-0 items-center gap-2 border-b px-3">
-        <TooltipProvider delayDuration={200}>
+    <TooltipProvider delayDuration={200}>
+      <div className="flex h-full flex-col">
+        {/* ── Toolbar ─────────────────────────────────────────────── */}
+        <div className="border-border-subtle flex h-9 shrink-0 items-center gap-2 border-b px-3">
           {/* Status dot — reflects current phase, sits left of the selector */}
           <div
             className={cn("h-1.5 w-1.5 shrink-0 rounded-full", {
@@ -773,157 +738,164 @@ export function SimulatorPanel({ workspaceId, workspacePath }: SimulatorPanelPro
               <TooltipContent side="bottom">Stop simulator</TooltipContent>
             </Tooltip>
           )}
+        </div>
 
-          {/* Home button — visible when streaming */}
-          {isLive && (
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <Button variant="ghost" size="sm" onClick={handleHome} className="h-7 w-7 p-0">
-                  <Home className="h-3 w-3" />
-                </Button>
-              </TooltipTrigger>
-              <TooltipContent side="bottom">Home</TooltipContent>
-            </Tooltip>
-          )}
+        {/* ── Device controls — floating pill above the device frame ── */}
+        {isLive && (
+          <div className="flex shrink-0 justify-center pt-2">
+            <div className="bg-bg-surface border-border flex items-center gap-0.5 rounded-lg border p-0.5 shadow-sm">
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={handleHome}
+                    aria-label="Home"
+                    className="h-7 w-7 p-0"
+                  >
+                    <Home className="h-3 w-3" />
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent side="bottom">Home</TooltipContent>
+              </Tooltip>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={handleScreenshot}
+                    aria-label="Screenshot"
+                    className="h-7 w-7 p-0"
+                  >
+                    <Camera className="h-3 w-3" />
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent side="bottom">Screenshot ⌘⇧S</TooltipContent>
+              </Tooltip>
+            </div>
+          </div>
+        )}
 
-          {/* Screenshot — visible when streaming */}
-          {isLive && (
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  onClick={handleScreenshot}
-                  className="h-7 w-7 p-0"
+        {/* ── Viewport — MJPEG stream + overlay states ───────────── */}
+        <SimulatorStreamViewer
+          workspaceId={workspaceId}
+          streamUrl={streamUrl}
+          isLive={isLive}
+          hidAvailable={hidAvailable}
+          onScreenshot={handleScreenshot}
+          deviceType={selectedSim?.device_type}
+        >
+          {/* Overlay states on top of (or instead of) the stream */}
+          {match(state)
+            .with({ phase: "idle" }, () => (
+              <div className="absolute inset-0 flex flex-col items-center justify-center gap-5">
+                {/* Device silhouette — ghost outline at reduced opacity.
+                 * Breathing animation oscillates opacity; reduced-motion users
+                 * get a static value via motion-safe gating. */}
+                <svg
+                  width="100"
+                  height="210"
+                  viewBox="0 0 100 210"
+                  fill="none"
+                  className="opacity-30 motion-safe:animate-[sim-idle-breathe_6s_ease-in-out_infinite]"
                 >
-                  <Camera className="h-3 w-3" />
+                  <rect
+                    x="1"
+                    y="1"
+                    width="98"
+                    height="208"
+                    rx="22"
+                    className="stroke-muted-foreground/20"
+                    strokeWidth="1.5"
+                  />
+                  <rect
+                    x="34"
+                    y="12"
+                    width="32"
+                    height="10"
+                    rx="5"
+                    className="fill-muted-foreground/10"
+                  />
+                  <rect
+                    x="35"
+                    y="196"
+                    width="30"
+                    height="3"
+                    rx="1.5"
+                    className="fill-muted-foreground/10"
+                  />
+                </svg>
+
+                <div className="flex flex-col items-center gap-1.5">
+                  <p className="text-text-secondary text-sm font-medium">
+                    {selectedSim?.name ?? "No simulator selected"}
+                  </p>
+                  {selectedSim && (
+                    <p className="text-text-muted text-xs">
+                      {selectedSim.runtime.replace("com.apple.CoreSimulator.SimRuntime.", "")}
+                    </p>
+                  )}
+                </div>
+
+                {/* Primary CTA — the only actionable element in idle state */}
+                <Button
+                  onClick={handleStart}
+                  disabled={!selectedUdid}
+                  className="min-w-[140px] gap-2"
+                >
+                  <Play className="h-4 w-4" />
+                  Start Simulator
                 </Button>
-              </TooltipTrigger>
-              <TooltipContent side="bottom">Screenshot ⌘⇧S</TooltipContent>
-            </Tooltip>
-          )}
-        </TooltipProvider>
-      </div>
 
-      {/* ── Viewport — MJPEG stream + overlay states ───────────── */}
-      <SimulatorStreamViewer
-        workspaceId={workspaceId}
-        streamUrl={streamUrl}
-        isLive={isLive}
-        hidAvailable={hidAvailable}
-        onScreenshot={handleScreenshot}
-        deviceType={selectedSim?.device_type}
-      >
-        {/* Overlay states on top of (or instead of) the stream */}
-        {match(state)
-          .with({ phase: "idle" }, () => (
-            <div className="absolute inset-0 flex flex-col items-center justify-center gap-5">
-              {/* Device silhouette — ghost outline at reduced opacity.
-               * Breathing animation oscillates opacity; reduced-motion users
-               * get a static value via motion-safe gating. */}
-              <svg
-                width="100"
-                height="210"
-                viewBox="0 0 100 210"
-                fill="none"
-                className="opacity-30 motion-safe:animate-[sim-idle-breathe_6s_ease-in-out_infinite]"
-              >
-                <rect
-                  x="1"
-                  y="1"
-                  width="98"
-                  height="208"
-                  rx="22"
-                  className="stroke-muted-foreground/20"
-                  strokeWidth="1.5"
-                />
-                <rect
-                  x="34"
-                  y="12"
-                  width="32"
-                  height="10"
-                  rx="5"
-                  className="fill-muted-foreground/10"
-                />
-                <rect
-                  x="35"
-                  y="196"
-                  width="30"
-                  height="3"
-                  rx="1.5"
-                  className="fill-muted-foreground/10"
-                />
-              </svg>
-
-              <div className="flex flex-col items-center gap-1.5">
-                <p className="text-text-secondary text-sm font-medium">
-                  {selectedSim?.name ?? "No simulator selected"}
-                </p>
-                {selectedSim && (
-                  <p className="text-text-muted text-xs">
-                    {selectedSim.runtime.replace("com.apple.CoreSimulator.SimRuntime.", "")}
+                {hasProject === false && (
+                  <p className="text-text-muted max-w-[220px] text-center text-xs">
+                    No Xcode project found. You can still use the simulator, but Build & Run is not
+                    available.
                   </p>
                 )}
               </div>
+            ))
+            .with({ phase: "booting" }, () => (
+              <div className="absolute inset-0 flex flex-col items-center justify-center gap-3">
+                <Loader2 className="text-primary h-6 w-6 animate-spin" />
+                <p className="text-text-secondary text-xs">Booting simulator...</p>
+              </div>
+            ))
+            .with({ phase: "error" }, (s) => (
+              <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 px-6">
+                <AlertCircle className="text-destructive/70 h-5 w-5" />
+                <p className="text-destructive max-w-[240px] text-center text-xs">{s.message}</p>
+                {s.canRetry && (
+                  <Button variant="outline" size="sm" onClick={handleRetry} className="h-7 text-xs">
+                    <RotateCcw className="mr-1.5 h-3 w-3" />
+                    Try Again
+                  </Button>
+                )}
+              </div>
+            ))
+            .otherwise(() => null)}
+        </SimulatorStreamViewer>
 
-              {/* Primary CTA — the only actionable element in idle state */}
-              <Button
-                onClick={handleStart}
-                disabled={!selectedUdid}
-                className="min-w-[140px] gap-2"
-              >
-                <Play className="h-4 w-4" />
-                Start Simulator
-              </Button>
+        {/* ── Build drawer — collapsible bar below the stream ────────── */}
+        {isBuilding && (
+          <BuildDrawer
+            startedAt={(state as Extract<SimPhase, { phase: "building" }>).startedAt}
+            logs={buildLogs}
+            logEndRef={buildLogEndRef}
+          />
+        )}
 
-              {hasProject === false && (
-                <p className="text-text-muted max-w-[220px] text-center text-xs">
-                  No Xcode project found. You can still use the simulator, but Build & Run is not
-                  available.
-                </p>
-              )}
-            </div>
-          ))
-          .with({ phase: "booting" }, () => (
-            <div className="absolute inset-0 flex flex-col items-center justify-center gap-3">
-              <Loader2 className="text-primary h-6 w-6 animate-spin" />
-              <p className="text-text-secondary text-xs">Booting simulator...</p>
-            </div>
-          ))
-          .with({ phase: "error" }, (s) => (
-            <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 px-6">
-              <AlertCircle className="text-destructive/70 h-5 w-5" />
-              <p className="text-destructive max-w-[240px] text-center text-xs">{s.message}</p>
-              {s.canRetry && (
-                <Button variant="outline" size="sm" onClick={handleRetry} className="h-7 text-xs">
-                  <RotateCcw className="mr-1.5 h-3 w-3" />
-                  Try Again
-                </Button>
-              )}
-            </div>
-          ))
-          .otherwise(() => null)}
-      </SimulatorStreamViewer>
-
-      {/* ── Build drawer — collapsible bar below the stream ────────── */}
-      {isBuilding && (
-        <BuildDrawer
-          startedAt={(state as Extract<SimPhase, { phase: "building" }>).startedAt}
-          logs={buildLogs}
-          logEndRef={buildLogEndRef}
-        />
-      )}
-
-      {/* ── App bar — bottom strip when app is running ──────────── */}
-      {state.phase === "running" && (
-        <SimulatorAppBar
-          app={state.app}
-          onRelaunch={handleRelaunch}
-          onTerminate={handleTerminate}
-          onUninstall={handleUninstall}
-        />
-      )}
-    </div>
+        {/* ── App bar — bottom strip when app is running ──────────── */}
+        {state.phase === "running" && (
+          <SimulatorAppBar
+            app={state.app}
+            onRelaunch={handleRelaunch}
+            onTerminate={handleTerminate}
+            onUninstall={handleUninstall}
+          />
+        )}
+      </div>
+    </TooltipProvider>
   );
 }
 
