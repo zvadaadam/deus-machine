@@ -56,12 +56,12 @@ export function useSessionComposer(
 ): UseSessionComposerReturn {
   const fallbackComposer = useMemo(
     () => emptyComposer(initialModel, defaultThinking),
-    [sessionId, initialModel, defaultThinking]
+    [initialModel, defaultThinking]
   );
 
   useEffect(() => {
-    sessionComposerActions.seedIfAbsent(sessionId, fallbackComposer);
-  }, [sessionId, fallbackComposer]);
+    sessionComposerActions.seedIfAbsent(sessionId, emptyComposer(initialModel, defaultThinking));
+  }, [sessionId, initialModel, defaultThinking]);
 
   const state = useSessionComposerStore((s) => s.composers[sessionId] ?? fallbackComposer);
 
