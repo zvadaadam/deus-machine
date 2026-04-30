@@ -104,3 +104,4 @@ main.js
 
 # Local iteration tooling (live-agent probes, ad-hoc harness scripts)
 .scratch/
+.device-use/
