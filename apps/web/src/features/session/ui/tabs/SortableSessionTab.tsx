@@ -13,7 +13,7 @@ interface SortableSessionTabProps {
  * The entire tab is the drag activator, matching the old interaction model.
  */
 export function SortableSessionTab({ id, children, className }: SortableSessionTabProps) {
-  const { listeners, setNodeRef, transform, transition, isDragging } = useSortable({
+  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
     id,
     transition: {
       duration: 200,
@@ -30,6 +30,7 @@ export function SortableSessionTab({ id, children, className }: SortableSessionT
     <div
       ref={setNodeRef}
       style={style}
+      {...attributes}
       {...listeners}
       className={cn(isDragging && "z-50 opacity-50", className)}
     >
