@@ -6,6 +6,7 @@
 import { getDatabase } from "../lib/database";
 import { getSessionRaw } from "../db";
 import { uuidv7 } from "@shared/lib/uuid";
+import { deriveSessionTitle } from "./title/derive";
 
 /**
  * Persist a user message and mark session as working.
@@ -24,6 +25,8 @@ export function writeUserMessage(
 
   const messageId = uuidv7();
   const sentAt = new Date().toISOString();
+  const derivedTitle =
+    session.message_count === 0 && !session.title ? deriveSessionTitle(content) : null;
 
   db.transaction(() => {
     db.prepare(
@@ -36,6 +39,12 @@ export function writeUserMessage(
     db.prepare(
       "UPDATE sessions SET status = 'working', last_user_message_at = ?, error_message = NULL, error_category = NULL, updated_at = datetime('now') WHERE id = ?"
     ).run(sentAt, sessionId);
+
+    if (derivedTitle) {
+      db.prepare(
+        "UPDATE sessions SET title = ?, updated_at = datetime('now') WHERE id = ? AND title IS NULL"
+      ).run(derivedTitle, sessionId);
+    }
   })();
 
   return { success: true, messageId };

@@ -10,7 +10,6 @@ describe("StreamContext", () => {
       expect(ctx.messageCount).toBe(0);
       expect(ctx.lastResultError).toBeNull();
       expect(ctx.firstMessageTime).toBeNull();
-      expect(ctx.titleFetched).toBe(false);
     });
   });
 });

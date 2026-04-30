@@ -13,6 +13,7 @@
 import { getDatabase } from "../../lib/database";
 import { uuidv7 } from "@shared/lib/uuid";
 import { getErrorMessage } from "@shared/lib/errors";
+import { isUsableSessionTitle } from "../title/derive";
 import type {
   MessageCancelledEvent,
   MessageCreatedEvent,
@@ -314,25 +315,19 @@ export function persistAgentSessionId(event: AgentSessionIdEvent): WriteResult<v
   }
 }
 
-/** Update session title and auto-set workspace title if not already set. */
+/** Update session title. Workspace titles stay explicit (PR title or user rename). */
 export function persistSessionTitle(event: SessionTitleEvent): WriteResult<void> {
   const db = getDatabase();
 
-  try {
-    db.transaction(() => {
-      // Always update session title
-      db.prepare(`UPDATE sessions SET title = ?, updated_at = datetime('now') WHERE id = ?`).run(
-        event.title,
-        event.sessionId
-      );
+  if (!isUsableSessionTitle(event.title)) {
+    return { ok: true, value: undefined };
+  }
 
-      // Auto-set workspace title only if not already set (preserves PR titles and user renames)
-      db.prepare(
-        `UPDATE workspaces SET title = ?
-         WHERE id = (SELECT workspace_id FROM sessions WHERE id = ?)
-         AND title IS NULL`
-      ).run(event.title, event.sessionId);
-    })();
+  try {
+    db.prepare(`UPDATE sessions SET title = ?, updated_at = datetime('now') WHERE id = ?`).run(
+      event.title,
+      event.sessionId
+    );
     return { ok: true, value: undefined };
   } catch (error) {
     const msg = getErrorMessage(error);
