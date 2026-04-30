@@ -243,8 +243,9 @@ export function useSendMessage() {
         // No return value needed — WS q:delta handles message reconciliation.
         return;
       } catch {
-        // Gateway/web fallback: HTTP POST to backend
-        return SessionService.sendMessage(sessionId, content, model);
+        // Fallback through the legacy service wrapper; keep the same runtime
+        // routing fields so backend validation behaves identically.
+        return SessionService.sendMessage(sessionId, content, model, agentHarness);
       }
     },
 

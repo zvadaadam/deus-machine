@@ -39,6 +39,7 @@ export interface Settings {
   experimental_simulator?: boolean;
   experimental_browser?: boolean;
   experimental_design?: boolean;
+  experimental_apps?: boolean;
 
   // Remote Access
   remote_access_enabled?: boolean;

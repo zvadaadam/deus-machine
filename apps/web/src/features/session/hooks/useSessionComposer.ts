@@ -10,7 +10,7 @@
  * both the seed value and as the clamp target when switching models.
  */
 
-import { useMemo } from "react";
+import { useEffect, useMemo } from "react";
 import type { ThinkingLevel } from "@/shared/agents";
 import type { InspectedElement } from "../ui/InspectedElementCard";
 import type { FileMention } from "../ui/FileMentionCard";
@@ -54,16 +54,16 @@ export function useSessionComposer(
   sessionId: string,
   { initialModel, defaultThinking }: UseSessionComposerOptions
 ): UseSessionComposerReturn {
-  // Seed synchronously on first hook call for this sessionId. Idempotent
-  // — subsequent renders/mounts are no-ops, preserving the user's staged
-  // content across focus-mode toggles and remounts. Done here (not in
-  // useEffect) so the selector below never has to return a fallback
-  // object — selectors that create a new object per call trip React's
-  // useSyncExternalStore "infinite loop" heuristic.
-  sessionComposerActions.seedIfAbsent(sessionId, emptyComposer(initialModel, defaultThinking));
+  const fallbackComposer = useMemo(
+    () => emptyComposer(initialModel, defaultThinking),
+    [initialModel, defaultThinking]
+  );
 
-  // seedIfAbsent above guarantees the slice exists by the time we read it.
-  const state = useSessionComposerStore((s) => s.composers[sessionId]) as ComposerState;
+  useEffect(() => {
+    sessionComposerActions.seedIfAbsent(sessionId, emptyComposer(initialModel, defaultThinking));
+  }, [sessionId, initialModel, defaultThinking]);
+
+  const state = useSessionComposerStore((s) => s.composers[sessionId] ?? fallbackComposer);
 
   // Bind sessionId into each action once per mount. defaultThinking goes
   // into setModel's clamp fallback — changes to it re-create the bag.
