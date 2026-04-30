@@ -36,14 +36,10 @@ export function getCleanRepoName(repoName: string): string {
  */
 export function getWorkspaceDisplayName(workspace: {
   title: string | null;
-  current_session_title?: string | null;
   slug: string;
   git_branch: string | null;
 }): string {
   if (isDisplayableTitle(workspace.title)) return workspace.title.trim();
-  if (isDisplayableTitle(workspace.current_session_title)) {
-    return workspace.current_session_title.trim();
-  }
   if (workspace.slug) return workspace.slug;
   return workspace.git_branch || "New workspace";
 }
@@ -56,14 +52,10 @@ export function getWorkspaceDisplayName(workspace: {
  */
 export function getWorkspaceSecondaryText(workspace: {
   title: string | null;
-  current_session_title?: string | null;
   slug: string;
 }): string | null {
   // Show slug as secondary only when title is the primary display name
-  if (
-    (isDisplayableTitle(workspace.title) || isDisplayableTitle(workspace.current_session_title)) &&
-    workspace.slug
-  ) {
+  if (isDisplayableTitle(workspace.title) && workspace.slug) {
     return workspace.slug;
   }
   return null;

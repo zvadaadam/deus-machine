@@ -44,6 +44,19 @@ export function writeUserMessage(
       db.prepare(
         "UPDATE sessions SET title = ?, updated_at = datetime('now') WHERE id = ? AND title IS NULL"
       ).run(derivedTitle, sessionId);
+
+      db.prepare(
+        `UPDATE workspaces
+         SET title = ?, updated_at = datetime('now')
+         WHERE id = ?
+           AND title IS NULL
+           AND NOT EXISTS (
+             SELECT 1 FROM sessions
+             WHERE workspace_id = ?
+               AND id != ?
+               AND message_count > 0
+           )`
+      ).run(derivedTitle, session.workspace_id, session.workspace_id, sessionId);
     }
   })();
 
