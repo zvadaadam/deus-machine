@@ -83,7 +83,6 @@ export interface WorkspaceWithDetailsRow {
 
   // From sessions JOIN (null when no active session)
   session_status: string | null;
-  current_session_title: string | null;
   session_error_category: string | null;
   session_error_message: string | null;
   latest_message_sent_at: string | null;

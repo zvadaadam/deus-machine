@@ -50,6 +50,27 @@ export const MIGRATIONS: string[] = [
   // Cleanup: old Claude SDK fallback titles polluted session/workspace labels.
   `UPDATE sessions SET title = NULL WHERE title = '(session)'`,
   `UPDATE workspaces SET title = NULL WHERE title = '(session)'`,
+  // Backfill workspace titles from the first meaningful titled session.
+  `UPDATE workspaces
+   SET title = (
+     SELECT s.title
+     FROM sessions s
+     WHERE s.workspace_id = workspaces.id
+       AND s.title IS NOT NULL
+       AND trim(s.title) != ''
+       AND lower(trim(s.title)) != '(session)'
+     ORDER BY s.id ASC
+     LIMIT 1
+   )
+   WHERE title IS NULL
+     AND EXISTS (
+       SELECT 1
+       FROM sessions s
+       WHERE s.workspace_id = workspaces.id
+         AND s.title IS NOT NULL
+         AND trim(s.title) != ''
+         AND lower(trim(s.title)) != '(session)'
+     )`,
 ];
 
 function normalizeMigrationSql(sql: string): string {
