@@ -12,12 +12,60 @@
 import { sendCommand, onEvent } from "@/platform/ws/query-protocol-client";
 import type { InstalledApp, InspectorSnapshot, SimulatorInfo, StreamInfo } from "../types";
 
+function asRecord(value: unknown): Record<string, unknown> {
+  return value !== null && typeof value === "object" ? (value as Record<string, unknown>) : {};
+}
+
+function asString(value: unknown): string | null {
+  return typeof value === "string" ? value : null;
+}
+
+function asNumber(value: unknown): number | null {
+  return typeof value === "number" && Number.isFinite(value) ? value : null;
+}
+
+function workspacePayload(data: unknown, workspaceId: string): Record<string, unknown> | null {
+  const payload = asRecord(data);
+  return payload.workspaceId === workspaceId ? payload : null;
+}
+
+function eventError(payload: Record<string, unknown>, fallback: string): Error {
+  return new Error(asString(payload.error) ?? fallback);
+}
+
+function parseStreamInfo(payload: Record<string, unknown>): StreamInfo | null {
+  const url = asString(payload.url);
+  const port = asNumber(payload.port);
+  if (!url || port === null) return null;
+  return {
+    url,
+    port,
+    hid_available: payload.hidAvailable === true,
+  };
+}
+
+function parseInstalledApp(payload: Record<string, unknown>): InstalledApp {
+  return {
+    bundle_id: asString(payload.bundleId) ?? "",
+    name: asString(payload.appName) ?? "App",
+    app_path: asString(payload.appPath) ?? "",
+  };
+}
+
+function parseInspectorSnapshot(result: unknown): InspectorSnapshot {
+  const snapshot = asRecord(result).snapshot;
+  if (!snapshot || typeof snapshot !== "object") {
+    throw new Error("Malformed inspector snapshot response");
+  }
+  return snapshot as InspectorSnapshot;
+}
+
 export const simulatorService = {
   /** Fast probe: does this workspace contain a buildable Xcode project? */
   hasXcodeProject: async (workspacePath: string): Promise<boolean> => {
     try {
       const result = await sendCommand("sim:hasXcodeProject", { workspacePath });
-      return (result as any)?.hasProject === true;
+      return asRecord(result).hasProject === true;
     } catch {
       return false;
     }
@@ -27,7 +75,8 @@ export const simulatorService = {
   listSimulators: async (): Promise<SimulatorInfo[]> => {
     try {
       const result = await sendCommand("sim:listDevices", {});
-      return ((result as any)?.devices ?? []) as SimulatorInfo[];
+      const devices = asRecord(result).devices;
+      return Array.isArray(devices) ? (devices as SimulatorInfo[]) : [];
     } catch (err) {
       console.warn("[Simulator] listSimulators failed:", err);
       return [];
@@ -53,22 +102,20 @@ export const simulatorService = {
       }, 30_000);
 
       const cleanup = onEvent((event, data) => {
-        const d = data as any;
-        if (d?.workspaceId !== workspaceId) return;
+        const payload = workspacePayload(data, workspaceId);
+        if (!payload) return;
 
         if (event === "sim:streamReady") {
           clearTimeout(timeout);
           cleanup();
-          resolve({
-            url: d.url,
-            port: d.port,
-            hid_available: d.hidAvailable ?? false,
-          });
+          const stream = parseStreamInfo(payload);
+          if (stream) resolve(stream);
+          else reject(new Error("Malformed simulator streamReady event"));
         }
         if (event === "sim:streamFailed") {
           clearTimeout(timeout);
           cleanup();
-          reject(new Error(d.error ?? "Failed to start simulator"));
+          reject(eventError(payload, "Failed to start simulator"));
         }
       });
 
@@ -99,17 +146,20 @@ export const simulatorService = {
 
   takeScreenshot: async (workspaceId: string): Promise<number[]> => {
     const result = await sendCommand("sim:screenshot", { workspaceId });
-    return ((result as any)?.bytes ?? []) as number[];
+    const bytes = asRecord(result).bytes;
+    return Array.isArray(bytes)
+      ? bytes.filter((byte): byte is number => typeof byte === "number")
+      : [];
   },
 
   startInspect: async (workspaceId: string, bundleId?: string): Promise<InspectorSnapshot> => {
     const result = await sendCommand("sim:inspectStart", { workspaceId, bundleId });
-    return (result as any)?.snapshot as InspectorSnapshot;
+    return parseInspectorSnapshot(result);
   },
 
   inspectSnapshot: async (workspaceId: string): Promise<InspectorSnapshot> => {
     const result = await sendCommand("sim:inspectSnapshot", { workspaceId });
-    return (result as any)?.snapshot as InspectorSnapshot;
+    return parseInspectorSnapshot(result);
   },
 
   pressHome: (workspaceId: string) =>
@@ -133,22 +183,18 @@ export const simulatorService = {
       }, 600_000);
 
       const cleanup = onEvent((event, data) => {
-        const d = data as any;
-        if (d?.workspaceId !== workspaceId) return;
+        const payload = workspacePayload(data, workspaceId);
+        if (!payload) return;
 
         if (event === "sim:buildComplete") {
           clearTimeout(timeout);
           cleanup();
-          resolve({
-            bundle_id: d.bundleId ?? "",
-            name: d.appName ?? "App",
-            app_path: d.appPath ?? "",
-          });
+          resolve(parseInstalledApp(payload));
         }
         if (event === "sim:buildFailed") {
           clearTimeout(timeout);
           cleanup();
-          reject(new Error(d.error ?? "Build failed"));
+          reject(eventError(payload, "Build failed"));
         }
       });
 

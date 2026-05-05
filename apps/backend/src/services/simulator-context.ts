@@ -114,6 +114,7 @@ interface SimulatorSession {
 // ---------------------------------------------------------------------------
 
 const sessions = new Map<string, SimulatorSession>();
+const startingUdids = new Map<string, string>();
 
 // ---------------------------------------------------------------------------
 // Event pushing (q:event broadcast to all WS clients)
@@ -121,6 +122,58 @@ const sessions = new Map<string, SimulatorSession>();
 
 function pushEvent(event: string, data: unknown): void {
   broadcast(JSON.stringify({ type: "q:event", event, data }));
+}
+
+function closeHidSocket(session: SimulatorSession): void {
+  if (!session.hidWs) return;
+  try {
+    session.hidWs.close();
+  } catch {
+    /* already closed */
+  }
+}
+
+function releaseWorkspaceSession(workspaceId: string, keepStreamForUdid?: string): void {
+  const session = sessions.get(workspaceId);
+  if (!session) return;
+
+  closeHidSocket(session);
+  sessions.delete(workspaceId);
+
+  if (session.udid === keepStreamForUdid) return;
+
+  const udidStillInUse = Array.from(sessions.values()).some((s) => s.udid === session.udid);
+  if (!udidStillInUse) {
+    killStream(session.udid);
+  }
+}
+
+function getActiveUdidOwner(udid: string, requesterWorkspaceId: string): string | null {
+  const owner = Array.from(sessions.values()).find(
+    (session) => session.udid === udid && session.workspaceId !== requesterWorkspaceId
+  );
+  if (owner) return owner.workspaceId;
+
+  const starterWorkspaceId = startingUdids.get(udid);
+  if (starterWorkspaceId && starterWorkspaceId !== requesterWorkspaceId) {
+    return starterWorkspaceId;
+  }
+
+  return null;
+}
+
+function claimStartingUdid(workspaceId: string, udid: string): void {
+  const ownerWorkspaceId = getActiveUdidOwner(udid, workspaceId);
+  if (ownerWorkspaceId) {
+    throw new Error("Simulator is already in use by another workspace");
+  }
+  startingUdids.set(udid, workspaceId);
+}
+
+function releaseStartingUdid(workspaceId: string, udid: string): void {
+  if (startingUdids.get(udid) === workspaceId) {
+    startingUdids.delete(udid);
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -228,19 +281,29 @@ function findSimInspectorPath(): string | null {
 // Port reservation
 // ---------------------------------------------------------------------------
 
-async function reservePort(preferred: number): Promise<number> {
-  const canBind = await new Promise<boolean>((resolve) => {
+const reservedPorts = new Set<number>();
+
+async function canBindPort(port: number): Promise<boolean> {
+  return new Promise<boolean>((resolve) => {
     const server = createServer();
     server.unref();
     server.once("error", () => resolve(false));
-    server.listen(preferred, () => {
+    server.listen(port, () => {
       server.close(() => resolve(true));
     });
   });
+}
 
-  if (canBind) return preferred;
+async function reservePort(preferred: number): Promise<number> {
+  for (let port = preferred; port < preferred + 100; port++) {
+    if (reservedPorts.has(port)) continue;
+    if (await canBindPort(port)) {
+      reservedPorts.add(port);
+      return port;
+    }
+  }
 
-  return new Promise((resolve, reject) => {
+  const fallbackPort = await new Promise<number>((resolve, reject) => {
     const server = createServer();
     server.unref();
     server.once("error", reject);
@@ -250,6 +313,13 @@ async function reservePort(preferred: number): Promise<number> {
       server.close((err) => (err ? reject(err) : resolve(port)));
     });
   });
+
+  reservedPorts.add(fallbackPort);
+  return fallbackPort;
+}
+
+function releasePortReservation(port: number): void {
+  reservedPorts.delete(port);
 }
 
 // ---------------------------------------------------------------------------
@@ -500,114 +570,109 @@ export async function startStream(
   udid: string,
   skipBootCheck = false
 ): Promise<void> {
-  // Boot if needed
-  if (!skipBootCheck) {
-    try {
-      await execFileAsync("xcrun", ["simctl", "boot", udid], { env: SIM_ENV });
-    } catch (err: any) {
-      if (!err?.stderr?.includes("Booted") && !err?.message?.includes("Booted")) {
-        throw new Error(`Failed to boot simulator: ${err?.message ?? err}`);
-      }
-    }
-  }
+  claimStartingUdid(workspaceId, udid);
 
-  // Open Simulator.app for framebuffer access
-  try {
-    await execFileAsync("open", ["-a", "Simulator", "--args", "-CurrentDeviceUDID", udid], {
-      env: SIM_ENV,
-    });
-    await new Promise((r) => setTimeout(r, 1500));
-  } catch {
-    /* */
-  }
-
-  // Start MJPEG stream
-  const port = await reservePort(3100 + sessions.size);
-  const streamInfo = await spawnStream(udid, port);
-
-  // Connect HID WebSocket
+  const previousSession = sessions.get(workspaceId);
+  let reservedPort: number | null = null;
   let hidWs: WebSocket | null = null;
-  let hidConnected = false;
+
   try {
-    hidWs = await connectHidWs(streamInfo.port);
-    hidConnected = true;
-  } catch {
-    console.warn("[Simulator] HID WebSocket unavailable for", udid);
-  }
-
-  // Get device info for display
-  const devices = await listDevices();
-  const deviceInfo = devices.find((d) => d.udid === udid);
-
-  // Track session
-  sessions.set(workspaceId, {
-    workspaceId,
-    udid,
-    deviceName: deviceInfo?.name ?? udid,
-    runtime: deviceInfo?.runtime ?? "",
-    streaming: true,
-    streamPid: streamInfo.pid,
-    streamPort: streamInfo.port,
-    hidWs,
-    hidConnected,
-    appBundleId: null,
-    appName: null,
-    inspectorSocketPath: null,
-    inspectorPid: null,
-    bootedAt: Date.now(),
-    streamStartedAt: Date.now(),
-  });
-
-  // Release any previous claim on this UDID by other workspaces.
-  // Close their HID WebSocket (the stream process is shared since we look it
-  // up by UDID, so we don't kill the stream — just release the other claim).
-  for (const [wsId, s] of sessions.entries()) {
-    if (s.udid === udid && wsId !== workspaceId) {
-      if (s.hidWs) {
-        try {
-          s.hidWs.close();
-        } catch {
-          /* already closed */
+    // Boot if needed
+    if (!skipBootCheck) {
+      try {
+        await execFileAsync("xcrun", ["simctl", "boot", udid], { env: SIM_ENV });
+      } catch (err: any) {
+        if (!err?.stderr?.includes("Booted") && !err?.message?.includes("Booted")) {
+          throw new Error(`Failed to boot simulator: ${err?.message ?? err}`);
         }
       }
-      sessions.delete(wsId);
-      pushEvent("sim:stopped", { workspaceId: wsId });
     }
-  }
 
-  // Push stream ready event to frontend
-  const streamReadyPayload = {
-    workspaceId,
-    url: `http://localhost:${streamInfo.port}/stream.mjpeg`,
-    port: streamInfo.port,
-    hidAvailable: hidConnected,
-    deviceName: deviceInfo?.name ?? udid,
-    udid,
-  };
-  pushEvent("sim:streamReady", streamReadyPayload);
+    // Start Simulator.app hidden so the private framebuffer pipeline exists
+    // without placing native simulator windows over the user's desktop.
+    try {
+      await execFileAsync(
+        "open",
+        ["-j", "-g", "-a", "Simulator", "--args", "-CurrentDeviceUDID", udid],
+        { env: SIM_ENV }
+      );
+      await new Promise((r) => setTimeout(r, 1500));
+    } catch {
+      /* */
+    }
+
+    // Start MJPEG stream
+    reservedPort = await reservePort(3100 + sessions.size + startingUdids.size);
+    const streamInfo = await spawnStream(udid, reservedPort);
+    releasePortReservation(reservedPort);
+    reservedPort = null;
+
+    // Connect HID WebSocket
+    let hidConnected = false;
+    try {
+      hidWs = await connectHidWs(streamInfo.port);
+      hidConnected = true;
+    } catch {
+      console.warn("[Simulator] HID WebSocket unavailable for", udid);
+    }
+
+    // Get device info for display
+    const devices = await listDevices();
+    const deviceInfo = devices.find((d) => d.udid === udid);
+
+    if (previousSession) {
+      releaseWorkspaceSession(workspaceId, udid);
+    }
+
+    // Track session
+    sessions.set(workspaceId, {
+      workspaceId,
+      udid,
+      deviceName: deviceInfo?.name ?? udid,
+      runtime: deviceInfo?.runtime ?? "",
+      streaming: true,
+      streamPid: streamInfo.pid,
+      streamPort: streamInfo.port,
+      hidWs,
+      hidConnected,
+      appBundleId: null,
+      appName: null,
+      inspectorSocketPath: null,
+      inspectorPid: null,
+      bootedAt: Date.now(),
+      streamStartedAt: Date.now(),
+    });
+
+    // Push stream ready event to frontend
+    const streamReadyPayload = {
+      workspaceId,
+      url: `http://localhost:${streamInfo.port}/stream.mjpeg`,
+      port: streamInfo.port,
+      hidAvailable: hidConnected,
+      deviceName: deviceInfo?.name ?? udid,
+      udid,
+    };
+    pushEvent("sim:streamReady", streamReadyPayload);
+  } catch (err) {
+    if (hidWs) {
+      try {
+        hidWs.close();
+      } catch {
+        /* */
+      }
+    }
+    throw err;
+  } finally {
+    if (reservedPort !== null) releasePortReservation(reservedPort);
+    releaseStartingUdid(workspaceId, udid);
+  }
 }
 
 export function stopStream(workspaceId: string): void {
   const session = sessions.get(workspaceId);
   if (!session) return;
 
-  if (session.hidWs) {
-    try {
-      session.hidWs.close();
-    } catch {
-      /* */
-    }
-  }
-
-  const udid = session.udid;
-  sessions.delete(workspaceId);
-
-  // Only kill the stream process if no other workspace uses this UDID
-  const udidStillInUse = Array.from(sessions.values()).some((s) => s.udid === udid);
-  if (!udidStillInUse) {
-    killStream(udid);
-  }
-
+  releaseWorkspaceSession(workspaceId);
   pushEvent("sim:stopped", { workspaceId });
 }
 
@@ -1082,4 +1147,6 @@ export function destroyAll(): void {
   }
   sessions.clear();
   activeStreams.clear();
+  startingUdids.clear();
+  reservedPorts.clear();
 }

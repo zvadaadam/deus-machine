@@ -1,30 +1,7 @@
 /**
- * Simulator store — two independent concerns, one unified store.
- *
- * Lifecycle separation (Hickey: "Simple is disentangled"):
- *
- * 1. SESSION PLANE (Electron IPC) — created by user Start, destroyed by user Stop
- *    or app close.  Nothing in React controls its lifetime.
- *
- * 2. DISPLAY PLANE (this store) — per-workspace phase + full session metadata.
- *    Persists across workspace switches so the component can remount without
- *    re-probing via IPC.  SimulatorPanel writes here; ContentTabBar reads the
- *    phase label; any future viewer reads the stream URL directly.
- *
- * The component plane (SimulatorPanel mount/unmount) is NOT represented here —
- * it is purely ephemeral React rendering.  Workspace switch unmounts the
- * component but leaves this store untouched → session survives → on remount
- * the component reads existing state and reconnects with zero IPC round-trip.
- *
- * DESIGN RULE: `clearWorkspaceSession` is called ONLY on explicit user Stop or
- * when `stop_streaming` succeeds.  It is NEVER called from a component's
- * useEffect cleanup return.  That is the key invariant keeping the three
- * planes disentangled.
- *
- * STATE MACHINE: All transitions are validated by the pure `transition()`
- * function in machine.ts.  The `dispatch()` method is the primary write path.
- * Illegal transitions return null and are silently ignored (with a dev warning).
- * This prevents entire categories of stuck-state bugs.
+ * Workspace-keyed simulator display state.
+ * Native simulator sessions have a separate lifetime and must only be cleared
+ * on explicit Stop or confirmed backend shutdown.
  */
 
 import { create } from "zustand";
