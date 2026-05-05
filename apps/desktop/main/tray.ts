@@ -23,9 +23,10 @@ type TrayStatus = "starting" | "running" | "offline";
  * Call after backend is spawned and the port is known.
  */
 export function setupTray(backendPort: number): void {
-  // Use the app icon resized for tray. On macOS, template images
-  // adapt to light/dark menu bar automatically.
-  const iconPath = join(__dirname, "../../resources/icons/icon.png");
+  // Monochrome alpha glyph — macOS tints template images for light/dark
+  // menu bars; on Windows it shows white-on-tray. The full app icon
+  // (icon.png) is colored RGBA and isn't suitable as a template.
+  const iconPath = join(__dirname, "../../resources/icons/icon-tray.png");
   const icon = nativeImage.createFromPath(iconPath).resize({ width: 18, height: 18 });
 
   // Mark as template so macOS renders it correctly in the menu bar

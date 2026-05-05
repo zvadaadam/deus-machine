@@ -174,6 +174,7 @@ export const PreferencesFile = z
     experimental_simulator: z.boolean().optional(),
     experimental_browser: z.boolean().optional(),
     experimental_design: z.boolean().optional(),
+    experimental_apps: z.boolean().optional(),
   })
   .passthrough();
 

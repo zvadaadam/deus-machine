@@ -1,277 +1,130 @@
 #!/usr/bin/env node
 /**
- * generate-icons.mjs — Generate all app icons from a master 1024x1024 PNG.
+ * Generate brand assets from a single SVG source of truth.
  *
- * Usage:
- *   node scripts/generate-icons.mjs                          # generate master + all sizes
- *   node scripts/generate-icons.mjs --master-only             # only generate master icon
- *   node scripts/generate-icons.mjs --from resources/icons/master.png  # use existing master
+ * Run rarely — when the brand or accent changes:
+ *   bun run icons
  *
- * Requires: sharp
- * macOS only: uses `iconutil` for .icns and `sips` as fallback
+ * Outputs:
+ *   resources/icons/{master-1024,icon,icon-dev,icon-tray}.png + icon.icns
+ *   apps/web/public/{favicon{,-16x16,-32x32}.png, apple-touch-icon.png,
+ *                    og-image.png, icon.svg}
+ *
+ * macOS-only: .icns generation needs `iconutil`. On other platforms the
+ * .icns step is skipped (it's pre-generated and committed).
  */
 
 import sharp from "sharp";
-import { execSync } from "child_process";
-import { mkdirSync, existsSync, rmSync, copyFileSync, writeFileSync } from "fs";
-import { join, resolve } from "path";
+import { execSync } from "node:child_process";
+import { mkdirSync, rmSync, writeFileSync } from "node:fs";
+import { join, resolve } from "node:path";
 
 const ROOT = resolve(import.meta.dirname, "..");
-const ICONS_DIR = join(ROOT, "resources", "icons");
-const WEB_PUBLIC = join(ROOT, "apps", "web", "public");
-const MASTER_PATH = join(ICONS_DIR, "master-1024.png");
+const ICONS = join(ROOT, "resources/icons");
+const WEB = join(ROOT, "apps/web/public");
 
-// ─── Project colors ───────────────────────────────────────────────
-// From global.css dark theme
-const BG_COLOR = "#0f0f0f"; // slightly lifted from #0b0b0b for icon visibility
-const ACCENT_COLOR = "#d4a0b8"; // oklch(0.78 0.09 345) ≈ cool rose
+const BG = "#0f0f0f";
+const ACCENT = "#d4a0b8"; // oklch(0.78 0.09 345) ≈ cool rose
+const DEV_ACCENT = "#F59E0B"; // amber — visually distinct dev variant
 
-// ─── Icon sizes config ────────────────────────────────────────────
-const ELECTRON_SIZES = [
-  { name: "16x16.png", size: 16 },
-  { name: "24x24.png", size: 24 },
-  { name: "32x32.png", size: 32 },
-  { name: "48x48.png", size: 48 },
-  { name: "64x64.png", size: 64 },
-  { name: "128x128.png", size: 128 },
-  { name: "128x128@2x.png", size: 256 },
-  { name: "256x256.png", size: 256 },
-  { name: "512x512.png", size: 512 },
-  { name: "icon.png", size: 512 },
-];
+// macOS squircle on a 1024×1024 canvas. Inner shape spans 100..920 (824px),
+// leaving a 100px safe-area for the soft drop shadow. macOS does NOT auto-mask
+// app icons — squircle and shadow are baked into the master.
+const SQUIRCLE =
+  "M 512 100 C 720 100 820 100 870 150 C 920 200 920 300 920 512 " +
+  "C 920 720 920 820 870 870 C 820 920 720 920 512 920 " +
+  "C 300 920 200 920 150 870 C 100 820 100 720 100 512 " +
+  "C 100 300 100 200 150 150 C 200 100 300 100 512 100 Z";
 
-// macOS .icns requires these exact sizes in an .iconset folder
-const ICONSET_SIZES = [
-  { name: "icon_16x16.png", size: 16 },
-  { name: "icon_16x16@2x.png", size: 32 },
-  { name: "icon_32x32.png", size: 32 },
-  { name: "icon_32x32@2x.png", size: 64 },
-  { name: "icon_128x128.png", size: 128 },
-  { name: "icon_128x128@2x.png", size: 256 },
-  { name: "icon_256x256.png", size: 256 },
-  { name: "icon_256x256@2x.png", size: 512 },
-  { name: "icon_512x512.png", size: 512 },
-  { name: "icon_512x512@2x.png", size: 1024 },
-];
+const SHADOW = `<filter id="d" x="-15%" y="-15%" width="130%" height="130%">
+  <feGaussianBlur in="SourceAlpha" stdDeviation="14"/>
+  <feOffset dy="10"/>
+  <feComponentTransfer><feFuncA type="linear" slope="0.55"/></feComponentTransfer>
+  <feMerge><feMergeNode/><feMergeNode in="SourceGraphic"/></feMerge>
+</filter>`;
 
-const WEB_SIZES = [
-  { name: "favicon.png", size: 32 },
-  { name: "favicon-16x16.png", size: 16 },
-  { name: "favicon-32x32.png", size: 32 },
-  { name: "apple-touch-icon.png", size: 180 },
-];
+const appSvg = (accent) => `<svg width="1024" height="1024" xmlns="http://www.w3.org/2000/svg">
+  <defs>${SHADOW}</defs>
+  <g filter="url(#d)">
+    <path d="${SQUIRCLE}" fill="${BG}"/>
+    <circle cx="512" cy="512" r="180" fill="${accent}"/>
+  </g>
+</svg>`;
 
-// ─── Generate master icon ─────────────────────────────────────────
-async function generateMaster() {
-  console.log("Generating master 1024x1024 icon...");
+const renderSvg = (svg, path) =>
+  sharp(Buffer.from(svg)).png({ compressionLevel: 9 }).toFile(path);
 
-  const size = 1024;
-  const circleRadius = Math.round(size * 0.18); // ~184px radius
-  const cx = size / 2;
-  const cy = size / 2;
-
-  // SVG with background + accent circle
-  // No rounded corners — macOS applies squircle mask automatically,
-  // Windows/Linux expect square icons
-  const svg = `
-    <svg width="${size}" height="${size}" xmlns="http://www.w3.org/2000/svg">
-      <rect width="${size}" height="${size}" fill="${BG_COLOR}" />
-      <circle cx="${cx}" cy="${cy}" r="${circleRadius}" fill="${ACCENT_COLOR}" />
-    </svg>
-  `;
-
-  await sharp(Buffer.from(svg))
-    .png({ compressionLevel: 9 })
-    .toFile(MASTER_PATH);
-
-  console.log(`  -> ${MASTER_PATH}`);
-  return MASTER_PATH;
-}
-
-// ─── Generate dev icon (orange dot variant) ───────────────────────
-async function generateDevIcon() {
-  console.log("Generating dev icon (orange dot)...");
-  const size = 512;
-  const circleRadius = Math.round(size * 0.18);
-
-  const svg = `
-    <svg width="${size}" height="${size}" xmlns="http://www.w3.org/2000/svg">
-      <rect width="${size}" height="${size}" fill="${BG_COLOR}" />
-      <circle cx="${size / 2}" cy="${size / 2}" r="${circleRadius}" fill="#F59E0B" />
-    </svg>
-  `;
-
-  const devPath = join(ICONS_DIR, "icon-dev.png");
-  await sharp(Buffer.from(svg))
-    .png({ compressionLevel: 9 })
-    .toFile(devPath);
-
-  console.log(`  -> ${devPath}`);
-}
-
-// ─── Resize helper ────────────────────────────────────────────────
-async function resizeTo(masterPath, outputPath, size) {
-  await sharp(masterPath)
+const resize = (src, size, path) =>
+  sharp(src)
     .resize(size, size, { kernel: sharp.kernel.lanczos3 })
     .png({ compressionLevel: 9 })
-    .toFile(outputPath);
-}
+    .toFile(path);
 
-// ─── Generate all sizes ──────────────────────────────────────────
-async function generateAllSizes(masterPath) {
-  // Electron / desktop icons
-  console.log("\nGenerating desktop icons...");
-  for (const { name, size } of ELECTRON_SIZES) {
-    const out = join(ICONS_DIR, name);
-    await resizeTo(masterPath, out, size);
-    console.log(`  -> ${name} (${size}x${size})`);
-  }
-
-  // Web icons
-  console.log("\nGenerating web icons...");
-  for (const { name, size } of WEB_SIZES) {
-    const out = join(WEB_PUBLIC, name);
-    await resizeTo(masterPath, out, size);
-    console.log(`  -> apps/web/public/${name} (${size}x${size})`);
-  }
-
-  // OG image (1200x630 — social card)
-  console.log("\nGenerating OG image (1200x630)...");
-  const ogSvg = `
-    <svg width="1200" height="630" xmlns="http://www.w3.org/2000/svg">
-      <rect width="1200" height="630" fill="${BG_COLOR}" />
-      <circle cx="600" cy="315" r="100" fill="${ACCENT_COLOR}" />
-    </svg>
-  `;
-  const ogPath = join(WEB_PUBLIC, "og-image.png");
-  await sharp(Buffer.from(ogSvg))
-    .png({ compressionLevel: 9 })
-    .toFile(ogPath);
-  console.log(`  -> apps/web/public/og-image.png (1200x630)`);
-
-  // SVG favicon (scalable, supports dark mode)
-  console.log("\nGenerating SVG favicon...");
-  const svgFavicon = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32">
-  <rect width="32" height="32" rx="6" fill="${BG_COLOR}"/>
-  <circle cx="16" cy="16" r="5.75" fill="${ACCENT_COLOR}"/>
-</svg>`;
-  const svgFaviconPath = join(WEB_PUBLIC, "icon.svg");
-  writeFileSync(svgFaviconPath, svgFavicon.trim());
-  console.log(`  -> apps/web/public/icon.svg`);
-
-  // Dev icon
-  await generateDevIcon();
-}
-
-// ─── Generate .icns (macOS) ──────────────────────────────────────
-async function generateIcns(masterPath) {
+async function buildIcns(master) {
   if (process.platform !== "darwin") {
-    console.log("\nSkipping .icns generation (not on macOS)");
+    console.warn("Skipping icon.icns — needs macOS iconutil");
     return;
   }
-
-  console.log("\nGenerating .icns (macOS app icon)...");
-  const iconsetDir = join(ICONS_DIR, "icon.iconset");
-
-  // Clean and create iconset directory
-  if (existsSync(iconsetDir)) rmSync(iconsetDir, { recursive: true });
-  mkdirSync(iconsetDir, { recursive: true });
-
-  // Generate all iconset sizes
-  for (const { name, size } of ICONSET_SIZES) {
-    await resizeTo(masterPath, join(iconsetDir, name), size);
+  const set = join(ICONS, "icon.iconset");
+  rmSync(set, { recursive: true, force: true });
+  mkdirSync(set, { recursive: true });
+  for (const s of [16, 32, 128, 256, 512]) {
+    await resize(master, s, join(set, `icon_${s}x${s}.png`));
+    await resize(master, s * 2, join(set, `icon_${s}x${s}@2x.png`));
   }
-
-  // Convert to .icns using macOS iconutil
-  const icnsPath = join(ICONS_DIR, "icon.icns");
-  try {
-    execSync(`iconutil -c icns "${iconsetDir}" -o "${icnsPath}"`, {
-      stdio: "pipe",
-    });
-    console.log(`  -> icon.icns`);
-  } catch (err) {
-    console.error("  Failed to generate .icns:", err.message);
-  }
-
-  // Clean up iconset directory
-  rmSync(iconsetDir, { recursive: true });
+  execSync(`iconutil -c icns "${set}" -o "${join(ICONS, "icon.icns")}"`);
+  rmSync(set, { recursive: true });
 }
 
-// ─── Generate .ico (Windows) ─────────────────────────────────────
-async function generateIco(masterPath) {
-  console.log("\nGenerating .ico (Windows)...");
-
-  // .ico format: we'll create individual PNGs and note the limitation
-  // A proper .ico requires a tool like png-to-ico or ImageMagick
-  // For now, create the constituent PNGs; electron-builder handles .ico generation
-  const icoSizes = [16, 24, 32, 48, 64, 256];
-  const icoDir = join(ICONS_DIR, "ico-parts");
-  if (!existsSync(icoDir)) mkdirSync(icoDir, { recursive: true });
-
-  for (const size of icoSizes) {
-    await resizeTo(masterPath, join(icoDir, `${size}.png`), size);
-    console.log(`  -> ico-parts/${size}.png`);
-  }
-
-  console.log(
-    "  Note: electron-builder auto-generates .ico from icon.png during build."
-  );
-  console.log(
-    "  For a hand-crafted .ico: brew install imagemagick && magick ico-parts/*.png icon.ico"
-  );
-}
-
-// ─── Main ─────────────────────────────────────────────────────────
 async function main() {
-  const args = process.argv.slice(2);
-  const masterOnly = args.includes("--master-only");
-  const fromArg = args.indexOf("--from");
-  const fromValue = fromArg !== -1 ? args[fromArg + 1] : null;
-  if (fromArg !== -1 && (!fromValue || fromValue.startsWith("-"))) {
-    console.error("--from requires a path argument");
-    process.exit(1);
-  }
-  const customMaster = fromValue ? resolve(fromValue) : null;
+  const master = join(ICONS, "master-1024.png");
 
-  console.log("=== Deus Icon Generator ===\n");
-  console.log(`Colors: bg=${BG_COLOR}, accent=${ACCENT_COLOR}`);
-  console.log(`Output: ${ICONS_DIR}`);
-  console.log("");
+  // Source of truth — squircle + rose accent
+  await renderSvg(appSvg(ACCENT), master);
 
-  let masterPath;
-  if (customMaster) {
-    if (!existsSync(customMaster)) {
-      console.error(`Master file not found: ${customMaster}`);
-      process.exit(1);
-    }
-    masterPath = customMaster;
-    console.log(`Using custom master: ${masterPath}`);
-  } else {
-    masterPath = await generateMaster();
-  }
+  // Dev variant — render at 1024 then downscale to 512 so the shadow stays sharp
+  await sharp(Buffer.from(appSvg(DEV_ACCENT)))
+    .resize(512, 512, { kernel: sharp.kernel.lanczos3 })
+    .png({ compressionLevel: 9 })
+    .toFile(join(ICONS, "icon-dev.png"));
 
-  if (masterOnly) {
-    console.log("\n--master-only: stopping after master generation.");
-    return;
+  // Win/Linux package + Linux BrowserWindow icon
+  await resize(master, 512, join(ICONS, "icon.png"));
+
+  // Tray glyph — monochrome alpha for macOS template image
+  await renderSvg(
+    `<svg width="64" height="64" xmlns="http://www.w3.org/2000/svg"><circle cx="32" cy="32" r="22" fill="#fff"/></svg>`,
+    join(ICONS, "icon-tray.png")
+  );
+
+  // Web favicons (all derived from master)
+  for (const [name, size] of [
+    ["favicon.png", 32],
+    ["favicon-16x16.png", 16],
+    ["favicon-32x32.png", 32],
+    ["apple-touch-icon.png", 180],
+  ]) {
+    await resize(master, size, join(WEB, name));
   }
 
-  await generateAllSizes(masterPath);
-  await generateIcns(masterPath);
-  await generateIco(masterPath);
+  // OG social card — different aspect ratio, rendered at native size
+  await renderSvg(
+    `<svg width="1200" height="630" xmlns="http://www.w3.org/2000/svg"><rect width="1200" height="630" fill="${BG}"/><circle cx="600" cy="315" r="100" fill="${ACCENT}"/></svg>`,
+    join(WEB, "og-image.png")
+  );
 
-  console.log("\n=== Done! ===");
-  console.log("\nGenerated files:");
-  console.log("  Desktop:  resources/icons/ (all sizes + .icns)");
-  console.log("  Web:      apps/web/public/ (favicon, apple-touch, og, svg)");
-  console.log("  Dev:      resources/icons/icon-dev.png (orange dot)");
-  console.log("");
-  console.log("Rounded corners: NOT baked in. Reasons:");
-  console.log("  - macOS auto-applies squircle mask to all app icons");
-  console.log("  - Windows/Linux expect square icons");
-  console.log("  - SVG favicon has rx=6 for browser tab display");
+  // Inline SVG favicon — scalable, browser-tab friendly
+  writeFileSync(
+    join(WEB, "icon.svg"),
+    `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32"><rect width="32" height="32" rx="6" fill="${BG}"/><circle cx="16" cy="16" r="5.75" fill="${ACCENT}"/></svg>`
+  );
+
+  await buildIcns(master);
+
+  console.log("Done.");
 }
 
 main().catch((err) => {
-  console.error("Error:", err);
+  console.error(err);
   process.exit(1);
 });

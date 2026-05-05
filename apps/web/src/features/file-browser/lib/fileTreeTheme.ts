@@ -16,20 +16,26 @@ import type { CSSProperties } from "react";
 
 /**
  * Pierre reads theming from CSS custom properties on the host element.
- * These four overrides make the tree inherit our dark/light theme:
- * background stays default (transparent), foreground + borders use the
- * app tokens, and selection uses a primary-tinted surface with the primary
- * colour itself as the selected text.
+ * These overrides make the tree inherit our runtime dark/light theme through
+ * Pierre's shadow-DOM boundary. Use app CSS variables directly here; Tailwind
+ * `--color-*` theme tokens are compile-time aliases and can resolve poorly
+ * inside third-party shadow roots.
  */
 export const fileTreeThemeStyles: CSSProperties = {
   display: "block",
   height: "100%",
   width: "100%",
-  ["--trees-fg-override" as never]: "var(--color-foreground)",
-  ["--trees-border-color-override" as never]: "var(--color-border)",
-  ["--trees-selected-bg-override" as never]:
-    "color-mix(in oklab, var(--color-primary) 14%, transparent)",
-  ["--trees-selected-fg-override" as never]: "var(--color-primary)",
+  backgroundColor: "var(--bg-elevated)",
+  colorScheme: "light dark",
+  ["--trees-bg-override" as never]: "var(--bg-elevated)",
+  ["--trees-bg-muted-override" as never]: "var(--bg-muted)",
+  ["--trees-fg-override" as never]: "var(--text-secondary)",
+  ["--trees-border-color-override" as never]: "var(--border-default)",
+  ["--trees-input-bg-override" as never]: "var(--bg-elevated)",
+  ["--trees-search-bg-override" as never]: "var(--bg-muted)",
+  ["--trees-search-fg-override" as never]: "var(--text-primary)",
+  ["--trees-selected-bg-override" as never]: "color-mix(in oklab, var(--primary) 14%, transparent)",
+  ["--trees-selected-fg-override" as never]: "var(--text-primary)",
 };
 
 /**
