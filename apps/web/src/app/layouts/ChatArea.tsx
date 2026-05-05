@@ -7,12 +7,16 @@
 
 import { useMemo, useCallback, useEffect, useRef } from "react";
 import type { Dispatch, SetStateAction } from "react";
-import { SessionPanel } from "@/features/session";
+import {
+  SessionPanel,
+  SessionTabBar,
+  getChatTabSessionId,
+  isSessionChatTab,
+} from "@/features/session";
 import type { SessionPanelRef } from "@/features/session";
 import { useWorkingSessionIds } from "@/features/session/api/session.queries";
 import { useUnreadStore, unreadActions } from "@/features/session/store/unreadStore";
 import { WorkspaceEmptyState } from "@/features/session/ui/WorkspaceEmptyState";
-import { MainContentTabBar } from "@/features/workspace";
 import type { Workspace } from "@/shared/types";
 import { useChatTabs } from "./useChatTabs";
 
@@ -38,6 +42,7 @@ export function ChatArea({
     activeTabId,
     activeTab,
     closedTabs,
+    focusActiveTabKey,
     handleTabChange,
     handleTabClose,
     handleTabAdd,
@@ -51,19 +56,19 @@ export function ChatArea({
   });
 
   // Resolve sessionId: tab's own session, falling back to workspace's active session
-  const tabSessionId = activeTab?.data?.sessionId || workspace.current_session_id;
+  const tabSessionId = getChatTabSessionId(activeTab) || workspace.current_session_id;
 
   // Per-tab working status: subscribes to each chat tab's session detail cache
   // so each tab's spinner reflects its own session's status (not the workspace's
   // single session_status which breaks with multiple tabs).
   const chatSessionIds = useMemo(
-    () => tabs.filter((t) => t.data?.sessionId).map((t) => t.data!.sessionId!),
+    () => tabs.filter(isSessionChatTab).map((tab) => tab.sessionId),
     [tabs]
   );
   const workingSessionIds = useWorkingSessionIds(chatSessionIds);
 
   // Mark non-active tab sessions as unread when they leave the working set.
-  const activeSessionId = activeTab?.data?.sessionId;
+  const activeSessionId = getChatTabSessionId(activeTab);
   const prevWorkingRef = useRef(workingSessionIds);
   const prevWorkspaceRef = useRef(workspace.id);
   useEffect(() => {
@@ -92,8 +97,9 @@ export function ChatArea({
   const handleTabChangeWithRead = useCallback(
     (tabId: string) => {
       const tab = tabs.find((t) => t.id === tabId);
-      if (tab?.data?.sessionId) {
-        unreadActions.markRead(tab.data.sessionId);
+      const sessionId = getChatTabSessionId(tab);
+      if (sessionId) {
+        unreadActions.markRead(sessionId);
       }
       handleTabChange(tabId);
     },
@@ -102,11 +108,12 @@ export function ChatArea({
 
   return (
     <div className="flex h-full min-w-0 flex-1 flex-col overflow-hidden">
-      <MainContentTabBar
+      <SessionTabBar
         tabs={tabs}
         activeTabId={activeTabId}
         workingSessionIds={workingSessionIds}
         unreadSessionIds={unreadSessionIds}
+        focusActiveTabKey={focusActiveTabKey}
         onTabChange={handleTabChangeWithRead}
         onTabClose={handleTabClose}
         onTabAdd={handleTabAdd}
@@ -129,7 +136,7 @@ export function ChatArea({
             workspaceDefaultBranch={workspace.git_default_branch}
             isFirstSession={workspace.latest_message_sent_at === null}
             embedded={true}
-            initialModel={activeTab?.data?.initialModel}
+            initialModel={activeTab?.initialModel}
             onAgentHarnessChange={(agentHarness) =>
               activeTab && updateChatTabAgentHarness(activeTab.id, agentHarness)
             }
