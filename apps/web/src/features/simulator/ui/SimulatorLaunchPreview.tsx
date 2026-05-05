@@ -50,7 +50,7 @@ export function SimulatorLaunchPreview({
           {phase === "idle" && (
             <Button
               onClick={onStart}
-              disabled={!selectedUdid}
+              disabled={!selectedUdid || typeof onStart !== "function"}
               className="min-h-11 min-w-[180px] gap-2 rounded-xl transition-[background-color,border-color,color,box-shadow] duration-150"
             >
               <Play className="h-4 w-4" />

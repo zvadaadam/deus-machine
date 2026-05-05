@@ -205,7 +205,12 @@ static void write_all(int fd, NSData *data) {
 }
 
 static NSDictionary *handle_request(NSDictionary *request) {
-    NSString *command = request[@"command"];
+    id rawCommand = request[@"command"];
+    if (![rawCommand isKindOfClass:NSString.class]) {
+        return @{@"ok": @NO, @"error": @"invalid command"};
+    }
+
+    NSString *command = (NSString *)rawCommand;
     if ([command isEqualToString:@"ping"]) {
         return @{@"ok": @YES, @"data": @{@"pid": @((int)getpid())}};
     }
@@ -253,19 +258,42 @@ static NSString *socket_path(void) {
     return [NSString stringWithFormat:@"/tmp/deus-siminspector-%d.sock", getpid()];
 }
 
+static BOOL fill_socket_addr(struct sockaddr_un *addr, NSString *path) {
+    const char *pathBytes = path.UTF8String;
+    if (!pathBytes || strlen(pathBytes) >= sizeof(addr->sun_path)) return NO;
+
+    memset(addr, 0, sizeof(*addr));
+    addr->sun_family = AF_UNIX;
+    strncpy(addr->sun_path, pathBytes, sizeof(addr->sun_path) - 1);
+    return YES;
+}
+
+static BOOL socket_path_is_live(const struct sockaddr_un *addr) {
+    int probe = socket(AF_UNIX, SOCK_STREAM, 0);
+    if (probe < 0) return NO;
+
+    BOOL live = connect(probe, (const struct sockaddr *)addr, sizeof(*addr)) == 0;
+    close(probe);
+    return live;
+}
+
 static void start_server(void) {
     if (sServerFd >= 0) return;
     NSString *path = socket_path();
-    if (path.length >= sizeof(((struct sockaddr_un *)0)->sun_path)) return;
+
+    struct sockaddr_un addr;
+    if (!fill_socket_addr(&addr, path)) return;
 
     int fd = socket(AF_UNIX, SOCK_STREAM, 0);
     if (fd < 0) return;
 
-    struct sockaddr_un addr;
-    memset(&addr, 0, sizeof(addr));
-    addr.sun_family = AF_UNIX;
-    strncpy(addr.sun_path, path.UTF8String, sizeof(addr.sun_path) - 1);
-    unlink(addr.sun_path);
+    if (access(addr.sun_path, F_OK) == 0) {
+        if (socket_path_is_live(&addr)) {
+            close(fd);
+            return;
+        }
+        unlink(addr.sun_path);
+    }
 
     if (bind(fd, (struct sockaddr *)&addr, sizeof(addr)) != 0 || listen(fd, 8) != 0) {
         close(fd);
