@@ -10,9 +10,9 @@
  * WebKit's persistent loading indicator for never-completing HTTP connections.
  *
  * Touch coordinates: Mouse coords are normalized to [0, 1] relative to the
- * canvas's rendered bounding rect. The <canvas> uses max-h-full/max-w-full
- * so getBoundingClientRect() returns the actual rendered rect — no
- * letterboxing mismatch.
+ * canvas's rendered bounding rect. Inspect mode keeps the native view overlay
+ * visible, but normal clicks still forward to the simulator; hold Option and
+ * click to pin/select an inspected native view.
  *
  * TODO(relay-streaming): In web/relay mode the MJPEG URL is not directly
  * accessible (it's on the remote Mac). To support relay streaming:
@@ -23,7 +23,7 @@
  *   5. Detect relay mode: if stream URL is not localhost, use WS frame path
  */
 
-import { useCallback, useEffect, useMemo, useRef } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { cn } from "@/shared/lib/utils";
 import { simulatorService } from "../api/simulator.service";
 import type { InspectorNode, InspectorSnapshot } from "../types";
@@ -126,6 +126,7 @@ interface SimulatorStreamViewerProps {
   selectedInspectorNodeId?: string | null;
   onInspectorHover?: (node: InspectorNode | null) => void;
   onInspectorSelect?: (node: InspectorNode | null) => void;
+  deviceHeader?: React.ReactNode;
   children?: React.ReactNode;
 }
 
@@ -230,10 +231,12 @@ export function SimulatorStreamViewer({
   selectedInspectorNodeId = null,
   onInspectorHover,
   onInspectorSelect,
+  deviceHeader,
   children,
 }: SimulatorStreamViewerProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const viewportRef = useRef<HTMLDivElement>(null);
+  const [screenSize, setScreenSize] = useState<{ width: number; height: number } | null>(null);
   const touchWarnedRef = useRef(false);
   const lastCoordsRef = useRef<{ x: number; y: number } | null>(null);
   const inspectorNodes = useMemo(
@@ -290,6 +293,9 @@ export function SimulatorStreamViewer({
           canvas.height = h;
           prevW = w;
           prevH = h;
+          setScreenSize((prev) =>
+            prev?.width === w && prev?.height === h ? prev : { width: w, height: h }
+          );
         }
         ctx.drawImage(img, 0, 0);
       }
@@ -301,8 +307,8 @@ export function SimulatorStreamViewer({
       cancelAnimationFrame(animId);
       img.src = ""; // Disconnect the MJPEG stream
       // Clear canvas so workspace-switch doesn't flash the old stream's last frame
-      const c = canvasRef.current;
-      if (c) c.getContext("2d")?.clearRect(0, 0, c.width, c.height);
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      setScreenSize(null);
     };
   }, [streamUrl]);
 
@@ -358,7 +364,7 @@ export function SimulatorStreamViewer({
     (e: React.MouseEvent) => {
       if (!isLive) return;
       viewportRef.current?.focus();
-      if (inspectMode) {
+      if (inspectMode && e.altKey) {
         e.preventDefault();
         onInspectorSelect?.(getInspectorNode(e));
         return;
@@ -382,8 +388,8 @@ export function SimulatorStreamViewer({
     (e: React.MouseEvent) => {
       if (inspectMode) {
         onInspectorHover?.(getInspectorNode(e));
-        return;
       }
+      if (inspectMode && e.altKey) return;
       if (!isLive || e.buttons !== 1) return;
       const coords = getNormalizedCoords(e);
       if (coords)
@@ -402,15 +408,15 @@ export function SimulatorStreamViewer({
 
   const handleMouseUp = useCallback(
     (e: React.MouseEvent) => {
-      if (inspectMode) return;
       if (!isLive) return;
-      const coords = getNormalizedCoords(e);
+      if (!lastCoordsRef.current) return;
+      const coords = getNormalizedCoords(e) ?? lastCoordsRef.current;
       if (coords) {
         simulatorService.sendTouch(workspaceId, coords.x, coords.y, "ended").catch(warnTouchFailed);
         lastCoordsRef.current = null;
       }
     },
-    [getNormalizedCoords, inspectMode, isLive, warnTouchFailed, workspaceId]
+    [getNormalizedCoords, isLive, warnTouchFailed, workspaceId]
   );
 
   // Window-level mouseup — catches drag-release outside the canvas
@@ -435,7 +441,6 @@ export function SimulatorStreamViewer({
 
   const handleWheel = useCallback(
     (e: React.WheelEvent) => {
-      if (inspectMode) return;
       if (!isLive) return;
       const coords = getNormalizedCoords(e, false);
       if (!coords) return;
@@ -444,7 +449,7 @@ export function SimulatorStreamViewer({
         .sendScroll(workspaceId, coords.x, coords.y, -e.deltaX, -e.deltaY)
         .catch(() => {});
     },
-    [getNormalizedCoords, inspectMode, isLive, workspaceId]
+    [getNormalizedCoords, isLive, workspaceId]
   );
 
   // -------------------------------------------------------------------------
@@ -497,7 +502,6 @@ export function SimulatorStreamViewer({
       tabIndex={isLive ? 0 : -1}
       className={cn(
         "bg-bg-base relative flex flex-1 cursor-default items-center justify-center overflow-hidden outline-none select-none",
-        inspectMode && "cursor-crosshair",
         isLive &&
           !deviceType &&
           "focus-visible:ring-primary/30 focus-visible:ring-1 focus-visible:ring-inset"
@@ -507,14 +511,14 @@ export function SimulatorStreamViewer({
       onMouseUp={handleMouseUp}
       onMouseLeave={(event) => {
         if (inspectMode) onInspectorHover?.(null);
-        else handleMouseUp(event);
+        handleMouseUp(event);
       }}
       onWheel={handleWheel}
       onKeyDown={handleKeyDown}
       onKeyUp={handleKeyUp}
     >
       {streamUrl && (
-        <DeviceFrame deviceType={deviceType}>
+        <DeviceFrame deviceType={deviceType} screenSize={screenSize} header={deviceHeader}>
           <canvas
             ref={canvasRef}
             className="pointer-events-none absolute inset-0 block h-full w-full select-none"

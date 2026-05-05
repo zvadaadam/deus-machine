@@ -47,12 +47,26 @@ static NSArray<NSString *> *safe_keys(void) {
     return keys;
 }
 
+static BOOL is_secure_text_entry(UIView *view) {
+    if (![view respondsToSelector:NSSelectorFromString(@"isSecureTextEntry")]) return NO;
+    @try {
+        return [[view valueForKey:@"secureTextEntry"] boolValue];
+    } @catch (NSException *ex) {
+        return NO;
+    }
+}
+
 static NSDictionary *properties_for_view(UIView *view) {
     NSMutableDictionary *props = [NSMutableDictionary dictionary];
+    BOOL secureTextEntry = is_secure_text_entry(view);
     for (NSString *key in safe_keys()) {
         SEL selector = NSSelectorFromString(key);
         if (![view respondsToSelector:selector]) continue;
         @try {
+            if (secureTextEntry && [key isEqualToString:@"text"]) {
+                props[key] = @"••••";
+                continue;
+            }
             id value = [view valueForKey:key];
             NSString *desc = short_desc(value);
             if (desc.length > 0) props[key] = desc;

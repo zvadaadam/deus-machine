@@ -1,5 +1,15 @@
 #!/usr/bin/env bun
-import { existsSync, copyFileSync, mkdirSync, unlinkSync, lstatSync } from "node:fs";
+import {
+  existsSync,
+  copyFileSync,
+  mkdirSync,
+  unlinkSync,
+  lstatSync,
+  readdirSync,
+  realpathSync,
+  chmodSync,
+} from "node:fs";
+import { execFileSync } from "node:child_process";
 import { join, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 import { $ } from "bun";
@@ -9,14 +19,41 @@ const nativeDir = join(here, "..", "native");
 const buildDir = join(nativeDir, ".build");
 const releaseDir = join(buildDir, "release");
 const releaseBinary = join(releaseDir, "simbridge");
-const archBinary = join(buildDir, "arm64-apple-macosx", "release", "simbridge");
+const universalBinary = join(buildDir, "apple", "Products", "Release", "simbridge");
 const inspectorBinary = join(releaseDir, "siminspector.dylib");
 const inspectorBuildScript = join(nativeDir, "Sources", "SimInspector", "build.sh");
+
+function hasRequiredMacArchitectures(binary: string): boolean {
+  if (process.platform !== "darwin") return true;
+  try {
+    const archs = execFileSync("lipo", ["-archs", binary], { encoding: "utf8" });
+    return archs.includes("arm64") && archs.includes("x86_64");
+  } catch {
+    return false;
+  }
+}
+
+function findSwiftBuildOutput(): string | null {
+  if (existsSync(universalBinary)) return realpathSync(universalBinary);
+  if (existsSync(releaseBinary) && hasRequiredMacArchitectures(releaseBinary)) {
+    return realpathSync(releaseBinary);
+  }
+  if (!existsSync(buildDir)) return null;
+
+  for (const entry of readdirSync(buildDir)) {
+    if (!entry.endsWith("-apple-macosx")) continue;
+    const candidate = join(buildDir, entry, "release", "simbridge");
+    if (existsSync(candidate) && hasRequiredMacArchitectures(candidate)) return candidate;
+  }
+
+  return null;
+}
 
 const bridgeReady =
   existsSync(releaseBinary) &&
   !lstatSync(releaseDir).isSymbolicLink() &&
-  !lstatSync(releaseBinary).isSymbolicLink();
+  !lstatSync(releaseBinary).isSymbolicLink() &&
+  hasRequiredMacArchitectures(releaseBinary);
 const inspectorReady = existsSync(inspectorBinary);
 
 if (bridgeReady && inspectorReady) {
@@ -38,13 +75,15 @@ try {
 if (!bridgeReady) {
   console.log("[build-native] Building simbridge...");
   try {
-    await $`swift build -c release`.cwd(nativeDir);
+    await $`swift build -c release --arch arm64 --arch x86_64`.cwd(nativeDir);
     console.log("[build-native] Built simbridge successfully.");
   } catch (error) {
     console.warn("[build-native] simbridge build failed:", error);
     process.exit(0);
   }
 }
+
+const builtBridge = findSwiftBuildOutput();
 
 // Swift creates .build/release as a symlink. Flatten to a real dir for packaging.
 if (existsSync(releaseDir) && lstatSync(releaseDir).isSymbolicLink()) {
@@ -55,8 +94,14 @@ if (!existsSync(releaseDir)) {
   mkdirSync(releaseDir, { recursive: true });
 }
 
-if (existsSync(archBinary)) {
-  copyFileSync(archBinary, releaseBinary);
+if (builtBridge && builtBridge !== releaseBinary) {
+  copyFileSync(builtBridge, releaseBinary);
+  chmodSync(releaseBinary, 0o755);
+}
+
+if (!existsSync(releaseBinary)) {
+  console.warn("[build-native] simbridge build did not produce a release binary.");
+  process.exit(1);
 }
 
 console.log(`[build-native] Binary ready: ${releaseBinary}`);

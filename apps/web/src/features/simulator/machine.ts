@@ -14,6 +14,7 @@
  *                                               └────────────APP_UNINSTALLED──────────────────────────┘
  *                                               ↑             BUILD_START (rebuild)                    │
  *                                               └─────────────────────────────────────────────────────┘
+ *   streaming/running/error ──SWITCH_DEVICE──→ booting
  *   Any active state ──STOP──→ idle
  *   Any active state ──ERROR──→ error ──BOOT (retry)──→ booting
  *   Any state ──CLEAR──→ idle (forced reset)
@@ -41,6 +42,7 @@ export type SimPhaseLabel = SimPhase["phase"];
 
 export type SimEvent =
   | { type: "BOOT"; udid: string }
+  | { type: "SWITCH_DEVICE"; udid: string }
   | { type: "STREAM_READY"; udid: string; stream: StreamInfo }
   | { type: "BUILD_START"; startedAt: number }
   | { type: "BUILD_SUCCESS"; app: InstalledApp }
@@ -62,6 +64,19 @@ export function transition(current: SimPhase, event: SimEvent): SimPhase | null 
     case "BOOT":
       // Can only boot from idle or error (retry)
       if (current.phase === "idle" || current.phase === "error") {
+        return { phase: "booting", udid: event.udid };
+      }
+      return null;
+
+    case "SWITCH_DEVICE":
+      // Allow changing devices while streamed/running or after an error.
+      // Building and booting are intentionally excluded: switching mid-build
+      // would make the build destination ambiguous.
+      if (
+        current.phase === "streaming" ||
+        current.phase === "running" ||
+        current.phase === "error"
+      ) {
         return { phase: "booting", udid: event.udid };
       }
       return null;
