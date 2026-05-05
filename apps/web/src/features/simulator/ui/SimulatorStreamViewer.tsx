@@ -10,9 +10,9 @@
  * WebKit's persistent loading indicator for never-completing HTTP connections.
  *
  * Touch coordinates: Mouse coords are normalized to [0, 1] relative to the
- * canvas's rendered bounding rect. The <canvas> uses max-h-full/max-w-full
- * so getBoundingClientRect() returns the actual rendered rect — no
- * letterboxing mismatch.
+ * canvas's rendered bounding rect. Inspect mode keeps the native view overlay
+ * visible, but normal clicks still forward to the simulator; hold Option and
+ * click to pin/select an inspected native view.
  *
  * TODO(relay-streaming): In web/relay mode the MJPEG URL is not directly
  * accessible (it's on the remote Mac). To support relay streaming:
@@ -23,9 +23,10 @@
  *   5. Detect relay mode: if stream URL is not localhost, use WS frame path
  */
 
-import { useCallback, useEffect, useRef } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { cn } from "@/shared/lib/utils";
 import { simulatorService } from "../api/simulator.service";
+import type { InspectorNode, InspectorSnapshot } from "../types";
 import { DeviceFrame } from "./DeviceFrame";
 
 // ---------------------------------------------------------------------------
@@ -119,7 +120,98 @@ interface SimulatorStreamViewerProps {
   onScreenshot: () => void;
   /** device_type from SimulatorInfo — drives device frame rendering */
   deviceType?: string | null;
+  inspectMode?: boolean;
+  inspectorSnapshot?: InspectorSnapshot | null;
+  hoveredInspectorNodeId?: string | null;
+  selectedInspectorNodeId?: string | null;
+  onInspectorHover?: (node: InspectorNode | null) => void;
+  onInspectorSelect?: (node: InspectorNode | null) => void;
+  deviceHeader?: React.ReactNode;
   children?: React.ReactNode;
+}
+
+interface FlatInspectorNode {
+  node: InspectorNode;
+  depth: number;
+  order: number;
+  path: string[];
+}
+
+function flattenInspectorNodes(
+  snapshot: InspectorSnapshot | null | undefined
+): FlatInspectorNode[] {
+  const out: FlatInspectorNode[] = [];
+  let order = 0;
+  const walk = (node: InspectorNode, depth: number, path: string[]) => {
+    const nextPath = [...path, node.className];
+    out.push({ node, depth, order: order++, path: nextPath });
+    for (const child of node.children) walk(child, depth + 1, nextPath);
+  };
+  for (const root of snapshot?.roots ?? []) walk(root, 0, []);
+  return out;
+}
+
+function snapshotBounds(
+  snapshot: InspectorSnapshot | null | undefined
+): { width: number; height: number } | null {
+  const root = snapshot?.roots.find(
+    (node) => node.screenRect.width > 0 && node.screenRect.height > 0
+  );
+  if (!root) return null;
+  return { width: root.screenRect.width, height: root.screenRect.height };
+}
+
+function contains(node: InspectorNode, x: number, y: number, inset = 0): boolean {
+  const rect = node.screenRect;
+  return (
+    x >= rect.x - inset &&
+    y >= rect.y - inset &&
+    x <= rect.x + rect.width + inset &&
+    y <= rect.y + rect.height + inset
+  );
+}
+
+function elementArea(node: InspectorNode): number {
+  return Math.max(1, node.screenRect.width) * Math.max(1, node.screenRect.height);
+}
+
+function inspectableWeight(node: InspectorNode): number {
+  if (node.label || node.identifier) return 0;
+  if (node.className.includes("Layer")) return 1;
+  if (node.properties && Object.keys(node.properties).length > 0) return 2;
+  return 3;
+}
+
+function pickNodeAtPoint(nodes: FlatInspectorNode[], x: number, y: number): InspectorNode | null {
+  let best: FlatInspectorNode | null = null;
+  for (const item of nodes) {
+    const node = item.node;
+    if (node.hidden || node.alpha < 0.01) continue;
+    if (node.screenRect.width <= 0 || node.screenRect.height <= 0) continue;
+
+    const slop = Math.min(
+      10,
+      Math.max(0, (44 - Math.min(node.screenRect.width, node.screenRect.height)) / 2)
+    );
+    if (!contains(node, x, y, slop)) continue;
+
+    if (!best) {
+      best = item;
+      continue;
+    }
+    const area = elementArea(node);
+    const bestArea = elementArea(best.node);
+    const weight = inspectableWeight(node);
+    const bestWeight = inspectableWeight(best.node);
+    if (
+      area < bestArea ||
+      (area === bestArea && weight < bestWeight) ||
+      (area === bestArea && weight === bestWeight && item.order > best.order)
+    ) {
+      best = item;
+    }
+  }
+  return best?.node ?? null;
 }
 
 // ---------------------------------------------------------------------------
@@ -133,12 +225,33 @@ export function SimulatorStreamViewer({
   hidAvailable,
   onScreenshot,
   deviceType,
+  inspectMode = false,
+  inspectorSnapshot = null,
+  hoveredInspectorNodeId = null,
+  selectedInspectorNodeId = null,
+  onInspectorHover,
+  onInspectorSelect,
+  deviceHeader,
   children,
 }: SimulatorStreamViewerProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const viewportRef = useRef<HTMLDivElement>(null);
+  const [screenSize, setScreenSize] = useState<{ width: number; height: number } | null>(null);
   const touchWarnedRef = useRef(false);
   const lastCoordsRef = useRef<{ x: number; y: number } | null>(null);
+  const inspectorNodes = useMemo(
+    () => flattenInspectorNodes(inspectorSnapshot),
+    [inspectorSnapshot]
+  );
+  const inspectorBounds = useMemo(() => snapshotBounds(inspectorSnapshot), [inspectorSnapshot]);
+  const selectedInspectorNode = useMemo(
+    () => inspectorNodes.find((item) => item.node.id === selectedInspectorNodeId)?.node ?? null,
+    [inspectorNodes, selectedInspectorNodeId]
+  );
+  const hoveredInspectorNode = useMemo(
+    () => inspectorNodes.find((item) => item.node.id === hoveredInspectorNodeId)?.node ?? null,
+    [hoveredInspectorNodeId, inspectorNodes]
+  );
 
   // Stable ref for workspaceId (window-level mouseup needs current value)
   const workspaceIdRef = useRef(workspaceId);
@@ -180,6 +293,9 @@ export function SimulatorStreamViewer({
           canvas.height = h;
           prevW = w;
           prevH = h;
+          setScreenSize((prev) =>
+            prev?.width === w && prev?.height === h ? prev : { width: w, height: h }
+          );
         }
         ctx.drawImage(img, 0, 0);
       }
@@ -191,8 +307,8 @@ export function SimulatorStreamViewer({
       cancelAnimationFrame(animId);
       img.src = ""; // Disconnect the MJPEG stream
       // Clear canvas so workspace-switch doesn't flash the old stream's last frame
-      const c = canvasRef.current;
-      if (c) c.getContext("2d")?.clearRect(0, 0, c.width, c.height);
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      setScreenSize(null);
     };
   }, [streamUrl]);
 
@@ -219,6 +335,20 @@ export function SimulatorStreamViewer({
     []
   );
 
+  const getInspectorNode = useCallback(
+    (e: React.MouseEvent | MouseEvent): InspectorNode | null => {
+      if (!inspectorBounds) return null;
+      const coords = getNormalizedCoords(e, false);
+      if (!coords) return null;
+      return pickNodeAtPoint(
+        inspectorNodes,
+        coords.x * inspectorBounds.width,
+        coords.y * inspectorBounds.height
+      );
+    },
+    [getNormalizedCoords, inspectorBounds, inspectorNodes]
+  );
+
   const warnTouchFailed = useCallback((err: unknown) => {
     if (!touchWarnedRef.current) {
       touchWarnedRef.current = true;
@@ -234,33 +364,59 @@ export function SimulatorStreamViewer({
     (e: React.MouseEvent) => {
       if (!isLive) return;
       viewportRef.current?.focus();
+      if (inspectMode && e.altKey) {
+        e.preventDefault();
+        onInspectorSelect?.(getInspectorNode(e));
+        return;
+      }
       const coords = getNormalizedCoords(e);
       if (coords)
         simulatorService.sendTouch(workspaceId, coords.x, coords.y, "began").catch(warnTouchFailed);
     },
-    [isLive, workspaceId, getNormalizedCoords, warnTouchFailed]
+    [
+      getInspectorNode,
+      getNormalizedCoords,
+      inspectMode,
+      isLive,
+      onInspectorSelect,
+      warnTouchFailed,
+      workspaceId,
+    ]
   );
 
   const handleMouseMove = useCallback(
     (e: React.MouseEvent) => {
+      if (inspectMode) {
+        onInspectorHover?.(getInspectorNode(e));
+      }
+      if (inspectMode && e.altKey) return;
       if (!isLive || e.buttons !== 1) return;
       const coords = getNormalizedCoords(e);
       if (coords)
         simulatorService.sendTouch(workspaceId, coords.x, coords.y, "moved").catch(warnTouchFailed);
     },
-    [isLive, workspaceId, getNormalizedCoords, warnTouchFailed]
+    [
+      getInspectorNode,
+      getNormalizedCoords,
+      inspectMode,
+      isLive,
+      onInspectorHover,
+      warnTouchFailed,
+      workspaceId,
+    ]
   );
 
   const handleMouseUp = useCallback(
     (e: React.MouseEvent) => {
       if (!isLive) return;
-      const coords = getNormalizedCoords(e);
+      if (!lastCoordsRef.current) return;
+      const coords = getNormalizedCoords(e) ?? lastCoordsRef.current;
       if (coords) {
         simulatorService.sendTouch(workspaceId, coords.x, coords.y, "ended").catch(warnTouchFailed);
         lastCoordsRef.current = null;
       }
     },
-    [isLive, workspaceId, getNormalizedCoords, warnTouchFailed]
+    [getNormalizedCoords, isLive, warnTouchFailed, workspaceId]
   );
 
   // Window-level mouseup — catches drag-release outside the canvas
@@ -293,7 +449,7 @@ export function SimulatorStreamViewer({
         .sendScroll(workspaceId, coords.x, coords.y, -e.deltaX, -e.deltaY)
         .catch(() => {});
     },
-    [isLive, workspaceId, getNormalizedCoords]
+    [getNormalizedCoords, isLive, workspaceId]
   );
 
   // -------------------------------------------------------------------------
@@ -353,20 +509,84 @@ export function SimulatorStreamViewer({
       onMouseDown={handleMouseDown}
       onMouseMove={handleMouseMove}
       onMouseUp={handleMouseUp}
-      onMouseLeave={handleMouseUp}
+      onMouseLeave={(event) => {
+        if (inspectMode) onInspectorHover?.(null);
+        handleMouseUp(event);
+      }}
       onWheel={handleWheel}
       onKeyDown={handleKeyDown}
       onKeyUp={handleKeyUp}
     >
       {streamUrl && (
-        <DeviceFrame deviceType={deviceType}>
+        <DeviceFrame deviceType={deviceType} screenSize={screenSize} header={deviceHeader}>
           <canvas
             ref={canvasRef}
             className="pointer-events-none absolute inset-0 block h-full w-full select-none"
           />
+          {inspectMode && inspectorBounds && (
+            <InspectorOverlay
+              node={selectedInspectorNode ?? hoveredInspectorNode}
+              bounds={inspectorBounds}
+            />
+          )}
         </DeviceFrame>
       )}
       {children}
+    </div>
+  );
+}
+
+function InspectorOverlay({
+  node,
+  bounds,
+}: {
+  node: InspectorNode | null;
+  bounds: { width: number; height: number };
+}) {
+  if (!node) return null;
+  const rect = node.screenRect;
+  const style = {
+    left: `${(rect.x / bounds.width) * 100}%`,
+    top: `${(rect.y / bounds.height) * 100}%`,
+    width: `${(rect.width / bounds.width) * 100}%`,
+    height: `${(rect.height / bounds.height) * 100}%`,
+  };
+  const label = node.label || node.identifier || node.className;
+
+  return (
+    <div className="pointer-events-none absolute inset-0 z-20">
+      <div
+        className="absolute rounded-[4px]"
+        style={{
+          ...style,
+          backgroundColor: "color-mix(in oklch, var(--primary) 12%, transparent)",
+          boxShadow:
+            "0 0 0 1px var(--bg-base), 0 0 0 3px var(--primary), 0 0 0 5px color-mix(in oklch, var(--bg-base) 85%, transparent), 0 10px 24px color-mix(in oklch, var(--primary) 28%, transparent)",
+        }}
+      >
+        <div
+          className="absolute inset-[2px] rounded-[2px]"
+          style={{ border: "1px solid var(--primary)" }}
+        />
+        <div
+          className="absolute inset-0 rounded-[4px]"
+          style={{
+            border: "1px solid color-mix(in oklch, var(--primary) 55%, var(--bg-base))",
+          }}
+        />
+      </div>
+      <div
+        className="bg-bg-base/95 border-border text-text-secondary absolute z-10 max-w-[220px] rounded-md border px-2 py-1 text-xs shadow-lg backdrop-blur"
+        style={{
+          left: `min(calc(${style.left} + 6px), calc(100% - 230px))`,
+          top: `min(calc(${style.top} + ${style.height} + 8px), calc(100% - 48px))`,
+          boxShadow:
+            "0 0 0 1px color-mix(in oklch, var(--primary) 18%, transparent), 0 12px 30px color-mix(in oklch, var(--bg-base) 62%, transparent)",
+        }}
+      >
+        <div className="truncate font-mono text-[11px]">{node.className}</div>
+        {label !== node.className && <div className="text-text-muted truncate">{label}</div>}
+      </div>
     </div>
   );
 }

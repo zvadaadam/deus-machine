@@ -1,63 +1,15 @@
 /**
  * SimulatorPanel — iOS simulator viewer and controller.
  *
- * Design direction: "Honest Chrome" — every pixel justifies its existence.
- * - Idle state: centered CTA with ghost device silhouette — no gradient, no noise
- * - Viewport: flat bg-bg-base; the MJPEG stream provides all visual richness
- * - Build progress: collapsible bottom bar — collapsed shows latest line, expand for full log
- * - Status bar: colored dots via semantic tokens (success, warning, destructive)
- *
- * State machine: idle → booting → streaming → building → running → error
- * All conditional rendering driven by a discriminated union via ts-pattern.
- *
- * MJPEG rendering: Frames are loaded into an offscreen <img> (never in the DOM)
- * and painted onto a visible <canvas> via requestAnimationFrame. This avoids
- * WebKit's persistent loading indicator for never-completing HTTP connections.
- * The <canvas> uses max-h-full/max-w-full so getBoundingClientRect() returns
- * the rendered rect for correct touch coordinate normalization.
- *
- * SESSION LIFECYCLE:
- * This component is always-mounted for the app's lifetime (CSS hide/show,
- * same pattern as BrowserPanel). Workspace switches change `workspaceId` prop
- * but do NOT unmount the component.
- *
- * The `state` (SimPhase) lives in the global Zustand store, keyed by
- * workspaceId. This means:
- * - Workspace A streams → switch to B → A's streaming state persists in store
- * - Switch back to A → component reads store, sees "streaming" immediately
- * - No IPC round-trip, no async probe, no idle flash on switch-back
- *
- * The native session (ScreenCapture + MjpegServer) is managed independently in
- * SimulatorSessions (HashMap<workspace_id, SimSession>). Its lifetime is:
- *   Created: user clicks Start (or agent calls SimulatorStart)
- *   Destroyed: user clicks Stop (or app closes — handled in Electron main)
- * It is NEVER destroyed on workspace switch. The component does not own
- * the native session — it is a view onto it.
+ * State lives in a workspace-keyed Zustand store. Native simulator sessions
+ * survive workspace switches and stop only on explicit Stop or app shutdown.
  */
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { match } from "ts-pattern";
-import {
-  Smartphone,
-  Play,
-  Square,
-  Home,
-  RotateCcw,
-  Loader2,
-  Rocket,
-  AlertCircle,
-  Camera,
-  Check,
-  ChevronDown,
-} from "lucide-react";
+import { ChevronDown, Crosshair, Loader2, RotateCcw, Send, Smartphone, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
+import { TooltipProvider } from "@/components/ui/tooltip";
 import { cn } from "@/shared/lib/utils";
 import { getErrorMessage } from "@shared/lib/errors";
 import { onEvent } from "@/platform/ws/query-protocol-client";
@@ -69,10 +21,13 @@ import type { SimPhase } from "../store";
 import { workspaceLayoutActions } from "@/features/workspace/store/workspaceLayoutStore";
 import { sessionComposerActions } from "@/features/session/store/sessionComposerStore";
 import { processImageFiles } from "@/features/session/lib/imageAttachments";
-import type { SimulatorInfo } from "../types";
-import { ensureManifestLoaded } from "../device-chrome";
+import type { InspectorNode, InspectorSnapshot, SimulatorInfo } from "../types";
 import { SimulatorStreamViewer } from "./SimulatorStreamViewer";
 import { SimulatorAppBar } from "./SimulatorAppBar";
+import { SimulatorContentHeader } from "./SimulatorContentHeader";
+import { SimulatorDeviceHeader } from "./SimulatorDeviceHeader";
+import { SimulatorEmptySurface } from "./SimulatorEmptySurface";
+import { SimulatorLaunchPreview } from "./SimulatorLaunchPreview";
 
 // ---------------------------------------------------------------------------
 // Props
@@ -88,6 +43,36 @@ interface SimulatorPanelProps {
 // ---------------------------------------------------------------------------
 
 const MAX_BUILD_LOG_LINES = 50;
+
+function inspectorPathForNode(snapshot: InspectorSnapshot | null, target: InspectorNode): string {
+  const parents = new Map<string, InspectorNode>();
+  const walk = (node: InspectorNode) => {
+    for (const child of node.children) {
+      parents.set(child.id, node);
+      walk(child);
+    }
+  };
+  for (const root of snapshot?.roots ?? []) walk(root);
+  const path = [target.className];
+  let current = parents.get(target.id);
+  while (current) {
+    path.unshift(current.className);
+    current = parents.get(current.id);
+  }
+  return path.slice(-6).join(" > ");
+}
+
+function inspectorPropsForNode(node: InspectorNode): string {
+  const props = node.properties ?? {};
+  const entries = Object.entries(props).slice(0, 12);
+  const rect = node.screenRect;
+  return [
+    `screenRect=${Math.round(rect.x)},${Math.round(rect.y)},${Math.round(rect.width)}×${Math.round(rect.height)}`,
+    `alpha=${node.alpha}`,
+    `hidden=${node.hidden}`,
+    ...entries.map(([key, value]) => `${key}=${value}`),
+  ].join("; ");
+}
 
 // ---------------------------------------------------------------------------
 // Device scoring — iPhones first, booted first, exclude pool/test devices.
@@ -153,6 +138,7 @@ export function SimulatorPanel({ workspaceId, workspacePath }: SimulatorPanelPro
   //   Session plane    — native HashMap, created by Start, destroyed by Stop only
   // ---------------------------------------------------------------------------
   const state: SimPhase = useSimulatorStatusStore((s) => s.sessions[workspaceId] ?? IDLE_PHASE);
+  const simulatorSessions = useSimulatorStatusStore((s) => s.sessions);
 
   // Two write paths — dispatch() validates transitions via the state machine;
   // setSession() bypasses validation for recovery paths (mount probes, agent-driven).
@@ -218,6 +204,22 @@ export function SimulatorPanel({ workspaceId, workspacePath }: SimulatorPanelPro
   // Build log accumulator — stores last N lines for the build drawer
   const [buildLogs, setBuildLogs] = useState<string[]>([]);
   const buildLogEndRef = useRef<HTMLDivElement>(null);
+  const [inspectMode, setInspectMode] = useState(false);
+  const [inspectorSnapshot, setInspectorSnapshot] = useState<InspectorSnapshot | null>(null);
+  const [hoveredInspectorNode, setHoveredInspectorNode] = useState<InspectorNode | null>(null);
+  const [selectedInspectorNode, setSelectedInspectorNode] = useState<InspectorNode | null>(null);
+  const [inspectError, setInspectError] = useState<string | null>(null);
+  const [inspectLoading, setInspectLoading] = useState(false);
+  const [inspectPrompt, setInspectPrompt] = useState("");
+
+  useEffect(() => {
+    setInspectMode(false);
+    setInspectorSnapshot(null);
+    setHoveredInspectorNode(null);
+    setSelectedInspectorNode(null);
+    setInspectError(null);
+    setInspectPrompt("");
+  }, [workspaceId]);
 
   // Listen for build log events streamed from backend via q:event.
   // Filter to only this workspace so concurrent builds don't interleave.
@@ -243,11 +245,6 @@ export function SimulatorPanel({ workspaceId, workspacePath }: SimulatorPanelPro
     buildLogEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [buildLogs]);
 
-  // Warm the device chrome manifest cache on mount
-  useEffect(() => {
-    ensureManifestLoaded();
-  }, []);
-
   // Filter to iOS-capable simulators
   const iosSimulators = useMemo(
     () =>
@@ -266,9 +263,20 @@ export function SimulatorPanel({ workspaceId, workspacePath }: SimulatorPanelPro
     () => iosSimulators.find((s) => s.udid === selectedUdid),
     [iosSimulators, selectedUdid]
   );
+  const noIosSimulators = iosSimulators.length === 0 && state.phase === "idle";
 
-  // Whether device select should be disabled (any active state)
-  const selectDisabled = state.phase !== "idle";
+  // Device changes are safe while idle/streaming/running/error. They are blocked
+  // during boot/build because the target simulator would be ambiguous.
+  const selectorDisabled =
+    noIosSimulators || state.phase === "booting" || state.phase === "building";
+  const claimedUdids = useMemo(() => {
+    const claimed = new Set<string>();
+    for (const [wsId, phase] of Object.entries(simulatorSessions)) {
+      if (wsId === workspaceId) continue;
+      if ("udid" in phase && phase.udid) claimed.add(phase.udid);
+    }
+    return claimed;
+  }, [simulatorSessions, workspaceId]);
 
   // Stream URL and HID availability — derived from the state machine guard.
   const streamUrl = hasStream(state) ? state.stream.url : null;
@@ -391,23 +399,26 @@ export function SimulatorPanel({ workspaceId, workspacePath }: SimulatorPanelPro
   // Start — boot simulator and begin streaming (no build)
   // -------------------------------------------------------------------------
 
-  const handleStart = async () => {
-    if (!selectedUdid) return;
-    // If another workspace owns this device, release it first (reassignment).
-    // The user chose this device explicitly or it was auto-selected — either way,
-    // one device = one workspace at a time.
-    const ownerWsId = simulatorStoreActions.getWorkspaceByUdid(selectedUdid, workspaceId);
+  const startSimulatorStream = async (udid: string, eventType: "BOOT" | "SWITCH_DEVICE") => {
+    const ownerWsId = simulatorStoreActions.getWorkspaceByUdid(udid, workspaceId);
     if (ownerWsId) {
-      simulatorService.stopStreaming(ownerWsId).catch(() => {});
-      simulatorStoreActions.clearWorkspaceSession(ownerWsId);
+      if (state.phase === "idle") {
+        simulatorStoreActions.setSession(workspaceId, {
+          phase: "error",
+          message: "That simulator is already in use by another workspace.",
+          canRetry: false,
+        });
+      }
+      return;
     }
-    // dispatch validates: BOOT is only legal from idle or error (retry).
-    if (!simulatorStoreActions.dispatch(workspaceId, { type: "BOOT", udid: selectedUdid })) return;
+
+    if (!simulatorStoreActions.dispatch(workspaceId, { type: eventType, udid })) return;
+
     // Skip the simctl boot check if the frontend already knows the device is booted
     // (saves 1-10s of `simctl list --json` parsing).
-    const isBooted = selectedSim?.state === "Booted";
+    const isBooted = iosSimulators.find((sim) => sim.udid === udid)?.state === "Booted";
     try {
-      const stream = await simulatorService.startStreaming(workspaceId, selectedUdid, isBooted);
+      const stream = await simulatorService.startStreaming(workspaceId, udid, isBooted);
       if (!stream.hid_available) {
         console.warn("[Simulator] HID client not available — touch/scroll/key injection disabled");
       }
@@ -415,16 +426,38 @@ export function SimulatorPanel({ workspaceId, workspacePath }: SimulatorPanelPro
       // so the write is correct even if the user switched away mid-boot.
       simulatorStoreActions.dispatch(workspaceId, {
         type: "STREAM_READY",
-        udid: selectedUdid,
+        udid,
         stream,
       });
-      workspaceLayoutActions.setSimulatorUdid(workspaceId, selectedUdid);
+      workspaceLayoutActions.setSimulatorUdid(workspaceId, udid);
     } catch (e) {
       simulatorStoreActions.dispatch(workspaceId, {
         type: "ERROR",
         message: `Failed to boot simulator: ${getErrorMessage(e)}`,
         canRetry: true,
       });
+    }
+  };
+
+  const handleStart = async () => {
+    if (!selectedUdid) return;
+    await startSimulatorStream(selectedUdid, "BOOT");
+  };
+
+  const handleSelectSimulator = (udid: string) => {
+    if (udid === selectedUdidRef.current) return;
+    if (simulatorStoreActions.getWorkspaceByUdid(udid, workspaceId)) return;
+
+    updateSelectedUdid(udid);
+    workspaceLayoutActions.setSimulatorUdid(workspaceId, udid);
+    setInspectMode(false);
+    setInspectorSnapshot(null);
+    setHoveredInspectorNode(null);
+    setSelectedInspectorNode(null);
+    setInspectError(null);
+
+    if (state.phase === "streaming" || state.phase === "running" || state.phase === "error") {
+      void startSimulatorStream(udid, "SWITCH_DEVICE");
     }
   };
 
@@ -534,6 +567,69 @@ export function SimulatorPanel({ workspaceId, workspacePath }: SimulatorPanelPro
     }
   }, [workspaceId]);
 
+  const refreshInspectorSnapshot = useCallback(async () => {
+    const snapshot = await simulatorService.inspectSnapshot(workspaceId);
+    setInspectorSnapshot(snapshot);
+    return snapshot;
+  }, [workspaceId]);
+
+  const handleToggleInspect = useCallback(async () => {
+    if (inspectMode) {
+      setInspectMode(false);
+      setHoveredInspectorNode(null);
+      setSelectedInspectorNode(null);
+      setInspectError(null);
+      return;
+    }
+    setInspectLoading(true);
+    setInspectError(null);
+    try {
+      const snapshot = await simulatorService.startInspect(
+        workspaceId,
+        state.phase === "running" ? state.app.bundle_id : undefined
+      );
+      setInspectorSnapshot(snapshot);
+      setInspectMode(true);
+    } catch (err) {
+      setInspectError(getErrorMessage(err));
+      setInspectMode(false);
+    } finally {
+      setInspectLoading(false);
+    }
+  }, [inspectMode, state, workspaceId]);
+
+  useEffect(() => {
+    if (!inspectMode) return;
+    const timer = setInterval(() => {
+      refreshInspectorSnapshot().catch((err) => setInspectError(getErrorMessage(err)));
+    }, 1000);
+    return () => clearInterval(timer);
+  }, [inspectMode, refreshInspectorSnapshot]);
+
+  const handleInspectorSelect = useCallback((node: InspectorNode | null) => {
+    setSelectedInspectorNode(node);
+    if (node) setInspectPrompt(`Ask about ${node.label || node.className}`);
+  }, []);
+
+  const handleSendInspectToChat = useCallback(() => {
+    const node = selectedInspectorNode;
+    const sid = workspaceLayoutActions.getLayout(workspaceId).activeChatTabSessionId;
+    if (!node || !sid) return;
+    sessionComposerActions.addInspectedElement(sid, {
+      ref: node.id,
+      tagName: node.className,
+      path: inspectorPathForNode(inspectorSnapshot, node),
+      innerText: node.label || node.identifier || node.className,
+      context: "external",
+      props: inspectorPropsForNode(node),
+      attributes: node.identifier ? `accessibilityIdentifier=${node.identifier}` : undefined,
+    });
+    sessionComposerActions.appendDraft(
+      sid,
+      inspectPrompt.trim() || `Help me understand this iOS view: ${node.className}`
+    );
+  }, [inspectPrompt, inspectorSnapshot, selectedInspectorNode, workspaceId]);
+
   // -------------------------------------------------------------------------
   // Empty state — no simulators installed
   // -------------------------------------------------------------------------
@@ -546,335 +642,120 @@ export function SimulatorPanel({ workspaceId, workspacePath }: SimulatorPanelPro
     );
   }
 
-  if (iosSimulators.length === 0 && state.phase !== "error") {
-    return (
-      <div className="flex h-full flex-col items-center justify-center gap-3 p-6 text-center">
-        <Smartphone className="text-text-muted h-8 w-8" />
-        <div>
-          <p className="text-text-secondary text-sm font-medium">No iOS Simulators</p>
-          <p className="text-text-muted mt-1 text-xs">
-            Open Xcode and create a simulator to get started.
-          </p>
-        </div>
-        <Button variant="outline" size="sm" onClick={loadSimulators}>
-          <RotateCcw className="mr-1.5 h-3.5 w-3.5" />
-          Refresh
-        </Button>
-      </div>
-    );
-  }
-
   // -------------------------------------------------------------------------
   // Main render
   // -------------------------------------------------------------------------
 
   const isBuilding = state.phase === "building";
+  const deviceHeader = (
+    <SimulatorDeviceHeader
+      state={state}
+      selectedSim={selectedSim}
+      isLive={isLive}
+      inspectMode={inspectMode}
+      inspectLoading={inspectLoading}
+      onHome={handleHome}
+      onScreenshot={handleScreenshot}
+      onToggleInspect={handleToggleInspect}
+    />
+  );
 
   return (
     <TooltipProvider delayDuration={200}>
-      <div className="flex h-full flex-col">
-        {/* ── Toolbar ─────────────────────────────────────────────── */}
-        <div className="border-border-subtle flex h-9 shrink-0 items-center gap-2 border-b px-3">
-          {/* Status dot — reflects current phase, sits left of the selector */}
-          <div
-            className={cn("h-1.5 w-1.5 shrink-0 rounded-full", {
-              "bg-muted-foreground/50": state.phase === "idle",
-              "bg-warning animate-pulse": state.phase === "booting" || state.phase === "building",
-              "bg-success": state.phase === "streaming" || state.phase === "running",
-              "bg-destructive": state.phase === "error",
-            })}
-          />
-
-          {/* Device selector — lightweight dropdown matching file-browser filter style */}
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <button
-                disabled={selectDisabled}
-                aria-label="Select simulator device"
-                aria-haspopup="listbox"
-                className="text-muted-foreground hover:text-foreground flex items-center gap-1 rounded-lg py-1 text-xs transition-colors duration-200 ease-[ease] disabled:pointer-events-none disabled:opacity-50"
-              >
-                <Smartphone className="h-[11px] w-[11px] shrink-0" />
-                <span className="truncate">
-                  {selectedSim
-                    ? `${selectedSim.name}  ${selectedSim.runtime.replace("com.apple.CoreSimulator.SimRuntime.", "")}`
-                    : "Select simulator..."}
-                </span>
-                <ChevronDown className="h-[10px] w-[10px] shrink-0" />
-              </button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="start" className="min-w-[200px]">
-              {iosSimulators.map((sim) => (
-                <DropdownMenuItem
-                  key={sim.udid}
-                  onClick={() => {
-                    updateSelectedUdid(sim.udid);
-                    workspaceLayoutActions.setSimulatorUdid(workspaceId, sim.udid);
-                  }}
-                  className="gap-2 text-xs"
-                >
-                  <Check
-                    className={cn(
-                      "h-3 w-3 shrink-0",
-                      selectedUdid === sim.udid ? "opacity-100" : "opacity-0"
-                    )}
-                  />
-                  {sim.state === "Booted" && (
-                    <span className="bg-success h-1.5 w-1.5 shrink-0 rounded-full" />
-                  )}
-                  <span className="truncate">{sim.name}</span>
-                  <span className="text-text-muted ml-auto text-xs">
-                    {sim.runtime.replace("com.apple.CoreSimulator.SimRuntime.", "")}
-                  </span>
-                </DropdownMenuItem>
-              ))}
-            </DropdownMenuContent>
-          </DropdownMenu>
-
-          {/* Spacer — pushes action buttons to the right */}
-          <div className="flex-1" />
-
-          {/* No-touch warning — inline in toolbar when HID is unavailable */}
-          {isLive && !hidAvailable && (
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <span className="text-warning flex cursor-help items-center gap-1">
-                  <AlertCircle className="h-3 w-3" />
-                  <span className="text-xs">No touch</span>
-                </span>
-              </TooltipTrigger>
-              <TooltipContent side="bottom" className="max-w-[220px]">
-                <p className="text-xs">
-                  HID client not available. Touch, scroll, and keyboard input won't work. Check
-                  Xcode/Simulator.app installation.
-                </p>
-              </TooltipContent>
-            </Tooltip>
-          )}
-
-          {/* Primary action — morphs based on state. Idle CTA is in the viewport, not here. */}
-          {match(state)
-            .with({ phase: "idle" }, () => null)
-            .with({ phase: "booting" }, () => (
-              <Button variant="outline" size="sm" disabled className="h-7 gap-1.5 px-2.5 text-xs">
-                <Loader2 className="h-3 w-3 animate-spin" />
-                Booting
-              </Button>
-            ))
-            .with({ phase: "streaming" }, () =>
-              hasProject ? (
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={handleBuildAndRun}
-                  className="h-7 gap-1.5 px-2.5 text-xs"
-                >
-                  <Rocket className="h-3 w-3" />
-                  Build & Run
-                </Button>
-              ) : hasProject === false ? (
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <span className="inline-flex cursor-not-allowed">
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        disabled
-                        className="h-7 gap-1.5 px-2.5 text-xs opacity-40"
-                      >
-                        <Rocket className="h-3 w-3" />
-                        Build & Run
-                      </Button>
-                    </span>
-                  </TooltipTrigger>
-                  <TooltipContent side="bottom">
-                    No Xcode project found in this workspace
-                  </TooltipContent>
-                </Tooltip>
-              ) : null
-            )
-            .with({ phase: "building" }, () => (
-              <Button variant="outline" size="sm" disabled className="h-7 gap-1.5 px-2.5 text-xs">
-                <Loader2 className="h-3 w-3 animate-spin" />
-                Building
-              </Button>
-            ))
-            .with({ phase: "running" }, () =>
-              hasProject ? (
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={handleBuildAndRun}
-                  className="h-7 gap-1.5 px-2.5 text-xs"
-                >
-                  <RotateCcw className="h-3 w-3" />
-                  Rebuild
-                </Button>
-              ) : null
-            )
-            .with({ phase: "error" }, (s) =>
-              s.canRetry ? (
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={handleRetry}
-                  className="h-7 gap-1.5 px-2.5 text-xs"
-                >
-                  <RotateCcw className="h-3 w-3" />
-                  Retry
-                </Button>
-              ) : null
-            )
-            .exhaustive()}
-
-          {/* Stop button — visible in all active states */}
-          {state.phase !== "idle" && state.phase !== "error" && (
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <Button variant="ghost" size="sm" onClick={handleStop} className="h-7 w-7 p-0">
-                  <Square className="h-3 w-3" />
-                </Button>
-              </TooltipTrigger>
-              <TooltipContent side="bottom">Stop simulator</TooltipContent>
-            </Tooltip>
-          )}
-        </div>
-
-        {/* ── Device controls — floating pill above the device frame ── */}
-        {isLive && (
-          <div className="flex shrink-0 justify-center pt-2">
-            <div className="bg-bg-surface border-border flex items-center gap-0.5 rounded-lg border p-0.5 shadow-sm">
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    onClick={handleHome}
-                    aria-label="Home"
-                    className="h-7 w-7 p-0"
-                  >
-                    <Home className="h-3 w-3" />
-                  </Button>
-                </TooltipTrigger>
-                <TooltipContent side="bottom">Home</TooltipContent>
-              </Tooltip>
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    onClick={handleScreenshot}
-                    aria-label="Screenshot"
-                    className="h-7 w-7 p-0"
-                  >
-                    <Camera className="h-3 w-3" />
-                  </Button>
-                </TooltipTrigger>
-                <TooltipContent side="bottom">Screenshot ⌘⇧S</TooltipContent>
-              </Tooltip>
-            </div>
-          </div>
-        )}
-
-        {/* ── Viewport — MJPEG stream + overlay states ───────────── */}
-        <SimulatorStreamViewer
-          workspaceId={workspaceId}
-          streamUrl={streamUrl}
+      <div className="bg-bg-base flex h-full flex-col">
+        <SimulatorContentHeader
+          state={state}
+          simulators={iosSimulators}
+          selectedSim={selectedSim}
+          selectedUdid={selectedUdid}
+          selectorDisabled={selectorDisabled}
+          claimedUdids={claimedUdids}
           isLive={isLive}
           hidAvailable={hidAvailable}
-          onScreenshot={handleScreenshot}
-          deviceType={selectedSim?.device_type}
-        >
-          {/* Overlay states on top of (or instead of) the stream */}
-          {match(state)
-            .with({ phase: "idle" }, () => (
-              <div className="absolute inset-0 flex flex-col items-center justify-center gap-5">
-                {/* Device silhouette — ghost outline at reduced opacity.
-                 * Breathing animation oscillates opacity; reduced-motion users
-                 * get a static value via motion-safe gating. */}
-                <svg
-                  width="100"
-                  height="210"
-                  viewBox="0 0 100 210"
-                  fill="none"
-                  className="opacity-30 motion-safe:animate-[sim-idle-breathe_6s_ease-in-out_infinite]"
-                >
-                  <rect
-                    x="1"
-                    y="1"
-                    width="98"
-                    height="208"
-                    rx="22"
-                    className="stroke-muted-foreground/20"
-                    strokeWidth="1.5"
-                  />
-                  <rect
-                    x="34"
-                    y="12"
-                    width="32"
-                    height="10"
-                    rx="5"
-                    className="fill-muted-foreground/10"
-                  />
-                  <rect
-                    x="35"
-                    y="196"
-                    width="30"
-                    height="3"
-                    rx="1.5"
-                    className="fill-muted-foreground/10"
-                  />
-                </svg>
+          hasProject={hasProject}
+          onSelectSimulator={handleSelectSimulator}
+          onBuildAndRun={handleBuildAndRun}
+          onRetry={handleRetry}
+          onStop={handleStop}
+        />
 
-                <div className="flex flex-col items-center gap-1.5">
-                  <p className="text-text-secondary text-sm font-medium">
-                    {selectedSim?.name ?? "No simulator selected"}
-                  </p>
-                  {selectedSim && (
-                    <p className="text-text-muted text-xs">
-                      {selectedSim.runtime.replace("com.apple.CoreSimulator.SimRuntime.", "")}
-                    </p>
-                  )}
-                </div>
+        {noIosSimulators ? (
+          <SimulatorEmptySurface
+            icon={<Smartphone className="h-5 w-5" />}
+            title="No iOS Simulators"
+            description="Open Xcode and create a simulator to get started."
+            action={
+              <Button variant="outline" size="sm" onClick={loadSimulators}>
+                <RotateCcw className="mr-1.5 h-3.5 w-3.5" />
+                Refresh
+              </Button>
+            }
+          />
+        ) : (
+          <SimulatorStreamViewer
+            workspaceId={workspaceId}
+            streamUrl={streamUrl}
+            isLive={isLive}
+            hidAvailable={hidAvailable}
+            onScreenshot={handleScreenshot}
+            deviceType={selectedSim?.device_type}
+            inspectMode={inspectMode}
+            inspectorSnapshot={inspectorSnapshot}
+            hoveredInspectorNodeId={hoveredInspectorNode?.id ?? null}
+            selectedInspectorNodeId={selectedInspectorNode?.id ?? null}
+            onInspectorHover={setHoveredInspectorNode}
+            onInspectorSelect={handleInspectorSelect}
+            deviceHeader={deviceHeader}
+          >
+            {inspectError && (
+              <div className="border-destructive/30 bg-bg-base/95 text-destructive absolute top-3 left-1/2 z-30 max-w-[360px] -translate-x-1/2 rounded-lg border px-3 py-2 text-xs shadow-lg backdrop-blur">
+                {inspectError}
+              </div>
+            )}
 
-                {/* Primary CTA — the only actionable element in idle state */}
-                <Button
-                  onClick={handleStart}
-                  disabled={!selectedUdid}
-                  className="min-w-[140px] gap-2"
-                >
-                  <Play className="h-4 w-4" />
-                  Start Simulator
-                </Button>
+            {inspectMode && selectedInspectorNode && (
+              <InspectorDetailsPanel
+                node={selectedInspectorNode}
+                prompt={inspectPrompt}
+                onPromptChange={setInspectPrompt}
+                onClose={() => setSelectedInspectorNode(null)}
+                onSendToChat={handleSendInspectToChat}
+              />
+            )}
 
-                {hasProject === false && (
-                  <p className="text-text-muted max-w-[220px] text-center text-xs">
-                    No Xcode project found. You can still use the simulator, but Build & Run is not
-                    available.
-                  </p>
-                )}
-              </div>
-            ))
-            .with({ phase: "booting" }, () => (
-              <div className="absolute inset-0 flex flex-col items-center justify-center gap-3">
-                <Loader2 className="text-primary h-6 w-6 animate-spin" />
-                <p className="text-text-secondary text-xs">Booting simulator...</p>
-              </div>
-            ))
-            .with({ phase: "error" }, (s) => (
-              <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 px-6">
-                <AlertCircle className="text-destructive/70 h-5 w-5" />
-                <p className="text-destructive max-w-[240px] text-center text-xs">{s.message}</p>
-                {s.canRetry && (
-                  <Button variant="outline" size="sm" onClick={handleRetry} className="h-7 text-xs">
-                    <RotateCcw className="mr-1.5 h-3 w-3" />
-                    Try Again
-                  </Button>
-                )}
-              </div>
-            ))
-            .otherwise(() => null)}
-        </SimulatorStreamViewer>
+            {/* Overlay states on top of (or instead of) the stream */}
+            {match(state)
+              .with({ phase: "idle" }, () => (
+                <SimulatorLaunchPreview
+                  phase="idle"
+                  selectedSim={selectedSim}
+                  selectedUdid={selectedUdid}
+                  onStart={handleStart}
+                  deviceHeader={deviceHeader}
+                />
+              ))
+              .with({ phase: "booting" }, () => (
+                <SimulatorLaunchPreview
+                  phase="booting"
+                  selectedSim={selectedSim}
+                  selectedUdid={selectedUdid}
+                  deviceHeader={deviceHeader}
+                />
+              ))
+              .with({ phase: "error" }, (s) => (
+                <SimulatorLaunchPreview
+                  phase="error"
+                  selectedSim={selectedSim}
+                  selectedUdid={selectedUdid}
+                  errorMessage={s.message}
+                  canRetry={s.canRetry}
+                  onRetry={handleRetry}
+                  deviceHeader={deviceHeader}
+                />
+              ))
+              .otherwise(() => null)}
+          </SimulatorStreamViewer>
+        )}
 
         {/* ── Build drawer — collapsible bar below the stream ────────── */}
         {isBuilding && (
@@ -896,6 +777,107 @@ export function SimulatorPanel({ workspaceId, workspacePath }: SimulatorPanelPro
         )}
       </div>
     </TooltipProvider>
+  );
+}
+
+function InspectorDetailsPanel({
+  node,
+  prompt,
+  onPromptChange,
+  onClose,
+  onSendToChat,
+}: {
+  node: InspectorNode;
+  prompt: string;
+  onPromptChange: (value: string) => void;
+  onClose: () => void;
+  onSendToChat: () => void;
+}) {
+  const rect = node.screenRect;
+  const properties = Object.entries(node.properties ?? {}).slice(0, 8);
+
+  return (
+    <aside
+      className="border-border bg-bg-base/95 absolute top-3 right-3 z-30 flex max-h-[calc(100%-24px)] w-[320px] flex-col overflow-hidden rounded-xl border shadow-2xl backdrop-blur"
+      onMouseDown={(event) => event.stopPropagation()}
+      onMouseMove={(event) => event.stopPropagation()}
+      onMouseUp={(event) => event.stopPropagation()}
+      onWheel={(event) => event.stopPropagation()}
+      onKeyDown={(event) => event.stopPropagation()}
+      onKeyUp={(event) => event.stopPropagation()}
+    >
+      <div className="border-border-subtle flex items-start gap-3 border-b p-3">
+        <div className="bg-primary/10 text-primary flex h-7 w-7 shrink-0 items-center justify-center rounded-lg">
+          <Crosshair className="h-3.5 w-3.5" />
+        </div>
+        <div className="min-w-0 flex-1">
+          <p className="text-text-secondary truncate font-mono text-xs">{node.className}</p>
+          <p className="text-text-muted mt-0.5 truncate text-xs">
+            {node.label || node.identifier || "Native iOS view"}
+          </p>
+        </div>
+        <button
+          type="button"
+          onClick={onClose}
+          className="text-text-muted hover:text-text-secondary rounded-md p-1 transition-colors"
+          aria-label="Close inspector details"
+        >
+          <X className="h-3.5 w-3.5" />
+        </button>
+      </div>
+
+      <div className="flex-1 overflow-y-auto p-3">
+        {node.id.startsWith("ax-") && (
+          <div className="bg-warning/10 text-warning mb-3 rounded-lg px-2 py-1.5 text-xs">
+            Accessibility fallback — build/run an app for richer native properties.
+          </div>
+        )}
+
+        <div className="grid grid-cols-2 gap-2 text-xs">
+          <div className="bg-bg-surface rounded-lg p-2">
+            <p className="text-text-muted">Position</p>
+            <p className="text-text-secondary mt-1 font-mono tabular-nums">
+              {Math.round(rect.x)}, {Math.round(rect.y)}
+            </p>
+          </div>
+          <div className="bg-bg-surface rounded-lg p-2">
+            <p className="text-text-muted">Size</p>
+            <p className="text-text-secondary mt-1 font-mono tabular-nums">
+              {Math.round(rect.width)} × {Math.round(rect.height)}
+            </p>
+          </div>
+        </div>
+
+        {properties.length > 0 && (
+          <div className="mt-3 space-y-1.5">
+            <p className="text-text-muted text-xs font-medium">Properties</p>
+            {properties.map(([key, value]) => (
+              <div key={key} className="grid grid-cols-[110px_1fr] gap-2 text-xs">
+                <span className="text-text-muted truncate font-mono">{key}</span>
+                <span className="text-text-secondary truncate">{value}</span>
+              </div>
+            ))}
+          </div>
+        )}
+
+        <label className="mt-4 block">
+          <span className="text-text-muted text-xs font-medium">Ask about this view</span>
+          <textarea
+            value={prompt}
+            onChange={(event) => onPromptChange(event.target.value)}
+            className="border-border bg-bg-surface text-text-secondary placeholder:text-text-muted focus:border-primary/50 mt-1 min-h-20 w-full resize-none rounded-lg border px-2.5 py-2 text-xs outline-none"
+            placeholder="Why is this clipped? Make this label red..."
+          />
+        </label>
+      </div>
+
+      <div className="border-border-subtle flex justify-end border-t p-2">
+        <Button size="sm" onClick={onSendToChat} className="h-7 gap-1.5 px-2.5 text-xs">
+          <Send className="h-3 w-3" />
+          Add to Chat
+        </Button>
+      </div>
+    </aside>
   );
 }
 

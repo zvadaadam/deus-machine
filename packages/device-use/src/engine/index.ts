@@ -62,7 +62,13 @@ export {
   pressButton,
 } from "./interaction.js";
 
-export { callSimBridge, isBridgeAvailable, findBridgePath, SIMBRIDGE_ENV } from "./simbridge.js";
+export {
+  callSimBridge,
+  isBridgeAvailable,
+  findBridgePath,
+  findInspectorPath,
+  SIMBRIDGE_ENV,
+} from "./simbridge.js";
 
 export { RefMap } from "./snapshot/refs.js";
 export { buildSnapshot } from "./snapshot/build.js";

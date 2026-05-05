@@ -19,3 +19,33 @@ export interface InstalledApp {
   name: string;
   app_path: string;
 }
+
+export interface InspectorRect {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+}
+
+export interface InspectorNode {
+  id: string;
+  parentId?: string;
+  className: string;
+  label?: string;
+  identifier?: string;
+  frame: InspectorRect;
+  screenRect: InspectorRect;
+  alpha: number;
+  hidden: boolean;
+  userInteractionEnabled: boolean;
+  properties?: Record<string, string>;
+  children: InspectorNode[];
+}
+
+export interface InspectorSnapshot {
+  bundleId: string;
+  pid: number;
+  timestamp: number;
+  roots: InspectorNode[];
+  source?: "native" | "accessibility";
+}

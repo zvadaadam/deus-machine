@@ -1,13 +1,14 @@
 // Builds the device-use workspace package on install:
 //   1. TypeScript → dist/ (via device-use's own build script)
 //   2. Swift → native/.build/release/simbridge (via device-use's build-native)
-//   3. Copies the simbridge binary into packages/device-use/bin/ (where
+//   3. Copies simbridge + siminspector into packages/device-use/bin/ (where
 //      runtime code looks for it)
 //
-// Idempotent: skips each step if the output already exists.
+// Idempotent for expensive builds, but helper binaries are always refreshed
+// from the latest native output to avoid stale packaged artifacts.
 
 import { execFileSync } from "node:child_process";
-import { copyFileSync, existsSync, mkdirSync, statSync } from "node:fs";
+import { copyFileSync, existsSync, mkdirSync, readdirSync, statSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -42,16 +43,39 @@ if (!existsSync(distEngine)) {
   log("dist/ already built, skipping");
 }
 
-// 2. Swift native build (macOS only, Xcode CLT required)
+// 2. Native build (macOS only, Xcode CLT required)
 const nativeDir = join(pkgDir, "native");
 const releaseBinary = join(nativeDir, ".build", "release", "simbridge");
-const archBinary = join(
-  nativeDir,
-  ".build",
-  "arm64-apple-macosx",
-  "release",
-  "simbridge"
-);
+const universalBinary = join(nativeDir, ".build", "apple", "Products", "Release", "simbridge");
+const releaseInspector = join(nativeDir, ".build", "release", "siminspector.dylib");
+
+function hasRequiredMacArchitectures(binary) {
+  if (process.platform !== "darwin") return true;
+  try {
+    const archs = execFileSync("lipo", ["-archs", binary], { encoding: "utf8" });
+    return archs.includes("arm64") && archs.includes("x86_64");
+  } catch {
+    return false;
+  }
+}
+
+function findSwiftBuildOutput() {
+  if (existsSync(universalBinary)) return universalBinary;
+  if (existsSync(releaseBinary) && hasRequiredMacArchitectures(releaseBinary)) {
+    return releaseBinary;
+  }
+
+  const buildDir = join(nativeDir, ".build");
+  if (!existsSync(buildDir)) return null;
+
+  for (const entry of readdirSync(buildDir)) {
+    if (!entry.endsWith("-apple-macosx")) continue;
+    const candidate = join(buildDir, entry, "release", "simbridge");
+    if (existsSync(candidate) && hasRequiredMacArchitectures(candidate)) return candidate;
+  }
+
+  return null;
+}
 
 function swiftAvailable() {
   try {
@@ -62,34 +86,31 @@ function swiftAvailable() {
   }
 }
 
-if (!existsSync(releaseBinary) && !existsSync(archBinary)) {
+if (!findSwiftBuildOutput() || !existsSync(releaseInspector)) {
   if (process.platform !== "darwin") {
-    log("not on macOS, skipping simbridge build");
+    log("not on macOS, skipping native build");
   } else if (!swiftAvailable()) {
     log("Swift not found (install Xcode CLT: xcode-select --install). Skipping.");
   } else {
-    log("building simbridge (Swift)...");
+    log("building native simulator helpers...");
     try {
-      run("swift", ["build", "-c", "release"], nativeDir);
+      run("bun", ["run", "build:native"], pkgDir);
     } catch (err) {
-      log(`Swift build failed: ${err.message}`);
-      // Non-fatal: runtime will error clearly if simbridge is missing
+      log(`native build failed: ${err.message}`);
+      // Non-fatal: runtime will error clearly if a helper is missing
     }
   }
 } else {
-  log("simbridge already built, skipping");
+  log("native simulator helpers already built, skipping");
 }
 
-// 3. Copy simbridge into packages/device-use/bin/ for stable runtime path
+// 3. Copy native helpers into packages/device-use/bin/ for stable runtime path
 const binDir = join(pkgDir, "bin");
 const binSimbridge = join(binDir, "simbridge");
-const source = existsSync(releaseBinary)
-  ? releaseBinary
-  : existsSync(archBinary)
-    ? archBinary
-    : null;
+const binSiminspector = join(binDir, "siminspector.dylib");
+const source = findSwiftBuildOutput();
 
-if (source && !existsSync(binSimbridge)) {
+if (source) {
   mkdirSync(binDir, { recursive: true });
   copyFileSync(source, binSimbridge);
   try {
@@ -100,8 +121,22 @@ if (source && !existsSync(binSimbridge)) {
     /* best effort */
   }
   log(`copied simbridge → ${binSimbridge}`);
-} else if (existsSync(binSimbridge)) {
-  log("bin/simbridge already present, skipping copy");
+} else {
+  log("simbridge build output not found; runtime will report a clear error if needed");
+}
+
+if (existsSync(releaseInspector)) {
+  mkdirSync(binDir, { recursive: true });
+  copyFileSync(releaseInspector, binSiminspector);
+  try {
+    const mode = statSync(releaseInspector).mode;
+    execFileSync("chmod", [(mode & 0o777).toString(8), binSiminspector]);
+  } catch {
+    /* best effort */
+  }
+  log(`copied siminspector → ${binSiminspector}`);
+} else {
+  log("siminspector build output not found; runtime will report a clear error if needed");
 }
 
 log("done");

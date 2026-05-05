@@ -2,8 +2,8 @@
 /**
  * Compile device-use into a single-file executable using `bun build --compile`.
  *
- * Note: the simbridge Swift binary is a separate executable that must ship
- * alongside the compiled device-use binary. We copy it into bin/ here.
+ * Note: simbridge and siminspector are separate native artifacts that must
+ * ship alongside the compiled device-use binary. We copy them into bin/ here.
  */
 import { existsSync, copyFileSync, mkdirSync, readFileSync, chmodSync } from "node:fs";
 import { join, dirname } from "node:path";
@@ -30,18 +30,28 @@ await $`bun build --compile --target=${target} --define ${versionDefine} --outfi
 
 const bridgeSrc = join(root, "native/.build/release/simbridge");
 const bridgeDest = join(binDir, "simbridge");
+const inspectorSrc = join(root, "native/.build/release/siminspector.dylib");
+const inspectorDest = join(binDir, "siminspector.dylib");
 
 if (!existsSync(bridgeSrc)) {
   console.warn(`[compile] simbridge not built yet at ${bridgeSrc}`);
   console.warn("[compile] run: bun run build:native");
   process.exit(1);
 }
+if (!existsSync(inspectorSrc)) {
+  console.warn(`[compile] siminspector not built yet at ${inspectorSrc}`);
+  console.warn("[compile] run: bun run build:native");
+  process.exit(1);
+}
 
 copyFileSync(bridgeSrc, bridgeDest);
+copyFileSync(inspectorSrc, inspectorDest);
 chmodSync(bridgeDest, 0o755);
+chmodSync(inspectorDest, 0o755);
 chmodSync(outPath, 0o755);
 
 console.log(`[compile] done`);
 console.log(`  device-use: ${outPath}`);
 console.log(`  simbridge:  ${bridgeDest}`);
+console.log(`  siminspector: ${inspectorDest}`);
 console.log(`\nTest: ${outPath} list`);
