@@ -160,9 +160,25 @@ function snapshotBounds(
   return { width: root.screenRect.width, height: root.screenRect.height };
 }
 
-function contains(node: InspectorNode, x: number, y: number): boolean {
+function contains(node: InspectorNode, x: number, y: number, inset = 0): boolean {
   const rect = node.screenRect;
-  return x >= rect.x && y >= rect.y && x <= rect.x + rect.width && y <= rect.y + rect.height;
+  return (
+    x >= rect.x - inset &&
+    y >= rect.y - inset &&
+    x <= rect.x + rect.width + inset &&
+    y <= rect.y + rect.height + inset
+  );
+}
+
+function elementArea(node: InspectorNode): number {
+  return Math.max(1, node.screenRect.width) * Math.max(1, node.screenRect.height);
+}
+
+function inspectableWeight(node: InspectorNode): number {
+  if (node.label || node.identifier) return 0;
+  if (node.className.includes("Layer")) return 1;
+  if (node.properties && Object.keys(node.properties).length > 0) return 2;
+  return 3;
 }
 
 function pickNodeAtPoint(nodes: FlatInspectorNode[], x: number, y: number): InspectorNode | null {
@@ -170,15 +186,29 @@ function pickNodeAtPoint(nodes: FlatInspectorNode[], x: number, y: number): Insp
   for (const item of nodes) {
     const node = item.node;
     if (node.hidden || node.alpha < 0.01) continue;
-    if (node.screenRect.width <= 1 || node.screenRect.height <= 1) continue;
-    if (!contains(node, x, y)) continue;
+    if (node.screenRect.width <= 0 || node.screenRect.height <= 0) continue;
+
+    const slop = Math.min(
+      10,
+      Math.max(0, (44 - Math.min(node.screenRect.width, node.screenRect.height)) / 2)
+    );
+    if (!contains(node, x, y, slop)) continue;
+
     if (!best) {
       best = item;
       continue;
     }
-    const area = node.screenRect.width * node.screenRect.height;
-    const bestArea = best.node.screenRect.width * best.node.screenRect.height;
-    if (area < bestArea || (area === bestArea && item.order > best.order)) best = item;
+    const area = elementArea(node);
+    const bestArea = elementArea(best.node);
+    const weight = inspectableWeight(node);
+    const bestWeight = inspectableWeight(best.node);
+    if (
+      area < bestArea ||
+      (area === bestArea && weight < bestWeight) ||
+      (area === bestArea && weight === bestWeight && item.order > best.order)
+    ) {
+      best = item;
+    }
   }
   return best?.node ?? null;
 }
@@ -521,12 +551,33 @@ function InspectorOverlay({
 
   return (
     <div className="pointer-events-none absolute inset-0 z-20">
-      <div className="border-primary bg-primary/10 absolute rounded-[3px] border" style={style} />
+      <div
+        className="absolute rounded-[4px]"
+        style={{
+          ...style,
+          backgroundColor: "color-mix(in oklch, var(--primary) 12%, transparent)",
+          boxShadow:
+            "0 0 0 1px var(--bg-base), 0 0 0 3px var(--primary), 0 0 0 5px color-mix(in oklch, var(--bg-base) 85%, transparent), 0 10px 24px color-mix(in oklch, var(--primary) 28%, transparent)",
+        }}
+      >
+        <div
+          className="absolute inset-[2px] rounded-[2px]"
+          style={{ border: "1px solid var(--primary)" }}
+        />
+        <div
+          className="absolute inset-0 rounded-[4px]"
+          style={{
+            border: "1px solid color-mix(in oklch, var(--primary) 55%, var(--bg-base))",
+          }}
+        />
+      </div>
       <div
         className="bg-bg-base/95 border-border text-text-secondary absolute z-10 max-w-[220px] rounded-md border px-2 py-1 text-xs shadow-lg backdrop-blur"
         style={{
           left: `min(calc(${style.left} + 6px), calc(100% - 230px))`,
-          top: `min(calc(${style.top} + ${style.height} + 6px), calc(100% - 44px))`,
+          top: `min(calc(${style.top} + ${style.height} + 8px), calc(100% - 48px))`,
+          boxShadow:
+            "0 0 0 1px color-mix(in oklch, var(--primary) 18%, transparent), 0 12px 30px color-mix(in oklch, var(--bg-base) 62%, transparent)",
         }}
       >
         <div className="truncate font-mono text-[11px]">{node.className}</div>
