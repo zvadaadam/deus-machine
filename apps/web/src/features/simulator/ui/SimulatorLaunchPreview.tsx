@@ -68,7 +68,9 @@ export function SimulatorLaunchPreview({
           {phase === "error" && (
             <div className="flex max-w-[240px] flex-col items-center gap-3" aria-live="polite">
               <AlertCircle className="text-destructive h-5 w-5" />
-              <p className="text-destructive text-sm leading-5">{errorMessage}</p>
+              <p className="text-destructive text-sm leading-5">
+                {errorMessage ?? "Something went wrong starting the simulator."}
+              </p>
               {canRetry && (
                 <Button
                   variant="outline"

@@ -1,5 +1,6 @@
 #import <Foundation/Foundation.h>
 #import <UIKit/UIKit.h>
+#import <errno.h>
 #import <sys/socket.h>
 #import <sys/un.h>
 #import <unistd.h>
@@ -188,6 +189,21 @@ static NSData *json_line(NSDictionary *payload) {
     return line;
 }
 
+static void write_all(int fd, NSData *data) {
+    const char *bytes = data.bytes;
+    NSUInteger remaining = data.length;
+    while (remaining > 0) {
+        ssize_t written = write(fd, bytes, remaining);
+        if (written < 0) {
+            if (errno == EINTR) continue;
+            break;
+        }
+        if (written == 0) break;
+        bytes += written;
+        remaining -= (NSUInteger)written;
+    }
+}
+
 static NSDictionary *handle_request(NSDictionary *request) {
     NSString *command = request[@"command"];
     if ([command isEqualToString:@"ping"]) {
@@ -226,7 +242,7 @@ static void handle_client(int clientFd) {
         }
 
         NSData *output = json_line(response);
-        write(clientFd, output.bytes, output.length);
+        write_all(clientFd, output);
         close(clientFd);
     }
 }

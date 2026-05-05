@@ -54,7 +54,7 @@ const bridgeReady =
   !lstatSync(releaseDir).isSymbolicLink() &&
   !lstatSync(releaseBinary).isSymbolicLink() &&
   hasRequiredMacArchitectures(releaseBinary);
-const inspectorReady = existsSync(inspectorBinary);
+const inspectorReady = existsSync(inspectorBinary) && hasRequiredMacArchitectures(inspectorBinary);
 
 if (bridgeReady && inspectorReady) {
   console.log("[build-native] simbridge already built, skipping.");
@@ -106,15 +106,19 @@ if (!existsSync(releaseBinary)) {
 
 console.log(`[build-native] Binary ready: ${releaseBinary}`);
 
-if (!existsSync(inspectorBinary)) {
+if (!inspectorReady) {
   console.log("[build-native] Building siminspector...");
   try {
     await $`bash ${inspectorBuildScript}`.cwd(nativeDir);
     console.log("[build-native] Built siminspector successfully.");
   } catch (error) {
     console.warn("[build-native] siminspector build failed:", error);
-    process.exit(0);
   }
+}
+
+if (!existsSync(inspectorBinary) || !hasRequiredMacArchitectures(inspectorBinary)) {
+  console.warn("[build-native] siminspector build did not produce a universal dylib.");
+  process.exit(1);
 }
 
 console.log(`[build-native] Dylib ready: ${inspectorBinary}`);

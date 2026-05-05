@@ -53,7 +53,7 @@ export function SimulatorContentHeader({
             type="button"
             disabled={selectorDisabled}
             aria-label="Select simulator device"
-            aria-haspopup="listbox"
+            aria-haspopup="menu"
             className="border-border-subtle/70 bg-bg-overlay/70 text-text-secondary hover:bg-bg-overlay hover:text-foreground focus-visible:ring-ring/40 flex h-7 max-w-[360px] items-center gap-1.5 rounded-lg border px-2 text-xs transition-[background-color,border-color,color,box-shadow] duration-150 ease-out focus-visible:ring-[3px] focus-visible:outline-none disabled:pointer-events-none disabled:opacity-45"
           >
             <AppleLogoIcon className="h-[13px] w-[13px] shrink-0" />
