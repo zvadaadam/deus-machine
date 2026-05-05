@@ -62,6 +62,54 @@ static NSDictionary *properties_for_view(UIView *view) {
     return props;
 }
 
+static NSDictionary *properties_for_layer(CALayer *layer) {
+    NSMutableDictionary *props = [NSMutableDictionary dictionary];
+    props[@"bounds"] = NSStringFromCGRect(layer.bounds);
+    props[@"position"] = NSStringFromCGPoint(layer.position);
+    props[@"anchorPoint"] = NSStringFromCGPoint(layer.anchorPoint);
+    props[@"opacity"] = short_desc(@(layer.opacity));
+    props[@"hidden"] = short_desc(@(layer.hidden));
+    props[@"masksToBounds"] = short_desc(@(layer.masksToBounds));
+    props[@"cornerRadius"] = short_desc(@(layer.cornerRadius));
+    if (layer.name.length > 0) props[@"name"] = layer.name;
+    if (layer.backgroundColor) props[@"backgroundColor"] = short_desc((__bridge id)layer.backgroundColor);
+    if (layer.borderColor) props[@"borderColor"] = short_desc((__bridge id)layer.borderColor);
+    if (layer.borderWidth > 0) props[@"borderWidth"] = short_desc(@(layer.borderWidth));
+    if (layer.shadowOpacity > 0) props[@"shadowOpacity"] = short_desc(@(layer.shadowOpacity));
+    if (layer.contents) props[@"contents"] = short_desc(layer.contents);
+    return props;
+}
+
+static NSDictionary *node_for_layer(CALayer *layer, UIView *ownerView, NSString *parentId, NSInteger index) {
+    NSString *nodeId = [NSString stringWithFormat:@"layer-%p", layer];
+    CGRect rectInView = [ownerView.layer convertRect:layer.bounds fromLayer:layer];
+    CGRect screenRect = [ownerView convertRect:rectInView toView:nil];
+    NSDictionary *props = properties_for_layer(layer);
+
+    NSMutableArray *children = [NSMutableArray arrayWithCapacity:layer.sublayers.count];
+    NSInteger childIndex = 0;
+    for (CALayer *sublayer in layer.sublayers) {
+        [children addObject:node_for_layer(sublayer, ownerView, nodeId, childIndex++)];
+    }
+
+    NSMutableDictionary *node = [@{
+        @"id": nodeId,
+        @"parentId": parentId,
+        @"className": NSStringFromClass([layer class]),
+        @"frame": rect_dict(layer.frame),
+        @"screenRect": rect_dict(screenRect),
+        @"alpha": @(layer.opacity),
+        @"hidden": @(layer.hidden),
+        @"userInteractionEnabled": @NO,
+        @"properties": props,
+        @"children": children,
+    } mutableCopy];
+
+    NSString *label = layer.name.length > 0 ? layer.name : [NSString stringWithFormat:@"Layer %ld", (long)index];
+    node[@"label"] = label;
+    return node;
+}
+
 static NSDictionary *node_for_view(UIView *view, NSString *parentId) {
     NSString *nodeId = [NSString stringWithFormat:@"%p", view];
     CGRect screenRect = [view convertRect:view.bounds toView:nil];
@@ -70,6 +118,13 @@ static NSDictionary *node_for_view(UIView *view, NSString *parentId) {
     NSMutableArray *children = [NSMutableArray arrayWithCapacity:view.subviews.count];
     for (UIView *subview in view.subviews) {
         [children addObject:node_for_view(subview, nodeId)];
+    }
+
+    NSInteger layerIndex = 0;
+    for (CALayer *sublayer in view.layer.sublayers) {
+        if ([sublayer.delegate isKindOfClass:UIView.class]) continue;
+        if (sublayer.bounds.size.width <= 0 || sublayer.bounds.size.height <= 0 || sublayer.opacity <= 0.01 || sublayer.hidden) continue;
+        [children addObject:node_for_layer(sublayer, view, nodeId, layerIndex++)];
     }
 
     NSMutableDictionary *node = [@{
