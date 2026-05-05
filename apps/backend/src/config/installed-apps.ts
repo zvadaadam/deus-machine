@@ -1,20 +1,46 @@
 // apps/backend/src/config/installed-apps.ts
 // Hardcoded list of installed agentic apps for v1.
 //
-// Repo root is located via `resolveRepoRoot`, which walks up from this
-// file looking for the monorepo's `package.json`. Works regardless of
-// `process.cwd()` (Electron, bundled .app, test harness, etc.).
+// Repo root is located via `resolveRepoRoot`, which walks up from the backend
+// cwd looking for the monorepo's `package.json`. Packaged apps read manifests
+// from Electron extraResources instead.
 //
 // v2 will replace this with a scanner that reads
 // `{workspace}/.deus/apps/*.json` alongside this baked-in list.
 
-import { dirname, resolve } from "node:path";
-import { fileURLToPath } from "node:url";
+import { existsSync } from "node:fs";
+import { resolve } from "node:path";
 import { resolveRepoRoot } from "../lib/repo-root";
 
-const REPO_ROOT =
-  process.env.DEUS_REPO_ROOT ?? resolveRepoRoot(dirname(fileURLToPath(import.meta.url)));
+function uniqueExisting(paths: Array<string | null>): string[] {
+  const seen = new Set<string>();
+  const existing: string[] = [];
 
-export const INSTALLED_APP_MANIFESTS: readonly string[] = [
-  resolve(REPO_ROOT, "packages/device-use/agentic-app.json"),
-];
+  for (const path of paths) {
+    if (!path || seen.has(path) || !existsSync(path)) continue;
+    seen.add(path);
+    existing.push(path);
+  }
+
+  return existing;
+}
+
+function resolveDevManifest(): string | null {
+  try {
+    const root = process.env.DEUS_REPO_ROOT ?? resolveRepoRoot(process.cwd());
+    return resolve(root, "packages/device-use/agentic-app.json");
+  } catch {
+    return null;
+  }
+}
+
+function resolvePackagedManifest(): string | null {
+  const resourcesPath = (process as { resourcesPath?: string }).resourcesPath;
+  if (!resourcesPath) return null;
+  return resolve(resourcesPath, "agentic-apps/device-use/agentic-app.json");
+}
+
+export const INSTALLED_APP_MANIFESTS: readonly string[] = uniqueExisting([
+  resolvePackagedManifest(),
+  resolveDevManifest(),
+]);

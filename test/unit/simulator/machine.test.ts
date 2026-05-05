@@ -11,9 +11,9 @@
  */
 
 import { describe, it, expect } from "vitest";
-import { transition, hasStream, hasUdid } from "../../../src/features/simulator/machine";
-import type { SimPhase, SimEvent } from "../../../src/features/simulator/machine";
-import type { StreamInfo, InstalledApp } from "../../../src/features/simulator/types";
+import { transition, hasStream, hasUdid } from "../../../apps/web/src/features/simulator/machine";
+import type { SimPhase } from "../../../apps/web/src/features/simulator/machine";
+import type { StreamInfo, InstalledApp } from "../../../apps/web/src/features/simulator/types";
 
 // ---------------------------------------------------------------------------
 // Test fixtures
@@ -120,6 +120,21 @@ describe("transition — legal transitions", () => {
     });
   });
 
+  it("streaming + SWITCH_DEVICE → booting new UDID", () => {
+    const next = transition(streaming(UDID_A), { type: "SWITCH_DEVICE", udid: UDID_B });
+    expect(next).toEqual({ phase: "booting", udid: UDID_B });
+  });
+
+  it("running + SWITCH_DEVICE → booting new UDID", () => {
+    const next = transition(running(UDID_A), { type: "SWITCH_DEVICE", udid: UDID_B });
+    expect(next).toEqual({ phase: "booting", udid: UDID_B });
+  });
+
+  it("error + SWITCH_DEVICE → booting selected UDID", () => {
+    const next = transition(error(), { type: "SWITCH_DEVICE", udid: UDID_B });
+    expect(next).toEqual({ phase: "booting", udid: UDID_B });
+  });
+
   it("error (canRetry) + BOOT → booting (retry)", () => {
     const next = transition(error(true), { type: "BOOT", udid: UDID_A });
     expect(next).toEqual({ phase: "booting", udid: UDID_A });
@@ -223,10 +238,20 @@ describe("transition — illegal transitions return null", () => {
     expect(transition(running(), { type: "BOOT", udid: UDID_A })).toBeNull();
   });
 
+  it("SWITCH_DEVICE from idle → null", () => {
+    expect(transition(idle(), { type: "SWITCH_DEVICE", udid: UDID_B })).toBeNull();
+  });
+
+  it("SWITCH_DEVICE from booting → null", () => {
+    expect(transition(booting(), { type: "SWITCH_DEVICE", udid: UDID_B })).toBeNull();
+  });
+
+  it("SWITCH_DEVICE from building → null", () => {
+    expect(transition(building(), { type: "SWITCH_DEVICE", udid: UDID_B })).toBeNull();
+  });
+
   it("STREAM_READY from idle → null", () => {
-    expect(
-      transition(idle(), { type: "STREAM_READY", udid: UDID_A, stream: STREAM })
-    ).toBeNull();
+    expect(transition(idle(), { type: "STREAM_READY", udid: UDID_A, stream: STREAM })).toBeNull();
   });
 
   it("STREAM_READY with wrong UDID → null", () => {

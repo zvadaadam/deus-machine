@@ -64,7 +64,11 @@ export const serveCommand: CommandDefinition<Params> = {
     // Await the auto-boot side effects (state load, pinned-sim start) that
     // run at module init. The default export is a Bun.serve spec.
     const mod = (await import(serverModule)) as { default: Bun.ServeOptions };
-    const bunRuntime = (globalThis as { Bun?: { serve(spec: Bun.ServeOptions): Bun.Server } }).Bun;
+    const bunRuntime = (
+      globalThis as {
+        Bun?: { serve(spec: Bun.ServeOptions): Bun.Server<undefined> };
+      }
+    ).Bun;
     if (!bunRuntime) {
       return {
         success: false,
