@@ -27,7 +27,9 @@
   <a href="https://deusmachine.ai">Website</a> · <a href="https://discord.gg/deus-machine">Discord</a> · <a href="https://github.com/zvadaadam/deus-machine/releases">Releases</a> · <a href="CONTRIBUTING.md">Contributing</a>
 </p>
 
-<!-- TODO: Replace with product screenshot showing 3+ parallel workspaces -->
+<p align="center">
+  <img src="assets/deus-desktop-mobile.jpg" alt="Deus Machine — desktop and mobile" width="100%" />
+</p>
 
 ---
 
@@ -61,8 +63,6 @@ Your code stays on your machine. You bring your own API key and pay Anthropic or
 - **Claude Code + Codex** — works with Anthropic's Claude Code and OpenAI's Codex. Bring your own API key.
 
 - **Monitor from your phone** — start agents on your server, check progress from any browser. Go to dinner, check your phone, three features are done.
-
-<!-- TODO: Screenshot of side-by-side desktop and mobile web UI -->
 
 - **Extensible** — add MCP servers, hooks, or your own scripts to customize each workspace.
 
