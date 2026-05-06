@@ -31,7 +31,8 @@ export function SubagentGroupBlock({
   childMessages,
 }: SubagentGroupBlockProps) {
   const { sessionStatus, workspaceId, workspacePath, subagentMessages } = useSession();
-  const { description, subagent_type } = toolUse.input ?? {};
+  const { description, prompt, subagent_type } = toolUse.input ?? {};
+  const label = description || prompt || "Agent";
 
   const isRunning = sessionStatus === "working" && !toolResult;
   const isError = toolResult?.is_error;
@@ -62,7 +63,7 @@ export function SubagentGroupBlock({
           "focus-visible:ring-ring focus-visible:ring-2 focus-visible:outline-none"
         )}
         aria-expanded={isExpanded}
-        aria-label={`${isExpanded ? "Collapse" : "Expand"} agent: ${description || "subagent"}`}
+        aria-label={`${isExpanded ? "Collapse" : "Expand"} agent: ${label}`}
       >
         <div className="flex min-w-0 flex-1 items-center gap-2">
           <div className="relative h-3.5 w-3.5 flex-shrink-0">
@@ -90,9 +91,7 @@ export function SubagentGroupBlock({
             )}
           </div>
 
-          <span className="text-muted-foreground truncate font-medium">
-            {description || "Agent"}
-          </span>
+          <span className="text-muted-foreground truncate font-medium">{label}</span>
 
           {subagent_type && (
             <span className="bg-muted text-muted-foreground/70 text-2xs flex-shrink-0 rounded-md px-1.5 py-0.5 font-mono leading-none">

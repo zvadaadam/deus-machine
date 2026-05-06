@@ -8,7 +8,6 @@
 // - Snapshot filtering: interactive-only, compact, depth-limited, CSS-scoped
 // - Wait modes: text, networkIdle, elementVisible, elementGone
 
-import { tool } from "@anthropic-ai/claude-agent-sdk";
 import type { SdkMcpToolDefinition } from "@anthropic-ai/claude-agent-sdk";
 import { z } from "zod";
 import { writeFileSync, mkdirSync, existsSync, readFileSync, unlinkSync } from "fs";
@@ -22,6 +21,7 @@ import {
   getSnapshot,
   type ElementBox,
 } from "./agent-browser-client";
+import { tool } from "./sdk-tool";
 
 // ============================================================================
 // Snapshot file-based fallback constants
@@ -577,7 +577,7 @@ Returns a page snapshot after all actions complete.`,
         }
         const actionSummary = args.actions
           .slice(0, 10)
-          .map((a) => summarizeBatchAction(a))
+          .map((a: string[]) => summarizeBatchAction(a))
           .join(", ");
         const details = [
           `Actions executed: ${args.actions.length}`,

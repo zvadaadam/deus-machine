@@ -66,7 +66,7 @@ export const STATUS_RANK: Record<WorkspaceStatus, number> = {
  * binds to a specific SDK on first query and cannot switch mid-session.
  * See the harness-lock guard in apps/backend/src/services/agent/commands.ts.
  */
-export const AgentHarnessSchema = z.enum(["claude", "codex"]);
+export const AgentHarnessSchema = z.enum(["claude", "codex", "codex-server"]);
 export type AgentHarness = z.infer<typeof AgentHarnessSchema>;
 
 /** Structured error categories for agent error responses. */

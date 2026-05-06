@@ -14,7 +14,7 @@
 //
 // Options:
 //   --url <ws://...>   Connect to a running agent-server instead of spawning one
-//   --agent <type>     Agent type: "claude" (default) or "codex"
+//   --agent <type>     Agent type: "claude" (default), "codex", or "codex-server"
 //   --model <model>    Model to use (default: "sonnet")
 //   --cwd <path>       Working directory for the agent (default: cwd)
 //   --session <id>     Session ID (default: auto-generated)
@@ -27,6 +27,7 @@ import * as path from "path";
 import * as readline from "readline";
 import { fileURLToPath } from "url";
 import WebSocket from "ws";
+import { getAgentHarnessEventLabel, getAgentHarnessLabel } from "../../shared/agent-catalog";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -338,7 +339,7 @@ function waitForResponse(ws: WebSocket, id: number, timeoutMs = 30_000): Promise
 async function main() {
   const opts = parseArgs();
 
-  const harnessLabel = opts.agent === "codex" ? "Codex" : "Claude Code";
+  const harnessLabel = getAgentHarnessLabel(opts.agent);
   banner("Agent Server Debug CLI");
   console.log(`  harness: ${c.bold}${harnessLabel}${c.reset} ${c.dim}(${opts.agent})${c.reset}`);
   console.log(`  model:   ${opts.model || `${c.dim}(default)${c.reset}`}`);
@@ -381,7 +382,7 @@ async function main() {
 
       // Derive provider label from agentHarness in the event
       const agentHarness = params.agentHarness || opts.agent;
-      const agentLabel = agentHarness === "codex" ? "CODEX" : "CLAUDE";
+      const agentLabel = getAgentHarnessEventLabel(agentHarness);
 
       printEvent(method, params, agentLabel);
 
@@ -479,7 +480,7 @@ async function main() {
       console.log(`  ${c.bold}.exit${c.reset}          Quit`);
       console.log(`  ${c.bold}.session <id>${c.reset}  Switch session`);
       console.log(`  ${c.bold}.model <name>${c.reset}  Switch model`);
-      console.log(`  ${c.bold}.agent <type>${c.reset}  Switch agent (claude/codex)`);
+      console.log(`  ${c.bold}.agent <type>${c.reset}  Switch agent (claude/codex/codex-server)`);
       console.log(`  ${c.bold}.cancel${c.reset}        Cancel running turn`);
       rl!.prompt();
       return;

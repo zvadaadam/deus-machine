@@ -258,8 +258,11 @@ describe("claude-handler", () => {
       expect(sdkCall.options.disallowedTools).toContain("AskUserQuestion");
       expect(sdkCall.options.permissionMode).toBe("plan");
       expect(sdkCall.options.maxTurns).toBe(50);
-      // MEDIUM → 8192 per resolveThinkingOptions; see agents/claude/thinking.ts
-      expect(sdkCall.options.maxThinkingTokens).toBe(8192);
+      expect(sdkCall.options.thinking).toEqual({
+        type: "adaptive",
+        display: "summarized",
+      });
+      expect(sdkCall.options.effort).toBe("medium");
     });
 
     it("includes MCP server when strictDataPrivacy is false", async () => {
