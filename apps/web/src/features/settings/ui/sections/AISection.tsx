@@ -76,7 +76,9 @@ export function AISection({ settings, saveSetting }: SettingsSectionProps) {
   const codexAuth = agentAuthQuery.data?.codex;
   const agents = agentAuthQuery.data?.agents ?? [];
   const claudeInstalled = agents.find((a) => a.type === "claude")?.installed;
-  const codexInstalled = agents.find((a) => a.type === "codex")?.installed;
+  const codexInstalled =
+    agents.find((a) => a.type === "codex-server")?.installed ??
+    agents.find((a) => a.type === "codex")?.installed;
   const claudeConnected = claudeAuth && !claudeAuth.error && claudeAuth.accountInfo;
   const codexConnected = codexAuth && !codexAuth.error && codexAuth.accountInfo;
 
@@ -237,15 +239,16 @@ export function AISection({ settings, saveSetting }: SettingsSectionProps) {
           </Label>
           <p className="text-muted-foreground text-sm">The model used for new conversations.</p>
           <Select
-            value={settings.claude_model ?? "claude-opus-4-7"}
+            value={settings.claude_model ?? "claude-opus-4-7[1m]"}
             onValueChange={(value) => saveSetting("claude_model", value)}
           >
             <SelectTrigger id="model" className="w-full">
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
+              <SelectItem value="claude-opus-4-7[1m]">Claude Opus 4.7 1M</SelectItem>
               <SelectItem value="claude-opus-4-7">Claude Opus 4.7</SelectItem>
-              <SelectItem value="claude-opus-4-6">Claude Opus 4.6</SelectItem>
+              <SelectItem value="claude-opus-4-6[1m]">Claude Opus 4.6 1M</SelectItem>
               <SelectItem value="claude-sonnet-4-6">Claude Sonnet 4.6</SelectItem>
               <SelectItem value="claude-haiku-4-5">Claude Haiku 4.5</SelectItem>
             </SelectContent>

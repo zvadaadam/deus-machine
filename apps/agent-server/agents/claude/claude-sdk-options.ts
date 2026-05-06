@@ -4,7 +4,14 @@
 
 import * as fs from "fs";
 import * as path from "path";
-import type { Options, PermissionMode, SettingSource } from "@anthropic-ai/claude-agent-sdk";
+import type {
+  CanUseTool,
+  EffortLevel,
+  Options,
+  PermissionMode,
+  SettingSource,
+  ThinkingConfig,
+} from "@anthropic-ai/claude-agent-sdk";
 import { EventBroadcaster } from "../../event-broadcaster";
 import { createCheckpoint } from "./checkpoint";
 import { createDeusMCPServer } from "../deus-tools";
@@ -29,39 +36,53 @@ export const DEFAULT_SETTING_SOURCES: SettingSource[] = ["user", "project", "loc
 // ============================================================================
 //
 // Translates the wire-protocol ThinkingLevel into Claude Agent SDK options.
-// Centralizing here means adding a new SDK parameter (e.g. `effort: "xhigh"`
-// once the SDK typedef catches up to Opus 4.7) is a one-line change.
-//
-// On Opus 4.6+ the SDK currently treats maxThinkingTokens as on/off
-// (0 = disabled, any non-zero = adaptive enabled). The graduated numbers
-// still differentiate on older models and preserve intent.
+// Claude Agent SDK 0.2.131 supports adaptive thinking plus effort levels,
+// which is the right path for Opus 4.7+ and avoids deprecated
+// maxThinkingTokens behavior.
 
 type ThinkingLevel = "NONE" | "LOW" | "MEDIUM" | "HIGH" | "XHIGH";
 
-// NONE uses 0 to explicitly disable thinking on Opus 4.6+ (where the SDK
-// treats maxThinkingTokens as on/off: 0 = disabled, any non-zero = adaptive
-// enabled). Leaving it undefined would fall through to the SDK default
-// behavior (thinking ON), which is the opposite of the user's intent.
-const LEVEL_TO_MAX_TOKENS: Record<ThinkingLevel, number> = {
-  NONE: 0,
-  LOW: 4096,
-  MEDIUM: 8192,
-  HIGH: 16384,
-  XHIGH: 32768,
+const LEVEL_TO_EFFORT: Record<Exclude<ThinkingLevel, "NONE">, EffortLevel> = {
+  LOW: "low",
+  MEDIUM: "medium",
+  HIGH: "high",
+  XHIGH: "xhigh",
 };
+
+export function normalizeThinkingLevel(
+  thinkingLevel: string | undefined
+): ThinkingLevel | undefined {
+  if (!thinkingLevel) return undefined;
+  const level = thinkingLevel.toUpperCase();
+  if (
+    level === "NONE" ||
+    level === "LOW" ||
+    level === "MEDIUM" ||
+    level === "HIGH" ||
+    level === "XHIGH"
+  ) {
+    return level;
+  }
+  return undefined;
+}
 
 /**
  * Resolves the Claude SDK options that realize a given thinking level.
- * Returns `{ maxThinkingTokens: undefined }` only when no level given — the
- * SDK then uses its default. When NONE is explicitly chosen, returns 0 so the
- * SDK disables thinking rather than falling back to its default.
+ * Undefined leaves SDK/model defaults alone. NONE explicitly disables
+ * thinking, while other levels use adaptive thinking plus the matching effort.
  */
 export function resolveThinkingOptions(thinkingLevel: string | undefined): {
-  maxThinkingTokens: number | undefined;
+  thinking?: ThinkingConfig;
+  effort?: EffortLevel;
 } {
-  if (!thinkingLevel) return { maxThinkingTokens: undefined };
-  const level = thinkingLevel.toUpperCase() as ThinkingLevel;
-  return { maxThinkingTokens: LEVEL_TO_MAX_TOKENS[level] };
+  const level = normalizeThinkingLevel(thinkingLevel);
+  if (!level) return {};
+  if (level === "NONE") return { thinking: { type: "disabled" } };
+
+  return {
+    thinking: { type: "adaptive", display: "summarized" },
+    effort: LEVEL_TO_EFFORT[level],
+  };
 }
 
 /**
@@ -103,7 +124,10 @@ The camera engine automatically creates cinematic zoom/pan effects: 2x zoom on t
  * Creates the canUseTool callback for a Claude session.
  * Handles ExitPlanMode approval and file path guards.
  */
-export function createCanUseTool(sessionId: string, workingDirectory: string | undefined) {
+export function createCanUseTool(
+  sessionId: string,
+  workingDirectory: string | undefined
+): CanUseTool {
   return async (toolName: string, input: any, _toolOptions: any) => {
     // Handle plan mode exit approval
     if (toolName === "ExitPlanMode") {
@@ -282,7 +306,8 @@ export function buildSdkOptions(
   const sdkOptions: Partial<Options> = {
     maxTurns: options?.maxTurns || 1_000,
     model: options?.model,
-    maxThinkingTokens: thinking.maxThinkingTokens,
+    thinking: thinking.thinking,
+    effort: thinking.effort,
     cwd: workingDirectory,
     pathToClaudeCodeExecutable: getClaudeExecutablePath(),
     systemPrompt: {
@@ -298,6 +323,7 @@ export function buildSdkOptions(
     permissionMode,
     hooks: createHooks(sessionId),
     includePartialMessages: true,
+    forwardSubagentText: true,
   };
 
   if (options?.chromeEnabled) {

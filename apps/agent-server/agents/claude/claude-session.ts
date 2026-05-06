@@ -16,7 +16,7 @@ import { SessionStore } from "../session-store";
  * Lifecycle phases (fields set in each phase):
  *
  *   IDLE (freshly created via query() → claudeSessions.set):
- *     currentSettings, currentModel, currentMaxThinkingTokens, turnId, cwd
+ *     currentSettings, currentModel, currentThinkingLevel, turnId, cwd
  *     generator/sendMessage/sendTerminate are undefined
  *
  *   ACTIVE (processWithGenerator running):
@@ -42,7 +42,7 @@ export interface SessionState {
     strictDataPrivacy?: boolean;
   };
   currentModel?: string;
-  currentMaxThinkingTokens?: number;
+  currentThinkingLevel?: string;
   turnId?: string;
   /** Monotonically increasing counter — incremented on every query() call.
    *  Used by the streaming loop to detect turn boundaries when the generator is reused. */

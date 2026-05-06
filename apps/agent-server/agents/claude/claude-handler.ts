@@ -2,7 +2,11 @@
 // ClaudeAgentHandler — implements AgentHandler for the Claude Agent SDK.
 // Orchestrates the generator lifecycle, delegates to focused modules.
 
-import { query as claudeSDK, type PermissionMode } from "@anthropic-ai/claude-agent-sdk";
+import {
+  query as claudeSDK,
+  type PermissionMode,
+  type SDKUserMessage,
+} from "@anthropic-ai/claude-agent-sdk";
 import * as fs from "fs";
 import { getErrorMessage } from "@shared/lib/errors";
 import { uuidv7 } from "@shared/lib/uuid";
@@ -36,7 +40,7 @@ import {
   buildSdkOptions,
   DEFAULT_PROMPT,
   DEFAULT_SETTING_SOURCES,
-  resolveThinkingOptions,
+  normalizeThinkingLevel,
 } from "./claude-sdk-options";
 import {
   claudeSessions,
@@ -76,15 +80,18 @@ function getInvalidWorkspacePathError(cwd: string | undefined): string | null {
   return null;
 }
 
-function buildPromptIterable(queue: AsyncQueue<string>, sessionId: string) {
+function buildPromptIterable(
+  queue: AsyncQueue<string>,
+  sessionId: string
+): AsyncIterable<SDKUserMessage> {
   return (async function* () {
     for await (const message of queue) {
-      let content: string | unknown[] = message;
+      let content: SDKUserMessage["message"]["content"] = message;
       if (message && message.startsWith("[")) {
         try {
           const parsed = JSON.parse(message);
           if (Array.isArray(parsed) && parsed.length > 0 && parsed[0]?.type) {
-            content = parsed;
+            content = parsed as SDKUserMessage["message"]["content"];
           }
         } catch {
           // Not valid JSON — keep as plain text string
@@ -128,11 +135,8 @@ export class ClaudeAgentHandler implements AgentHandler {
 
     const session = claudeSessions.get(sessionId);
     const modelChanged = session?.currentModel !== options.model;
-    const requestedMaxThinkingTokens = resolveThinkingOptions(
-      options.thinkingLevel
-    ).maxThinkingTokens;
-    const maxThinkingTokensChanged =
-      session?.currentMaxThinkingTokens !== requestedMaxThinkingTokens;
+    const requestedThinkingLevel = normalizeThinkingLevel(options.thinkingLevel);
+    const thinkingChanged = session?.currentThinkingLevel !== requestedThinkingLevel;
     const settingsChangedFlag = settingsChanged(session?.currentSettings, options);
 
     if (session) {
@@ -142,7 +146,10 @@ export class ClaudeAgentHandler implements AgentHandler {
     }
 
     const canReuse =
-      isSessionActive(session) && options.shouldResetGenerator !== true && !settingsChangedFlag;
+      isSessionActive(session) &&
+      options.shouldResetGenerator !== true &&
+      !settingsChangedFlag &&
+      !thinkingChanged;
 
     if (canReuse) {
       console.log(
@@ -166,16 +173,7 @@ export class ClaudeAgentHandler implements AgentHandler {
         }
       }
 
-      // Hot-swap maxThinkingTokens if it changed
       const query = claudeQueries.get(sessionId);
-      if (maxThinkingTokensChanged && session && query) {
-        try {
-          await query.setMaxThinkingTokens(requestedMaxThinkingTokens ?? null);
-          session.currentMaxThinkingTokens = requestedMaxThinkingTokens;
-        } catch (error) {
-          console.error(`Failed to update maxThinkingTokens: ${getErrorMessage(error)}`);
-        }
-      }
 
       // Update permission mode if provided
       if (query && options.permissionMode) {
@@ -213,7 +211,7 @@ export class ClaudeAgentHandler implements AgentHandler {
           strictDataPrivacy: options.strictDataPrivacy,
         },
         currentModel: options.model,
-        currentMaxThinkingTokens: requestedMaxThinkingTokens,
+        currentThinkingLevel: requestedThinkingLevel,
         turnId: options.turnId,
         turnVersion: 1,
         cwd: options.cwd,
@@ -319,6 +317,7 @@ export class ClaudeAgentHandler implements AgentHandler {
     );
 
     if (!agentSessionId) throw new Error("No agentSessionId provided");
+    if (!sessionId) throw new Error("No sessionId provided");
     if (blockIfNotInitialized(sessionId)) throw new Error("Initialization failure");
 
     const sdkOptions = {

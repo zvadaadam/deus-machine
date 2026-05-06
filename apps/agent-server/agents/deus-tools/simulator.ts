@@ -9,11 +9,11 @@
 //
 // Tool naming convention: SimulatorXxx (matches BrowserXxx pattern).
 
-import { tool } from "@anthropic-ai/claude-agent-sdk";
 import type { SdkMcpToolDefinition } from "@anthropic-ai/claude-agent-sdk";
 import { z } from "zod";
 import * as SimOps from "./sim-ops";
 import { getErrorMessage } from "@shared/lib/errors";
+import { tool } from "./sdk-tool";
 
 function textResult(text: string) {
   return { content: [{ type: "text" as const, text }] };
