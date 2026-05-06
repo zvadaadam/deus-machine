@@ -9,6 +9,8 @@ files:
   - "out/**/*"
   - "resources/**/*"
   - "!apps/**/*"
+  - "!node_modules/device-use/native/.build/**"
+  - "!node_modules/device-use/native/.swiftpm/**"
 asarUnpack:
   - "resources/**"
   - "node_modules/better-sqlite3/**"
