@@ -25,10 +25,7 @@ export function initializeCodexServer(): { success: boolean; error?: string } {
       agentHarness: "codex-server",
       displayName: "Codex app-server",
       envVar: "CODEX_APP_SERVER_CLI_PATH",
-      staticCandidates: [
-        ...candidatePathsNearRuntime(),
-        "/Applications/Conductor.app/Contents/Resources/bin/codex",
-      ],
+      staticCandidates: candidatePathsNearRuntime(),
       shellCommand: "codex",
       versionFlag: "--version",
       extraCandidates: extraCodexCandidates,
