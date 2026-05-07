@@ -237,7 +237,7 @@ class CodexAppServerTransformer implements EventTransformer<CodexAppServerNotifi
       case "webSearch":
         return this.startWebSearchPart(item);
       case "contextCompaction":
-        return this.createCompactionPart(item.id);
+        return this.startCompactionPart(item.id);
       default:
         return [];
     }
@@ -544,7 +544,7 @@ class CodexAppServerTransformer implements EventTransformer<CodexAppServerNotifi
     return [{ type: "part.created", part }];
   }
 
-  private createCompactionPart(itemId: string): PartEvent[] {
+  private startCompactionPart(itemId: string): PartEvent[] {
     const ctx = this.eventCtx();
     const part = createCompactionPart(ctx.sessionId, ctx.messageId, true);
     this.parts.set(part.id, part);

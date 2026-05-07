@@ -20,6 +20,7 @@ export interface EventTransformer<TEvent> {
   process(event: TEvent): PartEvent[];
   finish(): { events: PartEvent[]; parts: Part[]; usage: TokenUsage; cost?: number };
   getParts(): Part[];
+  isKnownSubagentThread?(threadId: string | undefined): boolean;
 }
 
 export interface Adapter<TEvent> {

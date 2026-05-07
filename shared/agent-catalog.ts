@@ -80,7 +80,7 @@ export const AGENT_CONFIGS = {
 
 // User-facing model picker groups. The legacy `codex-sdk` harness remains
 // registered in AGENT_CONFIGS for CLI/backend compatibility, but new frontend
-// sessions should route Codex through the app-server harness.
+// sessions should route through the current Codex harness.
 export const MODEL_PICKER_GROUPS = [
   AGENT_CONFIGS.claude,
   AGENT_CONFIGS["codex-server"],
