@@ -28,6 +28,7 @@ import * as readline from "readline";
 import { fileURLToPath } from "url";
 import WebSocket from "ws";
 import { getAgentHarnessEventLabel, getAgentHarnessLabel } from "../../shared/agent-catalog";
+import { AgentHarnessSchema, type AgentHarness } from "../../shared/enums";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -65,7 +66,30 @@ const c = {
 // Arg parsing
 // ---------------------------------------------------------------------------
 
-function parseArgs() {
+interface CliOptions {
+  url?: string;
+  agent: AgentHarness;
+  model?: string;
+  cwd: string;
+  session: string;
+  prompt: string | null;
+}
+
+function parseAgentHarness(value: string): AgentHarness {
+  const parsed = AgentHarnessSchema.safeParse(value);
+  if (parsed.success) return parsed.data;
+  throw new Error(
+    `Unknown agent "${value}". Expected one of: ${AgentHarnessSchema.options.join(", ")}`
+  );
+}
+
+function parseEventAgentHarness(value: unknown, fallback: AgentHarness): AgentHarness {
+  if (typeof value !== "string") return fallback;
+  const parsed = AgentHarnessSchema.safeParse(value);
+  return parsed.success ? parsed.data : fallback;
+}
+
+function parseArgs(): CliOptions {
   const args = process.argv.slice(2);
   const opts: Record<string, string> = {};
   const positional: string[] = [];
@@ -87,7 +111,7 @@ function parseArgs() {
 
   return {
     url: opts.url,
-    agent: opts.agent || "claude",
+    agent: parseAgentHarness(opts.agent || "claude"),
     model: opts.model, // no default — each harness has its own default
     cwd: opts.cwd || process.cwd(),
     session: opts.session || `cli-${Date.now()}`,
@@ -381,7 +405,7 @@ async function main() {
       const params = msg.params || {};
 
       // Derive provider label from agentHarness in the event
-      const agentHarness = params.agentHarness || opts.agent;
+      const agentHarness = parseEventAgentHarness(params.agentHarness, opts.agent);
       const agentLabel = getAgentHarnessEventLabel(agentHarness);
 
       printEvent(method, params, agentLabel);
@@ -500,7 +524,13 @@ async function main() {
       return;
     }
     if (input.startsWith(".agent ")) {
-      opts.agent = input.slice(7).trim();
+      try {
+        opts.agent = parseAgentHarness(input.slice(7).trim());
+      } catch (err) {
+        console.log(`${c.red}${err instanceof Error ? err.message : String(err)}${c.reset}`);
+        rl!.prompt();
+        return;
+      }
       console.log(`${c.green}Agent:${c.reset} ${opts.agent}`);
       rl!.prompt();
       return;

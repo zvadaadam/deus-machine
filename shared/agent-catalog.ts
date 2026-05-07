@@ -104,29 +104,14 @@ export const MODEL_PICKER_GROUPS = [
 export const DEFAULT_AGENT_HARNESS = "claude" satisfies AgentHarness;
 export const DEFAULT_MODEL = `${DEFAULT_AGENT_HARNESS}:${AGENT_CONFIGS[DEFAULT_AGENT_HARNESS].models[0].model}`;
 
-export function normalizeAgentHarness(agentHarness: string): AgentHarness | undefined {
-  const normalized = agentHarness.toLowerCase();
-  if (normalized === "codex") return "codex-sdk";
-  return Object.prototype.hasOwnProperty.call(AGENT_CONFIGS, normalized)
-    ? (normalized as AgentHarness)
-    : undefined;
+export function getKnownAgentConfig(agentHarness: AgentHarness): AgentConfig {
+  return AGENT_CONFIGS[agentHarness];
 }
 
-export function getKnownAgentConfig(agentHarness: string): AgentConfig | undefined {
-  const normalized = normalizeAgentHarness(agentHarness);
-  return normalized ? AGENT_CONFIGS[normalized] : undefined;
+export function getAgentHarnessLabel(agentHarness: AgentHarness): string {
+  return AGENT_CONFIGS[agentHarness].cliLabel;
 }
 
-export function getAgentHarnessLabel(agentHarness: string): string {
-  return getKnownAgentConfig(agentHarness)?.cliLabel ?? agentHarness;
-}
-
-export function getAgentHarnessEventLabel(agentHarness: string): string {
-  return (
-    getKnownAgentConfig(agentHarness)?.eventLabel ??
-    agentHarness
-      .toUpperCase()
-      .replace(/[^A-Z0-9]+/g, "-")
-      .replace(/^-|-$/g, "")
-  );
+export function getAgentHarnessEventLabel(agentHarness: AgentHarness): string {
+  return AGENT_CONFIGS[agentHarness].eventLabel;
 }

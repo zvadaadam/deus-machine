@@ -47,6 +47,9 @@ export const MIGRATIONS: string[] = [
   // sessions: drop the `model` column. Never read by the frontend; the
   // per-turn model lives on messages.model instead.
   `ALTER TABLE sessions DROP COLUMN model`,
+  // sessions: legacy Codex SDK harness id was `codex`; keep persisted sessions
+  // aligned with the stricter AgentHarness enum.
+  `UPDATE sessions SET agent_harness = 'codex-sdk' WHERE agent_harness = 'codex'`,
 ];
 
 function normalizeMigrationSql(sql: string): string {
