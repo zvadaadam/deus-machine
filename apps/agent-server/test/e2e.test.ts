@@ -587,7 +587,7 @@ describe.skipIf(!bundleExists || !hasOpenAIKey)("E2E: Real Codex Integration", (
     // Send a minimal query (short prompt for a quick response)
     sendNotification(client, "turn/start", {
       sessionId,
-      agentHarness: "codex",
+      agentHarness: "codex-sdk",
       prompt: "Reply with exactly: PONG",
       options: {
         cwd: WORKSPACE_ROOT,
@@ -643,7 +643,7 @@ describe.skipIf(!bundleExists || !hasOpenAIKey)("E2E: Real Codex Integration", (
     // Start a query that will take a while
     sendNotification(client, "turn/start", {
       sessionId,
-      agentHarness: "codex",
+      agentHarness: "codex-sdk",
       prompt:
         "Write a 500-word essay about the history of computing. Be very thorough and detailed.",
       options: {

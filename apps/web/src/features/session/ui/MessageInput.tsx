@@ -365,7 +365,7 @@ export function MessageInput({
   const showSetupNudge = !hasManifest && !hasMessages;
   const handleSetupEnvironment = () => onSend(GENERATE_HIVE_JSON);
 
-  const planModeDisabled = agentHarness === "codex" || agentHarness === "codex-server";
+  const planModeDisabled = agentHarness === "codex-sdk" || agentHarness === "codex-server";
   return (
     <div className={cn("relative z-20 shrink-0 px-2 pb-2", className)}>
       <AnimatePresence initial={false}>

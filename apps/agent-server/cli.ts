@@ -14,7 +14,7 @@
 //
 // Options:
 //   --url <ws://...>   Connect to a running agent-server instead of spawning one
-//   --agent <type>     Agent type: "claude" (default), "codex", or "codex-server"
+//   --agent <type>     Agent type: "claude" (default), "codex-sdk", or "codex-server"
 //   --model <model>    Model to use (default: "sonnet")
 //   --cwd <path>       Working directory for the agent (default: cwd)
 //   --session <id>     Session ID (default: auto-generated)
@@ -480,7 +480,9 @@ async function main() {
       console.log(`  ${c.bold}.exit${c.reset}          Quit`);
       console.log(`  ${c.bold}.session <id>${c.reset}  Switch session`);
       console.log(`  ${c.bold}.model <name>${c.reset}  Switch model`);
-      console.log(`  ${c.bold}.agent <type>${c.reset}  Switch agent (claude/codex/codex-server)`);
+      console.log(
+        `  ${c.bold}.agent <type>${c.reset}  Switch agent (claude/codex-sdk/codex-server)`
+      );
       console.log(`  ${c.bold}.cancel${c.reset}        Cancel running turn`);
       rl!.prompt();
       return;

@@ -531,7 +531,7 @@ class CodexTransformer implements EventTransformer<CodexEvent> {
 // ---------------------------------------------------------------------------
 
 export const codexAdapter: Adapter<CodexEvent> = {
-  id: "codex",
+  id: "codex-sdk",
   createTransformer(ctx: StreamContext) {
     return new CodexTransformer(ctx);
   },

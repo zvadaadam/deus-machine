@@ -67,7 +67,7 @@ export function ModelPicker({ model, hasMessages, onModelChange, onOpenNewTab }:
         {MODEL_PICKER_GROUPS.map((agentConfig, groupIdx) => {
           /**
            * Agent type lock: once a session has messages, its agent harness
-           * (claude/codex) is fixed. The user can switch models within the
+           * (claude/codex-server) is fixed. The user can switch models within the
            * same harness, but switching harnesses requires a new chat tab.
            */
           const isLockedGroup = hasMessages && agentConfig.id !== currentGroup;

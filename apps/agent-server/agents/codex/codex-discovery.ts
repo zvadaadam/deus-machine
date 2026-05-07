@@ -32,7 +32,7 @@ export function getCodexExecutablePath(): string {
 export function initializeCodex(): { success: boolean; error?: string } {
   return discoverExecutable(
     {
-      agentHarness: "codex",
+      agentHarness: "codex-sdk",
       displayName: "Codex",
       envVar: "CODEX_CLI_PATH",
       staticCandidates: ["/opt/homebrew/lib/node_modules/@openai/codex/bin/codex.js"],
@@ -60,5 +60,5 @@ export function initializeCodex(): { success: boolean; error?: string } {
  * Returns true if blocked (initialization failed), false if OK to proceed.
  */
 export function blockIfNotInitialized(sessionId: string): boolean {
-  return sharedBlock(state, "codex", sessionId);
+  return sharedBlock(state, "codex-sdk", sessionId);
 }
