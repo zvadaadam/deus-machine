@@ -132,13 +132,23 @@ export const TerminalContentSchema = z.object({
   type: z.literal("terminal"),
   terminalId: z.string(),
 });
+export const AgentResultContentSchema = z.object({
+  type: z.literal("agent_result"),
+  agentId: z.string().optional(),
+  status: z.enum(["pending", "running", "completed", "failed", "cancelled"]),
+  label: z.string().optional(),
+  message: z.string().optional(),
+});
 export const ToolOutputContentSchema = z.discriminatedUnion("type", [
   TextContentSchema,
   DiffContentSchema,
   TerminalContentSchema,
+  AgentResultContentSchema,
 ]);
 export type TextContent = z.infer<typeof TextContentSchema>;
 export type DiffContent = z.infer<typeof DiffContentSchema>;
+export type AgentResultContent = z.infer<typeof AgentResultContentSchema>;
+export type ToolOutputContent = z.infer<typeof ToolOutputContentSchema>;
 
 export const CompletedToolStateSchema = z.object({
   status: z.literal("COMPLETED"),

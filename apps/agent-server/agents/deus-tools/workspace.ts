@@ -1,10 +1,10 @@
 // agent-server/agents/deus-tools/workspace.ts
 // Workspace-aware tools: user interaction, diff, comments, terminal output.
 
-import { tool } from "@anthropic-ai/claude-agent-sdk";
 import type { SdkMcpToolDefinition } from "@anthropic-ai/claude-agent-sdk";
 import { z } from "zod";
 import { EventBroadcaster } from "../../event-broadcaster";
+import { tool } from "./sdk-tool";
 
 /**
  * Creates the workspace tool definitions for a given session.

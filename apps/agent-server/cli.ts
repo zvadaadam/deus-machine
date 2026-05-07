@@ -14,7 +14,7 @@
 //
 // Options:
 //   --url <ws://...>   Connect to a running agent-server instead of spawning one
-//   --agent <type>     Agent type: "claude" (default) or "codex"
+//   --agent <type>     Agent type: "claude" (default), "codex-sdk", or "codex-server"
 //   --model <model>    Model to use (default: "sonnet")
 //   --cwd <path>       Working directory for the agent (default: cwd)
 //   --session <id>     Session ID (default: auto-generated)
@@ -27,6 +27,8 @@ import * as path from "path";
 import * as readline from "readline";
 import { fileURLToPath } from "url";
 import WebSocket from "ws";
+import { getAgentHarnessEventLabel, getAgentHarnessLabel } from "../../shared/agent-catalog";
+import { AgentHarnessSchema, type AgentHarness } from "../../shared/enums";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -64,7 +66,30 @@ const c = {
 // Arg parsing
 // ---------------------------------------------------------------------------
 
-function parseArgs() {
+interface CliOptions {
+  url?: string;
+  agent: AgentHarness;
+  model?: string;
+  cwd: string;
+  session: string;
+  prompt: string | null;
+}
+
+function parseAgentHarness(value: string): AgentHarness {
+  const parsed = AgentHarnessSchema.safeParse(value);
+  if (parsed.success) return parsed.data;
+  throw new Error(
+    `Unknown agent "${value}". Expected one of: ${AgentHarnessSchema.options.join(", ")}`
+  );
+}
+
+function parseEventAgentHarness(value: unknown, fallback: AgentHarness): AgentHarness {
+  if (typeof value !== "string") return fallback;
+  const parsed = AgentHarnessSchema.safeParse(value);
+  return parsed.success ? parsed.data : fallback;
+}
+
+function parseArgs(): CliOptions {
   const args = process.argv.slice(2);
   const opts: Record<string, string> = {};
   const positional: string[] = [];
@@ -86,7 +111,7 @@ function parseArgs() {
 
   return {
     url: opts.url,
-    agent: opts.agent || "claude",
+    agent: parseAgentHarness(opts.agent || "claude"),
     model: opts.model, // no default — each harness has its own default
     cwd: opts.cwd || process.cwd(),
     session: opts.session || `cli-${Date.now()}`,
@@ -338,7 +363,7 @@ function waitForResponse(ws: WebSocket, id: number, timeoutMs = 30_000): Promise
 async function main() {
   const opts = parseArgs();
 
-  const harnessLabel = opts.agent === "codex" ? "Codex" : "Claude Code";
+  const harnessLabel = getAgentHarnessLabel(opts.agent);
   banner("Agent Server Debug CLI");
   console.log(`  harness: ${c.bold}${harnessLabel}${c.reset} ${c.dim}(${opts.agent})${c.reset}`);
   console.log(`  model:   ${opts.model || `${c.dim}(default)${c.reset}`}`);
@@ -380,8 +405,8 @@ async function main() {
       const params = msg.params || {};
 
       // Derive provider label from agentHarness in the event
-      const agentHarness = params.agentHarness || opts.agent;
-      const agentLabel = agentHarness === "codex" ? "CODEX" : "CLAUDE";
+      const agentHarness = parseEventAgentHarness(params.agentHarness, opts.agent);
+      const agentLabel = getAgentHarnessEventLabel(agentHarness);
 
       printEvent(method, params, agentLabel);
 
@@ -479,7 +504,9 @@ async function main() {
       console.log(`  ${c.bold}.exit${c.reset}          Quit`);
       console.log(`  ${c.bold}.session <id>${c.reset}  Switch session`);
       console.log(`  ${c.bold}.model <name>${c.reset}  Switch model`);
-      console.log(`  ${c.bold}.agent <type>${c.reset}  Switch agent (claude/codex)`);
+      console.log(
+        `  ${c.bold}.agent <type>${c.reset}  Switch agent (claude/codex-sdk/codex-server)`
+      );
       console.log(`  ${c.bold}.cancel${c.reset}        Cancel running turn`);
       rl!.prompt();
       return;
@@ -497,7 +524,13 @@ async function main() {
       return;
     }
     if (input.startsWith(".agent ")) {
-      opts.agent = input.slice(7).trim();
+      try {
+        opts.agent = parseAgentHarness(input.slice(7).trim());
+      } catch (err) {
+        console.log(`${c.red}${err instanceof Error ? err.message : String(err)}${c.reset}`);
+        rl!.prompt();
+        return;
+      }
       console.log(`${c.green}Agent:${c.reset} ${opts.agent}`);
       rl!.prompt();
       return;

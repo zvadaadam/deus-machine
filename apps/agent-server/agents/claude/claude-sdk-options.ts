@@ -4,7 +4,13 @@
 
 import * as fs from "fs";
 import * as path from "path";
-import type { Options, PermissionMode, SettingSource } from "@anthropic-ai/claude-agent-sdk";
+import type {
+  CanUseTool,
+  EffortLevel,
+  Options,
+  PermissionMode,
+  SettingSource,
+} from "@anthropic-ai/claude-agent-sdk";
 import { EventBroadcaster } from "../../event-broadcaster";
 import { createCheckpoint } from "./checkpoint";
 import { createDeusMCPServer } from "../deus-tools";
@@ -12,6 +18,7 @@ import { getClaudeExecutablePath } from "./claude-discovery";
 import { claudeSessions } from "./claude-session";
 import type { QueryOptions } from "../registry";
 import { buildWorkspaceContext } from "../environment";
+import { parseThinkingLevel, type ThinkingLevel } from "../thinking-levels";
 
 // ============================================================================
 // Constants
@@ -24,44 +31,30 @@ export const DEFAULT_PROMPT = {
 
 export const DEFAULT_SETTING_SOURCES: SettingSource[] = ["user", "project", "local"];
 
-// ============================================================================
-// Thinking level → SDK options
-// ============================================================================
-//
-// Translates the wire-protocol ThinkingLevel into Claude Agent SDK options.
-// Centralizing here means adding a new SDK parameter (e.g. `effort: "xhigh"`
-// once the SDK typedef catches up to Opus 4.7) is a one-line change.
-//
-// On Opus 4.6+ the SDK currently treats maxThinkingTokens as on/off
-// (0 = disabled, any non-zero = adaptive enabled). The graduated numbers
-// still differentiate on older models and preserve intent.
-
-type ThinkingLevel = "NONE" | "LOW" | "MEDIUM" | "HIGH" | "XHIGH";
-
-// NONE uses 0 to explicitly disable thinking on Opus 4.6+ (where the SDK
-// treats maxThinkingTokens as on/off: 0 = disabled, any non-zero = adaptive
-// enabled). Leaving it undefined would fall through to the SDK default
-// behavior (thinking ON), which is the opposite of the user's intent.
-const LEVEL_TO_MAX_TOKENS: Record<ThinkingLevel, number> = {
-  NONE: 0,
-  LOW: 4096,
-  MEDIUM: 8192,
-  HIGH: 16384,
-  XHIGH: 32768,
+const CLAUDE_EFFORT_BY_THINKING_LEVEL: Record<Exclude<ThinkingLevel, "NONE">, EffortLevel> = {
+  LOW: "low",
+  MEDIUM: "medium",
+  HIGH: "high",
+  XHIGH: "xhigh",
 };
 
-/**
- * Resolves the Claude SDK options that realize a given thinking level.
- * Returns `{ maxThinkingTokens: undefined }` only when no level given — the
- * SDK then uses its default. When NONE is explicitly chosen, returns 0 so the
- * SDK disables thinking rather than falling back to its default.
- */
-export function resolveThinkingOptions(thinkingLevel: string | undefined): {
-  maxThinkingTokens: number | undefined;
-} {
-  if (!thinkingLevel) return { maxThinkingTokens: undefined };
-  const level = thinkingLevel.toUpperCase() as ThinkingLevel;
-  return { maxThinkingTokens: LEVEL_TO_MAX_TOKENS[level] };
+export function parseClaudeThinkingLevel(
+  thinkingLevel: QueryOptions["thinkingLevel"]
+): ThinkingLevel | undefined {
+  return parseThinkingLevel(thinkingLevel, "Claude");
+}
+
+export function resolveClaudeThinkingOptions(
+  thinkingLevel: QueryOptions["thinkingLevel"]
+): Pick<Options, "thinking" | "effort"> {
+  const level = parseClaudeThinkingLevel(thinkingLevel);
+  if (!level) return {};
+  if (level === "NONE") return { thinking: { type: "disabled" } };
+
+  return {
+    thinking: { type: "adaptive", display: "summarized" },
+    effort: CLAUDE_EFFORT_BY_THINKING_LEVEL[level],
+  };
 }
 
 /**
@@ -103,7 +96,10 @@ The camera engine automatically creates cinematic zoom/pan effects: 2x zoom on t
  * Creates the canUseTool callback for a Claude session.
  * Handles ExitPlanMode approval and file path guards.
  */
-export function createCanUseTool(sessionId: string, workingDirectory: string | undefined) {
+export function createCanUseTool(
+  sessionId: string,
+  workingDirectory: string | undefined
+): CanUseTool {
   return async (toolName: string, input: any, _toolOptions: any) => {
     // Handle plan mode exit approval
     if (toolName === "ExitPlanMode") {
@@ -275,14 +271,15 @@ export function buildSdkOptions(
 ): Options {
   const workingDirectory = options?.cwd;
   const permissionMode = (options?.permissionMode ?? "default") as PermissionMode;
-  const thinking = resolveThinkingOptions(options?.thinkingLevel);
+  const thinking = resolveClaudeThinkingOptions(options?.thinkingLevel);
 
   // Built as Partial<Options> and conditionally extended.
   // Cast to Options at return — the SDK validates at runtime.
   const sdkOptions: Partial<Options> = {
     maxTurns: options?.maxTurns || 1_000,
     model: options?.model,
-    maxThinkingTokens: thinking.maxThinkingTokens,
+    thinking: thinking.thinking,
+    effort: thinking.effort,
     cwd: workingDirectory,
     pathToClaudeCodeExecutable: getClaudeExecutablePath(),
     systemPrompt: {
@@ -298,6 +295,7 @@ export function buildSdkOptions(
     permissionMode,
     hooks: createHooks(sessionId),
     includePartialMessages: true,
+    forwardSubagentText: true,
   };
 
   if (options?.chromeEnabled) {

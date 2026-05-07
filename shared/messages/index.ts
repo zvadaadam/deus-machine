@@ -31,6 +31,9 @@ export {
   TextContentSchema,
   type DiffContent,
   DiffContentSchema,
+  type AgentResultContent,
+  AgentResultContentSchema,
+  type ToolOutputContent,
   ToolOutputContentSchema,
   // Parts
   type TextPart,

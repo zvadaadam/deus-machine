@@ -118,7 +118,7 @@ function mapItemToContentBlocks(item: ThreadItem): unknown[] {
 // ============================================================================
 
 export class CodexAgentHandler implements AgentHandler {
-  readonly agentHarness = "codex" as const;
+  readonly agentHarness = "codex-sdk" as const;
   readonly capabilities: AgentCapabilities = {
     auth: false,
     workspaceInit: false,
@@ -252,7 +252,7 @@ export class CodexAgentHandler implements AgentHandler {
         // Transform into PartEvents and emit each individually
         const partEvents = transformer.process(event as ThreadEvent);
         for (const evt of partEvents) {
-          EventBroadcaster.emitPartEvent(sessionId, "codex", messageId, evt);
+          EventBroadcaster.emitPartEvent(sessionId, "codex-sdk", messageId, evt);
         }
 
         match(event)
@@ -267,12 +267,12 @@ export class CodexAgentHandler implements AgentHandler {
             console.log(
               `[${queryId}] Turn completed. Tokens: in=${e.usage.input_tokens}, out=${e.usage.output_tokens}`
             );
-            EventBroadcaster.emitSessionIdle(sessionId, "codex");
+            EventBroadcaster.emitSessionIdle(sessionId, "codex-sdk");
           })
           .with({ type: "turn.failed" }, (e) => {
             const classified = classifyError(e.error);
             console.error(`[${queryId}] Turn failed [${classified.category}]:`, classified.message);
-            handleQueryError(sessionId, "codex", e.error);
+            handleQueryError(sessionId, "codex-sdk", e.error);
           })
           .with({ type: "error" }, (e) => {
             const classified = classifyError(e);
@@ -280,7 +280,7 @@ export class CodexAgentHandler implements AgentHandler {
               `[${queryId}] Stream error [${classified.category}]:`,
               classified.message
             );
-            handleQueryError(sessionId, "codex", e);
+            handleQueryError(sessionId, "codex-sdk", e);
           })
           .with({ type: "turn.started" }, () => {
             // Informational — no action needed
@@ -294,7 +294,7 @@ export class CodexAgentHandler implements AgentHandler {
       // Finalize the transformer: close open parts, emit turn.completed
       const finished = transformer.finish();
       for (const evt of finished.events) {
-        EventBroadcaster.emitPartEvent(sessionId, "codex", messageId, evt);
+        EventBroadcaster.emitPartEvent(sessionId, "codex-sdk", messageId, evt);
       }
 
       // Only update status if this processQuery still owns the session —
@@ -302,7 +302,7 @@ export class CodexAgentHandler implements AgentHandler {
       if (codexSessions.owns(sessionId, session)) {
         if (abortController.signal.aborted) {
           // Abort break path: notify frontend + emit canonical events
-          handleCancellation(sessionId, "codex", true);
+          handleCancellation(sessionId, "codex-sdk", true);
         }
         // Note: no fallback idle emission here — turn.completed already emits it.
         // Emitting again would give the backend duplicate terminal lifecycle events.
@@ -322,9 +322,9 @@ export class CodexAgentHandler implements AgentHandler {
       // Only update status if this processQuery still owns the session.
       if (codexSessions.owns(sessionId, session)) {
         if (isAbort) {
-          handleCancellation(sessionId, "codex", true);
+          handleCancellation(sessionId, "codex-sdk", true);
         } else {
-          handleQueryError(sessionId, "codex", error);
+          handleQueryError(sessionId, "codex-sdk", error);
         }
       }
     } finally {

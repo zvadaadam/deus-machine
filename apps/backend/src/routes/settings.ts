@@ -3,6 +3,7 @@ import { getAllSettings, saveSetting } from "../services/settings.service";
 import { parseBody, SaveSettingBody } from "../lib/schemas";
 import { ensureRelayConnected, disconnectFromRelay } from "../services/relay.service";
 import { checkAuth, isConnected, getAgents } from "../services/agent";
+import type { AgentHarness } from "@shared/enums";
 
 const app = new Hono();
 
@@ -39,12 +40,19 @@ app.get("/settings/agent-auth", async (c) => {
   // Which agents had their CLI discovered during startup
   const agents = getAgents();
   const claudeInstalled = agents.some((a) => a.type === "claude" && a.initialized);
-  const codexInstalled = agents.some((a) => a.type === "codex" && a.initialized);
+  const codexAgent =
+    agents.find((a) => a.type === "codex-server" && a.initialized) ??
+    agents.find((a) => a.type === "codex-sdk" && a.initialized) ??
+    agents.find((a) => a.type === "codex-server") ??
+    agents.find((a) => a.type === "codex-sdk");
+  const codexInstalled = codexAgent?.initialized ?? false;
 
   const cwd = process.cwd();
   const [claudeResult, codexResult] = await Promise.allSettled([
     claudeInstalled ? checkAuth({ agentHarness: "claude", cwd }) : Promise.resolve(null),
-    codexInstalled ? checkAuth({ agentHarness: "codex", cwd }) : Promise.resolve(null),
+    codexInstalled && codexAgent?.capabilities.auth
+      ? checkAuth({ agentHarness: codexAgent.type as AgentHarness, cwd })
+      : Promise.resolve(null),
   ]);
 
   return c.json({

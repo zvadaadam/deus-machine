@@ -1,55 +1,32 @@
-// Agent catalog — single source of truth for which agents/models the UI
-// exposes, plus the helpers for looking them up and cycling thinking
-// levels. The server-side runtime (agent handlers, SDK option translation)
-// lives in apps/agent-server/agents/.
+// Agent catalog helpers. Shared metadata lives in shared/agent-catalog.ts;
+// runtime SDK/process implementations live in apps/agent-server/agents/.
 //
-// Harness lock constraint: once a session has messages, its agent type
-// (claude or codex) is fixed — the agent-server binds to a specific SDK on
-// first query and cannot switch mid-session. Within the same harness, model
-// switching is allowed (e.g. Sonnet → Opus). The UI enforces this by
-// disabling cross-group items in the model picker when hasMessages is true;
-// see MessageInput's model picker dropdown.
+// Harness lock constraint: once a session has messages, its agent type is
+// fixed — the agent-server binds to a specific runtime on first query and
+// cannot switch mid-session. The UI currently exposes Claude Code and Codex;
+// the legacy codex-sdk harness remains registered for backend/CLI compatibility.
+
+import {
+  AGENT_CONFIGS,
+  DEFAULT_MODEL,
+  MODEL_PICKER_GROUPS,
+  getKnownAgentConfig,
+} from "@shared/agent-catalog";
+import type { AgentConfig, AgentHarness, ThinkingLevel } from "@shared/agent-catalog";
+
+export {
+  AGENT_CONFIGS,
+  DEFAULT_MODEL,
+  MODEL_PICKER_GROUPS,
+  type AgentConfig,
+  type AgentHarness,
+  type AgentModelOption,
+  type ThinkingLevel,
+} from "@shared/agent-catalog";
 
 // ============================================================================
 // Types
 // ============================================================================
-
-export type AgentHarness = "claude" | "codex";
-
-export type ThinkingLevel = "NONE" | "LOW" | "MEDIUM" | "HIGH" | "XHIGH";
-
-/** A model entry in the picker. Associated with exactly one agent type. */
-export interface AgentModelOption {
-  /** Model identifier sent to the agent-server */
-  readonly model: string;
-  /** Human-readable label */
-  readonly label: string;
-  /** Show "New" badge in picker */
-  readonly isNew?: boolean;
-  /**
-   * Ordered thinking levels the user cycles through for this model.
-   * Overrides the agent-level default. Empty array hides the thinking indicator.
-   */
-  readonly thinkingLevels?: readonly ThinkingLevel[];
-}
-
-/**
- * Per-agent configuration record. Adding a new agent means adding one entry
- * to AGENT_CONFIGS — UI files consume this data via lookup helpers, so no
- * file-level conditionals.
- */
-export interface AgentConfig {
-  /** DB-compatible agent_harness string (matches sessions.agent_harness) */
-  readonly id: AgentHarness;
-  /** Human label for display (e.g. "Claude", "Codex") */
-  readonly label: string;
-  /** Group header label in model picker dropdown */
-  readonly groupLabel: string;
-  /** Default thinking levels when a model doesn't declare its own */
-  readonly thinkingLevels: readonly ThinkingLevel[];
-  /** Available models, in display order */
-  readonly models: readonly AgentModelOption[];
-}
 
 /** Flat-listed model option derived from an AgentConfig. */
 export interface ModelOption {
@@ -66,48 +43,6 @@ export interface ModelOption {
 // Catalog
 // ============================================================================
 
-export const AGENT_CONFIGS = {
-  claude: {
-    id: "claude" as const,
-    label: "Claude",
-    groupLabel: "Claude Code",
-    thinkingLevels: ["LOW", "MEDIUM", "HIGH"] as const,
-    models: [
-      {
-        model: "claude-opus-4-7",
-        label: "Opus 4.7",
-        isNew: true,
-        thinkingLevels: ["LOW", "MEDIUM", "HIGH", "XHIGH"] as const,
-      },
-      { model: "claude-opus-4-6", label: "Opus 4.6" },
-      { model: "claude-sonnet-4-6", label: "Sonnet 4.6", isNew: true },
-      { model: "claude-haiku-4-5", label: "Haiku 4.5", thinkingLevels: [] as const },
-    ],
-  },
-  codex: {
-    id: "codex" as const,
-    label: "Codex",
-    groupLabel: "Codex",
-    thinkingLevels: ["LOW", "MEDIUM", "HIGH"] as const,
-    models: [
-      { model: "gpt-5.3-codex", label: "GPT-5.3 Codex", isNew: true },
-      { model: "gpt-5.2-codex", label: "GPT-5.2 Codex" },
-      { model: "gpt-5.3-codex-spark", label: "Codex Spark" },
-    ],
-  },
-} satisfies Record<AgentHarness, AgentConfig>;
-
-/** Agent types that appear in the model picker (ordered). */
-export const MODEL_PICKER_GROUPS: readonly AgentConfig[] = [
-  AGENT_CONFIGS.claude,
-  AGENT_CONFIGS.codex,
-];
-
-/** App-wide default model (full "harness:modelId" form). Used to seed new
- *  chat composers and the home-screen welcome input. Keep in sync with
- *  `AGENT_CONFIGS.claude.models[0]`. */
-export const DEFAULT_MODEL = "claude:claude-opus-4-7";
-
 /** Flat model options array, derived from agent configs. */
 export const MODEL_OPTIONS: ModelOption[] = MODEL_PICKER_GROUPS.flatMap((config) =>
   config.models.map(
@@ -121,29 +56,38 @@ export const MODEL_OPTIONS: ModelOption[] = MODEL_PICKER_GROUPS.flatMap((config)
   )
 );
 
+const CODEX_SERVER_DEFAULT_MODEL = `${AGENT_CONFIGS["codex-server"].id}:${AGENT_CONFIGS["codex-server"].models[0].model}`;
+
 // ============================================================================
 // Lookup
 // ============================================================================
 
 /**
- * Resolve an agent config by type. Falls back to Claude for unknown types;
- * logs a dev-only warning so drift from the catalog doesn't silently misroute
- * users in production.
+ * Resolve an agent config by typed harness. Untyped boundaries should validate
+ * before calling into the catalog.
  */
-function getAgentConfig(agentHarness: string): AgentConfig {
-  const normalized = agentHarness.toLowerCase() as AgentHarness;
-  const config = AGENT_CONFIGS[normalized];
-  if (!config) {
-    if (import.meta.env.DEV) {
-      console.warn(`[agents] Unknown agent type "${agentHarness}", defaulting to claude.`);
-    }
-    return AGENT_CONFIGS.claude;
-  }
-  return config;
+function getAgentConfig(agentHarness: AgentHarness): AgentConfig {
+  return getKnownAgentConfig(agentHarness);
 }
 
-export function getAgentLabel(agentHarness: string): string {
+export function getAgentLabel(agentHarness: AgentHarness): string {
   return getAgentConfig(agentHarness).label;
+}
+
+export function resolveModelSelection(model: string): string | undefined {
+  const candidate = model.toLowerCase().trim();
+  if (MODEL_OPTIONS.some((option) => option.value === candidate)) {
+    return candidate;
+  }
+
+  // LocalStorage/tabs can still hold pre-codex-server picker values from older
+  // builds. Treat those as a one-time selection migration to the visible Codex
+  // harness; runtime harness ids are validated separately at the RPC boundary.
+  if (candidate.startsWith("codex:") || candidate.startsWith("codex-sdk:")) {
+    return CODEX_SERVER_DEFAULT_MODEL;
+  }
+
+  return undefined;
 }
 
 /**
@@ -151,8 +95,9 @@ export function getAgentLabel(agentHarness: string): string {
  * Returns undefined for unrecognized values.
  */
 export function getModelOption(model: string): ModelOption | undefined {
-  const normalized = model.toLowerCase().trim();
-  return MODEL_OPTIONS.find((option) => option.value === normalized);
+  const resolved = resolveModelSelection(model);
+  if (!resolved) return undefined;
+  return MODEL_OPTIONS.find((option) => option.value === resolved);
 }
 
 export function getModelLabel(model: string): string {
@@ -161,9 +106,7 @@ export function getModelLabel(model: string): string {
 
 export function getAgentHarnessForModel(model: string): AgentHarness {
   const option = getModelOption(model);
-  if (option) return option.agentHarness;
-  // Unknown models: use the harness prefix if present, default to claude.
-  return model.toLowerCase().startsWith("codex:") ? "codex" : "claude";
+  return option?.agentHarness ?? "claude";
 }
 
 /**
@@ -183,10 +126,8 @@ export function getModelId(model: string): string {
 // Thinking
 // ============================================================================
 //
-// The frontend only cares about *which* levels a given model supports and
-// how to cycle them. The mapping from level → SDK option (token budget
-// today, `effort` string tomorrow) lives in the agent-server — see
-// apps/agent-server/agents/claude/claude-sdk-options.ts (resolveThinkingOptions).
+// The frontend only cares which levels a model supports and how to cycle them.
+// Provider SDK mappings live in the agent-server harnesses.
 
 /**
  * Returns the thinking levels available for a given model. Falls back to

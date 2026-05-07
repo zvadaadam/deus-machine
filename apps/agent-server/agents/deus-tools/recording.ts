@@ -7,11 +7,11 @@
 // recording_event is NOT exposed — events are captured automatically by the
 // RecordingBridge which snoops on browser tool executions.
 
-import { tool } from "@anthropic-ai/claude-agent-sdk";
 import type { SdkMcpToolDefinition } from "@anthropic-ai/claude-agent-sdk";
 import { z } from "zod";
 import { SessionManager } from "../../../../packages/screen-studio/src/mcp/session-manager";
 import type { AgentEventType } from "../../../../packages/screen-studio/src/types";
+import { tool } from "./sdk-tool";
 
 // Module-level SessionManager instance — shared across all recording tools
 // and the RecordingBridge for a given agent-server process.
