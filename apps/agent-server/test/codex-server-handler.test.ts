@@ -129,7 +129,7 @@ describe("CodexServerAgentHandler", () => {
     );
   });
 
-  it("rejects unsupported thinking levels before starting a Codex turn", async () => {
+  it("rejects unsupported thinking levels before starting a Codex thread", async () => {
     mockClient.request.mockImplementation(async (method: string) => {
       if (method === "thread/start") return { thread: { id: "thread-1" } };
       return {};
@@ -143,11 +143,8 @@ describe("CodexServerAgentHandler", () => {
     });
     await flushAsyncWork();
 
-    expect(mockClient.request).not.toHaveBeenCalledWith(
-      "turn/start",
-      expect.anything(),
-      expect.anything()
-    );
+    expect(mockCodexAppServerClient).not.toHaveBeenCalled();
+    expect(mockClient.request).not.toHaveBeenCalled();
     expect(mockEventBroadcaster.emitSessionError).toHaveBeenCalledWith(
       "sess-bad-thinking",
       "codex-server",

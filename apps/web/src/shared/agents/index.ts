@@ -4,8 +4,7 @@
 // Harness lock constraint: once a session has messages, its agent type is
 // fixed — the agent-server binds to a specific runtime on first query and
 // cannot switch mid-session. The UI currently exposes Claude Code and Codex;
-// the Codex picker entry routes to the codex-server/app-server harness. The
-// legacy codex-sdk harness remains registered for backend/CLI compatibility.
+// the legacy codex-sdk harness remains registered for backend/CLI compatibility.
 
 import {
   AGENT_CONFIGS,
@@ -75,15 +74,16 @@ export function getAgentLabel(agentHarness: AgentHarness): string {
   return getAgentConfig(agentHarness).label;
 }
 
-export function normalizeModelSelection(model: string): string | undefined {
-  const normalized = model.toLowerCase().trim();
-  if (MODEL_OPTIONS.some((option) => option.value === normalized)) {
-    return normalized;
+export function resolveModelSelection(model: string): string | undefined {
+  const candidate = model.toLowerCase().trim();
+  if (MODEL_OPTIONS.some((option) => option.value === candidate)) {
+    return candidate;
   }
 
-  // Legacy frontend selections from the hidden Codex SDK harness should now
-  // behave like the user picked the visible Codex option.
-  if (normalized.startsWith("codex:") || normalized.startsWith("codex-sdk:")) {
+  // LocalStorage/tabs can still hold pre-codex-server picker values from older
+  // builds. Treat those as a one-time selection migration to the visible Codex
+  // harness; runtime harness ids are validated separately at the RPC boundary.
+  if (candidate.startsWith("codex:") || candidate.startsWith("codex-sdk:")) {
     return CODEX_SERVER_DEFAULT_MODEL;
   }
 
@@ -95,9 +95,9 @@ export function normalizeModelSelection(model: string): string | undefined {
  * Returns undefined for unrecognized values.
  */
 export function getModelOption(model: string): ModelOption | undefined {
-  const normalized = normalizeModelSelection(model);
-  if (!normalized) return undefined;
-  return MODEL_OPTIONS.find((option) => option.value === normalized);
+  const resolved = resolveModelSelection(model);
+  if (!resolved) return undefined;
+  return MODEL_OPTIONS.find((option) => option.value === resolved);
 }
 
 export function getModelLabel(model: string): string {

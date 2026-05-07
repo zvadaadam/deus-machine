@@ -110,6 +110,7 @@ export class CodexServerAgentHandler implements AgentHandler {
       if (!options.model) {
         throw new Error(`[codex-server-handler] options.model is required (session=${sessionId})`);
       }
+      const effort = mapThinkingLevel(options.thinkingLevel);
 
       const previousSession = codexServerSessions.get(sessionId);
       session = {
@@ -188,9 +189,7 @@ export class CodexServerAgentHandler implements AgentHandler {
           const threadId = getNotificationThreadId(notification);
           const belongsToRootThread = notificationBelongsToThread(notification, session.threadId);
           const belongsToKnownSubagent =
-            !!threadId &&
-            typeof (transformer as any).isKnownSubagentThread === "function" &&
-            (transformer as any).isKnownSubagentThread(threadId);
+            !!threadId && transformer.isKnownSubagentThread?.(threadId) === true;
 
           if (!belongsToRootThread && !belongsToKnownSubagent) return;
 
@@ -227,7 +226,7 @@ export class CodexServerAgentHandler implements AgentHandler {
           approvalPolicy: "never",
           sandboxPolicy: buildWorkspaceWriteSandbox(options),
           model: options.model,
-          effort: mapThinkingLevel(options.thinkingLevel),
+          effort,
           summary: "auto",
         },
         { signal: abortController.signal }

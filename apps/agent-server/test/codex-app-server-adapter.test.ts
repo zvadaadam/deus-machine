@@ -269,7 +269,7 @@ describe("CodexAppServerAdapter", () => {
       },
     });
 
-    expect((transformer as any).isKnownSubagentThread("sub-thread-1")).toBe(true);
+    expect(transformer.isKnownSubagentThread?.("sub-thread-1")).toBe(true);
 
     const started = transformer.process({
       method: "turn/started",

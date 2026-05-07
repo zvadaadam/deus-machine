@@ -17,7 +17,7 @@ import {
   DEFAULT_MODEL,
   getModelLabel,
   getModelOption,
-  normalizeModelSelection,
+  resolveModelSelection,
   MODEL_OPTIONS,
   MODEL_PICKER_GROUPS,
   type AgentHarness,
@@ -62,8 +62,8 @@ function getStoredModel(): string {
   // current default instead of silently sending an unknown model.
   try {
     const stored = localStorage.getItem(LAST_MODEL_KEY);
-    const normalized = stored ? normalizeModelSelection(stored) : undefined;
-    if (normalized) return normalized;
+    const resolved = stored ? resolveModelSelection(stored) : undefined;
+    if (resolved) return resolved;
   } catch {
     /* localStorage unavailable */
   }
