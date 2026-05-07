@@ -31,8 +31,12 @@ export function SubagentGroupBlock({
   childMessages,
 }: SubagentGroupBlockProps) {
   const { sessionStatus, workspaceId, workspacePath, subagentMessages } = useSession();
-  const { description, subagent_type } = toolUse.input ?? {};
-  const label = description || subagent_type || "Agent";
+  const { description, prompt, subagent_type } = toolUse.input ?? {};
+  const label =
+    compactAgentLabel(description) ||
+    compactAgentLabel(subagent_type) ||
+    compactAgentLabel(prompt) ||
+    "Agent";
 
   const isRunning = sessionStatus === "working" && !toolResult;
   const isError = toolResult?.is_error;
@@ -141,4 +145,11 @@ export function SubagentGroupBlock({
       </AnimatePresence>
     </div>
   );
+}
+
+function compactAgentLabel(value: unknown): string | undefined {
+  if (typeof value !== "string") return undefined;
+  const normalized = value.replace(/\s+/g, " ").trim();
+  if (!normalized) return undefined;
+  return normalized.length > 80 ? `${normalized.slice(0, 77).trimEnd()}...` : normalized;
 }

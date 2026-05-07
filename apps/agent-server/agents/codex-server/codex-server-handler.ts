@@ -27,8 +27,14 @@ import type {
   CodexAppServerNotification,
   CodexReasoningEffort,
   CodexSandboxPolicy,
+  CodexTurn,
   CodexThreadStartParams,
 } from "./codex-server-types";
+
+type CodexServerTurnCompletion = {
+  status: CodexTurn["status"];
+  error?: string;
+};
 
 export class CodexServerAgentHandler implements AgentHandler {
   readonly agentHarness = "codex-server" as const;
@@ -173,7 +179,7 @@ export class CodexServerAgentHandler implements AgentHandler {
       };
 
       let activeTurnId: string | undefined;
-      const turnCompletion = new Promise<void>((resolve, reject) => {
+      const turnCompletion = new Promise<CodexServerTurnCompletion>((resolve, reject) => {
         const abortHandler = () => reject(new Error("Codex app-server turn aborted"));
         abortController.signal.addEventListener("abort", abortHandler, { once: true });
 
@@ -200,7 +206,10 @@ export class CodexServerAgentHandler implements AgentHandler {
             activeTurnId = notification.params.turn.id;
             session.turnId = activeTurnId;
             abortController.signal.removeEventListener("abort", abortHandler);
-            resolve();
+            resolve({
+              status: notification.params.turn.status,
+              error: notification.params.turn.error?.message,
+            });
           } else if (notification.method === "error" && belongsToRootThread) {
             abortController.signal.removeEventListener("abort", abortHandler);
             reject(new Error(notification.params.error.message));
@@ -226,10 +235,27 @@ export class CodexServerAgentHandler implements AgentHandler {
       activeTurnId = activeTurnId ?? turn.turn.id;
       session.turnId = activeTurnId;
 
-      await turnCompletion;
+      const completedTurn = await turnCompletion;
 
       const finished = transformer.finish();
       emitEvents(finished.events);
+
+      if (completedTurn.status === "interrupted") {
+        handleCancellation(sessionId, "codex-server", true);
+        return;
+      }
+
+      if (completedTurn.status !== "completed") {
+        handleQueryError(
+          sessionId,
+          "codex-server",
+          new Error(
+            completedTurn.error ?? `Codex app-server turn ${completedTurn.status ?? "failed"}`
+          )
+        );
+        return;
+      }
+
       EventBroadcaster.emitSessionIdle(sessionId, "codex-server");
       console.log(`[${queryId}] Codex app-server turn completed: ${sessionId}`);
     } catch (error) {

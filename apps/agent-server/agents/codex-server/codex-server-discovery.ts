@@ -5,7 +5,6 @@
 
 import * as fs from "fs";
 import * as path from "path";
-import { execFileSync } from "child_process";
 import {
   blockIfNotInitialized as sharedBlock,
   discoverExecutable,
@@ -33,23 +32,10 @@ export function initializeCodexServer(): { success: boolean; error?: string } {
       shellCommand: "codex",
       versionFlag: "--version",
       extraCandidates: extraCodexCandidates,
+      validateVersion: validateCodexAppServerVersion,
     },
     state
   );
-
-  if (!result.success) return result;
-
-  const version = readCodexVersion(state.executablePath);
-  if (!isVersionAtLeast(version, MIN_CODEX_APP_SERVER_VERSION)) {
-    const error =
-      `Codex app-server requires codex-cli >= ${MIN_CODEX_APP_SERVER_VERSION}; ` +
-      `found ${version || "unknown"} at ${state.executablePath}. ` +
-      "Set CODEX_APP_SERVER_CLI_PATH to a newer Codex binary.";
-    console.error(error);
-    state.result = { success: false, error };
-    state.executablePath = "";
-    return { success: false, error };
-  }
 
   return result;
 }
@@ -90,17 +76,24 @@ function candidatePathsNearRuntime(): string[] {
   return Array.from(candidates).filter((candidate) => fs.existsSync(candidate));
 }
 
-function readCodexVersion(executablePath: string): string | null {
-  try {
-    const output = execFileSync(executablePath, ["--version"], {
-      encoding: "utf8",
-      timeout: 5000,
-      stdio: ["ignore", "pipe", "pipe"],
-    });
-    return output.match(/\d+\.\d+\.\d+/)?.[0] ?? null;
-  } catch {
-    return null;
+function validateCodexAppServerVersion(versionOutput: string): {
+  success: boolean;
+  error?: string;
+} {
+  const version = readCodexVersion(versionOutput);
+  if (isVersionAtLeast(version, MIN_CODEX_APP_SERVER_VERSION)) {
+    return { success: true };
   }
+
+  return {
+    success: false,
+    error:
+      `requires codex-cli >= ${MIN_CODEX_APP_SERVER_VERSION}; ` + `found ${version || "unknown"}`,
+  };
+}
+
+function readCodexVersion(versionOutput: string): string | null {
+  return versionOutput.match(/\d+\.\d+\.\d+/)?.[0] ?? null;
 }
 
 function isVersionAtLeast(version: string | null, minimum: string): boolean {
