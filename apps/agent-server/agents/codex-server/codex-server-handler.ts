@@ -4,6 +4,8 @@
 // without changing current Codex sessions.
 
 import { uuidv7 } from "@shared/lib/uuid";
+import type { PartEvent } from "@shared/agent-events";
+import type { Part } from "@shared/messages";
 import { EventBroadcaster } from "../../event-broadcaster";
 import { codexAppServerAdapter } from "../../messages/codex-app-server-adapter";
 import { classifyError, handleCancellation, handleQueryError } from "../lifecycle";
@@ -91,27 +93,29 @@ export class CodexServerAgentHandler implements AgentHandler {
     options: QueryOptions,
     resumeThreadId?: string
   ): Promise<void> {
-    if (!options.model) {
-      throw new Error(`[codex-server-handler] options.model is required (session=${sessionId})`);
-    }
-
     const queryId = `${sessionId}/${Date.now()}/codex-server`;
     const abortController = new AbortController();
-    const previousSession = codexServerSessions.get(sessionId);
-    const session: CodexServerSessionState = {
-      threadId: previousSession?.threadId,
-      turnId: previousSession?.turnId,
-      appServer: previousSession?.appServer,
-      abortController,
-      currentModel: options.model,
-      cwd: options.cwd,
-      isRunning: true,
-    };
-    codexServerSessions.set(sessionId, session);
+    let session: CodexServerSessionState | undefined;
 
     let unsubscribe: (() => void) | undefined;
 
     try {
+      if (!options.model) {
+        throw new Error(`[codex-server-handler] options.model is required (session=${sessionId})`);
+      }
+
+      const previousSession = codexServerSessions.get(sessionId);
+      session = {
+        threadId: previousSession?.threadId,
+        turnId: previousSession?.turnId,
+        appServer: previousSession?.appServer,
+        abortController,
+        currentModel: options.model,
+        cwd: options.cwd,
+        isRunning: true,
+      };
+      codexServerSessions.set(sessionId, session);
+
       const env = buildAgentEnvironment({
         providerEnvVars: options?.providerEnvVars,
         deusEnv: options?.deusEnv,
@@ -158,9 +162,13 @@ export class CodexServerAgentHandler implements AgentHandler {
         turnId: options.turnId,
       });
 
+      let currentMessageId = messageId;
       const emitEvents = (events: ReturnType<typeof transformer.process>) => {
         for (const evt of events) {
-          EventBroadcaster.emitPartEvent(sessionId, "codex-server", messageId, evt);
+          const eventMessageId =
+            messageIdForPartEvent(evt, transformer.getParts()) ?? currentMessageId;
+          currentMessageId = eventMessageId;
+          EventBroadcaster.emitPartEvent(sessionId, "codex-server", eventMessageId, evt);
         }
       };
 
@@ -236,16 +244,16 @@ export class CodexServerAgentHandler implements AgentHandler {
         raw.message
       );
 
-      if (codexServerSessions.owns(sessionId, session)) {
+      if (!session || codexServerSessions.owns(sessionId, session)) {
         if (isAbort) {
-          handleCancellation(sessionId, "codex-server", session.cancelledByUser ?? true);
+          handleCancellation(sessionId, "codex-server", session?.cancelledByUser ?? true);
         } else {
           handleQueryError(sessionId, "codex-server", error);
         }
       }
     } finally {
       unsubscribe?.();
-      if (codexServerSessions.owns(sessionId, session)) {
+      if (session && codexServerSessions.owns(sessionId, session)) {
         session.isRunning = false;
       }
     }
@@ -310,6 +318,21 @@ function getNotificationThreadId(notification: CodexAppServerNotification): stri
   if (!params || typeof params !== "object" || !("threadId" in params)) return undefined;
   const threadId = (params as { threadId?: unknown }).threadId;
   return typeof threadId === "string" ? threadId : undefined;
+}
+
+function messageIdForPartEvent(event: PartEvent, parts: Part[]): string | undefined {
+  switch (event.type) {
+    case "message.created":
+    case "message.done":
+      return event.messageId;
+    case "part.created":
+    case "part.done":
+      return event.part.messageId;
+    case "part.delta":
+      return parts.find((part) => part.id === event.partId)?.messageId;
+    default:
+      return undefined;
+  }
 }
 
 function notificationBelongsToTurn(

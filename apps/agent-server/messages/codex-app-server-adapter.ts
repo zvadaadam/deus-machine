@@ -561,9 +561,11 @@ class CodexAppServerTransformer implements EventTransformer<CodexAppServerNotifi
     return completeTrackedToolPart(this.partMaps(), itemId, output, isError, content);
   }
 
-  private finalizeStreamingParts(): PartEvent[] {
+  private finalizeStreamingParts(messageId?: string): PartEvent[] {
     const events: PartEvent[] = [];
     for (const part of this.parts.values()) {
+      if (messageId && part.messageId !== messageId) continue;
+
       if (part.type === "TEXT" && part.state === "STREAMING") {
         const done: Part = { ...part, state: "DONE" };
         this.parts.set(part.id, done);
@@ -628,6 +630,7 @@ class CodexAppServerTransformer implements EventTransformer<CodexAppServerNotifi
 
     subagent.done = true;
     return [
+      ...this.finalizeStreamingParts(subagent.messageId),
       {
         type: "message.done",
         messageId: subagent.messageId,

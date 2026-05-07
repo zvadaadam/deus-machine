@@ -297,7 +297,10 @@ describe("CodexAppServerAdapter", () => {
 
     const childCreated = started.find((event) => event.type === "message.created");
     const childPart = partFrom(delta.find((event) => event.type === "part.created")!);
+    const childPartDone = completed.find((event) => event.type === "part.done");
     const childDone = completed.find((event) => event.type === "message.done");
+    const childPartDoneIndex = completed.findIndex((event) => event.type === "part.done");
+    const childMessageDoneIndex = completed.findIndex((event) => event.type === "message.done");
 
     expect(childCreated).toMatchObject({
       type: "message.created",
@@ -309,11 +312,21 @@ describe("CodexAppServerAdapter", () => {
       text: "Subagent live",
       parentToolCallId: "spawn-tool-1",
     });
+    expect(childPartDone).toMatchObject({
+      type: "part.done",
+      part: expect.objectContaining({
+        id: childPart?.id,
+        messageId: childCreated?.messageId,
+        state: "DONE",
+        parentToolCallId: "spawn-tool-1",
+      }),
+    });
     expect(childDone).toMatchObject({
       type: "message.done",
       messageId: childCreated?.messageId,
       parentToolCallId: "spawn-tool-1",
       parts: [expect.objectContaining({ text: "Subagent live" })],
     });
+    expect(childPartDoneIndex).toBeLessThan(childMessageDoneIndex);
   });
 });
