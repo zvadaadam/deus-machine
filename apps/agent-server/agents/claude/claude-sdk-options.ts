@@ -63,7 +63,7 @@ export function normalizeThinkingLevel(
   ) {
     return level;
   }
-  return undefined;
+  throw new Error(`Unsupported Claude thinking level: ${thinkingLevel}`);
 }
 
 /**

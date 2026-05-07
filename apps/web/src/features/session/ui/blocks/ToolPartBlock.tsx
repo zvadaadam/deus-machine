@@ -73,6 +73,8 @@ function getCompletedToolResultContent(
 
 function renderToolOutputContent(content: ToolOutputContent): string {
   if (content.type === "text") return content.text;
+  if (content.type === "diff") return content.newText;
+  if (content.type === "terminal") return `Terminal output: ${content.terminalId}`;
   if (content.type === "agent_result") return renderAgentResultContent(content);
   return "";
 }

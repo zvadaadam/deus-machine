@@ -71,6 +71,7 @@ export class CodexAppServerClient {
         { signal: controller.signal }
       );
     } catch (error) {
+      this.close();
       if (controller.signal.aborted) {
         throw new Error(`Codex app-server did not initialize within ${this.startupTimeoutMs}ms`);
       }
