@@ -38,7 +38,7 @@ export function calculateTurnStats(messages: Message[]): TurnStats {
       toolCount++;
 
       const toolPart = part as ToolPart;
-      if (toolPart.toolName === "Task" || toolPart.toolName === "Agent") {
+      if (toolPart.kind === "task" || toolPart.subagent) {
         subagentCount++;
       }
 

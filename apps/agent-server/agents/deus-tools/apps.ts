@@ -10,11 +10,11 @@
 // fires `aap/register-mcp` back to the agent-server, which the registrar
 // handles separately. Two clean halves, one choke point per direction.
 
-import { tool } from "@anthropic-ai/claude-agent-sdk";
 import type { SdkMcpToolDefinition } from "@anthropic-ai/claude-agent-sdk";
 import { z } from "zod";
 import { getErrorMessage } from "@shared/lib/errors";
 import { EventBroadcaster } from "../../event-broadcaster";
+import { tool } from "./sdk-tool";
 
 // ----------------------------------------------------------------------------
 // Response helpers

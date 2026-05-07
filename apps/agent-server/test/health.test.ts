@@ -4,7 +4,7 @@ import { WebSocketServer } from "ws";
 
 // ── Mocks ──────────────────────────────────────────────────────────────────
 
-const mockGetRegisteredAgentHarnesses = vi.fn((): string[] => ["claude", "codex"]);
+const mockGetRegisteredAgentHarnesses = vi.fn((): string[] => ["claude", "codex-sdk"]);
 const mockEmitSessionCancelled = vi.fn();
 const mockEmitMessageCancelled = vi.fn();
 const mockGetAgent = vi.fn(() => undefined);
@@ -80,7 +80,7 @@ describe("health module", () => {
       expect(response.uptime).toBeGreaterThanOrEqual(0);
       expect(typeof response.memoryMb).toBe("number");
       expect(response.memoryMb).toBeGreaterThan(0);
-      expect(response.agents).toEqual(["claude", "codex"]);
+      expect(response.agents).toEqual(["claude", "codex-sdk"]);
       expect(response.connections).toBe(0);
       expect(response.version).toBe("1.0.0");
       expect(response.timestamp).toMatch(/^\d{4}-\d{2}-\d{2}T/);
@@ -263,7 +263,7 @@ describe("health module", () => {
 
     it("tracks multiple sessions", () => {
       trackSession("sess-1", "claude");
-      trackSession("sess-2", "codex");
+      trackSession("sess-2", "codex-sdk");
       expect(getActiveSessionCount()).toBe(2);
     });
 
@@ -274,9 +274,9 @@ describe("health module", () => {
 
     it("overwrites agent type for same session id", () => {
       trackSession("sess-1", "claude");
-      trackSession("sess-1", "codex");
+      trackSession("sess-1", "codex-sdk");
       expect(getActiveSessionCount()).toBe(1);
-      expect(getActiveSessions().get("sess-1")).toBe("codex");
+      expect(getActiveSessions().get("sess-1")).toBe("codex-sdk");
     });
   });
 
@@ -313,7 +313,7 @@ describe("health module", () => {
 
     it("handles multiple sessions draining at different times", async () => {
       trackSession("sess-1", "claude");
-      trackSession("sess-2", "codex");
+      trackSession("sess-2", "codex-sdk");
 
       setTimeout(() => untrackSession("sess-1"), 30);
       setTimeout(() => untrackSession("sess-2"), 80);
@@ -331,14 +331,14 @@ describe("health module", () => {
   describe("cancelRemainingSessions", () => {
     it("emits both message.cancelled and session.cancelled when no agent handler", async () => {
       trackSession("sess-1", "claude");
-      trackSession("sess-2", "codex");
+      trackSession("sess-2", "codex-sdk");
 
       await cancelRemainingSessions();
 
       expect(mockEmitMessageCancelled).toHaveBeenCalledTimes(2);
       expect(mockEmitSessionCancelled).toHaveBeenCalledTimes(2);
       expect(mockEmitSessionCancelled).toHaveBeenCalledWith("sess-1", "claude");
-      expect(mockEmitSessionCancelled).toHaveBeenCalledWith("sess-2", "codex");
+      expect(mockEmitSessionCancelled).toHaveBeenCalledWith("sess-2", "codex-sdk");
     });
 
     it("calls agent.cancel() when agent handler is available", async () => {

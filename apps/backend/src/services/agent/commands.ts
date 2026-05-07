@@ -25,6 +25,7 @@ import { resolveAapPaths } from "./service";
 import * as simulator from "../simulator-context";
 import { launchApp, stopApp } from "../aap";
 import { broadcast as wsBroadcast } from "../ws.service";
+import type { AgentHarness } from "@shared/enums";
 import type { CommandName } from "@shared/types/query-protocol";
 import {
   type QueryParams,
@@ -308,7 +309,7 @@ function handleSendMessage(params: QueryParams): CommandResult {
   const sessionId = requireParam(params, "sessionId", "sendMessage");
   const content = requireParam(params, "content", "sendMessage");
   const model = requireParam(params, "model", "sendMessage");
-  const agentHarness = requireParam(params, "agentHarness", "sendMessage") as "claude" | "codex";
+  const agentHarness = requireParam(params, "agentHarness", "sendMessage") as AgentHarness;
 
   const db = getDatabase();
   const session = getSessionRaw(db, sessionId);
@@ -481,7 +482,7 @@ function handleAgentRejection(sessionId: string, agentHarness: string, reason?: 
   persistSessionError({
     type: "session.error",
     sessionId,
-    agentHarness: agentHarness as "claude",
+    agentHarness: agentHarness as AgentHarness,
     error: msg,
     category: "internal",
   });
@@ -494,7 +495,7 @@ function handleAgentError(sessionId: string, agentHarness: string, err: unknown)
   persistSessionError({
     type: "session.error",
     sessionId,
-    agentHarness: agentHarness as "claude",
+    agentHarness: agentHarness as AgentHarness,
     error: `Agent server communication failed: ${errorMsg}`,
     category: "internal",
   });

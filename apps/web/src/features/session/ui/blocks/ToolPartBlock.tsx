@@ -1,6 +1,11 @@
 import { createElement, memo, useMemo } from "react";
 import { match, P } from "ts-pattern";
-import type { CompletedToolState, TextContent, ToolPart } from "@shared/messages/types";
+import type {
+  AgentResultContent,
+  CompletedToolState,
+  ToolPart,
+  ToolOutputContent,
+} from "@shared/messages/types";
 import type { ToolUseBlock, ToolResultBlock } from "@/shared/types";
 import { toolRegistry } from "../tools/ToolRegistry";
 import { SubagentGroupBlock } from "./SubagentGroupBlock";
@@ -38,19 +43,21 @@ function toToolUseBlock(part: ToolPart): ToolUseBlock {
   return {
     type: "tool_use",
     id: part.toolCallId,
-    name: part.toolName,
+    name: getToolRendererName(part),
     input,
   };
+}
+
+function getToolRendererName(part: ToolPart): string {
+  return part.kind === "task" || part.subagent ? "Agent" : part.toolName;
 }
 
 function getCompletedToolResultContent(
   state: CompletedToolState
 ): string | Record<string, unknown> | unknown[] {
   if (state.content && state.content.length > 0) {
-    const textParts = state.content
-      .filter((content): content is TextContent => content.type === "text")
-      .map((content) => content.text);
-    return textParts.join("\n") || JSON.stringify(state.output ?? "");
+    const renderedContent = state.content.map(renderToolOutputContent).filter(Boolean);
+    return renderedContent.join("\n") || JSON.stringify(state.output ?? "");
   }
 
   if (state.output != null) {
@@ -62,6 +69,20 @@ function getCompletedToolResultContent(
   }
 
   return "";
+}
+
+function renderToolOutputContent(content: ToolOutputContent): string {
+  if (content.type === "text") return content.text;
+  if (content.type === "diff") return content.newText;
+  if (content.type === "terminal") return `Terminal output: ${content.terminalId}`;
+  if (content.type === "agent_result") return renderAgentResultContent(content);
+  return "";
+}
+
+function renderAgentResultContent(content: AgentResultContent): string {
+  if (content.message) return content.message;
+  const label = content.label || content.agentId || "Agent";
+  return `${label}: ${content.status}`;
 }
 
 function toToolResultBlock(part: ToolPart): ToolResultBlock | undefined {
@@ -101,7 +122,7 @@ export const ToolPartBlock = memo(function ToolPartBlock({ part }: ToolPartBlock
   const toolResult = useMemo(() => toToolResultBlock(part), [part]);
   const isLoading = part.state.status === "PENDING" || part.state.status === "RUNNING";
 
-  const isAgentTool = part.toolName === "Task" || part.toolName === "Agent";
+  const isAgentTool = part.kind === "task" || !!part.subagent;
   if (isAgentTool && !insideSubagent && subagentMessages.has(part.toolCallId)) {
     return (
       <div className="w-full min-w-0">

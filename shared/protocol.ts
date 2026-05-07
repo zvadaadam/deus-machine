@@ -31,9 +31,7 @@ export type PermissionMode = z.infer<typeof PermissionModeSchema>;
 
 /**
  * User intent for how hard the model should think.
- * Agent-server translates this into SDK-specific options (maxThinkingTokens
- * today, `effort` once the SDK typedef catches up to Opus 4.7's xhigh).
- * Keeps the wire protocol stable across SDK version changes.
+ * Agent-server translates this stable wire value into SDK-specific options.
  */
 export const ThinkingLevelSchema = z.enum(["NONE", "LOW", "MEDIUM", "HIGH", "XHIGH"]);
 export type ThinkingLevel = z.infer<typeof ThinkingLevelSchema>;

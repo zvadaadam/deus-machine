@@ -27,7 +27,7 @@ export function TaskToolRenderer({ toolUse, toolResult, isLoading }: ToolRendere
       isLoading={isLoading}
       renderSummary={() => (
         <span className={cn("text-muted-foreground truncate text-sm", "font-mono")}>
-          {description || subagent_type || "Running agent"}
+          {description || prompt || subagent_type || "Running agent"}
         </span>
       )}
       renderContent={() => (

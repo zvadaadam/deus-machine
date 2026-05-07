@@ -6,7 +6,7 @@
  *   Opus 4.7:          Low → Med → High → X-High → Low
  *   Codex:             Low → Med → High → Low
  *
- * Thinking level cycle is defined per-model in shared/agents/catalog. The
+ * Thinking level cycle is defined per-model in shared/agent-catalog. The
  * component itself is agent-agnostic. Visual weight increases with level via
  * font-weight + opacity, so the word communicates intensity at a glance.
  * X-High gets a tinted gold pill to signal the top gear.
