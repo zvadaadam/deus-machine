@@ -126,10 +126,8 @@ export function getModelId(model: string): string {
 // Thinking
 // ============================================================================
 //
-// The frontend only cares about *which* levels a given model supports and
-// how to cycle them. The mapping from level → SDK option (token budget
-// today, `effort` string tomorrow) lives in the agent-server — see
-// apps/agent-server/agents/claude/claude-sdk-options.ts (resolveThinkingOptions).
+// The frontend only cares which levels a model supports and how to cycle them.
+// Provider SDK mappings live in the agent-server harnesses.
 
 /**
  * Returns the thinking levels available for a given model. Falls back to

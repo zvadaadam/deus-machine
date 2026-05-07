@@ -77,7 +77,7 @@ import { parseEnvString } from "../agents/environment";
 import { initializeClaude } from "../agents/claude/claude-discovery";
 import { ClaudeAgentHandler } from "../agents/claude/claude-handler";
 import { createCheckpoint } from "../agents/claude/checkpoint";
-import { resolveThinkingOptions } from "../agents/claude/claude-sdk-options";
+import { resolveClaudeThinkingOptions } from "../agents/claude/claude-sdk-options";
 
 // Create handler instance (same pattern as index.ts)
 const handler = new ClaudeAgentHandler();
@@ -550,9 +550,11 @@ describe("claude-handler", () => {
     });
   });
 
-  describe("resolveThinkingOptions", () => {
+  describe("resolveClaudeThinkingOptions", () => {
     it("throws for unsupported thinking levels", () => {
-      expect(() => resolveThinkingOptions("MAX")).toThrow("Unsupported Claude thinking level: MAX");
+      expect(() => resolveClaudeThinkingOptions("MAX" as any)).toThrow(
+        "Unsupported Claude thinking level: MAX"
+      );
     });
   });
 

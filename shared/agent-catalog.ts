@@ -4,10 +4,10 @@
 // apps/agent-server/agents/.
 
 import type { AgentHarness } from "./enums";
+import type { ThinkingLevel } from "./protocol";
 
 export type { AgentHarness } from "./enums";
-
-export type ThinkingLevel = "NONE" | "LOW" | "MEDIUM" | "HIGH" | "XHIGH";
+export type { ThinkingLevel } from "./protocol";
 
 export interface AgentModelOption {
   /** Model identifier sent to the agent-server. */

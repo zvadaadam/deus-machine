@@ -129,6 +129,33 @@ describe("CodexServerAgentHandler", () => {
     );
   });
 
+  it("rejects unsupported thinking levels before starting a Codex turn", async () => {
+    mockClient.request.mockImplementation(async (method: string) => {
+      if (method === "thread/start") return { thread: { id: "thread-1" } };
+      return {};
+    });
+
+    const handler = new CodexServerAgentHandler();
+    await handler.query("sess-bad-thinking", "hello", {
+      cwd: "/repo",
+      model: "gpt-5.5",
+      thinkingLevel: "MAX" as any,
+    });
+    await flushAsyncWork();
+
+    expect(mockClient.request).not.toHaveBeenCalledWith(
+      "turn/start",
+      expect.anything(),
+      expect.anything()
+    );
+    expect(mockEventBroadcaster.emitSessionError).toHaveBeenCalledWith(
+      "sess-bad-thinking",
+      "codex-server",
+      expect.stringContaining("Unsupported Codex thinking level: MAX"),
+      "internal"
+    );
+  });
+
   function emitTurn(
     method: "turn/started" | "turn/completed",
     status: "completed" | "interrupted" | "failed" | "inProgress",

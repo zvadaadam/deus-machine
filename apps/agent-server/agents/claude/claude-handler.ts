@@ -40,7 +40,7 @@ import {
   buildSdkOptions,
   DEFAULT_PROMPT,
   DEFAULT_SETTING_SOURCES,
-  normalizeThinkingLevel,
+  parseClaudeThinkingLevel,
 } from "./claude-sdk-options";
 import {
   claudeSessions,
@@ -135,7 +135,7 @@ export class ClaudeAgentHandler implements AgentHandler {
 
     const session = claudeSessions.get(sessionId);
     const modelChanged = session?.currentModel !== options.model;
-    const requestedThinkingLevel = normalizeThinkingLevel(options.thinkingLevel);
+    const requestedThinkingLevel = parseClaudeThinkingLevel(options.thinkingLevel);
     const thinkingChanged = session?.currentThinkingLevel !== requestedThinkingLevel;
     const settingsChangedFlag = settingsChanged(session?.currentSettings, options);
 

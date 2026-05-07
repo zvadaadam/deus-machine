@@ -10,7 +10,6 @@ import type {
   Options,
   PermissionMode,
   SettingSource,
-  ThinkingConfig,
 } from "@anthropic-ai/claude-agent-sdk";
 import { EventBroadcaster } from "../../event-broadcaster";
 import { createCheckpoint } from "./checkpoint";
@@ -19,6 +18,7 @@ import { getClaudeExecutablePath } from "./claude-discovery";
 import { claudeSessions } from "./claude-session";
 import type { QueryOptions } from "../registry";
 import { buildWorkspaceContext } from "../environment";
+import { parseThinkingLevel, type ThinkingLevel } from "../thinking-levels";
 
 // ============================================================================
 // Constants
@@ -31,57 +31,29 @@ export const DEFAULT_PROMPT = {
 
 export const DEFAULT_SETTING_SOURCES: SettingSource[] = ["user", "project", "local"];
 
-// ============================================================================
-// Thinking level → SDK options
-// ============================================================================
-//
-// Translates the wire-protocol ThinkingLevel into Claude Agent SDK options.
-// Claude Agent SDK 0.2.131 supports adaptive thinking plus effort levels,
-// which is the right path for Opus 4.7+ and avoids deprecated
-// maxThinkingTokens behavior.
-
-type ThinkingLevel = "NONE" | "LOW" | "MEDIUM" | "HIGH" | "XHIGH";
-
-const LEVEL_TO_EFFORT: Record<Exclude<ThinkingLevel, "NONE">, EffortLevel> = {
+const CLAUDE_EFFORT_BY_THINKING_LEVEL: Record<Exclude<ThinkingLevel, "NONE">, EffortLevel> = {
   LOW: "low",
   MEDIUM: "medium",
   HIGH: "high",
   XHIGH: "xhigh",
 };
 
-export function normalizeThinkingLevel(
-  thinkingLevel: string | undefined
+export function parseClaudeThinkingLevel(
+  thinkingLevel: QueryOptions["thinkingLevel"]
 ): ThinkingLevel | undefined {
-  if (!thinkingLevel) return undefined;
-  const level = thinkingLevel.toUpperCase();
-  if (
-    level === "NONE" ||
-    level === "LOW" ||
-    level === "MEDIUM" ||
-    level === "HIGH" ||
-    level === "XHIGH"
-  ) {
-    return level;
-  }
-  throw new Error(`Unsupported Claude thinking level: ${thinkingLevel}`);
+  return parseThinkingLevel(thinkingLevel, "Claude");
 }
 
-/**
- * Resolves the Claude SDK options that realize a given thinking level.
- * Undefined leaves SDK/model defaults alone. NONE explicitly disables
- * thinking, while other levels use adaptive thinking plus the matching effort.
- */
-export function resolveThinkingOptions(thinkingLevel: string | undefined): {
-  thinking?: ThinkingConfig;
-  effort?: EffortLevel;
-} {
-  const level = normalizeThinkingLevel(thinkingLevel);
+export function resolveClaudeThinkingOptions(
+  thinkingLevel: QueryOptions["thinkingLevel"]
+): Pick<Options, "thinking" | "effort"> {
+  const level = parseClaudeThinkingLevel(thinkingLevel);
   if (!level) return {};
   if (level === "NONE") return { thinking: { type: "disabled" } };
 
   return {
     thinking: { type: "adaptive", display: "summarized" },
-    effort: LEVEL_TO_EFFORT[level],
+    effort: CLAUDE_EFFORT_BY_THINKING_LEVEL[level],
   };
 }
 
@@ -299,7 +271,7 @@ export function buildSdkOptions(
 ): Options {
   const workingDirectory = options?.cwd;
   const permissionMode = (options?.permissionMode ?? "default") as PermissionMode;
-  const thinking = resolveThinkingOptions(options?.thinkingLevel);
+  const thinking = resolveClaudeThinkingOptions(options?.thinkingLevel);
 
   // Built as Partial<Options> and conditionally extended.
   // Cast to Options at return — the SDK validates at runtime.

@@ -30,6 +30,7 @@ import type {
   CodexTurn,
   CodexThreadStartParams,
 } from "./codex-server-types";
+import { parseThinkingLevel } from "../thinking-levels";
 
 type CodexServerTurnCompletion = {
   status: CodexTurn["status"];
@@ -313,7 +314,8 @@ function buildWorkspaceWriteSandbox(options: QueryOptions): CodexSandboxPolicy {
 }
 
 function mapThinkingLevel(level: QueryOptions["thinkingLevel"]): CodexReasoningEffort | null {
-  switch (level) {
+  const parsed = parseThinkingLevel(level, "Codex");
+  switch (parsed) {
     case "NONE":
       return "none";
     case "LOW":
