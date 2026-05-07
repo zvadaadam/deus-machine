@@ -787,7 +787,7 @@ export function HomeView({
                         <div key={agentConfig.id}>
                           {groupIdx > 0 && <div className="bg-border/70 mx-2 my-2 h-px" />}
                           <div className="text-text-muted/90 px-2 py-1.5 text-xs font-normal tracking-wide">
-                            {agentConfig.groupLabel}
+                            {agentConfig.label}
                           </div>
                           {MODEL_OPTIONS.filter((o) => o.agentHarness === agentConfig.id).map(
                             (option) => {
@@ -841,7 +841,7 @@ export function HomeView({
                         <div key={agentConfig.id}>
                           {groupIdx > 0 && <div className="bg-border/70 mx-1 my-1.5 h-px" />}
                           <div className="text-text-muted/90 text-2xs px-2 py-1 font-normal tracking-wide">
-                            {agentConfig.groupLabel}
+                            {agentConfig.label}
                           </div>
                           {MODEL_OPTIONS.filter((o) => o.agentHarness === agentConfig.id).map(
                             (option) => {
