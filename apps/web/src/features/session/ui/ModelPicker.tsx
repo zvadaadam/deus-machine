@@ -77,7 +77,7 @@ export function ModelPicker({ model, hasMessages, onModelChange, onOpenNewTab }:
               {groupIdx > 0 && <DropdownMenuSeparator className="bg-border/70 my-1.5" />}
               <DropdownMenuLabel>
                 <span className="text-text-muted/90 text-2xs px-1 font-normal tracking-wide">
-                  {agentConfig.groupLabel}
+                  {agentConfig.label}
                 </span>
               </DropdownMenuLabel>
               {MODEL_OPTIONS.filter((o) => o.agentHarness === agentConfig.id).map((option) => {

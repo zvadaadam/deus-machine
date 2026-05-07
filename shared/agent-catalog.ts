@@ -26,14 +26,8 @@ export interface AgentModelOption {
 export interface AgentConfig {
   /** DB-compatible agent_harness string (matches sessions.agent_harness). */
   readonly id: AgentHarness;
-  /** Human label for display. */
+  /** Human label for UI and debug display. */
   readonly label: string;
-  /** Group header label in model picker dropdown. */
-  readonly groupLabel: string;
-  /** Label for agent-server debug CLI banners. */
-  readonly cliLabel: string;
-  /** Short uppercase event prefix for agent-server debug CLI output. */
-  readonly eventLabel: string;
   /** Default thinking levels when a model doesn't declare its own. */
   readonly thinkingLevels: readonly ThinkingLevel[];
   /** Available models, in display order. */
@@ -43,10 +37,7 @@ export interface AgentConfig {
 export const AGENT_CONFIGS = {
   claude: {
     id: "claude",
-    label: "Claude",
-    groupLabel: "Claude Code",
-    cliLabel: "Claude Code",
-    eventLabel: "CLAUDE",
+    label: "Claude Code",
     thinkingLevels: ["LOW", "MEDIUM", "HIGH"],
     models: [
       {
@@ -68,10 +59,7 @@ export const AGENT_CONFIGS = {
   },
   "codex-sdk": {
     id: "codex-sdk",
-    label: "Codex",
-    groupLabel: "Codex",
-    cliLabel: "Codex",
-    eventLabel: "CODEX",
+    label: "Codex SDK",
     thinkingLevels: ["LOW", "MEDIUM", "HIGH"],
     models: [
       { model: "gpt-5.3-codex", label: "GPT-5.3 Codex", isNew: true },
@@ -82,9 +70,6 @@ export const AGENT_CONFIGS = {
   "codex-server": {
     id: "codex-server",
     label: "Codex",
-    groupLabel: "Codex",
-    cliLabel: "Codex App Server",
-    eventLabel: "CODEX-SERVER",
     thinkingLevels: ["LOW", "MEDIUM", "HIGH", "XHIGH"],
     models: [
       { model: "gpt-5.5", label: "GPT-5.5", isNew: true },
@@ -109,9 +94,9 @@ export function getKnownAgentConfig(agentHarness: AgentHarness): AgentConfig {
 }
 
 export function getAgentHarnessLabel(agentHarness: AgentHarness): string {
-  return AGENT_CONFIGS[agentHarness].cliLabel;
+  return AGENT_CONFIGS[agentHarness].label;
 }
 
 export function getAgentHarnessEventLabel(agentHarness: AgentHarness): string {
-  return AGENT_CONFIGS[agentHarness].eventLabel;
+  return agentHarness.toUpperCase();
 }
