@@ -92,7 +92,7 @@ export function normalizeModelSelection(model: string): string | undefined {
 
   // Legacy frontend selections from the hidden Codex SDK harness should now
   // behave like the user picked the visible Codex option.
-  if (normalized.startsWith("codex:")) {
+  if (normalized.startsWith("codex:") || normalized.startsWith("codex-sdk:")) {
     return CODEX_SERVER_DEFAULT_MODEL;
   }
 
