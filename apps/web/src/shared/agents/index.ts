@@ -5,7 +5,7 @@
 // fixed — the agent-server binds to a specific runtime on first query and
 // cannot switch mid-session. The UI currently exposes Claude Code and Codex;
 // the Codex picker entry routes to the codex-server/app-server harness. The
-// legacy codex SDK harness remains registered for backend/CLI compatibility.
+// legacy codex-sdk harness remains registered for backend/CLI compatibility.
 
 import {
   AGENT_CONFIGS,

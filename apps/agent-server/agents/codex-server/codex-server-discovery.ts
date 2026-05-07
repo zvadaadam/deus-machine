@@ -1,6 +1,6 @@
 // agent-server/agents/codex-server/codex-server-discovery.ts
 // Discovery for the Codex app-server harness. Kept separate from the existing
-// `codex` harness so app-server can require a newer Codex binary without
+// `codex-sdk` harness so app-server can require a newer Codex binary without
 // changing current Codex sessions.
 
 import * as fs from "fs";

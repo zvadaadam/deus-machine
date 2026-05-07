@@ -66,8 +66,8 @@ export const AGENT_CONFIGS = {
       { model: "claude-haiku-4-5", label: "Haiku 4.5", thinkingLevels: [] },
     ],
   },
-  codex: {
-    id: "codex",
+  "codex-sdk": {
+    id: "codex-sdk",
     label: "Codex",
     groupLabel: "Codex",
     cliLabel: "Codex",
@@ -93,7 +93,7 @@ export const AGENT_CONFIGS = {
   },
 } as const satisfies Record<AgentHarness, AgentConfig>;
 
-// User-facing model picker groups. The legacy `codex` SDK harness remains
+// User-facing model picker groups. The legacy `codex-sdk` harness remains
 // registered in AGENT_CONFIGS for CLI/backend compatibility, but new frontend
 // sessions should route Codex through the app-server harness.
 export const MODEL_PICKER_GROUPS = [
@@ -106,6 +106,7 @@ export const DEFAULT_MODEL = `${DEFAULT_AGENT_HARNESS}:${AGENT_CONFIGS[DEFAULT_A
 
 export function normalizeAgentHarness(agentHarness: string): AgentHarness | undefined {
   const normalized = agentHarness.toLowerCase();
+  if (normalized === "codex") return "codex-sdk";
   return Object.prototype.hasOwnProperty.call(AGENT_CONFIGS, normalized)
     ? (normalized as AgentHarness)
     : undefined;

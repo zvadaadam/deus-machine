@@ -78,7 +78,7 @@ export function AISection({ settings, saveSetting }: SettingsSectionProps) {
   const claudeInstalled = agents.find((a) => a.type === "claude")?.installed;
   const codexInstalled =
     agents.some((a) => a.type === "codex-server" && a.installed) ||
-    agents.some((a) => a.type === "codex" && a.installed);
+    agents.some((a) => a.type === "codex-sdk" && a.installed);
   const claudeConnected = claudeAuth && !claudeAuth.error && claudeAuth.accountInfo;
   const codexConnected = codexAuth && !codexAuth.error && codexAuth.accountInfo;
 

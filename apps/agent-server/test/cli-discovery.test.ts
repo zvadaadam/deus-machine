@@ -297,7 +297,7 @@ describe("blockIfNotInitialized", () => {
   it("returns true when result is null (never initialized)", () => {
     const state: DiscoveryState = { executablePath: "", result: null };
 
-    const blocked = blockIfNotInitialized(state, "codex", "session-2");
+    const blocked = blockIfNotInitialized(state, "codex-sdk", "session-2");
 
     expect(blocked).toBe(true);
     expect(mockEmitSessionError).toHaveBeenCalled();

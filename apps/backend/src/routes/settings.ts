@@ -42,9 +42,9 @@ app.get("/settings/agent-auth", async (c) => {
   const claudeInstalled = agents.some((a) => a.type === "claude" && a.initialized);
   const codexAgent =
     agents.find((a) => a.type === "codex-server" && a.initialized) ??
-    agents.find((a) => a.type === "codex" && a.initialized) ??
+    agents.find((a) => a.type === "codex-sdk" && a.initialized) ??
     agents.find((a) => a.type === "codex-server") ??
-    agents.find((a) => a.type === "codex");
+    agents.find((a) => a.type === "codex-sdk");
   const codexInstalled = codexAgent?.initialized ?? false;
 
   const cwd = process.cwd();
