@@ -12,7 +12,6 @@ import {
   DEFAULT_MODEL,
   MODEL_PICKER_GROUPS,
   getKnownAgentConfig,
-  normalizeAgentHarness,
 } from "@shared/agent-catalog";
 import type { AgentConfig, AgentHarness, ThinkingLevel } from "@shared/agent-catalog";
 
@@ -65,22 +64,14 @@ const CODEX_SERVER_DEFAULT_MODEL = `${AGENT_CONFIGS["codex-server"].id}:${AGENT_
 // ============================================================================
 
 /**
- * Resolve an agent config by type. Falls back to Claude for unknown types;
- * logs a dev-only warning so drift from the catalog doesn't silently misroute
- * users in production.
+ * Resolve an agent config by typed harness. Untyped boundaries should validate
+ * before calling into the catalog.
  */
-function getAgentConfig(agentHarness: string): AgentConfig {
-  const config = getKnownAgentConfig(agentHarness);
-  if (!config) {
-    if (import.meta.env.DEV) {
-      console.warn(`[agents] Unknown agent type "${agentHarness}", defaulting to claude.`);
-    }
-    return AGENT_CONFIGS.claude;
-  }
-  return config;
+function getAgentConfig(agentHarness: AgentHarness): AgentConfig {
+  return getKnownAgentConfig(agentHarness);
 }
 
-export function getAgentLabel(agentHarness: string): string {
+export function getAgentLabel(agentHarness: AgentHarness): string {
   return getAgentConfig(agentHarness).label;
 }
 
@@ -115,11 +106,7 @@ export function getModelLabel(model: string): string {
 
 export function getAgentHarnessForModel(model: string): AgentHarness {
   const option = getModelOption(model);
-  if (option) return option.agentHarness;
-  // Unknown models: use the harness prefix if present, default to claude.
-  const normalized = model.toLowerCase();
-  const prefix = normalized.split(":", 1)[0];
-  return normalizeAgentHarness(prefix) ?? "claude";
+  return option?.agentHarness ?? "claude";
 }
 
 /**
