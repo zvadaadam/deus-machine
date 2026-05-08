@@ -14,9 +14,9 @@ import { Button } from "@/components/ui/button";
 import { onEvent } from "@/platform/ws/query-protocol-client";
 import { GIT_INIT_PROGRESS, type GitInitProgressEvent } from "@shared/events";
 import { native, capabilities } from "@/platform";
-import { getBackendUrl } from "@/shared/config/api.config";
 import { useIsMobile } from "@/shared/hooks/use-mobile";
 import { cn } from "@/shared/lib/utils";
+import { useGhStatus } from "@/features/workspace/api";
 import { PROJECT_TEMPLATES, type ProjectTemplate } from "../lib/templates";
 import type { StartNewProjectTemplate } from "@/app/layouts/hooks/useStartNewProject";
 
@@ -51,7 +51,7 @@ export function StartNewProjectModal({
   const [defaultBasePath, setDefaultBasePath] = useState("");
   const [selectedTemplate, setSelectedTemplate] = useState<ProjectTemplate>(PROJECT_TEMPLATES[0]);
   const [lines, setLines] = useState<string[]>([]);
-  const [githubUsername, setGithubUsername] = useState<string | null>(null);
+  const githubUsername = useGhStatus().data?.login ?? null;
 
   // Resolve default destination path on mount
   useEffect(() => {
@@ -65,23 +65,6 @@ export function StartNewProjectModal({
       if (isMobile) setBasePath("");
     })();
   }, [show, isMobile]);
-
-  // Fetch GitHub username (cosmetic only)
-  useEffect(() => {
-    if (!show) return;
-    (async () => {
-      try {
-        const baseUrl = await getBackendUrl();
-        const res = await fetch(`${baseUrl}/api/git/user`);
-        if (res.ok) {
-          const data = await res.json();
-          if (data.githubUsername) setGithubUsername(data.githubUsername);
-        }
-      } catch {
-        /* gh not installed or not authenticated */
-      }
-    })();
-  }, [show]);
 
   // Listen for git-init-progress events while creating
   useEffect(() => {

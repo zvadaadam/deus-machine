@@ -1,6 +1,7 @@
 import { Hono } from "hono";
 import { withWorkspace } from "../middleware/workspace-loader";
-import { runGh, getPrStatus } from "../services/gh.service";
+import { getPrStatus } from "../services/gh.service";
+import { getGhIdentity } from "../services/gh-identity.service";
 import { getDatabase } from "../lib/database";
 import { invalidate } from "../services/query-engine";
 import { autoProgressStatus } from "../services/workspace-status.service";
@@ -9,12 +10,10 @@ import type { WorkspaceWithDetailsRow } from "../db";
 type Env = { Variables: { workspace: WorkspaceWithDetailsRow; workspacePath: string } };
 const app = new Hono<Env>();
 
-// gh CLI status check -- cached on frontend with long staleTime
+// gh CLI install + auth state + active account identity (login, display name, avatar).
+// Cached on frontend with long staleTime; also consumed by the sidebar profile chip.
 app.get("/gh-status", async (c) => {
-  const versionResult = await runGh(["--version"], { cwd: process.cwd(), timeoutMs: 2000 });
-  if (!versionResult.success) return c.json({ isInstalled: false, isAuthenticated: false });
-  const authResult = await runGh(["auth", "status"], { cwd: process.cwd(), timeoutMs: 5000 });
-  return c.json({ isInstalled: true, isAuthenticated: authResult.success });
+  return c.json(await getGhIdentity());
 });
 
 // PR status -- async, fork-aware, explicit errors

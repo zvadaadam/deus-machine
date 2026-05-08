@@ -26,4 +26,4 @@ export const native = {
 
 // Re-export types
 export type { InstalledApp } from "./apps";
-export type { CliCheckResult, GhAuthResult } from "./cli";
+export type { CliCheckResult, GhAuthLoginResult, GhAuthLogoutResult } from "./cli";

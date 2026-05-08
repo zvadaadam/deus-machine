@@ -15,6 +15,7 @@ import { join } from "path";
 import { app, BrowserWindow } from "electron";
 import crypto from "crypto";
 import { DEUS_DB_FILENAME } from "../../../shared/runtime";
+import { extendCliPath } from "../../../shared/lib/cli-path";
 
 export const CDP_PORT = "19222";
 
@@ -43,6 +44,7 @@ interface RuntimeEntries {
   backendCwd: string;
   agentServerCwd: string;
   nodePath?: string;
+  bundledBinDir?: string;
 }
 
 function resolveRuntimeEntries(): RuntimeEntries {
@@ -55,6 +57,7 @@ function resolveRuntimeEntries(): RuntimeEntries {
       backendCwd: app.getPath("userData"),
       agentServerCwd: app.getPath("userData"),
       nodePath: join(process.resourcesPath, "app.asar", "node_modules"),
+      bundledBinDir: join(process.resourcesPath, "bin"),
     };
   }
 
@@ -322,7 +325,9 @@ export async function spawnBackend(
 
   const sharedEnv = {
     DATABASE_PATH: dbPath,
+    PATH: extendCliPath(process.env.PATH),
     ...(runtime.nodePath ? { NODE_PATH: runtime.nodePath } : {}),
+    ...(runtime.bundledBinDir ? { DEUS_BUNDLED_BIN_DIR: runtime.bundledBinDir } : {}),
   };
 
   startupInProgress = true;
