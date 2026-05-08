@@ -44,8 +44,8 @@ describe("persistCancellation", () => {
   });
 
   it("works with codex agent type", () => {
-    persistCancellation("session-2", "codex");
-    expectCancellationEvents("session-2", "codex");
+    persistCancellation("session-2", "codex-sdk");
+    expectCancellationEvents("session-2", "codex-sdk");
   });
 
   it("does not send any error notifications", () => {
@@ -100,11 +100,11 @@ describe("notifyAndRecordError", () => {
 
   it("uses classified message directly when no enrichMessage callback", () => {
     const classified: ClassifiedError = { category: "rate_limit", message: "Too many requests" };
-    notifyAndRecordError("session-1", "codex", classified);
+    notifyAndRecordError("session-1", "codex-sdk", classified);
 
     expect(mockEmitSessionError).toHaveBeenCalledWith(
       "session-1",
-      "codex",
+      "codex-sdk",
       "Too many requests",
       "rate_limit"
     );
@@ -128,7 +128,7 @@ describe("persistCancellation canonical events", () => {
 
   it.each([
     ["claude", "session-1"],
-    ["codex", "session-2"],
+    ["codex-sdk", "session-2"],
   ] as const)("emits both cancellation events for %s agent type", (agentHarness, sessionId) => {
     persistCancellation(sessionId, agentHarness);
     expectCancellationEvents(sessionId, agentHarness);

@@ -68,8 +68,8 @@ describe("query-completion", () => {
     });
 
     it("passes correct agentHarness for codex", () => {
-      handleCancellation("sess-2", "codex", true);
-      expect(mockPersistCancellation).toHaveBeenCalledWith("sess-2", "codex");
+      handleCancellation("sess-2", "codex-sdk", true);
+      expect(mockPersistCancellation).toHaveBeenCalledWith("sess-2", "codex-sdk");
     });
   });
 
@@ -115,11 +115,11 @@ describe("query-completion", () => {
       const classified = { category: "network" as const, message: "codex error" };
       mockClassifyError.mockReturnValue(classified);
 
-      handleQueryError("sess-2", "codex", error);
+      handleQueryError("sess-2", "codex-sdk", error);
 
       expect(mockNotifyAndRecordError).toHaveBeenCalledWith(
         "sess-2",
-        "codex",
+        "codex-sdk",
         classified,
         undefined
       );

@@ -19,7 +19,7 @@ import type { AgentHarness } from "../../protocol";
  * Each agent provides one of these — the only thing that varies between agents.
  */
 export interface DiscoveryConfig {
-  /** Agent harness for error messages (e.g. "claude", "codex") */
+  /** Agent harness for error messages (e.g. "claude", "codex-sdk") */
   agentHarness: AgentHarness;
   /** Human-readable name for log messages (e.g. "Claude", "Codex") */
   displayName: string;
@@ -37,6 +37,14 @@ export interface DiscoveryConfig {
    * Returns additional paths to try, or empty array.
    */
   extraCandidates?: () => string[];
+  /**
+   * Optional: validate the version output for a candidate. Returning false
+   * makes discovery continue to the next candidate instead of accepting it.
+   */
+  validateVersion?: (
+    versionOutput: string,
+    candidate: string
+  ) => { success: boolean; error?: string };
 }
 
 /**
@@ -129,6 +137,11 @@ export function discoverExecutable(
 
     try {
       const version = verifyCandidate(candidate, config.versionFlag);
+      const validation = config.validateVersion?.(version, candidate);
+      if (validation && !validation.success) {
+        triedCandidates.push(validation.error ? `${candidate} (${validation.error})` : candidate);
+        continue;
+      }
       console.log(
         `${config.displayName} executable initialized with version: ${version} at ${candidate}`
       );

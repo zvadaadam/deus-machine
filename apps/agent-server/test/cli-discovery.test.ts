@@ -104,6 +104,25 @@ describe("discoverExecutable", () => {
     expect(state.executablePath).toBe("/good/path");
   });
 
+  it("tries the next candidate when version validation rejects the first", () => {
+    mockExistsSync.mockReturnValue(true);
+    mockExecSync.mockImplementation(() => {
+      throw new Error("shell discovery failed");
+    });
+    mockExecFileSync.mockReturnValueOnce("0.1.0").mockReturnValueOnce("2.0.0");
+
+    const { result, state } = runDiscovery({
+      staticCandidates: ["/old/path", "/new/path"],
+      validateVersion: (versionOutput) =>
+        versionOutput === "2.0.0"
+          ? { success: true }
+          : { success: false, error: `unsupported ${versionOutput}` },
+    });
+
+    expect(result.success).toBe(true);
+    expect(state.executablePath).toBe("/new/path");
+  });
+
   it("returns error when all candidates fail", () => {
     mockExistsSync.mockReturnValue(false);
     mockExecSync.mockImplementation(() => {
@@ -278,7 +297,7 @@ describe("blockIfNotInitialized", () => {
   it("returns true when result is null (never initialized)", () => {
     const state: DiscoveryState = { executablePath: "", result: null };
 
-    const blocked = blockIfNotInitialized(state, "codex", "session-2");
+    const blocked = blockIfNotInitialized(state, "codex-sdk", "session-2");
 
     expect(blocked).toBe(true);
     expect(mockEmitSessionError).toHaveBeenCalled();
