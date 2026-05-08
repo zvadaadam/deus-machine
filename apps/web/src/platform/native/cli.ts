@@ -13,9 +13,16 @@ export interface CliCheckResult {
   webMode?: boolean;
 }
 
-export interface GhAuthResult {
-  authenticated: boolean;
-  username?: string | null;
+export interface GhAuthLoginResult {
+  success: boolean;
+  path: string | null;
+  error?: string;
+}
+
+export interface GhAuthLogoutResult {
+  success: boolean;
+  path: string | null;
+  error?: string;
 }
 
 export async function checkCliTool(name: string): Promise<CliCheckResult> {
@@ -29,13 +36,54 @@ export async function checkCliTool(name: string): Promise<CliCheckResult> {
   }
 }
 
-export async function checkGhAuth(): Promise<GhAuthResult> {
-  if (!capabilities.ipcInvoke) return { authenticated: false, username: null };
+export async function startGhAuthLogin(): Promise<GhAuthLoginResult> {
+  if (!capabilities.ipcInvoke) {
+    return {
+      success: false,
+      path: null,
+      error: "GitHub CLI sign-in requires the desktop app",
+    };
+  }
+
   try {
     return (
-      (await invoke<GhAuthResult>("check_gh_auth")) ?? { authenticated: false, username: null }
+      (await invoke<GhAuthLoginResult>("start_gh_auth_login")) ?? {
+        success: false,
+        path: null,
+        error: "Could not start GitHub sign-in",
+      }
     );
-  } catch {
-    return { authenticated: false, username: null };
+  } catch (error) {
+    return {
+      success: false,
+      path: null,
+      error: error instanceof Error ? error.message : "Could not start GitHub sign-in",
+    };
+  }
+}
+
+export async function logoutGhAuth(): Promise<GhAuthLogoutResult> {
+  if (!capabilities.ipcInvoke) {
+    return {
+      success: false,
+      path: null,
+      error: "GitHub CLI sign-out requires the desktop app",
+    };
+  }
+
+  try {
+    return (
+      (await invoke<GhAuthLogoutResult>("logout_gh_auth")) ?? {
+        success: false,
+        path: null,
+        error: "Could not sign out of GitHub",
+      }
+    );
+  } catch (error) {
+    return {
+      success: false,
+      path: null,
+      error: error instanceof Error ? error.message : "Could not sign out of GitHub",
+    };
   }
 }

@@ -1,57 +1,131 @@
-import { useCliCheck, useGhAuth } from "../../api";
+import { Github } from "lucide-react";
+import { toast } from "sonner";
+import { useStartGhAuthLogin } from "../../api";
+import { useGhStatus } from "@/features/workspace/api";
 import { CliStatusRow } from "../components/CliStatusRow";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 
 interface GitHubSetupStepProps {
   onNext: () => void;
   onBack: () => void;
 }
 
-export function GitHubSetupStep({ onNext, onBack }: GitHubSetupStepProps) {
-  const ghCheck = useCliCheck("gh");
-  const ghAuth = useGhAuth(ghCheck.data?.installed === true);
+function getInitials(displayName: string | null, login: string | null): string {
+  if (displayName) {
+    const parts = displayName.trim().split(/\s+/);
+    if (parts.length >= 2) return (parts[0][0] + parts[1][0]).toUpperCase();
+    return displayName.slice(0, 2).toUpperCase();
+  }
+  if (login) return login.slice(0, 2).toUpperCase();
+  return "GH";
+}
 
-  const installed = ghCheck.isLoading ? null : (ghCheck.data?.installed ?? false);
-  const authenticated = ghAuth.data?.authenticated ?? false;
-  const username = ghAuth.data?.username;
+export function GitHubSetupStep({ onNext, onBack }: GitHubSetupStepProps) {
+  const ghStatus = useGhStatus();
+  const ghAuthLogin = useStartGhAuthLogin();
+
+  const installed = ghStatus.data?.isInstalled;
+  const authenticated = ghStatus.data?.isAuthenticated === true;
+  const login = ghStatus.data?.login ?? null;
+  const displayName = ghStatus.data?.displayName ?? null;
+  const avatarUrl = ghStatus.data?.avatarUrl ?? null;
+  const profileUrl = ghStatus.data?.htmlUrl ?? (login ? `https://github.com/${login}` : null);
+
+  const cliAvailable = ghStatus.isLoading ? null : (installed ?? false);
+  const checkingAccount = cliAvailable === true && (ghStatus.isLoading || ghAuthLogin.isPending);
+  const connectionStatus =
+    cliAvailable === null || checkingAccount ? null : cliAvailable === true && authenticated;
+  const canSignIn = cliAvailable === true && !ghStatus.isLoading && !authenticated;
+  const ghAuthActionLabel = canSignIn
+    ? ghAuthLogin.isPending
+      ? "Signing in"
+      : "Sign in"
+    : undefined;
+
+  async function retryGitHubChecks(): Promise<void> {
+    await ghStatus.refetch();
+  }
+
+  async function signInWithGitHubCli(): Promise<void> {
+    const result = await ghAuthLogin.mutateAsync();
+    if (!result.success) {
+      toast.error(result.error ?? "GitHub sign-in did not complete");
+      return;
+    }
+
+    const refreshed = await ghStatus.refetch();
+    if (refreshed.data?.isAuthenticated) {
+      toast.success("GitHub connected");
+    } else {
+      toast.error("GitHub sign-in finished, but Deus could not verify it yet");
+    }
+  }
 
   function getDetail(): string {
-    if (ghCheck.data?.webMode) return "CLI checks require the desktop app";
-    if (!installed) return "GitHub CLI not found";
-    if (ghAuth.isLoading) return "Checking authentication...";
-    if (authenticated && username) return `Authenticated as ${username}`;
-    if (authenticated) return "Authenticated";
-    return "Not authenticated — run: gh auth login";
+    if (ghStatus.data && installed === false) {
+      return "Bundled GitHub CLI is unavailable";
+    }
+    if (ghStatus.isLoading) return "Checking authentication...";
+    if (ghAuthLogin.isPending) return "Complete sign-in in your browser";
+    return "Not connected";
   }
 
   return (
     <div className="flex w-full max-w-md flex-col gap-6">
       <div className="space-y-2">
-        <h2 className="text-2xl font-semibold text-white">GitHub</h2>
+        <h2 className="text-2xl font-semibold text-white">Connect GitHub</h2>
         <p className="text-sm text-white/50">
-          Connect GitHub to create branches and pull requests from your workspaces.
+          Sign in to create branches and pull requests from your workspaces.
         </p>
       </div>
 
-      <CliStatusRow
-        name="GitHub CLI"
-        description="Required for Git operations"
-        installed={installed}
-        detail={getDetail()}
-        actionLabel={installed === false ? "Install" : undefined}
-        actionUrl={installed === false ? "https://cli.github.com" : undefined}
-        onRetry={() => {
-          ghCheck.refetch();
-          ghAuth.refetch();
-        }}
-      />
-
-      {installed && !ghAuth.isLoading && !authenticated && (
-        <div className="rounded-xl bg-white/5 p-4">
-          <p className="mb-2 text-xs font-medium text-white/70">Run this in your terminal:</p>
-          <code className="block rounded-lg bg-black/40 px-3 py-2 font-mono text-xs text-white/80">
-            gh auth login
-          </code>
-        </div>
+      {authenticated && login && profileUrl ? (
+        <a
+          href={profileUrl}
+          target="_blank"
+          rel="noopener noreferrer"
+          title={`Open @${login} on GitHub`}
+          className="flex items-center gap-3 rounded-xl bg-white/5 px-4 py-3 transition-colors duration-150 hover:bg-white/[0.07]"
+        >
+          <div className="relative shrink-0">
+            <Avatar className="size-10">
+              {avatarUrl && <AvatarImage src={avatarUrl} alt={displayName || login} />}
+              <AvatarFallback className="bg-white/10 text-xs font-semibold text-white">
+                {getInitials(displayName, login)}
+              </AvatarFallback>
+            </Avatar>
+            <span
+              aria-hidden="true"
+              className="absolute -right-0.5 -bottom-0.5 flex size-4 items-center justify-center rounded-full bg-white text-black ring-2 ring-[#0a0a0a]"
+            >
+              <svg viewBox="0 0 16 16" className="size-2.5 fill-current">
+                <path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z" />
+              </svg>
+            </span>
+          </div>
+          <div className="min-w-0 flex-1">
+            <p className="truncate text-sm font-medium text-white">{displayName || login}</p>
+            <p className="truncate text-xs text-white/50">
+              {displayName ? `@${login}` : "Signed in to GitHub"}
+            </p>
+          </div>
+        </a>
+      ) : (
+        <CliStatusRow
+          name="GitHub account"
+          description="Used for pull requests and GitHub workspaces"
+          installed={connectionStatus}
+          detail={getDetail()}
+          actionLabel={ghAuthActionLabel}
+          actionIcon={<Github className="h-3 w-3" />}
+          actionBusy={ghAuthLogin.isPending}
+          actionDisabled={!canSignIn}
+          onAction={canSignIn ? () => void signInWithGitHubCli() : undefined}
+          onRetry={() => void retryGitHubChecks()}
+          retryLabel="Check again"
+          showRetry={cliAvailable === false}
+          retryWhenUnavailable={cliAvailable === false}
+        />
       )}
 
       <div className="flex items-center gap-3 pt-2">
@@ -68,7 +142,7 @@ export function GitHubSetupStep({ onNext, onBack }: GitHubSetupStepProps) {
         >
           Skip
         </button>
-        {installed && authenticated && (
+        {authenticated && (
           <button
             onClick={onNext}
             className="rounded-xl bg-white px-6 py-2.5 text-sm font-semibold text-black transition-transform duration-200 hover:scale-[1.02] active:scale-[0.98]"

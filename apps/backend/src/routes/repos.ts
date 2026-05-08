@@ -147,23 +147,6 @@ app.get("/repos", (c) => {
   return c.json(getAllRepositories(db));
 });
 
-/** Global git + GitHub identity — used by the "Start New Project" modal. */
-app.get("/git/user", async (c) => {
-  let githubUsername: string | null = null;
-  try {
-    const result = await runGh(["api", "user", "--jq", ".login"], {
-      cwd: os.homedir(),
-      timeoutMs: 3000,
-    });
-    if (result.success && result.stdout?.trim()) {
-      githubUsername = result.stdout.trim();
-    }
-  } catch {
-    /* gh not installed or not authenticated */
-  }
-  return c.json({ githubUsername });
-});
-
 app.post("/repos", async (c) => {
   const db = getDatabase();
   const { root_path } = parseBody(CreateRepoBody, await c.req.json());

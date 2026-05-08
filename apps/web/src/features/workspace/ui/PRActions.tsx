@@ -204,7 +204,7 @@ function PRLink({ state }: { state: PRActionState }) {
 }
 
 // ---------------------------------------------------------------------------
-// GhWarning -- tooltip for missing/unauthenticated gh CLI
+// GhWarning -- tooltip for unavailable/unauthenticated GitHub integration
 // ---------------------------------------------------------------------------
 
 function GhWarning({ reason }: { reason: "not_installed" | "not_authenticated" }) {
@@ -223,8 +223,8 @@ function GhWarning({ reason }: { reason: "not_installed" | "not_authenticated" }
       <TooltipContent side="bottom">
         <p className="text-xs">
           {reason === "not_installed"
-            ? "GitHub CLI not installed \u2014 install gh to manage PRs"
-            : "Not authenticated \u2014 run gh auth login"}
+            ? "GitHub integration unavailable — restart Deus and check Settings"
+            : "Connect GitHub in Settings to manage PRs"}
         </p>
       </TooltipContent>
     </Tooltip>

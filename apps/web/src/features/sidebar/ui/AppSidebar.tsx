@@ -37,7 +37,7 @@ export function AppSidebar({
   onStatusChange,
   onNewSession,
   diffStatsMap,
-  profile = { username: "User" },
+  profile,
 }: AppSidebarProps) {
   const { state, hoverOpen, toggleSidebar, isMobile, setOpenMobile } = useSidebar();
   const openSettings = useUIStore((s) => s.openSettings);

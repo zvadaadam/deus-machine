@@ -35,7 +35,10 @@ export function ProjectSelectionStep({ onBack, onNext }: ProjectSelectionStepPro
   }, []);
 
   async function handleOpenProjects() {
-    if (selectedPaths.size === 0) return;
+    if (selectedPaths.size === 0) {
+      onNext();
+      return;
+    }
     setImporting(true);
     try {
       const results = await Promise.allSettled(
@@ -166,7 +169,7 @@ export function ProjectSelectionStep({ onBack, onNext }: ProjectSelectionStepPro
 
           <button
             onClick={handleOpenProjects}
-            disabled={importing || selectedPaths.size === 0}
+            disabled={importing}
             className="rounded-xl bg-white px-5 py-2 text-sm font-semibold text-black transition-transform hover:scale-[1.01] disabled:cursor-not-allowed disabled:opacity-50"
           >
             {importing ? <Loader2 className="h-4 w-4 animate-spin" /> : "Continue"}

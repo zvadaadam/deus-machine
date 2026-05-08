@@ -11,6 +11,7 @@ import { useUIStore } from "@/shared/stores/uiStore";
 import { useSettings, useUpdateSettings } from "../api/settings.queries";
 import {
   GeneralSection,
+  GitHubSection,
   AISection,
   EnvironmentSection,
   ExperimentalSection,
@@ -19,6 +20,7 @@ import {
 
 const SECTION_LABELS: Record<string, string> = {
   general: "General",
+  github: "GitHub",
   ai: "AI Providers",
   environment: "Environment",
   experimental: "Experimental",
@@ -87,6 +89,7 @@ export function SettingsPage() {
 
     return match(activeSection)
       .with("general", () => <GeneralSection {...sectionProps} theme={theme} setTheme={setTheme} />)
+      .with("github", () => <GitHubSection />)
       .with("ai", () => <AISection {...sectionProps} />)
       .with("environment", () => <EnvironmentSection />)
       .with("experimental", () => <ExperimentalSection {...sectionProps} />)

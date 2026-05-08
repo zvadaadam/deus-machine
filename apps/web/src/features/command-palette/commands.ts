@@ -6,6 +6,7 @@ import {
   GitBranch,
   GitPullRequest,
   Settings,
+  Github,
   Orbit,
   ArrowUpRight,
 } from "lucide-react";
@@ -118,6 +119,17 @@ export const staticCommands: CommandDefinition[] = [
     action: () => {
       uiActions.openSettings();
       uiActions.setActiveSettingsSection("general");
+    },
+  },
+  {
+    id: "settings-github",
+    label: "Settings: GitHub",
+    icon: Github,
+    group: "settings",
+    keywords: ["github", "gh", "pull request", "pr", "branch", "auth", "login"],
+    action: () => {
+      uiActions.openSettings();
+      uiActions.setActiveSettingsSection("github");
     },
   },
   {

@@ -7,6 +7,16 @@ import type { Workspace, DiffStats, RepoGroup } from "@/shared/types";
 import type { WorkspaceStatus } from "@shared/enums";
 
 /**
+ * Sidebar profile chip — derived from `gh api user` via useGhStatus().
+ * `login` is the GitHub username; falsy when unauthenticated.
+ */
+export interface SidebarProfile {
+  login?: string | null;
+  displayName?: string | null;
+  avatarUrl?: string | null;
+}
+
+/**
  * Main AppSidebar component props
  */
 export interface AppSidebarProps {
@@ -22,10 +32,7 @@ export interface AppSidebarProps {
   onArchive?: (workspaceId: string) => void;
   onStatusChange?: (workspaceId: string, status: WorkspaceStatus) => void;
   onNewSession?: () => void;
-  profile?: {
-    username: string;
-    email?: string;
-  };
+  profile?: SidebarProfile;
 }
 
 /**
@@ -62,10 +69,7 @@ export interface WorkspaceItemProps {
  * SidebarHeader component props
  */
 export interface SidebarHeaderProps {
-  profile?: {
-    username: string;
-    email?: string;
-  };
+  profile?: SidebarProfile;
   onOpenSettings: () => void;
   onToggleSidebar: () => void;
   onNewSession?: () => void;

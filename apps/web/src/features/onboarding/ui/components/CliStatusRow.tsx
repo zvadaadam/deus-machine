@@ -1,3 +1,4 @@
+import type { ReactNode } from "react";
 import { Check, X, Loader2 } from "lucide-react";
 import { cn } from "@/shared/lib/utils";
 
@@ -8,7 +9,14 @@ interface CliStatusRowProps {
   detail?: string;
   actionLabel?: string;
   actionUrl?: string;
+  actionIcon?: ReactNode;
+  actionBusy?: boolean;
+  actionDisabled?: boolean;
+  onAction?: () => void;
   onRetry?: () => void;
+  retryLabel?: string;
+  showRetry?: boolean;
+  retryWhenUnavailable?: boolean;
 }
 
 export function CliStatusRow({
@@ -18,8 +26,17 @@ export function CliStatusRow({
   detail,
   actionLabel,
   actionUrl,
+  actionIcon,
+  actionBusy = false,
+  actionDisabled = false,
+  onAction,
   onRetry,
+  retryLabel = "Retry",
+  showRetry = false,
+  retryWhenUnavailable = true,
 }: CliStatusRowProps) {
+  const shouldShowRetry = !!onRetry && (showRetry || (retryWhenUnavailable && installed === false));
+
   return (
     <div className="flex items-center gap-4 rounded-xl bg-white/5 px-4 py-3">
       <div
@@ -40,11 +57,11 @@ export function CliStatusRow({
       <div className="min-w-0 flex-1">
         <p className="text-sm font-medium text-white">{name}</p>
         <p className="truncate text-xs text-white/50">
-          {installed === null ? "Checking..." : detail || description}
+          {installed === null ? (detail ?? "Checking...") : detail || description}
         </p>
       </div>
 
-      {installed === false && actionLabel && actionUrl && (
+      {actionLabel && actionUrl && (
         <a
           href={actionUrl}
           target="_blank"
@@ -55,12 +72,23 @@ export function CliStatusRow({
         </a>
       )}
 
-      {onRetry && installed === false && (
+      {actionLabel && onAction && (
+        <button
+          onClick={onAction}
+          disabled={actionDisabled || actionBusy}
+          className="inline-flex shrink-0 items-center gap-1.5 rounded-lg bg-white px-3 py-1.5 text-xs font-semibold text-black transition-transform duration-200 hover:scale-[1.02] disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:scale-100"
+        >
+          {actionBusy ? <Loader2 className="h-3 w-3 animate-spin" /> : actionIcon}
+          {actionLabel}
+        </button>
+      )}
+
+      {shouldShowRetry && (
         <button
           onClick={onRetry}
           className="shrink-0 rounded-lg bg-white/10 px-3 py-1.5 text-xs font-medium text-white/70 transition-colors duration-200 hover:bg-white/20 hover:text-white"
         >
-          Retry
+          {retryLabel}
         </button>
       )}
     </div>
