@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { isExpectedMigrationError } from "@shared/schema";
+import { MIGRATIONS, isExpectedMigrationError } from "@shared/schema";
 
 describe("shared/schema migration error handling", () => {
   it("allows duplicate-column errors only for ADD COLUMN migrations", () => {
@@ -47,5 +47,13 @@ describe("shared/schema migration error handling", () => {
         "near TEXT: syntax error"
       )
     ).toBe(false);
+  });
+});
+
+describe("shared/schema data migrations", () => {
+  it("keeps a data migration for persisted legacy Codex SDK harness ids", () => {
+    expect(MIGRATIONS).toContain(
+      `UPDATE sessions SET agent_harness = 'codex-sdk' WHERE agent_harness = 'codex'`
+    );
   });
 });

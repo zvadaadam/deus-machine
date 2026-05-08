@@ -77,6 +77,7 @@ import { parseEnvString } from "../agents/environment";
 import { initializeClaude } from "../agents/claude/claude-discovery";
 import { ClaudeAgentHandler } from "../agents/claude/claude-handler";
 import { createCheckpoint } from "../agents/claude/checkpoint";
+import { resolveClaudeThinkingOptions } from "../agents/claude/claude-sdk-options";
 
 // Create handler instance (same pattern as index.ts)
 const handler = new ClaudeAgentHandler();
@@ -258,8 +259,24 @@ describe("claude-handler", () => {
       expect(sdkCall.options.disallowedTools).toContain("AskUserQuestion");
       expect(sdkCall.options.permissionMode).toBe("plan");
       expect(sdkCall.options.maxTurns).toBe(50);
-      // MEDIUM → 8192 per resolveThinkingOptions; see agents/claude/thinking.ts
-      expect(sdkCall.options.maxThinkingTokens).toBe(8192);
+      expect(sdkCall.options.thinking).toEqual({
+        type: "adaptive",
+        display: "summarized",
+      });
+      expect(sdkCall.options.effort).toBe("medium");
+    });
+
+    it("rejects unsupported thinking levels before starting Claude", async () => {
+      await expect(
+        handler.query("sess-bad-thinking", "hello", {
+          cwd: "/test",
+          model: "claude-sonnet-4-6",
+          thinkingLevel: "MAX" as any,
+          turnId: "turn-1",
+        })
+      ).rejects.toThrow("Unsupported Claude thinking level: MAX");
+
+      expect(mockClaudeSDK).not.toHaveBeenCalled();
     });
 
     it("includes MCP server when strictDataPrivacy is false", async () => {
@@ -530,6 +547,14 @@ describe("claude-handler", () => {
       // Crucially: emitSessionIdle should NOT have been called after
       // emitSessionError — the stopReasonError flag must prevent it
       expect(mockFrontendAPI.emitSessionIdle).not.toHaveBeenCalled();
+    });
+  });
+
+  describe("resolveClaudeThinkingOptions", () => {
+    it("throws for unsupported thinking levels", () => {
+      expect(() => resolveClaudeThinkingOptions("MAX" as any)).toThrow(
+        "Unsupported Claude thinking level: MAX"
+      );
     });
   });
 

@@ -14,23 +14,16 @@ import type {
   ThreadItem,
   Usage,
 } from "@openai/codex-sdk";
-import type {
-  DiffContent,
-  FinishReason,
-  Part,
-  RunningToolState,
-  TokenUsage,
-  ToolPart,
-} from "@shared/messages";
+import type { DiffContent, FinishReason, Part, TokenUsage } from "@shared/messages";
 import { emptyTokenUsage } from "@shared/messages";
 import type { Adapter, EventTransformer, PartEvent, StreamContext } from "./adapter";
+import { completeReasoningPart, createReasoningPart, createTextPart } from "./parts";
 import {
-  completeReasoningPart,
-  completeToolPart,
-  createReasoningPart,
-  createTextPart,
-  createToolPart,
-} from "./parts";
+  completeTrackedToolPart,
+  startFileChangeToolPart,
+  startMcpToolPart,
+  startShellToolPart,
+} from "./codex-part-helpers";
 
 // ---------------------------------------------------------------------------
 // CodexSdkTransformer
@@ -284,31 +277,13 @@ class CodexSdkTransformer implements EventTransformer<ThreadEvent> {
   // -------------------------------------------------------------------------
 
   private startCommandPart(item: CommandExecutionItem): PartEvent[] {
-    const part = createToolPart(this.ctx.sessionId, this.ctx.messageId, {
-      toolCallId: item.id,
-      toolName: "shell",
-      kind: "bash",
-      state: {
-        status: "RUNNING",
-        input: { command: item.command },
-        title: item.command,
-        time: { start: new Date().toISOString() },
-      } satisfies RunningToolState,
+    return startShellToolPart(this.ctx, this.partMaps(), {
+      itemId: item.id,
+      command: item.command,
     });
-    part.title = item.command;
-
-    this.parts.set(part.id, part);
-    this.itemParts.set(item.id, part.id);
-    return [{ type: "part.created", part }];
   }
 
   private completeCommandPart(item: CommandExecutionItem): PartEvent[] {
-    const partId = this.itemParts.get(item.id);
-    if (!partId) return [];
-
-    const existing = this.parts.get(partId) as ToolPart | undefined;
-    if (!existing) return [];
-
     const isError =
       item.status === "failed" || (item.exit_code !== undefined && item.exit_code !== 0);
 
@@ -317,21 +292,13 @@ class CodexSdkTransformer implements EventTransformer<ThreadEvent> {
       exit_code: item.exit_code,
     };
 
-    const updated = completeToolPart(
-      existing,
+    return completeTrackedToolPart(
+      this.partMaps(),
+      item.id,
       isError ? item.aggregated_output || `Exit code: ${item.exit_code}` : output,
-      isError
+      isError,
+      item.aggregated_output ? [{ type: "text", text: item.aggregated_output }] : undefined
     );
-
-    if (updated.state.status === "COMPLETED" && item.aggregated_output) {
-      (updated as ToolPart).state = {
-        ...updated.state,
-        content: [{ type: "text" as const, text: item.aggregated_output }],
-      };
-    }
-
-    this.parts.set(partId, updated);
-    return [{ type: "part.done", part: updated }];
   }
 
   // -------------------------------------------------------------------------
@@ -340,34 +307,14 @@ class CodexSdkTransformer implements EventTransformer<ThreadEvent> {
 
   private startFileChangePart(item: FileChangeItem): PartEvent[] {
     const paths = item.changes.map((c) => c.path);
-    const title = paths.length === 1 ? `Edit ${paths[0]}` : `Edit ${paths.length} files`;
-
-    const part = createToolPart(this.ctx.sessionId, this.ctx.messageId, {
-      toolCallId: item.id,
-      toolName: "apply_patch",
-      kind: "write",
-      state: {
-        status: "RUNNING",
-        input: item.changes,
-        title,
-        time: { start: new Date().toISOString() },
-      } satisfies RunningToolState,
+    return startFileChangeToolPart(this.ctx, this.partMaps(), {
+      itemId: item.id,
+      changes: item.changes,
+      paths,
     });
-    part.title = title;
-    part.locations = paths.map((path) => ({ path }));
-
-    this.parts.set(part.id, part);
-    this.itemParts.set(item.id, part.id);
-    return [{ type: "part.created", part }];
   }
 
   private completeFileChangePart(item: FileChangeItem): PartEvent[] {
-    const partId = this.itemParts.get(item.id);
-    if (!partId) return [];
-
-    const existing = this.parts.get(partId) as ToolPart | undefined;
-    if (!existing) return [];
-
     const isError = item.status === "failed";
 
     const content: DiffContent[] = item.changes.map((c) => ({
@@ -376,14 +323,13 @@ class CodexSdkTransformer implements EventTransformer<ThreadEvent> {
       newText: `${c.kind}: ${c.path}`,
     }));
 
-    const updated = completeToolPart(existing, { changes: item.changes }, isError);
-
-    if (updated.state.status === "COMPLETED" && content.length > 0) {
-      (updated as ToolPart).state = { ...updated.state, content };
-    }
-
-    this.parts.set(partId, updated);
-    return [{ type: "part.done", part: updated }];
+    return completeTrackedToolPart(
+      this.partMaps(),
+      item.id,
+      { changes: item.changes },
+      isError,
+      content
+    );
   }
 
   // -------------------------------------------------------------------------
@@ -391,38 +337,22 @@ class CodexSdkTransformer implements EventTransformer<ThreadEvent> {
   // -------------------------------------------------------------------------
 
   private startMcpPart(item: McpToolCallItem): PartEvent[] {
-    const toolName = `${item.server}/${item.tool}`;
-    const part = createToolPart(this.ctx.sessionId, this.ctx.messageId, {
-      toolCallId: item.id,
-      toolName,
-      kind: "mcp",
-      state: {
-        status: "RUNNING",
-        input: item.arguments,
-        title: item.tool,
-        time: { start: new Date().toISOString() },
-      } satisfies RunningToolState,
+    return startMcpToolPart(this.ctx, this.partMaps(), {
+      itemId: item.id,
+      server: item.server,
+      tool: item.tool,
+      input: item.arguments,
     });
-    part.title = item.tool;
-
-    this.parts.set(part.id, part);
-    this.itemParts.set(item.id, part.id);
-    return [{ type: "part.created", part }];
   }
 
   private completeMcpPart(item: McpToolCallItem): PartEvent[] {
-    const partId = this.itemParts.get(item.id);
-    if (!partId) return [];
-
-    const existing = this.parts.get(partId) as ToolPart | undefined;
-    if (!existing) return [];
-
     const isError = item.status === "failed" || !!item.error;
     const output = isError ? (item.error?.message ?? "Unknown MCP error") : item.result;
+    return completeTrackedToolPart(this.partMaps(), item.id, output, isError);
+  }
 
-    const updated = completeToolPart(existing, output, isError);
-    this.parts.set(partId, updated);
-    return [{ type: "part.done", part: updated }];
+  private partMaps() {
+    return { parts: this.parts, itemParts: this.itemParts };
   }
 }
 

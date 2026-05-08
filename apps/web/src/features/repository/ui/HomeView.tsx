@@ -17,6 +17,7 @@ import {
   DEFAULT_MODEL,
   getModelLabel,
   getModelOption,
+  resolveModelSelection,
   MODEL_OPTIONS,
   MODEL_PICKER_GROUPS,
   type AgentHarness,
@@ -61,7 +62,8 @@ function getStoredModel(): string {
   // current default instead of silently sending an unknown model.
   try {
     const stored = localStorage.getItem(LAST_MODEL_KEY);
-    if (stored && getModelOption(stored)) return stored;
+    const resolved = stored ? resolveModelSelection(stored) : undefined;
+    if (resolved) return resolved;
   } catch {
     /* localStorage unavailable */
   }
@@ -781,7 +783,7 @@ export function HomeView({
                           <div key={agentConfig.id}>
                             {groupIdx > 0 && <div className="bg-border/70 mx-2 my-2 h-px" />}
                             <div className="text-text-muted/90 px-2 py-1.5 text-xs font-normal tracking-wide">
-                              {agentConfig.groupLabel}
+                              {agentConfig.label}
                             </div>
                             {MODEL_OPTIONS.filter((o) => o.agentHarness === agentConfig.id).map(
                               (option) => {
@@ -837,7 +839,7 @@ export function HomeView({
                           <div key={agentConfig.id}>
                             {groupIdx > 0 && <div className="bg-border/70 mx-1 my-1.5 h-px" />}
                             <div className="text-text-muted/90 text-2xs px-2 py-1 font-normal tracking-wide">
-                              {agentConfig.groupLabel}
+                              {agentConfig.label}
                             </div>
                             {MODEL_OPTIONS.filter((o) => o.agentHarness === agentConfig.id).map(
                               (option) => {

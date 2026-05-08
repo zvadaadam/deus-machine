@@ -24,9 +24,15 @@ import { getErrorMessage } from "@shared/lib/errors";
 import { RpcConnection, wsTransport } from "./rpc-connection";
 import { EventBroadcaster } from "./event-broadcaster";
 import { classifyError } from "./agents/lifecycle";
-import { registerAgent, getAgent, initializeAllAgents } from "./agents/registry";
+import {
+  registerAgent,
+  getAgent,
+  initializeAllAgents,
+  getRegisteredAgentHarnesses,
+} from "./agents/registry";
 import { ClaudeAgentHandler } from "./agents/claude/claude-handler";
 import { CodexAgentHandler } from "./agents/codex/codex-handler";
+import { CodexServerAgentHandler } from "./agents/codex-server/codex-server-handler";
 import { registerAppMcp, unregisterAppMcp } from "./app-registrar";
 import { RegisterAppMcpRequestSchema, UnregisterAppMcpRequestSchema } from "./rpc-schemas";
 import {
@@ -163,10 +169,8 @@ class AgentServer {
 
   private getInitializedAgents() {
     const agents: { type: string; capabilities: unknown; initialized: boolean }[] = [];
-    for (const [agentHarness, handler] of [
-      ["claude", getAgent("claude")],
-      ["codex", getAgent("codex")],
-    ] as const) {
+    for (const agentHarness of getRegisteredAgentHarnesses()) {
+      const handler = getAgent(agentHarness);
       if (handler && this.initializedAgents.has(agentHarness)) {
         agents.push({ type: agentHarness, capabilities: handler.capabilities, initialized: true });
       }
@@ -256,7 +260,7 @@ class AgentServer {
     const cancelAll = (params: any) => {
       const sessionId = params?.sessionId;
       if (!sessionId) return;
-      for (const agentHarness of ["claude", "codex"] as const) {
+      for (const agentHarness of getRegisteredAgentHarnesses()) {
         const agent = getAgent(agentHarness);
         if (agent) void agent.cancel(sessionId);
       }
@@ -268,7 +272,7 @@ class AgentServer {
     rpcTunnel.addMethod("session/reset", (params: any) => {
       const sessionId = params?.sessionId;
       if (!sessionId) return;
-      for (const agentHarness of ["claude", "codex"] as const) {
+      for (const agentHarness of getRegisteredAgentHarnesses()) {
         const agent = getAgent(agentHarness);
         if (agent) agent.reset(sessionId);
       }
@@ -441,6 +445,7 @@ class AgentServer {
     // Register all agent handlers
     registerAgent(new ClaudeAgentHandler());
     registerAgent(new CodexAgentHandler());
+    registerAgent(new CodexServerAgentHandler());
 
     // Initialize all registered agents
     console.log("Initializing agent handlers...");

@@ -7,7 +7,7 @@ import {
   type AgentHandler,
 } from "../agents/registry";
 
-function createMockHandler(agentHarness: "claude" | "codex" = "claude"): AgentHandler {
+function createMockHandler(agentHarness: "claude" | "codex-sdk" = "claude"): AgentHandler {
   return {
     agentHarness,
     capabilities: {
@@ -43,7 +43,7 @@ describe("AgentRegistry", () => {
     });
 
     it("returns undefined for unregistered type", () => {
-      expect(getAgent("codex")).toBeUndefined();
+      expect(getAgent("codex-sdk")).toBeUndefined();
     });
 
     it("overwrites existing handler for same type", () => {
@@ -56,11 +56,11 @@ describe("AgentRegistry", () => {
 
     it("supports multiple agent types simultaneously", () => {
       const claude = createMockHandler("claude");
-      const codex = createMockHandler("codex");
+      const codex = createMockHandler("codex-sdk");
       registerAgent(claude);
       registerAgent(codex);
       expect(getAgent("claude")).toBe(claude);
-      expect(getAgent("codex")).toBe(codex);
+      expect(getAgent("codex-sdk")).toBe(codex);
     });
   });
 
@@ -71,7 +71,7 @@ describe("AgentRegistry", () => {
   describe("initializeAllAgents", () => {
     it("initializes all registered agents", () => {
       const claude = createMockHandler("claude");
-      const codex = createMockHandler("codex");
+      const codex = createMockHandler("codex-sdk");
       registerAgent(claude);
       registerAgent(codex);
 
@@ -80,7 +80,7 @@ describe("AgentRegistry", () => {
       expect(claude.initialize).toHaveBeenCalledOnce();
       expect(codex.initialize).toHaveBeenCalledOnce();
       expect(results.get("claude")).toEqual({ success: true });
-      expect(results.get("codex")).toEqual({ success: true });
+      expect(results.get("codex-sdk")).toEqual({ success: true });
     });
 
     it("returns empty map when no agents registered", () => {
@@ -113,7 +113,7 @@ describe("AgentRegistry", () => {
 
     it("continues initializing other agents when one fails", () => {
       const claude = createMockHandler("claude");
-      const codex = createMockHandler("codex");
+      const codex = createMockHandler("codex-sdk");
       (claude.initialize as any).mockImplementation(() => {
         throw new Error("Claude failed");
       });
@@ -122,7 +122,7 @@ describe("AgentRegistry", () => {
 
       const results = initializeAllAgents();
       expect(results.get("claude")?.success).toBe(false);
-      expect(results.get("codex")?.success).toBe(true);
+      expect(results.get("codex-sdk")?.success).toBe(true);
     });
   });
 
@@ -133,10 +133,10 @@ describe("AgentRegistry", () => {
   describe("clearAgentRegistry", () => {
     it("removes all registered agents", () => {
       registerAgent(createMockHandler("claude"));
-      registerAgent(createMockHandler("codex"));
+      registerAgent(createMockHandler("codex-sdk"));
       clearAgentRegistry();
       expect(getAgent("claude")).toBeUndefined();
-      expect(getAgent("codex")).toBeUndefined();
+      expect(getAgent("codex-sdk")).toBeUndefined();
     });
   });
 

@@ -660,7 +660,7 @@ describeWithDb("event → persistence → DB integration", () => {
       persistMessageCreated({
         type: "message.created",
         sessionId,
-        agentHarness: "codex",
+        agentHarness: "codex-sdk",
         messageId: "codex-msg-1",
         role: "assistant",
       });
@@ -669,7 +669,7 @@ describeWithDb("event → persistence → DB integration", () => {
       persistPartDone({
         type: "part.done",
         sessionId,
-        agentHarness: "codex",
+        agentHarness: "codex-sdk",
         messageId: "codex-msg-1",
         partId: "cp1",
         part: {
@@ -686,7 +686,7 @@ describeWithDb("event → persistence → DB integration", () => {
       persistPartDone({
         type: "part.done",
         sessionId,
-        agentHarness: "codex",
+        agentHarness: "codex-sdk",
         messageId: "codex-msg-1",
         partId: "cp2",
         part: {
@@ -703,7 +703,7 @@ describeWithDb("event → persistence → DB integration", () => {
       persistPartDone({
         type: "part.done",
         sessionId,
-        agentHarness: "codex",
+        agentHarness: "codex-sdk",
         messageId: "codex-msg-1",
         partId: "cp3",
         part: {
@@ -726,7 +726,7 @@ describeWithDb("event → persistence → DB integration", () => {
       persistPartDone({
         type: "part.done",
         sessionId,
-        agentHarness: "codex",
+        agentHarness: "codex-sdk",
         messageId: "codex-msg-1",
         partId: "cp4",
         part: {
@@ -742,7 +742,7 @@ describeWithDb("event → persistence → DB integration", () => {
       persistMessageDone({
         type: "message.done",
         sessionId,
-        agentHarness: "codex",
+        agentHarness: "codex-sdk",
         messageId: "codex-msg-1",
         stopReason: "end_turn",
         parts: [],

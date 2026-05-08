@@ -311,14 +311,14 @@ describe("EventBroadcaster", () => {
   describe("emitSessionIdle", () => {
     it("broadcasts session.idle event", () => {
       EventBroadcaster.attachTunnel(mockTunnel);
-      EventBroadcaster.emitSessionIdle("sess-1", "codex");
+      EventBroadcaster.emitSessionIdle("sess-1", "codex-sdk");
 
       expect(mockTunnel.notify).toHaveBeenCalledWith(
         AGENT_EVENT_NAMES.SESSION_IDLE,
         expect.objectContaining({
           type: AGENT_EVENT_NAMES.SESSION_IDLE,
           sessionId: "sess-1",
-          agentHarness: "codex",
+          agentHarness: "codex-sdk",
         })
       );
     });
