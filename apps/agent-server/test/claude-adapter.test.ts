@@ -727,7 +727,7 @@ describe("ClaudeCodeAdapter", () => {
       expect((events[0] as any).part.parentToolCallId).toBeUndefined();
 
       const subagentPart = events.find(
-        (e) =>
+        (e: any) =>
           (e.type === "part.created" || e.type === "part.done") && e.part.text === "Subagent output"
       );
       expect(subagentPart).toMatchObject({

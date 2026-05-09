@@ -14,6 +14,7 @@ import { createCheckpoint } from "./checkpoint";
 import { AsyncQueue } from "../async-queue";
 import { createStreamContext } from "./stream-context";
 import { classifyError, handleCancellation, handleQueryError } from "../lifecycle";
+import { createPartEventEmitter, type PartEventEmitter } from "../part-event-emitter";
 import {
   deserializeMessage,
   processMessage,
@@ -59,15 +60,6 @@ interface WorkspaceInitOptions {
   providerEnvVars?: string;
 }
 
-// ============================================================================
-// buildPromptIterable — parses queue messages into SDK-compatible user turns
-// ============================================================================
-
-/**
- * Wraps an AsyncQueue of raw prompt strings into the async-iterable format
- * expected by the Claude Agent SDK. Handles both plain text and JSON-encoded
- * content blocks (when user attaches images).
- */
 function getInvalidWorkspacePathError(cwd: string | undefined): string | null {
   if (!cwd) {
     return "Workspace path is missing for this Claude session.";
@@ -80,6 +72,10 @@ function getInvalidWorkspacePathError(cwd: string | undefined): string | null {
   return null;
 }
 
+/**
+ * Wraps queued prompt strings into the async-iterable format expected by the
+ * Claude SDK. JSON-encoded content blocks are passed through for attachments.
+ */
 function buildPromptIterable(
   queue: AsyncQueue<string>,
   sessionId: string
@@ -454,7 +450,6 @@ export class ClaudeAgentHandler implements AgentHandler {
         throw new Error(invalidWorkspacePathError);
       }
 
-      // Build environment using shared env-builder
       const tEnvStart = Date.now();
       const envForClaude = buildAgentEnvironment({
         providerEnvVars: options?.providerEnvVars,
@@ -474,7 +469,6 @@ export class ClaudeAgentHandler implements AgentHandler {
         );
       }
 
-      // Build SDK options using the dedicated builder
       const tSdkOptsStart = Date.now();
       const sdkOptions = buildSdkOptions(sessionId, envForClaude, options);
       console.log(`[TIMING][${generatorId}] buildSdkOptions took ${Date.now() - tSdkOptsStart}ms`);
@@ -531,24 +525,15 @@ export class ClaudeAgentHandler implements AgentHandler {
         messageId,
         turnId: currentTurnId,
       });
-
-      // Emit turn.started for the initial turn
-      EventBroadcaster.emitPartEvent(sessionId, "claude", messageId, {
-        type: "turn.started",
-        turnId: currentTurnId,
+      let partEmitter: PartEventEmitter = createPartEventEmitter({
+        sessionId,
+        agentHarness: "claude",
+        fallbackMessageId: messageId,
+        getParts: () => transformer.getParts(),
       });
 
-      // Track the current sub-message ID (updated by message.created events from the adapter)
-      let currentSubMessageId = messageId;
-
-      /** Emit a PartEvent, using the sub-message ID from message.created for proper FK linking. */
-      function emitEvt(evt: import("../../messages/adapter").PartEvent) {
-        // message.created / message.done carry their own messageId (the sub-message ID)
-        if (evt.type === "message.created" || evt.type === "message.done") {
-          currentSubMessageId = evt.messageId;
-        }
-        EventBroadcaster.emitPartEvent(sessionId, "claude", currentSubMessageId, evt);
-      }
+      // Emit turn.started for the initial turn
+      partEmitter.emit({ type: "turn.started", turnId: currentTurnId });
 
       // Stream messages back to the frontend and persist to DB.
       const tStreamStart = Date.now();
@@ -565,19 +550,24 @@ export class ClaudeAgentHandler implements AgentHandler {
         // on each new turn, so when it changes we need a fresh transformer.
         if (session.turnVersion !== currentTurnVersion) {
           const prevFinished = transformer.finish();
-          for (const evt of prevFinished.events) emitEvt(evt);
+          partEmitter.emitMany(prevFinished.events);
 
           currentTurnVersion = session.turnVersion;
           currentTurnId = session.turnId;
           messageId = uuidv7();
-          currentSubMessageId = messageId;
           transformer = claudeCodeAdapter.createTransformer({
             sessionId,
             messageId,
             turnId: currentTurnId,
           });
+          partEmitter = createPartEventEmitter({
+            sessionId,
+            agentHarness: "claude",
+            fallbackMessageId: messageId,
+            getParts: () => transformer.getParts(),
+          });
 
-          emitEvt({ type: "turn.started", turnId: currentTurnId });
+          partEmitter.emit({ type: "turn.started", turnId: currentTurnId });
         }
 
         // Deserialize, persist, and forward to frontend.
@@ -589,7 +579,7 @@ export class ClaudeAgentHandler implements AgentHandler {
 
           // Transform into PartEvents and emit each individually
           const events = transformer.process(cleanMessage as unknown as ClaudeCodeEvent);
-          for (const evt of events) emitEvt(evt);
+          partEmitter.emitMany(events);
 
           // Log per-message timing for first 5 messages, then every 10th
           if (ctx.messageCount <= 5 || ctx.messageCount % 10 === 0) {
@@ -602,7 +592,7 @@ export class ClaudeAgentHandler implements AgentHandler {
 
       // Finalize the last turn's transformer
       const finished = transformer.finish();
-      for (const evt of finished.events) emitEvt(evt);
+      partEmitter.emitMany(finished.events);
 
       console.log(
         `[TIMING][${generatorId}] STREAM_COMPLETE messages=${ctx.messageCount} totalStreamTime=${Date.now() - tStreamStart}ms totalProcessTime=${Date.now() - tProcessStart}ms`
