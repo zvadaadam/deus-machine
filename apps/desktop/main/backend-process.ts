@@ -1,44 +1,34 @@
 /**
- * Runtime Process Manager
+ * Electron runtime wrapper.
  *
- * Electron owns both runtime children explicitly:
- * 1. agent-server
- * 2. backend (connected via AGENT_SERVER_URL)
- *
- * This keeps desktop aligned with the CLI and dev launcher, and avoids
- * backend-specific child-process branching in production.
+ * Generic process orchestration lives in apps/runtime/supervisor.ts. This file
+ * only supplies Electron paths, desktop-specific env, restart policy, and UI
+ * event relay.
  */
 
-import { spawn, type ChildProcess } from "child_process";
-import { existsSync, mkdirSync, writeFileSync } from "fs";
+import { writeFileSync } from "fs";
 import { join } from "path";
 import { app, BrowserWindow } from "electron";
 import crypto from "crypto";
 import { DEUS_DB_FILENAME } from "../../../shared/runtime";
 import { extendCliPath } from "../../../shared/lib/cli-path";
+import {
+  RuntimeSupervisor,
+  type RuntimeEntries,
+  type RuntimeProcessHooks,
+} from "../../runtime/supervisor";
 
 export const CDP_PORT = "19222";
 
-type RuntimeProcessName = "backend" | "agent-server";
-
-let backendProcess: ChildProcess | null = null;
-let agentServerProcess: ChildProcess | null = null;
+let supervisor: RuntimeSupervisor | null = null;
 let isQuitting = false;
-let startupInProgress = false;
 let restartAttempt = 0;
 let restartTimer: ReturnType<typeof setTimeout> | null = null;
-let pendingRestartHooks: BackendSpawnHooks | null = null;
-const expectedExitPids = new Set<number>();
 const MAX_RESTART_ATTEMPTS = 5;
-const STARTUP_TIMEOUT_MS = 30_000;
 
-export interface BackendSpawnHooks {
-  onStdoutLine?: (source: RuntimeProcessName, line: string) => void;
-  onStderrLine?: (source: RuntimeProcessName, line: string) => void;
-  onExit?: (source: RuntimeProcessName, code: number | null, signal: NodeJS.Signals | null) => void;
-}
+export type BackendSpawnHooks = RuntimeProcessHooks;
 
-interface RuntimeEntries {
+interface ElectronRuntimeEntries extends RuntimeEntries {
   backendEntry: string;
   agentServerEntry: string;
   backendCwd: string;
@@ -48,7 +38,7 @@ interface RuntimeEntries {
   bundledBinDir?: string;
 }
 
-function resolveRuntimeEntries(): RuntimeEntries {
+function resolveRuntimeEntries(): ElectronRuntimeEntries {
   const projectRoot = join(__dirname, "../..");
 
   if (app.isPackaged) {
@@ -69,10 +59,6 @@ function resolveRuntimeEntries(): RuntimeEntries {
     backendCwd: join(projectRoot, "apps/backend"),
     agentServerCwd: join(projectRoot, "apps/agent-server"),
   };
-}
-
-function prettyProcessName(name: RuntimeProcessName): string {
-  return name === "agent-server" ? "Agent server" : "Backend";
 }
 
 function relayWorkspaceProgress(line: string): void {
@@ -102,77 +88,11 @@ function writeBackendPortFile(port: number): void {
   }
 }
 
-function markExpectedExit(child: ChildProcess | null): void {
-  if (child?.pid) {
-    expectedExitPids.add(child.pid);
-  }
-}
-
-function consumeExpectedExit(child: ChildProcess): boolean {
-  return child.pid != null ? expectedExitPids.delete(child.pid) : false;
-}
-
-function setProcessRef(name: RuntimeProcessName, child: ChildProcess): void {
-  if (name === "backend") {
-    backendProcess = child;
-    return;
-  }
-
-  agentServerProcess = child;
-}
-
-function clearProcessRef(name: RuntimeProcessName, child: ChildProcess): void {
-  if (name === "backend" && backendProcess === child) {
-    backendProcess = null;
-    return;
-  }
-
-  if (name === "agent-server" && agentServerProcess === child) {
-    agentServerProcess = null;
-  }
-}
-
-function terminateManagedProcess(child: ChildProcess | null): Promise<void> {
-  if (!child || child.exitCode !== null || child.signalCode !== null) {
-    return Promise.resolve();
-  }
-
-  return new Promise((resolve) => {
-    let finished = false;
-
-    const finish = () => {
-      if (finished) return;
-      finished = true;
-      clearTimeout(forceTimer);
-      resolve();
-    };
-
-    markExpectedExit(child);
-    child.once("exit", finish);
-    child.kill("SIGTERM");
-
-    const forceTimer = setTimeout(() => {
-      if (child.exitCode === null && child.signalCode === null) {
-        child.kill("SIGKILL");
-      }
-    }, 5_000);
-  });
-}
-
-async function stopRuntimeChildren(): Promise<void> {
-  await Promise.all([
-    terminateManagedProcess(backendProcess),
-    terminateManagedProcess(agentServerProcess),
-  ]);
-}
-
-function scheduleRestart(hooks: BackendSpawnHooks): void {
+function scheduleRestart(
+  hooks: BackendSpawnHooks,
+  createSupervisor: () => RuntimeSupervisor
+): void {
   if (isQuitting || restartTimer || restartAttempt >= MAX_RESTART_ATTEMPTS) {
-    return;
-  }
-
-  if (startupInProgress) {
-    pendingRestartHooks = hooks;
     return;
   }
 
@@ -184,10 +104,10 @@ function scheduleRestart(hooks: BackendSpawnHooks): void {
     restartTimer = null;
     void (async () => {
       try {
-        await stopRuntimeChildren();
-        const { port, authToken } = await spawnBackend(hooks);
+        supervisor = createSupervisor();
+        const { backendPort: port } = await supervisor.start();
         process.env.DEUS_BACKEND_PORT = String(port);
-        process.env.DEUS_AUTH_TOKEN = authToken;
+        writeBackendPortFile(port);
 
         for (const win of BrowserWindow.getAllWindows()) {
           win.webContents.send("backend:port-changed", { port });
@@ -195,127 +115,10 @@ function scheduleRestart(hooks: BackendSpawnHooks): void {
         console.log(`[runtime] Restarted on port ${port}, notified renderer`);
       } catch (err) {
         console.error("[runtime] Restart failed:", err);
-        scheduleRestart(hooks);
+        scheduleRestart(hooks, createSupervisor);
       }
     })();
   }, delay);
-}
-
-async function startManagedProcess(opts: {
-  name: RuntimeProcessName;
-  entry: string;
-  cwd: string;
-  env: Record<string, string>;
-  waitFor: RegExp;
-  hooks: BackendSpawnHooks;
-}): Promise<{ child: ChildProcess; value: string }> {
-  const { name, entry, cwd, env, waitFor, hooks } = opts;
-
-  if (!existsSync(entry)) {
-    throw new Error(`${prettyProcessName(name)} entry not found: ${entry}`);
-  }
-
-  mkdirSync(cwd, { recursive: true });
-
-  return new Promise((resolve, reject) => {
-    const child = spawn(process.execPath, [entry], {
-      cwd,
-      env: {
-        ...process.env,
-        ELECTRON_RUN_AS_NODE: "1",
-        ...env,
-      },
-      stdio: ["ignore", "pipe", "pipe"],
-    });
-    setProcessRef(name, child);
-
-    let settled = false;
-    let stdoutBuffer = "";
-
-    const fail = (error: Error) => {
-      if (settled) return;
-      settled = true;
-      clearTimeout(timeout);
-      reject(error);
-    };
-
-    const succeed = (value: string) => {
-      if (settled) return;
-      settled = true;
-      clearTimeout(timeout);
-      resolve({ child, value });
-    };
-
-    const timeout = setTimeout(() => {
-      markExpectedExit(child);
-      child.kill("SIGTERM");
-      fail(new Error(`${prettyProcessName(name)} startup timeout (${STARTUP_TIMEOUT_MS}ms)`));
-    }, STARTUP_TIMEOUT_MS);
-
-    child.stdout?.on("data", (data: Buffer) => {
-      stdoutBuffer += data.toString();
-      const lines = stdoutBuffer.split("\n");
-      stdoutBuffer = lines.pop() ?? "";
-
-      for (const line of lines) {
-        const trimmed = line.trim();
-        if (!trimmed) continue;
-
-        hooks.onStdoutLine?.(name, trimmed);
-
-        if (!hooks.onStdoutLine && !app.isPackaged) {
-          console.log(`[${name}]`, trimmed);
-        }
-
-        if (name === "backend") {
-          relayWorkspaceProgress(trimmed);
-        }
-
-        const match = trimmed.match(waitFor);
-        if (match) {
-          succeed(match[1]);
-        }
-      }
-    });
-
-    child.stderr?.on("data", (data: Buffer) => {
-      for (const line of data.toString().split("\n")) {
-        const trimmed = line.trim();
-        if (!trimmed) continue;
-        hooks.onStderrLine?.(name, trimmed);
-        if (!hooks.onStderrLine) {
-          console.error(`[${name}:stderr]`, trimmed);
-        }
-      }
-    });
-
-    child.on("exit", (code, signal) => {
-      const expected = consumeExpectedExit(child);
-      hooks.onExit?.(name, code, signal);
-      clearProcessRef(name, child);
-      if (!hooks.onExit) {
-        console.log(`[${name}] Exited with code=${code} signal=${signal}`);
-      }
-
-      if (!settled) {
-        fail(
-          new Error(
-            `${prettyProcessName(name)} exited before starting (code=${code}, signal=${signal})`
-          )
-        );
-        return;
-      }
-
-      if (!expected && !isQuitting) {
-        scheduleRestart(hooks);
-      }
-    });
-
-    child.on("error", (err) => {
-      console.error(`[${name}] Spawn error:`, err);
-      fail(err instanceof Error ? err : new Error(String(err)));
-    });
-  });
 }
 
 export async function spawnBackend(
@@ -335,56 +138,54 @@ export async function spawnBackend(
     ...(runtime.bundledBinDir ? { DEUS_BUNDLED_BIN_DIR: runtime.bundledBinDir } : {}),
   };
 
-  startupInProgress = true;
-
-  try {
-    const { value: agentServerUrl } = await startManagedProcess({
-      name: "agent-server",
-      entry: runtime.agentServerEntry,
-      cwd: runtime.agentServerCwd,
-      env: sharedEnv,
-      waitFor: /LISTEN_URL=(.+)/,
-      hooks,
-    });
-
-    const { value: backendPortValue } = await startManagedProcess({
-      name: "backend",
-      entry: runtime.backendEntry,
-      cwd: runtime.backendCwd,
-      env: {
-        ...sharedEnv,
-        AGENT_SERVER_URL: agentServerUrl,
+  const createSupervisor = () =>
+    new RuntimeSupervisor({
+      command: process.execPath,
+      entries: runtime,
+      sharedEnv,
+      backendEnv: {
         AUTH_TOKEN: authToken,
         PORT: "0",
         CDP_PORT,
       },
-      waitFor: /^\[BACKEND_PORT\](\d+)$/,
-      hooks,
+      forceElectronRunAsNode: true,
+      hooks: {
+        ...hooks,
+        onStdoutLine: (source, line) => {
+          hooks.onStdoutLine?.(source, line);
+          if (source === "backend") relayWorkspaceProgress(line);
+          if (!hooks.onStdoutLine && !app.isPackaged) console.log(`[${source}]`, line);
+        },
+        onStderrLine: (source, line) => {
+          hooks.onStderrLine?.(source, line);
+          if (!hooks.onStderrLine) console.error(`[${source}:stderr]`, line);
+        },
+        onExit: (source, code, signal) => {
+          hooks.onExit?.(source, code, signal);
+          if (!hooks.onExit) console.log(`[${source}] Exited with code=${code} signal=${signal}`);
+        },
+        onUnexpectedExit: () => scheduleRestart(hooks, createSupervisor),
+      },
     });
 
+  try {
+    supervisor = createSupervisor();
+    const { backendPort } = await supervisor.start();
+
     restartAttempt = 0;
-    const port = parseInt(backendPortValue, 10);
-    writeBackendPortFile(port);
-    return { port, authToken };
+    writeBackendPortFile(backendPort);
+    return { port: backendPort, authToken };
   } catch (error) {
-    await stopRuntimeChildren();
+    await supervisor?.stop();
     throw error;
-  } finally {
-    startupInProgress = false;
-    if (pendingRestartHooks && !restartTimer && !isQuitting) {
-      const queuedHooks = pendingRestartHooks;
-      pendingRestartHooks = null;
-      scheduleRestart(queuedHooks);
-    }
   }
 }
 
 export function stopBackend(): void {
   isQuitting = true;
-  pendingRestartHooks = null;
   if (restartTimer) {
     clearTimeout(restartTimer);
     restartTimer = null;
   }
-  void stopRuntimeChildren();
+  void supervisor?.stop();
 }
