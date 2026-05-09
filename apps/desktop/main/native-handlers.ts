@@ -19,6 +19,7 @@ import { checkCliTool } from "./cli-tools";
 import { logoutGhAuth, startGhAuthLogin } from "./github-cli-auth";
 
 const execFileAsync = promisify(execFile);
+const WORKSPACE_LOOKUP_TIMEOUT_MS = 2_000;
 
 interface WorkspaceFileTarget {
   workspaceId: string;
@@ -32,16 +33,21 @@ interface WorkspaceLookupResponse {
 async function getWorkspacePath(workspaceId: string): Promise<string | null> {
   const port = process.env.DEUS_BACKEND_PORT;
   if (!port || !/^\d+$/u.test(port)) return null;
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), WORKSPACE_LOOKUP_TIMEOUT_MS);
 
   try {
     const response = await fetch(
-      `http://localhost:${port}/api/workspaces/${encodeURIComponent(workspaceId)}`
+      `http://localhost:${port}/api/workspaces/${encodeURIComponent(workspaceId)}`,
+      { signal: controller.signal }
     );
     if (!response.ok) return null;
     const payload = (await response.json()) as WorkspaceLookupResponse;
     return typeof payload.workspace_path === "string" ? payload.workspace_path : null;
   } catch {
     return null;
+  } finally {
+    clearTimeout(timeout);
   }
 }
 
