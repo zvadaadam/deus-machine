@@ -14,6 +14,7 @@ import { uuidv7 } from "@shared/lib/uuid";
 import { EventBroadcaster } from "../../event-broadcaster";
 import { codexSdkAdapter } from "../../messages/codex-sdk-adapter";
 import { classifyError, handleCancellation, handleQueryError } from "../lifecycle";
+import { createPartEventEmitter } from "../part-event-emitter";
 import type { AgentCapabilities, AgentHandler, QueryOptions } from "../registry";
 import { buildAgentEnvironment, buildWorkspaceContext } from "../environment";
 import { initializeCodex, blockIfNotInitialized, getCodexExecutablePath } from "./codex-discovery";
@@ -192,7 +193,6 @@ export class CodexAgentHandler implements AgentHandler {
     codexSessions.set(sessionId, session);
 
     try {
-      // Build environment (reuse shared env builder)
       const env = buildAgentEnvironment({
         providerEnvVars: options?.providerEnvVars,
         deusEnv: options?.deusEnv,
@@ -218,7 +218,6 @@ export class CodexAgentHandler implements AgentHandler {
         ...(workspaceContext ? { config: { developer_instructions: workspaceContext } } : {}),
       });
 
-      // Configure thread options
       const threadOptions: ThreadOptions = {
         model,
         workingDirectory: options?.cwd,
@@ -228,12 +227,10 @@ export class CodexAgentHandler implements AgentHandler {
         additionalDirectories: options?.additionalDirectories,
       };
 
-      // Start or resume thread
       const thread = existingThreadId
         ? codex.resumeThread(existingThreadId, threadOptions)
         : codex.startThread(threadOptions);
 
-      // Run streamed
       const { events } = await thread.runStreamed(prompt, {
         signal: abortController.signal,
       });
@@ -245,24 +242,27 @@ export class CodexAgentHandler implements AgentHandler {
         messageId,
         turnId: options.turnId,
       });
+      const partEmitter = createPartEventEmitter({
+        sessionId,
+        agentHarness: "codex-sdk",
+        fallbackMessageId: messageId,
+        getParts: () => transformer.getParts(),
+      });
 
       for await (const event of events) {
         if (abortController.signal.aborted) break;
 
-        // Transform into PartEvents and emit each individually
-        const partEvents = transformer.process(event as ThreadEvent);
-        for (const evt of partEvents) {
-          EventBroadcaster.emitPartEvent(sessionId, "codex-sdk", messageId, evt);
-        }
+        partEmitter.emitMany(transformer.process(event as ThreadEvent));
 
         match(event)
           .with({ type: "thread.started" }, (e) => {
             session.threadId = e.thread_id;
             console.log(`[${queryId}] Thread started: ${e.thread_id}`);
           })
-          .with({ type: P.union("item.started", "item.updated", "item.completed") }, () => {
-            // Content handled by Part events via the transformer
-          })
+          .with(
+            { type: P.union("item.started", "item.updated", "item.completed") },
+            () => undefined
+          )
           .with({ type: "turn.completed" }, (e) => {
             console.log(
               `[${queryId}] Turn completed. Tokens: in=${e.usage.input_tokens}, out=${e.usage.output_tokens}`
@@ -282,26 +282,20 @@ export class CodexAgentHandler implements AgentHandler {
             );
             handleQueryError(sessionId, "codex-sdk", e);
           })
-          .with({ type: "turn.started" }, () => {
-            // Informational — no action needed
-          })
+          .with({ type: "turn.started" }, () => undefined)
           .otherwise((e) => {
             // External SDK types can gain new variants — gracefully skip unknown events
             console.warn(`[codex] Unknown ThreadEvent type: ${(e as any).type}`);
           });
       }
 
-      // Finalize the transformer: close open parts, emit turn.completed
       const finished = transformer.finish();
-      for (const evt of finished.events) {
-        EventBroadcaster.emitPartEvent(sessionId, "codex-sdk", messageId, evt);
-      }
+      partEmitter.emitMany(finished.events);
 
       // Only update status if this processQuery still owns the session —
       // a rapid re-query can replace the session before we reach this point.
       if (codexSessions.owns(sessionId, session)) {
         if (abortController.signal.aborted) {
-          // Abort break path: notify frontend + emit canonical events
           handleCancellation(sessionId, "codex-sdk", true);
         }
         // Note: no fallback idle emission here — turn.completed already emits it.

@@ -57,7 +57,15 @@ export type ClaudeRawStreamEvent =
   | { type: "content_block_start"; index: number; content_block: ClaudeContentBlock }
   | { type: "content_block_delta"; index: number; delta: ClaudeDelta }
   | { type: "content_block_stop"; index: number }
-  | { type: "message_start"; message: { usage?: ClaudeUsage } }
+  | {
+      type: "message_start";
+      message: {
+        id?: string;
+        role?: "assistant";
+        content?: ClaudeContentBlock[];
+        usage?: ClaudeUsage;
+      };
+    }
   | { type: "message_delta"; delta: { stop_reason?: string }; usage?: { output_tokens: number } }
   | { type: "message_stop" };
 
