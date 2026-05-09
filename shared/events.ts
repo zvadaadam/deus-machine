@@ -67,6 +67,8 @@ export const QUERY_RESOURCES = [
   // AAP (agentic apps protocol)
   "apps",
   "running_apps",
+  // Localhost dev-server discovery (curated port probe + page metadata)
+  "local_servers",
 ] as const;
 export type QueryResource = (typeof QUERY_RESOURCES)[number];
 

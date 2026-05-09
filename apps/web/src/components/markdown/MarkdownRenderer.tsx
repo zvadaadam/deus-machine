@@ -22,7 +22,7 @@
  * ```
  */
 
-import { isValidElement, useRef, useState } from "react";
+import { isValidElement, useMemo, useRef, useState } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import rehypeRaw from "rehype-raw";
@@ -31,6 +31,16 @@ import { cn } from "@/shared/lib/utils";
 import { ShikiCodeBlock } from "./ShikiCodeBlock";
 import { LazyMermaidDiagram } from "./LazyMermaidDiagram";
 import { HtmlPreviewBlock } from "./HtmlPreviewBlock";
+import { ArrowUpRight, FileText, Globe } from "lucide-react";
+
+export interface MarkdownFileLink {
+  path: string;
+  disabled?: boolean;
+  title?: string;
+  target?: "browser" | "file" | "external";
+}
+
+export type MarkdownFileLinkResolution = string | MarkdownFileLink | null;
 
 interface MarkdownRendererProps {
   children: string;
@@ -39,6 +49,9 @@ interface MarkdownRendererProps {
   allowHtml?: boolean;
   /** Custom prose classes (default: chat-optimized) */
   proseClassName?: string;
+  resolveFileLink?: (href: string, label: string) => MarkdownFileLinkResolution;
+  onFileLinkOpen?: (path: string) => void | Promise<void>;
+  onLinkOpen?: (href: string) => void | Promise<void>;
 }
 
 /**
@@ -194,16 +207,123 @@ export function MarkdownRenderer({
   className = "",
   allowHtml = false,
   proseClassName,
+  resolveFileLink,
+  onFileLinkOpen,
+  onLinkOpen,
 }: MarkdownRendererProps) {
+  const components = useMemo(() => {
+    if (!resolveFileLink && !onLinkOpen) return markdownComponents;
+
+    return {
+      ...markdownComponents,
+      a({ href, children, ...props }: any) {
+        const label = getLinkLabel(children);
+        const resolvedLink =
+          href && resolveFileLink && onFileLinkOpen ? resolveFileLink(href, label) : null;
+        const fileLink =
+          typeof resolvedLink === "string"
+            ? ({ path: resolvedLink, target: "file" } satisfies MarkdownFileLink)
+            : resolvedLink;
+        if (!fileLink) {
+          if (href && onLinkOpen && shouldHandleMarkdownHref(href)) {
+            return (
+              <a
+                href={href}
+                {...props}
+                className={cn(
+                  "text-primary inline-flex max-w-full items-baseline gap-1 rounded-sm border-0 bg-transparent p-0 text-left font-medium underline underline-offset-2",
+                  "hover:text-primary/80 focus-visible:ring-ring/60 focus-visible:ring-2 focus-visible:outline-none"
+                )}
+                title={`Open ${href}`}
+                onClick={(event) => {
+                  event.preventDefault();
+                  event.stopPropagation();
+                  void onLinkOpen(href);
+                }}
+              >
+                <span className="truncate">{children}</span>
+                <Globe className="relative top-0.5 h-3 w-3 shrink-0" strokeWidth={1.5} />
+              </a>
+            );
+          }
+
+          return (
+            <a href={href} {...props}>
+              {children}
+            </a>
+          );
+        }
+
+        if (fileLink.disabled) {
+          return (
+            <span
+              className="text-muted-foreground inline-flex max-w-full cursor-not-allowed items-baseline gap-1 rounded-sm font-medium underline decoration-dotted underline-offset-2 opacity-70"
+              title={fileLink.title ?? `File not found: ${fileLink.path}`}
+              aria-disabled="true"
+            >
+              <span className="truncate">{children}</span>
+              <MarkdownLinkIcon target={fileLink.target ?? "file"} />
+            </span>
+          );
+        }
+
+        return (
+          <a
+            href={fileLink.path}
+            className={cn(
+              "text-primary inline-flex max-w-full items-baseline gap-1 rounded-sm border-0 bg-transparent p-0 text-left font-medium underline underline-offset-2",
+              "hover:text-primary/80 focus-visible:ring-ring/60 focus-visible:ring-2 focus-visible:outline-none"
+            )}
+            title={fileLink.title ?? `Open ${fileLink.path}`}
+            onClick={(event) => {
+              event.preventDefault();
+              event.stopPropagation();
+              void onFileLinkOpen?.(fileLink.path);
+            }}
+          >
+            <span className="truncate">{children}</span>
+            <MarkdownLinkIcon target={fileLink.target ?? "file"} />
+          </a>
+        );
+      },
+    };
+  }, [onFileLinkOpen, onLinkOpen, resolveFileLink]);
+
   return (
     <article className={cn(proseClassName, className)}>
       <ReactMarkdown
         remarkPlugins={REMARK_PLUGINS}
         rehypePlugins={allowHtml ? REHYPE_PLUGINS_HTML : REHYPE_PLUGINS_PLAIN}
-        components={markdownComponents}
+        components={components}
       >
         {children}
       </ReactMarkdown>
     </article>
   );
+}
+
+function shouldHandleMarkdownHref(href: string): boolean {
+  const trimmed = href.trim();
+  if (/^(?:#|mailto:|tel:)/iu.test(trimmed)) return false;
+  if (/^file:\/\//iu.test(trimmed)) return true;
+  if (/^\/\//u.test(trimmed)) return true;
+  if (/^www\./iu.test(trimmed)) return true;
+  if (/^(?:localhost|127\.0\.0\.1|\[::1\]):\d+/iu.test(trimmed)) return true;
+  const scheme = trimmed.match(/^([a-z][a-z0-9+.-]*):/iu)?.[1]?.toLowerCase();
+  return scheme === "http" || scheme === "https";
+}
+
+function MarkdownLinkIcon({ target }: { target: MarkdownFileLink["target"] }) {
+  const className = "relative top-0.5 h-3 w-3 shrink-0";
+  if (target === "browser") return <Globe className={className} strokeWidth={1.5} />;
+  if (target === "file") return <FileText className={className} strokeWidth={1.5} />;
+  return <ArrowUpRight className={className} strokeWidth={1.5} />;
+}
+
+function getLinkLabel(children: unknown): string {
+  if (typeof children === "string" || typeof children === "number") return String(children);
+  if (Array.isArray(children)) return children.map(getLinkLabel).join("");
+  if (isValidElement(children))
+    return getLinkLabel((children.props as { children?: unknown }).children);
+  return "";
 }

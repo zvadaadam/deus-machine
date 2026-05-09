@@ -106,6 +106,68 @@ const ALLOWED_MEDIA_EXT: Record<string, string> = {
 const toResponseBody = (stream: fs.ReadStream): BodyInit =>
   Readable.toWeb(stream) as unknown as BodyInit;
 
+const ALLOWED_WORKSPACE_PREVIEW_EXT: Record<string, string> = {
+  ".avif": "image/avif",
+  ".gif": "image/gif",
+  ".htm": "text/html; charset=utf-8",
+  ".html": "text/html; charset=utf-8",
+  ".jpeg": "image/jpeg",
+  ".jpg": "image/jpeg",
+  ".pdf": "application/pdf",
+  ".png": "image/png",
+  ".webp": "image/webp",
+};
+
+/**
+ * GET /workspaces/:id/file-preview — Stream a browser-previewable workspace file.
+ * Query param: ?path=relative/file/path
+ */
+app.get("/workspaces/:id/file-preview", withWorkspace, (c) => {
+  const filePath = c.req.query("path");
+  if (!filePath) throw new ValidationError("path parameter is required");
+
+  const workspacePath = c.get("workspacePath");
+  const safeRelativePath = gitService.resolveWorkspaceRelativePath(workspacePath, filePath);
+  if (!safeRelativePath) throw new ValidationError("Invalid file path");
+
+  const absolutePath = path.resolve(workspacePath, safeRelativePath);
+  if (!fs.existsSync(absolutePath)) {
+    throw new ValidationError("File not found");
+  }
+
+  let realWorkspacePath: string;
+  let realPath: string;
+  try {
+    realWorkspacePath = fs.realpathSync(workspacePath);
+    realPath = fs.realpathSync(absolutePath);
+  } catch {
+    throw new ValidationError("File not found");
+  }
+
+  const relativeRealPath = path.relative(realWorkspacePath, realPath);
+  if (relativeRealPath.startsWith("..") || path.isAbsolute(relativeRealPath)) {
+    throw new ValidationError("Invalid file path");
+  }
+
+  const stat = fs.statSync(realPath);
+  if (!stat.isFile()) throw new ValidationError("Not a file");
+
+  const ext = path.extname(realPath).toLowerCase();
+  const mimeType = ALLOWED_WORKSPACE_PREVIEW_EXT[ext];
+  if (!mimeType) throw new ValidationError("Unsupported preview file type");
+
+  const stream = fs.createReadStream(realPath);
+  return new Response(toResponseBody(stream), {
+    status: 200,
+    headers: {
+      "Content-Type": mimeType,
+      "Content-Length": String(stat.size),
+      "Content-Disposition": `inline; filename="${path.basename(realPath).replace(/"/g, "")}"`,
+      "Cache-Control": "private, max-age=60",
+    },
+  });
+});
+
 /**
  * GET /files/stream — Stream a local media file.
  * Query param: ?path=/tmp/recording-rec_a1b2c3.mp4

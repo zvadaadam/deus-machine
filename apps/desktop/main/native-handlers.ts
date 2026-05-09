@@ -13,6 +13,8 @@ import { ipcMain, dialog, nativeTheme, BrowserWindow, shell, Menu, app } from "e
 import { exec, execFile } from "child_process";
 import { promisify } from "util";
 import { homedir } from "os";
+import path from "path";
+import { existsSync } from "fs";
 
 const execFileAsync = promisify(execFile);
 
@@ -118,11 +120,33 @@ export function registerNativeHandlers(): void {
     try {
       const parsed = new URL(url);
       if (parsed.protocol === "http:" || parsed.protocol === "https:") {
-        shell.openExternal(url);
+        return shell.openExternal(url);
       }
+      return undefined;
     } catch {
       // Ignore malformed URLs
+      return undefined;
     }
+  });
+
+  // -------------------------------------------------------------------------
+  // Open/reveal local files
+  // -------------------------------------------------------------------------
+
+  ipcMain.handle("native:openPath", async (_e, { filePath }: { filePath: string }) => {
+    if (!path.isAbsolute(filePath) || !existsSync(filePath)) return false;
+    const error = await shell.openPath(filePath);
+    if (error) {
+      console.error("[native:openPath] Failed:", error);
+      return false;
+    }
+    return true;
+  });
+
+  ipcMain.handle("native:revealInFinder", (_e, { filePath }: { filePath: string }) => {
+    if (!path.isAbsolute(filePath) || !existsSync(filePath)) return false;
+    shell.showItemInFolder(filePath);
+    return true;
   });
 
   // -------------------------------------------------------------------------

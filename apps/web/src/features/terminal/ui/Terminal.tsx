@@ -12,6 +12,7 @@ interface TerminalProps {
   workspacePath: string;
   /** Command to execute automatically after shell init (e.g. task execution, "claude login") */
   initialCommand?: string;
+  getInitialCommand?: (id: string) => string | undefined;
   /** Whether this terminal is visible (active tab AND panel visible). Used to refit on visibility change. */
   visible?: boolean;
 }
@@ -99,7 +100,13 @@ function safeFit(fitAddon: FitAddon): void {
   }
 }
 
-export function Terminal({ id, workspacePath, initialCommand, visible = true }: TerminalProps) {
+export function Terminal({
+  id,
+  workspacePath,
+  initialCommand,
+  getInitialCommand,
+  visible = true,
+}: TerminalProps) {
   const terminalRef = useRef<HTMLDivElement>(null);
   const xtermRef = useRef<XTerm | null>(null);
   const fitAddonRef = useRef<FitAddon | null>(null);
@@ -111,6 +118,7 @@ export function Terminal({ id, workspacePath, initialCommand, visible = true }: 
     const ptyId = `${id}-${Date.now()}`;
     let disposed = false;
     let ready = false;
+    const commandToRun = initialCommand ?? getInitialCommand?.(id);
 
     // Create xterm instance with theme-aware colors
     const xterm = new XTerm({
@@ -160,10 +168,10 @@ export function Terminal({ id, workspacePath, initialCommand, visible = true }: 
         if (!disposed) {
           ready = true;
           // Auto-run initial command after shell init settles
-          if (initialCommand) {
+          if (commandToRun) {
             setTimeout(() => {
               if (!disposed) {
-                const encoded = Array.from(new TextEncoder().encode(initialCommand + "\n"));
+                const encoded = Array.from(new TextEncoder().encode(commandToRun + "\n"));
                 ptyCommands.write(ptyId, encoded).catch((err) => {
                   console.error("Failed to write initial command:", err);
                 });
@@ -226,7 +234,7 @@ export function Terminal({ id, workspacePath, initialCommand, visible = true }: 
       });
       xterm.dispose();
     };
-  }, [id, workspacePath, initialCommand]);
+  }, [id, workspacePath, initialCommand, getInitialCommand]);
 
   // Refit terminal when becoming visible — container may have resized while hidden
   useEffect(() => {

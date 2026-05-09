@@ -19,14 +19,24 @@
  * - Dense IDE-friendly typography
  */
 
-import { useMemo } from "react";
+import { useCallback, useMemo } from "react";
 import type { TextBlock as TextBlockType, MessageRole } from "@/shared/types";
+import type { MarkdownFileLinkResolution } from "@/components/markdown/MarkdownRenderer";
 
 import { ChatMarkdown } from "@/components/markdown";
 import { cn } from "@/shared/lib/utils";
+import {
+  createWorkspacePreviewUrl,
+  isBrowserPreviewPath,
+  normalizeResourcePath,
+} from "../../lib/chatResources";
 import { parseUserMessageReferences } from "../../lib/parseUserMessageReferences";
 import { InspectElementPill } from "../InspectElementPill";
 import { DiffCommentPill } from "../DiffCommentPill";
+import { useSession } from "../../context";
+import { workspaceLayoutActions } from "@/features/workspace/store/workspaceLayoutStore";
+import { browserWindowActions } from "@/features/browser/store/browserWindowStore";
+import { getBaseURL } from "@/shared/config/api.config";
 
 export type TextWeight = "muted" | "normal";
 
@@ -37,6 +47,7 @@ interface TextBlockProps {
 }
 
 export function TextBlock({ block, role = "assistant", weight = "normal" }: TextBlockProps) {
+  const { workspaceId, workspacePath } = useSession();
   // Handle both TextBlock objects and plain strings
   const text = typeof block === "string" ? block : block.text;
 
@@ -50,6 +61,49 @@ export function TextBlock({ block, role = "assistant", weight = "normal" }: Text
         ? parseUserMessageReferences(text)
         : [],
     [role, text]
+  );
+
+  const handleMarkdownLinkOpen = useCallback(
+    async (href: string) => {
+      if (!workspaceId) return;
+      const url = resolveBrowserLinkUrl(href);
+      if (!url) return;
+      workspaceLayoutActions.setActiveContentTab(workspaceId, "browser");
+      browserWindowActions.requestNewTab(workspaceId, url);
+    },
+    [workspaceId]
+  );
+
+  const resolveFileLink = useCallback(
+    (href: string): MarkdownFileLinkResolution => {
+      const path = getWorkspaceFilePathFromHref(href, workspacePath);
+      if (!path) return null;
+
+      const target = isBrowserPreviewPath(path) ? "browser" : "file";
+      return {
+        path,
+        target,
+        title: target === "browser" ? `Open preview ${path}` : `Open ${path} in Files`,
+      };
+    },
+    [workspacePath]
+  );
+
+  const handleFileLinkOpen = useCallback(
+    async (path: string) => {
+      if (!workspaceId) return;
+
+      if (isBrowserPreviewPath(path)) {
+        const baseUrl = await getBaseURL();
+        const url = createWorkspacePreviewUrl(baseUrl, workspaceId, path);
+        workspaceLayoutActions.setActiveContentTab(workspaceId, "browser");
+        browserWindowActions.requestNewTab(workspaceId, url);
+        return;
+      }
+
+      workspaceLayoutActions.openFileInContent(workspaceId, path, "files");
+    },
+    [workspaceId]
   );
 
   if (!text || text.trim() === "") {
@@ -88,7 +142,46 @@ export function TextBlock({ block, role = "assistant", weight = "normal" }: Text
   // Wrap in div for weight control (opacity) since .markdown-content has explicit color
   return (
     <div className={weight === "muted" ? "opacity-60" : ""}>
-      <ChatMarkdown className="flex flex-col gap-1.5 px-2 py-1.5">{text}</ChatMarkdown>
+      <ChatMarkdown
+        className="flex flex-col gap-1.5 px-2 py-1.5"
+        resolveFileLink={resolveFileLink}
+        onFileLinkOpen={handleFileLinkOpen}
+        onLinkOpen={handleMarkdownLinkOpen}
+      >
+        {text}
+      </ChatMarkdown>
     </div>
+  );
+}
+
+function resolveBrowserLinkUrl(href: string): string | null {
+  const trimmed = href.trim();
+  if (!trimmed || /^(?:#|mailto:|tel:)/iu.test(trimmed)) return null;
+  if (/^https?:\/\//iu.test(trimmed)) return trimmed;
+  if (/^\/\//u.test(trimmed)) return `https:${trimmed}`;
+  if (/^www\./iu.test(trimmed)) return `https://${trimmed}`;
+  if (/^(?:localhost|127\.0\.0\.1|\[::1\]):\d+/iu.test(trimmed)) return `http://${trimmed}`;
+  if (/^file:\/\//iu.test(trimmed)) return trimmed;
+  return null;
+}
+
+function getWorkspaceFilePathFromHref(
+  href: string,
+  workspacePath: string | null | undefined
+): string | null {
+  const trimmed = href.trim();
+  if (!looksLikeWorkspaceFileHref(trimmed)) return null;
+  return normalizeResourcePath(trimmed.replace(/[?#].*$/u, ""), workspacePath);
+}
+
+function looksLikeWorkspaceFileHref(href: string): boolean {
+  if (!href || /^(?:#|mailto:|tel:)/iu.test(href)) return false;
+  if (/^(?:[a-z][a-z0-9+.-]*:|\/\/|www\.)/iu.test(href)) return false;
+
+  return (
+    href.startsWith("./") ||
+    href.startsWith("../") ||
+    href.includes("/") ||
+    /\.[^/.?#]+(?:[?#].*)?$/u.test(href)
   );
 }

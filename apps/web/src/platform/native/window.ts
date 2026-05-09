@@ -16,6 +16,20 @@ export async function setZoom(level: number): Promise<void> {
   await invoke("native:setZoom", { level });
 }
 
+export async function openExternal(url: string): Promise<void> {
+  if (window.electronAPI?.openExternal) {
+    await window.electronAPI.openExternal(url);
+    return;
+  }
+
+  if (capabilities.ipcInvoke) {
+    await invoke("native:openExternal", { url });
+    return;
+  }
+
+  window.open(url, "_blank", "noopener,noreferrer");
+}
+
 export async function enterOnboarding(): Promise<void> {
   if (!capabilities.nativeOnboarding) return;
   await invoke("enter_onboarding_mode");

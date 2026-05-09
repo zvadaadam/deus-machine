@@ -34,6 +34,7 @@ interface Window {
     downloadUpdate: () => Promise<void>;
     installUpdate: () => Promise<void>;
     onUpdateState: (callback: (state: unknown) => void) => () => void;
+    openExternal: (url: string) => Promise<void>;
     openTerminal: (command: string) => Promise<void>;
     on: (event: string, callback: (...args: unknown[]) => void) => () => void;
     invoke: (channel: string, args?: unknown) => Promise<unknown>;
