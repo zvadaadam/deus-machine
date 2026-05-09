@@ -118,9 +118,10 @@ function resetSessionAcrossAgents(params: unknown): void {
 
 async function providerAuth(params: unknown): Promise<unknown> {
   const agentHarness = requireParam<AgentHarness>(params, "agentHarness", "provider/auth");
+  const cwd = requireParam<string>(params, "cwd", "provider/auth");
   const agent = getAgent(agentHarness);
   if (!agent?.auth) throw new Error(`Agent "${agentHarness}" does not support auth`);
-  return agent.auth({ cwd: readParam<string>(params, "cwd") as string });
+  return agent.auth({ cwd });
 }
 
 async function providerInitWorkspace(params: unknown): Promise<unknown> {

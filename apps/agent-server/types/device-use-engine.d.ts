@@ -1,16 +1,17 @@
 declare module "device-use/engine" {
-  type AccessibilityNode =
+  export type AccessibilityNode =
     import("../../../packages/device-use/src/engine/types").AccessibilityNode;
-  type AppInfo = import("../../../packages/device-use/src/engine/types").AppInfo;
-  type CommandExecutor = import("../../../packages/device-use/src/engine/types").CommandExecutor;
-  type ExecOptions = import("../../../packages/device-use/src/engine/types").ExecOptions;
-  type Simulator = import("../../../packages/device-use/src/engine/types").Simulator;
-  type Snapshot = import("../../../packages/device-use/src/engine/types").Snapshot;
-  type CreateExecutorOptions = Omit<ExecOptions, "env"> & {
+  export type AppInfo = import("../../../packages/device-use/src/engine/types").AppInfo;
+  export type CommandExecutor =
+    import("../../../packages/device-use/src/engine/types").CommandExecutor;
+  export type ExecOptions = import("../../../packages/device-use/src/engine/types").ExecOptions;
+  export type Simulator = import("../../../packages/device-use/src/engine/types").Simulator;
+  export type Snapshot = import("../../../packages/device-use/src/engine/types").Snapshot;
+  export type CreateExecutorOptions = Omit<ExecOptions, "env"> & {
     env?: Record<string, string | undefined>;
   };
 
-  interface BuildSnapshotOptions {
+  export interface BuildSnapshotOptions {
     interactiveOnly?: boolean;
     startCounter?: number;
     refMap?: unknown;
