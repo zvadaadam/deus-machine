@@ -15,6 +15,11 @@ import {
 import { stopAllApps, sweepOrphanApps } from "./services/aap";
 import { setApp } from "./services/route-delegate";
 import { invalidate } from "./services/query-engine";
+import {
+  setRefreshListener as setLocalServerRefreshListener,
+  startBackgroundRefresh as startLocalServerDiscovery,
+  stopBackgroundRefresh as stopLocalServerDiscovery,
+} from "./services/local-servers.service";
 
 // Initialize Sentry before anything else.
 // DSN is a public, write-only ingest token — safe to hardcode.
@@ -150,6 +155,12 @@ if (agentServerUrl) {
 // Restores awareness of running simulators after a backend restart.
 void reconcileSimulators();
 
+// Periodic localhost dev-server discovery. Probes a curated port list
+// every 60s; the refresh listener pushes a fresh snapshot to all
+// `local_servers` WS subscribers each time a sweep completes.
+setLocalServerRefreshListener(() => invalidate(["local_servers"]));
+startLocalServerDiscovery();
+
 // Global error handlers
 process.on("uncaughtException", (error, origin) => {
   console.error("[FATAL] Uncaught Exception:", origin, error);
@@ -180,6 +191,7 @@ function shutdown() {
   destroyAllSimulators();
   destroyAllPtySessions();
   destroyAllWatchers();
+  stopLocalServerDiscovery();
   disconnectFromRelay();
   closeAllWsConnections();
   closeDatabase();

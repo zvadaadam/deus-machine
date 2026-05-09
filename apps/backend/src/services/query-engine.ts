@@ -31,6 +31,7 @@ import { resolveToolRelay, rejectToolRelay, runCommand } from "./agent";
 import { delegateToRoute } from "./route-delegate";
 import { autoProgressStatus, setWorkspaceStatus } from "./workspace-status.service";
 import { getRunningApps, listApps, stopAppsForWorkspace } from "./aap";
+import { getDiscoveredServers } from "./local-servers.service";
 import { WorkspaceStatusSchema } from "@shared/enums";
 import {
   QUERY_RESOURCES,
@@ -427,6 +428,7 @@ function runQuery(resource: QueryResource, params: QueryParams): unknown {
         const workspaceId = readStringParam(params, "workspaceId");
         return getRunningApps(workspaceId ?? null);
       })
+      .with("local_servers", () => getDiscoveredServers())
       .exhaustive()
   );
 }

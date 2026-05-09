@@ -1,13 +1,12 @@
 /**
- * SkillMentionCard — compact chip shown above the chat textarea
- * when a user picks a skill from the / slash command picker.
- *
- * Uses the "warning" (orange) token to visually distinguish skills
- * from inspect/file pills which use the primary (blue) token.
+ * SkillMentionCard — chip shown above the chat textarea when a user
+ * picks a skill from the / slash command picker. Uses the shared
+ * <MentionChip> primitive with the warning (orange) tone to visually
+ * distinguish skills from inspect/file pills (primary/blue).
  */
 
-import { X, Sparkles } from "lucide-react";
-import { m } from "framer-motion";
+import { Sparkles } from "lucide-react";
+import { MentionChip } from "@/components/ui/mention-chip";
 
 export interface SkillMention {
   id: string;
@@ -23,25 +22,14 @@ interface SkillMentionCardProps {
 
 export function SkillMentionCard({ mention, onRemove }: SkillMentionCardProps) {
   return (
-    <m.div
-      layout
-      initial={{ opacity: 0, scale: 0.95 }}
-      animate={{ opacity: 1, scale: 1 }}
-      exit={{ opacity: 0, scale: 0.95 }}
-      transition={{ duration: 0.15, ease: [0.165, 0.84, 0.44, 1] }}
+    <MentionChip
+      tone="warning"
+      icon={Sparkles}
       title={mention.description ?? mention.name}
-      className="group bg-warning/8 border-warning/20 relative flex shrink-0 items-center gap-1.5 rounded-full border py-1 pr-1.5 pl-2"
+      onRemove={onRemove}
+      removeAriaLabel={`Remove skill ${mention.name}`}
     >
-      <Sparkles className="text-warning/70 h-3 w-3 shrink-0" />
       <span className="text-foreground/80 max-w-[160px] truncate text-xs">{mention.name}</span>
-      <button
-        type="button"
-        onClick={onRemove}
-        className="text-foreground/30 hover:text-foreground/60 ease ml-0.5 flex h-4 w-4 shrink-0 items-center justify-center rounded-full transition-colors duration-200"
-        aria-label={`Remove skill ${mention.name}`}
-      >
-        <X className="h-3 w-3" />
-      </button>
-    </m.div>
+    </MentionChip>
   );
 }
