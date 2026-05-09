@@ -22,7 +22,7 @@ export async function killChildProcesses(parentPid = process.pid): Promise<void>
 
 function findChildProcesses(parentPid: number): Promise<number[]> {
   return new Promise((resolve) => {
-    execFile("/usr/bin/pgrep", ["-P", String(parentPid)], (error, stdout) => {
+    execFile("pgrep", ["-P", String(parentPid)], (error, stdout) => {
       if (error && getProcessExitCode(error) !== 1) {
         console.log(`[CLEANUP] Failed to enumerate child processes: ${getErrorMessage(error)}`);
         if (!stdout) {

@@ -32,11 +32,7 @@ describe("killChildProcesses", () => {
 
     await killChildProcesses(123);
 
-    expect(mockExecFile).toHaveBeenCalledWith(
-      "/usr/bin/pgrep",
-      ["-P", "123"],
-      expect.any(Function)
-    );
+    expect(mockExecFile).toHaveBeenCalledWith("pgrep", ["-P", "123"], expect.any(Function));
     expect(killSpy).not.toHaveBeenCalled();
     expect(logSpy).toHaveBeenCalledWith("[CLEANUP] No child processes found");
   });
