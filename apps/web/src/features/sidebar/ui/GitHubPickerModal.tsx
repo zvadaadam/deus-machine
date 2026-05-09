@@ -1,6 +1,6 @@
 import { useState, useCallback } from "react";
 import { useMutation } from "@tanstack/react-query";
-import { GitPullRequest, GitBranch, Github, Loader2 } from "lucide-react";
+import { GitPullRequest, GitBranch, Loader2 } from "lucide-react";
 import { toast } from "sonner";
 import {
   CommandDialog,
@@ -15,6 +15,7 @@ import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Badge } from "@/components/ui/badge";
 import { useRepoPrs, useRepoBranches, useGhStatus } from "@/features/workspace/api";
 import { native } from "@/platform";
+import { GitHubIcon } from "@/shared/components/icons/GitHubIcon";
 import type { PRSummary, BranchSummary } from "@shared/types";
 
 interface GitHubPickerModalProps {
@@ -153,7 +154,7 @@ export function GitHubPickerModal({
                 {signInMutation.isPending ? (
                   <Loader2 className="size-3.5 animate-spin" />
                 ) : (
-                  <Github className="size-3.5" />
+                  <GitHubIcon className="size-3.5" />
                 )}
                 {signInMutation.isPending ? "Signing in" : "Sign in"}
               </Button>
