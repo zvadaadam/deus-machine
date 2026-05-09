@@ -1,7 +1,8 @@
 import { useEffect, useRef } from "react";
+import type { ComponentType, SVGAttributes } from "react";
 import { ArrowLeft, Settings2, Orbit, Box, FlaskConical, Globe } from "lucide-react";
 import { capabilities } from "@/platform";
-import type { LucideIcon } from "lucide-react";
+import { GitHubIcon } from "@/shared/components/icons/GitHubIcon";
 import {
   Sidebar,
   SidebarContent,
@@ -17,17 +18,19 @@ import type { SettingsSection } from "@shared/types/settings";
 interface NavItem {
   id: SettingsSection;
   label: string;
-  icon: LucideIcon;
+  icon: ComponentType<SVGAttributes<SVGSVGElement>>;
+  badge?: string;
   /** If set, this item only shows when the capability is true. */
   capability?: keyof typeof capabilities;
 }
 
 const NAV_ITEMS: NavItem[] = [
   { id: "general", label: "General", icon: Settings2 },
+  { id: "github", label: "GitHub", icon: GitHubIcon },
   { id: "ai", label: "AI Providers", icon: Orbit },
   { id: "environment", label: "Environment", icon: Box },
   { id: "experimental", label: "Experimental", icon: FlaskConical },
-  { id: "access", label: "Remote Access", icon: Globe },
+  { id: "access", label: "Remote Access", icon: Globe, badge: "Experimental" },
 ];
 
 const visibleItems = NAV_ITEMS.filter((item) => !item.capability || capabilities[item.capability]);
@@ -86,7 +89,10 @@ export function SettingsSidebar() {
                   className="gap-2.5 px-3 py-1.5"
                 >
                   <Icon className="size-4 shrink-0" />
-                  <span className="text-base">{item.label}</span>
+                  <span className="text-base font-medium">{item.label}</span>
+                  {item.badge && (
+                    <span className="text-text-muted text-xs font-medium">{item.badge}</span>
+                  )}
                 </SidebarMenuButton>
               </SidebarMenuItem>
             );

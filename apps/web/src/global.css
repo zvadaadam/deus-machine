@@ -930,7 +930,7 @@
   --destructive-ring: color-mix(in oklch, var(--destructive) 20%, transparent);
 
   /* --- Sidebar (cool gray — recedes behind warm content) --- */
-  --sidebar: #f3f4f6;
+  --sidebar: #ececec;
   --sidebar-foreground: #6e6e73;
   --sidebar-primary: var(--primary);
   --sidebar-primary-foreground: var(--primary-foreground);
@@ -948,7 +948,7 @@
   --bg-muted: #e8e8e6;
 
   /* --- Specialized backgrounds --- */
-  --bg-sidebar: #f3f4f6;
+  --bg-sidebar: #ececec;
   --bg-selection: #fffdfb;
   --bg-code: #f7f7f5;
 
@@ -1000,7 +1000,7 @@
   --sidebar-tint-opacity: 75%;
   --sidebar-tint-strong: 85%;
   --content-tint-opacity: 92%;
-  --sidebar-wash: #f3f4f6;
+  --sidebar-wash: #ececec;
 
   /* --- Content area border/shadow --- */
   --content-border-opacity: 5%;
@@ -1209,6 +1209,33 @@
 /* Legacy: Targeted border reset for form elements */
 :where(button, input, textarea, select, summary) {
   border-color: var(--border);
+}
+
+/* Keyboard-only focus indicators.
+ *
+ * Strip outline/box-shadow on any :focus that the browser does NOT also
+ * resolve as :focus-visible. In practice this means: clicking a button or
+ * link with the mouse won't show a focus ring, but Tab-navigating to it
+ * will. Inputs/textareas are excluded because typing-capable elements
+ * always satisfy :focus-visible (you need to know where typing lands).
+ *
+ * This is a belt-and-suspenders rule — individual components should still
+ * use `focus-visible:` utilities. This catches anything that slips through
+ * (third-party components, forgotten migrations, future code). */
+:where(
+    button,
+    a,
+    summary,
+    [role="button"],
+    [role="link"],
+    [role="tab"],
+    [role="menuitem"],
+    [role="option"]
+  ):focus:not(:focus-visible) {
+  outline: none;
+  box-shadow: none;
+  --tw-ring-shadow: 0 0 #0000;
+  --tw-ring-offset-shadow: 0 0 #0000;
 }
 
 /* Base layout - applies to both web and desktop */
@@ -1501,7 +1528,7 @@ samp,
 .electron.fullscreen:not(.dark) [data-slot="sidebar-wrapper"]::after {
   background: linear-gradient(
     180deg,
-    color-mix(in oklch, oklch(0.94 0.008 75) 20%, transparent) 0%,
+    color-mix(in oklch, oklch(0.88 0.02 75) 28%, transparent) 0%,
     transparent 100%
   );
 }

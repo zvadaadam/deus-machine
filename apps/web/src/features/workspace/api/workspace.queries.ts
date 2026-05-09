@@ -184,9 +184,9 @@ export function useFileChanges(
 }
 
 /**
- * Check GitHub CLI availability and auth status.
+ * Check GitHub integration availability and auth status.
  * Cached with 5-minute staleTime — rarely changes during a session.
- * Gates usePRStatus to avoid wasted gh calls when CLI is missing or unauthenticated.
+ * Gates usePRStatus to avoid wasted GitHub calls when unavailable or unauthenticated.
  */
 export function useGhStatus() {
   return useQuery({
@@ -236,7 +236,7 @@ export function useRepoBranches(repoId: string | null) {
 /**
  * Fetch PR status for a workspace.
  *
- * Gated on gh CLI being installed + authenticated.
+ * Gated on GitHub integration being available + authenticated.
  * Polls every 30s while agent is working (to detect PR creation),
  * 60s while CI is pending post-session (CI runs 2-15min after push),
  * stops polling otherwise.
