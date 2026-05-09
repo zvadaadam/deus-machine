@@ -1,6 +1,7 @@
 import { promisify } from "util";
 import { execFile } from "child_process";
 import { getErrorMessage, isExecError } from "@shared/lib/errors";
+import { extendCliPath, resolveCliExecutable } from "@shared/lib/cli-path";
 import { parseGitHubRepo } from "@shared/lib/github";
 import { getGitRemoteUrl } from "../lib/git-remotes";
 export { parseGitHubRepo };
@@ -20,11 +21,17 @@ export async function runGh(
     }
 > {
   try {
-    const { stdout, stderr } = await execFileAsync("gh", args, {
+    const { stdout } = await execFileAsync(resolveCliExecutable("gh"), args, {
       cwd: options.cwd,
       encoding: "utf-8",
       timeout: options.timeoutMs ?? 5000,
-      env: { ...process.env, GIT_TERMINAL_PROMPT: "0", GH_PROMPT_DISABLED: "1" },
+      env: {
+        ...process.env,
+        PATH: extendCliPath(process.env.PATH),
+        GIT_TERMINAL_PROMPT: "0",
+        GH_PROMPT_DISABLED: "1",
+        GH_NO_UPDATE_NOTIFIER: "1",
+      },
     });
     return { success: true, stdout: stdout.trim() };
   } catch (err: unknown) {

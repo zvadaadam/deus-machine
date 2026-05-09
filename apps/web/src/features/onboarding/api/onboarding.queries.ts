@@ -11,13 +11,16 @@ export function useCliCheck(toolName: string) {
   });
 }
 
-export function useGhAuth(enabled: boolean) {
-  return useQuery({
-    queryKey: ["onboarding", "gh-auth"],
-    queryFn: () => OnboardingService.checkGhAuth(),
-    staleTime: Infinity,
-    retry: false,
-    enabled,
+export function useStartGhAuthLogin() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: () => OnboardingService.startGhAuthLogin(),
+    onSuccess: (result) => {
+      if (result.success) {
+        queryClient.invalidateQueries({ queryKey: queryKeys.github.ghStatus });
+      }
+    },
   });
 }
 

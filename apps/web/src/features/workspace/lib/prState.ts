@@ -14,7 +14,7 @@ import type { PRStatus, GhCliStatus, CheckDetail } from "@/shared/types";
  * Each variant carries only the data its rendering path needs.
  *
  * Priority order (highest to lowest):
- *   1. gh CLI unavailable (blocks everything)
+ *   1. GitHub integration unavailable (blocks PR actions)
  *   2. error (GitHub unreachable — timeout or network failure)
  *   3. no PR (initial state)
  *   4. merged (terminal)
@@ -56,7 +56,7 @@ export function derivePRActionState(
   ghStatus: GhCliStatus | null | undefined,
   targetBranch: string
 ): PRActionState {
-  // gh CLI gates everything
+  // GitHub integration gates PR actions.
   if (ghStatus && !ghStatus.isInstalled) {
     return { type: "gh_unavailable", reason: "not_installed" };
   }
@@ -64,8 +64,8 @@ export function derivePRActionState(
     return { type: "gh_unavailable", reason: "not_authenticated" };
   }
 
-  // gh CLI errors from the PR status endpoint — can arrive during the ghStatus
-  // 5-minute stale window (e.g., gh is uninstalled between status checks).
+  // GitHub integration errors from the PR status endpoint can arrive during
+  // the ghStatus 5-minute stale window.
   if (prStatus?.error === "gh_not_installed") {
     return { type: "gh_unavailable", reason: "not_installed" };
   }

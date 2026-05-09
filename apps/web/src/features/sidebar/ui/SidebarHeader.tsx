@@ -1,8 +1,19 @@
 import { PanelLeftClose, SquarePen } from "lucide-react";
 import { SidebarHeader as SidebarHeaderUI, useSidebar } from "@/components/ui/sidebar";
-import { Avatar, AvatarFallback } from "@/components/ui/avatar";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { cn } from "@/shared/lib/utils";
-import type { SidebarHeaderProps } from "../model/types";
+import type { SidebarHeaderProps, SidebarProfile } from "../model/types";
+
+const PLACEHOLDER_LABEL = "My Account";
+
+function deriveLabel(profile: SidebarProfile | undefined): string {
+  return profile?.displayName || profile?.login || PLACEHOLDER_LABEL;
+}
+
+function deriveInitials(profile: SidebarProfile | undefined): string {
+  const source = profile?.displayName || profile?.login || PLACEHOLDER_LABEL;
+  return source.slice(0, 2).toUpperCase();
+}
 
 /**
  * SidebarHeader — V2: Jony Ive
@@ -11,14 +22,15 @@ import type { SidebarHeaderProps } from "../model/types";
  * No chevron — it promised a dropdown but delivered settings.
  */
 export function SidebarHeader({
-  profile = { username: "User" },
+  profile,
   onOpenSettings,
   onToggleSidebar,
   onNewSession,
   isExpanded,
 }: SidebarHeaderProps) {
   const { isMobile } = useSidebar();
-  const initials = profile.username.slice(0, 2).toUpperCase();
+  const label = deriveLabel(profile);
+  const initials = deriveInitials(profile);
 
   const modKey = typeof navigator !== "undefined" && /Mac/.test(navigator.platform) ? "⌘" : "Ctrl+";
   const toggleTitle = `${isExpanded ? "Collapse" : "Expand"} sidebar (${modKey}B)`;
@@ -32,12 +44,15 @@ export function SidebarHeader({
         className="hover:bg-foreground/[0.04] flex min-w-0 flex-1 items-center gap-2 rounded-lg px-2 py-1.5 transition-colors duration-200"
       >
         <Avatar shape="square" className="h-6 w-6 shrink-0 rounded-md">
+          {profile?.avatarUrl && (
+            <AvatarImage src={profile.avatarUrl} alt={label} className="rounded-md" />
+          )}
           <AvatarFallback shape="square" className="text-2xs rounded-md font-semibold">
             {initials}
           </AvatarFallback>
         </Avatar>
         {isExpanded && (
-          <span className="text-text-primary truncate text-sm font-medium">{profile.username}</span>
+          <span className="text-text-primary truncate text-sm font-medium">{label}</span>
         )}
       </button>
 

@@ -1,4 +1,7 @@
-import { vi, describe, it, expect, beforeEach } from "vitest";
+import { chmodSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import path from "node:path";
+import { vi, describe, it, expect, beforeEach, afterAll } from "vitest";
 
 // ─── Hoisted mocks (vi.mock factories run before imports) ─────────
 
@@ -28,13 +31,23 @@ import {
   PENDING_STATUSES,
 } from "../../../src/services/gh.service";
 
+const originalBundledBinDir = process.env.DEUS_BUNDLED_BIN_DIR;
+
 beforeEach(() => {
   vi.clearAllMocks();
+  // Force resolveBundledCliPath to a non-existent dir so it returns null even
+  // when a dev machine has staged binaries at process.cwd()/dist/runtime/...
+  process.env.DEUS_BUNDLED_BIN_DIR = "/nonexistent/deus-test-bundled-bin";
   mockExecFileAsync.mockResolvedValue({ stdout: "", stderr: "" });
   mockGetGitRemoteUrl.mockImplementation(async (_workspacePath: string, remote: string) => {
     if (remote === "origin") return "https://github.com/expo/echo-backend.git";
     return null;
   });
+});
+
+afterAll(() => {
+  if (originalBundledBinDir === undefined) delete process.env.DEUS_BUNDLED_BIN_DIR;
+  else process.env.DEUS_BUNDLED_BIN_DIR = originalBundledBinDir;
 });
 
 // ─── Constants ────────────────────────────────────────────────────
@@ -153,6 +166,47 @@ describe("runGh", () => {
     const callEnv = mockExecFileAsync.mock.calls[0][2].env;
     expect(callEnv.GIT_TERMINAL_PROMPT).toBe("0");
     expect(callEnv.GH_PROMPT_DISABLED).toBe("1");
+    expect(callEnv.GH_NO_UPDATE_NOTIFIER).toBe("1");
+  });
+
+  it("prefers the bundled gh executable when present", async () => {
+    const dir = mkdtempSync(path.join(tmpdir(), "deus-gh-service-"));
+    const bundledGhPath = path.join(dir, process.platform === "win32" ? "gh.exe" : "gh");
+    process.env.DEUS_BUNDLED_BIN_DIR = dir;
+    mockExecFileAsync.mockResolvedValue({ stdout: "", stderr: "" });
+
+    try {
+      writeFileSync(bundledGhPath, "");
+      chmodSync(bundledGhPath, 0o755);
+
+      await runGh(["pr", "list"], { cwd: "/workspace" });
+
+      expect(mockExecFileAsync).toHaveBeenCalledWith(
+        bundledGhPath,
+        ["pr", "list"],
+        expect.any(Object)
+      );
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it("adds common Homebrew locations to PATH", async () => {
+    const originalPath = process.env.PATH;
+    process.env.PATH = "/usr/bin:/bin";
+    mockExecFileAsync.mockResolvedValue({ stdout: "", stderr: "" });
+
+    try {
+      await runGh(["pr", "list"], { cwd: "/workspace" });
+
+      const callEnv = mockExecFileAsync.mock.calls[0][2].env;
+      expect(callEnv.PATH.split(":")).toEqual(
+        expect.arrayContaining(["/opt/homebrew/bin", "/usr/local/bin", "/opt/local/bin"])
+      );
+    } finally {
+      if (originalPath === undefined) delete process.env.PATH;
+      else process.env.PATH = originalPath;
+    }
   });
 
   it("returns gh_not_installed when ENOENT", async () => {

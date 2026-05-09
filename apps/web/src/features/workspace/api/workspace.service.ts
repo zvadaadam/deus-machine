@@ -134,7 +134,7 @@ export const WorkspaceService = {
   },
 
   /**
-   * Check GitHub CLI installation and auth status.
+   * Check GitHub integration availability and auth status.
    * Cached with long staleTime on the frontend -- rarely changes.
    */
   fetchGhStatus: async (): Promise<GhCliStatus> => {
@@ -210,7 +210,7 @@ export const WorkspaceService = {
 
   /**
    * Fetch open pull requests for a repository.
-   * Uses gh CLI on the backend — requires gh to be installed and authenticated.
+   * Uses bundled gh on the backend and requires GitHub authentication.
    */
   fetchRepoPrs: async (repoId: string): Promise<PRSummary[]> => {
     return sendRequest<PRSummary[]>("repoPrs", { repoId });
