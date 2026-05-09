@@ -1,5 +1,5 @@
 import { existsSync } from "node:fs";
-import { join } from "node:path";
+import { delimiter, join } from "node:path";
 
 const COMMON_CLI_PATH_FALLBACKS = ["/opt/homebrew/bin", "/usr/local/bin", "/opt/local/bin"];
 const CLI_TOOL_NAME_PATTERN = /^[a-zA-Z0-9._+-]+$/;
@@ -58,12 +58,14 @@ export function resolveCliExecutable(tool: string): string {
 }
 
 export function extendCliPath(pathValue: string | undefined): string {
-  const pathEntries = [...getBundledCliDirectoryCandidates(), ...(pathValue ?? "").split(":")]
+  const pathEntries = [...getBundledCliDirectoryCandidates(), ...(pathValue ?? "").split(delimiter)]
     .filter(Boolean)
     .filter((entry, index, entries) => entries.indexOf(entry) === index);
 
+  // Homebrew/MacPorts locations are POSIX-only — appending them on Windows is
+  // harmless (they just don't resolve), but the delimiter must match the host.
   for (const fallback of COMMON_CLI_PATH_FALLBACKS) {
     if (!pathEntries.includes(fallback)) pathEntries.push(fallback);
   }
-  return pathEntries.join(":");
+  return pathEntries.join(delimiter);
 }
