@@ -22,23 +22,23 @@ extraResources:
       - "**/*"
   - from: "dist/runtime/electron/bin/index.bundled.cjs"
     to: "bin/index.bundled.cjs"
-  - from: "packages/device-use/bin/simbridge"
-    to: "simulator/simbridge"
-  - from: "packages/device-use/bin/siminspector.dylib"
-    to: "simulator/siminspector.dylib"
-  - from: "packages/device-use"
-    to: "agentic-apps/device-use"
-    filter:
-      - "agentic-app.json"
-      - "package.json"
-      - "dist/**/*"
-      - "skills/**/*"
-      - "bin/**/*"
 mac:
   category: public.app-category.developer-tools
   extraResources:
     - from: "dist/runtime/electron/bin/darwin-${arch}/gh"
       to: "bin/gh"
+    - from: "packages/device-use/bin/simbridge"
+      to: "simulator/simbridge"
+    - from: "packages/device-use/bin/siminspector.dylib"
+      to: "simulator/siminspector.dylib"
+    - from: "packages/device-use"
+      to: "agentic-apps/device-use"
+      filter:
+        - "agentic-app.json"
+        - "package.json"
+        - "dist/**/*"
+        - "skills/**/*"
+        - "bin/**/*"
   target:
     - target: dmg
       arch: [arm64, x64]
@@ -57,8 +57,6 @@ win:
 linux:
   target:
     - target: AppImage
-      arch: [x64]
-    - target: deb
       arch: [x64]
   category: Development
   icon: resources/icons/icon.png

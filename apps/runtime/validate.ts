@@ -44,6 +44,84 @@ function assertExists(filePath: string, label: string): void {
   }
 }
 
+function assertExecutable(filePath: string, label: string): void {
+  assertExists(filePath, label);
+  if (process.platform === "win32") return;
+  if ((statSync(filePath).mode & 0o111) === 0) {
+    throw createBuildRuntimeError(`Expected ${label} to be executable: ${filePath}`);
+  }
+}
+
+function getCodexTargetTriple(): string | null {
+  if (process.platform === "linux") {
+    if (process.arch === "x64") return "x86_64-unknown-linux-musl";
+    if (process.arch === "arm64") return "aarch64-unknown-linux-musl";
+  }
+  if (process.platform === "darwin") {
+    if (process.arch === "x64") return "x86_64-apple-darwin";
+    if (process.arch === "arm64") return "aarch64-apple-darwin";
+  }
+  if (process.platform === "win32") {
+    if (process.arch === "x64") return "x86_64-pc-windows-msvc";
+    if (process.arch === "arm64") return "aarch64-pc-windows-msvc";
+  }
+  return null;
+}
+
+function getCodexPlatformPackageName(): string | null {
+  if (process.platform === "linux") return `@openai/codex-linux-${process.arch}`;
+  if (process.platform === "darwin") return `@openai/codex-darwin-${process.arch}`;
+  if (process.platform === "win32") return `@openai/codex-win32-${process.arch}`;
+  return null;
+}
+
+function getClaudePlatformPackageNames(): string[] {
+  if (process.platform === "linux") {
+    return [
+      `@anthropic-ai/claude-agent-sdk-linux-${process.arch}`,
+      `@anthropic-ai/claude-agent-sdk-linux-${process.arch}-musl`,
+    ];
+  }
+  if (process.platform === "darwin" || process.platform === "win32") {
+    return [`@anthropic-ai/claude-agent-sdk-${process.platform}-${process.arch}`];
+  }
+  return [];
+}
+
+function assertPackagedProviderBinaries(projectRoot: string): void {
+  const nodeModulesDir = path.join(projectRoot, "node_modules");
+  const claudeExecutableName = process.platform === "win32" ? "claude.exe" : "claude";
+  const claudeCandidate = getClaudePlatformPackageNames()
+    .map((packageName) => path.join(nodeModulesDir, packageName, claudeExecutableName))
+    .find((candidate) => existsSync(candidate));
+
+  if (!claudeCandidate) {
+    throw createBuildRuntimeError(
+      `Missing packaged Claude executable for ${process.platform}-${process.arch}`
+    );
+  }
+  assertExecutable(claudeCandidate, "packaged Claude executable");
+
+  const codexPackageName = getCodexPlatformPackageName();
+  const codexTargetTriple = getCodexTargetTriple();
+  if (!codexPackageName || !codexTargetTriple) {
+    throw createBuildRuntimeError(
+      `Unsupported packaged Codex platform: ${process.platform}-${process.arch}`
+    );
+  }
+
+  const codexExecutableName = process.platform === "win32" ? "codex.exe" : "codex";
+  const codexExecutable = path.join(
+    nodeModulesDir,
+    codexPackageName,
+    "vendor",
+    codexTargetTriple,
+    "codex",
+    codexExecutableName
+  );
+  assertExecutable(codexExecutable, "packaged Codex executable");
+}
+
 function assertNotStale(
   projectRoot: string,
   filePath: string,
@@ -144,6 +222,8 @@ export function validateRuntimeStage(options: ValidateRuntimeStageOptions = {}):
       `Staged runtime manifest is stale: ${relativeFromProjectRoot(projectRoot, stagePaths.manifest)} is older than the source bundles`
     );
   }
+
+  assertPackagedProviderBinaries(projectRoot);
 
   log(
     `✓ Staged runtime ready for packaging (${relativeFromProjectRoot(projectRoot, stagePaths.root)})`

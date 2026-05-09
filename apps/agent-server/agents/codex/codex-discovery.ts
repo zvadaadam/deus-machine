@@ -9,6 +9,7 @@ import {
   blockIfNotInitialized as sharedBlock,
   type DiscoveryState,
 } from "../environment/cli-discovery";
+import { getPackagedCodexCandidates } from "../environment/packaged-cli-paths";
 
 // ============================================================================
 // State
@@ -35,7 +36,10 @@ export function initializeCodex(): { success: boolean; error?: string } {
       agentHarness: "codex-sdk",
       displayName: "Codex",
       envVar: "CODEX_CLI_PATH",
-      staticCandidates: ["/opt/homebrew/lib/node_modules/@openai/codex/bin/codex.js"],
+      staticCandidates: [
+        ...getPackagedCodexCandidates(),
+        "/opt/homebrew/lib/node_modules/@openai/codex/bin/codex.js",
+      ],
       shellCommand: "codex",
       versionFlag: "--version",
       extraCandidates: () => {
@@ -50,6 +54,7 @@ export function initializeCodex(): { success: boolean; error?: string } {
         }
         return [];
       },
+      skipShellDiscovery: process.env.DEUS_PACKAGED === "1",
     },
     state
   );

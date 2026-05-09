@@ -43,6 +43,7 @@ interface RuntimeEntries {
   agentServerEntry: string;
   backendCwd: string;
   agentServerCwd: string;
+  resourcesPath?: string;
   nodePath?: string;
   bundledBinDir?: string;
 }
@@ -56,6 +57,7 @@ function resolveRuntimeEntries(): RuntimeEntries {
       agentServerEntry: join(process.resourcesPath, "bin", "index.bundled.cjs"),
       backendCwd: app.getPath("userData"),
       agentServerCwd: app.getPath("userData"),
+      resourcesPath: process.resourcesPath,
       nodePath: join(process.resourcesPath, "app.asar", "node_modules"),
       bundledBinDir: join(process.resourcesPath, "bin"),
     };
@@ -326,6 +328,9 @@ export async function spawnBackend(
   const sharedEnv = {
     DATABASE_PATH: dbPath,
     PATH: extendCliPath(process.env.PATH),
+    ...(runtime.resourcesPath
+      ? { DEUS_PACKAGED: "1", DEUS_RESOURCES_PATH: runtime.resourcesPath }
+      : {}),
     ...(runtime.nodePath ? { NODE_PATH: runtime.nodePath } : {}),
     ...(runtime.bundledBinDir ? { DEUS_BUNDLED_BIN_DIR: runtime.bundledBinDir } : {}),
   };

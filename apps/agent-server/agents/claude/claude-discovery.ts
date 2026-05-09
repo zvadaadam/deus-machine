@@ -9,6 +9,7 @@ import {
   blockIfNotInitialized as sharedBlock,
   type DiscoveryState,
 } from "../environment/cli-discovery";
+import { getPackagedClaudeCandidates } from "../environment/packaged-cli-paths";
 
 // ============================================================================
 // State
@@ -36,11 +37,13 @@ export function initializeClaude(): { success: boolean; error?: string } {
       displayName: "Claude",
       envVar: "CLAUDE_CLI_PATH",
       staticCandidates: [
+        ...getPackagedClaudeCandidates(),
         path.join(path.dirname(process.argv[1]), "claude"),
         "/opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js",
       ],
       shellCommand: "claude",
       versionFlag: "-v",
+      skipShellDiscovery: process.env.DEUS_PACKAGED === "1",
     },
     state
   );
