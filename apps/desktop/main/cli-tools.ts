@@ -16,6 +16,23 @@ export function getCliLookupEnv(): NodeJS.ProcessEnv {
   return { ...process.env, PATH: extendCliPath(process.env.PATH) };
 }
 
+function getCliLookupCommand(tool: string): { command: string; args: string[] } {
+  if (process.platform === "win32") {
+    return { command: "where.exe", args: [tool] };
+  }
+
+  return { command: "which", args: [tool] };
+}
+
+function parseLookupPath(stdout: string): string | null {
+  return (
+    stdout
+      .split(/\r?\n/)
+      .map((line) => line.trim())
+      .find(Boolean) ?? null
+  );
+}
+
 async function findCliTool(tool: string): Promise<CliToolStatus> {
   if (!CLI_TOOL_NAME_PATTERN.test(tool)) return { installed: false, path: null };
 
@@ -23,8 +40,13 @@ async function findCliTool(tool: string): Promise<CliToolStatus> {
   if (bundledPath) return { installed: true, path: bundledPath };
 
   try {
-    const { stdout } = await execFileAsync("which", [tool], { env: getCliLookupEnv() });
-    return { installed: true, path: stdout.trim() };
+    const lookup = getCliLookupCommand(tool);
+    const { stdout } = await execFileAsync(lookup.command, lookup.args, {
+      env: getCliLookupEnv(),
+      windowsHide: true,
+    });
+    const path = parseLookupPath(stdout);
+    return path ? { installed: true, path } : { installed: false, path: null };
   } catch {
     return { installed: false, path: null };
   }
