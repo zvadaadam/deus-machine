@@ -11,7 +11,6 @@ export interface Settings {
   // General
   theme?: "light" | "dark" | "system";
   diff_view_mode?: string;
-  user_name?: string;
 
   // Onboarding
   onboarding_completed?: boolean;
@@ -56,4 +55,10 @@ export interface Settings {
  * Settings section identifiers
  * Used for navigation in settings UI
  */
-export type SettingsSection = "general" | "ai" | "environment" | "experimental" | "access";
+export type SettingsSection =
+  | "general"
+  | "github"
+  | "ai"
+  | "environment"
+  | "experimental"
+  | "access";

@@ -15,6 +15,8 @@ import { promisify } from "util";
 import { homedir } from "os";
 import path from "path";
 import { existsSync } from "fs";
+import { checkCliTool } from "./cli-tools";
+import { logoutGhAuth, startGhAuthLogin } from "./github-cli-auth";
 
 const execFileAsync = promisify(execFile);
 
@@ -26,11 +28,14 @@ export function registerNativeHandlers(): void {
   ipcMain.handle("show_main_window", () => {
     const win = BrowserWindow.getFocusedWindow() ?? BrowserWindow.getAllWindows()[0];
     if (win) {
-      // Transition to app mode — vibrancy + solid background.
+      // Transition to app mode. On macOS vibrancy IS the window background;
+      // calling setBackgroundColor after setVibrancy eliminates the vibrancy
+      // effect, so we only set a solid bg on non-darwin platforms.
       if (process.platform === "darwin") {
         win.setVibrancy("under-window");
+      } else {
+        win.setBackgroundColor("#1a1a1a");
       }
-      win.setBackgroundColor("#1a1a1a");
       win.show();
       win.focus();
     }
@@ -53,8 +58,10 @@ export function registerNativeHandlers(): void {
       if (process.platform === "darwin") {
         win.setWindowButtonVisibility(true);
         win.setVibrancy("under-window");
+        // No setBackgroundColor on darwin — would eliminate vibrancy.
+      } else {
+        win.setBackgroundColor("#1a1a1a");
       }
-      win.setBackgroundColor("#1a1a1a");
     }
   });
 
@@ -262,41 +269,27 @@ export function registerNativeHandlers(): void {
   // -------------------------------------------------------------------------
 
   ipcMain.handle("native:checkCliTool", async (_e, args: { name?: string; tool?: string }) => {
-    const tool = args.name || args.tool || "";
-    try {
-      const { stdout } = await execFileAsync("which", [tool]);
-      return { installed: true, path: stdout.trim() };
-    } catch {
-      return { installed: false, path: null };
-    }
+    return checkCliTool(args.name || args.tool || "");
   });
 
   ipcMain.handle("check_cli_tool", async (_e, args: { name?: string; tool?: string }) => {
-    const tool = args.name || args.tool || "";
-    try {
-      const { stdout } = await execFileAsync("which", [tool]);
-      return { installed: true, path: stdout.trim() };
-    } catch {
-      return { installed: false, path: null };
-    }
+    return checkCliTool(args.name || args.tool || "");
   });
 
-  ipcMain.handle("native:checkGhAuth", async () => {
-    try {
-      await execFileAsync("gh", ["auth", "status"]);
-      return { authenticated: true };
-    } catch {
-      return { authenticated: false };
-    }
+  ipcMain.handle("native:startGhAuthLogin", async () => {
+    return startGhAuthLogin();
   });
 
-  ipcMain.handle("check_gh_auth", async () => {
-    try {
-      await execFileAsync("gh", ["auth", "status"]);
-      return { authenticated: true };
-    } catch {
-      return { authenticated: false };
-    }
+  ipcMain.handle("start_gh_auth_login", async () => {
+    return startGhAuthLogin();
+  });
+
+  ipcMain.handle("native:logoutGhAuth", async () => {
+    return logoutGhAuth();
+  });
+
+  ipcMain.handle("logout_gh_auth", async () => {
+    return logoutGhAuth();
   });
 
   // -------------------------------------------------------------------------

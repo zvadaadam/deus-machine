@@ -36,6 +36,9 @@ extraResources:
       - "bin/**/*"
 mac:
   category: public.app-category.developer-tools
+  extraResources:
+    - from: "dist/runtime/electron/bin/darwin-${arch}/gh"
+      to: "bin/gh"
   target:
     - target: dmg
       arch: [arm64, x64]

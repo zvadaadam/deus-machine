@@ -164,7 +164,6 @@ export const PreferencesFile = z
   .object({
     theme: z.enum(["light", "dark", "system"]).optional(),
     diff_view_mode: z.string().optional(),
-    user_name: z.string().optional(),
     onboarding_completed: z.boolean().optional(),
     anthropic_api_key: z.string().optional(),
     claude_provider: z.string().optional(),
