@@ -1,4 +1,4 @@
-import type { LucideIcon } from "lucide-react";
+import type { ComponentType, SVGAttributes } from "react";
 import {
   Plus,
   FolderOpen,
@@ -6,19 +6,22 @@ import {
   GitBranch,
   GitPullRequest,
   Settings,
-  Github,
   Orbit,
   ArrowUpRight,
 } from "lucide-react";
 import { uiActions } from "@/shared/stores/uiStore";
 import { capabilities } from "@/platform/capabilities";
+import { GitHubIcon } from "@/shared/components/icons/GitHubIcon";
 
 export type CommandGroup = "workspace" | "project" | "navigation" | "settings";
+
+/** Accepts both lucide icons and our custom SVG components (e.g. GitHubIcon). */
+type IconComponent = ComponentType<SVGAttributes<SVGSVGElement>>;
 
 export interface CommandDefinition {
   id: string;
   label: string;
-  icon: LucideIcon;
+  icon: IconComponent;
   group: CommandGroup;
   shortcut?: string;
   keywords?: string[];
@@ -124,7 +127,7 @@ export const staticCommands: CommandDefinition[] = [
   {
     id: "settings-github",
     label: "Settings: GitHub",
-    icon: Github,
+    icon: GitHubIcon,
     group: "settings",
     keywords: ["github", "gh", "pull request", "pr", "branch", "auth", "login"],
     action: () => {
