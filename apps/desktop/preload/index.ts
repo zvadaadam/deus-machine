@@ -51,6 +51,9 @@ const ALLOWED_INVOKE_CHANNELS = new Set([
   "native:setZoom",
   "native:setTitle",
   "native:homeDir",
+  "native:openExternal",
+  "native:openPath",
+  "native:revealInFinder",
 
   // iOS Simulator — all operations moved to backend (q:command protocol).
   // No IPC channels needed.

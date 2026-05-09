@@ -25,8 +25,11 @@ import { StreamingReasoningBlock } from "./StreamingReasoningBlock";
 import { BufferedTextBlock } from "./BufferedTextBlock";
 import { ToolPartBlock } from "./ToolPartBlock";
 import { PartToolGroupBlock } from "./PartToolGroupBlock";
+import { ChatResourceCards } from "./ChatResourceCards";
 import { groupPartItems } from "../utils/groupParts";
 import { Layers } from "lucide-react";
+import { useSession } from "../../context";
+import { extractChatResources } from "../../lib/chatResources";
 
 interface PartsRendererProps {
   parts: Part[];
@@ -37,6 +40,8 @@ export const PartsRenderer = memo(function PartsRenderer({
   parts,
   isStreamingTurn = false,
 }: PartsRendererProps) {
+  const { workspacePath } = useSession();
+
   // Sort by partIndex (assigned by adapter at creation time)
   const sorted = useMemo(
     () => [...parts].sort((a, b) => (a.partIndex ?? 0) - (b.partIndex ?? 0)),
@@ -45,6 +50,10 @@ export const PartsRenderer = memo(function PartsRenderer({
 
   // Group consecutive read-only tool parts into collapsible streaks
   const grouped = useMemo(() => groupPartItems(sorted, isStreamingTurn), [sorted, isStreamingTurn]);
+  const resources = useMemo(
+    () => extractChatResources({ parts: sorted, isComplete: !isStreamingTurn, workspacePath }),
+    [isStreamingTurn, sorted, workspacePath]
+  );
 
   if (grouped.length === 0) return null;
 
@@ -73,6 +82,7 @@ export const PartsRenderer = memo(function PartsRenderer({
           .with({ kind: "part" }, ({ item }) => renderPart(item, lastTextPartId, isStreamingTurn))
           .exhaustive()
       )}
+      <ChatResourceCards resources={resources} />
     </>
   );
 });
