@@ -1,4 +1,4 @@
-import { mkdtempSync, mkdirSync, rmSync, utimesSync, writeFileSync } from "node:fs";
+import { chmodSync, mkdtempSync, mkdirSync, rmSync, utimesSync, writeFileSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
@@ -37,6 +37,34 @@ function writeProjectFixture(projectRoot: string): void {
       null,
       2
     )
+  );
+
+  const claudePackage =
+    process.platform === "linux"
+      ? `@anthropic-ai/claude-agent-sdk-linux-${process.arch}`
+      : `@anthropic-ai/claude-agent-sdk-${process.platform}-${process.arch}`;
+  const codexPackage =
+    process.platform === "linux"
+      ? `@openai/codex-linux-${process.arch}`
+      : `@openai/codex-darwin-${process.arch}`;
+  const codexTriple =
+    process.platform === "linux"
+      ? process.arch === "arm64"
+        ? "aarch64-unknown-linux-musl"
+        : "x86_64-unknown-linux-musl"
+      : process.arch === "arm64"
+        ? "aarch64-apple-darwin"
+        : "x86_64-apple-darwin";
+
+  writeFile(path.join(projectRoot, "node_modules", claudePackage, "claude"), "claude");
+  writeFile(
+    path.join(projectRoot, "node_modules", codexPackage, "vendor", codexTriple, "codex", "codex"),
+    "codex"
+  );
+  chmodSync(path.join(projectRoot, "node_modules", claudePackage, "claude"), 0o755);
+  chmodSync(
+    path.join(projectRoot, "node_modules", codexPackage, "vendor", codexTriple, "codex", "codex"),
+    0o755
   );
 }
 

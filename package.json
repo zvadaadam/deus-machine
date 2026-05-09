@@ -17,7 +17,7 @@
   ],
   "scripts": {
     "dev": "bun run native:electron && ([ -f apps/agent-server/dist/index.bundled.cjs ] || bun run build:agent-server) && electron-vite dev",
-    "dev:web": "./scripts/dev.sh",
+    "dev:web": "bun run native:node && bunx tsx apps/runtime/dev.ts",
     "dev:frontend": "vite --config apps/web/vite.config.ts",
     "dev:backend": "node apps/backend/server.cjs",
     "build": "electron-vite build",
