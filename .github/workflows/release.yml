@@ -1,4 +1,4 @@
-# Multi-platform release workflow (macOS, Windows, Linux)
+# Multi-platform release workflow (macOS, Linux)
 #
 # Builds and publishes the Electron app for all platforms via GitHub Releases.
 # electron-updater reads latest-mac.yml / latest.yml / latest-linux.yml from
@@ -295,44 +295,7 @@ jobs:
             dist-electron/latest-mac.yml
           if-no-files-found: error
 
-  # ── Step 2b: Build Windows (x64) ───────────────────────────────────
-  build-windows:
-    needs: validate-and-bump
-    runs-on: windows-latest
-    env:
-      SENTRY_AUTH_TOKEN: ${{ secrets.SENTRY_AUTH_TOKEN }}
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          ref: ${{ inputs.dry_run == false && needs.validate-and-bump.outputs.tag || github.ref }}
-
-      - uses: oven-sh/setup-bun@v2
-        with:
-          bun-version: 1.2.19
-
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 22
-
-      - name: Install dependencies
-        run: bun install --frozen-lockfile
-
-      - name: Build all
-        run: bun run build:all
-
-      - name: Package Windows (x64)
-        run: bunx electron-builder --win --publish never
-
-      - uses: actions/upload-artifact@v4
-        with:
-          name: windows
-          path: |
-            dist-electron/*.exe
-            dist-electron/*.blockmap
-            dist-electron/latest.yml
-          if-no-files-found: error
-
-  # ── Step 2c: Build Linux (x64) ─────────────────────────────────────
+  # ── Step 2b: Build Linux (x64) ─────────────────────────────────────
   build-linux:
     needs: validate-and-bump
     runs-on: ubuntu-latest
@@ -371,7 +334,7 @@ jobs:
 
   # ── Step 3: Create GitHub Release with all artifacts ────────────────
   create-release:
-    needs: [validate-and-bump, build-macos, build-windows, build-linux]
+    needs: [validate-and-bump, build-macos, build-linux]
     if: ${{ inputs.dry_run == false }}
     runs-on: ubuntu-latest
     steps:
@@ -383,7 +346,7 @@ jobs:
         run: |
           mkdir -p release
           find artifacts -type f \( \
-            -name "*.dmg" -o -name "*.zip" -o -name "*.exe" -o \
+            -name "*.dmg" -o -name "*.zip" -o \
             -name "*.AppImage" -o \
             -name "*.blockmap" -o -name "*.yml" \
           \) -exec cp {} release/ \;
