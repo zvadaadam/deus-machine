@@ -1,6 +1,8 @@
-import { useEffect, useRef, useState } from "react";
-import { ChevronDown } from "lucide-react";
+import { useCallback, useEffect, useRef, useState } from "react";
+import { ChevronDown, Plus, Terminal as TerminalIcon } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { TabPill } from "@/components/ui/tab-pill";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { useTerminalTaskStore, consumeTerminalTask } from "../store/terminalTaskStore";
 import { useWorkspaceLayoutStore, workspaceLayoutActions } from "@/features/workspace/store";
 import type { PersistedTerminalTab } from "@/features/workspace/store/workspaceLayoutStore";
@@ -37,13 +39,13 @@ function WorkspaceTerminals({
   workspacePath,
   isCurrent,
   panelVisible,
-  initialCommandsRef,
+  getInitialCommand,
 }: {
   workspaceId: string;
   workspacePath: string;
   isCurrent: boolean;
   panelVisible: boolean;
-  initialCommandsRef: React.MutableRefObject<Map<string, string>>;
+  getInitialCommand: (id: string) => string | undefined;
 }) {
   const tabs = useWorkspaceLayoutStore((s) => s.layouts[workspaceId]?.terminalTabs ?? EMPTY_TABS);
   const activeTabId = useWorkspaceLayoutStore(
@@ -64,7 +66,7 @@ function WorkspaceTerminals({
           <Terminal
             id={tab.id}
             workspacePath={workspacePath}
-            initialCommand={initialCommandsRef.current.get(tab.id)}
+            getInitialCommand={getInitialCommand}
             visible={panelVisible && isCurrent && activeTabId === tab.id}
           />
         </div>
@@ -87,6 +89,7 @@ export function TerminalPanel({
   );
 
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setVisitedWorkspaces((prev) => {
       const next = new Map(prev);
 
@@ -106,11 +109,6 @@ export function TerminalPanel({
       if (next.size > MAX_CACHED_WORKSPACES) {
         for (const wsId of next.keys()) {
           if (wsId !== workspaceId) {
-            // Clean up initialCommands for evicted workspace's terminals
-            const evictedLayout = workspaceLayoutActions.getLayout(wsId);
-            for (const tab of evictedLayout.terminalTabs) {
-              initialCommandsRef.current.delete(tab.id);
-            }
             next.delete(wsId);
             break;
           }
@@ -133,6 +131,7 @@ export function TerminalPanel({
   // One-shot initial commands — keyed by globally-unique tab ID (UUID based).
   // Not cleared on workspace switch since old workspace terminals stay mounted.
   const initialCommandsRef = useRef<Map<string, string>>(new Map());
+  const getInitialCommand = useCallback((id: string) => initialCommandsRef.current.get(id), []);
 
   // Ensure at least one terminal tab exists for the current workspace
   useEffect(() => {
@@ -219,36 +218,39 @@ export function TerminalPanel({
     <div className="bg-background flex h-full flex-col">
       {/* Tab bar — shows only the current workspace's tabs */}
       <div className="vibrancy-panel border-border/40 flex h-9 flex-shrink-0 items-center justify-between border-b">
-        <div className="flex flex-1 items-center gap-0.5 overflow-x-auto px-2">
+        <div
+          className="flex flex-1 items-center gap-1 overflow-x-auto px-2"
+          role="tablist"
+          aria-label="Terminal tabs"
+        >
           {tabs.map((tab) => (
-            <div
+            <TabPill
               key={tab.id}
-              className={`flex cursor-pointer items-center gap-1.5 rounded-t px-2 py-1 text-xs whitespace-nowrap transition-colors duration-200 ease-out select-none ${
-                activeTabId === tab.id
-                  ? "bg-background text-foreground font-medium"
-                  : "bg-muted/50 text-muted-foreground hover:bg-muted hover:text-foreground"
-              }`}
-              onClick={() => updateTabs(tabs, tab.id)}
+              active={activeTabId === tab.id}
+              icon={<TerminalIcon strokeWidth={1.75} className="h-3.5 w-3.5" />}
+              onSelect={() => updateTabs(tabs, tab.id)}
+              onClose={() => closeTab(tab.id)}
+              closeAriaLabel={`Close ${tab.title}`}
+              className="max-w-[150px]"
             >
-              <span>{tab.title}</span>
-              <button
-                className="text-muted-foreground hover:bg-muted/80 hover:text-foreground flex h-3 w-3 cursor-pointer items-center justify-center rounded-sm border-none bg-transparent p-0 text-sm leading-none transition-colors duration-200 ease-out"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  closeTab(tab.id);
-                }}
-              >
-                ×
-              </button>
-            </div>
+              {tab.title}
+            </TabPill>
           ))}
-          <button
-            className="text-muted-foreground hover:bg-muted/80 hover:text-foreground cursor-pointer rounded-lg border-none bg-transparent px-1.5 py-0.5 text-sm transition-colors duration-200 ease-out"
-            onClick={addTerminal}
-            title="New terminal"
-          >
-            +
-          </button>
+          <Tooltip delayDuration={300}>
+            <TooltipTrigger asChild>
+              <button
+                type="button"
+                aria-label="New terminal"
+                onClick={addTerminal}
+                className="text-text-muted hover:bg-foreground/5 hover:text-text-tertiary flex h-7 w-7 shrink-0 cursor-pointer items-center justify-center rounded-md border-none bg-transparent transition-[color,background-color,scale] duration-150 ease-out active:scale-[0.96]"
+              >
+                <Plus strokeWidth={1.75} className="h-3.5 w-3.5" />
+              </button>
+            </TooltipTrigger>
+            <TooltipContent side="bottom" sideOffset={8}>
+              <p className="text-xs">New terminal</p>
+            </TooltipContent>
+          </Tooltip>
         </div>
 
         {/* Collapse button on same line as tabs */}
@@ -282,7 +284,7 @@ export function TerminalPanel({
             workspacePath={wsPath}
             isCurrent={wsId === workspaceId}
             panelVisible={panelVisible}
-            initialCommandsRef={initialCommandsRef}
+            getInitialCommand={getInitialCommand}
           />
         ))}
       </div>

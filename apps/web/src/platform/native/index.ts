@@ -14,6 +14,7 @@ import * as cli from "./cli";
 import * as dialog from "./dialog";
 import * as browserViews from "./browser-views";
 import * as events from "./events";
+import * as files from "./files";
 
 export const native = {
   window: window_,
@@ -22,6 +23,7 @@ export const native = {
   dialog,
   browserViews,
   events,
+  files,
 } as const;
 
 // Re-export types

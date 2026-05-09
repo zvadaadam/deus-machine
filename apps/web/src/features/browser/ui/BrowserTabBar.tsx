@@ -1,16 +1,13 @@
 /**
  * BrowserTabBar — horizontal tab bar for multi-tab browser panel.
  *
- * Layout per tab: [icon-slot][title]. The icon slot shows the favicon (a
- * Globe placeholder today — swap for a real favicon later) at rest and
- * cross-fades to an X on tab hover (skill: Contextual Icon Animations —
- * scale 0.25→1, opacity 0→1, blur 4px→0, CSS-only, both icons kept in
- * DOM so enter + exit animate without a motion dep). Click the slot to
- * close; click the title to select.
+ * Each tab uses the shared <TabPill> primitive: [favicon|X crossfade][title].
+ * The Globe icon is a favicon placeholder for now.
  */
 
-import { Globe, Plus, X, Maximize2, Minimize2 } from "lucide-react";
+import { Globe, Plus, Maximize2, Minimize2 } from "lucide-react";
 import { Tooltip, TooltipTrigger, TooltipContent } from "@/components/ui/tooltip";
+import { TabPill } from "@/components/ui/tab-pill";
 import { cn } from "@/shared/lib/utils";
 import type { BrowserTabState } from "../types";
 import { browserWindowActions, useBrowserWindowStore } from "../store/browserWindowStore";
@@ -25,10 +22,6 @@ interface BrowserTabBarProps {
    *  right edge of the tab row. Null = no workspace context (e.g. tests). */
   workspaceId?: string | null;
 }
-
-// Skill's CSS-only icon cross-fade curve.
-const ICON_CROSS_FADE =
-  "transition-[opacity,filter,scale] duration-200 ease-[cubic-bezier(0.2,0,0,1)]";
 
 export function BrowserTabBar({
   tabs,
@@ -49,65 +42,19 @@ export function BrowserTabBar({
         role="tablist"
         aria-label="Browser tabs"
       >
-        {tabs.map((tab) => {
-          const isActive = activeTabId === tab.id;
-          return (
-            <div
-              key={tab.id}
-              className={cn(
-                "group flex h-7 items-center rounded-md text-xs whitespace-nowrap transition-colors duration-200 ease-out select-none",
-                isActive
-                  ? "bg-bg-raised text-text-secondary font-medium"
-                  : "text-text-muted hover:bg-foreground/5 hover:text-text-tertiary"
-              )}
-            >
-              {/* Icon slot — favicon (Globe placeholder) at rest, X on tab hover. */}
-              <button
-                type="button"
-                aria-label={`Close ${tab.title}`}
-                onClick={(e) => {
-                  e.stopPropagation();
-                  onTabClose(tab.id);
-                }}
-                className={cn(
-                  "relative flex h-full w-7 shrink-0 cursor-pointer items-center justify-center rounded-l-md border-none bg-transparent p-0",
-                  "transition-[background-color,scale] duration-150 ease-out",
-                  "hover:bg-foreground/10 active:scale-[0.96]"
-                )}
-              >
-                {/* Favicon (rest state) — full opacity so it reads as identity. */}
-                <span
-                  className={cn(
-                    "absolute inset-0 grid place-items-center",
-                    ICON_CROSS_FADE,
-                    "group-hover:scale-[0.25] group-hover:opacity-0 group-hover:blur-[4px]"
-                  )}
-                >
-                  <Globe strokeWidth={1.5} className="h-3.5 w-3.5" />
-                </span>
-                {/* Close (hover state) — pops in when the whole tab is hovered. */}
-                <span
-                  className={cn(
-                    "absolute inset-0 grid scale-[0.25] place-items-center opacity-0 blur-[4px]",
-                    ICON_CROSS_FADE,
-                    "group-hover:scale-100 group-hover:opacity-100 group-hover:blur-none"
-                  )}
-                >
-                  <X strokeWidth={1.75} className="h-3.5 w-3.5" />
-                </span>
-              </button>
-              <button
-                type="button"
-                role="tab"
-                aria-selected={isActive}
-                onClick={() => onTabSelect(tab.id)}
-                className="flex h-full min-w-0 cursor-pointer items-center border-none bg-transparent pr-2.5 pl-0.5 text-left"
-              >
-                <span className="max-w-[150px] truncate">{tab.title}</span>
-              </button>
-            </div>
-          );
-        })}
+        {tabs.map((tab) => (
+          <TabPill
+            key={tab.id}
+            active={activeTabId === tab.id}
+            icon={<Globe strokeWidth={1.5} className="h-3.5 w-3.5" />}
+            onSelect={() => onTabSelect(tab.id)}
+            onClose={() => onTabClose(tab.id)}
+            closeAriaLabel={`Close ${tab.title}`}
+            className="max-w-[150px]"
+          >
+            {tab.title}
+          </TabPill>
+        ))}
         <Tooltip delayDuration={300}>
           <TooltipTrigger asChild>
             <button

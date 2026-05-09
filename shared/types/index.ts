@@ -65,6 +65,15 @@ export type { NormalizedTask, ManifestResponse, TaskRunResponse } from "./manife
 // Onboarding types (shared between frontend and backend)
 export type { RecentProject } from "./onboarding";
 
+// Local server discovery types (shared between frontend and backend)
+export type {
+  LocalServer,
+  LocalServerSource,
+  LocalServerStatus,
+  LocalServerTheme,
+  LocalServersSnapshot,
+} from "./local-server";
+
 // GitHub types
 export type { PRStatus, GhCliStatus, CheckDetail, PRSummary, BranchSummary } from "./github";
 
