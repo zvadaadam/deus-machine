@@ -21,8 +21,9 @@ afterEach(() => {
 describe("cli path helpers", () => {
   it("prepends the bundled CLI directory before system fallbacks", () => {
     process.env.DEUS_BUNDLED_BIN_DIR = "/Applications/Deus.app/Contents/Resources/bin";
+    const basePath = ["/usr/bin", "/bin"].join(path.delimiter);
 
-    expect(extendCliPath("/usr/bin:/bin").split(":").slice(0, 3)).toEqual([
+    expect(extendCliPath(basePath).split(path.delimiter).slice(0, 3)).toEqual([
       "/Applications/Deus.app/Contents/Resources/bin",
       "/usr/bin",
       "/bin",

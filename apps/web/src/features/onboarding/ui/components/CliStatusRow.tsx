@@ -74,6 +74,7 @@ export function CliStatusRow({
 
       {actionLabel && onAction && (
         <button
+          type="button"
           onClick={onAction}
           disabled={actionDisabled || actionBusy}
           className="inline-flex shrink-0 items-center gap-1.5 rounded-lg bg-white px-3 py-1.5 text-xs font-semibold text-black transition-transform duration-200 hover:scale-[1.02] disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:scale-100"
@@ -85,6 +86,7 @@ export function CliStatusRow({
 
       {shouldShowRetry && (
         <button
+          type="button"
           onClick={onRetry}
           className="shrink-0 rounded-lg bg-white/10 px-3 py-1.5 text-xs font-medium text-white/70 transition-colors duration-200 hover:bg-white/20 hover:text-white"
         >
