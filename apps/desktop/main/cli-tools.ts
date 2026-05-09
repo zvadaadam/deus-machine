@@ -56,6 +56,12 @@ export async function checkCliTool(tool: string): Promise<CliToolStatus> {
   const initialResult = await findCliTool(tool);
   if (initialResult.installed || process.platform !== "darwin") return initialResult;
 
-  await syncShellEnvironment();
+  try {
+    await syncShellEnvironment();
+  } catch (error) {
+    console.warn("[cli-tools] Failed to sync shell environment before CLI lookup:", error);
+    return initialResult;
+  }
+
   return findCliTool(tool);
 }
