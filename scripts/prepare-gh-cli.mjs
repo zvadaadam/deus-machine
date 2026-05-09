@@ -57,6 +57,24 @@ function clearMacExtendedAttributes(filePath) {
   }
 }
 
+function getHostRuntimeKey() {
+  if (process.platform === "darwin" && (process.arch === "arm64" || process.arch === "x64")) {
+    return `darwin-${process.arch}`;
+  }
+
+  return null;
+}
+
+function verifyRunnableGhBinary(filePath, runtimeKey) {
+  const version = execFileSync(filePath, ["--version"], {
+    encoding: "utf8",
+    stdio: ["ignore", "pipe", "pipe"],
+  });
+  if (!version.includes(`gh version ${GH_VERSION}`)) {
+    throw new Error(`Unexpected gh version for ${runtimeKey}: ${version.trim()}`);
+  }
+}
+
 async function downloadFile(url, destinationPath) {
   const response = await fetch(url, {
     headers: {
@@ -101,22 +119,6 @@ async function ensureArchive(target) {
 function stageGhBinary(target, archivePath) {
   const outputPath = join(stagedBinRoot, target.runtimeKey, "gh");
 
-  if (existsSync(outputPath)) {
-    try {
-      const version = execFileSync(outputPath, ["--version"], {
-        encoding: "utf8",
-        stdio: ["ignore", "pipe", "pipe"],
-      });
-      if (version.includes(`gh version ${GH_VERSION}`)) {
-        clearMacExtendedAttributes(outputPath);
-        log(`Already staged ${target.runtimeKey}`);
-        return;
-      }
-    } catch {
-      rmSync(outputPath, { force: true });
-    }
-  }
-
   const tempDir = mkdtempSync(join(tmpdir(), "deus-gh-"));
   try {
     execFileSync("unzip", ["-q", "-o", archivePath, "-d", tempDir], {
@@ -133,12 +135,8 @@ function stageGhBinary(target, archivePath) {
     chmodSync(outputPath, 0o755);
     clearMacExtendedAttributes(outputPath);
 
-    const version = execFileSync(outputPath, ["--version"], {
-      encoding: "utf8",
-      stdio: ["ignore", "pipe", "pipe"],
-    });
-    if (!version.includes(`gh version ${GH_VERSION}`)) {
-      throw new Error(`Unexpected gh version for ${target.runtimeKey}: ${version.trim()}`);
+    if (target.runtimeKey === getHostRuntimeKey()) {
+      verifyRunnableGhBinary(outputPath, target.runtimeKey);
     }
 
     log(`Staged ${target.runtimeKey} -> ${outputPath}`);
