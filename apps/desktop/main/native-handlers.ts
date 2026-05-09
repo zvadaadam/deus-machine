@@ -14,11 +14,67 @@ import { exec, execFile } from "child_process";
 import { promisify } from "util";
 import { homedir } from "os";
 import path from "path";
-import { existsSync } from "fs";
+import { existsSync, realpathSync } from "fs";
 import { checkCliTool } from "./cli-tools";
 import { logoutGhAuth, startGhAuthLogin } from "./github-cli-auth";
 
 const execFileAsync = promisify(execFile);
+
+interface WorkspaceFileTarget {
+  workspaceId: string;
+  relativePath: string;
+}
+
+interface WorkspaceLookupResponse {
+  workspace_path?: string;
+}
+
+async function getWorkspacePath(workspaceId: string): Promise<string | null> {
+  const port = process.env.DEUS_BACKEND_PORT;
+  if (!port || !/^\d+$/u.test(port)) return null;
+
+  try {
+    const response = await fetch(
+      `http://localhost:${port}/api/workspaces/${encodeURIComponent(workspaceId)}`
+    );
+    if (!response.ok) return null;
+    const payload = (await response.json()) as WorkspaceLookupResponse;
+    return typeof payload.workspace_path === "string" ? payload.workspace_path : null;
+  } catch {
+    return null;
+  }
+}
+
+async function resolveWorkspaceFile(
+  target: Partial<WorkspaceFileTarget> | null | undefined
+): Promise<string | null> {
+  if (
+    !target ||
+    typeof target.workspaceId !== "string" ||
+    typeof target.relativePath !== "string" ||
+    path.isAbsolute(target.relativePath)
+  ) {
+    return null;
+  }
+
+  const workspacePath = await getWorkspacePath(target.workspaceId);
+  if (!workspacePath || !path.isAbsolute(workspacePath)) return null;
+
+  try {
+    const workspaceRoot = realpathSync(workspacePath);
+    const absolutePath = path.resolve(workspaceRoot, target.relativePath);
+    if (!existsSync(absolutePath)) return null;
+
+    const realPath = realpathSync(absolutePath);
+    const relative = path.relative(workspaceRoot, realPath);
+    if (relative === ".." || relative.startsWith(`..${path.sep}`) || path.isAbsolute(relative)) {
+      return null;
+    }
+    return realPath;
+  } catch {
+    return null;
+  }
+}
 
 export function registerNativeHandlers(): void {
   // -------------------------------------------------------------------------
@@ -140,8 +196,9 @@ export function registerNativeHandlers(): void {
   // Open/reveal local files
   // -------------------------------------------------------------------------
 
-  ipcMain.handle("native:openPath", async (_e, { filePath }: { filePath: string }) => {
-    if (!path.isAbsolute(filePath) || !existsSync(filePath)) return false;
+  ipcMain.handle("native:openPath", async (_e, target: WorkspaceFileTarget) => {
+    const filePath = await resolveWorkspaceFile(target);
+    if (!filePath) return false;
     const error = await shell.openPath(filePath);
     if (error) {
       console.error("[native:openPath] Failed:", error);
@@ -150,8 +207,9 @@ export function registerNativeHandlers(): void {
     return true;
   });
 
-  ipcMain.handle("native:revealInFinder", (_e, { filePath }: { filePath: string }) => {
-    if (!path.isAbsolute(filePath) || !existsSync(filePath)) return false;
+  ipcMain.handle("native:revealInFinder", async (_e, target: WorkspaceFileTarget) => {
+    const filePath = await resolveWorkspaceFile(target);
+    if (!filePath) return false;
     shell.showItemInFolder(filePath);
     return true;
   });

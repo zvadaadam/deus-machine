@@ -305,7 +305,6 @@ export function MarkdownRenderer({
 function shouldHandleMarkdownHref(href: string): boolean {
   const trimmed = href.trim();
   if (/^(?:#|mailto:|tel:)/iu.test(trimmed)) return false;
-  if (/^file:\/\//iu.test(trimmed)) return true;
   if (/^\/\//u.test(trimmed)) return true;
   if (/^www\./iu.test(trimmed)) return true;
   if (/^(?:localhost|127\.0\.0\.1|\[::1\]):\d+/iu.test(trimmed)) return true;

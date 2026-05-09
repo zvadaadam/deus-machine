@@ -17,8 +17,16 @@ interface BrowserEmptyStateProps {
 }
 
 export function BrowserEmptyState({ onOpen }: BrowserEmptyStateProps) {
-  const { data } = useLocalServers();
+  const { data, isLoading } = useLocalServers();
   const servers = data.servers;
+
+  if (isLoading || data.isLoading) {
+    return (
+      <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
+        <p className="text-muted-foreground/60 text-sm">Looking for local servers...</p>
+      </div>
+    );
+  }
 
   if (servers.length > 0) {
     // Outer scrolls; inner uses min-h-full + flex centering so the list is

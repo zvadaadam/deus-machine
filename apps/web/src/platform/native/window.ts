@@ -17,6 +17,8 @@ export async function setZoom(level: number): Promise<void> {
 }
 
 export async function openExternal(url: string): Promise<void> {
+  if (!isHttpUrl(url)) return;
+
   if (window.electronAPI?.openExternal) {
     await window.electronAPI.openExternal(url);
     return;
@@ -28,6 +30,15 @@ export async function openExternal(url: string): Promise<void> {
   }
 
   window.open(url, "_blank", "noopener,noreferrer");
+}
+
+function isHttpUrl(url: string): boolean {
+  try {
+    const parsed = new URL(url);
+    return parsed.protocol === "http:" || parsed.protocol === "https:";
+  } catch {
+    return false;
+  }
 }
 
 export async function enterOnboarding(): Promise<void> {
