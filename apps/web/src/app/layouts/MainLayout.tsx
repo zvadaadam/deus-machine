@@ -25,7 +25,6 @@ import {
 } from "@/features/workspace/api";
 import { useResizeHandle } from "@/features/workspace";
 import { useRepos } from "@/features/repository/api";
-import { useSettings as useSettingsQuery } from "@/features/settings";
 import { SidebarProvider, useSidebar } from "@/components/ui";
 import { AppSidebar, SidebarSkeleton } from "@/features/sidebar";
 import { useWorkspaceStore, workspaceLayoutActions } from "@/features/workspace/store";
@@ -132,17 +131,21 @@ export function MainLayout() {
   // Ref for inserting text from browser element selector
   const workspaceChatPanelRef = useRef<SessionPanelRef | null>(null);
 
-  // Queries for repos, settings
+  // Queries for repos
   const reposQuery = useRepos();
-  const settingsQuery = useSettingsQuery();
 
   const repos = reposQuery.data || [];
-  const username = settingsQuery.data?.user_name || "My Account";
 
-  // GitHub CLI status — gates PR polling
+  // GitHub integration status — gates PR polling and feeds the sidebar profile
   const ghStatusQuery = useGhStatus();
+  const ghIdentity = ghStatusQuery.data;
+  const sidebarProfile = {
+    login: ghIdentity?.login ?? null,
+    displayName: ghIdentity?.displayName ?? null,
+    avatarUrl: ghIdentity?.avatarUrl ?? null,
+  };
 
-  // PR status query — gated on gh CLI, polls while agent is working
+  // PR status query — gated on GitHub auth, polls while agent is working
   const prStatusQuery = usePRStatus(selectedWorkspace?.id || null, {
     ghInstalled: ghStatusQuery.data?.isInstalled,
     ghAuthenticated: ghStatusQuery.data?.isAuthenticated,
@@ -409,7 +412,7 @@ export function MainLayout() {
           onArchive={archiveWorkspace}
           onStatusChange={handleStatusChange}
           onNewSession={() => selectWorkspace(null)}
-          profile={{ username }}
+          profile={sidebarProfile}
         />
       )}
 

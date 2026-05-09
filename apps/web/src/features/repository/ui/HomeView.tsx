@@ -344,17 +344,12 @@ export function HomeView({
        * not geometric center which feels lifeless on tall displays) */}
       <div className="flex-[0_0_30%]" />
 
-      {/* Label — classifies the space without competing with the input.
-       * 14px uppercase with wide tracking (Vignelli-style section label).
-       * The user's typed text at 14px becomes the most prominent element.
-       * Switches from "building" to "start with a project" for zero-repo. */}
       <motion.h1
         key={hasRepos ? "has-repos" : "zero-repos"}
         initial={{ opacity: 0, y: 8 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.3, ease: EASE_OUT_QUART }}
-        className="text-text-muted mb-5 w-full max-w-[560px] px-4 text-sm font-semibold uppercase sm:px-6"
-        style={{ letterSpacing: "0.08em" }}
+        className="text-text-primary mb-6 w-full max-w-[720px] px-4 text-center text-2xl font-medium tracking-tight sm:px-6"
       >
         {hasRepos ? "What are we building?" : "Start with a project"}
       </motion.h1>
@@ -364,13 +359,12 @@ export function HomeView({
         initial={{ opacity: 0, y: 12 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.4, delay: 0.06, ease: EASE_OUT_QUART }}
-        className="w-full max-w-[560px] px-4 sm:px-6"
+        className="w-full max-w-[720px] px-4 sm:px-6"
       >
         <div
           className={cn(
-            "bg-bg-elevated border-border-subtle relative overflow-visible rounded-2xl border transition-[border-color,box-shadow] duration-200",
-            "focus-within:border-border-strong focus-within:shadow-md",
-            isDragging && "border-primary/50 ring-primary/20 ring-1"
+            "bg-bg-raised dark:bg-bg-surface relative overflow-visible rounded-2xl p-1 transition-shadow duration-200",
+            isDragging && "ring-primary/25 ring-2"
           )}
           onDragOver={(e) => {
             e.preventDefault();
@@ -412,8 +406,8 @@ export function HomeView({
               <p className="text-sm font-medium text-white/70">Drop images here</p>
             </div>
           )}
-          {/* Context bar — repo picker (left) + branch picker (right) */}
-          <div className="border-border-subtle/50 flex items-center justify-between border-b px-1 py-0.5">
+          {/* Context bar — repo picker + branch picker, on tray surface above the inner card */}
+          <div className="flex items-center justify-between px-1 py-0.5">
             {/* Repo picker trigger */}
             {hasRepos ? (
               <div ref={repoPickerRef} className="relative">
@@ -702,203 +696,208 @@ export function HomeView({
             )}
           </div>
 
-          {/* Image previews — shown above textarea when images are pasted/dropped */}
-          <AnimatePresence>
-            {attachments.length > 0 && (
-              <motion.div
-                initial={{ opacity: 0, height: 0 }}
-                animate={{ opacity: 1, height: "auto" }}
-                exit={{ opacity: 0, height: 0 }}
-                transition={{ duration: 0.2, ease: EASE_OUT_QUART }}
-                className="flex gap-2 overflow-x-auto px-3 pt-3"
-              >
-                <AnimatePresence mode="popLayout">
-                  {attachments.map((attachment) => (
-                    <PastedImageCard
-                      key={attachment.id}
-                      preview={attachment.preview}
-                      fileName={attachment.file.name}
-                      onRemove={() => removeAttachment(attachment.id)}
-                      size="sm"
-                    />
-                  ))}
-                </AnimatePresence>
-              </motion.div>
-            )}
-          </AnimatePresence>
+          {/* Inner card — typing surface (textarea + bottom toolbar) */}
+          <div className="bg-bg-elevated relative overflow-visible rounded-xl transition-shadow duration-200 focus-within:shadow-sm">
+            {/* Image previews — shown above textarea when images are pasted/dropped */}
+            <AnimatePresence>
+              {attachments.length > 0 && (
+                <motion.div
+                  initial={{ opacity: 0, height: 0 }}
+                  animate={{ opacity: 1, height: "auto" }}
+                  exit={{ opacity: 0, height: 0 }}
+                  transition={{ duration: 0.2, ease: EASE_OUT_QUART }}
+                  className="flex gap-2 overflow-x-auto px-3 pt-3"
+                >
+                  <AnimatePresence mode="popLayout">
+                    {attachments.map((attachment) => (
+                      <PastedImageCard
+                        key={attachment.id}
+                        preview={attachment.preview}
+                        fileName={attachment.file.name}
+                        onRemove={() => removeAttachment(attachment.id)}
+                        size="sm"
+                      />
+                    ))}
+                  </AnimatePresence>
+                </motion.div>
+              )}
+            </AnimatePresence>
 
-          {/* Textarea — the hero input */}
-          <textarea
-            ref={textareaRef}
-            value={message}
-            onChange={handleTextareaChange}
-            onKeyDown={handleKeyDown}
-            onPaste={handlePaste}
-            placeholder={
-              hasRepos ? "Describe what you'd like to do..." : "Add a project to get started"
-            }
-            disabled={!hasRepos || isSubmitting}
-            aria-label="Message to start a new workspace"
-            autoCorrect="off"
-            autoCapitalize="off"
-            spellCheck={false}
-            rows={3}
-            className={cn(
-              "text-text-primary placeholder:text-text-disabled w-full resize-none bg-transparent px-4 pt-3 pb-1 text-sm leading-relaxed outline-none",
-              "max-h-48 min-h-[76px] overflow-y-auto",
-              !hasRepos && "pointer-events-none opacity-40"
-            )}
-          />
+            {/* Textarea — the hero input */}
+            <textarea
+              ref={textareaRef}
+              value={message}
+              onChange={handleTextareaChange}
+              onKeyDown={handleKeyDown}
+              onPaste={handlePaste}
+              placeholder={
+                hasRepos ? "Describe what you'd like to do..." : "Add a project to get started"
+              }
+              disabled={!hasRepos || isSubmitting}
+              aria-label="Message to start a new workspace"
+              autoCorrect="off"
+              autoCapitalize="off"
+              spellCheck={false}
+              rows={3}
+              className={cn(
+                "text-text-primary placeholder:text-text-disabled w-full resize-none bg-transparent px-4 pt-3 pb-1 text-sm leading-relaxed outline-none",
+                "max-h-48 min-h-[76px] overflow-y-auto",
+                !hasRepos && "pointer-events-none opacity-40"
+              )}
+            />
 
-          {/* Bottom toolbar — model picker (left) + send button (right) */}
-          <div className="flex items-center justify-between px-1.5 pt-0.5 pb-2">
-            {/* Model picker */}
-            <div ref={modelPickerRef} className="relative">
+            {/* Bottom toolbar — model picker (left) + send button (right) */}
+            <div className="flex items-center justify-between px-1.5 pt-0.5 pb-2">
+              {/* Model picker */}
+              <div ref={modelPickerRef} className="relative">
+                <button
+                  type="button"
+                  onClick={() => setModelPickerOpen(!modelPickerOpen)}
+                  className="text-text-muted hover:text-text-secondary flex items-center gap-1.5 rounded-lg px-2 py-1.5 text-xs transition-colors duration-150"
+                >
+                  <AgentLogo
+                    type={selectedModelOption?.agentHarness ?? "claude"}
+                    className="h-3 w-3"
+                  />
+                  <span className="font-medium">{modelLabel}</span>
+                  <ChevronDown
+                    className={cn(
+                      "text-text-disabled size-3 transition-transform duration-200",
+                      modelPickerOpen && "rotate-180"
+                    )}
+                  />
+                </button>
+
+                {/* Mobile: bottom sheet */}
+                {isMobile ? (
+                  <Sheet open={modelPickerOpen} onOpenChange={setModelPickerOpen}>
+                    <SheetContent side="bottom" className="rounded-t-xl px-0">
+                      <SheetHeader className="px-4 pb-0">
+                        <SheetTitle className="text-sm">Select model</SheetTitle>
+                        <SheetDescription className="sr-only">
+                          Choose an AI model for your workspace
+                        </SheetDescription>
+                      </SheetHeader>
+                      <div className="max-h-[50vh] overflow-y-auto p-2">
+                        {MODEL_PICKER_GROUPS.map((agentConfig, groupIdx) => (
+                          <div key={agentConfig.id}>
+                            {groupIdx > 0 && <div className="bg-border/70 mx-2 my-2 h-px" />}
+                            <div className="text-text-muted/90 px-2 py-1.5 text-xs font-normal tracking-wide">
+                              {agentConfig.label}
+                            </div>
+                            {MODEL_OPTIONS.filter((o) => o.agentHarness === agentConfig.id).map(
+                              (option) => {
+                                const isSelected = selectedModelOption?.value === option.value;
+                                return (
+                                  <button
+                                    key={option.value}
+                                    type="button"
+                                    onClick={() => handleSelectModel(option.value)}
+                                    className={cn(
+                                      "flex w-full items-center gap-2.5 rounded-lg px-2 py-2.5 text-sm transition-colors duration-100",
+                                      "hover:bg-bg-raised/45",
+                                      isSelected ? "text-text-primary" : "text-text-secondary"
+                                    )}
+                                  >
+                                    <AgentLogo type={option.agentHarness} className="h-4 w-4" />
+                                    <span className="font-normal">{option.label}</span>
+                                    {option.isNew && (
+                                      <span className="border-accent-red-muted/60 bg-accent-red-muted/20 text-accent-red-muted text-2xs rounded-xs border px-1 py-px tracking-wide uppercase">
+                                        New
+                                      </span>
+                                    )}
+                                    <span className="ml-auto">
+                                      {isSelected && (
+                                        <Check className="text-text-primary size-3.5" />
+                                      )}
+                                    </span>
+                                  </button>
+                                );
+                              }
+                            )}
+                          </div>
+                        ))}
+                      </div>
+                    </SheetContent>
+                  </Sheet>
+                ) : (
+                  /* Desktop: animated dropdown */
+                  <AnimatePresence>
+                    {modelPickerOpen && (
+                      <motion.div
+                        initial={{ opacity: 0, scale: 0.96, y: -4 }}
+                        animate={{ opacity: 1, scale: 1, y: 0 }}
+                        exit={{ opacity: 0, scale: 0.96, y: -4 }}
+                        transition={{ duration: 0.15, ease: [0.215, 0.61, 0.355, 1] }}
+                        className={cn(
+                          "absolute top-full left-0 z-50 mt-1 w-56 overflow-hidden rounded-xl border p-1.5",
+                          "border-border/55 from-bg-overlay/95 to-bg-elevated/94 bg-linear-to-b backdrop-blur-2xl",
+                          "shadow-[var(--shadow-elevated)]"
+                        )}
+                      >
+                        {MODEL_PICKER_GROUPS.map((agentConfig, groupIdx) => (
+                          <div key={agentConfig.id}>
+                            {groupIdx > 0 && <div className="bg-border/70 mx-1 my-1.5 h-px" />}
+                            <div className="text-text-muted/90 text-2xs px-2 py-1 font-normal tracking-wide">
+                              {agentConfig.label}
+                            </div>
+                            {MODEL_OPTIONS.filter((o) => o.agentHarness === agentConfig.id).map(
+                              (option) => {
+                                const isSelected = selectedModelOption?.value === option.value;
+                                return (
+                                  <button
+                                    key={option.value}
+                                    type="button"
+                                    onClick={() => handleSelectModel(option.value)}
+                                    className={cn(
+                                      "flex w-full items-center gap-2 rounded-lg px-2 py-1.5 text-xs transition-colors duration-100",
+                                      "hover:bg-bg-raised/45",
+                                      isSelected ? "text-text-primary" : "text-text-secondary"
+                                    )}
+                                  >
+                                    <AgentLogo type={option.agentHarness} className="h-3.5 w-3.5" />
+                                    <span className="font-normal">{option.label}</span>
+                                    {option.isNew && (
+                                      <span className="border-accent-red-muted/60 bg-accent-red-muted/20 text-accent-red-muted text-2xs rounded-xs border px-1 py-px tracking-wide uppercase">
+                                        New
+                                      </span>
+                                    )}
+                                    <span className="ml-auto">
+                                      {isSelected && <Check className="text-text-primary size-3" />}
+                                    </span>
+                                  </button>
+                                );
+                              }
+                            )}
+                          </div>
+                        ))}
+                      </motion.div>
+                    )}
+                  </AnimatePresence>
+                )}
+              </div>
+
+              {/* Send button */}
               <button
                 type="button"
-                onClick={() => setModelPickerOpen(!modelPickerOpen)}
-                className="text-text-muted hover:text-text-secondary flex items-center gap-1.5 rounded-lg px-2 py-1.5 text-xs transition-colors duration-150"
+                onClick={handleSend}
+                disabled={!canSend}
+                aria-label="Send message"
+                title="Send message (Enter)"
+                className={cn(
+                  "mr-1 flex h-7 w-7 items-center justify-center rounded-full transition-all duration-150",
+                  canSend
+                    ? "bg-foreground text-background hover:opacity-90 active:scale-95"
+                    : "bg-bg-muted text-text-disabled cursor-default"
+                )}
               >
-                <AgentLogo
-                  type={selectedModelOption?.agentHarness ?? "claude"}
-                  className="h-3 w-3"
-                />
-                <span className="font-medium">{modelLabel}</span>
-                <ChevronDown
-                  className={cn(
-                    "text-text-disabled size-3 transition-transform duration-200",
-                    modelPickerOpen && "rotate-180"
-                  )}
-                />
+                {isSubmitting ? (
+                  <div className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-current border-t-transparent" />
+                ) : (
+                  <ArrowUp className="h-3.5 w-3.5" />
+                )}
               </button>
-
-              {/* Mobile: bottom sheet */}
-              {isMobile ? (
-                <Sheet open={modelPickerOpen} onOpenChange={setModelPickerOpen}>
-                  <SheetContent side="bottom" className="rounded-t-xl px-0">
-                    <SheetHeader className="px-4 pb-0">
-                      <SheetTitle className="text-sm">Select model</SheetTitle>
-                      <SheetDescription className="sr-only">
-                        Choose an AI model for your workspace
-                      </SheetDescription>
-                    </SheetHeader>
-                    <div className="max-h-[50vh] overflow-y-auto p-2">
-                      {MODEL_PICKER_GROUPS.map((agentConfig, groupIdx) => (
-                        <div key={agentConfig.id}>
-                          {groupIdx > 0 && <div className="bg-border/70 mx-2 my-2 h-px" />}
-                          <div className="text-text-muted/90 px-2 py-1.5 text-xs font-normal tracking-wide">
-                            {agentConfig.label}
-                          </div>
-                          {MODEL_OPTIONS.filter((o) => o.agentHarness === agentConfig.id).map(
-                            (option) => {
-                              const isSelected = selectedModelOption?.value === option.value;
-                              return (
-                                <button
-                                  key={option.value}
-                                  type="button"
-                                  onClick={() => handleSelectModel(option.value)}
-                                  className={cn(
-                                    "flex w-full items-center gap-2.5 rounded-lg px-2 py-2.5 text-sm transition-colors duration-100",
-                                    "hover:bg-bg-raised/45",
-                                    isSelected ? "text-text-primary" : "text-text-secondary"
-                                  )}
-                                >
-                                  <AgentLogo type={option.agentHarness} className="h-4 w-4" />
-                                  <span className="font-normal">{option.label}</span>
-                                  {option.isNew && (
-                                    <span className="border-accent-red-muted/60 bg-accent-red-muted/20 text-accent-red-muted text-2xs rounded-xs border px-1 py-px tracking-wide uppercase">
-                                      New
-                                    </span>
-                                  )}
-                                  <span className="ml-auto">
-                                    {isSelected && <Check className="text-text-primary size-3.5" />}
-                                  </span>
-                                </button>
-                              );
-                            }
-                          )}
-                        </div>
-                      ))}
-                    </div>
-                  </SheetContent>
-                </Sheet>
-              ) : (
-                /* Desktop: animated dropdown */
-                <AnimatePresence>
-                  {modelPickerOpen && (
-                    <motion.div
-                      initial={{ opacity: 0, scale: 0.96, y: -4 }}
-                      animate={{ opacity: 1, scale: 1, y: 0 }}
-                      exit={{ opacity: 0, scale: 0.96, y: -4 }}
-                      transition={{ duration: 0.15, ease: [0.215, 0.61, 0.355, 1] }}
-                      className={cn(
-                        "absolute top-full left-0 z-50 mt-1 w-56 overflow-hidden rounded-xl border p-1.5",
-                        "border-border/55 from-bg-overlay/95 to-bg-elevated/94 bg-linear-to-b backdrop-blur-2xl",
-                        "shadow-[var(--shadow-elevated)]"
-                      )}
-                    >
-                      {MODEL_PICKER_GROUPS.map((agentConfig, groupIdx) => (
-                        <div key={agentConfig.id}>
-                          {groupIdx > 0 && <div className="bg-border/70 mx-1 my-1.5 h-px" />}
-                          <div className="text-text-muted/90 text-2xs px-2 py-1 font-normal tracking-wide">
-                            {agentConfig.label}
-                          </div>
-                          {MODEL_OPTIONS.filter((o) => o.agentHarness === agentConfig.id).map(
-                            (option) => {
-                              const isSelected = selectedModelOption?.value === option.value;
-                              return (
-                                <button
-                                  key={option.value}
-                                  type="button"
-                                  onClick={() => handleSelectModel(option.value)}
-                                  className={cn(
-                                    "flex w-full items-center gap-2 rounded-lg px-2 py-1.5 text-xs transition-colors duration-100",
-                                    "hover:bg-bg-raised/45",
-                                    isSelected ? "text-text-primary" : "text-text-secondary"
-                                  )}
-                                >
-                                  <AgentLogo type={option.agentHarness} className="h-3.5 w-3.5" />
-                                  <span className="font-normal">{option.label}</span>
-                                  {option.isNew && (
-                                    <span className="border-accent-red-muted/60 bg-accent-red-muted/20 text-accent-red-muted text-2xs rounded-xs border px-1 py-px tracking-wide uppercase">
-                                      New
-                                    </span>
-                                  )}
-                                  <span className="ml-auto">
-                                    {isSelected && <Check className="text-text-primary size-3" />}
-                                  </span>
-                                </button>
-                              );
-                            }
-                          )}
-                        </div>
-                      ))}
-                    </motion.div>
-                  )}
-                </AnimatePresence>
-              )}
             </div>
-
-            {/* Send button */}
-            <button
-              type="button"
-              onClick={handleSend}
-              disabled={!canSend}
-              aria-label="Send message"
-              title="Send message (Enter)"
-              className={cn(
-                "mr-1 flex h-7 w-7 items-center justify-center rounded-full transition-all duration-150",
-                canSend
-                  ? "bg-foreground text-background hover:opacity-90 active:scale-95"
-                  : "bg-bg-muted text-text-disabled cursor-default"
-              )}
-            >
-              {isSubmitting ? (
-                <div className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-current border-t-transparent" />
-              ) : (
-                <ArrowUp className="h-3.5 w-3.5" />
-              )}
-            </button>
           </div>
         </div>
       </motion.div>
@@ -912,7 +911,7 @@ export function HomeView({
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0, y: 4 }}
             transition={{ duration: 0.2, delay: 0.12, ease: EASE_OUT_QUART }}
-            className="mt-3 flex w-full max-w-[560px] flex-wrap gap-2 px-6"
+            className="mt-3 flex w-full max-w-[720px] flex-wrap gap-2 px-4 sm:px-6"
           >
             {QUICK_PROMPTS.map((prompt, i) => (
               <motion.button
@@ -924,8 +923,8 @@ export function HomeView({
                 onClick={() => handleQuickPrompt(prompt)}
                 disabled={!selectedRepoId || isSubmitting}
                 className={cn(
-                  "border-border-subtle/60 text-text-muted rounded-lg border px-3 py-2 text-xs transition-colors duration-150",
-                  "hover:border-border hover:bg-foreground/[0.03] hover:text-text-secondary",
+                  "bg-bg-raised dark:bg-bg-surface text-text-muted rounded-lg px-3 py-2 text-xs transition-colors duration-150",
+                  "hover:bg-bg-muted dark:hover:bg-bg-elevated hover:text-text-secondary",
                   "disabled:pointer-events-none disabled:opacity-40"
                 )}
               >

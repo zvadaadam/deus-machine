@@ -6,8 +6,8 @@ export const OnboardingService = {
   /** Check if a CLI tool is installed. Returns safe default on failure or in web mode. */
   checkCliTool: native.cli.checkCliTool,
 
-  /** Check GitHub CLI auth status. Returns unauthenticated on failure or in web mode. */
-  checkGhAuth: native.cli.checkGhAuth,
+  /** Start GitHub auth through the browser flow using the resolved gh executable. */
+  startGhAuthLogin: native.cli.startGhAuthLogin,
 
   /** Fetch recent projects from Cursor, VS Code, and Claude directories. */
   async fetchRecentProjects(): Promise<{ projects: RecentProject[] }> {
