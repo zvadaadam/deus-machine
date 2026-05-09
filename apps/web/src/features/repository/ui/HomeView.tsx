@@ -697,7 +697,7 @@ export function HomeView({
           </div>
 
           {/* Inner card — typing surface (textarea + bottom toolbar) */}
-          <div className="bg-bg-elevated border-border-subtle focus-within:border-border-strong relative overflow-visible rounded-xl border transition-[border-color,box-shadow] duration-200 focus-within:shadow-sm">
+          <div className="bg-bg-elevated relative overflow-visible rounded-xl transition-shadow duration-200 focus-within:shadow-sm">
             {/* Image previews — shown above textarea when images are pasted/dropped */}
             <AnimatePresence>
               {attachments.length > 0 && (
