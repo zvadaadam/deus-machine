@@ -106,6 +106,7 @@ Detailed conventions for Tailwind v4, components, animations, and performance li
 ### Running services
 
 - Use `bun run dev:web` to start all three services (agent-server, backend, frontend) together. See `DEVELOPMENT.md` for details. The script (`scripts/dev.sh`) uses Electron's Node binary with `ELECTRON_RUN_AS_NODE=1` for native module ABI compatibility.
+- Use `bun run dev` to start the Electron desktop app (includes Vite, backend, agent-server). D-Bus errors in the VM logs (`Failed to connect to the bus`) are harmless — there is no system D-Bus in the Cloud VM.
 - The agent-server bundle must exist before running `dev:web`. It is built automatically by `dev.sh` on first run, but you can pre-build it with `bun run build:agent-server`.
 
 ### Testing caveats
@@ -116,12 +117,13 @@ Detailed conventions for Tailwind v4, components, animations, and performance li
 
 ### Commands reference
 
-| Task               | Command                          |
-| ------------------ | -------------------------------- |
-| Install deps       | `bun install`                    |
-| Dev server (web)   | `bun run dev:web`                |
-| Backend tests      | `bun run test:backend`           |
-| Agent-server tests | `bun run test:agent-server:unit` |
-| Lint               | `bun run lint`                   |
-| Format check       | `bun run format:check`           |
-| Typecheck          | `bun run typecheck`              |
+| Task                 | Command                          |
+| -------------------- | -------------------------------- |
+| Install deps         | `bun install`                    |
+| Dev server (web)     | `bun run dev:web`                |
+| Dev server (desktop) | `bun run dev`                    |
+| Backend tests        | `bun run test:backend`           |
+| Agent-server tests   | `bun run test:agent-server:unit` |
+| Lint                 | `bun run lint`                   |
+| Format check         | `bun run format:check`           |
+| Typecheck            | `bun run typecheck`              |
