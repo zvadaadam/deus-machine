@@ -47,12 +47,12 @@ Backend → Agent-Server (apps/agent-server/) — JSON-RPC 2.0 over WebSocket
 
 Single WS connection (`/ws`) using `q:` prefixed JSON frames:
 
-| Frame | Purpose |
-|---|---|
+| Frame                                    | Purpose                                                             |
+| ---------------------------------------- | ------------------------------------------------------------------- |
 | `q:subscribe` / `q:snapshot` / `q:delta` | Reactive data subscriptions (workspaces, stats, sessions, messages) |
-| `q:mutate` / `q:mutate_result` | Sync writes (archiveWorkspace, updateWorkspaceTitle) |
-| `q:command` / `q:command_ack` | Async actions (sendMessage, stopSession) |
-| `q:event` | Ephemeral push (tool relay, plan-mode) |
+| `q:mutate` / `q:mutate_result`           | Sync writes (archiveWorkspace, updateWorkspaceTitle)                |
+| `q:command` / `q:command_ack`            | Async actions (sendMessage, stopSession)                            |
+| `q:event`                                | Ephemeral push (tool relay, plan-mode)                              |
 
 Resources, mutations, commands, and events are all defined in `shared/events.ts`. Frontend subscribes via `useQuerySubscription()`.
 
@@ -94,3 +94,34 @@ Detailed conventions for Tailwind v4, components, animations, and performance li
 - Never use npm or yarn
 - WebSocket push over polling — only poll for git diffs on working sessions
 - All colors via CSS variables/tokens, never hardcoded
+
+## Cursor Cloud specific instructions
+
+### Environment
+
+- **Bun** must be on `$PATH`. The update script installs it to `~/.bun/bin`. Ensure `export PATH="$HOME/.bun/bin:$PATH"` is active in your shell before running any `bun` commands.
+- **Node.js 22** is pre-installed in the VM.
+- The SQLite database on Linux lives at `~/.local/share/deus/deus.db` (not the macOS `~/Library/Application Support/` path mentioned elsewhere in the docs).
+
+### Running services
+
+- Use `bun run dev:web` to start all three services (agent-server, backend, frontend) together. See `DEVELOPMENT.md` for details. The script (`scripts/dev.sh`) uses Electron's Node binary with `ELECTRON_RUN_AS_NODE=1` for native module ABI compatibility.
+- The agent-server bundle must exist before running `dev:web`. It is built automatically by `dev.sh` on first run, but you can pre-build it with `bun run build:agent-server`.
+
+### Testing caveats
+
+- **Backend integration tests** (`test/integration/`) fail under system Node because `better-sqlite3` and `node-pty` are compiled against Electron's Node ABI (`postinstall` runs `electron-builder install-app-deps`). Unit tests (`test/unit/`) pass fine. Use `bun run test:backend` for unit tests (3 integration files will fail with ABI mismatch — this is expected).
+- **Agent-server unit tests** run cleanly: `bun run test:agent-server:unit`.
+- **Lint** has pre-existing errors (3 errors, ~69 warnings) in the codebase. These are not introduced by your changes.
+
+### Commands reference
+
+| Task               | Command                          |
+| ------------------ | -------------------------------- |
+| Install deps       | `bun install`                    |
+| Dev server (web)   | `bun run dev:web`                |
+| Backend tests      | `bun run test:backend`           |
+| Agent-server tests | `bun run test:agent-server:unit` |
+| Lint               | `bun run lint`                   |
+| Format check       | `bun run format:check`           |
+| Typecheck          | `bun run typecheck`              |
