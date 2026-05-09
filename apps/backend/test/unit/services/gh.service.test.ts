@@ -35,7 +35,9 @@ const originalBundledBinDir = process.env.DEUS_BUNDLED_BIN_DIR;
 
 beforeEach(() => {
   vi.clearAllMocks();
-  delete process.env.DEUS_BUNDLED_BIN_DIR;
+  // Force resolveBundledCliPath to a non-existent dir so it returns null even
+  // when a dev machine has staged binaries at process.cwd()/dist/runtime/...
+  process.env.DEUS_BUNDLED_BIN_DIR = "/nonexistent/deus-test-bundled-bin";
   mockExecFileAsync.mockResolvedValue({ stdout: "", stderr: "" });
   mockGetGitRemoteUrl.mockImplementation(async (_workspacePath: string, remote: string) => {
     if (remote === "origin") return "https://github.com/expo/echo-backend.git";
