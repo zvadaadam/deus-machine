@@ -30,7 +30,6 @@
     "build:cli": "bun run build:runtime && bunx tsx apps/cli/build.ts",
     "build:all": "bun run build:runtime && bun run build",
     "package:mac": "bun run build:all && bun run prepare:gh-cli && electron-builder --mac",
-    "package:win": "bun run build:all && electron-builder --win",
     "package:linux": "bun run build:all && electron-builder --linux",
     "postinstall": "bun run prepare:device-use",
     "native:electron": "electron-builder install-app-deps",
