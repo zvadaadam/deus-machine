@@ -77,7 +77,17 @@ export function TextBlock({ block, role = "assistant", weight = "normal" }: Text
   const resolveFileLink = useCallback(
     (href: string): MarkdownFileLinkResolution => {
       const path = getWorkspaceFilePathFromHref(href, workspacePath);
-      if (!path) return null;
+      if (!path) {
+        if (/^file:\/\//iu.test(href.trim())) {
+          return {
+            path: href,
+            disabled: true,
+            target: "file",
+            title: "Only workspace files can be opened",
+          };
+        }
+        return null;
+      }
 
       const target = isBrowserPreviewPath(path) ? "browser" : "file";
       return {
@@ -161,7 +171,6 @@ function resolveBrowserLinkUrl(href: string): string | null {
   if (/^\/\//u.test(trimmed)) return `https:${trimmed}`;
   if (/^www\./iu.test(trimmed)) return `https://${trimmed}`;
   if (/^(?:localhost|127\.0\.0\.1|\[::1\]):\d+/iu.test(trimmed)) return `http://${trimmed}`;
-  if (/^file:\/\//iu.test(trimmed)) return trimmed;
   return null;
 }
 
@@ -170,8 +179,9 @@ function getWorkspaceFilePathFromHref(
   workspacePath: string | null | undefined
 ): string | null {
   const trimmed = href.trim();
-  if (!looksLikeWorkspaceFileHref(trimmed)) return null;
-  return normalizeResourcePath(trimmed.replace(/[?#].*$/u, ""), workspacePath);
+  const path = fileUrlToPath(trimmed) ?? trimmed.replace(/[?#].*$/u, "");
+  if (!looksLikeWorkspaceFileHref(path)) return null;
+  return normalizeResourcePath(path, workspacePath);
 }
 
 function looksLikeWorkspaceFileHref(href: string): boolean {
@@ -184,4 +194,15 @@ function looksLikeWorkspaceFileHref(href: string): boolean {
     href.includes("/") ||
     /\.[^/.?#]+(?:[?#].*)?$/u.test(href)
   );
+}
+
+function fileUrlToPath(href: string): string | null {
+  if (!/^file:\/\//iu.test(href)) return null;
+
+  try {
+    const url = new URL(href);
+    return decodeURIComponent(url.pathname);
+  } catch {
+    return null;
+  }
 }

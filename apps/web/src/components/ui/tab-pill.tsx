@@ -19,7 +19,7 @@ import { cn } from "@/shared/lib/utils";
 const ICON_CROSS_FADE =
   "transition-[opacity,filter,scale] duration-200 ease-[cubic-bezier(0.2,0,0,1)]";
 
-interface TabPillProps {
+type TabPillPropsBase = {
   /** Whether this tab is currently active. Drives bg + text color. */
   active: boolean;
   /** Rest-state icon shown in the left slot. Sized by the caller — typically
@@ -27,11 +27,6 @@ interface TabPillProps {
   icon: ReactNode;
   /** Click handler for the title button. */
   onSelect: () => void;
-  /** When provided, the icon slot becomes a close button; the icon
-   *  crossfades to X on hover. Omit to render a plain (non-button) slot. */
-  onClose?: () => void;
-  /** ARIA label for the close button. Required when `onClose` is provided. */
-  closeAriaLabel?: string;
   /** Title content. Truncates by default. */
   children: ReactNode;
   /** Forwarded keyboard handler on the title button (arrow-key tab nav). */
@@ -43,7 +38,22 @@ interface TabPillProps {
   /** Container className override — for max-width, min-width, custom text
    *  size, custom tone overrides (e.g. session unread state). */
   className?: string;
-}
+};
+
+type TabPillProps = TabPillPropsBase &
+  (
+    | {
+        /** When provided, the icon slot becomes a close button; the icon
+         *  crossfades to X on hover. */
+        onClose: () => void;
+        /** ARIA label for the close button. Required when `onClose` is provided. */
+        closeAriaLabel: string;
+      }
+    | {
+        onClose?: never;
+        closeAriaLabel?: never;
+      }
+  );
 
 export function TabPill({
   active,

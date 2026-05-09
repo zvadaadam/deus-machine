@@ -25,7 +25,6 @@ import {
   type ChatResource,
   type ResourceAction,
 } from "@/features/session/lib/chatResources";
-import { normalizeWorkspaceRelativePath } from "@/features/workspace/lib/normalizeWorkspaceRelativePath";
 import { workspaceLayoutActions } from "@/features/workspace/store/workspaceLayoutStore";
 import { getBaseURL } from "@/shared/config/api.config";
 import { cn } from "@/shared/lib/utils";
@@ -36,7 +35,7 @@ interface ChatResourceCardsProps {
 }
 
 export function ChatResourceCards({ resources }: ChatResourceCardsProps) {
-  const { workspaceId, workspacePath } = useSession();
+  const { workspaceId } = useSession();
 
   const openBrowserUrl = useCallback(
     (url: string) => {
@@ -54,16 +53,6 @@ export function ChatResourceCards({ resources }: ChatResourceCardsProps) {
       return createWorkspacePreviewUrl(baseUrl, workspaceId, path);
     },
     [workspaceId]
-  );
-
-  const resolveAbsolutePath = useCallback(
-    (path: string) => {
-      const relativePath = normalizeWorkspaceRelativePath(path);
-      const root = workspacePath?.replace(/[/\\]+$/u, "");
-      if (!relativePath || !root) return null;
-      return `${root}/${relativePath}`;
-    },
-    [workspacePath]
   );
 
   const runAction = useCallback(
@@ -95,17 +84,16 @@ export function ChatResourceCards({ resources }: ChatResourceCardsProps) {
         return;
       }
 
-      const absolutePath = resolveAbsolutePath(action.path);
-      if (!absolutePath) return;
+      const target = { workspaceId, relativePath: action.path };
 
       if (action.kind === "system-file") {
-        await native.files.openPath(absolutePath);
+        await native.files.openPath(target);
         return;
       }
 
-      await native.files.revealInFinder(absolutePath);
+      await native.files.revealInFinder(target);
     },
-    [getBrowserPreviewUrl, openBrowserUrl, resolveAbsolutePath, workspaceId]
+    [getBrowserPreviewUrl, openBrowserUrl, workspaceId]
   );
 
   if (resources.length === 0) return null;

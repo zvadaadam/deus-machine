@@ -44,13 +44,14 @@ export function SessionTab({
   onKeyDown,
   tabRef,
 }: SessionTabProps) {
+  const closeProps =
+    canClose && onClose ? { onClose, closeAriaLabel: `Close ${tab.label} tab` } : {};
+
   return (
     <TabPill
       active={isActive}
       icon={renderStatusIcon(tab, isWorking, isUnread)}
       onSelect={onSelect}
-      onClose={canClose && onClose ? onClose : undefined}
-      closeAriaLabel={canClose && onClose ? `Close ${tab.label} tab` : undefined}
       onTitleKeyDown={onKeyDown}
       titleTabIndex={isActive ? 0 : -1}
       titleRef={tabRef}
@@ -58,6 +59,7 @@ export function SessionTab({
         "max-w-[200px] min-w-[80px] text-base",
         !isActive && isUnread && "text-text-secondary hover:text-text-secondary"
       )}
+      {...closeProps}
     >
       {tab.label}
     </TabPill>
