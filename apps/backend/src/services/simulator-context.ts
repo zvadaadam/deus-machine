@@ -211,7 +211,8 @@ function findSimBridgePath(): string | null {
 
   // 2. Packaged Electron app — extraResources copies simbridge here.
   //    resourcesPath is Electron-only, not in NodeJS.Process types.
-  const resourcesPath = (process as { resourcesPath?: string }).resourcesPath;
+  const resourcesPath =
+    process.env["DEUS_RESOURCES_PATH"] ?? (process as { resourcesPath?: string }).resourcesPath;
   if (resourcesPath) {
     const packaged = join(resourcesPath, "simulator", "simbridge");
     if (existsSync(packaged)) {
@@ -250,7 +251,8 @@ function findSimInspectorPath(): string | null {
     return envOverride;
   }
 
-  const resourcesPath = (process as { resourcesPath?: string }).resourcesPath;
+  const resourcesPath =
+    process.env["DEUS_RESOURCES_PATH"] ?? (process as { resourcesPath?: string }).resourcesPath;
   if (resourcesPath) {
     const packaged = join(resourcesPath, "simulator", "siminspector.dylib");
     if (existsSync(packaged)) {
