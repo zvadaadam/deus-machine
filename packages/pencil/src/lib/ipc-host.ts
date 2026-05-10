@@ -122,9 +122,10 @@ const handlers: Record<string, IpcHandler> = {
   // sources in order:
   //   1. The Deus-managed editor session (saved via set-session below)
   //   2. The CLI's own pencil login session (~/.pencil/session-cli.json)
-  //   3. PENCIL_CLI_KEY env (best-effort fallback, not really a web token)
-  // None available → return undefined and the editor will show its own
-  // sign-in card.
+  //   3. Any verified Deus CLI key. Deus uses the CLI key as the integration
+  //      credential, so the embedded editor should not ask for a second web
+  //      sign-in after the user has already connected Pencil.
+  // None available → return undefined and the editor will show its own sign-in card.
   "get-session": () => {
     const persisted = readEditorSession();
     if (persisted) return { email: persisted.email, token: persisted.token };
@@ -140,8 +141,8 @@ const handlers: Record<string, IpcHandler> = {
       }
     }
     const resolved = resolveCliKey();
-    if (resolved && resolved.source === "env") {
-      return { email: "deus-cli", token: resolved.key };
+    if (resolved) {
+      return { email: a.sessionEmail ?? "Pencil CLI", token: resolved.key };
     }
     return undefined;
   },

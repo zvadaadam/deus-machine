@@ -191,6 +191,33 @@ export function rewriteEditorIndex(html: string): string {
       window.webappapi = {
         getBasePath() { return "/editor/"; }
       };
+      // Deus handles auth with the CLI-key setup card in the parent frame.
+      // The bundled editor may still render its own email OTP modal when it
+      // rejects a CLI key as a web token; remove only that modal so the
+      // CLI-authenticated canvas stays usable.
+      (() => {
+        const hideEditorSignin = () => {
+          const headings = Array.from(document.querySelectorAll("h1,h2,h3"));
+          for (const heading of headings) {
+            if ((heading.textContent || "").trim() !== "Sign in to Pencil") continue;
+            let node = heading.parentElement;
+            while (node && node !== document.body) {
+              const style = window.getComputedStyle(node);
+              if (style.position === "fixed" && node.textContent?.includes("Email Address")) {
+                node.remove();
+                return;
+              }
+              node = node.parentElement;
+            }
+          }
+        };
+        new MutationObserver(hideEditorSignin).observe(document.documentElement, {
+          childList: true,
+          subtree: true
+        });
+        window.addEventListener("DOMContentLoaded", hideEditorSignin);
+        window.setTimeout(hideEditorSignin, 0);
+      })();
     </script>
   `;
   return html.replace(/<script[^>]*type="module"[^>]*>/, (m) => inject + m);

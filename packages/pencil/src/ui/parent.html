@@ -61,12 +61,24 @@
         <p id="signin-copy">
           Deus is checking for an existing Pencil CLI key. No Pencil desktop app is required.
         </p>
+        <ol id="signin-steps" class="signin-steps" hidden>
+          <li>
+            Open
+            <a href="https://www.pencil.dev/zvada/settings" target="_blank" rel="noopener">
+              Pencil settings
+            </a>
+            in your browser.
+          </li>
+          <li>Find the CLI API key section and create or copy a key.</li>
+          <li>Paste the key here. It starts with <code>pencil_cli_</code>.</li>
+        </ol>
         <form id="signin-form" class="signin-form" hidden>
           <input
             id="signin-key"
-            type="password"
+            type="text"
             placeholder="pencil_cli_..."
-            autocomplete="off"
+            autocomplete="one-time-code"
+            autocapitalize="off"
             spellcheck="false"
           />
           <button id="signin-button" type="submit" class="btn btn--primary">Verify</button>
