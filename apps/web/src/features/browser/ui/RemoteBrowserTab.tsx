@@ -45,6 +45,10 @@ import type {
   BrowserProxyFrameEvent,
   BrowserProxyStateEvent,
 } from "@shared/types/browser-proxy";
+import {
+  BROWSER_FRAME_MEDIA_TRANSPORT,
+  useBrowserFrameMediaTransport,
+} from "./browserFrameMediaTransport";
 
 const INSPECT_DRAIN_INTERVAL_MS = 200;
 const REMOTE_COMMAND_TIMEOUT_MS = 20_000;
@@ -104,29 +108,6 @@ function mouseButton(button: number): "left" | "middle" | "right" | "none" {
   return "none";
 }
 
-function captureCanvasDataUrl(
-  canvas: HTMLCanvasElement,
-  rect?: { x: number; y: number; width: number; height: number }
-): string | null {
-  if (canvas.width <= 0 || canvas.height <= 0) return null;
-  if (!rect) return canvas.toDataURL("image/png");
-
-  const x = Math.max(0, Math.floor(rect.x));
-  const y = Math.max(0, Math.floor(rect.y));
-  if (x >= canvas.width || y >= canvas.height) return null;
-  const width = Math.max(1, Math.min(canvas.width - x, Math.floor(rect.width)));
-  const height = Math.max(1, Math.min(canvas.height - y, Math.floor(rect.height)));
-  if (width <= 0 || height <= 0) return null;
-
-  const out = document.createElement("canvas");
-  out.width = width;
-  out.height = height;
-  const ctx = out.getContext("2d");
-  if (!ctx) return null;
-  ctx.drawImage(canvas, x, y, width, height, 0, 0, width, height);
-  return out.toDataURL("image/png");
-}
-
 export const RemoteBrowserTab = forwardRef<BrowserTabHandle, RemoteBrowserTabProps>(
   function RemoteBrowserTab(
     { tab, workspaceId, onUpdateTab, onAddLog, visible, onElementSelected },
@@ -134,7 +115,7 @@ export const RemoteBrowserTab = forwardRef<BrowserTabHandle, RemoteBrowserTabPro
   ) {
     const tabId = tab.id;
     const panelContainerRef = useRef<HTMLDivElement | null>(null);
-    const canvasRef = useRef<HTMLCanvasElement | null>(null);
+    const mediaTransport = useBrowserFrameMediaTransport();
     const [panelRect, setPanelRect] = useState<Bounds | null>(null);
     const [hasLoaded, setHasLoaded] = useState(false);
     const [completingLoad, setCompletingLoad] = useState(false);
@@ -143,8 +124,6 @@ export const RemoteBrowserTab = forwardRef<BrowserTabHandle, RemoteBrowserTabPro
     const attachedRef = useRef(false);
     const hasLoadedRef = useRef(false);
     const lastMouseMoveAtRef = useRef(0);
-    const frameSizeRef = useRef({ width: 1, height: 1 });
-    const drawRequestRef = useRef(0);
     const automationInjectedRef = useRef(false);
     const suppressHistoryPushRef = useRef(false);
     const historyNavDeltaRef = useRef<-1 | 0 | 1>(0);
@@ -198,24 +177,6 @@ export const RemoteBrowserTab = forwardRef<BrowserTabHandle, RemoteBrowserTabPro
       onUpdateTab(tabId, { loading: false, error: null });
     }, [onUpdateTab, tabId]);
 
-    const drawFrame = useCallback((frame: BrowserProxyFrameEvent, onDrawn?: () => void) => {
-      const canvas = canvasRef.current;
-      if (!canvas) return;
-      const drawRequest = ++drawRequestRef.current;
-      frameSizeRef.current = { width: frame.width, height: frame.height };
-      if (canvas.width !== frame.width) canvas.width = frame.width;
-      if (canvas.height !== frame.height) canvas.height = frame.height;
-      const img = new Image();
-      img.onload = () => {
-        if (drawRequest !== drawRequestRef.current) return;
-        const ctx = canvas.getContext("2d");
-        if (!ctx) return;
-        ctx.drawImage(img, 0, 0, frame.width, frame.height);
-        onDrawn?.();
-      };
-      img.src = `data:image/${frame.format};base64,${frame.data}`;
-    }, []);
-
     const handleNavigated = useCallback(
       (url: string) => {
         if (isBlankUrl(url)) return;
@@ -258,7 +219,7 @@ export const RemoteBrowserTab = forwardRef<BrowserTabHandle, RemoteBrowserTabPro
       return onEvent((event, data) => {
         if (event === "browser:frame") {
           const frame = data as BrowserProxyFrameEvent;
-          if (frame.tabId === tabId) drawFrame(frame, markPixelsVisible);
+          if (frame.tabId === tabId) mediaTransport.drawFrame(frame, markPixelsVisible);
           return;
         }
 
@@ -298,7 +259,7 @@ export const RemoteBrowserTab = forwardRef<BrowserTabHandle, RemoteBrowserTabPro
           }
         }
       });
-    }, [drawFrame, handleNavigated, markPixelsVisible, onAddLog, onUpdateTab, tabId]);
+    }, [handleNavigated, markPixelsVisible, mediaTransport, onAddLog, onUpdateTab, tabId]);
 
     useEffect(() => {
       return () => {
@@ -325,6 +286,7 @@ export const RemoteBrowserTab = forwardRef<BrowserTabHandle, RemoteBrowserTabPro
           width: boundsWidth,
           height: boundsHeight,
           isMobileView: tabRef.current.isMobileView,
+          mediaTransport: BROWSER_FRAME_MEDIA_TRANSPORT,
         };
         if (!attachedRef.current) {
           await sendBrowserCommand("browser:attach", params, REMOTE_COMMAND_TIMEOUT_MS);
@@ -537,10 +499,9 @@ export const RemoteBrowserTab = forwardRef<BrowserTabHandle, RemoteBrowserTabPro
         width: number;
         height: number;
       }): Promise<string | null> => {
-        const canvas = canvasRef.current;
-        if (canvas) {
+        if (mediaTransport.canvasRef.current) {
           await new Promise((resolve) => setTimeout(resolve, 150));
-          const dataUrl = captureCanvasDataUrl(canvas, rect);
+          const dataUrl = mediaTransport.captureScreenshot(rect);
           if (dataUrl) return dataUrl;
         }
 
@@ -556,7 +517,7 @@ export const RemoteBrowserTab = forwardRef<BrowserTabHandle, RemoteBrowserTabPro
           return null;
         }
       },
-      [onAddLog, tabId]
+      [mediaTransport, onAddLog, tabId]
     );
 
     const setInspectOverlaysVisible = useCallback(
@@ -615,16 +576,12 @@ export const RemoteBrowserTab = forwardRef<BrowserTabHandle, RemoteBrowserTabPro
       ]
     );
 
-    const canvasPointFromClient = useCallback((clientX: number, clientY: number) => {
-      const canvas = canvasRef.current;
-      if (!canvas) return { x: 0, y: 0 };
-      const rect = canvas.getBoundingClientRect();
-      const frame = frameSizeRef.current;
-      return {
-        x: ((clientX - rect.left) / Math.max(1, rect.width)) * frame.width,
-        y: ((clientY - rect.top) / Math.max(1, rect.height)) * frame.height,
-      };
-    }, []);
+    const canvasPointFromClient = useCallback(
+      (clientX: number, clientY: number) => {
+        return mediaTransport.pointFromClient(clientX, clientY);
+      },
+      [mediaTransport]
+    );
 
     const canvasPoint = useCallback(
       (e: React.MouseEvent<HTMLCanvasElement>) => canvasPointFromClient(e.clientX, e.clientY),
@@ -741,7 +698,7 @@ export const RemoteBrowserTab = forwardRef<BrowserTabHandle, RemoteBrowserTabPro
       >
         {visible && bounds && !isBlankUrl(tab.currentUrl) && (
           <canvas
-            ref={canvasRef}
+            ref={mediaTransport.canvasRef}
             tabIndex={0}
             className="bg-bg h-full w-full outline-none"
             style={{
