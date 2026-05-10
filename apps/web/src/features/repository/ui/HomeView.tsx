@@ -145,13 +145,6 @@ function parseAppDate(value: string | null | undefined): Date | null {
 function getWorkspaceActivityDate(workspace: Workspace): Date {
   const latestMessageDate = parseAppDate(workspace.latest_message_sent_at);
   const workspaceDate = parseAppDate(workspace.updated_at);
-
-  if (latestMessageDate && workspaceDate) {
-    return latestMessageDate.getTime() > workspaceDate.getTime()
-      ? latestMessageDate
-      : workspaceDate;
-  }
-
   return latestMessageDate ?? workspaceDate ?? new Date(0);
 }
 
