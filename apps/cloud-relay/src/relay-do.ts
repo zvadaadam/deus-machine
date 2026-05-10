@@ -595,8 +595,7 @@ export class RelayDO extends DurableObject {
       return buildHttpTunnelResponse({
         request,
         tunnelPath: parsed.path,
-        publicPrefix:
-          request.headers.get("x-deus-relay-public-prefix") ?? `/http/${parsed.port}`,
+        publicPrefix: request.headers.get("x-deus-relay-public-prefix") ?? `/http/${parsed.port}`,
         deviceToken,
         upstream,
       });
@@ -834,7 +833,7 @@ function rewriteTunnelText(
   };
 
   let output = input.replace(
-    /\b(src|href|action)=("|\')([^"\']+)\2/gi,
+    /\b(src|href|action)=("|')([^"']+)\2/gi,
     (_match, attr: string, quote: string, value: string) =>
       `${attr}=${quote}${toTunnelUrl(value)}${quote}`
   );
@@ -847,8 +846,7 @@ function rewriteTunnelText(
   if (!opts.contentType.toLowerCase().includes("text/html")) {
     output = output.replace(
       /(["'])\/(?!\/)([^"']*)\1/g,
-      (_match, quote: string, value: string) =>
-        `${quote}${toTunnelUrl(`/${value}`)}${quote}`
+      (_match, quote: string, value: string) => `${quote}${toTunnelUrl(`/${value}`)}${quote}`
     );
   }
 

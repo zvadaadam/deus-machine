@@ -27,9 +27,8 @@ describe("local-http-tunnel.service", () => {
 
   it("validates the device token before forwarding to localhost", async () => {
     mockAuth.validateDeviceToken.mockReturnValue(null);
-    const { handleRelayedHttpRequest } = await import(
-      "../../../src/services/local-http-tunnel.service"
-    );
+    const { handleRelayedHttpRequest } =
+      await import("../../../src/services/local-http-tunnel.service");
 
     const response = await handleRelayedHttpRequest({
       method: "GET",
@@ -60,9 +59,8 @@ describe("local-http-tunnel.service", () => {
       });
     });
     const port = await listen(server);
-    const { handleRelayedHttpRequest } = await import(
-      "../../../src/services/local-http-tunnel.service"
-    );
+    const { handleRelayedHttpRequest } =
+      await import("../../../src/services/local-http-tunnel.service");
 
     const response = await handleRelayedHttpRequest({
       method: "POST",
