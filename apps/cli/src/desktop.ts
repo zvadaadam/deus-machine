@@ -6,7 +6,14 @@
  */
 
 import { execSync, spawn } from "node:child_process";
-import { createWriteStream, existsSync, mkdirSync, unlinkSync } from "node:fs";
+import {
+  chmodSync,
+  copyFileSync,
+  createWriteStream,
+  existsSync,
+  mkdirSync,
+  unlinkSync,
+} from "node:fs";
 import { join } from "node:path";
 import { tmpdir, platform, arch, homedir } from "node:os";
 import { get } from "node:https";
@@ -101,6 +108,13 @@ function hasFuse2(): boolean {
   }
 }
 
+function isOnPath(dir: string): boolean {
+  return (process.env.PATH ?? "")
+    .split(":")
+    .filter(Boolean)
+    .includes(dir);
+}
+
 function replaceInstalledMacApp(appPath: string, destPath: string): void {
   const stagedPath = `${destPath}.staged`;
   const backupPath = `${destPath}.backup`;
@@ -185,7 +199,7 @@ export async function installDesktop(options: DesktopOptions): Promise<void> {
 
   // Install
   const s3 = createSpinner("Installing...");
-  const installed = await installForPlatform(os, downloadPath, s3);
+  const installedPath = await installForPlatform(os, downloadPath, s3);
 
   // Cleanup temp file
   try {
@@ -194,8 +208,15 @@ export async function installDesktop(options: DesktopOptions): Promise<void> {
     // ignore cleanup failure
   }
 
-  if (installed) {
+  if (installedPath) {
     blank();
+    success("Launching Deus...");
+    if (os === "linux") {
+      const installDir = join(homedir(), ".local", "bin");
+      if (!isOnPath(installDir)) {
+        hint(`Add ${c.dim(installDir)} to PATH to launch the AppImage directly.`);
+      }
+    }
     success("Deus is ready!");
     blank();
   }
@@ -335,7 +356,7 @@ async function installForPlatform(
   os: string,
   filePath: string,
   s: ReturnType<typeof createSpinner>
-): Promise<boolean> {
+): Promise<string | null> {
   switch (os) {
     case "darwin": {
       let mountPoint: string | undefined;
@@ -364,16 +385,17 @@ async function installForPlatform(
           s.succeed(`Installed to ${c.dim("/Applications/Deus.app")}`);
 
           launchDesktop(destPath);
+          return destPath;
         } else {
           s.warn("DMG mounted — drag Deus to Applications to finish");
         }
 
-        return true;
+        return null;
       } catch {
         s.fail("Auto-install failed — opening DMG manually");
         execSync(`open "${filePath}"`);
         hint("Drag Deus.app to Applications, then launch it from Applications.");
-        return false;
+        return null;
       } finally {
         if (mountPoint) {
           try {
@@ -387,11 +409,11 @@ async function installForPlatform(
 
     case "linux": {
       try {
-        execSync(`chmod +x "${filePath}"`);
         const installDir = join(homedir(), ".local", "bin");
         mkdirSync(installDir, { recursive: true });
         const destPath = join(installDir, "Deus.AppImage");
-        execSync(`cp "${filePath}" "${destPath}"`);
+        copyFileSync(filePath, destPath);
+        chmodSync(destPath, 0o755);
         s.succeed(`Installed to ${c.dim(destPath)}`);
 
         if (!hasFuse2()) {
@@ -399,15 +421,15 @@ async function installForPlatform(
         }
 
         launchDesktop(destPath);
-        return true;
+        return destPath;
       } catch {
         s.fail("Installation failed — check permissions");
-        return false;
+        return null;
       }
     }
 
     default:
       s.fail("Unsupported platform");
-      return false;
+      return null;
   }
 }
