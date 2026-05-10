@@ -346,9 +346,7 @@ describe("http tunnel", () => {
   it("rejects HTTP tunnel requests without a token", async () => {
     await registerServer(relay, state);
 
-    const response = (await relay.fetch(
-      new Request("https://relay.test/http/3000/")
-    )) as Response;
+    const response = (await relay.fetch(new Request("https://relay.test/http/3000/"))) as Response;
 
     expect(response.status).toBe(401);
   });
