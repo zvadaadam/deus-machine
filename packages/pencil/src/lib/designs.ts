@@ -46,8 +46,14 @@ export function safePenName(name: unknown): string {
   return cleaned.length > 0 ? cleaned : "design";
 }
 
-export function penPathFor(name: string, storage: string): string {
-  return join(storage, "designs", `${safePenName(name)}.pen`);
+/** Default save location for agent‑generated designs. We put them under
+ *  `<workspace>/designs/` so they're committable to git as part of the
+ *  user's repo (instead of buried in the AAP's hidden `.pencil/` storage).
+ *  The `storage` arg is kept for back‑compat with old call sites that may
+ *  still pass it; if the workspace is unknown we fall back to storage. */
+export function penPathFor(name: string, storage: string, workspace?: string): string {
+  const root = workspace ?? storage;
+  return join(root, "designs", `${safePenName(name)}.pen`);
 }
 
 // ---------- active-design pointer ----------------------------------------
@@ -145,8 +151,8 @@ export function resolvePenPath(input: string, ctx: { workspace: string; storage:
     }
     return abs.endsWith(".pen") ? abs : abs + ".pen";
   }
-  // Bare name: agent default location.
-  return penPathFor(trimmed, ctx.storage);
+  // Bare name: agent default location (under <workspace>/designs/).
+  return penPathFor(trimmed, ctx.storage, ctx.workspace);
 }
 
 /** Recursive scan of the workspace for .pen files. Respects ignore dirs,

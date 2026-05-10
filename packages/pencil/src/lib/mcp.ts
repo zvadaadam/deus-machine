@@ -125,7 +125,7 @@ export const TOOLS: ToolDef[] = [
       try {
         file = a.file
           ? resolvePenPath(a.file, ctx)
-          : penPathFor(safePenName(a.name ?? ""), ctx.storage);
+          : penPathFor(safePenName(a.name ?? ""), ctx.storage, ctx.workspace);
       } catch (err) {
         return errResult((err as Error).message);
       }
@@ -158,7 +158,7 @@ export const TOOLS: ToolDef[] = [
     async run(args, ctx: Context): Promise<ToolResult> {
       const a = args as unknown as NewArgs;
       const name = safePenName(a.name);
-      const file = penPathFor(name, ctx.storage);
+      const file = penPathFor(name, ctx.storage, ctx.workspace);
       setActivePen(ctx.storage, file);
       // Fire-and-forget: tell the editor to switch to a blank doc. We do NOT
       // wait for a reply — the editor's `open-document` handler is sync and

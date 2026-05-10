@@ -711,9 +711,36 @@ async function fetchCliInfo(): Promise<void> {
   }
 }
 
+// ---- detect what the editor has open ---------------------------------
+//
+// The agent often reaches the binary's tools (open_document, batch_design)
+// directly without going through pencil_open / pencil_new. Without a
+// signal from those, our server never learns the active path and the
+// switcher trigger says "no design" while the canvas is full. Probe the
+// editor's documentURI on a short interval and sync.
+
+async function detectActive(): Promise<void> {
+  try {
+    const data = await jsonFetch<{ active: string | null }>("/detect-active");
+    if (data.active && data.active !== activeFile) {
+      activeFile = data.active;
+      // The detected file may not be in our cached `designs` list yet —
+      // refresh to catch up.
+      void refreshDesigns();
+    }
+  } catch {
+    /* ignore — bridge may be momentarily disconnected */
+  }
+}
+
 // ---- boot --------------------------------------------------------------
 
-dom.iframe.addEventListener("load", () => setStatus("live", "ready"));
+dom.iframe.addEventListener("load", () => {
+  setStatus("live", "ready");
+  // First probe ~1s after iframe loads (gives the editor time to register
+  // its IPC handlers).
+  window.setTimeout(detectActive, 1_000);
+});
 
 void checkAuth();
 void refreshDesigns();
@@ -721,3 +748,4 @@ connectEvents();
 void fetchCliInfo();
 window.setInterval(checkAuth, 15_000);
 window.setInterval(refreshDesigns, 8_000);
+window.setInterval(detectActive, 4_000);
