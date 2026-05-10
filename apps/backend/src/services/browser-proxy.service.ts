@@ -136,32 +136,13 @@ function isBlankUrl(url: string | undefined): boolean {
   return !url || url === "about:blank";
 }
 
-function isLocalHttpUrl(url: string | undefined): boolean {
+function isHttpUrl(url: string | undefined): boolean {
   if (isBlankUrl(url)) return false;
   const candidate = url;
   if (!candidate) return false;
   try {
     const parsed = new URL(candidate);
-    const host = parsed.hostname.toLowerCase();
-    return (
-      parsed.protocol === "http:" &&
-      !!parsed.port &&
-      (host === "localhost" || host === "127.0.0.1" || host === "::1" || host === "[::1]")
-    );
-  } catch {
-    return false;
-  }
-}
-
-function isExternalHttpUrl(url: string | undefined): boolean {
-  if (isBlankUrl(url)) return false;
-  const candidate = url;
-  if (!candidate) return false;
-  try {
-    const parsed = new URL(candidate);
-    return (
-      (parsed.protocol === "http:" || parsed.protocol === "https:") && !isLocalHttpUrl(candidate)
-    );
+    return parsed.protocol === "http:" || parsed.protocol === "https:";
   } catch {
     return false;
   }
@@ -169,7 +150,7 @@ function isExternalHttpUrl(url: string | undefined): boolean {
 
 async function resolveBrowserEngineCdpBaseUrl(url: string | undefined): Promise<string> {
   if (process.env.BROWSER_CDP_URL) return getNativeCdpBaseUrl();
-  return isExternalHttpUrl(url) ? await getManagedBrowserCdpBaseUrl() : getNativeCdpBaseUrl();
+  return isHttpUrl(url) ? await getManagedBrowserCdpBaseUrl() : getNativeCdpBaseUrl();
 }
 
 function isAppRendererTarget(target: CdpTarget): boolean {
@@ -1389,8 +1370,7 @@ async function createSession(
     cdpBaseUrl === getNativeCdpBaseUrl() &&
     usesNativeElectronCdp() &&
     workspaceId &&
-    !isBlankUrl(url) &&
-    isLocalHttpUrl(url)
+    !isBlankUrl(url)
   ) {
     registered = await requestNativeTabTarget(tabId, workspaceId, url);
   }
