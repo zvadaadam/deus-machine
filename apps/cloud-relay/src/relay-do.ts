@@ -770,7 +770,7 @@ function buildHttpTunnelResponse(args: {
   const headers = new Headers(args.upstream.headers);
   stripEmbeddingBlockers(headers);
 
-  let body = base64ToUint8Array(args.upstream.bodyBase64);
+  let body = base64ToArrayBuffer(args.upstream.bodyBase64);
   const contentType = headers.get("content-type") ?? "";
   if (isRewritableTextContent(contentType)) {
     const rewritten = rewriteTunnelText(new TextDecoder().decode(body), {
@@ -779,7 +779,7 @@ function buildHttpTunnelResponse(args: {
       publicPrefix: args.publicPrefix,
       deviceToken: args.deviceToken,
     });
-    body = new TextEncoder().encode(rewritten);
+    body = uint8ArrayToArrayBuffer(new TextEncoder().encode(rewritten));
     headers.set("content-length", String(body.byteLength));
   }
 
@@ -887,11 +887,17 @@ function arrayBufferToBase64(buffer: ArrayBuffer): string {
   return btoa(binary);
 }
 
-function base64ToUint8Array(value: string): Uint8Array {
+function base64ToArrayBuffer(value: string): ArrayBuffer {
   const binary = atob(value);
   const bytes = new Uint8Array(binary.length);
   for (let i = 0; i < binary.length; i += 1) {
     bytes[i] = binary.charCodeAt(i);
   }
-  return bytes;
+  return bytes.buffer;
+}
+
+function uint8ArrayToArrayBuffer(bytes: Uint8Array): ArrayBuffer {
+  const buffer = new ArrayBuffer(bytes.byteLength);
+  new Uint8Array(buffer).set(bytes);
+  return buffer;
 }
