@@ -24,9 +24,10 @@ export const FOCUS_URL_BAR_EVENT = "deus:browser:focus-url-bar";
  *  host chrome shortcuts and guest-page forwarded shortcuts. */
 export const TOGGLE_INSPECT_MODE_EVENT = "deus:browser:toggle-inspect-mode";
 
-/** Mobile preview dimensions — a single fixed iPhone-class viewport used when
- *  a tab toggles on mobile view. Not configurable by the user; the goal is
- *  "do my mobile breakpoints fire?", not "pixel-match iPhone 14 Pro". */
+/** Mobile preview dimensions. Width is fixed to an iPhone-class viewport so
+ *  mobile breakpoints fire; height follows the visible browser panel so the
+ *  stream is not vertically scaled. The height constant is only a fallback
+ *  before layout has been measured. */
 export const MOBILE_PREVIEW_WIDTH = 390;
 export const MOBILE_PREVIEW_HEIGHT = 852;
 export const MOBILE_PREVIEW_DPR = 3;
@@ -83,6 +84,8 @@ export interface BrowserTabState {
    *  `url` / `currentUrl` are unreliable for origin matching. `openedAt`
    *  is the invariant source of truth for "this tab was spawned by app X". */
   openedAt?: string;
+  /** Desktop-only: this native Electron tab backs a hosted-web browser canvas. */
+  streamToRemote?: boolean;
 }
 
 /** Data emitted when user selects an element in inspect mode */

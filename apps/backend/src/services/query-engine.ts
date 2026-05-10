@@ -352,7 +352,7 @@ async function handleCommand(connectionId: string, msg: CommandFrameInput): Prom
   const { id, command, params } = msg;
 
   try {
-    const result = await runCommand(toCommandName(command), params);
+    const result = await runCommand(toCommandName(command), params, { connectionId });
     sendFrame(connectionId, {
       type: "q:command_ack",
       id,

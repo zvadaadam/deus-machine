@@ -20,6 +20,13 @@ export function getDeploymentMode(): DeploymentMode {
   if (capabilities.ipcInvoke) return "electron";
   if (import.meta.env.VITE_BACKEND_PORT) return "web-dev";
 
+  // Browser tabs opened against the Electron dev server (`bun run dev`) do not
+  // have the Electron preload bridge, but they can discover the desktop
+  // backend through the Vite `/__backend_port` middleware. Treat all dev-mode
+  // browser renders as local web-dev so `localhost:1420` tests this branch
+  // instead of falling into the production relay/connect flow.
+  if (import.meta.env.DEV) return "web-dev";
+
   // Standalone mode: served from a CLI server that proxies /api and /ws to backend.
   // Detected when there's no relay server ID in the URL (no /s/{id}/... path).
   if (!getServerIdFromUrl()) return "web-standalone";
@@ -98,11 +105,6 @@ export async function resolveBackendEndpoints(serverId?: string): Promise<Backen
     apiBase: `http://localhost:${port}/api`,
   };
   return cachedEndpoints;
-}
-
-function invalidateEndpointCache(): void {
-  cachedEndpoints = null;
-  cachedRelayServerId = null;
 }
 
 /** Extract serverId from the current URL pathname (/s/{serverId}/...). */

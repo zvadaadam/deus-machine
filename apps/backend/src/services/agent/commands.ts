@@ -23,10 +23,12 @@ import { invalidate } from "../query-engine";
 import * as agentService from "./service";
 import { resolveAapPaths } from "./service";
 import * as simulator from "../simulator-context";
+import * as browserProxy from "../browser-proxy.service";
 import { launchApp, stopApp } from "../aap";
 import { broadcast as wsBroadcast } from "../ws.service";
 import type { AgentHarness } from "@shared/enums";
 import type { CommandName } from "@shared/types/query-protocol";
+import type { BrowserProxyInputParams, BrowserProxyMouseButton } from "@shared/types/browser-proxy";
 import {
   type QueryParams,
   readStringParam as readString,
@@ -39,11 +41,19 @@ interface CommandResult {
   [key: string]: unknown;
 }
 
+interface CommandContext {
+  connectionId?: string;
+}
+
+const MAX_BROWSER_TEXT_LENGTH = 256;
+const MAX_BROWSER_KEY_LENGTH = 32;
+
 // ---- Command Dispatch ----
 
 export async function runCommand(
   command: CommandName,
-  params: QueryParams
+  params: QueryParams,
+  context: CommandContext = {}
 ): Promise<CommandResult> {
   return (
     match(command)
@@ -299,6 +309,115 @@ export async function runCommand(
       // ---- AAP (agentic apps protocol) commands ----
       .with("launchApp", () => handleLaunchApp(params))
       .with("stopApp", () => handleStopApp(params))
+      // ---- Remote browser proxy commands ----
+      .with("browser:attach", async () => {
+        const tabId = requireParam(params, "tabId", "browser:attach");
+        const width = readNumber(params, "width");
+        const height = readNumber(params, "height");
+        if (width === undefined || height === undefined) {
+          throw new Error("browser:attach requires numeric width and height");
+        }
+        await browserProxy.attachBrowserTab(
+          {
+            tabId,
+            workspaceId: readString(params, "workspaceId"),
+            width,
+            height,
+            url: readString(params, "url"),
+            isMobileView: params.isMobileView === true,
+          },
+          context.connectionId
+        );
+        return {};
+      })
+      .with("browser:registerNativeTab", () => {
+        const tabId = requireParam(params, "tabId", "browser:registerNativeTab");
+        const workspaceId = requireParam(params, "workspaceId", "browser:registerNativeTab");
+        browserProxy.registerNativeBrowserTab({
+          tabId,
+          workspaceId,
+          url: readString(params, "url"),
+        });
+        return {};
+      })
+      .with("browser:unregisterNativeTab", () => {
+        browserProxy.unregisterNativeBrowserTab({
+          tabId: requireParam(params, "tabId", "browser:unregisterNativeTab"),
+        });
+        return {};
+      })
+      .with("browser:detach", async () => {
+        await browserProxy.detachBrowserTab(
+          {
+            tabId: requireParam(params, "tabId", "browser:detach"),
+          },
+          context.connectionId
+        );
+        return {};
+      })
+      .with("browser:close", async () => {
+        await browserProxy.closeBrowserTab({
+          tabId: requireParam(params, "tabId", "browser:close"),
+        });
+        return {};
+      })
+      .with("browser:navigate", async () => {
+        const tabId = requireParam(params, "tabId", "browser:navigate");
+        const url = requireParam(params, "url", "browser:navigate");
+        await browserProxy.navigateBrowserTab({ tabId, url });
+        return {};
+      })
+      .with("browser:back", async () => {
+        await browserProxy.goBackBrowserTab({
+          tabId: requireParam(params, "tabId", "browser:back"),
+        });
+        return {};
+      })
+      .with("browser:forward", async () => {
+        await browserProxy.goForwardBrowserTab({
+          tabId: requireParam(params, "tabId", "browser:forward"),
+        });
+        return {};
+      })
+      .with("browser:reload", async () => {
+        await browserProxy.reloadBrowserTab({
+          tabId: requireParam(params, "tabId", "browser:reload"),
+        });
+        return {};
+      })
+      .with("browser:resize", async () => {
+        const tabId = requireParam(params, "tabId", "browser:resize");
+        const width = readNumber(params, "width");
+        const height = readNumber(params, "height");
+        if (width === undefined || height === undefined) {
+          throw new Error("browser:resize requires numeric width and height");
+        }
+        await browserProxy.resizeBrowserTab({
+          tabId,
+          width,
+          height,
+          isMobileView: params.isMobileView === true,
+        });
+        return {};
+      })
+      .with("browser:input", async () => {
+        await browserProxy.sendBrowserInput(parseBrowserInput(params));
+        return {};
+      })
+      .with("browser:eval", async () => {
+        const result = await browserProxy.evaluateBrowserTab({
+          tabId: requireParam(params, "tabId", "browser:eval"),
+          expression: requireParam(params, "expression", "browser:eval"),
+        });
+        return { result };
+      })
+      .with("browser:captureScreenshot", async () => {
+        const dataUrl = await browserProxy.captureBrowserScreenshot({
+          tabId: requireParam(params, "tabId", "browser:captureScreenshot"),
+          rect: parseScreenshotRect(params.rect),
+        });
+        return { dataUrl };
+      })
       .exhaustive()
   );
 }
@@ -500,4 +619,121 @@ function handleAgentError(sessionId: string, agentHarness: string, err: unknown)
     category: "internal",
   });
   invalidate(["workspaces", "sessions", "session", "stats"], { sessionIds: [sessionId] });
+}
+
+function parseBrowserInput(params: QueryParams): BrowserProxyInputParams {
+  const tabId = requireParam(params, "tabId", "browser:input");
+  const kind = readString(params, "kind");
+  const modifiers = readNumber(params, "modifiers") ?? 0;
+
+  if (kind === "mouse") {
+    const type = readString(params, "inputType");
+    const x = readNumber(params, "x");
+    const y = readNumber(params, "y");
+    const button = readString(params, "button") ?? "none";
+    if (
+      (type !== "mousePressed" && type !== "mouseReleased" && type !== "mouseMoved") ||
+      x === undefined ||
+      y === undefined ||
+      !isMouseButton(button)
+    ) {
+      throw new Error("browser:input mouse requires inputType, x, y, and button");
+    }
+    return {
+      tabId,
+      kind,
+      type,
+      x,
+      y,
+      button,
+      clickCount: readNumber(params, "clickCount") ?? 0,
+      modifiers,
+    };
+  }
+
+  if (kind === "wheel") {
+    const x = readNumber(params, "x");
+    const y = readNumber(params, "y");
+    const deltaX = readNumber(params, "deltaX");
+    const deltaY = readNumber(params, "deltaY");
+    if (x === undefined || y === undefined || deltaX === undefined || deltaY === undefined) {
+      throw new Error("browser:input wheel requires x, y, deltaX, and deltaY");
+    }
+    return { tabId, kind, x, y, deltaX, deltaY, modifiers };
+  }
+
+  if (kind === "key") {
+    const type = readString(params, "inputType");
+    const key = readString(params, "key");
+    const code = readString(params, "code");
+    if ((type !== "keyDown" && type !== "keyUp") || !key || !code) {
+      throw new Error("browser:input key requires inputType, key, and code");
+    }
+    if (key.length > MAX_BROWSER_KEY_LENGTH || code.length > MAX_BROWSER_KEY_LENGTH) {
+      throw new Error("browser:input key and code are too long");
+    }
+    const text = readString(params, "text");
+    if (text && text.length > MAX_BROWSER_TEXT_LENGTH) {
+      throw new Error("browser:input text is too long");
+    }
+    return {
+      tabId,
+      kind,
+      type,
+      key,
+      code,
+      text,
+      modifiers,
+    };
+  }
+
+  if (kind === "touch") {
+    const type = readString(params, "inputType");
+    const rawPoints = Array.isArray(params.touchPoints) ? params.touchPoints : undefined;
+    if (
+      (type !== "touchStart" &&
+        type !== "touchMove" &&
+        type !== "touchEnd" &&
+        type !== "touchCancel") ||
+      !rawPoints
+    ) {
+      throw new Error("browser:input touch requires inputType and touchPoints");
+    }
+    const touchPoints = rawPoints.slice(0, 5).map((point) => {
+      if (!point || typeof point !== "object" || Array.isArray(point)) {
+        throw new Error("browser:input touchPoints must be objects");
+      }
+      const record = point as Record<string, unknown>;
+      const x = typeof record.x === "number" && Number.isFinite(record.x) ? record.x : undefined;
+      const y = typeof record.y === "number" && Number.isFinite(record.y) ? record.y : undefined;
+      const id =
+        typeof record.id === "number" && Number.isFinite(record.id) ? record.id : undefined;
+      if (x === undefined || y === undefined) {
+        throw new Error("browser:input touchPoints require numeric x and y");
+      }
+      return { x, y, ...(id !== undefined ? { id } : {}) };
+    });
+    return { tabId, kind, type, touchPoints, modifiers };
+  }
+
+  throw new Error("browser:input requires kind");
+}
+
+function isMouseButton(value: string): value is BrowserProxyMouseButton {
+  return value === "none" || value === "left" || value === "middle" || value === "right";
+}
+
+function parseScreenshotRect(
+  value: unknown
+): { x: number; y: number; width: number; height: number } | undefined {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return undefined;
+  const rect = value as Record<string, unknown>;
+  const x = typeof rect.x === "number" ? rect.x : undefined;
+  const y = typeof rect.y === "number" ? rect.y : undefined;
+  const width = typeof rect.width === "number" ? rect.width : undefined;
+  const height = typeof rect.height === "number" ? rect.height : undefined;
+  if (x === undefined || y === undefined || width === undefined || height === undefined) {
+    throw new Error("browser:captureScreenshot rect requires numeric x, y, width, height");
+  }
+  return { x, y, width, height };
 }

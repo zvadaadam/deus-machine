@@ -72,7 +72,11 @@ vi.mock("../../../src/services/agent/service", () => ({
   },
 }));
 vi.mock("../../../src/services/simulator-context", () => ({}));
-vi.mock("../../../src/services/ws.service", () => ({ broadcast: vi.fn() }));
+vi.mock("../../../src/services/ws.service", () => ({
+  broadcast: vi.fn(),
+  sendToConnection: vi.fn(),
+  onConnectionRemoved: vi.fn(),
+}));
 
 import { runCommand } from "../../../src/services/agent/commands";
 
