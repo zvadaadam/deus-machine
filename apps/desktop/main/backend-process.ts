@@ -326,6 +326,7 @@ export async function spawnBackend(
   const sharedEnv = {
     DATABASE_PATH: dbPath,
     PATH: extendCliPath(process.env.PATH),
+    ...(process.env.RELAY_URL ? { RELAY_URL: process.env.RELAY_URL } : {}),
     ...(runtime.nodePath ? { NODE_PATH: runtime.nodePath } : {}),
     ...(runtime.bundledBinDir ? { DEUS_BUNDLED_BIN_DIR: runtime.bundledBinDir } : {}),
   };
