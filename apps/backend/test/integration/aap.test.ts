@@ -10,7 +10,7 @@
 // it, then asserts on the Map's observable state via getRunningApps.
 
 import { spawn } from "node:child_process";
-import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
@@ -43,6 +43,8 @@ vi.mock("../../src/services/agent", () => ({
 // Register it as the only installed app by replacing the manifest list.
 const fakeAppDir = mkdtempSync(join(tmpdir(), "aap-integration-"));
 const fakeAppServer = join(fakeAppDir, "server.js");
+const fakePrefetchScript = join(fakeAppDir, "prefetch.js");
+const fakePrefetchMarker = join(fakeAppDir, "prefetched.txt");
 writeFileSync(
   fakeAppServer,
   `
@@ -60,6 +62,14 @@ console.log("fake app on " + port);
 `,
   "utf8"
 );
+writeFileSync(
+  fakePrefetchScript,
+  `
+const fs = require("node:fs");
+fs.writeFileSync(process.argv[2], process.env.DEUS_APP_ID + ":" + process.env.DEUS_PREFETCH, "utf8");
+`,
+  "utf8"
+);
 
 const fakeManifest = {
   $schema: "https://agenticapps.dev/schema/v1.json",
@@ -74,6 +84,10 @@ const fakeManifest = {
     env: {},
     ready: { type: "http", path: "/health", timeoutMs: 10_000 },
   },
+  prefetch: {
+    command: "bun",
+    args: ["run", fakePrefetchScript, fakePrefetchMarker],
+  },
   ui: { url: "http://127.0.0.1:{port}/" },
   agent: { tools: { type: "mcp-http", url: "http://127.0.0.1:{port}/mcp" } },
   storage: {},
@@ -83,9 +97,12 @@ const fakeManifest = {
 const fakeManifestPath = join(fakeAppDir, "agentic-app.json");
 writeFileSync(fakeManifestPath, JSON.stringify(fakeManifest, null, 2), "utf8");
 
+const fakeManifestWithoutPrefetch = { ...fakeManifest };
+delete (fakeManifestWithoutPrefetch as { prefetch?: unknown }).prefetch;
+
 // Second manifest for the ENOENT test — a command that doesn't exist on PATH.
 const bogusManifest = {
-  ...fakeManifest,
+  ...fakeManifestWithoutPrefetch,
   id: "test.bogus-command",
   launch: { ...fakeManifest.launch, command: "this-binary-does-not-exist-xyz123" },
 };
@@ -95,7 +112,7 @@ writeFileSync(bogusManifestPath, JSON.stringify(bogusManifest, null, 2), "utf8")
 // Third manifest for the cli-requires test — declares a missing CLI with an
 // install hint. Validated BEFORE spawn so the hint reaches the user.
 const needsCliManifest = {
-  ...fakeManifest,
+  ...fakeManifestWithoutPrefetch,
   id: "test.needs-missing-cli",
   requires: [
     {
@@ -125,6 +142,7 @@ const {
   stopApp,
   stopAppsForWorkspace,
   stopAllApps,
+  prefetchInstalledAppAssets,
   sweepOrphanApps,
 } = await import("../../src/services/aap");
 const { __clearRegistryCacheForTests } = await import("../../src/services/aap/registry");
@@ -171,6 +189,16 @@ describe("aap/apps.service (integration, in-memory)", () => {
       "test.fake-app",
       "test.needs-missing-cli",
     ]);
+  });
+
+  it("runs app prefetch commands in the background", async () => {
+    rmSync(fakePrefetchMarker, { force: true });
+    prefetchInstalledAppAssets();
+    await waitForCondition(
+      () => existsSync(fakePrefetchMarker),
+      (exists) => exists
+    );
+    expect(readFileSync(fakePrefetchMarker, "utf8")).toBe("test.fake-app:1");
   });
 
   it("launches, becomes ready, and is reachable on /health", async () => {

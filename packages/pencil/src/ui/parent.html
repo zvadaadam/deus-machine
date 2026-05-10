@@ -1,0 +1,94 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="color-scheme" content="dark" />
+    <title>Pencil</title>
+    <link rel="stylesheet" href="/styles.css" />
+  </head>
+  <body>
+    <header class="topbar">
+      <div class="brand">
+        <span class="brand-dot" id="dot" data-state=""></span>
+        <span class="brand-name">Pencil</span>
+        <span class="brand-version" id="version" hidden></span>
+      </div>
+      <span class="topbar-status" id="status">connecting…</span>
+      <div class="switcher" id="switcher">
+        <button
+          type="button"
+          id="switcher-trigger"
+          class="switcher-trigger is-empty"
+          aria-haspopup="listbox"
+          aria-expanded="false"
+        >
+          <span class="switcher-dot" id="switcher-dot" aria-hidden="true"></span>
+          <span class="switcher-name-empty" id="switcher-label">no design</span>
+          <svg class="switcher-chevron" viewBox="0 0 10 10" fill="none" aria-hidden="true">
+            <path
+              d="M2 4l3 3 3-3"
+              stroke="currentColor"
+              stroke-width="1.4"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+            />
+          </svg>
+        </button>
+        <div class="switcher-menu" id="switcher-menu" role="listbox" hidden></div>
+      </div>
+      <span class="topbar-spacer"></span>
+      <span class="topbar-running" id="running" hidden>
+        <span class="dot dot--run"></span>
+        <span id="run-label">working</span>
+        <span class="elapsed" id="run-elapsed"></span>
+        <button class="btn btn--danger" id="cancel">Cancel</button>
+      </span>
+      <span class="topbar-auth" id="auth"></span>
+    </header>
+
+    <iframe
+      id="editor"
+      class="editor-frame"
+      src="/editor/"
+      title="Pencil editor"
+      allow="clipboard-read; clipboard-write"
+    ></iframe>
+
+    <div id="signin-overlay" class="signin-overlay" data-state="checking">
+      <div class="signin-card">
+        <h1 id="signin-title">Preparing Pencil…</h1>
+        <p id="signin-copy">
+          Deus is checking for an existing Pencil CLI key. No Pencil desktop app is required.
+        </p>
+        <ol id="signin-steps" class="signin-steps" hidden>
+          <li>
+            Open
+            <a href="https://www.pencil.dev/zvada/settings" target="_blank" rel="noopener">
+              Pencil settings
+            </a>
+            in your browser.
+          </li>
+          <li>Find the CLI API key section and create or copy a key.</li>
+          <li>Paste the key here. It starts with <code>pencil_cli_</code>.</li>
+        </ol>
+        <form id="signin-form" class="signin-form" hidden>
+          <input
+            id="signin-key"
+            type="password"
+            placeholder="pencil_cli_..."
+            autocomplete="one-time-code"
+            autocapitalize="off"
+            spellcheck="false"
+          />
+          <button id="signin-button" type="submit" class="btn btn--primary">Verify</button>
+        </form>
+        <div id="signin-error" class="signin-error"></div>
+      </div>
+    </div>
+
+    <div id="toast" class="toast" role="status" aria-live="polite"></div>
+
+    <script src="/app.js" type="module"></script>
+  </body>
+</html>

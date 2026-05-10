@@ -107,6 +107,22 @@ describe("shared/aap/manifest", () => {
       expect(tcp.launch.ready.type).toBe("tcp");
     });
 
+    it("parses optional prefetch commands", () => {
+      const manifest = parseManifest({
+        ...VALID_MANIFEST,
+        prefetch: {
+          command: "node",
+          args: ["./dist/serve.js", "--prefetch"],
+          env: { WARM_CACHE: "1" },
+        },
+      });
+      expect(manifest.prefetch).toEqual({
+        command: "node",
+        args: ["./dist/serve.js", "--prefetch"],
+        env: { WARM_CACHE: "1" },
+      });
+    });
+
     it("rejects unsupported ready probe types", () => {
       const stdout = safeParseManifest({
         ...VALID_MANIFEST,
