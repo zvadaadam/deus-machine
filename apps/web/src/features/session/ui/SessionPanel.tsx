@@ -277,7 +277,7 @@ export const SessionPanel = forwardRef<SessionPanelRef, SessionPanelProps>(
       onOpenNewTab?.();
     }, [onOpenNewTab]);
 
-    const handleEditLastUserMessage = useCallback(() => {
+    const handleRestoreLastUserMessage = useCallback(() => {
       if (!latestUserMessageText) return;
 
       const currentDraft =
@@ -359,7 +359,9 @@ export const SessionPanel = forwardRef<SessionPanelRef, SessionPanelProps>(
               onStop={() => composerRef.current?.stopSession()}
               onOpenLoginTerminal={workspaceId ? handleOpenLoginTerminal : undefined}
               onRetryInNewChat={handleRetryInNewChat}
-              onEditLastUserMessage={latestUserMessageText ? handleEditLastUserMessage : undefined}
+              onRestoreLastUserMessage={
+                latestUserMessageText ? handleRestoreLastUserMessage : undefined
+              }
               workspaceRepoName={workspaceRepoName}
               workspaceParentBranch={workspaceParentBranch}
               isFirstSession={isFirstSession}
@@ -461,8 +463,8 @@ export const SessionPanel = forwardRef<SessionPanelRef, SessionPanelProps>(
                     onStop={() => composerRef.current?.stopSession()}
                     onOpenLoginTerminal={workspaceId ? handleOpenLoginTerminal : undefined}
                     onRetryInNewChat={handleRetryInNewChat}
-                    onEditLastUserMessage={
-                      latestUserMessageText ? handleEditLastUserMessage : undefined
+                    onRestoreLastUserMessage={
+                      latestUserMessageText ? handleRestoreLastUserMessage : undefined
                     }
                     workspaceRepoName={workspaceRepoName}
                     workspaceParentBranch={workspaceParentBranch}
