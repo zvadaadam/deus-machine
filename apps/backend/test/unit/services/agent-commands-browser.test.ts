@@ -1,8 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const mockAttachBrowserTab = vi.fn();
-const mockRegisterNativeBrowserTab = vi.fn();
-const mockUnregisterNativeBrowserTab = vi.fn();
 const mockDetachBrowserTab = vi.fn();
 const mockCloseBrowserTab = vi.fn();
 const mockNavigateBrowserTab = vi.fn();
@@ -16,8 +14,6 @@ const mockCaptureBrowserScreenshot = vi.fn();
 
 vi.mock("../../../src/services/browser-proxy.service", () => ({
   attachBrowserTab: (...args: unknown[]) => mockAttachBrowserTab(...args),
-  registerNativeBrowserTab: (...args: unknown[]) => mockRegisterNativeBrowserTab(...args),
-  unregisterNativeBrowserTab: (...args: unknown[]) => mockUnregisterNativeBrowserTab(...args),
   detachBrowserTab: (...args: unknown[]) => mockDetachBrowserTab(...args),
   closeBrowserTab: (...args: unknown[]) => mockCloseBrowserTab(...args),
   navigateBrowserTab: (...args: unknown[]) => mockNavigateBrowserTab(...args),
@@ -69,8 +65,6 @@ describe("agent/commands — browser proxy command handlers", () => {
   beforeEach(() => {
     mockAttachBrowserTab.mockReset();
     mockAttachBrowserTab.mockResolvedValue(undefined);
-    mockRegisterNativeBrowserTab.mockReset();
-    mockUnregisterNativeBrowserTab.mockReset();
     mockDetachBrowserTab.mockResolvedValue(undefined);
     mockCloseBrowserTab.mockResolvedValue(undefined);
     mockNavigateBrowserTab.mockResolvedValue(undefined);
@@ -121,22 +115,6 @@ describe("agent/commands — browser proxy command handlers", () => {
       /width and height/
     );
     expect(mockAttachBrowserTab).not.toHaveBeenCalled();
-  });
-
-  it("registers and unregisters a native Electron webview target", async () => {
-    await runCommand("browser:registerNativeTab", {
-      tabId: "tab-1",
-      workspaceId: "ws-1",
-      url: "https://example.com",
-    });
-    await runCommand("browser:unregisterNativeTab", { tabId: "tab-1" });
-
-    expect(mockRegisterNativeBrowserTab).toHaveBeenCalledWith({
-      tabId: "tab-1",
-      workspaceId: "ws-1",
-      url: "https://example.com",
-    });
-    expect(mockUnregisterNativeBrowserTab).toHaveBeenCalledWith({ tabId: "tab-1" });
   });
 
   it("parses mouse, wheel, key, and touch input payloads", async () => {

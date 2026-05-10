@@ -22,14 +22,13 @@ describe("browserWindowStore", () => {
   });
 
   it("queues remote tab open requests so rapid relay events are not dropped", () => {
-    browserWindowActions.requestNewTab("ws-1", "https://one.example/", "tab-1", true);
-    browserWindowActions.requestNewTab("ws-1", "https://two.example/", "tab-2", true);
+    browserWindowActions.requestNewTab("ws-1", "https://one.example/", "tab-1");
+    browserWindowActions.requestNewTab("ws-1", "https://two.example/", "tab-2");
 
     expect(useBrowserWindowStore.getState().pendingNewTab).toMatchObject({
       workspaceId: "ws-1",
       url: "https://one.example/",
       tabId: "tab-1",
-      streamToRemote: true,
     });
 
     browserWindowActions.consumePendingNewTab();
@@ -38,7 +37,6 @@ describe("browserWindowStore", () => {
       workspaceId: "ws-1",
       url: "https://two.example/",
       tabId: "tab-2",
-      streamToRemote: true,
     });
 
     browserWindowActions.consumePendingNewTab();

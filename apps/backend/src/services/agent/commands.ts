@@ -330,22 +330,6 @@ export async function runCommand(
         );
         return {};
       })
-      .with("browser:registerNativeTab", () => {
-        const tabId = requireParam(params, "tabId", "browser:registerNativeTab");
-        const workspaceId = requireParam(params, "workspaceId", "browser:registerNativeTab");
-        browserProxy.registerNativeBrowserTab({
-          tabId,
-          workspaceId,
-          url: readString(params, "url"),
-        });
-        return {};
-      })
-      .with("browser:unregisterNativeTab", () => {
-        browserProxy.unregisterNativeBrowserTab({
-          tabId: requireParam(params, "tabId", "browser:unregisterNativeTab"),
-        });
-        return {};
-      })
       .with("browser:detach", async () => {
         await browserProxy.detachBrowserTab(
           {

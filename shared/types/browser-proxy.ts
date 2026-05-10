@@ -28,17 +28,6 @@ export interface BrowserProxyErrorEvent {
   error: string;
 }
 
-export interface BrowserProxyNativeTabRequestEvent {
-  tabId: string;
-  workspaceId: string;
-  url: string;
-}
-
-export interface BrowserProxyNativeTabCloseRequestEvent {
-  tabId: string;
-  workspaceId?: string;
-}
-
 export interface BrowserProxyBounds {
   width: number;
   height: number;
@@ -63,12 +52,6 @@ export interface BrowserProxyNavigateParams {
 
 export interface BrowserProxyTabParams {
   tabId: string;
-}
-
-export interface BrowserProxyNativeTabParams {
-  tabId: string;
-  workspaceId: string;
-  url?: string;
 }
 
 export type BrowserProxyMouseButton = "none" | "left" | "middle" | "right";

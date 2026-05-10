@@ -217,8 +217,6 @@ describe("shared/events", () => {
       expect(COMMAND_NAMES).toContain("stopApp");
       // Remote browser proxy commands
       expect(COMMAND_NAMES).toContain("browser:attach");
-      expect(COMMAND_NAMES).toContain("browser:registerNativeTab");
-      expect(COMMAND_NAMES).toContain("browser:unregisterNativeTab");
       expect(COMMAND_NAMES).toContain("browser:detach");
       expect(COMMAND_NAMES).toContain("browser:close");
       expect(COMMAND_NAMES).toContain("browser:navigate");
@@ -229,7 +227,7 @@ describe("shared/events", () => {
       expect(COMMAND_NAMES).toContain("browser:input");
       expect(COMMAND_NAMES).toContain("browser:eval");
       expect(COMMAND_NAMES).toContain("browser:captureScreenshot");
-      expect(COMMAND_NAMES).toHaveLength(43);
+      expect(COMMAND_NAMES).toHaveLength(41);
     });
 
     it("REQUEST_RESOURCES contains the expected request-only resources", () => {
@@ -294,9 +292,7 @@ describe("shared/events", () => {
       expect(PROTOCOL_EVENTS).toContain("browser:state");
       expect(PROTOCOL_EVENTS).toContain("browser:console");
       expect(PROTOCOL_EVENTS).toContain("browser:error");
-      expect(PROTOCOL_EVENTS).toContain("browser:nativeTabRequested");
-      expect(PROTOCOL_EVENTS).toContain("browser:nativeTabCloseRequested");
-      expect(PROTOCOL_EVENTS).toHaveLength(29);
+      expect(PROTOCOL_EVENTS).toHaveLength(27);
     });
   });
 });

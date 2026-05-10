@@ -84,8 +84,6 @@ export interface BrowserTabState {
    *  `url` / `currentUrl` are unreliable for origin matching. `openedAt`
    *  is the invariant source of truth for "this tab was spawned by app X". */
   openedAt?: string;
-  /** Desktop-only: this native Electron tab backs a hosted-web browser canvas. */
-  streamToRemote?: boolean;
 }
 
 /** Data emitted when user selects an element in inspect mode */

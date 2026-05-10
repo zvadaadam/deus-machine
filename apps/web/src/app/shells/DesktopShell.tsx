@@ -25,11 +25,6 @@ import { useQueryProtocol } from "@/shared/hooks/useQueryProtocol";
 import { useBackendRestart } from "@/shared/hooks/useBackendRestart";
 import { useAutoUpdate, useUpdateToast, UpdateProvider } from "@/features/updates";
 import { useAnalyticsConsent } from "@/platform/analytics";
-import { onEvent } from "@/platform/ws/query-protocol-client";
-import { browserWindowActions } from "@/features/browser/store/browserWindowStore";
-import { workspaceLayoutActions } from "@/features/workspace/store/workspaceLayoutStore";
-import { useWorkspaceStore } from "@/features/workspace/store/workspaceStore";
-import { uiActions } from "@/shared/stores/uiStore";
 
 export function DesktopShell({ reset }: { reset: () => void }) {
   const auth = useAuth();
@@ -59,21 +54,6 @@ export function DesktopShell({ reset }: { reset: () => void }) {
   // Auto-update: check on launch + every 5 min, show toast when ready
   const autoUpdate = useAutoUpdate();
   useUpdateToast(autoUpdate);
-
-  // Hosted web browser tabs stream the native Electron <webview>. If the
-  // requested tab does not exist yet, the backend asks this desktop renderer
-  // over q:event to create it, then waits for BrowserTab's CDP registration.
-  useEffect(() => {
-    return onEvent((event, data) => {
-      if (event === "browser:nativeTabRequested") {
-        handleNativeBrowserTabRequest(data);
-        return;
-      }
-      if (event === "browser:nativeTabCloseRequested") {
-        handleNativeBrowserTabCloseRequest(data);
-      }
-    });
-  }, []);
 
   const showOnboarding = !settingsQuery.isError && !settingsQuery.data?.onboarding_completed;
 
@@ -141,40 +121,4 @@ export function DesktopShell({ reset }: { reset: () => void }) {
       <Toaster />
     </UpdateProvider>
   );
-}
-
-function isNativeBrowserTabRequest(
-  data: unknown
-): data is { tabId: string; workspaceId: string; url: string } {
-  if (!data || typeof data !== "object") return false;
-  const value = data as Record<string, unknown>;
-  return (
-    typeof value.tabId === "string" &&
-    typeof value.workspaceId === "string" &&
-    typeof value.url === "string"
-  );
-}
-
-function handleNativeBrowserTabRequest(data: unknown): void {
-  if (!isNativeBrowserTabRequest(data)) return;
-  uiActions.closeAllModals();
-  useWorkspaceStore.getState().selectWorkspace(data.workspaceId);
-  workspaceLayoutActions.setActiveContentTab(data.workspaceId, "browser");
-  browserWindowActions.requestNewTab(data.workspaceId, data.url, data.tabId, true);
-}
-
-function isNativeBrowserTabCloseRequest(
-  data: unknown
-): data is { tabId: string; workspaceId?: string } {
-  if (!data || typeof data !== "object") return false;
-  const value = data as Record<string, unknown>;
-  return (
-    typeof value.tabId === "string" &&
-    (value.workspaceId === undefined || typeof value.workspaceId === "string")
-  );
-}
-
-function handleNativeBrowserTabCloseRequest(data: unknown): void {
-  if (!isNativeBrowserTabCloseRequest(data)) return;
-  browserWindowActions.requestCloseTabById(data.tabId, data.workspaceId);
 }

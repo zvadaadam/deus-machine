@@ -164,8 +164,6 @@ export const COMMAND_NAMES = [
   "stopApp",
   // Remote browser proxy — agent-browser streaming for hosted web clients.
   "browser:attach",
-  "browser:registerNativeTab",
-  "browser:unregisterNativeTab",
   "browser:detach",
   "browser:close",
   "browser:navigate",
@@ -221,8 +219,6 @@ export const PROTOCOL_EVENTS = [
   "browser:state",
   "browser:console",
   "browser:error",
-  "browser:nativeTabRequested",
-  "browser:nativeTabCloseRequested",
 ] as const;
 export type ProtocolEvent = (typeof PROTOCOL_EVENTS)[number];
 
