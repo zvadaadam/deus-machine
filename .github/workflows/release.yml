@@ -184,13 +184,19 @@ jobs:
         run: |
           set -euo pipefail
 
+          found_resources=0
           while IFS= read -r resources_dir; do
+            found_resources=1
             echo "Verifying packaged simulator helpers in $resources_dir"
             test -x "$resources_dir/simulator/simbridge"
             test -f "$resources_dir/simulator/siminspector.dylib"
             lipo -verify_arch arm64 x86_64 "$resources_dir/simulator/simbridge"
             lipo -verify_arch arm64 x86_64 "$resources_dir/simulator/siminspector.dylib"
-          done < <(find dist-electron -maxdepth 3 -path '*/Deus.app/Contents/Resources' -type d | sort)
+          done < <(find dist-electron -maxdepth 4 -path '*/Deus.app/Contents/Resources' -type d | sort)
+          if [[ "$found_resources" -ne 1 ]]; then
+            echo "::error::No packaged Deus.app Resources directory found for simulator helper verification"
+            exit 1
+          fi
 
           while IFS= read -r app_path; do
             echo "Verifying signature for $app_path"
