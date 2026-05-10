@@ -182,7 +182,7 @@ function IconTooltip({ label, children }: { label: ReactNode; children: ReactNod
  *  don't write them to localStorage. */
 function serializeTabs(tabs: BrowserTabState[]): PersistedBrowserTab[] {
   return tabs
-    .filter((t) => !t.streamToRemote && !isBlankUrl(t.currentUrl))
+    .filter((t) => !isBlankUrl(t.currentUrl))
     .map((t) => ({
       id: t.id,
       url: t.currentUrl,
@@ -461,7 +461,6 @@ export function BrowserPanel({ workspaceId, panelVisible = true }: BrowserPanelP
       // Stamp the opening URL so apps:stopped can match this tab even after
       // Electron overwrites url/currentUrl on load failure (chrome-error).
       newTab.openedAt = pendingNewTab.url;
-      newTab.streamToRemote = pendingNewTab.streamToRemote === true;
     }
 
     const nextActiveTabId = existingTab?.id ?? newTab?.id;
@@ -481,7 +480,6 @@ export function BrowserPanel({ workspaceId, panelVisible = true }: BrowserPanelP
                   url: pendingNewTab.url,
                   currentUrl: pendingNewTab.url,
                   openedAt: pendingNewTab.url,
-                  streamToRemote: pendingNewTab.streamToRemote === true,
                 }
               : tab
           );
@@ -555,9 +553,7 @@ export function BrowserPanel({ workspaceId, panelVisible = true }: BrowserPanelP
     [workspaceId, persistTabs, requestFocusUrlBar]
   );
 
-  // Close a specific tab requested by the backend relay. Hosted relay
-  // browser sessions use this to remove the Electron <webview> that backed a
-  // remote canvas tab after the remote user closes it.
+  // Close a specific tab requested by external lifecycle hooks.
   const pendingCloseTabById = useBrowserWindowStore((s) => s.pendingCloseTabById);
   useEffect(() => {
     if (!pendingCloseTabById) return;

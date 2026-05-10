@@ -10,11 +10,7 @@ export interface PendingNewTabRequest {
   requestId: string;
   workspaceId: string;
   url: string;
-  /** Optional caller-owned tab id, used when a remote browser stream needs
-   *  the native Electron tab to register under the hosted tab's id. */
   tabId?: string;
-  /** True when the tab is a desktop backing surface for a hosted-web canvas. */
-  streamToRemote?: boolean;
 }
 
 /** Queue-style payload for requesting any Browser tabs whose currentUrl
@@ -28,9 +24,7 @@ export interface PendingCloseTabRequest {
   urlPrefix: string;
 }
 
-/** Queue-style payload for requesting a specific Browser tab be closed.
- *  Used by hosted relay browser sessions to clean up the Electron <webview>
- *  that was created on the desktop side for pixel streaming. */
+/** Queue-style payload for requesting a specific Browser tab be closed. */
 export interface PendingCloseTabByIdRequest {
   requestId: string;
   tabId: string;
@@ -48,12 +42,7 @@ interface BrowserWindowState {
    *  Not persisted (transient UI state); on app reload it resets to off. */
   focusModeByWorkspace: Record<string, boolean>;
 
-  requestNewTab: (
-    workspaceId: string,
-    url: string,
-    tabId?: string,
-    streamToRemote?: boolean
-  ) => void;
+  requestNewTab: (workspaceId: string, url: string, tabId?: string) => void;
   consumePendingNewTab: () => void;
   requestCloseTabByUrlPrefix: (workspaceId: string, urlPrefix: string) => void;
   consumePendingCloseTab: () => void;
@@ -73,7 +62,7 @@ export const useBrowserWindowStore = create<BrowserWindowState>()(
       pendingCloseTabByIdQueue: [],
       focusModeByWorkspace: {},
 
-      requestNewTab: (workspaceId, url, tabId, streamToRemote) =>
+      requestNewTab: (workspaceId, url, tabId) =>
         set(
           (state) => {
             const request: PendingNewTabRequest = {
@@ -81,7 +70,6 @@ export const useBrowserWindowStore = create<BrowserWindowState>()(
               workspaceId,
               url,
               tabId,
-              ...(streamToRemote === true ? { streamToRemote: true } : {}),
             };
             const queue = [...state.pendingNewTabQueue, request];
             return {
@@ -185,8 +173,8 @@ export const useBrowserWindowStore = create<BrowserWindowState>()(
 );
 
 export const browserWindowActions = {
-  requestNewTab: (workspaceId: string, url: string, tabId?: string, streamToRemote?: boolean) =>
-    useBrowserWindowStore.getState().requestNewTab(workspaceId, url, tabId, streamToRemote),
+  requestNewTab: (workspaceId: string, url: string, tabId?: string) =>
+    useBrowserWindowStore.getState().requestNewTab(workspaceId, url, tabId),
   consumePendingNewTab: () => useBrowserWindowStore.getState().consumePendingNewTab(),
   requestCloseTabByUrlPrefix: (workspaceId: string, urlPrefix: string) =>
     useBrowserWindowStore.getState().requestCloseTabByUrlPrefix(workspaceId, urlPrefix),

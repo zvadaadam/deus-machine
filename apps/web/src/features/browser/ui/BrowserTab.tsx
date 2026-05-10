@@ -51,10 +51,8 @@ import {
 } from "../automation/inspect-mode";
 import { VISUAL_EFFECTS_SETUP } from "../automation/visual-effects";
 import { getErrorMessage } from "@shared/lib/errors";
-import { isConnected, onConnectionChange, sendCommand } from "@/platform/ws/query-protocol-client";
 
 const INSPECT_DRAIN_INTERVAL_MS = 200;
-const BROWSER_PROXY_COMMAND_TIMEOUT_MS = 5_000;
 
 interface BrowserTabProps {
   tab: BrowserTabState;
@@ -220,79 +218,6 @@ export const BrowserTab = forwardRef<BrowserTabHandle, BrowserTabProps>(function
 
   // Guard: prevent duplicate automation injection across page loads
   const automationInjectedRef = useRef(false);
-
-  const registerBrowserProxyTarget = useCallback(async () => {
-    if (!workspaceId) return;
-    if (!tabRef.current.streamToRemote) return;
-    const wv = getWebview();
-    if (!wv) return;
-
-    try {
-      wv.getWebContentsId();
-    } catch {
-      return;
-    }
-
-    const url = wv.getURL();
-    try {
-      await wv.executeJavaScript(
-        `Object.defineProperty(globalThis,"__DEUS_BROWSER_TAB_ID__",{value:${JSON.stringify(
-          tabId
-        )},configurable:true}); true;`
-      );
-    } catch {
-      // Registration still lets the backend match by this tab's URL when the
-      // marker is not readable yet; the marker remains the primary check.
-    }
-
-    sendCommand(
-      "browser:registerNativeTab",
-      { tabId, workspaceId, url },
-      BROWSER_PROXY_COMMAND_TIMEOUT_MS
-    ).catch(() => {});
-  }, [getWebview, tabId, workspaceId]);
-
-  useEffect(() => {
-    if (!workspaceId) return;
-    if (!tab.streamToRemote) return;
-    const wv = getWebview();
-    if (!wv) return;
-
-    const register = () => {
-      void registerBrowserProxyTarget();
-    };
-    register();
-    wv.addEventListener("dom-ready", register);
-    wv.addEventListener("did-stop-loading", register);
-    wv.addEventListener("did-navigate", register);
-    wv.addEventListener("did-navigate-in-page", register);
-    return () => {
-      wv.removeEventListener("dom-ready", register);
-      wv.removeEventListener("did-stop-loading", register);
-      wv.removeEventListener("did-navigate", register);
-      wv.removeEventListener("did-navigate-in-page", register);
-    };
-  }, [getWebview, registerBrowserProxyTarget, tab.streamToRemote, workspaceId]);
-
-  useEffect(() => {
-    if (!workspaceId) return;
-    if (!tab.streamToRemote) return;
-    if (isConnected()) {
-      void registerBrowserProxyTarget();
-    }
-    return onConnectionChange((connected) => {
-      if (connected) void registerBrowserProxyTarget();
-    });
-  }, [registerBrowserProxyTarget, tab.streamToRemote, workspaceId]);
-
-  useEffect(() => {
-    if (!tab.streamToRemote) return;
-    return () => {
-      sendCommand("browser:unregisterNativeTab", { tabId }, BROWSER_PROXY_COMMAND_TIMEOUT_MS).catch(
-        () => {}
-      );
-    };
-  }, [tab.streamToRemote, tabId]);
 
   // --- Subscribe to <webview> DOM events ---
   useEffect(() => {
@@ -478,7 +403,6 @@ export const BrowserTab = forwardRef<BrowserTabHandle, BrowserTabProps>(function
   // Matches the fixed-width frame computed above so the layout viewport
   // exactly equals the rendered viewport.
   useEffect(() => {
-    if (tab.streamToRemote) return;
     if (!hasLoaded) return;
     const wv = getWebview();
     if (!wv) return;
@@ -519,7 +443,7 @@ export const BrowserTab = forwardRef<BrowserTabHandle, BrowserTabProps>(function
       // Bump the token so any in-flight promise above sees isStale().
       requestRef.current++;
     };
-  }, [tab.isMobileView, tab.streamToRemote, hasLoaded, getWebview, bounds?.height]);
+  }, [tab.isMobileView, hasLoaded, getWebview, bounds?.height]);
 
   // --- Imperative methods exposed to parent ---
 
