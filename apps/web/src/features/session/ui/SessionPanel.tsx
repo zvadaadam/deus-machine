@@ -21,7 +21,6 @@ import type { AgentHarness } from "@/shared/agents";
 import { workspaceLayoutActions } from "@/features/workspace/store";
 import { sessionComposerActions, useSessionComposerStore } from "../store/sessionComposerStore";
 import { processImageFiles } from "../lib/imageAttachments";
-import { extractTextFromUserMessageContent } from "../lib/userMessageContent";
 
 const CONTENT_WIDTH_CLASSES = "w-full max-w-[960px] mx-auto min-w-0";
 
@@ -159,7 +158,7 @@ export const SessionPanel = forwardRef<SessionPanelRef, SessionPanelProps>(
     const latestUserMessageText = useMemo(() => {
       for (let i = messages.length - 1; i >= 0; i--) {
         if (messages[i].role !== "user") continue;
-        const text = extractTextFromUserMessageContent(messages[i].content).trim();
+        const text = messages[i].content.trim();
         if (text) return text;
       }
       return null;
