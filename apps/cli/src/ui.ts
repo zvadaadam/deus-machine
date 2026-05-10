@@ -67,7 +67,7 @@ export const sym = {
   arrow: isUnicode ? "→" : "->",
   diamond: isUnicode ? "◆" : "*",
   pointer: isUnicode ? "❯" : ">",
-  info: isUnicode ? "ℹ" : "i",
+  info: "i",
   warning: isUnicode ? "⚠" : "!",
   bullet: isUnicode ? "•" : "-",
 

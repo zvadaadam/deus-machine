@@ -4,6 +4,7 @@
     "electron.vite.config.*",
     "apps/desktop/main/**/*",
     "apps/desktop/preload/**/*",
+    "scripts/runtime/**/*",
     "shared/**/*"
   ],
   "compilerOptions": {

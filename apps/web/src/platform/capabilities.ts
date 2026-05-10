@@ -20,6 +20,7 @@
  */
 
 const isElectron = typeof window !== "undefined" && "electronAPI" in window;
+const isMacPlatform = typeof navigator !== "undefined" && /^Mac/i.test(navigator.platform);
 
 export const capabilities = {
   /** Native PTY terminal (requires Electron IPC for shell spawning) */
@@ -35,12 +36,8 @@ export const capabilities = {
    *  browser proxy over the same WebSocket/relay connection used for app data. */
   relayBrowser: !isElectron,
 
-  /** iOS simulator panel — stream management lives in backend, works in
-   *  both desktop and web modes. Desktop connects to MJPEG directly;
-   *  web/relay mode shows the panel (no live stream until relay proxy is built —
-   *  user can still trigger builds, see logs, take screenshots).
-   *  TODO(relay-streaming): when MJPEG frame proxy lands, live stream works too. */
-  nativeSimulator: true,
+  /** iOS simulator panel — backed by macOS-only simctl/device-use helpers. */
+  nativeSimulator: isMacPlatform,
 
   /** Auto-update check/download/install (requires Electron updater) */
   autoUpdate: isElectron,
