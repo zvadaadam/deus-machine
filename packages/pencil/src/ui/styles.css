@@ -1,0 +1,575 @@
+/* packages/pencil/src/ui/styles.css
+ *
+ * Thin chrome around the embedded Pencil editor iframe. The editor itself
+ * brings its own design language; we just need a topbar and the sign-in
+ * overlay. Restraint over decoration.
+ */
+
+/* ---------- tokens ------------------------------------------------------- */
+
+/* Aligned with Deus's dark theme tokens (apps/web/src/global.css `.dark`).
+ * Pure neutral grays, OKLCH text scale, rose accent. We hard-code values
+ * here (instead of importing) because the AAP renders inside its own
+ * iframe with no shared stylesheet. Keep these in sync if Deus's palette
+ * shifts. */
+:root {
+  --bg: #0b0b0b; /* bg-base */
+  --bg-surface: #141414;
+  --bg-elev: #1a1a1a; /* bg-elevated */
+  --bg-raised: #212121;
+  --bg-overlay-solid: #242424;
+  --bg-muted: #2a2a2a;
+  --bg-sunken: #0b0b0b;
+  --bg-overlay: rgba(0, 0, 0, 0.55);
+
+  --border: color-mix(in oklch, oklch(0.86 0 0) 5%, transparent);
+  --border-strong: color-mix(in oklch, oklch(0.86 0 0) 8%, transparent);
+
+  --fg: oklch(0.86 0 0); /* text-primary */
+  --fg-secondary: oklch(0.75 0 0);
+  --fg-muted: oklch(0.58 0 0); /* text-tertiary */
+  --fg-subtle: oklch(0.5 0 0); /* text-muted */
+  --fg-disabled: oklch(0.32 0 0);
+
+  --accent: oklch(0.78 0.09 345); /* primary — cool rose */
+  --accent-fg: #0b0b0b;
+  --accent-soft: color-mix(in oklch, oklch(0.78 0.09 345) 14%, transparent);
+  --ring: color-mix(in oklch, oklch(0.78 0.09 345) 40%, transparent);
+
+  --success: oklch(0.68 0.12 150);
+  --warn: oklch(0.68 0.13 75);
+  --err: oklch(0.65 0.13 20);
+
+  --shadow-card: 0 24px 80px rgba(0, 0, 0, 0.6);
+  --shadow-pop: 0 12px 36px rgba(0, 0, 0, 0.5), 0 0 0 1px var(--border-strong);
+
+  --radius-sm: 4px;
+  --radius-md: 6px;
+  --radius-lg: 10px;
+
+  --font-sans: -apple-system, BlinkMacSystemFont, "Inter", "SF Pro Text", system-ui, sans-serif;
+  --font-mono: ui-monospace, SFMono-Regular, "JetBrains Mono", Menlo, monospace;
+}
+
+/* ---------- reset -------------------------------------------------------- */
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+/* `display: ...` rules below would otherwise win against the user-agent's
+ * implicit `[hidden] { display: none }`. Force the attribute to mean what
+ * it says regardless of any element's own display rule. */
+[hidden] {
+  display: none !important;
+}
+html,
+body {
+  height: 100%;
+  margin: 0;
+  background: var(--bg);
+  color: var(--fg);
+  font: 13px/1.5 var(--font-sans);
+  -webkit-font-smoothing: antialiased;
+}
+body {
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+button {
+  font: inherit;
+  color: inherit;
+}
+
+/* ---------- topbar ------------------------------------------------------- */
+
+.topbar {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  height: 36px;
+  padding: 0 12px;
+  border-bottom: 1px solid var(--border);
+  font-size: 11px;
+  color: var(--fg-muted);
+  user-select: none;
+  background: var(--bg-surface);
+  flex: 0 0 auto;
+}
+.brand {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+}
+.brand-name {
+  color: var(--fg);
+  font-weight: 600;
+  font-size: 12px;
+  letter-spacing: -0.01em;
+}
+.brand-version {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  color: var(--fg-subtle);
+  padding: 1px 5px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+}
+.brand-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--fg-subtle);
+  transition:
+    background 0.2s,
+    box-shadow 0.2s;
+}
+.brand-dot[data-state="live"] {
+  background: var(--success);
+  box-shadow: 0 0 0 4px rgba(52, 199, 89, 0.18);
+}
+.brand-dot[data-state="run"] {
+  background: var(--accent);
+  box-shadow: 0 0 0 4px var(--accent-soft);
+  animation: pulse 1.4s ease-in-out infinite;
+}
+.brand-dot[data-state="warn"] {
+  background: var(--warn);
+}
+.topbar-status {
+  font-size: 11px;
+}
+.topbar-spacer {
+  flex: 1;
+}
+
+/* ---------- design switcher (Linear-style file dropdown) -------------- */
+
+.switcher {
+  position: relative;
+}
+.switcher-trigger {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  height: 22px;
+  padding: 0 9px;
+  background: var(--bg-elev);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  color: var(--fg);
+  font: 11px var(--font-sans);
+  font-feature-settings: "tnum";
+  cursor: pointer;
+  transition:
+    background 0.12s,
+    border-color 0.12s;
+  max-width: 320px;
+}
+.switcher-trigger:hover {
+  background: var(--bg-raised);
+  border-color: var(--border-strong);
+}
+.switcher-trigger[aria-expanded="true"] {
+  background: var(--bg-raised);
+  border-color: var(--border-strong);
+}
+.switcher-trigger:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 2px var(--ring);
+}
+.switcher-trigger.is-empty {
+  color: var(--fg-muted);
+}
+.switcher-name {
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  color: var(--fg);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  letter-spacing: -0.01em;
+}
+.switcher-name-empty {
+  font-family: var(--font-sans);
+  color: var(--fg-muted);
+  font-size: 11px;
+}
+.switcher-chevron {
+  width: 10px;
+  height: 10px;
+  color: var(--fg-muted);
+  flex-shrink: 0;
+  transition: transform 0.15s;
+}
+.switcher-trigger[aria-expanded="true"] .switcher-chevron {
+  transform: rotate(180deg);
+  color: var(--fg);
+}
+.switcher-dot {
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: var(--fg-subtle);
+  flex-shrink: 0;
+}
+.switcher-dot.is-workspace {
+  background: var(--accent);
+}
+
+.switcher-menu {
+  position: absolute;
+  top: calc(100% + 6px);
+  left: 0;
+  min-width: 280px;
+  max-width: 460px;
+  max-height: 360px;
+  overflow-y: auto;
+  background: var(--bg-overlay-solid);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-md);
+  padding: 4px;
+  box-shadow: var(--shadow-pop);
+  z-index: 60;
+  animation: menu-in 0.12s ease-out;
+}
+@keyframes menu-in {
+  from {
+    opacity: 0;
+    transform: translateY(-4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+.switcher-section {
+  padding: 6px 8px 3px;
+  font-size: 9.5px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--fg-subtle);
+}
+.switcher-section + .switcher-item {
+  margin-top: 2px;
+}
+.switcher-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 6px 8px;
+  border: 0;
+  background: transparent;
+  color: var(--fg-secondary);
+  font: 11.5px var(--font-sans);
+  text-align: left;
+  cursor: pointer;
+  border-radius: var(--radius-sm);
+  transition:
+    background 0.1s,
+    color 0.1s;
+}
+.switcher-item:hover,
+.switcher-item:focus-visible {
+  background: var(--bg-raised);
+  color: var(--fg);
+  outline: none;
+}
+.switcher-item.is-active {
+  background: var(--bg-raised);
+  color: var(--fg);
+}
+.switcher-item-name {
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.switcher-item-meta {
+  font-size: 10px;
+  color: var(--fg-subtle);
+  font-variant-numeric: tabular-nums;
+  flex-shrink: 0;
+}
+.switcher-empty {
+  padding: 10px 8px;
+  color: var(--fg-muted);
+  font-size: 11px;
+  text-align: center;
+}
+.switcher-divider {
+  height: 1px;
+  margin: 4px 0;
+  background: var(--border);
+}
+.switcher-new {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 7px 8px;
+  border: 0;
+  background: transparent;
+  color: var(--fg);
+  font: 11.5px var(--font-sans);
+  text-align: left;
+  cursor: pointer;
+  border-radius: var(--radius-sm);
+  transition: background 0.1s;
+}
+.switcher-new:hover,
+.switcher-new:focus-visible {
+  background: var(--accent-soft);
+  color: var(--fg);
+  outline: none;
+}
+.switcher-new svg {
+  width: 11px;
+  height: 11px;
+  color: var(--accent);
+}
+.switcher-form {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 8px;
+}
+.switcher-form input,
+.switcher-form textarea {
+  background: var(--bg-elev);
+  color: var(--fg);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-sm);
+  padding: 6px 8px;
+  font: 11.5px var(--font-sans);
+  outline: none;
+  transition: border-color 0.12s;
+  resize: none;
+}
+.switcher-form input:focus,
+.switcher-form textarea:focus {
+  border-color: var(--accent);
+}
+.switcher-form textarea {
+  min-height: 64px;
+  font-family: inherit;
+}
+.switcher-form-row {
+  display: flex;
+  gap: 6px;
+  justify-content: flex-end;
+}
+.switcher-form-row .btn--primary,
+.switcher-form-row .btn--ghost {
+  height: 26px;
+  padding: 0 12px;
+  font-size: 11px;
+  border-radius: var(--radius-sm);
+}
+.btn--ghost {
+  background: transparent;
+  color: var(--fg-muted);
+  border: 1px solid var(--border-strong);
+}
+.btn--ghost:hover {
+  color: var(--fg);
+  background: var(--bg-raised);
+}
+.topbar-running {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  height: 22px;
+  padding: 0 8px 0 10px;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-md);
+  background: var(--accent-soft);
+  color: var(--fg);
+  font-size: 11px;
+}
+.topbar-auth {
+  font-size: 11px;
+}
+.dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+}
+.dot--run {
+  background: var(--accent);
+  box-shadow: 0 0 0 3px var(--accent-soft);
+  animation: pulse 1.4s ease-in-out infinite;
+}
+.elapsed {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  color: var(--fg-muted);
+}
+@keyframes pulse {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.55;
+  }
+}
+
+/* ---------- editor iframe ----------------------------------------------- */
+
+.editor-frame {
+  flex: 1;
+  width: 100%;
+  height: 100%;
+  border: 0;
+  background: var(--bg);
+  display: block;
+}
+
+/* ---------- buttons ------------------------------------------------------ */
+
+.btn {
+  border: 0;
+  cursor: pointer;
+  font: 600 12px var(--font-sans);
+  padding: 6px 12px;
+  border-radius: 6px;
+  transition:
+    background 0.12s,
+    border-color 0.12s,
+    opacity 0.12s;
+}
+.btn--primary {
+  background: var(--fg);
+  color: var(--bg);
+}
+.btn--primary:hover {
+  background: white;
+}
+.btn--primary:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+.btn--danger {
+  background: transparent;
+  color: var(--err);
+  border: 1px solid color-mix(in oklch, var(--err) 35%, transparent);
+  font-weight: 500;
+  padding: 0 9px;
+  height: 18px;
+  font-size: 10.5px;
+  border-radius: var(--radius-sm);
+}
+.btn--danger:hover {
+  border-color: var(--err);
+  background: color-mix(in oklch, var(--err) 10%, transparent);
+}
+
+/* ---------- sign-in overlay ---------------------------------------------- */
+
+.signin-overlay {
+  position: fixed;
+  inset: 32px 0 0 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--bg-overlay);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  z-index: 100;
+}
+.signin-card {
+  background: var(--bg-elev);
+  border: 1px solid var(--border-strong);
+  border-radius: 10px;
+  padding: 28px;
+  max-width: 460px;
+  width: calc(100% - 48px);
+  box-shadow: var(--shadow-card);
+}
+.signin-card h1 {
+  font-size: 17px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  margin: 0 0 8px;
+}
+.signin-card p {
+  color: var(--fg-muted);
+  font-size: 13px;
+  margin: 0 0 16px;
+  line-height: 1.55;
+}
+.signin-card code {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  background: var(--bg-sunken);
+  padding: 1px 5px;
+  border-radius: 3px;
+  color: var(--fg);
+}
+.signin-card a {
+  color: var(--fg);
+  text-decoration: underline;
+  text-decoration-color: var(--fg-subtle);
+  text-underline-offset: 2px;
+}
+.signin-form {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+.signin-form input {
+  flex: 1;
+  padding: 9px 11px;
+  background: var(--bg-sunken);
+  color: var(--fg);
+  border: 1px solid var(--border-strong);
+  border-radius: 6px;
+  font: 12px var(--font-mono);
+  outline: none;
+  transition: border-color 0.12s;
+}
+.signin-form input:focus {
+  border-color: var(--accent);
+}
+.signin-error {
+  color: var(--err);
+  font-size: 12px;
+  min-height: 18px;
+}
+
+/* ---------- toast -------------------------------------------------------- */
+
+.toast {
+  position: fixed;
+  bottom: 20px;
+  left: 50%;
+  transform: translate(-50%, 8px);
+  background: var(--bg-elev);
+  color: var(--fg);
+  border: 1px solid var(--border-strong);
+  border-radius: 6px;
+  padding: 8px 14px;
+  font-size: 12px;
+  opacity: 0;
+  pointer-events: none;
+  transition:
+    opacity 0.18s,
+    transform 0.18s;
+  z-index: 1000;
+  box-shadow: var(--shadow-card);
+}
+.toast--show {
+  opacity: 1;
+  transform: translate(-50%, 0);
+}
+.toast--error {
+  border-color: rgba(255, 107, 107, 0.4);
+  color: var(--err);
+}
