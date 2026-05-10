@@ -374,7 +374,7 @@ async function installForPlatform(
 
         if (!mountPoint) {
           s.fail("Could not mount disk image");
-          return false;
+          return null;
         }
 
         const appName = "Deus.app";
