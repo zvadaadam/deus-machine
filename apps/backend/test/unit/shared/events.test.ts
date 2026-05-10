@@ -300,7 +300,11 @@ describe("shared/events", () => {
       expect(PROTOCOL_EVENTS).toContain("browser:error");
       expect(PROTOCOL_EVENTS).toContain("browser:nativeTabRequested");
       expect(PROTOCOL_EVENTS).toContain("browser:nativeTabCloseRequested");
-      expect(PROTOCOL_EVENTS).toHaveLength(29);
+      expect(PROTOCOL_EVENTS).toContain("browser:webrtcOffer");
+      expect(PROTOCOL_EVENTS).toContain("browser:webrtcAnswer");
+      expect(PROTOCOL_EVENTS).toContain("browser:webrtcIce");
+      expect(PROTOCOL_EVENTS).toContain("browser:webrtcStop");
+      expect(PROTOCOL_EVENTS).toHaveLength(33);
     });
   });
 });
