@@ -4,7 +4,7 @@
 // dispatch table so the surface is visible at a glance.
 
 import * as fs from "node:fs";
-import { dirname, join } from "node:path";
+import { dirname, isAbsolute, join, relative, resolve as resolvePath } from "node:path";
 import { fileURLToPath } from "node:url";
 import type { IncomingMessage, ServerResponse } from "node:http";
 import { spawnSync } from "node:child_process";
@@ -24,6 +24,14 @@ import {
 import { getBinaryStatus } from "./mcp-binary.ts";
 import { rewriteEditorIndex } from "./editor-bundle.ts";
 import type { Context } from "./types.ts";
+
+/** True when `child` is `parent` or a descendant directory thereof. Uses
+ *  resolve + relative so sibling-prefix attacks (`/foo-other` against
+ *  `/foo`) and `..` traversal both fail closed. */
+function isInside(child: string, parent: string): boolean {
+  const rel = relative(resolvePath(parent), resolvePath(child));
+  return rel === "" || (!rel.startsWith("..") && !isAbsolute(rel));
+}
 
 // MIME map for static editor asset serving.
 const MIME: Record<string, string> = {
@@ -325,12 +333,16 @@ export function createRouter(
       const cliInfo = findPencilCli();
       const resolved = auth.resolveCliKey();
       const cliEnv = buildCliEnv();
+      // Don't expose ANY of the CLI key — even a prefix can leak via
+      // screenshots / support dumps. Source + presence is enough for
+      // debugging.
       return sendJson(res, 200, {
         ...auth.authState(),
         cli: cliInfo,
         workspace: ctx.workspace,
         storage: ctx.storage,
-        cliKeyPreview: resolved ? resolved.key.slice(0, 14) + "…" : null,
+        cliKeyPresent: Boolean(resolved),
+        cliKeySource: resolved?.source ?? null,
         spawnEnv: {
           PENCIL_API_BASE: cliEnv.PENCIL_API_BASE,
           NODE_ENV: cliEnv.NODE_ENV,
@@ -466,12 +478,19 @@ export function createRouter(
         return sendJson(res, 400, { ok: false, error: "invalid JSON" });
       }
       const target = payload.path;
-      // Allow paths inside either the AAP storage dir OR the workspace
-      // (so user can reveal/open .pen files that live in their repo).
-      const safe =
-        typeof target === "string" &&
-        (target.startsWith(ctx.storage) || target.startsWith(ctx.workspace));
-      if (!safe) {
+      if (typeof target !== "string") {
+        return sendJson(res, 403, {
+          ok: false,
+          error: "path must be a string",
+        });
+      }
+      // Real path-boundary check — `startsWith` alone is bypassable by
+      // sibling paths that share a prefix (e.g. `${workspace}-other/...`).
+      // Resolve the candidate, then require it's the root or a descendant.
+      const abs = resolvePath(target);
+      const insideWorkspace = isInside(abs, ctx.workspace);
+      const insideStorage = isInside(abs, ctx.storage);
+      if (!insideWorkspace && !insideStorage) {
         return sendJson(res, 403, {
           ok: false,
           error: "path must be inside the workspace or AAP storage dir",

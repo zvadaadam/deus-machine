@@ -157,7 +157,7 @@ export function resolvePenPath(input: string, ctx: { workspace: string; storage:
 
 /** Recursive scan of the workspace for .pen files. Respects ignore dirs,
  *  caps depth and total file count to keep large monorepos snappy. */
-export function findWorkspaceDesigns(workspace: string): Design[] {
+export function findWorkspaceDesigns(workspace: string, storage: string): Design[] {
   const found: Design[] = [];
   const stack: { dir: string; depth: number }[] = [{ dir: workspace, depth: 0 }];
   while (stack.length && found.length < MAX_SCAN_FILES) {
@@ -183,13 +183,17 @@ export function findWorkspaceDesigns(workspace: string): Design[] {
       } catch {
         continue;
       }
+      // Use the same content-addressed cache rule as previewPathForPen
+      // so the `preview` field always points at the actual cache entry
+      // (sibling `.preview.png` only exists for files inside <storage>/designs/).
+      const preview = previewPathForPen(full, storage);
       found.push({
         name: e.name.slice(0, -".pen".length),
         file: full,
-        preview: full.replace(/\.pen$/, ".preview.png"),
+        preview,
         sizeBytes: stat.size,
         modifiedAt: stat.mtime.toISOString(),
-        previewExists: false,
+        previewExists: fs.existsSync(preview),
       });
     }
   }
@@ -205,7 +209,7 @@ export function listAllDesigns(ctx: {
   storage: string;
 }): Array<Design & { inWorkspace: boolean }> {
   const storage = listStorageDesigns(ctx.storage);
-  const workspace = findWorkspaceDesigns(ctx.workspace);
+  const workspace = findWorkspaceDesigns(ctx.workspace, ctx.storage);
   // Avoid double-listing: if a workspace file is INSIDE storage (e.g.
   // workspace points at a parent containing .pencil/designs/), de-dup by
   // absolute path.
