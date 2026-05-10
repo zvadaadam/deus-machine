@@ -73,6 +73,27 @@ app.get("/api/servers/:serverId/status", withRelay, async (c) => {
   return stub.fetch(new Request(new URL("/status", c.req.url)));
 });
 
+// HTTP tunnel — iframe-friendly localhost preview proxy.
+// Public shape: /api/servers/:serverId/http/:port/*
+app.all("/api/servers/:serverId/http/:port/*", withRelay, async (c) => {
+  const stub = c.get("stub");
+  const serverId = c.req.param("serverId");
+  const port = c.req.param("port");
+  const rest = c.req.param("*") || "";
+  const httpUrl = new URL(c.req.url);
+  httpUrl.pathname = `/http/${port}/${rest}`.replace(/\/{2,}/g, "/");
+  const headers = new Headers(c.req.raw.headers);
+  headers.set("x-deus-relay-public-prefix", `/api/servers/${serverId}/http/${port}`);
+  return stub.fetch(
+    new Request(httpUrl, {
+      method: c.req.raw.method,
+      headers,
+      body: c.req.raw.body,
+      redirect: "manual",
+    })
+  );
+});
+
 // Root
 app.get("/", (c) =>
   c.json({

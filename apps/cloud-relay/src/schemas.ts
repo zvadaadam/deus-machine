@@ -47,6 +47,16 @@ const baseFrameSchema = z.discriminatedUnion("type", [
     payload: z.string(),
   }),
   z.object({
+    type: z.literal("http_response"),
+    requestId: z.string(),
+    response: z.object({
+      status: z.number(),
+      statusText: z.string().optional(),
+      headers: z.record(z.string()),
+      bodyBase64: z.string(),
+    }),
+  }),
+  z.object({
     type: z.literal("auth_response"),
     clientId: z.string(),
     allowed: z.boolean(),

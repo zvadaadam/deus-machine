@@ -293,6 +293,68 @@ describe("data forwarding", () => {
 });
 
 // ============================================================================
+// HTTP Tunnel
+// ============================================================================
+
+describe("http tunnel", () => {
+  it("forwards HTTP requests to the registered server tunnel", async () => {
+    const tunnelWs = await registerServer(relay, state);
+
+    const responsePromise = relay.fetch(
+      new Request("https://relay.test/http/3000/index.html?token=dev_tok&q=1", {
+        headers: { accept: "text/html" },
+      })
+    ) as Promise<Response>;
+
+    await vi.waitFor(() => {
+      expect(getSentMessages(tunnelWs).some((msg: any) => msg.type === "http_request")).toBe(true);
+    });
+
+    const requestFrame = getSentMessages(tunnelWs).find(
+      (msg: any) => msg.type === "http_request"
+    ) as any;
+    expect(requestFrame.request).toMatchObject({
+      method: "GET",
+      port: 3000,
+      path: "/index.html",
+      query: "q=1",
+      deviceToken: "dev_tok",
+    });
+
+    await relay.webSocketMessage(
+      tunnelWs,
+      JSON.stringify({
+        type: "http_response",
+        requestId: requestFrame.requestId,
+        response: {
+          status: 200,
+          headers: {
+            "content-type": "text/html; charset=utf-8",
+            "x-frame-options": "DENY",
+          },
+          bodyBase64: Buffer.from('<script src="/src/main.tsx"></script>').toString("base64"),
+        },
+      })
+    );
+
+    const response = await responsePromise;
+    expect(response.status).toBe(200);
+    expect(response.headers.get("x-frame-options")).toBeNull();
+    expect(await response.text()).toContain("/http/3000/src/main.tsx?token=dev_tok");
+  });
+
+  it("rejects HTTP tunnel requests without a token", async () => {
+    await registerServer(relay, state);
+
+    const response = (await relay.fetch(
+      new Request("https://relay.test/http/3000/")
+    )) as Response;
+
+    expect(response.status).toBe(401);
+  });
+});
+
+// ============================================================================
 // Pairing Flow
 // ============================================================================
 
