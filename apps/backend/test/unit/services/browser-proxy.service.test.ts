@@ -388,19 +388,20 @@ describe("browser-proxy.service", () => {
   });
 
   it("falls back to creating a CDP target when no registered target can be matched", async () => {
+    mockState.managedBrowser.cdpBaseUrl = "http://managed-browser.test:9222";
     const fetchCalls: string[] = [];
     vi.stubGlobal(
       "fetch",
       vi.fn(async (url: string | URL) => {
         const href = String(url);
         fetchCalls.push(href);
-        if (href.endsWith("/json")) {
+        if (href === "http://managed-browser.test:9222/json") {
           return jsonResponse([]);
         }
-        if (href.endsWith("/json/version")) {
+        if (href === "http://managed-browser.test:9222/json/version") {
           return jsonResponse({});
         }
-        if (href.includes("/json/new?")) {
+        if (href.startsWith("http://managed-browser.test:9222/json/new?")) {
           return jsonResponse({
             id: "created-target",
             type: "page",
@@ -421,7 +422,9 @@ describe("browser-proxy.service", () => {
       url: "https://github.com/",
     });
 
-    expect(fetchCalls).toContain("http://127.0.0.1:19222/json/new?https%3A%2F%2Fgithub.com%2F");
+    expect(fetchCalls).toContain(
+      "http://managed-browser.test:9222/json/new?https%3A%2F%2Fgithub.com%2F"
+    );
     expect(mockState.broadcast.frames).not.toContainEqual(
       JSON.stringify({
         type: "q:event",
