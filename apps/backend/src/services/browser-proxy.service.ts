@@ -59,6 +59,8 @@ const NATIVE_TAB_REQUEST_POLL_MS = 100;
 const NATIVE_TAB_MARKER = "__DEUS_BROWSER_TAB_ID__";
 const TARGET_RECONNECT_TIMEOUT_MS = 8_000;
 const TARGET_RECONNECT_POLL_MS = 100;
+const TARGET_CREATE_DISCOVERY_TIMEOUT_MS = 3_000;
+const TARGET_CREATE_DISCOVERY_POLL_MS = 100;
 const DEFAULT_MEDIA_TRANSPORT: BrowserProxyMediaTransport = "websocket-frames";
 
 const AGENT_BROWSER_BINARY = (() => {
@@ -161,6 +163,18 @@ async function findTargetById(targetId: string): Promise<CdpTarget | null> {
   return targets.find((target) => target.id === targetId) ?? null;
 }
 
+async function waitForTargetById(targetId: string): Promise<CdpTarget | null> {
+  const deadline = Date.now() + TARGET_CREATE_DISCOVERY_TIMEOUT_MS;
+  do {
+    const target = await findTargetById(targetId);
+    if (target?.webSocketDebuggerUrl) return target;
+    if (Date.now() < deadline) {
+      await delay(TARGET_CREATE_DISCOVERY_POLL_MS);
+    }
+  } while (Date.now() < deadline);
+  return null;
+}
+
 async function findTargetByUrl(url: string | undefined): Promise<CdpTarget | null> {
   if (isBlankUrl(url)) return null;
   const targets = await listTargets();
@@ -184,10 +198,14 @@ async function createTarget(url: string | undefined): Promise<CdpTarget> {
         url: targetUrl,
       })) as { targetId?: string };
       if (result.targetId) {
-        const created = await findTargetById(result.targetId);
+        const created = await waitForTargetById(result.targetId);
         if (created?.webSocketDebuggerUrl) return created;
+        throw new Error("Created CDP target did not expose a debugger URL");
       }
-    } catch {
+    } catch (err) {
+      if (getErrorMessage(err).includes("Created CDP target did not expose")) {
+        throw err;
+      }
       // Fall back to the HTTP endpoint below.
     } finally {
       browserClient?.close();
