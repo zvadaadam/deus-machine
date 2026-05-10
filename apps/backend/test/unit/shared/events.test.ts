@@ -229,11 +229,7 @@ describe("shared/events", () => {
       expect(COMMAND_NAMES).toContain("browser:input");
       expect(COMMAND_NAMES).toContain("browser:eval");
       expect(COMMAND_NAMES).toContain("browser:captureScreenshot");
-      expect(COMMAND_NAMES).toContain("browser:webrtcOffer");
-      expect(COMMAND_NAMES).toContain("browser:webrtcAnswer");
-      expect(COMMAND_NAMES).toContain("browser:webrtcIce");
-      expect(COMMAND_NAMES).toContain("browser:webrtcStop");
-      expect(COMMAND_NAMES).toHaveLength(47);
+      expect(COMMAND_NAMES).toHaveLength(43);
     });
 
     it("REQUEST_RESOURCES contains the expected request-only resources", () => {

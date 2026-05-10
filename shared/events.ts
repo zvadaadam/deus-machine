@@ -176,10 +176,6 @@ export const COMMAND_NAMES = [
   "browser:input",
   "browser:eval",
   "browser:captureScreenshot",
-  "browser:webrtcOffer",
-  "browser:webrtcAnswer",
-  "browser:webrtcIce",
-  "browser:webrtcStop",
 ] as const;
 export type CommandName = (typeof COMMAND_NAMES)[number];
 
@@ -227,10 +223,6 @@ export const PROTOCOL_EVENTS = [
   "browser:error",
   "browser:nativeTabRequested",
   "browser:nativeTabCloseRequested",
-  "browser:webrtcOffer",
-  "browser:webrtcAnswer",
-  "browser:webrtcIce",
-  "browser:webrtcStop",
 ] as const;
 export type ProtocolEvent = (typeof PROTOCOL_EVENTS)[number];
 
