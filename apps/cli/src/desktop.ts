@@ -26,6 +26,7 @@ import {
   blank,
   success,
   error,
+  info,
   hint,
   kv,
 } from "./ui.js";
@@ -214,7 +215,7 @@ export async function installDesktop(options: DesktopOptions): Promise<void> {
     if (os === "linux") {
       const installDir = join(homedir(), ".local", "bin");
       if (!isOnPath(installDir)) {
-        hint(`Add ${c.dim(installDir)} to PATH to launch the AppImage directly.`);
+        info(`Add ${c.dim(installDir)} to PATH to launch the AppImage directly.`);
       }
     }
     success("Deus is ready!");
@@ -417,7 +418,7 @@ async function installForPlatform(
         s.succeed(`Installed to ${c.dim(destPath)}`);
 
         if (!hasFuse2()) {
-          hint("libfuse2 not found; launching AppImage with APPIMAGE_EXTRACT_AND_RUN=1.");
+          info("libfuse2 not found; launching AppImage with APPIMAGE_EXTRACT_AND_RUN=1.");
         }
 
         launchDesktop(destPath);
