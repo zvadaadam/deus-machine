@@ -21,6 +21,7 @@ import type {
   BrowserProxyEvalParams,
   BrowserProxyFrameEvent,
   BrowserProxyInputParams,
+  BrowserProxyMediaTransport,
   BrowserProxyNativeTabCloseRequestEvent,
   BrowserProxyNativeTabParams,
   BrowserProxyNativeTabRequestEvent,
@@ -81,6 +82,7 @@ const NATIVE_TAB_REQUEST_POLL_MS = 100;
 const NATIVE_TAB_MARKER = "__DEUS_BROWSER_TAB_ID__";
 const TARGET_RECONNECT_TIMEOUT_MS = 8_000;
 const TARGET_RECONNECT_POLL_MS = 100;
+const DEFAULT_MEDIA_TRANSPORT: BrowserProxyMediaTransport = "websocket-frames";
 
 const AGENT_BROWSER_BINARY = (() => {
   try {
@@ -468,6 +470,7 @@ class BrowserProxySession {
   private width = 1280;
   private height = 720;
   private isMobileView = false;
+  private mediaTransport: BrowserProxyMediaTransport = DEFAULT_MEDIA_TRANSPORT;
   private currentUrl = "about:blank";
   private loading = false;
   private inputQueue: Promise<void> = Promise.resolve();
@@ -526,6 +529,7 @@ class BrowserProxySession {
     this.width = normalizeSize(params.width, MAX_STREAM_WIDTH);
     this.height = normalizeSize(params.height, MAX_STREAM_HEIGHT);
     this.isMobileView = params.isMobileView === true;
+    this.mediaTransport = normalizeMediaTransport(params.mediaTransport);
 
     await this.ensureClient();
 
@@ -537,7 +541,7 @@ class BrowserProxySession {
     } else {
       await this.refreshState({ loading: false });
     }
-    await this.startStream();
+    await this.startMediaStream();
   }
 
   async detach(connectionId: string | undefined): Promise<void> {
@@ -608,8 +612,9 @@ class BrowserProxySession {
     this.width = normalizeSize(params.width, MAX_STREAM_WIDTH);
     this.height = normalizeSize(params.height, MAX_STREAM_HEIGHT);
     this.isMobileView = params.isMobileView === true;
+    this.mediaTransport = normalizeMediaTransport(params.mediaTransport);
     await this.setViewport(await this.ensureClient());
-    await this.startStream();
+    await this.startMediaStream();
   }
 
   async input(params: BrowserProxyInputParams): Promise<void> {
@@ -846,9 +851,12 @@ class BrowserProxySession {
     });
   }
 
-  private async startStream(): Promise<void> {
+  private async startMediaStream(): Promise<void> {
     const client = await this.ensureClient();
     await client.send("Page.bringToFront").catch(() => {});
+    if (this.mediaTransport !== "websocket-frames") {
+      throw new Error(`Unsupported browser media transport: ${this.mediaTransport}`);
+    }
     if (this.nativeCdpStream) {
       await this.restartNativeScreencast(client);
       return;
@@ -1514,6 +1522,12 @@ onConnectionRemoved((connectionId) => {
 
 function normalizeSize(value: number, max = Number.MAX_SAFE_INTEGER): number {
   return Math.min(max, Math.max(MIN_VIEWPORT_SIZE, Math.floor(value || MIN_VIEWPORT_SIZE)));
+}
+
+function normalizeMediaTransport(
+  transport: BrowserProxyMediaTransport | undefined
+): BrowserProxyMediaTransport {
+  return transport ?? DEFAULT_MEDIA_TRANSPORT;
 }
 
 function nativeTabRequestTimeoutMs(): number {

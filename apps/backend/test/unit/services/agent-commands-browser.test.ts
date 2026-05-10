@@ -111,9 +111,44 @@ describe("agent/commands — browser proxy command handlers", () => {
         height: 768,
         url: "https://github.com",
         isMobileView: true,
+        mediaTransport: undefined,
       },
       "conn-1"
     );
+  });
+
+  it("accepts the websocket frame media transport", async () => {
+    await runCommand("browser:attach", {
+      tabId: "tab-1",
+      width: 1024,
+      height: 768,
+      mediaTransport: "websocket-frames",
+    });
+
+    expect(mockAttachBrowserTab).toHaveBeenCalledWith(
+      {
+        tabId: "tab-1",
+        workspaceId: undefined,
+        width: 1024,
+        height: 768,
+        url: undefined,
+        isMobileView: false,
+        mediaTransport: "websocket-frames",
+      },
+      undefined
+    );
+  });
+
+  it("rejects unsupported browser media transports", async () => {
+    await expect(
+      runCommand("browser:attach", {
+        tabId: "tab-1",
+        width: 1024,
+        height: 768,
+        mediaTransport: "webrtc",
+      })
+    ).rejects.toThrow(/mediaTransport/);
+    expect(mockAttachBrowserTab).not.toHaveBeenCalled();
   });
 
   it("rejects browser:attach without numeric dimensions", async () => {
