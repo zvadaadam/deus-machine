@@ -55,8 +55,37 @@ export function requestFromIframe(
     }, timeoutMs);
     pending.set(id, { resolve, reject, timeout, method, startedAt: Date.now() });
 
-    broadcastEvent("ipc-request", { id, type: "request", method, payload });
+    broadcastEvent("ipc-request", {
+      id,
+      type: "request",
+      method,
+      payload: normalizeIframePayload(method, payload),
+    });
   });
+}
+
+export function normalizeIframePayload(method: string, payload: unknown): unknown {
+  if (method !== "batch-design" || typeof payload !== "object" || payload === null) {
+    return payload;
+  }
+  const data = payload as Record<string, unknown>;
+  if (typeof data.input === "string") {
+    return payload;
+  }
+  const input = normalizeBatchDesignInput(data.operations);
+  if (input === null) return payload;
+  return {
+    ...data,
+    input,
+  };
+}
+
+function normalizeBatchDesignInput(operations: unknown): string | null {
+  if (typeof operations === "string") return operations;
+  if (Array.isArray(operations) && operations.every((operation) => typeof operation === "string")) {
+    return operations.join("\n");
+  }
+  return null;
 }
 
 /** Called by /ipc-response when the iframe replies. */

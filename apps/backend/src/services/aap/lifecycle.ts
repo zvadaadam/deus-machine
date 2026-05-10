@@ -274,7 +274,7 @@ export async function stopChild(
  *
  *  Returning absolute paths means Electron / Finder-launched backends don't
  *  depend on the inherited PATH to find workspace binaries. */
-function resolveCommand(command: string, packageRoot: string): string {
+export function resolveCommand(command: string, packageRoot: string): string {
   if (isAbsolute(command)) return command;
 
   // (1.5) Path-form command (`./dist/cli.js`, `bin/foo`, etc.) — Node's spawn

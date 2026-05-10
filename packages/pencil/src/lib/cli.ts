@@ -33,8 +33,8 @@ export function findPencilCli(): { command: string; args: string[] } {
  *  matters: NODE_ENV=development from a dev shell silently routes the
  *  CLI to http://localhost:3001, and a stale PENCIL_API_BASE pointing at
  *  localhost has the same effect. */
-export function buildCliEnv(): NodeJS.ProcessEnv {
-  const env: NodeJS.ProcessEnv = { ...process.env };
+export function buildCliEnv(overrides: NodeJS.ProcessEnv = {}): NodeJS.ProcessEnv {
+  const env: NodeJS.ProcessEnv = { ...process.env, ...overrides };
 
   if (!env.PENCIL_API_BASE || /localhost|127\.0\.0\.1/.test(env.PENCIL_API_BASE)) {
     env.PENCIL_API_BASE = PENCIL_PROD_API_BASE;
@@ -60,13 +60,14 @@ function appendCappedTail(existing: string, chunk: string, max = STDERR_TAIL_BYT
 export interface SpawnOpts {
   op?: Op;
   onChunk?: (stream: "stdout" | "stderr", chunk: string) => void;
+  env?: NodeJS.ProcessEnv;
 }
 
 /** Run the CLI to completion. Resolves with stdout/stderr captured. */
 export function spawnCli(
   extraArgs: string[],
   ctx: Context,
-  { op, onChunk }: SpawnOpts = {}
+  { op, onChunk, env }: SpawnOpts = {}
 ): Promise<CliResult> {
   const cli = findPencilCli();
   const { workspace, storage } = ctx;
@@ -75,7 +76,7 @@ export function spawnCli(
 
     const child: ChildProcess = spawn(cli.command, [...cli.args, ...extraArgs], {
       cwd: workspace,
-      env: buildCliEnv(),
+      env: buildCliEnv(env),
       stdio: ["ignore", "pipe", "pipe"],
     });
     if (op) {
@@ -126,8 +127,8 @@ export function spawnCli(
 
 /** Round-trip a key against the Pencil API by running `pencil status`.
  *  Used to verify a freshly-pasted key before persisting. */
-export async function verifyCliKey(_key: string, ctx: Context): Promise<CliVerifyResult> {
-  const result = await spawnCli(["status"], ctx, {});
+export async function verifyCliKey(key: string, ctx: Context): Promise<CliVerifyResult> {
+  const result = await spawnCli(["status"], ctx, { env: { PENCIL_CLI_KEY: key } });
   if (!result.ok) {
     return {
       ok: false,

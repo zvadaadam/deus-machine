@@ -48,7 +48,22 @@ function parseArgs(): CliArgs {
   return { port: port as number, workspace, storage };
 }
 
+async function prefetchEditorBundle(): Promise<void> {
+  try {
+    const dir = await ensureEditorBundle();
+    console.log(`[pencil-aap] prefetched editor bundle: ${dir}`);
+  } catch (err) {
+    console.warn(`[pencil-aap] editor bundle prefetch failed: ${(err as Error).message}`);
+    process.exitCode = 1;
+  }
+}
+
 async function main(): Promise<void> {
+  if (process.argv.includes("--prefetch-editor")) {
+    await prefetchEditorBundle();
+    return;
+  }
+
   const opts = parseArgs();
   const baseCtx = { workspace: opts.workspace, storage: opts.storage };
 
@@ -64,7 +79,7 @@ async function main(): Promise<void> {
   } catch (err) {
     console.error(
       `[pencil-aap] could not obtain editor bundle: ${(err as Error).message}\n` +
-        "First-run downloads ~16 MB from api.pencil.dev. Install Pencil's VS Code/Cursor extension once if you're offline."
+        "First-run downloads the editor bundle from api.pencil.dev. Install Pencil's VS Code/Cursor extension once if you're offline."
     );
     process.exit(3);
   }

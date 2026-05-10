@@ -87,6 +87,9 @@ const dom = {
   runElapsed: $("run-elapsed"),
   cancelBtn: $<HTMLButtonElement>("cancel"),
   signinOverlay: $("signin-overlay"),
+  signinTitle: $("signin-title"),
+  signinCopy: $("signin-copy"),
+  signinSteps: $<HTMLOListElement>("signin-steps"),
   signinForm: $<HTMLFormElement>("signin-form"),
   signinKey: $<HTMLInputElement>("signin-key"),
   signinButton: $<HTMLButtonElement>("signin-button"),
@@ -313,10 +316,18 @@ async function checkAuth(): Promise<void> {
       state.signedIn = false;
       dom.auth.textContent = "not signed in";
       dom.auth.style.color = "var(--warn)";
+      dom.signinOverlay.dataset.state = "signin";
       dom.signinOverlay.hidden = false;
+      dom.signinTitle.textContent = "Connect Pencil";
+      dom.signinCopy.innerHTML =
+        "Deus uses a Pencil CLI key to run the embedded editor. No Pencil desktop app is required.";
+      dom.signinSteps.hidden = false;
+      dom.signinForm.hidden = false;
     } else {
       state.signedIn = true;
       dom.signinOverlay.hidden = true;
+      dom.signinSteps.hidden = true;
+      dom.signinForm.hidden = true;
       const email = data.sessionEmail || state.verifiedEmail;
       dom.auth.textContent = email
         ? `signed in · ${email}`
@@ -326,8 +337,17 @@ async function checkAuth(): Promise<void> {
       dom.auth.style.color = "var(--fg-muted)";
       setStatus("live", "ready");
     }
-  } catch {
-    /* keep last state */
+  } catch (err) {
+    state.signedIn = false;
+    dom.auth.textContent = "auth unavailable";
+    dom.auth.style.color = "var(--warn)";
+    dom.signinOverlay.dataset.state = "signin";
+    dom.signinOverlay.hidden = false;
+    dom.signinTitle.textContent = "Couldn't check Pencil";
+    dom.signinCopy.textContent =
+      err instanceof Error ? err.message : "Refresh the panel and try again.";
+    dom.signinSteps.hidden = true;
+    dom.signinForm.hidden = true;
   }
 }
 

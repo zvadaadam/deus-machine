@@ -321,15 +321,7 @@ export function createRouter(
       }
       const trimmed = payload.key.trim();
       // Round-trip the key against the API before persisting.
-      const previousEnv = process.env.PENCIL_CLI_KEY;
-      process.env.PENCIL_CLI_KEY = trimmed;
-      let verify;
-      try {
-        verify = await verifyCliKey(trimmed, ctx);
-      } finally {
-        if (previousEnv === undefined) delete process.env.PENCIL_CLI_KEY;
-        else process.env.PENCIL_CLI_KEY = previousEnv;
-      }
+      const verify = await verifyCliKey(trimmed, ctx);
       if (!verify.ok) {
         return sendJson(res, 400, {
           ok: false,
@@ -354,6 +346,7 @@ export function createRouter(
 
     if (method === "POST" && url === "/auth-clear") {
       auth.clearKey();
+      auth.clearEditorSession();
       return sendJson(res, 200, { ok: true, ...auth.authState() });
     }
 
