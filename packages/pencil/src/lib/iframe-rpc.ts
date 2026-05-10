@@ -55,8 +55,27 @@ export function requestFromIframe(
     }, timeoutMs);
     pending.set(id, { resolve, reject, timeout, method, startedAt: Date.now() });
 
-    broadcastEvent("ipc-request", { id, type: "request", method, payload });
+    broadcastEvent("ipc-request", {
+      id,
+      type: "request",
+      method,
+      payload: normalizeIframePayload(method, payload),
+    });
   });
+}
+
+function normalizeIframePayload(method: string, payload: unknown): unknown {
+  if (method !== "batch-design" || typeof payload !== "object" || payload === null) {
+    return payload;
+  }
+  const data = payload as Record<string, unknown>;
+  if (typeof data.input === "string" || typeof data.operations !== "string") {
+    return payload;
+  }
+  return {
+    ...data,
+    input: data.operations,
+  };
 }
 
 /** Called by /ipc-response when the iframe replies. */
