@@ -184,6 +184,20 @@ jobs:
         run: |
           set -euo pipefail
 
+          found_resources=0
+          while IFS= read -r resources_dir; do
+            found_resources=1
+            echo "Verifying packaged simulator helpers in $resources_dir"
+            test -x "$resources_dir/simulator/simbridge"
+            test -f "$resources_dir/simulator/siminspector.dylib"
+            lipo -verify_arch arm64 x86_64 "$resources_dir/simulator/simbridge"
+            lipo -verify_arch arm64 x86_64 "$resources_dir/simulator/siminspector.dylib"
+          done < <(find dist-electron -maxdepth 4 -path '*/Deus.app/Contents/Resources' -type d | sort)
+          if [[ "$found_resources" -ne 1 ]]; then
+            echo "::error::No packaged Deus.app Resources directory found for simulator helper verification"
+            exit 1
+          fi
+
           while IFS= read -r app_path; do
             echo "Verifying signature for $app_path"
             codesign --verify --deep --strict --verbose=2 "$app_path"
@@ -230,6 +244,8 @@ jobs:
 
           app_bin="$copied_app/Contents/MacOS/Deus"
           resources_dir="$copied_app/Contents/Resources"
+          test -x "$resources_dir/simulator/simbridge"
+          test -f "$resources_dir/simulator/siminspector.dylib"
 
           ELECTRON_RUN_AS_NODE=1 \
           DATABASE_PATH="$smoke_db" \
@@ -239,6 +255,8 @@ jobs:
           DEUS_PACKAGED=1 \
           DEUS_RESOURCES_PATH="$resources_dir" \
           DEUS_BUNDLED_BIN_DIR="$resources_dir/bin" \
+          DEVICE_USE_SIMBRIDGE="$resources_dir/simulator/simbridge" \
+          DEVICE_USE_SIMINSPECTOR="$resources_dir/simulator/siminspector.dylib" \
           AGENT_SERVER_ENTRY="$resources_dir/bin/index.bundled.cjs" \
           AGENT_SERVER_CWD="$resources_dir/bin" \
           NODE_PATH="$resources_dir/app.asar/node_modules" \
@@ -306,11 +324,12 @@ jobs:
           name: linux
           path: |
             dist-electron/*.AppImage
+            dist-electron/*.deb
             dist-electron/*.blockmap
             dist-electron/latest-linux.yml
           if-no-files-found: error
 
-  # ── Step 3: Create GitHub Release with all artifacts ────────────────
+  # ── Step 3: Stage a draft GitHub Release with all artifacts ─────────
   create-release:
     needs: [validate-and-bump, build-macos, build-linux]
     if: ${{ inputs.dry_run == false }}
@@ -325,13 +344,13 @@ jobs:
           mkdir -p release
           find artifacts -type f \( \
             -name "*.dmg" -o -name "*.zip" -o \
-            -name "*.AppImage" -o \
+            -name "*.AppImage" -o -name "*.deb" -o \
             -name "*.blockmap" -o -name "*.yml" \
           \) -exec cp {} release/ \;
           echo "=== Release files ==="
           ls -lh release/
 
-      - name: Create GitHub Release
+      - name: Create draft GitHub Release
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           TAG: ${{ needs.validate-and-bump.outputs.tag }}
@@ -340,10 +359,11 @@ jobs:
           gh release create "$TAG" \
             --repo "${{ github.repository }}" \
             --title "Deus v${VERSION}" \
+            --draft \
             --generate-notes \
             release/*
 
-  # ── Step 4: Publish CLI to npm ──────────────────────────────────────
+  # ── Step 4: Publish CLI to npm before the release becomes public ────
   publish-cli:
     needs: [validate-and-bump, create-release]
     if: ${{ inputs.dry_run == false }}
@@ -387,3 +407,18 @@ jobs:
         run: npm publish --access public --provenance
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+
+  # ── Step 5: Publish GitHub Release after CLI publish succeeds ───────
+  publish-release:
+    needs: [validate-and-bump, publish-cli]
+    if: ${{ inputs.dry_run == false }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Publish draft GitHub Release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG: ${{ needs.validate-and-bump.outputs.tag }}
+        run: |
+          gh release edit "$TAG" \
+            --repo "${{ github.repository }}" \
+            --draft=false
