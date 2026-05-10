@@ -17,18 +17,12 @@ const { binaryNamesForTarget, prunePencilCliBinaries } =
 
 const tempRoots: string[] = [];
 
-function createOutDir(): string {
+function createOutDir(
+  candidatePath = ["app.asar.unpacked", "node_modules", "@pencil.dev", "cli", "dist", "out"]
+): string {
   const root = path.join(os.tmpdir(), `deus-pencil-prune-${Date.now()}-${Math.random()}`);
   tempRoots.push(root);
-  const outDir = path.join(
-    root,
-    "app.asar.unpacked",
-    "node_modules",
-    "@pencil.dev",
-    "cli",
-    "dist",
-    "out"
-  );
+  const outDir = path.join(root, ...candidatePath);
   mkdirSync(path.join(outDir, "data"), { recursive: true });
   for (const name of [
     "mcp-server-darwin-arm64",
@@ -40,6 +34,10 @@ function createOutDir(): string {
   }
   writeFileSync(path.join(outDir, "data", "shadcn.lib.pen"), "library");
   return root;
+}
+
+function outDirFor(root: string, candidatePath: string[]): string {
+  return path.join(root, ...candidatePath);
 }
 
 afterEach(() => {
@@ -57,18 +55,41 @@ describe("prune-pencil-cli-binaries", () => {
       resourcesDir,
     });
 
-    const outDir = path.join(
-      resourcesDir,
+    const outDir = outDirFor(resourcesDir, [
       "app.asar.unpacked",
       "node_modules",
       "@pencil.dev",
       "cli",
       "dist",
-      "out"
-    );
+      "out",
+    ]);
     expect(result).toEqual({ removed: 3, kept: 1 });
     expect(readdirSync(outDir).sort()).toEqual(["data", "mcp-server-darwin-arm64"]);
     expect(readdirSync(path.join(outDir, "data"))).toEqual(["shadcn.lib.pen"]);
+  });
+
+  it("also prunes the packaged Pencil app dependency copy", () => {
+    const candidatePath = [
+      "agentic-apps",
+      "pencil",
+      "node_modules",
+      "@pencil.dev",
+      "cli",
+      "dist",
+      "out",
+    ];
+    const resourcesDir = createOutDir(candidatePath);
+    const result = prunePencilCliBinaries({
+      electronPlatformName: "linux",
+      arch: "x64",
+      resourcesDir,
+    });
+
+    expect(result).toEqual({ removed: 3, kept: 1 });
+    expect(readdirSync(outDirFor(resourcesDir, candidatePath)).sort()).toEqual([
+      "data",
+      "mcp-server-linux-x64",
+    ]);
   });
 
   it("maps electron-builder arch numbers to Pencil binary names", () => {

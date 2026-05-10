@@ -20,6 +20,7 @@
   },
   "scripts": {
     "build": "bunx tsx build.ts",
+    "test": "vitest run test",
     "typecheck": "tsc --noEmit"
   }
 }

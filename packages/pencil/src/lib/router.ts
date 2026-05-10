@@ -321,15 +321,7 @@ export function createRouter(
       }
       const trimmed = payload.key.trim();
       // Round-trip the key against the API before persisting.
-      const previousEnv = process.env.PENCIL_CLI_KEY;
-      process.env.PENCIL_CLI_KEY = trimmed;
-      let verify;
-      try {
-        verify = await verifyCliKey(trimmed, ctx);
-      } finally {
-        if (previousEnv === undefined) delete process.env.PENCIL_CLI_KEY;
-        else process.env.PENCIL_CLI_KEY = previousEnv;
-      }
+      const verify = await verifyCliKey(trimmed, ctx);
       if (!verify.ok) {
         return sendJson(res, 400, {
           ok: false,
@@ -338,7 +330,6 @@ export function createRouter(
       }
       try {
         auth.persistKey(trimmed);
-        auth.writeEditorSession({ email: verify.email || "Pencil CLI", token: trimmed });
       } catch (err) {
         return sendJson(res, 500, {
           ok: false,

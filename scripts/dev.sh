@@ -51,6 +51,13 @@ if [ ! -f "apps/agent-server/dist/index.bundled.cjs" ]; then
     echo ""
 fi
 
+if [ ! -f "packages/pencil/dist/serve.js" ]; then
+    echo -e "${BLUE}Building Pencil app (first run)...${NC}"
+    bun run build:pencil
+    echo -e "${GREEN}✓ Pencil app built${NC}"
+    echo ""
+fi
+
 # Start agent-server first to get its LISTEN_URL
 echo -e "${BLUE}Starting agent-server...${NC}"
 "$NODE_CMD" apps/agent-server/dist/index.bundled.cjs > /tmp/agent-server.log 2>&1 &
