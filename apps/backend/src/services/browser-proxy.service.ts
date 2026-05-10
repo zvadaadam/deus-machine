@@ -28,7 +28,11 @@ import type {
   BrowserProxyResizeParams,
   BrowserProxyScreenshotParams,
   BrowserProxyStateEvent,
+  BrowserProxyStreamTransport,
   BrowserProxyTabParams,
+  BrowserProxyWebRtcDescriptionEvent,
+  BrowserProxyWebRtcIceCandidateEvent,
+  BrowserProxyWebRtcStopEvent,
 } from "@shared/types/browser-proxy";
 
 type JsonObject = Record<string, unknown>;
@@ -118,6 +122,10 @@ function emit(
   event: "browser:nativeTabCloseRequested",
   data: BrowserProxyNativeTabCloseRequestEvent
 ): void;
+function emit(event: "browser:webrtcOffer", data: BrowserProxyWebRtcDescriptionEvent): void;
+function emit(event: "browser:webrtcAnswer", data: BrowserProxyWebRtcDescriptionEvent): void;
+function emit(event: "browser:webrtcIce", data: BrowserProxyWebRtcIceCandidateEvent): void;
+function emit(event: "browser:webrtcStop", data: BrowserProxyWebRtcStopEvent): void;
 function emit(event: string, data: unknown): void {
   wsBroadcast(JSON.stringify({ type: "q:event", event, data }));
 }
@@ -468,6 +476,7 @@ class BrowserProxySession {
   private width = 1280;
   private height = 720;
   private isMobileView = false;
+  private streamTransport: BrowserProxyStreamTransport = "frames";
   private currentUrl = "about:blank";
   private loading = false;
   private inputQueue: Promise<void> = Promise.resolve();
@@ -526,6 +535,7 @@ class BrowserProxySession {
     this.width = normalizeSize(params.width, MAX_STREAM_WIDTH);
     this.height = normalizeSize(params.height, MAX_STREAM_HEIGHT);
     this.isMobileView = params.isMobileView === true;
+    this.streamTransport = normalizeStreamTransport(params.preferredTransport);
 
     await this.ensureClient();
 
@@ -608,6 +618,7 @@ class BrowserProxySession {
     this.width = normalizeSize(params.width, MAX_STREAM_WIDTH);
     this.height = normalizeSize(params.height, MAX_STREAM_HEIGHT);
     this.isMobileView = params.isMobileView === true;
+    this.streamTransport = normalizeStreamTransport(params.preferredTransport);
     await this.setViewport(await this.ensureClient());
     await this.startStream();
   }
@@ -849,6 +860,11 @@ class BrowserProxySession {
   private async startStream(): Promise<void> {
     const client = await this.ensureClient();
     await client.send("Page.bringToFront").catch(() => {});
+    if (this.streamTransport === "webrtc") {
+      this.stream.close();
+      await this.stopNativeScreencast();
+      return;
+    }
     if (this.nativeCdpStream) {
       await this.restartNativeScreencast(client);
       return;
@@ -1502,6 +1518,22 @@ export async function captureBrowserScreenshot(
   return requireSession(params.tabId).captureScreenshot(params);
 }
 
+export function relayBrowserWebRtcOffer(params: BrowserProxyWebRtcDescriptionEvent): void {
+  emit("browser:webrtcOffer", params);
+}
+
+export function relayBrowserWebRtcAnswer(params: BrowserProxyWebRtcDescriptionEvent): void {
+  emit("browser:webrtcAnswer", params);
+}
+
+export function relayBrowserWebRtcIce(params: BrowserProxyWebRtcIceCandidateEvent): void {
+  emit("browser:webrtcIce", params);
+}
+
+export function relayBrowserWebRtcStop(params: BrowserProxyWebRtcStopEvent): void {
+  emit("browser:webrtcStop", params);
+}
+
 function requireSession(tabId: string): BrowserProxySession {
   const session = sessions.get(tabId);
   if (!session) throw new Error(`Browser proxy tab is not attached: ${tabId}`);
@@ -1514,6 +1546,12 @@ onConnectionRemoved((connectionId) => {
 
 function normalizeSize(value: number, max = Number.MAX_SAFE_INTEGER): number {
   return Math.min(max, Math.max(MIN_VIEWPORT_SIZE, Math.floor(value || MIN_VIEWPORT_SIZE)));
+}
+
+function normalizeStreamTransport(
+  transport: BrowserProxyStreamTransport | undefined
+): BrowserProxyStreamTransport {
+  return transport === "webrtc" ? "webrtc" : "frames";
 }
 
 function nativeTabRequestTimeoutMs(): number {

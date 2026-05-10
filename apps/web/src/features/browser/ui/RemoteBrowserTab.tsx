@@ -44,10 +44,21 @@ import type {
   BrowserProxyErrorEvent,
   BrowserProxyFrameEvent,
   BrowserProxyStateEvent,
+  BrowserProxyWebRtcDescriptionEvent,
+  BrowserProxyWebRtcIceCandidateEvent,
+  BrowserProxyWebRtcStopEvent,
 } from "@shared/types/browser-proxy";
+import {
+  createBrowserRtcPeerConnection,
+  isBrowserWebRtcExperimentEnabled,
+  makeBrowserWebRtcPeerId,
+  makeIceCommandParams,
+} from "./browserWebRtcExperiment";
 
 const INSPECT_DRAIN_INTERVAL_MS = 200;
 const REMOTE_COMMAND_TIMEOUT_MS = 20_000;
+
+type WebRtcViewerState = "idle" | "connecting" | "connected" | "failed";
 
 async function sendBrowserCommand(
   command: CommandName,
@@ -135,10 +146,12 @@ export const RemoteBrowserTab = forwardRef<BrowserTabHandle, RemoteBrowserTabPro
     const tabId = tab.id;
     const panelContainerRef = useRef<HTMLDivElement | null>(null);
     const canvasRef = useRef<HTMLCanvasElement | null>(null);
+    const videoRef = useRef<HTMLVideoElement | null>(null);
     const [panelRect, setPanelRect] = useState<Bounds | null>(null);
     const [hasLoaded, setHasLoaded] = useState(false);
     const [completingLoad, setCompletingLoad] = useState(false);
     const [wsConnected, setWsConnected] = useState(isConnected());
+    const [webRtcState, setWebRtcState] = useState<WebRtcViewerState>("idle");
     const completingTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
     const attachedRef = useRef(false);
     const hasLoadedRef = useRef(false);
@@ -148,6 +161,8 @@ export const RemoteBrowserTab = forwardRef<BrowserTabHandle, RemoteBrowserTabPro
     const automationInjectedRef = useRef(false);
     const suppressHistoryPushRef = useRef(false);
     const historyNavDeltaRef = useRef<-1 | 0 | 1>(0);
+    const webRtcEnabled = isBrowserWebRtcExperimentEnabled();
+    const webRtcPeerRef = useRef<{ peerId: string; pc: RTCPeerConnection } | null>(null);
 
     const tabRef = useRef(tab);
     tabRef.current = tab;
@@ -254,9 +269,101 @@ export const RemoteBrowserTab = forwardRef<BrowserTabHandle, RemoteBrowserTabPro
       [onUpdateTab, tabId]
     );
 
+    const stopWebRtcViewer = useCallback(
+      (notifyPublisher: boolean) => {
+        const peer = webRtcPeerRef.current;
+        if (!peer) {
+          setWebRtcState("idle");
+          return;
+        }
+        webRtcPeerRef.current = null;
+        if (notifyPublisher) {
+          sendCommand(
+            "browser:webrtcStop",
+            { tabId, peerId: peer.peerId, from: "viewer" },
+            REMOTE_COMMAND_TIMEOUT_MS
+          ).catch(() => {});
+        }
+        peer.pc.close();
+        const video = videoRef.current;
+        if (video?.srcObject instanceof MediaStream) {
+          video.srcObject.getTracks().forEach((track) => track.stop());
+          video.srcObject = null;
+        }
+        setWebRtcState("idle");
+      },
+      [tabId]
+    );
+
+    const startWebRtcViewer = useCallback(async () => {
+      if (!webRtcEnabled || !workspaceId) return;
+      if (webRtcPeerRef.current) return;
+      if (typeof RTCPeerConnection === "undefined") {
+        throw new Error("This browser does not support RTCPeerConnection");
+      }
+
+      const peerId = makeBrowserWebRtcPeerId(tabId);
+      const pc = createBrowserRtcPeerConnection();
+      webRtcPeerRef.current = { peerId, pc };
+      setWebRtcState("connecting");
+
+      pc.addTransceiver("video", { direction: "recvonly" });
+      pc.ontrack = (event) => {
+        const [stream] = event.streams;
+        const video = videoRef.current;
+        if (!stream || !video) return;
+        video.srcObject = stream;
+        void video.play().catch(() => {});
+        setWebRtcState("connected");
+        markPixelsVisible();
+      };
+      pc.onicecandidate = (event) => {
+        if (!event.candidate) return;
+        sendCommand(
+          "browser:webrtcIce",
+          makeIceCommandParams(tabId, peerId, "viewer", event.candidate),
+          REMOTE_COMMAND_TIMEOUT_MS
+        ).catch(() => {});
+      };
+      pc.onconnectionstatechange = () => {
+        if (pc.connectionState === "connected") {
+          setWebRtcState("connected");
+          return;
+        }
+        if (pc.connectionState === "failed" || pc.connectionState === "disconnected") {
+          setWebRtcState("failed");
+        }
+      };
+
+      try {
+        const offer = await pc.createOffer();
+        await pc.setLocalDescription(offer);
+        if (!offer.sdp) throw new Error("WebRTC offer did not include SDP");
+        await sendBrowserCommand(
+          "browser:webrtcOffer",
+          {
+            tabId,
+            peerId,
+            workspaceId,
+            type: "offer",
+            sdp: offer.sdp,
+          },
+          REMOTE_COMMAND_TIMEOUT_MS
+        );
+      } catch (err) {
+        if (webRtcPeerRef.current?.peerId === peerId) {
+          webRtcPeerRef.current = null;
+          pc.close();
+          setWebRtcState("failed");
+        }
+        throw err;
+      }
+    }, [markPixelsVisible, tabId, webRtcEnabled, workspaceId]);
+
     useEffect(() => {
       return onEvent((event, data) => {
         if (event === "browser:frame") {
+          if (webRtcState === "connected") return;
           const frame = data as BrowserProxyFrameEvent;
           if (frame.tabId === tabId) drawFrame(frame, markPixelsVisible);
           return;
@@ -296,9 +403,61 @@ export const RemoteBrowserTab = forwardRef<BrowserTabHandle, RemoteBrowserTabPro
             onAddLog(tabId, "error", message);
             onUpdateTab(tabId, { error: message, loading: false });
           }
+          return;
+        }
+
+        if (event === "browser:webrtcAnswer") {
+          const answer = data as BrowserProxyWebRtcDescriptionEvent;
+          const peer = webRtcPeerRef.current;
+          if (!peer || answer.tabId !== tabId || answer.peerId !== peer.peerId) return;
+          peer.pc.setRemoteDescription({ type: "answer", sdp: answer.sdp }).catch((err) => {
+            setWebRtcState("failed");
+            onAddLog(tabId, "error", `WebRTC answer failed: ${getErrorMessage(err)}`);
+          });
+          return;
+        }
+
+        if (event === "browser:webrtcIce") {
+          const ice = data as BrowserProxyWebRtcIceCandidateEvent;
+          const peer = webRtcPeerRef.current;
+          if (
+            !peer ||
+            ice.tabId !== tabId ||
+            ice.peerId !== peer.peerId ||
+            ice.from !== "publisher"
+          ) {
+            return;
+          }
+          peer.pc.addIceCandidate(ice.candidate).catch((err) => {
+            onAddLog(tabId, "warn", `WebRTC ICE add failed: ${getErrorMessage(err)}`);
+          });
+          return;
+        }
+
+        if (event === "browser:webrtcStop") {
+          const stop = data as BrowserProxyWebRtcStopEvent;
+          const peer = webRtcPeerRef.current;
+          if (
+            !peer ||
+            stop.tabId !== tabId ||
+            stop.peerId !== peer.peerId ||
+            stop.from !== "publisher"
+          ) {
+            return;
+          }
+          stopWebRtcViewer(false);
         }
       });
-    }, [drawFrame, handleNavigated, markPixelsVisible, onAddLog, onUpdateTab, tabId]);
+    }, [
+      drawFrame,
+      handleNavigated,
+      markPixelsVisible,
+      onAddLog,
+      onUpdateTab,
+      stopWebRtcViewer,
+      tabId,
+      webRtcState,
+    ]);
 
     useEffect(() => {
       return () => {
@@ -310,10 +469,12 @@ export const RemoteBrowserTab = forwardRef<BrowserTabHandle, RemoteBrowserTabPro
       return onConnectionChange((connected) => {
         if (connected) {
           attachedRef.current = false;
+        } else {
+          stopWebRtcViewer(false);
         }
         setWsConnected(connected);
       });
-    }, []);
+    }, [stopWebRtcViewer]);
 
     const attachOrResize = useCallback(
       async (nextUrl = tabRef.current.currentUrl) => {
@@ -325,15 +486,18 @@ export const RemoteBrowserTab = forwardRef<BrowserTabHandle, RemoteBrowserTabPro
           width: boundsWidth,
           height: boundsHeight,
           isMobileView: tabRef.current.isMobileView,
+          preferredTransport: webRtcEnabled ? "webrtc" : "frames",
         };
         if (!attachedRef.current) {
           await sendBrowserCommand("browser:attach", params, REMOTE_COMMAND_TIMEOUT_MS);
           attachedRef.current = true;
+          await startWebRtcViewer();
           return;
         }
         await sendBrowserCommand("browser:resize", params, REMOTE_COMMAND_TIMEOUT_MS);
+        await startWebRtcViewer();
       },
-      [boundsHeight, boundsWidth, tabId, workspaceId]
+      [boundsHeight, boundsWidth, startWebRtcViewer, tabId, webRtcEnabled, workspaceId]
     );
 
     useEffect(() => {
@@ -358,17 +522,19 @@ export const RemoteBrowserTab = forwardRef<BrowserTabHandle, RemoteBrowserTabPro
 
     useEffect(() => {
       if (visible || !attachedRef.current) return;
+      stopWebRtcViewer(true);
       sendCommand("browser:detach", { tabId }, REMOTE_COMMAND_TIMEOUT_MS).catch(() => {});
       attachedRef.current = false;
-    }, [visible, tabId]);
+    }, [stopWebRtcViewer, visible, tabId]);
 
     useEffect(() => {
       return () => {
+        stopWebRtcViewer(true);
         if (!attachedRef.current) return;
         sendCommand("browser:detach", { tabId }, REMOTE_COMMAND_TIMEOUT_MS).catch(() => {});
         attachedRef.current = false;
       };
-    }, [tabId]);
+    }, [stopWebRtcViewer, tabId]);
 
     const navigateToUrl = useCallback(
       (url: string) => {
@@ -537,6 +703,28 @@ export const RemoteBrowserTab = forwardRef<BrowserTabHandle, RemoteBrowserTabPro
         width: number;
         height: number;
       }): Promise<string | null> => {
+        const video = videoRef.current;
+        if (webRtcEnabled && video && video.videoWidth > 0 && video.videoHeight > 0) {
+          const out = document.createElement("canvas");
+          out.width = Math.max(1, Math.floor(rect?.width ?? video.videoWidth));
+          out.height = Math.max(1, Math.floor(rect?.height ?? video.videoHeight));
+          const ctx = out.getContext("2d");
+          if (ctx) {
+            const sx = Math.max(0, Math.floor(rect?.x ?? 0));
+            const sy = Math.max(0, Math.floor(rect?.y ?? 0));
+            const sw = Math.max(
+              1,
+              Math.min(video.videoWidth - sx, Math.floor(rect?.width ?? video.videoWidth))
+            );
+            const sh = Math.max(
+              1,
+              Math.min(video.videoHeight - sy, Math.floor(rect?.height ?? video.videoHeight))
+            );
+            ctx.drawImage(video, sx, sy, sw, sh, 0, 0, out.width, out.height);
+            return out.toDataURL("image/png");
+          }
+        }
+
         const canvas = canvasRef.current;
         if (canvas) {
           await new Promise((resolve) => setTimeout(resolve, 150));
@@ -556,7 +744,7 @@ export const RemoteBrowserTab = forwardRef<BrowserTabHandle, RemoteBrowserTabPro
           return null;
         }
       },
-      [onAddLog, tabId]
+      [onAddLog, tabId, webRtcEnabled]
     );
 
     const setInspectOverlaysVisible = useCallback(
@@ -615,26 +803,34 @@ export const RemoteBrowserTab = forwardRef<BrowserTabHandle, RemoteBrowserTabPro
       ]
     );
 
-    const canvasPointFromClient = useCallback((clientX: number, clientY: number) => {
-      const canvas = canvasRef.current;
-      if (!canvas) return { x: 0, y: 0 };
-      const rect = canvas.getBoundingClientRect();
-      const frame = frameSizeRef.current;
-      return {
-        x: ((clientX - rect.left) / Math.max(1, rect.width)) * frame.width,
-        y: ((clientY - rect.top) / Math.max(1, rect.height)) * frame.height,
-      };
-    }, []);
+    const canvasPointFromClient = useCallback(
+      (clientX: number, clientY: number) => {
+        const surface =
+          webRtcState === "connected" && videoRef.current ? videoRef.current : canvasRef.current;
+        if (!surface) return { x: 0, y: 0 };
+        const rect = surface.getBoundingClientRect();
+        const video = surface instanceof HTMLVideoElement ? surface : null;
+        const frame =
+          video?.videoWidth && video.videoHeight
+            ? { width: video.videoWidth, height: video.videoHeight }
+            : frameSizeRef.current;
+        return {
+          x: ((clientX - rect.left) / Math.max(1, rect.width)) * frame.width,
+          y: ((clientY - rect.top) / Math.max(1, rect.height)) * frame.height,
+        };
+      },
+      [webRtcState]
+    );
 
     const canvasPoint = useCallback(
-      (e: React.MouseEvent<HTMLCanvasElement>) => canvasPointFromClient(e.clientX, e.clientY),
+      (e: React.MouseEvent<HTMLElement>) => canvasPointFromClient(e.clientX, e.clientY),
       [canvasPointFromClient]
     );
 
     const sendMouse = useCallback(
       (
         inputType: "mousePressed" | "mouseReleased" | "mouseMoved",
-        e: React.MouseEvent<HTMLCanvasElement>
+        e: React.MouseEvent<HTMLElement>
       ) => {
         if (inputType === "mouseMoved") {
           const now = Date.now();
@@ -661,7 +857,7 @@ export const RemoteBrowserTab = forwardRef<BrowserTabHandle, RemoteBrowserTabPro
     );
 
     const sendWheel = useCallback(
-      (e: React.WheelEvent<HTMLCanvasElement>) => {
+      (e: React.WheelEvent<HTMLElement>) => {
         e.preventDefault();
         const point = canvasPoint(e);
         sendCommand(
@@ -682,7 +878,7 @@ export const RemoteBrowserTab = forwardRef<BrowserTabHandle, RemoteBrowserTabPro
     );
 
     const sendKey = useCallback(
-      (inputType: "keyDown" | "keyUp", e: React.KeyboardEvent<HTMLCanvasElement>) => {
+      (inputType: "keyDown" | "keyUp", e: React.KeyboardEvent<HTMLElement>) => {
         const isFocusUrl =
           inputType === "keyDown" && (e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "l";
         if (isFocusUrl) {
@@ -711,7 +907,7 @@ export const RemoteBrowserTab = forwardRef<BrowserTabHandle, RemoteBrowserTabPro
     const sendTouch = useCallback(
       (
         inputType: "touchStart" | "touchMove" | "touchEnd" | "touchCancel",
-        e: React.TouchEvent<HTMLCanvasElement>
+        e: React.TouchEvent<HTMLElement>
       ) => {
         e.preventDefault();
         const sourceTouches =
@@ -739,7 +935,45 @@ export const RemoteBrowserTab = forwardRef<BrowserTabHandle, RemoteBrowserTabPro
         ref={panelContainerRef}
         className="relative h-full min-h-0 w-full min-w-0 overflow-hidden [grid-area:1/1]"
       >
-        {visible && bounds && !isBlankUrl(tab.currentUrl) && (
+        {visible && bounds && !isBlankUrl(tab.currentUrl) && webRtcEnabled && (
+          <video
+            ref={videoRef}
+            tabIndex={0}
+            autoPlay
+            playsInline
+            muted
+            className="bg-bg h-full w-full outline-none"
+            style={{
+              width: `${bounds.width}px`,
+              height: `${bounds.height}px`,
+              marginLeft: `${Math.max(0, (panelRect?.width ?? bounds.width) - bounds.width) / 2}px`,
+              touchAction: "none",
+            }}
+            onLoadedMetadata={(e) => {
+              frameSizeRef.current = {
+                width: e.currentTarget.videoWidth || bounds.width,
+                height: e.currentTarget.videoHeight || bounds.height,
+              };
+              markPixelsVisible();
+            }}
+            onMouseDown={(e) => {
+              e.currentTarget.focus();
+              sendMouse("mousePressed", e);
+            }}
+            onMouseUp={(e) => sendMouse("mouseReleased", e)}
+            onMouseMove={(e) => sendMouse("mouseMoved", e)}
+            onWheel={sendWheel}
+            onTouchStart={(e) => sendTouch("touchStart", e)}
+            onTouchMove={(e) => sendTouch("touchMove", e)}
+            onTouchEnd={(e) => sendTouch("touchEnd", e)}
+            onTouchCancel={(e) => sendTouch("touchCancel", e)}
+            onContextMenu={(e) => e.preventDefault()}
+            onKeyDown={(e) => sendKey("keyDown", e)}
+            onKeyUp={(e) => sendKey("keyUp", e)}
+          />
+        )}
+
+        {visible && bounds && !isBlankUrl(tab.currentUrl) && !webRtcEnabled && (
           <canvas
             ref={canvasRef}
             tabIndex={0}
@@ -776,6 +1010,12 @@ export const RemoteBrowserTab = forwardRef<BrowserTabHandle, RemoteBrowserTabPro
                 : "browser-loading-complete 0.4s ease-out forwards",
             }}
           />
+        )}
+
+        {visible && webRtcEnabled && webRtcState !== "connected" && !tab.error && (
+          <div className="bg-bg/80 text-muted-foreground pointer-events-none absolute top-3 right-3 z-20 rounded-md px-2 py-1 text-[11px] shadow-sm backdrop-blur">
+            WebRTC {webRtcState === "failed" ? "failed" : "connecting"}
+          </div>
         )}
 
         {visible && isBlankUrl(tab.currentUrl) && !tab.loading && !tab.error && (

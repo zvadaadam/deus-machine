@@ -13,6 +13,10 @@ const mockResizeBrowserTab = vi.fn();
 const mockSendBrowserInput = vi.fn();
 const mockEvaluateBrowserTab = vi.fn();
 const mockCaptureBrowserScreenshot = vi.fn();
+const mockRelayBrowserWebRtcOffer = vi.fn();
+const mockRelayBrowserWebRtcAnswer = vi.fn();
+const mockRelayBrowserWebRtcIce = vi.fn();
+const mockRelayBrowserWebRtcStop = vi.fn();
 
 vi.mock("../../../src/services/browser-proxy.service", () => ({
   attachBrowserTab: (...args: unknown[]) => mockAttachBrowserTab(...args),
@@ -28,6 +32,10 @@ vi.mock("../../../src/services/browser-proxy.service", () => ({
   sendBrowserInput: (...args: unknown[]) => mockSendBrowserInput(...args),
   evaluateBrowserTab: (...args: unknown[]) => mockEvaluateBrowserTab(...args),
   captureBrowserScreenshot: (...args: unknown[]) => mockCaptureBrowserScreenshot(...args),
+  relayBrowserWebRtcOffer: (...args: unknown[]) => mockRelayBrowserWebRtcOffer(...args),
+  relayBrowserWebRtcAnswer: (...args: unknown[]) => mockRelayBrowserWebRtcAnswer(...args),
+  relayBrowserWebRtcIce: (...args: unknown[]) => mockRelayBrowserWebRtcIce(...args),
+  relayBrowserWebRtcStop: (...args: unknown[]) => mockRelayBrowserWebRtcStop(...args),
 }));
 
 vi.mock("../../../src/lib/database", () => ({
@@ -81,6 +89,10 @@ describe("agent/commands — browser proxy command handlers", () => {
     mockSendBrowserInput.mockResolvedValue(undefined);
     mockEvaluateBrowserTab.mockResolvedValue("ok");
     mockCaptureBrowserScreenshot.mockResolvedValue("data:image/png;base64,abc");
+    mockRelayBrowserWebRtcOffer.mockReset();
+    mockRelayBrowserWebRtcAnswer.mockReset();
+    mockRelayBrowserWebRtcIce.mockReset();
+    mockRelayBrowserWebRtcStop.mockReset();
   });
 
   afterEach(() => {
@@ -111,6 +123,7 @@ describe("agent/commands — browser proxy command handlers", () => {
         height: 768,
         url: "https://github.com",
         isMobileView: true,
+        preferredTransport: undefined,
       },
       "conn-1"
     );
@@ -241,6 +254,65 @@ describe("agent/commands — browser proxy command handlers", () => {
     expect(mockCaptureBrowserScreenshot).toHaveBeenCalledWith({
       tabId: "tab-1",
       rect: { x: 1, y: 2, width: 300, height: 200 },
+    });
+  });
+
+  it("relays WebRTC signaling commands", async () => {
+    await runCommand("browser:webrtcOffer", {
+      tabId: "tab-1",
+      peerId: "peer-1",
+      sdp: "offer-sdp",
+      workspaceId: "ws-1",
+    });
+    await runCommand("browser:webrtcAnswer", {
+      tabId: "tab-1",
+      peerId: "peer-1",
+      sdp: "answer-sdp",
+    });
+    await runCommand("browser:webrtcIce", {
+      tabId: "tab-1",
+      peerId: "peer-1",
+      from: "viewer",
+      candidate: {
+        candidate: "candidate:1 1 udp 1 127.0.0.1 123 typ host",
+        sdpMid: "0",
+        sdpMLineIndex: 0,
+      },
+    });
+    await runCommand("browser:webrtcStop", {
+      tabId: "tab-1",
+      peerId: "peer-1",
+      from: "publisher",
+    });
+
+    expect(mockRelayBrowserWebRtcOffer).toHaveBeenCalledWith({
+      tabId: "tab-1",
+      peerId: "peer-1",
+      type: "offer",
+      sdp: "offer-sdp",
+      workspaceId: "ws-1",
+    });
+    expect(mockRelayBrowserWebRtcAnswer).toHaveBeenCalledWith({
+      tabId: "tab-1",
+      peerId: "peer-1",
+      type: "answer",
+      sdp: "answer-sdp",
+      workspaceId: undefined,
+    });
+    expect(mockRelayBrowserWebRtcIce).toHaveBeenCalledWith({
+      tabId: "tab-1",
+      peerId: "peer-1",
+      from: "viewer",
+      candidate: {
+        candidate: "candidate:1 1 udp 1 127.0.0.1 123 typ host",
+        sdpMid: "0",
+        sdpMLineIndex: 0,
+      },
+    });
+    expect(mockRelayBrowserWebRtcStop).toHaveBeenCalledWith({
+      tabId: "tab-1",
+      peerId: "peer-1",
+      from: "publisher",
     });
   });
 });
