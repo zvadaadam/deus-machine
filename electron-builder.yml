@@ -4,7 +4,7 @@ directories:
   buildResources: resources
   output: dist-electron
 electronLanguages: [en]
-beforePack: "apps/runtime/electron-builder-before-pack.cjs"
+beforePack: "scripts/runtime/electron-builder-before-pack.cjs"
 files:
   - "out/**/*"
   - "resources/**/*"

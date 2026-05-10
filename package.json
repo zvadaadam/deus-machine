@@ -17,7 +17,7 @@
   ],
   "scripts": {
     "dev": "bun run native:electron && ([ -f apps/agent-server/dist/index.bundled.cjs ] || bun run build:agent-server) && electron-vite dev",
-    "dev:web": "bun run native:node && bunx tsx apps/runtime/dev.ts",
+    "dev:web": "bun run native:node && bunx tsx scripts/runtime/dev.ts",
     "dev:frontend": "vite --config apps/web/vite.config.ts",
     "dev:backend": "node apps/backend/server.cjs",
     "build": "electron-vite build",
@@ -64,8 +64,8 @@
     "knip": "knip",
     "knip:fix": "knip --fix",
     "prepare": "husky",
-    "build:runtime": "bun run build:agent-server && bun run build:backend && bunx tsx apps/runtime/build.ts",
-    "validate:runtime": "bunx tsx apps/runtime/validate.ts",
+    "build:runtime": "bun run build:agent-server && bun run build:backend && bunx tsx scripts/runtime/build.ts",
+    "validate:runtime": "bunx tsx scripts/runtime/validate.ts",
     "icons": "node scripts/generate-icons.mjs"
   },
   "dependencies": {

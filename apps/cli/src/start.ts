@@ -11,7 +11,7 @@
  * 4. Show pairing code + QR for remote access
  */
 
-import { execSync } from "node:child_process";
+import { execSync, spawn, type ChildProcess } from "node:child_process";
 import { existsSync } from "node:fs";
 import { join, resolve, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -22,8 +22,7 @@ import {
   resolveDefaultDataDir,
   resolveRuntimeStagePaths,
 } from "../../../shared/runtime";
-import { validateRuntimeStage } from "../../runtime/validate";
-import { RuntimeSupervisor } from "../../runtime/supervisor";
+import { validateRuntimeStage } from "../../../scripts/runtime/validate";
 import {
   spinner as createSpinner,
   statusLine,
@@ -80,7 +79,7 @@ export async function start(options: StartOptions): Promise<void> {
   kv("Database", c.dim(dbPath));
   blank();
 
-  let supervisor: RuntimeSupervisor | null = null;
+  let backendProcess: ChildProcess | null = null;
   let status: ReturnType<typeof statusLine> | null = null;
 
   let shuttingDown = false;
@@ -96,7 +95,8 @@ export async function start(options: StartOptions): Promise<void> {
     const msg = gradientText("Shutting down...", [167, 139, 250], [34, 211, 238]);
     console.log(`  ${msg}`);
 
-    supervisor?.stop().finally(() => {
+    stopBackendProcess(backendProcess).finally(() => {
+      backendProcess = null;
       clearServerInfo();
       blank();
       const bye = gradientText("Thanks for using Deus!", [167, 139, 250], [34, 211, 238]);
@@ -114,49 +114,41 @@ export async function start(options: StartOptions): Promise<void> {
     extraEnv.ANTHROPIC_API_KEY = config.anthropic_api_key;
   }
 
-  const s1 = createSpinner("Starting runtime...");
-  supervisor = new RuntimeSupervisor({
+  const s1 = createSpinner("Starting backend...");
+  const started = await startBackendProcess({
     command: nodeCmd,
-    entries: {
-      agentServerEntry: paths.agentServer,
-      backendEntry: paths.backend,
-      agentServerCwd: dirname(paths.agentServer),
-      backendCwd: dirname(paths.backend),
-    },
-    sharedEnv: { DATABASE_PATH: dbPath, ...extraEnv },
-    backendEnv: { PORT: "0" },
+    backendEntry: paths.backend,
+    backendCwd: dirname(paths.backend),
     forceElectronRunAsNode: nodeCmd !== process.execPath,
-    hooks: {
-      onUnexpectedExit: (source, code, signal) => {
-        if (shuttingDown) return;
-        blank();
-        warn(
-          `${source} exited unexpectedly${signal ? ` (${signal})` : code ? ` (code ${code})` : ""}`
-        );
-        shutdown(1);
-      },
+    env: {
+      DATABASE_PATH: dbPath,
+      AGENT_SERVER_ENTRY: paths.agentServer,
+      AGENT_SERVER_CWD: dirname(paths.agentServer),
+      PORT: "0",
+      ...extraEnv,
+    },
+    onUnexpectedExit: (code, signal) => {
+      if (shuttingDown) return;
+      blank();
+      warn(`backend exited unexpectedly${signal ? ` (${signal})` : code ? ` (code ${code})` : ""}`);
+      shutdown(1);
     },
   });
 
-  let backendPort: number;
-  let agentServerUrl: string;
-  try {
-    const started = await supervisor.start();
-    backendPort = started.backendPort;
-    agentServerUrl = started.agentServerUrl;
-  } catch {
+  if (!started) {
     s1.fail("Runtime failed to start");
     shutdown(1);
     return;
   }
+  backendProcess = started.process;
   s1.succeed(`Runtime ${c.dim("ready")}`);
-  const port = backendPort;
+  const port = started.backendPort;
 
   // Write server info for `deus pair` and `deus status`
   writeServerInfo({
     pid: process.pid,
     backendPort: port,
-    agentServerUrl,
+    agentServerUrl: "managed-by-backend",
     startedAt: new Date().toISOString(),
   });
 
@@ -282,4 +274,81 @@ function resolveNodeBinary(): string {
   }
 
   return process.execPath;
+}
+
+async function startBackendProcess(opts: {
+  command: string;
+  backendEntry: string;
+  backendCwd: string;
+  env: Record<string, string>;
+  forceElectronRunAsNode: boolean;
+  onUnexpectedExit: (code: number | null, signal: NodeJS.Signals | null) => void;
+}): Promise<{ process: ChildProcess; backendPort: number } | null> {
+  const { command, backendEntry, backendCwd, env, forceElectronRunAsNode, onUnexpectedExit } = opts;
+
+  return new Promise((resolve) => {
+    const child = spawn(command, [backendEntry], {
+      cwd: backendCwd,
+      stdio: ["ignore", "pipe", "pipe"],
+      env: {
+        ...process.env,
+        ...(forceElectronRunAsNode ? { ELECTRON_RUN_AS_NODE: "1" } : {}),
+        ...env,
+      },
+    });
+
+    let buffer = "";
+    let resolved = false;
+    const timeout = setTimeout(() => {
+      if (!resolved) {
+        resolved = true;
+        child.kill("SIGTERM");
+        resolve(null);
+      }
+    }, 30_000);
+
+    child.stdout?.on("data", (data: Buffer) => {
+      process.stdout.write(data);
+      buffer += data.toString();
+      const match = buffer.match(/^\[BACKEND_PORT\](\d+)$/m);
+      if (match && !resolved) {
+        resolved = true;
+        clearTimeout(timeout);
+        resolve({ process: child, backendPort: parseInt(match[1], 10) });
+      }
+    });
+
+    child.stderr?.on("data", (data: Buffer) => process.stderr.write(data));
+
+    child.on("exit", (code, signal) => {
+      if (!resolved) {
+        resolved = true;
+        clearTimeout(timeout);
+        resolve(null);
+        return;
+      }
+      onUnexpectedExit(code, signal);
+    });
+  });
+}
+
+function stopBackendProcess(child: ChildProcess | null): Promise<void> {
+  if (!child || child.exitCode !== null || child.signalCode !== null) return Promise.resolve();
+
+  return new Promise((resolve) => {
+    let finished = false;
+    const finish = () => {
+      if (finished) return;
+      finished = true;
+      clearTimeout(forceTimer);
+      resolve();
+    };
+
+    child.once("exit", finish);
+    child.kill("SIGTERM");
+
+    const forceTimer = setTimeout(() => {
+      if (child.exitCode === null && child.signalCode === null) child.kill("SIGKILL");
+    }, 5_000);
+  });
 }
