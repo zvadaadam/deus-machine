@@ -19,8 +19,9 @@ import { Button } from "@/components/ui/button";
 import { X, Upload } from "lucide-react";
 import type { AgentHarness } from "@/shared/agents";
 import { workspaceLayoutActions } from "@/features/workspace/store";
-import { sessionComposerActions } from "../store/sessionComposerStore";
+import { sessionComposerActions, useSessionComposerStore } from "../store/sessionComposerStore";
 import { processImageFiles } from "../lib/imageAttachments";
+import { extractTextFromUserMessageContent } from "../lib/userMessageContent";
 
 const CONTENT_WIDTH_CLASSES = "w-full max-w-[960px] mx-auto min-w-0";
 
@@ -155,6 +156,15 @@ export const SessionPanel = forwardRef<SessionPanelRef, SessionPanelProps>(
       return null;
     }, [messages]);
 
+    const latestUserMessageText = useMemo(() => {
+      for (let i = messages.length - 1; i >= 0; i--) {
+        if (messages[i].role !== "user") continue;
+        const text = extractTextFromUserMessageContent(messages[i].content).trim();
+        if (text) return text;
+      }
+      return null;
+    }, [messages]);
+
     // DEBUG: disabled — was flooding console, making [autoscroll] logs unreadable
     // if (import.meta.env.DEV) {
     //   console.log("[SessionPanel] DEBUG:", { sessionId, messagesCount: messages.length, loading, sessionStatus });
@@ -267,6 +277,19 @@ export const SessionPanel = forwardRef<SessionPanelRef, SessionPanelProps>(
       onOpenNewTab?.();
     }, [onOpenNewTab]);
 
+    const handleEditLastUserMessage = useCallback(() => {
+      if (!latestUserMessageText) return;
+
+      const currentDraft =
+        useSessionComposerStore.getState().composers[sessionId]?.draft.trim() ?? "";
+      if (currentDraft) {
+        sessionComposerActions.appendDraft(sessionId, latestUserMessageText);
+        return;
+      }
+
+      sessionComposerActions.setDraft(sessionId, latestUserMessageText);
+    }, [latestUserMessageText, sessionId]);
+
     // Pending agent request for THIS session (plan approval or questions)
     const pendingRequest = pendingRequests.get(sessionId) ?? null;
     const pendingPlan = pendingRequest?.type === "exitPlanMode" ? pendingRequest : null;
@@ -336,6 +359,7 @@ export const SessionPanel = forwardRef<SessionPanelRef, SessionPanelProps>(
               onStop={() => composerRef.current?.stopSession()}
               onOpenLoginTerminal={workspaceId ? handleOpenLoginTerminal : undefined}
               onRetryInNewChat={handleRetryInNewChat}
+              onEditLastUserMessage={latestUserMessageText ? handleEditLastUserMessage : undefined}
               workspaceRepoName={workspaceRepoName}
               workspaceParentBranch={workspaceParentBranch}
               isFirstSession={isFirstSession}
@@ -437,6 +461,9 @@ export const SessionPanel = forwardRef<SessionPanelRef, SessionPanelProps>(
                     onStop={() => composerRef.current?.stopSession()}
                     onOpenLoginTerminal={workspaceId ? handleOpenLoginTerminal : undefined}
                     onRetryInNewChat={handleRetryInNewChat}
+                    onEditLastUserMessage={
+                      latestUserMessageText ? handleEditLastUserMessage : undefined
+                    }
                     workspaceRepoName={workspaceRepoName}
                     workspaceParentBranch={workspaceParentBranch}
                     userSendCount={userSendCount}

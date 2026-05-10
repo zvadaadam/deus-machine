@@ -5,7 +5,7 @@ import { AssistantTurn } from "./AssistantTurn";
 import { WorkspaceEmptyState } from "./WorkspaceEmptyState";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Button } from "@/components/ui/button";
-import { ChevronDown, TerminalSquare, MessageSquarePlus } from "lucide-react";
+import { ChevronDown, TerminalSquare, MessageSquarePlus, PencilLine } from "lucide-react";
 import { cn } from "@/shared/lib/utils";
 
 import { useWorkingDuration } from "@/shared/hooks";
@@ -108,6 +108,7 @@ interface ChatProps {
   onStop?: () => void; // Callback to stop/cancel the session
   onOpenLoginTerminal?: () => void;
   onRetryInNewChat?: () => void;
+  onEditLastUserMessage?: () => void;
   /** True when there are older messages beyond the loaded window */
   hasOlder?: boolean;
   /** True when a load-older request is in flight */
@@ -132,6 +133,7 @@ export function Chat({
   latestMessageSentAt,
   onOpenLoginTerminal,
   onRetryInNewChat,
+  onEditLastUserMessage,
   hasOlder = false,
   loadingOlder = false,
   onLoadOlder,
@@ -541,6 +543,17 @@ export function Chat({
                         )}
                       </div>
                       <div className="flex shrink-0 items-center gap-2">
+                        {onEditLastUserMessage && (
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            className="h-7 text-xs"
+                            onClick={onEditLastUserMessage}
+                          >
+                            <PencilLine className="mr-1.5 h-3.5 w-3.5" />
+                            Edit last message
+                          </Button>
+                        )}
                         {match(errorCategory)
                           .with("auth", () =>
                             onOpenLoginTerminal ? (

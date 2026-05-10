@@ -225,29 +225,23 @@ export function useSendMessage() {
       permissionMode?: string;
       thinkingLevel?: string;
     }): Promise<Message | void> => {
-      // Send message via WS command: backend saves user message to DB,
-      // forwards to agent-server, and pushes q:delta to subscribers.
-      try {
-        if (!isConnected()) await connect();
-        const ack = await sendCommand("sendMessage", {
-          sessionId,
-          content,
-          model,
-          agentHarness,
-          permissionMode,
-          thinkingLevel,
-        });
-        if (!ack.accepted) {
-          throw new Error(ack.error || "Agent rejected the query");
-        }
-        // No return value needed — WS q:delta handles message reconciliation.
-        return;
-      } catch {
-        // Fallback through the legacy service wrapper; keep the same runtime
-        // routing fields so backend validation behaves identically.
-        return SessionService.sendMessage(sessionId, content, model, agentHarness);
+      if (!isConnected()) await connect();
+      const ack = await sendCommand("sendMessage", {
+        sessionId,
+        content,
+        model,
+        agentHarness,
+        permissionMode,
+        thinkingLevel,
+      });
+      if (!ack.accepted) {
+        throw new Error(ack.error || "Agent rejected the query");
       }
+      // No return value needed — WS q:delta handles message reconciliation.
+      return;
     },
+
+    retry: false,
 
     // Optimistic update: show user message immediately.
     // Status indicators (tab spinner, sidebar) are updated by the workspaces
