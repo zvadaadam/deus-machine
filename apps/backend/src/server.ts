@@ -20,6 +20,7 @@ import {
   startBackgroundRefresh as startLocalServerDiscovery,
   stopBackgroundRefresh as stopLocalServerDiscovery,
 } from "./services/local-servers.service";
+import { startManagedAgentServer, stopManagedAgentServer } from "./runtime/agent-process";
 
 // Initialize Sentry before anything else.
 // DSN is a public, write-only ingest token — safe to hardcode.
@@ -101,15 +102,48 @@ export function getServerPort() {
 
 // Start server with dynamic port allocation
 const PORT = process.env.PORT ? parseInt(process.env.PORT) : 0;
-const agentServerUrl = process.env.AGENT_SERVER_URL;
 const allowAgentless =
   process.env.AGENT_ALLOW_AGENTLESS === "1" || process.env.AGENT_ALLOW_AGENTLESS === "true";
 
-if (!agentServerUrl && !allowAgentless) {
-  console.error(
-    "[server] AGENT_SERVER_URL is required. Launch the backend through Electron, the CLI, or dev.sh. To debug without an agent-server, set AGENT_ALLOW_AGENTLESS=true explicitly."
-  );
-  process.exit(1);
+async function resolveAgentServerUrl(): Promise<string | null> {
+  if (process.env.AGENT_SERVER_URL) return process.env.AGENT_SERVER_URL;
+  if (allowAgentless) return null;
+  return startManagedAgentServer();
+}
+
+async function onListening(port: number): Promise<void> {
+  actualServerPort = port;
+
+  const agentServerUrl = await resolveAgentServerUrl();
+  if (agentServerUrl) {
+    agentService.init(agentServerUrl);
+  } else {
+    console.warn("[server] Starting in explicit agentless mode (AGENT_ALLOW_AGENTLESS=true)");
+  }
+
+  // CRITICAL: Machine-readable port output for Electron main process and dev.
+  // Emitted after agent-server startup so launchers see a fully wired runtime.
+  console.log(`[BACKEND_PORT]${port}`);
+
+  console.log("\nDeus Backend Server");
+  console.log(`API Server: http://0.0.0.0:${port}`);
+  console.log(`Database: ${DB_PATH}`);
+  console.log("Server ready!\n");
+
+  const remoteEnabled = getSetting("remote_access_enabled");
+  if (remoteEnabled === true) {
+    ensureRelayConnected();
+  }
+
+  // Discover booted simulators on startup (fire-and-forget).
+  // Restores awareness of running simulators after a backend restart.
+  void reconcileSimulators();
+
+  // Periodic localhost dev-server discovery. Probes a curated port list
+  // every 60s; the refresh listener pushes a fresh snapshot to all
+  // `local_servers` WS subscribers each time a sweep completes.
+  setLocalServerRefreshListener(() => invalidate(["local_servers"]));
+  startLocalServerDiscovery();
 }
 
 // Bind 0.0.0.0 to accept connections from all interfaces.
@@ -121,45 +155,15 @@ const server = serve(
     hostname: "0.0.0.0",
   },
   (info) => {
-    actualServerPort = info.port;
-
-    // CRITICAL: Machine-readable port output for Electron main process and dev.sh
-    console.log(`[BACKEND_PORT]${info.port}`);
-
-    console.log("\nDeus Backend Server");
-    console.log(`API Server: http://0.0.0.0:${info.port}`);
-    console.log(`Database: ${DB_PATH}`);
-    console.log("Server ready!\n");
+    void onListening(info.port).catch((error) => {
+      console.error("[server] Startup failed:", error);
+      process.exit(1);
+    });
   }
 );
 
 // Inject WebSocket support into the HTTP server
 injectWebSocket(server);
-
-const remoteEnabled = getSetting("remote_access_enabled");
-if (remoteEnabled === true) {
-  ensureRelayConnected();
-}
-
-// Connect to agent-server.
-//
-// Launchers (Electron main, CLI, dev.sh) own the runtime topology and always
-// provide AGENT_SERVER_URL. The backend only connects.
-if (agentServerUrl) {
-  agentService.init(agentServerUrl);
-} else {
-  console.warn("[server] Starting in explicit agentless mode (AGENT_ALLOW_AGENTLESS=true)");
-}
-
-// Discover booted simulators on startup (fire-and-forget).
-// Restores awareness of running simulators after a backend restart.
-void reconcileSimulators();
-
-// Periodic localhost dev-server discovery. Probes a curated port list
-// every 60s; the refresh listener pushes a fresh snapshot to all
-// `local_servers` WS subscribers each time a sweep completes.
-setLocalServerRefreshListener(() => invalidate(["local_servers"]));
-startLocalServerDiscovery();
 
 // Global error handlers
 process.on("uncaughtException", (error, origin) => {
@@ -170,6 +174,7 @@ process.on("uncaughtException", (error, origin) => {
     destroyAllSimulators();
     destroyAllPtySessions();
     destroyAllWatchers();
+    void stopManagedAgentServer();
     try {
       closeDatabase();
     } catch {}
@@ -184,18 +189,23 @@ process.on("unhandledRejection", (reason) => {
 });
 
 // Graceful shutdown
+let shuttingDown = false;
 function shutdown() {
+  if (shuttingDown) return;
+  shuttingDown = true;
   console.log("\nShutting down...");
   agentService.shutdown();
-  stopAllApps();
-  destroyAllSimulators();
-  destroyAllPtySessions();
-  destroyAllWatchers();
-  stopLocalServerDiscovery();
-  disconnectFromRelay();
-  closeAllWsConnections();
-  closeDatabase();
-  process.exit(0);
+  void stopManagedAgentServer().finally(() => {
+    stopAllApps();
+    destroyAllSimulators();
+    destroyAllPtySessions();
+    destroyAllWatchers();
+    stopLocalServerDiscovery();
+    disconnectFromRelay();
+    closeAllWsConnections();
+    closeDatabase();
+    process.exit(0);
+  });
 }
 
 process.on("SIGINT", shutdown);

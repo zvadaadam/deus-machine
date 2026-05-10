@@ -11,7 +11,7 @@
  * 4. Show pairing code + QR for remote access
  */
 
-import { spawn, execSync, type ChildProcess } from "node:child_process";
+import { execSync, spawn, type ChildProcess } from "node:child_process";
 import { existsSync } from "node:fs";
 import { join, resolve, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -22,7 +22,7 @@ import {
   resolveDefaultDataDir,
   resolveRuntimeStagePaths,
 } from "../../../shared/runtime";
-import { validateRuntimeStage } from "../../runtime/validate";
+import { validateRuntimeStage } from "../../../scripts/runtime/validate";
 import {
   spinner as createSpinner,
   statusLine,
@@ -48,11 +48,6 @@ const __dirname = dirname(__filename);
 
 export interface StartOptions {
   dataDir?: string;
-}
-
-interface ProcessInfo {
-  process: ChildProcess;
-  name: string;
 }
 
 export async function start(options: StartOptions): Promise<void> {
@@ -84,8 +79,7 @@ export async function start(options: StartOptions): Promise<void> {
   kv("Database", c.dim(dbPath));
   blank();
 
-  // Track child processes for cleanup
-  const children: ProcessInfo[] = [];
+  let backendProcess: ChildProcess | null = null;
   let status: ReturnType<typeof statusLine> | null = null;
 
   let shuttingDown = false;
@@ -101,30 +95,8 @@ export async function start(options: StartOptions): Promise<void> {
     const msg = gradientText("Shutting down...", [167, 139, 250], [34, 211, 238]);
     console.log(`  ${msg}`);
 
-    // Send SIGTERM and wait for children to exit (up to 5s)
-    const exitPromises: Promise<void>[] = [];
-    for (const child of children) {
-      if (child.process.exitCode === null && child.process.signalCode === null) {
-        exitPromises.push(
-          new Promise<void>((resolve) => {
-            child.process.once("exit", resolve);
-            child.process.kill("SIGTERM");
-          })
-        );
-      }
-    }
-
-    const drainTimeout = setTimeout(() => {
-      // Force kill after 5s if children haven't exited
-      for (const child of children) {
-        if (child.process.exitCode === null && child.process.signalCode === null) {
-          child.process.kill("SIGKILL");
-        }
-      }
-    }, 5000);
-
-    Promise.all(exitPromises).finally(() => {
-      clearTimeout(drainTimeout);
+    stopBackendProcess(backendProcess).finally(() => {
+      backendProcess = null;
       clearServerInfo();
       blank();
       const bye = gradientText("Thanks for using Deus!", [167, 139, 250], [34, 211, 238]);
@@ -142,54 +114,41 @@ export async function start(options: StartOptions): Promise<void> {
     extraEnv.ANTHROPIC_API_KEY = config.anthropic_api_key;
   }
 
-  // ── Step 1: Agent server ─────────────────────────────────────────
-  const s1 = createSpinner("Starting agent server...");
-  const agentServerUrl = await startProcess({
-    name: "agent-server",
+  const s1 = createSpinner("Starting backend...");
+  const started = await startBackendProcess({
     command: nodeCmd,
-    args: [paths.agentServer],
-    env: { DATABASE_PATH: dbPath, ...extraEnv },
-    waitFor: /LISTEN_URL=(.+)/,
-    children,
-  });
-
-  if (!agentServerUrl) {
-    s1.fail("Agent server failed to start");
-    shutdown(1);
-    return;
-  }
-  s1.succeed(`Agent server ${c.dim("ready")}`);
-
-  // ── Step 2: Backend ──────────────────────────────────────────────
-  const s2 = createSpinner("Starting backend...");
-  const backendPort = await startProcess({
-    name: "backend",
-    command: nodeCmd,
-    args: [paths.backend],
+    backendEntry: paths.backend,
+    backendCwd: dirname(paths.backend),
+    forceElectronRunAsNode: nodeCmd !== process.execPath,
     env: {
-      AGENT_SERVER_URL: agentServerUrl,
       DATABASE_PATH: dbPath,
+      AGENT_SERVER_ENTRY: paths.agentServer,
+      AGENT_SERVER_CWD: dirname(paths.agentServer),
       PORT: "0",
       ...extraEnv,
     },
-    waitFor: /\[BACKEND_PORT\](\d+)/,
-    children,
+    onUnexpectedExit: (code, signal) => {
+      if (shuttingDown) return;
+      blank();
+      warn(`backend exited unexpectedly${signal ? ` (${signal})` : code ? ` (code ${code})` : ""}`);
+      shutdown(1);
+    },
   });
 
-  if (!backendPort) {
-    s2.fail("Backend failed to start");
+  if (!started) {
+    s1.fail("Runtime failed to start");
     shutdown(1);
     return;
   }
-  s2.succeed(`Backend ${c.dim("ready")}`);
-
-  const port = parseInt(backendPort, 10);
+  backendProcess = started.process;
+  s1.succeed(`Runtime ${c.dim("ready")}`);
+  const port = started.backendPort;
 
   // Write server info for `deus pair` and `deus status`
   writeServerInfo({
     pid: process.pid,
     backendPort: port,
-    agentServerUrl,
+    agentServerUrl: "managed-by-backend",
     startedAt: new Date().toISOString(),
   });
 
@@ -231,19 +190,6 @@ export async function start(options: StartOptions): Promise<void> {
     const elapsed = formatUptime(Date.now() - startedAt.getTime());
     return `${c.dim(`Running for ${elapsed}`)}  ${c.dim(`${sym.bullet} Ctrl+C to stop`)}`;
   }, 2000);
-
-  // Supervise children — if either crashes after startup, tear down and exit
-  for (const child of children) {
-    child.process.on("exit", (code, signal) => {
-      if (!shuttingDown) {
-        blank();
-        warn(
-          `${child.name} exited unexpectedly${signal ? ` (${signal})` : code ? ` (code ${code})` : ""}`
-        );
-        shutdown(1);
-      }
-    });
-  }
 
   // Keep the process alive
   await new Promise(() => {});
@@ -330,64 +276,79 @@ function resolveNodeBinary(): string {
   return process.execPath;
 }
 
-// ── Process spawner ──────────────────────────────────────────────────
-
-async function startProcess(opts: {
-  name: string;
+async function startBackendProcess(opts: {
   command: string;
-  args: string[];
+  backendEntry: string;
+  backendCwd: string;
   env: Record<string, string>;
-  waitFor: RegExp;
-  children: ProcessInfo[];
-  timeoutMs?: number;
-}): Promise<string | null> {
-  const { name, command, args, env, waitFor, children, timeoutMs = 15_000 } = opts;
+  forceElectronRunAsNode: boolean;
+  onUnexpectedExit: (code: number | null, signal: NodeJS.Signals | null) => void;
+}): Promise<{ process: ChildProcess; backendPort: number } | null> {
+  const { command, backendEntry, backendCwd, env, forceElectronRunAsNode, onUnexpectedExit } = opts;
 
   return new Promise((resolve) => {
-    const processEnv: Record<string, string> = {};
-    if (command !== process.execPath && command.includes("Electron")) {
-      processEnv.ELECTRON_RUN_AS_NODE = "1";
-    }
-
-    const child = spawn(command, args, {
+    const child = spawn(command, [backendEntry], {
+      cwd: backendCwd,
       stdio: ["ignore", "pipe", "pipe"],
-      env: { ...process.env, ...processEnv, ...env },
+      env: {
+        ...process.env,
+        ...(forceElectronRunAsNode ? { ELECTRON_RUN_AS_NODE: "1" } : {}),
+        ...env,
+      },
     });
-
-    children.push({ process: child, name });
 
     let buffer = "";
     let resolved = false;
-
     const timeout = setTimeout(() => {
       if (!resolved) {
         resolved = true;
         child.kill("SIGTERM");
         resolve(null);
       }
-    }, timeoutMs);
+    }, 30_000);
 
-    function onStdout(data: Buffer) {
+    child.stdout?.on("data", (data: Buffer) => {
+      process.stdout.write(data);
       buffer += data.toString();
-      const match = buffer.match(waitFor);
+      const match = buffer.match(/^\[BACKEND_PORT\](\d+)$/m);
       if (match && !resolved) {
         resolved = true;
         clearTimeout(timeout);
-        // Stop listening and release the buffer — process may run for days
-        child.stdout?.removeListener("data", onStdout);
-        buffer = "";
-        resolve(match[1]);
+        resolve({ process: child, backendPort: parseInt(match[1], 10) });
       }
-    }
+    });
 
-    child.stdout?.on("data", onStdout);
+    child.stderr?.on("data", (data: Buffer) => process.stderr.write(data));
 
-    child.on("exit", () => {
+    child.on("exit", (code, signal) => {
       if (!resolved) {
         resolved = true;
         clearTimeout(timeout);
         resolve(null);
+        return;
       }
+      onUnexpectedExit(code, signal);
     });
+  });
+}
+
+function stopBackendProcess(child: ChildProcess | null): Promise<void> {
+  if (!child || child.exitCode !== null || child.signalCode !== null) return Promise.resolve();
+
+  return new Promise((resolve) => {
+    let finished = false;
+    const finish = () => {
+      if (finished) return;
+      finished = true;
+      clearTimeout(forceTimer);
+      resolve();
+    };
+
+    child.once("exit", finish);
+    child.kill("SIGTERM");
+
+    const forceTimer = setTimeout(() => {
+      if (child.exitCode === null && child.signalCode === null) child.kill("SIGKILL");
+    }, 5_000);
   });
 }
