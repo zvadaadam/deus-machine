@@ -45,6 +45,8 @@ export interface DiscoveryConfig {
     versionOutput: string,
     candidate: string
   ) => { success: boolean; error?: string };
+  /** Packaged desktop should only use deterministic bundled/env candidates. */
+  skipShellDiscovery?: boolean;
 }
 
 /**
@@ -97,30 +99,30 @@ export function discoverExecutable(
     }
   }
 
-  // Dynamic discovery: find via user's login shell PATH.
-  // Node's child_process inherits a minimal env, so run through login shell
-  // to pick up ~/.local/bin, nvm paths, etc.
-  // Strip node_modules/.bin from PATH to avoid finding SDK's internal
-  // CLI wrapper (which crashes on version check in bundled/test contexts).
-  try {
-    const shell = process.env.SHELL || "/bin/zsh";
-    const cleanEnv = { ...process.env };
-    if (cleanEnv.PATH) {
-      cleanEnv.PATH = cleanEnv.PATH.split(":")
-        .filter((p) => !p.includes("node_modules"))
-        .join(":");
+  if (!config.skipShellDiscovery && process.env.DEUS_PACKAGED !== "1") {
+    // Dynamic discovery is a dev/global-install fallback. Packaged desktop
+    // must rely on bundled candidates so broken packages fail loudly.
+    try {
+      const fallbackShell = process.platform === "linux" ? "/bin/bash" : "/bin/zsh";
+      const shell = process.env.SHELL || fallbackShell;
+      const cleanEnv = { ...process.env };
+      if (cleanEnv.PATH) {
+        cleanEnv.PATH = cleanEnv.PATH.split(":")
+          .filter((p) => !p.includes("node_modules"))
+          .join(":");
+      }
+      const resolved = execSync(`"${shell}" -l -c "command -v ${config.shellCommand}"`, {
+        encoding: "utf-8",
+        timeout: 5000,
+        env: cleanEnv,
+        stdio: ["ignore", "pipe", "pipe"],
+      }).trim();
+      if (resolved && !candidates.includes(resolved)) {
+        candidates.push(resolved);
+      }
+    } catch {
+      // Shell discovery failed — continue with deterministic candidates
     }
-    const resolved = execSync(`"${shell}" -l -c "command -v ${config.shellCommand}"`, {
-      encoding: "utf-8",
-      timeout: 5000,
-      env: cleanEnv,
-      stdio: ["ignore", "pipe", "pipe"],
-    }).trim();
-    if (resolved && !candidates.includes(resolved)) {
-      candidates.push(resolved);
-    }
-  } catch {
-    // Shell discovery failed — continue with static candidates
   }
 
   // Verify each candidate
