@@ -55,17 +55,13 @@
       allow="clipboard-read; clipboard-write"
     ></iframe>
 
-    <div id="signin-overlay" class="signin-overlay" hidden>
+    <div id="signin-overlay" class="signin-overlay" data-state="checking">
       <div class="signin-card">
-        <h1>Sign in to Pencil</h1>
-        <p>
-          Paste a CLI key from your
-          <a href="https://www.pencil.dev" target="_blank" rel="noopener"
-            >Pencil developer settings</a
-          >. Verified against the Pencil API and stored locally in
-          <code>~/.deus/pencil/cli-key</code>; never sent anywhere else.
+        <h1 id="signin-title">Preparing Pencil…</h1>
+        <p id="signin-copy">
+          Deus is checking for an existing Pencil CLI key. No Pencil desktop app is required.
         </p>
-        <form id="signin-form" class="signin-form">
+        <form id="signin-form" class="signin-form" hidden>
           <input
             id="signin-key"
             type="password"
