@@ -467,7 +467,6 @@ export function MainContent({
             <HomeView
               repos={repos}
               repoGroups={repoGroups}
-              selectedWorkspaceId={selectedWorkspace?.id ?? null}
               onSendMessage={onStartWorkspace}
               onWorkspaceClick={onWorkspaceClick}
               onOpenProject={onOpenProject}
