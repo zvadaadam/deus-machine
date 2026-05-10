@@ -278,6 +278,49 @@ export function createRouter(
       });
     }
 
+    // ----- detect what's actually open in the iframe editor --------------
+    //
+    // Probes `get-editor-state`, parses the documentURI, and syncs our
+    // server‑side active pointer. Used by the panel UI to keep the
+    // switcher trigger in sync when the agent uses the binary's tools
+    // directly (open_document, batch_design …) without going through
+    // pencil_open / pencil_new — without this poll, the switcher would
+    // say "no design" while the canvas is full of frames.
+    if (method === "GET" && url === "/detect-active") {
+      try {
+        const { requestFromIframe } = await import("./iframe-rpc.ts");
+        let reply: unknown;
+        try {
+          reply = await requestFromIframe("get-editor-state", { include_schema: false }, 4_000);
+        } catch {
+          return sendJson(res, 200, { active: null, source: "iframe-timeout" });
+        }
+        const r = reply as { result?: { message?: string } } | null;
+        const message = r?.result?.message;
+        if (typeof message !== "string") {
+          return sendJson(res, 200, { active: null, source: "iframe-empty" });
+        }
+        let parsed: { documentURI?: string };
+        try {
+          parsed = JSON.parse(message) as { documentURI?: string };
+        } catch {
+          return sendJson(res, 200, { active: null, source: "iframe-bad-json" });
+        }
+        const uri = parsed.documentURI;
+        if (typeof uri !== "string" || !uri.startsWith("file://")) {
+          return sendJson(res, 200, { active: null, source: "iframe-no-uri" });
+        }
+        const path = decodeURI(uri.replace(/^file:\/\//, ""));
+        designs.setActivePen(ctx.storage, path);
+        return sendJson(res, 200, { active: path, source: "iframe" });
+      } catch (err) {
+        return sendJson(res, 500, {
+          active: null,
+          error: err instanceof Error ? err.message : String(err),
+        });
+      }
+    }
+
     if (method === "GET" && url === "/diagnostic") {
       const cliInfo = findPencilCli();
       const resolved = auth.resolveCliKey();
