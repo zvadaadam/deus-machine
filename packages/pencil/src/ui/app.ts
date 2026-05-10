@@ -258,9 +258,25 @@ function connectEvents(): void {
     console.log("[pencil-iframe] ← ipc-request", msg.method);
     pushToEditor(msg);
   });
-  es.addEventListener("active-file", () => {
+  es.addEventListener("active-file", (ev) => {
     // The tabs UI now reflects the active file; refresh the design list
-    // to pick up the change.
+    // to pick up the change. If the event includes `pending: true`, the
+    // file doesn't exist on disk yet — pencil_new just created the
+    // intent, agent will materialize it on first save.
+    try {
+      const data = JSON.parse((ev as MessageEvent).data) as {
+        path: string;
+        name: string;
+        pending?: boolean;
+      };
+      if (data.pending) {
+        pendingDesign = { path: data.path, name: data.name };
+        activeFile = data.path;
+        renderTrigger();
+      }
+    } catch {
+      /* malformed event — fall through to refresh */
+    }
     void refreshDesigns();
   });
   es.onerror = () => {
@@ -385,12 +401,22 @@ dom.signinForm.addEventListener("submit", async (ev) => {
 let designs: Design[] = [];
 let activeFile: string | null = null;
 let menuOpen = false;
+// A "pending" design exists only in memory between when the user clicks
+// + New design and when the agent makes the first batch_design call that
+// triggers a save (which materializes the .pen file on disk). It's how
+// the switcher shows "agent-layout · new" before the file exists.
+let pendingDesign: { path: string; name: string } | null = null;
 
 async function refreshDesigns(): Promise<void> {
   try {
     const data = await jsonFetch<DesignsResponse>("/designs");
     designs = data.designs ?? [];
     activeFile = data.active;
+    // If the pending design's file has now landed on disk, drop the
+    // synthetic entry — the real one supersedes it.
+    if (pendingDesign && designs.some((d) => d.file === pendingDesign?.path)) {
+      pendingDesign = null;
+    }
     renderTrigger();
     if (menuOpen) renderMenu();
   } catch {
@@ -411,19 +437,29 @@ function renderTrigger(): void {
     dom.switcherLabel.textContent = active.name;
     dom.switcherTrigger.title =
       active.file + (active.inWorkspace ? "  (workspace)" : "  (storage)");
-  } else if (designs.length > 0) {
+    return;
+  }
+  if (pendingDesign && pendingDesign.path === activeFile) {
+    dom.switcherTrigger.classList.remove("is-empty");
+    dom.switcherDot.classList.add("is-workspace");
+    dom.switcherLabel.className = "switcher-name";
+    dom.switcherLabel.textContent = `${pendingDesign.name} · new`;
+    dom.switcherTrigger.title = `${pendingDesign.path}  (unsaved — first edit creates it)`;
+    return;
+  }
+  if (designs.length > 0) {
     dom.switcherTrigger.classList.remove("is-empty");
     dom.switcherDot.classList.remove("is-workspace");
     dom.switcherLabel.className = "switcher-name-empty";
     dom.switcherLabel.textContent = `${designs.length} design${designs.length === 1 ? "" : "s"}`;
     dom.switcherTrigger.title = "Choose a design";
-  } else {
-    dom.switcherTrigger.classList.add("is-empty");
-    dom.switcherDot.classList.remove("is-workspace");
-    dom.switcherLabel.className = "switcher-name-empty";
-    dom.switcherLabel.textContent = "no design";
-    dom.switcherTrigger.title = "No .pen files in this workspace yet";
+    return;
   }
+  dom.switcherTrigger.classList.add("is-empty");
+  dom.switcherDot.classList.remove("is-workspace");
+  dom.switcherLabel.className = "switcher-name-empty";
+  dom.switcherLabel.textContent = "no design";
+  dom.switcherTrigger.title = "No .pen files in this workspace yet";
 }
 
 function relativeAge(iso: string): string {
@@ -537,7 +573,7 @@ function openNewDesignForm(): void {
       const ok = await callNewDesignTool(name);
       if (ok) {
         closeMenu();
-        toast(`Blank canvas: ${name}`);
+        toast(`Blank canvas opened — now ask the agent to design "${name}".`);
         void refreshDesigns();
       } else {
         submit.disabled = false;

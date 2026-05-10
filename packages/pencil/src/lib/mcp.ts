@@ -18,8 +18,8 @@ import {
   safePenName,
 } from "./designs.ts";
 import * as fs from "node:fs";
-import { pushFileUpdate } from "./ipc-host.ts";
-import { requestFromIframe } from "./iframe-rpc.ts";
+import { notifyEditor, pushFileUpdate } from "./ipc-host.ts";
+import { broadcastEvent } from "./ops.ts";
 import type { Context, ToolDef, ToolResult } from "./types.ts";
 
 // ---- Result helpers -------------------------------------------------------
@@ -160,22 +160,19 @@ export const TOOLS: ToolDef[] = [
       const name = safePenName(a.name);
       const file = penPathFor(name, ctx.storage);
       setActivePen(ctx.storage, file);
-      try {
-        await requestFromIframe("open-document", { filePath: "new" });
-      } catch (err) {
-        const message = (err as Error).message;
-        if (!message.includes("METHOD_NOT_FOUND")) {
-          return errResult(
-            `Couldn't reach the editor to open a blank canvas: ${message}. ` +
-              "Is the Pencil panel open?"
-          );
-        }
-      }
+      // Fire-and-forget: tell the editor to switch to a blank doc. We do NOT
+      // wait for a reply — the editor's `open-document` handler is sync and
+      // doesn't always send a response, so awaiting would hang for 60s.
+      notifyEditor("open-document", { filePath: "new" });
+      // Side-channel SSE event so the panel's switcher updates immediately,
+      // even though the .pen file won't exist on disk until the editor
+      // (or agent via batch_design) triggers the first save.
+      broadcastEvent("active-file", { path: file, name, pending: true });
       return okResult({
         file,
         message:
-          `Blank canvas open. Save target is ${file}. ` +
-          "Now use batch_design to build the design — each op shows up live on the canvas.",
+          `Blank canvas opened (will save to ${file} on first edit). ` +
+          "Now use batch_design to build the design — each op renders live on the canvas.",
       });
     },
   },
