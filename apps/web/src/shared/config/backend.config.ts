@@ -47,6 +47,16 @@ export interface BackendEndpoints {
 export const RELAY_BASE_URL =
   (import.meta.env.VITE_RELAY_URL as string | undefined) || "wss://relay.deusmachine.ai";
 
+export function getRelayHttpBaseUrl(): string {
+  const url = new URL(RELAY_BASE_URL);
+  url.protocol = url.protocol === "ws:" ? "http:" : "https:";
+  return url.origin;
+}
+
+export function getRelayServerId(): string | null {
+  return getServerIdFromUrl();
+}
+
 let cachedEndpoints: BackendEndpoints | null = null;
 /** The serverId that the cached endpoints were built for (relay mode only). */
 let cachedRelayServerId: string | null = null;

@@ -7,6 +7,7 @@
 export type ServerFrame =
   | { type: "register"; serverId: string; relayToken: string; serverName?: string }
   | { type: "data"; clientId: string; payload: string }
+  | { type: "http_response"; requestId: string; response: RelayedHttpResponse }
   | { type: "auth_response"; clientId: string; allowed: boolean; reason?: string }
   | { type: "pong" }
   // Pairing: desktop validated the code, returning the device token (or error)
@@ -19,6 +20,7 @@ export type RelayFrame =
   | { type: "client_connected"; clientId: string; deviceToken: string }
   | { type: "client_disconnected"; clientId: string }
   | { type: "data"; clientId: string; payload: string }
+  | { type: "http_request"; requestId: string; request: RelayedHttpRequest }
   | { type: "ping" }
   | { type: "error"; message: string }
   // Pairing: web client wants to exchange a code for a device token
@@ -56,3 +58,22 @@ export type PairerResponseFrame =
 
 export type PairerFrame = PairerRequestFrame;
 export type RelayPairerFrame = PairerResponseFrame;
+
+// ---- HTTP tunnel payloads ----
+
+export interface RelayedHttpRequest {
+  method: string;
+  port: number;
+  path: string;
+  query: string;
+  headers: Record<string, string>;
+  bodyBase64?: string;
+  deviceToken?: string;
+}
+
+export interface RelayedHttpResponse {
+  status: number;
+  statusText?: string;
+  headers: Record<string, string>;
+  bodyBase64: string;
+}

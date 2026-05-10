@@ -26,6 +26,7 @@ import {
   type WsSendable,
 } from "./ws.service";
 import { handleFrame as handleQueryFrame, removeSubs as removeQuerySubs } from "./query-engine";
+import { handleRelayedHttpRequest } from "./local-http-tunnel.service";
 
 // ---- Tunnel State ----
 
@@ -281,6 +282,23 @@ function handleRelayFrame(frame: RelayFrame): void {
         // Ignore malformed inner messages
       }
     })
+    .with({ type: "http_request" }, (f) => {
+      void handleRelayedHttpRequest(f.request)
+        .then((response) => {
+          sendToRelay({ type: "http_response", requestId: f.requestId, response });
+        })
+        .catch((err) => {
+          sendToRelay({
+            type: "http_response",
+            requestId: f.requestId,
+            response: {
+              status: 502,
+              headers: { "content-type": "text/plain; charset=utf-8" },
+              bodyBase64: Buffer.from(getErrorMessage(err), "utf8").toString("base64"),
+            },
+          });
+        });
+    })
     .with({ type: "pair_request" }, (f) => {
       handlePairRequest(f.pairId, f.code, f.deviceName);
     })
@@ -322,6 +340,10 @@ function sendToRelay(frame: ServerFrame): void {
       // Will be handled by close/error handlers
     }
   }
+}
+
+function getErrorMessage(err: unknown): string {
+  return err instanceof Error ? err.message : String(err);
 }
 
 function scheduleReconnect(): void {

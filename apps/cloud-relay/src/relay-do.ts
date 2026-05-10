@@ -18,6 +18,7 @@ import type {
   RelayClientFrame,
   RelayFrame,
   RelayPairerFrame,
+  RelayedHttpResponse,
   ServerFrame,
 } from "../../../shared/types/relay";
 import { clientAuthFrameSchema, pairerFrameSchema, serverFrameSchema } from "./schemas";
@@ -26,8 +27,18 @@ const AUTH_TIMEOUT_MS = 5_000;
 const OFFLINE_WAIT_MS = 300_000; // 5 min — max time a client waits for server to reconnect
 const HEARTBEAT_INTERVAL_MS = 30_000;
 const PAIR_TIMEOUT_MS = 30_000;
+const HTTP_TUNNEL_TIMEOUT_MS = 30_000;
+const HTTP_TUNNEL_MAX_BODY_BYTES = 5 * 1024 * 1024;
+
+interface PendingHttpRequest {
+  resolve: (response: RelayedHttpResponse) => void;
+  reject: (err: Error) => void;
+  timer: ReturnType<typeof setTimeout>;
+}
 
 export class RelayDO extends DurableObject {
+  private readonly pendingHttpRequests = new Map<string, PendingHttpRequest>();
+
   async fetch(request: Request): Promise<Response> {
     const url = new URL(request.url);
 
@@ -42,6 +53,9 @@ export class RelayDO extends DurableObject {
     }
     if (url.pathname === "/status") {
       return this.handleStatus();
+    }
+    if (url.pathname.startsWith("/http/")) {
+      return this.handleHttpTunnelRequest(request);
     }
 
     return new Response("Not found", { status: 404 });
@@ -313,6 +327,11 @@ export class RelayDO extends DurableObject {
         await this.forwardToClient(frame.clientId, frame.payload);
         break;
       }
+      case "http_response": {
+        if (!isRegistered) break;
+        this.resolveHttpRequest(frame.requestId, frame.response);
+        break;
+      }
       case "pong": {
         break;
       }
@@ -523,6 +542,89 @@ export class RelayDO extends DurableObject {
     }
   }
 
+  // ---- HTTP Tunnel ----
+
+  private async handleHttpTunnelRequest(request: Request): Promise<Response> {
+    const tunnel = this.getTunnel();
+    const isRegistered = await this.ctx.storage.get<boolean>("tunnelRegistered");
+    if (!tunnel || !isRegistered) {
+      return new Response("Server is offline", { status: 503 });
+    }
+
+    const url = new URL(request.url);
+    const parsed = parseHttpTunnelPath(url.pathname);
+    if (!parsed) {
+      return new Response("Invalid tunnel path", { status: 400 });
+    }
+
+    const deviceToken = url.searchParams.get("token") ?? undefined;
+    if (!deviceToken) {
+      return new Response("Missing token", { status: 401 });
+    }
+
+    const query = new URLSearchParams(url.searchParams);
+    query.delete("token");
+
+    let bodyBase64: string | undefined;
+    if (request.method !== "GET" && request.method !== "HEAD") {
+      const body = await request.arrayBuffer();
+      if (body.byteLength > HTTP_TUNNEL_MAX_BODY_BYTES) {
+        return new Response("Request body too large", { status: 413 });
+      }
+      bodyBase64 = arrayBufferToBase64(body);
+    }
+
+    const requestId = crypto.randomUUID();
+    const responsePromise = this.waitForHttpResponse(requestId);
+    this.safeSend(tunnel, {
+      type: "http_request",
+      requestId,
+      request: {
+        method: request.method,
+        port: parsed.port,
+        path: parsed.path,
+        query: query.toString(),
+        headers: headersToObject(request.headers),
+        bodyBase64,
+        deviceToken,
+      },
+    });
+
+    try {
+      const upstream = await responsePromise;
+      return buildHttpTunnelResponse({
+        request,
+        tunnelPath: parsed.path,
+        publicPrefix:
+          request.headers.get("x-deus-relay-public-prefix") ?? `/http/${parsed.port}`,
+        deviceToken,
+        upstream,
+      });
+    } catch (err) {
+      return new Response(err instanceof Error ? err.message : "Tunnel request failed", {
+        status: 504,
+      });
+    }
+  }
+
+  private waitForHttpResponse(requestId: string): Promise<RelayedHttpResponse> {
+    return new Promise((resolve, reject) => {
+      const timer = setTimeout(() => {
+        this.pendingHttpRequests.delete(requestId);
+        reject(new Error("Tunnel request timed out"));
+      }, HTTP_TUNNEL_TIMEOUT_MS);
+      this.pendingHttpRequests.set(requestId, { resolve, reject, timer });
+    });
+  }
+
+  private resolveHttpRequest(requestId: string, response: RelayedHttpResponse): void {
+    const pending = this.pendingHttpRequests.get(requestId);
+    if (!pending) return;
+    clearTimeout(pending.timer);
+    this.pendingHttpRequests.delete(requestId);
+    pending.resolve(response);
+  }
+
   private async handleServerDisconnect(): Promise<void> {
     // If another tunnel is already active (e.g. old tunnel's close callback firing
     // after handleTunnel replaced it), skip the disconnect flow.
@@ -535,6 +637,7 @@ export class RelayDO extends DurableObject {
     await this.ctx.storage.put("tunnelRegistered", false);
     const disconnectedAt = Date.now();
     await this.ctx.storage.put("serverDisconnectedAt", disconnectedAt);
+    this.rejectAllHttpRequests("Server disconnected");
 
     const serverName = await this.ctx.storage.get<string>("serverName");
     const clients = this.ctx.getWebSockets("client");
@@ -623,6 +726,14 @@ export class RelayDO extends DurableObject {
     return tunnels[0] ?? null;
   }
 
+  private rejectAllHttpRequests(message: string): void {
+    for (const [requestId, pending] of this.pendingHttpRequests) {
+      clearTimeout(pending.timer);
+      pending.reject(new Error(message));
+      this.pendingHttpRequests.delete(requestId);
+    }
+  }
+
   private safeSend(ws: WebSocket, data: RelayFrame | RelayClientFrame | RelayPairerFrame): void {
     try {
       ws.send(JSON.stringify(data));
@@ -630,4 +741,159 @@ export class RelayDO extends DurableObject {
       console.error("relay: safeSend failed", err);
     }
   }
+}
+
+function parseHttpTunnelPath(pathname: string): { port: number; path: string } | null {
+  const match = pathname.match(/^\/http\/(\d+)(\/.*)?$/);
+  if (!match) return null;
+  const port = Number(match[1]);
+  if (!Number.isInteger(port) || port < 1 || port > 65535) return null;
+  return { port, path: match[2] ?? "/" };
+}
+
+function headersToObject(headers: Headers): Record<string, string> {
+  const out: Record<string, string> = {};
+  for (const [key, value] of headers) {
+    const lower = key.toLowerCase();
+    if (lower === "host" || lower.startsWith("cf-") || lower === "content-length") continue;
+    out[lower] = value;
+  }
+  return out;
+}
+
+function buildHttpTunnelResponse(args: {
+  request: Request;
+  tunnelPath: string;
+  publicPrefix: string;
+  deviceToken: string;
+  upstream: RelayedHttpResponse;
+}): Response {
+  const headers = new Headers(args.upstream.headers);
+  stripEmbeddingBlockers(headers);
+
+  let body = base64ToUint8Array(args.upstream.bodyBase64);
+  const contentType = headers.get("content-type") ?? "";
+  if (isRewritableTextContent(contentType)) {
+    const rewritten = rewriteTunnelText(new TextDecoder().decode(body), {
+      contentType,
+      tunnelPath: args.tunnelPath,
+      publicPrefix: args.publicPrefix,
+      deviceToken: args.deviceToken,
+    });
+    body = new TextEncoder().encode(rewritten);
+    headers.set("content-length", String(body.byteLength));
+  }
+
+  return new Response(args.request.method === "HEAD" ? null : body, {
+    status: args.upstream.status,
+    statusText: args.upstream.statusText,
+    headers,
+  });
+}
+
+function stripEmbeddingBlockers(headers: Headers): void {
+  headers.delete("x-frame-options");
+  headers.delete("content-length");
+  headers.delete("content-encoding");
+  headers.delete("transfer-encoding");
+
+  const csp = headers.get("content-security-policy");
+  if (!csp) return;
+  const directives = csp
+    .split(";")
+    .map((directive) => directive.trim())
+    .filter((directive) => directive && !directive.toLowerCase().startsWith("frame-ancestors"));
+  if (directives.length === 0) {
+    headers.delete("content-security-policy");
+  } else {
+    headers.set("content-security-policy", directives.join("; "));
+  }
+}
+
+function isRewritableTextContent(contentType: string): boolean {
+  const lower = contentType.toLowerCase();
+  return (
+    lower.includes("text/html") ||
+    lower.includes("text/css") ||
+    lower.includes("javascript") ||
+    lower.includes("application/json")
+  );
+}
+
+function rewriteTunnelText(
+  input: string,
+  opts: { contentType: string; tunnelPath: string; publicPrefix: string; deviceToken: string }
+): string {
+  const currentDir = opts.tunnelPath.endsWith("/")
+    ? opts.tunnelPath
+    : opts.tunnelPath.slice(0, opts.tunnelPath.lastIndexOf("/") + 1) || "/";
+  const toTunnelUrl = (raw: string): string => {
+    if (!shouldRewriteUrl(raw)) return raw;
+    const path = raw.startsWith("/") ? raw : normalizeTunnelPath(`${currentDir}${raw}`);
+    return withToken(`${opts.publicPrefix}${path}`, opts.deviceToken);
+  };
+
+  let output = input.replace(
+    /\b(src|href|action)=("|\')([^"\']+)\2/gi,
+    (_match, attr: string, quote: string, value: string) =>
+      `${attr}=${quote}${toTunnelUrl(value)}${quote}`
+  );
+
+  output = output.replace(
+    /url\(\s*(["']?)([^"')]+)\1\s*\)/gi,
+    (_match, quote: string, value: string) => `url(${quote}${toTunnelUrl(value)}${quote})`
+  );
+
+  if (!opts.contentType.toLowerCase().includes("text/html")) {
+    output = output.replace(
+      /(["'])\/(?!\/)([^"']*)\1/g,
+      (_match, quote: string, value: string) =>
+        `${quote}${toTunnelUrl(`/${value}`)}${quote}`
+    );
+  }
+
+  return output;
+}
+
+function shouldRewriteUrl(value: string): boolean {
+  if (!value || value.startsWith("#")) return false;
+  if (/^(?:[a-z][a-z0-9+.-]*:|\/\/)/i.test(value)) return false;
+  return true;
+}
+
+function normalizeTunnelPath(path: string): string {
+  const segments: string[] = [];
+  for (const segment of path.split("/")) {
+    if (!segment || segment === ".") continue;
+    if (segment === "..") {
+      segments.pop();
+      continue;
+    }
+    segments.push(segment);
+  }
+  return `/${segments.join("/")}`;
+}
+
+function withToken(path: string, token: string): string {
+  const [base, hash = ""] = path.split("#", 2);
+  const separator = base.includes("?") ? "&" : "?";
+  return `${base}${separator}token=${encodeURIComponent(token)}${hash ? `#${hash}` : ""}`;
+}
+
+function arrayBufferToBase64(buffer: ArrayBuffer): string {
+  let binary = "";
+  const bytes = new Uint8Array(buffer);
+  for (let i = 0; i < bytes.length; i += 1) {
+    binary += String.fromCharCode(bytes[i]);
+  }
+  return btoa(binary);
+}
+
+function base64ToUint8Array(value: string): Uint8Array {
+  const binary = atob(value);
+  const bytes = new Uint8Array(binary.length);
+  for (let i = 0; i < binary.length; i += 1) {
+    bytes[i] = binary.charCodeAt(i);
+  }
+  return bytes;
 }
