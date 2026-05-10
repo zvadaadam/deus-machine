@@ -49,11 +49,13 @@ export interface BrowserProxyAttachParams extends BrowserProxyBounds {
   workspaceId?: string;
   url?: string;
   isMobileView?: boolean;
+  preferredTransport?: BrowserProxyStreamTransport;
 }
 
 export interface BrowserProxyResizeParams extends BrowserProxyBounds {
   tabId: string;
   isMobileView?: boolean;
+  preferredTransport?: BrowserProxyStreamTransport;
 }
 
 export interface BrowserProxyNavigateParams {
@@ -123,4 +125,35 @@ export interface BrowserProxyScreenshotParams {
     width: number;
     height: number;
   };
+}
+
+export type BrowserProxyStreamTransport = "frames" | "webrtc";
+export type BrowserProxyWebRtcSignalSource = "viewer" | "publisher";
+
+export interface BrowserProxyWebRtcDescriptionEvent {
+  tabId: string;
+  peerId: string;
+  sdp: string;
+  type: "offer" | "answer";
+  workspaceId?: string;
+}
+
+export interface BrowserProxyWebRtcIceCandidate {
+  candidate: string;
+  sdpMid?: string | null;
+  sdpMLineIndex?: number | null;
+  usernameFragment?: string | null;
+}
+
+export interface BrowserProxyWebRtcIceCandidateEvent {
+  tabId: string;
+  peerId: string;
+  from: BrowserProxyWebRtcSignalSource;
+  candidate: BrowserProxyWebRtcIceCandidate;
+}
+
+export interface BrowserProxyWebRtcStopEvent {
+  tabId: string;
+  peerId: string;
+  from: BrowserProxyWebRtcSignalSource;
 }

@@ -28,7 +28,12 @@ import { launchApp, stopApp } from "../aap";
 import { broadcast as wsBroadcast } from "../ws.service";
 import type { AgentHarness } from "@shared/enums";
 import type { CommandName } from "@shared/types/query-protocol";
-import type { BrowserProxyInputParams, BrowserProxyMouseButton } from "@shared/types/browser-proxy";
+import type {
+  BrowserProxyInputParams,
+  BrowserProxyMouseButton,
+  BrowserProxyWebRtcIceCandidate,
+  BrowserProxyWebRtcSignalSource,
+} from "@shared/types/browser-proxy";
 import {
   type QueryParams,
   readStringParam as readString,
@@ -325,6 +330,7 @@ export async function runCommand(
             height,
             url: readString(params, "url"),
             isMobileView: params.isMobileView === true,
+            preferredTransport: readBrowserTransport(params),
           },
           context.connectionId
         );
@@ -397,6 +403,7 @@ export async function runCommand(
           width,
           height,
           isMobileView: params.isMobileView === true,
+          preferredTransport: readBrowserTransport(params),
         });
         return {};
       })
@@ -417,6 +424,43 @@ export async function runCommand(
           rect: parseScreenshotRect(params.rect),
         });
         return { dataUrl };
+      })
+      .with("browser:webrtcOffer", () => {
+        browserProxy.relayBrowserWebRtcOffer({
+          tabId: requireParam(params, "tabId", "browser:webrtcOffer"),
+          peerId: requireParam(params, "peerId", "browser:webrtcOffer"),
+          type: "offer",
+          sdp: requireParam(params, "sdp", "browser:webrtcOffer"),
+          workspaceId: readString(params, "workspaceId"),
+        });
+        return {};
+      })
+      .with("browser:webrtcAnswer", () => {
+        browserProxy.relayBrowserWebRtcAnswer({
+          tabId: requireParam(params, "tabId", "browser:webrtcAnswer"),
+          peerId: requireParam(params, "peerId", "browser:webrtcAnswer"),
+          type: "answer",
+          sdp: requireParam(params, "sdp", "browser:webrtcAnswer"),
+          workspaceId: readString(params, "workspaceId"),
+        });
+        return {};
+      })
+      .with("browser:webrtcIce", () => {
+        browserProxy.relayBrowserWebRtcIce({
+          tabId: requireParam(params, "tabId", "browser:webrtcIce"),
+          peerId: requireParam(params, "peerId", "browser:webrtcIce"),
+          from: readWebRtcSource(params, "browser:webrtcIce"),
+          candidate: readWebRtcCandidate(params, "browser:webrtcIce"),
+        });
+        return {};
+      })
+      .with("browser:webrtcStop", () => {
+        browserProxy.relayBrowserWebRtcStop({
+          tabId: requireParam(params, "tabId", "browser:webrtcStop"),
+          peerId: requireParam(params, "peerId", "browser:webrtcStop"),
+          from: readWebRtcSource(params, "browser:webrtcStop"),
+        });
+        return {};
       })
       .exhaustive()
   );
@@ -721,6 +765,42 @@ function parseBrowserInput(params: QueryParams): BrowserProxyInputParams {
 
 function isMouseButton(value: string): value is BrowserProxyMouseButton {
   return value === "none" || value === "left" || value === "middle" || value === "right";
+}
+
+function readBrowserTransport(params: QueryParams): "frames" | "webrtc" | undefined {
+  const transport = readString(params, "preferredTransport");
+  if (!transport) return undefined;
+  if (transport === "frames" || transport === "webrtc") return transport;
+  throw new Error("browser transport must be frames or webrtc");
+}
+
+function readWebRtcSource(params: QueryParams, command: string): BrowserProxyWebRtcSignalSource {
+  const source = requireParam(params, "from", command);
+  if (source === "viewer" || source === "publisher") return source;
+  throw new Error(`${command} requires from to be viewer or publisher`);
+}
+
+function readWebRtcCandidate(params: QueryParams, command: string): BrowserProxyWebRtcIceCandidate {
+  const raw = params.candidate;
+  if (!raw || typeof raw !== "object" || Array.isArray(raw)) {
+    throw new Error(`${command} requires candidate`);
+  }
+  const record = raw as Record<string, unknown>;
+  if (typeof record.candidate !== "string") {
+    throw new Error(`${command} candidate requires a candidate string`);
+  }
+  return {
+    candidate: record.candidate,
+    ...(typeof record.sdpMid === "string" || record.sdpMid === null
+      ? { sdpMid: record.sdpMid }
+      : {}),
+    ...(typeof record.sdpMLineIndex === "number" && Number.isFinite(record.sdpMLineIndex)
+      ? { sdpMLineIndex: record.sdpMLineIndex }
+      : {}),
+    ...(typeof record.usernameFragment === "string" || record.usernameFragment === null
+      ? { usernameFragment: record.usernameFragment }
+      : {}),
+  };
 }
 
 function parseScreenshotRect(

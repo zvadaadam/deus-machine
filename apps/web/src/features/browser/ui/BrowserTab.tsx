@@ -22,7 +22,7 @@ import { AlertCircle, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { match } from "ts-pattern";
 import { useWebview } from "../hooks/useWebview";
-import { webviewManager, type Bounds } from "../webview-manager";
+import { webviewManager, type Bounds, type WebviewElement } from "../webview-manager";
 import { MOBILE_PREVIEW_WIDTH, MOBILE_PREVIEW_HEIGHT, MOBILE_PREVIEW_DPR } from "../types";
 import {
   setEmulation,
@@ -51,10 +51,26 @@ import {
 } from "../automation/inspect-mode";
 import { VISUAL_EFFECTS_SETUP } from "../automation/visual-effects";
 import { getErrorMessage } from "@shared/lib/errors";
-import { isConnected, onConnectionChange, sendCommand } from "@/platform/ws/query-protocol-client";
+import {
+  isConnected,
+  onConnectionChange,
+  onEvent,
+  sendCommand,
+} from "@/platform/ws/query-protocol-client";
+import type {
+  BrowserProxyWebRtcDescriptionEvent,
+  BrowserProxyWebRtcIceCandidateEvent,
+  BrowserProxyWebRtcStopEvent,
+} from "@shared/types/browser-proxy";
+import {
+  createBrowserRtcPeerConnection,
+  isBrowserWebRtcExperimentEnabled,
+  makeIceCommandParams,
+} from "./browserWebRtcExperiment";
 
 const INSPECT_DRAIN_INTERVAL_MS = 200;
 const BROWSER_PROXY_COMMAND_TIMEOUT_MS = 5_000;
+const WEBRTC_CAPTURE_FPS = 20;
 
 interface BrowserTabProps {
   tab: BrowserTabState;
@@ -71,6 +87,76 @@ function levelFromWebviewEvent(level: number): ConsoleLog["level"] {
   if (level === 2) return "warn";
   if (level === 0) return "debug";
   return "info";
+}
+
+function delay(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+async function loadImage(src: string): Promise<HTMLImageElement> {
+  const image = new Image();
+  image.decoding = "async";
+  await new Promise<void>((resolve, reject) => {
+    image.onload = () => resolve();
+    image.onerror = () => reject(new Error("Failed to decode webview capture"));
+    image.src = src;
+  });
+  return image;
+}
+
+async function createWebviewCaptureStream(
+  webview: WebviewElement,
+  bounds: Bounds | null,
+  onError: (error: unknown) => void
+): Promise<{ stream: MediaStream; stop: () => void }> {
+  const directCapture = (webview as unknown as { captureStream?: () => MediaStream }).captureStream;
+  if (typeof directCapture === "function") {
+    const stream = directCapture.call(webview);
+    return { stream, stop: () => stream.getTracks().forEach((track) => track.stop()) };
+  }
+
+  if (!HTMLCanvasElement.prototype.captureStream) {
+    throw new Error("This Chromium build does not expose canvas.captureStream()");
+  }
+
+  const canvas = document.createElement("canvas");
+  canvas.width = Math.max(1, Math.floor(bounds?.width ?? 1280));
+  canvas.height = Math.max(1, Math.floor(bounds?.height ?? 720));
+  const ctx = canvas.getContext("2d");
+  if (!ctx) throw new Error("Failed to create browser stream canvas");
+
+  const stream = canvas.captureStream(WEBRTC_CAPTURE_FPS);
+  let stopped = false;
+
+  const pump = async () => {
+    while (!stopped) {
+      const startedAt = performance.now();
+      try {
+        const capture = await webview.capturePage();
+        const size = capture.getSize?.();
+        if (size && size.width > 0 && size.height > 0) {
+          if (canvas.width !== size.width) canvas.width = size.width;
+          if (canvas.height !== size.height) canvas.height = size.height;
+        }
+        const image = await loadImage(capture.toDataURL());
+        ctx.drawImage(image, 0, 0, canvas.width, canvas.height);
+      } catch (err) {
+        if (!stopped) onError(err);
+      }
+      const elapsed = performance.now() - startedAt;
+      await delay(Math.max(0, 1000 / WEBRTC_CAPTURE_FPS - elapsed));
+    }
+  };
+
+  void pump();
+
+  return {
+    stream,
+    stop: () => {
+      stopped = true;
+      stream.getTracks().forEach((track) => track.stop());
+    },
+  };
 }
 
 export const BrowserTab = forwardRef<BrowserTabHandle, BrowserTabProps>(function BrowserTab(
@@ -220,6 +306,43 @@ export const BrowserTab = forwardRef<BrowserTabHandle, BrowserTabProps>(function
 
   // Guard: prevent duplicate automation injection across page loads
   const automationInjectedRef = useRef(false);
+  const webRtcEnabled = isBrowserWebRtcExperimentEnabled();
+  const webRtcPublishersRef = useRef<
+    Map<
+      string,
+      {
+        pc: RTCPeerConnection;
+        stopCapture: () => void;
+      }
+    >
+  >(new Map());
+
+  const stopWebRtcPublisher = useCallback(
+    (peerId: string, notifyViewer: boolean) => {
+      const publisher = webRtcPublishersRef.current.get(peerId);
+      if (!publisher) return;
+      webRtcPublishersRef.current.delete(peerId);
+      publisher.stopCapture();
+      publisher.pc.close();
+      if (notifyViewer) {
+        sendCommand(
+          "browser:webrtcStop",
+          { tabId, peerId, from: "publisher" },
+          BROWSER_PROXY_COMMAND_TIMEOUT_MS
+        ).catch(() => {});
+      }
+    },
+    [tabId]
+  );
+
+  const stopAllWebRtcPublishers = useCallback(
+    (notifyViewer: boolean) => {
+      for (const peerId of [...webRtcPublishersRef.current.keys()]) {
+        stopWebRtcPublisher(peerId, notifyViewer);
+      }
+    },
+    [stopWebRtcPublisher]
+  );
 
   const registerBrowserProxyTarget = useCallback(async () => {
     if (!workspaceId) return;
@@ -293,6 +416,108 @@ export const BrowserTab = forwardRef<BrowserTabHandle, BrowserTabProps>(function
       );
     };
   }, [tab.streamToRemote, tabId]);
+
+  useEffect(() => {
+    if (!webRtcEnabled || !workspaceId || !tab.streamToRemote) {
+      stopAllWebRtcPublishers(true);
+      return;
+    }
+
+    return onEvent((event, data) => {
+      if (event === "browser:webrtcOffer") {
+        const offer = data as BrowserProxyWebRtcDescriptionEvent;
+        if (offer.tabId !== tabId || offer.workspaceId !== workspaceId) return;
+        void (async () => {
+          stopWebRtcPublisher(offer.peerId, false);
+          const wv = getWebview();
+          if (!wv) throw new Error("No local webview to publish");
+
+          const pc = createBrowserRtcPeerConnection();
+          const capture = await createWebviewCaptureStream(wv, pageBoundsRef.current, (err) => {
+            onAddLog(tabId, "warn", `WebRTC capture tick failed: ${getErrorMessage(err)}`);
+          });
+
+          webRtcPublishersRef.current.set(offer.peerId, {
+            pc,
+            stopCapture: capture.stop,
+          });
+
+          for (const track of capture.stream.getTracks()) {
+            pc.addTrack(track, capture.stream);
+          }
+
+          pc.onicecandidate = (iceEvent) => {
+            if (!iceEvent.candidate) return;
+            sendCommand(
+              "browser:webrtcIce",
+              makeIceCommandParams(tabId, offer.peerId, "publisher", iceEvent.candidate),
+              BROWSER_PROXY_COMMAND_TIMEOUT_MS
+            ).catch(() => {});
+          };
+          pc.onconnectionstatechange = () => {
+            if (
+              pc.connectionState === "failed" ||
+              pc.connectionState === "disconnected" ||
+              pc.connectionState === "closed"
+            ) {
+              stopWebRtcPublisher(offer.peerId, false);
+            }
+          };
+
+          await pc.setRemoteDescription({ type: "offer", sdp: offer.sdp });
+          const answer = await pc.createAnswer();
+          await pc.setLocalDescription(answer);
+          if (!answer.sdp) throw new Error("WebRTC answer did not include SDP");
+          await sendCommand(
+            "browser:webrtcAnswer",
+            {
+              tabId,
+              peerId: offer.peerId,
+              workspaceId,
+              type: "answer",
+              sdp: answer.sdp,
+            },
+            BROWSER_PROXY_COMMAND_TIMEOUT_MS
+          );
+          onAddLog(tabId, "info", "WebRTC browser publisher connected");
+        })().catch((err) => {
+          stopWebRtcPublisher(offer.peerId, true);
+          onAddLog(tabId, "error", `WebRTC publish failed: ${getErrorMessage(err)}`);
+        });
+        return;
+      }
+
+      if (event === "browser:webrtcIce") {
+        const ice = data as BrowserProxyWebRtcIceCandidateEvent;
+        if (ice.tabId !== tabId || ice.from !== "viewer") return;
+        const publisher = webRtcPublishersRef.current.get(ice.peerId);
+        if (!publisher) return;
+        publisher.pc.addIceCandidate(ice.candidate).catch((err) => {
+          onAddLog(tabId, "warn", `WebRTC ICE add failed: ${getErrorMessage(err)}`);
+        });
+        return;
+      }
+
+      if (event === "browser:webrtcStop") {
+        const stop = data as BrowserProxyWebRtcStopEvent;
+        if (stop.tabId !== tabId || stop.from !== "viewer") return;
+        stopWebRtcPublisher(stop.peerId, false);
+      }
+    });
+  }, [
+    getWebview,
+    onAddLog,
+    stopAllWebRtcPublishers,
+    stopWebRtcPublisher,
+    tab.streamToRemote,
+    tabId,
+    webRtcEnabled,
+    workspaceId,
+  ]);
+
+  useEffect(() => {
+    return () => stopAllWebRtcPublishers(true);
+  }, [stopAllWebRtcPublishers]);
 
   // --- Subscribe to <webview> DOM events ---
   useEffect(() => {
