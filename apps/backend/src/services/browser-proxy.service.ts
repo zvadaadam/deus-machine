@@ -14,6 +14,7 @@ import { dirname, join } from "node:path";
 import { createRequire } from "node:module";
 import { WebSocket, type RawData } from "ws";
 import { broadcast as wsBroadcast, onConnectionRemoved, sendToConnection } from "./ws.service";
+import { getManagedBrowserCdpBaseUrl } from "./managed-browser.service";
 import type {
   BrowserProxyAttachParams,
   BrowserProxyConsoleEvent,
@@ -40,6 +41,7 @@ interface CdpTarget {
   title?: string;
   url?: string;
   webSocketDebuggerUrl?: string;
+  cdpBaseUrl?: string;
 }
 
 interface NativeTabRegistration {
@@ -99,7 +101,7 @@ function getCdpPort(): string {
   return port;
 }
 
-function getCdpBaseUrl(): string {
+function getNativeCdpBaseUrl(): string {
   const configured = process.env.BROWSER_CDP_URL;
   const baseUrl = configured || `http://127.0.0.1:${getCdpPort()}`;
   return baseUrl.replace(/\/+$/, "");
@@ -134,6 +136,36 @@ function isBlankUrl(url: string | undefined): boolean {
   return !url || url === "about:blank";
 }
 
+function isLocalHttpUrl(url: string | undefined): boolean {
+  if (isBlankUrl(url)) return false;
+  try {
+    const parsed = new URL(url);
+    const host = parsed.hostname.toLowerCase();
+    return (
+      parsed.protocol === "http:" &&
+      !!parsed.port &&
+      (host === "localhost" || host === "127.0.0.1" || host === "::1" || host === "[::1]")
+    );
+  } catch {
+    return false;
+  }
+}
+
+function isExternalHttpUrl(url: string | undefined): boolean {
+  if (isBlankUrl(url)) return false;
+  try {
+    const parsed = new URL(url);
+    return (parsed.protocol === "http:" || parsed.protocol === "https:") && !isLocalHttpUrl(url);
+  } catch {
+    return false;
+  }
+}
+
+async function resolveBrowserEngineCdpBaseUrl(url: string | undefined): Promise<string> {
+  if (process.env.BROWSER_CDP_URL) return getNativeCdpBaseUrl();
+  return isExternalHttpUrl(url) ? await getManagedBrowserCdpBaseUrl() : getNativeCdpBaseUrl();
+}
+
 function isAppRendererTarget(target: CdpTarget): boolean {
   const url = target.url ?? "";
   return (
@@ -159,14 +191,17 @@ async function fetchJson<T>(url: string, init?: RequestInit): Promise<T> {
   return (await res.json()) as T;
 }
 
-async function listTargets(): Promise<CdpTarget[]> {
-  return fetchJson<CdpTarget[]>(`${getCdpBaseUrl()}/json`);
+async function listTargets(cdpBaseUrl = getNativeCdpBaseUrl()): Promise<CdpTarget[]> {
+  return (await fetchJson<CdpTarget[]>(`${cdpBaseUrl}/json`)).map((target) => ({
+    ...target,
+    cdpBaseUrl,
+  }));
 }
 
-async function getBrowserWsUrl(): Promise<string | null> {
+async function getBrowserWsUrl(cdpBaseUrl = getNativeCdpBaseUrl()): Promise<string | null> {
   try {
     const version = await fetchJson<{ webSocketDebuggerUrl?: string }>(
-      `${getCdpBaseUrl()}/json/version`
+      `${cdpBaseUrl}/json/version`
     );
     return version.webSocketDebuggerUrl ?? null;
   } catch {
@@ -174,14 +209,20 @@ async function getBrowserWsUrl(): Promise<string | null> {
   }
 }
 
-async function findTargetById(targetId: string): Promise<CdpTarget | null> {
-  const targets = await listTargets();
+async function findTargetById(
+  targetId: string,
+  cdpBaseUrl = getNativeCdpBaseUrl()
+): Promise<CdpTarget | null> {
+  const targets = await listTargets(cdpBaseUrl);
   return targets.find((target) => target.id === targetId) ?? null;
 }
 
-async function findTargetByUrl(url: string | undefined): Promise<CdpTarget | null> {
+async function findTargetByUrl(
+  url: string | undefined,
+  cdpBaseUrl = getNativeCdpBaseUrl()
+): Promise<CdpTarget | null> {
   if (isBlankUrl(url)) return null;
-  const targets = await listTargets();
+  const targets = await listTargets(cdpBaseUrl);
   return (
     targets.find(
       (target) =>
@@ -190,10 +231,13 @@ async function findTargetByUrl(url: string | undefined): Promise<CdpTarget | nul
   );
 }
 
-async function createTarget(url: string | undefined): Promise<CdpTarget> {
+async function createTarget(
+  url: string | undefined,
+  cdpBaseUrl = getNativeCdpBaseUrl()
+): Promise<CdpTarget> {
   const targetUrl = url || "about:blank";
 
-  const browserWsUrl = await getBrowserWsUrl();
+  const browserWsUrl = await getBrowserWsUrl(cdpBaseUrl);
   if (browserWsUrl) {
     let browserClient: CdpClient | null = null;
     try {
@@ -202,7 +246,7 @@ async function createTarget(url: string | undefined): Promise<CdpTarget> {
         url: targetUrl,
       })) as { targetId?: string };
       if (result.targetId) {
-        const created = await findTargetById(result.targetId);
+        const created = await findTargetById(result.targetId, cdpBaseUrl);
         if (created?.webSocketDebuggerUrl) return created;
       }
     } catch {
@@ -213,17 +257,17 @@ async function createTarget(url: string | undefined): Promise<CdpTarget> {
   }
 
   const created = await fetchJson<CdpTarget>(
-    `${getCdpBaseUrl()}/json/new?${encodeURIComponent(targetUrl)}`,
+    `${cdpBaseUrl}/json/new?${encodeURIComponent(targetUrl)}`,
     { method: "PUT" }
   );
   if (!created.webSocketDebuggerUrl) {
     throw new Error("Created CDP target did not expose a debugger URL");
   }
-  return created;
+  return { ...created, cdpBaseUrl };
 }
 
-async function closeTarget(targetId: string): Promise<void> {
-  const browserWsUrl = await getBrowserWsUrl();
+async function closeTarget(targetId: string, cdpBaseUrl = getNativeCdpBaseUrl()): Promise<void> {
+  const browserWsUrl = await getBrowserWsUrl(cdpBaseUrl);
   if (browserWsUrl) {
     let browserClient: CdpClient | null = null;
     try {
@@ -237,7 +281,7 @@ async function closeTarget(targetId: string): Promise<void> {
     }
   }
 
-  await fetch(`${getCdpBaseUrl()}/json/close/${encodeURIComponent(targetId)}`).catch(() => {});
+  await fetch(`${cdpBaseUrl}/json/close/${encodeURIComponent(targetId)}`).catch(() => {});
 }
 
 class CdpClient {
@@ -396,6 +440,7 @@ class AgentBrowserStream {
   constructor(
     private readonly port: number,
     private readonly agentBrowserSessionId: string,
+    private readonly cdpBaseUrl: string,
     private readonly onFrame: (frame: AgentBrowserStreamFrame) => void,
     private readonly onError: (error: string) => void
   ) {}
@@ -426,7 +471,12 @@ class AgentBrowserStream {
   private async startInner(target: CdpTarget): Promise<void> {
     if (this.ws?.readyState === WebSocket.OPEN) return;
     this.closeSocket();
-    await bootstrapAgentBrowserStream(target, this.agentBrowserSessionId, this.port);
+    await bootstrapAgentBrowserStream(
+      target,
+      this.agentBrowserSessionId,
+      this.port,
+      this.cdpBaseUrl
+    );
     if (this.stopped) return;
     this.ws = await connectAgentBrowserStream(this.port);
     this.bindStream(this.ws);
@@ -484,13 +534,15 @@ class BrowserProxySession {
     private target: CdpTarget,
     private readonly ownsTarget: boolean,
     readonly streamPort: number,
-    readonly agentBrowserSessionId: string
+    readonly agentBrowserSessionId: string,
+    private readonly cdpBaseUrl: string
   ) {
     this.currentUrl = target.url || "about:blank";
     this.nativeCdpStream = usesNativeElectronCdp() && target.type === "webview";
     this.stream = new AgentBrowserStream(
       streamPort,
       agentBrowserSessionId,
+      cdpBaseUrl,
       (frame) => {
         this.lastFrameAt = frame.timestamp;
         if (frame.timestamp - this.lastForwardedFrameAt < MIN_FRAME_INTERVAL_MS) return;
@@ -565,7 +617,7 @@ class BrowserProxySession {
     claimedTargetIds.delete(this.target.id);
     sessions.delete(this.tabId);
     if (this.ownsTarget) {
-      await closeTarget(this.target.id);
+      await closeTarget(this.target.id, this.cdpBaseUrl);
     }
   }
 
@@ -707,10 +759,10 @@ class BrowserProxySession {
       const registered = await findRegisteredTarget(this.tabId);
       if (registered) return registered;
 
-      const byId = await findTargetById(this.target.id);
+      const byId = await findTargetById(this.target.id, this.cdpBaseUrl);
       if (byId && isUsablePageTarget(byId)) return byId;
 
-      const byUrl = await findTargetByUrl(this.currentUrl);
+      const byUrl = await findTargetByUrl(this.currentUrl, this.cdpBaseUrl);
       if (byUrl) return byUrl;
 
       if (Date.now() < deadline) {
@@ -1066,7 +1118,8 @@ function estimateBase64Bytes(value: string): number {
 async function bootstrapAgentBrowserStream(
   target: CdpTarget,
   sessionId: string,
-  port: number
+  port: number,
+  cdpBaseUrl: string
 ): Promise<void> {
   if (!target.webSocketDebuggerUrl) throw new Error("CDP target has no debugger URL");
   const env = {
@@ -1078,7 +1131,7 @@ async function bootstrapAgentBrowserStream(
     AGENT_BROWSER_SOCKET_DIR: process.env.AGENT_BROWSER_SOCKET_DIR ?? "/tmp",
   };
 
-  const browserWsUrl = await getBrowserWsUrl();
+  const browserWsUrl = await getBrowserWsUrl(cdpBaseUrl);
   if (!browserWsUrl) {
     await runAgentBrowserCommand(
       ["--cdp", target.webSocketDebuggerUrl, "get", "url", "--json"],
@@ -1087,7 +1140,7 @@ async function bootstrapAgentBrowserStream(
     return;
   }
 
-  const tabIndex = await resolveAgentBrowserTabIndex(browserWsUrl, target, env);
+  const tabIndex = await resolveAgentBrowserTabIndex(browserWsUrl, target, env, cdpBaseUrl);
   const selected = await runAgentBrowserCommand(
     ["--cdp", browserWsUrl, "tab", String(tabIndex), "--json"],
     env
@@ -1098,16 +1151,17 @@ async function bootstrapAgentBrowserStream(
 async function resolveAgentBrowserTabIndex(
   cdpUrl: string,
   target: CdpTarget,
-  env: Record<string, string | undefined>
+  env: Record<string, string | undefined>,
+  cdpBaseUrl: string
 ): Promise<number> {
   const result = await runAgentBrowserCommand(["--cdp", cdpUrl, "tab", "list", "--json"], env);
   const tabs = getAgentBrowserTabs(result);
   const exactMatches = tabs.filter((tab) => agentBrowserTabMatchesTarget(tab, target, true));
-  const exactIndex = await pickAgentBrowserTabIndex(target, exactMatches, true);
+  const exactIndex = await pickAgentBrowserTabIndex(target, exactMatches, true, cdpBaseUrl);
   if (exactIndex !== null) return exactIndex;
 
   const urlMatches = tabs.filter((tab) => agentBrowserTabMatchesTarget(tab, target, false));
-  const urlIndex = await pickAgentBrowserTabIndex(target, urlMatches, false);
+  const urlIndex = await pickAgentBrowserTabIndex(target, urlMatches, false, cdpBaseUrl);
   if (urlIndex !== null) return urlIndex;
 
   throw new Error(
@@ -1120,7 +1174,8 @@ async function resolveAgentBrowserTabIndex(
 async function pickAgentBrowserTabIndex(
   target: CdpTarget,
   matches: AgentBrowserTab[],
-  requireType: boolean
+  requireType: boolean,
+  cdpBaseUrl: string
 ): Promise<number | null> {
   const indexedMatches = matches.filter(
     (tab): tab is AgentBrowserTab & { index: number } => typeof tab.index === "number"
@@ -1128,15 +1183,16 @@ async function pickAgentBrowserTabIndex(
   if (indexedMatches.length === 1) return indexedMatches[0].index;
   if (indexedMatches.length < 2) return null;
 
-  const cdpOrdinal = await getCdpTargetOrdinal(target, requireType);
+  const cdpOrdinal = await getCdpTargetOrdinal(target, requireType, cdpBaseUrl);
   return cdpOrdinal !== null ? (indexedMatches[cdpOrdinal]?.index ?? null) : null;
 }
 
 async function getCdpTargetOrdinal(
   target: CdpTarget,
-  requireType: boolean
+  requireType: boolean,
+  cdpBaseUrl: string
 ): Promise<number | null> {
-  const targets = await listTargets().catch(() => []);
+  const targets = await listTargets(cdpBaseUrl).catch(() => []);
   const matchingTargets = targets.filter(
     (candidate) =>
       isUsablePageTarget(candidate) &&
@@ -1320,15 +1376,24 @@ async function createSession(
   workspaceId: string | undefined,
   url: string | undefined
 ): Promise<BrowserProxySession> {
+  const cdpBaseUrl = await resolveBrowserEngineCdpBaseUrl(url);
   let registered = await findRegisteredTarget(tabId);
-  if (!registered && usesNativeElectronCdp() && workspaceId && !isBlankUrl(url)) {
+  if (
+    !registered &&
+    cdpBaseUrl === getNativeCdpBaseUrl() &&
+    usesNativeElectronCdp() &&
+    workspaceId &&
+    !isBlankUrl(url) &&
+    isLocalHttpUrl(url)
+  ) {
     registered = await requestNativeTabTarget(tabId, workspaceId, url);
   }
 
-  const allowUrlFallback = !usesNativeElectronCdp() || !workspaceId;
-  const existing = registered ?? (allowUrlFallback ? await findTargetByUrl(url) : null);
+  const allowUrlFallback =
+    cdpBaseUrl !== getNativeCdpBaseUrl() || !usesNativeElectronCdp() || !workspaceId;
+  const existing = registered ?? (allowUrlFallback ? await findTargetByUrl(url, cdpBaseUrl) : null);
   const ownsTarget = !existing;
-  const target = existing ?? (await createTarget(url));
+  const target = existing ?? (await createTarget(url, cdpBaseUrl));
   if (!target.webSocketDebuggerUrl) throw new Error("CDP target has no debugger URL");
   claimedTargetIds.add(target.id);
   const streamPort = await allocateStreamPort();
@@ -1338,7 +1403,8 @@ async function createSession(
     target,
     ownsTarget,
     streamPort,
-    makeAgentBrowserSessionId(tabId)
+    makeAgentBrowserSessionId(tabId),
+    cdpBaseUrl
   );
   sessions.set(tabId, session);
   return session;
