@@ -21,7 +21,7 @@ import { registerNativeHandlers } from "./native-handlers";
 import { registerBrowserEmulationHandlers } from "./browser-emulation";
 // PTY, file watching, and browser server are now handled by the backend
 // via WebSocket commands — no Electron IPC needed for these.
-import { setupAutoUpdater } from "./auto-updater";
+import { registerUpdateHandlers, setupAutoUpdater } from "./auto-updater";
 import { syncShellEnvironment } from "./shell-env";
 import { setupAppMenu } from "./app-menu";
 import { setupTray, destroyTray } from "./tray";
@@ -309,6 +309,7 @@ app.whenReady().then(async () => {
   // Register IPC handlers before window creation so they're ready immediately
   registerNativeHandlers();
   registerBrowserEmulationHandlers();
+  registerUpdateHandlers();
 
   // Cross-window event relay — forwards a sender's event to all other windows.
   // Used for chat-insert (e.g. terminal/simulator feeding the main composer).
@@ -347,11 +348,8 @@ app.whenReady().then(async () => {
     }
   }
 
-  // Auto-updater (delayed start — let the app boot first)
   if (!is.dev) {
-    setTimeout(() => {
-      if (mainWindow && !mainWindow.isDestroyed()) setupAutoUpdater(mainWindow);
-    }, 15_000);
+    if (mainWindow && !mainWindow.isDestroyed()) setupAutoUpdater(mainWindow);
   }
 });
 

@@ -28,10 +28,6 @@ const GITHUB_REPO = "zvadaadam/deus-machine";
 
 const INSTALL_PATHS: Record<string, string[]> = {
   darwin: ["/Applications/Deus.app", `${homedir()}/Applications/Deus.app`],
-  win32: [
-    `${process.env.LOCALAPPDATA || ""}\\Programs\\Deus\\Deus.exe`,
-    `${process.env.PROGRAMFILES || ""}\\Deus\\Deus.exe`,
-  ],
   linux: [`${homedir()}/.local/bin/Deus.AppImage`, "/usr/local/bin/Deus.AppImage"],
 };
 
@@ -50,7 +46,6 @@ export function hasDisplay(): boolean {
   if (process.env.CI || process.env.DOCKER || existsSync("/.dockerenv")) return false;
   if (process.env.SSH_CONNECTION || process.env.SSH_TTY) return false;
   if (os === "darwin") return true;
-  if (os === "win32") return true;
   if (os === "linux") return !!(process.env.DISPLAY || process.env.WAYLAND_DISPLAY);
   return false;
 }
@@ -72,7 +67,6 @@ export function launchDesktop(appPath: string): void {
     case "darwin":
       spawn("open", [appPath], { detached: true, stdio: "ignore" }).unref();
       break;
-    case "win32":
     case "linux":
       spawn(appPath, [], { detached: true, stdio: "ignore" }).unref();
       break;
@@ -115,7 +109,7 @@ export async function installDesktop(options: DesktopOptions): Promise<void> {
   if (!assetPattern) {
     error(`Unsupported platform: ${os} ${cpuArch}`);
     blank();
-    hint("Supported: macOS (arm64/x64), Windows (x64), Linux (x64)");
+    hint("Supported: macOS (arm64/x64), Linux (x64)");
     hint(`Or run ${c.cyan("deus start")} to run as a headless server.`);
     blank();
     process.exit(1);
@@ -191,11 +185,6 @@ function getAssetPattern(
         description: `macOS DMG (${archSuffix})`,
       };
     }
-    case "win32":
-      return {
-        matcher: (name) => name.endsWith(".exe") && !name.includes("blockmap"),
-        description: "Windows installer (exe)",
-      };
     case "linux":
       return {
         matcher: (name) => name.endsWith(".AppImage"),
@@ -366,13 +355,6 @@ async function installForPlatform(
           }
         }
       }
-    }
-
-    case "win32": {
-      s.succeed("Launching installer...");
-      spawn(filePath, [], { detached: true, stdio: "ignore" }).unref();
-      hint("Follow the on-screen instructions to complete installation.");
-      return true;
     }
 
     case "linux": {

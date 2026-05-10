@@ -167,6 +167,15 @@ describe("discoverExecutable", () => {
     expect(state.executablePath).toBe("/env/override/cli");
   });
 
+  it("skips shell discovery for packaged desktop", () => {
+    process.env.DEUS_PACKAGED = "1";
+    mockExistsSync.mockReturnValue(false);
+
+    runDiscovery({ staticCandidates: ["/missing/cli"] });
+
+    expect(mockExecSync).not.toHaveBeenCalled();
+  });
+
   it("invokes extraCandidates callback and uses results", () => {
     const extraFn = vi.fn().mockReturnValue(["/extra/path"]);
     mockExistsSync.mockReturnValue(true);
