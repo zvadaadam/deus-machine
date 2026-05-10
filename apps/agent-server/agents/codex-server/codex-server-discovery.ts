@@ -10,6 +10,7 @@ import {
   discoverExecutable,
   type DiscoveryState,
 } from "../environment/cli-discovery";
+import { getPackagedCodexCandidates } from "../environment/packaged-cli-paths";
 
 const MIN_CODEX_APP_SERVER_VERSION = "0.128.0";
 
@@ -56,6 +57,9 @@ function extraCodexCandidates(): string[] {
 
 function candidatePathsNearRuntime(): string[] {
   const candidates = new Set<string>();
+  for (const packagedCandidate of getPackagedCodexCandidates()) {
+    candidates.add(packagedCandidate);
+  }
 
   const argvEntry = process.argv[1];
   if (argvEntry) {

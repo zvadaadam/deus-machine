@@ -24,6 +24,28 @@ Never run `bun run dev:frontend` alone — it skips the backend.
 - Frontend: http://localhost:1420 (Vite auto-increments if taken)
 - Backend: dynamic port (check terminal output)
 
+## Cursor Cloud setup
+
+For a fresh cloud agent, set up and smoke-test the repo from the workspace root:
+
+```bash
+bun install --frozen-lockfile
+bun run typecheck
+bun run test:backend
+bun run test:agent-server
+bun run dev:web
+```
+
+`bun run dev:web` is the preferred cloud smoke because it rebuilds the Node native module ABI, starts the backend, lets the backend own agent-server startup, and then starts Vite with the emitted backend port. Confirm the terminal shows `[agent-server] LISTEN_URL=...`, `[BACKEND_PORT]...`, `Server ready!`, and an `AgentClient` handshake before opening the frontend URL.
+
+For Linux package/distribution checks:
+
+```bash
+bun run package:linux
+```
+
+This should produce both `dist-electron/Deus-*.AppImage` and `dist-electron/deus_*_amd64.deb`. On Cursor Cloud, direct AppImage execution may fail without `libfuse.so.2`; use `APPIMAGE_EXTRACT_AND_RUN=1` for smoke tests in that environment.
+
 ## Architecture (3 Processes)
 
 ```text
@@ -47,12 +69,12 @@ Backend → Agent-Server (apps/agent-server/) — JSON-RPC 2.0 over WebSocket
 
 Single WS connection (`/ws`) using `q:` prefixed JSON frames:
 
-| Frame | Purpose |
-|---|---|
+| Frame                                    | Purpose                                                             |
+| ---------------------------------------- | ------------------------------------------------------------------- |
 | `q:subscribe` / `q:snapshot` / `q:delta` | Reactive data subscriptions (workspaces, stats, sessions, messages) |
-| `q:mutate` / `q:mutate_result` | Sync writes (archiveWorkspace, updateWorkspaceTitle) |
-| `q:command` / `q:command_ack` | Async actions (sendMessage, stopSession) |
-| `q:event` | Ephemeral push (tool relay, plan-mode) |
+| `q:mutate` / `q:mutate_result`           | Sync writes (archiveWorkspace, updateWorkspaceTitle)                |
+| `q:command` / `q:command_ack`            | Async actions (sendMessage, stopSession)                            |
+| `q:event`                                | Ephemeral push (tool relay, plan-mode)                              |
 
 Resources, mutations, commands, and events are all defined in `shared/events.ts`. Frontend subscribes via `useQuerySubscription()`.
 
