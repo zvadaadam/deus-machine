@@ -203,8 +203,12 @@ export async function handleMcpRequest(
     return error(null, -32700, "parse error");
   }
   if (Array.isArray(req)) {
+    // JSON-RPC 2.0 §6: empty batch is an error; a batch consisting only
+    // of notifications produces no response (caller should send 202).
+    if (req.length === 0) return error(null, -32600, "invalid request: empty batch");
     const results = await Promise.all(req.map((r) => handleSingle(r, ctx)));
-    return results.filter((r): r is JsonRpcResponse => r !== null);
+    const responses = results.filter((r): r is JsonRpcResponse => r !== null);
+    return responses.length === 0 ? null : responses;
   }
   return handleSingle(req, ctx);
 }
@@ -231,7 +235,21 @@ async function handleSingle(req: JsonRpcRequest, ctx: Context): Promise<JsonRpcR
         // editor surface (batch_design, get_editor_state, get_screenshot,
         // snapshot_layout, …). All tools that touch the canvas come from
         // the binary; ours are pure filesystem/state helpers.
-        const binaryTools = await listBinaryTools().catch(() => []);
+        //
+        // If the binary list fails (binary crashed, port not yet ready),
+        // surface a JSON-RPC error rather than silently returning only
+        // the 4 local tools — agents would otherwise believe they have
+        // full capability and fail mysteriously on `batch_design` etc.
+        let binaryTools: Awaited<ReturnType<typeof listBinaryTools>>;
+        try {
+          binaryTools = await listBinaryTools();
+        } catch (err) {
+          return error(
+            safeId,
+            -32603,
+            `bundled MCP binary unreachable: ${err instanceof Error ? err.message : String(err)}`
+          );
+        }
         const ourSet = new Set(TOOLS.map((t) => t.name));
         const merged = [
           ...TOOLS.map(({ name, description, inputSchema }) => ({

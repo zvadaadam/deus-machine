@@ -4,6 +4,7 @@
 
 import * as fs from "node:fs";
 import { join } from "node:path";
+import { pathToFileURL } from "node:url";
 import { createServer } from "node:http";
 
 import * as auth from "./lib/auth.ts";
@@ -183,7 +184,11 @@ function watchActiveDesignForUpdates(storage: string): void {
 
       try {
         const content = fs.readFileSync(penPath, "utf8");
-        notifyEditor("file-update", { fileURI: pathToFileURI(penPath), content, isDirty: false });
+        notifyEditor("file-update", {
+          fileURI: pathToFileURL(penPath).href,
+          content,
+          isDirty: false,
+        });
       } catch {
         /* file might be mid-write; we'll catch the next coalesced event */
       }
@@ -191,10 +196,6 @@ function watchActiveDesignForUpdates(storage: string): void {
   } catch {
     /* watch failed — agent will still work; editor just won't auto-reload */
   }
-}
-
-function pathToFileURI(p: string): string {
-  return "file://" + encodeURI(p.startsWith("/") ? p : "/" + p);
 }
 
 main().catch((err: unknown) => {

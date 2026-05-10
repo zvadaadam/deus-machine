@@ -123,10 +123,28 @@ export async function startMcpBinary(): Promise<{ httpPort: number } | null> {
   });
   proc = { child, httpPort, sessionId: null, cachedTools: null };
 
-  // Wait for the binary's HTTP server to come up.
+  // Wait for the binary's HTTP server to come up. If it never does,
+  // tear down the child and report failure — otherwise we'd return a
+  // bogus { httpPort } and every later fetch would just hit ECONNREFUSED.
+  let listening = false;
   for (let i = 0; i < 30; i++) {
-    if (await isPortOpen(httpPort)) break;
+    if (await isPortOpen(httpPort)) {
+      listening = true;
+      break;
+    }
     await new Promise((r) => setTimeout(r, 100));
+  }
+  if (!listening) {
+    console.warn(
+      `[pencil-binary] HTTP server never came up on port ${httpPort} after 3s — killing`
+    );
+    try {
+      child.kill("SIGTERM");
+    } catch {
+      /* already gone */
+    }
+    proc = null;
+    return null;
   }
   return { httpPort };
 }

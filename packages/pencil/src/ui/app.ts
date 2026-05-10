@@ -128,10 +128,14 @@ function setStatus(s: StatusState, text: string): void {
 async function jsonFetch<T = unknown>(url: string, init?: RequestInit): Promise<T> {
   const res = await fetch(url, init);
   const text = await res.text();
+  if (!res.ok) {
+    throw new Error(`HTTP ${res.status} for ${url}: ${text.slice(0, 200)}`);
+  }
+  if (!text.length) return {} as T;
   try {
-    return text.length ? (JSON.parse(text) as T) : ({} as T);
+    return JSON.parse(text) as T;
   } catch {
-    return { error: `bad response (${res.status})` } as unknown as T;
+    throw new Error(`bad JSON from ${url} (status ${res.status}): ${text.slice(0, 200)}`);
   }
 }
 
@@ -150,6 +154,11 @@ async function postJson<T = unknown>(url: string, payload: unknown): Promise<T> 
 // which we relay back to the iframe via iframe.contentWindow.postMessage.
 // Notifications (no expected response) just round-trip and we drop the
 // 202 ACK on the floor.
+
+// We serve the editor at our same origin under /editor/, so the iframe's
+// origin equals the panel's origin. Any inbound message that doesn't
+// originate there (or any outbound reply targeted elsewhere) is suspect.
+const EXPECTED_ORIGIN = window.location.origin;
 
 async function handleEditorMessage(msg: IpcMessage): Promise<void> {
   // Forward to backend.
@@ -188,7 +197,7 @@ async function handleEditorMessage(msg: IpcMessage): Promise<void> {
     }
   }
   if (reply && dom.iframe.contentWindow) {
-    dom.iframe.contentWindow.postMessage(reply, "*");
+    dom.iframe.contentWindow.postMessage(reply, EXPECTED_ORIGIN);
   }
 }
 
@@ -208,6 +217,11 @@ async function relayEditorReply(msg: IpcMessage): Promise<void> {
 
 window.addEventListener("message", (ev) => {
   if (ev.source !== dom.iframe.contentWindow) return;
+  // Origin lock: ev.origin can be "null" when the iframe sandbox forces an
+  // opaque origin. We accept either (a) our own origin or (b) "null" only
+  // when the iframe is currently navigated to a same-origin path. Anything
+  // else (e.g. iframe redirected to attacker.com) is rejected.
+  if (ev.origin !== EXPECTED_ORIGIN && ev.origin !== "null") return;
   const data = ev.data;
   if (!data || typeof data !== "object") return;
   const msg = data as Partial<IpcMessage>;
@@ -223,30 +237,40 @@ window.addEventListener("message", (ev) => {
 });
 
 function pushToEditor(msg: IpcMessage): void {
-  if (dom.iframe.contentWindow) dom.iframe.contentWindow.postMessage(msg, "*");
+  if (dom.iframe.contentWindow) dom.iframe.contentWindow.postMessage(msg, EXPECTED_ORIGIN);
 }
 
 // ---- SSE event stream ---------------------------------------------------
 
+function safeParse<T>(data: string, label: string): T | null {
+  try {
+    return JSON.parse(data) as T;
+  } catch (err) {
+    console.warn(`[sse] malformed ${label} payload:`, (err as Error).message);
+    return null;
+  }
+}
+
 function connectEvents(): void {
   const es = new EventSource("/events");
   es.addEventListener("op-start", (ev) => {
-    const op = JSON.parse((ev as MessageEvent).data) as OpStartEvent;
-    showRunningPill(op);
+    const op = safeParse<OpStartEvent>((ev as MessageEvent).data, "op-start");
+    if (op) showRunningPill(op);
   });
   es.addEventListener("op-end", (ev) => {
-    const op = JSON.parse((ev as MessageEvent).data) as OpEndEvent;
-    hideRunningPill(op);
+    const op = safeParse<OpEndEvent>((ev as MessageEvent).data, "op-end");
+    if (op) hideRunningPill(op);
   });
   es.addEventListener("op-phase", (ev) => {
-    const data = JSON.parse((ev as MessageEvent).data) as { phase: string };
-    if (state.runStartedAt !== null) {
+    const data = safeParse<{ phase: string }>((ev as MessageEvent).data, "op-phase");
+    if (data && state.runStartedAt !== null) {
       dom.runLabel.textContent = data.phase.toLowerCase();
     }
   });
   es.addEventListener("ipc-notify", (ev) => {
     // Backend pushes IPC notifications meant for the editor; relay them.
-    const msg = JSON.parse((ev as MessageEvent).data) as IpcMessage;
+    const msg = safeParse<IpcMessage>((ev as MessageEvent).data, "ipc-notify");
+    if (!msg) return;
     console.log("[pencil-iframe] ← ipc-notify", msg.method);
     pushToEditor(msg);
   });
@@ -254,7 +278,8 @@ function connectEvents(): void {
     // Backend wants the editor to handle a request — forward to the
     // iframe; the editor's response will come back through the window
     // message listener and get relayed via /ipc-response.
-    const msg = JSON.parse((ev as MessageEvent).data) as IpcMessage;
+    const msg = safeParse<IpcMessage>((ev as MessageEvent).data, "ipc-request");
+    if (!msg) return;
     console.log("[pencil-iframe] ← ipc-request", msg.method);
     pushToEditor(msg);
   });

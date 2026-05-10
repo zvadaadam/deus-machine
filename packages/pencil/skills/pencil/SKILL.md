@@ -34,7 +34,7 @@ All design work goes through the **live editor** tools (provided by the bundled 
 
 ## Standard workflow
 
-```
+```text
 1. get_guidelines("general")                  // load .pen op syntax
 2. pencil_get_active                          // know what's open
    (or: pencil_list_designs → pencil_open / pencil_new)
@@ -48,7 +48,7 @@ All design work goes through the **live editor** tools (provided by the bundled 
 
 **New design from scratch:**
 
-```
+```text
 user: "design me an agent control center"
 → pencil_new({ name: "agent-control-center" })       // blank canvas, visible
 → get_guidelines("general")                          // .pen syntax
@@ -59,7 +59,7 @@ user: "design me an agent control center"
 
 **Edit an existing design:**
 
-```
+```text
 user: "make the title bigger"
 → get_editor_state({ include_schema: true })         // find the title node
 → batch_design({ operations: [ "U('title-id', { fontSize: 48 })" ] })  // immediate
@@ -67,7 +67,7 @@ user: "make the title bigger"
 
 **Switch context:**
 
-```
+```text
 user: "show me the dashboard instead"
 → pencil_list_designs                                 // find it
 → pencil_open({ file: "design/dashboard.pen" })       // switch panel

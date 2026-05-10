@@ -37,8 +37,11 @@
   --ring: color-mix(in oklch, oklch(0.78 0.09 345) 40%, transparent);
 
   --success: oklch(0.68 0.12 150);
+  --success-soft: color-mix(in oklch, oklch(0.68 0.12 150) 18%, transparent);
   --warn: oklch(0.68 0.13 75);
   --err: oklch(0.65 0.13 20);
+  --err-soft: color-mix(in oklch, oklch(0.65 0.13 20) 35%, transparent);
+  --fg-strong: oklch(0.95 0 0); /* hover state for primary buttons */
 
   --shadow-card: 0 24px 80px rgba(0, 0, 0, 0.6);
   --shadow-pop: 0 12px 36px rgba(0, 0, 0, 0.5), 0 0 0 1px var(--border-strong);
@@ -47,8 +50,8 @@
   --radius-md: 6px;
   --radius-lg: 10px;
 
-  --font-sans: -apple-system, BlinkMacSystemFont, "Inter", "SF Pro Text", system-ui, sans-serif;
-  --font-mono: ui-monospace, SFMono-Regular, "JetBrains Mono", Menlo, monospace;
+  --font-sans: -apple-system, "BlinkMacSystemFont", "Inter", "SF Pro Text", system-ui, sans-serif;
+  --font-mono: ui-monospace, "SFMono-Regular", "JetBrains Mono", "Menlo", monospace;
 }
 
 /* ---------- reset -------------------------------------------------------- */
@@ -128,7 +131,7 @@ button {
 }
 .brand-dot[data-state="live"] {
   background: var(--success);
-  box-shadow: 0 0 0 4px rgba(52, 199, 89, 0.18);
+  box-shadow: 0 0 0 4px var(--success-soft);
 }
 .brand-dot[data-state="run"] {
   background: var(--accent);
@@ -450,7 +453,7 @@ button {
   color: var(--bg);
 }
 .btn--primary:hover {
-  background: white;
+  background: var(--fg-strong);
 }
 .btn--primary:disabled {
   opacity: 0.5;
@@ -584,6 +587,6 @@ button {
   transform: translate(-50%, 0);
 }
 .toast--error {
-  border-color: rgba(255, 107, 107, 0.4);
+  border-color: var(--err-soft);
   color: var(--err);
 }

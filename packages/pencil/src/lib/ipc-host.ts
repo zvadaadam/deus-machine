@@ -12,6 +12,7 @@
 
 import * as fs from "node:fs";
 import { dirname, join } from "node:path";
+import { pathToFileURL } from "node:url";
 import { randomUUID } from "node:crypto";
 
 import {
@@ -26,9 +27,12 @@ import { broadcastEvent } from "./ops.ts";
 import type { Context } from "./types.ts";
 
 /** Convert an absolute filesystem path to a `file://` URI. The editor's
- *  document manager stores docs by URI; load-file payloads must use this. */
+ *  document manager stores docs by URI; load-file payloads must use this.
+ *  We use Node's `pathToFileURL` so filenames containing `#`, `?`, or
+ *  other URI‑significant characters round‑trip correctly (a plain
+ *  `encodeURI` would leave them unescaped). */
 export function pathToFileURI(p: string): string {
-  return "file://" + encodeURI(p.startsWith("/") ? p : "/" + p);
+  return pathToFileURL(p).href;
 }
 
 /** Push a fresh document into the editor. The editor's `file-update`
@@ -216,12 +220,15 @@ const handlers: Record<string, IpcHandler> = {
   // Save flow — editor sends `notify("save-resource", { content })`.
   // We persist to disk and re-broadcast.
   "save-resource": async (payload, ctx) => {
-    const { content } = payload as { content: string };
+    const data = payload as { content?: unknown };
+    if (typeof data?.content !== "string") {
+      throw new Error("save-resource requires payload.content to be a string");
+    }
     const active = designs.getActivePreview(ctx.storage);
     if (!active) throw new Error("no active resource to save into");
     const penPath = active.replace(/\.preview\.png$/, ".pen");
     await fs.promises.mkdir(dirname(penPath), { recursive: true });
-    await fs.promises.writeFile(penPath, content, "utf8");
+    await fs.promises.writeFile(penPath, data.content, "utf8");
     return true;
   },
 

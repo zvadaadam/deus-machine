@@ -220,5 +220,15 @@ export function rewriteEditorIndex(html: string): string {
       })();
     </script>
   `;
-  return html.replace(/<script[^>]*type="module"[^>]*>/, (m) => inject + m);
+  // Fail closed if the upstream bundle ever changes the entry-script
+  // shape — `replace` would silently return the original HTML and the
+  // IPC bridge would break at runtime with no early signal.
+  const pattern = /<script[^>]*type="module"[^>]*>/;
+  if (!pattern.test(html)) {
+    throw new Error(
+      "rewriteEditorIndex: editor index.html no longer contains the expected " +
+        '<script type="module"> entry — webappapi shim cannot be injected.'
+    );
+  }
+  return html.replace(pattern, (m) => inject + m);
 }
