@@ -31,6 +31,10 @@ export const capabilities = {
    *  arbitrary cross-origin sites with CDP access). */
   nativeBrowser: isElectron,
 
+  /** Remote browser — hosted web renders a canvas fed by the backend's CDP
+   *  browser proxy over the same WebSocket/relay connection used for app data. */
+  relayBrowser: !isElectron,
+
   /** iOS simulator panel — stream management lives in backend, works in
    *  both desktop and web modes. Desktop connects to MJPEG directly;
    *  web/relay mode shows the panel (no live stream until relay proxy is built —

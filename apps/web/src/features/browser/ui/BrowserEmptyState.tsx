@@ -14,9 +14,10 @@ import { LocalServerCard } from "./LocalServerCard";
 interface BrowserEmptyStateProps {
   /** Called when the user clicks a local server card. */
   onOpen: (url: string) => void;
+  description?: string;
 }
 
-export function BrowserEmptyState({ onOpen }: BrowserEmptyStateProps) {
+export function BrowserEmptyState({ onOpen, description }: BrowserEmptyStateProps) {
   const { data, isLoading } = useLocalServers();
   const servers = data.servers;
 
@@ -61,7 +62,7 @@ export function BrowserEmptyState({ onOpen }: BrowserEmptyStateProps) {
           Paste a URL above or ask the Agent to browse
         </p>
         <p className="text-muted-foreground/40 mt-1 text-xs">
-          Supports any website — cookies, auth, and devtools included
+          {description ?? "Supports any website — cookies, auth, and devtools included"}
         </p>
       </div>
     </div>

@@ -162,6 +162,20 @@ export const COMMAND_NAMES = [
   // (not these commands), but both paths converge on apps.service.launchApp.
   "launchApp",
   "stopApp",
+  // Remote browser proxy — agent-browser streaming for hosted web clients.
+  "browser:attach",
+  "browser:registerNativeTab",
+  "browser:unregisterNativeTab",
+  "browser:detach",
+  "browser:close",
+  "browser:navigate",
+  "browser:back",
+  "browser:forward",
+  "browser:reload",
+  "browser:resize",
+  "browser:input",
+  "browser:eval",
+  "browser:captureScreenshot",
 ] as const;
 export type CommandName = (typeof COMMAND_NAMES)[number];
 
@@ -202,6 +216,13 @@ export const PROTOCOL_EVENTS = [
   //   apps:stopped  — tabs pointing at the url are closed (the port is dead)
   "apps:launched",
   "apps:stopped",
+  // Remote browser proxy events.
+  "browser:frame",
+  "browser:state",
+  "browser:console",
+  "browser:error",
+  "browser:nativeTabRequested",
+  "browser:nativeTabCloseRequested",
 ] as const;
 export type ProtocolEvent = (typeof PROTOCOL_EVENTS)[number];
 

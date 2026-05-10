@@ -57,7 +57,10 @@ export const CONTENT_TABS: ContentTabItem[] = [
 export function isTabVisible(tab: ContentTab, settings?: Settings): boolean {
   const item = CONTENT_TABS.find((i) => i.id === tab);
   if (!item) return false;
-  if (item.capabilityGate && !capabilities[item.capabilityGate]) return false;
+  if (tab === "browser" && !(capabilities.nativeBrowser || capabilities.relayBrowser)) {
+    return false;
+  }
+  if (tab !== "browser" && item.capabilityGate && !capabilities[item.capabilityGate]) return false;
   if (item.visibilityKey) return settings?.[item.visibilityKey] === true;
   return true;
 }

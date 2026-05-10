@@ -215,7 +215,21 @@ describe("shared/events", () => {
       // AAP commands
       expect(COMMAND_NAMES).toContain("launchApp");
       expect(COMMAND_NAMES).toContain("stopApp");
-      expect(COMMAND_NAMES).toHaveLength(30);
+      // Remote browser proxy commands
+      expect(COMMAND_NAMES).toContain("browser:attach");
+      expect(COMMAND_NAMES).toContain("browser:registerNativeTab");
+      expect(COMMAND_NAMES).toContain("browser:unregisterNativeTab");
+      expect(COMMAND_NAMES).toContain("browser:detach");
+      expect(COMMAND_NAMES).toContain("browser:close");
+      expect(COMMAND_NAMES).toContain("browser:navigate");
+      expect(COMMAND_NAMES).toContain("browser:back");
+      expect(COMMAND_NAMES).toContain("browser:forward");
+      expect(COMMAND_NAMES).toContain("browser:reload");
+      expect(COMMAND_NAMES).toContain("browser:resize");
+      expect(COMMAND_NAMES).toContain("browser:input");
+      expect(COMMAND_NAMES).toContain("browser:eval");
+      expect(COMMAND_NAMES).toContain("browser:captureScreenshot");
+      expect(COMMAND_NAMES).toHaveLength(43);
     });
 
     it("REQUEST_RESOURCES contains the expected request-only resources", () => {
@@ -275,7 +289,14 @@ describe("shared/events", () => {
       // AAP events
       expect(PROTOCOL_EVENTS).toContain("apps:launched");
       expect(PROTOCOL_EVENTS).toContain("apps:stopped");
-      expect(PROTOCOL_EVENTS).toHaveLength(23);
+      // Remote browser proxy events
+      expect(PROTOCOL_EVENTS).toContain("browser:frame");
+      expect(PROTOCOL_EVENTS).toContain("browser:state");
+      expect(PROTOCOL_EVENTS).toContain("browser:console");
+      expect(PROTOCOL_EVENTS).toContain("browser:error");
+      expect(PROTOCOL_EVENTS).toContain("browser:nativeTabRequested");
+      expect(PROTOCOL_EVENTS).toContain("browser:nativeTabCloseRequested");
+      expect(PROTOCOL_EVENTS).toHaveLength(29);
     });
   });
 });
