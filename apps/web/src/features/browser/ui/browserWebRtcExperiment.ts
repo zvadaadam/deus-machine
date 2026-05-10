@@ -1,5 +1,6 @@
 import type {
   BrowserProxyWebRtcIceCandidate,
+  BrowserProxyWebRtcIceCandidateEvent,
   BrowserProxyWebRtcSignalSource,
 } from "@shared/types/browser-proxy";
 
@@ -39,7 +40,7 @@ export function makeIceCommandParams(
   peerId: string,
   from: BrowserProxyWebRtcSignalSource,
   candidate: RTCIceCandidate
-): Record<string, unknown> {
+): BrowserProxyWebRtcIceCandidateEvent {
   return {
     tabId,
     peerId,
