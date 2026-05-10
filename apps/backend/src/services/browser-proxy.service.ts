@@ -119,7 +119,6 @@ class BrowserProxySession {
     this.stream = new AgentBrowserStream(
       streamPort,
       agentBrowserSessionId,
-      cdpBaseUrl,
       (frame) => {
         this.lastFrameAt = frame.timestamp;
         if (frame.timestamp - this.lastForwardedFrameAt < MIN_FRAME_INTERVAL_MS) return;

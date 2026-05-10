@@ -3,28 +3,13 @@ import { dirname, join } from "node:path";
 import { createRequire } from "node:module";
 import { WebSocket, type RawData } from "ws";
 import type { BrowserProxyInputParams } from "@shared/types/browser-proxy";
-import {
-  CdpClient,
-  getBrowserWsUrl,
-  isUsablePageTarget,
-  listTargets,
-  type CdpTarget,
-  type JsonObject,
-} from "./cdp";
+import { type CdpTarget, type JsonObject } from "./cdp";
 
 export interface AgentBrowserStreamFrame {
   data: string;
   width: number;
   height: number;
   timestamp: number;
-}
-
-interface AgentBrowserTab {
-  active?: boolean;
-  index?: number;
-  title?: string;
-  type?: string;
-  url?: string;
 }
 
 interface AgentBrowserCommandResult {
@@ -61,7 +46,6 @@ export class AgentBrowserStream {
   constructor(
     private readonly port: number,
     private readonly agentBrowserSessionId: string,
-    private readonly cdpBaseUrl: string,
     private readonly onFrame: (frame: AgentBrowserStreamFrame) => void,
     private readonly onError: (error: string) => void
   ) {}
@@ -92,12 +76,7 @@ export class AgentBrowserStream {
   private async startInner(target: CdpTarget): Promise<void> {
     if (this.ws?.readyState === WebSocket.OPEN) return;
     this.closeSocket();
-    await bootstrapAgentBrowserStream(
-      target,
-      this.agentBrowserSessionId,
-      this.port,
-      this.cdpBaseUrl
-    );
+    await bootstrapAgentBrowserStream(target, this.agentBrowserSessionId, this.port);
     if (this.stopped) return;
     this.ws = await connectAgentBrowserStream(this.port);
     this.bindStream(this.ws);
@@ -197,8 +176,7 @@ function estimateBase64Bytes(value: string): number {
 async function bootstrapAgentBrowserStream(
   target: CdpTarget,
   sessionId: string,
-  port: number,
-  cdpBaseUrl: string
+  port: number
 ): Promise<void> {
   if (!target.webSocketDebuggerUrl) throw new Error("CDP target has no debugger URL");
   const env = {
@@ -210,106 +188,11 @@ async function bootstrapAgentBrowserStream(
     AGENT_BROWSER_SOCKET_DIR: process.env.AGENT_BROWSER_SOCKET_DIR ?? "/tmp",
   };
 
-  const browserWsUrl = await getBrowserWsUrl(cdpBaseUrl);
-  if (!browserWsUrl) {
-    await runAgentBrowserCommand(
-      ["--cdp", target.webSocketDebuggerUrl, "get", "url", "--json"],
-      env
-    );
-    return;
-  }
-
-  const tabIndex = await resolveAgentBrowserTabIndex(browserWsUrl, target, env, cdpBaseUrl);
   const selected = await runAgentBrowserCommand(
-    ["--cdp", browserWsUrl, "tab", String(tabIndex), "--json"],
+    ["--cdp", target.webSocketDebuggerUrl, "get", "url", "--json"],
     env
   );
   assertAgentBrowserSelectedTarget(selected, target);
-}
-
-async function resolveAgentBrowserTabIndex(
-  cdpUrl: string,
-  target: CdpTarget,
-  env: Record<string, string | undefined>,
-  cdpBaseUrl: string
-): Promise<number> {
-  const result = await runAgentBrowserCommand(["--cdp", cdpUrl, "tab", "list", "--json"], env);
-  const tabs = getAgentBrowserTabs(result);
-  const exactMatches = tabs.filter((tab) => agentBrowserTabMatchesTarget(tab, target, true));
-  const exactIndex = await pickAgentBrowserTabIndex(target, exactMatches, true, cdpBaseUrl);
-  if (exactIndex !== null) return exactIndex;
-
-  const urlMatches = tabs.filter((tab) => agentBrowserTabMatchesTarget(tab, target, false));
-  const urlIndex = await pickAgentBrowserTabIndex(target, urlMatches, false, cdpBaseUrl);
-  if (urlIndex !== null) return urlIndex;
-
-  throw new Error(
-    `agent-browser could not resolve CDP target tab: ${target.id} ${target.type} ${
-      target.url ?? "about:blank"
-    }`
-  );
-}
-
-async function pickAgentBrowserTabIndex(
-  target: CdpTarget,
-  matches: AgentBrowserTab[],
-  requireType: boolean,
-  cdpBaseUrl: string
-): Promise<number | null> {
-  const indexedMatches = matches.filter(
-    (tab): tab is AgentBrowserTab & { index: number } => typeof tab.index === "number"
-  );
-  if (indexedMatches.length === 1) return indexedMatches[0].index;
-  if (indexedMatches.length < 2) return null;
-
-  const cdpOrdinal = await getCdpTargetOrdinal(target, requireType, cdpBaseUrl);
-  return cdpOrdinal !== null ? (indexedMatches[cdpOrdinal]?.index ?? null) : null;
-}
-
-async function getCdpTargetOrdinal(
-  target: CdpTarget,
-  requireType: boolean,
-  cdpBaseUrl: string
-): Promise<number | null> {
-  const targets = await listTargets(cdpBaseUrl).catch(() => []);
-  const matchingTargets = targets.filter(
-    (candidate) =>
-      isUsablePageTarget(candidate) &&
-      cdpTargetMatchesAgentBrowserMatch(candidate, target, requireType)
-  );
-  const ordinal = matchingTargets.findIndex((candidate) => candidate.id === target.id);
-  return ordinal >= 0 ? ordinal : null;
-}
-
-function cdpTargetMatchesAgentBrowserMatch(
-  candidate: CdpTarget,
-  target: CdpTarget,
-  requireType: boolean
-): boolean {
-  if (typeof target.url === "string" && candidate.url !== target.url) return false;
-  if (requireType && target.type && candidate.type !== target.type) return false;
-  if (target.title && candidate.title && candidate.title !== target.title) return false;
-  return !!target.url;
-}
-
-function getAgentBrowserTabs(result: AgentBrowserCommandResult): AgentBrowserTab[] {
-  const data = result.data;
-  if (!data || typeof data !== "object") return [];
-  const tabs = (data as JsonObject).tabs;
-  if (!Array.isArray(tabs)) return [];
-  return tabs.filter((tab): tab is AgentBrowserTab => !!tab && typeof tab === "object");
-}
-
-function agentBrowserTabMatchesTarget(
-  tab: AgentBrowserTab,
-  target: CdpTarget,
-  requireType: boolean
-): boolean {
-  if (typeof tab.index !== "number") return false;
-  if (target.url && tab.url !== target.url) return false;
-  if (requireType && target.type && tab.type !== target.type) return false;
-  if (target.title && tab.title && tab.title !== target.title) return false;
-  return !!target.url;
 }
 
 function assertAgentBrowserSelectedTarget(
