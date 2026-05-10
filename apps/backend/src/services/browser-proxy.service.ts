@@ -14,6 +14,7 @@ import { dirname, join } from "node:path";
 import { createRequire } from "node:module";
 import { WebSocket, type RawData } from "ws";
 import { broadcast as wsBroadcast, onConnectionRemoved, sendToConnection } from "./ws.service";
+import { CdpClient, type CdpTarget, type JsonObject } from "./browser-proxy-cdp";
 import type {
   BrowserProxyAttachParams,
   BrowserProxyConsoleEvent,
@@ -32,16 +33,7 @@ import type {
   BrowserProxyTabParams,
 } from "@shared/types/browser-proxy";
 
-type JsonObject = Record<string, unknown>;
 const require = createRequire(import.meta.url);
-
-interface CdpTarget {
-  id: string;
-  type: string;
-  title?: string;
-  url?: string;
-  webSocketDebuggerUrl?: string;
-}
 
 interface NativeTabRegistration {
   tabId: string;
@@ -49,21 +41,6 @@ interface NativeTabRegistration {
   url?: string;
 }
 
-interface CdpResponse {
-  id?: number;
-  result?: unknown;
-  error?: { message?: string; code?: number };
-  method?: string;
-  params?: JsonObject;
-}
-
-interface PendingCommand {
-  resolve: (value: unknown) => void;
-  reject: (err: Error) => void;
-  timer: ReturnType<typeof setTimeout>;
-}
-
-const CDP_COMMAND_TIMEOUT_MS = 10_000;
 const AGENT_BROWSER_COMMAND_TIMEOUT_MS = 10_000;
 const AGENT_BROWSER_IDLE_TIMEOUT_MS = 30_000;
 const AGENT_BROWSER_STREAM_CONNECT_TIMEOUT_MS = 5_000;
@@ -111,16 +88,19 @@ function usesNativeElectronCdp(): boolean {
   return !process.env.BROWSER_CDP_URL;
 }
 
-function emit(event: "browser:frame", data: BrowserProxyFrameEvent): void;
-function emit(event: "browser:state", data: BrowserProxyStateEvent): void;
-function emit(event: "browser:console", data: BrowserProxyConsoleEvent): void;
-function emit(event: "browser:error", data: BrowserProxyErrorEvent): void;
-function emit(event: "browser:nativeTabRequested", data: BrowserProxyNativeTabRequestEvent): void;
-function emit(
+function broadcastBrowserProxyEvent(event: "browser:frame", data: BrowserProxyFrameEvent): void;
+function broadcastBrowserProxyEvent(event: "browser:state", data: BrowserProxyStateEvent): void;
+function broadcastBrowserProxyEvent(event: "browser:console", data: BrowserProxyConsoleEvent): void;
+function broadcastBrowserProxyEvent(event: "browser:error", data: BrowserProxyErrorEvent): void;
+function broadcastBrowserProxyEvent(
+  event: "browser:nativeTabRequested",
+  data: BrowserProxyNativeTabRequestEvent
+): void;
+function broadcastBrowserProxyEvent(
   event: "browser:nativeTabCloseRequested",
   data: BrowserProxyNativeTabCloseRequestEvent
 ): void;
-function emit(event: string, data: unknown): void {
+function broadcastBrowserProxyEvent(event: string, data: unknown): void {
   wsBroadcast(JSON.stringify({ type: "q:event", event, data }));
 }
 
@@ -240,128 +220,6 @@ async function closeTarget(targetId: string): Promise<void> {
   }
 
   await fetch(`${getCdpBaseUrl()}/json/close/${encodeURIComponent(targetId)}`).catch(() => {});
-}
-
-class CdpClient {
-  private id = 0;
-  private readonly pending = new Map<number, PendingCommand>();
-  private readonly handlers = new Map<string, Set<(params: JsonObject) => void>>();
-
-  private constructor(private readonly ws: WebSocket) {
-    ws.on("message", (raw) => this.handleMessage(raw));
-    ws.on("close", () => this.rejectAll("CDP socket closed"));
-    ws.on("error", (err) => this.rejectAll(err.message));
-  }
-
-  static connect(url: string): Promise<CdpClient> {
-    return new Promise((resolve, reject) => {
-      const ws = new WebSocket(url);
-      const failTimer = setTimeout(() => {
-        reject(new Error("Timed out connecting to CDP target"));
-        try {
-          ws.close();
-        } catch {
-          // ignore
-        }
-      }, CDP_COMMAND_TIMEOUT_MS);
-
-      ws.once("open", () => {
-        clearTimeout(failTimer);
-        resolve(new CdpClient(ws));
-      });
-      ws.once("error", (err) => {
-        clearTimeout(failTimer);
-        reject(err instanceof Error ? err : new Error(String(err)));
-      });
-    });
-  }
-
-  on(method: string, handler: (params: JsonObject) => void): () => void {
-    let set = this.handlers.get(method);
-    if (!set) {
-      set = new Set();
-      this.handlers.set(method, set);
-    }
-    set.add(handler);
-    return () => set?.delete(handler);
-  }
-
-  send(method: string, params: JsonObject = {}): Promise<unknown> {
-    if (this.ws.readyState !== WebSocket.OPEN) {
-      return Promise.reject(new Error("CDP socket is not open"));
-    }
-
-    const id = ++this.id;
-    const payload = JSON.stringify({ id, method, params });
-    return new Promise((resolve, reject) => {
-      const timer = setTimeout(() => {
-        this.pending.delete(id);
-        reject(new Error(`CDP command timed out: ${method}`));
-      }, CDP_COMMAND_TIMEOUT_MS);
-
-      this.pending.set(id, { resolve, reject, timer });
-      try {
-        this.ws.send(payload);
-      } catch (err) {
-        clearTimeout(timer);
-        this.pending.delete(id);
-        reject(err instanceof Error ? err : new Error(String(err)));
-      }
-    });
-  }
-
-  isOpen(): boolean {
-    return this.ws.readyState === WebSocket.OPEN;
-  }
-
-  close(): void {
-    try {
-      this.ws.close();
-    } catch {
-      // ignore
-    }
-  }
-
-  private handleMessage(raw: RawData): void {
-    let msg: CdpResponse;
-    try {
-      msg = JSON.parse(raw.toString()) as CdpResponse;
-    } catch {
-      return;
-    }
-
-    if (msg.id !== undefined) {
-      const pending = this.pending.get(msg.id);
-      if (!pending) return;
-      clearTimeout(pending.timer);
-      this.pending.delete(msg.id);
-      if (msg.error) {
-        pending.reject(new Error(msg.error.message ?? `CDP error ${msg.error.code ?? ""}`));
-      } else {
-        pending.resolve(msg.result);
-      }
-      return;
-    }
-
-    if (!msg.method) return;
-    const set = this.handlers.get(msg.method);
-    if (!set) return;
-    for (const handler of set) {
-      try {
-        handler(msg.params ?? {});
-      } catch (err) {
-        console.error(`[BrowserProxy] Event handler failed for ${msg.method}:`, err);
-      }
-    }
-  }
-
-  private rejectAll(reason: string): void {
-    for (const [id, pending] of this.pending) {
-      clearTimeout(pending.timer);
-      pending.reject(new Error(reason));
-      this.pending.delete(id);
-    }
-  }
 }
 
 const claimedTargetIds = new Set<string>();
@@ -518,7 +376,7 @@ class BrowserProxySession {
     const url = params.url || this.currentUrl;
     if (!usesNativeElectronCdp() || !params.workspaceId || isBlankUrl(url)) return;
     if (this.target.type !== "webview") return;
-    emit("browser:nativeTabRequested", {
+    broadcastBrowserProxyEvent("browser:nativeTabRequested", {
       tabId: this.tabId,
       workspaceId: params.workspaceId,
       url,
@@ -1360,7 +1218,11 @@ async function requestNativeTabTarget(
   const requestedUrl = url;
   if (!requestedUrl || requestedUrl === "about:blank") return null;
 
-  emit("browser:nativeTabRequested", { tabId, workspaceId, url: requestedUrl });
+  broadcastBrowserProxyEvent("browser:nativeTabRequested", {
+    tabId,
+    workspaceId,
+    url: requestedUrl,
+  });
 
   const deadline = Date.now() + nativeTabRequestTimeoutMs();
   while (Date.now() < deadline) {
@@ -1374,7 +1236,7 @@ async function requestNativeTabTarget(
 
 function requestNativeTabClose(tabId: string, workspaceId: string | undefined): void {
   const payload = workspaceId ? { tabId, workspaceId } : { tabId };
-  emit("browser:nativeTabCloseRequested", payload);
+  broadcastBrowserProxyEvent("browser:nativeTabCloseRequested", payload);
 }
 
 async function findRegisteredTarget(tabId: string): Promise<CdpTarget | null> {
@@ -1471,7 +1333,7 @@ export function cleanupBrowserSessionsForConnection(connectionId: string): void 
     if (!session.hasConnection(connectionId)) continue;
     if (!session.removeConnection(connectionId)) continue;
     void closeBrowserTab({ tabId }).catch((err) => {
-      emit("browser:error", { tabId, error: getErrorMessage(err) });
+      broadcastBrowserProxyEvent("browser:error", { tabId, error: getErrorMessage(err) });
     });
   }
 }
