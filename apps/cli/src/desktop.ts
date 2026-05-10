@@ -68,8 +68,36 @@ export function launchDesktop(appPath: string): void {
       spawn("open", [appPath], { detached: true, stdio: "ignore" }).unref();
       break;
     case "linux":
-      spawn(appPath, [], { detached: true, stdio: "ignore" }).unref();
+      spawn(appPath, [], {
+        detached: true,
+        stdio: "ignore",
+        env: {
+          ...process.env,
+          ...(hasFuse2() ? {} : { APPIMAGE_EXTRACT_AND_RUN: "1" }),
+        },
+      }).unref();
       break;
+  }
+}
+
+function hasFuse2(): boolean {
+  const commonLibPaths = [
+    "/lib/x86_64-linux-gnu/libfuse.so.2",
+    "/usr/lib/x86_64-linux-gnu/libfuse.so.2",
+    "/lib/aarch64-linux-gnu/libfuse.so.2",
+    "/usr/lib/aarch64-linux-gnu/libfuse.so.2",
+    "/usr/lib64/libfuse.so.2",
+    "/usr/lib/libfuse.so.2",
+  ];
+
+  if (commonLibPaths.some((libPath) => existsSync(libPath))) return true;
+
+  try {
+    return execSync("ldconfig -p", { encoding: "utf-8", stdio: ["ignore", "pipe", "ignore"] })
+      .split("\n")
+      .some((line) => line.includes("libfuse.so.2"));
+  } catch {
+    return false;
   }
 }
 
@@ -365,6 +393,10 @@ async function installForPlatform(
         const destPath = join(installDir, "Deus.AppImage");
         execSync(`cp "${filePath}" "${destPath}"`);
         s.succeed(`Installed to ${c.dim(destPath)}`);
+
+        if (!hasFuse2()) {
+          hint("libfuse2 not found; launching AppImage with APPIMAGE_EXTRACT_AND_RUN=1.");
+        }
 
         launchDesktop(destPath);
         return true;

@@ -22,6 +22,7 @@ import { pair } from "./pair.js";
 import { runAuthSetup } from "./login.js";
 import { showStatus } from "./status.js";
 import { animatedBanner, banner, c, blank, info, hint, success, error } from "./ui.js";
+import { getCliCommand, isGlobalVersionRequest } from "./args.js";
 
 function printHelp(version: string) {
   banner(version);
@@ -67,7 +68,7 @@ function printHelp(version: string) {
 
 async function main() {
   const args = process.argv.slice(2);
-  const command = args[0] && !args[0].startsWith("-") ? args[0] : null;
+  const command = getCliCommand(args);
   const commandArgs = command ? args.slice(1) : args;
 
   // Load version once
@@ -75,7 +76,7 @@ async function main() {
   const version = pkg.default.version;
 
   // Version (plain output, no banner)
-  if (args.includes("--version") || args.includes("-v")) {
+  if (isGlobalVersionRequest(args)) {
     console.log(version);
     process.exit(0);
   }
