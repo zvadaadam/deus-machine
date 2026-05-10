@@ -22,7 +22,7 @@ import { pair } from "./pair.js";
 import { runAuthSetup } from "./login.js";
 import { showStatus } from "./status.js";
 import { animatedBanner, banner, c, blank, info, hint, success, error } from "./ui.js";
-import { getCliCommand, isGlobalVersionRequest } from "./args.js";
+import { getCliCommand, getCliCommandIndex, isGlobalVersionRequest } from "./args.js";
 
 function printHelp(version: string) {
   banner(version);
@@ -68,8 +68,9 @@ function printHelp(version: string) {
 
 async function main() {
   const args = process.argv.slice(2);
+  const commandIndex = getCliCommandIndex(args);
   const command = getCliCommand(args);
-  const commandArgs = command ? args.slice(1) : args;
+  const commandArgs = commandIndex === -1 ? args : args.slice(commandIndex + 1);
 
   // Load version once
   const pkg = await import("../package.json", { with: { type: "json" } });

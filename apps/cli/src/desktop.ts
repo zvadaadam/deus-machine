@@ -5,7 +5,7 @@
  * for the current platform, and runs it.
  */
 
-import { execSync, spawn } from "node:child_process";
+import { execFileSync, execSync, spawn } from "node:child_process";
 import {
   chmodSync,
   copyFileSync,
@@ -110,10 +110,7 @@ function hasFuse2(): boolean {
 }
 
 function isOnPath(dir: string): boolean {
-  return (process.env.PATH ?? "")
-    .split(":")
-    .filter(Boolean)
-    .includes(dir);
+  return (process.env.PATH ?? "").split(":").filter(Boolean).includes(dir);
 }
 
 function replaceInstalledMacApp(appPath: string, destPath: string): void {
@@ -215,7 +212,11 @@ export async function installDesktop(options: DesktopOptions): Promise<void> {
     if (os === "linux") {
       const installDir = join(homedir(), ".local", "bin");
       if (!isOnPath(installDir)) {
-        info(`Add ${c.dim(installDir)} to PATH to launch the AppImage directly.`);
+        info(
+          hasFuse2()
+            ? `Add ${c.dim(installDir)} to PATH to launch the AppImage directly.`
+            : `Add ${c.dim(installDir)} to PATH. Until libfuse2 is installed, launch it with ${c.dim("APPIMAGE_EXTRACT_AND_RUN=1 Deus.AppImage")} or create a wrapper script.`
+        );
       }
     }
     success("Deus is ready!");
@@ -394,7 +395,7 @@ async function installForPlatform(
         return null;
       } catch {
         s.fail("Auto-install failed — opening DMG manually");
-        execSync(`open "${filePath}"`);
+        execFileSync("open", [filePath], { stdio: "ignore" });
         hint("Drag Deus.app to Applications, then launch it from Applications.");
         return null;
       } finally {

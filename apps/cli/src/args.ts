@@ -1,9 +1,13 @@
+export function getCliCommandIndex(args: string[]): number {
+  return args.findIndex((arg) => !arg.startsWith("-"));
+}
+
 export function getCliCommand(args: string[]): string | null {
-  return args[0] && !args[0].startsWith("-") ? args[0] : null;
+  const commandIndex = getCliCommandIndex(args);
+  return commandIndex === -1 ? null : args[commandIndex];
 }
 
 export function isGlobalVersionRequest(args: string[]): boolean {
-  const command = getCliCommand(args);
-  if (command) return false;
+  if (getCliCommandIndex(args) !== -1) return false;
   return args.includes("--version") || args.includes("-v");
 }
