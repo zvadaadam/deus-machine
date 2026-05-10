@@ -52,7 +52,7 @@ const baseFrameSchema = z.discriminatedUnion("type", [
     response: z.object({
       status: z.number(),
       statusText: z.string().optional(),
-      headers: z.record(z.string()),
+      headers: z.record(z.string(), z.string()),
       bodyBase64: z.string(),
     }),
   }),
