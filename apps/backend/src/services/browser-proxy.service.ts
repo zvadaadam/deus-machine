@@ -138,8 +138,10 @@ function isBlankUrl(url: string | undefined): boolean {
 
 function isLocalHttpUrl(url: string | undefined): boolean {
   if (isBlankUrl(url)) return false;
+  const candidate = url;
+  if (!candidate) return false;
   try {
-    const parsed = new URL(url);
+    const parsed = new URL(candidate);
     const host = parsed.hostname.toLowerCase();
     return (
       parsed.protocol === "http:" &&
@@ -153,9 +155,13 @@ function isLocalHttpUrl(url: string | undefined): boolean {
 
 function isExternalHttpUrl(url: string | undefined): boolean {
   if (isBlankUrl(url)) return false;
+  const candidate = url;
+  if (!candidate) return false;
   try {
-    const parsed = new URL(url);
-    return (parsed.protocol === "http:" || parsed.protocol === "https:") && !isLocalHttpUrl(url);
+    const parsed = new URL(candidate);
+    return (
+      (parsed.protocol === "http:" || parsed.protocol === "https:") && !isLocalHttpUrl(candidate)
+    );
   } catch {
     return false;
   }
