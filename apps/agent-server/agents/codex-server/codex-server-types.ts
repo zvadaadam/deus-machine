@@ -82,6 +82,8 @@ export interface CodexThreadStartParams {
   developerInstructions?: string | null;
   ephemeral?: boolean | null;
   sessionStartSource?: string | null;
+  dynamicTools?: CodexDynamicToolSpec[] | null;
+  dynamic_tools?: CodexDynamicToolSpec[] | null;
 }
 
 export interface CodexThreadResumeParams extends CodexThreadStartParams {
@@ -118,6 +120,32 @@ export interface CodexTurnStartResponse {
 export interface CodexTurnInterruptParams {
   threadId: string;
   turnId: string;
+}
+
+export interface CodexDynamicToolSpec {
+  namespace?: string | null;
+  name: string;
+  description: string;
+  inputSchema: JsonValue;
+  input_schema?: JsonValue;
+  deferLoading?: boolean | null;
+  defer_loading?: boolean | null;
+}
+
+export interface CodexDynamicToolCallParams {
+  threadId: string;
+  turnId: string;
+  callId: string;
+  namespace: string | null;
+  tool: string;
+  arguments: JsonValue;
+}
+
+export interface CodexDynamicToolCallResponse {
+  contentItems: Array<
+    { type: "inputText"; text: string } | { type: "inputImage"; imageUrl: string }
+  >;
+  success: boolean;
 }
 
 export interface CodexThreadRollbackParams {
@@ -280,6 +308,10 @@ export type CodexAppServerNotification =
   | {
       method: "item/mcpToolCall/progress";
       params: { threadId: string; turnId: string; itemId: string; progress?: unknown };
+    }
+  | {
+      method: "item/tool/call";
+      params: CodexDynamicToolCallParams;
     }
   | {
       method: "error";

@@ -64,6 +64,7 @@ export const QUERY_RESOURCES = [
   "sessions",
   "session",
   "messages",
+  "goal",
   // AAP (agentic apps protocol)
   "apps",
   "running_apps",
@@ -118,6 +119,9 @@ export const MUTATION_NAMES = [
   "saveSetting",
   "invalidateFileCache",
   "runTask",
+  "goalStart",
+  "goalResume",
+  "goalCancel",
   "revokeDevice",
 ] as const;
 export type MutationName = (typeof MUTATION_NAMES)[number];
@@ -171,6 +175,8 @@ export const PROTOCOL_EVENTS = [
   "session:error",
   "session:progress",
   "tool:request",
+  "goal:updated",
+  "goal:ended",
   // Message lifecycle events
   "message:created",
   "message:done",

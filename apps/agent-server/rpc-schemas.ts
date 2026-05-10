@@ -19,6 +19,7 @@ export const AskUserQuestionRequestSchema = z.object({
       question: z.string(),
       options: z.array(z.string()),
       multiSelect: z.boolean().optional(),
+      assumedAnswer: z.string().optional(),
     })
   ),
 });

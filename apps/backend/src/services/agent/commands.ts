@@ -25,8 +25,24 @@ import { resolveAapPaths } from "./service";
 import * as simulator from "../simulator-context";
 import { launchApp, stopApp } from "../aap";
 import { broadcast as wsBroadcast } from "../ws.service";
+import {
+  GoalCancelRequestSchema,
+  GoalResumeRequestSchema,
+  GoalStartRequestSchema,
+} from "@shared/goals";
 import type { AgentHarness } from "@shared/enums";
 import type { CommandName } from "@shared/types/query-protocol";
+import type { QueryOptions } from "@shared/protocol";
+import { pushGoalEnded, pushGoalUpdated } from "../goals/goal-events";
+import { buildGoalTurnOptions, startGoalContinuation } from "../goals/goal-orchestrator";
+import {
+  createGoal,
+  deleteGoal,
+  getGoal,
+  goalContextForSession,
+  resumeGoal,
+  toActiveGoal,
+} from "../goals/goal-store";
 import {
   type QueryParams,
   readStringParam as readString,
@@ -37,6 +53,12 @@ import {
 interface CommandResult {
   commandId?: string;
   [key: string]: unknown;
+}
+
+interface SendSessionContext {
+  db: ReturnType<typeof getDatabase>;
+  session: ReturnType<typeof getSessionRaw>;
+  existingAgentSessionId: string | null;
 }
 
 // ---- Command Dispatch ----
@@ -311,42 +333,7 @@ function handleSendMessage(params: QueryParams): CommandResult {
   const model = requireParam(params, "model", "sendMessage");
   const agentHarness = requireParam(params, "agentHarness", "sendMessage") as AgentHarness;
 
-  const db = getDatabase();
-  const session = getSessionRaw(db, sessionId);
-
-  // Harness lock: once a session has messages, its agent harness is bound to
-  // a specific SDK process. Reject cross-harness switches to keep the server
-  // authoritative; the UI disables these options too, but this is the source
-  // of truth.
-  if (session && session.message_count > 0 && session.agent_harness !== agentHarness) {
-    throw new Error(
-      `Cannot switch agent from ${session.agent_harness} to ${agentHarness} on a session with messages. Open a new chat tab instead.`
-    );
-  }
-
-  // New sessions default to Claude at creation time because the user may pick
-  // the actual harness in the composer before the first send. Persist that
-  // first-send choice so follow-up turns route to the same agent process.
-  if (session && session.message_count === 0 && session.agent_harness !== agentHarness) {
-    const result = db
-      .prepare(
-        `
-        UPDATE sessions
-        SET agent_harness = ?, updated_at = datetime('now')
-        WHERE id = ? AND message_count = 0
-      `
-      )
-      .run(agentHarness, sessionId);
-
-    if (result.changes === 0) {
-      const current = getSessionRaw(db, sessionId);
-      if (current && current.agent_harness !== agentHarness) {
-        throw new Error(
-          `Cannot switch agent from ${current.agent_harness} to ${agentHarness} on a session with messages. Open a new chat tab instead.`
-        );
-      }
-    }
-  }
+  const context = prepareSessionForSend(sessionId, agentHarness);
 
   // 1. Persist the user message
   const result = writeUserMessage(sessionId, content, model);
@@ -356,17 +343,23 @@ function handleSendMessage(params: QueryParams): CommandResult {
   });
 
   // 2. Forward to agent-server (fire-and-forget — ACK already sent)
-  const existingAgentSessionId = session?.agent_session_id ?? null;
-
-  // Resolve cwd server-side from session → workspace → repo.
-  // Clear any caller-provided value so the server is authoritative.
-  delete params.cwd;
-  if (session) {
-    const workspace = getWorkspaceForMiddleware(db, session.workspace_id);
-    if (workspace) {
-      params.cwd = computeWorkspacePath(workspace);
-    }
-  }
+  const turnOptions = buildTurnOptions(
+    withServerResolvedCwd(params, context),
+    model,
+    context.existingAgentSessionId
+  ) as QueryOptions;
+  const activeGoal = getGoal(sessionId);
+  const activeGoalContext = goalContextForSession(sessionId);
+  const effectiveTurnOptions =
+    activeGoal?.status === "active" && activeGoalContext
+      ? {
+          ...turnOptions,
+          model: activeGoal.model,
+          thinkingLevel: activeGoal.thinkingLevel,
+          goalContext: activeGoalContext,
+          allowQuestions: activeGoal.allowQuestions,
+        }
+      : turnOptions;
 
   if (!agentService.isConnected()) {
     handleAgentError(sessionId, agentHarness, new Error("Agent server is disconnected"));
@@ -378,9 +371,7 @@ function handleSendMessage(params: QueryParams): CommandResult {
       sessionId,
       agentHarness,
       prompt: content,
-      options: buildTurnOptions(params, model, existingAgentSessionId) as Parameters<
-        typeof agentService.forwardTurn
-      >[0]["options"],
+      options: effectiveTurnOptions,
     })
     .then((response) => {
       if (!response.accepted) {
@@ -392,6 +383,112 @@ function handleSendMessage(params: QueryParams): CommandResult {
     });
 
   return { commandId: result.messageId };
+}
+
+export function handleGoalStart(params: QueryParams): CommandResult {
+  const request = GoalStartRequestSchema.parse(params);
+  const objective = request.objective.trim();
+  if (!objective) throw new Error("goalStart requires a non-empty objective");
+
+  const context = prepareSessionForSend(request.sessionId, request.agentHarness);
+  const messageContent = `/goal ${objective}${request.tokenBudget ? ` --tokens ${request.tokenBudget}` : ""}${request.allowQuestions === false ? " --no-questions" : ""}`;
+  const result = writeUserMessage(request.sessionId, messageContent, request.model);
+  if (!result.success) throw new Error(result.error);
+  invalidate(["workspaces", "sessions", "session", "messages", "stats"], {
+    sessionIds: [request.sessionId],
+  });
+
+  if (!agentService.isConnected()) {
+    handleAgentError(
+      request.sessionId,
+      request.agentHarness,
+      new Error("Agent server is disconnected")
+    );
+    return { commandId: result.messageId };
+  }
+
+  const goal = createGoal({
+    sessionId: request.sessionId,
+    objective,
+    tokenBudget: request.tokenBudget ?? null,
+    model: request.model,
+    thinkingLevel: request.thinkingLevel,
+    allowQuestions: request.allowQuestions,
+  });
+  const resolved = withServerResolvedCwd(params, context);
+  const cwd = readString(resolved, "cwd") || "";
+  const turnOptions: QueryOptions = {
+    ...buildGoalTurnOptions(goal, cwd, context.existingAgentSessionId),
+    providerEnvVars: readString(params, "providerEnvVars"),
+    ghToken: readString(params, "ghToken"),
+    deusEnv: params.deusEnv as Record<string, string> | undefined,
+    additionalDirectories: params.additionalDirectories as string[] | undefined,
+    chromeEnabled: params.chromeEnabled as boolean | undefined,
+    strictDataPrivacy: params.strictDataPrivacy as boolean | undefined,
+    turnId: readString(params, "turnId"),
+  };
+  const activeGoal = toActiveGoal(goal);
+  pushGoalUpdated(activeGoal);
+  invalidate(["goal"], { sessionIds: [request.sessionId] });
+
+  agentService
+    .forwardTurn({
+      sessionId: request.sessionId,
+      agentHarness: request.agentHarness,
+      prompt: objective,
+      options: turnOptions,
+    })
+    .then((response) => {
+      if (!response.accepted) {
+        const ended = deleteGoal(request.sessionId, "cancelled");
+        if (ended) pushGoalEnded(ended);
+        invalidate(["goal"], { sessionIds: [request.sessionId] });
+        handleAgentRejection(request.sessionId, request.agentHarness, response.reason);
+      }
+    })
+    .catch((err) => {
+      const ended = deleteGoal(request.sessionId, "cancelled");
+      if (ended) pushGoalEnded(ended);
+      invalidate(["goal"], { sessionIds: [request.sessionId] });
+      handleAgentError(request.sessionId, request.agentHarness, err);
+    });
+
+  return { commandId: result.messageId, goal: activeGoal };
+}
+
+export function handleGoalCancel(params: QueryParams): CommandResult {
+  const request = GoalCancelRequestSchema.parse(params);
+  const ended = deleteGoal(request.sessionId, "cancelled");
+  if (ended) {
+    pushGoalEnded(ended);
+  }
+  invalidate(["goal"], { sessionIds: [request.sessionId] });
+  return { success: true, goal: ended };
+}
+
+export function handleGoalResume(params: QueryParams): CommandResult {
+  const request = GoalResumeRequestSchema.parse(params);
+  const goal = getGoal(request.sessionId);
+  if (!goal) throw new Error("No goal found for this session.");
+  if (goal.status !== "paused") {
+    throw new Error(`Only paused goals can be resumed (current status: ${goal.status}).`);
+  }
+  if (!agentService.isConnected()) {
+    throw new Error("Agent server is disconnected");
+  }
+
+  const resumed = resumeGoal(request.sessionId);
+  if (!resumed) throw new Error("Failed to resume goal.");
+
+  const activeGoal = toActiveGoal(resumed);
+  pushGoalUpdated(activeGoal);
+  invalidate(["goal"], { sessionIds: [request.sessionId] });
+
+  void startGoalContinuation(request.sessionId, {
+    startTurn: (turn) => agentService.forwardTurn(turn),
+  });
+
+  return { success: true, goal: activeGoal };
 }
 
 // ---- stopSession ----
@@ -415,7 +512,10 @@ async function handleStopSession(params: QueryParams): Promise<CommandResult> {
   db.prepare("UPDATE sessions SET status = 'idle', updated_at = datetime('now') WHERE id = ?").run(
     sessionId
   );
+  const ended = deleteGoal(sessionId, "cancelled");
+  if (ended) pushGoalEnded(ended);
   invalidate(["workspaces", "sessions", "session", "stats"], { sessionIds: [sessionId] });
+  invalidate(["goal"], { sessionIds: [sessionId] });
   return {};
 }
 
@@ -474,6 +574,63 @@ function buildTurnOptions(
     resume: resume || readString(params, "resume"),
     resumeSessionAt: readString(params, "resumeSessionAt"),
   };
+}
+
+function prepareSessionForSend(sessionId: string, agentHarness: AgentHarness): SendSessionContext {
+  const db = getDatabase();
+  const session = getSessionRaw(db, sessionId);
+
+  // Harness lock: once a session has messages, its agent harness is bound to
+  // a specific SDK process. Reject cross-harness switches to keep the server
+  // authoritative; the UI disables these options too, but this is the source
+  // of truth.
+  if (session && session.message_count > 0 && session.agent_harness !== agentHarness) {
+    throw new Error(
+      `Cannot switch agent from ${session.agent_harness} to ${agentHarness} on a session with messages. Open a new chat tab instead.`
+    );
+  }
+
+  // New sessions default to Claude at creation time because the user may pick
+  // the actual harness in the composer before the first send. Persist that
+  // first-send choice so follow-up turns route to the same agent process.
+  if (session && session.message_count === 0 && session.agent_harness !== agentHarness) {
+    const result = db
+      .prepare(
+        `
+        UPDATE sessions
+        SET agent_harness = ?, updated_at = datetime('now')
+        WHERE id = ? AND message_count = 0
+      `
+      )
+      .run(agentHarness, sessionId);
+
+    if (result.changes === 0) {
+      const current = getSessionRaw(db, sessionId);
+      if (current && current.agent_harness !== agentHarness) {
+        throw new Error(
+          `Cannot switch agent from ${current.agent_harness} to ${agentHarness} on a session with messages. Open a new chat tab instead.`
+        );
+      }
+    }
+  }
+
+  return {
+    db,
+    session,
+    existingAgentSessionId: session?.agent_session_id ?? null,
+  };
+}
+
+function withServerResolvedCwd(params: QueryParams, context: SendSessionContext): QueryParams {
+  const next = { ...params };
+  delete next.cwd;
+  if (context.session) {
+    const workspace = getWorkspaceForMiddleware(context.db, context.session.workspace_id);
+    if (workspace) {
+      next.cwd = computeWorkspacePath(workspace);
+    }
+  }
+  return next;
 }
 
 function handleAgentRejection(sessionId: string, agentHarness: string, reason?: string): void {

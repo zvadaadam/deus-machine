@@ -28,6 +28,8 @@ import {
 import { computeWorkspacePath } from "../middleware/workspace-loader";
 import { getConnection } from "./ws.service";
 import { resolveToolRelay, rejectToolRelay, runCommand } from "./agent";
+import { handleGoalCancel, handleGoalResume, handleGoalStart } from "./agent/commands";
+import { getActiveGoal } from "./goals/goal-store";
 import { delegateToRoute } from "./route-delegate";
 import { autoProgressStatus, setWorkspaceStatus } from "./workspace-status.service";
 import { getRunningApps, listApps, stopAppsForWorkspace } from "./aap";
@@ -421,6 +423,7 @@ function runQuery(resource: QueryResource, params: QueryParams): unknown {
 
         return { messages: attachParts(db, rows), has_older: hasOlder, has_newer: false };
       })
+      .with("goal", () => getActiveGoal(requireParam(params, "sessionId", "goal")))
       // AAP (agentic apps protocol) — real handlers. `apps` is the registry;
       // `running_apps` is workspace-scoped live instances.
       .with("apps", () => listApps())
@@ -638,6 +641,9 @@ async function runMutation(action: string, params: QueryParams): Promise<unknown
           `/api/workspaces/${encodeURIComponent(wsId)}/tasks/${encodeURIComponent(taskName)}/run`
         );
       })
+      .with("goalStart", () => handleGoalStart(params))
+      .with("goalResume", () => handleGoalResume(params))
+      .with("goalCancel", () => handleGoalCancel(params))
       .with("revokeDevice", () => {
         const deviceId = requireParam(params, "deviceId", "revokeDevice");
         return delegateToRoute(

@@ -78,6 +78,7 @@ import { initializeClaude } from "../agents/claude/claude-discovery";
 import { ClaudeAgentHandler } from "../agents/claude/claude-handler";
 import { createCheckpoint } from "../agents/claude/checkpoint";
 import { resolveClaudeThinkingOptions } from "../agents/claude/claude-sdk-options";
+import { createDeusMCPServer } from "../agents/deus-tools";
 
 // Create handler instance (same pattern as index.ts)
 const handler = new ClaudeAgentHandler();
@@ -303,6 +304,41 @@ describe("claude-handler", () => {
       const sdkCall = mockClaudeSDK.mock.calls[0][0];
       expect(sdkCall.options.mcpServers).toBeDefined();
       expect(sdkCall.options.mcpServers.deus).toBeDefined();
+    });
+
+    it("passes allowQuestions through to the Deus MCP server", async () => {
+      const mockQuery = {
+        [Symbol.asyncIterator]: () => ({
+          next: async () => ({ value: undefined, done: true }),
+        }),
+        interrupt: vi.fn().mockResolvedValue(undefined),
+        setPermissionMode: vi.fn().mockResolvedValue(undefined),
+        setModel: vi.fn().mockResolvedValue(undefined),
+        setMaxThinkingTokens: vi.fn().mockResolvedValue(undefined),
+      };
+      mockClaudeSDK.mockReturnValue(mockQuery);
+
+      await handler.query("sess-no-questions", "hello", {
+        cwd: "/test",
+        model: "claude-sonnet-4-6",
+        allowQuestions: false,
+        goalContext: {
+          objective: "Ship goal mode",
+          tokenBudget: null,
+          spentTokens: 0,
+          startedAt: 100,
+        },
+      });
+
+      await new Promise((r) => setTimeout(r, 100));
+
+      expect(createDeusMCPServer).toHaveBeenCalledWith(
+        "sess-no-questions",
+        expect.objectContaining({
+          includeGoalTools: true,
+          includeAskUserQuestion: false,
+        })
+      );
     });
 
     it("excludes MCP server when strictDataPrivacy is true", async () => {

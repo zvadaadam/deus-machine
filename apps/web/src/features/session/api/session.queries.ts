@@ -62,6 +62,22 @@ export function useSession(sessionId: string | null) {
   });
 }
 
+export function useGoal(sessionId: string | null) {
+  useQuerySubscription("goal", {
+    queryKey: queryKeys.sessions.goal(sessionId || ""),
+    params: { sessionId: sessionId || "" },
+    enabled: !!sessionId,
+  });
+
+  return useQuery({
+    queryKey: queryKeys.sessions.goal(sessionId || ""),
+    queryFn: () => SessionService.fetchGoal(sessionId!),
+    enabled: !!sessionId,
+    staleTime: Infinity,
+    refetchOnWindowFocus: false,
+  });
+}
+
 /**
  * Subscribe to per-session working status for multiple sessions at once.
  * Used by the tab bar to show per-tab spinners and unread detection.

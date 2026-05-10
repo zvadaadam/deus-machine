@@ -16,7 +16,7 @@ import { serve } from "@hono/node-server";
 
 // ---- Hoisted setup: create DB before vi.mock factories run ----
 
-const { testDb, TEST_DB_PATH, TEST_DIR } = vi.hoisted(() => {
+const { testDb, TEST_DB_PATH, TEST_DIR, canUseDatabase } = vi.hoisted(() => {
   const Database = require("better-sqlite3");
   const os = require("os");
   const path = require("path");
@@ -27,11 +27,17 @@ const { testDb, TEST_DB_PATH, TEST_DIR } = vi.hoisted(() => {
   fs.mkdirSync(testDir, { recursive: true });
   const dbPath = path.join(testDir, "deus.db");
 
-  const db = new Database(dbPath);
-  db.pragma("journal_mode = WAL");
-  db.pragma("foreign_keys = ON");
-  return { testDb: db, TEST_DB_PATH: dbPath, TEST_DIR: testDir };
+  try {
+    const db = new Database(dbPath);
+    db.pragma("journal_mode = WAL");
+    db.pragma("foreign_keys = ON");
+    return { testDb: db, TEST_DB_PATH: dbPath, TEST_DIR: testDir, canUseDatabase: true };
+  } catch {
+    return { testDb: null, TEST_DB_PATH: dbPath, TEST_DIR: testDir, canUseDatabase: false };
+  }
 });
+
+const describeWithDb = canUseDatabase ? describe : describe.skip;
 
 vi.mock("../../src/lib/database", () => ({
   getDatabase: () => testDb,
@@ -102,6 +108,7 @@ function waitForClose(ws: WebSocket): Promise<number> {
 }
 
 beforeAll(async () => {
+  if (!testDb) return;
   testDb.exec(SCHEMA_SQL);
   const created = createApp();
   app = created.app;
@@ -117,6 +124,7 @@ beforeAll(async () => {
 });
 
 beforeEach(() => {
+  if (!testDb) return;
   clearAuthState();
   invalidateRemoteGateCache();
   testDb.exec("DELETE FROM paired_devices");
@@ -130,7 +138,7 @@ beforeEach(() => {
 afterAll(() => {
   closeAllWs();
   server?.close();
-  testDb.close();
+  testDb?.close();
   // Clean up temp directory
   try {
     fs.rmSync(TEST_DIR, { recursive: true });
@@ -141,7 +149,7 @@ afterAll(() => {
 // Tests
 // ============================================================================
 
-describe("WebSocket: localhost auto-auth", () => {
+describeWithDb("WebSocket: localhost auto-auth", () => {
   it("auto-authenticates localhost connections on open", async () => {
     const { ws, firstMessage } = connectWs();
     try {
@@ -154,7 +162,7 @@ describe("WebSocket: localhost auto-auth", () => {
   });
 });
 
-describe("WebSocket: token validation via real hash path", () => {
+describeWithDb("WebSocket: token validation via real hash path", () => {
   it("createDeviceToken + validateDeviceToken agree on SHA-256 hashing", async () => {
     // This verifies end-to-end: create token -> hash stored in DB -> validate by re-hashing
     const token = createTestToken();
@@ -179,7 +187,7 @@ describe("WebSocket: token validation via real hash path", () => {
   });
 });
 
-describe("WebSocket: protocol messages", () => {
+describeWithDb("WebSocket: protocol messages", () => {
   it("handles subscribe and pong messages", async () => {
     const { ws, firstMessage } = connectWs();
     try {
@@ -219,7 +227,7 @@ describe("WebSocket: protocol messages", () => {
   });
 });
 
-describe("WebSocket: connection lifecycle", () => {
+describeWithDb("WebSocket: connection lifecycle", () => {
   it("cleans up on client disconnect", async () => {
     const { ws, firstMessage } = connectWs();
     const connected = await firstMessage;

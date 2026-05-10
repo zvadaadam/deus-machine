@@ -8,6 +8,7 @@ import { createSdkMcpServer } from "@anthropic-ai/claude-agent-sdk";
 import { createWorkspaceTools } from "./workspace";
 import { createBrowserTools } from "./browser";
 import { createAppsTools } from "./apps";
+import { createUpdateGoalMcpTool } from "../../goals/tool";
 
 import { createSimulatorTools } from "./simulator";
 import { createRecordingTools, getSessionManager } from "./recording";
@@ -28,7 +29,10 @@ import { RecordingBridge } from "./recording-bridge";
  *   - recording_start/stop tools call bridge.setActiveSession() to activate/deactivate
  *   - Browser tool executions automatically emit recording events via the bridge
  */
-export function createDeusMCPServer(sessionId: string) {
+export function createDeusMCPServer(
+  sessionId: string,
+  options: { includeGoalTools?: boolean; includeAskUserQuestion?: boolean } = {}
+) {
   // Create the recording bridge that connects browser tools to the recording engine
   const bridge = new RecordingBridge(() => getSessionManager());
 
@@ -72,12 +76,15 @@ export function createDeusMCPServer(sessionId: string) {
     name: "deus",
     version: "1.0.0",
     tools: [
-      ...createWorkspaceTools(sessionId),
+      ...createWorkspaceTools(sessionId, {
+        includeAskUserQuestion: options.includeAskUserQuestion,
+      }),
       ...createBrowserTools(sessionId, (action) => {
         bridge.onBrowserAction(action);
       }),
       ...createSimulatorTools(sessionId),
       ...createAppsTools(sessionId),
+      ...(options.includeGoalTools ? [createUpdateGoalMcpTool(sessionId)] : []),
       ...wrappedRecordingTools,
     ],
   });

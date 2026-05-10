@@ -20,7 +20,7 @@
 import { forwardRef, useEffect, useImperativeHandle } from "react";
 import { MessageInput } from "./MessageInput";
 import { useSessionActions } from "../hooks";
-import { useSessionWithMessages } from "../api/session.queries";
+import { useGoal, useSessionWithMessages } from "../api/session.queries";
 import { useManifestTasks } from "@/features/workspace/api/workspace.queries";
 import { useSettings } from "@/features/settings/api";
 import {
@@ -110,6 +110,7 @@ const ActiveSessionComposer = forwardRef<SessionComposerRef, ActiveProps>(
     // Composer state itself (draft/model/etc.) lives in the store;
     // MessageInput reads it directly. We don't subscribe here.
     const { session, messages, sessionStatus } = useSessionWithMessages(sessionId);
+    const { data: activeGoal = null } = useGoal(sessionId);
     const { data: manifestData } = useManifestTasks(workspaceId);
     const hasManifest = manifestData === undefined ? true : manifestData?.manifest != null;
 
@@ -124,7 +125,17 @@ const ActiveSessionComposer = forwardRef<SessionComposerRef, ActiveProps>(
       onAgentHarnessChange?.(agentHarness);
     }, [agentHarness, onAgentHarnessChange]);
 
-    const { sendMessage, stopSession, compactConversation, createPR, sending } = useSessionActions({
+    const {
+      sendMessage,
+      stopSession,
+      compactConversation,
+      createPR,
+      startGoal,
+      resumeGoal,
+      cancelGoal,
+      dismissGoal,
+      sending,
+    } = useSessionActions({
       sessionId,
       workspaceId: workspaceId ?? undefined,
       targetBranch: targetBranch ?? "main",
@@ -169,7 +180,12 @@ const ActiveSessionComposer = forwardRef<SessionComposerRef, ActiveProps>(
         hasManifest={hasManifest}
         showCompactButton={showCompactButton}
         hasPendingPlan={hasPendingPlan}
+        activeGoal={activeGoal}
         onSend={(content) => sendMessage(content)}
+        onStartGoal={startGoal}
+        onResumeGoal={resumeGoal}
+        onCancelGoal={cancelGoal}
+        onDismissGoal={dismissGoal}
         onCompact={compactConversation}
         onStop={stopSession}
         onOpenNewTab={onOpenNewTab}

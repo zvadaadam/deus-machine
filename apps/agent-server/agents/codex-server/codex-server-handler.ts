@@ -10,6 +10,15 @@ import { classifyError, handleCancellation, handleQueryError } from "../lifecycl
 import { createPartEventEmitter } from "../part-event-emitter";
 import type { AgentCapabilities, AgentHandler, QueryOptions } from "../registry";
 import { buildAgentEnvironment, buildWorkspaceContext } from "../environment";
+import { buildGoalSystemPrompt } from "../../goals/prompt";
+import {
+  ASK_USER_QUESTION_TOOL_NAME,
+  createAskUserQuestionDynamicToolSpec,
+  createUpdateGoalDynamicToolSpec,
+  handleAskUserQuestionDynamicToolCall,
+  handleUpdateGoalDynamicToolCall,
+  UPDATE_GOAL_TOOL_NAME,
+} from "../../goals/tool";
 import {
   blockIfCodexServerNotInitialized,
   getCodexServerExecutablePath,
@@ -28,6 +37,7 @@ import type {
   CodexSandboxPolicy,
   CodexTurn,
   CodexThreadStartParams,
+  CodexDynamicToolCallParams,
 } from "./codex-server-types";
 import { parseThinkingLevel } from "../thinking-levels";
 
@@ -112,14 +122,26 @@ export class CodexServerAgentHandler implements AgentHandler {
       const effort = mapThinkingLevel(options.thinkingLevel);
 
       const previousSession = codexServerSessions.get(sessionId);
+      const wantsGoalTools = !!options.goalContext;
+      const allowQuestions = options.allowQuestions !== false;
+      const shouldStartFreshThreadForGoalMode =
+        !!previousSession?.threadId &&
+        (previousSession.goalToolsActive !== wantsGoalTools ||
+          previousSession.allowQuestions !== allowQuestions);
       const sessionState: CodexServerSessionState = {
-        threadId: previousSession?.threadId,
-        turnId: previousSession?.turnId,
+        threadId: shouldStartFreshThreadForGoalMode ? undefined : previousSession?.threadId,
+        turnId: shouldStartFreshThreadForGoalMode ? undefined : previousSession?.turnId,
         appServer: previousSession?.appServer,
         abortController,
         currentModel: options.model,
         cwd: options.cwd,
         isRunning: true,
+        goalToolsActive: shouldStartFreshThreadForGoalMode
+          ? undefined
+          : previousSession?.goalToolsActive,
+        allowQuestions: shouldStartFreshThreadForGoalMode
+          ? undefined
+          : previousSession?.allowQuestions,
       };
       session = sessionState;
       codexServerSessions.set(sessionId, sessionState);
@@ -136,13 +158,15 @@ export class CodexServerAgentHandler implements AgentHandler {
           codexPath,
           cwd: options.cwd,
           env,
+          onRequest: (method, requestParams) =>
+            this.handleAppServerRequest(sessionId, method, requestParams),
         });
         await sessionState.appServer.initialize();
       }
 
       const workspaceContext = buildWorkspaceContext(options.cwd);
       const threadParams = this.buildThreadParams(options, workspaceContext);
-      const shouldResume = !sessionState.threadId && !!resumeThreadId;
+      const shouldResume = !wantsGoalTools && !sessionState.threadId && !!resumeThreadId;
 
       if (shouldResume) {
         const response = await sessionState.appServer.request("thread/resume", {
@@ -151,11 +175,17 @@ export class CodexServerAgentHandler implements AgentHandler {
           excludeTurns: true,
         });
         sessionState.threadId = response.thread.id;
+        sessionState.goalToolsActive = false;
+        sessionState.allowQuestions = allowQuestions;
         console.log(`[${queryId}] Resumed thread: ${response.thread.id}`);
       } else if (!sessionState.threadId) {
         const response = await sessionState.appServer.request("thread/start", threadParams);
         sessionState.threadId = response.thread.id;
-        EventBroadcaster.emitAgentSessionId(sessionId, response.thread.id);
+        sessionState.goalToolsActive = wantsGoalTools;
+        sessionState.allowQuestions = allowQuestions;
+        if (!wantsGoalTools) {
+          EventBroadcaster.emitAgentSessionId(sessionId, response.thread.id);
+        }
         console.log(`[${queryId}] Started thread: ${response.thread.id}`);
       }
 
@@ -288,16 +318,44 @@ export class CodexServerAgentHandler implements AgentHandler {
     options: QueryOptions,
     workspaceContext: string
   ): CodexThreadStartParams {
+    const goalPrompt = options.goalContext ? buildGoalSystemPrompt(options.goalContext) : "";
+    const developerInstructions = [workspaceContext, goalPrompt].filter(Boolean).join("\n\n");
     return {
       model: options.model ?? null,
       cwd: options.cwd,
       approvalPolicy: "never",
       sandbox: "workspace-write",
-      developerInstructions: workspaceContext || null,
+      developerInstructions: developerInstructions || null,
+      ...(options.goalContext
+        ? {
+            dynamicTools: [
+              createUpdateGoalDynamicToolSpec(),
+              ...(options.allowQuestions !== false ? [createAskUserQuestionDynamicToolSpec()] : []),
+            ],
+          }
+        : {}),
       config: {
         "features.collaboration_modes": true,
       },
     };
+  }
+
+  private async handleAppServerRequest(
+    sessionId: string,
+    method: string,
+    params: unknown
+  ): Promise<unknown> {
+    if (method !== "item/tool/call") {
+      throw new Error(`Unsupported Codex app-server request: ${method}`);
+    }
+    const call = params as Partial<CodexDynamicToolCallParams>;
+    if (call.tool === UPDATE_GOAL_TOOL_NAME) {
+      return handleUpdateGoalDynamicToolCall(sessionId, call.arguments);
+    }
+    if (call.tool === ASK_USER_QUESTION_TOOL_NAME) {
+      return handleAskUserQuestionDynamicToolCall(sessionId, call.arguments);
+    }
+    throw new Error(`Unsupported dynamic tool: ${call.tool ?? "unknown"}`);
   }
 }
 

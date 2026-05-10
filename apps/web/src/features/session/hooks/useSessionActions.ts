@@ -17,7 +17,7 @@
 import { useCallback } from "react";
 import { toast } from "sonner";
 import { useSendMessage, useStopSession } from "../api/session.queries";
-import { sendCommand, connect, isConnected } from "@/platform/ws";
+import { sendCommand, sendMutate, connect, isConnected } from "@/platform/ws";
 import { track } from "@/platform/analytics";
 import { getAgentHarnessForModel, getModelId } from "@/shared/agents";
 import { COMPACT_CONVERSATION, createPRPrompt } from "../lib/sessionPrompts";
@@ -43,6 +43,14 @@ interface UseSessionActionsReturn {
   stopSession: () => Promise<void>;
   compactConversation: () => Promise<void>;
   createPR: () => Promise<void>;
+  startGoal: (
+    objective: string,
+    tokenBudget: number | null,
+    allowQuestions?: boolean
+  ) => Promise<void>;
+  resumeGoal: () => Promise<void>;
+  cancelGoal: () => Promise<void>;
+  dismissGoal: () => Promise<void>;
   sending: boolean;
 }
 
@@ -123,11 +131,89 @@ export function useSessionActions({
     return sendMessage(createPRPrompt(targetBranch));
   }, [sendMessage, workspaceId, targetBranch]);
 
+  const startGoal = useCallback(
+    async (objective: string, tokenBudget: number | null, allowQuestions = true) => {
+      if (sendMessageMutation.isPending) return;
+      if (!objective.trim()) {
+        toast.error("Goal objective required");
+        return;
+      }
+
+      const composer = useSessionComposerStore.getState().composers[sessionId];
+      if (!composer) return;
+
+      try {
+        const effectiveModel = getModelId(composer.model);
+        const effectiveHarness = getAgentHarnessForModel(composer.model);
+        if (!isConnected()) await connect();
+        const result = await sendMutate("goalStart", {
+          sessionId,
+          objective: objective.trim(),
+          tokenBudget,
+          model: effectiveModel,
+          agentHarness: effectiveHarness,
+          thinkingLevel: composer.thinkingLevel,
+          allowQuestions,
+        });
+        if (!result.success) throw new Error(result.error || "Failed to start goal");
+      } catch (error) {
+        console.error("Failed to start goal:", error);
+        toast.error(error instanceof Error ? error.message : "Failed to start goal");
+        return;
+      }
+
+      try {
+        onMessageSent?.();
+      } catch (callbackError) {
+        console.error("[useSessionActions] onMessageSent callback failed:", callbackError);
+      }
+    },
+    [sessionId, sendMessageMutation.isPending, onMessageSent]
+  );
+
+  const resumeGoal = useCallback(async () => {
+    try {
+      if (!isConnected()) await connect();
+      const result = await sendMutate("goalResume", { sessionId });
+      if (!result.success) throw new Error(result.error || "Failed to resume goal");
+      onMessageSent?.();
+    } catch (error) {
+      console.error("Failed to resume goal:", error);
+      toast.error(error instanceof Error ? error.message : "Failed to resume goal");
+    }
+  }, [sessionId, onMessageSent]);
+
+  const cancelGoal = useCallback(async () => {
+    try {
+      if (!isConnected()) await connect();
+      const result = await sendMutate("goalCancel", { sessionId });
+      if (!result.success) throw new Error(result.error || "Failed to cancel goal");
+      onMessageSent?.();
+    } catch (error) {
+      console.error("Failed to cancel goal:", error);
+      toast.error(error instanceof Error ? error.message : "Failed to cancel goal");
+    }
+  }, [sessionId, onMessageSent]);
+
+  const dismissGoal = useCallback(async () => {
+    try {
+      if (!isConnected()) await connect();
+      const result = await sendMutate("goalCancel", { sessionId });
+      if (!result.success) throw new Error(result.error || "Failed to dismiss goal");
+    } catch (error) {
+      console.error("Failed to dismiss goal:", error);
+    }
+  }, [sessionId]);
+
   return {
     sendMessage,
     stopSession,
     compactConversation,
     createPR,
+    startGoal,
+    resumeGoal,
+    cancelGoal,
+    dismissGoal,
     sending: sendMessageMutation.isPending,
   };
 }

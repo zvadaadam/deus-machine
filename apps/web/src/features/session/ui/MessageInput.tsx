@@ -20,11 +20,12 @@
  */
 
 import type { SessionStatus } from "@/shared/types";
+import type { ActiveGoal } from "@shared/goals";
 import { useIsMobile } from "@/shared/hooks/use-mobile";
 import { AnimatePresence, motion } from "framer-motion";
-import { Minimize2, ArrowUp, Square, Wrench } from "lucide-react";
+import { Minimize2, ArrowUp, Square, Wrench, Target } from "lucide-react";
 import { useFileMention } from "../hooks/useFileMention";
-import { useSlashCommand } from "../hooks/useSlashCommand";
+import { parseGoalCommand, useSlashCommand } from "../hooks/useSlashCommand";
 import { useSessionComposer } from "../hooks/useSessionComposer";
 import { FileMentionPopover } from "./FileMentionPopover";
 import { SlashCommandPopover } from "./SlashCommandPopover";
@@ -61,6 +62,7 @@ import { ThinkingIndicator } from "./ThinkingIndicator";
 import { ModelPicker } from "./ModelPicker";
 import { PlanModeToggle } from "./PlanModeToggle";
 import { ContextTokenIndicator } from "./ContextTokenIndicator";
+import { GoalBanner } from "./GoalBanner";
 
 // Long pastes (20+ lines) are shown as collapsed cards instead of inline text
 const PASTE_LINE_THRESHOLD = 20;
@@ -86,8 +88,13 @@ interface MessageInputProps {
   hasManifest?: boolean;
   showCompactButton?: boolean;
   hasPendingPlan?: boolean;
+  activeGoal?: ActiveGoal | null;
 
   onSend: (content: string) => void;
+  onStartGoal?: (objective: string, tokenBudget: number | null, allowQuestions?: boolean) => void;
+  onResumeGoal?: () => void;
+  onCancelGoal?: () => void;
+  onDismissGoal?: () => void;
   onCompact?: () => void;
   onStop?: () => void;
   onOpenNewTab?: (initialModel?: string) => void;
@@ -211,7 +218,12 @@ export function MessageInput({
   hasManifest = true,
   showCompactButton = false,
   hasPendingPlan = false,
+  activeGoal = null,
   onSend,
+  onStartGoal,
+  onResumeGoal,
+  onCancelGoal,
+  onDismissGoal,
   onCompact,
   onStop,
   onOpenNewTab,
@@ -284,6 +296,15 @@ export function MessageInput({
 
   const handleSend = () => {
     if (sending || !hasContent) return;
+    const goalCommand = parseGoalCommand(draft);
+    if (goalCommand?.kind === "cancel") {
+      onCancelGoal?.();
+      return;
+    }
+    if (goalCommand?.kind === "start") {
+      onStartGoal?.(goalCommand.objective, goalCommand.tokenBudget, goalCommand.allowQuestions);
+      return;
+    }
     const combined = buildCombinedContent();
     if (combined) onSend(combined);
     // Parent clears store content on successful send (see SessionComposer
@@ -304,9 +325,11 @@ export function MessageInput({
     value: draft,
     workspacePath,
     onChange: composer.setDraft,
-    enabled: isClaudeAgent,
+    enabled: true,
     onAddSkill: (skill) =>
-      composer.addSkillMention({ name: skill.name, description: skill.description }),
+      isClaudeAgent
+        ? composer.addSkillMention({ name: skill.name, description: skill.description })
+        : composer.setDraft(`/${skill.name} `),
   });
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
@@ -364,6 +387,13 @@ export function MessageInput({
   // "Set up your environment" nudge — visible when no deus.json + no history yet.
   const showSetupNudge = !hasManifest && !hasMessages;
   const handleSetupEnvironment = () => onSend(GENERATE_HIVE_JSON);
+  const handleGoalButton = () => {
+    if (activeGoal) {
+      composer.setDraft("/goal cancel");
+      return;
+    }
+    composer.setDraft(draft.trim().length > 0 ? `/goal ${draft.trim()}` : "/goal ");
+  };
 
   const planModeDisabled = agentHarness === "codex-sdk" || agentHarness === "codex-server";
   return (
@@ -391,13 +421,21 @@ export function MessageInput({
         )}
       </AnimatePresence>
 
+      <GoalBanner
+        goal={activeGoal}
+        onResume={onResumeGoal}
+        onCancel={onCancelGoal}
+        onDismiss={onDismissGoal}
+      />
+
       <InputGroup
         data-no-ring={true}
         // Unified glass pill: translucent raised bg + backdrop blur + hairline
         // ring + shadow. Reads as an elevated surface against the chat panel
         // (which is ~#f5f5f4) and as a floating glass pill against a webpage
         // in focus mode. Same styling in both contexts — no branching.
-        className="bg-bg-muted/75 ring-border-subtle relative overflow-visible rounded-2xl border-0 shadow-lg ring-1 backdrop-blur-xl"
+        // z-10 keeps it above the GoalBanner so the rounded top edge tucks over.
+        className="bg-bg-muted/75 ring-border-subtle relative z-10 overflow-visible rounded-2xl border-0 shadow-lg ring-1 backdrop-blur-xl"
       >
         <ComposerStagedContent
           skillMentions={skillMentions}
@@ -495,6 +533,16 @@ export function MessageInput({
               onClick={composer.togglePlanMode}
               disabled={planModeDisabled}
             />
+            <Button
+              onClick={handleGoalButton}
+              title={activeGoal ? "Cancel goal" : "Start goal"}
+              variant="ghost"
+              size="sm"
+              className="text-text-muted hover:text-text-secondary rounded-lg px-2 active:not-disabled:scale-[0.97]"
+            >
+              <Target className="size-3.5" />
+              <span className="text-xs font-normal">Goal</span>
+            </Button>
           </div>
 
           <div className="flex items-center gap-1">

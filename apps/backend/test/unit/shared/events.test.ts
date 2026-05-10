@@ -162,12 +162,13 @@ describe("shared/events", () => {
       expect(QUERY_RESOURCES).toContain("sessions");
       expect(QUERY_RESOURCES).toContain("session");
       expect(QUERY_RESOURCES).toContain("messages");
+      expect(QUERY_RESOURCES).toContain("goal");
       // AAP resources
       expect(QUERY_RESOURCES).toContain("apps");
       expect(QUERY_RESOURCES).toContain("running_apps");
       // Local server discovery
       expect(QUERY_RESOURCES).toContain("local_servers");
-      expect(QUERY_RESOURCES).toHaveLength(8);
+      expect(QUERY_RESOURCES).toHaveLength(9);
     });
 
     it("MUTATION_NAMES contains the expected mutations", () => {
@@ -185,7 +186,10 @@ describe("shared/events", () => {
       expect(MUTATION_NAMES).toContain("invalidateFileCache");
       expect(MUTATION_NAMES).toContain("revokeDevice");
       expect(MUTATION_NAMES).toContain("runTask");
-      expect(MUTATION_NAMES).toHaveLength(13);
+      expect(MUTATION_NAMES).toContain("goalStart");
+      expect(MUTATION_NAMES).toContain("goalResume");
+      expect(MUTATION_NAMES).toContain("goalCancel");
+      expect(MUTATION_NAMES).toHaveLength(16);
     });
 
     it("COMMAND_NAMES contains the expected commands", () => {
@@ -265,6 +269,8 @@ describe("shared/events", () => {
       expect(PROTOCOL_EVENTS).toContain("git-clone-progress");
       expect(PROTOCOL_EVENTS).toContain("git-init-progress");
       expect(PROTOCOL_EVENTS).toContain("agent-server:request");
+      expect(PROTOCOL_EVENTS).toContain("goal:updated");
+      expect(PROTOCOL_EVENTS).toContain("goal:ended");
       // Simulator events
       expect(PROTOCOL_EVENTS).toContain("sim:streamReady");
       expect(PROTOCOL_EVENTS).toContain("sim:stopped");
@@ -275,7 +281,7 @@ describe("shared/events", () => {
       // AAP events
       expect(PROTOCOL_EVENTS).toContain("apps:launched");
       expect(PROTOCOL_EVENTS).toContain("apps:stopped");
-      expect(PROTOCOL_EVENTS).toHaveLength(23);
+      expect(PROTOCOL_EVENTS).toHaveLength(25);
     });
   });
 });

@@ -29,6 +29,7 @@ export interface CodexAppServerClientOptions {
   cwd?: string;
   env?: NodeJS.ProcessEnv;
   startupTimeoutMs?: number;
+  onRequest?: (method: string, params: unknown) => Promise<unknown>;
 }
 
 export class CodexAppServerClient {
@@ -36,6 +37,7 @@ export class CodexAppServerClient {
   private readonly cwd?: string;
   private readonly env?: NodeJS.ProcessEnv;
   private readonly startupTimeoutMs: number;
+  private readonly onRequest?: (method: string, params: unknown) => Promise<unknown>;
   private proc?: ChildProcessWithoutNullStreams;
   private nextId = 1;
   private stdoutBuffer = "";
@@ -49,6 +51,7 @@ export class CodexAppServerClient {
     this.cwd = options.cwd;
     this.env = options.env;
     this.startupTimeoutMs = options.startupTimeoutMs ?? 10_000;
+    this.onRequest = options.onRequest;
   }
 
   onNotification(handler: NotificationHandler): () => void {
@@ -66,7 +69,7 @@ export class CodexAppServerClient {
         "initialize",
         {
           clientInfo: { name: "deus-machine", title: null, version: "0.0.0" },
-          capabilities: null,
+          capabilities: { experimentalApi: true },
         },
         { signal: controller.signal }
       );
@@ -183,13 +186,7 @@ export class CodexAppServerClient {
 
     if ("method" in message && typeof message.method === "string") {
       if ("id" in message && typeof message.id === "number") {
-        this.write({
-          id: message.id,
-          error: {
-            code: -32601,
-            message: `Unsupported Codex app-server request: ${message.method}`,
-          },
-        });
+        void this.handleRequest(message.id, message.method, message.params);
         return;
       }
 
@@ -200,6 +197,32 @@ export class CodexAppServerClient {
       for (const handler of this.notificationHandlers) {
         handler(notification);
       }
+    }
+  }
+
+  private async handleRequest(id: RpcId, method: string, params: unknown): Promise<void> {
+    if (!this.onRequest) {
+      this.write({
+        id,
+        error: {
+          code: -32601,
+          message: `Unsupported Codex app-server request: ${method}`,
+        },
+      });
+      return;
+    }
+
+    try {
+      const result = await this.onRequest(method, params);
+      this.write({ id, result });
+    } catch (error) {
+      this.write({
+        id,
+        error: {
+          code: -32000,
+          message: error instanceof Error ? error.message : String(error),
+        },
+      });
     }
   }
 

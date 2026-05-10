@@ -17,6 +17,56 @@ export interface SlashCommandItem {
   kind: "skill" | "command";
 }
 
+export type ParsedGoalCommand =
+  | {
+      kind: "start";
+      objective: string;
+      tokenBudget: number | null;
+      allowQuestions: boolean;
+    }
+  | { kind: "cancel" };
+
+const BUILT_IN_COMMANDS: SlashCommandItem[] = [
+  {
+    name: "goal",
+    description: "Start or cancel a long-running objective",
+    kind: "command",
+  },
+];
+
+const TOKEN_BUDGET_RE = /(?:^|\s)--tokens(?:=|\s+)([0-9]+(?:\.[0-9]+)?[kKmM]?)/;
+const NO_QUESTIONS_RE = /(?:^|\s)--no-questions(?=\s|$)/;
+
+export function parseGoalCommand(value: string): ParsedGoalCommand | null {
+  const trimmed = value.trim();
+  if (!trimmed.startsWith("/goal")) return null;
+
+  const rest = trimmed.slice("/goal".length).trim();
+  if (rest === "cancel") return { kind: "cancel" };
+
+  const tokenMatch = rest.match(TOKEN_BUDGET_RE);
+  const tokenBudget = tokenMatch ? parseTokenBudget(tokenMatch[1]) : null;
+  const allowQuestions = !NO_QUESTIONS_RE.test(rest);
+  const objective = rest
+    .replace(TOKEN_BUDGET_RE, " ")
+    .replace(NO_QUESTIONS_RE, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+
+  return { kind: "start", objective, tokenBudget, allowQuestions };
+}
+
+function parseTokenBudget(raw: string): number {
+  const unit = raw.at(-1)?.toLowerCase();
+  const multiplier = unit === "k" ? 1_000 : unit === "m" ? 1_000_000 : 1;
+  const numeric = unit === "k" || unit === "m" ? raw.slice(0, -1) : raw;
+  const value = Number(numeric);
+  if (!Number.isFinite(value) || value <= 0) {
+    throw new Error(`Invalid token budget: ${raw}`);
+  }
+  return Math.round(value * multiplier);
+}
+
 interface UseSlashCommandOptions {
   /** Current textarea value */
   value: string;
@@ -76,7 +126,7 @@ export function useSlashCommand({
   const [selectedIndex, setSelectedIndex] = useState(0);
 
   // Cached items from backend (fetched per workspace, filtered client-side)
-  const [allItems, setAllItems] = useState<SlashCommandItem[]>([]);
+  const [allItems, setAllItems] = useState<SlashCommandItem[]>(BUILT_IN_COMMANDS);
   const [loading, setLoading] = useState(false);
   const fetchedWorkspaceRef = useRef<string | null>(null);
 
@@ -124,8 +174,8 @@ export function useSlashCommand({
               : Promise.resolve([]),
           ]);
 
-        const items: SlashCommandItem[] = [];
-        const seen = new Set<string>();
+        const items: SlashCommandItem[] = [...BUILT_IN_COMMANDS];
+        const seen = new Set<string>(BUILT_IN_COMMANDS.map((item) => item.name));
 
         // Project items first (they override global ones with the same name)
         const addItems = (

@@ -40,6 +40,8 @@ export interface SessionState {
     additionalDirectories?: string[];
     chromeEnabled?: boolean;
     strictDataPrivacy?: boolean;
+    goalActive?: boolean;
+    allowQuestions?: boolean;
   };
   currentModel?: string;
   currentThinkingLevel?: string;
@@ -105,6 +107,14 @@ export function settingsChanged(
   }
 
   if ((oldSettings.strictDataPrivacy ?? false) !== (newSettings?.strictDataPrivacy ?? false)) {
+    return true;
+  }
+
+  if ((oldSettings.goalActive ?? false) !== !!newSettings?.goalContext) {
+    return true;
+  }
+
+  if ((oldSettings.allowQuestions ?? true) !== (newSettings?.allowQuestions ?? true)) {
     return true;
   }
 

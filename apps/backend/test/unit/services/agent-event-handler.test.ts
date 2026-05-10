@@ -19,6 +19,9 @@ const {
   mockBroadcast,
   mockRelay,
   mockRespondToAgent,
+  mockStartTurn,
+  mockHandleGoalSessionIdle,
+  mockHandleGoalTurnCompleted,
 } = vi.hoisted(() => ({
   mockPersistMessageCreated: vi.fn(() => ({ ok: true, value: "msg-id" })),
   mockPersistMessageCancelled: vi.fn(() => ({ ok: true, value: "msg-id" })),
@@ -34,6 +37,9 @@ const {
   mockBroadcast: vi.fn(),
   mockRelay: vi.fn(() => Promise.resolve({ diff: "ok" })),
   mockRespondToAgent: vi.fn(() => Promise.resolve()),
+  mockStartTurn: vi.fn(),
+  mockHandleGoalSessionIdle: vi.fn(),
+  mockHandleGoalTurnCompleted: vi.fn(),
 }));
 
 vi.mock("../../../src/services/agent/persistence", () => ({
@@ -61,6 +67,11 @@ vi.mock("../../../src/services/agent/tool-relay", () => ({
   relay: mockRelay,
 }));
 
+vi.mock("../../../src/services/goals/goal-orchestrator", () => ({
+  handleGoalSessionIdle: mockHandleGoalSessionIdle,
+  handleGoalTurnCompleted: mockHandleGoalTurnCompleted,
+}));
+
 // ============================================================================
 // Import after mocks
 // ============================================================================
@@ -71,6 +82,7 @@ import type { AgentEvent } from "../../../../shared/agent-events";
 // Create event handler with injected mock (same pattern as production)
 const handleAgentEvent = createAgentEventHandler({
   respondToAgent: mockRespondToAgent,
+  startTurn: mockStartTurn,
 });
 
 // ============================================================================
