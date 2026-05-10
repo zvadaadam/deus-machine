@@ -1,6 +1,6 @@
 export {
   useCliCheck,
-  useGhAuth,
+  useStartGhAuthLogin,
   useRecentProjects,
   useCompleteOnboarding,
 } from "./onboarding.queries";

@@ -5,8 +5,15 @@
  * for the current platform, and runs it.
  */
 
-import { execSync, spawn } from "node:child_process";
-import { createWriteStream, existsSync, mkdirSync, unlinkSync } from "node:fs";
+import { execFileSync, execSync, spawn } from "node:child_process";
+import {
+  chmodSync,
+  copyFileSync,
+  createWriteStream,
+  existsSync,
+  mkdirSync,
+  unlinkSync,
+} from "node:fs";
 import { join } from "node:path";
 import { tmpdir, platform, arch, homedir } from "node:os";
 import { get } from "node:https";
@@ -19,6 +26,7 @@ import {
   blank,
   success,
   error,
+  info,
   hint,
   kv,
 } from "./ui.js";
@@ -28,10 +36,6 @@ const GITHUB_REPO = "zvadaadam/deus-machine";
 
 const INSTALL_PATHS: Record<string, string[]> = {
   darwin: ["/Applications/Deus.app", `${homedir()}/Applications/Deus.app`],
-  win32: [
-    `${process.env.LOCALAPPDATA || ""}\\Programs\\Deus\\Deus.exe`,
-    `${process.env.PROGRAMFILES || ""}\\Deus\\Deus.exe`,
-  ],
   linux: [`${homedir()}/.local/bin/Deus.AppImage`, "/usr/local/bin/Deus.AppImage"],
 };
 
@@ -50,7 +54,6 @@ export function hasDisplay(): boolean {
   if (process.env.CI || process.env.DOCKER || existsSync("/.dockerenv")) return false;
   if (process.env.SSH_CONNECTION || process.env.SSH_TTY) return false;
   if (os === "darwin") return true;
-  if (os === "win32") return true;
   if (os === "linux") return !!(process.env.DISPLAY || process.env.WAYLAND_DISPLAY);
   return false;
 }
@@ -72,11 +75,42 @@ export function launchDesktop(appPath: string): void {
     case "darwin":
       spawn("open", [appPath], { detached: true, stdio: "ignore" }).unref();
       break;
-    case "win32":
     case "linux":
-      spawn(appPath, [], { detached: true, stdio: "ignore" }).unref();
+      spawn(appPath, [], {
+        detached: true,
+        stdio: "ignore",
+        env: {
+          ...process.env,
+          ...(hasFuse2() ? {} : { APPIMAGE_EXTRACT_AND_RUN: "1" }),
+        },
+      }).unref();
       break;
   }
+}
+
+function hasFuse2(): boolean {
+  const commonLibPaths = [
+    "/lib/x86_64-linux-gnu/libfuse.so.2",
+    "/usr/lib/x86_64-linux-gnu/libfuse.so.2",
+    "/lib/aarch64-linux-gnu/libfuse.so.2",
+    "/usr/lib/aarch64-linux-gnu/libfuse.so.2",
+    "/usr/lib64/libfuse.so.2",
+    "/usr/lib/libfuse.so.2",
+  ];
+
+  if (commonLibPaths.some((libPath) => existsSync(libPath))) return true;
+
+  try {
+    return execSync("ldconfig -p", { encoding: "utf-8", stdio: ["ignore", "pipe", "ignore"] })
+      .split("\n")
+      .some((line) => line.includes("libfuse.so.2"));
+  } catch {
+    return false;
+  }
+}
+
+function isOnPath(dir: string): boolean {
+  return (process.env.PATH ?? "").split(":").filter(Boolean).includes(dir);
 }
 
 function replaceInstalledMacApp(appPath: string, destPath: string): void {
@@ -115,7 +149,7 @@ export async function installDesktop(options: DesktopOptions): Promise<void> {
   if (!assetPattern) {
     error(`Unsupported platform: ${os} ${cpuArch}`);
     blank();
-    hint("Supported: macOS (arm64/x64), Windows (x64), Linux (x64)");
+    hint("Supported: macOS (arm64/x64), Linux (x64)");
     hint(`Or run ${c.cyan("deus start")} to run as a headless server.`);
     blank();
     process.exit(1);
@@ -163,7 +197,7 @@ export async function installDesktop(options: DesktopOptions): Promise<void> {
 
   // Install
   const s3 = createSpinner("Installing...");
-  const installed = await installForPlatform(os, downloadPath, s3);
+  const installedPath = await installForPlatform(os, downloadPath, s3);
 
   // Cleanup temp file
   try {
@@ -172,8 +206,19 @@ export async function installDesktop(options: DesktopOptions): Promise<void> {
     // ignore cleanup failure
   }
 
-  if (installed) {
+  if (installedPath) {
     blank();
+    success("Launching Deus...");
+    if (os === "linux") {
+      const installDir = join(homedir(), ".local", "bin");
+      if (!isOnPath(installDir)) {
+        info(
+          hasFuse2()
+            ? `Add ${c.dim(installDir)} to PATH to launch the AppImage directly.`
+            : `Add ${c.dim(installDir)} to PATH. Until libfuse2 is installed, launch it with ${c.dim("APPIMAGE_EXTRACT_AND_RUN=1 Deus.AppImage")} or create a wrapper script.`
+        );
+      }
+    }
     success("Deus is ready!");
     blank();
   }
@@ -191,11 +236,6 @@ function getAssetPattern(
         description: `macOS DMG (${archSuffix})`,
       };
     }
-    case "win32":
-      return {
-        matcher: (name) => name.endsWith(".exe") && !name.includes("blockmap"),
-        description: "Windows installer (exe)",
-      };
     case "linux":
       return {
         matcher: (name) => name.endsWith(".AppImage"),
@@ -318,7 +358,7 @@ async function installForPlatform(
   os: string,
   filePath: string,
   s: ReturnType<typeof createSpinner>
-): Promise<boolean> {
+): Promise<string | null> {
   switch (os) {
     case "darwin": {
       let mountPoint: string | undefined;
@@ -335,7 +375,7 @@ async function installForPlatform(
 
         if (!mountPoint) {
           s.fail("Could not mount disk image");
-          return false;
+          return null;
         }
 
         const appName = "Deus.app";
@@ -347,16 +387,17 @@ async function installForPlatform(
           s.succeed(`Installed to ${c.dim("/Applications/Deus.app")}`);
 
           launchDesktop(destPath);
+          return destPath;
         } else {
           s.warn("DMG mounted — drag Deus to Applications to finish");
         }
 
-        return true;
+        return null;
       } catch {
         s.fail("Auto-install failed — opening DMG manually");
-        execSync(`open "${filePath}"`);
+        execFileSync("open", [filePath], { stdio: "ignore" });
         hint("Drag Deus.app to Applications, then launch it from Applications.");
-        return false;
+        return null;
       } finally {
         if (mountPoint) {
           try {
@@ -368,32 +409,29 @@ async function installForPlatform(
       }
     }
 
-    case "win32": {
-      s.succeed("Launching installer...");
-      spawn(filePath, [], { detached: true, stdio: "ignore" }).unref();
-      hint("Follow the on-screen instructions to complete installation.");
-      return true;
-    }
-
     case "linux": {
       try {
-        execSync(`chmod +x "${filePath}"`);
         const installDir = join(homedir(), ".local", "bin");
         mkdirSync(installDir, { recursive: true });
         const destPath = join(installDir, "Deus.AppImage");
-        execSync(`cp "${filePath}" "${destPath}"`);
+        copyFileSync(filePath, destPath);
+        chmodSync(destPath, 0o755);
         s.succeed(`Installed to ${c.dim(destPath)}`);
 
+        if (!hasFuse2()) {
+          info("libfuse2 not found; launching AppImage with APPIMAGE_EXTRACT_AND_RUN=1.");
+        }
+
         launchDesktop(destPath);
-        return true;
+        return destPath;
       } catch {
         s.fail("Installation failed — check permissions");
-        return false;
+        return null;
       }
     }
 
     default:
       s.fail("Unsupported platform");
-      return false;
+      return null;
   }
 }

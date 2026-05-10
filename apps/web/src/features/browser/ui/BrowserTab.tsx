@@ -18,7 +18,7 @@ import {
   useState,
   forwardRef,
 } from "react";
-import { AlertCircle, Globe, Loader2 } from "lucide-react";
+import { AlertCircle, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { match } from "ts-pattern";
 import { useWebview } from "../hooks/useWebview";
@@ -31,6 +31,7 @@ import {
   closeDevtools as closeDevtoolsMain,
 } from "@/platform/native/browser-views";
 import type { BrowserTabHandle, BrowserTabState, ConsoleLog, ElementSelectedEvent } from "../types";
+import { BrowserEmptyState } from "./BrowserEmptyState";
 import {
   BLANK_URL,
   deriveTitleFromUrl,
@@ -146,11 +147,21 @@ export const BrowserTab = forwardRef<BrowserTabHandle, BrowserTabProps>(function
     };
   })();
 
+  // The <webview> lives outside React in document.body (see webview-manager.ts)
+  // and captures pointer events on its bounds. When the tab is on the empty
+  // state we hide the webview so the local-server cards underneath receive
+  // hover and click. CSS z-index can't help — the webview is in document.body,
+  // not a sibling of this React tree, so we can't visually layer DOM on top
+  // of it. The cleaner long-term seam would be a webviewManager.setInteractive
+  // API that calls Electron's setIgnoreMouseEvents on webContents — worth
+  // adding if this trick recurs (overlays, modals, etc.). For one caller it
+  // would be over-engineering.
+  const isOnEmptyState = isBlankUrl(tab.currentUrl) && !tab.loading && !tab.error;
   const { getWebview } = useWebview({
     id: tabId,
     initialUrl,
     bounds,
-    isVisible: visible,
+    isVisible: visible && !isOnEmptyState,
   });
 
   // Latest page bounds, read imperatively by consumers (InspectPromptOverlay
@@ -777,23 +788,7 @@ export const BrowserTab = forwardRef<BrowserTabHandle, BrowserTabProps>(function
        *  during the initial about:blank load thanks to isBlankUrl() guards
        *  in handleNavigated / onStopLoading. */}
       {visible && isBlankUrl(tab.currentUrl) && !tab.loading && !tab.error && (
-        <div className="pointer-events-none absolute inset-0 flex flex-col items-center justify-center gap-3">
-          <div className="bg-muted/50 flex h-10 w-10 items-center justify-center rounded-xl">
-            <Globe
-              className="text-muted-foreground/60 h-5 w-5"
-              strokeWidth={1.5}
-              aria-hidden="true"
-            />
-          </div>
-          <div className="text-center">
-            <p className="text-muted-foreground text-sm">
-              Paste a URL above or ask the Agent to browse
-            </p>
-            <p className="text-muted-foreground/40 mt-1 text-xs">
-              Supports any website — cookies, auth, and devtools included
-            </p>
-          </div>
-        </div>
+        <BrowserEmptyState onOpen={navigateToUrl} />
       )}
 
       {/* Loading overlay during first page load */}

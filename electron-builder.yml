@@ -4,7 +4,7 @@ directories:
   buildResources: resources
   output: dist-electron
 electronLanguages: [en]
-beforePack: "apps/runtime/electron-builder-before-pack.cjs"
+beforePack: "scripts/runtime/electron-builder-before-pack.cjs"
 afterPack: "scripts/prune-pencil-cli-binaries.cjs"
 files:
   - "out/**/*"
@@ -24,18 +24,6 @@ extraResources:
       - "**/*"
   - from: "dist/runtime/electron/bin/index.bundled.cjs"
     to: "bin/index.bundled.cjs"
-  - from: "packages/device-use/bin/simbridge"
-    to: "simulator/simbridge"
-  - from: "packages/device-use/bin/siminspector.dylib"
-    to: "simulator/siminspector.dylib"
-  - from: "packages/device-use"
-    to: "agentic-apps/device-use"
-    filter:
-      - "agentic-app.json"
-      - "package.json"
-      - "dist/**/*"
-      - "skills/**/*"
-      - "bin/**/*"
   - from: "packages/pencil"
     to: "agentic-apps/pencil"
     filter:
@@ -51,6 +39,21 @@ extraResources:
       - "SKILL.md"
 mac:
   category: public.app-category.developer-tools
+  extraResources:
+    - from: "dist/runtime/electron/bin/darwin-${arch}/gh"
+      to: "bin/gh"
+    - from: "packages/device-use/bin/simbridge"
+      to: "simulator/simbridge"
+    - from: "packages/device-use/bin/siminspector.dylib"
+      to: "simulator/siminspector.dylib"
+    - from: "packages/device-use"
+      to: "agentic-apps/device-use"
+      filter:
+        - "agentic-app.json"
+        - "package.json"
+        - "dist/**/*"
+        - "skills/**/*"
+        - "bin/**/*"
   target:
     - target: dmg
       arch: [arm64, x64]
@@ -61,11 +64,6 @@ mac:
   darkModeSupport: true
   icon: resources/icons/icon.icns
   notarize: true
-win:
-  target:
-    - target: nsis
-      arch: [x64]
-  icon: resources/icons/icon.png
 linux:
   target:
     - target: AppImage
@@ -74,9 +72,6 @@ linux:
       arch: [x64]
   category: Development
   icon: resources/icons/icon.png
-nsis:
-  oneClick: false
-  allowToChangeInstallationDirectory: true
 publish:
   provider: github
   releaseType: release

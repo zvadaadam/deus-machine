@@ -13,8 +13,74 @@ import { ipcMain, dialog, nativeTheme, BrowserWindow, shell, Menu, app } from "e
 import { exec, execFile } from "child_process";
 import { promisify } from "util";
 import { homedir } from "os";
+import path from "path";
+import { existsSync, realpathSync } from "fs";
+import { checkCliTool } from "./cli-tools";
+import { logoutGhAuth, startGhAuthLogin } from "./github-cli-auth";
 
 const execFileAsync = promisify(execFile);
+const WORKSPACE_LOOKUP_TIMEOUT_MS = 2_000;
+
+interface WorkspaceFileTarget {
+  workspaceId: string;
+  relativePath: string;
+}
+
+interface WorkspaceLookupResponse {
+  workspace_path?: string;
+}
+
+async function getWorkspacePath(workspaceId: string): Promise<string | null> {
+  const port = process.env.DEUS_BACKEND_PORT;
+  if (!port || !/^\d+$/u.test(port)) return null;
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), WORKSPACE_LOOKUP_TIMEOUT_MS);
+
+  try {
+    const response = await fetch(
+      `http://localhost:${port}/api/workspaces/${encodeURIComponent(workspaceId)}`,
+      { signal: controller.signal }
+    );
+    if (!response.ok) return null;
+    const payload = (await response.json()) as WorkspaceLookupResponse;
+    return typeof payload.workspace_path === "string" ? payload.workspace_path : null;
+  } catch {
+    return null;
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
+async function resolveWorkspaceFile(
+  target: Partial<WorkspaceFileTarget> | null | undefined
+): Promise<string | null> {
+  if (
+    !target ||
+    typeof target.workspaceId !== "string" ||
+    typeof target.relativePath !== "string" ||
+    path.isAbsolute(target.relativePath)
+  ) {
+    return null;
+  }
+
+  const workspacePath = await getWorkspacePath(target.workspaceId);
+  if (!workspacePath || !path.isAbsolute(workspacePath)) return null;
+
+  try {
+    const workspaceRoot = realpathSync(workspacePath);
+    const absolutePath = path.resolve(workspaceRoot, target.relativePath);
+    if (!existsSync(absolutePath)) return null;
+
+    const realPath = realpathSync(absolutePath);
+    const relative = path.relative(workspaceRoot, realPath);
+    if (relative === ".." || relative.startsWith(`..${path.sep}`) || path.isAbsolute(relative)) {
+      return null;
+    }
+    return realPath;
+  } catch {
+    return null;
+  }
+}
 
 export function registerNativeHandlers(): void {
   // -------------------------------------------------------------------------
@@ -24,11 +90,14 @@ export function registerNativeHandlers(): void {
   ipcMain.handle("show_main_window", () => {
     const win = BrowserWindow.getFocusedWindow() ?? BrowserWindow.getAllWindows()[0];
     if (win) {
-      // Transition to app mode — vibrancy + solid background.
+      // Transition to app mode. On macOS vibrancy IS the window background;
+      // calling setBackgroundColor after setVibrancy eliminates the vibrancy
+      // effect, so we only set a solid bg on non-darwin platforms.
       if (process.platform === "darwin") {
         win.setVibrancy("under-window");
+      } else {
+        win.setBackgroundColor("#1a1a1a");
       }
-      win.setBackgroundColor("#1a1a1a");
       win.show();
       win.focus();
     }
@@ -51,8 +120,10 @@ export function registerNativeHandlers(): void {
       if (process.platform === "darwin") {
         win.setWindowButtonVisibility(true);
         win.setVibrancy("under-window");
+        // No setBackgroundColor on darwin — would eliminate vibrancy.
+      } else {
+        win.setBackgroundColor("#1a1a1a");
       }
-      win.setBackgroundColor("#1a1a1a");
     }
   });
 
@@ -118,11 +189,35 @@ export function registerNativeHandlers(): void {
     try {
       const parsed = new URL(url);
       if (parsed.protocol === "http:" || parsed.protocol === "https:") {
-        shell.openExternal(url);
+        return shell.openExternal(url);
       }
+      return undefined;
     } catch {
       // Ignore malformed URLs
+      return undefined;
     }
+  });
+
+  // -------------------------------------------------------------------------
+  // Open/reveal local files
+  // -------------------------------------------------------------------------
+
+  ipcMain.handle("native:openPath", async (_e, target: WorkspaceFileTarget) => {
+    const filePath = await resolveWorkspaceFile(target);
+    if (!filePath) return false;
+    const error = await shell.openPath(filePath);
+    if (error) {
+      console.error("[native:openPath] Failed:", error);
+      return false;
+    }
+    return true;
+  });
+
+  ipcMain.handle("native:revealInFinder", async (_e, target: WorkspaceFileTarget) => {
+    const filePath = await resolveWorkspaceFile(target);
+    if (!filePath) return false;
+    shell.showItemInFolder(filePath);
+    return true;
   });
 
   // -------------------------------------------------------------------------
@@ -238,41 +333,27 @@ export function registerNativeHandlers(): void {
   // -------------------------------------------------------------------------
 
   ipcMain.handle("native:checkCliTool", async (_e, args: { name?: string; tool?: string }) => {
-    const tool = args.name || args.tool || "";
-    try {
-      const { stdout } = await execFileAsync("which", [tool]);
-      return { installed: true, path: stdout.trim() };
-    } catch {
-      return { installed: false, path: null };
-    }
+    return checkCliTool(args.name || args.tool || "");
   });
 
   ipcMain.handle("check_cli_tool", async (_e, args: { name?: string; tool?: string }) => {
-    const tool = args.name || args.tool || "";
-    try {
-      const { stdout } = await execFileAsync("which", [tool]);
-      return { installed: true, path: stdout.trim() };
-    } catch {
-      return { installed: false, path: null };
-    }
+    return checkCliTool(args.name || args.tool || "");
   });
 
-  ipcMain.handle("native:checkGhAuth", async () => {
-    try {
-      await execFileAsync("gh", ["auth", "status"]);
-      return { authenticated: true };
-    } catch {
-      return { authenticated: false };
-    }
+  ipcMain.handle("native:startGhAuthLogin", async () => {
+    return startGhAuthLogin();
   });
 
-  ipcMain.handle("check_gh_auth", async () => {
-    try {
-      await execFileAsync("gh", ["auth", "status"]);
-      return { authenticated: true };
-    } catch {
-      return { authenticated: false };
-    }
+  ipcMain.handle("start_gh_auth_login", async () => {
+    return startGhAuthLogin();
+  });
+
+  ipcMain.handle("native:logoutGhAuth", async () => {
+    return logoutGhAuth();
+  });
+
+  ipcMain.handle("logout_gh_auth", async () => {
+    return logoutGhAuth();
   });
 
   // -------------------------------------------------------------------------

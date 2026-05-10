@@ -1,6 +1,7 @@
 import { useCallback } from "react";
 import { toast } from "sonner";
-import { Github, Loader2 } from "lucide-react";
+import { Loader2 } from "lucide-react";
+import { GitHubIcon } from "@/shared/components/icons/GitHubIcon";
 import { native } from "@/platform";
 import { getBackendUrl } from "@/shared/config/api.config";
 import { getErrorMessage } from "@shared/lib/errors";
@@ -24,10 +25,10 @@ interface InspectedRepository {
 }
 
 const REPO = {
-  url: "https://github.com/zvadaadam/deus",
-  name: "deus",
+  url: "https://github.com/zvadaadam/deus-machine",
+  name: "deus-machine",
   displayName: "Deus",
-  displayUrl: "github.com/zvadaadam/deus",
+  displayUrl: "github.com/zvadaadam/deus-machine",
   description: "The source behind the tool you’re using right now.",
 } as const;
 
@@ -199,7 +200,7 @@ export function DeusStep({ onBack, onComplete }: DeusStepProps) {
 
       <div className="flex items-center gap-3 rounded-xl bg-white/[0.04] p-4">
         <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-white/[0.08]">
-          <Github className="h-4.5 w-4.5 text-white/40" />
+          <GitHubIcon className="h-4.5 w-4.5 text-white/60" />
         </div>
 
         <div className="min-w-0 flex-1">

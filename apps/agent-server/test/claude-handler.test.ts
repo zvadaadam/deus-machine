@@ -829,22 +829,24 @@ describe("claude-handler", () => {
 
       // Verify emitPartEvent was called with turn.started, part events, and turn.completed
       const partEventCalls = mockFrontendAPI.emitPartEvent.mock.calls;
-      const allEvents = partEventCalls.map((call: unknown[]) => call[3]);
+      const allEvents = partEventCalls.map((call: unknown[]) => call[3]) as Array<{
+        type: string;
+        part?: { type?: string; text?: string };
+      }>;
 
       // Should have a turn.started event
-      const turnStarted = allEvents.find((e: { type: string }) => e.type === "turn.started");
+      const turnStarted = allEvents.find((e) => e.type === "turn.started");
       expect(turnStarted).toBeDefined();
 
       // Should have part events with TEXT content
       const partDoneEvents = allEvents.filter(
-        (e: { type: string; part?: { type: string } }) =>
-          (e.type === "part.created" || e.type === "part.done") && e.part?.type === "TEXT"
+        (e) => (e.type === "part.created" || e.type === "part.done") && e.part?.type === "TEXT"
       );
       expect(partDoneEvents.length).toBeGreaterThanOrEqual(1);
-      expect(partDoneEvents[0].part.text).toBe("Hello from Parts");
+      expect(partDoneEvents[0]!.part!.text).toBe("Hello from Parts");
 
       // Should have a turn.completed event
-      const turnCompleted = allEvents.find((e: { type: string }) => e.type === "turn.completed");
+      const turnCompleted = allEvents.find((e) => e.type === "turn.completed");
       expect(turnCompleted).toBeDefined();
     });
   });

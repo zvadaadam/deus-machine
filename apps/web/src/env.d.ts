@@ -34,7 +34,11 @@ interface Window {
     downloadUpdate: () => Promise<void>;
     installUpdate: () => Promise<void>;
     onUpdateState: (callback: (state: unknown) => void) => () => void;
+    openExternal: (url: string) => Promise<void>;
     openTerminal: (command: string) => Promise<void>;
+    confirm: (message: string, detail?: string) => Promise<boolean>;
+    startGhAuthLogin: () => Promise<{ success: boolean; path: string | null; error?: string }>;
+    logoutGhAuth: () => Promise<{ success: boolean; path: string | null; error?: string }>;
     on: (event: string, callback: (...args: unknown[]) => void) => () => void;
     invoke: (channel: string, args?: unknown) => Promise<unknown>;
     send: (channel: string, ...args: unknown[]) => void;

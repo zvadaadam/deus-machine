@@ -86,7 +86,7 @@ const PatchApplyBeginEventSchema = z.object({
   call_id: z.string(),
   turn_id: z.string(),
   auto_approved: z.boolean().optional(),
-  changes: z.record(FileChangeSchema),
+  changes: z.record(z.string(), FileChangeSchema),
 });
 
 const PatchApplyEndEventSchema = z.object({
@@ -96,14 +96,14 @@ const PatchApplyEndEventSchema = z.object({
   stdout: z.string().optional(),
   stderr: z.string().optional(),
   success: z.boolean(),
-  changes: z.record(FileChangeSchema),
+  changes: z.record(z.string(), FileChangeSchema),
 });
 
 const ApplyPatchApprovalRequestEventSchema = z.object({
   type: z.literal("apply_patch_approval_request"),
   call_id: z.string(),
   turn_id: z.string(),
-  changes: z.record(FileChangeSchema),
+  changes: z.record(z.string(), FileChangeSchema),
   reason: z.string().nullable().optional(),
 });
 

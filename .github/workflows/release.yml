@@ -1,4 +1,4 @@
-# Multi-platform release workflow (macOS, Windows, Linux)
+# Multi-platform release workflow (macOS, Linux)
 #
 # Builds and publishes the Electron app for all platforms via GitHub Releases.
 # electron-updater reads latest-mac.yml / latest.yml / latest-linux.yml from
@@ -184,6 +184,20 @@ jobs:
         run: |
           set -euo pipefail
 
+          found_resources=0
+          while IFS= read -r resources_dir; do
+            found_resources=1
+            echo "Verifying packaged simulator helpers in $resources_dir"
+            test -x "$resources_dir/simulator/simbridge"
+            test -f "$resources_dir/simulator/siminspector.dylib"
+            lipo -verify_arch arm64 x86_64 "$resources_dir/simulator/simbridge"
+            lipo -verify_arch arm64 x86_64 "$resources_dir/simulator/siminspector.dylib"
+          done < <(find dist-electron -maxdepth 4 -path '*/Deus.app/Contents/Resources' -type d | sort)
+          if [[ "$found_resources" -ne 1 ]]; then
+            echo "::error::No packaged Deus.app Resources directory found for simulator helper verification"
+            exit 1
+          fi
+
           while IFS= read -r app_path; do
             echo "Verifying signature for $app_path"
             codesign --verify --deep --strict --verbose=2 "$app_path"
@@ -207,20 +221,14 @@ jobs:
           copied_root="$(mktemp -d "${RUNNER_TEMP}/deus-app.XXXXXX")"
           copied_app="$copied_root/Deus.app"
           smoke_log="$(mktemp "${RUNNER_TEMP}/deus-smoke.XXXXXX.log")"
-          agent_log="$(mktemp "${RUNNER_TEMP}/deus-agent.XXXXXX.log")"
           smoke_db="$(mktemp "${RUNNER_TEMP}/deus-smoke.XXXXXX.db")"
           attached=0
           backend_pid=""
-          agent_pid=""
 
           cleanup() {
             if [[ -n "$backend_pid" ]]; then
               kill "$backend_pid" 2>/dev/null || true
               wait "$backend_pid" 2>/dev/null || true
-            fi
-            if [[ -n "$agent_pid" ]]; then
-              kill "$agent_pid" 2>/dev/null || true
-              wait "$agent_pid" 2>/dev/null || true
             fi
             if [[ "$attached" -eq 1 ]]; then
               hdiutil detach "$mount_dir" -quiet || true
@@ -236,33 +244,21 @@ jobs:
 
           app_bin="$copied_app/Contents/MacOS/Deus"
           resources_dir="$copied_app/Contents/Resources"
+          test -x "$resources_dir/simulator/simbridge"
+          test -f "$resources_dir/simulator/siminspector.dylib"
 
           ELECTRON_RUN_AS_NODE=1 \
           DATABASE_PATH="$smoke_db" \
-          NODE_PATH="$resources_dir/app.asar/node_modules" \
-          "$app_bin" "$resources_dir/bin/index.bundled.cjs" >"$agent_log" 2>&1 &
-          agent_pid=$!
-
-          agent_url=""
-          for _ in {1..30}; do
-            if grep -q '^LISTEN_URL=' "$agent_log"; then
-              agent_url="$(grep '^LISTEN_URL=' "$agent_log" | head -n 1 | sed 's/^LISTEN_URL=//')"
-              break
-            fi
-            if ! kill -0 "$agent_pid" 2>/dev/null; then
-              break
-            fi
-            sleep 1
-          done
-
-          [[ -n "$agent_url" ]]
-
-          ELECTRON_RUN_AS_NODE=1 \
-          DATABASE_PATH="$smoke_db" \
-          AGENT_SERVER_URL="$agent_url" \
           AUTH_TOKEN=smoke \
           PORT=0 \
           CDP_PORT=19222 \
+          DEUS_PACKAGED=1 \
+          DEUS_RESOURCES_PATH="$resources_dir" \
+          DEUS_BUNDLED_BIN_DIR="$resources_dir/bin" \
+          DEVICE_USE_SIMBRIDGE="$resources_dir/simulator/simbridge" \
+          DEVICE_USE_SIMINSPECTOR="$resources_dir/simulator/siminspector.dylib" \
+          AGENT_SERVER_ENTRY="$resources_dir/bin/index.bundled.cjs" \
+          AGENT_SERVER_CWD="$resources_dir/bin" \
           NODE_PATH="$resources_dir/app.asar/node_modules" \
           "$app_bin" "$resources_dir/backend/server.bundled.cjs" >"$smoke_log" 2>&1 &
           backend_pid=$!
@@ -295,44 +291,7 @@ jobs:
             dist-electron/latest-mac.yml
           if-no-files-found: error
 
-  # ── Step 2b: Build Windows (x64) ───────────────────────────────────
-  build-windows:
-    needs: validate-and-bump
-    runs-on: windows-latest
-    env:
-      SENTRY_AUTH_TOKEN: ${{ secrets.SENTRY_AUTH_TOKEN }}
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          ref: ${{ inputs.dry_run == false && needs.validate-and-bump.outputs.tag || github.ref }}
-
-      - uses: oven-sh/setup-bun@v2
-        with:
-          bun-version: 1.2.19
-
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 22
-
-      - name: Install dependencies
-        run: bun install --frozen-lockfile
-
-      - name: Build all
-        run: bun run build:all
-
-      - name: Package Windows (x64)
-        run: bunx electron-builder --win --publish never
-
-      - uses: actions/upload-artifact@v4
-        with:
-          name: windows
-          path: |
-            dist-electron/*.exe
-            dist-electron/*.blockmap
-            dist-electron/latest.yml
-          if-no-files-found: error
-
-  # ── Step 2c: Build Linux (x64) ─────────────────────────────────────
+  # ── Step 2b: Build Linux (x64) ─────────────────────────────────────
   build-linux:
     needs: validate-and-bump
     runs-on: ubuntu-latest
@@ -370,9 +329,9 @@ jobs:
             dist-electron/latest-linux.yml
           if-no-files-found: error
 
-  # ── Step 3: Create GitHub Release with all artifacts ────────────────
+  # ── Step 3: Stage a draft GitHub Release with all artifacts ─────────
   create-release:
-    needs: [validate-and-bump, build-macos, build-windows, build-linux]
+    needs: [validate-and-bump, build-macos, build-linux]
     if: ${{ inputs.dry_run == false }}
     runs-on: ubuntu-latest
     steps:
@@ -384,14 +343,14 @@ jobs:
         run: |
           mkdir -p release
           find artifacts -type f \( \
-            -name "*.dmg" -o -name "*.zip" -o -name "*.exe" -o \
+            -name "*.dmg" -o -name "*.zip" -o \
             -name "*.AppImage" -o -name "*.deb" -o \
             -name "*.blockmap" -o -name "*.yml" \
           \) -exec cp {} release/ \;
           echo "=== Release files ==="
           ls -lh release/
 
-      - name: Create GitHub Release
+      - name: Create draft GitHub Release
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           TAG: ${{ needs.validate-and-bump.outputs.tag }}
@@ -400,10 +359,11 @@ jobs:
           gh release create "$TAG" \
             --repo "${{ github.repository }}" \
             --title "Deus v${VERSION}" \
+            --draft \
             --generate-notes \
             release/*
 
-  # ── Step 4: Publish CLI to npm ──────────────────────────────────────
+  # ── Step 4: Publish CLI to npm before the release becomes public ────
   publish-cli:
     needs: [validate-and-bump, create-release]
     if: ${{ inputs.dry_run == false }}
@@ -447,3 +407,18 @@ jobs:
         run: npm publish --access public --provenance
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+
+  # ── Step 5: Publish GitHub Release after CLI publish succeeds ───────
+  publish-release:
+    needs: [validate-and-bump, publish-cli]
+    if: ${{ inputs.dry_run == false }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Publish draft GitHub Release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG: ${{ needs.validate-and-bump.outputs.tag }}
+        run: |
+          gh release edit "$TAG" \
+            --repo "${{ github.repository }}" \
+            --draft=false

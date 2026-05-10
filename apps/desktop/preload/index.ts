@@ -33,7 +33,8 @@ const ALLOWED_INVOKE_CHANNELS = new Set([
 
   // CLI / environment checks (snake_case aliases)
   "check_cli_tool",
-  "check_gh_auth",
+  "start_gh_auth_login",
+  "logout_gh_auth",
   "get_installed_apps",
   "open_in_app",
 
@@ -51,6 +52,9 @@ const ALLOWED_INVOKE_CHANNELS = new Set([
   "native:setZoom",
   "native:setTitle",
   "native:homeDir",
+  "native:openExternal",
+  "native:openPath",
+  "native:revealInFinder",
 
   // iOS Simulator — all operations moved to backend (q:command protocol).
   // No IPC channels needed.
@@ -147,7 +151,10 @@ const electronAPI = {
 
   checkCliTool: (tool: string): Promise<{ installed: boolean; path: string | null }> =>
     ipcRenderer.invoke("native:checkCliTool", { tool }),
-  checkGhAuth: (): Promise<{ authenticated: boolean }> => ipcRenderer.invoke("native:checkGhAuth"),
+  startGhAuthLogin: (): Promise<{ success: boolean; path: string | null; error?: string }> =>
+    ipcRenderer.invoke("native:startGhAuthLogin"),
+  logoutGhAuth: (): Promise<{ success: boolean; path: string | null; error?: string }> =>
+    ipcRenderer.invoke("native:logoutGhAuth"),
   getInstalledApps: (): Promise<Array<{ name: string; path: string }>> =>
     ipcRenderer.invoke("native:getInstalledApps"),
   openInApp: (appPath: string, filePath: string): Promise<boolean> =>

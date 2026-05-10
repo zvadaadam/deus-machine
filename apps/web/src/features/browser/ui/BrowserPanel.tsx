@@ -24,7 +24,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import {
-  RefreshCw,
+  RotateCw,
   ChevronLeft,
   ChevronRight,
   Terminal,
@@ -36,6 +36,7 @@ import {
   Camera,
   Monitor,
   Smartphone,
+  ArrowUpRight,
 } from "lucide-react";
 import { BrowserTabBar } from "./BrowserTabBar";
 import { BrowserTab } from "./BrowserTab";
@@ -837,6 +838,11 @@ export function BrowserPanel({ workspaceId, panelVisible = true }: BrowserPanelP
     tabRefs.current.get(activeTab.id)?.reload();
   }, [activeTab]);
 
+  const handleOpenExternal = useCallback(() => {
+    if (!activeTab?.currentUrl || isBlankUrl(activeTab.currentUrl)) return;
+    window.open(activeTab.currentUrl, "_blank");
+  }, [activeTab]);
+
   const handleToggleSelector = useCallback(() => {
     if (!activeTab?.currentUrl) return;
     tabRefs.current.get(activeTab.id)?.toggleElementSelector();
@@ -1019,27 +1025,41 @@ export function BrowserPanel({ workspaceId, panelVisible = true }: BrowserPanelP
               disabled={!activeTab || activeTab.loading || !activeTab.currentUrl}
               aria-label="Reload"
             >
-              <RefreshCw
+              <RotateCw
                 strokeWidth={1.75}
-                className={`h-3.5 w-3.5 ${activeTab?.loading ? "animate-spin" : ""}`}
+                className={`h-3 w-3 ${activeTab?.loading ? "animate-spin" : ""}`}
               />
             </Button>
           </IconTooltip>
 
-          <Input
-            ref={urlInputRef}
-            type="text"
-            value={isBlankUrl(activeTab?.url) ? "" : (activeTab?.url ?? "")}
-            onChange={handleUrlChange}
-            onKeyDown={handleKeyDown}
-            onFocus={(e) => e.target.select()}
-            placeholder="Search or enter URL..."
-            autoComplete="off"
-            spellCheck={false}
-            data-1p-ignore
-            className="bg-bg-elevated focus-visible:border-border-strong h-7 min-w-0 flex-1 text-sm focus-visible:ring-0"
-            disabled={!activeTab || activeTab.loading}
-          />
+          <div className="group relative flex min-w-0 flex-1 items-center">
+            <Input
+              ref={urlInputRef}
+              type="text"
+              value={isBlankUrl(activeTab?.url) ? "" : (activeTab?.url ?? "")}
+              onChange={handleUrlChange}
+              onKeyDown={handleKeyDown}
+              onFocus={(e) => e.target.select()}
+              placeholder="Enter URL"
+              autoComplete="off"
+              spellCheck={false}
+              data-1p-ignore
+              className="hover:bg-muted/60 focus-visible:bg-muted/80 focus-visible:ring-primary/40 h-7 w-full min-w-0 border-0 bg-transparent pr-7 text-sm shadow-none transition-colors focus-visible:ring-2"
+              disabled={!activeTab || activeTab.loading}
+            />
+            {activeTab?.currentUrl && !isBlankUrl(activeTab.currentUrl) && (
+              <IconTooltip label="Open in external browser">
+                <button
+                  type="button"
+                  onClick={handleOpenExternal}
+                  className="text-text-muted hover:text-text-secondary absolute right-1 flex h-5 w-5 items-center justify-center rounded opacity-0 transition-opacity duration-150 group-focus-within:opacity-100 group-hover:opacity-100"
+                  aria-label="Open in external browser"
+                >
+                  <ArrowUpRight strokeWidth={1.75} className="h-3.5 w-3.5" />
+                </button>
+              </IconTooltip>
+            )}
+          </div>
 
           {/* Injection failure indicator — red dot, only visible on error */}
           {activeTab?.injectionFailed && (

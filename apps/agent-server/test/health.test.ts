@@ -7,7 +7,7 @@ import { WebSocketServer } from "ws";
 const mockGetRegisteredAgentHarnesses = vi.fn((): string[] => ["claude", "codex-sdk"]);
 const mockEmitSessionCancelled = vi.fn();
 const mockEmitMessageCancelled = vi.fn();
-const mockGetAgent = vi.fn(() => undefined);
+const mockGetAgent = vi.fn((_agentHarness?: unknown) => undefined);
 
 vi.mock("../agents/registry", () => ({
   getRegisteredAgentHarnesses: () => mockGetRegisteredAgentHarnesses(),

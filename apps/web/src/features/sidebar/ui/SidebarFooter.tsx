@@ -1,10 +1,11 @@
 import { useState } from "react";
-import { FolderGit2, FolderPlus, Github, Plus } from "lucide-react";
+import { FolderGit2, FolderPlus, Plus } from "lucide-react";
 import { SidebarFooter as SidebarFooterUI } from "@/components/ui/sidebar";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { AIStatusIndicator } from "@/features/ai-status/ui/AIStatusIndicator";
 import { ConnectionOrb } from "@/features/connection";
 import { capabilities } from "@/platform/capabilities";
+import { GitHubIcon } from "@/shared/components/icons/GitHubIcon";
 import type { SidebarFooterProps } from "../model/types";
 
 /**
@@ -54,7 +55,7 @@ export function SidebarFooter({
             }}
             className="hover:bg-bg-elevated focus-visible:bg-bg-elevated flex w-full items-center gap-3 rounded-lg px-3 py-3 transition-colors duration-150 focus-visible:outline-none"
           >
-            <Github className="text-text-muted h-4 w-4 shrink-0" />
+            <GitHubIcon className="text-text-muted h-4 w-4 shrink-0" />
             <div className="min-w-0 text-left">
               <p className="text-text-primary text-sm font-medium">Clone from GitHub</p>
               <p className="text-text-muted text-xs">Start from a remote repository</p>

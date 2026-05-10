@@ -35,12 +35,22 @@ export interface PRStatus {
 }
 
 /**
- * GitHub CLI availability status
- * Cached separately with long staleTime since it rarely changes
+ * GitHub CLI availability + active account identity.
+ * Combines `gh auth status` (installed/authenticated) with `gh api user`
+ * (login, display name, avatar). Cached on the frontend with a long
+ * staleTime since this rarely changes during a session.
  */
 export interface GhCliStatus {
   isInstalled: boolean;
   isAuthenticated: boolean;
+  /** GitHub login (e.g. "octocat"). Null when unauthenticated. */
+  login?: string | null;
+  /** Profile display name (e.g. "The Octocat"). May be null even when authenticated. */
+  displayName?: string | null;
+  /** Public avatar URL from githubusercontent.com. Null when unauthenticated or unreachable. */
+  avatarUrl?: string | null;
+  /** Profile URL (e.g. "https://github.com/octocat"). */
+  htmlUrl?: string | null;
 }
 
 /**

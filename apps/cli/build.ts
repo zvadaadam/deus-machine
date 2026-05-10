@@ -10,7 +10,7 @@ import { build } from "esbuild";
 import { cpSync, existsSync, mkdirSync, rmSync, writeFileSync } from "fs";
 import { resolve, join, dirname } from "path";
 import { fileURLToPath } from "url";
-import { stageRuntime } from "../runtime/stage";
+import { stageRuntime } from "../../scripts/runtime/stage";
 import { resolveRuntimeStagePaths } from "../../shared/runtime";
 
 const __filename = fileURLToPath(import.meta.url);

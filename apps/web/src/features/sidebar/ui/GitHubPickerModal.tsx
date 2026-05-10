@@ -1,5 +1,7 @@
 import { useState, useCallback } from "react";
-import { GitPullRequest, GitBranch } from "lucide-react";
+import { useMutation } from "@tanstack/react-query";
+import { GitPullRequest, GitBranch, Loader2 } from "lucide-react";
+import { toast } from "sonner";
 import {
   CommandDialog,
   CommandInput,
@@ -8,9 +10,12 @@ import {
   CommandGroup,
   CommandItem,
 } from "@/components/ui/command";
+import { Button } from "@/components/ui/button";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Badge } from "@/components/ui/badge";
 import { useRepoPrs, useRepoBranches, useGhStatus } from "@/features/workspace/api";
+import { native } from "@/platform";
+import { GitHubIcon } from "@/shared/components/icons/GitHubIcon";
 import type { PRSummary, BranchSummary } from "@shared/types";
 
 interface GitHubPickerModalProps {
@@ -42,6 +47,24 @@ export function GitHubPickerModal({
   const prsQuery = useRepoPrs(open ? repoId : null);
   const branchesQuery = useRepoBranches(open ? repoId : null);
   const ghStatus = useGhStatus();
+
+  const signInMutation = useMutation({
+    mutationFn: () => native.cli.startGhAuthLogin(),
+    onSuccess: async (result) => {
+      if (!result.success) {
+        toast.error(result.error ?? "GitHub sign-in did not complete");
+        return;
+      }
+
+      const refreshed = await ghStatus.refetch();
+      if (refreshed.data?.isAuthenticated) {
+        toast.success("GitHub connected");
+        await prsQuery.refetch();
+      } else {
+        toast.error("GitHub sign-in finished, but Deus could not verify it yet");
+      }
+    },
+  });
 
   const handlePrSelect = useCallback(
     (pr: PRSummary) => {
@@ -115,11 +138,30 @@ export function GitHubPickerModal({
       </div>
       <CommandList>
         <CommandEmpty>
-          {activeTab === "prs" && !ghInstalled
-            ? "GitHub CLI (gh) is not installed"
-            : activeTab === "prs" && !ghAuthenticated
-              ? "Run `gh auth login` to authenticate"
-              : "No results found."}
+          {activeTab === "prs" && !ghInstalled ? (
+            <div className="text-muted-foreground px-3 py-6 text-center text-sm">
+              GitHub integration is unavailable. Restart Deus, then check Settings.
+            </div>
+          ) : activeTab === "prs" && !ghAuthenticated ? (
+            <div className="flex flex-col items-center gap-3 px-3 py-6 text-center">
+              <p className="text-muted-foreground text-sm">Connect GitHub to load pull requests.</p>
+              <Button
+                size="sm"
+                className="gap-1.5"
+                onClick={() => void signInMutation.mutateAsync()}
+                disabled={signInMutation.isPending}
+              >
+                {signInMutation.isPending ? (
+                  <Loader2 className="size-3.5 animate-spin" />
+                ) : (
+                  <GitHubIcon className="size-3.5" />
+                )}
+                {signInMutation.isPending ? "Signing in" : "Sign in"}
+              </Button>
+            </div>
+          ) : (
+            "No results found."
+          )}
         </CommandEmpty>
 
         {activeTab === "prs" && (

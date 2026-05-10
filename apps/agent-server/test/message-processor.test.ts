@@ -40,7 +40,7 @@ vi.mock("../agents/lifecycle", () => ({
 
 // Mock the Claude Agent SDK's listSessions (used via dynamic import in title fetch)
 const { mockListSessions } = vi.hoisted(() => ({
-  mockListSessions: vi.fn(() => Promise.resolve([])),
+  mockListSessions: vi.fn(async (): Promise<Array<{ sessionId: string; summary?: string }>> => []),
 }));
 
 vi.mock("@anthropic-ai/claude-agent-sdk", () => ({
@@ -74,7 +74,7 @@ function makeOpts(overrides: Partial<ProcessMessageOptions> = {}): ProcessMessag
 }
 
 function makeSession(overrides: Partial<SessionState> = {}): SessionState {
-  return { ...overrides };
+  return { turnVersion: 1, ...overrides };
 }
 
 function makeCtx(overrides: Partial<StreamContext> = {}): StreamContext {
