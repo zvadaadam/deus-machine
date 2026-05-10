@@ -159,6 +159,10 @@ vi.mock("../../../src/services/ws.service", () => ({
   },
 }));
 
+vi.mock("../../../src/services/managed-browser.service", () => ({
+  getManagedBrowserCdpBaseUrl: async () => "http://127.0.0.1:19222",
+}));
+
 describe("browser-proxy.service", () => {
   beforeEach(() => {
     vi.resetModules();
@@ -414,6 +418,17 @@ describe("browser-proxy.service", () => {
     });
 
     expect(fetchCalls).toContain("http://127.0.0.1:19222/json/new?https%3A%2F%2Fgithub.com%2F");
+    expect(mockState.broadcast.frames).not.toContainEqual(
+      JSON.stringify({
+        type: "q:event",
+        event: "browser:nativeTabRequested",
+        data: {
+          tabId: "tab-2",
+          workspaceId: "ws-1",
+          url: "https://github.com/",
+        },
+      })
+    );
     expect(mockState.agentBrowser.calls).toContainEqual(
       expect.objectContaining({ args: ["--cdp", "ws://created-target", "get", "url", "--json"] })
     );
