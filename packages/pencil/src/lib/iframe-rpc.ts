@@ -64,18 +64,28 @@ export function requestFromIframe(
   });
 }
 
-function normalizeIframePayload(method: string, payload: unknown): unknown {
+export function normalizeIframePayload(method: string, payload: unknown): unknown {
   if (method !== "batch-design" || typeof payload !== "object" || payload === null) {
     return payload;
   }
   const data = payload as Record<string, unknown>;
-  if (typeof data.input === "string" || typeof data.operations !== "string") {
+  if (typeof data.input === "string") {
     return payload;
   }
+  const input = normalizeBatchDesignInput(data.operations);
+  if (input === null) return payload;
   return {
     ...data,
-    input: data.operations,
+    input,
   };
+}
+
+function normalizeBatchDesignInput(operations: unknown): string | null {
+  if (typeof operations === "string") return operations;
+  if (Array.isArray(operations) && operations.every((operation) => typeof operation === "string")) {
+    return operations.join("\n");
+  }
+  return null;
 }
 
 /** Called by /ipc-response when the iframe replies. */

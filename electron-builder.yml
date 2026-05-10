@@ -36,6 +36,19 @@ extraResources:
       - "dist/**/*"
       - "skills/**/*"
       - "bin/**/*"
+  - from: "packages/pencil"
+    to: "agentic-apps/pencil"
+    filter:
+      - "agentic-app.json"
+      - "package.json"
+      - "dist/**/*"
+      - "skills/**/*"
+  - from: "node_modules/@pencil.dev/cli"
+    to: "agentic-apps/pencil/node_modules/@pencil.dev/cli"
+    filter:
+      - "package.json"
+      - "dist/**/*"
+      - "SKILL.md"
 mac:
   category: public.app-category.developer-tools
   target:
