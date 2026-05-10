@@ -306,6 +306,7 @@ jobs:
           name: linux
           path: |
             dist-electron/*.AppImage
+            dist-electron/*.deb
             dist-electron/*.blockmap
             dist-electron/latest-linux.yml
           if-no-files-found: error
@@ -325,7 +326,7 @@ jobs:
           mkdir -p release
           find artifacts -type f \( \
             -name "*.dmg" -o -name "*.zip" -o \
-            -name "*.AppImage" -o \
+            -name "*.AppImage" -o -name "*.deb" -o \
             -name "*.blockmap" -o -name "*.yml" \
           \) -exec cp {} release/ \;
           echo "=== Release files ==="
