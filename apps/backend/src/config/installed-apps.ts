@@ -25,22 +25,24 @@ function uniqueExisting(paths: Array<string | null>): string[] {
   return existing;
 }
 
-function resolveDevManifest(): string | null {
+function resolveDevManifest(packagePath: string): string | null {
   try {
     const root = process.env.DEUS_REPO_ROOT ?? resolveRepoRoot(process.cwd());
-    return resolve(root, "packages/device-use/agentic-app.json");
+    return resolve(root, packagePath);
   } catch {
     return null;
   }
 }
 
-function resolvePackagedManifest(): string | null {
+function resolvePackagedManifest(relPath: string): string | null {
   const resourcesPath = (process as { resourcesPath?: string }).resourcesPath;
   if (!resourcesPath) return null;
-  return resolve(resourcesPath, "agentic-apps/device-use/agentic-app.json");
+  return resolve(resourcesPath, relPath);
 }
 
 export const INSTALLED_APP_MANIFESTS: readonly string[] = uniqueExisting([
-  resolvePackagedManifest(),
-  resolveDevManifest(),
+  resolvePackagedManifest("agentic-apps/device-use/agentic-app.json"),
+  resolveDevManifest("packages/device-use/agentic-app.json"),
+  resolvePackagedManifest("agentic-apps/pencil/agentic-app.json"),
+  resolveDevManifest("packages/pencil/agentic-app.json"),
 ]);
