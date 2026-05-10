@@ -3,8 +3,8 @@ import os from "node:os";
 import path from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import { CLI_RUNTIME_DEPENDENCIES } from "@shared/runtime";
-import { stageRuntime } from "../../../apps/runtime/stage";
-import { validateRuntimeStage } from "../../../apps/runtime/validate";
+import { stageRuntime } from "../../../scripts/runtime/stage";
+import { validateRuntimeStage } from "../../../scripts/runtime/validate";
 
 const tempRoots: string[] = [];
 

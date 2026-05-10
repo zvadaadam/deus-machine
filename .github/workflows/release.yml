@@ -207,20 +207,14 @@ jobs:
           copied_root="$(mktemp -d "${RUNNER_TEMP}/deus-app.XXXXXX")"
           copied_app="$copied_root/Deus.app"
           smoke_log="$(mktemp "${RUNNER_TEMP}/deus-smoke.XXXXXX.log")"
-          agent_log="$(mktemp "${RUNNER_TEMP}/deus-agent.XXXXXX.log")"
           smoke_db="$(mktemp "${RUNNER_TEMP}/deus-smoke.XXXXXX.db")"
           attached=0
           backend_pid=""
-          agent_pid=""
 
           cleanup() {
             if [[ -n "$backend_pid" ]]; then
               kill "$backend_pid" 2>/dev/null || true
               wait "$backend_pid" 2>/dev/null || true
-            fi
-            if [[ -n "$agent_pid" ]]; then
-              kill "$agent_pid" 2>/dev/null || true
-              wait "$agent_pid" 2>/dev/null || true
             fi
             if [[ "$attached" -eq 1 ]]; then
               hdiutil detach "$mount_dir" -quiet || true
@@ -239,30 +233,14 @@ jobs:
 
           ELECTRON_RUN_AS_NODE=1 \
           DATABASE_PATH="$smoke_db" \
-          NODE_PATH="$resources_dir/app.asar/node_modules" \
-          "$app_bin" "$resources_dir/bin/index.bundled.cjs" >"$agent_log" 2>&1 &
-          agent_pid=$!
-
-          agent_url=""
-          for _ in {1..30}; do
-            if grep -q '^LISTEN_URL=' "$agent_log"; then
-              agent_url="$(grep '^LISTEN_URL=' "$agent_log" | head -n 1 | sed 's/^LISTEN_URL=//')"
-              break
-            fi
-            if ! kill -0 "$agent_pid" 2>/dev/null; then
-              break
-            fi
-            sleep 1
-          done
-
-          [[ -n "$agent_url" ]]
-
-          ELECTRON_RUN_AS_NODE=1 \
-          DATABASE_PATH="$smoke_db" \
-          AGENT_SERVER_URL="$agent_url" \
           AUTH_TOKEN=smoke \
           PORT=0 \
           CDP_PORT=19222 \
+          DEUS_PACKAGED=1 \
+          DEUS_RESOURCES_PATH="$resources_dir" \
+          DEUS_BUNDLED_BIN_DIR="$resources_dir/bin" \
+          AGENT_SERVER_ENTRY="$resources_dir/bin/index.bundled.cjs" \
+          AGENT_SERVER_CWD="$resources_dir/bin" \
           NODE_PATH="$resources_dir/app.asar/node_modules" \
           "$app_bin" "$resources_dir/backend/server.bundled.cjs" >"$smoke_log" 2>&1 &
           backend_pid=$!
