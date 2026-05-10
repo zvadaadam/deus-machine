@@ -79,9 +79,10 @@ app.all("/api/servers/:serverId/http/:port/*", withRelay, async (c) => {
   const stub = c.get("stub");
   const serverId = c.req.param("serverId");
   const port = c.req.param("port");
-  const rest = c.req.param("*") || "";
   const httpUrl = new URL(c.req.url);
-  httpUrl.pathname = `/http/${port}/${rest}`.replace(/\/{2,}/g, "/");
+  const prefix = `/api/servers/${serverId}/http/${port}`;
+  const rest = httpUrl.pathname.startsWith(prefix) ? httpUrl.pathname.slice(prefix.length) : "/";
+  httpUrl.pathname = `/http/${port}${rest || "/"}`.replace(/\/{2,}/g, "/");
   const headers = new Headers(c.req.raw.headers);
   headers.set("x-deus-relay-public-prefix", `/api/servers/${serverId}/http/${port}`);
   return stub.fetch(
