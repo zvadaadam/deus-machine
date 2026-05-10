@@ -116,3 +116,12 @@ Detailed conventions for Tailwind v4, components, animations, and performance li
 - Never use npm or yarn
 - WebSocket push over polling — only poll for git diffs on working sessions
 - All colors via CSS variables/tokens, never hardcoded
+
+## Cursor Cloud specific instructions
+
+- **Bun path**: Bun is installed at `~/.bun/bin/bun`. The update script ensures it is on PATH, but for tmux sessions you may need `export PATH="$HOME/.bun/bin:$PATH"` before invoking bun.
+- **Native rebuild**: `bun run dev:web` rebuilds `better-sqlite3` for the Node ABI automatically (`bun run native:node`). This takes ~20s on first run after install. Do not skip it.
+- **Agent-Server SDK warnings**: On startup, the agent-server logs Claude/Codex executable initialization failures. These are expected in environments without Claude CLI or Codex CLI installed — the app still functions for UI testing and the `codex-sdk` agent remains available via the SDK.
+- **Database location on Linux**: SQLite DB is at `~/.local/share/deus/deus.db` (not `~/Library/...` as documented for macOS).
+- **Pre-existing lint errors**: `bun run lint` has 3 pre-existing errors (not warnings) in the codebase. Do not treat these as environment failures.
+- **Running `dev:web` in background**: Use a tmux session. The command starts all 3 processes (native rebuild → agent-server build → backend → Vite). Wait for `Server ready!` and the Vite URL before interacting.
