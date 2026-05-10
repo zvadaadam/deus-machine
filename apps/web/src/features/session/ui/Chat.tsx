@@ -5,7 +5,7 @@ import { AssistantTurn } from "./AssistantTurn";
 import { WorkspaceEmptyState } from "./WorkspaceEmptyState";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Button } from "@/components/ui/button";
-import { ChevronDown, TerminalSquare, MessageSquarePlus, PencilLine } from "lucide-react";
+import { ChevronDown, TerminalSquare, MessageSquarePlus, Undo2 } from "lucide-react";
 import { cn } from "@/shared/lib/utils";
 
 import { useWorkingDuration } from "@/shared/hooks";
@@ -108,7 +108,7 @@ interface ChatProps {
   onStop?: () => void; // Callback to stop/cancel the session
   onOpenLoginTerminal?: () => void;
   onRetryInNewChat?: () => void;
-  onEditLastUserMessage?: () => void;
+  onRestoreLastUserMessage?: () => void;
   /** True when there are older messages beyond the loaded window */
   hasOlder?: boolean;
   /** True when a load-older request is in flight */
@@ -133,7 +133,7 @@ export function Chat({
   latestMessageSentAt,
   onOpenLoginTerminal,
   onRetryInNewChat,
-  onEditLastUserMessage,
+  onRestoreLastUserMessage,
   hasOlder = false,
   loadingOlder = false,
   onLoadOlder,
@@ -508,12 +508,12 @@ export function Chat({
                     animate={{ opacity: 1 }}
                     exit={{ opacity: 0 }}
                     transition={{ duration: 0.15, ease: [0.25, 0.46, 0.45, 0.94] }}
-                    className={cn("mr-auto", "mt-1 w-fit max-w-[60%]")}
+                    className={cn("mr-auto", "mt-1 w-fit max-w-[90%] sm:max-w-lg")}
                     role="alert"
                     aria-live="assertive"
                   >
-                    <div className="border-destructive/20 border-l-destructive bg-destructive/5 flex items-center gap-4 rounded-lg border border-l-2 px-3 py-2.5">
-                      <div className="min-w-0 flex-1">
+                    <div className="border-destructive/20 border-l-destructive bg-destructive/5 flex flex-col items-start gap-3 rounded-lg border border-l-2 px-3 py-2.5">
+                      <div className="min-w-0">
                         <p className="text-destructive/80 text-xs font-medium">
                           {match(errorCategory)
                             .with("auth", () => "Authentication Error")
@@ -528,7 +528,7 @@ export function Chat({
                                 : "Error"
                             )}
                         </p>
-                        <p className="text-foreground/80 mt-0.5 text-sm break-words">
+                        <p className="text-foreground/80 mt-0.5 text-sm leading-relaxed break-words whitespace-pre-wrap">
                           {errorMessage}
                         </p>
                         {errorCategory === "rate_limit" && (
@@ -542,16 +542,16 @@ export function Chat({
                           </p>
                         )}
                       </div>
-                      <div className="flex shrink-0 items-center gap-2">
-                        {onEditLastUserMessage && (
+                      <div className="flex flex-wrap items-center gap-2">
+                        {onRestoreLastUserMessage && (
                           <Button
                             variant="outline"
                             size="sm"
                             className="h-7 text-xs"
-                            onClick={onEditLastUserMessage}
+                            onClick={onRestoreLastUserMessage}
                           >
-                            <PencilLine className="mr-1.5 h-3.5 w-3.5" />
-                            Edit last message
+                            <Undo2 className="mr-1.5 h-3.5 w-3.5" />
+                            Restore message
                           </Button>
                         )}
                         {match(errorCategory)
