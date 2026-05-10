@@ -311,7 +311,7 @@ jobs:
             dist-electron/latest-linux.yml
           if-no-files-found: error
 
-  # ── Step 3: Create GitHub Release with all artifacts ────────────────
+  # ── Step 3: Stage a draft GitHub Release with all artifacts ─────────
   create-release:
     needs: [validate-and-bump, build-macos, build-linux]
     if: ${{ inputs.dry_run == false }}
@@ -332,7 +332,7 @@ jobs:
           echo "=== Release files ==="
           ls -lh release/
 
-      - name: Create GitHub Release
+      - name: Create draft GitHub Release
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           TAG: ${{ needs.validate-and-bump.outputs.tag }}
@@ -341,10 +341,11 @@ jobs:
           gh release create "$TAG" \
             --repo "${{ github.repository }}" \
             --title "Deus v${VERSION}" \
+            --draft \
             --generate-notes \
             release/*
 
-  # ── Step 4: Publish CLI to npm ──────────────────────────────────────
+  # ── Step 4: Publish CLI to npm before the release becomes public ────
   publish-cli:
     needs: [validate-and-bump, create-release]
     if: ${{ inputs.dry_run == false }}
@@ -388,3 +389,18 @@ jobs:
         run: npm publish --access public --provenance
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+
+  # ── Step 5: Publish GitHub Release after CLI publish succeeds ───────
+  publish-release:
+    needs: [validate-and-bump, publish-cli]
+    if: ${{ inputs.dry_run == false }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Publish draft GitHub Release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG: ${{ needs.validate-and-bump.outputs.tag }}
+        run: |
+          gh release edit "$TAG" \
+            --repo "${{ github.repository }}" \
+            --draft=false
