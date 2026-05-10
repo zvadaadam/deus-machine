@@ -438,7 +438,7 @@ async function main() {
   );
 
   // Send query
-  async function sendQuery(prompt: string) {
+  async function sendQuery(prompt: string): Promise<boolean> {
     turnCounter++;
     isRunning = true;
     const turnId = `${opts.session}-turn-${turnCounter}`;
@@ -447,7 +447,7 @@ async function main() {
     console.log(`  ${c.dim}turnId: ${turnId}${c.reset}`);
     console.log(`  ${c.dim}prompt: ${truncate(prompt, 80)}${c.reset}\n`);
 
-    sendNotification(ws, "turn/start", {
+    const startId = sendRequest(ws, "turn/start", {
       sessionId: opts.session,
       agentHarness: opts.agent,
       prompt,
@@ -458,12 +458,27 @@ async function main() {
         permissionMode: "default",
       },
     });
+
+    const response = await waitForResponse(ws, startId);
+    if (response.error) {
+      isRunning = false;
+      console.log(`${c.red}turn/start failed:${c.reset} ${response.error.message}`);
+      return false;
+    }
+
+    if (response.result?.accepted === false) {
+      isRunning = false;
+      console.log(`${c.red}turn/start rejected:${c.reset} ${response.result.reason}`);
+      return false;
+    }
+
+    return true;
   }
 
   // Single-shot mode
   if (opts.prompt) {
-    await sendQuery(opts.prompt);
-    if (isRunning) {
+    const started = await sendQuery(opts.prompt);
+    if (started && isRunning) {
       await new Promise<void>((resolve) => {
         onTurnEnd = resolve;
       });
@@ -542,7 +557,8 @@ async function main() {
       return;
     }
 
-    await sendQuery(input);
+    const started = await sendQuery(input);
+    if (!started) rl!.prompt();
   });
 
   let cancelSentAt = 0;

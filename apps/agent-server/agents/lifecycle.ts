@@ -1,26 +1,106 @@
 // agent-server/agents/lifecycle.ts
-// Error classification, cancellation, and error reporting for agent query
-// lifecycle. Consolidates error-classifier.ts, query-lifecycle.ts, and
-// query-completion.ts into a single module.
+// Error classification and query lifecycle reporting helpers.
 
 import { EventBroadcaster } from "../event-broadcaster";
 import type { AgentHarness, ErrorCategory } from "../protocol";
-
-// ============================================================================
-// Error Classification
-// ============================================================================
 
 export interface ClassifiedError {
   category: ErrorCategory;
   message: string;
 }
 
-/**
- * Classifies an error into a machine-readable category.
- *
- * Priority order matters — earlier checks win when multiple keywords match.
- * e.g. "AbortError" always wins over a message that also mentions "network".
- */
+interface ErrorMatchContext {
+  name: string;
+  msg: string;
+}
+
+type ErrorRule = {
+  category: ErrorCategory;
+  matches: (ctx: ErrorMatchContext) => boolean;
+};
+
+const ERROR_RULES: ErrorRule[] = [
+  {
+    category: "abort",
+    matches: ({ name, msg }) => name === "AbortError" || msg.includes("aborted"),
+  },
+  {
+    category: "auth",
+    matches: ({ msg }) =>
+      includesAny(msg, [
+        "401",
+        "403",
+        "unauthorized",
+        "authentication",
+        "invalid api key",
+        "invalid x-api-key",
+        "billing",
+        "subscription",
+        "out of credits",
+        "payment",
+      ]),
+  },
+  {
+    category: "rate_limit",
+    matches: ({ msg }) => includesAny(msg, ["429", "rate limit", "overloaded"]),
+  },
+  {
+    category: "context_limit",
+    matches: ({ msg }) =>
+      (msg.includes("context") && includesAny(msg, ["limit", "length", "exceeded"])) ||
+      includesAny(msg, [
+        "too large",
+        "exceeds the dimension limit",
+        "max turns",
+        "turn limit",
+        "max output token",
+        "output token limit",
+      ]) ||
+      (msg.includes("budget") && includesAny(msg, ["exceed", "limit"])),
+  },
+  {
+    category: "network",
+    matches: ({ msg }) =>
+      includesAny(msg, [
+        "500",
+        "502",
+        "503",
+        "internal server error",
+        "service unavailable",
+        "gateway timeout",
+      ]),
+  },
+  {
+    category: "network",
+    matches: ({ name, msg }) =>
+      (name === "TypeError" && msg.includes("fetch")) ||
+      includesAny(msg, ["econnrefused", "etimedout", "enetunreach", "dns"]),
+  },
+  {
+    category: "db_write",
+    matches: ({ msg }) =>
+      msg.includes("sqlite") ||
+      msg.includes("database is locked") ||
+      msg.includes("readonly") ||
+      (msg.includes("busy") && msg.includes("database")),
+  },
+  {
+    category: "invalid_request",
+    matches: ({ msg }) =>
+      msg.includes("invalid") && (msg.includes("request") || msg.includes("param")),
+  },
+  {
+    category: "process_exit",
+    matches: ({ msg }) =>
+      includesAny(msg, [
+        "exited with code",
+        "terminated by signal",
+        "process exited",
+        "killed by signal",
+      ]),
+  },
+];
+
 export function classifyError(error: unknown): ClassifiedError {
   if (!(error instanceof Error)) {
     // Handle plain objects with a .message property (e.g. Codex SDK's
@@ -39,157 +119,45 @@ export function classifyError(error: unknown): ClassifiedError {
 
   const msg = error.message.toLowerCase();
   const name = error.name;
+  const rule = ERROR_RULES.find((candidate) => candidate.matches({ name, msg }));
+  if (rule) return { category: rule.category, message: error.message };
 
-  // Abort — user cancelled (highest priority, never retry)
-  if (name === "AbortError" || msg.includes("aborted")) {
-    return { category: "abort", message: error.message };
-  }
-
-  // Auth / billing errors — non-retryable, user action required
-  if (
-    msg.includes("401") ||
-    msg.includes("403") ||
-    msg.includes("unauthorized") ||
-    msg.includes("authentication") ||
-    msg.includes("invalid api key") ||
-    msg.includes("invalid x-api-key") ||
-    msg.includes("billing") ||
-    msg.includes("subscription") ||
-    msg.includes("out of credits") ||
-    msg.includes("payment")
-  ) {
-    return { category: "auth", message: error.message };
-  }
-
-  // Rate limits — user can retry by sending another message
-  if (msg.includes("429") || msg.includes("rate limit") || msg.includes("overloaded")) {
-    return { category: "rate_limit", message: error.message };
-  }
-
-  // Context / size / turn limits — non-retryable, conversation can't continue as-is
-  if (
-    (msg.includes("context") &&
-      (msg.includes("limit") || msg.includes("length") || msg.includes("exceeded"))) ||
-    msg.includes("too large") ||
-    msg.includes("exceeds the dimension limit") ||
-    msg.includes("max turns") ||
-    msg.includes("turn limit") ||
-    msg.includes("max output token") ||
-    msg.includes("output token limit") ||
-    (msg.includes("budget") && (msg.includes("exceed") || msg.includes("limit")))
-  ) {
-    return { category: "context_limit", message: error.message };
-  }
-
-  // Server errors (5xx) — retryable, transient infrastructure issues
-  if (
-    msg.includes("500") ||
-    msg.includes("502") ||
-    msg.includes("503") ||
-    msg.includes("internal server error") ||
-    msg.includes("service unavailable") ||
-    msg.includes("gateway timeout")
-  ) {
-    return { category: "network", message: error.message };
-  }
-
-  // Network errors — retryable
-  if (
-    (name === "TypeError" && msg.includes("fetch")) ||
-    msg.includes("econnrefused") ||
-    msg.includes("etimedout") ||
-    msg.includes("enetunreach") ||
-    msg.includes("dns")
-  ) {
-    return { category: "network", message: error.message };
-  }
-
-  // DB write errors (SQLite) — retryable short-term
-  // "busy" requires "database" context to avoid matching API "Server is busy" errors.
-  if (
-    msg.includes("sqlite") ||
-    msg.includes("database is locked") ||
-    msg.includes("readonly") ||
-    (msg.includes("busy") && msg.includes("database"))
-  ) {
-    return { category: "db_write", message: error.message };
-  }
-
-  // Invalid request — non-retryable
-  if (msg.includes("invalid") && (msg.includes("request") || msg.includes("param"))) {
-    return { category: "invalid_request", message: error.message };
-  }
-
-  // Process exit / signal termination — Claude Code subprocess crashed or was killed.
-  // These come from the SDK when the child process exits non-zero or is terminated by a signal.
-  if (
-    msg.includes("exited with code") ||
-    msg.includes("terminated by signal") ||
-    msg.includes("process exited") ||
-    msg.includes("killed by signal")
-  ) {
-    return { category: "process_exit", message: error.message };
-  }
-
-  // Fallback — unknown internal error
   return { category: "internal", message: error.message };
 }
 
-/**
- * Maps SDK stop_reason to an error category (or null if not an error).
- * "end_turn" and "stop_sequence" are normal completions.
- * "max_tokens" is a context_limit error — user needs a new session.
- * "cancelled" is handled separately in the abort path.
- */
+function includesAny(value: string, needles: string[]): boolean {
+  return needles.some((needle) => value.includes(needle));
+}
+
 export function classifyStopReason(stopReason: string | undefined): ClassifiedError | null {
   if (!stopReason) return null;
 
   switch (stopReason) {
     case "end_turn":
     case "stop_sequence":
-      return null; // Normal completion, not an error
+      return null;
     case "max_tokens":
       return {
         category: "context_limit",
         message: "Response truncated — output token limit reached.",
       };
     default:
-      return null; // Unknown stop_reason — treat as normal
+      return null;
   }
 }
 
-// ============================================================================
-// Cancellation Notification
-// ============================================================================
-
 /**
- * Notifies all connected tunnels of a cancellation event and emits canonical
- * session lifecycle events. The backend handles DB persistence (saving the
- * cancelled message and updating session status to idle).
- *
- * This identical sequence was duplicated 4 times across both handlers:
- * - claude-handler.ts post-loop cancel path
- * - claude-handler.ts catch cancel path
- * - codex-handler.ts post-loop abort path
- * - codex-handler.ts catch abort path
+ * Emits the canonical cancellation sequence. The backend persists the
+ * cancelled message and session status from these events.
  */
 export function persistCancellation(sessionId: string, agentHarness: AgentHarness): void {
   EventBroadcaster.emitSessionCancelled(sessionId, agentHarness);
   EventBroadcaster.emitMessageCancelled(sessionId, agentHarness);
 }
 
-// ============================================================================
-// Error Reporting
-// ============================================================================
-
 /**
- * Reports a classified error to the frontend and emits canonical session.error.
- * The backend handles persisting the error status to the DB.
- *
- * The optional `enrichMessage` callback allows handler-specific enrichment
- * without modifying this shared function (Open/Closed). Claude uses it
- * to append process_exit diagnostics (resume state, message count, etc.).
- * Codex passes nothing and gets the classified message as-is.
+ * Emits a canonical session.error. `enrichMessage` lets providers append
+ * context without changing the classifier.
  */
 export function notifyAndRecordError(
   sessionId: string,
@@ -207,22 +175,6 @@ export function notifyAndRecordError(
   );
 }
 
-// ============================================================================
-// Query Completion Helpers
-// ============================================================================
-
-/**
- * Handles the cancellation post-loop pattern.
- *
- * If `wasCancelled` is true, persists the cancellation event and returns
- * true to signal the caller should return early. Otherwise returns false.
- *
- * Replaces the duplicated pattern:
- *   if (session.cancelledByUser) {
- *     persistCancellation(sessionId, agentHarness);
- *     return;
- *   }
- */
 export function handleCancellation(
   sessionId: string,
   agentHarness: AgentHarness,
@@ -230,19 +182,9 @@ export function handleCancellation(
 ): boolean {
   if (!wasCancelled) return false;
   persistCancellation(sessionId, agentHarness);
-  return true; // signals early exit
+  return true;
 }
 
-/**
- * Handles the error post-loop pattern.
- *
- * Classifies the error and calls notifyAndRecordError with optional
- * handler-specific message enrichment.
- *
- * Replaces the duplicated pattern:
- *   const classified = classifyError(error);
- *   notifyAndRecordError(sessionId, agentHarness, classified, enrichFn);
- */
 export function handleQueryError(
   sessionId: string,
   agentHarness: AgentHarness,

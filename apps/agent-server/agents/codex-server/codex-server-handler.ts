@@ -4,11 +4,10 @@
 // without changing current Codex sessions.
 
 import { uuidv7 } from "@shared/lib/uuid";
-import type { PartEvent } from "@shared/agent-events";
-import type { Part } from "@shared/messages";
 import { EventBroadcaster } from "../../event-broadcaster";
 import { codexAppServerAdapter } from "../../messages/codex-app-server-adapter";
 import { classifyError, handleCancellation, handleQueryError } from "../lifecycle";
+import { createPartEventEmitter } from "../part-event-emitter";
 import type { AgentCapabilities, AgentHandler, QueryOptions } from "../registry";
 import { buildAgentEnvironment, buildWorkspaceContext } from "../environment";
 import {
@@ -113,7 +112,7 @@ export class CodexServerAgentHandler implements AgentHandler {
       const effort = mapThinkingLevel(options.thinkingLevel);
 
       const previousSession = codexServerSessions.get(sessionId);
-      session = {
+      const sessionState: CodexServerSessionState = {
         threadId: previousSession?.threadId,
         turnId: previousSession?.turnId,
         appServer: previousSession?.appServer,
@@ -122,7 +121,8 @@ export class CodexServerAgentHandler implements AgentHandler {
         cwd: options.cwd,
         isRunning: true,
       };
-      codexServerSessions.set(sessionId, session);
+      session = sessionState;
+      codexServerSessions.set(sessionId, sessionState);
 
       const env = buildAgentEnvironment({
         providerEnvVars: options?.providerEnvVars,
@@ -131,35 +131,35 @@ export class CodexServerAgentHandler implements AgentHandler {
       });
       const codexPath = getCodexServerExecutablePath() || "codex";
 
-      if (!session.appServer) {
-        session.appServer = new CodexAppServerClient({
+      if (!sessionState.appServer) {
+        sessionState.appServer = new CodexAppServerClient({
           codexPath,
           cwd: options.cwd,
           env,
         });
-        await session.appServer.initialize();
+        await sessionState.appServer.initialize();
       }
 
       const workspaceContext = buildWorkspaceContext(options.cwd);
       const threadParams = this.buildThreadParams(options, workspaceContext);
-      const shouldResume = !session.threadId && !!resumeThreadId;
+      const shouldResume = !sessionState.threadId && !!resumeThreadId;
 
       if (shouldResume) {
-        const response = await session.appServer.request("thread/resume", {
+        const response = await sessionState.appServer.request("thread/resume", {
           ...threadParams,
           threadId: resumeThreadId,
           excludeTurns: true,
         });
-        session.threadId = response.thread.id;
+        sessionState.threadId = response.thread.id;
         console.log(`[${queryId}] Resumed thread: ${response.thread.id}`);
-      } else if (!session.threadId) {
-        const response = await session.appServer.request("thread/start", threadParams);
-        session.threadId = response.thread.id;
+      } else if (!sessionState.threadId) {
+        const response = await sessionState.appServer.request("thread/start", threadParams);
+        sessionState.threadId = response.thread.id;
         EventBroadcaster.emitAgentSessionId(sessionId, response.thread.id);
         console.log(`[${queryId}] Started thread: ${response.thread.id}`);
       }
 
-      if (!session.threadId) {
+      if (!sessionState.threadId) {
         throw new Error("Codex app-server did not return a thread id");
       }
 
@@ -169,25 +169,24 @@ export class CodexServerAgentHandler implements AgentHandler {
         messageId,
         turnId: options.turnId,
       });
-
-      let currentMessageId = messageId;
-      const emitEvents = (events: ReturnType<typeof transformer.process>) => {
-        for (const evt of events) {
-          const eventMessageId =
-            messageIdForPartEvent(evt, transformer.getParts()) ?? currentMessageId;
-          currentMessageId = eventMessageId;
-          EventBroadcaster.emitPartEvent(sessionId, "codex-server", eventMessageId, evt);
-        }
-      };
+      const partEmitter = createPartEventEmitter({
+        sessionId,
+        agentHarness: "codex-server",
+        fallbackMessageId: messageId,
+        getParts: () => transformer.getParts(),
+      });
 
       let activeTurnId: string | undefined;
       const turnCompletion = new Promise<CodexServerTurnCompletion>((resolve, reject) => {
         const abortHandler = () => reject(new Error("Codex app-server turn aborted"));
         abortController.signal.addEventListener("abort", abortHandler, { once: true });
 
-        unsubscribe = session.appServer!.onNotification((notification) => {
+        unsubscribe = sessionState.appServer!.onNotification((notification) => {
           const threadId = getNotificationThreadId(notification);
-          const belongsToRootThread = notificationBelongsToThread(notification, session.threadId);
+          const belongsToRootThread = notificationBelongsToThread(
+            notification,
+            sessionState.threadId
+          );
           const belongsToKnownSubagent =
             !!threadId && transformer.isKnownSubagentThread?.(threadId) === true;
 
@@ -195,16 +194,16 @@ export class CodexServerAgentHandler implements AgentHandler {
 
           if (notification.method === "turn/started" && belongsToRootThread) {
             activeTurnId = notification.params.turn.id;
-            session.turnId = activeTurnId;
+            sessionState.turnId = activeTurnId;
           }
 
           if (belongsToRootThread && !notificationBelongsToTurn(notification, activeTurnId)) return;
 
-          emitEvents(transformer.process(notification));
+          partEmitter.emitMany(transformer.process(notification));
 
           if (notification.method === "turn/completed" && belongsToRootThread) {
             activeTurnId = notification.params.turn.id;
-            session.turnId = activeTurnId;
+            sessionState.turnId = activeTurnId;
             abortController.signal.removeEventListener("abort", abortHandler);
             resolve({
               status: notification.params.turn.status,
@@ -217,10 +216,10 @@ export class CodexServerAgentHandler implements AgentHandler {
         });
       });
 
-      const turn = await session.appServer.request(
+      const turn = await sessionState.appServer.request(
         "turn/start",
         {
-          threadId: session.threadId,
+          threadId: sessionState.threadId,
           input: [{ type: "text", text: prompt, text_elements: [] }],
           cwd: options.cwd,
           approvalPolicy: "never",
@@ -233,12 +232,12 @@ export class CodexServerAgentHandler implements AgentHandler {
       );
 
       activeTurnId = activeTurnId ?? turn.turn.id;
-      session.turnId = activeTurnId;
+      sessionState.turnId = activeTurnId;
 
       const completedTurn = await turnCompletion;
 
       const finished = transformer.finish();
-      emitEvents(finished.events);
+      partEmitter.emitMany(finished.events);
 
       if (completedTurn.status === "interrupted") {
         handleCancellation(sessionId, "codex-server", true);
@@ -345,21 +344,6 @@ function getNotificationThreadId(notification: CodexAppServerNotification): stri
   if (!params || typeof params !== "object" || !("threadId" in params)) return undefined;
   const threadId = (params as { threadId?: unknown }).threadId;
   return typeof threadId === "string" ? threadId : undefined;
-}
-
-function messageIdForPartEvent(event: PartEvent, parts: Part[]): string | undefined {
-  switch (event.type) {
-    case "message.created":
-    case "message.done":
-      return event.messageId;
-    case "part.created":
-    case "part.done":
-      return event.part.messageId;
-    case "part.delta":
-      return parts.find((part) => part.id === event.partId)?.messageId;
-    default:
-      return undefined;
-  }
 }
 
 function notificationBelongsToTurn(
