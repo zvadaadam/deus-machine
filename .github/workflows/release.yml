@@ -184,6 +184,14 @@ jobs:
         run: |
           set -euo pipefail
 
+          while IFS= read -r resources_dir; do
+            echo "Verifying packaged simulator helpers in $resources_dir"
+            test -x "$resources_dir/simulator/simbridge"
+            test -f "$resources_dir/simulator/siminspector.dylib"
+            lipo -verify_arch arm64 x86_64 "$resources_dir/simulator/simbridge"
+            lipo -verify_arch arm64 x86_64 "$resources_dir/simulator/siminspector.dylib"
+          done < <(find dist-electron -maxdepth 3 -path '*/Deus.app/Contents/Resources' -type d | sort)
+
           while IFS= read -r app_path; do
             echo "Verifying signature for $app_path"
             codesign --verify --deep --strict --verbose=2 "$app_path"
@@ -230,6 +238,8 @@ jobs:
 
           app_bin="$copied_app/Contents/MacOS/Deus"
           resources_dir="$copied_app/Contents/Resources"
+          test -x "$resources_dir/simulator/simbridge"
+          test -f "$resources_dir/simulator/siminspector.dylib"
 
           ELECTRON_RUN_AS_NODE=1 \
           DATABASE_PATH="$smoke_db" \
@@ -239,6 +249,8 @@ jobs:
           DEUS_PACKAGED=1 \
           DEUS_RESOURCES_PATH="$resources_dir" \
           DEUS_BUNDLED_BIN_DIR="$resources_dir/bin" \
+          DEVICE_USE_SIMBRIDGE="$resources_dir/simulator/simbridge" \
+          DEVICE_USE_SIMINSPECTOR="$resources_dir/simulator/siminspector.dylib" \
           AGENT_SERVER_ENTRY="$resources_dir/bin/index.bundled.cjs" \
           AGENT_SERVER_CWD="$resources_dir/bin" \
           NODE_PATH="$resources_dir/app.asar/node_modules" \
