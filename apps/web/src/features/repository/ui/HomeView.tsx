@@ -1239,7 +1239,7 @@ export function HomeView({
       {/* Spacer */}
       <div className="flex-1" />
 
-      {/* Footer actions — subtle secondary entry points (only when repos exist) */}
+      {/* Footer actions — sticky so long recent lists still leave project actions visible. */}
       <AnimatePresence>
         {hasRepos && (
           <motion.div
@@ -1248,9 +1248,9 @@ export function HomeView({
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
             transition={{ duration: 0.3, delay: 0.25, ease: EASE_OUT_QUART }}
-            className="pb-8"
+            className="from-bg-surface via-bg-surface/95 pointer-events-none sticky bottom-0 z-20 mt-auto flex w-full justify-center bg-gradient-to-t to-transparent pt-12 pb-6"
           >
-            <div className="flex items-center gap-3">
+            <div className="pointer-events-auto flex items-center gap-3">
               {onStartNewProject && (
                 <>
                   <button
