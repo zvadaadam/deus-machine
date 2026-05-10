@@ -338,6 +338,7 @@ export function createRouter(
       }
       try {
         auth.persistKey(trimmed);
+        auth.writeEditorSession({ email: verify.email || "Pencil CLI", token: trimmed });
       } catch (err) {
         return sendJson(res, 500, {
           ok: false,
@@ -354,6 +355,7 @@ export function createRouter(
 
     if (method === "POST" && url === "/auth-clear") {
       auth.clearKey();
+      auth.clearEditorSession();
       return sendJson(res, 200, { ok: true, ...auth.authState() });
     }
 

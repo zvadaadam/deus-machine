@@ -519,6 +519,19 @@ button {
   text-decoration-color: var(--fg-subtle);
   text-underline-offset: 2px;
 }
+.signin-steps {
+  margin: 0 0 16px;
+  padding-left: 20px;
+  color: var(--fg-secondary);
+  font-size: 12px;
+  line-height: 1.55;
+}
+.signin-steps li + li {
+  margin-top: 5px;
+}
+.signin-steps code {
+  font-size: 11px;
+}
 .signin-form {
   display: flex;
   gap: 8px;
@@ -533,6 +546,7 @@ button {
   border-radius: 6px;
   font: 12px var(--font-mono);
   outline: none;
+  -webkit-text-security: disc;
   transition: border-color 0.12s;
 }
 .signin-form input:focus {
