@@ -31,6 +31,9 @@ const mockState = vi.hoisted(() => ({
     }>,
     removedListener: null as null | ((connectionId: string) => void),
   },
+  managedBrowser: {
+    cdpBaseUrl: "http://127.0.0.1:19222",
+  },
 }));
 
 vi.mock("node:child_process", () => ({
@@ -160,7 +163,7 @@ vi.mock("../../../src/services/ws.service", () => ({
 }));
 
 vi.mock("../../../src/services/managed-browser.service", () => ({
-  getManagedBrowserCdpBaseUrl: async () => "http://127.0.0.1:19222",
+  getManagedBrowserCdpBaseUrl: async () => mockState.managedBrowser.cdpBaseUrl,
 }));
 
 describe("browser-proxy.service", () => {
@@ -176,6 +179,7 @@ describe("browser-proxy.service", () => {
     mockState.broadcast.frames = [];
     mockState.broadcast.targeted = [];
     mockState.broadcast.removedListener = null;
+    mockState.managedBrowser.cdpBaseUrl = "http://127.0.0.1:19222";
     delete process.env.BROWSER_CDP_URL;
     process.env.CDP_PORT = "19222";
     process.env.BROWSER_PROXY_NATIVE_TAB_TIMEOUT_MS = "0";
@@ -895,6 +899,61 @@ describe("browser-proxy.service", () => {
 
     expect(fetchCalls).toContain("http://10.0.0.5:9222/json");
     expect(fetchCalls.some((url) => url.startsWith("http://10.0.0.5:9222/json/new?"))).toBe(true);
+  });
+
+  it("routes localhost remote browser sessions to managed Chrome instead of Electron webviews", async () => {
+    mockState.managedBrowser.cdpBaseUrl = "http://managed-browser.test:9222";
+    const fetchCalls: string[] = [];
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (url: string | URL) => {
+        const href = String(url);
+        fetchCalls.push(href);
+        if (href === "http://managed-browser.test:9222/json") return jsonResponse([]);
+        if (href === "http://managed-browser.test:9222/json/version") {
+          return jsonResponse({});
+        }
+        if (href.startsWith("http://managed-browser.test:9222/json/new?")) {
+          return jsonResponse({
+            id: "managed-local-target",
+            type: "page",
+            url: "http://localhost:3000/",
+            webSocketDebuggerUrl: "ws://managed-local-target",
+          });
+        }
+        throw new Error(`unexpected fetch: ${href}`);
+      })
+    );
+
+    const service = await import("../../../src/services/browser-proxy.service");
+    await service.attachBrowserTab({
+      tabId: "tab-local-managed",
+      workspaceId: "ws-1",
+      width: 800,
+      height: 600,
+      url: "http://localhost:3000/",
+    });
+
+    expect(fetchCalls).toContain("http://managed-browser.test:9222/json");
+    expect(fetchCalls).toContain(
+      "http://managed-browser.test:9222/json/new?http%3A%2F%2Flocalhost%3A3000%2F"
+    );
+    expect(mockState.broadcast.frames).not.toContainEqual(
+      JSON.stringify({
+        type: "q:event",
+        event: "browser:nativeTabRequested",
+        data: {
+          tabId: "tab-local-managed",
+          workspaceId: "ws-1",
+          url: "http://localhost:3000/",
+        },
+      })
+    );
+    expect(mockState.agentBrowser.calls).toContainEqual(
+      expect.objectContaining({
+        args: ["--cdp", "ws://managed-local-target", "get", "url", "--json"],
+      })
+    );
   });
 
   it("uses the visible preview height for mobile viewport streams", async () => {

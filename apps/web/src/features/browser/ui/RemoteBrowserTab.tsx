@@ -4,7 +4,6 @@ import {
   useEffect,
   useImperativeHandle,
   useLayoutEffect,
-  useMemo,
   useRef,
   useState,
 } from "react";
@@ -40,8 +39,6 @@ import {
 } from "../automation/inspect-mode";
 import { VISUAL_EFFECTS_SETUP } from "../automation/visual-effects";
 import { getErrorMessage } from "@shared/lib/errors";
-import { getStoredToken } from "@/features/auth";
-import { getRelayHttpBaseUrl, getRelayServerId, isRelayMode } from "@/shared/config/backend.config";
 import type {
   BrowserProxyConsoleEvent,
   BrowserProxyErrorEvent,
@@ -51,37 +48,6 @@ import type {
 
 const INSPECT_DRAIN_INTERVAL_MS = 200;
 const REMOTE_COMMAND_TIMEOUT_MS = 20_000;
-const LOCAL_TUNNEL_HOSTS = new Set(["localhost", "127.0.0.1", "::1", "[::1]"]);
-
-function buildLocalHttpTunnelUrl(rawUrl: string | null | undefined): string | null {
-  if (!rawUrl || !isRelayMode()) return null;
-
-  let parsed: URL;
-  try {
-    parsed = new URL(rawUrl);
-  } catch {
-    return null;
-  }
-
-  if (parsed.protocol !== "http:") return null;
-  if (!parsed.port) return null;
-  if (!LOCAL_TUNNEL_HOSTS.has(parsed.hostname.toLowerCase())) return null;
-
-  const serverId = getRelayServerId();
-  const token = getStoredToken();
-  if (!serverId || !token) return null;
-
-  const tunnel = new URL(
-    `/api/servers/${encodeURIComponent(serverId)}/http/${encodeURIComponent(parsed.port)}${parsed.pathname}`,
-    getRelayHttpBaseUrl()
-  );
-  for (const [key, value] of parsed.searchParams) {
-    tunnel.searchParams.append(key, value);
-  }
-  tunnel.searchParams.set("token", token);
-  tunnel.hash = parsed.hash;
-  return tunnel.toString();
-}
 
 async function sendBrowserCommand(
   command: CommandName,
@@ -168,7 +134,6 @@ export const RemoteBrowserTab = forwardRef<BrowserTabHandle, RemoteBrowserTabPro
   ) {
     const tabId = tab.id;
     const panelContainerRef = useRef<HTMLDivElement | null>(null);
-    const iframeRef = useRef<HTMLIFrameElement | null>(null);
     const canvasRef = useRef<HTMLCanvasElement | null>(null);
     const [panelRect, setPanelRect] = useState<Bounds | null>(null);
     const [hasLoaded, setHasLoaded] = useState(false);
@@ -222,7 +187,6 @@ export const RemoteBrowserTab = forwardRef<BrowserTabHandle, RemoteBrowserTabPro
     pageBoundsRef.current = bounds;
     const boundsWidth = bounds?.width;
     const boundsHeight = bounds?.height;
-    const tunnelUrl = useMemo(() => buildLocalHttpTunnelUrl(tab.currentUrl), [tab.currentUrl]);
 
     const markPixelsVisible = useCallback(() => {
       if (hasLoadedRef.current) return;
@@ -343,12 +307,6 @@ export const RemoteBrowserTab = forwardRef<BrowserTabHandle, RemoteBrowserTabPro
     }, []);
 
     useEffect(() => {
-      if (!tunnelUrl) return;
-      hasLoadedRef.current = false;
-      setHasLoaded(false);
-    }, [tunnelUrl]);
-
-    useEffect(() => {
       return onConnectionChange((connected) => {
         if (connected) {
           attachedRef.current = false;
@@ -359,7 +317,6 @@ export const RemoteBrowserTab = forwardRef<BrowserTabHandle, RemoteBrowserTabPro
 
     const attachOrResize = useCallback(
       async (nextUrl = tabRef.current.currentUrl) => {
-        if (buildLocalHttpTunnelUrl(nextUrl)) return;
         if (!boundsWidth || !boundsHeight || isBlankUrl(nextUrl)) return;
         const params = {
           tabId,
@@ -381,7 +338,6 @@ export const RemoteBrowserTab = forwardRef<BrowserTabHandle, RemoteBrowserTabPro
 
     useEffect(() => {
       if (!visible || !wsConnected) return;
-      if (tunnelUrl) return;
       attachOrResize().catch((err) => {
         const message = remoteBrowserErrorMessage(err);
         onAddLog(tabId, "error", `Remote browser attach failed: ${message}`);
@@ -395,7 +351,6 @@ export const RemoteBrowserTab = forwardRef<BrowserTabHandle, RemoteBrowserTabPro
       tab.isMobileView,
       bounds?.width,
       bounds?.height,
-      tunnelUrl,
       onAddLog,
       onUpdateTab,
       tabId,
@@ -408,12 +363,6 @@ export const RemoteBrowserTab = forwardRef<BrowserTabHandle, RemoteBrowserTabPro
     }, [visible, tabId]);
 
     useEffect(() => {
-      if (!tunnelUrl || !attachedRef.current) return;
-      sendCommand("browser:detach", { tabId }, REMOTE_COMMAND_TIMEOUT_MS).catch(() => {});
-      attachedRef.current = false;
-    }, [tunnelUrl, tabId]);
-
-    useEffect(() => {
       return () => {
         if (!attachedRef.current) return;
         sendCommand("browser:detach", { tabId }, REMOTE_COMMAND_TIMEOUT_MS).catch(() => {});
@@ -423,7 +372,6 @@ export const RemoteBrowserTab = forwardRef<BrowserTabHandle, RemoteBrowserTabPro
 
     const navigateToUrl = useCallback(
       (url: string) => {
-        if (buildLocalHttpTunnelUrl(url)) return;
         const run = async () => {
           if (!attachedRef.current) {
             await attachOrResize(url);
@@ -441,51 +389,26 @@ export const RemoteBrowserTab = forwardRef<BrowserTabHandle, RemoteBrowserTabPro
     );
 
     const goBack = useCallback(() => {
-      if (tunnelUrl) {
-        try {
-          iframeRef.current?.contentWindow?.history.back();
-        } catch {
-          // Cross-origin iframe history is best-effort.
-        }
-        return;
-      }
       suppressHistoryPushRef.current = true;
       historyNavDeltaRef.current = -1;
       sendBrowserCommand("browser:back", { tabId }, REMOTE_COMMAND_TIMEOUT_MS).catch((err) => {
         onAddLog(tabId, "error", `Back failed: ${getErrorMessage(err)}`);
       });
-    }, [onAddLog, tabId, tunnelUrl]);
+    }, [onAddLog, tabId]);
 
     const goForward = useCallback(() => {
-      if (tunnelUrl) {
-        try {
-          iframeRef.current?.contentWindow?.history.forward();
-        } catch {
-          // Cross-origin iframe history is best-effort.
-        }
-        return;
-      }
       suppressHistoryPushRef.current = true;
       historyNavDeltaRef.current = 1;
       sendBrowserCommand("browser:forward", { tabId }, REMOTE_COMMAND_TIMEOUT_MS).catch((err) => {
         onAddLog(tabId, "error", `Forward failed: ${getErrorMessage(err)}`);
       });
-    }, [onAddLog, tabId, tunnelUrl]);
+    }, [onAddLog, tabId]);
 
     const reload = useCallback(() => {
-      if (tunnelUrl) {
-        try {
-          iframeRef.current?.contentWindow?.location.reload();
-        } catch {
-          const iframe = iframeRef.current;
-          if (iframe) iframe.src = tunnelUrl;
-        }
-        return;
-      }
       sendBrowserCommand("browser:reload", { tabId }, REMOTE_COMMAND_TIMEOUT_MS).catch((err) => {
         onAddLog(tabId, "error", `Reload failed: ${getErrorMessage(err)}`);
       });
-    }, [onAddLog, tabId, tunnelUrl]);
+    }, [onAddLog, tabId]);
 
     const evalBrowser = useCallback(
       async (expression: string): Promise<unknown> => {
@@ -500,10 +423,6 @@ export const RemoteBrowserTab = forwardRef<BrowserTabHandle, RemoteBrowserTabPro
     );
 
     const injectAutomation = useCallback(async (): Promise<boolean> => {
-      if (tunnelUrl) {
-        onAddLog(tabId, "info", "Inspect mode is not available for HTTP-tunneled previews yet");
-        return false;
-      }
       if (automationInjectedRef.current) return true;
       try {
         await evalBrowser(INSPECT_MODE_SETUP);
@@ -525,7 +444,7 @@ export const RemoteBrowserTab = forwardRef<BrowserTabHandle, RemoteBrowserTabPro
         onUpdateTab(tabId, { injectionFailed: true });
         return false;
       }
-    }, [evalBrowser, onAddLog, onUpdateTab, tabId, tunnelUrl]);
+    }, [evalBrowser, onAddLog, onUpdateTab, tabId]);
 
     useEffect(() => {
       if (!tab.loading) return;
@@ -618,10 +537,6 @@ export const RemoteBrowserTab = forwardRef<BrowserTabHandle, RemoteBrowserTabPro
         width: number;
         height: number;
       }): Promise<string | null> => {
-        if (tunnelUrl) {
-          onAddLog(tabId, "warn", "Screenshots are not available for HTTP-tunneled previews yet");
-          return null;
-        }
         const canvas = canvasRef.current;
         if (canvas) {
           await new Promise((resolve) => setTimeout(resolve, 150));
@@ -641,7 +556,7 @@ export const RemoteBrowserTab = forwardRef<BrowserTabHandle, RemoteBrowserTabPro
           return null;
         }
       },
-      [onAddLog, tabId, tunnelUrl]
+      [onAddLog, tabId]
     );
 
     const setInspectOverlaysVisible = useCallback(
@@ -824,23 +739,7 @@ export const RemoteBrowserTab = forwardRef<BrowserTabHandle, RemoteBrowserTabPro
         ref={panelContainerRef}
         className="relative h-full min-h-0 w-full min-w-0 overflow-hidden [grid-area:1/1]"
       >
-        {visible && bounds && tunnelUrl && (
-          <iframe
-            ref={iframeRef}
-            src={tunnelUrl}
-            className="bg-bg h-full w-full border-0 outline-none"
-            style={{
-              width: `${bounds.width}px`,
-              height: `${bounds.height}px`,
-              marginLeft: `${Math.max(0, (panelRect?.width ?? bounds.width) - bounds.width) / 2}px`,
-            }}
-            title={tab.title || "Local preview"}
-            allow="clipboard-read; clipboard-write"
-            onLoad={markPixelsVisible}
-          />
-        )}
-
-        {visible && bounds && !tunnelUrl && !isBlankUrl(tab.currentUrl) && (
+        {visible && bounds && !isBlankUrl(tab.currentUrl) && (
           <canvas
             ref={canvasRef}
             tabIndex={0}
