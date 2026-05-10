@@ -20,6 +20,7 @@ import {
   startBackgroundRefresh as startLocalServerDiscovery,
   stopBackgroundRefresh as stopLocalServerDiscovery,
 } from "./services/local-servers.service";
+import { pauseAllActiveGoals } from "./services/goals/goal-store";
 
 // Initialize Sentry before anything else.
 // DSN is a public, write-only ingest token — safe to hardcode.
@@ -39,6 +40,10 @@ Sentry.init({
 
 // Initialize database
 const db = initDatabase();
+const pausedGoals = pauseAllActiveGoals();
+if (pausedGoals > 0) {
+  console.log(`[Goals] Paused ${pausedGoals} active goal${pausedGoals === 1 ? "" : "s"} on boot`);
+}
 
 // AAP orphan sweep: on restart after an ungraceful shutdown (SIGKILL, OOM,
 // crash), child app processes can outlive the backend. The PID journal

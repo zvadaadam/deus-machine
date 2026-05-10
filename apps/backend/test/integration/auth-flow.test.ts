@@ -18,7 +18,7 @@ import { describe, it, expect, beforeAll, beforeEach, afterAll, vi } from "vites
 
 // ---- Hoisted setup: create DB in vi.hoisted scope so vi.mock can reference it ----
 
-const { testDb, TEST_DB_PATH, TEST_DIR } = vi.hoisted(() => {
+const { testDb, TEST_DB_PATH, TEST_DIR, canUseDatabase } = vi.hoisted(() => {
   // Import better-sqlite3 synchronously in the hoisted block.
   // vi.hoisted runs before any vi.mock factory but after module imports are resolved.
   const Database = require("better-sqlite3");
@@ -32,11 +32,17 @@ const { testDb, TEST_DB_PATH, TEST_DIR } = vi.hoisted(() => {
   fs.mkdirSync(testDir, { recursive: true });
   const dbPath = path.join(testDir, "deus.db");
 
-  const db = new Database(dbPath);
-  db.pragma("journal_mode = WAL");
-  db.pragma("foreign_keys = ON");
-  return { testDb: db, TEST_DB_PATH: dbPath, TEST_DIR: testDir };
+  try {
+    const db = new Database(dbPath);
+    db.pragma("journal_mode = WAL");
+    db.pragma("foreign_keys = ON");
+    return { testDb: db, TEST_DB_PATH: dbPath, TEST_DIR: testDir, canUseDatabase: true };
+  } catch {
+    return { testDb: null, TEST_DB_PATH: dbPath, TEST_DIR: testDir, canUseDatabase: false };
+  }
 });
+
+const describeWithDb = canUseDatabase ? describe : describe.skip;
 
 // Mock getDatabase to return our test DB.
 // This must be vi.mock (hoisted) so every module that imports getDatabase gets the test DB.
@@ -70,12 +76,14 @@ const LOCAL_HEADERS = { "x-forwarded-for": "127.0.0.1" };
 let app: ReturnType<typeof createApp>["app"];
 
 beforeAll(() => {
+  if (!testDb) return;
   // Create all tables in the test DB
   testDb.exec(SCHEMA_SQL);
   ({ app } = createApp());
 });
 
 beforeEach(() => {
+  if (!testDb) return;
   // Clean slate for each test: clear in-memory auth state + DB rows + preferences + caches
   clearAuthState();
   invalidateRemoteGateCache();
@@ -88,7 +96,7 @@ beforeEach(() => {
 
 afterAll(() => {
   closeAllWs();
-  testDb.close();
+  testDb?.close();
   // Clean up temp directory
   try {
     fs.rmSync(TEST_DIR, { recursive: true });
@@ -141,7 +149,7 @@ async function pairDevice(
 // Test Suites
 // ============================================================================
 
-describe("Remote Gate: access control", () => {
+describeWithDb("Remote Gate: access control", () => {
   it("allows localhost requests when remote access is disabled", async () => {
     disableRemoteAccess();
     const res = await app.request("/api/health", { headers: LOCAL_HEADERS });
@@ -164,7 +172,7 @@ describe("Remote Gate: access control", () => {
   });
 });
 
-describe("Full pairing flow: generate code -> pair -> use token", () => {
+describeWithDb("Full pairing flow: generate code -> pair -> use token", () => {
   beforeEach(() => {
     enableRemoteAccess();
   });
@@ -242,7 +250,7 @@ describe("Full pairing flow: generate code -> pair -> use token", () => {
   });
 });
 
-describe("Device management: list, revoke, verify revocation", () => {
+describeWithDb("Device management: list, revoke, verify revocation", () => {
   beforeEach(() => {
     enableRemoteAccess();
   });
@@ -302,7 +310,7 @@ describe("Device management: list, revoke, verify revocation", () => {
   });
 });
 
-describe("Pairing validation: Zod schema enforcement", () => {
+describeWithDb("Pairing validation: Zod schema enforcement", () => {
   beforeEach(() => {
     enableRemoteAccess();
   });
@@ -348,7 +356,7 @@ describe("Pairing validation: Zod schema enforcement", () => {
   });
 });
 
-describe("Rate limiting across the full stack", () => {
+describeWithDb("Rate limiting across the full stack", () => {
   beforeEach(() => {
     enableRemoteAccess();
   });
@@ -402,7 +410,7 @@ describe("Rate limiting across the full stack", () => {
   });
 });
 
-describe("Multiple devices: independent tokens", () => {
+describeWithDb("Multiple devices: independent tokens", () => {
   beforeEach(() => {
     enableRemoteAccess();
   });

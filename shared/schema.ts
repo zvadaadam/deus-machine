@@ -4,8 +4,8 @@
  * Imported by backend/src/lib/schema.ts.
  * All statements are idempotent (IF NOT EXISTS).
  *
- * Tables: repositories, workspaces, sessions, messages, parts, paired_devices
- * Indexes: 13
+ * Tables: repositories, workspaces, sessions, goals, messages, parts, paired_devices
+ * Indexes: 14
  * Triggers: 5 (3 auto-update updated_at, 2 denormalized message_count + auto-seq)
  */
 
@@ -49,6 +49,22 @@ export const MIGRATIONS: string[] = [
   `ALTER TABLE sessions DROP COLUMN model`,
   // Data migration for local DBs created before the Codex SDK harness rename.
   `UPDATE sessions SET agent_harness = 'codex-sdk' WHERE agent_harness = 'codex'`,
+  // goals: persisted autonomous goal state, keyed one goal per session.
+  `CREATE TABLE IF NOT EXISTS goals (
+    session_id      TEXT PRIMARY KEY NOT NULL REFERENCES sessions(id) ON DELETE CASCADE,
+    goal_id         TEXT NOT NULL,
+    objective       TEXT NOT NULL,
+    status          TEXT NOT NULL DEFAULT 'active'
+                    CHECK(status IN ('active','paused','budget_limited','complete')),
+    token_budget    INTEGER,
+    spent_tokens    INTEGER NOT NULL DEFAULT 0,
+    model           TEXT NOT NULL,
+    thinking_level  TEXT,
+    allow_questions INTEGER NOT NULL DEFAULT 1,
+    created_at      TEXT NOT NULL DEFAULT (datetime('now')),
+    updated_at      TEXT NOT NULL DEFAULT (datetime('now'))
+  )`,
+  `CREATE INDEX IF NOT EXISTS idx_goals_status ON goals(status)`,
 ];
 
 function normalizeMigrationSql(sql: string): string {
@@ -129,6 +145,23 @@ export const SCHEMA_SQL = `
     updated_at TEXT NOT NULL DEFAULT (datetime('now'))
   );
 
+  -- Persisted autonomous goals. session_id is the primary key so starting a
+  -- new goal replaces the previous goal for that session.
+  CREATE TABLE IF NOT EXISTS goals (
+    session_id      TEXT PRIMARY KEY NOT NULL REFERENCES sessions(id) ON DELETE CASCADE,
+    goal_id         TEXT NOT NULL,
+    objective       TEXT NOT NULL,
+    status          TEXT NOT NULL DEFAULT 'active'
+                    CHECK(status IN ('active','paused','budget_limited','complete')),
+    token_budget    INTEGER,
+    spent_tokens    INTEGER NOT NULL DEFAULT 0,
+    model           TEXT NOT NULL,
+    thinking_level  TEXT,
+    allow_questions INTEGER NOT NULL DEFAULT 1,
+    created_at      TEXT NOT NULL DEFAULT (datetime('now')),
+    updated_at      TEXT NOT NULL DEFAULT (datetime('now'))
+  );
+
   -- Chat messages within sessions (id = UUID7, embeds created_at; append-only, no updated_at)
   -- seq is a per-session monotonic integer for reliable cursor pagination.
   -- Auto-assigned by trigger — never set manually in INSERT.
@@ -172,11 +205,12 @@ export const SCHEMA_SQL = `
     created_at TEXT NOT NULL DEFAULT (datetime('now'))
   );
 
-  -- Indexes (10)
+  -- Indexes (14)
   CREATE INDEX IF NOT EXISTS idx_workspaces_repository_id ON workspaces(repository_id);
   CREATE INDEX IF NOT EXISTS idx_workspaces_state ON workspaces(state);
   CREATE INDEX IF NOT EXISTS idx_sessions_workspace_id ON sessions(workspace_id);
   CREATE INDEX IF NOT EXISTS idx_sessions_status ON sessions(status);
+  CREATE INDEX IF NOT EXISTS idx_goals_status ON goals(status);
   CREATE INDEX IF NOT EXISTS idx_messages_seq ON messages(session_id, seq DESC);
   CREATE INDEX IF NOT EXISTS idx_messages_sent_at ON messages(session_id, sent_at);
   CREATE INDEX IF NOT EXISTS idx_messages_session_role ON messages(session_id, role, id DESC);

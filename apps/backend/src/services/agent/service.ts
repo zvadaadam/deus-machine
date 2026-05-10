@@ -26,6 +26,7 @@ import {
 import { invalidate } from "../query-engine";
 import { getContextForSession } from "../simulator-context";
 import { getRunningApps, launchApp, listApps, readAppSkill, stopApp } from "../aap";
+import { handleGoalUpdate } from "../goals/goal-rpc";
 import { DB_PATH, getDatabase } from "../../lib/database";
 import { getSessionRaw, getWorkspaceForMiddleware } from "../../db";
 import { requireParam } from "../../lib/query-params";
@@ -56,6 +57,7 @@ export function init(agentServerUrl: string): void {
     // circular dependency that previously existed between these modules.
     onEvent: createAgentEventHandler({
       respondToAgent: (params) => respondToAgent(params),
+      startTurn: (params) => forwardTurn(params),
     }),
 
     onConnected: (agents) => {
@@ -70,6 +72,10 @@ export function init(agentServerUrl: string): void {
     // apps.service directly, no frontend relay.
     onAapRpc: async (method, params) => {
       return handleAapRpc(method, params);
+    },
+
+    onGoalRpc: async (params) => {
+      return handleGoalUpdate(params);
     },
 
     // Relay agent-server's frontend-facing RPC requests (browser, diff, plan)

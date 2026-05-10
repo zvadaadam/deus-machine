@@ -34,6 +34,7 @@ import type {
   ReadAppSkillRequest,
   ReadAppSkillResponse,
 } from "./protocol";
+import type { GoalUpdateRequest } from "@shared/goals";
 
 // ============================================================================
 // Timeout defaults (milliseconds)
@@ -422,6 +423,10 @@ class EventBroadcasterClass {
   }
   requestReadAppSkill(r: ReadAppSkillRequest): Promise<ReadAppSkillResponse> {
     return this.rpc<ReadAppSkillResponse>("aap/read-app-skill", r, DATA_QUERY_TIMEOUT_MS);
+  }
+
+  requestUpdateGoal(r: GoalUpdateRequest): Promise<unknown> {
+    return this.rpc<unknown>("goal/update", r, DATA_QUERY_TIMEOUT_MS);
   }
 
   // --- Simulator context RPC (handled by backend, not forwarded to frontend) ---

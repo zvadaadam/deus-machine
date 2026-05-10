@@ -56,4 +56,9 @@ describe("shared/schema data migrations", () => {
       `UPDATE sessions SET agent_harness = 'codex-sdk' WHERE agent_harness = 'codex'`
     );
   });
+
+  it("creates the persisted goals table and status index", () => {
+    expect(MIGRATIONS.some((sql) => sql.includes("CREATE TABLE IF NOT EXISTS goals"))).toBe(true);
+    expect(MIGRATIONS).toContain(`CREATE INDEX IF NOT EXISTS idx_goals_status ON goals(status)`);
+  });
 });

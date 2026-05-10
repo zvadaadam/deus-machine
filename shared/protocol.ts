@@ -10,6 +10,7 @@
 import { z } from "zod";
 
 import { AgentHarnessSchema } from "./enums";
+import { GoalContextSchema } from "./goals";
 
 // ============================================================================
 // Shared Field Schemas
@@ -53,6 +54,8 @@ export const QueryOptionsSchema = z.object({
   shouldResetGenerator: z.boolean().optional(),
   resume: z.string().min(1).optional(),
   resumeSessionAt: z.string().min(1).optional(),
+  goalContext: GoalContextSchema.optional(),
+  allowQuestions: z.boolean().optional(),
 });
 export type QueryOptions = z.infer<typeof QueryOptionsSchema>;
 

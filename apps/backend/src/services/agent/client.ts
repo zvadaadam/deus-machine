@@ -67,6 +67,8 @@ export interface AgentClientOptions {
    *  stop-app). The backend handles these directly against apps.service — no
    *  frontend relay. */
   onAapRpc?: (method: string, params: Record<string, unknown>) => Promise<unknown>;
+  /** Called when the agent-server's update_goal tool marks a backend goal complete. */
+  onGoalRpc?: (params: Record<string, unknown>) => Promise<unknown>;
 }
 
 // ============================================================================
@@ -97,6 +99,7 @@ export class AgentClient {
     params: Record<string, unknown>
   ) => Promise<unknown>;
   private onAapRpc: (method: string, params: Record<string, unknown>) => Promise<unknown>;
+  private onGoalRpc: (params: Record<string, unknown>) => Promise<unknown>;
 
   private reconnectTimer: ReturnType<typeof setTimeout> | null = null;
   private reconnectAttempt = 0;
@@ -116,6 +119,8 @@ export class AgentClient {
       (() => Promise.reject(new Error("No frontend RPC handler registered")));
     this.onAapRpc =
       options.onAapRpc ?? (() => Promise.reject(new Error("No AAP RPC handler registered")));
+    this.onGoalRpc =
+      options.onGoalRpc ?? (() => Promise.reject(new Error("No goal RPC handler registered")));
   }
 
   // ==========================================================================
@@ -350,6 +355,14 @@ export class AgentClient {
       });
     }
     console.log(`[AgentClient] Registered ${aapMethods.length} AAP RPC methods`);
+
+    this.peer.addMethod("goal/update", async (params: unknown) => {
+      if (!params || typeof params !== "object") {
+        throw new Error("goal/update requires an object params payload");
+      }
+      return this.onGoalRpc(params as Record<string, unknown>);
+    });
+    console.log("[AgentClient] Registered goal/update RPC method");
   }
 
   private teardownPeer(): void {

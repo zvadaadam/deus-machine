@@ -38,8 +38,33 @@ export function AgentQuestionOverlay({
 }: AgentQuestionOverlayProps) {
   const reduceMotion = useReducedMotion();
 
+  return (
+    <AnimatePresence>
+      {request ? (
+        <AgentQuestionOverlayContent
+          key={request.wsRequestId}
+          request={request}
+          agentHarness={agentHarness}
+          reduceMotion={reduceMotion}
+          onSubmit={onSubmit}
+          onDismiss={onDismiss}
+        />
+      ) : null}
+    </AnimatePresence>
+  );
+}
+
+function AgentQuestionOverlayContent({
+  request,
+  agentHarness,
+  reduceMotion,
+  onSubmit,
+  onDismiss,
+}: AgentQuestionOverlayProps & { request: AskQuestionRequest; reduceMotion: boolean | null }) {
   // Track answers per question index
-  const [answers, setAnswers] = useState<(string | string[] | null)[]>([]);
+  const [answers, setAnswers] = useState<(string | string[] | null)[]>(() =>
+    buildInitialAnswers(request)
+  );
   // Track which question the user is currently answering
   const [currentIndex, setCurrentIndex] = useState(0);
   // Track "Other" input visibility and value per question
@@ -47,7 +72,7 @@ export function AgentQuestionOverlay({
   const [otherText, setOtherText] = useState<Record<number, string>>({});
   const otherInputRef = useRef<HTMLInputElement>(null);
 
-  const questions = useMemo(() => request?.questions ?? [], [request?.questions]);
+  const questions = useMemo(() => request.questions, [request.questions]);
 
   const handleOptionClick = useCallback(
     (questionIndex: number, option: string) => {
@@ -178,179 +203,189 @@ export function AgentQuestionOverlay({
   const currentQuestion = questions[currentIndex];
 
   const isOtherOpen = showOtherInput[currentIndex] ?? false;
+  const assumedAnswer = currentQuestion?.assumedAnswer?.trim();
+  const assumedAnswerMatchesOption =
+    !!assumedAnswer && currentQuestion?.options.some((option) => option === assumedAnswer);
 
-  return (
-    <AnimatePresence>
-      {request && currentQuestion && (
-        <motion.div
-          key={`agent-question-${request.wsRequestId}-${currentIndex}`}
-          initial={{ opacity: 0, y: 6 }}
-          animate={{ opacity: 1, y: 0 }}
-          exit={{ opacity: 0, y: 6 }}
-          transition={{ duration: 0.2, ease: [0.165, 0.84, 0.44, 1] }}
-          className="border-border/50 bg-muted/30 mx-4 mb-3 rounded-xl border px-4 py-3 backdrop-blur-sm"
-          role="dialog"
-          aria-label="Agent question"
-          aria-live="polite"
-        >
-          {/* Progress indicator for multi-question flows */}
-          {questions.length > 1 && (
-            <div className="mb-2 flex items-center gap-1.5">
-              {questions.map((_, i) => (
-                <span
-                  key={i}
-                  className={cn(
-                    "h-1 w-6 origin-left rounded-full transition-transform duration-200",
-                    i < currentIndex
-                      ? "bg-primary scale-x-[0.667]"
-                      : i === currentIndex
-                        ? "bg-primary scale-x-100"
-                        : "bg-border scale-x-[0.333]"
-                  )}
-                  aria-hidden="true"
-                />
-              ))}
-              <span className="text-muted-foreground ml-1 text-xs">
-                {currentIndex + 1} / {questions.length}
-              </span>
-            </div>
-          )}
+  return currentQuestion ? (
+    <motion.div
+      key={`agent-question-${request.wsRequestId}-${currentIndex}`}
+      initial={{ opacity: 0, y: 6 }}
+      animate={{ opacity: 1, y: 0 }}
+      exit={{ opacity: 0, y: 6 }}
+      transition={{ duration: 0.2, ease: [0.165, 0.84, 0.44, 1] }}
+      className="border-border/50 bg-muted/30 mx-4 mb-3 rounded-xl border px-4 py-3 backdrop-blur-sm"
+      role="dialog"
+      aria-label="Agent question"
+      aria-live="polite"
+    >
+      {/* Progress indicator for multi-question flows */}
+      {questions.length > 1 && (
+        <div className="mb-2 flex items-center gap-1.5">
+          {questions.map((_, i) => (
+            <span
+              key={i}
+              className={cn(
+                "h-1 w-6 origin-left rounded-full transition-transform duration-200",
+                i < currentIndex
+                  ? "bg-primary scale-x-[0.667]"
+                  : i === currentIndex
+                    ? "bg-primary scale-x-100"
+                    : "bg-border scale-x-[0.333]"
+              )}
+              aria-hidden="true"
+            />
+          ))}
+          <span className="text-muted-foreground ml-1 text-xs">
+            {currentIndex + 1} / {questions.length}
+          </span>
+        </div>
+      )}
 
-          {/* Question text with agent logo */}
-          <div className="mb-3 flex items-start gap-2.5">
-            {(() => {
-              const Logo = getAgentLogo(agentHarness || "claude");
-              return Logo ? <Logo className="mt-0.5 h-4 w-4 shrink-0" aria-hidden="true" /> : null;
-            })()}
-            <p className="text-foreground min-w-0 text-sm font-medium">
-              {currentQuestion.question}
-            </p>
-          </div>
+      {/* Question text with agent logo */}
+      <div className="mb-3 flex items-start gap-2.5">
+        {(() => {
+          const Logo = getAgentLogo(agentHarness || "claude");
+          return Logo ? <Logo className="mt-0.5 h-4 w-4 shrink-0" aria-hidden="true" /> : null;
+        })()}
+        <p className="text-foreground min-w-0 text-sm font-medium">{currentQuestion.question}</p>
+      </div>
 
-          {/* Option chips */}
-          <div className="flex flex-wrap gap-2" role="group" aria-label="Answer options">
-            {currentQuestion.options.map((option) => {
-              const multiAnswers = (answers[currentIndex] as string[] | undefined) ?? [];
-              const isSelected = currentQuestion.multiSelect
-                ? multiAnswers.includes(option)
-                : answers[currentIndex] === option;
+      {assumedAnswer && !assumedAnswerMatchesOption && (
+        <p className="text-text-muted mb-2 text-xs">Agent's hint: {assumedAnswer}</p>
+      )}
 
-              return (
-                <button
-                  key={option}
-                  type="button"
-                  onClick={() => handleOptionClick(currentIndex, option)}
-                  className={cn(
-                    "inline-flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-xs font-medium",
-                    "ease transition-colors duration-150",
-                    "focus-visible:ring-ring focus-visible:ring-2 focus-visible:outline-none",
-                    isSelected
-                      ? "border-primary bg-primary/10 text-primary"
-                      : "border-border text-muted-foreground hover:border-foreground/40 hover:text-foreground"
-                  )}
-                  aria-pressed={currentQuestion.multiSelect ? isSelected : undefined}
-                  aria-label={option}
-                >
-                  {currentQuestion.multiSelect && isSelected && (
-                    <Check className="h-3 w-3 shrink-0" aria-hidden="true" />
-                  )}
-                  {option}
-                </button>
-              );
-            })}
+      {/* Option chips */}
+      <div className="flex flex-wrap gap-2" role="group" aria-label="Answer options">
+        {currentQuestion.options.map((option) => {
+          const multiAnswers = (answers[currentIndex] as string[] | undefined) ?? [];
+          const isSelected = currentQuestion.multiSelect
+            ? multiAnswers.includes(option)
+            : answers[currentIndex] === option;
 
-            {/* "Other..." chip — opens inline text input */}
+          return (
             <button
+              key={option}
               type="button"
-              onClick={() => handleOtherClick(currentIndex)}
+              onClick={() => handleOptionClick(currentIndex, option)}
               className={cn(
                 "inline-flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-xs font-medium",
                 "ease transition-colors duration-150",
                 "focus-visible:ring-ring focus-visible:ring-2 focus-visible:outline-none",
-                isOtherOpen
+                isSelected
                   ? "border-primary bg-primary/10 text-primary"
-                  : "border-border text-muted-foreground hover:border-foreground/40 hover:text-foreground border-dashed"
+                  : "border-border text-muted-foreground hover:border-foreground/40 hover:text-foreground"
               )}
-              aria-label="Type a custom answer"
+              aria-pressed={currentQuestion.multiSelect ? isSelected : undefined}
+              aria-label={option}
             >
-              <Pencil className="h-3 w-3 shrink-0" aria-hidden="true" />
-              Other...
+              {currentQuestion.multiSelect && isSelected && (
+                <Check className="h-3 w-3 shrink-0" aria-hidden="true" />
+              )}
+              {option}
             </button>
-          </div>
+          );
+        })}
 
-          {/* Inline text input for custom answers — Enter to submit */}
-          <AnimatePresence>
-            {isOtherOpen && (
-              <motion.div
-                initial={reduceMotion ? false : { opacity: 0, height: 0 }}
-                animate={{ opacity: 1, height: "auto" }}
-                exit={reduceMotion ? { opacity: 0 } : { opacity: 0, height: 0 }}
-                transition={{ duration: 0.15, ease: [0.165, 0.84, 0.44, 1] }}
-                className="overflow-hidden"
-              >
-                <input
-                  ref={otherInputRef}
-                  type="text"
-                  value={otherText[currentIndex] ?? ""}
-                  onChange={(e) =>
-                    setOtherText((prev) => ({ ...prev, [currentIndex]: e.target.value }))
-                  }
-                  onKeyDown={(e) => {
-                    if (e.key === "Enter") {
-                      e.preventDefault();
-                      handleOtherSubmit(currentIndex);
-                    }
-                    if (e.key === "Escape") {
-                      setShowOtherInput((prev) => ({ ...prev, [currentIndex]: false }));
-                    }
-                  }}
-                  placeholder="Type your answer and press Enter..."
-                  className={cn(
-                    "text-foreground placeholder:text-muted-foreground/60",
-                    "mt-2 w-full border-0 bg-transparent px-0 py-1 text-xs",
-                    "border-border/50 border-b",
-                    "focus:border-primary focus:outline-none"
-                  )}
-                  aria-label="Custom answer"
-                />
-              </motion.div>
-            )}
-          </AnimatePresence>
-
-          {/* Footer: multi-select shows helper text + Done/Skip, single-select shows Skip only */}
-          {currentQuestion.multiSelect ? (
-            <div className="mt-3 flex items-center justify-between">
-              <span className="text-muted-foreground text-xs">Select all that apply</span>
-              <div className="flex gap-2">
-                <Button variant="ghost" size="sm" className="h-7 text-xs" onClick={onDismiss}>
-                  Skip
-                </Button>
-                <Button
-                  size="sm"
-                  className="h-7 gap-1 text-xs"
-                  disabled={((answers[currentIndex] as string[]) ?? []).length === 0}
-                  onClick={() => handleMultiSelectDone(currentIndex)}
-                >
-                  {currentIndex < questions.length - 1 ? (
-                    <>
-                      Next
-                      <ChevronRight className="h-3 w-3" aria-hidden="true" />
-                    </>
-                  ) : (
-                    "Submit"
-                  )}
-                </Button>
-              </div>
-            </div>
-          ) : (
-            <div className="mt-3 flex justify-end">
-              <Button variant="ghost" size="sm" className="h-7 text-xs" onClick={onDismiss}>
-                Skip
-              </Button>
-            </div>
+        {/* "Other..." chip — opens inline text input */}
+        <button
+          type="button"
+          onClick={() => handleOtherClick(currentIndex)}
+          className={cn(
+            "inline-flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-xs font-medium",
+            "ease transition-colors duration-150",
+            "focus-visible:ring-ring focus-visible:ring-2 focus-visible:outline-none",
+            isOtherOpen
+              ? "border-primary bg-primary/10 text-primary"
+              : "border-border text-muted-foreground hover:border-foreground/40 hover:text-foreground border-dashed"
           )}
-        </motion.div>
+          aria-label="Type a custom answer"
+        >
+          <Pencil className="h-3 w-3 shrink-0" aria-hidden="true" />
+          Other...
+        </button>
+      </div>
+
+      {/* Inline text input for custom answers — Enter to submit */}
+      <AnimatePresence>
+        {isOtherOpen && (
+          <motion.div
+            initial={reduceMotion ? false : { opacity: 0, height: 0 }}
+            animate={{ opacity: 1, height: "auto" }}
+            exit={reduceMotion ? { opacity: 0 } : { opacity: 0, height: 0 }}
+            transition={{ duration: 0.15, ease: [0.165, 0.84, 0.44, 1] }}
+            className="overflow-hidden"
+          >
+            <input
+              ref={otherInputRef}
+              type="text"
+              value={otherText[currentIndex] ?? ""}
+              onChange={(e) =>
+                setOtherText((prev) => ({ ...prev, [currentIndex]: e.target.value }))
+              }
+              onKeyDown={(e) => {
+                if (e.key === "Enter") {
+                  e.preventDefault();
+                  handleOtherSubmit(currentIndex);
+                }
+                if (e.key === "Escape") {
+                  setShowOtherInput((prev) => ({ ...prev, [currentIndex]: false }));
+                }
+              }}
+              placeholder="Type your answer and press Enter..."
+              className={cn(
+                "text-foreground placeholder:text-muted-foreground/60",
+                "mt-2 w-full border-0 bg-transparent px-0 py-1 text-xs",
+                "border-border/50 border-b",
+                "focus:border-primary focus:outline-none"
+              )}
+              aria-label="Custom answer"
+            />
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* Footer: multi-select shows helper text + Done/Skip, single-select shows Skip only */}
+      {currentQuestion.multiSelect ? (
+        <div className="mt-3 flex items-center justify-between">
+          <span className="text-muted-foreground text-xs">Select all that apply</span>
+          <div className="flex gap-2">
+            <Button variant="ghost" size="sm" className="h-7 text-xs" onClick={onDismiss}>
+              Skip
+            </Button>
+            <Button
+              size="sm"
+              className="h-7 gap-1 text-xs"
+              disabled={((answers[currentIndex] as string[]) ?? []).length === 0}
+              onClick={() => handleMultiSelectDone(currentIndex)}
+            >
+              {currentIndex < questions.length - 1 ? (
+                <>
+                  Next
+                  <ChevronRight className="h-3 w-3" aria-hidden="true" />
+                </>
+              ) : (
+                "Submit"
+              )}
+            </Button>
+          </div>
+        </div>
+      ) : (
+        <div className="mt-3 flex justify-end">
+          <Button variant="ghost" size="sm" className="h-7 text-xs" onClick={onDismiss}>
+            Skip
+          </Button>
+        </div>
       )}
-    </AnimatePresence>
-  );
+    </motion.div>
+  ) : null;
+}
+
+function buildInitialAnswers(request: AskQuestionRequest): (string | string[] | null)[] {
+  return request.questions.map((question) => {
+    if (!question.assumedAnswer) return null;
+    const match = question.options.find((option) => option === question.assumedAnswer);
+    if (!match) return null;
+    return question.multiSelect ? [match] : match;
+  });
 }

@@ -10,90 +10,105 @@ import { tool } from "./sdk-tool";
  * Creates the workspace tool definitions for a given session.
  * These tools handle user interaction and workspace state inspection.
  */
-export function createWorkspaceTools(sessionId: string): SdkMcpToolDefinition<any>[] {
-  return [
-    // ====================================================================
-    // AskUserQuestion
-    // ====================================================================
-    tool(
-      "AskUserQuestion",
-      "Use this tool when you need to ask the user questions during execution. This allows you to: 1. Gather user preferences or requirements, 2. Clarify ambiguous instructions, 3. Get decisions on implementation choices, 4. Offer choices to the user about what direction to take. IMPORTANT: An 'Other' option that allows free-form input is automatically provided to the user, so do NOT include 'Other' or similar options in your options array.",
-      {
-        questions: z
-          .array(
-            z.object({
-              question: z.string().describe("The question to ask the user"),
-              options: z
-                .array(z.string())
-                .max(4)
-                .describe(
-                  "Available options for the user to choose from (max 4). Do not include 'Other' - it is automatically provided."
-                ),
-              multiSelect: z
-                .boolean()
-                .optional()
-                .describe(
-                  "If true, user can select multiple options. Answers are comma-separated."
-                ),
-            })
-          )
-          .max(4),
-      },
-      async (args) => {
-        console.log(`[deusMCPServer] AskUserQuestion invoked for session ${sessionId}`);
+export function createWorkspaceTools(
+  sessionId: string,
+  options: { includeAskUserQuestion?: boolean } = {}
+): SdkMcpToolDefinition<any>[] {
+  const tools: SdkMcpToolDefinition<any>[] = [];
 
-        let answers: (string | string[])[];
-        try {
-          const response = await EventBroadcaster.requestAskUserQuestion({
-            sessionId,
-            questions: args.questions,
-          });
-          answers = response.answers;
-        } catch (err) {
-          console.error("[deusMCPServer] AskUserQuestion request failed:", err);
-          return {
-            content: [
-              {
-                type: "text",
-                text: "Question request failed (frontend may be unavailable or timed out). Please continue without this information or try again later.",
-              },
-            ],
-          };
-        }
+  if (options.includeAskUserQuestion !== false) {
+    tools.push(
+      // ====================================================================
+      // AskUserQuestion
+      // ====================================================================
+      tool(
+        "AskUserQuestion",
+        "Use this tool when you need to ask the user questions during execution. This allows you to: 1. Gather user preferences or requirements, 2. Clarify ambiguous instructions, 3. Get decisions on implementation choices, 4. Offer choices to the user about what direction to take. IMPORTANT: An 'Other' option that allows free-form input is automatically provided to the user, so do NOT include 'Other' or similar options in your options array.",
+        {
+          questions: z
+            .array(
+              z.object({
+                question: z.string().describe("The question to ask the user"),
+                options: z
+                  .array(z.string())
+                  .max(4)
+                  .describe(
+                    "Available options for the user to choose from (max 4). Do not include 'Other' - it is automatically provided."
+                  ),
+                multiSelect: z
+                  .boolean()
+                  .optional()
+                  .describe(
+                    "If true, user can select multiple options. Answers are comma-separated."
+                  ),
+                assumedAnswer: z
+                  .string()
+                  .optional()
+                  .describe(
+                    "Optional UI hint to preselect a matching option or show as the agent's suggested answer."
+                  ),
+              })
+            )
+            .max(4),
+        },
+        async (args) => {
+          console.log(`[deusMCPServer] AskUserQuestion invoked for session ${sessionId}`);
 
-        // Handle user cancellation
-        if (answers.length === 1 && answers[0] === "USER_CANCELLED") {
-          return {
-            content: [
-              {
-                type: "text",
-                text: "User cancelled the question. Please continue without this information or ask in a different way.",
-              },
-            ],
-          };
-        }
-
-        const formatAnswer = (answer: string | string[], index: number): string => {
-          if (Array.isArray(answer)) {
-            const selections = answer.map((s) => `   - ${s}`).join("\n");
-            return `${index + 1}.\n${selections}`;
+          let answers: (string | string[])[];
+          try {
+            const response = await EventBroadcaster.requestAskUserQuestion({
+              sessionId,
+              questions: args.questions,
+            });
+            answers = response.answers;
+          } catch (err) {
+            console.error("[deusMCPServer] AskUserQuestion request failed:", err);
+            return {
+              content: [
+                {
+                  type: "text",
+                  text: "Question request failed (frontend may be unavailable or timed out). Please continue without this information or try again later.",
+                },
+              ],
+            };
           }
-          return `${index + 1}. ${answer}`;
-        };
 
-        return {
-          content: [
-            {
-              type: "text",
-              text: `User responses:\n${answers
-                .map((answer: string | string[], i: number) => formatAnswer(answer, i))
-                .join("\n")}`,
-            },
-          ],
-        };
-      }
-    ),
+          // Handle user cancellation
+          if (answers.length === 1 && answers[0] === "USER_CANCELLED") {
+            return {
+              content: [
+                {
+                  type: "text",
+                  text: "User cancelled the question. Please continue without this information or ask in a different way.",
+                },
+              ],
+            };
+          }
 
+          const formatAnswer = (answer: string | string[], index: number): string => {
+            if (Array.isArray(answer)) {
+              const selections = answer.map((s) => `   - ${s}`).join("\n");
+              return `${index + 1}.\n${selections}`;
+            }
+            return `${index + 1}. ${answer}`;
+          };
+
+          return {
+            content: [
+              {
+                type: "text",
+                text: `User responses:\n${answers
+                  .map((answer: string | string[], i: number) => formatAnswer(answer, i))
+                  .join("\n")}`,
+              },
+            ],
+          };
+        }
+      )
+    );
+  }
+
+  tools.push(
     // ====================================================================
     // GetWorkspaceDiff
     // ====================================================================
@@ -239,6 +254,8 @@ Returns the terminal output along with information about what type of terminal i
           ],
         };
       }
-    ),
-  ];
+    )
+  );
+
+  return tools;
 }

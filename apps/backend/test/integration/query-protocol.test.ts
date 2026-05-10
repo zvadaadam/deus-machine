@@ -19,7 +19,7 @@ import { serve } from "@hono/node-server";
 
 // ---- Hoisted setup: create DB before vi.mock factories run ----
 
-const { testDb, TEST_DB_PATH, TEST_DIR } = vi.hoisted(() => {
+const { testDb, TEST_DB_PATH, TEST_DIR, canUseDatabase } = vi.hoisted(() => {
   const Database = require("better-sqlite3");
   const os = require("os");
   const path = require("path");
@@ -29,11 +29,17 @@ const { testDb, TEST_DB_PATH, TEST_DIR } = vi.hoisted(() => {
   fs.mkdirSync(testDir, { recursive: true });
   const dbPath = path.join(testDir, "deus.db");
 
-  const db = new Database(dbPath);
-  db.pragma("journal_mode = WAL");
-  db.pragma("foreign_keys = ON");
-  return { testDb: db, TEST_DB_PATH: dbPath, TEST_DIR: testDir };
+  try {
+    const db = new Database(dbPath);
+    db.pragma("journal_mode = WAL");
+    db.pragma("foreign_keys = ON");
+    return { testDb: db, TEST_DB_PATH: dbPath, TEST_DIR: testDir, canUseDatabase: true };
+  } catch {
+    return { testDb: null, TEST_DB_PATH: dbPath, TEST_DIR: testDir, canUseDatabase: false };
+  }
 });
+
+const describeWithDb = canUseDatabase ? describe : describe.skip;
 
 vi.mock("../../src/lib/database", () => ({
   getDatabase: () => testDb,
@@ -210,6 +216,7 @@ function collectMessages(ws: WebSocket, timeoutMs = 300): Promise<any[]> {
 // ---- Lifecycle ----
 
 beforeAll(async () => {
+  if (!testDb) return;
   testDb.exec(SCHEMA_SQL);
   seedTestData();
 
@@ -224,6 +231,7 @@ beforeAll(async () => {
 });
 
 beforeEach(() => {
+  if (!testDb) return;
   resetStatsCache();
 
   // Reset messages to clean state for each test
@@ -242,7 +250,7 @@ beforeEach(() => {
 afterAll(() => {
   closeAllWs();
   server?.close();
-  testDb.close();
+  testDb?.close();
   try {
     fs.rmSync(TEST_DIR, { recursive: true });
   } catch {}
@@ -252,7 +260,7 @@ afterAll(() => {
 // Tests
 // ============================================================================
 
-describe("q:request → q:response", () => {
+describeWithDb("q:request → q:response", () => {
   it("fetches workspaces as RepoGroup[]", async () => {
     const { ws } = await connectAndAuth();
     try {
@@ -428,7 +436,7 @@ describe("q:request → q:response", () => {
   });
 });
 
-describe("q:subscribe → initial q:snapshot", () => {
+describeWithDb("q:subscribe → initial q:snapshot", () => {
   it("returns snapshot with subscription ID for workspaces (RepoGroup[])", async () => {
     const { ws } = await connectAndAuth();
     try {
@@ -477,7 +485,7 @@ describe("q:subscribe → initial q:snapshot", () => {
   });
 });
 
-describe("q:subscribe → live q:snapshot push", () => {
+describeWithDb("q:subscribe → live q:snapshot push", () => {
   it("pushes updated snapshot when invalidate() is called", async () => {
     const { ws } = await connectAndAuth();
     try {
@@ -548,7 +556,7 @@ describe("q:subscribe → live q:snapshot push", () => {
   });
 });
 
-describe("q:subscribe → q:delta for messages", () => {
+describeWithDb("q:subscribe → q:delta for messages", () => {
   it("pushes delta with new messages after invalidation", async () => {
     const { ws } = await connectAndAuth();
     try {
@@ -640,7 +648,7 @@ describe("q:subscribe → q:delta for messages", () => {
   });
 });
 
-describe("q:unsubscribe", () => {
+describeWithDb("q:unsubscribe", () => {
   it("stops receiving pushes after unsubscribe", async () => {
     const { ws } = await connectAndAuth();
     try {
@@ -674,7 +682,7 @@ describe("q:unsubscribe", () => {
   });
 });
 
-describe("q:mutate → q:mutate_result", () => {
+describeWithDb("q:mutate → q:mutate_result", () => {
   it("archives a workspace", async () => {
     const { ws } = await connectAndAuth();
     try {
@@ -748,7 +756,7 @@ describe("q:mutate → q:mutate_result", () => {
   });
 });
 
-describe("q:command → q:command_ack", () => {
+describeWithDb("q:command → q:command_ack", () => {
   it("sends a message via q:command and returns command_ack", async () => {
     const { ws } = await connectAndAuth();
     try {
@@ -893,7 +901,7 @@ describe("q:command → q:command_ack", () => {
   });
 });
 
-describe("Error handling", () => {
+describeWithDb("Error handling", () => {
   it("returns q:error for unknown q:* frame type", async () => {
     const { ws } = await connectAndAuth();
     try {

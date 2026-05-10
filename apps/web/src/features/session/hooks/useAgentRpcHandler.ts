@@ -42,6 +42,7 @@ export interface AskQuestionRequest {
     question: string;
     options: string[];
     multiSelect?: boolean;
+    assumedAnswer?: string;
   }>;
   /** WS requestId used for q:tool_response routing */
   wsRequestId: string;

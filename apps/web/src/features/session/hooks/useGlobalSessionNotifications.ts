@@ -20,8 +20,10 @@
 import { useEffect, useRef } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { match } from "ts-pattern";
+import { toast } from "sonner";
 import { capabilities } from "@/platform/capabilities";
 import { sendNotification } from "@/platform/notifications";
+import { onEvent } from "@/platform/ws";
 import { isWindowFocused } from "@/shared/hooks/useWindowFocus";
 import { track } from "@/platform/analytics";
 import { unreadActions } from "@/features/session/store/unreadStore";
@@ -32,6 +34,7 @@ import {
 } from "@/features/workspace/store/workspaceLayoutStore";
 import { show as showWindow } from "@/platform/native/window";
 import type { SessionStatus } from "@shared/types/session";
+import type { EndedGoal } from "@shared/goals";
 import type { RepoGroup, SetupStatus, Workspace } from "@shared/types/workspace";
 
 /**
@@ -126,6 +129,78 @@ export function useGlobalSessionNotifications() {
         batchTimerRef.current = setTimeout(flushFinishedBatch, BATCH_WINDOW_MS);
       }
     }
+
+    function findTargetBySessionId(sessionId: string): FinishedEntry | null {
+      const workspaces = queryClient.getQueriesData<RepoGroup[]>({
+        queryKey: ["workspaces", "by-repo"],
+      });
+      for (const [, groups] of workspaces) {
+        if (!groups) continue;
+        for (const group of groups) {
+          for (const ws of group.workspaces) {
+            if (ws.current_session_id === sessionId) {
+              return {
+                workspaceId: ws.id,
+                sessionId,
+                repoName: group.repo_name,
+                label: ws.title || ws.git_branch || ws.slug,
+              };
+            }
+          }
+        }
+      }
+      return null;
+    }
+
+    const unsubscribeEvents = onEvent((event, data) => {
+      if (event === "goal:ended") {
+        const goal = data as EndedGoal;
+        if (goal.reason === "cancelled") return;
+        const title =
+          goal.reason === "budget_limited" ? "Goal reached its budget" : "Goal complete";
+        const target = findTargetBySessionId(goal.sessionId);
+        const body = target ? `${target.repoName} · ${target.label}` : truncate(goal.objective, 96);
+
+        if (isWindowFocused()) {
+          toast(title, { description: truncate(goal.objective, 120), duration: 4000 });
+        } else if (canNotify) {
+          sendNotification({
+            title,
+            body,
+            sound: goal.reason === "budget_limited" ? "Ping" : "Glass",
+            onClick: target
+              ? () => navigateToWorkspace(target.workspaceId, target.sessionId)
+              : undefined,
+          });
+        }
+        return;
+      }
+
+      if (event !== "tool:request" || !data || typeof data !== "object") return;
+      const request = data as {
+        sessionId?: unknown;
+        method?: unknown;
+        params?: { questions?: Array<{ question?: string }> };
+      };
+      if (request.method !== "askUserQuestion" || typeof request.sessionId !== "string") return;
+
+      const question = request.params?.questions?.[0]?.question;
+      const body = question ? truncate(question, 120) : "Agent is waiting for your answer.";
+      const target = findTargetBySessionId(request.sessionId);
+
+      if (isWindowFocused()) {
+        toast("Agent has a question", { description: body, duration: 5000 });
+      } else if (canNotify) {
+        sendNotification({
+          title: "Agent has a question",
+          body,
+          sound: "Ping",
+          onClick: target
+            ? () => navigateToWorkspace(target.workspaceId, target.sessionId)
+            : undefined,
+        });
+      }
+    });
 
     // Detect session + setup transitions from the workspace query cache.
     // Only watches current_session_id per workspace. Non-current sessions
@@ -280,7 +355,12 @@ export function useGlobalSessionNotifications() {
 
     return () => {
       unsubscribe();
+      unsubscribeEvents();
       if (batchTimerRef.current) clearTimeout(batchTimerRef.current);
     };
   }, [queryClient]);
+}
+
+function truncate(value: string, max: number): string {
+  return value.length > max ? `${value.slice(0, max - 1)}...` : value;
 }

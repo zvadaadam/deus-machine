@@ -9,6 +9,7 @@
 import { sendRequest, sendMutate, sendCommand } from "@/platform/ws";
 import type { Session, Message } from "../types";
 import type { AgentHarness } from "@/shared/agents";
+import type { ActiveGoal } from "@shared/goals";
 
 /** Pagination params for cursor-based message fetching (seq-based) */
 export interface MessagePaginationParams {
@@ -45,6 +46,10 @@ export const SessionService = {
       ...(params?.before != null ? { before: params.before } : {}),
       ...(params?.after != null ? { after: params.after } : {}),
     });
+  },
+
+  fetchGoal: async (id: string): Promise<ActiveGoal | null> => {
+    return sendRequest<ActiveGoal | null>("goal", { sessionId: id });
   },
 
   /**

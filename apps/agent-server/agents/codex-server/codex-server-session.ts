@@ -19,6 +19,10 @@ export interface CodexServerSessionState {
   cwd?: string;
   /** Whether a query is currently running. */
   isRunning: boolean;
+  /** Whether the current app-server thread was started with active goal tools/instructions. */
+  goalToolsActive?: boolean;
+  /** Whether the thread includes the user-question dynamic tool. */
+  allowQuestions?: boolean;
   /** Set when the user explicitly cancelled the turn. */
   cancelledByUser?: boolean;
 }

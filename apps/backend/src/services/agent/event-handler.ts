@@ -15,6 +15,11 @@ import { invalidate } from "../query-engine";
 import { broadcast } from "../ws.service";
 import { relay } from "./tool-relay";
 import {
+  handleGoalSessionIdle,
+  handleGoalTurnCompleted,
+  type GoalOrchestratorDeps,
+} from "../goals/goal-orchestrator";
+import {
   persistMessageCancelled,
   persistMessageCreated,
   persistPartDone,
@@ -83,6 +88,7 @@ function pushEvent(event: ProtocolEvent, data: Omit<AgentEvent, "type">): void {
  */
 export function createAgentEventHandler(deps: {
   respondToAgent: RespondToAgentFn;
+  startTurn: GoalOrchestratorDeps["startTurn"];
 }): AgentEventHandler {
   const { respondToAgent } = deps;
 
@@ -96,6 +102,7 @@ export function createAgentEventHandler(deps: {
       .with({ type: "session.idle" }, (e) => {
         console.log(`[AgentEvent] session.idle: session=${e.sessionId}`);
         persistAndInvalidate(persistSessionIdle(e), SESSION_RESOURCES, e.sessionId);
+        handleGoalSessionIdle(e.sessionId, deps);
       })
       .with({ type: "session.error" }, (e) => {
         console.log(`[AgentEvent] session.error: session=${e.sessionId} error=${e.error}`);
@@ -174,6 +181,7 @@ export function createAgentEventHandler(deps: {
         console.log(
           `[AgentEvent] turn.completed: session=${e.sessionId} finishReason=${e.finishReason ?? "none"} cost=${e.cost ?? 0}`
         );
+        handleGoalTurnCompleted(e, deps);
         // No message invalidation — all part data already streamed via q:event.
         // Session status change (session.idle) handles the UI update.
       })
