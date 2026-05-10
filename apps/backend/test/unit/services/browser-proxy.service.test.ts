@@ -419,6 +419,62 @@ describe("browser-proxy.service", () => {
     );
   });
 
+  it("waits for browser-created targets to appear in the CDP target list", async () => {
+    const fetchCalls: string[] = [];
+    let listCalls = 0;
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (url: string | URL) => {
+        const href = String(url);
+        fetchCalls.push(href);
+        if (href.endsWith("/json/version")) {
+          return jsonResponse({ webSocketDebuggerUrl: "ws://browser" });
+        }
+        if (href.endsWith("/json")) {
+          listCalls += 1;
+          return jsonResponse(
+            listCalls < 2
+              ? []
+              : [
+                  {
+                    id: "created-target",
+                    type: "page",
+                    url: "https://github.com/",
+                    webSocketDebuggerUrl: "ws://created-target",
+                  },
+                ]
+          );
+        }
+        throw new Error(`unexpected fetch: ${href}`);
+      })
+    );
+    mockState.agentBrowser.tabs = [
+      { index: 0, type: "page", title: "GitHub", url: "https://github.com/" },
+    ];
+
+    const service = await import("../../../src/services/browser-proxy.service");
+    await service.attachBrowserTab({
+      tabId: "tab-created-by-browser-ws",
+      width: 800,
+      height: 600,
+      url: "https://github.com/",
+    });
+
+    expect(fetchCalls.some((url) => url.includes("/json/new?"))).toBe(false);
+    expect(mockState.ws.sent).toContainEqual(
+      expect.objectContaining({
+        url: "ws://browser",
+        method: "Target.createTarget",
+        params: { url: "https://github.com/" },
+      })
+    );
+    expect(mockState.agentBrowser.calls).toContainEqual(
+      expect.objectContaining({
+        args: ["--cdp", "ws://browser", "tab", "list", "--json"],
+      })
+    );
+  });
+
   it("uses compact agent-browser session names for long tab ids", async () => {
     vi.stubGlobal(
       "fetch",
