@@ -163,10 +163,13 @@ export const TOOLS: ToolDef[] = [
       try {
         await requestFromIframe("open-document", { filePath: "new" });
       } catch (err) {
-        return errResult(
-          `Couldn't reach the editor to open a blank canvas: ${(err as Error).message}. ` +
-            "Is the Pencil panel open?"
-        );
+        const message = (err as Error).message;
+        if (!message.includes("METHOD_NOT_FOUND")) {
+          return errResult(
+            `Couldn't reach the editor to open a blank canvas: ${message}. ` +
+              "Is the Pencil panel open?"
+          );
+        }
       }
       return okResult({
         file,

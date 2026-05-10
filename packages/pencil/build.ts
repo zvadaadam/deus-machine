@@ -30,14 +30,7 @@ await esbuild.build({
   target: "node18",
   format: "esm",
   outfile: join(distDir, "serve.js"),
-  external: [
-    "@pencil.dev/cli",
-    "unzipper",
-    "@aws-sdk/client-s3",
-    "ws",
-    "bufferutil",
-    "utf-8-validate",
-  ],
+  external: ["@pencil.dev/cli", "@aws-sdk/client-s3", "bufferutil", "utf-8-validate"],
   banner: {
     js: "import { createRequire } from 'node:module';\nconst require = createRequire(import.meta.url);\n",
   },
