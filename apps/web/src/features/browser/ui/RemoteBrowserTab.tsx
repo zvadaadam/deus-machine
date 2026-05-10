@@ -86,6 +86,7 @@ export const RemoteBrowserTab = forwardRef<BrowserTabHandle, RemoteBrowserTabPro
     const [wsConnected, setWsConnected] = useState(isConnected());
     const completingTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
     const attachedRef = useRef(false);
+    const attachInFlightRef = useRef<Promise<void> | null>(null);
     const hasLoadedRef = useRef(false);
     const automationInjectedRef = useRef(false);
     const suppressHistoryPushRef = useRef(false);
@@ -216,6 +217,7 @@ export const RemoteBrowserTab = forwardRef<BrowserTabHandle, RemoteBrowserTabPro
       return onConnectionChange((connected) => {
         if (connected) {
           attachedRef.current = false;
+          attachInFlightRef.current = null;
         }
         setWsConnected(connected);
       });
@@ -234,9 +236,23 @@ export const RemoteBrowserTab = forwardRef<BrowserTabHandle, RemoteBrowserTabPro
           mediaTransport: BROWSER_FRAME_MEDIA_TRANSPORT,
         };
         if (!attachedRef.current) {
-          await sendBrowserCommand("browser:attach", params, REMOTE_BROWSER_COMMAND_TIMEOUT_MS);
-          attachedRef.current = true;
-          return;
+          if (!attachInFlightRef.current) {
+            const attachPromise = sendBrowserCommand(
+              "browser:attach",
+              params,
+              REMOTE_BROWSER_COMMAND_TIMEOUT_MS
+            )
+              .then(() => {
+                attachedRef.current = true;
+              })
+              .finally(() => {
+                if (attachInFlightRef.current === attachPromise) {
+                  attachInFlightRef.current = null;
+                }
+              });
+            attachInFlightRef.current = attachPromise;
+          }
+          return attachInFlightRef.current;
         }
         await sendBrowserCommand("browser:resize", params, REMOTE_BROWSER_COMMAND_TIMEOUT_MS);
       },
@@ -267,6 +283,7 @@ export const RemoteBrowserTab = forwardRef<BrowserTabHandle, RemoteBrowserTabPro
       if (visible || !attachedRef.current) return;
       sendCommand("browser:detach", { tabId }, REMOTE_BROWSER_COMMAND_TIMEOUT_MS).catch(() => {});
       attachedRef.current = false;
+      attachInFlightRef.current = null;
     }, [visible, tabId]);
 
     useEffect(() => {
@@ -274,6 +291,7 @@ export const RemoteBrowserTab = forwardRef<BrowserTabHandle, RemoteBrowserTabPro
         if (!attachedRef.current) return;
         sendCommand("browser:detach", { tabId }, REMOTE_BROWSER_COMMAND_TIMEOUT_MS).catch(() => {});
         attachedRef.current = false;
+        attachInFlightRef.current = null;
       };
     }, [tabId]);
 
