@@ -25,6 +25,11 @@
     }
   },
 
+  "prefetch": {
+    "command": "node",
+    "args": ["./dist/serve.js", "--prefetch-editor"]
+  },
+
   "ui": {
     "url": "http://127.0.0.1:{port}/"
   },

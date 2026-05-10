@@ -58,6 +58,18 @@ export const LaunchSchema = z.object({
 export type Launch = z.infer<typeof LaunchSchema>;
 
 // ----------------------------------------------------------------------------
+// prefetch — optional one-shot warmup command run at host boot
+// ----------------------------------------------------------------------------
+
+export const PrefetchSchema = z.object({
+  command: z.string().min(1),
+  args: z.array(z.string()).default([]),
+  cwd: z.string().optional(),
+  env: z.record(z.string(), z.string()).default({}),
+});
+export type Prefetch = z.infer<typeof PrefetchSchema>;
+
+// ----------------------------------------------------------------------------
 // ui — just a URL in v1
 // ----------------------------------------------------------------------------
 
@@ -148,6 +160,7 @@ export const ManifestSchema = z.object({
   icon: z.string().optional(),
 
   launch: LaunchSchema,
+  prefetch: PrefetchSchema.optional(),
   ui: UiSchema,
   agent: AgentSchema,
   storage: StorageSchema,
