@@ -229,7 +229,7 @@ export function GeneralSection({ settings, saveSetting, theme, setTheme }: Gener
               ))
               .with("idle", () => null)
               .with("checking", () => null)
-              .exhaustive()}
+              .otherwise(() => null)}
 
           {manualResult === "up-to-date" && (
             <div className="text-muted-foreground flex items-center gap-2 text-sm">
