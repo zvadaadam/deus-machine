@@ -20,7 +20,7 @@
 import { useRef, useCallback, useMemo, useEffect } from "react";
 import type { ImperativePanelHandle } from "react-resizable-panels";
 import type { SessionPanelRef } from "@/features/session";
-import { HomeView } from "@/features/repository";
+import { HomeView, type Repository } from "@/features/repository";
 import { useWorkspaceLayout } from "@/features/workspace";
 import { webviewManager } from "@/features/browser/webview-manager";
 import { useCollapsedSizePercent } from "@/features/workspace/hooks/useCollapsedSizePercent";
@@ -61,7 +61,7 @@ interface MainContentProps {
   onCloneRepository: () => void;
   onStartNewProject: () => void;
   /** Repos for the home screen's repo picker */
-  repos: import("@/features/repository/types").Repository[];
+  repos: Repository[];
   /** Sidebar workspace groups reused by the home screen recent list. */
   repoGroups: RepoGroup[];
   /** Handler for sending the first message from the home screen.
