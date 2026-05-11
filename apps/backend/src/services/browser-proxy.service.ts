@@ -789,10 +789,14 @@ class BrowserProxySession {
     }
 
     if (params.kind === "key") {
+      const virtualKeyCode = cdpVirtualKeyCode(params.key, params.code);
       await this.sendCdp("Input.dispatchKeyEvent", {
         type: params.type,
         key: params.key,
         code: params.code,
+        ...(virtualKeyCode !== undefined
+          ? { windowsVirtualKeyCode: virtualKeyCode, nativeVirtualKeyCode: virtualKeyCode }
+          : {}),
         modifiers: params.modifiers ?? 0,
       });
       if (params.type === "keyDown" && params.text) {
@@ -802,6 +806,9 @@ class BrowserProxySession {
           code: params.code,
           text: params.text,
           unmodifiedText: params.text,
+          ...(virtualKeyCode !== undefined
+            ? { windowsVirtualKeyCode: virtualKeyCode, nativeVirtualKeyCode: virtualKeyCode }
+            : {}),
           modifiers: params.modifiers ?? 0,
         });
       }
@@ -1407,6 +1414,29 @@ function normalizeMediaTransport(
   transport: BrowserProxyMediaTransport | undefined
 ): BrowserProxyMediaTransport {
   return transport ?? DEFAULT_MEDIA_TRANSPORT;
+}
+
+function cdpVirtualKeyCode(key: string, code: string): number | undefined {
+  const byKey: Record<string, number> = {
+    Backspace: 8,
+    Tab: 9,
+    Enter: 13,
+    Escape: 27,
+    PageUp: 33,
+    PageDown: 34,
+    End: 35,
+    Home: 36,
+    ArrowLeft: 37,
+    ArrowUp: 38,
+    ArrowRight: 39,
+    ArrowDown: 40,
+    Delete: 46,
+  };
+  if (byKey[key] !== undefined) return byKey[key];
+
+  if (/^Key[A-Z]$/.test(code)) return code.charCodeAt(3);
+  if (/^Digit[0-9]$/.test(code)) return code.charCodeAt(5);
+  return undefined;
 }
 
 function nativeTabRequestTimeoutMs(): number {
