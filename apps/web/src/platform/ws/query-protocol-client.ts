@@ -7,7 +7,7 @@
  *
  * Protocol:
  *   Client sends: q:subscribe, q:unsubscribe, q:request, q:mutate, q:command
- *   Server sends: q:snapshot, q:delta, q:response, q:mutate_result, q:command_ack, q:error, q:event, ping
+ *   Server sends: q:snapshot, q:subscribed, q:delta, q:response, q:mutate_result, q:command_ack, q:error, q:event, ping
  *   Client responds to ping with pong
  *
  * Relay mode (web-production):
@@ -171,8 +171,10 @@ export async function connect(serverId?: string): Promise<void> {
 /**
  * Subscribe to a query resource. Returns an unsubscribe function.
  *
- * On subscription, the server sends an initial q:snapshot. Subsequent
- * invalidations push q:snapshot (full replace) or q:delta (incremental).
+ * On subscription, the server sends an initial q:snapshot (or q:subscribed
+ * for delta-only resources like messages, where history is loaded separately
+ * via q:request/HTTP). Subsequent invalidations push q:snapshot (full replace)
+ * or q:delta (incremental).
  */
 export function subscribe(
   resource: QueryResource,
@@ -535,6 +537,10 @@ async function openSocket(serverId?: string): Promise<void> {
       .with("q:snapshot", () => {
         const sub = subscriptions.get(msg.id as string);
         sub?.onSnapshot(msg.data);
+      })
+      .with("q:subscribed", () => {
+        // Subscription ack for delta-only resources (e.g. messages).
+        // No initial data — history is loaded via q:request / HTTP. Deltas follow.
       })
       .with("q:delta", () => {
         const sub = subscriptions.get(msg.id as string);
