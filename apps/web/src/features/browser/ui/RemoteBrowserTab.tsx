@@ -3,13 +3,7 @@ import { AlertCircle, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { BrowserEmptyState } from "./BrowserEmptyState";
 import { match } from "ts-pattern";
-import {
-  isConnected,
-  onConnectionChange,
-  onEvent,
-  sendCommand,
-} from "@/platform/ws/query-protocol-client";
-import type { CommandName } from "@shared/types/query-protocol";
+import { isConnected, onConnectionChange, sendCommand } from "@/platform/ws/query-protocol-client";
 import type { Bounds } from "../webview-manager";
 import { deriveTitleFromUrl, isBlankUrl } from "../types";
 import type { BrowserTabHandle, BrowserTabState, ConsoleLog, ElementSelectedEvent } from "../types";
@@ -25,12 +19,6 @@ import {
 } from "../automation/inspect-mode";
 import { VISUAL_EFFECTS_SETUP } from "../automation/visual-effects";
 import { getErrorMessage } from "@shared/lib/errors";
-import type {
-  BrowserProxyConsoleEvent,
-  BrowserProxyErrorEvent,
-  BrowserProxyFrameEvent,
-  BrowserProxyStateEvent,
-} from "@shared/types/browser-proxy";
 import {
   BROWSER_FRAME_MEDIA_TRANSPORT,
   useBrowserFrameMediaTransport,
@@ -38,20 +26,10 @@ import {
 import { REMOTE_BROWSER_COMMAND_TIMEOUT_MS } from "./remoteBrowserConstants";
 import { useRemoteBrowserInput } from "./useRemoteBrowserInput";
 import { useRemoteBrowserPanelBounds } from "./useRemoteBrowserPanelBounds";
+import { sendBrowserCommand } from "./remoteBrowserCommands";
+import { useRemoteBrowserEvents } from "./useRemoteBrowserEvents";
 
 const INSPECT_DRAIN_INTERVAL_MS = 200;
-
-async function sendBrowserCommand(
-  command: CommandName,
-  params: Record<string, unknown>,
-  timeoutMs = REMOTE_BROWSER_COMMAND_TIMEOUT_MS
-): Promise<Record<string, unknown>> {
-  const result = await sendCommand(command, params, timeoutMs);
-  if (!result.accepted) {
-    throw new Error(result.error || `${command} failed`);
-  }
-  return result;
-}
 
 interface RemoteBrowserTabProps {
   tab: BrowserTabState;
@@ -157,55 +135,16 @@ export const RemoteBrowserTab = forwardRef<BrowserTabHandle, RemoteBrowserTabPro
       [onUpdateTab, tabId]
     );
 
-    useEffect(() => {
-      return onEvent((event, data) => {
-        if (event === "browser:frame") {
-          const frame = data as BrowserProxyFrameEvent;
-          if (frame.tabId === tabId) mediaTransport.drawFrame(frame, markPixelsVisible);
-          return;
-        }
-
-        if (event === "browser:state") {
-          const state = data as BrowserProxyStateEvent;
-          if (state.tabId !== tabId) return;
-          if (state.currentUrl) handleNavigated(state.currentUrl);
-          if (state.loading === false) {
-            completeLoadTransition();
-          }
-          onUpdateTab(tabId, {
-            ...(state.title ? { title: state.title } : {}),
-            ...(state.loading !== undefined ? { loading: state.loading } : {}),
-            ...(state.error !== undefined
-              ? { error: state.error === null ? null : remoteBrowserErrorMessage(state.error) }
-              : {}),
-          });
-          return;
-        }
-
-        if (event === "browser:console") {
-          const log = data as BrowserProxyConsoleEvent;
-          if (log.tabId === tabId) onAddLog(tabId, log.level, log.message);
-          return;
-        }
-
-        if (event === "browser:error") {
-          const err = data as BrowserProxyErrorEvent;
-          if (err.tabId === tabId) {
-            const message = remoteBrowserErrorMessage(err.error);
-            onAddLog(tabId, "error", message);
-            onUpdateTab(tabId, { error: message, loading: false });
-          }
-        }
-      });
-    }, [
+    useRemoteBrowserEvents({
+      tabId,
+      mediaTransport,
+      markPixelsVisible,
       completeLoadTransition,
       handleNavigated,
-      markPixelsVisible,
-      mediaTransport,
       onAddLog,
       onUpdateTab,
-      tabId,
-    ]);
+      formatError: remoteBrowserErrorMessage,
+    });
 
     useEffect(() => {
       return () => {

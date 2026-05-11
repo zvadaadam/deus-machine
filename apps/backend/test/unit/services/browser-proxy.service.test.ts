@@ -319,6 +319,44 @@ describe("browser-proxy.service", () => {
         })
       );
     });
+
+    service.sendBrowserInput({
+      tabId: "tab-1",
+      kind: "key",
+      type: "keyDown",
+      key: "!",
+      code: "Digit1",
+      text: "!",
+    });
+    await vi.waitFor(() => {
+      expect(mockState.ws.sent).toContainEqual(
+        expect.objectContaining({
+          url: "ws://native-target",
+          method: "Input.dispatchKeyEvent",
+          params: {
+            type: "keyDown",
+            key: "!",
+            code: "Digit1",
+            modifiers: 0,
+          },
+        })
+      );
+      expect(mockState.ws.sent).toContainEqual(
+        expect.objectContaining({
+          url: "ws://native-target",
+          method: "Input.dispatchKeyEvent",
+          params: {
+            type: "char",
+            key: "!",
+            code: "Digit1",
+            text: "!",
+            unmodifiedText: "!",
+            modifiers: 0,
+          },
+        })
+      );
+    });
+
     await expect(service.captureBrowserScreenshot({ tabId: "tab-1" })).resolves.toBe(
       "data:image/png;base64,png"
     );

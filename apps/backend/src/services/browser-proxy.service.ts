@@ -793,7 +793,6 @@ class BrowserProxySession {
         type: params.type,
         key: params.key,
         code: params.code,
-        ...(params.type === "keyDown" && params.text ? { text: params.text } : {}),
         modifiers: params.modifiers ?? 0,
       });
       if (params.type === "keyDown" && params.text) {
