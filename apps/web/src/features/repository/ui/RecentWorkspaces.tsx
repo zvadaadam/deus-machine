@@ -143,7 +143,7 @@ export function RecentWorkspaces({
       animate={{ opacity: 1, y: 0 }}
       exit={{ opacity: 0, y: 6 }}
       transition={{ duration: 0.24, delay: 0.1, ease: EASE_OUT_QUART }}
-      className="mt-5 w-full max-w-[720px] px-4 sm:px-6"
+      className="mt-5 w-full max-w-[700px] px-4 sm:px-6"
     >
       <div className="flex flex-col gap-5">
         {groups.map((group) => (
