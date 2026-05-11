@@ -349,9 +349,9 @@ export function HomeView({
   }, []);
 
   return (
-    <div className="flex h-full min-h-0 flex-1 flex-col items-center overflow-y-auto">
+    <div className="relative flex h-full min-h-0 flex-1 flex-col items-center overflow-hidden">
       {/* Top spacer — keeps the input high enough that recent workspaces can breathe below. */}
-      <div className="flex-[0_0_14%] sm:flex-[0_0_18%]" />
+      <div className="flex-[0_0_14%] shrink-0 sm:flex-[0_0_18%]" />
 
       <motion.h1
         key={hasRepos ? "has-repos" : "zero-repos"}
@@ -944,104 +944,110 @@ export function HomeView({
         )}
       </AnimatePresence>
 
-      <AnimatePresence>
-        {hasRepos && !message.trim() && recentWorkspaceGroups.length > 0 && (
-          <RecentWorkspaces
-            groups={recentWorkspaceGroups}
-            selectedWorkspaceId={selectedWorkspaceId}
-            onWorkspaceClick={onWorkspaceClick}
-          />
-        )}
-      </AnimatePresence>
+      {/* Scrollable middle — recents (or zero state) get their own scroll container
+       * so the input + header stay pinned at the top. The footer below is absolutely
+       * positioned over this area; pb-32 gives the last item room to scroll past
+       * the button row instead of staying stuck behind the gradient. */}
+      <div className="flex min-h-0 w-full flex-1 flex-col items-center overflow-y-auto pb-32">
+        <AnimatePresence>
+          {hasRepos && recentWorkspaceGroups.length > 0 && (
+            <RecentWorkspaces
+              groups={recentWorkspaceGroups}
+              selectedWorkspaceId={selectedWorkspaceId}
+              onWorkspaceClick={onWorkspaceClick}
+            />
+          )}
+        </AnimatePresence>
 
-      {/* Zero-repo state — project action cards replace quick prompts */}
-      <AnimatePresence>
-        {!hasRepos && (
-          <motion.div
-            key="zero-state"
-            initial={{ opacity: 0, y: 8 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: 12 }}
-            transition={{ duration: 0.3, delay: 0.15, ease: EASE_OUT_QUART }}
-            className="mt-6 w-full max-w-[560px] px-4 sm:px-6"
-          >
-            <p className="text-text-muted mb-4 text-sm">
-              Add a project to start working with your AI coding agent.
-            </p>
+        {/* Zero-repo state — project action cards replace quick prompts */}
+        <AnimatePresence>
+          {!hasRepos && (
+            <motion.div
+              key="zero-state"
+              initial={{ opacity: 0, y: 8 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: 12 }}
+              transition={{ duration: 0.3, delay: 0.15, ease: EASE_OUT_QUART }}
+              className="mt-6 w-full max-w-[560px] px-4 sm:px-6"
+            >
+              <p className="text-text-muted mb-4 text-sm">
+                Add a project to start working with your AI coding agent.
+              </p>
 
-            <div className="border-border-subtle bg-bg-elevated/60 overflow-hidden rounded-xl border">
-              {onStartNewProject && (
-                <button
-                  type="button"
-                  onClick={onStartNewProject}
-                  className="hover:bg-bg-raised/40 flex w-full items-start gap-3.5 px-4 py-3.5 text-left transition-colors duration-150"
-                >
-                  <div className="bg-bg-muted mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-lg">
-                    <FolderGit2 className="text-text-tertiary h-4 w-4" />
-                  </div>
-                  <div>
-                    <h3 className="text-text-primary text-sm font-medium">Start a new project</h3>
-                    <p className="text-text-muted mt-0.5 text-xs">
-                      Create a project from scratch or a template
-                    </p>
-                  </div>
-                </button>
-              )}
+              <div className="border-border-subtle bg-bg-elevated/60 overflow-hidden rounded-xl border">
+                {onStartNewProject && (
+                  <button
+                    type="button"
+                    onClick={onStartNewProject}
+                    className="hover:bg-bg-raised/40 flex w-full items-start gap-3.5 px-4 py-3.5 text-left transition-colors duration-150"
+                  >
+                    <div className="bg-bg-muted mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-lg">
+                      <FolderGit2 className="text-text-tertiary h-4 w-4" />
+                    </div>
+                    <div>
+                      <h3 className="text-text-primary text-sm font-medium">Start a new project</h3>
+                      <p className="text-text-muted mt-0.5 text-xs">
+                        Create a project from scratch or a template
+                      </p>
+                    </div>
+                  </button>
+                )}
 
-              {onStartNewProject && onCloneRepository && (
-                <div className="border-border-subtle/50 mx-4 border-t" />
-              )}
-
-              {onCloneRepository && (
-                <button
-                  type="button"
-                  onClick={onCloneRepository}
-                  className="hover:bg-bg-raised/40 flex w-full items-start gap-3.5 px-4 py-3.5 text-left transition-colors duration-150"
-                >
-                  <div className="bg-bg-muted mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-lg">
-                    <GitBranch className="text-text-tertiary h-4 w-4" />
-                  </div>
-                  <div>
-                    <h3 className="text-text-primary text-sm font-medium">Clone from GitHub</h3>
-                    <p className="text-text-muted mt-0.5 text-xs">
-                      Paste a repository URL or search your GitHub repos
-                    </p>
-                  </div>
-                </button>
-              )}
-
-              {capabilities.nativeFolderPicker &&
-                onOpenProject &&
-                (onCloneRepository || onStartNewProject) && (
+                {onStartNewProject && onCloneRepository && (
                   <div className="border-border-subtle/50 mx-4 border-t" />
                 )}
 
-              {capabilities.nativeFolderPicker && onOpenProject && (
-                <button
-                  type="button"
-                  onClick={onOpenProject}
-                  className="hover:bg-bg-raised/40 flex w-full items-start gap-3.5 px-4 py-3.5 text-left transition-colors duration-150"
-                >
-                  <div className="bg-bg-muted mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-lg">
-                    <FolderOpen className="text-text-tertiary h-4 w-4" />
-                  </div>
-                  <div>
-                    <h3 className="text-text-primary text-sm font-medium">Open a local project</h3>
-                    <p className="text-text-muted mt-0.5 text-xs">
-                      Browse your filesystem for an existing codebase
-                    </p>
-                  </div>
-                </button>
-              )}
-            </div>
-          </motion.div>
-        )}
-      </AnimatePresence>
+                {onCloneRepository && (
+                  <button
+                    type="button"
+                    onClick={onCloneRepository}
+                    className="hover:bg-bg-raised/40 flex w-full items-start gap-3.5 px-4 py-3.5 text-left transition-colors duration-150"
+                  >
+                    <div className="bg-bg-muted mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-lg">
+                      <GitBranch className="text-text-tertiary h-4 w-4" />
+                    </div>
+                    <div>
+                      <h3 className="text-text-primary text-sm font-medium">Clone from GitHub</h3>
+                      <p className="text-text-muted mt-0.5 text-xs">
+                        Paste a repository URL or search your GitHub repos
+                      </p>
+                    </div>
+                  </button>
+                )}
 
-      {/* Spacer */}
-      <div className="flex-1" />
+                {capabilities.nativeFolderPicker &&
+                  onOpenProject &&
+                  (onCloneRepository || onStartNewProject) && (
+                    <div className="border-border-subtle/50 mx-4 border-t" />
+                  )}
 
-      {/* Footer actions — sticky so long recent lists still leave project actions visible. */}
+                {capabilities.nativeFolderPicker && onOpenProject && (
+                  <button
+                    type="button"
+                    onClick={onOpenProject}
+                    className="hover:bg-bg-raised/40 flex w-full items-start gap-3.5 px-4 py-3.5 text-left transition-colors duration-150"
+                  >
+                    <div className="bg-bg-muted mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-lg">
+                      <FolderOpen className="text-text-tertiary h-4 w-4" />
+                    </div>
+                    <div>
+                      <h3 className="text-text-primary text-sm font-medium">
+                        Open a local project
+                      </h3>
+                      <p className="text-text-muted mt-0.5 text-xs">
+                        Browse your filesystem for an existing codebase
+                      </p>
+                    </div>
+                  </button>
+                )}
+              </div>
+            </motion.div>
+          )}
+        </AnimatePresence>
+      </div>
+
+      {/* Footer actions — absolute so the recents scroll container above
+       * fills the full viewport and items can fade behind the buttons. */}
       <AnimatePresence>
         {hasRepos && (
           <motion.div
@@ -1050,7 +1056,7 @@ export function HomeView({
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
             transition={{ duration: 0.3, delay: 0.25, ease: EASE_OUT_QUART }}
-            className="from-bg-surface via-bg-surface/95 pointer-events-none sticky bottom-0 z-20 mt-auto flex w-full justify-center bg-gradient-to-t to-transparent pt-12 pb-6"
+            className="home-footer-fade pointer-events-none absolute right-0 bottom-0 left-0 z-20 flex w-full justify-center pt-24 pb-6"
           >
             <div className="pointer-events-auto flex items-center gap-3">
               {onStartNewProject && (
