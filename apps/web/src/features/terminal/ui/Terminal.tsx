@@ -1,4 +1,4 @@
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Terminal as XTerm } from "@xterm/xterm";
 import { FitAddon } from "@xterm/addon-fit";
 import { WebLinksAddon } from "@xterm/addon-web-links";
@@ -107,11 +107,18 @@ export function Terminal({
   getInitialCommand,
   visible = true,
 }: TerminalProps) {
+  const [shouldInitialize, setShouldInitialize] = useState(visible);
   const terminalRef = useRef<HTMLDivElement>(null);
   const xtermRef = useRef<XTerm | null>(null);
   const fitAddonRef = useRef<FitAddon | null>(null);
 
   useEffect(() => {
+    if (!visible || shouldInitialize) return;
+    queueMicrotask(() => setShouldInitialize(true));
+  }, [shouldInitialize, visible]);
+
+  useEffect(() => {
+    if (!shouldInitialize) return;
     if (!terminalRef.current) return;
 
     // Unique PTY id per effect invocation so StrictMode double-fire doesn't collide
@@ -234,7 +241,7 @@ export function Terminal({
       });
       xterm.dispose();
     };
-  }, [id, workspacePath, initialCommand, getInitialCommand]);
+  }, [id, workspacePath, initialCommand, getInitialCommand, shouldInitialize]);
 
   // Refit terminal when becoming visible — container may have resized while hidden
   useEffect(() => {
@@ -247,7 +254,7 @@ export function Terminal({
 
   return (
     <div className="terminal-container">
-      <div ref={terminalRef} className="terminal" />
+      {shouldInitialize && <div ref={terminalRef} className="terminal" />}
     </div>
   );
 }
