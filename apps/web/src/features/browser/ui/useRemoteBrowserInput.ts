@@ -71,7 +71,7 @@ export function useRemoteBrowserInput(
           x: point.x,
           y: point.y,
           button: inputType === "mouseMoved" ? "none" : mouseButton(e.button),
-          clickCount: inputType === "mouseMoved" ? 0 : 1,
+          clickCount: inputType === "mouseMoved" ? 0 : Math.max(1, e.detail || 1),
           modifiers: modifierMask(e),
         },
         REMOTE_BROWSER_COMMAND_TIMEOUT_MS

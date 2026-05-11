@@ -337,6 +337,8 @@ describe("browser-proxy.service", () => {
             type: "keyDown",
             key: "!",
             code: "Digit1",
+            windowsVirtualKeyCode: 49,
+            nativeVirtualKeyCode: 49,
             modifiers: 0,
           },
         })
@@ -351,6 +353,32 @@ describe("browser-proxy.service", () => {
             code: "Digit1",
             text: "!",
             unmodifiedText: "!",
+            windowsVirtualKeyCode: 49,
+            nativeVirtualKeyCode: 49,
+            modifiers: 0,
+          },
+        })
+      );
+    });
+
+    service.sendBrowserInput({
+      tabId: "tab-1",
+      kind: "key",
+      type: "keyDown",
+      key: "ArrowLeft",
+      code: "ArrowLeft",
+    });
+    await vi.waitFor(() => {
+      expect(mockState.ws.sent).toContainEqual(
+        expect.objectContaining({
+          url: "ws://native-target",
+          method: "Input.dispatchKeyEvent",
+          params: {
+            type: "keyDown",
+            key: "ArrowLeft",
+            code: "ArrowLeft",
+            windowsVirtualKeyCode: 37,
+            nativeVirtualKeyCode: 37,
             modifiers: 0,
           },
         })
