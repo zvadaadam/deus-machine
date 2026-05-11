@@ -49,11 +49,13 @@ export interface BrowserProxyAttachParams extends BrowserProxyBounds {
   workspaceId?: string;
   url?: string;
   isMobileView?: boolean;
+  mediaTransport?: BrowserProxyMediaTransport;
 }
 
 export interface BrowserProxyResizeParams extends BrowserProxyBounds {
   tabId: string;
   isMobileView?: boolean;
+  mediaTransport?: BrowserProxyMediaTransport;
 }
 
 export interface BrowserProxyNavigateParams {
@@ -124,3 +126,10 @@ export interface BrowserProxyScreenshotParams {
     height: number;
   };
 }
+
+/**
+ * Browser media transport requested by a viewer. The current production path is
+ * WebSocket-delivered encoded image frames; future transports should extend this
+ * union without changing browser control commands.
+ */
+export type BrowserProxyMediaTransport = "websocket-frames";

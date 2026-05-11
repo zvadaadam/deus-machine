@@ -319,6 +319,72 @@ describe("browser-proxy.service", () => {
         })
       );
     });
+
+    service.sendBrowserInput({
+      tabId: "tab-1",
+      kind: "key",
+      type: "keyDown",
+      key: "!",
+      code: "Digit1",
+      text: "!",
+    });
+    await vi.waitFor(() => {
+      expect(mockState.ws.sent).toContainEqual(
+        expect.objectContaining({
+          url: "ws://native-target",
+          method: "Input.dispatchKeyEvent",
+          params: {
+            type: "keyDown",
+            key: "!",
+            code: "Digit1",
+            windowsVirtualKeyCode: 49,
+            nativeVirtualKeyCode: 49,
+            modifiers: 0,
+          },
+        })
+      );
+      expect(mockState.ws.sent).toContainEqual(
+        expect.objectContaining({
+          url: "ws://native-target",
+          method: "Input.dispatchKeyEvent",
+          params: {
+            type: "char",
+            key: "!",
+            code: "Digit1",
+            text: "!",
+            unmodifiedText: "!",
+            windowsVirtualKeyCode: 49,
+            nativeVirtualKeyCode: 49,
+            modifiers: 0,
+          },
+        })
+      );
+    });
+
+    service.sendBrowserInput({
+      tabId: "tab-1",
+      kind: "key",
+      type: "keyDown",
+      key: "ArrowLeft",
+      code: "ArrowLeft",
+    });
+    await vi.waitFor(() => {
+      expect(mockState.ws.sent).toContainEqual(
+        expect.objectContaining({
+          url: "ws://native-target",
+          method: "Input.dispatchKeyEvent",
+          params: {
+            type: "keyDown",
+            key: "ArrowLeft",
+            code: "ArrowLeft",
+            windowsVirtualKeyCode: 37,
+            nativeVirtualKeyCode: 37,
+            modifiers: 0,
+          },
+        })
+      );
+    });
+
     await expect(service.captureBrowserScreenshot({ tabId: "tab-1" })).resolves.toBe(
       "data:image/png;base64,png"
     );
@@ -416,6 +482,62 @@ describe("browser-proxy.service", () => {
     expect(fetchCalls).toContain("http://127.0.0.1:19222/json/new?https%3A%2F%2Fgithub.com%2F");
     expect(mockState.agentBrowser.calls).toContainEqual(
       expect.objectContaining({ args: ["--cdp", "ws://created-target", "get", "url", "--json"] })
+    );
+  });
+
+  it("waits for browser-created targets to appear in the CDP target list", async () => {
+    const fetchCalls: string[] = [];
+    let listCalls = 0;
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (url: string | URL) => {
+        const href = String(url);
+        fetchCalls.push(href);
+        if (href.endsWith("/json/version")) {
+          return jsonResponse({ webSocketDebuggerUrl: "ws://browser" });
+        }
+        if (href.endsWith("/json")) {
+          listCalls += 1;
+          return jsonResponse(
+            listCalls < 2
+              ? []
+              : [
+                  {
+                    id: "created-target",
+                    type: "page",
+                    url: "https://github.com/",
+                    webSocketDebuggerUrl: "ws://created-target",
+                  },
+                ]
+          );
+        }
+        throw new Error(`unexpected fetch: ${href}`);
+      })
+    );
+    mockState.agentBrowser.tabs = [
+      { index: 0, type: "page", title: "GitHub", url: "https://github.com/" },
+    ];
+
+    const service = await import("../../../src/services/browser-proxy.service");
+    await service.attachBrowserTab({
+      tabId: "tab-created-by-browser-ws",
+      width: 800,
+      height: 600,
+      url: "https://github.com/",
+    });
+
+    expect(fetchCalls.some((url) => url.includes("/json/new?"))).toBe(false);
+    expect(mockState.ws.sent).toContainEqual(
+      expect.objectContaining({
+        url: "ws://browser",
+        method: "Target.createTarget",
+        params: { url: "https://github.com/" },
+      })
+    );
+    expect(mockState.agentBrowser.calls).toContainEqual(
+      expect.objectContaining({
+        args: ["--cdp", "ws://browser", "tab", "list", "--json"],
+      })
     );
   });
 

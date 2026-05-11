@@ -1,31 +1,11 @@
-import {
-  forwardRef,
-  useCallback,
-  useEffect,
-  useImperativeHandle,
-  useLayoutEffect,
-  useRef,
-  useState,
-} from "react";
-import type * as React from "react";
+import { forwardRef, useCallback, useEffect, useImperativeHandle, useRef, useState } from "react";
 import { AlertCircle, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { BrowserEmptyState } from "./BrowserEmptyState";
 import { match } from "ts-pattern";
-import {
-  isConnected,
-  onConnectionChange,
-  onEvent,
-  sendCommand,
-} from "@/platform/ws/query-protocol-client";
-import type { CommandName } from "@shared/types/query-protocol";
+import { isConnected, onConnectionChange, sendCommand } from "@/platform/ws/query-protocol-client";
 import type { Bounds } from "../webview-manager";
-import {
-  deriveTitleFromUrl,
-  isBlankUrl,
-  FOCUS_URL_BAR_EVENT,
-  MOBILE_PREVIEW_WIDTH,
-} from "../types";
+import { deriveTitleFromUrl, isBlankUrl } from "../types";
 import type { BrowserTabHandle, BrowserTabState, ConsoleLog, ElementSelectedEvent } from "../types";
 import {
   INSPECT_MODE_SETUP,
@@ -39,27 +19,17 @@ import {
 } from "../automation/inspect-mode";
 import { VISUAL_EFFECTS_SETUP } from "../automation/visual-effects";
 import { getErrorMessage } from "@shared/lib/errors";
-import type {
-  BrowserProxyConsoleEvent,
-  BrowserProxyErrorEvent,
-  BrowserProxyFrameEvent,
-  BrowserProxyStateEvent,
-} from "@shared/types/browser-proxy";
+import {
+  BROWSER_FRAME_MEDIA_TRANSPORT,
+  useBrowserFrameMediaTransport,
+} from "./browserFrameMediaTransport";
+import { REMOTE_BROWSER_COMMAND_TIMEOUT_MS } from "./remoteBrowserConstants";
+import { useRemoteBrowserInput } from "./useRemoteBrowserInput";
+import { useRemoteBrowserPanelBounds } from "./useRemoteBrowserPanelBounds";
+import { sendBrowserCommand } from "./remoteBrowserCommands";
+import { useRemoteBrowserEvents } from "./useRemoteBrowserEvents";
 
 const INSPECT_DRAIN_INTERVAL_MS = 200;
-const REMOTE_COMMAND_TIMEOUT_MS = 20_000;
-
-async function sendBrowserCommand(
-  command: CommandName,
-  params: Record<string, unknown>,
-  timeoutMs = REMOTE_COMMAND_TIMEOUT_MS
-): Promise<Record<string, unknown>> {
-  const result = await sendCommand(command, params, timeoutMs);
-  if (!result.accepted) {
-    throw new Error(result.error || `${command} failed`);
-  }
-  return result;
-}
 
 interface RemoteBrowserTabProps {
   tab: BrowserTabState;
@@ -68,21 +38,6 @@ interface RemoteBrowserTabProps {
   onAddLog: (tabId: string, level: ConsoleLog["level"], message: string) => void;
   visible: boolean;
   onElementSelected?: (tabId: string, event: ElementSelectedEvent) => void;
-}
-
-function modifierMask(
-  e: Pick<
-    KeyboardEvent | React.KeyboardEvent | React.MouseEvent | React.TouchEvent,
-    "altKey" | "ctrlKey" | "metaKey" | "shiftKey"
-  >
-): number {
-  return (e.altKey ? 1 : 0) | (e.ctrlKey ? 2 : 0) | (e.metaKey ? 4 : 0) | (e.shiftKey ? 8 : 0);
-}
-
-function keyText(e: React.KeyboardEvent): string | undefined {
-  if (e.key.length !== 1) return undefined;
-  if (e.metaKey || e.ctrlKey) return undefined;
-  return e.key;
 }
 
 function remoteBrowserErrorMessage(err: unknown): string {
@@ -97,54 +52,20 @@ function remoteBrowserErrorMessage(err: unknown): string {
   return message;
 }
 
-function mouseButton(button: number): "left" | "middle" | "right" | "none" {
-  if (button === 0) return "left";
-  if (button === 1) return "middle";
-  if (button === 2) return "right";
-  return "none";
-}
-
-function captureCanvasDataUrl(
-  canvas: HTMLCanvasElement,
-  rect?: { x: number; y: number; width: number; height: number }
-): string | null {
-  if (canvas.width <= 0 || canvas.height <= 0) return null;
-  if (!rect) return canvas.toDataURL("image/png");
-
-  const x = Math.max(0, Math.floor(rect.x));
-  const y = Math.max(0, Math.floor(rect.y));
-  if (x >= canvas.width || y >= canvas.height) return null;
-  const width = Math.max(1, Math.min(canvas.width - x, Math.floor(rect.width)));
-  const height = Math.max(1, Math.min(canvas.height - y, Math.floor(rect.height)));
-  if (width <= 0 || height <= 0) return null;
-
-  const out = document.createElement("canvas");
-  out.width = width;
-  out.height = height;
-  const ctx = out.getContext("2d");
-  if (!ctx) return null;
-  ctx.drawImage(canvas, x, y, width, height, 0, 0, width, height);
-  return out.toDataURL("image/png");
-}
-
 export const RemoteBrowserTab = forwardRef<BrowserTabHandle, RemoteBrowserTabProps>(
   function RemoteBrowserTab(
     { tab, workspaceId, onUpdateTab, onAddLog, visible, onElementSelected },
     ref
   ) {
     const tabId = tab.id;
-    const panelContainerRef = useRef<HTMLDivElement | null>(null);
-    const canvasRef = useRef<HTMLCanvasElement | null>(null);
-    const [panelRect, setPanelRect] = useState<Bounds | null>(null);
+    const mediaTransport = useBrowserFrameMediaTransport();
     const [hasLoaded, setHasLoaded] = useState(false);
     const [completingLoad, setCompletingLoad] = useState(false);
     const [wsConnected, setWsConnected] = useState(isConnected());
     const completingTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
     const attachedRef = useRef(false);
+    const attachInFlightRef = useRef<Promise<void> | null>(null);
     const hasLoadedRef = useRef(false);
-    const lastMouseMoveAtRef = useRef(0);
-    const frameSizeRef = useRef({ width: 1, height: 1 });
-    const drawRequestRef = useRef(0);
     const automationInjectedRef = useRef(false);
     const suppressHistoryPushRef = useRef(false);
     const historyNavDeltaRef = useRef<-1 | 0 | 1>(0);
@@ -155,66 +76,26 @@ export const RemoteBrowserTab = forwardRef<BrowserTabHandle, RemoteBrowserTabPro
       useRef<RemoteBrowserTabProps["onElementSelected"]>(onElementSelected);
     onElementSelectedRef.current = onElementSelected;
 
-    useLayoutEffect(() => {
-      const el = panelContainerRef.current;
-      if (!el) return;
-      const update = () => {
-        const r = el.getBoundingClientRect();
-        setPanelRect({ x: r.x, y: r.y, width: r.width, height: r.height });
-      };
-      update();
-      const ro = new ResizeObserver(update);
-      ro.observe(el);
-      window.addEventListener("resize", update);
-      window.addEventListener("scroll", update, true);
-      return () => {
-        ro.disconnect();
-        window.removeEventListener("resize", update);
-        window.removeEventListener("scroll", update, true);
-      };
-    }, []);
-
-    const SPLITTER_GUARD = 6;
-    const bounds: Bounds | null = (() => {
-      if (!panelRect) return null;
-      const available = Math.max(0, panelRect.width - SPLITTER_GUARD * 2);
-      const w = tab.isMobileView ? Math.min(MOBILE_PREVIEW_WIDTH, available) : available;
-      const x = panelRect.x + (panelRect.width - w) / 2;
-      return { x, y: panelRect.y, width: w, height: panelRect.height };
-    })();
+    const { panelContainerRef, panelRect, bounds } = useRemoteBrowserPanelBounds(tab.isMobileView);
 
     const pageBoundsRef = useRef<Bounds | null>(null);
     pageBoundsRef.current = bounds;
     const boundsWidth = bounds?.width;
     const boundsHeight = bounds?.height;
 
-    const markPixelsVisible = useCallback(() => {
+    const completeLoadTransition = useCallback(() => {
       if (hasLoadedRef.current) return;
       hasLoadedRef.current = true;
       setHasLoaded(true);
       setCompletingLoad(true);
       if (completingTimerRef.current) clearTimeout(completingTimerRef.current);
       completingTimerRef.current = setTimeout(() => setCompletingLoad(false), 500);
-      onUpdateTab(tabId, { loading: false, error: null });
-    }, [onUpdateTab, tabId]);
-
-    const drawFrame = useCallback((frame: BrowserProxyFrameEvent, onDrawn?: () => void) => {
-      const canvas = canvasRef.current;
-      if (!canvas) return;
-      const drawRequest = ++drawRequestRef.current;
-      frameSizeRef.current = { width: frame.width, height: frame.height };
-      if (canvas.width !== frame.width) canvas.width = frame.width;
-      if (canvas.height !== frame.height) canvas.height = frame.height;
-      const img = new Image();
-      img.onload = () => {
-        if (drawRequest !== drawRequestRef.current) return;
-        const ctx = canvas.getContext("2d");
-        if (!ctx) return;
-        ctx.drawImage(img, 0, 0, frame.width, frame.height);
-        onDrawn?.();
-      };
-      img.src = `data:image/${frame.format};base64,${frame.data}`;
     }, []);
+
+    const markPixelsVisible = useCallback(() => {
+      completeLoadTransition();
+      onUpdateTab(tabId, { loading: false, error: null });
+    }, [completeLoadTransition, onUpdateTab, tabId]);
 
     const handleNavigated = useCallback(
       (url: string) => {
@@ -254,51 +135,16 @@ export const RemoteBrowserTab = forwardRef<BrowserTabHandle, RemoteBrowserTabPro
       [onUpdateTab, tabId]
     );
 
-    useEffect(() => {
-      return onEvent((event, data) => {
-        if (event === "browser:frame") {
-          const frame = data as BrowserProxyFrameEvent;
-          if (frame.tabId === tabId) drawFrame(frame, markPixelsVisible);
-          return;
-        }
-
-        if (event === "browser:state") {
-          const state = data as BrowserProxyStateEvent;
-          if (state.tabId !== tabId) return;
-          if (state.currentUrl) handleNavigated(state.currentUrl);
-          if (state.loading === false) {
-            hasLoadedRef.current = true;
-            setHasLoaded(true);
-            setCompletingLoad(true);
-            if (completingTimerRef.current) clearTimeout(completingTimerRef.current);
-            completingTimerRef.current = setTimeout(() => setCompletingLoad(false), 500);
-          }
-          onUpdateTab(tabId, {
-            ...(state.title ? { title: state.title } : {}),
-            ...(state.loading !== undefined ? { loading: state.loading } : {}),
-            ...(state.error !== undefined
-              ? { error: state.error === null ? null : remoteBrowserErrorMessage(state.error) }
-              : {}),
-          });
-          return;
-        }
-
-        if (event === "browser:console") {
-          const log = data as BrowserProxyConsoleEvent;
-          if (log.tabId === tabId) onAddLog(tabId, log.level, log.message);
-          return;
-        }
-
-        if (event === "browser:error") {
-          const err = data as BrowserProxyErrorEvent;
-          if (err.tabId === tabId) {
-            const message = remoteBrowserErrorMessage(err.error);
-            onAddLog(tabId, "error", message);
-            onUpdateTab(tabId, { error: message, loading: false });
-          }
-        }
-      });
-    }, [drawFrame, handleNavigated, markPixelsVisible, onAddLog, onUpdateTab, tabId]);
+    useRemoteBrowserEvents({
+      tabId,
+      mediaTransport,
+      markPixelsVisible,
+      completeLoadTransition,
+      handleNavigated,
+      onAddLog,
+      onUpdateTab,
+      formatError: remoteBrowserErrorMessage,
+    });
 
     useEffect(() => {
       return () => {
@@ -310,6 +156,7 @@ export const RemoteBrowserTab = forwardRef<BrowserTabHandle, RemoteBrowserTabPro
       return onConnectionChange((connected) => {
         if (connected) {
           attachedRef.current = false;
+          attachInFlightRef.current = null;
         }
         setWsConnected(connected);
       });
@@ -325,13 +172,28 @@ export const RemoteBrowserTab = forwardRef<BrowserTabHandle, RemoteBrowserTabPro
           width: boundsWidth,
           height: boundsHeight,
           isMobileView: tabRef.current.isMobileView,
+          mediaTransport: BROWSER_FRAME_MEDIA_TRANSPORT,
         };
         if (!attachedRef.current) {
-          await sendBrowserCommand("browser:attach", params, REMOTE_COMMAND_TIMEOUT_MS);
-          attachedRef.current = true;
-          return;
+          if (!attachInFlightRef.current) {
+            const attachPromise = sendBrowserCommand(
+              "browser:attach",
+              params,
+              REMOTE_BROWSER_COMMAND_TIMEOUT_MS
+            )
+              .then(() => {
+                attachedRef.current = true;
+              })
+              .finally(() => {
+                if (attachInFlightRef.current === attachPromise) {
+                  attachInFlightRef.current = null;
+                }
+              });
+            attachInFlightRef.current = attachPromise;
+          }
+          return attachInFlightRef.current;
         }
-        await sendBrowserCommand("browser:resize", params, REMOTE_COMMAND_TIMEOUT_MS);
+        await sendBrowserCommand("browser:resize", params, REMOTE_BROWSER_COMMAND_TIMEOUT_MS);
       },
       [boundsHeight, boundsWidth, tabId, workspaceId]
     );
@@ -358,15 +220,17 @@ export const RemoteBrowserTab = forwardRef<BrowserTabHandle, RemoteBrowserTabPro
 
     useEffect(() => {
       if (visible || !attachedRef.current) return;
-      sendCommand("browser:detach", { tabId }, REMOTE_COMMAND_TIMEOUT_MS).catch(() => {});
+      sendCommand("browser:detach", { tabId }, REMOTE_BROWSER_COMMAND_TIMEOUT_MS).catch(() => {});
       attachedRef.current = false;
+      attachInFlightRef.current = null;
     }, [visible, tabId]);
 
     useEffect(() => {
       return () => {
         if (!attachedRef.current) return;
-        sendCommand("browser:detach", { tabId }, REMOTE_COMMAND_TIMEOUT_MS).catch(() => {});
+        sendCommand("browser:detach", { tabId }, REMOTE_BROWSER_COMMAND_TIMEOUT_MS).catch(() => {});
         attachedRef.current = false;
+        attachInFlightRef.current = null;
       };
     }, [tabId]);
 
@@ -377,7 +241,11 @@ export const RemoteBrowserTab = forwardRef<BrowserTabHandle, RemoteBrowserTabPro
             await attachOrResize(url);
             return;
           }
-          await sendBrowserCommand("browser:navigate", { tabId, url }, REMOTE_COMMAND_TIMEOUT_MS);
+          await sendBrowserCommand(
+            "browser:navigate",
+            { tabId, url },
+            REMOTE_BROWSER_COMMAND_TIMEOUT_MS
+          );
         };
         run().catch((err) => {
           const message = remoteBrowserErrorMessage(err);
@@ -391,23 +259,29 @@ export const RemoteBrowserTab = forwardRef<BrowserTabHandle, RemoteBrowserTabPro
     const goBack = useCallback(() => {
       suppressHistoryPushRef.current = true;
       historyNavDeltaRef.current = -1;
-      sendBrowserCommand("browser:back", { tabId }, REMOTE_COMMAND_TIMEOUT_MS).catch((err) => {
-        onAddLog(tabId, "error", `Back failed: ${getErrorMessage(err)}`);
-      });
+      sendBrowserCommand("browser:back", { tabId }, REMOTE_BROWSER_COMMAND_TIMEOUT_MS).catch(
+        (err) => {
+          onAddLog(tabId, "error", `Back failed: ${getErrorMessage(err)}`);
+        }
+      );
     }, [onAddLog, tabId]);
 
     const goForward = useCallback(() => {
       suppressHistoryPushRef.current = true;
       historyNavDeltaRef.current = 1;
-      sendBrowserCommand("browser:forward", { tabId }, REMOTE_COMMAND_TIMEOUT_MS).catch((err) => {
-        onAddLog(tabId, "error", `Forward failed: ${getErrorMessage(err)}`);
-      });
+      sendBrowserCommand("browser:forward", { tabId }, REMOTE_BROWSER_COMMAND_TIMEOUT_MS).catch(
+        (err) => {
+          onAddLog(tabId, "error", `Forward failed: ${getErrorMessage(err)}`);
+        }
+      );
     }, [onAddLog, tabId]);
 
     const reload = useCallback(() => {
-      sendBrowserCommand("browser:reload", { tabId }, REMOTE_COMMAND_TIMEOUT_MS).catch((err) => {
-        onAddLog(tabId, "error", `Reload failed: ${getErrorMessage(err)}`);
-      });
+      sendBrowserCommand("browser:reload", { tabId }, REMOTE_BROWSER_COMMAND_TIMEOUT_MS).catch(
+        (err) => {
+          onAddLog(tabId, "error", `Reload failed: ${getErrorMessage(err)}`);
+        }
+      );
     }, [onAddLog, tabId]);
 
     const evalBrowser = useCallback(
@@ -415,7 +289,7 @@ export const RemoteBrowserTab = forwardRef<BrowserTabHandle, RemoteBrowserTabPro
         const result = await sendBrowserCommand(
           "browser:eval",
           { tabId, expression },
-          REMOTE_COMMAND_TIMEOUT_MS
+          REMOTE_BROWSER_COMMAND_TIMEOUT_MS
         );
         return result.result;
       },
@@ -537,10 +411,9 @@ export const RemoteBrowserTab = forwardRef<BrowserTabHandle, RemoteBrowserTabPro
         width: number;
         height: number;
       }): Promise<string | null> => {
-        const canvas = canvasRef.current;
-        if (canvas) {
+        if (mediaTransport.canvasRef.current) {
           await new Promise((resolve) => setTimeout(resolve, 150));
-          const dataUrl = captureCanvasDataUrl(canvas, rect);
+          const dataUrl = mediaTransport.captureScreenshot(rect);
           if (dataUrl) return dataUrl;
         }
 
@@ -548,7 +421,7 @@ export const RemoteBrowserTab = forwardRef<BrowserTabHandle, RemoteBrowserTabPro
           const result = await sendBrowserCommand(
             "browser:captureScreenshot",
             { tabId, ...(rect ? { rect } : {}) },
-            REMOTE_COMMAND_TIMEOUT_MS
+            REMOTE_BROWSER_COMMAND_TIMEOUT_MS
           );
           return typeof result.dataUrl === "string" ? result.dataUrl : null;
         } catch (err) {
@@ -556,7 +429,7 @@ export const RemoteBrowserTab = forwardRef<BrowserTabHandle, RemoteBrowserTabPro
           return null;
         }
       },
-      [onAddLog, tabId]
+      [mediaTransport, onAddLog, tabId]
     );
 
     const setInspectOverlaysVisible = useCallback(
@@ -615,123 +488,15 @@ export const RemoteBrowserTab = forwardRef<BrowserTabHandle, RemoteBrowserTabPro
       ]
     );
 
-    const canvasPointFromClient = useCallback((clientX: number, clientY: number) => {
-      const canvas = canvasRef.current;
-      if (!canvas) return { x: 0, y: 0 };
-      const rect = canvas.getBoundingClientRect();
-      const frame = frameSizeRef.current;
-      return {
-        x: ((clientX - rect.left) / Math.max(1, rect.width)) * frame.width,
-        y: ((clientY - rect.top) / Math.max(1, rect.height)) * frame.height,
-      };
-    }, []);
-
-    const canvasPoint = useCallback(
-      (e: React.MouseEvent<HTMLCanvasElement>) => canvasPointFromClient(e.clientX, e.clientY),
-      [canvasPointFromClient]
-    );
-
-    const sendMouse = useCallback(
-      (
-        inputType: "mousePressed" | "mouseReleased" | "mouseMoved",
-        e: React.MouseEvent<HTMLCanvasElement>
-      ) => {
-        if (inputType === "mouseMoved") {
-          const now = Date.now();
-          if (now - lastMouseMoveAtRef.current < 33) return;
-          lastMouseMoveAtRef.current = now;
-        }
-        const point = canvasPoint(e);
-        sendCommand(
-          "browser:input",
-          {
-            tabId,
-            kind: "mouse",
-            inputType,
-            x: point.x,
-            y: point.y,
-            button: inputType === "mouseMoved" ? "none" : mouseButton(e.button),
-            clickCount: inputType === "mouseMoved" ? 0 : 1,
-            modifiers: modifierMask(e),
-          },
-          REMOTE_COMMAND_TIMEOUT_MS
-        ).catch(() => {});
+    const canvasPointFromClient = useCallback(
+      (clientX: number, clientY: number) => {
+        return mediaTransport.pointFromClient(clientX, clientY);
       },
-      [canvasPoint, tabId]
+      [mediaTransport]
     );
-
-    const sendWheel = useCallback(
-      (e: React.WheelEvent<HTMLCanvasElement>) => {
-        e.preventDefault();
-        const point = canvasPoint(e);
-        sendCommand(
-          "browser:input",
-          {
-            tabId,
-            kind: "wheel",
-            x: point.x,
-            y: point.y,
-            deltaX: e.deltaX,
-            deltaY: e.deltaY,
-            modifiers: modifierMask(e),
-          },
-          REMOTE_COMMAND_TIMEOUT_MS
-        ).catch(() => {});
-      },
-      [canvasPoint, tabId]
-    );
-
-    const sendKey = useCallback(
-      (inputType: "keyDown" | "keyUp", e: React.KeyboardEvent<HTMLCanvasElement>) => {
-        const isFocusUrl =
-          inputType === "keyDown" && (e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "l";
-        if (isFocusUrl) {
-          window.dispatchEvent(new CustomEvent(FOCUS_URL_BAR_EVENT));
-          e.preventDefault();
-          return;
-        }
-        e.preventDefault();
-        sendCommand(
-          "browser:input",
-          {
-            tabId,
-            kind: "key",
-            inputType,
-            key: e.key,
-            code: e.code,
-            text: keyText(e),
-            modifiers: modifierMask(e),
-          },
-          REMOTE_COMMAND_TIMEOUT_MS
-        ).catch(() => {});
-      },
-      [tabId]
-    );
-
-    const sendTouch = useCallback(
-      (
-        inputType: "touchStart" | "touchMove" | "touchEnd" | "touchCancel",
-        e: React.TouchEvent<HTMLCanvasElement>
-      ) => {
-        e.preventDefault();
-        const sourceTouches =
-          inputType === "touchEnd" || inputType === "touchCancel" ? [] : Array.from(e.touches);
-        sendCommand(
-          "browser:input",
-          {
-            tabId,
-            kind: "touch",
-            inputType,
-            touchPoints: sourceTouches.map((touch) => ({
-              id: touch.identifier,
-              ...canvasPointFromClient(touch.clientX, touch.clientY),
-            })),
-            modifiers: modifierMask(e),
-          },
-          REMOTE_COMMAND_TIMEOUT_MS
-        ).catch(() => {});
-      },
-      [canvasPointFromClient, tabId]
+    const { sendMouse, sendWheel, sendKey, sendTouch } = useRemoteBrowserInput(
+      tabId,
+      canvasPointFromClient
     );
 
     return (
@@ -741,7 +506,7 @@ export const RemoteBrowserTab = forwardRef<BrowserTabHandle, RemoteBrowserTabPro
       >
         {visible && bounds && !isBlankUrl(tab.currentUrl) && (
           <canvas
-            ref={canvasRef}
+            ref={mediaTransport.canvasRef}
             tabIndex={0}
             className="bg-bg h-full w-full outline-none"
             style={{

@@ -28,7 +28,11 @@ import { launchApp, stopApp } from "../aap";
 import { broadcast as wsBroadcast } from "../ws.service";
 import type { AgentHarness } from "@shared/enums";
 import type { CommandName } from "@shared/types/query-protocol";
-import type { BrowserProxyInputParams, BrowserProxyMouseButton } from "@shared/types/browser-proxy";
+import type {
+  BrowserProxyInputParams,
+  BrowserProxyMediaTransport,
+  BrowserProxyMouseButton,
+} from "@shared/types/browser-proxy";
 import {
   type QueryParams,
   readStringParam as readString,
@@ -325,6 +329,7 @@ export async function runCommand(
             height,
             url: readString(params, "url"),
             isMobileView: params.isMobileView === true,
+            mediaTransport: readBrowserMediaTransport(params),
           },
           context.connectionId
         );
@@ -397,6 +402,7 @@ export async function runCommand(
           width,
           height,
           isMobileView: params.isMobileView === true,
+          mediaTransport: readBrowserMediaTransport(params),
         });
         return {};
       })
@@ -721,6 +727,13 @@ function parseBrowserInput(params: QueryParams): BrowserProxyInputParams {
 
 function isMouseButton(value: string): value is BrowserProxyMouseButton {
   return value === "none" || value === "left" || value === "middle" || value === "right";
+}
+
+function readBrowserMediaTransport(params: QueryParams): BrowserProxyMediaTransport | undefined {
+  const transport = readString(params, "mediaTransport");
+  if (!transport) return undefined;
+  if (transport === "websocket-frames") return transport;
+  throw new Error("browser mediaTransport must be websocket-frames");
 }
 
 function parseScreenshotRect(
