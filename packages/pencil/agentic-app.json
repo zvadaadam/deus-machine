@@ -18,6 +18,9 @@
       "--storage",
       "{storage.workspace}"
     ],
+    "env": {
+      "DEUS_APP_AUTH_TOKEN": "{secret}"
+    },
     "ready": {
       "type": "http",
       "path": "/health",
@@ -31,13 +34,13 @@
   },
 
   "ui": {
-    "url": "http://127.0.0.1:{port}/"
+    "url": "http://127.0.0.1:{port}/#token={secret}"
   },
 
   "agent": {
     "tools": {
       "type": "mcp-http",
-      "url": "http://127.0.0.1:{port}/mcp"
+      "url": "http://127.0.0.1:{port}/mcp?token={secret}"
     },
     "bootstrap": "ALL design work happens on the live iframe canvas — every op the agent makes renders in real time and the user watches it build. Workflow: (1) `pencil_get_active` or `pencil_list_designs` to know what's open / what exists; (2) `pencil_new` to start a blank canvas, OR `pencil_open` to switch to an existing .pen; (3) `get_guidelines` once at the start (provides .pen op syntax + style); (4) `get_editor_state({ include_schema: true })` to read the document; (5) drive the design with `batch_design` ops — small batches (≤25 ops) so progress is visible. Other live tools as needed: `batch_get`, `snapshot_layout`, `get_screenshot`, `find_empty_space_on_canvas`, `replace_all_matching_properties`, `search_all_unique_properties`, `set_variables`, `get_variables`, `export_nodes`, `open_document`. Call `mcp__deus__read_app_skill({ appId: 'pencil.app' })` for full guidance."
   },

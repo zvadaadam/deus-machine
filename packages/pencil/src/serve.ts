@@ -66,7 +66,11 @@ async function main(): Promise<void> {
   }
 
   const opts = parseArgs();
-  const baseCtx = { workspace: opts.workspace, storage: opts.storage };
+  const baseCtx = {
+    workspace: opts.workspace,
+    storage: opts.storage,
+    authToken: process.env.DEUS_APP_AUTH_TOKEN,
+  };
 
   fs.mkdirSync(baseCtx.storage, { recursive: true });
   fs.mkdirSync(join(baseCtx.storage, "designs"), { recursive: true });

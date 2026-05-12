@@ -10,6 +10,7 @@ import type { ChildProcess } from "node:child_process";
 export interface Context {
   workspace: string;
   storage: string;
+  authToken?: string;
 }
 
 // ---- auth -----------------------------------------------------------------

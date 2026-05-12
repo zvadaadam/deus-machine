@@ -4,6 +4,7 @@
 // dispatch table so the surface is visible at a glance.
 
 import * as fs from "node:fs";
+import { timingSafeEqual } from "node:crypto";
 import { dirname, isAbsolute, join, relative, resolve as resolvePath } from "node:path";
 import { fileURLToPath } from "node:url";
 import type { IncomingMessage, ServerResponse } from "node:http";
@@ -31,6 +32,33 @@ import type { Context } from "./types.ts";
 function isInside(child: string, parent: string): boolean {
   const rel = relative(resolvePath(parent), resolvePath(child));
   return rel === "" || (!rel.startsWith("..") && !isAbsolute(rel));
+}
+
+function findUiDir(here: string): string {
+  const bundled = join(here, "ui");
+  if (fs.existsSync(join(bundled, "parent.html"))) return bundled;
+  return join(here, "..", "ui");
+}
+
+function tokenMatches(actual: string | undefined, expected: string): boolean {
+  if (!actual) return false;
+  const actualBytes = Buffer.from(actual);
+  const expectedBytes = Buffer.from(expected);
+  return actualBytes.length === expectedBytes.length && timingSafeEqual(actualBytes, expectedBytes);
+}
+
+export function isAuthorizedRequest(
+  req: IncomingMessage,
+  url: URL,
+  authToken: string | undefined
+): boolean {
+  if (!authToken) return true;
+  const header = req.headers["x-deus-app-token"];
+  const headerToken = Array.isArray(header) ? header[0] : header;
+  return (
+    tokenMatches(headerToken, authToken) ||
+    tokenMatches(url.searchParams.get("token") ?? undefined, authToken)
+  );
 }
 
 // MIME map for static editor asset serving.
@@ -189,36 +217,51 @@ export function createRouter(
   ctx: RouterContext
 ): (req: IncomingMessage, res: ServerResponse) => Promise<void> {
   const here = dirname(fileURLToPath(import.meta.url));
-  const uiDir = join(here, "ui");
+  const uiDir = findUiDir(here);
   const parentHtml = fs.readFileSync(join(uiDir, "parent.html"), "utf8");
   const stylesCss = fs.readFileSync(join(uiDir, "styles.css"), "utf8");
   const appJs = fs.readFileSync(join(uiDir, "app.js"), "utf8");
 
   return async (req, res) => {
     const url = req.url ?? "/";
+    const parsedUrl = new URL(url, "http://127.0.0.1");
+    const pathname = parsedUrl.pathname;
     const method = req.method ?? "GET";
 
     // --- system ----------------------------------------------------------
-    if (method === "GET" && url === "/health") {
+    if (method === "GET" && pathname === "/health") {
       return send(res, 200, "text/plain", "ok");
     }
 
-    if (method === "GET" && (url === "/" || url === "/index.html")) {
+    if (method === "GET" && (pathname === "/" || pathname === "/index.html")) {
       return send(res, 200, "text/html; charset=utf-8", parentHtml);
     }
 
-    if (method === "GET" && url === "/styles.css") {
+    if (method === "GET" && pathname === "/styles.css") {
       return send(res, 200, "text/css; charset=utf-8", stylesCss, {
         "Cache-Control": "no-cache",
       });
     }
-    if (method === "GET" && url === "/app.js") {
+    if (method === "GET" && pathname === "/app.js") {
       return send(res, 200, "application/javascript; charset=utf-8", appJs, {
         "Cache-Control": "no-cache",
       });
     }
 
-    if (method === "GET" && url === "/cli-info") {
+    // ----- editor bundle (the actual Pencil editor in iframe) ---------
+    if (method === "GET" && (pathname === "/editor" || pathname.startsWith("/editor/"))) {
+      const sub = pathname.slice("/editor".length) || "/";
+      return serveEditorFile(res, ctx.editorBundleDir, sub);
+    }
+
+    // The static shell and editor bundle are public so the iframe can boot.
+    // All stateful/local-privileged endpoints below require the per-launch
+    // secret passed by the host in the UI URL fragment or MCP query string.
+    if (!isAuthorizedRequest(req, parsedUrl, ctx.authToken)) {
+      return sendJson(res, 401, { error: "unauthorized" });
+    }
+
+    if (method === "GET" && pathname === "/cli-info") {
       try {
         const version = await getCliVersion(ctx);
         return sendJson(res, 200, { version });
@@ -227,14 +270,8 @@ export function createRouter(
       }
     }
 
-    // ----- editor bundle (the actual Pencil editor in iframe) ---------
-    if (method === "GET" && (url === "/editor" || url.startsWith("/editor/"))) {
-      const sub = url.slice("/editor".length) || "/";
-      return serveEditorFile(res, ctx.editorBundleDir, sub);
-    }
-
     // ----- editor IPC bridge (POST per request) ----------------------
-    if (method === "POST" && url === "/ipc") {
+    if (method === "POST" && pathname === "/ipc") {
       let body: ipcHost.IpcMessage;
       try {
         body = await readJsonBody<ipcHost.IpcMessage>(req);
@@ -263,7 +300,7 @@ export function createRouter(
     // SSE event; parent.html relays to the iframe; the iframe's editor
     // returns; parent.html POSTs the response here so the pending Promise
     // can resolve.
-    if (method === "POST" && url === "/ipc-response") {
+    if (method === "POST" && pathname === "/ipc-response") {
       let body: IframeReply;
       try {
         body = await readJsonBody<IframeReply>(req);
@@ -275,7 +312,7 @@ export function createRouter(
     }
 
     // ----- bridge status (debug) -----------------------------------------
-    if (method === "GET" && url === "/bridge-status") {
+    if (method === "GET" && pathname === "/bridge-status") {
       return sendJson(res, 200, {
         transport: {
           running: isTransportServerRunning(),
@@ -294,7 +331,7 @@ export function createRouter(
     // directly (open_document, batch_design …) without going through
     // pencil_open / pencil_new — without this poll, the switcher would
     // say "no design" while the canvas is full of frames.
-    if (method === "GET" && url === "/detect-active") {
+    if (method === "GET" && pathname === "/detect-active") {
       try {
         const { requestFromIframe } = await import("./iframe-rpc.ts");
         let reply: unknown;
@@ -329,7 +366,7 @@ export function createRouter(
       }
     }
 
-    if (method === "GET" && url === "/diagnostic") {
+    if (method === "GET" && pathname === "/diagnostic") {
       const cliInfo = findPencilCli();
       const resolved = auth.resolveCliKey();
       const cliEnv = buildCliEnv();
@@ -357,11 +394,11 @@ export function createRouter(
     }
 
     // --- auth -----------------------------------------------------------
-    if (method === "GET" && url === "/auth-status") {
+    if (method === "GET" && pathname === "/auth-status") {
       return sendJson(res, 200, auth.authState());
     }
 
-    if (method === "POST" && url === "/auth-set") {
+    if (method === "POST" && pathname === "/auth-set") {
       let payload: { key?: unknown };
       try {
         payload = await readJsonBody(req);
@@ -399,14 +436,14 @@ export function createRouter(
       });
     }
 
-    if (method === "POST" && url === "/auth-clear") {
+    if (method === "POST" && pathname === "/auth-clear") {
       auth.clearKey();
       auth.clearEditorSession();
       return sendJson(res, 200, { ok: true, ...auth.authState() });
     }
 
     // --- designs --------------------------------------------------------
-    if (method === "GET" && url.startsWith("/preview")) {
+    if (method === "GET" && pathname.startsWith("/preview")) {
       const previewPath = designs.getActivePreview(ctx.storage);
       if (!previewPath || !fs.existsSync(previewPath)) {
         return send(res, 204, "text/plain", "");
@@ -421,7 +458,7 @@ export function createRouter(
       return;
     }
 
-    if (method === "GET" && url === "/designs") {
+    if (method === "GET" && pathname === "/designs") {
       const list = designs.listAllDesigns(ctx);
       const cur = ops.getCurrentOp();
       const activePen = designs.getActivePen(ctx.storage);
@@ -445,7 +482,7 @@ export function createRouter(
       });
     }
 
-    if (method === "POST" && url === "/active") {
+    if (method === "POST" && pathname === "/active") {
       let payload: { file?: unknown; name?: unknown };
       try {
         payload = await readJsonBody(req);
@@ -470,7 +507,7 @@ export function createRouter(
     }
 
     // --- system handoff (reveal/open) -----------------------------------
-    if (method === "POST" && (url === "/reveal" || url === "/open-pen")) {
+    if (method === "POST" && (pathname === "/reveal" || pathname === "/open-pen")) {
       let payload: { path?: unknown };
       try {
         payload = await readJsonBody(req);
@@ -499,11 +536,11 @@ export function createRouter(
       if (process.platform !== "darwin") {
         return sendJson(res, 501, {
           ok: false,
-          error: `${url.slice(1)} only implemented on macOS`,
+          error: `${pathname.slice(1)} only implemented on macOS`,
         });
       }
       try {
-        const args = url === "/reveal" ? ["-R", target] : [target];
+        const args = pathname === "/reveal" ? ["-R", target] : [target];
         spawnSync("open", args, { stdio: "ignore", timeout: 3000 });
         return sendJson(res, 200, { ok: true });
       } catch (err) {
@@ -515,12 +552,12 @@ export function createRouter(
     }
 
     // --- ops ------------------------------------------------------------
-    if (method === "POST" && url === "/cancel") {
+    if (method === "POST" && pathname === "/cancel") {
       const id = ops.cancelCurrentOp();
       return sendJson(res, 200, { ok: Boolean(id), id });
     }
 
-    if (method === "GET" && url === "/events") {
+    if (method === "GET" && pathname === "/events") {
       res.writeHead(200, {
         "Content-Type": "text/event-stream",
         "Cache-Control": "no-cache, no-transform",
@@ -561,7 +598,7 @@ export function createRouter(
     }
 
     // --- mcp ------------------------------------------------------------
-    if (method === "POST" && url === "/mcp") {
+    if (method === "POST" && pathname === "/mcp") {
       const body = await readBody(req);
       try {
         const result = await mcp.handleMcpRequest(body, ctx);
