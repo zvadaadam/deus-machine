@@ -11,6 +11,7 @@ const VARS: TemplateVars = {
   port: 47831,
   workspace: "/repos/my-app",
   userData: "/Users/me/Library/Application Support/com.deus.app",
+  secret: "launch-secret",
   storage: {
     workspace: "/repos/my-app/.deus/apps/deus.mobile-use",
     global: "/Users/me/Library/Application Support/com.deus.app/apps/deus.mobile-use",
@@ -31,6 +32,10 @@ describe("shared/aap/template", () => {
 
     it("substitutes multiple vars in one string", () => {
       expect(substituteTemplate("{workspace}:{port}", VARS)).toBe("/repos/my-app:47831");
+    });
+
+    it("substitutes the per-launch secret", () => {
+      expect(substituteTemplate("token={secret}", VARS)).toBe("token=launch-secret");
     });
 
     it("passes literal text through", () => {

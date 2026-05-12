@@ -125,8 +125,26 @@ function setStatus(s: StatusState, text: string): void {
 
 // ---- net helpers --------------------------------------------------------
 
+const AUTH_TOKEN = new URLSearchParams(window.location.hash.replace(/^#/, "")).get("token") ?? "";
+
+function withAuthUrl(url: string): string {
+  if (!AUTH_TOKEN) return url;
+  const u = new URL(url, window.location.href);
+  u.searchParams.set("token", AUTH_TOKEN);
+  return `${u.pathname}${u.search}${u.hash}`;
+}
+
+function withAuthHeaders(headers?: HeadersInit): Headers {
+  const next = new Headers(headers);
+  if (AUTH_TOKEN) next.set("X-Deus-App-Token", AUTH_TOKEN);
+  return next;
+}
+
 async function jsonFetch<T = unknown>(url: string, init?: RequestInit): Promise<T> {
-  const res = await fetch(url, init);
+  const res = await fetch(withAuthUrl(url), {
+    ...init,
+    headers: withAuthHeaders(init?.headers),
+  });
   const text = await res.text();
   if (!res.ok) {
     throw new Error(`HTTP ${res.status} for ${url}: ${text.slice(0, 200)}`);
@@ -166,7 +184,7 @@ async function handleEditorMessage(msg: IpcMessage): Promise<void> {
   try {
     const res = await fetch("/ipc", {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: withAuthHeaders({ "Content-Type": "application/json" }),
       body: JSON.stringify(msg),
     });
     if (res.status === 202) return; // notification, no reply
@@ -207,7 +225,7 @@ async function relayEditorReply(msg: IpcMessage): Promise<void> {
   try {
     await fetch("/ipc-response", {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: withAuthHeaders({ "Content-Type": "application/json" }),
       body: JSON.stringify(msg),
     });
   } catch (err) {
@@ -252,7 +270,7 @@ function safeParse<T>(data: string, label: string): T | null {
 }
 
 function connectEvents(): void {
-  const es = new EventSource("/events");
+  const es = new EventSource(withAuthUrl("/events"));
   es.addEventListener("op-start", (ev) => {
     const op = safeParse<OpStartEvent>((ev as MessageEvent).data, "op-start");
     if (op) showRunningPill(op);
@@ -618,9 +636,9 @@ interface McpResp {
 }
 
 async function callNewDesignTool(name: string): Promise<boolean> {
-  const res = await fetch("/mcp", {
+  const res = await fetch(withAuthUrl("/mcp"), {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers: withAuthHeaders({ "Content-Type": "application/json" }),
     body: JSON.stringify({
       jsonrpc: "2.0",
       id: Date.now(),
