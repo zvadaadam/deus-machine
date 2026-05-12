@@ -20,6 +20,7 @@
 //   3. apps:launched q:event on successful ready (Phase 4 consumer)
 
 import { spawn, spawnSync, type ChildProcess } from "node:child_process";
+import { randomBytes } from "node:crypto";
 import { isAbsolute, resolve as resolvePath } from "node:path";
 
 import type { Manifest } from "@shared/aap/manifest";
@@ -272,6 +273,7 @@ async function doLaunch(
     port,
     workspace: args.workspacePath,
     userData: args.userDataDir,
+    secret: randomBytes(32).toString("base64url"),
     storage: { workspace: storageWorkspace, global: storageGlobal },
   };
 
