@@ -7,6 +7,7 @@
 //   {storage.workspace}  — absolute path to per-workspace storage dir
 //   {storage.global}     — absolute path to per-user storage dir
 //   {userData}           — absolute path of Deus user-data dir
+//   {secret}             — per-launch bearer secret for localhost app endpoints
 //
 // Used on launch args, env values, cwd, ui.url, ready.path. Any token that
 // matches the template pattern but isn't in the provided vars throws — no
@@ -16,6 +17,7 @@ export interface TemplateVars {
   port?: number;
   workspace?: string;
   userData?: string;
+  secret?: string;
   storage?: {
     workspace?: string;
     global?: string;
