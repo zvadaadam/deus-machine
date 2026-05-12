@@ -16,6 +16,40 @@ const DB_PATH = process.env.DATABASE_PATH || DEFAULT_DB_PATH;
 
 let dbInstance: Database.Database | null = null;
 
+function runMigrations(db: Database.Database): void {
+  for (const sql of MIGRATIONS) {
+    try {
+      db.exec(sql);
+    } catch (e: unknown) {
+      const msg = e instanceof Error ? e.message : "";
+      if (!isExpectedMigrationError(sql, msg)) {
+        throw e;
+      }
+    }
+  }
+}
+
+function isMissingColumnError(error: unknown): boolean {
+  return error instanceof Error && error.message.toLowerCase().includes("no such column");
+}
+
+function initializeSchema(db: Database.Database): void {
+  try {
+    db.exec(SCHEMA_SQL);
+  } catch (error) {
+    if (!isMissingColumnError(error)) {
+      throw error;
+    }
+
+    console.warn("Schema creation hit a missing column; applying migrations before retrying");
+    runMigrations(db);
+    db.exec(SCHEMA_SQL);
+    return;
+  }
+
+  runMigrations(db);
+}
+
 function initDatabase(): Database.Database {
   if (dbInstance) {
     return dbInstance;
@@ -36,22 +70,9 @@ function initDatabase(): Database.Database {
     dbInstance.pragma("busy_timeout = 5000");
     dbInstance.pragma("optimize");
 
-    // Create all tables, indexes, and triggers (idempotent)
-    dbInstance.exec(SCHEMA_SQL);
-
-    // Post-launch migrations: tolerate only the specific no-op failures that
-    // happen when a database already reflects the final schema. Anything else
-    // should fail fast so we don't silently continue with a partial migration.
-    for (const sql of MIGRATIONS) {
-      try {
-        dbInstance.exec(sql);
-      } catch (e: unknown) {
-        const msg = e instanceof Error ? e.message : "";
-        if (!isExpectedMigrationError(sql, msg)) {
-          throw e;
-        }
-      }
-    }
+    // Create all tables, indexes, and triggers (idempotent), with a migration
+    // retry for existing DBs where new indexes reference not-yet-added columns.
+    initializeSchema(dbInstance);
 
     console.log("Database connected");
     return dbInstance;
