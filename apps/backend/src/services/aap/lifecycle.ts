@@ -266,16 +266,28 @@ export async function stopChild(
  *  spec's "PATH, then app package's bin/" intent by trying, in order:
  *
  *    1. absolute command → as-is
- *    2. `<packageRoot>/package.json` `bin[command]` (npm/bun package bin)
- *    3. `<packageRoot>/bin/<command>` (convention for standalone binaries)
- *    4. `<repoRoot>/node_modules/.bin/<command>` (workspace symlinks —
+ *    2. packaged Electron-as-Node executable for `node`
+ *    3. `<packageRoot>/package.json` `bin[command]` (npm/bun package bin)
+ *    4. `<packageRoot>/bin/<command>` (convention for standalone binaries)
+ *    5. `<repoRoot>/node_modules/.bin/<command>` (workspace symlinks —
  *       what `bun run` implicitly prepends to PATH)
- *    5. fall through (return as-is; spawn will use process PATH)
+ *    6. fall through (return as-is; spawn will use process PATH)
  *
  *  Returning absolute paths means Electron / Finder-launched backends don't
  *  depend on the inherited PATH to find workspace binaries. */
 export function resolveCommand(command: string, packageRoot: string): string {
   if (isAbsolute(command)) return command;
+
+  // Packaged desktop runs the backend under Electron-as-Node. We do not ship a
+  // separate `node` binary, so app manifests that launch JS entrypoints with
+  // `node` must reuse the current Electron executable.
+  if (
+    command === "node" &&
+    process.env.DEUS_PACKAGED === "1" &&
+    process.env.ELECTRON_RUN_AS_NODE === "1"
+  ) {
+    return process.execPath;
+  }
 
   // (1.5) Path-form command (`./dist/cli.js`, `bin/foo`, etc.) — Node's spawn
   // would resolve these against `process.cwd`, but the manifest writes them
