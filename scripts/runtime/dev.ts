@@ -2,6 +2,7 @@ import { spawn, type ChildProcess } from "node:child_process";
 import { existsSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import { resolveNodeRuntimeCommand } from "./node-runtime";
 
 const runtimeDir = path.dirname(fileURLToPath(import.meta.url));
 const projectRoot = path.resolve(runtimeDir, "../..");
@@ -63,8 +64,9 @@ async function main(): Promise<void> {
 
 function startBackend(): Promise<{ process: ChildProcess; port: number } | null> {
   return new Promise((resolve) => {
+    const nodeCommand = resolveNodeRuntimeCommand();
     const child = spawn(
-      process.execPath,
+      nodeCommand,
       [path.join(projectRoot, "apps", "backend", "server.cjs")],
       {
         cwd: path.join(projectRoot, "apps", "backend"),
