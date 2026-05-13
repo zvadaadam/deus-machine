@@ -1,9 +1,13 @@
 import { createServer } from "node:http";
+import { mkdtempSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 
 import {
   isProcessAlive,
   killByPid,
+  resolveCommand,
   spawnApp,
   stopChild,
   waitForReady,
@@ -49,6 +53,25 @@ async function startProbeServer(options: { healthStatus: number } = { healthStat
 }
 
 describe("aap/lifecycle", () => {
+  describe("resolveCommand", () => {
+    it("uses the current Electron executable for node in packaged Electron-as-Node backends", () => {
+      const packageRoot = mkdtempSync(join(tmpdir(), "aap-resolve-command-"));
+      const prevPackaged = process.env.DEUS_PACKAGED;
+      const prevElectronRunAsNode = process.env.ELECTRON_RUN_AS_NODE;
+      process.env.DEUS_PACKAGED = "1";
+      process.env.ELECTRON_RUN_AS_NODE = "1";
+      try {
+        expect(resolveCommand("node", packageRoot)).toBe(process.execPath);
+      } finally {
+        if (prevPackaged === undefined) delete process.env.DEUS_PACKAGED;
+        else process.env.DEUS_PACKAGED = prevPackaged;
+        if (prevElectronRunAsNode === undefined) delete process.env.ELECTRON_RUN_AS_NODE;
+        else process.env.ELECTRON_RUN_AS_NODE = prevElectronRunAsNode;
+        rmSync(packageRoot, { recursive: true, force: true });
+      }
+    });
+  });
+
   describe("spawnApp", () => {
     it("spawns a child, fires onExit with the exit code", async () => {
       const exit = new Promise<{ code: number | null }>((resolve) => {
