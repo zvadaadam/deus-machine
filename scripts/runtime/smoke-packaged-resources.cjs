@@ -4,12 +4,10 @@ const path = require("node:path");
 const { execFileSync, spawnSync } = require("node:child_process");
 const afterPack = require("../prune-pencil-cli-binaries.cjs");
 const { verifyPackagedAgentClis } = afterPack;
+const { PROJECT_ROOT, RUNTIME_BINARIES, RUNTIME_MANIFESTS } = require("./lib/smoke-helpers.cjs");
 
-const PROJECT_ROOT = path.resolve(__dirname, "../..");
 const STAGED_BIN_ROOT = path.join(PROJECT_ROOT, "dist", "runtime", "electron", "bin");
 const DARWIN_ARCHES = ["arm64", "x64"];
-const RUNTIME_BINARIES = ["deus-runtime", "codex", "claude", "gh", "rg", "agent-browser"];
-const RUNTIME_MANIFESTS = ["deus-runtime.json", "agent-clis.json", "gh-cli.json"];
 
 function targetArches() {
   if (process.env.DEUS_RESOURCE_SMOKE_ALL_ARCHES === "1") return DARWIN_ARCHES;
