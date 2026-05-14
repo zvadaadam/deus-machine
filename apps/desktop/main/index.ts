@@ -305,7 +305,7 @@ app.whenReady().then(async () => {
     return;
   }
 
-  // Electron owns both runtime children directly: agent-server first, then backend.
+  // Backend owns agent-server startup; Electron only supervises the packaged runtime entrypoint.
 
   // Register IPC handlers before window creation so they're ready immediately
   registerNativeHandlers();

@@ -34,6 +34,7 @@ vi.mock("node:child_process", () => ({
 }));
 
 const tempRoots: string[] = [];
+const originalVerifyRuntimeRunnable = process.env.DEUS_VERIFY_RUNTIME_RUNNABLE;
 
 function createTempProjectRoot(): string {
   const projectRoot = mkdtempSync(path.join(os.tmpdir(), "deus-runtime-validate-"));
@@ -129,6 +130,8 @@ beforeEach(() => {
 });
 
 afterEach(() => {
+  if (originalVerifyRuntimeRunnable === undefined) delete process.env.DEUS_VERIFY_RUNTIME_RUNNABLE;
+  else process.env.DEUS_VERIFY_RUNTIME_RUNNABLE = originalVerifyRuntimeRunnable;
   for (const projectRoot of tempRoots.splice(0)) {
     rmSync(projectRoot, { recursive: true, force: true });
   }
@@ -143,8 +146,23 @@ describe("validateRuntimeStage", () => {
     writeGhFixtures(projectRoot);
 
     expect(() => validateRuntimeStage({ projectRoot, log: () => {} })).not.toThrow();
-    expect(validateDeusRuntimeMock).toHaveBeenCalledOnce();
+    expect(validateDeusRuntimeMock).toHaveBeenCalledWith(
+      expect.objectContaining({ projectRoot, verifyRunnable: false })
+    );
     expect(validateStagedAgentClisMock).toHaveBeenCalledOnce();
+  });
+
+  it("can require runnable native runtime validation when requested", () => {
+    const projectRoot = createTempProjectRoot();
+    writeProjectFixture(projectRoot);
+    stageRuntime({ projectRoot, log: () => {} });
+    writeGhFixtures(projectRoot);
+    process.env.DEUS_VERIFY_RUNTIME_RUNNABLE = "1";
+
+    expect(() => validateRuntimeStage({ projectRoot, log: () => {} })).not.toThrow();
+    expect(validateDeusRuntimeMock).toHaveBeenCalledWith(
+      expect.objectContaining({ projectRoot, verifyRunnable: true })
+    );
   });
 
   it("fails when the staged GitHub CLI is missing", () => {
