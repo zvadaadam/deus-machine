@@ -320,6 +320,7 @@ async function run(command: RuntimeCommand, dataDir?: string): Promise<void> {
         resourcesPath: layout.resourcesPath,
         nodeEnv: process.env.NODE_ENV ?? "",
         nodePath: process.env.NODE_PATH ?? "",
+        pathEnv: process.env.PATH ?? "",
         nodeGlobalPaths: NodeModule.globalPaths,
         runtimeKey: getRuntimeKey(),
         binaries,
