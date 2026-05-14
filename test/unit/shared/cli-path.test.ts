@@ -63,6 +63,22 @@ describe("cli path helpers", () => {
     expect(resolveCliExecutable("gh")).toBe("gh");
   });
 
+  it("does not resolve a bundled file that is not executable", () => {
+    const dir = mkdtempSync(path.join(tmpdir(), "deus-cli-path-mode-"));
+    const filePath = path.join(dir, process.platform === "win32" ? "gh.exe" : "gh");
+    process.env.DEUS_BUNDLED_BIN_DIR = dir;
+
+    try {
+      writeFileSync(filePath, "");
+      if (process.platform !== "win32") chmodSync(filePath, 0o644);
+
+      const expected = process.platform === "win32" ? filePath : null;
+      expect(resolveBundledCliPath("gh")).toBe(expected);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
   it("does not fall back to PATH in packaged runtime mode", () => {
     process.env.DEUS_PACKAGED = "1";
     process.env.DEUS_BUNDLED_BIN_DIR = "/Applications/Deus.app/Contents/Resources/bin";
