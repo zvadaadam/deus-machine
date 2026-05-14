@@ -2,14 +2,14 @@ import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 
 // ── Mocks ──────────────────────────────────────────────────────────────────
 
-const mockExecSync = vi.fn();
 const mockExecFileSync = vi.fn();
 const mockExistsSync = vi.fn();
 const mockSendError = vi.fn();
 const mockEmitSessionError = vi.fn();
+const mockResolveBundledCliPath = vi.fn();
+const mockGetBundledCliPathCandidates = vi.fn();
 
 vi.mock("child_process", () => ({
-  execSync: (...args: unknown[]) => mockExecSync(...args),
   execFileSync: (...args: unknown[]) => mockExecFileSync(...args),
 }));
 
@@ -25,6 +25,11 @@ vi.mock("../event-broadcaster", () => ({
   },
 }));
 
+vi.mock("@shared/lib/cli-path", () => ({
+  resolveBundledCliPath: (...args: unknown[]) => mockResolveBundledCliPath(...args),
+  getBundledCliPathCandidates: (...args: unknown[]) => mockGetBundledCliPathCandidates(...args),
+}));
+
 import {
   discoverExecutable,
   blockIfNotInitialized,
@@ -38,9 +43,8 @@ function makeConfig(overrides?: Partial<DiscoveryConfig>): DiscoveryConfig {
   return {
     agentHarness: "claude",
     displayName: "TestCLI",
-    envVar: "TEST_CLI_PATH",
-    staticCandidates: [],
-    shellCommand: "testcli",
+    envVars: ["TEST_CLI_PATH"],
+    bundledTool: "claude",
     versionFlag: "-v",
     ...overrides,
   };
@@ -62,7 +66,14 @@ describe("discoverExecutable", () => {
   const originalEnv = { ...process.env };
 
   beforeEach(() => {
-    vi.clearAllMocks();
+    mockExecFileSync.mockReset();
+    mockExistsSync.mockReset();
+    mockSendError.mockReset();
+    mockEmitSessionError.mockReset();
+    mockResolveBundledCliPath.mockReset();
+    mockGetBundledCliPathCandidates.mockReset();
+    mockResolveBundledCliPath.mockReturnValue(null);
+    mockGetBundledCliPathCandidates.mockReturnValue([]);
     // Reset env to avoid leaking between tests
     delete process.env.TEST_CLI_PATH;
   });
@@ -71,48 +82,44 @@ describe("discoverExecutable", () => {
     process.env = { ...originalEnv };
   });
 
-  it("succeeds when the first static candidate verifies", () => {
+  it("accepts the bundled runtime candidate without executing it", () => {
     mockExistsSync.mockReturnValue(true);
-    mockExecSync.mockImplementation(() => {
-      throw new Error("shell discovery failed");
-    });
-    mockExecFileSync.mockReturnValueOnce("1.0.0");
 
-    const { result, state } = runDiscovery({ staticCandidates: ["/usr/bin/testcli"] });
+    mockResolveBundledCliPath.mockReturnValue("/usr/bin/testcli");
+    const { result, state } = runDiscovery();
 
     expect(result.success).toBe(true);
     expect(state.executablePath).toBe("/usr/bin/testcli");
     expect(state.result).toEqual({ success: true, path: "/usr/bin/testcli" });
+    expect(mockExecFileSync).not.toHaveBeenCalled();
   });
 
-  it("tries the next candidate when the first fails verification", () => {
+  it("tries the bundled candidate when an override fails verification", () => {
     mockExistsSync
       .mockReturnValueOnce(true) // /bad/path exists
       .mockReturnValueOnce(true); // /good/path exists
-    mockExecSync.mockImplementation(() => {
-      throw new Error("shell discovery failed");
-    });
     mockExecFileSync
       .mockImplementationOnce(() => {
         throw new Error("version check failed");
       })
       .mockReturnValueOnce("2.0.0");
 
-    const { result, state } = runDiscovery({ staticCandidates: ["/bad/path", "/good/path"] });
+    process.env.TEST_CLI_PATH = "/bad/path";
+    mockResolveBundledCliPath.mockReturnValue("/good/path");
+    const { result, state } = runDiscovery();
 
     expect(result.success).toBe(true);
     expect(state.executablePath).toBe("/good/path");
+    expect(mockExecFileSync).toHaveBeenCalledTimes(1);
   });
 
-  it("tries the next candidate when version validation rejects the first", () => {
+  it("tries the bundled candidate when version validation rejects the override", () => {
     mockExistsSync.mockReturnValue(true);
-    mockExecSync.mockImplementation(() => {
-      throw new Error("shell discovery failed");
-    });
-    mockExecFileSync.mockReturnValueOnce("0.1.0").mockReturnValueOnce("2.0.0");
+    mockExecFileSync.mockReturnValueOnce("0.1.0");
+    process.env.TEST_CLI_PATH = "/old/path";
+    mockResolveBundledCliPath.mockReturnValue("/new/path");
 
     const { result, state } = runDiscovery({
-      staticCandidates: ["/old/path", "/new/path"],
       validateVersion: (versionOutput) =>
         versionOutput === "2.0.0"
           ? { success: true }
@@ -121,21 +128,21 @@ describe("discoverExecutable", () => {
 
     expect(result.success).toBe(true);
     expect(state.executablePath).toBe("/new/path");
+    expect(mockExecFileSync).toHaveBeenCalledTimes(1);
   });
 
   it("returns error when all candidates fail", () => {
     mockExistsSync.mockReturnValue(false);
-    mockExecSync.mockImplementation(() => {
-      throw new Error("not found");
-    });
     mockExecFileSync.mockImplementation(() => {
       throw new Error("not found");
     });
+    process.env.TEST_CLI_PATH = "/missing/a";
+    mockResolveBundledCliPath.mockReturnValue("/missing/b");
 
-    const { result, state } = runDiscovery({ staticCandidates: ["/missing/a", "/missing/b"] });
+    const { result, state } = runDiscovery();
 
     expect(result.success).toBe(false);
-    expect(result.error).toContain("Failed to find TestCLI executable");
+    expect(result.error).toContain("Failed to initialize TestCLI executable");
     expect(result.error).toContain("/missing/a");
     expect(result.error).toContain("/missing/b");
     expect(state.result?.success).toBe(false);
@@ -143,11 +150,9 @@ describe("discoverExecutable", () => {
 
   it("skips path-like candidates that don't exist on disk", () => {
     mockExistsSync.mockReturnValue(false);
-    mockExecSync.mockImplementation(() => {
-      throw new Error("not found");
-    });
+    mockResolveBundledCliPath.mockReturnValue("/nonexistent/cli");
 
-    const { result } = runDiscovery({ staticCandidates: ["/nonexistent/cli"] });
+    const { result } = runDiscovery();
 
     expect(result.success).toBe(false);
     expect(mockExecFileSync).not.toHaveBeenCalled();
@@ -156,106 +161,84 @@ describe("discoverExecutable", () => {
   it("uses env var override with highest priority", () => {
     process.env.TEST_CLI_PATH = "/env/override/cli";
     mockExistsSync.mockReturnValue(true);
-    mockExecSync.mockImplementation(() => {
-      throw new Error("shell discovery");
-    });
     mockExecFileSync.mockReturnValueOnce("3.0.0");
+    mockResolveBundledCliPath.mockReturnValue("/static/cli");
 
-    const { result, state } = runDiscovery({ staticCandidates: ["/static/cli"] });
+    const { result, state } = runDiscovery();
 
     expect(result.success).toBe(true);
     expect(state.executablePath).toBe("/env/override/cli");
   });
 
-  it("skips shell discovery for packaged desktop", () => {
+  it("does not use shell discovery", () => {
     process.env.DEUS_PACKAGED = "1";
     mockExistsSync.mockReturnValue(false);
+    mockResolveBundledCliPath.mockReturnValue(null);
+    mockGetBundledCliPathCandidates.mockReturnValue(["/missing/cli"]);
 
-    runDiscovery({ staticCandidates: ["/missing/cli"] });
+    const { result } = runDiscovery();
 
-    expect(mockExecSync).not.toHaveBeenCalled();
+    expect(result.success).toBe(false);
+    expect(mockExecFileSync).not.toHaveBeenCalled();
   });
 
-  it("invokes extraCandidates callback and uses results", () => {
-    const extraFn = vi.fn().mockReturnValue(["/extra/path"]);
+  it("uses bundled runtime candidate after env overrides", () => {
     mockExistsSync.mockReturnValue(true);
-    mockExecSync.mockImplementation(() => {
-      throw new Error("shell discovery");
-    });
-    mockExecFileSync.mockReturnValueOnce("4.0.0");
+    mockResolveBundledCliPath.mockReturnValue("/extra/path");
 
-    const { result, state } = runDiscovery({ extraCandidates: extraFn });
+    const { result, state } = runDiscovery();
 
-    expect(extraFn).toHaveBeenCalled();
     expect(result.success).toBe(true);
     expect(state.executablePath).toBe("/extra/path");
+    expect(mockExecFileSync).not.toHaveBeenCalled();
   });
 
-  it("continues when extraCandidates throws", () => {
+  it("rejects bare command names as custom overrides", () => {
+    process.env.TEST_CLI_PATH = "testcli";
     mockExistsSync.mockReturnValue(true);
-    mockExecSync.mockImplementation(() => {
-      throw new Error("shell discovery");
-    });
-    mockExecFileSync.mockReturnValueOnce("5.0.0");
 
-    const { result, state } = runDiscovery({
-      staticCandidates: ["/fallback/cli"],
-      extraCandidates: () => {
-        throw new Error("resolve failed");
-      },
-    });
+    const { result } = runDiscovery();
 
-    expect(result.success).toBe(true);
-    expect(state.executablePath).toBe("/fallback/cli");
+    expect(result.success).toBe(false);
+    expect(mockExecFileSync).not.toHaveBeenCalled();
+    expect(result.error).toContain("custom overrides must be executable paths");
   });
 
-  it("uses execFileSync with node for .js candidates", () => {
+  it("rejects .js candidates", () => {
+    process.env.TEST_CLI_PATH = "/usr/lib/cli.js";
     mockExistsSync.mockReturnValue(true);
-    mockExecSync.mockImplementation(() => {
-      throw new Error("shell discovery");
-    });
-    mockExecFileSync.mockReturnValueOnce("6.0.0");
 
-    runDiscovery({ staticCandidates: ["/usr/lib/cli.js"] });
+    const { result } = runDiscovery();
 
-    // Verification uses execFileSync with "node" as first arg and path in args array
-    expect(mockExecFileSync).toHaveBeenCalledWith(
-      "node",
-      ["/usr/lib/cli.js", "-v"],
-      expect.objectContaining({ encoding: "utf-8", timeout: 5000 })
-    );
+    expect(result.success).toBe(false);
+    expect(mockExecFileSync).not.toHaveBeenCalled();
+    expect(result.error).toContain("JavaScript CLI wrappers are not supported");
   });
 
   it("uses execFileSync with candidate directly for native binaries", () => {
+    process.env.TEST_CLI_PATH = "/usr/bin/testcli";
     mockExistsSync.mockReturnValue(true);
-    mockExecSync.mockImplementation(() => {
-      throw new Error("shell discovery");
-    });
     mockExecFileSync.mockReturnValueOnce("7.0.0");
 
-    runDiscovery({ staticCandidates: ["/usr/bin/testcli"] });
+    runDiscovery();
 
     // Native binary: candidate is the executable, versionFlag in args array
     expect(mockExecFileSync).toHaveBeenCalledWith(
       "/usr/bin/testcli",
       ["-v"],
-      expect.objectContaining({ encoding: "utf-8", timeout: 5000 })
+      expect.objectContaining({ encoding: "utf-8", timeout: 20000 })
     );
   });
 
-  it("deduplicates candidates from extraCandidates", () => {
+  it("deduplicates env and bundled candidates", () => {
     mockExistsSync.mockReturnValue(true);
-    mockExecSync.mockImplementation(() => {
-      throw new Error("shell discovery");
-    });
     mockExecFileSync.mockImplementation(() => {
       throw new Error("verify failed");
     });
+    process.env.TEST_CLI_PATH = "/usr/bin/cli";
+    mockResolveBundledCliPath.mockReturnValue("/usr/bin/cli");
 
-    runDiscovery({
-      staticCandidates: ["/usr/bin/cli"],
-      extraCandidates: () => ["/usr/bin/cli"], // duplicate
-    });
+    runDiscovery();
 
     // Should only try to verify /usr/bin/cli once (not twice for the duplicate)
     const verifyCalls = mockExecFileSync.mock.calls.filter(
