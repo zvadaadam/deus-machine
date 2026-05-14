@@ -7,9 +7,17 @@ const { verifyPackagedAgentClis } = afterPack;
 
 const PROJECT_ROOT = path.resolve(__dirname, "../..");
 const STAGED_BIN_ROOT = path.join(PROJECT_ROOT, "dist", "runtime", "electron", "bin");
-const TARGET_ARCHES = ["arm64", "x64"];
+const DARWIN_ARCHES = ["arm64", "x64"];
 const RUNTIME_BINARIES = ["deus-runtime", "codex", "claude", "gh", "rg", "agent-browser"];
 const RUNTIME_MANIFESTS = ["deus-runtime.json", "agent-clis.json", "gh-cli.json"];
+
+function targetArches() {
+  if (process.env.DEUS_RESOURCE_SMOKE_ALL_ARCHES === "1") return DARWIN_ARCHES;
+  if (process.platform === "darwin" && (process.arch === "arm64" || process.arch === "x64")) {
+    return [process.arch];
+  }
+  return DARWIN_ARCHES;
+}
 
 function copyFile(src, dest) {
   if (!fs.existsSync(src)) {
@@ -38,18 +46,13 @@ function copyRuntimeBin(resourcesDir, arch) {
 }
 
 function copyNodePtyPayload(resourcesDir, arch) {
-  const nodePtyRoot = path.join(
-    resourcesDir,
-    "app.asar.unpacked",
-    "node_modules",
-    "node-pty"
-  );
+  const nodePtyRoot = path.join(resourcesDir, "app.asar.unpacked", "node_modules", "node-pty");
   copyFile(
     path.join(PROJECT_ROOT, "node_modules", "node-pty", "package.json"),
     path.join(nodePtyRoot, "package.json")
   );
 
-  for (const candidateArch of TARGET_ARCHES) {
+  for (const candidateArch of DARWIN_ARCHES) {
     const sourcePrebuildDir = path.join(
       PROJECT_ROOT,
       "node_modules",
@@ -83,21 +86,26 @@ function copyCanvasPayload(resourcesDir, arch) {
     path.join(unpackedNodeModules, "@napi-rs", "canvas", "package.json")
   );
 
-  for (const candidateArch of TARGET_ARCHES) {
+  for (const candidateArch of DARWIN_ARCHES) {
     const packageName = `canvas-darwin-${candidateArch}`;
     const sourcePackageDir = path.join(PROJECT_ROOT, "node_modules", "@napi-rs", packageName);
+    const targetPackageDir = path.join(unpackedNodeModules, "@napi-rs", packageName);
+
+    if (candidateArch !== arch && !fs.existsSync(sourcePackageDir)) {
+      writeFile(
+        path.join(targetPackageDir, "package.json"),
+        JSON.stringify({ name: `@napi-rs/${packageName}`, private: true })
+      );
+      continue;
+    }
+
     copyFile(
       path.join(sourcePackageDir, "package.json"),
-      path.join(unpackedNodeModules, "@napi-rs", packageName, "package.json")
+      path.join(targetPackageDir, "package.json")
     );
     copyFile(
       path.join(sourcePackageDir, `skia.darwin-${candidateArch}.node`),
-      path.join(
-        unpackedNodeModules,
-        "@napi-rs",
-        packageName,
-        `skia.darwin-${candidateArch}.node`
-      )
+      path.join(targetPackageDir, `skia.darwin-${candidateArch}.node`)
     );
   }
 }
@@ -200,12 +208,7 @@ function signPackagedPayloads(resourcesDir, arch) {
     path.join(unpackedNodeModules, "better-sqlite3", "build", "Release", "better_sqlite3.node"),
     path.join(unpackedNodeModules, "node-pty", "prebuilds", `darwin-${arch}`, "pty.node"),
     path.join(unpackedNodeModules, "node-pty", "prebuilds", `darwin-${arch}`, "spawn-helper"),
-    path.join(
-      unpackedNodeModules,
-      "@napi-rs",
-      `canvas-darwin-${arch}`,
-      `skia.darwin-${arch}.node`
-    ),
+    path.join(unpackedNodeModules, "@napi-rs", `canvas-darwin-${arch}`, `skia.darwin-${arch}.node`),
   ];
 
   for (const filePath of payloads) {
@@ -254,7 +257,7 @@ async function smokeArch(arch) {
 }
 
 void (async () => {
-  for (const arch of TARGET_ARCHES) {
+  for (const arch of targetArches()) {
     await smokeArch(arch);
   }
 })().catch((error) => {
