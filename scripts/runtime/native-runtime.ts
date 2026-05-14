@@ -36,6 +36,24 @@ const REQUIRED_RUNTIME_ENTITLEMENTS = [
   "com.apple.security.cs.allow-unsigned-executable-memory",
   "com.apple.security.cs.disable-library-validation",
 ] as const;
+const VERSION_CHECK_ENV_DENYLIST = [
+  "AGENT_SERVER_CWD",
+  "AGENT_SERVER_ENTRY",
+  "AUTH_TOKEN",
+  "DATABASE_PATH",
+  "DEUS_AUTH_TOKEN",
+  "DEUS_BACKEND_PORT",
+  "DEUS_BUNDLED_BIN_DIR",
+  "DEUS_DATA_DIR",
+  "DEUS_PACKAGED",
+  "DEUS_RESOURCES_PATH",
+  "DEUS_RUNTIME",
+  "DEUS_RUNTIME_COMMAND",
+  "DEUS_RUNTIME_EXECUTABLE",
+  "ELECTRON_RUN_AS_NODE",
+  "NODE_PATH",
+  "PORT",
+] as const;
 
 export const DEUS_RUNTIME_TARGETS = [
   {
@@ -465,14 +483,17 @@ export function buildDeusRuntime(options: BuildDeusRuntimeOptions = {}): DeusRun
 
 export function verifyStagedDeusRuntimeVersion(executablePath: string): string {
   const helperPath = path.join(runtimeDir, "run-version-check.cjs");
+  const env: NodeJS.ProcessEnv = { ...process.env };
+  for (const key of VERSION_CHECK_ENV_DENYLIST) {
+    delete env[key];
+  }
+  env.DEUS_VERSION_CHECK_TIMEOUT_MS = String(VERIFY_TIMEOUT_MS);
+  env.DEUS_VERSION_CHECK_STOP_TIMEOUT_MS = String(VERIFY_STOP_TIMEOUT_MS);
+
   const result = spawnSync(process.execPath, [helperPath, executablePath, "--version"], {
     encoding: "utf8",
     timeout: VERIFY_TIMEOUT_MS + VERIFY_STOP_TIMEOUT_MS + 5_000,
-    env: {
-      ...process.env,
-      DEUS_VERSION_CHECK_TIMEOUT_MS: String(VERIFY_TIMEOUT_MS),
-      DEUS_VERSION_CHECK_STOP_TIMEOUT_MS: String(VERIFY_STOP_TIMEOUT_MS),
-    },
+    env,
     stdio: ["ignore", "pipe", "pipe"],
   });
   const rawOutput = (result.stdout || "").trim();
