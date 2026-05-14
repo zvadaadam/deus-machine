@@ -351,13 +351,12 @@ function handleSendMessage(params: QueryParams): CommandResult {
   const activeGoal = getGoal(sessionId);
   const activeGoalContext = goalContextForSession(sessionId);
   const effectiveTurnOptions =
-    activeGoal?.status === "active" && activeGoalContext
+    agentHarness === "codex-server" && activeGoal?.status === "active" && activeGoalContext
       ? {
           ...turnOptions,
           model: activeGoal.model,
           thinkingLevel: activeGoal.thinkingLevel,
           goalContext: activeGoalContext,
-          allowQuestions: activeGoal.allowQuestions,
         }
       : turnOptions;
 
@@ -389,9 +388,12 @@ export function handleGoalStart(params: QueryParams): CommandResult {
   const request = GoalStartRequestSchema.parse(params);
   const objective = request.objective.trim();
   if (!objective) throw new Error("goalStart requires a non-empty objective");
+  if (request.agentHarness !== "codex-server") {
+    throw new Error("Goals are currently supported only for Codex.");
+  }
 
   const context = prepareSessionForSend(request.sessionId, request.agentHarness);
-  const messageContent = `/goal ${objective}${request.tokenBudget ? ` --tokens ${request.tokenBudget}` : ""}${request.allowQuestions === false ? " --no-questions" : ""}`;
+  const messageContent = `/goal ${objective}${request.tokenBudget ? ` --tokens ${request.tokenBudget}` : ""}`;
   const result = writeUserMessage(request.sessionId, messageContent, request.model);
   if (!result.success) throw new Error(result.error);
   invalidate(["workspaces", "sessions", "session", "messages", "stats"], {
@@ -413,12 +415,12 @@ export function handleGoalStart(params: QueryParams): CommandResult {
     tokenBudget: request.tokenBudget ?? null,
     model: request.model,
     thinkingLevel: request.thinkingLevel,
-    allowQuestions: request.allowQuestions,
   });
   const resolved = withServerResolvedCwd(params, context);
   const cwd = readString(resolved, "cwd") || "";
   const turnOptions: QueryOptions = {
     ...buildGoalTurnOptions(goal, cwd, context.existingAgentSessionId),
+    goalAction: "start",
     providerEnvVars: readString(params, "providerEnvVars"),
     ghToken: readString(params, "ghToken"),
     deusEnv: params.deusEnv as Record<string, string> | undefined,
@@ -456,13 +458,23 @@ export function handleGoalStart(params: QueryParams): CommandResult {
   return { commandId: result.messageId, goal: activeGoal };
 }
 
-export function handleGoalCancel(params: QueryParams): CommandResult {
+export async function handleGoalCancel(params: QueryParams): Promise<CommandResult> {
   const request = GoalCancelRequestSchema.parse(params);
+  const goal = getGoal(request.sessionId);
   const ended = deleteGoal(request.sessionId, "cancelled");
   if (ended) {
     pushGoalEnded(ended);
   }
   invalidate(["goal"], { sessionIds: [request.sessionId] });
+
+  if ((goal?.status === "active" || goal?.status === "paused") && agentService.isConnected()) {
+    try {
+      await agentService.stopSession({ sessionId: request.sessionId });
+    } catch (error) {
+      console.error("[CommandHandler] Failed to clear native goal on cancel:", error);
+    }
+  }
+
   return { success: true, goal: ended };
 }
 

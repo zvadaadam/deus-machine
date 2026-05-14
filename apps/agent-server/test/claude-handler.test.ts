@@ -306,41 +306,6 @@ describe("claude-handler", () => {
       expect(sdkCall.options.mcpServers.deus).toBeDefined();
     });
 
-    it("passes allowQuestions through to the Deus MCP server", async () => {
-      const mockQuery = {
-        [Symbol.asyncIterator]: () => ({
-          next: async () => ({ value: undefined, done: true }),
-        }),
-        interrupt: vi.fn().mockResolvedValue(undefined),
-        setPermissionMode: vi.fn().mockResolvedValue(undefined),
-        setModel: vi.fn().mockResolvedValue(undefined),
-        setMaxThinkingTokens: vi.fn().mockResolvedValue(undefined),
-      };
-      mockClaudeSDK.mockReturnValue(mockQuery);
-
-      await handler.query("sess-no-questions", "hello", {
-        cwd: "/test",
-        model: "claude-sonnet-4-6",
-        allowQuestions: false,
-        goalContext: {
-          objective: "Ship goal mode",
-          tokenBudget: null,
-          spentTokens: 0,
-          startedAt: 100,
-        },
-      });
-
-      await new Promise((r) => setTimeout(r, 100));
-
-      expect(createDeusMCPServer).toHaveBeenCalledWith(
-        "sess-no-questions",
-        expect.objectContaining({
-          includeGoalTools: true,
-          includeAskUserQuestion: false,
-        })
-      );
-    });
-
     it("excludes MCP server when strictDataPrivacy is true", async () => {
       const mockQuery = {
         [Symbol.asyncIterator]: () => ({

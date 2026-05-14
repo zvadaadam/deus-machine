@@ -1,14 +1,19 @@
 // backend/src/services/goals/goal-rpc.ts
-// Backend-owned handler for model calls to update_goal.
+// Backend-owned handler for native provider goal terminal-state notifications.
 
 import { GoalUpdateRequestSchema } from "@shared/goals";
-import { completeGoal } from "./goal-store";
+import { budgetLimitGoalFromProvider, completeGoal } from "./goal-store";
 import { pushGoalEnded } from "./goal-events";
 import { invalidate } from "../query-engine";
 
 export async function handleGoalUpdate(params: unknown): Promise<unknown> {
   const request = GoalUpdateRequestSchema.parse(params);
-  const ended = completeGoal(request.sessionId, request.summary);
+  const options =
+    request.spentTokens === undefined ? undefined : { spentTokens: request.spentTokens };
+  const ended =
+    request.status === "complete"
+      ? completeGoal(request.sessionId, request.summary, options)
+      : budgetLimitGoalFromProvider(request.sessionId, options);
   if (!ended) {
     return { ok: false, message: "No active goal for this session." };
   }
@@ -18,7 +23,8 @@ export async function handleGoalUpdate(params: unknown): Promise<unknown> {
   return {
     ok: true,
     goal: ended,
-    message: "Goal completion recorded.",
+    message:
+      request.status === "complete" ? "Goal completion recorded." : "Goal budget limit recorded.",
     completionBudgetReport:
       ended.tokenBudget === null
         ? null

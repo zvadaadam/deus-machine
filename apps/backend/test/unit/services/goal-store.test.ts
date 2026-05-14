@@ -20,6 +20,7 @@ vi.mock("../../../src/lib/database", () => ({
 
 import {
   budgetLimitGoal,
+  budgetLimitGoalFromProvider,
   clearGoalsForTest,
   completeGoal,
   createGoal,
@@ -51,7 +52,6 @@ describeWithDb("goal-store", () => {
       tokenBudget: 200_000,
       model: "claude-sonnet-4-6",
       thinkingLevel: "HIGH",
-      allowQuestions: false,
       now: 100,
     });
 
@@ -60,7 +60,6 @@ describeWithDb("goal-store", () => {
       status: "active",
       tokenBudget: 200_000,
       spentTokens: 0,
-      allowQuestions: false,
     });
 
     const ended = deleteGoal("sess-1", "cancelled");
@@ -127,9 +126,28 @@ describeWithDb("goal-store", () => {
       tokenBudget: null,
       model: "claude-sonnet-4-6",
     });
-    const complete = completeGoal("sess-1", "Done");
-    expect(complete).toMatchObject({ reason: "complete", summary: "Done", status: "complete" });
-    expect(getGoal("sess-1")).toMatchObject({ status: "complete" });
+    const complete = completeGoal("sess-1", "Done", { spentTokens: 42 });
+    expect(complete).toMatchObject({
+      reason: "complete",
+      summary: "Done",
+      status: "complete",
+      spentTokens: 42,
+    });
+    expect(getGoal("sess-1")).toMatchObject({ status: "complete", spentTokens: 42 });
+
+    clearGoalsForTest();
+    createGoal({
+      sessionId: "sess-1",
+      objective: "Finish",
+      tokenBudget: 100,
+      model: "claude-sonnet-4-6",
+    });
+    const nativeBudget = budgetLimitGoalFromProvider("sess-1", { spentTokens: 123 });
+    expect(nativeBudget).toMatchObject({
+      reason: "budget_limited",
+      status: "budget_limited",
+      spentTokens: 123,
+    });
   });
 });
 

@@ -55,7 +55,7 @@ export const QueryOptionsSchema = z.object({
   resume: z.string().min(1).optional(),
   resumeSessionAt: z.string().min(1).optional(),
   goalContext: GoalContextSchema.optional(),
-  allowQuestions: z.boolean().optional(),
+  goalAction: z.enum(["start", "continue"]).optional(),
 });
 export type QueryOptions = z.infer<typeof QueryOptionsSchema>;
 

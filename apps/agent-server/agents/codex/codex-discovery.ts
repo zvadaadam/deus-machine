@@ -2,8 +2,6 @@
 // Codex CLI executable discovery — thin wrapper over shared cli-discovery.
 // Preserves the same 3 exported functions that codex-handler.ts imports.
 
-import * as path from "path";
-import * as fs from "fs";
 import {
   discoverExecutable,
   blockIfNotInitialized as sharedBlock,
@@ -36,25 +34,8 @@ export function initializeCodex(): { success: boolean; error?: string } {
       agentHarness: "codex-sdk",
       displayName: "Codex",
       envVar: "CODEX_CLI_PATH",
-      staticCandidates: [
-        ...getPackagedCodexCandidates(),
-        "/opt/homebrew/lib/node_modules/@openai/codex/bin/codex.js",
-      ],
-      shellCommand: "codex",
+      staticCandidates: getPackagedCodexCandidates(),
       versionFlag: "--version",
-      extraCandidates: () => {
-        // Try to find the binary bundled with @openai/codex npm package
-        try {
-          const codexPkgPath = require.resolve("@openai/codex/package.json");
-          const codexDir = path.dirname(codexPkgPath);
-          const binPath = path.join(codexDir, "bin", "codex.js");
-          if (fs.existsSync(binPath)) return [binPath];
-        } catch {
-          // @openai/codex not installed as a direct dependency
-        }
-        return [];
-      },
-      skipShellDiscovery: process.env.DEUS_PACKAGED === "1",
     },
     state
   );

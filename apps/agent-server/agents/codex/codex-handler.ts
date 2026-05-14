@@ -17,7 +17,6 @@ import { classifyError, handleCancellation, handleQueryError } from "../lifecycl
 import { createPartEventEmitter } from "../part-event-emitter";
 import type { AgentCapabilities, AgentHandler, QueryOptions } from "../registry";
 import { buildAgentEnvironment, buildWorkspaceContext } from "../environment";
-import { buildGoalSystemPrompt } from "../../goals/prompt";
 import { initializeCodex, blockIfNotInitialized, getCodexExecutablePath } from "./codex-discovery";
 import { codexSessions, abortCodexSession, type CodexSessionState } from "./codex-session";
 
@@ -212,15 +211,11 @@ export class CodexAgentHandler implements AgentHandler {
       // Inject workspace context via config.developer_instructions
       // so it lands in the system prompt, not the user message.
       const workspaceContext = buildWorkspaceContext(options?.cwd);
-      const goalPrompt = options.goalContext ? buildGoalSystemPrompt(options.goalContext) : "";
-      const developerInstructions = [workspaceContext, goalPrompt].filter(Boolean).join("\n\n");
       const codex = new Codex({
         apiKey,
         codexPathOverride: codexPath || undefined,
         env,
-        ...(developerInstructions
-          ? { config: { developer_instructions: developerInstructions } }
-          : {}),
+        ...(workspaceContext ? { config: { developer_instructions: workspaceContext } } : {}),
       });
 
       const threadOptions: ThreadOptions = {

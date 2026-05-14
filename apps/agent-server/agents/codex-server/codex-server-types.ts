@@ -122,6 +122,46 @@ export interface CodexTurnInterruptParams {
   turnId: string;
 }
 
+export type CodexThreadGoalStatus = "active" | "paused" | "budgetLimited" | "complete";
+
+export interface CodexThreadGoal {
+  threadId: string;
+  objective: string;
+  status: CodexThreadGoalStatus;
+  tokenBudget: number | null;
+  tokensUsed: number;
+  timeUsedSeconds: number;
+  createdAt: number;
+  updatedAt: number;
+}
+
+export interface CodexThreadGoalSetParams {
+  threadId: string;
+  objective?: string | null;
+  status?: CodexThreadGoalStatus | null;
+  tokenBudget?: number | null;
+}
+
+export interface CodexThreadGoalSetResponse {
+  goal: CodexThreadGoal;
+}
+
+export interface CodexThreadGoalGetParams {
+  threadId: string;
+}
+
+export interface CodexThreadGoalGetResponse {
+  goal: CodexThreadGoal | null;
+}
+
+export interface CodexThreadGoalClearParams {
+  threadId: string;
+}
+
+export interface CodexThreadGoalClearResponse {
+  cleared: boolean;
+}
+
 export interface CodexDynamicToolSpec {
   namespace?: string | null;
   name: string;
@@ -252,6 +292,11 @@ export type CodexAppServerNotification =
   | { method: "thread/started"; params: { thread: CodexThread } }
   | { method: "thread/status/changed"; params: { threadId: string; status: unknown } }
   | {
+      method: "thread/goal/updated";
+      params: { threadId: string; turnId?: string | null; goal: CodexThreadGoal };
+    }
+  | { method: "thread/goal/cleared"; params: { threadId: string } }
+  | {
       method: "thread/tokenUsage/updated";
       params: { threadId: string; turnId: string; tokenUsage: CodexThreadTokenUsage };
     }
@@ -335,6 +380,12 @@ export interface CodexAppServerRequestMap {
   "thread/resume": { params: CodexThreadResumeParams; result: CodexThreadResponse };
   "thread/fork": { params: CodexThreadForkParams; result: CodexThreadResponse };
   "thread/rollback": { params: CodexThreadRollbackParams; result: CodexThreadResponse };
+  "thread/goal/set": { params: CodexThreadGoalSetParams; result: CodexThreadGoalSetResponse };
+  "thread/goal/get": { params: CodexThreadGoalGetParams; result: CodexThreadGoalGetResponse };
+  "thread/goal/clear": {
+    params: CodexThreadGoalClearParams;
+    result: CodexThreadGoalClearResponse;
+  };
   "turn/start": { params: CodexTurnStartParams; result: CodexTurnStartResponse };
   "turn/interrupt": { params: CodexTurnInterruptParams; result: unknown };
 }

@@ -205,8 +205,6 @@ export class ClaudeAgentHandler implements AgentHandler {
           additionalDirectories: options.additionalDirectories,
           chromeEnabled: options.chromeEnabled,
           strictDataPrivacy: options.strictDataPrivacy,
-          goalActive: !!options.goalContext,
-          allowQuestions: options.allowQuestions ?? true,
         },
         currentModel: options.model,
         currentThinkingLevel: requestedThinkingLevel,

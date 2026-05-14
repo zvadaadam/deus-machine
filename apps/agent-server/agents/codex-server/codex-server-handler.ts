@@ -3,22 +3,10 @@
 // `codex` SDK/exec handler so we can expose and iterate on app-server behavior
 // without changing current Codex sessions.
 
-import { uuidv7 } from "@shared/lib/uuid";
 import { EventBroadcaster } from "../../event-broadcaster";
-import { codexAppServerAdapter } from "../../messages/codex-app-server-adapter";
 import { classifyError, handleCancellation, handleQueryError } from "../lifecycle";
-import { createPartEventEmitter } from "../part-event-emitter";
 import type { AgentCapabilities, AgentHandler, QueryOptions } from "../registry";
 import { buildAgentEnvironment, buildWorkspaceContext } from "../environment";
-import { buildGoalSystemPrompt } from "../../goals/prompt";
-import {
-  ASK_USER_QUESTION_TOOL_NAME,
-  createAskUserQuestionDynamicToolSpec,
-  createUpdateGoalDynamicToolSpec,
-  handleAskUserQuestionDynamicToolCall,
-  handleUpdateGoalDynamicToolCall,
-  UPDATE_GOAL_TOOL_NAME,
-} from "../../goals/tool";
 import {
   blockIfCodexServerNotInitialized,
   getCodexServerExecutablePath,
@@ -31,20 +19,18 @@ import {
   codexServerSessions,
   type CodexServerSessionState,
 } from "./codex-server-session";
-import type {
-  CodexAppServerNotification,
-  CodexReasoningEffort,
-  CodexSandboxPolicy,
-  CodexTurn,
-  CodexThreadStartParams,
-  CodexDynamicToolCallParams,
-} from "./codex-server-types";
-import { parseThinkingLevel } from "../thinking-levels";
-
-type CodexServerTurnCompletion = {
-  status: CodexTurn["status"];
-  error?: string;
-};
+import {
+  buildCodexThreadParams,
+  buildCodexTurnStartParams,
+  mapCodexThinkingLevel,
+} from "./codex-server-config";
+import {
+  clearNativeGoal,
+  ensureNativeGoal,
+  nativeGoalOwnsTurn,
+  syncNativeGoalUpdate,
+} from "./codex-server-goals";
+import { CodexServerTurnWatcher } from "./codex-server-turn-watcher";
 
 export class CodexServerAgentHandler implements AgentHandler {
   readonly agentHarness = "codex-server" as const;
@@ -85,6 +71,8 @@ export class CodexServerAgentHandler implements AgentHandler {
     session.cancelledByUser = true;
     session.abortController?.abort();
 
+    await clearNativeGoal(session);
+
     if (session.appServer && session.threadId && session.turnId) {
       try {
         await session.appServer.request("turn/interrupt", {
@@ -112,36 +100,24 @@ export class CodexServerAgentHandler implements AgentHandler {
     const queryId = `${sessionId}/${Date.now()}/codex-server`;
     const abortController = new AbortController();
     let session: CodexServerSessionState | undefined;
-
-    let unsubscribe: (() => void) | undefined;
+    let turnWatcher: CodexServerTurnWatcher | undefined;
 
     try {
       if (!options.model) {
         throw new Error(`[codex-server-handler] options.model is required (session=${sessionId})`);
       }
-      const effort = mapThinkingLevel(options.thinkingLevel);
+      const effort = mapCodexThinkingLevel(options.thinkingLevel);
 
       const previousSession = codexServerSessions.get(sessionId);
-      const wantsGoalTools = !!options.goalContext;
-      const allowQuestions = options.allowQuestions !== false;
-      const shouldStartFreshThreadForGoalMode =
-        !!previousSession?.threadId &&
-        (previousSession.goalToolsActive !== wantsGoalTools ||
-          previousSession.allowQuestions !== allowQuestions);
       const sessionState: CodexServerSessionState = {
-        threadId: shouldStartFreshThreadForGoalMode ? undefined : previousSession?.threadId,
-        turnId: shouldStartFreshThreadForGoalMode ? undefined : previousSession?.turnId,
+        threadId: previousSession?.threadId,
+        turnId: previousSession?.turnId,
         appServer: previousSession?.appServer,
         abortController,
         currentModel: options.model,
         cwd: options.cwd,
         isRunning: true,
-        goalToolsActive: shouldStartFreshThreadForGoalMode
-          ? undefined
-          : previousSession?.goalToolsActive,
-        allowQuestions: shouldStartFreshThreadForGoalMode
-          ? undefined
-          : previousSession?.allowQuestions,
+        nativeGoalKnown: previousSession?.nativeGoalKnown,
       };
       session = sessionState;
       codexServerSessions.set(sessionId, sessionState);
@@ -165,8 +141,8 @@ export class CodexServerAgentHandler implements AgentHandler {
       }
 
       const workspaceContext = buildWorkspaceContext(options.cwd);
-      const threadParams = this.buildThreadParams(options, workspaceContext);
-      const shouldResume = !wantsGoalTools && !sessionState.threadId && !!resumeThreadId;
+      const threadParams = buildCodexThreadParams(options, workspaceContext);
+      const shouldResume = !sessionState.threadId && !!resumeThreadId;
 
       if (shouldResume) {
         const response = await sessionState.appServer.request("thread/resume", {
@@ -175,17 +151,12 @@ export class CodexServerAgentHandler implements AgentHandler {
           excludeTurns: true,
         });
         sessionState.threadId = response.thread.id;
-        sessionState.goalToolsActive = false;
-        sessionState.allowQuestions = allowQuestions;
+        EventBroadcaster.emitAgentSessionId(sessionId, response.thread.id);
         console.log(`[${queryId}] Resumed thread: ${response.thread.id}`);
       } else if (!sessionState.threadId) {
         const response = await sessionState.appServer.request("thread/start", threadParams);
         sessionState.threadId = response.thread.id;
-        sessionState.goalToolsActive = wantsGoalTools;
-        sessionState.allowQuestions = allowQuestions;
-        if (!wantsGoalTools) {
-          EventBroadcaster.emitAgentSessionId(sessionId, response.thread.id);
-        }
+        EventBroadcaster.emitAgentSessionId(sessionId, response.thread.id);
         console.log(`[${queryId}] Started thread: ${response.thread.id}`);
       }
 
@@ -193,81 +164,33 @@ export class CodexServerAgentHandler implements AgentHandler {
         throw new Error("Codex app-server did not return a thread id");
       }
 
-      const messageId = uuidv7();
-      const transformer = codexAppServerAdapter.createTransformer({
+      turnWatcher = new CodexServerTurnWatcher({
         sessionId,
-        messageId,
-        turnId: options.turnId,
-      });
-      const partEmitter = createPartEventEmitter({
-        sessionId,
-        agentHarness: "codex-server",
-        fallbackMessageId: messageId,
-        getParts: () => transformer.getParts(),
+        session: sessionState,
+        queryOptions: options,
+        abortSignal: abortController.signal,
+        onNativeGoalUpdate: (goal) => syncNativeGoalUpdate(sessionId, goal),
       });
 
-      let activeTurnId: string | undefined;
-      const turnCompletion = new Promise<CodexServerTurnCompletion>((resolve, reject) => {
-        const abortHandler = () => reject(new Error("Codex app-server turn aborted"));
-        abortController.signal.addEventListener("abort", abortHandler, { once: true });
+      if (options.goalContext) {
+        const goal = await ensureNativeGoal(sessionState, options);
+        turnWatcher.setGoalStatus(goal?.status);
+      }
 
-        unsubscribe = sessionState.appServer!.onNotification((notification) => {
-          const threadId = getNotificationThreadId(notification);
-          const belongsToRootThread = notificationBelongsToThread(
-            notification,
-            sessionState.threadId
-          );
-          const belongsToKnownSubagent =
-            !!threadId && transformer.isKnownSubagentThread?.(threadId) === true;
+      if (!nativeGoalOwnsTurn(options)) {
+        const turn = await sessionState.appServer.request(
+          "turn/start",
+          buildCodexTurnStartParams(options, {
+            threadId: sessionState.threadId,
+            prompt,
+            effort,
+          }),
+          { signal: abortController.signal }
+        );
+        turnWatcher.markStartedTurn(turn.turn.id);
+      }
 
-          if (!belongsToRootThread && !belongsToKnownSubagent) return;
-
-          if (notification.method === "turn/started" && belongsToRootThread) {
-            activeTurnId = notification.params.turn.id;
-            sessionState.turnId = activeTurnId;
-          }
-
-          if (belongsToRootThread && !notificationBelongsToTurn(notification, activeTurnId)) return;
-
-          partEmitter.emitMany(transformer.process(notification));
-
-          if (notification.method === "turn/completed" && belongsToRootThread) {
-            activeTurnId = notification.params.turn.id;
-            sessionState.turnId = activeTurnId;
-            abortController.signal.removeEventListener("abort", abortHandler);
-            resolve({
-              status: notification.params.turn.status,
-              error: notification.params.turn.error?.message,
-            });
-          } else if (notification.method === "error" && belongsToRootThread) {
-            abortController.signal.removeEventListener("abort", abortHandler);
-            reject(new Error(notification.params.error.message));
-          }
-        });
-      });
-
-      const turn = await sessionState.appServer.request(
-        "turn/start",
-        {
-          threadId: sessionState.threadId,
-          input: [{ type: "text", text: prompt, text_elements: [] }],
-          cwd: options.cwd,
-          approvalPolicy: "never",
-          sandboxPolicy: buildWorkspaceWriteSandbox(options),
-          model: options.model,
-          effort,
-          summary: "auto",
-        },
-        { signal: abortController.signal }
-      );
-
-      activeTurnId = activeTurnId ?? turn.turn.id;
-      sessionState.turnId = activeTurnId;
-
-      const completedTurn = await turnCompletion;
-
-      const finished = transformer.finish();
-      partEmitter.emitMany(finished.events);
+      const completedTurn = await turnWatcher.completion;
 
       if (completedTurn.status === "interrupted") {
         handleCancellation(sessionId, "codex-server", true);
@@ -307,112 +230,18 @@ export class CodexServerAgentHandler implements AgentHandler {
         }
       }
     } finally {
-      unsubscribe?.();
+      turnWatcher?.dispose();
       if (session && codexServerSessions.owns(sessionId, session)) {
         session.isRunning = false;
       }
     }
   }
 
-  private buildThreadParams(
-    options: QueryOptions,
-    workspaceContext: string
-  ): CodexThreadStartParams {
-    const goalPrompt = options.goalContext ? buildGoalSystemPrompt(options.goalContext) : "";
-    const developerInstructions = [workspaceContext, goalPrompt].filter(Boolean).join("\n\n");
-    return {
-      model: options.model ?? null,
-      cwd: options.cwd,
-      approvalPolicy: "never",
-      sandbox: "workspace-write",
-      developerInstructions: developerInstructions || null,
-      ...(options.goalContext
-        ? {
-            dynamicTools: [
-              createUpdateGoalDynamicToolSpec(),
-              ...(options.allowQuestions !== false ? [createAskUserQuestionDynamicToolSpec()] : []),
-            ],
-          }
-        : {}),
-      config: {
-        "features.collaboration_modes": true,
-      },
-    };
-  }
-
   private async handleAppServerRequest(
-    sessionId: string,
+    _sessionId: string,
     method: string,
-    params: unknown
+    _params: unknown
   ): Promise<unknown> {
-    if (method !== "item/tool/call") {
-      throw new Error(`Unsupported Codex app-server request: ${method}`);
-    }
-    const call = params as Partial<CodexDynamicToolCallParams>;
-    if (call.tool === UPDATE_GOAL_TOOL_NAME) {
-      return handleUpdateGoalDynamicToolCall(sessionId, call.arguments);
-    }
-    if (call.tool === ASK_USER_QUESTION_TOOL_NAME) {
-      return handleAskUserQuestionDynamicToolCall(sessionId, call.arguments);
-    }
-    throw new Error(`Unsupported dynamic tool: ${call.tool ?? "unknown"}`);
+    throw new Error(`Unsupported Codex app-server request: ${method}`);
   }
-}
-
-function buildWorkspaceWriteSandbox(options: QueryOptions): CodexSandboxPolicy {
-  return {
-    type: "workspaceWrite",
-    writableRoots: [options.cwd, ...(options.additionalDirectories ?? [])],
-    networkAccess: true,
-    excludeTmpdirEnvVar: false,
-    excludeSlashTmp: false,
-  };
-}
-
-function mapThinkingLevel(level: QueryOptions["thinkingLevel"]): CodexReasoningEffort | null {
-  const parsed = parseThinkingLevel(level, "Codex");
-  switch (parsed) {
-    case "NONE":
-      return "none";
-    case "LOW":
-      return "low";
-    case "MEDIUM":
-      return "medium";
-    case "HIGH":
-      return "high";
-    case "XHIGH":
-      return "xhigh";
-    default:
-      return null;
-  }
-}
-
-function notificationBelongsToThread(
-  notification: CodexAppServerNotification,
-  threadId: string | undefined
-): boolean {
-  if (!threadId) return true;
-  const notificationThreadId = getNotificationThreadId(notification);
-  if (!notificationThreadId) return true;
-  return notificationThreadId === threadId;
-}
-
-function getNotificationThreadId(notification: CodexAppServerNotification): string | undefined {
-  const params = notification.params;
-  if (!params || typeof params !== "object" || !("threadId" in params)) return undefined;
-  const threadId = (params as { threadId?: unknown }).threadId;
-  return typeof threadId === "string" ? threadId : undefined;
-}
-
-function notificationBelongsToTurn(
-  notification: CodexAppServerNotification,
-  turnId: string | undefined
-): boolean {
-  if (!turnId) return true;
-  if (notification.method === "turn/started" || notification.method === "turn/completed") {
-    return notification.params.turn.id === turnId;
-  }
-  const params = notification.params;
-  if (!params || typeof params !== "object" || !("turnId" in params)) return true;
-  return (params as { turnId?: string }).turnId === turnId;
 }

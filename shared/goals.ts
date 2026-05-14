@@ -1,6 +1,6 @@
 // shared/goals.ts
-// Provider-neutral goal state shared by the backend orchestrator, agent-server
-// adapters, and frontend status UI.
+// Persisted goal mirror shared by the backend, Codex app-server adapter, and
+// frontend status UI.
 
 import { z } from "zod";
 import { AgentHarnessSchema } from "./enums";
@@ -28,7 +28,6 @@ export const ActiveGoalSchema = z.object({
   timeUsedSeconds: z.number().int().nonnegative(),
   createdAt: z.number().int().nonnegative(),
   updatedAt: z.number().int().nonnegative(),
-  allowQuestions: z.boolean(),
 });
 export type ActiveGoal = z.infer<typeof ActiveGoalSchema>;
 
@@ -48,7 +47,6 @@ export const GoalStartRequestSchema = z.object({
   model: z.string().min(1),
   agentHarness: AgentHarnessSchema,
   thinkingLevel: GoalThinkingLevelSchema.optional(),
-  allowQuestions: z.boolean().optional(),
 });
 export type GoalStartRequest = z.infer<typeof GoalStartRequestSchema>;
 
@@ -64,7 +62,8 @@ export type GoalResumeRequest = z.infer<typeof GoalResumeRequestSchema>;
 
 export const GoalUpdateRequestSchema = z.object({
   sessionId: z.string().min(1),
-  status: z.literal("complete"),
+  status: z.enum(["complete", "budget_limited"]),
   summary: z.string().optional(),
+  spentTokens: z.number().int().nonnegative().optional(),
 });
 export type GoalUpdateRequest = z.infer<typeof GoalUpdateRequestSchema>;

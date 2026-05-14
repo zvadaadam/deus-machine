@@ -105,6 +105,17 @@ bun run test:agent-server     # apps/agent-server/test/
 
 Vitest with `vi.mock()` and `vi.hoisted()`. Tests live outside `src/` — never colocate.
 
+### Desktop App Testing Skill
+
+When testing the Electron desktop app with native macOS automation, use the project skill
+`cua-desktop-testing`:
+
+- Codex: `.codex/skills/cua-desktop-testing/SKILL.md`
+- Claude: `.claude/skills/cua-desktop-testing/SKILL.md`
+
+Use it for desktop-only bugs, Electron boot issues, CUA driver workflows, packaged runtime
+binary checks, and end-to-end flows that cross renderer → backend → agent-server.
+
 ## Code Style
 
 Detailed conventions for Tailwind v4, components, animations, and performance live in `.claude/skills/deus-code-style/`. Read the relevant file before writing or reviewing code.

@@ -27,6 +27,7 @@ const {
       emitSessionError: vi.fn(),
       emitSessionCancelled: vi.fn(),
       emitMessageCancelled: vi.fn(),
+      requestUpdateGoal: vi.fn(),
     },
     mockClient,
     mockCodexAppServerClient: vi.fn(function () {
@@ -153,8 +154,9 @@ describe("CodexServerAgentHandler", () => {
     );
   });
 
-  it("starts a fresh unpersisted Codex thread when entering goal mode", async () => {
+  it("enables native Codex goals and keeps the existing thread when entering goal mode", async () => {
     const threadStartParams: unknown[] = [];
+    const goalSetParams: unknown[] = [];
     let startedThreads = 0;
 
     mockClient.request.mockImplementation(async (method: string, params: any) => {
@@ -171,6 +173,27 @@ describe("CodexServerAgentHandler", () => {
         });
         return { turn: { id: `turn-${startedThreads}`, status: "inProgress" } };
       }
+      if (method === "thread/goal/set") {
+        goalSetParams.push(params);
+        queueMicrotask(() => {
+          notificationHandler?.({
+            method: "thread/goal/updated",
+            params: {
+              threadId: params.threadId,
+              goal: nativeGoal(
+                params.threadId,
+                params.objective,
+                "complete",
+                params.tokenBudget,
+                321
+              ),
+            },
+          });
+        });
+        return {
+          goal: nativeGoal(params.threadId, params.objective, "active", params.tokenBudget),
+        };
+      }
       return {};
     });
 
@@ -181,50 +204,7 @@ describe("CodexServerAgentHandler", () => {
     await handler.query("sess-goal", "goal", {
       cwd: "/repo",
       model: "gpt-5.5",
-      goalContext: {
-        objective: "Ship goal mode",
-        tokenBudget: null,
-        spentTokens: 0,
-        startedAt: 100,
-      },
-    });
-    await flushAsyncWork();
-
-    expect(threadStartParams).toHaveLength(2);
-    expect(threadStartParams[0]).not.toHaveProperty("dynamicTools");
-    expect(threadStartParams[1]).toMatchObject({
-      dynamicTools: [
-        expect.objectContaining({ name: "update_goal" }),
-        expect.objectContaining({ name: "askUserQuestion" }),
-      ],
-    });
-    expect(mockEventBroadcaster.emitAgentSessionId).toHaveBeenCalledTimes(1);
-    expect(mockEventBroadcaster.emitAgentSessionId).toHaveBeenCalledWith("sess-goal", "thread-1");
-  });
-
-  it("omits askUserQuestion dynamic tool when goal questions are disabled", async () => {
-    const threadStartParams: unknown[] = [];
-
-    mockClient.request.mockImplementation(async (method: string, params: any) => {
-      if (method === "thread/start") {
-        threadStartParams.push(params);
-        return { thread: { id: "thread-no-questions" } };
-      }
-      if (method === "turn/start") {
-        queueMicrotask(() => {
-          emitTurn("turn/started", "inProgress", undefined, params.threadId);
-          emitTurn("turn/completed", "completed", undefined, params.threadId);
-        });
-        return { turn: { id: "turn-1", status: "inProgress" } };
-      }
-      return {};
-    });
-
-    const handler = new CodexServerAgentHandler();
-    await handler.query("sess-no-questions", "goal", {
-      cwd: "/repo",
-      model: "gpt-5.5",
-      allowQuestions: false,
+      goalAction: "start",
       goalContext: {
         objective: "Ship goal mode",
         tokenBudget: null,
@@ -236,8 +216,122 @@ describe("CodexServerAgentHandler", () => {
 
     expect(threadStartParams).toHaveLength(1);
     expect(threadStartParams[0]).toMatchObject({
-      dynamicTools: [expect.objectContaining({ name: "update_goal" })],
+      config: {
+        "features.collaboration_modes": true,
+        "features.goals": true,
+      },
     });
+    expect(threadStartParams[0]).not.toHaveProperty("dynamicTools");
+    expect(goalSetParams).toEqual([
+      {
+        threadId: "thread-1",
+        objective: "Ship goal mode",
+        status: "active",
+        tokenBudget: null,
+      },
+    ]);
+    expect(mockEventBroadcaster.emitAgentSessionId).toHaveBeenCalledTimes(1);
+    expect(mockEventBroadcaster.emitAgentSessionId).toHaveBeenCalledWith("sess-goal", "thread-1");
+  });
+
+  it("lets native Codex goals own explicit goal continuations", async () => {
+    const requestedMethods: string[] = [];
+
+    mockClient.request.mockImplementation(async (method: string, params: any) => {
+      requestedMethods.push(method);
+      if (method === "thread/start") return { thread: { id: "thread-native-goal" } };
+      if (method === "thread/goal/set") {
+        queueMicrotask(() => {
+          emitTurn("turn/started", "inProgress", undefined, params.threadId);
+          emitTurn("turn/completed", "completed", undefined, params.threadId);
+          notificationHandler?.({
+            method: "thread/goal/updated",
+            params: {
+              threadId: params.threadId,
+              goal: nativeGoal(
+                params.threadId,
+                params.objective,
+                "complete",
+                params.tokenBudget,
+                321
+              ),
+            },
+          });
+        });
+        return {
+          goal: nativeGoal(params.threadId, params.objective, "active", params.tokenBudget),
+        };
+      }
+      return {};
+    });
+
+    const handler = new CodexServerAgentHandler();
+    await handler.query("sess-native-goal", "goal", {
+      cwd: "/repo",
+      model: "gpt-5.5",
+      goalAction: "start",
+      goalContext: {
+        objective: "Ship goal mode",
+        tokenBudget: 1000,
+        spentTokens: 0,
+        startedAt: 100,
+      },
+    });
+    await flushAsyncWork();
+
+    expect(requestedMethods).toContain("thread/goal/set");
+    expect(requestedMethods).not.toContain("turn/start");
+    expect(mockEventBroadcaster.requestUpdateGoal).toHaveBeenCalledWith({
+      sessionId: "sess-native-goal",
+      status: "complete",
+      summary: "Codex marked the native goal complete.",
+      spentTokens: 321,
+    });
+  });
+
+  it("does not inject legacy dynamic goal tools for native goal sessions", async () => {
+    const threadStartParams: unknown[] = [];
+
+    mockClient.request.mockImplementation(async (method: string, params: any) => {
+      if (method === "thread/start") {
+        threadStartParams.push(params);
+        return { thread: { id: "thread-no-questions" } };
+      }
+      if (method === "thread/goal/get") {
+        return { goal: nativeGoal(params.threadId, "Ship goal mode", "active", null) };
+      }
+      if (method === "turn/start") {
+        queueMicrotask(() => {
+          emitTurn("turn/started", "inProgress", undefined, params.threadId);
+          emitTurn("turn/completed", "completed", undefined, params.threadId);
+          notificationHandler?.({
+            method: "thread/goal/updated",
+            params: {
+              threadId: params.threadId,
+              goal: nativeGoal(params.threadId, "Ship goal mode", "complete", null),
+            },
+          });
+        });
+        return { turn: { id: "turn-1", status: "inProgress" } };
+      }
+      return {};
+    });
+
+    const handler = new CodexServerAgentHandler();
+    await handler.query("sess-no-questions", "goal", {
+      cwd: "/repo",
+      model: "gpt-5.5",
+      goalContext: {
+        objective: "Ship goal mode",
+        tokenBudget: null,
+        spentTokens: 0,
+        startedAt: 100,
+      },
+    });
+    await flushAsyncWork();
+
+    expect(threadStartParams).toHaveLength(1);
+    expect(threadStartParams[0]).not.toHaveProperty("dynamicTools");
     expect(JSON.stringify(threadStartParams[0])).not.toContain("askUserQuestion");
   });
 
@@ -258,6 +352,25 @@ describe("CodexServerAgentHandler", () => {
         },
       },
     });
+  }
+
+  function nativeGoal(
+    threadId: string,
+    objective: string,
+    status: "active" | "paused" | "budgetLimited" | "complete",
+    tokenBudget: number | null,
+    tokensUsed = 0
+  ) {
+    return {
+      threadId,
+      objective,
+      status,
+      tokenBudget,
+      tokensUsed,
+      timeUsedSeconds: 0,
+      createdAt: 100,
+      updatedAt: 100,
+    };
   }
 });
 

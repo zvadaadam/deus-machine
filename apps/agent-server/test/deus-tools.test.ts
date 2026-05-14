@@ -121,16 +121,6 @@ describe("createDeusMCPServer", () => {
     expect(toolNames).toContain("recording_status");
   });
 
-  it("omits AskUserQuestion when questions are disabled", () => {
-    const noQuestionServer = createDeusMCPServer(SESSION_ID, {
-      includeAskUserQuestion: false,
-    });
-    const toolNames = Object.keys(getRegisteredTools(noQuestionServer.instance));
-
-    expect(toolNames).not.toContain("AskUserQuestion");
-    expect(toolNames).toContain("GetWorkspaceDiff");
-  });
-
   // ==========================================================================
   // AskUserQuestion
   // ==========================================================================

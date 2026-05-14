@@ -26,6 +26,13 @@ function spawnCommand(
   });
 }
 
+function getHostRuntimeKey(): string | null {
+  if (process.platform === "darwin" && (process.arch === "arm64" || process.arch === "x64")) {
+    return `darwin-${process.arch}`;
+  }
+  return null;
+}
+
 async function ensureAgentServerBundle(): Promise<void> {
   const bundlePath = path.join(projectRoot, "apps", "agent-server", "dist", "index.bundled.cjs");
   if (existsSync(bundlePath)) return;
@@ -62,6 +69,8 @@ async function main(): Promise<void> {
 }
 
 function startBackend(): Promise<{ process: ChildProcess; port: number } | null> {
+  const runtimeKey = getHostRuntimeKey();
+
   return new Promise((resolve) => {
     const child = spawn(
       process.execPath,
@@ -80,6 +89,19 @@ function startBackend(): Promise<{ process: ChildProcess; port: number } | null>
             "index.bundled.cjs"
           ),
           AGENT_SERVER_CWD: path.join(projectRoot, "apps", "agent-server"),
+          DEUS_PROJECT_ROOT: projectRoot,
+          ...(runtimeKey
+            ? {
+                DEUS_BUNDLED_BIN_DIR: path.join(
+                  projectRoot,
+                  "dist",
+                  "runtime",
+                  "electron",
+                  "bin",
+                  runtimeKey
+                ),
+              }
+            : {}),
         },
       }
     );
