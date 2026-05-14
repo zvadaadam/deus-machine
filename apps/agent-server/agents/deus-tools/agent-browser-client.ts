@@ -131,11 +131,34 @@ async function buildArgs(args: string[]): Promise<string[]> {
  * Hardcoded so both sides agree without manual env var configuration.
  */
 const STREAM_PORT = "9223";
+const AGENT_BROWSER_CHILD_ENV_DENYLIST = [
+  "AGENT_SERVER_CWD",
+  "AGENT_SERVER_ENTRY",
+  "AUTH_TOKEN",
+  "DATABASE_PATH",
+  "DEUS_AUTH_TOKEN",
+  "DEUS_BACKEND_PORT",
+  "DEUS_BUNDLED_BIN_DIR",
+  "DEUS_DATA_DIR",
+  "DEUS_PACKAGED",
+  "DEUS_RESOURCES_PATH",
+  "DEUS_RUNTIME",
+  "DEUS_RUNTIME_COMMAND",
+  "DEUS_RUNTIME_EXECUTABLE",
+  "ELECTRON_RUN_AS_NODE",
+  "NODE_PATH",
+  "PORT",
+] as const;
 
 /** Build env for agent-browser subprocess */
 function buildEnv(sessionId: string): NodeJS.ProcessEnv {
+  const env: NodeJS.ProcessEnv = { ...process.env };
+  for (const key of AGENT_BROWSER_CHILD_ENV_DENYLIST) {
+    delete env[key];
+  }
+
   return {
-    ...process.env,
+    ...env,
     AGENT_BROWSER_SESSION: sessionId,
     AGENT_BROWSER_HEADED: "1",
     AGENT_BROWSER_STREAM_PORT: STREAM_PORT,

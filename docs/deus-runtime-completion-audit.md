@@ -35,6 +35,7 @@ Status: implementation is staged, but the overall goal is not complete until dir
 - Staged and packaged `--version` verification helpers scrub stale backend/runtime env before launching `deus-runtime`, `codex`, `claude`, `gh`, or `rg`, so afterPack and runnable-validation checks cannot inherit obsolete Electron-as-Node, `NODE_PATH`, bundled-bin, data-dir, auth, or port settings.
 - Desktop CLI lookup/auth and backend `gh` service child processes now scrub stale runtime-only env while still resolving packaged `gh` through bundled `Resources/bin`.
 - `syncShellEnvironment()` now returns immediately under `DEUS_PACKAGED`/`DEUS_RUNTIME`, so future packaged call paths cannot import a login-shell PATH after packaged main has selected deterministic `Resources/bin` plus system paths.
+- Agent-server `agent-browser` subprocesses now scrub runtime-only env as well, so the bundled browser helper does not inherit Electron-as-Node, `NODE_PATH`, or `DEUS_RUNTIME_EXECUTABLE` from `deus-runtime`.
 - `b72f4d96 test: smoke current desktop runtime contract` verifies current Electron main source by bundling it to a temporary output and checking the packaged `deus-runtime` launch contract.
 - `fa6cfca7 test: tighten packaged main runtime guard` makes the before-pack and app.asar smoke checks share the stricter packaged main runtime contract assertion.
 - `87f66d88 docs: record runtime resign diagnostic` records that ad-hoc re-signing a temporary runtime copy does not bypass this host's provenance/Gatekeeper launch blocker.
