@@ -220,16 +220,44 @@ jobs:
           mount_dir="$(mktemp -d "${RUNNER_TEMP}/deus-dmg.XXXXXX")"
           copied_root="$(mktemp -d "${RUNNER_TEMP}/deus-app.XXXXXX")"
           copied_app="$copied_root/Deus.app"
-          smoke_log="$(mktemp "${RUNNER_TEMP}/deus-smoke.XXXXXX.log")"
-          smoke_db="$(mktemp "${RUNNER_TEMP}/deus-smoke.XXXXXX.db")"
+          self_test_log="$(mktemp "${RUNNER_TEMP}/deus-self-test.XXXXXX.log")"
+          agent_log="$(mktemp "${RUNNER_TEMP}/deus-agent-server.XXXXXX.log")"
+          backend_log="$(mktemp "${RUNNER_TEMP}/deus-backend.XXXXXX.log")"
+          smoke_data_dir="$(mktemp -d "${RUNNER_TEMP}/deus-smoke-data.XXXXXX")"
           attached=0
+          agent_pid=""
           backend_pid=""
 
-          cleanup() {
-            if [[ -n "$backend_pid" ]]; then
-              kill "$backend_pid" 2>/dev/null || true
-              wait "$backend_pid" 2>/dev/null || true
+          stop_pid() {
+            local pid="$1"
+            if [[ -n "$pid" ]]; then
+              kill "$pid" 2>/dev/null || true
+              wait "$pid" 2>/dev/null || true
             fi
+          }
+
+          wait_for_log() {
+            local pid="$1"
+            local log_path="$2"
+            local pattern="$3"
+            local label="$4"
+            for _ in {1..45}; do
+              if grep -qE "$pattern" "$log_path"; then
+                return 0
+              fi
+              if ! kill -0 "$pid" 2>/dev/null; then
+                break
+              fi
+              sleep 1
+            done
+            echo "::error::${label} did not reach readiness"
+            cat "$log_path" || true
+            return 1
+          }
+
+          cleanup() {
+            stop_pid "$backend_pid"
+            stop_pid "$agent_pid"
             if [[ "$attached" -eq 1 ]]; then
               hdiutil detach "$mount_dir" -quiet || true
             fi
@@ -244,36 +272,46 @@ jobs:
 
           app_bin="$copied_app/Contents/MacOS/Deus"
           resources_dir="$copied_app/Contents/Resources"
+          runtime_bin="$resources_dir/bin/deus-runtime"
           test -x "$resources_dir/simulator/simbridge"
           test -f "$resources_dir/simulator/siminspector.dylib"
-
-          ELECTRON_RUN_AS_NODE=1 \
-          DATABASE_PATH="$smoke_db" \
-          AUTH_TOKEN=smoke \
-          PORT=0 \
-          CDP_PORT=19222 \
-          DEUS_PACKAGED=1 \
-          DEUS_RESOURCES_PATH="$resources_dir" \
-          DEUS_BUNDLED_BIN_DIR="$resources_dir/bin" \
-          DEVICE_USE_SIMBRIDGE="$resources_dir/simulator/simbridge" \
-          DEVICE_USE_SIMINSPECTOR="$resources_dir/simulator/siminspector.dylib" \
-          AGENT_SERVER_ENTRY="$resources_dir/bin/index.bundled.cjs" \
-          AGENT_SERVER_CWD="$resources_dir/bin" \
-          NODE_PATH="$resources_dir/app.asar/node_modules" \
-          "$app_bin" "$resources_dir/backend/server.bundled.cjs" >"$smoke_log" 2>&1 &
-          backend_pid=$!
-
-          for _ in {1..30}; do
-            if grep -q '^\[BACKEND_PORT\]' "$smoke_log"; then
-              break
-            fi
-            if ! kill -0 "$backend_pid" 2>/dev/null; then
-              break
-            fi
-            sleep 1
+          test -x "$app_bin"
+          for binary in deus-runtime codex claude gh rg; do
+            test -x "$resources_dir/bin/$binary"
           done
 
-          grep -q '^\[BACKEND_PORT\]' "$smoke_log"
+          node scripts/runtime/smoke-packaged-app.cjs \
+            --app "$copied_app" \
+            --run-version-checks
+
+          "$runtime_bin" --version
+          "$runtime_bin" self-test >"$self_test_log"
+          node - "$self_test_log" <<'NODE'
+          const fs = require("fs");
+          const result = JSON.parse(fs.readFileSync(process.argv[2], "utf8"));
+          if (!result.ok) {
+            console.error(result);
+            process.exit(1);
+          }
+          NODE
+
+          PATH="$resources_dir/bin:/usr/bin:/bin:/usr/sbin:/sbin" \
+          "$runtime_bin" agent-server >"$agent_log" 2>&1 &
+          agent_pid=$!
+          wait_for_log "$agent_pid" "$agent_log" 'LISTEN_URL=' "deus-runtime agent-server"
+          stop_pid "$agent_pid"
+          agent_pid=""
+
+          PATH="$resources_dir/bin:/usr/bin:/bin:/usr/sbin:/sbin" \
+          "$runtime_bin" backend --data-dir "$smoke_data_dir" >"$backend_log" 2>&1 &
+          backend_pid=$!
+          wait_for_log "$backend_pid" "$backend_log" '^\[agent-server\] LISTEN_URL=' "deus-runtime backend managed agent-server"
+          wait_for_log "$backend_pid" "$backend_log" '^\[BACKEND_PORT\]' "deus-runtime backend"
+
+          if grep -E 'spawn (codex|claude).*ENOENT|ELECTRON_RUN_AS_NODE|resources/backend|AGENT_SERVER_ENTRY|global CLI' "$agent_log" "$backend_log"; then
+            echo "::error::Packaged runtime smoke used an obsolete runtime path"
+            exit 1
+          fi
 
       - name: Clean up Apple API key
         if: always()
