@@ -208,7 +208,7 @@ jobs:
             xcrun stapler validate "$dmg_path"
           done < <(find dist-electron -maxdepth 1 -name '*.dmg' -type f | sort)
 
-      - name: Smoke test packaged runtime from DMG copy
+      - name: Smoke test packaged runtime and desktop from DMG copy
         run: |
           set -euo pipefail
 
