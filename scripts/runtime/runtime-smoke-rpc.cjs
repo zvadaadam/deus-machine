@@ -75,7 +75,7 @@ async function assertInitializedAgents(listenUrl, requiredAgents = DEFAULT_REQUI
 }
 
 function readAgentServerListenUrl(output) {
-  return output.match(/(?:^|\n)(?:\[agent-server\] )?LISTEN_URL=(ws:\/\/[^\s]+)/)?.[1] ?? null;
+  return output.match(/(?:^|\n)(?:\[[^\]\n]+\] )*LISTEN_URL=(ws:\/\/[^\s]+)/)?.[1] ?? null;
 }
 
 module.exports = {
