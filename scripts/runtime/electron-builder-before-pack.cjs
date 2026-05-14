@@ -161,6 +161,9 @@ function assertPackagedMainRuntimeContents(contents, label = "Electron main buil
     '"DEUS_DATA_DIR"',
     '"PORT"',
     'runtime.runtimeExecutable ? ["backend"]',
+    "PACKAGED_BUNDLED_TOOLS",
+    "CLI_CHILD_ENV_DENYLIST",
+    "PACKAGED_TERMINAL_TOOLS",
   ];
 
   for (const snippet of requiredSnippets) {

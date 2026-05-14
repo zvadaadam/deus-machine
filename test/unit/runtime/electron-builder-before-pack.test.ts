@@ -47,6 +47,9 @@ function packagedRuntimeContractOutput(extraLines: string[] = []): string {
     'const runtimeExecutable = join(process.resourcesPath, "bin", "deus-runtime");',
     "const env = { DEUS_RUNTIME_EXECUTABLE: runtimeExecutable };",
     'const backendArgs = runtime.runtimeExecutable ? ["backend"] : [runtime.backendEntry];',
+    'const PACKAGED_BUNDLED_TOOLS = new Set(["codex", "claude", "gh", "rg"]);',
+    "const CLI_CHILD_ENV_DENYLIST = PACKAGED_RUNTIME_ENV_DENYLIST;",
+    'const PACKAGED_TERMINAL_TOOLS = new Set(["claude", "codex", "gh", "rg"]);',
     ...extraLines,
   ].join("\n");
 }
@@ -134,6 +137,22 @@ describe("electron-builder beforePack runtime guard", () => {
     expect(() => assertPackagedMainRuntimeContract(projectRoot)).toThrow(
       /PACKAGED_RUNTIME_ENV_DENYLIST/
     );
+  });
+
+  it("rejects stale Electron main output missing packaged CLI lookup guards", () => {
+    const projectRoot = createProjectWithMainOutput(
+      [
+        "function configurePackagedMainRuntimeEnv(options) { process.env.DEUS_PACKAGED = '1'; }",
+        "configurePackagedMainRuntimeEnv({ isPackaged: app.isPackaged });",
+        'const PACKAGED_RUNTIME_ENV_DENYLIST = ["AUTH_TOKEN", "DATABASE_PATH", "DEUS_AUTH_TOKEN", "DEUS_BUNDLED_BIN_DIR", "DEUS_BACKEND_PORT", "DEUS_DATA_DIR", "PORT"];',
+        "for (const key of PACKAGED_RUNTIME_ENV_DENYLIST) delete childEnv[key];",
+        'const runtimeExecutable = join(process.resourcesPath, "bin", "deus-runtime");',
+        "const env = { DEUS_RUNTIME_EXECUTABLE: runtimeExecutable };",
+        'const backendArgs = runtime.runtimeExecutable ? ["backend"] : [runtime.backendEntry];',
+      ].join("\n")
+    );
+
+    expect(() => assertPackagedMainRuntimeContract(projectRoot)).toThrow(/PACKAGED_BUNDLED_TOOLS/);
   });
 
   it("accepts renderer output containing the current package version", () => {
