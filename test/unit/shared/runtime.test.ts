@@ -43,6 +43,8 @@ describe("runtime contract", () => {
 
   it("declares the runtime packages the published CLI must carry", () => {
     expect(CLI_RUNTIME_DEPENDENCIES).toEqual([
+      "@anthropic-ai/claude-agent-sdk",
+      "@hono/node-server",
       "@napi-rs/canvas",
       "@openai/codex",
       "@openai/codex-sdk",
