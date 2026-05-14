@@ -54,6 +54,10 @@ Recorded branch checks:
 
 Recent focused checks:
 
+- `bun run build:runtime` rebuilt both Darwin native runtime executables and refreshed staged `codex`, `claude`, `gh`, and `rg` artifacts.
+- `bun run validate:runtime` passed against the refreshed `dist/runtime`.
+- `bun run smoke:runtime-resources` passed for both `darwin-arm64` and `darwin-x64`, including runtime/CLI signatures, runtime entitlements, dylibs, native module payloads, and manifest checks.
+- `node scripts/runtime/smoke-native-runtime.cjs --skip-validate` still failed at the required direct `deus-runtime --version` gate on this host: no stdout/stderr before the 45s timeout; `file` showed arm64 Mach-O, `codesign` showed Developer ID Application signing, `spctl` rejected it as `Unnotarized Developer ID`, and `xattr` showed `com.apple.provenance`.
 - `node scripts/runtime/smoke-packaged-app.cjs --help`
 - Focused Vitest for `test/unit/runtime/electron-builder-before-pack.test.ts` still hangs before any output and was killed by a 15s wrapper.
 - Direct `deus-runtime --version` through `scripts/runtime/run-version-check.cjs` still times out before stdout/stderr.
