@@ -20,6 +20,7 @@
 //   3. apps:launched q:event on successful ready (Phase 4 consumer)
 
 import { spawn, spawnSync, type ChildProcess } from "node:child_process";
+import { existsSync } from "node:fs";
 import { isAbsolute, resolve as resolvePath } from "node:path";
 
 import type { Manifest } from "@shared/aap/manifest";
@@ -40,6 +41,7 @@ import { getErrorMessage } from "@shared/lib/errors";
 import { uuidv7 } from "@shared/lib/uuid";
 
 import { invalidate } from "../query-engine";
+import { createBackendChildEnv } from "../../runtime/child-env";
 import { broadcast } from "../ws.service";
 
 import { allocateFreePort } from "./port-allocator";
@@ -168,13 +170,19 @@ async function runPrefetch(installed: InstalledAppEntry): Promise<void> {
   const rawCwd = prefetch.cwd ? substituteTemplate(prefetch.cwd, vars) : packageRoot;
   const cwd = isAbsolute(rawCwd) ? rawCwd : resolvePath(packageRoot, rawCwd);
   const command = resolveCommand(prefetch.command, packageRoot);
+  if (!canSpawnResolvedCommand(command)) {
+    console.log(`[AAP] Prefetch skipped: ${manifest.id}`, {
+      command: prefetch.command,
+      reason: "command unavailable",
+    });
+    return;
+  }
   const args = substituteArgs(prefetch.args, vars);
-  const env: NodeJS.ProcessEnv = {
-    ...process.env,
+  const env = createBackendChildEnv({
     ...substituteEnv(prefetch.env, vars),
     DEUS_APP_ID: manifest.id,
     DEUS_PREFETCH: "1",
-  };
+  });
 
   await new Promise<void>((resolve) => {
     let child: ChildProcess;
@@ -223,6 +231,13 @@ async function runPrefetch(installed: InstalledAppEntry): Promise<void> {
       finish();
     });
   });
+}
+
+function canSpawnResolvedCommand(command: string): boolean {
+  if (isAbsolute(command) || command.includes("/") || command.includes("\\")) {
+    return existsSync(command);
+  }
+  return isCliOnPath(command);
 }
 
 // ----------------------------------------------------------------------------
