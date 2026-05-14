@@ -99,6 +99,7 @@ describe("desktop backend process", () => {
     expect(options.env.ELECTRON_RUN_AS_NODE).toBeUndefined();
     expect(options.env.AGENT_SERVER_ENTRY).toBeUndefined();
     expect(options.env.AGENT_SERVER_CWD).toBeUndefined();
+    expect(options.env.NODE_PATH).toBeUndefined();
     expect(options.env.DEUS_PACKAGED).toBe("1");
     expect(options.env.DEUS_RESOURCES_PATH).toBe("/Applications/Deus.app/Contents/Resources");
     expect(options.env.DEUS_RUNTIME_EXECUTABLE).toBe(
