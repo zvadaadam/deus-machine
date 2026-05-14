@@ -17,6 +17,7 @@ bun run typecheck
 bun run typecheck:backend
 bun run typecheck:agent-server
 bun run smoke:runtime-resources
+bun run smoke:desktop-main-runtime
 node scripts/runtime/smoke-packaged-app.cjs --app dist-electron/mac-arm64/Deus.app
 ```
 
@@ -26,6 +27,7 @@ They verify:
 - `codex`, `claude`, `gh`, and `rg` exist for Darwin arm64/x64 and match their manifests.
 - Packaged `Resources/bin` contains executable `deus-runtime`, `codex`, `claude`, `gh`, and `rg`.
 - `afterPack` verifies copied `Resources/bin` files against the staging manifest hashes before macOS re-signing mutates Mach-O bytes; signed app checks then rely on code signature, architecture, entitlements, and dylib validation.
+- Current Electron main source bundles to a fresh temporary file containing the `deus-runtime` launch contract, even when the ignored `out/main` artifact cannot be refreshed on this host.
 - Packaged app.asar contains the `deus-runtime` launch contract and no obsolete packaged backend path plumbing.
 - Native binaries have the expected architecture, code signature, page size, entitlements, and system dylib dependencies.
 

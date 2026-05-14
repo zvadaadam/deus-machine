@@ -81,6 +81,9 @@ jobs:
       - name: Smoke source runtime contract
         run: bun run smoke:runtime-source
 
+      - name: Smoke desktop main runtime contract
+        run: bun run smoke:desktop-main-runtime
+
       - name: Smoke native runtime executable
         run: bun run smoke:runtime-native -- --skip-validate
 

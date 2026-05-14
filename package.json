@@ -42,6 +42,7 @@
     "smoke:runtime-source": "node scripts/runtime/smoke-source-runtime.cjs",
     "smoke:runtime-native": "node scripts/runtime/smoke-native-runtime.cjs",
     "smoke:runtime-resources": "node scripts/runtime/smoke-packaged-resources.cjs",
+    "smoke:desktop-main-runtime": "node scripts/runtime/smoke-desktop-main-runtime.cjs",
     "smoke:packaged-app": "node scripts/runtime/smoke-packaged-app.cjs",
     "smoke:packaged-runtime": "node scripts/runtime/smoke-packaged-runtime.cjs",
     "smoke:packaged-desktop": "node scripts/runtime/smoke-packaged-desktop.cjs",
