@@ -1,8 +1,9 @@
 #!/usr/bin/env bun
 
 import { randomBytes } from "node:crypto";
-import { existsSync, statSync } from "node:fs";
+import { existsSync, mkdtempSync, rmSync, statSync } from "node:fs";
 import { Module as NodeModule } from "node:module";
+import { tmpdir } from "node:os";
 import { basename, delimiter, dirname, join, resolve } from "node:path";
 import packageJson from "../../package.json";
 
@@ -184,6 +185,54 @@ async function inspectRuntimeImports() {
   return results;
 }
 
+async function inspectSqliteContract() {
+  const tempDir = mkdtempSync(join(tmpdir(), "deus-runtime-sqlite-"));
+  try {
+    const { openSqliteDatabase } = await import("../backend/src/lib/sqlite");
+    const db = openSqliteDatabase(join(tempDir, "contract.db"));
+    try {
+      db.pragma("journal_mode = WAL");
+      db.exec("CREATE TABLE items (id TEXT PRIMARY KEY, value TEXT NOT NULL)");
+      db.prepare("INSERT INTO items (id, value) VALUES (?, ?)").run("a", "one");
+
+      const row = db.prepare("SELECT value FROM items WHERE id = ?").get("a") as
+        | { value?: unknown }
+        | undefined;
+      if (row?.value !== "one") {
+        throw new Error(`unexpected select result: ${JSON.stringify(row)}`);
+      }
+
+      const rows = db.prepare("SELECT value FROM items ORDER BY id").all() as Array<{
+        value?: unknown;
+      }>;
+      if (rows.length !== 1 || rows[0]?.value !== "one") {
+        throw new Error(`unexpected all result: ${JSON.stringify(rows)}`);
+      }
+
+      db.transaction(() => {
+        db.prepare("INSERT INTO items (id, value) VALUES (?, ?)").run("b", "two");
+      })();
+
+      const count = db.prepare("SELECT count(*) as count FROM items").get() as
+        | { count?: unknown }
+        | undefined;
+      if (Number(count?.count) !== 2) {
+        throw new Error(`unexpected transaction count: ${JSON.stringify(count)}`);
+      }
+    } finally {
+      db.close();
+    }
+    return { ok: true };
+  } catch (error) {
+    return {
+      ok: false,
+      error: error instanceof Error ? error.message : String(error),
+    };
+  } finally {
+    rmSync(tempDir, { recursive: true, force: true });
+  }
+}
+
 function configureRuntimeEnv(command: RuntimeCommand, dataDir?: string): void {
   const layout = resolveRuntimeLayout();
   const isNativeRuntimeExecutable = basename(layout.executablePath) === RUNTIME_NAME;
@@ -251,6 +300,7 @@ async function run(command: RuntimeCommand, dataDir?: string): Promise<void> {
       REQUIRED_BINARIES.map((name) => [name, inspectBundledBinary(layout.bundledBinDir, name)])
     );
     const imports = await inspectRuntimeImports();
+    const sqlite = await inspectSqliteContract();
     const missing = Object.entries(binaries)
       .filter(([, result]) => !result.exists || !result.executable)
       .map(([name]) => name);
@@ -259,7 +309,7 @@ async function run(command: RuntimeCommand, dataDir?: string): Promise<void> {
       .map(([name]) => name);
     console.log(
       JSON.stringify({
-        ok: missing.length === 0 && failedImports.length === 0,
+        ok: missing.length === 0 && failedImports.length === 0 && sqlite.ok,
         version: VERSION,
         executable: layout.executablePath,
         binDir: layout.bundledBinDir,
@@ -269,11 +319,12 @@ async function run(command: RuntimeCommand, dataDir?: string): Promise<void> {
         runtimeKey: getRuntimeKey(),
         binaries,
         imports,
+        sqlite,
         missing,
         failedImports,
       })
     );
-    if (missing.length > 0 || failedImports.length > 0) process.exit(1);
+    if (missing.length > 0 || failedImports.length > 0 || !sqlite.ok) process.exit(1);
     return;
   }
 
