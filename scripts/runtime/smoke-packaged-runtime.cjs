@@ -103,7 +103,8 @@ function bundledAgentCliPatterns(binDir) {
 
 function assertHostRunnableArch(filePath) {
   if (process.platform !== "darwin") return;
-  const expectedArch = process.arch === "arm64" ? "arm64" : process.arch === "x64" ? "x86_64" : null;
+  const expectedArch =
+    process.arch === "arm64" ? "arm64" : process.arch === "x64" ? "x86_64" : null;
   if (!expectedArch) return;
 
   const output = execFileSync("file", [filePath], {
@@ -474,7 +475,11 @@ async function smokePackagedRuntime(options) {
     throw new Error(`Packaged runtime self-test failed: ${JSON.stringify(selfTest)}`);
   }
   if (selfTest.nodeEnv !== "production") {
-    throw new Error(`Packaged runtime self-test expected NODE_ENV=production: ${selfTest.nodeEnv}`);
+    throw new Error(
+      `Packaged runtime self-test expected NODE_ENV=production: ${selfTest.nodeEnv}; selfTest=${JSON.stringify(
+        selfTest
+      )}`
+    );
   }
   if (path.resolve(String(selfTest.binDir || "")) !== path.resolve(binDir)) {
     throw new Error(

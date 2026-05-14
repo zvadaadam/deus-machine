@@ -436,7 +436,11 @@ async function smokeNativeRuntime(options) {
     throw new Error(`Native runtime self-test failed: ${JSON.stringify(selfTest)}`);
   }
   if (selfTest.nodeEnv !== "production") {
-    throw new Error(`Native runtime self-test expected NODE_ENV=production: ${selfTest.nodeEnv}`);
+    throw new Error(
+      `Native runtime self-test expected NODE_ENV=production: ${selfTest.nodeEnv}; selfTest=${JSON.stringify(
+        selfTest
+      )}`
+    );
   }
   if (path.resolve(String(selfTest.binDir || "")) !== path.resolve(binDir)) {
     throw new Error(
@@ -505,7 +509,9 @@ async function smokeNativeRuntime(options) {
           await assertBackendDbRoute(output);
           const listenUrl = readAgentServerListenUrl(output);
           if (!listenUrl) {
-            throw new Error("Native backend runtime output did not include agent-server LISTEN_URL");
+            throw new Error(
+              "Native backend runtime output did not include agent-server LISTEN_URL"
+            );
           }
           await assertInitializedAgents(listenUrl);
         },
