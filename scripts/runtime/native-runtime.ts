@@ -337,8 +337,6 @@ export function buildDeusRuntime(options: BuildDeusRuntimeOptions = {}): DeusRun
         "--sourcemap=none",
         `--outfile=${output}`,
         "--external",
-        "better-sqlite3",
-        "--external",
         "node-pty",
         "--external",
         "@napi-rs/canvas",

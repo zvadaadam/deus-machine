@@ -314,11 +314,6 @@ function verifyPackagedRuntimeManifests(binDir, targetArch) {
 function verifyPackagedRuntimeExternalModules(resourcesDir, targetArch) {
   const unpackedNodeModules = path.join(resourcesDir, "app.asar.unpacked", "node_modules");
   const requiredFiles = [
-    ["better-sqlite3 package", path.join(unpackedNodeModules, "better-sqlite3", "package.json")],
-    [
-      "better-sqlite3 native binding",
-      path.join(unpackedNodeModules, "better-sqlite3", "build", "Release", "better_sqlite3.node"),
-    ],
     ["node-pty package", path.join(unpackedNodeModules, "node-pty", "package.json")],
     [
       "@napi-rs/canvas package",
