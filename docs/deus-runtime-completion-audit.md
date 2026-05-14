@@ -28,7 +28,7 @@ Status: implementation is staged, but the overall goal is not complete until dir
 - Native and packaged runtime direct smokes now verify `self-test` layout, including `binDir`, `resourcesPath`, and native-module `NODE_PATH`.
 - Packaged Electron main and native `deus-runtime` force `NODE_ENV=production`; direct runtime smokes assert the self-test reports production mode.
 - Runtime-managed agent-server spawns scrub backend-only auth, database, data-dir, and listen-port env while preserving desktop runtime context.
-- Packaged Electron main now also scrubs stale backend-only auth, database, data-dir, and listen-port env before spawning `deus-runtime backend`; smoke launchers apply the same cleanup so verification cannot accidentally inherit an obsolete runtime context.
+- Packaged Electron main now also scrubs stale backend-only auth, database, data-dir, bundled-bin, and listen-port env before spawning `deus-runtime backend`; smoke launchers apply the same cleanup so verification cannot accidentally inherit an obsolete runtime context.
 - `b72f4d96 test: smoke current desktop runtime contract` verifies current Electron main source by bundling it to a temporary output and checking the packaged `deus-runtime` launch contract.
 - `fa6cfca7 test: tighten packaged main runtime guard` makes the before-pack and app.asar smoke checks share the stricter packaged main runtime contract assertion.
 - `87f66d88 docs: record runtime resign diagnostic` records that ad-hoc re-signing a temporary runtime copy does not bypass this host's provenance/Gatekeeper launch blocker.
@@ -55,7 +55,7 @@ Recorded branch checks:
 
 Recent focused checks:
 
-- `bun run smoke:runtime-source` passed after the source-smoke env scrub and backend/desktop env-denylist hardening.
+- `bun run smoke:runtime-source` passed after the source-smoke env scrub and backend/desktop env-denylist hardening, including stale `DEUS_BUNDLED_BIN_DIR` cleanup.
 - `bun run smoke:desktop-main-runtime` passed after the packaged Electron main env scrub update.
 - `bun run typecheck`, `bun run typecheck:backend`, and `bun run typecheck:agent-server` passed after the env-denylist changes.
 - `node --check scripts/runtime/smoke-source-runtime.cjs && node --check scripts/runtime/smoke-native-runtime.cjs && node --check scripts/runtime/smoke-packaged-runtime.cjs && node --check scripts/runtime/smoke-packaged-desktop.cjs` passed.
