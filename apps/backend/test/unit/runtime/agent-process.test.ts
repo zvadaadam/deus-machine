@@ -82,6 +82,31 @@ describe("managed agent-server process", () => {
     expect(readFileSync(electronRunAsNodePath, "utf8").trim()).toBe("");
   });
 
+  it("fails before spawning when deus-runtime is not executable", async () => {
+    const root = createTempRoot();
+    const runtimePath = path.join(root, "bin", "deus-runtime");
+    mkdirSync(path.dirname(runtimePath), { recursive: true });
+    writeFileSync(runtimePath, "");
+    if (process.platform !== "win32") chmodSync(runtimePath, 0o644);
+    process.env.DEUS_RUNTIME_EXECUTABLE = runtimePath;
+
+    await expect(startManagedAgentServer()).rejects.toThrow(
+      /deus-runtime executable is missing or not executable/
+    );
+  });
+
+  it("fails before spawning when deus-runtime points at a directory", async () => {
+    const root = createTempRoot();
+    const runtimePath = path.join(root, "bin", "deus-runtime");
+    mkdirSync(runtimePath, { recursive: true });
+    if (process.platform !== "win32") chmodSync(runtimePath, 0o755);
+    process.env.DEUS_RUNTIME_EXECUTABLE = runtimePath;
+
+    await expect(startManagedAgentServer()).rejects.toThrow(
+      /deus-runtime executable is missing or not executable/
+    );
+  });
+
   it("does not infer the obsolete packaged CJS entry from a bundled bin dir", async () => {
     const root = createTempRoot();
     const binDir = path.join(root, "bin");

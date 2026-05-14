@@ -1,5 +1,5 @@
 import { spawn, type ChildProcess } from "node:child_process";
-import { existsSync, mkdirSync } from "node:fs";
+import { existsSync, mkdirSync, statSync } from "node:fs";
 import path from "node:path";
 
 const STARTUP_TIMEOUT_MS = 30_000;
@@ -21,6 +21,14 @@ function resolveRuntimeExecutable(): string | null {
   return null;
 }
 
+function isExecutableFile(filePath: string): boolean {
+  if (!existsSync(filePath)) return false;
+  const stat = statSync(filePath);
+  if (!stat.isFile()) return false;
+  if (process.platform === "win32") return true;
+  return (stat.mode & 0o111) !== 0;
+}
+
 export async function startManagedAgentServer(): Promise<string> {
   if (child && child.exitCode === null && child.signalCode === null) {
     throw new Error("agent-server is already running");
@@ -29,8 +37,8 @@ export async function startManagedAgentServer(): Promise<string> {
   const runtimeExecutable = resolveRuntimeExecutable();
   const entry = runtimeExecutable ? null : resolveAgentServerEntry();
   if (runtimeExecutable) {
-    if (!existsSync(runtimeExecutable)) {
-      throw new Error(`deus-runtime executable not found: ${runtimeExecutable}`);
+    if (!isExecutableFile(runtimeExecutable)) {
+      throw new Error(`deus-runtime executable is missing or not executable: ${runtimeExecutable}`);
     }
   } else if (entry && !existsSync(entry)) {
     throw new Error(`Agent-server entry not found: ${entry}`);
