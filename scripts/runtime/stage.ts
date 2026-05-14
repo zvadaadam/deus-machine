@@ -30,10 +30,6 @@ export interface RuntimeManifest {
       backend: string;
       agentServer: string;
     };
-    electron: {
-      backend: string;
-      agentServer: string;
-    };
   };
   nodeRuntimeDependencies: readonly string[];
 }
@@ -78,13 +74,9 @@ export function stageRuntime(options: StageRuntimeOptions = {}): RuntimeManifest
 
   mkdirSync(path.dirname(stagePaths.common.backendBundle), { recursive: true });
   mkdirSync(path.dirname(stagePaths.common.agentServerBundle), { recursive: true });
-  mkdirSync(path.dirname(stagePaths.electron.backendBundle), { recursive: true });
-  mkdirSync(path.dirname(stagePaths.electron.agentServerBundle), { recursive: true });
 
   cpSync(sources.backendBundle, stagePaths.common.backendBundle);
   cpSync(sources.agentServerBundle, stagePaths.common.agentServerBundle);
-  cpSync(sources.backendBundle, stagePaths.electron.backendBundle);
-  cpSync(sources.agentServerBundle, stagePaths.electron.agentServerBundle);
 
   const manifest: RuntimeManifest = {
     version: RUNTIME_MANIFEST_VERSION,
@@ -97,10 +89,6 @@ export function stageRuntime(options: StageRuntimeOptions = {}): RuntimeManifest
       common: {
         backend: relativeFromProjectRoot(projectRoot, stagePaths.common.backendBundle),
         agentServer: relativeFromProjectRoot(projectRoot, stagePaths.common.agentServerBundle),
-      },
-      electron: {
-        backend: relativeFromProjectRoot(projectRoot, stagePaths.electron.backendBundle),
-        agentServer: relativeFromProjectRoot(projectRoot, stagePaths.electron.agentServerBundle),
       },
     },
     nodeRuntimeDependencies: CLI_RUNTIME_DEPENDENCIES,

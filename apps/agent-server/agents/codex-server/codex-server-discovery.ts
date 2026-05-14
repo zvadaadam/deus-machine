@@ -8,7 +8,6 @@ import {
   discoverExecutable,
   type DiscoveryState,
 } from "../environment/cli-discovery";
-import { getPackagedCodexCandidates } from "../environment/packaged-cli-paths";
 
 const MIN_CODEX_APP_SERVER_VERSION = "0.128.0";
 
@@ -24,7 +23,7 @@ export function initializeCodexServer(): { success: boolean; error?: string } {
       agentHarness: "codex-server",
       displayName: "Codex app-server",
       envVars: ["CODEX_APP_SERVER_CLI_PATH", "CODEX_CLI_PATH"],
-      staticCandidates: getPackagedCodexCandidates(),
+      bundledTool: "codex",
       versionFlag: "--version",
       validateVersion: validateCodexAppServerVersion,
     },

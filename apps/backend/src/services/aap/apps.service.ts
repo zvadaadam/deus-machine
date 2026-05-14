@@ -19,10 +19,17 @@
 //   2. invalidate(["apps","running_apps"]) for WS subscribers
 //   3. apps:launched q:event on successful ready (Phase 4 consumer)
 
-import { spawnSync, type ChildProcess } from "node:child_process";
+import { spawn, spawnSync, type ChildProcess } from "node:child_process";
+import { existsSync } from "node:fs";
+import { isAbsolute, resolve as resolvePath } from "node:path";
 
 import type { Manifest } from "@shared/aap/manifest";
-import { substituteTemplate, type TemplateVars } from "@shared/aap/template";
+import {
+  substituteArgs,
+  substituteEnv,
+  substituteTemplate,
+  type TemplateVars,
+} from "@shared/aap/template";
 import type {
   InstalledApp,
   LaunchAppArgs,
@@ -34,10 +41,18 @@ import { getErrorMessage } from "@shared/lib/errors";
 import { uuidv7 } from "@shared/lib/uuid";
 
 import { invalidate } from "../query-engine";
+import { createBackendChildEnv } from "../../runtime/child-env";
 import { broadcast } from "../ws.service";
 
 import { allocateFreePort } from "./port-allocator";
-import { isProcessAlive, killByPid, spawnApp, stopChild, waitForReady } from "./lifecycle";
+import {
+  isProcessAlive,
+  killByPid,
+  resolveCommand,
+  spawnApp,
+  stopChild,
+  waitForReady,
+} from "./lifecycle";
 import { registerMcpForRunningApp, unregisterMcpForRunningApp } from "./mcp-bridge";
 import { clearPids, readPids, recordPid } from "./pid-journal";
 import {
@@ -92,6 +107,10 @@ const runningApps = new Map<string, RunningAppEntry>();
  *  in-flight promise — same result, one spawn. Cleared in a `finally`. */
 const launching = new Map<string, Promise<LaunchAppResult>>();
 
+/** App ids whose optional boot prefetch has already been started this backend
+ * process. Prefetch is best-effort and idempotent at the app layer. */
+const prefetchStarted = new Set<string>();
+
 // ----------------------------------------------------------------------------
 // public read API
 // ----------------------------------------------------------------------------
@@ -122,6 +141,103 @@ export function getRunningApps(workspaceId?: string | null): RunningApp[] {
   const matches =
     workspaceId === undefined ? entries : entries.filter((e) => e.workspaceId === workspaceId);
   return matches.map(toView);
+}
+
+// ----------------------------------------------------------------------------
+// background prefetch
+// ----------------------------------------------------------------------------
+
+/** Start optional app-defined warmup commands without blocking backend boot.
+ * Used by heavy embedded apps (Pencil) to populate caches before the user opens
+ * the panel. Failures are logged and never affect app availability. */
+export function prefetchInstalledAppAssets(): void {
+  for (const installed of loadInstalledApps()) {
+    const { manifest } = installed;
+    if (!manifest.prefetch || prefetchStarted.has(manifest.id)) continue;
+    if (!isPlatformCompatible(manifest)) continue;
+
+    prefetchStarted.add(manifest.id);
+    void runPrefetch(installed);
+  }
+}
+
+async function runPrefetch(installed: InstalledAppEntry): Promise<void> {
+  const { manifest, packageRoot } = installed;
+  const prefetch = manifest.prefetch;
+  if (!prefetch) return;
+
+  const vars: TemplateVars = {};
+  const rawCwd = prefetch.cwd ? substituteTemplate(prefetch.cwd, vars) : packageRoot;
+  const cwd = isAbsolute(rawCwd) ? rawCwd : resolvePath(packageRoot, rawCwd);
+  const command = resolveCommand(prefetch.command, packageRoot);
+  if (!canSpawnResolvedCommand(command)) {
+    console.log(`[AAP] Prefetch skipped: ${manifest.id}`, {
+      command: prefetch.command,
+      reason: "command unavailable",
+    });
+    return;
+  }
+  const args = substituteArgs(prefetch.args, vars);
+  const env = createBackendChildEnv({
+    ...substituteEnv(prefetch.env, vars),
+    DEUS_APP_ID: manifest.id,
+    DEUS_PREFETCH: "1",
+  });
+
+  await new Promise<void>((resolve) => {
+    let child: ChildProcess;
+    try {
+      child = spawn(command, args, { cwd, env, stdio: ["ignore", "pipe", "pipe"] });
+    } catch (err) {
+      console.warn(`[AAP] Prefetch failed to spawn: ${manifest.id}`, {
+        error: getErrorMessage(err),
+      });
+      resolve();
+      return;
+    }
+    const stdout: string[] = [];
+    const stderr: string[] = [];
+    let finished = false;
+    const finish = (): void => {
+      if (finished) return;
+      finished = true;
+      resolve();
+    };
+    const push = (ring: string[], chunk: Buffer): void => {
+      ring.push(chunk.toString("utf8"));
+      while (ring.join("").length > 2_048) ring.shift();
+    };
+
+    child.stdout?.on("data", (chunk: Buffer) => push(stdout, chunk));
+    child.stderr?.on("data", (chunk: Buffer) => push(stderr, chunk));
+    child.once("error", (err) => {
+      console.warn(`[AAP] Prefetch failed to spawn: ${manifest.id}`, {
+        error: getErrorMessage(err),
+      });
+      finish();
+    });
+    child.once("exit", (code, signal) => {
+      if (finished) return;
+      if (code === 0) {
+        console.log(`[AAP] Prefetch complete: ${manifest.id}`);
+      } else {
+        console.warn(`[AAP] Prefetch failed: ${manifest.id}`, {
+          exitCode: code,
+          signal,
+          stderrTail: stderr.join("").slice(-1_024).trim() || undefined,
+          stdoutTail: stdout.join("").slice(-1_024).trim() || undefined,
+        });
+      }
+      finish();
+    });
+  });
+}
+
+function canSpawnResolvedCommand(command: string): boolean {
+  if (isAbsolute(command) || command.includes("/") || command.includes("\\")) {
+    return existsSync(command);
+  }
+  return isCliOnPath(command);
 }
 
 // ----------------------------------------------------------------------------
@@ -458,6 +574,15 @@ function validateRequires(manifest: Manifest): void {
       );
     }
   }
+}
+
+function isPlatformCompatible(manifest: Manifest): boolean {
+  for (const req of manifest.requires) {
+    if (req.type !== "platform") continue;
+    if (req.os && req.os !== process.platform) return false;
+    if (req.arch && req.arch !== process.arch) return false;
+  }
+  return true;
 }
 
 function isCliOnPath(name: string): boolean {

@@ -55,7 +55,10 @@ export class CodexAppServerClient {
   private exited = false;
 
   constructor(options: CodexAppServerClientOptions) {
-    this.codexPath = options.codexPath || "codex";
+    if (!options.codexPath) {
+      throw new Error("Codex app-server executable path is required");
+    }
+    this.codexPath = options.codexPath;
     this.cwd = options.cwd;
     this.env = options.env;
     this.startupTimeoutMs = options.startupTimeoutMs ?? 10_000;

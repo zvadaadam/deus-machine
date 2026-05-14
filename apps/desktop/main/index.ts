@@ -26,6 +26,7 @@ import { syncShellEnvironment } from "./shell-env";
 import { setupAppMenu } from "./app-menu";
 import { setupTray, destroyTray } from "./tray";
 import { ensureInstalledInApplications } from "./install-preflight";
+import { configurePackagedMainRuntimeEnv } from "./runtime-env";
 import {
   formatStartupFailureDetail,
   getMainLogPath,
@@ -240,6 +241,11 @@ app.whenReady().then(async () => {
   initMainProcessLogging();
   logMainProcess("[main] App ready, starting initialization...");
   logMainProcess("[main] __dirname: " + __dirname);
+  configurePackagedMainRuntimeEnv({
+    isPackaged: app.isPackaged,
+    platform: process.platform,
+    resourcesPath: process.resourcesPath,
+  });
 
   if (await ensureInstalledInApplications()) {
     return;
@@ -247,8 +253,9 @@ app.whenReady().then(async () => {
 
   // Set up the native app menu (File, Edit, View, Window, Help)
   setupAppMenu();
-  // Fix PATH when launched from macOS Finder (login shell doesn't run)
-  if (process.platform === "darwin") {
+  // Dev-only: mirror terminal PATH when Electron is launched outside a shell.
+  // Packaged runtime uses bundled binaries and a deterministic system PATH.
+  if (process.platform === "darwin" && !app.isPackaged) {
     try {
       await syncShellEnvironment();
     } catch (err) {
@@ -304,7 +311,7 @@ app.whenReady().then(async () => {
     return;
   }
 
-  // Electron owns both runtime children directly: agent-server first, then backend.
+  // Backend owns agent-server startup; Electron only supervises the packaged runtime entrypoint.
 
   // Register IPC handlers before window creation so they're ready immediately
   registerNativeHandlers();

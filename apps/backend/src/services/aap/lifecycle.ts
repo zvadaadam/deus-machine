@@ -21,6 +21,7 @@ import {
 } from "@shared/aap/template";
 
 import { resolveRepoRoot } from "../../lib/repo-root";
+import { createBackendChildEnv } from "../../runtime/child-env";
 
 // ----------------------------------------------------------------------------
 // spawn
@@ -68,13 +69,12 @@ export function spawnApp(args: SpawnArgs): Spawned {
   const cwd = isAbsolute(rawCwd) ? rawCwd : resolvePath(packageRoot, rawCwd);
   const resolvedCommand = resolveCommand(launch.command, packageRoot);
 
-  const env: NodeJS.ProcessEnv = {
-    ...process.env,
+  const env = createBackendChildEnv({
     ...substituteEnv(launch.env, vars),
     DEUS_APP_ID: manifest.id,
     DEUS_WORKSPACE_ID: vars.workspace ?? "",
     DEUS_PORT: String(vars.port),
-  };
+  });
 
   const child = spawn(resolvedCommand, cmdArgs, {
     cwd,
@@ -274,7 +274,7 @@ export async function stopChild(
  *
  *  Returning absolute paths means Electron / Finder-launched backends don't
  *  depend on the inherited PATH to find workspace binaries. */
-function resolveCommand(command: string, packageRoot: string): string {
+export function resolveCommand(command: string, packageRoot: string): string {
   if (isAbsolute(command)) return command;
 
   // (1.5) Path-form command (`./dist/cli.js`, `bin/foo`, etc.) — Node's spawn

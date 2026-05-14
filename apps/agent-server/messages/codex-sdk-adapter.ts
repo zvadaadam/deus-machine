@@ -15,7 +15,7 @@ import type {
   Usage,
 } from "@openai/codex-sdk";
 import type { DiffContent, FinishReason, Part, TokenUsage } from "@shared/messages";
-import { emptyTokenUsage } from "@shared/messages";
+import { addTokenUsage, emptyTokenUsage } from "@shared/messages";
 import type { Adapter, EventTransformer, PartEvent, StreamContext } from "./adapter";
 import { completeReasoningPart, createReasoningPart, createTextPart } from "./parts";
 import {
@@ -24,6 +24,8 @@ import {
   startMcpToolPart,
   startShellToolPart,
 } from "./codex-part-helpers";
+
+type UsageWithReasoning = Usage & { reasoning_output_tokens?: number };
 
 // ---------------------------------------------------------------------------
 // CodexSdkTransformer
@@ -101,11 +103,13 @@ class CodexSdkTransformer implements EventTransformer<ThreadEvent> {
   }
 
   private handleTurnCompleted(usage: Usage): PartEvent[] {
-    this.totalUsage = {
-      input: this.totalUsage.input + usage.input_tokens,
-      output: this.totalUsage.output + usage.output_tokens,
-      cacheRead: (this.totalUsage.cacheRead ?? 0) + usage.cached_input_tokens,
-    };
+    const usageWithReasoning = usage as UsageWithReasoning;
+    this.totalUsage = addTokenUsage(this.totalUsage, {
+      input: usage.input_tokens,
+      output: usage.output_tokens,
+      reasoning: usageWithReasoning.reasoning_output_tokens,
+      cacheRead: usage.cached_input_tokens,
+    });
     this.lastFinishReason = "end_turn";
     this.turnCompletedEmitted = true;
 

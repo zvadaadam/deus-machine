@@ -1,9 +1,13 @@
 // agent-server/agents/environment/env-builder.ts
 // Shared environment construction for all agent handlers.
-// Builds the 6-layer environment: shell env → process.env → extra env →
+// Builds the layered environment: shell env in dev → process.env → extra env →
 // deusEnv → providerEnvVars → ghToken.
 
 import { getShellEnvironment } from "./shell-env";
+
+function shouldLoadShellEnvironment(): boolean {
+  return process.env.DEUS_PACKAGED !== "1" && process.env.DEUS_RUNTIME !== "1";
+}
 
 /**
  * Parses a multi-line "KEY=value" env string (supports export prefix, quoting).
@@ -62,7 +66,7 @@ export function parseEnvString(envString: string): Record<string, string> {
  * Builds the environment variable object for an agent session.
  *
  * Layer precedence (later layers override earlier):
- * 1. Shell environment (login shell capture)
+ * 1. Shell environment (login shell capture, dev/source runtime only)
  * 2. process.env (agent-server process environment)
  * 3. extraEnv (agent-specific static env vars, e.g. CLAUDE_CODE_ENABLE_TASKS)
  * 4. deusEnv (from frontend options)
@@ -77,11 +81,14 @@ export function buildAgentEnvironment(options?: {
 }): Record<string, string> {
   const env: Record<string, string> = {};
 
-  // Layer 1: Shell environment
-  try {
-    Object.assign(env, getShellEnvironment());
-  } catch (error) {
-    console.error("Failed to load shell environment, continuing without it:", error);
+  // Layer 1: Shell environment. Packaged runtime skips login-shell capture so
+  // bundled agent CLIs cannot silently fall through to Homebrew/global PATH.
+  if (shouldLoadShellEnvironment()) {
+    try {
+      Object.assign(env, getShellEnvironment());
+    } catch (error) {
+      console.error("Failed to load shell environment, continuing without it:", error);
+    }
   }
 
   // Layer 2: process.env

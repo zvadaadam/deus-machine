@@ -6,6 +6,8 @@ export const DEUS_PREFERENCES_FILENAME = "preferences.json";
 export const RUNTIME_MANIFEST_VERSION = 1;
 
 export const CLI_RUNTIME_DEPENDENCIES = [
+  "@anthropic-ai/claude-agent-sdk",
+  "@hono/node-server",
   "@napi-rs/canvas",
   "@openai/codex",
   "@openai/codex-sdk",
@@ -33,8 +35,6 @@ export interface RuntimeStagePaths {
   };
   electron: {
     root: string;
-    backendBundle: string;
-    agentServerBundle: string;
   };
 }
 
@@ -81,8 +81,6 @@ export function resolveRuntimeStagePaths(projectRoot: string): RuntimeStagePaths
     },
     electron: {
       root: electronRoot,
-      backendBundle: path.join(electronRoot, "backend", "server.bundled.cjs"),
-      agentServerBundle: path.join(electronRoot, "bin", "index.bundled.cjs"),
     },
   };
 }

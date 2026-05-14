@@ -1,0 +1,26 @@
+{
+  "name": "@deus/pencil-app",
+  "version": "0.2.0",
+  "private": true,
+  "description": "Pencil design AAP — wraps the Pencil CLI as MCP-callable design tools.",
+  "type": "module",
+  "main": "dist/serve.js",
+  "files": [
+    "dist",
+    "skills",
+    "agentic-app.json"
+  ],
+  "dependencies": {
+    "@pencil.dev/cli": "^0.2.5",
+    "unzipper": "^0.12.3",
+    "ws": "^8.18.3"
+  },
+  "devDependencies": {
+    "@types/ws": "^8.18.1"
+  },
+  "scripts": {
+    "build": "bun build.ts",
+    "test": "vitest run test",
+    "typecheck": "bun ../../node_modules/typescript/bin/tsc --noEmit"
+  }
+}

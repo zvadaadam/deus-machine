@@ -6,7 +6,14 @@ import * as fs from "fs";
 // vi.hoisted() ensures variables are available when vi.mock factories run.
 // ============================================================================
 
-const { mockClaudeSDK, mockFrontendAPI, mockExecSync, mockExecFileSync } = vi.hoisted(() => ({
+const {
+  mockClaudeSDK,
+  mockFrontendAPI,
+  mockExecSync,
+  mockExecFileSync,
+  mockResolveBundledCliPath,
+  mockGetBundledCliPathCandidates,
+} = vi.hoisted(() => ({
   mockClaudeSDK: vi.fn(),
   mockFrontendAPI: {
     sendMessage: vi.fn(),
@@ -29,6 +36,8 @@ const { mockClaudeSDK, mockFrontendAPI, mockExecSync, mockExecFileSync } = vi.ho
   },
   mockExecSync: vi.fn(),
   mockExecFileSync: vi.fn(),
+  mockResolveBundledCliPath: vi.fn(),
+  mockGetBundledCliPathCandidates: vi.fn(),
 }));
 
 vi.mock("@anthropic-ai/claude-agent-sdk", async (importOriginal) => {
@@ -60,11 +69,17 @@ vi.mock("child_process", () => ({
   execFileSync: mockExecFileSync,
 }));
 
+vi.mock("@shared/lib/cli-path", () => ({
+  resolveBundledCliPath: (...args: unknown[]) => mockResolveBundledCliPath(...args),
+  getBundledCliPathCandidates: (...args: unknown[]) => mockGetBundledCliPathCandidates(...args),
+}));
+
 vi.mock("fs", async (importOriginal) => {
   const actual = (await importOriginal()) as any;
   return {
     ...actual,
     existsSync: vi.fn(() => true),
+    statSync: vi.fn(() => ({ isFile: () => true, mode: 0o755 })),
     realpathSync: vi.fn((p: string) => p),
   };
 });
@@ -90,6 +105,9 @@ const handler = new ClaudeAgentHandler();
 describe("claude-handler", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    delete process.env.CLAUDE_CLI_PATH;
+    mockResolveBundledCliPath.mockReturnValue("/bundled/claude");
+    mockGetBundledCliPathCandidates.mockReturnValue(["/bundled/claude"]);
   });
 
   // ==========================================================================
@@ -105,6 +123,7 @@ describe("claude-handler", () => {
     });
 
     it("fails when no executable is found", () => {
+      mockResolveBundledCliPath.mockReturnValue(null);
       mockExecSync.mockImplementation(() => {
         throw new Error("not found");
       });
@@ -113,20 +132,20 @@ describe("claude-handler", () => {
       });
       const result = initializeClaude();
       expect(result.success).toBe(false);
-      expect(result.error).toContain("Failed to find Claude executable");
+      expect(result.error).toContain("Failed to initialize Claude executable");
+      expect(result.error).toContain("/bundled/claude");
     });
 
-    it("tries multiple candidate paths", () => {
+    it("falls back to bundled path when an override fails verification", () => {
+      process.env.CLAUDE_CLI_PATH = "/bad/claude";
       let callCount = 0;
       mockExecFileSync.mockImplementation(() => {
         callCount++;
-        // Fail on first candidate, succeed on second
-        if (callCount < 2) throw new Error("not found");
-        return "1.0.0";
+        throw new Error("not found");
       });
       const result = initializeClaude();
       expect(result.success).toBe(true);
-      expect(callCount).toBeGreaterThanOrEqual(2);
+      expect(callCount).toBe(1);
     });
   });
 
@@ -154,6 +173,7 @@ describe("claude-handler", () => {
 
     it("blocks query when initialization failed", async () => {
       // Reset to failed state
+      mockResolveBundledCliPath.mockReturnValue(null);
       mockExecSync.mockImplementation(() => {
         throw new Error("not found");
       });
@@ -869,6 +889,7 @@ describe("claude-handler", () => {
     });
 
     it("blocks cancel when initialization failed", async () => {
+      mockResolveBundledCliPath.mockReturnValue(null);
       mockExecSync.mockImplementation(() => {
         throw new Error("not found");
       });

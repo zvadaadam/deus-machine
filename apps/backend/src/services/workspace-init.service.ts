@@ -29,6 +29,7 @@ import { promisify } from "util";
 import { uuidv7 } from "@shared/lib/uuid";
 import { getDatabase } from "../lib/database";
 import { detectInstallCommand } from "../lib/package-manager";
+import { createBackendChildEnv } from "../runtime/child-env";
 import { invalidate } from "./query-engine";
 
 const execFileAsync = promisify(execFile);
@@ -163,7 +164,7 @@ const STAGES: InitStage[] = [
       await execFileAsync(pm.command, pm.args, {
         cwd: ctx.workspacePath,
         timeout: 120_000, // 2 min max for large installs
-        env: { ...process.env, CI: "1" }, // Suppress interactive prompts
+        env: createBackendChildEnv({ CI: "1" }), // Suppress interactive prompts
       });
     },
   },
