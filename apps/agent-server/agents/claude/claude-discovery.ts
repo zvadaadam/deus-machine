@@ -3,13 +3,11 @@
 // Preserves the same 3 exported functions that claude-handler.ts,
 // claude-sdk-options.ts, and claude-handler.test.ts import.
 
-import * as path from "path";
 import {
   discoverExecutable,
   blockIfNotInitialized as sharedBlock,
   type DiscoveryState,
 } from "../environment/cli-discovery";
-import { getPackagedClaudeCandidates } from "../environment/packaged-cli-paths";
 
 // ============================================================================
 // State
@@ -35,15 +33,9 @@ export function initializeClaude(): { success: boolean; error?: string } {
     {
       agentHarness: "claude",
       displayName: "Claude",
-      envVar: "CLAUDE_CLI_PATH",
-      staticCandidates: [
-        ...getPackagedClaudeCandidates(),
-        path.join(path.dirname(process.argv[1]), "claude"),
-        "/opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js",
-      ],
-      shellCommand: "claude",
-      versionFlag: "-v",
-      skipShellDiscovery: process.env.DEUS_PACKAGED === "1",
+      envVars: ["CLAUDE_CLI_PATH"],
+      bundledTool: "claude",
+      versionFlag: "--version",
     },
     state
   );

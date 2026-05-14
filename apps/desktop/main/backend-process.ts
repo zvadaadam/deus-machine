@@ -1,10 +1,11 @@
 import { spawn, type ChildProcess } from "child_process";
-import { writeFileSync } from "fs";
-import { join } from "path";
+import { existsSync, statSync, writeFileSync } from "fs";
+import { delimiter, extname, join } from "path";
 import { app, BrowserWindow } from "electron";
 import crypto from "crypto";
 import { DEUS_DB_FILENAME } from "../../../shared/runtime";
-import { extendCliPath } from "../../../shared/lib/cli-path";
+import { extendCliPath, getDevStagedCliDirectory } from "../../../shared/lib/cli-path";
+import { PACKAGED_RUNTIME_ENV_DENYLIST } from "./runtime-env";
 
 export const CDP_PORT = "19222";
 
@@ -14,6 +15,8 @@ let restartAttempt = 0;
 let restartTimer: ReturnType<typeof setTimeout> | null = null;
 const MAX_RESTART_ATTEMPTS = 5;
 const STARTUP_TIMEOUT_MS = 30_000;
+const PACKAGED_SYSTEM_PATHS = ["/usr/bin", "/bin", "/usr/sbin", "/sbin"];
+const WINDOWS_EXECUTABLE_EXTENSIONS = new Set([".exe", ".cmd", ".bat", ".ps1", ".com"]);
 
 export interface BackendSpawnHooks {
   onStdoutLine?: (source: "backend", line: string) => void;
@@ -22,27 +25,27 @@ export interface BackendSpawnHooks {
 }
 
 interface ElectronRuntimeEntries {
-  backendEntry: string;
+  backendEntry?: string;
   backendCwd: string;
-  agentServerEntry: string;
-  agentServerCwd: string;
+  agentServerEntry?: string;
+  agentServerCwd?: string;
   resourcesPath?: string;
-  nodePath?: string;
   bundledBinDir?: string;
+  runtimeExecutable?: string;
 }
 
 function resolveRuntimeEntries(): ElectronRuntimeEntries {
   const projectRoot = join(__dirname, "../..");
 
   if (app.isPackaged) {
+    if (process.platform !== "darwin") {
+      throw new Error("Packaged Deus runtime is currently only staged for macOS");
+    }
     return {
-      backendEntry: join(process.resourcesPath, "backend", "server.bundled.cjs"),
       backendCwd: app.getPath("userData"),
-      agentServerEntry: join(process.resourcesPath, "bin", "index.bundled.cjs"),
-      agentServerCwd: app.getPath("userData"),
       resourcesPath: process.resourcesPath,
-      nodePath: join(process.resourcesPath, "app.asar", "node_modules"),
       bundledBinDir: join(process.resourcesPath, "bin"),
+      runtimeExecutable: join(process.resourcesPath, "bin", "deus-runtime"),
     };
   }
 
@@ -51,6 +54,7 @@ function resolveRuntimeEntries(): ElectronRuntimeEntries {
     backendCwd: join(projectRoot, "apps/backend"),
     agentServerEntry: join(projectRoot, "apps/agent-server/dist/index.bundled.cjs"),
     agentServerCwd: join(projectRoot, "apps/agent-server"),
+    bundledBinDir: getDevStagedCliDirectory(projectRoot) ?? undefined,
   };
 }
 
@@ -81,6 +85,23 @@ function writeBackendPortFile(port: number): void {
   }
 }
 
+function buildRuntimePath(runtime: ElectronRuntimeEntries): string {
+  if (runtime.runtimeExecutable && runtime.bundledBinDir) {
+    return [runtime.bundledBinDir, ...PACKAGED_SYSTEM_PATHS].join(delimiter);
+  }
+  return [runtime.bundledBinDir, extendCliPath(process.env.PATH)].filter(Boolean).join(delimiter);
+}
+
+function isExecutableFile(filePath: string): boolean {
+  if (!existsSync(filePath)) return false;
+  const stat = statSync(filePath);
+  if (!stat.isFile()) return false;
+  if (process.platform === "win32") {
+    return WINDOWS_EXECUTABLE_EXTENSIONS.has(extname(filePath).toLowerCase());
+  }
+  return (stat.mode & 0o111) !== 0;
+}
+
 function terminateBackend(): Promise<void> {
   const child = backendProcess;
   if (!child || child.exitCode !== null || child.signalCode !== null) {
@@ -90,10 +111,11 @@ function terminateBackend(): Promise<void> {
 
   return new Promise((resolve) => {
     let finished = false;
+    let forceTimer: ReturnType<typeof setTimeout> | null = null;
     const finish = () => {
       if (finished) return;
       finished = true;
-      clearTimeout(forceTimer);
+      if (forceTimer) clearTimeout(forceTimer);
       if (backendProcess === child) backendProcess = null;
       resolve();
     };
@@ -101,7 +123,7 @@ function terminateBackend(): Promise<void> {
     child.once("exit", finish);
     child.kill("SIGTERM");
 
-    const forceTimer = setTimeout(() => {
+    forceTimer = setTimeout(() => {
       if (child.exitCode === null && child.signalCode === null) {
         child.kill("SIGKILL");
       }
@@ -143,34 +165,55 @@ export async function spawnBackend(
 ): Promise<{ port: number; authToken: string }> {
   const authToken = crypto.randomBytes(24).toString("hex");
   const runtime = resolveRuntimeEntries();
+  if (runtime.runtimeExecutable && !isExecutableFile(runtime.runtimeExecutable)) {
+    throw new Error(
+      `deus-runtime executable is missing or not executable: ${runtime.runtimeExecutable}`
+    );
+  }
   const dbPath = join(app.getPath("userData"), DEUS_DB_FILENAME);
 
-  const sharedEnv = {
+  const sharedEnv: NodeJS.ProcessEnv = {
     DATABASE_PATH: dbPath,
-    PATH: extendCliPath(process.env.PATH),
+    PATH: buildRuntimePath(runtime),
     ...(runtime.resourcesPath
       ? { DEUS_PACKAGED: "1", DEUS_RESOURCES_PATH: runtime.resourcesPath }
       : {}),
-    AGENT_SERVER_ENTRY: runtime.agentServerEntry,
-    AGENT_SERVER_CWD: runtime.agentServerCwd,
-    ...(runtime.nodePath ? { NODE_PATH: runtime.nodePath } : {}),
+    ...(runtime.runtimeExecutable
+      ? { DEUS_RUNTIME_EXECUTABLE: runtime.runtimeExecutable }
+      : {
+          AGENT_SERVER_ENTRY: runtime.agentServerEntry!,
+          AGENT_SERVER_CWD: runtime.agentServerCwd!,
+        }),
     ...(runtime.bundledBinDir ? { DEUS_BUNDLED_BIN_DIR: runtime.bundledBinDir } : {}),
   };
+  if (runtime.runtimeExecutable) {
+    sharedEnv.NODE_ENV = "production";
+  }
 
   return new Promise((resolve, reject) => {
     let settled = false;
     let stdoutBuffer = "";
 
-    const child = spawn(process.execPath, [runtime.backendEntry], {
+    const backendCommand = runtime.runtimeExecutable ?? process.execPath;
+    const backendArgs = runtime.runtimeExecutable ? ["backend"] : [runtime.backendEntry!];
+
+    const childEnv: NodeJS.ProcessEnv = { ...process.env };
+    if (runtime.runtimeExecutable) {
+      for (const key of PACKAGED_RUNTIME_ENV_DENYLIST) {
+        delete childEnv[key];
+      }
+    } else {
+      childEnv.ELECTRON_RUN_AS_NODE = "1";
+    }
+    Object.assign(childEnv, sharedEnv, {
+      AUTH_TOKEN: authToken,
+      PORT: "0",
+      CDP_PORT,
+    });
+
+    const child = spawn(backendCommand, backendArgs, {
       cwd: runtime.backendCwd,
-      env: {
-        ...process.env,
-        ELECTRON_RUN_AS_NODE: "1",
-        ...sharedEnv,
-        AUTH_TOKEN: authToken,
-        PORT: "0",
-        CDP_PORT,
-      },
+      env: childEnv,
       stdio: ["ignore", "pipe", "pipe"],
     });
     backendProcess = child;

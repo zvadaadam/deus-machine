@@ -35,7 +35,8 @@ function resolveDevManifest(packagePath: string): string | null {
 }
 
 function resolvePackagedManifest(relPath: string): string | null {
-  const resourcesPath = (process as { resourcesPath?: string }).resourcesPath;
+  const resourcesPath =
+    process.env.DEUS_RESOURCES_PATH ?? (process as { resourcesPath?: string }).resourcesPath;
   if (!resourcesPath) return null;
   return resolve(resourcesPath, relPath);
 }

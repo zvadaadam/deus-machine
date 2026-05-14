@@ -10,13 +10,14 @@
  */
 
 import { ipcMain, dialog, nativeTheme, BrowserWindow, shell, Menu, app } from "electron";
-import { exec, execFile } from "child_process";
+import { execFile } from "child_process";
 import { promisify } from "util";
 import { homedir } from "os";
 import path from "path";
 import { existsSync, realpathSync } from "fs";
 import { checkCliTool } from "./cli-tools";
 import { logoutGhAuth, startGhAuthLogin } from "./github-cli-auth";
+import { resolveTerminalCliCommand, toAppleScriptString } from "./terminal-command";
 
 const execFileAsync = promisify(execFile);
 const WORKSPACE_LOOKUP_TIMEOUT_MS = 2_000;
@@ -225,13 +226,17 @@ export function registerNativeHandlers(): void {
   // -------------------------------------------------------------------------
 
   ipcMain.handle("native:openTerminal", (_e, { command }: { command: string }) => {
-    // Sanitize: only allow simple alphanumeric commands (e.g., "claude login", "codex login")
-    if (!/^[a-zA-Z0-9 _-]+$/.test(command)) return;
+    const terminalCommand = resolveTerminalCliCommand(command);
+    if (!terminalCommand) return;
 
-    const escaped = command.replace(/"/g, '\\"');
-    // Open the default terminal on macOS and run the command
-    exec(
-      `osascript -e 'tell application "Terminal" to activate' -e 'tell application "Terminal" to do script "${escaped}"'`,
+    execFile(
+      "osascript",
+      [
+        "-e",
+        'tell application "Terminal" to activate',
+        "-e",
+        `tell application "Terminal" to do script ${toAppleScriptString(terminalCommand)}`,
+      ],
       (err: Error | null) => {
         if (err) console.error("[native:openTerminal] Failed:", err.message);
       }

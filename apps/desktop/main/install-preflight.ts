@@ -1,16 +1,33 @@
 import { app, dialog } from "electron";
-import { join, resolve, sep } from "path";
+import { realpathSync } from "fs";
+import { isAbsolute, join, relative, resolve } from "path";
+
+function canonicalPath(filePath: string): string {
+  try {
+    return realpathSync.native(filePath);
+  } catch {
+    return resolve(filePath);
+  }
+}
 
 function isInsideDirectory(filePath: string, directoryPath: string): boolean {
-  const normalizedDirectory = `${resolve(directoryPath)}${sep}`;
-  const normalizedFile = resolve(filePath);
-  return normalizedFile.startsWith(normalizedDirectory);
+  const normalizedFile = canonicalPath(filePath);
+  const normalizedDirectory = canonicalPath(directoryPath);
+  const relativePath = relative(normalizedDirectory, normalizedFile);
+  return relativePath !== "" && !relativePath.startsWith("..") && !isAbsolute(relativePath);
 }
 
 export function isApplicationsInstallPath(executablePath: string, homeDir: string): boolean {
   return (
     isInsideDirectory(executablePath, "/Applications") ||
     isInsideDirectory(executablePath, join(homeDir, "Applications"))
+  );
+}
+
+function getHomeDirectoryCandidates(): string[] {
+  return [app.getPath("home"), process.env.HOME].filter(
+    (value, index, values): value is string =>
+      typeof value === "string" && value.length > 0 && values.indexOf(value) === index
   );
 }
 
@@ -36,7 +53,11 @@ export async function ensureInstalledInApplications(): Promise<boolean> {
   }
 
   const executablePath = app.getPath("exe");
-  if (isApplicationsInstallPath(executablePath, app.getPath("home"))) {
+  if (
+    getHomeDirectoryCandidates().some((homeDir) =>
+      isApplicationsInstallPath(executablePath, homeDir)
+    )
+  ) {
     return false;
   }
 
