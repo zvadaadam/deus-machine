@@ -138,12 +138,7 @@ function pruneNodePtyRuntimeBinaries(context) {
   if (!targetArch) return { removed: 0, kept: 0 };
 
   const resourcesDir = context.resourcesDir ?? resourcesDirForContext(context);
-  const nodePtyRoot = path.join(
-    resourcesDir,
-    "app.asar.unpacked",
-    "node_modules",
-    "node-pty"
-  );
+  const nodePtyRoot = path.join(resourcesDir, "app.asar.unpacked", "node_modules", "node-pty");
   if (!fs.existsSync(nodePtyRoot)) return { removed: 0, kept: 0 };
 
   let removed = 0;
@@ -183,12 +178,7 @@ function pruneCanvasRuntimeBinaries(context) {
   if (!targetArch) return { removed: 0, kept: 0 };
 
   const resourcesDir = context.resourcesDir ?? resourcesDirForContext(context);
-  const napiRsRoot = path.join(
-    resourcesDir,
-    "app.asar.unpacked",
-    "node_modules",
-    "@napi-rs"
-  );
+  const napiRsRoot = path.join(resourcesDir, "app.asar.unpacked", "node_modules", "@napi-rs");
   if (!fs.existsSync(napiRsRoot)) return { removed: 0, kept: 0 };
 
   const targetPackageName = `canvas-darwin-${targetArch}`;
@@ -410,7 +400,9 @@ function verifyRuntimeSystemDylibs(filePath) {
         !dependency.startsWith("/usr/lib/") && !dependency.startsWith("/System/Library/")
     );
   if (unexpected.length > 0) {
-    throw new Error(`Packaged Deus runtime has non-system dylib dependencies: ${unexpected.join(", ")}`);
+    throw new Error(
+      `Packaged Deus runtime has non-system dylib dependencies: ${unexpected.join(", ")}`
+    );
   }
   console.log("[runtime] packaged Deus runtime dylib dependencies verified");
 }
@@ -452,10 +444,7 @@ function verifyPackagedRuntimeManifests(binDir, targetArch, options = {}) {
     path.join(binDir, "deus-runtime.json"),
     "Deus runtime manifest"
   );
-  const agentCliManifest = readJsonFile(
-    path.join(binDir, "agent-clis.json"),
-    "agent CLI manifest"
-  );
+  const agentCliManifest = readJsonFile(path.join(binDir, "agent-clis.json"), "agent CLI manifest");
   const ghCliManifest = readJsonFile(path.join(binDir, "gh-cli.json"), "GitHub CLI manifest");
 
   if (runtimeManifest.version !== 1 || !Array.isArray(runtimeManifest.entries)) {
@@ -504,10 +493,7 @@ function verifyPackagedRuntimeManifests(binDir, targetArch, options = {}) {
 function verifyPackagedRuntimeExternalModules(resourcesDir, targetArch, options = {}) {
   const unpackedNodeModules = path.join(resourcesDir, "app.asar.unpacked", "node_modules");
   const requiredFiles = [
-    [
-      "better-sqlite3 package",
-      path.join(unpackedNodeModules, "better-sqlite3", "package.json"),
-    ],
+    ["better-sqlite3 package", path.join(unpackedNodeModules, "better-sqlite3", "package.json")],
     ["node-pty package", path.join(unpackedNodeModules, "node-pty", "package.json")],
     [
       "@napi-rs/canvas package",

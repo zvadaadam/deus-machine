@@ -24,6 +24,7 @@ const external = [
   "http",
   "https",
   // Runtime packages with native/platform-specific loading.
+  "@anthropic-ai/claude-agent-sdk",
   "@openai/codex",
   "@openai/codex-sdk",
   "@napi-rs/canvas",
