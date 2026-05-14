@@ -105,6 +105,10 @@ describe("desktop backend process", () => {
     process.env.ELECTRON_RUN_AS_NODE = "1";
     process.env.AGENT_SERVER_ENTRY = "/tmp/dev-agent-server.cjs";
     process.env.AGENT_SERVER_CWD = "/tmp/dev-agent-server";
+    process.env.DEUS_RUNTIME = "1";
+    process.env.DEUS_RUNTIME_COMMAND = "agent-server";
+    process.env.DEUS_RUNTIME_EXECUTABLE = "/tmp/stale-runtime";
+    process.env.NODE_PATH = "/tmp/stale-node-modules";
 
     const child = createFakeChild();
     mockSpawn.mockReturnValue(child);
@@ -122,6 +126,8 @@ describe("desktop backend process", () => {
     expect(options.env.ELECTRON_RUN_AS_NODE).toBeUndefined();
     expect(options.env.AGENT_SERVER_ENTRY).toBeUndefined();
     expect(options.env.AGENT_SERVER_CWD).toBeUndefined();
+    expect(options.env.DEUS_RUNTIME).toBeUndefined();
+    expect(options.env.DEUS_RUNTIME_COMMAND).toBeUndefined();
     expect(options.env.NODE_PATH).toBeUndefined();
     expect(options.env.DEUS_PACKAGED).toBe("1");
     expect(options.env.DEUS_RESOURCES_PATH).toBe(resourcesPath);

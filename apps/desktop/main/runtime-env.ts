@@ -1,7 +1,7 @@
 import { delimiter, join } from "path";
 
 const PACKAGED_SYSTEM_PATHS = ["/usr/bin", "/bin", "/usr/sbin", "/sbin"];
-const PACKAGED_RUNTIME_ENV_DENYLIST = [
+export const PACKAGED_RUNTIME_ENV_DENYLIST = [
   "AGENT_SERVER_CWD",
   "AGENT_SERVER_ENTRY",
   "ELECTRON_RUN_AS_NODE",
