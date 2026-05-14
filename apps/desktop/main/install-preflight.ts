@@ -24,6 +24,13 @@ export function isApplicationsInstallPath(executablePath: string, homeDir: strin
   );
 }
 
+function getHomeDirectoryCandidates(): string[] {
+  return [app.getPath("home"), process.env.HOME].filter(
+    (value, index, values): value is string =>
+      typeof value === "string" && value.length > 0 && values.indexOf(value) === index
+  );
+}
+
 function buildMovePromptDetail(executablePath: string, extraReason?: string): string {
   return [
     "Deus needs to run from Applications on macOS.",
@@ -46,7 +53,11 @@ export async function ensureInstalledInApplications(): Promise<boolean> {
   }
 
   const executablePath = app.getPath("exe");
-  if (isApplicationsInstallPath(executablePath, app.getPath("home"))) {
+  if (
+    getHomeDirectoryCandidates().some((homeDir) =>
+      isApplicationsInstallPath(executablePath, homeDir)
+    )
+  ) {
     return false;
   }
 

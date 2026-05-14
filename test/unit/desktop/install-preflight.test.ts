@@ -21,8 +21,13 @@ vi.mock("electron", () => ({
   dialog: mockDialog,
 }));
 
-import { isApplicationsInstallPath } from "../../../apps/desktop/main/install-preflight";
+import {
+  ensureInstalledInApplications,
+  isApplicationsInstallPath,
+} from "../../../apps/desktop/main/install-preflight";
 
+const originalEnv = { ...process.env };
+const originalPlatform = process.platform;
 const tempRoots: string[] = [];
 
 function createTempRoot(): string {
@@ -40,6 +45,12 @@ afterEach(() => {
   mockApp.quit.mockReset();
   mockDialog.showMessageBox.mockReset();
   mockDialog.showMessageBoxSync.mockReset();
+  process.env = { ...originalEnv };
+  Object.defineProperty(process, "platform", {
+    configurable: true,
+    enumerable: true,
+    value: originalPlatform,
+  });
 });
 
 describe("desktop install preflight", () => {
@@ -67,5 +78,34 @@ describe("desktop install preflight", () => {
     expect(
       isApplicationsInstallPath("/Users/test/Downloads/Deus.app/Contents/MacOS/Deus", "/Users/test")
     ).toBe(false);
+  });
+
+  it("accepts the process HOME Applications path when Electron reports a different home", async () => {
+    Object.defineProperty(process, "platform", {
+      configurable: true,
+      enumerable: true,
+      value: "darwin",
+    });
+    const root = createTempRoot();
+    const executablePath = path.join(
+      root,
+      "home",
+      "Applications",
+      "Deus.app",
+      "Contents",
+      "MacOS",
+      "Deus"
+    );
+    mkdirSync(path.dirname(executablePath), { recursive: true });
+    writeFileSync(executablePath, "");
+    process.env.HOME = path.join(root, "home");
+    mockApp.getPath.mockImplementation((name: string) => {
+      if (name === "exe") return executablePath;
+      if (name === "home") return "/Users/runner";
+      return root;
+    });
+
+    await expect(ensureInstalledInApplications()).resolves.toBe(false);
+    expect(mockDialog.showMessageBox).not.toHaveBeenCalled();
   });
 });
