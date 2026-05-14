@@ -60,21 +60,31 @@ describe("managed agent-server process", () => {
     const envPath = path.join(root, "env.txt");
     const envFormat =
       [
+        "AUTH_TOKEN=%s",
+        "DATABASE_PATH=%s",
+        "DEUS_BACKEND_PORT=%s",
+        "DEUS_DATA_DIR=%s",
         "ELECTRON_RUN_AS_NODE=%s",
         "AGENT_SERVER_CWD=%s",
         "DEUS_RUNTIME=%s",
         "DEUS_RUNTIME_COMMAND=%s",
         "DEUS_RUNTIME_EXECUTABLE=%s",
         "NODE_PATH=%s",
+        "PORT=%s",
         "",
       ].join("\\n") + "\\n";
     const envArgs = [
+      "$AUTH_TOKEN",
+      "$DATABASE_PATH",
+      "$DEUS_BACKEND_PORT",
+      "$DEUS_DATA_DIR",
       "$ELECTRON_RUN_AS_NODE",
       "$AGENT_SERVER_CWD",
       "$DEUS_RUNTIME",
       "$DEUS_RUNTIME_COMMAND",
       "$DEUS_RUNTIME_EXECUTABLE",
       "$NODE_PATH",
+      "$PORT",
     ]
       .map(JSON.stringify)
       .join(" ");
@@ -98,18 +108,28 @@ describe("managed agent-server process", () => {
     process.env.DEUS_RUNTIME = "1";
     process.env.DEUS_RUNTIME_COMMAND = "backend";
     process.env.NODE_PATH = "/tmp/stale-node-modules";
+    process.env.AUTH_TOKEN = "backend-auth-token";
+    process.env.DATABASE_PATH = path.join(root, "backend.db");
+    process.env.DEUS_BACKEND_PORT = "45678";
+    process.env.DEUS_DATA_DIR = path.join(root, "data");
+    process.env.PORT = "45678";
 
     await expect(startManagedAgentServer()).resolves.toBe("ws://127.0.0.1:7890");
     expect(readFileSync(argsPath, "utf8").trim()).toBe("agent-server");
     expect(readFileSync(cwdPath, "utf8").trim()).toBe(root);
     expect(readFileSync(envPath, "utf8")).toBe(
       [
+        "AUTH_TOKEN=",
+        "DATABASE_PATH=",
+        "DEUS_BACKEND_PORT=",
+        "DEUS_DATA_DIR=",
         "ELECTRON_RUN_AS_NODE=",
         "AGENT_SERVER_CWD=",
         "DEUS_RUNTIME=",
         "DEUS_RUNTIME_COMMAND=",
         "DEUS_RUNTIME_EXECUTABLE=",
         "NODE_PATH=",
+        "PORT=",
         "",
       ].join("\n")
     );
