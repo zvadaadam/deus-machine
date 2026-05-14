@@ -11,11 +11,13 @@ describe("backend child process environment", () => {
   it("scrubs packaged runtime internals while preserving caller overrides", () => {
     process.env.DEUS_RUNTIME = "1";
     process.env.DEUS_RUNTIME_COMMAND = "backend";
-    process.env.DEUS_RUNTIME_EXECUTABLE = "/Applications/Deus.app/Contents/Resources/bin/deus-runtime";
+    process.env.DEUS_RUNTIME_EXECUTABLE =
+      "/Applications/Deus.app/Contents/Resources/bin/deus-runtime";
     process.env.DEUS_BUNDLED_BIN_DIR = "/Applications/Deus.app/Contents/Resources/bin";
     process.env.DEUS_RESOURCES_PATH = "/Applications/Deus.app/Contents/Resources";
     process.env.ELECTRON_RUN_AS_NODE = "1";
-    process.env.NODE_PATH = "/Applications/Deus.app/Contents/Resources/app.asar.unpacked/node_modules";
+    process.env.NODE_PATH =
+      "/Applications/Deus.app/Contents/Resources/app.asar.unpacked/node_modules";
     process.env.DATABASE_PATH = "/tmp/deus.db";
     process.env.PORT = "1234";
     process.env.PATH = "/Applications/Deus.app/Contents/Resources/bin:/usr/bin:/bin";

@@ -200,9 +200,7 @@ describe("managed agent-server process", () => {
     mkdirSync(binDir, { recursive: true });
     writeExecutable(
       path.join(binDir, "index.bundled.cjs"),
-      ["console.log('LISTEN_URL=ws://127.0.0.1:4567');", "setInterval(() => {}, 1000);"].join(
-        "\n"
-      )
+      ["console.log('LISTEN_URL=ws://127.0.0.1:4567');", "setInterval(() => {}, 1000);"].join("\n")
     );
 
     process.chdir(root);

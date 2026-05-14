@@ -38,7 +38,8 @@ describe("agent-browser client", () => {
   it("scrubs packaged runtime-only environment from child CLI processes", async () => {
     process.env.DEUS_RUNTIME = "1";
     process.env.DEUS_RUNTIME_COMMAND = "agent-server";
-    process.env.DEUS_RUNTIME_EXECUTABLE = "/Applications/Deus.app/Contents/Resources/bin/deus-runtime";
+    process.env.DEUS_RUNTIME_EXECUTABLE =
+      "/Applications/Deus.app/Contents/Resources/bin/deus-runtime";
     process.env.DEUS_BUNDLED_BIN_DIR = "/Applications/Deus.app/Contents/Resources/bin";
     process.env.DEUS_RESOURCES_PATH = "/Applications/Deus.app/Contents/Resources";
     process.env.ELECTRON_RUN_AS_NODE = "1";
