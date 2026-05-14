@@ -27,11 +27,6 @@ const OBSOLETE_RUNTIME_PATTERNS = [
   /AGENT_SERVER_ENTRY/,
   /global CLI/,
 ];
-const BUNDLED_AGENT_CLI_PATTERNS = [
-  /BUNDLED_CLI_PATH claude=.*\/claude/,
-  /BUNDLED_CLI_PATH codex=.*\/codex/,
-];
-
 function parseArgs(argv) {
   const options = {
     appPath: null,
@@ -85,6 +80,17 @@ function assertExecutable(filePath, label) {
   const stat = fs.statSync(filePath);
   assert(stat.isFile(), `${label} is not a regular file: ${filePath}`);
   assert((stat.mode & 0o111) !== 0, `${label} is not executable: ${filePath}`);
+}
+
+function escapeRegExp(value) {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+function bundledAgentCliPatterns(binDir) {
+  return [
+    new RegExp(`BUNDLED_CLI_PATH claude=${escapeRegExp(path.join(binDir, "claude"))}`),
+    new RegExp(`BUNDLED_CLI_PATH codex=${escapeRegExp(path.join(binDir, "codex"))}`),
+  ];
 }
 
 function assertHostRunnableArch(filePath) {
@@ -377,10 +383,16 @@ async function smokePackagedRuntime(options) {
   if (selfTest.ok !== true) {
     throw new Error(`Packaged runtime self-test failed: ${JSON.stringify(selfTest)}`);
   }
+  if (path.resolve(String(selfTest.binDir || "")) !== path.resolve(binDir)) {
+    throw new Error(
+      `Packaged runtime self-test resolved unexpected binDir: ${selfTest.binDir}; expected ${binDir}`
+    );
+  }
   console.log(`[runtime-smoke] packaged runtime self-test binDir: ${selfTest.binDir}`);
 
+  const expectedBundledCliPatterns = bundledAgentCliPatterns(binDir);
   await waitForRuntimePatterns(runtimeBin, ["agent-server"], binDir, [
-    ...BUNDLED_AGENT_CLI_PATTERNS,
+    ...expectedBundledCliPatterns,
     /LISTEN_URL=/,
   ]);
   console.log(
@@ -394,8 +406,9 @@ async function smokePackagedRuntime(options) {
       ["backend", "--data-dir", dataDir],
       binDir,
       [
-        /^\[agent-server\] BUNDLED_CLI_PATH claude=.*\/claude/m,
-        /^\[agent-server\] BUNDLED_CLI_PATH codex=.*\/codex/m,
+        ...expectedBundledCliPatterns.map(
+          (pattern) => new RegExp(`^\\[agent-server\\] ${pattern.source}`, "m")
+        ),
         /^\[agent-server\] LISTEN_URL=/m,
         /^\[BACKEND_PORT\]\d+/m,
       ],
