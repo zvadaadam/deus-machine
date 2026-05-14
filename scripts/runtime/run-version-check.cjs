@@ -50,9 +50,10 @@ async function main() {
     writeResult({ ok: false, error: "missing executable path", stdout: "", stderr: "" }, 2);
     return;
   }
+  const resolvedExecutablePath = path.resolve(executablePath);
 
-  const child = spawn(executablePath, args, {
-    cwd: path.dirname(executablePath),
+  const child = spawn(resolvedExecutablePath, args, {
+    cwd: path.dirname(resolvedExecutablePath),
     detached: process.platform !== "win32",
     env: process.env,
     stdio: ["ignore", "pipe", "pipe"],
