@@ -344,6 +344,8 @@ export function buildDeusRuntime(options: BuildDeusRuntimeOptions = {}): DeusRun
         "@napi-rs/canvas",
         "--external",
         "@napi-rs/canvas-darwin-arm64",
+        "--external",
+        "@napi-rs/canvas-darwin-x64",
       ],
       {
         cwd: projectRoot,
