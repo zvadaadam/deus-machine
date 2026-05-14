@@ -1,6 +1,7 @@
 const fs = require("node:fs");
 const crypto = require("node:crypto");
 const path = require("node:path");
+const { execFileSync, spawnSync } = require("node:child_process");
 
 const ARCH_BY_BUILDER_VALUE = new Map([
   [1, "x64"],
@@ -19,6 +20,7 @@ const REQUIRED_RUNTIME_ENTITLEMENTS = [
   "com.apple.security.cs.disable-library-validation",
 ];
 const MAC_CODESIGN_PAGE_SIZE = "4096";
+const PROJECT_ROOT = path.resolve(__dirname, "..");
 
 function platformSegment(electronPlatformName) {
   if (electronPlatformName === "darwin") return "darwin";
@@ -152,6 +154,85 @@ function pruneNodePtyRuntimeBinaries(context) {
     );
   }
   return { removed, kept };
+}
+
+function fileArch(filePath) {
+  const output = execFileSync("file", [filePath], {
+    encoding: "utf8",
+    timeout: 20_000,
+    stdio: ["ignore", "pipe", "pipe"],
+  });
+  const description = output.includes(":") ? output.slice(output.indexOf(":") + 1) : output;
+  if (/\barm64\b/.test(description)) return "arm64";
+  if (/\bx86_64\b/.test(description)) return "x64";
+  return null;
+}
+
+function bunNodeTargetVersion() {
+  return execFileSync("bun", ["-e", "console.log(process.version.replace(/^v/, ''))"], {
+    cwd: PROJECT_ROOT,
+    encoding: "utf8",
+    timeout: 20_000,
+    stdio: ["ignore", "pipe", "pipe"],
+  }).trim();
+}
+
+function installBetterSqlitePrebuild(packageRoot, targetArch) {
+  const prebuildInstall = path.join(PROJECT_ROOT, "node_modules", "prebuild-install", "bin.js");
+  fs.rmSync(path.join(packageRoot, "build"), { recursive: true, force: true });
+  const result = spawnSync(
+    process.execPath,
+    [
+      prebuildInstall,
+      "--runtime",
+      "node",
+      "--target",
+      bunNodeTargetVersion(),
+      "--arch",
+      targetArch,
+      "--platform",
+      "darwin",
+    ],
+    {
+      cwd: packageRoot,
+      encoding: "utf8",
+      stdio: ["ignore", "pipe", "pipe"],
+    }
+  );
+  if (result.status !== 0) {
+    throw new Error(
+      `Failed to install packaged better-sqlite3 darwin-${targetArch} prebuild: ${
+        result.stderr || result.stdout
+      }`
+    );
+  }
+}
+
+function prepareBetterSqliteRuntimeBinding(context) {
+  if (context.electronPlatformName !== "darwin") return { updated: false };
+
+  const targetArch = ARCH_BY_BUILDER_VALUE.get(context.arch);
+  if (!targetArch) return { updated: false };
+
+  const resourcesDir = context.resourcesDir ?? resourcesDirForContext(context);
+  const packageRoot = path.join(
+    resourcesDir,
+    "app.asar.unpacked",
+    "node_modules",
+    "better-sqlite3"
+  );
+  const nativeBinding = path.join(packageRoot, "build", "Release", "better_sqlite3.node");
+  if (!fs.existsSync(packageRoot)) return { updated: false };
+  if (fs.existsSync(nativeBinding) && fileArch(nativeBinding) === targetArch) {
+    return { updated: false };
+  }
+
+  console.log(`[runtime] installing better-sqlite3 prebuild for darwin-${targetArch}`);
+  installBetterSqlitePrebuild(packageRoot, targetArch);
+  if (!fs.existsSync(nativeBinding) || fileArch(nativeBinding) !== targetArch) {
+    throw new Error(`better-sqlite3 prebuild did not produce darwin-${targetArch} binding`);
+  }
+  return { updated: true };
 }
 
 function assertExecutable(filePath, label) {
@@ -366,6 +447,10 @@ function verifyPackagedRuntimeManifests(binDir, targetArch, options = {}) {
 function verifyPackagedRuntimeExternalModules(resourcesDir, targetArch, options = {}) {
   const unpackedNodeModules = path.join(resourcesDir, "app.asar.unpacked", "node_modules");
   const requiredFiles = [
+    [
+      "better-sqlite3 package",
+      path.join(unpackedNodeModules, "better-sqlite3", "package.json"),
+    ],
     ["node-pty package", path.join(unpackedNodeModules, "node-pty", "package.json")],
     [
       "@napi-rs/canvas package",
@@ -376,6 +461,13 @@ function verifyPackagedRuntimeExternalModules(resourcesDir, targetArch, options 
   const expectedFileArch = targetArch ? FILE_ARCH_BY_TARGET_ARCH.get(targetArch) : undefined;
 
   if (targetArch) {
+    const betterSqliteNative = path.join(
+      unpackedNodeModules,
+      "better-sqlite3",
+      "build",
+      "Release",
+      "better_sqlite3.node"
+    );
     const nodePtyPackageRoot = path.join(unpackedNodeModules, "node-pty");
     const nodePtyPrebuildFiles = [
       path.join(nodePtyPackageRoot, "prebuilds", `darwin-${targetArch}`, "pty.node"),
@@ -395,6 +487,7 @@ function verifyPackagedRuntimeExternalModules(resourcesDir, targetArch, options 
       ),
     ]);
     nativePayloads.push(
+      [`better-sqlite3 native binding for darwin-${targetArch}`, betterSqliteNative],
       [`node-pty native binding for darwin-${targetArch}`, nodePtyPrebuildFiles[0]],
       [`node-pty spawn helper for darwin-${targetArch}`, nodePtyPrebuildFiles[1]],
       [
@@ -523,6 +616,7 @@ function verifyPackagedAgentClis(context, options = {}) {
 module.exports = async function afterPack(context) {
   prunePencilCliBinaries(context);
   pruneNodePtyRuntimeBinaries(context);
+  prepareBetterSqliteRuntimeBinding(context);
   verifyPackagedAgentClis(context, {
     runVersionChecks: false,
     verifyExecutableSignatures: false,
@@ -532,6 +626,7 @@ module.exports = async function afterPack(context) {
 
 module.exports.prunePencilCliBinaries = prunePencilCliBinaries;
 module.exports.pruneNodePtyRuntimeBinaries = pruneNodePtyRuntimeBinaries;
+module.exports.prepareBetterSqliteRuntimeBinding = prepareBetterSqliteRuntimeBinding;
 module.exports.binaryNamesForTarget = binaryNamesForTarget;
 module.exports.verifyPackagedRuntimeManifests = verifyPackagedRuntimeManifests;
 module.exports.verifyPackagedRuntimeExternalModules = verifyPackagedRuntimeExternalModules;
