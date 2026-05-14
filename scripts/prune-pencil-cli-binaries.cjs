@@ -18,6 +18,7 @@ const REQUIRED_RUNTIME_ENTITLEMENTS = [
   "com.apple.security.cs.allow-unsigned-executable-memory",
   "com.apple.security.cs.disable-library-validation",
 ];
+const MAC_CODESIGN_PAGE_SIZE = "4096";
 
 function platformSegment(electronPlatformName) {
   if (electronPlatformName === "darwin") return "darwin";
@@ -207,6 +208,29 @@ function verifyCodeSignature(filePath, label) {
     stdio: ["ignore", "ignore", "pipe"],
   });
   console.log(`[runtime] packaged ${label} code signature verified`);
+}
+
+function verifyCodeSignaturePageSize(filePath, label, expectedPageSize = MAC_CODESIGN_PAGE_SIZE) {
+  const result = require("node:child_process").spawnSync(
+    "codesign",
+    ["-dv", "--verbose=4", filePath],
+    {
+      encoding: "utf8",
+      stdio: ["ignore", "pipe", "pipe"],
+    }
+  );
+  if (result.status !== 0) {
+    throw new Error(
+      `Unable to inspect packaged ${label} code signature: ${result.stderr || result.stdout}`
+    );
+  }
+  const output = `${result.stdout}\n${result.stderr}`;
+  if (!output.includes(`Page size=${expectedPageSize}`)) {
+    throw new Error(
+      `Packaged ${label} code signature page size mismatch; expected ${expectedPageSize}`
+    );
+  }
+  console.log(`[runtime] packaged ${label} code signature page size verified`);
 }
 
 function verifyRuntimeEntitlements(filePath) {
@@ -454,6 +478,9 @@ function verifyPackagedAgentClis(context, options = {}) {
     verifyMachOArch(executablePath, label, expectedFileArch);
     if (options.verifyExecutableSignatures !== false) {
       verifyCodeSignature(executablePath, label);
+      if (label === "Deus runtime") {
+        verifyCodeSignaturePageSize(executablePath, label);
+      }
     }
     if (label === "Deus runtime") {
       verifyRuntimeEntitlements(executablePath);
@@ -501,3 +528,4 @@ module.exports.binaryNamesForTarget = binaryNamesForTarget;
 module.exports.verifyPackagedRuntimeManifests = verifyPackagedRuntimeManifests;
 module.exports.verifyPackagedRuntimeExternalModules = verifyPackagedRuntimeExternalModules;
 module.exports.verifyPackagedAgentClis = verifyPackagedAgentClis;
+module.exports.verifyCodeSignaturePageSize = verifyCodeSignaturePageSize;
