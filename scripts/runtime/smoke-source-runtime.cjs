@@ -1,4 +1,5 @@
 const fs = require("node:fs");
+const http = require("node:http");
 const os = require("node:os");
 const path = require("node:path");
 const { spawn, spawnSync } = require("node:child_process");
@@ -48,6 +49,48 @@ function stopChild(child) {
   });
 }
 
+function getJson(port, pathname) {
+  return new Promise((resolve, reject) => {
+    const request = http.get(
+      {
+        hostname: "127.0.0.1",
+        port,
+        path: pathname,
+        timeout: 5_000,
+      },
+      (response) => {
+        let body = "";
+        response.setEncoding("utf8");
+        response.on("data", (chunk) => {
+          body += chunk;
+        });
+        response.on("end", () => {
+          resolve({ statusCode: response.statusCode, body });
+        });
+      }
+    );
+    request.on("error", reject);
+    request.on("timeout", () => request.destroy(new Error(`Timed out requesting ${pathname}`)));
+  });
+}
+
+async function assertBackendDbRoute(port) {
+  const response = await getJson(port, "/api/workspaces");
+  if (response.statusCode !== 200) {
+    throw new Error(
+      `Backend DB route failed: GET /api/workspaces returned ${response.statusCode}: ${response.body.slice(
+        0,
+        500
+      )}`
+    );
+  }
+
+  const parsed = JSON.parse(response.body);
+  if (!Array.isArray(parsed)) {
+    throw new Error(`Backend DB route returned non-array payload: ${response.body.slice(0, 500)}`);
+  }
+}
+
 async function waitForRuntimeLine(args, matcher, options = {}) {
   const child = spawn("bun", [RUNTIME_ENTRY, ...args], {
     cwd: PROJECT_ROOT,
@@ -92,7 +135,9 @@ async function waitForRuntimeLine(args, matcher, options = {}) {
         if (settled) return;
         settled = true;
         clearTimeout(timeout);
-        resolve(match);
+        Promise.resolve(options.onReady?.(match, output))
+          .then(() => resolve(match))
+          .catch(reject);
       };
       const maybeSucceed = () => {
         if (matchedValue === null) return;
@@ -181,7 +226,7 @@ async function main() {
       ["backend", "--data-dir", dataDir],
       (line) => {
         const match = line.match(/^\[BACKEND_PORT\](\d+)$/);
-        return match ? match[1] : null;
+        return match ? Number(match[1]) : null;
       },
       {
         env: {
@@ -192,9 +237,12 @@ async function main() {
           /^\[agent-server\] BUNDLED_CLI_PATH claude=.*\/claude/m,
           /^\[agent-server\] BUNDLED_CLI_PATH codex=.*\/codex/m,
         ],
+        onReady: assertBackendDbRoute,
       }
     );
-    console.log(`[runtime-source-smoke] backend resolved bundled CLIs: ${backendPort}`);
+    console.log(
+      `[runtime-source-smoke] backend resolved bundled CLIs and served DB route: ${backendPort}`
+    );
   } finally {
     fs.rmSync(dataDir, { recursive: true, force: true });
   }
