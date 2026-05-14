@@ -107,7 +107,7 @@ jobs:
         run: bun install --frozen-lockfile
 
       - name: Run desktop/runtime unit tests
-        run: bun run test:simulator
+        run: bun run test:desktop-runtime
 
   backend-tests:
     name: Backend Tests
