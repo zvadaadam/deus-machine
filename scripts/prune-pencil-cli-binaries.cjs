@@ -551,6 +551,74 @@ function validateVersionOutput(label, output) {
   }
 }
 
+function runDiagnostic(command, args) {
+  const result = spawnSync(command, args, {
+    encoding: "utf8",
+    timeout: 20_000,
+    stdio: ["ignore", "pipe", "pipe"],
+  });
+  const output = `${result.stdout || ""}${result.stderr || ""}`.trim();
+  if (result.error) {
+    return [result.error.code || result.error.message, output].filter(Boolean).join("\n");
+  }
+  if (result.status !== 0) {
+    return output || `${command} exited with status ${result.status}`;
+  }
+  return output;
+}
+
+function packagedExecutableDiagnostics(executablePath) {
+  if (process.platform !== "darwin") return "";
+  return [
+    `file: ${runDiagnostic("file", [executablePath])}`,
+    `codesign: ${runDiagnostic("codesign", ["-dv", "--verbose=4", executablePath])}`,
+    `spctl: ${runDiagnostic("spctl", ["--assess", "--type", "execute", "--verbose=4", executablePath])}`,
+    `xattr: ${runDiagnostic("xattr", ["-l", executablePath]) || "none"}`,
+  ].join("\n");
+}
+
+function macExecutionPolicyHint(diagnostics) {
+  if (process.platform !== "darwin") return "";
+  if (!/spctl:[\s\S]*rejected/.test(diagnostics)) return "";
+  if (!/com\.apple\.(provenance|quarantine)/.test(diagnostics)) return "";
+
+  return [
+    "",
+    "macOS rejected this executable before its --version command produced output.",
+    "Verify runnable packaged binaries on a notarized artifact or a macOS host that allows generated/copied Mach-O binaries to launch.",
+  ].join("\n");
+}
+
+function runPackagedVersionCheck(label, executablePath, binDir) {
+  const result = spawnSync(executablePath, ["--version"], {
+    encoding: "utf8",
+    timeout: 20_000,
+    env: {
+      ...process.env,
+      DEUS_BUNDLED_BIN_DIR: binDir,
+      PATH: [binDir, ...PACKAGED_SYSTEM_PATHS].join(path.delimiter),
+    },
+    stdio: ["ignore", "pipe", "pipe"],
+  });
+  const stdout = (result.stdout || "").trim();
+  const stderr = (result.stderr || "").trim();
+
+  if (result.status !== 0) {
+    const diagnostics = packagedExecutableDiagnostics(executablePath);
+    const hint = macExecutionPolicyHint(diagnostics);
+    throw new Error(
+      `Packaged ${label} --version failed: status=${result.status} signal=${
+        result.signal
+      } error=${result.error?.code ?? "none"} stdout=${stdout} stderr=${stderr}${
+        diagnostics ? `\n${diagnostics}` : ""
+      }${hint}`
+    );
+  }
+
+  validateVersionOutput(label, stdout);
+  console.log(`[runtime] packaged ${label}: ${stdout}`);
+}
+
 function verifyPackagedAgentClis(context, options = {}) {
   if (context.electronPlatformName !== "darwin") return;
 
@@ -596,20 +664,7 @@ function verifyPackagedAgentClis(context, options = {}) {
     ["Claude CLI", path.join(binDir, "claude")],
     ["Codex ripgrep helper", path.join(binDir, "rg")],
   ]) {
-    const output = require("node:child_process")
-      .execFileSync(executablePath, ["--version"], {
-        encoding: "utf8",
-        timeout: 20_000,
-        env: {
-          ...process.env,
-          DEUS_BUNDLED_BIN_DIR: binDir,
-          PATH: [binDir, ...PACKAGED_SYSTEM_PATHS].join(path.delimiter),
-        },
-        stdio: ["ignore", "pipe", "pipe"],
-      })
-      .trim();
-    validateVersionOutput(label, output);
-    console.log(`[runtime] packaged ${label}: ${output}`);
+    runPackagedVersionCheck(label, executablePath, binDir);
   }
 }
 
