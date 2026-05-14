@@ -66,6 +66,8 @@ describe("managed agent-server process", () => {
         "DEUS_BUNDLED_BIN_DIR=%s",
         "DEUS_BACKEND_PORT=%s",
         "DEUS_DATA_DIR=%s",
+        "DEUS_PACKAGED=%s",
+        "DEUS_RESOURCES_PATH=%s",
         "ELECTRON_RUN_AS_NODE=%s",
         "AGENT_SERVER_CWD=%s",
         "DEUS_RUNTIME=%s",
@@ -82,6 +84,8 @@ describe("managed agent-server process", () => {
       "$DEUS_BUNDLED_BIN_DIR",
       "$DEUS_BACKEND_PORT",
       "$DEUS_DATA_DIR",
+      "$DEUS_PACKAGED",
+      "$DEUS_RESOURCES_PATH",
       "$ELECTRON_RUN_AS_NODE",
       "$AGENT_SERVER_CWD",
       "$DEUS_RUNTIME",
@@ -118,6 +122,8 @@ describe("managed agent-server process", () => {
     process.env.DEUS_BUNDLED_BIN_DIR = path.join(root, "stale-bin");
     process.env.DEUS_BACKEND_PORT = "45678";
     process.env.DEUS_DATA_DIR = path.join(root, "data");
+    process.env.DEUS_PACKAGED = "1";
+    process.env.DEUS_RESOURCES_PATH = path.join(root, "stale-resources");
     process.env.PORT = "45678";
 
     await expect(startManagedAgentServer()).resolves.toBe("ws://127.0.0.1:7890");
@@ -131,6 +137,8 @@ describe("managed agent-server process", () => {
         "DEUS_BUNDLED_BIN_DIR=",
         "DEUS_BACKEND_PORT=",
         "DEUS_DATA_DIR=",
+        "DEUS_PACKAGED=",
+        "DEUS_RESOURCES_PATH=",
         "ELECTRON_RUN_AS_NODE=",
         "AGENT_SERVER_CWD=",
         "DEUS_RUNTIME=",
