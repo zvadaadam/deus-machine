@@ -270,27 +270,11 @@ function assertFileArch(fileOutput: string, target: DeusRuntimeTarget, filePath:
 
 function resolveCodeSigningIdentity(): string {
   const explicitIdentity = process.env.DEUS_RUNTIME_CODESIGN_IDENTITY || process.env.CSC_NAME;
-  if (explicitIdentity) return explicitIdentity;
-  if (process.platform !== "darwin") return "-";
+  if (explicitIdentity?.trim()) return explicitIdentity;
 
-  try {
-    const output = execFileSync("security", ["find-identity", "-v", "-p", "codesigning"], {
-      encoding: "utf8",
-      timeout: VERIFY_TIMEOUT_MS,
-      stdio: ["ignore", "pipe", "pipe"],
-    });
-    const identities = output
-      .split(/\r?\n/)
-      .map((line) => line.match(/"([^"]+)"/)?.[1])
-      .filter((identity): identity is string => Boolean(identity));
-    return (
-      identities.find((identity) => identity.startsWith("Developer ID Application:")) ??
-      identities.find((identity) => identity.startsWith("Apple Development:")) ??
-      "-"
-    );
-  } catch {
-    return "-";
-  }
+  // Final distribution signing is electron-builder's job; staged runtime builds
+  // stay ad-hoc so local keychains cannot silently produce unnotarized Developer ID binaries.
+  return "-";
 }
 
 function resolveRuntimeEntitlementsPath(projectRoot: string): string {
