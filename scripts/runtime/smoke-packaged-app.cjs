@@ -15,6 +15,17 @@ const DEFAULT_APP_PATH = path.join(PROJECT_ROOT, "dist-electron", "mac-arm64", "
 const REQUIRED_BINARIES = ["deus-runtime", "codex", "claude", "gh", "rg", "agent-browser"];
 const REQUIRED_MANIFESTS = ["deus-runtime.json", "agent-clis.json", "gh-cli.json"];
 const ALLOWED_BIN_ENTRIES = new Set([...REQUIRED_BINARIES, ...REQUIRED_MANIFESTS]);
+const FORBIDDEN_RUNTIME_PACKAGE_PREFIXES = [
+  "/node_modules/@anthropic-ai/claude-agent-sdk-darwin-",
+  "/node_modules/@anthropic-ai/claude-agent-sdk-linux-",
+  "/node_modules/@anthropic-ai/claude-agent-sdk-win32-",
+  "/node_modules/@openai/codex-darwin-",
+  "/node_modules/@openai/codex-linux-",
+  "/node_modules/@openai/codex-win32-",
+  "/node_modules/agent-browser/",
+  "/node_modules/@sentry/cli/",
+  "/node_modules/@sentry/cli-",
+];
 
 function parseArgs(argv) {
   const options = {
@@ -199,6 +210,60 @@ function verifyAsarRuntimeContract(asarPath) {
   console.log("[runtime-smoke] packaged app.asar runtime contract verified");
 }
 
+function verifyNoDuplicateRuntimeCliPackages(resourcesDir) {
+  const asarPath = path.join(resourcesDir, "app.asar");
+  assert(fs.existsSync(asarPath), `Missing packaged app.asar: ${asarPath}`);
+
+  const duplicateAsarEntries = asar
+    .listPackage(asarPath)
+    .filter((entry) =>
+      FORBIDDEN_RUNTIME_PACKAGE_PREFIXES.some((prefix) => entry.startsWith(prefix))
+    );
+  assert(
+    duplicateAsarEntries.length === 0,
+    "Packaged app.asar contains duplicate runtime CLI package payloads outside Resources/bin:\n" +
+      duplicateAsarEntries.slice(0, 20).join("\n")
+  );
+
+  const unpackedNodeModules = path.join(resourcesDir, "app.asar.unpacked", "node_modules");
+  if (fs.existsSync(unpackedNodeModules)) {
+    const duplicateUnpackedRoots = [
+      path.join(unpackedNodeModules, "@anthropic-ai", "claude-agent-sdk-darwin-arm64"),
+      path.join(unpackedNodeModules, "@anthropic-ai", "claude-agent-sdk-darwin-x64"),
+      path.join(unpackedNodeModules, "@anthropic-ai", "claude-agent-sdk-linux-arm64"),
+      path.join(unpackedNodeModules, "@anthropic-ai", "claude-agent-sdk-linux-arm64-musl"),
+      path.join(unpackedNodeModules, "@anthropic-ai", "claude-agent-sdk-linux-x64"),
+      path.join(unpackedNodeModules, "@anthropic-ai", "claude-agent-sdk-linux-x64-musl"),
+      path.join(unpackedNodeModules, "@anthropic-ai", "claude-agent-sdk-win32-arm64"),
+      path.join(unpackedNodeModules, "@anthropic-ai", "claude-agent-sdk-win32-x64"),
+      path.join(unpackedNodeModules, "@openai", "codex-darwin-arm64"),
+      path.join(unpackedNodeModules, "@openai", "codex-darwin-x64"),
+      path.join(unpackedNodeModules, "@openai", "codex-linux-arm64"),
+      path.join(unpackedNodeModules, "@openai", "codex-linux-x64"),
+      path.join(unpackedNodeModules, "@openai", "codex-win32-arm64"),
+      path.join(unpackedNodeModules, "@openai", "codex-win32-x64"),
+      path.join(unpackedNodeModules, "agent-browser"),
+      path.join(unpackedNodeModules, "@sentry", "cli"),
+      path.join(unpackedNodeModules, "@sentry", "cli-darwin"),
+      path.join(unpackedNodeModules, "@sentry", "cli-linux-arm"),
+      path.join(unpackedNodeModules, "@sentry", "cli-linux-arm64"),
+      path.join(unpackedNodeModules, "@sentry", "cli-linux-i686"),
+      path.join(unpackedNodeModules, "@sentry", "cli-linux-x64"),
+      path.join(unpackedNodeModules, "@sentry", "cli-win32-arm64"),
+      path.join(unpackedNodeModules, "@sentry", "cli-win32-i686"),
+      path.join(unpackedNodeModules, "@sentry", "cli-win32-x64"),
+    ].filter((entryPath) => fs.existsSync(entryPath));
+
+    assert(
+      duplicateUnpackedRoots.length === 0,
+      "Packaged app.asar.unpacked contains duplicate runtime CLI package payloads outside Resources/bin:\n" +
+        duplicateUnpackedRoots.join("\n")
+    );
+  }
+
+  console.log("[runtime-smoke] duplicate runtime CLI package payloads absent");
+}
+
 async function verifyPackagedApp(options) {
   const appPath = options.appPath;
   assertDirectory(appPath, "packaged app bundle");
@@ -246,6 +311,7 @@ async function verifyPackagedApp(options) {
     }
   );
   verifyAsarRuntimeContract(path.join(resourcesDir, "app.asar"));
+  verifyNoDuplicateRuntimeCliPackages(resourcesDir);
 
   console.log(`[runtime-smoke] packaged app verified: ${appPath}`);
 }
