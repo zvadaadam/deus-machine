@@ -1,7 +1,9 @@
 const fs = require("node:fs");
+const http = require("node:http");
 const os = require("node:os");
 const path = require("node:path");
 const { execFileSync, spawn, spawnSync } = require("node:child_process");
+const { assertInitializedAgents, readAgentServerListenUrl } = require("./runtime-smoke-rpc.cjs");
 
 const PROJECT_ROOT = path.resolve(__dirname, "../..");
 const DEFAULT_APP_PATH = path.join(PROJECT_ROOT, "dist-electron", "mac-arm64", "Deus.app");
@@ -156,6 +158,58 @@ function appDiagnostics(appPath, appBinary) {
     `spctl: ${runDiagnostic("spctl", ["--assess", "--type", "execute", "--verbose=4", appPath])}`,
     `xattr: ${runDiagnostic("xattr", ["-lr", appBinary]) || "none"}`,
   ].join("\n");
+}
+
+function getJson(port, pathname) {
+  return new Promise((resolve, reject) => {
+    const request = http.get(
+      {
+        hostname: "127.0.0.1",
+        port,
+        path: pathname,
+        timeout: 5_000,
+      },
+      (response) => {
+        let body = "";
+        response.setEncoding("utf8");
+        response.on("data", (chunk) => {
+          body += chunk;
+        });
+        response.on("end", () => {
+          resolve({ statusCode: response.statusCode, body });
+        });
+      }
+    );
+    request.on("error", reject);
+    request.on("timeout", () => request.destroy(new Error(`Timed out requesting ${pathname}`)));
+  });
+}
+
+async function assertBackendDbRouteFromLog(logContents) {
+  const match = logContents.match(/\[backend\] \[BACKEND_PORT\](\d+)/);
+  if (!match) throw new Error("Packaged desktop log did not include [BACKEND_PORT]");
+
+  const response = await getJson(Number(match[1]), "/api/workspaces");
+  if (response.statusCode !== 200) {
+    throw new Error(
+      `Packaged desktop backend DB route failed: GET /api/workspaces returned ${
+        response.statusCode
+      }: ${response.body.slice(0, 500)}`
+    );
+  }
+
+  const parsed = JSON.parse(response.body);
+  if (!Array.isArray(parsed)) {
+    throw new Error(
+      `Packaged desktop backend DB route returned non-array payload: ${response.body.slice(0, 500)}`
+    );
+  }
+}
+
+async function assertInitializedAgentsFromLog(logContents) {
+  const listenUrl = readAgentServerListenUrl(logContents);
+  if (!listenUrl) throw new Error("Packaged desktop log did not include agent-server LISTEN_URL");
+  await assertInitializedAgents(listenUrl);
 }
 
 function packagedDesktopEnv(tempHome) {
@@ -347,13 +401,17 @@ async function smokePackagedDesktop(options) {
   });
 
   try {
-    const { logPath } = await waitForDesktopReadiness(
+    const { logPath, contents } = await waitForDesktopReadiness(
       child,
       tempHome,
       requiredLogPatterns(binDir),
       appDiagnostics(launchAppPath, appBinary)
     );
-    console.log(`[runtime-smoke] packaged desktop reached readiness; log=${logPath}`);
+    await assertInitializedAgentsFromLog(contents);
+    await assertBackendDbRouteFromLog(contents);
+    console.log(
+      `[runtime-smoke] packaged desktop reached readiness, initialized agents, and served DB route; log=${logPath}`
+    );
   } catch (error) {
     if (stderr.trim()) {
       console.error(`[runtime-smoke] packaged desktop stderr:\n${stderr.trim()}`);
