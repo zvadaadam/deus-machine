@@ -200,7 +200,7 @@ function verifyAsarRuntimeContract(asarPath) {
   console.log("[runtime-smoke] packaged app.asar runtime contract verified");
 }
 
-function verifyPackagedApp(options) {
+async function verifyPackagedApp(options) {
   const appPath = options.appPath;
   assertDirectory(appPath, "packaged app bundle");
   assert(appPath.endsWith(".app"), `Expected a macOS .app bundle: ${appPath}`);
@@ -234,7 +234,7 @@ function verifyPackagedApp(options) {
   if (options.requireGatekeeper) {
     verifyGatekeeperAssessment(appPath);
   }
-  verifyPackagedAgentClis(
+  await verifyPackagedAgentClis(
     {
       electronPlatformName: "darwin",
       arch,
@@ -250,9 +250,11 @@ function verifyPackagedApp(options) {
   console.log(`[runtime-smoke] packaged app verified: ${appPath}`);
 }
 
-try {
-  verifyPackagedApp(parseArgs(process.argv.slice(2)));
-} catch (error) {
+async function main() {
+  await verifyPackagedApp(parseArgs(process.argv.slice(2)));
+}
+
+main().catch((error) => {
   console.error(error);
   process.exit(1);
-}
+});

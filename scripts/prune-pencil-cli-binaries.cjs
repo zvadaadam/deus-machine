@@ -1,7 +1,7 @@
 const fs = require("node:fs");
 const crypto = require("node:crypto");
 const path = require("node:path");
-const { execFileSync, spawnSync } = require("node:child_process");
+const { execFileSync, spawn, spawnSync } = require("node:child_process");
 
 const ARCH_BY_BUILDER_VALUE = new Map([
   [1, "x64"],
@@ -20,6 +20,8 @@ const REQUIRED_RUNTIME_ENTITLEMENTS = [
   "com.apple.security.cs.disable-library-validation",
 ];
 const MAC_CODESIGN_PAGE_SIZE = "4096";
+const PACKAGED_VERSION_TIMEOUT_MS = 20_000;
+const PACKAGED_VERSION_STOP_TIMEOUT_MS = 5_000;
 const PROJECT_ROOT = path.resolve(__dirname, "..");
 
 function platformSegment(electronPlatformName) {
@@ -589,10 +591,44 @@ function macExecutionPolicyHint(diagnostics) {
   ].join("\n");
 }
 
-function runPackagedVersionCheck(label, executablePath, binDir) {
-  const result = spawnSync(executablePath, ["--version"], {
-    encoding: "utf8",
-    timeout: 20_000,
+function killChildTree(child, signal) {
+  if (process.platform !== "win32" && child.pid) {
+    try {
+      process.kill(-child.pid, signal);
+      return;
+    } catch {
+      // Fall back to the direct child if process-group termination is unavailable.
+    }
+  }
+  child.kill(signal);
+}
+
+function stopVersionChild(child) {
+  if (child.exitCode !== null || child.signalCode !== null) return Promise.resolve();
+
+  return new Promise((resolve) => {
+    let settled = false;
+    const finish = () => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(forceTimer);
+      resolve();
+    };
+    const forceTimer = setTimeout(() => {
+      if (child.exitCode === null && child.signalCode === null) killChildTree(child, "SIGKILL");
+      child.stdout?.destroy();
+      child.stderr?.destroy();
+      child.unref?.();
+      finish();
+    }, PACKAGED_VERSION_STOP_TIMEOUT_MS);
+    child.once("exit", finish);
+    killChildTree(child, "SIGTERM");
+  });
+}
+
+async function runPackagedVersionCheck(label, executablePath, binDir) {
+  const child = spawn(executablePath, ["--version"], {
+    detached: process.platform !== "win32",
     env: {
       ...process.env,
       DEUS_BUNDLED_BIN_DIR: binDir,
@@ -600,26 +636,85 @@ function runPackagedVersionCheck(label, executablePath, binDir) {
     },
     stdio: ["ignore", "pipe", "pipe"],
   });
-  const stdout = (result.stdout || "").trim();
-  const stderr = (result.stderr || "").trim();
 
-  if (result.status !== 0) {
-    const diagnostics = packagedExecutableDiagnostics(executablePath);
-    const hint = macExecutionPolicyHint(diagnostics);
-    throw new Error(
-      `Packaged ${label} --version failed: status=${result.status} signal=${
-        result.signal
-      } error=${result.error?.code ?? "none"} stdout=${stdout} stderr=${stderr}${
-        diagnostics ? `\n${diagnostics}` : ""
-      }${hint}`
-    );
+  let stdout = "";
+  let stderr = "";
+
+  try {
+    await new Promise((resolve, reject) => {
+      let settled = false;
+      const timeout = setTimeout(() => {
+        const diagnostics = packagedExecutableDiagnostics(executablePath);
+        const hint = macExecutionPolicyHint(diagnostics);
+        fail(
+          new Error(
+            `Packaged ${label} --version timed out after ${PACKAGED_VERSION_TIMEOUT_MS}ms stdout=${stdout
+              .trim()
+              .slice(-4000)} stderr=${stderr.trim().slice(-4000)}${
+              diagnostics ? `\n${diagnostics}` : ""
+            }${hint}`
+          )
+        );
+      }, PACKAGED_VERSION_TIMEOUT_MS);
+
+      const fail = (error) => {
+        if (settled) return;
+        settled = true;
+        clearTimeout(timeout);
+        reject(error);
+      };
+
+      child.stdout.on("data", (data) => {
+        stdout += data.toString();
+      });
+      child.stderr.on("data", (data) => {
+        stderr += data.toString();
+      });
+      child.on("error", (error) => {
+        const diagnostics = packagedExecutableDiagnostics(executablePath);
+        const hint = macExecutionPolicyHint(diagnostics);
+        fail(
+          new Error(
+            `Packaged ${label} --version failed to spawn: error=${
+              error.code || error.message
+            } stdout=${stdout.trim().slice(-4000)} stderr=${stderr.trim().slice(-4000)}${
+              diagnostics ? `\n${diagnostics}` : ""
+            }${hint}`
+          )
+        );
+      });
+      child.on("exit", (code, signal) => {
+        if (settled) return;
+        if (code === 0) {
+          settled = true;
+          clearTimeout(timeout);
+          resolve();
+          return;
+        }
+
+        const diagnostics = packagedExecutableDiagnostics(executablePath);
+        const hint = macExecutionPolicyHint(diagnostics);
+        fail(
+          new Error(
+            `Packaged ${label} --version failed: status=${code} signal=${
+              signal ?? "none"
+            } stdout=${stdout.trim().slice(-4000)} stderr=${stderr.trim().slice(-4000)}${
+              diagnostics ? `\n${diagnostics}` : ""
+            }${hint}`
+          )
+        );
+      });
+    });
+  } finally {
+    await stopVersionChild(child);
   }
 
-  validateVersionOutput(label, stdout);
-  console.log(`[runtime] packaged ${label}: ${stdout}`);
+  const output = stdout.trim();
+  validateVersionOutput(label, output);
+  console.log(`[runtime] packaged ${label}: ${output}`);
 }
 
-function verifyPackagedAgentClis(context, options = {}) {
+async function verifyPackagedAgentClis(context, options = {}) {
   if (context.electronPlatformName !== "darwin") return;
 
   const resourcesDir = context.resourcesDir ?? resourcesDirForContext(context);
@@ -664,7 +759,7 @@ function verifyPackagedAgentClis(context, options = {}) {
     ["Claude CLI", path.join(binDir, "claude")],
     ["Codex ripgrep helper", path.join(binDir, "rg")],
   ]) {
-    runPackagedVersionCheck(label, executablePath, binDir);
+    await runPackagedVersionCheck(label, executablePath, binDir);
   }
 }
 
@@ -672,7 +767,7 @@ module.exports = async function afterPack(context) {
   prunePencilCliBinaries(context);
   pruneNodePtyRuntimeBinaries(context);
   prepareBetterSqliteRuntimeBinding(context);
-  verifyPackagedAgentClis(context, {
+  await verifyPackagedAgentClis(context, {
     runVersionChecks: false,
     verifyExecutableSignatures: false,
     verifyNativePayloadSignatures: false,
