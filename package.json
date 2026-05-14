@@ -19,7 +19,7 @@
     "dev": "bun run native:electron && ([ -f apps/agent-server/dist/index.bundled.cjs ] || bun run build:agent-server) && electron-vite dev",
     "dev:web": "bun run native:node && bunx tsx scripts/runtime/dev.ts",
     "dev:frontend": "vite --config apps/web/vite.config.ts",
-    "dev:backend": "node apps/backend/server.cjs",
+    "dev:backend": "bun run native:node && node apps/backend/server.cjs",
     "build": "electron-vite build",
     "build:agent-server": "bunx tsx apps/agent-server/build.ts",
     "build:backend": "bunx tsx apps/backend/build.ts",
