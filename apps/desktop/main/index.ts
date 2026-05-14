@@ -247,8 +247,9 @@ app.whenReady().then(async () => {
 
   // Set up the native app menu (File, Edit, View, Window, Help)
   setupAppMenu();
-  // Fix PATH when launched from macOS Finder (login shell doesn't run)
-  if (process.platform === "darwin") {
+  // Dev-only: mirror terminal PATH when Electron is launched outside a shell.
+  // Packaged runtime uses bundled binaries and a deterministic system PATH.
+  if (process.platform === "darwin" && !app.isPackaged) {
     try {
       await syncShellEnvironment();
     } catch (err) {

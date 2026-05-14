@@ -1,4 +1,3 @@
-import Database from "better-sqlite3";
 import { execFileSync } from "node:child_process";
 import {
   closeSync,
@@ -13,6 +12,7 @@ import { homedir } from "node:os";
 import { fileURLToPath } from "node:url";
 import { basename, dirname, join } from "node:path";
 import type { RecentProject } from "@shared/types/onboarding";
+import { openSqliteDatabase } from "../lib/sqlite";
 
 const RECENT_PROJECT_LIMIT = 100;
 const CLAUDE_JSONL_SCAN_BYTES = 16 * 1024;
@@ -191,9 +191,9 @@ function readVscdbProjects(
   if (!existsSync(dbPath)) return [];
   if (!hasGitProbeBudgetRemaining(options)) return [];
 
-  let db: InstanceType<typeof Database> | undefined;
+  let db: ReturnType<typeof openSqliteDatabase> | undefined;
   try {
-    db = new Database(dbPath, { readonly: true });
+    db = openSqliteDatabase(dbPath, { readonly: true });
     const row = db
       .prepare("SELECT value FROM ItemTable WHERE key = 'history.recentlyOpenedPathsList'")
       .get() as { value: string } | undefined;

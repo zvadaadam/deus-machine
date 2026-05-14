@@ -75,9 +75,11 @@ function resolveSimBridgePath(): string | null {
     return envOverride;
   }
 
-  // 2. Packaged Electron app — extraResources drops simbridge here.
-  //    resourcesPath is Electron-only, not in NodeJS.Process types.
-  const resourcesPath = (process as { resourcesPath?: string }).resourcesPath;
+  // 2. Packaged app — extraResources drops simbridge here. Compiled
+  // deus-runtime processes do not have Electron's process.resourcesPath, so
+  // prefer the explicit runtime env that desktop main passes down.
+  const resourcesPath =
+    process.env["DEUS_RESOURCES_PATH"] ?? (process as { resourcesPath?: string }).resourcesPath;
   if (resourcesPath) {
     const packaged = join(resourcesPath, "simulator", "simbridge");
     if (existsSync(packaged)) {
