@@ -466,6 +466,9 @@ async function smokePackagedRuntime(options) {
   if (selfTest.ok !== true) {
     throw new Error(`Packaged runtime self-test failed: ${JSON.stringify(selfTest)}`);
   }
+  if (selfTest.nodeEnv !== "production") {
+    throw new Error(`Packaged runtime self-test expected NODE_ENV=production: ${selfTest.nodeEnv}`);
+  }
   if (path.resolve(String(selfTest.binDir || "")) !== path.resolve(binDir)) {
     throw new Error(
       `Packaged runtime self-test resolved unexpected binDir: ${selfTest.binDir}; expected ${binDir}`

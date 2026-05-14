@@ -28,6 +28,7 @@ export function configurePackagedMainRuntimeEnv(options: {
   if (!options.resourcesPath) return;
 
   const bundledBinDir = join(options.resourcesPath, "bin");
+  env.NODE_ENV = "production";
   env.DEUS_RESOURCES_PATH = options.resourcesPath;
   env.DEUS_BUNDLED_BIN_DIR = bundledBinDir;
 

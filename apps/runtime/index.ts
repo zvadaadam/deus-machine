@@ -264,7 +264,11 @@ function configureRuntimeEnv(command: RuntimeCommand, dataDir?: string): void {
     process.env.DEUS_BUNDLED_BIN_DIR ??= layout.bundledBinDir;
     process.env.DEUS_RESOURCES_PATH ??= layout.resourcesPath;
   }
-  process.env.NODE_ENV ??= "production";
+  if (isNativeRuntimeExecutable) {
+    process.env.NODE_ENV = "production";
+  } else {
+    process.env.NODE_ENV ??= "production";
+  }
   process.env.NODE_PATH = nodePathCandidates.join(delimiter);
   refreshNodePathResolution();
   process.env.PATH = isNativeRuntimeExecutable
@@ -314,6 +318,7 @@ async function run(command: RuntimeCommand, dataDir?: string): Promise<void> {
         executable: layout.executablePath,
         binDir: layout.bundledBinDir,
         resourcesPath: layout.resourcesPath,
+        nodeEnv: process.env.NODE_ENV ?? "",
         nodePath: process.env.NODE_PATH ?? "",
         nodeGlobalPaths: NodeModule.globalPaths,
         runtimeKey: getRuntimeKey(),
