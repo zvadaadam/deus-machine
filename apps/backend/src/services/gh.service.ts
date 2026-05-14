@@ -7,6 +7,38 @@ import { getGitRemoteUrl } from "../lib/git-remotes";
 export { parseGitHubRepo };
 
 const execFileAsync = promisify(execFile);
+const GH_CHILD_ENV_DENYLIST = [
+  "AGENT_SERVER_CWD",
+  "AGENT_SERVER_ENTRY",
+  "AUTH_TOKEN",
+  "DATABASE_PATH",
+  "DEUS_AUTH_TOKEN",
+  "DEUS_BACKEND_PORT",
+  "DEUS_BUNDLED_BIN_DIR",
+  "DEUS_DATA_DIR",
+  "DEUS_PACKAGED",
+  "DEUS_RESOURCES_PATH",
+  "DEUS_RUNTIME",
+  "DEUS_RUNTIME_COMMAND",
+  "DEUS_RUNTIME_EXECUTABLE",
+  "ELECTRON_RUN_AS_NODE",
+  "NODE_PATH",
+  "PORT",
+] as const;
+
+function ghChildEnv(): NodeJS.ProcessEnv {
+  const env: NodeJS.ProcessEnv = { ...process.env };
+  for (const key of GH_CHILD_ENV_DENYLIST) {
+    delete env[key];
+  }
+  return {
+    ...env,
+    PATH: extendCliPath(process.env.PATH),
+    GIT_TERMINAL_PROMPT: "0",
+    GH_PROMPT_DISABLED: "1",
+    GH_NO_UPDATE_NOTIFIER: "1",
+  };
+}
 
 // Helper: run gh CLI command with timeout, explicit error classification
 export async function runGh(
@@ -25,13 +57,7 @@ export async function runGh(
       cwd: options.cwd,
       encoding: "utf-8",
       timeout: options.timeoutMs ?? 5000,
-      env: {
-        ...process.env,
-        PATH: extendCliPath(process.env.PATH),
-        GIT_TERMINAL_PROMPT: "0",
-        GH_PROMPT_DISABLED: "1",
-        GH_NO_UPDATE_NOTIFIER: "1",
-      },
+      env: ghChildEnv(),
     });
     return { success: true, stdout: stdout.trim() };
   } catch (err: unknown) {

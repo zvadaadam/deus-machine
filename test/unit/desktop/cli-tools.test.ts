@@ -17,7 +17,10 @@ import { configurePackagedMainRuntimeEnv } from "../../../apps/desktop/main/runt
 const originalBundledBinDir = process.env.DEUS_BUNDLED_BIN_DIR;
 const originalDeusPackaged = process.env.DEUS_PACKAGED;
 const originalDeusRuntime = process.env.DEUS_RUNTIME;
+const originalDeusRuntimeExecutable = process.env.DEUS_RUNTIME_EXECUTABLE;
 const originalPath = process.env.PATH;
+const originalNodePath = process.env.NODE_PATH;
+const originalElectronRunAsNode = process.env.ELECTRON_RUN_AS_NODE;
 const tempRoots: string[] = [];
 
 function createTempRoot(): string {
@@ -34,8 +37,14 @@ afterEach(() => {
   else process.env.DEUS_PACKAGED = originalDeusPackaged;
   if (originalDeusRuntime === undefined) delete process.env.DEUS_RUNTIME;
   else process.env.DEUS_RUNTIME = originalDeusRuntime;
+  if (originalDeusRuntimeExecutable === undefined) delete process.env.DEUS_RUNTIME_EXECUTABLE;
+  else process.env.DEUS_RUNTIME_EXECUTABLE = originalDeusRuntimeExecutable;
   if (originalPath === undefined) delete process.env.PATH;
   else process.env.PATH = originalPath;
+  if (originalNodePath === undefined) delete process.env.NODE_PATH;
+  else process.env.NODE_PATH = originalNodePath;
+  if (originalElectronRunAsNode === undefined) delete process.env.ELECTRON_RUN_AS_NODE;
+  else process.env.ELECTRON_RUN_AS_NODE = originalElectronRunAsNode;
   for (const root of tempRoots.splice(0)) {
     rmSync(root, { recursive: true, force: true });
   }
@@ -45,11 +54,20 @@ describe("desktop CLI tools", () => {
   it("uses deterministic packaged PATH for native CLI commands", () => {
     process.env.DEUS_PACKAGED = "1";
     process.env.DEUS_BUNDLED_BIN_DIR = "/Applications/Deus.app/Contents/Resources/bin";
+    process.env.DEUS_RUNTIME_EXECUTABLE = "/tmp/stale-runtime";
+    process.env.ELECTRON_RUN_AS_NODE = "1";
+    process.env.NODE_PATH = "/tmp/stale-node-modules";
     process.env.PATH = "/opt/homebrew/bin:/usr/local/bin:/usr/bin";
 
-    expect(getCliLookupEnv().PATH).toBe(
+    const env = getCliLookupEnv();
+    expect(env.PATH).toBe(
       "/Applications/Deus.app/Contents/Resources/bin:/usr/bin:/bin:/usr/sbin:/sbin"
     );
+    expect(env.DEUS_PACKAGED).toBeUndefined();
+    expect(env.DEUS_BUNDLED_BIN_DIR).toBeUndefined();
+    expect(env.DEUS_RUNTIME_EXECUTABLE).toBeUndefined();
+    expect(env.ELECTRON_RUN_AS_NODE).toBeUndefined();
+    expect(env.NODE_PATH).toBeUndefined();
   });
 
   it.each(["codex", "claude", "gh", "rg"])(
