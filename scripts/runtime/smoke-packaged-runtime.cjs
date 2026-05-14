@@ -1,0 +1,271 @@
+const fs = require("node:fs");
+const os = require("node:os");
+const path = require("node:path");
+const { execFileSync, spawn, spawnSync } = require("node:child_process");
+
+const PROJECT_ROOT = path.resolve(__dirname, "../..");
+const DEFAULT_APP_PATH = path.join(PROJECT_ROOT, "dist-electron", "mac-arm64", "Deus.app");
+const STARTUP_TIMEOUT_MS = 45_000;
+const STOP_TIMEOUT_MS = 5_000;
+const PACKAGED_SYSTEM_PATHS = ["/usr/bin", "/bin", "/usr/sbin", "/sbin"];
+const OBSOLETE_RUNTIME_PATTERNS = [
+  /spawn (codex|claude).*ENOENT/,
+  /ELECTRON_RUN_AS_NODE/,
+  /resources\/backend/,
+  /AGENT_SERVER_ENTRY/,
+  /global CLI/,
+];
+
+function parseArgs(argv) {
+  const options = {
+    appPath: null,
+    requireGatekeeper: false,
+    skipAppCheck: false,
+  };
+
+  for (let index = 0; index < argv.length; index++) {
+    const arg = argv[index];
+    if (arg === "--app") {
+      options.appPath = argv[++index];
+    } else if (arg === "--require-gatekeeper") {
+      options.requireGatekeeper = true;
+    } else if (arg === "--skip-app-check") {
+      options.skipAppCheck = true;
+    } else if (arg === "--help" || arg === "-h") {
+      printUsage();
+      process.exit(0);
+    } else if (arg.startsWith("-")) {
+      throw new Error(`Unknown option: ${arg}`);
+    } else if (!options.appPath) {
+      options.appPath = arg;
+    } else {
+      throw new Error(`Unexpected argument: ${arg}`);
+    }
+  }
+
+  options.appPath = path.resolve(options.appPath ?? DEFAULT_APP_PATH);
+  return options;
+}
+
+function printUsage() {
+  console.log(`Usage: node scripts/runtime/smoke-packaged-runtime.cjs [app-path]
+
+Options:
+  --app <path>             Path to the packaged .app bundle
+  --require-gatekeeper     Require spctl execute assessment in the app check
+  --skip-app-check         Skip smoke-packaged-app.cjs and only run runtime commands
+
+This smoke executes the packaged Resources/bin/deus-runtime. It should be run
+on notarized release artifacts or hosts that allow generated/copied Mach-O
+binaries to launch directly.`);
+}
+
+function assert(condition, message) {
+  if (!condition) throw new Error(message);
+}
+
+function assertExecutable(filePath, label) {
+  assert(fs.existsSync(filePath), `Missing ${label}: ${filePath}`);
+  const stat = fs.statSync(filePath);
+  assert(stat.isFile(), `${label} is not a regular file: ${filePath}`);
+  assert((stat.mode & 0o111) !== 0, `${label} is not executable: ${filePath}`);
+}
+
+function assertHostRunnableArch(filePath) {
+  if (process.platform !== "darwin") return;
+  const expectedArch = process.arch === "arm64" ? "arm64" : process.arch === "x64" ? "x86_64" : null;
+  if (!expectedArch) return;
+
+  const output = execFileSync("file", [filePath], {
+    encoding: "utf8",
+    timeout: 20_000,
+    stdio: ["ignore", "pipe", "pipe"],
+  }).trim();
+  if (!output.includes(expectedArch)) {
+    throw new Error(
+      `Packaged runtime architecture does not match this host; expected ${expectedArch}: ${output}`
+    );
+  }
+}
+
+function runtimeEnv(binDir) {
+  const env = {
+    ...process.env,
+    PATH: [binDir, ...PACKAGED_SYSTEM_PATHS].join(path.delimiter),
+  };
+  delete env.ELECTRON_RUN_AS_NODE;
+  delete env.AGENT_SERVER_ENTRY;
+  delete env.AGENT_SERVER_CWD;
+  delete env.NODE_PATH;
+  return env;
+}
+
+function runAppCheck(appPath, options) {
+  if (options.skipAppCheck) return;
+
+  const args = [
+    path.join(PROJECT_ROOT, "scripts", "runtime", "smoke-packaged-app.cjs"),
+    "--app",
+    appPath,
+    "--run-version-checks",
+  ];
+  if (options.requireGatekeeper) args.push("--require-gatekeeper");
+
+  execFileSync(process.execPath, args, {
+    cwd: PROJECT_ROOT,
+    stdio: "inherit",
+  });
+}
+
+function runRuntime(runtimeBin, args, binDir) {
+  const result = spawnSync(runtimeBin, args, {
+    cwd: path.dirname(runtimeBin),
+    encoding: "utf8",
+    timeout: STARTUP_TIMEOUT_MS,
+    env: runtimeEnv(binDir),
+    stdio: ["ignore", "pipe", "pipe"],
+  });
+  if (result.status !== 0) {
+    throw new Error(
+      `${path.basename(runtimeBin)} ${args.join(" ")} failed: status=${result.status} signal=${
+        result.signal
+      } error=${result.error?.code ?? "none"} stderr=${result.stderr.trim()}`
+    );
+  }
+  return result.stdout.trim();
+}
+
+function stopChild(child) {
+  if (child.exitCode !== null || child.signalCode !== null) return Promise.resolve();
+
+  return new Promise((resolve) => {
+    let settled = false;
+    const finish = () => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(forceTimer);
+      resolve();
+    };
+    const forceTimer = setTimeout(() => {
+      if (child.exitCode === null && child.signalCode === null) child.kill("SIGKILL");
+    }, STOP_TIMEOUT_MS);
+    child.once("exit", finish);
+    child.kill("SIGTERM");
+  });
+}
+
+async function waitForRuntimePatterns(runtimeBin, args, binDir, patterns) {
+  const child = spawn(runtimeBin, args, {
+    cwd: path.dirname(runtimeBin),
+    env: runtimeEnv(binDir),
+    stdio: ["ignore", "pipe", "pipe"],
+  });
+
+  let stdout = "";
+  let stderr = "";
+  const matched = new Set();
+
+  try {
+    await new Promise((resolve, reject) => {
+      const timeout = setTimeout(() => {
+        reject(
+          new Error(
+            `${path.basename(runtimeBin)} ${args.join(
+              " "
+            )} did not reach readiness. stdout=${stdout.trim()} stderr=${stderr.trim()}`
+          )
+        );
+      }, STARTUP_TIMEOUT_MS);
+
+      const fail = (error) => {
+        clearTimeout(timeout);
+        reject(error);
+      };
+      const maybeDone = () => {
+        if (matched.size !== patterns.length) return;
+        clearTimeout(timeout);
+        resolve();
+      };
+      const inspectOutput = () => {
+        const output = `${stdout}\n${stderr}`;
+        for (const pattern of OBSOLETE_RUNTIME_PATTERNS) {
+          if (pattern.test(output)) {
+            fail(new Error(`Packaged runtime smoke used obsolete runtime path: ${pattern}`));
+            return;
+          }
+        }
+        patterns.forEach((pattern, index) => {
+          if (pattern.test(output)) matched.add(index);
+        });
+        maybeDone();
+      };
+
+      child.stdout.on("data", (data) => {
+        stdout += data.toString();
+        inspectOutput();
+      });
+      child.stderr.on("data", (data) => {
+        stderr += data.toString();
+        inspectOutput();
+      });
+      child.on("error", fail);
+      child.on("exit", (code, signal) => {
+        if (matched.size !== patterns.length) {
+          fail(
+            new Error(
+              `${path.basename(runtimeBin)} ${args.join(
+                " "
+              )} exited before readiness: code=${code} signal=${signal} stdout=${stdout.trim()} stderr=${stderr.trim()}`
+            )
+          );
+        }
+      });
+    });
+  } finally {
+    await stopChild(child);
+  }
+
+  return stdout;
+}
+
+async function smokePackagedRuntime(options) {
+  const appPath = options.appPath;
+  const resourcesDir = path.join(appPath, "Contents", "Resources");
+  const binDir = path.join(resourcesDir, "bin");
+  const runtimeBin = path.join(binDir, "deus-runtime");
+  assertExecutable(runtimeBin, "packaged Deus runtime");
+  assertHostRunnableArch(runtimeBin);
+
+  runAppCheck(appPath, options);
+
+  const version = runRuntime(runtimeBin, ["--version"], binDir);
+  if (!/^deus-runtime \d+\.\d+\.\d+ /.test(version)) {
+    throw new Error(`Unexpected packaged runtime version output: ${version}`);
+  }
+  console.log(`[runtime-smoke] packaged runtime version: ${version}`);
+
+  const selfTest = JSON.parse(runRuntime(runtimeBin, ["self-test"], binDir));
+  if (selfTest.ok !== true) {
+    throw new Error(`Packaged runtime self-test failed: ${JSON.stringify(selfTest)}`);
+  }
+  console.log(`[runtime-smoke] packaged runtime self-test binDir: ${selfTest.binDir}`);
+
+  await waitForRuntimePatterns(runtimeBin, ["agent-server"], binDir, [/LISTEN_URL=/]);
+  console.log("[runtime-smoke] packaged runtime agent-server reached LISTEN_URL");
+
+  const dataDir = fs.mkdtempSync(path.join(os.tmpdir(), "deus-packaged-runtime-"));
+  try {
+    await waitForRuntimePatterns(runtimeBin, ["backend", "--data-dir", dataDir], binDir, [
+      /^\[agent-server\] LISTEN_URL=/m,
+      /^\[BACKEND_PORT\]\d+/m,
+    ]);
+  } finally {
+    fs.rmSync(dataDir, { recursive: true, force: true });
+  }
+  console.log("[runtime-smoke] packaged runtime backend reached managed agent-server and port");
+}
+
+smokePackagedRuntime(parseArgs(process.argv.slice(2))).catch((error) => {
+  console.error(error);
+  process.exit(1);
+});
