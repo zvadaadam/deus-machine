@@ -17,6 +17,7 @@ import { resolveRuntimeStagePaths } from "../../shared/runtime";
 const runtimeDir = path.dirname(fileURLToPath(import.meta.url));
 const defaultProjectRoot = path.resolve(runtimeDir, "../..");
 const VERIFY_TIMEOUT_MS = 20_000;
+const VERIFY_STOP_TIMEOUT_MS = 5_000;
 const MAC_CODESIGN_PAGE_SIZE = "4096";
 const SOURCE_EXTENSIONS = new Set([".cjs", ".js", ".json", ".mjs", ".ts", ".tsx"]);
 const IGNORED_SOURCE_DIRS = new Set([
@@ -60,6 +61,16 @@ interface RuntimeManifestEntry {
   fileOutput: string;
   otoolOutput: string;
   versionOutput?: string;
+}
+
+interface VersionCheckResult {
+  ok: boolean;
+  status?: number | null;
+  signal?: string | null;
+  timedOut?: boolean;
+  error?: string;
+  stdout?: string;
+  stderr?: string;
 }
 
 export interface DeusRuntimeManifest {
@@ -452,20 +463,42 @@ export function buildDeusRuntime(options: BuildDeusRuntimeOptions = {}): DeusRun
 }
 
 export function verifyStagedDeusRuntimeVersion(executablePath: string): string {
-  const result = spawnSync(executablePath, ["--version"], {
+  const helperPath = path.join(runtimeDir, "run-version-check.cjs");
+  const result = spawnSync(process.execPath, [helperPath, executablePath, "--version"], {
     encoding: "utf8",
-    timeout: VERIFY_TIMEOUT_MS,
+    timeout: VERIFY_TIMEOUT_MS + VERIFY_STOP_TIMEOUT_MS + 5_000,
+    env: {
+      ...process.env,
+      DEUS_VERSION_CHECK_TIMEOUT_MS: String(VERIFY_TIMEOUT_MS),
+      DEUS_VERSION_CHECK_STOP_TIMEOUT_MS: String(VERIFY_STOP_TIMEOUT_MS),
+    },
     stdio: ["ignore", "pipe", "pipe"],
   });
-  const output = (result.stdout || "").trim();
+  const rawOutput = (result.stdout || "").trim();
+  let checkResult: VersionCheckResult;
+  try {
+    checkResult = JSON.parse(rawOutput) as VersionCheckResult;
+  } catch {
+    checkResult = {
+      ok: false,
+      status: result.status,
+      signal: result.signal,
+      error: spawnErrorCode(result.error),
+      stdout: rawOutput,
+      stderr: (result.stderr || "").trim(),
+    };
+  }
+  const output = (checkResult.stdout || "").trim();
   if (result.status !== 0) {
-    const stderr = (result.stderr || "").trim();
+    const stderr = [checkResult.stderr, result.stderr].filter(Boolean).join("\n").trim();
     const diagnostics = runtimeExecutableDiagnostics(executablePath);
     const hint = macExecutionPolicyHint(diagnostics);
     throw new Error(
       `deus-runtime --version failed for ${executablePath}: status=${result.status} signal=${
         result.signal
-      } error=${spawnErrorCode(result.error)} stdout=${output} stderr=${stderr}${
+      } error=${checkResult.error ?? spawnErrorCode(result.error)} timedOut=${
+        checkResult.timedOut === true
+      } stdout=${output} stderr=${stderr}${
         diagnostics ? `\n${diagnostics}` : ""
       }${hint}`
     );
