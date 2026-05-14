@@ -13,6 +13,9 @@ vi.mock("../agents/environment/shell-env", () => ({
 
 import { parseEnvString, buildAgentEnvironment } from "../agents/environment";
 
+const originalDeusPackaged = process.env.DEUS_PACKAGED;
+const originalDeusRuntime = process.env.DEUS_RUNTIME;
+
 // ============================================================================
 // parseEnvString
 // ============================================================================
@@ -51,6 +54,10 @@ describe("parseEnvString", () => {
 describe("buildAgentEnvironment", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    if (originalDeusPackaged === undefined) delete process.env.DEUS_PACKAGED;
+    else process.env.DEUS_PACKAGED = originalDeusPackaged;
+    if (originalDeusRuntime === undefined) delete process.env.DEUS_RUNTIME;
+    else process.env.DEUS_RUNTIME = originalDeusRuntime;
     mockGetShellEnvironment.mockReturnValue({ PATH: "/usr/bin", HOME: "/home/test" });
   });
 
@@ -73,6 +80,16 @@ describe("buildAgentEnvironment", () => {
       if (originalEnv === undefined) delete process.env.MY_VAR;
       else process.env.MY_VAR = originalEnv;
     }
+  });
+
+  it("skips login-shell environment capture in packaged runtime mode", () => {
+    process.env.DEUS_RUNTIME = "1";
+    mockGetShellEnvironment.mockReturnValue({ SHELL_ONLY_VAR: "from-shell" });
+
+    const env = buildAgentEnvironment();
+
+    expect(mockGetShellEnvironment).not.toHaveBeenCalled();
+    expect(env.SHELL_ONLY_VAR).toBeUndefined();
   });
 
   it("extraEnv overrides process.env", () => {

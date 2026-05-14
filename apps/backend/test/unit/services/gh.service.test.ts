@@ -32,6 +32,7 @@ import {
 } from "../../../src/services/gh.service";
 
 const originalBundledBinDir = process.env.DEUS_BUNDLED_BIN_DIR;
+const originalDeusPackaged = process.env.DEUS_PACKAGED;
 
 beforeEach(() => {
   vi.clearAllMocks();
@@ -48,6 +49,8 @@ beforeEach(() => {
 afterAll(() => {
   if (originalBundledBinDir === undefined) delete process.env.DEUS_BUNDLED_BIN_DIR;
   else process.env.DEUS_BUNDLED_BIN_DIR = originalBundledBinDir;
+  if (originalDeusPackaged === undefined) delete process.env.DEUS_PACKAGED;
+  else process.env.DEUS_PACKAGED = originalDeusPackaged;
 });
 
 // ─── Constants ────────────────────────────────────────────────────
@@ -191,7 +194,7 @@ describe("runGh", () => {
     }
   });
 
-  it("adds common Homebrew locations to PATH", async () => {
+  it("preserves inherited PATH without adding global install fallbacks", async () => {
     const originalPath = process.env.PATH;
     process.env.PATH = "/usr/bin:/bin";
     mockExecFileAsync.mockResolvedValue({ stdout: "", stderr: "" });
@@ -200,12 +203,34 @@ describe("runGh", () => {
       await runGh(["pr", "list"], { cwd: "/workspace" });
 
       const callEnv = mockExecFileAsync.mock.calls[0][2].env;
-      expect(callEnv.PATH.split(":")).toEqual(
-        expect.arrayContaining(["/opt/homebrew/bin", "/usr/local/bin", "/opt/local/bin"])
+      expect(callEnv.PATH).toBe("/nonexistent/deus-test-bundled-bin:/usr/bin:/bin");
+    } finally {
+      if (originalPath === undefined) delete process.env.PATH;
+      else process.env.PATH = originalPath;
+    }
+  });
+
+  it("uses only bundled and system PATH entries in packaged runtime mode", async () => {
+    const originalPath = process.env.PATH;
+    process.env.DEUS_PACKAGED = "1";
+    process.env.DEUS_BUNDLED_BIN_DIR = "/Applications/Deus.app/Contents/Resources/bin";
+    process.env.PATH = "/opt/homebrew/bin:/usr/local/bin:/usr/bin";
+    mockExecFileAsync.mockResolvedValue({ stdout: "", stderr: "" });
+
+    try {
+      await runGh(["pr", "list"], { cwd: "/workspace" });
+
+      const callEnv = mockExecFileAsync.mock.calls[0][2].env;
+      expect(mockExecFileAsync.mock.calls[0][0]).toBe(
+        "/Applications/Deus.app/Contents/Resources/bin/gh"
+      );
+      expect(callEnv.PATH).toBe(
+        "/Applications/Deus.app/Contents/Resources/bin:/usr/bin:/bin:/usr/sbin:/sbin"
       );
     } finally {
       if (originalPath === undefined) delete process.env.PATH;
       else process.env.PATH = originalPath;
+      delete process.env.DEUS_PACKAGED;
     }
   });
 
