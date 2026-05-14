@@ -28,6 +28,11 @@ function request(method: string, payload: unknown): IpcMessage {
   return { id: `${method}-test`, type: "request", method, payload };
 }
 
+function expectSuccess(reply: IpcMessage | null): void {
+  expect(reply).toMatchObject({ type: "response" });
+  expect(reply).not.toHaveProperty("error");
+}
+
 afterEach(async () => {
   await Promise.all(roots.splice(0).map((root) => fs.rm(root, { recursive: true, force: true })));
 });
@@ -38,21 +43,24 @@ describe("handleEditorMessage filesystem IPC", () => {
     const workspaceFile = join(ctx.workspace, "design.pen");
     const storageFile = join(ctx.storage, "scratch.bin");
 
-    await expect(
-      handleEditorMessage(request("write-file", { path: workspaceFile, contents: [65, 66] }), ctx)
-    ).resolves.toMatchObject({ type: "response", error: undefined });
+    expectSuccess(
+      await handleEditorMessage(
+        request("write-file", { path: workspaceFile, contents: [65, 66] }),
+        ctx
+      )
+    );
 
     await expect(
       handleEditorMessage(request("read-file", { path: workspaceFile }), ctx)
     ).resolves.toMatchObject({ payload: [65, 66] });
 
-    await expect(
-      handleEditorMessage(request("ensure-dir", { path: join(ctx.storage, "nested") }), ctx)
-    ).resolves.toMatchObject({ type: "response", error: undefined });
+    expectSuccess(
+      await handleEditorMessage(request("ensure-dir", { path: join(ctx.storage, "nested") }), ctx)
+    );
 
-    await expect(
-      handleEditorMessage(request("write-file", { path: storageFile, contents: [67] }), ctx)
-    ).resolves.toMatchObject({ type: "response", error: undefined });
+    expectSuccess(
+      await handleEditorMessage(request("write-file", { path: storageFile, contents: [67] }), ctx)
+    );
   });
 
   it("rejects read, write, and mkdir outside workspace and storage roots", async () => {
@@ -65,21 +73,30 @@ describe("handleEditorMessage filesystem IPC", () => {
       handleEditorMessage(request("read-file", { path: outsideFile }), ctx)
     ).resolves.toMatchObject({
       type: "response",
-      error: { code: "HANDLER_ERROR", message: "path must be inside the workspace or AAP storage dir" },
+      error: {
+        code: "HANDLER_ERROR",
+        message: "path must be inside the workspace or AAP storage dir",
+      },
     });
 
     await expect(
       handleEditorMessage(request("write-file", { path: outsideFile, contents: [88] }), ctx)
     ).resolves.toMatchObject({
       type: "response",
-      error: { code: "HANDLER_ERROR", message: "path must be inside the workspace or AAP storage dir" },
+      error: {
+        code: "HANDLER_ERROR",
+        message: "path must be inside the workspace or AAP storage dir",
+      },
     });
 
     await expect(
       handleEditorMessage(request("ensure-dir", { path: outsideDir }), ctx)
     ).resolves.toMatchObject({
       type: "response",
-      error: { code: "HANDLER_ERROR", message: "path must be inside the workspace or AAP storage dir" },
+      error: {
+        code: "HANDLER_ERROR",
+        message: "path must be inside the workspace or AAP storage dir",
+      },
     });
 
     await expect(fs.readFile(outsideFile, "utf8")).resolves.toBe("secret");
@@ -97,7 +114,10 @@ describe("handleEditorMessage filesystem IPC", () => {
       handleEditorMessage(request("read-file", { path: join(workspaceLink, "secret.txt") }), ctx)
     ).resolves.toMatchObject({
       type: "response",
-      error: { code: "HANDLER_ERROR", message: "path must be inside the workspace or AAP storage dir" },
+      error: {
+        code: "HANDLER_ERROR",
+        message: "path must be inside the workspace or AAP storage dir",
+      },
     });
 
     await expect(
@@ -107,7 +127,10 @@ describe("handleEditorMessage filesystem IPC", () => {
       )
     ).resolves.toMatchObject({
       type: "response",
-      error: { code: "HANDLER_ERROR", message: "path must be inside the workspace or AAP storage dir" },
+      error: {
+        code: "HANDLER_ERROR",
+        message: "path must be inside the workspace or AAP storage dir",
+      },
     });
 
     expect(existsSync(join(outside, "new-secret.txt"))).toBe(false);
