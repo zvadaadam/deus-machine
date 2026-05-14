@@ -7,6 +7,17 @@ const PROJECT_ROOT = path.resolve(__dirname, "../..");
 const STARTUP_TIMEOUT_MS = 45_000;
 const STOP_TIMEOUT_MS = 5_000;
 const PACKAGED_SYSTEM_PATHS = ["/usr/bin", "/bin", "/usr/sbin", "/sbin"];
+const RUNTIME_ENV_DENYLIST = [
+  "AGENT_SERVER_CWD",
+  "AGENT_SERVER_ENTRY",
+  "ELECTRON_RUN_AS_NODE",
+  "DEUS_PACKAGED",
+  "DEUS_RUNTIME",
+  "DEUS_RUNTIME_COMMAND",
+  "DEUS_RUNTIME_EXECUTABLE",
+  "DEUS_RESOURCES_PATH",
+  "NODE_PATH",
+];
 const OBSOLETE_RUNTIME_PATTERNS = [
   /spawn (codex|claude).*ENOENT/,
   /ELECTRON_RUN_AS_NODE/,
@@ -82,10 +93,9 @@ function runtimeEnv(binDir) {
     DEUS_BUNDLED_BIN_DIR: binDir,
     PATH: [binDir, ...PACKAGED_SYSTEM_PATHS].join(path.delimiter),
   };
-  delete env.ELECTRON_RUN_AS_NODE;
-  delete env.AGENT_SERVER_ENTRY;
-  delete env.AGENT_SERVER_CWD;
-  delete env.NODE_PATH;
+  for (const key of RUNTIME_ENV_DENYLIST) {
+    delete env[key];
+  }
   return env;
 }
 
