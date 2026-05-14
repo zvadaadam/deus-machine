@@ -24,6 +24,24 @@ const VERIFY_TIMEOUT_MS = 20_000;
 const VERIFY_STOP_TIMEOUT_MS = 5_000;
 // Keep in sync with apps/agent-server/agents/codex-server/codex-server-discovery.ts.
 const MIN_CODEX_APP_SERVER_VERSION = "0.128.0";
+const VERSION_CHECK_ENV_DENYLIST = [
+  "AGENT_SERVER_CWD",
+  "AGENT_SERVER_ENTRY",
+  "AUTH_TOKEN",
+  "DATABASE_PATH",
+  "DEUS_AUTH_TOKEN",
+  "DEUS_BACKEND_PORT",
+  "DEUS_BUNDLED_BIN_DIR",
+  "DEUS_DATA_DIR",
+  "DEUS_PACKAGED",
+  "DEUS_RESOURCES_PATH",
+  "DEUS_RUNTIME",
+  "DEUS_RUNTIME_COMMAND",
+  "DEUS_RUNTIME_EXECUTABLE",
+  "ELECTRON_RUN_AS_NODE",
+  "NODE_PATH",
+  "PORT",
+] as const;
 
 type AgentCliName = "codex" | "claude";
 
@@ -508,10 +526,7 @@ export function verifyStagedAgentCliVersion(
   executablePath: string
 ): string {
   const binDir = path.dirname(executablePath);
-  const env = {
-    ...process.env,
-    PATH: [binDir, process.env.PATH].filter(Boolean).join(path.delimiter),
-  };
+  const env = versionCheckEnv(binDir);
   const output = verifyVersion(
     executablePath,
     [tool === "claude" ? "--version" : "--version"],
@@ -526,13 +541,19 @@ async function verifyStagedAgentCliVersionBounded(
   executablePath: string
 ): Promise<string> {
   const binDir = path.dirname(executablePath);
-  const env = {
-    ...process.env,
-    PATH: [binDir, process.env.PATH].filter(Boolean).join(path.delimiter),
-  };
+  const env = versionCheckEnv(binDir);
   const output = await verifyVersionBounded(executablePath, ["--version"], env);
   assertVersionOutput(tool, output, executablePath);
   return output;
+}
+
+function versionCheckEnv(binDir: string): NodeJS.ProcessEnv {
+  const env: NodeJS.ProcessEnv = { ...process.env };
+  for (const key of VERSION_CHECK_ENV_DENYLIST) {
+    delete env[key];
+  }
+  env.PATH = [binDir, process.env.PATH].filter(Boolean).join(path.delimiter);
+  return env;
 }
 
 function inspectStaticExecutable(

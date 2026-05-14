@@ -3,6 +3,32 @@ const path = require("node:path");
 
 const timeoutMs = Number(process.env.DEUS_VERSION_CHECK_TIMEOUT_MS || 20_000);
 const stopTimeoutMs = Number(process.env.DEUS_VERSION_CHECK_STOP_TIMEOUT_MS || 5_000);
+const VERSION_CHECK_ENV_DENYLIST = [
+  "AGENT_SERVER_CWD",
+  "AGENT_SERVER_ENTRY",
+  "AUTH_TOKEN",
+  "DATABASE_PATH",
+  "DEUS_AUTH_TOKEN",
+  "DEUS_BACKEND_PORT",
+  "DEUS_BUNDLED_BIN_DIR",
+  "DEUS_DATA_DIR",
+  "DEUS_PACKAGED",
+  "DEUS_RESOURCES_PATH",
+  "DEUS_RUNTIME",
+  "DEUS_RUNTIME_COMMAND",
+  "DEUS_RUNTIME_EXECUTABLE",
+  "ELECTRON_RUN_AS_NODE",
+  "NODE_PATH",
+  "PORT",
+];
+
+function versionCheckEnv() {
+  const env = { ...process.env };
+  for (const key of VERSION_CHECK_ENV_DENYLIST) {
+    delete env[key];
+  }
+  return env;
+}
 
 function writeResult(result, exitCode) {
   process.stdout.write(`${JSON.stringify(result)}\n`);
@@ -55,7 +81,7 @@ async function main() {
   const child = spawn(resolvedExecutablePath, args, {
     cwd: path.dirname(resolvedExecutablePath),
     detached: process.platform !== "win32",
-    env: process.env,
+    env: versionCheckEnv(),
     stdio: ["ignore", "pipe", "pipe"],
   });
 

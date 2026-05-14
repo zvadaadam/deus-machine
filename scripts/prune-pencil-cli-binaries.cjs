@@ -23,6 +23,24 @@ const MAC_CODESIGN_PAGE_SIZE = "4096";
 const PACKAGED_VERSION_TIMEOUT_MS = 20_000;
 const PACKAGED_VERSION_STOP_TIMEOUT_MS = 5_000;
 const PROJECT_ROOT = path.resolve(__dirname, "..");
+const PACKAGED_VERSION_ENV_DENYLIST = [
+  "AGENT_SERVER_CWD",
+  "AGENT_SERVER_ENTRY",
+  "AUTH_TOKEN",
+  "DATABASE_PATH",
+  "DEUS_AUTH_TOKEN",
+  "DEUS_BACKEND_PORT",
+  "DEUS_BUNDLED_BIN_DIR",
+  "DEUS_DATA_DIR",
+  "DEUS_PACKAGED",
+  "DEUS_RESOURCES_PATH",
+  "DEUS_RUNTIME",
+  "DEUS_RUNTIME_COMMAND",
+  "DEUS_RUNTIME_EXECUTABLE",
+  "ELECTRON_RUN_AS_NODE",
+  "NODE_PATH",
+  "PORT",
+];
 
 function platformSegment(electronPlatformName) {
   if (electronPlatformName === "darwin") return "darwin";
@@ -627,13 +645,18 @@ function stopVersionChild(child) {
 }
 
 async function runPackagedVersionCheck(label, executablePath, binDir) {
+  const env = { ...process.env };
+  for (const key of PACKAGED_VERSION_ENV_DENYLIST) {
+    delete env[key];
+  }
+  Object.assign(env, {
+    DEUS_BUNDLED_BIN_DIR: binDir,
+    PATH: [binDir, ...PACKAGED_SYSTEM_PATHS].join(path.delimiter),
+  });
+
   const child = spawn(executablePath, ["--version"], {
     detached: process.platform !== "win32",
-    env: {
-      ...process.env,
-      DEUS_BUNDLED_BIN_DIR: binDir,
-      PATH: [binDir, ...PACKAGED_SYSTEM_PATHS].join(path.delimiter),
-    },
+    env,
     stdio: ["ignore", "pipe", "pipe"],
   });
 
