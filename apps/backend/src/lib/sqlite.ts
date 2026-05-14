@@ -56,6 +56,8 @@ export function openSqliteDatabase(
   options?: BetterSqlite3.Options
 ): BetterSqlite3.Database {
   if (isBunRuntime()) {
+    // deus-runtime is a Bun-compiled executable. Use Bun's built-in SQLite
+    // there instead of crossing back into better-sqlite3's Node native addon.
     const BunDatabase = loadBunSqlite();
     const bunOptions = options?.readonly
       ? { readonly: true }
