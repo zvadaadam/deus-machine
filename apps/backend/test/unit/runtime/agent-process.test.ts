@@ -129,7 +129,7 @@ describe("managed agent-server process", () => {
     await expect(startManagedAgentServer()).resolves.toBe("ws://127.0.0.1:7890");
     expect(readFileSync(argsPath, "utf8").trim()).toBe("agent-server");
     expect(readFileSync(cwdPath, "utf8").trim()).toBe(root);
-    expect(readFileSync(envPath, "utf8")).toBe(
+    expect(readFileSync(envPath, "utf8").trimEnd()).toBe(
       [
         "AUTH_TOKEN=",
         "DATABASE_PATH=",
@@ -146,7 +146,6 @@ describe("managed agent-server process", () => {
         "DEUS_RUNTIME_EXECUTABLE=",
         "NODE_PATH=",
         "PORT=",
-        "",
       ].join("\n")
     );
   });
