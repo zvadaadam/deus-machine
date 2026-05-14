@@ -6,6 +6,7 @@ directories:
 electronLanguages: [en]
 beforePack: "scripts/runtime/electron-builder-before-pack.cjs"
 afterPack: "scripts/prune-pencil-cli-binaries.cjs"
+afterSign: "scripts/verify-packaged-agent-clis.cjs"
 files:
   - "out/**/*"
   - "resources/**/*"
@@ -18,12 +19,6 @@ asarUnpack:
   - "node_modules/node-pty/**"
   - "node_modules/@pencil.dev/cli/dist/out/**"
 extraResources:
-  - from: "dist/runtime/electron/backend"
-    to: "backend"
-    filter:
-      - "**/*"
-  - from: "dist/runtime/electron/bin/index.bundled.cjs"
-    to: "bin/index.bundled.cjs"
   - from: "packages/pencil"
     to: "agentic-apps/pencil"
     filter:
@@ -39,9 +34,29 @@ extraResources:
       - "SKILL.md"
 mac:
   category: public.app-category.developer-tools
+  binaries:
+    - "Contents/Resources/bin/deus-runtime"
+    - "Contents/Resources/bin/codex"
+    - "Contents/Resources/bin/claude"
+    - "Contents/Resources/bin/gh"
+    - "Contents/Resources/bin/rg"
   extraResources:
+    - from: "dist/runtime/electron/bin/deus-runtime.json"
+      to: "bin/deus-runtime.json"
+    - from: "dist/runtime/electron/bin/agent-clis.json"
+      to: "bin/agent-clis.json"
+    - from: "dist/runtime/electron/bin/gh-cli.json"
+      to: "bin/gh-cli.json"
     - from: "dist/runtime/electron/bin/darwin-${arch}/gh"
       to: "bin/gh"
+    - from: "dist/runtime/electron/bin/darwin-${arch}/deus-runtime"
+      to: "bin/deus-runtime"
+    - from: "dist/runtime/electron/bin/darwin-${arch}/codex"
+      to: "bin/codex"
+    - from: "dist/runtime/electron/bin/darwin-${arch}/claude"
+      to: "bin/claude"
+    - from: "dist/runtime/electron/bin/darwin-${arch}/rg"
+      to: "bin/rg"
     - from: "packages/device-use/bin/simbridge"
       to: "simulator/simbridge"
     - from: "packages/device-use/bin/siminspector.dylib"

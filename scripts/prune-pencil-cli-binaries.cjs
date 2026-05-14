@@ -1,4 +1,5 @@
 const fs = require("node:fs");
+const crypto = require("node:crypto");
 const path = require("node:path");
 
 const ARCH_BY_BUILDER_VALUE = new Map([
@@ -7,6 +8,15 @@ const ARCH_BY_BUILDER_VALUE = new Map([
   ["x64", "x64"],
   ["arm64", "arm64"],
 ]);
+const FILE_ARCH_BY_TARGET_ARCH = new Map([
+  ["x64", "x86_64"],
+  ["arm64", "arm64"],
+]);
+const REQUIRED_RUNTIME_ENTITLEMENTS = [
+  "com.apple.security.cs.allow-jit",
+  "com.apple.security.cs.allow-unsigned-executable-memory",
+  "com.apple.security.cs.disable-library-validation",
+];
 
 function platformSegment(electronPlatformName) {
   if (electronPlatformName === "darwin") return "darwin";
@@ -97,9 +107,218 @@ function prunePencilCliBinaries(context) {
   return totals;
 }
 
+function assertExecutable(filePath, label) {
+  if (!fs.existsSync(filePath)) {
+    throw new Error(`Missing packaged ${label}: ${filePath}`);
+  }
+  if ((fs.statSync(filePath).mode & 0o111) === 0) {
+    throw new Error(`Packaged ${label} is not executable: ${filePath}`);
+  }
+}
+
+function verifyMachOArch(filePath, label, expectedFileArch) {
+  const fileOutput = require("node:child_process")
+    .execFileSync("file", [filePath], {
+      encoding: "utf8",
+      timeout: 20_000,
+      stdio: ["ignore", "pipe", "pipe"],
+    })
+    .trim();
+  if (
+    !fileOutput.includes("Mach-O 64-bit executable") ||
+    (expectedFileArch && !fileOutput.includes(expectedFileArch))
+  ) {
+    throw new Error(`Packaged ${label} has unexpected architecture: ${fileOutput}`);
+  }
+  console.log(`[agent-clis] packaged ${label}: ${fileOutput}`);
+}
+
+function verifyCodeSignature(filePath, label) {
+  require("node:child_process").execFileSync("codesign", ["--verify", "--verbose=2", filePath], {
+    encoding: "utf8",
+    timeout: 20_000,
+    stdio: ["ignore", "ignore", "pipe"],
+  });
+  console.log(`[agent-clis] packaged ${label} code signature verified`);
+}
+
+function verifyRuntimeEntitlements(filePath) {
+  const result = require("node:child_process").spawnSync(
+    "codesign",
+    ["-d", "--entitlements", ":-", filePath],
+    {
+      encoding: "utf8",
+      stdio: ["ignore", "pipe", "pipe"],
+    }
+  );
+  if (result.status !== 0) {
+    throw new Error(
+      `Unable to read packaged Deus runtime entitlements: ${result.stderr || result.stdout}`
+    );
+  }
+  const entitlements = `${result.stdout}\n${result.stderr}`;
+  for (const entitlement of REQUIRED_RUNTIME_ENTITLEMENTS) {
+    if (!entitlements.includes(entitlement)) {
+      throw new Error(`Packaged Deus runtime is missing ${entitlement} entitlement`);
+    }
+  }
+  console.log("[agent-clis] packaged Deus runtime entitlements verified");
+}
+
+function verifyRuntimeSystemDylibs(filePath) {
+  const output = require("node:child_process").execFileSync("otool", ["-L", filePath], {
+    encoding: "utf8",
+    timeout: 20_000,
+    stdio: ["ignore", "pipe", "pipe"],
+  });
+  const unexpected = output
+    .split(/\r?\n/)
+    .slice(1)
+    .map((line) => line.trim().split(/\s+/)[0])
+    .filter(Boolean)
+    .filter(
+      (dependency) =>
+        !dependency.startsWith("/usr/lib/") && !dependency.startsWith("/System/Library/")
+    );
+  if (unexpected.length > 0) {
+    throw new Error(`Packaged Deus runtime has non-system dylib dependencies: ${unexpected.join(", ")}`);
+  }
+  console.log("[agent-clis] packaged Deus runtime dylib dependencies verified");
+}
+
+function readJsonFile(filePath, label) {
+  if (!fs.existsSync(filePath)) {
+    throw new Error(`Missing packaged ${label}: ${filePath}`);
+  }
+  try {
+    return JSON.parse(fs.readFileSync(filePath, "utf8"));
+  } catch (error) {
+    throw new Error(
+      `Unable to read packaged ${label}: ${error instanceof Error ? error.message : String(error)}`
+    );
+  }
+}
+
+function hashFile(filePath) {
+  return crypto.createHash("sha256").update(fs.readFileSync(filePath)).digest("hex");
+}
+
+function verifyManifestFileEntry(entry, filePath, label) {
+  assertExecutable(filePath, label);
+  if (!entry || typeof entry !== "object") {
+    throw new Error(`Packaged manifest is missing ${label}`);
+  }
+  if (entry.sha256 !== hashFile(filePath)) {
+    throw new Error(`Packaged ${label} hash does not match its manifest entry`);
+  }
+  if (entry.size !== fs.statSync(filePath).size) {
+    throw new Error(`Packaged ${label} size does not match its manifest entry`);
+  }
+}
+
+function verifyPackagedRuntimeManifests(binDir, targetArch) {
+  const runtimeKey = targetArch ? `darwin-${targetArch}` : null;
+  const runtimeManifest = readJsonFile(
+    path.join(binDir, "deus-runtime.json"),
+    "Deus runtime manifest"
+  );
+  const agentCliManifest = readJsonFile(
+    path.join(binDir, "agent-clis.json"),
+    "agent CLI manifest"
+  );
+  const ghCliManifest = readJsonFile(path.join(binDir, "gh-cli.json"), "GitHub CLI manifest");
+
+  if (runtimeManifest.version !== 1 || !Array.isArray(runtimeManifest.entries)) {
+    throw new Error("Packaged Deus runtime manifest has an unexpected shape");
+  }
+  if (agentCliManifest.version !== 1 || !Array.isArray(agentCliManifest.targets)) {
+    throw new Error("Packaged agent CLI manifest has an unexpected shape");
+  }
+  if (ghCliManifest.version !== 1 || !Array.isArray(ghCliManifest.targets)) {
+    throw new Error("Packaged GitHub CLI manifest has an unexpected shape");
+  }
+  if (runtimeKey && !runtimeManifest.entries.some((entry) => entry.runtimeKey === runtimeKey)) {
+    throw new Error(`Packaged Deus runtime manifest is missing ${runtimeKey}`);
+  }
+  if (runtimeKey) {
+    const runtimeEntry = runtimeManifest.entries.find((entry) => entry.runtimeKey === runtimeKey);
+    verifyManifestFileEntry(runtimeEntry, path.join(binDir, "deus-runtime"), "Deus runtime");
+
+    for (const tool of ["codex", "claude", "rg"]) {
+      const entry = agentCliManifest.targets.find(
+        (candidate) => candidate.runtimeKey === runtimeKey && candidate.tool === tool
+      );
+      if (!entry) {
+        throw new Error(`Packaged agent CLI manifest is missing ${runtimeKey}/${tool}`);
+      }
+      verifyManifestFileEntry(entry, path.join(binDir, tool), `${tool} CLI`);
+    }
+    const ghEntry = ghCliManifest.targets.find(
+      (entry) => entry.runtimeKey === runtimeKey && entry.tool === "gh"
+    );
+    if (!ghEntry) {
+      throw new Error(`Packaged GitHub CLI manifest is missing ${runtimeKey}/gh`);
+    }
+    verifyManifestFileEntry(ghEntry, path.join(binDir, "gh"), "GitHub CLI");
+  }
+
+  console.log("[agent-clis] packaged runtime manifests verified");
+}
+
+function verifyPackagedAgentClis(context, options = {}) {
+  if (context.electronPlatformName !== "darwin") return;
+
+  const resourcesDir = context.resourcesDir ?? resourcesDirForContext(context);
+  const binDir = path.join(resourcesDir, "bin");
+  const targetArch = ARCH_BY_BUILDER_VALUE.get(context.arch);
+  const expectedFileArch = targetArch ? FILE_ARCH_BY_TARGET_ARCH.get(targetArch) : undefined;
+  verifyPackagedRuntimeManifests(binDir, targetArch);
+  const packagedExecutables = [
+    ["Deus runtime", path.join(binDir, "deus-runtime")],
+    ["GitHub CLI", path.join(binDir, "gh")],
+    ["Codex CLI", path.join(binDir, "codex")],
+    ["Claude CLI", path.join(binDir, "claude")],
+    ["Codex ripgrep helper", path.join(binDir, "rg")],
+  ];
+
+  for (const [label, executablePath] of packagedExecutables) {
+    assertExecutable(executablePath, label);
+    verifyMachOArch(executablePath, label, expectedFileArch);
+    verifyCodeSignature(executablePath, label);
+    if (label === "Deus runtime") {
+      verifyRuntimeEntitlements(executablePath);
+      verifyRuntimeSystemDylibs(executablePath);
+    }
+  }
+
+  if (options.runVersionChecks === false || (targetArch && targetArch !== process.arch)) return;
+
+  for (const [label, executablePath] of [
+    ["Codex CLI", path.join(binDir, "codex")],
+    ["Claude CLI", path.join(binDir, "claude")],
+  ]) {
+    const output = require("node:child_process")
+      .execFileSync(executablePath, ["--version"], {
+        encoding: "utf8",
+        timeout: 20_000,
+        env: {
+          ...process.env,
+          PATH: [binDir, process.env.PATH].filter(Boolean).join(path.delimiter),
+        },
+        stdio: ["ignore", "pipe", "pipe"],
+      })
+      .trim();
+    if (!output) throw new Error(`Packaged ${label} --version produced no output`);
+    console.log(`[agent-clis] packaged ${label}: ${output}`);
+  }
+}
+
 module.exports = async function afterPack(context) {
   prunePencilCliBinaries(context);
+  verifyPackagedAgentClis(context, { runVersionChecks: false });
 };
 
 module.exports.prunePencilCliBinaries = prunePencilCliBinaries;
 module.exports.binaryNamesForTarget = binaryNamesForTarget;
+module.exports.verifyPackagedRuntimeManifests = verifyPackagedRuntimeManifests;
+module.exports.verifyPackagedAgentClis = verifyPackagedAgentClis;
