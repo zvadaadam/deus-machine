@@ -139,6 +139,9 @@ jobs:
       - name: Smoke test staged native runtime
         run: bun run smoke:runtime-native
 
+      - name: Smoke test packaged runtime resources
+        run: bun run smoke:runtime-resources
+
       - name: Prepare Apple API key for notarization
         run: |
           if [[ -z "$APPLE_API_KEY" || -z "$APPLE_API_KEY_ID" || -z "$APPLE_API_ISSUER" ]]; then
