@@ -270,6 +270,10 @@ function verifyPackagedRuntimeExternalModules(resourcesDir, targetArch) {
   const unpackedNodeModules = path.join(resourcesDir, "app.asar.unpacked", "node_modules");
   const requiredFiles = [
     ["better-sqlite3 package", path.join(unpackedNodeModules, "better-sqlite3", "package.json")],
+    [
+      "better-sqlite3 native binding",
+      path.join(unpackedNodeModules, "better-sqlite3", "build", "Release", "better_sqlite3.node"),
+    ],
     ["node-pty package", path.join(unpackedNodeModules, "node-pty", "package.json")],
     [
       "@napi-rs/canvas package",
@@ -278,10 +282,38 @@ function verifyPackagedRuntimeExternalModules(resourcesDir, targetArch) {
   ];
 
   if (targetArch) {
+    const nodePtyPackageRoot = path.join(unpackedNodeModules, "node-pty");
+    const nodePtyBuildFiles = [
+      path.join(nodePtyPackageRoot, "build", "Release", "pty.node"),
+      path.join(nodePtyPackageRoot, "build", "Release", "spawn-helper"),
+    ];
+    const nodePtyPrebuildFiles = [
+      path.join(nodePtyPackageRoot, "prebuilds", `darwin-${targetArch}`, "pty.node"),
+      path.join(nodePtyPackageRoot, "prebuilds", `darwin-${targetArch}`, "spawn-helper"),
+    ];
     requiredFiles.push([
       `@napi-rs/canvas native package for darwin-${targetArch}`,
       path.join(unpackedNodeModules, "@napi-rs", `canvas-darwin-${targetArch}`, "package.json"),
     ]);
+    requiredFiles.push([
+      `@napi-rs/canvas native binding for darwin-${targetArch}`,
+      path.join(
+        unpackedNodeModules,
+        "@napi-rs",
+        `canvas-darwin-${targetArch}`,
+        `skia.darwin-${targetArch}.node`
+      ),
+    ]);
+
+    const hasNodePtyBuild = nodePtyBuildFiles.every((filePath) => fs.existsSync(filePath));
+    const hasNodePtyPrebuild = nodePtyPrebuildFiles.every((filePath) => fs.existsSync(filePath));
+    if (!hasNodePtyBuild && !hasNodePtyPrebuild) {
+      throw new Error(
+        `Missing unpacked runtime external module node-pty native files for darwin-${targetArch}. ` +
+          `Expected either ${nodePtyBuildFiles.join(", ")} or ${nodePtyPrebuildFiles.join(", ")}. ` +
+          "Bun-compiled deus-runtime cannot rely on Electron app.asar module resolution."
+      );
+    }
   }
 
   for (const [label, filePath] of requiredFiles) {

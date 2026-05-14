@@ -126,16 +126,44 @@ function writePackagedRuntimeFixture(binDir: string): void {
 }
 
 function writeRuntimeExternalModuleFixture(resourcesDir: string): void {
+  const unpackedNodeModules = path.join(resourcesDir, "app.asar.unpacked", "node_modules");
   for (const packagePath of [
     ["better-sqlite3"],
     ["node-pty"],
     ["@napi-rs", "canvas"],
     ["@napi-rs", "canvas-darwin-arm64"],
   ]) {
-    const dir = path.join(resourcesDir, "app.asar.unpacked", "node_modules", ...packagePath);
+    const dir = path.join(unpackedNodeModules, ...packagePath);
     mkdirSync(dir, { recursive: true });
     writeFileSync(path.join(dir, "package.json"), "{}");
   }
+  mkdirSync(path.join(unpackedNodeModules, "better-sqlite3", "build", "Release"), {
+    recursive: true,
+  });
+  writeFileSync(
+    path.join(unpackedNodeModules, "better-sqlite3", "build", "Release", "better_sqlite3.node"),
+    "sqlite-native"
+  );
+  mkdirSync(path.join(unpackedNodeModules, "node-pty", "prebuilds", "darwin-arm64"), {
+    recursive: true,
+  });
+  writeFileSync(
+    path.join(unpackedNodeModules, "node-pty", "prebuilds", "darwin-arm64", "pty.node"),
+    "pty-native"
+  );
+  writeFileSync(
+    path.join(unpackedNodeModules, "node-pty", "prebuilds", "darwin-arm64", "spawn-helper"),
+    "pty-helper"
+  );
+  writeFileSync(
+    path.join(
+      unpackedNodeModules,
+      "@napi-rs",
+      "canvas-darwin-arm64",
+      "skia.darwin-arm64.node"
+    ),
+    "canvas-native"
+  );
 }
 
 afterEach(() => {
@@ -231,6 +259,28 @@ describe("prune-pencil-cli-binaries", () => {
     );
     expect(() => verifyPackagedRuntimeExternalModules(resourcesDir, "arm64")).toThrow(
       /@napi-rs\/canvas package/
+    );
+  });
+
+  it("requires native runtime external module payloads outside app.asar", () => {
+    const resourcesDir = createTempRoot("deus-runtime-native-payloads");
+    tempRoots.push(resourcesDir);
+    writeRuntimeExternalModuleFixture(resourcesDir);
+
+    rmSync(
+      path.join(
+        resourcesDir,
+        "app.asar.unpacked",
+        "node_modules",
+        "@napi-rs",
+        "canvas-darwin-arm64",
+        "skia.darwin-arm64.node"
+      ),
+      { force: true }
+    );
+
+    expect(() => verifyPackagedRuntimeExternalModules(resourcesDir, "arm64")).toThrow(
+      /@napi-rs\/canvas native binding/
     );
   });
 });
