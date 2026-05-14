@@ -1,0 +1,17 @@
+{
+  "ghVersion": "2.92.0",
+  "targets": [
+    {
+      "runtimeKey": "darwin-x64",
+      "fileArch": "x86_64",
+      "archivePlatform": "macOS_amd64",
+      "archiveSha256": "ae9bb327ab0d91071bdada79f8f14034a2a0f19b0e001835a782eafa519d2af0"
+    },
+    {
+      "runtimeKey": "darwin-arm64",
+      "fileArch": "arm64",
+      "archivePlatform": "macOS_arm64",
+      "archiveSha256": "b11c54f6bd7d15ed6590475079e5b2fcf36f45d3991a80041b29c9d0cc1f1d07"
+    }
+  ]
+}

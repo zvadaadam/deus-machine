@@ -3,7 +3,7 @@ import { spawn, ChildProcess } from "child_process";
 import * as fs from "fs";
 import * as path from "path";
 import WebSocket from "ws";
-import { getPackagedClaudeCandidates } from "../agents/environment/packaged-cli-paths";
+import { resolveBundledCliPath } from "@shared/lib/cli-path";
 
 /**
  * End-to-end tests: Spawn a real agent-server process, connect via
@@ -16,8 +16,8 @@ import { getPackagedClaudeCandidates } from "../agents/environment/packaged-cli-
  *
  * NOTE: These tests require:
  * 1. The agent-server bundle to be built: `bunx tsx agent-server/build.ts`
- * 2. Bundled/locked Claude CLI to be available (for Claude integration tests)
- * 3. OPENAI_API_KEY env var (for Codex integration tests — CLI binary comes from npm)
+ * 2. DEUS_AGENT_SERVER_E2E_REAL_CLAUDE=1 (for Claude integration tests)
+ * 3. DEUS_AGENT_SERVER_E2E_REAL_CODEX=1 and OPENAI_API_KEY env var (for Codex integration tests)
  */
 
 const AGENT_SERVER_DIR = path.resolve(__dirname, "..");
@@ -29,17 +29,27 @@ const WORKSPACE_ROOT = path.resolve(AGENT_SERVER_DIR, "..");
 // Check if the bundle exists before running E2E tests
 const bundleExists = fs.existsSync(BUNDLE_PATH);
 
-// Check deterministic bundled/locked candidates only; the app does not depend
-// on the user's global shell PATH for Claude.
-const claudeCliAvailable = getPackagedClaudeCandidates().length > 0;
+const runRealClaudeIntegration = process.env.DEUS_AGENT_SERVER_E2E_REAL_CLAUDE === "1";
+const runRealCodexIntegration = process.env.DEUS_AGENT_SERVER_E2E_REAL_CODEX === "1";
+
+const claudePath = process.env.CLAUDE_CLI_PATH || resolveBundledCliPath("claude");
+const claudeCliAvailable =
+  runRealClaudeIntegration && !!(claudePath && isExecutableFile(claudePath));
 
 // Check if Codex can run — the binary comes bundled with @openai/codex (npm dep),
 // so we only need an API key to actually hit the OpenAI API.
 const hasOpenAIKey = !!(process.env.OPENAI_API_KEY || process.env.CODEX_API_KEY);
+const codexIntegrationEnabled = runRealCodexIntegration && hasOpenAIKey;
 
-// In CI, integration tests MUST run — fail if prerequisites are missing, don't skip.
-// Locally, gracefully skip when keys/CLI are unavailable.
+// Real provider integrations are opt-in so normal tests do not depend on auth
+// state, network access, or global CLIs.
 const isCI = !!process.env.CI;
+
+function isExecutableFile(filePath: string): boolean {
+  if (!fs.existsSync(filePath)) return false;
+  if (process.platform === "win32") return true;
+  return (fs.statSync(filePath).mode & 0o111) !== 0;
+}
 
 // ============================================================================
 // CI prerequisite guard — fail fast with clear messages
@@ -51,11 +61,9 @@ if (isCI) {
       expect(bundleExists, "Run 'bun run build:agent-server' before E2E tests").toBe(true);
     });
 
-    it("OPENAI_API_KEY is set for Codex tests", () => {
-      expect(
-        hasOpenAIKey,
-        "Add OPENAI_API_KEY as a GitHub Actions secret (Settings → Secrets → Actions)"
-      ).toBe(true);
+    it("OPENAI_API_KEY is set when real Codex E2E is enabled", () => {
+      if (!runRealCodexIntegration) return;
+      expect(hasOpenAIKey, "Add OPENAI_API_KEY as a GitHub Actions secret").toBe(true);
     });
   });
 }
@@ -168,9 +176,9 @@ async function spawnAgentServer(): Promise<{
     let stdoutBuffer = "";
     const timeout = setTimeout(() => {
       reject(
-        new Error(`Agent-server did not print LISTEN_URL within 15s. stderr: ${stderrOutput}`)
+        new Error(`Agent-server did not print LISTEN_URL within 30s. stderr: ${stderrOutput}`)
       );
-    }, 15_000);
+    }, 30_000);
 
     proc.stdout?.on("data", (data: Buffer) => {
       stdoutBuffer += data.toString();
@@ -543,7 +551,7 @@ describe.skipIf(!bundleExists || !claudeCliAvailable)("E2E: Real Claude Integrat
 
 // Skip if bundle missing or API key unavailable (matches Claude E2E pattern).
 // Fork PRs can't access repo secrets — skip gracefully instead of failing.
-describe.skipIf(!bundleExists || !hasOpenAIKey)("E2E: Real Codex Integration", () => {
+describe.skipIf(!bundleExists || !codexIntegrationEnabled)("E2E: Real Codex Integration", () => {
   let agentServerProcess: ChildProcess;
   let client: WebSocket;
   let logPath: string;

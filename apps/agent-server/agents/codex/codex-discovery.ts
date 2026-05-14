@@ -7,7 +7,6 @@ import {
   blockIfNotInitialized as sharedBlock,
   type DiscoveryState,
 } from "../environment/cli-discovery";
-import { getPackagedCodexCandidates } from "../environment/packaged-cli-paths";
 
 // ============================================================================
 // State
@@ -33,8 +32,8 @@ export function initializeCodex(): { success: boolean; error?: string } {
     {
       agentHarness: "codex-sdk",
       displayName: "Codex",
-      envVar: "CODEX_CLI_PATH",
-      staticCandidates: getPackagedCodexCandidates(),
+      envVars: ["CODEX_CLI_PATH"],
+      bundledTool: "codex",
       versionFlag: "--version",
     },
     state

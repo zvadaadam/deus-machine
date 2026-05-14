@@ -1,12 +1,12 @@
 // agent-server/agents/environment/cli-discovery.ts
-// Generic CLI executable resolution for agent handlers.
-// Agent CLIs are resolved deterministically: explicit override first, then
-// bundled/runtime candidates. We intentionally do not scan the user's shell for
-// global installs; packaged builds should use the binary we ship.
+// Generic CLI executable discovery for all agent handlers.
+// Each agent provides a DiscoveryConfig describing what to find;
+// this module handles the deterministic override/bundled verification flow.
 
 import * as path from "path";
 import * as fs from "fs";
 import { execFileSync } from "child_process";
+import { getBundledCliPathCandidates, resolveBundledCliPath } from "@shared/lib/cli-path";
 import { EventBroadcaster } from "../../event-broadcaster";
 import type { AgentHarness } from "../../protocol";
 
@@ -23,12 +23,10 @@ export interface DiscoveryConfig {
   agentHarness: AgentHarness;
   /** Human-readable name for log messages (e.g. "Claude", "Codex") */
   displayName: string;
-  /** Env var override (e.g. "CLAUDE_CLI_PATH", "CODEX_CLI_PATH") */
-  envVar?: string;
-  /** Env var overrides in priority order. */
-  envVars?: string[];
-  /** Static candidate paths (bundled/runtime install locations) */
-  staticCandidates: string[];
+  /** Env var override paths (e.g. "CLAUDE_CLI_PATH", "CODEX_CLI_PATH") */
+  envVars: string[];
+  /** Bundled executable name inside Resources/bin or staged dist/runtime bin. */
+  bundledTool: "claude" | "codex";
   /** Version flag to verify the candidate (e.g. "-v", "--version") */
   versionFlag: string;
   /**
@@ -50,6 +48,13 @@ export interface DiscoveryState {
   result: { success: boolean; path?: string; error?: string } | null;
 }
 
+interface Candidate {
+  path: string;
+  source: "override" | "bundled";
+}
+
+const WINDOWS_EXECUTABLE_EXTENSIONS = new Set([".exe", ".cmd", ".bat", ".ps1", ".com"]);
+
 // ============================================================================
 // Discovery Algorithm
 // ============================================================================
@@ -59,8 +64,8 @@ export interface DiscoveryState {
  * Mutates `state` with the result.
  *
  * Algorithm:
- * 1. Gather candidates: env var(s) → static bundled/runtime paths
- * 2. For each candidate: verify it exists, run `<candidate> <versionFlag>`
+ * 1. Gather candidates: explicit env override path(s) → bundled runtime path
+ * 2. For each candidate: verify it exists; custom overrides also run `<candidate> <versionFlag>`
  * 3. First success wins; all failures produce a descriptive error.
  */
 export function discoverExecutable(
@@ -69,75 +74,122 @@ export function discoverExecutable(
 ): { success: boolean; error?: string } {
   console.log(`Setting up ${config.displayName} executable path...`);
 
-  const candidates: string[] = [];
+  const candidates: Candidate[] = [];
 
-  for (const envVar of getEnvVarNames(config)) {
-    pushCandidate(candidates, process.env[envVar]);
+  for (const envVar of config.envVars) {
+    const envOverride = process.env[envVar];
+    if (envOverride) candidates.push({ path: envOverride, source: "override" });
   }
 
-  for (const candidate of config.staticCandidates) {
-    pushCandidate(candidates, candidate);
-  }
+  const bundledCandidate = resolveBundledCliPath(config.bundledTool);
+  if (bundledCandidate) candidates.push({ path: bundledCandidate, source: "bundled" });
 
-  // Verify each candidate
   const triedCandidates: string[] = [];
+  const seenCandidates = new Set<string>();
   for (const candidate of candidates) {
-    if (!candidate) continue;
+    if (seenCandidates.has(candidate.path)) continue;
+    seenCandidates.add(candidate.path);
 
-    // Avoid shell noise when absolute/relative paths are missing
-    const looksLikePath = candidate.includes(path.sep) || candidate.startsWith(".");
-    if (looksLikePath && !fs.existsSync(candidate)) {
-      triedCandidates.push(candidate);
+    const candidatePath = candidate.path;
+
+    if (!isPathCandidate(candidatePath)) {
+      triedCandidates.push(`${candidatePath} (custom overrides must be executable paths)`);
       continue;
     }
 
+    if (candidatePath.endsWith(".js")) {
+      triedCandidates.push(`${candidatePath} (JavaScript CLI wrappers are not supported)`);
+      continue;
+    }
+
+    if (!fs.existsSync(candidatePath)) {
+      triedCandidates.push(`${candidatePath} (missing)`);
+      continue;
+    }
+
+    const executableProblem = getExecutableFileProblem(candidatePath);
+    if (executableProblem) {
+      triedCandidates.push(`${candidatePath} (${executableProblem})`);
+      continue;
+    }
+
+    if (candidate.source === "bundled") {
+      // Bundled binaries are version-verified while staging/packaging the runtime.
+      // Runtime startup should not block on executing them just to rediscover the
+      // same locked package version.
+      console.log(
+        `${config.displayName} executable initialized at ${candidatePath} (bundled runtime)`
+      );
+      if (process.env.DEUS_RUNTIME === "1" || process.env.DEUS_PACKAGED === "1") {
+        process.stdout.write(`BUNDLED_CLI_PATH ${config.bundledTool}=${candidatePath}\n`);
+      }
+      state.executablePath = candidatePath;
+      state.result = { success: true, path: candidatePath };
+      return { success: true };
+    }
+
     try {
-      const version = verifyCandidate(candidate, config.versionFlag);
-      const validation = config.validateVersion?.(version, candidate);
+      const version = verifyCandidate(candidatePath, config.versionFlag);
+      const validation = config.validateVersion?.(version, candidatePath);
       if (validation && !validation.success) {
-        triedCandidates.push(validation.error ? `${candidate} (${validation.error})` : candidate);
+        triedCandidates.push(
+          validation.error ? `${candidatePath} (${validation.error})` : candidatePath
+        );
         continue;
       }
       console.log(
-        `${config.displayName} executable initialized with version: ${version} at ${candidate}`
+        `${config.displayName} executable initialized with version: ${version} at ${candidatePath}`
       );
-      state.executablePath = candidate;
-      state.result = { success: true, path: candidate };
+      state.executablePath = candidatePath;
+      state.result = { success: true, path: candidatePath };
       return { success: true };
-    } catch {
-      triedCandidates.push(candidate);
+    } catch (error) {
+      const detail = error instanceof Error ? error.message : String(error);
+      triedCandidates.push(`${candidatePath} (${detail})`);
     }
   }
 
-  const triedList = triedCandidates.length > 0 ? triedCandidates.join(", ") : "(none)";
-  const errorMessage = `Failed to find ${config.displayName} executable. Tried: ${triedList}`;
+  const expectedBundled = getBundledCliPathCandidates(config.bundledTool);
+  for (const candidate of expectedBundled) {
+    if (
+      !seenCandidates.has(candidate) &&
+      !triedCandidates.some((tried) => tried.startsWith(candidate))
+    ) {
+      triedCandidates.push(`${candidate} (missing)`);
+    }
+  }
+
+  const errorMessage = `Failed to initialize ${config.displayName} executable. Tried: ${triedCandidates.join(", ")}`;
   console.error(`${config.displayName} executable initialization failed: ${errorMessage}`);
   state.result = { success: false, error: errorMessage };
   return { success: false, error: errorMessage };
 }
 
-function getEnvVarNames(config: DiscoveryConfig): string[] {
-  const names = [...(config.envVars ?? [])];
-  if (config.envVar) names.push(config.envVar);
-  return Array.from(new Set(names));
+function isPathCandidate(candidate: string): boolean {
+  return path.isAbsolute(candidate) || candidate.startsWith(".") || candidate.includes(path.sep);
 }
 
-function pushCandidate(candidates: string[], candidate: string | undefined): void {
-  if (!candidate || candidates.includes(candidate)) return;
-  candidates.push(candidate);
+function getExecutableFileProblem(candidate: string): string | null {
+  const stat = fs.statSync(candidate);
+  if (!stat.isFile()) return "not a regular file";
+  if (process.platform === "win32") {
+    return WINDOWS_EXECUTABLE_EXTENSIONS.has(path.extname(candidate).toLowerCase())
+      ? null
+      : "not a recognized Windows executable";
+  }
+  return (stat.mode & 0o111) !== 0 ? null : "not executable";
 }
 
 function verifyCandidate(candidate: string, versionFlag: string): string {
-  const opts = {
+  return execFileSync(candidate, [versionFlag], {
     encoding: "utf-8" as const,
-    timeout: 5000,
+    timeout: 20_000,
     stdio: ["ignore", "pipe", "pipe"] as ["ignore", "pipe", "pipe"],
-  };
-
-  // Candidate must be a directly executable file. Bundled agent CLIs are native
-  // binaries; custom overrides should point at an executable wrapper or binary,
-  // not a raw JS module that requires us to discover another runtime.
-  return execFileSync(candidate, [versionFlag], opts).trim();
+    env: {
+      ...process.env,
+      PATH: [path.dirname(candidate), process.env.PATH].filter(Boolean).join(path.delimiter),
+    },
+  }).trim();
 }
 
 // ============================================================================

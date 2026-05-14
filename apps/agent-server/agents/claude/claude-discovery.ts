@@ -8,7 +8,6 @@ import {
   blockIfNotInitialized as sharedBlock,
   type DiscoveryState,
 } from "../environment/cli-discovery";
-import { getPackagedClaudeCandidates } from "../environment/packaged-cli-paths";
 
 // ============================================================================
 // State
@@ -34,9 +33,9 @@ export function initializeClaude(): { success: boolean; error?: string } {
     {
       agentHarness: "claude",
       displayName: "Claude",
-      envVar: "CLAUDE_CLI_PATH",
-      staticCandidates: getPackagedClaudeCandidates(),
-      versionFlag: "-v",
+      envVars: ["CLAUDE_CLI_PATH"],
+      bundledTool: "claude",
+      versionFlag: "--version",
     },
     state
   );

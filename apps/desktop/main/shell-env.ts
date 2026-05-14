@@ -1,14 +1,14 @@
 /**
  * Shell Environment Sync
  *
- * On macOS, when an app is launched from Finder (not from a terminal),
- * the PATH is minimal (/usr/bin:/bin:/usr/sbin:/sbin). This means tools
- * like `git`, `gh`, `node`, and `bun` are not found.
+ * On macOS, when the development app is launched from Finder (not from a
+ * terminal), the PATH is minimal (/usr/bin:/bin:/usr/sbin:/sbin). This means
+ * developer tools may not be found.
  *
- * This module runs the user's login shell to capture the full PATH and
- * applies it to process.env before spawning the backend or any child processes.
+ * This module runs the user's login shell to capture the full PATH for dev
+ * only. Packaged runtime uses bundled binaries plus deterministic system paths.
  *
- * Ensures child processes get the user's full shell environment.
+ * Ensures dev child processes get the user's full shell environment.
  */
 
 import { execFile } from "child_process";
@@ -18,6 +18,7 @@ const execFileAsync = promisify(execFile);
 
 export async function syncShellEnvironment(): Promise<void> {
   if (process.platform !== "darwin") return;
+  if (process.env.DEUS_PACKAGED === "1" || process.env.DEUS_RUNTIME === "1") return;
 
   try {
     // Detect user's actual login shell via dscl (macOS directory service),

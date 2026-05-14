@@ -2,6 +2,7 @@ import { spawn, type ChildProcess } from "node:child_process";
 import { existsSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import { getDevStagedCliDirectory } from "../../shared/lib/cli-path";
 
 const runtimeDir = path.dirname(fileURLToPath(import.meta.url));
 const projectRoot = path.resolve(runtimeDir, "../..");
@@ -24,13 +25,6 @@ function spawnCommand(
     });
     child.on("exit", (code) => resolve(code ?? 0));
   });
-}
-
-function getHostRuntimeKey(): string | null {
-  if (process.platform === "darwin" && (process.arch === "arm64" || process.arch === "x64")) {
-    return `darwin-${process.arch}`;
-  }
-  return null;
 }
 
 async function ensureAgentServerBundle(): Promise<void> {
@@ -69,8 +63,6 @@ async function main(): Promise<void> {
 }
 
 function startBackend(): Promise<{ process: ChildProcess; port: number } | null> {
-  const runtimeKey = getHostRuntimeKey();
-
   return new Promise((resolve) => {
     const child = spawn(
       process.execPath,
@@ -89,19 +81,7 @@ function startBackend(): Promise<{ process: ChildProcess; port: number } | null>
             "index.bundled.cjs"
           ),
           AGENT_SERVER_CWD: path.join(projectRoot, "apps", "agent-server"),
-          DEUS_PROJECT_ROOT: projectRoot,
-          ...(runtimeKey
-            ? {
-                DEUS_BUNDLED_BIN_DIR: path.join(
-                  projectRoot,
-                  "dist",
-                  "runtime",
-                  "electron",
-                  "bin",
-                  runtimeKey
-                ),
-              }
-            : {}),
+          DEUS_BUNDLED_BIN_DIR: getDevStagedCliDirectory(projectRoot) ?? "",
         },
       }
     );

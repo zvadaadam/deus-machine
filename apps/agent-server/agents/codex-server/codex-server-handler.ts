@@ -127,7 +127,10 @@ export class CodexServerAgentHandler implements AgentHandler {
         deusEnv: options?.deusEnv,
         ghToken: options?.ghToken,
       });
-      const codexPath = getCodexServerExecutablePath() || "codex";
+      const codexPath = getCodexServerExecutablePath();
+      if (!codexPath) {
+        throw new Error("Codex app-server executable path is required");
+      }
 
       if (!sessionState.appServer) {
         sessionState.appServer = new CodexAppServerClient({

@@ -335,6 +335,23 @@ describe("CodexServerAgentHandler", () => {
     expect(JSON.stringify(threadStartParams[0])).not.toContain("askUserQuestion");
   });
 
+  it("does not fall back to a global codex executable when discovery has no path", async () => {
+    mockGetCodexServerExecutablePath.mockReturnValue("");
+
+    const handler = new CodexServerAgentHandler();
+    await handler.query("sess-no-codex-path", "hello", { cwd: "/repo", model: "gpt-5.5" });
+    await flushAsyncWork();
+
+    expect(mockCodexAppServerClient).not.toHaveBeenCalled();
+    expect(mockClient.request).not.toHaveBeenCalled();
+    expect(mockEventBroadcaster.emitSessionError).toHaveBeenCalledWith(
+      "sess-no-codex-path",
+      "codex-server",
+      "Codex app-server executable path is required",
+      "internal"
+    );
+  });
+
   function emitTurn(
     method: "turn/started" | "turn/completed",
     status: "completed" | "interrupted" | "failed" | "inProgress",
