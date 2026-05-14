@@ -31,6 +31,7 @@ Status: implementation is staged, but the overall goal is not complete until dir
 - Packaged Electron main now also scrubs stale backend-only auth, database, data-dir, bundled-bin, and listen-port env before spawning `deus-runtime backend`; smoke launchers apply the same cleanup so verification cannot accidentally inherit an obsolete runtime context.
 - `electron-builder` beforePack and `smoke-packaged-app` now reject packaged Electron main output that lacks the packaged runtime env scrub denylist, so stale app bundles cannot silently omit the stricter backend/runtime env cleanup.
 - `electron-builder` beforePack and `smoke-packaged-app` also reject packaged Electron main output that lacks bundled CLI lookup and terminal command guards for `codex`, `claude`, `gh`, and `rg`.
+- Pull-request macOS runtime CI now packages an unsigned arm64 app directory and runs the static packaged-app smoke with app-signature verification skipped, so `beforePack`, `afterPack`, `Resources/bin` wiring, native module pruning, duplicate CLI-payload rejection, and app.asar runtime-contract checks run before release signing/notarization.
 - Staged and packaged `--version` verification helpers scrub stale backend/runtime env before launching `deus-runtime`, `codex`, `claude`, `gh`, or `rg`, so afterPack and runnable-validation checks cannot inherit obsolete Electron-as-Node, `NODE_PATH`, bundled-bin, data-dir, auth, or port settings.
 - Desktop CLI lookup/auth and backend `gh` service child processes now scrub stale runtime-only env while still resolving packaged `gh` through bundled `Resources/bin`.
 - `b72f4d96 test: smoke current desktop runtime contract` verifies current Electron main source by bundling it to a temporary output and checking the packaged `deus-runtime` launch contract.
@@ -61,6 +62,10 @@ Recorded branch checks:
 
 Recent focused checks:
 
+- `node --check scripts/runtime/smoke-packaged-app.cjs` passed after adding the unsigned package-dir smoke flag.
+- `node scripts/runtime/smoke-packaged-app.cjs --app dist-electron/mac-arm64/Deus.app --arch arm64 --skip-app-signature` passed against the freshly rebuilt arm64 app directory.
+- `node scripts/runtime/smoke-packaged-app.cjs --app dist-electron/mac-arm64/Deus.app --arch arm64 --skip-app-signature --require-gatekeeper` fails fast with the expected incompatible-flags error.
+- A local narrow `electron-builder --mac dir --arm64 --publish never -c.mac.notarize=false` run with identity auto-discovery disabled and the existing host shim completed, exercising `beforePack`, `afterPack`, and `afterSign` on the arm64 app directory.
 - `bun run smoke:runtime-resources` passed on current `HEAD` after the README platform-support update, verifying both `darwin-arm64` and `darwin-x64` resource layouts.
 - `bun run smoke:desktop-main-runtime` passed on current `HEAD`, confirming current Electron main source still contains the packaged `Resources/bin/deus-runtime` contract.
 - `bun run package:linux` and `bun run package:win` fail with explicit unsupported-platform messages instead of producing misleading Linux/Windows desktop artifacts.
