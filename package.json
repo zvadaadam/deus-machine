@@ -39,6 +39,7 @@
     "prepare:device-use": "node scripts/prepare-device-use.mjs",
     "prepare:gh-cli": "node scripts/prepare-gh-cli.mjs",
     "prepare:agent-clis": "bun scripts/runtime/prepare-agent-clis.ts",
+    "smoke:runtime-source": "node scripts/runtime/smoke-source-runtime.cjs",
     "smoke:runtime-resources": "node scripts/runtime/smoke-packaged-resources.cjs",
     "preview": "vite preview",
     "test": "bun run test:backend && node node_modules/vitest/vitest.mjs run --config apps/agent-server/vitest.config.ts && node node_modules/vitest/vitest.mjs run --config test/vitest.config.ts",
