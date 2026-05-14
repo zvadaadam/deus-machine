@@ -109,11 +109,47 @@ function findProjectRoot(start: string): string | null {
   }
 }
 
+function isSourceRuntimeInvocation(): boolean {
+  return process.argv.some((candidate) => candidate.endsWith(join("apps", "runtime", "index.ts")));
+}
+
+function isExecutableFile(filePath: string): boolean {
+  if (!existsSync(filePath)) return false;
+  const stat = statSync(filePath);
+  if (!stat.isFile()) return false;
+  if (process.platform === "win32") return true;
+  return (stat.mode & 0o111) !== 0;
+}
+
+function runtimeExecutableInDirectory(dir: string | undefined): string | null {
+  if (!dir) return null;
+  const candidate = join(dir, RUNTIME_NAME);
+  return isExecutableFile(candidate) ? candidate : null;
+}
+
 function resolveRuntimeExecutablePath(): string {
+  const explicitRuntimeExecutable = process.env.DEUS_RUNTIME_EXECUTABLE;
+  if (
+    explicitRuntimeExecutable &&
+    basename(explicitRuntimeExecutable) === RUNTIME_NAME &&
+    isExecutableFile(explicitRuntimeExecutable)
+  ) {
+    return resolve(explicitRuntimeExecutable);
+  }
+
   for (const candidate of [process.execPath, process.argv[0], process.argv[1]]) {
     if (candidate && basename(candidate) === RUNTIME_NAME) {
       return resolve(candidate);
     }
+  }
+
+  if (!isSourceRuntimeInvocation()) {
+    const cwdExecutable = runtimeExecutableInDirectory(process.cwd());
+    if (cwdExecutable) return resolve(cwdExecutable);
+
+    const firstPathEntry = process.env.PATH?.split(delimiter).find(Boolean);
+    const pathExecutable = runtimeExecutableInDirectory(firstPathEntry);
+    if (pathExecutable) return resolve(pathExecutable);
   }
 
   return process.execPath;
@@ -326,6 +362,9 @@ async function run(command: RuntimeCommand, dataDir?: string): Promise<void> {
         ok: missing.length === 0 && failedImports.length === 0 && sqlite.ok,
         version: VERSION,
         executable: layout.executablePath,
+        execPath: process.execPath,
+        argv: process.argv,
+        cwd: process.cwd(),
         binDir: layout.bundledBinDir,
         resourcesPath: layout.resourcesPath,
         nodeEnv: process.env.NODE_ENV ?? "",
