@@ -6,6 +6,7 @@ import {
   resolveTerminalCliCommand,
   toAppleScriptString,
 } from "../../../apps/desktop/main/terminal-command";
+import { configurePackagedMainRuntimeEnv } from "../../../apps/desktop/main/runtime-env";
 
 const originalBundledBinDir = process.env.DEUS_BUNDLED_BIN_DIR;
 const originalDeusPackaged = process.env.DEUS_PACKAGED;
@@ -65,6 +66,17 @@ describe("terminal command helpers", () => {
 
     expect(resolveTerminalCliCommand("codex login")).toBeNull();
     expect(resolveTerminalCliCommand("claude login")).toBeNull();
+  });
+
+  it("uses packaged Electron main env for terminal agent commands", () => {
+    const codexPath = createBundledTool("codex");
+    configurePackagedMainRuntimeEnv({
+      isPackaged: true,
+      platform: "darwin",
+      resourcesPath: path.dirname(path.dirname(codexPath)),
+    });
+
+    expect(resolveTerminalCliCommand("codex login")).toBe(`'${codexPath}' 'login'`);
   });
 
   it("escapes AppleScript strings", () => {

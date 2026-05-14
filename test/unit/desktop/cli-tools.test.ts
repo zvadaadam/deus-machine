@@ -12,6 +12,7 @@ vi.mock("../../../apps/desktop/main/shell-env", () => ({
 }));
 
 import { checkCliTool, getCliLookupEnv } from "../../../apps/desktop/main/cli-tools";
+import { configurePackagedMainRuntimeEnv } from "../../../apps/desktop/main/runtime-env";
 
 const originalBundledBinDir = process.env.DEUS_BUNDLED_BIN_DIR;
 const originalDeusPackaged = process.env.DEUS_PACKAGED;
@@ -55,6 +56,18 @@ describe("desktop CLI tools", () => {
     process.env.DEUS_PACKAGED = "1";
     process.env.DEUS_BUNDLED_BIN_DIR = "/missing";
     process.env.PATH = "/opt/homebrew/bin:/usr/bin";
+
+    await expect(checkCliTool("gh")).resolves.toEqual({ installed: false, path: null });
+    expect(mockSyncShellEnvironment).not.toHaveBeenCalled();
+  });
+
+  it("uses packaged Electron main env without requiring inherited DEUS_PACKAGED", async () => {
+    configurePackagedMainRuntimeEnv({
+      isPackaged: true,
+      platform: "darwin",
+      resourcesPath: "/Applications/Deus.app/Contents/Resources",
+    });
+    process.env.PATH = "/Applications/Deus.app/Contents/Resources/bin:/usr/bin:/bin:/usr/sbin:/sbin";
 
     await expect(checkCliTool("gh")).resolves.toEqual({ installed: false, path: null });
     expect(mockSyncShellEnvironment).not.toHaveBeenCalled();
