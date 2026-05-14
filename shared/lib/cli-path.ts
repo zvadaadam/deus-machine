@@ -1,4 +1,4 @@
-import { existsSync } from "node:fs";
+import { existsSync, statSync } from "node:fs";
 import { delimiter, join } from "node:path";
 
 const CLI_TOOL_NAME_PATTERN = /^[a-zA-Z0-9._+-]+$/;
@@ -49,7 +49,7 @@ export function getBundledCliDirectory(): string | null {
 }
 
 export function resolveBundledCliPath(tool: string): string | null {
-  return getBundledCliPathCandidates(tool).find((candidate) => existsSync(candidate)) ?? null;
+  return getBundledCliPathCandidates(tool).find(isExecutableFile) ?? null;
 }
 
 export function getBundledCliPathCandidates(tool: string): string[] {
@@ -66,6 +66,12 @@ function missingPackagedCliPath(tool: string): string {
   return process.platform === "win32"
     ? join("C:\\", "__deus_missing_bundled_bin__", executableName)
     : join("/", "__deus_missing_bundled_bin__", executableName);
+}
+
+function isExecutableFile(filePath: string): boolean {
+  if (!existsSync(filePath)) return false;
+  if (process.platform === "win32") return true;
+  return (statSync(filePath).mode & 0o111) !== 0;
 }
 
 export function resolveCliExecutable(tool: string): string {
