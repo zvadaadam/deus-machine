@@ -28,7 +28,6 @@ interface ElectronRuntimeEntries {
   agentServerEntry?: string;
   agentServerCwd?: string;
   resourcesPath?: string;
-  nodePath?: string;
   bundledBinDir?: string;
   runtimeExecutable?: string;
 }
@@ -43,7 +42,6 @@ function resolveRuntimeEntries(): ElectronRuntimeEntries {
     return {
       backendCwd: app.getPath("userData"),
       resourcesPath: process.resourcesPath,
-      nodePath: join(process.resourcesPath, "app.asar", "node_modules"),
       bundledBinDir: join(process.resourcesPath, "bin"),
       runtimeExecutable: join(process.resourcesPath, "bin", "deus-runtime"),
     };
@@ -168,7 +166,6 @@ export async function spawnBackend(
           AGENT_SERVER_ENTRY: runtime.agentServerEntry!,
           AGENT_SERVER_CWD: runtime.agentServerCwd!,
         }),
-    ...(runtime.nodePath ? { NODE_PATH: runtime.nodePath } : {}),
     ...(runtime.bundledBinDir ? { DEUS_BUNDLED_BIN_DIR: runtime.bundledBinDir } : {}),
   };
 
