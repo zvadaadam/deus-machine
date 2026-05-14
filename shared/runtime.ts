@@ -6,6 +6,8 @@ export const DEUS_PREFERENCES_FILENAME = "preferences.json";
 export const RUNTIME_MANIFEST_VERSION = 1;
 
 export const CLI_RUNTIME_DEPENDENCIES = [
+  "@anthropic-ai/claude-agent-sdk",
+  "@hono/node-server",
   "@napi-rs/canvas",
   "@openai/codex",
   "@openai/codex-sdk",
