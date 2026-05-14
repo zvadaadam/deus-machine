@@ -37,6 +37,7 @@ Status: implementation is staged, but the overall goal is not complete until dir
 - Desktop CLI lookup/auth and backend `gh` service child processes now scrub stale runtime-only env while still resolving packaged `gh` through bundled `Resources/bin`.
 - `syncShellEnvironment()` now returns immediately under `DEUS_PACKAGED`/`DEUS_RUNTIME`, so future packaged call paths cannot import a login-shell PATH after packaged main has selected deterministic `Resources/bin` plus system paths.
 - Agent-server `agent-browser` subprocesses now scrub runtime-only env as well, so the bundled browser helper does not inherit Electron-as-Node, `NODE_PATH`, or `DEUS_RUNTIME_EXECUTABLE` from `deus-runtime`.
+- Backend-launched app, setup, archive, and dependency-install child processes now scrub packaged runtime internals before executing project commands, so user/project processes do not inherit `DEUS_RUNTIME_EXECUTABLE`, Electron-as-Node, backend ports, auth tokens, or runtime native-module paths.
 - `b72f4d96 test: smoke current desktop runtime contract` verifies current Electron main source by bundling it to a temporary output and checking the packaged `deus-runtime` launch contract.
 - `fa6cfca7 test: tighten packaged main runtime guard` makes the before-pack and app.asar smoke checks share the stricter packaged main runtime contract assertion.
 - `87f66d88 docs: record runtime resign diagnostic` records that ad-hoc re-signing a temporary runtime copy does not bypass this host's provenance/Gatekeeper launch blocker.
@@ -85,6 +86,7 @@ Recent focused checks:
 - `bun run build:runtime`, `bun run validate:runtime`, and `bun run smoke:runtime-resources` passed after version-check env cleanup.
 - `DEUS_VERIFY_RUNTIME_RUNNABLE=1 bun run validate:runtime` still failed at direct `deus-runtime --version` on this host, but the bounded helper exited with status 124 and printed the same `Unnotarized Developer ID`/`com.apple.provenance` diagnostics.
 - `bun run smoke:runtime-source`, `bun run smoke:desktop-main-runtime`, `bun run build:runtime`, `bun run validate:runtime`, and `bun run smoke:runtime-resources` passed after desktop/backend `gh` child-env cleanup.
+- `bun run typecheck`, `bun run typecheck:backend`, `bun run build:runtime`, `bun run validate:runtime`, `bun run smoke:runtime-source`, and `bun run smoke:runtime-resources` passed after backend-launched project child processes were moved to `createBackendChildEnv`.
 - `bun run smoke:desktop-main-runtime`, `node --check scripts/runtime/electron-builder-before-pack.cjs`, and a direct beforePack packaged-CLI guard probe passed after tightening packaged main bundle assertions.
 - `bun run smoke:runtime-source`, `node --check` for source/native/packaged runtime smoke scripts, `bun run build:runtime`, `bun run validate:runtime`, and `bun run smoke:runtime-resources` passed after adding `pathEnv` to `deus-runtime self-test` and requiring deterministic native/package `PATH`.
 - `bun run typecheck`, `bun run typecheck:backend`, and `bun run typecheck:agent-server` passed after the env-denylist changes.

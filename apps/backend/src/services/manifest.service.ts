@@ -5,6 +5,7 @@ import { spawn } from "child_process";
 import type BetterSqlite3 from "better-sqlite3";
 import { DeusManifestSchema, type DeusManifest, type NormalizedTask } from "../lib/deus-manifest";
 import { detectPackageManager, getRunPrefix } from "../lib/package-manager";
+import { createBackendChildEnv } from "../runtime/child-env";
 import { emitProgress } from "./workspace-init.service";
 
 /**
@@ -285,7 +286,7 @@ export function runSetupScript(
 
   const setupProc = spawn("sh", ["-c", setupCmd], {
     cwd: workspacePath,
-    env: { ...process.env, ...setupEnv },
+    env: createBackendChildEnv(setupEnv),
     stdio: ["ignore", "pipe", "pipe"],
   });
   setupProc.stdout.pipe(setupLog);
