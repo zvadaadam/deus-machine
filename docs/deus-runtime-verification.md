@@ -51,7 +51,7 @@ They verify:
 - `deus-runtime --version` returns the runtime version and runtime key.
 - `deus-runtime agent-server` reaches `LISTEN_URL`.
 - `deus-runtime backend` reaches `[BACKEND_PORT]` with an isolated data directory.
-- The agent-server reports initialized `claude` and `codex-sdk` agents.
+- The agent-server reports initialized `claude`, `codex-sdk`, and `codex-server` agents.
 - Backend `/api/workspaces` is served from the runtime process.
 - Packaged logs do not contain `spawn codex ENOENT`, `spawn claude ENOENT`, `ELECTRON_RUN_AS_NODE`, global CLI fallback, or other runtime contract failures.
 
