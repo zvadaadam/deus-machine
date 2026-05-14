@@ -109,8 +109,18 @@ function findProjectRoot(start: string): string | null {
   }
 }
 
+function resolveRuntimeExecutablePath(): string {
+  for (const candidate of [process.execPath, process.argv[0], process.argv[1]]) {
+    if (candidate && basename(candidate) === RUNTIME_NAME) {
+      return resolve(candidate);
+    }
+  }
+
+  return process.execPath;
+}
+
 function resolveRuntimeLayout() {
-  const executablePath = process.execPath;
+  const executablePath = resolveRuntimeExecutablePath();
   const executableDir = dirname(executablePath);
   const runtimeKey = getRuntimeKey();
   const isNativeRuntimeExecutable = basename(executablePath) === RUNTIME_NAME;
