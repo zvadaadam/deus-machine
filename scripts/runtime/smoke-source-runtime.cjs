@@ -7,6 +7,10 @@ const PROJECT_ROOT = path.resolve(__dirname, "../..");
 const RUNTIME_ENTRY = path.join(PROJECT_ROOT, "apps", "runtime", "index.ts");
 const STARTUP_TIMEOUT_MS = 30_000;
 const STOP_TIMEOUT_MS = 5_000;
+const BUNDLED_AGENT_CLI_PATTERNS = [
+  /BUNDLED_CLI_PATH claude=.*\/claude/,
+  /BUNDLED_CLI_PATH codex=.*\/codex/,
+];
 
 function runRuntime(args) {
   const result = spawnSync("bun", [RUNTIME_ENTRY, ...args], {
@@ -56,6 +60,8 @@ async function waitForRuntimeLine(args, matcher, options = {}) {
 
   let stdoutBuffer = "";
   let stderrBuffer = "";
+  let output = "";
+  let matchedValue = null;
   let settled = false;
 
   try {
@@ -82,19 +88,32 @@ async function waitForRuntimeLine(args, matcher, options = {}) {
         clearTimeout(timeout);
         resolve(match);
       };
+      const maybeSucceed = () => {
+        if (matchedValue === null) return;
+        for (const pattern of options.requiredPatterns || []) {
+          if (!pattern.test(output)) return;
+        }
+        succeed(matchedValue);
+      };
 
       child.stdout.on("data", (data) => {
-        stdoutBuffer += data.toString();
+        const chunk = data.toString();
+        output += chunk;
+        stdoutBuffer += chunk;
         const lines = stdoutBuffer.split("\n");
         stdoutBuffer = lines.pop() || "";
         for (const line of lines) {
           const match = matcher(line.trim());
-          if (match) succeed(match);
+          if (match) matchedValue = match;
         }
+        maybeSucceed();
       });
 
       child.stderr.on("data", (data) => {
-        stderrBuffer += data.toString();
+        const chunk = data.toString();
+        output += chunk;
+        stderrBuffer += chunk;
+        maybeSucceed();
       });
 
       child.on("error", fail);
@@ -138,11 +157,17 @@ async function main() {
   }
   console.log(`[runtime-source-smoke] self-test binDir: ${selfTest.binDir}`);
 
-  const listenUrl = await waitForRuntimeLine(["agent-server"], (line) => {
-    const match = line.match(/LISTEN_URL=(.+)$/);
-    return match ? match[1] : null;
-  });
-  console.log(`[runtime-source-smoke] agent-server: ${listenUrl}`);
+  const listenUrl = await waitForRuntimeLine(
+    ["agent-server"],
+    (line) => {
+      const match = line.match(/LISTEN_URL=(.+)$/);
+      return match ? match[1] : null;
+    },
+    {
+      requiredPatterns: BUNDLED_AGENT_CLI_PATTERNS,
+    }
+  );
+  console.log(`[runtime-source-smoke] agent-server resolved bundled CLIs: ${listenUrl}`);
 
   const dataDir = fs.mkdtempSync(path.join(os.tmpdir(), "deus-runtime-source-"));
   try {
@@ -157,9 +182,13 @@ async function main() {
           DEUS_DATA_DIR: dataDir,
           DATABASE_PATH: path.join(dataDir, "deus.db"),
         },
+        requiredPatterns: [
+          /^\[agent-server\] BUNDLED_CLI_PATH claude=.*\/claude/m,
+          /^\[agent-server\] BUNDLED_CLI_PATH codex=.*\/codex/m,
+        ],
       }
     );
-    console.log(`[runtime-source-smoke] backend: ${backendPort}`);
+    console.log(`[runtime-source-smoke] backend resolved bundled CLIs: ${backendPort}`);
   } finally {
     fs.rmSync(dataDir, { recursive: true, force: true });
   }

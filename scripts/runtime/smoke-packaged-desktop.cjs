@@ -20,6 +20,8 @@ const PACKAGED_RUNTIME_ENV_DENYLIST = [
 const REQUIRED_LOG_PATTERNS = [
   /\[main\] App ready, starting initialization/,
   /\[main\] Spawning runtime stack/,
+  /\[backend\] \[agent-server\] BUNDLED_CLI_PATH claude=.*\/claude/,
+  /\[backend\] \[agent-server\] BUNDLED_CLI_PATH codex=.*\/codex/,
   /\[backend\] \[agent-server\] LISTEN_URL=/,
   /\[backend\] \[BACKEND_PORT\]\d+/,
   /\[main\] Backend started on port: \d+/,
