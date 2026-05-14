@@ -52,6 +52,41 @@ jobs:
       - name: Typecheck & test (cloud-relay)
         run: cd apps/cloud-relay && bun install --frozen-lockfile && bunx tsc --noEmit && bunx vitest run
 
+  runtime-macos:
+    name: Native Runtime Smoke (macOS)
+    runs-on: macos-14
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.2.19
+
+      - name: Install dependencies
+        run: bun install --frozen-lockfile
+
+      - name: Build staged native runtime
+        run: bun run build:runtime
+
+      - name: Validate staged runtime
+        run: bun run validate:runtime
+
+      - name: Smoke source runtime contract
+        run: bun run smoke:runtime-source
+
+      - name: Smoke native runtime executable
+        run: bun run smoke:runtime-native -- --skip-validate
+
+      - name: Smoke packaged runtime resources
+        run: bun run smoke:runtime-resources
+
   backend-tests:
     name: Backend Tests
     runs-on: ubuntu-latest
