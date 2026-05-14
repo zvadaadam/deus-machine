@@ -30,6 +30,7 @@ Status: implementation is staged, but the overall goal is not complete until dir
 - Runtime-managed agent-server spawns scrub backend-only auth, database, data-dir, and listen-port env while preserving desktop runtime context.
 - Packaged Electron main now also scrubs stale backend-only auth, database, data-dir, bundled-bin, and listen-port env before spawning `deus-runtime backend`; smoke launchers apply the same cleanup so verification cannot accidentally inherit an obsolete runtime context.
 - `electron-builder` beforePack and `smoke-packaged-app` now reject packaged Electron main output that lacks the packaged runtime env scrub denylist, so stale app bundles cannot silently omit the stricter backend/runtime env cleanup.
+- `electron-builder` beforePack and `smoke-packaged-app` also reject packaged Electron main output that lacks bundled CLI lookup and terminal command guards for `codex`, `claude`, `gh`, and `rg`.
 - Staged and packaged `--version` verification helpers scrub stale backend/runtime env before launching `deus-runtime`, `codex`, `claude`, `gh`, or `rg`, so afterPack and runnable-validation checks cannot inherit obsolete Electron-as-Node, `NODE_PATH`, bundled-bin, data-dir, auth, or port settings.
 - Desktop CLI lookup/auth and backend `gh` service child processes now scrub stale runtime-only env while still resolving packaged `gh` through bundled `Resources/bin`.
 - `b72f4d96 test: smoke current desktop runtime contract` verifies current Electron main source by bundling it to a temporary output and checking the packaged `deus-runtime` launch contract.
@@ -70,6 +71,7 @@ Recent focused checks:
 - `bun run build:runtime`, `bun run validate:runtime`, and `bun run smoke:runtime-resources` passed after version-check env cleanup.
 - `DEUS_VERIFY_RUNTIME_RUNNABLE=1 bun run validate:runtime` still failed at direct `deus-runtime --version` on this host, but the bounded helper exited with status 124 and printed the same `Unnotarized Developer ID`/`com.apple.provenance` diagnostics.
 - `bun run smoke:runtime-source`, `bun run smoke:desktop-main-runtime`, `bun run build:runtime`, `bun run validate:runtime`, and `bun run smoke:runtime-resources` passed after desktop/backend `gh` child-env cleanup.
+- `bun run smoke:desktop-main-runtime`, `node --check scripts/runtime/electron-builder-before-pack.cjs`, and a direct beforePack packaged-CLI guard probe passed after tightening packaged main bundle assertions.
 - `bun run typecheck`, `bun run typecheck:backend`, and `bun run typecheck:agent-server` passed after the env-denylist changes.
 - `node --check scripts/runtime/smoke-source-runtime.cjs && node --check scripts/runtime/smoke-native-runtime.cjs && node --check scripts/runtime/smoke-packaged-runtime.cjs && node --check scripts/runtime/smoke-packaged-desktop.cjs` passed.
 - Focused Vitest for `test/unit/desktop`, `test/unit/runtime`, and shared runtime/CLI-path tests still hangs before Vitest output and was killed by a 20s wrapper.
