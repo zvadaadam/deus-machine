@@ -23,6 +23,7 @@ Status: implementation is staged, but the overall goal is not complete until dir
 ## Latest Guardrail Slices
 
 - Release verification statically runs `scripts/runtime/smoke-packaged-app.cjs --require-gatekeeper` over every produced `.app` before upload; direct packaged runtime/desktop smokes still run on the host-arch app copied from the notarized DMG.
+- Release verification also mounts every produced DMG and runs `scripts/runtime/smoke-packaged-dmgs.cjs --require-gatekeeper`, so static bundle inspection covers release artifacts, not only unpacked app directories.
 - Static packaged app smoke rejects unexpected `Resources/bin` entries; only `deus-runtime`, `codex`, `claude`, `gh`, `rg`, and their manifests are allowed.
 - Native and packaged runtime direct smokes now verify `self-test` layout, including `binDir`, `resourcesPath`, and native-module `NODE_PATH`.
 - Packaged Electron main and native `deus-runtime` force `NODE_ENV=production`; direct runtime smokes assert the self-test reports production mode.
