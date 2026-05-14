@@ -46,6 +46,9 @@ jobs:
       - name: Typecheck (backend)
         run: bun run typecheck:backend
 
+      - name: Typecheck (agent-server)
+        run: bun run typecheck:agent-server
+
       - name: Typecheck & test (cloud-relay)
         run: cd apps/cloud-relay && bun install --frozen-lockfile && bunx tsc --noEmit && bunx vitest run
 
