@@ -114,6 +114,12 @@ function assertPackagedMainRuntimeContract(projectRoot) {
     );
   }
 
+  if (!contents.includes("configurePackagedMainRuntimeEnv")) {
+    throw new Error(
+      "Electron main build output does not contain the packaged main runtime environment initializer. Run `bun run build` before packaging."
+    );
+  }
+
   if (
     contents.includes('process.resourcesPath, "backend"') ||
     contents.includes("process.resourcesPath, 'backend'")
