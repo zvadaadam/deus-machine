@@ -17,16 +17,6 @@ const PACKAGED_RUNTIME_ENV_DENYLIST = [
   "DEUS_RUNTIME_EXECUTABLE",
   "NODE_PATH",
 ];
-const REQUIRED_LOG_PATTERNS = [
-  /\[main\] App ready, starting initialization/,
-  /\[main\] Spawning runtime stack/,
-  /\[backend\] \[agent-server\] BUNDLED_CLI_PATH claude=.*\/claude/,
-  /\[backend\] \[agent-server\] BUNDLED_CLI_PATH codex=.*\/codex/,
-  /\[backend\] \[agent-server\] LISTEN_URL=/,
-  /\[backend\] \[BACKEND_PORT\]\d+/,
-  /\[main\] Backend started on port: \d+/,
-  /\[main\] Window created/,
-];
 const FORBIDDEN_LOG_PATTERNS = [
   /spawn (codex|claude).*ENOENT/,
   /ELECTRON_RUN_AS_NODE/,
@@ -89,6 +79,31 @@ function assertExecutable(filePath, label) {
   const stat = fs.statSync(filePath);
   assert(stat.isFile(), `${label} is not a regular file: ${filePath}`);
   assert((stat.mode & 0o111) !== 0, `${label} is not executable: ${filePath}`);
+}
+
+function escapeRegExp(value) {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+function requiredLogPatterns(binDir) {
+  return [
+    /\[main\] App ready, starting initialization/,
+    /\[main\] Spawning runtime stack/,
+    new RegExp(
+      `\\[backend\\] \\[agent-server\\] BUNDLED_CLI_PATH claude=${escapeRegExp(
+        path.join(binDir, "claude")
+      )}`
+    ),
+    new RegExp(
+      `\\[backend\\] \\[agent-server\\] BUNDLED_CLI_PATH codex=${escapeRegExp(
+        path.join(binDir, "codex")
+      )}`
+    ),
+    /\[backend\] \[agent-server\] LISTEN_URL=/,
+    /\[backend\] \[BACKEND_PORT\]\d+/,
+    /\[main\] Backend started on port: \d+/,
+    /\[main\] Window created/,
+  ];
 }
 
 function assertHostRunnableArch(filePath, label) {
@@ -209,7 +224,7 @@ function killChildTree(child, signal) {
   child.kill(signal);
 }
 
-async function waitForDesktopReadiness(child, tempHome) {
+async function waitForDesktopReadiness(child, tempHome, requiredPatterns) {
   const matched = new Set();
   let lastLog = "";
   let lastLogPath = null;
@@ -229,10 +244,10 @@ async function waitForDesktopReadiness(child, tempHome) {
         }
       }
 
-      REQUIRED_LOG_PATTERNS.forEach((pattern, index) => {
+      requiredPatterns.forEach((pattern, index) => {
         if (pattern.test(contents)) matched.add(index);
       });
-      if (matched.size === REQUIRED_LOG_PATTERNS.length) {
+      if (matched.size === requiredPatterns.length) {
         clearInterval(interval);
         clearTimeout(timeout);
         resolve();
@@ -241,17 +256,20 @@ async function waitForDesktopReadiness(child, tempHome) {
 
     const timeout = setTimeout(() => {
       clearInterval(interval);
+      const missing = requiredPatterns
+        .filter((_, index) => !matched.has(index))
+        .map((pattern) => pattern.toString());
       reject(
         new Error(
-          `Packaged desktop did not reach readiness. logPath=${lastLogPath ?? "missing"} log=${lastLog.slice(
-            -4000
-          )}`
+          `Packaged desktop did not reach readiness. missing=${missing.join(", ") || "none"} logPath=${
+            lastLogPath ?? "missing"
+          } log=${lastLog.slice(-4000)}`
         )
       );
     }, STARTUP_TIMEOUT_MS);
 
     child.on("exit", (code, signal) => {
-      if (matched.size !== REQUIRED_LOG_PATTERNS.length) {
+      if (matched.size !== requiredPatterns.length) {
         clearInterval(interval);
         clearTimeout(timeout);
         reject(
@@ -282,6 +300,7 @@ async function smokePackagedDesktop(options) {
   fs.mkdirSync(tempHome, { recursive: true });
   const launchAppPath = copyAppToTempApplications(options.appPath, tempHome);
   const appBinary = path.join(launchAppPath, "Contents", "MacOS", "Deus");
+  const binDir = path.join(launchAppPath, "Contents", "Resources", "bin");
   assertExecutable(appBinary, "packaged Deus app executable");
   assertHostRunnableArch(appBinary, "Deus app executable");
   if (options.requireGatekeeper) {
@@ -301,7 +320,11 @@ async function smokePackagedDesktop(options) {
   });
 
   try {
-    const { logPath } = await waitForDesktopReadiness(child, tempHome);
+    const { logPath } = await waitForDesktopReadiness(
+      child,
+      tempHome,
+      requiredLogPatterns(binDir)
+    );
     console.log(`[runtime-smoke] packaged desktop reached readiness; log=${logPath}`);
   } catch (error) {
     if (stderr.trim()) {
