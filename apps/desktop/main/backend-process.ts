@@ -5,6 +5,7 @@ import { app, BrowserWindow } from "electron";
 import crypto from "crypto";
 import { DEUS_DB_FILENAME } from "../../../shared/runtime";
 import { extendCliPath, getDevStagedCliDirectory } from "../../../shared/lib/cli-path";
+import { PACKAGED_RUNTIME_ENV_DENYLIST } from "./runtime-env";
 
 export const CDP_PORT = "19222";
 
@@ -189,20 +190,19 @@ export async function spawnBackend(
     const backendCommand = runtime.runtimeExecutable ?? process.execPath;
     const backendArgs = runtime.runtimeExecutable ? ["backend"] : [runtime.backendEntry!];
 
-    const childEnv: NodeJS.ProcessEnv = {
-      ...process.env,
-      ...sharedEnv,
-      AUTH_TOKEN: authToken,
-      PORT: "0",
-      CDP_PORT,
-    };
+    const childEnv: NodeJS.ProcessEnv = { ...process.env };
     if (runtime.runtimeExecutable) {
-      delete childEnv.ELECTRON_RUN_AS_NODE;
-      delete childEnv.AGENT_SERVER_ENTRY;
-      delete childEnv.AGENT_SERVER_CWD;
+      for (const key of PACKAGED_RUNTIME_ENV_DENYLIST) {
+        delete childEnv[key];
+      }
     } else {
       childEnv.ELECTRON_RUN_AS_NODE = "1";
     }
+    Object.assign(childEnv, sharedEnv, {
+      AUTH_TOKEN: authToken,
+      PORT: "0",
+      CDP_PORT,
+    });
 
     const child = spawn(backendCommand, backendArgs, {
       cwd: runtime.backendCwd,
