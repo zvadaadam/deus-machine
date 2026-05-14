@@ -1,5 +1,5 @@
 import { spawn, type ChildProcess } from "child_process";
-import { writeFileSync } from "fs";
+import { existsSync, statSync, writeFileSync } from "fs";
 import { delimiter, join } from "path";
 import { app, BrowserWindow } from "electron";
 import crypto from "crypto";
@@ -90,6 +90,14 @@ function buildRuntimePath(runtime: ElectronRuntimeEntries): string {
   return [runtime.bundledBinDir, extendCliPath(process.env.PATH)].filter(Boolean).join(delimiter);
 }
 
+function isExecutableFile(filePath: string): boolean {
+  if (!existsSync(filePath)) return false;
+  const stat = statSync(filePath);
+  if (!stat.isFile()) return false;
+  if (process.platform === "win32") return true;
+  return (stat.mode & 0o111) !== 0;
+}
+
 function terminateBackend(): Promise<void> {
   const child = backendProcess;
   if (!child || child.exitCode !== null || child.signalCode !== null) {
@@ -152,6 +160,11 @@ export async function spawnBackend(
 ): Promise<{ port: number; authToken: string }> {
   const authToken = crypto.randomBytes(24).toString("hex");
   const runtime = resolveRuntimeEntries();
+  if (runtime.runtimeExecutable && !isExecutableFile(runtime.runtimeExecutable)) {
+    throw new Error(
+      `deus-runtime executable is missing or not executable: ${runtime.runtimeExecutable}`
+    );
+  }
   const dbPath = join(app.getPath("userData"), DEUS_DB_FILENAME);
 
   const sharedEnv = {
