@@ -3,6 +3,7 @@ const http = require("node:http");
 const os = require("node:os");
 const path = require("node:path");
 const { spawn, spawnSync } = require("node:child_process");
+const { assertInitializedAgents, readAgentServerListenUrl } = require("./runtime-smoke-rpc.cjs");
 
 const PROJECT_ROOT = path.resolve(__dirname, "../..");
 const RUNTIME_ENTRY = path.join(PROJECT_ROOT, "apps", "runtime", "index.ts");
@@ -216,9 +217,12 @@ async function main() {
     },
     {
       requiredPatterns: BUNDLED_AGENT_CLI_PATTERNS,
+      onReady: (listenUrl) => assertInitializedAgents(listenUrl),
     }
   );
-  console.log(`[runtime-source-smoke] agent-server resolved bundled CLIs: ${listenUrl}`);
+  console.log(
+    `[runtime-source-smoke] agent-server resolved bundled CLIs and initialized agents: ${listenUrl}`
+  );
 
   const dataDir = fs.mkdtempSync(path.join(os.tmpdir(), "deus-runtime-source-"));
   try {
@@ -237,11 +241,18 @@ async function main() {
           /^\[agent-server\] BUNDLED_CLI_PATH claude=.*\/claude/m,
           /^\[agent-server\] BUNDLED_CLI_PATH codex=.*\/codex/m,
         ],
-        onReady: assertBackendDbRoute,
+        onReady: async (backendPort, output) => {
+          await assertBackendDbRoute(backendPort);
+          const agentServerListenUrl = readAgentServerListenUrl(output);
+          if (!agentServerListenUrl) {
+            throw new Error("Backend runtime output did not include agent-server LISTEN_URL");
+          }
+          await assertInitializedAgents(agentServerListenUrl);
+        },
       }
     );
     console.log(
-      `[runtime-source-smoke] backend resolved bundled CLIs and served DB route: ${backendPort}`
+      `[runtime-source-smoke] backend resolved bundled CLIs, initialized agents, and served DB route: ${backendPort}`
     );
   } finally {
     fs.rmSync(dataDir, { recursive: true, force: true });

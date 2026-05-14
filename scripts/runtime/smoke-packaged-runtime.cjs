@@ -3,6 +3,7 @@ const http = require("node:http");
 const os = require("node:os");
 const path = require("node:path");
 const { execFileSync, spawn, spawnSync } = require("node:child_process");
+const { assertInitializedAgents, readAgentServerListenUrl } = require("./runtime-smoke-rpc.cjs");
 
 const PROJECT_ROOT = path.resolve(__dirname, "../..");
 const DEFAULT_APP_PATH = path.join(PROJECT_ROOT, "dist-electron", "mac-arm64", "Deus.app");
@@ -391,12 +392,21 @@ async function smokePackagedRuntime(options) {
   console.log(`[runtime-smoke] packaged runtime self-test binDir: ${selfTest.binDir}`);
 
   const expectedBundledCliPatterns = bundledAgentCliPatterns(binDir);
-  await waitForRuntimePatterns(runtimeBin, ["agent-server"], binDir, [
-    ...expectedBundledCliPatterns,
-    /LISTEN_URL=/,
-  ]);
+  await waitForRuntimePatterns(
+    runtimeBin,
+    ["agent-server"],
+    binDir,
+    [...expectedBundledCliPatterns, /LISTEN_URL=/],
+    {
+      onReady: async (output) => {
+        const listenUrl = readAgentServerListenUrl(output);
+        if (!listenUrl) throw new Error("Packaged runtime output did not include LISTEN_URL");
+        await assertInitializedAgents(listenUrl);
+      },
+    }
+  );
   console.log(
-    "[runtime-smoke] packaged runtime agent-server resolved bundled CLIs and reached LISTEN_URL"
+    "[runtime-smoke] packaged runtime agent-server resolved bundled CLIs and initialized agents"
   );
 
   const dataDir = fs.mkdtempSync(path.join(os.tmpdir(), "deus-packaged-runtime-"));
@@ -413,14 +423,23 @@ async function smokePackagedRuntime(options) {
         /^\[BACKEND_PORT\]\d+/m,
       ],
       {
-        onReady: assertBackendDbRoute,
+        onReady: async (output) => {
+          await assertBackendDbRoute(output);
+          const listenUrl = readAgentServerListenUrl(output);
+          if (!listenUrl) {
+            throw new Error(
+              "Packaged backend runtime output did not include agent-server LISTEN_URL"
+            );
+          }
+          await assertInitializedAgents(listenUrl);
+        },
       }
     );
   } finally {
     fs.rmSync(dataDir, { recursive: true, force: true });
   }
   console.log(
-    "[runtime-smoke] packaged runtime backend resolved bundled CLIs and served DB route"
+    "[runtime-smoke] packaged runtime backend resolved bundled CLIs, initialized agents, and served DB route"
   );
 }
 
