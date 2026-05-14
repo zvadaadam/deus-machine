@@ -38,4 +38,33 @@ describe("desktop packaged runtime environment", () => {
       "/Applications/Deus.app/Contents/Resources/bin:/usr/bin:/bin:/usr/sbin:/sbin"
     );
   });
+
+  it("removes inherited dev runtime variables from packaged main", () => {
+    const env: NodeJS.ProcessEnv = {
+      AGENT_SERVER_CWD: "/repo/apps/agent-server",
+      AGENT_SERVER_ENTRY: "/repo/apps/agent-server/dist/index.bundled.cjs",
+      DEUS_RUNTIME: "1",
+      DEUS_RUNTIME_COMMAND: "backend",
+      DEUS_RUNTIME_EXECUTABLE: "/tmp/deus-runtime",
+      ELECTRON_RUN_AS_NODE: "1",
+      NODE_PATH: "/repo/node_modules",
+      PATH: "/opt/homebrew/bin:/usr/bin",
+    };
+
+    configurePackagedMainRuntimeEnv({
+      isPackaged: true,
+      platform: "darwin",
+      resourcesPath: "/Applications/Deus.app/Contents/Resources",
+      env,
+    });
+
+    expect(env.AGENT_SERVER_CWD).toBeUndefined();
+    expect(env.AGENT_SERVER_ENTRY).toBeUndefined();
+    expect(env.DEUS_RUNTIME).toBeUndefined();
+    expect(env.DEUS_RUNTIME_COMMAND).toBeUndefined();
+    expect(env.DEUS_RUNTIME_EXECUTABLE).toBeUndefined();
+    expect(env.ELECTRON_RUN_AS_NODE).toBeUndefined();
+    expect(env.NODE_PATH).toBeUndefined();
+    expect(env.DEUS_PACKAGED).toBe("1");
+  });
 });

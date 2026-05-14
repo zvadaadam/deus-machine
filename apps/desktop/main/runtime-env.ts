@@ -1,6 +1,15 @@
 import { delimiter, join } from "path";
 
 const PACKAGED_SYSTEM_PATHS = ["/usr/bin", "/bin", "/usr/sbin", "/sbin"];
+const PACKAGED_RUNTIME_ENV_DENYLIST = [
+  "AGENT_SERVER_CWD",
+  "AGENT_SERVER_ENTRY",
+  "ELECTRON_RUN_AS_NODE",
+  "DEUS_RUNTIME",
+  "DEUS_RUNTIME_COMMAND",
+  "DEUS_RUNTIME_EXECUTABLE",
+  "NODE_PATH",
+] as const;
 
 export function configurePackagedMainRuntimeEnv(options: {
   isPackaged: boolean;
@@ -12,6 +21,9 @@ export function configurePackagedMainRuntimeEnv(options: {
 
   const env = options.env ?? process.env;
   env.DEUS_PACKAGED = "1";
+  for (const key of PACKAGED_RUNTIME_ENV_DENYLIST) {
+    delete env[key];
+  }
 
   if (!options.resourcesPath) return;
 

@@ -8,6 +8,15 @@ const DEFAULT_APP_PATH = path.join(PROJECT_ROOT, "dist-electron", "mac-arm64", "
 const STARTUP_TIMEOUT_MS = 60_000;
 const STOP_TIMEOUT_MS = 5_000;
 const PACKAGED_SYSTEM_PATHS = ["/usr/bin", "/bin", "/usr/sbin", "/sbin"];
+const PACKAGED_RUNTIME_ENV_DENYLIST = [
+  "AGENT_SERVER_CWD",
+  "AGENT_SERVER_ENTRY",
+  "ELECTRON_RUN_AS_NODE",
+  "DEUS_RUNTIME",
+  "DEUS_RUNTIME_COMMAND",
+  "DEUS_RUNTIME_EXECUTABLE",
+  "NODE_PATH",
+];
 const REQUIRED_LOG_PATTERNS = [
   /\[main\] App ready, starting initialization/,
   /\[main\] Spawning runtime stack/,
@@ -103,6 +112,18 @@ function verifyGatekeeperAssessment(appPath) {
     timeout: 60_000,
     stdio: ["ignore", "ignore", "pipe"],
   });
+}
+
+function packagedDesktopEnv(tempHome) {
+  const env = {
+    ...process.env,
+    HOME: tempHome,
+    PATH: PACKAGED_SYSTEM_PATHS.join(path.delimiter),
+  };
+  for (const key of PACKAGED_RUNTIME_ENV_DENYLIST) {
+    delete env[key];
+  }
+  return env;
 }
 
 function runAppCheck(appPath, options) {
@@ -268,11 +289,7 @@ async function smokePackagedDesktop(options) {
   const child = spawn(appBinary, [], {
     cwd: tempHome,
     detached: process.platform !== "win32",
-    env: {
-      ...process.env,
-      HOME: tempHome,
-      PATH: PACKAGED_SYSTEM_PATHS.join(path.delimiter),
-    },
+    env: packagedDesktopEnv(tempHome),
     stdio: ["ignore", "ignore", "pipe"],
   });
 
