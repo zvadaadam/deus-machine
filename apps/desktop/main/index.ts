@@ -26,6 +26,7 @@ import { syncShellEnvironment } from "./shell-env";
 import { setupAppMenu } from "./app-menu";
 import { setupTray, destroyTray } from "./tray";
 import { ensureInstalledInApplications } from "./install-preflight";
+import { configurePackagedMainRuntimeEnv } from "./runtime-env";
 import {
   formatStartupFailureDetail,
   getMainLogPath,
@@ -240,6 +241,11 @@ app.whenReady().then(async () => {
   initMainProcessLogging();
   logMainProcess("[main] App ready, starting initialization...");
   logMainProcess("[main] __dirname: " + __dirname);
+  configurePackagedMainRuntimeEnv({
+    isPackaged: app.isPackaged,
+    platform: process.platform,
+    resourcesPath: process.resourcesPath,
+  });
 
   if (await ensureInstalledInApplications()) {
     return;
