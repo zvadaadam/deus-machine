@@ -28,9 +28,13 @@ const {
     verifyPackagedRuntimeExternalModules: (
       resourcesDir: string,
       targetArch: string,
-      options?: { verifyNativePayloads?: boolean }
+      options?: { verifyNativePayloads?: boolean; verifyNativePayloadSignatures?: boolean }
     ) => void;
-    verifyPackagedRuntimeManifests: (binDir: string, targetArch: string) => void;
+    verifyPackagedRuntimeManifests: (
+      binDir: string,
+      targetArch: string,
+      options?: { verifyFileHashes?: boolean }
+    ) => void;
   };
 
 const tempRoots: string[] = [];
@@ -261,6 +265,21 @@ describe("prune-pencil-cli-binaries", () => {
     expect(() => verifyPackagedRuntimeManifests(binDir, "arm64")).toThrow(
       /codex CLI hash does not match/
     );
+  });
+
+  it("can skip packaged runtime manifest hashes after code signing mutates binaries", () => {
+    const resourcesDir = createTempRoot("deus-packaged-bin-signed");
+    tempRoots.push(resourcesDir);
+    const binDir = path.join(resourcesDir, "bin");
+    writePackagedRuntimeFixture(binDir);
+
+    const codexPath = path.join(binDir, "codex");
+    writeFileSync(codexPath, "signed-codex");
+    chmodSync(codexPath, 0o755);
+
+    expect(() =>
+      verifyPackagedRuntimeManifests(binDir, "arm64", { verifyFileHashes: false })
+    ).not.toThrow();
   });
 
   it("verifies native runtime external modules are unpacked outside app.asar", () => {
