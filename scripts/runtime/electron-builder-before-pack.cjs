@@ -76,32 +76,75 @@ function assertBuildOutputFresh(projectRoot, label, outputRelative, sourceRelati
   }
 }
 
+function outputTreeContains(projectRoot, outputRelative, expectedText) {
+  const outputPath = path.join(projectRoot, outputRelative);
+  if (!existsSync(outputPath)) return false;
+
+  const stat = statSync(outputPath);
+  if (stat.isDirectory()) {
+    for (const entry of readdirSync(outputPath, { withFileTypes: true })) {
+      const entryRelative = path.join(outputRelative, entry.name);
+      if (entry.isDirectory() && outputTreeContains(projectRoot, entryRelative, expectedText)) {
+        return true;
+      }
+      if (entry.isFile() && SOURCE_EXTENSIONS.has(path.extname(entry.name))) {
+        const contents = readFileSync(path.join(projectRoot, entryRelative), "utf8");
+        if (contents.includes(expectedText)) return true;
+      }
+    }
+    return false;
+  }
+
+  const contents = readFileSync(outputPath, "utf8");
+  return contents.includes(expectedText);
+}
+
+function assertOutputTreeContains(projectRoot, label, outputRelative, expectedText) {
+  const outputPath = path.join(projectRoot, outputRelative);
+  if (!existsSync(outputPath)) {
+    throw new Error(
+      `Missing Electron ${label} build output: ${outputRelative}. Run \`bun run build\`.`
+    );
+  }
+
+  if (!outputTreeContains(projectRoot, outputRelative, expectedText)) {
+    throw new Error(
+      `Electron ${label} build output does not contain ${expectedText}. Run \`bun run build\`.`
+    );
+  }
+}
+
+function assertElectronBuildVersion(projectRoot) {
+  const packageJson = JSON.parse(readFileSync(path.join(projectRoot, "package.json"), "utf8"));
+  if (!packageJson.version) {
+    throw new Error("package.json is missing version");
+  }
+  assertOutputTreeContains(projectRoot, "renderer", "out/renderer", String(packageJson.version));
+}
+
 function assertElectronBuildFresh(projectRoot) {
   assertBuildOutputFresh(projectRoot, "main", "out/main/index.js", [
     "apps/desktop/main",
     "shared",
     "electron.vite.config.ts",
-    "package.json",
   ]);
   assertBuildOutputFresh(projectRoot, "preload", "out/preload/index.mjs", [
     "apps/desktop/preload",
     "shared",
     "electron.vite.config.ts",
-    "package.json",
   ]);
   assertBuildOutputFresh(projectRoot, "preload", "out/preload/browser-preload.mjs", [
     "apps/desktop/preload",
     "shared",
     "electron.vite.config.ts",
-    "package.json",
   ]);
   assertBuildOutputFresh(projectRoot, "renderer", "out/renderer/index.html", [
     "apps/web/index.html",
     "apps/web/src",
     "shared",
     "electron.vite.config.ts",
-    "package.json",
   ]);
+  assertElectronBuildVersion(projectRoot);
 }
 
 function assertPackagedMainRuntimeContract(projectRoot) {
@@ -189,3 +232,4 @@ module.exports = function beforePack(context) {
 
 module.exports.assertPackagedMainRuntimeContract = assertPackagedMainRuntimeContract;
 module.exports.assertPackagedRuntimePlatform = assertPackagedRuntimePlatform;
+module.exports.assertElectronBuildVersion = assertElectronBuildVersion;
