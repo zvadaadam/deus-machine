@@ -72,8 +72,9 @@ Because of that host policy, a local run can truthfully complete the static chec
 
 When `bun run build` is blocked on this host, `out/main` and any existing `dist-electron/*.app` may be stale relative to desktop main-process source changes. Treat the release workflow or a non-blocked macOS builder as the source of truth for freshly rebuilt packaged artifacts.
 
-The release workflow runs the required direct checks on macOS after packaging and notarization:
+The release workflow runs staged, packaged, and notarized checks on macOS:
 
-- `bun run smoke:runtime-native`
-- `node scripts/runtime/smoke-packaged-runtime.cjs --app "$copied_app" --require-gatekeeper`
-- `node scripts/runtime/smoke-packaged-desktop.cjs --app "$copied_app" --require-gatekeeper`
+- Before packaging, `bun run smoke:runtime-native` directly verifies the staged host-arch `deus-runtime`.
+- After packaging, every produced `.app` is inspected with `node scripts/runtime/smoke-packaged-app.cjs --app "$app_path"`.
+- After DMG/ZIP notarization, the release workflow copies the host-arch app out of the DMG and runs `node scripts/runtime/smoke-packaged-runtime.cjs --app "$copied_app" --require-gatekeeper`.
+- The same copied app is then launched through `node scripts/runtime/smoke-packaged-desktop.cjs --app "$copied_app" --require-gatekeeper`.

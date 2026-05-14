@@ -214,6 +214,7 @@ jobs:
           while IFS= read -r app_path; do
             echo "Verifying signature for $app_path"
             codesign --verify --deep --strict --verbose=2 "$app_path"
+            node scripts/runtime/smoke-packaged-app.cjs --app "$app_path"
           done < <(find dist-electron -maxdepth 2 -path '*/Deus.app' -type d | sort)
 
           while IFS= read -r dmg_path; do
