@@ -25,6 +25,7 @@ Status: implementation is staged, but the overall goal is not complete until dir
 - Release verification statically runs `scripts/runtime/smoke-packaged-app.cjs --require-gatekeeper` over every produced `.app` before upload; direct packaged runtime/desktop smokes still run on the host-arch app copied from the notarized DMG.
 - Native and packaged runtime direct smokes now verify `self-test` layout, including `binDir`, `resourcesPath`, and native-module `NODE_PATH`.
 - Packaged Electron main and native `deus-runtime` force `NODE_ENV=production`; direct runtime smokes assert the self-test reports production mode.
+- Runtime-managed agent-server spawns scrub backend-only auth, database, data-dir, and listen-port env while preserving desktop runtime context.
 - `b72f4d96 test: smoke current desktop runtime contract` verifies current Electron main source by bundling it to a temporary output and checking the packaged `deus-runtime` launch contract.
 - `fa6cfca7 test: tighten packaged main runtime guard` makes the before-pack and app.asar smoke checks share the stricter packaged main runtime contract assertion.
 - `87f66d88 docs: record runtime resign diagnostic` records that ad-hoc re-signing a temporary runtime copy does not bypass this host's provenance/Gatekeeper launch blocker.
