@@ -152,6 +152,14 @@ function assertPackagedMainRuntimeContents(contents, label = "Electron main buil
     'process.resourcesPath, "bin", "deus-runtime"',
     "DEUS_RUNTIME_EXECUTABLE",
     "configurePackagedMainRuntimeEnv",
+    "PACKAGED_RUNTIME_ENV_DENYLIST",
+    '"AUTH_TOKEN"',
+    '"DATABASE_PATH"',
+    '"DEUS_AUTH_TOKEN"',
+    '"DEUS_BUNDLED_BIN_DIR"',
+    '"DEUS_BACKEND_PORT"',
+    '"DEUS_DATA_DIR"',
+    '"PORT"',
     'runtime.runtimeExecutable ? ["backend"]',
   ];
 
