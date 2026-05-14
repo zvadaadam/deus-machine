@@ -14,6 +14,7 @@ const PROJECT_ROOT = path.resolve(__dirname, "../..");
 const DEFAULT_APP_PATH = path.join(PROJECT_ROOT, "dist-electron", "mac-arm64", "Deus.app");
 const REQUIRED_BINARIES = ["deus-runtime", "codex", "claude", "gh", "rg"];
 const REQUIRED_MANIFESTS = ["deus-runtime.json", "agent-clis.json", "gh-cli.json"];
+const ALLOWED_BIN_ENTRIES = new Set([...REQUIRED_BINARIES, ...REQUIRED_MANIFESTS]);
 
 function parseArgs(argv) {
   const options = {
@@ -88,6 +89,22 @@ function assertRegularExecutable(filePath, label) {
   const stat = fs.statSync(filePath);
   assert(stat.isFile(), `${label} is not a regular file: ${filePath}`);
   assert((stat.mode & 0o111) !== 0, `${label} is not executable: ${filePath}`);
+}
+
+function assertRegularFile(filePath, label) {
+  assert(fs.existsSync(filePath), `Missing ${label}: ${filePath}`);
+  assert(fs.statSync(filePath).isFile(), `${label} is not a regular file: ${filePath}`);
+}
+
+function verifyResourcesBinContents(binDir) {
+  const unexpected = fs
+    .readdirSync(binDir)
+    .filter((entry) => entry !== ".DS_Store" && !ALLOWED_BIN_ENTRIES.has(entry));
+  assert(
+    unexpected.length === 0,
+    `Packaged Resources/bin contains unexpected entries: ${unexpected.join(", ")}`
+  );
+  console.log("[runtime-smoke] packaged Resources/bin contents verified");
 }
 
 function run(command, args, options = {}) {
@@ -194,6 +211,7 @@ async function verifyPackagedApp(options) {
   assert(fs.existsSync(infoPlist), `Missing app Info.plist: ${infoPlist}`);
   assertDirectory(resourcesDir, "packaged Resources directory");
   assertDirectory(binDir, "packaged Resources/bin directory");
+  verifyResourcesBinContents(binDir);
 
   const bundleExecutable = readPlistValue(infoPlist, "CFBundleExecutable");
   const appExecutable = path.join(contentsDir, "MacOS", bundleExecutable);
@@ -208,7 +226,7 @@ async function verifyPackagedApp(options) {
     assertRegularExecutable(path.join(binDir, name), `packaged ${name}`);
   }
   for (const name of REQUIRED_MANIFESTS) {
-    assert(fs.existsSync(path.join(binDir, name)), `Missing packaged manifest: ${name}`);
+    assertRegularFile(path.join(binDir, name), `packaged manifest ${name}`);
   }
 
   verifyAppSignature(appPath, appExecutable);
