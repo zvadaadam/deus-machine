@@ -1,4 +1,4 @@
-import { execFileSync, spawnSync } from "node:child_process";
+import { execFileSync, spawn, spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
 import {
   chmodSync,
@@ -21,6 +21,7 @@ import { resolveRuntimeStagePaths } from "../../shared/runtime";
 const runtimeDir = path.dirname(fileURLToPath(import.meta.url));
 const defaultProjectRoot = path.resolve(runtimeDir, "../..");
 const VERIFY_TIMEOUT_MS = 20_000;
+const VERIFY_STOP_TIMEOUT_MS = 5_000;
 // Keep in sync with apps/agent-server/agents/codex-server/codex-server-discovery.ts.
 const MIN_CODEX_APP_SERVER_VERSION = "0.128.0";
 
@@ -329,6 +330,129 @@ function verifyVersion(
   return output;
 }
 
+function killChildTree(child: ReturnType<typeof spawn>, signal: NodeJS.Signals): void {
+  if (process.platform !== "win32" && child.pid) {
+    try {
+      process.kill(-child.pid, signal);
+      return;
+    } catch {
+      // Fall back to the direct child if process-group termination is unavailable.
+    }
+  }
+  child.kill(signal);
+}
+
+function stopVersionChild(child: ReturnType<typeof spawn>): Promise<void> {
+  if (child.exitCode !== null || child.signalCode !== null) return Promise.resolve();
+
+  return new Promise((resolve) => {
+    let settled = false;
+    const finish = () => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(forceTimer);
+      resolve();
+    };
+    const forceTimer = setTimeout(() => {
+      if (child.exitCode === null && child.signalCode === null) killChildTree(child, "SIGKILL");
+      child.stdout?.destroy();
+      child.stderr?.destroy();
+      child.unref?.();
+      finish();
+    }, VERIFY_STOP_TIMEOUT_MS);
+    child.once("exit", finish);
+    killChildTree(child, "SIGTERM");
+  });
+}
+
+async function verifyVersionBounded(
+  executablePath: string,
+  args: string[],
+  env: NodeJS.ProcessEnv = process.env
+): Promise<string> {
+  const child = spawn(executablePath, args, {
+    detached: process.platform !== "win32",
+    env,
+    stdio: ["ignore", "pipe", "pipe"],
+  });
+
+  let stdout = "";
+  let stderr = "";
+
+  try {
+    await new Promise<void>((resolve, reject) => {
+      let settled = false;
+      const timeout = setTimeout(() => {
+        const diagnostics = stagedExecutableDiagnostics(executablePath);
+        const hint = macExecutionPolicyHint(diagnostics);
+        fail(
+          new Error(
+            `${path.basename(executablePath)} ${args.join(
+              " "
+            )} timed out after ${VERIFY_TIMEOUT_MS}ms stdout=${stdout
+              .trim()
+              .slice(-4000)} stderr=${stderr.trim().slice(-4000)}${
+              diagnostics ? `\n${diagnostics}` : ""
+            }${hint}`
+          )
+        );
+      }, VERIFY_TIMEOUT_MS);
+
+      const fail = (error: Error) => {
+        if (settled) return;
+        settled = true;
+        clearTimeout(timeout);
+        reject(error);
+      };
+
+      child.stdout?.on("data", (data) => {
+        stdout += data.toString();
+      });
+      child.stderr?.on("data", (data) => {
+        stderr += data.toString();
+      });
+      child.on("error", (error) => {
+        const diagnostics = stagedExecutableDiagnostics(executablePath);
+        const hint = macExecutionPolicyHint(diagnostics);
+        fail(
+          new Error(
+            `${path.basename(executablePath)} ${args.join(" ")} failed to spawn: error=${
+              spawnErrorCode(error)
+            } stdout=${stdout.trim().slice(-4000)} stderr=${stderr.trim().slice(-4000)}${
+              diagnostics ? `\n${diagnostics}` : ""
+            }${hint}`
+          )
+        );
+      });
+      child.on("exit", (code, signal) => {
+        if (settled) return;
+        if (code === 0) {
+          settled = true;
+          clearTimeout(timeout);
+          resolve();
+          return;
+        }
+
+        const diagnostics = stagedExecutableDiagnostics(executablePath);
+        const hint = macExecutionPolicyHint(diagnostics);
+        fail(
+          new Error(
+            `${path.basename(executablePath)} ${args.join(" ")} failed: status=${code} signal=${
+              signal ?? "none"
+            } stdout=${stdout.trim().slice(-4000)} stderr=${stderr.trim().slice(-4000)}${
+              diagnostics ? `\n${diagnostics}` : ""
+            }${hint}`
+          )
+        );
+      });
+    });
+  } finally {
+    await stopVersionChild(child);
+  }
+
+  return stdout.trim();
+}
+
 function diagnosticOutput(command: string, args: string[], cwd: string): string {
   const result = spawnSync(command, args, {
     cwd,
@@ -393,6 +517,20 @@ export function verifyStagedAgentCliVersion(
     [tool === "claude" ? "--version" : "--version"],
     env
   );
+  assertVersionOutput(tool, output, executablePath);
+  return output;
+}
+
+async function verifyStagedAgentCliVersionBounded(
+  tool: AgentCliName,
+  executablePath: string
+): Promise<string> {
+  const binDir = path.dirname(executablePath);
+  const env = {
+    ...process.env,
+    PATH: [binDir, process.env.PATH].filter(Boolean).join(path.delimiter),
+  };
+  const output = await verifyVersionBounded(executablePath, ["--version"], env);
   assertVersionOutput(tool, output, executablePath);
   return output;
 }
@@ -489,7 +627,7 @@ export async function prepareAgentClis(
       };
 
       if (verifyRunnable && shouldVerifyRuntimeKey(target.runtimeKey)) {
-        codexRecord.versionOutput = verifyStagedAgentCliVersion("codex", stagedCodex);
+        codexRecord.versionOutput = await verifyStagedAgentCliVersionBounded("codex", stagedCodex);
         log(`✓ ${target.runtimeKey}/codex ${codexRecord.versionOutput}`);
       } else {
         log(`✓ ${target.runtimeKey}/codex staged from ${codexPackage.sourceDescription}`);
@@ -536,7 +674,10 @@ export async function prepareAgentClis(
       };
 
       if (verifyRunnable && shouldVerifyRuntimeKey(target.runtimeKey)) {
-        claudeRecord.versionOutput = verifyStagedAgentCliVersion("claude", stagedClaude);
+        claudeRecord.versionOutput = await verifyStagedAgentCliVersionBounded(
+          "claude",
+          stagedClaude
+        );
         log(`✓ ${target.runtimeKey}/claude ${claudeRecord.versionOutput}`);
       } else {
         log(`✓ ${target.runtimeKey}/claude staged from ${claudePackage.sourceDescription}`);
