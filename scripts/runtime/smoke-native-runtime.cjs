@@ -1,4 +1,5 @@
 const fs = require("node:fs");
+const http = require("node:http");
 const os = require("node:os");
 const path = require("node:path");
 const { execFileSync, spawn, spawnSync } = require("node:child_process");
@@ -185,7 +186,52 @@ function killChildTree(child, signal) {
   child.kill(signal);
 }
 
-async function waitForRuntimePatterns(runtimeBin, args, binDir, patterns) {
+function getJson(port, pathname) {
+  return new Promise((resolve, reject) => {
+    const request = http.get(
+      {
+        hostname: "127.0.0.1",
+        port,
+        path: pathname,
+        timeout: 5_000,
+      },
+      (response) => {
+        let body = "";
+        response.setEncoding("utf8");
+        response.on("data", (chunk) => {
+          body += chunk;
+        });
+        response.on("end", () => {
+          resolve({ statusCode: response.statusCode, body });
+        });
+      }
+    );
+    request.on("error", reject);
+    request.on("timeout", () => request.destroy(new Error(`Timed out requesting ${pathname}`)));
+  });
+}
+
+async function assertBackendDbRoute(output) {
+  const match = output.match(/^\[BACKEND_PORT\](\d+)/m);
+  if (!match) throw new Error("Backend DB route check could not find [BACKEND_PORT]");
+
+  const response = await getJson(Number(match[1]), "/api/workspaces");
+  if (response.statusCode !== 200) {
+    throw new Error(
+      `Backend DB route failed: GET /api/workspaces returned ${response.statusCode}: ${response.body.slice(
+        0,
+        500
+      )}`
+    );
+  }
+
+  const parsed = JSON.parse(response.body);
+  if (!Array.isArray(parsed)) {
+    throw new Error(`Backend DB route returned non-array payload: ${response.body.slice(0, 500)}`);
+  }
+}
+
+async function waitForRuntimePatterns(runtimeBin, args, binDir, patterns, options = {}) {
   const child = spawn(runtimeBin, args, {
     cwd: path.dirname(runtimeBin),
     detached: process.platform !== "win32",
@@ -199,7 +245,10 @@ async function waitForRuntimePatterns(runtimeBin, args, binDir, patterns) {
 
   try {
     await new Promise((resolve, reject) => {
+      let settled = false;
+      let completing = false;
       const timeout = setTimeout(() => {
+        settled = true;
         const missing = patterns
           .filter((_, index) => !matched.has(index))
           .map((pattern) => pattern.toString());
@@ -218,10 +267,13 @@ async function waitForRuntimePatterns(runtimeBin, args, binDir, patterns) {
       }, STARTUP_TIMEOUT_MS);
 
       const fail = (error) => {
+        if (settled) return;
+        settled = true;
         clearTimeout(timeout);
         reject(error);
       };
       const maybeDone = () => {
+        if (settled || completing) return;
         const output = `${stdout}\n${stderr}`;
         for (const pattern of OBSOLETE_RUNTIME_PATTERNS) {
           if (pattern.test(output)) {
@@ -233,8 +285,15 @@ async function waitForRuntimePatterns(runtimeBin, args, binDir, patterns) {
           if (pattern.test(output)) matched.add(index);
         });
         if (matched.size === patterns.length) {
+          completing = true;
           clearTimeout(timeout);
-          resolve();
+          Promise.resolve(options.onReady?.(output))
+            .then(() => {
+              if (settled) return;
+              settled = true;
+              resolve();
+            })
+            .catch(fail);
         }
       };
 
@@ -248,7 +307,7 @@ async function waitForRuntimePatterns(runtimeBin, args, binDir, patterns) {
       });
       child.on("error", fail);
       child.on("exit", (code, signal) => {
-        if (matched.size !== patterns.length) {
+        if (!settled && matched.size !== patterns.length) {
           const diagnostics = runtimeDiagnostics(runtimeBin);
           fail(
             new Error(
@@ -296,16 +355,24 @@ async function smokeNativeRuntime(options) {
 
   const dataDir = fs.mkdtempSync(path.join(os.tmpdir(), "deus-native-runtime-"));
   try {
-    await waitForRuntimePatterns(runtimeBin, ["backend", "--data-dir", dataDir], binDir, [
-      /^\[agent-server\] BUNDLED_CLI_PATH claude=.*\/claude/m,
-      /^\[agent-server\] BUNDLED_CLI_PATH codex=.*\/codex/m,
-      /^\[agent-server\] LISTEN_URL=/m,
-      /^\[BACKEND_PORT\]\d+/m,
-    ]);
+    await waitForRuntimePatterns(
+      runtimeBin,
+      ["backend", "--data-dir", dataDir],
+      binDir,
+      [
+        /^\[agent-server\] BUNDLED_CLI_PATH claude=.*\/claude/m,
+        /^\[agent-server\] BUNDLED_CLI_PATH codex=.*\/codex/m,
+        /^\[agent-server\] LISTEN_URL=/m,
+        /^\[BACKEND_PORT\]\d+/m,
+      ],
+      {
+        onReady: assertBackendDbRoute,
+      }
+    );
   } finally {
     fs.rmSync(dataDir, { recursive: true, force: true });
   }
-  console.log("[runtime-smoke] native runtime backend resolved bundled CLIs and reached port");
+  console.log("[runtime-smoke] native runtime backend resolved bundled CLIs and served DB route");
 }
 
 smokeNativeRuntime(parseArgs(process.argv.slice(2))).catch((error) => {
