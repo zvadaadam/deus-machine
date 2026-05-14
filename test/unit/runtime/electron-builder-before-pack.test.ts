@@ -5,9 +5,14 @@ import path from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 
 const require = createRequire(import.meta.url);
-const { assertPackagedMainRuntimeContract, assertPackagedRuntimePlatform } = require(
+const {
+  assertElectronBuildVersion,
+  assertPackagedMainRuntimeContract,
+  assertPackagedRuntimePlatform,
+} = require(
   "../../../scripts/runtime/electron-builder-before-pack.cjs"
 ) as {
+  assertElectronBuildVersion: (projectRoot: string) => void;
   assertPackagedMainRuntimeContract: (projectRoot: string) => void;
   assertPackagedRuntimePlatform: (context?: { electronPlatformName?: string }) => void;
 };
@@ -20,6 +25,16 @@ function createProjectWithMainOutput(contents: string): string {
   const mainOutput = path.join(projectRoot, "out", "main", "index.js");
   mkdirSync(path.dirname(mainOutput), { recursive: true });
   writeFileSync(mainOutput, contents);
+  return projectRoot;
+}
+
+function createProjectWithRendererVersion(packageVersion: string, rendererContents: string): string {
+  const projectRoot = mkdtempSync(path.join(os.tmpdir(), "deus-before-pack-"));
+  tempRoots.push(projectRoot);
+  writeFileSync(path.join(projectRoot, "package.json"), JSON.stringify({ version: packageVersion }));
+  const rendererOutput = path.join(projectRoot, "out", "renderer", "assets", "index.js");
+  mkdirSync(path.dirname(rendererOutput), { recursive: true });
+  writeFileSync(rendererOutput, rendererContents);
   return projectRoot;
 }
 
@@ -100,6 +115,26 @@ describe("electron-builder beforePack runtime guard", () => {
 
     expect(() => assertPackagedMainRuntimeContract(projectRoot)).toThrow(
       /packaged main runtime environment initializer/
+    );
+  });
+
+  it("accepts renderer output containing the current package version", () => {
+    const projectRoot = createProjectWithRendererVersion(
+      "1.2.3",
+      'window.__APP_VERSION__ = "1.2.3";'
+    );
+
+    expect(() => assertElectronBuildVersion(projectRoot)).not.toThrow();
+  });
+
+  it("rejects renderer output missing the current package version", () => {
+    const projectRoot = createProjectWithRendererVersion(
+      "1.2.3",
+      'window.__APP_VERSION__ = "1.2.2";'
+    );
+
+    expect(() => assertElectronBuildVersion(projectRoot)).toThrow(
+      /renderer build output does not contain 1\.2\.3/
     );
   });
 });
