@@ -11,6 +11,11 @@ function log(message: string): void {
   console.log(`[dev] ${message}`);
 }
 
+function resolveBackendNodeCommand(): string {
+  if ("bun" in process.versions) return "node";
+  return process.execPath;
+}
+
 function spawnCommand(
   command: string,
   args: string[],
@@ -63,8 +68,9 @@ async function main(): Promise<void> {
 
 function startBackend(): Promise<{ process: ChildProcess; port: number } | null> {
   return new Promise((resolve) => {
+    const nodeCommand = resolveBackendNodeCommand();
     const child = spawn(
-      process.execPath,
+      nodeCommand,
       [path.join(projectRoot, "apps", "backend", "server.cjs")],
       {
         cwd: path.join(projectRoot, "apps", "backend"),
