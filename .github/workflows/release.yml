@@ -218,7 +218,7 @@ jobs:
               dmg_path="$(find dist-electron -maxdepth 1 -name '*arm64.dmg' -type f | head -n 1)"
               ;;
             x86_64)
-              dmg_path="$(find dist-electron -maxdepth 1 \( -name '*x64.dmg' -o ! -name '*arm64.dmg' \) -type f | head -n 1)"
+              dmg_path="$(find dist-electron -maxdepth 1 \( -name '*x64.dmg' -o \( -name '*.dmg' ! -name '*arm64.dmg' \) \) -type f | head -n 1)"
               ;;
             *)
               echo "::error::Unsupported macOS runner architecture: ${runner_arch}"
