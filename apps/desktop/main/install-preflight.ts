@@ -1,10 +1,20 @@
 import { app, dialog } from "electron";
-import { join, resolve, sep } from "path";
+import { realpathSync } from "fs";
+import { isAbsolute, join, relative, resolve } from "path";
+
+function canonicalPath(filePath: string): string {
+  try {
+    return realpathSync.native(filePath);
+  } catch {
+    return resolve(filePath);
+  }
+}
 
 function isInsideDirectory(filePath: string, directoryPath: string): boolean {
-  const normalizedDirectory = `${resolve(directoryPath)}${sep}`;
-  const normalizedFile = resolve(filePath);
-  return normalizedFile.startsWith(normalizedDirectory);
+  const normalizedFile = canonicalPath(filePath);
+  const normalizedDirectory = canonicalPath(directoryPath);
+  const relativePath = relative(normalizedDirectory, normalizedFile);
+  return relativePath !== "" && !relativePath.startsWith("..") && !isAbsolute(relativePath);
 }
 
 export function isApplicationsInstallPath(executablePath: string, homeDir: string): boolean {
