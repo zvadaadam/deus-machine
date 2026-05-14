@@ -174,8 +174,9 @@ function macExecutionPolicyHint(diagnostics) {
 
   return [
     "",
-    "macOS rejected this app before packaged Electron reached readiness.",
-    "If the process times out with no main.log progress, verify on a notarized artifact or a macOS host that allows copied app bundles to launch.",
+    "macOS rejected this app before packaged Electron reached main-process startup.",
+    "This is a host execution-policy failure, not evidence that bundled backend startup failed.",
+    "Verify packaged desktop readiness on a notarized artifact or a macOS host that allows generated/copied Mach-O app bundles to launch.",
   ].join("\n");
 }
 
