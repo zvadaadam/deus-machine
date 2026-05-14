@@ -125,6 +125,17 @@ async function main() {
   if (selfTest.ok !== true) {
     throw new Error(`Source runtime self-test failed: ${JSON.stringify(selfTest)}`);
   }
+  const nodePathEntries = String(selfTest.nodePath || "")
+    .split(path.delimiter)
+    .filter(Boolean);
+  const nodeGlobalPaths = Array.isArray(selfTest.nodeGlobalPaths) ? selfTest.nodeGlobalPaths : [];
+  for (const entry of nodePathEntries) {
+    if (!nodeGlobalPaths.includes(entry)) {
+      throw new Error(
+        `Source runtime NODE_PATH entry is not active in module resolution: ${entry}`
+      );
+    }
+  }
   console.log(`[runtime-source-smoke] self-test binDir: ${selfTest.binDir}`);
 
   const listenUrl = await waitForRuntimeLine(["agent-server"], (line) => {

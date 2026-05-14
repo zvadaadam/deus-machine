@@ -2,6 +2,7 @@
 
 import { randomBytes } from "node:crypto";
 import { existsSync, statSync } from "node:fs";
+import { Module as NodeModule } from "node:module";
 import { basename, delimiter, dirname, join, resolve } from "node:path";
 import packageJson from "../../package.json";
 
@@ -122,6 +123,13 @@ function deterministicPackagedPath(bundledBinDir: string): string {
   return unique([bundledBinDir, ...PACKAGED_SYSTEM_PATHS]).join(delimiter);
 }
 
+function refreshNodePathResolution(): void {
+  const moduleWithInitPaths = NodeModule as typeof NodeModule & {
+    _initPaths?: () => void;
+  };
+  moduleWithInitPaths._initPaths?.();
+}
+
 function inspectBundledBinary(binDir: string, name: (typeof REQUIRED_BINARIES)[number]) {
   const filePath = join(binDir, name);
   const exists = existsSync(filePath);
@@ -162,6 +170,7 @@ function configureRuntimeEnv(command: RuntimeCommand, dataDir?: string): void {
   }
   process.env.NODE_ENV ??= "production";
   process.env.NODE_PATH = nodePathCandidates.join(delimiter);
+  refreshNodePathResolution();
   process.env.PATH = isNativeRuntimeExecutable
     ? deterministicPackagedPath(layout.bundledBinDir)
     : prependPath(process.env.PATH, [layout.bundledBinDir]);
@@ -205,6 +214,7 @@ async function run(command: RuntimeCommand, dataDir?: string): Promise<void> {
         binDir: layout.bundledBinDir,
         resourcesPath: layout.resourcesPath,
         nodePath: process.env.NODE_PATH ?? "",
+        nodeGlobalPaths: NodeModule.globalPaths,
         runtimeKey: getRuntimeKey(),
         binaries,
         missing,
