@@ -3,10 +3,12 @@ import { existsSync, mkdirSync, statSync } from "node:fs";
 import path from "node:path";
 
 const STARTUP_TIMEOUT_MS = 30_000;
+const WINDOWS_EXECUTABLE_EXTENSIONS = new Set([".exe", ".cmd", ".bat", ".ps1", ".com"]);
 const RUNTIME_AGENT_SERVER_ENV_DENYLIST = [
   "AGENT_SERVER_CWD",
   "AGENT_SERVER_ENTRY",
   "AUTH_TOKEN",
+  "BUN_OPTIONS",
   "DATABASE_PATH",
   "DEUS_AUTH_TOKEN",
   "DEUS_BUNDLED_BIN_DIR",
@@ -47,7 +49,9 @@ function isExecutableFile(filePath: string): boolean {
   if (!existsSync(filePath)) return false;
   const stat = statSync(filePath);
   if (!stat.isFile()) return false;
-  if (process.platform === "win32") return true;
+  if (process.platform === "win32") {
+    return WINDOWS_EXECUTABLE_EXTENSIONS.has(path.extname(filePath).toLowerCase());
+  }
   return (stat.mode & 0o111) !== 0;
 }
 

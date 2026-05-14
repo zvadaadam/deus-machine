@@ -17,29 +17,21 @@ import { tmpdir } from "node:os";
 import { basename, dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
-const GH_VERSION = "2.92.0";
-const GH_RELEASE_BASE_URL = `https://github.com/cli/cli/releases/download/v${GH_VERSION}`;
 const VERIFY_TIMEOUT_MS = 20_000;
-
-const TARGETS = [
-  {
-    runtimeKey: "darwin-x64",
-    fileArch: "x86_64",
-    archiveName: `gh_${GH_VERSION}_macOS_amd64.zip`,
-    archiveRoot: `gh_${GH_VERSION}_macOS_amd64`,
-    sha256: "ae9bb327ab0d91071bdada79f8f14034a2a0f19b0e001835a782eafa519d2af0",
-  },
-  {
-    runtimeKey: "darwin-arm64",
-    fileArch: "arm64",
-    archiveName: `gh_${GH_VERSION}_macOS_arm64.zip`,
-    archiveRoot: `gh_${GH_VERSION}_macOS_arm64`,
-    sha256: "b11c54f6bd7d15ed6590475079e5b2fcf36f45d3991a80041b29c9d0cc1f1d07",
-  },
-];
 
 const scriptDir = dirname(fileURLToPath(import.meta.url));
 const projectRoot = resolve(scriptDir, "..");
+const ghContract = JSON.parse(
+  readFileSync(join(scriptDir, "runtime", "gh-cli-contract.json"), "utf8")
+);
+const GH_VERSION = ghContract.ghVersion;
+const GH_RELEASE_BASE_URL = `https://github.com/cli/cli/releases/download/v${GH_VERSION}`;
+const TARGETS = ghContract.targets.map((target) => ({
+  ...target,
+  archiveName: `gh_${GH_VERSION}_${target.archivePlatform}.zip`,
+  archiveRoot: `gh_${GH_VERSION}_${target.archivePlatform}`,
+  sha256: target.archiveSha256,
+}));
 const cacheDir = join(projectRoot, "dist", "cache", "gh", GH_VERSION);
 const stagedBinRoot = join(projectRoot, "dist", "runtime", "electron", "bin");
 const manifestPath = join(stagedBinRoot, "gh-cli.json");

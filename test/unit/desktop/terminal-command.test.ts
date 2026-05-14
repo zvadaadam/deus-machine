@@ -12,6 +12,8 @@ const originalBundledBinDir = process.env.DEUS_BUNDLED_BIN_DIR;
 const originalResourcesPath = process.env.DEUS_RESOURCES_PATH;
 const originalDeusPackaged = process.env.DEUS_PACKAGED;
 const originalDeusRuntime = process.env.DEUS_RUNTIME;
+const originalPath = process.env.PATH;
+const originalNodeEnv = process.env.NODE_ENV;
 const tempRoots: string[] = [];
 
 function createBundledTool(tool: string): string {
@@ -35,6 +37,10 @@ afterEach(() => {
   else process.env.DEUS_PACKAGED = originalDeusPackaged;
   if (originalDeusRuntime === undefined) delete process.env.DEUS_RUNTIME;
   else process.env.DEUS_RUNTIME = originalDeusRuntime;
+  if (originalPath === undefined) delete process.env.PATH;
+  else process.env.PATH = originalPath;
+  if (originalNodeEnv === undefined) delete process.env.NODE_ENV;
+  else process.env.NODE_ENV = originalNodeEnv;
   for (const root of tempRoots.splice(0)) {
     rmSync(root, { recursive: true, force: true });
   }

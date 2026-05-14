@@ -18,11 +18,6 @@ import type { RuntimeManifest } from "./stage";
 const runtimeDir = path.dirname(fileURLToPath(import.meta.url));
 const defaultProjectRoot = path.resolve(runtimeDir, "../..");
 const BUILD_RUNTIME_COMMAND = "bun run build:runtime";
-const DARWIN_NATIVE_CLI_TARGETS = [
-  { runtimeKey: "darwin-arm64", fileArch: "arm64" },
-  { runtimeKey: "darwin-x64", fileArch: "x86_64" },
-] as const;
-
 interface GhCliManifest {
   version: 1;
   ghVersion: string;
@@ -33,6 +28,22 @@ interface GhCliManifest {
     sha256: string;
     size: number;
     fileOutput: string;
+    source?: {
+      version: string;
+      archiveName: string;
+      archiveSha256: string;
+      url: string;
+    };
+  }>;
+}
+
+interface GhCliContract {
+  ghVersion: string;
+  targets: Array<{
+    runtimeKey: string;
+    fileArch: string;
+    archivePlatform: string;
+    archiveSha256: string;
   }>;
 }
 
@@ -61,6 +72,25 @@ function readManifest(manifestPath: string): RuntimeManifest {
 
 function hashFile(filePath: string): string {
   return createHash("sha256").update(readFileSync(filePath)).digest("hex");
+}
+
+function ghArchiveName(version: string, archivePlatform: string): string {
+  return `gh_${version}_${archivePlatform}.zip`;
+}
+
+function readGhCliContract(projectRoot: string): GhCliContract {
+  const contractPath = path.join(projectRoot, "scripts", "runtime", "gh-cli-contract.json");
+  try {
+    const contract = JSON.parse(readFileSync(contractPath, "utf8")) as GhCliContract;
+    if (typeof contract.ghVersion !== "string" || !Array.isArray(contract.targets)) {
+      throw new Error("unexpected contract shape");
+    }
+    return contract;
+  } catch (error) {
+    throw createBuildRuntimeError(
+      `Unable to read GitHub CLI contract at ${contractPath}: ${error instanceof Error ? error.message : String(error)}`
+    );
+  }
 }
 
 function assertExists(filePath: string, label: string): void {
@@ -121,8 +151,14 @@ function assertStagedGhCli(projectRoot: string): void {
   if (manifest.version !== 1 || !Array.isArray(manifest.targets)) {
     throw createBuildRuntimeError(`Unexpected staged GitHub CLI manifest shape: ${manifestPath}`);
   }
+  const contract = readGhCliContract(projectRoot);
+  if (manifest.ghVersion !== contract.ghVersion) {
+    throw createBuildRuntimeError(
+      `GitHub CLI manifest version mismatch: expected ${contract.ghVersion}, found ${manifest.ghVersion}`
+    );
+  }
 
-  for (const target of DARWIN_NATIVE_CLI_TARGETS) {
+  for (const target of contract.targets) {
     const ghPath = path.join(binRoot, target.runtimeKey, "gh");
     const label = `${target.runtimeKey}/gh`;
     assertExecutable(ghPath, label);
@@ -149,6 +185,20 @@ function assertStagedGhCli(projectRoot: string): void {
     if (manifestEntry.fileOutput !== fileOutput) {
       throw createBuildRuntimeError(
         `GitHub CLI manifest file output mismatch for ${target.runtimeKey}/gh`
+      );
+    }
+    const archiveName = ghArchiveName(contract.ghVersion, target.archivePlatform);
+    const expectedUrl = `https://github.com/cli/cli/releases/download/v${contract.ghVersion}/${archiveName}`;
+    const source = manifestEntry.source;
+    if (
+      !source ||
+      source.version !== contract.ghVersion ||
+      source.archiveName !== archiveName ||
+      source.archiveSha256 !== target.archiveSha256 ||
+      source.url !== expectedUrl
+    ) {
+      throw createBuildRuntimeError(
+        `GitHub CLI manifest source mismatch for ${target.runtimeKey}/gh`
       );
     }
   }

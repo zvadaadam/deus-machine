@@ -15,8 +15,9 @@ function versionCheckEnv() {
 }
 
 function writeResult(result, exitCode) {
-  process.stdout.write(`${JSON.stringify(result)}\n`);
-  process.exit(exitCode);
+  process.stdout.write(`${JSON.stringify(result)}\n`, () => {
+    process.exit(exitCode);
+  });
 }
 
 async function main() {
@@ -40,6 +41,8 @@ async function main() {
   try {
     await new Promise((resolve, reject) => {
       let settled = false;
+      let exitCode = null;
+      let exitSignal = null;
       const timeout = setTimeout(() => {
         reject(Object.assign(new Error("timeout"), { timedOut: true }));
       }, timeoutMs);
@@ -61,7 +64,11 @@ async function main() {
         finish(() => reject(error));
       });
       child.on("exit", (code, signal) => {
-        finish(() => resolve({ code, signal }));
+        exitCode = code;
+        exitSignal = signal;
+      });
+      child.on("close", (code, signal) => {
+        finish(() => resolve({ code: exitCode ?? code, signal: exitSignal ?? signal }));
       });
     }).then((result) => {
       const { code, signal } = result;

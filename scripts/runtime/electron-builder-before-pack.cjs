@@ -156,6 +156,7 @@ function assertPackagedMainRuntimeContents(contents, label = "Electron main buil
     '"AGENT_SERVER_CWD"',
     '"AGENT_SERVER_ENTRY"',
     '"AUTH_TOKEN"',
+    '"BUN_OPTIONS"',
     '"DATABASE_PATH"',
     '"DEUS_AUTH_TOKEN"',
     '"DEUS_BUNDLED_BIN_DIR"',

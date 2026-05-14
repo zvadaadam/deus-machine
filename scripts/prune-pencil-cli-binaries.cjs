@@ -23,24 +23,7 @@ const MAC_CODESIGN_PAGE_SIZE = "4096";
 const PACKAGED_VERSION_TIMEOUT_MS = 20_000;
 const PACKAGED_VERSION_STOP_TIMEOUT_MS = 5_000;
 const PROJECT_ROOT = path.resolve(__dirname, "..");
-const PACKAGED_VERSION_ENV_DENYLIST = [
-  "AGENT_SERVER_CWD",
-  "AGENT_SERVER_ENTRY",
-  "AUTH_TOKEN",
-  "DATABASE_PATH",
-  "DEUS_AUTH_TOKEN",
-  "DEUS_BACKEND_PORT",
-  "DEUS_BUNDLED_BIN_DIR",
-  "DEUS_DATA_DIR",
-  "DEUS_PACKAGED",
-  "DEUS_RESOURCES_PATH",
-  "DEUS_RUNTIME",
-  "DEUS_RUNTIME_COMMAND",
-  "DEUS_RUNTIME_EXECUTABLE",
-  "ELECTRON_RUN_AS_NODE",
-  "NODE_PATH",
-  "PORT",
-];
+const PACKAGED_VERSION_ENV_ALLOWLIST = ["LANG", "LC_ALL", "LC_CTYPE", "TMPDIR", "TZ"];
 
 function platformSegment(electronPlatformName) {
   if (electronPlatformName === "darwin") return "darwin";
@@ -243,14 +226,21 @@ function installBetterSqlitePrebuild(packageRoot, targetArch) {
     {
       cwd: packageRoot,
       encoding: "utf8",
+      timeout: 20_000,
       stdio: ["ignore", "pipe", "pipe"],
     }
   );
-  if (result.status !== 0) {
+  const output = `${result.stdout || ""}${result.stderr || ""}`.trim();
+  if (result.error) {
     throw new Error(
       `Failed to install packaged better-sqlite3 darwin-${targetArch} prebuild: ${
-        result.stderr || result.stdout
-      }`
+        result.error.code || result.error.message
+      }${output ? `\n${output}` : ""}`
+    );
+  }
+  if (result.status !== 0) {
+    throw new Error(
+      `Failed to install packaged better-sqlite3 darwin-${targetArch} prebuild: ${output}`
     );
   }
 }
@@ -344,9 +334,17 @@ function verifyCodeSignaturePageSize(filePath, label, expectedPageSize = MAC_COD
     ["-dv", "--verbose=4", filePath],
     {
       encoding: "utf8",
+      timeout: 20_000,
       stdio: ["ignore", "pipe", "pipe"],
     }
   );
+  if (result.error) {
+    throw new Error(
+      `Unable to inspect packaged ${label} code signature: ${
+        result.error.code || result.error.message
+      }`
+    );
+  }
   if (result.status !== 0) {
     throw new Error(
       `Unable to inspect packaged ${label} code signature: ${result.stderr || result.stdout}`
@@ -367,9 +365,17 @@ function verifyRuntimeEntitlements(filePath) {
     ["-d", "--entitlements", ":-", filePath],
     {
       encoding: "utf8",
+      timeout: 20_000,
       stdio: ["ignore", "pipe", "pipe"],
     }
   );
+  if (result.error) {
+    throw new Error(
+      `Unable to read packaged Deus runtime entitlements: ${
+        result.error.code || result.error.message
+      }`
+    );
+  }
   if (result.status !== 0) {
     throw new Error(
       `Unable to read packaged Deus runtime entitlements: ${result.stderr || result.stdout}`
@@ -695,14 +701,13 @@ function stopVersionChild(child) {
 }
 
 async function runPackagedVersionCheck(label, executablePath, binDir) {
-  const env = { ...process.env };
-  for (const key of PACKAGED_VERSION_ENV_DENYLIST) {
-    delete env[key];
-  }
-  Object.assign(env, {
+  const env = {
     DEUS_BUNDLED_BIN_DIR: binDir,
     PATH: [binDir, ...PACKAGED_SYSTEM_PATHS].join(path.delimiter),
-  });
+  };
+  for (const key of PACKAGED_VERSION_ENV_ALLOWLIST) {
+    if (process.env[key]) env[key] = process.env[key];
+  }
 
   const child = spawn(executablePath, ["--version"], {
     detached: process.platform !== "win32",
@@ -716,6 +721,8 @@ async function runPackagedVersionCheck(label, executablePath, binDir) {
   try {
     await new Promise((resolve, reject) => {
       let settled = false;
+      let exitCode = null;
+      let exitSignal = null;
       const timeout = setTimeout(() => {
         const diagnostics = packagedExecutableDiagnostics(executablePath);
         const hint = macExecutionPolicyHint(diagnostics);
@@ -757,8 +764,14 @@ async function runPackagedVersionCheck(label, executablePath, binDir) {
         );
       });
       child.on("exit", (code, signal) => {
+        exitCode = code;
+        exitSignal = signal;
+      });
+      child.on("close", (code, signal) => {
         if (settled) return;
-        if (code === 0) {
+        const finalCode = exitCode ?? code;
+        const finalSignal = exitSignal ?? signal;
+        if (finalCode === 0) {
           settled = true;
           clearTimeout(timeout);
           resolve();
@@ -769,8 +782,8 @@ async function runPackagedVersionCheck(label, executablePath, binDir) {
         const hint = macExecutionPolicyHint(diagnostics);
         fail(
           new Error(
-            `Packaged ${label} --version failed: status=${code} signal=${
-              signal ?? "none"
+            `Packaged ${label} --version failed: status=${finalCode} signal=${
+              finalSignal ?? "none"
             } stdout=${stdout.trim().slice(-4000)} stderr=${stderr.trim().slice(-4000)}${
               diagnostics ? `\n${diagnostics}` : ""
             }${hint}`

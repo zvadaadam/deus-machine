@@ -4,6 +4,7 @@ import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 
 const mockExecFileSync = vi.fn();
 const mockExistsSync = vi.fn();
+const mockStatSync = vi.fn();
 const mockSendError = vi.fn();
 const mockEmitSessionError = vi.fn();
 const mockResolveBundledCliPath = vi.fn();
@@ -15,7 +16,11 @@ vi.mock("child_process", () => ({
 
 vi.mock("fs", async (importOriginal) => {
   const original = await importOriginal<typeof import("fs")>();
-  return { ...original, existsSync: (...args: unknown[]) => mockExistsSync(...args) };
+  return {
+    ...original,
+    existsSync: (...args: unknown[]) => mockExistsSync(...args),
+    statSync: (...args: unknown[]) => mockStatSync(...args),
+  };
 });
 
 vi.mock("../event-broadcaster", () => ({
@@ -68,12 +73,14 @@ describe("discoverExecutable", () => {
   beforeEach(() => {
     mockExecFileSync.mockReset();
     mockExistsSync.mockReset();
+    mockStatSync.mockReset();
     mockSendError.mockReset();
     mockEmitSessionError.mockReset();
     mockResolveBundledCliPath.mockReset();
     mockGetBundledCliPathCandidates.mockReset();
     mockResolveBundledCliPath.mockReturnValue(null);
     mockGetBundledCliPathCandidates.mockReturnValue([]);
+    mockStatSync.mockReturnValue({ isFile: () => true, mode: 0o755 });
     // Reset env to avoid leaking between tests
     delete process.env.TEST_CLI_PATH;
   });
@@ -202,6 +209,18 @@ describe("discoverExecutable", () => {
 
     expect(result.success).toBe(true);
     expect(state.executablePath).toBe("/extra/path");
+    expect(mockExecFileSync).not.toHaveBeenCalled();
+  });
+
+  it("rejects bundled runtime candidates that are not executable files", () => {
+    mockExistsSync.mockReturnValue(true);
+    mockStatSync.mockReturnValue({ isFile: () => true, mode: 0o644 });
+    mockResolveBundledCliPath.mockReturnValue("/extra/path");
+
+    const { result } = runDiscovery();
+
+    expect(result.success).toBe(false);
+    expect(result.error).toContain("/extra/path (not executable)");
     expect(mockExecFileSync).not.toHaveBeenCalled();
   });
 

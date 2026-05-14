@@ -75,7 +75,6 @@ describe("managed agent-server process", () => {
         "DEUS_RUNTIME_EXECUTABLE=%s",
         "NODE_PATH=%s",
         "PORT=%s",
-        "",
       ].join("\\n") + "\\n";
     const envArgs = [
       "$AUTH_TOKEN",

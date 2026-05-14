@@ -53,6 +53,8 @@ interface Candidate {
   source: "override" | "bundled";
 }
 
+const WINDOWS_EXECUTABLE_EXTENSIONS = new Set([".exe", ".cmd", ".bat", ".ps1", ".com"]);
+
 // ============================================================================
 // Discovery Algorithm
 // ============================================================================
@@ -102,6 +104,12 @@ export function discoverExecutable(
 
     if (!fs.existsSync(candidatePath)) {
       triedCandidates.push(`${candidatePath} (missing)`);
+      continue;
+    }
+
+    const executableProblem = getExecutableFileProblem(candidatePath);
+    if (executableProblem) {
+      triedCandidates.push(`${candidatePath} (${executableProblem})`);
       continue;
     }
 
@@ -159,6 +167,17 @@ export function discoverExecutable(
 
 function isPathCandidate(candidate: string): boolean {
   return path.isAbsolute(candidate) || candidate.startsWith(".") || candidate.includes(path.sep);
+}
+
+function getExecutableFileProblem(candidate: string): string | null {
+  const stat = fs.statSync(candidate);
+  if (!stat.isFile()) return "not a regular file";
+  if (process.platform === "win32") {
+    return WINDOWS_EXECUTABLE_EXTENSIONS.has(path.extname(candidate).toLowerCase())
+      ? null
+      : "not a recognized Windows executable";
+  }
+  return (stat.mode & 0o111) !== 0 ? null : "not executable";
 }
 
 function verifyCandidate(candidate: string, versionFlag: string): string {
