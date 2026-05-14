@@ -25,6 +25,7 @@ They verify:
 - `dist/runtime/electron/bin/<runtime-key>/deus-runtime` exists for Darwin arm64/x64 and matches `deus-runtime.json`.
 - `codex`, `claude`, `gh`, and `rg` exist for Darwin arm64/x64 and match their manifests.
 - Packaged `Resources/bin` contains executable `deus-runtime`, `codex`, `claude`, `gh`, and `rg`.
+- `afterPack` verifies copied `Resources/bin` files against the staging manifest hashes before macOS re-signing mutates Mach-O bytes; signed app checks then rely on code signature, architecture, entitlements, and dylib validation.
 - Packaged app.asar contains the `deus-runtime` launch contract and no obsolete packaged backend path plumbing.
 - Native binaries have the expected architecture, code signature, page size, entitlements, and system dylib dependencies.
 
