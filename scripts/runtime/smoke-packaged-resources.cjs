@@ -1,7 +1,7 @@
 const fs = require("node:fs");
 const os = require("node:os");
 const path = require("node:path");
-const { execFileSync } = require("node:child_process");
+const { execFileSync, spawnSync } = require("node:child_process");
 const afterPack = require("../prune-pencil-cli-binaries.cjs");
 const { verifyPackagedAgentClis } = afterPack;
 
@@ -102,6 +102,74 @@ function copyCanvasPayload(resourcesDir, arch) {
   }
 }
 
+function fileArch(filePath) {
+  const output = execFileSync("file", [filePath], {
+    encoding: "utf8",
+    timeout: 20_000,
+    stdio: ["ignore", "pipe", "pipe"],
+  });
+  const description = output.includes(":") ? output.slice(output.indexOf(":") + 1) : output;
+  if (/\barm64\b/.test(description)) return "arm64";
+  if (/\bx86_64\b/.test(description)) return "x64";
+  return null;
+}
+
+function bunNodeTargetVersion() {
+  return execFileSync("bun", ["-e", "console.log(process.version.replace(/^v/, ''))"], {
+    cwd: PROJECT_ROOT,
+    encoding: "utf8",
+    timeout: 20_000,
+    stdio: ["ignore", "pipe", "pipe"],
+  }).trim();
+}
+
+function installBetterSqlitePrebuild(packageRoot, arch) {
+  const prebuildInstall = path.join(PROJECT_ROOT, "node_modules", "prebuild-install", "bin.js");
+  fs.rmSync(path.join(packageRoot, "build"), { recursive: true, force: true });
+  const result = spawnSync(
+    process.execPath,
+    [
+      prebuildInstall,
+      "--runtime",
+      "node",
+      "--target",
+      bunNodeTargetVersion(),
+      "--arch",
+      arch,
+      "--platform",
+      "darwin",
+    ],
+    {
+      cwd: packageRoot,
+      encoding: "utf8",
+      stdio: ["ignore", "pipe", "pipe"],
+    }
+  );
+  if (result.status !== 0) {
+    throw new Error(
+      `Failed to install better-sqlite3 ${arch} prebuild: ${result.stderr || result.stdout}`
+    );
+  }
+}
+
+function copyBetterSqlitePayload(resourcesDir, arch) {
+  const packageRoot = path.join(
+    resourcesDir,
+    "app.asar.unpacked",
+    "node_modules",
+    "better-sqlite3"
+  );
+  fs.mkdirSync(path.dirname(packageRoot), { recursive: true });
+  fs.cpSync(path.join(PROJECT_ROOT, "node_modules", "better-sqlite3"), packageRoot, {
+    recursive: true,
+  });
+
+  const nativeBinding = path.join(packageRoot, "build", "Release", "better_sqlite3.node");
+  if (!fs.existsSync(nativeBinding) || fileArch(nativeBinding) !== arch) {
+    installBetterSqlitePrebuild(packageRoot, arch);
+  }
+}
+
 function signPackagedPayloads(resourcesDir, arch) {
   const unpackedNodeModules = path.join(resourcesDir, "app.asar.unpacked", "node_modules");
   execFileSync(
@@ -128,6 +196,7 @@ function signPackagedPayloads(resourcesDir, arch) {
     path.join(resourcesDir, "bin", "claude"),
     path.join(resourcesDir, "bin", "gh"),
     path.join(resourcesDir, "bin", "rg"),
+    path.join(unpackedNodeModules, "better-sqlite3", "build", "Release", "better_sqlite3.node"),
     path.join(unpackedNodeModules, "node-pty", "prebuilds", `darwin-${arch}`, "pty.node"),
     path.join(unpackedNodeModules, "node-pty", "prebuilds", `darwin-${arch}`, "spawn-helper"),
     path.join(
@@ -149,6 +218,7 @@ async function smokeArch(arch) {
   const resourcesDir = fs.mkdtempSync(path.join(os.tmpdir(), `deus-resources-${arch}-`));
   try {
     copyRuntimeBin(resourcesDir, arch);
+    copyBetterSqlitePayload(resourcesDir, arch);
     copyNodePtyPayload(resourcesDir, arch);
     copyCanvasPayload(resourcesDir, arch);
 

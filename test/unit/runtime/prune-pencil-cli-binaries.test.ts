@@ -142,6 +142,7 @@ function writePackagedRuntimeFixture(binDir: string): void {
 function writeRuntimeExternalModuleFixture(resourcesDir: string): void {
   const unpackedNodeModules = path.join(resourcesDir, "app.asar.unpacked", "node_modules");
   for (const packagePath of [
+    ["better-sqlite3"],
     ["node-pty"],
     ["@napi-rs", "canvas"],
     ["@napi-rs", "canvas-darwin-arm64"],
@@ -150,6 +151,19 @@ function writeRuntimeExternalModuleFixture(resourcesDir: string): void {
     mkdirSync(dir, { recursive: true });
     writeFileSync(path.join(dir, "package.json"), "{}");
   }
+  mkdirSync(path.join(unpackedNodeModules, "better-sqlite3", "build", "Release"), {
+    recursive: true,
+  });
+  writeFileSync(
+    path.join(
+      unpackedNodeModules,
+      "better-sqlite3",
+      "build",
+      "Release",
+      "better_sqlite3.node"
+    ),
+    "better-sqlite-native"
+  );
   mkdirSync(path.join(unpackedNodeModules, "node-pty", "prebuilds", "darwin-arm64"), {
     recursive: true,
   });
@@ -325,6 +339,31 @@ describe("prune-pencil-cli-binaries", () => {
         verifyNativePayloads: false,
       })
     ).toThrow(/@napi-rs\/canvas package/);
+  });
+
+  it("requires the better-sqlite3 native binding outside app.asar", () => {
+    const resourcesDir = createTempRoot("deus-runtime-sqlite");
+    tempRoots.push(resourcesDir);
+    writeRuntimeExternalModuleFixture(resourcesDir);
+
+    rmSync(
+      path.join(
+        resourcesDir,
+        "app.asar.unpacked",
+        "node_modules",
+        "better-sqlite3",
+        "build",
+        "Release",
+        "better_sqlite3.node"
+      ),
+      { force: true }
+    );
+
+    expect(() =>
+      verifyPackagedRuntimeExternalModules(resourcesDir, "arm64", {
+        verifyNativePayloads: false,
+      })
+    ).toThrow(/better-sqlite3 native binding/);
   });
 
   it("prunes node-pty build output so packaged runtime resolves target prebuilds", () => {
