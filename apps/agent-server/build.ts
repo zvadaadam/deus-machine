@@ -28,6 +28,7 @@ const external = [
   "@openai/codex-sdk",
   "@napi-rs/canvas",
   "@napi-rs/canvas-darwin-arm64",
+  "@napi-rs/canvas-darwin-x64",
   "ws",
   "@sentry/node",
   "device-use",
