@@ -19,6 +19,8 @@ files:
   - "!node_modules/@anthropic-ai/claude-agent-sdk-darwin-*/**"
   - "!node_modules/@anthropic-ai/claude-agent-sdk-linux-*/**"
   - "!node_modules/@anthropic-ai/claude-agent-sdk-win32-*/**"
+  - "!node_modules/@openai/codex/bin/**"
+  - "!node_modules/@openai/codex/vendor/**"
   - "!node_modules/@openai/codex-darwin-*/**"
   - "!node_modules/@openai/codex-linux-*/**"
   - "!node_modules/@openai/codex-win32-*/**"
