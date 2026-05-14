@@ -9,17 +9,14 @@ const { mockRecentlyOpenedValue } = vi.hoisted(() => ({
   mockRecentlyOpenedValue: { value: undefined as string | undefined },
 }));
 
-vi.mock("better-sqlite3", () => ({
-  default: class MockDatabase {
-    prepare() {
-      return {
-        get: () =>
-          mockRecentlyOpenedValue.value ? { value: mockRecentlyOpenedValue.value } : undefined,
-      };
-    }
-
-    close() {}
-  },
+vi.mock("../../../src/lib/sqlite", () => ({
+  openSqliteDatabase: () => ({
+    prepare: () => ({
+      get: () =>
+        mockRecentlyOpenedValue.value ? { value: mockRecentlyOpenedValue.value } : undefined,
+    }),
+    close: () => undefined,
+  }),
 }));
 
 import {

@@ -1,6 +1,7 @@
 /**
  * CLI tool detection — check if CLI tools (git, gh, node, etc.) are installed.
- * Desktop-only: shells out to `which` on macOS/Linux.
+ * Desktop-only: resolves bundled packaged tools first, then falls back to native lookup for
+ * non-bundled development/system tools.
  * Web mode: returns "not installed" defaults.
  */
 

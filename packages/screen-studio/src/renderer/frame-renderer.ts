@@ -68,7 +68,7 @@ export async function isCanvasAvailable(): Promise<boolean> {
 
 const DEFAULT_BACKGROUND: BackgroundConfig = {
   type: "solid",
-  colors: ["#0f0f23"],
+  colors: ["#0f0f23", "#0f0f23"],
 };
 
 const DEFAULT_CURSOR: CursorConfig = {

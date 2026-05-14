@@ -4,26 +4,37 @@ directories:
   buildResources: resources
   output: dist-electron
 electronLanguages: [en]
+npmRebuild: false
 beforePack: "scripts/runtime/electron-builder-before-pack.cjs"
 afterPack: "scripts/prune-pencil-cli-binaries.cjs"
+afterSign: "scripts/verify-packaged-agent-clis.cjs"
 files:
   - "out/**/*"
   - "resources/**/*"
   - "!apps/**/*"
   - "!node_modules/device-use/native/.build/**"
   - "!node_modules/device-use/native/.swiftpm/**"
+  # The packaged runtime owns native agent/browser CLIs in Resources/bin.
+  # Keep SDK libraries, but do not also ship their npm native executable payloads.
+  - "!node_modules/@anthropic-ai/claude-agent-sdk-darwin-*/**"
+  - "!node_modules/@anthropic-ai/claude-agent-sdk-linux-*/**"
+  - "!node_modules/@anthropic-ai/claude-agent-sdk-win32-*/**"
+  - "!node_modules/@openai/codex/bin/**"
+  - "!node_modules/@openai/codex/vendor/**"
+  - "!node_modules/@openai/codex-darwin-*/**"
+  - "!node_modules/@openai/codex-linux-*/**"
+  - "!node_modules/@openai/codex-win32-*/**"
+  - "!node_modules/agent-browser/**"
+  - "!node_modules/@sentry/cli/**"
+  - "!node_modules/@sentry/cli-*/**"
 asarUnpack:
   - "resources/**"
   - "node_modules/better-sqlite3/**"
   - "node_modules/node-pty/**"
+  - "node_modules/@napi-rs/canvas/**"
+  - "node_modules/@napi-rs/canvas-*/**"
   - "node_modules/@pencil.dev/cli/dist/out/**"
 extraResources:
-  - from: "dist/runtime/electron/backend"
-    to: "backend"
-    filter:
-      - "**/*"
-  - from: "dist/runtime/electron/bin/index.bundled.cjs"
-    to: "bin/index.bundled.cjs"
   - from: "packages/pencil"
     to: "agentic-apps/pencil"
     filter:
@@ -39,9 +50,32 @@ extraResources:
       - "SKILL.md"
 mac:
   category: public.app-category.developer-tools
+  binaries:
+    - "Contents/Resources/bin/deus-runtime"
+    - "Contents/Resources/bin/codex"
+    - "Contents/Resources/bin/claude"
+    - "Contents/Resources/bin/gh"
+    - "Contents/Resources/bin/rg"
+    - "Contents/Resources/bin/agent-browser"
   extraResources:
+    - from: "dist/runtime/electron/bin/deus-runtime.json"
+      to: "bin/deus-runtime.json"
+    - from: "dist/runtime/electron/bin/agent-clis.json"
+      to: "bin/agent-clis.json"
+    - from: "dist/runtime/electron/bin/gh-cli.json"
+      to: "bin/gh-cli.json"
     - from: "dist/runtime/electron/bin/darwin-${arch}/gh"
       to: "bin/gh"
+    - from: "dist/runtime/electron/bin/darwin-${arch}/deus-runtime"
+      to: "bin/deus-runtime"
+    - from: "dist/runtime/electron/bin/darwin-${arch}/codex"
+      to: "bin/codex"
+    - from: "dist/runtime/electron/bin/darwin-${arch}/claude"
+      to: "bin/claude"
+    - from: "dist/runtime/electron/bin/darwin-${arch}/rg"
+      to: "bin/rg"
+    - from: "dist/runtime/electron/bin/darwin-${arch}/agent-browser"
+      to: "bin/agent-browser"
     - from: "packages/device-use/bin/simbridge"
       to: "simulator/simbridge"
     - from: "packages/device-use/bin/siminspector.dylib"
@@ -61,6 +95,9 @@ mac:
       arch: [arm64, x64]
   entitlements: resources/entitlements.mac.plist
   entitlementsInherit: resources/entitlements.mac.plist
+  additionalArguments:
+    - "--pagesize"
+    - "4096"
   darkModeSupport: true
   icon: resources/icons/icon.icns
   notarize: true

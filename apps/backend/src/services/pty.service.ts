@@ -5,11 +5,17 @@
  * PTY data and exit events are broadcast to all WS clients as q:event frames.
  */
 
-import * as pty from "node-pty";
+import type * as Pty from "node-pty";
 import { broadcast } from "./ws.service";
 
 // Active PTY sessions, keyed by client-provided ID
-const sessions = new Map<string, pty.IPty>();
+const sessions = new Map<string, Pty.IPty>();
+let ptyModule: typeof Pty | null = null;
+
+function getPtyModule(): typeof Pty {
+  ptyModule ??= require("node-pty") as typeof Pty;
+  return ptyModule;
+}
 
 /** Broadcast a q:event frame to all connected WS clients. */
 function pushEvent(event: string, data: unknown): void {
@@ -30,7 +36,7 @@ export function spawnPty(args: {
     throw new Error(`PTY session already exists: ${id}`);
   }
 
-  const ptyProcess = pty.spawn(command, cmdArgs, {
+  const ptyProcess = getPtyModule().spawn(command, cmdArgs, {
     name: "xterm-256color",
     cols,
     rows,

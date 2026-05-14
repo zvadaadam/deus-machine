@@ -19,8 +19,8 @@
     "@types/ws": "^8.18.1"
   },
   "scripts": {
-    "build": "bunx tsx build.ts",
+    "build": "bun build.ts",
     "test": "vitest run test",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "bun ../../node_modules/typescript/bin/tsc --noEmit"
   }
 }
