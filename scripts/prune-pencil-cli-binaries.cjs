@@ -450,6 +450,12 @@ function validateVersionOutput(label, output) {
   if (label === "Deus runtime" && !/^deus-runtime \d+\.\d+\.\d+ /.test(output)) {
     throw new Error(`Packaged ${label} --version produced unexpected output: ${output}`);
   }
+  if (label === "GitHub CLI" && !/^gh version \d+\.\d+\.\d+/m.test(output)) {
+    throw new Error(`Packaged ${label} --version produced unexpected output: ${output}`);
+  }
+  if (label === "Codex ripgrep helper" && !/^ripgrep \d+\.\d+\.\d+/m.test(output)) {
+    throw new Error(`Packaged ${label} --version produced unexpected output: ${output}`);
+  }
 }
 
 function verifyPackagedAgentClis(context, options = {}) {
