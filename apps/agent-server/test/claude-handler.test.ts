@@ -79,6 +79,7 @@ vi.mock("fs", async (importOriginal) => {
   return {
     ...actual,
     existsSync: vi.fn(() => true),
+    statSync: vi.fn(() => ({ isFile: () => true, mode: 0o755 })),
     realpathSync: vi.fn((p: string) => p),
   };
 });
