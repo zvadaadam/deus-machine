@@ -17,7 +17,7 @@ Status: implementation is staged, but the overall goal is not complete until dir
 | Preserve explicit developer/user overrides | `cli-discovery.ts` still checks configured env override paths before bundled candidates and verifies custom overrides with the version flag. | Static/source verified |
 | Remove packaged global/shell CLI discovery fallback | `cli-discovery.ts` no longer accepts bare commands; `env-builder.ts` skips login-shell capture under `DEUS_PACKAGED`/`DEUS_RUNTIME`; packaged PATH is `Resources/bin` plus system paths only. | Static/source verified |
 | Remove obsolete packaged Electron-as-Node backend path plumbing | `backend-process.ts` only uses `process.execPath` for dev; packaged path uses `deus-runtime`. `electron-builder-before-pack.cjs` and `smoke-packaged-app.cjs` reject obsolete `resources/backend` and `runtime.nodePath` snippets. | Static/package guard verified |
-| Keep Linux/Windows packaged behavior explicit | `package:linux` and `package:win` route to `scripts/runtime/unsupported-packaged-platform.cjs`; `electron-builder-before-pack.cjs` rejects non-Darwin packaged runtime builds. | Static verified |
+| Keep Linux/Windows packaged behavior explicit | `package:linux` and `package:win` route to `scripts/runtime/unsupported-packaged-platform.cjs`; `electron-builder-before-pack.cjs` rejects non-Darwin packaged runtime builds; the README no longer advertises Linux packaged desktop downloads. | Static verified |
 | CUA packaged desktop verification | `docs/deus-runtime-verification.md` records the local `_dyld_start` host-policy blocker. `scripts/runtime/smoke-packaged-desktop.cjs` is the automated packaged desktop readiness check. | Blocked locally; required on executable host |
 
 ## Latest Guardrail Slices
@@ -36,6 +36,8 @@ Status: implementation is staged, but the overall goal is not complete until dir
 - `b72f4d96 test: smoke current desktop runtime contract` verifies current Electron main source by bundling it to a temporary output and checking the packaged `deus-runtime` launch contract.
 - `fa6cfca7 test: tighten packaged main runtime guard` makes the before-pack and app.asar smoke checks share the stricter packaged main runtime contract assertion.
 - `87f66d88 docs: record runtime resign diagnostic` records that ad-hoc re-signing a temporary runtime copy does not bypass this host's provenance/Gatekeeper launch blocker.
+- `b3974509 fix: keep staged runtime signing explicit` stops the runtime build from silently selecting a local Developer ID identity. Staged runtime binaries are ad-hoc signed unless `DEUS_RUNTIME_CODESIGN_IDENTITY` or `CSC_NAME` is explicitly provided; electron-builder remains responsible for final app distribution signing.
+- `1a1eb47d docs: clarify packaged desktop platform support` removes the Linux packaged desktop download from the README and states that Linux packaged desktop builds are disabled until native runtime and bundled CLI payloads are staged and verified for Linux.
 
 ## Local Evidence
 
@@ -59,6 +61,10 @@ Recorded branch checks:
 
 Recent focused checks:
 
+- `bun run smoke:runtime-resources` passed on current `HEAD` after the README platform-support update, verifying both `darwin-arm64` and `darwin-x64` resource layouts.
+- `bun run smoke:desktop-main-runtime` passed on current `HEAD`, confirming current Electron main source still contains the packaged `Resources/bin/deus-runtime` contract.
+- `bun run package:linux` and `bun run package:win` fail with explicit unsupported-platform messages instead of producing misleading Linux/Windows desktop artifacts.
+- `git diff --check` passed before the README platform-support commit.
 - `bun run smoke:runtime-source` passed after the source-smoke env scrub and backend/desktop env-denylist hardening, including stale `DEUS_BUNDLED_BIN_DIR` cleanup.
 - `bun run smoke:desktop-main-runtime` passed after tightening the beforePack/app.asar packaged-main env scrub assertion.
 - `node --check scripts/runtime/electron-builder-before-pack.cjs` passed.
@@ -80,7 +86,7 @@ Recent focused checks:
 - `bun run build:runtime` rebuilt both Darwin native runtime executables again after the backend source change.
 - `bun run validate:runtime` passed against the refreshed `dist/runtime`.
 - `bun run smoke:runtime-resources` passed for both `darwin-arm64` and `darwin-x64` against the refreshed `dist/runtime`.
-- `node scripts/runtime/smoke-native-runtime.cjs --skip-validate` still failed at the required direct `deus-runtime --version` gate on this host: no stdout/stderr before the 45s timeout; `file` showed arm64 Mach-O, `codesign` showed Developer ID Application signing, `spctl` rejected it as `Unnotarized Developer ID`, and `xattr` showed `com.apple.provenance`.
+- `node scripts/runtime/smoke-native-runtime.cjs --skip-validate` still failed at the required direct `deus-runtime --version` gate on this host after staged runtime signing was made explicit: no stdout/stderr before the 45s timeout; `file` showed arm64 Mach-O, `codesign` showed ad-hoc hardened-runtime signing with the expected page size, `spctl` rejected it, and `xattr` showed `com.apple.provenance`.
 - `node scripts/runtime/smoke-packaged-app.cjs --help`
 - Focused Vitest for `test/unit/runtime/electron-builder-before-pack.test.ts` still hangs before any output and was killed by a 20s wrapper.
 - Direct `deus-runtime --version` through `scripts/runtime/run-version-check.cjs` still times out before stdout/stderr.
