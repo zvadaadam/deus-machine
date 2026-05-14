@@ -8,7 +8,7 @@ const { verifyPackagedAgentClis } = afterPack;
 const PROJECT_ROOT = path.resolve(__dirname, "../..");
 const STAGED_BIN_ROOT = path.join(PROJECT_ROOT, "dist", "runtime", "electron", "bin");
 const TARGET_ARCHES = ["arm64", "x64"];
-const RUNTIME_BINARIES = ["deus-runtime", "codex", "claude", "gh", "rg"];
+const RUNTIME_BINARIES = ["deus-runtime", "codex", "claude", "gh", "rg", "agent-browser"];
 const RUNTIME_MANIFESTS = ["deus-runtime.json", "agent-clis.json", "gh-cli.json"];
 
 function copyFile(src, dest) {
@@ -196,6 +196,7 @@ function signPackagedPayloads(resourcesDir, arch) {
     path.join(resourcesDir, "bin", "claude"),
     path.join(resourcesDir, "bin", "gh"),
     path.join(resourcesDir, "bin", "rg"),
+    path.join(resourcesDir, "bin", "agent-browser"),
     path.join(unpackedNodeModules, "better-sqlite3", "build", "Release", "better_sqlite3.node"),
     path.join(unpackedNodeModules, "node-pty", "prebuilds", `darwin-${arch}`, "pty.node"),
     path.join(unpackedNodeModules, "node-pty", "prebuilds", `darwin-${arch}`, "spawn-helper"),

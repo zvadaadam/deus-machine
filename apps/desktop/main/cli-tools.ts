@@ -10,7 +10,7 @@ import { syncShellEnvironment } from "./shell-env";
 const execFileAsync = promisify(execFile);
 
 const CLI_TOOL_NAME_PATTERN = /^[a-zA-Z0-9._+-]+$/;
-const PACKAGED_BUNDLED_TOOLS = new Set(["codex", "claude", "gh", "rg"]);
+const PACKAGED_BUNDLED_TOOLS = new Set(["codex", "claude", "gh", "rg", "agent-browser"]);
 const PACKAGED_SYSTEM_PATHS = ["/usr/bin", "/bin", "/usr/sbin", "/sbin"];
 const CLI_CHILD_ENV_DENYLIST = [
   "AGENT_SERVER_CWD",

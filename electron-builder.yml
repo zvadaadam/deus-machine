@@ -43,6 +43,7 @@ mac:
     - "Contents/Resources/bin/claude"
     - "Contents/Resources/bin/gh"
     - "Contents/Resources/bin/rg"
+    - "Contents/Resources/bin/agent-browser"
   extraResources:
     - from: "dist/runtime/electron/bin/deus-runtime.json"
       to: "bin/deus-runtime.json"
@@ -60,6 +61,8 @@ mac:
       to: "bin/claude"
     - from: "dist/runtime/electron/bin/darwin-${arch}/rg"
       to: "bin/rg"
+    - from: "dist/runtime/electron/bin/darwin-${arch}/agent-browser"
+      to: "bin/agent-browser"
     - from: "packages/device-use/bin/simbridge"
       to: "simulator/simbridge"
     - from: "packages/device-use/bin/siminspector.dylib"

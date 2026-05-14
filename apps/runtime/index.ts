@@ -11,7 +11,14 @@ const VERSION = packageJson.version;
 const RUNTIME_NAME = "deus-runtime";
 const DARWIN_RUNTIME_KEYS = new Set(["darwin-arm64", "darwin-x64"]);
 const PACKAGED_SYSTEM_PATHS = ["/usr/bin", "/bin", "/usr/sbin", "/sbin"];
-const REQUIRED_BINARIES = ["deus-runtime", "codex", "claude", "gh", "rg"] as const;
+const REQUIRED_BINARIES = [
+  "deus-runtime",
+  "codex",
+  "claude",
+  "gh",
+  "rg",
+  "agent-browser",
+] as const;
 const REQUIRED_RUNTIME_IMPORTS = [
   {
     name: "@anthropic-ai/claude-agent-sdk",

@@ -47,7 +47,7 @@ function packagedRuntimeContractOutput(extraLines: string[] = []): string {
     'const runtimeExecutable = join(process.resourcesPath, "bin", "deus-runtime");',
     "const env = { DEUS_RUNTIME_EXECUTABLE: runtimeExecutable };",
     'const backendArgs = runtime.runtimeExecutable ? ["backend"] : [runtime.backendEntry];',
-    'const PACKAGED_BUNDLED_TOOLS = new Set(["codex", "claude", "gh", "rg"]);',
+    'const PACKAGED_BUNDLED_TOOLS = new Set(["codex", "claude", "gh", "rg", "agent-browser"]);',
     "const CLI_CHILD_ENV_DENYLIST = PACKAGED_RUNTIME_ENV_DENYLIST;",
     'const PACKAGED_TERMINAL_TOOLS = new Set(["claude", "codex", "gh", "rg"]);',
     ...extraLines,

@@ -15,6 +15,7 @@
 
 import { execFile, spawn } from "child_process";
 import { dirname, join } from "path";
+import { resolveBundledCliPath, resolveCliExecutable } from "@shared/lib/cli-path";
 
 export interface AgentBrowserResult {
   success: boolean;
@@ -35,6 +36,12 @@ export interface ElementBox {
 // since the package has no "main" field (require.resolve would throw).
 // Note: agent-server is bundled to CJS, so require.resolve is available.
 const BINARY = (() => {
+  const bundled = resolveBundledCliPath("agent-browser");
+  if (bundled) return bundled;
+  if (process.env.DEUS_RUNTIME === "1" || process.env.DEUS_PACKAGED === "1") {
+    return resolveCliExecutable("agent-browser");
+  }
+
   try {
     const pkgDir = dirname(require.resolve("agent-browser/package.json"));
     return join(pkgDir, "bin", "agent-browser.js");
