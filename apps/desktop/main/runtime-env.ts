@@ -4,11 +4,17 @@ const PACKAGED_SYSTEM_PATHS = ["/usr/bin", "/bin", "/usr/sbin", "/sbin"];
 export const PACKAGED_RUNTIME_ENV_DENYLIST = [
   "AGENT_SERVER_CWD",
   "AGENT_SERVER_ENTRY",
+  "AUTH_TOKEN",
+  "DATABASE_PATH",
+  "DEUS_AUTH_TOKEN",
+  "DEUS_BACKEND_PORT",
+  "DEUS_DATA_DIR",
   "ELECTRON_RUN_AS_NODE",
   "DEUS_RUNTIME",
   "DEUS_RUNTIME_COMMAND",
   "DEUS_RUNTIME_EXECUTABLE",
   "NODE_PATH",
+  "PORT",
 ] as const;
 
 export function configurePackagedMainRuntimeEnv(options: {

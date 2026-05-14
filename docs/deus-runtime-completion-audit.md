@@ -28,13 +28,14 @@ Status: implementation is staged, but the overall goal is not complete until dir
 - Native and packaged runtime direct smokes now verify `self-test` layout, including `binDir`, `resourcesPath`, and native-module `NODE_PATH`.
 - Packaged Electron main and native `deus-runtime` force `NODE_ENV=production`; direct runtime smokes assert the self-test reports production mode.
 - Runtime-managed agent-server spawns scrub backend-only auth, database, data-dir, and listen-port env while preserving desktop runtime context.
+- Packaged Electron main now also scrubs stale backend-only auth, database, data-dir, and listen-port env before spawning `deus-runtime backend`; smoke launchers apply the same cleanup so verification cannot accidentally inherit an obsolete runtime context.
 - `b72f4d96 test: smoke current desktop runtime contract` verifies current Electron main source by bundling it to a temporary output and checking the packaged `deus-runtime` launch contract.
 - `fa6cfca7 test: tighten packaged main runtime guard` makes the before-pack and app.asar smoke checks share the stricter packaged main runtime contract assertion.
 - `87f66d88 docs: record runtime resign diagnostic` records that ad-hoc re-signing a temporary runtime copy does not bypass this host's provenance/Gatekeeper launch blocker.
 
 ## Local Evidence
 
-Current inspected state at this audit:
+Previously inspected state at the start of this audit:
 
 - `git status --short --branch` reports a clean `bun-runtime` worktree before this audit refresh.
 - `dist/runtime/electron/bin` contains Darwin arm64/x64 staged `deus-runtime`, `codex`, `claude`, `gh`, and `rg`.
@@ -54,9 +55,15 @@ Recorded branch checks:
 
 Recent focused checks:
 
-- `bun run build:runtime` rebuilt both Darwin native runtime executables and refreshed staged `codex`, `claude`, `gh`, and `rg` artifacts.
+- `bun run smoke:runtime-source` passed after the source-smoke env scrub and backend/desktop env-denylist hardening.
+- `bun run smoke:desktop-main-runtime` passed after the packaged Electron main env scrub update.
+- `bun run typecheck`, `bun run typecheck:backend`, and `bun run typecheck:agent-server` passed after the env-denylist changes.
+- `node --check scripts/runtime/smoke-source-runtime.cjs && node --check scripts/runtime/smoke-native-runtime.cjs && node --check scripts/runtime/smoke-packaged-runtime.cjs && node --check scripts/runtime/smoke-packaged-desktop.cjs` passed.
+- Focused Vitest for `test/unit/desktop`, `test/unit/runtime`, and shared runtime/CLI-path tests still hangs before Vitest output and was killed by a 20s wrapper.
+- Focused Vitest for `apps/backend/test/unit/runtime/agent-process.test.ts` still hangs before Vitest output and was killed by a 20s wrapper.
+- `bun run build:runtime` rebuilt both Darwin native runtime executables again after the backend source change.
 - `bun run validate:runtime` passed against the refreshed `dist/runtime`.
-- `bun run smoke:runtime-resources` passed for both `darwin-arm64` and `darwin-x64`, including runtime/CLI signatures, runtime entitlements, dylibs, native module payloads, and manifest checks.
+- `bun run smoke:runtime-resources` passed for both `darwin-arm64` and `darwin-x64` against the refreshed `dist/runtime`.
 - `node scripts/runtime/smoke-native-runtime.cjs --skip-validate` still failed at the required direct `deus-runtime --version` gate on this host: no stdout/stderr before the 45s timeout; `file` showed arm64 Mach-O, `codesign` showed Developer ID Application signing, `spctl` rejected it as `Unnotarized Developer ID`, and `xattr` showed `com.apple.provenance`.
 - `node scripts/runtime/smoke-packaged-app.cjs --help`
 - Focused Vitest for `test/unit/runtime/electron-builder-before-pack.test.ts` still hangs before any output and was killed by a 15s wrapper.

@@ -62,6 +62,7 @@ describe("managed agent-server process", () => {
       [
         "AUTH_TOKEN=%s",
         "DATABASE_PATH=%s",
+        "DEUS_AUTH_TOKEN=%s",
         "DEUS_BACKEND_PORT=%s",
         "DEUS_DATA_DIR=%s",
         "ELECTRON_RUN_AS_NODE=%s",
@@ -76,6 +77,7 @@ describe("managed agent-server process", () => {
     const envArgs = [
       "$AUTH_TOKEN",
       "$DATABASE_PATH",
+      "$DEUS_AUTH_TOKEN",
       "$DEUS_BACKEND_PORT",
       "$DEUS_DATA_DIR",
       "$ELECTRON_RUN_AS_NODE",
@@ -110,6 +112,7 @@ describe("managed agent-server process", () => {
     process.env.NODE_PATH = "/tmp/stale-node-modules";
     process.env.AUTH_TOKEN = "backend-auth-token";
     process.env.DATABASE_PATH = path.join(root, "backend.db");
+    process.env.DEUS_AUTH_TOKEN = "desktop-main-auth-token";
     process.env.DEUS_BACKEND_PORT = "45678";
     process.env.DEUS_DATA_DIR = path.join(root, "data");
     process.env.PORT = "45678";
@@ -121,6 +124,7 @@ describe("managed agent-server process", () => {
       [
         "AUTH_TOKEN=",
         "DATABASE_PATH=",
+        "DEUS_AUTH_TOKEN=",
         "DEUS_BACKEND_PORT=",
         "DEUS_DATA_DIR=",
         "ELECTRON_RUN_AS_NODE=",

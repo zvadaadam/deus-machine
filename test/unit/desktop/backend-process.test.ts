@@ -105,11 +105,17 @@ describe("desktop backend process", () => {
     process.env.ELECTRON_RUN_AS_NODE = "1";
     process.env.AGENT_SERVER_ENTRY = "/tmp/dev-agent-server.cjs";
     process.env.AGENT_SERVER_CWD = "/tmp/dev-agent-server";
+    process.env.AUTH_TOKEN = "stale-auth-token";
+    process.env.DATABASE_PATH = "/tmp/stale.db";
+    process.env.DEUS_AUTH_TOKEN = "stale-main-auth-token";
+    process.env.DEUS_BACKEND_PORT = "45678";
+    process.env.DEUS_DATA_DIR = "/tmp/stale-data";
     process.env.DEUS_RUNTIME = "1";
     process.env.DEUS_RUNTIME_COMMAND = "agent-server";
     process.env.DEUS_RUNTIME_EXECUTABLE = "/tmp/stale-runtime";
     process.env.NODE_PATH = "/tmp/stale-node-modules";
     process.env.NODE_ENV = "development";
+    process.env.PORT = "45678";
 
     const child = createFakeChild();
     mockSpawn.mockReturnValue(child);
@@ -127,6 +133,9 @@ describe("desktop backend process", () => {
     expect(options.env.ELECTRON_RUN_AS_NODE).toBeUndefined();
     expect(options.env.AGENT_SERVER_ENTRY).toBeUndefined();
     expect(options.env.AGENT_SERVER_CWD).toBeUndefined();
+    expect(options.env.DEUS_AUTH_TOKEN).toBeUndefined();
+    expect(options.env.DEUS_BACKEND_PORT).toBeUndefined();
+    expect(options.env.DEUS_DATA_DIR).toBeUndefined();
     expect(options.env.DEUS_RUNTIME).toBeUndefined();
     expect(options.env.DEUS_RUNTIME_COMMAND).toBeUndefined();
     expect(options.env.NODE_PATH).toBeUndefined();
@@ -138,6 +147,8 @@ describe("desktop backend process", () => {
     expect(options.env.DATABASE_PATH).toBe(
       "/Users/test/Library/Application Support/Deus/deus.db"
     );
+    expect(options.env.AUTH_TOKEN).toBe(result.authToken);
+    expect(options.env.AUTH_TOKEN).not.toBe("stale-auth-token");
     expect(options.env.PATH).toBe(
       `${path.join(resourcesPath, "bin")}:/usr/bin:/bin:/usr/sbin:/sbin`
     );
