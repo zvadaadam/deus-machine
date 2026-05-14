@@ -59,6 +59,8 @@ They verify:
 
 On this macOS workstation, direct execution of newly created or copied Mach-O files can hang before user code runs. The observed failure mode is a timeout at `_dyld_start`; it affects staged `deus-runtime`, packaged `deus-runtime`, freshly copied agent CLIs, copied Bun/Node binaries, Electron helper binaries, Vitest startup, and local Electron packaging helpers.
 
+The direct smoke diagnostics for this failure show `spctl` rejecting the executable, `com.apple.provenance` on the file, and no stdout/stderr from the child. A trivial C executable and a trivial `bun build --compile` executable created in `/tmp` show the same `_dyld_start` hang on this host, so this is not specific to the Deus runtime entrypoint.
+
 Because of that host policy, a local run can truthfully complete the static checks above but cannot prove direct runtime or packaged desktop launch. Direct runtime and packaged desktop verification must run on a notarized artifact or a macOS host that allows the staged/copied Mach-O binaries to execute.
 
 The release workflow runs the required direct checks on macOS after packaging and notarization:
