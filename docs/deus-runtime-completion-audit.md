@@ -60,6 +60,9 @@ Recent focused checks:
 - `bun run smoke:desktop-main-runtime` passed after tightening the beforePack/app.asar packaged-main env scrub assertion.
 - `node --check scripts/runtime/electron-builder-before-pack.cjs` passed.
 - A direct Node probe of `assertPackagedMainRuntimeContract` accepted output with the packaged env scrub denylist and rejected stale output without it.
+- `bun run prepare:agent-clis` passed standalone and refreshed staged Darwin `codex`/`claude` payloads.
+- `bun run prepare:gh-cli` passed standalone and refreshed staged Darwin `gh` payloads after checksum and signature verification.
+- `bun run build` still hangs after starting `electron-vite build`; a 30s wrapper killed it before any build output beyond the command banner.
 - `bun run typecheck`, `bun run typecheck:backend`, and `bun run typecheck:agent-server` passed after the env-denylist changes.
 - `node --check scripts/runtime/smoke-source-runtime.cjs && node --check scripts/runtime/smoke-native-runtime.cjs && node --check scripts/runtime/smoke-packaged-runtime.cjs && node --check scripts/runtime/smoke-packaged-desktop.cjs` passed.
 - Focused Vitest for `test/unit/desktop`, `test/unit/runtime`, and shared runtime/CLI-path tests still hangs before Vitest output and was killed by a 20s wrapper.
