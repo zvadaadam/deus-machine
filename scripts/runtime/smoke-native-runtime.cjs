@@ -96,6 +96,32 @@ function runValidateRuntime() {
   });
 }
 
+function runDiagnostic(command, args) {
+  try {
+    return execFileSync(command, args, {
+      cwd: PROJECT_ROOT,
+      encoding: "utf8",
+      timeout: 20_000,
+      stdio: ["ignore", "pipe", "pipe"],
+    }).trim();
+  } catch (error) {
+    const stdout = error && typeof error === "object" && "stdout" in error ? error.stdout : "";
+    const stderr = error && typeof error === "object" && "stderr" in error ? error.stderr : "";
+    const output = `${stdout || ""}${stderr || ""}`.trim();
+    return output || `${command} failed`;
+  }
+}
+
+function runtimeDiagnostics(runtimeBin) {
+  if (process.platform !== "darwin") return "";
+  return [
+    `file: ${runDiagnostic("file", [runtimeBin])}`,
+    `codesign: ${runDiagnostic("codesign", ["-dv", "--verbose=4", runtimeBin])}`,
+    `spctl: ${runDiagnostic("spctl", ["--assess", "--type", "execute", "--verbose=4", runtimeBin])}`,
+    `xattr: ${runDiagnostic("xattr", ["-l", runtimeBin]) || "none"}`,
+  ].join("\n");
+}
+
 function runRuntime(runtimeBin, args, binDir) {
   const result = spawnSync(runtimeBin, args, {
     cwd: path.dirname(runtimeBin),
@@ -105,10 +131,13 @@ function runRuntime(runtimeBin, args, binDir) {
     stdio: ["ignore", "pipe", "pipe"],
   });
   if (result.status !== 0) {
+    const diagnostics = runtimeDiagnostics(runtimeBin);
     throw new Error(
       `${path.basename(runtimeBin)} ${args.join(" ")} failed: status=${result.status} signal=${
         result.signal
-      } error=${result.error?.code ?? "none"} stdout=${result.stdout.trim()} stderr=${result.stderr.trim()}`
+      } error=${result.error?.code ?? "none"} stdout=${result.stdout.trim()} stderr=${result.stderr.trim()}${
+        diagnostics ? `\n${diagnostics}` : ""
+      }`
     );
   }
   return result.stdout.trim();
