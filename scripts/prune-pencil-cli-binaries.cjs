@@ -492,8 +492,10 @@ function verifyPackagedAgentClis(context, options = {}) {
 
   for (const [label, executablePath] of [
     ["Deus runtime", path.join(binDir, "deus-runtime")],
+    ["GitHub CLI", path.join(binDir, "gh")],
     ["Codex CLI", path.join(binDir, "codex")],
     ["Claude CLI", path.join(binDir, "claude")],
+    ["Codex ripgrep helper", path.join(binDir, "rg")],
   ]) {
     const output = require("node:child_process")
       .execFileSync(executablePath, ["--version"], {
