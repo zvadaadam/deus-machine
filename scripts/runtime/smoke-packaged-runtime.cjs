@@ -103,6 +103,33 @@ function assertHostRunnableArch(filePath) {
   }
 }
 
+function runDiagnostic(command, args) {
+  const result = spawnSync(command, args, {
+    cwd: PROJECT_ROOT,
+    encoding: "utf8",
+    timeout: 20_000,
+    stdio: ["ignore", "pipe", "pipe"],
+  });
+  const output = `${result.stdout || ""}${result.stderr || ""}`.trim();
+  if (result.error) {
+    return [result.error.code || result.error.message, output].filter(Boolean).join("\n");
+  }
+  if (result.status !== 0) {
+    return output || `${command} exited with status ${result.status}`;
+  }
+  return output;
+}
+
+function runtimeDiagnostics(runtimeBin) {
+  if (process.platform !== "darwin") return "";
+  return [
+    `file: ${runDiagnostic("file", [runtimeBin])}`,
+    `codesign: ${runDiagnostic("codesign", ["-dv", "--verbose=4", runtimeBin])}`,
+    `spctl: ${runDiagnostic("spctl", ["--assess", "--type", "execute", "--verbose=4", runtimeBin])}`,
+    `xattr: ${runDiagnostic("xattr", ["-l", runtimeBin]) || "none"}`,
+  ].join("\n");
+}
+
 function runtimeEnv(binDir) {
   const env = {
     ...process.env,
@@ -140,10 +167,13 @@ function runRuntime(runtimeBin, args, binDir) {
     stdio: ["ignore", "pipe", "pipe"],
   });
   if (result.status !== 0) {
+    const diagnostics = runtimeDiagnostics(runtimeBin);
     throw new Error(
       `${path.basename(runtimeBin)} ${args.join(" ")} failed: status=${result.status} signal=${
         result.signal
-      } error=${result.error?.code ?? "none"} stderr=${result.stderr.trim()}`
+      } error=${result.error?.code ?? "none"} stdout=${result.stdout.trim()} stderr=${result.stderr.trim()}${
+        diagnostics ? `\n${diagnostics}` : ""
+      }`
     );
   }
   return result.stdout.trim();
@@ -195,11 +225,19 @@ async function waitForRuntimePatterns(runtimeBin, args, binDir, patterns) {
   try {
     await new Promise((resolve, reject) => {
       const timeout = setTimeout(() => {
+        const missing = patterns
+          .filter((_, index) => !matched.has(index))
+          .map((pattern) => pattern.toString());
+        const diagnostics = runtimeDiagnostics(runtimeBin);
         reject(
           new Error(
             `${path.basename(runtimeBin)} ${args.join(
               " "
-            )} did not reach readiness. stdout=${stdout.trim()} stderr=${stderr.trim()}`
+            )} did not reach readiness. missing=${missing.join(", ") || "none"} stdout=${stdout
+              .trim()
+              .slice(-4000)} stderr=${stderr.trim().slice(-4000)}${
+              diagnostics ? `\n${diagnostics}` : ""
+            }`
           )
         );
       }, STARTUP_TIMEOUT_MS);
@@ -238,11 +276,16 @@ async function waitForRuntimePatterns(runtimeBin, args, binDir, patterns) {
       child.on("error", fail);
       child.on("exit", (code, signal) => {
         if (matched.size !== patterns.length) {
+          const diagnostics = runtimeDiagnostics(runtimeBin);
           fail(
             new Error(
               `${path.basename(runtimeBin)} ${args.join(
                 " "
-              )} exited before readiness: code=${code} signal=${signal} stdout=${stdout.trim()} stderr=${stderr.trim()}`
+              )} exited before readiness: code=${code} signal=${signal} stdout=${stdout
+                .trim()
+                .slice(-4000)} stderr=${stderr.trim().slice(-4000)}${
+                diagnostics ? `\n${diagnostics}` : ""
+              }`
             )
           );
         }
