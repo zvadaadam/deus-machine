@@ -1,4 +1,7 @@
 import { EventEmitter } from "node:events";
+import { chmodSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import os from "node:os";
+import path from "node:path";
 import { PassThrough } from "node:stream";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
@@ -29,6 +32,22 @@ import { CDP_PORT, spawnBackend, stopBackend } from "../../../apps/desktop/main/
 const originalEnv = { ...process.env };
 const originalPlatform = process.platform;
 const originalResourcesPath = (process as { resourcesPath?: string }).resourcesPath;
+const tempRoots: string[] = [];
+
+function createTempResourcesRoot(): string {
+  const root = mkdtempSync(path.join(os.tmpdir(), "deus-desktop-backend-"));
+  tempRoots.push(root);
+  const resourcesPath = path.join(root, "Resources");
+  mkdirSync(path.join(resourcesPath, "bin"), { recursive: true });
+  return resourcesPath;
+}
+
+function createRuntimeExecutable(resourcesPath: string): string {
+  const runtimePath = path.join(resourcesPath, "bin", "deus-runtime");
+  writeFileSync(runtimePath, "#!/bin/sh\n");
+  chmodSync(runtimePath, 0o755);
+  return runtimePath;
+}
 
 function createFakeChild() {
   const child = new EventEmitter() as EventEmitter & {
@@ -52,6 +71,9 @@ function createFakeChild() {
 
 afterEach(() => {
   stopBackend();
+  for (const root of tempRoots.splice(0)) {
+    rmSync(root, { recursive: true, force: true });
+  }
   mockSpawn.mockReset();
   mockApp.isPackaged = true;
   mockApp.getPath.mockClear();
@@ -76,8 +98,9 @@ describe("desktop backend process", () => {
       enumerable: true,
       value: "darwin",
     });
-    (process as { resourcesPath?: string }).resourcesPath =
-      "/Applications/Deus.app/Contents/Resources";
+    const resourcesPath = createTempResourcesRoot();
+    const runtimePath = createRuntimeExecutable(resourcesPath);
+    (process as { resourcesPath?: string }).resourcesPath = resourcesPath;
     process.env.PATH = "/opt/homebrew/bin:/usr/local/bin:/usr/bin";
     process.env.ELECTRON_RUN_AS_NODE = "1";
     process.env.AGENT_SERVER_ENTRY = "/tmp/dev-agent-server.cjs";
@@ -93,7 +116,7 @@ describe("desktop backend process", () => {
     expect(result.port).toBe(45678);
     expect(mockSpawn).toHaveBeenCalledOnce();
     const [command, args, options] = mockSpawn.mock.calls[0];
-    expect(command).toBe("/Applications/Deus.app/Contents/Resources/bin/deus-runtime");
+    expect(command).toBe(runtimePath);
     expect(args).toEqual(["backend"]);
     expect(options.cwd).toBe("/Users/test/Library/Application Support/Deus");
     expect(options.env.ELECTRON_RUN_AS_NODE).toBeUndefined();
@@ -101,20 +124,65 @@ describe("desktop backend process", () => {
     expect(options.env.AGENT_SERVER_CWD).toBeUndefined();
     expect(options.env.NODE_PATH).toBeUndefined();
     expect(options.env.DEUS_PACKAGED).toBe("1");
-    expect(options.env.DEUS_RESOURCES_PATH).toBe("/Applications/Deus.app/Contents/Resources");
-    expect(options.env.DEUS_RUNTIME_EXECUTABLE).toBe(
-      "/Applications/Deus.app/Contents/Resources/bin/deus-runtime"
-    );
-    expect(options.env.DEUS_BUNDLED_BIN_DIR).toBe(
-      "/Applications/Deus.app/Contents/Resources/bin"
-    );
+    expect(options.env.DEUS_RESOURCES_PATH).toBe(resourcesPath);
+    expect(options.env.DEUS_RUNTIME_EXECUTABLE).toBe(runtimePath);
+    expect(options.env.DEUS_BUNDLED_BIN_DIR).toBe(path.join(resourcesPath, "bin"));
     expect(options.env.DATABASE_PATH).toBe(
       "/Users/test/Library/Application Support/Deus/deus.db"
     );
     expect(options.env.PATH).toBe(
-      "/Applications/Deus.app/Contents/Resources/bin:/usr/bin:/bin:/usr/sbin:/sbin"
+      `${path.join(resourcesPath, "bin")}:/usr/bin:/bin:/usr/sbin:/sbin`
     );
     expect(options.env.PORT).toBe("0");
     expect(options.env.CDP_PORT).toBe(CDP_PORT);
+  });
+
+  it("fails before spawning when packaged deus-runtime is missing", async () => {
+    Object.defineProperty(process, "platform", {
+      configurable: true,
+      enumerable: true,
+      value: "darwin",
+    });
+    const resourcesPath = createTempResourcesRoot();
+    (process as { resourcesPath?: string }).resourcesPath = resourcesPath;
+
+    await expect(spawnBackend()).rejects.toThrow(
+      /deus-runtime executable is missing or not executable/
+    );
+    expect(mockSpawn).not.toHaveBeenCalled();
+  });
+
+  it("fails before spawning when packaged deus-runtime is not executable", async () => {
+    Object.defineProperty(process, "platform", {
+      configurable: true,
+      enumerable: true,
+      value: "darwin",
+    });
+    const resourcesPath = createTempResourcesRoot();
+    const runtimePath = path.join(resourcesPath, "bin", "deus-runtime");
+    writeFileSync(runtimePath, "#!/bin/sh\n");
+    chmodSync(runtimePath, 0o644);
+    (process as { resourcesPath?: string }).resourcesPath = resourcesPath;
+
+    await expect(spawnBackend()).rejects.toThrow(
+      /deus-runtime executable is missing or not executable/
+    );
+    expect(mockSpawn).not.toHaveBeenCalled();
+  });
+
+  it("fails before spawning when packaged deus-runtime points at a directory", async () => {
+    Object.defineProperty(process, "platform", {
+      configurable: true,
+      enumerable: true,
+      value: "darwin",
+    });
+    const resourcesPath = createTempResourcesRoot();
+    mkdirSync(path.join(resourcesPath, "bin", "deus-runtime"));
+    (process as { resourcesPath?: string }).resourcesPath = resourcesPath;
+
+    await expect(spawnBackend()).rejects.toThrow(
+      /deus-runtime executable is missing or not executable/
+    );
+    expect(mockSpawn).not.toHaveBeenCalled();
   });
 });
