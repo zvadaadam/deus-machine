@@ -144,17 +144,27 @@ function escapeRegExp(value) {
   return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
 
+function pathPattern(filePath) {
+  const paths = [filePath];
+  try {
+    paths.push(fs.realpathSync.native(filePath));
+  } catch {
+    // Keep the original spelling when the path is not present.
+  }
+  return `(?:${[...new Set(paths)].map(escapeRegExp).join("|")})`;
+}
+
 function requiredLogPatterns(binDir) {
   return [
     /\[main\] App ready, starting initialization/,
     /\[main\] Spawning runtime stack/,
     new RegExp(
-      `\\[backend\\] \\[agent-server\\] BUNDLED_CLI_PATH claude=${escapeRegExp(
+      `\\[backend\\] \\[agent-server\\] BUNDLED_CLI_PATH claude=${pathPattern(
         path.join(binDir, "claude")
       )}`
     ),
     new RegExp(
-      `\\[backend\\] \\[agent-server\\] BUNDLED_CLI_PATH codex=${escapeRegExp(
+      `\\[backend\\] \\[agent-server\\] BUNDLED_CLI_PATH codex=${pathPattern(
         path.join(binDir, "codex")
       )}`
     ),
@@ -380,7 +390,13 @@ function killChildTree(child, signal) {
   child.kill(signal);
 }
 
-async function waitForDesktopReadiness(child, tempHome, requiredPatterns, diagnostics) {
+async function waitForDesktopReadiness(
+  child,
+  tempHome,
+  requiredPatterns,
+  diagnostics,
+  getProcessOutput
+) {
   const matched = new Set();
   let lastLog = "";
   let lastLogPath = null;
@@ -389,10 +405,10 @@ async function waitForDesktopReadiness(child, tempHome, requiredPatterns, diagno
     const interval = setInterval(() => {
       const { logPath, contents } = readMainLog(tempHome);
       lastLogPath = logPath;
-      lastLog = contents;
+      lastLog = [contents, getProcessOutput()].filter(Boolean).join("\n");
 
       for (const pattern of FORBIDDEN_LOG_PATTERNS) {
-        if (pattern.test(contents)) {
+        if (pattern.test(lastLog)) {
           clearInterval(interval);
           clearTimeout(timeout);
           reject(new Error(`Packaged desktop smoke hit forbidden log pattern: ${pattern}`));
@@ -401,7 +417,7 @@ async function waitForDesktopReadiness(child, tempHome, requiredPatterns, diagno
       }
 
       requiredPatterns.forEach((pattern, index) => {
-        if (pattern.test(contents)) matched.add(index);
+        if (pattern.test(lastLog)) matched.add(index);
       });
       if (matched.size === requiredPatterns.length) {
         clearInterval(interval);
@@ -448,7 +464,11 @@ async function waitForDesktopReadiness(child, tempHome, requiredPatterns, diagno
     });
   });
 
-  return readMainLog(tempHome);
+  const { logPath, contents } = readMainLog(tempHome);
+  return {
+    logPath,
+    contents: [contents, getProcessOutput()].filter(Boolean).join("\n"),
+  };
 }
 
 async function smokePackagedDesktop(options) {
@@ -478,20 +498,26 @@ async function smokePackagedDesktop(options) {
     cwd: tempHome,
     detached: process.platform !== "win32",
     env: packagedDesktopEnv(tempHome),
-    stdio: ["ignore", "ignore", "pipe"],
+    stdio: ["ignore", "pipe", "pipe"],
   });
 
+  let stdout = "";
   let stderr = "";
+  child.stdout?.on("data", (data) => {
+    stdout += data.toString();
+  });
   child.stderr?.on("data", (data) => {
     stderr += data.toString();
   });
+  const getProcessOutput = () => [stdout, stderr].filter(Boolean).join("\n");
 
   try {
     const { logPath, contents } = await waitForDesktopReadiness(
       child,
       tempHome,
       requiredLogPatterns(binDir),
-      appDiagnostics(launchAppPath, appBinary)
+      appDiagnostics(launchAppPath, appBinary),
+      getProcessOutput
     );
     await assertInitializedAgentsFromLog(contents);
     await assertBackendDbRouteFromLog(contents);
