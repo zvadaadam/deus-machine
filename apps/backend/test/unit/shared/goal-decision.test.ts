@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { decideAfterTurn, tokenCountForUsage } from "@shared/goal-decision";
+import { goalContextFromGoal, tokenCountForUsage } from "@shared/goal-decision";
 import type { ActiveGoal } from "@shared/goals";
 
 const baseGoal: ActiveGoal = {
@@ -12,7 +12,6 @@ const baseGoal: ActiveGoal = {
   timeUsedSeconds: 0,
   createdAt: 10,
   updatedAt: 10,
-  allowQuestions: true,
 };
 
 describe("goal-decision", () => {
@@ -28,29 +27,12 @@ describe("goal-decision", () => {
     ).toBe(190);
   });
 
-  it("continues when the token budget remains", () => {
-    const decision = decideAfterTurn(baseGoal, {
-      now: 20,
-      tokens: { input: 200, output: 100 },
+  it("builds the provider-neutral goal context used by Codex app-server", () => {
+    expect(goalContextFromGoal(baseGoal)).toEqual({
+      objective: "Refactor auth",
+      tokenBudget: 1_000,
+      spentTokens: 100,
+      startedAt: 10,
     });
-
-    expect(decision.kind).toBe("continue");
-    expect(decision.goal.spentTokens).toBe(400);
-    expect(decision.goal.timeUsedSeconds).toBe(10);
-    expect(decision.prompt).toContain("Continue working toward the active thread goal");
-  });
-
-  it("finalizes when the token budget is reached", () => {
-    const decision = decideAfterTurn(baseGoal, {
-      now: 20,
-      tokens: { input: 800, output: 100 },
-    });
-
-    expect(decision.kind).toBe("finalize");
-    if (decision.kind === "finalize") {
-      expect(decision.reason).toBe("budget_limited");
-      expect(decision.goal.spentTokens).toBe(1_000);
-      expect(decision.prompt).toContain("has reached its token budget");
-    }
   });
 });

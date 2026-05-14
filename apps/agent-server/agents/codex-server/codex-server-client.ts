@@ -24,6 +24,14 @@ type RpcMessage =
   | { id: RpcId; result?: unknown; error?: { code?: number; message?: string; data?: unknown } }
   | { id?: RpcId; method: string; params?: unknown };
 
+export function buildCodexAppServerSpawnCommand(codexPath: string): {
+  command: string;
+  args: string[];
+} {
+  const appServerArgs = ["app-server", "--listen", "stdio://"];
+  return { command: codexPath, args: appServerArgs };
+}
+
 export interface CodexAppServerClientOptions {
   codexPath: string;
   cwd?: string;
@@ -141,7 +149,8 @@ export class CodexAppServerClient {
     if (this.proc && !this.exited) return;
 
     this.exited = false;
-    const proc = spawn(this.codexPath, ["app-server", "--listen", "stdio://"], {
+    const spawnCommand = buildCodexAppServerSpawnCommand(this.codexPath);
+    const proc = spawn(spawnCommand.command, spawnCommand.args, {
       cwd: this.cwd,
       env: this.env,
       stdio: ["pipe", "pipe", "pipe"],

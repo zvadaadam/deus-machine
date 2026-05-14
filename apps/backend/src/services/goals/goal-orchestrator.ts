@@ -1,11 +1,7 @@
 // backend/src/services/goals/goal-orchestrator.ts
-// Backend-driven continuation loop for persisted active goals.
+// Codex-native goal coordination for persisted UI state.
 
-import {
-  decideAfterTurn,
-  goalContextFromGoal,
-  renderGoalContinuationPrompt,
-} from "@shared/goal-decision";
+import { goalContextFromGoal, tokenCountForUsage } from "@shared/goal-decision";
 import type { AgentEvent, TurnStartRequest, TurnStartResponse } from "@shared/agent-events";
 import type { AgentHarness } from "@shared/enums";
 import { getDatabase } from "../../lib/database";
@@ -29,35 +25,33 @@ export interface GoalOrchestratorDeps {
 
 export function handleGoalTurnCompleted(
   event: AgentEvent & { type: "turn.completed" },
-  deps: GoalOrchestratorDeps
+  _deps: GoalOrchestratorDeps
 ): void {
   const stored = getRunnableGoal(event.sessionId);
   if (!stored) return;
 
-  const decision = decideAfterTurn(toActiveGoal(stored), { tokens: event.tokens });
+  const updatedGoal = {
+    ...toActiveGoal(stored),
+    spentTokens: stored.spentTokens + tokenCountForUsage(event.tokens),
+    updatedAt: Math.floor(Date.now() / 1000),
+  };
 
-  if (decision.kind === "finalize") {
-    const ended = budgetLimitGoal(event.sessionId, decision.goal);
+  if (updatedGoal.tokenBudget !== null && updatedGoal.spentTokens >= updatedGoal.tokenBudget) {
+    const ended = budgetLimitGoal(event.sessionId, updatedGoal);
     if (ended) pushGoalEnded(ended);
     invalidate(["goal"], { sessionIds: [event.sessionId] });
     return;
   }
 
-  const nextStored = saveGoalProgress(event.sessionId, decision.goal);
+  const nextStored = saveGoalProgress(event.sessionId, updatedGoal);
   if (!nextStored) return;
 
   pushGoalUpdated(toActiveGoal(nextStored));
   invalidate(["goal"], { sessionIds: [event.sessionId] });
-
-  if (isSessionIdle(event.sessionId)) {
-    void startGoalContinuation(event.sessionId, deps);
-  }
 }
 
-export function handleGoalSessionIdle(sessionId: string, deps: GoalOrchestratorDeps): void {
-  const goal = getRunnableGoal(sessionId);
-  if (!goal) return;
-  void startGoalContinuation(sessionId, deps);
+export function handleGoalSessionIdle(_sessionId: string, _deps: GoalOrchestratorDeps): void {
+  // Codex app-server owns the autonomous continuation loop for active goals.
 }
 
 export async function startGoalContinuation(
@@ -86,6 +80,7 @@ export function buildGoalTurnStartRequest(sessionId: string): TurnStartRequest |
   const db = getDatabase();
   const session = getSessionRaw(db, sessionId);
   if (!session) return null;
+  if (session.agent_harness !== "codex-server") return null;
 
   const workspace = getWorkspaceForMiddleware(db, session.workspace_id);
   if (!workspace) return null;
@@ -96,7 +91,7 @@ export function buildGoalTurnStartRequest(sessionId: string): TurnStartRequest |
   return {
     sessionId,
     agentHarness: session.agent_harness as AgentHarness,
-    prompt: renderGoalContinuationPrompt(toActiveGoal(goal)),
+    prompt: "Continue the active Codex goal.",
     options: buildGoalTurnOptions(goal, cwd, session.agent_session_id),
   };
 }
@@ -112,11 +107,6 @@ export function buildGoalTurnOptions(
     thinkingLevel: goal.thinkingLevel,
     resume: resume ?? undefined,
     goalContext: goalContextFromGoal(goal),
-    allowQuestions: goal.allowQuestions,
+    goalAction: "continue",
   };
-}
-
-function isSessionIdle(sessionId: string): boolean {
-  const session = getSessionRaw(getDatabase(), sessionId);
-  return session?.status === "idle";
 }

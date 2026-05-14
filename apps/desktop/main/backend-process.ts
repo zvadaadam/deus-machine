@@ -26,13 +26,22 @@ interface ElectronRuntimeEntries {
   backendCwd: string;
   agentServerEntry: string;
   agentServerCwd: string;
+  projectRoot?: string;
   resourcesPath?: string;
   nodePath?: string;
   bundledBinDir?: string;
 }
 
+function getHostRuntimeKey(): string | null {
+  if (process.platform === "darwin" && (process.arch === "arm64" || process.arch === "x64")) {
+    return `darwin-${process.arch}`;
+  }
+  return null;
+}
+
 function resolveRuntimeEntries(): ElectronRuntimeEntries {
   const projectRoot = join(__dirname, "../..");
+  const runtimeKey = getHostRuntimeKey();
 
   if (app.isPackaged) {
     return {
@@ -51,6 +60,10 @@ function resolveRuntimeEntries(): ElectronRuntimeEntries {
     backendCwd: join(projectRoot, "apps/backend"),
     agentServerEntry: join(projectRoot, "apps/agent-server/dist/index.bundled.cjs"),
     agentServerCwd: join(projectRoot, "apps/agent-server"),
+    projectRoot,
+    bundledBinDir: runtimeKey
+      ? join(projectRoot, "dist/runtime/electron/bin", runtimeKey)
+      : undefined,
   };
 }
 
@@ -153,6 +166,7 @@ export async function spawnBackend(
       : {}),
     AGENT_SERVER_ENTRY: runtime.agentServerEntry,
     AGENT_SERVER_CWD: runtime.agentServerCwd,
+    ...(runtime.projectRoot ? { DEUS_PROJECT_ROOT: runtime.projectRoot } : {}),
     ...(runtime.nodePath ? { NODE_PATH: runtime.nodePath } : {}),
     ...(runtime.bundledBinDir ? { DEUS_BUNDLED_BIN_DIR: runtime.bundledBinDir } : {}),
   };

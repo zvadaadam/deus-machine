@@ -43,11 +43,7 @@ interface UseSessionActionsReturn {
   stopSession: () => Promise<void>;
   compactConversation: () => Promise<void>;
   createPR: () => Promise<void>;
-  startGoal: (
-    objective: string,
-    tokenBudget: number | null,
-    allowQuestions?: boolean
-  ) => Promise<void>;
+  startGoal: (objective: string, tokenBudget: number | null) => Promise<void>;
   resumeGoal: () => Promise<void>;
   cancelGoal: () => Promise<void>;
   dismissGoal: () => Promise<void>;
@@ -132,7 +128,7 @@ export function useSessionActions({
   }, [sendMessage, workspaceId, targetBranch]);
 
   const startGoal = useCallback(
-    async (objective: string, tokenBudget: number | null, allowQuestions = true) => {
+    async (objective: string, tokenBudget: number | null) => {
       if (sendMessageMutation.isPending) return;
       if (!objective.trim()) {
         toast.error("Goal objective required");
@@ -145,6 +141,10 @@ export function useSessionActions({
       try {
         const effectiveModel = getModelId(composer.model);
         const effectiveHarness = getAgentHarnessForModel(composer.model);
+        if (effectiveHarness !== "codex-server") {
+          toast.error("Goals are currently supported only for Codex");
+          return;
+        }
         if (!isConnected()) await connect();
         const result = await sendMutate("goalStart", {
           sessionId,
@@ -153,7 +153,6 @@ export function useSessionActions({
           model: effectiveModel,
           agentHarness: effectiveHarness,
           thinkingLevel: composer.thinkingLevel,
-          allowQuestions,
         });
         if (!result.success) throw new Error(result.error || "Failed to start goal");
       } catch (error) {

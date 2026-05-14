@@ -24,7 +24,6 @@ interface GoalRow {
   spent_tokens: number;
   model: string;
   thinking_level: QueryOptions["thinkingLevel"] | null;
-  allow_questions: 0 | 1;
   created_at: string;
   updated_at: string;
 }
@@ -35,21 +34,19 @@ export function createGoal(params: {
   tokenBudget: number | null;
   model: string;
   thinkingLevel?: QueryOptions["thinkingLevel"];
-  allowQuestions?: boolean;
   now?: number;
 }): StoredGoal {
   const db = getDatabase();
   const goalId = uuidv7();
   const createdAt = params.now ? secondsToSqlDate(params.now) : null;
-  const allowQuestions = params.allowQuestions !== false ? 1 : 0;
 
   db.prepare(
     `
       INSERT INTO goals (
         session_id, goal_id, objective, status, token_budget, spent_tokens,
-        model, thinking_level, allow_questions, created_at, updated_at
+        model, thinking_level, created_at, updated_at
       )
-      VALUES (?, ?, ?, 'active', ?, 0, ?, ?, ?, COALESCE(?, datetime('now')), COALESCE(?, datetime('now')))
+      VALUES (?, ?, ?, 'active', ?, 0, ?, ?, COALESCE(?, datetime('now')), COALESCE(?, datetime('now')))
       ON CONFLICT(session_id) DO UPDATE SET
         goal_id = excluded.goal_id,
         objective = excluded.objective,
@@ -58,7 +55,6 @@ export function createGoal(params: {
         spent_tokens = 0,
         model = excluded.model,
         thinking_level = excluded.thinking_level,
-        allow_questions = excluded.allow_questions,
         created_at = excluded.created_at,
         updated_at = excluded.updated_at
     `
@@ -69,7 +65,6 @@ export function createGoal(params: {
     params.tokenBudget,
     params.model,
     params.thinkingLevel ?? null,
-    allowQuestions,
     createdAt,
     createdAt
   );
@@ -134,26 +129,25 @@ export function resumeGoal(sessionId: string): StoredGoal | null {
   return getGoal(sessionId) ?? null;
 }
 
-export function completeGoal(sessionId: string, summary?: string): EndedGoal | null {
-  return markTerminalGoal(sessionId, "complete", summary);
+export function completeGoal(
+  sessionId: string,
+  summary?: string,
+  options?: { spentTokens?: number }
+): EndedGoal | null {
+  return markTerminalGoal(sessionId, "complete", summary, options);
 }
 
 export function budgetLimitGoal(sessionId: string, goal: ActiveGoal): EndedGoal | null {
-  const existing = getGoal(sessionId);
-  if (!existing || existing.status !== "active") return null;
+  return markTerminalGoal(sessionId, "budget_limited", undefined, {
+    spentTokens: goal.spentTokens,
+  });
+}
 
-  getDatabase()
-    .prepare(
-      `
-        UPDATE goals
-        SET spent_tokens = ?, status = 'budget_limited', updated_at = datetime('now')
-        WHERE session_id = ?
-      `
-    )
-    .run(goal.spentTokens, sessionId);
-
-  const updated = getGoal(sessionId);
-  return updated ? { ...toActiveGoal(updated), reason: "budget_limited" } : null;
+export function budgetLimitGoalFromProvider(
+  sessionId: string,
+  options?: { spentTokens?: number }
+): EndedGoal | null {
+  return markTerminalGoal(sessionId, "budget_limited", undefined, options);
 }
 
 export function deleteGoal(
@@ -187,21 +181,34 @@ export function toActiveGoal(goal: StoredGoal): ActiveGoal {
     timeUsedSeconds: Math.max(0, nowSeconds() - createdAt),
     createdAt,
     updatedAt: goal.updatedAt,
-    allowQuestions: goal.allowQuestions,
   };
 }
 
 function markTerminalGoal(
   sessionId: string,
   reason: Extract<GoalEndReason, "complete" | "budget_limited">,
-  summary?: string
+  summary?: string,
+  options?: { spentTokens?: number }
 ): EndedGoal | null {
   const goal = getGoal(sessionId);
   if (!goal || goal.status === "complete" || goal.status === "budget_limited") return null;
+  const spentTokens =
+    typeof options?.spentTokens === "number" && Number.isFinite(options.spentTokens)
+      ? Math.max(0, Math.floor(options.spentTokens))
+      : null;
 
   getDatabase()
-    .prepare("UPDATE goals SET status = ?, updated_at = datetime('now') WHERE session_id = ?")
-    .run(reason, sessionId);
+    .prepare(
+      `
+        UPDATE goals
+        SET
+          status = ?,
+          spent_tokens = MAX(spent_tokens, COALESCE(?, spent_tokens)),
+          updated_at = datetime('now')
+        WHERE session_id = ?
+      `
+    )
+    .run(reason, spentTokens, sessionId);
 
   const updated = getGoal(sessionId);
   return updated ? { ...toActiveGoal(updated), reason, ...(summary ? { summary } : {}) } : null;
@@ -220,7 +227,6 @@ function rowToGoal(row: GoalRow): StoredGoal {
     updatedAt: sqlDateToSeconds(row.updated_at),
     model: row.model,
     thinkingLevel: row.thinking_level ?? undefined,
-    allowQuestions: row.allow_questions === 1,
   };
 }
 

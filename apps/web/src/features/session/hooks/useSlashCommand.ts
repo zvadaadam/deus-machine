@@ -22,7 +22,6 @@ export type ParsedGoalCommand =
       kind: "start";
       objective: string;
       tokenBudget: number | null;
-      allowQuestions: boolean;
     }
   | { kind: "cancel" };
 
@@ -35,7 +34,6 @@ const BUILT_IN_COMMANDS: SlashCommandItem[] = [
 ];
 
 const TOKEN_BUDGET_RE = /(?:^|\s)--tokens(?:=|\s+)([0-9]+(?:\.[0-9]+)?[kKmM]?)/;
-const NO_QUESTIONS_RE = /(?:^|\s)--no-questions(?=\s|$)/;
 
 export function parseGoalCommand(value: string): ParsedGoalCommand | null {
   const trimmed = value.trim();
@@ -46,14 +44,9 @@ export function parseGoalCommand(value: string): ParsedGoalCommand | null {
 
   const tokenMatch = rest.match(TOKEN_BUDGET_RE);
   const tokenBudget = tokenMatch ? parseTokenBudget(tokenMatch[1]) : null;
-  const allowQuestions = !NO_QUESTIONS_RE.test(rest);
-  const objective = rest
-    .replace(TOKEN_BUDGET_RE, " ")
-    .replace(NO_QUESTIONS_RE, " ")
-    .replace(/\s+/g, " ")
-    .trim();
+  const objective = rest.replace(TOKEN_BUDGET_RE, " ").replace(/\s+/g, " ").trim();
 
-  return { kind: "start", objective, tokenBudget, allowQuestions };
+  return { kind: "start", objective, tokenBudget };
 }
 
 function parseTokenBudget(raw: string): number {
@@ -76,6 +69,8 @@ interface UseSlashCommandOptions {
   onChange: (newValue: string) => void;
   /** Disable the hook entirely (e.g. for Codex which doesn't support skills) */
   enabled?: boolean;
+  /** Whether to expose Deus's built-in /goal command. */
+  enableGoalCommand?: boolean;
   /**
    * When provided, selecting a skill adds a structured mention via this callback
    * instead of inserting `/name ` text inline. The `/query` the user typed is
@@ -120,15 +115,28 @@ export function useSlashCommand({
   workspacePath,
   onChange,
   enabled = true,
+  enableGoalCommand = true,
   onAddSkill,
 }: UseSlashCommandOptions): UseSlashCommandReturn {
   const [isOpen, setIsOpen] = useState(false);
   const [selectedIndex, setSelectedIndex] = useState(0);
 
   // Cached items from backend (fetched per workspace, filtered client-side)
-  const [allItems, setAllItems] = useState<SlashCommandItem[]>(BUILT_IN_COMMANDS);
+  const builtInCommands = useMemo(
+    () => (enableGoalCommand ? BUILT_IN_COMMANDS : []),
+    [enableGoalCommand]
+  );
+  const [allItems, setAllItems] = useState<SlashCommandItem[]>(builtInCommands);
   const [loading, setLoading] = useState(false);
   const fetchedWorkspaceRef = useRef<string | null>(null);
+
+  useEffect(() => {
+    setAllItems((items) => {
+      const builtInNames = new Set(BUILT_IN_COMMANDS.map((item) => item.name));
+      const externalItems = items.filter((item) => !builtInNames.has(item.name));
+      return [...builtInCommands, ...externalItems];
+    });
+  }, [builtInCommands]);
 
   // Detect trigger (disabled entirely for agents that don't support skills)
   const triggerActive = enabled && isSlashTriggerActive(value);
@@ -174,8 +182,8 @@ export function useSlashCommand({
               : Promise.resolve([]),
           ]);
 
-        const items: SlashCommandItem[] = [...BUILT_IN_COMMANDS];
-        const seen = new Set<string>(BUILT_IN_COMMANDS.map((item) => item.name));
+        const items: SlashCommandItem[] = [...builtInCommands];
+        const seen = new Set<string>(builtInCommands.map((item) => item.name));
 
         // Project items first (they override global ones with the same name)
         const addItems = (
@@ -212,7 +220,7 @@ export function useSlashCommand({
     };
 
     fetchItems();
-  }, [isOpen, workspacePath]);
+  }, [isOpen, workspacePath, builtInCommands]);
 
   // Filter items by query (client-side fuzzy match)
   const results = useMemo(() => {

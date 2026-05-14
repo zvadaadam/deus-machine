@@ -1,12 +1,12 @@
 // agent-server/agents/environment/cli-discovery.ts
-// Generic CLI executable discovery for all agent handlers.
-// Each agent provides a DiscoveryConfig describing what to find;
-// this module handles the discovery algorithm (candidate gathering,
-// shell PATH discovery, candidate verification, init guard).
+// Generic CLI executable resolution for agent handlers.
+// Agent CLIs are resolved deterministically: explicit override first, then
+// bundled/runtime candidates. We intentionally do not scan the user's shell for
+// global installs; packaged builds should use the binary we ship.
 
 import * as path from "path";
 import * as fs from "fs";
-import { execSync, execFileSync } from "child_process";
+import { execFileSync } from "child_process";
 import { EventBroadcaster } from "../../event-broadcaster";
 import type { AgentHarness } from "../../protocol";
 
@@ -24,19 +24,13 @@ export interface DiscoveryConfig {
   /** Human-readable name for log messages (e.g. "Claude", "Codex") */
   displayName: string;
   /** Env var override (e.g. "CLAUDE_CLI_PATH", "CODEX_CLI_PATH") */
-  envVar: string;
-  /** Static candidate paths (known install locations) */
+  envVar?: string;
+  /** Env var overrides in priority order. */
+  envVars?: string[];
+  /** Static candidate paths (bundled/runtime install locations) */
   staticCandidates: string[];
-  /** Shell command name for dynamic discovery (e.g. "claude", "codex") */
-  shellCommand: string;
   /** Version flag to verify the candidate (e.g. "-v", "--version") */
   versionFlag: string;
-  /**
-   * Optional: additional candidates discovered programmatically
-   * (e.g. Codex's require.resolve for bundled npm binary).
-   * Returns additional paths to try, or empty array.
-   */
-  extraCandidates?: () => string[];
   /**
    * Optional: validate the version output for a candidate. Returning false
    * makes discovery continue to the next candidate instead of accepting it.
@@ -45,8 +39,6 @@ export interface DiscoveryConfig {
     versionOutput: string,
     candidate: string
   ) => { success: boolean; error?: string };
-  /** Packaged desktop should only use deterministic bundled/env candidates. */
-  skipShellDiscovery?: boolean;
 }
 
 /**
@@ -67,7 +59,7 @@ export interface DiscoveryState {
  * Mutates `state` with the result.
  *
  * Algorithm:
- * 1. Gather candidates: env var → static paths → extra candidates → shell PATH
+ * 1. Gather candidates: env var(s) → static bundled/runtime paths
  * 2. For each candidate: verify it exists, run `<candidate> <versionFlag>`
  * 3. First success wins; all failures produce a descriptive error.
  */
@@ -77,52 +69,14 @@ export function discoverExecutable(
 ): { success: boolean; error?: string } {
   console.log(`Setting up ${config.displayName} executable path...`);
 
-  // Build candidate list
   const candidates: string[] = [];
 
-  // Env var override (highest priority)
-  const envOverride = process.env[config.envVar];
-  if (envOverride) candidates.push(envOverride);
-
-  // Static candidate paths
-  candidates.push(...config.staticCandidates);
-
-  // Extra programmatic candidates (e.g. require.resolve for bundled binary)
-  if (config.extraCandidates) {
-    try {
-      const extra = config.extraCandidates();
-      for (const p of extra) {
-        if (p && !candidates.includes(p)) candidates.push(p);
-      }
-    } catch {
-      // Extra candidate discovery failed — continue
-    }
+  for (const envVar of getEnvVarNames(config)) {
+    pushCandidate(candidates, process.env[envVar]);
   }
 
-  if (!config.skipShellDiscovery && process.env.DEUS_PACKAGED !== "1") {
-    // Dynamic discovery is a dev/global-install fallback. Packaged desktop
-    // must rely on bundled candidates so broken packages fail loudly.
-    try {
-      const fallbackShell = process.platform === "linux" ? "/bin/bash" : "/bin/zsh";
-      const shell = process.env.SHELL || fallbackShell;
-      const cleanEnv = { ...process.env };
-      if (cleanEnv.PATH) {
-        cleanEnv.PATH = cleanEnv.PATH.split(":")
-          .filter((p) => !p.includes("node_modules"))
-          .join(":");
-      }
-      const resolved = execSync(`"${shell}" -l -c "command -v ${config.shellCommand}"`, {
-        encoding: "utf-8",
-        timeout: 5000,
-        env: cleanEnv,
-        stdio: ["ignore", "pipe", "pipe"],
-      }).trim();
-      if (resolved && !candidates.includes(resolved)) {
-        candidates.push(resolved);
-      }
-    } catch {
-      // Shell discovery failed — continue with deterministic candidates
-    }
+  for (const candidate of config.staticCandidates) {
+    pushCandidate(candidates, candidate);
   }
 
   // Verify each candidate
@@ -155,10 +109,22 @@ export function discoverExecutable(
     }
   }
 
-  const errorMessage = `Failed to find ${config.displayName} executable. Tried: ${triedCandidates.join(", ")}`;
+  const triedList = triedCandidates.length > 0 ? triedCandidates.join(", ") : "(none)";
+  const errorMessage = `Failed to find ${config.displayName} executable. Tried: ${triedList}`;
   console.error(`${config.displayName} executable initialization failed: ${errorMessage}`);
   state.result = { success: false, error: errorMessage };
   return { success: false, error: errorMessage };
+}
+
+function getEnvVarNames(config: DiscoveryConfig): string[] {
+  const names = [...(config.envVars ?? [])];
+  if (config.envVar) names.push(config.envVar);
+  return Array.from(new Set(names));
+}
+
+function pushCandidate(candidates: string[], candidate: string | undefined): void {
+  if (!candidate || candidates.includes(candidate)) return;
+  candidates.push(candidate);
 }
 
 function verifyCandidate(candidate: string, versionFlag: string): string {
@@ -168,12 +134,9 @@ function verifyCandidate(candidate: string, versionFlag: string): string {
     stdio: ["ignore", "pipe", "pipe"] as ["ignore", "pipe", "pipe"],
   };
 
-  // JS entrypoint installed via a global package manager
-  if (candidate.endsWith(".js")) {
-    return execFileSync("node", [candidate, versionFlag], opts).trim();
-  }
-
-  // Native binary/symlink
+  // Candidate must be a directly executable file. Bundled agent CLIs are native
+  // binaries; custom overrides should point at an executable wrapper or binary,
+  // not a raw JS module that requires us to discover another runtime.
   return execFileSync(candidate, [versionFlag], opts).trim();
 }
 

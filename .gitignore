@@ -80,6 +80,10 @@ apps/web/public/device-chrome/
 .entire/
 .agents/
 .claude/
+!.claude/
+.claude/*
+!.claude/skills/
+!.claude/skills/**
 .context/
 .prompts/
 .cursor/

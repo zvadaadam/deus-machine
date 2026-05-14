@@ -20,18 +20,24 @@ module.exports = function beforePack(context) {
   if (context?.electronPlatformName !== "darwin") return;
 
   const arch = Arch[context.arch];
-  const ghPath = path.join(
+  assertBundledCli(projectRoot, arch, "gh", "GitHub CLI", "prepare:gh-cli");
+  assertBundledCli(projectRoot, arch, "codex", "Codex CLI", "prepare:agent-clis");
+  assertBundledCli(projectRoot, arch, "claude", "Claude Code CLI", "prepare:agent-clis");
+};
+
+function assertBundledCli(projectRoot, arch, binaryName, displayName, prepareScript) {
+  const cliPath = path.join(
     projectRoot,
     "dist",
     "runtime",
     "electron",
     "bin",
     `darwin-${arch}`,
-    "gh"
+    binaryName
   );
-  if (!existsSync(ghPath)) {
+  if (!existsSync(cliPath)) {
     throw new Error(
-      `Missing bundled GitHub CLI for darwin-${arch}: ${ghPath}. Run \`bun run prepare:gh-cli\` before packaging.`
+      `Missing bundled ${displayName} for darwin-${arch}: ${cliPath}. Run \`bun run ${prepareScript}\` before packaging.`
     );
   }
-};
+}

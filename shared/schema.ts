@@ -60,11 +60,14 @@ export const MIGRATIONS: string[] = [
     spent_tokens    INTEGER NOT NULL DEFAULT 0,
     model           TEXT NOT NULL,
     thinking_level  TEXT,
-    allow_questions INTEGER NOT NULL DEFAULT 1,
+    DEPRECATED_allow_questions INTEGER NOT NULL DEFAULT 1,
     created_at      TEXT NOT NULL DEFAULT (datetime('now')),
     updated_at      TEXT NOT NULL DEFAULT (datetime('now'))
   )`,
   `CREATE INDEX IF NOT EXISTS idx_goals_status ON goals(status)`,
+  // goals: old custom goal-interview flag, no longer used now that Codex
+  // app-server owns goal execution.
+  `ALTER TABLE goals RENAME COLUMN allow_questions TO DEPRECATED_allow_questions`,
 ];
 
 function normalizeMigrationSql(sql: string): string {
@@ -157,7 +160,7 @@ export const SCHEMA_SQL = `
     spent_tokens    INTEGER NOT NULL DEFAULT 0,
     model           TEXT NOT NULL,
     thinking_level  TEXT,
-    allow_questions INTEGER NOT NULL DEFAULT 1,
+    DEPRECATED_allow_questions INTEGER NOT NULL DEFAULT 1,
     created_at      TEXT NOT NULL DEFAULT (datetime('now')),
     updated_at      TEXT NOT NULL DEFAULT (datetime('now'))
   );

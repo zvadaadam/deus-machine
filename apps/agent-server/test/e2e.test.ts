@@ -1,8 +1,9 @@
 import { describe, it, expect, beforeAll, afterAll } from "vitest";
-import { spawn, ChildProcess, execSync } from "child_process";
+import { spawn, ChildProcess } from "child_process";
 import * as fs from "fs";
 import * as path from "path";
 import WebSocket from "ws";
+import { getPackagedClaudeCandidates } from "../agents/environment/packaged-cli-paths";
 
 /**
  * End-to-end tests: Spawn a real agent-server process, connect via
@@ -15,7 +16,7 @@ import WebSocket from "ws";
  *
  * NOTE: These tests require:
  * 1. The agent-server bundle to be built: `bunx tsx agent-server/build.ts`
- * 2. Claude CLI to be installed (for Claude integration tests)
+ * 2. Bundled/locked Claude CLI to be available (for Claude integration tests)
  * 3. OPENAI_API_KEY env var (for Codex integration tests — CLI binary comes from npm)
  */
 
@@ -28,23 +29,9 @@ const WORKSPACE_ROOT = path.resolve(AGENT_SERVER_DIR, "..");
 // Check if the bundle exists before running E2E tests
 const bundleExists = fs.existsSync(BUNDLE_PATH);
 
-// Check if Claude CLI is available on this machine.
-// We only check if the executable exists (not run it) because running
-// `claude -v` can crash in vitest's Node.js context due to module
-// compatibility issues with the Claude Code SDK.
-let claudeCliAvailable = false;
-try {
-  const shell = process.env.SHELL || "/bin/zsh";
-  const claudePath = execSync(`${shell} -l -c "command -v claude"`, {
-    encoding: "utf-8",
-    timeout: 5000,
-  }).trim();
-  if (claudePath && fs.existsSync(claudePath)) {
-    claudeCliAvailable = true;
-  }
-} catch {
-  // Claude CLI not installed — integration tests will be skipped
-}
+// Check deterministic bundled/locked candidates only; the app does not depend
+// on the user's global shell PATH for Claude.
+const claudeCliAvailable = getPackagedClaudeCandidates().length > 0;
 
 // Check if Codex can run — the binary comes bundled with @openai/codex (npm dep),
 // so we only need an API key to actually hit the OpenAI API.

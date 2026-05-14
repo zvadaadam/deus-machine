@@ -91,7 +91,7 @@ interface MessageInputProps {
   activeGoal?: ActiveGoal | null;
 
   onSend: (content: string) => void;
-  onStartGoal?: (objective: string, tokenBudget: number | null, allowQuestions?: boolean) => void;
+  onStartGoal?: (objective: string, tokenBudget: number | null) => void;
   onResumeGoal?: () => void;
   onCancelGoal?: () => void;
   onDismissGoal?: () => void;
@@ -254,6 +254,7 @@ export function MessageInput({
   const agentHarness: AgentHarness = selectedOption?.agentHarness ?? getAgentHarnessForModel(model);
   const modelId = selectedOption?.model ?? model;
   const isClaudeAgent = agentHarness === "claude";
+  const supportsGoals = agentHarness === "codex-server";
 
   // Build combined message content from all staged sources.
   // See the big block-comment in the previous revision for ordering rationale
@@ -296,13 +297,13 @@ export function MessageInput({
 
   const handleSend = () => {
     if (sending || !hasContent) return;
-    const goalCommand = parseGoalCommand(draft);
+    const goalCommand = supportsGoals ? parseGoalCommand(draft) : null;
     if (goalCommand?.kind === "cancel") {
       onCancelGoal?.();
       return;
     }
     if (goalCommand?.kind === "start") {
-      onStartGoal?.(goalCommand.objective, goalCommand.tokenBudget, goalCommand.allowQuestions);
+      onStartGoal?.(goalCommand.objective, goalCommand.tokenBudget);
       return;
     }
     const combined = buildCombinedContent();
@@ -326,6 +327,7 @@ export function MessageInput({
     workspacePath,
     onChange: composer.setDraft,
     enabled: true,
+    enableGoalCommand: supportsGoals,
     onAddSkill: (skill) =>
       isClaudeAgent
         ? composer.addSkillMention({ name: skill.name, description: skill.description })
@@ -388,7 +390,7 @@ export function MessageInput({
   const showSetupNudge = !hasManifest && !hasMessages;
   const handleSetupEnvironment = () => onSend(GENERATE_HIVE_JSON);
   const handleGoalButton = () => {
-    if (activeGoal) {
+    if (activeGoal && supportsGoals) {
       composer.setDraft("/goal cancel");
       return;
     }
@@ -422,7 +424,7 @@ export function MessageInput({
       </AnimatePresence>
 
       <GoalBanner
-        goal={activeGoal}
+        goal={supportsGoals ? activeGoal : null}
         onResume={onResumeGoal}
         onCancel={onCancelGoal}
         onDismiss={onDismissGoal}
@@ -533,16 +535,18 @@ export function MessageInput({
               onClick={composer.togglePlanMode}
               disabled={planModeDisabled}
             />
-            <Button
-              onClick={handleGoalButton}
-              title={activeGoal ? "Cancel goal" : "Start goal"}
-              variant="ghost"
-              size="sm"
-              className="text-text-muted hover:text-text-secondary rounded-lg px-2 active:not-disabled:scale-[0.97]"
-            >
-              <Target className="size-3.5" />
-              <span className="text-xs font-normal">Goal</span>
-            </Button>
+            {supportsGoals && (
+              <Button
+                onClick={handleGoalButton}
+                title={activeGoal ? "Cancel goal" : "Start goal"}
+                variant="ghost"
+                size="sm"
+                className="text-text-muted hover:text-text-secondary rounded-lg px-2 active:not-disabled:scale-[0.97]"
+              >
+                <Target className="size-3.5" />
+                <span className="text-xs font-normal">Goal</span>
+              </Button>
+            )}
           </div>
 
           <div className="flex items-center gap-1">

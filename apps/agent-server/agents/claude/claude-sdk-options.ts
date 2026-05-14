@@ -19,7 +19,6 @@ import { claudeSessions } from "./claude-session";
 import type { QueryOptions } from "../registry";
 import { buildWorkspaceContext } from "../environment";
 import { parseThinkingLevel, type ThinkingLevel } from "../thinking-levels";
-import { buildGoalSystemPrompt } from "../../goals/prompt";
 
 // ============================================================================
 // Constants
@@ -63,17 +62,13 @@ export function resolveClaudeThinkingOptions(
  * Tells the agent what project it's in and where the worktree lives
  * so it doesn't confuse the workspace name with the project name.
  */
-export function buildAppendSystemPrompt(cwd?: string, options?: QueryOptions): string {
+export function buildAppendSystemPrompt(cwd?: string): string {
   const workspaceContext =
     buildWorkspaceContext(cwd) ||
     "You are working inside Deus, a desktop app that orchestrates multiple AI coding agents in parallel.";
-  const goalPrompt = options?.goalContext
-    ? `\n\n${buildGoalSystemPrompt(options.goalContext)}`
-    : "";
 
   return `
 ${workspaceContext}
-${goalPrompt}
 
 # Screen Recording
 
@@ -290,7 +285,7 @@ export function buildSdkOptions(
     systemPrompt: {
       type: "preset" as const,
       preset: "claude_code" as const,
-      append: buildAppendSystemPrompt(workingDirectory, options),
+      append: buildAppendSystemPrompt(workingDirectory),
     },
     settingSources: DEFAULT_SETTING_SOURCES,
     canUseTool: createCanUseTool(sessionId, workingDirectory),
@@ -317,10 +312,7 @@ export function buildSdkOptions(
 
   if (!options?.strictDataPrivacy) {
     sdkOptions.mcpServers = {
-      deus: createDeusMCPServer(sessionId, {
-        includeGoalTools: !!options?.goalContext,
-        includeAskUserQuestion: options?.allowQuestions !== false,
-      }),
+      deus: createDeusMCPServer(sessionId),
     };
   }
 
