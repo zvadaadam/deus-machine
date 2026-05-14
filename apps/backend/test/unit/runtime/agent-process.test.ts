@@ -57,7 +57,27 @@ describe("managed agent-server process", () => {
     const runtimePath = path.join(root, "bin", "deus-runtime");
     const argsPath = path.join(root, "args.txt");
     const cwdPath = path.join(root, "cwd.txt");
-    const electronRunAsNodePath = path.join(root, "electron-run-as-node.txt");
+    const envPath = path.join(root, "env.txt");
+    const envFormat =
+      [
+        "ELECTRON_RUN_AS_NODE=%s",
+        "AGENT_SERVER_CWD=%s",
+        "DEUS_RUNTIME=%s",
+        "DEUS_RUNTIME_COMMAND=%s",
+        "DEUS_RUNTIME_EXECUTABLE=%s",
+        "NODE_PATH=%s",
+        "",
+      ].join("\\n") + "\\n";
+    const envArgs = [
+      "$ELECTRON_RUN_AS_NODE",
+      "$AGENT_SERVER_CWD",
+      "$DEUS_RUNTIME",
+      "$DEUS_RUNTIME_COMMAND",
+      "$DEUS_RUNTIME_EXECUTABLE",
+      "$NODE_PATH",
+    ]
+      .map(JSON.stringify)
+      .join(" ");
     mkdirSync(path.dirname(runtimePath), { recursive: true });
     writeExecutable(
       runtimePath,
@@ -65,7 +85,7 @@ describe("managed agent-server process", () => {
         "#!/bin/sh",
         `printf '%s\\n' "$1" > ${JSON.stringify(argsPath)}`,
         `pwd > ${JSON.stringify(cwdPath)}`,
-        `printf '%s\\n' "$ELECTRON_RUN_AS_NODE" > ${JSON.stringify(electronRunAsNodePath)}`,
+        `printf ${JSON.stringify(envFormat)} ${envArgs} > ${JSON.stringify(envPath)}`,
         "echo 'LISTEN_URL=ws://127.0.0.1:7890'",
         "while true; do sleep 1; done",
       ].join("\n")
@@ -75,11 +95,24 @@ describe("managed agent-server process", () => {
     process.env.DEUS_RUNTIME_EXECUTABLE = runtimePath;
     process.env.AGENT_SERVER_CWD = path.join(root, "leaked-dev-agent-server-cwd");
     process.env.ELECTRON_RUN_AS_NODE = "1";
+    process.env.DEUS_RUNTIME = "1";
+    process.env.DEUS_RUNTIME_COMMAND = "backend";
+    process.env.NODE_PATH = "/tmp/stale-node-modules";
 
     await expect(startManagedAgentServer()).resolves.toBe("ws://127.0.0.1:7890");
     expect(readFileSync(argsPath, "utf8").trim()).toBe("agent-server");
     expect(readFileSync(cwdPath, "utf8").trim()).toBe(root);
-    expect(readFileSync(electronRunAsNodePath, "utf8").trim()).toBe("");
+    expect(readFileSync(envPath, "utf8")).toBe(
+      [
+        "ELECTRON_RUN_AS_NODE=",
+        "AGENT_SERVER_CWD=",
+        "DEUS_RUNTIME=",
+        "DEUS_RUNTIME_COMMAND=",
+        "DEUS_RUNTIME_EXECUTABLE=",
+        "NODE_PATH=",
+        "",
+      ].join("\n")
+    );
   });
 
   it("fails before spawning when deus-runtime is not executable", async () => {

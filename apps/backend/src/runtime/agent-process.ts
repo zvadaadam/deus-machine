@@ -3,6 +3,15 @@ import { existsSync, mkdirSync, statSync } from "node:fs";
 import path from "node:path";
 
 const STARTUP_TIMEOUT_MS = 30_000;
+const RUNTIME_AGENT_SERVER_ENV_DENYLIST = [
+  "AGENT_SERVER_CWD",
+  "AGENT_SERVER_ENTRY",
+  "ELECTRON_RUN_AS_NODE",
+  "DEUS_RUNTIME",
+  "DEUS_RUNTIME_COMMAND",
+  "DEUS_RUNTIME_EXECUTABLE",
+  "NODE_PATH",
+] as const;
 
 let child: ChildProcess | null = null;
 let stopping = false;
@@ -60,9 +69,9 @@ export async function startManagedAgentServer(): Promise<string> {
   return new Promise((resolve, reject) => {
     const childEnv: NodeJS.ProcessEnv = { ...process.env };
     if (runtimeExecutable) {
-      delete childEnv.ELECTRON_RUN_AS_NODE;
-      delete childEnv.AGENT_SERVER_ENTRY;
-      delete childEnv.AGENT_SERVER_CWD;
+      for (const key of RUNTIME_AGENT_SERVER_ENV_DENYLIST) {
+        delete childEnv[key];
+      }
     } else {
       childEnv.ELECTRON_RUN_AS_NODE = "1";
     }
