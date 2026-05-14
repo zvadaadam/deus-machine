@@ -1,5 +1,5 @@
 const { execFileSync } = require("node:child_process");
-const { existsSync, readdirSync, statSync } = require("node:fs");
+const { existsSync, readFileSync, readdirSync, statSync } = require("node:fs");
 const path = require("node:path");
 const { Arch } = require("builder-util");
 const ARCH_BY_BUILDER_VALUE = new Map([
@@ -103,6 +103,32 @@ function assertElectronBuildFresh(projectRoot) {
   ]);
 }
 
+function assertPackagedMainRuntimeContract(projectRoot) {
+  const mainOutput = path.join(projectRoot, "out/main/index.js");
+  const contents = readFileSync(mainOutput, "utf8");
+
+  if (!contents.includes("deus-runtime") || !contents.includes("DEUS_RUNTIME_EXECUTABLE")) {
+    throw new Error(
+      "Electron main build output does not contain the packaged deus-runtime launch contract. Run `bun run build` before packaging."
+    );
+  }
+
+  if (
+    contents.includes('process.resourcesPath, "backend"') ||
+    contents.includes("process.resourcesPath, 'backend'")
+  ) {
+    throw new Error(
+      "Electron main build output still contains the obsolete packaged backend bundle path. Run `bun run build` before packaging."
+    );
+  }
+
+  if (contents.includes("runtime.nodePath") || contents.includes("NODE_PATH: runtime.nodePath")) {
+    throw new Error(
+      "Electron main build output still contains obsolete packaged NODE_PATH plumbing. Run `bun run build` before packaging."
+    );
+  }
+}
+
 module.exports = function beforePack(context) {
   const projectRoot = path.resolve(__dirname, "../..");
 
@@ -118,6 +144,7 @@ module.exports = function beforePack(context) {
   }
 
   assertElectronBuildFresh(projectRoot);
+  assertPackagedMainRuntimeContract(projectRoot);
 
   if (context?.electronPlatformName !== "darwin") return;
 
@@ -143,3 +170,5 @@ module.exports = function beforePack(context) {
     }
   }
 };
+
+module.exports.assertPackagedMainRuntimeContract = assertPackagedMainRuntimeContract;
