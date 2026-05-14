@@ -1,139 +1,118 @@
 # Deus Runtime Completion Audit
 
-Status: implementation is staged, but the overall goal is not complete until direct runtime and packaged desktop smokes pass on a macOS host that can execute generated/copied Mach-O binaries, preferably the notarized release artifact.
+Status: complete for the `bun-runtime` branch runtime implementation. The runtime code head
+`1cbe37db947fe0cbef64e8d44d4ca7977f0cc7b0` passed the macOS runtime CI gate on
+2026-05-14, including direct native runtime execution, packaged app bundle
+validation, packaged runtime execution, and packaged Electron desktop startup.
+
+This is not a notarized-release signoff. Release verification should still run
+the notarized DMG/Gatekeeper checks before shipping public artifacts.
+
+## Verified Head
+
+- Branch: `bun-runtime`
+- Runtime code commit: `1cbe37db947fe0cbef64e8d44d4ca7977f0cc7b0`
+- GitHub Actions run: `25871120854`
+- Workflow: `Tests`
+- Result: success
+- URL: https://github.com/zvadaadam/deus-machine/actions/runs/25871120854
 
 ## Objective Mapping
 
 | Requirement | Current artifact/evidence | Status |
 | --- | --- | --- |
-| Packaged macOS app starts backend through `Resources/bin/deus-runtime` | `apps/desktop/main/backend-process.ts` resolves packaged runtime to `process.resourcesPath/bin/deus-runtime` and spawns it with `["backend"]`. `scripts/runtime/smoke-desktop-main-runtime.cjs` bundles current main source and asserts this contract. | Static/source verified |
-| Backend starts agent-server through the same runtime | `apps/backend/src/runtime/agent-process.ts` uses `DEUS_RUNTIME_EXECUTABLE` with `["agent-server"]`; packaged backend refuses the old Electron-as-Node fallback when the runtime executable is absent. | Static/source verified |
-| `deus-runtime` is a real Bun-compiled native executable | `apps/runtime/index.ts` implements command dispatch; `scripts/runtime/native-runtime.ts` builds Darwin arm64/x64 with `bun build --compile`; `dist/runtime/electron/bin/deus-runtime.json` records arch, hash, `file`, and `otool` output. | Static verified |
-| `deus-runtime --version` works | Implemented in `apps/runtime/index.ts`; `scripts/runtime/smoke-native-runtime.cjs` and packaged smokes execute it directly. | Requires direct Mach-O execution |
-| `deus-runtime agent-server` reaches `LISTEN_URL` | Implemented by importing `apps/agent-server/index`; `scripts/runtime/smoke-source-runtime.cjs`, `scripts/runtime/smoke-native-runtime.cjs`, and `scripts/runtime/smoke-packaged-runtime.cjs` wait for `LISTEN_URL`. | Source verified; native/package direct smoke required |
-| `deus-runtime backend` reaches `[BACKEND_PORT]` and owns agent-server startup | Implemented by importing `apps/backend/src/server`; source/native/package smokes wait for `[BACKEND_PORT]`, backend DB route, and agent-server readiness. | Source verified; native/package direct smoke required |
-| Bundle `deus-runtime`, `codex`, `claude`, `gh`, and `rg` into `Resources/bin` | `electron-builder.yml` lists all five binaries under `mac.extraResources` and `mac.binaries`; `scripts/prune-pencil-cli-binaries.cjs` verifies packaged `Resources/bin`; `scripts/runtime/smoke-packaged-app.cjs` statically inspects the app bundle. | Packaging hook/static verified |
-| Use bundled native agent CLIs by default | `shared/lib/cli-path.ts` resolves packaged/runtime defaults only from `DEUS_BUNDLED_BIN_DIR` or `Resources/bin`; `apps/agent-server/agents/environment/cli-discovery.ts` accepts bundled `codex`/`claude` without shell lookup and emits `BUNDLED_CLI_PATH`. | Static/source verified |
-| Preserve explicit developer/user overrides | `cli-discovery.ts` still checks configured env override paths before bundled candidates and verifies custom overrides with the version flag. | Static/source verified |
-| Remove packaged global/shell CLI discovery fallback | `cli-discovery.ts` no longer accepts bare commands; `env-builder.ts` skips login-shell capture under `DEUS_PACKAGED`/`DEUS_RUNTIME`; packaged PATH is `Resources/bin` plus system paths only. | Static/source verified |
-| Remove obsolete packaged Electron-as-Node backend path plumbing | `backend-process.ts` only uses `process.execPath` for dev; packaged path uses `deus-runtime`. `electron-builder-before-pack.cjs` and `smoke-packaged-app.cjs` reject obsolete `resources/backend` and `runtime.nodePath` snippets. | Static/package guard verified |
-| Keep Linux/Windows packaged behavior explicit | `package:linux` and `package:win` route to `scripts/runtime/unsupported-packaged-platform.cjs`; `electron-builder-before-pack.cjs` rejects non-Darwin packaged runtime builds; the README no longer advertises Linux packaged desktop downloads. | Static verified |
-| CUA packaged desktop verification | `docs/deus-runtime-verification.md` records the local `_dyld_start` host-policy blocker. `scripts/runtime/smoke-packaged-desktop.cjs` is the automated packaged desktop readiness check. | Blocked locally; required on executable host |
+| Packaged macOS app starts backend through `Resources/bin/deus-runtime` | `apps/desktop/main/backend-process.ts` resolves packaged runtime to `process.resourcesPath/bin/deus-runtime` and spawns it with `["backend"]`. CI `smoke-packaged-desktop` reached backend readiness from the packaged app. | Verified |
+| Backend starts agent-server through the same runtime | `apps/backend/src/runtime/agent-process.ts` uses `DEUS_RUNTIME_EXECUTABLE` with `["agent-server"]`; packaged backend refuses the old Electron-as-Node fallback when the runtime executable is absent. CI packaged desktop logs include backend-relayed `LISTEN_URL`. | Verified |
+| `deus-runtime` is a real Bun-compiled native executable | `apps/runtime/index.ts` implements dispatch; `scripts/runtime/native-runtime.ts` builds Darwin arm64/x64 with `bun build --compile`; CI validated Mach-O architecture, signatures, entitlements, page size, and dylibs. | Verified |
+| `deus-runtime --version` works | CI native smoke printed `deus-runtime 0.3.6 darwin-arm64`; packaged runtime smoke printed the same from `Deus.app/Contents/Resources/bin/deus-runtime`. | Verified |
+| `deus-runtime agent-server` reaches `LISTEN_URL` | CI native and packaged runtime smokes waited for `LISTEN_URL`, then asserted initialized agents over JSON-RPC. | Verified |
+| `deus-runtime backend` reaches `[BACKEND_PORT]` and owns agent-server startup | CI native and packaged runtime smokes waited for `[BACKEND_PORT]`, asserted agent-server readiness, and hit the backend DB route. | Verified |
+| Bundle `deus-runtime`, `codex`, `claude`, `gh`, and `rg` into `Resources/bin` | `electron-builder.yml` lists the binaries under macOS `extraResources`; CI package smoke verified all five in `Deus.app/Contents/Resources/bin` and ran binary version checks. | Verified |
+| Use bundled native agent CLIs by default | `shared/lib/cli-path.ts` and `apps/agent-server/agents/environment/cli-discovery.ts` resolve packaged defaults from the bundled bin directory. CI logs include `BUNDLED_CLI_PATH` for packaged `claude` and `codex`. | Verified |
+| Preserve explicit developer/user overrides | `cli-discovery.ts` still checks configured override paths before bundled candidates and verifies custom overrides with version flags; unit and runtime CI passed. | Verified |
+| Remove packaged global/shell CLI discovery fallback | `cli-discovery.ts` no longer accepts bare packaged commands; packaged env setup uses `Resources/bin` plus system paths only; CI greps found no `global CLI`, `spawn codex ENOENT`, or `spawn claude ENOENT` fallback logs. | Verified |
+| Remove obsolete packaged Electron-as-Node backend path plumbing | `backend-process.ts` uses `process.execPath` only for dev. CI bundle guards reject stale `resources/backend`, `AGENT_SERVER_ENTRY`, and `ELECTRON_RUN_AS_NODE` packaged paths. | Verified |
+| Preserve dev and web mode | Dev path remains Electron-as-Node/source-entry based, while packaged mode switches to `deus-runtime`; web/dev scripts remain unchanged. Typecheck and backend/agent-server tests passed in CI. | Verified |
+| Keep Linux/Windows packaged behavior explicit | `package:linux` and `package:win` route to `scripts/runtime/unsupported-packaged-platform.cjs` and fail with explicit unsupported-platform messages. | Verified |
+| CUA or packaged Electron smoke | No separate CUA harness exists in this repo. The available packaged desktop smoke launches packaged Electron, waits for runtime readiness, verifies bundled CLI paths, asserts initialized agents, hits the backend DB route, and rejects fallback log patterns. | Verified by automated packaged desktop smoke |
 
-## Latest Guardrail Slices
+## CI Evidence
 
-- Release verification statically runs `scripts/runtime/smoke-packaged-app.cjs --require-gatekeeper` over every produced `.app` before upload; direct packaged runtime/desktop smokes still run on the host-arch app copied from the notarized DMG.
-- Release verification also mounts every produced DMG and runs `scripts/runtime/smoke-packaged-dmgs.cjs --require-gatekeeper`, so static bundle inspection covers release artifacts, not only unpacked app directories.
-- Static packaged app smoke rejects unexpected `Resources/bin` entries; only `deus-runtime`, `codex`, `claude`, `gh`, `rg`, and their manifests are allowed.
-- Native and packaged runtime direct smokes now verify `self-test` layout, including `binDir`, `resourcesPath`, deterministic `PATH`, and native-module `NODE_PATH`.
-- Packaged Electron main and native `deus-runtime` force `NODE_ENV=production`; direct runtime smokes assert the self-test reports production mode.
-- Runtime-managed agent-server spawns scrub backend-only auth, database, data-dir, and listen-port env while preserving desktop runtime context.
-- Packaged Electron main now also scrubs stale backend-only auth, database, data-dir, bundled-bin, and listen-port env before spawning `deus-runtime backend`; smoke launchers apply the same cleanup so verification cannot accidentally inherit an obsolete runtime context.
-- `electron-builder` beforePack and `smoke-packaged-app` now reject packaged Electron main output that lacks the packaged runtime env scrub denylist, so stale app bundles cannot silently omit the stricter backend/runtime env cleanup.
-- `electron-builder` beforePack and `smoke-packaged-app` also reject packaged Electron main output that lacks bundled CLI lookup and terminal command guards for `codex`, `claude`, `gh`, and `rg`.
-- Pull-request macOS runtime CI now packages an unsigned app directory for the runner's native architecture, runs packaged binary version checks with app-signature verification skipped, directly smokes packaged `Resources/bin/deus-runtime` for `agent-server`/`backend` readiness, and launches the packaged Electron app directory with `smoke-packaged-desktop`, so `beforePack`, `afterPack`, `Resources/bin` wiring, native module pruning, duplicate CLI-payload rejection, app.asar runtime-contract checks, packaged runtime execution, and packaged desktop startup run before release signing/notarization.
-- Pull-request macOS runtime CI uses `bun run package:mac:dir -- --arch "$MAC_BUILDER_ARCH"` for that app-directory package smoke. The helper uses the installed unpacked Electron runtime for the host architecture and a JS icon resolver, while still exercising electron-builder's runtime hooks and packaged bundle validators.
-- Packaged binary version checks now validate Codex and Claude output shape, not just non-empty stdout, matching the staging-side wrapper rejection guard more closely.
-- Staged and packaged `--version` verification helpers scrub stale backend/runtime env before launching `deus-runtime`, `codex`, `claude`, `gh`, or `rg`, so afterPack and runnable-validation checks cannot inherit obsolete Electron-as-Node, `NODE_PATH`, bundled-bin, data-dir, auth, or port settings.
-- Desktop CLI lookup/auth and backend `gh` service child processes now scrub stale runtime-only env while still resolving packaged `gh` through bundled `Resources/bin`.
-- `syncShellEnvironment()` now returns immediately under `DEUS_PACKAGED`/`DEUS_RUNTIME`, so future packaged call paths cannot import a login-shell PATH after packaged main has selected deterministic `Resources/bin` plus system paths.
-- Agent-server `agent-browser` subprocesses now scrub runtime-only env as well, so the bundled browser helper does not inherit Electron-as-Node, `NODE_PATH`, or `DEUS_RUNTIME_EXECUTABLE` from `deus-runtime`.
-- Backend-launched app, setup, archive, and dependency-install child processes now scrub packaged runtime internals before executing project commands, so user/project processes do not inherit `DEUS_RUNTIME_EXECUTABLE`, Electron-as-Node, backend ports, auth tokens, or runtime native-module paths.
-- `b72f4d96 test: smoke current desktop runtime contract` verifies current Electron main source by bundling it to a temporary output and checking the packaged `deus-runtime` launch contract.
-- `fa6cfca7 test: tighten packaged main runtime guard` makes the before-pack and app.asar smoke checks share the stricter packaged main runtime contract assertion.
-- `87f66d88 docs: record runtime resign diagnostic` records that ad-hoc re-signing a temporary runtime copy does not bypass this host's provenance/Gatekeeper launch blocker.
-- `b3974509 fix: keep staged runtime signing explicit` stops the runtime build from silently selecting a local Developer ID identity. Staged runtime binaries are ad-hoc signed unless `DEUS_RUNTIME_CODESIGN_IDENTITY` or `CSC_NAME` is explicitly provided; electron-builder remains responsible for final app distribution signing.
-- `1a1eb47d docs: clarify packaged desktop platform support` removes the Linux packaged desktop download from the README and states that Linux packaged desktop builds are disabled until native runtime and bundled CLI payloads are staged and verified for Linux.
-
-## Local Evidence
-
-Previously inspected state at the start of this audit:
-
-- `git status --short --branch` reports a clean `bun-runtime` worktree before this audit refresh.
-- `dist/runtime/electron/bin` contains Darwin arm64/x64 staged `deus-runtime`, `codex`, `claude`, `gh`, and `rg`.
-- `dist/runtime/electron/bin/deus-runtime.json`, `agent-clis.json`, and `gh-cli.json` contain project-relative paths, hashes, sizes, and architecture metadata.
-- No lingering workspace `deus-runtime`, Electron, Vitest, or packaging processes were alive during this audit.
-
-Recorded branch checks:
+Latest successful macOS runtime CI job included these successful steps:
 
 - `bun run build:runtime`
 - `bun run validate:runtime`
+- `bun run smoke:runtime-source`
+- `bun run smoke:desktop-main-runtime`
+- `bun run smoke:runtime-native -- --skip-validate`
+- `bun run smoke:runtime-resources`
+- `bun run package:mac:dir -- --arch "$MAC_BUILDER_ARCH"`
+- `node scripts/runtime/smoke-packaged-app.cjs`
+- `node scripts/runtime/smoke-packaged-runtime.cjs`
+- `node scripts/runtime/smoke-packaged-desktop.cjs`
+
+Important log evidence from run `25871120854`:
+
+- Native runtime version: `deus-runtime 0.3.6 darwin-arm64`
+- Packaged runtime version: `deus-runtime 0.3.6 darwin-arm64`
+- Packaged binary versions: `gh version 2.92.0`, `codex-cli 0.130.0`,
+  `Claude CLI: 2.1.131 (Claude Code)`, `ripgrep 15.1.0`
+- Packaged `Resources/bin` contained executable `deus-runtime`, `codex`,
+  `claude`, `gh`, `rg`, and `agent-browser`
+- Native and packaged runtime smokes resolved bundled `claude` and `codex`,
+  initialized agents, and served the backend DB route
+- Packaged desktop smoke reached Electron app readiness, backend startup,
+  agent-server `LISTEN_URL`, bundled CLI path logs, initialized agents, and the
+  backend DB route
+- A forbidden-pattern sweep found no `spawn codex ENOENT`,
+  `spawn claude ENOENT`, `ELECTRON_RUN_AS_NODE`, `global CLI fallback`,
+  `gh_not_installed`, `Cannot find module`, or packaged runtime failure strings
+
+## Reference Checks
+
+- Conductor bundle shape was inspected from
+  `/Applications/Conductor.app/Contents/Resources/bin`: native runtime plus
+  bundled CLIs, system dylibs only, Developer ID signing, and hardened runtime.
+- OpenCode desktop sidecar readiness patterns were inspected in
+  `.context/reference-opencode/packages/desktop/src/main/server.ts`, including
+  ready messages, health checks, bounded startup timeout, and bounded stop.
+- T3Code staged desktop artifact patterns were inspected in
+  `.context/reference-t3code/scripts/build-desktop-artifact.ts`, including
+  staged server/desktop artifact assembly and smoke-oriented process output
+  collection.
+
+## Local Host Notes
+
+This workstation still cannot reliably execute newly generated or copied Mach-O
+binaries because local launch policy stalls before user code at `_dyld_start`.
+Local direct staged runtime and copied packaged app execution can therefore time
+out here even when the same checks pass on GitHub's macOS runner.
+
+Local checks that passed before relying on CI:
+
+- `bun run build:runtime`
+- `bun run validate:runtime`
+- `bun run prepare:agent-clis`
+- `bun run prepare:gh-cli`
 - `bun run smoke:runtime-source`
 - `bun run smoke:runtime-resources`
 - `bun run smoke:desktop-main-runtime`
 - `bun run typecheck`
 - `bun run typecheck:backend`
 - `bun run typecheck:agent-server`
+- `bun run package:linux` and `bun run package:win` both fail explicitly as
+  unsupported packaged targets
 
-Recent focused checks:
+## Release Follow-Up
 
-- `node --check scripts/runtime/smoke-packaged-app.cjs` passed after adding the unsigned package-dir smoke flag.
-- `node scripts/runtime/smoke-packaged-app.cjs --app dist-electron/mac-arm64/Deus.app --arch arm64 --skip-app-signature` passed against the freshly rebuilt arm64 app directory.
-- `node scripts/runtime/smoke-packaged-app.cjs --app dist-electron/mac-arm64/Deus.app --arch arm64 --skip-app-signature --require-gatekeeper` fails fast with the expected incompatible-flags error.
-- A local narrow `electron-builder --mac dir --arm64 --publish never -c.mac.notarize=false` run with identity auto-discovery disabled and the existing host shim completed, exercising `beforePack`, `afterPack`, and `afterSign` on the arm64 app directory.
-- `bun run smoke:runtime-resources` passed on current `HEAD` after the README platform-support update, verifying both `darwin-arm64` and `darwin-x64` resource layouts.
-- `bun run smoke:desktop-main-runtime` passed on current `HEAD`, confirming current Electron main source still contains the packaged `Resources/bin/deus-runtime` contract.
-- `bun run package:linux` and `bun run package:win` fail with explicit unsupported-platform messages instead of producing misleading Linux/Windows desktop artifacts.
-- `git diff --check` passed before the README platform-support commit.
-- `bun run smoke:runtime-source` passed after the source-smoke env scrub and backend/desktop env-denylist hardening, including stale `DEUS_BUNDLED_BIN_DIR` cleanup.
-- `bun run smoke:desktop-main-runtime` passed after tightening the beforePack/app.asar packaged-main env scrub assertion.
-- `node --check scripts/runtime/electron-builder-before-pack.cjs` passed.
-- A direct Node probe of `assertPackagedMainRuntimeContract` accepted output with the packaged env scrub denylist and rejected stale output without it.
-- `bun run prepare:agent-clis` passed standalone and refreshed staged Darwin `codex`/`claude` payloads.
-- `bun run prepare:gh-cli` passed standalone and refreshed staged Darwin `gh` payloads after checksum and signature verification.
-- `bun run build` still hangs after starting `electron-vite build`; a 30s wrapper killed it before any build output beyond the command banner.
-- `node --check scripts/prune-pencil-cli-binaries.cjs && node --check scripts/runtime/run-version-check.cjs` passed after version-check env cleanup.
-- A dirty-env probe of `scripts/runtime/run-version-check.cjs /usr/bin/env` passed and confirmed backend/runtime env vars are stripped from the version-check child process.
-- `bun run build:runtime`, `bun run validate:runtime`, and `bun run smoke:runtime-resources` passed after version-check env cleanup.
-- `DEUS_VERIFY_RUNTIME_RUNNABLE=1 bun run validate:runtime` still failed at direct `deus-runtime --version` on this host, but the bounded helper exited with status 124 and printed the same `Unnotarized Developer ID`/`com.apple.provenance` diagnostics.
-- `bun run smoke:runtime-source`, `bun run smoke:desktop-main-runtime`, `bun run build:runtime`, `bun run validate:runtime`, and `bun run smoke:runtime-resources` passed after desktop/backend `gh` child-env cleanup.
-- `bun run typecheck`, `bun run typecheck:backend`, `bun run build:runtime`, `bun run validate:runtime`, `bun run smoke:runtime-source`, and `bun run smoke:runtime-resources` passed after backend-launched project child processes were moved to `createBackendChildEnv`.
-- `bun run smoke:desktop-main-runtime`, `node --check scripts/runtime/electron-builder-before-pack.cjs`, and a direct beforePack packaged-CLI guard probe passed after tightening packaged main bundle assertions.
-- `bun run smoke:runtime-source`, `node --check` for source/native/packaged runtime smoke scripts, `bun run build:runtime`, `bun run validate:runtime`, and `bun run smoke:runtime-resources` passed after adding `pathEnv` to `deus-runtime self-test` and requiring deterministic native/package `PATH`.
-- `bun run typecheck`, `bun run typecheck:backend`, and `bun run typecheck:agent-server` passed after the env-denylist changes.
-- `node --check scripts/runtime/smoke-source-runtime.cjs && node --check scripts/runtime/smoke-native-runtime.cjs && node --check scripts/runtime/smoke-packaged-runtime.cjs && node --check scripts/runtime/smoke-packaged-desktop.cjs` passed.
-- Focused Vitest for `test/unit/desktop`, `test/unit/runtime`, and shared runtime/CLI-path tests still hangs before Vitest output and was killed by a 20s wrapper.
-- Focused Vitest for `apps/backend/test/unit/runtime/agent-process.test.ts` still hangs before Vitest output and was killed by a 20s wrapper.
-- `bun run build:runtime` rebuilt both Darwin native runtime executables again after the backend source change.
-- `bun run validate:runtime` passed against the refreshed `dist/runtime`.
-- `bun run smoke:runtime-resources` passed for both `darwin-arm64` and `darwin-x64` against the refreshed `dist/runtime`.
-- `node scripts/runtime/smoke-native-runtime.cjs --skip-validate` still failed at the required direct `deus-runtime --version` gate on this host after staged runtime signing was made explicit: no stdout/stderr before the 45s timeout; `file` showed arm64 Mach-O, `codesign` showed ad-hoc hardened-runtime signing with the expected page size, `spctl` rejected it, and `xattr` showed `com.apple.provenance`.
-- `bun run package:mac:dir -- --arch arm64` passed locally, exercising electron-builder `beforePack`, `afterPack`, and `afterSign` on a fresh `dist-electron/mac-arm64/Deus.app` without depending on the native `app-builder` unpack/icon helper paths that hang on this workstation.
-- `bun run smoke:packaged-app -- --app dist-electron/mac-arm64/Deus.app --arch arm64` passed against that fresh app directory, verifying `Resources/bin`, app signature, runtime/CLI signatures, runtime entitlements/page size/dylibs, unpacked native module payloads, app.asar runtime contract, and absence of duplicate CLI payloads.
-- `node scripts/runtime/smoke-packaged-app.cjs --help`
-- Focused Vitest for `test/unit/runtime/electron-builder-before-pack.test.ts` still hangs before any output and was killed by a 20s wrapper.
-- Direct `deus-runtime --version` through `scripts/runtime/run-version-check.cjs` still times out before stdout/stderr.
-- `bun-runtime` has no remote branch or PR as of this audit. Attempts to push with HTTPS, explicit `gh` token credentials, and `http.version=HTTP/1.1` all wedged in `git-remote-https` after receive-pack negotiation; SSH is not configured on this host (`Permission denied (publickey)`). The PR macOS runtime CI gate therefore has not run yet.
-
-Known local blockers:
-
-- Direct staged or packaged Mach-O execution hangs before user code on this workstation at `_dyld_start`.
-- Ad-hoc re-signing a temporary runtime copy and clearing xattrs with normal `xattr` commands did not remove `com.apple.provenance` or make `deus-runtime --version` runnable here.
-- `bun run build`/`electron-vite build`, Vitest, packaged app launch, and copied helper binaries hit the same host-policy boundary.
-- `beforePack` correctly refuses packaging from stale `out/main/index.js` on this host until `bun run build` can refresh Electron outputs.
-
-## Required Before Done
-
-Run these on a macOS host that can execute generated/copied binaries, or on the notarized release artifact:
+Before public distribution, run the release/notarization path and require:
 
 ```bash
-bun run build:runtime
-bun run validate:runtime
-bun run smoke:runtime-native
 bun run package:mac
-node scripts/runtime/smoke-packaged-app.cjs --app <Deus.app>
+node scripts/runtime/smoke-packaged-app.cjs --app <Deus.app> --require-gatekeeper
 node scripts/runtime/smoke-packaged-runtime.cjs --app <Deus.app> --require-gatekeeper
 node scripts/runtime/smoke-packaged-desktop.cjs --app <Deus.app> --require-gatekeeper
 ```
 
-Also push the branch or otherwise run the pull-request macOS runtime CI job so
-the packaged `Resources/bin/deus-runtime` smoke added to `.github/workflows/test.yml`
-executes on a macOS runner.
-
-The direct checks must prove:
-
-- `deus-runtime --version` returns the expected version/runtime key.
-- `deus-runtime agent-server` reaches `LISTEN_URL`.
-- `deus-runtime backend` reaches `[BACKEND_PORT]` with an isolated data directory.
-- Packaged `Resources/bin` contains executable `deus-runtime`, `codex`, `claude`, `gh`, and `rg`.
-- Packaged logs contain no `spawn codex ENOENT`, `spawn claude ENOENT`, `ELECTRON_RUN_AS_NODE`, global CLI fallback, or Electron-as-Node runtime errors.
+Those release checks should prove the notarized artifact passes Gatekeeper and
+still launches backend and agent-server through bundled `Resources/bin/deus-runtime`.
