@@ -531,6 +531,10 @@ function verifyPackagedRuntimeExternalModules(resourcesDir, targetArch, options 
       path.join(nodePtyPackageRoot, "prebuilds", `darwin-${targetArch}`, "spawn-helper"),
     ];
     requiredFiles.push([
+      `better-sqlite3 native binding for darwin-${targetArch}`,
+      betterSqliteNative,
+    ]);
+    requiredFiles.push([
       `@napi-rs/canvas native package for darwin-${targetArch}`,
       path.join(unpackedNodeModules, "@napi-rs", `canvas-darwin-${targetArch}`, "package.json"),
     ]);

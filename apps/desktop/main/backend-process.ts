@@ -108,10 +108,11 @@ function terminateBackend(): Promise<void> {
 
   return new Promise((resolve) => {
     let finished = false;
+    let forceTimer: ReturnType<typeof setTimeout> | null = null;
     const finish = () => {
       if (finished) return;
       finished = true;
-      clearTimeout(forceTimer);
+      if (forceTimer) clearTimeout(forceTimer);
       if (backendProcess === child) backendProcess = null;
       resolve();
     };
@@ -119,7 +120,7 @@ function terminateBackend(): Promise<void> {
     child.once("exit", finish);
     child.kill("SIGTERM");
 
-    const forceTimer = setTimeout(() => {
+    forceTimer = setTimeout(() => {
       if (child.exitCode === null && child.signalCode === null) {
         child.kill("SIGKILL");
       }
@@ -168,7 +169,7 @@ export async function spawnBackend(
   }
   const dbPath = join(app.getPath("userData"), DEUS_DB_FILENAME);
 
-  const sharedEnv = {
+  const sharedEnv: NodeJS.ProcessEnv = {
     DATABASE_PATH: dbPath,
     PATH: buildRuntimePath(runtime),
     ...(runtime.resourcesPath
@@ -182,6 +183,9 @@ export async function spawnBackend(
         }),
     ...(runtime.bundledBinDir ? { DEUS_BUNDLED_BIN_DIR: runtime.bundledBinDir } : {}),
   };
+  if (runtime.runtimeExecutable) {
+    sharedEnv.NODE_ENV = "production";
+  }
 
   return new Promise((resolve, reject) => {
     let settled = false;

@@ -100,15 +100,16 @@ function writeGhFixtures(projectRoot: string): void {
   const targets = [];
   for (const runtimeKey of ["darwin-arm64", "darwin-x64"]) {
     const ghPath = path.join(projectRoot, "dist", "runtime", "electron", "bin", runtimeKey, "gh");
+    const relativeGhPath = path.relative(projectRoot, ghPath).split(path.sep).join("/");
     writeExecutable(ghPath, "gh");
     const fileArch = runtimeKey === "darwin-x64" ? "x86_64" : "arm64";
     targets.push({
       tool: "gh",
       runtimeKey,
-      path: path.relative(projectRoot, ghPath).split(path.sep).join("/"),
+      path: relativeGhPath,
       sha256: createHash("sha256").update("gh").digest("hex"),
       size: 2,
-      fileOutput: `${ghPath}: Mach-O 64-bit executable ${fileArch}`,
+      fileOutput: `${relativeGhPath}: Mach-O 64-bit executable ${fileArch}`,
       source: {
         version: "test",
         archiveName: "test.zip",
@@ -170,6 +171,11 @@ describe("validateRuntimeStage", () => {
     writeProjectFixture(projectRoot);
 
     stageRuntime({ projectRoot, log: () => {} });
+    writeGhFixtures(projectRoot);
+    rmSync(
+      path.join(projectRoot, "dist", "runtime", "electron", "bin", "darwin-arm64", "gh"),
+      { force: true }
+    );
 
     expect(() => validateRuntimeStage({ projectRoot, log: () => {} })).toThrow(
       /Missing darwin-arm64\/gh/
