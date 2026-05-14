@@ -8,12 +8,18 @@ import { afterEach, describe, expect, it } from "vitest";
 const require = createRequire(import.meta.url);
 const {
   binaryNamesForTarget,
+  pruneNodePtyRuntimeBinaries,
   prunePencilCliBinaries,
   verifyPackagedRuntimeExternalModules,
   verifyPackagedRuntimeManifests,
 } =
   require("../../../scripts/prune-pencil-cli-binaries.cjs") as {
     binaryNamesForTarget: (platform: string, arch: string | number) => Set<string>;
+    pruneNodePtyRuntimeBinaries: (context: {
+      electronPlatformName: string;
+      arch: string | number;
+      resourcesDir: string;
+    }) => { removed: number; kept: number };
     prunePencilCliBinaries: (context: {
       electronPlatformName: string;
       arch: string | number;
@@ -166,6 +172,28 @@ function writeRuntimeExternalModuleFixture(resourcesDir: string): void {
   );
 }
 
+function writeNodePtyPruneFixture(resourcesDir: string): string {
+  const nodePtyRoot = path.join(
+    resourcesDir,
+    "app.asar.unpacked",
+    "node_modules",
+    "node-pty"
+  );
+  for (const fileParts of [
+    ["build", "Release", "pty.node"],
+    ["build", "Release", "spawn-helper"],
+    ["prebuilds", "darwin-arm64", "pty.node"],
+    ["prebuilds", "darwin-arm64", "spawn-helper"],
+    ["prebuilds", "darwin-x64", "pty.node"],
+    ["prebuilds", "darwin-x64", "spawn-helper"],
+  ]) {
+    const filePath = path.join(nodePtyRoot, ...fileParts);
+    mkdirSync(path.dirname(filePath), { recursive: true });
+    writeFileSync(filePath, fileParts.join("/"));
+  }
+  return nodePtyRoot;
+}
+
 afterEach(() => {
   for (const root of tempRoots.splice(0)) {
     rmSync(root, { recursive: true, force: true });
@@ -259,6 +287,44 @@ describe("prune-pencil-cli-binaries", () => {
     );
     expect(() => verifyPackagedRuntimeExternalModules(resourcesDir, "arm64")).toThrow(
       /@napi-rs\/canvas package/
+    );
+  });
+
+  it("prunes node-pty build output so packaged runtime resolves target prebuilds", () => {
+    const resourcesDir = createTempRoot("deus-node-pty-prune");
+    tempRoots.push(resourcesDir);
+    const nodePtyRoot = writeNodePtyPruneFixture(resourcesDir);
+
+    expect(
+      pruneNodePtyRuntimeBinaries({
+        electronPlatformName: "darwin",
+        arch: "arm64",
+        resourcesDir,
+      })
+    ).toEqual({ removed: 2, kept: 1 });
+
+    expect(readdirSync(path.join(nodePtyRoot, "prebuilds"))).toEqual(["darwin-arm64"]);
+    expect(() => readdirSync(path.join(nodePtyRoot, "build"))).toThrow();
+  });
+
+  it("rejects packaged node-pty build output before target prebuilds", () => {
+    const resourcesDir = createTempRoot("deus-node-pty-stale-build");
+    tempRoots.push(resourcesDir);
+    writeRuntimeExternalModuleFixture(resourcesDir);
+    const staleBuild = path.join(
+      resourcesDir,
+      "app.asar.unpacked",
+      "node_modules",
+      "node-pty",
+      "build",
+      "Release",
+      "pty.node"
+    );
+    mkdirSync(path.dirname(staleBuild), { recursive: true });
+    writeFileSync(staleBuild, "electron-abi-build");
+
+    expect(() => verifyPackagedRuntimeExternalModules(resourcesDir, "arm64")).toThrow(
+      /node-pty build output/
     );
   });
 

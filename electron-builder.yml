@@ -4,6 +4,7 @@ directories:
   buildResources: resources
   output: dist-electron
 electronLanguages: [en]
+npmRebuild: false
 beforePack: "scripts/runtime/electron-builder-before-pack.cjs"
 afterPack: "scripts/prune-pencil-cli-binaries.cjs"
 afterSign: "scripts/verify-packaged-agent-clis.cjs"
