@@ -11,6 +11,20 @@ const RUNTIME_NAME = "deus-runtime";
 const DARWIN_RUNTIME_KEYS = new Set(["darwin-arm64", "darwin-x64"]);
 const PACKAGED_SYSTEM_PATHS = ["/usr/bin", "/bin", "/usr/sbin", "/sbin"];
 const REQUIRED_BINARIES = ["deus-runtime", "codex", "claude", "gh", "rg"] as const;
+const REQUIRED_RUNTIME_IMPORTS = [
+  {
+    name: "@anthropic-ai/claude-agent-sdk",
+    load: () => import("@anthropic-ai/claude-agent-sdk"),
+  },
+  {
+    name: "@openai/codex-sdk",
+    load: () => import("@openai/codex-sdk"),
+  },
+  {
+    name: "@hono/node-server",
+    load: () => import("@hono/node-server"),
+  },
+] as const;
 
 type RuntimeCommand = "agent-server" | "backend" | "self-test";
 
@@ -137,6 +151,24 @@ function inspectBundledBinary(binDir: string, name: (typeof REQUIRED_BINARIES)[n
   return { path: filePath, exists, executable };
 }
 
+async function inspectRuntimeImports() {
+  const results: Record<string, { ok: boolean; error?: string }> = {};
+
+  for (const item of REQUIRED_RUNTIME_IMPORTS) {
+    try {
+      await item.load();
+      results[item.name] = { ok: true };
+    } catch (error) {
+      results[item.name] = {
+        ok: false,
+        error: error instanceof Error ? error.message : String(error),
+      };
+    }
+  }
+
+  return results;
+}
+
 function configureRuntimeEnv(command: RuntimeCommand, dataDir?: string): void {
   const layout = resolveRuntimeLayout();
   const isNativeRuntimeExecutable = basename(layout.executablePath) === RUNTIME_NAME;
@@ -203,12 +235,16 @@ async function run(command: RuntimeCommand, dataDir?: string): Promise<void> {
     const binaries = Object.fromEntries(
       REQUIRED_BINARIES.map((name) => [name, inspectBundledBinary(layout.bundledBinDir, name)])
     );
+    const imports = await inspectRuntimeImports();
     const missing = Object.entries(binaries)
       .filter(([, result]) => !result.exists || !result.executable)
       .map(([name]) => name);
+    const failedImports = Object.entries(imports)
+      .filter(([, result]) => !result.ok)
+      .map(([name]) => name);
     console.log(
       JSON.stringify({
-        ok: missing.length === 0,
+        ok: missing.length === 0 && failedImports.length === 0,
         version: VERSION,
         executable: layout.executablePath,
         binDir: layout.bundledBinDir,
@@ -217,10 +253,12 @@ async function run(command: RuntimeCommand, dataDir?: string): Promise<void> {
         nodeGlobalPaths: NodeModule.globalPaths,
         runtimeKey: getRuntimeKey(),
         binaries,
+        imports,
         missing,
+        failedImports,
       })
     );
-    if (missing.length > 0) process.exit(1);
+    if (missing.length > 0 || failedImports.length > 0) process.exit(1);
     return;
   }
 
