@@ -1,8 +1,13 @@
 const { spawn } = require("node:child_process");
 const path = require("node:path");
 
-const timeoutMs = Number(process.env.DEUS_VERSION_CHECK_TIMEOUT_MS || 20_000);
-const stopTimeoutMs = Number(process.env.DEUS_VERSION_CHECK_STOP_TIMEOUT_MS || 5_000);
+function parsePositiveInteger(value, fallback) {
+  const parsed = Number(value);
+  return Number.isFinite(parsed) && parsed > 0 ? Math.floor(parsed) : fallback;
+}
+
+const timeoutMs = parsePositiveInteger(process.env.DEUS_VERSION_CHECK_TIMEOUT_MS, 20_000);
+const stopTimeoutMs = parsePositiveInteger(process.env.DEUS_VERSION_CHECK_STOP_TIMEOUT_MS, 5_000);
 const VERSION_CHECK_ENV_DENYLIST = [
   "AGENT_SERVER_CWD",
   "AGENT_SERVER_ENTRY",

@@ -6,7 +6,22 @@ const { execFileSync, spawn, spawnSync } = require("node:child_process");
 const { assertInitializedAgents, readAgentServerListenUrl } = require("./runtime-smoke-rpc.cjs");
 
 const PROJECT_ROOT = path.resolve(__dirname, "../..");
-const DEFAULT_APP_PATH = path.join(PROJECT_ROOT, "dist-electron", "mac-arm64", "Deus.app");
+function resolveDefaultAppPath() {
+  const candidates =
+    process.arch === "arm64"
+      ? ["mac-arm64", "mac"]
+      : process.arch === "x64"
+        ? ["mac-x64", "mac"]
+        : ["mac"];
+
+  for (const directory of candidates) {
+    const appPath = path.join(PROJECT_ROOT, "dist-electron", directory, "Deus.app");
+    if (fs.existsSync(appPath)) return appPath;
+  }
+  return path.join(PROJECT_ROOT, "dist-electron", candidates[0], "Deus.app");
+}
+
+const DEFAULT_APP_PATH = resolveDefaultAppPath();
 const STARTUP_TIMEOUT_MS = 45_000;
 const STOP_TIMEOUT_MS = 5_000;
 const PACKAGED_SYSTEM_PATHS = ["/usr/bin", "/bin", "/usr/sbin", "/sbin"];
@@ -161,11 +176,12 @@ function macExecutionPolicyHint(diagnostics) {
 function runtimeEnv(binDir) {
   const env = {
     ...process.env,
-    PATH: [binDir, ...PACKAGED_SYSTEM_PATHS].join(path.delimiter),
   };
   for (const key of RUNTIME_ENV_DENYLIST) {
     delete env[key];
   }
+  env.DEUS_BUNDLED_BIN_DIR = binDir;
+  env.PATH = [binDir, ...PACKAGED_SYSTEM_PATHS].join(path.delimiter);
   return env;
 }
 
