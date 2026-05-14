@@ -66,6 +66,7 @@ export interface DeusRuntimeManifest {
   version: 1;
   builtAt: string;
   bunVersion: string;
+  packageVersion: string;
   entries: RuntimeManifestEntry[];
 }
 
@@ -122,6 +123,15 @@ function execOutput(command: string, args: string[], cwd: string): string {
   }).trim();
 }
 
+function readPackageVersion(projectRoot: string): string {
+  const packageJsonPath = path.join(projectRoot, "package.json");
+  const packageJson = JSON.parse(readFileSync(packageJsonPath, "utf8")) as { version?: unknown };
+  if (typeof packageJson.version !== "string" || packageJson.version.length === 0) {
+    throw new Error(`package.json is missing a string version: ${packageJsonPath}`);
+  }
+  return packageJson.version;
+}
+
 function latestSourceMtime(projectRoot: string, sourceRelatives: string[]) {
   let latest: { mtimeMs: number; path: string | null } = { mtimeMs: 0, path: null };
 
@@ -155,7 +165,6 @@ function assertRuntimeFresh(projectRoot: string, executablePath: string, runtime
     "apps/backend/src",
     "apps/agent-server",
     "shared",
-    "package.json",
     "resources/entitlements.runtime.plist",
   ]);
   if (!latestSource.path) return;
@@ -324,6 +333,7 @@ export function buildDeusRuntime(options: BuildDeusRuntimeOptions = {}): DeusRun
   const projectRoot = options.projectRoot ?? defaultProjectRoot;
   const entry = path.join(projectRoot, "apps", "runtime", "index.ts");
   const bunVersion = execOutput("bun", ["--version"], projectRoot);
+  const packageVersion = readPackageVersion(projectRoot);
   const entries: RuntimeManifestEntry[] = [];
 
   for (const target of DEUS_RUNTIME_TARGETS) {
@@ -387,6 +397,7 @@ export function buildDeusRuntime(options: BuildDeusRuntimeOptions = {}): DeusRun
     version: 1,
     builtAt: new Date().toISOString(),
     bunVersion,
+    packageVersion,
     entries,
   };
   const manifestPath = resolveDeusRuntimeManifestPath(projectRoot);
@@ -417,6 +428,14 @@ export function validateDeusRuntime(options: ValidateDeusRuntimeOptions = {}): D
   }
 
   const manifest = JSON.parse(readFileSync(manifestPath, "utf8")) as DeusRuntimeManifest;
+  const packageVersion = readPackageVersion(projectRoot);
+  if (manifest.packageVersion !== packageVersion) {
+    throw new Error(
+      `Native runtime manifest package version mismatch: expected ${packageVersion}, found ${
+        manifest.packageVersion ?? "missing"
+      }. Run \`bun run build:runtime\` before packaging.`
+    );
+  }
   const runtimeKeys = options.runtimeKey
     ? [options.runtimeKey]
     : DEUS_RUNTIME_TARGETS.map((target) => target.runtimeKey);
