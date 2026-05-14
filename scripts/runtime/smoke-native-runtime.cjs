@@ -428,6 +428,9 @@ async function smokeNativeRuntime(options) {
   if (selfTest.ok !== true) {
     throw new Error(`Native runtime self-test failed: ${JSON.stringify(selfTest)}`);
   }
+  if (selfTest.nodeEnv !== "production") {
+    throw new Error(`Native runtime self-test expected NODE_ENV=production: ${selfTest.nodeEnv}`);
+  }
   if (path.resolve(String(selfTest.binDir || "")) !== path.resolve(binDir)) {
     throw new Error(
       `Native runtime self-test resolved unexpected binDir: ${selfTest.binDir}; expected ${binDir}`

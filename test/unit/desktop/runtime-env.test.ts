@@ -32,6 +32,7 @@ describe("desktop packaged runtime environment", () => {
     });
 
     expect(env.DEUS_PACKAGED).toBe("1");
+    expect(env.NODE_ENV).toBe("production");
     expect(env.DEUS_RESOURCES_PATH).toBe("/Applications/Deus.app/Contents/Resources");
     expect(env.DEUS_BUNDLED_BIN_DIR).toBe("/Applications/Deus.app/Contents/Resources/bin");
     expect(env.PATH).toBe(
