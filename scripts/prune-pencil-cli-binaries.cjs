@@ -108,6 +108,51 @@ function prunePencilCliBinaries(context) {
   return totals;
 }
 
+function pruneNodePtyRuntimeBinaries(context) {
+  if (context.electronPlatformName !== "darwin") return { removed: 0, kept: 0 };
+
+  const targetArch = ARCH_BY_BUILDER_VALUE.get(context.arch);
+  if (!targetArch) return { removed: 0, kept: 0 };
+
+  const resourcesDir = context.resourcesDir ?? resourcesDirForContext(context);
+  const nodePtyRoot = path.join(
+    resourcesDir,
+    "app.asar.unpacked",
+    "node_modules",
+    "node-pty"
+  );
+  if (!fs.existsSync(nodePtyRoot)) return { removed: 0, kept: 0 };
+
+  let removed = 0;
+  let kept = 0;
+  const buildDir = path.join(nodePtyRoot, "build");
+  if (fs.existsSync(buildDir)) {
+    fs.rmSync(buildDir, { recursive: true, force: true });
+    removed++;
+  }
+
+  const prebuildsDir = path.join(nodePtyRoot, "prebuilds");
+  if (fs.existsSync(prebuildsDir)) {
+    for (const entry of fs.readdirSync(prebuildsDir, { withFileTypes: true })) {
+      if (!entry.isDirectory()) continue;
+      const entryPath = path.join(prebuildsDir, entry.name);
+      if (entry.name === `darwin-${targetArch}`) {
+        kept++;
+        continue;
+      }
+      fs.rmSync(entryPath, { recursive: true, force: true });
+      removed++;
+    }
+  }
+
+  if (removed > 0 || kept > 0) {
+    console.log(
+      `[runtime] kept node-pty prebuild darwin-${targetArch}; removed ${removed} non-runtime node-pty native dirs`
+    );
+  }
+  return { removed, kept };
+}
+
 function assertExecutable(filePath, label) {
   if (!fs.existsSync(filePath)) {
     throw new Error(`Missing packaged ${label}: ${filePath}`);
@@ -283,10 +328,6 @@ function verifyPackagedRuntimeExternalModules(resourcesDir, targetArch) {
 
   if (targetArch) {
     const nodePtyPackageRoot = path.join(unpackedNodeModules, "node-pty");
-    const nodePtyBuildFiles = [
-      path.join(nodePtyPackageRoot, "build", "Release", "pty.node"),
-      path.join(nodePtyPackageRoot, "build", "Release", "spawn-helper"),
-    ];
     const nodePtyPrebuildFiles = [
       path.join(nodePtyPackageRoot, "prebuilds", `darwin-${targetArch}`, "pty.node"),
       path.join(nodePtyPackageRoot, "prebuilds", `darwin-${targetArch}`, "spawn-helper"),
@@ -305,13 +346,18 @@ function verifyPackagedRuntimeExternalModules(resourcesDir, targetArch) {
       ),
     ]);
 
-    const hasNodePtyBuild = nodePtyBuildFiles.every((filePath) => fs.existsSync(filePath));
     const hasNodePtyPrebuild = nodePtyPrebuildFiles.every((filePath) => fs.existsSync(filePath));
-    if (!hasNodePtyBuild && !hasNodePtyPrebuild) {
+    const staleNodePtyBuild = path.join(nodePtyPackageRoot, "build", "Release", "pty.node");
+    if (fs.existsSync(staleNodePtyBuild)) {
       throw new Error(
-        `Missing unpacked runtime external module node-pty native files for darwin-${targetArch}. ` +
-          `Expected either ${nodePtyBuildFiles.join(", ")} or ${nodePtyPrebuildFiles.join(", ")}. ` +
-          "Bun-compiled deus-runtime cannot rely on Electron app.asar module resolution."
+        `Packaged node-pty build output is still present: ${staleNodePtyBuild}. ` +
+          "node-pty resolves build/Release before prebuilds, so packaged deus-runtime must keep only the target Darwin prebuild."
+      );
+    }
+    if (!hasNodePtyPrebuild) {
+      throw new Error(
+        `Missing unpacked runtime external module node-pty prebuild files for darwin-${targetArch}: ` +
+          `${nodePtyPrebuildFiles.join(", ")}. Bun-compiled deus-runtime cannot rely on Electron app.asar module resolution.`
       );
     }
   }
@@ -388,10 +434,12 @@ function verifyPackagedAgentClis(context, options = {}) {
 
 module.exports = async function afterPack(context) {
   prunePencilCliBinaries(context);
+  pruneNodePtyRuntimeBinaries(context);
   verifyPackagedAgentClis(context, { runVersionChecks: false });
 };
 
 module.exports.prunePencilCliBinaries = prunePencilCliBinaries;
+module.exports.pruneNodePtyRuntimeBinaries = pruneNodePtyRuntimeBinaries;
 module.exports.binaryNamesForTarget = binaryNamesForTarget;
 module.exports.verifyPackagedRuntimeManifests = verifyPackagedRuntimeManifests;
 module.exports.verifyPackagedRuntimeExternalModules = verifyPackagedRuntimeExternalModules;
