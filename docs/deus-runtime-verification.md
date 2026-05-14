@@ -43,11 +43,14 @@ bun run test:desktop-runtime
 
 That suite covers the packaged Electron backend spawn contract, packaged CLI lookup behavior, and electron-builder runtime guardrails.
 
-The macOS runtime CI job also packages an unsigned arm64 app directory with
-electron-builder and runs the static packaged-app smoke with
-`--skip-app-signature`, so pull requests exercise `beforePack`, `afterPack`,
-`Resources/bin` wiring, native module pruning, and app.asar runtime-contract
-checks before release signing/notarization.
+The macOS runtime CI job also packages an unsigned app directory for the
+runner's native architecture with electron-builder, runs the packaged-app smoke
+with `--skip-app-signature --run-version-checks`, then executes the packaged
+`Resources/bin/deus-runtime` through `smoke-packaged-runtime --skip-app-check`.
+That means pull requests exercise `beforePack`, `afterPack`, `Resources/bin`
+wiring, native module pruning, app.asar runtime-contract checks, packaged binary
+version checks, and packaged `agent-server`/`backend` readiness before release
+signing/notarization.
 
 ## Direct Runtime Checks
 

@@ -95,17 +95,44 @@ jobs:
           bun run build:pencil
           bun run build
 
+      - name: Select macOS package architecture
+        run: |
+          set -euo pipefail
+          case "$(uname -m)" in
+            arm64)
+              echo "MAC_BUILDER_ARCH=arm64" >> "$GITHUB_ENV"
+              echo "MAC_EXPECTED_ARCH=arm64" >> "$GITHUB_ENV"
+              echo "MAC_APP_PATH=dist-electron/mac-arm64/Deus.app" >> "$GITHUB_ENV"
+              ;;
+            x86_64)
+              echo "MAC_BUILDER_ARCH=x64" >> "$GITHUB_ENV"
+              echo "MAC_EXPECTED_ARCH=x64" >> "$GITHUB_ENV"
+              echo "MAC_APP_PATH=dist-electron/mac/Deus.app" >> "$GITHUB_ENV"
+              ;;
+            *)
+              echo "::error::Unsupported macOS runner architecture: $(uname -m)"
+              exit 1
+              ;;
+          esac
+
       - name: Package macOS app directory
-        run: bunx electron-builder --mac dir --arm64 --publish never -c.mac.notarize=false
+        run: bunx electron-builder --mac dir --${MAC_BUILDER_ARCH} --publish never -c.mac.notarize=false
         env:
           CSC_IDENTITY_AUTO_DISCOVERY: "false"
 
       - name: Smoke packaged macOS app bundle
         run: >
           node scripts/runtime/smoke-packaged-app.cjs
-          --app dist-electron/mac-arm64/Deus.app
-          --arch arm64
+          --app "$MAC_APP_PATH"
+          --arch "$MAC_EXPECTED_ARCH"
           --skip-app-signature
+          --run-version-checks
+
+      - name: Smoke packaged runtime executable
+        run: >
+          node scripts/runtime/smoke-packaged-runtime.cjs
+          --app "$MAC_APP_PATH"
+          --skip-app-check
 
   desktop-runtime-tests:
     name: Desktop Runtime Unit Tests
