@@ -147,16 +147,29 @@ function stopChild(child) {
       resolve();
     };
     const forceTimer = setTimeout(() => {
-      if (child.exitCode === null && child.signalCode === null) child.kill("SIGKILL");
+      if (child.exitCode === null && child.signalCode === null) killChildTree(child, "SIGKILL");
     }, STOP_TIMEOUT_MS);
     child.once("exit", finish);
-    child.kill("SIGTERM");
+    killChildTree(child, "SIGTERM");
   });
+}
+
+function killChildTree(child, signal) {
+  if (process.platform !== "win32" && child.pid) {
+    try {
+      process.kill(-child.pid, signal);
+      return;
+    } catch {
+      // Fall back to the direct child if process-group termination is unavailable.
+    }
+  }
+  child.kill(signal);
 }
 
 async function waitForRuntimePatterns(runtimeBin, args, binDir, patterns) {
   const child = spawn(runtimeBin, args, {
     cwd: path.dirname(runtimeBin),
+    detached: process.platform !== "win32",
     env: runtimeEnv(binDir),
     stdio: ["ignore", "pipe", "pipe"],
   });
