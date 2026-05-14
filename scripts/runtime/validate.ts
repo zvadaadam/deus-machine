@@ -80,8 +80,14 @@ function assertExecutable(filePath: string, label: string): void {
   }
 }
 
-function getMachOArchOutput(filePath: string, label: string, fileArch: string): string {
-  const fileOutput = execFileSync("file", [filePath], {
+function getMachOArchOutput(
+  projectRoot: string,
+  filePath: string,
+  label: string,
+  fileArch: string
+): string {
+  const fileOutput = execFileSync("file", [relativeFromProjectRoot(projectRoot, filePath)], {
+    cwd: projectRoot,
     encoding: "utf8",
     timeout: 20_000,
     stdio: ["ignore", "pipe", "pipe"],
@@ -120,7 +126,7 @@ function assertStagedGhCli(projectRoot: string): void {
     const ghPath = path.join(binRoot, target.runtimeKey, "gh");
     const label = `${target.runtimeKey}/gh`;
     assertExecutable(ghPath, label);
-    const fileOutput = getMachOArchOutput(ghPath, label, target.fileArch);
+    const fileOutput = getMachOArchOutput(projectRoot, ghPath, label, target.fileArch);
     verifyMacCodeSignature(ghPath, label);
     const manifestEntry = manifest.targets.find(
       (entry) => entry.runtimeKey === target.runtimeKey && entry.tool === "gh"
