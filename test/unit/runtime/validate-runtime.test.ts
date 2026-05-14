@@ -1,10 +1,37 @@
 import { chmodSync, mkdtempSync, mkdirSync, rmSync, utimesSync, writeFileSync } from "node:fs";
+import { createHash } from "node:crypto";
 import os from "node:os";
 import path from "node:path";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { CLI_RUNTIME_DEPENDENCIES } from "@shared/runtime";
 import { stageRuntime } from "../../../scripts/runtime/stage";
 import { validateRuntimeStage } from "../../../scripts/runtime/validate";
+
+const validateDeusRuntimeMock = vi.hoisted(() => vi.fn());
+const validateStagedAgentClisMock = vi.hoisted(() => vi.fn());
+const execFileSyncMock = vi.hoisted(() =>
+  vi.fn((command: string, args: string[]) => {
+    if (command === "file") {
+      const targetPath = args[0] ?? "";
+      const arch = targetPath.includes("darwin-x64") ? "x86_64" : "arm64";
+      return `${targetPath}: Mach-O 64-bit executable ${arch}`;
+    }
+    if (command === "codesign") return "";
+    throw new Error(`Unexpected execFileSync call: ${command} ${args.join(" ")}`);
+  })
+);
+
+vi.mock("../../../scripts/runtime/native-runtime", () => ({
+  validateDeusRuntime: validateDeusRuntimeMock,
+}));
+
+vi.mock("../../../scripts/runtime/agent-clis", () => ({
+  validateStagedAgentClis: validateStagedAgentClisMock,
+}));
+
+vi.mock("node:child_process", () => ({
+  execFileSync: execFileSyncMock,
+}));
 
 const tempRoots: string[] = [];
 
@@ -17,6 +44,11 @@ function createTempProjectRoot(): string {
 function writeFile(filePath: string, contents: string): void {
   mkdirSync(path.dirname(filePath), { recursive: true });
   writeFileSync(filePath, contents);
+}
+
+function writeExecutable(filePath: string, contents: string): void {
+  writeFile(filePath, contents);
+  chmodSync(filePath, 0o755);
 }
 
 function writeProjectFixture(projectRoot: string): void {
@@ -56,17 +88,45 @@ function writeProjectFixture(projectRoot: string): void {
         ? "aarch64-apple-darwin"
         : "x86_64-apple-darwin";
 
-  writeFile(path.join(projectRoot, "node_modules", claudePackage, "claude"), "claude");
-  writeFile(
+  writeExecutable(path.join(projectRoot, "node_modules", claudePackage, "claude"), "claude");
+  writeExecutable(
     path.join(projectRoot, "node_modules", codexPackage, "vendor", codexTriple, "codex", "codex"),
     "codex"
   );
-  chmodSync(path.join(projectRoot, "node_modules", claudePackage, "claude"), 0o755);
-  chmodSync(
-    path.join(projectRoot, "node_modules", codexPackage, "vendor", codexTriple, "codex", "codex"),
-    0o755
+}
+
+function writeGhFixtures(projectRoot: string): void {
+  const targets = [];
+  for (const runtimeKey of ["darwin-arm64", "darwin-x64"]) {
+    const ghPath = path.join(projectRoot, "dist", "runtime", "electron", "bin", runtimeKey, "gh");
+    writeExecutable(ghPath, "gh");
+    const fileArch = runtimeKey === "darwin-x64" ? "x86_64" : "arm64";
+    targets.push({
+      tool: "gh",
+      runtimeKey,
+      path: path.relative(projectRoot, ghPath).split(path.sep).join("/"),
+      sha256: createHash("sha256").update("gh").digest("hex"),
+      size: 2,
+      fileOutput: `${ghPath}: Mach-O 64-bit executable ${fileArch}`,
+      source: {
+        version: "test",
+        archiveName: "test.zip",
+        archiveSha256: "test",
+        url: "https://example.invalid/test.zip",
+      },
+    });
+  }
+  writeFile(
+    path.join(projectRoot, "dist", "runtime", "electron", "bin", "gh-cli.json"),
+    JSON.stringify({ version: 1, ghVersion: "test", targets }, null, 2)
   );
 }
+
+beforeEach(() => {
+  validateDeusRuntimeMock.mockReset();
+  validateStagedAgentClisMock.mockReset();
+  execFileSyncMock.mockClear();
+});
 
 afterEach(() => {
   for (const projectRoot of tempRoots.splice(0)) {
@@ -80,8 +140,22 @@ describe("validateRuntimeStage", () => {
     writeProjectFixture(projectRoot);
 
     stageRuntime({ projectRoot, log: () => {} });
+    writeGhFixtures(projectRoot);
 
     expect(() => validateRuntimeStage({ projectRoot, log: () => {} })).not.toThrow();
+    expect(validateDeusRuntimeMock).toHaveBeenCalledOnce();
+    expect(validateStagedAgentClisMock).toHaveBeenCalledOnce();
+  });
+
+  it("fails when the staged GitHub CLI is missing", () => {
+    const projectRoot = createTempProjectRoot();
+    writeProjectFixture(projectRoot);
+
+    stageRuntime({ projectRoot, log: () => {} });
+
+    expect(() => validateRuntimeStage({ projectRoot, log: () => {} })).toThrow(
+      /Missing darwin-arm64\/gh/
+    );
   });
 
   it("fails when the staged runtime is older than the source bundles", () => {
