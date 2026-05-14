@@ -98,6 +98,16 @@ function readPlistValue(plistPath, key) {
   return run("plutil", ["-extract", key, "raw", "-o", "-", plistPath]);
 }
 
+function readJsonFile(filePath, label) {
+  try {
+    return JSON.parse(fs.readFileSync(filePath, "utf8"));
+  } catch (error) {
+    throw new Error(
+      `Unable to read ${label}: ${error instanceof Error ? error.message : String(error)}`
+    );
+  }
+}
+
 function fileOutput(filePath) {
   return run("file", [filePath]);
 }
@@ -127,6 +137,21 @@ function verifyAppSignature(appPath, appExecutable) {
   });
   verifyCodeSignaturePageSize(appExecutable, "Deus app executable");
   console.log("[runtime-smoke] app code signature verified");
+}
+
+function verifyRuntimeManifestPackageVersion(binDir) {
+  const packageJson = readJsonFile(path.join(PROJECT_ROOT, "package.json"), "package.json");
+  const runtimeManifest = readJsonFile(
+    path.join(binDir, "deus-runtime.json"),
+    "packaged Deus runtime manifest"
+  );
+  assert(
+    runtimeManifest.packageVersion === packageJson.version,
+    `Packaged Deus runtime manifest version mismatch; expected ${packageJson.version}, found ${
+      runtimeManifest.packageVersion ?? "missing"
+    }`
+  );
+  console.log("[runtime-smoke] packaged runtime manifest package version verified");
 }
 
 function verifyGatekeeperAssessment(appPath) {
@@ -205,6 +230,7 @@ function verifyPackagedApp(options) {
   }
 
   verifyAppSignature(appPath, appExecutable);
+  verifyRuntimeManifestPackageVersion(binDir);
   if (options.requireGatekeeper) {
     verifyGatekeeperAssessment(appPath);
   }
