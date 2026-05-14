@@ -81,7 +81,7 @@ npx deus-machine
 
 ### 2. Connect your AI agent
 
-First launch walks you through setup. You'll need the [Claude Code CLI](https://docs.anthropic.com/en/docs/claude-code) installed, or an API key from [Anthropic](https://console.anthropic.com/) or [OpenAI](https://platform.openai.com/).
+First launch walks you through setup. The packaged macOS app includes the native Claude and Codex agent CLIs it needs; bring an API key or provider login from [Anthropic](https://console.anthropic.com/) or [OpenAI](https://platform.openai.com/).
 
 ### 3. Start building
 
