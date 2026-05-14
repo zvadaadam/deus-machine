@@ -12,6 +12,7 @@ const FILE_ARCH_BY_TARGET_ARCH = new Map([
   ["x64", "x86_64"],
   ["arm64", "arm64"],
 ]);
+const PACKAGED_SYSTEM_PATHS = ["/usr/bin", "/bin", "/usr/sbin", "/sbin"];
 const REQUIRED_RUNTIME_ENTITLEMENTS = [
   "com.apple.security.cs.allow-jit",
   "com.apple.security.cs.allow-unsigned-executable-memory",
@@ -130,7 +131,7 @@ function verifyMachOArch(filePath, label, expectedFileArch) {
   ) {
     throw new Error(`Packaged ${label} has unexpected architecture: ${fileOutput}`);
   }
-  console.log(`[agent-clis] packaged ${label}: ${fileOutput}`);
+  console.log(`[runtime] packaged ${label}: ${fileOutput}`);
 }
 
 function verifyCodeSignature(filePath, label) {
@@ -139,7 +140,7 @@ function verifyCodeSignature(filePath, label) {
     timeout: 20_000,
     stdio: ["ignore", "ignore", "pipe"],
   });
-  console.log(`[agent-clis] packaged ${label} code signature verified`);
+  console.log(`[runtime] packaged ${label} code signature verified`);
 }
 
 function verifyRuntimeEntitlements(filePath) {
@@ -162,7 +163,7 @@ function verifyRuntimeEntitlements(filePath) {
       throw new Error(`Packaged Deus runtime is missing ${entitlement} entitlement`);
     }
   }
-  console.log("[agent-clis] packaged Deus runtime entitlements verified");
+  console.log("[runtime] packaged Deus runtime entitlements verified");
 }
 
 function verifyRuntimeSystemDylibs(filePath) {
@@ -183,7 +184,7 @@ function verifyRuntimeSystemDylibs(filePath) {
   if (unexpected.length > 0) {
     throw new Error(`Packaged Deus runtime has non-system dylib dependencies: ${unexpected.join(", ")}`);
   }
-  console.log("[agent-clis] packaged Deus runtime dylib dependencies verified");
+  console.log("[runtime] packaged Deus runtime dylib dependencies verified");
 }
 
 function readJsonFile(filePath, label) {
@@ -262,7 +263,7 @@ function verifyPackagedRuntimeManifests(binDir, targetArch) {
     verifyManifestFileEntry(ghEntry, path.join(binDir, "gh"), "GitHub CLI");
   }
 
-  console.log("[agent-clis] packaged runtime manifests verified");
+  console.log("[runtime] packaged runtime manifests verified");
 }
 
 function verifyPackagedRuntimeExternalModules(resourcesDir, targetArch) {
@@ -292,7 +293,14 @@ function verifyPackagedRuntimeExternalModules(resourcesDir, targetArch) {
     }
   }
 
-  console.log("[agent-clis] packaged runtime external modules verified");
+  console.log("[runtime] packaged runtime external modules verified");
+}
+
+function validateVersionOutput(label, output) {
+  if (!output) throw new Error(`Packaged ${label} --version produced no output`);
+  if (label === "Deus runtime" && !/^deus-runtime \d+\.\d+\.\d+ /.test(output)) {
+    throw new Error(`Packaged ${label} --version produced unexpected output: ${output}`);
+  }
 }
 
 function verifyPackagedAgentClis(context, options = {}) {
@@ -325,6 +333,7 @@ function verifyPackagedAgentClis(context, options = {}) {
   if (options.runVersionChecks === false || (targetArch && targetArch !== process.arch)) return;
 
   for (const [label, executablePath] of [
+    ["Deus runtime", path.join(binDir, "deus-runtime")],
     ["Codex CLI", path.join(binDir, "codex")],
     ["Claude CLI", path.join(binDir, "claude")],
   ]) {
@@ -334,13 +343,14 @@ function verifyPackagedAgentClis(context, options = {}) {
         timeout: 20_000,
         env: {
           ...process.env,
-          PATH: [binDir, process.env.PATH].filter(Boolean).join(path.delimiter),
+          DEUS_BUNDLED_BIN_DIR: binDir,
+          PATH: [binDir, ...PACKAGED_SYSTEM_PATHS].join(path.delimiter),
         },
         stdio: ["ignore", "pipe", "pipe"],
       })
       .trim();
-    if (!output) throw new Error(`Packaged ${label} --version produced no output`);
-    console.log(`[agent-clis] packaged ${label}: ${output}`);
+    validateVersionOutput(label, output);
+    console.log(`[runtime] packaged ${label}: ${output}`);
   }
 }
 

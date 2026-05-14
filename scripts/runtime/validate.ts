@@ -146,7 +146,11 @@ function assertStagedGhCli(projectRoot: string): void {
 
 function assertPackagedProviderBinaries(projectRoot: string): void {
   try {
-    validateDeusRuntime({ projectRoot, log: () => undefined });
+    validateDeusRuntime({
+      projectRoot,
+      log: () => undefined,
+      verifyRunnable: process.env.DEUS_VERIFY_RUNTIME_RUNNABLE === "1",
+    });
   } catch (error) {
     throw createBuildRuntimeError(
       `Native runtime validation failed: ${error instanceof Error ? error.message : String(error)}`
