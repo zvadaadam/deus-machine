@@ -70,8 +70,10 @@ function missingPackagedCliPath(tool: string): string {
 
 function isExecutableFile(filePath: string): boolean {
   if (!existsSync(filePath)) return false;
+  const stat = statSync(filePath);
+  if (!stat.isFile()) return false;
   if (process.platform === "win32") return true;
-  return (statSync(filePath).mode & 0o111) !== 0;
+  return (stat.mode & 0o111) !== 0;
 }
 
 export function resolveCliExecutable(tool: string): string {
