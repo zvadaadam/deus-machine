@@ -299,6 +299,10 @@ function stopChild(child) {
     };
     const forceTimer = setTimeout(() => {
       if (child.exitCode === null && child.signalCode === null) killChildTree(child, "SIGKILL");
+      child.stdout?.destroy();
+      child.stderr?.destroy();
+      child.unref?.();
+      finish();
     }, STOP_TIMEOUT_MS);
     child.once("exit", finish);
     killChildTree(child, "SIGTERM");

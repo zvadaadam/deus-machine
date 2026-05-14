@@ -147,26 +147,89 @@ function macExecutionPolicyHint(diagnostics) {
   ].join("\n");
 }
 
-function runRuntime(runtimeBin, args, binDir) {
-  const result = spawnSync(runtimeBin, args, {
+async function runRuntime(runtimeBin, args, binDir) {
+  const child = spawn(runtimeBin, args, {
     cwd: path.dirname(runtimeBin),
-    encoding: "utf8",
-    timeout: STARTUP_TIMEOUT_MS,
+    detached: process.platform !== "win32",
     env: runtimeEnv(binDir),
     stdio: ["ignore", "pipe", "pipe"],
   });
-  if (result.status !== 0) {
-    const diagnostics = runtimeDiagnostics(runtimeBin);
-    const hint = macExecutionPolicyHint(diagnostics);
-    throw new Error(
-      `${path.basename(runtimeBin)} ${args.join(" ")} failed: status=${result.status} signal=${
-        result.signal
-      } error=${result.error?.code ?? "none"} stdout=${result.stdout.trim()} stderr=${result.stderr.trim()}${
-        diagnostics ? `\n${diagnostics}` : ""
-      }${hint}`
-    );
+
+  let stdout = "";
+  let stderr = "";
+
+  try {
+    return await new Promise((resolve, reject) => {
+      let settled = false;
+      const timeout = setTimeout(() => {
+        const diagnostics = runtimeDiagnostics(runtimeBin);
+        const hint = macExecutionPolicyHint(diagnostics);
+        fail(
+          new Error(
+            `${path.basename(runtimeBin)} ${args.join(
+              " "
+            )} timed out after ${STARTUP_TIMEOUT_MS}ms stdout=${stdout
+              .trim()
+              .slice(-4000)} stderr=${stderr.trim().slice(-4000)}${
+              diagnostics ? `\n${diagnostics}` : ""
+            }${hint}`
+          )
+        );
+      }, STARTUP_TIMEOUT_MS);
+
+      const fail = (error) => {
+        if (settled) return;
+        settled = true;
+        clearTimeout(timeout);
+        reject(error);
+      };
+
+      child.stdout.on("data", (data) => {
+        stdout += data.toString();
+      });
+      child.stderr.on("data", (data) => {
+        stderr += data.toString();
+      });
+      child.on("error", (error) => {
+        const diagnostics = runtimeDiagnostics(runtimeBin);
+        const hint = macExecutionPolicyHint(diagnostics);
+        fail(
+          new Error(
+            `${path.basename(runtimeBin)} ${args.join(" ")} failed to spawn: error=${
+              error.code || error.message
+            } stdout=${stdout.trim().slice(-4000)} stderr=${stderr.trim().slice(-4000)}${
+              diagnostics ? `\n${diagnostics}` : ""
+            }${hint}`
+          )
+        );
+      });
+      child.on("exit", (code, signal) => {
+        if (settled) return;
+        if (code === 0) {
+          settled = true;
+          clearTimeout(timeout);
+          resolve(stdout.trim());
+          return;
+        }
+
+        const diagnostics = runtimeDiagnostics(runtimeBin);
+        const hint = macExecutionPolicyHint(diagnostics);
+        fail(
+          new Error(
+            `${path.basename(runtimeBin)} ${args.join(
+              " "
+            )} failed: status=${code} signal=${signal ?? "none"} stdout=${stdout
+              .trim()
+              .slice(-4000)} stderr=${stderr.trim().slice(-4000)}${
+              diagnostics ? `\n${diagnostics}` : ""
+            }${hint}`
+          )
+        );
+      });
+    });
+  } finally {
+    await stopChild(child);
   }
-  return result.stdout.trim();
 }
 
 function stopChild(child) {
@@ -182,6 +245,10 @@ function stopChild(child) {
     };
     const forceTimer = setTimeout(() => {
       if (child.exitCode === null && child.signalCode === null) killChildTree(child, "SIGKILL");
+      child.stdout?.destroy();
+      child.stderr?.destroy();
+      child.unref?.();
+      finish();
     }, STOP_TIMEOUT_MS);
     child.once("exit", finish);
     killChildTree(child, "SIGTERM");
@@ -351,13 +418,13 @@ async function smokeNativeRuntime(options) {
   const runtimeBin = path.join(binDir, "deus-runtime");
   assertExecutable(runtimeBin, `staged ${options.runtimeKey} Deus runtime`);
 
-  const version = runRuntime(runtimeBin, ["--version"], binDir);
+  const version = await runRuntime(runtimeBin, ["--version"], binDir);
   if (!new RegExp(`^deus-runtime \\d+\\.\\d+\\.\\d+ ${options.runtimeKey}$`).test(version)) {
     throw new Error(`Unexpected staged runtime version output: ${version}`);
   }
   console.log(`[runtime-smoke] native runtime version: ${version}`);
 
-  const selfTest = JSON.parse(runRuntime(runtimeBin, ["self-test"], binDir));
+  const selfTest = JSON.parse(await runRuntime(runtimeBin, ["self-test"], binDir));
   if (selfTest.ok !== true) {
     throw new Error(`Native runtime self-test failed: ${JSON.stringify(selfTest)}`);
   }
