@@ -52,6 +52,21 @@ describe("terminal command helpers", () => {
     expect(resolveTerminalCliCommand("claude login")).toBe(`'${claudePath}' 'login'`);
   });
 
+  it("uses bundled Codex CLI paths in packaged runtime", () => {
+    const codexPath = createBundledTool("codex");
+    process.env.DEUS_PACKAGED = "1";
+
+    expect(resolveTerminalCliCommand("codex login")).toBe(`'${codexPath}' 'login'`);
+  });
+
+  it("does not fall back to global agent CLI names in packaged runtime", () => {
+    process.env.DEUS_PACKAGED = "1";
+    process.env.DEUS_BUNDLED_BIN_DIR = "/missing";
+
+    expect(resolveTerminalCliCommand("codex login")).toBeNull();
+    expect(resolveTerminalCliCommand("claude login")).toBeNull();
+  });
+
   it("escapes AppleScript strings", () => {
     expect(toAppleScriptString("'codex' \"login\"")).toBe("\"'codex' \\\"login\\\"\"");
   });
