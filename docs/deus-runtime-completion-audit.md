@@ -29,6 +29,7 @@ Status: implementation is staged, but the overall goal is not complete until dir
 - Packaged Electron main and native `deus-runtime` force `NODE_ENV=production`; direct runtime smokes assert the self-test reports production mode.
 - Runtime-managed agent-server spawns scrub backend-only auth, database, data-dir, and listen-port env while preserving desktop runtime context.
 - Packaged Electron main now also scrubs stale backend-only auth, database, data-dir, bundled-bin, and listen-port env before spawning `deus-runtime backend`; smoke launchers apply the same cleanup so verification cannot accidentally inherit an obsolete runtime context.
+- `electron-builder` beforePack and `smoke-packaged-app` now reject packaged Electron main output that lacks the packaged runtime env scrub denylist, so stale app bundles cannot silently omit the stricter backend/runtime env cleanup.
 - `b72f4d96 test: smoke current desktop runtime contract` verifies current Electron main source by bundling it to a temporary output and checking the packaged `deus-runtime` launch contract.
 - `fa6cfca7 test: tighten packaged main runtime guard` makes the before-pack and app.asar smoke checks share the stricter packaged main runtime contract assertion.
 - `87f66d88 docs: record runtime resign diagnostic` records that ad-hoc re-signing a temporary runtime copy does not bypass this host's provenance/Gatekeeper launch blocker.
@@ -56,7 +57,9 @@ Recorded branch checks:
 Recent focused checks:
 
 - `bun run smoke:runtime-source` passed after the source-smoke env scrub and backend/desktop env-denylist hardening, including stale `DEUS_BUNDLED_BIN_DIR` cleanup.
-- `bun run smoke:desktop-main-runtime` passed after the packaged Electron main env scrub update.
+- `bun run smoke:desktop-main-runtime` passed after tightening the beforePack/app.asar packaged-main env scrub assertion.
+- `node --check scripts/runtime/electron-builder-before-pack.cjs` passed.
+- A direct Node probe of `assertPackagedMainRuntimeContract` accepted output with the packaged env scrub denylist and rejected stale output without it.
 - `bun run typecheck`, `bun run typecheck:backend`, and `bun run typecheck:agent-server` passed after the env-denylist changes.
 - `node --check scripts/runtime/smoke-source-runtime.cjs && node --check scripts/runtime/smoke-native-runtime.cjs && node --check scripts/runtime/smoke-packaged-runtime.cjs && node --check scripts/runtime/smoke-packaged-desktop.cjs` passed.
 - Focused Vitest for `test/unit/desktop`, `test/unit/runtime`, and shared runtime/CLI-path tests still hangs before Vitest output and was killed by a 20s wrapper.
@@ -66,7 +69,7 @@ Recent focused checks:
 - `bun run smoke:runtime-resources` passed for both `darwin-arm64` and `darwin-x64` against the refreshed `dist/runtime`.
 - `node scripts/runtime/smoke-native-runtime.cjs --skip-validate` still failed at the required direct `deus-runtime --version` gate on this host: no stdout/stderr before the 45s timeout; `file` showed arm64 Mach-O, `codesign` showed Developer ID Application signing, `spctl` rejected it as `Unnotarized Developer ID`, and `xattr` showed `com.apple.provenance`.
 - `node scripts/runtime/smoke-packaged-app.cjs --help`
-- Focused Vitest for `test/unit/runtime/electron-builder-before-pack.test.ts` still hangs before any output and was killed by a 15s wrapper.
+- Focused Vitest for `test/unit/runtime/electron-builder-before-pack.test.ts` still hangs before any output and was killed by a 20s wrapper.
 - Direct `deus-runtime --version` through `scripts/runtime/run-version-check.cjs` still times out before stdout/stderr.
 
 Known local blockers:
