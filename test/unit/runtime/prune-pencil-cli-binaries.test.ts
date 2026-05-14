@@ -267,6 +267,22 @@ describe("prune-pencil-cli-binaries", () => {
     );
   });
 
+  it("rejects packaged runtime directories masquerading as executables", () => {
+    const resourcesDir = createTempRoot("deus-packaged-bin-dir");
+    tempRoots.push(resourcesDir);
+    const binDir = path.join(resourcesDir, "bin");
+    writePackagedRuntimeFixture(binDir);
+
+    const codexPath = path.join(binDir, "codex");
+    rmSync(codexPath, { force: true });
+    mkdirSync(codexPath);
+    chmodSync(codexPath, 0o755);
+
+    expect(() => verifyPackagedRuntimeManifests(binDir, "arm64")).toThrow(
+      /codex CLI is not a regular file/
+    );
+  });
+
   it("can skip packaged runtime manifest hashes after code signing mutates binaries", () => {
     const resourcesDir = createTempRoot("deus-packaged-bin-signed");
     tempRoots.push(resourcesDir);

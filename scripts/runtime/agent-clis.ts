@@ -477,7 +477,11 @@ function assertExecutable(filePath: string, label: string): void {
   if (!existsSync(filePath)) {
     throw new Error(`Missing ${label}: ${filePath}`);
   }
-  if ((statSync(filePath).mode & 0o111) === 0) {
+  const stat = statSync(filePath);
+  if (!stat.isFile()) {
+    throw new Error(`Expected ${label} to be a regular file: ${filePath}`);
+  }
+  if ((stat.mode & 0o111) === 0) {
     throw new Error(`Expected ${label} to be executable: ${filePath}`);
   }
 }

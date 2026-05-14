@@ -157,7 +157,11 @@ function assertExecutable(filePath, label) {
   if (!fs.existsSync(filePath)) {
     throw new Error(`Missing packaged ${label}: ${filePath}`);
   }
-  if ((fs.statSync(filePath).mode & 0o111) === 0) {
+  const stat = fs.statSync(filePath);
+  if (!stat.isFile()) {
+    throw new Error(`Packaged ${label} is not a regular file: ${filePath}`);
+  }
+  if ((stat.mode & 0o111) === 0) {
     throw new Error(`Packaged ${label} is not executable: ${filePath}`);
   }
 }
