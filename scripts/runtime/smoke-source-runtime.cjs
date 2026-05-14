@@ -9,14 +9,40 @@ const PROJECT_ROOT = path.resolve(__dirname, "../..");
 const RUNTIME_ENTRY = path.join(PROJECT_ROOT, "apps", "runtime", "index.ts");
 const STARTUP_TIMEOUT_MS = 30_000;
 const STOP_TIMEOUT_MS = 5_000;
+const RUNTIME_ENV_DENYLIST = [
+  "AGENT_SERVER_CWD",
+  "AGENT_SERVER_ENTRY",
+  "AUTH_TOKEN",
+  "DATABASE_PATH",
+  "DEUS_AUTH_TOKEN",
+  "DEUS_BACKEND_PORT",
+  "DEUS_DATA_DIR",
+  "DEUS_PACKAGED",
+  "DEUS_RUNTIME",
+  "DEUS_RUNTIME_COMMAND",
+  "DEUS_RUNTIME_EXECUTABLE",
+  "DEUS_RESOURCES_PATH",
+  "ELECTRON_RUN_AS_NODE",
+  "NODE_PATH",
+  "PORT",
+];
 const BUNDLED_AGENT_CLI_PATTERNS = [
   /BUNDLED_CLI_PATH claude=.*\/claude/,
   /BUNDLED_CLI_PATH codex=.*\/codex/,
 ];
 
+function runtimeEnv(extraEnv = {}) {
+  const env = { ...process.env };
+  for (const key of RUNTIME_ENV_DENYLIST) {
+    delete env[key];
+  }
+  return { ...env, ...extraEnv };
+}
+
 function runRuntime(args) {
   const result = spawnSync("bun", [RUNTIME_ENTRY, ...args], {
     cwd: PROJECT_ROOT,
+    env: runtimeEnv(),
     encoding: "utf8",
     timeout: STARTUP_TIMEOUT_MS,
     stdio: ["ignore", "pipe", "pipe"],
@@ -99,10 +125,7 @@ async function assertBackendDbRoute(port) {
 async function waitForRuntimeLine(args, matcher, options = {}) {
   const child = spawn("bun", [RUNTIME_ENTRY, ...args], {
     cwd: PROJECT_ROOT,
-    env: {
-      ...process.env,
-      ...(options.env || {}),
-    },
+    env: runtimeEnv(options.env || {}),
     stdio: ["ignore", "pipe", "pipe"],
   });
 

@@ -44,12 +44,18 @@ describe("desktop packaged runtime environment", () => {
     const env: NodeJS.ProcessEnv = {
       AGENT_SERVER_CWD: "/repo/apps/agent-server",
       AGENT_SERVER_ENTRY: "/repo/apps/agent-server/dist/index.bundled.cjs",
+      AUTH_TOKEN: "stale-auth-token",
+      DATABASE_PATH: "/tmp/stale.db",
+      DEUS_AUTH_TOKEN: "stale-main-auth-token",
+      DEUS_BACKEND_PORT: "45678",
+      DEUS_DATA_DIR: "/tmp/stale-data",
       DEUS_RUNTIME: "1",
       DEUS_RUNTIME_COMMAND: "backend",
       DEUS_RUNTIME_EXECUTABLE: "/tmp/deus-runtime",
       ELECTRON_RUN_AS_NODE: "1",
       NODE_PATH: "/repo/node_modules",
       PATH: "/opt/homebrew/bin:/usr/bin",
+      PORT: "45678",
     };
 
     configurePackagedMainRuntimeEnv({
@@ -61,11 +67,17 @@ describe("desktop packaged runtime environment", () => {
 
     expect(env.AGENT_SERVER_CWD).toBeUndefined();
     expect(env.AGENT_SERVER_ENTRY).toBeUndefined();
+    expect(env.AUTH_TOKEN).toBeUndefined();
+    expect(env.DATABASE_PATH).toBeUndefined();
+    expect(env.DEUS_AUTH_TOKEN).toBeUndefined();
+    expect(env.DEUS_BACKEND_PORT).toBeUndefined();
+    expect(env.DEUS_DATA_DIR).toBeUndefined();
     expect(env.DEUS_RUNTIME).toBeUndefined();
     expect(env.DEUS_RUNTIME_COMMAND).toBeUndefined();
     expect(env.DEUS_RUNTIME_EXECUTABLE).toBeUndefined();
     expect(env.ELECTRON_RUN_AS_NODE).toBeUndefined();
     expect(env.NODE_PATH).toBeUndefined();
+    expect(env.PORT).toBeUndefined();
     expect(env.DEUS_PACKAGED).toBe("1");
   });
 });
