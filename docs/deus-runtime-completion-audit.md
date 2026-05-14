@@ -43,6 +43,7 @@ Previously recorded branch checks:
 Known local blockers:
 
 - Direct staged or packaged Mach-O execution hangs before user code on this workstation at `_dyld_start`.
+- Ad-hoc re-signing a temporary runtime copy and clearing xattrs with normal `xattr` commands did not remove `com.apple.provenance` or make `deus-runtime --version` runnable here.
 - `bun run build`/`electron-vite build`, Vitest, packaged app launch, and copied helper binaries hit the same host-policy boundary.
 - `beforePack` correctly refuses packaging from stale `out/main/index.js` on this host until `bun run build` can refresh Electron outputs.
 
