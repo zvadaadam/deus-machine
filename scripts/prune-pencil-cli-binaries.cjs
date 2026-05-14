@@ -179,6 +179,23 @@ function verifyMachOArch(filePath, label, expectedFileArch) {
   console.log(`[runtime] packaged ${label}: ${fileOutput}`);
 }
 
+function verifyMachO64Arch(filePath, label, expectedFileArch) {
+  const fileOutput = require("node:child_process")
+    .execFileSync("file", [filePath], {
+      encoding: "utf8",
+      timeout: 20_000,
+      stdio: ["ignore", "pipe", "pipe"],
+    })
+    .trim();
+  if (
+    !fileOutput.includes("Mach-O 64-bit") ||
+    (expectedFileArch && !fileOutput.includes(expectedFileArch))
+  ) {
+    throw new Error(`Packaged ${label} has unexpected architecture: ${fileOutput}`);
+  }
+  console.log(`[runtime] packaged ${label}: ${fileOutput}`);
+}
+
 function verifyCodeSignature(filePath, label) {
   require("node:child_process").execFileSync("codesign", ["--verify", "--verbose=2", filePath], {
     encoding: "utf8",
@@ -311,7 +328,7 @@ function verifyPackagedRuntimeManifests(binDir, targetArch) {
   console.log("[runtime] packaged runtime manifests verified");
 }
 
-function verifyPackagedRuntimeExternalModules(resourcesDir, targetArch) {
+function verifyPackagedRuntimeExternalModules(resourcesDir, targetArch, options = {}) {
   const unpackedNodeModules = path.join(resourcesDir, "app.asar.unpacked", "node_modules");
   const requiredFiles = [
     ["node-pty package", path.join(unpackedNodeModules, "node-pty", "package.json")],
@@ -320,6 +337,8 @@ function verifyPackagedRuntimeExternalModules(resourcesDir, targetArch) {
       path.join(unpackedNodeModules, "@napi-rs", "canvas", "package.json"),
     ],
   ];
+  const nativePayloads = [];
+  const expectedFileArch = targetArch ? FILE_ARCH_BY_TARGET_ARCH.get(targetArch) : undefined;
 
   if (targetArch) {
     const nodePtyPackageRoot = path.join(unpackedNodeModules, "node-pty");
@@ -340,6 +359,19 @@ function verifyPackagedRuntimeExternalModules(resourcesDir, targetArch) {
         `skia.darwin-${targetArch}.node`
       ),
     ]);
+    nativePayloads.push(
+      [`node-pty native binding for darwin-${targetArch}`, nodePtyPrebuildFiles[0]],
+      [`node-pty spawn helper for darwin-${targetArch}`, nodePtyPrebuildFiles[1]],
+      [
+        `@napi-rs/canvas native binding for darwin-${targetArch}`,
+        path.join(
+          unpackedNodeModules,
+          "@napi-rs",
+          `canvas-darwin-${targetArch}`,
+          `skia.darwin-${targetArch}.node`
+        ),
+      ]
+    );
 
     const hasNodePtyPrebuild = nodePtyPrebuildFiles.every((filePath) => fs.existsSync(filePath));
     const staleNodePtyBuild = path.join(nodePtyPackageRoot, "build", "Release", "pty.node");
@@ -363,6 +395,13 @@ function verifyPackagedRuntimeExternalModules(resourcesDir, targetArch) {
         `Missing unpacked runtime external module ${label}: ${filePath}. ` +
           "Bun-compiled deus-runtime cannot rely on Electron app.asar module resolution."
       );
+    }
+  }
+
+  if (options.verifyNativePayloads !== false) {
+    for (const [label, filePath] of nativePayloads) {
+      verifyMachO64Arch(filePath, label, expectedFileArch);
+      verifyCodeSignature(filePath, label);
     }
   }
 

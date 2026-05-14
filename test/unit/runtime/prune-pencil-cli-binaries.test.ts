@@ -25,7 +25,11 @@ const {
       arch: string | number;
       resourcesDir: string;
     }) => { removed: number; kept: number };
-    verifyPackagedRuntimeExternalModules: (resourcesDir: string, targetArch: string) => void;
+    verifyPackagedRuntimeExternalModules: (
+      resourcesDir: string,
+      targetArch: string,
+      options?: { verifyNativePayloads?: boolean }
+    ) => void;
     verifyPackagedRuntimeManifests: (binDir: string, targetArch: string) => void;
   };
 
@@ -264,7 +268,11 @@ describe("prune-pencil-cli-binaries", () => {
     tempRoots.push(resourcesDir);
     writeRuntimeExternalModuleFixture(resourcesDir);
 
-    expect(() => verifyPackagedRuntimeExternalModules(resourcesDir, "arm64")).not.toThrow();
+    expect(() =>
+      verifyPackagedRuntimeExternalModules(resourcesDir, "arm64", {
+        verifyNativePayloads: false,
+      })
+    ).not.toThrow();
 
     rmSync(
       path.join(
@@ -277,9 +285,11 @@ describe("prune-pencil-cli-binaries", () => {
       ),
       { force: true }
     );
-    expect(() => verifyPackagedRuntimeExternalModules(resourcesDir, "arm64")).toThrow(
-      /@napi-rs\/canvas package/
-    );
+    expect(() =>
+      verifyPackagedRuntimeExternalModules(resourcesDir, "arm64", {
+        verifyNativePayloads: false,
+      })
+    ).toThrow(/@napi-rs\/canvas package/);
   });
 
   it("prunes node-pty build output so packaged runtime resolves target prebuilds", () => {
@@ -315,9 +325,11 @@ describe("prune-pencil-cli-binaries", () => {
     mkdirSync(path.dirname(staleBuild), { recursive: true });
     writeFileSync(staleBuild, "electron-abi-build");
 
-    expect(() => verifyPackagedRuntimeExternalModules(resourcesDir, "arm64")).toThrow(
-      /node-pty build output/
-    );
+    expect(() =>
+      verifyPackagedRuntimeExternalModules(resourcesDir, "arm64", {
+        verifyNativePayloads: false,
+      })
+    ).toThrow(/node-pty build output/);
   });
 
   it("requires native runtime external module payloads outside app.asar", () => {
@@ -337,8 +349,10 @@ describe("prune-pencil-cli-binaries", () => {
       { force: true }
     );
 
-    expect(() => verifyPackagedRuntimeExternalModules(resourcesDir, "arm64")).toThrow(
-      /@napi-rs\/canvas native binding/
-    );
+    expect(() =>
+      verifyPackagedRuntimeExternalModules(resourcesDir, "arm64", {
+        verifyNativePayloads: false,
+      })
+    ).toThrow(/@napi-rs\/canvas native binding/);
   });
 });
