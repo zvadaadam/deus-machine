@@ -367,7 +367,7 @@ async function run(command: RuntimeCommand, dataDir?: string): Promise<void> {
         cwd: process.cwd(),
         binDir: layout.bundledBinDir,
         resourcesPath: layout.resourcesPath,
-        nodeEnv: process.env.NODE_ENV ?? "",
+        nodeEnv: process.env["NODE_ENV"] ?? "",
         nodePath: process.env.NODE_PATH ?? "",
         pathEnv: process.env.PATH ?? "",
         nodeGlobalPaths: NodeModule.globalPaths,

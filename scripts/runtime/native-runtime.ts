@@ -350,7 +350,9 @@ function readMacEntitlements(filePath: string): string {
     stdio: ["ignore", "pipe", "pipe"],
   });
   if (result.status !== 0) {
-    throw new Error(`Unable to read entitlements for ${filePath}: ${result.stderr || result.stdout}`);
+    throw new Error(
+      `Unable to read entitlements for ${filePath}: ${result.stderr || result.stdout}`
+    );
   }
   return `${result.stdout}\n${result.stderr}`;
 }
@@ -418,6 +420,7 @@ export function buildDeusRuntime(options: BuildDeusRuntimeOptions = {}): DeusRun
       ],
       {
         cwd: projectRoot,
+        env: { ...process.env, NODE_ENV: "production" },
         stdio: "inherit",
       }
     );
@@ -504,9 +507,7 @@ export function verifyStagedDeusRuntimeVersion(executablePath: string): string {
         result.signal
       } error=${checkResult.error ?? spawnErrorCode(result.error)} timedOut=${
         checkResult.timedOut === true
-      } stdout=${output} stderr=${stderr}${
-        diagnostics ? `\n${diagnostics}` : ""
-      }${hint}`
+      } stdout=${output} stderr=${stderr}${diagnostics ? `\n${diagnostics}` : ""}${hint}`
     );
   }
   if (!/^deus-runtime \d+\.\d+\.\d+ /.test(output)) {
