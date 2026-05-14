@@ -620,6 +620,12 @@ function validateVersionOutput(label, output) {
   if (label === "GitHub CLI" && !/^gh version \d+\.\d+\.\d+/m.test(output)) {
     throw new Error(`Packaged ${label} --version produced unexpected output: ${output}`);
   }
+  if (label === "Codex CLI" && !/\b\d+\.\d+\.\d+\b/.test(output)) {
+    throw new Error(`Packaged ${label} --version produced unexpected output: ${output}`);
+  }
+  if (label === "Claude CLI" && !/(Claude Code|\b\d+\.\d+\.\d+\b)/.test(output)) {
+    throw new Error(`Packaged ${label} --version produced unexpected output: ${output}`);
+  }
   if (label === "Codex ripgrep helper" && !/^ripgrep \d+\.\d+\.\d+/m.test(output)) {
     throw new Error(`Packaged ${label} --version produced unexpected output: ${output}`);
   }
@@ -863,3 +869,4 @@ module.exports.verifyPackagedRuntimeManifests = verifyPackagedRuntimeManifests;
 module.exports.verifyPackagedRuntimeExternalModules = verifyPackagedRuntimeExternalModules;
 module.exports.verifyPackagedAgentClis = verifyPackagedAgentClis;
 module.exports.verifyCodeSignaturePageSize = verifyCodeSignaturePageSize;
+module.exports.validateVersionOutput = validateVersionOutput;
