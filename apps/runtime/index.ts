@@ -14,15 +14,30 @@ const REQUIRED_BINARIES = ["deus-runtime", "codex", "claude", "gh", "rg"] as con
 const REQUIRED_RUNTIME_IMPORTS = [
   {
     name: "@anthropic-ai/claude-agent-sdk",
-    load: () => import("@anthropic-ai/claude-agent-sdk"),
+    load: async () => {
+      const module = await import("@anthropic-ai/claude-agent-sdk");
+      if (typeof module.query !== "function") {
+        throw new Error("missing query export");
+      }
+    },
   },
   {
     name: "@openai/codex-sdk",
-    load: () => import("@openai/codex-sdk"),
+    load: async () => {
+      const module = await import("@openai/codex-sdk");
+      if (typeof module.Codex !== "function") {
+        throw new Error("missing Codex export");
+      }
+    },
   },
   {
     name: "@hono/node-server",
-    load: () => import("@hono/node-server"),
+    load: async () => {
+      const module = await import("@hono/node-server");
+      if (typeof module.serve !== "function") {
+        throw new Error("missing serve export");
+      }
+    },
   },
 ] as const;
 
