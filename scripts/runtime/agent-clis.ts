@@ -21,6 +21,8 @@ import { resolveRuntimeStagePaths } from "../../shared/runtime";
 const runtimeDir = path.dirname(fileURLToPath(import.meta.url));
 const defaultProjectRoot = path.resolve(runtimeDir, "../..");
 const VERIFY_TIMEOUT_MS = 20_000;
+// Keep in sync with apps/agent-server/agents/codex-server/codex-server-discovery.ts.
+const MIN_CODEX_APP_SERVER_VERSION = "0.128.0";
 
 type AgentCliName = "codex" | "claude";
 
@@ -141,6 +143,33 @@ function readLockedPackage(projectRoot: string, lockKey: string): LockedPackage 
     version: parsed.version,
     integrity: match[2],
   };
+}
+
+function readSemver(version: string): string | null {
+  return version.match(/\d+\.\d+\.\d+/)?.[0] ?? null;
+}
+
+function isVersionAtLeast(version: string | null, minimum: string): boolean {
+  if (!version) return false;
+  const currentParts = version.split(".").map(Number);
+  const minimumParts = minimum.split(".").map(Number);
+
+  for (let i = 0; i < minimumParts.length; i++) {
+    const current = currentParts[i] ?? 0;
+    const required = minimumParts[i] ?? 0;
+    if (current > required) return true;
+    if (current < required) return false;
+  }
+  return true;
+}
+
+function assertCodexAppServerCompatible(version: string, label: string): void {
+  const semver = readSemver(version);
+  if (isVersionAtLeast(semver, MIN_CODEX_APP_SERVER_VERSION)) return;
+
+  throw new Error(
+    `${label} requires @openai/codex >= ${MIN_CODEX_APP_SERVER_VERSION} for the codex app-server harness; found ${version}`
+  );
 }
 
 function nodeModulesPackagePath(projectRoot: string, packageName: string): string {
@@ -426,6 +455,7 @@ export async function prepareAgentClis(
     mkdirSync(targetDir, { recursive: true });
 
     const lockedCodex = readLockedPackage(projectRoot, target.codexAliasPackage);
+    assertCodexAppServerCompatible(lockedCodex.version, target.runtimeKey);
     const codexEntry = path.join("vendor", target.codexTriple, "codex", "codex");
     const rgEntry = path.join("vendor", target.codexTriple, "path", "rg");
     const codexPackage = await resolvePackageRoot(projectRoot, lockedCodex, codexEntry, log);
@@ -573,6 +603,11 @@ export function validateStagedAgentClis(
     const target = AGENT_CLI_TARGETS.find((item) => item.runtimeKey === runtimeKey);
     if (!target) throw new Error(`Unsupported agent CLI runtime key: ${runtimeKey}`);
     const manifestEntries = manifest.targets.filter((entry) => entry.runtimeKey === runtimeKey);
+    const codexEntry = manifestEntries.find((entry) => entry.tool === "codex");
+    if (!codexEntry) {
+      throw new Error(`Agent CLI manifest is missing ${runtimeKey}/codex`);
+    }
+    assertCodexAppServerCompatible(codexEntry.source.version, `${runtimeKey}/codex`);
 
     for (const tool of ["codex", "claude", "rg"] as const) {
       const executablePath = resolveStagedAgentCliPath(projectRoot, runtimeKey, tool);
