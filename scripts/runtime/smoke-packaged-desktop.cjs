@@ -80,6 +80,31 @@ function assertExecutable(filePath, label) {
   assert((stat.mode & 0o111) !== 0, `${label} is not executable: ${filePath}`);
 }
 
+function assertHostRunnableArch(filePath, label) {
+  if (process.platform !== "darwin") return;
+  const expectedArch = process.arch === "arm64" ? "arm64" : process.arch === "x64" ? "x86_64" : null;
+  if (!expectedArch) return;
+
+  const output = execFileSync("file", [filePath], {
+    encoding: "utf8",
+    timeout: 20_000,
+    stdio: ["ignore", "pipe", "pipe"],
+  }).trim();
+  if (!output.includes(expectedArch)) {
+    throw new Error(
+      `Packaged ${label} architecture does not match this host; expected ${expectedArch}: ${output}`
+    );
+  }
+}
+
+function verifyGatekeeperAssessment(appPath) {
+  execFileSync("spctl", ["--assess", "--type", "execute", "--verbose=4", appPath], {
+    encoding: "utf8",
+    timeout: 60_000,
+    stdio: ["ignore", "ignore", "pipe"],
+  });
+}
+
 function runAppCheck(appPath, options) {
   if (options.skipAppCheck) return;
 
@@ -235,6 +260,10 @@ async function smokePackagedDesktop(options) {
   const launchAppPath = copyAppToTempApplications(options.appPath, tempHome);
   const appBinary = path.join(launchAppPath, "Contents", "MacOS", "Deus");
   assertExecutable(appBinary, "packaged Deus app executable");
+  assertHostRunnableArch(appBinary, "Deus app executable");
+  if (options.requireGatekeeper) {
+    verifyGatekeeperAssessment(launchAppPath);
+  }
 
   const child = spawn(appBinary, [], {
     cwd: tempHome,
