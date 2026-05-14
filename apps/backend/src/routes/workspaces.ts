@@ -6,6 +6,7 @@ import { spawn, execFile, execSync } from "child_process";
 import { promisify } from "util";
 import { uuidv7 } from "@shared/lib/uuid";
 import { getDatabase } from "../lib/database";
+import { createBackendChildEnv } from "../runtime/child-env";
 import { withWorkspace, computeWorkspacePath } from "../middleware/workspace-loader";
 import { NotFoundError, ValidationError } from "../lib/errors";
 import { parseBody, PatchWorkspaceBody, CreateWorkspaceBody } from "../lib/schemas";
@@ -97,7 +98,7 @@ app.patch("/workspaces/:id", async (c) => {
               });
               const archiveProc = spawn("sh", ["-c", archiveCmd], {
                 cwd: wsPath,
-                env: { ...process.env, ...archiveEnv },
+                env: createBackendChildEnv(archiveEnv),
                 stdio: "ignore",
                 detached: false,
               });

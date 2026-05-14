@@ -41,6 +41,7 @@ import { getErrorMessage } from "@shared/lib/errors";
 import { uuidv7 } from "@shared/lib/uuid";
 
 import { invalidate } from "../query-engine";
+import { createBackendChildEnv } from "../../runtime/child-env";
 import { broadcast } from "../ws.service";
 
 import { allocateFreePort } from "./port-allocator";
@@ -177,12 +178,11 @@ async function runPrefetch(installed: InstalledAppEntry): Promise<void> {
     return;
   }
   const args = substituteArgs(prefetch.args, vars);
-  const env: NodeJS.ProcessEnv = {
-    ...process.env,
+  const env = createBackendChildEnv({
     ...substituteEnv(prefetch.env, vars),
     DEUS_APP_ID: manifest.id,
     DEUS_PREFETCH: "1",
-  };
+  });
 
   await new Promise<void>((resolve) => {
     let child: ChildProcess;
