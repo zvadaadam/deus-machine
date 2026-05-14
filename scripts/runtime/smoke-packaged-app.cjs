@@ -19,14 +19,16 @@ const FORBIDDEN_RUNTIME_PACKAGE_PREFIXES = [
   "/node_modules/@anthropic-ai/claude-agent-sdk-darwin-",
   "/node_modules/@anthropic-ai/claude-agent-sdk-linux-",
   "/node_modules/@anthropic-ai/claude-agent-sdk-win32-",
-  "/node_modules/@openai/codex/bin/",
-  "/node_modules/@openai/codex/vendor/",
   "/node_modules/@openai/codex-darwin-",
   "/node_modules/@openai/codex-linux-",
   "/node_modules/@openai/codex-win32-",
-  "/node_modules/agent-browser/",
-  "/node_modules/@sentry/cli/",
   "/node_modules/@sentry/cli-",
+];
+const FORBIDDEN_RUNTIME_PACKAGE_ROOTS = [
+  "/node_modules/@openai/codex/bin",
+  "/node_modules/@openai/codex/vendor",
+  "/node_modules/agent-browser",
+  "/node_modules/@sentry/cli",
 ];
 
 function parseArgs(argv) {
@@ -216,11 +218,14 @@ function verifyNoDuplicateRuntimeCliPackages(resourcesDir) {
   const asarPath = path.join(resourcesDir, "app.asar");
   assert(fs.existsSync(asarPath), `Missing packaged app.asar: ${asarPath}`);
 
+  const isForbiddenAsarEntry = (entry) =>
+    FORBIDDEN_RUNTIME_PACKAGE_PREFIXES.some((prefix) => entry.startsWith(prefix)) ||
+    FORBIDDEN_RUNTIME_PACKAGE_ROOTS.some(
+      (root) => entry === root || entry.startsWith(`${root}/`)
+    );
   const duplicateAsarEntries = asar
     .listPackage(asarPath)
-    .filter((entry) =>
-      FORBIDDEN_RUNTIME_PACKAGE_PREFIXES.some((prefix) => entry.startsWith(prefix))
-    );
+    .filter(isForbiddenAsarEntry);
   assert(
     duplicateAsarEntries.length === 0,
     "Packaged app.asar contains duplicate runtime CLI package payloads outside Resources/bin:\n" +
