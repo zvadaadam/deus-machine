@@ -270,7 +270,8 @@ jobs:
 
           mount_dir="$(mktemp -d "${RUNNER_TEMP}/deus-dmg.XXXXXX")"
           copied_root="$(mktemp -d "${RUNNER_TEMP}/deus-app.XXXXXX")"
-          copied_app="$copied_root/Deus.app"
+          copied_home="$copied_root/home"
+          copied_app="$copied_home/Applications/Deus.app"
           attached=0
 
           cleanup() {
@@ -282,6 +283,7 @@ jobs:
 
           hdiutil attach "$dmg_path" -mountpoint "$mount_dir" -nobrowse
           attached=1
+          mkdir -p "$(dirname "$copied_app")"
           ditto "$mount_dir/Deus.app" "$copied_app"
           hdiutil detach "$mount_dir" -quiet
           attached=0
@@ -298,6 +300,8 @@ jobs:
 
           node scripts/runtime/smoke-packaged-desktop.cjs \
             --app "$copied_app" \
+            --home "$copied_home" \
+            --launch-in-place \
             --require-gatekeeper
 
       - name: Clean up Apple API key
