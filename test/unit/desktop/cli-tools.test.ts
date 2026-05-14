@@ -52,14 +52,17 @@ describe("desktop CLI tools", () => {
     );
   });
 
-  it("does not fall back to shell/global lookup for packaged bundled tools", async () => {
-    process.env.DEUS_PACKAGED = "1";
-    process.env.DEUS_BUNDLED_BIN_DIR = "/missing";
-    process.env.PATH = "/opt/homebrew/bin:/usr/bin";
+  it.each(["codex", "claude", "gh", "rg"])(
+    "does not fall back to shell/global lookup for packaged bundled tool %s",
+    async (tool) => {
+      process.env.DEUS_PACKAGED = "1";
+      process.env.DEUS_BUNDLED_BIN_DIR = "/missing";
+      process.env.PATH = "/opt/homebrew/bin:/usr/bin";
 
-    await expect(checkCliTool("gh")).resolves.toEqual({ installed: false, path: null });
-    expect(mockSyncShellEnvironment).not.toHaveBeenCalled();
-  });
+      await expect(checkCliTool(tool)).resolves.toEqual({ installed: false, path: null });
+      expect(mockSyncShellEnvironment).not.toHaveBeenCalled();
+    }
+  );
 
   it("uses packaged Electron main env without requiring inherited DEUS_PACKAGED", async () => {
     configurePackagedMainRuntimeEnv({
@@ -73,16 +76,19 @@ describe("desktop CLI tools", () => {
     expect(mockSyncShellEnvironment).not.toHaveBeenCalled();
   });
 
-  it("resolves packaged bundled tools from the bundled bin directory", async () => {
-    const root = createTempRoot();
-    const binDir = path.join(root, "bin");
-    const ghPath = path.join(binDir, "gh");
-    mkdirSync(binDir, { recursive: true });
-    writeFileSync(ghPath, "");
-    chmodSync(ghPath, 0o755);
-    process.env.DEUS_PACKAGED = "1";
-    process.env.DEUS_BUNDLED_BIN_DIR = binDir;
+  it.each(["codex", "claude", "gh", "rg"])(
+    "resolves packaged bundled tool %s from the bundled bin directory",
+    async (tool) => {
+      const root = createTempRoot();
+      const binDir = path.join(root, "bin");
+      const toolPath = path.join(binDir, tool);
+      mkdirSync(binDir, { recursive: true });
+      writeFileSync(toolPath, "");
+      chmodSync(toolPath, 0o755);
+      process.env.DEUS_PACKAGED = "1";
+      process.env.DEUS_BUNDLED_BIN_DIR = binDir;
 
-    await expect(checkCliTool("gh")).resolves.toEqual({ installed: true, path: ghPath });
-  });
+      await expect(checkCliTool(tool)).resolves.toEqual({ installed: true, path: toolPath });
+    }
+  );
 });
