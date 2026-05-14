@@ -282,6 +282,7 @@ jobs:
 
           node scripts/runtime/smoke-packaged-app.cjs \
             --app "$copied_app" \
+            --require-gatekeeper \
             --run-version-checks
 
           "$runtime_bin" --version

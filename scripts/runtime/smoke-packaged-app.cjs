@@ -16,6 +16,7 @@ function parseArgs(argv) {
   const options = {
     appPath: null,
     arch: null,
+    requireGatekeeper: false,
     runVersionChecks: false,
     verifyManifestHashes: false,
   };
@@ -28,6 +29,8 @@ function parseArgs(argv) {
       options.arch = argv[++index];
     } else if (arg === "--run-version-checks") {
       options.runVersionChecks = true;
+    } else if (arg === "--require-gatekeeper") {
+      options.requireGatekeeper = true;
     } else if (arg === "--verify-manifest-hashes") {
       options.verifyManifestHashes = true;
     } else if (arg === "--help" || arg === "-h") {
@@ -57,11 +60,13 @@ Options:
   --app <path>                 Path to the packaged .app bundle
   --arch <arm64|x64>           Expected macOS runtime architecture
   --run-version-checks         Execute packaged --version checks
+  --require-gatekeeper         Require spctl execute assessment to pass
   --verify-manifest-hashes     Verify packaged binary hashes against manifests
 
 By default this smoke inspects the packaged app statically and does not execute
 generated/copied Mach-O binaries. Use --run-version-checks on hosts where the
-packaged binaries can be launched directly.`);
+packaged binaries can be launched directly. Use --require-gatekeeper on
+notarized release artifacts, not local ad-hoc or unnotarized builds.`);
 }
 
 function assert(condition, message) {
@@ -122,6 +127,15 @@ function verifyAppSignature(appPath, appExecutable) {
   });
   verifyCodeSignaturePageSize(appExecutable, "Deus app executable");
   console.log("[runtime-smoke] app code signature verified");
+}
+
+function verifyGatekeeperAssessment(appPath) {
+  execFileSync("spctl", ["--assess", "--type", "execute", "--verbose=4", appPath], {
+    encoding: "utf8",
+    timeout: 60_000,
+    stdio: ["ignore", "ignore", "pipe"],
+  });
+  console.log("[runtime-smoke] app Gatekeeper execute assessment verified");
 }
 
 function verifyAsarRuntimeContract(asarPath) {
@@ -191,6 +205,9 @@ function verifyPackagedApp(options) {
   }
 
   verifyAppSignature(appPath, appExecutable);
+  if (options.requireGatekeeper) {
+    verifyGatekeeperAssessment(appPath);
+  }
   verifyPackagedAgentClis(
     {
       electronPlatformName: "darwin",
