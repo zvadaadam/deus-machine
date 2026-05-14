@@ -20,16 +20,22 @@ Status: implementation is staged, but the overall goal is not complete until dir
 | Keep Linux/Windows packaged behavior explicit | `package:linux` and `package:win` route to `scripts/runtime/unsupported-packaged-platform.cjs`; `electron-builder-before-pack.cjs` rejects non-Darwin packaged runtime builds. | Static verified |
 | CUA packaged desktop verification | `docs/deus-runtime-verification.md` records the local `_dyld_start` host-policy blocker. `scripts/runtime/smoke-packaged-desktop.cjs` is the automated packaged desktop readiness check. | Blocked locally; required on executable host |
 
+## Latest Guardrail Slices
+
+- `b72f4d96 test: smoke current desktop runtime contract` verifies current Electron main source by bundling it to a temporary output and checking the packaged `deus-runtime` launch contract.
+- `fa6cfca7 test: tighten packaged main runtime guard` makes the before-pack and app.asar smoke checks share the stricter packaged main runtime contract assertion.
+- `87f66d88 docs: record runtime resign diagnostic` records that ad-hoc re-signing a temporary runtime copy does not bypass this host's provenance/Gatekeeper launch blocker.
+
 ## Local Evidence
 
-Current inspected state:
+Current inspected state at this audit:
 
-- `git status --short --branch` reports a clean `bun-runtime` worktree before this audit note.
+- `git status --short --branch` reports a clean `bun-runtime` worktree before this audit refresh.
 - `dist/runtime/electron/bin` contains Darwin arm64/x64 staged `deus-runtime`, `codex`, `claude`, `gh`, and `rg`.
 - `dist/runtime/electron/bin/deus-runtime.json`, `agent-clis.json`, and `gh-cli.json` contain project-relative paths, hashes, sizes, and architecture metadata.
 - No lingering workspace `deus-runtime`, Electron, Vitest, or packaging processes were alive during this audit.
 
-Previously recorded branch checks:
+Recorded branch checks:
 
 - `bun run build:runtime`
 - `bun run validate:runtime`
@@ -39,6 +45,12 @@ Previously recorded branch checks:
 - `bun run typecheck`
 - `bun run typecheck:backend`
 - `bun run typecheck:agent-server`
+
+Recent focused checks:
+
+- `node scripts/runtime/smoke-packaged-app.cjs --help`
+- Focused Vitest for `test/unit/runtime/electron-builder-before-pack.test.ts` still hangs before any output and was killed by a 15s wrapper.
+- Direct `deus-runtime --version` through `scripts/runtime/run-version-check.cjs` still times out before stdout/stderr.
 
 Known local blockers:
 
