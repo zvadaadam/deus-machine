@@ -105,6 +105,26 @@ function assertExecutable(filePath, label) {
   assert((stat.mode & 0o111) !== 0, `${label} is not executable: ${filePath}`);
 }
 
+function isInsideDirectory(filePath, directoryPath) {
+  const normalizedDirectory = `${path.resolve(directoryPath)}${path.sep}`;
+  const normalizedFile = path.resolve(filePath);
+  return normalizedFile.startsWith(normalizedDirectory);
+}
+
+function isApplicationsInstallPath(appPath, homePath) {
+  return (
+    isInsideDirectory(appPath, "/Applications") ||
+    isInsideDirectory(appPath, path.join(homePath, "Applications"))
+  );
+}
+
+function assertLaunchInPlaceInstallPath(appPath, homePath) {
+  if (isApplicationsInstallPath(appPath, homePath)) return;
+  throw new Error(
+    `--launch-in-place requires --app to be inside /Applications or --home/Applications so the packaged install preflight does not block startup: app=${appPath} home=${homePath}`
+  );
+}
+
 function escapeRegExp(value) {
   return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
@@ -428,6 +448,9 @@ async function smokePackagedDesktop(options) {
   const launchAppPath = options.launchInPlace
     ? options.appPath
     : copyAppToTempApplications(options.appPath, tempHome);
+  if (options.launchInPlace) {
+    assertLaunchInPlaceInstallPath(launchAppPath, tempHome);
+  }
   const appBinary = path.join(launchAppPath, "Contents", "MacOS", "Deus");
   const binDir = path.join(launchAppPath, "Contents", "Resources", "bin");
   assertExecutable(appBinary, "packaged Deus app executable");
