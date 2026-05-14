@@ -481,6 +481,12 @@ async function smokePackagedRuntime(options) {
       `Packaged runtime self-test resolved unexpected binDir: ${selfTest.binDir}; expected ${binDir}`
     );
   }
+  const expectedRuntimePath = [binDir, ...PACKAGED_SYSTEM_PATHS].join(path.delimiter);
+  if (selfTest.pathEnv !== expectedRuntimePath) {
+    throw new Error(
+      `Packaged runtime self-test expected deterministic PATH ${expectedRuntimePath}: ${selfTest.pathEnv}`
+    );
+  }
   if (path.resolve(String(selfTest.resourcesPath || "")) !== path.resolve(resourcesDir)) {
     throw new Error(
       `Packaged runtime self-test resolved unexpected resourcesPath: ${selfTest.resourcesPath}; expected ${resourcesDir}`

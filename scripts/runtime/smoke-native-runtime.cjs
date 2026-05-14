@@ -443,6 +443,12 @@ async function smokeNativeRuntime(options) {
       `Native runtime self-test resolved unexpected binDir: ${selfTest.binDir}; expected ${binDir}`
     );
   }
+  const expectedRuntimePath = [binDir, ...PACKAGED_SYSTEM_PATHS].join(path.delimiter);
+  if (selfTest.pathEnv !== expectedRuntimePath) {
+    throw new Error(
+      `Native runtime self-test expected deterministic PATH ${expectedRuntimePath}: ${selfTest.pathEnv}`
+    );
+  }
   const expectedResourcesPath = path.join(PROJECT_ROOT, "dist", "runtime", "electron");
   if (path.resolve(String(selfTest.resourcesPath || "")) !== path.resolve(expectedResourcesPath)) {
     throw new Error(

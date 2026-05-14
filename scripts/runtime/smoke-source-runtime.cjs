@@ -227,6 +227,12 @@ async function main() {
   const nodePathEntries = String(selfTest.nodePath || "")
     .split(path.delimiter)
     .filter(Boolean);
+  const pathEntries = String(selfTest.pathEnv || "")
+    .split(path.delimiter)
+    .filter(Boolean);
+  if (!pathEntries.includes(String(selfTest.binDir))) {
+    throw new Error(`Source runtime PATH is missing bundled bin dir: ${selfTest.pathEnv}`);
+  }
   const nodeGlobalPaths = Array.isArray(selfTest.nodeGlobalPaths) ? selfTest.nodeGlobalPaths : [];
   for (const entry of nodePathEntries) {
     if (!nodeGlobalPaths.includes(entry)) {
