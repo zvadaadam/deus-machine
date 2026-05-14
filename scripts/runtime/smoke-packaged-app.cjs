@@ -37,6 +37,7 @@ function parseArgs(argv) {
     arch: null,
     requireGatekeeper: false,
     runVersionChecks: false,
+    skipAppSignature: false,
     verifyManifestHashes: false,
   };
 
@@ -50,6 +51,8 @@ function parseArgs(argv) {
       options.runVersionChecks = true;
     } else if (arg === "--require-gatekeeper") {
       options.requireGatekeeper = true;
+    } else if (arg === "--skip-app-signature") {
+      options.skipAppSignature = true;
     } else if (arg === "--verify-manifest-hashes") {
       options.verifyManifestHashes = true;
     } else if (arg === "--help" || arg === "-h") {
@@ -67,6 +70,9 @@ function parseArgs(argv) {
   if (options.arch && options.arch !== "arm64" && options.arch !== "x64") {
     throw new Error(`Unsupported arch: ${options.arch}`);
   }
+  if (options.requireGatekeeper && options.skipAppSignature) {
+    throw new Error("--require-gatekeeper cannot be combined with --skip-app-signature");
+  }
 
   options.appPath = path.resolve(options.appPath ?? DEFAULT_APP_PATH);
   return options;
@@ -80,12 +86,15 @@ Options:
   --arch <arm64|x64>           Expected macOS runtime architecture
   --run-version-checks         Execute packaged --version checks
   --require-gatekeeper         Require spctl execute assessment to pass
+  --skip-app-signature         Skip the app bundle code-signature check
   --verify-manifest-hashes     Verify pre-sign binary hashes against manifests
 
 By default this smoke inspects the packaged app statically and does not execute
 generated/copied Mach-O binaries. Use --run-version-checks on hosts where the
 packaged binaries can be launched directly. Use --require-gatekeeper on
 notarized release artifacts, not local ad-hoc or unnotarized builds.
+Use --skip-app-signature only for unsigned PR package-dir builds; release
+artifacts must keep the default app signature check.
 Do not use --verify-manifest-hashes on signed apps; electron-builder re-signing
 mutates Mach-O bytes after afterPack verifies the copied files.`);
 }
@@ -303,7 +312,11 @@ async function verifyPackagedApp(options) {
     assertRegularFile(path.join(binDir, name), `packaged manifest ${name}`);
   }
 
-  verifyAppSignature(appPath, appExecutable);
+  if (!options.skipAppSignature) {
+    verifyAppSignature(appPath, appExecutable);
+  } else {
+    console.log("[runtime-smoke] app code signature check skipped");
+  }
   verifyRuntimeManifestPackageVersion(binDir);
   if (options.requireGatekeeper) {
     verifyGatekeeperAssessment(appPath);

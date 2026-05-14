@@ -21,6 +21,10 @@ bun run smoke:desktop-main-runtime
 node scripts/runtime/smoke-packaged-app.cjs --app dist-electron/mac-arm64/Deus.app
 ```
 
+For unsigned pull-request package-dir builds, use the same packaged-app smoke
+with `--skip-app-signature`. Release artifacts must keep the default app
+signature check and add `--require-gatekeeper`.
+
 They verify:
 
 - `dist/runtime/electron/bin/<runtime-key>/deus-runtime` exists for Darwin arm64/x64 and matches `deus-runtime.json`.
@@ -38,6 +42,12 @@ bun run test:desktop-runtime
 ```
 
 That suite covers the packaged Electron backend spawn contract, packaged CLI lookup behavior, and electron-builder runtime guardrails.
+
+The macOS runtime CI job also packages an unsigned arm64 app directory with
+electron-builder and runs the static packaged-app smoke with
+`--skip-app-signature`, so pull requests exercise `beforePack`, `afterPack`,
+`Resources/bin` wiring, native module pruning, and app.asar runtime-contract
+checks before release signing/notarization.
 
 ## Direct Runtime Checks
 
