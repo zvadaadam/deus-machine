@@ -38,6 +38,7 @@ const FORBIDDEN_LOG_PATTERNS = [
 function parseArgs(argv) {
   const options = {
     appPath: null,
+    homePath: null,
     launchInPlace: false,
     requireGatekeeper: false,
     skipAppCheck: false,
@@ -46,7 +47,13 @@ function parseArgs(argv) {
   for (let index = 0; index < argv.length; index++) {
     const arg = argv[index];
     if (arg === "--app") {
-      options.appPath = argv[++index];
+      const value = argv[++index];
+      if (!value) throw new Error("--app requires a path");
+      options.appPath = value;
+    } else if (arg === "--home") {
+      const value = argv[++index];
+      if (!value) throw new Error("--home requires a path");
+      options.homePath = path.resolve(value);
     } else if (arg === "--launch-in-place") {
       options.launchInPlace = true;
     } else if (arg === "--require-gatekeeper") {
@@ -74,6 +81,7 @@ function printUsage() {
 
 Options:
   --app <path>             Path to the packaged .app bundle
+  --home <path>            HOME to use while launching the packaged app
   --launch-in-place        Launch --app directly instead of copying it to a temp Applications dir
   --require-gatekeeper     Require spctl execute assessment in the app check
   --skip-app-check         Skip smoke-packaged-app.cjs
@@ -412,8 +420,10 @@ async function smokePackagedDesktop(options) {
   assert(fs.existsSync(options.appPath), `Missing packaged app: ${options.appPath}`);
   runAppCheck(options.appPath, options);
 
-  const tempRoot = fs.mkdtempSync(path.join(os.tmpdir(), "deus-packaged-desktop-"));
-  const tempHome = path.join(tempRoot, "home");
+  const tempRoot = options.homePath
+    ? null
+    : fs.mkdtempSync(path.join(os.tmpdir(), "deus-packaged-desktop-"));
+  const tempHome = options.homePath ?? path.join(tempRoot, "home");
   fs.mkdirSync(tempHome, { recursive: true });
   const launchAppPath = options.launchInPlace
     ? options.appPath
@@ -457,7 +467,7 @@ async function smokePackagedDesktop(options) {
     throw error;
   } finally {
     await stopChild(child);
-    fs.rmSync(tempRoot, { recursive: true, force: true });
+    if (tempRoot) fs.rmSync(tempRoot, { recursive: true, force: true });
   }
 }
 
