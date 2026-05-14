@@ -1,11 +1,12 @@
-import { mkdirSync, readdirSync, rmSync, writeFileSync } from "node:fs";
+import { chmodSync, mkdirSync, readdirSync, rmSync, writeFileSync } from "node:fs";
+import { createHash } from "node:crypto";
 import { createRequire } from "node:module";
 import os from "node:os";
 import path from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 
 const require = createRequire(import.meta.url);
-const { binaryNamesForTarget, prunePencilCliBinaries } =
+const { binaryNamesForTarget, prunePencilCliBinaries, verifyPackagedRuntimeManifests } =
   require("../../../scripts/prune-pencil-cli-binaries.cjs") as {
     binaryNamesForTarget: (platform: string, arch: string | number) => Set<string>;
     prunePencilCliBinaries: (context: {
@@ -13,6 +14,7 @@ const { binaryNamesForTarget, prunePencilCliBinaries } =
       arch: string | number;
       resourcesDir: string;
     }) => { removed: number; kept: number };
+    verifyPackagedRuntimeManifests: (binDir: string, targetArch: string) => void;
   };
 
 const tempRoots: string[] = [];
@@ -20,7 +22,7 @@ const tempRoots: string[] = [];
 function createOutDir(
   candidatePath = ["app.asar.unpacked", "node_modules", "@pencil.dev", "cli", "dist", "out"]
 ): string {
-  const root = path.join(os.tmpdir(), `deus-pencil-prune-${Date.now()}-${Math.random()}`);
+  const root = createTempRoot("deus-pencil-prune");
   tempRoots.push(root);
   const outDir = path.join(root, ...candidatePath);
   mkdirSync(path.join(outDir, "data"), { recursive: true });
@@ -36,8 +38,85 @@ function createOutDir(
   return root;
 }
 
+function createTempRoot(prefix: string): string {
+  return path.join(os.tmpdir(), `${prefix}-${Date.now()}-${Math.random()}`);
+}
+
 function outDirFor(root: string, candidatePath: string[]): string {
   return path.join(root, ...candidatePath);
+}
+
+function sha256(value: string): string {
+  return createHash("sha256").update(value).digest("hex");
+}
+
+function writePackagedRuntimeFixture(binDir: string): void {
+  mkdirSync(binDir, { recursive: true });
+  const files = new Map([
+    ["deus-runtime", "runtime"],
+    ["codex", "codex"],
+    ["claude", "claude"],
+    ["rg", "rg"],
+    ["gh", "gh"],
+  ]);
+
+  for (const [name, contents] of files) {
+    const filePath = path.join(binDir, name);
+    writeFileSync(filePath, contents);
+    chmodSync(filePath, 0o755);
+  }
+
+  writeFileSync(
+    path.join(binDir, "deus-runtime.json"),
+    JSON.stringify(
+      {
+        version: 1,
+        entries: [
+          {
+            runtimeKey: "darwin-arm64",
+            sha256: sha256("runtime"),
+            size: "runtime".length,
+          },
+        ],
+      },
+      null,
+      2
+    )
+  );
+  writeFileSync(
+    path.join(binDir, "agent-clis.json"),
+    JSON.stringify(
+      {
+        version: 1,
+        targets: ["codex", "claude", "rg"].map((tool) => ({
+          runtimeKey: "darwin-arm64",
+          tool,
+          sha256: sha256(files.get(tool)!),
+          size: files.get(tool)!.length,
+        })),
+      },
+      null,
+      2
+    )
+  );
+  writeFileSync(
+    path.join(binDir, "gh-cli.json"),
+    JSON.stringify(
+      {
+        version: 1,
+        targets: [
+          {
+            runtimeKey: "darwin-arm64",
+            tool: "gh",
+            sha256: sha256("gh"),
+            size: "gh".length,
+          },
+        ],
+      },
+      null,
+      2
+    )
+  );
 }
 
 afterEach(() => {
@@ -95,5 +174,21 @@ describe("prune-pencil-cli-binaries", () => {
   it("maps electron-builder arch numbers to Pencil binary names", () => {
     expect(binaryNamesForTarget("win32", 1)).toEqual(new Set(["mcp-server-windows-x64.exe"]));
     expect(binaryNamesForTarget("linux", 3)).toEqual(new Set(["mcp-server-linux-arm64"]));
+  });
+
+  it("verifies packaged runtime manifest hashes against copied Resources/bin files", () => {
+    const resourcesDir = createTempRoot("deus-packaged-bin");
+    tempRoots.push(resourcesDir);
+    const binDir = path.join(resourcesDir, "bin");
+    writePackagedRuntimeFixture(binDir);
+
+    expect(() => verifyPackagedRuntimeManifests(binDir, "arm64")).not.toThrow();
+
+    const codexPath = path.join(binDir, "codex");
+    writeFileSync(codexPath, "stale-codex");
+    chmodSync(codexPath, 0o755);
+    expect(() => verifyPackagedRuntimeManifests(binDir, "arm64")).toThrow(
+      /codex CLI hash does not match/
+    );
   });
 });
