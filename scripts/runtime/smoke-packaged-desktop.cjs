@@ -1,7 +1,7 @@
 const fs = require("node:fs");
 const os = require("node:os");
 const path = require("node:path");
-const { execFileSync, spawn } = require("node:child_process");
+const { execFileSync, spawn, spawnSync } = require("node:child_process");
 
 const PROJECT_ROOT = path.resolve(__dirname, "../..");
 const DEFAULT_APP_PATH = path.join(PROJECT_ROOT, "dist-electron", "mac-arm64", "Deus.app");
@@ -131,6 +131,33 @@ function verifyGatekeeperAssessment(appPath) {
   });
 }
 
+function runDiagnostic(command, args) {
+  const result = spawnSync(command, args, {
+    cwd: PROJECT_ROOT,
+    encoding: "utf8",
+    timeout: 20_000,
+    stdio: ["ignore", "pipe", "pipe"],
+  });
+  const output = `${result.stdout || ""}${result.stderr || ""}`.trim();
+  if (result.error) {
+    return [result.error.code || result.error.message, output].filter(Boolean).join("\n");
+  }
+  if (result.status !== 0) {
+    return output || `${command} exited with status ${result.status}`;
+  }
+  return output;
+}
+
+function appDiagnostics(appPath, appBinary) {
+  if (process.platform !== "darwin") return "";
+  return [
+    `file: ${runDiagnostic("file", [appBinary])}`,
+    `codesign: ${runDiagnostic("codesign", ["-dv", "--verbose=4", appBinary])}`,
+    `spctl: ${runDiagnostic("spctl", ["--assess", "--type", "execute", "--verbose=4", appPath])}`,
+    `xattr: ${runDiagnostic("xattr", ["-lr", appBinary]) || "none"}`,
+  ].join("\n");
+}
+
 function packagedDesktopEnv(tempHome) {
   const env = {
     ...process.env,
@@ -224,7 +251,7 @@ function killChildTree(child, signal) {
   child.kill(signal);
 }
 
-async function waitForDesktopReadiness(child, tempHome, requiredPatterns) {
+async function waitForDesktopReadiness(child, tempHome, requiredPatterns, diagnostics) {
   const matched = new Set();
   let lastLog = "";
   let lastLogPath = null;
@@ -263,7 +290,7 @@ async function waitForDesktopReadiness(child, tempHome, requiredPatterns) {
         new Error(
           `Packaged desktop did not reach readiness. missing=${missing.join(", ") || "none"} logPath=${
             lastLogPath ?? "missing"
-          } log=${lastLog.slice(-4000)}`
+          } log=${lastLog.slice(-4000)}${diagnostics ? `\n${diagnostics}` : ""}`
         )
       );
     }, STARTUP_TIMEOUT_MS);
@@ -276,7 +303,7 @@ async function waitForDesktopReadiness(child, tempHome, requiredPatterns) {
           new Error(
             `Packaged desktop exited before readiness: code=${code} signal=${signal} logPath=${
               lastLogPath ?? "missing"
-            } log=${lastLog.slice(-4000)}`
+            } log=${lastLog.slice(-4000)}${diagnostics ? `\n${diagnostics}` : ""}`
           )
         );
       }
@@ -323,7 +350,8 @@ async function smokePackagedDesktop(options) {
     const { logPath } = await waitForDesktopReadiness(
       child,
       tempHome,
-      requiredLogPatterns(binDir)
+      requiredLogPatterns(binDir),
+      appDiagnostics(launchAppPath, appBinary)
     );
     console.log(`[runtime-smoke] packaged desktop reached readiness; log=${logPath}`);
   } catch (error) {
