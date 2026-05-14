@@ -13,6 +13,7 @@ const {
   prunePencilCliBinaries,
   verifyPackagedRuntimeExternalModules,
   verifyPackagedRuntimeManifests,
+  validateVersionOutput,
 } =
   require("../../../scripts/prune-pencil-cli-binaries.cjs") as {
     binaryNamesForTarget: (platform: string, arch: string | number) => Set<string>;
@@ -41,6 +42,7 @@ const {
       targetArch: string,
       options?: { verifyFileHashes?: boolean }
     ) => void;
+    validateVersionOutput: (label: string, output: string) => void;
   };
 
 const tempRoots: string[] = [];
@@ -338,6 +340,18 @@ describe("prune-pencil-cli-binaries", () => {
     expect(() =>
       verifyPackagedRuntimeManifests(binDir, "arm64", { verifyFileHashes: false })
     ).not.toThrow();
+  });
+
+  it("validates packaged agent CLI version output shape", () => {
+    expect(() => validateVersionOutput("Codex CLI", "codex-cli 0.130.0")).not.toThrow();
+    expect(() => validateVersionOutput("Claude CLI", "Claude Code 2.0.55")).not.toThrow();
+
+    expect(() => validateVersionOutput("Codex CLI", "codex wrapper")).toThrow(
+      /Codex CLI --version produced unexpected output/
+    );
+    expect(() => validateVersionOutput("Claude CLI", "claude wrapper")).toThrow(
+      /Claude CLI --version produced unexpected output/
+    );
   });
 
   it("verifies native runtime external modules are unpacked outside app.asar", () => {
