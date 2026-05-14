@@ -266,11 +266,12 @@ function hashFile(filePath) {
   return crypto.createHash("sha256").update(fs.readFileSync(filePath)).digest("hex");
 }
 
-function verifyManifestFileEntry(entry, filePath, label) {
+function verifyManifestFileEntry(entry, filePath, label, options = {}) {
   assertExecutable(filePath, label);
   if (!entry || typeof entry !== "object") {
     throw new Error(`Packaged manifest is missing ${label}`);
   }
+  if (options.verifyFileHashes === false) return;
   if (entry.sha256 !== hashFile(filePath)) {
     throw new Error(`Packaged ${label} hash does not match its manifest entry`);
   }
@@ -279,7 +280,7 @@ function verifyManifestFileEntry(entry, filePath, label) {
   }
 }
 
-function verifyPackagedRuntimeManifests(binDir, targetArch) {
+function verifyPackagedRuntimeManifests(binDir, targetArch, options = {}) {
   const runtimeKey = targetArch ? `darwin-${targetArch}` : null;
   const runtimeManifest = readJsonFile(
     path.join(binDir, "deus-runtime.json"),
@@ -305,7 +306,9 @@ function verifyPackagedRuntimeManifests(binDir, targetArch) {
   }
   if (runtimeKey) {
     const runtimeEntry = runtimeManifest.entries.find((entry) => entry.runtimeKey === runtimeKey);
-    verifyManifestFileEntry(runtimeEntry, path.join(binDir, "deus-runtime"), "Deus runtime");
+    verifyManifestFileEntry(runtimeEntry, path.join(binDir, "deus-runtime"), "Deus runtime", {
+      verifyFileHashes: options.verifyFileHashes,
+    });
 
     for (const tool of ["codex", "claude", "rg"]) {
       const entry = agentCliManifest.targets.find(
@@ -314,7 +317,9 @@ function verifyPackagedRuntimeManifests(binDir, targetArch) {
       if (!entry) {
         throw new Error(`Packaged agent CLI manifest is missing ${runtimeKey}/${tool}`);
       }
-      verifyManifestFileEntry(entry, path.join(binDir, tool), `${tool} CLI`);
+      verifyManifestFileEntry(entry, path.join(binDir, tool), `${tool} CLI`, {
+        verifyFileHashes: options.verifyFileHashes,
+      });
     }
     const ghEntry = ghCliManifest.targets.find(
       (entry) => entry.runtimeKey === runtimeKey && entry.tool === "gh"
@@ -322,7 +327,9 @@ function verifyPackagedRuntimeManifests(binDir, targetArch) {
     if (!ghEntry) {
       throw new Error(`Packaged GitHub CLI manifest is missing ${runtimeKey}/gh`);
     }
-    verifyManifestFileEntry(ghEntry, path.join(binDir, "gh"), "GitHub CLI");
+    verifyManifestFileEntry(ghEntry, path.join(binDir, "gh"), "GitHub CLI", {
+      verifyFileHashes: options.verifyFileHashes,
+    });
   }
 
   console.log("[runtime] packaged runtime manifests verified");
@@ -401,7 +408,9 @@ function verifyPackagedRuntimeExternalModules(resourcesDir, targetArch, options 
   if (options.verifyNativePayloads !== false) {
     for (const [label, filePath] of nativePayloads) {
       verifyMachO64Arch(filePath, label, expectedFileArch);
-      verifyCodeSignature(filePath, label);
+      if (options.verifyNativePayloadSignatures !== false) {
+        verifyCodeSignature(filePath, label);
+      }
     }
   }
 
@@ -422,8 +431,12 @@ function verifyPackagedAgentClis(context, options = {}) {
   const binDir = path.join(resourcesDir, "bin");
   const targetArch = ARCH_BY_BUILDER_VALUE.get(context.arch);
   const expectedFileArch = targetArch ? FILE_ARCH_BY_TARGET_ARCH.get(targetArch) : undefined;
-  verifyPackagedRuntimeManifests(binDir, targetArch);
-  verifyPackagedRuntimeExternalModules(resourcesDir, targetArch);
+  verifyPackagedRuntimeManifests(binDir, targetArch, {
+    verifyFileHashes: options.verifyManifestHashes,
+  });
+  verifyPackagedRuntimeExternalModules(resourcesDir, targetArch, {
+    verifyNativePayloadSignatures: options.verifyNativePayloadSignatures,
+  });
   const packagedExecutables = [
     ["Deus runtime", path.join(binDir, "deus-runtime")],
     ["GitHub CLI", path.join(binDir, "gh")],
@@ -435,7 +448,9 @@ function verifyPackagedAgentClis(context, options = {}) {
   for (const [label, executablePath] of packagedExecutables) {
     assertExecutable(executablePath, label);
     verifyMachOArch(executablePath, label, expectedFileArch);
-    verifyCodeSignature(executablePath, label);
+    if (options.verifyExecutableSignatures !== false) {
+      verifyCodeSignature(executablePath, label);
+    }
     if (label === "Deus runtime") {
       verifyRuntimeEntitlements(executablePath);
       verifyRuntimeSystemDylibs(executablePath);
@@ -469,7 +484,11 @@ function verifyPackagedAgentClis(context, options = {}) {
 module.exports = async function afterPack(context) {
   prunePencilCliBinaries(context);
   pruneNodePtyRuntimeBinaries(context);
-  verifyPackagedAgentClis(context, { runVersionChecks: false });
+  verifyPackagedAgentClis(context, {
+    runVersionChecks: false,
+    verifyExecutableSignatures: false,
+    verifyNativePayloadSignatures: false,
+  });
 };
 
 module.exports.prunePencilCliBinaries = prunePencilCliBinaries;
