@@ -21,6 +21,10 @@ function resolveRuntimeExecutable(): string | null {
   return null;
 }
 
+function isPackagedBackend(): boolean {
+  return process.env.DEUS_PACKAGED === "1";
+}
+
 function isExecutableFile(filePath: string): boolean {
   if (!existsSync(filePath)) return false;
   const stat = statSync(filePath);
@@ -35,6 +39,11 @@ export async function startManagedAgentServer(): Promise<string> {
   }
 
   const runtimeExecutable = resolveRuntimeExecutable();
+  if (!runtimeExecutable && isPackagedBackend()) {
+    throw new Error(
+      "Packaged backend requires DEUS_RUNTIME_EXECUTABLE; refusing Electron-as-Node agent-server fallback"
+    );
+  }
   const entry = runtimeExecutable ? null : resolveAgentServerEntry();
   if (runtimeExecutable) {
     if (!isExecutableFile(runtimeExecutable)) {
