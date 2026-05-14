@@ -18,6 +18,24 @@ const {
 };
 
 const tempRoots: string[] = [];
+const packagedRuntimeDenylist = [
+  "AGENT_SERVER_CWD",
+  "AGENT_SERVER_ENTRY",
+  "AUTH_TOKEN",
+  "DATABASE_PATH",
+  "DEUS_AUTH_TOKEN",
+  "DEUS_BUNDLED_BIN_DIR",
+  "DEUS_BACKEND_PORT",
+  "DEUS_DATA_DIR",
+  "ELECTRON_RUN_AS_NODE",
+  "DEUS_PACKAGED",
+  "DEUS_RESOURCES_PATH",
+  "DEUS_RUNTIME",
+  "DEUS_RUNTIME_COMMAND",
+  "DEUS_RUNTIME_EXECUTABLE",
+  "NODE_PATH",
+  "PORT",
+];
 
 function createProjectWithMainOutput(contents: string): string {
   const projectRoot = mkdtempSync(path.join(os.tmpdir(), "deus-before-pack-"));
@@ -42,7 +60,7 @@ function packagedRuntimeContractOutput(extraLines: string[] = []): string {
   return [
     "function configurePackagedMainRuntimeEnv(options) { process.env.DEUS_PACKAGED = '1'; }",
     "configurePackagedMainRuntimeEnv({ isPackaged: app.isPackaged });",
-    'const PACKAGED_RUNTIME_ENV_DENYLIST = ["AUTH_TOKEN", "DATABASE_PATH", "DEUS_AUTH_TOKEN", "DEUS_BUNDLED_BIN_DIR", "DEUS_BACKEND_PORT", "DEUS_DATA_DIR", "PORT"];',
+    `const PACKAGED_RUNTIME_ENV_DENYLIST = ${JSON.stringify(packagedRuntimeDenylist)};`,
     "for (const key of PACKAGED_RUNTIME_ENV_DENYLIST) delete childEnv[key];",
     'const runtimeExecutable = join(process.resourcesPath, "bin", "deus-runtime");',
     "const env = { DEUS_RUNTIME_EXECUTABLE: runtimeExecutable };",
@@ -139,12 +157,26 @@ describe("electron-builder beforePack runtime guard", () => {
     );
   });
 
+  it("rejects stale Electron main output with incomplete runtime env scrub denylist", () => {
+    const staleDenylist = packagedRuntimeDenylist.filter(
+      (key) => key !== "ELECTRON_RUN_AS_NODE" && key !== "NODE_PATH"
+    );
+    const projectRoot = createProjectWithMainOutput(
+      packagedRuntimeContractOutput().replace(
+        JSON.stringify(packagedRuntimeDenylist),
+        JSON.stringify(staleDenylist)
+      )
+    );
+
+    expect(() => assertPackagedMainRuntimeContract(projectRoot)).toThrow(/ELECTRON_RUN_AS_NODE/);
+  });
+
   it("rejects stale Electron main output missing packaged CLI lookup guards", () => {
     const projectRoot = createProjectWithMainOutput(
       [
         "function configurePackagedMainRuntimeEnv(options) { process.env.DEUS_PACKAGED = '1'; }",
         "configurePackagedMainRuntimeEnv({ isPackaged: app.isPackaged });",
-        'const PACKAGED_RUNTIME_ENV_DENYLIST = ["AUTH_TOKEN", "DATABASE_PATH", "DEUS_AUTH_TOKEN", "DEUS_BUNDLED_BIN_DIR", "DEUS_BACKEND_PORT", "DEUS_DATA_DIR", "PORT"];',
+        `const PACKAGED_RUNTIME_ENV_DENYLIST = ${JSON.stringify(packagedRuntimeDenylist)};`,
         "for (const key of PACKAGED_RUNTIME_ENV_DENYLIST) delete childEnv[key];",
         'const runtimeExecutable = join(process.resourcesPath, "bin", "deus-runtime");',
         "const env = { DEUS_RUNTIME_EXECUTABLE: runtimeExecutable };",
