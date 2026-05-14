@@ -43,6 +43,8 @@ describe("electron-builder beforePack runtime guard", () => {
   it("accepts Electron main output with the packaged deus-runtime contract", () => {
     const projectRoot = createProjectWithMainOutput(
       [
+        "function configurePackagedMainRuntimeEnv(options) { process.env.DEUS_PACKAGED = '1'; }",
+        "configurePackagedMainRuntimeEnv({ isPackaged: app.isPackaged });",
         "const runtimeExecutable = join(process.resourcesPath, 'bin', 'deus-runtime');",
         "const env = { DEUS_RUNTIME_EXECUTABLE: runtimeExecutable };",
       ].join("\n")
@@ -62,6 +64,7 @@ describe("electron-builder beforePack runtime guard", () => {
   it("rejects obsolete packaged backend bundle paths", () => {
     const projectRoot = createProjectWithMainOutput(
       [
+        "function configurePackagedMainRuntimeEnv(options) { process.env.DEUS_PACKAGED = '1'; }",
         "const runtimeExecutable = join(process.resourcesPath, 'bin', 'deus-runtime');",
         "const env = { DEUS_RUNTIME_EXECUTABLE: runtimeExecutable };",
         'const backendEntry = join(process.resourcesPath, "backend", "server.bundled.cjs");',
@@ -76,6 +79,7 @@ describe("electron-builder beforePack runtime guard", () => {
   it("rejects obsolete packaged NODE_PATH plumbing", () => {
     const projectRoot = createProjectWithMainOutput(
       [
+        "function configurePackagedMainRuntimeEnv(options) { process.env.DEUS_PACKAGED = '1'; }",
         "const runtimeExecutable = join(process.resourcesPath, 'bin', 'deus-runtime');",
         "const env = { DEUS_RUNTIME_EXECUTABLE: runtimeExecutable, NODE_PATH: runtime.nodePath };",
       ].join("\n")
@@ -83,6 +87,19 @@ describe("electron-builder beforePack runtime guard", () => {
 
     expect(() => assertPackagedMainRuntimeContract(projectRoot)).toThrow(
       /obsolete packaged NODE_PATH plumbing/
+    );
+  });
+
+  it("rejects stale Electron main output missing packaged main env initialization", () => {
+    const projectRoot = createProjectWithMainOutput(
+      [
+        "const runtimeExecutable = join(process.resourcesPath, 'bin', 'deus-runtime');",
+        "const env = { DEUS_RUNTIME_EXECUTABLE: runtimeExecutable };",
+      ].join("\n")
+    );
+
+    expect(() => assertPackagedMainRuntimeContract(projectRoot)).toThrow(
+      /packaged main runtime environment initializer/
     );
   });
 });
