@@ -19,6 +19,9 @@ function parseArgs(argv) {
   for (let index = 0; index < argv.length; index++) {
     const arg = argv[index];
     if (arg === "--arch") {
+      if (index + 1 >= argv.length) {
+        throw new Error("Missing value for --arch");
+      }
       options.arch = argv[++index];
     } else if (arg === "--help" || arg === "-h") {
       printUsage();
@@ -102,6 +105,12 @@ function resolveIconInput(args) {
 
 function installIconResolver() {
   const appBuilder = require("app-builder-lib/out/util/appBuilder");
+  if (!appBuilder || typeof appBuilder.executeAppBuilderAsJson !== "function") {
+    throw new Error(
+      "electron-builder internal API executeAppBuilderAsJson not found; " +
+        "package-mac-dir requires electron-builder ^26.0.0"
+    );
+  }
   const realExecuteAppBuilderAsJson = appBuilder.executeAppBuilderAsJson;
 
   appBuilder.executeAppBuilderAsJson = async function executeAppBuilderAsJson(args) {
