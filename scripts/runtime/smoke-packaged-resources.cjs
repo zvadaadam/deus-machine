@@ -238,7 +238,7 @@ async function smokeArch(arch) {
     }
 
     signPackagedPayloads(resourcesDir, arch);
-    verifyPackagedAgentClis(context, {
+    await verifyPackagedAgentClis(context, {
       runVersionChecks: false,
       verifyManifestHashes: false,
     });
