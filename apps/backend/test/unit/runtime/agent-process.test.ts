@@ -107,6 +107,24 @@ describe("managed agent-server process", () => {
     );
   });
 
+  it("refuses packaged agent-server fallback without deus-runtime", async () => {
+    const root = createTempRoot();
+    const entry = path.join(root, "agent.cjs");
+    writeExecutable(
+      entry,
+      ["console.log('LISTEN_URL=ws://127.0.0.1:4567');", "setInterval(() => {}, 1000);"].join("\n")
+    );
+
+    process.env.DEUS_PACKAGED = "1";
+    process.env.AGENT_SERVER_ENTRY = entry;
+    process.env.AGENT_SERVER_CWD = root;
+    process.env.ELECTRON_RUN_AS_NODE = "1";
+
+    await expect(startManagedAgentServer()).rejects.toThrow(
+      /Packaged backend requires DEUS_RUNTIME_EXECUTABLE/
+    );
+  });
+
   it("does not infer the obsolete packaged CJS entry from a bundled bin dir", async () => {
     const root = createTempRoot();
     const binDir = path.join(root, "bin");
