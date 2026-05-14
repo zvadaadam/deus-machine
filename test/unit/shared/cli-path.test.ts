@@ -93,9 +93,34 @@ describe("cli path helpers", () => {
   it("uses a non-global sentinel path when packaged runtime has no bundled bin directory", () => {
     process.env.DEUS_PACKAGED = "1";
     delete process.env.DEUS_BUNDLED_BIN_DIR;
+    delete process.env.DEUS_RESOURCES_PATH;
 
     expect(resolveCliExecutable("gh")).toBe("/__deus_missing_bundled_bin__/gh");
   });
+
+  it.runIf(process.platform === "darwin" && (process.arch === "arm64" || process.arch === "x64"))(
+    "does not use dev-staged binaries as a packaged runtime fallback",
+    () => {
+      process.env.DEUS_PACKAGED = "1";
+      delete process.env.DEUS_BUNDLED_BIN_DIR;
+      delete process.env.DEUS_RESOURCES_PATH;
+      const root = mkdtempSync(path.join(tmpdir(), "deus-cli-path-packaged-"));
+      const dir = path.join(root, "dist", "runtime", "electron", "bin", `darwin-${process.arch}`);
+      const executablePath = path.join(dir, "gh");
+
+      try {
+        mkdirSync(dir, { recursive: true });
+        writeFileSync(executablePath, "");
+        chmodSync(executablePath, 0o755);
+        process.chdir(root);
+
+        expect(resolveBundledCliPath("gh")).toBeNull();
+        expect(resolveCliExecutable("gh")).toBe("/__deus_missing_bundled_bin__/gh");
+      } finally {
+        rmSync(root, { recursive: true, force: true });
+      }
+    }
+  );
 
   it("ignores inherited user PATH entries in packaged runtime mode", () => {
     process.env.DEUS_PACKAGED = "1";

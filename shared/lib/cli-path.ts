@@ -36,6 +36,7 @@ function getBundledCliDirectoryCandidates(): string[] {
   const candidates: string[] = [];
   const resourcesPath = getElectronResourcesPath();
   if (resourcesPath) candidates.push(join(resourcesPath, "bin"));
+  if (isPackagedRuntime()) return [...new Set(candidates)];
 
   const devStagedCliDirectory = getDevStagedCliDirectory();
   if (devStagedCliDirectory) candidates.push(devStagedCliDirectory);
