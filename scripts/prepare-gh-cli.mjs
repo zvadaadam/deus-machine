@@ -78,7 +78,8 @@ function verifyGhBinary(filePath, runtimeKey) {
 }
 
 function inspectGhBinary(filePath, target) {
-  const fileOutput = execFileSync("file", [filePath], {
+  const fileOutput = execFileSync("file", [relativeFromProjectRoot(filePath)], {
+    cwd: projectRoot,
     encoding: "utf8",
     timeout: VERIFY_TIMEOUT_MS,
     stdio: ["ignore", "pipe", "pipe"],

@@ -425,9 +425,10 @@ export function buildDeusRuntime(options: BuildDeusRuntimeOptions = {}): DeusRun
 
     chmodSync(output, 0o755);
     signMacExecutable(output, projectRoot);
-    const fileOutput = execOutput("file", [output], projectRoot);
+    const manifestCommandPath = relativeFromProjectRoot(projectRoot, output);
+    const fileOutput = execOutput("file", [manifestCommandPath], projectRoot);
     assertFileArch(fileOutput, target, output);
-    const otoolOutput = execOutput("otool", ["-L", output], projectRoot);
+    const otoolOutput = execOutput("otool", ["-L", manifestCommandPath], projectRoot);
     verifyMacSystemDylibs(otoolOutput, output);
     verifyMacCodeSignature(output);
     verifyMacCodeSignaturePageSize(output);
@@ -548,9 +549,10 @@ export function validateDeusRuntime(options: ValidateDeusRuntimeOptions = {}): D
     if (manifestEntry.sha256 !== hashFile(executablePath)) {
       throw new Error(`Native runtime manifest hash mismatch for ${runtimeKey}`);
     }
-    const fileOutput = execOutput("file", [executablePath], projectRoot);
+    const manifestCommandPath = relativeFromProjectRoot(projectRoot, executablePath);
+    const fileOutput = execOutput("file", [manifestCommandPath], projectRoot);
     assertFileArch(fileOutput, target, executablePath);
-    const otoolOutput = execOutput("otool", ["-L", executablePath], projectRoot);
+    const otoolOutput = execOutput("otool", ["-L", manifestCommandPath], projectRoot);
     verifyMacSystemDylibs(otoolOutput, executablePath);
     if (manifestEntry.size !== statSync(executablePath).size) {
       throw new Error(`Native runtime manifest size mismatch for ${runtimeKey}`);

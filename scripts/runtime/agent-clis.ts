@@ -536,6 +536,7 @@ async function verifyStagedAgentCliVersionBounded(
 }
 
 function inspectStaticExecutable(
+  projectRoot: string,
   filePath: string,
   label: string,
   fileArch: string
@@ -544,7 +545,7 @@ function inspectStaticExecutable(
   return {
     sha256: hashFile(filePath),
     size: statSync(filePath).size,
-    fileOutput: getMachOArchOutput(filePath, label, fileArch),
+    fileOutput: getMachOArchOutput(projectRoot, filePath, label, fileArch),
   };
 }
 
@@ -603,11 +604,13 @@ export async function prepareAgentClis(
       copyExecutable(path.join(codexPackage.packageRoot, codexEntry), stagedCodex);
       copyExecutable(path.join(codexPackage.packageRoot, rgEntry), stagedRg);
       const codexInspection = inspectStaticExecutable(
+        projectRoot,
         stagedCodex,
         `${target.runtimeKey}/codex`,
         target.fileArch
       );
       const rgInspection = inspectStaticExecutable(
+        projectRoot,
         stagedRg,
         `${target.runtimeKey}/rg`,
         target.fileArch
@@ -655,6 +658,7 @@ export async function prepareAgentClis(
       const stagedClaude = resolveStagedAgentCliPath(projectRoot, target.runtimeKey, "claude");
       copyExecutable(path.join(claudePackage.packageRoot, "claude"), stagedClaude);
       const claudeInspection = inspectStaticExecutable(
+        projectRoot,
         stagedClaude,
         `${target.runtimeKey}/claude`,
         target.fileArch
@@ -713,8 +717,14 @@ function assertExecutable(filePath: string, label: string): void {
   }
 }
 
-function getMachOArchOutput(filePath: string, label: string, fileArch: string): string {
-  const fileOutput = execFileSync("file", [filePath], {
+function getMachOArchOutput(
+  projectRoot: string,
+  filePath: string,
+  label: string,
+  fileArch: string
+): string {
+  const fileOutput = execFileSync("file", [relativeFromProjectRoot(projectRoot, filePath)], {
+    cwd: projectRoot,
     encoding: "utf8",
     timeout: VERIFY_TIMEOUT_MS,
     stdio: ["ignore", "pipe", "pipe"],
@@ -753,6 +763,7 @@ export function validateStagedAgentClis(
     for (const tool of ["codex", "claude", "rg"] as const) {
       const executablePath = resolveStagedAgentCliPath(projectRoot, runtimeKey, tool);
       const inspection = inspectStaticExecutable(
+        projectRoot,
         executablePath,
         `${runtimeKey}/${tool}`,
         target.fileArch
