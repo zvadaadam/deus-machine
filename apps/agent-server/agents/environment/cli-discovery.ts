@@ -112,6 +112,9 @@ export function discoverExecutable(
       console.log(
         `${config.displayName} executable initialized at ${candidatePath} (bundled runtime)`
       );
+      if (process.env.DEUS_RUNTIME === "1" || process.env.DEUS_PACKAGED === "1") {
+        process.stdout.write(`BUNDLED_CLI_PATH ${config.bundledTool}=${candidatePath}\n`);
+      }
       state.executablePath = candidatePath;
       state.result = { success: true, path: candidatePath };
       return { success: true };

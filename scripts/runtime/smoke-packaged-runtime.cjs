@@ -15,6 +15,10 @@ const OBSOLETE_RUNTIME_PATTERNS = [
   /AGENT_SERVER_ENTRY/,
   /global CLI/,
 ];
+const BUNDLED_AGENT_CLI_PATTERNS = [
+  /BUNDLED_CLI_PATH claude=.*\/claude/,
+  /BUNDLED_CLI_PATH codex=.*\/codex/,
+];
 
 function parseArgs(argv) {
   const options = {
@@ -263,19 +267,28 @@ async function smokePackagedRuntime(options) {
   }
   console.log(`[runtime-smoke] packaged runtime self-test binDir: ${selfTest.binDir}`);
 
-  await waitForRuntimePatterns(runtimeBin, ["agent-server"], binDir, [/LISTEN_URL=/]);
-  console.log("[runtime-smoke] packaged runtime agent-server reached LISTEN_URL");
+  await waitForRuntimePatterns(runtimeBin, ["agent-server"], binDir, [
+    ...BUNDLED_AGENT_CLI_PATTERNS,
+    /LISTEN_URL=/,
+  ]);
+  console.log(
+    "[runtime-smoke] packaged runtime agent-server resolved bundled CLIs and reached LISTEN_URL"
+  );
 
   const dataDir = fs.mkdtempSync(path.join(os.tmpdir(), "deus-packaged-runtime-"));
   try {
     await waitForRuntimePatterns(runtimeBin, ["backend", "--data-dir", dataDir], binDir, [
+      /^\[agent-server\] BUNDLED_CLI_PATH claude=.*\/claude/m,
+      /^\[agent-server\] BUNDLED_CLI_PATH codex=.*\/codex/m,
       /^\[agent-server\] LISTEN_URL=/m,
       /^\[BACKEND_PORT\]\d+/m,
     ]);
   } finally {
     fs.rmSync(dataDir, { recursive: true, force: true });
   }
-  console.log("[runtime-smoke] packaged runtime backend reached managed agent-server and port");
+  console.log(
+    "[runtime-smoke] packaged runtime backend resolved bundled CLIs and reached managed agent-server and port"
+  );
 }
 
 smokePackagedRuntime(parseArgs(process.argv.slice(2))).catch((error) => {

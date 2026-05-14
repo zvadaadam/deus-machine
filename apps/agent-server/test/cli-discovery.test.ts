@@ -94,6 +94,18 @@ describe("discoverExecutable", () => {
     expect(mockExecFileSync).not.toHaveBeenCalled();
   });
 
+  it("emits bundled CLI path on stdout in runtime mode", () => {
+    const stdoutWrite = vi.spyOn(process.stdout, "write").mockImplementation(() => true);
+    process.env.DEUS_RUNTIME = "1";
+    mockExistsSync.mockReturnValue(true);
+    mockResolveBundledCliPath.mockReturnValue("/runtime/bin/codex");
+
+    runDiscovery({ bundledTool: "codex" });
+
+    expect(stdoutWrite).toHaveBeenCalledWith("BUNDLED_CLI_PATH codex=/runtime/bin/codex\n");
+    stdoutWrite.mockRestore();
+  });
+
   it("tries the bundled candidate when an override fails verification", () => {
     mockExistsSync
       .mockReturnValueOnce(true) // /bad/path exists
