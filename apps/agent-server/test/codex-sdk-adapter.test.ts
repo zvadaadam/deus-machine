@@ -420,7 +420,12 @@ describe("CodexSdkAdapter", () => {
 
       const events = transformer.process({
         type: "turn.completed",
-        usage: { input_tokens: 100, output_tokens: 50, cached_input_tokens: 20 },
+        usage: {
+          input_tokens: 100,
+          output_tokens: 50,
+          cached_input_tokens: 20,
+          reasoning_output_tokens: 5,
+        },
       });
 
       expect(events).toHaveLength(2);
@@ -429,7 +434,7 @@ describe("CodexSdkAdapter", () => {
       expect(turnCompleted).toMatchObject({
         type: "turn.completed",
         finishReason: "end_turn",
-        tokens: expect.objectContaining({ input: 100, output: 50, cacheRead: 20 }),
+        tokens: expect.objectContaining({ input: 100, output: 50, reasoning: 5, cacheRead: 20 }),
       });
     });
 
@@ -498,11 +503,16 @@ describe("CodexSdkAdapter", () => {
 
       transformer.process({
         type: "turn.completed",
-        usage: { input_tokens: 100, output_tokens: 50, cached_input_tokens: 10 },
+        usage: {
+          input_tokens: 100,
+          output_tokens: 50,
+          cached_input_tokens: 10,
+          reasoning_output_tokens: 4,
+        },
       });
 
       const result = transformer.finish();
-      expect(result.usage).toMatchObject({ input: 100, output: 50, cacheRead: 10 });
+      expect(result.usage).toMatchObject({ input: 100, output: 50, reasoning: 4, cacheRead: 10 });
     });
 
     it("returns all parts (excluding turn events) from getParts()", () => {
@@ -519,7 +529,12 @@ describe("CodexSdkAdapter", () => {
       });
       transformer.process({
         type: "turn.completed",
-        usage: { input_tokens: 50, output_tokens: 25, cached_input_tokens: 0 },
+        usage: {
+          input_tokens: 50,
+          output_tokens: 25,
+          cached_input_tokens: 0,
+          reasoning_output_tokens: 0,
+        },
       });
 
       const result = transformer.finish();
