@@ -160,6 +160,18 @@ function appDiagnostics(appPath, appBinary) {
   ].join("\n");
 }
 
+function macExecutionPolicyHint(diagnostics) {
+  if (process.platform !== "darwin") return "";
+  if (!/spctl:[\s\S]*rejected/.test(diagnostics)) return "";
+  if (!/com\.apple\.(provenance|quarantine)/.test(diagnostics)) return "";
+
+  return [
+    "",
+    "macOS rejected this app before packaged Electron reached readiness.",
+    "If the process times out with no main.log progress, verify on a notarized artifact or a macOS host that allows copied app bundles to launch.",
+  ].join("\n");
+}
+
 function getJson(port, pathname) {
   return new Promise((resolve, reject) => {
     const request = http.get(
@@ -344,7 +356,9 @@ async function waitForDesktopReadiness(child, tempHome, requiredPatterns, diagno
         new Error(
           `Packaged desktop did not reach readiness. missing=${missing.join(", ") || "none"} logPath=${
             lastLogPath ?? "missing"
-          } log=${lastLog.slice(-4000)}${diagnostics ? `\n${diagnostics}` : ""}`
+          } log=${lastLog.slice(-4000)}${diagnostics ? `\n${diagnostics}` : ""}${macExecutionPolicyHint(
+            diagnostics
+          )}`
         )
       );
     }, STARTUP_TIMEOUT_MS);
@@ -357,7 +371,9 @@ async function waitForDesktopReadiness(child, tempHome, requiredPatterns, diagno
           new Error(
             `Packaged desktop exited before readiness: code=${code} signal=${signal} logPath=${
               lastLogPath ?? "missing"
-            } log=${lastLog.slice(-4000)}${diagnostics ? `\n${diagnostics}` : ""}`
+            } log=${lastLog.slice(-4000)}${diagnostics ? `\n${diagnostics}` : ""}${macExecutionPolicyHint(
+              diagnostics
+            )}`
           )
         );
       }

@@ -135,6 +135,18 @@ function runtimeDiagnostics(runtimeBin) {
   ].join("\n");
 }
 
+function macExecutionPolicyHint(diagnostics) {
+  if (process.platform !== "darwin") return "";
+  if (!/spctl:[\s\S]*rejected/.test(diagnostics)) return "";
+  if (!/com\.apple\.(provenance|quarantine)/.test(diagnostics)) return "";
+
+  return [
+    "",
+    "macOS rejected this executable before user code reached readiness.",
+    "If the process times out with no stdout/stderr, verify on a notarized artifact or a macOS host that allows generated Mach-O binaries to launch.",
+  ].join("\n");
+}
+
 function runRuntime(runtimeBin, args, binDir) {
   const result = spawnSync(runtimeBin, args, {
     cwd: path.dirname(runtimeBin),
@@ -145,12 +157,13 @@ function runRuntime(runtimeBin, args, binDir) {
   });
   if (result.status !== 0) {
     const diagnostics = runtimeDiagnostics(runtimeBin);
+    const hint = macExecutionPolicyHint(diagnostics);
     throw new Error(
       `${path.basename(runtimeBin)} ${args.join(" ")} failed: status=${result.status} signal=${
         result.signal
       } error=${result.error?.code ?? "none"} stdout=${result.stdout.trim()} stderr=${result.stderr.trim()}${
         diagnostics ? `\n${diagnostics}` : ""
-      }`
+      }${hint}`
     );
   }
   return result.stdout.trim();
@@ -254,6 +267,7 @@ async function waitForRuntimePatterns(runtimeBin, args, binDir, patterns, option
           .filter((_, index) => !matched.has(index))
           .map((pattern) => pattern.toString());
         const diagnostics = runtimeDiagnostics(runtimeBin);
+        const hint = macExecutionPolicyHint(diagnostics);
         reject(
           new Error(
             `${path.basename(runtimeBin)} ${args.join(
@@ -262,7 +276,7 @@ async function waitForRuntimePatterns(runtimeBin, args, binDir, patterns, option
               .trim()
               .slice(-4000)} stderr=${stderr.trim().slice(-4000)}${
               diagnostics ? `\n${diagnostics}` : ""
-            }`
+            }${hint}`
           )
         );
       }, STARTUP_TIMEOUT_MS);
@@ -310,6 +324,7 @@ async function waitForRuntimePatterns(runtimeBin, args, binDir, patterns, option
       child.on("exit", (code, signal) => {
         if (!settled && matched.size !== patterns.length) {
           const diagnostics = runtimeDiagnostics(runtimeBin);
+          const hint = macExecutionPolicyHint(diagnostics);
           fail(
             new Error(
               `${path.basename(runtimeBin)} ${args.join(
@@ -318,7 +333,7 @@ async function waitForRuntimePatterns(runtimeBin, args, binDir, patterns, option
                 .trim()
                 .slice(-4000)} stderr=${stderr.trim().slice(-4000)}${
                 diagnostics ? `\n${diagnostics}` : ""
-              }`
+              }${hint}`
             )
           );
         }
