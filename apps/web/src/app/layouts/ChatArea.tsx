@@ -133,6 +133,11 @@ export function ChatArea({
             workspacePath={workspace.workspace_path}
             workspaceRepoName={workspace.repo_name}
             workspaceParentBranch={workspace.git_target_branch}
+            workspaceKind={workspace.workspace_kind}
+            workspaceState={workspace.state}
+            workspaceInitStep={workspace.init_stage}
+            workspaceSetupStatus={workspace.setup_status}
+            workspaceCloudStatus={workspace.cloud_status ?? null}
             workspaceDefaultBranch={workspace.git_default_branch}
             isFirstSession={workspace.latest_message_sent_at === null}
             embedded={true}

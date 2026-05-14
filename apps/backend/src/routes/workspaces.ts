@@ -20,6 +20,11 @@ import {
   isManifestCommandSafe,
 } from "../services/manifest.service";
 import { initializeWorkspace } from "../services/workspace-init.service";
+import {
+  createCloudSessionForWorkspace,
+  initializeCloudWorkspace,
+  stopCloudWorkspace,
+} from "../services/cloud-workspace.service";
 import { autoProgressStatus, setWorkspaceStatus } from "../services/workspace-status.service";
 import {
   getAllWorkspaces,
@@ -80,7 +85,11 @@ app.patch("/workspaces/:id", async (c) => {
       // Run archive lifecycle hook (best-effort)
       try {
         const ws = getWorkspaceById(db, id);
-        if (ws && ws.root_path) {
+        if (ws?.workspace_kind === "cloud") {
+          void stopCloudWorkspace(ws).catch((err) => {
+            console.warn("[WORKSPACE] Cloud archive cleanup failed (continuing):", err);
+          });
+        } else if (ws && ws.root_path) {
           const wsPath = computeWorkspacePath(ws);
           const manifest = readManifestWithFallback(wsPath, ws.root_path);
           const archiveCmd = manifest ? getArchiveCommand(manifest) : null;
@@ -129,10 +138,15 @@ app.patch("/workspaces/:id", async (c) => {
 // Create workspace
 app.post("/workspaces", async (c) => {
   const db = getDatabase();
-  const { repository_id, source_branch, pr_number, pr_url, pr_title, target_branch } = parseBody(
-    CreateWorkspaceBody,
-    await c.req.json()
-  );
+  const {
+    repository_id,
+    workspace_kind,
+    source_branch,
+    pr_number,
+    pr_url,
+    pr_title,
+    target_branch,
+  } = parseBody(CreateWorkspaceBody, await c.req.json());
 
   const repo = getRepositoryById(db, repository_id);
   if (!repo) throw new NotFoundError("Repository not found");
@@ -150,6 +164,27 @@ app.post("/workspaces", async (c) => {
     if (gitUser) branchPrefix = gitUser;
   } catch {}
   const placeholderBranchName = `${branchPrefix}/${workspace_name}`;
+  const targetBranch = target_branch || repo.git_default_branch || "main";
+
+  if (workspace_kind === "cloud") {
+    await initializeCloudWorkspace({
+      db,
+      workspaceId,
+      repositoryId: repository_id,
+      repo,
+      workspaceName: workspace_name,
+      branchName: placeholderBranchName,
+      parentBranch: parent_branch,
+      targetBranch,
+      prNumber: pr_number ?? null,
+      prUrl: pr_url ?? null,
+      prTitle: pr_title ?? null,
+    });
+
+    const workspace = getWorkspaceForMiddleware(db, workspaceId);
+    if (!workspace) throw new NotFoundError("Workspace not found after creation");
+    return c.json({ ...workspace, workspace_path: computeWorkspacePath(workspace) });
+  }
 
   // ─── IMPORTANT: Remote-first branch strategy ───────────────────────
   // We ALWAYS want worktrees branched from origin/<parent_branch>, not
@@ -187,8 +222,8 @@ app.post("/workspaces", async (c) => {
     `
     INSERT INTO workspaces (
       id, repository_id, slug, title, git_branch,
-      git_target_branch, pr_url, pr_number, state, updated_at
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'))
+      git_target_branch, workspace_kind, pr_url, pr_number, state, updated_at
+    ) VALUES (?, ?, ?, ?, ?, ?, 'local', ?, ?, ?, datetime('now'))
   `
   ).run(
     workspaceId,
@@ -196,7 +231,7 @@ app.post("/workspaces", async (c) => {
     workspace_name,
     pr_title || null,
     placeholderBranchName,
-    target_branch || repo.git_default_branch || "main",
+    targetBranch,
     pr_url || null,
     pr_number || null,
     "initializing"
@@ -280,12 +315,17 @@ app.get("/workspaces/:id/sessions", (c) => {
 });
 
 // Create a new session for an existing workspace
-app.post("/workspaces/:id/sessions", (c) => {
+app.post("/workspaces/:id/sessions", async (c) => {
   const db = getDatabase();
   const workspaceId = c.req.param("id");
 
   const workspace = getWorkspaceRaw(db, workspaceId);
   if (!workspace) throw new NotFoundError("Workspace not found");
+
+  if (workspace.workspace_kind === "cloud") {
+    const session = await createCloudSessionForWorkspace({ db, workspace });
+    return c.json(session);
+  }
 
   const sessionId = uuidv7();
 

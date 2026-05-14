@@ -24,6 +24,7 @@ import * as agentService from "./service";
 import { resolveAapPaths } from "./service";
 import * as simulator from "../simulator-context";
 import { launchApp, stopApp } from "../aap";
+import { abortCloudTurn, forwardCloudTurn, isCloudSession } from "../cloud-workspace.service";
 import { broadcast as wsBroadcast } from "../ws.service";
 import type { AgentHarness } from "@shared/enums";
 import type { CommandName } from "@shared/types/query-protocol";
@@ -134,7 +135,9 @@ export async function runCommand(
         const prUrl = readString(params, "pr_url");
         const prTitle = readString(params, "pr_title");
         const targetBranch = readString(params, "target_branch");
+        const workspaceKind = readString(params, "workspace_kind");
         if (sourceBranch) body.source_branch = sourceBranch;
+        if (workspaceKind) body.workspace_kind = workspaceKind;
         if (params.pr_number != null) body.pr_number = params.pr_number;
         if (prUrl) body.pr_url = prUrl;
         if (prTitle) body.pr_title = prTitle;
@@ -313,6 +316,11 @@ function handleSendMessage(params: QueryParams): CommandResult {
 
   const db = getDatabase();
   const session = getSessionRaw(db, sessionId);
+  const workspace = session ? getWorkspaceForMiddleware(db, session.workspace_id) : undefined;
+
+  if (workspace?.workspace_kind === "cloud" && agentHarness !== "claude") {
+    throw new Error("Cloud workspaces currently run Claude. Open a Claude chat tab to continue.");
+  }
 
   // Harness lock: once a session has messages, its agent harness is bound to
   // a specific SDK process. Reject cross-harness switches to keep the server
@@ -358,14 +366,20 @@ function handleSendMessage(params: QueryParams): CommandResult {
   // 2. Forward to agent-server (fire-and-forget — ACK already sent)
   const existingAgentSessionId = session?.agent_session_id ?? null;
 
+  if (workspace?.workspace_kind === "cloud") {
+    try {
+      forwardCloudTurn({ sessionId, prompt: content });
+    } catch (err) {
+      handleAgentError(sessionId, agentHarness, err);
+    }
+    return { commandId: result.messageId };
+  }
+
   // Resolve cwd server-side from session → workspace → repo.
   // Clear any caller-provided value so the server is authoritative.
   delete params.cwd;
-  if (session) {
-    const workspace = getWorkspaceForMiddleware(db, session.workspace_id);
-    if (workspace) {
-      params.cwd = computeWorkspacePath(workspace);
-    }
+  if (workspace) {
+    params.cwd = computeWorkspacePath(workspace);
   }
 
   if (!agentService.isConnected()) {
@@ -402,6 +416,15 @@ async function handleStopSession(params: QueryParams): Promise<CommandResult> {
   const db = getDatabase();
   const session = getSessionRaw(db, sessionId);
   if (!session) throw new Error("Session not found");
+
+  if (isCloudSession(session)) {
+    abortCloudTurn(sessionId);
+    db.prepare(
+      "UPDATE sessions SET status = 'idle', updated_at = datetime('now') WHERE id = ?"
+    ).run(sessionId);
+    invalidate(["workspaces", "sessions", "session", "stats"], { sessionIds: [sessionId] });
+    return {};
+  }
 
   if (agentService.isConnected()) {
     try {

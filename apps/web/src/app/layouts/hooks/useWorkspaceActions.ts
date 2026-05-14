@@ -118,7 +118,8 @@ export function useWorkspaceActions({
 
   // --- Manifest tasks (deus.json) ---
 
-  const isWorkspaceReady = selectedWorkspace?.state === "ready";
+  const isWorkspaceReady =
+    selectedWorkspace?.state === "ready" && selectedWorkspace.workspace_kind !== "cloud";
   const { data: manifestData } = useManifestTasks(isWorkspaceReady ? selectedWorkspaceId : null);
   const manifestTasks = manifestData?.tasks;
   const hasManifest = manifestData?.manifest != null;

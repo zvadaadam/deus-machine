@@ -84,7 +84,7 @@ app.post("/sessions/:id/messages", async (c) => {
 
   const db = getDatabase();
   const createdMessage = getMessageById(db, result.messageId);
-  return c.json(createdMessage);
+  return c.json(createdMessage ? attachParts(db, [createdMessage])[0] : null);
 });
 
 /**

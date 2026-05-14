@@ -170,6 +170,7 @@ export const PROTOCOL_EVENTS = [
   "session:plan-mode",
   "session:error",
   "session:progress",
+  "workspace:progress",
   "tool:request",
   // Message lifecycle events
   "message:created",

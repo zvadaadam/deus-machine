@@ -31,7 +31,13 @@ import { QueryOptionsSchema } from "./protocol";
 
 export type PartEvent =
   | { type: "turn.started"; turnId?: string }
-  | { type: "message.created"; messageId: string; role: "assistant"; parentToolCallId?: string }
+  | {
+      type: "message.created";
+      messageId: string;
+      role: "assistant";
+      messageIndex?: number;
+      parentToolCallId?: string;
+    }
   | { type: "part.created"; part: Part }
   | { type: "part.delta"; partId: string; delta: string }
   | { type: "part.done"; part: Part }
@@ -371,6 +377,7 @@ export const MessageCreatedEventSchema = z.object({
   agentHarness: AgentHarnessSchema,
   messageId: z.string(),
   role: z.literal("assistant"),
+  messageIndex: z.number().int().nonnegative().optional(),
   parentToolCallId: z.string().optional(),
 });
 export type MessageCreatedEvent = z.infer<typeof MessageCreatedEventSchema>;

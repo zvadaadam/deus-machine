@@ -1,6 +1,6 @@
 import React from "react";
 import { match } from "ts-pattern";
-import { Archive, Loader2 } from "lucide-react";
+import { Archive, Cloud, Loader2 } from "lucide-react";
 import NumberFlow from "@number-flow/react";
 import { useQueryClient } from "@tanstack/react-query";
 
@@ -91,9 +91,15 @@ export const WorkspaceItem = React.memo(function WorkspaceItem({
               <SidebarRowIconSlot>
                 <CircularPixelGrid variant="working" size={14} resolution={8} />
               </SidebarRowIconSlot>
-              <span className="text-text-disabled truncate text-base font-normal">
+              <span className="text-text-disabled min-w-0 truncate text-base font-normal">
                 {getWorkspaceDisplayName(workspace)}
               </span>
+              {workspace.workspace_kind === "cloud" && (
+                <Cloud
+                  className="text-text-disabled h-3 w-3 shrink-0"
+                  aria-label="Cloud workspace"
+                />
+              )}
             </div>
             {/* Row 2: secondary context · init stage */}
             <div className="flex min-w-0 items-center gap-1.5 pl-[26px]">
@@ -233,7 +239,7 @@ export const WorkspaceItem = React.memo(function WorkspaceItem({
             </WorkspaceStatusMenu>
             <span
               className={cn(
-                "truncate text-base",
+                "min-w-0 truncate text-base",
                 isActive
                   ? "text-text-primary font-medium"
                   : isActiveState
@@ -243,6 +249,15 @@ export const WorkspaceItem = React.memo(function WorkspaceItem({
             >
               {displayName}
             </span>
+            {workspace.workspace_kind === "cloud" && (
+              <Cloud
+                className={cn(
+                  "h-3 w-3 shrink-0",
+                  isActive || isActiveState ? "text-text-muted" : "text-text-disabled"
+                )}
+                aria-label="Cloud workspace"
+              />
+            )}
           </div>
 
           {/* Row 2: secondary context · status */}

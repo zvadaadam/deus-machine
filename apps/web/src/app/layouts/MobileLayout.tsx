@@ -74,7 +74,7 @@ export function MobileLayout({
 
   // File changes -- always queried for the badge count on the code tab,
   // and used by ChangesDiffViewer when the code tab is active.
-  const isReady = workspace.state === "ready";
+  const isReady = workspace.state === "ready" && workspace.workspace_kind !== "cloud";
   const { data: fileChangesData } = useFileChanges(
     isReady ? workspace.id : null,
     workspace.session_status,
@@ -116,6 +116,7 @@ export function MobileLayout({
           workspacePath={workspace.workspace_path}
           setupStatus={workspace.setup_status}
           setupError={workspace.error_message}
+          workspaceKind={workspace.workspace_kind}
           onSendAgentMessage={sendAgentMessageHandler ? handleSendAgentMessage : undefined}
           onRetrySetup={onRetrySetup}
           onViewSetupLogs={onViewSetupLogs}
@@ -158,12 +159,18 @@ export function MobileLayout({
         role="tabpanel"
         aria-labelledby="mobile-tab-code"
       >
-        <ChangesView
-          workspace={workspace}
-          isWatched={isWatched}
-          onReview={handleInsertReviewPrompt}
-          compact
-        />
+        {workspace.workspace_kind === "cloud" ? (
+          <div className="text-text-muted flex h-full items-center justify-center px-6 text-center text-sm">
+            Cloud workspace
+          </div>
+        ) : (
+          <ChangesView
+            workspace={workspace}
+            isWatched={isWatched}
+            onReview={handleInsertReviewPrompt}
+            compact
+          />
+        )}
       </div>
 
       {/* Bottom tab bar */}

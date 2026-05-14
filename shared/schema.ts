@@ -6,7 +6,7 @@
  *
  * Tables: repositories, workspaces, sessions, messages, parts, paired_devices
  * Indexes: 13
- * Triggers: 5 (3 auto-update updated_at, 2 denormalized message_count + auto-seq)
+ * Triggers: 6 (3 auto-update updated_at, 3 denormalized message_count + auto-seq)
  */
 
 /**
@@ -49,6 +49,31 @@ export const MIGRATIONS: string[] = [
   `ALTER TABLE sessions DROP COLUMN model`,
   // Data migration for local DBs created before the Codex SDK harness rename.
   `UPDATE sessions SET agent_harness = 'codex-sdk' WHERE agent_harness = 'codex'`,
+  // Cloud workspace support. Local remains the default for existing rows.
+  `ALTER TABLE workspaces ADD COLUMN workspace_kind TEXT NOT NULL DEFAULT 'local'`,
+  `ALTER TABLE workspaces ADD COLUMN cloud_workspace_id TEXT`,
+  `ALTER TABLE workspaces ADD COLUMN cloud_organization_id TEXT`,
+  `ALTER TABLE workspaces ADD COLUMN cloud_status TEXT`,
+  `ALTER TABLE sessions ADD COLUMN cloud_session_id TEXT`,
+  `CREATE INDEX IF NOT EXISTS idx_workspaces_kind ON workspaces(workspace_kind)`,
+  // messages: allow cloud runtime events to provide their canonical
+  // zero-based messageIndex while keeping seq as the local pagination cursor.
+  `DROP TRIGGER IF EXISTS assign_message_seq`,
+  `CREATE TRIGGER IF NOT EXISTS assign_message_seq
+    AFTER INSERT ON messages
+    WHEN NEW.seq <= 0
+    BEGIN
+      UPDATE messages
+        SET seq = (SELECT COALESCE(MAX(m.seq), 0) + 1 FROM messages m WHERE m.session_id = NEW.session_id AND m.id != NEW.id)
+        WHERE id = NEW.id;
+      UPDATE sessions SET message_count = message_count + 1 WHERE id = NEW.session_id;
+    END`,
+  `CREATE TRIGGER IF NOT EXISTS count_explicit_message_seq
+    AFTER INSERT ON messages
+    WHEN NEW.seq > 0
+    BEGIN
+      UPDATE sessions SET message_count = message_count + 1 WHERE id = NEW.session_id;
+    END`,
 ];
 
 function normalizeMigrationSql(sql: string): string {
@@ -98,6 +123,10 @@ export const SCHEMA_SQL = `
     title TEXT,
     git_branch TEXT,
     git_target_branch TEXT,
+    workspace_kind TEXT NOT NULL DEFAULT 'local',
+    cloud_workspace_id TEXT,
+    cloud_organization_id TEXT,
+    cloud_status TEXT,
     state TEXT NOT NULL DEFAULT 'initializing',
     status TEXT NOT NULL DEFAULT 'in-progress',
     current_session_id TEXT,
@@ -117,6 +146,7 @@ export const SCHEMA_SQL = `
     workspace_id TEXT NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
     agent_harness TEXT NOT NULL DEFAULT 'claude',
     agent_session_id TEXT,
+    cloud_session_id TEXT,
     title TEXT,
     status TEXT NOT NULL DEFAULT 'idle',
     message_count INTEGER NOT NULL DEFAULT 0,
@@ -172,7 +202,7 @@ export const SCHEMA_SQL = `
     created_at TEXT NOT NULL DEFAULT (datetime('now'))
   );
 
-  -- Indexes (10)
+  -- Indexes (13)
   CREATE INDEX IF NOT EXISTS idx_workspaces_repository_id ON workspaces(repository_id);
   CREATE INDEX IF NOT EXISTS idx_workspaces_state ON workspaces(state);
   CREATE INDEX IF NOT EXISTS idx_sessions_workspace_id ON sessions(workspace_id);
@@ -200,13 +230,21 @@ export const SCHEMA_SQL = `
     AFTER UPDATE ON sessions
     BEGIN UPDATE sessions SET updated_at = datetime('now') WHERE id = NEW.id; END;
 
-  -- Triggers: denormalized message_count + auto-seq on messages (2)
+  -- Triggers: denormalized message_count + auto-seq on messages (3)
   CREATE TRIGGER IF NOT EXISTS assign_message_seq
     AFTER INSERT ON messages
+    WHEN NEW.seq <= 0
     BEGIN
       UPDATE messages
         SET seq = (SELECT COALESCE(MAX(m.seq), 0) + 1 FROM messages m WHERE m.session_id = NEW.session_id AND m.id != NEW.id)
         WHERE id = NEW.id;
+      UPDATE sessions SET message_count = message_count + 1 WHERE id = NEW.session_id;
+    END;
+
+  CREATE TRIGGER IF NOT EXISTS count_explicit_message_seq
+    AFTER INSERT ON messages
+    WHEN NEW.seq > 0
+    BEGIN
       UPDATE sessions SET message_count = message_count + 1 WHERE id = NEW.session_id;
     END;
 

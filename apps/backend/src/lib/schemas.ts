@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { WorkspaceStateSchema, WorkspaceStatusSchema } from "@shared/enums";
+import { WorkspaceKindSchema, WorkspaceStateSchema, WorkspaceStatusSchema } from "@shared/enums";
 import { ValidationError } from "./errors";
 
 // ============================================================================
@@ -102,6 +102,7 @@ export const PatchWorkspaceBody = z.object({
 
 export const CreateWorkspaceBody = z.object({
   repository_id: z.string().min(1, "repository_id is required"),
+  workspace_kind: WorkspaceKindSchema.optional().default("local"),
   source_branch: z
     .string()
     .refine((s) => !s.startsWith("-"), "Branch name must not start with a dash")
@@ -170,6 +171,8 @@ export const PreferencesFile = z
     claude_model: z.string().optional(),
     custom_endpoint: z.string().optional(),
     default_thinking_level: z.enum(["LOW", "MEDIUM", "HIGH"]).optional(),
+    deus_api_key: z.string().optional(),
+    deus_base_url: z.string().optional(),
     experimental_simulator: z.boolean().optional(),
     experimental_browser: z.boolean().optional(),
     experimental_design: z.boolean().optional(),

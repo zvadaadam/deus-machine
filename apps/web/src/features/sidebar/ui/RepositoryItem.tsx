@@ -1,9 +1,16 @@
 import { useMemo } from "react";
-import { Plus, ChevronRight, ChevronDown, GitPullRequest } from "lucide-react";
+import { Plus, ChevronRight, ChevronDown, GitPullRequest, Cloud, HardDrive } from "lucide-react";
 import { AnimatePresence, m, useReducedMotion } from "framer-motion";
 import { SidebarMenuItem } from "@/components/ui/sidebar";
 import { Collapsible, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { Tooltip, TooltipTrigger, TooltipContent } from "@/components/ui/tooltip";
+import {
+  DropdownMenu,
+  DropdownMenuTrigger,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuShortcut,
+} from "@/components/ui/dropdown-menu";
 import { cn } from "@/shared/lib/utils";
 import { useUnreadStore } from "@/features/session/store/unreadStore";
 import { useWorkspaceLayoutStore } from "@/features/workspace/store/workspaceLayoutStore";
@@ -12,7 +19,7 @@ import { sortByStatusPriority } from "../lib/status";
 import { useSidebarStore } from "../store/sidebarStore";
 import type { RepositoryItemProps } from "../model/types";
 import type { Workspace, DiffStats, RepoGroup } from "@/shared/types";
-import type { WorkspaceStatus } from "@shared/enums";
+import type { WorkspaceKind, WorkspaceStatus } from "@shared/enums";
 import { WorkspaceItem } from "./WorkspaceItem";
 
 import { SidebarRow, SidebarRowMain, SidebarRowIconSlot, SidebarRowRight } from "./SidebarRow";
@@ -119,22 +126,10 @@ export function RepositoryItem({
                     <TooltipContent side="bottom">New from PR or branch</TooltipContent>
                   </Tooltip>
                 )}
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <button
-                      type="button"
-                      aria-label={`New workspace in ${repoName}`}
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        onNewWorkspace(repository.repo_id);
-                      }}
-                      className="text-text-muted hover:text-text-tertiary cursor-pointer [&_*]:cursor-pointer"
-                    >
-                      <Plus className="h-4 w-4" />
-                    </button>
-                  </TooltipTrigger>
-                  <TooltipContent side="bottom">New workspace</TooltipContent>
-                </Tooltip>
+                <NewWorkspaceKindMenu
+                  repoName={repoName}
+                  onSelect={(kind) => onNewWorkspace(repository.repo_id, kind)}
+                />
               </SidebarRowRight>
             )}
           </SidebarRow>
@@ -171,6 +166,43 @@ export function RepositoryItem({
   );
 }
 
+function NewWorkspaceKindMenu({
+  repoName,
+  onSelect,
+}: {
+  repoName: string;
+  onSelect: (kind: WorkspaceKind) => void;
+}) {
+  return (
+    <DropdownMenu>
+      <DropdownMenuTrigger asChild>
+        <button
+          type="button"
+          aria-label={`New workspace in ${repoName}`}
+          onPointerDown={(e) => e.stopPropagation()}
+          onClick={(e) => e.stopPropagation()}
+          className="text-text-muted hover:text-text-tertiary cursor-pointer [&_*]:cursor-pointer"
+        >
+          <Plus className="h-4 w-4" />
+        </button>
+      </DropdownMenuTrigger>
+      <DropdownMenuContent align="end" side="bottom" className="w-44">
+        <DropdownMenuItem onSelect={() => onSelect("local")} className="text-xs">
+          <HardDrive className="size-3.5" />
+          <span>Local</span>
+          <DropdownMenuShortcut className="text-text-disabled text-2xs tracking-normal normal-case">
+            localhost
+          </DropdownMenuShortcut>
+        </DropdownMenuItem>
+        <DropdownMenuItem onSelect={() => onSelect("cloud")} className="text-xs">
+          <Cloud className="size-3.5" />
+          <span>Cloud</span>
+        </DropdownMenuItem>
+      </DropdownMenuContent>
+    </DropdownMenu>
+  );
+}
+
 // ── Inner list with stale-workspace collapsing ───────────────────────────
 
 interface RepositoryWorkspaceListProps {
@@ -180,7 +212,7 @@ interface RepositoryWorkspaceListProps {
   unreadWorkspaceIds?: Set<string>;
   diffStatsMap?: Record<string, DiffStats>;
   reduceMotion: boolean | null;
-  onNewWorkspace: (repoId?: string) => void;
+  onNewWorkspace: (repoId?: string, kind?: WorkspaceKind) => void;
   onWorkspaceClick: (workspace: Workspace) => void;
   onArchive?: (workspaceId: string) => void;
   onStatusChange?: (workspaceId: string, status: WorkspaceStatus) => void;

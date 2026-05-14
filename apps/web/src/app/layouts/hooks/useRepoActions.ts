@@ -23,6 +23,7 @@ import { capabilities } from "@/platform/capabilities";
 import { getErrorMessage } from "@shared/lib/errors";
 import { useCloneRepo } from "./useCloneRepo";
 import { useStartNewProject } from "./useStartNewProject";
+import type { WorkspaceKind } from "@shared/enums";
 
 interface UseRepoActionsOptions {
   selectWorkspace: (id: string | null) => void;
@@ -42,6 +43,7 @@ export function useRepoActions({
 
   // New-workspace modal state (used by NewWorkspaceModal)
   const [selectedRepoId, setSelectedRepoId] = useState("");
+  const [workspaceKind, setWorkspaceKind] = useState<WorkspaceKind>("local");
   const [creating, setCreating] = useState(false);
 
   // ── Shared utilities ─────────────────────────────────────────
@@ -61,8 +63,11 @@ export function useRepoActions({
   }
 
   /** Create a workspace for the given repo, select it, and expand the sidebar. */
-  async function createWorkspaceAndSelect(repoId: string) {
-    const workspace = await createWorkspaceMutation.mutateAsync(repoId);
+  async function createWorkspaceAndSelect(repoId: string, kind: WorkspaceKind = "local") {
+    const workspace = await createWorkspaceMutation.mutateAsync({
+      repositoryId: repoId,
+      workspace_kind: kind,
+    });
     selectWorkspace(workspace.id);
     expandRepo(workspace.repository_id);
   }
@@ -85,10 +90,10 @@ export function useRepoActions({
 
   /** Create a workspace with loading state and error handling. */
   const createAndSelectWorkspace = useCallback(
-    async (repoId: string) => {
+    async (repoId: string, kind: WorkspaceKind = "local") => {
       setCreating(true);
       try {
-        await createWorkspaceAndSelect(repoId);
+        await createWorkspaceAndSelect(repoId, kind);
       } catch (error) {
         selectWorkspace(null);
         console.error("Error creating workspace:", error);
@@ -109,19 +114,23 @@ export function useRepoActions({
     const repoIdToCreate = selectedRepoId;
     setSelectedRepoId("");
     closeNewWorkspaceModal();
-    await createAndSelectWorkspace(repoIdToCreate);
+    await createAndSelectWorkspace(repoIdToCreate, workspaceKind);
   }
 
-  /** Handle "New Workspace" — if repoId is provided, create directly; otherwise open modal. */
+  /** Handle "New Workspace" by opening the modal, optionally pre-selecting a repository. */
   const handleNewWorkspace = useCallback(
-    async (repoId?: string) => {
-      if (repoId) {
-        await createAndSelectWorkspace(repoId);
+    (repoId?: string, kind?: WorkspaceKind) => {
+      if (repoId && kind) {
+        void createAndSelectWorkspace(repoId, kind);
         return;
+      }
+
+      if (repoId) {
+        setSelectedRepoId(repoId);
       }
       openNewWorkspaceModal();
     },
-    [openNewWorkspaceModal, createAndSelectWorkspace]
+    [createAndSelectWorkspace, openNewWorkspaceModal]
   );
 
   // ── Open local project ───────────────────────────────────────
@@ -151,6 +160,7 @@ export function useRepoActions({
     async (params: {
       repositoryId: string;
       source_branch: string;
+      workspace_kind?: WorkspaceKind;
       pr_number?: number;
       pr_url?: string;
       pr_title?: string;
@@ -176,6 +186,8 @@ export function useRepoActions({
     // New-workspace modal state
     selectedRepoId,
     setSelectedRepoId,
+    workspaceKind,
+    setWorkspaceKind,
     creating,
     createWorkspaceFromModal,
     handleNewWorkspace,

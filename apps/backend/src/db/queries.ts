@@ -28,7 +28,8 @@ import type {
 const WORKSPACE_DETAILS_SELECT = `
   SELECT
     w.id, w.repository_id, w.slug, w.title, w.git_branch,
-    w.git_target_branch, w.state, w.status, w.current_session_id,
+    w.git_target_branch, w.workspace_kind, w.cloud_workspace_id,
+    w.cloud_organization_id, w.cloud_status, w.state, w.status, w.current_session_id,
     w.pr_url, w.pr_number,
     w.setup_status, w.error_message, w.init_stage,
     w.updated_at,
@@ -71,7 +72,8 @@ export function getWorkspacesByRepo(
       `
     SELECT
       w.id, w.repository_id, w.slug, w.title, w.git_branch,
-      w.git_target_branch, w.state, w.status, w.current_session_id,
+      w.git_target_branch, w.workspace_kind, w.cloud_workspace_id,
+      w.cloud_organization_id, w.cloud_status, w.state, w.status, w.current_session_id,
       w.pr_url, w.pr_number,
       w.setup_status, w.error_message, w.init_stage,
       w.updated_at,
@@ -142,7 +144,8 @@ export function getWorkspacesBySessionIds(
       `
     SELECT
       w.id, w.repository_id, w.slug, w.title, w.git_branch,
-      w.git_target_branch, w.state, w.status, w.current_session_id,
+      w.git_target_branch, w.workspace_kind, w.cloud_workspace_id,
+      w.cloud_organization_id, w.cloud_status, w.state, w.status, w.current_session_id,
       w.pr_url, w.pr_number,
       w.setup_status, w.error_message, w.init_stage,
       w.updated_at,
@@ -327,6 +330,13 @@ export function getMessagesDelta(
     .all(sessionId, afterSeq) as MessageRow[];
 }
 
+function withMessageIndex<T extends MessageRow>(message: T): T {
+  return {
+    ...message,
+    messageIndex: Math.max(0, message.seq - 1),
+  };
+}
+
 // ─── Parts Queries ──────────────────────────────────────────
 
 /**
@@ -372,7 +382,7 @@ export function attachParts(db: Database.Database, messages: MessageRow[]): Mess
   }
 
   return messages.map((msg) => ({
-    ...msg,
+    ...withMessageIndex(msg),
     parts: partsByMessageId.get(msg.id) ?? [],
   }));
 }

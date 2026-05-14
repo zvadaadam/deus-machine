@@ -1,7 +1,7 @@
 import { createMiddleware } from "hono/factory";
 import path from "path";
 import { getDatabase } from "../lib/database";
-import { NotFoundError } from "../lib/errors";
+import { NotFoundError, ValidationError } from "../lib/errors";
 import { getWorkspaceForMiddleware } from "../db";
 import type { WorkspaceWithDetailsRow } from "../db";
 
@@ -17,7 +17,9 @@ export interface WorkspaceContext {
 export function computeWorkspacePath(ws: {
   root_path?: string | null;
   slug?: string | null;
+  workspace_kind?: string | null;
 }): string {
+  if (ws.workspace_kind === "cloud") return "";
   if (!ws.root_path) return "";
   if (!ws.slug) return "";
   return path.join(ws.root_path, ".deus", ws.slug);
@@ -36,6 +38,10 @@ export const withWorkspace = createMiddleware(async (c, next) => {
 
   if (!workspace || !workspace.root_path || !workspace.slug) {
     throw new NotFoundError("Workspace not found");
+  }
+
+  if (workspace.workspace_kind === "cloud") {
+    throw new ValidationError("Cloud workspaces do not have a local filesystem path");
   }
 
   const workspacePath = computeWorkspacePath(workspace);

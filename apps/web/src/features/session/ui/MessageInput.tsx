@@ -294,7 +294,7 @@ export function MessageInput({
   // selected index). Picked files get pushed into the composer store.
   const fileMention = useFileMention({
     value: draft,
-    workspaceId: workspaceId ?? null,
+    workspaceId: workspacePath ? (workspaceId ?? null) : null,
     onChange: composer.setDraft,
     onAddMention: (result) => composer.addFileMention({ path: result.path, name: result.name }),
   });
@@ -462,7 +462,6 @@ export function MessageInput({
           }}
           onPaste={handlePaste}
           placeholder="Ask a follow-up ... (@ files, / skills)"
-          disabled={sending}
           onKeyDown={handleKeyDown}
           onSelect={fileMention.handleCursorChange}
           onClick={fileMention.handleCursorChange}

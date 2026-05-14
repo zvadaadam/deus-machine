@@ -38,6 +38,7 @@ import { cn } from "@/shared/lib/utils";
 import { ResizablePanelGroup, ResizablePanel, ResizableHandle } from "@/components/ui/resizable";
 import { PanelLeft } from "lucide-react";
 import type { Workspace, PRStatus, GhCliStatus } from "@/shared/types";
+import type { WorkspaceKind } from "@shared/enums";
 import { useUpdateWorkspaceStatus } from "@/features/workspace/api";
 import { REVIEW_CODE } from "@/features/session/lib/sessionPrompts";
 import { native } from "@/platform";
@@ -64,7 +65,12 @@ interface MainContentProps {
   repos: import("@/features/repository/types").Repository[];
   /** Handler for sending the first message from the home screen.
    *  Creates workspace + selects it + queues the first message. */
-  onStartWorkspace: (repoId: string, message: string, model: string) => void;
+  onStartWorkspace: (
+    repoId: string,
+    message: string,
+    model: string,
+    options?: { branch?: string; workspaceKind?: WorkspaceKind }
+  ) => void;
 }
 
 export function MainContent({
@@ -125,7 +131,8 @@ export function MainContent({
   const statusMutation = useUpdateWorkspaceStatus();
 
   // Only start watching and querying diffs once the worktree checkout is complete.
-  const isReady = selectedWorkspace?.state === "ready";
+  const isReady =
+    selectedWorkspace?.state === "ready" && selectedWorkspace.workspace_kind !== "cloud";
 
   // Watch workspace for file changes (event-driven cache invalidation)
   const isWatched = useFileWatcher(
@@ -361,6 +368,7 @@ export function MainContent({
                         workspacePath={selectedWorkspace.workspace_path}
                         setupStatus={selectedWorkspace.setup_status}
                         setupError={selectedWorkspace.error_message}
+                        workspaceKind={selectedWorkspace.workspace_kind}
                         onSendAgentMessage={
                           sendAgentMessageHandler ? handleSendAgentMessage : undefined
                         }

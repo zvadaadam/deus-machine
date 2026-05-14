@@ -8,7 +8,7 @@
 
 import { sendRequest, sendMutate, sendCommand } from "@/platform/ws";
 import type { Workspace, RepoGroup, DiffStats, FileChange } from "../types";
-import type { WorkspaceStatus } from "@shared/enums";
+import type { WorkspaceKind, WorkspaceStatus } from "@shared/enums";
 import type { PRStatus, GhCliStatus, PRSummary, BranchSummary } from "@/shared/types";
 import type { NormalizedTask, ManifestResponse, TaskRunResponse } from "@shared/types/manifest";
 
@@ -88,6 +88,7 @@ export const WorkspaceService = {
       pr_url?: string;
       pr_title?: string;
       target_branch?: string;
+      workspace_kind?: WorkspaceKind;
     }
   ): Promise<Pick<Workspace, "id" | "repository_id">> => {
     const result = await sendCommand("createWorkspace", {

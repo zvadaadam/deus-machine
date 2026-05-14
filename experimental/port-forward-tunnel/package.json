@@ -1,0 +1,11 @@
+{
+  "name": "port-forward-tunnel",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "demo": "bun run demo.ts",
+    "target": "bun run target.ts",
+    "server": "bun run server.ts",
+    "client": "bun run client.ts"
+  }
+}

@@ -18,6 +18,7 @@ export interface TurnStats {
 }
 
 const FILE_MODIFYING_TOOLS = new Set(["Edit", "Write", "MultiEdit", "NotebookEdit"]);
+const SUBAGENT_TOOLS = new Set(["task", "agent"]);
 
 function getToolInputFilePath(input: unknown): string | null {
   if (!input || typeof input !== "object") return null;
@@ -38,7 +39,11 @@ export function calculateTurnStats(messages: Message[]): TurnStats {
       toolCount++;
 
       const toolPart = part as ToolPart;
-      if (toolPart.kind === "task" || toolPart.subagent) {
+      if (
+        toolPart.kind === "task" ||
+        toolPart.subagent ||
+        SUBAGENT_TOOLS.has(toolPart.toolName.toLowerCase())
+      ) {
         subagentCount++;
       }
 

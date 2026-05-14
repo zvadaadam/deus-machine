@@ -137,18 +137,21 @@ export function usePartEvents(sessionId: string | null): void {
 function onMessageCreated(
   qc: QueryClient,
   sessionId: string,
-  data: { messageId: string; role: string; parentToolCallId?: string }
+  data: { messageId: string; role: string; messageIndex?: number; parentToolCallId?: string }
 ): void {
   const key = queryKeys.sessions.messages(sessionId);
 
   qc.setQueryData<PaginatedMessages>(key, (old) => {
+    const fallbackSeq = (old?.messages.at(-1)?.seq ?? 0) + 1;
+    const seq = data.messageIndex != null ? data.messageIndex + 1 : fallbackSeq;
     if (!old) {
       return {
         messages: [
           {
             id: data.messageId,
             session_id: sessionId,
-            seq: 0,
+            seq,
+            messageIndex: data.messageIndex ?? Math.max(0, seq - 1),
             role: data.role as "assistant",
             content: "",
             sent_at: new Date().toISOString(),
@@ -171,7 +174,8 @@ function onMessageCreated(
         {
           id: data.messageId,
           session_id: sessionId,
-          seq: 0,
+          seq,
+          messageIndex: data.messageIndex ?? Math.max(0, seq - 1),
           role: data.role as "assistant",
           content: "",
           sent_at: new Date().toISOString(),
@@ -202,8 +206,10 @@ function onMessageDone(
     const msg = old.messages[msgIndex];
     const updates: Partial<Message> = { stop_reason: data.stopReason ?? null };
 
-    // Repair parts if message:done carries more than the cache has
-    if (data.parts && data.parts.length > (msg.parts?.length ?? 0)) {
+    // message:done is authoritative for final part state. Replace when the
+    // final payload differs, even if the count is unchanged, so corrected text
+    // ordering and DONE state repairs are reflected in the cache.
+    if (data.parts) {
       updates.parts = data.parts;
     }
     if (data.parentToolCallId) {

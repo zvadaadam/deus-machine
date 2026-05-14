@@ -252,6 +252,7 @@ class EventBroadcasterClass {
           agentHarness,
           messageId: event.messageId,
           role: event.role,
+          ...(event.messageIndex != null ? { messageIndex: event.messageIndex } : {}),
           ...(event.parentToolCallId ? { parentToolCallId: event.parentToolCallId } : {}),
         });
         break;

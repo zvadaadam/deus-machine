@@ -53,7 +53,11 @@ export function getWorkspaceDisplayName(workspace: {
 export function getWorkspaceSecondaryText(workspace: {
   title: string | null;
   slug: string;
+  workspace_kind?: string | null;
 }): string | null {
+  if (workspace.workspace_kind === "cloud") {
+    return workspace.title && workspace.slug ? `${workspace.slug} · Cloud` : "Cloud";
+  }
   // Show slug as secondary only when title is the primary display name
   if (workspace.title && workspace.slug) return workspace.slug;
   return null;

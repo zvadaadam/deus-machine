@@ -31,6 +31,10 @@ export interface Settings {
   // AI — Codex
   openai_api_key?: string;
 
+  // Deus Cloud
+  deus_api_key?: string;
+  deus_base_url?: string;
+
   // Analytics (opt-out, default true when absent)
   analytics_enabled?: boolean;
 
@@ -59,6 +63,7 @@ export type SettingsSection =
   | "general"
   | "github"
   | "ai"
+  | "cloud-agents"
   | "environment"
   | "experimental"
   | "access";

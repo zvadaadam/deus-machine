@@ -10,6 +10,7 @@ import {
   Sparkles,
   Copy,
   Check,
+  Cloud,
 } from "lucide-react";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import {
@@ -25,7 +26,7 @@ import { native } from "@/platform";
 import type { InstalledApp } from "@/platform";
 import { track } from "@/platform/analytics";
 import type { SetupStatus } from "@/shared/types";
-import type { WorkspaceStatus } from "@shared/enums";
+import type { WorkspaceKind, WorkspaceStatus } from "@shared/enums";
 import type { NormalizedTask } from "../api/workspace.service";
 import { HeaderRunButton } from "./HeaderRunButton";
 import { WorkflowStatusIcon } from "@/features/sidebar/ui/WorkflowStatusIcon";
@@ -46,6 +47,7 @@ interface WorkspaceHeaderProps {
   onRetrySetup?: () => void;
   onViewSetupLogs?: () => void;
   workspaceStatus?: WorkspaceStatus;
+  workspaceKind?: WorkspaceKind;
   onStatusChange?: (status: WorkspaceStatus) => void;
   tasks?: NormalizedTask[];
   hasManifest?: boolean;
@@ -71,6 +73,7 @@ export function WorkspaceHeader({
   onRetrySetup,
   onViewSetupLogs,
   workspaceStatus,
+  workspaceKind,
   onStatusChange,
   tasks,
   hasManifest,
@@ -131,6 +134,13 @@ export function WorkspaceHeader({
           >
             {title}
           </span>
+        )}
+
+        {workspaceKind === "cloud" && (
+          <Cloud
+            className="text-text-muted mr-0.5 h-3.5 w-3.5 shrink-0"
+            aria-label="Cloud workspace"
+          />
         )}
 
         {subtitle && (

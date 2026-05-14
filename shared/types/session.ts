@@ -18,6 +18,7 @@ export interface Message {
   id: string;
   session_id: string;
   seq: number; // Per-session monotonic sequence number (auto-assigned by trigger)
+  messageIndex?: number; // Zero-based runtime order used by Deus Cloud/SDK events
   role: MessageRole;
   content: string; // JSON-stringified MessageContent
   turn_id?: string | null; // Conversation turn identifier
@@ -129,6 +130,7 @@ export interface Session {
   workspace_id: string;
   agent_harness: import("../enums").AgentHarness;
   agent_session_id?: string | null;
+  cloud_session_id?: string | null;
   title?: string | null;
   status: SessionStatus;
   message_count: number;

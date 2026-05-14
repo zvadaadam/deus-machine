@@ -17,7 +17,8 @@ import { useEffect } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { queryKeys } from "@/shared/api/queryKeys";
 import { WORKSPACE_PROGRESS } from "@shared/events";
-import { native } from "@/platform";
+import { capabilities, native } from "@/platform";
+import { onEvent } from "@/platform/ws";
 import type { RepoGroup } from "@shared/types/workspace";
 import {
   applyWorkspaceProgressToRepoGroups,
@@ -33,7 +34,7 @@ export function useWorkspaceInitEvents() {
   const queryClient = useQueryClient();
 
   useEffect(() => {
-    const unlisten = native.events.on(WORKSPACE_PROGRESS, (data) => {
+    const handleProgress = (data: { workspaceId: string; step: string; label: string }) => {
       const { step, workspaceId } = data;
 
       if (import.meta.env.DEV) {
@@ -58,8 +59,22 @@ export function useWorkspaceInitEvents() {
           queryKey: queryKeys.workspaces.all,
         });
       }
-    });
+    };
 
-    return unlisten;
+    const unlistenNative = capabilities.ipcEventListeners
+      ? native.events.on(WORKSPACE_PROGRESS, handleProgress)
+      : undefined;
+    const unlistenWs = capabilities.ipcEventListeners
+      ? undefined
+      : onEvent((event, data) => {
+          if (event === WORKSPACE_PROGRESS) {
+            handleProgress(data as { workspaceId: string; step: string; label: string });
+          }
+        });
+
+    return () => {
+      unlistenNative?.();
+      unlistenWs?.();
+    };
   }, [queryClient]);
 }
