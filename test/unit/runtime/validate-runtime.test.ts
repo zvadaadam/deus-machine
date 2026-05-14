@@ -172,10 +172,9 @@ describe("validateRuntimeStage", () => {
 
     stageRuntime({ projectRoot, log: () => {} });
     writeGhFixtures(projectRoot);
-    rmSync(
-      path.join(projectRoot, "dist", "runtime", "electron", "bin", "darwin-arm64", "gh"),
-      { force: true }
-    );
+    rmSync(path.join(projectRoot, "dist", "runtime", "electron", "bin", "darwin-arm64", "gh"), {
+      force: true,
+    });
 
     expect(() => validateRuntimeStage({ projectRoot, log: () => {} })).toThrow(
       /Missing darwin-arm64\/gh/
