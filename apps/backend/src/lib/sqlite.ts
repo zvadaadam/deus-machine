@@ -37,7 +37,9 @@ function loadBunSqlite(): BunSqliteDatabaseConstructor {
   return mod.Database;
 }
 
-function withBetterSqlitePragmaShape(db: InstanceType<BunSqliteDatabaseConstructor>): BetterSqlite3.Database {
+function withBetterSqlitePragmaShape(
+  db: InstanceType<BunSqliteDatabaseConstructor>
+): BetterSqlite3.Database {
   const candidate = db as InstanceType<BunSqliteDatabaseConstructor> & {
     pragma?: (source: string) => unknown;
   };
@@ -59,12 +61,8 @@ export function openSqliteDatabase(
     // deus-runtime is a Bun-compiled executable. Use Bun's built-in SQLite
     // there instead of crossing back into better-sqlite3's Node native addon.
     const BunDatabase = loadBunSqlite();
-    const bunOptions = options?.readonly
-      ? { readonly: true }
-      : { create: true, readwrite: true };
-    return withBetterSqlitePragmaShape(
-      new BunDatabase(filename, bunOptions)
-    );
+    const bunOptions = options?.readonly ? { readonly: true } : { create: true, readwrite: true };
+    return withBetterSqlitePragmaShape(new BunDatabase(filename, bunOptions));
   }
 
   const Database = loadBetterSqlite3();

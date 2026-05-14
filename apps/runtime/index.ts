@@ -11,14 +11,7 @@ const VERSION = packageJson.version;
 const RUNTIME_NAME = "deus-runtime";
 const DARWIN_RUNTIME_KEYS = new Set(["darwin-arm64", "darwin-x64"]);
 const PACKAGED_SYSTEM_PATHS = ["/usr/bin", "/bin", "/usr/sbin", "/sbin"];
-const REQUIRED_BINARIES = [
-  "deus-runtime",
-  "codex",
-  "claude",
-  "gh",
-  "rg",
-  "agent-browser",
-] as const;
+const REQUIRED_BINARIES = ["deus-runtime", "codex", "claude", "gh", "rg", "agent-browser"] as const;
 const REQUIRED_RUNTIME_IMPORTS = [
   {
     name: "@anthropic-ai/claude-agent-sdk",
@@ -127,7 +120,7 @@ function resolveRuntimeLayout() {
     ? isStagedDarwinRuntime
       ? findProjectRoot(executableDir)
       : null
-    : findProjectRoot(process.cwd()) ?? findProjectRoot(resolve(executableDir, "../../.."));
+    : (findProjectRoot(process.cwd()) ?? findProjectRoot(resolve(executableDir, "../../..")));
   const stagedBinDir =
     projectRoot && DARWIN_RUNTIME_KEYS.has(runtimeKey)
       ? join(projectRoot, "dist", "runtime", "electron", "bin", runtimeKey)
