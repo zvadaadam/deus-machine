@@ -40,6 +40,7 @@
     "prepare:gh-cli": "node scripts/prepare-gh-cli.mjs",
     "prepare:agent-clis": "bun scripts/runtime/prepare-agent-clis.ts",
     "smoke:runtime-source": "node scripts/runtime/smoke-source-runtime.cjs",
+    "smoke:runtime-native": "node scripts/runtime/smoke-native-runtime.cjs",
     "smoke:runtime-resources": "node scripts/runtime/smoke-packaged-resources.cjs",
     "smoke:packaged-app": "node scripts/runtime/smoke-packaged-app.cjs",
     "smoke:packaged-runtime": "node scripts/runtime/smoke-packaged-runtime.cjs",
