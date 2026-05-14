@@ -1,46 +1,25 @@
 const fs = require("node:fs");
-const http = require("node:http");
 const os = require("node:os");
 const path = require("node:path");
-const { execFileSync, spawn, spawnSync } = require("node:child_process");
+const { execFileSync, spawn } = require("node:child_process");
 const { assertInitializedAgents, readAgentServerListenUrl } = require("./runtime-smoke-rpc.cjs");
-
-const PROJECT_ROOT = path.resolve(__dirname, "../..");
-function resolveDefaultAppPath() {
-  const candidates =
-    process.arch === "arm64"
-      ? ["mac-arm64", "mac"]
-      : process.arch === "x64"
-        ? ["mac-x64", "mac"]
-        : ["mac"];
-
-  for (const directory of candidates) {
-    const appPath = path.join(PROJECT_ROOT, "dist-electron", directory, "Deus.app");
-    if (fs.existsSync(appPath)) return appPath;
-  }
-  return path.join(PROJECT_ROOT, "dist-electron", candidates[0], "Deus.app");
-}
+const {
+  PROJECT_ROOT,
+  appDiagnostics,
+  assert,
+  assertBackendDbRoute,
+  assertExecutable,
+  assertHostRunnableArch,
+  macExecutionPolicyHint,
+  packagedDesktopEnv,
+  pathPattern,
+  resolveDefaultAppPath,
+  stopChild,
+  verifyGatekeeperAssessment,
+} = require("./lib/smoke-helpers.cjs");
 
 const DEFAULT_APP_PATH = resolveDefaultAppPath();
 const STARTUP_TIMEOUT_MS = 60_000;
-const STOP_TIMEOUT_MS = 5_000;
-const PACKAGED_SYSTEM_PATHS = ["/usr/bin", "/bin", "/usr/sbin", "/sbin"];
-const PACKAGED_RUNTIME_ENV_DENYLIST = [
-  "AGENT_SERVER_CWD",
-  "AGENT_SERVER_ENTRY",
-  "AUTH_TOKEN",
-  "DATABASE_PATH",
-  "DEUS_AUTH_TOKEN",
-  "DEUS_BUNDLED_BIN_DIR",
-  "DEUS_BACKEND_PORT",
-  "DEUS_DATA_DIR",
-  "ELECTRON_RUN_AS_NODE",
-  "DEUS_RUNTIME",
-  "DEUS_RUNTIME_COMMAND",
-  "DEUS_RUNTIME_EXECUTABLE",
-  "NODE_PATH",
-  "PORT",
-];
 const FORBIDDEN_LOG_PATTERNS = [
   /spawn (codex|claude).*ENOENT/,
   /ELECTRON_RUN_AS_NODE/,
@@ -109,17 +88,6 @@ Use --launch-in-place for already-installed/notarized app bundles when copying
 the Mach-O payload would invalidate the host's launch-policy decision.`);
 }
 
-function assert(condition, message) {
-  if (!condition) throw new Error(message);
-}
-
-function assertExecutable(filePath, label) {
-  assert(fs.existsSync(filePath), `Missing ${label}: ${filePath}`);
-  const stat = fs.statSync(filePath);
-  assert(stat.isFile(), `${label} is not a regular file: ${filePath}`);
-  assert((stat.mode & 0o111) !== 0, `${label} is not executable: ${filePath}`);
-}
-
 function isInsideDirectory(filePath, directoryPath) {
   const normalizedDirectory = `${path.resolve(directoryPath)}${path.sep}`;
   const normalizedFile = path.resolve(filePath);
@@ -138,20 +106,6 @@ function assertLaunchInPlaceInstallPath(appPath, homePath) {
   throw new Error(
     `--launch-in-place requires --app to be inside /Applications or --home/Applications so the packaged install preflight does not block startup: app=${appPath} home=${homePath}`
   );
-}
-
-function escapeRegExp(value) {
-  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-}
-
-function pathPattern(filePath) {
-  const paths = [filePath];
-  try {
-    paths.push(fs.realpathSync.native(filePath));
-  } catch {
-    // Keep the original spelling when the path is not present.
-  }
-  return `(?:${[...new Set(paths)].map(escapeRegExp).join("|")})`;
 }
 
 function requiredLogPatterns(binDir) {
@@ -175,134 +129,16 @@ function requiredLogPatterns(binDir) {
   ];
 }
 
-function assertHostRunnableArch(filePath, label) {
-  if (process.platform !== "darwin") return;
-  const expectedArch = process.arch === "arm64" ? "arm64" : process.arch === "x64" ? "x86_64" : null;
-  if (!expectedArch) return;
-
-  const output = execFileSync("file", [filePath], {
-    encoding: "utf8",
-    timeout: 20_000,
-    stdio: ["ignore", "pipe", "pipe"],
-  }).trim();
-  if (!output.includes(expectedArch)) {
-    throw new Error(
-      `Packaged ${label} architecture does not match this host; expected ${expectedArch}: ${output}`
-    );
-  }
-}
-
-function verifyGatekeeperAssessment(appPath) {
-  execFileSync("spctl", ["--assess", "--type", "execute", "--verbose=4", appPath], {
-    encoding: "utf8",
-    timeout: 60_000,
-    stdio: ["ignore", "ignore", "pipe"],
-  });
-}
-
-function runDiagnostic(command, args) {
-  const result = spawnSync(command, args, {
-    cwd: PROJECT_ROOT,
-    encoding: "utf8",
-    timeout: 20_000,
-    stdio: ["ignore", "pipe", "pipe"],
-  });
-  const output = `${result.stdout || ""}${result.stderr || ""}`.trim();
-  if (result.error) {
-    return [result.error.code || result.error.message, output].filter(Boolean).join("\n");
-  }
-  if (result.status !== 0) {
-    return output || `${command} exited with status ${result.status}`;
-  }
-  return output;
-}
-
-function appDiagnostics(appPath, appBinary) {
-  if (process.platform !== "darwin") return "";
-  return [
-    `file: ${runDiagnostic("file", [appBinary])}`,
-    `codesign: ${runDiagnostic("codesign", ["-dv", "--verbose=4", appBinary])}`,
-    `spctl: ${runDiagnostic("spctl", ["--assess", "--type", "execute", "--verbose=4", appPath])}`,
-    `xattr: ${runDiagnostic("xattr", ["-lr", appBinary]) || "none"}`,
-  ].join("\n");
-}
-
-function macExecutionPolicyHint(diagnostics) {
-  if (process.platform !== "darwin") return "";
-  if (!/spctl:[\s\S]*rejected/.test(diagnostics)) return "";
-  if (!/com\.apple\.(provenance|quarantine)/.test(diagnostics)) return "";
-
-  return [
-    "",
-    "macOS rejected this app before packaged Electron reached main-process startup.",
-    "This is a host execution-policy failure, not evidence that bundled backend startup failed.",
-    "If the app is already installed in /Applications, rerun this smoke with --launch-in-place to avoid copying the Mach-O payload.",
-    "Verify packaged desktop readiness on a notarized artifact or a macOS host that allows generated/copied Mach-O app bundles to launch.",
-  ].join("\n");
-}
-
-function getJson(port, pathname) {
-  return new Promise((resolve, reject) => {
-    const request = http.get(
-      {
-        hostname: "127.0.0.1",
-        port,
-        path: pathname,
-        timeout: 5_000,
-      },
-      (response) => {
-        let body = "";
-        response.setEncoding("utf8");
-        response.on("data", (chunk) => {
-          body += chunk;
-        });
-        response.on("end", () => {
-          resolve({ statusCode: response.statusCode, body });
-        });
-      }
-    );
-    request.on("error", reject);
-    request.on("timeout", () => request.destroy(new Error(`Timed out requesting ${pathname}`)));
-  });
-}
-
 async function assertBackendDbRouteFromLog(logContents) {
   const match = logContents.match(/\[backend\] \[BACKEND_PORT\](\d+)/);
   if (!match) throw new Error("Packaged desktop log did not include [BACKEND_PORT]");
-
-  const response = await getJson(Number(match[1]), "/api/workspaces");
-  if (response.statusCode !== 200) {
-    throw new Error(
-      `Packaged desktop backend DB route failed: GET /api/workspaces returned ${
-        response.statusCode
-      }: ${response.body.slice(0, 500)}`
-    );
-  }
-
-  const parsed = JSON.parse(response.body);
-  if (!Array.isArray(parsed)) {
-    throw new Error(
-      `Packaged desktop backend DB route returned non-array payload: ${response.body.slice(0, 500)}`
-    );
-  }
+  await assertBackendDbRoute(Number(match[1]), "Packaged desktop backend DB route");
 }
 
 async function assertInitializedAgentsFromLog(logContents) {
   const listenUrl = readAgentServerListenUrl(logContents);
   if (!listenUrl) throw new Error("Packaged desktop log did not include agent-server LISTEN_URL");
   await assertInitializedAgents(listenUrl);
-}
-
-function packagedDesktopEnv(tempHome) {
-  const env = {
-    ...process.env,
-    HOME: tempHome,
-    PATH: PACKAGED_SYSTEM_PATHS.join(path.delimiter),
-  };
-  for (const key of PACKAGED_RUNTIME_ENV_DENYLIST) {
-    delete env[key];
-  }
-  return env;
 }
 
 function runAppCheck(appPath, options) {
@@ -355,41 +191,6 @@ function readMainLog(tempHome) {
   return { logPath, contents: fs.readFileSync(logPath, "utf8") };
 }
 
-function stopChild(child) {
-  if (child.exitCode !== null || child.signalCode !== null) return Promise.resolve();
-
-  return new Promise((resolve) => {
-    let settled = false;
-    const finish = () => {
-      if (settled) return;
-      settled = true;
-      clearTimeout(forceTimer);
-      resolve();
-    };
-    const forceTimer = setTimeout(() => {
-      if (child.exitCode === null && child.signalCode === null) killChildTree(child, "SIGKILL");
-      child.stdout?.destroy();
-      child.stderr?.destroy();
-      child.unref?.();
-      finish();
-    }, STOP_TIMEOUT_MS);
-    child.once("exit", finish);
-    killChildTree(child, "SIGTERM");
-  });
-}
-
-function killChildTree(child, signal) {
-  if (process.platform !== "win32" && child.pid) {
-    try {
-      process.kill(-child.pid, signal);
-      return;
-    } catch {
-      // Fall back to the direct child if process-group termination is unavailable.
-    }
-  }
-  child.kill(signal);
-}
-
 async function waitForDesktopReadiness(
   child,
   tempHome,
@@ -436,7 +237,8 @@ async function waitForDesktopReadiness(
           `Packaged desktop did not reach readiness. missing=${missing.join(", ") || "none"} logPath=${
             lastLogPath ?? "missing"
           } log=${lastLog.slice(-4000)}${diagnostics ? `\n${diagnostics}` : ""}${macExecutionPolicyHint(
-            diagnostics
+            diagnostics,
+            "app"
           )}`
         )
       );
@@ -451,7 +253,8 @@ async function waitForDesktopReadiness(
             `Packaged desktop exited before readiness: code=${code} signal=${signal} logPath=${
               lastLogPath ?? "missing"
             } log=${lastLog.slice(-4000)}${diagnostics ? `\n${diagnostics}` : ""}${macExecutionPolicyHint(
-              diagnostics
+              diagnostics,
+              "app"
             )}`
           )
         );

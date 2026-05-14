@@ -1,5 +1,6 @@
 const { spawn } = require("node:child_process");
 const path = require("node:path");
+const { scrubRuntimeEnv, stopChild } = require("./lib/smoke-helpers.cjs");
 
 function parsePositiveInteger(value, fallback) {
   const parsed = Number(value);
@@ -8,71 +9,14 @@ function parsePositiveInteger(value, fallback) {
 
 const timeoutMs = parsePositiveInteger(process.env.DEUS_VERSION_CHECK_TIMEOUT_MS, 20_000);
 const stopTimeoutMs = parsePositiveInteger(process.env.DEUS_VERSION_CHECK_STOP_TIMEOUT_MS, 5_000);
-const VERSION_CHECK_ENV_DENYLIST = [
-  "AGENT_SERVER_CWD",
-  "AGENT_SERVER_ENTRY",
-  "AUTH_TOKEN",
-  "DATABASE_PATH",
-  "DEUS_AUTH_TOKEN",
-  "DEUS_BACKEND_PORT",
-  "DEUS_BUNDLED_BIN_DIR",
-  "DEUS_DATA_DIR",
-  "DEUS_PACKAGED",
-  "DEUS_RESOURCES_PATH",
-  "DEUS_RUNTIME",
-  "DEUS_RUNTIME_COMMAND",
-  "DEUS_RUNTIME_EXECUTABLE",
-  "ELECTRON_RUN_AS_NODE",
-  "NODE_PATH",
-  "PORT",
-];
 
 function versionCheckEnv() {
-  const env = { ...process.env };
-  for (const key of VERSION_CHECK_ENV_DENYLIST) {
-    delete env[key];
-  }
-  return env;
+  return scrubRuntimeEnv({ ...process.env });
 }
 
 function writeResult(result, exitCode) {
   process.stdout.write(`${JSON.stringify(result)}\n`);
   process.exit(exitCode);
-}
-
-function killChildTree(child, signal) {
-  if (process.platform !== "win32" && child.pid) {
-    try {
-      process.kill(-child.pid, signal);
-      return;
-    } catch {
-      // Fall back to the direct child if process-group termination is unavailable.
-    }
-  }
-  child.kill(signal);
-}
-
-function stopChild(child) {
-  if (child.exitCode !== null || child.signalCode !== null) return Promise.resolve();
-
-  return new Promise((resolve) => {
-    let settled = false;
-    const finish = () => {
-      if (settled) return;
-      settled = true;
-      clearTimeout(forceTimer);
-      resolve();
-    };
-    const forceTimer = setTimeout(() => {
-      if (child.exitCode === null && child.signalCode === null) killChildTree(child, "SIGKILL");
-      child.stdout?.destroy();
-      child.stderr?.destroy();
-      child.unref?.();
-      finish();
-    }, stopTimeoutMs);
-    child.once("exit", finish);
-    killChildTree(child, "SIGTERM");
-  });
 }
 
 async function main() {
@@ -133,7 +77,7 @@ async function main() {
       );
     });
   } catch (error) {
-    await stopChild(child);
+    await stopChild(child, stopTimeoutMs);
     writeResult(
       {
         ok: false,

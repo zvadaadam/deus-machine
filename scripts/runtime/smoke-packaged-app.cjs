@@ -9,11 +9,20 @@ const {
 const {
   assertPackagedMainRuntimeContents,
 } = require("./electron-builder-before-pack.cjs");
+const {
+  PROJECT_ROOT,
+  RUNTIME_BINARIES,
+  RUNTIME_MANIFESTS,
+  assert,
+  assertDirectory,
+  assertExecutable: assertRegularExecutable,
+  assertRegularFile,
+  resolveDefaultAppPath,
+} = require("./lib/smoke-helpers.cjs");
 
-const PROJECT_ROOT = path.resolve(__dirname, "../..");
-const DEFAULT_APP_PATH = path.join(PROJECT_ROOT, "dist-electron", "mac-arm64", "Deus.app");
-const REQUIRED_BINARIES = ["deus-runtime", "codex", "claude", "gh", "rg", "agent-browser"];
-const REQUIRED_MANIFESTS = ["deus-runtime.json", "agent-clis.json", "gh-cli.json"];
+const DEFAULT_APP_PATH = resolveDefaultAppPath();
+const REQUIRED_BINARIES = RUNTIME_BINARIES;
+const REQUIRED_MANIFESTS = RUNTIME_MANIFESTS;
 const ALLOWED_BIN_ENTRIES = new Set([...REQUIRED_BINARIES, ...REQUIRED_MANIFESTS]);
 const FORBIDDEN_RUNTIME_PACKAGE_PREFIXES = [
   "/node_modules/@anthropic-ai/claude-agent-sdk-darwin-",
@@ -97,27 +106,6 @@ Use --skip-app-signature only for unsigned PR package-dir builds; release
 artifacts must keep the default app signature check.
 Do not use --verify-manifest-hashes on signed apps; electron-builder re-signing
 mutates Mach-O bytes after afterPack verifies the copied files.`);
-}
-
-function assert(condition, message) {
-  if (!condition) throw new Error(message);
-}
-
-function assertDirectory(dirPath, label) {
-  assert(fs.existsSync(dirPath), `Missing ${label}: ${dirPath}`);
-  assert(fs.statSync(dirPath).isDirectory(), `${label} is not a directory: ${dirPath}`);
-}
-
-function assertRegularExecutable(filePath, label) {
-  assert(fs.existsSync(filePath), `Missing ${label}: ${filePath}`);
-  const stat = fs.statSync(filePath);
-  assert(stat.isFile(), `${label} is not a regular file: ${filePath}`);
-  assert((stat.mode & 0o111) !== 0, `${label} is not executable: ${filePath}`);
-}
-
-function assertRegularFile(filePath, label) {
-  assert(fs.existsSync(filePath), `Missing ${label}: ${filePath}`);
-  assert(fs.statSync(filePath).isFile(), `${label} is not a regular file: ${filePath}`);
 }
 
 function verifyResourcesBinContents(binDir) {
