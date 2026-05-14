@@ -3,14 +3,11 @@
 // `codex-sdk` harness so app-server can require a newer Codex binary without
 // changing current Codex sessions.
 
-import * as fs from "fs";
-import * as path from "path";
 import {
   blockIfNotInitialized as sharedBlock,
   discoverExecutable,
   type DiscoveryState,
 } from "../environment/cli-discovery";
-import { getPackagedCodexCandidates } from "../environment/packaged-cli-paths";
 
 const MIN_CODEX_APP_SERVER_VERSION = "0.128.0";
 
@@ -25,11 +22,9 @@ export function initializeCodexServer(): { success: boolean; error?: string } {
     {
       agentHarness: "codex-server",
       displayName: "Codex app-server",
-      envVar: "CODEX_APP_SERVER_CLI_PATH",
-      staticCandidates: candidatePathsNearRuntime(),
-      shellCommand: "codex",
+      envVars: ["CODEX_APP_SERVER_CLI_PATH", "CODEX_CLI_PATH"],
+      bundledTool: "codex",
       versionFlag: "--version",
-      extraCandidates: extraCodexCandidates,
       validateVersion: validateCodexAppServerVersion,
     },
     state
@@ -40,41 +35,6 @@ export function initializeCodexServer(): { success: boolean; error?: string } {
 
 export function blockIfCodexServerNotInitialized(sessionId: string): boolean {
   return sharedBlock(state, "codex-server", sessionId);
-}
-
-function extraCodexCandidates(): string[] {
-  const candidates = [process.env.CODEX_CLI_PATH].filter(Boolean) as string[];
-
-  try {
-    const codexPkgPath = require.resolve("@openai/codex/package.json");
-    candidates.push(path.join(path.dirname(codexPkgPath), "bin", "codex.js"));
-  } catch {
-    // @openai/codex may not be installed directly.
-  }
-
-  return candidates;
-}
-
-function candidatePathsNearRuntime(): string[] {
-  const candidates = new Set<string>();
-  for (const packagedCandidate of getPackagedCodexCandidates()) {
-    candidates.add(packagedCandidate);
-  }
-
-  const argvEntry = process.argv[1];
-  if (argvEntry) {
-    const dir = path.dirname(argvEntry);
-    candidates.add(path.join(dir, "codex"));
-    candidates.add(path.join(dir, "bin", "codex"));
-    candidates.add(path.join(dir, "..", "bin", "codex"));
-  }
-
-  const resourcesPath = (process as { resourcesPath?: string }).resourcesPath;
-  if (resourcesPath) {
-    candidates.add(path.join(resourcesPath, "bin", "codex"));
-  }
-
-  return Array.from(candidates).filter((candidate) => fs.existsSync(candidate));
 }
 
 function validateCodexAppServerVersion(versionOutput: string): {

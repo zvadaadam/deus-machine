@@ -32,6 +32,10 @@ import {
 } from "../../../src/services/gh.service";
 
 const originalBundledBinDir = process.env.DEUS_BUNDLED_BIN_DIR;
+const originalDeusPackaged = process.env.DEUS_PACKAGED;
+const originalDeusRuntimeExecutable = process.env.DEUS_RUNTIME_EXECUTABLE;
+const originalElectronRunAsNode = process.env.ELECTRON_RUN_AS_NODE;
+const originalNodePath = process.env.NODE_PATH;
 
 beforeEach(() => {
   vi.clearAllMocks();
@@ -48,6 +52,14 @@ beforeEach(() => {
 afterAll(() => {
   if (originalBundledBinDir === undefined) delete process.env.DEUS_BUNDLED_BIN_DIR;
   else process.env.DEUS_BUNDLED_BIN_DIR = originalBundledBinDir;
+  if (originalDeusPackaged === undefined) delete process.env.DEUS_PACKAGED;
+  else process.env.DEUS_PACKAGED = originalDeusPackaged;
+  if (originalDeusRuntimeExecutable === undefined) delete process.env.DEUS_RUNTIME_EXECUTABLE;
+  else process.env.DEUS_RUNTIME_EXECUTABLE = originalDeusRuntimeExecutable;
+  if (originalElectronRunAsNode === undefined) delete process.env.ELECTRON_RUN_AS_NODE;
+  else process.env.ELECTRON_RUN_AS_NODE = originalElectronRunAsNode;
+  if (originalNodePath === undefined) delete process.env.NODE_PATH;
+  else process.env.NODE_PATH = originalNodePath;
 });
 
 // ─── Constants ────────────────────────────────────────────────────
@@ -169,6 +181,34 @@ describe("runGh", () => {
     expect(callEnv.GH_NO_UPDATE_NOTIFIER).toBe("1");
   });
 
+  it("scrubs runtime-only env from gh child process", async () => {
+    process.env.DEUS_PACKAGED = "1";
+    process.env.DEUS_RUNTIME_EXECUTABLE = "/tmp/stale-runtime";
+    process.env.ELECTRON_RUN_AS_NODE = "1";
+    process.env.NODE_PATH = "/tmp/stale-node-modules";
+    mockExecFileAsync.mockResolvedValue({ stdout: "", stderr: "" });
+
+    try {
+      await runGh(["pr", "list"], { cwd: "/workspace" });
+
+      const callEnv = mockExecFileAsync.mock.calls[0][2].env;
+      expect(callEnv.DEUS_PACKAGED).toBeUndefined();
+      expect(callEnv.DEUS_BUNDLED_BIN_DIR).toBeUndefined();
+      expect(callEnv.DEUS_RUNTIME_EXECUTABLE).toBeUndefined();
+      expect(callEnv.ELECTRON_RUN_AS_NODE).toBeUndefined();
+      expect(callEnv.NODE_PATH).toBeUndefined();
+    } finally {
+      if (originalDeusPackaged === undefined) delete process.env.DEUS_PACKAGED;
+      else process.env.DEUS_PACKAGED = originalDeusPackaged;
+      if (originalDeusRuntimeExecutable === undefined) delete process.env.DEUS_RUNTIME_EXECUTABLE;
+      else process.env.DEUS_RUNTIME_EXECUTABLE = originalDeusRuntimeExecutable;
+      if (originalElectronRunAsNode === undefined) delete process.env.ELECTRON_RUN_AS_NODE;
+      else process.env.ELECTRON_RUN_AS_NODE = originalElectronRunAsNode;
+      if (originalNodePath === undefined) delete process.env.NODE_PATH;
+      else process.env.NODE_PATH = originalNodePath;
+    }
+  });
+
   it("prefers the bundled gh executable when present", async () => {
     const dir = mkdtempSync(path.join(tmpdir(), "deus-gh-service-"));
     const bundledGhPath = path.join(dir, process.platform === "win32" ? "gh.exe" : "gh");
@@ -191,7 +231,7 @@ describe("runGh", () => {
     }
   });
 
-  it("adds common Homebrew locations to PATH", async () => {
+  it("preserves inherited PATH without adding global install fallbacks", async () => {
     const originalPath = process.env.PATH;
     process.env.PATH = "/usr/bin:/bin";
     mockExecFileAsync.mockResolvedValue({ stdout: "", stderr: "" });
@@ -200,12 +240,34 @@ describe("runGh", () => {
       await runGh(["pr", "list"], { cwd: "/workspace" });
 
       const callEnv = mockExecFileAsync.mock.calls[0][2].env;
-      expect(callEnv.PATH.split(":")).toEqual(
-        expect.arrayContaining(["/opt/homebrew/bin", "/usr/local/bin", "/opt/local/bin"])
+      expect(callEnv.PATH).toBe("/nonexistent/deus-test-bundled-bin:/usr/bin:/bin");
+    } finally {
+      if (originalPath === undefined) delete process.env.PATH;
+      else process.env.PATH = originalPath;
+    }
+  });
+
+  it("uses only bundled and system PATH entries in packaged runtime mode", async () => {
+    const originalPath = process.env.PATH;
+    process.env.DEUS_PACKAGED = "1";
+    process.env.DEUS_BUNDLED_BIN_DIR = "/Applications/Deus.app/Contents/Resources/bin";
+    process.env.PATH = "/opt/homebrew/bin:/usr/local/bin:/usr/bin";
+    mockExecFileAsync.mockResolvedValue({ stdout: "", stderr: "" });
+
+    try {
+      await runGh(["pr", "list"], { cwd: "/workspace" });
+
+      const callEnv = mockExecFileAsync.mock.calls[0][2].env;
+      expect(mockExecFileAsync.mock.calls[0][0]).toBe(
+        "/Applications/Deus.app/Contents/Resources/bin/gh"
+      );
+      expect(callEnv.PATH).toBe(
+        "/Applications/Deus.app/Contents/Resources/bin:/usr/bin:/bin:/usr/sbin:/sbin"
       );
     } finally {
       if (originalPath === undefined) delete process.env.PATH;
       else process.env.PATH = originalPath;
+      delete process.env.DEUS_PACKAGED;
     }
   });
 

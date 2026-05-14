@@ -2,6 +2,7 @@ import { spawn, type ChildProcess } from "node:child_process";
 import { existsSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import { getDevStagedCliDirectory } from "../../shared/lib/cli-path";
 
 const runtimeDir = path.dirname(fileURLToPath(import.meta.url));
 const projectRoot = path.resolve(runtimeDir, "../..");
@@ -80,6 +81,7 @@ function startBackend(): Promise<{ process: ChildProcess; port: number } | null>
             "index.bundled.cjs"
           ),
           AGENT_SERVER_CWD: path.join(projectRoot, "apps", "agent-server"),
+          DEUS_BUNDLED_BIN_DIR: getDevStagedCliDirectory(projectRoot) ?? "",
         },
       }
     );

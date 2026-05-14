@@ -204,6 +204,9 @@ export class CodexAgentHandler implements AgentHandler {
 
       const model = options.model;
       const codexPath = getCodexExecutablePath();
+      if (!codexPath) {
+        throw new Error("Codex executable path is required");
+      }
 
       // Dynamic import — @openai/codex-sdk is ESM-only, can't be require()'d from CJS
       const { Codex } = await import("@openai/codex-sdk");
@@ -213,7 +216,7 @@ export class CodexAgentHandler implements AgentHandler {
       const workspaceContext = buildWorkspaceContext(options?.cwd);
       const codex = new Codex({
         apiKey,
-        codexPathOverride: codexPath || undefined,
+        codexPathOverride: codexPath,
         env,
         ...(workspaceContext ? { config: { developer_instructions: workspaceContext } } : {}),
       });
