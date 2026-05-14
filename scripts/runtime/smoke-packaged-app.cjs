@@ -61,12 +61,14 @@ Options:
   --arch <arm64|x64>           Expected macOS runtime architecture
   --run-version-checks         Execute packaged --version checks
   --require-gatekeeper         Require spctl execute assessment to pass
-  --verify-manifest-hashes     Verify packaged binary hashes against manifests
+  --verify-manifest-hashes     Verify pre-sign binary hashes against manifests
 
 By default this smoke inspects the packaged app statically and does not execute
 generated/copied Mach-O binaries. Use --run-version-checks on hosts where the
 packaged binaries can be launched directly. Use --require-gatekeeper on
-notarized release artifacts, not local ad-hoc or unnotarized builds.`);
+notarized release artifacts, not local ad-hoc or unnotarized builds.
+Do not use --verify-manifest-hashes on signed apps; electron-builder re-signing
+mutates Mach-O bytes after afterPack verifies the copied files.`);
 }
 
 function assert(condition, message) {
