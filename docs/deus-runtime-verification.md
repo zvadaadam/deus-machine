@@ -64,6 +64,8 @@ On this macOS workstation, direct execution of newly created or copied Mach-O fi
 
 The direct smoke diagnostics for this failure show `spctl` rejecting the executable, `com.apple.provenance` on the file, and no stdout/stderr from the child. A trivial C executable and a trivial `bun build --compile` executable created in `/tmp` show the same `_dyld_start` hang on this host, so this is not specific to the Deus runtime entrypoint.
 
+Re-signing a temporary copy of `dist/runtime/electron/bin/darwin-arm64/deus-runtime` ad hoc with the runtime entitlements does not change the local failure: `spctl` still rejects the copied executable, `com.apple.provenance` remains present, and `deus-runtime --version` still times out before stdout/stderr. Normal `xattr -d`/`xattr -c` operations also do not remove the provenance attribute here.
+
 CUA verification reaches the same host-policy boundary here: `cua-driver launch_app` resolves the local packaged `com.deus.app` bundle and starts a background Deus process, but no window is created, no `main.log` is written, and sampling the process shows the main thread parked at `_dyld_start`.
 
 Because of that host policy, a local run can truthfully complete the static checks above but cannot prove direct runtime or packaged desktop launch. Direct runtime and packaged desktop verification must run on a notarized artifact or a macOS host that allows the staged/copied Mach-O binaries to execute.
