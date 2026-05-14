@@ -259,6 +259,10 @@ jobs:
             --app "$copied_app" \
             --require-gatekeeper
 
+          node scripts/runtime/smoke-packaged-desktop.cjs \
+            --app "$copied_app" \
+            --require-gatekeeper
+
       - name: Clean up Apple API key
         if: always()
         run: rm -f "${RUNNER_TEMP}/AuthKey_${APPLE_API_KEY_ID}.p8"
