@@ -1,6 +1,6 @@
 const WebSocket = require("ws");
 
-const DEFAULT_REQUIRED_AGENTS = ["claude", "codex-sdk"];
+const DEFAULT_REQUIRED_AGENTS = ["claude", "codex-sdk", "codex-server"];
 const JSON_RPC_TIMEOUT_MS = 5_000;
 
 function requestJsonRpc(listenUrl, method, params) {
