@@ -133,7 +133,6 @@ function configureRuntimeEnv(command: RuntimeCommand, dataDir?: string): void {
   const layout = resolveRuntimeLayout();
   const isNativeRuntimeExecutable = basename(layout.executablePath) === RUNTIME_NAME;
   const runtimeNodePathCandidates = [
-    join(layout.resourcesPath, "app.asar", "node_modules"),
     join(layout.resourcesPath, "app.asar.unpacked", "node_modules"),
     isNativeRuntimeExecutable && layout.projectRoot
       ? join(layout.projectRoot, "node_modules")
@@ -205,6 +204,7 @@ async function run(command: RuntimeCommand, dataDir?: string): Promise<void> {
         executable: layout.executablePath,
         binDir: layout.bundledBinDir,
         resourcesPath: layout.resourcesPath,
+        nodePath: process.env.NODE_PATH ?? "",
         runtimeKey: getRuntimeKey(),
         binaries,
         missing,
