@@ -471,6 +471,21 @@ async function smokePackagedRuntime(options) {
       `Packaged runtime self-test resolved unexpected binDir: ${selfTest.binDir}; expected ${binDir}`
     );
   }
+  if (path.resolve(String(selfTest.resourcesPath || "")) !== path.resolve(resourcesDir)) {
+    throw new Error(
+      `Packaged runtime self-test resolved unexpected resourcesPath: ${selfTest.resourcesPath}; expected ${resourcesDir}`
+    );
+  }
+  const expectedNodePath = path.join(resourcesDir, "app.asar.unpacked", "node_modules");
+  const nodePathEntries = String(selfTest.nodePath || "")
+    .split(path.delimiter)
+    .filter(Boolean)
+    .map((entry) => path.resolve(entry));
+  if (!nodePathEntries.includes(path.resolve(expectedNodePath))) {
+    throw new Error(
+      `Packaged runtime self-test NODE_PATH is missing ${expectedNodePath}: ${selfTest.nodePath}`
+    );
+  }
   console.log(`[runtime-smoke] packaged runtime self-test binDir: ${selfTest.binDir}`);
 
   const expectedBundledCliPatterns = bundledAgentCliPatterns(binDir);

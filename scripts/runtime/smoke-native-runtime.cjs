@@ -428,6 +428,31 @@ async function smokeNativeRuntime(options) {
   if (selfTest.ok !== true) {
     throw new Error(`Native runtime self-test failed: ${JSON.stringify(selfTest)}`);
   }
+  if (path.resolve(String(selfTest.binDir || "")) !== path.resolve(binDir)) {
+    throw new Error(
+      `Native runtime self-test resolved unexpected binDir: ${selfTest.binDir}; expected ${binDir}`
+    );
+  }
+  const expectedResourcesPath = path.join(PROJECT_ROOT, "dist", "runtime", "electron");
+  if (path.resolve(String(selfTest.resourcesPath || "")) !== path.resolve(expectedResourcesPath)) {
+    throw new Error(
+      `Native runtime self-test resolved unexpected resourcesPath: ${selfTest.resourcesPath}; expected ${expectedResourcesPath}`
+    );
+  }
+  const nodePathEntries = String(selfTest.nodePath || "")
+    .split(path.delimiter)
+    .filter(Boolean)
+    .map((entry) => path.resolve(entry));
+  for (const expectedNodePath of [
+    path.join(expectedResourcesPath, "app.asar.unpacked", "node_modules"),
+    path.join(PROJECT_ROOT, "node_modules"),
+  ]) {
+    if (!nodePathEntries.includes(path.resolve(expectedNodePath))) {
+      throw new Error(
+        `Native runtime self-test NODE_PATH is missing ${expectedNodePath}: ${selfTest.nodePath}`
+      );
+    }
+  }
   console.log(`[runtime-smoke] native runtime self-test binDir: ${selfTest.binDir}`);
 
   await waitForRuntimePatterns(
