@@ -33,8 +33,6 @@ export interface RuntimeStagePaths {
   };
   electron: {
     root: string;
-    backendBundle: string;
-    agentServerBundle: string;
   };
 }
 
@@ -81,8 +79,6 @@ export function resolveRuntimeStagePaths(projectRoot: string): RuntimeStagePaths
     },
     electron: {
       root: electronRoot,
-      backendBundle: path.join(electronRoot, "backend", "server.bundled.cjs"),
-      agentServerBundle: path.join(electronRoot, "bin", "index.bundled.cjs"),
     },
   };
 }

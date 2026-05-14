@@ -1,3 +1,5 @@
+import { execFileSync } from "node:child_process";
+import { createHash } from "node:crypto";
 import { existsSync, readFileSync, statSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -9,11 +11,30 @@ import {
   RUNTIME_MANIFEST_VERSION,
   resolveRuntimeStagePaths,
 } from "../../shared/runtime";
+import { validateStagedAgentClis } from "./agent-clis";
+import { validateDeusRuntime } from "./native-runtime";
 import type { RuntimeManifest } from "./stage";
 
 const runtimeDir = path.dirname(fileURLToPath(import.meta.url));
 const defaultProjectRoot = path.resolve(runtimeDir, "../..");
 const BUILD_RUNTIME_COMMAND = "bun run build:runtime";
+const DARWIN_NATIVE_CLI_TARGETS = [
+  { runtimeKey: "darwin-arm64", fileArch: "arm64" },
+  { runtimeKey: "darwin-x64", fileArch: "x86_64" },
+] as const;
+
+interface GhCliManifest {
+  version: 1;
+  ghVersion: string;
+  targets: Array<{
+    tool: "gh";
+    runtimeKey: string;
+    path: string;
+    sha256: string;
+    size: number;
+    fileOutput: string;
+  }>;
+}
 
 export interface ValidateRuntimeStageOptions {
   log?: (line: string) => void;
@@ -38,6 +59,10 @@ function readManifest(manifestPath: string): RuntimeManifest {
   }
 }
 
+function hashFile(filePath: string): string {
+  return createHash("sha256").update(readFileSync(filePath)).digest("hex");
+}
+
 function assertExists(filePath: string, label: string): void {
   if (!existsSync(filePath)) {
     throw createBuildRuntimeError(`Missing ${label}: ${filePath}`);
@@ -51,67 +76,92 @@ function assertExecutable(filePath: string, label: string): void {
   }
 }
 
-function getCodexTargetTriple(): string | null {
-  if (process.platform === "linux") {
-    if (process.arch === "x64") return "x86_64-unknown-linux-musl";
-    if (process.arch === "arm64") return "aarch64-unknown-linux-musl";
+function getMachOArchOutput(filePath: string, label: string, fileArch: string): string {
+  const fileOutput = execFileSync("file", [filePath], {
+    encoding: "utf8",
+    timeout: 20_000,
+    stdio: ["ignore", "pipe", "pipe"],
+  }).trim();
+  if (!fileOutput.includes("Mach-O 64-bit executable") || !fileOutput.includes(fileArch)) {
+    throw createBuildRuntimeError(`Unexpected ${label} architecture: ${fileOutput}`);
   }
-  if (process.platform === "darwin") {
-    if (process.arch === "x64") return "x86_64-apple-darwin";
-    if (process.arch === "arm64") return "aarch64-apple-darwin";
-  }
-  return null;
+  return fileOutput;
 }
 
-function getCodexPlatformPackageName(): string | null {
-  if (process.platform === "linux") return `@openai/codex-linux-${process.arch}`;
-  if (process.platform === "darwin") return `@openai/codex-darwin-${process.arch}`;
-  return null;
+function verifyMacCodeSignature(filePath: string, label: string): void {
+  if (process.platform !== "darwin") return;
+  try {
+    execFileSync("codesign", ["--verify", "--verbose=2", filePath], {
+      encoding: "utf8",
+      timeout: 20_000,
+      stdio: ["ignore", "ignore", "pipe"],
+    });
+  } catch (error) {
+    throw createBuildRuntimeError(
+      `Invalid ${label} code signature: ${error instanceof Error ? error.message : String(error)}`
+    );
+  }
 }
 
-function getClaudePlatformPackageNames(): string[] {
-  if (process.platform === "linux") {
-    return [
-      `@anthropic-ai/claude-agent-sdk-linux-${process.arch}`,
-      `@anthropic-ai/claude-agent-sdk-linux-${process.arch}-musl`,
-    ];
+function assertStagedGhCli(projectRoot: string): void {
+  const binRoot = path.join(resolveRuntimeStagePaths(projectRoot).electron.root, "bin");
+  const manifestPath = path.join(binRoot, "gh-cli.json");
+  assertExists(manifestPath, "staged GitHub CLI manifest");
+  const manifest = JSON.parse(readFileSync(manifestPath, "utf8")) as GhCliManifest;
+  if (manifest.version !== 1 || !Array.isArray(manifest.targets)) {
+    throw createBuildRuntimeError(`Unexpected staged GitHub CLI manifest shape: ${manifestPath}`);
   }
-  if (process.platform === "darwin") {
-    return [`@anthropic-ai/claude-agent-sdk-${process.platform}-${process.arch}`];
+
+  for (const target of DARWIN_NATIVE_CLI_TARGETS) {
+    const ghPath = path.join(binRoot, target.runtimeKey, "gh");
+    const label = `${target.runtimeKey}/gh`;
+    assertExecutable(ghPath, label);
+    const fileOutput = getMachOArchOutput(ghPath, label, target.fileArch);
+    verifyMacCodeSignature(ghPath, label);
+    const manifestEntry = manifest.targets.find(
+      (entry) => entry.runtimeKey === target.runtimeKey && entry.tool === "gh"
+    );
+    if (!manifestEntry) {
+      throw createBuildRuntimeError(`GitHub CLI manifest is missing ${target.runtimeKey}/gh`);
+    }
+    const expectedPath = relativeFromProjectRoot(projectRoot, ghPath);
+    if (manifestEntry.path !== expectedPath) {
+      throw createBuildRuntimeError(
+        `GitHub CLI manifest path mismatch for ${target.runtimeKey}/gh: expected ${expectedPath}, found ${manifestEntry.path}`
+      );
+    }
+    if (manifestEntry.sha256 !== hashFile(ghPath)) {
+      throw createBuildRuntimeError(`GitHub CLI manifest hash mismatch for ${target.runtimeKey}/gh`);
+    }
+    if (manifestEntry.size !== statSync(ghPath).size) {
+      throw createBuildRuntimeError(`GitHub CLI manifest size mismatch for ${target.runtimeKey}/gh`);
+    }
+    if (manifestEntry.fileOutput !== fileOutput) {
+      throw createBuildRuntimeError(
+        `GitHub CLI manifest file output mismatch for ${target.runtimeKey}/gh`
+      );
+    }
   }
-  return [];
 }
 
 function assertPackagedProviderBinaries(projectRoot: string): void {
-  const nodeModulesDir = path.join(projectRoot, "node_modules");
-  const claudeCandidate = getClaudePlatformPackageNames()
-    .map((packageName) => path.join(nodeModulesDir, packageName, "claude"))
-    .find((candidate) => existsSync(candidate));
-
-  if (!claudeCandidate) {
+  try {
+    validateDeusRuntime({ projectRoot, log: () => undefined });
+  } catch (error) {
     throw createBuildRuntimeError(
-      `Missing packaged Claude executable for ${process.platform}-${process.arch}`
-    );
-  }
-  assertExecutable(claudeCandidate, "packaged Claude executable");
-
-  const codexPackageName = getCodexPlatformPackageName();
-  const codexTargetTriple = getCodexTargetTriple();
-  if (!codexPackageName || !codexTargetTriple) {
-    throw createBuildRuntimeError(
-      `Unsupported packaged Codex platform: ${process.platform}-${process.arch}`
+      `Native runtime validation failed: ${error instanceof Error ? error.message : String(error)}`
     );
   }
 
-  const codexExecutable = path.join(
-    nodeModulesDir,
-    codexPackageName,
-    "vendor",
-    codexTargetTriple,
-    "codex",
-    "codex"
-  );
-  assertExecutable(codexExecutable, "packaged Codex executable");
+  try {
+    validateStagedAgentClis({ projectRoot, log: () => undefined, verifyRunnable: false });
+  } catch (error) {
+    throw createBuildRuntimeError(
+      `Staged agent CLI validation failed: ${error instanceof Error ? error.message : String(error)}`
+    );
+  }
+
+  assertStagedGhCli(projectRoot);
 }
 
 function assertNotStale(
@@ -142,10 +192,6 @@ function buildExpectedManifest(projectRoot: string): RuntimeManifest {
         backend: relativeFromProjectRoot(projectRoot, stagePaths.common.backendBundle),
         agentServer: relativeFromProjectRoot(projectRoot, stagePaths.common.agentServerBundle),
       },
-      electron: {
-        backend: relativeFromProjectRoot(projectRoot, stagePaths.electron.backendBundle),
-        agentServer: relativeFromProjectRoot(projectRoot, stagePaths.electron.agentServerBundle),
-      },
     },
     nodeRuntimeDependencies: CLI_RUNTIME_DEPENDENCIES,
   };
@@ -165,8 +211,6 @@ export function validateRuntimeStage(options: ValidateRuntimeStageOptions = {}):
   assertExists(stagePaths.manifest, "staged runtime manifest");
   assertExists(stagePaths.common.backendBundle, "staged common backend bundle");
   assertExists(stagePaths.common.agentServerBundle, "staged common agent-server bundle");
-  assertExists(stagePaths.electron.backendBundle, "staged electron backend bundle");
-  assertExists(stagePaths.electron.agentServerBundle, "staged electron agent-server bundle");
 
   const manifest = readManifest(stagePaths.manifest);
   const expectedManifest = buildExpectedManifest(projectRoot);
@@ -185,26 +229,11 @@ export function validateRuntimeStage(options: ValidateRuntimeStageOptions = {}):
   );
   assertNotStale(
     projectRoot,
-    stagePaths.electron.backendBundle,
-    "staged electron backend bundle",
-    sources.backendBundle,
-    "backend source bundle"
-  );
-  assertNotStale(
-    projectRoot,
     stagePaths.common.agentServerBundle,
     "staged common agent-server bundle",
     sources.agentServerBundle,
     "agent-server source bundle"
   );
-  assertNotStale(
-    projectRoot,
-    stagePaths.electron.agentServerBundle,
-    "staged electron agent-server bundle",
-    sources.agentServerBundle,
-    "agent-server source bundle"
-  );
-
   const latestSourceMtime = Math.max(
     statSync(sources.backendBundle).mtimeMs,
     statSync(sources.agentServerBundle).mtimeMs

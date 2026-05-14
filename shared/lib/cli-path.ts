@@ -1,11 +1,13 @@
 import { existsSync } from "node:fs";
 import { delimiter, join } from "node:path";
 
-const COMMON_CLI_PATH_FALLBACKS = ["/opt/homebrew/bin", "/usr/local/bin", "/opt/local/bin"];
 const CLI_TOOL_NAME_PATTERN = /^[a-zA-Z0-9._+-]+$/;
+const PACKAGED_SYSTEM_PATHS = ["/usr/bin", "/bin", "/usr/sbin", "/sbin"];
 
 function getElectronResourcesPath(): string | null {
-  return (process as { resourcesPath?: string }).resourcesPath ?? null;
+  return (
+    process.env.DEUS_RESOURCES_PATH ?? (process as { resourcesPath?: string }).resourcesPath ?? null
+  );
 }
 
 function getRuntimeKey(): string | null {
@@ -16,11 +18,15 @@ function getRuntimeKey(): string | null {
   return null;
 }
 
-function getDevStagedCliDirectory(): string | null {
+function isPackagedRuntime(): boolean {
+  return process.env.DEUS_PACKAGED === "1" || process.env.DEUS_RUNTIME === "1";
+}
+
+export function getDevStagedCliDirectory(projectRoot = process.cwd()): string | null {
   const runtimeKey = getRuntimeKey();
   if (!runtimeKey) return null;
 
-  return join(process.cwd(), "dist", "runtime", "electron", "bin", runtimeKey);
+  return join(projectRoot, "dist", "runtime", "electron", "bin", runtimeKey);
 }
 
 function getBundledCliDirectoryCandidates(): string[] {
@@ -42,30 +48,39 @@ export function getBundledCliDirectory(): string | null {
 }
 
 export function resolveBundledCliPath(tool: string): string | null {
-  if (!CLI_TOOL_NAME_PATTERN.test(tool)) return null;
+  return getBundledCliPathCandidates(tool).find((candidate) => existsSync(candidate)) ?? null;
+}
+
+export function getBundledCliPathCandidates(tool: string): string[] {
+  if (!CLI_TOOL_NAME_PATTERN.test(tool)) return [];
 
   const executableName = process.platform === "win32" ? `${tool}.exe` : tool;
-  for (const bundledCliDirectory of getBundledCliDirectoryCandidates()) {
-    const candidate = join(bundledCliDirectory, executableName);
-    if (existsSync(candidate)) return candidate;
-  }
+  return getBundledCliDirectoryCandidates().map((bundledCliDirectory) =>
+    join(bundledCliDirectory, executableName)
+  );
+}
 
-  return null;
+function missingPackagedCliPath(tool: string): string {
+  const executableName = process.platform === "win32" ? `${tool}.exe` : tool;
+  return process.platform === "win32"
+    ? join("C:\\", "__deus_missing_bundled_bin__", executableName)
+    : join("/", "__deus_missing_bundled_bin__", executableName);
 }
 
 export function resolveCliExecutable(tool: string): string {
-  return resolveBundledCliPath(tool) ?? tool;
+  const bundledCliPath = resolveBundledCliPath(tool);
+  if (bundledCliPath) return bundledCliPath;
+  if (isPackagedRuntime()) return getBundledCliPathCandidates(tool)[0] ?? missingPackagedCliPath(tool);
+  return tool;
 }
 
 export function extendCliPath(pathValue: string | undefined): string {
-  const pathEntries = [...getBundledCliDirectoryCandidates(), ...(pathValue ?? "").split(delimiter)]
+  const inheritedPathEntries = isPackagedRuntime()
+    ? PACKAGED_SYSTEM_PATHS
+    : (pathValue ?? "").split(delimiter);
+  const pathEntries = [...getBundledCliDirectoryCandidates(), ...inheritedPathEntries]
     .filter(Boolean)
     .filter((entry, index, entries) => entries.indexOf(entry) === index);
 
-  // Homebrew/MacPorts locations are POSIX-only — appending them on Windows is
-  // harmless (they just don't resolve), but the delimiter must match the host.
-  for (const fallback of COMMON_CLI_PATH_FALLBACKS) {
-    if (!pathEntries.includes(fallback)) pathEntries.push(fallback);
-  }
   return pathEntries.join(delimiter);
 }
