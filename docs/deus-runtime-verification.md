@@ -28,6 +28,14 @@ They verify:
 - Packaged app.asar contains the `deus-runtime` launch contract and no obsolete packaged backend path plumbing.
 - Native binaries have the expected architecture, code signature, page size, entitlements, and system dylib dependencies.
 
+PR CI also runs the root desktop/runtime unit suite:
+
+```bash
+bun run test:simulator
+```
+
+That suite covers the packaged Electron backend spawn contract, packaged CLI lookup behavior, and electron-builder runtime guardrails.
+
 ## Direct Runtime Checks
 
 These checks execute newly staged or packaged Mach-O binaries and are required before considering the runtime fully verified:
