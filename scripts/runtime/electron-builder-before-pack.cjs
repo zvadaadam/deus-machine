@@ -8,6 +8,7 @@ const ARCH_BY_BUILDER_VALUE = new Map([
   ["x64", "x64"],
   ["arm64", "arm64"],
 ]);
+const SUPPORTED_PACKAGED_RUNTIME_PLATFORM = "darwin";
 
 const SOURCE_EXTENSIONS = new Set([
   ".cjs",
@@ -129,8 +130,19 @@ function assertPackagedMainRuntimeContract(projectRoot) {
   }
 }
 
+function assertPackagedRuntimePlatform(context) {
+  const platformName = context?.electronPlatformName;
+  if (!platformName || platformName === SUPPORTED_PACKAGED_RUNTIME_PLATFORM) return;
+
+  throw new Error(
+    `Packaged Deus native runtime is currently staged only for macOS. Refusing to build ${platformName} artifacts until Resources/bin/deus-runtime and bundled native CLIs are staged for that platform.`
+  );
+}
+
 module.exports = function beforePack(context) {
   const projectRoot = path.resolve(__dirname, "../..");
+
+  assertPackagedRuntimePlatform(context);
 
   try {
     execFileSync("bun", ["run", "validate:runtime"], {
@@ -145,8 +157,6 @@ module.exports = function beforePack(context) {
 
   assertElectronBuildFresh(projectRoot);
   assertPackagedMainRuntimeContract(projectRoot);
-
-  if (context?.electronPlatformName !== "darwin") return;
 
   const arch = ARCH_BY_BUILDER_VALUE.get(context.arch);
   if (!arch) {
@@ -172,3 +182,4 @@ module.exports = function beforePack(context) {
 };
 
 module.exports.assertPackagedMainRuntimeContract = assertPackagedMainRuntimeContract;
+module.exports.assertPackagedRuntimePlatform = assertPackagedRuntimePlatform;
