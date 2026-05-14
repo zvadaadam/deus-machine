@@ -78,6 +78,7 @@ function writePackagedRuntimeFixture(binDir: string): void {
     ["claude", "claude"],
     ["rg", "rg"],
     ["gh", "gh"],
+    ["agent-browser", "agent-browser"],
   ]);
 
   for (const [name, contents] of files) {
@@ -108,7 +109,7 @@ function writePackagedRuntimeFixture(binDir: string): void {
     JSON.stringify(
       {
         version: 1,
-        targets: ["codex", "claude", "rg"].map((tool) => ({
+        targets: ["codex", "claude", "rg", "agent-browser"].map((tool) => ({
           runtimeKey: "darwin-arm64",
           tool,
           sha256: sha256(files.get(tool)!),

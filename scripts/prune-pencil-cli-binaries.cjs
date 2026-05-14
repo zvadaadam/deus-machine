@@ -439,7 +439,7 @@ function verifyPackagedRuntimeManifests(binDir, targetArch, options = {}) {
       verifyFileHashes: options.verifyFileHashes,
     });
 
-    for (const tool of ["codex", "claude", "rg"]) {
+    for (const tool of ["codex", "claude", "rg", "agent-browser"]) {
       const entry = agentCliManifest.targets.find(
         (candidate) => candidate.runtimeKey === runtimeKey && candidate.tool === tool
       );
@@ -756,6 +756,7 @@ async function verifyPackagedAgentClis(context, options = {}) {
     ["Codex CLI", path.join(binDir, "codex")],
     ["Claude CLI", path.join(binDir, "claude")],
     ["Codex ripgrep helper", path.join(binDir, "rg")],
+    ["agent-browser CLI", path.join(binDir, "agent-browser")],
   ];
 
   for (const [label, executablePath] of packagedExecutables) {

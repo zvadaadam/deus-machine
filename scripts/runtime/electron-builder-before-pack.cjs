@@ -234,6 +234,7 @@ module.exports = function beforePack(context) {
     ["Codex CLI", "codex", "bun run prepare:agent-clis"],
     ["Claude CLI", "claude", "bun run prepare:agent-clis"],
     ["ripgrep for Codex", "rg", "bun run prepare:agent-clis"],
+    ["agent-browser CLI", "agent-browser", "bun run prepare:agent-clis"],
   ];
 
   for (const [label, name, command] of requiredBins) {

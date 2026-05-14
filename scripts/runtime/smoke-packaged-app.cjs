@@ -12,7 +12,7 @@ const {
 
 const PROJECT_ROOT = path.resolve(__dirname, "../..");
 const DEFAULT_APP_PATH = path.join(PROJECT_ROOT, "dist-electron", "mac-arm64", "Deus.app");
-const REQUIRED_BINARIES = ["deus-runtime", "codex", "claude", "gh", "rg"];
+const REQUIRED_BINARIES = ["deus-runtime", "codex", "claude", "gh", "rg", "agent-browser"];
 const REQUIRED_MANIFESTS = ["deus-runtime.json", "agent-clis.json", "gh-cli.json"];
 const ALLOWED_BIN_ENTRIES = new Set([...REQUIRED_BINARIES, ...REQUIRED_MANIFESTS]);
 

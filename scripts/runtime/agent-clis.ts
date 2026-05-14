@@ -44,10 +44,12 @@ const VERSION_CHECK_ENV_DENYLIST = [
 ] as const;
 
 type AgentCliName = "codex" | "claude";
+type BundledAgentToolName = AgentCliName | "rg" | "agent-browser";
 
 interface AgentCliTarget {
   runtimeKey: "darwin-arm64" | "darwin-x64";
   fileArch: "arm64" | "x86_64";
+  agentBrowserEntry: "bin/agent-browser-darwin-arm64" | "bin/agent-browser-darwin-x64";
   codexAliasPackage: string;
   codexTriple: string;
   claudePackageName: string;
@@ -61,7 +63,7 @@ interface LockedPackage {
 }
 
 interface StagedAgentCli {
-  tool: AgentCliName | "rg";
+  tool: BundledAgentToolName;
   runtimeKey: string;
   path: string;
   sha256: string;
@@ -99,6 +101,7 @@ export const AGENT_CLI_TARGETS: readonly AgentCliTarget[] = [
   {
     runtimeKey: "darwin-arm64",
     fileArch: "arm64",
+    agentBrowserEntry: "bin/agent-browser-darwin-arm64",
     codexAliasPackage: "@openai/codex-darwin-arm64",
     codexTriple: "aarch64-apple-darwin",
     claudePackageName: "@anthropic-ai/claude-agent-sdk-darwin-arm64",
@@ -106,6 +109,7 @@ export const AGENT_CLI_TARGETS: readonly AgentCliTarget[] = [
   {
     runtimeKey: "darwin-x64",
     fileArch: "x86_64",
+    agentBrowserEntry: "bin/agent-browser-darwin-x64",
     codexAliasPackage: "@openai/codex-darwin-x64",
     codexTriple: "x86_64-apple-darwin",
     claudePackageName: "@anthropic-ai/claude-agent-sdk-darwin-x64",
@@ -123,7 +127,7 @@ export function resolveAgentCliManifestPath(projectRoot: string): string {
 export function resolveStagedAgentCliPath(
   projectRoot: string,
   runtimeKey: string,
-  tool: AgentCliName | "rg"
+  tool: BundledAgentToolName
 ): string {
   return path.join(resolveRuntimeStagePaths(projectRoot).electron.root, "bin", runtimeKey, tool);
 }
@@ -574,7 +578,7 @@ function assertManifestEntry(
   projectRoot: string,
   manifestEntries: StagedAgentCli[],
   runtimeKey: string,
-  tool: AgentCliName | "rg",
+  tool: BundledAgentToolName,
   executablePath: string,
   inspection: { sha256: string; size: number; fileOutput: string }
 ): void {
@@ -711,6 +715,49 @@ export async function prepareAgentClis(
     } finally {
       claudePackage.cleanup();
     }
+
+    const lockedAgentBrowser = readLockedPackage(projectRoot, "agent-browser");
+    const agentBrowserPackage = await resolvePackageRoot(
+      projectRoot,
+      lockedAgentBrowser,
+      target.agentBrowserEntry,
+      log
+    );
+    try {
+      const stagedAgentBrowser = resolveStagedAgentCliPath(
+        projectRoot,
+        target.runtimeKey,
+        "agent-browser"
+      );
+      copyExecutable(
+        path.join(agentBrowserPackage.packageRoot, target.agentBrowserEntry),
+        stagedAgentBrowser
+      );
+      const agentBrowserInspection = inspectStaticExecutable(
+        projectRoot,
+        stagedAgentBrowser,
+        `${target.runtimeKey}/agent-browser`,
+        target.fileArch
+      );
+
+      manifestTargets.push({
+        tool: "agent-browser",
+        runtimeKey: target.runtimeKey,
+        path: relativeFromProjectRoot(projectRoot, stagedAgentBrowser),
+        ...agentBrowserInspection,
+        source: {
+          package: lockedAgentBrowser.packageName,
+          version: lockedAgentBrowser.version,
+          integrity: lockedAgentBrowser.integrity,
+          entry: target.agentBrowserEntry,
+        },
+      });
+      log(
+        `✓ ${target.runtimeKey}/agent-browser staged from ${agentBrowserPackage.sourceDescription}`
+      );
+    } finally {
+      agentBrowserPackage.cleanup();
+    }
   }
 
   const manifest: AgentCliManifest = {
@@ -781,7 +828,7 @@ export function validateStagedAgentClis(
     }
     assertCodexAppServerCompatible(codexEntry.source.version, `${runtimeKey}/codex`);
 
-    for (const tool of ["codex", "claude", "rg"] as const) {
+    for (const tool of ["codex", "claude", "rg", "agent-browser"] as const) {
       const executablePath = resolveStagedAgentCliPath(projectRoot, runtimeKey, tool);
       const inspection = inspectStaticExecutable(
         projectRoot,
@@ -799,9 +846,9 @@ export function validateStagedAgentClis(
       );
     }
 
-    if (manifestEntries.length !== 3) {
+    if (manifestEntries.length !== 4) {
       throw new Error(
-        `Agent CLI manifest expected 3 entries for ${runtimeKey}, found ${manifestEntries.length}`
+        `Agent CLI manifest expected 4 entries for ${runtimeKey}, found ${manifestEntries.length}`
       );
     }
 

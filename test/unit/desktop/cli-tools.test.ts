@@ -70,7 +70,7 @@ describe("desktop CLI tools", () => {
     expect(env.NODE_PATH).toBeUndefined();
   });
 
-  it.each(["codex", "claude", "gh", "rg"])(
+  it.each(["codex", "claude", "gh", "rg", "agent-browser"])(
     "does not fall back to shell/global lookup for packaged bundled tool %s",
     async (tool) => {
       process.env.DEUS_PACKAGED = "1";
@@ -94,7 +94,7 @@ describe("desktop CLI tools", () => {
     expect(mockSyncShellEnvironment).not.toHaveBeenCalled();
   });
 
-  it.each(["codex", "claude", "gh", "rg"])(
+  it.each(["codex", "claude", "gh", "rg", "agent-browser"])(
     "resolves packaged bundled tool %s from the bundled bin directory",
     async (tool) => {
       const root = createTempRoot();
