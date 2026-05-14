@@ -45,6 +45,9 @@ on:
 permissions:
   contents: write
 
+env:
+  BUN_VERSION: 1.2.19
+
 jobs:
   # ── Step 1: Validate version & bump files ───────────────────────────
   validate-and-bump:
@@ -91,7 +94,15 @@ jobs:
 
       - uses: oven-sh/setup-bun@v2
         with:
-          bun-version: 1.2.19
+          bun-version: ${{ env.BUN_VERSION }}
+
+      - name: Verify Bun version pin
+        run: |
+          package_manager="$(sed -nE 's/.*"packageManager": "bun@([^"]+)".*/\1/p' package.json)"
+          if [[ "$package_manager" != "$BUN_VERSION" ]]; then
+            echo "::error::release workflow BUN_VERSION=$BUN_VERSION but package.json packageManager=bun@$package_manager"
+            exit 1
+          fi
 
       - name: Bump version, commit & create tag
         if: ${{ inputs.dry_run == false }}
@@ -118,7 +129,15 @@ jobs:
 
       - uses: oven-sh/setup-bun@v2
         with:
-          bun-version: 1.2.19
+          bun-version: ${{ env.BUN_VERSION }}
+
+      - name: Verify Bun version pin
+        run: |
+          package_manager="$(sed -nE 's/.*"packageManager": "bun@([^"]+)".*/\1/p' package.json)"
+          if [[ "$package_manager" != "$BUN_VERSION" ]]; then
+            echo "::error::release workflow BUN_VERSION=$BUN_VERSION but package.json packageManager=bun@$package_manager"
+            exit 1
+          fi
 
       - uses: actions/setup-node@v4
         with:
@@ -354,7 +373,15 @@ jobs:
 
       - uses: oven-sh/setup-bun@v2
         with:
-          bun-version: 1.2.19
+          bun-version: ${{ env.BUN_VERSION }}
+
+      - name: Verify Bun version pin
+        run: |
+          package_manager="$(sed -nE 's/.*"packageManager": "bun@([^"]+)".*/\1/p' package.json)"
+          if [[ "$package_manager" != "$BUN_VERSION" ]]; then
+            echo "::error::release workflow BUN_VERSION=$BUN_VERSION but package.json packageManager=bun@$package_manager"
+            exit 1
+          fi
 
       - uses: actions/setup-node@v4
         with:
