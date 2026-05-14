@@ -38,6 +38,7 @@ const FORBIDDEN_LOG_PATTERNS = [
 function parseArgs(argv) {
   const options = {
     appPath: null,
+    launchInPlace: false,
     requireGatekeeper: false,
     skipAppCheck: false,
   };
@@ -46,6 +47,8 @@ function parseArgs(argv) {
     const arg = argv[index];
     if (arg === "--app") {
       options.appPath = argv[++index];
+    } else if (arg === "--launch-in-place") {
+      options.launchInPlace = true;
     } else if (arg === "--require-gatekeeper") {
       options.requireGatekeeper = true;
     } else if (arg === "--skip-app-check") {
@@ -71,12 +74,16 @@ function printUsage() {
 
 Options:
   --app <path>             Path to the packaged .app bundle
+  --launch-in-place        Launch --app directly instead of copying it to a temp Applications dir
   --require-gatekeeper     Require spctl execute assessment in the app check
   --skip-app-check         Skip smoke-packaged-app.cjs
 
 This smoke launches the packaged Electron app with an isolated temporary HOME.
 It copies Deus.app to that HOME's Applications directory so the packaged
-Applications-folder preflight does not block backend startup.`);
+Applications-folder preflight does not block backend startup.
+
+Use --launch-in-place for already-installed/notarized app bundles when copying
+the Mach-O payload would invalidate the host's launch-policy decision.`);
 }
 
 function assert(condition, message) {
@@ -176,6 +183,7 @@ function macExecutionPolicyHint(diagnostics) {
     "",
     "macOS rejected this app before packaged Electron reached main-process startup.",
     "This is a host execution-policy failure, not evidence that bundled backend startup failed.",
+    "If the app is already installed in /Applications, rerun this smoke with --launch-in-place to avoid copying the Mach-O payload.",
     "Verify packaged desktop readiness on a notarized artifact or a macOS host that allows generated/copied Mach-O app bundles to launch.",
   ].join("\n");
 }
@@ -407,7 +415,9 @@ async function smokePackagedDesktop(options) {
   const tempRoot = fs.mkdtempSync(path.join(os.tmpdir(), "deus-packaged-desktop-"));
   const tempHome = path.join(tempRoot, "home");
   fs.mkdirSync(tempHome, { recursive: true });
-  const launchAppPath = copyAppToTempApplications(options.appPath, tempHome);
+  const launchAppPath = options.launchInPlace
+    ? options.appPath
+    : copyAppToTempApplications(options.appPath, tempHome);
   const appBinary = path.join(launchAppPath, "Contents", "MacOS", "Deus");
   const binDir = path.join(launchAppPath, "Contents", "Resources", "bin");
   assertExecutable(appBinary, "packaged Deus app executable");
