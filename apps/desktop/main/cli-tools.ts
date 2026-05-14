@@ -12,6 +12,24 @@ const execFileAsync = promisify(execFile);
 const CLI_TOOL_NAME_PATTERN = /^[a-zA-Z0-9._+-]+$/;
 const PACKAGED_BUNDLED_TOOLS = new Set(["codex", "claude", "gh", "rg"]);
 const PACKAGED_SYSTEM_PATHS = ["/usr/bin", "/bin", "/usr/sbin", "/sbin"];
+const CLI_CHILD_ENV_DENYLIST = [
+  "AGENT_SERVER_CWD",
+  "AGENT_SERVER_ENTRY",
+  "AUTH_TOKEN",
+  "DATABASE_PATH",
+  "DEUS_AUTH_TOKEN",
+  "DEUS_BACKEND_PORT",
+  "DEUS_BUNDLED_BIN_DIR",
+  "DEUS_DATA_DIR",
+  "DEUS_PACKAGED",
+  "DEUS_RESOURCES_PATH",
+  "DEUS_RUNTIME",
+  "DEUS_RUNTIME_COMMAND",
+  "DEUS_RUNTIME_EXECUTABLE",
+  "ELECTRON_RUN_AS_NODE",
+  "NODE_PATH",
+  "PORT",
+] as const;
 
 export interface CliToolStatus {
   installed: boolean;
@@ -25,12 +43,19 @@ function isPackagedRuntime(): boolean {
 export function getCliLookupEnv(): NodeJS.ProcessEnv {
   if (isPackagedRuntime()) {
     const bundledDir = getBundledCliDirectory();
-    return {
-      ...process.env,
+    return cliChildEnv({
       PATH: [bundledDir, ...PACKAGED_SYSTEM_PATHS].filter(Boolean).join(":"),
-    };
+    });
   }
-  return { ...process.env, PATH: extendCliPath(process.env.PATH) };
+  return cliChildEnv({ PATH: extendCliPath(process.env.PATH) });
+}
+
+function cliChildEnv(overrides: NodeJS.ProcessEnv = {}): NodeJS.ProcessEnv {
+  const env: NodeJS.ProcessEnv = { ...process.env };
+  for (const key of CLI_CHILD_ENV_DENYLIST) {
+    delete env[key];
+  }
+  return { ...env, ...overrides };
 }
 
 function getCliLookupCommand(tool: string): { command: string; args: string[] } {
