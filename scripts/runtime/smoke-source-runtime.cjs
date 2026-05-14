@@ -66,12 +66,18 @@ async function waitForRuntimeLine(args, matcher, options = {}) {
 
   try {
     const value = await new Promise((resolve, reject) => {
+      const missingRequiredPatterns = () =>
+        (options.requiredPatterns || [])
+          .filter((pattern) => !pattern.test(output))
+          .map((pattern) => pattern.toString());
       const timeout = setTimeout(() => {
         reject(
           new Error(
             `Timed out waiting for bun apps/runtime/index.ts ${args.join(
               " "
-            )}. stderr: ${stderrBuffer.trim()}`
+            )}. missing=${missingRequiredPatterns().join(", ") || "none"} stdout=${output
+              .trim()
+              .slice(-4000)} stderr=${stderrBuffer.trim().slice(-4000)}`
           )
         );
       }, STARTUP_TIMEOUT_MS);
