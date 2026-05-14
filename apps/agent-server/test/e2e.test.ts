@@ -33,7 +33,8 @@ const runRealClaudeIntegration = process.env.DEUS_AGENT_SERVER_E2E_REAL_CLAUDE =
 const runRealCodexIntegration = process.env.DEUS_AGENT_SERVER_E2E_REAL_CODEX === "1";
 
 const claudePath = process.env.CLAUDE_CLI_PATH || resolveBundledCliPath("claude");
-const claudeCliAvailable = runRealClaudeIntegration && !!(claudePath && fs.existsSync(claudePath));
+const claudeCliAvailable =
+  runRealClaudeIntegration && !!(claudePath && isExecutableFile(claudePath));
 
 // Check if Codex can run — the binary comes bundled with @openai/codex (npm dep),
 // so we only need an API key to actually hit the OpenAI API.
@@ -43,6 +44,12 @@ const codexIntegrationEnabled = runRealCodexIntegration && hasOpenAIKey;
 // Real provider integrations are opt-in so normal tests do not depend on auth
 // state, network access, or global CLIs.
 const isCI = !!process.env.CI;
+
+function isExecutableFile(filePath: string): boolean {
+  if (!fs.existsSync(filePath)) return false;
+  if (process.platform === "win32") return true;
+  return (fs.statSync(filePath).mode & 0o111) !== 0;
+}
 
 // ============================================================================
 // CI prerequisite guard — fail fast with clear messages

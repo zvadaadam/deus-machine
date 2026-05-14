@@ -99,12 +99,12 @@ function assertExecutable(filePath, label) {
 function runtimeEnv(binDir) {
   const env = {
     ...process.env,
-    DEUS_BUNDLED_BIN_DIR: binDir,
-    PATH: [binDir, ...PACKAGED_SYSTEM_PATHS].join(path.delimiter),
   };
   for (const key of RUNTIME_ENV_DENYLIST) {
     delete env[key];
   }
+  env.DEUS_BUNDLED_BIN_DIR = binDir;
+  env.PATH = [binDir, ...PACKAGED_SYSTEM_PATHS].join(path.delimiter);
   return env;
 }
 

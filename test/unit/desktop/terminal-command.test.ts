@@ -9,6 +9,7 @@ import {
 import { configurePackagedMainRuntimeEnv } from "../../../apps/desktop/main/runtime-env";
 
 const originalBundledBinDir = process.env.DEUS_BUNDLED_BIN_DIR;
+const originalResourcesPath = process.env.DEUS_RESOURCES_PATH;
 const originalDeusPackaged = process.env.DEUS_PACKAGED;
 const originalDeusRuntime = process.env.DEUS_RUNTIME;
 const tempRoots: string[] = [];
@@ -28,6 +29,8 @@ function createBundledTool(tool: string): string {
 afterEach(() => {
   if (originalBundledBinDir === undefined) delete process.env.DEUS_BUNDLED_BIN_DIR;
   else process.env.DEUS_BUNDLED_BIN_DIR = originalBundledBinDir;
+  if (originalResourcesPath === undefined) delete process.env.DEUS_RESOURCES_PATH;
+  else process.env.DEUS_RESOURCES_PATH = originalResourcesPath;
   if (originalDeusPackaged === undefined) delete process.env.DEUS_PACKAGED;
   else process.env.DEUS_PACKAGED = originalDeusPackaged;
   if (originalDeusRuntime === undefined) delete process.env.DEUS_RUNTIME;
