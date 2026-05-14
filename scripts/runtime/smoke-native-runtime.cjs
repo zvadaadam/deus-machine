@@ -193,13 +193,16 @@ async function waitForRuntimePatterns(runtimeBin, args, binDir, patterns) {
         const missing = patterns
           .filter((_, index) => !matched.has(index))
           .map((pattern) => pattern.toString());
+        const diagnostics = runtimeDiagnostics(runtimeBin);
         reject(
           new Error(
             `${path.basename(runtimeBin)} ${args.join(
               " "
             )} did not reach readiness. missing=${missing.join(", ") || "none"} stdout=${stdout
               .trim()
-              .slice(-4000)} stderr=${stderr.trim().slice(-4000)}`
+              .slice(-4000)} stderr=${stderr.trim().slice(-4000)}${
+              diagnostics ? `\n${diagnostics}` : ""
+            }`
           )
         );
       }, STARTUP_TIMEOUT_MS);
@@ -236,13 +239,16 @@ async function waitForRuntimePatterns(runtimeBin, args, binDir, patterns) {
       child.on("error", fail);
       child.on("exit", (code, signal) => {
         if (matched.size !== patterns.length) {
+          const diagnostics = runtimeDiagnostics(runtimeBin);
           fail(
             new Error(
               `${path.basename(runtimeBin)} ${args.join(
                 " "
               )} exited before readiness: code=${code} signal=${signal} stdout=${stdout
                 .trim()
-                .slice(-4000)} stderr=${stderr.trim().slice(-4000)}`
+                .slice(-4000)} stderr=${stderr.trim().slice(-4000)}${
+                diagnostics ? `\n${diagnostics}` : ""
+              }`
             )
           );
         }
