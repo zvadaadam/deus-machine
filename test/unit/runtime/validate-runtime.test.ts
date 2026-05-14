@@ -176,6 +176,30 @@ describe("validateRuntimeStage", () => {
     );
   });
 
+  it("fails when the staged GitHub CLI is a directory", () => {
+    const projectRoot = createTempProjectRoot();
+    writeProjectFixture(projectRoot);
+
+    stageRuntime({ projectRoot, log: () => {} });
+    writeGhFixtures(projectRoot);
+    const ghPath = path.join(
+      projectRoot,
+      "dist",
+      "runtime",
+      "electron",
+      "bin",
+      "darwin-arm64",
+      "gh"
+    );
+    rmSync(ghPath, { force: true });
+    mkdirSync(ghPath);
+    chmodSync(ghPath, 0o755);
+
+    expect(() => validateRuntimeStage({ projectRoot, log: () => {} })).toThrow(
+      /Expected darwin-arm64\/gh to be a regular file/
+    );
+  });
+
   it("fails when the staged runtime is older than the source bundles", () => {
     const projectRoot = createTempProjectRoot();
     writeProjectFixture(projectRoot);

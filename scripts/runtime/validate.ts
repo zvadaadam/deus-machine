@@ -71,7 +71,11 @@ function assertExists(filePath: string, label: string): void {
 
 function assertExecutable(filePath: string, label: string): void {
   assertExists(filePath, label);
-  if ((statSync(filePath).mode & 0o111) === 0) {
+  const stat = statSync(filePath);
+  if (!stat.isFile()) {
+    throw createBuildRuntimeError(`Expected ${label} to be a regular file: ${filePath}`);
+  }
+  if ((stat.mode & 0o111) === 0) {
     throw createBuildRuntimeError(`Expected ${label} to be executable: ${filePath}`);
   }
 }
