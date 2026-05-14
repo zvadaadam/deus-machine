@@ -92,6 +92,16 @@ describe("buildAgentEnvironment", () => {
     expect(env.SHELL_ONLY_VAR).toBeUndefined();
   });
 
+  it("skips login-shell environment capture in packaged app mode", () => {
+    process.env.DEUS_PACKAGED = "1";
+    mockGetShellEnvironment.mockReturnValue({ SHELL_PATH: "/opt/homebrew/bin:/usr/local/bin" });
+
+    const env = buildAgentEnvironment();
+
+    expect(mockGetShellEnvironment).not.toHaveBeenCalled();
+    expect(env.SHELL_PATH).toBeUndefined();
+  });
+
   it("extraEnv overrides process.env", () => {
     const env = buildAgentEnvironment({
       extraEnv: { PATH: "/custom/path" },
