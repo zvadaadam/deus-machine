@@ -769,6 +769,7 @@ module.exports = async function afterPack(context) {
   prepareBetterSqliteRuntimeBinding(context);
   await verifyPackagedAgentClis(context, {
     runVersionChecks: false,
+    verifyManifestHashes: true,
     verifyExecutableSignatures: false,
     verifyNativePayloadSignatures: false,
   });

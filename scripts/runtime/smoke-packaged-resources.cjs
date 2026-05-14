@@ -238,6 +238,9 @@ async function smokeArch(arch) {
     }
 
     signPackagedPayloads(resourcesDir, arch);
+    // Re-signing mutates Mach-O bytes. The real afterPack hook verifies
+    // pre-sign manifest hashes; signed artifacts are verified by signature,
+    // architecture, entitlements, and dylib checks.
     await verifyPackagedAgentClis(context, {
       runVersionChecks: false,
       verifyManifestHashes: false,
