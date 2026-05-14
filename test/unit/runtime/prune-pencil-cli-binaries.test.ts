@@ -6,7 +6,12 @@ import path from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 
 const require = createRequire(import.meta.url);
-const { binaryNamesForTarget, prunePencilCliBinaries, verifyPackagedRuntimeManifests } =
+const {
+  binaryNamesForTarget,
+  prunePencilCliBinaries,
+  verifyPackagedRuntimeExternalModules,
+  verifyPackagedRuntimeManifests,
+} =
   require("../../../scripts/prune-pencil-cli-binaries.cjs") as {
     binaryNamesForTarget: (platform: string, arch: string | number) => Set<string>;
     prunePencilCliBinaries: (context: {
@@ -14,6 +19,7 @@ const { binaryNamesForTarget, prunePencilCliBinaries, verifyPackagedRuntimeManif
       arch: string | number;
       resourcesDir: string;
     }) => { removed: number; kept: number };
+    verifyPackagedRuntimeExternalModules: (resourcesDir: string, targetArch: string) => void;
     verifyPackagedRuntimeManifests: (binDir: string, targetArch: string) => void;
   };
 
@@ -119,6 +125,19 @@ function writePackagedRuntimeFixture(binDir: string): void {
   );
 }
 
+function writeRuntimeExternalModuleFixture(resourcesDir: string): void {
+  for (const packagePath of [
+    ["better-sqlite3"],
+    ["node-pty"],
+    ["@napi-rs", "canvas"],
+    ["@napi-rs", "canvas-darwin-arm64"],
+  ]) {
+    const dir = path.join(resourcesDir, "app.asar.unpacked", "node_modules", ...packagePath);
+    mkdirSync(dir, { recursive: true });
+    writeFileSync(path.join(dir, "package.json"), "{}");
+  }
+}
+
 afterEach(() => {
   for (const root of tempRoots.splice(0)) {
     rmSync(root, { recursive: true, force: true });
@@ -189,6 +208,29 @@ describe("prune-pencil-cli-binaries", () => {
     chmodSync(codexPath, 0o755);
     expect(() => verifyPackagedRuntimeManifests(binDir, "arm64")).toThrow(
       /codex CLI hash does not match/
+    );
+  });
+
+  it("verifies native runtime external modules are unpacked outside app.asar", () => {
+    const resourcesDir = createTempRoot("deus-runtime-externals");
+    tempRoots.push(resourcesDir);
+    writeRuntimeExternalModuleFixture(resourcesDir);
+
+    expect(() => verifyPackagedRuntimeExternalModules(resourcesDir, "arm64")).not.toThrow();
+
+    rmSync(
+      path.join(
+        resourcesDir,
+        "app.asar.unpacked",
+        "node_modules",
+        "@napi-rs",
+        "canvas",
+        "package.json"
+      ),
+      { force: true }
+    );
+    expect(() => verifyPackagedRuntimeExternalModules(resourcesDir, "arm64")).toThrow(
+      /@napi-rs\/canvas package/
     );
   });
 });

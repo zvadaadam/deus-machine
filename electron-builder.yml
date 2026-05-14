@@ -17,6 +17,8 @@ asarUnpack:
   - "resources/**"
   - "node_modules/better-sqlite3/**"
   - "node_modules/node-pty/**"
+  - "node_modules/@napi-rs/canvas/**"
+  - "node_modules/@napi-rs/canvas-*/**"
   - "node_modules/@pencil.dev/cli/dist/out/**"
 extraResources:
   - from: "packages/pencil"

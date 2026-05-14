@@ -265,6 +265,36 @@ function verifyPackagedRuntimeManifests(binDir, targetArch) {
   console.log("[agent-clis] packaged runtime manifests verified");
 }
 
+function verifyPackagedRuntimeExternalModules(resourcesDir, targetArch) {
+  const unpackedNodeModules = path.join(resourcesDir, "app.asar.unpacked", "node_modules");
+  const requiredFiles = [
+    ["better-sqlite3 package", path.join(unpackedNodeModules, "better-sqlite3", "package.json")],
+    ["node-pty package", path.join(unpackedNodeModules, "node-pty", "package.json")],
+    [
+      "@napi-rs/canvas package",
+      path.join(unpackedNodeModules, "@napi-rs", "canvas", "package.json"),
+    ],
+  ];
+
+  if (targetArch) {
+    requiredFiles.push([
+      `@napi-rs/canvas native package for darwin-${targetArch}`,
+      path.join(unpackedNodeModules, "@napi-rs", `canvas-darwin-${targetArch}`, "package.json"),
+    ]);
+  }
+
+  for (const [label, filePath] of requiredFiles) {
+    if (!fs.existsSync(filePath)) {
+      throw new Error(
+        `Missing unpacked runtime external module ${label}: ${filePath}. ` +
+          "Bun-compiled deus-runtime cannot rely on Electron app.asar module resolution."
+      );
+    }
+  }
+
+  console.log("[agent-clis] packaged runtime external modules verified");
+}
+
 function verifyPackagedAgentClis(context, options = {}) {
   if (context.electronPlatformName !== "darwin") return;
 
@@ -273,6 +303,7 @@ function verifyPackagedAgentClis(context, options = {}) {
   const targetArch = ARCH_BY_BUILDER_VALUE.get(context.arch);
   const expectedFileArch = targetArch ? FILE_ARCH_BY_TARGET_ARCH.get(targetArch) : undefined;
   verifyPackagedRuntimeManifests(binDir, targetArch);
+  verifyPackagedRuntimeExternalModules(resourcesDir, targetArch);
   const packagedExecutables = [
     ["Deus runtime", path.join(binDir, "deus-runtime")],
     ["GitHub CLI", path.join(binDir, "gh")],
@@ -321,4 +352,5 @@ module.exports = async function afterPack(context) {
 module.exports.prunePencilCliBinaries = prunePencilCliBinaries;
 module.exports.binaryNamesForTarget = binaryNamesForTarget;
 module.exports.verifyPackagedRuntimeManifests = verifyPackagedRuntimeManifests;
+module.exports.verifyPackagedRuntimeExternalModules = verifyPackagedRuntimeExternalModules;
 module.exports.verifyPackagedAgentClis = verifyPackagedAgentClis;
