@@ -10,6 +10,8 @@ export const PACKAGED_RUNTIME_ENV_DENYLIST = [
   "DEUS_BUNDLED_BIN_DIR",
   "DEUS_BACKEND_PORT",
   "DEUS_DATA_DIR",
+  "DEUS_PACKAGED",
+  "DEUS_RESOURCES_PATH",
   "ELECTRON_RUN_AS_NODE",
   "DEUS_RUNTIME",
   "DEUS_RUNTIME_COMMAND",
@@ -27,10 +29,10 @@ export function configurePackagedMainRuntimeEnv(options: {
   if (!options.isPackaged) return;
 
   const env = options.env ?? process.env;
-  env.DEUS_PACKAGED = "1";
   for (const key of PACKAGED_RUNTIME_ENV_DENYLIST) {
     delete env[key];
   }
+  env.DEUS_PACKAGED = "1";
 
   if (!options.resourcesPath) return;
 

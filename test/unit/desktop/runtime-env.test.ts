@@ -50,6 +50,8 @@ describe("desktop packaged runtime environment", () => {
       DEUS_BUNDLED_BIN_DIR: "/tmp/stale-bin",
       DEUS_BACKEND_PORT: "45678",
       DEUS_DATA_DIR: "/tmp/stale-data",
+      DEUS_PACKAGED: "stale-packaged",
+      DEUS_RESOURCES_PATH: "/tmp/stale-resources",
       DEUS_RUNTIME: "1",
       DEUS_RUNTIME_COMMAND: "backend",
       DEUS_RUNTIME_EXECUTABLE: "/tmp/deus-runtime",
