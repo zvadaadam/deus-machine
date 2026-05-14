@@ -97,19 +97,20 @@ function runValidateRuntime() {
 }
 
 function runDiagnostic(command, args) {
-  try {
-    return execFileSync(command, args, {
-      cwd: PROJECT_ROOT,
-      encoding: "utf8",
-      timeout: 20_000,
-      stdio: ["ignore", "pipe", "pipe"],
-    }).trim();
-  } catch (error) {
-    const stdout = error && typeof error === "object" && "stdout" in error ? error.stdout : "";
-    const stderr = error && typeof error === "object" && "stderr" in error ? error.stderr : "";
-    const output = `${stdout || ""}${stderr || ""}`.trim();
-    return output || `${command} failed`;
+  const result = spawnSync(command, args, {
+    cwd: PROJECT_ROOT,
+    encoding: "utf8",
+    timeout: 20_000,
+    stdio: ["ignore", "pipe", "pipe"],
+  });
+  const output = `${result.stdout || ""}${result.stderr || ""}`.trim();
+  if (result.error) {
+    return [result.error.code || result.error.message, output].filter(Boolean).join("\n");
   }
+  if (result.status !== 0) {
+    return output || `${command} exited with status ${result.status}`;
+  }
+  return output;
 }
 
 function runtimeDiagnostics(runtimeBin) {
