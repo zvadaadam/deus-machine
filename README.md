@@ -7,7 +7,7 @@
 </h3>
 
 <p align="center">
-  Run AI coding agents on your own machine — Mac, Linux, or any server.<br/>
+  Run AI coding agents on your own machine — Mac or server.<br/>
   Connect from desktop, phone, browser, or Slack. Agents keep working when you walk away.
 </p>
 
@@ -19,8 +19,7 @@
 </p>
 
 <p align="center">
-  <a href="https://github.com/zvadaadam/deus-machine/releases/latest"><img src="https://img.shields.io/badge/macOS-Download-000000?style=for-the-badge&logo=apple&logoColor=white" alt="Download for macOS" /></a>&nbsp;&nbsp;
-  <a href="https://github.com/zvadaadam/deus-machine/releases/latest"><img src="https://img.shields.io/badge/Linux-Download-000000?style=for-the-badge&logo=linux&logoColor=white" alt="Download for Linux" /></a>
+  <a href="https://github.com/zvadaadam/deus-machine/releases/latest"><img src="https://img.shields.io/badge/macOS-Download-000000?style=for-the-badge&logo=apple&logoColor=white" alt="Download for macOS" /></a>
 </p>
 
 <p align="center">
@@ -37,7 +36,7 @@
 
 Deus turns any machine into an always-on AI dev server. Install it on a Mac Mini, a Linux box, or a cloud VM. Spin up agents, close your laptop, and check back from your phone — they keep working.
 
-- **Desktop app** — full workspace UI on Mac or Linux
+- **Desktop app** — full workspace UI on macOS
 - **Web browser** — open [app.deusmachine.ai](https://app.deusmachine.ai) from any computer
 - **Phone** — monitor agents, review results, send messages on the go
 - **Slack** — send tasks and check status without leaving chat _(coming soon)_
@@ -70,7 +69,9 @@ Your code stays on your machine. You bring your own API key and pay Anthropic or
 
 ### 1. Install
 
-**Desktop app (recommended)** — download for [macOS](https://github.com/zvadaadam/deus-machine/releases/latest) or [Linux](https://github.com/zvadaadam/deus-machine/releases/latest) from GitHub Releases.
+**Desktop app (recommended)** — download for [macOS](https://github.com/zvadaadam/deus-machine/releases/latest) from GitHub Releases.
+
+Linux packaged desktop builds are disabled until the native packaged runtime and bundled agent CLIs are staged and verified for Linux. Use the CLI or web app for Linux servers today.
 
 **CLI on any machine** — one command:
 
