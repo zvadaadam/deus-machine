@@ -147,19 +147,18 @@ function assertElectronBuildFresh(projectRoot) {
   assertElectronBuildVersion(projectRoot);
 }
 
-function assertPackagedMainRuntimeContract(projectRoot) {
-  const mainOutput = path.join(projectRoot, "out/main/index.js");
-  const contents = readFileSync(mainOutput, "utf8");
+function assertPackagedMainRuntimeContents(contents, label = "Electron main build output") {
+  const requiredSnippets = [
+    'process.resourcesPath, "bin", "deus-runtime"',
+    "DEUS_RUNTIME_EXECUTABLE",
+    "configurePackagedMainRuntimeEnv",
+    'runtime.runtimeExecutable ? ["backend"]',
+  ];
 
-  if (!contents.includes("deus-runtime") || !contents.includes("DEUS_RUNTIME_EXECUTABLE")) {
+  for (const snippet of requiredSnippets) {
+    if (contents.includes(snippet)) continue;
     throw new Error(
-      "Electron main build output does not contain the packaged deus-runtime launch contract. Run `bun run build` before packaging."
-    );
-  }
-
-  if (!contents.includes("configurePackagedMainRuntimeEnv")) {
-    throw new Error(
-      "Electron main build output does not contain the packaged main runtime environment initializer. Run `bun run build` before packaging."
+      `${label} does not contain packaged runtime contract snippet: ${snippet}. Run \`bun run build\` before packaging.`
     );
   }
 
@@ -168,15 +167,21 @@ function assertPackagedMainRuntimeContract(projectRoot) {
     contents.includes("process.resourcesPath, 'backend'")
   ) {
     throw new Error(
-      "Electron main build output still contains the obsolete packaged backend bundle path. Run `bun run build` before packaging."
+      `${label} still contains the obsolete packaged backend bundle path. Run \`bun run build\` before packaging.`
     );
   }
 
   if (contents.includes("runtime.nodePath") || contents.includes("NODE_PATH: runtime.nodePath")) {
     throw new Error(
-      "Electron main build output still contains obsolete packaged NODE_PATH plumbing. Run `bun run build` before packaging."
+      `${label} still contains obsolete packaged NODE_PATH plumbing. Run \`bun run build\` before packaging.`
     );
   }
+}
+
+function assertPackagedMainRuntimeContract(projectRoot) {
+  const mainOutput = path.join(projectRoot, "out/main/index.js");
+  const contents = readFileSync(mainOutput, "utf8");
+  assertPackagedMainRuntimeContents(contents);
 }
 
 function assertPackagedRuntimePlatform(context) {
@@ -231,5 +236,6 @@ module.exports = function beforePack(context) {
 };
 
 module.exports.assertPackagedMainRuntimeContract = assertPackagedMainRuntimeContract;
+module.exports.assertPackagedMainRuntimeContents = assertPackagedMainRuntimeContents;
 module.exports.assertPackagedRuntimePlatform = assertPackagedRuntimePlatform;
 module.exports.assertElectronBuildVersion = assertElectronBuildVersion;

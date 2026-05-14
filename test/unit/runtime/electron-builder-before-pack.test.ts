@@ -38,6 +38,17 @@ function createProjectWithRendererVersion(packageVersion: string, rendererConten
   return projectRoot;
 }
 
+function packagedRuntimeContractOutput(extraLines: string[] = []): string {
+  return [
+    "function configurePackagedMainRuntimeEnv(options) { process.env.DEUS_PACKAGED = '1'; }",
+    "configurePackagedMainRuntimeEnv({ isPackaged: app.isPackaged });",
+    'const runtimeExecutable = join(process.resourcesPath, "bin", "deus-runtime");',
+    "const env = { DEUS_RUNTIME_EXECUTABLE: runtimeExecutable };",
+    'const backendArgs = runtime.runtimeExecutable ? ["backend"] : [runtime.backendEntry];',
+    ...extraLines,
+  ].join("\n");
+}
+
 afterEach(() => {
   for (const root of tempRoots.splice(0)) {
     rmSync(root, { recursive: true, force: true });
@@ -56,14 +67,7 @@ describe("electron-builder beforePack runtime guard", () => {
   });
 
   it("accepts Electron main output with the packaged deus-runtime contract", () => {
-    const projectRoot = createProjectWithMainOutput(
-      [
-        "function configurePackagedMainRuntimeEnv(options) { process.env.DEUS_PACKAGED = '1'; }",
-        "configurePackagedMainRuntimeEnv({ isPackaged: app.isPackaged });",
-        "const runtimeExecutable = join(process.resourcesPath, 'bin', 'deus-runtime');",
-        "const env = { DEUS_RUNTIME_EXECUTABLE: runtimeExecutable };",
-      ].join("\n")
-    );
+    const projectRoot = createProjectWithMainOutput(packagedRuntimeContractOutput());
 
     expect(() => assertPackagedMainRuntimeContract(projectRoot)).not.toThrow();
   });
@@ -72,18 +76,15 @@ describe("electron-builder beforePack runtime guard", () => {
     const projectRoot = createProjectWithMainOutput("console.log('backend');");
 
     expect(() => assertPackagedMainRuntimeContract(projectRoot)).toThrow(
-      /does not contain the packaged deus-runtime launch contract/
+      /does not contain packaged runtime contract snippet/
     );
   });
 
   it("rejects obsolete packaged backend bundle paths", () => {
     const projectRoot = createProjectWithMainOutput(
-      [
-        "function configurePackagedMainRuntimeEnv(options) { process.env.DEUS_PACKAGED = '1'; }",
-        "const runtimeExecutable = join(process.resourcesPath, 'bin', 'deus-runtime');",
-        "const env = { DEUS_RUNTIME_EXECUTABLE: runtimeExecutable };",
+      packagedRuntimeContractOutput([
         'const backendEntry = join(process.resourcesPath, "backend", "server.bundled.cjs");',
-      ].join("\n")
+      ])
     );
 
     expect(() => assertPackagedMainRuntimeContract(projectRoot)).toThrow(
@@ -93,11 +94,9 @@ describe("electron-builder beforePack runtime guard", () => {
 
   it("rejects obsolete packaged NODE_PATH plumbing", () => {
     const projectRoot = createProjectWithMainOutput(
-      [
-        "function configurePackagedMainRuntimeEnv(options) { process.env.DEUS_PACKAGED = '1'; }",
-        "const runtimeExecutable = join(process.resourcesPath, 'bin', 'deus-runtime');",
+      packagedRuntimeContractOutput([
         "const env = { DEUS_RUNTIME_EXECUTABLE: runtimeExecutable, NODE_PATH: runtime.nodePath };",
-      ].join("\n")
+      ])
     );
 
     expect(() => assertPackagedMainRuntimeContract(projectRoot)).toThrow(
@@ -108,13 +107,14 @@ describe("electron-builder beforePack runtime guard", () => {
   it("rejects stale Electron main output missing packaged main env initialization", () => {
     const projectRoot = createProjectWithMainOutput(
       [
-        "const runtimeExecutable = join(process.resourcesPath, 'bin', 'deus-runtime');",
+        'const runtimeExecutable = join(process.resourcesPath, "bin", "deus-runtime");',
         "const env = { DEUS_RUNTIME_EXECUTABLE: runtimeExecutable };",
+        'const backendArgs = runtime.runtimeExecutable ? ["backend"] : [runtime.backendEntry];',
       ].join("\n")
     );
 
     expect(() => assertPackagedMainRuntimeContract(projectRoot)).toThrow(
-      /packaged main runtime environment initializer/
+      /configurePackagedMainRuntimeEnv/
     );
   });
 

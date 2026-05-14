@@ -6,6 +6,9 @@ const {
   verifyCodeSignaturePageSize,
   verifyPackagedAgentClis,
 } = require("../prune-pencil-cli-binaries.cjs");
+const {
+  assertPackagedMainRuntimeContents,
+} = require("./electron-builder-before-pack.cjs");
 
 const PROJECT_ROOT = path.resolve(__dirname, "../..");
 const DEFAULT_APP_PATH = path.join(PROJECT_ROOT, "dist-electron", "mac-arm64", "Deus.app");
@@ -174,30 +177,7 @@ function verifyAsarRuntimeContract(asarPath) {
   }
 
   const mainOutput = asar.extractFile(asarPath, "out/main/index.js").toString("utf8");
-  const requiredSnippets = [
-    "deus-runtime",
-    "DEUS_RUNTIME_EXECUTABLE",
-    "configurePackagedMainRuntimeEnv",
-  ];
-  for (const snippet of requiredSnippets) {
-    assert(
-      mainOutput.includes(snippet),
-      `Packaged Electron main output is missing runtime contract snippet: ${snippet}`
-    );
-  }
-
-  const obsoleteSnippets = [
-    'process.resourcesPath, "backend"',
-    "process.resourcesPath, 'backend'",
-    "runtime.nodePath",
-    "NODE_PATH: runtime.nodePath",
-  ];
-  for (const snippet of obsoleteSnippets) {
-    assert(
-      !mainOutput.includes(snippet),
-      `Packaged Electron main output still contains obsolete runtime snippet: ${snippet}`
-    );
-  }
+  assertPackagedMainRuntimeContents(mainOutput, "Packaged Electron main output");
 
   console.log("[runtime-smoke] packaged app.asar runtime contract verified");
 }
