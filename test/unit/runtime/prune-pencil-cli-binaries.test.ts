@@ -8,6 +8,7 @@ import { afterEach, describe, expect, it } from "vitest";
 const require = createRequire(import.meta.url);
 const {
   binaryNamesForTarget,
+  pruneCanvasRuntimeBinaries,
   pruneNodePtyRuntimeBinaries,
   prunePencilCliBinaries,
   verifyPackagedRuntimeExternalModules,
@@ -15,6 +16,11 @@ const {
 } =
   require("../../../scripts/prune-pencil-cli-binaries.cjs") as {
     binaryNamesForTarget: (platform: string, arch: string | number) => Set<string>;
+    pruneCanvasRuntimeBinaries: (context: {
+      electronPlatformName: string;
+      arch: string | number;
+      resourcesDir: string;
+    }) => { removed: number; kept: number };
     pruneNodePtyRuntimeBinaries: (context: {
       electronPlatformName: string;
       arch: string | number;
@@ -209,6 +215,27 @@ function writeNodePtyPruneFixture(resourcesDir: string): string {
   return nodePtyRoot;
 }
 
+function writeCanvasPruneFixture(resourcesDir: string): string {
+  const napiRsRoot = path.join(
+    resourcesDir,
+    "app.asar.unpacked",
+    "node_modules",
+    "@napi-rs"
+  );
+  for (const packageName of [
+    "canvas",
+    "canvas-darwin-arm64",
+    "canvas-darwin-x64",
+    "canvas-linux-x64-gnu",
+    "canvas-win32-x64-msvc",
+  ]) {
+    const packageRoot = path.join(napiRsRoot, packageName);
+    mkdirSync(packageRoot, { recursive: true });
+    writeFileSync(path.join(packageRoot, "package.json"), "{}");
+  }
+  return napiRsRoot;
+}
+
 afterEach(() => {
   for (const root of tempRoots.splice(0)) {
     rmSync(root, { recursive: true, force: true });
@@ -384,6 +411,22 @@ describe("prune-pencil-cli-binaries", () => {
     expect(() => readdirSync(path.join(nodePtyRoot, "build"))).toThrow();
   });
 
+  it("prunes @napi-rs/canvas native packages to the target arch", () => {
+    const resourcesDir = createTempRoot("deus-canvas-prune");
+    tempRoots.push(resourcesDir);
+    const napiRsRoot = writeCanvasPruneFixture(resourcesDir);
+
+    expect(
+      pruneCanvasRuntimeBinaries({
+        electronPlatformName: "darwin",
+        arch: "arm64",
+        resourcesDir,
+      })
+    ).toEqual({ removed: 3, kept: 1 });
+
+    expect(readdirSync(napiRsRoot).sort()).toEqual(["canvas", "canvas-darwin-arm64"]);
+  });
+
   it("rejects packaged node-pty build output before target prebuilds", () => {
     const resourcesDir = createTempRoot("deus-node-pty-stale-build");
     tempRoots.push(resourcesDir);
@@ -405,6 +448,27 @@ describe("prune-pencil-cli-binaries", () => {
         verifyNativePayloads: false,
       })
     ).toThrow(/node-pty build output/);
+  });
+
+  it("rejects non-target @napi-rs/canvas native packages", () => {
+    const resourcesDir = createTempRoot("deus-canvas-stale");
+    tempRoots.push(resourcesDir);
+    writeRuntimeExternalModuleFixture(resourcesDir);
+    const stalePackage = path.join(
+      resourcesDir,
+      "app.asar.unpacked",
+      "node_modules",
+      "@napi-rs",
+      "canvas-linux-x64-gnu"
+    );
+    mkdirSync(stalePackage, { recursive: true });
+    writeFileSync(path.join(stalePackage, "package.json"), "{}");
+
+    expect(() =>
+      verifyPackagedRuntimeExternalModules(resourcesDir, "arm64", {
+        verifyNativePayloads: false,
+      })
+    ).toThrow(/non-target @napi-rs\/canvas native packages/);
   });
 
   it("requires native runtime external module payloads outside app.asar", () => {

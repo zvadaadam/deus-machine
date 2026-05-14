@@ -176,6 +176,43 @@ function pruneNodePtyRuntimeBinaries(context) {
   return { removed, kept };
 }
 
+function pruneCanvasRuntimeBinaries(context) {
+  if (context.electronPlatformName !== "darwin") return { removed: 0, kept: 0 };
+
+  const targetArch = ARCH_BY_BUILDER_VALUE.get(context.arch);
+  if (!targetArch) return { removed: 0, kept: 0 };
+
+  const resourcesDir = context.resourcesDir ?? resourcesDirForContext(context);
+  const napiRsRoot = path.join(
+    resourcesDir,
+    "app.asar.unpacked",
+    "node_modules",
+    "@napi-rs"
+  );
+  if (!fs.existsSync(napiRsRoot)) return { removed: 0, kept: 0 };
+
+  const targetPackageName = `canvas-darwin-${targetArch}`;
+  let removed = 0;
+  let kept = 0;
+  for (const entry of fs.readdirSync(napiRsRoot, { withFileTypes: true })) {
+    if (!entry.isDirectory() || !entry.name.startsWith("canvas-")) continue;
+    const entryPath = path.join(napiRsRoot, entry.name);
+    if (entry.name === targetPackageName) {
+      kept++;
+      continue;
+    }
+    fs.rmSync(entryPath, { recursive: true, force: true });
+    removed++;
+  }
+
+  if (removed > 0 || kept > 0) {
+    console.log(
+      `[runtime] kept @napi-rs/${targetPackageName}; removed ${removed} non-runtime canvas native dirs`
+    );
+  }
+  return { removed, kept };
+}
+
 function fileArch(filePath) {
   const output = execFileSync("file", [filePath], {
     encoding: "utf8",
@@ -535,6 +572,23 @@ function verifyPackagedRuntimeExternalModules(resourcesDir, targetArch, options 
           `${nodePtyPrebuildFiles.join(", ")}. Bun-compiled deus-runtime cannot rely on Electron app.asar module resolution.`
       );
     }
+
+    const napiRsRoot = path.join(unpackedNodeModules, "@napi-rs");
+    const expectedCanvasPackage = `canvas-darwin-${targetArch}`;
+    const staleCanvasPackages = fs.existsSync(napiRsRoot)
+      ? fs
+          .readdirSync(napiRsRoot, { withFileTypes: true })
+          .filter((entry) => entry.isDirectory())
+          .map((entry) => entry.name)
+          .filter((name) => name.startsWith("canvas-") && name !== expectedCanvasPackage)
+      : [];
+    if (staleCanvasPackages.length > 0) {
+      throw new Error(
+        `Packaged runtime still contains non-target @napi-rs/canvas native packages: ${staleCanvasPackages.join(
+          ", "
+        )}. Keep only @napi-rs/${expectedCanvasPackage} for darwin-${targetArch}.`
+      );
+    }
   }
 
   for (const [label, filePath] of requiredFiles) {
@@ -790,6 +844,7 @@ async function verifyPackagedAgentClis(context, options = {}) {
 module.exports = async function afterPack(context) {
   prunePencilCliBinaries(context);
   pruneNodePtyRuntimeBinaries(context);
+  pruneCanvasRuntimeBinaries(context);
   prepareBetterSqliteRuntimeBinding(context);
   await verifyPackagedAgentClis(context, {
     runVersionChecks: false,
@@ -801,6 +856,7 @@ module.exports = async function afterPack(context) {
 
 module.exports.prunePencilCliBinaries = prunePencilCliBinaries;
 module.exports.pruneNodePtyRuntimeBinaries = pruneNodePtyRuntimeBinaries;
+module.exports.pruneCanvasRuntimeBinaries = pruneCanvasRuntimeBinaries;
 module.exports.prepareBetterSqliteRuntimeBinding = prepareBetterSqliteRuntimeBinding;
 module.exports.binaryNamesForTarget = binaryNamesForTarget;
 module.exports.verifyPackagedRuntimeManifests = verifyPackagedRuntimeManifests;
