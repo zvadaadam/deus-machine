@@ -1,8 +1,9 @@
-# Multi-platform release workflow (macOS, Linux)
+# Release workflow (macOS desktop + CLI)
 #
-# Builds and publishes the Electron app for all platforms via GitHub Releases.
-# electron-updater reads latest-mac.yml / latest.yml / latest-linux.yml from
-# the release assets to deliver auto-updates.
+# Builds and publishes the macOS Electron app via GitHub Releases.
+# electron-updater reads latest-mac.yml from the release assets to deliver
+# auto-updates. Linux desktop packaging is intentionally disabled until the
+# native packaged runtime and bundled agent CLIs are staged for Linux.
 #
 # Trigger: GitHub Actions UI → "Run workflow" → pick bump type
 # Or CLI:  gh workflow run release.yml -f bump=patch
@@ -279,47 +280,9 @@ jobs:
             dist-electron/latest-mac.yml
           if-no-files-found: error
 
-  # ── Step 2b: Build Linux (x64) ─────────────────────────────────────
-  build-linux:
-    needs: validate-and-bump
-    runs-on: ubuntu-latest
-    env:
-      SENTRY_AUTH_TOKEN: ${{ secrets.SENTRY_AUTH_TOKEN }}
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          ref: ${{ inputs.dry_run == false && needs.validate-and-bump.outputs.tag || github.ref }}
-
-      - uses: oven-sh/setup-bun@v2
-        with:
-          bun-version: 1.2.19
-
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 22
-
-      - name: Install dependencies
-        run: bun install --frozen-lockfile
-
-      - name: Build all
-        run: bun run build:all
-
-      - name: Package Linux (x64)
-        run: bunx electron-builder --linux --publish never
-
-      - uses: actions/upload-artifact@v4
-        with:
-          name: linux
-          path: |
-            dist-electron/*.AppImage
-            dist-electron/*.deb
-            dist-electron/*.blockmap
-            dist-electron/latest-linux.yml
-          if-no-files-found: error
-
   # ── Step 3: Stage a draft GitHub Release with all artifacts ─────────
   create-release:
-    needs: [validate-and-bump, build-macos, build-linux]
+    needs: [validate-and-bump, build-macos]
     if: ${{ inputs.dry_run == false }}
     runs-on: ubuntu-latest
     steps:
@@ -332,7 +295,6 @@ jobs:
           mkdir -p release
           find artifacts -type f \( \
             -name "*.dmg" -o -name "*.zip" -o \
-            -name "*.AppImage" -o -name "*.deb" -o \
             -name "*.blockmap" -o -name "*.yml" \
           \) -exec cp {} release/ \;
           echo "=== Release files ==="
