@@ -50,11 +50,12 @@ uses the installed unpacked Electron runtime for the host architecture, but
 still runs electron-builder's `beforePack`, `afterPack`, and `afterSign` hooks.
 CI then runs the packaged-app smoke with
 `--skip-app-signature --run-version-checks`, followed by the packaged
-`Resources/bin/deus-runtime` smoke with `--skip-app-check`. That means pull
-requests exercise `beforePack`, `afterPack`, `Resources/bin` wiring, native
-module pruning, app.asar runtime-contract checks, packaged binary version
-checks, and packaged `agent-server`/`backend` readiness before release
-signing/notarization.
+`Resources/bin/deus-runtime` smoke and packaged Electron desktop smoke with
+`--skip-app-check`. That means pull requests exercise `beforePack`,
+`afterPack`, `Resources/bin` wiring, native module pruning, app.asar
+runtime-contract checks, packaged binary version checks, packaged
+`agent-server`/`backend` readiness, and packaged Electron main-process startup
+before release signing/notarization.
 
 ## Direct Runtime Checks
 

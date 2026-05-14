@@ -134,6 +134,12 @@ jobs:
           --app "$MAC_APP_PATH"
           --skip-app-check
 
+      - name: Smoke packaged Electron desktop
+        run: >
+          node scripts/runtime/smoke-packaged-desktop.cjs
+          --app "$MAC_APP_PATH"
+          --skip-app-check
+
   desktop-runtime-tests:
     name: Desktop Runtime Unit Tests
     runs-on: ubuntu-latest
