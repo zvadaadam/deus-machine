@@ -116,7 +116,7 @@ jobs:
           esac
 
       - name: Package macOS app directory
-        run: bunx electron-builder --mac dir --${MAC_BUILDER_ARCH} --publish never -c.mac.notarize=false
+        run: bun run package:mac:dir -- --arch "$MAC_BUILDER_ARCH"
         env:
           CSC_IDENTITY_AUTO_DISCOVERY: "false"
 
