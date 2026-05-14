@@ -47,6 +47,7 @@ describe("desktop packaged runtime environment", () => {
       AUTH_TOKEN: "stale-auth-token",
       DATABASE_PATH: "/tmp/stale.db",
       DEUS_AUTH_TOKEN: "stale-main-auth-token",
+      DEUS_BUNDLED_BIN_DIR: "/tmp/stale-bin",
       DEUS_BACKEND_PORT: "45678",
       DEUS_DATA_DIR: "/tmp/stale-data",
       DEUS_RUNTIME: "1",
@@ -70,6 +71,7 @@ describe("desktop packaged runtime environment", () => {
     expect(env.AUTH_TOKEN).toBeUndefined();
     expect(env.DATABASE_PATH).toBeUndefined();
     expect(env.DEUS_AUTH_TOKEN).toBeUndefined();
+    expect(env.DEUS_BUNDLED_BIN_DIR).toBe("/Applications/Deus.app/Contents/Resources/bin");
     expect(env.DEUS_BACKEND_PORT).toBeUndefined();
     expect(env.DEUS_DATA_DIR).toBeUndefined();
     expect(env.DEUS_RUNTIME).toBeUndefined();

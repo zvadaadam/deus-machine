@@ -108,6 +108,7 @@ describe("desktop backend process", () => {
     process.env.AUTH_TOKEN = "stale-auth-token";
     process.env.DATABASE_PATH = "/tmp/stale.db";
     process.env.DEUS_AUTH_TOKEN = "stale-main-auth-token";
+    process.env.DEUS_BUNDLED_BIN_DIR = "/tmp/stale-bin";
     process.env.DEUS_BACKEND_PORT = "45678";
     process.env.DEUS_DATA_DIR = "/tmp/stale-data";
     process.env.DEUS_RUNTIME = "1";
