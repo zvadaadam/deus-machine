@@ -123,6 +123,48 @@ function execOutput(command: string, args: string[], cwd: string): string {
   }).trim();
 }
 
+function spawnErrorCode(error: Error | undefined): string {
+  return (error as NodeJS.ErrnoException | undefined)?.code ?? error?.message ?? "none";
+}
+
+function diagnosticOutput(command: string, args: string[], cwd: string): string {
+  const result = spawnSync(command, args, {
+    cwd,
+    encoding: "utf8",
+    timeout: VERIFY_TIMEOUT_MS,
+    stdio: ["ignore", "pipe", "pipe"],
+  });
+  const output = `${result.stdout || ""}${result.stderr || ""}`.trim();
+  if (result.error) {
+    return [spawnErrorCode(result.error), output].filter(Boolean).join("\n");
+  }
+  if (result.status !== 0) return output || `${command} exited with status ${result.status}`;
+  return output;
+}
+
+function runtimeExecutableDiagnostics(executablePath: string): string {
+  if (process.platform !== "darwin") return "";
+  const cwd = path.dirname(executablePath);
+  return [
+    `file: ${diagnosticOutput("file", [executablePath], cwd)}`,
+    `codesign: ${diagnosticOutput("codesign", ["-dv", "--verbose=4", executablePath], cwd)}`,
+    `spctl: ${diagnosticOutput("spctl", ["--assess", "--type", "execute", "--verbose=4", executablePath], cwd)}`,
+    `xattr: ${diagnosticOutput("xattr", ["-l", executablePath], cwd) || "none"}`,
+  ].join("\n");
+}
+
+function macExecutionPolicyHint(diagnostics: string): string {
+  if (process.platform !== "darwin") return "";
+  if (!/spctl:[\s\S]*rejected/.test(diagnostics)) return "";
+  if (!/com\.apple\.(provenance|quarantine)/.test(diagnostics)) return "";
+
+  return [
+    "",
+    "macOS rejected this executable before --version produced output.",
+    "Verify runnable staged runtime binaries on a notarized artifact or a macOS host that allows generated Mach-O binaries to launch.",
+  ].join("\n");
+}
+
 function readPackageVersion(projectRoot: string): string {
   const packageJsonPath = path.join(projectRoot, "package.json");
   const packageJson = JSON.parse(readFileSync(packageJsonPath, "utf8")) as { version?: unknown };
@@ -410,11 +452,24 @@ export function buildDeusRuntime(options: BuildDeusRuntimeOptions = {}): DeusRun
 }
 
 export function verifyStagedDeusRuntimeVersion(executablePath: string): string {
-  const output = execFileSync(executablePath, ["--version"], {
+  const result = spawnSync(executablePath, ["--version"], {
     encoding: "utf8",
     timeout: VERIFY_TIMEOUT_MS,
     stdio: ["ignore", "pipe", "pipe"],
-  }).trim();
+  });
+  const output = (result.stdout || "").trim();
+  if (result.status !== 0) {
+    const stderr = (result.stderr || "").trim();
+    const diagnostics = runtimeExecutableDiagnostics(executablePath);
+    const hint = macExecutionPolicyHint(diagnostics);
+    throw new Error(
+      `deus-runtime --version failed for ${executablePath}: status=${result.status} signal=${
+        result.signal
+      } error=${spawnErrorCode(result.error)} stdout=${output} stderr=${stderr}${
+        diagnostics ? `\n${diagnostics}` : ""
+      }${hint}`
+    );
+  }
   if (!/^deus-runtime \d+\.\d+\.\d+ /.test(output)) {
     throw new Error(`Unexpected deus-runtime --version output for ${executablePath}: ${output}`);
   }

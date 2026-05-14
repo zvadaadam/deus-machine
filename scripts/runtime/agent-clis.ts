@@ -1,4 +1,4 @@
-import { execFileSync } from "node:child_process";
+import { execFileSync, spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
 import {
   chmodSync,
@@ -269,17 +269,73 @@ function shouldVerifyRuntimeKey(runtimeKey: string): boolean {
   return runtimeKey === `darwin-${process.arch}`;
 }
 
+function spawnErrorCode(error: Error | undefined): string {
+  return (error as NodeJS.ErrnoException | undefined)?.code ?? error?.message ?? "none";
+}
+
 function verifyVersion(
   executablePath: string,
   args: string[],
   env: NodeJS.ProcessEnv = process.env
 ): string {
-  return execFileSync(executablePath, args, {
+  const result = spawnSync(executablePath, args, {
     encoding: "utf8",
     timeout: VERIFY_TIMEOUT_MS,
     env,
     stdio: ["ignore", "pipe", "pipe"],
-  }).trim();
+  });
+  const output = (result.stdout || "").trim();
+  if (result.status !== 0) {
+    const stderr = (result.stderr || "").trim();
+    const diagnostics = stagedExecutableDiagnostics(executablePath);
+    const hint = macExecutionPolicyHint(diagnostics);
+    throw new Error(
+      `${path.basename(executablePath)} ${args.join(" ")} failed: status=${result.status} signal=${
+        result.signal
+      } error=${spawnErrorCode(result.error)} stdout=${output} stderr=${stderr}${
+        diagnostics ? `\n${diagnostics}` : ""
+      }${hint}`
+    );
+  }
+  return output;
+}
+
+function diagnosticOutput(command: string, args: string[], cwd: string): string {
+  const result = spawnSync(command, args, {
+    cwd,
+    encoding: "utf8",
+    timeout: VERIFY_TIMEOUT_MS,
+    stdio: ["ignore", "pipe", "pipe"],
+  });
+  const output = `${result.stdout || ""}${result.stderr || ""}`.trim();
+  if (result.error) {
+    return [spawnErrorCode(result.error), output].filter(Boolean).join("\n");
+  }
+  if (result.status !== 0) return output || `${command} exited with status ${result.status}`;
+  return output;
+}
+
+function stagedExecutableDiagnostics(executablePath: string): string {
+  if (process.platform !== "darwin") return "";
+  const cwd = path.dirname(executablePath);
+  return [
+    `file: ${diagnosticOutput("file", [executablePath], cwd)}`,
+    `codesign: ${diagnosticOutput("codesign", ["-dv", "--verbose=4", executablePath], cwd)}`,
+    `spctl: ${diagnosticOutput("spctl", ["--assess", "--type", "execute", "--verbose=4", executablePath], cwd)}`,
+    `xattr: ${diagnosticOutput("xattr", ["-l", executablePath], cwd) || "none"}`,
+  ].join("\n");
+}
+
+function macExecutionPolicyHint(diagnostics: string): string {
+  if (process.platform !== "darwin") return "";
+  if (!/spctl:[\s\S]*rejected/.test(diagnostics)) return "";
+  if (!/com\.apple\.(provenance|quarantine)/.test(diagnostics)) return "";
+
+  return [
+    "",
+    "macOS rejected this executable before --version produced output.",
+    "Verify runnable staged agent CLIs on a notarized artifact or a macOS host that allows generated/copied Mach-O binaries to launch.",
+  ].join("\n");
 }
 
 function assertVersionOutput(tool: AgentCliName, output: string, executablePath: string): void {
