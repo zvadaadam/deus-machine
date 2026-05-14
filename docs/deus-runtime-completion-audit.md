@@ -98,6 +98,7 @@ Recent focused checks:
 - `node scripts/runtime/smoke-packaged-app.cjs --help`
 - Focused Vitest for `test/unit/runtime/electron-builder-before-pack.test.ts` still hangs before any output and was killed by a 20s wrapper.
 - Direct `deus-runtime --version` through `scripts/runtime/run-version-check.cjs` still times out before stdout/stderr.
+- `bun-runtime` has no remote branch or PR as of this audit. Attempts to push with HTTPS, explicit `gh` token credentials, and `http.version=HTTP/1.1` all wedged in `git-remote-https` after receive-pack negotiation; SSH is not configured on this host (`Permission denied (publickey)`). The PR macOS runtime CI gate therefore has not run yet.
 
 Known local blockers:
 
@@ -119,6 +120,10 @@ node scripts/runtime/smoke-packaged-app.cjs --app <Deus.app>
 node scripts/runtime/smoke-packaged-runtime.cjs --app <Deus.app> --require-gatekeeper
 node scripts/runtime/smoke-packaged-desktop.cjs --app <Deus.app> --require-gatekeeper
 ```
+
+Also push the branch or otherwise run the pull-request macOS runtime CI job so
+the packaged `Resources/bin/deus-runtime` smoke added to `.github/workflows/test.yml`
+executes on a macOS runner.
 
 The direct checks must prove:
 
