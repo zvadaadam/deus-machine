@@ -60,12 +60,28 @@ describe("terminal command helpers", () => {
     expect(resolveTerminalCliCommand("codex login")).toBe(`'${codexPath}' 'login'`);
   });
 
-  it("does not fall back to global agent CLI names in packaged runtime", () => {
+  it("uses bundled GitHub CLI paths in packaged runtime", () => {
+    const ghPath = createBundledTool("gh");
+    process.env.DEUS_PACKAGED = "1";
+
+    expect(resolveTerminalCliCommand("gh auth login")).toBe(`'${ghPath}' 'auth' 'login'`);
+  });
+
+  it("uses bundled ripgrep paths in packaged runtime", () => {
+    const rgPath = createBundledTool("rg");
+    process.env.DEUS_PACKAGED = "1";
+
+    expect(resolveTerminalCliCommand("rg search")).toBe(`'${rgPath}' 'search'`);
+  });
+
+  it("does not fall back to global bundled CLI names in packaged runtime", () => {
     process.env.DEUS_PACKAGED = "1";
     process.env.DEUS_BUNDLED_BIN_DIR = "/missing";
 
     expect(resolveTerminalCliCommand("codex login")).toBeNull();
     expect(resolveTerminalCliCommand("claude login")).toBeNull();
+    expect(resolveTerminalCliCommand("gh auth login")).toBeNull();
+    expect(resolveTerminalCliCommand("rg search")).toBeNull();
   });
 
   it("uses packaged Electron main env for terminal agent commands", () => {

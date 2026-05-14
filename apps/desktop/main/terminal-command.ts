@@ -1,7 +1,7 @@
 import { resolveBundledCliPath } from "../../../shared/lib/cli-path";
 
 const TERMINAL_TOKEN_PATTERN = /^[a-zA-Z0-9_-]+$/;
-const PACKAGED_TERMINAL_TOOLS = new Set(["claude", "codex"]);
+const PACKAGED_TERMINAL_TOOLS = new Set(["claude", "codex", "gh", "rg"]);
 
 function isPackagedRuntime(): boolean {
   return process.env.DEUS_PACKAGED === "1" || process.env.DEUS_RUNTIME === "1";
