@@ -29,6 +29,10 @@ export type MessageRole = z.infer<typeof MessageRoleSchema>;
 export const WorkspaceStateSchema = z.enum(["ready", "initializing", "archived", "error"]);
 export type WorkspaceState = z.infer<typeof WorkspaceStateSchema>;
 
+/** Where the workspace runs. Local workspaces use a desktop git worktree. */
+export const WorkspaceKindSchema = z.enum(["local", "cloud"]);
+export type WorkspaceKind = z.infer<typeof WorkspaceKindSchema>;
+
 /** Workspace initialization progress. */
 const SetupStatusSchema = z.enum(["none", "running", "completed", "failed"]);
 export type SetupStatus = z.infer<typeof SetupStatusSchema>;

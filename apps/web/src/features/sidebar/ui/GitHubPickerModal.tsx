@@ -17,15 +17,18 @@ import { useRepoPrs, useRepoBranches, useGhStatus } from "@/features/workspace/a
 import { native } from "@/platform";
 import { GitHubIcon } from "@/shared/components/icons/GitHubIcon";
 import type { PRSummary, BranchSummary } from "@shared/types";
+import type { WorkspaceKind } from "@shared/enums";
 
 interface GitHubPickerModalProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   repoId: string;
   repoName: string;
+  workspaceKind: WorkspaceKind;
   onCreateWorkspace: (params: {
     repositoryId: string;
     source_branch: string;
+    workspace_kind?: WorkspaceKind;
     pr_number?: number;
     pr_url?: string;
     pr_title?: string;
@@ -38,6 +41,7 @@ export function GitHubPickerModal({
   onOpenChange,
   repoId,
   repoName,
+  workspaceKind,
   onCreateWorkspace,
 }: GitHubPickerModalProps) {
   const [activeTab, setActiveTab] = useState<"prs" | "branches">("prs");
@@ -71,6 +75,7 @@ export function GitHubPickerModal({
       onCreateWorkspace({
         repositoryId: repoId,
         source_branch: pr.branch,
+        workspace_kind: workspaceKind,
         pr_number: pr.number,
         pr_url: pr.url,
         pr_title: pr.title,
@@ -79,7 +84,7 @@ export function GitHubPickerModal({
       onOpenChange(false);
       setSearch("");
     },
-    [repoId, onCreateWorkspace, onOpenChange]
+    [repoId, workspaceKind, onCreateWorkspace, onOpenChange]
   );
 
   const handleBranchSelect = useCallback(
@@ -87,11 +92,12 @@ export function GitHubPickerModal({
       onCreateWorkspace({
         repositoryId: repoId,
         source_branch: branch.name,
+        workspace_kind: workspaceKind,
       });
       onOpenChange(false);
       setSearch("");
     },
-    [repoId, onCreateWorkspace, onOpenChange]
+    [repoId, workspaceKind, onCreateWorkspace, onOpenChange]
   );
 
   const handleOpenChange = useCallback(

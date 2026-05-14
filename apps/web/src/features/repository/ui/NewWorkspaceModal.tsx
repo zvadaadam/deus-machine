@@ -1,5 +1,7 @@
 import type { Repository } from "../types";
 import type { NewWorkspaceMode } from "@/shared/stores/uiStore";
+import type { WorkspaceKind } from "@shared/enums";
+import { ArrowRight, Cloud, HardDrive, Loader2, Plus } from "lucide-react";
 import {
   Dialog,
   DialogContent,
@@ -23,8 +25,10 @@ interface NewWorkspaceModalProps {
   repos: Repository[];
   selectedRepoId: string;
   creating: boolean;
+  workspaceKind: WorkspaceKind;
   onClose: () => void;
   onRepoChange: (repoId: string) => void;
+  onWorkspaceKindChange: (kind: WorkspaceKind) => void;
   onCreate: () => void;
   mode?: NewWorkspaceMode;
 }
@@ -38,8 +42,10 @@ export function NewWorkspaceModal({
   repos,
   selectedRepoId,
   creating,
+  workspaceKind,
   onClose,
   onRepoChange,
+  onWorkspaceKindChange,
   onCreate,
   mode = "default",
 }: NewWorkspaceModalProps) {
@@ -78,6 +84,40 @@ export function NewWorkspaceModal({
               The workspace will be created in this repository
             </p>
           </div>
+
+          <div className="grid gap-2">
+            <Label className="text-sm">Run Location</Label>
+            <div className="grid grid-cols-2 gap-2">
+              <button
+                type="button"
+                onClick={() => onWorkspaceKindChange("local")}
+                aria-pressed={workspaceKind === "local"}
+                className={`border-border-subtle hover:bg-muted/60 flex h-16 items-center gap-3 rounded-lg border px-3 text-left transition-colors ${
+                  workspaceKind === "local" ? "bg-muted text-foreground" : "text-muted-foreground"
+                }`}
+              >
+                <HardDrive className="h-4 w-4 shrink-0" />
+                <span className="min-w-0">
+                  <span className="block truncate text-sm font-medium">Local</span>
+                  <span className="text-muted-foreground block truncate text-xs">Desktop</span>
+                </span>
+              </button>
+              <button
+                type="button"
+                onClick={() => onWorkspaceKindChange("cloud")}
+                aria-pressed={workspaceKind === "cloud"}
+                className={`border-border-subtle hover:bg-muted/60 flex h-16 items-center gap-3 rounded-lg border px-3 text-left transition-colors ${
+                  workspaceKind === "cloud" ? "bg-muted text-foreground" : "text-muted-foreground"
+                }`}
+              >
+                <Cloud className="h-4 w-4 shrink-0" />
+                <span className="min-w-0">
+                  <span className="block truncate text-sm font-medium">Cloud</span>
+                  <span className="text-muted-foreground block truncate text-xs">Claude</span>
+                </span>
+              </button>
+            </div>
+          </div>
         </div>
 
         <DialogFooter>
@@ -85,7 +125,13 @@ export function NewWorkspaceModal({
             Cancel
           </Button>
           <Button onClick={onCreate} disabled={creating || !selectedRepoId} className="gap-2">
-            {creating ? "⟳" : isFromGitHub ? "→" : "+"}
+            {creating ? (
+              <Loader2 className="size-4 animate-spin" />
+            ) : isFromGitHub ? (
+              <ArrowRight className="size-4" />
+            ) : (
+              <Plus className="size-4" />
+            )}
             {creating ? "Creating..." : isFromGitHub ? "Continue" : "Create Workspace"}
           </Button>
         </DialogFooter>

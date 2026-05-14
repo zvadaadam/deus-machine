@@ -13,7 +13,8 @@
   "type": "module",
   "main": "./out/main/index.js",
   "workspaces": [
-    "packages/*"
+    "packages/*",
+    "/Users/zvada/conductor/workspaces/deus-sdk/freetown/packages/*"
   ],
   "scripts": {
     "dev": "bun run native:electron && ([ -f apps/agent-server/dist/index.bundled.cjs ] || bun run build:agent-server) && electron-vite dev",
@@ -72,6 +73,8 @@
   },
   "dependencies": {
     "@anthropic-ai/claude-agent-sdk": "0.2.131",
+    "@deus-hq/api": "workspace:*",
+    "@deus-hq/sdk": "workspace:*",
     "@dnd-kit/core": "^6.3.1",
     "@dnd-kit/sortable": "^10.0.0",
     "@dnd-kit/utilities": "^3.2.2",

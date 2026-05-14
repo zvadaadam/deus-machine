@@ -21,6 +21,7 @@ import type { AgentHarness } from "@/shared/agents";
 import { workspaceLayoutActions } from "@/features/workspace/store";
 import { sessionComposerActions } from "../store/sessionComposerStore";
 import { processImageFiles } from "../lib/imageAttachments";
+import type { SetupStatus, WorkspaceKind, WorkspaceState } from "@shared/enums";
 
 const CONTENT_WIDTH_CLASSES = "w-full max-w-[960px] mx-auto min-w-0";
 
@@ -30,6 +31,11 @@ interface SessionPanelProps {
   workspaceId?: string;
   workspaceRepoName?: string | null;
   workspaceParentBranch?: string | null;
+  workspaceKind?: WorkspaceKind | null;
+  workspaceState?: WorkspaceState | null;
+  workspaceInitStep?: string | null;
+  workspaceSetupStatus?: SetupStatus | null;
+  workspaceCloudStatus?: string | null;
   /** Default branch of the repo (e.g. "main"). Used for getDiff RPC auto-response. */
   workspaceDefaultBranch?: string | null;
   isFirstSession?: boolean;
@@ -63,6 +69,11 @@ export const SessionPanel = forwardRef<SessionPanelRef, SessionPanelProps>(
       workspaceId,
       workspaceRepoName,
       workspaceParentBranch,
+      workspaceKind,
+      workspaceState,
+      workspaceInitStep,
+      workspaceSetupStatus,
+      workspaceCloudStatus,
       workspaceDefaultBranch,
       isFirstSession,
       onClose,
@@ -338,6 +349,11 @@ export const SessionPanel = forwardRef<SessionPanelRef, SessionPanelProps>(
               onRetryInNewChat={handleRetryInNewChat}
               workspaceRepoName={workspaceRepoName}
               workspaceParentBranch={workspaceParentBranch}
+              workspaceKind={workspaceKind}
+              workspaceState={workspaceState}
+              workspaceInitStep={workspaceInitStep}
+              workspaceSetupStatus={workspaceSetupStatus}
+              workspaceCloudStatus={workspaceCloudStatus}
               isFirstSession={isFirstSession}
               userSendCount={userSendCount}
             />
@@ -439,6 +455,11 @@ export const SessionPanel = forwardRef<SessionPanelRef, SessionPanelProps>(
                     onRetryInNewChat={handleRetryInNewChat}
                     workspaceRepoName={workspaceRepoName}
                     workspaceParentBranch={workspaceParentBranch}
+                    workspaceKind={workspaceKind}
+                    workspaceState={workspaceState}
+                    workspaceInitStep={workspaceInitStep}
+                    workspaceSetupStatus={workspaceSetupStatus}
+                    workspaceCloudStatus={workspaceCloudStatus}
                     userSendCount={userSendCount}
                   />
 

@@ -1,88 +1,64 @@
 import React from "react";
 import { renderToStaticMarkup } from "react-dom/server";
-import { describe, expect, it, vi } from "vitest";
+import { describe, expect, it } from "vitest";
+
 import { SessionProvider } from "@/features/session/context";
 import { SubagentMessageList } from "@/features/session/ui/blocks/SubagentMessageList";
-import type { ContentBlock } from "@/features/session/types";
+import type { Part } from "@shared/messages/types";
 import type { Message } from "@/shared/types";
 
-function createMessage(id: string, blocks: ContentBlock[]): Message {
+function textPart(id: string, messageId: string, text: string, partIndex = 0): Part {
+  return {
+    type: "TEXT",
+    id,
+    sessionId: "session-1",
+    messageId,
+    partIndex,
+    text,
+    state: "DONE",
+  };
+}
+
+function createMessage(id: string, parts?: Part[]): Message {
   return {
     id,
     session_id: "session-1",
     seq: 1,
     role: "assistant",
-    content: JSON.stringify(blocks),
+    content: "",
+    parts,
   };
 }
 
+function render(messages: Message[]): string {
+  return renderToStaticMarkup(
+    React.createElement(
+      SessionProvider,
+      {
+        subagentMessages: new Map(),
+        sessionStatus: "idle",
+      },
+      React.createElement(SubagentMessageList, { messages })
+    )
+  );
+}
+
 describe("SubagentMessageList", () => {
-  it("renders blocks through SessionContext and skips standalone tool results", () => {
-    const renderBlock = vi.fn((block: ContentBlock | string) =>
-      React.createElement("span", null, typeof block === "string" ? block : block.type)
-    );
-    const parseContent = (content: string) => JSON.parse(content) as ContentBlock[];
+  it("renders part-based assistant child messages", () => {
     const messages: Message[] = [
-      createMessage("m-1", [{ type: "text", text: "First" }]),
-      createMessage("m-2", [{ type: "tool_result", tool_use_id: "tool-1", content: "ignored" }]),
-      createMessage("m-3", [
-        { type: "tool_use", id: "tool-2", name: "Read", input: { file_path: "src/app.tsx" } },
-        { type: "tool_result", tool_use_id: "tool-2", content: "done" },
-        { type: "text", text: "After tool" },
-      ]),
+      createMessage("m-1", [textPart("p-1", "m-1", "First")]),
+      createMessage("m-2", [textPart("p-2", "m-2", "After tool")]),
     ];
 
-    const markup = renderToStaticMarkup(
-      React.createElement(
-        SessionProvider,
-        {
-          parseContent,
-          toolResultMap: new Map(),
-          parentToolUseMap: new Map(),
-          subagentMessages: new Map(),
-          sessionStatus: "idle",
-          renderBlock,
-        },
-        React.createElement(SubagentMessageList, { messages })
-      )
-    );
+    const markup = render(messages);
 
-    expect(markup).toContain("text");
-    expect(markup).toContain("tool_use");
-    expect(renderBlock).toHaveBeenCalledTimes(3);
-    expect(
-      renderBlock.mock.calls.map(([block]) => (typeof block === "string" ? block : block.type))
-    ).toEqual(["text", "tool_use", "text"]);
-    expect(
-      renderBlock.mock.calls.every(
-        ([, , role, isStreaming]) => role === "assistant" && isStreaming === false
-      )
-    ).toBe(true);
+    expect(markup).toContain("First");
+    expect(markup).toContain("After tool");
   });
 
-  it("renders nothing when only tool_result blocks remain", () => {
-    const renderBlock = vi.fn(() => React.createElement("span", null, "unused"));
-    const parseContent = (content: string) => JSON.parse(content) as ContentBlock[];
-    const messages: Message[] = [
-      createMessage("m-1", [{ type: "tool_result", tool_use_id: "tool-1", content: "ignored" }]),
-    ];
+  it("renders nothing when no assistant messages have parts", () => {
+    const messages: Message[] = [createMessage("m-1")];
 
-    const markup = renderToStaticMarkup(
-      React.createElement(
-        SessionProvider,
-        {
-          parseContent,
-          toolResultMap: new Map(),
-          parentToolUseMap: new Map(),
-          subagentMessages: new Map(),
-          sessionStatus: "idle",
-          renderBlock,
-        },
-        React.createElement(SubagentMessageList, { messages })
-      )
-    );
-
-    expect(markup).toBe("");
-    expect(renderBlock).not.toHaveBeenCalled();
+    expect(render(messages)).toBe("");
   });
 });

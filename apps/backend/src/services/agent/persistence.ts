@@ -56,9 +56,21 @@ export function persistMessageCreated(event: MessageCreatedEvent): WriteResult {
     }
 
     db.prepare(
-      `INSERT OR REPLACE INTO messages (id, session_id, role, sent_at, parent_tool_use_id)
-       VALUES (?, ?, ?, ?, ?)`
-    ).run(event.messageId, event.sessionId, event.role, sentAt, event.parentToolCallId ?? null);
+      `INSERT INTO messages (id, session_id, seq, role, sent_at, parent_tool_use_id)
+       VALUES (?, ?, ?, ?, ?, ?)
+       ON CONFLICT(id) DO UPDATE SET
+         seq = CASE WHEN excluded.seq > 0 THEN excluded.seq ELSE messages.seq END,
+         role = excluded.role,
+         sent_at = COALESCE(messages.sent_at, excluded.sent_at),
+         parent_tool_use_id = excluded.parent_tool_use_id`
+    ).run(
+      event.messageId,
+      event.sessionId,
+      event.messageIndex != null ? event.messageIndex + 1 : 0,
+      event.role,
+      sentAt,
+      event.parentToolCallId ?? null
+    );
     return { ok: true, value: event.messageId };
   } catch (error) {
     const msg = getErrorMessage(error);

@@ -59,7 +59,7 @@ export function ChangesView({ workspace, isWatched = false, onReview, compact }:
   const diffViewerRef = useRef<ChangesDiffViewerRef>(null);
   const [changesFilter, setChangesFilter] = useState<ChangesFilter>("all-changes");
 
-  const isReady = workspace.state === "ready";
+  const isReady = workspace.state === "ready" && workspace.workspace_kind !== "cloud";
 
   // Fetch file change data
   const { data: fileChangesData } = useFileChanges(

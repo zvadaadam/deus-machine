@@ -4,29 +4,42 @@ import { errorHandler } from "../../../src/middleware/error-handler";
 
 // ─── Hoisted mocks (vi.mock factories run before imports) ─────────
 
-const { mockStmt, mockDb, mockExecFileAsync, mockInitializeWorkspace, mockInvalidate } = vi.hoisted(
-  () => {
-    const mockStmt = {
-      all: vi.fn(() => []),
-      get: vi.fn(),
-      run: vi.fn(() => ({ changes: 1 })),
-    };
-    const mockDb = {
-      prepare: vi.fn(() => mockStmt),
-      transaction: vi.fn((fn: Function) => fn),
-    };
-    const mockExecFileAsync = vi.fn(() => Promise.resolve({ stdout: "", stderr: "" }));
-    const mockInitializeWorkspace = vi.fn(() => Promise.resolve());
-    const mockInvalidate = vi.fn();
-    return {
-      mockStmt,
-      mockDb,
-      mockExecFileAsync,
-      mockInitializeWorkspace,
-      mockInvalidate,
-    };
-  }
-);
+const {
+  mockStmt,
+  mockDb,
+  mockExecFileAsync,
+  mockInitializeWorkspace,
+  mockInitializeCloudWorkspace,
+  mockCreateCloudSessionForWorkspace,
+  mockStopCloudWorkspace,
+  mockInvalidate,
+} = vi.hoisted(() => {
+  const mockStmt = {
+    all: vi.fn(() => []),
+    get: vi.fn(),
+    run: vi.fn(() => ({ changes: 1 })),
+  };
+  const mockDb = {
+    prepare: vi.fn(() => mockStmt),
+    transaction: vi.fn((fn: Function) => fn),
+  };
+  const mockExecFileAsync = vi.fn(() => Promise.resolve({ stdout: "", stderr: "" }));
+  const mockInitializeWorkspace = vi.fn(() => Promise.resolve());
+  const mockInitializeCloudWorkspace = vi.fn(() => Promise.resolve("ws-test-uuid"));
+  const mockCreateCloudSessionForWorkspace = vi.fn(() => Promise.resolve({ id: "cloud-session" }));
+  const mockStopCloudWorkspace = vi.fn(() => Promise.resolve());
+  const mockInvalidate = vi.fn();
+  return {
+    mockStmt,
+    mockDb,
+    mockExecFileAsync,
+    mockInitializeWorkspace,
+    mockInitializeCloudWorkspace,
+    mockCreateCloudSessionForWorkspace,
+    mockStopCloudWorkspace,
+    mockInvalidate,
+  };
+});
 
 vi.mock("../../../src/lib/database", () => ({
   getDatabase: vi.fn(() => mockDb),
@@ -38,6 +51,13 @@ vi.mock("../../../src/services/workspace.service", () => ({
 
 vi.mock("../../../src/services/workspace-init.service", () => ({
   initializeWorkspace: (...args: unknown[]) => mockInitializeWorkspace(...args),
+}));
+
+vi.mock("../../../src/services/cloud-workspace.service", () => ({
+  initializeCloudWorkspace: (...args: unknown[]) => mockInitializeCloudWorkspace(...args),
+  createCloudSessionForWorkspace: (...args: unknown[]) =>
+    mockCreateCloudSessionForWorkspace(...args),
+  stopCloudWorkspace: (...args: unknown[]) => mockStopCloudWorkspace(...args),
 }));
 
 vi.mock("../../../src/services/query-engine", () => ({
@@ -106,6 +126,7 @@ const MOCK_REPO = {
   id: "repo-001",
   name: "my-project",
   root_path: "/repos/my-project",
+  git_origin_url: "https://github.com/acme/my-project.git",
   git_default_branch: "main",
   sort_order: 0,
   updated_at: "2024-01-01T00:00:00Z",
@@ -125,6 +146,16 @@ const MOCK_CREATED_WORKSPACE = {
   updated_at: "2024-01-01T00:00:00Z",
 };
 
+const MOCK_CLOUD_WORKSPACE = {
+  ...MOCK_CREATED_WORKSPACE,
+  workspace_kind: "cloud",
+  workspace_path: "",
+  state: "ready",
+  cloud_workspace_id: "cloud-ws-001",
+  cloud_organization_id: "org-001",
+  cloud_status: "PROVISIONING",
+};
+
 // ─── Setup ────────────────────────────────────────────────────────
 
 beforeEach(() => {
@@ -132,6 +163,9 @@ beforeEach(() => {
   mockDb.prepare.mockReturnValue(mockStmt);
   mockDb.transaction.mockImplementation((fn: Function) => fn);
   mockInitializeWorkspace.mockResolvedValue(undefined);
+  mockInitializeCloudWorkspace.mockResolvedValue("ws-test-uuid");
+  mockCreateCloudSessionForWorkspace.mockResolvedValue({ id: "cloud-session" });
+  mockStopCloudWorkspace.mockResolvedValue(undefined);
   mockExecFileAsync.mockResolvedValue({ stdout: "", stderr: "" });
 });
 
@@ -382,6 +416,35 @@ describe("POST /workspaces", () => {
     expect(mockInitializeWorkspace).toHaveBeenCalledWith(
       expect.objectContaining({ parentBranch: "main" })
     );
+  });
+
+  it("creates a cloud workspace without fetching or initializing a local worktree", async () => {
+    mockStmt.get.mockReturnValueOnce(MOCK_REPO).mockReturnValueOnce(MOCK_CLOUD_WORKSPACE);
+
+    const res = await app.request("/workspaces", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ repository_id: "repo-001", workspace_kind: "cloud" }),
+    });
+
+    expect(res.status).toBe(200);
+    expect(mockInitializeCloudWorkspace).toHaveBeenCalledWith(
+      expect.objectContaining({
+        workspaceId: "ws-test-uuid",
+        repositoryId: "repo-001",
+        repo: MOCK_REPO,
+        workspaceName: "europa",
+        branchName: "testuser/europa",
+        parentBranch: "main",
+        targetBranch: "main",
+      })
+    );
+    expect(mockExecFileAsync).not.toHaveBeenCalled();
+    expect(mockInitializeWorkspace).not.toHaveBeenCalled();
+
+    const body = await res.json();
+    expect(body.workspace_kind).toBe("cloud");
+    expect(body.workspace_path).toBe("");
   });
 });
 

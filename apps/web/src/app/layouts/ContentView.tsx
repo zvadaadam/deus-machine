@@ -19,6 +19,7 @@ import { SimulatorPanel } from "@/features/simulator";
 import { AppsLauncher, useAppsLaunched, useAppsStopped } from "@/features/apps";
 import { capabilities } from "@/platform/capabilities";
 import { cn } from "@/shared/lib/utils";
+import { Cloud } from "lucide-react";
 import type { ContentTab } from "@/features/workspace/store";
 import type { Workspace } from "@/shared/types";
 
@@ -43,6 +44,10 @@ export function ContentView({
   // is on a different content tab still takes effect.
   useAppsLaunched(workspace.id);
   useAppsStopped(workspace.id);
+
+  if (workspace.workspace_kind === "cloud") {
+    return <CloudWorkspaceContent workspace={workspace} />;
+  }
 
   return (
     <div className="flex h-full min-w-0 flex-1 flex-col overflow-hidden">
@@ -91,6 +96,28 @@ export function ContentView({
         >
           <SimulatorPanel workspaceId={workspace.id} workspacePath={workspace.workspace_path} />
         </div>
+      )}
+    </div>
+  );
+}
+
+function CloudWorkspaceContent({ workspace }: { workspace: Workspace }) {
+  return (
+    <div className="flex h-full min-w-0 flex-1 flex-col items-center justify-center gap-3 p-6 text-center">
+      <div className="bg-bg-muted/30 flex h-10 w-10 items-center justify-center rounded-xl">
+        <Cloud className="text-text-muted/60 h-5 w-5" />
+      </div>
+      <div className="space-y-1">
+        <p className="text-text-secondary text-sm font-medium">Cloud workspace</p>
+        <p className="text-text-muted max-w-[260px] text-xs">
+          Chat runs in Deus Cloud. Local files, terminal, simulator, and git diff panels are only
+          available for desktop workspaces.
+        </p>
+      </div>
+      {workspace.cloud_status && (
+        <span className="text-text-disabled text-[11px] tracking-normal uppercase">
+          {workspace.cloud_status}
+        </span>
       )}
     </div>
   );

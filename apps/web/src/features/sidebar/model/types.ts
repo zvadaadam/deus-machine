@@ -4,7 +4,7 @@
  */
 
 import type { Workspace, DiffStats, RepoGroup } from "@/shared/types";
-import type { WorkspaceStatus } from "@shared/enums";
+import type { WorkspaceKind, WorkspaceStatus } from "@shared/enums";
 
 /**
  * Sidebar profile chip — derived from `gh api user` via useGhStatus().
@@ -24,7 +24,7 @@ export interface AppSidebarProps {
   selectedWorkspaceId: string | null;
   diffStatsMap?: Record<string, DiffStats>;
   onWorkspaceClick: (workspace: Workspace) => void;
-  onNewWorkspace: (repoId?: string) => void;
+  onNewWorkspace: (repoId?: string, kind?: WorkspaceKind) => void;
   onNewWorkspaceFromGitHub?: (repoId: string) => void;
   onAddRepository?: () => void;
   onCloneRepository?: () => void;
@@ -45,7 +45,7 @@ export interface RepositoryItemProps {
   diffStatsMap?: Record<string, DiffStats>;
   onToggleCollapse: () => void;
   onWorkspaceClick: (workspace: Workspace) => void;
-  onNewWorkspace: (repoId?: string) => void;
+  onNewWorkspace: (repoId?: string, kind?: WorkspaceKind) => void;
   onNewWorkspaceFromGitHub?: (repoId: string) => void;
   onArchive?: (workspaceId: string) => void;
   onStatusChange?: (workspaceId: string, status: WorkspaceStatus) => void;

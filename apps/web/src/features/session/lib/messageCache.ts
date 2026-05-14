@@ -26,16 +26,40 @@ export function mergeMessageDelta(
   const paginated = old as PaginatedMessages;
   if (!upserted || upserted.length === 0) return old;
 
-  // Remove optimistic placeholders — real messages replace them
+  // Remove optimistic placeholders — real messages replace them.
   const realMessages = paginated.messages.filter((m) => !m.id.startsWith("optimistic-"));
 
-  // Deduplicate: don't add messages that already exist
-  const existingIds = new Set(realMessages.map((m) => m.id));
-  const newMessages = (upserted as Message[]).filter((m) => !existingIds.has(m.id));
+  const byId = new Map(realMessages.map((message) => [message.id, message]));
+  for (const incoming of upserted as Message[]) {
+    const existing = byId.get(incoming.id);
+    byId.set(incoming.id, mergeMessage(existing, incoming));
+  }
 
   return {
-    messages: [...realMessages, ...newMessages],
+    messages: [...byId.values()].sort(compareMessages),
     has_older: paginated.has_older,
     has_newer: false,
   };
+}
+
+function mergeMessage(existing: Message | undefined, incoming: Message): Message {
+  if (!existing) return incoming;
+
+  return {
+    ...existing,
+    ...incoming,
+    parts:
+      incoming.parts && incoming.parts.length > 0
+        ? incoming.parts
+        : existing.parts && existing.parts.length > 0
+          ? existing.parts
+          : incoming.parts,
+  };
+}
+
+function compareMessages(a: Message, b: Message): number {
+  const aIndex = a.messageIndex ?? Math.max(0, a.seq - 1);
+  const bIndex = b.messageIndex ?? Math.max(0, b.seq - 1);
+  if (aIndex !== bIndex) return aIndex - bIndex;
+  return a.seq - b.seq;
 }

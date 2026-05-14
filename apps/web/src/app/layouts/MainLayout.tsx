@@ -32,6 +32,7 @@ import { useSidebarStore } from "@/features/sidebar/store";
 import { useUIStore } from "@/shared/stores/uiStore";
 import { ResizeHandle } from "@/shared/components/ResizeHandle";
 import type { Workspace } from "@/shared/types";
+import type { WorkspaceKind } from "@shared/enums";
 import { unreadActions } from "@/features/session/store/unreadStore";
 import { native } from "@/platform";
 import { capabilities } from "@/platform/capabilities";
@@ -126,7 +127,10 @@ export function MainLayout() {
   const [sidebarDragging, setSidebarDragging] = useState(false);
 
   // GitHub picker modal state
-  const [githubPickerRepoId, setGithubPickerRepoId] = useState<string | null>(null);
+  const [githubPickerContext, setGithubPickerContext] = useState<{
+    repoId: string;
+    workspaceKind: WorkspaceKind;
+  } | null>(null);
 
   // Ref for inserting text from browser element selector
   const workspaceChatPanelRef = useRef<SessionPanelRef | null>(null);
@@ -146,11 +150,17 @@ export function MainLayout() {
   };
 
   // PR status query — gated on GitHub auth, polls while agent is working
-  const prStatusQuery = usePRStatus(selectedWorkspace?.id || null, {
-    ghInstalled: ghStatusQuery.data?.isInstalled,
-    ghAuthenticated: ghStatusQuery.data?.isAuthenticated,
-    sessionStatus: selectedWorkspace?.session_status ?? undefined,
-  });
+  const prStatusQuery = usePRStatus(
+    selectedWorkspace?.workspace_kind === "cloud" ? null : selectedWorkspace?.id || null,
+    {
+      ghInstalled: ghStatusQuery.data?.isInstalled,
+      ghAuthenticated: ghStatusQuery.data?.isAuthenticated,
+      sessionStatus:
+        selectedWorkspace?.workspace_kind === "cloud"
+          ? undefined
+          : (selectedWorkspace?.session_status ?? undefined),
+    }
+  );
 
   // --- Extracted hooks ---
 
@@ -173,11 +183,18 @@ export function MainLayout() {
   } | null>(null);
 
   const handleStartWorkspace = useCallback(
-    async (repoId: string, message: string, model: string, branch?: string) => {
+    async (
+      repoId: string,
+      message: string,
+      model: string,
+      options?: { branch?: string; workspaceKind?: WorkspaceKind }
+    ) => {
       try {
-        const workspace = await welcomeCreateMutation.mutateAsync(
-          branch ? { repositoryId: repoId, source_branch: branch } : repoId
-        );
+        const workspace = await welcomeCreateMutation.mutateAsync({
+          repositoryId: repoId,
+          workspace_kind: options?.workspaceKind ?? "local",
+          ...(options?.branch ? { source_branch: options.branch } : {}),
+        });
         // Store pending message — will be sent when workspace gets a session
         pendingWelcomeMessageRef.current = {
           message,
@@ -216,10 +233,10 @@ export function MainLayout() {
 
   // Derive repo name for GitHub picker modal from repoGroups
   const githubPickerRepoName = useMemo(() => {
-    if (!githubPickerRepoId) return "";
-    const group = repoGroups.find((g) => g.repo_id === githubPickerRepoId);
+    if (!githubPickerContext) return "";
+    const group = repoGroups.find((g) => g.repo_id === githubPickerContext.repoId);
     return group?.repo_name ?? "";
-  }, [githubPickerRepoId, repoGroups]);
+  }, [githubPickerContext, repoGroups]);
 
   // Hide native WebContentsViews when any dialog is open — they render above
   // the DOM so dialogs would appear behind them. BrowserTab's own visible
@@ -405,7 +422,10 @@ export function MainLayout() {
           diffStatsMap={bulkDiffStatsQuery.data}
           onWorkspaceClick={handleWorkspaceClick}
           onNewWorkspace={repoActions.handleNewWorkspace}
-          onNewWorkspaceFromGitHub={setGithubPickerRepoId}
+          onNewWorkspaceFromGitHub={(repoId) => {
+            repoActions.setSelectedRepoId(repoId);
+            openNewWorkspaceModal("from-github");
+          }}
           onAddRepository={repoActions.handleOpenProject}
           onCloneRepository={() => repoActions.setShowCloneModal(true)}
           onStartNewProject={() => repoActions.setShowStartNewModal(true)}
@@ -443,14 +463,21 @@ export function MainLayout() {
         repos={repos}
         selectedRepoId={repoActions.selectedRepoId}
         creating={repoActions.creating}
+        workspaceKind={repoActions.workspaceKind}
         onClose={closeNewWorkspaceModal}
         onRepoChange={repoActions.setSelectedRepoId}
+        onWorkspaceKindChange={repoActions.setWorkspaceKind}
         onCreate={
           newWorkspaceMode === "from-github"
             ? () => {
                 const repoId = repoActions.selectedRepoId;
                 closeNewWorkspaceModal();
-                if (repoId) setGithubPickerRepoId(repoId);
+                if (repoId) {
+                  setGithubPickerContext({
+                    repoId,
+                    workspaceKind: repoActions.workspaceKind,
+                  });
+                }
               }
             : repoActions.createWorkspaceFromModal
         }
@@ -492,10 +519,11 @@ export function MainLayout() {
       />
 
       <GitHubPickerModal
-        open={!!githubPickerRepoId}
-        onOpenChange={(open) => !open && setGithubPickerRepoId(null)}
-        repoId={githubPickerRepoId || ""}
+        open={!!githubPickerContext}
+        onOpenChange={(open) => !open && setGithubPickerContext(null)}
+        repoId={githubPickerContext?.repoId || ""}
         repoName={githubPickerRepoName}
+        workspaceKind={githubPickerContext?.workspaceKind ?? "local"}
         onCreateWorkspace={repoActions.handleNewWorkspaceFromGitHub}
       />
 

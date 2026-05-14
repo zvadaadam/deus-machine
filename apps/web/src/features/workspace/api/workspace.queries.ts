@@ -11,7 +11,7 @@ import { queryKeys } from "@/shared/api/queryKeys";
 import { useQuerySubscription } from "@/shared/hooks/useQuerySubscription";
 import type { RepoGroup, DiffStats } from "../types";
 import type { PRStatus } from "@/shared/types";
-import type { WorkspaceStatus } from "@shared/enums";
+import type { WorkspaceKind, WorkspaceStatus } from "@shared/enums";
 import { createOptimisticWorkspace, mergeWorkspaceDelta } from "../lib/workspace.utils";
 import { track } from "@/platform/analytics";
 
@@ -89,7 +89,9 @@ export function useBulkDiffStats(repoGroups: RepoGroup[]) {
   // Stable, de-duplicated IDs for query key — only ready workspaces.
   const workspaceIds = useMemo(() => {
     const ids = repoGroups.flatMap((g) =>
-      g.workspaces.filter((w) => w.state === "ready").map((w) => w.id)
+      g.workspaces
+        .filter((w) => w.state === "ready" && w.workspace_kind !== "cloud")
+        .map((w) => w.id)
     );
     return Array.from(new Set(ids)).sort();
   }, [repoGroups]);
@@ -98,7 +100,9 @@ export function useBulkDiffStats(repoGroups: RepoGroup[]) {
   const workingIds = useMemo(() => {
     return repoGroups
       .flatMap((g) => g.workspaces)
-      .filter((w) => w.state === "ready" && w.session_status === "working")
+      .filter(
+        (w) => w.state === "ready" && w.workspace_kind !== "cloud" && w.session_status === "working"
+      )
       .map((w) => w.id);
   }, [repoGroups]);
 
@@ -301,6 +305,7 @@ type CreateWorkspaceParams =
       pr_url?: string;
       pr_title?: string;
       target_branch?: string;
+      workspace_kind?: WorkspaceKind;
     };
 
 export function useCreateWorkspace() {
@@ -319,12 +324,15 @@ export function useCreateWorkspace() {
               pr_url: params.pr_url,
               pr_title: params.pr_title,
               target_branch: params.target_branch,
+              workspace_kind: params.workspace_kind,
             };
       return WorkspaceService.create(repoId, options);
     },
 
     onMutate: async (params: CreateWorkspaceParams) => {
       const repositoryId = typeof params === "string" ? params : params.repositoryId;
+      const workspaceKind =
+        typeof params === "string" ? "local" : (params.workspace_kind ?? "local");
       await queryClient.cancelQueries({ queryKey });
 
       const previousData = queryClient.getQueryData<RepoGroup[]>(queryKey);
@@ -336,7 +344,7 @@ export function useCreateWorkspace() {
           const repoGroup = draft.find((g) => g.repo_id === repositoryId);
           if (repoGroup) {
             repoGroup.workspaces.unshift(
-              createOptimisticWorkspace(repositoryId, repoGroup.repo_name)
+              createOptimisticWorkspace(repositoryId, repoGroup.repo_name, workspaceKind)
             );
           }
         });

@@ -1,4 +1,5 @@
 import type { Workspace, RepoGroup, FileChange } from "@/shared/types";
+import type { WorkspaceKind } from "@shared/enums";
 
 export type ChangeStatus = "added" | "modified" | "deleted";
 
@@ -28,7 +29,11 @@ export function fileChangePath(fc: FileChange): string {
  * - useRepoActions.handleCloneRepository() (git clone flow)
  * - useCreateWorkspace() onMutate (React Query optimistic update)
  */
-export function createOptimisticWorkspace(repoId: string, repoName: string): Workspace {
+export function createOptimisticWorkspace(
+  repoId: string,
+  repoName: string,
+  workspaceKind: WorkspaceKind = "local"
+): Workspace {
   return {
     id: `optimistic-${Date.now()}`,
     repository_id: repoId,
@@ -36,6 +41,10 @@ export function createOptimisticWorkspace(repoId: string, repoName: string): Wor
     title: null,
     git_branch: null,
     git_target_branch: null,
+    workspace_kind: workspaceKind,
+    cloud_workspace_id: null,
+    cloud_organization_id: null,
+    cloud_status: workspaceKind === "cloud" ? "PROVISIONING" : null,
     state: "initializing",
     status: "in-progress",
     current_session_id: null,

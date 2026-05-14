@@ -13,6 +13,7 @@ import {
   GeneralSection,
   GitHubSection,
   AISection,
+  CloudAgentsSection,
   EnvironmentSection,
   ExperimentalSection,
   AccessSection,
@@ -22,6 +23,7 @@ const SECTION_LABELS: Record<string, string> = {
   general: "General",
   github: "GitHub",
   ai: "AI Providers",
+  "cloud-agents": "Cloud Agents",
   environment: "Environment",
   experimental: "Experimental",
   access: "Remote Access",
@@ -91,6 +93,7 @@ export function SettingsPage() {
       .with("general", () => <GeneralSection {...sectionProps} theme={theme} setTheme={setTheme} />)
       .with("github", () => <GitHubSection />)
       .with("ai", () => <AISection {...sectionProps} />)
+      .with("cloud-agents", () => <CloudAgentsSection {...sectionProps} />)
       .with("environment", () => <EnvironmentSection />)
       .with("experimental", () => <ExperimentalSection {...sectionProps} />)
       .with("access", () => <AccessSection {...sectionProps} />)

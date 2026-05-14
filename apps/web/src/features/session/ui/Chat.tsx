@@ -5,8 +5,15 @@ import { AssistantTurn } from "./AssistantTurn";
 import { WorkspaceEmptyState } from "./WorkspaceEmptyState";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Button } from "@/components/ui/button";
-import { ChevronDown, TerminalSquare, MessageSquarePlus } from "lucide-react";
+import {
+  AlertTriangle,
+  ChevronDown,
+  Loader2,
+  TerminalSquare,
+  MessageSquarePlus,
+} from "lucide-react";
 import { cn } from "@/shared/lib/utils";
+import type { SetupStatus, WorkspaceKind, WorkspaceState } from "@shared/enums";
 
 import { useWorkingDuration } from "@/shared/hooks";
 import { useAutoScroll } from "../hooks";
@@ -40,6 +47,77 @@ type AssistantTurnData = {
 };
 
 type Turn = UserTurn | AssistantTurnData;
+type WorkspaceProgressKind = "pending" | "error";
+
+interface WorkspaceProgress {
+  kind: WorkspaceProgressKind;
+  label: string;
+}
+
+function getInitProgressLabel(initStep?: string | null): string | null {
+  return match(initStep)
+    .with("worktree", () => "Creating worktree...")
+    .with("session", () => "Preparing chat...")
+    .with("dependencies", () => "Installing dependencies...")
+    .with("hooks", () => "Setting up environment...")
+    .with("git-clean", () => "Verifying workspace...")
+    .otherwise(() => null);
+}
+
+function getWorkspaceProgress({
+  workspaceKind,
+  workspaceState,
+  initStep,
+  setupStatus,
+  cloudStatus,
+  sessionStatus,
+}: {
+  workspaceKind?: WorkspaceKind | null;
+  workspaceState?: WorkspaceState | null;
+  initStep?: string | null;
+  setupStatus?: SetupStatus | null;
+  cloudStatus?: string | null;
+  sessionStatus: SessionStatus;
+}): WorkspaceProgress | null {
+  const initLabel = getInitProgressLabel(initStep);
+  if (initLabel) {
+    return {
+      kind: "pending",
+      label: initLabel,
+    };
+  }
+
+  if (workspaceState === "initializing") {
+    return { kind: "pending", label: "Setting up workspace..." };
+  }
+
+  if (setupStatus === "running") {
+    return { kind: "pending", label: "Running setup script..." };
+  }
+  if (setupStatus === "failed") {
+    return { kind: "error", label: "Setup failed" };
+  }
+
+  if (workspaceKind === "cloud") {
+    const status = cloudStatus?.toUpperCase();
+    if (!status || status === "PROVISIONING" || status === "PENDING" || status === "STARTING") {
+      return workspaceState === "ready"
+        ? null
+        : { kind: "pending", label: "Cloning repository in cloud..." };
+    }
+    if (status === "STOPPING") {
+      return { kind: "pending", label: "Stopping cloud workspace..." };
+    }
+    if (status === "ERROR") {
+      return { kind: "error", label: "Cloud workspace error" };
+    }
+    if (status === "RUNNING" && sessionStatus === "working") {
+      return { kind: "pending", label: "Cloud agent running..." };
+    }
+  }
+
+  return null;
+}
 
 /**
  * Calculate spacing classes for turns using PADDING (not margin).
@@ -116,6 +194,11 @@ interface ChatProps {
   onLoadOlder?: () => void;
   workspaceRepoName?: string | null;
   workspaceParentBranch?: string | null;
+  workspaceKind?: WorkspaceKind | null;
+  workspaceState?: WorkspaceState | null;
+  workspaceInitStep?: string | null;
+  workspaceSetupStatus?: SetupStatus | null;
+  workspaceCloudStatus?: string | null;
   isFirstSession?: boolean;
   /** Incremented by SessionPanel when the human clicks Send. */
   userSendCount?: number;
@@ -137,6 +220,11 @@ export function Chat({
   onLoadOlder,
   workspaceRepoName,
   workspaceParentBranch,
+  workspaceKind,
+  workspaceState,
+  workspaceInitStep,
+  workspaceSetupStatus,
+  workspaceCloudStatus,
   isFirstSession,
   userSendCount = 0,
   className,
@@ -171,6 +259,15 @@ export function Chat({
   const { formattedDuration } = useWorkingDuration({
     status: sessionStatus,
     latestMessageSentAt,
+  });
+
+  const workspaceProgress = getWorkspaceProgress({
+    workspaceKind,
+    workspaceState,
+    initStep: workspaceInitStep,
+    setupStatus: workspaceSetupStatus,
+    cloudStatus: workspaceCloudStatus,
+    sessionStatus,
   });
 
   // Memoize message filtering to avoid re-parsing JSON on every render
@@ -408,6 +505,9 @@ export function Chat({
             repoName={workspaceRepoName}
             parentBranch={workspaceParentBranch}
             isFirstSession={isFirstSession}
+            initializing={Boolean(workspaceProgress)}
+            initStep={workspaceInitStep}
+            statusLabel={workspaceProgress?.label}
           />
         ) : (
           <>
@@ -497,6 +597,36 @@ export function Chat({
                   );
                 })}
               </div>
+              <AnimatePresence>
+                {workspaceProgress && (
+                  <m.div
+                    key={`${workspaceProgress.kind}:${workspaceProgress.label}`}
+                    initial={{ opacity: 0, y: 4 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    exit={{ opacity: 0, y: 4 }}
+                    transition={{ duration: 0.16, ease: [0.215, 0.61, 0.355, 1] }}
+                    className="mr-auto flex items-center gap-2 px-2 py-1.5"
+                    role={workspaceProgress.kind === "error" ? "alert" : "status"}
+                    aria-live="polite"
+                  >
+                    {workspaceProgress.kind === "error" ? (
+                      <AlertTriangle className="text-accent-red-muted h-3.5 w-3.5 shrink-0" />
+                    ) : (
+                      <Loader2 className="text-text-muted h-3.5 w-3.5 shrink-0 animate-spin motion-reduce:animate-none" />
+                    )}
+                    <span
+                      className={cn(
+                        "text-xs",
+                        workspaceProgress.kind === "error"
+                          ? "text-accent-red-muted"
+                          : "text-text-muted"
+                      )}
+                    >
+                      {workspaceProgress.label}
+                    </span>
+                  </m.div>
+                )}
+              </AnimatePresence>
               {/* Session-level error — rendered inline in the chat flow (law of locality) */}
               <AnimatePresence>
                 {sessionStatus === "error" && errorMessage && (

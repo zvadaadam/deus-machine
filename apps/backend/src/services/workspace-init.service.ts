@@ -30,6 +30,7 @@ import { uuidv7 } from "@shared/lib/uuid";
 import { getDatabase } from "../lib/database";
 import { detectInstallCommand } from "../lib/package-manager";
 import { invalidate } from "./query-engine";
+import { broadcast } from "./ws.service";
 
 const execFileAsync = promisify(execFile);
 
@@ -61,8 +62,10 @@ interface InitStage {
  * prefixed with DEUS_WORKSPACE_PROGRESS: as IPC events.
  */
 export function emitProgress(workspaceId: string, step: string, label: string): void {
-  const payload = JSON.stringify({ workspaceId, step, label });
+  const data = { workspaceId, step, label };
+  const payload = JSON.stringify(data);
   process.stdout.write(`DEUS_WORKSPACE_PROGRESS:${payload}\n`);
+  broadcast(JSON.stringify({ type: "q:event", event: "workspace:progress", data }));
 }
 
 function updateInitStage(workspaceId: string, stage: string): void {

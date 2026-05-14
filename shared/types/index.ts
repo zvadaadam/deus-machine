@@ -7,6 +7,7 @@
 export type {
   Workspace,
   WorkspaceState,
+  WorkspaceKind,
   SetupStatus,
   RepoGroup,
   DiffStats,

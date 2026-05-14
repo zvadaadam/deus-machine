@@ -8,6 +8,7 @@ import {
   Settings,
   Orbit,
   ArrowUpRight,
+  Cloud,
 } from "lucide-react";
 import { uiActions } from "@/shared/stores/uiStore";
 import { capabilities } from "@/platform/capabilities";
@@ -144,6 +145,17 @@ export const staticCommands: CommandDefinition[] = [
     action: () => {
       uiActions.openSettings();
       uiActions.setActiveSettingsSection("ai");
+    },
+  },
+  {
+    id: "settings-cloud-agents",
+    label: "Settings: Cloud Agents",
+    icon: Cloud,
+    group: "settings",
+    keywords: ["cloud", "agents", "deus", "api", "key", "claude", "workspace"],
+    action: () => {
+      uiActions.openSettings();
+      uiActions.setActiveSettingsSection("cloud-agents");
     },
   },
 ];

@@ -1,6 +1,6 @@
 import type { WorkspaceProgressEvent } from "@shared/events";
 import type { SessionStatus } from "@shared/types/session";
-import type { RepoGroup } from "@shared/types/workspace";
+import type { RepoGroup, WorkspaceState } from "@shared/types/workspace";
 
 export function isTerminalWorkspaceProgressStep(step: string): boolean {
   return step === "done" || step.startsWith("error");
@@ -25,9 +25,13 @@ export function applyWorkspaceProgressToRepoGroups(
       changed = true;
       groupChanged = true;
 
+      const terminalState: WorkspaceState | null =
+        event.step === "done" ? "ready" : event.step.startsWith("error") ? "error" : null;
+
       return {
         ...workspace,
         init_stage: event.step,
+        ...(terminalState ? { state: terminalState } : {}),
       };
     });
 

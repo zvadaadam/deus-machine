@@ -251,6 +251,7 @@ describe("shared/events", () => {
       expect(PROTOCOL_EVENTS).toContain("session:plan-mode");
       expect(PROTOCOL_EVENTS).toContain("session:error");
       expect(PROTOCOL_EVENTS).toContain("session:progress");
+      expect(PROTOCOL_EVENTS).toContain("workspace:progress");
       expect(PROTOCOL_EVENTS).toContain("tool:request");
       // Message lifecycle events
       expect(PROTOCOL_EVENTS).toContain("message:created");
@@ -275,7 +276,7 @@ describe("shared/events", () => {
       // AAP events
       expect(PROTOCOL_EVENTS).toContain("apps:launched");
       expect(PROTOCOL_EVENTS).toContain("apps:stopped");
-      expect(PROTOCOL_EVENTS).toHaveLength(23);
+      expect(PROTOCOL_EVENTS).toHaveLength(24);
     });
   });
 });

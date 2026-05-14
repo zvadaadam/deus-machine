@@ -27,7 +27,7 @@ export function FilesView({ workspace, isWatched = false }: FilesViewProps) {
     (state) => state.layouts[workspace.id]?.pendingFileNavigation ?? null
   );
   const revealRequest = pendingFileNavigation?.target === "files" ? pendingFileNavigation : null;
-  const isReady = workspace.state === "ready";
+  const isReady = workspace.state === "ready" && workspace.workspace_kind !== "cloud";
 
   const { data: fileChangesData } = useFileChanges(
     isReady ? workspace.id : null,

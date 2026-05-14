@@ -34,6 +34,10 @@ export interface WorkspaceRow {
   title: string | null;
   git_branch: string | null;
   git_target_branch: string | null;
+  workspace_kind: string;
+  cloud_workspace_id: string | null;
+  cloud_organization_id: string | null;
+  cloud_status: string | null;
   state: string;
   status: string;
   current_session_id: string | null;
@@ -60,6 +64,10 @@ export interface WorkspaceWithDetailsRow {
   title: string | null;
   git_branch: string | null;
   git_target_branch: string | null;
+  workspace_kind: string;
+  cloud_workspace_id: string | null;
+  cloud_organization_id: string | null;
+  cloud_status: string | null;
   state: string;
   status: string;
   current_session_id: string | null;
@@ -95,6 +103,7 @@ export interface SessionRow {
   workspace_id: string;
   agent_harness: string;
   agent_session_id: string | null;
+  cloud_session_id: string | null;
   title: string | null;
   status: string;
   message_count: number;
@@ -119,6 +128,7 @@ export interface MessageRow {
   id: string;
   session_id: string;
   seq: number;
+  messageIndex?: number;
   role: string;
   content: string | null;
   turn_id: string | null;
