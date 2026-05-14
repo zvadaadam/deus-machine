@@ -1,9 +1,10 @@
-import Database from "better-sqlite3";
+import type BetterSqlite3 from "better-sqlite3";
 import path from "path";
 import fs from "fs";
 import os from "os";
 import { resolveDefaultDatabasePath } from "../../../../shared/runtime";
 import { SCHEMA_SQL, MIGRATIONS, isExpectedMigrationError } from "@shared/schema";
+import { openSqliteDatabase } from "./sqlite";
 
 const DEFAULT_DB_PATH = resolveDefaultDatabasePath({
   platform: process.platform,
@@ -14,9 +15,9 @@ const DEFAULT_DB_PATH = resolveDefaultDatabasePath({
 
 const DB_PATH = process.env.DATABASE_PATH || DEFAULT_DB_PATH;
 
-let dbInstance: Database.Database | null = null;
+let dbInstance: BetterSqlite3.Database | null = null;
 
-function initDatabase(): Database.Database {
+function initDatabase(): BetterSqlite3.Database {
   if (dbInstance) {
     return dbInstance;
   }
@@ -30,7 +31,7 @@ function initDatabase(): Database.Database {
   console.log("Opening database:", DB_PATH);
 
   try {
-    dbInstance = new Database(DB_PATH);
+    dbInstance = openSqliteDatabase(DB_PATH);
     dbInstance.pragma("journal_mode = WAL");
     dbInstance.pragma("foreign_keys = ON");
     dbInstance.pragma("busy_timeout = 5000");
@@ -61,7 +62,7 @@ function initDatabase(): Database.Database {
   }
 }
 
-function getDatabase(): Database.Database {
+function getDatabase(): BetterSqlite3.Database {
   if (!dbInstance) {
     throw new Error("Database not initialized. Call initDatabase() first.");
   }

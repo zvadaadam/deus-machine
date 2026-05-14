@@ -9,12 +9,6 @@ let stopping = false;
 
 function resolveAgentServerEntry(): string {
   if (process.env.AGENT_SERVER_ENTRY) return process.env.AGENT_SERVER_ENTRY;
-  if (process.env.DEUS_BUNDLED_BIN_DIR) {
-    return path.join(process.env.DEUS_BUNDLED_BIN_DIR, "index.bundled.cjs");
-  }
-  if (process.env.DEUS_RESOURCES_PATH) {
-    return path.join(process.env.DEUS_RESOURCES_PATH, "bin", "index.bundled.cjs");
-  }
   return path.join(process.cwd(), "apps", "agent-server", "dist", "index.bundled.cjs");
 }
 
@@ -22,29 +16,49 @@ function resolveAgentServerCwd(entry: string): string {
   return process.env.AGENT_SERVER_CWD || path.dirname(entry);
 }
 
+function resolveRuntimeExecutable(): string | null {
+  if (process.env.DEUS_RUNTIME_EXECUTABLE) return process.env.DEUS_RUNTIME_EXECUTABLE;
+  return null;
+}
+
 export async function startManagedAgentServer(): Promise<string> {
   if (child && child.exitCode === null && child.signalCode === null) {
     throw new Error("agent-server is already running");
   }
 
-  const entry = resolveAgentServerEntry();
-  if (!existsSync(entry)) {
+  const runtimeExecutable = resolveRuntimeExecutable();
+  const entry = runtimeExecutable ? null : resolveAgentServerEntry();
+  if (runtimeExecutable) {
+    if (!existsSync(runtimeExecutable)) {
+      throw new Error(`deus-runtime executable not found: ${runtimeExecutable}`);
+    }
+  } else if (entry && !existsSync(entry)) {
     throw new Error(`Agent-server entry not found: ${entry}`);
   }
 
-  const cwd = resolveAgentServerCwd(entry);
+  const cwd = runtimeExecutable ? process.cwd() : resolveAgentServerCwd(entry!);
   mkdirSync(cwd, { recursive: true });
   stopping = false;
 
   return new Promise((resolve, reject) => {
-    const agent = spawn(process.execPath, [entry], {
-      cwd,
-      env: {
-        ...process.env,
-        ELECTRON_RUN_AS_NODE: "1",
-      },
-      stdio: ["ignore", "pipe", "pipe"],
-    });
+    const childEnv: NodeJS.ProcessEnv = { ...process.env };
+    if (runtimeExecutable) {
+      delete childEnv.ELECTRON_RUN_AS_NODE;
+      delete childEnv.AGENT_SERVER_ENTRY;
+      delete childEnv.AGENT_SERVER_CWD;
+    } else {
+      childEnv.ELECTRON_RUN_AS_NODE = "1";
+    }
+
+    const agent = spawn(
+      runtimeExecutable ?? process.execPath,
+      runtimeExecutable ? ["agent-server"] : [entry!],
+      {
+        cwd,
+        env: childEnv,
+        stdio: ["ignore", "pipe", "pipe"],
+      }
+    );
     child = agent;
 
     let settled = false;
