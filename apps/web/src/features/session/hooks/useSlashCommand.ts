@@ -37,7 +37,7 @@ const TOKEN_BUDGET_RE = /(?:^|\s)--tokens(?:=|\s+)([0-9]+(?:\.[0-9]+)?[kKmM]?)/;
 
 export function parseGoalCommand(value: string): ParsedGoalCommand | null {
   const trimmed = value.trim();
-  if (!trimmed.startsWith("/goal")) return null;
+  if (trimmed !== "/goal" && !trimmed.startsWith("/goal ")) return null;
 
   const rest = trimmed.slice("/goal".length).trim();
   if (rest === "cancel") return { kind: "cancel" };

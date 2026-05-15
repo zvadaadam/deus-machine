@@ -19,7 +19,7 @@ function partFrom(evt: PartEvent) {
   return undefined;
 }
 
-function usageWithReasoning(usage: UsageWithReasoning): UsageWithReasoning {
+function usageWithReasoning(usage: UsageWithReasoning): any {
   return usage;
 }
 

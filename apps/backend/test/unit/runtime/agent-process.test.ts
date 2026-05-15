@@ -1,4 +1,12 @@
-import { chmodSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import {
+  chmodSync,
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  realpathSync,
+  rmSync,
+  writeFileSync,
+} from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
@@ -54,7 +62,8 @@ describe("managed agent-server process", () => {
 
   it("starts agent-server through deus-runtime without Electron-as-Node", async () => {
     const root = createTempRoot();
-    const runtimePath = path.join(root, "bin", "deus-runtime");
+    const runtimePath = "/bin/sh";
+    const runtimeScriptPath = path.join(root, "agent-server");
     const argsPath = path.join(root, "args.txt");
     const cwdPath = path.join(root, "cwd.txt");
     const envPath = path.join(root, "env.txt");
@@ -95,12 +104,11 @@ describe("managed agent-server process", () => {
     ]
       .map(JSON.stringify)
       .join(" ");
-    mkdirSync(path.dirname(runtimePath), { recursive: true });
     writeExecutable(
-      runtimePath,
+      runtimeScriptPath,
       [
         "#!/bin/sh",
-        `printf '%s\\n' "$1" > ${JSON.stringify(argsPath)}`,
+        `basename "$0" > ${JSON.stringify(argsPath)}`,
         `pwd > ${JSON.stringify(cwdPath)}`,
         `printf ${JSON.stringify(envFormat)} ${envArgs} > ${JSON.stringify(envPath)}`,
         "echo 'LISTEN_URL=ws://127.0.0.1:7890'",
@@ -127,7 +135,7 @@ describe("managed agent-server process", () => {
 
     await expect(startManagedAgentServer()).resolves.toBe("ws://127.0.0.1:7890");
     expect(readFileSync(argsPath, "utf8").trim()).toBe("agent-server");
-    expect(readFileSync(cwdPath, "utf8").trim()).toBe(root);
+    expect(realpathSync(readFileSync(cwdPath, "utf8").trim())).toBe(realpathSync(root));
     expect(readFileSync(envPath, "utf8").trimEnd()).toBe(
       [
         "AUTH_TOKEN=",

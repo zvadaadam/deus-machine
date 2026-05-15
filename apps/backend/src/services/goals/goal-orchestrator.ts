@@ -57,9 +57,9 @@ export function handleGoalSessionIdle(_sessionId: string, _deps: GoalOrchestrato
 export async function startGoalContinuation(
   sessionId: string,
   deps: GoalOrchestratorDeps
-): Promise<void> {
+): Promise<boolean> {
   const request = buildGoalTurnStartRequest(sessionId);
-  if (!request) return;
+  if (!request) return false;
 
   try {
     const response = await deps.startTurn(request);
@@ -67,9 +67,12 @@ export async function startGoalContinuation(
       console.warn(
         `[GoalOrchestrator] continuation rejected session=${sessionId}: ${response.reason ?? "unknown"}`
       );
+      return false;
     }
+    return true;
   } catch (error) {
     console.error(`[GoalOrchestrator] failed to start continuation session=${sessionId}`, error);
+    return false;
   }
 }
 

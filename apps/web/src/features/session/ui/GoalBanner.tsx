@@ -9,10 +9,9 @@ interface GoalBannerProps {
   goal?: ActiveGoal | null;
   onResume?: () => void;
   onCancel?: () => void;
-  onDismiss?: () => void;
 }
 
-export function GoalBanner({ goal, onResume, onCancel, onDismiss }: GoalBannerProps) {
+export function GoalBanner({ goal, onResume, onCancel }: GoalBannerProps) {
   const [hiddenTerminalKey, setHiddenTerminalKey] = useState<string | null>(null);
   const terminalKey =
     goal && isTerminalStatus(goal.status)
@@ -24,12 +23,14 @@ export function GoalBanner({ goal, onResume, onCancel, onDismiss }: GoalBannerPr
 
     const id = window.setTimeout(() => {
       setHiddenTerminalKey(terminalKey);
-      onDismiss?.();
     }, 3_000);
     return () => window.clearTimeout(id);
-  }, [onDismiss, terminalKey]);
+  }, [terminalKey]);
 
   const visibleGoal = terminalKey && hiddenTerminalKey === terminalKey ? null : goal;
+  const dismissVisibleTerminalGoal = () => {
+    if (terminalKey) setHiddenTerminalKey(terminalKey);
+  };
 
   return (
     <AnimatePresence initial={false}>
@@ -39,7 +40,7 @@ export function GoalBanner({ goal, onResume, onCancel, onDismiss }: GoalBannerPr
           goal={visibleGoal}
           onResume={onResume}
           onCancel={onCancel}
-          onDismiss={onDismiss}
+          onDismiss={dismissVisibleTerminalGoal}
         />
       ) : null}
     </AnimatePresence>
