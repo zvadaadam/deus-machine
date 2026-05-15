@@ -12,6 +12,14 @@
       "fileArch": "arm64",
       "archivePlatform": "macOS_arm64",
       "archiveSha256": "b11c54f6bd7d15ed6590475079e5b2fcf36f45d3991a80041b29c9d0cc1f1d07"
+    },
+    {
+      "runtimeKey": "linux-x64",
+      "fileFormat": "ELF 64-bit",
+      "fileArch": "x86-64",
+      "archivePlatform": "linux_amd64",
+      "archiveExtension": "tar.gz",
+      "archiveSha256": "b57848131bdf0c229cd35e1f2a51aa718199858b2e728410b37e89a428943ec4"
     }
   ]
 }

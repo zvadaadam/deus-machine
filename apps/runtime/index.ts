@@ -9,7 +9,7 @@ import packageJson from "../../package.json";
 
 const VERSION = packageJson.version;
 const RUNTIME_NAME = "deus-runtime";
-const DARWIN_RUNTIME_KEYS = new Set(["darwin-arm64", "darwin-x64"]);
+const STAGED_RUNTIME_KEYS = new Set(["darwin-arm64", "darwin-x64", "linux-x64"]);
 const PACKAGED_SYSTEM_PATHS = ["/usr/bin", "/bin", "/usr/sbin", "/sbin"];
 const REQUIRED_BINARIES = ["deus-runtime", "codex", "claude", "gh", "rg", "agent-browser"] as const;
 const REQUIRED_RUNTIME_IMPORTS = [
@@ -160,23 +160,23 @@ function resolveRuntimeLayout() {
   const executableDir = dirname(executablePath);
   const runtimeKey = getRuntimeKey();
   const isNativeRuntimeExecutable = basename(executablePath) === RUNTIME_NAME;
-  const isStagedDarwinRuntime =
-    DARWIN_RUNTIME_KEYS.has(basename(executableDir)) && basename(dirname(executableDir)) === "bin";
+  const isStagedRuntime =
+    STAGED_RUNTIME_KEYS.has(basename(executableDir)) && basename(dirname(executableDir)) === "bin";
   const projectRoot = isNativeRuntimeExecutable
-    ? isStagedDarwinRuntime
+    ? isStagedRuntime
       ? findProjectRoot(executableDir)
       : null
     : (findProjectRoot(process.cwd()) ?? findProjectRoot(resolve(executableDir, "../../..")));
   const stagedBinDir =
-    projectRoot && DARWIN_RUNTIME_KEYS.has(runtimeKey)
+    projectRoot && STAGED_RUNTIME_KEYS.has(runtimeKey)
       ? join(projectRoot, "dist", "runtime", "electron", "bin", runtimeKey)
       : null;
-  const bundledBinDir = isStagedDarwinRuntime
+  const bundledBinDir = isStagedRuntime
     ? executableDir
     : stagedBinDir && existsSync(stagedBinDir)
       ? stagedBinDir
       : executableDir;
-  const resourcesPath = isStagedDarwinRuntime
+  const resourcesPath = isStagedRuntime
     ? resolve(executableDir, "../..")
     : stagedBinDir && existsSync(stagedBinDir)
       ? join(projectRoot!, "dist", "runtime", "electron")
