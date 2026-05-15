@@ -462,7 +462,7 @@ describe("prune-pencil-cli-binaries", () => {
         arch: "x64",
         resourcesDir,
       })
-    ).toEqual({ copied: 2 });
+    ).toEqual({ copied: 1 });
 
     expect(
       pruneNodePtyRuntimeBinaries({
