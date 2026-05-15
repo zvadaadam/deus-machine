@@ -2,14 +2,26 @@
 // Backend-owned handler for native provider goal terminal-state notifications.
 
 import { GoalUpdateRequestSchema } from "@shared/goals";
-import { budgetLimitGoalFromProvider, completeGoal } from "./goal-store";
-import { pushGoalEnded } from "./goal-events";
+import { budgetLimitGoalFromProvider, completeGoal, pauseGoal, toActiveGoal } from "./goal-store";
+import { pushGoalEnded, pushGoalUpdated } from "./goal-events";
 import { invalidate } from "../query-engine";
 
 export async function handleGoalUpdate(params: unknown): Promise<unknown> {
   const request = GoalUpdateRequestSchema.parse(params);
   const options =
     request.spentTokens === undefined ? undefined : { spentTokens: request.spentTokens };
+  if (request.status === "paused") {
+    const paused = pauseGoal(request.sessionId, options);
+    if (!paused) {
+      return { ok: false, message: "No active goal for this session." };
+    }
+
+    const goal = toActiveGoal(paused);
+    pushGoalUpdated(goal);
+    invalidate(["goal"], { sessionIds: [request.sessionId] });
+    return { ok: true, goal, message: "Goal pause recorded." };
+  }
+
   const ended =
     request.status === "complete"
       ? completeGoal(request.sessionId, request.summary, options)

@@ -64,10 +64,15 @@ export async function syncNativeGoalUpdate(
   goal: CodexThreadGoal
 ): Promise<void> {
   try {
-    if (goal.status === "complete" || goal.status === "budgetLimited") {
+    if (goal.status === "paused" || goal.status === "complete" || goal.status === "budgetLimited") {
       await EventBroadcaster.requestUpdateGoal({
         sessionId,
-        status: goal.status === "complete" ? "complete" : "budget_limited",
+        status:
+          goal.status === "paused"
+            ? "paused"
+            : goal.status === "complete"
+              ? "complete"
+              : "budget_limited",
         ...(goal.status === "complete"
           ? { summary: "Codex marked the native goal complete." }
           : {}),

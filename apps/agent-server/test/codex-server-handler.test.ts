@@ -289,6 +289,55 @@ describe("CodexServerAgentHandler", () => {
     });
   });
 
+  it("syncs native Codex paused goals back to the backend", async () => {
+    mockClient.request.mockImplementation(async (method: string, params: any) => {
+      if (method === "thread/start") return { thread: { id: "thread-paused-goal" } };
+      if (method === "thread/goal/set") {
+        queueMicrotask(() => {
+          emitTurn("turn/started", "inProgress", undefined, params.threadId);
+          emitTurn("turn/completed", "completed", undefined, params.threadId);
+          notificationHandler?.({
+            method: "thread/goal/updated",
+            params: {
+              threadId: params.threadId,
+              goal: nativeGoal(
+                params.threadId,
+                params.objective,
+                "paused",
+                params.tokenBudget,
+                111
+              ),
+            },
+          });
+        });
+        return {
+          goal: nativeGoal(params.threadId, params.objective, "active", params.tokenBudget),
+        };
+      }
+      return {};
+    });
+
+    const handler = new CodexServerAgentHandler();
+    await handler.query("sess-native-paused-goal", "goal", {
+      cwd: "/repo",
+      model: "gpt-5.5",
+      goalAction: "start",
+      goalContext: {
+        objective: "Pause when blocked",
+        tokenBudget: 1000,
+        spentTokens: 0,
+        startedAt: 100,
+      },
+    });
+    await flushAsyncWork();
+
+    expect(mockEventBroadcaster.requestUpdateGoal).toHaveBeenCalledWith({
+      sessionId: "sess-native-paused-goal",
+      status: "paused",
+      spentTokens: 111,
+    });
+  });
+
   it("does not inject legacy dynamic goal tools for native goal sessions", async () => {
     const threadStartParams: unknown[] = [];
 
