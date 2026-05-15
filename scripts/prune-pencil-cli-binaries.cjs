@@ -583,16 +583,27 @@ function ensureLinuxNodePtyRuntimePrebuild(context) {
     return { copied: 0 };
   }
 
-  const buildReleaseDir = path.join(nodePtyRoot, "build", "Release");
-  if (!requiredFiles.every((name) => fs.existsSync(path.join(buildReleaseDir, name)))) {
+  const packagedBuildReleaseDir = path.join(nodePtyRoot, "build", "Release");
+  const sourceNodePtyRoot = fs.existsSync(path.join(nodePtyRoot, "binding.gyp"))
+    ? nodePtyRoot
+    : path.join(PROJECT_ROOT, "node_modules", "node-pty");
+  const packagedBuildHasPayload = requiredFiles.every((name) =>
+    fs.existsSync(path.join(packagedBuildReleaseDir, name))
+  );
+  const sourceBuildReleaseDir = packagedBuildHasPayload
+    ? packagedBuildReleaseDir
+    : path.join(sourceNodePtyRoot, "build", "Release");
+
+  if (!requiredFiles.every((name) => fs.existsSync(path.join(sourceBuildReleaseDir, name)))) {
     if (process.platform !== "linux" || process.arch !== targetArch) return { copied: 0 };
+    if (!fs.existsSync(path.join(sourceNodePtyRoot, "binding.gyp"))) return { copied: 0 };
 
     const nodeGypPath = path.join(PROJECT_ROOT, "node_modules", "node-gyp", "bin", "node-gyp.js");
     if (!fs.existsSync(nodeGypPath)) return { copied: 0 };
 
     console.log(`[runtime] rebuilding node-pty native payload for ${targetPrebuild}`);
     execFileSync(process.execPath, [nodeGypPath, "rebuild"], {
-      cwd: nodePtyRoot,
+      cwd: sourceNodePtyRoot,
       env: {
         ...process.env,
         npm_config_build_from_source: "true",
@@ -603,14 +614,14 @@ function ensureLinuxNodePtyRuntimePrebuild(context) {
   }
 
   for (const name of requiredFiles) {
-    const sourcePath = path.join(buildReleaseDir, name);
+    const sourcePath = path.join(sourceBuildReleaseDir, name);
     if (!fs.existsSync(sourcePath)) return { copied: 0 };
   }
 
   fs.mkdirSync(prebuildDir, { recursive: true });
   for (const name of requiredFiles) {
     const destinationPath = path.join(prebuildDir, name);
-    fs.copyFileSync(path.join(buildReleaseDir, name), destinationPath);
+    fs.copyFileSync(path.join(sourceBuildReleaseDir, name), destinationPath);
     if (name === "spawn-helper") fs.chmodSync(destinationPath, 0o755);
   }
   console.log(`[runtime] copied node-pty build/Release output into ${targetPrebuild} prebuild`);
