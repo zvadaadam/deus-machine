@@ -279,9 +279,11 @@ function assertExecutable(filePath: string, label: string): void {
 }
 
 function assertFileArch(fileOutput: string, target: DeusRuntimeTarget, filePath: string): void {
-  const expectedFormat =
-    target.platform === "darwin" ? "Mach-O 64-bit executable" : "ELF 64-bit";
-  if (!fileOutput.includes(expectedFormat) || !fileOutput.includes(target.fileArch)) {
+  const hasExpectedFormat =
+    target.platform === "darwin"
+      ? fileOutput.includes("Mach-O 64-bit") && fileOutput.includes("executable")
+      : fileOutput.includes("ELF 64-bit");
+  if (!hasExpectedFormat || !fileOutput.includes(target.fileArch)) {
     throw new Error(`Unexpected file(1) output for ${filePath}: ${fileOutput}`);
   }
 }

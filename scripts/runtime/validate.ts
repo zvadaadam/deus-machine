@@ -125,7 +125,11 @@ function getExecutableFileOutput(
     timeout: 20_000,
     stdio: ["ignore", "pipe", "pipe"],
   }).trim();
-  if (!fileOutput.includes(fileFormat) || !fileOutput.includes(fileArch)) {
+  const hasExpectedFormat =
+    fileFormat === "Mach-O 64-bit executable"
+      ? fileOutput.includes("Mach-O 64-bit") && fileOutput.includes("executable")
+      : fileOutput.includes(fileFormat);
+  if (!hasExpectedFormat || !fileOutput.includes(fileArch)) {
     throw createBuildRuntimeError(`Unexpected ${label} architecture: ${fileOutput}`);
   }
   return fileOutput;

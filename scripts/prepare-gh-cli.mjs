@@ -78,7 +78,11 @@ function inspectGhBinary(filePath, target) {
     timeout: VERIFY_TIMEOUT_MS,
     stdio: ["ignore", "pipe", "pipe"],
   }).trim();
-  if (!fileOutput.includes(target.fileFormat) || !fileOutput.includes(target.fileArch)) {
+  const hasExpectedFormat =
+    target.fileFormat === "Mach-O 64-bit executable"
+      ? fileOutput.includes("Mach-O 64-bit") && fileOutput.includes("executable")
+      : fileOutput.includes(target.fileFormat);
+  if (!hasExpectedFormat || !fileOutput.includes(target.fileArch)) {
     throw new Error(`Unexpected gh architecture for ${target.runtimeKey}: ${fileOutput}`);
   }
 
