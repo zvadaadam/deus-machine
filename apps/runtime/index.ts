@@ -5,6 +5,7 @@ import { existsSync, mkdtempSync, rmSync, statSync } from "node:fs";
 import { Module as NodeModule } from "node:module";
 import { tmpdir } from "node:os";
 import { basename, delimiter, dirname, join, resolve } from "node:path";
+import { pathToFileURL } from "node:url";
 import packageJson from "../../package.json";
 
 const VERSION = packageJson.version;
@@ -42,11 +43,12 @@ const REQUIRED_RUNTIME_IMPORTS = [
   },
 ] as const;
 
-type RuntimeCommand = "agent-server" | "backend" | "self-test";
+type RuntimeCommand = "agent-server" | "backend" | "node" | "self-test";
 
 interface ParsedArgs {
   command: RuntimeCommand | "version" | "help";
   dataDir?: string;
+  scriptArgs?: string[];
 }
 
 function usage(): string {
@@ -58,6 +60,7 @@ function usage(): string {
     `  ${RUNTIME_NAME} self-test`,
     `  ${RUNTIME_NAME} agent-server`,
     `  ${RUNTIME_NAME} backend [--data-dir <path>]`,
+    `  ${RUNTIME_NAME} node <script> [args...]`,
   ].join("\n");
 }
 
@@ -70,6 +73,10 @@ function parseArgs(argv: string[]): ParsedArgs {
     return { command: "version" };
   }
   if (first === "self-test") return { command: "self-test" };
+  if (first === "node") {
+    if (rest.length === 0) throw new Error("node command requires a script path");
+    return { command: "node", scriptArgs: rest };
+  }
   if (first !== "agent-server" && first !== "backend") {
     throw new Error(`Unknown command: ${first}`);
   }
@@ -341,7 +348,23 @@ function configureRuntimeEnv(command: RuntimeCommand, dataDir?: string): void {
   }
 }
 
-async function run(command: RuntimeCommand, dataDir?: string): Promise<void> {
+async function runNodeScript(scriptArgs: string[]): Promise<void> {
+  const [script, ...args] = scriptArgs;
+  if (!script) throw new Error("node command requires a script path");
+  if (script.startsWith("-")) {
+    throw new Error(`Unsupported node option for packaged runtime: ${script}`);
+  }
+
+  const scriptPath = resolve(script);
+  process.argv = [process.execPath, scriptPath, ...args];
+  await import(pathToFileURL(scriptPath).href);
+}
+
+async function run(
+  command: RuntimeCommand,
+  dataDir?: string,
+  scriptArgs: string[] = []
+): Promise<void> {
   configureRuntimeEnv(command, dataDir);
 
   if (command === "self-test") {
@@ -383,6 +406,11 @@ async function run(command: RuntimeCommand, dataDir?: string): Promise<void> {
     return;
   }
 
+  if (command === "node") {
+    await runNodeScript(scriptArgs);
+    return;
+  }
+
   if (command === "agent-server") {
     await import("../agent-server/index");
     return;
@@ -411,7 +439,7 @@ async function main(): Promise<void> {
     return;
   }
 
-  await run(args.command, args.dataDir);
+  await run(args.command, args.dataDir, args.scriptArgs);
 }
 
 main().catch((error) => {
