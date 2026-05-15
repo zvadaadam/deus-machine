@@ -94,7 +94,6 @@ interface MessageInputProps {
   onStartGoal?: (objective: string, tokenBudget: number | null) => void;
   onResumeGoal?: () => void;
   onCancelGoal?: () => void;
-  onDismissGoal?: () => void;
   onCompact?: () => void;
   onStop?: () => void;
   onOpenNewTab?: (initialModel?: string) => void;
@@ -223,7 +222,6 @@ export function MessageInput({
   onStartGoal,
   onResumeGoal,
   onCancelGoal,
-  onDismissGoal,
   onCompact,
   onStop,
   onOpenNewTab,
@@ -427,7 +425,6 @@ export function MessageInput({
         goal={supportsGoals ? activeGoal : null}
         onResume={onResumeGoal}
         onCancel={onCancelGoal}
-        onDismiss={onDismissGoal}
       />
 
       <InputGroup

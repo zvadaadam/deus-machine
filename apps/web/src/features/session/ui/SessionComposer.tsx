@@ -133,7 +133,6 @@ const ActiveSessionComposer = forwardRef<SessionComposerRef, ActiveProps>(
       startGoal,
       resumeGoal,
       cancelGoal,
-      dismissGoal,
       sending,
     } = useSessionActions({
       sessionId,
@@ -185,7 +184,6 @@ const ActiveSessionComposer = forwardRef<SessionComposerRef, ActiveProps>(
         onStartGoal={startGoal}
         onResumeGoal={resumeGoal}
         onCancelGoal={cancelGoal}
-        onDismissGoal={dismissGoal}
         onCompact={compactConversation}
         onStop={stopSession}
         onOpenNewTab={onOpenNewTab}

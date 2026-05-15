@@ -46,7 +46,6 @@ interface UseSessionActionsReturn {
   startGoal: (objective: string, tokenBudget: number | null) => Promise<void>;
   resumeGoal: () => Promise<void>;
   cancelGoal: () => Promise<void>;
-  dismissGoal: () => Promise<void>;
   sending: boolean;
 }
 
@@ -194,16 +193,6 @@ export function useSessionActions({
     }
   }, [sessionId, onMessageSent]);
 
-  const dismissGoal = useCallback(async () => {
-    try {
-      if (!isConnected()) await connect();
-      const result = await sendMutate("goalCancel", { sessionId });
-      if (!result.success) throw new Error(result.error || "Failed to dismiss goal");
-    } catch (error) {
-      console.error("Failed to dismiss goal:", error);
-    }
-  }, [sessionId]);
-
   return {
     sendMessage,
     stopSession,
@@ -212,7 +201,6 @@ export function useSessionActions({
     startGoal,
     resumeGoal,
     cancelGoal,
-    dismissGoal,
     sending: sendMessageMutation.isPending,
   };
 }

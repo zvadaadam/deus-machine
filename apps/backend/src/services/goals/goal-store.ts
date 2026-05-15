@@ -119,6 +119,16 @@ export function pauseAllActiveGoals(): number {
   return result.changes;
 }
 
+export function pauseGoal(sessionId: string): StoredGoal | null {
+  const result = getDatabase()
+    .prepare(
+      "UPDATE goals SET status = 'paused', updated_at = datetime('now') WHERE session_id = ? AND status = 'active'"
+    )
+    .run(sessionId);
+  if (result.changes === 0) return null;
+  return getGoal(sessionId) ?? null;
+}
+
 export function resumeGoal(sessionId: string): StoredGoal | null {
   const result = getDatabase()
     .prepare(

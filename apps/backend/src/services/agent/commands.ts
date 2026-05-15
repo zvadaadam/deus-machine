@@ -40,6 +40,7 @@ import {
   deleteGoal,
   getGoal,
   goalContextForSession,
+  pauseGoal,
   resumeGoal,
   toActiveGoal,
 } from "../goals/goal-store";
@@ -478,7 +479,7 @@ export async function handleGoalCancel(params: QueryParams): Promise<CommandResu
   return { success: true, goal: ended };
 }
 
-export function handleGoalResume(params: QueryParams): CommandResult {
+export async function handleGoalResume(params: QueryParams): Promise<CommandResult> {
   const request = GoalResumeRequestSchema.parse(params);
   const goal = getGoal(request.sessionId);
   if (!goal) throw new Error("No goal found for this session.");
@@ -496,9 +497,15 @@ export function handleGoalResume(params: QueryParams): CommandResult {
   pushGoalUpdated(activeGoal);
   invalidate(["goal"], { sessionIds: [request.sessionId] });
 
-  void startGoalContinuation(request.sessionId, {
+  const started = await startGoalContinuation(request.sessionId, {
     startTurn: (turn) => agentService.forwardTurn(turn),
   });
+  if (!started) {
+    const paused = pauseGoal(request.sessionId);
+    if (paused) pushGoalUpdated(toActiveGoal(paused));
+    invalidate(["goal"], { sessionIds: [request.sessionId] });
+    throw new Error("Failed to resume goal.");
+  }
 
   return { success: true, goal: activeGoal };
 }
