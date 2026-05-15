@@ -33,7 +33,7 @@
     "package:mac": "bun run build:all && electron-builder --mac",
     "package:mac:dir": "node scripts/runtime/package-mac-dir.cjs",
     "package:win": "node scripts/runtime/unsupported-packaged-platform.cjs Windows",
-    "package:linux": "node scripts/runtime/unsupported-packaged-platform.cjs Linux",
+    "package:linux": "bun run build:all && electron-builder --linux",
     "postinstall": "bun run prepare:device-use",
     "native:electron": "electron-builder install-app-deps",
     "native:node": "cd node_modules/better-sqlite3 && node ../node-gyp/bin/node-gyp.js rebuild",

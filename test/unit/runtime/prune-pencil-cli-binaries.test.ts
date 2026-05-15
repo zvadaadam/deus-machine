@@ -1,4 +1,4 @@
-import { chmodSync, mkdirSync, readdirSync, rmSync, writeFileSync } from "node:fs";
+import { chmodSync, mkdirSync, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs";
 import { createHash } from "node:crypto";
 import { createRequire } from "node:module";
 import os from "node:os";
@@ -8,6 +8,7 @@ import { afterEach, describe, expect, it } from "vitest";
 const require = createRequire(import.meta.url);
 const {
   binaryNamesForTarget,
+  ensureLinuxNodePtyRuntimePrebuild,
   pruneCanvasRuntimeBinaries,
   pruneNodePtyRuntimeBinaries,
   prunePencilCliBinaries,
@@ -17,6 +18,11 @@ const {
 } =
   require("../../../scripts/prune-pencil-cli-binaries.cjs") as {
     binaryNamesForTarget: (platform: string, arch: string | number) => Set<string>;
+    ensureLinuxNodePtyRuntimePrebuild: (context: {
+      electronPlatformName: string;
+      arch: string | number;
+      resourcesDir: string;
+    }) => { copied: number };
     pruneCanvasRuntimeBinaries: (context: {
       electronPlatformName: string;
       arch: string | number;
@@ -209,6 +215,26 @@ function writeNodePtyPruneFixture(resourcesDir: string): string {
     ["prebuilds", "darwin-arm64", "spawn-helper"],
     ["prebuilds", "darwin-x64", "pty.node"],
     ["prebuilds", "darwin-x64", "spawn-helper"],
+  ]) {
+    const filePath = path.join(nodePtyRoot, ...fileParts);
+    mkdirSync(path.dirname(filePath), { recursive: true });
+    writeFileSync(filePath, fileParts.join("/"));
+  }
+  return nodePtyRoot;
+}
+
+function writeLinuxNodePtyBuildFixture(resourcesDir: string): string {
+  const nodePtyRoot = path.join(
+    resourcesDir,
+    "app.asar.unpacked",
+    "node_modules",
+    "node-pty"
+  );
+  for (const fileParts of [
+    ["build", "Release", "pty.node"],
+    ["build", "Release", "spawn-helper"],
+    ["prebuilds", "darwin-arm64", "pty.node"],
+    ["prebuilds", "darwin-arm64", "spawn-helper"],
   ]) {
     const filePath = path.join(nodePtyRoot, ...fileParts);
     mkdirSync(path.dirname(filePath), { recursive: true });
@@ -422,6 +448,34 @@ describe("prune-pencil-cli-binaries", () => {
     ).toEqual({ removed: 2, kept: 1 });
 
     expect(readdirSync(path.join(nodePtyRoot, "prebuilds"))).toEqual(["darwin-arm64"]);
+    expect(() => readdirSync(path.join(nodePtyRoot, "build"))).toThrow();
+  });
+
+  it("promotes Linux node-pty build output into target prebuilds before pruning", () => {
+    const resourcesDir = createTempRoot("deus-node-pty-linux-prebuild");
+    tempRoots.push(resourcesDir);
+    const nodePtyRoot = writeLinuxNodePtyBuildFixture(resourcesDir);
+
+    expect(
+      ensureLinuxNodePtyRuntimePrebuild({
+        electronPlatformName: "linux",
+        arch: "x64",
+        resourcesDir,
+      })
+    ).toEqual({ copied: 1 });
+
+    expect(
+      pruneNodePtyRuntimeBinaries({
+        electronPlatformName: "linux",
+        arch: "x64",
+        resourcesDir,
+      })
+    ).toEqual({ removed: 2, kept: 1 });
+
+    expect(readdirSync(path.join(nodePtyRoot, "prebuilds"))).toEqual(["linux-x64"]);
+    expect(readFileSync(path.join(nodePtyRoot, "prebuilds", "linux-x64", "pty.node"), "utf8")).toBe(
+      "build/Release/pty.node"
+    );
     expect(() => readdirSync(path.join(nodePtyRoot, "build"))).toThrow();
   });
 
