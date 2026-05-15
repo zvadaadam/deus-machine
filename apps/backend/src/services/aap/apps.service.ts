@@ -49,6 +49,7 @@ import {
   isProcessAlive,
   killByPid,
   resolveCommand,
+  resolveRuntimeNodeCommand,
   spawnApp,
   stopChild,
   waitForReady,
@@ -170,14 +171,15 @@ async function runPrefetch(installed: InstalledAppEntry): Promise<void> {
   const rawCwd = prefetch.cwd ? substituteTemplate(prefetch.cwd, vars) : packageRoot;
   const cwd = isAbsolute(rawCwd) ? rawCwd : resolvePath(packageRoot, rawCwd);
   const command = resolveCommand(prefetch.command, packageRoot);
-  if (!canSpawnResolvedCommand(command)) {
+  const args = substituteArgs(prefetch.args, vars);
+  const spawnCommand = resolveRuntimeNodeCommand(command, args);
+  if (!canSpawnResolvedCommand(spawnCommand.command)) {
     console.log(`[AAP] Prefetch skipped: ${manifest.id}`, {
       command: prefetch.command,
       reason: "command unavailable",
     });
     return;
   }
-  const args = substituteArgs(prefetch.args, vars);
   const env = createBackendChildEnv({
     ...substituteEnv(prefetch.env, vars),
     DEUS_APP_ID: manifest.id,
@@ -187,7 +189,11 @@ async function runPrefetch(installed: InstalledAppEntry): Promise<void> {
   await new Promise<void>((resolve) => {
     let child: ChildProcess;
     try {
-      child = spawn(command, args, { cwd, env, stdio: ["ignore", "pipe", "pipe"] });
+      child = spawn(spawnCommand.command, spawnCommand.args, {
+        cwd,
+        env,
+        stdio: ["ignore", "pipe", "pipe"],
+      });
     } catch (err) {
       console.warn(`[AAP] Prefetch failed to spawn: ${manifest.id}`, {
         error: getErrorMessage(err),

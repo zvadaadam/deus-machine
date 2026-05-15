@@ -4,6 +4,7 @@ import { describe, expect, it } from "vitest";
 import {
   isProcessAlive,
   killByPid,
+  resolveRuntimeNodeCommand,
   spawnApp,
   stopChild,
   waitForReady,
@@ -49,6 +50,46 @@ async function startProbeServer(options: { healthStatus: number } = { healthStat
 }
 
 describe("aap/lifecycle", () => {
+  describe("resolveRuntimeNodeCommand", () => {
+    it("routes node scripts through deus-runtime in packaged runtime", () => {
+      const originalRuntime = process.env.DEUS_RUNTIME;
+      const originalExecutable = process.env.DEUS_RUNTIME_EXECUTABLE;
+      try {
+        process.env.DEUS_RUNTIME = "1";
+        process.env.DEUS_RUNTIME_EXECUTABLE = "/Applications/Deus.app/Contents/Resources/bin/deus-runtime";
+
+        expect(resolveRuntimeNodeCommand("node", ["./dist/serve.js", "--port", "1234"])).toEqual({
+          command: "/Applications/Deus.app/Contents/Resources/bin/deus-runtime",
+          args: ["node", "./dist/serve.js", "--port", "1234"],
+        });
+      } finally {
+        if (originalRuntime === undefined) delete process.env.DEUS_RUNTIME;
+        else process.env.DEUS_RUNTIME = originalRuntime;
+        if (originalExecutable === undefined) delete process.env.DEUS_RUNTIME_EXECUTABLE;
+        else process.env.DEUS_RUNTIME_EXECUTABLE = originalExecutable;
+      }
+    });
+
+    it("leaves node commands unchanged outside packaged runtime", () => {
+      const originalRuntime = process.env.DEUS_RUNTIME;
+      const originalExecutable = process.env.DEUS_RUNTIME_EXECUTABLE;
+      try {
+        delete process.env.DEUS_RUNTIME;
+        process.env.DEUS_RUNTIME_EXECUTABLE = "/tmp/deus-runtime";
+
+        expect(resolveRuntimeNodeCommand("node", ["./dist/serve.js"])).toEqual({
+          command: "node",
+          args: ["./dist/serve.js"],
+        });
+      } finally {
+        if (originalRuntime === undefined) delete process.env.DEUS_RUNTIME;
+        else process.env.DEUS_RUNTIME = originalRuntime;
+        if (originalExecutable === undefined) delete process.env.DEUS_RUNTIME_EXECUTABLE;
+        else process.env.DEUS_RUNTIME_EXECUTABLE = originalExecutable;
+      }
+    });
+  });
+
   describe("spawnApp", () => {
     it("spawns a child, fires onExit with the exit code", async () => {
       const exit = new Promise<{ code: number | null }>((resolve) => {
