@@ -33,6 +33,7 @@ const MAC_CODESIGN_PAGE_SIZE = "4096";
 const PACKAGED_VERSION_TIMEOUT_MS = 20_000;
 const PACKAGED_VERSION_STOP_TIMEOUT_MS = 5_000;
 const PACKAGE_RECOVERY_TIMEOUT_MS = 60_000;
+const NODE_PTY_REBUILD_TIMEOUT_MS = 120_000;
 const PROJECT_ROOT = path.resolve(__dirname, "..");
 const PACKAGED_VERSION_ENV_ALLOWLIST = ["LANG", "LC_ALL", "LC_CTYPE", "TMPDIR", "TZ"];
 
@@ -583,6 +584,24 @@ function ensureLinuxNodePtyRuntimePrebuild(context) {
   }
 
   const buildReleaseDir = path.join(nodePtyRoot, "build", "Release");
+  if (!requiredFiles.every((name) => fs.existsSync(path.join(buildReleaseDir, name)))) {
+    if (process.platform !== "linux" || process.arch !== targetArch) return { copied: 0 };
+
+    const nodeGypPath = path.join(PROJECT_ROOT, "node_modules", "node-gyp", "bin", "node-gyp.js");
+    if (!fs.existsSync(nodeGypPath)) return { copied: 0 };
+
+    console.log(`[runtime] rebuilding node-pty native payload for ${targetPrebuild}`);
+    execFileSync(process.execPath, [nodeGypPath, "rebuild"], {
+      cwd: nodePtyRoot,
+      env: {
+        ...process.env,
+        npm_config_build_from_source: "true",
+      },
+      stdio: "inherit",
+      timeout: NODE_PTY_REBUILD_TIMEOUT_MS,
+    });
+  }
+
   for (const name of requiredFiles) {
     const sourcePath = path.join(buildReleaseDir, name);
     if (!fs.existsSync(sourcePath)) return { copied: 0 };
