@@ -48,9 +48,13 @@ type AgentCliName = "codex" | "claude";
 type BundledAgentToolName = AgentCliName | "rg" | "agent-browser";
 
 interface AgentCliTarget {
-  runtimeKey: "darwin-arm64" | "darwin-x64";
-  fileArch: "arm64" | "x86_64";
-  agentBrowserEntry: "bin/agent-browser-darwin-arm64" | "bin/agent-browser-darwin-x64";
+  runtimeKey: "darwin-arm64" | "darwin-x64" | "linux-x64";
+  fileFormat: "Mach-O 64-bit executable" | "ELF 64-bit";
+  fileArch: "arm64" | "x86_64" | "x86-64";
+  agentBrowserEntry:
+    | "bin/agent-browser-darwin-arm64"
+    | "bin/agent-browser-darwin-x64"
+    | "bin/agent-browser-linux-x64";
   codexAliasPackage: string;
   codexTriple: string;
   claudePackageName: string;
@@ -101,6 +105,7 @@ export interface ValidateAgentCliOptions {
 export const AGENT_CLI_TARGETS: readonly AgentCliTarget[] = [
   {
     runtimeKey: "darwin-arm64",
+    fileFormat: "Mach-O 64-bit executable",
     fileArch: "arm64",
     agentBrowserEntry: "bin/agent-browser-darwin-arm64",
     codexAliasPackage: "@openai/codex-darwin-arm64",
@@ -109,11 +114,21 @@ export const AGENT_CLI_TARGETS: readonly AgentCliTarget[] = [
   },
   {
     runtimeKey: "darwin-x64",
+    fileFormat: "Mach-O 64-bit executable",
     fileArch: "x86_64",
     agentBrowserEntry: "bin/agent-browser-darwin-x64",
     codexAliasPackage: "@openai/codex-darwin-x64",
     codexTriple: "x86_64-apple-darwin",
     claudePackageName: "@anthropic-ai/claude-agent-sdk-darwin-x64",
+  },
+  {
+    runtimeKey: "linux-x64",
+    fileFormat: "ELF 64-bit",
+    fileArch: "x86-64",
+    agentBrowserEntry: "bin/agent-browser-linux-x64",
+    codexAliasPackage: "@openai/codex-linux-x64",
+    codexTriple: "x86_64-unknown-linux-musl",
+    claudePackageName: "@anthropic-ai/claude-agent-sdk-linux-x64",
   },
 ] as const;
 
@@ -318,8 +333,9 @@ function hashFile(filePath: string): string {
 }
 
 function shouldVerifyRuntimeKey(runtimeKey: string): boolean {
-  if (process.platform !== "darwin") return false;
-  return runtimeKey === `darwin-${process.arch}`;
+  if (process.platform === "darwin") return runtimeKey === `darwin-${process.arch}`;
+  if (process.platform === "linux" && process.arch === "x64") return runtimeKey === "linux-x64";
+  return false;
 }
 
 function spawnErrorCode(error: Error | undefined): string {
@@ -565,13 +581,14 @@ function inspectStaticExecutable(
   projectRoot: string,
   filePath: string,
   label: string,
+  fileFormat: string,
   fileArch: string
 ): { sha256: string; size: number; fileOutput: string } {
   assertExecutable(filePath, label);
   return {
     sha256: hashFile(filePath),
     size: statSync(filePath).size,
-    fileOutput: getMachOArchOutput(projectRoot, filePath, label, fileArch),
+    fileOutput: getExecutableFileOutput(projectRoot, filePath, label, fileFormat, fileArch),
   };
 }
 
@@ -633,12 +650,14 @@ export async function prepareAgentClis(
         projectRoot,
         stagedCodex,
         `${target.runtimeKey}/codex`,
+        target.fileFormat,
         target.fileArch
       );
       const rgInspection = inspectStaticExecutable(
         projectRoot,
         stagedRg,
         `${target.runtimeKey}/rg`,
+        target.fileFormat,
         target.fileArch
       );
 
@@ -687,6 +706,7 @@ export async function prepareAgentClis(
         projectRoot,
         stagedClaude,
         `${target.runtimeKey}/claude`,
+        target.fileFormat,
         target.fileArch
       );
 
@@ -738,6 +758,7 @@ export async function prepareAgentClis(
         projectRoot,
         stagedAgentBrowser,
         `${target.runtimeKey}/agent-browser`,
+        target.fileFormat,
         target.fileArch
       );
 
@@ -786,10 +807,11 @@ function assertExecutable(filePath: string, label: string): void {
   }
 }
 
-function getMachOArchOutput(
+function getExecutableFileOutput(
   projectRoot: string,
   filePath: string,
   label: string,
+  fileFormat: string,
   fileArch: string
 ): string {
   const fileOutput = execFileSync("file", [relativeFromProjectRoot(projectRoot, filePath)], {
@@ -798,7 +820,7 @@ function getMachOArchOutput(
     timeout: VERIFY_TIMEOUT_MS,
     stdio: ["ignore", "pipe", "pipe"],
   }).trim();
-  if (!fileOutput.includes("Mach-O 64-bit executable") || !fileOutput.includes(fileArch)) {
+  if (!fileOutput.includes(fileFormat) || !fileOutput.includes(fileArch)) {
     throw new Error(`Unexpected ${label} architecture: ${fileOutput}`);
   }
   return fileOutput;
@@ -835,6 +857,7 @@ export function validateStagedAgentClis(
         projectRoot,
         executablePath,
         `${runtimeKey}/${tool}`,
+        target.fileFormat,
         target.fileArch
       );
       assertManifestEntry(

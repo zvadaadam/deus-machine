@@ -28,7 +28,9 @@ const GH_VERSION = ghContract.ghVersion;
 const GH_RELEASE_BASE_URL = `https://github.com/cli/cli/releases/download/v${GH_VERSION}`;
 const TARGETS = ghContract.targets.map((target) => ({
   ...target,
-  archiveName: `gh_${GH_VERSION}_${target.archivePlatform}.zip`,
+  archiveExtension: target.archiveExtension || "zip",
+  fileFormat: target.fileFormat || "Mach-O 64-bit executable",
+  archiveName: `gh_${GH_VERSION}_${target.archivePlatform}.${target.archiveExtension || "zip"}`,
   archiveRoot: `gh_${GH_VERSION}_${target.archivePlatform}`,
   sha256: target.archiveSha256,
 }));
@@ -61,7 +63,7 @@ function clearMacExtendedAttributes(filePath) {
 }
 
 function verifyGhBinary(filePath, runtimeKey) {
-  if (process.platform !== "darwin") return;
+  if (process.platform !== "darwin" || !runtimeKey.startsWith("darwin-")) return;
   execFileSync("codesign", ["--verify", "--verbose=2", filePath], {
     timeout: VERIFY_TIMEOUT_MS,
     stdio: ["ignore", "ignore", "pipe"],
@@ -76,7 +78,7 @@ function inspectGhBinary(filePath, target) {
     timeout: VERIFY_TIMEOUT_MS,
     stdio: ["ignore", "pipe", "pipe"],
   }).trim();
-  if (!fileOutput.includes("Mach-O 64-bit executable") || !fileOutput.includes(target.fileArch)) {
+  if (!fileOutput.includes(target.fileFormat) || !fileOutput.includes(target.fileArch)) {
     throw new Error(`Unexpected gh architecture for ${target.runtimeKey}: ${fileOutput}`);
   }
 
@@ -133,9 +135,17 @@ function stageGhBinary(target, archivePath) {
 
   const tempDir = mkdtempSync(join(tmpdir(), "deus-gh-"));
   try {
-    execFileSync("unzip", ["-q", "-o", archivePath, "-d", tempDir], {
-      stdio: ["ignore", "pipe", "pipe"],
-    });
+    if (target.archiveExtension === "zip") {
+      execFileSync("unzip", ["-q", "-o", archivePath, "-d", tempDir], {
+        stdio: ["ignore", "pipe", "pipe"],
+      });
+    } else if (target.archiveExtension === "tar.gz") {
+      execFileSync("tar", ["-xzf", archivePath, "-C", tempDir], {
+        stdio: ["ignore", "pipe", "pipe"],
+      });
+    } else {
+      throw new Error(`Unsupported gh archive extension: ${target.archiveExtension}`);
+    }
 
     const sourcePath = join(tempDir, target.archiveRoot, "bin", "gh");
     if (!existsSync(sourcePath)) {

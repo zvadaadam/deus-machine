@@ -59,13 +59,21 @@ const VERSION_CHECK_ENV_DENYLIST = [
 export const DEUS_RUNTIME_TARGETS = [
   {
     runtimeKey: "darwin-arm64",
+    platform: "darwin",
     bunTarget: "bun-darwin-arm64",
     fileArch: "arm64",
   },
   {
     runtimeKey: "darwin-x64",
+    platform: "darwin",
     bunTarget: "bun-darwin-x64",
     fileArch: "x86_64",
+  },
+  {
+    runtimeKey: "linux-x64",
+    platform: "linux",
+    bunTarget: "bun-linux-x64",
+    fileArch: "x86-64",
   },
 ] as const;
 
@@ -78,7 +86,7 @@ interface RuntimeManifestEntry {
   sha256: string;
   size: number;
   fileOutput: string;
-  otoolOutput: string;
+  otoolOutput?: string;
   versionOutput?: string;
 }
 
@@ -137,11 +145,18 @@ function getHostRuntimeKey(): string | null {
   if (process.platform === "darwin" && (process.arch === "arm64" || process.arch === "x64")) {
     return `darwin-${process.arch}`;
   }
+  if (process.platform === "linux" && process.arch === "x64") {
+    return "linux-x64";
+  }
   return null;
 }
 
 function shouldVerifyRuntimeKey(runtimeKey: string): boolean {
   return getHostRuntimeKey() === runtimeKey;
+}
+
+function canInspectMacBinary(target: DeusRuntimeTarget): boolean {
+  return target.platform === "darwin" && process.platform === "darwin";
 }
 
 function execOutput(command: string, args: string[], cwd: string): string {
@@ -264,7 +279,9 @@ function assertExecutable(filePath: string, label: string): void {
 }
 
 function assertFileArch(fileOutput: string, target: DeusRuntimeTarget, filePath: string): void {
-  if (!fileOutput.includes("Mach-O 64-bit executable") || !fileOutput.includes(target.fileArch)) {
+  const expectedFormat =
+    target.platform === "darwin" ? "Mach-O 64-bit executable" : "ELF 64-bit";
+  if (!fileOutput.includes(expectedFormat) || !fileOutput.includes(target.fileArch)) {
     throw new Error(`Unexpected file(1) output for ${filePath}: ${fileOutput}`);
   }
 }
@@ -418,6 +435,8 @@ export function buildDeusRuntime(options: BuildDeusRuntimeOptions = {}): DeusRun
         "@napi-rs/canvas-darwin-arm64",
         "--external",
         "@napi-rs/canvas-darwin-x64",
+        "--external",
+        "@napi-rs/canvas-linux-x64-gnu",
       ],
       {
         cwd: projectRoot,
@@ -430,15 +449,20 @@ export function buildDeusRuntime(options: BuildDeusRuntimeOptions = {}): DeusRun
     }
 
     chmodSync(output, 0o755);
-    signMacExecutable(output, projectRoot);
+    if (canInspectMacBinary(target)) signMacExecutable(output, projectRoot);
     const manifestCommandPath = relativeFromProjectRoot(projectRoot, output);
     const fileOutput = execOutput("file", [manifestCommandPath], projectRoot);
     assertFileArch(fileOutput, target, output);
-    const otoolOutput = execOutput("otool", ["-L", manifestCommandPath], projectRoot);
-    verifyMacSystemDylibs(otoolOutput, output);
-    verifyMacCodeSignature(output);
-    verifyMacCodeSignaturePageSize(output);
-    verifyMacRuntimeEntitlements(output);
+    const otoolOutput =
+      canInspectMacBinary(target)
+        ? execOutput("otool", ["-L", manifestCommandPath], projectRoot)
+        : undefined;
+    if (otoolOutput) verifyMacSystemDylibs(otoolOutput, output);
+    if (canInspectMacBinary(target)) {
+      verifyMacCodeSignature(output);
+      verifyMacCodeSignaturePageSize(output);
+      verifyMacRuntimeEntitlements(output);
+    }
 
     const entryRecord: RuntimeManifestEntry = {
       runtimeKey: target.runtimeKey,
@@ -447,7 +471,7 @@ export function buildDeusRuntime(options: BuildDeusRuntimeOptions = {}): DeusRun
       sha256: hashFile(output),
       size: statSync(output).size,
       fileOutput,
-      otoolOutput,
+      ...(otoolOutput ? { otoolOutput } : {}),
     };
 
     log(`✓ ${target.runtimeKey}/deus-runtime ${fileOutput}`);
@@ -559,8 +583,11 @@ export function validateDeusRuntime(options: ValidateDeusRuntimeOptions = {}): D
     const manifestCommandPath = relativeFromProjectRoot(projectRoot, executablePath);
     const fileOutput = execOutput("file", [manifestCommandPath], projectRoot);
     assertFileArch(fileOutput, target, executablePath);
-    const otoolOutput = execOutput("otool", ["-L", manifestCommandPath], projectRoot);
-    verifyMacSystemDylibs(otoolOutput, executablePath);
+    const otoolOutput =
+      canInspectMacBinary(target)
+        ? execOutput("otool", ["-L", manifestCommandPath], projectRoot)
+        : undefined;
+    if (otoolOutput) verifyMacSystemDylibs(otoolOutput, executablePath);
     if (manifestEntry.size !== statSync(executablePath).size) {
       throw new Error(`Native runtime manifest size mismatch for ${runtimeKey}`);
     }
@@ -570,9 +597,11 @@ export function validateDeusRuntime(options: ValidateDeusRuntimeOptions = {}): D
     if (manifestEntry.otoolOutput !== otoolOutput) {
       throw new Error(`Native runtime manifest otool output mismatch for ${runtimeKey}`);
     }
-    verifyMacCodeSignature(executablePath);
-    verifyMacCodeSignaturePageSize(executablePath);
-    verifyMacRuntimeEntitlements(executablePath);
+    if (canInspectMacBinary(target)) {
+      verifyMacCodeSignature(executablePath);
+      verifyMacCodeSignaturePageSize(executablePath);
+      verifyMacRuntimeEntitlements(executablePath);
+    }
 
     if (options.verifyRunnable === true && shouldVerifyRuntimeKey(runtimeKey)) {
       const version = verifyStagedDeusRuntimeVersion(executablePath);

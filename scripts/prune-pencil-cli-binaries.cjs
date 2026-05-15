@@ -13,6 +13,16 @@ const FILE_ARCH_BY_TARGET_ARCH = new Map([
   ["x64", "x86_64"],
   ["arm64", "arm64"],
 ]);
+const FILE_ARCH_BY_RUNTIME_KEY = new Map([
+  ["darwin-x64", "x86_64"],
+  ["darwin-arm64", "arm64"],
+  ["linux-x64", "x86-64"],
+]);
+const FILE_FORMAT_BY_RUNTIME_KEY = new Map([
+  ["darwin-x64", "Mach-O 64-bit"],
+  ["darwin-arm64", "Mach-O 64-bit"],
+  ["linux-x64", "ELF 64-bit"],
+]);
 const PACKAGED_SYSTEM_PATHS = ["/usr/bin", "/bin", "/usr/sbin", "/sbin"];
 const REQUIRED_RUNTIME_ENTITLEMENTS = [
   "com.apple.security.cs.allow-jit",
@@ -30,6 +40,12 @@ function platformSegment(electronPlatformName) {
   if (electronPlatformName === "linux") return "linux";
   if (electronPlatformName === "win32") return "windows";
   return null;
+}
+
+function runtimeKeyForContext(context) {
+  const arch = ARCH_BY_BUILDER_VALUE.get(context.arch);
+  if (!context.electronPlatformName || !arch) return null;
+  return `${context.electronPlatformName}-${arch}`;
 }
 
 function binaryNamesForTarget(electronPlatformName, archValue) {
@@ -115,10 +131,13 @@ function prunePencilCliBinaries(context) {
 }
 
 function pruneNodePtyRuntimeBinaries(context) {
-  if (context.electronPlatformName !== "darwin") return { removed: 0, kept: 0 };
+  if (context.electronPlatformName !== "darwin" && context.electronPlatformName !== "linux") {
+    return { removed: 0, kept: 0 };
+  }
 
   const targetArch = ARCH_BY_BUILDER_VALUE.get(context.arch);
   if (!targetArch) return { removed: 0, kept: 0 };
+  const targetPrebuild = `${context.electronPlatformName}-${targetArch}`;
 
   const resourcesDir = context.resourcesDir ?? resourcesDirForContext(context);
   const nodePtyRoot = path.join(resourcesDir, "app.asar.unpacked", "node_modules", "node-pty");
@@ -137,7 +156,7 @@ function pruneNodePtyRuntimeBinaries(context) {
     for (const entry of fs.readdirSync(prebuildsDir, { withFileTypes: true })) {
       if (!entry.isDirectory()) continue;
       const entryPath = path.join(prebuildsDir, entry.name);
-      if (entry.name === `darwin-${targetArch}`) {
+      if (entry.name === targetPrebuild) {
         kept++;
         continue;
       }
@@ -148,14 +167,16 @@ function pruneNodePtyRuntimeBinaries(context) {
 
   if (removed > 0 || kept > 0) {
     console.log(
-      `[runtime] kept node-pty prebuild darwin-${targetArch}; removed ${removed} non-runtime node-pty native dirs`
+      `[runtime] kept node-pty prebuild ${targetPrebuild}; removed ${removed} non-runtime node-pty native dirs`
     );
   }
   return { removed, kept };
 }
 
 function pruneCanvasRuntimeBinaries(context) {
-  if (context.electronPlatformName !== "darwin") return { removed: 0, kept: 0 };
+  if (context.electronPlatformName !== "darwin" && context.electronPlatformName !== "linux") {
+    return { removed: 0, kept: 0 };
+  }
 
   const targetArch = ARCH_BY_BUILDER_VALUE.get(context.arch);
   if (!targetArch) return { removed: 0, kept: 0 };
@@ -164,7 +185,10 @@ function pruneCanvasRuntimeBinaries(context) {
   const napiRsRoot = path.join(resourcesDir, "app.asar.unpacked", "node_modules", "@napi-rs");
   if (!fs.existsSync(napiRsRoot)) return { removed: 0, kept: 0 };
 
-  const targetPackageName = `canvas-darwin-${targetArch}`;
+  const targetPackageName =
+    context.electronPlatformName === "linux"
+      ? `canvas-linux-${targetArch}-gnu`
+      : `canvas-darwin-${targetArch}`;
   let removed = 0;
   let kept = 0;
   for (const entry of fs.readdirSync(napiRsRoot, { withFileTypes: true })) {
@@ -194,7 +218,7 @@ function fileArch(filePath) {
   });
   const description = output.includes(":") ? output.slice(output.indexOf(":") + 1) : output;
   if (/\barm64\b/.test(description)) return "arm64";
-  if (/\bx86_64\b/.test(description)) return "x64";
+  if (/\bx86[_-]64\b/.test(description)) return "x64";
   return null;
 }
 
@@ -221,7 +245,7 @@ function installBetterSqlitePrebuild(packageRoot, targetArch) {
       "--arch",
       targetArch,
       "--platform",
-      "darwin",
+      process.env.DEUS_BETTER_SQLITE_PREBUILD_PLATFORM || process.platform,
     ],
     {
       cwd: packageRoot,
@@ -233,20 +257,22 @@ function installBetterSqlitePrebuild(packageRoot, targetArch) {
   const output = `${result.stdout || ""}${result.stderr || ""}`.trim();
   if (result.error) {
     throw new Error(
-      `Failed to install packaged better-sqlite3 darwin-${targetArch} prebuild: ${
+      `Failed to install packaged better-sqlite3 ${process.platform}-${targetArch} prebuild: ${
         result.error.code || result.error.message
       }${output ? `\n${output}` : ""}`
     );
   }
   if (result.status !== 0) {
     throw new Error(
-      `Failed to install packaged better-sqlite3 darwin-${targetArch} prebuild: ${output}`
+      `Failed to install packaged better-sqlite3 ${process.platform}-${targetArch} prebuild: ${output}`
     );
   }
 }
 
 function prepareBetterSqliteRuntimeBinding(context) {
-  if (context.electronPlatformName !== "darwin") return { updated: false };
+  if (context.electronPlatformName !== "darwin" && context.electronPlatformName !== "linux") {
+    return { updated: false };
+  }
 
   const targetArch = ARCH_BY_BUILDER_VALUE.get(context.arch);
   if (!targetArch) return { updated: false };
@@ -264,10 +290,17 @@ function prepareBetterSqliteRuntimeBinding(context) {
     return { updated: false };
   }
 
-  console.log(`[runtime] installing better-sqlite3 prebuild for darwin-${targetArch}`);
-  installBetterSqlitePrebuild(packageRoot, targetArch);
+  console.log(`[runtime] installing better-sqlite3 prebuild for ${context.electronPlatformName}-${targetArch}`);
+  const previousPlatform = process.env.DEUS_BETTER_SQLITE_PREBUILD_PLATFORM;
+  process.env.DEUS_BETTER_SQLITE_PREBUILD_PLATFORM = context.electronPlatformName;
+  try {
+    installBetterSqlitePrebuild(packageRoot, targetArch);
+  } finally {
+    if (previousPlatform === undefined) delete process.env.DEUS_BETTER_SQLITE_PREBUILD_PLATFORM;
+    else process.env.DEUS_BETTER_SQLITE_PREBUILD_PLATFORM = previousPlatform;
+  }
   if (!fs.existsSync(nativeBinding) || fileArch(nativeBinding) !== targetArch) {
-    throw new Error(`better-sqlite3 prebuild did not produce darwin-${targetArch} binding`);
+    throw new Error(`better-sqlite3 prebuild did not produce ${context.electronPlatformName}-${targetArch} binding`);
   }
   return { updated: true };
 }
@@ -315,6 +348,23 @@ function verifyMachO64Arch(filePath, label, expectedFileArch) {
     (expectedFileArch && !fileOutput.includes(expectedFileArch))
   ) {
     throw new Error(`Packaged ${label} has unexpected architecture: ${fileOutput}`);
+  }
+  console.log(`[runtime] packaged ${label}: ${fileOutput}`);
+}
+
+function verifyExecutableFileFormat(filePath, label, expectedFileFormat, expectedFileArch) {
+  const fileOutput = require("node:child_process")
+    .execFileSync("file", [filePath], {
+      encoding: "utf8",
+      timeout: 20_000,
+      stdio: ["ignore", "pipe", "pipe"],
+    })
+    .trim();
+  if (
+    !fileOutput.includes(expectedFileFormat) ||
+    (expectedFileArch && !fileOutput.includes(expectedFileArch))
+  ) {
+    throw new Error(`Packaged ${label} has unexpected file type: ${fileOutput}`);
   }
   console.log(`[runtime] packaged ${label}: ${fileOutput}`);
 }
@@ -430,6 +480,84 @@ function hashFile(filePath) {
   return crypto.createHash("sha256").update(fs.readFileSync(filePath)).digest("hex");
 }
 
+function escapeRegExp(value) {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+function parsePackageSpec(spec) {
+  const separator = spec.lastIndexOf("@");
+  if (separator <= 0) throw new Error(`Unexpected package spec in bun.lock: ${spec}`);
+  return {
+    packageName: spec.slice(0, separator),
+    version: spec.slice(separator + 1),
+  };
+}
+
+function readLockedPackage(lockKey) {
+  const lockPath = path.join(PROJECT_ROOT, "bun.lock");
+  const lockText = fs.readFileSync(lockPath, "utf8");
+  const entryPattern = new RegExp(
+    `^\\s+"${escapeRegExp(lockKey)}": \\["([^"]+)".*"((?:sha\\d+-)[^"]+)"\\],?$`,
+    "m"
+  );
+  const match = lockText.match(entryPattern);
+  if (!match) throw new Error(`Missing ${lockKey} in ${lockPath}`);
+  return {
+    ...parsePackageSpec(match[1]),
+    integrity: match[2],
+  };
+}
+
+function packageTarballUrl(packageName, version) {
+  const packageBase = packageName.split("/").pop();
+  if (!packageBase) throw new Error(`Invalid package name: ${packageName}`);
+  return `https://registry.npmjs.org/${packageName}/-/${packageBase}-${version}.tgz`;
+}
+
+function verifyIntegrity(filePath, integrity, url) {
+  const [algorithm, expected] = integrity.split("-");
+  if (!algorithm || !expected) throw new Error(`Unsupported integrity string for ${url}: ${integrity}`);
+  const actual = crypto.createHash(algorithm).update(fs.readFileSync(filePath)).digest("base64");
+  if (actual !== expected) throw new Error(`Integrity mismatch for ${url}: expected ${integrity}`);
+}
+
+function ensureCanvasRuntimePackage(context) {
+  if (context.electronPlatformName !== "darwin" && context.electronPlatformName !== "linux") {
+    return { installed: false };
+  }
+  const targetArch = ARCH_BY_BUILDER_VALUE.get(context.arch);
+  if (!targetArch) return { installed: false };
+  const packageName =
+    context.electronPlatformName === "linux"
+      ? `@napi-rs/canvas-linux-${targetArch}-gnu`
+      : `@napi-rs/canvas-darwin-${targetArch}`;
+  const resourcesDir = context.resourcesDir ?? resourcesDirForContext(context);
+  const packageRoot = path.join(
+    resourcesDir,
+    "app.asar.unpacked",
+    "node_modules",
+    ...packageName.split("/")
+  );
+  if (fs.existsSync(path.join(packageRoot, "package.json"))) return { installed: false };
+
+  const lockedPackage = readLockedPackage(packageName);
+  const url = packageTarballUrl(lockedPackage.packageName, lockedPackage.version);
+  const tempRoot = fs.mkdtempSync(path.join(require("node:os").tmpdir(), "deus-canvas-"));
+  const tarballPath = path.join(tempRoot, "package.tgz");
+  try {
+    console.log(`[runtime] installing missing ${packageName} from lockfile`);
+    execFileSync("curl", ["-fsSL", url, "-o", tarballPath], { stdio: ["ignore", "pipe", "pipe"] });
+    verifyIntegrity(tarballPath, lockedPackage.integrity, url);
+    execFileSync("tar", ["-xzf", tarballPath, "-C", tempRoot], { stdio: ["ignore", "pipe", "pipe"] });
+    fs.rmSync(packageRoot, { recursive: true, force: true });
+    fs.mkdirSync(path.dirname(packageRoot), { recursive: true });
+    fs.cpSync(path.join(tempRoot, "package"), packageRoot, { recursive: true });
+    return { installed: true };
+  } finally {
+    fs.rmSync(tempRoot, { recursive: true, force: true });
+  }
+}
+
 function verifyManifestFileEntry(entry, filePath, label, options = {}) {
   assertExecutable(filePath, label);
   if (!entry || typeof entry !== "object") {
@@ -444,8 +572,12 @@ function verifyManifestFileEntry(entry, filePath, label, options = {}) {
   }
 }
 
-function verifyPackagedRuntimeManifests(binDir, targetArch, options = {}) {
-  const runtimeKey = targetArch ? `darwin-${targetArch}` : null;
+function verifyPackagedRuntimeManifests(binDir, targetArchOrRuntimeKey, options = {}) {
+  const runtimeKey = targetArchOrRuntimeKey
+    ? String(targetArchOrRuntimeKey).includes("-")
+      ? String(targetArchOrRuntimeKey)
+      : `darwin-${targetArchOrRuntimeKey}`
+    : null;
   const runtimeManifest = readJsonFile(
     path.join(binDir, "deus-runtime.json"),
     "Deus runtime manifest"
@@ -496,7 +628,7 @@ function verifyPackagedRuntimeManifests(binDir, targetArch, options = {}) {
   console.log("[runtime] packaged runtime manifests verified");
 }
 
-function verifyPackagedRuntimeExternalModules(resourcesDir, targetArch, options = {}) {
+function verifyPackagedRuntimeExternalModules(resourcesDir, targetArchOrRuntimeKey, options = {}) {
   const unpackedNodeModules = path.join(resourcesDir, "app.asar.unpacked", "node_modules");
   const requiredFiles = [
     ["better-sqlite3 package", path.join(unpackedNodeModules, "better-sqlite3", "package.json")],
@@ -507,9 +639,16 @@ function verifyPackagedRuntimeExternalModules(resourcesDir, targetArch, options 
     ],
   ];
   const nativePayloads = [];
-  const expectedFileArch = targetArch ? FILE_ARCH_BY_TARGET_ARCH.get(targetArch) : undefined;
+  const runtimeKey = targetArchOrRuntimeKey
+    ? String(targetArchOrRuntimeKey).includes("-")
+      ? String(targetArchOrRuntimeKey)
+      : `darwin-${targetArchOrRuntimeKey}`
+    : null;
+  const [targetPlatform, targetArch] = runtimeKey ? runtimeKey.split("-") : [];
+  const expectedFileArch = runtimeKey ? FILE_ARCH_BY_RUNTIME_KEY.get(runtimeKey) : undefined;
+  const expectedFileFormat = runtimeKey ? FILE_FORMAT_BY_RUNTIME_KEY.get(runtimeKey) : undefined;
 
-  if (targetArch) {
+  if (runtimeKey && targetPlatform && targetArch) {
     const betterSqliteNative = path.join(
       unpackedNodeModules,
       "better-sqlite3",
@@ -519,39 +658,32 @@ function verifyPackagedRuntimeExternalModules(resourcesDir, targetArch, options 
     );
     const nodePtyPackageRoot = path.join(unpackedNodeModules, "node-pty");
     const nodePtyPrebuildFiles = [
-      path.join(nodePtyPackageRoot, "prebuilds", `darwin-${targetArch}`, "pty.node"),
-      path.join(nodePtyPackageRoot, "prebuilds", `darwin-${targetArch}`, "spawn-helper"),
+      path.join(nodePtyPackageRoot, "prebuilds", runtimeKey, "pty.node"),
+      path.join(nodePtyPackageRoot, "prebuilds", runtimeKey, "spawn-helper"),
     ];
     requiredFiles.push([
-      `better-sqlite3 native binding for darwin-${targetArch}`,
+      `better-sqlite3 native binding for ${runtimeKey}`,
       betterSqliteNative,
     ]);
+    const canvasNativePackage =
+      targetPlatform === "linux" ? `canvas-linux-${targetArch}-gnu` : `canvas-darwin-${targetArch}`;
+    const canvasNativeFile =
+      targetPlatform === "linux"
+        ? `skia.linux-${targetArch}-gnu.node`
+        : `skia.darwin-${targetArch}.node`;
     requiredFiles.push([
-      `@napi-rs/canvas native package for darwin-${targetArch}`,
-      path.join(unpackedNodeModules, "@napi-rs", `canvas-darwin-${targetArch}`, "package.json"),
+      `@napi-rs/canvas native package for ${runtimeKey}`,
+      path.join(unpackedNodeModules, "@napi-rs", canvasNativePackage, "package.json"),
     ]);
     requiredFiles.push([
-      `@napi-rs/canvas native binding for darwin-${targetArch}`,
-      path.join(
-        unpackedNodeModules,
-        "@napi-rs",
-        `canvas-darwin-${targetArch}`,
-        `skia.darwin-${targetArch}.node`
-      ),
+      `@napi-rs/canvas native binding for ${runtimeKey}`,
+      path.join(unpackedNodeModules, "@napi-rs", canvasNativePackage, canvasNativeFile),
     ]);
     nativePayloads.push(
-      [`better-sqlite3 native binding for darwin-${targetArch}`, betterSqliteNative],
-      [`node-pty native binding for darwin-${targetArch}`, nodePtyPrebuildFiles[0]],
-      [`node-pty spawn helper for darwin-${targetArch}`, nodePtyPrebuildFiles[1]],
-      [
-        `@napi-rs/canvas native binding for darwin-${targetArch}`,
-        path.join(
-          unpackedNodeModules,
-          "@napi-rs",
-          `canvas-darwin-${targetArch}`,
-          `skia.darwin-${targetArch}.node`
-        ),
-      ]
+      [`better-sqlite3 native binding for ${runtimeKey}`, betterSqliteNative],
+      [`node-pty native binding for ${runtimeKey}`, nodePtyPrebuildFiles[0]],
+      [`node-pty spawn helper for ${runtimeKey}`, nodePtyPrebuildFiles[1]],
+      [`@napi-rs/canvas native binding for ${runtimeKey}`, path.join(unpackedNodeModules, "@napi-rs", canvasNativePackage, canvasNativeFile)]
     );
 
     const hasNodePtyPrebuild = nodePtyPrebuildFiles.every((filePath) => fs.existsSync(filePath));
@@ -564,13 +696,13 @@ function verifyPackagedRuntimeExternalModules(resourcesDir, targetArch, options 
     }
     if (!hasNodePtyPrebuild) {
       throw new Error(
-        `Missing unpacked runtime external module node-pty prebuild files for darwin-${targetArch}: ` +
+        `Missing unpacked runtime external module node-pty prebuild files for ${runtimeKey}: ` +
           `${nodePtyPrebuildFiles.join(", ")}. Bun-compiled deus-runtime cannot rely on Electron app.asar module resolution.`
       );
     }
 
     const napiRsRoot = path.join(unpackedNodeModules, "@napi-rs");
-    const expectedCanvasPackage = `canvas-darwin-${targetArch}`;
+    const expectedCanvasPackage = canvasNativePackage;
     const staleCanvasPackages = fs.existsSync(napiRsRoot)
       ? fs
           .readdirSync(napiRsRoot, { withFileTypes: true })
@@ -582,7 +714,7 @@ function verifyPackagedRuntimeExternalModules(resourcesDir, targetArch, options 
       throw new Error(
         `Packaged runtime still contains non-target @napi-rs/canvas native packages: ${staleCanvasPackages.join(
           ", "
-        )}. Keep only @napi-rs/${expectedCanvasPackage} for darwin-${targetArch}.`
+        )}. Keep only @napi-rs/${expectedCanvasPackage} for ${runtimeKey}.`
       );
     }
   }
@@ -598,9 +730,9 @@ function verifyPackagedRuntimeExternalModules(resourcesDir, targetArch, options 
 
   if (options.verifyNativePayloads !== false) {
     for (const [label, filePath] of nativePayloads) {
-      verifyMachO64Arch(filePath, label, expectedFileArch);
+      verifyExecutableFileFormat(filePath, label, expectedFileFormat || "Mach-O 64-bit", expectedFileArch);
       if (options.verifyNativePayloadSignatures !== false) {
-        verifyCodeSignature(filePath, label);
+        if (runtimeKey?.startsWith("darwin-")) verifyCodeSignature(filePath, label);
       }
     }
   }
@@ -801,16 +933,17 @@ async function runPackagedVersionCheck(label, executablePath, binDir) {
 }
 
 async function verifyPackagedAgentClis(context, options = {}) {
-  if (context.electronPlatformName !== "darwin") return;
+  if (context.electronPlatformName !== "darwin" && context.electronPlatformName !== "linux") return;
 
   const resourcesDir = context.resourcesDir ?? resourcesDirForContext(context);
   const binDir = path.join(resourcesDir, "bin");
-  const targetArch = ARCH_BY_BUILDER_VALUE.get(context.arch);
-  const expectedFileArch = targetArch ? FILE_ARCH_BY_TARGET_ARCH.get(targetArch) : undefined;
-  verifyPackagedRuntimeManifests(binDir, targetArch, {
+  const runtimeKey = runtimeKeyForContext(context);
+  const expectedFileArch = runtimeKey ? FILE_ARCH_BY_RUNTIME_KEY.get(runtimeKey) : undefined;
+  const expectedFileFormat = runtimeKey ? FILE_FORMAT_BY_RUNTIME_KEY.get(runtimeKey) : undefined;
+  verifyPackagedRuntimeManifests(binDir, runtimeKey, {
     verifyFileHashes: options.verifyManifestHashes,
   });
-  verifyPackagedRuntimeExternalModules(resourcesDir, targetArch, {
+  verifyPackagedRuntimeExternalModules(resourcesDir, runtimeKey, {
     verifyNativePayloadSignatures: options.verifyNativePayloadSignatures,
   });
   const packagedExecutables = [
@@ -824,20 +957,27 @@ async function verifyPackagedAgentClis(context, options = {}) {
 
   for (const [label, executablePath] of packagedExecutables) {
     assertExecutable(executablePath, label);
-    verifyMachOArch(executablePath, label, expectedFileArch);
-    if (options.verifyExecutableSignatures !== false) {
+    verifyExecutableFileFormat(executablePath, label, expectedFileFormat || "Mach-O 64-bit", expectedFileArch);
+    if (context.electronPlatformName === "darwin" && options.verifyExecutableSignatures !== false) {
       verifyCodeSignature(executablePath, label);
       if (label === "Deus runtime") {
         verifyCodeSignaturePageSize(executablePath, label);
       }
     }
-    if (label === "Deus runtime") {
+    if (label === "Deus runtime" && context.electronPlatformName === "darwin") {
       verifyRuntimeEntitlements(executablePath);
       verifyRuntimeSystemDylibs(executablePath);
     }
   }
 
-  if (options.runVersionChecks === false || (targetArch && targetArch !== process.arch)) return;
+  const targetArch = ARCH_BY_BUILDER_VALUE.get(context.arch);
+  if (
+    options.runVersionChecks === false ||
+    context.electronPlatformName !== process.platform ||
+    (targetArch && targetArch !== process.arch)
+  ) {
+    return;
+  }
 
   for (const [label, executablePath] of [
     ["Deus runtime", path.join(binDir, "deus-runtime")],
@@ -852,6 +992,7 @@ async function verifyPackagedAgentClis(context, options = {}) {
 
 module.exports = async function afterPack(context) {
   prunePencilCliBinaries(context);
+  ensureCanvasRuntimePackage(context);
   pruneNodePtyRuntimeBinaries(context);
   pruneCanvasRuntimeBinaries(context);
   prepareBetterSqliteRuntimeBinding(context);
@@ -864,6 +1005,7 @@ module.exports = async function afterPack(context) {
 };
 
 module.exports.prunePencilCliBinaries = prunePencilCliBinaries;
+module.exports.ensureCanvasRuntimePackage = ensureCanvasRuntimePackage;
 module.exports.pruneNodePtyRuntimeBinaries = pruneNodePtyRuntimeBinaries;
 module.exports.pruneCanvasRuntimeBinaries = pruneCanvasRuntimeBinaries;
 module.exports.prepareBetterSqliteRuntimeBinding = prepareBetterSqliteRuntimeBinding;
