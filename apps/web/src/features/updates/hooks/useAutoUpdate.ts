@@ -34,6 +34,44 @@ export interface UseAutoUpdateReturn {
 
 const CHECK_INTERVAL_MS = 5 * 60 * 1000; // 5 minutes
 const PENDING_VERSION_KEY = "pendingUpdateVersion";
+const UPDATE_STAGES = new Set<UpdateStage>(["idle", "checking", "downloading", "ready", "error"]);
+
+function isUpdateStage(stage: unknown): stage is UpdateStage {
+  return typeof stage === "string" && UPDATE_STAGES.has(stage as UpdateStage);
+}
+
+function stringField(value: unknown): string | undefined {
+  return typeof value === "string" ? value : undefined;
+}
+
+export function normalizeUpdateState(updateState: unknown): UpdateState {
+  if (!updateState || typeof updateState !== "object") {
+    return { stage: "idle" };
+  }
+
+  const payload = updateState as Record<string, unknown>;
+  if (!isUpdateStage(payload.stage)) {
+    return { stage: "idle" };
+  }
+
+  switch (payload.stage) {
+    case "idle":
+    case "checking":
+    case "downloading":
+      return { stage: payload.stage };
+    case "ready":
+      return {
+        stage: "ready",
+        version: stringField(payload.version),
+        releaseNotes: stringField(payload.releaseNotes),
+      };
+    case "error":
+      return {
+        stage: "error",
+        error: stringField(payload.error) ?? "Unknown update error",
+      };
+  }
+}
 
 export function useAutoUpdate(): UseAutoUpdateReturn {
   const [state, setState] = useState<UpdateState>({ stage: "idle" });
@@ -49,12 +87,7 @@ export function useAutoUpdate(): UseAutoUpdateReturn {
     if (!capabilities.autoUpdate) return;
 
     const unlisten = window.electronAPI!.onUpdateState((updateState: unknown) => {
-      const s = updateState as {
-        stage: UpdateStage;
-        version?: string;
-        releaseNotes?: string;
-        error?: string;
-      };
+      const s = normalizeUpdateState(updateState);
       if (s.stage === "ready" && s.version) {
         localStorage.setItem(PENDING_VERSION_KEY, s.version);
         isDownloadingRef.current = false;
