@@ -52,6 +52,11 @@ export interface Spawned {
   getStderr(): string;
 }
 
+interface SpawnCommand {
+  command: string;
+  args: string[];
+}
+
 /** Each "data" event is one chunk (a Buffer.toString()), not a line. The
  *  ring caps chunk count so we don't buffer megabytes of stdout from a
  *  chatty child while still preserving the most recent crash context. */
@@ -68,6 +73,7 @@ export function spawnApp(args: SpawnArgs): Spawned {
   const rawCwd = launch.cwd ? substituteTemplate(launch.cwd, vars) : packageRoot;
   const cwd = isAbsolute(rawCwd) ? rawCwd : resolvePath(packageRoot, rawCwd);
   const resolvedCommand = resolveCommand(launch.command, packageRoot);
+  const spawnCommand = resolveRuntimeNodeCommand(resolvedCommand, cmdArgs);
 
   const env = createBackendChildEnv({
     ...substituteEnv(launch.env, vars),
@@ -76,7 +82,7 @@ export function spawnApp(args: SpawnArgs): Spawned {
     DEUS_PORT: String(vars.port),
   });
 
-  const child = spawn(resolvedCommand, cmdArgs, {
+  const child = spawn(spawnCommand.command, spawnCommand.args, {
     cwd,
     env,
     stdio: ["ignore", "pipe", "pipe"],
@@ -317,6 +323,15 @@ export function resolveCommand(command: string, packageRoot: string): string {
   // (5) Let spawn() resolve via PATH; if absent there too, the "error"
   //     event fires with ENOENT and our onError handler surfaces it.
   return command;
+}
+
+export function resolveRuntimeNodeCommand(command: string, args: string[]): SpawnCommand {
+  const runtimeExecutable = process.env.DEUS_RUNTIME_EXECUTABLE;
+  if (command === "node" && process.env.DEUS_RUNTIME === "1" && runtimeExecutable) {
+    return { command: runtimeExecutable, args: ["node", ...args] };
+  }
+
+  return { command, args };
 }
 
 // ----------------------------------------------------------------------------
