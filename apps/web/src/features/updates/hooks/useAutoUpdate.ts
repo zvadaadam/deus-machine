@@ -160,15 +160,18 @@ export function useAutoUpdate(): UseAutoUpdateReturn {
   useEffect(() => {
     if (!capabilities.autoUpdate || import.meta.env.DEV) return;
 
+    const runCheck = () => void check().catch(console.error);
+
     // Initial check
-    void check().catch(console.error);
+    const initialCheck = setTimeout(runCheck, 0);
 
     // Periodic checks
-    const interval = setInterval(() => {
-      void check().catch(console.error);
-    }, CHECK_INTERVAL_MS);
+    const interval = setInterval(runCheck, CHECK_INTERVAL_MS);
 
-    return () => clearInterval(interval);
+    return () => {
+      clearTimeout(initialCheck);
+      clearInterval(interval);
+    };
   }, [check]);
 
   return { state, check, install };
