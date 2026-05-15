@@ -32,6 +32,7 @@ const REQUIRED_RUNTIME_ENTITLEMENTS = [
 const MAC_CODESIGN_PAGE_SIZE = "4096";
 const PACKAGED_VERSION_TIMEOUT_MS = 20_000;
 const PACKAGED_VERSION_STOP_TIMEOUT_MS = 5_000;
+const PACKAGE_RECOVERY_TIMEOUT_MS = 60_000;
 const PROJECT_ROOT = path.resolve(__dirname, "..");
 const PACKAGED_VERSION_ENV_ALLOWLIST = ["LANG", "LC_ALL", "LC_CTYPE", "TMPDIR", "TZ"];
 
@@ -546,9 +547,15 @@ function ensureCanvasRuntimePackage(context) {
   const tarballPath = path.join(tempRoot, "package.tgz");
   try {
     console.log(`[runtime] installing missing ${packageName} from lockfile`);
-    execFileSync("curl", ["-fsSL", url, "-o", tarballPath], { stdio: ["ignore", "pipe", "pipe"] });
+    execFileSync("curl", ["-fsSL", url, "-o", tarballPath], {
+      stdio: ["ignore", "pipe", "pipe"],
+      timeout: PACKAGE_RECOVERY_TIMEOUT_MS,
+    });
     verifyIntegrity(tarballPath, lockedPackage.integrity, url);
-    execFileSync("tar", ["-xzf", tarballPath, "-C", tempRoot], { stdio: ["ignore", "pipe", "pipe"] });
+    execFileSync("tar", ["-xzf", tarballPath, "-C", tempRoot], {
+      stdio: ["ignore", "pipe", "pipe"],
+      timeout: PACKAGE_RECOVERY_TIMEOUT_MS,
+    });
     fs.rmSync(packageRoot, { recursive: true, force: true });
     fs.mkdirSync(path.dirname(packageRoot), { recursive: true });
     fs.cpSync(path.join(tempRoot, "package"), packageRoot, { recursive: true });

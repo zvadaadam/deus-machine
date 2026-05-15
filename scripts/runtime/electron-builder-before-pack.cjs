@@ -215,7 +215,10 @@ function assertPackagedRuntimePlatform(context) {
 
   const supportedArches = SUPPORTED_PACKAGED_RUNTIME_KEYS.get(platformName);
   const arch = ARCH_BY_BUILDER_VALUE.get(context?.arch);
-  if (supportedArches && (!arch || supportedArches.has(arch))) return;
+  if (supportedArches) {
+    if (context?.arch == null) return;
+    if (arch && supportedArches.has(arch)) return;
+  }
 
   throw new Error(
     `Packaged Deus native runtime is staged for ${[...SUPPORTED_PACKAGED_RUNTIME_KEYS.entries()]
@@ -243,11 +246,11 @@ module.exports = function beforePack(context) {
   assertElectronBuildFresh(projectRoot);
   assertPackagedMainRuntimeContract(projectRoot);
 
+  const platformName = context.electronPlatformName || SUPPORTED_PACKAGED_RUNTIME_PLATFORM;
   const arch = ARCH_BY_BUILDER_VALUE.get(context.arch);
   if (!arch) {
-    throw new Error(`Unsupported macOS packaging architecture: ${String(context.arch)}`);
+    throw new Error(`Unsupported ${platformName} packaging architecture: ${String(context.arch)}`);
   }
-  const platformName = context.electronPlatformName || SUPPORTED_PACKAGED_RUNTIME_PLATFORM;
   const runtimeKey = `${platformName}-${arch}`;
   const binDir = path.join(projectRoot, "dist", "runtime", "electron", "bin", runtimeKey);
   const requiredBins = [

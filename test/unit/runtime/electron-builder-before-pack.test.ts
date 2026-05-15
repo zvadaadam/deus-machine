@@ -93,6 +93,12 @@ describe("electron-builder beforePack runtime guard", () => {
     ).not.toThrow();
   });
 
+  it("rejects unknown packaged architecture values for supported platforms", () => {
+    expect(() => assertPackagedRuntimePlatform({ electronPlatformName: "linux", arch: 99 })).toThrow(
+      /Refusing to build linux/
+    );
+  });
+
   it("rejects platforms without staged native runtime binaries", () => {
     expect(() => assertPackagedRuntimePlatform({ electronPlatformName: "win32" })).toThrow(
       /Refusing to build win32/
