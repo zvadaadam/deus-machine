@@ -62,7 +62,7 @@ export type GoalResumeRequest = z.infer<typeof GoalResumeRequestSchema>;
 
 export const GoalUpdateRequestSchema = z.object({
   sessionId: z.string().min(1),
-  status: z.enum(["complete", "budget_limited"]),
+  status: z.enum(["paused", "complete", "budget_limited"]),
   summary: z.string().optional(),
   spentTokens: z.number().int().nonnegative().optional(),
 });

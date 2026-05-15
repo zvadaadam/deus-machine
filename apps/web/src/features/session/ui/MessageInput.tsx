@@ -253,6 +253,7 @@ export function MessageInput({
   const modelId = selectedOption?.model ?? model;
   const isClaudeAgent = agentHarness === "claude";
   const supportsGoals = agentHarness === "codex-server";
+  const cancellableGoal = activeGoal?.status === "active" || activeGoal?.status === "paused";
 
   // Build combined message content from all staged sources.
   // See the big block-comment in the previous revision for ordering rationale
@@ -388,7 +389,7 @@ export function MessageInput({
   const showSetupNudge = !hasManifest && !hasMessages;
   const handleSetupEnvironment = () => onSend(GENERATE_HIVE_JSON);
   const handleGoalButton = () => {
-    if (activeGoal && supportsGoals) {
+    if (cancellableGoal && supportsGoals) {
       composer.setDraft("/goal cancel");
       return;
     }
@@ -535,7 +536,7 @@ export function MessageInput({
             {supportsGoals && (
               <Button
                 onClick={handleGoalButton}
-                title={activeGoal ? "Cancel goal" : "Start goal"}
+                title={cancellableGoal ? "Cancel goal" : "Start goal"}
                 variant="ghost"
                 size="sm"
                 className="text-text-muted hover:text-text-secondary rounded-lg px-2 active:not-disabled:scale-[0.97]"

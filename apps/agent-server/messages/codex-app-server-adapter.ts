@@ -10,7 +10,7 @@ import type {
   TokenUsage,
   ToolOutputContent,
 } from "@shared/messages";
-import { emptyTokenUsage } from "@shared/messages";
+import { addTokenUsage, emptyTokenUsage } from "@shared/messages";
 import { uuidv7 } from "@shared/lib/uuid";
 import type {
   CodexAppServerNotification,
@@ -54,6 +54,7 @@ class CodexAppServerTransformer implements EventTransformer<CodexAppServerNotifi
     { messageId: string; parentToolCallId: string; done: boolean }
   >();
   private readonly emittedAgentResultMessages = new Set<string>();
+  private readonly turnUsage = new Map<string, TokenUsage>();
   private currentThreadId: string | undefined;
   private totalUsage: TokenUsage = { ...emptyTokenUsage };
   private lastFinishReason: FinishReason | undefined;
@@ -86,7 +87,10 @@ class CodexAppServerTransformer implements EventTransformer<CodexAppServerNotifi
           emitted = this.handleTurnCompleted(notification.params.turn.status);
           break;
         case "thread/tokenUsage/updated":
-          emitted = this.handleTokenUsage(notification.params.tokenUsage);
+          emitted = this.handleTokenUsage(
+            notification.params.turnId,
+            notification.params.tokenUsage
+          );
           break;
         case "item/started":
           emitted = this.handleItemStarted(notification.params.item);
@@ -199,20 +203,17 @@ class CodexAppServerTransformer implements EventTransformer<CodexAppServerNotifi
     ];
   }
 
-  private handleTokenUsage(tokenUsage: CodexThreadTokenUsage): PartEvent[] {
+  private handleTokenUsage(turnId: string, tokenUsage: CodexThreadTokenUsage): PartEvent[] {
     const usage = tokenUsage.last;
-    this.totalUsage = {
-      input: this.totalUsage.input + usage.inputTokens,
-      output: this.totalUsage.output + usage.outputTokens,
-      reasoning:
-        usage.reasoningOutputTokens > 0
-          ? (this.totalUsage.reasoning ?? 0) + usage.reasoningOutputTokens
-          : this.totalUsage.reasoning,
-      cacheRead:
-        usage.cachedInputTokens > 0
-          ? (this.totalUsage.cacheRead ?? 0) + usage.cachedInputTokens
-          : this.totalUsage.cacheRead,
-    };
+    this.turnUsage.set(turnId, {
+      input: usage.inputTokens,
+      output: usage.outputTokens,
+      reasoning: usage.reasoningOutputTokens > 0 ? usage.reasoningOutputTokens : undefined,
+      cacheRead: usage.cachedInputTokens > 0 ? usage.cachedInputTokens : undefined,
+    });
+    this.totalUsage = Array.from(this.turnUsage.values()).reduce<TokenUsage>(addTokenUsage, {
+      ...emptyTokenUsage,
+    });
     return [];
   }
 

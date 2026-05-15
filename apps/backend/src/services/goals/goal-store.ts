@@ -119,12 +119,26 @@ export function pauseAllActiveGoals(): number {
   return result.changes;
 }
 
-export function pauseGoal(sessionId: string): StoredGoal | null {
+export function pauseGoal(
+  sessionId: string,
+  options?: { spentTokens?: number }
+): StoredGoal | null {
+  const spentTokens =
+    typeof options?.spentTokens === "number" && Number.isFinite(options.spentTokens)
+      ? Math.max(0, Math.floor(options.spentTokens))
+      : null;
   const result = getDatabase()
     .prepare(
-      "UPDATE goals SET status = 'paused', updated_at = datetime('now') WHERE session_id = ? AND status = 'active'"
+      `
+        UPDATE goals
+        SET
+          status = 'paused',
+          spent_tokens = MAX(spent_tokens, COALESCE(?, spent_tokens)),
+          updated_at = datetime('now')
+        WHERE session_id = ? AND status = 'active'
+      `
     )
-    .run(sessionId);
+    .run(spentTokens, sessionId);
   if (result.changes === 0) return null;
   return getGoal(sessionId) ?? null;
 }

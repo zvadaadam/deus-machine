@@ -462,6 +462,10 @@ export function handleGoalStart(params: QueryParams): CommandResult {
 export async function handleGoalCancel(params: QueryParams): Promise<CommandResult> {
   const request = GoalCancelRequestSchema.parse(params);
   const goal = getGoal(request.sessionId);
+  if (goal?.status === "complete" || goal?.status === "budget_limited") {
+    return { success: true, goal: toActiveGoal(goal) };
+  }
+
   const ended = deleteGoal(request.sessionId, "cancelled");
   if (ended) {
     pushGoalEnded(ended);

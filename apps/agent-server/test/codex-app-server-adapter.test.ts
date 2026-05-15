@@ -47,6 +47,45 @@ describe("CodexAppServerAdapter", () => {
     expect(transformer.getParts()[0]).toMatchObject({ type: "TEXT", text: "Hello world" });
   });
 
+  it("uses the latest token usage update per turn instead of summing repeated updates", () => {
+    const transformer = codexAppServerAdapter.createTransformer(makeCtx());
+
+    transformer.process({
+      method: "thread/tokenUsage/updated",
+      params: {
+        threadId: "thread-1",
+        turnId: "turn-1",
+        tokenUsage: usage(10, 2, 1, 3),
+      },
+    });
+    transformer.process({
+      method: "thread/tokenUsage/updated",
+      params: {
+        threadId: "thread-1",
+        turnId: "turn-1",
+        tokenUsage: usage(20, 4, 2, 6),
+      },
+    });
+
+    const completed = transformer.process({
+      method: "turn/completed",
+      params: {
+        threadId: "thread-1",
+        turn: { id: "turn-1", status: "completed" },
+      },
+    });
+
+    expect(completed.find((event) => event.type === "turn.completed")).toMatchObject({
+      type: "turn.completed",
+      tokens: {
+        input: 20,
+        output: 4,
+        cacheRead: 2,
+        reasoning: 6,
+      },
+    });
+  });
+
   it("creates and completes command execution tool parts", () => {
     const transformer = codexAppServerAdapter.createTransformer(makeCtx());
 
@@ -330,3 +369,23 @@ describe("CodexAppServerAdapter", () => {
     expect(childPartDoneIndex).toBeLessThan(childMessageDoneIndex);
   });
 });
+
+function usage(inputTokens: number, outputTokens: number, cachedInputTokens = 0, reasoning = 0) {
+  return {
+    last: {
+      totalTokens: inputTokens + outputTokens + cachedInputTokens + reasoning,
+      inputTokens,
+      cachedInputTokens,
+      outputTokens,
+      reasoningOutputTokens: reasoning,
+    },
+    total: {
+      totalTokens: inputTokens + outputTokens + cachedInputTokens + reasoning,
+      inputTokens,
+      cachedInputTokens,
+      outputTokens,
+      reasoningOutputTokens: reasoning,
+    },
+    modelContextWindow: null,
+  };
+}
