@@ -565,6 +565,39 @@ function ensureCanvasRuntimePackage(context) {
   }
 }
 
+function ensureLinuxNodePtyRuntimePrebuild(context) {
+  if (context.electronPlatformName !== "linux") return { copied: 0 };
+
+  const targetArch = ARCH_BY_BUILDER_VALUE.get(context.arch);
+  if (!targetArch) return { copied: 0 };
+
+  const resourcesDir = context.resourcesDir ?? resourcesDirForContext(context);
+  const nodePtyRoot = path.join(resourcesDir, "app.asar.unpacked", "node_modules", "node-pty");
+  if (!fs.existsSync(nodePtyRoot)) return { copied: 0 };
+
+  const targetPrebuild = `${context.electronPlatformName}-${targetArch}`;
+  const prebuildDir = path.join(nodePtyRoot, "prebuilds", targetPrebuild);
+  const requiredFiles = ["pty.node", "spawn-helper"];
+  if (requiredFiles.every((name) => fs.existsSync(path.join(prebuildDir, name)))) {
+    return { copied: 0 };
+  }
+
+  const buildReleaseDir = path.join(nodePtyRoot, "build", "Release");
+  for (const name of requiredFiles) {
+    const sourcePath = path.join(buildReleaseDir, name);
+    if (!fs.existsSync(sourcePath)) return { copied: 0 };
+  }
+
+  fs.mkdirSync(prebuildDir, { recursive: true });
+  for (const name of requiredFiles) {
+    const destinationPath = path.join(prebuildDir, name);
+    fs.copyFileSync(path.join(buildReleaseDir, name), destinationPath);
+    if (name === "spawn-helper") fs.chmodSync(destinationPath, 0o755);
+  }
+  console.log(`[runtime] copied node-pty build/Release output into ${targetPrebuild} prebuild`);
+  return { copied: requiredFiles.length };
+}
+
 function verifyManifestFileEntry(entry, filePath, label, options = {}) {
   assertExecutable(filePath, label);
   if (!entry || typeof entry !== "object") {
@@ -698,7 +731,7 @@ function verifyPackagedRuntimeExternalModules(resourcesDir, targetArchOrRuntimeK
     if (fs.existsSync(staleNodePtyBuild)) {
       throw new Error(
         `Packaged node-pty build output is still present: ${staleNodePtyBuild}. ` +
-          "node-pty resolves build/Release before prebuilds, so packaged deus-runtime must keep only the target Darwin prebuild."
+          `node-pty resolves build/Release before prebuilds, so packaged deus-runtime must keep only the target ${runtimeKey} prebuild.`
       );
     }
     if (!hasNodePtyPrebuild) {
@@ -1000,6 +1033,7 @@ async function verifyPackagedAgentClis(context, options = {}) {
 module.exports = async function afterPack(context) {
   prunePencilCliBinaries(context);
   ensureCanvasRuntimePackage(context);
+  ensureLinuxNodePtyRuntimePrebuild(context);
   pruneNodePtyRuntimeBinaries(context);
   pruneCanvasRuntimeBinaries(context);
   prepareBetterSqliteRuntimeBinding(context);
@@ -1013,6 +1047,7 @@ module.exports = async function afterPack(context) {
 
 module.exports.prunePencilCliBinaries = prunePencilCliBinaries;
 module.exports.ensureCanvasRuntimePackage = ensureCanvasRuntimePackage;
+module.exports.ensureLinuxNodePtyRuntimePrebuild = ensureLinuxNodePtyRuntimePrebuild;
 module.exports.pruneNodePtyRuntimeBinaries = pruneNodePtyRuntimeBinaries;
 module.exports.pruneCanvasRuntimeBinaries = pruneCanvasRuntimeBinaries;
 module.exports.prepareBetterSqliteRuntimeBinding = prepareBetterSqliteRuntimeBinding;
