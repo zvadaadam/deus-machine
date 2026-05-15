@@ -38,8 +38,8 @@ function resolveRuntimeEntries(): ElectronRuntimeEntries {
   const projectRoot = join(__dirname, "../..");
 
   if (app.isPackaged) {
-    if (process.platform !== "darwin") {
-      throw new Error("Packaged Deus runtime is currently only staged for macOS");
+    if (process.platform !== "darwin" && process.platform !== "linux") {
+      throw new Error("Packaged Deus runtime is currently only staged for macOS and Linux");
     }
     return {
       backendCwd: app.getPath("userData"),

@@ -19,26 +19,29 @@ describe("desktop packaged runtime environment", () => {
     });
   });
 
-  it("marks packaged main and pins macOS PATH to bundled bin plus system tools", () => {
-    const env: NodeJS.ProcessEnv = {
-      PATH: "/opt/homebrew/bin:/usr/local/bin:/usr/bin",
-    };
+  it.each(["darwin", "linux"] as const)(
+    "marks packaged %s main and pins PATH to bundled bin plus system tools",
+    (platform) => {
+      const env: NodeJS.ProcessEnv = {
+        PATH: "/opt/homebrew/bin:/usr/local/bin:/usr/bin",
+      };
 
-    configurePackagedMainRuntimeEnv({
-      isPackaged: true,
-      platform: "darwin",
-      resourcesPath: "/Applications/Deus.app/Contents/Resources",
-      env,
-    });
+      configurePackagedMainRuntimeEnv({
+        isPackaged: true,
+        platform,
+        resourcesPath: "/Applications/Deus.app/Contents/Resources",
+        env,
+      });
 
-    expect(env.DEUS_PACKAGED).toBe("1");
-    expect(env.NODE_ENV).toBe("production");
-    expect(env.DEUS_RESOURCES_PATH).toBe("/Applications/Deus.app/Contents/Resources");
-    expect(env.DEUS_BUNDLED_BIN_DIR).toBe("/Applications/Deus.app/Contents/Resources/bin");
-    expect(env.PATH).toBe(
-      "/Applications/Deus.app/Contents/Resources/bin:/usr/bin:/bin:/usr/sbin:/sbin"
-    );
-  });
+      expect(env.DEUS_PACKAGED).toBe("1");
+      expect(env.NODE_ENV).toBe("production");
+      expect(env.DEUS_RESOURCES_PATH).toBe("/Applications/Deus.app/Contents/Resources");
+      expect(env.DEUS_BUNDLED_BIN_DIR).toBe("/Applications/Deus.app/Contents/Resources/bin");
+      expect(env.PATH).toBe(
+        "/Applications/Deus.app/Contents/Resources/bin:/usr/bin:/bin:/usr/sbin:/sbin"
+      );
+    }
+  );
 
   it("removes inherited dev runtime variables from packaged main", () => {
     const env: NodeJS.ProcessEnv = {
