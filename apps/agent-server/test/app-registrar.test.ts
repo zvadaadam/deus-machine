@@ -159,6 +159,46 @@ describe("app-registrar", () => {
     });
   });
 
+  it("scopes duplicate AAP server names to the matching query workspace", async () => {
+    const qA = makeFakeQuery();
+    const qB = makeFakeQuery();
+    claudeQueries.set("session-a", qA);
+    claudeQueries.set("session-b", qB);
+    attachQuery(qA, {}, "/repos/workspace-a");
+    attachQuery(qB, {}, "/repos/workspace-b");
+
+    await registerAppMcp("pencil_app", "http://127.0.0.1:1111/mcp", "/repos/workspace-a");
+    await registerAppMcp("pencil_app", "http://127.0.0.1:2222/mcp", "/repos/workspace-b");
+
+    expect(qA.setMcpServers).toHaveBeenLastCalledWith({
+      pencil_app: { type: "http", url: "http://127.0.0.1:1111/mcp" },
+    });
+    expect(qB.setMcpServers).toHaveBeenLastCalledWith({
+      pencil_app: { type: "http", url: "http://127.0.0.1:2222/mcp" },
+    });
+  });
+
+  it("unregistering one workspace leaves the same app registered in other workspaces", async () => {
+    const qA = makeFakeQuery();
+    const qB = makeFakeQuery();
+    claudeQueries.set("session-a", qA);
+    claudeQueries.set("session-b", qB);
+    attachQuery(qA, {}, "/repos/workspace-a");
+    attachQuery(qB, {}, "/repos/workspace-b");
+
+    await registerAppMcp("pencil_app", "http://127.0.0.1:1111/mcp", "/repos/workspace-a");
+    await registerAppMcp("pencil_app", "http://127.0.0.1:2222/mcp", "/repos/workspace-b");
+    qA.setMcpServers.mockClear();
+    qB.setMcpServers.mockClear();
+
+    await unregisterAppMcp("pencil_app", "/repos/workspace-a");
+
+    expect(qA.setMcpServers).toHaveBeenCalledWith({});
+    expect(qB.setMcpServers).toHaveBeenCalledWith({
+      pencil_app: { type: "http", url: "http://127.0.0.1:2222/mcp" },
+    });
+  });
+
   it("attachQuery after a register catches the new query up to the current dynamic state", async () => {
     // Regression: a new chat starting AFTER an app was launched used to never
     // receive the AAP server until some later register/unregister event fired.

@@ -1,6 +1,7 @@
 // packages/pencil/src/lib/config.ts
 
 import { homedir } from "node:os";
+import { createHash } from "node:crypto";
 import { join } from "node:path";
 
 const HOME = homedir();
@@ -30,9 +31,20 @@ export const DEUS_EDITOR_SESSION_FILE = join(HOME, ".deus", "pencil", "editor-se
  *  `~/.pencil/apps/<app-name>` to find the WebSocket port of the host
  *  it's been told to connect to via `-app <name>`. */
 export const PENCIL_APPS_DIR = join(HOME, ".pencil", "apps");
-/** Our app name in the registry. Anything unique works; "deus" is the
- *  obvious choice. */
-export const PENCIL_HOST_APP_NAME = "deus";
+/** Prefix for our app names in the registry. Each running AAP instance appends
+ *  a stable hash so concurrent workspaces do not overwrite each other's host
+ *  port file. */
+export const PENCIL_HOST_APP_NAME_PREFIX = "deus";
+
+export function pencilHostAppNameFor(opts: {
+  workspace: string;
+  storage: string;
+  port: number;
+}): string {
+  const seed = `${opts.workspace}\0${opts.storage}\0${opts.port}`;
+  const hash = createHash("sha256").update(seed).digest("hex").slice(0, 16);
+  return `${PENCIL_HOST_APP_NAME_PREFIX}-${hash}`;
+}
 
 // ---- Tools / format whitelist --------------------------------------------
 export const ALLOWED_EXPORT_FORMATS = ["png", "jpeg", "webp", "pdf"] as const;

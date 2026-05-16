@@ -172,13 +172,13 @@ function providerUpdateMode(params: unknown): void {
 
 async function registerAapMcp(params: unknown): Promise<{ added: string[] }> {
   const parsed = RegisterAppMcpRequestSchema.parse(params);
-  await registerAppMcp(parsed.serverName, parsed.url);
+  await registerAppMcp(parsed.serverName, parsed.url, parsed.workspacePath);
   return { added: [parsed.serverName] };
 }
 
 async function unregisterAapMcp(params: unknown): Promise<{ removed: string[] }> {
   const parsed = UnregisterAppMcpRequestSchema.parse(params);
-  await unregisterAppMcp(parsed.serverName);
+  await unregisterAppMcp(parsed.serverName, parsed.workspacePath);
   return { removed: [parsed.serverName] };
 }
 

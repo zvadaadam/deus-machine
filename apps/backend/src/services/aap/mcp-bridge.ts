@@ -25,6 +25,8 @@ export interface McpBridgeApp {
   appId: string;
   /** Fully-resolved MCP HTTP URL — `agent.tools.url` with `{port}` substituted. */
   mcpUrl: string;
+  /** Absolute workspace path this app instance belongs to. */
+  workspacePath: string;
 }
 
 /**
@@ -45,6 +47,7 @@ export async function registerMcpForRunningApp(app: McpBridgeApp): Promise<void>
     await sendRequestToAgent("aap/register-mcp", {
       serverName,
       url: app.mcpUrl,
+      workspacePath: app.workspacePath,
     });
     console.log(`[AAP-Bridge] Registered ${serverName} → ${app.mcpUrl}`);
   } catch (err) {
@@ -66,7 +69,10 @@ export async function unregisterMcpForRunningApp(app: McpBridgeApp): Promise<voi
   }
 
   try {
-    await sendRequestToAgent("aap/unregister-mcp", { serverName });
+    await sendRequestToAgent("aap/unregister-mcp", {
+      serverName,
+      workspacePath: app.workspacePath,
+    });
     console.log(`[AAP-Bridge] Unregistered ${serverName}`);
   } catch (err) {
     console.warn(
