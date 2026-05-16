@@ -101,8 +101,8 @@ function pickFreePort(): Promise<number> {
   });
 }
 
-/** Start the binary in HTTP mode pointed at our `-app deus` socket. */
-export async function startMcpBinary(): Promise<{ httpPort: number } | null> {
+/** Start the binary in HTTP mode pointed at our `-app <hostAppName>` socket. */
+export async function startMcpBinary(hostAppName: string): Promise<{ httpPort: number } | null> {
   if (proc) return { httpPort: proc.httpPort };
   const binary = findBundledMcpBinary();
   if (!binary) {
@@ -110,8 +110,10 @@ export async function startMcpBinary(): Promise<{ httpPort: number } | null> {
     return null;
   }
   const httpPort = await pickFreePort();
-  console.log(`[pencil-binary] launching ${binary} -app deus -http -http-port ${httpPort}`);
-  const child = spawn(binary, ["-app", "deus", "-http", "-http-port", String(httpPort)], {
+  console.log(
+    `[pencil-binary] launching ${binary} -app ${hostAppName} -http -http-port ${httpPort}`
+  );
+  const child = spawn(binary, ["-app", hostAppName, "-http", "-http-port", String(httpPort)], {
     stdio: ["ignore", "pipe", "pipe"],
   });
   child.stdout.on("data", (c) => process.stdout.write(`[mcp-bin] ${c}`));

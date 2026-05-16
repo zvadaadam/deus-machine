@@ -258,9 +258,13 @@ describe("aap/apps.service (integration, in-memory)", () => {
     // manifest's agent.tools.url substituted.
     const registerCalls = sendRequestToAgent.mock.calls.filter((c) => c[0] === "aap/register-mcp");
     expect(registerCalls).toHaveLength(1);
-    const [, params] = registerCalls[0] as [string, { serverName: string; url: string }];
+    const [, params] = registerCalls[0] as [
+      string,
+      { serverName: string; url: string; workspacePath: string },
+    ];
     expect(params.serverName).toBe("test_fake_app");
     expect(params.url).toMatch(/^http:\/\/127\.0\.0\.1:\d+\/mcp$/);
+    expect(params.workspacePath).toBe(fakeAppDir);
 
     await stopApp(result.runningAppId);
   });
@@ -292,7 +296,7 @@ describe("aap/apps.service (integration, in-memory)", () => {
     );
     const unregister = sendRequestToAgent.mock.calls.find((c) => c[0] === "aap/unregister-mcp");
     expect(unregister).toBeDefined();
-    expect(unregister![1]).toEqual({ serverName: "test_fake_app" });
+    expect(unregister![1]).toEqual({ serverName: "test_fake_app", workspacePath: fakeAppDir });
   });
 
   it("mcp-bridge: launch succeeds even when agent-server is NOT connected", async () => {
