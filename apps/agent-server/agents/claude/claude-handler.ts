@@ -494,7 +494,7 @@ export class ClaudeAgentHandler implements AgentHandler {
       // setMcpServers would disconnect the deus transport and hang any
       // tool call that's mid-flight on it (e.g. `launch_app` itself, which
       // triggers the very broadcast that kills its own transport).
-      attachQuery(queryResult, sdkOptions.mcpServers ?? {});
+      attachQuery(queryResult, sdkOptions.mcpServers ?? {}, options.cwd);
       session.generator = queryResult[Symbol.asyncIterator]();
 
       // Per-message options (constant for the lifetime of this generator).

@@ -40,12 +40,14 @@ describe("aap/mcp-bridge", () => {
       await registerMcpForRunningApp({
         appId: "deus.mobile-use",
         mcpUrl: "http://127.0.0.1:45321/mcp",
+        workspacePath: "/repos/app",
       });
 
       expect(sendRequestToAgent).toHaveBeenCalledTimes(1);
       expect(sendRequestToAgent).toHaveBeenCalledWith("aap/register-mcp", {
         serverName: "deus_mobile_use",
         url: "http://127.0.0.1:45321/mcp",
+        workspacePath: "/repos/app",
       });
     });
 
@@ -56,11 +58,13 @@ describe("aap/mcp-bridge", () => {
       await registerMcpForRunningApp({
         appId: "acme.foo-bar.baz",
         mcpUrl: "http://127.0.0.1:1/mcp",
+        workspacePath: "/repos/app",
       });
 
       expect(sendRequestToAgent).toHaveBeenCalledWith("aap/register-mcp", {
         serverName: "acme_foo_bar_baz",
         url: "http://127.0.0.1:1/mcp",
+        workspacePath: "/repos/app",
       });
     });
 
@@ -71,6 +75,7 @@ describe("aap/mcp-bridge", () => {
         registerMcpForRunningApp({
           appId: "deus.mobile-use",
           mcpUrl: "http://127.0.0.1:1/mcp",
+          workspacePath: "/repos/app",
         })
       ).resolves.toBeUndefined();
 
@@ -87,6 +92,7 @@ describe("aap/mcp-bridge", () => {
         registerMcpForRunningApp({
           appId: "deus.mobile-use",
           mcpUrl: "http://127.0.0.1:1/mcp",
+          workspacePath: "/repos/app",
         })
       ).resolves.toBeUndefined();
     });
@@ -100,11 +106,13 @@ describe("aap/mcp-bridge", () => {
       await unregisterMcpForRunningApp({
         appId: "deus.mobile-use",
         mcpUrl: "http://127.0.0.1:1/mcp",
+        workspacePath: "/repos/app",
       });
 
       expect(sendRequestToAgent).toHaveBeenCalledTimes(1);
       expect(sendRequestToAgent).toHaveBeenCalledWith("aap/unregister-mcp", {
         serverName: "deus_mobile_use",
+        workspacePath: "/repos/app",
       });
     });
 
@@ -115,6 +123,7 @@ describe("aap/mcp-bridge", () => {
         unregisterMcpForRunningApp({
           appId: "deus.mobile-use",
           mcpUrl: "http://127.0.0.1:1/mcp",
+          workspacePath: "/repos/app",
         })
       ).resolves.toBeUndefined();
 
@@ -129,6 +138,7 @@ describe("aap/mcp-bridge", () => {
         unregisterMcpForRunningApp({
           appId: "deus.mobile-use",
           mcpUrl: "http://127.0.0.1:1/mcp",
+          workspacePath: "/repos/app",
         })
       ).resolves.toBeUndefined();
     });

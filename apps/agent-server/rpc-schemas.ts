@@ -380,6 +380,7 @@ export const ReadAppSkillResponseSchema = z.object({
 export const RegisterAppMcpRequestSchema = z.object({
   serverName: z.string(),
   url: z.string(),
+  workspacePath: z.string().optional(),
 });
 
 export const RegisterAppMcpResponseSchema = z.object({
@@ -389,6 +390,7 @@ export const RegisterAppMcpResponseSchema = z.object({
 
 export const UnregisterAppMcpRequestSchema = z.object({
   serverName: z.string(),
+  workspacePath: z.string().optional(),
 });
 
 export const UnregisterAppMcpResponseSchema = z.object({
