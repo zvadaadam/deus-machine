@@ -25,6 +25,7 @@ import Roo from "./roo.svg?react";
 import Trae from "./trae.svg?react";
 import Vscode from "./vscode.svg?react";
 import Windsurf from "./windsurf.svg?react";
+import { lookupAgentLogo } from "./lookup";
 
 export type AgentLogoComponent = FC<SVGProps<SVGSVGElement>>;
 
@@ -55,6 +56,6 @@ export const agentLogos: Record<string, AgentLogoComponent> = {
 };
 
 /** Get agent logo component, returns undefined if not found */
-export function getAgentLogo(agentHarness: string): AgentLogoComponent | undefined {
-  return agentLogos[agentHarness.toLowerCase()];
+export function getAgentLogo(agentHarness: string | null | undefined): AgentLogoComponent | undefined {
+  return lookupAgentLogo(agentLogos, agentHarness);
 }
