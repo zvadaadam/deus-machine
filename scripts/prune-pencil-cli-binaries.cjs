@@ -578,7 +578,7 @@ function ensureLinuxNodePtyRuntimePrebuild(context) {
 
   const targetPrebuild = `${context.electronPlatformName}-${targetArch}`;
   const prebuildDir = path.join(nodePtyRoot, "prebuilds", targetPrebuild);
-  const requiredFiles = ["pty.node"];
+  const requiredFiles = ["pty.node", "spawn-helper"];
   if (requiredFiles.every((name) => fs.existsSync(path.join(prebuildDir, name)))) {
     return { copied: 0 };
   }
@@ -729,12 +729,8 @@ function verifyPackagedRuntimeExternalModules(resourcesDir, targetArchOrRuntimeK
     const nodePtyPackageRoot = path.join(unpackedNodeModules, "node-pty");
     const nodePtyPrebuildFiles = [
       path.join(nodePtyPackageRoot, "prebuilds", runtimeKey, "pty.node"),
+      path.join(nodePtyPackageRoot, "prebuilds", runtimeKey, "spawn-helper"),
     ];
-    if (targetPlatform === "darwin") {
-      nodePtyPrebuildFiles.push(
-        path.join(nodePtyPackageRoot, "prebuilds", runtimeKey, "spawn-helper")
-      );
-    }
     requiredFiles.push([
       `better-sqlite3 native binding for ${runtimeKey}`,
       betterSqliteNative,
@@ -758,9 +754,7 @@ function verifyPackagedRuntimeExternalModules(resourcesDir, targetArchOrRuntimeK
       [`node-pty native binding for ${runtimeKey}`, nodePtyPrebuildFiles[0]],
       [`@napi-rs/canvas native binding for ${runtimeKey}`, path.join(unpackedNodeModules, "@napi-rs", canvasNativePackage, canvasNativeFile)]
     );
-    if (targetPlatform === "darwin" && nodePtyPrebuildFiles[1]) {
-      nativePayloads.push([`node-pty spawn helper for ${runtimeKey}`, nodePtyPrebuildFiles[1]]);
-    }
+    nativePayloads.push([`node-pty spawn helper for ${runtimeKey}`, nodePtyPrebuildFiles[1]]);
 
     const hasNodePtyPrebuild = nodePtyPrebuildFiles.every((filePath) => fs.existsSync(filePath));
     const staleNodePtyBuild = path.join(nodePtyPackageRoot, "build", "Release", "pty.node");
