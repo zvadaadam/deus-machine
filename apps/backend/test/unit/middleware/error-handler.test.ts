@@ -1,5 +1,6 @@
 import { describe, it, expect } from "vitest";
 import { Hono } from "hono";
+import * as Sentry from "@sentry/node";
 import { errorHandler } from "../../../src/middleware/error-handler";
 import { NotFoundError, ValidationError, ConflictError, AppError } from "../../../src/lib/errors";
 
@@ -66,6 +67,7 @@ describe("errorHandler", () => {
     expect(res.status).toBe(500);
     const body = await res.json();
     expect(body).toEqual({ error: "Internal server error" });
+    expect(Sentry.captureException).toHaveBeenCalledWith(expect.any(Error));
   });
 
   it("includes details for AppError when provided", async () => {
