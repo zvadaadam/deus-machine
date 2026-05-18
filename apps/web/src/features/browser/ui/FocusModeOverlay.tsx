@@ -13,8 +13,6 @@
  * here, the chat picks it up on remount; keep typing mid-draft, the
  * draft follows.
  */
-/* eslint-env browser */
-
 import { useEffect, useLayoutEffect, useState } from "react";
 import { createPortal } from "react-dom";
 import { SessionComposer } from "@/features/session/ui/SessionComposer";
