@@ -93,7 +93,7 @@ export function isDesktopRedirectUri(rawUrl: string): boolean {
 
 export function buildDesktopLoginUrl(input: {
   config: DesktopAuthConfig;
-  redirectUri: string;
+  callbackPort: number;
   codeChallenge: string;
   state: string;
 }): string {
@@ -111,13 +111,14 @@ export function buildDesktopLoginUrl(input: {
   if (!input.config.clientId) {
     throw new Error("Invalid WorkOS client ID");
   }
-  if (!isDesktopRedirectUri(input.redirectUri)) {
+  const redirectUri = resolveDesktopRedirectUri(input.config.redirectUri, input.callbackPort);
+  if (!isDesktopRedirectUri(redirectUri)) {
     throw new Error("Invalid desktop redirect URI");
   }
 
   url.searchParams.set("response_type", "code");
   url.searchParams.set("client_id", input.config.clientId);
-  url.searchParams.set("redirect_uri", input.redirectUri);
+  url.searchParams.set("redirect_uri", redirectUri);
   url.searchParams.set("provider", input.config.provider);
   url.searchParams.set("code_challenge", input.codeChallenge);
   url.searchParams.set("code_challenge_method", "S256");

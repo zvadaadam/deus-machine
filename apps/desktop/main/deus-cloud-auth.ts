@@ -61,6 +61,7 @@ interface DesktopCallbackServer {
 }
 
 let pendingLogin: PendingLogin | null = null;
+let loginStartInProgress = false;
 
 function parseTimestamp(value: string): number | null {
   const timestamp = Date.parse(value);
@@ -331,9 +332,14 @@ function broadcastAuthChanged(status: DeusCloudSessionStatus): void {
   }
 }
 
-function finishPendingLogin(error: Error | null, status?: DeusCloudSessionStatus): void {
+function finishPendingLogin(
+  error: Error | null,
+  status?: DeusCloudSessionStatus,
+  expectedPending?: PendingLogin
+): void {
   const pending = pendingLogin;
   if (!pending) return;
+  if (expectedPending && pending !== expectedPending) return;
   clearTimeout(pending.timeout);
   pendingLogin = null;
   void pending.closeCallbackServer();
@@ -372,22 +378,33 @@ export async function signOutDeusCloud(): Promise<DeusCloudAuthResult> {
 }
 
 export async function startDeusCloudLogin(): Promise<DeusCloudAuthResult> {
-  if (pendingLogin) {
+  if (loginStartInProgress || pendingLogin) {
     throw new Error("Deus Cloud sign-in is already in progress");
   }
 
+  loginStartInProgress = true;
   const cloudUrl = resolveDeusCloudUrl();
   const state = createDesktopState();
   const pkce = createDesktopPkcePair();
-  const callbackServer = await createDesktopCallbackServer(state);
+  let callbackServer: DesktopCallbackServer;
+  try {
+    callbackServer = await createDesktopCallbackServer(state);
+  } catch (error) {
+    loginStartInProgress = false;
+    throw error;
+  }
+
+  let pending!: PendingLogin;
   const resultPromise = new Promise<DeusCloudAuthResult>((resolve, reject) => {
     const timeout = setTimeout(() => {
       void callbackServer.close();
-      pendingLogin = null;
+      if (pendingLogin === pending) {
+        pendingLogin = null;
+      }
       reject(new Error("Deus Cloud sign-in timed out"));
     }, LOGIN_TIMEOUT_MS);
 
-    pendingLogin = {
+    pending = {
       state,
       verifier: pkce.verifier,
       cloudUrl,
@@ -396,31 +413,43 @@ export async function startDeusCloudLogin(): Promise<DeusCloudAuthResult> {
       resolve,
       reject,
     };
+    pendingLogin = pending;
   });
+  loginStartInProgress = false;
 
-  try {
-    const config = await fetchDesktopAuthConfig(cloudUrl);
-    const redirectUri = resolveDesktopRedirectUri(
-      config.redirectUri,
-      Number(new URL(callbackServer.redirectUri).port)
-    );
-    const loginUrl = buildDesktopLoginUrl({
-      config,
-      redirectUri,
-      state,
-      codeChallenge: pkce.challenge,
-    });
-    await shell.openExternal(loginUrl);
-  } catch (error) {
-    finishPendingLogin(error instanceof Error ? error : new Error("Could not open Deus Cloud"));
-  }
+  void (async () => {
+    try {
+      const config = await fetchDesktopAuthConfig(cloudUrl);
+      if (pendingLogin !== pending) return;
+
+      const loginUrl = buildDesktopLoginUrl({
+        config,
+        callbackPort: Number(new URL(callbackServer.redirectUri).port),
+        state,
+        codeChallenge: pkce.challenge,
+      });
+      if (pendingLogin !== pending) return;
+
+      await shell.openExternal(loginUrl);
+    } catch (error) {
+      finishPendingLogin(
+        error instanceof Error ? error : new Error("Could not open Deus Cloud"),
+        undefined,
+        pending
+      );
+    }
+  })();
 
   void (async () => {
     try {
       const callback = await callbackServer.waitForCallback;
       await completeDesktopLogin(callback);
     } catch (error) {
-      finishPendingLogin(error instanceof Error ? error : new Error("Deus Cloud sign-in failed"));
+      finishPendingLogin(
+        error instanceof Error ? error : new Error("Deus Cloud sign-in failed"),
+        undefined,
+        pending
+      );
     }
   })();
 
@@ -428,11 +457,13 @@ export async function startDeusCloudLogin(): Promise<DeusCloudAuthResult> {
 }
 
 async function completeDesktopLogin(callback: DesktopAuthCallback): Promise<void> {
+  let activePending: PendingLogin | null = null;
   try {
     const pending = pendingLogin;
     if (!pending) {
-      throw new Error("No Deus Cloud sign-in is in progress");
+      return;
     }
+    activePending = pending;
     if (callback.state !== pending.state) {
       throw new Error("Deus Cloud sign-in state did not match");
     }
@@ -442,14 +473,18 @@ async function completeDesktopLogin(callback: DesktopAuthCallback): Promise<void
       code: callback.code,
       verifier: pending.verifier,
     });
+    if (pendingLogin !== pending) return;
+
     await writeStoredSession(stored);
     const session = toPublicStatus(stored);
     broadcastAuthChanged(session);
-    finishPendingLogin(null, session);
+    finishPendingLogin(null, session, pending);
   } catch (error) {
     const normalized = error instanceof Error ? error : new Error("Deus Cloud sign-in failed");
-    finishPendingLogin(normalized);
-    broadcastAuthChanged(await getDeusCloudSessionStatus());
+    finishPendingLogin(normalized, undefined, activePending ?? undefined);
+    if (!activePending || pendingLogin !== activePending) {
+      broadcastAuthChanged(await getDeusCloudSessionStatus());
+    }
   }
 }
 
