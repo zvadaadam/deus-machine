@@ -8,6 +8,7 @@ describe("simulator capability resolution", () => {
         backendPlatform: "darwin",
         relayClient: false,
         simctlAvailable: true,
+        simbridgeAvailable: true,
       })
     ).toEqual({
       available: true,
@@ -20,6 +21,7 @@ describe("simulator capability resolution", () => {
       backendPlatform: "darwin",
       relayClient: true,
       simctlAvailable: true,
+      simbridgeAvailable: true,
     });
 
     expect(capabilities.available).toBe(false);
@@ -31,6 +33,7 @@ describe("simulator capability resolution", () => {
       backendPlatform: "linux",
       relayClient: false,
       simctlAvailable: true,
+      simbridgeAvailable: true,
     });
 
     expect(capabilities.available).toBe(false);
@@ -42,9 +45,22 @@ describe("simulator capability resolution", () => {
       backendPlatform: "darwin",
       relayClient: false,
       simctlAvailable: false,
+      simbridgeAvailable: true,
     });
 
     expect(capabilities.available).toBe(false);
     expect(capabilities.unavailableReason).toContain("simctl");
+  });
+
+  it("blocks macOS backends without simbridge", () => {
+    const capabilities = resolveSimulatorCapabilities({
+      backendPlatform: "darwin",
+      relayClient: false,
+      simctlAvailable: true,
+      simbridgeAvailable: false,
+    });
+
+    expect(capabilities.available).toBe(false);
+    expect(capabilities.unavailableReason).toContain("simbridge");
   });
 });
