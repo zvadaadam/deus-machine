@@ -10,6 +10,7 @@ import { useTheme } from "@/app/providers";
 import { useUIStore } from "@/shared/stores/uiStore";
 import { useSettings, useUpdateSettings } from "../api/settings.queries";
 import {
+  AccountSection,
   GeneralSection,
   GitHubSection,
   AISection,
@@ -19,6 +20,7 @@ import {
 } from "./sections";
 
 const SECTION_LABELS: Record<string, string> = {
+  account: "Account",
   general: "General",
   github: "GitHub",
   ai: "AI Providers",
@@ -88,6 +90,7 @@ export function SettingsPage() {
     const sectionProps = { settings, saveSetting };
 
     return match(activeSection)
+      .with("account", () => <AccountSection />)
       .with("general", () => <GeneralSection {...sectionProps} theme={theme} setTheme={setTheme} />)
       .with("github", () => <GitHubSection />)
       .with("ai", () => <AISection {...sectionProps} />)

@@ -27,6 +27,7 @@ import { setupAppMenu } from "./app-menu";
 import { setupTray, destroyTray } from "./tray";
 import { ensureInstalledInApplications } from "./install-preflight";
 import { configurePackagedMainRuntimeEnv } from "./runtime-env";
+import { registerDeusCloudAuthHandlers } from "./deus-cloud-auth";
 import {
   formatStartupFailureDetail,
   getMainLogPath,
@@ -315,6 +316,7 @@ app.whenReady().then(async () => {
 
   // Register IPC handlers before window creation so they're ready immediately
   registerNativeHandlers();
+  registerDeusCloudAuthHandlers();
   registerBrowserEmulationHandlers();
   registerUpdateHandlers();
 
@@ -360,8 +362,8 @@ app.whenReady().then(async () => {
   }
 });
 
-// Second instance: focus existing window
-app.on("second-instance", () => {
+// Second instance: focus existing window.
+app.on("second-instance", (_event, _commandLine) => {
   if (mainWindow) {
     if (mainWindow.isMinimized()) mainWindow.restore();
     mainWindow.focus();

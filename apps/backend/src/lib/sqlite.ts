@@ -1,4 +1,7 @@
 import type BetterSqlite3 from "better-sqlite3";
+import { createRequire } from "node:module";
+
+const require = createRequire(import.meta.url);
 
 type BetterSqlite3Constructor = new (
   filename: string,

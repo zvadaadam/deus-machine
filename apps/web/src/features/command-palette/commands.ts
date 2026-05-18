@@ -8,6 +8,7 @@ import {
   Settings,
   Orbit,
   ArrowUpRight,
+  UserCircle,
 } from "lucide-react";
 import { uiActions } from "@/shared/stores/uiStore";
 import { capabilities } from "@/platform/capabilities";
@@ -113,6 +114,17 @@ export const staticCommands: CommandDefinition[] = [
   },
 
   // --- Settings sections ---
+  {
+    id: "settings-account",
+    label: "Settings: Account",
+    icon: UserCircle,
+    group: "settings",
+    keywords: ["account", "deus cloud", "cloud", "auth", "login", "sign in"],
+    action: () => {
+      uiActions.openSettings();
+      uiActions.setActiveSettingsSection("account");
+    },
+  },
   {
     id: "settings-general",
     label: "Settings: General",
