@@ -1,4 +1,12 @@
-import { chmodSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import {
+  chmodSync,
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  realpathSync,
+  rmSync,
+  writeFileSync,
+} from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
@@ -12,7 +20,7 @@ const originalEnv = { ...process.env };
 const originalCwd = process.cwd();
 
 function createTempRoot(): string {
-  const root = mkdtempSync(path.join(os.tmpdir(), "deus-agent-process-"));
+  const root = realpathSync.native(mkdtempSync(path.join(os.tmpdir(), "deus-agent-process-")));
   tempRoots.push(root);
   return root;
 }

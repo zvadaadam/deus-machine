@@ -56,6 +56,7 @@ export interface Settings {
  * Used for navigation in settings UI
  */
 export type SettingsSection =
+  | "account"
   | "general"
   | "github"
   | "ai"

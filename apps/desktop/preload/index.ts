@@ -35,6 +35,9 @@ const ALLOWED_INVOKE_CHANNELS = new Set([
   "check_cli_tool",
   "start_gh_auth_login",
   "logout_gh_auth",
+  "deus_cloud:get_session",
+  "deus_cloud:start_login",
+  "deus_cloud:sign_out",
   "get_installed_apps",
   "open_in_app",
 
@@ -93,6 +96,9 @@ const ALLOWED_EVENT_CHANNELS = new Set([
 
   // Auto-update state
   "update:state",
+
+  // Deus Cloud account auth
+  "deus_cloud:changed",
 ]);
 
 const electronAPI = {
@@ -155,6 +161,14 @@ const electronAPI = {
     ipcRenderer.invoke("native:startGhAuthLogin"),
   logoutGhAuth: (): Promise<{ success: boolean; path: string | null; error?: string }> =>
     ipcRenderer.invoke("native:logoutGhAuth"),
+  getDeusCloudSession: (): Promise<unknown> => ipcRenderer.invoke("deus_cloud:get_session"),
+  startDeusCloudLogin: (): Promise<unknown> => ipcRenderer.invoke("deus_cloud:start_login"),
+  signOutDeusCloud: (): Promise<unknown> => ipcRenderer.invoke("deus_cloud:sign_out"),
+  onDeusCloudAuthChanged: (callback: (session: unknown) => void): (() => void) => {
+    const listener = (_e: Electron.IpcRendererEvent, session: unknown): void => callback(session);
+    ipcRenderer.on("deus_cloud:changed", listener);
+    return () => ipcRenderer.removeListener("deus_cloud:changed", listener);
+  },
   getInstalledApps: (): Promise<Array<{ name: string; path: string }>> =>
     ipcRenderer.invoke("native:getInstalledApps"),
   openInApp: (appPath: string, filePath: string): Promise<boolean> =>
