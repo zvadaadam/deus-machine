@@ -145,4 +145,67 @@ describe("desktop Deus Cloud auth flow", () => {
       session: { signedIn: false },
     });
   });
+
+  it("rejects overlapping sign-in attempts while login setup is pending", async () => {
+    let resolveConfig: (response: Response) => void = () => {};
+    const configResponse = new Promise<Response>((resolve) => {
+      resolveConfig = resolve;
+    });
+
+    global.fetch = vi.fn(async (input, init) => {
+      const url = new URL(String(input));
+
+      if (url.pathname === "/auth/desktop/config") {
+        return configResponse;
+      }
+
+      if (url.hostname === "127.0.0.1") {
+        return originalFetch(input, init);
+      }
+
+      if (url.pathname === "/auth/desktop/exchange") {
+        return Response.json({
+          session_token: "deus-session-token",
+          token_type: "Bearer",
+          expires_in_seconds: 3600,
+          account_id: "user_test",
+        });
+      }
+
+      throw new Error(`unexpected fetch: ${url.toString()}`);
+    }) as typeof fetch;
+
+    const firstLogin = startDeusCloudLogin();
+    await vi.waitFor(() => expect(global.fetch).toHaveBeenCalledTimes(1));
+
+    await expect(startDeusCloudLogin()).rejects.toThrow(
+      "Deus Cloud sign-in is already in progress"
+    );
+
+    resolveConfig(
+      Response.json({
+        authorization_endpoint: "https://api.workos.test/user_management/authorize",
+        client_id: "client_test",
+        provider: "authkit",
+        redirect_uri: "http://127.0.0.1:*/auth/callback",
+      })
+    );
+
+    await vi.waitFor(() => expect(electronMocks.openExternal).toHaveBeenCalledTimes(1));
+    const loginUrl = new URL(electronMocks.openExternal.mock.calls[0]?.[0] as string);
+    const redirectUri = loginUrl.searchParams.get("redirect_uri");
+    const state = loginUrl.searchParams.get("state");
+    const callbackUrl = new URL(redirectUri ?? "");
+    callbackUrl.searchParams.set("code", "workos-code");
+    callbackUrl.searchParams.set("state", state ?? "");
+    await expect(originalFetch(callbackUrl)).resolves.toMatchObject({ status: 200 });
+
+    await expect(firstLogin).resolves.toMatchObject({
+      success: true,
+      session: {
+        signedIn: true,
+        accountId: "user_test",
+      },
+    });
+  });
 });

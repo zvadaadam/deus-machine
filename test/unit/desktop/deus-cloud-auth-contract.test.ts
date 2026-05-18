@@ -30,7 +30,7 @@ describe("desktop Deus Cloud auth contract", () => {
           provider: "authkit",
           redirectUri: "http://127.0.0.1:*/auth/callback",
         },
-        redirectUri,
+        callbackPort: 54321,
         codeChallenge: pair.challenge,
         state,
       })
