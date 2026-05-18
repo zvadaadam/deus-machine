@@ -26,6 +26,13 @@ Never run `bun run dev:frontend` alone — it skips the backend.
 
 ## Cursor Cloud setup
 
+Fresh cloud images should have Bun available. If `command -v bun` fails, install it before any repo commands:
+
+```bash
+curl -fsSL https://bun.sh/install | bash
+export PATH="$HOME/.bun/bin:$PATH"
+```
+
 For a fresh cloud agent, set up and smoke-test the repo from the workspace root:
 
 ```bash
@@ -37,6 +44,12 @@ bun run dev:web
 ```
 
 `bun run dev:web` is the preferred cloud smoke because it rebuilds the Node native module ABI, starts the backend, lets the backend own agent-server startup, and then starts Vite with the emitted backend port. Confirm the terminal shows `[agent-server] LISTEN_URL=...`, `[BACKEND_PORT]...`, `Server ready!`, and an `AgentClient` handshake before opening the frontend URL.
+
+For browser-based UI smoke tests, install the Playwright browser after dependencies are installed:
+
+```bash
+bunx playwright install chromium
+```
 
 For Linux package/distribution checks:
 
