@@ -54,7 +54,7 @@ async function main() {
 
   // Step 3: Stage shared runtime
   console.log("\n3. Staging shared runtime...");
-  stageRuntime({ log: (line) => console.log(`   ${line}`) });
+  stageRuntime({ log: (line) => console.log(`   ${line}`), preserveElectron: true });
   const runtimePaths = resolveRuntimeStagePaths(monorepoRoot);
 
   // Step 4: Copy staged bundles for distribution

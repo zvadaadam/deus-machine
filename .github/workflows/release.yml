@@ -430,12 +430,12 @@ jobs:
     steps:
       - name: Validate npm token
         run: |
-          if [ -z "$NODE_AUTH_TOKEN" ]; then
+          if [ -z "$NPM_CONFIG_TOKEN" ]; then
             echo "::error::NPM_TOKEN secret is not configured. Cannot publish CLI."
             exit 1
           fi
         env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+          NPM_CONFIG_TOKEN: ${{ secrets.NPM_TOKEN }}
 
       - uses: actions/checkout@v4
         with:
@@ -468,8 +468,11 @@ jobs:
 
       - name: Publish to npm
         working-directory: apps/cli
-        run: bun publish --access public
+        run: |
+          printf '//registry.npmjs.org/:_authToken=%s\n' "$NPM_CONFIG_TOKEN" > .npmrc
+          bun publish --access public
         env:
+          NPM_CONFIG_TOKEN: ${{ secrets.NPM_TOKEN }}
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
 
   # ── Step 5: Publish GitHub Release after CLI publish succeeds ───────
