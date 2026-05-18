@@ -1,19 +1,20 @@
 import { app, BrowserWindow, ipcMain, safeStorage, shell } from "electron";
 import { chmod, mkdir, readFile, rm, writeFile } from "node:fs/promises";
+import { createServer, type ServerResponse } from "node:http";
+import type { AddressInfo } from "node:net";
 import { dirname, join } from "node:path";
 import type { DeusCloudAuthResult, DeusCloudSessionStatus } from "../../../shared/types";
 import {
   buildDesktopLoginUrl,
   createDesktopPkcePair,
   createDesktopState,
+  DEUS_CLOUD_DESKTOP_CALLBACK_PATH,
   type DesktopAuthConfig,
-  DEUS_CLOUD_PROTOCOL,
-  isDesktopAuthCallbackUrl,
+  type DesktopAuthCallback,
   parseDesktopAuthCallbackUrl,
+  resolveDesktopRedirectUri,
   resolveDeusCloudUrl,
 } from "./deus-cloud-auth-contract";
-
-export { isDesktopAuthCallbackUrl };
 
 const SESSION_FILE_NAME = "deus-cloud-session.json";
 const SESSION_FILE_VERSION = 1;
@@ -47,9 +48,16 @@ interface PendingLogin {
   state: string;
   verifier: string;
   cloudUrl: string;
+  closeCallbackServer: () => Promise<void>;
   timeout: NodeJS.Timeout;
   resolve: (value: DeusCloudAuthResult) => void;
   reject: (error: Error) => void;
+}
+
+interface DesktopCallbackServer {
+  redirectUri: string;
+  waitForCallback: Promise<DesktopAuthCallback>;
+  close: () => Promise<void>;
 }
 
 let pendingLogin: PendingLogin | null = null;
@@ -90,6 +98,93 @@ function requireSafeStorage(): void {
   if (!safeStorage.isEncryptionAvailable()) {
     throw new Error("Secure credential storage is unavailable on this device");
   }
+}
+
+function respondHtml(res: ServerResponse, status: number, message: string): void {
+  res.writeHead(status, {
+    "content-type": "text/html; charset=utf-8",
+    "cache-control": "no-store",
+  });
+  res.end(`<!doctype html><title>Deus</title><body>${message}</body>`);
+}
+
+async function closeServer(server: ReturnType<typeof createServer>): Promise<void> {
+  if (!server.listening) return;
+  await new Promise<void>((resolve) => {
+    server.close(() => resolve());
+  });
+}
+
+async function createDesktopCallbackServer(expectedState: string): Promise<DesktopCallbackServer> {
+  let settled = false;
+  let resolveCallback: (callback: DesktopAuthCallback) => void = () => {};
+  let rejectCallback: (error: Error) => void = () => {};
+
+  const waitForCallback = new Promise<DesktopAuthCallback>((resolve, reject) => {
+    resolveCallback = resolve;
+    rejectCallback = reject;
+  });
+
+  const server = createServer((req, res) => {
+    const requestUrl = new URL(req.url ?? "/", `http://127.0.0.1`);
+    if (requestUrl.pathname !== DEUS_CLOUD_DESKTOP_CALLBACK_PATH) {
+      respondHtml(res, 404, "Not Found");
+      return;
+    }
+
+    if (settled) {
+      respondHtml(res, 409, "This Deus sign-in request was already handled.");
+      return;
+    }
+
+    try {
+      const address = server.address();
+      if (!address || typeof address === "string") {
+        throw new Error("Desktop callback server is unavailable");
+      }
+
+      const callback = parseDesktopAuthCallbackUrl(
+        `http://127.0.0.1:${address.port}${requestUrl.pathname}${requestUrl.search}`
+      );
+      if (callback.state !== expectedState) {
+        throw new Error("Deus Cloud sign-in state did not match");
+      }
+
+      settled = true;
+      respondHtml(res, 200, "You can return to Deus.");
+      resolveCallback(callback);
+    } catch (error) {
+      settled = true;
+      respondHtml(res, 400, "Deus sign-in failed.");
+      rejectCallback(error instanceof Error ? error : new Error("Deus Cloud sign-in failed"));
+    }
+  });
+
+  await new Promise<void>((resolve, reject) => {
+    server.once("error", reject);
+    server.listen(0, "127.0.0.1", () => {
+      server.off("error", reject);
+      resolve();
+    });
+  });
+
+  const address = server.address();
+  if (!address || typeof address === "string") {
+    await closeServer(server);
+    throw new Error("Could not start desktop callback server");
+  }
+
+  return {
+    redirectUri: `http://127.0.0.1:${(address as AddressInfo).port}${DEUS_CLOUD_DESKTOP_CALLBACK_PATH}`,
+    waitForCallback,
+    close: async () => {
+      if (!settled) {
+        settled = true;
+        rejectCallback(new Error("Deus Cloud sign-in was cancelled"));
+      }
+      await closeServer(server);
+    },
+  };
 }
 
 async function readStoredSession(): Promise<StoredDeusCloudSession | null> {
@@ -167,6 +262,7 @@ function parseDesktopAuthConfig(body: DesktopAuthConfigResponse | null): Desktop
   if (body.client_id.length === 0) {
     throw new Error("Deus Cloud returned an empty WorkOS client ID");
   }
+  resolveDesktopRedirectUri(body.redirect_uri, 1);
 
   return {
     authorizationEndpoint: endpoint.toString(),
@@ -240,6 +336,7 @@ function finishPendingLogin(error: Error | null, status?: DeusCloudSessionStatus
   if (!pending) return;
   clearTimeout(pending.timeout);
   pendingLogin = null;
+  void pending.closeCallbackServer();
 
   if (error) {
     pending.reject(error);
@@ -250,15 +347,6 @@ function finishPendingLogin(error: Error | null, status?: DeusCloudSessionStatus
     success: true,
     session: status ?? toPublicStatus(null, pending.cloudUrl),
   });
-}
-
-export function registerDeusCloudProtocolClient(): void {
-  if (process.defaultApp && process.argv.length >= 2) {
-    app.setAsDefaultProtocolClient(DEUS_CLOUD_PROTOCOL, process.execPath, [process.argv[1]]);
-    return;
-  }
-
-  app.setAsDefaultProtocolClient(DEUS_CLOUD_PROTOCOL);
 }
 
 export async function getDeusCloudSessionStatus(): Promise<DeusCloudSessionStatus> {
@@ -291,8 +379,10 @@ export async function startDeusCloudLogin(): Promise<DeusCloudAuthResult> {
   const cloudUrl = resolveDeusCloudUrl();
   const state = createDesktopState();
   const pkce = createDesktopPkcePair();
+  const callbackServer = await createDesktopCallbackServer(state);
   const resultPromise = new Promise<DeusCloudAuthResult>((resolve, reject) => {
     const timeout = setTimeout(() => {
+      void callbackServer.close();
       pendingLogin = null;
       reject(new Error("Deus Cloud sign-in timed out"));
     }, LOGIN_TIMEOUT_MS);
@@ -301,6 +391,7 @@ export async function startDeusCloudLogin(): Promise<DeusCloudAuthResult> {
       state,
       verifier: pkce.verifier,
       cloudUrl,
+      closeCallbackServer: callbackServer.close,
       timeout,
       resolve,
       reject,
@@ -309,8 +400,13 @@ export async function startDeusCloudLogin(): Promise<DeusCloudAuthResult> {
 
   try {
     const config = await fetchDesktopAuthConfig(cloudUrl);
+    const redirectUri = resolveDesktopRedirectUri(
+      config.redirectUri,
+      Number(new URL(callbackServer.redirectUri).port)
+    );
     const loginUrl = buildDesktopLoginUrl({
       config,
+      redirectUri,
       state,
       codeChallenge: pkce.challenge,
     });
@@ -319,14 +415,20 @@ export async function startDeusCloudLogin(): Promise<DeusCloudAuthResult> {
     finishPendingLogin(error instanceof Error ? error : new Error("Could not open Deus Cloud"));
   }
 
+  void (async () => {
+    try {
+      const callback = await callbackServer.waitForCallback;
+      await completeDesktopLogin(callback);
+    } catch (error) {
+      finishPendingLogin(error instanceof Error ? error : new Error("Deus Cloud sign-in failed"));
+    }
+  })();
+
   return resultPromise;
 }
 
-export async function handleDeusCloudAuthCallbackUrl(rawUrl: string): Promise<boolean> {
-  if (!isDesktopAuthCallbackUrl(rawUrl)) return false;
-
+async function completeDesktopLogin(callback: DesktopAuthCallback): Promise<void> {
   try {
-    const callback = parseDesktopAuthCallbackUrl(rawUrl);
     const pending = pendingLogin;
     if (!pending) {
       throw new Error("No Deus Cloud sign-in is in progress");
@@ -349,19 +451,6 @@ export async function handleDeusCloudAuthCallbackUrl(rawUrl: string): Promise<bo
     finishPendingLogin(normalized);
     broadcastAuthChanged(await getDeusCloudSessionStatus());
   }
-
-  return true;
-}
-
-export function handlePotentialDeusCloudAuthUrls(values: readonly string[]): boolean {
-  let handled = false;
-  for (const value of values) {
-    if (isDesktopAuthCallbackUrl(value)) {
-      handled = true;
-      void handleDeusCloudAuthCallbackUrl(value);
-    }
-  }
-  return handled;
 }
 
 export function registerDeusCloudAuthHandlers(): void {

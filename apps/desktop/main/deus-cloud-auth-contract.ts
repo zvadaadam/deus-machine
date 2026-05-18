@@ -1,14 +1,14 @@
 import { createHash, randomBytes } from "node:crypto";
 
 export const DEUS_CLOUD_DEFAULT_URL = "https://cloud.deusmachine.ai";
-export const DEUS_CLOUD_PROTOCOL = "deus-machine";
-export const DEUS_CLOUD_AUTH_CALLBACK_HOST = "auth";
-export const DEUS_CLOUD_AUTH_CALLBACK_PATH = "/callback";
+export const DEUS_CLOUD_DESKTOP_CALLBACK_HOST = "127.0.0.1";
+export const DEUS_CLOUD_DESKTOP_CALLBACK_PATH = "/auth/callback";
 
 const PKCE_VERIFIER_RE = /^[A-Za-z0-9._~-]{43,128}$/;
 const PKCE_CHALLENGE_RE = /^[A-Za-z0-9_-]{43,128}$/;
 const WORKOS_AUTH_CODE_RE = /^[!-~]{1,2048}$/;
 const STATE_RE = /^[A-Za-z0-9._~-]{16,128}$/;
+const LOOPBACK_REDIRECT_PATTERN_RE = /^http:\/\/127\.0\.0\.1:\*\/auth\/callback$/;
 
 export interface DesktopPkcePair {
   verifier: string;
@@ -66,8 +66,34 @@ export function resolveDeusCloudUrl(env: NodeJS.ProcessEnv = process.env): strin
   return parsed.toString().replace(/\/$/u, "");
 }
 
+export function resolveDesktopRedirectUri(pattern: string, port: number): string {
+  if (!LOOPBACK_REDIRECT_PATTERN_RE.test(pattern)) {
+    throw new Error("Invalid desktop redirect URI pattern");
+  }
+  if (!Number.isInteger(port) || port <= 0 || port > 65535) {
+    throw new Error("Invalid desktop callback port");
+  }
+
+  return `http://${DEUS_CLOUD_DESKTOP_CALLBACK_HOST}:${port}${DEUS_CLOUD_DESKTOP_CALLBACK_PATH}`;
+}
+
+export function isDesktopRedirectUri(rawUrl: string): boolean {
+  try {
+    const url = new URL(rawUrl);
+    return (
+      url.protocol === "http:" &&
+      url.hostname === DEUS_CLOUD_DESKTOP_CALLBACK_HOST &&
+      url.pathname === DEUS_CLOUD_DESKTOP_CALLBACK_PATH &&
+      url.port.length > 0
+    );
+  } catch {
+    return false;
+  }
+}
+
 export function buildDesktopLoginUrl(input: {
   config: DesktopAuthConfig;
+  redirectUri: string;
   codeChallenge: string;
   state: string;
 }): string {
@@ -85,19 +111,13 @@ export function buildDesktopLoginUrl(input: {
   if (!input.config.clientId) {
     throw new Error("Invalid WorkOS client ID");
   }
-
-  const redirectUri = new URL(input.config.redirectUri);
-  if (
-    redirectUri.protocol !== `${DEUS_CLOUD_PROTOCOL}:` ||
-    redirectUri.hostname !== DEUS_CLOUD_AUTH_CALLBACK_HOST ||
-    redirectUri.pathname !== DEUS_CLOUD_AUTH_CALLBACK_PATH
-  ) {
+  if (!isDesktopRedirectUri(input.redirectUri)) {
     throw new Error("Invalid desktop redirect URI");
   }
 
   url.searchParams.set("response_type", "code");
   url.searchParams.set("client_id", input.config.clientId);
-  url.searchParams.set("redirect_uri", input.config.redirectUri);
+  url.searchParams.set("redirect_uri", input.redirectUri);
   url.searchParams.set("provider", input.config.provider);
   url.searchParams.set("code_challenge", input.codeChallenge);
   url.searchParams.set("code_challenge_method", "S256");
@@ -105,21 +125,8 @@ export function buildDesktopLoginUrl(input: {
   return url.toString();
 }
 
-export function isDesktopAuthCallbackUrl(rawUrl: string): boolean {
-  try {
-    const url = new URL(rawUrl);
-    return (
-      url.protocol === `${DEUS_CLOUD_PROTOCOL}:` &&
-      url.hostname === DEUS_CLOUD_AUTH_CALLBACK_HOST &&
-      url.pathname === DEUS_CLOUD_AUTH_CALLBACK_PATH
-    );
-  } catch {
-    return false;
-  }
-}
-
 export function parseDesktopAuthCallbackUrl(rawUrl: string): DesktopAuthCallback {
-  if (!isDesktopAuthCallbackUrl(rawUrl)) {
+  if (!isDesktopRedirectUri(rawUrl)) {
     throw new Error("Unsupported Deus Cloud callback URL");
   }
 
