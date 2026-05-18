@@ -232,9 +232,18 @@ describe("cli path helpers", () => {
       writeFileSync(executablePath, "");
       chmodSync(executablePath, 0o755);
       process.chdir(root);
+      const expectedPath = path.join(
+        process.cwd(),
+        "dist",
+        "runtime",
+        "electron",
+        "bin",
+        "linux-x64",
+        "gh"
+      );
 
-      expect(resolveBundledCliPath("gh")).toBe(executablePath);
-      expect(resolveCliExecutable("gh")).toBe(executablePath);
+      expect(resolveBundledCliPath("gh")).toBe(expectedPath);
+      expect(resolveCliExecutable("gh")).toBe(expectedPath);
     } finally {
       rmSync(root, { recursive: true, force: true });
     }
