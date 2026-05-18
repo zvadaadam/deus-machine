@@ -2,7 +2,7 @@
  * Integration tests for event → persistence → DB pipeline.
  *
  * Unlike agent-persistence.test.ts (which mocks the DB), these tests create
- * a real in-memory SQLite database, apply the full schema + migrations, and
+ * a real in-memory SQLite database, apply the full schema, and
  * verify the actual row state after feeding events through persistence functions.
  *
  * The goal: confirm that canonical events from the agent-server adapters
@@ -21,7 +21,7 @@ try {
 }
 
 const describeWithDb = canUseDatabase ? describe : describe.skip;
-import { SCHEMA_SQL, MIGRATIONS, isExpectedMigrationError } from "@shared/schema";
+import { SCHEMA_SQL } from "@shared/schema";
 import { uuidv7 } from "@shared/lib/uuid";
 
 // ============================================================================
@@ -55,7 +55,7 @@ import type {
 // Helpers
 // ============================================================================
 
-/** Create an in-memory SQLite DB with full schema + migrations applied. */
+/** Create an in-memory SQLite DB with the full pre-launch schema applied. */
 function createTestDb(): Database.Database {
   const db = new Database(":memory:");
   db.pragma("journal_mode = WAL");
@@ -63,18 +63,6 @@ function createTestDb(): Database.Database {
 
   // Apply full schema (tables, indexes, triggers)
   db.exec(SCHEMA_SQL);
-
-  // Apply post-launch migrations (ALTER TABLEs, new tables)
-  for (const sql of MIGRATIONS) {
-    try {
-      db.exec(sql);
-    } catch (e: unknown) {
-      const msg = e instanceof Error ? e.message : "";
-      if (!isExpectedMigrationError(sql, msg)) {
-        throw e;
-      }
-    }
-  }
 
   return db;
 }

@@ -3,7 +3,11 @@ import path from "path";
 import fs from "fs";
 import os from "os";
 import { resolveDefaultDatabasePath } from "../../../../shared/runtime";
-import { SCHEMA_SQL, MIGRATIONS, isExpectedMigrationError } from "@shared/schema";
+import {
+  PRELAUNCH_REQUIRED_COLUMNS,
+  PRELAUNCH_SCHEMA_RESET_HINT,
+  SCHEMA_SQL,
+} from "@shared/schema";
 import { openSqliteDatabase } from "./sqlite";
 
 const DEFAULT_DB_PATH = resolveDefaultDatabasePath({
@@ -16,6 +20,43 @@ const DEFAULT_DB_PATH = resolveDefaultDatabasePath({
 const DB_PATH = process.env.DATABASE_PATH || DEFAULT_DB_PATH;
 
 let dbInstance: BetterSqlite3.Database | null = null;
+
+interface TableInfoRow {
+  name: string;
+}
+
+function assertPrelaunchSchemaCurrent(db: BetterSqlite3.Database): void {
+  const missing: string[] = [];
+
+  for (const [table, requiredColumns] of Object.entries(PRELAUNCH_REQUIRED_COLUMNS)) {
+    const rows = db.pragma(`table_info(${table})`) as TableInfoRow[];
+    if (rows.length === 0) {
+      missing.push(`${table}.*`);
+      continue;
+    }
+
+    const actualColumns = new Set(rows.map((row) => row.name));
+    for (const column of requiredColumns) {
+      if (!actualColumns.has(column)) {
+        missing.push(`${table}.${column}`);
+      }
+    }
+  }
+
+  if (missing.length > 0) {
+    throw prelaunchSchemaError(`Missing columns/tables: ${missing.join(", ")}`);
+  }
+}
+
+function prelaunchSchemaError(detail: string): Error {
+  return new Error(
+    [
+      "Database schema is out of date for this pre-launch build.",
+      detail,
+      PRELAUNCH_SCHEMA_RESET_HINT,
+    ].join(" ")
+  );
+}
 
 function initDatabase(): BetterSqlite3.Database {
   if (dbInstance) {
@@ -37,26 +78,27 @@ function initDatabase(): BetterSqlite3.Database {
     dbInstance.pragma("busy_timeout = 5000");
     dbInstance.pragma("optimize");
 
-    // Create all tables, indexes, and triggers (idempotent)
-    dbInstance.exec(SCHEMA_SQL);
-
-    // Post-launch migrations: tolerate only the specific no-op failures that
-    // happen when a database already reflects the final schema. Anything else
-    // should fail fast so we don't silently continue with a partial migration.
-    for (const sql of MIGRATIONS) {
-      try {
-        dbInstance.exec(sql);
-      } catch (e: unknown) {
-        const msg = e instanceof Error ? e.message : "";
-        if (!isExpectedMigrationError(sql, msg)) {
-          throw e;
-        }
-      }
+    // Pre-launch policy: SCHEMA_SQL is the source of truth. We create fresh
+    // databases from it directly, then fail fast with a reset hint if an old
+    // local database still has a pre-launch schema shape.
+    try {
+      dbInstance.exec(SCHEMA_SQL);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      throw prelaunchSchemaError(`Schema initialization failed: ${message}`);
     }
+    assertPrelaunchSchemaCurrent(dbInstance);
 
     console.log("Database connected");
     return dbInstance;
   } catch (error) {
+    if (dbInstance) {
+      try {
+        dbInstance.close();
+      } finally {
+        dbInstance = null;
+      }
+    }
     console.error("Failed to open database:", error);
     throw error;
   }

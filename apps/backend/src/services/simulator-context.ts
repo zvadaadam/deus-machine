@@ -20,6 +20,7 @@ import WebSocket from "ws";
 import { getDatabase } from "../lib/database";
 import { getSessionRaw } from "../db/queries";
 import { broadcast } from "./ws.service";
+import type { SimulatorCapabilities } from "@shared/types/simulator";
 
 const execFileAsync = promisify(execFile);
 
@@ -91,6 +92,12 @@ export interface SimulatorInfo {
   is_available: boolean;
 }
 
+export interface SimulatorCapabilityInput {
+  backendPlatform: NodeJS.Platform;
+  relayClient: boolean;
+  simctlAvailable: boolean;
+}
+
 interface SimulatorSession {
   workspaceId: string;
   udid: string;
@@ -115,6 +122,61 @@ interface SimulatorSession {
 
 const sessions = new Map<string, SimulatorSession>();
 const startingUdids = new Map<string, string>();
+
+const MACOS_REQUIRED_REASON = "iOS Simulator requires a local macOS backend with Xcode.";
+const SIMCTL_REQUIRED_REASON = "iOS Simulator requires Xcode simctl on the backend Mac.";
+const RELAY_STREAM_UNAVAILABLE_REASON =
+  "iOS Simulator streaming is unavailable over remote relay in this build.";
+
+export function resolveSimulatorCapabilities({
+  backendPlatform,
+  relayClient,
+  simctlAvailable,
+}: SimulatorCapabilityInput): SimulatorCapabilities {
+  if (backendPlatform !== "darwin") {
+    return {
+      available: false,
+      unavailableReason: MACOS_REQUIRED_REASON,
+    };
+  }
+
+  if (!simctlAvailable) {
+    return {
+      available: false,
+      unavailableReason: SIMCTL_REQUIRED_REASON,
+    };
+  }
+
+  if (relayClient) {
+    return {
+      available: false,
+      unavailableReason: RELAY_STREAM_UNAVAILABLE_REASON,
+    };
+  }
+
+  return {
+    available: true,
+    unavailableReason: null,
+  };
+}
+
+function hasSimulatorToolchain(): boolean {
+  const developerDir = SIM_ENV["DEVELOPER_DIR"];
+  if (!developerDir) return false;
+  return existsSync(join(developerDir, "usr/bin", "simctl"));
+}
+
+export function getSimulatorCapabilities(
+  options: {
+    relayClient?: boolean;
+  } = {}
+): SimulatorCapabilities {
+  return resolveSimulatorCapabilities({
+    backendPlatform: process.platform,
+    relayClient: options.relayClient === true,
+    simctlAvailable: hasSimulatorToolchain(),
+  });
+}
 
 // ---------------------------------------------------------------------------
 // Event pushing (q:event broadcast to all WS clients)

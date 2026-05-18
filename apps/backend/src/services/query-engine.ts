@@ -32,6 +32,11 @@ import { delegateToRoute } from "./route-delegate";
 import { autoProgressStatus, setWorkspaceStatus } from "./workspace-status.service";
 import { getRunningApps, listApps, stopAppsForWorkspace } from "./aap";
 import { getDiscoveredServers } from "./local-servers.service";
+import {
+  runRequest,
+  type RequestContext,
+  type RequestResourceName,
+} from "./query-request-dispatcher";
 import { WorkspaceStatusSchema } from "@shared/enums";
 import {
   QUERY_RESOURCES,
@@ -80,6 +85,10 @@ interface Sub {
   id: string;
   resource: QueryResource;
   params: QueryParams;
+}
+
+interface CommandContext {
+  relayClient: boolean;
 }
 
 /** Per-connection active subscriptions, keyed by client-assigned sub ID. */
@@ -246,7 +255,7 @@ async function handleRequest(connectionId: string, msg: ResourceFrameInput): Pro
       const data = runQuery(resource, params);
       sendFrame(connectionId, { type: "q:response", id, data });
     } else if (isRequestResource(resource)) {
-      const data = await runRequest(resource, params);
+      const data = await runRequest(resource, params, getRequestContext(connectionId));
       sendFrame(connectionId, { type: "q:response", id, data });
     } else {
       throw new Error(`Unknown resource: ${resource}`);
@@ -352,7 +361,11 @@ async function handleCommand(connectionId: string, msg: CommandFrameInput): Prom
   const { id, command, params } = msg;
 
   try {
-    const result = await runCommand(toCommandName(command), params);
+    const result = await runCommand(
+      toCommandName(command),
+      params,
+      getCommandContext(connectionId)
+    );
     sendFrame(connectionId, {
       type: "q:command_ack",
       id,
@@ -435,89 +448,16 @@ function runQuery(resource: QueryResource, params: QueryParams): unknown {
 
 // ---- Request Dispatch (one-shot reads via route delegation) ----
 
-type RequestResourceName = (typeof REQUEST_RESOURCES)[number];
-
 function isRequestResource(value: string): value is RequestResourceName {
   return (REQUEST_RESOURCES as readonly string[]).includes(value);
 }
 
-/**
- * Route one-shot request resources to existing Hono endpoints.
- * Uses delegateToRoute() so all business logic stays in the route handlers.
- */
-async function runRequest(resource: RequestResourceName, params: QueryParams): Promise<unknown> {
-  /** GET /api/workspaces/:id{path} — covers the 10+ workspace-scoped reads. */
-  const wsGet = (path = "") =>
-    delegateToRoute(
-      "GET",
-      `/api/workspaces/${encodeURIComponent(requireParam(params, "workspaceId", resource))}${path}`
-    );
-  /** GET /api/repos/:id{path} — covers repo-scoped reads. */
-  const repoGet = (path = "") =>
-    delegateToRoute(
-      "GET",
-      `/api/repos/${encodeURIComponent(requireParam(params, "repoId", resource))}${path}`
-    );
+function getRequestContext(connectionId: string): RequestContext {
+  return { relayClient: getConnection(connectionId)?.isVirtual === true };
+}
 
-  return match(resource)
-    .with("settings", () => delegateToRoute("GET", "/api/settings"))
-    .with("repos", () => delegateToRoute("GET", "/api/repos"))
-    .with("repoManifest", () => repoGet("/manifest"))
-    .with("detectManifest", () => repoGet("/detect-manifest"))
-    .with("agentConfig", () => {
-      const section = readStringParam(params, "section") ?? "agents";
-      const scope = readStringParam(params, "scope") ?? "global";
-      const repoPath = readStringParam(params, "repoPath");
-      const qs = new URLSearchParams({ scope });
-      if (repoPath) qs.set("repoPath", repoPath);
-      return delegateToRoute(
-        "GET",
-        `/api/agent-config/${encodeURIComponent(section)}?${qs.toString()}`
-      );
-    })
-    .with("ghStatus", () => delegateToRoute("GET", "/api/gh-status"))
-    .with("prStatus", () => wsGet("/pr-status"))
-    .with("workspace", () => wsGet())
-    .with("allWorkspaces", () => delegateToRoute("GET", "/api/workspaces"))
-    .with("workspaceManifest", () => wsGet("/manifest"))
-    .with("setupLogs", () => wsGet("/setup-logs"))
-    .with("diffStats", () => wsGet("/diff-stats"))
-    .with("diffFiles", () => wsGet("/diff-files"))
-    .with("diffFile", () => {
-      const wsId = requireParam(params, "workspaceId", "diffFile");
-      const file = requireParam(params, "file", "diffFile");
-      return delegateToRoute(
-        "GET",
-        `/api/workspaces/${encodeURIComponent(wsId)}/diff-file?file=${encodeURIComponent(file)}`
-      );
-    })
-    .with("penFiles", () => wsGet("/pen-files"))
-    .with("workspaceFiles", () => wsGet("/files"))
-    .with("fileContent", () => {
-      const wsId = requireParam(params, "workspaceId", "fileContent");
-      const filePath = requireParam(params, "path", "fileContent");
-      return delegateToRoute(
-        "GET",
-        `/api/workspaces/${encodeURIComponent(wsId)}/file-content?path=${encodeURIComponent(filePath)}`
-      );
-    })
-    .with("fileSearch", () => {
-      const wsId = requireParam(params, "workspaceId", "fileSearch");
-      const query = readStringParam(params, "query") ?? "";
-      const limit = readNumberParam(params, "limit");
-      return delegateToRoute("POST", `/api/workspaces/${encodeURIComponent(wsId)}/files/search`, {
-        query,
-        ...(limit !== undefined ? { limit } : {}),
-      });
-    })
-    .with("recentProjects", () => delegateToRoute("GET", "/api/onboarding/recent-projects"))
-    .with("pairedDevices", () => delegateToRoute("GET", "/api/remote-auth/devices"))
-    .with("relayStatus", () => delegateToRoute("GET", "/api/relay/status"))
-    .with("allSessions", () => delegateToRoute("GET", "/api/sessions"))
-    .with("repoPrs", () => repoGet("/prs"))
-    .with("repoBranches", () => repoGet("/branches"))
-    .with("agentAuth", () => delegateToRoute("GET", "/api/settings/agent-auth"))
-    .exhaustive();
+function getCommandContext(connectionId: string): CommandContext {
+  return { relayClient: getConnection(connectionId)?.isVirtual === true };
 }
 
 // ---- Mutation Dispatch ----
