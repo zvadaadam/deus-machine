@@ -28,6 +28,18 @@ describe("simulator capability resolution", () => {
     expect(capabilities.unavailableReason).toContain("remote relay");
   });
 
+  it("reports relay streaming as the blocker before local helper state", () => {
+    const capabilities = resolveSimulatorCapabilities({
+      backendPlatform: "darwin",
+      relayClient: true,
+      simctlAvailable: true,
+      simbridgeAvailable: false,
+    });
+
+    expect(capabilities.available).toBe(false);
+    expect(capabilities.unavailableReason).toContain("remote relay");
+  });
+
   it("blocks non-macOS backends", () => {
     const capabilities = resolveSimulatorCapabilities({
       backendPlatform: "linux",

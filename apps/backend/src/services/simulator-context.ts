@@ -151,17 +151,17 @@ export function resolveSimulatorCapabilities({
     };
   }
 
-  if (!simbridgeAvailable) {
-    return {
-      available: false,
-      unavailableReason: SIMBRIDGE_REQUIRED_REASON,
-    };
-  }
-
   if (relayClient) {
     return {
       available: false,
       unavailableReason: RELAY_STREAM_UNAVAILABLE_REASON,
+    };
+  }
+
+  if (!simbridgeAvailable) {
+    return {
+      available: false,
+      unavailableReason: SIMBRIDGE_REQUIRED_REASON,
     };
   }
 
