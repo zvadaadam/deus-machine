@@ -16,7 +16,7 @@
     "packages/*"
   ],
   "scripts": {
-    "dev": "bun run native:electron && ([ -f apps/agent-server/dist/index.bundled.cjs ] || bun run build:agent-server) && electron-vite dev",
+    "dev": "bun run native:electron && ([ -f apps/agent-server/dist/index.bundled.cjs ] || bun run build:agent-server) && ([ -f packages/pencil/dist/serve.js ] || bun run build:pencil) && electron-vite dev",
     "dev:web": "bun run native:node && bun scripts/runtime/dev.ts",
     "dev:frontend": "vite --config apps/web/vite.config.ts",
     "dev:backend": "node apps/backend/server.cjs",

@@ -39,6 +39,44 @@ interface Window {
     confirm: (message: string, detail?: string) => Promise<boolean>;
     startGhAuthLogin: () => Promise<{ success: boolean; path: string | null; error?: string }>;
     logoutGhAuth: () => Promise<{ success: boolean; path: string | null; error?: string }>;
+    getDeusCloudSession: () => Promise<{
+      signedIn: boolean;
+      accountId: string | null;
+      expiresAt: string | null;
+      tokenType: "Bearer" | null;
+      cloudUrl: string;
+    }>;
+    startDeusCloudLogin: () => Promise<{
+      success: boolean;
+      session: {
+        signedIn: boolean;
+        accountId: string | null;
+        expiresAt: string | null;
+        tokenType: "Bearer" | null;
+        cloudUrl: string;
+      };
+      error?: string;
+    }>;
+    signOutDeusCloud: () => Promise<{
+      success: boolean;
+      session: {
+        signedIn: boolean;
+        accountId: string | null;
+        expiresAt: string | null;
+        tokenType: "Bearer" | null;
+        cloudUrl: string;
+      };
+      error?: string;
+    }>;
+    onDeusCloudAuthChanged: (
+      callback: (session: {
+        signedIn: boolean;
+        accountId: string | null;
+        expiresAt: string | null;
+        tokenType: "Bearer" | null;
+        cloudUrl: string;
+      }) => void
+    ) => () => void;
     on: (event: string, callback: (...args: unknown[]) => void) => () => void;
     invoke: (channel: string, args?: unknown) => Promise<unknown>;
     send: (channel: string, ...args: unknown[]) => void;

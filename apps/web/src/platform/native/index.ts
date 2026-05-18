@@ -15,6 +15,7 @@ import * as dialog from "./dialog";
 import * as browserViews from "./browser-views";
 import * as events from "./events";
 import * as files from "./files";
+import * as deusCloud from "./deus-cloud";
 
 export const native = {
   window: window_,
@@ -24,6 +25,7 @@ export const native = {
   browserViews,
   events,
   files,
+  deusCloud,
 } as const;
 
 // Re-export types

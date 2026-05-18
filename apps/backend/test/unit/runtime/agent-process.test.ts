@@ -20,7 +20,7 @@ const originalEnv = { ...process.env };
 const originalCwd = process.cwd();
 
 function createTempRoot(): string {
-  const root = mkdtempSync(path.join(os.tmpdir(), "deus-agent-process-"));
+  const root = realpathSync.native(mkdtempSync(path.join(os.tmpdir(), "deus-agent-process-")));
   tempRoots.push(root);
   return root;
 }
