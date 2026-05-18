@@ -37,11 +37,11 @@ describe("desktop Deus Cloud auth contract", () => {
 
   it("parses the desktop callback URL", () => {
     const parsed = parseDesktopAuthCallbackUrl(
-      "deus-machine://auth/callback?code=abc_DEF-123456789012345678901234567890123456&state=state_1234567890123456&expires_at=2026-05-18T15%3A00%3A00.000Z"
+      "deus-machine://auth/callback?code=oauth.code-1_~&state=state_1234567890123456&expires_at=2026-05-18T15%3A00%3A00.000Z"
     );
 
     expect(parsed).toEqual({
-      code: "abc_DEF-123456789012345678901234567890123456",
+      code: "oauth.code-1_~",
       state: "state_1234567890123456",
       expiresAt: "2026-05-18T15:00:00.000Z",
     });
