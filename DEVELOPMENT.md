@@ -83,6 +83,21 @@ bun run dev:web
 
 ---
 
+## Local Database Schema
+
+Deus is still pre-launch, so the checked-in SQLite schema is the source of truth.
+Breaking schema changes should update `shared/schema.ts` directly instead of
+adding compatibility migrations for old local databases.
+
+If your local database was created by an older build and the backend reports a
+pre-launch schema mismatch, reset it by deleting `deus.db` from the app data
+directory or by pointing `DATABASE_PATH` at a fresh file before restarting.
+
+Use durable migrations only after launch or once real external testers depend on
+preserved local data.
+
+---
+
 ## Available Scripts
 
 ### Main Commands (Use These!)

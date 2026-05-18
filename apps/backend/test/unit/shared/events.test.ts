@@ -240,11 +240,12 @@ describe("shared/events", () => {
       expect(REQUEST_RESOURCES).toContain("recentProjects");
       expect(REQUEST_RESOURCES).toContain("pairedDevices");
       expect(REQUEST_RESOURCES).toContain("relayStatus");
+      expect(REQUEST_RESOURCES).toContain("simulatorCapabilities");
       expect(REQUEST_RESOURCES).toContain("allSessions");
       expect(REQUEST_RESOURCES).toContain("repoPrs");
       expect(REQUEST_RESOURCES).toContain("repoBranches");
       expect(REQUEST_RESOURCES).toContain("agentAuth");
-      expect(REQUEST_RESOURCES).toHaveLength(25);
+      expect(REQUEST_RESOURCES).toHaveLength(26);
     });
 
     it("PROTOCOL_EVENTS contains the expected events", () => {

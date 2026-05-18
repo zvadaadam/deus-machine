@@ -8,8 +8,6 @@
  * All the stability (mid-transition fallback to last visible bounds) is
  * inside WebviewInstance.sync() — see webview-manager.ts.
  */
-/* eslint-env browser */
-
 import { useCallback, useEffect, useLayoutEffect, useRef } from "react";
 import {
   type Bounds,

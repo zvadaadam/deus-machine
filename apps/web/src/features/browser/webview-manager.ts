@@ -13,8 +13,6 @@
  * changes don't destroy the guest page, and the container stacks normally
  * alongside DOM (so dropdowns, overlays, and splitters layer above it).
  */
-/* eslint-env browser */
-
 export type Bounds = { x: number; y: number; width: number; height: number };
 
 export interface WebviewState {
