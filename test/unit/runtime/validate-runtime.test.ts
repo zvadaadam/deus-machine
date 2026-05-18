@@ -1,4 +1,13 @@
-import { chmodSync, mkdtempSync, mkdirSync, rmSync, utimesSync, writeFileSync } from "node:fs";
+import {
+  chmodSync,
+  existsSync,
+  mkdtempSync,
+  mkdirSync,
+  readFileSync,
+  rmSync,
+  utimesSync,
+  writeFileSync,
+} from "node:fs";
 import { createHash } from "node:crypto";
 import os from "node:os";
 import path from "node:path";
@@ -168,6 +177,29 @@ afterEach(() => {
 });
 
 describe("validateRuntimeStage", () => {
+  it("can restage shared bundles without deleting packaged runtime artifacts", () => {
+    const projectRoot = createTempProjectRoot();
+    writeProjectFixture(projectRoot);
+
+    stageRuntime({ projectRoot, log: () => {} });
+    const nativeRuntimeManifest = path.join(
+      projectRoot,
+      "dist",
+      "runtime",
+      "electron",
+      "bin",
+      "deus-runtime.json"
+    );
+    writeFile(nativeRuntimeManifest, "native-runtime");
+
+    stageRuntime({ projectRoot, log: () => {}, preserveElectron: true });
+
+    expect(readFileSync(nativeRuntimeManifest, "utf8")).toBe("native-runtime");
+    expect(
+      existsSync(path.join(projectRoot, "dist", "runtime", "common", "server.bundled.cjs"))
+    ).toBe(true);
+  });
+
   it("accepts a freshly staged runtime", () => {
     const projectRoot = createTempProjectRoot();
     writeProjectFixture(projectRoot);

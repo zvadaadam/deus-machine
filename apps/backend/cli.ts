@@ -94,7 +94,8 @@ function ensureSchema(dbPath: string) {
   const schemaPath = path.resolve(__dirname, "../../shared/schema.ts");
   const schemaContent = fs.readFileSync(schemaPath, "utf-8");
 
-  // Extract SCHEMA_SQL and MIGRATIONS from the file
+  // Extract SCHEMA_SQL from the file. Pre-launch schema changes update the
+  // source schema directly; stale local DBs should be reset rather than migrated.
   const schemaMatch = schemaContent.match(/export const SCHEMA_SQL = `([\s\S]*?)`;/);
   if (schemaMatch) {
     const schemaSql = schemaMatch[1];
@@ -104,24 +105,6 @@ function ensureSchema(dbPath: string) {
       });
     } catch {
       /* tables already exist */
-    }
-  }
-
-  // Run migrations
-  const migrationsMatch = schemaContent.match(
-    /export const MIGRATIONS: string\[\] = \[([\s\S]*?)\];/
-  );
-  if (migrationsMatch) {
-    const migrationBlock = migrationsMatch[1];
-    const migrations = [...migrationBlock.matchAll(/`([^`]+)`/g)].map((m) => m[1]);
-    for (const migration of migrations) {
-      try {
-        execSync(`sqlite3 "${dbPath}" "${migration.replace(/"/g, '\\"').replace(/\n/g, " ")}"`, {
-          timeout: 5000,
-        });
-      } catch {
-        /* already applied */
-      }
     }
   }
 }

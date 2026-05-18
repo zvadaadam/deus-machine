@@ -14,6 +14,9 @@ function getRuntimeKey(): string | null {
   if (process.platform === "darwin" && (process.arch === "arm64" || process.arch === "x64")) {
     return `darwin-${process.arch}`;
   }
+  if (process.platform === "linux" && process.arch === "x64") {
+    return "linux-x64";
+  }
 
   return null;
 }

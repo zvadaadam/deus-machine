@@ -159,6 +159,32 @@ describe("desktop backend process", () => {
     expect(options.env.CDP_PORT).toBe(CDP_PORT);
   });
 
+  it("starts packaged Linux backend through bundled deus-runtime", async () => {
+    Object.defineProperty(process, "platform", {
+      configurable: true,
+      enumerable: true,
+      value: "linux",
+    });
+    const resourcesPath = createTempResourcesRoot();
+    const runtimePath = createRuntimeExecutable(resourcesPath);
+    (process as { resourcesPath?: string }).resourcesPath = resourcesPath;
+    const child = createFakeChild();
+    mockSpawn.mockReturnValue(child);
+
+    const resultPromise = spawnBackend();
+    child.stdout.write("[BACKEND_PORT]45678\n");
+    await resultPromise;
+
+    const [command, args, options] = mockSpawn.mock.calls[0];
+    expect(command).toBe(runtimePath);
+    expect(args).toEqual(["backend"]);
+    expect(options.env.DEUS_PACKAGED).toBe("1");
+    expect(options.env.DEUS_BUNDLED_BIN_DIR).toBe(path.join(resourcesPath, "bin"));
+    expect(options.env.PATH).toBe(
+      `${path.join(resourcesPath, "bin")}:/usr/bin:/bin:/usr/sbin:/sbin`
+    );
+  });
+
   it("fails before spawning when packaged deus-runtime is missing", async () => {
     Object.defineProperty(process, "platform", {
       configurable: true,

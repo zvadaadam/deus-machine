@@ -9,6 +9,10 @@ const ARCH_BY_BUILDER_VALUE = new Map([
   ["arm64", "arm64"],
 ]);
 const SUPPORTED_PACKAGED_RUNTIME_PLATFORM = "darwin";
+const SUPPORTED_PACKAGED_RUNTIME_KEYS = new Map([
+  ["darwin", new Set(["arm64", "x64"])],
+  ["linux", new Set(["x64"])],
+]);
 
 const SOURCE_EXTENSIONS = new Set([
   ".cjs",
@@ -207,10 +211,19 @@ function assertPackagedMainRuntimeContract(projectRoot) {
 
 function assertPackagedRuntimePlatform(context) {
   const platformName = context?.electronPlatformName;
-  if (!platformName || platformName === SUPPORTED_PACKAGED_RUNTIME_PLATFORM) return;
+  if (!platformName) return;
+
+  const supportedArches = SUPPORTED_PACKAGED_RUNTIME_KEYS.get(platformName);
+  const arch = ARCH_BY_BUILDER_VALUE.get(context?.arch);
+  if (supportedArches) {
+    if (context?.arch == null) return;
+    if (arch && supportedArches.has(arch)) return;
+  }
 
   throw new Error(
-    `Packaged Deus native runtime is currently staged only for macOS. Refusing to build ${platformName} artifacts until Resources/bin/deus-runtime and bundled native CLIs are staged for that platform.`
+    `Packaged Deus native runtime is staged for ${[...SUPPORTED_PACKAGED_RUNTIME_KEYS.entries()]
+      .map(([platform, arches]) => `${platform}-${[...arches].join("|")}`)
+      .join(", ")}. Refusing to build ${platformName}${arch ? `-${arch}` : ""} artifacts until Resources/bin/deus-runtime and bundled native CLIs are staged for that platform.`
   );
 }
 
@@ -233,11 +246,13 @@ module.exports = function beforePack(context) {
   assertElectronBuildFresh(projectRoot);
   assertPackagedMainRuntimeContract(projectRoot);
 
+  const platformName = context.electronPlatformName || SUPPORTED_PACKAGED_RUNTIME_PLATFORM;
   const arch = ARCH_BY_BUILDER_VALUE.get(context.arch);
   if (!arch) {
-    throw new Error(`Unsupported macOS packaging architecture: ${String(context.arch)}`);
+    throw new Error(`Unsupported ${platformName} packaging architecture: ${String(context.arch)}`);
   }
-  const binDir = path.join(projectRoot, "dist", "runtime", "electron", "bin", `darwin-${arch}`);
+  const runtimeKey = `${platformName}-${arch}`;
+  const binDir = path.join(projectRoot, "dist", "runtime", "electron", "bin", runtimeKey);
   const requiredBins = [
     ["GitHub CLI", "gh", "bun run prepare:gh-cli"],
     ["Deus runtime", "deus-runtime", "bun run build:runtime"],
@@ -251,7 +266,7 @@ module.exports = function beforePack(context) {
     const binPath = path.join(binDir, name);
     if (!existsSync(binPath)) {
       throw new Error(
-        `Missing bundled ${label} for darwin-${arch}: ${binPath}. Run \`${command}\` before packaging.`
+        `Missing bundled ${label} for ${runtimeKey}: ${binPath}. Run \`${command}\` before packaging.`
       );
     }
   }

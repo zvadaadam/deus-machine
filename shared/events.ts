@@ -96,6 +96,7 @@ export const REQUEST_RESOURCES = [
   "recentProjects",
   "pairedDevices",
   "relayStatus",
+  "simulatorCapabilities",
   "allSessions",
   "repoPrs",
   "repoBranches",

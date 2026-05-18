@@ -162,6 +162,47 @@ jobs:
       - name: Run desktop/runtime unit tests
         run: bun run test:desktop-runtime
 
+  runtime-linux:
+    name: Native Runtime Smoke (Linux)
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.2.19
+
+      - name: Install dependencies
+        run: bun install --frozen-lockfile
+
+      - name: Build Electron desktop outputs
+        run: |
+          bun run build:all
+
+      - name: Package Linux app
+        run: bunx electron-builder --linux dir --publish never
+        env:
+          CSC_IDENTITY_AUTO_DISCOVERY: "false"
+
+      - name: Verify packaged Linux runtime resources
+        run: |
+          set -euo pipefail
+          resources_dir="dist-electron/linux-unpacked/resources"
+          test -x "$resources_dir/bin/deus-runtime"
+          test -x "$resources_dir/bin/codex"
+          test -x "$resources_dir/bin/claude"
+          test -x "$resources_dir/bin/gh"
+          test -x "$resources_dir/bin/rg"
+          test -x "$resources_dir/bin/agent-browser"
+          file "$resources_dir/bin/deus-runtime" | grep 'ELF 64-bit'
+
   backend-tests:
     name: Backend Tests
     runs-on: ubuntu-latest

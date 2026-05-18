@@ -42,7 +42,7 @@ export function configurePackagedMainRuntimeEnv(options: {
   env.DEUS_RESOURCES_PATH = options.resourcesPath;
   env.DEUS_BUNDLED_BIN_DIR = bundledBinDir;
 
-  if (options.platform === "darwin") {
+  if (options.platform === "darwin" || options.platform === "linux") {
     env.PATH = [bundledBinDir, ...PACKAGED_SYSTEM_PATHS].join(delimiter);
   }
 }
