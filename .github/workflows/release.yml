@@ -221,8 +221,8 @@ jobs:
             echo "Verifying packaged simulator helpers in $resources_dir"
             test -x "$resources_dir/simulator/simbridge"
             test -f "$resources_dir/simulator/siminspector.dylib"
-            lipo -verify_arch arm64 x86_64 "$resources_dir/simulator/simbridge"
-            lipo -verify_arch arm64 x86_64 "$resources_dir/simulator/siminspector.dylib"
+            lipo "$resources_dir/simulator/simbridge" -verify_arch arm64 x86_64
+            lipo "$resources_dir/simulator/siminspector.dylib" -verify_arch arm64 x86_64
           done < <(find dist-electron -maxdepth 4 -path '*/Deus.app/Contents/Resources' -type d | sort)
           if [[ "$found_resources" -ne 1 ]]; then
             echo "::error::No packaged Deus.app Resources directory found for simulator helper verification"
