@@ -147,6 +147,7 @@ describe("desktop Deus Cloud auth flow", () => {
   });
 
   it("rejects overlapping sign-in attempts while login setup is pending", async () => {
+    process.env.DEUS_MACHINE_CLOUD_URL = "http://cloud.test/deus";
     let resolveConfig: (response: Response) => void = () => {};
     const configResponse = new Promise<Response>((resolve) => {
       resolveConfig = resolve;
@@ -155,7 +156,7 @@ describe("desktop Deus Cloud auth flow", () => {
     global.fetch = vi.fn(async (input, init) => {
       const url = new URL(String(input));
 
-      if (url.pathname === "/auth/desktop/config") {
+      if (url.pathname === "/deus/auth/desktop/config") {
         return configResponse;
       }
 
@@ -163,7 +164,7 @@ describe("desktop Deus Cloud auth flow", () => {
         return originalFetch(input, init);
       }
 
-      if (url.pathname === "/auth/desktop/exchange") {
+      if (url.pathname === "/deus/auth/desktop/exchange") {
         return Response.json({
           session_token: "deus-session-token",
           token_type: "Bearer",
@@ -205,7 +206,94 @@ describe("desktop Deus Cloud auth flow", () => {
       session: {
         signedIn: true,
         accountId: "user_test",
+        cloudUrl: "http://cloud.test/deus",
       },
     });
+  });
+
+  it("cancels an in-flight browser login when signing out", async () => {
+    global.fetch = vi.fn(async (input, init) => {
+      const url = new URL(String(input));
+
+      if (url.pathname === "/auth/desktop/config") {
+        return Response.json({
+          authorization_endpoint: "https://api.workos.test/user_management/authorize",
+          client_id: "client_test",
+          provider: "authkit",
+          redirect_uri: "http://127.0.0.1:*/auth/callback",
+        });
+      }
+
+      if (url.hostname === "127.0.0.1") {
+        return originalFetch(input, init);
+      }
+
+      if (url.pathname === "/auth/desktop/exchange") {
+        return Response.json({
+          session_token: "deus-session-token",
+          token_type: "Bearer",
+          expires_in_seconds: 3600,
+          account_id: "user_test",
+        });
+      }
+
+      throw new Error(`unexpected fetch: ${url.toString()}`);
+    }) as typeof fetch;
+
+    const loginResult = startDeusCloudLogin().catch((error) => error as Error);
+    await vi.waitFor(() => expect(electronMocks.openExternal).toHaveBeenCalledTimes(1));
+
+    await expect(signOutDeusCloud()).resolves.toMatchObject({
+      success: true,
+      session: { signedIn: false },
+    });
+    await expect(loginResult).resolves.toMatchObject({
+      message: "Deus Cloud sign-in was cancelled",
+    });
+    await expect(getDeusCloudSessionStatus()).resolves.toMatchObject({ signedIn: false });
+  });
+
+  it("rejects invalid desktop exchange responses before storing a session", async () => {
+    global.fetch = vi.fn(async (input, init) => {
+      const url = new URL(String(input));
+
+      if (url.pathname === "/auth/desktop/config") {
+        return Response.json({
+          authorization_endpoint: "https://api.workos.test/user_management/authorize",
+          client_id: "client_test",
+          provider: "authkit",
+          redirect_uri: "http://127.0.0.1:*/auth/callback",
+        });
+      }
+
+      if (url.hostname === "127.0.0.1") {
+        return originalFetch(input, init);
+      }
+
+      if (url.pathname === "/auth/desktop/exchange") {
+        return Response.json({
+          session_token: "",
+          token_type: "Bearer",
+          expires_in_seconds: 0,
+          account_id: "",
+        });
+      }
+
+      throw new Error(`unexpected fetch: ${url.toString()}`);
+    }) as typeof fetch;
+
+    const loginResult = startDeusCloudLogin().catch((error) => error as Error);
+    await vi.waitFor(() => expect(electronMocks.openExternal).toHaveBeenCalledTimes(1));
+
+    const loginUrl = new URL(electronMocks.openExternal.mock.calls[0]?.[0] as string);
+    const callbackUrl = new URL(loginUrl.searchParams.get("redirect_uri") ?? "");
+    callbackUrl.searchParams.set("code", "workos-code");
+    callbackUrl.searchParams.set("state", loginUrl.searchParams.get("state") ?? "");
+    await expect(originalFetch(callbackUrl)).resolves.toMatchObject({ status: 200 });
+
+    await expect(loginResult).resolves.toMatchObject({
+      message: "Deus Cloud returned an invalid desktop session",
+    });
+    await expect(getDeusCloudSessionStatus()).resolves.toMatchObject({ signedIn: false });
   });
 });

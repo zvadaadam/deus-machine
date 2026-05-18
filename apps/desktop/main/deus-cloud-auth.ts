@@ -62,10 +62,21 @@ interface DesktopCallbackServer {
 
 let pendingLogin: PendingLogin | null = null;
 let loginStartInProgress = false;
+let loginGeneration = 0;
 
 function parseTimestamp(value: string): number | null {
   const timestamp = Date.parse(value);
   return Number.isFinite(timestamp) ? timestamp : null;
+}
+
+function cloudEndpointUrl(cloudUrl: string, path: string): URL {
+  const url = new URL(cloudUrl);
+  const basePath = url.pathname.replace(/\/+$/u, "");
+  const endpointPath = path.startsWith("/") ? path : `/${path}`;
+  url.pathname = `${basePath}${endpointPath}`;
+  url.search = "";
+  url.hash = "";
+  return url;
 }
 
 function getSessionFilePath(): string {
@@ -274,7 +285,7 @@ function parseDesktopAuthConfig(body: DesktopAuthConfigResponse | null): Desktop
 }
 
 async function fetchDesktopAuthConfig(cloudUrl: string): Promise<DesktopAuthConfig> {
-  const response = await fetch(new URL("/auth/desktop/config", cloudUrl));
+  const response = await fetch(cloudEndpointUrl(cloudUrl, "/auth/desktop/config"));
   const body = (await response.json().catch(() => null)) as DesktopAuthConfigResponse | null;
 
   if (!response.ok) {
@@ -289,7 +300,7 @@ async function exchangeDesktopCode(input: {
   code: string;
   verifier: string;
 }): Promise<StoredDeusCloudSession> {
-  const response = await fetch(new URL("/auth/desktop/exchange", input.cloudUrl), {
+  const response = await fetch(cloudEndpointUrl(input.cloudUrl, "/auth/desktop/exchange"), {
     method: "POST",
     headers: { "content-type": "application/json" },
     body: JSON.stringify({
@@ -306,9 +317,13 @@ async function exchangeDesktopCode(input: {
   if (
     !body ||
     typeof body.session_token !== "string" ||
+    body.session_token.length === 0 ||
     body.token_type !== "Bearer" ||
     typeof body.account_id !== "string" ||
-    typeof body.expires_in_seconds !== "number"
+    body.account_id.length === 0 ||
+    typeof body.expires_in_seconds !== "number" ||
+    !Number.isFinite(body.expires_in_seconds) ||
+    body.expires_in_seconds <= 0
   ) {
     throw new Error("Deus Cloud returned an invalid desktop session");
   }
@@ -371,6 +386,12 @@ export async function getStoredDeusCloudSessionToken(): Promise<string | null> {
 }
 
 export async function signOutDeusCloud(): Promise<DeusCloudAuthResult> {
+  loginGeneration += 1;
+  const pending = pendingLogin;
+  if (pending) {
+    finishPendingLogin(new Error("Deus Cloud sign-in was cancelled"), undefined, pending);
+  }
+
   await clearStoredSession();
   const session = await getDeusCloudSessionStatus();
   broadcastAuthChanged(session);
@@ -386,9 +407,14 @@ export async function startDeusCloudLogin(): Promise<DeusCloudAuthResult> {
   const cloudUrl = resolveDeusCloudUrl();
   const state = createDesktopState();
   const pkce = createDesktopPkcePair();
+  const generation = loginGeneration;
   let callbackServer: DesktopCallbackServer;
   try {
     callbackServer = await createDesktopCallbackServer(state);
+    if (generation !== loginGeneration) {
+      await callbackServer.close();
+      throw new Error("Deus Cloud sign-in was cancelled");
+    }
   } catch (error) {
     loginStartInProgress = false;
     throw error;
