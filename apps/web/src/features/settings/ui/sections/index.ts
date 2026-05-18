@@ -1,3 +1,4 @@
+export { AccountSection } from "./AccountSection";
 export { GeneralSection } from "./GeneralSection";
 export { GitHubSection } from "./GitHubSection";
 export { AISection } from "./AISection";

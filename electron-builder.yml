@@ -1,5 +1,9 @@
 appId: com.deus.app
 productName: Deus
+protocols:
+  - name: Deus Machine Auth
+    schemes:
+      - deus-machine
 directories:
   buildResources: resources
   output: dist-electron
