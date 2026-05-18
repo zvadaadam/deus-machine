@@ -7,7 +7,7 @@ export const DEUS_CLOUD_AUTH_CALLBACK_PATH = "/callback";
 
 const PKCE_VERIFIER_RE = /^[A-Za-z0-9._~-]{43,128}$/;
 const PKCE_CHALLENGE_RE = /^[A-Za-z0-9_-]{43,128}$/;
-const DESKTOP_LOGIN_CODE_RE = /^[!-~]{1,2048}$/;
+const WORKOS_AUTH_CODE_RE = /^[!-~]{1,2048}$/;
 const STATE_RE = /^[A-Za-z0-9._~-]{16,128}$/;
 
 export interface DesktopPkcePair {
@@ -15,10 +15,16 @@ export interface DesktopPkcePair {
   challenge: string;
 }
 
+export interface DesktopAuthConfig {
+  authorizationEndpoint: string;
+  clientId: string;
+  provider: "authkit";
+  redirectUri: string;
+}
+
 export interface DesktopAuthCallback {
   code: string;
   state: string;
-  expiresAt: string | null;
 }
 
 export function base64UrlEncode(buffer: Buffer): string {
@@ -61,7 +67,7 @@ export function resolveDeusCloudUrl(env: NodeJS.ProcessEnv = process.env): strin
 }
 
 export function buildDesktopLoginUrl(input: {
-  cloudUrl: string;
+  config: DesktopAuthConfig;
   codeChallenge: string;
   state: string;
 }): string {
@@ -72,7 +78,27 @@ export function buildDesktopLoginUrl(input: {
     throw new Error("Invalid desktop auth state");
   }
 
-  const url = new URL("/auth/desktop/start", input.cloudUrl);
+  const url = new URL(input.config.authorizationEndpoint);
+  if (url.protocol !== "https:" && url.protocol !== "http:") {
+    throw new Error("Invalid WorkOS authorization endpoint");
+  }
+  if (!input.config.clientId) {
+    throw new Error("Invalid WorkOS client ID");
+  }
+
+  const redirectUri = new URL(input.config.redirectUri);
+  if (
+    redirectUri.protocol !== `${DEUS_CLOUD_PROTOCOL}:` ||
+    redirectUri.hostname !== DEUS_CLOUD_AUTH_CALLBACK_HOST ||
+    redirectUri.pathname !== DEUS_CLOUD_AUTH_CALLBACK_PATH
+  ) {
+    throw new Error("Invalid desktop redirect URI");
+  }
+
+  url.searchParams.set("response_type", "code");
+  url.searchParams.set("client_id", input.config.clientId);
+  url.searchParams.set("redirect_uri", input.config.redirectUri);
+  url.searchParams.set("provider", input.config.provider);
   url.searchParams.set("code_challenge", input.codeChallenge);
   url.searchParams.set("code_challenge_method", "S256");
   url.searchParams.set("state", input.state);
@@ -100,14 +126,13 @@ export function parseDesktopAuthCallbackUrl(rawUrl: string): DesktopAuthCallback
   const url = new URL(rawUrl);
   const code = url.searchParams.get("code");
   const state = url.searchParams.get("state");
-  const expiresAt = url.searchParams.get("expires_at");
 
-  if (!code || !DESKTOP_LOGIN_CODE_RE.test(code)) {
-    throw new Error("Invalid desktop login code");
+  if (!code || !WORKOS_AUTH_CODE_RE.test(code)) {
+    throw new Error("Invalid WorkOS authorization code");
   }
   if (!state || !STATE_RE.test(state)) {
     throw new Error("Invalid desktop auth state");
   }
 
-  return { code, state, expiresAt };
+  return { code, state };
 }
