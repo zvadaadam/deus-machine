@@ -46,6 +46,13 @@ function assertPrelaunchSchemaCurrent(db: BetterSqlite3.Database): void {
   if (missing.length > 0) {
     throw prelaunchSchemaError(`Missing columns/tables: ${missing.join(", ")}`);
   }
+
+  const staleCodexHarness = db
+    .prepare("SELECT 1 FROM sessions WHERE agent_harness = 'codex' LIMIT 1")
+    .get();
+  if (staleCodexHarness) {
+    throw prelaunchSchemaError("Found stale sessions.agent_harness value: codex");
+  }
 }
 
 function prelaunchSchemaError(detail: string): Error {

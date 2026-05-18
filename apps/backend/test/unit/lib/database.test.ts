@@ -3,6 +3,7 @@ import { mkdtempSync, rmSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { SCHEMA_SQL } from "@shared/schema";
 
 describe("database pre-launch schema bootstrap", () => {
   let originalDatabasePath: string | undefined;
@@ -59,6 +60,32 @@ describe("database pre-launch schema bootstrap", () => {
     expect(() => initDatabase()).toThrow(
       "Database schema is out of date for this pre-launch build."
     );
+    expect(() => initDatabase()).toThrow("Reset it by deleting deus.db");
+  });
+
+  it("throws a reset hint for stale codex harness rows", async () => {
+    vi.spyOn(console, "error").mockImplementation(() => {});
+    vi.spyOn(console, "log").mockImplementation(() => {});
+    const dbPath = path.join(tempDir, "stale-codex.db");
+    const staleDb = new Database(dbPath);
+    staleDb.exec(SCHEMA_SQL);
+    staleDb
+      .prepare("INSERT INTO repositories (id, name, root_path) VALUES ('repo-1', 'Repo', '/repo')")
+      .run();
+    staleDb
+      .prepare("INSERT INTO workspaces (id, repository_id, slug) VALUES ('ws-1', 'repo-1', 'ws-1')")
+      .run();
+    staleDb
+      .prepare(
+        "INSERT INTO sessions (id, workspace_id, agent_harness) VALUES ('sess-1', 'ws-1', 'codex')"
+      )
+      .run();
+    staleDb.close();
+    process.env.DATABASE_PATH = dbPath;
+
+    const { initDatabase } = await import("../../../src/lib/database");
+
+    expect(() => initDatabase()).toThrow("Found stale sessions.agent_harness value: codex");
     expect(() => initDatabase()).toThrow("Reset it by deleting deus.db");
   });
 });

@@ -8,7 +8,7 @@
 //
 // TODO(relay-streaming): Add MJPEG frame proxy for web/relay mode.
 
-import { execFile, spawn } from "child_process";
+import { execFile, execFileSync, spawn } from "child_process";
 import { promisify } from "util";
 import { existsSync, unlinkSync } from "fs";
 import { readdir } from "fs/promises";
@@ -96,6 +96,7 @@ export interface SimulatorCapabilityInput {
   backendPlatform: NodeJS.Platform;
   relayClient: boolean;
   simctlAvailable: boolean;
+  simbridgeAvailable: boolean;
 }
 
 interface SimulatorSession {
@@ -125,6 +126,8 @@ const startingUdids = new Map<string, string>();
 
 const MACOS_REQUIRED_REASON = "iOS Simulator requires a local macOS backend with Xcode.";
 const SIMCTL_REQUIRED_REASON = "iOS Simulator requires Xcode simctl on the backend Mac.";
+const SIMBRIDGE_REQUIRED_REASON =
+  "iOS Simulator streaming requires the simbridge helper. Run `bun install` in repo root to build it.";
 const RELAY_STREAM_UNAVAILABLE_REASON =
   "iOS Simulator streaming is unavailable over remote relay in this build.";
 
@@ -132,6 +135,7 @@ export function resolveSimulatorCapabilities({
   backendPlatform,
   relayClient,
   simctlAvailable,
+  simbridgeAvailable,
 }: SimulatorCapabilityInput): SimulatorCapabilities {
   if (backendPlatform !== "darwin") {
     return {
@@ -144,6 +148,13 @@ export function resolveSimulatorCapabilities({
     return {
       available: false,
       unavailableReason: SIMCTL_REQUIRED_REASON,
+    };
+  }
+
+  if (!simbridgeAvailable) {
+    return {
+      available: false,
+      unavailableReason: SIMBRIDGE_REQUIRED_REASON,
     };
   }
 
@@ -161,9 +172,17 @@ export function resolveSimulatorCapabilities({
 }
 
 function hasSimulatorToolchain(): boolean {
-  const developerDir = SIM_ENV["DEVELOPER_DIR"];
-  if (!developerDir) return false;
-  return existsSync(join(developerDir, "usr/bin", "simctl"));
+  try {
+    const resolved = execFileSync("xcrun", ["--find", "simctl"], {
+      env: SIM_ENV,
+      stdio: ["ignore", "pipe", "ignore"],
+      encoding: "utf8",
+      timeout: 5000,
+    }).trim();
+    return resolved.length > 0;
+  } catch {
+    return false;
+  }
 }
 
 export function getSimulatorCapabilities(
@@ -175,6 +194,7 @@ export function getSimulatorCapabilities(
     backendPlatform: process.platform,
     relayClient: options.relayClient === true,
     simctlAvailable: hasSimulatorToolchain(),
+    simbridgeAvailable: findSimBridgePath() !== null,
   });
 }
 
