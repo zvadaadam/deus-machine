@@ -81,6 +81,7 @@ apps/web/public/device-chrome/
 .agents/
 .claude/
 .context/
+.megagoal/
 .prompts/
 .cursor/
 .windsurf/
