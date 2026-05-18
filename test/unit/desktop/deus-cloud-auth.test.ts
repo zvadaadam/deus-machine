@@ -44,7 +44,6 @@ vi.mock("electron", () => ({
 
 import {
   getDeusCloudSessionStatus,
-  handleDeusCloudAuthCallbackUrl,
   signOutDeusCloud,
   startDeusCloudLogin,
 } from "../../../apps/desktop/main/deus-cloud-auth";
@@ -76,8 +75,12 @@ describe("desktop Deus Cloud auth flow", () => {
           authorization_endpoint: "https://api.workos.test/user_management/authorize",
           client_id: "client_test",
           provider: "authkit",
-          redirect_uri: "deus-machine://auth/callback",
+          redirect_uri: "http://127.0.0.1:*/auth/callback",
         });
+      }
+
+      if (url.hostname === "127.0.0.1") {
+        return originalFetch(input, init);
       }
 
       if (url.pathname === "/auth/desktop/exchange") {
@@ -101,16 +104,18 @@ describe("desktop Deus Cloud auth flow", () => {
     expect(loginUrl.pathname).toBe("/user_management/authorize");
     expect(loginUrl.searchParams.get("response_type")).toBe("code");
     expect(loginUrl.searchParams.get("client_id")).toBe("client_test");
-    expect(loginUrl.searchParams.get("redirect_uri")).toBe("deus-machine://auth/callback");
+    const redirectUri = loginUrl.searchParams.get("redirect_uri");
+    expect(redirectUri).toMatch(/^http:\/\/127\.0\.0\.1:\d+\/auth\/callback$/);
     expect(loginUrl.searchParams.get("provider")).toBe("authkit");
     expect(loginUrl.searchParams.get("code_challenge_method")).toBe("S256");
 
     const state = loginUrl.searchParams.get("state");
     expect(state).toBeTruthy();
 
-    await expect(
-      handleDeusCloudAuthCallbackUrl(`deus-machine://auth/callback?code=workos-code&state=${state}`)
-    ).resolves.toBe(true);
+    const callbackUrl = new URL(redirectUri ?? "");
+    callbackUrl.searchParams.set("code", "workos-code");
+    callbackUrl.searchParams.set("state", state ?? "");
+    await expect(originalFetch(callbackUrl)).resolves.toMatchObject({ status: 200 });
 
     await expect(loginResult).resolves.toMatchObject({
       success: true,

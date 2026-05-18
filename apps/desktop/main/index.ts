@@ -27,13 +27,7 @@ import { setupAppMenu } from "./app-menu";
 import { setupTray, destroyTray } from "./tray";
 import { ensureInstalledInApplications } from "./install-preflight";
 import { configurePackagedMainRuntimeEnv } from "./runtime-env";
-import {
-  handleDeusCloudAuthCallbackUrl,
-  handlePotentialDeusCloudAuthUrls,
-  isDesktopAuthCallbackUrl,
-  registerDeusCloudAuthHandlers,
-  registerDeusCloudProtocolClient,
-} from "./deus-cloud-auth";
+import { registerDeusCloudAuthHandlers } from "./deus-cloud-auth";
 import {
   formatStartupFailureDetail,
   getMainLogPath,
@@ -67,12 +61,6 @@ app.commandLine.appendSwitch("remote-debugging-port", CDP_PORT);
 app.commandLine.appendSwitch("remote-debugging-address", "127.0.0.1");
 
 let mainWindow: BrowserWindow | null = null;
-
-app.on("open-url", (event, url) => {
-  if (!isDesktopAuthCallbackUrl(url)) return;
-  event.preventDefault();
-  void handleDeusCloudAuthCallbackUrl(url);
-});
 
 // ---------------------------------------------------------------------------
 // Window Creation
@@ -259,7 +247,6 @@ app.whenReady().then(async () => {
     platform: process.platform,
     resourcesPath: process.resourcesPath,
   });
-  registerDeusCloudProtocolClient();
 
   if (await ensureInstalledInApplications()) {
     return;
@@ -375,10 +362,8 @@ app.whenReady().then(async () => {
   }
 });
 
-// Second instance: focus existing window and process protocol callbacks.
-app.on("second-instance", (_event, commandLine) => {
-  handlePotentialDeusCloudAuthUrls(commandLine);
-
+// Second instance: focus existing window.
+app.on("second-instance", (_event, _commandLine) => {
   if (mainWindow) {
     if (mainWindow.isMinimized()) mainWindow.restore();
     mainWindow.focus();
