@@ -22,14 +22,23 @@ describe("desktop Deus Cloud auth contract", () => {
     const state = createDesktopState();
     const url = new URL(
       buildDesktopLoginUrl({
-        cloudUrl: "https://cloud.deusmachine.ai",
+        config: {
+          authorizationEndpoint: "https://api.workos.com/user_management/authorize",
+          clientId: "client_test",
+          provider: "authkit",
+          redirectUri: "deus-machine://auth/callback",
+        },
         codeChallenge: pair.challenge,
         state,
       })
     );
 
-    expect(url.origin).toBe("https://cloud.deusmachine.ai");
-    expect(url.pathname).toBe("/auth/desktop/start");
+    expect(url.origin).toBe("https://api.workos.com");
+    expect(url.pathname).toBe("/user_management/authorize");
+    expect(url.searchParams.get("response_type")).toBe("code");
+    expect(url.searchParams.get("client_id")).toBe("client_test");
+    expect(url.searchParams.get("redirect_uri")).toBe("deus-machine://auth/callback");
+    expect(url.searchParams.get("provider")).toBe("authkit");
     expect(url.searchParams.get("code_challenge")).toBe(pair.challenge);
     expect(url.searchParams.get("code_challenge_method")).toBe("S256");
     expect(url.searchParams.get("state")).toBe(state);
@@ -37,13 +46,12 @@ describe("desktop Deus Cloud auth contract", () => {
 
   it("parses the desktop callback URL", () => {
     const parsed = parseDesktopAuthCallbackUrl(
-      "deus-machine://auth/callback?code=oauth.code-1_~&state=state_1234567890123456&expires_at=2026-05-18T15%3A00%3A00.000Z"
+      "deus-machine://auth/callback?code=oauth.code-1_~&state=state_1234567890123456"
     );
 
     expect(parsed).toEqual({
       code: "oauth.code-1_~",
       state: "state_1234567890123456",
-      expiresAt: "2026-05-18T15:00:00.000Z",
     });
   });
 

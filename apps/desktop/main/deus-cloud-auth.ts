@@ -6,6 +6,7 @@ import {
   buildDesktopLoginUrl,
   createDesktopPkcePair,
   createDesktopState,
+  type DesktopAuthConfig,
   DEUS_CLOUD_PROTOCOL,
   isDesktopAuthCallbackUrl,
   parseDesktopAuthCallbackUrl,
@@ -33,6 +34,13 @@ interface DesktopExchangeResponse {
   token_type?: string;
   expires_in_seconds?: number;
   account_id?: string;
+}
+
+interface DesktopAuthConfigResponse {
+  authorization_endpoint?: string;
+  client_id?: string;
+  provider?: string;
+  redirect_uri?: string;
 }
 
 interface PendingLogin {
@@ -140,6 +148,45 @@ function decryptSessionToken(encryptedToken: string): string {
   return safeStorage.decryptString(Buffer.from(encryptedToken, "base64"));
 }
 
+function parseDesktopAuthConfig(body: DesktopAuthConfigResponse | null): DesktopAuthConfig {
+  if (
+    !body ||
+    typeof body.authorization_endpoint !== "string" ||
+    typeof body.client_id !== "string" ||
+    body.provider !== "authkit" ||
+    typeof body.redirect_uri !== "string"
+  ) {
+    throw new Error("Deus Cloud returned invalid desktop login configuration");
+  }
+
+  const endpoint = new URL(body.authorization_endpoint);
+  if (endpoint.protocol !== "https:" && endpoint.protocol !== "http:") {
+    throw new Error("Deus Cloud returned invalid WorkOS authorization endpoint");
+  }
+
+  if (body.client_id.length === 0) {
+    throw new Error("Deus Cloud returned an empty WorkOS client ID");
+  }
+
+  return {
+    authorizationEndpoint: endpoint.toString(),
+    clientId: body.client_id,
+    provider: "authkit",
+    redirectUri: body.redirect_uri,
+  };
+}
+
+async function fetchDesktopAuthConfig(cloudUrl: string): Promise<DesktopAuthConfig> {
+  const response = await fetch(new URL("/auth/desktop/config", cloudUrl));
+  const body = (await response.json().catch(() => null)) as DesktopAuthConfigResponse | null;
+
+  if (!response.ok) {
+    throw new Error("Deus Cloud desktop login is not configured");
+  }
+
+  return parseDesktopAuthConfig(body);
+}
+
 async function exchangeDesktopCode(input: {
   cloudUrl: string;
   code: string;
@@ -244,12 +291,6 @@ export async function startDeusCloudLogin(): Promise<DeusCloudAuthResult> {
   const cloudUrl = resolveDeusCloudUrl();
   const state = createDesktopState();
   const pkce = createDesktopPkcePair();
-  const loginUrl = buildDesktopLoginUrl({
-    cloudUrl,
-    state,
-    codeChallenge: pkce.challenge,
-  });
-
   const resultPromise = new Promise<DeusCloudAuthResult>((resolve, reject) => {
     const timeout = setTimeout(() => {
       pendingLogin = null;
@@ -267,6 +308,12 @@ export async function startDeusCloudLogin(): Promise<DeusCloudAuthResult> {
   });
 
   try {
+    const config = await fetchDesktopAuthConfig(cloudUrl);
+    const loginUrl = buildDesktopLoginUrl({
+      config,
+      state,
+      codeChallenge: pkce.challenge,
+    });
     await shell.openExternal(loginUrl);
   } catch (error) {
     finishPendingLogin(error instanceof Error ? error : new Error("Could not open Deus Cloud"));
@@ -286,12 +333,6 @@ export async function handleDeusCloudAuthCallbackUrl(rawUrl: string): Promise<bo
     }
     if (callback.state !== pending.state) {
       throw new Error("Deus Cloud sign-in state did not match");
-    }
-    if (callback.expiresAt) {
-      const expiresAt = parseTimestamp(callback.expiresAt);
-      if (!expiresAt || expiresAt <= Date.now()) {
-        throw new Error("Deus Cloud sign-in code expired");
-      }
     }
 
     const stored = await exchangeDesktopCode({
