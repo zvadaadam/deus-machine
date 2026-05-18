@@ -1,7 +1,7 @@
 /**
  * Deus Database Schema — Single source of truth.
  *
- * Imported by backend/src/lib/schema.ts.
+ * Imported by backend/src/lib/database.ts.
  * All statements are idempotent (IF NOT EXISTS).
  *
  * Tables: repositories, workspaces, sessions, messages, parts, paired_devices
@@ -10,73 +10,25 @@
  */
 
 /**
- * Post-launch migrations.
+ * Pre-launch schema policy.
  *
- * Run each statement individually after SCHEMA_SQL. Fresh installs already
- * have the final schema, so some ALTER statements become harmless no-ops
- * (for example: adding an existing column, renaming an already-renamed
- * column, or dropping a column that was already removed).
+ * Deus has not launched yet, so SCHEMA_SQL is the source of truth. Breaking
+ * schema changes should update SCHEMA_SQL directly. If a local dev database was
+ * created by an older shape, reset it instead of preserving compatibility
+ * baggage through replayed migrations.
+ *
+ * After launch, replace this with versioned, audited migrations before changing
+ * persisted user data.
  */
-export const MIGRATIONS: string[] = [
-  // sessions: structured error category for category-aware UI
-  `ALTER TABLE sessions ADD COLUMN error_category TEXT`,
-  // workspaces: Workflow status (backlog/in-progress/in-review/done/canceled)
-  `ALTER TABLE workspaces ADD COLUMN status TEXT NOT NULL DEFAULT 'in-progress'`,
-  `CREATE INDEX IF NOT EXISTS idx_workspaces_status ON workspaces(status)`,
-  // messages: stop_reason column (replaces old parts JSON column)
-  `ALTER TABLE messages ADD COLUMN stop_reason TEXT`,
-  // parts: separate table for part persistence (append-only)
-  `CREATE TABLE IF NOT EXISTS parts (
-    id TEXT PRIMARY KEY NOT NULL,
-    message_id TEXT NOT NULL REFERENCES messages(id) ON DELETE CASCADE,
-    session_id TEXT NOT NULL,
-    seq INTEGER NOT NULL DEFAULT 0,
-    type TEXT NOT NULL,
-    data TEXT NOT NULL DEFAULT '{}',
-    tool_call_id TEXT,
-    tool_name TEXT,
-    parent_tool_call_id TEXT
-  )`,
-  `CREATE INDEX IF NOT EXISTS idx_parts_message_id ON parts(message_id, seq)`,
-  `CREATE INDEX IF NOT EXISTS idx_parts_session_type ON parts(session_id, type)`,
-  `CREATE INDEX IF NOT EXISTS idx_parts_tool_call_id ON parts(tool_call_id)`,
-  // sessions: rename agent_type → agent_harness to match the type name
-  // (AgentHarness) and the "harness lock" concept. Safe no-op when the
-  // column has already been renamed or the DB is a fresh install.
-  `ALTER TABLE sessions RENAME COLUMN agent_type TO agent_harness`,
-  // sessions: drop the `model` column. Never read by the frontend; the
-  // per-turn model lives on messages.model instead.
-  `ALTER TABLE sessions DROP COLUMN model`,
-  // Data migration for local DBs created before the Codex SDK harness rename.
-  `UPDATE sessions SET agent_harness = 'codex-sdk' WHERE agent_harness = 'codex'`,
-];
+export const PRELAUNCH_SCHEMA_RESET_HINT =
+  "This local database was created with an older pre-launch schema. Reset it by deleting deus.db (or point DATABASE_PATH at a fresh file), then restart Deus.";
 
-function normalizeMigrationSql(sql: string): string {
-  return sql.trim().replace(/\s+/g, " ").toUpperCase();
-}
-
-/**
- * Only tolerate migration errors that are expected for an already-migrated DB.
- * Everything else should fail fast so we don't hide a broken migration.
- */
-export function isExpectedMigrationError(sql: string, message: string): boolean {
-  const normalizedSql = normalizeMigrationSql(sql);
-  const normalizedMessage = message.toLowerCase();
-
-  if (normalizedSql.includes(" ADD COLUMN ")) {
-    return normalizedMessage.includes("duplicate column");
-  }
-
-  if (normalizedSql.includes(" RENAME COLUMN ")) {
-    return normalizedMessage.includes("no such column");
-  }
-
-  if (normalizedSql.includes(" DROP COLUMN ")) {
-    return normalizedMessage.includes("no such column");
-  }
-
-  return false;
-}
+export const PRELAUNCH_REQUIRED_COLUMNS = {
+  workspaces: ["status"],
+  sessions: ["agent_harness", "error_category"],
+  messages: ["stop_reason"],
+  parts: ["parent_tool_call_id"],
+} as const satisfies Record<string, readonly string[]>;
 
 export const SCHEMA_SQL = `
   -- Repositories tracked by the app (id = UUID7, embeds created_at)

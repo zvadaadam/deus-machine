@@ -1,9 +1,18 @@
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { Separator } from "@/components/ui/separator";
+import { useSimulatorCapabilities } from "@/features/simulator";
 import type { SettingsSectionProps } from "./types";
 
 export function ExperimentalSection({ settings, saveSetting }: SettingsSectionProps) {
+  const simulatorCapabilities = useSimulatorCapabilities();
+  const simulatorUnavailableReason =
+    simulatorCapabilities.data.available === false
+      ? simulatorCapabilities.data.unavailableReason
+      : null;
+  const simulatorSwitchDisabled =
+    settings.experimental_simulator !== true && simulatorCapabilities.data.available === false;
+
   return (
     <div className="space-y-5">
       <div>
@@ -20,12 +29,14 @@ export function ExperimentalSection({ settings, saveSetting }: SettingsSectionPr
             iOS Simulator
           </Label>
           <p className="text-muted-foreground text-base">
-            Let the AI agent interact with and test on iOS simulators.
+            {simulatorUnavailableReason ??
+              "Let the AI agent interact with and test on iOS simulators."}
           </p>
         </div>
         <Switch
           id="experimental-simulator"
           checked={settings.experimental_simulator === true}
+          disabled={simulatorSwitchDisabled}
           onCheckedChange={(checked) => saveSetting("experimental_simulator", checked)}
         />
       </div>

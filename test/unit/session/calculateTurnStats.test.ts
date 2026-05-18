@@ -81,6 +81,7 @@ describe("calculateTurnStats", () => {
             partIndex: 3,
             toolCallId: "call-4",
             toolName: "Task",
+            kind: "task",
             state: {
               status: "COMPLETED",
               input: {},

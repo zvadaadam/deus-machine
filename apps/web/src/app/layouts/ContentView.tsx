@@ -17,7 +17,6 @@ import { DesignPanel } from "@/features/workspace/ui/DesignPanel";
 import { BrowserPanel } from "@/features/browser";
 import { SimulatorPanel } from "@/features/simulator";
 import { AppsLauncher, useAppsLaunched, useAppsStopped } from "@/features/apps";
-import { capabilities } from "@/platform/capabilities";
 import { cn } from "@/shared/lib/utils";
 import type { ContentTab } from "@/features/workspace/store";
 import type { Workspace } from "@/shared/types";
@@ -29,6 +28,7 @@ interface ContentViewProps {
   isWatched?: boolean;
   /** Insert a code review prompt into the chat input */
   onReview?: () => void;
+  simulatorAvailable: boolean;
 }
 
 export function ContentView({
@@ -36,6 +36,7 @@ export function ContentView({
   activeTab,
   isWatched = false,
   onReview,
+  simulatorAvailable,
 }: ContentViewProps) {
   // AAP lifecycle → Browser tabs: open on launch, close on stop/crash.
   // Both hooks ignore events targeting other workspaces and always mount
@@ -82,7 +83,7 @@ export function ContentView({
         />
       </div>
 
-      {capabilities.nativeSimulator && (
+      {simulatorAvailable && (
         <div
           className={cn(
             "h-full w-full",
