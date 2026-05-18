@@ -15,6 +15,7 @@ const defaultProjectRoot = path.resolve(runtimeDir, "../..");
 
 export interface StageRuntimeOptions {
   log?: (line: string) => void;
+  preserveElectron?: boolean;
   projectRoot?: string;
 }
 
@@ -25,12 +26,12 @@ export interface RuntimeManifest {
     databaseFile: string;
     preferencesFile: string;
   };
-    bundles: {
-      common: {
-        backend: string;
-        agentServer: string;
-      };
+  bundles: {
+    common: {
+      backend: string;
+      agentServer: string;
     };
+  };
   nodeRuntimeDependencies: readonly string[];
 }
 
@@ -70,7 +71,12 @@ export function stageRuntime(options: StageRuntimeOptions = {}): RuntimeManifest
 
   assertCliRuntimeDependencies(projectRoot, log);
 
-  rmSync(stagePaths.root, { recursive: true, force: true });
+  if (options.preserveElectron === true) {
+    rmSync(stagePaths.common.root, { recursive: true, force: true });
+    rmSync(stagePaths.manifest, { force: true });
+  } else {
+    rmSync(stagePaths.root, { recursive: true, force: true });
+  }
 
   mkdirSync(path.dirname(stagePaths.common.backendBundle), { recursive: true });
   mkdirSync(path.dirname(stagePaths.common.agentServerBundle), { recursive: true });
