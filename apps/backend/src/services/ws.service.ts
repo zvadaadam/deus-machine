@@ -10,6 +10,7 @@ import type { WSContext } from "hono/ws";
 export interface WsSendable {
   send(data: string | ArrayBuffer): void;
   close(code?: number, reason?: string): void;
+  readonly bufferedAmount?: number;
 }
 
 export interface WsConnection {
@@ -25,6 +26,7 @@ export interface WsConnection {
 
 const connections = new Map<string, WsConnection>();
 let heartbeatInterval: ReturnType<typeof setInterval> | null = null;
+const connectionRemovedListeners = new Set<(connectionId: string) => void>();
 
 const HEARTBEAT_INTERVAL_MS = 30_000;
 const HEARTBEAT_TIMEOUT_MS = 10_000;
@@ -48,7 +50,8 @@ export function addConnection(ws: WsSendable, deviceId: string | null, isVirtual
 
 /** Remove a connection by ID. */
 export function removeConnection(id: string): void {
-  connections.delete(id);
+  const existed = connections.delete(id);
+  if (existed) notifyConnectionRemoved(id);
   if (connections.size === 0) stopHeartbeat();
 }
 
@@ -64,14 +67,36 @@ export function recordPong(id: string): void {
 }
 
 /** Broadcast a message to all connected clients. */
-export function broadcast(message: string): void {
+export function broadcast(message: string, options: { maxBufferedAmount?: number } = {}): void {
   for (const conn of connections.values()) {
+    if (shouldDropForBackpressure(conn, options.maxBufferedAmount)) continue;
     try {
       conn.ws.send(message);
     } catch {
       // Connection may have closed — will be cleaned up on next heartbeat
     }
   }
+}
+
+/** Send a message to one connected client. */
+export function sendToConnection(
+  id: string,
+  message: string,
+  options: { maxBufferedAmount?: number } = {}
+): boolean {
+  const conn = connections.get(id);
+  if (!conn || shouldDropForBackpressure(conn, options.maxBufferedAmount)) return false;
+  try {
+    conn.ws.send(message);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+export function onConnectionRemoved(listener: (connectionId: string) => void): () => void {
+  connectionRemovedListeners.add(listener);
+  return () => connectionRemovedListeners.delete(listener);
 }
 
 /** Close all connections and stop heartbeat (for shutdown). */
@@ -84,7 +109,9 @@ export function closeAll(): void {
       // Best-effort
     }
   }
+  const removedIds = [...connections.keys()];
   connections.clear();
+  for (const id of removedIds) notifyConnectionRemoved(id);
 }
 
 // ---- Heartbeat ----
@@ -115,7 +142,7 @@ function checkHeartbeats(): void {
       } catch {
         // Already closed
       }
-      connections.delete(id);
+      removeConnection(id);
       continue;
     }
 
@@ -123,11 +150,28 @@ function checkHeartbeats(): void {
     try {
       conn.ws.send(JSON.stringify({ type: "ping" }));
     } catch {
-      connections.delete(id);
+      removeConnection(id);
     }
   }
 
   if (connections.size === 0) stopHeartbeat();
+}
+
+function shouldDropForBackpressure(
+  conn: WsConnection,
+  maxBufferedAmount: number | undefined
+): boolean {
+  return maxBufferedAmount !== undefined && (conn.ws.bufferedAmount ?? 0) > maxBufferedAmount;
+}
+
+function notifyConnectionRemoved(connectionId: string): void {
+  for (const listener of connectionRemovedListeners) {
+    try {
+      listener(connectionId);
+    } catch {
+      // Cleanup listeners should not break WS teardown.
+    }
+  }
 }
 
 // ---- Protocol Dispatch ----

@@ -51,11 +51,14 @@ import {
 } from "../automation/inspect-mode";
 import { VISUAL_EFFECTS_SETUP } from "../automation/visual-effects";
 import { getErrorMessage } from "@shared/lib/errors";
+import { isConnected, onConnectionChange, sendCommand } from "@/platform/ws/query-protocol-client";
 
 const INSPECT_DRAIN_INTERVAL_MS = 200;
+const BROWSER_PROXY_COMMAND_TIMEOUT_MS = 5_000;
 
 interface BrowserTabProps {
   tab: BrowserTabState;
+  workspaceId: string | null;
   onUpdateTab: (tabId: string, updates: Partial<BrowserTabState>) => void;
   onAddLog: (tabId: string, level: ConsoleLog["level"], message: string) => void;
   visible: boolean;
@@ -71,7 +74,7 @@ function levelFromWebviewEvent(level: number): ConsoleLog["level"] {
 }
 
 export const BrowserTab = forwardRef<BrowserTabHandle, BrowserTabProps>(function BrowserTab(
-  { tab, onUpdateTab, onAddLog, visible, onElementSelected },
+  { tab, workspaceId, onUpdateTab, onAddLog, visible, onElementSelected },
   ref
 ) {
   const tabId = tab.id;
@@ -217,6 +220,79 @@ export const BrowserTab = forwardRef<BrowserTabHandle, BrowserTabProps>(function
 
   // Guard: prevent duplicate automation injection across page loads
   const automationInjectedRef = useRef(false);
+
+  const registerBrowserProxyTarget = useCallback(async () => {
+    if (!workspaceId) return;
+    if (!tabRef.current.streamToRemote) return;
+    const wv = getWebview();
+    if (!wv) return;
+
+    try {
+      wv.getWebContentsId();
+    } catch {
+      return;
+    }
+
+    const url = wv.getURL();
+    try {
+      await wv.executeJavaScript(
+        `Object.defineProperty(globalThis,"__DEUS_BROWSER_TAB_ID__",{value:${JSON.stringify(
+          tabId
+        )},configurable:true}); true;`
+      );
+    } catch {
+      // Registration still lets the backend match by this tab's URL when the
+      // marker is not readable yet; the marker remains the primary check.
+    }
+
+    sendCommand(
+      "browser:registerNativeTab",
+      { tabId, workspaceId, url },
+      BROWSER_PROXY_COMMAND_TIMEOUT_MS
+    ).catch(() => {});
+  }, [getWebview, tabId, workspaceId]);
+
+  useEffect(() => {
+    if (!workspaceId) return;
+    if (!tab.streamToRemote) return;
+    const wv = getWebview();
+    if (!wv) return;
+
+    const register = () => {
+      void registerBrowserProxyTarget();
+    };
+    register();
+    wv.addEventListener("dom-ready", register);
+    wv.addEventListener("did-stop-loading", register);
+    wv.addEventListener("did-navigate", register);
+    wv.addEventListener("did-navigate-in-page", register);
+    return () => {
+      wv.removeEventListener("dom-ready", register);
+      wv.removeEventListener("did-stop-loading", register);
+      wv.removeEventListener("did-navigate", register);
+      wv.removeEventListener("did-navigate-in-page", register);
+    };
+  }, [getWebview, registerBrowserProxyTarget, tab.streamToRemote, workspaceId]);
+
+  useEffect(() => {
+    if (!workspaceId) return;
+    if (!tab.streamToRemote) return;
+    if (isConnected()) {
+      void registerBrowserProxyTarget();
+    }
+    return onConnectionChange((connected) => {
+      if (connected) void registerBrowserProxyTarget();
+    });
+  }, [registerBrowserProxyTarget, tab.streamToRemote, workspaceId]);
+
+  useEffect(() => {
+    if (!tab.streamToRemote) return;
+    return () => {
+      sendCommand("browser:unregisterNativeTab", { tabId }, BROWSER_PROXY_COMMAND_TIMEOUT_MS).catch(
+        () => {}
+      );
+    };
+  }, [tab.streamToRemote, tabId]);
 
   // --- Subscribe to <webview> DOM events ---
   useEffect(() => {
@@ -396,16 +472,20 @@ export const BrowserTab = forwardRef<BrowserTabHandle, BrowserTabProps>(function
   // width the user dragged to — exactly what you'd get sizing a real
   // browser window.
   //
-  // Mobile mode → CDP override at 390×852 with mobile UA, touch, DPR 3.
+  // Mobile mode → CDP override at 390px wide with mobile UA, touch, DPR 3.
+  // Height follows the actual preview area so screenshots/streams do not
+  // squeeze a fixed 852px viewport into a shorter browser panel.
   // Matches the fixed-width frame computed above so the layout viewport
   // exactly equals the rendered viewport.
   useEffect(() => {
+    if (tab.streamToRemote) return;
     if (!hasLoaded) return;
     const wv = getWebview();
     if (!wv) return;
 
-    const requestId = ++emulationRequestRef.current;
-    const isStale = () => requestId !== emulationRequestRef.current;
+    const requestRef = emulationRequestRef;
+    const requestId = ++requestRef.current;
+    const isStale = () => requestId !== requestRef.current;
     (async () => {
       let webContentsId: number;
       try {
@@ -423,7 +503,7 @@ export const BrowserTab = forwardRef<BrowserTabHandle, BrowserTabProps>(function
       await setEmulation({
         webContentsId,
         width: MOBILE_PREVIEW_WIDTH,
-        height: MOBILE_PREVIEW_HEIGHT,
+        height: Math.max(1, Math.floor(bounds?.height ?? MOBILE_PREVIEW_HEIGHT)),
         deviceScaleFactor: MOBILE_PREVIEW_DPR,
         mobile: true,
         scale: 1,
@@ -437,9 +517,9 @@ export const BrowserTab = forwardRef<BrowserTabHandle, BrowserTabProps>(function
 
     return () => {
       // Bump the token so any in-flight promise above sees isStale().
-      emulationRequestRef.current++;
+      requestRef.current++;
     };
-  }, [tab.isMobileView, hasLoaded, getWebview]);
+  }, [tab.isMobileView, tab.streamToRemote, hasLoaded, getWebview, bounds?.height]);
 
   // --- Imperative methods exposed to parent ---
 

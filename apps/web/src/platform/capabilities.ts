@@ -32,6 +32,10 @@ export const capabilities = {
    *  arbitrary cross-origin sites with CDP access). */
   nativeBrowser: isElectron,
 
+  /** Remote browser — hosted web renders a canvas fed by the backend's CDP
+   *  browser proxy over the same WebSocket/relay connection used for app data. */
+  relayBrowser: !isElectron,
+
   /** iOS simulator panel — backed by macOS-only simctl/device-use helpers. */
   nativeSimulator: isMacPlatform,
 

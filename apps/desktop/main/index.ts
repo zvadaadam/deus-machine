@@ -54,8 +54,9 @@ if (!app.requestSingleInstanceLock()) {
 
 // Enable Chrome DevTools Protocol so agent-browser can connect to IDE browser views
 // via CDP instead of spawning a separate Chrome process. Listens on 127.0.0.1 only.
-// Agent tools use `agent-browser --cdp <port>` to interact with the same browser
-// the user sees — shared cookies, real-time visibility of agent actions.
+// Agent tools resolve a specific target WebSocket URL on this port and pass
+// `agent-browser --cdp <target-ws-url>` so the Electron app renderer is never
+// exposed as the controllable browser.
 app.commandLine.appendSwitch("remote-debugging-port", CDP_PORT);
 app.commandLine.appendSwitch("remote-debugging-address", "127.0.0.1");
 
@@ -87,6 +88,7 @@ async function createWindow(): Promise<void> {
       nodeIntegration: false,
       sandbox: false, // ESM preload requires sandbox: false (package.json "type": "module")
       webviewTag: true, // Phase 1 of WebContentsView→<webview> migration — enables <webview> for guest pages
+      backgroundThrottling: false,
     },
   });
 
@@ -107,6 +109,7 @@ async function createWindow(): Promise<void> {
     webPreferences.preload = join(__dirname, "../preload/browser-preload.mjs");
     webPreferences.contextIsolation = true;
     webPreferences.nodeIntegration = false;
+    webPreferences.backgroundThrottling = false;
 
     // Validate src scheme. Unparseable / disallowed schemes fall back to
     // about:blank rather than killing the attach — the guest still mounts,

@@ -234,6 +234,9 @@ function handleRelayFrame(frame: RelayFrame): void {
 
         // Virtual WsSendable routes data back through the relay tunnel
         const virtualWs: WsSendable = {
+          get bufferedAmount() {
+            return tunnelWs?.bufferedAmount ?? 0;
+          },
           send(data: string | ArrayBuffer) {
             const payload =
               typeof data === "string" ? data : new TextDecoder().decode(data as ArrayBuffer);

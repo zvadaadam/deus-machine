@@ -40,6 +40,8 @@ import {
 } from "lucide-react";
 import { BrowserTabBar } from "./BrowserTabBar";
 import { BrowserTab } from "./BrowserTab";
+import { RemoteBrowserTab } from "./RemoteBrowserTab";
+import { disposeRemoteBrowserTab } from "./remoteBrowserLifecycle";
 import { FocusModeOverlay } from "./FocusModeOverlay";
 import { InspectPromptOverlay } from "./InspectPromptOverlay";
 import { webviewManager, type Bounds } from "../webview-manager";
@@ -67,6 +69,7 @@ import { sessionComposerActions } from "@/features/session/store/sessionComposer
 import { attachScreenshotToComposer } from "../lib/attachScreenshotToComposer";
 import { useBrowserWindowStore, browserWindowActions } from "../store/browserWindowStore";
 import { native } from "@/platform";
+import { capabilities } from "@/platform/capabilities";
 import { BROWSER_NEW_TAB_REQUESTED } from "@shared/events";
 
 const MAX_LOGS = 500;
@@ -144,9 +147,16 @@ function loadWorkspaceTabs(wsId: string | null): { tabs: BrowserTabState[]; acti
   if (wsId) {
     const layout = workspaceLayoutActions.getLayout(wsId);
     if (layout.browserTabs.length > 0) {
-      const tabs = layout.browserTabs.map((pt) => hydratePersistedTab(pt));
+      const seen = new Set<string>();
+      const tabs = layout.browserTabs
+        .filter((pt) => {
+          if (seen.has(pt.id)) return false;
+          seen.add(pt.id);
+          return true;
+        })
+        .map((pt) => hydratePersistedTab(pt));
       const persisted = layout.activeBrowserTabId
-        ? layout.browserTabs.find((t) => t.id === layout.activeBrowserTabId)
+        ? tabs.find((t) => t.id === layout.activeBrowserTabId)
         : null;
       return { tabs, activeTabId: persisted?.id ?? tabs[0].id };
     }
@@ -172,7 +182,7 @@ function IconTooltip({ label, children }: { label: ReactNode; children: ReactNod
  *  don't write them to localStorage. */
 function serializeTabs(tabs: BrowserTabState[]): PersistedBrowserTab[] {
   return tabs
-    .filter((t) => !isBlankUrl(t.currentUrl))
+    .filter((t) => !t.streamToRemote && !isBlankUrl(t.currentUrl))
     .map((t) => ({
       id: t.id,
       url: t.currentUrl,
@@ -210,6 +220,7 @@ export function BrowserPanel({ workspaceId, panelVisible = true }: BrowserPanelP
     workspaceId ? (s.layouts[workspaceId]?.chatPanelCollapsed ?? false) : false
   );
   const showFocusOverlay = (focusMode || chatCollapsed) && panelVisible && !!workspaceId;
+  const BrowserTabComponent = capabilities.nativeBrowser ? BrowserTab : RemoteBrowserTab;
   const { open: sidebarOpen, setOpen: setSidebarOpen } = useSidebar();
   const previousLayoutRef = useRef<{ chatCollapsed: boolean; sidebarOpen: boolean } | null>(null);
 
@@ -436,22 +447,56 @@ export function BrowserPanel({ workspaceId, panelVisible = true }: BrowserPanelP
     if (!pendingNewTab) return;
     if (pendingNewTab.workspaceId !== workspaceId) return;
 
-    const newTab = createBrowserTab(workspaceId);
-    newTab.url = pendingNewTab.url;
-    newTab.currentUrl = pendingNewTab.url;
-    // Stamp the opening URL so apps:stopped can match this tab even after
-    // Electron overwrites url/currentUrl on load failure (chrome-error).
-    newTab.openedAt = pendingNewTab.url;
-    // Reacting to a consumer-side effect (new-tab request dispatched via
-    // the global browserWindowStore) — the setState IS the sync from that
-    // external store into this component's state.
+    const requestedTabId = pendingNewTab.tabId;
+    const existingTab = requestedTabId
+      ? tabInfoRef.current.find((tab) => tab.id === requestedTabId)
+      : null;
+    const newTab = existingTab ? null : createBrowserTab(workspaceId);
+    if (newTab) {
+      if (requestedTabId) {
+        newTab.id = requestedTabId;
+      }
+      newTab.url = pendingNewTab.url;
+      newTab.currentUrl = pendingNewTab.url;
+      // Stamp the opening URL so apps:stopped can match this tab even after
+      // Electron overwrites url/currentUrl on load failure (chrome-error).
+      newTab.openedAt = pendingNewTab.url;
+      newTab.streamToRemote = pendingNewTab.streamToRemote === true;
+    }
+
+    const nextActiveTabId = existingTab?.id ?? newTab?.id;
+    if (!nextActiveTabId) {
+      browserWindowActions.consumePendingNewTab();
+      return;
+    }
 
     setTabs((prev) => {
+      if (requestedTabId) {
+        const existing = prev.find((tab) => tab.id === requestedTabId);
+        if (existing) {
+          const next = prev.map((tab) =>
+            tab.id === existing.id
+              ? {
+                  ...tab,
+                  url: pendingNewTab.url,
+                  currentUrl: pendingNewTab.url,
+                  openedAt: pendingNewTab.url,
+                  streamToRemote: pendingNewTab.streamToRemote === true,
+                }
+              : tab
+          );
+          persistTabs(next, existing.id);
+          return next;
+        }
+      }
+
+      if (!newTab) return prev;
+
       const next = [...prev, newTab];
       persistTabs(next, newTab.id);
       return next;
     });
-    setActiveTabId(newTab.id);
+    setActiveTabId(nextActiveTabId);
     browserWindowActions.consumePendingNewTab();
   }, [pendingNewTab, workspaceId, persistTabs]);
 
@@ -474,12 +519,18 @@ export function BrowserPanel({ workspaceId, panelVisible = true }: BrowserPanelP
   const closeTab = useCallback(
     (closingTabId: string) => {
       setTabs((prev) => {
+        const idx = prev.findIndex((t) => t.id === closingTabId);
+        if (idx === -1) return prev;
+
         // Dispose both the page <webview> and the companion DevTools host
         // so their guest pages tear down. Keeps memory tight as tabs churn.
-        webviewManager.dispose(closingTabId);
-        webviewManager.dispose(`${closingTabId}__devtools`);
+        if (capabilities.nativeBrowser) {
+          webviewManager.dispose(closingTabId);
+          webviewManager.dispose(`${closingTabId}__devtools`);
+        } else {
+          disposeRemoteBrowserTab(closingTabId);
+        }
 
-        const idx = prev.findIndex((t) => t.id === closingTabId);
         let newTabs = prev.filter((t) => t.id !== closingTabId);
 
         let nextActiveId = activeTabIdRef.current;
@@ -503,6 +554,31 @@ export function BrowserPanel({ workspaceId, panelVisible = true }: BrowserPanelP
     },
     [workspaceId, persistTabs, requestFocusUrlBar]
   );
+
+  // Close a specific tab requested by the backend relay. Hosted relay
+  // browser sessions use this to remove the Electron <webview> that backed a
+  // remote canvas tab after the remote user closes it.
+  const pendingCloseTabById = useBrowserWindowStore((s) => s.pendingCloseTabById);
+  useEffect(() => {
+    if (!pendingCloseTabById) return;
+    if (pendingCloseTabById.workspaceId && pendingCloseTabById.workspaceId !== workspaceId) {
+      if (capabilities.nativeBrowser) {
+        webviewManager.dispose(pendingCloseTabById.tabId);
+        webviewManager.dispose(`${pendingCloseTabById.tabId}__devtools`);
+      }
+      browserWindowActions.consumePendingCloseTabById();
+      return;
+    }
+
+    const exists = tabs.some((tab) => tab.id === pendingCloseTabById.tabId);
+    if (exists) {
+      closeTab(pendingCloseTabById.tabId);
+    } else if (capabilities.nativeBrowser) {
+      webviewManager.dispose(pendingCloseTabById.tabId);
+      webviewManager.dispose(`${pendingCloseTabById.tabId}__devtools`);
+    }
+    browserWindowActions.consumePendingCloseTabById();
+  }, [pendingCloseTabById, workspaceId, tabs, closeTab]);
 
   // Close-tab request consumer — triggered by AAP's `apps:stopped` event
   // via useAppsStopped. Matches any tab whose `currentUrl` shares the
@@ -908,7 +984,7 @@ export function BrowserPanel({ workspaceId, panelVisible = true }: BrowserPanelP
   // --- Cookie Sync ---
 
   const [cookieBrowsers, setCookieBrowsers] = useState<InstalledBrowser[]>([]);
-  const [cookieSyncing, setCookieSyncing] = useState<string | null>(null); // browser name being synced
+  const [cookieSyncing] = useState<string | null>(null); // browser name being synced
   const [lastSyncResult, setLastSyncResult] = useState<{ browser: string; count: number } | null>(
     null
   );
@@ -1213,7 +1289,7 @@ export function BrowserPanel({ workspaceId, panelVisible = true }: BrowserPanelP
               size="icon"
               className="text-text-muted hover:text-text-secondary aria-pressed:bg-primary/10 aria-pressed:text-primary aria-pressed:hover:text-primary h-7 w-7 transition-colors duration-150 ease-out"
               onClick={handleToggleDevtools}
-              disabled={!activeTab?.currentUrl}
+              disabled={!activeTab?.currentUrl || !capabilities.nativeBrowser}
               aria-pressed={activeTab?.devtoolsOpen}
               aria-label={activeTab?.devtoolsOpen ? "Close DevTools" : "Open DevTools"}
             >
@@ -1251,10 +1327,11 @@ export function BrowserPanel({ workspaceId, panelVisible = true }: BrowserPanelP
         )}
         <div className="grid h-full min-h-0 w-full min-w-0">
           {tabs.map((tab) => (
-            <BrowserTab
+            <BrowserTabComponent
               key={tab.id}
               ref={setTabRef(tab.id)}
               tab={tab}
+              workspaceId={workspaceId}
               onUpdateTab={handleUpdateTab}
               onAddLog={handleAddLog}
               onElementSelected={handleElementSelected}
