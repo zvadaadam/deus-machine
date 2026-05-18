@@ -7,6 +7,7 @@ export const DEUS_CLOUD_AUTH_CALLBACK_PATH = "/callback";
 
 const PKCE_VERIFIER_RE = /^[A-Za-z0-9._~-]{43,128}$/;
 const PKCE_CHALLENGE_RE = /^[A-Za-z0-9_-]{43,128}$/;
+const DESKTOP_LOGIN_CODE_RE = /^[!-~]{1,2048}$/;
 const STATE_RE = /^[A-Za-z0-9._~-]{16,128}$/;
 
 export interface DesktopPkcePair {
@@ -101,7 +102,7 @@ export function parseDesktopAuthCallbackUrl(rawUrl: string): DesktopAuthCallback
   const state = url.searchParams.get("state");
   const expiresAt = url.searchParams.get("expires_at");
 
-  if (!code || !PKCE_CHALLENGE_RE.test(code)) {
+  if (!code || !DESKTOP_LOGIN_CODE_RE.test(code)) {
     throw new Error("Invalid desktop login code");
   }
   if (!state || !STATE_RE.test(state)) {
