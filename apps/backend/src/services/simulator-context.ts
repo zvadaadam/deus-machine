@@ -8,7 +8,7 @@
 //
 // TODO(relay-streaming): Add MJPEG frame proxy for web/relay mode.
 
-import { execFile, spawn } from "child_process";
+import { execFile, execFileSync, spawn } from "child_process";
 import { promisify } from "util";
 import { existsSync, unlinkSync } from "fs";
 import { readdir } from "fs/promises";
@@ -20,6 +20,7 @@ import WebSocket from "ws";
 import { getDatabase } from "../lib/database";
 import { getSessionRaw } from "../db/queries";
 import { broadcast } from "./ws.service";
+import type { SimulatorCapabilities } from "@shared/types/simulator";
 
 const execFileAsync = promisify(execFile);
 
@@ -91,6 +92,13 @@ export interface SimulatorInfo {
   is_available: boolean;
 }
 
+export interface SimulatorCapabilityInput {
+  backendPlatform: NodeJS.Platform;
+  relayClient: boolean;
+  simctlAvailable: boolean;
+  simbridgeAvailable: boolean;
+}
+
 interface SimulatorSession {
   workspaceId: string;
   udid: string;
@@ -115,6 +123,80 @@ interface SimulatorSession {
 
 const sessions = new Map<string, SimulatorSession>();
 const startingUdids = new Map<string, string>();
+
+const MACOS_REQUIRED_REASON = "iOS Simulator requires a local macOS backend with Xcode.";
+const SIMCTL_REQUIRED_REASON = "iOS Simulator requires Xcode simctl on the backend Mac.";
+const SIMBRIDGE_REQUIRED_REASON =
+  "iOS Simulator streaming requires the simbridge helper. Run `bun install` in repo root to build it.";
+const RELAY_STREAM_UNAVAILABLE_REASON =
+  "iOS Simulator streaming is unavailable over remote relay in this build.";
+
+export function resolveSimulatorCapabilities({
+  backendPlatform,
+  relayClient,
+  simctlAvailable,
+  simbridgeAvailable,
+}: SimulatorCapabilityInput): SimulatorCapabilities {
+  if (backendPlatform !== "darwin") {
+    return {
+      available: false,
+      unavailableReason: MACOS_REQUIRED_REASON,
+    };
+  }
+
+  if (!simctlAvailable) {
+    return {
+      available: false,
+      unavailableReason: SIMCTL_REQUIRED_REASON,
+    };
+  }
+
+  if (relayClient) {
+    return {
+      available: false,
+      unavailableReason: RELAY_STREAM_UNAVAILABLE_REASON,
+    };
+  }
+
+  if (!simbridgeAvailable) {
+    return {
+      available: false,
+      unavailableReason: SIMBRIDGE_REQUIRED_REASON,
+    };
+  }
+
+  return {
+    available: true,
+    unavailableReason: null,
+  };
+}
+
+function hasSimulatorToolchain(): boolean {
+  try {
+    const resolved = execFileSync("xcrun", ["--find", "simctl"], {
+      env: SIM_ENV,
+      stdio: ["ignore", "pipe", "ignore"],
+      encoding: "utf8",
+      timeout: 5000,
+    }).trim();
+    return resolved.length > 0;
+  } catch {
+    return false;
+  }
+}
+
+export function getSimulatorCapabilities(
+  options: {
+    relayClient?: boolean;
+  } = {}
+): SimulatorCapabilities {
+  return resolveSimulatorCapabilities({
+    backendPlatform: process.platform,
+    relayClient: options.relayClient === true,
+    simctlAvailable: hasSimulatorToolchain(),
+    simbridgeAvailable: findSimBridgePath() !== null,
+  });
+}
 
 // ---------------------------------------------------------------------------
 // Event pushing (q:event broadcast to all WS clients)

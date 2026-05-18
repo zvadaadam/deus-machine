@@ -14,7 +14,10 @@ const {
 ) as {
   assertElectronBuildVersion: (projectRoot: string) => void;
   assertPackagedMainRuntimeContract: (projectRoot: string) => void;
-  assertPackagedRuntimePlatform: (context?: { electronPlatformName?: string }) => void;
+  assertPackagedRuntimePlatform: (context?: {
+    electronPlatformName?: string;
+    arch?: string | number;
+  }) => void;
 };
 
 const tempRoots: string[] = [];
@@ -84,9 +87,21 @@ describe("electron-builder beforePack runtime guard", () => {
     expect(() => assertPackagedRuntimePlatform({ electronPlatformName: "darwin" })).not.toThrow();
   });
 
-  it("rejects non-macOS packaging until native runtime binaries are staged", () => {
-    expect(() => assertPackagedRuntimePlatform({ electronPlatformName: "linux" })).toThrow(
-      /native runtime is currently staged only for macOS/
+  it("allows Linux x64 packaging where native runtime binaries are staged", () => {
+    expect(() =>
+      assertPackagedRuntimePlatform({ electronPlatformName: "linux", arch: "x64" })
+    ).not.toThrow();
+  });
+
+  it("rejects unknown packaged architecture values for supported platforms", () => {
+    expect(() => assertPackagedRuntimePlatform({ electronPlatformName: "linux", arch: 99 })).toThrow(
+      /Refusing to build linux/
+    );
+  });
+
+  it("rejects platforms without staged native runtime binaries", () => {
+    expect(() => assertPackagedRuntimePlatform({ electronPlatformName: "win32" })).toThrow(
+      /Refusing to build win32/
     );
   });
 

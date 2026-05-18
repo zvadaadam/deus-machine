@@ -9,8 +9,9 @@
  * are pushed via q:event (sim:streamReady, sim:stopped, etc.).
  */
 
-import { sendCommand, onEvent } from "@/platform/ws/query-protocol-client";
+import { sendCommand, sendRequest, onEvent } from "@/platform/ws/query-protocol-client";
 import type { InstalledApp, InspectorSnapshot, SimulatorInfo, StreamInfo } from "../types";
+import type { SimulatorCapabilities } from "@shared/types/simulator";
 
 function asRecord(value: unknown): Record<string, unknown> {
   return value !== null && typeof value === "object" ? (value as Record<string, unknown>) : {};
@@ -61,6 +62,9 @@ function parseInspectorSnapshot(result: unknown): InspectorSnapshot {
 }
 
 export const simulatorService = {
+  getCapabilities: (): Promise<SimulatorCapabilities> =>
+    sendRequest<SimulatorCapabilities>("simulatorCapabilities"),
+
   /** Fast probe: does this workspace contain a buildable Xcode project? */
   hasXcodeProject: async (workspacePath: string): Promise<boolean> => {
     try {

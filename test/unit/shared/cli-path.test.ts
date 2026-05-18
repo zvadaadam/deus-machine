@@ -14,6 +14,8 @@ const originalResourcesPathEnv = process.env.DEUS_RESOURCES_PATH;
 const originalDeusPackaged = process.env.DEUS_PACKAGED;
 const originalDeusRuntime = process.env.DEUS_RUNTIME;
 const originalCwd = process.cwd();
+const originalPlatform = process.platform;
+const originalArch = process.arch;
 
 afterEach(() => {
   if (originalBundledBinDir === undefined) delete process.env.DEUS_BUNDLED_BIN_DIR;
@@ -25,6 +27,16 @@ afterEach(() => {
   if (originalDeusRuntime === undefined) delete process.env.DEUS_RUNTIME;
   else process.env.DEUS_RUNTIME = originalDeusRuntime;
   process.chdir(originalCwd);
+  Object.defineProperty(process, "platform", {
+    configurable: true,
+    enumerable: true,
+    value: originalPlatform,
+  });
+  Object.defineProperty(process, "arch", {
+    configurable: true,
+    enumerable: true,
+    value: originalArch,
+  });
 });
 
 describe("cli path helpers", () => {
@@ -198,6 +210,44 @@ describe("cli path helpers", () => {
       }
     }
   );
+
+  it("resolves the staged Linux dev binary when running from source on Linux x64", () => {
+    Object.defineProperty(process, "platform", {
+      configurable: true,
+      enumerable: true,
+      value: "linux",
+    });
+    Object.defineProperty(process, "arch", {
+      configurable: true,
+      enumerable: true,
+      value: "x64",
+    });
+    delete process.env.DEUS_BUNDLED_BIN_DIR;
+    const root = mkdtempSync(path.join(tmpdir(), "deus-cli-path-linux-dev-"));
+    const dir = path.join(root, "dist", "runtime", "electron", "bin", "linux-x64");
+    const executablePath = path.join(dir, "gh");
+
+    try {
+      mkdirSync(dir, { recursive: true });
+      writeFileSync(executablePath, "");
+      chmodSync(executablePath, 0o755);
+      process.chdir(root);
+      const expectedPath = path.join(
+        process.cwd(),
+        "dist",
+        "runtime",
+        "electron",
+        "bin",
+        "linux-x64",
+        "gh"
+      );
+
+      expect(resolveBundledCliPath("gh")).toBe(expectedPath);
+      expect(resolveCliExecutable("gh")).toBe(expectedPath);
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
 
   it("rejects unsafe command names for bundled path resolution", () => {
     process.env.DEUS_BUNDLED_BIN_DIR = "/Applications/Deus.app/Contents/Resources/bin";

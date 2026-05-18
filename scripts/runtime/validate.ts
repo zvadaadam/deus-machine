@@ -41,8 +41,10 @@ interface GhCliContract {
   ghVersion: string;
   targets: Array<{
     runtimeKey: string;
+    fileFormat?: string;
     fileArch: string;
     archivePlatform: string;
+    archiveExtension?: string;
     archiveSha256: string;
   }>;
 }
@@ -74,8 +76,8 @@ function hashFile(filePath: string): string {
   return createHash("sha256").update(readFileSync(filePath)).digest("hex");
 }
 
-function ghArchiveName(version: string, archivePlatform: string): string {
-  return `gh_${version}_${archivePlatform}.zip`;
+function ghArchiveName(version: string, archivePlatform: string, extension = "zip"): string {
+  return `gh_${version}_${archivePlatform}.${extension}`;
 }
 
 function readGhCliContract(projectRoot: string): GhCliContract {
@@ -110,10 +112,11 @@ function assertExecutable(filePath: string, label: string): void {
   }
 }
 
-function getMachOArchOutput(
+function getExecutableFileOutput(
   projectRoot: string,
   filePath: string,
   label: string,
+  fileFormat: string,
   fileArch: string
 ): string {
   const fileOutput = execFileSync("file", [relativeFromProjectRoot(projectRoot, filePath)], {
@@ -122,14 +125,18 @@ function getMachOArchOutput(
     timeout: 20_000,
     stdio: ["ignore", "pipe", "pipe"],
   }).trim();
-  if (!fileOutput.includes("Mach-O 64-bit executable") || !fileOutput.includes(fileArch)) {
+  const hasExpectedFormat =
+    fileFormat === "Mach-O 64-bit executable"
+      ? fileOutput.includes("Mach-O 64-bit") && fileOutput.includes("executable")
+      : fileOutput.includes(fileFormat);
+  if (!hasExpectedFormat || !fileOutput.includes(fileArch)) {
     throw createBuildRuntimeError(`Unexpected ${label} architecture: ${fileOutput}`);
   }
   return fileOutput;
 }
 
 function verifyMacCodeSignature(filePath: string, label: string): void {
-  if (process.platform !== "darwin") return;
+  if (process.platform !== "darwin" || !label.startsWith("darwin-")) return;
   try {
     execFileSync("codesign", ["--verify", "--verbose=2", filePath], {
       encoding: "utf8",
@@ -162,7 +169,13 @@ function assertStagedGhCli(projectRoot: string): void {
     const ghPath = path.join(binRoot, target.runtimeKey, "gh");
     const label = `${target.runtimeKey}/gh`;
     assertExecutable(ghPath, label);
-    const fileOutput = getMachOArchOutput(projectRoot, ghPath, label, target.fileArch);
+    const fileOutput = getExecutableFileOutput(
+      projectRoot,
+      ghPath,
+      label,
+      target.fileFormat ?? "Mach-O 64-bit executable",
+      target.fileArch
+    );
     verifyMacCodeSignature(ghPath, label);
     const manifestEntry = manifest.targets.find(
       (entry) => entry.runtimeKey === target.runtimeKey && entry.tool === "gh"
@@ -187,7 +200,11 @@ function assertStagedGhCli(projectRoot: string): void {
         `GitHub CLI manifest file output mismatch for ${target.runtimeKey}/gh`
       );
     }
-    const archiveName = ghArchiveName(contract.ghVersion, target.archivePlatform);
+    const archiveName = ghArchiveName(
+      contract.ghVersion,
+      target.archivePlatform,
+      target.archiveExtension
+    );
     const expectedUrl = `https://github.com/cli/cli/releases/download/v${contract.ghVersion}/${archiveName}`;
     const source = manifestEntry.source;
     if (

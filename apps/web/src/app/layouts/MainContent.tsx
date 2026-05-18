@@ -26,6 +26,7 @@ import { webviewManager } from "@/features/browser/webview-manager";
 import { useCollapsedSizePercent } from "@/features/workspace/hooks/useCollapsedSizePercent";
 import type { ContentTab } from "@/features/workspace/store";
 import { useFileWatcher } from "@/features/file-browser/hooks/useFileWatcher";
+import { useSimulatorCapabilities } from "@/features/simulator";
 import { workspaceLayoutActions } from "@/features/workspace/store";
 import { sessionComposerActions } from "@/features/session/store/sessionComposerStore";
 import { WorkspaceHeader } from "@/features/workspace/ui/WorkspaceHeader";
@@ -100,7 +101,15 @@ export function MainContent({
 
   // Effective tab: if the stored tab is hidden by experimental settings, fall back to "changes".
   const experimentalSettings = useSettings().data;
-  const effectiveContentTab = isTabVisible(contentTab, experimentalSettings)
+  const simulatorCapabilities = useSimulatorCapabilities({
+    enabled: experimentalSettings?.experimental_simulator === true,
+  });
+  const simulatorAvailable =
+    experimentalSettings?.experimental_simulator === true &&
+    simulatorCapabilities.data.available === true;
+  const effectiveContentTab = isTabVisible(contentTab, experimentalSettings, {
+    simulatorAvailable,
+  })
     ? contentTab
     : "changes";
 
@@ -434,6 +443,7 @@ export function MainContent({
                           activeTab={effectiveContentTab}
                           onTabChange={handleContentTabChange}
                           workspaceId={selectedWorkspaceId}
+                          simulatorAvailable={simulatorAvailable}
                         />
                         <PRActions
                           prStatus={prStatus}
@@ -457,6 +467,7 @@ export function MainContent({
                           activeTab={effectiveContentTab}
                           isWatched={isWatched}
                           onReview={handleInsertReviewPrompt}
+                          simulatorAvailable={simulatorAvailable}
                         />
                       </div>
                     </div>

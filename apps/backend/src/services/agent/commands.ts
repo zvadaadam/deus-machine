@@ -40,11 +40,16 @@ interface CommandResult {
   [key: string]: unknown;
 }
 
+export interface CommandContext {
+  relayClient?: boolean;
+}
+
 // ---- Command Dispatch ----
 
 export async function runCommand(
   command: CommandName,
-  params: QueryParams
+  params: QueryParams,
+  context: CommandContext = {}
 ): Promise<CommandResult> {
   return (
     match(command)
@@ -169,6 +174,12 @@ export async function runCommand(
         const workspaceId = requireParam(params, "workspaceId", "sim:start");
         const udid = requireParam(params, "udid", "sim:start");
         const skipBootCheck = params.skipBootCheck === true;
+        const capabilities = simulator.getSimulatorCapabilities({
+          relayClient: context.relayClient === true,
+        });
+        if (!capabilities.available) {
+          throw new Error(capabilities.unavailableReason ?? "Simulator is unavailable");
+        }
         // Async: start returns immediately, pushes sim:streamReady event when ready
         simulator.startStream(workspaceId, udid, skipBootCheck).catch((err) => {
           console.error("[Simulator] startStream failed:", err);
