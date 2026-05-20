@@ -248,10 +248,21 @@ function findMissingPrefetchEntrypoint(args: string[], cwd: string): string | nu
   if (!firstArg) return null;
   if (firstArg.startsWith("-")) return null;
   if (isUriLikeArg(firstArg)) return null;
-  if (!firstArg.includes("/") && !firstArg.includes("\\")) return null;
+  if (!isFilesystemEntrypointArg(firstArg)) return null;
 
   const entrypoint = isAbsolute(firstArg) ? firstArg : resolvePath(cwd, firstArg);
   return existsSync(entrypoint) ? null : entrypoint;
+}
+
+function isFilesystemEntrypointArg(value: string): boolean {
+  return (
+    isAbsolute(value) ||
+    value.startsWith("./") ||
+    value.startsWith("../") ||
+    value.startsWith(".\\") ||
+    value.startsWith("..\\") ||
+    /^[a-zA-Z]:[\\/]/.test(value)
+  );
 }
 
 function isUriLikeArg(value: string): boolean {

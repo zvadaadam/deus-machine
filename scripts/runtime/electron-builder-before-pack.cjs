@@ -24,11 +24,18 @@ const SOURCE_EXTENSIONS = new Set([
   ".cjs",
   ".css",
   ".html",
+  ".h",
   ".js",
   ".json",
   ".jsx",
+  ".m",
   ".mjs",
+  ".mm",
+  ".plist",
+  ".resolved",
+  ".sh",
   ".svg",
+  ".swift",
   ".ts",
   ".tsx",
 ]);
@@ -66,11 +73,13 @@ function latestSourceMtime(projectRoot, sourceRelatives) {
   return latest;
 }
 
-function assertBuildOutputFresh(projectRoot, label, outputRelative, sourceRelatives) {
+function assertBuildOutputFresh(projectRoot, label, outputRelative, sourceRelatives, options = {}) {
+  const kind = options.kind ?? "Electron";
+  const rebuildCommand = options.rebuildCommand ?? "bun run build";
   const outputPath = path.join(projectRoot, outputRelative);
   if (!existsSync(outputPath)) {
     throw new Error(
-      `Missing Electron ${label} build output: ${outputRelative}. Run \`bun run build\`.`
+      `Missing ${kind} ${label} build output: ${outputRelative}. Run \`${rebuildCommand}\`.`
     );
   }
 
@@ -78,10 +87,10 @@ function assertBuildOutputFresh(projectRoot, label, outputRelative, sourceRelati
   const latestSource = latestSourceMtime(projectRoot, sourceRelatives);
   if (latestSource.path && outputStat.mtimeMs < latestSource.mtimeMs) {
     throw new Error(
-      `Stale Electron ${label} build output: ${outputRelative} is older than ${relativeFromProjectRoot(
+      `Stale ${kind} ${label} build output: ${outputRelative} is older than ${relativeFromProjectRoot(
         projectRoot,
         latestSource.path
-      )}. Run \`bun run build\` before packaging.`
+      )}. Run \`${rebuildCommand}\` before packaging.`
     );
   }
 }
@@ -270,6 +279,55 @@ function assertDeviceUsePayloads(projectRoot) {
   assertUniversalMacHelper(simbridge, "device-use simbridge");
   assertUniversalMacHelper(siminspector, "device-use siminspector");
   assertNoBuildLocalInstallName(siminspector, projectRoot, "device-use siminspector");
+
+  const tsSources = [
+    "packages/device-use/src/cli",
+    "packages/device-use/src/engine",
+    "packages/device-use/src/server",
+    "packages/device-use/package.json",
+    "packages/device-use/scripts/build-ts.ts",
+  ];
+  const frontendSources = [
+    "packages/device-use/src/frontend",
+    "packages/device-use/vite.config.ts",
+    "packages/device-use/package.json",
+  ];
+  const nativeSources = [
+    "packages/device-use/native/Sources",
+    "packages/device-use/native/Package.swift",
+    "packages/device-use/native/Package.resolved",
+    "packages/device-use/scripts/build-native.ts",
+  ];
+  const freshnessOptions = {
+    kind: "device-use",
+    rebuildCommand: "bun run prepare:device-use --force",
+  };
+
+  for (const [, relativePath] of DEVICE_USE_PACKAGE_FILES) {
+    if (!relativePath.startsWith("dist/")) continue;
+    const sources = relativePath.startsWith("dist/frontend/") ? frontendSources : tsSources;
+    assertBuildOutputFresh(
+      projectRoot,
+      relativePath,
+      path.join("packages/device-use", relativePath),
+      sources,
+      freshnessOptions
+    );
+  }
+  assertBuildOutputFresh(
+    projectRoot,
+    "bin/simbridge",
+    "packages/device-use/bin/simbridge",
+    nativeSources,
+    freshnessOptions
+  );
+  assertBuildOutputFresh(
+    projectRoot,
+    "bin/siminspector.dylib",
+    "packages/device-use/bin/siminspector.dylib",
+    nativeSources,
+    freshnessOptions
+  );
 }
 
 module.exports = function beforePack(context) {

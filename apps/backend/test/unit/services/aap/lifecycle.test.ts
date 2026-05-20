@@ -1,4 +1,7 @@
 import { createServer } from "node:http";
+import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 
 import {
@@ -67,53 +70,91 @@ function withEnv(overrides: Record<string, string | undefined>, test: () => void
   }
 }
 
+function withPackageJson(
+  name: string,
+  bin: Record<string, string>,
+  test: (packageRoot: string) => void
+): void {
+  const packageRoot = mkdtempSync(join(tmpdir(), "aap-lifecycle-package-"));
+  writeFileSync(join(packageRoot, "package.json"), JSON.stringify({ name, bin }), "utf8");
+  try {
+    test(packageRoot);
+  } finally {
+    rmSync(packageRoot, { recursive: true, force: true });
+  }
+}
+
 describe("aap/lifecycle", () => {
   describe("resolveLaunchCommand", () => {
     it("routes packaged device-use launches through the bundled Deus runtime", () => {
-      withEnv(
-        {
-          DEUS_PACKAGED: "1",
-          DEUS_RUNTIME: undefined,
-          DEUS_RUNTIME_EXECUTABLE: process.execPath,
-        },
-        () => {
-          expect(resolveLaunchCommand("device-use", process.cwd())).toEqual({
-            command: process.execPath,
-            argsPrefix: ["device-use"],
-          });
-        }
-      );
+      withPackageJson("device-use", { "device-use": "./dist/cli.js" }, (packageRoot) => {
+        withEnv(
+          {
+            DEUS_PACKAGED: "1",
+            DEUS_RUNTIME: undefined,
+            DEUS_RUNTIME_EXECUTABLE: process.execPath,
+          },
+          () => {
+            expect(resolveLaunchCommand("device-use", packageRoot)).toEqual({
+              command: process.execPath,
+              argsPrefix: ["device-use"],
+            });
+          }
+        );
+      });
     });
 
     it("routes standalone runtime device-use launches through the bundled Deus runtime", () => {
-      withEnv(
-        {
-          DEUS_PACKAGED: undefined,
-          DEUS_RUNTIME: "1",
-          DEUS_RUNTIME_EXECUTABLE: process.execPath,
-        },
-        () => {
-          expect(resolveLaunchCommand("device-use", process.cwd())).toEqual({
-            command: process.execPath,
-            argsPrefix: ["device-use"],
-          });
-        }
-      );
+      withPackageJson("device-use", { "device-use": "./dist/cli.js" }, (packageRoot) => {
+        withEnv(
+          {
+            DEUS_PACKAGED: undefined,
+            DEUS_RUNTIME: "1",
+            DEUS_RUNTIME_EXECUTABLE: process.execPath,
+          },
+          () => {
+            expect(resolveLaunchCommand("device-use", packageRoot)).toEqual({
+              command: process.execPath,
+              argsPrefix: ["device-use"],
+            });
+          }
+        );
+      });
     });
 
     it("keeps source device-use launches on the package bin path", () => {
-      withEnv(
-        {
-          DEUS_PACKAGED: undefined,
-          DEUS_RUNTIME: undefined,
-          DEUS_RUNTIME_EXECUTABLE: undefined,
-        },
-        () => {
-          const resolved = resolveLaunchCommand("device-use", process.cwd());
-          expect(resolved.argsPrefix).toEqual([]);
-          expect(resolved.command.endsWith("device-use")).toBe(true);
-        }
-      );
+      withPackageJson("device-use", { "device-use": "./dist/cli.js" }, (packageRoot) => {
+        withEnv(
+          {
+            DEUS_PACKAGED: undefined,
+            DEUS_RUNTIME: undefined,
+            DEUS_RUNTIME_EXECUTABLE: undefined,
+          },
+          () => {
+            const resolved = resolveLaunchCommand("device-use", packageRoot);
+            expect(resolved.argsPrefix).toEqual([]);
+            expect(resolved.command).toBe(join(packageRoot, "dist/cli.js"));
+          }
+        );
+      });
+    });
+
+    it("keeps unrelated package-local device-use commands on the package bin path", () => {
+      withPackageJson("other-aap-app", { "device-use": "./local-device-use.js" }, (packageRoot) => {
+        withEnv(
+          {
+            DEUS_PACKAGED: "1",
+            DEUS_RUNTIME: undefined,
+            DEUS_RUNTIME_EXECUTABLE: process.execPath,
+          },
+          () => {
+            expect(resolveLaunchCommand("device-use", packageRoot)).toEqual({
+              command: join(packageRoot, "local-device-use.js"),
+              argsPrefix: [],
+            });
+          }
+        );
+      });
     });
   });
 
