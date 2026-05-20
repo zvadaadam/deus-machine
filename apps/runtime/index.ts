@@ -368,11 +368,11 @@ function configureRuntimeEnv(command: RuntimeCommand, dataDir?: string): void {
   }
 }
 
-function resolveDeviceUseCli(layout: ReturnType<typeof resolveRuntimeLayout>): string {
+function resolveDeviceUseRuntimeEntry(layout: ReturnType<typeof resolveRuntimeLayout>): string {
   const candidates = [
-    join(layout.resourcesPath, "agentic-apps", "device-use", "dist", "cli.js"),
+    join(layout.resourcesPath, "agentic-apps", "device-use", "dist", "cli-runtime.js"),
     layout.projectRoot
-      ? join(layout.projectRoot, "packages", "device-use", "dist", "cli.js")
+      ? join(layout.projectRoot, "packages", "device-use", "dist", "cli-runtime.js")
       : null,
   ];
   for (const candidate of candidates) {
@@ -380,7 +380,7 @@ function resolveDeviceUseCli(layout: ReturnType<typeof resolveRuntimeLayout>): s
   }
 
   throw new Error(
-    `Unable to find packaged device-use CLI. Checked: ${candidates.filter(Boolean).join(", ")}`
+    `Unable to find packaged device-use runtime CLI. Checked: ${candidates.filter(Boolean).join(", ")}`
   );
 }
 
@@ -463,7 +463,7 @@ async function run(
 
   if (command === "device-use") {
     const layout = resolveRuntimeLayout();
-    const cliPath = resolveDeviceUseCli(layout);
+    const cliPath = resolveDeviceUseRuntimeEntry(layout);
     process.argv = [layout.executablePath, "device-use", ...passthroughArgs];
     await import(pathToFileURL(cliPath).href);
     return;
