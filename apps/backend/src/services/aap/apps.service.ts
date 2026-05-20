@@ -167,10 +167,7 @@ async function runPrefetch(installed: InstalledAppEntry): Promise<void> {
   if (!prefetch) return;
 
   const vars: TemplateVars = {};
-  const rawCwd = prefetch.cwd ? substituteTemplate(prefetch.cwd, vars) : packageRoot;
-  const cwd = isAbsolute(rawCwd) ? rawCwd : resolvePath(packageRoot, rawCwd);
   const command = resolveCommand(prefetch.command, packageRoot);
-  const args = substituteArgs(prefetch.args, vars);
   if (!canSpawnResolvedCommand(command)) {
     console.log(`[AAP] Prefetch skipped: ${manifest.id}`, {
       command: prefetch.command,
@@ -178,6 +175,10 @@ async function runPrefetch(installed: InstalledAppEntry): Promise<void> {
     });
     return;
   }
+
+  const rawCwd = prefetch.cwd ? substituteTemplate(prefetch.cwd, vars) : packageRoot;
+  const cwd = isAbsolute(rawCwd) ? rawCwd : resolvePath(packageRoot, rawCwd);
+  const args = substituteArgs(prefetch.args, vars);
   const missingEntrypoint = findMissingPrefetchEntrypoint(args, cwd);
   if (missingEntrypoint) {
     console.log(`[AAP] Prefetch skipped: ${manifest.id}`, {
@@ -246,10 +247,15 @@ function findMissingPrefetchEntrypoint(args: string[], cwd: string): string | nu
   const [firstArg] = args;
   if (!firstArg) return null;
   if (firstArg.startsWith("-")) return null;
+  if (isUriLikeArg(firstArg)) return null;
   if (!firstArg.includes("/") && !firstArg.includes("\\")) return null;
 
   const entrypoint = isAbsolute(firstArg) ? firstArg : resolvePath(cwd, firstArg);
   return existsSync(entrypoint) ? null : entrypoint;
+}
+
+function isUriLikeArg(value: string): boolean {
+  return /^[a-zA-Z][a-zA-Z\d+.-]*:\/\//.test(value) || value.startsWith("file:");
 }
 
 function canSpawnResolvedCommand(command: string): boolean {
