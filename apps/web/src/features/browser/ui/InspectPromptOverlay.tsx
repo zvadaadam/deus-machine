@@ -14,8 +14,6 @@
  * without submitting, and clicking another page element simply retargets
  * the prompt.
  */
-/* eslint-env browser */
-
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { ArrowUp, MousePointer2 } from "lucide-react";

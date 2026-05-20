@@ -29,6 +29,7 @@ interface ContentTabBarProps {
   activeTab: ContentTab;
   onTabChange: (tab: ContentTab) => void;
   workspaceId?: string | null;
+  simulatorAvailable: boolean;
 }
 
 const ALWAYS_PRIMARY_TAB_IDS: ContentTab[] = ["changes", "files", "terminal", "browser"];
@@ -100,7 +101,12 @@ function ContentTabButton({
   );
 }
 
-export function ContentTabBar({ activeTab, onTabChange, workspaceId }: ContentTabBarProps) {
+export function ContentTabBar({
+  activeTab,
+  onTabChange,
+  workspaceId,
+  simulatorAvailable,
+}: ContentTabBarProps) {
   const settings = useSettings().data;
   const simPhase = useSimulatorStatusStore((s) =>
     workspaceId ? s.phases[workspaceId] : undefined
@@ -109,8 +115,8 @@ export function ContentTabBar({ activeTab, onTabChange, workspaceId }: ContentTa
   const simulatorActive = simPhase && simPhase !== "idle";
 
   const visibleItems = useMemo(
-    () => CONTENT_TABS.filter((item) => isTabVisible(item.id, settings)),
-    [settings]
+    () => CONTENT_TABS.filter((item) => isTabVisible(item.id, settings, { simulatorAvailable })),
+    [settings, simulatorAvailable]
   );
   const simulatorVisible = visibleItems.some((item) => item.id === "simulator");
   const isMobileProject = useWorkspaceIsMobileProject(workspaceId, { enabled: simulatorVisible });

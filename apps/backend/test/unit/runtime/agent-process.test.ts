@@ -20,7 +20,7 @@ const originalEnv = { ...process.env };
 const originalCwd = process.cwd();
 
 function createTempRoot(): string {
-  const root = mkdtempSync(path.join(os.tmpdir(), "deus-agent-process-"));
+  const root = realpathSync.native(mkdtempSync(path.join(os.tmpdir(), "deus-agent-process-")));
   tempRoots.push(root);
   return root;
 }
@@ -135,7 +135,7 @@ describe("managed agent-server process", () => {
 
     await expect(startManagedAgentServer()).resolves.toBe("ws://127.0.0.1:7890");
     expect(readFileSync(argsPath, "utf8").trim()).toBe("agent-server");
-    expect(readFileSync(cwdPath, "utf8").trim()).toBe(realpathSync(root));
+    expect(realpathSync(readFileSync(cwdPath, "utf8").trim())).toBe(realpathSync(root));
     expect(readFileSync(envPath, "utf8").trimEnd()).toBe(
       [
         "AUTH_TOKEN=",
