@@ -29,10 +29,12 @@ export const serveCommand: CommandDefinition<Params> = {
     const here = path.dirname(fileURLToPath(import.meta.url));
     // Locate the server entrypoint across dev + bundled layouts.
     // From <pkg>/src/cli/commands/serve.{ts,js}: ../../server/index.ts (dev)
-    // From <pkg>/dist/cli.js (bundled): ../src/server/index.ts
-    // From <pkg>/dist/cli/<…>/serve.js (future split build): ../../../server/index.js
+    // From <pkg>/dist/cli.js (bundled): server/index.js
+    // From <pkg>/dist/cli/<...>/serve.js (future split build): ../../server/index.js
     const moduleCandidates = [
       path.resolve(here, "../../server/index.ts"),
+      path.resolve(here, "server/index.js"),
+      path.resolve(here, "../../server/index.js"),
       path.resolve(here, "../src/server/index.ts"),
       path.resolve(here, "../../../server/index.js"),
     ];

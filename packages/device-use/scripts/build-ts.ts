@@ -15,6 +15,7 @@ if (existsSync(distDir)) rmSync(distDir, { recursive: true });
 const entries = [
   { entry: "src/cli/index.ts", out: "dist/cli.js", shebang: true },
   { entry: "src/engine/index.ts", out: "dist/engine.js", shebang: false },
+  { entry: "src/server/index.ts", out: "dist/server/index.js", shebang: false },
 ];
 
 for (const { entry, out, shebang } of entries) {

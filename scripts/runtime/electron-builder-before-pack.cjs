@@ -13,6 +13,12 @@ const SUPPORTED_PACKAGED_RUNTIME_KEYS = new Map([
   ["darwin", new Set(["arm64", "x64"])],
   ["linux", new Set(["x64"])],
 ]);
+const {
+  DEVICE_USE_HELPER_NAMES,
+  DEVICE_USE_PACKAGE_FILES,
+  assertNoBuildLocalInstallName,
+  deviceUsePackageRoot,
+} = require("./lib/device-use-payloads.cjs");
 
 const SOURCE_EXTENSIONS = new Set([
   ".cjs",
@@ -223,8 +229,47 @@ function assertPackagedRuntimePlatform(context) {
   throw new Error(
     `Packaged Deus native runtime is staged for ${[...SUPPORTED_PACKAGED_RUNTIME_KEYS.entries()]
       .map(([platform, arches]) => `${platform}-${[...arches].join("|")}`)
-      .join(", ")}. Refusing to build ${platformName}${arch ? `-${arch}` : ""} artifacts until Resources/bin/deus-runtime and bundled native CLIs are staged for that platform.`
+      .join(
+        ", "
+      )}. Refusing to build ${platformName}${arch ? `-${arch}` : ""} artifacts until Resources/bin/deus-runtime and bundled native CLIs are staged for that platform.`
   );
+}
+
+function assertExecutableFile(filePath, label) {
+  if (!existsSync(filePath)) {
+    throw new Error(`Missing ${label}: ${filePath}`);
+  }
+  const stat = statSync(filePath);
+  if (!stat.isFile()) {
+    throw new Error(`${label} is not a regular file: ${filePath}`);
+  }
+  if ((stat.mode & 0o111) === 0) {
+    throw new Error(`${label} is not executable: ${filePath}`);
+  }
+}
+
+function assertUniversalMacHelper(filePath, label) {
+  assertExecutableFile(filePath, label);
+  execFileSync("lipo", [filePath, "-verify_arch", "arm64", "x86_64"], {
+    stdio: "ignore",
+  });
+}
+
+function assertDeviceUsePayloads(projectRoot) {
+  const packageRoot = deviceUsePackageRoot(projectRoot);
+
+  for (const [label, relativePath] of DEVICE_USE_PACKAGE_FILES) {
+    const filePath = path.join(packageRoot, relativePath);
+    if (!existsSync(filePath) || !statSync(filePath).isFile()) {
+      throw new Error(`Missing ${label}: ${filePath}. Run \`bun run prepare:device-use\`.`);
+    }
+  }
+
+  const simbridge = path.join(packageRoot, "bin", DEVICE_USE_HELPER_NAMES.simbridge);
+  const siminspector = path.join(packageRoot, "bin", DEVICE_USE_HELPER_NAMES.siminspector);
+  assertUniversalMacHelper(simbridge, "device-use simbridge");
+  assertUniversalMacHelper(siminspector, "device-use siminspector");
+  assertNoBuildLocalInstallName(siminspector, projectRoot, "device-use siminspector");
 }
 
 module.exports = function beforePack(context) {
@@ -269,6 +314,10 @@ module.exports = function beforePack(context) {
         `Missing bundled ${label} for ${runtimeKey}: ${binPath}. Run \`${command}\` before packaging.`
       );
     }
+  }
+
+  if (platformName === "darwin") {
+    assertDeviceUsePayloads(projectRoot);
   }
 };
 
