@@ -3,7 +3,7 @@ import { existsSync, statSync, writeFileSync } from "fs";
 import { delimiter, extname, join } from "path";
 import { app, BrowserWindow } from "electron";
 import crypto from "crypto";
-import { DEUS_DB_FILENAME } from "../../../shared/runtime";
+import { DEUS_DB_FILENAME, PACKAGED_SYSTEM_PATHS } from "../../../shared/runtime";
 import { extendCliPath, getDevStagedCliDirectory } from "../../../shared/lib/cli-path";
 import { PACKAGED_RUNTIME_ENV_DENYLIST } from "./runtime-env";
 
@@ -15,7 +15,6 @@ let restartAttempt = 0;
 let restartTimer: ReturnType<typeof setTimeout> | null = null;
 const MAX_RESTART_ATTEMPTS = 5;
 const STARTUP_TIMEOUT_MS = 30_000;
-const PACKAGED_SYSTEM_PATHS = ["/usr/bin", "/bin", "/usr/sbin", "/sbin"];
 const WINDOWS_EXECUTABLE_EXTENSIONS = new Set([".exe", ".cmd", ".bat", ".ps1", ".com"]);
 
 export interface BackendSpawnHooks {

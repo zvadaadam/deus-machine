@@ -4,6 +4,7 @@ export const DEUS_APP_ID = "com.deus.app";
 export const DEUS_DB_FILENAME = "deus.db";
 export const DEUS_PREFERENCES_FILENAME = "preferences.json";
 export const RUNTIME_MANIFEST_VERSION = 1;
+export const PACKAGED_SYSTEM_PATHS = ["/usr/bin", "/bin", "/usr/sbin", "/sbin"] as const;
 
 export const CLI_RUNTIME_DEPENDENCIES = [
   "@anthropic-ai/claude-agent-sdk",

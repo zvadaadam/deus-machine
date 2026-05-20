@@ -13,16 +13,29 @@ const SUPPORTED_PACKAGED_RUNTIME_KEYS = new Map([
   ["darwin", new Set(["arm64", "x64"])],
   ["linux", new Set(["x64"])],
 ]);
+const {
+  DEVICE_USE_HELPER_NAMES,
+  DEVICE_USE_PACKAGE_FILES,
+  assertNoBuildLocalInstallName,
+  deviceUsePackageRoot,
+} = require("./lib/device-use-payloads.cjs");
 
 const SOURCE_EXTENSIONS = new Set([
   ".cjs",
   ".css",
   ".html",
+  ".h",
   ".js",
   ".json",
   ".jsx",
+  ".m",
   ".mjs",
+  ".mm",
+  ".plist",
+  ".resolved",
+  ".sh",
   ".svg",
+  ".swift",
   ".ts",
   ".tsx",
 ]);
@@ -60,11 +73,13 @@ function latestSourceMtime(projectRoot, sourceRelatives) {
   return latest;
 }
 
-function assertBuildOutputFresh(projectRoot, label, outputRelative, sourceRelatives) {
+function assertBuildOutputFresh(projectRoot, label, outputRelative, sourceRelatives, options = {}) {
+  const kind = options.kind ?? "Electron";
+  const rebuildCommand = options.rebuildCommand ?? "bun run build";
   const outputPath = path.join(projectRoot, outputRelative);
   if (!existsSync(outputPath)) {
     throw new Error(
-      `Missing Electron ${label} build output: ${outputRelative}. Run \`bun run build\`.`
+      `Missing ${kind} ${label} build output: ${outputRelative}. Run \`${rebuildCommand}\`.`
     );
   }
 
@@ -72,10 +87,10 @@ function assertBuildOutputFresh(projectRoot, label, outputRelative, sourceRelati
   const latestSource = latestSourceMtime(projectRoot, sourceRelatives);
   if (latestSource.path && outputStat.mtimeMs < latestSource.mtimeMs) {
     throw new Error(
-      `Stale Electron ${label} build output: ${outputRelative} is older than ${relativeFromProjectRoot(
+      `Stale ${kind} ${label} build output: ${outputRelative} is older than ${relativeFromProjectRoot(
         projectRoot,
         latestSource.path
-      )}. Run \`bun run build\` before packaging.`
+      )}. Run \`${rebuildCommand}\` before packaging.`
     );
   }
 }
@@ -223,7 +238,95 @@ function assertPackagedRuntimePlatform(context) {
   throw new Error(
     `Packaged Deus native runtime is staged for ${[...SUPPORTED_PACKAGED_RUNTIME_KEYS.entries()]
       .map(([platform, arches]) => `${platform}-${[...arches].join("|")}`)
-      .join(", ")}. Refusing to build ${platformName}${arch ? `-${arch}` : ""} artifacts until Resources/bin/deus-runtime and bundled native CLIs are staged for that platform.`
+      .join(
+        ", "
+      )}. Refusing to build ${platformName}${arch ? `-${arch}` : ""} artifacts until Resources/bin/deus-runtime and bundled native CLIs are staged for that platform.`
+  );
+}
+
+function assertExecutableFile(filePath, label) {
+  if (!existsSync(filePath)) {
+    throw new Error(`Missing ${label}: ${filePath}`);
+  }
+  const stat = statSync(filePath);
+  if (!stat.isFile()) {
+    throw new Error(`${label} is not a regular file: ${filePath}`);
+  }
+  if ((stat.mode & 0o111) === 0) {
+    throw new Error(`${label} is not executable: ${filePath}`);
+  }
+}
+
+function assertUniversalMacHelper(filePath, label) {
+  assertExecutableFile(filePath, label);
+  execFileSync("lipo", [filePath, "-verify_arch", "arm64", "x86_64"], {
+    stdio: "ignore",
+  });
+}
+
+function assertDeviceUsePayloads(projectRoot) {
+  const packageRoot = deviceUsePackageRoot(projectRoot);
+
+  for (const [label, relativePath] of DEVICE_USE_PACKAGE_FILES) {
+    const filePath = path.join(packageRoot, relativePath);
+    if (!existsSync(filePath) || !statSync(filePath).isFile()) {
+      throw new Error(`Missing ${label}: ${filePath}. Run \`bun run prepare:device-use\`.`);
+    }
+  }
+
+  const simbridge = path.join(packageRoot, "bin", DEVICE_USE_HELPER_NAMES.simbridge);
+  const siminspector = path.join(packageRoot, "bin", DEVICE_USE_HELPER_NAMES.siminspector);
+  assertUniversalMacHelper(simbridge, "device-use simbridge");
+  assertUniversalMacHelper(siminspector, "device-use siminspector");
+  assertNoBuildLocalInstallName(siminspector, projectRoot, "device-use siminspector");
+
+  const tsSources = [
+    "packages/device-use/src/cli",
+    "packages/device-use/src/engine",
+    "packages/device-use/src/server",
+    "packages/device-use/package.json",
+    "packages/device-use/scripts/build-ts.ts",
+  ];
+  const frontendSources = [
+    "packages/device-use/src/frontend",
+    "packages/device-use/vite.config.ts",
+    "packages/device-use/package.json",
+  ];
+  const nativeSources = [
+    "packages/device-use/native/Sources",
+    "packages/device-use/native/Package.swift",
+    "packages/device-use/native/Package.resolved",
+    "packages/device-use/scripts/build-native.ts",
+  ];
+  const freshnessOptions = {
+    kind: "device-use",
+    rebuildCommand: "bun run prepare:device-use --force",
+  };
+
+  for (const [, relativePath] of DEVICE_USE_PACKAGE_FILES) {
+    if (!relativePath.startsWith("dist/")) continue;
+    const sources = relativePath.startsWith("dist/frontend/") ? frontendSources : tsSources;
+    assertBuildOutputFresh(
+      projectRoot,
+      relativePath,
+      path.join("packages/device-use", relativePath),
+      sources,
+      freshnessOptions
+    );
+  }
+  assertBuildOutputFresh(
+    projectRoot,
+    "bin/simbridge",
+    "packages/device-use/bin/simbridge",
+    nativeSources,
+    freshnessOptions
+  );
+  assertBuildOutputFresh(
+    projectRoot,
+    "bin/siminspector.dylib",
+    "packages/device-use/bin/siminspector.dylib",
+    nativeSources,
+    freshnessOptions
   );
 }
 
@@ -269,6 +372,10 @@ module.exports = function beforePack(context) {
         `Missing bundled ${label} for ${runtimeKey}: ${binPath}. Run \`${command}\` before packaging.`
       );
     }
+  }
+
+  if (platformName === "darwin") {
+    assertDeviceUsePayloads(projectRoot);
   }
 };
 

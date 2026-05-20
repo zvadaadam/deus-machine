@@ -6,14 +6,16 @@
  */
 
 import type * as Pty from "node-pty";
+import { createRequire } from "node:module";
 import { broadcast } from "./ws.service";
 
 // Active PTY sessions, keyed by client-provided ID
 const sessions = new Map<string, Pty.IPty>();
 let ptyModule: typeof Pty | null = null;
+const requireModule = createRequire(import.meta.url);
 
 function getPtyModule(): typeof Pty {
-  ptyModule ??= require("node-pty") as typeof Pty;
+  ptyModule ??= requireModule("node-pty") as typeof Pty;
   return ptyModule;
 }
 

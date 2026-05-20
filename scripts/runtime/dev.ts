@@ -7,6 +7,7 @@ import { getDevStagedCliDirectory } from "../../shared/lib/cli-path";
 const runtimeDir = path.dirname(fileURLToPath(import.meta.url));
 const projectRoot = path.resolve(runtimeDir, "../..");
 let stopping = false;
+const nodeExecutable = process.env.NODE_EXECUTABLE || "node";
 
 function log(message: string): void {
   console.log(`[dev] ${message}`);
@@ -64,27 +65,23 @@ async function main(): Promise<void> {
 
 function startBackend(): Promise<{ process: ChildProcess; port: number } | null> {
   return new Promise((resolve) => {
-    const child = spawn(
-      process.execPath,
-      [path.join(projectRoot, "apps", "backend", "server.cjs")],
-      {
-        cwd: path.join(projectRoot, "apps", "backend"),
-        stdio: ["ignore", "pipe", "pipe"],
-        env: {
-          ...process.env,
-          PORT: "0",
-          AGENT_SERVER_ENTRY: path.join(
-            projectRoot,
-            "apps",
-            "agent-server",
-            "dist",
-            "index.bundled.cjs"
-          ),
-          AGENT_SERVER_CWD: path.join(projectRoot, "apps", "agent-server"),
-          DEUS_BUNDLED_BIN_DIR: getDevStagedCliDirectory(projectRoot) ?? "",
-        },
-      }
-    );
+    const child = spawn(nodeExecutable, [path.join(projectRoot, "apps", "backend", "server.cjs")], {
+      cwd: path.join(projectRoot, "apps", "backend"),
+      stdio: ["ignore", "pipe", "pipe"],
+      env: {
+        ...process.env,
+        PORT: "0",
+        AGENT_SERVER_ENTRY: path.join(
+          projectRoot,
+          "apps",
+          "agent-server",
+          "dist",
+          "index.bundled.cjs"
+        ),
+        AGENT_SERVER_CWD: path.join(projectRoot, "apps", "agent-server"),
+        DEUS_BUNDLED_BIN_DIR: getDevStagedCliDirectory(projectRoot) ?? "",
+      },
+    });
 
     let settled = false;
     let buffer = "";

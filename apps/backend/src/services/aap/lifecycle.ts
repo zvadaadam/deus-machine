@@ -57,6 +57,11 @@ export interface Spawned {
  *  chatty child while still preserving the most recent crash context. */
 const RING_MAX_CHUNKS = 50;
 
+interface ResolvedLaunchCommand {
+  command: string;
+  argsPrefix: string[];
+}
+
 export function spawnApp(args: SpawnArgs): Spawned {
   const { manifest, vars, packageRoot, onExit, onError } = args;
   const { launch } = manifest;
@@ -67,7 +72,7 @@ export function spawnApp(args: SpawnArgs): Spawned {
   // relative to the package they live in.
   const rawCwd = launch.cwd ? substituteTemplate(launch.cwd, vars) : packageRoot;
   const cwd = isAbsolute(rawCwd) ? rawCwd : resolvePath(packageRoot, rawCwd);
-  const resolvedCommand = resolveCommand(launch.command, packageRoot);
+  const resolvedCommand = resolveLaunchCommand(launch.command, packageRoot);
 
   const env = createBackendChildEnv({
     ...substituteEnv(launch.env, vars),
@@ -76,7 +81,7 @@ export function spawnApp(args: SpawnArgs): Spawned {
     DEUS_PORT: String(vars.port),
   });
 
-  const child = spawn(resolvedCommand, cmdArgs, {
+  const child = spawn(resolvedCommand.command, [...resolvedCommand.argsPrefix, ...cmdArgs], {
     cwd,
     env,
     stdio: ["ignore", "pipe", "pipe"],
@@ -317,6 +322,35 @@ export function resolveCommand(command: string, packageRoot: string): string {
   // (5) Let spawn() resolve via PATH; if absent there too, the "error"
   //     event fires with ENOENT and our onError handler surfaces it.
   return command;
+}
+
+function isDeviceUsePackageRoot(packageRoot: string): boolean {
+  try {
+    const pj = JSON.parse(readFileSync(join(packageRoot, "package.json"), "utf8")) as {
+      name?: string;
+    };
+    return pj.name === "device-use";
+  } catch {
+    return false;
+  }
+}
+
+export function resolveLaunchCommand(command: string, packageRoot: string): ResolvedLaunchCommand {
+  if (command === "device-use" && isDeviceUsePackageRoot(packageRoot)) {
+    const runtimeExecutable = process.env.DEUS_RUNTIME_EXECUTABLE;
+    const hasBundledRuntime = process.env.DEUS_PACKAGED === "1" || process.env.DEUS_RUNTIME === "1";
+    if (hasBundledRuntime && runtimeExecutable && existsSync(runtimeExecutable)) {
+      return {
+        command: runtimeExecutable,
+        argsPrefix: ["device-use"],
+      };
+    }
+  }
+
+  return {
+    command: resolveCommand(command, packageRoot),
+    argsPrefix: [],
+  };
 }
 
 // ----------------------------------------------------------------------------

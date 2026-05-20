@@ -1,9 +1,13 @@
 import { createServer } from "node:http";
+import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 
 import {
   isProcessAlive,
   killByPid,
+  resolveLaunchCommand,
   spawnApp,
   stopChild,
   waitForReady,
@@ -48,7 +52,112 @@ async function startProbeServer(options: { healthStatus: number } = { healthStat
   return { server, port, close: () => new Promise<void>((r) => server.close(() => r())) };
 }
 
+function withEnv(overrides: Record<string, string | undefined>, test: () => void): void {
+  const original = new Map(Object.keys(overrides).map((key) => [key, process.env[key]] as const));
+
+  for (const [key, value] of Object.entries(overrides)) {
+    if (value === undefined) delete process.env[key];
+    else process.env[key] = value;
+  }
+
+  try {
+    test();
+  } finally {
+    for (const [key, value] of original) {
+      if (value === undefined) delete process.env[key];
+      else process.env[key] = value;
+    }
+  }
+}
+
+function withPackageJson(
+  name: string,
+  bin: Record<string, string>,
+  test: (packageRoot: string) => void
+): void {
+  const packageRoot = mkdtempSync(join(tmpdir(), "aap-lifecycle-package-"));
+  writeFileSync(join(packageRoot, "package.json"), JSON.stringify({ name, bin }), "utf8");
+  try {
+    test(packageRoot);
+  } finally {
+    rmSync(packageRoot, { recursive: true, force: true });
+  }
+}
+
 describe("aap/lifecycle", () => {
+  describe("resolveLaunchCommand", () => {
+    it("routes packaged device-use launches through the bundled Deus runtime", () => {
+      withPackageJson("device-use", { "device-use": "./dist/cli.js" }, (packageRoot) => {
+        withEnv(
+          {
+            DEUS_PACKAGED: "1",
+            DEUS_RUNTIME: undefined,
+            DEUS_RUNTIME_EXECUTABLE: process.execPath,
+          },
+          () => {
+            expect(resolveLaunchCommand("device-use", packageRoot)).toEqual({
+              command: process.execPath,
+              argsPrefix: ["device-use"],
+            });
+          }
+        );
+      });
+    });
+
+    it("routes standalone runtime device-use launches through the bundled Deus runtime", () => {
+      withPackageJson("device-use", { "device-use": "./dist/cli.js" }, (packageRoot) => {
+        withEnv(
+          {
+            DEUS_PACKAGED: undefined,
+            DEUS_RUNTIME: "1",
+            DEUS_RUNTIME_EXECUTABLE: process.execPath,
+          },
+          () => {
+            expect(resolveLaunchCommand("device-use", packageRoot)).toEqual({
+              command: process.execPath,
+              argsPrefix: ["device-use"],
+            });
+          }
+        );
+      });
+    });
+
+    it("keeps source device-use launches on the package bin path", () => {
+      withPackageJson("device-use", { "device-use": "./dist/cli.js" }, (packageRoot) => {
+        withEnv(
+          {
+            DEUS_PACKAGED: undefined,
+            DEUS_RUNTIME: undefined,
+            DEUS_RUNTIME_EXECUTABLE: undefined,
+          },
+          () => {
+            const resolved = resolveLaunchCommand("device-use", packageRoot);
+            expect(resolved.argsPrefix).toEqual([]);
+            expect(resolved.command).toBe(join(packageRoot, "dist/cli.js"));
+          }
+        );
+      });
+    });
+
+    it("keeps unrelated package-local device-use commands on the package bin path", () => {
+      withPackageJson("other-aap-app", { "device-use": "./local-device-use.js" }, (packageRoot) => {
+        withEnv(
+          {
+            DEUS_PACKAGED: "1",
+            DEUS_RUNTIME: undefined,
+            DEUS_RUNTIME_EXECUTABLE: process.execPath,
+          },
+          () => {
+            expect(resolveLaunchCommand("device-use", packageRoot)).toEqual({
+              command: join(packageRoot, "local-device-use.js"),
+              argsPrefix: [],
+            });
+          }
+        );
+      });
+    });
+  });
+
   describe("spawnApp", () => {
     it("spawns a child, fires onExit with the exit code", async () => {
       const exit = new Promise<{ code: number | null }>((resolve) => {

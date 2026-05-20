@@ -4,16 +4,18 @@
 //   3. Copies simbridge + siminspector into packages/device-use/bin/ (where
 //      runtime code looks for it)
 //
-// Idempotent for expensive builds, but helper binaries are always refreshed
-// from the latest native output to avoid stale packaged artifacts.
+// Idempotent for expensive builds. Fresh installs can use already-staged
+// helpers without requiring Swift; when helpers are missing, we build or copy
+// from the current native output.
 
 import { execFileSync } from "node:child_process";
-import { copyFileSync, existsSync, mkdirSync, readdirSync, statSync } from "node:fs";
+import { chmodSync, copyFileSync, existsSync, mkdirSync, readdirSync, statSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const rootDir = dirname(dirname(fileURLToPath(import.meta.url)));
 const pkgDir = join(rootDir, "packages", "device-use");
+const force = process.argv.includes("--force");
 
 function log(msg) {
   console.log(`[prepare-device-use] ${msg}`);
@@ -28,11 +30,16 @@ if (!existsSync(pkgDir)) {
   process.exit(0);
 }
 
-// 1. TypeScript build
+// 1. TypeScript/server build
 const distDir = join(pkgDir, "dist");
-const distEngine = join(distDir, "engine.js");
-if (!existsSync(distEngine)) {
-  log("building TypeScript (dist/)...");
+const distOutputs = [
+  join(distDir, "cli.js"),
+  join(distDir, "cli-runtime.js"),
+  join(distDir, "engine.js"),
+  join(distDir, "server", "index.js"),
+];
+if (force || distOutputs.some((output) => !existsSync(output))) {
+  log(force ? "rebuilding TypeScript (dist/)..." : "building TypeScript (dist/)...");
   try {
     run("bun", ["run", "build:ts"], pkgDir);
   } catch (err) {
@@ -43,11 +50,27 @@ if (!existsSync(distEngine)) {
   log("dist/ already built, skipping");
 }
 
-// 2. Native build (macOS only, Xcode CLT required)
+const frontendIndex = join(distDir, "frontend", "index.html");
+if (force || !existsSync(frontendIndex)) {
+  log(force ? "rebuilding frontend (dist/frontend/)..." : "building frontend (dist/frontend/)...");
+  try {
+    run("bun", ["run", "build:frontend"], pkgDir);
+  } catch (err) {
+    log(`frontend build failed: ${err.message}`);
+    process.exit(1);
+  }
+} else {
+  log("dist/frontend/ already built, skipping");
+}
+
+// 2. Native helpers (macOS only, Xcode CLT required)
 const nativeDir = join(pkgDir, "native");
 const releaseBinary = join(nativeDir, ".build", "release", "simbridge");
 const universalBinary = join(nativeDir, ".build", "apple", "Products", "Release", "simbridge");
 const releaseInspector = join(nativeDir, ".build", "release", "siminspector.dylib");
+const binDir = join(pkgDir, "bin");
+const binSimbridge = join(binDir, "simbridge");
+const binSiminspector = join(binDir, "siminspector.dylib");
 
 function hasRequiredMacArchitectures(binary) {
   if (process.platform !== "darwin") return true;
@@ -86,11 +109,37 @@ function swiftAvailable() {
   }
 }
 
-if (!findSwiftBuildOutput() || !existsSync(releaseInspector)) {
+function helperReady(filePath) {
+  return existsSync(filePath) && hasRequiredMacArchitectures(filePath);
+}
+
+const stagedHelpersReady = !force && helperReady(binSimbridge) && helperReady(binSiminspector);
+
+if (force && process.platform === "darwin") {
+  if (!swiftAvailable()) {
+    log(
+      "Swift not found (install Xcode CLT: xcode-select --install). Cannot force-refresh native helpers."
+    );
+    process.exit(1);
+  }
+  log("rebuilding native simulator helpers...");
+  try {
+    run("bun", ["run", "scripts/build-native.ts", "--force"], pkgDir);
+  } catch (err) {
+    log(`native build failed: ${err.message}`);
+    process.exit(1);
+  }
+} else if (stagedHelpersReady) {
+  log("native simulator helpers already staged, skipping");
+} else if (!findSwiftBuildOutput() || !existsSync(releaseInspector)) {
   if (process.platform !== "darwin") {
-    log("not on macOS, skipping native build");
+    log(
+      "not on macOS and staged simulator helpers are missing; packaged macOS builds must stage them on macOS"
+    );
   } else if (!swiftAvailable()) {
-    log("Swift not found (install Xcode CLT: xcode-select --install). Skipping.");
+    log(
+      "Swift not found (install Xcode CLT: xcode-select --install). Using any existing staged helpers."
+    );
   } else {
     log("building native simulator helpers...");
     try {
@@ -105,10 +154,7 @@ if (!findSwiftBuildOutput() || !existsSync(releaseInspector)) {
 }
 
 // 3. Copy native helpers into packages/device-use/bin/ for stable runtime path
-const binDir = join(pkgDir, "bin");
-const binSimbridge = join(binDir, "simbridge");
-const binSiminspector = join(binDir, "siminspector.dylib");
-const source = findSwiftBuildOutput();
+const source = stagedHelpersReady ? null : findSwiftBuildOutput();
 
 if (source) {
   mkdirSync(binDir, { recursive: true });
@@ -116,27 +162,50 @@ if (source) {
   try {
     // Preserve executable bit
     const mode = statSync(source).mode;
-    execFileSync("chmod", [(mode & 0o777).toString(8), binSimbridge]);
+    chmodSync(binSimbridge, mode & 0o777);
   } catch {
     /* best effort */
   }
   log(`copied simbridge → ${binSimbridge}`);
+} else if (helperReady(binSimbridge)) {
+  log(`using staged simbridge at ${binSimbridge}`);
 } else {
   log("simbridge build output not found; runtime will report a clear error if needed");
 }
 
-if (existsSync(releaseInspector)) {
+if (!stagedHelpersReady && existsSync(releaseInspector)) {
   mkdirSync(binDir, { recursive: true });
   copyFileSync(releaseInspector, binSiminspector);
   try {
     const mode = statSync(releaseInspector).mode;
-    execFileSync("chmod", [(mode & 0o777).toString(8), binSiminspector]);
+    chmodSync(binSiminspector, mode & 0o777);
   } catch {
     /* best effort */
   }
   log(`copied siminspector → ${binSiminspector}`);
+} else if (helperReady(binSiminspector)) {
+  log(`using staged siminspector at ${binSiminspector}`);
 } else {
   log("siminspector build output not found; runtime will report a clear error if needed");
+}
+
+if (process.platform === "darwin" && existsSync(binSiminspector)) {
+  try {
+    execFileSync("install_name_tool", ["-id", "@rpath/siminspector.dylib", binSiminspector], {
+      stdio: "ignore",
+    });
+  } catch {
+    log("could not normalize siminspector install name; packaged smoke will verify it");
+  }
+}
+
+if (
+  force &&
+  process.platform === "darwin" &&
+  (!helperReady(binSimbridge) || !helperReady(binSiminspector))
+) {
+  log("forced native helper refresh did not stage both simulator helpers");
+  process.exit(1);
 }
 
 log("done");

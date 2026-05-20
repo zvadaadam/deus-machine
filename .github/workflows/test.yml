@@ -122,7 +122,7 @@ jobs:
 
       - name: Smoke packaged macOS app bundle
         run: >
-          node scripts/runtime/smoke-packaged-app.cjs
+          bun run smoke:packaged-app --
           --app "$MAC_APP_PATH"
           --arch "$MAC_EXPECTED_ARCH"
           --skip-app-signature
@@ -130,13 +130,13 @@ jobs:
 
       - name: Smoke packaged runtime executable
         run: >
-          node scripts/runtime/smoke-packaged-runtime.cjs
+          bun run smoke:packaged-runtime --
           --app "$MAC_APP_PATH"
           --skip-app-check
 
       - name: Smoke packaged Electron desktop
         run: >
-          node scripts/runtime/smoke-packaged-desktop.cjs
+          bun run smoke:packaged-desktop --
           --app "$MAC_APP_PATH"
           --skip-app-check
 

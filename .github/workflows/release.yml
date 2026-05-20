@@ -232,7 +232,7 @@ jobs:
           while IFS= read -r app_path; do
             echo "Verifying signature for $app_path"
             codesign --verify --deep --strict --verbose=2 "$app_path"
-            node scripts/runtime/smoke-packaged-app.cjs --app "$app_path" --require-gatekeeper
+            bun run smoke:packaged-app -- --app "$app_path" --require-gatekeeper
           done < <(find dist-electron -maxdepth 2 -path '*/Deus.app' -type d | sort)
 
           while IFS= read -r dmg_path; do
@@ -240,7 +240,7 @@ jobs:
             xcrun stapler validate "$dmg_path"
           done < <(find dist-electron -maxdepth 1 -name '*.dmg' -type f | sort)
 
-          node scripts/runtime/smoke-packaged-dmgs.cjs \
+          bun run smoke:packaged-dmgs -- \
             --require-gatekeeper \
             $(find dist-electron -maxdepth 1 -name '*.dmg' -type f | sort)
 
@@ -293,11 +293,11 @@ jobs:
           test -f "$resources_dir/simulator/siminspector.dylib"
           test -x "$app_bin"
 
-          node scripts/runtime/smoke-packaged-runtime.cjs \
+          bun run smoke:packaged-runtime -- \
             --app "$copied_app" \
             --require-gatekeeper
 
-          node scripts/runtime/smoke-packaged-desktop.cjs \
+          bun run smoke:packaged-desktop -- \
             --app "$copied_app" \
             --home "$copied_home" \
             --launch-in-place \

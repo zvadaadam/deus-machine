@@ -11,9 +11,7 @@ const SUPPORTED_ARCHES = new Set(["arm64", "x64"]);
 function parseArgs(argv) {
   const options = {
     arch:
-      process.platform === "darwin" && SUPPORTED_ARCHES.has(process.arch)
-        ? process.arch
-        : "arm64",
+      process.platform === "darwin" && SUPPORTED_ARCHES.has(process.arch) ? process.arch : "arm64",
   };
 
   for (let index = 0; index < argv.length; index++) {
@@ -130,10 +128,18 @@ function installIconResolver() {
   };
 }
 
+function prepareDeviceUsePayloads() {
+  execFileSync("bun", ["run", "prepare:device-use", "--force"], {
+    cwd: PROJECT_ROOT,
+    stdio: "inherit",
+  });
+}
+
 async function main() {
   assertHostPlatform();
   const options = parseArgs(process.argv.slice(2));
   assertElectronDistArch(options.arch);
+  prepareDeviceUsePayloads();
   installIconResolver();
 
   const { Arch, Platform, build } = require("electron-builder");

@@ -1,8 +1,8 @@
 import { existsSync, statSync } from "node:fs";
 import { delimiter, join } from "node:path";
+import { PACKAGED_SYSTEM_PATHS } from "../runtime";
 
 const CLI_TOOL_NAME_PATTERN = /^[a-zA-Z0-9._+-]+$/;
-const PACKAGED_SYSTEM_PATHS = ["/usr/bin", "/bin", "/usr/sbin", "/sbin"];
 
 function getElectronResourcesPath(): string | null {
   return (
@@ -82,7 +82,8 @@ function isExecutableFile(filePath: string): boolean {
 export function resolveCliExecutable(tool: string): string {
   const bundledCliPath = resolveBundledCliPath(tool);
   if (bundledCliPath) return bundledCliPath;
-  if (isPackagedRuntime()) return getBundledCliPathCandidates(tool)[0] ?? missingPackagedCliPath(tool);
+  if (isPackagedRuntime())
+    return getBundledCliPathCandidates(tool)[0] ?? missingPackagedCliPath(tool);
   return tool;
 }
 

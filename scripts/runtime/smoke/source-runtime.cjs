@@ -2,7 +2,7 @@ const fs = require("node:fs");
 const os = require("node:os");
 const path = require("node:path");
 const { spawn, spawnSync } = require("node:child_process");
-const { assertInitializedAgents, readAgentServerListenUrl } = require("./runtime-smoke-rpc.cjs");
+const { assertInitializedAgents, readAgentServerListenUrl } = require("./runtime-rpc.cjs");
 const {
   PROJECT_ROOT,
   assertBackendDbRoute,
@@ -154,6 +154,12 @@ async function main() {
     }
   }
   console.log(`[runtime-source-smoke] self-test binDir: ${selfTest.binDir}`);
+
+  const deviceUseVersion = runRuntime(["device-use", "--version"]);
+  if (!/^device-use \d+\.\d+\.\d+/.test(deviceUseVersion)) {
+    throw new Error(`Unexpected source runtime device-use output: ${deviceUseVersion}`);
+  }
+  console.log(`[runtime-source-smoke] device-use command: ${deviceUseVersion}`);
 
   const listenUrl = await waitForRuntimeLine(
     ["agent-server"],

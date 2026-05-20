@@ -167,8 +167,6 @@ async function runPrefetch(installed: InstalledAppEntry): Promise<void> {
   if (!prefetch) return;
 
   const vars: TemplateVars = {};
-  const rawCwd = prefetch.cwd ? substituteTemplate(prefetch.cwd, vars) : packageRoot;
-  const cwd = isAbsolute(rawCwd) ? rawCwd : resolvePath(packageRoot, rawCwd);
   const command = resolveCommand(prefetch.command, packageRoot);
   if (!canSpawnResolvedCommand(command)) {
     console.log(`[AAP] Prefetch skipped: ${manifest.id}`, {
@@ -177,7 +175,19 @@ async function runPrefetch(installed: InstalledAppEntry): Promise<void> {
     });
     return;
   }
+
+  const rawCwd = prefetch.cwd ? substituteTemplate(prefetch.cwd, vars) : packageRoot;
+  const cwd = isAbsolute(rawCwd) ? rawCwd : resolvePath(packageRoot, rawCwd);
   const args = substituteArgs(prefetch.args, vars);
+  const missingEntrypoint = findMissingPrefetchEntrypoint(args, cwd);
+  if (missingEntrypoint) {
+    console.log(`[AAP] Prefetch skipped: ${manifest.id}`, {
+      command: prefetch.command,
+      reason: "entrypoint unavailable",
+      entrypoint: missingEntrypoint,
+    });
+    return;
+  }
   const env = createBackendChildEnv({
     ...substituteEnv(prefetch.env, vars),
     DEUS_APP_ID: manifest.id,
@@ -231,6 +241,32 @@ async function runPrefetch(installed: InstalledAppEntry): Promise<void> {
       finish();
     });
   });
+}
+
+function findMissingPrefetchEntrypoint(args: string[], cwd: string): string | null {
+  const [firstArg] = args;
+  if (!firstArg) return null;
+  if (firstArg.startsWith("-")) return null;
+  if (isUriLikeArg(firstArg)) return null;
+  if (!isFilesystemEntrypointArg(firstArg)) return null;
+
+  const entrypoint = isAbsolute(firstArg) ? firstArg : resolvePath(cwd, firstArg);
+  return existsSync(entrypoint) ? null : entrypoint;
+}
+
+function isFilesystemEntrypointArg(value: string): boolean {
+  return (
+    isAbsolute(value) ||
+    value.startsWith("./") ||
+    value.startsWith("../") ||
+    value.startsWith(".\\") ||
+    value.startsWith("..\\") ||
+    /^[a-zA-Z]:[\\/]/.test(value)
+  );
+}
+
+function isUriLikeArg(value: string): boolean {
+  return /^[a-zA-Z][a-zA-Z\d+.-]*:\/\//.test(value) || value.startsWith("file:");
 }
 
 function canSpawnResolvedCommand(command: string): boolean {

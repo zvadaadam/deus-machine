@@ -92,7 +92,9 @@ export interface AgentCliManifest {
 export interface PrepareAgentCliOptions {
   log?: (line: string) => void;
   projectRoot?: string;
+  runtimeKeys?: readonly AgentCliTarget["runtimeKey"][];
   verifyRunnable?: boolean;
+  writeManifest?: boolean;
 }
 
 export interface ValidateAgentCliOptions {
@@ -455,9 +457,9 @@ async function verifyVersionBounded(
         const hint = macExecutionPolicyHint(diagnostics);
         fail(
           new Error(
-            `${path.basename(executablePath)} ${args.join(" ")} failed to spawn: error=${
-              spawnErrorCode(error)
-            } stdout=${stdout.trim().slice(-4000)} stderr=${stderr.trim().slice(-4000)}${
+            `${path.basename(executablePath)} ${args.join(" ")} failed to spawn: error=${spawnErrorCode(
+              error
+            )} stdout=${stdout.trim().slice(-4000)} stderr=${stderr.trim().slice(-4000)}${
               diagnostics ? `\n${diagnostics}` : ""
             }${hint}`
           )
@@ -542,10 +544,7 @@ function assertVersionOutput(tool: AgentCliName, output: string, executablePath:
   }
 }
 
-export function verifyStagedAgentCliVersion(
-  tool: AgentCliName,
-  executablePath: string
-): string {
+export function verifyStagedAgentCliVersion(tool: AgentCliName, executablePath: string): string {
   const binDir = path.dirname(executablePath);
   const env = versionCheckEnv(binDir);
   const output = verifyVersion(
@@ -628,9 +627,13 @@ export async function prepareAgentClis(
   const log = options.log ?? console.log;
   const projectRoot = options.projectRoot ?? defaultProjectRoot;
   const verifyRunnable = options.verifyRunnable === true;
+  const writeManifest = options.writeManifest !== false;
   const manifestTargets: StagedAgentCli[] = [];
+  const runtimeKeys = options.runtimeKeys ? new Set(options.runtimeKeys) : null;
 
   for (const target of AGENT_CLI_TARGETS) {
+    if (runtimeKeys && !runtimeKeys.has(target.runtimeKey)) continue;
+
     const targetDir = path.dirname(
       resolveStagedAgentCliPath(projectRoot, target.runtimeKey, "codex")
     );
@@ -788,9 +791,17 @@ export async function prepareAgentClis(
     targets: manifestTargets,
   };
   const manifestPath = resolveAgentCliManifestPath(projectRoot);
-  mkdirSync(path.dirname(manifestPath), { recursive: true });
-  writeFileSync(manifestPath, JSON.stringify(manifest, null, 2) + "\n");
-  log(`✓ Agent CLIs staged at ${relativeFromProjectRoot(projectRoot, path.dirname(manifestPath))}`);
+  if (writeManifest) {
+    mkdirSync(path.dirname(manifestPath), { recursive: true });
+    writeFileSync(manifestPath, JSON.stringify(manifest, null, 2) + "\n");
+  }
+  const manifestLabel = writeManifest ? "manifest updated" : "manifest unchanged";
+  log(
+    `✓ Agent CLIs staged at ${relativeFromProjectRoot(
+      projectRoot,
+      path.dirname(manifestPath)
+    )} (${manifestLabel})`
+  );
   return manifest;
 }
 
@@ -830,9 +841,7 @@ function getExecutableFileOutput(
   return fileOutput;
 }
 
-export function validateStagedAgentClis(
-  options: ValidateAgentCliOptions = {}
-): AgentCliManifest {
+export function validateStagedAgentClis(options: ValidateAgentCliOptions = {}): AgentCliManifest {
   const log = options.log ?? console.log;
   const projectRoot = options.projectRoot ?? defaultProjectRoot;
   const manifestPath = resolveAgentCliManifestPath(projectRoot);

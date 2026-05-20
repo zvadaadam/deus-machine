@@ -9,7 +9,7 @@
 
   "launch": {
     "command": "device-use",
-    "args": ["serve", "--port", "{port}"],
+    "args": ["serve", "--host", "127.0.0.1", "--port", "{port}"],
     "cwd": "{workspace}",
     "env": {
       "DEUS_STORAGE": "{storage.workspace}",

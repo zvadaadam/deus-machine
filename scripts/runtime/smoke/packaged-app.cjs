@@ -5,10 +5,8 @@ const asar = require("@electron/asar");
 const {
   verifyCodeSignaturePageSize,
   verifyPackagedAgentClis,
-} = require("../prune-pencil-cli-binaries.cjs");
-const {
-  assertPackagedMainRuntimeContents,
-} = require("./electron-builder-before-pack.cjs");
+} = require("../../prune-pencil-cli-binaries.cjs");
+const { assertPackagedMainRuntimeContents } = require("../electron-builder-before-pack.cjs");
 const {
   PROJECT_ROOT,
   RUNTIME_BINARIES,
@@ -19,6 +17,13 @@ const {
   assertRegularFile,
   resolveDefaultAppPath,
 } = require("./lib/smoke-helpers.cjs");
+const {
+  DEVICE_USE_HELPER_NAMES,
+  DEVICE_USE_PACKAGE_FILES,
+  assertNoBuildLocalInstallName,
+  packagedDeviceUseRoot,
+  packagedSimulatorDir,
+} = require("../lib/device-use-payloads.cjs");
 
 const DEFAULT_APP_PATH = resolveDefaultAppPath();
 const REQUIRED_BINARIES = RUNTIME_BINARIES;
@@ -88,7 +93,7 @@ function parseArgs(argv) {
 }
 
 function printUsage() {
-  console.log(`Usage: node scripts/runtime/smoke-packaged-app.cjs [app-path]
+  console.log(`Usage: bun run smoke:packaged-app -- [app-path]
 
 Options:
   --app <path>                 Path to the packaged .app bundle
@@ -201,7 +206,11 @@ function verifyAsarRuntimeContract(asarPath) {
   assert(fs.existsSync(asarPath), `Missing packaged app.asar: ${asarPath}`);
 
   const entries = new Set(asar.listPackage(asarPath));
-  for (const entry of ["/out/main/index.js", "/out/preload/index.mjs", "/out/renderer/index.html"]) {
+  for (const entry of [
+    "/out/main/index.js",
+    "/out/preload/index.mjs",
+    "/out/renderer/index.html",
+  ]) {
     assert(entries.has(entry), `Packaged app.asar is missing ${entry}`);
   }
 
@@ -217,12 +226,8 @@ function verifyNoDuplicateRuntimeCliPackages(resourcesDir) {
 
   const isForbiddenAsarEntry = (entry) =>
     FORBIDDEN_RUNTIME_PACKAGE_PREFIXES.some((prefix) => entry.startsWith(prefix)) ||
-    FORBIDDEN_RUNTIME_PACKAGE_ROOTS.some(
-      (root) => entry === root || entry.startsWith(`${root}/`)
-    );
-  const duplicateAsarEntries = asar
-    .listPackage(asarPath)
-    .filter(isForbiddenAsarEntry);
+    FORBIDDEN_RUNTIME_PACKAGE_ROOTS.some((root) => entry === root || entry.startsWith(`${root}/`));
+  const duplicateAsarEntries = asar.listPackage(asarPath).filter(isForbiddenAsarEntry);
   assert(
     duplicateAsarEntries.length === 0,
     "Packaged app.asar contains duplicate runtime CLI package payloads outside Resources/bin:\n" +
@@ -268,6 +273,88 @@ function verifyNoDuplicateRuntimeCliPackages(resourcesDir) {
   }
 
   console.log("[runtime-smoke] duplicate runtime CLI package payloads absent");
+}
+
+function verifyMacUniversalBinary(filePath, label, options) {
+  assertRegularExecutable(filePath, label);
+  const output = fileOutput(filePath);
+  assert(
+    output.includes("Mach-O") && output.includes("arm64") && output.includes("x86_64"),
+    `${label} is not a universal arm64/x86_64 Mach-O binary: ${output}`
+  );
+  execFileSync("lipo", [filePath, "-verify_arch", "arm64", "x86_64"], {
+    encoding: "utf8",
+    timeout: 20_000,
+    stdio: ["ignore", "ignore", "pipe"],
+  });
+
+  if (!options.skipAppSignature) {
+    execFileSync("codesign", ["--verify", "--verbose=2", filePath], {
+      encoding: "utf8",
+      timeout: 20_000,
+      stdio: ["ignore", "ignore", "pipe"],
+    });
+    verifyCodeSignaturePageSize(filePath, label);
+  }
+  console.log(`[runtime-smoke] ${label}: ${output}`);
+}
+
+function verifyPackagedDeviceUse(resourcesDir, options) {
+  const simulatorDir = packagedSimulatorDir(resourcesDir);
+  const appRoot = packagedDeviceUseRoot(resourcesDir);
+
+  assertDirectory(simulatorDir, "packaged simulator helper directory");
+  verifyMacUniversalBinary(
+    path.join(simulatorDir, DEVICE_USE_HELPER_NAMES.simbridge),
+    "packaged simulator simbridge",
+    options
+  );
+  const simulatorInspector = path.join(simulatorDir, DEVICE_USE_HELPER_NAMES.siminspector);
+  verifyMacUniversalBinary(simulatorInspector, "packaged simulator siminspector", options);
+  assertNoBuildLocalInstallName(
+    simulatorInspector,
+    PROJECT_ROOT,
+    "packaged simulator siminspector"
+  );
+
+  assertDirectory(appRoot, "packaged device-use app");
+  for (const [, relativePath] of DEVICE_USE_PACKAGE_FILES) {
+    assertRegularFile(path.join(appRoot, relativePath), `packaged device-use ${relativePath}`);
+  }
+  verifyMacUniversalBinary(
+    path.join(appRoot, "bin", DEVICE_USE_HELPER_NAMES.simbridge),
+    "packaged device-use app simbridge",
+    options
+  );
+  const appInspector = path.join(appRoot, "bin", DEVICE_USE_HELPER_NAMES.siminspector);
+  verifyMacUniversalBinary(appInspector, "packaged device-use app siminspector", options);
+  assertNoBuildLocalInstallName(appInspector, PROJECT_ROOT, "packaged device-use app siminspector");
+
+  for (const forbidden of [
+    path.join(appRoot, "native", ".build"),
+    path.join(appRoot, "native", ".swiftpm"),
+  ]) {
+    assert(
+      !fs.existsSync(forbidden),
+      `Packaged device-use contains generated native build output: ${forbidden}`
+    );
+  }
+
+  const manifest = readJsonFile(
+    path.join(appRoot, "agentic-app.json"),
+    "packaged device-use manifest"
+  );
+  assert(
+    manifest.launch?.command === "device-use",
+    `Packaged device-use manifest has unexpected launch command: ${manifest.launch?.command}`
+  );
+  assert(
+    Array.isArray(manifest.launch?.args) &&
+      manifest.launch.args.includes("--host") &&
+      manifest.launch.args.includes("127.0.0.1"),
+    "Packaged device-use manifest must bind AAP-launched Mobile Use to loopback"
+  );
+  console.log("[runtime-smoke] packaged device-use runtime payload verified");
 }
 
 async function verifyPackagedApp(options) {
@@ -322,6 +409,7 @@ async function verifyPackagedApp(options) {
   );
   verifyAsarRuntimeContract(path.join(resourcesDir, "app.asar"));
   verifyNoDuplicateRuntimeCliPackages(resourcesDir);
+  verifyPackagedDeviceUse(resourcesDir, options);
 
   console.log(`[runtime-smoke] packaged app verified: ${appPath}`);
 }
