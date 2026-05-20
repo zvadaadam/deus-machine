@@ -1713,11 +1713,33 @@ button:not(:disabled),
   background: linear-gradient(to bottom, transparent 0%, var(--content-bg) 100%);
 }
 
+/* HomeView sticky footer fade — same translucent-aware pattern as .chat-tabs-header.
+ * Stays fully opaque through the button row (bottom ~60%) so recent-workspace
+ * items don't bleed through, then fades to transparent above. */
+.home-footer-fade {
+  --content-bg: var(--bg-surface);
+  background: linear-gradient(
+    to top,
+    var(--content-bg) 0%,
+    var(--content-bg) 55%,
+    color-mix(in oklch, var(--content-bg) 70%, transparent) 75%,
+    transparent 100%
+  );
+}
+
 /* Desktop: content area is semi-translucent for vibrancy.
  * Override gradients to use the same translucent mix as main-content. */
 .electron .chat-tabs-header,
 .electron .bg-fade-overlay {
   --content-bg: color-mix(in oklch, var(--background) var(--content-tint-opacity), transparent);
+}
+
+/* Desktop: the footer fade can't use the translucent --content-bg or scrolling
+ * text shows through the buttons (translucent on translucent ≠ opaque). Use
+ * solid var(--background) for the bottom of the fade so the button row sits
+ * on a fully opaque surface; the gradient still feathers to transparent up top. */
+.electron .home-footer-fade {
+  --content-bg: var(--background);
 }
 
 /* Diffs (Pierre) theme bridge — v1.1.7

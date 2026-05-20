@@ -20,7 +20,7 @@
 import { useRef, useCallback, useMemo, useEffect } from "react";
 import type { ImperativePanelHandle } from "react-resizable-panels";
 import type { SessionPanelRef } from "@/features/session";
-import { HomeView } from "@/features/repository";
+import { HomeView, type Repository } from "@/features/repository";
 import { useWorkspaceLayout } from "@/features/workspace";
 import { webviewManager } from "@/features/browser/webview-manager";
 import { useCollapsedSizePercent } from "@/features/workspace/hooks/useCollapsedSizePercent";
@@ -38,7 +38,7 @@ import { SidebarInset, useSidebar } from "@/components/ui";
 import { cn } from "@/shared/lib/utils";
 import { ResizablePanelGroup, ResizablePanel, ResizableHandle } from "@/components/ui/resizable";
 import { PanelLeft } from "lucide-react";
-import type { Workspace, PRStatus, GhCliStatus } from "@/shared/types";
+import type { Workspace, RepoGroup, PRStatus, GhCliStatus } from "@/shared/types";
 import { useUpdateWorkspaceStatus } from "@/features/workspace/api";
 import { REVIEW_CODE } from "@/features/session/lib/sessionPrompts";
 import { native } from "@/platform";
@@ -62,10 +62,13 @@ interface MainContentProps {
   onCloneRepository: () => void;
   onStartNewProject: () => void;
   /** Repos for the home screen's repo picker */
-  repos: import("@/features/repository/types").Repository[];
+  repos: Repository[];
+  /** Sidebar workspace groups reused by the home screen recent list. */
+  repoGroups: RepoGroup[];
   /** Handler for sending the first message from the home screen.
    *  Creates workspace + selects it + queues the first message. */
-  onStartWorkspace: (repoId: string, message: string, model: string) => void;
+  onStartWorkspace: (repoId: string, message: string, model: string, branch?: string) => void;
+  onWorkspaceClick: (workspace: Workspace) => void;
 }
 
 export function MainContent({
@@ -78,7 +81,9 @@ export function MainContent({
   onCloneRepository,
   onStartNewProject,
   repos,
+  repoGroups,
   onStartWorkspace,
+  onWorkspaceClick,
 }: MainContentProps) {
   const { open: sidebarOpen, toggleSidebar } = useSidebar();
   const isMobile = useIsMobile();
@@ -472,7 +477,9 @@ export function MainContent({
           <div className="flex min-w-0 flex-1">
             <HomeView
               repos={repos}
+              repoGroups={repoGroups}
               onSendMessage={onStartWorkspace}
+              onWorkspaceClick={onWorkspaceClick}
               onOpenProject={onOpenProject}
               onCloneRepository={onCloneRepository}
               onStartNewProject={onStartNewProject}

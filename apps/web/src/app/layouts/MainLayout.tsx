@@ -433,7 +433,9 @@ export function MainLayout() {
           onCloneRepository={() => repoActions.setShowCloneModal(true)}
           onStartNewProject={() => repoActions.setShowStartNewModal(true)}
           repos={repos}
+          repoGroups={repoGroups}
           onStartWorkspace={handleStartWorkspace}
+          onWorkspaceClick={handleWorkspaceClick}
         />
       )}
 
