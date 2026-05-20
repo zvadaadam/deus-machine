@@ -15,6 +15,7 @@ import { fileURLToPath } from "node:url";
 
 const rootDir = dirname(dirname(fileURLToPath(import.meta.url)));
 const pkgDir = join(rootDir, "packages", "device-use");
+const force = process.argv.includes("--force");
 
 function log(msg) {
   console.log(`[prepare-device-use] ${msg}`);
@@ -37,8 +38,8 @@ const distOutputs = [
   join(distDir, "engine.js"),
   join(distDir, "server", "index.js"),
 ];
-if (distOutputs.some((output) => !existsSync(output))) {
-  log("building TypeScript (dist/)...");
+if (force || distOutputs.some((output) => !existsSync(output))) {
+  log(force ? "rebuilding TypeScript (dist/)..." : "building TypeScript (dist/)...");
   try {
     run("bun", ["run", "build:ts"], pkgDir);
   } catch (err) {
@@ -50,8 +51,8 @@ if (distOutputs.some((output) => !existsSync(output))) {
 }
 
 const frontendIndex = join(distDir, "frontend", "index.html");
-if (!existsSync(frontendIndex)) {
-  log("building frontend (dist/frontend/)...");
+if (force || !existsSync(frontendIndex)) {
+  log(force ? "rebuilding frontend (dist/frontend/)..." : "building frontend (dist/frontend/)...");
   try {
     run("bun", ["run", "build:frontend"], pkgDir);
   } catch (err) {
@@ -112,9 +113,23 @@ function helperReady(filePath) {
   return existsSync(filePath) && hasRequiredMacArchitectures(filePath);
 }
 
-const stagedHelpersReady = helperReady(binSimbridge) && helperReady(binSiminspector);
+const stagedHelpersReady = !force && helperReady(binSimbridge) && helperReady(binSiminspector);
 
-if (stagedHelpersReady) {
+if (force && process.platform === "darwin") {
+  if (!swiftAvailable()) {
+    log(
+      "Swift not found (install Xcode CLT: xcode-select --install). Cannot force-refresh native helpers."
+    );
+    process.exit(1);
+  }
+  log("rebuilding native simulator helpers...");
+  try {
+    run("bun", ["run", "scripts/build-native.ts", "--force"], pkgDir);
+  } catch (err) {
+    log(`native build failed: ${err.message}`);
+    process.exit(1);
+  }
+} else if (stagedHelpersReady) {
   log("native simulator helpers already staged, skipping");
 } else if (!findSwiftBuildOutput() || !existsSync(releaseInspector)) {
   if (process.platform !== "darwin") {
@@ -182,6 +197,15 @@ if (process.platform === "darwin" && existsSync(binSiminspector)) {
   } catch {
     log("could not normalize siminspector install name; packaged smoke will verify it");
   }
+}
+
+if (
+  force &&
+  process.platform === "darwin" &&
+  (!helperReady(binSimbridge) || !helperReady(binSiminspector))
+) {
+  log("forced native helper refresh did not stage both simulator helpers");
+  process.exit(1);
 }
 
 log("done");

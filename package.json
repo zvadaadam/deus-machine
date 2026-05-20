@@ -29,7 +29,7 @@
     "deploy:relay": "cd apps/cloud-relay && wrangler deploy",
     "build:web": "vite build --config apps/web/vite.config.ts --outDir dist/web",
     "build:cli": "bun run build:runtime && bun apps/cli/build.ts",
-    "build:all": "bun run prepare:device-use && bun run build:runtime && bun run build:pencil && bun run build",
+    "build:all": "bun run prepare:device-use --force && bun run build:runtime && bun run build:pencil && bun run build",
     "package:mac": "bun run build:all && electron-builder --mac",
     "package:mac:dir": "node scripts/runtime/package-mac-dir.cjs",
     "package:win": "node scripts/runtime/unsupported-packaged-platform.cjs Windows",
