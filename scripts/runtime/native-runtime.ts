@@ -455,10 +455,9 @@ export function buildDeusRuntime(options: BuildDeusRuntimeOptions = {}): DeusRun
     const manifestCommandPath = relativeFromProjectRoot(projectRoot, output);
     const fileOutput = execOutput("file", [manifestCommandPath], projectRoot);
     assertFileArch(fileOutput, target, output);
-    const otoolOutput =
-      canInspectMacBinary(target)
-        ? execOutput("otool", ["-L", manifestCommandPath], projectRoot)
-        : undefined;
+    const otoolOutput = canInspectMacBinary(target)
+      ? execOutput("otool", ["-L", manifestCommandPath], projectRoot)
+      : undefined;
     if (otoolOutput) verifyMacSystemDylibs(otoolOutput, output);
     if (canInspectMacBinary(target)) {
       verifyMacCodeSignature(output);
@@ -496,7 +495,7 @@ export function buildDeusRuntime(options: BuildDeusRuntimeOptions = {}): DeusRun
 }
 
 export function verifyStagedDeusRuntimeVersion(executablePath: string): string {
-  const helperPath = path.join(runtimeDir, "run-version-check.cjs");
+  const helperPath = path.join(runtimeDir, "smoke", "run-version-check.cjs");
   const env: NodeJS.ProcessEnv = { ...process.env };
   for (const key of VERSION_CHECK_ENV_DENYLIST) {
     delete env[key];
@@ -585,10 +584,9 @@ export function validateDeusRuntime(options: ValidateDeusRuntimeOptions = {}): D
     const manifestCommandPath = relativeFromProjectRoot(projectRoot, executablePath);
     const fileOutput = execOutput("file", [manifestCommandPath], projectRoot);
     assertFileArch(fileOutput, target, executablePath);
-    const otoolOutput =
-      canInspectMacBinary(target)
-        ? execOutput("otool", ["-L", manifestCommandPath], projectRoot)
-        : undefined;
+    const otoolOutput = canInspectMacBinary(target)
+      ? execOutput("otool", ["-L", manifestCommandPath], projectRoot)
+      : undefined;
     if (otoolOutput) verifyMacSystemDylibs(otoolOutput, executablePath);
     if (manifestEntry.size !== statSync(executablePath).size) {
       throw new Error(`Native runtime manifest size mismatch for ${runtimeKey}`);

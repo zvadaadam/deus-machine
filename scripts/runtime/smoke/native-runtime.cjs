@@ -2,7 +2,7 @@ const fs = require("node:fs");
 const os = require("node:os");
 const path = require("node:path");
 const { execFileSync } = require("node:child_process");
-const { assertInitializedAgents, readAgentServerListenUrl } = require("./runtime-smoke-rpc.cjs");
+const { assertInitializedAgents, readAgentServerListenUrl } = require("./runtime-rpc.cjs");
 const {
   PROJECT_ROOT,
   assertBackendDbRouteFromOutput,
@@ -50,7 +50,7 @@ function parseArgs(argv) {
 }
 
 function printUsage() {
-  console.log(`Usage: node scripts/runtime/smoke-native-runtime.cjs [options]
+  console.log(`Usage: bun run smoke:runtime-native -- [options]
 
 Options:
   --runtime-key <key>      Staged runtime key, defaults to host key

@@ -19,7 +19,7 @@ bun run typecheck:agent-server
 bun run smoke:runtime-resources
 bun run smoke:desktop-main-runtime
 bun run package:mac:dir -- --arch <arm64|x64>
-node scripts/runtime/smoke-packaged-app.cjs --app dist-electron/mac-arm64/Deus.app
+bun run smoke:packaged-app -- --app dist-electron/mac-arm64/Deus.app
 ```
 
 For unsigned pull-request package-dir builds, use the same packaged-app smoke
@@ -93,7 +93,7 @@ When `bun run build` is blocked on this host, `out/main` and any existing `dist-
 The release workflow runs staged, packaged, and notarized checks on macOS:
 
 - Before packaging, `bun run smoke:runtime-native` directly verifies the staged host-arch `deus-runtime`.
-- After packaging, every produced `.app` is inspected with `node scripts/runtime/smoke-packaged-app.cjs --app "$app_path" --require-gatekeeper`.
-- After DMG notarization, every produced DMG is mounted and inspected with `node scripts/runtime/smoke-packaged-dmgs.cjs --require-gatekeeper <dmg...>`.
-- After DMG/ZIP notarization, the release workflow copies the host-arch app out of the DMG and runs `node scripts/runtime/smoke-packaged-runtime.cjs --app "$copied_app" --require-gatekeeper`.
-- The same copied app is then launched through `node scripts/runtime/smoke-packaged-desktop.cjs --app "$copied_app" --require-gatekeeper`.
+- After packaging, every produced `.app` is inspected with `bun run smoke:packaged-app -- --app "$app_path" --require-gatekeeper`.
+- After DMG notarization, every produced DMG is mounted and inspected with `bun run smoke:packaged-dmgs -- --require-gatekeeper <dmg...>`.
+- After DMG/ZIP notarization, the release workflow copies the host-arch app out of the DMG and runs `bun run smoke:packaged-runtime -- --app "$copied_app" --require-gatekeeper`.
+- The same copied app is then launched through `bun run smoke:packaged-desktop -- --app "$copied_app" --require-gatekeeper`.

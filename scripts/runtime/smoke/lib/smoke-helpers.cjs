@@ -3,7 +3,7 @@ const http = require("node:http");
 const path = require("node:path");
 const { execFileSync, spawn, spawnSync } = require("node:child_process");
 
-const PROJECT_ROOT = path.resolve(__dirname, "../../..");
+const PROJECT_ROOT = path.resolve(__dirname, "../../../..");
 const DEFAULT_RUNTIME_TIMEOUT_MS = 45_000;
 const DEFAULT_STOP_TIMEOUT_MS = 5_000;
 const PACKAGED_SYSTEM_PATHS = ["/usr/bin", "/bin", "/usr/sbin", "/sbin"];
