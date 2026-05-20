@@ -16,7 +16,7 @@
     "packages/*"
   ],
   "scripts": {
-    "dev": "bun run native:electron && bun scripts/runtime/prepare-dev-agent-clis.ts && ([ -f apps/agent-server/dist/index.bundled.cjs ] || bun run build:agent-server) && electron-vite dev",
+    "dev": "bun run native:electron && bun scripts/runtime/prepare-dev-agent-clis.ts && ([ -f apps/agent-server/dist/index.bundled.cjs ] || bun run build:agent-server) && ([ -f packages/pencil/dist/serve.js ] || bun run build:pencil) && electron-vite dev",
     "dev:web": "bun run native:node && bun scripts/runtime/prepare-dev-agent-clis.ts && bun scripts/runtime/dev.ts",
     "dev:frontend": "vite --config apps/web/vite.config.ts",
     "dev:backend": "node apps/backend/server.cjs",
@@ -71,8 +71,8 @@
     "typecheck:all": "bun run typecheck && bun run typecheck:backend && bun run typecheck:agent-server && bun run typecheck:relay",
     "format": "prettier --write \"apps/**/*.{ts,tsx,css,json}\"",
     "format:check": "prettier --check \"apps/**/*.{ts,tsx,css,json}\"",
-    "lint": "eslint apps --ext .ts,.tsx",
-    "lint:fix": "eslint apps --ext .ts,.tsx --fix",
+    "lint": "eslint apps packages shared scripts test --ext .ts,.tsx,.js,.cjs,.mjs",
+    "lint:fix": "eslint apps packages shared scripts test --ext .ts,.tsx,.js,.cjs,.mjs --fix",
     "knip": "knip",
     "knip:fix": "knip --fix",
     "prepare": "husky",

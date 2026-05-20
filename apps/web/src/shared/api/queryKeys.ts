@@ -51,6 +51,11 @@ export const queryKeys = {
     ghStatus: ["github", "gh-status"] as const,
   },
 
+  // Deus Cloud account
+  deusCloud: {
+    session: ["deus-cloud", "session"] as const,
+  },
+
   // AI Provider Status (external health monitoring)
   providerStatus: {
     all: ["provider-status"] as const,

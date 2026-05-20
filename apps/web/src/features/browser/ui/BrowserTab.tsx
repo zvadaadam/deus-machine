@@ -7,8 +7,6 @@
  * dropdowns, focus-mode chat bar) layer above it via plain CSS — no native
  * hide/show IPC dance like the old WebContentsView path required.
  */
-/* eslint-env browser */
-
 import {
   useCallback,
   useEffect,

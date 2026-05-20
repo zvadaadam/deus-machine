@@ -20,7 +20,6 @@
  */
 
 const isElectron = typeof window !== "undefined" && "electronAPI" in window;
-const isMacPlatform = typeof navigator !== "undefined" && /^Mac/i.test(navigator.platform);
 
 export const capabilities = {
   /** Native PTY terminal (requires Electron IPC for shell spawning) */
@@ -31,9 +30,6 @@ export const capabilities = {
    *  in plain web mode (there's no equivalent DOM element for embedding
    *  arbitrary cross-origin sites with CDP access). */
   nativeBrowser: isElectron,
-
-  /** iOS simulator panel — backed by macOS-only simctl/device-use helpers. */
-  nativeSimulator: isMacPlatform,
 
   /** Auto-update check/download/install (requires Electron updater) */
   autoUpdate: isElectron,

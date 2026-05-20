@@ -45,6 +45,9 @@ export type { Repository, Stats } from "./repository";
 // Settings types
 export type { Settings, SettingsSection } from "./settings";
 
+// Deus Cloud auth
+export type { DeusCloudAuthResult, DeusCloudSessionStatus } from "./deus-cloud-auth";
+
 // Agent config types (shared between frontend and backend)
 export type {
   SkillItem,
@@ -73,6 +76,9 @@ export type {
   LocalServerTheme,
   LocalServersSnapshot,
 } from "./local-server";
+
+// Simulator capability types
+export type { SimulatorCapabilities } from "./simulator";
 
 // GitHub types
 export type { PRStatus, GhCliStatus, CheckDetail, PRSummary, BranchSummary } from "./github";

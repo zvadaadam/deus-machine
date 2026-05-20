@@ -1,7 +1,8 @@
 /**
  * Content Tab Registry — data-driven tab definitions for the content panel.
  *
- * Each entry declares its visibility gates (settings key, platform capability).
+ * Each entry declares its visibility gates: settings, platform support, or
+ * simulator availability.
  * The ContentTabBar and ContentView consume this registry — adding a new tab
  * is one entry here + the component in its feature folder.
  */
@@ -20,6 +21,10 @@ import type { ContentTab } from "@/features/workspace/store";
 import type { Settings } from "@shared/types/settings";
 import { capabilities, type CapabilityName } from "@/platform/capabilities";
 
+export interface ContentTabVisibility {
+  simulatorAvailable?: boolean;
+}
+
 export interface ContentTabItem {
   id: ContentTab;
   label: string;
@@ -28,6 +33,8 @@ export interface ContentTabItem {
   visibilityKey?: keyof Settings;
   /** Platform capability that must be true. Absent = always available. */
   capabilityGate?: CapabilityName;
+  /** Simulator tab needs backend-confirmed local simulator support. */
+  requiresSimulator?: boolean;
 }
 
 export const CONTENT_TABS: ContentTabItem[] = [
@@ -46,7 +53,7 @@ export const CONTENT_TABS: ContentTabItem[] = [
     id: "simulator",
     label: "Simulator",
     icon: Smartphone,
-    capabilityGate: "nativeSimulator",
+    requiresSimulator: true,
     visibilityKey: "experimental_simulator",
   },
   { id: "apps", label: "Apps", icon: LayoutGrid, visibilityKey: "experimental_apps" },
@@ -54,10 +61,17 @@ export const CONTENT_TABS: ContentTabItem[] = [
 ];
 
 /** Check if a tab should be visible given current settings and platform capabilities. */
-export function isTabVisible(tab: ContentTab, settings?: Settings): boolean {
+export function isTabVisible(
+  tab: ContentTab,
+  settings?: Settings,
+  visibility: ContentTabVisibility = {}
+): boolean {
   const item = CONTENT_TABS.find((i) => i.id === tab);
   if (!item) return false;
   if (item.capabilityGate && !capabilities[item.capabilityGate]) return false;
+  if (item.requiresSimulator && visibility.simulatorAvailable !== true) {
+    return false;
+  }
   if (item.visibilityKey) return settings?.[item.visibilityKey] === true;
   return true;
 }
