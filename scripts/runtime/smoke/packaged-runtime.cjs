@@ -5,7 +5,7 @@ const path = require("node:path");
 const { execFileSync, spawn, spawnSync } = require("node:child_process");
 const { createServer } = require("node:net");
 const WebSocket = require("ws");
-const { assertInitializedAgents, readAgentServerListenUrl } = require("./runtime-smoke-rpc.cjs");
+const { assertInitializedAgents, readAgentServerListenUrl } = require("./runtime-rpc.cjs");
 const {
   PROJECT_ROOT,
   PACKAGED_SYSTEM_PATHS,
@@ -55,12 +55,12 @@ function parseArgs(argv) {
 }
 
 function printUsage() {
-  console.log(`Usage: node scripts/runtime/smoke-packaged-runtime.cjs [app-path]
+  console.log(`Usage: bun run smoke:packaged-runtime -- [app-path]
 
 Options:
   --app <path>             Path to the packaged .app bundle
   --require-gatekeeper     Require spctl execute assessment in the app check
-  --skip-app-check         Skip smoke-packaged-app.cjs and only run runtime commands
+  --skip-app-check         Skip the packaged app smoke and only run runtime commands
 
 This smoke executes the packaged Resources/bin/deus-runtime. It should be run
 on notarized release artifacts or hosts that allow generated/copied Mach-O
@@ -71,7 +71,7 @@ function runAppCheck(appPath, options) {
   if (options.skipAppCheck) return;
 
   const args = [
-    path.join(PROJECT_ROOT, "scripts", "runtime", "smoke-packaged-app.cjs"),
+    path.join(PROJECT_ROOT, "scripts", "runtime", "smoke", "packaged-app.cjs"),
     "--app",
     appPath,
     "--run-version-checks",

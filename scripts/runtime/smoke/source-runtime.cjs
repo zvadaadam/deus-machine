@@ -2,7 +2,7 @@ const fs = require("node:fs");
 const os = require("node:os");
 const path = require("node:path");
 const { spawn, spawnSync } = require("node:child_process");
-const { assertInitializedAgents, readAgentServerListenUrl } = require("./runtime-smoke-rpc.cjs");
+const { assertInitializedAgents, readAgentServerListenUrl } = require("./runtime-rpc.cjs");
 const {
   PROJECT_ROOT,
   assertBackendDbRoute,

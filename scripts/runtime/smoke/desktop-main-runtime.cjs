@@ -2,9 +2,9 @@ const { execFileSync } = require("node:child_process");
 const fs = require("node:fs");
 const os = require("node:os");
 const path = require("node:path");
-const { assertPackagedMainRuntimeContract } = require("./electron-builder-before-pack.cjs");
+const { assertPackagedMainRuntimeContract } = require("../electron-builder-before-pack.cjs");
 
-const PROJECT_ROOT = path.resolve(__dirname, "../..");
+const PROJECT_ROOT = path.resolve(__dirname, "../../..");
 const EXTERNALS = [
   "electron",
   "better-sqlite3",

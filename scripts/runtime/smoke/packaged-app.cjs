@@ -5,8 +5,8 @@ const asar = require("@electron/asar");
 const {
   verifyCodeSignaturePageSize,
   verifyPackagedAgentClis,
-} = require("../prune-pencil-cli-binaries.cjs");
-const { assertPackagedMainRuntimeContents } = require("./electron-builder-before-pack.cjs");
+} = require("../../prune-pencil-cli-binaries.cjs");
+const { assertPackagedMainRuntimeContents } = require("../electron-builder-before-pack.cjs");
 const {
   PROJECT_ROOT,
   RUNTIME_BINARIES,
@@ -23,7 +23,7 @@ const {
   assertNoBuildLocalInstallName,
   packagedDeviceUseRoot,
   packagedSimulatorDir,
-} = require("./lib/device-use-payloads.cjs");
+} = require("../lib/device-use-payloads.cjs");
 
 const DEFAULT_APP_PATH = resolveDefaultAppPath();
 const REQUIRED_BINARIES = RUNTIME_BINARIES;
@@ -93,7 +93,7 @@ function parseArgs(argv) {
 }
 
 function printUsage() {
-  console.log(`Usage: node scripts/runtime/smoke-packaged-app.cjs [app-path]
+  console.log(`Usage: bun run smoke:packaged-app -- [app-path]
 
 Options:
   --app <path>                 Path to the packaged .app bundle

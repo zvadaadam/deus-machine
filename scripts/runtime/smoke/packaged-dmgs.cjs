@@ -3,7 +3,7 @@ const os = require("node:os");
 const path = require("node:path");
 const { execFileSync } = require("node:child_process");
 
-const PROJECT_ROOT = path.resolve(__dirname, "../..");
+const PROJECT_ROOT = path.resolve(__dirname, "../../..");
 
 function parseArgs(argv) {
   const options = {
@@ -33,12 +33,12 @@ function parseArgs(argv) {
 }
 
 function printUsage() {
-  console.log(`Usage: node scripts/runtime/smoke-packaged-dmgs.cjs [options] <dmg...>
+  console.log(`Usage: bun run smoke:packaged-dmgs -- [options] <dmg...>
 
 Options:
   --require-gatekeeper     Require spctl execute assessment for each mounted app
 
-Mounts each macOS DMG, runs smoke-packaged-app.cjs against the contained
+Mounts each macOS DMG, runs the packaged app smoke against the contained
 Deus.app with an inferred architecture, then detaches the image.`);
 }
 
@@ -77,7 +77,7 @@ function smokeDmg(dmgPath, options) {
 
     const appPath = path.join(mountDir, "Deus.app");
     const args = [
-      path.join(PROJECT_ROOT, "scripts", "runtime", "smoke-packaged-app.cjs"),
+      path.join(PROJECT_ROOT, "scripts", "runtime", "smoke", "packaged-app.cjs"),
       "--app",
       appPath,
       "--arch",

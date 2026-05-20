@@ -9,7 +9,7 @@ const projectRoot = path.resolve(__dirname, "../../..");
 describe("packaged runtime smoke harness", () => {
   it("does not load host better-sqlite3 to seed backend state", () => {
     const script = readFileSync(
-      path.join(projectRoot, "scripts", "runtime", "smoke-packaged-runtime.cjs"),
+      path.join(projectRoot, "scripts", "runtime", "smoke", "packaged-runtime.cjs"),
       "utf8"
     );
 

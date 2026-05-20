@@ -2,7 +2,7 @@ const fs = require("node:fs");
 const os = require("node:os");
 const path = require("node:path");
 const { execFileSync, spawn } = require("node:child_process");
-const { assertInitializedAgents, readAgentServerListenUrl } = require("./runtime-smoke-rpc.cjs");
+const { assertInitializedAgents, readAgentServerListenUrl } = require("./runtime-rpc.cjs");
 const {
   PROJECT_ROOT,
   appDiagnostics,
@@ -71,14 +71,14 @@ function parseArgs(argv) {
 }
 
 function printUsage() {
-  console.log(`Usage: node scripts/runtime/smoke-packaged-desktop.cjs [app-path]
+  console.log(`Usage: bun run smoke:packaged-desktop -- [app-path]
 
 Options:
   --app <path>             Path to the packaged .app bundle
   --home <path>            HOME to use while launching the packaged app
   --launch-in-place        Launch --app directly instead of copying it to a temp Applications dir
   --require-gatekeeper     Require spctl execute assessment in the app check
-  --skip-app-check         Skip smoke-packaged-app.cjs
+  --skip-app-check         Skip the packaged app smoke
 
 This smoke launches the packaged Electron app with an isolated temporary HOME.
 It copies Deus.app to that HOME's Applications directory so the packaged
@@ -145,7 +145,7 @@ function runAppCheck(appPath, options) {
   if (options.skipAppCheck) return;
 
   const args = [
-    path.join(PROJECT_ROOT, "scripts", "runtime", "smoke-packaged-app.cjs"),
+    path.join(PROJECT_ROOT, "scripts", "runtime", "smoke", "packaged-app.cjs"),
     "--app",
     appPath,
   ];

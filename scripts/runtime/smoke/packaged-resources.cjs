@@ -2,7 +2,7 @@ const fs = require("node:fs");
 const os = require("node:os");
 const path = require("node:path");
 const { execFileSync, spawnSync } = require("node:child_process");
-const afterPack = require("../prune-pencil-cli-binaries.cjs");
+const afterPack = require("../../prune-pencil-cli-binaries.cjs");
 const { verifyPackagedAgentClis } = afterPack;
 const { PROJECT_ROOT, RUNTIME_BINARIES, RUNTIME_MANIFESTS } = require("./lib/smoke-helpers.cjs");
 
