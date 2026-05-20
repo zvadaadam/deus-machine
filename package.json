@@ -36,7 +36,7 @@
     "package:linux": "bun run build:all && electron-builder --linux",
     "postinstall": "bun run prepare:device-use",
     "native:electron": "electron-builder install-app-deps",
-    "native:node": "cd node_modules/better-sqlite3 && PYTHON=${PYTHON:-/usr/bin/python3} node ../node-gyp/bin/node-gyp.js rebuild",
+    "native:node": "node scripts/runtime/rebuild-node-native.cjs",
     "prepare:device-use": "node scripts/prepare-device-use.mjs",
     "prepare:gh-cli": "node scripts/prepare-gh-cli.mjs",
     "prepare:agent-clis": "bun scripts/runtime/prepare-agent-clis.ts",

@@ -10,7 +10,7 @@
 // it, then asserts on the Map's observable state via getRunningApps.
 
 import { spawn } from "node:child_process";
-import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { chmodSync, existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
@@ -45,6 +45,8 @@ const fakeAppDir = mkdtempSync(join(tmpdir(), "aap-integration-"));
 const fakeAppServer = join(fakeAppDir, "server.js");
 const fakePrefetchScript = join(fakeAppDir, "prefetch.js");
 const fakePrefetchMarker = join(fakeAppDir, "prefetched.txt");
+const urlPrefetchScript = join(fakeAppDir, "url-prefetch.js");
+const urlPrefetchMarker = join(fakeAppDir, "url-prefetched.txt");
 writeFileSync(
   fakeAppServer,
   `
@@ -70,6 +72,15 @@ fs.writeFileSync(process.argv[2], process.env.DEUS_APP_ID + ":" + process.env.DE
 `,
   "utf8"
 );
+writeFileSync(
+  urlPrefetchScript,
+  `#!/usr/bin/env bun
+import { writeFileSync } from "node:fs";
+writeFileSync(process.argv[3], process.argv[2], "utf8");
+`,
+  "utf8"
+);
+chmodSync(urlPrefetchScript, 0o755);
 
 const fakeManifest = {
   $schema: "https://agenticapps.dev/schema/v1.json",
@@ -100,6 +111,33 @@ writeFileSync(fakeManifestPath, JSON.stringify(fakeManifest, null, 2), "utf8");
 const fakeManifestWithoutPrefetch = { ...fakeManifest };
 delete (fakeManifestWithoutPrefetch as { prefetch?: unknown }).prefetch;
 
+const missingPrefetchManifest = {
+  ...fakeManifestWithoutPrefetch,
+  id: "test.prefetch-missing-command",
+  prefetch: {
+    command: "this-prefetch-command-does-not-exist-xyz123",
+    args: ["{workspace}"],
+    cwd: "{workspace}",
+  },
+};
+const missingPrefetchManifestPath = join(fakeAppDir, "missing-prefetch-manifest.json");
+writeFileSync(
+  missingPrefetchManifestPath,
+  JSON.stringify(missingPrefetchManifest, null, 2),
+  "utf8"
+);
+
+const urlPrefetchManifest = {
+  ...fakeManifestWithoutPrefetch,
+  id: "test.prefetch-url-operand",
+  prefetch: {
+    command: urlPrefetchScript,
+    args: ["https://example.com/mobile-use/prefetch.js", urlPrefetchMarker],
+  },
+};
+const urlPrefetchManifestPath = join(fakeAppDir, "url-prefetch-manifest.json");
+writeFileSync(urlPrefetchManifestPath, JSON.stringify(urlPrefetchManifest, null, 2), "utf8");
+
 // Second manifest for the ENOENT test — a command that doesn't exist on PATH.
 const bogusManifest = {
   ...fakeManifestWithoutPrefetch,
@@ -126,7 +164,13 @@ const needsCliManifestPath = join(fakeAppDir, "needs-cli-manifest.json");
 writeFileSync(needsCliManifestPath, JSON.stringify(needsCliManifest, null, 2), "utf8");
 
 vi.mock("../../src/config/installed-apps", () => ({
-  INSTALLED_APP_MANIFESTS: [fakeManifestPath, bogusManifestPath, needsCliManifestPath],
+  INSTALLED_APP_MANIFESTS: [
+    fakeManifestPath,
+    missingPrefetchManifestPath,
+    urlPrefetchManifestPath,
+    bogusManifestPath,
+    needsCliManifestPath,
+  ],
 }));
 
 // Point the PID journal at a per-run tmp file so tests don't stomp on
@@ -188,18 +232,43 @@ describe("aap/apps.service (integration, in-memory)", () => {
       "test.bogus-command",
       "test.fake-app",
       "test.needs-missing-cli",
+      "test.prefetch-missing-command",
+      "test.prefetch-url-operand",
     ]);
   });
 
-  it("runs app prefetch commands in the background", async () => {
+  it("runs app prefetch commands in the background and skips unavailable optional commands", async () => {
     rmSync(fakePrefetchMarker, { force: true });
-    prefetchInstalledAppAssets();
-    await waitForCondition(
-      () => existsSync(fakePrefetchMarker),
-      (exists) => exists,
-      10_000
-    );
-    expect(readFileSync(fakePrefetchMarker, "utf8")).toBe("test.fake-app:1");
+    rmSync(urlPrefetchMarker, { force: true });
+
+    const logSpy = vi.spyOn(console, "log").mockImplementation(() => {});
+    try {
+      prefetchInstalledAppAssets();
+      await waitForCondition(
+        () => existsSync(fakePrefetchMarker) && existsSync(urlPrefetchMarker),
+        (exists) => exists,
+        10_000
+      );
+      expect(readFileSync(fakePrefetchMarker, "utf8")).toBe("test.fake-app:1");
+      expect(readFileSync(urlPrefetchMarker, "utf8")).toBe(
+        "https://example.com/mobile-use/prefetch.js"
+      );
+
+      await waitForCondition(
+        () =>
+          logSpy.mock.calls.find(
+            ([message]) => message === "[AAP] Prefetch skipped: test.prefetch-missing-command"
+          ),
+        (call) => Boolean(call),
+        2_000
+      );
+      const skipped = logSpy.mock.calls.find(
+        ([message]) => message === "[AAP] Prefetch skipped: test.prefetch-missing-command"
+      );
+      expect(skipped?.[1]).toMatchObject({ reason: "command unavailable" });
+    } finally {
+      logSpy.mockRestore();
+    }
   });
 
   it("launches, becomes ready, and is reachable on /health", async () => {
