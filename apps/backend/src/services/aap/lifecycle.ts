@@ -324,8 +324,19 @@ export function resolveCommand(command: string, packageRoot: string): string {
   return command;
 }
 
+function isDeviceUsePackageRoot(packageRoot: string): boolean {
+  try {
+    const pj = JSON.parse(readFileSync(join(packageRoot, "package.json"), "utf8")) as {
+      name?: string;
+    };
+    return pj.name === "device-use";
+  } catch {
+    return false;
+  }
+}
+
 export function resolveLaunchCommand(command: string, packageRoot: string): ResolvedLaunchCommand {
-  if (command === "device-use") {
+  if (command === "device-use" && isDeviceUsePackageRoot(packageRoot)) {
     const runtimeExecutable = process.env.DEUS_RUNTIME_EXECUTABLE;
     const hasBundledRuntime = process.env.DEUS_PACKAGED === "1" || process.env.DEUS_RUNTIME === "1";
     if (hasBundledRuntime && runtimeExecutable && existsSync(runtimeExecutable)) {

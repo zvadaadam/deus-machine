@@ -47,6 +47,7 @@ const fakePrefetchScript = join(fakeAppDir, "prefetch.js");
 const fakePrefetchMarker = join(fakeAppDir, "prefetched.txt");
 const urlPrefetchScript = join(fakeAppDir, "url-prefetch.js");
 const urlPrefetchMarker = join(fakeAppDir, "url-prefetched.txt");
+const scopedPrefetchMarker = join(fakeAppDir, "scoped-prefetched.txt");
 writeFileSync(
   fakeAppServer,
   `
@@ -138,6 +139,21 @@ const urlPrefetchManifest = {
 const urlPrefetchManifestPath = join(fakeAppDir, "url-prefetch-manifest.json");
 writeFileSync(urlPrefetchManifestPath, JSON.stringify(urlPrefetchManifest, null, 2), "utf8");
 
+const scopedPackagePrefetchManifest = {
+  ...fakeManifestWithoutPrefetch,
+  id: "test.prefetch-scoped-package",
+  prefetch: {
+    command: urlPrefetchScript,
+    args: ["@scope/tool", scopedPrefetchMarker],
+  },
+};
+const scopedPackagePrefetchManifestPath = join(fakeAppDir, "scoped-package-prefetch-manifest.json");
+writeFileSync(
+  scopedPackagePrefetchManifestPath,
+  JSON.stringify(scopedPackagePrefetchManifest, null, 2),
+  "utf8"
+);
+
 // Second manifest for the ENOENT test — a command that doesn't exist on PATH.
 const bogusManifest = {
   ...fakeManifestWithoutPrefetch,
@@ -167,6 +183,7 @@ vi.mock("../../src/config/installed-apps", () => ({
   INSTALLED_APP_MANIFESTS: [
     fakeManifestPath,
     missingPrefetchManifestPath,
+    scopedPackagePrefetchManifestPath,
     urlPrefetchManifestPath,
     bogusManifestPath,
     needsCliManifestPath,
@@ -233,23 +250,29 @@ describe("aap/apps.service (integration, in-memory)", () => {
       "test.fake-app",
       "test.needs-missing-cli",
       "test.prefetch-missing-command",
+      "test.prefetch-scoped-package",
       "test.prefetch-url-operand",
     ]);
   });
 
   it("runs app prefetch commands in the background and skips unavailable optional commands", async () => {
     rmSync(fakePrefetchMarker, { force: true });
+    rmSync(scopedPrefetchMarker, { force: true });
     rmSync(urlPrefetchMarker, { force: true });
 
     const logSpy = vi.spyOn(console, "log").mockImplementation(() => {});
     try {
       prefetchInstalledAppAssets();
       await waitForCondition(
-        () => existsSync(fakePrefetchMarker) && existsSync(urlPrefetchMarker),
+        () =>
+          existsSync(fakePrefetchMarker) &&
+          existsSync(scopedPrefetchMarker) &&
+          existsSync(urlPrefetchMarker),
         (exists) => exists,
         10_000
       );
       expect(readFileSync(fakePrefetchMarker, "utf8")).toBe("test.fake-app:1");
+      expect(readFileSync(scopedPrefetchMarker, "utf8")).toBe("@scope/tool");
       expect(readFileSync(urlPrefetchMarker, "utf8")).toBe(
         "https://example.com/mobile-use/prefetch.js"
       );
