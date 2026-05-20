@@ -311,7 +311,11 @@ function verifyPackagedDeviceUse(resourcesDir, options) {
   );
   const simulatorInspector = path.join(simulatorDir, DEVICE_USE_HELPER_NAMES.siminspector);
   verifyMacUniversalBinary(simulatorInspector, "packaged simulator siminspector", options);
-  assertNoBuildLocalInstallName(simulatorInspector, PROJECT_ROOT, "packaged simulator siminspector");
+  assertNoBuildLocalInstallName(
+    simulatorInspector,
+    PROJECT_ROOT,
+    "packaged simulator siminspector"
+  );
 
   assertDirectory(appRoot, "packaged device-use app");
   for (const [, relativePath] of DEVICE_USE_PACKAGE_FILES) {
@@ -343,6 +347,12 @@ function verifyPackagedDeviceUse(resourcesDir, options) {
   assert(
     manifest.launch?.command === "device-use",
     `Packaged device-use manifest has unexpected launch command: ${manifest.launch?.command}`
+  );
+  assert(
+    Array.isArray(manifest.launch?.args) &&
+      manifest.launch.args.includes("--host") &&
+      manifest.launch.args.includes("127.0.0.1"),
+    "Packaged device-use manifest must bind AAP-launched Mobile Use to loopback"
   );
   console.log("[runtime-smoke] packaged device-use runtime payload verified");
 }

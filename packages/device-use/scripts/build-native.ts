@@ -22,6 +22,7 @@ const releaseBinary = join(releaseDir, "simbridge");
 const universalBinary = join(buildDir, "apple", "Products", "Release", "simbridge");
 const inspectorBinary = join(releaseDir, "siminspector.dylib");
 const inspectorBuildScript = join(nativeDir, "Sources", "SimInspector", "build.sh");
+const force = process.argv.includes("--force");
 
 function hasRequiredMacArchitectures(binary: string): boolean {
   if (process.platform !== "darwin") return true;
@@ -50,11 +51,13 @@ function findSwiftBuildOutput(): string | null {
 }
 
 const bridgeReady =
+  !force &&
   existsSync(releaseBinary) &&
   !lstatSync(releaseDir).isSymbolicLink() &&
   !lstatSync(releaseBinary).isSymbolicLink() &&
   hasRequiredMacArchitectures(releaseBinary);
-const inspectorReady = existsSync(inspectorBinary) && hasRequiredMacArchitectures(inspectorBinary);
+const inspectorReady =
+  !force && existsSync(inspectorBinary) && hasRequiredMacArchitectures(inspectorBinary);
 
 if (bridgeReady && inspectorReady) {
   console.log("[build-native] simbridge already built, skipping.");
@@ -69,7 +72,7 @@ try {
 } catch {
   console.warn("[build-native] Swift not found. simbridge will not be available.");
   console.warn("  Install Xcode Command Line Tools: xcode-select --install");
-  process.exit(0);
+  process.exit(force ? 1 : 0);
 }
 
 if (!bridgeReady) {
@@ -79,7 +82,7 @@ if (!bridgeReady) {
     console.log("[build-native] Built simbridge successfully.");
   } catch (error) {
     console.warn("[build-native] simbridge build failed:", error);
-    process.exit(0);
+    process.exit(force ? 1 : 0);
   }
 }
 
@@ -113,6 +116,7 @@ if (!inspectorReady) {
     console.log("[build-native] Built siminspector successfully.");
   } catch (error) {
     console.warn("[build-native] siminspector build failed:", error);
+    if (force) process.exit(1);
   }
 }
 
