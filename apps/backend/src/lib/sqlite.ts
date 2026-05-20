@@ -1,4 +1,7 @@
 import type BetterSqlite3 from "better-sqlite3";
+import { createRequire } from "node:module";
+
+const requireModule = createRequire(import.meta.url);
 
 type BetterSqlite3Constructor = new (
   filename: string,
@@ -21,7 +24,7 @@ function isBunRuntime(): boolean {
 }
 
 function loadBetterSqlite3(): BetterSqlite3Constructor {
-  const mod = require("better-sqlite3") as
+  const mod = requireModule("better-sqlite3") as
     | BetterSqlite3Constructor
     | { default?: BetterSqlite3Constructor };
   if (typeof mod === "function") return mod;
@@ -30,7 +33,7 @@ function loadBetterSqlite3(): BetterSqlite3Constructor {
 }
 
 function loadBunSqlite(): BunSqliteDatabaseConstructor {
-  const mod = require("bun:sqlite") as { Database?: BunSqliteDatabaseConstructor };
+  const mod = requireModule("bun:sqlite") as { Database?: BunSqliteDatabaseConstructor };
   if (!mod.Database) {
     throw new Error("Unable to load bun:sqlite");
   }

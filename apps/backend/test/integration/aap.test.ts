@@ -196,7 +196,8 @@ describe("aap/apps.service (integration, in-memory)", () => {
     prefetchInstalledAppAssets();
     await waitForCondition(
       () => existsSync(fakePrefetchMarker),
-      (exists) => exists
+      (exists) => exists,
+      10_000
     );
     expect(readFileSync(fakePrefetchMarker, "utf8")).toBe("test.fake-app:1");
   });

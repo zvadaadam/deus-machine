@@ -14,6 +14,7 @@ for ARCH in arm64 x86_64; do
     -isysroot "$SDK_PATH" \
     -arch "$ARCH" \
     -mios-simulator-version-min=15.0 \
+    -Wl,-install_name,@rpath/siminspector.dylib \
     -framework Foundation \
     -framework UIKit \
     "$SCRIPT_DIR/Inspector.m" \

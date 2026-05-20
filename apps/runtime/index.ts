@@ -5,13 +5,15 @@ import { existsSync, mkdtempSync, rmSync, statSync } from "node:fs";
 import { Module as NodeModule } from "node:module";
 import { tmpdir } from "node:os";
 import { basename, delimiter, dirname, join, resolve } from "node:path";
+import { pathToFileURL } from "node:url";
 import packageJson from "../../package.json";
+import { PACKAGED_SYSTEM_PATHS } from "../../shared/runtime";
 
 const VERSION = packageJson.version;
 const RUNTIME_NAME = "deus-runtime";
 const STAGED_RUNTIME_KEYS = new Set(["darwin-arm64", "darwin-x64", "linux-x64"]);
-const PACKAGED_SYSTEM_PATHS = ["/usr/bin", "/bin", "/usr/sbin", "/sbin"];
 const REQUIRED_BINARIES = ["deus-runtime", "codex", "claude", "gh", "rg", "agent-browser"] as const;
+const REQUIRED_SIMULATOR_HELPERS = ["simbridge", "siminspector.dylib"] as const;
 const REQUIRED_RUNTIME_IMPORTS = [
   {
     name: "@anthropic-ai/claude-agent-sdk",
@@ -42,11 +44,12 @@ const REQUIRED_RUNTIME_IMPORTS = [
   },
 ] as const;
 
-type RuntimeCommand = "agent-server" | "backend" | "self-test";
+type RuntimeCommand = "agent-server" | "backend" | "device-use" | "self-test";
 
 interface ParsedArgs {
   command: RuntimeCommand | "version" | "help";
   dataDir?: string;
+  passthroughArgs?: string[];
 }
 
 function usage(): string {
@@ -58,6 +61,7 @@ function usage(): string {
     `  ${RUNTIME_NAME} self-test`,
     `  ${RUNTIME_NAME} agent-server`,
     `  ${RUNTIME_NAME} backend [--data-dir <path>]`,
+    `  ${RUNTIME_NAME} device-use [...args]`,
   ].join("\n");
 }
 
@@ -70,6 +74,7 @@ function parseArgs(argv: string[]): ParsedArgs {
     return { command: "version" };
   }
   if (first === "self-test") return { command: "self-test" };
+  if (first === "device-use") return { command: "device-use", passthroughArgs: rest };
   if (first !== "agent-server" && first !== "backend") {
     throw new Error(`Unknown command: ${first}`);
   }
@@ -213,6 +218,16 @@ function inspectBundledBinary(binDir: string, name: (typeof REQUIRED_BINARIES)[n
   return { path: filePath, exists, executable };
 }
 
+function inspectSimulatorHelper(
+  resourcesPath: string,
+  name: (typeof REQUIRED_SIMULATOR_HELPERS)[number]
+) {
+  const filePath = join(resourcesPath, "simulator", name);
+  const exists = existsSync(filePath);
+  const executable = exists ? (statSync(filePath).mode & 0o111) !== 0 : false;
+  return { path: filePath, exists, executable };
+}
+
 async function inspectRuntimeImports() {
   const results: Record<string, { ok: boolean; error?: string }> = {};
 
@@ -339,9 +354,41 @@ function configureRuntimeEnv(command: RuntimeCommand, dataDir?: string): void {
       process.env.DATABASE_PATH = join(resolve(dataDir), "deus.db");
     }
   }
+
+  if (command === "device-use") {
+    const simbridge = join(layout.resourcesPath, "simulator", "simbridge");
+    const siminspector = join(layout.resourcesPath, "simulator", "siminspector.dylib");
+    if (isNativeRuntimeExecutable) {
+      process.env.DEVICE_USE_SIMBRIDGE = simbridge;
+      process.env.DEVICE_USE_SIMINSPECTOR = siminspector;
+    } else {
+      process.env.DEVICE_USE_SIMBRIDGE ??= simbridge;
+      process.env.DEVICE_USE_SIMINSPECTOR ??= siminspector;
+    }
+  }
 }
 
-async function run(command: RuntimeCommand, dataDir?: string): Promise<void> {
+function resolveDeviceUseCli(layout: ReturnType<typeof resolveRuntimeLayout>): string {
+  const candidates = [
+    join(layout.resourcesPath, "agentic-apps", "device-use", "dist", "cli.js"),
+    layout.projectRoot
+      ? join(layout.projectRoot, "packages", "device-use", "dist", "cli.js")
+      : null,
+  ];
+  for (const candidate of candidates) {
+    if (candidate && existsSync(candidate)) return candidate;
+  }
+
+  throw new Error(
+    `Unable to find packaged device-use CLI. Checked: ${candidates.filter(Boolean).join(", ")}`
+  );
+}
+
+async function run(
+  command: RuntimeCommand,
+  dataDir?: string,
+  passthroughArgs: string[] = []
+): Promise<void> {
   configureRuntimeEnv(command, dataDir);
 
   if (command === "self-test") {
@@ -349,17 +396,33 @@ async function run(command: RuntimeCommand, dataDir?: string): Promise<void> {
     const binaries = Object.fromEntries(
       REQUIRED_BINARIES.map((name) => [name, inspectBundledBinary(layout.bundledBinDir, name)])
     );
+    const simulatorHelpers = Object.fromEntries(
+      REQUIRED_SIMULATOR_HELPERS.map((name) => [
+        name,
+        inspectSimulatorHelper(layout.resourcesPath, name),
+      ])
+    );
+    const requireSimulatorHelpers = existsSync(
+      join(layout.resourcesPath, "agentic-apps", "device-use", "agentic-app.json")
+    );
     const imports = await inspectRuntimeImports();
     const sqlite = await inspectSqliteContract();
     const missing = Object.entries(binaries)
       .filter(([, result]) => !result.exists || !result.executable)
+      .map(([name]) => name);
+    const missingSimulatorHelpers = Object.entries(simulatorHelpers)
+      .filter(([, result]) => requireSimulatorHelpers && (!result.exists || !result.executable))
       .map(([name]) => name);
     const failedImports = Object.entries(imports)
       .filter(([, result]) => !result.ok)
       .map(([name]) => name);
     console.log(
       JSON.stringify({
-        ok: missing.length === 0 && failedImports.length === 0 && sqlite.ok,
+        ok:
+          missing.length === 0 &&
+          missingSimulatorHelpers.length === 0 &&
+          failedImports.length === 0 &&
+          sqlite.ok,
         version: VERSION,
         executable: layout.executablePath,
         execPath: process.execPath,
@@ -373,18 +436,36 @@ async function run(command: RuntimeCommand, dataDir?: string): Promise<void> {
         nodeGlobalPaths: NodeModule.globalPaths,
         runtimeKey: getRuntimeKey(),
         binaries,
+        simulatorHelpers,
         imports,
         sqlite,
+        requireSimulatorHelpers,
         missing,
+        missingSimulatorHelpers,
         failedImports,
       })
     );
-    if (missing.length > 0 || failedImports.length > 0 || !sqlite.ok) process.exit(1);
+    if (
+      missing.length > 0 ||
+      missingSimulatorHelpers.length > 0 ||
+      failedImports.length > 0 ||
+      !sqlite.ok
+    ) {
+      process.exit(1);
+    }
     return;
   }
 
   if (command === "agent-server") {
     await import("../agent-server/index");
+    return;
+  }
+
+  if (command === "device-use") {
+    const layout = resolveRuntimeLayout();
+    const cliPath = resolveDeviceUseCli(layout);
+    process.argv = [layout.executablePath, "device-use", ...passthroughArgs];
+    await import(pathToFileURL(cliPath).href);
     return;
   }
 
@@ -411,7 +492,7 @@ async function main(): Promise<void> {
     return;
   }
 
-  await run(args.command, args.dataDir);
+  await run(args.command, args.dataDir, args.passthroughArgs);
 }
 
 main().catch((error) => {

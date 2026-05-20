@@ -11,6 +11,8 @@
 // contain business logic directly.
 
 import { match } from "ts-pattern";
+import { execFile } from "node:child_process";
+import { promisify } from "node:util";
 import { getDatabase } from "../../lib/database";
 import { getSessionRaw, getWorkspaceForMiddleware } from "../../db";
 import { computeWorkspacePath } from "../../middleware/workspace-loader";
@@ -38,6 +40,8 @@ interface CommandResult {
   commandId?: string;
   [key: string]: unknown;
 }
+
+const execFileAsync = promisify(execFile);
 
 // ---- Command Dispatch ----
 
@@ -268,10 +272,7 @@ export async function runCommand(
         const bundleId = requireParam(params, "bundleId", "sim:launchApp");
         const session = simulator.getContextForWorkspace(workspaceId);
         if (!session) throw new Error("No active simulator session");
-        await import("child_process").then(({ execFile }) => {
-          const { promisify } = require("util");
-          return promisify(execFile)("xcrun", ["simctl", "launch", session.udid, bundleId]);
-        });
+        await execFileAsync("xcrun", ["simctl", "launch", session.udid, bundleId]);
         return {};
       })
       .with("sim:terminateApp", async () => {
@@ -279,10 +280,7 @@ export async function runCommand(
         const bundleId = requireParam(params, "bundleId", "sim:terminateApp");
         const session = simulator.getContextForWorkspace(workspaceId);
         if (!session) throw new Error("No active simulator session");
-        await import("child_process").then(({ execFile }) => {
-          const { promisify } = require("util");
-          return promisify(execFile)("xcrun", ["simctl", "terminate", session.udid, bundleId]);
-        });
+        await execFileAsync("xcrun", ["simctl", "terminate", session.udid, bundleId]);
         return {};
       })
       .with("sim:uninstallApp", async () => {
@@ -290,10 +288,7 @@ export async function runCommand(
         const bundleId = requireParam(params, "bundleId", "sim:uninstallApp");
         const session = simulator.getContextForWorkspace(workspaceId);
         if (!session) throw new Error("No active simulator session");
-        await import("child_process").then(({ execFile }) => {
-          const { promisify } = require("util");
-          return promisify(execFile)("xcrun", ["simctl", "uninstall", session.udid, bundleId]);
-        });
+        await execFileAsync("xcrun", ["simctl", "uninstall", session.udid, bundleId]);
         return {};
       })
       // ---- AAP (agentic apps protocol) commands ----
