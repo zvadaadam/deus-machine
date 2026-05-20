@@ -5,6 +5,7 @@ const DEVICE_USE_PACKAGE_FILES = Object.freeze([
   ["device-use manifest", "agentic-app.json"],
   ["device-use package metadata", "package.json"],
   ["device-use CLI bundle", "dist/cli.js"],
+  ["device-use runtime CLI bundle", "dist/cli-runtime.js"],
   ["device-use engine bundle", "dist/engine.js"],
   ["device-use server bundle", "dist/server/index.js"],
   ["device-use frontend bundle", "dist/frontend/index.html"],

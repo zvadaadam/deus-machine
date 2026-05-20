@@ -33,6 +33,7 @@ if (!existsSync(pkgDir)) {
 const distDir = join(pkgDir, "dist");
 const distOutputs = [
   join(distDir, "cli.js"),
+  join(distDir, "cli-runtime.js"),
   join(distDir, "engine.js"),
   join(distDir, "server", "index.js"),
 ];

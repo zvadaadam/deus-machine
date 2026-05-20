@@ -1,5 +1,5 @@
 #!/usr/bin/env bun
-import { readFileSync, rmSync, existsSync } from "node:fs";
+import { chmodSync, existsSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { join, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -13,12 +13,21 @@ const version = pkg.version as string;
 if (existsSync(distDir)) rmSync(distDir, { recursive: true });
 
 const entries = [
-  { entry: "src/cli/index.ts", out: "dist/cli.js", shebang: true },
-  { entry: "src/engine/index.ts", out: "dist/engine.js", shebang: false },
-  { entry: "src/server/index.ts", out: "dist/server/index.js", shebang: false },
+  { entry: "src/cli/index.ts", out: "dist/cli.js", executable: true },
+  { entry: "src/cli/index.ts", out: "dist/cli-runtime.js", executable: false },
+  { entry: "src/engine/index.ts", out: "dist/engine.js", executable: false },
+  { entry: "src/server/index.ts", out: "dist/server/index.js", executable: false },
 ];
 
-for (const { entry, out, shebang } of entries) {
+function makeExecutableCli(filePath: string): void {
+  const source = readFileSync(filePath, "utf-8")
+    .replace(/^\uFEFF/, "")
+    .replace(/^#!.*\r?\n/, "");
+  writeFileSync(filePath, `#!/usr/bin/env bun\n${source}`);
+  chmodSync(filePath, 0o755);
+}
+
+for (const { entry, out, executable } of entries) {
   const result = await Bun.build({
     entrypoints: [join(root, entry)],
     outdir: join(root, dirname(out)),
@@ -28,7 +37,6 @@ for (const { entry, out, shebang } of entries) {
     splitting: false,
     sourcemap: "external",
     define: { __VERSION__: JSON.stringify(version) },
-    banner: shebang ? "#!/usr/bin/env bun" : undefined,
   });
 
   if (!result.success) {
@@ -36,15 +44,12 @@ for (const { entry, out, shebang } of entries) {
     for (const log of result.logs) console.error(log);
     process.exit(1);
   }
-  console.log(`  ✓ ${out}`);
-}
 
-// Make cli.js executable
-try {
-  const { chmodSync } = await import("node:fs");
-  chmodSync(join(root, "dist/cli.js"), 0o755);
-} catch {
-  // ignore
+  if (executable) {
+    makeExecutableCli(join(root, out));
+  }
+
+  console.log(`  ✓ ${out}`);
 }
 
 console.log("\nTS build complete.");
