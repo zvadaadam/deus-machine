@@ -11,7 +11,7 @@
 // as the "ipc-notify" event.
 
 import * as fs from "node:fs";
-import { dirname, join } from "node:path";
+import { dirname, isAbsolute, join, relative, resolve as resolvePath } from "node:path";
 import { pathToFileURL } from "node:url";
 import { randomUUID } from "node:crypto";
 
@@ -116,6 +116,58 @@ interface IpcHandler {
 
 const DEVICE_ID = randomUUID();
 
+function isInside(child: string, parent: string): boolean {
+  const rel = relative(resolvePath(parent), resolvePath(child));
+  return rel === "" || (!rel.startsWith("..") && !isAbsolute(rel));
+}
+
+function allowedRoots(ctx: Context): string[] {
+  const roots = [ctx.workspace, ctx.storage];
+  return Array.from(
+    new Set(
+      roots.flatMap((root) => {
+        const resolved = resolvePath(root);
+        try {
+          return [resolved, fs.realpathSync(resolved)];
+        } catch {
+          return [resolved];
+        }
+      })
+    )
+  );
+}
+
+function isAllowedPath(path: string, ctx: Context): boolean {
+  return allowedRoots(ctx).some((root) => isInside(path, root));
+}
+
+function assertAllowedFsPath(path: unknown, ctx: Context): string {
+  if (typeof path !== "string" || path.length === 0) {
+    throw new Error("path must be a non-empty string");
+  }
+  const abs = resolvePath(path);
+  if (!isAllowedPath(abs, ctx)) {
+    throw new Error("path must be inside the workspace or AAP storage dir");
+  }
+  return abs;
+}
+
+function assertAllowedRealPath(path: string, ctx: Context): void {
+  if (!isAllowedPath(fs.realpathSync(path), ctx)) {
+    throw new Error("path must be inside the workspace or AAP storage dir");
+  }
+}
+
+function assertAllowedExistingAncestor(path: string, ctx: Context): void {
+  let current = path;
+  while (!fs.existsSync(current)) {
+    const parent = dirname(current);
+    if (parent === current) break;
+    current = parent;
+  }
+  assertAllowedRealPath(current, ctx);
+}
+
 const handlers: Record<string, IpcHandler> = {
   // Identity / lifecycle
   "get-device-id": () => DEVICE_ID,
@@ -197,21 +249,28 @@ const handlers: Record<string, IpcHandler> = {
   "set-workspace-folder-path": () => undefined,
 
   // File ops — used for libraries, imports, temp scratch
-  "read-file": async (payload) => {
-    const filePath = (payload as { path?: string }).path;
-    if (!filePath) throw new Error("missing path");
+  "read-file": async (payload, ctx) => {
+    const filePath = assertAllowedFsPath((payload as { path?: unknown }).path, ctx);
+    assertAllowedRealPath(filePath, ctx);
     const buf = await fs.promises.readFile(filePath);
     return Array.from(buf);
   },
-  "write-file": async (payload) => {
-    const { path, contents } = payload as { path: string; contents: number[] };
-    await fs.promises.mkdir(dirname(path), { recursive: true });
-    await fs.promises.writeFile(path, Buffer.from(contents));
+  "write-file": async (payload, ctx) => {
+    const data = payload as { path?: unknown; contents?: unknown };
+    const filePath = assertAllowedFsPath(data.path, ctx);
+    if (!Array.isArray(data.contents)) {
+      throw new Error("contents must be an array");
+    }
+    if (fs.existsSync(filePath)) assertAllowedRealPath(filePath, ctx);
+    else assertAllowedExistingAncestor(dirname(filePath), ctx);
+    await fs.promises.mkdir(dirname(filePath), { recursive: true });
+    await fs.promises.writeFile(filePath, Buffer.from(data.contents));
     return undefined;
   },
-  "ensure-dir": async (payload) => {
-    const { path } = payload as { path: string };
-    await fs.promises.mkdir(path, { recursive: true });
+  "ensure-dir": async (payload, ctx) => {
+    const dirPath = assertAllowedFsPath((payload as { path?: unknown }).path, ctx);
+    assertAllowedExistingAncestor(dirPath, ctx);
+    await fs.promises.mkdir(dirPath, { recursive: true });
     return undefined;
   },
   "watch-file": () => undefined,
