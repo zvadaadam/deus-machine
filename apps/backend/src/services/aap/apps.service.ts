@@ -81,6 +81,7 @@ interface RunningAppEntry {
   id: string;
   appId: string;
   workspaceId: string | null;
+  workspacePath: string;
   pid: number;
   port: number;
   url: string;
@@ -371,6 +372,7 @@ async function doLaunch(
     id: runningAppId,
     appId: args.appId,
     workspaceId: args.workspaceId,
+    workspacePath: args.workspacePath,
     pid: spawned.pid,
     port,
     url,
@@ -466,7 +468,7 @@ async function doLaunch(
   //
   // Symmetric with `unregisterMcpForRunningApp` in handleChildExit (fire-and-
   // forget for different-but-related reasons; see that call site).
-  void registerMcpForRunningApp({ appId: args.appId, mcpUrl });
+  void registerMcpForRunningApp({ appId: args.appId, mcpUrl, workspacePath: args.workspacePath });
   pushEvent("apps:launched", {
     appId: args.appId,
     workspaceId: args.workspaceId,
@@ -712,7 +714,11 @@ function handleChildExit(
   // fire-and-forget (this is a sync handler called from child.on('exit')).
   // If we awaited here we'd either block the event loop or make this whole
   // function async and force every caller to retrofit async handling.
-  void unregisterMcpForRunningApp({ appId: entry.appId, mcpUrl: entry.mcpUrl });
+  void unregisterMcpForRunningApp({
+    appId: entry.appId,
+    mcpUrl: entry.mcpUrl,
+    workspacePath: entry.workspacePath,
+  });
 }
 
 function toView(entry: RunningAppEntry): RunningApp {

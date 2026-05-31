@@ -4,7 +4,7 @@
 // bundled mcp-server-darwin-arm64 (CLI 0.2.5+) is a `WebSocketClient`
 // that discovers its host via the file at `~/.pencil/apps/<app-name>`.
 // The file's contents are the host's TCP port (5 ASCII chars, no newline).
-// On startup with `-app deus`, the binary reads `~/.pencil/apps/deus`,
+// On startup with `-app <name>`, the binary reads `~/.pencil/apps/<name>`,
 // connects to `ws://[::1]:<port>`, and routes MCP tool_calls through us.
 //
 // Wire format (each WS frame is one JSON message — WS already frames):
@@ -28,7 +28,7 @@ import { join } from "node:path";
 import { randomUUID } from "node:crypto";
 import { WebSocketServer, type WebSocket } from "ws";
 
-import { PENCIL_APPS_DIR, PENCIL_HOST_APP_NAME } from "./config.ts";
+import { PENCIL_APPS_DIR, PENCIL_HOST_APP_NAME_PREFIX } from "./config.ts";
 import { requestFromIframe } from "./iframe-rpc.ts";
 
 interface ClientState {
@@ -40,6 +40,7 @@ let httpServer: http.Server | null = null;
 let wsServer: WebSocketServer | null = null;
 const clients = new Map<string, ClientState>();
 let registeredAppFile: string | null = null;
+let registeredAppPort: number | null = null;
 
 // CLI 0.2.5+ sends *flat* tool_request frames (no `type` / `data` wrapper).
 // Older Cursor extension binary used the wrapped shape. We accept both
@@ -64,7 +65,7 @@ interface WrappedToolRequest {
 type Frame = FlatToolRequest | WrappedToolRequest | { type?: string; data?: unknown };
 
 /** Boot the WS host. Returns the port we ended up bound to. */
-export async function startTransportServer(): Promise<number> {
+export async function startTransportServer(hostAppName = PENCIL_HOST_APP_NAME_PREFIX): Promise<number> {
   if (httpServer) {
     const addr = httpServer.address();
     return addr && typeof addr === "object" ? addr.port : 0;
@@ -85,7 +86,7 @@ export async function startTransportServer(): Promise<number> {
         reject(new Error("could not get bound port"));
         return;
       }
-      registerAppPort(addr.port);
+      registerAppPort(hostAppName, addr.port);
       console.log(`[pencil-transport] WebSocket host listening on ws://[::1]:${addr.port}`);
       resolve(addr.port);
     });
@@ -112,23 +113,28 @@ export async function stopTransportServer(): Promise<void> {
   unregisterAppPort();
 }
 
-function registerAppPort(port: number): void {
+function registerAppPort(hostAppName: string, port: number): void {
   fs.mkdirSync(PENCIL_APPS_DIR, { recursive: true });
-  registeredAppFile = join(PENCIL_APPS_DIR, PENCIL_HOST_APP_NAME);
+  registeredAppFile = join(PENCIL_APPS_DIR, hostAppName);
+  registeredAppPort = port;
   // Match the format Pencil's own apps use: just the port number, no
   // newline (5-character file for typical ports).
   fs.writeFileSync(registeredAppFile, String(port), "utf8");
-  console.log(`[pencil-transport] registered app "${PENCIL_HOST_APP_NAME}" → port ${port}`);
+  console.log(`[pencil-transport] registered app "${hostAppName}" → port ${port}`);
 }
 
 function unregisterAppPort(): void {
   if (!registeredAppFile) return;
   try {
-    fs.unlinkSync(registeredAppFile);
+    const current = fs.readFileSync(registeredAppFile, "utf8");
+    if (registeredAppPort === null || current === String(registeredAppPort)) {
+      fs.unlinkSync(registeredAppFile);
+    }
   } catch {
     /* fine */
   }
   registeredAppFile = null;
+  registeredAppPort = null;
 }
 
 // ---- connection handling --------------------------------------------------

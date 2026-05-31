@@ -26,6 +26,8 @@
 //   - Query lifecycle: claude-handler calls `attachQuery` after construction
 //     and `detachQuery` in the finally block.
 
+import { resolve as resolvePath } from "node:path";
+
 import type { Query, McpServerConfig } from "@anthropic-ai/claude-agent-sdk";
 
 import { claudeQueries } from "./agents/claude/claude-session";
@@ -35,10 +37,17 @@ import { getErrorMessage } from "@shared/lib/errors";
 // Module state — single source of truth for the dynamic MCP map.
 // ----------------------------------------------------------------------------
 
-/** Currently-registered dynamic MCP servers. Key = SDK server name (normalized
- *  via `idToServerName`). Value = HTTP transport config. Must stay in sync
- *  with what's been pushed to each Query via setMcpServers. */
-const registeredServers = new Map<string, McpServerConfig>();
+interface RegisteredServer {
+  serverName: string;
+  config: McpServerConfig;
+  workspacePath: string | null;
+}
+
+/** Currently-registered dynamic MCP servers. Key = scoped SDK server name
+ *  (`workspacePath + serverName`). Value = HTTP transport config plus the
+ *  workspace it belongs to. Must stay in sync with what's been pushed to each
+ *  Query via setMcpServers. */
+const registeredServers = new Map<string, RegisteredServer>();
 
 /** Per-query list of SDK-type MCP servers that must be preserved across every
  *  setMcpServers broadcast. The SDK disconnects any SDK server not in the
@@ -47,6 +56,11 @@ const registeredServers = new Map<string, McpServerConfig>();
  *  the Query is created — typed as the SDK's input shape (the union) since
  *  it gets re-broadcast through `setMcpServers` unchanged. */
 const protectedByQuery = new Map<Query, Record<string, McpServerConfig>>();
+
+/** Workspace path associated with each live Query. AAP tools are workspace
+ * scoped, so a Pencil instance launched in workspace A must not replace the
+ * `mcp__pencil_app__*` tools in workspace B. */
+const workspaceByQuery = new Map<Query, string | null>();
 
 // ----------------------------------------------------------------------------
 // Serialization
@@ -84,10 +98,19 @@ function enqueueRegistryUpdate<T>(fn: () => Promise<T>): Promise<T> {
  * results in two broadcasts of the same payload — the SDK treats it as a
  * re-set, not a duplicate.
  */
-export function registerAppMcp(serverName: string, url: string): Promise<void> {
+export function registerAppMcp(
+  serverName: string,
+  url: string,
+  workspacePath?: string | null
+): Promise<void> {
   return enqueueRegistryUpdate(async () => {
     const config: McpServerConfig = { type: "http", url };
-    registeredServers.set(serverName, config);
+    const normalizedWorkspace = normalizeWorkspacePath(workspacePath);
+    registeredServers.set(registryKey(serverName, normalizedWorkspace), {
+      serverName,
+      config,
+      workspacePath: normalizedWorkspace,
+    });
     console.log(
       `[AAP-Registrar] Registered ${serverName} → ${url} (${registeredServers.size} total)`
     );
@@ -100,9 +123,11 @@ export function registerAppMcp(serverName: string, url: string): Promise<void> {
  * server wasn't registered, this is a silent no-op (no broadcast — we don't
  * thrash the SDK for a map that didn't actually change).
  */
-export function unregisterAppMcp(serverName: string): Promise<void> {
+export function unregisterAppMcp(serverName: string, workspacePath?: string | null): Promise<void> {
   return enqueueRegistryUpdate(async () => {
-    const existed = registeredServers.delete(serverName);
+    const existed = registeredServers.delete(
+      registryKey(serverName, normalizeWorkspacePath(workspacePath))
+    );
     if (!existed) return;
     console.log(`[AAP-Registrar] Unregistered ${serverName} (${registeredServers.size} remaining)`);
     await broadcast();
@@ -121,8 +146,13 @@ export function unregisterAppMcp(serverName: string): Promise<void> {
  * this, apps launched before the session started stayed invisible until the
  * next register/unregister event happened to fire.
  */
-export function attachQuery(query: Query, sdkServers: Record<string, McpServerConfig>): void {
+export function attachQuery(
+  query: Query,
+  sdkServers: Record<string, McpServerConfig>,
+  workspacePath?: string | null
+): void {
   protectedByQuery.set(query, sdkServers);
+  workspaceByQuery.set(query, normalizeWorkspacePath(workspacePath));
   if (registeredServers.size > 0) {
     void enqueueRegistryUpdate(() => pushToQuery(query));
   }
@@ -132,6 +162,7 @@ export function attachQuery(query: Query, sdkServers: Record<string, McpServerCo
  *  finally block, alongside `claudeQueries.delete(sessionId)`. */
 export function detachQuery(query: Query): void {
   protectedByQuery.delete(query);
+  workspaceByQuery.delete(query);
 }
 
 /** Build the full setMcpServers payload for a single query: its protected
@@ -145,9 +176,11 @@ function buildPayloadForQuery(query: Query): Record<string, McpServerConfig> {
   // an AAP app can't shadow the host's own tools without an explicit
   // override. That's the safer default.
   const protectedSdkServers = protectedByQuery.get(query) ?? {};
+  const queryWorkspace = workspaceByQuery.get(query) ?? null;
   const payload: Record<string, McpServerConfig> = { ...protectedSdkServers };
-  for (const [name, config] of registeredServers) {
-    payload[name] = config;
+  for (const server of registeredServers.values()) {
+    if (server.workspacePath !== null && server.workspacePath !== queryWorkspace) continue;
+    payload[server.serverName] = server.config;
   }
   return payload;
 }
@@ -189,4 +222,14 @@ async function broadcast(): Promise<void> {
 export function __clearRegistrarForTests(): void {
   registeredServers.clear();
   protectedByQuery.clear();
+  workspaceByQuery.clear();
+}
+
+function normalizeWorkspacePath(workspacePath: string | null | undefined): string | null {
+  if (!workspacePath) return null;
+  return resolvePath(workspacePath);
+}
+
+function registryKey(serverName: string, workspacePath: string | null): string {
+  return `${workspacePath ?? "__global__"}\0${serverName}`;
 }
