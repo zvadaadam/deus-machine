@@ -1,6 +1,7 @@
 import { app, dialog } from "electron";
 import { realpathSync } from "fs";
 import { isAbsolute, join, relative, resolve } from "path";
+import { logMainProcess } from "./startup-diagnostics";
 
 function canonicalPath(filePath: string): string {
   try {
@@ -31,22 +32,56 @@ function getHomeDirectoryCandidates(): string[] {
   );
 }
 
-function buildMovePromptDetail(executablePath: string, extraReason?: string): string {
+function buildManualMoveDetail(executablePath: string, failureReason?: string): string {
   return [
-    "Deus needs to run from Applications on macOS.",
+    "Deus could not install itself into Applications automatically.",
     "",
     "Launching directly from a disk image, Downloads, or another transient location can cause macOS to randomize the app path and break bundled backend processes.",
     "",
     `Current location: ${executablePath}`,
-    extraReason ? "" : null,
-    extraReason ? extraReason : null,
+    failureReason ? "" : null,
+    failureReason ?? null,
     "",
-    "Move Deus to Applications now, then reopen it from there.",
+    "Drag Deus into Applications manually, then reopen it from there.",
   ]
     .filter((line): line is string => line !== null)
     .join("\n");
 }
 
+async function quitWithManualMoveGuidance(
+  executablePath: string,
+  failureReason?: string
+): Promise<void> {
+  await dialog.showMessageBox({
+    type: "error",
+    buttons: ["OK"],
+    defaultId: 0,
+    cancelId: 0,
+    noLink: true,
+    message: "Move Deus to Applications manually",
+    detail: buildManualMoveDetail(executablePath, failureReason),
+  });
+  app.quit();
+}
+
+/**
+ * First-launch installer. When the packaged app is opened from a disk image,
+ * Downloads, or any other non-Applications location, it silently installs
+ * itself into /Applications and relaunches from there — double-clicking the
+ * app in the DMG is enough, no drag-to-Applications step (same flow as the
+ * Codex and Claude desktop apps).
+ *
+ * Electron's bundle mover handles the mechanics: it trashes a stale existing
+ * copy, escalates to an authorized install when /Applications is not
+ * writable, strips the quarantine attribute, relaunches the installed copy,
+ * and detaches the source disk image. If a copy is already running from
+ * Applications it hands focus to that copy instead of replacing it (the
+ * single-instance lock normally exits us before that can even happen).
+ *
+ * Returns true when startup must stop — the app is relaunching from
+ * Applications, handing off to a running copy, or quitting after a failed
+ * move.
+ */
 export async function ensureInstalledInApplications(): Promise<boolean> {
   if (process.platform !== "darwin" || !app.isPackaged) {
     return false;
@@ -61,85 +96,25 @@ export async function ensureInstalledInApplications(): Promise<boolean> {
     return false;
   }
 
-  const { response } = await dialog.showMessageBox({
-    type: "question",
-    buttons: ["Move to Applications", "Quit"],
-    defaultId: 0,
-    cancelId: 1,
-    noLink: true,
-    message: "Move Deus to Applications?",
-    detail: buildMovePromptDetail(executablePath),
-  });
-
-  if (response !== 0) {
-    app.quit();
-    return true;
-  }
+  logMainProcess(`[main] Self-installing into /Applications from: ${executablePath}`);
 
   try {
-    const moved = app.moveToApplicationsFolder({
-      conflictHandler: (conflictType) => {
-        if (conflictType === "exists") {
-          return (
-            dialog.showMessageBoxSync({
-              type: "question",
-              buttons: ["Cancel", "Replace Existing App"],
-              defaultId: 0,
-              cancelId: 0,
-              noLink: true,
-              message: "Replace the existing Deus app?",
-              detail:
-                "An existing copy of Deus is already in Applications. Replacing it will move this version into its place.",
-            }) === 1
-          );
-        }
-
-        if (conflictType === "existsAndRunning") {
-          dialog.showMessageBoxSync({
-            type: "warning",
-            buttons: ["OK"],
-            defaultId: 0,
-            cancelId: 0,
-            noLink: true,
-            message: "Deus is already running from Applications",
-            detail:
-              "Close the running copy of Deus, then reopen this installer build and try again.",
-          });
-        }
-
-        return false;
-      },
-    });
-
-    if (moved) {
+    // No conflictHandler on purpose: the mover's defaults are the installer
+    // semantics we want — replace a stale copy, hand off to a running one.
+    if (app.moveToApplicationsFolder()) {
       return true;
     }
   } catch (error) {
-    await dialog.showMessageBox({
-      type: "error",
-      buttons: ["OK"],
-      defaultId: 0,
-      cancelId: 0,
-      noLink: true,
-      message: "Move Deus to Applications manually",
-      detail: buildMovePromptDetail(
-        executablePath,
-        error instanceof Error ? `Move failed: ${error.message}` : undefined
-      ),
-    });
-    app.quit();
+    const reason = error instanceof Error ? error.message : String(error);
+    logMainProcess(`[main] Self-install into /Applications failed: ${reason}`);
+    await quitWithManualMoveGuidance(
+      executablePath,
+      error instanceof Error ? `Automatic install failed: ${error.message}` : undefined
+    );
     return true;
   }
 
-  await dialog.showMessageBox({
-    type: "error",
-    buttons: ["OK"],
-    defaultId: 0,
-    cancelId: 0,
-    noLink: true,
-    message: "Move Deus to Applications manually",
-    detail: buildMovePromptDetail(executablePath),
-  });
-  app.quit();
+  logMainProcess("[main] Self-install into /Applications was not performed");
+  await quitWithManualMoveGuidance(executablePath);
   return true;
 }
