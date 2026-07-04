@@ -36,6 +36,7 @@ import {
 
 const originalEnv = { ...process.env };
 const originalPlatform = process.platform;
+const originalArch = process.arch;
 const tempRoots: string[] = [];
 
 function createTempRoot(): string {
@@ -61,6 +62,11 @@ afterEach(() => {
     configurable: true,
     enumerable: true,
     value: originalPlatform,
+  });
+  Object.defineProperty(process, "arch", {
+    configurable: true,
+    enumerable: true,
+    value: originalArch,
   });
 });
 
@@ -149,10 +155,14 @@ describe("desktop install preflight", () => {
     return executablePath;
   }
 
-  const CURRENT_ARCH = process.arch === "arm64" ? "arm64" : "x86_64";
+  const CURRENT_ARCH = originalArch === "arm64" ? "arm64" : "x86_64";
   const OTHER_ARCH = CURRENT_ARCH === "arm64" ? "x86_64" : "arm64";
 
-  function mockInstalledVersion(version: string | null, archs: string = CURRENT_ARCH): void {
+  function mockInstalledVersion(
+    version: string | null,
+    archs: string = CURRENT_ARCH,
+    procTranslated = "0"
+  ): void {
     mockExecFileSync.mockImplementation((file: string) => {
       if (file === "/usr/bin/plutil") {
         if (version === null) throw new Error("missing plist");
@@ -160,6 +170,9 @@ describe("desktop install preflight", () => {
       }
       if (file === "/usr/bin/lipo") {
         return `${archs}\n`;
+      }
+      if (file === "/usr/sbin/sysctl") {
+        return `${procTranslated}\n`;
       }
       return "";
     });
@@ -246,7 +259,7 @@ describe("desktop install preflight", () => {
     expect(releaseOrder).toBeLessThan(openOrder);
   });
 
-  it("replaces a same-version install that does not run natively on this arch", async () => {
+  it("replaces a same-version install that does not run natively on this machine", async () => {
     setupTransientLaunch();
     mockInstalledVersion("0.3.8", OTHER_ARCH);
     mockApp.moveToApplicationsFolder.mockImplementation(
@@ -261,6 +274,30 @@ describe("desktop install preflight", () => {
       expect.anything(),
       expect.anything()
     );
+  });
+
+  it("never lets a Rosetta build displace a same-version native install", async () => {
+    setupTransientLaunch();
+    // x64 DMG opened on Apple Silicon: process.arch reports x64 under
+    // Rosetta while the machine (sysctl.proc_translated=1) is arm64.
+    Object.defineProperty(process, "arch", {
+      configurable: true,
+      enumerable: true,
+      value: "x64",
+    });
+    mockInstalledVersion("0.3.8", "arm64", "1");
+    mockApp.moveToApplicationsFolder.mockImplementation(
+      (options: { conflictHandler: (conflictType: string) => boolean }) =>
+        options.conflictHandler("exists")
+    );
+
+    await expect(ensureInstalledInApplications()).resolves.toBe(true);
+    expect(mockExecFileSync).toHaveBeenCalledWith(
+      "/usr/bin/open",
+      ["/Applications/Deus.app"],
+      expect.anything()
+    );
+    expect(mockApp.quit).toHaveBeenCalledTimes(1);
   });
 
   it("defers running-copy conflicts to the mover without reading versions", async () => {
@@ -278,30 +315,31 @@ describe("desktop install preflight", () => {
 
 describe("shouldReplaceExistingInstall", () => {
   it.each([
-    // installed, incoming, installedSupportsCurrentArch, expected
-    [null, "0.3.8", true, true],
-    ["not-a-version", "0.3.8", true, true],
-    ["0.3.6", "0.3.8", true, true],
-    ["0.3.8", "0.3.8", true, false],
-    ["0.4.0", "0.3.8", true, false],
-    ["10.0", "9.9.9", true, false],
-    // Prerelease ordering: releases outrank prereleases of the same core.
-    ["0.3.8", "0.3.8-beta.1", true, false],
-    ["0.3.8-beta.1", "0.3.8", true, true],
-    ["0.3.8-beta.1", "0.3.8-beta.2", true, true],
-    ["0.3.8-beta.2", "0.3.8-beta.10", true, true],
-    ["0.3.8-alpha", "0.3.8-alpha.1", true, true],
-    // Same version on the wrong architecture is replaced; newer never is.
-    ["0.3.8", "0.3.8", false, true],
+    // installed, incoming, replaceSameVersionForArch, expected
+    [null, "0.3.8", false, true],
+    ["not-a-version", "0.3.8", false, true],
+    ["0.3.6", "0.3.8", false, true],
+    ["0.3.8", "0.3.8", false, false],
     ["0.4.0", "0.3.8", false, false],
+    ["10.0", "9.9.9", false, false],
+    // Prerelease ordering: releases outrank prereleases of the same core.
+    ["0.3.8", "0.3.8-beta.1", false, false],
+    ["0.3.8-beta.1", "0.3.8", false, true],
+    ["0.3.8-beta.1", "0.3.8-beta.2", false, true],
+    ["0.3.8-beta.2", "0.3.8-beta.10", false, true],
+    ["0.3.8-alpha", "0.3.8-alpha.1", false, true],
+    // An arch-justified replacement applies to same versions only — a newer
+    // install is never displaced.
+    ["0.3.8", "0.3.8", true, true],
+    ["0.4.0", "0.3.8", true, false],
   ])(
-    "installed=%s incoming=%s supportsArch=%s → replace=%s",
-    (installedVersion, incomingVersion, supportsArch, expected) => {
+    "installed=%s incoming=%s archReplace=%s → replace=%s",
+    (installedVersion, incomingVersion, replaceSameVersionForArch, expected) => {
       expect(
         shouldReplaceExistingInstall(
           installedVersion as string | null,
           incomingVersion as string,
-          supportsArch as boolean
+          replaceSameVersionForArch as boolean
         )
       ).toBe(expected);
     }

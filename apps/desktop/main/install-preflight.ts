@@ -49,7 +49,7 @@ function buildManualMoveDetail(executablePath: string, failureReason?: string): 
     .join("\n");
 }
 
-function installedBundleSupportsCurrentArch(bundlePath: string, executableName: string): boolean {
+function readInstalledBundleArchs(bundlePath: string, executableName: string): string[] | null {
   try {
     const archs = execFileSync(
       "/usr/bin/lipo",
@@ -57,13 +57,46 @@ function installedBundleSupportsCurrentArch(bundlePath: string, executableName: 
       { encoding: "utf8", timeout: 3_000 }
     )
       .trim()
-      .split(/\s+/);
-    return archs.includes(process.arch === "arm64" ? "arm64" : "x86_64");
+      .split(/\s+/)
+      .filter(Boolean);
+    return archs.length > 0 ? archs : null;
   } catch {
-    // Unreadable binary — treat as unsupported so the replacement also
-    // repairs a broken install.
-    return false;
+    return null;
   }
+}
+
+/**
+ * The machine's native architecture — NOT process.arch, which reports x64
+ * when an x64 build runs under Rosetta on Apple Silicon.
+ */
+function getMachineNativeArch(): "arm64" | "x86_64" {
+  if (process.arch === "arm64") {
+    return "arm64";
+  }
+  try {
+    const translated = execFileSync("/usr/sbin/sysctl", ["-n", "sysctl.proc_translated"], {
+      encoding: "utf8",
+      timeout: 3_000,
+    }).trim();
+    return translated === "1" ? "arm64" : "x86_64";
+  } catch {
+    // The sysctl key does not exist on Intel hardware.
+    return "x86_64";
+  }
+}
+
+function shouldReplaceSameVersionForArch(bundlePath: string, executableName: string): boolean {
+  const installedArchs = readInstalledBundleArchs(bundlePath, executableName);
+  if (installedArchs === null) {
+    // Unreadable binary — replacing also repairs a broken install.
+    return true;
+  }
+  const nativeArch = getMachineNativeArch();
+  const incomingArch = process.arch === "arm64" ? "arm64" : "x86_64";
+  // Only a native build may replace a same-version install, and only when the
+  // installed copy cannot run natively (an x64 leftover on Apple Silicon). A
+  // Rosetta build must never displace a native install.
+  return incomingArch === nativeArch && !installedArchs.includes(nativeArch);
 }
 
 function readBundleShortVersion(bundlePath: string): string | null {
@@ -138,14 +171,15 @@ function compareVersions(left: string, right: string): number | null {
 /**
  * An existing install is replaced when the launched copy is strictly newer —
  * opening an old (or already-installed) DMG must not silently downgrade — or
- * when versions match but the installed binary does not run natively on this
- * architecture (e.g. an x64 install superseded by the arm64 DMG). Unknown or
- * unparseable versions replace, preserving plain installer semantics.
+ * when versions match and the caller determined the replacement is justified
+ * for architecture reasons (a native build superseding a non-native install).
+ * Unknown or unparseable versions replace, preserving plain installer
+ * semantics.
  */
 export function shouldReplaceExistingInstall(
   installedVersion: string | null,
   incomingVersion: string,
-  installedSupportsCurrentArch: boolean
+  replaceSameVersionForArch: boolean
 ): boolean {
   if (!installedVersion) {
     return true;
@@ -154,7 +188,7 @@ export function shouldReplaceExistingInstall(
   if (comparison === null || comparison < 0) {
     return true;
   }
-  return comparison === 0 && !installedSupportsCurrentArch;
+  return comparison === 0 && replaceSameVersionForArch;
 }
 
 async function quitWithManualMoveGuidance(
@@ -227,7 +261,7 @@ export async function ensureInstalledInApplications(): Promise<boolean> {
           shouldReplaceExistingInstall(
             readBundleShortVersion(installedBundlePath),
             app.getVersion(),
-            installedBundleSupportsCurrentArch(installedBundlePath, basename(executablePath))
+            shouldReplaceSameVersionForArch(installedBundlePath, basename(executablePath))
           )
         ) {
           return true;
