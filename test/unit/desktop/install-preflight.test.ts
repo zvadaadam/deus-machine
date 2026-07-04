@@ -3,10 +3,11 @@ import os from "node:os";
 import path from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-const { mockApp, mockDialog } = vi.hoisted(() => ({
+const { mockApp, mockDialog, mockExecFileSync } = vi.hoisted(() => ({
   mockApp: {
     isPackaged: true,
     getPath: vi.fn(),
+    getVersion: vi.fn(),
     moveToApplicationsFolder: vi.fn(),
     quit: vi.fn(),
   },
@@ -14,6 +15,7 @@ const { mockApp, mockDialog } = vi.hoisted(() => ({
     showMessageBox: vi.fn(),
     showMessageBoxSync: vi.fn(),
   },
+  mockExecFileSync: vi.fn(),
 }));
 
 vi.mock("electron", () => ({
@@ -21,9 +23,14 @@ vi.mock("electron", () => ({
   dialog: mockDialog,
 }));
 
+vi.mock("child_process", () => ({
+  execFileSync: mockExecFileSync,
+}));
+
 import {
   ensureInstalledInApplications,
   isApplicationsInstallPath,
+  shouldReplaceExistingInstall,
 } from "../../../apps/desktop/main/install-preflight";
 
 const originalEnv = { ...process.env };
@@ -41,10 +48,12 @@ afterEach(() => {
     rmSync(root, { recursive: true, force: true });
   }
   mockApp.getPath.mockReset();
+  mockApp.getVersion.mockReset();
   mockApp.moveToApplicationsFolder.mockReset();
   mockApp.quit.mockReset();
   mockDialog.showMessageBox.mockReset();
   mockDialog.showMessageBoxSync.mockReset();
+  mockExecFileSync.mockReset();
   process.env = { ...originalEnv };
   Object.defineProperty(process, "platform", {
     configurable: true,
@@ -134,7 +143,18 @@ describe("desktop install preflight", () => {
       if (name === "home") return path.join(root, "home");
       return root;
     });
+    mockApp.getVersion.mockReturnValue("0.3.8");
     return executablePath;
+  }
+
+  function mockInstalledVersion(version: string | null): void {
+    mockExecFileSync.mockImplementation((file: string) => {
+      if (file === "/usr/bin/plutil") {
+        if (version === null) throw new Error("missing plist");
+        return `${version}\n`;
+      }
+      return "";
+    });
   }
 
   it("silently installs into Applications when launched from a transient location", async () => {
@@ -171,5 +191,69 @@ describe("desktop install preflight", () => {
     await expect(ensureInstalledInApplications()).resolves.toBe(true);
     expect(mockDialog.showMessageBox).toHaveBeenCalledTimes(1);
     expect(mockApp.quit).toHaveBeenCalledTimes(1);
+  });
+
+  it("replaces an older installed copy silently", async () => {
+    setupTransientLaunch();
+    mockInstalledVersion("0.3.6");
+    mockApp.moveToApplicationsFolder.mockImplementation(
+      (options: { conflictHandler: (conflictType: string) => boolean }) =>
+        options.conflictHandler("exists")
+    );
+
+    await expect(ensureInstalledInApplications()).resolves.toBe(true);
+    expect(mockDialog.showMessageBox).not.toHaveBeenCalled();
+    expect(mockApp.quit).not.toHaveBeenCalled();
+    expect(mockExecFileSync).not.toHaveBeenCalledWith(
+      "/usr/bin/open",
+      expect.anything(),
+      expect.anything()
+    );
+  });
+
+  it("opens a same-or-newer installed copy instead of downgrading it", async () => {
+    setupTransientLaunch();
+    mockInstalledVersion("0.4.0");
+    mockApp.moveToApplicationsFolder.mockImplementation(
+      (options: { conflictHandler: (conflictType: string) => boolean }) =>
+        options.conflictHandler("exists")
+    );
+
+    await expect(ensureInstalledInApplications()).resolves.toBe(true);
+    expect(mockExecFileSync).toHaveBeenCalledWith(
+      "/usr/bin/open",
+      ["/Applications/Deus.app"],
+      expect.anything()
+    );
+    expect(mockApp.quit).toHaveBeenCalledTimes(1);
+    expect(mockDialog.showMessageBox).not.toHaveBeenCalled();
+  });
+
+  it("defers running-copy conflicts to the mover without reading versions", async () => {
+    setupTransientLaunch();
+    mockApp.moveToApplicationsFolder.mockImplementation(
+      (options: { conflictHandler: (conflictType: string) => boolean }) =>
+        options.conflictHandler("existsAndRunning")
+    );
+
+    await expect(ensureInstalledInApplications()).resolves.toBe(true);
+    expect(mockExecFileSync).not.toHaveBeenCalled();
+    expect(mockDialog.showMessageBox).not.toHaveBeenCalled();
+  });
+});
+
+describe("shouldReplaceExistingInstall", () => {
+  it.each([
+    [null, "0.3.8", true],
+    ["not-a-version", "0.3.8", true],
+    ["0.3.6", "0.3.8", true],
+    ["0.3.8", "0.3.8", false],
+    ["0.4.0", "0.3.8", false],
+    ["10.0", "9.9.9", false],
+    ["0.3.8", "0.3.8-beta.1", false],
+  ])("installed=%s incoming=%s → replace=%s", (installedVersion, incomingVersion, expected) => {
+    expect(shouldReplaceExistingInstall(installedVersion, incomingVersion as string)).toBe(
+      expected
+    );
   });
 });

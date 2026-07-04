@@ -1,6 +1,7 @@
 import { app, dialog } from "electron";
+import { execFileSync } from "child_process";
 import { realpathSync } from "fs";
-import { isAbsolute, join, relative, resolve } from "path";
+import { basename, isAbsolute, join, relative, resolve } from "path";
 import { logMainProcess } from "./startup-diagnostics";
 
 function canonicalPath(filePath: string): string {
@@ -48,6 +49,62 @@ function buildManualMoveDetail(executablePath: string, failureReason?: string): 
     .join("\n");
 }
 
+function readBundleShortVersion(bundlePath: string): string | null {
+  try {
+    const version = execFileSync(
+      "/usr/bin/plutil",
+      [
+        "-extract",
+        "CFBundleShortVersionString",
+        "raw",
+        "-o",
+        "-",
+        join(bundlePath, "Contents", "Info.plist"),
+      ],
+      { encoding: "utf8", timeout: 3_000 }
+    ).trim();
+    return version.length > 0 ? version : null;
+  } catch {
+    return null;
+  }
+}
+
+function compareVersions(left: string, right: string): number | null {
+  const parse = (value: string): number[] | null => {
+    const match = value.trim().match(/^(\d+(?:\.\d+)*)/);
+    return match ? match[1].split(".").map(Number) : null;
+  };
+  const leftParts = parse(left);
+  const rightParts = parse(right);
+  if (!leftParts || !rightParts) {
+    return null;
+  }
+  for (let index = 0; index < Math.max(leftParts.length, rightParts.length); index++) {
+    const delta = (leftParts[index] ?? 0) - (rightParts[index] ?? 0);
+    if (delta !== 0) {
+      return delta < 0 ? -1 : 1;
+    }
+  }
+  return 0;
+}
+
+/**
+ * An existing install is replaced only when the launched copy is strictly
+ * newer — opening an old (or already-installed) DMG must not silently
+ * downgrade. Unknown or unparseable versions replace, preserving plain
+ * installer semantics.
+ */
+export function shouldReplaceExistingInstall(
+  installedVersion: string | null,
+  incomingVersion: string
+): boolean {
+  if (!installedVersion) {
+    return true;
+  }
+  const comparison = compareVersions(installedVersion, incomingVersion);
+  return comparison === null || comparison < 0;
+}
+
 async function quitWithManualMoveGuidance(
   executablePath: string,
   failureReason?: string
@@ -78,8 +135,12 @@ async function quitWithManualMoveGuidance(
  * Applications it hands focus to that copy instead of replacing it (the
  * single-instance lock normally exits us before that can even happen).
  *
+ * An installed copy is only replaced when this launch is strictly newer;
+ * opening an old or already-installed DMG opens the installed app instead of
+ * silently downgrading it.
+ *
  * Returns true when startup must stop — the app is relaunching from
- * Applications, handing off to a running copy, or quitting after a failed
+ * Applications, handing off to an installed copy, or quitting after a failed
  * move.
  */
 export async function ensureInstalledInApplications(): Promise<boolean> {
@@ -98,19 +159,53 @@ export async function ensureInstalledInApplications(): Promise<boolean> {
 
   logMainProcess(`[main] Self-installing into /Applications from: ${executablePath}`);
 
+  // <bundle>.app/Contents/MacOS/<binary> → <bundle>.app
+  const bundleName = basename(resolve(executablePath, "..", "..", ".."));
+  const installedBundlePath = join("/Applications", bundleName);
+  let handedOffToInstalledCopy = false;
+
   try {
-    // No conflictHandler on purpose: the mover's defaults are the installer
-    // semantics we want — replace a stale copy, hand off to a running one.
-    if (app.moveToApplicationsFolder()) {
+    const moved = app.moveToApplicationsFolder({
+      conflictHandler: (conflictType) => {
+        // "existsAndRunning": defer to the mover — it focuses the running copy.
+        if (conflictType !== "exists") {
+          return true;
+        }
+        if (
+          shouldReplaceExistingInstall(
+            readBundleShortVersion(installedBundlePath),
+            app.getVersion()
+          )
+        ) {
+          return true;
+        }
+        handedOffToInstalledCopy = true;
+        return false;
+      },
+    });
+    if (moved) {
       return true;
     }
   } catch (error) {
     const reason = error instanceof Error ? error.message : String(error);
     logMainProcess(`[main] Self-install into /Applications failed: ${reason}`);
-    await quitWithManualMoveGuidance(
-      executablePath,
-      error instanceof Error ? `Automatic install failed: ${error.message}` : undefined
+    await quitWithManualMoveGuidance(executablePath, `Automatic install failed: ${reason}`);
+    return true;
+  }
+
+  if (handedOffToInstalledCopy) {
+    logMainProcess(
+      `[main] Same-or-newer Deus already installed — opening ${installedBundlePath} instead`
     );
+    try {
+      execFileSync("/usr/bin/open", [installedBundlePath], { timeout: 10_000 });
+    } catch (error) {
+      logMainProcess(
+        "[main] Failed to open installed copy: " +
+          (error instanceof Error ? error.message : String(error))
+      );
+    }
+    app.quit();
     return true;
   }
 
