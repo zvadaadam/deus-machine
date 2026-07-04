@@ -49,6 +49,23 @@ function buildManualMoveDetail(executablePath: string, failureReason?: string): 
     .join("\n");
 }
 
+function installedBundleSupportsCurrentArch(bundlePath: string, executableName: string): boolean {
+  try {
+    const archs = execFileSync(
+      "/usr/bin/lipo",
+      ["-archs", join(bundlePath, "Contents", "MacOS", executableName)],
+      { encoding: "utf8", timeout: 3_000 }
+    )
+      .trim()
+      .split(/\s+/);
+    return archs.includes(process.arch === "arm64" ? "arm64" : "x86_64");
+  } catch {
+    // Unreadable binary — treat as unsupported so the replacement also
+    // repairs a broken install.
+    return false;
+  }
+}
+
 function readBundleShortVersion(bundlePath: string): string | null {
   try {
     const version = execFileSync(
@@ -69,40 +86,75 @@ function readBundleShortVersion(bundlePath: string): string | null {
   }
 }
 
+function comparePrereleaseIdentifiers(left: string[], right: string[]): number {
+  for (let index = 0; index < Math.max(left.length, right.length); index++) {
+    const leftPart = left[index];
+    const rightPart = right[index];
+    // Semver: when a prerelease is a prefix of the other, the shorter is older.
+    if (leftPart === undefined) return -1;
+    if (rightPart === undefined) return 1;
+    const leftNumeric = /^\d+$/.test(leftPart);
+    const rightNumeric = /^\d+$/.test(rightPart);
+    if (leftNumeric && rightNumeric) {
+      const delta = Number(leftPart) - Number(rightPart);
+      if (delta !== 0) return delta < 0 ? -1 : 1;
+    } else if (leftNumeric !== rightNumeric) {
+      // Semver: numeric identifiers sort below alphanumeric ones.
+      return leftNumeric ? -1 : 1;
+    } else if (leftPart !== rightPart) {
+      return leftPart < rightPart ? -1 : 1;
+    }
+  }
+  return 0;
+}
+
 function compareVersions(left: string, right: string): number | null {
-  const parse = (value: string): number[] | null => {
-    const match = value.trim().match(/^(\d+(?:\.\d+)*)/);
-    return match ? match[1].split(".").map(Number) : null;
+  const parse = (value: string): { core: number[]; prerelease: string[] | null } | null => {
+    const match = value.trim().match(/^(\d+(?:\.\d+)*)(?:-([0-9A-Za-z.-]+))?/);
+    if (!match) return null;
+    return {
+      core: match[1].split(".").map(Number),
+      prerelease: match[2] ? match[2].split(".") : null,
+    };
   };
   const leftParts = parse(left);
   const rightParts = parse(right);
   if (!leftParts || !rightParts) {
     return null;
   }
-  for (let index = 0; index < Math.max(leftParts.length, rightParts.length); index++) {
-    const delta = (leftParts[index] ?? 0) - (rightParts[index] ?? 0);
+  for (let index = 0; index < Math.max(leftParts.core.length, rightParts.core.length); index++) {
+    const delta = (leftParts.core[index] ?? 0) - (rightParts.core[index] ?? 0);
     if (delta !== 0) {
       return delta < 0 ? -1 : 1;
     }
   }
-  return 0;
+  // Semver: a release outranks any prerelease of the same core version.
+  if (!leftParts.prerelease && !rightParts.prerelease) return 0;
+  if (!leftParts.prerelease) return 1;
+  if (!rightParts.prerelease) return -1;
+  return comparePrereleaseIdentifiers(leftParts.prerelease, rightParts.prerelease);
 }
 
 /**
- * An existing install is replaced only when the launched copy is strictly
- * newer — opening an old (or already-installed) DMG must not silently
- * downgrade. Unknown or unparseable versions replace, preserving plain
- * installer semantics.
+ * An existing install is replaced when the launched copy is strictly newer —
+ * opening an old (or already-installed) DMG must not silently downgrade — or
+ * when versions match but the installed binary does not run natively on this
+ * architecture (e.g. an x64 install superseded by the arm64 DMG). Unknown or
+ * unparseable versions replace, preserving plain installer semantics.
  */
 export function shouldReplaceExistingInstall(
   installedVersion: string | null,
-  incomingVersion: string
+  incomingVersion: string,
+  installedSupportsCurrentArch: boolean
 ): boolean {
   if (!installedVersion) {
     return true;
   }
   const comparison = compareVersions(installedVersion, incomingVersion);
-  return comparison === null || comparison < 0;
+  if (comparison === null || comparison < 0) {
+    return true;
+  }
+  return comparison === 0 && !installedSupportsCurrentArch;
 }
 
 async function quitWithManualMoveGuidance(
@@ -174,7 +226,8 @@ export async function ensureInstalledInApplications(): Promise<boolean> {
         if (
           shouldReplaceExistingInstall(
             readBundleShortVersion(installedBundlePath),
-            app.getVersion()
+            app.getVersion(),
+            installedBundleSupportsCurrentArch(installedBundlePath, basename(executablePath))
           )
         ) {
           return true;
@@ -197,6 +250,10 @@ export async function ensureInstalledInApplications(): Promise<boolean> {
     logMainProcess(
       `[main] Same-or-newer Deus already installed — opening ${installedBundlePath} instead`
     );
+    // Release the lock before launching the installed copy: it boots while
+    // this process is still tearing down, and it must win the lock instead of
+    // quitting as a second instance.
+    app.releaseSingleInstanceLock();
     try {
       execFileSync("/usr/bin/open", [installedBundlePath], { timeout: 10_000 });
     } catch (error) {
