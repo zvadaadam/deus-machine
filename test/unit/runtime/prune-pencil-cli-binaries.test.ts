@@ -201,6 +201,53 @@ function writeRuntimeExternalModuleFixture(resourcesDir: string): void {
   );
 }
 
+function writeLinuxRuntimeExternalModuleFixture(resourcesDir: string): void {
+  const unpackedNodeModules = path.join(resourcesDir, "app.asar.unpacked", "node_modules");
+  for (const packagePath of [
+    ["better-sqlite3"],
+    ["node-pty"],
+    ["@napi-rs", "canvas"],
+    ["@napi-rs", "canvas-linux-x64-gnu"],
+  ]) {
+    const dir = path.join(unpackedNodeModules, ...packagePath);
+    mkdirSync(dir, { recursive: true });
+    writeFileSync(path.join(dir, "package.json"), "{}");
+  }
+  mkdirSync(path.join(unpackedNodeModules, "better-sqlite3", "build", "Release"), {
+    recursive: true,
+  });
+  writeFileSync(
+    path.join(
+      unpackedNodeModules,
+      "better-sqlite3",
+      "build",
+      "Release",
+      "better_sqlite3.node"
+    ),
+    "better-sqlite-native"
+  );
+  mkdirSync(path.join(unpackedNodeModules, "node-pty", "prebuilds", "linux-x64"), {
+    recursive: true,
+  });
+  writeFileSync(
+    path.join(unpackedNodeModules, "node-pty", "prebuilds", "linux-x64", "pty.node"),
+    "pty-native"
+  );
+  writeFileSync(
+    path.join(unpackedNodeModules, "node-pty", "prebuilds", "linux-x64", "spawn-helper"),
+    "pty-helper"
+  );
+  writeFileSync(
+    path.join(
+      unpackedNodeModules,
+      "@napi-rs",
+      "canvas-linux-x64-gnu",
+      "skia.linux-x64-gnu.node"
+    ),
+    "canvas-native"
+  );
+}
+
 function writeNodePtyPruneFixture(resourcesDir: string): string {
   const nodePtyRoot = path.join(
     resourcesDir,
@@ -462,7 +509,7 @@ describe("prune-pencil-cli-binaries", () => {
         arch: "x64",
         resourcesDir,
       })
-    ).toEqual({ copied: 1 });
+    ).toEqual({ copied: 2 });
 
     expect(
       pruneNodePtyRuntimeBinaries({
@@ -476,6 +523,9 @@ describe("prune-pencil-cli-binaries", () => {
     expect(readFileSync(path.join(nodePtyRoot, "prebuilds", "linux-x64", "pty.node"), "utf8")).toBe(
       "build/Release/pty.node"
     );
+    expect(
+      readFileSync(path.join(nodePtyRoot, "prebuilds", "linux-x64", "spawn-helper"), "utf8")
+    ).toBe("build/Release/spawn-helper");
     expect(() => readdirSync(path.join(nodePtyRoot, "build"))).toThrow();
   });
 
@@ -516,6 +566,31 @@ describe("prune-pencil-cli-binaries", () => {
         verifyNativePayloads: false,
       })
     ).toThrow(/node-pty build output/);
+  });
+
+  it("requires the Linux node-pty spawn helper beside the native prebuild", () => {
+    const resourcesDir = createTempRoot("deus-node-pty-linux-helper");
+    tempRoots.push(resourcesDir);
+    writeLinuxRuntimeExternalModuleFixture(resourcesDir);
+
+    rmSync(
+      path.join(
+        resourcesDir,
+        "app.asar.unpacked",
+        "node_modules",
+        "node-pty",
+        "prebuilds",
+        "linux-x64",
+        "spawn-helper"
+      ),
+      { force: true }
+    );
+
+    expect(() =>
+      verifyPackagedRuntimeExternalModules(resourcesDir, "linux-x64", {
+        verifyNativePayloads: false,
+      })
+    ).toThrow(/spawn-helper/);
   });
 
   it("rejects non-target @napi-rs/canvas native packages", () => {
