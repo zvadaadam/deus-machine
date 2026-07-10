@@ -55,6 +55,9 @@ export const agentLogos: Record<string, AgentLogoComponent> = {
 };
 
 /** Get agent logo component, returns undefined if not found */
-export function getAgentLogo(agentHarness: string): AgentLogoComponent | undefined {
+export function getAgentLogo(
+  agentHarness: string | null | undefined
+): AgentLogoComponent | undefined {
+  if (!agentHarness) return undefined;
   return agentLogos[agentHarness.toLowerCase()];
 }

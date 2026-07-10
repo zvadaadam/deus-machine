@@ -34,6 +34,32 @@ export interface UseAutoUpdateReturn {
 
 const CHECK_INTERVAL_MS = 5 * 60 * 1000; // 5 minutes
 const PENDING_VERSION_KEY = "pendingUpdateVersion";
+const UPDATE_STAGES = new Set<UpdateStage>(["idle", "checking", "downloading", "ready", "error"]);
+
+export function normalizeUpdateState(updateState: unknown): UpdateState {
+  if (!updateState || typeof updateState !== "object") {
+    return { stage: "idle" };
+  }
+
+  const candidate = updateState as {
+    stage?: unknown;
+    version?: unknown;
+    releaseNotes?: unknown;
+    error?: unknown;
+  };
+
+  const stage = candidate.stage;
+  if (typeof stage !== "string" || !UPDATE_STAGES.has(stage as UpdateStage)) {
+    return { stage: "idle" };
+  }
+
+  return {
+    stage: stage as UpdateStage,
+    version: typeof candidate.version === "string" ? candidate.version : undefined,
+    releaseNotes: typeof candidate.releaseNotes === "string" ? candidate.releaseNotes : undefined,
+    error: typeof candidate.error === "string" ? candidate.error : undefined,
+  };
+}
 
 export function useAutoUpdate(): UseAutoUpdateReturn {
   const [state, setState] = useState<UpdateState>({ stage: "idle" });
@@ -49,12 +75,7 @@ export function useAutoUpdate(): UseAutoUpdateReturn {
     if (!capabilities.autoUpdate) return;
 
     const unlisten = window.electronAPI!.onUpdateState((updateState: unknown) => {
-      const s = updateState as {
-        stage: UpdateStage;
-        version?: string;
-        releaseNotes?: string;
-        error?: string;
-      };
+      const s = normalizeUpdateState(updateState);
       if (s.stage === "ready" && s.version) {
         localStorage.setItem(PENDING_VERSION_KEY, s.version);
         isDownloadingRef.current = false;
