@@ -15,6 +15,7 @@ import { notifyEditor } from "./lib/ipc-host.ts";
 import * as designs from "./lib/designs.ts";
 import { startTransportServer, stopTransportServer } from "./lib/transport-server.ts";
 import { startMcpBinary, stopMcpBinary } from "./lib/mcp-binary.ts";
+import { pencilHostAppNameFor } from "./lib/config.ts";
 
 interface CliArgs {
   port: number;
@@ -67,6 +68,11 @@ async function main(): Promise<void> {
 
   const opts = parseArgs();
   const baseCtx = { workspace: opts.workspace, storage: opts.storage };
+  const pencilHostAppName = pencilHostAppNameFor({
+    workspace: opts.workspace,
+    storage: opts.storage,
+    port: opts.port,
+  });
 
   fs.mkdirSync(baseCtx.storage, { recursive: true });
   fs.mkdirSync(join(baseCtx.storage, "designs"), { recursive: true });
@@ -95,13 +101,13 @@ async function main(): Promise<void> {
   // The binary's HTTP MCP gives the agent the *full* Pencil tool surface
   // (batch_design, get_editor_state, get_screenshot, …) bridged to the
   // iframe editor's IPC handlers via lib/iframe-rpc.ts.
-  await startTransportServer().catch((err) => {
+  await startTransportServer(pencilHostAppName).catch((err) => {
     console.error(`[pencil-aap] transport-server failed: ${err.message}`);
   });
   // Slight delay before spawning so the socket is definitely listening
   // when the binary tries to dial in.
   await new Promise((r) => setTimeout(r, 100));
-  const binaryInfo = await startMcpBinary().catch(() => null);
+  const binaryInfo = await startMcpBinary(pencilHostAppName).catch(() => null);
   if (binaryInfo) {
     console.log(
       `[pencil-aap] bundled MCP binary listening on http://127.0.0.1:${binaryInfo.httpPort}/mcp`
