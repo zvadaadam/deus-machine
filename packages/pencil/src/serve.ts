@@ -3,6 +3,7 @@
 // AAP launcher entry. Thin: parse args, boot HTTP, hand off to router.
 
 import * as fs from "node:fs";
+import { randomUUID } from "node:crypto";
 import { join } from "node:path";
 import { pathToFileURL } from "node:url";
 import { createServer } from "node:http";
@@ -84,7 +85,7 @@ async function main(): Promise<void> {
     );
     process.exit(3);
   }
-  const ctx = { ...baseCtx, editorBundleDir };
+  const ctx = { ...baseCtx, editorBundleDir, panelToken: randomUUID() };
 
   // Wire a watcher on the active design so the editor sees `file-update`
   // notifications when the CLI rewrites the .pen file.
