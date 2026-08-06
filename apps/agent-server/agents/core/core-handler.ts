@@ -234,17 +234,30 @@ export class CoreAgentHandler implements AgentHandler {
         );
         return;
       }
-      if (event.type === "turn.ended" && event.stopReason === "error" && !errorReported) {
-        // Adapter-reported failures (e.g. codex turn.failed) carry the message
-        // only on turn.ended.error — surface those as session.error as well.
-        errorReported = true;
-        const classified = classifyError(new Error(event.error?.message ?? "agent turn failed"));
-        EventBroadcaster.emitSessionError(
-          sessionId,
-          this.agentHarness,
-          classified.message,
-          classified.category
-        );
+      if (event.type === "turn.ended") {
+        // Terminal session status, matching the legacy handlers: the backend
+        // and CLI key agent state off session.idle/cancelled/error — a turn
+        // that ends without one of these leaves the product stuck "working".
+        if (event.stopReason === "error") {
+          if (!errorReported) {
+            // Adapter-reported failures (e.g. codex turn.failed) carry the
+            // message only on turn.ended.error.
+            errorReported = true;
+            const classified = classifyError(
+              new Error(event.error?.message ?? "agent turn failed")
+            );
+            EventBroadcaster.emitSessionError(
+              sessionId,
+              this.agentHarness,
+              classified.message,
+              classified.category
+            );
+          }
+        } else if (event.stopReason === "cancelled") {
+          EventBroadcaster.emitSessionCancelled(sessionId, this.agentHarness);
+        } else {
+          EventBroadcaster.emitSessionIdle(sessionId, this.agentHarness);
+        }
       }
       for (const partEvent of shim.translate(event)) {
         EventBroadcaster.emitPartEvent(
