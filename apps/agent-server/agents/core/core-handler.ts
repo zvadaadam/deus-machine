@@ -1,25 +1,43 @@
 // agent-server/agents/core/core-handler.ts
-// Phase A: deus's AgentHandler implemented over @agent-server/core. Behind
-// DEUS_ENGINE=core this replaces ClaudeAgentHandler while keeping deus's wire
-// format (via lifecycle-shim) and deus behaviors (deus-tools MCP suite,
-// ExitPlanMode round-trip, checkpoint hooks) through the engine's embed-tier
-// options. The old handler stays the default until parity is proven.
+// deus's AgentHandler implemented over the embedded @agent-server/core engine —
+// the only engine path (the in-repo claude/codex implementations are gone).
+// Keeps deus's wire format (via lifecycle-shim) and deus behaviors (deus-tools
+// MCP suite, ExitPlanMode round-trip, checkpoint hooks, AAP MCP hot-swap)
+// through the engine's embed-tier options.
 
 import {
+  AgentRuntime,
   callbackSink,
-  createAgentRuntime,
+  createAgentRegistry,
   generateUUIDv7,
-  type AgentRuntime,
+  type AgentRegistry,
+  type ClaudeCodeAgent,
   type ClaudeToolPolicy,
   type SdkMcpServers,
 } from "@agent-server/core";
+import type { McpServerConfig } from "@agent-server/protocol";
 import type { LifecycleEvent, SessionUsageEvent } from "@agent-server/protocol";
 import { EventBroadcaster } from "../../event-broadcaster";
 import type { AgentHandler, ContextUsageParams, QueryOptions } from "../registry";
 import { buildAgentEnvironment } from "../environment/env-builder";
 import { createDeusMCPServer } from "../deus-tools";
-import { createCheckpoint } from "../claude/checkpoint";
+import { classifyError } from "../lifecycle";
+import { createCheckpoint } from "./checkpoint";
 import { LifecycleToPartEvents } from "./lifecycle-shim";
+import { buildSystemPromptAppend } from "./system-prompt";
+
+import type { ErrorCategory } from "@shared/enums";
+
+/** Engine error categories → deus error categories (rest fold into internal). */
+const ERROR_CATEGORY: Record<string, ErrorCategory> = {
+  auth: "auth",
+  rate_limit: "rate_limit",
+  usage_limit: "rate_limit",
+  context_limit: "context_limit",
+  network: "network",
+  abort: "abort",
+  process_exit: "process_exit",
+};
 
 /** Per-deus-session state the core path tracks. */
 interface CoreSession {
@@ -80,11 +98,27 @@ const toolPolicy: ClaudeToolPolicy = async (toolName, input, ctx) => {
   }
 };
 
+/** deus harness names → engine harness names (all three, no legacy path). */
+const ENGINE_HARNESS = {
+  claude: "claude-code",
+  "codex-sdk": "codex-sdk",
+  "codex-server": "codex-app-server",
+} as const;
+type DeusHarness = keyof typeof ENGINE_HARNESS;
+
+/** AAP-registered MCP servers, applied to every claude turn + live-swapped. */
+let aapServers: Record<string, McpServerConfig> = {};
+
+let registry: AgentRegistry | undefined;
 let runtime: AgentRuntime | undefined;
 
-function getRuntime(): AgentRuntime {
-  runtime ??= createAgentRuntime({
-    harnesses: ["claude-code"],
+function getRegistry(): AgentRegistry {
+  registry ??= createAgentRegistry({
+    harnesses: ["claude-code", "codex-sdk", "codex-app-server"],
+    // Deterministic CLIs: always the engine's tested pins (sha-verified,
+    // cached downloads), never whatever binary the host happens to have.
+    // Operator escape hatches ($CLAUDE_CLI_PATH / $CODEX_CLI_PATH) still win.
+    provision: { mode: "pinned" },
     claudeCode: {
       sdkMcpServers: ({ sessionId }) =>
         ({ deus: createDeusMCPServer(sessionId) }) as unknown as SdkMcpServers,
@@ -121,11 +155,35 @@ function getRuntime(): AgentRuntime {
       }),
     },
   });
+  return registry;
+}
+
+function getRuntime(): AgentRuntime {
+  runtime ??= new AgentRuntime(getRegistry());
   return runtime;
 }
 
+/**
+ * AAP app registration: remember the server set for every future claude turn
+ * AND live-swap it onto the given running sessions (mid-conversation apps).
+ */
+export async function setAapMcpServers(
+  servers: Record<string, McpServerConfig>,
+  liveSessionIds: string[] = [...sessions.keys()]
+): Promise<void> {
+  aapServers = servers;
+  const claude = getRegistry().getAgent("claude-code") as ClaudeCodeAgent;
+  for (const sessionId of liveSessionIds) {
+    try {
+      await claude.setMcpServers(sessionId, servers);
+    } catch (error) {
+      console.error(`[core] mcp hot-swap failed for ${sessionId}:`, error);
+    }
+  }
+}
+
 export class CoreAgentHandler implements AgentHandler {
-  readonly agentHarness = "claude" as const;
+  readonly agentHarness: DeusHarness;
   readonly capabilities = {
     auth: false,
     workspaceInit: false,
@@ -135,6 +193,14 @@ export class CoreAgentHandler implements AgentHandler {
     sessionResume: true,
     permissionMode: false,
   } satisfies AgentHandler["capabilities"];
+
+  constructor(harness: DeusHarness = "claude") {
+    this.agentHarness = harness;
+  }
+
+  private get engineHarness() {
+    return ENGINE_HARNESS[this.agentHarness];
+  }
 
   initialize(): { success: boolean; error?: string } {
     return { success: true };
@@ -146,6 +212,7 @@ export class CoreAgentHandler implements AgentHandler {
     state.turnId = turnId;
     state.cwd = options.cwd;
     const shim = new LifecycleToPartEvents();
+    let errorReported = false;
     const sink = callbackSink(async (event: LifecycleEvent) => {
       if (event.type === "session.created") {
         EventBroadcaster.emitAgentSessionId(sessionId, event.nativeSessionId);
@@ -154,6 +221,30 @@ export class CoreAgentHandler implements AgentHandler {
       if (event.type === "session.usage") {
         state.lastUsage = event;
         return;
+      }
+      if (event.type === "error") {
+        // Turn errors end the turn structurally (turn.ended stopReason=error);
+        // this surfaces the message on deus's session.error channel too.
+        errorReported = true;
+        EventBroadcaster.emitSessionError(
+          sessionId,
+          this.agentHarness,
+          event.error,
+          ERROR_CATEGORY[event.code ?? ""] ?? "internal"
+        );
+        return;
+      }
+      if (event.type === "turn.ended" && event.stopReason === "error" && !errorReported) {
+        // Adapter-reported failures (e.g. codex turn.failed) carry the message
+        // only on turn.ended.error — surface those as session.error as well.
+        errorReported = true;
+        const classified = classifyError(new Error(event.error?.message ?? "agent turn failed"));
+        EventBroadcaster.emitSessionError(
+          sessionId,
+          this.agentHarness,
+          classified.message,
+          classified.category
+        );
       }
       for (const partEvent of shim.translate(event)) {
         EventBroadcaster.emitPartEvent(
@@ -170,14 +261,19 @@ export class CoreAgentHandler implements AgentHandler {
         turnId,
         input: prompt,
         config: {
-          harness: "claude-code",
+          harness: this.engineHarness,
           cwd: options.cwd,
           model: options.model,
           thinkingLevel: toEngineThinking(options.thinkingLevel),
+          systemPromptAppend: buildSystemPromptAppend(this.agentHarness, options.cwd),
           permissionMode:
             options.permissionMode === "dontAsk" ? "bypassPermissions" : options.permissionMode,
           maxTurns: options.maxTurns,
           resumeSessionId: options.resume,
+          mcpServers:
+            this.agentHarness === "claude" && Object.keys(aapServers).length
+              ? aapServers
+              : undefined,
           env: buildAgentEnvironment({
             providerEnvVars: options.providerEnvVars,
             deusEnv: options.deusEnv,
@@ -190,12 +286,12 @@ export class CoreAgentHandler implements AgentHandler {
   }
 
   async cancel(sessionId: string): Promise<void> {
-    await getRuntime().cancel("claude-code", sessionId);
+    await getRuntime().cancel(this.engineHarness, sessionId);
   }
 
   reset(sessionId: string): void {
     sessions.delete(sessionId);
-    void getRuntime().closeSession("claude-code", sessionId);
+    void getRuntime().closeSession(this.engineHarness, sessionId);
   }
 
   async getContextUsage(params: ContextUsageParams): Promise<unknown> {

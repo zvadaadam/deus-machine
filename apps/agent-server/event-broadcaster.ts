@@ -10,7 +10,7 @@ import { AGENT_EVENT_NAMES } from "@shared/agent-events";
 import type { AgentEvent, InteractionRequestType } from "@shared/agent-events";
 import type { AgentHarness, ErrorCategory } from "@shared/enums";
 import type { FinishReason, Part, TokenUsage } from "@shared/messages";
-import type { PartEvent } from "./messages/adapter";
+import type { PartEvent } from "@shared/agent-events";
 import type {
   MessageResponse,
   ErrorResponse,

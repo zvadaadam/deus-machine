@@ -84,6 +84,40 @@ describe("LifecycleToPartEvents", () => {
     expect(completed).toMatchObject({ turnId: "t1", cost: 0.01 });
   });
 
+  it("emits the created→done pair for parts terminal on first sight", () => {
+    // Completed-on-arrival messages (Codex SDK) surface as one message.part
+    // snapshot already in state done — consumers keying finality off part.done
+    // must still see it.
+    const shim = new LifecycleToPartEvents();
+    const out = shim.translate({
+      type: "message.part",
+      turnId: "t1",
+      messageId: "m1",
+      outputIndex: 0,
+      partIndex: 0,
+      part: textPart("p1", "DEUS-CORE-OK", "done"),
+      timestamp: T,
+    });
+    expect(out.map((e) => e.type)).toEqual(["part.created", "part.done"]);
+    expect(out[1] && "part" in out[1] && out[1].part).toMatchObject({
+      type: "TEXT",
+      text: "DEUS-CORE-OK",
+      state: "DONE",
+    });
+  });
+
+  it("maps engine stop reasons onto deus finish reasons", () => {
+    const shim = new LifecycleToPartEvents();
+    const out = shim.translate({
+      type: "turn.ended",
+      turnId: "t1",
+      sessionId: "s",
+      stopReason: "max_turn_requests",
+      timestamp: T,
+    });
+    expect(out[0]).toMatchObject({ type: "turn.completed", finishReason: "max_turns" });
+  });
+
   it("maps tool parts through PENDING/RUNNING/COMPLETED vocabulary", () => {
     const running = toDeusPart({
       id: "p2",

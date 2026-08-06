@@ -13,7 +13,9 @@
     "baseUrl": "..",
     "paths": {
       "@shared/*": ["../shared/*"]
-    }
+    },
+    "noEmit": true,
+    "allowImportingTsExtensions": true
   },
   "include": ["./**/*.ts", "../../shared/**/*.ts"],
   "exclude": ["dist", "node_modules", "test/browser-templates.test.ts"]
