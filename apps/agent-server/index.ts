@@ -26,6 +26,7 @@ import {
   getRegisteredAgentHarnesses,
 } from "./agents/registry";
 import { ClaudeAgentHandler } from "./agents/claude/claude-handler";
+import { CoreAgentHandler } from "./agents/core/core-handler";
 import { CodexAgentHandler } from "./agents/codex/codex-handler";
 import { CodexServerAgentHandler } from "./agents/codex-server/codex-server-handler";
 import { installFileLogger } from "./logging";
@@ -146,7 +147,14 @@ class AgentServer {
   async start(): Promise<void> {
     await this.cleanup();
 
-    registerAgent(new ClaudeAgentHandler());
+    // Phase A of the @agent-server/core embedding: opt-in engine swap for the
+    // claude harness; the legacy handler stays the default until parity holds.
+    if (process.env.DEUS_ENGINE === "core") {
+      console.log("[agent-server] claude harness: embedded @agent-server/core engine");
+      registerAgent(new CoreAgentHandler());
+    } else {
+      registerAgent(new ClaudeAgentHandler());
+    }
     registerAgent(new CodexAgentHandler());
     registerAgent(new CodexServerAgentHandler());
 
