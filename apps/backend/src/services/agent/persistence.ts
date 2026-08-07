@@ -268,9 +268,12 @@ export function persistSessionContextUsage(event: SessionContextUsageEvent): Wri
   const db = getDatabase();
 
   try {
-    const percent = event.size ? Math.min((event.used / event.size) * 100, 100) : 0;
+    // Claude reports `used` on every model message but `size` only on the
+    // final result — a size-less event must not zero the percent mid-turn
+    // (and codex-sdk never reports size at all).
+    const percent = event.size ? Math.min((event.used / event.size) * 100, 100) : null;
     db.prepare(
-      `UPDATE sessions SET context_token_count = ?, context_used_percent = ?, updated_at = datetime('now') WHERE id = ?`
+      `UPDATE sessions SET context_token_count = ?, context_used_percent = COALESCE(?, context_used_percent), updated_at = datetime('now') WHERE id = ?`
     ).run(event.used, percent, event.sessionId);
     return { ok: true, value: undefined };
   } catch (error) {

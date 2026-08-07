@@ -21,6 +21,8 @@ import { EventBroadcaster } from "../../event-broadcaster";
 import type { AgentHandler, ContextUsageParams, QueryOptions } from "../registry";
 import { buildAgentEnvironment } from "../environment/env-builder";
 import { createDeusMCPServer } from "../deus-tools";
+import * as fs from "node:fs";
+import * as path from "node:path";
 import { classifyError } from "../lifecycle";
 import { createCheckpoint } from "./checkpoint";
 import { LifecycleToPartEvents } from "./lifecycle-shim";
@@ -41,6 +43,7 @@ const ERROR_CATEGORY: Record<string, ErrorCategory> = {
 
 /** Per-deus-session state the core path tracks. */
 interface CoreSession {
+  harness?: DeusHarness;
   turnId?: string;
   cwd?: string;
   lastUsage?: SessionUsageEvent;
@@ -79,26 +82,66 @@ function sessionState(sessionId: string): CoreSession {
   return s;
 }
 
-/** ExitPlanMode approval keeps riding deus's broadcaster round-trip. */
-const toolPolicy: ClaudeToolPolicy = async (toolName, input, ctx) => {
-  if (toolName !== "ExitPlanMode") return undefined; // engine broker / default flow
+const EDIT_TOOLS = new Set(["Edit", "MultiEdit", "Write", "NotebookEdit"]);
+
+function realpathOrResolve(p: string): string {
   try {
-    const response = await EventBroadcaster.requestExitPlanMode({
-      sessionId: ctx.sessionId,
-      toolInput: input,
-    });
-    if (response.approved) {
-      return {
-        behavior: "allow",
-        updatedInput: input,
-        updatedPermissions: [{ type: "setMode", mode: "default", destination: "session" }],
-      };
-    }
-    return { behavior: "deny", message: "Plan was not approved", interrupt: false };
+    return fs.realpathSync(p);
   } catch {
-    return { behavior: "deny", message: "Plan approval unavailable", interrupt: false };
+    return path.resolve(p);
   }
+}
+
+/**
+ * Deus tool decisions, ported from the legacy canUseTool (deus has no
+ * interactive permission UI, so nothing may fall through to the engine's
+ * broker — an unanswered `permission.requested` parks the turn forever):
+ *   - ExitPlanMode rides deus's broadcaster round-trip;
+ *   - edit tools are denied outside cwd + additionalDirectories;
+ *   - everything else is allowed.
+ */
+export const decideToolUse: ClaudeToolPolicy = async (toolName, input, ctx) => {
+  if (toolName === "ExitPlanMode") {
+    try {
+      const response = await EventBroadcaster.requestExitPlanMode({
+        sessionId: ctx.sessionId,
+        toolInput: input,
+      });
+      if (response.approved) {
+        return {
+          behavior: "allow",
+          updatedInput: input,
+          updatedPermissions: [{ type: "setMode", mode: "default", destination: "session" }],
+        };
+      }
+      return { behavior: "deny", message: "Plan was not approved", interrupt: false };
+    } catch {
+      return { behavior: "deny", message: "Plan approval unavailable", interrupt: false };
+    }
+  }
+
+  if (EDIT_TOOLS.has(toolName)) {
+    const state = sessions.get(ctx.sessionId);
+    const cwd = state?.cwd;
+    const filePath = String(input.file_path ?? input.notebook_path ?? "");
+    if (cwd && filePath) {
+      const allowed = [cwd, ...(state?.lastOptions?.additionalDirectories ?? [])].map(
+        realpathOrResolve
+      );
+      const target = realpathOrResolve(filePath);
+      if (!allowed.some((dir) => target === dir || target.startsWith(dir + path.sep))) {
+        return {
+          behavior: "deny",
+          message: `Cannot edit files outside allowed directories (${allowed.join(", ")}). Attempted: ${filePath}`,
+        };
+      }
+    }
+  }
+
+  return { behavior: "allow", updatedInput: input };
 };
+
+const toolPolicy = decideToolUse;
 
 /** deus harness names → engine harness names (all three, no legacy path). */
 const ENGINE_HARNESS = {
@@ -181,7 +224,9 @@ function getRuntime(): AgentRuntime {
  */
 export async function setAapMcpServers(
   servers: Record<string, McpServerConfig>,
-  liveSessionIds: string[] = [...sessions.keys()]
+  liveSessionIds: string[] = [...sessions.entries()]
+    .filter(([, s]) => s.harness === "claude")
+    .map(([id]) => id)
 ): Promise<void> {
   aapServers = servers;
   const claude = getRegistry().getAgent("claude-code") as ClaudeCodeAgent;
@@ -203,6 +248,9 @@ export class CoreAgentHandler implements AgentHandler {
     modelSwitch: "in-session",
     multiTurn: true,
     sessionResume: true,
+    // Deliberate cut vs the legacy handler: permission-mode changes apply on
+    // the NEXT turn (the engine restarts the session with resume when the mode
+    // differs); live mid-turn switching (legacy updatePermissionMode) is gone.
     permissionMode: false,
   } satisfies AgentHandler["capabilities"];
 
@@ -221,6 +269,7 @@ export class CoreAgentHandler implements AgentHandler {
   async query(sessionId: string, prompt: string, options: QueryOptions): Promise<void> {
     const state = sessionState(sessionId);
     const turnId = options.turnId ?? generateUUIDv7();
+    state.harness = this.agentHarness;
     state.turnId = turnId;
     state.cwd = options.cwd;
     state.lastOptions = options;
@@ -254,10 +303,20 @@ export class CoreAgentHandler implements AgentHandler {
         );
         return;
       }
+      for (const partEvent of shim.translate(event)) {
+        EventBroadcaster.emitPartEvent(
+          sessionId,
+          this.agentHarness,
+          event.turnId ?? turnId,
+          partEvent
+        );
+      }
       if (event.type === "turn.ended") {
         // Terminal session status, matching the legacy handlers: the backend
         // and CLI key agent state off session.idle/cancelled/error — a turn
         // that ends without one of these leaves the product stuck "working".
+        // Emitted AFTER the translated turn.completed so the part stream is
+        // fully closed before the status flips (legacy ordering).
         if (event.stopReason === "error") {
           if (!errorReported) {
             // Adapter-reported failures (e.g. codex turn.failed) carry the
@@ -278,14 +337,6 @@ export class CoreAgentHandler implements AgentHandler {
         } else {
           EventBroadcaster.emitSessionIdle(sessionId, this.agentHarness);
         }
-      }
-      for (const partEvent of shim.translate(event)) {
-        EventBroadcaster.emitPartEvent(
-          sessionId,
-          this.agentHarness,
-          event.turnId ?? turnId,
-          partEvent
-        );
       }
     });
     await getRuntime().run(
@@ -326,14 +377,17 @@ export class CoreAgentHandler implements AgentHandler {
 
   reset(sessionId: string): void {
     sessions.delete(sessionId);
-    void getRuntime().closeSession(this.engineHarness, sessionId);
+    getRuntime()
+      .closeSession(this.engineHarness, sessionId)
+      .catch((error) => console.warn(`[core] closeSession(${sessionId}) failed:`, error));
   }
 
   async getContextUsage(params: ContextUsageParams): Promise<unknown> {
     const state = params.id ? sessions.get(params.id) : undefined;
     const usage = state?.lastUsage;
-    return usage
-      ? { used: usage.used, size: usage.size, cost: usage.cost }
-      : { used: 0, size: undefined, cost: undefined };
+    // null = "not known yet" — a fake zero is indistinguishable from an
+    // actually-empty context. (The push path — session.contextUsage — is the
+    // primary feed; this pull RPC is kept for external callers.)
+    return usage ? { used: usage.used, size: usage.size, cost: usage.cost } : null;
   }
 }

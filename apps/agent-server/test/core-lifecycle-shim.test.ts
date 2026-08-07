@@ -1,13 +1,101 @@
-// Phase A shim: exact LifecycleEvent → deus PartEvent sequences.
+// The engine→deus shim gate: every payload the broadcaster would emit must
+// satisfy deus's zod schemas — the backend validates with
+// AgentEventSchema.safeParse and silently SKIPS invalid events, so a subset
+// match (toMatchObject) is not enough here. Each test wraps the shim output
+// exactly the way EventBroadcaster.emitPartEvent does and parses it.
 import { describe, expect, it } from "vitest";
 import type { LifecycleEvent } from "@agent-server/protocol";
-import { LifecycleToPartEvents, toDeusPart } from "../agents/core/lifecycle-shim";
+import { AgentEventSchema, type PartEvent } from "@shared/agent-events";
+import { LifecycleToPartEvents, toDeusPart, toDeusTokens } from "../agents/core/lifecycle-shim";
 
-const T = 1;
+const T = 1_700_000_000_000;
+
+/** Mirror EventBroadcaster.emitPartEvent's payload construction. */
+function wrap(partEvent: PartEvent, messageId = "m1") {
+  const base = { sessionId: "s", agentHarness: "claude" as const };
+  switch (partEvent.type) {
+    case "turn.started":
+      return { type: "turn.started", ...base, messageId, turnId: partEvent.turnId };
+    case "message.created":
+      return {
+        type: "message.created",
+        ...base,
+        messageId: partEvent.messageId,
+        role: partEvent.role,
+        ...(partEvent.parentToolCallId ? { parentToolCallId: partEvent.parentToolCallId } : {}),
+      };
+    case "part.created":
+    case "part.done":
+      return {
+        type: partEvent.type,
+        ...base,
+        messageId: partEvent.part.messageId,
+        partId: partEvent.part.id,
+        part: partEvent.part,
+      };
+    case "part.delta":
+      return { type: "part.delta", ...base, partId: partEvent.partId, delta: partEvent.delta };
+    case "message.done":
+      return {
+        type: "message.done",
+        ...base,
+        messageId: partEvent.messageId,
+        parts: partEvent.parts,
+        ...(partEvent.parentToolCallId ? { parentToolCallId: partEvent.parentToolCallId } : {}),
+      };
+    case "turn.completed":
+      return {
+        type: "turn.completed",
+        ...base,
+        messageId,
+        turnId: partEvent.turnId,
+        ...(partEvent.finishReason ? { finishReason: partEvent.finishReason } : {}),
+        ...(partEvent.tokens ? { tokens: partEvent.tokens } : {}),
+        ...(partEvent.cost != null ? { cost: partEvent.cost } : {}),
+      };
+    default:
+      throw new Error(`unmapped part event: ${(partEvent as { type: string }).type}`);
+  }
+}
+
+/** Translate + schema-validate every emission (the backend's acceptance bar). */
+function translateValidated(shim: LifecycleToPartEvents, event: LifecycleEvent): PartEvent[] {
+  const out = shim.translate(event);
+  for (const partEvent of out) AgentEventSchema.parse(wrap(partEvent));
+  return out;
+}
 
 function textPart(id: string, text: string, state: "streaming" | "done") {
   return { id, sessionId: "s", messageId: "m1", type: "text" as const, text, state };
 }
+
+const toolPart = (
+  state:
+    | { status: "pending"; partialInput: string }
+    | { status: "in_progress"; input: Record<string, unknown>; time: { start: number } }
+    | {
+        status: "completed";
+        input: Record<string, unknown>;
+        output: string;
+        title: string;
+        time: { start: number; end: number };
+      }
+    | {
+        status: "failed";
+        input: Record<string, unknown>;
+        error: string;
+        time: { start: number; end: number };
+      }
+) => ({
+  id: "tp1",
+  sessionId: "s",
+  messageId: "m1",
+  type: "tool" as const,
+  toolCallId: "tc1",
+  toolName: "Bash",
+  kind: "execute" as const,
+  state,
+});
 
 describe("LifecycleToPartEvents", () => {
   it("translates a streamed text turn into the legacy sequence exactly", () => {
@@ -57,12 +145,12 @@ describe("LifecycleToPartEvents", () => {
         sessionId: "s",
         stopReason: "end_turn",
         finishReason: "end_turn",
-        tokens: { input: 10, output: 5, cache: { read: 0, write: 0 } },
+        tokens: { input: 10, output: 5, cache: { read: 7, write: 3 } },
         cost: 0.01,
         timestamp: T,
       },
     ];
-    const out = events.flatMap((e) => shim.translate(e));
+    const out = events.flatMap((e) => translateValidated(shim, e));
     expect(out.map((e) => e.type)).toEqual([
       "turn.started",
       "message.created",
@@ -77,38 +165,122 @@ describe("LifecycleToPartEvents", () => {
       type: "TEXT",
       text: "hello",
       state: "DONE",
+      partIndex: 0,
     });
-    const messageDone = out.find((e) => e.type === "message.done");
-    expect(messageDone && "parts" in messageDone && messageDone.parts).toHaveLength(1);
     const completed = out.find((e) => e.type === "turn.completed");
-    expect(completed).toMatchObject({ turnId: "t1", cost: 0.01 });
+    expect(completed).toMatchObject({
+      turnId: "t1",
+      cost: 0.01,
+      tokens: { input: 10, output: 5, cacheRead: 7, cacheCreation: { total: 3 } },
+    });
   });
 
-  it("emits the created→done pair for parts terminal on first sight", () => {
-    // Completed-on-arrival messages (Codex SDK) surface as one message.part
-    // snapshot already in state done — consumers keying finality off part.done
-    // must still see it.
+  it("translates a tool lifecycle into schema-valid deus tool states", () => {
     const shim = new LifecycleToPartEvents();
-    const out = shim.translate({
+    const at = (part: ReturnType<typeof toolPart>, partIndex = 1): LifecycleEvent => ({
+      type: "message.part",
+      turnId: "t1",
+      messageId: "m1",
+      outputIndex: 0,
+      partIndex,
+      part,
+      timestamp: T,
+    });
+
+    const created = translateValidated(
+      shim,
+      at(toolPart({ status: "pending", partialInput: "{" }))
+    );
+    expect(created.map((e) => e.type)).toEqual(["part.created"]);
+    expect((created[0] as { part: { state: unknown } }).part.state).toEqual({
+      status: "PENDING",
+      partialInput: "{",
+    });
+
+    const running = translateValidated(
+      shim,
+      at(toolPart({ status: "in_progress", input: { command: "ls" }, time: { start: T } }))
+    );
+    expect(running).toEqual([]);
+
+    const done = translateValidated(
+      shim,
+      at(
+        toolPart({
+          status: "completed",
+          input: { command: "ls" },
+          output: "file.txt",
+          title: "ls",
+          time: { start: T, end: T + 500 },
+        })
+      )
+    );
+    expect(done.map((e) => e.type)).toEqual(["part.done"]);
+    expect((done[0] as { part: { state: unknown; kind?: string } }).part).toMatchObject({
+      kind: "bash",
+      state: {
+        status: "COMPLETED",
+        output: "file.txt",
+        time: { start: new Date(T).toISOString(), end: new Date(T + 500).toISOString() },
+      },
+    });
+
+    const ended = translateValidated(shim, {
+      type: "message.ended",
+      turnId: "t1",
+      messageId: "m1",
+      timestamp: T,
+    });
+    expect((ended[0] as { parts: unknown[] }).parts).toHaveLength(1);
+  });
+
+  it("emits the created→done pair for a tool terminal on first sight", () => {
+    const shim = new LifecycleToPartEvents();
+    const out = translateValidated(shim, {
       type: "message.part",
       turnId: "t1",
       messageId: "m1",
       outputIndex: 0,
       partIndex: 0,
-      part: textPart("p1", "DEUS-CORE-OK", "done"),
+      part: toolPart({
+        status: "failed",
+        input: {},
+        error: "boom",
+        time: { start: T, end: T + 1 },
+      }),
       timestamp: T,
     });
     expect(out.map((e) => e.type)).toEqual(["part.created", "part.done"]);
-    expect(out[1] && "part" in out[1] && out[1].part).toMatchObject({
-      type: "TEXT",
-      text: "DEUS-CORE-OK",
-      state: "DONE",
+    expect((out[1] as { part: { state: unknown } }).part.state).toMatchObject({
+      status: "ERROR",
+      error: "boom",
     });
+  });
+
+  it("carries the sub-agent parent onto message.created and message.done", () => {
+    const shim = new LifecycleToPartEvents();
+    const created = translateValidated(shim, {
+      type: "message.started",
+      turnId: "t1",
+      messageId: "m-sub",
+      outputIndex: 1,
+      role: "assistant",
+      parentToolUseId: "task-1",
+      timestamp: T,
+    });
+    expect(created[0]).toMatchObject({ type: "message.created", parentToolCallId: "task-1" });
+    const done = translateValidated(shim, {
+      type: "message.ended",
+      turnId: "t1",
+      messageId: "m-sub",
+      timestamp: T,
+    });
+    expect(done[0]).toMatchObject({ type: "message.done", parentToolCallId: "task-1" });
   });
 
   it("maps engine stop reasons onto deus finish reasons", () => {
     const shim = new LifecycleToPartEvents();
-    const out = shim.translate({
+    const out = translateValidated(shim, {
       type: "turn.ended",
       turnId: "t1",
       sessionId: "s",
@@ -127,30 +299,19 @@ describe("LifecycleToPartEvents", () => {
       toolCallId: "tc1",
       toolName: "Bash",
       kind: "execute",
-      state: { status: "in_progress", input: { command: "ls" }, time: { start: 1 } },
+      state: { status: "in_progress", input: { command: "ls" }, time: { start: T } },
     });
     expect(running).toMatchObject({
       type: "TOOL",
       toolName: "Bash",
-      state: { status: "RUNNING", input: { command: "ls" } },
-    });
-    const failed = toDeusPart({
-      id: "p2",
-      sessionId: "s",
-      messageId: "m1",
-      type: "tool",
-      toolCallId: "tc1",
-      toolName: "Bash",
       state: {
-        status: "failed",
+        status: "RUNNING",
         input: { command: "ls" },
-        error: "boom",
-        time: { start: 1, end: 2 },
+        time: { start: new Date(T).toISOString() },
       },
     });
-    expect(failed.type === "TOOL" && failed.state).toMatchObject({
-      status: "ERROR",
-      error: "boom",
-    });
+    expect(
+      toDeusTokens({ input: 1, output: 2, reasoning: 3, cache: { read: 4, write: 5 } })
+    ).toEqual({ input: 1, output: 2, reasoning: 3, cacheRead: 4, cacheCreation: { total: 5 } });
   });
 });

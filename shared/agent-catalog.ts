@@ -57,19 +57,16 @@ export const AGENT_CONFIGS = {
       {
         model: "claude-opus-5[1m]",
         label: "Opus 5 1M",
-        isNew: true,
         thinkingLevels: ["LOW", "MEDIUM", "HIGH", "XHIGH"],
       },
       {
         model: "claude-opus-5",
         label: "Opus 5",
-        isNew: true,
         thinkingLevels: ["LOW", "MEDIUM", "HIGH", "XHIGH"],
       },
       {
         model: "claude-sonnet-5",
         label: "Sonnet 5",
-        isNew: true,
         thinkingLevels: ["LOW", "MEDIUM", "HIGH", "XHIGH"],
       },
       // Previous generation
@@ -84,8 +81,8 @@ export const AGENT_CONFIGS = {
         thinkingLevels: ["LOW", "MEDIUM", "HIGH", "XHIGH"],
       },
       { model: "claude-sonnet-4-6", label: "Sonnet 4.6" },
-      { model: "claude-haiku-4-5", label: "Haiku 4.5", thinkingLevels: [] },
       { model: "claude-opus-4-6[1m]", label: "Opus 4.6 1M" },
+      { model: "claude-haiku-4-5", label: "Haiku 4.5", thinkingLevels: [] },
     ],
   },
   "codex-sdk": {
