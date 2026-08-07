@@ -2,11 +2,11 @@
 // current map through core-handler's setAapMcpServers, FIFO-ordered.
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-vi.mock("../agents/core/core-handler", () => ({
+vi.mock("../agents/core/engine", () => ({
   setAapMcpServers: vi.fn(async () => {}),
 }));
 
-import { setAapMcpServers } from "../agents/core/core-handler";
+import { setAapMcpServers } from "../agents/core/engine";
 import { __clearRegistrarForTests, registerAppMcp, unregisterAppMcp } from "../app-registrar";
 
 const broadcasts = vi.mocked(setAapMcpServers);
