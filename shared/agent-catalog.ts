@@ -40,21 +40,52 @@ export const AGENT_CONFIGS = {
     label: "Claude Code",
     thinkingLevels: ["LOW", "MEDIUM", "HIGH"],
     models: [
+      // Claude 5 family (Mythos-class Fable on top). These models require
+      // thinking enabled — no NONE level (they 400 on thinking.type.disabled).
+      {
+        model: "claude-fable-5[1m]",
+        label: "Fable 5 1M",
+        isNew: true,
+        thinkingLevels: ["LOW", "MEDIUM", "HIGH", "XHIGH"],
+      },
+      {
+        model: "claude-fable-5",
+        label: "Fable 5",
+        isNew: true,
+        thinkingLevels: ["LOW", "MEDIUM", "HIGH", "XHIGH"],
+      },
+      {
+        model: "claude-opus-5[1m]",
+        label: "Opus 5 1M",
+        isNew: true,
+        thinkingLevels: ["LOW", "MEDIUM", "HIGH", "XHIGH"],
+      },
+      {
+        model: "claude-opus-5",
+        label: "Opus 5",
+        isNew: true,
+        thinkingLevels: ["LOW", "MEDIUM", "HIGH", "XHIGH"],
+      },
+      {
+        model: "claude-sonnet-5",
+        label: "Sonnet 5",
+        isNew: true,
+        thinkingLevels: ["LOW", "MEDIUM", "HIGH", "XHIGH"],
+      },
+      // Previous generation
       {
         model: "claude-opus-4-7[1m]",
         label: "Opus 4.7 1M",
-        isNew: true,
         thinkingLevels: ["LOW", "MEDIUM", "HIGH", "XHIGH"],
       },
       {
         model: "claude-opus-4-7",
         label: "Opus 4.7",
-        isNew: true,
         thinkingLevels: ["LOW", "MEDIUM", "HIGH", "XHIGH"],
       },
-      { model: "claude-opus-4-6[1m]", label: "Opus 4.6 1M" },
-      { model: "claude-sonnet-4-6", label: "Sonnet 4.6", isNew: true },
+      { model: "claude-sonnet-4-6", label: "Sonnet 4.6" },
       { model: "claude-haiku-4-5", label: "Haiku 4.5", thinkingLevels: [] },
+      { model: "claude-opus-4-6[1m]", label: "Opus 4.6 1M" },
     ],
   },
   "codex-sdk": {
@@ -72,7 +103,11 @@ export const AGENT_CONFIGS = {
     label: "Codex",
     thinkingLevels: ["LOW", "MEDIUM", "HIGH", "XHIGH"],
     models: [
-      { model: "gpt-5.5", label: "GPT-5.5", isNew: true },
+      // gpt-5.6-sol is the current Codex flagship (ChatGPT-auth accounts run
+      // it as their default; bare "gpt-5.6" and the -codex variants are not
+      // available under ChatGPT auth — verified live).
+      { model: "gpt-5.6-sol", label: "GPT-5.6 Sol", isNew: true },
+      { model: "gpt-5.5", label: "GPT-5.5" },
       { model: "gpt-5.4", label: "GPT-5.4" },
     ],
   },
