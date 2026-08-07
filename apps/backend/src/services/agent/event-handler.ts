@@ -21,6 +21,7 @@ import {
   persistMessageDone,
   persistSessionStarted,
   persistSessionIdle,
+  persistSessionContextUsage,
   persistSessionError,
   persistSessionCancelled,
   persistAgentSessionId,
@@ -96,6 +97,9 @@ export function createAgentEventHandler(deps: {
       .with({ type: "session.idle" }, (e) => {
         console.log(`[AgentEvent] session.idle: session=${e.sessionId}`);
         persistAndInvalidate(persistSessionIdle(e), SESSION_RESOURCES, e.sessionId);
+      })
+      .with({ type: "session.contextUsage" }, (e) => {
+        persistAndInvalidate(persistSessionContextUsage(e), SESSION_RESOURCES, e.sessionId);
       })
       .with({ type: "session.error" }, (e) => {
         console.log(`[AgentEvent] session.error: session=${e.sessionId} error=${e.error}`);

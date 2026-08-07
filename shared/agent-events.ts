@@ -60,6 +60,7 @@ export const AGENT_EVENT_NAMES = {
   SESSION_IDLE: "session.idle",
   SESSION_ERROR: "session.error",
   SESSION_CANCELLED: "session.cancelled",
+  SESSION_CONTEXT_USAGE: "session.contextUsage",
 
   // Messages (one per SDK message)
   MESSAGE_SYSTEM: "message.system",
@@ -288,6 +289,19 @@ export const SessionIdleEventSchema = z.object({
 });
 export type SessionIdleEvent = z.infer<typeof SessionIdleEventSchema>;
 
+export const SessionContextUsageEventSchema = z.object({
+  type: z.literal("session.contextUsage"),
+  sessionId: z.string(),
+  agentHarness: AgentHarnessSchema,
+  /** Tokens currently in the context window. */
+  used: z.number(),
+  /** Context window size, when the provider reports it. */
+  size: z.number().optional(),
+  /** Cumulative session cost in USD, when reported. */
+  cost: z.number().optional(),
+});
+export type SessionContextUsageEvent = z.infer<typeof SessionContextUsageEventSchema>;
+
 export const SessionErrorEventSchema = z.object({
   type: z.literal("session.error"),
   sessionId: z.string(),
@@ -491,6 +505,7 @@ export const AgentEventSchema = z.discriminatedUnion("type", [
   SessionIdleEventSchema,
   SessionErrorEventSchema,
   SessionCancelledEventSchema,
+  SessionContextUsageEventSchema,
   // Messages (legacy — raw SDK content blocks)
   MessageSystemEventSchema,
   MessageAssistantEventSchema,

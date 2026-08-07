@@ -156,6 +156,19 @@ class EventBroadcasterClass {
     });
   }
 
+  emitSessionContextUsage(
+    sessionId: string,
+    agentHarness: AgentHarness,
+    usage: { used: number; size?: number; cost?: number }
+  ): void {
+    this.emitEvent({
+      type: AGENT_EVENT_NAMES.SESSION_CONTEXT_USAGE,
+      sessionId,
+      agentHarness,
+      ...usage,
+    });
+  }
+
   // --- Messages ---
 
   emitSystemMessage(sessionId: string, agentHarness: AgentHarness, data: unknown): void {

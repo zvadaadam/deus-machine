@@ -21,6 +21,7 @@ import type {
   MessageDoneEvent,
   SessionStartedEvent,
   SessionIdleEvent,
+  SessionContextUsageEvent,
   SessionErrorEvent,
   SessionCancelledEvent,
   AgentSessionIdEvent,
@@ -258,6 +259,23 @@ export function persistSessionIdle(event: SessionIdleEvent): WriteResult<void> {
   } catch (error) {
     const msg = getErrorMessage(error);
     console.error(`[AgentPersistence] Failed to persist session.idle:`, msg);
+    return { ok: false, error: msg };
+  }
+}
+
+/** Persist the live context gauge onto the session row (composer indicator). */
+export function persistSessionContextUsage(event: SessionContextUsageEvent): WriteResult<void> {
+  const db = getDatabase();
+
+  try {
+    const percent = event.size ? Math.min((event.used / event.size) * 100, 100) : 0;
+    db.prepare(
+      `UPDATE sessions SET context_token_count = ?, context_used_percent = ?, updated_at = datetime('now') WHERE id = ?`
+    ).run(event.used, percent, event.sessionId);
+    return { ok: true, value: undefined };
+  } catch (error) {
+    const msg = getErrorMessage(error);
+    console.error(`[AgentPersistence] Failed to persist session.contextUsage:`, msg);
     return { ok: false, error: msg };
   }
 }

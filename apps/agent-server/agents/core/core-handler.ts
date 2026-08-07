@@ -44,6 +44,8 @@ interface CoreSession {
   turnId?: string;
   cwd?: string;
   lastUsage?: SessionUsageEvent;
+  /** Latest QueryOptions — read by the sdkOptions factory at session spawn. */
+  lastOptions?: QueryOptions;
 }
 
 const sessions = new Map<string, CoreSession>();
@@ -122,6 +124,16 @@ function getRegistry(): AgentRegistry {
     claudeCode: {
       sdkMcpServers: ({ sessionId }) =>
         ({ deus: createDeusMCPServer(sessionId) }) as unknown as SdkMcpServers,
+      // Legacy-handler parity: deus can't render AskUserQuestion, sub-agent
+      // text must reach the wire, and Chrome tools ride an extra CLI arg.
+      sdkOptions: ({ sessionId }) => {
+        const opts = sessions.get(sessionId)?.lastOptions;
+        return {
+          disallowedTools: ["AskUserQuestion"],
+          forwardSubagentText: true,
+          ...(opts?.chromeEnabled ? { extraArgs: { chrome: null } } : {}),
+        };
+      },
       toolPolicy,
       hooks: ({ sessionId, currentTurnId }) => ({
         UserPromptSubmit: [
@@ -211,6 +223,7 @@ export class CoreAgentHandler implements AgentHandler {
     const turnId = options.turnId ?? generateUUIDv7();
     state.turnId = turnId;
     state.cwd = options.cwd;
+    state.lastOptions = options;
     const shim = new LifecycleToPartEvents();
     let errorReported = false;
     const sink = callbackSink(async (event: LifecycleEvent) => {
@@ -220,6 +233,13 @@ export class CoreAgentHandler implements AgentHandler {
       }
       if (event.type === "session.usage") {
         state.lastUsage = event;
+        // Live context gauge: the backend persists it onto the session row
+        // (context_token_count / context_used_percent) for the composer UI.
+        EventBroadcaster.emitSessionContextUsage(sessionId, this.agentHarness, {
+          used: event.used,
+          size: event.size,
+          cost: event.cost,
+        });
         return;
       }
       if (event.type === "error") {
@@ -279,9 +299,11 @@ export class CoreAgentHandler implements AgentHandler {
           model: options.model,
           thinkingLevel: toEngineThinking(options.thinkingLevel),
           systemPromptAppend: buildSystemPromptAppend(this.agentHarness, options.cwd),
-          permissionMode:
-            options.permissionMode === "dontAsk" ? "bypassPermissions" : options.permissionMode,
-          maxTurns: options.maxTurns,
+          // Verbatim — the engine speaks dontAsk natively (never-prompt without
+          // the dangerous bypass, which also disables Claude extended thinking).
+          permissionMode: options.permissionMode,
+          maxTurns: options.maxTurns ?? 1000,
+          additionalDirectories: options.additionalDirectories,
           resumeSessionId: options.resume,
           mcpServers:
             this.agentHarness === "claude" && Object.keys(aapServers).length
