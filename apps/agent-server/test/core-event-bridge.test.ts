@@ -199,7 +199,6 @@ describe("CoreEventBridge", () => {
       state.cwd = "/tmp/w";
       state.nativeSessionId = "native-1";
       bridge.handle(turnEnded("end_turn"));
-      expect(state.titleFetched).toBe(true);
       await vi.waitFor(() =>
         expect(EventBroadcaster.emitSessionTitle).toHaveBeenCalledWith(
           "s1",
@@ -207,6 +206,8 @@ describe("CoreEventBridge", () => {
           "Fix login flow"
         )
       );
+      // Flag flips only on SUCCESS (a missing summary retries next turn).
+      expect(state.titleFetched).toBe(true);
       // Second successful turn: no refetch.
       vi.mocked(EventBroadcaster.emitSessionTitle).mockClear();
       bridge.handle(turnEnded("end_turn"));

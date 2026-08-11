@@ -45,3 +45,25 @@ describe("toEngineInput", () => {
     expect(toEngineInput("[]")).toBe("[]");
   });
 });
+
+describe("withoutImageParts (codex harnesses)", () => {
+  it("replaces image parts with an explicit marker, keeps text", async () => {
+    const { withoutImageParts } = await import("../agents/core/core-handler");
+    const out = withoutImageParts([
+      { type: "text", text: "look:" },
+      { type: "image", data: "AAAA", mediaType: "image/png" },
+    ]);
+    expect(out).toEqual([
+      { type: "text", text: "look:" },
+      {
+        type: "text",
+        text: "[attached image omitted — this model harness does not support image input]",
+      },
+    ]);
+  });
+
+  it("passes plain strings through", async () => {
+    const { withoutImageParts } = await import("../agents/core/core-handler");
+    expect(withoutImageParts("hi")).toBe("hi");
+  });
+});

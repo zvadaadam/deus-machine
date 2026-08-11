@@ -17,12 +17,23 @@ const EDIT_TOOLS = new Set(["Edit", "MultiEdit", "Write", "NotebookEdit"]);
 
 function realpathOrResolve(p: string, base?: string): string {
   const absolute = base ? path.resolve(base, p) : path.resolve(p);
-  try {
-    return fs.realpathSync(absolute);
-  } catch {
-    // New files don't exist yet — resolve the deepest existing ancestor so
-    // symlinked workspace roots still compare correctly.
-    return absolute;
+  // New files don't exist yet: walk up to the deepest EXISTING ancestor,
+  // realpath that, and re-append the remainder. Without the walk, a new file
+  // written through an in-workspace symlink (cwd/link/new.ts with
+  // link -> outside) keeps the cwd prefix and escapes the guard, and a
+  // workspace that itself sits behind a symlink (/tmp on macOS) false-denies.
+  let dir = absolute;
+  const tail: string[] = [];
+  for (;;) {
+    try {
+      const real = fs.realpathSync(dir);
+      return tail.length ? path.join(real, ...tail) : real;
+    } catch {
+      const parent = path.dirname(dir);
+      if (parent === dir) return absolute;
+      tail.unshift(path.basename(dir));
+      dir = parent;
+    }
   }
 }
 

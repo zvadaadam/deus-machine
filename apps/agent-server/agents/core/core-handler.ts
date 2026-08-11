@@ -63,6 +63,23 @@ export function toEngineInput(prompt: string): AgentInput {
   return parts.length ? parts : prompt;
 }
 
+/**
+ * The codex harnesses take text-only input (the engine's codex adapters drop
+ * image parts) — replace images with an explicit marker so the model knows an
+ * attachment existed instead of it vanishing silently.
+ */
+export function withoutImageParts(input: AgentInput): AgentInput {
+  if (typeof input === "string") return input;
+  return input.map((part) =>
+    part.type === "image"
+      ? {
+          type: "text" as const,
+          text: "[attached image omitted — this model harness does not support image input]",
+        }
+      : part
+  );
+}
+
 /** deus UPPERCASE thinking levels → engine lowercase. */
 function toEngineThinking(
   level: QueryOptions["thinkingLevel"]
@@ -125,9 +142,27 @@ export class CoreAgentHandler implements AgentHandler {
     try {
       const sdk = await import("@anthropic-ai/claude-agent-sdk");
       const emptyPrompt = (async function* () {})();
-      const query = sdk.query({ prompt: emptyPrompt, options: { cwd: params.cwd } });
+      const query = sdk.query({
+        prompt: emptyPrompt,
+        options: {
+          cwd: params.cwd,
+          // Packaged apps exclude the SDK's platform CLI packages — point the
+          // SDK at the bundled binary (set by bundled-clis.ts); dev falls back
+          // to the SDK's own resolution.
+          ...(process.env.CLAUDE_CLI_PATH
+            ? { pathToClaudeCodeExecutable: process.env.CLAUDE_CLI_PATH }
+            : {}),
+        },
+      });
       try {
-        const accountInfo = await query.accountInfo();
+        // Bounded: a stalled CLI init must not hang the settings route (and
+        // the finally-interrupt below reaps the subprocess either way).
+        const accountInfo = await Promise.race([
+          query.accountInfo(),
+          new Promise((_, reject) =>
+            setTimeout(() => reject(new Error("auth check timed out")), 15_000)
+          ),
+        ]);
         return { type: "claude_auth_output", agentHarness: "claude", accountInfo };
       } finally {
         void query.interrupt().catch(() => {});
@@ -154,7 +189,10 @@ export class CoreAgentHandler implements AgentHandler {
       {
         sessionId,
         turnId,
-        input: toEngineInput(prompt),
+        input:
+          this.agentHarness === "claude"
+            ? toEngineInput(prompt)
+            : withoutImageParts(toEngineInput(prompt)),
         config: {
           harness: this.engineHarness,
           cwd: options.cwd,
@@ -170,11 +208,18 @@ export class CoreAgentHandler implements AgentHandler {
           // Checkpoint revert: fork the resumed session at a specific message.
           resumeSessionAt: options.resumeSessionAt,
           mcpServers: this.agentHarness === "claude" ? currentAapServers() : undefined,
-          env: buildAgentEnvironment({
-            providerEnvVars: options.providerEnvVars,
-            deusEnv: options.deusEnv,
-            ghToken: options.ghToken,
-          }),
+          env: {
+            ...buildAgentEnvironment({
+              providerEnvVars: options.providerEnvVars,
+              deusEnv: options.deusEnv,
+              ghToken: options.ghToken,
+            }),
+            // Not read by anyone: a fingerprint marker. Flipping the flag
+            // changes the env, which restarts the claude session (context
+            // preserved via resume) and re-runs the sdkMcpServers factory —
+            // otherwise a warm session keeps the deus MCP suite attached.
+            ...(options.strictDataPrivacy ? { DEUS_STRICT_DATA_PRIVACY: "1" } : {}),
+          },
         },
       },
       callbackSink((event: LifecycleEvent) => bridge.handle(event))
@@ -184,9 +229,17 @@ export class CoreAgentHandler implements AgentHandler {
   async cancel(sessionId: string): Promise<void> {
     // A forced cancellation can kill the subprocess before the Stop hook runs —
     // create the end checkpoint first so undo/revert still has its ref
-    // (legacy parity; createCheckpoint is a no-op outside a git repo).
+    // (createCheckpoint is a no-op outside a git repo). Guards: the SESSION's
+    // harness (cancel is broadcast to all three handlers) and an active turn
+    // (state.turnId clears at turn end — a stale checkpoint here would fold
+    // post-turn edits into "state at end of turn N" and break undo).
     const state = sessions.get(sessionId);
-    if (this.agentHarness === "claude" && state?.turnId && state.cwd) {
+    if (
+      this.agentHarness === "claude" &&
+      state?.harness === "claude" &&
+      state.turnId &&
+      state.cwd
+    ) {
       createCheckpoint(sessionId, state.turnId, "end", state.cwd, "[core]");
     }
     await getRuntime().cancel(this.engineHarness, sessionId);

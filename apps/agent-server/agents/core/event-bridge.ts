@@ -51,10 +51,12 @@ export class CoreEventBridge {
         };
         // Live context gauge: the backend persists it onto the session row
         // (context_token_count / context_used_percent) for the composer UI.
+        // Emit the MERGED values — a used-only update with a raw undefined
+        // size would desync the persisted count from the stale percent.
         EventBroadcaster.emitSessionContextUsage(this.sessionId, this.harness, {
           used: event.used,
-          size: event.size,
-          cost: event.cost,
+          size: this.state.lastUsage.size,
+          cost: this.state.lastUsage.cost,
         });
         return;
       case "error":
@@ -95,6 +97,10 @@ export class CoreEventBridge {
    * the status flips (legacy ordering).
    */
   private emitTerminalStatus(event: Extract<LifecycleEvent, { type: "turn.ended" }>): void {
+    // The turn is over — cancel() and the checkpoint hooks key "turn active"
+    // off state.turnId; a stale id would let a later session-stop overwrite
+    // the end checkpoint with post-turn edits.
+    this.state.turnId = undefined;
     if (event.stopReason === "error") {
       if (this.errorReported) return;
       // Adapter-reported failures (e.g. codex turn.failed) carry the message
@@ -141,13 +147,17 @@ export class CoreEventBridge {
     if (this.harness !== "claude" || this.state.titleFetched) return;
     const { cwd, nativeSessionId } = this.state;
     if (!cwd || !nativeSessionId) return;
-    this.state.titleFetched = true;
     void (async () => {
       try {
         const { listSessions } = await import("@anthropic-ai/claude-agent-sdk");
         const sessions = await listSessions({ dir: cwd, limit: 20 });
         const title = sessions.find((s) => s.sessionId === nativeSessionId)?.summary;
-        if (title) EventBroadcaster.emitSessionTitle(this.sessionId, this.harness, title);
+        if (title) {
+          // Flag only on success: the SDK summary usually lags the first turn,
+          // so keep retrying at each turn end until one exists.
+          this.state.titleFetched = true;
+          EventBroadcaster.emitSessionTitle(this.sessionId, this.harness, title);
+        }
       } catch (error) {
         console.error(`[core] title fetch failed for ${this.sessionId}:`, error);
       }
