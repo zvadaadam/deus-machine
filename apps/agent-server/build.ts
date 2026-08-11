@@ -25,6 +25,9 @@ const external = [
   "https",
   // Runtime packages with native/platform-specific loading.
   "@anthropic-ai/claude-agent-sdk",
+  // Optional engine peer (ACP harness) — deus registers only the three native
+  // harnesses, so this dynamic import must stay external and never loads.
+  "@agentclientprotocol/sdk",
   "@openai/codex",
   "@openai/codex-sdk",
   "@napi-rs/canvas",
