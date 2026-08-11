@@ -8,7 +8,7 @@
 import type { LifecycleEvent } from "@agent-server/protocol";
 import type { ErrorCategory } from "@shared/enums";
 import { EventBroadcaster } from "../../event-broadcaster";
-import { classifyError } from "../lifecycle";
+import { classifyError, classifyStopReason } from "../lifecycle";
 import { LifecycleToPartEvents } from "./lifecycle-shim";
 import type { CoreSession, DeusHarness } from "./session-state";
 
@@ -37,10 +37,18 @@ export class CoreEventBridge {
   handle(event: LifecycleEvent): void {
     switch (event.type) {
       case "session.created":
+        this.state.nativeSessionId = event.nativeSessionId;
         EventBroadcaster.emitAgentSessionId(this.sessionId, event.nativeSessionId);
         return;
       case "session.usage":
-        this.state.lastUsage = event;
+        // Merge — Claude reports `size` only on the final result; a later
+        // used-only event must not erase the known window size or cost.
+        this.state.lastUsage = {
+          ...this.state.lastUsage,
+          ...event,
+          size: event.size ?? this.state.lastUsage?.size,
+          cost: event.cost ?? this.state.lastUsage?.cost,
+        };
         // Live context gauge: the backend persists it onto the session row
         // (context_token_count / context_used_percent) for the composer UI.
         EventBroadcaster.emitSessionContextUsage(this.sessionId, this.harness, {
@@ -50,6 +58,11 @@ export class CoreEventBridge {
         });
         return;
       case "error":
+        // Recoverable errors (the engine is retrying / the turn continues) are
+        // diagnostics, not terminal state — promoting them would flip the UI to
+        // an error while the agent is still running AND suppress the real
+        // terminal error via the dedupe flag.
+        if (event.recoverable) return;
         // Turn errors end the turn structurally (turn.ended stopReason=error);
         // this surfaces the message on deus's session.error channel too.
         this.errorReported = true;
@@ -97,9 +110,47 @@ export class CoreEventBridge {
       return;
     }
     if (event.stopReason === "cancelled") {
+      // message.cancelled persists the cancellation marker row the frontend
+      // uses to render "Turn interrupted" after a reload (legacy parity).
+      EventBroadcaster.emitMessageCancelled(this.sessionId, this.harness);
       EventBroadcaster.emitSessionCancelled(this.sessionId, this.harness);
       return;
     }
+    // Truncation is an error the user must see (legacy classifyStopReason;
+    // engine vocabulary matches its cases, everything unknown maps to null).
+    const stopIssue = classifyStopReason(event.stopReason);
+    if (stopIssue) {
+      EventBroadcaster.emitSessionError(
+        this.sessionId,
+        this.harness,
+        stopIssue.message,
+        stopIssue.category
+      );
+      return;
+    }
     EventBroadcaster.emitSessionIdle(this.sessionId, this.harness);
+    this.fetchTitleOnce();
+  }
+
+  /**
+   * Best-effort session title after the first successful claude turn: the SDK
+   * auto-summarizes sessions; the backend names the session AND an untitled
+   * workspace from `session.title` (legacy parity). Fire-and-forget.
+   */
+  private fetchTitleOnce(): void {
+    if (this.harness !== "claude" || this.state.titleFetched) return;
+    const { cwd, nativeSessionId } = this.state;
+    if (!cwd || !nativeSessionId) return;
+    this.state.titleFetched = true;
+    void (async () => {
+      try {
+        const { listSessions } = await import("@anthropic-ai/claude-agent-sdk");
+        const sessions = await listSessions({ dir: cwd, limit: 20 });
+        const title = sessions.find((s) => s.sessionId === nativeSessionId)?.summary;
+        if (title) EventBroadcaster.emitSessionTitle(this.sessionId, this.harness, title);
+      } catch (error) {
+        console.error(`[core] title fetch failed for ${this.sessionId}:`, error);
+      }
+    })();
   }
 }

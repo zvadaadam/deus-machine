@@ -7,9 +7,10 @@
 // shared per-session state in ./session-state.
 
 import { callbackSink, generateUUIDv7 } from "@agent-server/core";
-import type { LifecycleEvent } from "@agent-server/protocol";
+import type { AgentInput, LifecycleEvent } from "@agent-server/protocol";
 import type { AgentHandler, ContextUsageParams, QueryOptions } from "../registry";
 import { buildAgentEnvironment } from "../environment/env-builder";
+import { createCheckpoint } from "./checkpoint";
 import { CoreEventBridge } from "./event-bridge";
 import { currentAapServers, getRuntime } from "./engine";
 import { ENGINE_HARNESS, type DeusHarness, sessionState, sessions } from "./session-state";
@@ -17,6 +18,50 @@ import { buildSystemPromptAppend } from "./system-prompt";
 
 export { setAapMcpServers } from "./engine";
 export { decideToolUse } from "./tool-policy";
+
+/**
+ * Deus's frontend serializes attachment-bearing prompts as a JSON array of
+ * Anthropic content blocks (text / image with base64 or URL source). The
+ * legacy handler passed that array straight to the SDK; the engine speaks its
+ * own PartInput vocabulary, so translate. Anything unrecognized stays text.
+ */
+export function toEngineInput(prompt: string): AgentInput {
+  if (!prompt.startsWith("[")) return prompt;
+  let blocks: unknown;
+  try {
+    blocks = JSON.parse(prompt);
+  } catch {
+    return prompt;
+  }
+  if (!Array.isArray(blocks) || blocks.length === 0) return prompt;
+  const parts: Extract<AgentInput, unknown[]> = [];
+  for (const block of blocks as Array<Record<string, unknown>>) {
+    if (block?.type === "text" && typeof block.text === "string") {
+      parts.push({ type: "text", text: block.text });
+      continue;
+    }
+    if (block?.type === "image") {
+      const source = block.source as
+        | { type?: string; url?: string; media_type?: string; data?: string }
+        | undefined;
+      if (source?.type === "url" && source.url) {
+        parts.push({ type: "image", url: source.url, mediaType: source.media_type ?? "image/png" });
+        continue;
+      }
+      if (source?.data) {
+        parts.push({
+          type: "image",
+          data: source.data,
+          mediaType: source.media_type ?? "image/png",
+        });
+        continue;
+      }
+    }
+    // Unknown block type — not a content array we understand; keep raw text.
+    return prompt;
+  }
+  return parts.length ? parts : prompt;
+}
 
 /** deus UPPERCASE thinking levels → engine lowercase. */
 function toEngineThinking(
@@ -40,21 +85,24 @@ function toEngineThinking(
 
 export class CoreAgentHandler implements AgentHandler {
   readonly agentHarness: DeusHarness;
-  readonly capabilities = {
-    auth: false,
-    workspaceInit: false,
-    contextUsage: true,
-    modelSwitch: "in-session",
-    multiTurn: true,
-    sessionResume: true,
-    // Deliberate cut vs the legacy handler: permission-mode changes apply on
-    // the NEXT turn (the engine restarts the session with resume when the mode
-    // differs); live mid-turn switching (legacy updatePermissionMode) is gone.
-    permissionMode: false,
-  } satisfies AgentHandler["capabilities"];
+  readonly capabilities: AgentHandler["capabilities"];
 
   constructor(harness: DeusHarness = "claude") {
     this.agentHarness = harness;
+    this.capabilities = {
+      // Auth status is a claude-only feature (SDK accountInfo); the codex
+      // handlers must not advertise it or the settings route would query them.
+      auth: harness === "claude",
+      workspaceInit: false,
+      contextUsage: true,
+      modelSwitch: "in-session",
+      multiTurn: true,
+      sessionResume: true,
+      // Deliberate cut vs the legacy handler: permission-mode changes apply on
+      // the NEXT turn (the engine restarts the session with resume when the
+      // mode differs); live mid-turn switching (updatePermissionMode) is gone.
+      permissionMode: false,
+    };
   }
 
   private get engineHarness() {
@@ -63,6 +111,34 @@ export class CoreAgentHandler implements AgentHandler {
 
   initialize(): { success: boolean; error?: string } {
     return { success: true };
+  }
+
+  /**
+   * Provider auth status for the settings screen (legacy parity): spawn an
+   * idle SDK query and ask it for the account info, then interrupt it.
+   * Claude-only — the codex harnesses report no auth capability.
+   */
+  async auth(params: { cwd: string }): Promise<unknown> {
+    if (this.agentHarness !== "claude") {
+      return { type: "claude_auth_output", agentHarness: this.agentHarness, error: "unsupported" };
+    }
+    try {
+      const sdk = await import("@anthropic-ai/claude-agent-sdk");
+      const emptyPrompt = (async function* () {})();
+      const query = sdk.query({ prompt: emptyPrompt, options: { cwd: params.cwd } });
+      try {
+        const accountInfo = await query.accountInfo();
+        return { type: "claude_auth_output", agentHarness: "claude", accountInfo };
+      } finally {
+        void query.interrupt().catch(() => {});
+      }
+    } catch (error) {
+      return {
+        type: "claude_auth_output",
+        agentHarness: "claude",
+        error: error instanceof Error ? error.message : String(error),
+      };
+    }
   }
 
   async query(sessionId: string, prompt: string, options: QueryOptions): Promise<void> {
@@ -78,7 +154,7 @@ export class CoreAgentHandler implements AgentHandler {
       {
         sessionId,
         turnId,
-        input: prompt,
+        input: toEngineInput(prompt),
         config: {
           harness: this.engineHarness,
           cwd: options.cwd,
@@ -91,6 +167,8 @@ export class CoreAgentHandler implements AgentHandler {
           maxTurns: options.maxTurns ?? 1000,
           additionalDirectories: options.additionalDirectories,
           resumeSessionId: options.resume,
+          // Checkpoint revert: fork the resumed session at a specific message.
+          resumeSessionAt: options.resumeSessionAt,
           mcpServers: this.agentHarness === "claude" ? currentAapServers() : undefined,
           env: buildAgentEnvironment({
             providerEnvVars: options.providerEnvVars,
@@ -104,6 +182,13 @@ export class CoreAgentHandler implements AgentHandler {
   }
 
   async cancel(sessionId: string): Promise<void> {
+    // A forced cancellation can kill the subprocess before the Stop hook runs —
+    // create the end checkpoint first so undo/revert still has its ref
+    // (legacy parity; createCheckpoint is a no-op outside a git repo).
+    const state = sessions.get(sessionId);
+    if (this.agentHarness === "claude" && state?.turnId && state.cwd) {
+      createCheckpoint(sessionId, state.turnId, "end", state.cwd, "[core]");
+    }
     await getRuntime().cancel(this.engineHarness, sessionId);
   }
 

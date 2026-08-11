@@ -43,8 +43,12 @@ export function getRegistry(): AgentRegistry {
     // Operator escape hatches ($CLAUDE_CLI_PATH / $CODEX_CLI_PATH) still win.
     provision: { mode: "pinned" },
     claudeCode: {
+      // Strict-data-privacy sessions must not get the deus tool suite
+      // (workspace/browser/simulator/recording/app tools) — legacy parity.
       sdkMcpServers: ({ sessionId }) =>
-        ({ deus: createDeusMCPServer(sessionId) }) as unknown as SdkMcpServers,
+        sessions.get(sessionId)?.lastOptions?.strictDataPrivacy
+          ? ({} as SdkMcpServers)
+          : ({ deus: createDeusMCPServer(sessionId) } as unknown as SdkMcpServers),
       // Legacy-handler parity: deus can't render AskUserQuestion, sub-agent
       // text must reach the wire, and Chrome tools ride an extra CLI arg.
       sdkOptions: ({ sessionId }) => {
@@ -102,11 +106,18 @@ export async function setAapMcpServers(
 ): Promise<void> {
   aapServers = servers;
   const claude = getRegistry().getAgent("claude-code") as ClaudeCodeAgent;
+  const failures: string[] = [];
   for (const sessionId of liveSessionIds) {
     try {
       await claude.setMcpServers(sessionId, servers);
     } catch (error) {
       console.error(`[core] mcp hot-swap failed for ${sessionId}:`, error);
+      failures.push(sessionId);
     }
+  }
+  // Every session was attempted; a failed swap must surface to the caller
+  // (the registrar contract: never report a failed set as attached).
+  if (failures.length) {
+    throw new Error(`mcp hot-swap failed for session(s): ${failures.join(", ")}`);
   }
 }

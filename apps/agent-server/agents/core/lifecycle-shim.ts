@@ -22,6 +22,10 @@ const FINISH_REASON: Record<StopReason, FinishReason> = {
 
 const iso = (ms: number): string => new Date(ms).toISOString();
 
+/** Sub-agent spawning tools — deus renders their child output only under
+ * kind "task" (Chat.tsx filters parented messages; ToolPartBlock nests them). */
+const SUBAGENT_TOOLS = new Set(["Task", "Agent", "spawn_agent"]);
+
 /** Engine ToolKind (ACP taxonomy) → deus ToolKind. */
 const TOOL_KIND: Record<string, ToolPart["kind"] & string> = {
   read: "read",
@@ -113,7 +117,11 @@ export function toDeusPart(part: EnginePart, partIndex?: number): Part {
     toolName: part.toolName,
     state: toDeusToolState(part.state),
     ...(part.title !== undefined ? { title: part.title } : {}),
-    ...(part.kind !== undefined ? { kind: TOOL_KIND[part.kind] ?? "other" } : {}),
+    ...(SUBAGENT_TOOLS.has(part.toolName)
+      ? { kind: "task" as const }
+      : part.kind !== undefined
+        ? { kind: TOOL_KIND[part.kind] ?? "other" }
+        : {}),
     ...(part.locations !== undefined ? { locations: part.locations } : {}),
   };
 }
@@ -160,14 +168,24 @@ export class LifecycleToPartEvents {
         return [{ type: "part.delta", partId: event.partId, delta: event.delta.text }];
       }
       case "message.part": {
-        const first = !this.parts.has(event.part.id);
+        const previous = this.parts.get(event.part.id);
         const deusPart = toDeusPart(event.part, event.partIndex);
         this.parts.set(event.part.id, deusPart);
         // Consumers may key finality off the part.done event or the part's
         // state, so a part that is terminal on first sight (completed-on-arrival
         // messages, e.g. Codex SDK) still gets the full created → done pair.
+        // Nonterminal STATE changes (tool pending → running) re-emit
+        // part.created — the frontend upserts by part id, and the RUNNING state
+        // is where the parsed tool input first appears.
         const events: PartEvent[] = [];
-        if (first) events.push({ type: "part.created", part: deusPart });
+        const stateChanged =
+          previous !== undefined &&
+          previous.type === "TOOL" &&
+          deusPart.type === "TOOL" &&
+          previous.state.status !== deusPart.state.status;
+        if (previous === undefined || (stateChanged && !isTerminal(event.part))) {
+          events.push({ type: "part.created", part: deusPart });
+        }
         if (isTerminal(event.part)) events.push({ type: "part.done", part: deusPart });
         return events;
       }

@@ -348,11 +348,13 @@ describe.skipIf(!bundleExists || !claudeCliAvailable)("E2E: Real Claude Integrat
   // Claude CLI discovery
   // ------------------------------------------------------------------
 
-  it("discovers Claude CLI during initialization", async () => {
-    // The agent-server log records whether initialization succeeded
+  it("initializes every core handler", async () => {
+    // The embedded engine provisions CLIs lazily at first turn; startup only
+    // records handler registration (the legacy per-CLI version probe is gone).
     const log = await readFileWithRetry(logPath, 7000);
-    expect(log).toContain("Claude executable initialized with version:");
-    expect(log).toContain("handler initialized successfully");
+    expect(log).toContain("claude handler initialized successfully");
+    expect(log).toContain("codex-sdk handler initialized successfully");
+    expect(log).toContain("codex-server handler initialized successfully");
     // Must NOT contain the initialization failure message
     expect(log).not.toContain("initialization failed");
   });
@@ -390,7 +392,10 @@ describe.skipIf(!bundleExists || !claudeCliAvailable)("E2E: Real Claude Integrat
   // Workspace initialization (real Claude SDK call)
   // ------------------------------------------------------------------
 
-  it("returns slash commands and MCP servers via workspaceInit", async () => {
+  it("reports workspaceInit as unsupported (capability removed with the legacy engine)", async () => {
+    // Deliberate cut: no product code calls provider/initWorkspace (the
+    // backend's sendProviderInitWorkspace has no caller), so the core handler
+    // does not implement it. The RPC must fail loudly, not pretend.
     const id = sendRequest(client, "provider/initWorkspace", {
       agentHarness: "claude",
       id: "test-workspace-init",
@@ -405,15 +410,8 @@ describe.skipIf(!bundleExists || !claudeCliAvailable)("E2E: Real Claude Integrat
 
     expect(response.jsonrpc).toBe("2.0");
     expect(response.id).toBe(id);
-    expect(response.result).toBeDefined();
-    expect(response.result.type).toBe("workspace_init_output");
-    expect(response.result.agentHarness).toBe("claude");
-
-    // Should return either real data or an error
-    if (!response.result.error) {
-      // Slash commands should be an array (may be empty in some setups)
-      expect(Array.isArray(response.result.slashCommands)).toBe(true);
-    }
+    expect(response.result).toBeUndefined();
+    expect(String(response.error?.message ?? "")).toContain("does not support");
   }, 30_000);
 
   // ------------------------------------------------------------------

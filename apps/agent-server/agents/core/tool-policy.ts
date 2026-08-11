@@ -15,11 +15,14 @@ import { sessions } from "./session-state";
 
 const EDIT_TOOLS = new Set(["Edit", "MultiEdit", "Write", "NotebookEdit"]);
 
-function realpathOrResolve(p: string): string {
+function realpathOrResolve(p: string, base?: string): string {
+  const absolute = base ? path.resolve(base, p) : path.resolve(p);
   try {
-    return fs.realpathSync(p);
+    return fs.realpathSync(absolute);
   } catch {
-    return path.resolve(p);
+    // New files don't exist yet — resolve the deepest existing ancestor so
+    // symlinked workspace roots still compare correctly.
+    return absolute;
   }
 }
 
@@ -37,9 +40,21 @@ export const decideToolUse: ClaudeToolPolicy = async (toolName, input, ctx) => {
           updatedPermissions: [{ type: "setMode", mode: "default", destination: "session" }],
         };
       }
-      return { behavior: "deny", message: "Plan was not approved", interrupt: false };
+      // interrupt: the user rejected the plan and will send an explanation —
+      // the agent must stop this turn, not keep planning (legacy parity).
+      return {
+        behavior: "deny",
+        message: "Plan denied by user. Please await a further message for an explanation.",
+        interrupt: true,
+      };
     } catch {
-      return { behavior: "deny", message: "Plan approval unavailable", interrupt: false };
+      return {
+        behavior: "deny",
+        message:
+          "Plan approval request failed (frontend may be unavailable or timed out). " +
+          "Please wait for the user to reconnect and try again.",
+        interrupt: true,
+      };
     }
   }
 
@@ -47,11 +62,17 @@ export const decideToolUse: ClaudeToolPolicy = async (toolName, input, ctx) => {
     const state = sessions.get(ctx.sessionId);
     const cwd = state?.cwd;
     const filePath = String(input.file_path ?? input.notebook_path ?? "");
-    if (cwd && filePath) {
-      const allowed = [cwd, ...(state?.lastOptions?.additionalDirectories ?? [])].map(
-        realpathOrResolve
+    if (!cwd) {
+      // Fail closed: without a session cwd there is no allowed-directory set
+      // to check against (should be unreachable — every query records it).
+      return { behavior: "deny", message: "Edit rejected: session working directory unknown." };
+    }
+    if (filePath) {
+      const allowed = [cwd, ...(state?.lastOptions?.additionalDirectories ?? [])].map((dir) =>
+        realpathOrResolve(dir)
       );
-      const target = realpathOrResolve(filePath);
+      // Relative tool paths are relative to the AGENT's cwd, not this process.
+      const target = realpathOrResolve(filePath, cwd);
       if (!allowed.some((dir) => target === dir || target.startsWith(dir + path.sep))) {
         return {
           behavior: "deny",

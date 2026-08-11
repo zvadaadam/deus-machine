@@ -197,11 +197,23 @@ describe("LifecycleToPartEvents", () => {
       partialInput: "{",
     });
 
+    // pending → running re-emits part.created: the RUNNING state carries the
+    // first parsed tool input, and the frontend upserts parts by id.
     const running = translateValidated(
       shim,
       at(toolPart({ status: "in_progress", input: { command: "ls" }, time: { start: T } }))
     );
-    expect(running).toEqual([]);
+    expect(running.map((e) => e.type)).toEqual(["part.created"]);
+    expect((running[0] as { part: { state: { status: string } } }).part.state.status).toBe(
+      "RUNNING"
+    );
+
+    // Same state again (input refinement only) — no re-emission.
+    const runningAgain = translateValidated(
+      shim,
+      at(toolPart({ status: "in_progress", input: { command: "ls -la" }, time: { start: T } }))
+    );
+    expect(runningAgain).toEqual([]);
 
     const done = translateValidated(
       shim,
@@ -313,5 +325,21 @@ describe("LifecycleToPartEvents", () => {
     expect(
       toDeusTokens({ input: 1, output: 2, reasoning: 3, cache: { read: 4, write: 5 } })
     ).toEqual({ input: 1, output: 2, reasoning: 3, cacheRead: 4, cacheCreation: { total: 5 } });
+  });
+
+  it("maps sub-agent spawning tools to kind 'task' regardless of engine kind", () => {
+    // deus renders nested child output only under kind "task" — the engine
+    // classifies Task under ACP's taxonomy as "other", which would flatten it.
+    const task = toDeusPart({
+      id: "p1",
+      sessionId: "s",
+      messageId: "m1",
+      type: "tool",
+      toolCallId: "tc1",
+      toolName: "Task",
+      kind: "other",
+      state: { status: "in_progress", input: { prompt: "explore" }, time: { start: T } },
+    });
+    expect(task).toMatchObject({ type: "TOOL", kind: "task" });
   });
 });

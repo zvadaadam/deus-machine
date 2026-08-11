@@ -19,6 +19,9 @@ export interface CoreSession {
   harness?: DeusHarness;
   turnId?: string;
   cwd?: string;
+  nativeSessionId?: string;
+  /** Set once the first successful turn has kicked off a title fetch. */
+  titleFetched?: boolean;
   lastUsage?: SessionUsageEvent;
   /** Latest QueryOptions — read by the sdkOptions factory at session spawn. */
   lastOptions?: QueryOptions;
