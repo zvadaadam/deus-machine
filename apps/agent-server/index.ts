@@ -25,6 +25,7 @@ import {
   initializeAllAgents,
   getRegisteredAgentHarnesses,
 } from "./agents/registry";
+import { adoptBundledClis } from "./agents/core/bundled-clis";
 import { CoreAgentHandler } from "./agents/core/core-handler";
 import { installFileLogger } from "./logging";
 import { killChildProcesses } from "./process-cleanup";
@@ -146,6 +147,9 @@ class AgentServer {
 
     // All harnesses run on the embedded @agent-server/core engine — the
     // in-repo engine implementations are gone (phase B of the consolidation).
+    // Packaged/staged runtimes: adopt bundled CLIs before the engine registry
+    // exists (its provisioner honors the CLI-path env overrides).
+    adoptBundledClis();
     registerAgent(new CoreAgentHandler("claude"));
     registerAgent(new CoreAgentHandler("codex-sdk"));
     registerAgent(new CoreAgentHandler("codex-server"));
