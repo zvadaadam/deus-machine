@@ -35,13 +35,13 @@ const edit = (filePath: string) =>
 describe("edit guard path resolution", () => {
   it("denies a NEW file written through an in-workspace symlink pointing outside", async () => {
     const result = await edit(path.join(workspace, "evil-link", "new-file.ts"));
-    expect(result.behavior).toBe("deny");
+    expect(result?.behavior).toBe("deny");
   });
 
   it("denies an EXISTING file behind the symlink", async () => {
     fs.writeFileSync(path.join(outside, "existing.ts"), "y");
     const result = await edit(path.join(workspace, "evil-link", "existing.ts"));
-    expect(result.behavior).toBe("deny");
+    expect(result?.behavior).toBe("deny");
   });
 
   it("allows a new file in a symlinked WORKSPACE root (macOS /tmp)", async () => {
@@ -49,16 +49,16 @@ describe("edit guard path resolution", () => {
     // symlink (/tmp -> /private/tmp) — the allowed-dir and the target must
     // both canonicalize for the prefix check to hold.
     const result = await edit(path.join(workspace, "brand-new.ts"));
-    expect(result.behavior).toBe("allow");
+    expect(result?.behavior).toBe("allow");
   });
 
   it("allows a new file in a not-yet-created subdirectory", async () => {
     const result = await edit(path.join(workspace, "deep", "er", "new.ts"));
-    expect(result.behavior).toBe("allow");
+    expect(result?.behavior).toBe("allow");
   });
 
   it("denies relative traversal out of the workspace", async () => {
     const result = await edit("../outside-rel.ts");
-    expect(result.behavior).toBe("deny");
+    expect(result?.behavior).toBe("deny");
   });
 });
