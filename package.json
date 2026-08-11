@@ -149,8 +149,8 @@
     "ws": "^8.19.0",
     "zod": "^4.3.6",
     "zustand": "^5.0.12",
-    "@agent-server/core": "file:../../agent-server/ndjamena/packages/core",
-    "@agent-server/protocol": "file:../../agent-server/ndjamena/packages/protocol"
+    "@agent-server/core": "npm:@zvada/agent-server-core@^0.1.0",
+    "@agent-server/protocol": "npm:@zvada/agent-server-protocol@^0.1.0"
   },
   "devDependencies": {
     "@electron-toolkit/tsconfig": "^2.0.0",
@@ -209,6 +209,6 @@
     ]
   },
   "overrides": {
-    "@agent-server/protocol": "file:../../agent-server/ndjamena/packages/protocol"
+    "@agent-server/protocol": "npm:@zvada/agent-server-protocol@^0.1.0"
   }
 }
