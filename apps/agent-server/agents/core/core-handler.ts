@@ -184,6 +184,15 @@ export class CoreAgentHandler implements AgentHandler {
     state.cwd = options.cwd;
     state.lastOptions = options;
 
+    // Forced generator reset (backend recovery path): drop the warm engine
+    // session so this turn spawns a fresh subprocess; conversation context
+    // still resumes via options.resume (the native session id).
+    if (options.shouldResetGenerator) {
+      await getRuntime()
+        .closeSession(this.engineHarness, sessionId)
+        .catch(() => {});
+    }
+
     const bridge = new CoreEventBridge(sessionId, this.agentHarness, turnId, state);
     await getRuntime().run(
       {

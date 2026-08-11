@@ -40,6 +40,7 @@ function wrap(partEvent: PartEvent, messageId = "m1") {
         type: "message.done",
         ...base,
         messageId: partEvent.messageId,
+        ...(partEvent.stopReason ? { stopReason: partEvent.stopReason } : {}),
         parts: partEvent.parts,
         ...(partEvent.parentToolCallId ? { parentToolCallId: partEvent.parentToolCallId } : {}),
       };
@@ -244,6 +245,9 @@ describe("LifecycleToPartEvents", () => {
       timestamp: T,
     });
     expect((ended[0] as { parts: unknown[] }).parts).toHaveLength(1);
+    // Synthesized stop reason (the engine doesn't surface the model's): a
+    // message that ran tools stopped to use them.
+    expect((ended[0] as { stopReason?: string }).stopReason).toBe("tool_use");
   });
 
   it("emits the created→done pair for a tool terminal on first sight", () => {

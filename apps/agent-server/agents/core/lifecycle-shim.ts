@@ -194,10 +194,17 @@ export class LifecycleToPartEvents {
           .filter((p) => p.messageId === event.messageId)
           .sort((a, b) => (a.partIndex ?? 0) - (b.partIndex ?? 0));
         const parent = this.messageParents.get(event.messageId);
+        // Legacy adapters persisted the model's stop reason per message; the
+        // engine doesn't surface it on message.ended, so synthesize the two
+        // structural values (a message that ran tools stopped to use them).
+        // "cancelled"/"error" ride their own channels (message.cancelled /
+        // session.error), matching how the frontend actually detects them.
+        const stopReason = parts.some((p) => p.type === "TOOL") ? "tool_use" : "end_turn";
         return [
           {
             type: "message.done",
             messageId: event.messageId,
+            stopReason,
             parts,
             ...(parent ? { parentToolCallId: parent } : {}),
           },
