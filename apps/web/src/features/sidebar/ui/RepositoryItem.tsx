@@ -245,7 +245,7 @@ function RepositoryWorkspaceList({
             <button type="button">
               <SidebarRowMain>
                 <SidebarRowIconSlot>
-                  <Plus className="h-4 w-4" />
+                  <Plus className="h-3.5 w-3.5" />
                 </SidebarRowIconSlot>
                 <span className="font-normal">New workspace</span>
               </SidebarRowMain>

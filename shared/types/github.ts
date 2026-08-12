@@ -16,6 +16,8 @@ export interface CheckDetail {
  */
 export interface PRStatus {
   has_pr: boolean;
+  /** True when GitHub was actually queried — `has_pr: false` without it means "couldn't check". */
+  conclusive?: boolean;
   pr_number?: number;
   pr_title?: string;
   pr_url?: string;

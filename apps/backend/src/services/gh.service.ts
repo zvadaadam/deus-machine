@@ -137,6 +137,13 @@ export function classifyCheck(check: any): "passing" | "failing" | "pending" {
 
 export interface PrStatusResponse {
   has_pr: boolean;
+  /**
+   * True only when GitHub was successfully queried, so `has_pr: false` means
+   * "authoritatively no PR" rather than "couldn't check" (missing worktree,
+   * detached HEAD, unparseable gh output). Consumers persisting state must
+   * not clear a stored snapshot on inconclusive results.
+   */
+  conclusive?: boolean;
   pr_number?: number;
   pr_title?: string;
   pr_url?: string;
@@ -168,10 +175,11 @@ export async function getPrStatus(workspacePath: string): Promise<PrStatusRespon
     });
     headBranch = stdout.trim();
   } catch {
-    return { has_pr: false, error: null };
+    return { has_pr: false, conclusive: false, error: null };
   }
 
-  if (!headBranch || headBranch === "HEAD") return { has_pr: false, error: null };
+  if (!headBranch || headBranch === "HEAD")
+    return { has_pr: false, conclusive: false, error: null };
 
   // Resolve origin and upstream remotes for fork support
   const originUrl = await getGitRemoteUrl(workspacePath, "origin");
@@ -215,7 +223,7 @@ export async function getPrStatus(workspacePath: string): Promise<PrStatusRespon
         result.error === "gh_not_authenticated" ||
         result.error === "timeout"
       ) {
-        return { has_pr: false, error: result.error };
+        return { has_pr: false, conclusive: false, error: result.error };
       }
       lastError = result.error; // Track for surfacing if all attempts fail
       continue;
@@ -246,6 +254,7 @@ export async function getPrStatus(workspacePath: string): Promise<PrStatusRespon
       if (state === "closed") {
         return {
           has_pr: true,
+          conclusive: true,
           pr_number: pr.number,
           pr_title: pr.title,
           pr_url: pr.url,
@@ -293,6 +302,7 @@ export async function getPrStatus(workspacePath: string): Promise<PrStatusRespon
 
       return {
         has_pr: true,
+        conclusive: true,
         pr_number: pr.number,
         pr_title: pr.title,
         pr_url: pr.url,
@@ -312,5 +322,9 @@ export async function getPrStatus(workspacePath: string): Promise<PrStatusRespon
 
   // If all attempts failed with errors, surface it instead of silently showing "no PR".
   // lastError is only set for 'unknown' errors (timeout/auth/install return immediately).
-  return { has_pr: false, error: !hadSuccessfulResponse && lastError ? "network" : null };
+  return {
+    has_pr: false,
+    conclusive: hadSuccessfulResponse,
+    error: !hadSuccessfulResponse && lastError ? "network" : null,
+  };
 }

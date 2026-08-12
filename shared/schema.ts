@@ -24,11 +24,38 @@ export const PRELAUNCH_SCHEMA_RESET_HINT =
   "This local database was created with an older pre-launch schema. Reset it by deleting deus.db (or point DATABASE_PATH at a fresh file), then restart Deus.";
 
 export const PRELAUNCH_REQUIRED_COLUMNS = {
-  workspaces: ["status"],
+  // pr_* columns are additive (see ADDITIVE_COLUMNS) and asserted here only
+  // AFTER applyAdditiveColumns has run, so a failed ALTER surfaces at boot
+  // with the reset hint instead of as a "no such column" error at first query.
+  workspaces: [
+    "status",
+    "pr_state",
+    "pr_is_draft",
+    "pr_review_status",
+    "pr_has_conflicts",
+    "pr_ci_status",
+    "pr_checked_at",
+  ],
   sessions: ["agent_harness", "error_category"],
   messages: ["stop_reason"],
   parts: ["parent_tool_call_id"],
 } as const satisfies Record<string, readonly string[]>;
+
+/**
+ * Additive columns applied to existing databases via ALTER TABLE at startup.
+ * Purely additive (nullable or defaulted) — no reset required, unlike
+ * PRELAUNCH_REQUIRED_COLUMNS breaks. Keep in sync with SCHEMA_SQL.
+ */
+export const ADDITIVE_COLUMNS = {
+  workspaces: {
+    pr_state: "TEXT",
+    pr_is_draft: "INTEGER NOT NULL DEFAULT 0",
+    pr_review_status: "TEXT",
+    pr_has_conflicts: "INTEGER NOT NULL DEFAULT 0",
+    pr_ci_status: "TEXT",
+    pr_checked_at: "TEXT",
+  },
+} as const satisfies Record<string, Record<string, string>>;
 
 export const SCHEMA_SQL = `
   -- Repositories tracked by the app (id = UUID7, embeds created_at)
@@ -55,6 +82,12 @@ export const SCHEMA_SQL = `
     current_session_id TEXT,
     pr_url TEXT,
     pr_number INTEGER,
+    pr_state TEXT,
+    pr_is_draft INTEGER NOT NULL DEFAULT 0,
+    pr_review_status TEXT,
+    pr_has_conflicts INTEGER NOT NULL DEFAULT 0,
+    pr_ci_status TEXT,
+    pr_checked_at TEXT,
     archive_commit TEXT,
     archived_at TEXT,
     setup_status TEXT NOT NULL DEFAULT 'none',

@@ -28,6 +28,7 @@ import {
   persistSessionTitle,
   type WriteResult,
 } from "./persistence";
+import { refreshPrSnapshotForSession } from "../pr-snapshot.service";
 
 // ---- Types ----
 
@@ -97,6 +98,8 @@ export function createAgentEventHandler(deps: {
       .with({ type: "session.idle" }, (e) => {
         console.log(`[AgentEvent] session.idle: session=${e.sessionId}`);
         persistAndInvalidate(persistSessionIdle(e), SESSION_RESOURCES, e.sessionId);
+        // Turn ended — the agent may have created or updated a PR.
+        void refreshPrSnapshotForSession(e.sessionId);
       })
       .with({ type: "session.contextUsage" }, (e) => {
         persistAndInvalidate(persistSessionContextUsage(e), SESSION_RESOURCES, e.sessionId);
