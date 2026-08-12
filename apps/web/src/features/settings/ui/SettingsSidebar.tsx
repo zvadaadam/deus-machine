@@ -1,6 +1,15 @@
 import { useEffect, useRef } from "react";
 import type { ComponentType, SVGAttributes } from "react";
-import { ArrowLeft, Settings2, Orbit, Box, FlaskConical, Globe, UserCircle } from "lucide-react";
+import {
+  ArrowLeft,
+  Settings2,
+  Orbit,
+  Box,
+  FlaskConical,
+  Globe,
+  Chrome,
+  UserCircle,
+} from "lucide-react";
 import { capabilities } from "@/platform";
 import { GitHubIcon } from "@/shared/components/icons/GitHubIcon";
 import {
@@ -28,6 +37,7 @@ const NAV_ITEMS: NavItem[] = [
   { id: "account", label: "Account", icon: UserCircle },
   { id: "general", label: "General", icon: Settings2 },
   { id: "github", label: "GitHub", icon: GitHubIcon },
+  { id: "browser", label: "Browser", icon: Chrome, capability: "nativeBrowser" },
   { id: "ai", label: "AI Providers", icon: Orbit },
   { id: "environment", label: "Environment", icon: Box },
   { id: "experimental", label: "Experimental", icon: FlaskConical },
