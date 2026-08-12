@@ -7,7 +7,7 @@ vi.mock("child_process", () => ({
   execFileSync: mockExecFileSync,
 }));
 
-import { createCheckpoint } from "../agents/claude/checkpoint";
+import { createCheckpoint } from "../agents/core/checkpoint";
 
 describe("createCheckpoint", () => {
   beforeEach(() => {

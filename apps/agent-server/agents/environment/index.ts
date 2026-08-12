@@ -4,9 +4,3 @@
 export { parseEnvString, buildAgentEnvironment } from "./env-builder";
 export { getShellEnvironment } from "./shell-env";
 export { getProjectName, buildWorkspaceContext } from "./workspace-context";
-export {
-  discoverExecutable,
-  blockIfNotInitialized,
-  type DiscoveryConfig,
-  type DiscoveryState,
-} from "./cli-discovery";

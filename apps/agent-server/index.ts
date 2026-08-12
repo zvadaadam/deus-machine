@@ -25,9 +25,8 @@ import {
   initializeAllAgents,
   getRegisteredAgentHarnesses,
 } from "./agents/registry";
-import { ClaudeAgentHandler } from "./agents/claude/claude-handler";
-import { CodexAgentHandler } from "./agents/codex/codex-handler";
-import { CodexServerAgentHandler } from "./agents/codex-server/codex-server-handler";
+import { adoptBundledClis } from "./agents/core/bundled-clis";
+import { CoreAgentHandler } from "./agents/core/core-handler";
 import { installFileLogger } from "./logging";
 import { killChildProcesses } from "./process-cleanup";
 import { registerRpcMethods } from "./rpc-methods";
@@ -146,9 +145,14 @@ class AgentServer {
   async start(): Promise<void> {
     await this.cleanup();
 
-    registerAgent(new ClaudeAgentHandler());
-    registerAgent(new CodexAgentHandler());
-    registerAgent(new CodexServerAgentHandler());
+    // All harnesses run on the embedded @agent-server/core engine — the
+    // in-repo engine implementations are gone (phase B of the consolidation).
+    // Packaged/staged runtimes: adopt bundled CLIs before the engine registry
+    // exists (its provisioner honors the CLI-path env overrides).
+    adoptBundledClis();
+    registerAgent(new CoreAgentHandler("claude"));
+    registerAgent(new CoreAgentHandler("codex-sdk"));
+    registerAgent(new CoreAgentHandler("codex-server"));
 
     console.log("Initializing agent handlers...");
     this.initializedAgents.clear();

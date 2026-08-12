@@ -10,7 +10,7 @@ import { AGENT_EVENT_NAMES } from "@shared/agent-events";
 import type { AgentEvent, InteractionRequestType } from "@shared/agent-events";
 import type { AgentHarness, ErrorCategory } from "@shared/enums";
 import type { FinishReason, Part, TokenUsage } from "@shared/messages";
-import type { PartEvent } from "./messages/adapter";
+import type { PartEvent } from "@shared/agent-events";
 import type {
   MessageResponse,
   ErrorResponse,
@@ -153,6 +153,19 @@ class EventBroadcasterClass {
       type: AGENT_EVENT_NAMES.SESSION_CANCELLED,
       sessionId,
       agentHarness,
+    });
+  }
+
+  emitSessionContextUsage(
+    sessionId: string,
+    agentHarness: AgentHarness,
+    usage: { used: number; size?: number; cost?: number }
+  ): void {
+    this.emitEvent({
+      type: AGENT_EVENT_NAMES.SESSION_CONTEXT_USAGE,
+      sessionId,
+      agentHarness,
+      ...usage,
     });
   }
 
