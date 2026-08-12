@@ -1,13 +1,13 @@
 // agent-server/agents/core/core-handler.ts
-// deus's AgentHandler implemented over the embedded @agent-server/core engine —
+// deus's AgentHandler implemented over the embedded @zvada/agent-server/core engine —
 // the only engine path (the in-repo claude/codex implementations are gone).
 // This file is just the handler: per-turn config assembly and lifecycle
 // forwarding. The engine wiring lives in ./engine, the event translation in
 // ./event-bridge (+ ./lifecycle-shim), tool decisions in ./tool-policy, and
 // shared per-session state in ./session-state.
 
-import { callbackSink, generateUUIDv7 } from "@agent-server/core";
-import type { AgentInput, LifecycleEvent } from "@agent-server/protocol";
+import { callbackSink, generateUUIDv7 } from "@zvada/agent-server/core";
+import type { AgentInput, LifecycleEvent } from "@zvada/agent-server/protocol";
 import type { AgentHandler, ContextUsageParams, QueryOptions } from "../registry";
 import { buildAgentEnvironment } from "../environment/env-builder";
 import { createCheckpoint } from "./checkpoint";
