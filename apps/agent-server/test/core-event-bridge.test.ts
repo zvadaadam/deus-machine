@@ -3,7 +3,7 @@
 // densest logic in the core path — asserted here against a scripted sequence
 // and real EventBroadcaster spies.
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import type { LifecycleEvent } from "@agent-server/protocol";
+import type { LifecycleEvent } from "@zvada/agent-server/protocol";
 import { EventBroadcaster } from "../event-broadcaster";
 import { CoreEventBridge } from "../agents/core/event-bridge";
 import type { CoreSession } from "../agents/core/session-state";

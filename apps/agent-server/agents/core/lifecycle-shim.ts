@@ -6,7 +6,7 @@
 // so a shape mismatch here silently drops content (see the shim test, which
 // parses every emission).
 
-import type { LifecycleEvent, Part as EnginePart, StopReason } from "@agent-server/protocol";
+import type { LifecycleEvent, Part as EnginePart, StopReason } from "@zvada/agent-server/protocol";
 import type { FinishReason, Part, ToolPart, TokenUsage } from "@shared/messages";
 import type { PartEvent } from "@shared/agent-events";
 

@@ -2,7 +2,7 @@
 // AAP dynamic MCP registry: apps register/unregister MCP servers at runtime
 // and every live Claude session picks them up mid-conversation.
 //
-// Since the @agent-server/core embedding, all the per-query bookkeeping this
+// Since the @zvada/agent-server/core embedding, all the per-query bookkeeping this
 // file used to carry (protected SDK servers, attach/detach lifecycles,
 // per-query payload merging) lives in the engine: `setAapMcpServers` persists
 // the map for future turns and live-swaps it onto running sessions via the
@@ -10,7 +10,7 @@
 // `deus` tool server on every swap — an AAP app can never drop the host's own
 // tools, and a failed swap throws instead of silently reporting "attached".
 
-import type { McpServerConfig } from "@agent-server/protocol";
+import type { McpServerConfig } from "@zvada/agent-server/protocol";
 import { getErrorMessage } from "@shared/lib/errors";
 import { setAapMcpServers } from "./agents/core/core-handler";
 
