@@ -357,12 +357,19 @@ function handleSendMessage(params: QueryParams): CommandResult {
     }
   }
 
-  // A send against a working session would persist a user message that no
-  // agent will ever answer (the wire rejects the turn with turnActive and the
-  // composer shows nothing). Reject up front — the q:command error surfaces
-  // in the UI. The wire guard stays as the backstop for the status race.
-  if (session?.status === "working") {
-    throw new Error("The agent is still working — wait for the current turn to finish.");
+  // A send against an active turn would persist a user message that no agent
+  // will ever answer (the wire rejects the turn with turnActive and the
+  // composer shows nothing). "Needs input" counts as active too: plan
+  // approval and questions park the RUNNING turn while the overlay waits.
+  // Reject up front — the q:command error surfaces in the UI. The wire guard
+  // stays as the backstop for the status race.
+  const ACTIVE_TURN_STATUSES = ["working", "needs_plan_response", "needs_response"];
+  if (session && ACTIVE_TURN_STATUSES.includes(session.status)) {
+    throw new Error(
+      session.status === "working"
+        ? "The agent is still working — wait for the current turn to finish."
+        : "The agent is waiting for your response — answer the pending prompt first."
+    );
   }
 
   // 1. Persist the user message
