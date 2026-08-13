@@ -5735,6 +5735,7 @@
                           "content": "Auth flow for mobile",
                           "fontFamily": "Inter",
                           "fontSize": 13,
+                          "fontWeight": "normal",
                           "letterSpacing": -0.14
                         },
                         {
@@ -5810,6 +5811,7 @@
                           "content": "Payments retry queue",
                           "fontFamily": "Inter",
                           "fontSize": 13,
+                          "fontWeight": "normal",
                           "letterSpacing": -0.14
                         },
                         {
@@ -5926,6 +5928,7 @@
                           "content": "Refactor query engine",
                           "fontFamily": "Inter",
                           "fontSize": 13,
+                          "fontWeight": "normal",
                           "letterSpacing": -0.14
                         }
                       ]
@@ -5991,6 +5994,7 @@
                           "content": "Fix onboarding crash",
                           "fontFamily": "Inter",
                           "fontSize": 13,
+                          "fontWeight": "normal",
                           "letterSpacing": -0.14
                         }
                       ]
@@ -6056,6 +6060,7 @@
                           "content": "callisto-5",
                           "fontFamily": "Inter",
                           "fontSize": 13,
+                          "fontWeight": "normal",
                           "letterSpacing": -0.14
                         }
                       ]
