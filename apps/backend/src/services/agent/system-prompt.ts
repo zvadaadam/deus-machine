@@ -1,11 +1,11 @@
-// agent-server/agents/core/system-prompt.ts
+// backend/src/services/agent/system-prompt.ts
 // The deus system-prompt append, fed to the embedded engine as
 // RunConfig.systemPromptAppend. Ported verbatim from the legacy handlers:
 // claude got workspace context + the screen-recording tool briefing (the
 // recording tools live in the in-process deus MCP suite); the codex harnesses
 // got workspace context only (they run without the deus tool suite).
 
-import { buildWorkspaceContext } from "../environment";
+import { buildWorkspaceContext } from "./workspace-context";
 
 const FALLBACK_CONTEXT =
   "You are working inside Deus, a desktop app that orchestrates multiple AI coding agents in parallel.";

@@ -7,12 +7,13 @@
 export {
   init,
   shutdown,
-  forwardTurn,
+  startTurn,
   stopSession,
   isConnected,
   checkAuth,
   getAgents,
-  sendRequestToAgent,
+  registerAapMcp,
+  unregisterAapMcp,
 } from "./service";
 
 export { runCommand } from "./commands";

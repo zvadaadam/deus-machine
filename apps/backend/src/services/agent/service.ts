@@ -1,22 +1,29 @@
 // backend/src/services/agent/service.ts
 // Composition root for agent-server communication.
 //
-// Creates the AgentClient, wires the event handler with injected dependencies,
-// and exposes typed methods for other services to call. No circular imports —
-// this module imports from its dependencies, none of them import back.
+// Wires the AgentLink (standard wire + deus side channel), the
+// LifecycleTranslator (engine events → deus AgentEvents), and the event
+// handler (persistence + WS push). No circular imports — this module imports
+// from its dependencies, none of them import back.
 //
 // Dependency graph (all arrows point down, no cycles):
 //
 //   service (this file)
-//       ├── client              (WebSocket transport)
+//       ├── client              (AgentLink: wire + side channel)
+//       ├── translate/          (LifecycleTranslator + shim + classifiers)
 //       ├── event-handler       (factory: createAgentEventHandler)
+//       ├── run-config          (turn params assembly)
 //       └── tool-relay          (frontend RPC relay)
 //
 // Initialized once at startup in server.ts via agentService.init().
 
 import path from "path";
-import { AgentClient } from "./client";
+import type { AgentHarness } from "@shared/enums";
+import type { ProviderAuthRequest, AgentInfo } from "@shared/agent-events";
+import { AgentLink } from "./client";
 import { createAgentEventHandler } from "./event-handler";
+import { LifecycleTranslator } from "./translate/translator";
+import { buildTurnStartParams, type DeusTurnOptions } from "./run-config";
 import { relay } from "./tool-relay";
 import {
   persistSessionNeedsPlanResponse,
@@ -30,132 +37,189 @@ import { DB_PATH, getDatabase } from "../../lib/database";
 import { getSessionRaw, getWorkspaceForMiddleware } from "../../db";
 import { requireParam } from "../../lib/query-params";
 import { computeWorkspacePath } from "../../middleware/workspace-loader";
-import type {
-  TurnStartRequest,
-  TurnStartResponse,
-  SessionStopRequest,
-  ProviderAuthRequest,
-} from "@shared/agent-events";
 
 // ---- Singleton ----
 
-let client: AgentClient | null = null;
+let link: AgentLink | null = null;
+let translator: LifecycleTranslator | null = null;
+let disposed = false;
 
-/** Initialize the agent service. Call once at startup. */
+const RECONNECT_BASE_MS = 1_000;
+const RECONNECT_MAX_MS = 30_000;
+
+/** Initialize the agent service. Call once at startup. Connects in the
+ *  background and keeps retrying — same contract as the legacy client. */
 export function init(agentServerUrl: string): void {
-  if (client) {
+  if (link || translator) {
     console.warn("[AgentService] Already initialized, skipping");
     return;
   }
+  disposed = false;
 
-  client = new AgentClient({
-    url: agentServerUrl,
-
-    onEvent: createAgentEventHandler(),
-
-    onConnected: (agents) => {
-      console.log(`[AgentService] Connected, agents: [${agents.map((a) => a.type).join(", ")}]`);
-    },
-    onDisconnected: () => {
-      console.log("[AgentService] Disconnected from agent-server");
-    },
-
-    // Handle AAP RPCs from the agent-server's deus-tools (list_apps,
-    // launch_app, stop_app). These are server-to-server: we resolve against
-    // apps.service directly, no frontend relay.
-    onAapRpc: async (method, params) => {
-      return handleAapRpc(method, params);
-    },
-
-    // Relay agent-server's frontend-facing RPC requests (browser, diff, plan)
-    onFrontendRpc: async (requestId, sessionId, method, params) => {
-      // Handle simulator context locally — the backend owns this state,
-      // no need to relay to the frontend.
-      if (method === "getSimulatorContext") {
-        return getContextForSession(sessionId);
-      }
-
-      const isUserFacing = method === "exitPlanMode" || method === "askUserQuestion";
-      const sessionResources = ["workspaces", "sessions", "session", "stats"] as const;
-
-      // User-facing methods: update session status so sidebar shows "needs input" instead of "working"
-      if (method === "exitPlanMode") {
-        const result = persistSessionNeedsPlanResponse(sessionId);
-        if (result.ok) invalidate([...sessionResources], { sessionIds: [sessionId] });
-      } else if (method === "askUserQuestion") {
-        const result = persistSessionNeedsResponse(sessionId);
-        if (result.ok) invalidate([...sessionResources], { sessionIds: [sessionId] });
-      }
-
-      try {
-        return await relay({
-          type: "tool.request",
-          requestId,
-          sessionId,
-          method,
-          params,
-          // User-facing methods wait indefinitely; auto-responding keep 2-min timeout
-          timeoutMs: isUserFacing ? 24 * 60 * 60 * 1000 : 120_000,
-        });
-      } finally {
-        if (isUserFacing) {
-          const result = persistSessionBackToWorking(sessionId);
-          if (result.ok) invalidate([...sessionResources], { sessionIds: [sessionId] });
-        }
-      }
+  const handleAgentEvent = createAgentEventHandler();
+  translator = new LifecycleTranslator({
+    emit: handleAgentEvent,
+    // Events arriving without a beginTurn (replay after a backend restart)
+    // resolve their harness from the session row.
+    resolveHarness: (sessionId) => {
+      const session = getSessionRaw(getDatabase(), sessionId);
+      return (session?.agent_harness as AgentHarness | undefined) ?? undefined;
     },
   });
 
-  client.connect();
+  void establishLink(agentServerUrl, handleAgentEvent);
 }
 
-/** Gracefully shut down the agent client. */
+async function establishLink(
+  url: string,
+  handleAgentEvent: ReturnType<typeof createAgentEventHandler>
+): Promise<void> {
+  for (let attempt = 0; !disposed; attempt++) {
+    try {
+      link = await AgentLink.connect({
+        url,
+        onEnvelope: (envelope) => translator?.handle(envelope),
+        onConnected: (agents) => {
+          console.log(
+            `[AgentService] Connected, agents: [${agents.map((a) => a.type).join(", ")}]`
+          );
+        },
+        onDisconnected: () => {
+          console.log("[AgentService] Disconnected from agent-server");
+        },
+        onToolRequest: (method, params) => handleToolRequest(method, params),
+        onTitle: ({ sessionId, agentHarness, title }) => {
+          handleAgentEvent({
+            type: "session.title",
+            sessionId,
+            agentHarness: agentHarness as AgentHarness,
+            title,
+          });
+        },
+      });
+      return;
+    } catch (err) {
+      const delay = Math.min(RECONNECT_BASE_MS * 2 ** attempt, RECONNECT_MAX_MS);
+      console.error(
+        `[AgentService] Connect failed (${err instanceof Error ? err.message : err}); retrying in ${delay}ms`
+      );
+      await new Promise((resolve) => setTimeout(resolve, delay));
+    }
+  }
+}
+
+/** Gracefully shut down the agent link. */
 export function shutdown(): void {
-  client?.disconnect();
-  client = null;
+  disposed = true;
+  void link?.close();
+  link = null;
+  translator = null;
 }
 
-// ---- Public API (typed wrappers) ----
+// ---- Public API ----
 
-/** Forward a turn/start request to the agent-server. */
-export async function forwardTurn(params: TurnStartRequest): Promise<TurnStartResponse> {
-  if (!client) throw new Error("Agent service not initialized");
-  return client.sendTurnStart(params);
+/**
+ * Start a turn on the agent-server (quick-ack; completion arrives as
+ * lifecycle events). Emits the deus session.started once the server accepted
+ * the turn — mirroring the legacy accept path. Throws on rejection
+ * (WireRequestError with typed codes) or when disconnected.
+ */
+export async function startTurn(
+  sessionId: string,
+  turnId: string,
+  agentHarness: AgentHarness,
+  prompt: string,
+  options: DeusTurnOptions
+): Promise<void> {
+  if (!link) throw new Error("Agent service not initialized");
+  const params = buildTurnStartParams(sessionId, turnId, agentHarness, prompt, options);
+  await link.startTurn(params);
+  translator?.beginTurn(sessionId, agentHarness, turnId);
 }
 
-/** Stop a session on the agent-server. */
-export async function stopSession(params: SessionStopRequest): Promise<void> {
-  if (!client) throw new Error("Agent service not initialized");
-  return client.sendSessionStop(params);
+/** Cancel a session's active turn (best-effort, idempotent). */
+export async function stopSession(params: { sessionId: string }): Promise<void> {
+  if (!link) throw new Error("Agent service not initialized");
+  await link.cancelTurn(params.sessionId);
 }
 
-/** Check if the agent service is connected. */
+/** Check if the agent link is connected. */
 export function isConnected(): boolean {
-  return client?.isConnected() ?? false;
+  return link?.isConnected() ?? false;
 }
 
 /** Check authentication status for an agent provider. */
 export async function checkAuth(params: ProviderAuthRequest): Promise<unknown> {
-  if (!client) throw new Error("Agent service not initialized");
-  return client.sendProviderAuth(params);
+  if (!link) throw new Error("Agent service not initialized");
+  return link.providerAuth(params);
 }
 
 /** Returns the agents discovered during the initialize handshake. */
-export function getAgents() {
-  return client?.getAgents() ?? [];
+export function getAgents(): ReadonlyArray<AgentInfo> {
+  return link?.getAgents() ?? [];
 }
 
-/**
- * Send an arbitrary outbound RPC to the agent-server. Returns the raw
- * response; callers are responsible for shape validation.
- *
- * Currently used by the AAP mcp-bridge to fire register/unregister RPCs
- * when an app transitions to ready / stops. If it grows more consumers
- * we'll split it out into typed wrappers — for now keep one generic.
- */
-export async function sendRequestToAgent(method: string, params: unknown): Promise<unknown> {
-  if (!client) throw new Error("Agent service not initialized");
-  return client.sendRequest(method, params);
+/** Register an AAP app's MCP server with the agent-server (mid-turn hot-swap). */
+export async function registerAapMcp(serverName: string, url: string): Promise<void> {
+  if (!link) throw new Error("Agent service not initialized");
+  await link.aapRegisterMcp(serverName, url);
+}
+
+/** Unregister an AAP app's MCP server. */
+export async function unregisterAapMcp(serverName: string): Promise<void> {
+  if (!link) throw new Error("Agent service not initialized");
+  await link.aapUnregisterMcp(serverName);
+}
+
+// ----------------------------------------------------------------------------
+// Side-channel tool dispatch (agent-server → backend)
+// ----------------------------------------------------------------------------
+
+/** Handle one tool round-trip from the agent's in-process deus MCP suite. */
+async function handleToolRequest(
+  method: string,
+  params: Record<string, unknown>
+): Promise<unknown> {
+  if (method.startsWith("aap/")) {
+    return handleAapRpc(method, params);
+  }
+
+  // Simulator context is backend state — no frontend relay.
+  if (method === "getSimulatorContext") {
+    const sessionId = requireParam(params, "sessionId", method);
+    return getContextForSession(sessionId);
+  }
+
+  const sessionId = requireParam(params, "sessionId", method);
+  const requestId = crypto.randomUUID();
+  const isUserFacing = method === "exitPlanMode" || method === "askUserQuestion";
+  const sessionResources = ["workspaces", "sessions", "session", "stats"] as const;
+
+  // User-facing methods: update session status so the sidebar shows
+  // "needs input" instead of "working".
+  if (method === "exitPlanMode") {
+    const result = persistSessionNeedsPlanResponse(sessionId);
+    if (result.ok) invalidate([...sessionResources], { sessionIds: [sessionId] });
+  } else if (method === "askUserQuestion") {
+    const result = persistSessionNeedsResponse(sessionId);
+    if (result.ok) invalidate([...sessionResources], { sessionIds: [sessionId] });
+  }
+
+  try {
+    return await relay({
+      requestId,
+      sessionId,
+      method,
+      params,
+      // User-facing methods wait indefinitely; auto-responding keep 2-min timeout
+      timeoutMs: isUserFacing ? 24 * 60 * 60 * 1000 : 120_000,
+    });
+  } finally {
+    if (isUserFacing) {
+      const result = persistSessionBackToWorking(sessionId);
+      if (result.ok) invalidate([...sessionResources], { sessionIds: [sessionId] });
+    }
+  }
 }
 
 // ----------------------------------------------------------------------------
@@ -209,8 +273,8 @@ export function resolveAapPaths(
 }
 
 /** Handle an AAP RPC dispatched by the agent-server's deus-tools. Throws on
- *  bad args or service errors — the json-rpc-2.0 library translates throws
- *  into error responses, which surface as `AAP error: …` in the tool result. */
+ *  bad args or service errors — the side channel translates throws into
+ *  error responses, which surface as `AAP error: …` in the tool result. */
 async function handleAapRpc(method: string, params: Record<string, unknown>): Promise<unknown> {
   if (method === "aap/list-apps") {
     // The agent's workspace is resolved from its sessionId — Claude can't

@@ -1,12 +1,15 @@
-#!/usr/bin/env node
+#!/usr/bin/env bun
 // backend/cli.ts
-// Self-contained CLI that tests the full event → persistence pipeline.
+// Self-contained CLI that tests the full event → persistence pipeline
+// WITHOUT the frontend: the standard wire + the backend's REAL translation.
 //
 // 1. Creates a workspace + session in the real DB (via sqlite3 CLI)
-// 2. Spawns the agent-server
-// 3. Sends a turn/start
-// 4. On each event: persists to DB (mimicking the backend event handler)
-// 5. Dumps the DB to verify everything stored correctly
+// 2. Spawns the agent-server bundle
+// 3. Connects backend-style (AgentServerClient + deus side channel + hello)
+// 4. Starts a turn with the backend's REAL run-config assembly
+// 5. Feeds every envelope through the backend's REAL LifecycleTranslator and
+//    persists the resulting AgentEvents (mimicking the event handler's SQL)
+// 6. Dumps the DB to verify everything stored correctly
 //
 // Usage:
 //   bun run cli:backend -- "Say hello"
@@ -18,6 +21,14 @@ import * as fs from "fs";
 import * as os from "os";
 import { fileURLToPath } from "url";
 import WebSocket from "ws";
+import { AgentServerClient } from "@zvada/agent-server/client";
+import { channelTransport, pushNdjsonLines } from "@zvada/agent-server/protocol";
+import { SIDE_CHANNEL, SideChannelEndpoint, filterClaimedLines } from "@shared/agent-side-channel";
+import type { LineTransport } from "@shared/agent-side-channel";
+import type { AgentEvent } from "@shared/agent-events";
+import type { AgentHarness } from "@shared/enums";
+import { LifecycleTranslator } from "./src/services/agent/translate/translator";
+import { buildTurnStartParams } from "./src/services/agent/run-config";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -301,86 +312,106 @@ async function main() {
   });
   console.log(`  ${c.green}Agent-server:${c.reset} ${wsUrl}`);
 
-  // 4. Connect
+  // 4. Connect backend-style: typed client + deus side channel + hello
   const ws = new WebSocket(wsUrl);
   await new Promise<void>((resolve, reject) => {
     ws.on("open", resolve);
     ws.on("error", reject);
   });
+  const {
+    transport,
+    push,
+    end: endTransport,
+  } = channelTransport({
+    send: (line) => ws.send(line),
+    close: () => ws.close(),
+  });
+  ws.on("message", (data: Buffer | string) => pushNdjsonLines(push, data));
+  ws.on("close", () => endTransport("socket closed"));
 
-  // Handshake
-  ws.send(JSON.stringify({ jsonrpc: "2.0", id: 1, method: "initialize", params: {} }));
-  ws.send(JSON.stringify({ jsonrpc: "2.0", method: "initialized", params: {} }));
-  await new Promise((r) => setTimeout(r, 1500));
+  const sideChannel = new SideChannelEndpoint((line) => transport.send(line), "cli-backend");
+  sideChannel.onRequest(SIDE_CHANNEL.exitPlanMode, () => ({ approved: true }));
+  sideChannel.onNotification(SIDE_CHANNEL.title, (params) => {
+    const { title } = (params ?? {}) as { title?: string };
+    console.log(`${ts()} ${c.magenta}◂ deus/title${c.reset} "${title}"`);
+  });
+  sideChannel.notify(SIDE_CHANNEL.hello, {});
 
-  // 5. Listen for events and persist
+  const client = await AgentServerClient.attach(
+    filterClaimedLines(transport as LineTransport, (line) => sideChannel.handleLine(line))
+  );
+  const init = await client.initialize();
+  console.log(
+    `  ${c.green}Handshake:${c.reset} v${init.protocolVersion} harnesses=[${Object.keys(init.harnesses).join(", ")}]`
+  );
+
+  // 5. The backend's REAL translation: LifecycleEvent envelopes → AgentEvents,
+  // persisted with the same SQL shapes the event handler uses.
   let turnDone = false;
   let partSeq = 0;
 
   banner("Events");
 
-  ws.on("message", (data: any) => {
-    const msg = JSON.parse(data.toString());
-    if (msg.id != null && msg.result !== undefined) return;
-
-    const method = msg.method;
-    const params = msg.params || {};
-
-    // Skip legacy/SDK passthrough
-    if (!method || !method.includes(".")) return;
-
-    // Color
+  const handleAgentEvent = (event: AgentEvent): void => {
     let color = c.cyan;
-    if (method.startsWith("turn.") || method.startsWith("session.")) color = c.magenta;
-    if (method.startsWith("part.")) color = c.green;
-    if (method.startsWith("message.")) color = c.blue;
-    if (method.includes("error")) color = c.red;
+    if (event.type.startsWith("turn.") || event.type.startsWith("session.")) color = c.magenta;
+    if (event.type.startsWith("part.")) color = c.green;
+    if (event.type.startsWith("message.")) color = c.blue;
+    if (event.type.includes("error")) color = c.red;
 
-    // Display
     let detail = "";
-    switch (method) {
+    switch (event.type) {
       case "message.created":
-        detail = `messageId=${params.messageId}`;
+        detail = `messageId=${event.messageId}`;
         sqlRun(
           dbPath,
-          `INSERT OR REPLACE INTO messages (id, session_id, role, sent_at) VALUES ('${params.messageId}', '${sessionId}', 'assistant', datetime('now'));`
+          `INSERT OR REPLACE INTO messages (id, session_id, role, sent_at) VALUES ('${event.messageId}', '${sessionId}', 'assistant', datetime('now'));`
         );
         detail += ` ${c.green}→ DB INSERT${c.reset}`;
         break;
 
       case "part.created":
-        detail = `${params.part?.type} partId=${params.partId}`;
+        detail = `${event.part.type} partId=${event.partId}`;
         break;
 
       case "part.delta":
-        detail = `delta="${(params.delta || "").slice(0, 40)}"`;
+        detail = `delta="${(event.delta || "").slice(0, 40)}"`;
         break;
 
       case "part.done": {
-        const part = params.part;
+        const part = event.part;
         const partData = JSON.stringify(part).replace(/'/g, "''");
-        const toolCallId = part?.type === "TOOL" ? part.toolCallId || "" : "";
-        const toolName = part?.type === "TOOL" ? part.toolName || "" : "";
-        const parentId = part?.parentToolCallId || "";
+        const toolCallId = part.type === "TOOL" ? part.toolCallId || "" : "";
+        const toolName = part.type === "TOOL" ? part.toolName || "" : "";
+        const parentId = part.parentToolCallId || "";
         const ok = sqlRun(
           dbPath,
-          `INSERT OR REPLACE INTO parts (id, message_id, session_id, seq, type, data, tool_call_id, tool_name, parent_tool_call_id) VALUES ('${params.partId}', '${params.messageId}', '${sessionId}', ${partSeq++}, '${part?.type}', '${partData}', '${toolCallId}', '${toolName}', '${parentId}');`
+          `INSERT OR REPLACE INTO parts (id, message_id, session_id, seq, type, data, tool_call_id, tool_name, parent_tool_call_id) VALUES ('${event.partId}', '${event.messageId}', '${sessionId}', ${partSeq++}, '${part.type}', '${partData}', '${toolCallId}', '${toolName}', '${parentId}');`
         );
-        detail = `${part?.type} partId=${params.partId} ${ok ? `${c.green}→ DB INSERT${c.reset}` : `${c.red}→ DB FAIL${c.reset}`}`;
+        detail = `${part.type} partId=${event.partId} ${ok ? `${c.green}→ DB INSERT${c.reset}` : `${c.red}→ DB FAIL${c.reset}`}`;
         break;
       }
 
       case "message.done":
-        detail = `stopReason=${params.stopReason || "none"}`;
+        detail = `stopReason=${event.stopReason || "none"}`;
         sqlRun(
           dbPath,
-          `UPDATE messages SET stop_reason='${params.stopReason || ""}' WHERE id='${params.messageId}';`
+          `UPDATE messages SET stop_reason='${event.stopReason || ""}' WHERE id='${event.messageId}';`
         );
         detail += ` ${c.green}→ DB UPDATE${c.reset}`;
         break;
 
       case "turn.completed":
-        detail = `finishReason=${params.finishReason || "none"}`;
+        detail = `finishReason=${event.finishReason || "none"}`;
+        break;
+
+      case "agent.session_id":
+        detail = `agentSessionId=${event.agentSessionId}`;
+        sqlRun(
+          dbPath,
+          `UPDATE sessions SET agent_session_id='${event.agentSessionId}' WHERE id='${sessionId}';`
+        );
+        detail += ` ${c.green}→ DB UPDATE${c.reset}`;
         break;
 
       case "session.idle":
@@ -389,34 +420,37 @@ async function main() {
         detail = "→ turn complete";
         break;
 
+      case "session.cancelled":
+        turnDone = true;
+        detail = "→ cancelled";
+        break;
+
       case "session.error":
-        detail = params.error || "unknown";
+        detail = event.error || "unknown";
         turnDone = true;
         break;
 
       default:
-        detail = JSON.stringify(params).slice(0, 50);
+        detail = JSON.stringify(event).slice(0, 50);
     }
 
-    console.log(`${ts()} ${c.green}◂${c.reset} ${color}${c.bold}${method}${c.reset} ${detail}`);
-  });
+    console.log(`${ts()} ${c.green}◂${c.reset} ${color}${c.bold}${event.type}${c.reset} ${detail}`);
+  };
 
-  // 6. Send turn/start
+  const translator = new LifecycleTranslator({ emit: handleAgentEvent });
+  client.onEvent((envelope) => translator.handle(envelope));
+
+  // 6. Start the turn with the backend's REAL run-config assembly
   banner("Sending Turn");
   console.log(`  ${c.dim}${opts.prompt}${c.reset}\n`);
 
-  ws.send(
-    JSON.stringify({
-      jsonrpc: "2.0",
-      method: "turn/start",
-      params: {
-        sessionId,
-        agentHarness: opts.agent,
-        prompt: opts.prompt,
-        options: { cwd: opts.cwd, permissionMode: "default" },
-      },
-    })
-  );
+  const turnId = uuid7();
+  const params = buildTurnStartParams(sessionId, turnId, opts.agent as AgentHarness, opts.prompt, {
+    cwd: opts.cwd,
+    permissionMode: "default",
+  });
+  await client.startTurn(params);
+  translator.beginTurn(sessionId, opts.agent as AgentHarness, turnId);
 
   // 7. Wait for completion
   await new Promise<void>((resolve) => {
@@ -444,6 +478,7 @@ async function main() {
       : `  ${c.red}${c.bold}FAIL${c.reset}: No parts persisted`
   );
 
+  await client.close();
   ws.close();
   proc.kill("SIGTERM");
   process.exit(partCount > 0 ? 0 : 1);

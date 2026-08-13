@@ -7,7 +7,7 @@ import * as os from "node:os";
 import * as path from "node:path";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { decideToolUse } from "../agents/core/tool-policy";
-import { sessions } from "../agents/core/session-state";
+import { trackedSessions } from "../session-tracker";
 
 const SID = "policy-test-session";
 let workspace: string;
@@ -17,11 +17,11 @@ beforeAll(() => {
   workspace = fs.mkdtempSync(path.join(os.tmpdir(), "deus-ws-"));
   outside = fs.mkdtempSync(path.join(os.tmpdir(), "deus-outside-"));
   fs.symlinkSync(outside, path.join(workspace, "evil-link"));
-  sessions.set(SID, { cwd: workspace });
+  trackedSessions.set(SID, { harness: "claude-code", cwd: workspace });
 });
 
 afterAll(() => {
-  sessions.delete(SID);
+  trackedSessions.delete(SID);
   fs.rmSync(workspace, { recursive: true, force: true });
   fs.rmSync(outside, { recursive: true, force: true });
 });

@@ -1,4 +1,4 @@
-// agent-server/agents/environment/workspace-context.ts
+// backend/src/services/agent/workspace-context.ts
 // Shared workspace context for agent system prompts.
 // Both Claude and Codex handlers use this to tell agents about the
 // Deus orchestrator, worktree location, and actual project name.

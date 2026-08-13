@@ -13,6 +13,9 @@
 import { match } from "ts-pattern";
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
+import { WireRequestError } from "@zvada/agent-server/client";
+import { uuidv7 } from "@shared/lib/uuid";
+import type { ThinkingLevel, PermissionMode } from "@shared/protocol";
 import { getDatabase } from "../../lib/database";
 import { getSessionRaw, getWorkspaceForMiddleware } from "../../db";
 import { computeWorkspacePath } from "../../middleware/workspace-loader";
@@ -365,12 +368,12 @@ function handleSendMessage(params: QueryParams): CommandResult {
   const existingAgentSessionId = session?.agent_session_id ?? null;
 
   // Resolve cwd server-side from session → workspace → repo.
-  // Clear any caller-provided value so the server is authoritative.
-  delete params.cwd;
+  // The server is authoritative; caller-provided values are ignored.
+  let cwd: string | undefined;
   if (session) {
     const workspace = getWorkspaceForMiddleware(db, session.workspace_id);
     if (workspace) {
-      params.cwd = computeWorkspacePath(workspace);
+      cwd = computeWorkspacePath(workspace) ?? undefined;
     }
   }
 
@@ -378,22 +381,30 @@ function handleSendMessage(params: QueryParams): CommandResult {
     handleAgentError(sessionId, agentHarness, new Error("Agent server is disconnected"));
     return { commandId: result.messageId };
   }
+  if (!cwd) {
+    handleAgentError(sessionId, agentHarness, new Error("Session has no resolvable workspace"));
+    return { commandId: result.messageId };
+  }
 
+  const turnId = readString(params, "turnId") ?? uuidv7();
   agentService
-    .forwardTurn({
-      sessionId,
-      agentHarness,
-      prompt: content,
-      options: buildTurnOptions(params, model, existingAgentSessionId) as Parameters<
-        typeof agentService.forwardTurn
-      >[0]["options"],
-    })
-    .then((response) => {
-      if (!response.accepted) {
-        handleAgentRejection(sessionId, agentHarness, response.reason);
-      }
+    .startTurn(sessionId, turnId, agentHarness, content, {
+      cwd,
+      model,
+      thinkingLevel: readString(params, "thinkingLevel") as ThinkingLevel | undefined,
+      permissionMode: readString(params, "permissionMode") as PermissionMode | undefined,
+      maxTurns: params.maxTurns as number | undefined,
+      additionalDirectories: params.additionalDirectories as string[] | undefined,
+      resume: existingAgentSessionId || readString(params, "resume"),
+      resumeSessionAt: readString(params, "resumeSessionAt"),
     })
     .catch((err) => {
+      if (err instanceof WireRequestError) {
+        // Typed rejections from the standard wire (turnActive, harness
+        // unavailable, shutting down, invalid params) — the turn never ran.
+        handleAgentRejection(sessionId, agentHarness, err.message);
+        return;
+      }
       handleAgentError(sessionId, agentHarness, err);
     });
 
@@ -457,24 +468,6 @@ async function handleStopApp(params: QueryParams): Promise<CommandResult> {
 }
 
 // ---- Helpers ----
-
-function buildTurnOptions(
-  params: QueryParams,
-  model: string | undefined,
-  resume: string | null
-): Record<string, unknown> {
-  return {
-    cwd: readString(params, "cwd") || "",
-    model,
-    thinkingLevel: readString(params, "thinkingLevel"),
-    maxTurns: params.maxTurns as number | undefined,
-    turnId: readString(params, "turnId"),
-    permissionMode: readString(params, "permissionMode"),
-    additionalDirectories: params.additionalDirectories as string[] | undefined,
-    resume: resume || readString(params, "resume"),
-    resumeSessionAt: readString(params, "resumeSessionAt"),
-  };
-}
 
 function handleAgentRejection(sessionId: string, agentHarness: string, reason?: string): void {
   const msg = reason || "Agent rejected the message";

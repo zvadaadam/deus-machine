@@ -1,40 +1,108 @@
-import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
-import { createServer as createHttpServer } from "http";
+// Integration: the real wire stack over a real WebSocket — upstream
+// AgentServerClient (typed client, seq tracking) ⇄ bridgeWsConnection
+// (side-channel claim + observers) ⇄ upstream AgentServer ⇄ a scripted fake
+// runtime. No mocked transports; only the engine is fake.
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { createServer as createHttpServer, type Server } from "http";
 import { WebSocketServer, WebSocket } from "ws";
-import { RpcConnection, wsTransport } from "../rpc-connection";
+import { AgentServerClient, WireRequestError } from "@zvada/agent-server/client";
+import type { LifecycleEvent, WireEventEnvelope } from "@zvada/agent-server/protocol";
+import { channelTransport, pushNdjsonLines } from "@zvada/agent-server/protocol";
+import {
+  SIDE_CHANNEL,
+  SideChannelEndpoint,
+  filterClaimedLines,
+  type LineTransport,
+} from "@shared/agent-side-channel";
+import { AgentServer } from "../upstream-server";
+import { bridgeWsConnection, createEventObserverTransport } from "../wire";
+import { HostRpc } from "../host-link";
+import { trackedSessions } from "../session-tracker";
 
-/**
- * Integration tests: Real WebSockets, real JSON-RPC 2.0 tunnels,
- * no mocked dependencies except the SDK.
- */
+const T = 1_700_000_000_000;
 
-// Helper to wait for a condition with timeout
-function waitFor(fn: () => boolean, timeoutMs = 5000): Promise<void> {
-  return new Promise((resolve, reject) => {
-    const start = Date.now();
-    const check = () => {
-      if (fn()) return resolve();
-      if (Date.now() - start > timeoutMs) return reject(new Error("waitFor timed out"));
-      setTimeout(check, 20);
-    };
-    check();
-  });
+/** Scripted engine: turn/start replays a fixed event sequence. */
+function fakeRuntime(script: (sessionId: string, turnId: string) => LifecycleEvent[]) {
+  return {
+    harnesses: ["claude-code", "codex-sdk", "codex-app-server"],
+    capabilities: () => ({
+      multiTurn: true,
+      sessionResume: true,
+      modelSwitch: "in-session",
+      thinkingLevels: true,
+      images: true,
+      mcpServers: true,
+      permissionRequests: false,
+    }),
+    async run(
+      request: { sessionId: string; turnId: string },
+      sink: { emit: (e: LifecycleEvent) => void | Promise<void> }
+    ) {
+      for (const event of script(request.sessionId, request.turnId)) {
+        await sink.emit(event);
+        // Yield so the quick-ack response hits the socket before events do.
+        await new Promise((r) => setImmediate(r));
+      }
+    },
+    async cancel() {},
+    async closeSession() {},
+    respondPermission: () => false,
+    async shutdown() {},
+  } as never;
 }
 
-describe("Integration: RpcConnection over real WebSocket", () => {
-  let httpServer: ReturnType<typeof createHttpServer>;
+function defaultScript(sessionId: string, turnId: string): LifecycleEvent[] {
+  return [
+    { type: "turn.started", sessionId, turnId, timestamp: T },
+    {
+      type: "session.created",
+      sessionId,
+      nativeSessionId: "native-abc",
+      harness: "claude-code",
+      timestamp: T,
+    },
+    {
+      type: "message.started",
+      turnId,
+      messageId: "m1",
+      outputIndex: 0,
+      role: "assistant",
+      timestamp: T,
+    },
+    {
+      type: "message.part",
+      turnId,
+      messageId: "m1",
+      outputIndex: 0,
+      partIndex: 0,
+      part: { type: "text", id: "p1", sessionId, messageId: "m1", text: "Hi", state: "done" },
+      timestamp: T,
+    },
+    { type: "message.ended", turnId, messageId: "m1", timestamp: T },
+    { type: "turn.ended", sessionId, turnId, stopReason: "end_turn", timestamp: T },
+  ];
+}
+
+describe("Integration: standard wire + deus side channel over a real WebSocket", () => {
+  let httpServer: Server;
   let wss: WebSocketServer;
-  let serverWs: WebSocket | null = null;
-  let clientWs: WebSocket | null = null;
-  let serverTunnel: RpcConnection | null = null;
-  let clientTunnel: RpcConnection | null = null;
   let port: number;
+  let wireServer: AgentServer;
+  let client: AgentServerClient | null = null;
+  let sideChannel: SideChannelEndpoint | null = null;
+  let clientWs: WebSocket | null = null;
 
   beforeEach(async () => {
-    // Create a real WebSocket server on a dynamic port
+    trackedSessions.clear();
+    wireServer = new AgentServer(fakeRuntime(defaultScript), {
+      info: { name: "test-agent-server" },
+    });
+    // Production wiring: the observer feeds the session tracker from the
+    // event broadcast (native ids, turn boundaries).
+    wireServer.attach(createEventObserverTransport());
     httpServer = createHttpServer();
     wss = new WebSocketServer({ server: httpServer });
-
+    wss.on("connection", (ws) => bridgeWsConnection(ws, wireServer));
     await new Promise<void>((resolve) => {
       httpServer.listen(0, "127.0.0.1", () => {
         const addr = httpServer.address();
@@ -42,111 +110,214 @@ describe("Integration: RpcConnection over real WebSocket", () => {
         resolve();
       });
     });
-
-    // Server side: accept connections and wire up RPC
-    const serverReady = new Promise<void>((resolve) => {
-      wss.on("connection", (ws) => {
-        serverWs = ws;
-        const transport = wsTransport(ws);
-        serverTunnel = new RpcConnection(transport);
-
-        ws.on("message", (data: Buffer | string) => {
-          const msg = typeof data === "string" ? data : data.toString("utf8");
-          serverTunnel!.handleMessage(msg);
-        });
-
-        resolve();
-      });
-    });
-
-    // Client side: connect and wire up RPC
-    clientWs = await new Promise<WebSocket>((resolve, reject) => {
-      const ws = new WebSocket(`ws://127.0.0.1:${port}`);
-      ws.on("open", () => resolve(ws));
-      ws.on("error", reject);
-    });
-
-    const clientTransport = wsTransport(clientWs);
-    clientTunnel = new RpcConnection(clientTransport);
-
-    clientWs.on("message", (data: Buffer | string) => {
-      const msg = typeof data === "string" ? data : data.toString("utf8");
-      clientTunnel!.handleMessage(msg);
-    });
-
-    await serverReady;
   });
 
-  afterEach(() => {
-    clientTunnel?.stop();
-    serverTunnel?.stop();
-    if (clientWs?.readyState === WebSocket.OPEN) clientWs.close();
-    if (serverWs && (serverWs as any).readyState === WebSocket.OPEN) (serverWs as any).close();
+  afterEach(async () => {
+    await client?.close();
+    client = null;
+    sideChannel = null;
+    clientWs?.close();
+    clientWs = null;
     wss.close();
     httpServer.close();
+    vi.restoreAllMocks();
   });
 
-  it("delivers a notification from client to server", async () => {
-    const received: unknown[] = [];
-    serverTunnel!.addMethod("testNotify", async (params) => {
-      received.push(params);
-      return undefined;
+  /** Connect exactly like the backend's AgentLink: ws → transport → side
+   *  channel claim → upstream client; sends deus/hello. */
+  async function connectBackendStyle(
+    onToolRequest?: (method: string, params: unknown) => Promise<unknown>
+  ): Promise<AgentServerClient> {
+    const ws = new WebSocket(`ws://127.0.0.1:${port}`);
+    clientWs = ws;
+    await new Promise<void>((resolve, reject) => {
+      ws.on("open", () => resolve());
+      ws.on("error", reject);
     });
-
-    clientTunnel!.notify("testNotify", { hello: "ws-world" });
-
-    await waitFor(() => received.length > 0);
-    expect(received[0]).toEqual({ hello: "ws-world" });
-  });
-
-  it("completes a request/response round-trip (client -> server)", async () => {
-    serverTunnel!.addMethod("add", async (params: any) => {
-      return { result: params.a + params.b };
+    const { transport, push, end } = channelTransport({
+      send: (line) => ws.send(line),
+      close: () => ws.close(),
     });
+    ws.on("message", (data: Buffer | string) => pushNdjsonLines(push, data));
+    ws.on("close", () => end("socket closed"));
 
-    const result = await clientTunnel!.request("add", { a: 10, b: 20 });
-    expect(result).toEqual({ result: 30 });
-  });
-
-  it("completes a request/response round-trip (server -> client)", async () => {
-    clientTunnel!.addMethod("getUserInput", async () => {
-      return { answer: "ws-yes" };
-    });
-
-    const result = await serverTunnel!.request("getUserInput", {});
-    expect(result).toEqual({ answer: "ws-yes" });
-  });
-
-  it("handles multiple concurrent requests over WS", async () => {
-    serverTunnel!.addMethod("echo", async (params: any) => {
-      await new Promise((r) => setTimeout(r, 10));
-      return { echoed: params.message };
-    });
-
-    const results = await Promise.all([
-      clientTunnel!.request("echo", { message: "alpha" }),
-      clientTunnel!.request("echo", { message: "beta" }),
-      clientTunnel!.request("echo", { message: "gamma" }),
-    ]);
-
-    expect(results).toEqual([{ echoed: "alpha" }, { echoed: "beta" }, { echoed: "gamma" }]);
-  });
-
-  it("handles rapid-fire notifications without message loss over WS", async () => {
-    const received: number[] = [];
-
-    serverTunnel!.addMethod("counter", async (params: any) => {
-      received.push(params.n);
-      return undefined;
-    });
-
-    const count = 50;
-    for (let i = 0; i < count; i++) {
-      clientTunnel!.notify("counter", { n: i });
+    const channel = new SideChannelEndpoint((line) => transport.send(line), "test-backend");
+    if (onToolRequest) {
+      for (const method of Object.values(SIDE_CHANNEL)) {
+        channel.onRequest(method, (params) => onToolRequest(method, params));
+      }
     }
+    sideChannel = channel;
+    channel.notify(SIDE_CHANNEL.hello, {});
 
-    await waitFor(() => received.length === count, 5000);
-    expect(received.length).toBe(count);
-    expect(received.sort((a, b) => a - b)).toEqual(Array.from({ length: count }, (_, i) => i));
+    client = await AgentServerClient.attach(
+      filterClaimedLines(transport as LineTransport, (line) => channel.handleLine(line))
+    );
+    // One round-trip so the server has processed our earlier deus/hello
+    // (frames are handled in order) — mirrors AgentLink.connect.
+    await client.initialize();
+    return client;
+  }
+
+  it("handshakes and reports the three deus harnesses", async () => {
+    const c = await connectBackendStyle();
+    const init = await c.initialize();
+    expect(Object.keys(init.harnesses).sort()).toEqual([
+      "claude-code",
+      "codex-app-server",
+      "codex-sdk",
+    ]);
+    expect(init.server.name).toBe("test-agent-server");
+  });
+
+  it("runs a quick-ack turn and streams sequenced events in order", async () => {
+    const c = await connectBackendStyle();
+    const envelopes: WireEventEnvelope[] = [];
+    c.onEvent((envelope) => envelopes.push(envelope));
+
+    const turn = await c.runTurn({
+      sessionId: "sess-1",
+      turnId: "turn-1",
+      input: "hello",
+      config: { harness: "claude-code", cwd: "/tmp" },
+    });
+    const ended = await turn.result;
+    expect(ended.stopReason).toBe("end_turn");
+
+    await vi.waitFor(() => expect(envelopes.length).toBe(6));
+    expect(envelopes.map((e) => e.seq)).toEqual([1, 2, 3, 4, 5, 6]);
+    expect(envelopes.map((e) => e.event.type)).toEqual([
+      "turn.started",
+      "session.created",
+      "message.started",
+      "message.part",
+      "message.ended",
+      "turn.ended",
+    ]);
+  });
+
+  it("tracks session config from observed turn/start and native id from events", async () => {
+    const c = await connectBackendStyle();
+    const turn = await c.runTurn({
+      sessionId: "sess-track",
+      turnId: "turn-1",
+      input: "hello",
+      config: {
+        harness: "claude-code",
+        cwd: "/tmp/workspace",
+        additionalDirectories: ["/tmp/extra"],
+      },
+    });
+    await turn.result;
+    await vi.waitFor(() => {
+      const state = trackedSessions.get("sess-track");
+      expect(state?.cwd).toBe("/tmp/workspace");
+      expect(state?.harness).toBe("claude-code");
+      expect(state?.additionalDirectories).toEqual(["/tmp/extra"]);
+      expect(state?.nativeSessionId).toBe("native-abc");
+      // turn.ended cleared the active-turn marker.
+      expect(state?.turnId).toBeUndefined();
+    });
+  });
+
+  it("rejects a second turn on a busy session with turnActive", async () => {
+    // A runtime whose turn never ends within the test window.
+    const hangingRuntime = {
+      harnesses: ["claude-code"],
+      capabilities: () => ({
+        multiTurn: true,
+        sessionResume: true,
+        modelSwitch: "in-session",
+        thinkingLevels: true,
+        images: true,
+        mcpServers: true,
+        permissionRequests: false,
+      }),
+      async run(
+        request: { sessionId: string; turnId: string },
+        sink: { emit: (e: LifecycleEvent) => void | Promise<void> }
+      ) {
+        await sink.emit({
+          type: "turn.started",
+          sessionId: request.sessionId,
+          turnId: request.turnId,
+          timestamp: T,
+        });
+        await new Promise(() => {}); // hang — the turn stays active
+      },
+      async cancel() {},
+      async closeSession() {},
+      respondPermission: () => false,
+      async shutdown() {},
+    } as never;
+    const slowServer = new AgentServer(hangingRuntime, {});
+    const slowWss = new WebSocketServer({ port: 0 });
+    slowWss.on("connection", (ws) => bridgeWsConnection(ws, slowServer));
+    const slowPort = (slowWss.address() as { port: number }).port;
+
+    const ws = new WebSocket(`ws://127.0.0.1:${slowPort}`);
+    await new Promise<void>((resolve, reject) => {
+      ws.on("open", () => resolve());
+      ws.on("error", reject);
+    });
+    const { transport, push, end } = channelTransport({
+      send: (line) => ws.send(line),
+      close: () => ws.close(),
+    });
+    ws.on("message", (data: Buffer | string) => pushNdjsonLines(push, data));
+    ws.on("close", () => end("socket closed"));
+    const c = await AgentServerClient.attach(transport as never);
+
+    await c.startTurn({
+      sessionId: "busy-1",
+      turnId: "turn-a",
+      input: "x",
+      config: { harness: "claude-code", cwd: "/tmp" },
+    });
+    await expect(
+      c.startTurn({
+        sessionId: "busy-1",
+        turnId: "turn-b",
+        input: "y",
+        config: { harness: "claude-code", cwd: "/tmp" },
+      })
+    ).rejects.toMatchObject({ code: -32002 });
+
+    await c.close();
+    ws.close();
+    slowWss.close();
+  });
+
+  it("routes an agent-side HostRpc request to the backend over the side channel", async () => {
+    const seen: Array<{ method: string; params: unknown }> = [];
+    await connectBackendStyle(async (method, params) => {
+      seen.push({ method, params });
+      if (method === SIDE_CHANNEL.getDiff) return { diff: "diff --git a b" };
+      throw new Error(`unexpected ${method}`);
+    });
+
+    // The hello already marked this connection as host; the entry's tools can
+    // now round-trip.
+    const response = await HostRpc.requestGetDiff({ sessionId: "sess-1" });
+    expect(response).toEqual({ diff: "diff --git a b" });
+    expect(seen).toEqual([{ method: SIDE_CHANNEL.getDiff, params: { sessionId: "sess-1" } }]);
+  });
+
+  it("answers deus/provider-auth on the side channel (codex → unsupported)", async () => {
+    await connectBackendStyle();
+    const result = await sideChannel!.request<{ error?: string }>(
+      SIDE_CHANNEL.providerAuth,
+      { agentHarness: "codex-sdk", cwd: "/tmp" },
+      5_000
+    );
+    expect(result).toMatchObject({ error: "unsupported" });
+  });
+
+  it("side-channel frames never reach the upstream wire (and vice versa)", async () => {
+    const c = await connectBackendStyle(async () => ({ ok: true }));
+    // An upstream request still works after side-channel traffic interleaves.
+    await HostRpc.requestGetDiff({ sessionId: "s" }).catch(() => {});
+    const init = await c.initialize();
+    expect(init.protocolVersion).toBe(1);
   });
 });

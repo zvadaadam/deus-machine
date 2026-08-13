@@ -6,7 +6,11 @@
 import { describe, expect, it } from "vitest";
 import type { LifecycleEvent } from "@zvada/agent-server/protocol";
 import { AgentEventSchema, type PartEvent } from "@shared/agent-events";
-import { LifecycleToPartEvents, toDeusPart, toDeusTokens } from "../agents/core/lifecycle-shim";
+import {
+  LifecycleToPartEvents,
+  toDeusPart,
+  toDeusTokens,
+} from "../../../src/services/agent/translate/lifecycle-shim";
 
 const T = 1_700_000_000_000;
 

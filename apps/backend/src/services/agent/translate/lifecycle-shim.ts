@@ -1,4 +1,4 @@
-// agent-server/agents/core/lifecycle-shim.ts
+// backend/src/services/agent/translate/lifecycle-shim.ts
 // Translate the embedded engine's LifecycleEvent stream into deus's PartEvents
 // so the existing EventBroadcaster wire format (the frontend contract) stays
 // byte-compatible. Every emitted part must satisfy deus's zod schemas — the

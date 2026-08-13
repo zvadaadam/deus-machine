@@ -1,0 +1,33 @@
+// agent-server/title-watch.ts
+// Best-effort session title after a successful claude turn: the SDK
+// auto-summarizes sessions; the backend names the session AND an untitled
+// workspace from the pushed title. Runs agent-server-side because it needs
+// the claude SDK's listSessions against the session's cwd; the result rides
+// the deus/title side-channel notification. Fire-and-forget.
+
+import { SIDE_CHANNEL } from "@shared/agent-side-channel";
+import { notifyHost } from "./host-link";
+import { trackedSessions } from "./session-tracker";
+
+/** Kick a title fetch after a turn ended cleanly (idle, not error/cancel). */
+export function maybeFetchTitle(sessionId: string): void {
+  const state = trackedSessions.get(sessionId);
+  if (!state || state.harness !== "claude-code" || state.titleFetched) return;
+  const { cwd, nativeSessionId } = state;
+  if (!cwd || !nativeSessionId) return;
+  void (async () => {
+    try {
+      const { listSessions } = await import("@anthropic-ai/claude-agent-sdk");
+      const sessions = await listSessions({ dir: cwd, limit: 20 });
+      const title = sessions.find((s) => s.sessionId === nativeSessionId)?.summary;
+      if (title) {
+        // Flag only on success: the SDK summary usually lags the first turn,
+        // so keep retrying at each turn end until one exists.
+        state.titleFetched = true;
+        notifyHost(SIDE_CHANNEL.title, { sessionId, agentHarness: "claude", title });
+      }
+    } catch (error) {
+      console.error(`[title-watch] title fetch failed for ${sessionId}:`, error);
+    }
+  })();
+}
