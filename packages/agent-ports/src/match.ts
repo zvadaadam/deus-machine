@@ -2,7 +2,7 @@
 // Project detection: map a session's cwd onto what Deus already knows.
 // Pure functions — the backend service supplies repos/workspaces from the DB.
 
-import type { PortableSessionHead } from "./types.ts";
+import type { PortableSessionHead } from "./types";
 
 export interface KnownRepo {
   id: string;

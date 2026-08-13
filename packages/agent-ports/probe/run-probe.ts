@@ -11,10 +11,10 @@
 import { promises as fsp } from "node:fs";
 import { homedir, tmpdir } from "node:os";
 import { join } from "node:path";
-import * as claudeCode from "../src/providers/claude-code.ts";
-import * as codex from "../src/providers/codex.ts";
-import * as cursor from "../src/providers/cursor.ts";
-import type { FullParseStats, PortableSessionHead } from "../src/types.ts";
+import * as claudeCode from "../src/providers/claude-code";
+import * as codex from "../src/providers/codex";
+import * as cursor from "../src/providers/cursor";
+import type { FullParseStats, PortableSessionHead } from "../src/types";
 
 const HOME = homedir();
 const headsOnly = process.argv.includes("--heads-only");

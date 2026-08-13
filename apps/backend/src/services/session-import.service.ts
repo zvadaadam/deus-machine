@@ -36,7 +36,7 @@ import {
   type PortMessage,
   type PortableSession,
   type PortableSessionHead,
-} from "../../../../packages/agent-ports/src/index.ts";
+} from "../../../../packages/agent-ports/src/index";
 
 const SCAN_TTL_MS = 30_000;
 const SCAN_MAX_AGE_DAYS = 180;

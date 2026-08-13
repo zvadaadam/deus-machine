@@ -17,8 +17,8 @@
 //             message JSON in agentKv blobs (see blobRefs/mapBlobMessage)
 // All three parse; a header with none of them means the body is not local.
 
-import { openSqlite, type SqliteDb } from "../sqlite.ts";
-import { mapPool } from "../pool.ts";
+import { openSqlite, type SqliteDb } from "../sqlite";
+import { mapPool } from "../pool";
 import { promises as fsp } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -28,7 +28,7 @@ import type {
   PortPart,
   PortableSession,
   PortableSessionHead,
-} from "../types.ts";
+} from "../types";
 
 // blob — modern glass format: conversationState ("~" + base64 protobuf) is a
 //        list of SHA256 refs into agentKv:blob:<hash>, each a plaintext

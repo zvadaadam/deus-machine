@@ -13,7 +13,7 @@
 import { createReadStream, promises as fsp } from "node:fs";
 import { createInterface } from "node:readline";
 import { join } from "node:path";
-import { mapPool } from "../pool.ts";
+import { mapPool } from "../pool";
 import type {
   FullParseStats,
   PortMessage,
@@ -22,7 +22,7 @@ import type {
   PortableSession,
   PortableSessionHead,
   ScanOptions,
-} from "../types.ts";
+} from "../types";
 
 const HEAD_BYTES = 128 * 1024;
 const DAY_MS = 24 * 60 * 60 * 1000;
