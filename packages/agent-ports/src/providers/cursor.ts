@@ -487,11 +487,19 @@ function mapBlobMessage(
         if (str(b.type) !== "tool-result") continue;
         const toolCallId = str(b.toolCallId);
         const output = b.result ?? b.experimental_content;
+        const failed = b.isError === true;
+        const errorText = failed
+          ? typeof output === "string"
+            ? output
+            : JSON.stringify(output ?? "Tool failed")
+          : undefined;
         const pending = toolCallId ? pendingTools.get(toolCallId) : undefined;
         if (pending) {
           // Complete the original call in place — no duplicate part, no
-          // false "Interrupted" conversion downstream.
-          pending.state = { status: "COMPLETED", input: pending.state.input, output };
+          // false "Interrupted" conversion downstream. Failures stay failures.
+          pending.state = failed
+            ? { status: "ERROR", input: pending.state.input, error: errorText! }
+            : { status: "COMPLETED", input: pending.state.input, output };
           pendingTools.delete(toolCallId!);
           continue;
         }
@@ -501,7 +509,7 @@ function mapBlobMessage(
           toolCallId: toolCallId ?? `blob-result-${stats.records}`,
           toolName: str(b.toolName) ?? "unknown",
           kind: "other",
-          state: { status: "COMPLETED", output },
+          state: failed ? { status: "ERROR", error: errorText! } : { status: "COMPLETED", output },
         });
       }
     }

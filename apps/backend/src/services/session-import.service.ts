@@ -387,7 +387,9 @@ export async function importExternalSession(params: QueryParams): Promise<{
         ? await codex.fullParse(head)
         : await cursor.fullParse(head as Parameters<typeof cursor.fullParse>[0]);
 
-  const importableMessages = parsed.messages.filter((m) => !shouldSkipMessage(m));
+  const importableMessages = parsed.messages.filter(
+    (m) => !shouldSkipMessage(m) && hasRenderableContent(m)
+  );
   if (importableMessages.length === 0) {
     throw new Error("Nothing to import — the session's content could not be read from the source");
   }
@@ -428,6 +430,18 @@ function markImportedInSnapshot(key: string, sessionId: string): void {
   }
 }
 
+/** At least one part (or user text) must survive canonicalization — empty
+ *  REASONING/TEXT parts are dropped there and must not count as content. */
+function hasRenderableContent(message: PortMessage): boolean {
+  if (message.text?.trim()) return true;
+  return message.parts.some(
+    (p) =>
+      p.type === "TOOL" ||
+      p.type === "COMPACTION" ||
+      ((p.type === "TEXT" || p.type === "REASONING") && p.text.trim().length > 0)
+  );
+}
+
 function shouldSkipMessage(message: PortMessage): boolean {
   if (!message.isMeta) return false;
   // Meta messages that only carry plain text (env preambles, hook echoes) are
@@ -453,7 +467,10 @@ function insertImportedSession(
 ): string {
   const sessionId = uuidv7();
   const provider = head.identity.provider;
-  const harness = provider === "codex" ? "codex-sdk" : "claude";
+  // codex-server is the user-selectable codex harness (codex-sdk is legacy and
+  // absent from the model picker — a codex-sdk-locked session could never
+  // accept a reply).
+  const harness = provider === "codex" ? "codex-server" : "claude";
   const agentSessionId = provider === "cursor" ? null : head.identity.sessionId;
   const messages = parsed.messages.filter((m) => !shouldSkipMessage(m));
   const lastUserAt =

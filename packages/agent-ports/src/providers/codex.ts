@@ -369,7 +369,9 @@ export async function fullParse(head: PortableSessionHead): Promise<PortableSess
             .map((b) => str(obj(b)?.text) ?? "")
             .filter(Boolean)
             .join("\n") || contentText(payload.content);
-        assistant().parts.push({ type: "REASONING", text });
+        // Encrypted reasoning with no summary yields "" — an empty part would
+        // count as importable content while rendering nothing.
+        if (text) assistant().parts.push({ type: "REASONING", text });
         break;
       }
       case "function_call":
@@ -411,10 +413,13 @@ export async function fullParse(head: PortableSessionHead): Promise<PortableSess
           try {
             const parsed = JSON.parse(output);
             if (obj(parsed)) {
-              const metadata = obj((parsed as Record<string, unknown>).metadata);
+              const record = parsed as Record<string, unknown>;
+              const metadata = obj(record.metadata);
+              // exit_code appears nested (metadata) or top-level depending on
+              // the tool/version — honor either before declaring success.
               if (typeof metadata?.exit_code === "number") exitCode = metadata.exit_code;
-              if ("output" in (parsed as object))
-                output = (parsed as Record<string, unknown>).output;
+              else if (typeof record.exit_code === "number") exitCode = record.exit_code;
+              if ("output" in record) output = record.output;
             }
           } catch {
             /* raw string output */
