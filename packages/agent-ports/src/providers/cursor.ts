@@ -319,6 +319,10 @@ function mapBubble(
       }
     }
     const status = str(tfd.status);
+    // Unfinished bubble states stay RUNNING so the importer marks them
+    // interrupted instead of rendering a phantom success.
+    const unfinished =
+      status !== undefined && status !== "completed" && status !== "success" && status !== "error";
     parts.push({
       type: "TOOL",
       toolCallId: str(tfd.toolCallId) ?? `bubble-${str(bubble.bubbleId) ?? "?"}`,
@@ -327,7 +331,9 @@ function mapBubble(
       state:
         status === "error"
           ? { status: "ERROR", input, error: str(tfd.error) ?? "error" }
-          : { status: "COMPLETED", input, output },
+          : unfinished
+            ? { status: "RUNNING", input }
+            : { status: "COMPLETED", input, output },
     });
   }
 

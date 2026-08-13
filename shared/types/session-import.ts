@@ -18,6 +18,8 @@ export interface ImportableSessionDTO {
   cwd: string;
   lastTimestamp?: string;
   messageCount: number;
+  /** True when the count came from a bounded head read (real total may be higher). */
+  approximateCount?: boolean;
   sizeBytes: number;
   model?: string;
   imported: boolean;

@@ -223,7 +223,7 @@ export function ImportSessionsModal({ open, onClose, onOpenWorkspace }: ImportSe
             Conversations found on this Mac, grouped by the project they were worked on.
           </DialogDescription>
           {/* Provider filter chips */}
-          <div className="mt-3 flex items-center gap-1.5">
+          <div className="mt-3 flex flex-wrap items-center gap-1.5">
             {ALL_PROVIDERS.map((provider) => {
               const active = enabledProviders.has(provider);
               return (
@@ -371,8 +371,9 @@ export function ImportSessionsModal({ open, onClose, onOpenWorkspace }: ImportSe
                                     {session.title}
                                   </div>
                                   <div className="text-text-muted mt-0.5 text-[11px]">
-                                    {PROVIDER_LABEL[session.provider]} · {session.messageCount}{" "}
-                                    messages · {relativeTime(session.lastTimestamp)}
+                                    {PROVIDER_LABEL[session.provider]} · {session.messageCount}
+                                    {session.approximateCount ? "+" : ""} messages ·{" "}
+                                    {relativeTime(session.lastTimestamp)}
                                   </div>
                                 </div>
                                 <Button

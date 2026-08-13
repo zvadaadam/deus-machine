@@ -43,6 +43,7 @@ const SCAN_MAX_AGE_DAYS = 180;
 const MAX_SESSIONS_PER_PROVIDER = 120;
 const MAX_TOOL_PAYLOAD_CHARS = 16_384;
 const MAX_USER_CONTENT_CHARS = 65_536;
+const MAX_TEXT_PART_CHARS = 262_144;
 
 export type { ImportableGroup, ImportableSessionDTO, ImportableSessionsSnapshot };
 
@@ -161,6 +162,7 @@ async function refreshImportableSessions(): Promise<void> {
         cwd: head.identity.cwd,
         lastTimestamp: lastActivityIso(head),
         messageCount: head.messageCount,
+        approximateCount: head.truncatedHead || undefined,
         sizeBytes: head.sourceSizeBytes,
         model: head.model,
         imported: imported !== undefined,
@@ -270,6 +272,24 @@ function cursorUserDir(home: string): string {
   return join(process.env.XDG_CONFIG_HOME ?? join(home, ".config"), "Cursor", "User");
 }
 
+/** Remove copy dirs left by previous processes (tracking is in-memory only,
+ *  so restarts would otherwise accumulate Cursor DB copies in tmp). */
+async function sweepStaleCopyDirs(): Promise<void> {
+  let entries: string[];
+  try {
+    entries = await fsp.readdir(tmpdir());
+  } catch {
+    return;
+  }
+  await Promise.all(
+    entries
+      .filter((name) => name.startsWith("deus-agent-ports-"))
+      .map((name) => join(tmpdir(), name))
+      .filter((dir) => !cursorCopyDirs.includes(dir))
+      .map((dir) => fsp.rm(dir, { recursive: true, force: true }).catch(() => {}))
+  );
+}
+
 async function scanCursor(home: string): Promise<PortableSessionHead[]> {
   const userDir = cursorUserDir(home);
   const src = join(userDir, "globalStorage", "state.vscdb");
@@ -282,6 +302,7 @@ async function scanCursor(home: string): Promise<PortableSessionHead[]> {
   // must outlive their scan — imports full-parse from them later, and a stale
   // subscriber can still click rows from the previous snapshot — so keep the
   // current AND previous generation, deleting only older ones.
+  await sweepStaleCopyDirs();
   const copyDir = await fsp.mkdtemp(join(tmpdir(), "deus-agent-ports-"));
   cursorCopyDirs.push(copyDir);
   while (cursorCopyDirs.length > 2) {
@@ -502,7 +523,7 @@ function toCanonicalPart(
         sessionId,
         messageId,
         partIndex,
-        text: part.text,
+        text: capString(part.text, MAX_TEXT_PART_CHARS),
         state: "DONE",
         parentToolCallId: part.parentToolCallId,
       };
@@ -514,7 +535,7 @@ function toCanonicalPart(
         sessionId,
         messageId,
         partIndex,
-        text: part.text,
+        text: capString(part.text, MAX_TEXT_PART_CHARS),
         state: "DONE",
         parentToolCallId: part.parentToolCallId,
       };
