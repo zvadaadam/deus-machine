@@ -43,7 +43,10 @@ function fakeRuntime(script: (sessionId: string, turnId: string) => LifecycleEve
         await new Promise((r) => setImmediate(r));
       }
     },
-    async cancel() {},
+    admission: () => ({ status: "new" }),
+    async cancel() {
+      return { confirmed: true };
+    },
     async closeSession() {},
     respondPermission: () => false,
     async shutdown() {},
@@ -237,7 +240,10 @@ describe("Integration: standard wire + deus side channel over a real WebSocket",
         });
         await new Promise(() => {}); // hang — the turn stays active
       },
-      async cancel() {},
+      admission: () => ({ status: "new" }),
+      async cancel() {
+        return { confirmed: true };
+      },
       async closeSession() {},
       respondPermission: () => false,
       async shutdown() {},

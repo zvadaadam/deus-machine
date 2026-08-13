@@ -43,7 +43,7 @@
     "@hono/node-server": "^1.19.9",
     "@napi-rs/canvas": "^0.1.97",
     "@openai/codex": "0.146.1",
-    "@openai/codex-sdk": "0.130.0",
+    "@openai/codex-sdk": "0.146.1",
     "@sentry/node": "^10.40.0",
     "agent-browser": "^0.21.4",
     "better-sqlite3": "^12.4.1",

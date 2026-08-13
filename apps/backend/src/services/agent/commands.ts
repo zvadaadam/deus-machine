@@ -357,6 +357,14 @@ function handleSendMessage(params: QueryParams): CommandResult {
     }
   }
 
+  // A send against a working session would persist a user message that no
+  // agent will ever answer (the wire rejects the turn with turnActive and the
+  // composer shows nothing). Reject up front — the q:command error surfaces
+  // in the UI. The wire guard stays as the backstop for the status race.
+  if (session?.status === "working") {
+    throw new Error("The agent is still working — wait for the current turn to finish.");
+  }
+
   // 1. Persist the user message
   const result = writeUserMessage(sessionId, content, model);
   if (!result.success) throw new Error(result.error);

@@ -1,3 +1,4 @@
+import { useMemo } from "react";
 import { match } from "ts-pattern";
 import { Wrench } from "lucide-react";
 import { BaseToolRenderer } from "../components";
@@ -67,30 +68,37 @@ function ContentBlockRenderer({ block }: { block: ContentBlock }) {
     .exhaustive();
 }
 
-function safeJsonPreview(value: unknown): string | undefined {
-  try {
-    return JSON.stringify(value);
-  } catch {
-    return undefined;
+/** Bounded preview of a non-primitive input value — never serializes the
+ *  whole payload (codex apply_patch inputs can be megabytes). */
+function boundedPreview(value: unknown): string {
+  if (value == null) return "";
+  if (Array.isArray(value)) return `[${value.length} item${value.length === 1 ? "" : "s"}]`;
+  if (typeof value === "object") {
+    const keys = Object.keys(value);
+    return `{${keys.slice(0, 3).join(", ")}${keys.length > 3 ? ", …" : ""}}`;
   }
+  return String(value);
 }
 
 export function DefaultToolRenderer({ toolUse, toolResult, isLoading }: ToolRendererProps) {
   // Prefer the first primitive input value for the summary; objects/arrays
-  // stringify as "[object Object]" noise (e.g. codex apply_patch's `changes`),
-  // so fall back to a compact JSON preview instead.
+  // get a bounded structural preview (e.g. codex apply_patch's `changes` →
+  // "[2 items]") — never a full serialization, memoized across renders.
   const input = toolUse.input || {};
-  const firstPrimitive = Object.values(input).find(
-    (value) => typeof value === "string" || typeof value === "number" || typeof value === "boolean"
-  );
-  const firstInputKey = Object.keys(input)[0];
-  const firstInputValue = (
-    firstPrimitive !== undefined
-      ? String(firstPrimitive)
-      : firstInputKey
-        ? (safeJsonPreview(input[firstInputKey]) ?? "")
-        : ""
-  ).substring(0, 40);
+  const firstInputValue = useMemo(() => {
+    const firstPrimitive = Object.values(input).find(
+      (value) =>
+        typeof value === "string" || typeof value === "number" || typeof value === "boolean"
+    );
+    const firstKey = Object.keys(input)[0];
+    const raw =
+      firstPrimitive !== undefined
+        ? String(firstPrimitive)
+        : firstKey
+          ? boundedPreview(input[firstKey])
+          : "";
+    return raw.substring(0, 40);
+  }, [input]);
 
   return (
     <BaseToolRenderer

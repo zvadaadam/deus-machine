@@ -151,6 +151,11 @@ export class LifecycleTranslator {
       default:
     }
 
+    // Keep the active-turn marker truthful on the replay path too: state
+    // rebuilt via resolveHarness has no turnId, and the concurrent-send guard
+    // in beginTurn keys "busy" off it.
+    if (event.type === "turn.started" && event.turnId) state.turnId = event.turnId;
+
     this.emitParts(sessionId, state, event);
     if (event.type === "turn.ended") this.emitTerminalStatus(sessionId, state, event);
   }
