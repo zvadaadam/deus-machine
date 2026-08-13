@@ -402,8 +402,17 @@ function handleSendMessage(params: QueryParams): CommandResult {
     })
     .catch((err) => {
       if (err instanceof WireRequestError) {
-        // Typed rejections from the standard wire (turnActive, harness
-        // unavailable, shutting down, invalid params) — the turn never ran.
+        // turnActive (-32002): the session is legitimately mid-turn — the
+        // running turn must NOT be flipped to an error status. The send is
+        // dropped (UI guards against double-send; this is the backstop).
+        if (err.code === -32002) {
+          console.warn(
+            `[CommandHandler] sendMessage rejected, turn already active: session=${sessionId}`
+          );
+          return;
+        }
+        // Other typed rejections (harness unavailable, shutting down,
+        // invalid params) — the turn never ran.
         handleAgentRejection(sessionId, agentHarness, err.message);
         return;
       }

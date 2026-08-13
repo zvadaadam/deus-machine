@@ -246,4 +246,76 @@ describe("LifecycleTranslator", () => {
     // The deus turn.started carries the turnId as its messageId (legacy wire shape).
     expect(emitted[0]).toMatchObject({ messageId: "t1", turnId: "t1" });
   });
+
+  describe("concurrent-send protection (quick-ack turnActive)", () => {
+    it("beginTurn on a busy session is a no-op that preserves the live shim", () => {
+      // Live turn streams a part…
+      feed({ type: "turn.started", sessionId: "s1", turnId: "t1", timestamp: T });
+      feed({
+        type: "message.started",
+        turnId: "t1",
+        messageId: "m1",
+        outputIndex: 0,
+        role: "assistant",
+        timestamp: T,
+      });
+      feed({
+        type: "message.part",
+        turnId: "t1",
+        messageId: "m1",
+        outputIndex: 0,
+        partIndex: 0,
+        part: {
+          type: "text",
+          id: "p1",
+          sessionId: "s1",
+          messageId: "m1",
+          text: "streaming",
+          state: "streaming",
+        },
+        timestamp: T,
+      });
+      emitted.length = 0;
+
+      // …a doomed concurrent send registers: must refuse and emit nothing.
+      expect(translator.beginTurn("s1", "claude", "t2")).toBe(false);
+      expect(emitted).toEqual([]);
+
+      // The live turn's shim survived: its message.done still carries the part.
+      feed({
+        type: "message.part",
+        turnId: "t1",
+        messageId: "m1",
+        outputIndex: 0,
+        partIndex: 0,
+        part: {
+          type: "text",
+          id: "p1",
+          sessionId: "s1",
+          messageId: "m1",
+          text: "streaming done",
+          state: "done",
+        },
+        timestamp: T + 1,
+      });
+      feed({ type: "message.ended", turnId: "t1", messageId: "m1", timestamp: T + 2 });
+      const done = emitted.find((e) => e.type === "message.done");
+      expect(done).toMatchObject({ messageId: "m1" });
+      expect((done as Extract<AgentEvent, { type: "message.done" }>).parts).toHaveLength(1);
+    });
+
+    it("abortTurn rolls back only its own registration", () => {
+      // t1 is active (from beforeEach). A wrong-id abort must not release it…
+      translator.abortTurn("s1", "someone-else");
+      expect(translator.beginTurn("s1", "claude", "t2")).toBe(false);
+      // …the right id does.
+      translator.abortTurn("s1", "t1");
+      expect(translator.beginTurn("s1", "claude", "t2")).toBe(true);
+    });
+
+    it("force re-registration wins over stale local state", () => {
+      expect(translator.beginTurn("s1", "claude", "t2")).toBe(false);
+      expect(translator.beginTurn("s1", "claude", "t2", { force: true })).toBe(true);
+    });
+  });
 });

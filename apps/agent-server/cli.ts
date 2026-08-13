@@ -465,6 +465,13 @@ async function main() {
   };
 
   rl.on("line", (line) => {
+    // Control commands act immediately — a running turn holds the pump, and
+    // .cancel serialized behind the turn it should cancel is useless.
+    if (line.trim() === ".cancel" && running) {
+      console.log(`${c.yellow}Cancelling turn…${c.reset}`);
+      void conn.client.cancelTurn(state.sessionId).catch(() => {});
+      return;
+    }
     pendingLines.push(line);
     void pump();
   });

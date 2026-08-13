@@ -50,12 +50,24 @@ export class LifecycleTranslator {
   constructor(private readonly deps: LifecycleTranslatorDeps) {}
 
   /**
-   * A turn was accepted by the agent-server. Resets the per-turn state and
-   * emits the deus session.started (status → working), mirroring the legacy
-   * server's accept path.
+   * Register a turn ahead of its quick-ack round-trip: resets the per-turn
+   * state and emits the deus session.started (status → working), mirroring
+   * the legacy server's accept path.
+   *
+   * Returns false — touching NOTHING — when the session already has an
+   * active turn: a concurrent send is about to be rejected with turnActive,
+   * and replacing the live turn's shim would corrupt its part bookkeeping.
+   * Callers re-register with `force` if the server accepts anyway (stale
+   * local state, e.g. after a backend restart).
    */
-  beginTurn(sessionId: string, harness: AgentHarness, turnId: string): void {
+  beginTurn(
+    sessionId: string,
+    harness: AgentHarness,
+    turnId: string,
+    opts: { force?: boolean } = {}
+  ): boolean {
     const existing = this.sessions.get(sessionId);
+    if (existing?.turnId !== undefined && !opts.force) return false;
     this.sessions.set(sessionId, {
       harness,
       turnId,
@@ -64,6 +76,13 @@ export class LifecycleTranslator {
       lastUsage: existing?.lastUsage,
     });
     this.deps.emit({ type: "session.started", sessionId, agentHarness: harness });
+    return true;
+  }
+
+  /** Roll back a beginTurn whose start was rejected (only if still ours). */
+  abortTurn(sessionId: string, turnId: string): void {
+    const state = this.sessions.get(sessionId);
+    if (state?.turnId === turnId) state.turnId = undefined;
   }
 
   /** Feed one sequenced wire envelope (post-dedupe, in order). */

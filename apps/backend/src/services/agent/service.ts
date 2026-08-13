@@ -142,10 +142,19 @@ export async function startTurn(
   const params = buildTurnStartParams(sessionId, turnId, agentHarness, prompt, options);
   // Register the turn BEFORE the quick-ack round-trip: the server can push
   // the first envelopes in the same tick the ack line is processed, and the
-  // translator must already know the session then. A rejected turn leaves a
-  // transient 'working' status that the caller's error path overwrites.
-  translator?.beginTurn(sessionId, agentHarness, turnId);
-  await link.startTurn(params);
+  // translator must already know the session then. beginTurn is a no-op when
+  // the session is locally busy (the server will reject with turnActive) —
+  // the live turn's state must not be clobbered by a doomed registration.
+  const registered = translator?.beginTurn(sessionId, agentHarness, turnId) ?? false;
+  try {
+    await link.startTurn(params);
+  } catch (err) {
+    if (registered) translator?.abortTurn(sessionId, turnId);
+    throw err;
+  }
+  // Server accepted a turn our local state thought was concurrent — the local
+  // view was stale (e.g. backend restart); register for real now.
+  if (!registered) translator?.beginTurn(sessionId, agentHarness, turnId, { force: true });
 }
 
 /** Cancel a session's active turn (best-effort, idempotent). */

@@ -58,7 +58,11 @@ function observeInboundLine(line: string): string | undefined {
         mcpServers?: Record<string, unknown>;
       };
     };
-    observeTurnStart(params);
+    // A turn/start against a busy session is about to be rejected with
+    // turnActive — it must not overwrite the ACTIVE turn's cwd/dirs/turnId
+    // (the edit guard and cancel-checkpoint consult them mid-turn).
+    const active = params.sessionId ? trackedSessions.get(params.sessionId) : undefined;
+    if (active?.turnId === undefined) observeTurnStart(params);
     // AAP parity with the legacy handler: every claude turn carries the
     // currently registered AAP MCP servers in its wire config (the engine
     // hot-swaps mcpServers between turns without a session restart).
