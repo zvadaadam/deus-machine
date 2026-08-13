@@ -157,7 +157,6 @@ export function RepositoryItem({
                 selectedWorkspaceId={selectedWorkspaceId}
                 unreadWorkspaceIds={unreadWorkspaceIds}
                 diffStatsMap={diffStatsMap}
-                reduceMotion={reduceMotion}
                 onNewWorkspace={onNewWorkspace}
                 onWorkspaceClick={onWorkspaceClick}
                 onArchive={onArchive}
@@ -179,7 +178,6 @@ interface RepositoryWorkspaceListProps {
   selectedWorkspaceId: string | null;
   unreadWorkspaceIds?: Set<string>;
   diffStatsMap?: Record<string, DiffStats>;
-  reduceMotion: boolean | null;
   onNewWorkspace: (repoId?: string) => void;
   onWorkspaceClick: (workspace: Workspace) => void;
   onArchive?: (workspaceId: string) => void;
@@ -192,7 +190,6 @@ function RepositoryWorkspaceList({
   selectedWorkspaceId,
   unreadWorkspaceIds,
   diffStatsMap,
-  reduceMotion,
   onNewWorkspace,
   onWorkspaceClick,
   onArchive,
@@ -213,29 +210,13 @@ function RepositoryWorkspaceList({
   return (
     <>
       {isDeus && (
-        <m.li
-          initial={reduceMotion ? false : { opacity: 0, y: -4 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{
-            duration: 0.22,
-            ease: [0.165, 0.84, 0.44, 1],
-            delay: reduceMotion ? 0 : 0.02,
-          }}
-        >
+        <li>
           <DeusRepositoryBanner onNewWorkspace={() => onNewWorkspace(repository.repo_id)} />
-        </m.li>
+        </li>
       )}
 
       {sortedWorkspaces.length === 0 && (
-        <m.li
-          initial={reduceMotion ? false : { opacity: 0, y: -4 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{
-            duration: 0.18,
-            ease: [0.165, 0.84, 0.44, 1],
-            delay: reduceMotion ? 0 : 0.03,
-          }}
-        >
+        <li>
           <SidebarRow
             variant="action"
             asChild
@@ -245,26 +226,17 @@ function RepositoryWorkspaceList({
             <button type="button">
               <SidebarRowMain>
                 <SidebarRowIconSlot>
-                  <Plus className="h-4 w-4" />
+                  <Plus className="h-3.5 w-3.5" />
                 </SidebarRowIconSlot>
                 <span className="font-normal">New workspace</span>
               </SidebarRowMain>
             </button>
           </SidebarRow>
-        </m.li>
+        </li>
       )}
 
-      {displayedWorkspaces.map((workspace, index) => (
-        <m.li
-          key={workspace.id}
-          initial={reduceMotion ? false : { opacity: 0, y: -4 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{
-            duration: 0.18,
-            ease: [0.165, 0.84, 0.44, 1],
-            delay: reduceMotion ? 0 : Math.min(0.05 + index * 0.025, 0.12),
-          }}
-        >
+      {displayedWorkspaces.map((workspace) => (
+        <li key={workspace.id}>
           <WorkspaceItem
             workspace={workspace}
             isActive={workspace.id === selectedWorkspaceId}
@@ -273,15 +245,11 @@ function RepositoryWorkspaceList({
             onArchive={onArchive}
             onStatusChange={onStatusChange}
           />
-        </m.li>
+        </li>
       ))}
 
       {hasStale && (
-        <m.li
-          initial={reduceMotion ? false : { opacity: 0 }}
-          animate={{ opacity: 1 }}
-          transition={{ duration: 0.15, ease: [0.165, 0.84, 0.44, 1] }}
-        >
+        <li>
           <SidebarRow
             variant="action"
             asChild
@@ -303,7 +271,7 @@ function RepositoryWorkspaceList({
               </SidebarRowMain>
             </button>
           </SidebarRow>
-        </m.li>
+        </li>
       )}
     </>
   );

@@ -50,6 +50,12 @@ const ALLOWED_INVOKE_CHANNELS = new Set([
   "browser_webview_devtools_open",
   "browser_webview_devtools_close",
 
+  // Connect browser — inject decrypted cookies from a real profile into the
+  // persist:browser session. Read/decrypt happens in the backend; only the
+  // native session write lives on the main side. Clear wipes that session.
+  "browser_import_cookies",
+  "browser_clear_session",
+
   // Native operations (called via generic invoke from platform layer)
   "native:pickFolder",
   "native:setZoom",

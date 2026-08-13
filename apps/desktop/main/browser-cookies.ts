@@ -1,0 +1,75 @@
+/**
+ * Main-process cookie injection for the in-app browser.
+ *
+ * The backend reads + decrypts cookies from the user's real Chromium profiles
+ * (see browser-import.service.ts) and forwards them here. We write them into
+ * the `persist:browser` session — the same partition the browser <webview>
+ * uses (see apps/web/.../webview-manager.ts) and that agent-browser drives over
+ * CDP — so both the visible browser and the agent become logged in.
+ *
+ * This is the one step that needs a native Electron API (`session.cookies`),
+ * so it lives in main rather than the backend.
+ */
+
+import { ipcMain, session, webContents } from "electron";
+import { WEBVIEW_PARTITION } from "../../../shared/browser";
+import type { ImportCookie, ImportCookiesResult } from "../../../shared/types/browser-import";
+
+export function registerBrowserCookieHandlers(): void {
+  ipcMain.handle(
+    "browser_import_cookies",
+    async (_e, { cookies }: { cookies: ImportCookie[] }): Promise<ImportCookiesResult> => {
+      if (!Array.isArray(cookies)) {
+        return { success: false, imported: 0, failed: 0, error: "cookies must be an array" };
+      }
+
+      const ses = session.fromPartition(WEBVIEW_PARTITION);
+      let imported = 0;
+      let failed = 0;
+
+      for (const c of cookies) {
+        try {
+          await ses.cookies.set({
+            url: c.url,
+            name: c.name,
+            value: c.value,
+            // Host-only cookies (incl. __Host-) require `domain` absent, or
+            // Electron widens their scope / rejects them outright.
+            ...(c.hostOnly ? {} : { domain: c.domain }),
+            path: c.path,
+            secure: c.secure,
+            httpOnly: c.httpOnly,
+            expirationDate: c.expirationDate,
+            sameSite: c.sameSite,
+          });
+          imported += 1;
+        } catch {
+          // A single malformed cookie shouldn't abort the whole import — Chrome
+          // stores edge cases Electron rejects. Skip and keep going.
+          failed += 1;
+        }
+      }
+
+      // set() buffers writes; flush so imported cookies survive an immediate quit.
+      await ses.cookies.flushStore();
+
+      return { success: true, imported, failed };
+    }
+  );
+
+  // Wipe the in-app browser session — the honest "disconnect", since imported
+  // cookies commingle in one partition and can't be attributed back to a
+  // source profile. Clears cookies + storage + HTTP cache.
+  ipcMain.handle("browser_clear_session", async (): Promise<{ success: boolean }> => {
+    const ses = session.fromPartition(WEBVIEW_PARTITION);
+    await ses.clearStorageData(); // cookies + local/session/IndexedDB storage
+    await ses.clearCache();
+    // Clearing storage/cache doesn't reset a live page's in-memory state — an
+    // SPA holding a token in memory would stay authenticated until reloaded.
+    // Reload the open guests in this partition so the clear actually takes hold.
+    for (const wc of webContents.getAllWebContents()) {
+      if (!wc.isDestroyed() && wc.session === ses) wc.reload();
+    }
+    return { success: true };
+  });
+}
