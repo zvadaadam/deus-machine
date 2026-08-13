@@ -50,6 +50,15 @@ export function BrowserSection() {
         toast.error(result.error ?? "Could not import cookies");
         return;
       }
+      if (result.imported === 0) {
+        // Nothing landed (no cookies, or every write was rejected) — don't
+        // report a session that wasn't actually changed.
+        toast.warning(
+          `No cookies were imported from ${profile.name || profile.browserName}` +
+            (result.failed ? ` (${result.failed} rejected)` : "")
+        );
+        return;
+      }
       setConnected((prev) => new Set(prev).add(key));
       toast.success(
         `Imported ${result.imported} cookie${result.imported === 1 ? "" : "s"} from ${
@@ -81,6 +90,11 @@ export function BrowserSection() {
         {profiles.isLoading ? (
           <div className="flex h-24 items-center justify-center">
             <Loader2 className="text-muted-foreground size-4 animate-spin" />
+          </div>
+        ) : profiles.isError ? (
+          <div className="text-muted-foreground flex h-24 flex-col items-center justify-center gap-1 text-sm">
+            <Globe className="size-5" />
+            {getErrorMessage(profiles.error)}
           </div>
         ) : list.length === 0 ? (
           <div className="text-muted-foreground flex h-24 flex-col items-center justify-center gap-1 text-sm">

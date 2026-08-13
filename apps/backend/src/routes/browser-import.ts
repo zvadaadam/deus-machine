@@ -4,8 +4,20 @@ import {
   readProfileCookies,
   type BrowserId,
 } from "../services/browser-import.service";
+import { getClientIp, isLocalhost } from "../lib/network";
 
 const app = new Hono();
+
+// These routes return decrypted browser session cookies, so they must never be
+// reachable from a remote paired device (which authMiddleware would otherwise
+// admit with a bearer token). The feature is desktop-only — restrict to the
+// local machine. Reads the same client IP the WebSocket route uses.
+app.use("/browser/*", async (c, next) => {
+  if (!isLocalhost(getClientIp(c))) {
+    return c.json({ error: "Browser import is only available on the local device." }, 403);
+  }
+  await next();
+});
 
 /** List local Chromium browser profiles available to import. */
 app.get("/browser/profiles", (c) => {

@@ -33,7 +33,9 @@ export function registerBrowserCookieHandlers(): void {
             url: c.url,
             name: c.name,
             value: c.value,
-            domain: c.domain,
+            // Host-only cookies (incl. __Host-) require `domain` absent, or
+            // Electron widens their scope / rejects them outright.
+            ...(c.hostOnly ? {} : { domain: c.domain }),
             path: c.path,
             secure: c.secure,
             httpOnly: c.httpOnly,
@@ -43,11 +45,13 @@ export function registerBrowserCookieHandlers(): void {
           imported += 1;
         } catch {
           // A single malformed cookie shouldn't abort the whole import — Chrome
-          // stores edge cases (e.g. __Host- prefixes with a domain) that
-          // Electron rejects. Skip and keep going, like the source app does.
+          // stores edge cases Electron rejects. Skip and keep going.
           failed += 1;
         }
       }
+
+      // set() buffers writes; flush so imported cookies survive an immediate quit.
+      await ses.cookies.flushStore();
 
       return { success: true, imported, failed };
     }

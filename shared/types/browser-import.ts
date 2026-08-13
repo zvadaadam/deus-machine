@@ -26,6 +26,12 @@ export interface ImportCookie {
   name: string;
   value: string;
   domain: string;
+  /**
+   * True when the source cookie is host-only (Chromium `host_key` had no
+   * leading dot). Host-only cookies — including all `__Host-` cookies — must be
+   * set with `domain` omitted, or Electron widens their scope / rejects them.
+   */
+  hostOnly: boolean;
   path: string;
   secure: boolean;
   httpOnly: boolean;

@@ -41,9 +41,12 @@ export function useConnectBrowserProfile() {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: async (profile: BrowserProfile): Promise<ImportCookiesResult> => {
+      // First read per browser blocks on the macOS Keychain prompt, which can
+      // outlive the default 30s request timeout — give the user 2 minutes.
       const { cookies } = await apiClient.post<{ cookies: ImportCookie[]; count: number }>(
         "/browser/cookies",
-        { browserId: profile.browserId, profileDir: profile.profileDir }
+        { browserId: profile.browserId, profileDir: profile.profileDir },
+        120_000
       );
       return invoke<ImportCookiesResult>("browser_import_cookies", { cookies });
     },

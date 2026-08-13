@@ -37,7 +37,7 @@ const NAV_ITEMS: NavItem[] = [
   { id: "account", label: "Account", icon: UserCircle },
   { id: "general", label: "General", icon: Settings2 },
   { id: "github", label: "GitHub", icon: GitHubIcon },
-  { id: "browser", label: "Browser", icon: Chrome, capability: "nativeBrowser" },
+  { id: "browser", label: "Browser", icon: Chrome, capability: "browserProfileImport" },
   { id: "ai", label: "AI Providers", icon: Orbit },
   { id: "environment", label: "Environment", icon: Box },
   { id: "experimental", label: "Experimental", icon: FlaskConical },

@@ -16,7 +16,7 @@
  * bespoke binary format.
  */
 
-import { pbkdf2Sync, createDecipheriv } from "node:crypto";
+import { pbkdf2Sync, createDecipheriv, createHash } from "node:crypto";
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
 import { homedir, tmpdir } from "node:os";
@@ -151,13 +151,29 @@ function looksPrintable(buf: Buffer): boolean {
   return n > 0;
 }
 
+/** Does the 32-byte prefix equal SHA-256 of the cookie's host_key? */
+function hasDomainHashPrefix(plain: Buffer, hostKey: string): boolean {
+  const prefix = plain.subarray(0, 32);
+  // host_key is hashed with and without its leading dot across Chromium
+  // versions; accept either so the deterministic check fires when it can.
+  return (
+    prefix.equals(createHash("sha256").update(hostKey).digest()) ||
+    prefix.equals(createHash("sha256").update(hostKey.replace(/^\./, "")).digest())
+  );
+}
+
 /**
  * Decrypt a Chromium `encrypted_value` blob (macOS v10/v11 scheme):
  * AES-128-CBC, IV = 16 spaces, PKCS#7 padding. Chrome 130+ additionally
- * prepends a 32-byte SHA-256 domain hash to the plaintext; we detect and
- * strip it heuristically (the hash is binary, real values start printable).
+ * prepends a 32-byte SHA-256 hash of the cookie's domain to the plaintext.
+ * We strip it deterministically when it matches SHA-256(host_key); when the
+ * host_key isn't available we fall back to a printability heuristic.
  */
-export function decryptCookieValue(encrypted: Buffer, key: Buffer): string | null {
+export function decryptCookieValue(
+  encrypted: Buffer,
+  key: Buffer,
+  hostKey?: string
+): string | null {
   if (encrypted.length < 3) return null;
   const version = encrypted.subarray(0, 3).toString("latin1");
   if (version !== "v10" && version !== "v11") return null;
@@ -173,12 +189,14 @@ export function decryptCookieValue(encrypted: Buffer, key: Buffer): string | nul
     return null;
   }
 
+  if (out.length === 0) return null;
   const pad = out[out.length - 1];
   if (pad < 1 || pad > 16 || pad > out.length) return null;
   let plain = out.subarray(0, out.length - pad);
 
-  if (plain.length >= 32 && !looksPrintable(plain)) {
-    plain = plain.subarray(32);
+  if (plain.length >= 32) {
+    const stripHash = hostKey ? hasDomainHashPrefix(plain, hostKey) : !looksPrintable(plain);
+    if (stripHash) plain = plain.subarray(32);
   }
   return plain.toString("utf8");
 }
@@ -204,6 +222,36 @@ function copyDbToTemp(dbPath: string): string {
     if (fs.existsSync(dbPath + ext)) fs.copyFileSync(dbPath + ext, dest + ext);
   }
   return dest;
+}
+
+const COOKIE_QUERY =
+  "SELECT host_key, name, value, encrypted_value, path, expires_utc, is_secure, is_httponly, samesite FROM cookies";
+
+function queryCookieRows(dbPath: string): CookieRow[] {
+  const db = openSqliteDatabase(dbPath, { readonly: true, fileMustExist: true });
+  try {
+    return db.prepare(COOKIE_QUERY).all() as CookieRow[];
+  } finally {
+    db.close();
+  }
+}
+
+/**
+ * Read cookie rows. If the live DB can't be opened OR queried — a running
+ * browser can hold a lock through either step — snapshot it to a temp dir and
+ * read the copy, always deleting the snapshot afterward.
+ */
+function readCookieRows(dbPath: string): CookieRow[] {
+  try {
+    return queryCookieRows(dbPath);
+  } catch {
+    const tempPath = copyDbToTemp(dbPath);
+    try {
+      return queryCookieRows(tempPath);
+    } finally {
+      fs.rmSync(dirname(tempPath), { recursive: true, force: true });
+    }
+  }
 }
 
 /** Resolve the cookie DB path (Chrome 96+ moved it under Network/). */
@@ -252,31 +300,13 @@ export async function readProfileCookies(
   if (!dbPath) return [];
 
   const key = await getAesKey(def);
-
-  let db: ReturnType<typeof openSqliteDatabase>;
-  let tempPath: string | null = null;
-  try {
-    db = openSqliteDatabase(dbPath, { readonly: true, fileMustExist: true });
-  } catch {
-    tempPath = copyDbToTemp(dbPath);
-    db = openSqliteDatabase(tempPath, { readonly: true, fileMustExist: true });
-  }
-
-  let rows: CookieRow[];
-  try {
-    rows = db.prepare(
-      "SELECT host_key, name, value, encrypted_value, path, expires_utc, is_secure, is_httponly, samesite FROM cookies"
-    ).all() as CookieRow[];
-  } finally {
-    db.close();
-    if (tempPath) fs.rmSync(dirname(tempPath), { recursive: true, force: true });
-  }
+  const rows = readCookieRows(dbPath);
 
   const cookies: ImportCookie[] = [];
   for (const row of rows) {
     let value = row.value ?? "";
     if ((!value || value.length === 0) && row.encrypted_value && row.encrypted_value.length > 0) {
-      const decrypted = decryptCookieValue(Buffer.from(row.encrypted_value), key);
+      const decrypted = decryptCookieValue(Buffer.from(row.encrypted_value), key, row.host_key);
       if (decrypted === null) continue; // undecryptable — skip rather than corrupt the session
       value = decrypted;
     }
@@ -290,6 +320,9 @@ export async function readProfileCookies(
       name: row.name,
       value,
       domain: row.host_key,
+      // No leading dot in host_key means a host-only cookie (incl. all
+      // __Host- cookies); the main process omits `domain` for these.
+      hostOnly: !row.host_key.startsWith("."),
       path: row.path || "/",
       secure,
       httpOnly: row.is_httponly === 1,

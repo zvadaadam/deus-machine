@@ -1,5 +1,5 @@
 import { vi, describe, it, expect, beforeEach } from "vitest";
-import { pbkdf2Sync, createCipheriv } from "node:crypto";
+import { pbkdf2Sync, createCipheriv, createHash } from "node:crypto";
 
 const { mockReadFileSync, mockStatSync } = vi.hoisted(() => ({
   mockReadFileSync: vi.fn(),
@@ -37,15 +37,28 @@ describe("browser-import.service — decryptCookieValue", () => {
     expect(decryptCookieValue(encrypted, KEY)).toBe("session=abc123");
   });
 
-  it("strips the 32-byte SHA-256 domain-hash prefix (Chrome 130+)", () => {
+  it("strips the 32-byte prefix heuristically when host_key is absent", () => {
     const prefixed = Buffer.concat([Buffer.alloc(32, 0), Buffer.from("real-token-value")]);
     const encrypted = encryptV10(prefixed);
     expect(decryptCookieValue(encrypted, KEY)).toBe("real-token-value");
   });
 
+  it("strips the domain-hash prefix deterministically via SHA-256(host_key)", () => {
+    const host = "example.com";
+    const hash = createHash("sha256").update(host).digest(); // random-looking, but exact
+    const encrypted = encryptV10(Buffer.concat([hash, Buffer.from("real-token-value")]));
+    expect(decryptCookieValue(encrypted, KEY, host)).toBe("real-token-value");
+  });
+
   it("does not strip a legit printable value that is >= 32 bytes", () => {
     const value = "a".repeat(40);
     expect(decryptCookieValue(encryptV10(Buffer.from(value)), KEY)).toBe(value);
+    // Even with a host_key, a value whose prefix isn't the domain hash is kept.
+    expect(decryptCookieValue(encryptV10(Buffer.from(value)), KEY, "example.com")).toBe(value);
+  });
+
+  it("returns null for an empty decrypted body", () => {
+    expect(decryptCookieValue(Buffer.from("v10"), KEY)).toBeNull();
   });
 
   it("returns null for an unknown encryption version", () => {
