@@ -169,9 +169,14 @@ export type QServerFrame =
 
 /** Payload shape for q:event with event: "tool:request".
  *  Sent by the backend when relaying a tool request from the agent to the frontend.
- *  Derived from the canonical ToolRequestEvent (shared/agent-events.ts) minus the
- *  discriminator field — the WS frame wraps this in q:event, not as a standalone event. */
-export type ToolRequestEventData = Omit<import("../agent-events").ToolRequestEvent, "type">;
+ *  The WS frame wraps this in q:event, not as a standalone event. */
+export interface ToolRequestEventData {
+  requestId: string;
+  sessionId: string;
+  method: string;
+  params: Record<string, unknown>;
+  timeoutMs: number;
+}
 
 // ---- Part Lifecycle Event Payloads ----
 

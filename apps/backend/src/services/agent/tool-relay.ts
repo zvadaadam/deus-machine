@@ -13,7 +13,6 @@
 // Timeout handling: each tool request has a timeout (set by the agent-server).
 // If the frontend doesn't respond within the timeout, the pending promise is rejected.
 
-import type { ToolRequestEvent } from "@shared/agent-events";
 import type { ToolRequestEventData, QServerFrame } from "@shared/types/query-protocol";
 import { broadcast } from "../ws.service";
 
@@ -38,11 +37,8 @@ const pending = new Map<string, PendingRelay>();
  *
  * Returns a promise that resolves when the frontend sends back q:tool_response,
  * or rejects if the timeout expires.
- *
- * The caller (agent-event-handler) uses the resolved value to send the result
- * back to the agent-server via agentClient.sendTurnRespond().
  */
-export function relay(event: ToolRequestEvent): Promise<unknown> {
+export function relay(event: ToolRequestEventData & { type?: string }): Promise<unknown> {
   const { requestId, sessionId, method, params, timeoutMs } = event;
 
   // If there's already a pending request with this ID, reject the old one

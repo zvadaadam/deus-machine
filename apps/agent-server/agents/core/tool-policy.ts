@@ -3,15 +3,15 @@
 // canUseTool. Deus has no interactive permission UI, so nothing may fall
 // through to the engine's broker — an unanswered `permission.requested` parks
 // the turn forever. Policy:
-//   - ExitPlanMode rides deus's broadcaster round-trip;
+//   - ExitPlanMode rides the deus/exitPlanMode side-channel round-trip;
 //   - edit tools are denied outside cwd + additionalDirectories;
 //   - everything else is allowed.
 
 import * as fs from "node:fs";
 import * as path from "node:path";
 import type { ClaudeToolPolicy } from "@zvada/agent-server/core";
-import { EventBroadcaster } from "../../event-broadcaster";
-import { sessions } from "./session-state";
+import { HostRpc } from "../../host-link";
+import { trackedSessions } from "../../session-tracker";
 
 const EDIT_TOOLS = new Set(["Edit", "MultiEdit", "Write", "NotebookEdit"]);
 
@@ -40,7 +40,7 @@ function realpathOrResolve(p: string, base?: string): string {
 export const decideToolUse: ClaudeToolPolicy = async (toolName, input, ctx) => {
   if (toolName === "ExitPlanMode") {
     try {
-      const response = await EventBroadcaster.requestExitPlanMode({
+      const response = await HostRpc.requestExitPlanMode({
         sessionId: ctx.sessionId,
         toolInput: input,
       });
@@ -70,16 +70,16 @@ export const decideToolUse: ClaudeToolPolicy = async (toolName, input, ctx) => {
   }
 
   if (EDIT_TOOLS.has(toolName)) {
-    const state = sessions.get(ctx.sessionId);
+    const state = trackedSessions.get(ctx.sessionId);
     const cwd = state?.cwd;
     const filePath = String(input.file_path ?? input.notebook_path ?? "");
     if (!cwd) {
       // Fail closed: without a session cwd there is no allowed-directory set
-      // to check against (should be unreachable — every query records it).
+      // to check against (should be unreachable — every turn/start records it).
       return { behavior: "deny", message: "Edit rejected: session working directory unknown." };
     }
     if (filePath) {
-      const allowed = [cwd, ...(state?.lastOptions?.additionalDirectories ?? [])].map((dir) =>
+      const allowed = [cwd, ...(state?.additionalDirectories ?? [])].map((dir) =>
         realpathOrResolve(dir)
       );
       // Relative tool paths are relative to the AGENT's cwd, not this process.

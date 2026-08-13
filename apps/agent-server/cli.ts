@@ -1,54 +1,54 @@
-#!/usr/bin/env node
+#!/usr/bin/env bun
 // agent-server/cli.ts
-// Debug CLI for the agent-server. Spawns the server (or connects to an
-// existing one via --url), sends queries, and pretty-prints every canonical
-// event for inspection. Legacy events are filtered out — only our unified
-// event system is shown.
+// Headless test harness for the agent-server on the standard
+// @zvada/agent-server wire — no backend, no frontend.
 //
-// Two visual layers per turn:
-//   RAW    — the raw SDK message from Claude Code / Codex (message.assistant, message.tool_result)
-//   PARTS  — our unified Part transformation (message.parts)
+// Connects exactly the way the backend does (typed AgentServerClient + the
+// deus/* side channel, announcing itself as host via deus/hello), so live
+// turns exercise the REAL production path: engine, tool policy, in-process
+// deus MCP suite, checkpoints, seq+replay.
 //
 // Usage:
-//   bunx tsx apps/agent-server/cli.ts [options] [prompt]
+//   bun apps/agent-server/cli.ts                        # spawn bundle + REPL
+//   bun apps/agent-server/cli.ts --url ws://127.0.0.1:PORT   # dial a running server (observer)
+//   bun apps/agent-server/cli.ts --prompt "2+2?"        # one-shot turn, exit code = result
+//   flags: --agent claude|codex-sdk|codex-server  --model NAME  --cwd PATH
+//          --session ID  --resume NATIVE_ID  --permission-mode MODE  --json
+//          --host  (claim deus tool routing when dialing with --url; a spawned
+//                   server is always hosted by the CLI)
 //
-// Options:
-//   --url <ws://...>   Connect to a running agent-server instead of spawning one
-//   --agent <type>     Agent type: "claude" (default), "codex-sdk", or "codex-server"
-//   --model <model>    Model to use (default: "sonnet")
-//   --cwd <path>       Working directory for the agent (default: cwd)
-//   --session <id>     Session ID (default: auto-generated)
-//   --no-color         Disable colors
-//
-// If no prompt is given, enters interactive REPL mode.
+// Side-channel host behavior, active when this CLI is the host (so live
+// turns never park). Dialing a backend-managed server with --url stays
+// observer-only — announcing deus/hello there would steal tool routing from
+// the real backend and leave it stolen after the CLI exits:
+//   exitPlanMode    → auto-approve (logged)
+//   askUserQuestion → answers each question with its first option (logged)
+//   everything else → error result (tool surfaces "unavailable in CLI")
 
 import { spawn, type ChildProcess } from "child_process";
+import * as fs from "fs";
 import * as path from "path";
 import * as readline from "readline";
 import { fileURLToPath } from "url";
 import WebSocket from "ws";
-import { getAgentHarnessEventLabel, getAgentHarnessLabel } from "../../shared/agent-catalog";
-import { AgentHarnessSchema, type AgentHarness } from "../../shared/enums";
+import { AgentServerClient } from "@zvada/agent-server/client";
+import type { LifecycleEvent, TurnStartParams } from "@zvada/agent-server/protocol";
+import { generateUUIDv7 } from "@zvada/agent-server/protocol";
+import {
+  SIDE_CHANNEL,
+  SideChannelEndpoint,
+  claimSideChannel,
+  wsLineTransport,
+} from "@shared/agent-side-channel";
+import { ENGINE_HARNESS_BY_DEUS } from "../../shared/enums";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 // ---------------------------------------------------------------------------
-// Legacy methods to filter out (we only show canonical dot-notation events)
+// Colors
 // ---------------------------------------------------------------------------
 
-const LEGACY_METHODS = new Set([
-  "message",
-  "statusChanged",
-  "queryError",
-  "enterPlanModeNotification",
-]);
-
-// ---------------------------------------------------------------------------
-// ANSI colors
-// ---------------------------------------------------------------------------
-
-const useColor = !process.argv.includes("--no-color") && process.stdout.isTTY;
-
+const useColor = process.stdout.isTTY && !process.argv.includes("--json");
 const c = {
   reset: useColor ? "\x1b[0m" : "",
   dim: useColor ? "\x1b[2m" : "",
@@ -59,213 +59,170 @@ const c = {
   blue: useColor ? "\x1b[34m" : "",
   magenta: useColor ? "\x1b[35m" : "",
   cyan: useColor ? "\x1b[36m" : "",
-  gray: useColor ? "\x1b[90m" : "",
 };
 
+const truncate = (s: string, n = 200) => (s.length > n ? `${s.slice(0, n)}…` : s);
+
 // ---------------------------------------------------------------------------
-// Arg parsing
+// Args
 // ---------------------------------------------------------------------------
 
-interface CliOptions {
-  url?: string;
-  agent: AgentHarness;
-  model?: string;
-  cwd: string;
-  session: string;
-  prompt: string | null;
-}
-
-function parseAgentHarness(value: string): AgentHarness {
-  const parsed = AgentHarnessSchema.safeParse(value);
-  if (parsed.success) return parsed.data;
-  throw new Error(
-    `Unknown agent "${value}". Expected one of: ${AgentHarnessSchema.options.join(", ")}`
-  );
-}
-
-function parseEventAgentHarness(value: unknown, fallback: AgentHarness): AgentHarness {
-  if (typeof value !== "string") return fallback;
-  const parsed = AgentHarnessSchema.safeParse(value);
-  return parsed.success ? parsed.data : fallback;
-}
-
-function parseArgs(): CliOptions {
+function parseArgs() {
   const args = process.argv.slice(2);
   const opts: Record<string, string> = {};
-  const positional: string[] = [];
-
-  let pastSeparator = false;
   for (let i = 0; i < args.length; i++) {
     const arg = args[i];
-    if (arg === "--" && !pastSeparator) {
-      pastSeparator = true;
-      continue;
-    }
-    if (arg === "--no-color") continue;
-    if (!pastSeparator && arg.startsWith("--") && i + 1 < args.length) {
-      opts[arg.slice(2)] = args[++i];
-    } else {
-      positional.push(arg);
-    }
+    if (arg === "--json" || arg === "--host") continue;
+    if (arg.startsWith("--") && i + 1 < args.length) opts[arg.slice(2)] = args[++i];
   }
-
+  const agent = (opts.agent ?? "claude") as keyof typeof ENGINE_HARNESS_BY_DEUS;
+  if (!ENGINE_HARNESS_BY_DEUS[agent]) {
+    console.error(`Unknown --agent "${agent}" (use claude | codex-sdk | codex-server)`);
+    process.exit(1);
+  }
   return {
     url: opts.url,
-    agent: parseAgentHarness(opts.agent || "claude"),
-    model: opts.model, // no default — each harness has its own default
-    cwd: opts.cwd || process.cwd(),
-    session: opts.session || `cli-${Date.now()}`,
-    prompt: positional.join(" ") || null,
+    agent,
+    model: opts.model,
+    cwd: path.resolve(opts.cwd ?? process.cwd()),
+    sessionId: opts.session ?? generateUUIDv7(),
+    resume: opts.resume,
+    permissionMode: opts["permission-mode"] ?? "default",
+    prompt: opts.prompt,
+    json: process.argv.includes("--json"),
+    forceHost: process.argv.includes("--host"),
   };
 }
 
 // ---------------------------------------------------------------------------
-// Formatting helpers
+// Event rendering
 // ---------------------------------------------------------------------------
 
-function ts(): string {
-  const now = new Date();
-  return `${c.dim}${now.toLocaleTimeString("en-US", { hour12: false })}.${String(now.getMilliseconds()).padStart(3, "0")}${c.reset}`;
-}
+/** Part ids whose text already streamed as deltas (don't reprint on snapshot). */
+const streamedParts = new Set<string>();
+/** True while streamed text has no trailing newline yet. */
+let midStream = false;
 
-function banner(text: string) {
-  const line = "─".repeat(Math.max(0, 60 - text.length));
-  console.log(`\n${c.dim}──${c.reset} ${c.bold}${text}${c.reset} ${c.dim}${line}${c.reset}`);
-}
-
-function json(obj: any, indent = 2) {
-  const str = JSON.stringify(obj, null, 2);
-  const pad = " ".repeat(indent);
-  for (const line of str.split("\n")) {
-    console.log(`${pad}${c.dim}${line}${c.reset}`);
+function breakLine(): void {
+  if (midStream) {
+    process.stdout.write("\n");
+    midStream = false;
   }
 }
 
-function truncate(s: string, max: number): string {
-  const flat = s.replace(/\n/g, "\\n");
-  return flat.length <= max ? flat : flat.slice(0, max - 1) + "…";
-}
-
-/** Deep-clone an object, truncating string values longer than `max` chars */
-function truncateStrings(obj: any, max = 200): any {
-  if (typeof obj === "string") {
-    return obj.length > max
-      ? obj.slice(0, max - 1).replace(/\n/g, "\\n") + "…"
-      : obj.replace(/\n/g, "\\n");
+function renderEvent(event: LifecycleEvent, json: boolean): void {
+  if (json) {
+    console.log(JSON.stringify(event));
+    return;
   }
-  if (Array.isArray(obj)) return obj.map((v) => truncateStrings(v, max));
-  if (obj && typeof obj === "object") {
-    const out: Record<string, any> = {};
-    for (const [k, v] of Object.entries(obj)) {
-      out[k] = truncateStrings(v, max);
+  if (event.type !== "message.part.delta" && event.type !== "message.part") breakLine();
+  switch (event.type) {
+    case "session.created":
+      console.log(
+        `${c.dim}◆ session.created${c.reset} native=${event.nativeSessionId}` +
+          (event.resumed !== undefined ? ` resumed=${event.resumed}` : "")
+      );
+      return;
+    case "turn.started":
+      console.log(`${c.dim}◆ turn.started ${event.turnId}${c.reset}`);
+      return;
+    case "message.started":
+      console.log(`${c.dim}◆ message ${event.messageId} (${event.role})${c.reset}`);
+      return;
+    case "message.part.delta":
+      streamedParts.add(event.partId);
+      if (event.delta.type === "text-delta") {
+        process.stdout.write(event.delta.text);
+        midStream = true;
+      } else if (event.delta.type === "reasoning-delta") {
+        process.stdout.write(`${c.dim}${event.delta.text}${c.reset}`);
+        midStream = true;
+      }
+      return;
+    case "message.part": {
+      const part = event.part;
+      // Short outputs can arrive as one finished part with no delta stream.
+      if (part.type === "text" && part.state === "done" && !streamedParts.has(part.id)) {
+        streamedParts.add(part.id);
+        process.stdout.write(part.text);
+        midStream = true;
+      }
+      if (part.type === "tool") {
+        breakLine();
+        const status = part.state.status;
+        const color = status === "completed" ? c.green : status === "failed" ? c.red : c.yellow;
+        console.log(
+          `${color}▸ ${part.toolName}${c.reset} ${c.dim}${status}${c.reset}` +
+            (part.state.status === "completed"
+              ? ` ${c.dim}${truncate(part.state.output, 120)}${c.reset}`
+              : part.state.status === "failed"
+                ? ` ${c.red}${truncate(part.state.error, 120)}${c.reset}`
+                : "")
+        );
+      }
+      return;
     }
-    return out;
-  }
-  return obj;
-}
-
-// ---------------------------------------------------------------------------
-// Event classification and printing
-// ---------------------------------------------------------------------------
-
-// SDK events: these wrap raw messages from Claude Code / Codex
-const SDK_EVENTS = new Set([
-  "message.system",
-  "message.assistant",
-  "message.tool_result",
-  "message.result",
-]);
-
-// Our canonical events
-const DEUS_EVENTS = new Set([
-  "session.started",
-  "session.idle",
-  "session.error",
-  "session.cancelled",
-  "session.title",
-  "agent.session_id",
-  "turn.started",
-  "message.created",
-  "part.created",
-  "part.delta",
-  "part.done",
-  "message.done",
-  "turn.completed",
-  "message.cancelled",
-  "request.opened",
-  "request.resolved",
-  "tool.request",
-]);
-
-function classifyEvent(method: string): { origin: string; color: string } {
-  if (SDK_EVENTS.has(method)) {
-    return { origin: "SDK", color: c.blue };
-  }
-  if (DEUS_EVENTS.has(method)) {
-    return { origin: "DEUS", color: c.green };
-  }
-  // Unknown — show it anyway
-  return { origin: "???", color: c.yellow };
-}
-
-function printEvent(method: string, params: any, agentLabel: string) {
-  const { origin, color: originColor } = classifyEvent(method);
-
-  // Color the method name by category
-  let methodColor = c.cyan;
-  if (method.startsWith("session.")) methodColor = c.magenta;
-  if (method.startsWith("message.parts")) methodColor = c.green;
-  if (method.startsWith("message.assistant") || method.startsWith("message.tool_result"))
-    methodColor = c.blue;
-  if (method.startsWith("message.result")) methodColor = c.yellow;
-  if (method.includes("error")) methodColor = c.red;
-
-  // Origin tag: CLAUDE/CODEX for SDK events, DEUS for ours
-  const originTag = origin === "SDK" ? agentLabel : origin;
-
-  // Header: timestamp ◂ method                                    [ORIGIN]
-  const header = `${method}`;
-  const pad = Math.max(1, 50 - header.length);
-  console.log(
-    `${ts()} ${c.green}◂${c.reset} ${methodColor}${c.bold}${header}${c.reset}${" ".repeat(pad)}${originColor}${originTag}${c.reset}`
-  );
-
-  // Strip envelope fields we already show in the header
-  const { type: _t, sessionId: _s, agentHarness: _a, ...payload } = params;
-
-  // Show the raw JSON payload with long strings truncated
-  if (Object.keys(payload).length > 0) {
-    json(truncateStrings(payload), 2);
+    case "message.ended":
+      breakLine();
+      return;
+    case "session.usage":
+      console.log(
+        `${c.dim}◆ usage used=${event.used}${event.size ? `/${event.size}` : ""}${event.cost !== undefined ? ` $${event.cost.toFixed(4)}` : ""}${c.reset}`
+      );
+      return;
+    case "session.compacted":
+      console.log(`${c.magenta}◆ context compacted${c.reset}`);
+      return;
+    case "turn.ended": {
+      const color = event.stopReason === "end_turn" ? c.green : c.red;
+      const tokens = event.tokens ? ` in=${event.tokens.input} out=${event.tokens.output}` : "";
+      const cost = event.cost !== undefined ? ` $${event.cost.toFixed(4)}` : "";
+      console.log(
+        `${color}◆ turn.ended ${event.stopReason}${c.reset}${c.dim}${tokens}${cost}${c.reset}`
+      );
+      return;
+    }
+    case "error":
+      console.log(
+        `${event.recoverable ? c.yellow : c.red}◆ error${event.recoverable ? " (recoverable)" : ""}: ${event.error}${c.reset}`
+      );
+      return;
+    case "permission.requested":
+      console.log(`${c.yellow}◆ permission.requested ${event.title}${c.reset}`);
+      return;
+    default:
+      console.log(`${c.dim}◆ ${event.type}${c.reset}`);
   }
 }
 
 // ---------------------------------------------------------------------------
-// Agent server lifecycle
+// Server spawn / connect
 // ---------------------------------------------------------------------------
 
-async function spawnServer(): Promise<{ ws: WebSocket; proc: ChildProcess; logPath: string }> {
+async function resolveServerUrl(opts: {
+  url?: string;
+}): Promise<{ url: string; proc: ChildProcess | null }> {
+  if (opts.url) return { url: opts.url, proc: null };
+
   const bundlePath = path.resolve(__dirname, "dist", "index.bundled.cjs");
-  const logPath = path.resolve(__dirname, "dist", `cli-server-${Date.now()}.log`);
-
-  console.log(`${c.dim}Spawning agent-server...${c.reset}`);
-  console.log(`${c.dim}Server logs: ${logPath}${c.reset}`);
-
-  const fs = await import("fs");
-  const logStream = fs.createWriteStream(logPath, { flags: "a" });
-
+  if (!fs.existsSync(bundlePath)) {
+    console.error(`${c.red}Bundle missing. Run: bun run build:agent-server${c.reset}`);
+    process.exit(1);
+  }
   const proc = spawn("node", [bundlePath], {
-    env: { ...process.env, LOG_LEVEL: "info" },
+    env: { ...process.env, LOG_LEVEL: process.env.LOG_LEVEL ?? "info" },
     stdio: ["pipe", "pipe", "pipe"],
   });
-
-  proc.stderr?.on("data", (data: Buffer) => {
-    logStream.write(data);
+  let stderr = "";
+  proc.stderr?.on("data", (d: Buffer) => {
+    stderr += d.toString();
   });
-
-  const wsUrl = await new Promise<string>((resolve, reject) => {
+  const url = await new Promise<string>((resolve, reject) => {
     let buffer = "";
-    const timeout = setTimeout(() => reject(new Error("Server startup timed out")), 15_000);
-
+    const timeout = setTimeout(
+      () => reject(new Error(`agent-server did not print LISTEN_URL in 30s\n${stderr}`)),
+      30_000
+    );
     proc.stdout?.on("data", (data: Buffer) => {
       buffer += data.toString();
       const match = buffer.match(/LISTEN_URL=(.+)/);
@@ -274,86 +231,126 @@ async function spawnServer(): Promise<{ ws: WebSocket; proc: ChildProcess; logPa
         resolve(match[1].trim());
       }
     });
-
-    proc.on("error", (err) => {
-      clearTimeout(timeout);
-      reject(err);
-    });
-
     proc.on("exit", (code) => {
       clearTimeout(timeout);
-      if (code !== 0) reject(new Error(`Server exited with code ${code}`));
+      reject(new Error(`agent-server exited (${code}) before listening\n${stderr}`));
     });
   });
-
-  console.log(`${c.green}Server listening:${c.reset} ${wsUrl}`);
-  const ws = await connectWs(wsUrl);
-  return { ws, proc, logPath };
+  return { url, proc };
 }
 
-async function connectWs(url: string): Promise<WebSocket> {
-  return new Promise((resolve, reject) => {
-    const ws = new WebSocket(url);
-    const timeout = setTimeout(() => {
-      ws.close();
-      reject(new Error("WebSocket connection timed out"));
-    }, 10_000);
+interface Connection {
+  client: AgentServerClient;
+  close(): void;
+}
 
-    ws.on("open", () => {
-      clearTimeout(timeout);
-      resolve(ws);
-    });
-    ws.on("error", (err) => {
-      clearTimeout(timeout);
-      reject(err);
-    });
+async function connect(url: string, json: boolean, announceHost: boolean): Promise<Connection> {
+  const ws = new WebSocket(url);
+  await new Promise<void>((resolve, reject) => {
+    ws.on("open", () => resolve());
+    ws.on("error", reject);
   });
-}
+  const transport = wsLineTransport(ws);
 
-// ---------------------------------------------------------------------------
-// JSON-RPC helpers
-// ---------------------------------------------------------------------------
+  const sideChannel = new SideChannelEndpoint((line) => transport.send(line), "cli");
+  sideChannel.onRequest(SIDE_CHANNEL.exitPlanMode, () => {
+    console.log(`\n${c.yellow}◆ exitPlanMode → auto-approved by CLI${c.reset}`);
+    return { approved: true };
+  });
+  sideChannel.onRequest(SIDE_CHANNEL.askUserQuestion, (params) => {
+    const { questions = [] } = (params ?? {}) as {
+      questions?: Array<{ question: string; options: string[] }>;
+    };
+    const answers = questions.map((q) => q.options[0] ?? "");
+    console.log(
+      `\n${c.yellow}◆ askUserQuestion → answered with first option(s): ${JSON.stringify(answers)}${c.reset}`
+    );
+    return { answers };
+  });
+  sideChannel.onNotification(SIDE_CHANNEL.title, (params) => {
+    const { title } = (params ?? {}) as { title?: string };
+    console.log(`${c.dim}◆ session title: "${title}"${c.reset}`);
+  });
+  for (const method of [
+    SIDE_CHANNEL.getDiff,
+    SIDE_CHANNEL.diffComment,
+    SIDE_CHANNEL.getTerminalOutput,
+    SIDE_CHANNEL.getSimulatorContext,
+    SIDE_CHANNEL.aapListApps,
+    SIDE_CHANNEL.aapLaunchApp,
+    SIDE_CHANNEL.aapStopApp,
+    SIDE_CHANNEL.aapReadAppSkill,
+  ]) {
+    sideChannel.onRequest(method, () => {
+      throw new Error(`${method} is not available in the CLI harness`);
+    });
+  }
+  if (announceHost) {
+    sideChannel.notify(SIDE_CHANNEL.hello, {});
+  } else {
+    console.log(
+      `${c.dim}observer mode: not claiming deus tool routing (pass --host to claim)${c.reset}`
+    );
+  }
 
-let rpcId = 0;
-
-function sendRequest(ws: WebSocket, method: string, params: any): number {
-  const id = ++rpcId;
-  const frame = { jsonrpc: "2.0", id, method, params };
+  const client = await AgentServerClient.attach(claimSideChannel(transport, sideChannel));
+  const init = await client.initialize();
   console.log(
-    `${ts()} ${c.blue}▸${c.reset} ${c.bold}${method}${c.reset} ${c.dim}id=${id}${c.reset}`
+    `${c.green}Connected${c.reset} ${c.dim}${url} · ${init.server.name} · harnesses: ${Object.keys(init.harnesses).join(", ")}${c.reset}`
   );
-  ws.send(JSON.stringify(frame));
-  return id;
+  client.onEvent((envelope) => renderEvent(envelope.event, json));
+
+  return {
+    client,
+    close: () => {
+      void client.close();
+      ws.close();
+    },
+  };
 }
 
-function sendNotification(ws: WebSocket, method: string, params: any): void {
-  const frame = { jsonrpc: "2.0", method, params };
-  console.log(`${ts()} ${c.blue}▸${c.reset} ${c.bold}${method}${c.reset}`);
-  ws.send(JSON.stringify(frame));
+// ---------------------------------------------------------------------------
+// Turn driving
+// ---------------------------------------------------------------------------
+
+interface CliState {
+  sessionId: string;
+  agent: keyof typeof ENGINE_HARNESS_BY_DEUS;
+  model?: string;
+  cwd: string;
+  resume?: string;
+  permissionMode: string;
+  nativeSessionId?: string;
 }
 
-function waitForResponse(ws: WebSocket, id: number, timeoutMs = 30_000): Promise<any> {
-  return new Promise((resolve, reject) => {
-    const timer = setTimeout(() => {
-      ws.removeListener("message", handler);
-      reject(new Error(`RPC timeout (id=${id})`));
-    }, timeoutMs);
-
-    function handler(data: WebSocket.Data) {
-      try {
-        const msg = JSON.parse(data.toString());
-        if (msg.id === id) {
-          clearTimeout(timer);
-          ws.removeListener("message", handler);
-          resolve(msg);
-        }
-      } catch {
-        /* ignore */
-      }
+async function runTurn(conn: Connection, state: CliState, prompt: string): Promise<boolean> {
+  const params: TurnStartParams = {
+    sessionId: state.sessionId,
+    turnId: generateUUIDv7(),
+    input: prompt,
+    config: {
+      harness: ENGINE_HARNESS_BY_DEUS[state.agent],
+      cwd: state.cwd,
+      model: state.model,
+      permissionMode: state.permissionMode as TurnStartParams["config"]["permissionMode"],
+      resumeSessionId: state.resume,
+      maxTurns: 1000,
+    },
+  };
+  const off = conn.client.onEvent((envelope) => {
+    if (envelope.sessionId === state.sessionId && envelope.event.type === "session.created") {
+      state.nativeSessionId = envelope.event.nativeSessionId;
+      // Follow-up turns resume the warm conversation automatically.
+      state.resume = envelope.event.nativeSessionId;
     }
-
-    ws.on("message", handler);
   });
+  try {
+    const handle = await conn.client.runTurn(params);
+    const ended = await handle.result;
+    return ended.stopReason === "end_turn";
+  } finally {
+    off();
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -362,228 +359,139 @@ function waitForResponse(ws: WebSocket, id: number, timeoutMs = 30_000): Promise
 
 async function main() {
   const opts = parseArgs();
+  const { url, proc } = await resolveServerUrl(opts);
+  // A spawned server is private to this CLI — host it. A dialed server
+  // (--url) already has a host (the backend); only claim it on --host.
+  const conn = await connect(url, opts.json, proc !== null || opts.forceHost);
 
-  const harnessLabel = getAgentHarnessLabel(opts.agent);
-  banner("Agent Server Debug CLI");
-  console.log(`  harness: ${c.bold}${harnessLabel}${c.reset} ${c.dim}(${opts.agent})${c.reset}`);
-  console.log(`  model:   ${opts.model || `${c.dim}(default)${c.reset}`}`);
-  console.log(`  cwd:     ${c.dim}${opts.cwd}${c.reset}`);
-  console.log(`  session: ${c.dim}${opts.session}${c.reset}`);
+  const state: CliState = {
+    sessionId: opts.sessionId,
+    agent: opts.agent,
+    model: opts.model,
+    cwd: opts.cwd,
+    resume: opts.resume,
+    permissionMode: opts.permissionMode,
+  };
 
-  let ws: WebSocket;
-  let proc: ChildProcess | null = null;
-
-  if (opts.url) {
-    console.log(`\n${c.dim}Connecting to ${opts.url}...${c.reset}`);
-    ws = await connectWs(opts.url);
-    console.log(`${c.green}Connected${c.reset}`);
-  } else {
-    const result = await spawnServer();
-    ws = result.ws;
-    proc = result.proc;
-  }
-
-  // State
-  let turnCounter = 0;
-  let isRunning = false;
-  let rl: readline.Interface | null = null;
-  let onTurnEnd: (() => void) | null = null;
-
-  // Listen for canonical events only
-  ws.on("message", (data: WebSocket.Data) => {
-    try {
-      const msg = JSON.parse(data.toString());
-
-      // Skip RPC responses (handled by waitForResponse)
-      if (msg.id != null && (msg.result !== undefined || msg.error !== undefined)) return;
-
-      // Skip legacy notifications
-      if (LEGACY_METHODS.has(msg.method)) return;
-
-      // This is a canonical event (dot-notation method)
-      const method = msg.method;
-      const params = msg.params || {};
-
-      // Derive provider label from agentHarness in the event
-      const agentHarness = parseEventAgentHarness(params.agentHarness, opts.agent);
-      const agentLabel = getAgentHarnessEventLabel(agentHarness);
-
-      printEvent(method, params, agentLabel);
-
-      // Detect turn completion from canonical events
-      if (
-        (method === "session.idle" || method === "session.error") &&
-        params.sessionId === opts.session
-      ) {
-        isRunning = false;
-        onTurnEnd?.();
-        onTurnEnd = null;
-        if (rl) {
-          if (method === "session.idle") banner("Ready");
-          rl.prompt();
-        }
-      }
-    } catch {
-      console.log(`${c.red}[unparseable]${c.reset} ${data.toString().slice(0, 200)}`);
-    }
-  });
-
-  // Handshake
-  banner("Handshake");
-  const initId = sendRequest(ws, "initialize", {});
-  const initResp = await waitForResponse(ws, initId);
-  const agents = initResp.result?.agents?.map((a: any) => a.id || a.type || a.name).filter(Boolean);
-  console.log(
-    `${c.green}Initialized${c.reset} v${initResp.result?.version} agents=[${agents?.join(", ") || "?"}]`
-  );
-
-  // Send query
-  async function sendQuery(prompt: string): Promise<boolean> {
-    turnCounter++;
-    isRunning = true;
-    const turnId = `${opts.session}-turn-${turnCounter}`;
-
-    banner(`Turn ${turnCounter}`);
-    console.log(`  ${c.dim}turnId: ${turnId}${c.reset}`);
-    console.log(`  ${c.dim}prompt: ${truncate(prompt, 80)}${c.reset}\n`);
-
-    const startId = sendRequest(ws, "turn/start", {
-      sessionId: opts.session,
-      agentHarness: opts.agent,
-      prompt,
-      options: {
-        cwd: opts.cwd,
-        model: opts.model,
-        turnId,
-        permissionMode: "default",
-      },
-    });
-
-    const response = await waitForResponse(ws, startId);
-    if (response.error) {
-      isRunning = false;
-      console.log(`${c.red}turn/start failed:${c.reset} ${response.error.message}`);
-      return false;
-    }
-
-    if (response.result?.accepted === false) {
-      isRunning = false;
-      console.log(`${c.red}turn/start rejected:${c.reset} ${response.result.reason}`);
-      return false;
-    }
-
-    return true;
-  }
-
-  // Single-shot mode
-  if (opts.prompt) {
-    const started = await sendQuery(opts.prompt);
-    if (started && isRunning) {
-      await new Promise<void>((resolve) => {
-        onTurnEnd = resolve;
-      });
-    }
-    ws.close();
+  const shutdown = (code: number) => {
+    conn.close();
     proc?.kill("SIGTERM");
+    process.exit(code);
+  };
+
+  // One-shot mode: run a single turn and exit with a meaningful code.
+  if (opts.prompt) {
+    try {
+      const ok = await runTurn(conn, state, opts.prompt);
+      shutdown(ok ? 0 : 1);
+    } catch (err) {
+      console.error(`${c.red}Turn failed: ${err instanceof Error ? err.message : err}${c.reset}`);
+      shutdown(1);
+    }
     return;
   }
 
-  // Interactive REPL
-  banner("Interactive Mode");
-  console.log(`  Type a prompt and press Enter.`);
+  // REPL mode
   console.log(
-    `  ${c.bold}.help${c.reset} for commands, ${c.bold}Ctrl+C${c.reset} to cancel turn, double ${c.bold}Ctrl+C${c.reset} to quit.\n`
+    `${c.dim}session=${state.sessionId} agent=${state.agent} cwd=${state.cwd}\n` +
+      `commands: .agent <a> · .model <m> · .session <id> · .cancel · .exit${c.reset}\n`
   );
-
-  rl = readline.createInterface({
+  const rl = readline.createInterface({
     input: process.stdin,
     output: process.stdout,
-    prompt: `${c.cyan}>${c.reset} `,
+    prompt: `${c.cyan}› ${c.reset}`,
+  });
+  let running = false;
+  let stdinEnded = false;
+
+  // A line queue instead of rl.question: piped input delivers every line up
+  // front (and EOF closes readline) — question() would drop lines that arrive
+  // while a turn is running.
+  const pendingLines: string[] = [];
+
+  const handleInput = async (input: string): Promise<"continue" | "exit"> => {
+    if (input === ".exit" || input === ".quit") return "exit";
+    if (input === ".cancel") {
+      await conn.client.cancelTurn(state.sessionId).catch(() => {});
+      return "continue";
+    }
+    if (input.startsWith(".agent ")) {
+      const agent = input.slice(7).trim() as keyof typeof ENGINE_HARNESS_BY_DEUS;
+      if (ENGINE_HARNESS_BY_DEUS[agent]) {
+        state.agent = agent;
+        state.resume = undefined;
+        state.sessionId = generateUUIDv7();
+        console.log(`${c.dim}agent=${agent} (new session ${state.sessionId})${c.reset}`);
+      } else console.log(`${c.red}unknown agent${c.reset}`);
+      return "continue";
+    }
+    if (input.startsWith(".model ")) {
+      state.model = input.slice(7).trim() || undefined;
+      console.log(`${c.dim}model=${state.model ?? "(default)"}${c.reset}`);
+      return "continue";
+    }
+    if (input.startsWith(".session ")) {
+      state.sessionId = input.slice(9).trim();
+      state.resume = undefined;
+      console.log(`${c.dim}session=${state.sessionId}${c.reset}`);
+      return "continue";
+    }
+    running = true;
+    try {
+      await runTurn(conn, state, input);
+    } catch (err) {
+      console.error(`${c.red}${err instanceof Error ? err.message : err}${c.reset}`);
+    } finally {
+      running = false;
+    }
+    return "continue";
+  };
+
+  let pumping = false;
+  const pump = async () => {
+    if (pumping) return;
+    pumping = true;
+    try {
+      while (pendingLines.length) {
+        const input = pendingLines.shift()!.trim();
+        if (!input) continue;
+        if ((await handleInput(input)) === "exit") return shutdown(0);
+      }
+    } finally {
+      pumping = false;
+    }
+    if (stdinEnded) return shutdown(0);
+    rl.prompt();
+  };
+
+  rl.on("line", (line) => {
+    // Control commands act immediately — a running turn holds the pump, and
+    // .cancel serialized behind the turn it should cancel is useless.
+    if (line.trim() === ".cancel" && running) {
+      console.log(`${c.yellow}Cancelling turn…${c.reset}`);
+      void conn.client.cancelTurn(state.sessionId).catch(() => {});
+      return;
+    }
+    pendingLines.push(line);
+    void pump();
+  });
+  rl.on("close", () => {
+    stdinEnded = true;
+    void pump();
+  });
+  rl.on("SIGINT", () => {
+    if (running) {
+      console.log(`\n${c.yellow}Cancelling turn…${c.reset}`);
+      void conn.client.cancelTurn(state.sessionId);
+    } else {
+      shutdown(0);
+    }
   });
 
   rl.prompt();
-
-  rl.on("line", async (line: string) => {
-    const input = line.trim();
-    if (!input) {
-      rl!.prompt();
-      return;
-    }
-
-    if (input === ".exit" || input === ".quit") {
-      ws.close();
-      proc?.kill("SIGTERM");
-      process.exit(0);
-    }
-    if (input === ".help") {
-      console.log(`  ${c.bold}.exit${c.reset}          Quit`);
-      console.log(`  ${c.bold}.session <id>${c.reset}  Switch session`);
-      console.log(`  ${c.bold}.model <name>${c.reset}  Switch model`);
-      console.log(
-        `  ${c.bold}.agent <type>${c.reset}  Switch agent (claude/codex-sdk/codex-server)`
-      );
-      console.log(`  ${c.bold}.cancel${c.reset}        Cancel running turn`);
-      rl!.prompt();
-      return;
-    }
-    if (input.startsWith(".session ")) {
-      opts.session = input.slice(9).trim();
-      console.log(`${c.green}Session:${c.reset} ${opts.session}`);
-      rl!.prompt();
-      return;
-    }
-    if (input.startsWith(".model ")) {
-      opts.model = input.slice(7).trim();
-      console.log(`${c.green}Model:${c.reset} ${opts.model}`);
-      rl!.prompt();
-      return;
-    }
-    if (input.startsWith(".agent ")) {
-      try {
-        opts.agent = parseAgentHarness(input.slice(7).trim());
-      } catch (err) {
-        console.log(`${c.red}${err instanceof Error ? err.message : String(err)}${c.reset}`);
-        rl!.prompt();
-        return;
-      }
-      console.log(`${c.green}Agent:${c.reset} ${opts.agent}`);
-      rl!.prompt();
-      return;
-    }
-    if (input === ".cancel") {
-      if (isRunning) sendNotification(ws, "turn/cancel", { sessionId: opts.session });
-      else console.log(`${c.dim}No turn running${c.reset}`);
-      rl!.prompt();
-      return;
-    }
-
-    const started = await sendQuery(input);
-    if (!started) rl!.prompt();
-  });
-
-  let cancelSentAt = 0;
-  rl.on("SIGINT", () => {
-    const now = Date.now();
-    if (isRunning && now - cancelSentAt > 1000) {
-      cancelSentAt = now;
-      console.log(`\n${c.yellow}Cancelling turn… (Ctrl+C again to quit)${c.reset}`);
-      sendNotification(ws, "turn/cancel", { sessionId: opts.session });
-    } else {
-      console.log(`\n${c.dim}Bye${c.reset}`);
-      ws.close();
-      proc?.kill("SIGTERM");
-      process.exit(0);
-    }
-  });
-
-  rl.on("close", () => {
-    ws.close();
-    proc?.kill("SIGTERM");
-    process.exit(0);
-  });
 }
 
 main().catch((err) => {
-  console.error(`${c.red}Fatal: ${err.message}${c.reset}`);
+  console.error(`${c.red}Fatal: ${err instanceof Error ? err.message : err}${c.reset}`);
   process.exit(1);
 });

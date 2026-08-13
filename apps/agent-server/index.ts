@@ -1,7 +1,11 @@
 // agent-server/index.ts
 // Entry point for the Deus agent-server process.
 //
-// WebSocket server on 127.0.0.1 (dynamic port) using JSON-RPC 2.0 text frames.
+// The process serves the standard @zvada/agent-server wire (JSON-RPC 2.0,
+// per-session seq, bounded replay) over a WebSocket on 127.0.0.1 (dynamic
+// port), with deus/* side-channel frames multiplexed on the same pipe (see
+// shared/agent-side-channel.ts). The engine runs in-process with the deus
+// embed-tier seams: in-process MCP tool suite, tool policy, checkpoint hooks.
 
 import * as Sentry from "@sentry/node";
 
@@ -15,200 +19,95 @@ Sentry.init({
 });
 
 import { createServer as createHttpServer } from "http";
-import { WebSocketServer, WebSocket } from "ws";
+import { WebSocketServer } from "ws";
+import { AgentServer as WireServer } from "./upstream-server";
 
-import { RpcConnection, wsTransport } from "./rpc-connection";
-import { EventBroadcaster } from "./event-broadcaster";
-import {
-  registerAgent,
-  getAgent,
-  initializeAllAgents,
-  getRegisteredAgentHarnesses,
-} from "./agents/registry";
 import { adoptBundledClis } from "./agents/core/bundled-clis";
-import { CoreAgentHandler } from "./agents/core/core-handler";
+import { applyShellEnvironment } from "./agents/environment";
+import { getRuntime } from "./agents/core/engine";
 import { installFileLogger } from "./logging";
 import { killChildProcesses } from "./process-cleanup";
-import { registerRpcMethods } from "./rpc-methods";
-import {
-  handleHttpRequest,
-  setShuttingDown,
-  setAgentsInitialized,
-  waitForDrain,
-  cancelRemainingSessions,
-} from "./health";
+import { bridgeWsConnection, createEventObserverTransport } from "./wire";
 
 const logger = installFileLogger();
 export const logFilePath = logger.logFilePath;
 
-class AgentServer {
-  private initializedAgents = new Set<string>();
-  private httpServer: ReturnType<typeof createHttpServer> | null = null;
-  private wss: WebSocketServer | null = null;
+async function start(): Promise<void> {
+  console.log("AgentServer: Initializing...");
 
-  constructor() {
-    console.log("AgentServer: Initializing...");
+  // Packaged/staged runtimes: adopt bundled CLIs before the engine registry
+  // exists (its provisioner honors the CLI-path env overrides).
+  adoptBundledClis();
 
-    const gracefulShutdown = async (signal: string) => {
-      console.log(`\n[SIGNAL] Received ${signal}, shutting down gracefully...`);
+  // Dev/source only: fold the login shell's environment into process.env once
+  // at startup. The engine spreads process.env under every harness subprocess,
+  // so this replaces the legacy per-turn env layering (process.env wins).
+  applyShellEnvironment();
 
-      setShuttingDown(true);
+  const runtime = getRuntime();
+  const wireServer = new WireServer(runtime, { info: { name: "deus-agent-server" } });
+  wireServer.attach(createEventObserverTransport());
 
-      if (this.httpServer) {
-        this.httpServer.close();
-        console.log("[SHUTDOWN] HTTP server closed to new connections");
-      }
+  // Binding to 127.0.0.1 — agent-server only accepts local connections.
+  const httpServer = createHttpServer((_req, res) => {
+    res.writeHead(404, { "Content-Type": "text/plain" });
+    res.end("Not found");
+  });
+  const wss = new WebSocketServer({ server: httpServer });
 
-      console.log("[SHUTDOWN] Waiting for in-flight turns to drain...");
-      const drained = await waitForDrain();
-      if (drained) {
-        console.log("[SHUTDOWN] All turns drained successfully");
-      } else {
-        console.log("[SHUTDOWN] Drain timeout reached, cancelling remaining sessions");
-        await cancelRemainingSessions();
-      }
+  wss.on("connection", (ws) => bridgeWsConnection(ws, wireServer));
+  wss.on("error", (error: Error) => console.error("WebSocketServer error:", error));
 
-      try {
-        await this.cleanup();
-        console.log("[SIGNAL] Cleanup complete, exiting process");
-      } catch (error) {
-        console.error("[SIGNAL] Cleanup failed:", error);
-      } finally {
-        process.exit(0);
-      }
-    };
-    process.on("SIGINT", () => gracefulShutdown("SIGINT"));
-    process.on("SIGTERM", () => gracefulShutdown("SIGTERM"));
-  }
-
-  private getInitializedAgents() {
-    const agents: { type: string; capabilities: unknown; initialized: boolean }[] = [];
-    for (const agentHarness of getRegisteredAgentHarnesses()) {
-      const handler = getAgent(agentHarness);
-      if (handler && this.initializedAgents.has(agentHarness)) {
-        agents.push({ type: agentHarness, capabilities: handler.capabilities, initialized: true });
-      }
+  const SHUTDOWN_TIMEOUT_MS = 15_000;
+  let shuttingDown = false;
+  const gracefulShutdown = async (signal: string) => {
+    if (shuttingDown) return;
+    shuttingDown = true;
+    console.log(`\n[SIGNAL] Received ${signal}, shutting down...`);
+    httpServer.close();
+    // A wedged harness subprocess must not make the process unkillable-by-
+    // SIGTERM (the spawner escalates to SIGKILL, but quit should not hang).
+    const forceExit = setTimeout(() => {
+      console.error("[SIGNAL] Cleanup timed out, forcing exit");
+      process.exit(1);
+    }, SHUTDOWN_TIMEOUT_MS);
+    forceExit.unref();
+    try {
+      // Cancels in-flight turns (their turn.ended still broadcasts), releases
+      // harness subprocesses, closes every attached transport.
+      await wireServer.shutdown();
+      await killChildProcesses();
+      for (const client of wss.clients) client.close(1001, "Server shutting down");
+      wss.close();
+      console.log("[SIGNAL] Cleanup complete, exiting process");
+    } catch (error) {
+      console.error("[SIGNAL] Cleanup failed:", error);
+    } finally {
+      clearTimeout(forceExit);
+      process.exit(0);
     }
-    return agents;
-  }
+  };
+  process.on("SIGINT", () => void gracefulShutdown("SIGINT"));
+  process.on("SIGTERM", () => void gracefulShutdown("SIGTERM"));
 
-  /**
-   * Wires up all JSON-RPC methods and notifications on a new connection.
-   */
-  private setupJsonRpc(rpcTunnel: RpcConnection): void {
-    registerRpcMethods(rpcTunnel, {
-      getInitializedAgents: () => this.getInitializedAgents(),
+  await new Promise<void>((resolve, reject) => {
+    // Port 0 = OS-assigned dynamic port
+    httpServer.listen(0, "127.0.0.1", () => {
+      const addr = httpServer.address();
+      const port = typeof addr === "object" && addr ? addr.port : 0;
+
+      console.log(`Agent-server listening on ws://127.0.0.1:${port}`);
+      console.log(`Agent-server PID: ${process.pid}`);
+
+      // Machine-readable output for the backend spawner / dev.sh
+      logger.writeStdout(`LISTEN_URL=ws://127.0.0.1:${port}`);
+      resolve();
     });
-  }
-
-  /**
-   * Handles a new WebSocket connection.
-   * Each WS text frame is a complete JSON-RPC message (no line splitting needed).
-   */
-  private handleWsConnection(ws: WebSocket): void {
-    console.log("Client connected (ws)");
-    const transport = wsTransport(ws);
-    const rpcTunnel = new RpcConnection(transport);
-    this.setupJsonRpc(rpcTunnel);
-
-    ws.on("message", (data: Buffer | string) => {
-      const message = typeof data === "string" ? data : data.toString("utf8");
-      console.debug("Received WS message with length", message.length);
-      rpcTunnel.handleMessage(message);
+    httpServer.on("error", (error: Error) => {
+      console.error("HTTP server error:", error);
+      reject(error);
     });
-
-    ws.on("error", (error: Error) => {
-      console.error("WebSocket error:", error);
-    });
-
-    ws.on("close", (code: number, reason: Buffer) => {
-      console.log(`Client disconnected (ws), code=${code} reason=${reason.toString()}`);
-      rpcTunnel.stop();
-      EventBroadcaster.detachTunnel(rpcTunnel);
-    });
-  }
-
-  private async cleanup(): Promise<void> {
-    await killChildProcesses();
-
-    if (this.wss) {
-      for (const client of this.wss.clients) {
-        client.close(1001, "Server shutting down");
-      }
-      this.wss.close();
-    }
-    if (this.httpServer) {
-      this.httpServer.close();
-    }
-  }
-
-  async start(): Promise<void> {
-    await this.cleanup();
-
-    // All harnesses run on the embedded @zvada/agent-server/core engine — the
-    // in-repo engine implementations are gone (phase B of the consolidation).
-    // Packaged/staged runtimes: adopt bundled CLIs before the engine registry
-    // exists (its provisioner honors the CLI-path env overrides).
-    adoptBundledClis();
-    registerAgent(new CoreAgentHandler("claude"));
-    registerAgent(new CoreAgentHandler("codex-sdk"));
-    registerAgent(new CoreAgentHandler("codex-server"));
-
-    console.log("Initializing agent handlers...");
-    this.initializedAgents.clear();
-    const initResults = initializeAllAgents();
-    for (const [agentHarness, result] of initResults) {
-      if (!result.success) {
-        console.error(`${agentHarness} initialization failed:`, result.error);
-      } else {
-        console.log(`${agentHarness} handler initialized successfully`);
-        this.initializedAgents.add(agentHarness);
-      }
-    }
-
-    setAgentsInitialized(this.initializedAgents.size > 0);
-
-    return this.listen();
-  }
-
-  private listen(): Promise<void> {
-    return new Promise((resolve, reject) => {
-      // Create an HTTP server for health endpoints + WS upgrade.
-      // Binding to 127.0.0.1 — agent-server only accepts local connections.
-      this.httpServer = createHttpServer((req, res) => {
-        handleHttpRequest(req, res, this.wss);
-      });
-
-      this.wss = new WebSocketServer({ server: this.httpServer });
-
-      this.wss.on("connection", (ws) => {
-        console.log("Server: New WebSocket connection accepted");
-        this.handleWsConnection(ws);
-      });
-
-      this.wss.on("error", (error: Error) => {
-        console.error("WebSocketServer error:", error);
-      });
-
-      // Port 0 = OS-assigned dynamic port
-      this.httpServer.listen(0, "127.0.0.1", () => {
-        const addr = this.httpServer!.address();
-        const port = typeof addr === "object" && addr ? addr.port : 0;
-
-        console.log(`Agent-server listening on ws://127.0.0.1:${port}`);
-        console.log(`Agent-server PID: ${process.pid}`);
-
-        // Machine-readable output for the Electron main process / dev.sh
-        logger.writeStdout(`LISTEN_URL=ws://127.0.0.1:${port}`);
-        resolve();
-      });
-
-      this.httpServer.on("error", (error: Error) => {
-        console.error("HTTP server error:", error);
-        reject(error);
-      });
-    });
-  }
+  });
 }
 
 process.on("uncaughtException", (error: any) => {
@@ -228,8 +127,7 @@ process.on("unhandledRejection", (reason, _promise) => {
   console.error("Unhandled Rejection Reason:", JSON.stringify(reason, null, 2));
 });
 
-const server = new AgentServer();
-server.start().catch((error) => {
+start().catch((error) => {
   console.error("Startup failed:", error);
   process.exit(1);
 });

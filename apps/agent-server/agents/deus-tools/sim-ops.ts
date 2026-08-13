@@ -12,14 +12,14 @@
 // NOT used by: Simulator Panel (that goes through the backend service).
 //
 // TODO(build-log-streaming): pipe xcodebuild stdout line-by-line via
-// EventBroadcaster so the panel can show real-time build progress.
+// the side channel so the panel can show real-time build progress.
 
 import { execFile } from "child_process";
 import { promisify } from "util";
 import { readdir } from "fs/promises";
 import { tmpdir } from "os";
 import { dirname, join } from "path";
-import { EventBroadcaster } from "../../event-broadcaster";
+import { HostRpc } from "../../host-link";
 
 const execFileAsync = promisify(execFile);
 
@@ -186,7 +186,7 @@ export async function resolveDevice(destination?: string, sessionId?: string): P
   if (sessionId) {
     // Let RPC errors (timeout, disconnect) propagate so the agent sees the
     // real problem. Only a `null` response means "no workspace binding yet".
-    const ctx = await EventBroadcaster.requestSimulatorContext({ sessionId });
+    const ctx = await HostRpc.requestSimulatorContext({ sessionId });
     if (ctx?.udid) return ctx.udid;
     throw new Error(
       "No simulator assigned to this workspace. Start one via the Simulator panel " +
@@ -659,7 +659,7 @@ export async function build(
   const derivedData = join(cwd, "build");
 
   // TODO(build-log-streaming): pipe stdout/stderr line-by-line via
-  // EventBroadcaster so the frontend panel can show real-time build progress.
+  // the side channel so the frontend panel can show real-time build progress.
   await execFileAsync(
     "xcodebuild",
     [

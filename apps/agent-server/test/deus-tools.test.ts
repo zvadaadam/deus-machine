@@ -14,8 +14,10 @@ const { mockFrontendAPI } = vi.hoisted(() => ({
     requestReadAppSkill: vi.fn(),
   },
 }));
-vi.mock("../event-broadcaster", () => ({
-  EventBroadcaster: mockFrontendAPI,
+vi.mock("../host-link", () => ({
+  HostRpc: mockFrontendAPI,
+  notifyHost: vi.fn(),
+  hasHost: () => true,
 }));
 
 // Mock device-use/engine — the package is ESM-only, tests run in CJS context.

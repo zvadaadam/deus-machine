@@ -17,8 +17,6 @@ const {
   mockPersistSessionTitle,
   mockInvalidate,
   mockBroadcast,
-  mockRelay,
-  mockRespondToAgent,
 } = vi.hoisted(() => ({
   mockPersistMessageCreated: vi.fn(() => ({ ok: true, value: "msg-id" })),
   mockPersistMessageCancelled: vi.fn(() => ({ ok: true, value: "msg-id" })),
@@ -32,8 +30,6 @@ const {
   mockPersistSessionTitle: vi.fn(() => ({ ok: true, value: undefined })),
   mockInvalidate: vi.fn(),
   mockBroadcast: vi.fn(),
-  mockRelay: vi.fn(() => Promise.resolve({ diff: "ok" })),
-  mockRespondToAgent: vi.fn(() => Promise.resolve()),
 }));
 
 vi.mock("../../../src/services/agent/persistence", () => ({
@@ -57,10 +53,6 @@ vi.mock("../../../src/services/ws.service", () => ({
   broadcast: mockBroadcast,
 }));
 
-vi.mock("../../../src/services/agent/tool-relay", () => ({
-  relay: mockRelay,
-}));
-
 // ============================================================================
 // Import after mocks
 // ============================================================================
@@ -68,10 +60,7 @@ vi.mock("../../../src/services/agent/tool-relay", () => ({
 import { createAgentEventHandler } from "../../../src/services/agent/event-handler";
 import type { AgentEvent } from "../../../../shared/agent-events";
 
-// Create event handler with injected mock (same pattern as production)
-const handleAgentEvent = createAgentEventHandler({
-  respondToAgent: mockRespondToAgent,
-});
+const handleAgentEvent = createAgentEventHandler();
 
 // ============================================================================
 // Tests
@@ -176,45 +165,6 @@ describe("handleAgentEvent", () => {
   // ==========================================================================
   // Messages
   // ==========================================================================
-
-  describe("message.assistant (SDK passthrough — no persistence)", () => {
-    it("does not persist or invalidate", () => {
-      const event: AgentEvent = {
-        type: "message.assistant",
-        sessionId: "sess-1",
-        agentHarness: "claude",
-        message: { id: "msg-1", role: "assistant", content: [] },
-      };
-      handleAgentEvent(event);
-      expect(mockInvalidate).not.toHaveBeenCalled();
-    });
-  });
-
-  describe("message.tool_result (SDK passthrough — no persistence)", () => {
-    it("does not persist or invalidate", () => {
-      const event: AgentEvent = {
-        type: "message.tool_result",
-        sessionId: "sess-1",
-        agentHarness: "claude",
-        message: { id: "msg-2", role: "user", content: [] },
-      };
-      handleAgentEvent(event);
-      expect(mockInvalidate).not.toHaveBeenCalled();
-    });
-  });
-
-  describe("message.result (SDK passthrough — no persistence)", () => {
-    it("does not persist or invalidate", () => {
-      const event: AgentEvent = {
-        type: "message.result",
-        sessionId: "sess-1",
-        agentHarness: "claude",
-        subtype: "success",
-      };
-      handleAgentEvent(event);
-      expect(mockInvalidate).not.toHaveBeenCalled();
-    });
-  });
 
   describe("message.cancelled", () => {
     const event: AgentEvent = {
@@ -450,91 +400,9 @@ describe("handleAgentEvent", () => {
   // Interaction requests (no DB write, no invalidation)
   // ==========================================================================
 
-  describe("request.opened", () => {
-    it("does not persist or invalidate", () => {
-      const event: AgentEvent = {
-        type: "request.opened",
-        requestId: "req-1",
-        sessionId: "sess-1",
-        agentHarness: "claude",
-        requestType: "tool_approval",
-        data: { tool: "bash" },
-      };
-
-      handleAgentEvent(event);
-
-      expect(mockInvalidate).not.toHaveBeenCalled();
-      // None of the persistence functions should be called
-      expect(mockPersistSessionStarted).not.toHaveBeenCalled();
-    });
-  });
-
-  describe("request.resolved", () => {
-    it("does not persist or invalidate", () => {
-      const event: AgentEvent = {
-        type: "request.resolved",
-        requestId: "req-1",
-        sessionId: "sess-1",
-      };
-
-      handleAgentEvent(event);
-
-      expect(mockInvalidate).not.toHaveBeenCalled();
-    });
-  });
-
   // ==========================================================================
   // Tool relay
   // ==========================================================================
-
-  describe("tool.request", () => {
-    const event: AgentEvent = {
-      type: "tool.request",
-      requestId: "treq-1",
-      sessionId: "sess-1",
-      method: "getDiff",
-      params: { stat: true },
-      timeoutMs: 30000,
-    };
-
-    it("calls relay() with the event", () => {
-      handleAgentEvent(event);
-      expect(mockRelay).toHaveBeenCalledWith(event);
-    });
-
-    it("does not persist or invalidate", () => {
-      handleAgentEvent(event);
-      expect(mockInvalidate).not.toHaveBeenCalled();
-    });
-
-    it("sends result back to agent-server via agentService.respondToAgent when relay resolves", async () => {
-      mockRelay.mockResolvedValue({ diff: "file.ts: +10 -5" });
-
-      handleAgentEvent(event);
-
-      await vi.waitFor(() => {
-        expect(mockRespondToAgent).toHaveBeenCalledWith({
-          sessionId: "sess-1",
-          requestId: "treq-1",
-          result: { diff: "file.ts: +10 -5" },
-        });
-      });
-    });
-
-    it("sends error result back to agent-server when relay rejects", async () => {
-      mockRelay.mockRejectedValue(new Error("Tool relay timed out"));
-
-      handleAgentEvent(event);
-
-      await vi.waitFor(() => {
-        expect(mockRespondToAgent).toHaveBeenCalledWith({
-          sessionId: "sess-1",
-          requestId: "treq-1",
-          result: { error: "Tool relay timed out" },
-        });
-      });
-    });
-  });
 
   // ==========================================================================
   // Metadata
@@ -604,20 +472,6 @@ describe("handleAgentEvent", () => {
           category: "internal",
         },
         { type: "session.cancelled", sessionId: "s", agentHarness: "claude" },
-        {
-          type: "message.assistant",
-          sessionId: "s",
-          agentHarness: "claude",
-          message: { id: "m", role: "assistant", content: [] },
-        },
-        {
-          type: "message.tool_result",
-          sessionId: "s",
-          agentHarness: "claude",
-          message: { id: "m", role: "user", content: [] },
-        },
-        { type: "message.system", sessionId: "s", agentHarness: "claude", data: {} },
-        { type: "message.result", sessionId: "s", agentHarness: "claude", subtype: "success" },
         { type: "message.cancelled", sessionId: "s", agentHarness: "claude" },
         // Turn, message & part lifecycle
         { type: "turn.started", sessionId: "s", agentHarness: "claude", messageId: "m" },
@@ -659,24 +513,6 @@ describe("handleAgentEvent", () => {
           agentHarness: "claude",
           messageId: "m",
           finishReason: "end_turn",
-        },
-        // Interaction requests
-        {
-          type: "request.opened",
-          requestId: "r",
-          sessionId: "s",
-          agentHarness: "claude",
-          requestType: "tool_approval",
-          data: {},
-        },
-        { type: "request.resolved", requestId: "r", sessionId: "s" },
-        {
-          type: "tool.request",
-          requestId: "r",
-          sessionId: "s",
-          method: "m",
-          params: {},
-          timeoutMs: 1000,
         },
         { type: "agent.session_id", sessionId: "s", agentSessionId: "a" },
         { type: "session.title", sessionId: "s", agentHarness: "claude", title: "Fix bug" },

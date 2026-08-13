@@ -12,7 +12,7 @@
 
 import type { McpServerConfig } from "@zvada/agent-server/protocol";
 import { getErrorMessage } from "@shared/lib/errors";
-import { setAapMcpServers } from "./agents/core/core-handler";
+import { setAapMcpServers } from "./agents/core/engine";
 
 /** Registered AAP servers by normalized app id (e.g. `deus_mobile_use`). */
 const registeredServers = new Map<string, McpServerConfig>();

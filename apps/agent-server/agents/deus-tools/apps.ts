@@ -1,7 +1,7 @@
 // agent-server/agents/deus-tools/apps.ts
 //
 // AAP lifecycle tools surfaced in the Deus MCP server. Thin wrappers: each
-// tool validates its args, calls `EventBroadcaster.requestXxx(...)` to hit
+// tool validates its args, calls `HostRpc.requestXxx(...)` to hit
 // the backend's apps.service (where real state + process management lives),
 // and formats the result for the agent.
 //
@@ -13,7 +13,7 @@
 import type { SdkMcpToolDefinition } from "@anthropic-ai/claude-agent-sdk";
 import { z } from "zod";
 import { getErrorMessage } from "@shared/lib/errors";
-import { EventBroadcaster } from "../../event-broadcaster";
+import { HostRpc } from "../../host-link";
 import { tool } from "./sdk-tool";
 
 // ----------------------------------------------------------------------------
@@ -62,7 +62,7 @@ you don't need (and can't pass) a workspaceId.`,
       {},
       withErrorCatch(async () => {
         console.log(`[deusMCPServer] list_apps invoked for session ${sessionId}`);
-        const response = await EventBroadcaster.requestListApps({ sessionId });
+        const response = await HostRpc.requestListApps({ sessionId });
         return textResult(JSON.stringify(response, null, 2));
       })
     ),
@@ -88,7 +88,7 @@ Workspace is inferred from your session — do NOT pass a workspaceId.`,
         console.log(
           `[deusMCPServer] launch_app invoked for session ${sessionId} appId=${args.appId}`
         );
-        const response = await EventBroadcaster.requestLaunchApp({
+        const response = await HostRpc.requestLaunchApp({
           appId: args.appId,
           sessionId,
         });
@@ -122,7 +122,7 @@ are automatically removed from your tool list.`,
         console.log(
           `[deusMCPServer] stop_app invoked for session ${sessionId} runningAppId=${args.runningAppId}`
         );
-        const response = await EventBroadcaster.requestStopApp({
+        const response = await HostRpc.requestStopApp({
           runningAppId: args.runningAppId,
         });
         return textResult(
@@ -151,7 +151,7 @@ Returns an empty string if the app declares no skills.`,
         console.log(
           `[deusMCPServer] read_app_skill invoked for session ${sessionId} appId=${args.appId}`
         );
-        const response = await EventBroadcaster.requestReadAppSkill({ appId: args.appId });
+        const response = await HostRpc.requestReadAppSkill({ appId: args.appId });
         return textResult(
           response.content.length > 0 ? response.content : `No skills declared for ${args.appId}.`
         );

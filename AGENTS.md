@@ -43,7 +43,7 @@ bun run test:agent-server
 bun run dev:web
 ```
 
-`bun run dev:web` is the preferred cloud smoke because it rebuilds the Node native module ABI, starts the backend, lets the backend own agent-server startup, and then starts Vite with the emitted backend port. Confirm the terminal shows `[agent-server] LISTEN_URL=...`, `[BACKEND_PORT]...`, `Server ready!`, and an `AgentClient` handshake before opening the frontend URL.
+`bun run dev:web` is the preferred cloud smoke because it rebuilds the Node native module ABI, starts the backend, lets the backend own agent-server startup, and then starts Vite with the emitted backend port. Confirm the terminal shows `[agent-server] LISTEN_URL=...`, `[BACKEND_PORT]...`, `Server ready!`, and `[AgentService] Connected, agents: [claude, codex-sdk, codex-server]` before opening the frontend URL.
 
 For browser-based UI smoke tests, install the Playwright browser after dependencies are installed:
 
@@ -77,6 +77,16 @@ Backend → Agent-Server (apps/agent-server/) — JSON-RPC 2.0 over WebSocket
 **Agent-Server** — Stateless. Wraps Claude/Codex SDKs, emits canonical events to backend. No DB access, no direct frontend communication. Separate process for isolation.
 
 **Rule of thumb:** Needs native Electron API? → Main process. Everything else → Backend or Agent-Server.
+
+### The @zvada/agent-server package (upstream engine + wire)
+
+The agent-server runs on the upstream **[`@zvada/agent-server`](https://github.com/zvadaadam/agent-server)** package (same author as this repo): `/core` is the engine (AgentRuntime + Claude/Codex/ACP harness adapters), `/protocol` the zod wire contract, `/server` the JSON-RPC 2.0 wire (per-session `seq`, bounded replay, quick-ack turns), `/client` the typed consumer the backend uses. Deus-specific traffic (tool round-trips, AAP MCP hot-swap, provider auth, titles) rides a `deus/*` side channel multiplexed on the same pipe — see `shared/agent-side-channel.ts`.
+
+When debugging agent-server behavior (event shapes, turn admission, cancel semantics, resume, provisioning), **read the package source — you have full access**:
+
+- `node_modules/@zvada/agent-server/src/` — the package ships readable TypeScript source, not compiled JS. This is the fastest reference and always matches the installed version.
+- Local clone at `~/Developer/agent/agent-server` (Conductor-managed; work lives on branches/origin, the main checkout is a stale empty worktree) and https://github.com/zvadaadam/agent-server for history, DESIGN.md, and plans/.
+- Engine bugs belong upstream (branch + PR there, then bump the pin here); consumer-side hardening belongs in the backend's `translate/` shim or the agent-server's wire bridge.
 
 ### WebSocket Query Protocol
 
