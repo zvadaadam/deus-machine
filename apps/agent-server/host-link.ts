@@ -66,9 +66,12 @@ function requestHost<T>(method: string, params: unknown, timeoutMs?: number): Pr
   return host.request<T>(method, params, timeoutMs);
 }
 
-/** Fire-and-forget notification to the host (dropped when none attached). */
-export function notifyHost(method: string, params: unknown): void {
-  host?.notify(method, params);
+/** Fire-and-forget notification to the host. Returns false when no host is
+ *  attached (the notification was dropped) so callers can retry later. */
+export function notifyHost(method: string, params: unknown): boolean {
+  if (!host) return false;
+  host.notify(method, params);
+  return true;
 }
 
 /**

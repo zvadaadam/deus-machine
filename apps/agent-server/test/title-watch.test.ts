@@ -4,7 +4,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const { mockNotifyHost, mockListSessions } = vi.hoisted(() => ({
-  mockNotifyHost: vi.fn(),
+  mockNotifyHost: vi.fn(() => true),
   mockListSessions: vi.fn(async () => [{ sessionId: "native-1", summary: "Fix login flow" }]),
 }));
 
@@ -53,6 +53,22 @@ describe("maybeFetchTitle", () => {
     maybeFetchTitle("s1");
     await new Promise((r) => setImmediate(r));
     expect(mockNotifyHost).not.toHaveBeenCalled();
+  });
+
+  it("keeps retrying when the host is disconnected at push time", async () => {
+    mockNotifyHost.mockReturnValueOnce(false);
+    trackedSessions.set("s1", {
+      harness: "claude-code",
+      cwd: "/tmp/w",
+      nativeSessionId: "native-1",
+    });
+    maybeFetchTitle("s1");
+    await vi.waitFor(() => expect(mockNotifyHost).toHaveBeenCalledTimes(1));
+    // Dropped push must not burn the attempt.
+    expect(trackedSessions.get("s1")?.titleFetched).toBeFalsy();
+    // Host back: next turn end delivers and latches.
+    maybeFetchTitle("s1");
+    await vi.waitFor(() => expect(trackedSessions.get("s1")?.titleFetched).toBe(true));
   });
 
   it("retries while the summary is missing", async () => {

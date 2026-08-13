@@ -26,10 +26,15 @@ export function maybeFetchTitle(sessionId: string): void {
       const sessions = await listSessions({ dir: cwd, limit: 20 });
       const title = sessions.find((s) => s.sessionId === nativeSessionId)?.summary;
       if (title) {
-        // Flag only on success: the SDK summary usually lags the first turn,
-        // so keep retrying at each turn end until one exists.
-        state.titleFetched = true;
-        notifyHost(SIDE_CHANNEL.title, { sessionId, agentHarness: "claude", title });
+        // Flag only on DELIVERY: the SDK summary usually lags the first turn
+        // (retry until one exists), and a backend disconnect at push time
+        // must not burn the only attempt — the next turn end retries.
+        const delivered = notifyHost(SIDE_CHANNEL.title, {
+          sessionId,
+          agentHarness: "claude",
+          title,
+        });
+        if (delivered) state.titleFetched = true;
       }
     } catch (error) {
       console.error(`[title-watch] title fetch failed for ${sessionId}:`, error);

@@ -37,32 +37,40 @@ import { RegisterAppMcpRequestSchema, UnregisterAppMcpRequestSchema } from "./rp
 import { observeLifecycleEvent, observeTurnStart, trackedSessions } from "./session-tracker";
 import { maybeFetchTitle } from "./title-watch";
 
+interface PendingTurnStart {
+  sessionId?: string;
+  turnId?: string;
+  config?: {
+    harness?: string;
+    cwd?: string;
+    additionalDirectories?: string[];
+    mcpServers?: Record<string, unknown>;
+  };
+}
+
 /**
  * Observe (and possibly rewrite) an inbound non-side-channel line.
  * Returns a replacement line, or undefined to pass the original through.
+ *
+ * turn/start is NOT tracked here — a rejected request (bad harness, shutting
+ * down, …) must never pollute the session tracker with a turn that will
+ * never run. The request is parked in `pendingStarts` and committed only
+ * when the outbound ACK confirms the server accepted it (the quick-ack is
+ * sent before the first event can be emitted, so the tracker is always
+ * populated before the embed seams consult it).
  */
-function observeInboundLine(line: string): string | undefined {
+function observeInboundLine(
+  line: string,
+  pendingStarts: Map<string | number, PendingTurnStart>
+): string | undefined {
   // Cheap pre-filter: only turn/start + turn/cancel requests matter here.
   if (!line.includes('"turn/')) return undefined;
   const msg = decodeWireMessage(line);
   if (msg.kind !== "request") return undefined;
 
   if (msg.method === "turn/start") {
-    const params = (msg.params ?? {}) as {
-      sessionId?: string;
-      turnId?: string;
-      config?: {
-        harness?: string;
-        cwd?: string;
-        additionalDirectories?: string[];
-        mcpServers?: Record<string, unknown>;
-      };
-    };
-    // A turn/start against a busy session is about to be rejected with
-    // turnActive — it must not overwrite the ACTIVE turn's cwd/dirs/turnId
-    // (the edit guard and cancel-checkpoint consult them mid-turn).
-    const active = params.sessionId ? trackedSessions.get(params.sessionId) : undefined;
-    if (active?.turnId === undefined) observeTurnStart(params);
+    const params = (msg.params ?? {}) as PendingTurnStart;
+    pendingStarts.set(msg.id, params);
     // AAP parity with the legacy handler: every claude turn carries the
     // currently registered AAP MCP servers in its wire config (the engine
     // hot-swaps mcpServers between turns without a session restart).
@@ -91,6 +99,25 @@ function observeInboundLine(line: string): string | undefined {
   return undefined;
 }
 
+/** Commit a parked turn/start once its outbound response proves acceptance. */
+function observeOutboundLine(
+  line: string,
+  pendingStarts: Map<string | number, PendingTurnStart>
+): void {
+  if (pendingStarts.size === 0) return;
+  const msg = decodeWireMessage(line);
+  if (msg.kind !== "response" || msg.id === null) return;
+  const pending = pendingStarts.get(msg.id);
+  if (pending === undefined) return;
+  pendingStarts.delete(msg.id);
+  // A rejected start (error response) never touches the tracker: an active
+  // session keeps its live turn's cwd/dirs, an idle session stays idle so the
+  // corrected retry records ITS config instead of the rejected one's.
+  if (msg.error) return;
+  const active = pending.sessionId ? trackedSessions.get(pending.sessionId) : undefined;
+  if (active?.turnId === undefined) observeTurnStart(pending);
+}
+
 /** Wire one accepted WebSocket into the server + side channel. */
 export function bridgeWsConnection(ws: WebSocket, agentServer: AgentServer): void {
   ws.on("error", (error: Error) => {
@@ -116,11 +143,24 @@ export function bridgeWsConnection(ws: WebSocket, agentServer: AgentServer): voi
     clearHost(sideChannel);
   });
 
-  // Claim side-channel frames once; observe/rewrite the rest; forward to the wire.
+  // Claim side-channel frames once; observe/rewrite the rest; forward to the
+  // wire. Outbound responses commit parked turn/starts on acceptance.
+  const pendingStarts = new Map<string | number, PendingTurnStart>();
   const filtered = filterClaimedLines(
-    transport,
+    {
+      send: (line) => {
+        observeOutboundLine(line, pendingStarts);
+        transport.send(line);
+      },
+      onLine: (handler) => transport.onLine(handler),
+      onClose: (handler) => transport.onClose(handler),
+      close: () => transport.close(),
+      get closed() {
+        return transport.closed;
+      },
+    },
     (line) => sideChannel.handleLine(line),
-    observeInboundLine
+    (line) => observeInboundLine(line, pendingStarts)
   );
 
   agentServer.attach(filtered);

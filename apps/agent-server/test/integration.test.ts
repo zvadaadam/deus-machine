@@ -215,6 +215,36 @@ describe("Integration: standard wire + deus side channel over a real WebSocket",
     });
   });
 
+  it("does not track a rejected turn/start; the corrected retry records its own config", async () => {
+    const c = await connectBackendStyle();
+    // First attempt: unavailable harness (fake runtime registers no "acp"),
+    // but a well-formed payload with sessionId/turnId/cwd.
+    await expect(
+      c.startTurn({
+        sessionId: "sess-reject",
+        turnId: "turn-bad",
+        input: "x",
+        config: { harness: "acp", cwd: "/tmp/WRONG" },
+      })
+    ).rejects.toMatchObject({ code: -32000 });
+    // The rejected request never reached the tracker.
+    expect(trackedSessions.get("sess-reject")).toBeUndefined();
+
+    // Corrected retry: accepted, and the tracker records ITS config.
+    const turn = await c.runTurn({
+      sessionId: "sess-reject",
+      turnId: "turn-good",
+      input: "x",
+      config: { harness: "claude-code", cwd: "/tmp/RIGHT" },
+    });
+    await turn.result;
+    await vi.waitFor(() => {
+      const state = trackedSessions.get("sess-reject");
+      expect(state?.cwd).toBe("/tmp/RIGHT");
+      expect(state?.harness).toBe("claude-code");
+    });
+  });
+
   it("rejects a second turn on a busy session with turnActive", async () => {
     // A runtime whose turn never ends within the test window.
     const hangingRuntime = {
