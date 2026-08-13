@@ -10,12 +10,17 @@
 //
 // Usage:
 //   bun apps/agent-server/cli.ts                        # spawn bundle + REPL
-//   bun apps/agent-server/cli.ts --url ws://127.0.0.1:PORT   # dial a running server
+//   bun apps/agent-server/cli.ts --url ws://127.0.0.1:PORT   # dial a running server (observer)
 //   bun apps/agent-server/cli.ts --prompt "2+2?"        # one-shot turn, exit code = result
 //   flags: --agent claude|codex-sdk|codex-server  --model NAME  --cwd PATH
 //          --session ID  --resume NATIVE_ID  --permission-mode MODE  --json
+//          --host  (claim deus tool routing when dialing with --url; a spawned
+//                   server is always hosted by the CLI)
 //
-// Side-channel host behavior (so live turns never park):
+// Side-channel host behavior, active when this CLI is the host (so live
+// turns never park). Dialing a backend-managed server with --url stays
+// observer-only — announcing deus/hello there would steal tool routing from
+// the real backend and leave it stolen after the CLI exits:
 //   exitPlanMode    → auto-approve (logged)
 //   askUserQuestion → answers each question with its first option (logged)
 //   everything else → error result (tool surfaces "unavailable in CLI")
@@ -67,7 +72,7 @@ function parseArgs() {
   const opts: Record<string, string> = {};
   for (let i = 0; i < args.length; i++) {
     const arg = args[i];
-    if (arg === "--json") continue;
+    if (arg === "--json" || arg === "--host") continue;
     if (arg.startsWith("--") && i + 1 < args.length) opts[arg.slice(2)] = args[++i];
   }
   const agent = (opts.agent ?? "claude") as keyof typeof ENGINE_HARNESS_BY_DEUS;
@@ -85,6 +90,7 @@ function parseArgs() {
     permissionMode: opts["permission-mode"] ?? "default",
     prompt: opts.prompt,
     json: process.argv.includes("--json"),
+    forceHost: process.argv.includes("--host"),
   };
 }
 
@@ -238,7 +244,7 @@ interface Connection {
   close(): void;
 }
 
-async function connect(url: string, json: boolean): Promise<Connection> {
+async function connect(url: string, json: boolean, announceHost: boolean): Promise<Connection> {
   const ws = new WebSocket(url);
   await new Promise<void>((resolve, reject) => {
     ws.on("open", () => resolve());
@@ -279,7 +285,13 @@ async function connect(url: string, json: boolean): Promise<Connection> {
       throw new Error(`${method} is not available in the CLI harness`);
     });
   }
-  sideChannel.notify(SIDE_CHANNEL.hello, {});
+  if (announceHost) {
+    sideChannel.notify(SIDE_CHANNEL.hello, {});
+  } else {
+    console.log(
+      `${c.dim}observer mode: not claiming deus tool routing (pass --host to claim)${c.reset}`
+    );
+  }
 
   const client = await AgentServerClient.attach(claimSideChannel(transport, sideChannel));
   const init = await client.initialize();
@@ -348,7 +360,9 @@ async function runTurn(conn: Connection, state: CliState, prompt: string): Promi
 async function main() {
   const opts = parseArgs();
   const { url, proc } = await resolveServerUrl(opts);
-  const conn = await connect(url, opts.json);
+  // A spawned server is private to this CLI — host it. A dialed server
+  // (--url) already has a host (the backend); only claim it on --host.
+  const conn = await connect(url, opts.json, proc !== null || opts.forceHost);
 
   const state: CliState = {
     sessionId: opts.sessionId,

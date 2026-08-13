@@ -321,16 +321,7 @@ async function main() {
     ws.on("open", resolve);
     ws.on("error", reject);
   });
-  const {
-    transport,
-    push,
-    end: endTransport,
-  } = channelTransport({
-    send: (line) => ws.send(line),
-    close: () => ws.close(),
-  });
-  ws.on("message", (data: Buffer | string) => pushNdjsonLines(push, data));
-  ws.on("close", () => endTransport("socket closed"));
+  const transport = wsLineTransport(ws);
 
   const sideChannel = new SideChannelEndpoint((line) => transport.send(line), "cli-backend");
   sideChannel.onRequest(SIDE_CHANNEL.exitPlanMode, () => ({ approved: true }));
