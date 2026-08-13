@@ -470,13 +470,7 @@ function buildTurnOptions(
     maxTurns: params.maxTurns as number | undefined,
     turnId: readString(params, "turnId"),
     permissionMode: readString(params, "permissionMode"),
-    providerEnvVars: readString(params, "providerEnvVars"),
-    ghToken: readString(params, "ghToken"),
-    deusEnv: params.deusEnv as Record<string, string> | undefined,
     additionalDirectories: params.additionalDirectories as string[] | undefined,
-    chromeEnabled: params.chromeEnabled as boolean | undefined,
-    strictDataPrivacy: params.strictDataPrivacy as boolean | undefined,
-    shouldResetGenerator: params.shouldResetGenerator as boolean | undefined,
     resume: resume || readString(params, "resume"),
     resumeSessionAt: readString(params, "resumeSessionAt"),
   };

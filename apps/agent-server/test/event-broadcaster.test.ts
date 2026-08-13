@@ -1,11 +1,6 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
-import { FRONTEND_NOTIFICATIONS, FRONTEND_RPC_METHODS } from "../protocol";
+import { FRONTEND_RPC_METHODS } from "../protocol";
 import { AGENT_EVENT_NAMES } from "@shared/agent-events";
-import {
-  buildMessageResponse,
-  buildErrorResponse,
-  buildEnterPlanModeNotification,
-} from "./builders";
 
 // We need to test EventBroadcaster which is a singleton. To get a fresh instance
 // per test we re-import the module.
@@ -43,8 +38,8 @@ describe("EventBroadcaster", () => {
   // ==========================================================================
 
   describe("attachTunnel / detachTunnel", () => {
-    it("sendMessage does not throw when no tunnel (broadcasts to empty set)", () => {
-      expect(() => EventBroadcaster.sendMessage(buildMessageResponse())).not.toThrow();
+    it("emitSessionIdle does not throw when no tunnel (broadcasts to empty set)", () => {
+      expect(() => EventBroadcaster.emitSessionIdle("s1", "claude")).not.toThrow();
     });
 
     it("requestExitPlanMode throws when no tunnel is attached", () => {
@@ -55,7 +50,7 @@ describe("EventBroadcaster", () => {
 
     it("works after attaching a tunnel", () => {
       EventBroadcaster.attachTunnel(mockTunnel);
-      EventBroadcaster.sendMessage(buildMessageResponse());
+      EventBroadcaster.emitSessionIdle("s1", "claude");
       expect(mockTunnel.notify).toHaveBeenCalled();
     });
 
@@ -72,11 +67,11 @@ describe("EventBroadcaster", () => {
       const tunnel2 = createMockTunnel();
       EventBroadcaster.attachTunnel(mockTunnel);
       EventBroadcaster.attachTunnel(tunnel2);
-      const msg = buildMessageResponse();
-      EventBroadcaster.sendMessage(msg);
+      EventBroadcaster.emitSessionIdle("s1", "claude");
 
-      expect(mockTunnel.notify).toHaveBeenCalledWith(FRONTEND_NOTIFICATIONS.MESSAGE, msg);
-      expect(tunnel2.notify).toHaveBeenCalledWith(FRONTEND_NOTIFICATIONS.MESSAGE, msg);
+      const expected = expect.objectContaining({ type: "session.idle", sessionId: "s1" });
+      expect(mockTunnel.notify).toHaveBeenCalledWith("session.idle", expected);
+      expect(tunnel2.notify).toHaveBeenCalledWith("session.idle", expected);
     });
 
     it("removes dead tunnels that throw on notify", () => {
@@ -89,11 +84,11 @@ describe("EventBroadcaster", () => {
         throw new Error("Socket closed");
       });
 
-      EventBroadcaster.sendMessage(buildMessageResponse());
+      EventBroadcaster.emitSessionIdle("s1", "claude");
 
       // tunnel2 should still work, mockTunnel removed
       tunnel2.notify.mockClear();
-      EventBroadcaster.sendMessage(buildMessageResponse());
+      EventBroadcaster.emitSessionIdle("s1", "claude");
       expect(tunnel2.notify).toHaveBeenCalledTimes(1);
       expect(mockTunnel.notify).toHaveBeenCalledTimes(1); // only the first call
     });
@@ -127,45 +122,6 @@ describe("EventBroadcaster", () => {
   // ==========================================================================
   // Outgoing notifications
   // ==========================================================================
-
-  describe("sendMessage", () => {
-    it("sends a message notification", () => {
-      EventBroadcaster.attachTunnel(mockTunnel);
-      const msg = buildMessageResponse();
-      EventBroadcaster.sendMessage(msg);
-
-      expect(mockTunnel.notify).toHaveBeenCalledWith(FRONTEND_NOTIFICATIONS.MESSAGE, msg);
-    });
-
-    it("does not throw when tunnel.notify fails (frontend disconnected)", () => {
-      EventBroadcaster.attachTunnel(mockTunnel);
-      mockTunnel.notify.mockImplementation(() => {
-        throw new Error("Socket closed");
-      });
-
-      expect(() => EventBroadcaster.sendMessage(buildMessageResponse())).not.toThrow();
-    });
-  });
-
-  describe("sendError", () => {
-    it("sends an error notification", () => {
-      EventBroadcaster.attachTunnel(mockTunnel);
-      const err = buildErrorResponse();
-      EventBroadcaster.sendError(err);
-
-      expect(mockTunnel.notify).toHaveBeenCalledWith(FRONTEND_NOTIFICATIONS.QUERY_ERROR, err);
-    });
-  });
-
-  describe("sendEnterPlanModeNotification", () => {
-    it("sends enter plan mode notification", () => {
-      EventBroadcaster.attachTunnel(mockTunnel);
-      const notif = buildEnterPlanModeNotification();
-      EventBroadcaster.sendEnterPlanModeNotification(notif);
-
-      expect(mockTunnel.notify).toHaveBeenCalledWith(FRONTEND_NOTIFICATIONS.ENTER_PLAN_MODE, notif);
-    });
-  });
 
   // ==========================================================================
   // Outgoing requests (with timeout)
@@ -358,89 +314,6 @@ describe("EventBroadcaster", () => {
     });
   });
 
-  describe("emitAssistantMessage", () => {
-    it("broadcasts message.assistant event with message payload", () => {
-      EventBroadcaster.attachTunnel(mockTunnel);
-      const message = {
-        id: "msg-1",
-        role: "assistant" as const,
-        content: [{ type: "text", text: "Hello" }],
-      };
-      EventBroadcaster.emitAssistantMessage("sess-1", "claude", message, "sonnet");
-
-      expect(mockTunnel.notify).toHaveBeenCalledWith(
-        AGENT_EVENT_NAMES.MESSAGE_ASSISTANT,
-        expect.objectContaining({
-          type: AGENT_EVENT_NAMES.MESSAGE_ASSISTANT,
-          sessionId: "sess-1",
-          agentHarness: "claude",
-          message,
-          model: "sonnet",
-        })
-      );
-    });
-
-    it("omits model when not provided", () => {
-      EventBroadcaster.attachTunnel(mockTunnel);
-      EventBroadcaster.emitAssistantMessage("sess-1", "claude", {
-        id: "msg-1",
-        role: "assistant",
-        content: [],
-      });
-
-      const payload = mockTunnel.notify.mock.calls[0][1];
-      expect(payload.model).toBeUndefined();
-    });
-  });
-
-  describe("emitToolResultMessage", () => {
-    it("broadcasts message.tool_result event", () => {
-      EventBroadcaster.attachTunnel(mockTunnel);
-      const message = {
-        id: "msg-2",
-        role: "user" as const,
-        content: [{ type: "tool_result", tool_use_id: "t1" }],
-      };
-      EventBroadcaster.emitToolResultMessage("sess-1", "claude", message, "opus");
-
-      expect(mockTunnel.notify).toHaveBeenCalledWith(
-        AGENT_EVENT_NAMES.MESSAGE_TOOL_RESULT,
-        expect.objectContaining({
-          type: AGENT_EVENT_NAMES.MESSAGE_TOOL_RESULT,
-          sessionId: "sess-1",
-          message,
-          model: "opus",
-        })
-      );
-    });
-  });
-
-  describe("emitMessageResult", () => {
-    it("broadcasts message.result event with subtype and usage", () => {
-      EventBroadcaster.attachTunnel(mockTunnel);
-      const usage = { input_tokens: 100, output_tokens: 50 };
-      EventBroadcaster.emitMessageResult("sess-1", "claude", "success", usage);
-
-      expect(mockTunnel.notify).toHaveBeenCalledWith(
-        AGENT_EVENT_NAMES.MESSAGE_RESULT,
-        expect.objectContaining({
-          type: AGENT_EVENT_NAMES.MESSAGE_RESULT,
-          sessionId: "sess-1",
-          subtype: "success",
-          usage,
-        })
-      );
-    });
-
-    it("omits usage when not provided", () => {
-      EventBroadcaster.attachTunnel(mockTunnel);
-      EventBroadcaster.emitMessageResult("sess-1", "claude", "success");
-
-      const payload = mockTunnel.notify.mock.calls[0][1];
-      expect(payload.usage).toBeUndefined();
-    });
-  });
-
   describe("emitMessageCancelled", () => {
     it("broadcasts message.cancelled event", () => {
       EventBroadcaster.attachTunnel(mockTunnel);
@@ -468,46 +341,6 @@ describe("EventBroadcaster", () => {
           type: AGENT_EVENT_NAMES.AGENT_SESSION_ID,
           sessionId: "sess-1",
           agentSessionId: "sdk-abc-123",
-        })
-      );
-    });
-  });
-
-  describe("emitRequestOpened", () => {
-    it("broadcasts request.opened event", () => {
-      EventBroadcaster.attachTunnel(mockTunnel);
-      EventBroadcaster.emitRequestOpened("req-1", "sess-1", "claude", "tool_approval", {
-        tool: "bash",
-      });
-
-      expect(mockTunnel.notify).toHaveBeenCalledWith(
-        AGENT_EVENT_NAMES.REQUEST_OPENED,
-        expect.objectContaining({
-          type: AGENT_EVENT_NAMES.REQUEST_OPENED,
-          requestId: "req-1",
-          sessionId: "sess-1",
-          agentHarness: "claude",
-          requestType: "tool_approval",
-          data: { tool: "bash" },
-        })
-      );
-    });
-  });
-
-  describe("emitToolRequest", () => {
-    it("broadcasts tool.request event", () => {
-      EventBroadcaster.attachTunnel(mockTunnel);
-      EventBroadcaster.emitToolRequest("req-1", "sess-1", "getDiff", { file: "test.ts" }, 10000);
-
-      expect(mockTunnel.notify).toHaveBeenCalledWith(
-        AGENT_EVENT_NAMES.TOOL_REQUEST,
-        expect.objectContaining({
-          type: AGENT_EVENT_NAMES.TOOL_REQUEST,
-          requestId: "req-1",
-          sessionId: "sess-1",
-          method: "getDiff",
-          params: { file: "test.ts" },
-          timeoutMs: 10000,
         })
       );
     });

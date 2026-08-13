@@ -8,7 +8,6 @@ export {
   init,
   shutdown,
   forwardTurn,
-  respondToAgent,
   stopSession,
   isConnected,
   checkAuth,

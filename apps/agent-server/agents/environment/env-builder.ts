@@ -1,7 +1,6 @@
 // agent-server/agents/environment/env-builder.ts
-// Shared environment construction for all agent handlers.
-// Builds the layered environment: shell env in dev → process.env → extra env →
-// deusEnv → providerEnvVars → ghToken.
+// Shared environment construction for agent sessions.
+// Builds the layered environment: shell env in dev → process.env → extra env.
 
 import { getShellEnvironment } from "./shell-env";
 
@@ -10,73 +9,14 @@ function shouldLoadShellEnvironment(): boolean {
 }
 
 /**
- * Parses a multi-line "KEY=value" env string (supports export prefix, quoting).
- * Used to parse user-provided environment variable overrides.
- */
-export function parseEnvString(envString: string): Record<string, string> {
-  const result: Record<string, string> = {};
-  const lines = envString.split("\n");
-  let i = 0;
-
-  while (i < lines.length) {
-    let line = lines[i].trim();
-    if (!line || line.startsWith("#")) {
-      i++;
-      continue;
-    }
-    if (line.startsWith("export ")) {
-      line = line.substring(7).trim();
-    }
-
-    const equalIndex = line.indexOf("=");
-    if (equalIndex === -1) {
-      i++;
-      continue;
-    }
-
-    const key = line.substring(0, equalIndex).trim();
-    if (!key) {
-      i++;
-      continue;
-    }
-
-    let value = line.substring(equalIndex + 1).trim();
-
-    // Handle quoted values (may span multiple lines)
-    if ((value.startsWith('"') || value.startsWith("'")) && value.length > 1) {
-      const quote = value[0];
-      let endQuoteIndex = value.indexOf(quote, 1);
-      while (endQuoteIndex === -1 && i + 1 < lines.length) {
-        i++;
-        value += "\n" + lines[i];
-        endQuoteIndex = value.indexOf(quote, 1);
-      }
-      if (endQuoteIndex !== -1) {
-        value = value.substring(1, endQuoteIndex);
-      }
-    }
-
-    result[key] = value;
-    i++;
-  }
-  return result;
-}
-
-/**
  * Builds the environment variable object for an agent session.
  *
  * Layer precedence (later layers override earlier):
  * 1. Shell environment (login shell capture, dev/source runtime only)
  * 2. process.env (agent-server process environment)
- * 3. extraEnv (agent-specific static env vars, e.g. CLAUDE_CODE_ENABLE_TASKS)
- * 4. deusEnv (from frontend options)
- * 5. providerEnvVars (user-configured env string, empty values delete keys)
- * 6. ghToken (sets GH_TOKEN if provided)
+ * 3. extraEnv (agent-specific static env vars)
  */
 export function buildAgentEnvironment(options?: {
-  providerEnvVars?: string;
-  deusEnv?: Record<string, string>;
-  ghToken?: string;
   extraEnv?: Record<string, string>;
 }): Record<string, string> {
   const env: Record<string, string> = {};
@@ -102,25 +42,6 @@ export function buildAgentEnvironment(options?: {
       env[key] = value;
     }
   }
-
-  // Layer 4: Deus env (from frontend)
-  if (options?.deusEnv) {
-    for (const [key, value] of Object.entries(options.deusEnv)) {
-      env[key] = value;
-    }
-  }
-
-  // Layer 5: User-configured env vars (empty values delete keys)
-  if (options?.providerEnvVars) {
-    const parsed = parseEnvString(options.providerEnvVars);
-    for (const [key, value] of Object.entries(parsed)) {
-      if (value === "") delete env[key];
-      else env[key] = value;
-    }
-  }
-
-  // Layer 6: GitHub token
-  if (options?.ghToken) env["GH_TOKEN"] = options.ghToken;
 
   return env;
 }

@@ -33,7 +33,6 @@ import { computeWorkspacePath } from "../../middleware/workspace-loader";
 import type {
   TurnStartRequest,
   TurnStartResponse,
-  TurnRespondRequest,
   SessionStopRequest,
   ProviderAuthRequest,
 } from "@shared/agent-events";
@@ -52,11 +51,7 @@ export function init(agentServerUrl: string): void {
   client = new AgentClient({
     url: agentServerUrl,
 
-    // Wire the event handler with respondToAgent injected — breaks the
-    // circular dependency that previously existed between these modules.
-    onEvent: createAgentEventHandler({
-      respondToAgent: (params) => respondToAgent(params),
-    }),
+    onEvent: createAgentEventHandler(),
 
     onConnected: (agents) => {
       console.log(`[AgentService] Connected, agents: [${agents.map((a) => a.type).join(", ")}]`);
@@ -126,12 +121,6 @@ export function shutdown(): void {
 export async function forwardTurn(params: TurnStartRequest): Promise<TurnStartResponse> {
   if (!client) throw new Error("Agent service not initialized");
   return client.sendTurnStart(params);
-}
-
-/** Send a tool relay response back to the agent-server. */
-export async function respondToAgent(params: TurnRespondRequest): Promise<void> {
-  if (!client) throw new Error("Agent service not initialized");
-  return client.sendTurnRespond(params);
 }
 
 /** Stop a session on the agent-server. */

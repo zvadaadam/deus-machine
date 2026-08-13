@@ -9,41 +9,6 @@ import { randomUUID } from "crypto";
 // Agent-server → Frontend notifications / responses
 // ============================================================================
 
-export function buildMessageResponse(overrides?: Record<string, any>) {
-  return {
-    id: `sess_${randomUUID().slice(0, 8)}`,
-    type: "message" as const,
-    agentHarness: "claude" as const,
-    data: {
-      type: "assistant",
-      message: {
-        role: "assistant",
-        content: [{ type: "text", text: "Test response" }],
-      },
-    },
-    ...overrides,
-  };
-}
-
-export function buildErrorResponse(overrides?: Record<string, any>) {
-  return {
-    id: `sess_${randomUUID().slice(0, 8)}`,
-    type: "error" as const,
-    error: "Test error",
-    agentHarness: "claude" as const,
-    ...overrides,
-  };
-}
-
-export function buildEnterPlanModeNotification(overrides?: Record<string, any>) {
-  return {
-    type: "enter_plan_mode_notification" as const,
-    id: `sess_${randomUUID().slice(0, 8)}`,
-    agentHarness: "claude" as const,
-    ...overrides,
-  };
-}
-
 // ============================================================================
 // JSON-RPC helpers
 // ============================================================================

@@ -43,22 +43,14 @@ export function getRegistry(): AgentRegistry {
     // Operator escape hatches ($CLAUDE_CLI_PATH / $CODEX_CLI_PATH) still win.
     provision: { mode: "pinned" },
     claudeCode: {
-      // Strict-data-privacy sessions must not get the deus tool suite
-      // (workspace/browser/simulator/recording/app tools) — legacy parity.
       sdkMcpServers: ({ sessionId }) =>
-        sessions.get(sessionId)?.lastOptions?.strictDataPrivacy
-          ? ({} as SdkMcpServers)
-          : ({ deus: createDeusMCPServer(sessionId) } as unknown as SdkMcpServers),
-      // Legacy-handler parity: deus can't render AskUserQuestion, sub-agent
-      // text must reach the wire, and Chrome tools ride an extra CLI arg.
-      sdkOptions: ({ sessionId }) => {
-        const opts = sessions.get(sessionId)?.lastOptions;
-        return {
-          disallowedTools: ["AskUserQuestion"],
-          forwardSubagentText: true,
-          ...(opts?.chromeEnabled ? { extraArgs: { chrome: null } } : {}),
-        };
-      },
+        ({ deus: createDeusMCPServer(sessionId) }) as unknown as SdkMcpServers,
+      // Legacy-handler parity: deus can't render AskUserQuestion, and
+      // sub-agent text must reach the wire.
+      sdkOptions: () => ({
+        disallowedTools: ["AskUserQuestion"],
+        forwardSubagentText: true,
+      }),
       toolPolicy: decideToolUse,
       hooks: ({ sessionId, currentTurnId }) => ({
         UserPromptSubmit: [

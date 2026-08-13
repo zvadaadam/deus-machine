@@ -35,15 +35,9 @@ export function registerRpcMethods(rpcTunnel: RpcConnection, ctx: RpcMethodConte
   });
 
   rpcTunnel.addMethod("turn/start", startTurn);
-  rpcTunnel.addMethod("turn/respond", logTurnResponse);
   rpcTunnel.addMethod("turn/cancel", cancelTurnAcrossAgents);
   rpcTunnel.addMethod("session/stop", cancelTurnAcrossAgents);
-  rpcTunnel.addMethod("session/reset", resetSessionAcrossAgents);
   rpcTunnel.addMethod("provider/auth", providerAuth);
-  rpcTunnel.addMethod("provider/initWorkspace", providerInitWorkspace);
-  rpcTunnel.addMethod("provider/contextUsage", providerContextUsage);
-  rpcTunnel.addMethod("provider/updateMode", providerUpdateMode);
-  rpcTunnel.addMethod("agent/list", () => ({ agents: ctx.getInitializedAgents() }));
   rpcTunnel.addMethod("aap/register-mcp", registerAapMcp);
   rpcTunnel.addMethod("aap/unregister-mcp", unregisterAapMcp);
 }
@@ -93,11 +87,6 @@ function startTurn(params: unknown): { accepted: boolean; reason?: string } {
   return { accepted: true };
 }
 
-function logTurnResponse(params: unknown): void {
-  const requestId = readParam<string>(params, "requestId");
-  console.log(`[AgentServer] turn/respond received (requestId=${requestId})`);
-}
-
 function cancelTurnAcrossAgents(params: unknown): void {
   const sessionId = readParam<string>(params, "sessionId");
   if (!sessionId) return;
@@ -107,67 +96,12 @@ function cancelTurnAcrossAgents(params: unknown): void {
   });
 }
 
-function resetSessionAcrossAgents(params: unknown): void {
-  const sessionId = readParam<string>(params, "sessionId");
-  if (!sessionId) return;
-
-  forEachAgent((agent) => {
-    agent.reset(sessionId);
-  });
-}
-
 async function providerAuth(params: unknown): Promise<unknown> {
   const agentHarness = requireParam<AgentHarness>(params, "agentHarness", "provider/auth");
   const cwd = requireParam<string>(params, "cwd", "provider/auth");
   const agent = getAgent(agentHarness);
   if (!agent?.auth) throw new Error(`Agent "${agentHarness}" does not support auth`);
   return agent.auth({ cwd });
-}
-
-async function providerInitWorkspace(params: unknown): Promise<unknown> {
-  const agentHarness = requireParam<AgentHarness>(params, "agentHarness", "provider/initWorkspace");
-  const agent = getAgent(agentHarness);
-  if (!agent?.initWorkspace) {
-    throw new Error(`Agent "${agentHarness}" does not support workspace init`);
-  }
-
-  return agent.initWorkspace({
-    cwd: readParam<string>(params, "cwd") as string,
-    ghToken: readParam<string>(params, "ghToken"),
-    providerEnvVars: readParam<string>(params, "providerEnvVars"),
-  });
-}
-
-async function providerContextUsage(params: unknown): Promise<unknown> {
-  const agentHarness = readParam<AgentHarness>(params, "agentHarness");
-  const sessionId = readParam<string>(params, "sessionId");
-  const cwd = readParam<string>(params, "cwd");
-  const agentSessionId = readParam<string>(params, "agentSessionId");
-
-  if (!agentHarness || !sessionId || !cwd || !agentSessionId) {
-    throw new Error(
-      "provider/contextUsage requires agentHarness, sessionId, cwd, and agentSessionId"
-    );
-  }
-
-  const agent = getAgent(agentHarness);
-  if (!agent?.getContextUsage) {
-    throw new Error(`Agent "${agentHarness}" does not support context usage`);
-  }
-
-  return agent.getContextUsage({ id: sessionId, options: { cwd, agentSessionId } });
-}
-
-function providerUpdateMode(params: unknown): void {
-  const agentHarness = requireParam<AgentHarness>(params, "agentHarness", "provider/updateMode");
-  const agent = getAgent(agentHarness);
-
-  if (agent?.updatePermissionMode) {
-    void agent.updatePermissionMode(
-      readParam<string>(params, "sessionId") as string,
-      readParam<string>(params, "permissionMode") as string
-    );
-  }
 }
 
 async function registerAapMcp(params: unknown): Promise<{ added: string[] }> {

@@ -20,17 +20,6 @@ export interface AuthParams {
   cwd: string;
 }
 
-export interface InitWorkspaceParams {
-  cwd: string;
-  ghToken?: string;
-  providerEnvVars?: string;
-}
-
-export interface ContextUsageParams {
-  id?: string;
-  options: { cwd: string; agentSessionId: string };
-}
-
 /**
  * Common interface for all agent handlers.
  *
@@ -42,9 +31,6 @@ export interface ContextUsageParams {
  *
  * Optional provider-specific methods (guarded by capabilities):
  * - auth() — check account auth info
- * - initWorkspace() — get slash commands + MCP server status
- * - getContextUsage() — fetch context window usage
- * - updatePermissionMode() — hot-swap permission mode on active query
  */
 export interface AgentHandler {
   readonly agentHarness: AgentHarness;
@@ -60,9 +46,6 @@ export interface AgentHandler {
 
   // Optional provider-specific methods (guarded by capabilities)
   auth?(params: AuthParams): Promise<any>;
-  initWorkspace?(params: InitWorkspaceParams): Promise<any>;
-  getContextUsage?(params: ContextUsageParams): Promise<any>;
-  updatePermissionMode?(sessionId: string, permissionMode: string): Promise<void>;
 }
 
 // ============================================================================

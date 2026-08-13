@@ -28,14 +28,8 @@ import {
   type InitializeResult,
   type TurnStartRequest,
   type TurnStartResponse,
-  type TurnCancelRequest,
-  type TurnRespondRequest,
-  type SessionResetRequest,
   type SessionStopRequest,
   type ProviderAuthRequest,
-  type ProviderInitWorkspaceRequest,
-  type ProviderContextUsageRequest,
-  type ProviderUpdateModeRequest,
   type AgentEvent,
   type AgentInfo,
 } from "@shared/agent-events";
@@ -159,19 +153,7 @@ export class AgentClient {
     return result as TurnStartResponse;
   }
 
-  async sendTurnCancel(params: TurnCancelRequest): Promise<void> {
-    await this.request(AGENT_RPC_METHODS.TURN_CANCEL, params);
-  }
-
-  async sendTurnRespond(params: TurnRespondRequest): Promise<void> {
-    await this.request(AGENT_RPC_METHODS.TURN_RESPOND, params);
-  }
-
   // ---- Session lifecycle RPCs ----
-
-  async sendSessionReset(params: SessionResetRequest): Promise<void> {
-    await this.request(AGENT_RPC_METHODS.SESSION_RESET, params);
-  }
 
   async sendSessionStop(params: SessionStopRequest): Promise<void> {
     await this.request(AGENT_RPC_METHODS.SESSION_STOP, params);
@@ -181,18 +163,6 @@ export class AgentClient {
 
   async sendProviderAuth(params: ProviderAuthRequest): Promise<unknown> {
     return this.request(AGENT_RPC_METHODS.PROVIDER_AUTH, params);
-  }
-
-  async sendProviderInitWorkspace(params: ProviderInitWorkspaceRequest): Promise<unknown> {
-    return this.request(AGENT_RPC_METHODS.PROVIDER_INIT_WORKSPACE, params);
-  }
-
-  async sendProviderContextUsage(params: ProviderContextUsageRequest): Promise<unknown> {
-    return this.request(AGENT_RPC_METHODS.PROVIDER_CONTEXT_USAGE, params);
-  }
-
-  async sendProviderUpdateMode(params: ProviderUpdateModeRequest): Promise<void> {
-    this.notify(AGENT_RPC_METHODS.PROVIDER_UPDATE_MODE, params);
   }
 
   // ---- Generic outbound RPC (for AAP MCP bridge) ----
@@ -206,21 +176,6 @@ export class AgentClient {
    */
   async sendRequest(method: string, params: unknown): Promise<unknown> {
     return this.request(method, params);
-  }
-
-  // ---- Introspection ----
-
-  async listAgents(): Promise<AgentInfo[]> {
-    const result = await this.request(AGENT_RPC_METHODS.AGENT_LIST, {});
-    if (
-      !result ||
-      typeof result !== "object" ||
-      !Array.isArray((result as Record<string, unknown>).agents)
-    ) {
-      console.error("[AgentClient] listAgents: unexpected response shape", result);
-      return [];
-    }
-    return (result as Record<string, unknown>).agents as AgentInfo[];
   }
 
   // ==========================================================================
@@ -485,14 +440,6 @@ export class AgentClient {
       RPC_TIMEOUT_MS,
       method
     );
-  }
-
-  private notify(method: string, params: unknown): void {
-    if (!this.peer || !this.connected) {
-      console.error(`[AgentClient] Cannot send notification "${method}" — not connected`);
-      return;
-    }
-    this.peer.notify(method, params, undefined);
   }
 
   // ==========================================================================

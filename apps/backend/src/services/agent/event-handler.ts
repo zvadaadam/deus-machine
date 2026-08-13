@@ -4,16 +4,12 @@
 //
 // This is the single entry point for all agent → backend data flow.
 // Each event is handled: persist first, then invalidate (ordering matters).
-//
-// Created via createAgentEventHandler() — a factory that injects the
-// respondToAgent dependency, breaking the circular import with service.ts.
 
 import { match } from "ts-pattern";
 import type { AgentEvent } from "@shared/agent-events";
 import type { QueryResource, QServerFrame, ProtocolEvent } from "@shared/types/query-protocol";
 import { invalidate } from "../query-engine";
 import { broadcast } from "../ws.service";
-import { relay } from "./tool-relay";
 import {
   persistMessageCancelled,
   persistMessageCreated,
@@ -30,12 +26,6 @@ import {
 } from "./persistence";
 
 // ---- Types ----
-
-type RespondToAgentFn = (params: {
-  sessionId: string;
-  requestId: string;
-  result: unknown;
-}) => Promise<void>;
 
 export type AgentEventHandler = (event: AgentEvent) => void;
 
@@ -75,18 +65,8 @@ function pushEvent(event: ProtocolEvent, data: Omit<AgentEvent, "type">): void {
 
 // ---- Factory ----
 
-/**
- * Create an agent event handler with injected dependencies.
- *
- * The respondToAgent function is injected to break the circular dependency
- * between this module and service.ts. The composition root (service.ts)
- * provides the concrete implementation: client.sendTurnRespond().
- */
-export function createAgentEventHandler(deps: {
-  respondToAgent: RespondToAgentFn;
-}): AgentEventHandler {
-  const { respondToAgent } = deps;
-
+/** Create the agent event handler: persistence + WS invalidation per event. */
+export function createAgentEventHandler(): AgentEventHandler {
   return function handleAgentEvent(event: AgentEvent): void {
     match(event)
       // ── Session lifecycle ─────────────────────────────────────────────
@@ -110,11 +90,6 @@ export function createAgentEventHandler(deps: {
         persistAndInvalidate(persistSessionCancelled(e), SESSION_RESOURCES, e.sessionId);
       })
 
-      // ── SDK passthrough events (no persistence — Parts handle content) ──
-      .with({ type: "message.system" }, () => {})
-      .with({ type: "message.assistant" }, () => {})
-      .with({ type: "message.tool_result" }, () => {})
-      .with({ type: "message.result" }, () => {})
       .with({ type: "message.cancelled" }, (e) => {
         console.log(`[AgentEvent] message.cancelled: session=${e.sessionId}`);
         persistAndInvalidate(
@@ -182,26 +157,6 @@ export function createAgentEventHandler(deps: {
         // Session status change (session.idle) handles the UI update.
       })
 
-      // ── Interaction requests ──────────────────────────────────────────
-      .with({ type: "request.opened" }, (e) => {
-        console.log(
-          `[AgentEvent] request.opened: session=${e.sessionId} requestId=${e.requestId} type=${e.requestType}`
-        );
-      })
-      .with({ type: "request.resolved" }, (e) => {
-        console.log(
-          `[AgentEvent] request.resolved: session=${e.sessionId} requestId=${e.requestId}`
-        );
-      })
-
-      // ── Tool relay ────────────────────────────────────────────────────
-      .with({ type: "tool.request" }, (e) => {
-        console.log(
-          `[AgentEvent] tool.request: session=${e.sessionId} method=${e.method} requestId=${e.requestId}`
-        );
-        void relayToolRequest(e, respondToAgent);
-      })
-
       // ── Metadata ──────────────────────────────────────────────────────
       .with({ type: "agent.session_id" }, (e) => {
         console.log(
@@ -216,33 +171,4 @@ export function createAgentEventHandler(deps: {
 
       .exhaustive();
   };
-}
-
-// ---- Tool relay internal ----
-
-async function relayToolRequest(
-  event: AgentEvent & { type: "tool.request" },
-  respondToAgent: RespondToAgentFn
-): Promise<void> {
-  const { sessionId, requestId, method } = event;
-
-  try {
-    const result = await relay(event);
-    await respondToAgent({ sessionId, requestId, result });
-    console.log(`[AgentEvent] tool.request resolved: requestId=${requestId} method=${method}`);
-  } catch (err) {
-    console.error(`[AgentEvent] tool.request failed: requestId=${requestId} method=${method}`, err);
-    try {
-      await respondToAgent({
-        sessionId,
-        requestId,
-        result: { error: err instanceof Error ? err.message : "Tool relay failed" },
-      });
-    } catch (respondErr) {
-      console.error(
-        `[AgentEvent] Failed to send error response to agent: requestId=${requestId}`,
-        respondErr
-      );
-    }
-  }
 }

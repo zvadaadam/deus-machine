@@ -233,26 +233,23 @@ describe("AgentClient", () => {
       });
     });
 
-    it("dispatches message.assistant events", async () => {
+    it("dispatches message.created events", async () => {
       const events: unknown[] = [];
       client = await connectAndHandshake({
         onEvent: (event) => events.push(event),
       });
 
-      sendNotification(server.lastClient!, AGENT_EVENT_NAMES.MESSAGE_ASSISTANT, {
-        type: "message.assistant",
+      sendNotification(server.lastClient!, AGENT_EVENT_NAMES.MESSAGE_CREATED, {
+        type: "message.created",
         sessionId: "sess-1",
         agentHarness: "claude",
-        message: {
-          id: "msg-1",
-          role: "assistant",
-          content: [{ type: "text", text: "Hello!" }],
-        },
+        messageId: "msg-1",
+        role: "assistant",
       });
 
       await waitFor(() => events.length > 0);
-      expect((events[0] as any).type).toBe("message.assistant");
-      expect((events[0] as any).message.id).toBe("msg-1");
+      expect((events[0] as any).type).toBe("message.created");
+      expect((events[0] as any).messageId).toBe("msg-1");
     });
 
     it("ignores malformed event payloads without crashing", async () => {

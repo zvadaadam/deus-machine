@@ -8,7 +8,7 @@
 
 import { callbackSink, generateUUIDv7 } from "@zvada/agent-server/core";
 import type { AgentInput, LifecycleEvent } from "@zvada/agent-server/protocol";
-import type { AgentHandler, ContextUsageParams, QueryOptions } from "../registry";
+import type { AgentHandler, QueryOptions } from "../registry";
 import { buildAgentEnvironment } from "../environment/env-builder";
 import { createCheckpoint } from "./checkpoint";
 import { CoreEventBridge } from "./event-bridge";
@@ -184,15 +184,6 @@ export class CoreAgentHandler implements AgentHandler {
     state.cwd = options.cwd;
     state.lastOptions = options;
 
-    // Forced generator reset (backend recovery path): drop the warm engine
-    // session so this turn spawns a fresh subprocess; conversation context
-    // still resumes via options.resume (the native session id).
-    if (options.shouldResetGenerator) {
-      await getRuntime()
-        .closeSession(this.engineHarness, sessionId)
-        .catch(() => {});
-    }
-
     const bridge = new CoreEventBridge(sessionId, this.agentHarness, turnId, state);
     await getRuntime().run(
       {
@@ -217,18 +208,7 @@ export class CoreAgentHandler implements AgentHandler {
           // Checkpoint revert: fork the resumed session at a specific message.
           resumeSessionAt: options.resumeSessionAt,
           mcpServers: this.agentHarness === "claude" ? currentAapServers() : undefined,
-          env: {
-            ...buildAgentEnvironment({
-              providerEnvVars: options.providerEnvVars,
-              deusEnv: options.deusEnv,
-              ghToken: options.ghToken,
-            }),
-            // Not read by anyone: a fingerprint marker. Flipping the flag
-            // changes the env, which restarts the claude session (context
-            // preserved via resume) and re-runs the sdkMcpServers factory —
-            // otherwise a warm session keeps the deus MCP suite attached.
-            ...(options.strictDataPrivacy ? { DEUS_STRICT_DATA_PRIVACY: "1" } : {}),
-          },
+          env: buildAgentEnvironment(),
         },
       },
       callbackSink((event: LifecycleEvent) => bridge.handle(event))
@@ -259,14 +239,5 @@ export class CoreAgentHandler implements AgentHandler {
     getRuntime()
       .closeSession(this.engineHarness, sessionId)
       .catch((error) => console.warn(`[core] closeSession(${sessionId}) failed:`, error));
-  }
-
-  async getContextUsage(params: ContextUsageParams): Promise<unknown> {
-    const state = params.id ? sessions.get(params.id) : undefined;
-    const usage = state?.lastUsage;
-    // null = "not known yet" — a fake zero is indistinguishable from an
-    // actually-empty context. (The push path — session.contextUsage — is the
-    // primary feed; this pull RPC is kept for external callers.)
-    return usage ? { used: usage.used, size: usage.size, cost: usage.cost } : null;
   }
 }

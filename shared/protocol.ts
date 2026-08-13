@@ -9,8 +9,6 @@
 
 import { z } from "zod";
 
-import { AgentHarnessSchema } from "./enums";
-
 // ============================================================================
 // Shared Field Schemas
 // ============================================================================
@@ -44,23 +42,8 @@ export const QueryOptionsSchema = z.object({
   maxTurns: z.number().int().positive().optional(),
   turnId: z.string().min(1).optional(),
   permissionMode: PermissionModeSchema.optional(),
-  providerEnvVars: z.string().optional(),
-  ghToken: z.string().optional(),
-  deusEnv: z.record(z.string(), z.string()).optional(),
   additionalDirectories: z.array(z.string()).optional(),
-  chromeEnabled: z.boolean().optional(),
-  strictDataPrivacy: z.boolean().optional(),
-  shouldResetGenerator: z.boolean().optional(),
   resume: z.string().min(1).optional(),
   resumeSessionAt: z.string().min(1).optional(),
 });
 export type QueryOptions = z.infer<typeof QueryOptionsSchema>;
-
-export const QueryRequestSchema = z.object({
-  type: z.literal("query"),
-  id: z.string().min(1),
-  agentHarness: AgentHarnessSchema,
-  prompt: z.string().min(1),
-  options: QueryOptionsSchema,
-});
-export type QueryRequest = z.infer<typeof QueryRequestSchema>;

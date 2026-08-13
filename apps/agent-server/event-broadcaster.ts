@@ -5,16 +5,12 @@
 // methods for canonical agent events.
 
 import type { RpcConnection } from "./rpc-connection";
-import { FRONTEND_NOTIFICATIONS, FRONTEND_RPC_METHODS } from "./protocol";
+import { FRONTEND_RPC_METHODS } from "./protocol";
 import { AGENT_EVENT_NAMES } from "@shared/agent-events";
-import type { AgentEvent, InteractionRequestType } from "@shared/agent-events";
+import type { AgentEvent } from "@shared/agent-events";
 import type { AgentHarness, ErrorCategory } from "@shared/enums";
-import type { FinishReason, Part, TokenUsage } from "@shared/messages";
 import type { PartEvent } from "@shared/agent-events";
 import type {
-  MessageResponse,
-  ErrorResponse,
-  EnterPlanModeNotification,
   AskUserQuestionRequest,
   AskUserQuestionResponse,
   GetDiffRequest,
@@ -38,11 +34,6 @@ import type {
 // ============================================================================
 // Timeout defaults (milliseconds)
 // ============================================================================
-
-/** Timeout for user-facing requests that require human interaction.
- *  2 minutes allows users time to read multi-option questions and deliberate.
- *  There is no UI countdown, so this must be generous. */
-const USER_FACING_TIMEOUT_MS = 120_000;
 
 /** Timeout for data-fetching requests that should resolve quickly */
 const DATA_QUERY_TIMEOUT_MS = 10_000;
@@ -82,32 +73,10 @@ class EventBroadcasterClass {
   }
 
   // ==========================================================================
-  // OUTGOING NOTIFICATIONS (agent-server -> frontend)
-  // ==========================================================================
-
-  sendMessage(response: MessageResponse): void {
-    this.broadcastNotification(FRONTEND_NOTIFICATIONS.MESSAGE, response, "sendMessage");
-  }
-
-  sendError(response: ErrorResponse): void {
-    this.broadcastNotification(FRONTEND_NOTIFICATIONS.QUERY_ERROR, response, "sendError");
-  }
-
-  sendEnterPlanModeNotification(response: EnterPlanModeNotification): void {
-    this.broadcastNotification(
-      FRONTEND_NOTIFICATIONS.ENTER_PLAN_MODE,
-      response,
-      "sendEnterPlanModeNotification"
-    );
-  }
-
-  // ==========================================================================
-  // CANONICAL EVENT EMISSION (agent-server protocol — dual-write period)
+  // CANONICAL EVENT EMISSION (agent-server protocol)
   //
   // These methods emit provider-neutral events defined in shared/agent-events.ts
-  // as JSON-RPC notifications to all connected tunnels. During the dual-write
-  // period, both the old notifications (sendMessage/sendError/etc.) and these
-  // canonical events are emitted simultaneously.
+  // as JSON-RPC notifications to all connected tunnels.
   // ==========================================================================
 
   /** Generic emit: broadcasts a canonical AgentEvent as a JSON-RPC notification. */
@@ -170,66 +139,6 @@ class EventBroadcasterClass {
   }
 
   // --- Messages ---
-
-  emitSystemMessage(sessionId: string, agentHarness: AgentHarness, data: unknown): void {
-    this.emitEvent({
-      type: AGENT_EVENT_NAMES.MESSAGE_SYSTEM,
-      sessionId,
-      agentHarness,
-      data,
-    });
-  }
-
-  emitAssistantMessage(
-    sessionId: string,
-    agentHarness: AgentHarness,
-    message: {
-      id: string;
-      role: "assistant";
-      content: unknown;
-      stop_reason?: string | null;
-      parent_tool_use_id?: string | null;
-    },
-    model?: string
-  ): void {
-    this.emitEvent({
-      type: AGENT_EVENT_NAMES.MESSAGE_ASSISTANT,
-      sessionId,
-      agentHarness,
-      message,
-      ...(model ? { model } : {}),
-    });
-  }
-
-  emitToolResultMessage(
-    sessionId: string,
-    agentHarness: AgentHarness,
-    message: { id: string; role: "user"; content: unknown; parent_tool_use_id?: string | null },
-    model?: string
-  ): void {
-    this.emitEvent({
-      type: AGENT_EVENT_NAMES.MESSAGE_TOOL_RESULT,
-      sessionId,
-      agentHarness,
-      message,
-      ...(model ? { model } : {}),
-    });
-  }
-
-  emitMessageResult(
-    sessionId: string,
-    agentHarness: AgentHarness,
-    subtype: string,
-    usage?: unknown
-  ): void {
-    this.emitEvent({
-      type: AGENT_EVENT_NAMES.MESSAGE_RESULT,
-      sessionId,
-      agentHarness,
-      subtype,
-      ...(usage !== undefined ? { usage } : {}),
-    });
-  }
 
   emitMessageCancelled(sessionId: string, agentHarness: AgentHarness): void {
     this.emitEvent({
@@ -321,44 +230,6 @@ class EventBroadcasterClass {
         });
         break;
     }
-  }
-
-  // --- Interaction requests ---
-
-  emitRequestOpened(
-    requestId: string,
-    sessionId: string,
-    agentHarness: AgentHarness,
-    requestType: InteractionRequestType,
-    data: unknown
-  ): void {
-    this.emitEvent({
-      type: AGENT_EVENT_NAMES.REQUEST_OPENED,
-      requestId,
-      sessionId,
-      agentHarness,
-      requestType,
-      data,
-    });
-  }
-
-  // --- Tool relay ---
-
-  emitToolRequest(
-    requestId: string,
-    sessionId: string,
-    method: string,
-    params: Record<string, unknown>,
-    timeoutMs: number
-  ): void {
-    this.emitEvent({
-      type: AGENT_EVENT_NAMES.TOOL_REQUEST,
-      requestId,
-      sessionId,
-      method,
-      params,
-      timeoutMs,
-    });
   }
 
   // --- Metadata ---
