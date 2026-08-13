@@ -393,8 +393,10 @@ function handleSendMessage(params: QueryParams): CommandResult {
       model,
       thinkingLevel: readString(params, "thinkingLevel") as ThinkingLevel | undefined,
       permissionMode: readString(params, "permissionMode") as PermissionMode | undefined,
-      maxTurns: params.maxTurns as number | undefined,
-      additionalDirectories: params.additionalDirectories as string[] | undefined,
+      maxTurns: readNumber(params, "maxTurns"),
+      additionalDirectories: Array.isArray(params.additionalDirectories)
+        ? params.additionalDirectories.filter((dir): dir is string => typeof dir === "string")
+        : undefined,
       resume: existingAgentSessionId || readString(params, "resume"),
       resumeSessionAt: readString(params, "resumeSessionAt"),
     })

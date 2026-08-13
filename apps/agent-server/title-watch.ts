@@ -9,12 +9,17 @@ import { SIDE_CHANNEL } from "@shared/agent-side-channel";
 import { notifyHost } from "./host-link";
 import { trackedSessions } from "./session-tracker";
 
+/** Sessions with a fetch in flight — rapid turn ends must not double-push. */
+const inFlight = new Set<string>();
+
 /** Kick a title fetch after a turn ended cleanly (idle, not error/cancel). */
 export function maybeFetchTitle(sessionId: string): void {
   const state = trackedSessions.get(sessionId);
   if (!state || state.harness !== "claude-code" || state.titleFetched) return;
   const { cwd, nativeSessionId } = state;
   if (!cwd || !nativeSessionId) return;
+  if (inFlight.has(sessionId)) return;
+  inFlight.add(sessionId);
   void (async () => {
     try {
       const { listSessions } = await import("@anthropic-ai/claude-agent-sdk");
@@ -28,6 +33,8 @@ export function maybeFetchTitle(sessionId: string): void {
       }
     } catch (error) {
       console.error(`[title-watch] title fetch failed for ${sessionId}:`, error);
+    } finally {
+      inFlight.delete(sessionId);
     }
   })();
 }

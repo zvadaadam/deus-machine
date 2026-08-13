@@ -20,6 +20,15 @@ export function applyShellEnvironment(): void {
   if (!shouldLoadShellEnvironment()) return;
   try {
     for (const [key, value] of Object.entries(getShellEnvironment())) {
+      if (key === "PATH" && process.env.PATH) {
+        // Union rather than skip: a GUI-launched process has a minimal PATH,
+        // and the login shell's entries (homebrew, nvm, …) must still be
+        // findable. Current entries keep precedence.
+        const current = process.env.PATH.split(":").filter(Boolean);
+        const merged = new Set([...current, ...value.split(":").filter(Boolean)]);
+        process.env.PATH = [...merged].join(":");
+        continue;
+      }
       if (process.env[key] === undefined) process.env[key] = value;
     }
   } catch (error) {

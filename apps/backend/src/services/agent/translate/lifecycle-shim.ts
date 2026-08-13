@@ -211,6 +211,8 @@ export class LifecycleToPartEvents {
         ) {
           deusPart.text = streamed;
         }
+        // The accumulation has served its purpose once the part is terminal.
+        if (terminal) this.deltaText.delete(event.part.id);
 
         // Hold empty streaming reasoning parts; drop them if they end empty.
         if (deusPart.type === "REASONING" && previous === undefined && deusPart.text === "") {

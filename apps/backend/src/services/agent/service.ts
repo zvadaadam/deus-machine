@@ -76,7 +76,7 @@ async function establishLink(
 ): Promise<void> {
   for (let attempt = 0; !disposed; attempt++) {
     try {
-      link = await AgentLink.connect({
+      const connected = await AgentLink.connect({
         url,
         onEnvelope: (envelope) => translator?.handle(envelope),
         onConnected: (agents) => {
@@ -97,6 +97,13 @@ async function establishLink(
           });
         },
       });
+      // shutdown() may have run while the connect was in flight — a link
+      // assigned now would outlive the service with its reconnect loop alive.
+      if (disposed) {
+        await connected.close();
+        return;
+      }
+      link = connected;
       return;
     } catch (err) {
       const delay = Math.min(RECONNECT_BASE_MS * 2 ** attempt, RECONNECT_MAX_MS);
@@ -133,8 +140,12 @@ export async function startTurn(
 ): Promise<void> {
   if (!link) throw new Error("Agent service not initialized");
   const params = buildTurnStartParams(sessionId, turnId, agentHarness, prompt, options);
-  await link.startTurn(params);
+  // Register the turn BEFORE the quick-ack round-trip: the server can push
+  // the first envelopes in the same tick the ack line is processed, and the
+  // translator must already know the session then. A rejected turn leaves a
+  // transient 'working' status that the caller's error path overwrites.
   translator?.beginTurn(sessionId, agentHarness, turnId);
+  await link.startTurn(params);
 }
 
 /** Cancel a session's active turn (best-effort, idempotent). */

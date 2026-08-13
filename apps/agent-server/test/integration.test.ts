@@ -245,6 +245,7 @@ describe("Integration: standard wire + deus side channel over a real WebSocket",
     const slowServer = new AgentServer(hangingRuntime, {});
     const slowWss = new WebSocketServer({ port: 0 });
     slowWss.on("connection", (ws) => bridgeWsConnection(ws, slowServer));
+    await new Promise<void>((resolve) => slowWss.once("listening", () => resolve()));
     const slowPort = (slowWss.address() as { port: number }).port;
 
     const ws = new WebSocket(`ws://127.0.0.1:${slowPort}`);

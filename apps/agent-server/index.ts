@@ -58,12 +58,20 @@ async function start(): Promise<void> {
   wss.on("connection", (ws) => bridgeWsConnection(ws, wireServer));
   wss.on("error", (error: Error) => console.error("WebSocketServer error:", error));
 
+  const SHUTDOWN_TIMEOUT_MS = 15_000;
   let shuttingDown = false;
   const gracefulShutdown = async (signal: string) => {
     if (shuttingDown) return;
     shuttingDown = true;
     console.log(`\n[SIGNAL] Received ${signal}, shutting down...`);
     httpServer.close();
+    // A wedged harness subprocess must not make the process unkillable-by-
+    // SIGTERM (the spawner escalates to SIGKILL, but quit should not hang).
+    const forceExit = setTimeout(() => {
+      console.error("[SIGNAL] Cleanup timed out, forcing exit");
+      process.exit(1);
+    }, SHUTDOWN_TIMEOUT_MS);
+    forceExit.unref();
     try {
       // Cancels in-flight turns (their turn.ended still broadcasts), releases
       // harness subprocesses, closes every attached transport.
@@ -75,6 +83,7 @@ async function start(): Promise<void> {
     } catch (error) {
       console.error("[SIGNAL] Cleanup failed:", error);
     } finally {
+      clearTimeout(forceExit);
       process.exit(0);
     }
   };

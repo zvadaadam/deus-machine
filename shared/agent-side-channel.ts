@@ -145,19 +145,29 @@ export function claimSideChannel(
 
 /**
  * Wrap a transport so lines claimed by `claim` never reach the upstream wire.
- * `claim` runs on every inbound line; outbound `send` passes through untouched
- * (side-channel responses are written directly to the inner transport).
+ * The claim step runs ONCE per line on a single inner subscription (a second
+ * downstream subscriber must not re-run side-channel dispatch); unclaimed
+ * lines fan out to every downstream handler, optionally rewritten first.
+ * Outbound `send` passes through untouched (side-channel responses are
+ * written directly to the inner transport).
  */
 export function filterClaimedLines(
   inner: LineTransport,
-  claim: (line: string) => boolean
+  claim: (line: string) => boolean,
+  rewriteLine?: (line: string) => string | undefined
 ): LineTransport {
+  const handlers = new Set<(line: string) => void>();
+  inner.onLine((line) => {
+    if (claim(line)) return;
+    const rewritten = rewriteLine?.(line) ?? line;
+    for (const handler of [...handlers]) handler(rewritten);
+  });
   return {
     send: (line) => inner.send(line),
-    onLine: (handler) =>
-      inner.onLine((line) => {
-        if (!claim(line)) handler(line);
-      }),
+    onLine: (handler) => {
+      handlers.add(handler);
+      return () => handlers.delete(handler);
+    },
     onClose: (handler) => inner.onClose(handler),
     close: () => inner.close(),
     get closed() {

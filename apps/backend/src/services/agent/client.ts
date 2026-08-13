@@ -98,7 +98,14 @@ export class AgentLink {
 
   /** Build one connection: dial, wrap, claim side-channel frames. */
   private async openTransport(): Promise<LineTransport> {
+    if (this.disposed) {
+      throw new Error("agent link disposed");
+    }
     const ws = await dialWebSocket(this.options.url);
+    if (this.disposed) {
+      ws.close();
+      throw new Error("agent link disposed");
+    }
     ws.on("error", () => {
       // A close event always follows; nothing to do here.
     });

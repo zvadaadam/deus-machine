@@ -429,7 +429,11 @@ async function main() {
     console.log(`${ts()} ${c.green}◂${c.reset} ${color}${c.bold}${event.type}${c.reset} ${detail}`);
   };
 
-  const translator = new LifecycleTranslator({ emit: handleAgentEvent });
+  const translator = new LifecycleTranslator({
+    emit: handleAgentEvent,
+    // The quick-ack can race the first envelopes; the fallback keeps them.
+    resolveHarness: () => opts.agent as AgentHarness,
+  });
   client.onEvent((envelope) => translator.handle(envelope));
 
   // 6. Start the turn with the backend's REAL run-config assembly
@@ -441,8 +445,8 @@ async function main() {
     cwd: opts.cwd,
     permissionMode: "default",
   });
-  await client.startTurn(params);
   translator.beginTurn(sessionId, opts.agent as AgentHarness, turnId);
+  await client.startTurn(params);
 
   // 7. Wait for completion
   await new Promise<void>((resolve) => {

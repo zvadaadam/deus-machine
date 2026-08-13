@@ -21,7 +21,12 @@ import {
   encodeRequest,
   WireEventEnvelopeSchema,
 } from "@zvada/agent-server/protocol";
-import { SIDE_CHANNEL, SideChannelEndpoint, wsLineTransport } from "@shared/agent-side-channel";
+import {
+  SIDE_CHANNEL,
+  SideChannelEndpoint,
+  filterClaimedLines,
+  wsLineTransport,
+} from "@shared/agent-side-channel";
 import type { LineTransport } from "@shared/agent-side-channel";
 import { registerAppMcp, unregisterAppMcp } from "./app-registrar";
 import { createCheckpoint } from "./agents/core/checkpoint";
@@ -107,20 +112,12 @@ export function bridgeWsConnection(ws: WebSocket, agentServer: AgentServer): voi
     clearHost(sideChannel);
   });
 
-  // Claim side-channel frames; observe/rewrite the rest; forward to the wire.
-  const filtered: LineTransport = {
-    send: (line) => transport.send(line),
-    onLine: (handler) =>
-      transport.onLine((line) => {
-        if (sideChannel.handleLine(line)) return;
-        handler(observeInboundLine(line) ?? line);
-      }),
-    onClose: (handler) => transport.onClose(handler),
-    close: () => transport.close(),
-    get closed() {
-      return transport.closed;
-    },
-  };
+  // Claim side-channel frames once; observe/rewrite the rest; forward to the wire.
+  const filtered = filterClaimedLines(
+    transport,
+    (line) => sideChannel.handleLine(line),
+    observeInboundLine
+  );
 
   agentServer.attach(filtered);
   console.log("[wire] Client connected");
