@@ -288,10 +288,14 @@ export async function fullParse(head: PortableSessionHead): Promise<PortableSess
   let model: string | undefined;
   let currentAssistant: PortMessage | undefined;
 
-  const assistant = (): PortMessage => {
+  const assistant = (ts?: string): PortMessage => {
     if (!currentAssistant) {
-      currentAssistant = { role: "assistant", model, parts: [] };
+      // Stamp the creating record's timestamp so tool/reasoning-only turns
+      // keep real chronology (head.lastTimestamp is a bounded-prefix value).
+      currentAssistant = { role: "assistant", model, sentAt: ts, parts: [] };
       messages.push(currentAssistant);
+    } else if (ts && !currentAssistant.sentAt) {
+      currentAssistant.sentAt = ts;
     }
     return currentAssistant;
   };
@@ -371,7 +375,7 @@ export async function fullParse(head: PortableSessionHead): Promise<PortableSess
             .join("\n") || contentText(payload.content);
         // Encrypted reasoning with no summary yields "" — an empty part would
         // count as importable content while rendering nothing.
-        if (text) assistant().parts.push({ type: "REASONING", text });
+        if (text) assistant(timestamp).parts.push({ type: "REASONING", text });
         break;
       }
       case "function_call":
@@ -394,7 +398,7 @@ export async function fullParse(head: PortableSessionHead): Promise<PortableSess
           kind: toolKind(name),
           state: { status: "RUNNING", input },
         };
-        assistant().parts.push(part);
+        assistant(timestamp).parts.push(part);
         pendingByCallId.set(callId, part);
         break;
       }
@@ -443,10 +447,13 @@ export async function fullParse(head: PortableSessionHead): Promise<PortableSess
           toolCallId: callId,
           toolName: "local_shell",
           kind: "bash",
-          state: {
-            status: str(payload.status) === "completed" ? "COMPLETED" : "RUNNING",
-            input: { command },
-          },
+          state:
+            str(payload.status) === "failed"
+              ? { status: "ERROR", input: { command }, error: "Command failed" }
+              : {
+                  status: str(payload.status) === "completed" ? "COMPLETED" : "RUNNING",
+                  input: { command },
+                },
         };
         assistant().parts.push(part);
         // Codex emits the result as function_call_output with the same call_id;

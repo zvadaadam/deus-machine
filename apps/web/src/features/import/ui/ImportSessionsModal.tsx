@@ -182,8 +182,11 @@ export function ImportSessionsModal({ open, onClose, onOpenWorkspace }: ImportSe
     if (items.length === 0) return;
     setBulk({ done: 0, total: items.length });
     let failures = 0;
-    for (let i = 0; i < items.length; i++) {
-      const { session, workspaceId } = items[i];
+    // Oldest first: each import overwrites the workspace's current session,
+    // so the NEWEST conversation ends up active after a bulk run.
+    const ordered = [...items].reverse();
+    for (let i = 0; i < ordered.length; i++) {
+      const { session, workspaceId } = ordered[i];
       try {
         const ack = await importExternalSession(session.key, workspaceId);
         if (!ack.accepted) failures++;

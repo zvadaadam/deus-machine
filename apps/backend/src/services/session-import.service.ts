@@ -519,7 +519,7 @@ function insertImportedSession(
           messageId,
           sessionId,
           "user",
-          capString(message.text ?? "", MAX_USER_CONTENT_CHARS),
+          userContentForInsert(message),
           sentAt,
           null,
           null,
@@ -637,6 +637,41 @@ function toCanonicalPart(
   }
 }
 
+const MAX_IMAGE_BASE64_CHARS = 2_000_000;
+const MAX_IMAGES_PER_MESSAGE = 6;
+
+/**
+ * User content column: plain capped text, or JSON content blocks when the
+ * message carried images (the UI renders block-format user content). Oversized
+ * or excess images are replaced with a text marker rather than ballooning the DB.
+ */
+function userContentForInsert(message: PortMessage): string {
+  const blocks = message.contentBlocks;
+  if (!blocks || blocks.length === 0) return capString(message.text ?? "", MAX_USER_CONTENT_CHARS);
+  let images = 0;
+  let omitted = 0;
+  const bounded: unknown[] = [];
+  for (const block of blocks) {
+    const b = block as Record<string, unknown>;
+    if (b?.type === "text" && typeof b.text === "string") {
+      bounded.push({ type: "text", text: capString(b.text, MAX_USER_CONTENT_CHARS) });
+      continue;
+    }
+    if (b?.type === "image") {
+      const data = (b.source as Record<string, unknown> | undefined)?.data;
+      const tooBig = typeof data === "string" && data.length > MAX_IMAGE_BASE64_CHARS;
+      if (tooBig || images >= MAX_IMAGES_PER_MESSAGE) {
+        omitted++;
+        continue;
+      }
+      images++;
+      bounded.push(block);
+    }
+  }
+  if (omitted > 0) bounded.push({ type: "text", text: `[${omitted} image(s) omitted on import]` });
+  return JSON.stringify(bounded);
+}
+
 function capString(value: string, max: number): string {
   return value.length > max ? `${value.slice(0, max)}\n… [truncated on import]` : value;
 }
@@ -654,7 +689,24 @@ function capJson(value: unknown): unknown {
   // Preserve STRUCTURE while capping string leaves: replacing the whole
   // object would strip fields registered renderers depend on (file_path,
   // command, old/new_string for Write/Edit) and break their display.
-  return capJsonLeaves(value, 4);
+  const capped = capJsonLeaves(value, 4);
+  // Hard total budget: leaf-capping can't bound arrays of thousands of small
+  // entries or very deep objects. Fall back to a preview that still keeps the
+  // small identifying fields renderers key on.
+  try {
+    if (JSON.stringify(capped).length <= MAX_TOOL_PAYLOAD_CHARS * 16) return capped;
+  } catch {
+    /* fall through to preview */
+  }
+  const identity: Record<string, unknown> = { truncated: true };
+  if (value && typeof value === "object" && !Array.isArray(value)) {
+    for (const key of ["file_path", "path", "command", "query", "url", "description", "name"]) {
+      const entry = (value as Record<string, unknown>)[key];
+      if (typeof entry === "string") identity[key] = capString(entry, 2_048);
+    }
+  }
+  identity.preview = `${text.slice(0, MAX_TOOL_PAYLOAD_CHARS)}…`;
+  return identity;
 }
 
 function capJsonLeaves(value: unknown, depth: number): unknown {

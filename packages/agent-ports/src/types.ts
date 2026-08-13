@@ -92,6 +92,9 @@ export interface PortMessage {
   model?: string;
   /** User messages: plain text. Assistant messages: parts carry the content. */
   text?: string;
+  /** User messages with images: Anthropic-style content blocks (text+image),
+   *  stored verbatim so the UI renders what the agent actually saw. */
+  contentBlocks?: unknown[];
   parts: PortPart[];
   /** True when this is provider/meta chatter a UI should hide (env context, hooks…). */
   isMeta?: boolean;

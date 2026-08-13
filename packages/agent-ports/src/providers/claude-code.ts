@@ -90,6 +90,20 @@ function userText(record: Record<string, unknown>): string | undefined {
   return texts.length ? texts.join("\n") : undefined;
 }
 
+/** Base64 image blocks from a user record's message.content (pasted images). */
+function userImageBlocks(record: Record<string, unknown>): unknown[] {
+  const message = record.message as Record<string, unknown> | undefined;
+  const content = message?.content;
+  if (!Array.isArray(content)) return [];
+  return content.filter((block) => {
+    if (typeof block !== "object" || block === null) return false;
+    const b = block as Record<string, unknown>;
+    if (b.type !== "image") return false;
+    const source = b.source as Record<string, unknown> | undefined;
+    return source?.type === "base64" && typeof source.data === "string";
+  });
+}
+
 /** Meta user content we hide by default (hooks, command echoes, reminders). */
 function isMetaUserText(text: string): boolean {
   return (
@@ -401,13 +415,21 @@ export async function fullParse(head: PortableSessionHead): Promise<PortableSess
         });
         continue;
       }
-      if (text !== undefined) {
-        const meta = record.isMeta === true || isMetaUserText(text);
+      const imageBlocks = userImageBlocks(record);
+      if (text !== undefined || imageBlocks.length > 0) {
+        const bodyText = text ?? "";
+        const meta = record.isMeta === true || (text !== undefined && isMetaUserText(text));
         messages.push({
           role: "user",
           sentAt: str(record.timestamp),
-          text,
-          parts: [{ type: "TEXT", text, parentToolCallId }],
+          text: bodyText,
+          // Mixed/image-only prompts carry the full block list so the UI can
+          // render exactly what the agent was shown.
+          contentBlocks:
+            imageBlocks.length > 0
+              ? [...(bodyText ? [{ type: "text", text: bodyText }] : []), ...imageBlocks]
+              : undefined,
+          parts: [{ type: "TEXT", text: bodyText, parentToolCallId }],
           isMeta: meta || isSidechain,
         });
       }
