@@ -147,7 +147,7 @@ async function refreshImportableSessions(): Promise<void> {
       totals[provider]++;
       if (kept >= MAX_SESSIONS_PER_PROVIDER) continue;
       kept++;
-      const key = identityKey(head.identity);
+      const key = stableKey(head);
       headsByKey.set(key, head);
       const imported = importedByKey.get(key);
       sessions.push({
@@ -155,7 +155,7 @@ async function refreshImportableSessions(): Promise<void> {
         provider,
         title: buildTitle(head),
         cwd: head.identity.cwd,
-        lastTimestamp: head.lastTimestamp,
+        lastTimestamp: lastActivityIso(head),
         messageCount: head.messageCount,
         sizeBytes: head.sourceSizeBytes,
         model: head.model,
@@ -182,6 +182,27 @@ async function refreshImportableSessions(): Promise<void> {
 /** Fire-and-forget cache warmup so the first modal open shows data instantly. */
 export function warmImportableSessions(): void {
   getImportableSessionsSnapshot();
+}
+
+/**
+ * Dedupe identity. Cursor's cwd comes from best-effort workspaceStorage
+ * mapping and can change between scans — exclude it from the key there
+ * (composerId alone is stable); Claude/Codex read cwd from the transcript
+ * itself, where it is intrinsic.
+ */
+function stableKey(head: PortableSessionHead): string {
+  return identityKey({
+    ...head.identity,
+    cwd: head.identity.provider === "cursor" ? "" : head.identity.cwd,
+  });
+}
+
+/** Head timestamps come from a bounded prefix read; mtime is authoritative
+ *  for "last activity" on transcripts larger than the head window. */
+function lastActivityIso(head: PortableSessionHead): string {
+  const parsed = head.lastTimestamp ? Date.parse(head.lastTimestamp) : NaN;
+  const best = Math.max(Number.isFinite(parsed) ? parsed : 0, head.sourceMtimeMs);
+  return new Date(best).toISOString();
 }
 
 function buildTitle(head: PortableSessionHead): string {
@@ -234,31 +255,47 @@ function groupSessions(
   return groups;
 }
 
-let cursorCopyDir: string | undefined;
+const cursorCopyDirs: string[] = [];
+
+/** Cursor user-data dir by platform (macOS / Linux AppImage+deb / Windows). */
+function cursorUserDir(home: string): string {
+  if (process.platform === "darwin")
+    return join(home, "Library", "Application Support", "Cursor", "User");
+  if (process.platform === "win32")
+    return join(process.env.APPDATA ?? join(home, "AppData", "Roaming"), "Cursor", "User");
+  return join(process.env.XDG_CONFIG_HOME ?? join(home, ".config"), "Cursor", "User");
+}
 
 async function scanCursor(home: string): Promise<PortableSessionHead[]> {
-  const userDir = join(home, "Library", "Application Support", "Cursor", "User");
+  const userDir = cursorUserDir(home);
   const src = join(userDir, "globalStorage", "state.vscdb");
   try {
     await fsp.stat(src);
   } catch {
     return [];
   }
-  // Private per-scan dir (mkdtemp): unpredictable path, no clashes with other
-  // scans. The copy must outlive the scan — imports full-parse from it later —
-  // so only the previous scan's dir is removed.
-  const previousCopyDir = cursorCopyDir;
-  cursorCopyDir = await fsp.mkdtemp(join(tmpdir(), "deus-agent-ports-"));
-  if (previousCopyDir)
-    await fsp.rm(previousCopyDir, { recursive: true, force: true }).catch(() => {});
-  const dbPath = join(cursorCopyDir, "cursor-state.vscdb");
+  // Private per-scan dir (mkdtemp): unpredictable path, no clashes. Copies
+  // must outlive their scan — imports full-parse from them later, and a stale
+  // subscriber can still click rows from the previous snapshot — so keep the
+  // current AND previous generation, deleting only older ones.
+  const copyDir = await fsp.mkdtemp(join(tmpdir(), "deus-agent-ports-"));
+  cursorCopyDirs.push(copyDir);
+  while (cursorCopyDirs.length > 2) {
+    const stale = cursorCopyDirs.shift()!;
+    await fsp.rm(stale, { recursive: true, force: true }).catch(() => {});
+  }
+  const dbPath = join(copyDir, "cursor-state.vscdb");
   await fsp.copyFile(src, dbPath);
   await fsp.copyFile(`${src}-wal`, `${dbPath}-wal`).catch(() => {});
   const heads = await cursor.scan({
     dbPath,
     workspaceStorageDir: join(userDir, "workspaceStorage"),
   });
-  return heads.filter((h) => h.era !== "empty" && h.messageCount > 0);
+  // Same recency window the other providers apply at scan time.
+  const minMtime = Date.now() - SCAN_MAX_AGE_DAYS * 24 * 60 * 60 * 1000;
+  return heads.filter(
+    (h) => h.era !== "empty" && h.messageCount > 0 && h.sourceMtimeMs >= minMtime
+  );
 }
 
 // --- Import ----------------------------------------------------------------
@@ -287,10 +324,12 @@ export async function importExternalSession(params: QueryParams): Promise<{
 
   const head = headsByKey.get(key);
   if (!head) throw new Error("Session not found in the current scan — reopen the import dialog");
-  const workspace = db.prepare("SELECT id FROM workspaces WHERE id = ?").get(workspaceId) as
-    | { id: string }
+  const workspace = db.prepare("SELECT id, state FROM workspaces WHERE id = ?").get(workspaceId) as
+    | { id: string; state: string }
     | undefined;
   if (!workspace) throw new Error(`Workspace not found: ${workspaceId}`);
+  if (workspace.state !== "ready")
+    throw new Error(`Workspace is not ready (state: ${workspace.state}) — pick another target`);
 
   const parsed =
     head.identity.provider === "claude-code"
