@@ -39,6 +39,13 @@ export interface Workspace {
   error_message: string | null;
   pr_url?: string | null;
   pr_number?: number | null;
+  /** PR lifecycle snapshot — persisted by the backend from gh, pushed over WS. */
+  pr_state?: "open" | "merged" | "closed" | null;
+  pr_is_draft?: number | null;
+  pr_review_status?: "approved" | "changes_requested" | "review_required" | "none" | null;
+  pr_has_conflicts?: number | null;
+  pr_ci_status?: "passing" | "failing" | "pending" | "unknown" | null;
+  pr_checked_at?: string | null;
   archive_commit?: string | null;
   archived_at?: string | null;
 }

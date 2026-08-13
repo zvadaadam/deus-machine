@@ -121,7 +121,9 @@ function inspectRepositoryRoot(rootPath: string): InspectedRepository {
   try {
     normalizedRootPath = execFileSync("git", ["rev-parse", "--show-toplevel"], {
       cwd: normalizedRootPath,
-      timeout: 2000,
+      // First git spawn on cold macOS CI runners can exceed 2s (Gatekeeper
+      // scan of the packaged app) — keep registration robust, not snappy.
+      timeout: 10_000,
     })
       .toString()
       .trim();

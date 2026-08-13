@@ -1,10 +1,7 @@
 import { Hono } from "hono";
 import { withWorkspace } from "../middleware/workspace-loader";
-import { getPrStatus } from "../services/gh.service";
 import { getGhIdentity } from "../services/gh-identity.service";
-import { getDatabase } from "../lib/database";
-import { invalidate } from "../services/query-engine";
-import { autoProgressStatus } from "../services/workspace-status.service";
+import { fetchAndApplyPrStatus } from "../services/pr-snapshot.service";
 import type { WorkspaceWithDetailsRow } from "../db";
 
 type Env = { Variables: { workspace: WorkspaceWithDetailsRow; workspacePath: string } };
@@ -17,42 +14,13 @@ app.get("/gh-status", async (c) => {
 });
 
 // PR status -- async, fork-aware, explicit errors
-// Side-effect: persists pr_url on first discovery + triggers auto-derive
+// Side-effect: persists the pr_* lifecycle snapshot + triggers auto-derive
 app.get("/workspaces/:id/pr-status", withWorkspace, async (c) => {
   const workspace = c.get("workspace");
   const workspacePath = c.get("workspacePath");
-  const result = await getPrStatus(workspacePath);
-
-  let needsInvalidation = false;
-
-  // Persist PR metadata when URL changes
-  if (result.has_pr && result.pr_url && result.pr_url !== workspace.pr_url) {
-    const db = getDatabase();
-    db.prepare("UPDATE workspaces SET pr_url = ?, pr_number = ? WHERE id = ?").run(
-      result.pr_url,
-      result.pr_number ?? null,
-      workspace.id
-    );
-    needsInvalidation = true;
-  }
-
-  // Auto-progress to in-review whenever a PR exists (not just on URL change)
-  if (result.has_pr) {
-    if (autoProgressStatus(workspace.id, "in-review")) {
-      needsInvalidation = true;
-    }
-  }
-
-  // Auto-derive done on merge
-  if (result.merge_status === "merged") {
-    if (autoProgressStatus(workspace.id, "done")) {
-      needsInvalidation = true;
-    }
-  }
-
-  if (needsInvalidation) {
-    invalidate(["workspaces", "stats"]);
-  }
+  // Epoch-guarded fetch+persist — shared with background refreshes so an
+  // overlapping older lookup can never overwrite a newer snapshot.
+  const result = await fetchAndApplyPrStatus(workspace.id, workspacePath);
 
   return c.json(result);
 });

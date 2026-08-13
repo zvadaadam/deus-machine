@@ -13,6 +13,8 @@
  * changes don't destroy the guest page, and the container stacks normally
  * alongside DOM (so dropdowns, overlays, and splitters layer above it).
  */
+import { WEBVIEW_PARTITION } from "@shared/browser";
+
 export type Bounds = { x: number; y: number; width: number; height: number };
 
 export interface WebviewState {
@@ -20,8 +22,8 @@ export interface WebviewState {
   isVisible: boolean;
 }
 
-/** Shared cookie/session partition — mirrored on the <webview> tag below. */
-export const WEBVIEW_PARTITION = "persist:browser";
+/** Re-exported so existing browser-feature imports keep their local source. */
+export { WEBVIEW_PARTITION };
 
 /** z-index reserved for <webview> guests and the overlays that must render
  *  on top of them (focus-mode composer, agent cursor, comment pins). */

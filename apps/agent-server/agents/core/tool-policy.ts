@@ -9,7 +9,7 @@
 
 import * as fs from "node:fs";
 import * as path from "node:path";
-import type { ClaudeToolPolicy } from "@agent-server/core";
+import type { ClaudeToolPolicy } from "@zvada/agent-server/core";
 import { EventBroadcaster } from "../../event-broadcaster";
 import { sessions } from "./session-state";
 

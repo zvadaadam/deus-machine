@@ -1,5 +1,5 @@
 // agent-server/agents/core/engine.ts
-// The one construction site for the embedded @agent-server/core engine: lazy
+// The one construction site for the embedded @zvada/agent-server/core engine: lazy
 // registry + runtime singletons shared by all three CoreAgentHandler
 // instances, deus's claude embed-tier options (in-process deus MCP suite,
 // tool policy, checkpoint hooks, legacy SDK-option parity), and the
@@ -10,9 +10,9 @@ import {
   createAgentRegistry,
   type AgentRegistry,
   type ClaudeCodeAgent,
-} from "@agent-server/core";
-import type { SdkMcpServers } from "@agent-server/core";
-import type { McpServerConfig } from "@agent-server/protocol";
+} from "@zvada/agent-server/core";
+import type { SdkMcpServers } from "@zvada/agent-server/core";
+import type { McpServerConfig } from "@zvada/agent-server/protocol";
 import { createDeusMCPServer } from "../deus-tools";
 import { createCheckpoint } from "./checkpoint";
 import { sessions, sessionState } from "./session-state";

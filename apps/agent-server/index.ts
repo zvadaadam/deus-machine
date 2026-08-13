@@ -145,7 +145,7 @@ class AgentServer {
   async start(): Promise<void> {
     await this.cleanup();
 
-    // All harnesses run on the embedded @agent-server/core engine — the
+    // All harnesses run on the embedded @zvada/agent-server/core engine — the
     // in-repo engine implementations are gone (phase B of the consolidation).
     // Packaged/staged runtimes: adopt bundled CLIs before the engine registry
     // exists (its provisioner honors the CLI-path env overrides).

@@ -30,14 +30,19 @@ class ApiClient {
   }
 
   /**
-   * Generic POST request
+   * Generic POST request. `timeoutMs` overrides the default request timeout —
+   * useful for endpoints that block on an interactive OS prompt.
    */
-  async post<T>(endpoint: string, data?: any): Promise<T> {
-    return this.request<T>(endpoint, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: data ? JSON.stringify(data) : undefined,
-    });
+  async post<T>(endpoint: string, data?: any, timeoutMs?: number): Promise<T> {
+    return this.request<T>(
+      endpoint,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: data ? JSON.stringify(data) : undefined,
+      },
+      timeoutMs
+    );
   }
 
   /**
@@ -73,11 +78,15 @@ class ApiClient {
    * Core request method — standard HTTP fetch.
    * Attaches Authorization header for remote browser clients.
    */
-  private async request<T>(endpoint: string, options: RequestInit): Promise<T> {
+  private async request<T>(
+    endpoint: string,
+    options: RequestInit,
+    timeoutMs: number = this.timeout
+  ): Promise<T> {
     const baseURL = await getBaseURL();
     const url = `${baseURL}${endpoint}`;
     const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), this.timeout);
+    const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
 
     // Attach Bearer token for remote (non-localhost) browser sessions
     const headers = new Headers(options.headers);

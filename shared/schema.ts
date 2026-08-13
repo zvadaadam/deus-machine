@@ -24,11 +24,42 @@ export const PRELAUNCH_SCHEMA_RESET_HINT =
   "This local database was created with an older pre-launch schema. Reset it by deleting deus.db (or point DATABASE_PATH at a fresh file), then restart Deus.";
 
 export const PRELAUNCH_REQUIRED_COLUMNS = {
-  workspaces: ["status"],
+  // pr_* columns are additive (see ADDITIVE_COLUMNS) and asserted here only
+  // AFTER applyAdditiveColumns has run, so a failed ALTER surfaces at boot
+  // with the reset hint instead of as a "no such column" error at first query.
+  workspaces: [
+    "status",
+    "pr_state",
+    "pr_is_draft",
+    "pr_review_status",
+    "pr_has_conflicts",
+    "pr_ci_status",
+    "pr_checked_at",
+  ],
   sessions: ["agent_harness", "error_category", "origin_key"],
   messages: ["stop_reason"],
   parts: ["parent_tool_call_id"],
 } as const satisfies Record<string, readonly string[]>;
+
+/**
+ * Additive columns applied to existing databases via ALTER TABLE at startup.
+ * Purely additive (nullable or defaulted) — no reset required, unlike
+ * PRELAUNCH_REQUIRED_COLUMNS breaks. Keep in sync with SCHEMA_SQL.
+ */
+export const ADDITIVE_COLUMNS = {
+  sessions: {
+    // Imported-session identity (nullable) — see sessions.origin_key comment.
+    origin_key: "TEXT",
+  },
+  workspaces: {
+    pr_state: "TEXT",
+    pr_is_draft: "INTEGER NOT NULL DEFAULT 0",
+    pr_review_status: "TEXT",
+    pr_has_conflicts: "INTEGER NOT NULL DEFAULT 0",
+    pr_ci_status: "TEXT",
+    pr_checked_at: "TEXT",
+  },
+} as const satisfies Record<string, Record<string, string>>;
 
 export const SCHEMA_SQL = `
   -- Repositories tracked by the app (id = UUID7, embeds created_at)
@@ -55,6 +86,12 @@ export const SCHEMA_SQL = `
     current_session_id TEXT,
     pr_url TEXT,
     pr_number INTEGER,
+    pr_state TEXT,
+    pr_is_draft INTEGER NOT NULL DEFAULT 0,
+    pr_review_status TEXT,
+    pr_has_conflicts INTEGER NOT NULL DEFAULT 0,
+    pr_ci_status TEXT,
+    pr_checked_at TEXT,
     archive_commit TEXT,
     archived_at TEXT,
     setup_status TEXT NOT NULL DEFAULT 'none',
@@ -132,10 +169,6 @@ export const SCHEMA_SQL = `
   CREATE INDEX IF NOT EXISTS idx_workspaces_state ON workspaces(state);
   CREATE INDEX IF NOT EXISTS idx_sessions_workspace_id ON sessions(workspace_id);
   CREATE INDEX IF NOT EXISTS idx_sessions_status ON sessions(status);
-  -- UNIQUE backs the import idempotency contract: concurrent imports of the
-  -- same external session race to insert; the loser gets a constraint error
-  -- and returns the winner's row.
-  CREATE UNIQUE INDEX IF NOT EXISTS idx_sessions_origin_key_unique ON sessions(origin_key);
   CREATE INDEX IF NOT EXISTS idx_messages_seq ON messages(session_id, seq DESC);
   CREATE INDEX IF NOT EXISTS idx_messages_sent_at ON messages(session_id, sent_at);
   CREATE INDEX IF NOT EXISTS idx_messages_session_role ON messages(session_id, role, id DESC);
@@ -172,4 +205,16 @@ export const SCHEMA_SQL = `
   CREATE TRIGGER IF NOT EXISTS dec_session_message_count
     AFTER DELETE ON messages
     BEGIN UPDATE sessions SET message_count = message_count - 1 WHERE id = OLD.session_id; END;
+`;
+
+/**
+ * Index statements that reference ADDITIVE_COLUMNS — executed after
+ * applyAdditiveColumns so databases created before the column existed
+ * gain the column first.
+ * UNIQUE on origin_key backs the import idempotency contract: concurrent
+ * imports of the same external session race to insert; the loser gets a
+ * constraint error and returns the winner's row.
+ */
+export const POST_ADDITIVE_SQL = `
+  CREATE UNIQUE INDEX IF NOT EXISTS idx_sessions_origin_key_unique ON sessions(origin_key);
 `;

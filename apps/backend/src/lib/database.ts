@@ -4,6 +4,8 @@ import fs from "fs";
 import os from "os";
 import { resolveDefaultDatabasePath } from "../../../../shared/runtime";
 import {
+  ADDITIVE_COLUMNS,
+  POST_ADDITIVE_SQL,
   PRELAUNCH_REQUIRED_COLUMNS,
   PRELAUNCH_SCHEMA_RESET_HINT,
   SCHEMA_SQL,
@@ -55,6 +57,25 @@ function assertPrelaunchSchemaCurrent(db: BetterSqlite3.Database): void {
   }
 }
 
+/**
+ * Apply additive (non-breaking) columns to databases created before the
+ * column existed. CREATE TABLE IF NOT EXISTS never alters existing tables,
+ * so purely additive columns are ALTERed in here instead of forcing a reset.
+ */
+function applyAdditiveColumns(db: BetterSqlite3.Database): void {
+  for (const [table, columns] of Object.entries(ADDITIVE_COLUMNS)) {
+    const rows = db.pragma(`table_info(${table})`) as TableInfoRow[];
+    if (rows.length === 0) continue;
+
+    const existing = new Set(rows.map((row) => row.name));
+    for (const [column, definition] of Object.entries(columns)) {
+      if (!existing.has(column)) {
+        db.exec(`ALTER TABLE ${table} ADD COLUMN ${column} ${definition}`);
+      }
+    }
+  }
+}
+
 function prelaunchSchemaError(detail: string): Error {
   return new Error(
     [
@@ -90,6 +111,8 @@ function initDatabase(): BetterSqlite3.Database {
     // local database still has a pre-launch schema shape.
     try {
       dbInstance.exec(SCHEMA_SQL);
+      applyAdditiveColumns(dbInstance);
+      dbInstance.exec(POST_ADDITIVE_SQL);
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       throw prelaunchSchemaError(`Schema initialization failed: ${message}`);
