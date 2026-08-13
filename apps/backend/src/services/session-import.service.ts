@@ -363,6 +363,10 @@ export async function importExternalSession(params: QueryParams): Promise<{
     .prepare("SELECT id, workspace_id FROM sessions WHERE origin_key = ?")
     .get(key) as { id: string; workspace_id: string } | undefined;
   if (existing) {
+    // The DB can be ahead of our in-memory snapshot (another backend process
+    // imported this key) — refresh the row so the modal stops offering it.
+    markImportedInSnapshot(key, existing.id);
+    invalidate(["importable_sessions"]);
     return {
       commandId: existing.id,
       sessionId: existing.id,
@@ -386,6 +390,17 @@ export async function importExternalSession(params: QueryParams): Promise<{
       : head.identity.provider === "codex"
         ? await codex.fullParse(head)
         : await cursor.fullParse(head as Parameters<typeof cursor.fullParse>[0]);
+
+  // A transcript being appended mid-parse yields a truncated tail record and a
+  // partial import that would permanently claim the origin key. The source
+  // growing since the scan is the reliable tell (cursor parses our own frozen
+  // copy, so this applies to the file-based providers only).
+  if (head.identity.provider !== "cursor") {
+    const now = await fsp.stat(head.sourceFilePath).catch(() => undefined);
+    if (now && now.size !== head.sourceSizeBytes) {
+      throw new Error("This session is still being written — try importing again in a moment");
+    }
+  }
 
   const importableMessages = parsed.messages.filter(
     (m) => !shouldSkipMessage(m) && hasRenderableContent(m)
@@ -434,6 +449,8 @@ function markImportedInSnapshot(key: string, sessionId: string): void {
  *  REASONING/TEXT parts are dropped there and must not count as content. */
 function hasRenderableContent(message: PortMessage): boolean {
   if (message.text?.trim()) return true;
+  // Image-only prompts render via content blocks (userContentForInsert).
+  if (message.contentBlocks && message.contentBlocks.length > 0) return true;
   return message.parts.some(
     (p) =>
       p.type === "TOOL" ||

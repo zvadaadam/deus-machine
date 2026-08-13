@@ -69,8 +69,8 @@ function groupKey(group: ImportableGroup): string {
 interface ImportSessionsModalProps {
   open: boolean;
   onClose: () => void;
-  /** Select the workspace a session was imported into (from MainLayout). */
-  onOpenWorkspace?: (workspaceId: string, repositoryId?: string) => void;
+  /** Select the workspace (and open the imported session's tab) — from MainLayout. */
+  onOpenWorkspace?: (workspaceId: string, repositoryId?: string, sessionId?: string) => void;
 }
 
 export function ImportSessionsModal({ open, onClose, onOpenWorkspace }: ImportSessionsModalProps) {
@@ -162,7 +162,7 @@ export function ImportSessionsModal({ open, onClose, onOpenWorkspace }: ImportSe
             ? {
                 label: "Open",
                 onClick: () => {
-                  onOpenWorkspace(ack.workspaceId!, repositoryId);
+                  onOpenWorkspace(ack.workspaceId!, repositoryId, ack.sessionId);
                   onClose();
                 },
               }

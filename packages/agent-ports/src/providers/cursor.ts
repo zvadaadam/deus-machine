@@ -585,6 +585,11 @@ export async function fullParse(head: CursorHead): Promise<PortableSession> {
         const mapped = mapBlobMessage(message, stats, pendingTools);
         if (mapped) messages.push(mapped);
       }
+      // Interrupted runs leave calls without results — account for them like
+      // the Claude/Codex parsers do so probe fidelity numbers stay honest.
+      stats.orphanToolCalls = [...pendingTools.values()].filter(
+        (p) => p.state.status === "RUNNING"
+      ).length;
       return { head, messages, stats: finish(stats, startedAt) };
     }
 

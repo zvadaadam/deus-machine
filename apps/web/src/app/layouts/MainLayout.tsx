@@ -501,7 +501,16 @@ export function MainLayout() {
       <ImportSessionsModal
         open={showImportSessionsModal}
         onClose={closeImportSessionsModal}
-        onOpenWorkspace={(workspaceId, repositoryId) => {
+        onOpenWorkspace={(workspaceId, repositoryId, sessionId) => {
+          if (sessionId) {
+            // Persisted tabs shadow the current_session_id fallback — add the
+            // imported session as the active tab so "Open" actually shows it.
+            const layout = workspaceLayoutActions.getLayout(workspaceId);
+            const tabIds = layout.chatTabSessionIds.includes(sessionId)
+              ? layout.chatTabSessionIds
+              : [...layout.chatTabSessionIds, sessionId];
+            workspaceLayoutActions.setChatTabState(workspaceId, tabIds, sessionId);
+          }
           selectWorkspace(workspaceId);
           if (repositoryId) expandRepo(repositoryId);
         }}
