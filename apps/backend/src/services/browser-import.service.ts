@@ -46,7 +46,12 @@ const BROWSERS: BrowserDef[] = [
     base: "BraveSoftware/Brave-Browser",
     keychainService: "Brave Safe Storage",
   },
-  { id: "edge", name: "Edge", base: "Microsoft Edge", keychainService: "Microsoft Edge Safe Storage" },
+  {
+    id: "edge",
+    name: "Edge",
+    base: "Microsoft Edge",
+    keychainService: "Microsoft Edge Safe Storage",
+  },
   { id: "arc", name: "Arc", base: "Arc/User Data", keychainService: "Arc Safe Storage" },
 ];
 
@@ -192,7 +197,15 @@ export function decryptCookieValue(
   if (out.length === 0) return null;
   const pad = out[out.length - 1];
   if (pad < 1 || pad > 16 || pad > out.length) return null;
-  let plain = out.subarray(0, out.length - pad);
+  // Validate the full PKCS#7 suffix, not just its length. A wrong Safe Storage
+  // key (e.g. a profile copied from another Mac) still "decrypts" to garbage
+  // whose last byte lands in 1..16 ~1/16 of the time; the per-byte check
+  // rejects it instead of importing replacement-character junk.
+  const padStart = out.length - pad;
+  for (let i = padStart; i < out.length; i++) {
+    if (out[i] !== pad) return null;
+  }
+  let plain = out.subarray(0, padStart);
 
   if (plain.length >= 32) {
     const stripHash = hostKey ? hasDomainHashPrefix(plain, hostKey) : !looksPrintable(plain);

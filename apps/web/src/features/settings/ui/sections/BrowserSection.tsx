@@ -37,12 +37,35 @@ function formatLastUsed(ms: number | null): string | null {
   return `used ${Math.floor(days / 7)}w ago`;
 }
 
+// Cookies persist in the shared session, so the connected badge must survive
+// navigation/restart. We can't attribute session cookies back to a profile, so
+// this is a best-effort record of which profiles were imported; the Clear
+// action resets it.
+const CONNECTED_KEY = "deus.browser.connectedProfiles";
+
+function loadConnected(): Set<string> {
+  try {
+    const raw = localStorage.getItem(CONNECTED_KEY);
+    return new Set(raw ? (JSON.parse(raw) as string[]) : []);
+  } catch {
+    return new Set();
+  }
+}
+
+function saveConnected(keys: Set<string>): void {
+  try {
+    localStorage.setItem(CONNECTED_KEY, JSON.stringify([...keys]));
+  } catch {
+    // localStorage unavailable — badges just won't persist.
+  }
+}
+
 export function BrowserSection() {
   const profiles = useBrowserProfiles();
   const connect = useConnectBrowserProfile();
   const clearSession = useClearBrowserSession();
   const [connectingKey, setConnectingKey] = useState<string | null>(null);
-  const [connected, setConnected] = useState<Set<string>>(new Set());
+  const [connected, setConnected] = useState<Set<string>>(loadConnected);
 
   async function onConnect(profile: BrowserProfile): Promise<void> {
     const key = profileKey(profile);
@@ -62,7 +85,11 @@ export function BrowserSection() {
         );
         return;
       }
-      setConnected((prev) => new Set(prev).add(key));
+      setConnected((prev) => {
+        const next = new Set(prev).add(key);
+        saveConnected(next);
+        return next;
+      });
       toast.success(
         `Imported ${result.imported} cookie${result.imported === 1 ? "" : "s"} from ${
           profile.name || profile.browserName
@@ -85,6 +112,7 @@ export function BrowserSection() {
     try {
       await clearSession.mutateAsync();
       setConnected(new Set());
+      saveConnected(new Set());
       toast.success("Browser data cleared");
     } catch (error) {
       toast.error(getErrorMessage(error));
@@ -99,8 +127,7 @@ export function BrowserSection() {
         <h3 className="text-base font-semibold">Connect your browser</h3>
         <p className="text-muted-foreground mt-1 text-base">
           Import a browser profile so the agent works in the sessions you&apos;re already logged
-          into. Cookies are copied into the in-app browser; your other browsers aren&apos;t
-          changed.
+          into. Cookies are copied into the in-app browser; your other browsers aren&apos;t changed.
         </p>
       </div>
 
@@ -156,7 +183,7 @@ export function BrowserSection() {
                     size="sm"
                     variant="outline"
                     className="shrink-0 gap-1.5"
-                    disabled={isConnecting || connect.isPending}
+                    disabled={isConnecting || connect.isPending || clearSession.isPending}
                     onClick={() => void onConnect(profile)}
                   >
                     {isConnecting && <Loader2 className="size-3.5 animate-spin" />}
@@ -178,7 +205,7 @@ export function BrowserSection() {
             variant="ghost"
             size="sm"
             className="text-muted-foreground hover:text-destructive gap-1.5"
-            disabled={clearSession.isPending}
+            disabled={clearSession.isPending || connect.isPending}
             onClick={() => void onClearData()}
           >
             {clearSession.isPending ? (
