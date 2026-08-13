@@ -67,11 +67,30 @@ function ContentBlockRenderer({ block }: { block: ContentBlock }) {
     .exhaustive();
 }
 
+function safeJsonPreview(value: unknown): string | undefined {
+  try {
+    return JSON.stringify(value);
+  } catch {
+    return undefined;
+  }
+}
+
 export function DefaultToolRenderer({ toolUse, toolResult, isLoading }: ToolRendererProps) {
-  const firstInputKey = Object.keys(toolUse.input || {})[0];
-  const firstInputValue = firstInputKey
-    ? String(toolUse.input[firstInputKey]).substring(0, 40)
-    : "";
+  // Prefer the first primitive input value for the summary; objects/arrays
+  // stringify as "[object Object]" noise (e.g. codex apply_patch's `changes`),
+  // so fall back to a compact JSON preview instead.
+  const input = toolUse.input || {};
+  const firstPrimitive = Object.values(input).find(
+    (value) => typeof value === "string" || typeof value === "number" || typeof value === "boolean"
+  );
+  const firstInputKey = Object.keys(input)[0];
+  const firstInputValue = (
+    firstPrimitive !== undefined
+      ? String(firstPrimitive)
+      : firstInputKey
+        ? (safeJsonPreview(input[firstInputKey]) ?? "")
+        : ""
+  ).substring(0, 40);
 
   return (
     <BaseToolRenderer
