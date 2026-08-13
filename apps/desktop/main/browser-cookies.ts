@@ -11,7 +11,7 @@
  * so it lives in main rather than the backend.
  */
 
-import { ipcMain, session } from "electron";
+import { ipcMain, session, webContents } from "electron";
 import { WEBVIEW_PARTITION } from "../../../shared/browser";
 import type { ImportCookie, ImportCookiesResult } from "../../../shared/types/browser-import";
 
@@ -64,6 +64,12 @@ export function registerBrowserCookieHandlers(): void {
     const ses = session.fromPartition(WEBVIEW_PARTITION);
     await ses.clearStorageData(); // cookies + local/session/IndexedDB storage
     await ses.clearCache();
+    // Clearing storage/cache doesn't reset a live page's in-memory state — an
+    // SPA holding a token in memory would stay authenticated until reloaded.
+    // Reload the open guests in this partition so the clear actually takes hold.
+    for (const wc of webContents.getAllWebContents()) {
+      if (!wc.isDestroyed() && wc.session === ses) wc.reload();
+    }
     return { success: true };
   });
 }
