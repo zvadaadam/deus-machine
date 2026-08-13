@@ -5,9 +5,12 @@ import * as path from "path";
 import WebSocket from "ws";
 import { AgentServerClient } from "@zvada/agent-server/client";
 import type { WireEventEnvelope } from "@zvada/agent-server/protocol";
-import { channelTransport, pushNdjsonLines } from "@zvada/agent-server/protocol";
-import { SIDE_CHANNEL, SideChannelEndpoint, filterClaimedLines } from "@shared/agent-side-channel";
-import type { LineTransport } from "@shared/agent-side-channel";
+import {
+  SIDE_CHANNEL,
+  SideChannelEndpoint,
+  claimSideChannel,
+  wsLineTransport,
+} from "@shared/agent-side-channel";
 import { resolveBundledCliPath } from "@shared/lib/cli-path";
 
 /**
@@ -184,12 +187,7 @@ async function connectBackendStyle(
   onToolRequest?: (method: string, params: unknown) => Promise<unknown>
 ): Promise<BackendStyleConnection> {
   const ws = await openRawSocket(wsUrl);
-  const { transport, push, end } = channelTransport({
-    send: (line) => ws.send(line),
-    close: () => ws.close(),
-  });
-  ws.on("message", (data: Buffer | string) => pushNdjsonLines(push, data));
-  ws.on("close", () => end("socket closed"));
+  const transport = wsLineTransport(ws);
 
   const sideChannel = new SideChannelEndpoint((line) => transport.send(line), "e2e-backend");
   if (onToolRequest) {
@@ -199,9 +197,7 @@ async function connectBackendStyle(
   }
   sideChannel.notify(SIDE_CHANNEL.hello, {});
 
-  const client = await AgentServerClient.attach(
-    filterClaimedLines(transport as LineTransport, (line) => sideChannel.handleLine(line))
-  );
+  const client = await AgentServerClient.attach(claimSideChannel(transport, sideChannel));
   const envelopes: WireEventEnvelope[] = [];
   client.onEvent((envelope) => envelopes.push(envelope));
 

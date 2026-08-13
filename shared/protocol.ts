@@ -24,26 +24,12 @@ export const PermissionModeSchema = z.enum([
 export type PermissionMode = z.infer<typeof PermissionModeSchema>;
 
 // ============================================================================
-// Query Options & Request (used by agent handler interface)
+// Thinking Level
 // ============================================================================
 
 /**
  * User intent for how hard the model should think.
- * Agent-server translates this stable wire value into SDK-specific options.
+ * The backend translates this stable wire value into the engine's vocabulary.
  */
 export const ThinkingLevelSchema = z.enum(["NONE", "LOW", "MEDIUM", "HIGH", "XHIGH"]);
 export type ThinkingLevel = z.infer<typeof ThinkingLevelSchema>;
-
-/** Options passed alongside a query/turn request. */
-export const QueryOptionsSchema = z.object({
-  cwd: z.string().min(1),
-  model: z.string().min(1).optional(),
-  thinkingLevel: ThinkingLevelSchema.optional(),
-  maxTurns: z.number().int().positive().optional(),
-  turnId: z.string().min(1).optional(),
-  permissionMode: PermissionModeSchema.optional(),
-  additionalDirectories: z.array(z.string()).optional(),
-  resume: z.string().min(1).optional(),
-  resumeSessionAt: z.string().min(1).optional(),
-});
-export type QueryOptions = z.infer<typeof QueryOptionsSchema>;

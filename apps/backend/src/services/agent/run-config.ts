@@ -4,17 +4,10 @@
 // config assembly: prompt → engine input conversion, thinking-level mapping,
 // system-prompt append, resume plumbing.
 
-import type { AgentInput, RunConfig, TurnStartParams } from "@zvada/agent-server/protocol";
-import type { AgentHarness } from "@shared/enums";
+import type { AgentInput, TurnStartParams } from "@zvada/agent-server/protocol";
+import { ENGINE_HARNESS_BY_DEUS, type AgentHarness } from "@shared/enums";
 import type { ThinkingLevel, PermissionMode } from "@shared/protocol";
 import { buildSystemPromptAppend } from "./system-prompt";
-
-/** deus harness names → engine harness names. */
-export const ENGINE_HARNESS = {
-  claude: "claude-code",
-  "codex-sdk": "codex-sdk",
-  "codex-server": "codex-app-server",
-} as const satisfies Record<AgentHarness, RunConfig["harness"]>;
 
 /**
  * Deus's frontend serializes attachment-bearing prompts as a JSON array of
@@ -124,7 +117,7 @@ export function buildTurnStartParams(
     turnId,
     input: agentHarness === "claude" ? input : withoutImageParts(input),
     config: {
-      harness: ENGINE_HARNESS[agentHarness],
+      harness: ENGINE_HARNESS_BY_DEUS[agentHarness],
       cwd: options.cwd,
       model: options.model,
       thinkingLevel: toEngineThinking(options.thinkingLevel),

@@ -19,10 +19,9 @@ import {
   channelTransport,
   decodeWireMessage,
   encodeRequest,
-  pushNdjsonLines,
   WireEventEnvelopeSchema,
 } from "@zvada/agent-server/protocol";
-import { SIDE_CHANNEL, SideChannelEndpoint } from "@shared/agent-side-channel";
+import { SIDE_CHANNEL, SideChannelEndpoint, wsLineTransport } from "@shared/agent-side-channel";
 import type { LineTransport } from "@shared/agent-side-channel";
 import { registerAppMcp, unregisterAppMcp } from "./app-registrar";
 import { createCheckpoint } from "./agents/core/checkpoint";
@@ -85,18 +84,10 @@ function observeInboundLine(line: string): string | undefined {
 
 /** Wire one accepted WebSocket into the server + side channel. */
 export function bridgeWsConnection(ws: WebSocket, agentServer: AgentServer): void {
-  const { transport, push, end } = channelTransport({
-    send: (line) => ws.send(line),
-    close: () => ws.close(),
-  });
-
-  ws.on("message", (data: Buffer | string) => pushNdjsonLines(push, data));
-  ws.on("close", (code: number, reason: Buffer) => {
-    end(`socket closed (code=${code} reason=${reason.toString()})`);
-  });
   ws.on("error", (error: Error) => {
     console.error("[wire] WebSocket error:", error.message);
   });
+  const transport = wsLineTransport(ws);
 
   const sideChannel = new SideChannelEndpoint((line) => transport.send(line), "agent-server");
   sideChannel.onNotification(SIDE_CHANNEL.hello, () => setHost(sideChannel));

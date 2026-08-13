@@ -22,9 +22,12 @@ import * as os from "os";
 import { fileURLToPath } from "url";
 import WebSocket from "ws";
 import { AgentServerClient } from "@zvada/agent-server/client";
-import { channelTransport, pushNdjsonLines } from "@zvada/agent-server/protocol";
-import { SIDE_CHANNEL, SideChannelEndpoint, filterClaimedLines } from "@shared/agent-side-channel";
-import type { LineTransport } from "@shared/agent-side-channel";
+import {
+  SIDE_CHANNEL,
+  SideChannelEndpoint,
+  claimSideChannel,
+  wsLineTransport,
+} from "@shared/agent-side-channel";
 import type { AgentEvent } from "@shared/agent-events";
 import type { AgentHarness } from "@shared/enums";
 import { LifecycleTranslator } from "./src/services/agent/translate/translator";
@@ -337,9 +340,7 @@ async function main() {
   });
   sideChannel.notify(SIDE_CHANNEL.hello, {});
 
-  const client = await AgentServerClient.attach(
-    filterClaimedLines(transport as LineTransport, (line) => sideChannel.handleLine(line))
-  );
+  const client = await AgentServerClient.attach(claimSideChannel(transport, sideChannel));
   const init = await client.initialize();
   console.log(
     `  ${c.green}Handshake:${c.reset} v${init.protocolVersion} harnesses=[${Object.keys(init.harnesses).join(", ")}]`

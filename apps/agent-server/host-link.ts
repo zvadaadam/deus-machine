@@ -29,7 +29,7 @@ import type {
   StopAppResponse,
   ReadAppSkillRequest,
   ReadAppSkillResponse,
-} from "./protocol";
+} from "./rpc-schemas";
 
 /** Timeout for data-fetching requests that should resolve quickly. */
 const DATA_QUERY_TIMEOUT_MS = 10_000;

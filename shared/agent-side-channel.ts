@@ -65,6 +65,84 @@ export interface LineTransport {
   readonly closed: boolean;
 }
 
+/** The subset of a node `ws` socket the wire glue needs. */
+export interface WsSocketLike {
+  send(data: string): void;
+  close(): void;
+
+  // adapter over node-ws's event emitter; listener args vary per event.
+  on(event: "message" | "close", listener: (...args: any[]) => void): unknown;
+}
+
+/**
+ * Bridge a connected node-ws socket into a LineTransport: NDJSON framing in
+ * both directions, socket close → transport close. This is the ONE place the
+ * deus wire glue lives — the backend link, the agent-server bridge, both CLIs,
+ * and the integration tests all connect through it.
+ */
+export function wsLineTransport(ws: WsSocketLike): LineTransport {
+  const lineHandlers = new Set<(line: string) => void>();
+  const closeHandlers = new Set<(reason?: string) => void>();
+  let closed = false;
+
+  const end = (reason?: string) => {
+    if (closed) return;
+    closed = true;
+    for (const handler of [...closeHandlers]) handler(reason);
+    lineHandlers.clear();
+    closeHandlers.clear();
+  };
+
+  ws.on("message", (data: unknown) => {
+    if (closed) return;
+    const text =
+      typeof data === "string"
+        ? data
+        : data instanceof Uint8Array
+          ? new TextDecoder().decode(data)
+          : String(data);
+    for (const line of text.split("\n")) {
+      if (!line.trim()) continue;
+      for (const handler of [...lineHandlers]) handler(line);
+    }
+  });
+  ws.on("close", () => end("socket closed"));
+
+  return {
+    send(line) {
+      if (!closed) ws.send(line);
+    },
+    onLine(handler) {
+      lineHandlers.add(handler);
+      return () => lineHandlers.delete(handler);
+    },
+    onClose(handler) {
+      closeHandlers.add(handler);
+      return () => closeHandlers.delete(handler);
+    },
+    close() {
+      if (closed) return;
+      ws.close();
+      end("closed locally");
+    },
+    get closed() {
+      return closed;
+    },
+  };
+}
+
+/**
+ * Claim deus/* frames on a transport and return the upstream-only view.
+ * Pending side-channel requests fail when the transport drops.
+ */
+export function claimSideChannel(
+  transport: LineTransport,
+  endpoint: SideChannelEndpoint
+): LineTransport {
+  transport.onClose(() => endpoint.failPending("connection closed"));
+  return filterClaimedLines(transport, (line) => endpoint.handleLine(line));
+}
+
 /**
  * Wrap a transport so lines claimed by `claim` never reach the upstream wire.
  * `claim` runs on every inbound line; outbound `send` passes through untouched

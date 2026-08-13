@@ -28,9 +28,14 @@ import { fileURLToPath } from "url";
 import WebSocket from "ws";
 import { AgentServerClient } from "@zvada/agent-server/client";
 import type { LifecycleEvent, TurnStartParams } from "@zvada/agent-server/protocol";
-import { channelTransport, generateUUIDv7, pushNdjsonLines } from "@zvada/agent-server/protocol";
-import { SIDE_CHANNEL, SideChannelEndpoint, filterClaimedLines } from "@shared/agent-side-channel";
-import type { LineTransport } from "@shared/agent-side-channel";
+import { generateUUIDv7 } from "@zvada/agent-server/protocol";
+import {
+  SIDE_CHANNEL,
+  SideChannelEndpoint,
+  claimSideChannel,
+  wsLineTransport,
+} from "@shared/agent-side-channel";
+import { ENGINE_HARNESS_BY_DEUS } from "../../shared/enums";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -57,12 +62,6 @@ const truncate = (s: string, n = 200) => (s.length > n ? `${s.slice(0, n)}…` :
 // Args
 // ---------------------------------------------------------------------------
 
-const DEUS_TO_ENGINE = {
-  claude: "claude-code",
-  "codex-sdk": "codex-sdk",
-  "codex-server": "codex-app-server",
-} as const;
-
 function parseArgs() {
   const args = process.argv.slice(2);
   const opts: Record<string, string> = {};
@@ -71,8 +70,8 @@ function parseArgs() {
     if (arg === "--json") continue;
     if (arg.startsWith("--") && i + 1 < args.length) opts[arg.slice(2)] = args[++i];
   }
-  const agent = (opts.agent ?? "claude") as keyof typeof DEUS_TO_ENGINE;
-  if (!DEUS_TO_ENGINE[agent]) {
+  const agent = (opts.agent ?? "claude") as keyof typeof ENGINE_HARNESS_BY_DEUS;
+  if (!ENGINE_HARNESS_BY_DEUS[agent]) {
     console.error(`Unknown --agent "${agent}" (use claude | codex-sdk | codex-server)`);
     process.exit(1);
   }
@@ -245,12 +244,7 @@ async function connect(url: string, json: boolean): Promise<Connection> {
     ws.on("open", () => resolve());
     ws.on("error", reject);
   });
-  const { transport, push, end } = channelTransport({
-    send: (line) => ws.send(line),
-    close: () => ws.close(),
-  });
-  ws.on("message", (data: Buffer | string) => pushNdjsonLines(push, data));
-  ws.on("close", () => end("socket closed"));
+  const transport = wsLineTransport(ws);
 
   const sideChannel = new SideChannelEndpoint((line) => transport.send(line), "cli");
   sideChannel.onRequest(SIDE_CHANNEL.exitPlanMode, () => {
@@ -287,9 +281,7 @@ async function connect(url: string, json: boolean): Promise<Connection> {
   }
   sideChannel.notify(SIDE_CHANNEL.hello, {});
 
-  const client = await AgentServerClient.attach(
-    filterClaimedLines(transport as LineTransport, (line) => sideChannel.handleLine(line))
-  );
+  const client = await AgentServerClient.attach(claimSideChannel(transport, sideChannel));
   const init = await client.initialize();
   console.log(
     `${c.green}Connected${c.reset} ${c.dim}${url} · ${init.server.name} · harnesses: ${Object.keys(init.harnesses).join(", ")}${c.reset}`
@@ -311,7 +303,7 @@ async function connect(url: string, json: boolean): Promise<Connection> {
 
 interface CliState {
   sessionId: string;
-  agent: keyof typeof DEUS_TO_ENGINE;
+  agent: keyof typeof ENGINE_HARNESS_BY_DEUS;
   model?: string;
   cwd: string;
   resume?: string;
@@ -325,7 +317,7 @@ async function runTurn(conn: Connection, state: CliState, prompt: string): Promi
     turnId: generateUUIDv7(),
     input: prompt,
     config: {
-      harness: DEUS_TO_ENGINE[state.agent],
+      harness: ENGINE_HARNESS_BY_DEUS[state.agent],
       cwd: state.cwd,
       model: state.model,
       permissionMode: state.permissionMode as TurnStartParams["config"]["permissionMode"],
@@ -410,8 +402,8 @@ async function main() {
       return "continue";
     }
     if (input.startsWith(".agent ")) {
-      const agent = input.slice(7).trim() as keyof typeof DEUS_TO_ENGINE;
-      if (DEUS_TO_ENGINE[agent]) {
+      const agent = input.slice(7).trim() as keyof typeof ENGINE_HARNESS_BY_DEUS;
+      if (ENGINE_HARNESS_BY_DEUS[agent]) {
         state.agent = agent;
         state.resume = undefined;
         state.sessionId = generateUUIDv7();

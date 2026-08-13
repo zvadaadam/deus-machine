@@ -11,7 +11,6 @@ import { z } from "zod";
 import { AgentHarnessSchema, ErrorCategorySchema } from "./enums";
 import { PartSchema, TokenUsageSchema, FinishReasonSchema } from "./messages";
 import type { FinishReason, Part, TokenUsage } from "./messages";
-import { QueryOptionsSchema } from "./protocol";
 
 // ============================================================================
 // Part Event Types
@@ -112,46 +111,6 @@ export const AgentInfoSchema = z.object({
 });
 export type AgentInfo = z.infer<typeof AgentInfoSchema>;
 
-export const InitializeResultSchema = z.object({
-  version: z.string(),
-  agents: z.array(AgentInfoSchema),
-});
-export type InitializeResult = z.infer<typeof InitializeResultSchema>;
-
-// ============================================================================
-// Turn Options (params for turn/start RPC)
-// ============================================================================
-//
-// Re-exported from shared/protocol.ts. The turn/start RPC and query-engine
-// queries share the same option shape — there's no semantic reason for a
-// separate schema here.
-
-export { QueryOptionsSchema as TurnOptionsSchema } from "./protocol";
-export type { QueryOptions as TurnOptions } from "./protocol";
-
-// ============================================================================
-// RPC Request/Response Schemas (client → agent-server)
-// ============================================================================
-
-export const TurnStartRequestSchema = z.object({
-  sessionId: z.string().min(1),
-  agentHarness: AgentHarnessSchema,
-  prompt: z.string().min(1),
-  options: QueryOptionsSchema,
-});
-export type TurnStartRequest = z.infer<typeof TurnStartRequestSchema>;
-
-export const TurnStartResponseSchema = z.object({
-  accepted: z.boolean(),
-  reason: z.string().optional(),
-});
-export type TurnStartResponse = z.infer<typeof TurnStartResponseSchema>;
-
-const SessionStopRequestSchema = z.object({
-  sessionId: z.string().min(1),
-});
-export type SessionStopRequest = z.infer<typeof SessionStopRequestSchema>;
-
 // ============================================================================
 // Provider Operation Schemas
 // ============================================================================
@@ -161,42 +120,6 @@ const ProviderAuthRequestSchema = z.object({
   cwd: z.string().min(1),
 });
 export type ProviderAuthRequest = z.infer<typeof ProviderAuthRequestSchema>;
-
-// ============================================================================
-// Agent-Server RPC Method Constants
-// ============================================================================
-
-export const AGENT_RPC_METHODS = {
-  // Handshake
-  INITIALIZE: "initialize",
-  INITIALIZED: "initialized",
-
-  // Turn lifecycle
-  TURN_START: "turn/start",
-  TURN_CANCEL: "turn/cancel",
-
-  // Session lifecycle
-  SESSION_STOP: "session/stop",
-
-  // Provider operations
-  PROVIDER_AUTH: "provider/auth",
-} as const;
-
-/**
- * Frontend-facing RPC methods. The agent-server's tools call these as JSON-RPC
- * requests through the tunnel. The backend relays them to the frontend via
- * q:event tool:request, the frontend handles them, and the result flows back.
- */
-export const FRONTEND_RPC_METHODS = {
-  EXIT_PLAN_MODE: "exitPlanMode",
-  ASK_USER_QUESTION: "askUserQuestion",
-  GET_DIFF: "getDiff",
-  DIFF_COMMENT: "diffComment",
-  GET_TERMINAL_OUTPUT: "getTerminalOutput",
-  // Simulator context — backend-only method (handled in onFrontendRpc before
-  // the frontend relay). Resolves the agent's session to its workspace's UDID.
-  GET_SIMULATOR_CONTEXT: "getSimulatorContext",
-} as const;
 
 // ============================================================================
 // Notification Payloads (agent-server → client)

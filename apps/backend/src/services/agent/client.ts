@@ -9,16 +9,16 @@
 import { WebSocket } from "ws";
 import { AgentServerClient } from "@zvada/agent-server/client";
 import type { InitializeResult, WireEventEnvelope } from "@zvada/agent-server/protocol";
-import { channelTransport, pushNdjsonLines } from "@zvada/agent-server/protocol";
 import type { TurnStartParams } from "@zvada/agent-server/protocol";
 import {
   SIDE_CHANNEL,
   SideChannelEndpoint,
-  filterClaimedLines,
+  claimSideChannel,
+  wsLineTransport,
   type LineTransport,
   type SideChannelTitle,
 } from "@shared/agent-side-channel";
-import type { AgentHarness } from "@shared/enums";
+import { DEUS_HARNESS_BY_ENGINE, type AgentHarness, type EngineHarness } from "@shared/enums";
 import type { AgentInfo } from "@shared/agent-events";
 
 // ============================================================================
@@ -38,13 +38,6 @@ export interface AgentLinkOptions {
   /** Session title pushed by the agent-server (claude SDK auto-summary). */
   onTitle: (payload: SideChannelTitle) => void;
 }
-
-/** Engine harness names → deus harness names. */
-const DEUS_HARNESS: Record<string, AgentHarness> = {
-  "claude-code": "claude",
-  "codex-sdk": "codex-sdk",
-  "codex-app-server": "codex-server",
-};
 
 /** Side-channel methods that dispatch into onToolRequest, keyed by wire name. */
 const TOOL_REQUEST_METHODS: Record<string, string> = {
@@ -78,7 +71,7 @@ export class AgentLink {
   /** Dial the agent-server; the returned link auto-reconnects on drop. */
   static async connect(options: AgentLinkOptions): Promise<AgentLink> {
     const link = new AgentLink(options);
-    link.client = await AgentServerClient.fromTransportFactory(() => link.openTransport(), {
+    const client = await AgentServerClient.fromTransportFactory(() => link.openTransport(), {
       reconnect: true,
       // The agent-server lives and dies with the backend (managed spawn) —
       // never give up on our side; a dead child kills the backend anyway.
@@ -87,9 +80,18 @@ export class AgentLink {
       requestTimeoutMs: 30_000,
       clientInfo: { name: "deus-backend" },
     });
-    link.client.onEvent(options.onEnvelope);
-    const init = await link.client.initialize();
-    link.agents = toAgentInfos(init);
+    link.client = client;
+    try {
+      client.onEvent(options.onEnvelope);
+      const init = await client.initialize();
+      link.agents = toAgentInfos(init);
+    } catch (err) {
+      // A failed handshake must not leak a dialing client (its reconnect loop
+      // would keep the dead link alive) — the caller retries from scratch.
+      await client.close().catch(() => {});
+      link.client = null;
+      throw err;
+    }
     options.onConnected?.(link.agents);
     return link;
   }
@@ -97,15 +99,10 @@ export class AgentLink {
   /** Build one connection: dial, wrap, claim side-channel frames. */
   private async openTransport(): Promise<LineTransport> {
     const ws = await dialWebSocket(this.options.url);
-    const { transport, push, end } = channelTransport({
-      send: (line) => ws.send(line),
-      close: () => ws.close(),
-    });
-    ws.on("message", (data: Buffer | string) => pushNdjsonLines(push, data));
-    ws.on("close", () => end("socket closed"));
     ws.on("error", () => {
       // A close event always follows; nothing to do here.
     });
+    const transport = wsLineTransport(ws);
 
     const sideChannel = new SideChannelEndpoint((line) => transport.send(line), "backend");
     for (const [wireMethod, method] of Object.entries(TOOL_REQUEST_METHODS)) {
@@ -122,7 +119,6 @@ export class AgentLink {
     });
 
     transport.onClose(() => {
-      sideChannel.failPending("agent-server connection closed");
       if (this.sideChannel === sideChannel) this.sideChannel = null;
       const wasConnected = this.connected;
       this.connected = false;
@@ -134,7 +130,7 @@ export class AgentLink {
     // Mark this connection as THE deus host for tool round-trips.
     sideChannel.notify(SIDE_CHANNEL.hello, {});
 
-    return filterClaimedLines(transport as LineTransport, (line) => sideChannel.handleLine(line));
+    return claimSideChannel(transport, sideChannel);
   }
 
   // ---- Standard wire ----
@@ -243,7 +239,7 @@ function dialWebSocket(url: string): Promise<WebSocket> {
  *  capability values mirror what the legacy per-harness handlers advertised. */
 function toAgentInfos(result: InitializeResult): AgentInfo[] {
   return Object.keys(result.harnesses).flatMap((engineHarness) => {
-    const type = DEUS_HARNESS[engineHarness];
+    const type = DEUS_HARNESS_BY_ENGINE[engineHarness as EngineHarness];
     if (!type) return [];
     return [
       {

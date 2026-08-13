@@ -8,7 +8,7 @@
 // Deus's backend always mints sessionId/turnId client-side (uuidv7) and sends
 // both on turn/start — a request without a sessionId is simply not tracked.
 
-import type { AgentHarness as EngineHarness } from "@zvada/agent-server/protocol";
+import type { EngineHarness } from "@shared/enums";
 
 export interface TrackedSession {
   harness: EngineHarness;

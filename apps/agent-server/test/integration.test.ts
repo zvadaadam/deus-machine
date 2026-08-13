@@ -5,14 +5,13 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { createServer as createHttpServer, type Server } from "http";
 import { WebSocketServer, WebSocket } from "ws";
-import { AgentServerClient, WireRequestError } from "@zvada/agent-server/client";
+import { AgentServerClient } from "@zvada/agent-server/client";
 import type { LifecycleEvent, WireEventEnvelope } from "@zvada/agent-server/protocol";
-import { channelTransport, pushNdjsonLines } from "@zvada/agent-server/protocol";
 import {
   SIDE_CHANNEL,
   SideChannelEndpoint,
-  filterClaimedLines,
-  type LineTransport,
+  claimSideChannel,
+  wsLineTransport,
 } from "@shared/agent-side-channel";
 import { AgentServer } from "../upstream-server";
 import { bridgeWsConnection, createEventObserverTransport } from "../wire";
@@ -134,12 +133,7 @@ describe("Integration: standard wire + deus side channel over a real WebSocket",
       ws.on("open", () => resolve());
       ws.on("error", reject);
     });
-    const { transport, push, end } = channelTransport({
-      send: (line) => ws.send(line),
-      close: () => ws.close(),
-    });
-    ws.on("message", (data: Buffer | string) => pushNdjsonLines(push, data));
-    ws.on("close", () => end("socket closed"));
+    const transport = wsLineTransport(ws);
 
     const channel = new SideChannelEndpoint((line) => transport.send(line), "test-backend");
     if (onToolRequest) {
@@ -150,9 +144,7 @@ describe("Integration: standard wire + deus side channel over a real WebSocket",
     sideChannel = channel;
     channel.notify(SIDE_CHANNEL.hello, {});
 
-    client = await AgentServerClient.attach(
-      filterClaimedLines(transport as LineTransport, (line) => channel.handleLine(line))
-    );
+    client = await AgentServerClient.attach(claimSideChannel(transport, channel));
     // One round-trip so the server has processed our earlier deus/hello
     // (frames are handled in order) — mirrors AgentLink.connect.
     await client.initialize();
@@ -260,13 +252,7 @@ describe("Integration: standard wire + deus side channel over a real WebSocket",
       ws.on("open", () => resolve());
       ws.on("error", reject);
     });
-    const { transport, push, end } = channelTransport({
-      send: (line) => ws.send(line),
-      close: () => ws.close(),
-    });
-    ws.on("message", (data: Buffer | string) => pushNdjsonLines(push, data));
-    ws.on("close", () => end("socket closed"));
-    const c = await AgentServerClient.attach(transport as never);
+    const c = await AgentServerClient.attach(wsLineTransport(ws) as never);
 
     await c.startTurn({
       sessionId: "busy-1",
