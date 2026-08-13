@@ -97,8 +97,11 @@ export function applyPrStatusSideEffects(workspaceId: string, result: PrStatusRe
     needsInvalidation = true;
   }
 
-  // Workflow auto-derivation: PR exists → in-review, PR merged → done.
-  if (result.has_pr && autoProgressStatus(workspaceId, "in-review")) needsInvalidation = true;
+  // Workflow auto-derivation: OPEN PR → in-review, merged PR → done.
+  // Closed-unmerged PRs must not progress the workflow.
+  if (result.pr_state === "open" && autoProgressStatus(workspaceId, "in-review")) {
+    needsInvalidation = true;
+  }
   if (result.merge_status === "merged" && autoProgressStatus(workspaceId, "done")) {
     needsInvalidation = true;
   }

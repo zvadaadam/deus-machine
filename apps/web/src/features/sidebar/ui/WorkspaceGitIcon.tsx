@@ -27,9 +27,10 @@ export type GitLifecycle =
   | "local"
   | "manual";
 
-export function deriveGitLifecycle(workspace: Workspace): GitLifecycle {
-  // Explicit user override (backlog/canceled) keeps its workflow glyph.
-  if (workspace.status === "backlog" || workspace.status === "canceled") return "manual";
+/** PR-only lifecycle — ignores the manual workflow override. */
+export type PrLifecycle = Exclude<GitLifecycle, "manual">;
+
+export function derivePrLifecycle(workspace: Workspace): PrLifecycle {
   if (workspace.pr_state === "merged") return "merged";
   if (workspace.pr_state === "closed") return "closed";
   if (workspace.pr_state === "open") {
@@ -42,6 +43,12 @@ export function deriveGitLifecycle(workspace: Workspace): GitLifecycle {
   // lifecycle refresh — show a PR shape (muted) rather than a local branch.
   if (workspace.pr_url) return "linked";
   return "local";
+}
+
+export function deriveGitLifecycle(workspace: Workspace): GitLifecycle {
+  // Explicit user override (backlog/canceled) keeps its workflow glyph.
+  if (workspace.status === "backlog" || workspace.status === "canceled") return "manual";
+  return derivePrLifecycle(workspace);
 }
 
 interface WorkspaceGitIconProps {

@@ -1,8 +1,7 @@
 import { Hono } from "hono";
 import { withWorkspace } from "../middleware/workspace-loader";
-import { getPrStatus } from "../services/gh.service";
 import { getGhIdentity } from "../services/gh-identity.service";
-import { applyPrStatusSideEffects } from "../services/pr-snapshot.service";
+import { fetchAndApplyPrStatus } from "../services/pr-snapshot.service";
 import type { WorkspaceWithDetailsRow } from "../db";
 
 type Env = { Variables: { workspace: WorkspaceWithDetailsRow; workspacePath: string } };
@@ -19,9 +18,9 @@ app.get("/gh-status", async (c) => {
 app.get("/workspaces/:id/pr-status", withWorkspace, async (c) => {
   const workspace = c.get("workspace");
   const workspacePath = c.get("workspacePath");
-  const result = await getPrStatus(workspacePath);
-
-  applyPrStatusSideEffects(workspace.id, result);
+  // Epoch-guarded fetch+persist — shared with background refreshes so an
+  // overlapping older lookup can never overwrite a newer snapshot.
+  const result = await fetchAndApplyPrStatus(workspace.id, workspacePath);
 
   return c.json(result);
 });

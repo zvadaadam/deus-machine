@@ -11,12 +11,13 @@ import { SessionService, type PaginatedMessages } from "@/features/session/api/s
 import type { Workspace, DiffStats } from "@/shared/types";
 import type { DisplayStatus } from "../lib/status";
 import { getWorkspaceDisplayName, getWorkspaceSecondaryText } from "../lib/utils";
-import { WorkspaceGitIcon, deriveGitLifecycle } from "./WorkspaceGitIcon";
+import { WorkspaceGitIcon, derivePrLifecycle } from "./WorkspaceGitIcon";
 
-/** Compact human label for the PR chip. */
+/** Compact human label for the PR chip — PR fields only, so a manual
+ * backlog/canceled workflow override never hides an existing PR. */
 function prChipLabel(workspace: Workspace): string | null {
   if (!workspace.pr_number) return null;
-  const label = match(deriveGitLifecycle(workspace))
+  const label = match(derivePrLifecycle(workspace))
     .with("merged", () => "Merged")
     .with("closed", () => "Closed")
     .with("conflicts", () => "Conflicts")
@@ -24,7 +25,8 @@ function prChipLabel(workspace: Workspace): string | null {
     .with("changes_requested", () => "Changes requested")
     .with("open", () => (workspace.pr_review_status === "approved" ? "Approved" : "Open"))
     .with("linked", () => "PR")
-    .otherwise(() => null);
+    .with("local", () => null)
+    .exhaustive();
   return label ? `#${workspace.pr_number} ${label}` : null;
 }
 
@@ -54,7 +56,9 @@ function LiveActivityLine({ sessionId }: { sessionId: string }) {
   const { data } = useQuery({
     queryKey: queryKeys.sessions.messages(sessionId),
     queryFn: () => SessionService.fetchMessages(sessionId),
-    staleTime: Infinity,
+    // Unselected sessions receive no part push events, so poll briefly while
+    // the card is open — this component only mounts for working workspaces.
+    refetchInterval: 2_000,
     refetchOnWindowFocus: false,
   });
   const liveTool = findLiveTool(data);
@@ -106,7 +110,7 @@ export function WorkspaceHoverCard({
   const hasChanges = additions > 0 || deletions > 0;
 
   const branch = workspace.git_branch;
-  const targetBranch = workspace.git_target_branch || "main";
+  const targetBranch = workspace.git_target_branch || workspace.git_default_branch || "main";
   const timeText =
     isWorking && workingDuration ? workingDuration : formatTimeAgo(workspace.updated_at);
 
