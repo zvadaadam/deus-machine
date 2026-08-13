@@ -99,7 +99,7 @@ export function createAgentEventHandler(deps: {
         console.log(`[AgentEvent] session.idle: session=${e.sessionId}`);
         persistAndInvalidate(persistSessionIdle(e), SESSION_RESOURCES, e.sessionId);
         // Turn ended — the agent may have created or updated a PR.
-        void refreshPrSnapshotForSession(e.sessionId);
+        refreshPrSnapshotForSession(e.sessionId);
       })
       .with({ type: "session.contextUsage" }, (e) => {
         persistAndInvalidate(persistSessionContextUsage(e), SESSION_RESOURCES, e.sessionId);
@@ -107,10 +107,14 @@ export function createAgentEventHandler(deps: {
       .with({ type: "session.error" }, (e) => {
         console.log(`[AgentEvent] session.error: session=${e.sessionId} error=${e.error}`);
         persistAndInvalidate(persistSessionError(e), SESSION_RESOURCES, e.sessionId);
+        // The agent may have pushed a PR before the turn failed.
+        refreshPrSnapshotForSession(e.sessionId);
       })
       .with({ type: "session.cancelled" }, (e) => {
         console.log(`[AgentEvent] session.cancelled: session=${e.sessionId}`);
         persistAndInvalidate(persistSessionCancelled(e), SESSION_RESOURCES, e.sessionId);
+        // The agent may have pushed a PR before the turn was stopped.
+        refreshPrSnapshotForSession(e.sessionId);
       })
 
       // ── SDK passthrough events (no persistence — Parts handle content) ──

@@ -175,7 +175,7 @@ for (const [i, seed] of seeds.entries()) {
       wsId,
       seed.title ?? seed.slug,
       sessionStatus,
-      sessionStatus === "working" ? lastUserMessageAt : updatedAt,
+      lastUserMessageAt,
       updatedAt
     );
   }

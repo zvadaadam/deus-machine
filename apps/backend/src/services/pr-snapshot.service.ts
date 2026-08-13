@@ -5,7 +5,12 @@
  *
  * Refresh points:
  *   - GET /workspaces/:id/pr-status (frontend polls the open workspace)
- *   - session.idle (agent turn ended — catches PRs the agent just created)
+ *   - session.idle / session.error / session.cancelled (turn ended — the
+ *     agent may have created or updated a PR before finishing or failing)
+ *
+ * Background refreshes are throttled per workspace (cooldown + coalesced
+ * trailing refresh so a skipped event is deferred, never dropped) and bounded
+ * globally so N agents finishing together can't spawn N gh chains at once.
  */
 import { getDatabase } from "../lib/database";
 import { getPrStatus, type PrStatusResponse } from "./gh.service";
@@ -27,12 +32,16 @@ interface PrSnapshotRow {
 /**
  * Persist the PR lifecycle snapshot + auto-progress workflow status.
  * Writes (and invalidates the workspaces resource) only when something changed.
+ *
+ * pr_url/pr_number are deliberately preserved on a conclusive no-PR result:
+ * workspaces created from the GitHub PR picker store them before the branch
+ * exists, and they act as the PR-linkage breadcrumb either way.
  */
 export function applyPrStatusSideEffects(workspaceId: string, result: PrStatusResponse): void {
   // gh unavailable / network error — keep the last known snapshot.
   if (result.error) return;
   // Inconclusive "no PR" (missing worktree, detached HEAD, unparseable gh
-  // output) must not wipe a previously persisted snapshot.
+  // output, partially failed fork lookup) must not wipe a stored snapshot.
   if (!result.has_pr && !result.conclusive) return;
 
   const db = getDatabase();
@@ -99,41 +108,96 @@ export function applyPrStatusSideEffects(workspaceId: string, result: PrStatusRe
   }
 }
 
-// Throttle state for the unattended turn-end path. `session.idle` fires once
-// per turn per session, and the product runs many agents in parallel — without
-// this every turn would spawn a git + gh subprocess chain (and a GitHub API
-// call) even for workspaces that will never have a PR.
+// ── Refresh orchestration ────────────────────────────────────────────────
+
 const REFRESH_COOLDOWN_MS = 60_000;
+/** Wait before re-checking when a workspace is busy or capacity is full. */
+const BUSY_RETRY_MS = 5_000;
+/** Global bound: N agents finishing together must not spawn N gh chains. */
+const MAX_CONCURRENT_REFRESHES = 3;
+
+let activeRefreshes = 0;
 const inFlight = new Set<string>();
 const lastRefreshAt = new Map<string, number>();
+const trailingTimers = new Map<string, ReturnType<typeof setTimeout>>();
+/** Monotonic per-workspace token — a stale fetch never overwrites a newer one. */
+const refreshEpoch = new Map<string, number>();
 
-/** Turn-end hook: refresh the PR snapshot for the session's workspace. */
-export async function refreshPrSnapshotForSession(sessionId: string): Promise<void> {
-  try {
-    const db = getDatabase();
-    const session = getSessionById(db, sessionId);
-    if (!session) return;
+/**
+ * Fetch + persist in one step, epoch-guarded: if a newer fetch for the same
+ * workspace started while this one was awaiting gh, its result is dropped
+ * instead of overwriting fresher state. Both the route and the background
+ * path go through here. Returns the raw response for route consumers.
+ */
+export async function fetchAndApplyPrStatus(
+  workspaceId: string,
+  workspacePath: string
+): Promise<PrStatusResponse> {
+  const epoch = (refreshEpoch.get(workspaceId) ?? 0) + 1;
+  refreshEpoch.set(workspaceId, epoch);
 
-    const workspaceId = session.workspace_id;
-    const last = lastRefreshAt.get(workspaceId);
-    if (inFlight.has(workspaceId) || (last && Date.now() - last < REFRESH_COOLDOWN_MS)) return;
+  const result = await getPrStatus(workspacePath);
 
-    const workspace = getWorkspaceById(db, workspaceId);
-    if (!workspace || workspace.state === "archived") return;
-
-    const workspacePath = computeWorkspacePath(workspace);
-    if (!workspacePath) return;
-
-    inFlight.add(workspaceId);
+  if (refreshEpoch.get(workspaceId) === epoch) {
     lastRefreshAt.set(workspaceId, Date.now());
-    try {
-      const result = await getPrStatus(workspacePath);
-      applyPrStatusSideEffects(workspace.id, result);
-    } finally {
-      inFlight.delete(workspaceId);
-    }
+    applyPrStatusSideEffects(workspaceId, result);
+  }
+  return result;
+}
+
+/** Terminal-turn hook: refresh the PR snapshot for the session's workspace. */
+export function refreshPrSnapshotForSession(sessionId: string): void {
+  try {
+    const session = getSessionById(getDatabase(), sessionId);
+    if (!session) return;
+    scheduleWorkspaceRefresh(session.workspace_id);
   } catch (error) {
     // Best-effort background refresh — never let it break the event pipeline.
-    console.error(`[PrSnapshot] Refresh failed for session ${sessionId}:`, error);
+    console.error(`[PrSnapshot] Refresh scheduling failed for session ${sessionId}:`, error);
+  }
+}
+
+/**
+ * Schedule a background refresh. Inside the cooldown (or while busy) the
+ * refresh is deferred via a coalesced trailing timer — repeated events
+ * collapse into one pending refresh, and none are silently dropped.
+ */
+function scheduleWorkspaceRefresh(workspaceId: string): void {
+  if (trailingTimers.has(workspaceId)) return;
+
+  const last = lastRefreshAt.get(workspaceId) ?? 0;
+  const cooldownWait = Math.max(0, last + REFRESH_COOLDOWN_MS - Date.now());
+  const busy = inFlight.has(workspaceId) || activeRefreshes >= MAX_CONCURRENT_REFRESHES;
+  const wait = Math.max(cooldownWait, busy ? BUSY_RETRY_MS : 0);
+
+  if (wait > 0) {
+    const timer = setTimeout(() => {
+      trailingTimers.delete(workspaceId);
+      scheduleWorkspaceRefresh(workspaceId);
+    }, wait);
+    timer.unref?.();
+    trailingTimers.set(workspaceId, timer);
+    return;
+  }
+
+  void runWorkspaceRefresh(workspaceId);
+}
+
+async function runWorkspaceRefresh(workspaceId: string): Promise<void> {
+  const workspace = getWorkspaceById(getDatabase(), workspaceId);
+  if (!workspace || workspace.state === "archived") return;
+
+  const workspacePath = computeWorkspacePath(workspace);
+  if (!workspacePath) return;
+
+  inFlight.add(workspaceId);
+  activeRefreshes++;
+  try {
+    await fetchAndApplyPrStatus(workspaceId, workspacePath);
+  } catch (error) {
+    console.error(`[PrSnapshot] Refresh failed for workspace ${workspaceId}:`, error);
+  } finally {
+    inFlight.delete(workspaceId);
+    activeRefreshes--;
   }
 }

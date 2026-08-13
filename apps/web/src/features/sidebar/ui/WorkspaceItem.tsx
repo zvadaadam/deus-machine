@@ -155,10 +155,18 @@ export const WorkspaceItem = React.memo(function WorkspaceItem({
                 })
         }
         onKeyDown={(e) => {
-          if (e.key === " ") e.preventDefault();
+          // Only when the row itself is focused — child buttons (status menu,
+          // archive) bubble their key events up here.
+          if (e.currentTarget === e.target && e.key === " ") e.preventDefault();
         }}
         onKeyUp={(e) => {
-          if (!isInitializing && (e.key === "Enter" || e.key === " ")) onClick(workspace);
+          if (
+            e.currentTarget === e.target &&
+            !isInitializing &&
+            (e.key === "Enter" || e.key === " ")
+          ) {
+            onClick(workspace);
+          }
         }}
       >
         {/* Left: icon + name. Icon is flush left, aligned with the repo label. */}
@@ -224,6 +232,7 @@ export const WorkspaceItem = React.memo(function WorkspaceItem({
           ) : statusDotClass ? (
             <span
               className={cn("h-2 w-2 rounded-full", statusDotClass)}
+              title={displayStatus === "error" ? "Error" : "Needs response"}
               aria-label={displayStatus === "error" ? "Error" : "Unread activity"}
             />
           ) : (

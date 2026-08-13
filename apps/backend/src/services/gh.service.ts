@@ -197,6 +197,7 @@ export async function getPrStatus(workspacePath: string): Promise<PrStatusRespon
 
   let lastError: string | null = null;
   let hadSuccessfulResponse = false;
+  let allAttemptsSucceeded = true;
 
   for (const { repoArg, headArg } of attempts) {
     const args = [
@@ -226,6 +227,7 @@ export async function getPrStatus(workspacePath: string): Promise<PrStatusRespon
         return { has_pr: false, conclusive: false, error: result.error };
       }
       lastError = result.error; // Track for surfacing if all attempts fail
+      allAttemptsSucceeded = false;
       continue;
     }
 
@@ -233,9 +235,13 @@ export async function getPrStatus(workspacePath: string): Promise<PrStatusRespon
     try {
       prs = JSON.parse(result.stdout || "[]");
     } catch {
+      allAttemptsSucceeded = false;
       continue;
     }
-    if (!Array.isArray(prs)) continue;
+    if (!Array.isArray(prs)) {
+      allAttemptsSucceeded = false;
+      continue;
+    }
     hadSuccessfulResponse = true;
 
     // Priority: OPEN > MERGED > CLOSED. Open PRs are actionable,
@@ -322,9 +328,12 @@ export async function getPrStatus(workspacePath: string): Promise<PrStatusRespon
 
   // If all attempts failed with errors, surface it instead of silently showing "no PR".
   // lastError is only set for 'unknown' errors (timeout/auth/install return immediately).
+  // "No PR" is authoritative only when EVERY attempted repo lookup returned
+  // valid output — a fork whose upstream query succeeded (empty) but whose
+  // origin query failed has NOT been conclusively checked.
   return {
     has_pr: false,
-    conclusive: hadSuccessfulResponse,
+    conclusive: hadSuccessfulResponse && allAttemptsSucceeded,
     error: !hadSuccessfulResponse && lastError ? "network" : null,
   };
 }

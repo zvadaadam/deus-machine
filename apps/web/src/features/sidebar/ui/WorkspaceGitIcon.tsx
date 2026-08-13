@@ -23,6 +23,7 @@ type GitLifecycle =
   | "draft"
   | "changes_requested"
   | "open"
+  | "linked"
   | "local"
   | "manual";
 
@@ -37,6 +38,9 @@ function deriveGitLifecycle(workspace: Workspace): GitLifecycle {
     if (workspace.pr_review_status === "changes_requested") return "changes_requested";
     return "open";
   }
+  // PR-picker workspaces know their pr_url before the first successful
+  // lifecycle refresh — show a PR shape (muted) rather than a local branch.
+  if (workspace.pr_url) return "linked";
   return "local";
 }
 
@@ -81,6 +85,7 @@ export const WorkspaceGitIcon = React.memo(function WorkspaceGitIcon({
     .with("draft", () => GitPullRequestDraft)
     .with("changes_requested", () => GitPullRequestArrow)
     .with("open", () => GitPullRequest)
+    .with("linked", () => GitPullRequest)
     .with("local", () => GitBranch)
     .exhaustive();
 
@@ -91,6 +96,7 @@ export const WorkspaceGitIcon = React.memo(function WorkspaceGitIcon({
     .with("draft", () => "text-text-tertiary")
     .with("changes_requested", () => "text-accent-gold")
     .with("open", () => "text-accent-green")
+    .with("linked", () => "text-text-muted")
     .with("local", () => "text-text-muted")
     .exhaustive();
 
