@@ -145,11 +145,15 @@ async function refreshImportableSessions(): Promise<void> {
       if (head.messageCount === 0) continue;
       if (isDeusOwned(head, knownWorkspaces)) continue;
       totals[provider]++;
-      if (kept >= MAX_SESSIONS_PER_PROVIDER) continue;
-      kept++;
       const key = stableKey(head);
-      headsByKey.set(key, head);
       const imported = importedByKey.get(key);
+      // Cap only unimported listings: already-imported rows are bounded and
+      // must not starve older unimported sessions out of the list.
+      if (imported === undefined) {
+        if (kept >= MAX_SESSIONS_PER_PROVIDER) continue;
+        kept++;
+      }
+      headsByKey.set(key, head);
       sessions.push({
         key,
         provider,
@@ -381,9 +385,18 @@ function markImportedInSnapshot(key: string, sessionId: string): void {
 
 function shouldSkipMessage(message: PortMessage): boolean {
   if (!message.isMeta) return false;
-  // Meta messages that only carry text (env preambles, hook echoes) are noise;
-  // meta carriers of TOOL results / COMPACTION must be kept.
-  return message.parts.every((p) => p.type === "TEXT");
+  // Meta messages that only carry plain text (env preambles, hook echoes) are
+  // noise. Text parts with parentToolCallId are subagent (sidechain) output
+  // and must be kept, as must TOOL/COMPACTION carriers.
+  return message.parts.every((p) => p.type === "TEXT" && !p.parentToolCallId);
+}
+
+/** Owning Task/Agent tool id for subagent messages (→ messages.parent_tool_use_id). */
+function messageParent(message: PortMessage): string | null {
+  for (const part of message.parts) {
+    if ("parentToolCallId" in part && part.parentToolCallId) return part.parentToolCallId;
+  }
+  return null;
 }
 
 function insertImportedSession(
