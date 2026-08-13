@@ -22,6 +22,7 @@ import { mapPool } from "../pool";
 import { promises as fsp } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { fileURLToPath } from "node:url";
 import type {
   FullParseStats,
   PortMessage,
@@ -96,7 +97,15 @@ export async function buildComposerCwdMap(
     try {
       const meta = parseJson(await fsp.readFile(join(dir, "workspace.json"), "utf8"));
       const raw = str(meta?.folder) ?? str(meta?.workspace);
-      if (raw?.startsWith("file://")) folder = decodeURIComponent(raw.slice("file://".length));
+      if (raw?.startsWith("file://")) {
+        try {
+          // fileURLToPath handles Windows drive URIs (file:///c%3A/…) and UNC
+          // paths correctly; naive prefix-stripping leaves a bogus leading "/".
+          folder = fileURLToPath(raw);
+        } catch {
+          /* malformed URI — leave unmapped */
+        }
+      }
     } catch {
       return;
     }
