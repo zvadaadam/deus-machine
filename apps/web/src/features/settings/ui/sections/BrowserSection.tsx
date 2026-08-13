@@ -1,12 +1,14 @@
 import { useState } from "react";
-import { CheckCircle2, Globe, Loader2, RefreshCw } from "lucide-react";
+import { CheckCircle2, Globe, Loader2, RefreshCw, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
+import { native } from "@/platform";
 import { getErrorMessage } from "@shared/lib/errors";
 import {
   useBrowserProfiles,
   useConnectBrowserProfile,
+  useClearBrowserSession,
   type BrowserProfile,
 } from "../../api/browser-import.queries";
 
@@ -38,6 +40,7 @@ function formatLastUsed(ms: number | null): string | null {
 export function BrowserSection() {
   const profiles = useBrowserProfiles();
   const connect = useConnectBrowserProfile();
+  const clearSession = useClearBrowserSession();
   const [connectingKey, setConnectingKey] = useState<string | null>(null);
   const [connected, setConnected] = useState<Set<string>>(new Set());
 
@@ -70,6 +73,21 @@ export function BrowserSection() {
       toast.error(getErrorMessage(error));
     } finally {
       setConnectingKey(null);
+    }
+  }
+
+  async function onClearData(): Promise<void> {
+    const confirmed = await native.dialog.confirm(
+      "Clear browser data?",
+      "This signs the in-app browser out of every imported session and clears its cookies, storage, and cache. Your other browsers aren't affected."
+    );
+    if (!confirmed) return;
+    try {
+      await clearSession.mutateAsync();
+      setConnected(new Set());
+      toast.success("Browser data cleared");
+    } catch (error) {
+      toast.error(getErrorMessage(error));
     }
   }
 
@@ -155,16 +173,32 @@ export function BrowserSection() {
         <p className="text-muted-foreground text-xs">
           Reading cookies asks macOS for Keychain access the first time per browser.
         </p>
-        <Button
-          variant="ghost"
-          size="sm"
-          className="gap-1.5"
-          disabled={profiles.isFetching}
-          onClick={() => void profiles.refetch()}
-        >
-          <RefreshCw className={profiles.isFetching ? "size-3.5 animate-spin" : "size-3.5"} />
-          Refresh
-        </Button>
+        <div className="flex items-center gap-1">
+          <Button
+            variant="ghost"
+            size="sm"
+            className="text-muted-foreground hover:text-destructive gap-1.5"
+            disabled={clearSession.isPending}
+            onClick={() => void onClearData()}
+          >
+            {clearSession.isPending ? (
+              <Loader2 className="size-3.5 animate-spin" />
+            ) : (
+              <Trash2 className="size-3.5" />
+            )}
+            Clear browser data
+          </Button>
+          <Button
+            variant="ghost"
+            size="sm"
+            className="gap-1.5"
+            disabled={profiles.isFetching}
+            onClick={() => void profiles.refetch()}
+          >
+            <RefreshCw className={profiles.isFetching ? "size-3.5 animate-spin" : "size-3.5"} />
+            Refresh
+          </Button>
+        </div>
       </div>
     </div>
   );

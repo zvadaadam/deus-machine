@@ -55,3 +55,11 @@ export function useConnectBrowserProfile() {
     },
   });
 }
+
+/** Wipe the in-app browser session (cookies + storage + cache). */
+export function useClearBrowserSession() {
+  return useMutation({
+    mutationFn: (): Promise<{ success: boolean }> =>
+      invoke<{ success: boolean }>("browser_clear_session"),
+  });
+}

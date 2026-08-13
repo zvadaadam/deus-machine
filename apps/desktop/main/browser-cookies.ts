@@ -56,4 +56,14 @@ export function registerBrowserCookieHandlers(): void {
       return { success: true, imported, failed };
     }
   );
+
+  // Wipe the in-app browser session — the honest "disconnect", since imported
+  // cookies commingle in one partition and can't be attributed back to a
+  // source profile. Clears cookies + storage + HTTP cache.
+  ipcMain.handle("browser_clear_session", async (): Promise<{ success: boolean }> => {
+    const ses = session.fromPartition(WEBVIEW_PARTITION);
+    await ses.clearStorageData(); // cookies + local/session/IndexedDB storage
+    await ses.clearCache();
+    return { success: true };
+  });
 }
