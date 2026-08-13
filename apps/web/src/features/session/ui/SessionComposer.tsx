@@ -25,6 +25,7 @@ import { useManifestTasks } from "@/features/workspace/api/workspace.queries";
 import { useSettings } from "@/features/settings/api";
 import {
   DEFAULT_MODEL,
+  defaultModelForHarness,
   getAgentHarnessForModel,
   type AgentHarness,
   type ThinkingLevel,
@@ -117,7 +118,11 @@ const ActiveSessionComposer = forwardRef<SessionComposerRef, ActiveProps>(
     // We subscribe to just `model` (a string) to avoid re-renders on
     // unrelated staged-content changes like paste.
     const model = useSessionComposerStore(
-      (s) => s.composers[sessionId]?.model ?? initialModel ?? DEFAULT_MODEL
+      (s) =>
+        s.composers[sessionId]?.model ??
+        initialModel ??
+        defaultModelForHarness(session?.agent_harness) ??
+        DEFAULT_MODEL
     );
     const agentHarness = getAgentHarnessForModel(model);
     useEffect(() => {

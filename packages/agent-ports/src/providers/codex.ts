@@ -455,7 +455,7 @@ export async function fullParse(head: PortableSessionHead): Promise<PortableSess
                   input: { command },
                 },
         };
-        assistant().parts.push(part);
+        assistant(timestamp).parts.push(part);
         // Codex emits the result as function_call_output with the same call_id;
         // registering here lets the shared output handler complete it.
         pendingByCallId.set(callId, part);
@@ -467,7 +467,7 @@ export async function fullParse(head: PortableSessionHead): Promise<PortableSess
         stats.toolNames["web_search"] = (stats.toolNames["web_search"] ?? 0) + 1;
         const status = str(payload.status);
         const input = { query: str(action?.query) };
-        assistant().parts.push({
+        assistant(timestamp).parts.push({
           type: "TOOL",
           toolCallId: callId,
           toolName: "web_search",

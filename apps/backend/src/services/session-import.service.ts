@@ -419,6 +419,8 @@ export async function importExternalSession(params: QueryParams): Promise<{
       .prepare("SELECT id, workspace_id FROM sessions WHERE origin_key = ?")
       .get(key) as { id: string; workspace_id: string } | undefined;
     if (!winner) throw error;
+    markImportedInSnapshot(key, winner.id);
+    invalidate(["importable_sessions"]);
     return {
       commandId: winner.id,
       sessionId: winner.id,

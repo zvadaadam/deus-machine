@@ -121,6 +121,17 @@ export const MODEL_PICKER_GROUPS = [
 export const DEFAULT_AGENT_HARNESS = "claude" satisfies AgentHarness;
 export const DEFAULT_MODEL = `${DEFAULT_AGENT_HARNESS}:${AGENT_CONFIGS[DEFAULT_AGENT_HARNESS].models[0].model}`;
 
+/** Default model string for a session's harness — used when a composer has no
+ *  stored/initial model, so replies keep the session's harness instead of
+ *  falling back to the global (Claude) default and tripping the harness lock. */
+export function defaultModelForHarness(
+  agentHarness: string | null | undefined
+): string | undefined {
+  if (!agentHarness || !(agentHarness in AGENT_CONFIGS)) return undefined;
+  const config = AGENT_CONFIGS[agentHarness as AgentHarness];
+  return `${config.id}:${config.models[0].model}`;
+}
+
 export function getKnownAgentConfig(agentHarness: AgentHarness): AgentConfig {
   return AGENT_CONFIGS[agentHarness];
 }
