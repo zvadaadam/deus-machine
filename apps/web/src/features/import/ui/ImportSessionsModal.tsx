@@ -431,10 +431,13 @@ export function ImportSessionsModal({ open, onClose, onOpenWorkspace }: ImportSe
                   <Loader2 className="h-3.5 w-3.5 animate-spin" />
                   Importing {bulk.done}/{bulk.total}…
                 </span>
-              ) : pendingSessions.length === 0 ? (
-                "All imported"
-              ) : (
+              ) : pendingSessions.length > 0 ? (
                 `Import all (${pendingSessions.length})`
+              ) : totalListed - totalImported > 0 ? (
+                // Unimported sessions exist but none has a target workspace.
+                "No import target"
+              ) : (
+                "All imported"
               )}
             </Button>
           </div>

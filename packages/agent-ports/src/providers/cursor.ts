@@ -282,7 +282,10 @@ export async function scan(options: CursorScanOptions): Promise<CursorHead[]> {
           sessionId: composerId,
         },
         sourceFilePath: options.dbPath,
-        sourceMtimeMs: num(data.lastUpdatedAt) ?? options.sourceMtimeMs ?? stat.mtimeMs,
+        // Per-composer timestamps first; the DB-wide mtime is a last resort
+        // (any Cursor activity touches it, making undated composers look new).
+        sourceMtimeMs:
+          num(data.lastUpdatedAt) ?? num(data.createdAt) ?? options.sourceMtimeMs ?? stat.mtimeMs,
         sourceSizeBytes: stat.size,
         title: str(data.name),
         firstUserPrompt: str(data.text) || undefined,

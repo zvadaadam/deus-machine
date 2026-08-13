@@ -651,5 +651,19 @@ function capJson(value: unknown): unknown {
     return String(value).slice(0, MAX_TOOL_PAYLOAD_CHARS);
   }
   if (text.length <= MAX_TOOL_PAYLOAD_CHARS) return value;
-  return { truncated: true, preview: `${text.slice(0, MAX_TOOL_PAYLOAD_CHARS)}…` };
+  // Preserve STRUCTURE while capping string leaves: replacing the whole
+  // object would strip fields registered renderers depend on (file_path,
+  // command, old/new_string for Write/Edit) and break their display.
+  return capJsonLeaves(value, 4);
+}
+
+function capJsonLeaves(value: unknown, depth: number): unknown {
+  if (typeof value === "string") return capString(value, MAX_TOOL_PAYLOAD_CHARS);
+  if (depth === 0 || value === null || typeof value !== "object") return value;
+  if (Array.isArray(value)) return value.map((item) => capJsonLeaves(item, depth - 1));
+  const out: Record<string, unknown> = {};
+  for (const [key, entry] of Object.entries(value as Record<string, unknown>)) {
+    out[key] = capJsonLeaves(entry, depth - 1);
+  }
+  return out;
 }

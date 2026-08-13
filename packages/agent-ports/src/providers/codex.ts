@@ -458,12 +458,21 @@ export async function fullParse(head: PortableSessionHead): Promise<PortableSess
         const action = obj(payload.action);
         const callId = str(payload.id) ?? `search-${stats.records}`;
         stats.toolNames["web_search"] = (stats.toolNames["web_search"] ?? 0) + 1;
+        const status = str(payload.status);
+        const input = { query: str(action?.query) };
         assistant().parts.push({
           type: "TOOL",
           toolCallId: callId,
           toolName: "web_search",
           kind: "search",
-          state: { status: "COMPLETED", input: { query: str(action?.query) } },
+          // Same status discipline as other tools: failures stay failures,
+          // unfinished searches stay RUNNING (rendered as interrupted).
+          state:
+            status === "failed"
+              ? { status: "ERROR", input, error: "Search failed" }
+              : status !== undefined && status !== "completed"
+                ? { status: "RUNNING", input }
+                : { status: "COMPLETED", input },
         });
         break;
       }
