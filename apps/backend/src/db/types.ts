@@ -65,6 +65,12 @@ export interface WorkspaceWithDetailsRow {
   current_session_id: string | null;
   pr_url: string | null;
   pr_number: number | null;
+  pr_state: string | null;
+  pr_is_draft: number;
+  pr_review_status: string | null;
+  pr_has_conflicts: number;
+  pr_ci_status: string | null;
+  pr_checked_at: string | null;
   init_stage: string | null;
   updated_at: string;
 

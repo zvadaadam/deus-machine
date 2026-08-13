@@ -22,24 +22,32 @@ import type {
 // ─── Workspace Queries ───────────────────────────────────────
 
 /**
- * Canonical workspace + repo + session JOIN.
- * Single source of truth — reused by list, get-by-id, and by-repo queries.
+ * Canonical workspace + repo + session column list and JOIN.
+ * Single source of truth — reused by list, get-by-id, and by-repo queries
+ * (by-repo appends repo_sort_order). Add new workspace columns HERE only.
  */
-const WORKSPACE_DETAILS_SELECT = `
-  SELECT
+const WORKSPACE_ROW_COLUMNS = `
     w.id, w.repository_id, w.slug, w.title, w.git_branch,
     w.git_target_branch, w.state, w.status, w.current_session_id,
     w.pr_url, w.pr_number,
+    w.pr_state, w.pr_is_draft, w.pr_review_status, w.pr_has_conflicts, w.pr_ci_status, w.pr_checked_at,
     w.setup_status, w.error_message, w.init_stage,
     w.updated_at,
     r.name as repo_name, r.root_path, r.git_default_branch, r.git_origin_url,
     s.status as session_status,
     s.error_category as session_error_category,
     s.error_message as session_error_message,
-    s.last_user_message_at as latest_message_sent_at
+    s.last_user_message_at as latest_message_sent_at`;
+
+const WORKSPACE_JOINS = `
   FROM workspaces w
   LEFT JOIN repositories r ON w.repository_id = r.id
   LEFT JOIN sessions s ON w.current_session_id = s.id
+`;
+
+const WORKSPACE_DETAILS_SELECT = `
+  SELECT ${WORKSPACE_ROW_COLUMNS}
+  ${WORKSPACE_JOINS}
 `;
 
 export function getAllWorkspaces(db: Database.Database): WorkspaceWithDetailsRow[] {
@@ -69,21 +77,9 @@ export function getWorkspacesByRepo(
   return db
     .prepare(
       `
-    SELECT
-      w.id, w.repository_id, w.slug, w.title, w.git_branch,
-      w.git_target_branch, w.state, w.status, w.current_session_id,
-      w.pr_url, w.pr_number,
-      w.setup_status, w.error_message, w.init_stage,
-      w.updated_at,
-      r.name as repo_name, r.sort_order as repo_sort_order, r.root_path,
-      r.git_default_branch, r.git_origin_url,
-      s.status as session_status,
-      s.error_category as session_error_category,
-      s.error_message as session_error_message,
-      s.last_user_message_at as latest_message_sent_at
-    FROM workspaces w
-    LEFT JOIN repositories r ON w.repository_id = r.id
-    LEFT JOIN sessions s ON w.current_session_id = s.id
+    SELECT ${WORKSPACE_ROW_COLUMNS},
+      r.sort_order as repo_sort_order
+    ${WORKSPACE_JOINS}
     ${stateFilter}
     ORDER BY r.sort_order, r.name, w.updated_at DESC
   `
@@ -144,6 +140,7 @@ export function getWorkspacesBySessionIds(
       w.id, w.repository_id, w.slug, w.title, w.git_branch,
       w.git_target_branch, w.state, w.status, w.current_session_id,
       w.pr_url, w.pr_number,
+      w.pr_state, w.pr_is_draft, w.pr_review_status, w.pr_has_conflicts, w.pr_ci_status, w.pr_checked_at,
       w.setup_status, w.error_message, w.init_stage,
       w.updated_at,
       r.name as repo_name, r.sort_order as repo_sort_order, r.root_path,
