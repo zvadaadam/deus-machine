@@ -107,7 +107,7 @@ async function refreshImportableSessions(): Promise<void> {
     .prepare(
       `SELECT w.id, w.repository_id, w.slug, w.title, w.updated_at, r.root_path
        FROM workspaces w JOIN repositories r ON r.id = w.repository_id
-       WHERE w.state != 'archived'
+       WHERE w.state = 'ready'
        ORDER BY w.updated_at DESC`
     )
     .all() as {
@@ -272,7 +272,24 @@ function cursorUserDir(home: string): string {
   return join(process.env.XDG_CONFIG_HOME ?? join(home, ".config"), "Cursor", "User");
 }
 
-/** Remove copy dirs left by previous processes (tracking is in-memory only,
+/** Copy dirs are PID-scoped ("deus-agent-ports-{pid}-…") so concurrent
+ *  backends never delete each other's live copies. */
+const COPY_DIR_PREFIX = `deus-agent-ports-${process.pid}-`;
+
+function copyDirOwnerAlive(name: string): boolean {
+  const match = /^deus-agent-ports-(\d+)-/.exec(name);
+  if (!match) return false; // legacy unscoped dir — safe to remove
+  const pid = Number(match[1]);
+  if (pid === process.pid) return true;
+  try {
+    process.kill(pid, 0);
+    return true; // owning process still running
+  } catch {
+    return false;
+  }
+}
+
+/** Remove copy dirs whose owning process is gone (tracking is in-memory only,
  *  so restarts would otherwise accumulate Cursor DB copies in tmp). */
 async function sweepStaleCopyDirs(): Promise<void> {
   let entries: string[];
@@ -283,7 +300,7 @@ async function sweepStaleCopyDirs(): Promise<void> {
   }
   await Promise.all(
     entries
-      .filter((name) => name.startsWith("deus-agent-ports-"))
+      .filter((name) => name.startsWith("deus-agent-ports-") && !copyDirOwnerAlive(name))
       .map((name) => join(tmpdir(), name))
       .filter((dir) => !cursorCopyDirs.includes(dir))
       .map((dir) => fsp.rm(dir, { recursive: true, force: true }).catch(() => {}))
@@ -303,7 +320,7 @@ async function scanCursor(home: string): Promise<PortableSessionHead[]> {
   // subscriber can still click rows from the previous snapshot — so keep the
   // current AND previous generation, deleting only older ones.
   await sweepStaleCopyDirs();
-  const copyDir = await fsp.mkdtemp(join(tmpdir(), "deus-agent-ports-"));
+  const copyDir = await fsp.mkdtemp(join(tmpdir(), COPY_DIR_PREFIX));
   cursorCopyDirs.push(copyDir);
   while (cursorCopyDirs.length > 2) {
     const stale = cursorCopyDirs.shift()!;
@@ -438,8 +455,8 @@ function insertImportedSession(
     null;
 
   const insertMessage = db.prepare(
-    `INSERT INTO messages (id, session_id, role, content, sent_at, model, agent_message_id)
-     VALUES (?, ?, ?, ?, ?, ?, ?)`
+    `INSERT INTO messages (id, session_id, role, content, sent_at, model, agent_message_id, parent_tool_use_id)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?)`
   );
   const insertPart = db.prepare(
     `INSERT INTO parts (id, message_id, session_id, seq, type, data, tool_call_id, tool_name, parent_tool_call_id)
@@ -460,6 +477,7 @@ function insertImportedSession(
     for (const message of messages) {
       const messageId = uuidv7();
       const sentAt = message.sentAt ?? head.lastTimestamp ?? null;
+      const parentToolUseId = messageParent(message);
       // Compaction markers arrive as meta user messages — store as assistant so
       // the COMPACTION part renders in the transcript flow.
       const role = message.parts.some((p) => p.type !== "TEXT") ? "assistant" : message.role;
@@ -471,7 +489,8 @@ function insertImportedSession(
           capString(message.text ?? "", MAX_USER_CONTENT_CHARS),
           sentAt,
           null,
-          null
+          null,
+          parentToolUseId
         );
         continue;
       }
@@ -482,7 +501,8 @@ function insertImportedSession(
         null,
         sentAt,
         message.model ?? null,
-        message.agentMessageId ?? null
+        message.agentMessageId ?? null,
+        parentToolUseId
       );
       message.parts.forEach((part, index) => {
         const canonical = toCanonicalPart(part, sessionId, messageId, index, sentAt);

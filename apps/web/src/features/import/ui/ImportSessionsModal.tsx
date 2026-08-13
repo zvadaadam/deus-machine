@@ -86,12 +86,14 @@ export function ImportSessionsModal({ open, onClose, onOpenWorkspace }: ImportSe
   const scanning = isLoading || snapshot === undefined || snapshot.status === "scanning";
   const allGroups = useMemo(() => snapshot?.groups ?? [], [snapshot]);
 
-  // Provider chip counts reflect everything scanned, filtering reflects toggles.
+  // Provider chip counts reflect everything DISCOVERED (snapshot.totals),
+  // not just the capped listing — so truncation is visible to the user.
   const providerCounts = useMemo(() => {
+    if (snapshot?.totals) return snapshot.totals;
     const counts: Record<ImportProvider, number> = { "claude-code": 0, codex: 0, cursor: 0 };
     for (const group of allGroups) for (const session of group.sessions) counts[session.provider]++;
     return counts;
-  }, [allGroups]);
+  }, [snapshot, allGroups]);
 
   const groups = useMemo(
     () =>
@@ -303,7 +305,7 @@ export function ImportSessionsModal({ open, onClose, onOpenWorkspace }: ImportSe
                         expanded && "rotate-90"
                       )}
                     />
-                    <span className="text-text-primary shrink-0 text-[13px] font-medium">
+                    <span className="text-text-primary min-w-0 truncate text-[13px] font-medium">
                       {group.projectName}
                     </span>
                     <span
@@ -319,7 +321,7 @@ export function ImportSessionsModal({ open, onClose, onOpenWorkspace }: ImportSe
                     <span className="text-text-disabled min-w-0 flex-1 truncate text-[11px]">
                       {group.sessions[0]?.cwd.replace(/^\/Users\/[^/]+/, "~")}
                     </span>
-                    <span className="text-text-muted shrink-0 text-[11px] tabular-nums">
+                    <span className="text-text-muted hidden shrink-0 text-[11px] tabular-nums sm:inline">
                       {group.sessions.length} session{group.sessions.length === 1 ? "" : "s"}
                     </span>
                     {pending > 0 && (
