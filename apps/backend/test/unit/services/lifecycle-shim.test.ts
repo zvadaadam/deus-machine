@@ -351,3 +351,87 @@ describe("LifecycleToPartEvents", () => {
     expect(task).toMatchObject({ type: "TOOL", kind: "task" });
   });
 });
+
+describe("reasoning hardening (codex snapshot quirks)", () => {
+  const streamingReasoning = (partId: string, text: string): LifecycleEvent => ({
+    type: "message.part",
+    turnId: "t1",
+    messageId: "m1",
+    outputIndex: 0,
+    partIndex: 0,
+    part: {
+      type: "reasoning",
+      id: partId,
+      sessionId: "s1",
+      messageId: "m1",
+      text,
+      state: "streaming",
+    },
+    timestamp: 1,
+  });
+  const terminalReasoning = (partId: string, text: string): LifecycleEvent => ({
+    type: "message.part",
+    turnId: "t1",
+    messageId: "m1",
+    outputIndex: 0,
+    partIndex: 0,
+    part: { type: "reasoning", id: partId, sessionId: "s1", messageId: "m1", text, state: "done" },
+    timestamp: 2,
+  });
+  const reasoningDelta = (partId: string, text: string): LifecycleEvent => ({
+    type: "message.part.delta",
+    turnId: "t1",
+    messageId: "m1",
+    outputIndex: 0,
+    partIndex: 0,
+    partId,
+    delta: { type: "reasoning-delta", text },
+    timestamp: 1,
+  });
+
+  it("restores an empty terminal snapshot from streamed deltas (codex clobber)", () => {
+    const shim = new LifecycleToPartEvents();
+    // part-open with empty text: held, nothing emitted yet
+    expect(shim.translate(streamingReasoning("r1", ""))).toEqual([]);
+    // first delta releases the hold: created rides in FRONT of the delta
+    const onDelta = shim.translate(reasoningDelta("r1", "Tracing the wire"));
+    expect(onDelta.map((e) => e.type)).toEqual(["part.created", "part.delta"]);
+    // codex completes the item with text:"" — the snapshot must not clobber
+    const done = shim.translate(terminalReasoning("r1", ""));
+    expect(done.map((e) => e.type)).toEqual(["part.done"]);
+    const donePart = (done[0] as Extract<PartEvent, { type: "part.done" }>).part;
+    expect(donePart).toMatchObject({ type: "REASONING", text: "Tracing the wire", state: "DONE" });
+    // message.done carries the restored part
+    const ended = shim.translate({
+      type: "message.ended",
+      turnId: "t1",
+      messageId: "m1",
+      timestamp: 3,
+    });
+    const parts = (ended[0] as Extract<PartEvent, { type: "message.done" }>).parts;
+    expect(parts).toHaveLength(1);
+    expect(parts[0]).toMatchObject({ type: "REASONING", text: "Tracing the wire" });
+  });
+
+  it("suppresses reasoning parts that never produce text (no empty Thought shells)", () => {
+    const shim = new LifecycleToPartEvents();
+    expect(shim.translate(streamingReasoning("r2", ""))).toEqual([]);
+    expect(shim.translate(terminalReasoning("r2", ""))).toEqual([]);
+    const ended = shim.translate({
+      type: "message.ended",
+      turnId: "t1",
+      messageId: "m1",
+      timestamp: 3,
+    });
+    expect((ended[0] as Extract<PartEvent, { type: "message.done" }>).parts).toEqual([]);
+  });
+
+  it("keeps reasoning whose terminal snapshot carries its own text (claude path)", () => {
+    const shim = new LifecycleToPartEvents();
+    expect(shim.translate(streamingReasoning("r3", ""))).toEqual([]);
+    const done = shim.translate(terminalReasoning("r3", "full accumulated thought"));
+    expect(done.map((e) => e.type)).toEqual(["part.created", "part.done"]);
+    const donePart = (done[1] as Extract<PartEvent, { type: "part.done" }>).part;
+    expect(donePart).toMatchObject({ type: "REASONING", text: "full accumulated thought" });
+  });
+});

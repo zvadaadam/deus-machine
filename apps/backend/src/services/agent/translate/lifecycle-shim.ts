@@ -142,12 +142,26 @@ function isTerminal(part: EnginePart): boolean {
  *   message.part.delta → part.delta (text + reasoning)
  *   message.ended      → message.done (with that message's parts, by partIndex)
  *   turn.ended         → turn.completed (finishReason, tokens, cost)
+ *
+ * Two hardenings against adapter snapshot quirks (seen with codex reasoning,
+ * whose thought text streams via summary deltas while the completed item
+ * carries an empty text field):
+ *   - streamed delta text is accumulated per part; a TERMINAL snapshot whose
+ *     text is empty is restored from the accumulation, so persisted parts
+ *     never lose what already streamed;
+ *   - REASONING parts are announced lazily (part.created rides in front of
+ *     the first delta), and a reasoning part that ends with no text at all is
+ *     suppressed entirely — no empty "Thought" shells.
  */
 export class LifecycleToPartEvents {
   /** Latest deus part per engine part id (also the message.done source). */
   private readonly parts = new Map<string, Part>();
   /** Sub-agent parent per messageId, carried onto message.done. */
   private readonly messageParents = new Map<string, string>();
+  /** Streamed delta text per part id (snapshot-restoration source). */
+  private readonly deltaText = new Map<string, string>();
+  /** Reasoning parts held back until they have text (last snapshot kept). */
+  private readonly heldReasoning = new Map<string, Part>();
 
   translate(event: LifecycleEvent): PartEvent[] {
     switch (event.type) {
@@ -165,11 +179,50 @@ export class LifecycleToPartEvents {
         ];
       case "message.part.delta": {
         if (event.delta.type === "tool-input-delta") return [];
-        return [{ type: "part.delta", partId: event.partId, delta: event.delta.text }];
+        const events: PartEvent[] = [];
+        // A held reasoning part gets its part.created in front of its first
+        // delta — created always precedes deltas, and summary-less reasoning
+        // (which never deltas) never surfaces.
+        const held = this.heldReasoning.get(event.partId);
+        if (held) {
+          this.heldReasoning.delete(event.partId);
+          this.parts.set(event.partId, held);
+          events.push({ type: "part.created", part: held });
+        }
+        this.deltaText.set(
+          event.partId,
+          (this.deltaText.get(event.partId) ?? "") + event.delta.text
+        );
+        events.push({ type: "part.delta", partId: event.partId, delta: event.delta.text });
+        return events;
       }
       case "message.part": {
         const previous = this.parts.get(event.part.id);
         const deusPart = toDeusPart(event.part, event.partIndex);
+        const terminal = isTerminal(event.part);
+        // Snapshot restoration: never let an empty terminal snapshot erase
+        // text that already streamed (persistence stores the snapshot).
+        const streamed = this.deltaText.get(event.part.id);
+        if (
+          terminal &&
+          streamed &&
+          (deusPart.type === "TEXT" || deusPart.type === "REASONING") &&
+          deusPart.text === ""
+        ) {
+          deusPart.text = streamed;
+        }
+
+        // Hold empty streaming reasoning parts; drop them if they end empty.
+        if (deusPart.type === "REASONING" && previous === undefined && deusPart.text === "") {
+          if (!terminal) {
+            this.heldReasoning.set(event.part.id, deusPart);
+            return [];
+          }
+          this.heldReasoning.delete(event.part.id);
+          return [];
+        }
+
+        const wasHeld = this.heldReasoning.delete(event.part.id);
         this.parts.set(event.part.id, deusPart);
         // Consumers may key finality off the part.done event or the part's
         // state, so a part that is terminal on first sight (completed-on-arrival
@@ -183,10 +236,10 @@ export class LifecycleToPartEvents {
           previous.type === "TOOL" &&
           deusPart.type === "TOOL" &&
           previous.state.status !== deusPart.state.status;
-        if (previous === undefined || (stateChanged && !isTerminal(event.part))) {
+        if (previous === undefined || wasHeld || (stateChanged && !isTerminal(event.part))) {
           events.push({ type: "part.created", part: deusPart });
         }
-        if (isTerminal(event.part)) events.push({ type: "part.done", part: deusPart });
+        if (terminal) events.push({ type: "part.done", part: deusPart });
         return events;
       }
       case "message.ended": {
