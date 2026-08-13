@@ -5,7 +5,7 @@
 // densest behavior in the core path — keep it in one unit so the whole
 // contract is testable with a scripted event sequence (see its test).
 
-import type { LifecycleEvent } from "@agent-server/protocol";
+import type { LifecycleEvent } from "@zvada/agent-server/protocol";
 import type { ErrorCategory } from "@shared/enums";
 import { EventBroadcaster } from "../../event-broadcaster";
 import { classifyError, classifyStopReason } from "../lifecycle";

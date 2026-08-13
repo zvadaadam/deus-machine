@@ -13,6 +13,7 @@ import {
   AccountSection,
   GeneralSection,
   GitHubSection,
+  BrowserSection,
   AISection,
   EnvironmentSection,
   ExperimentalSection,
@@ -23,6 +24,7 @@ const SECTION_LABELS: Record<string, string> = {
   account: "Account",
   general: "General",
   github: "GitHub",
+  browser: "Browser",
   ai: "AI Providers",
   environment: "Environment",
   experimental: "Experimental",
@@ -93,6 +95,7 @@ export function SettingsPage() {
       .with("account", () => <AccountSection />)
       .with("general", () => <GeneralSection {...sectionProps} theme={theme} setTheme={setTheme} />)
       .with("github", () => <GitHubSection />)
+      .with("browser", () => <BrowserSection />)
       .with("ai", () => <AISection {...sectionProps} />)
       .with("environment", () => <EnvironmentSection />)
       .with("experimental", () => <ExperimentalSection {...sectionProps} />)

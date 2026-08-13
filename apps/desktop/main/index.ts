@@ -19,6 +19,7 @@ import { is } from "@electron-toolkit/utils";
 import { spawnBackend, stopBackend, CDP_PORT } from "./backend-process";
 import { registerNativeHandlers } from "./native-handlers";
 import { registerBrowserEmulationHandlers } from "./browser-emulation";
+import { registerBrowserCookieHandlers } from "./browser-cookies";
 // PTY, file watching, and browser server are now handled by the backend
 // via WebSocket commands — no Electron IPC needed for these.
 import { registerUpdateHandlers, setupAutoUpdater } from "./auto-updater";
@@ -318,6 +319,7 @@ app.whenReady().then(async () => {
   registerNativeHandlers();
   registerDeusCloudAuthHandlers();
   registerBrowserEmulationHandlers();
+  registerBrowserCookieHandlers();
   registerUpdateHandlers();
 
   // Cross-window event relay — forwards a sender's event to all other windows.

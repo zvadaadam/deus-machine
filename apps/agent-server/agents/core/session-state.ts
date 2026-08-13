@@ -4,7 +4,7 @@
 // and the handler writes it at the start of every turn. One deus session id
 // maps to exactly one harness (the DB primary key), recorded on first use.
 
-import type { SessionUsageEvent } from "@agent-server/protocol";
+import type { SessionUsageEvent } from "@zvada/agent-server/protocol";
 import type { QueryOptions } from "../registry";
 
 /** deus harness names → engine harness names (all three, no legacy path). */

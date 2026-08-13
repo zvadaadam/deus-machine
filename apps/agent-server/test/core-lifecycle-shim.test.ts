@@ -4,7 +4,7 @@
 // match (toMatchObject) is not enough here. Each test wraps the shim output
 // exactly the way EventBroadcaster.emitPartEvent does and parses it.
 import { describe, expect, it } from "vitest";
-import type { LifecycleEvent } from "@agent-server/protocol";
+import type { LifecycleEvent } from "@zvada/agent-server/protocol";
 import { AgentEventSchema, type PartEvent } from "@shared/agent-events";
 import { LifecycleToPartEvents, toDeusPart, toDeusTokens } from "../agents/core/lifecycle-shim";
 

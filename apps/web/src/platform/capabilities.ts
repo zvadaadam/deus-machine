@@ -20,10 +20,16 @@
  */
 
 const isElectron = typeof window !== "undefined" && "electronAPI" in window;
+const isMac = typeof navigator !== "undefined" && /Mac/i.test(navigator.userAgent);
 
 export const capabilities = {
   /** Native PTY terminal (requires Electron IPC for shell spawning) */
   nativeTerminal: isElectron,
+
+  /** Import cookies from local Chromium profiles into the in-app browser.
+   *  Reads the macOS Keychain + macOS profile paths, so it's desktop + macOS
+   *  only — the backend returns nothing off Darwin. */
+  browserProfileImport: isElectron && isMac,
 
   /** Embedded browser — uses Electron's <webview> tag, which requires
    *  `webPreferences.webviewTag: true` on the host window. Not available
