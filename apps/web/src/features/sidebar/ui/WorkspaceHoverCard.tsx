@@ -1,9 +1,11 @@
-import React from "react";
+import React, { useEffect, useRef, useState } from "react";
 import { match } from "ts-pattern";
 import { GitBranch } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
 
 import { cn } from "@/shared/lib/utils";
+import { onEvent } from "@/platform/ws";
+import type { Part } from "@shared/messages/types";
 import { formatTimeAgo } from "@/shared/lib/formatters";
 import { HoverCard, HoverCardContent, HoverCardTrigger } from "@/components/ui/hover-card";
 import { SessionService, type PaginatedMessages } from "@/features/session/api/session.service";
@@ -29,6 +31,17 @@ function prChipLabel(workspace: Workspace): string | null {
   return label ? `#${workspace.pr_number} ${label}` : null;
 }
 
+function toolLabel(part: Part & { type: "TOOL" }): string {
+  const detail = part.title ?? (part.state.status === "RUNNING" ? part.state.title : undefined);
+  return detail ? `${part.toolName} · ${detail}` : part.toolName;
+}
+
+function isInFlight(part: Part): part is Part & { type: "TOOL" } {
+  return (
+    part.type === "TOOL" && (part.state.status === "RUNNING" || part.state.status === "PENDING")
+  );
+}
+
 /**
  * Latest in-flight tool call from the fetched messages, if any.
  * Scans every part — with parallel tool calls the newest part can be
@@ -41,32 +54,60 @@ function findLiveTool(data: PaginatedMessages | undefined): string | null {
     if (!parts?.length) continue;
     for (let p = parts.length - 1; p >= 0; p--) {
       const part = parts[p];
-      if (part.type !== "TOOL") continue;
-      if (part.state.status === "RUNNING" || part.state.status === "PENDING") {
-        const detail =
-          part.title ?? (part.state.status === "RUNNING" ? part.state.title : undefined);
-        return detail ? `${part.toolName} · ${detail}` : part.toolName;
-      }
+      if (isInFlight(part)) return toolLabel(part);
     }
   }
   return null;
 }
 
-/** Rendered only while the card is open — one cache subscription per open card. */
-function LiveActivityLine({ sessionId }: { sessionId: string }) {
+/**
+ * Live tool label: seeded by a one-shot fetch, kept current by the part
+ * events the backend already broadcasts to every client — no polling.
+ * Once any tool event for this session arrives, events become the source
+ * of truth (so a snapshot tool that finished can't linger).
+ */
+function useLiveTool(sessionId: string): string | null {
   const { data } = useQuery({
-    // Isolated key — never the shared sessions.messages cache. Polling that
-    // cache would overwrite the selected session's live streaming state with
-    // older DB snapshots (part deltas persist only on part.done).
+    // Isolated key — never the shared sessions.messages cache, whose live
+    // streaming state must not be overwritten with DB snapshots.
     queryKey: ["sidebar", "live-activity", sessionId],
     queryFn: () => SessionService.fetchMessages(sessionId, { limit: 5 }),
-    // Unselected sessions receive no part push events, so poll briefly while
-    // the card is open — this component only mounts for working workspaces.
-    refetchInterval: 2_000,
-    refetchOnWindowFocus: false,
+    staleTime: 15_000,
     gcTime: 10_000,
+    refetchOnWindowFocus: false,
   });
-  const liveTool = findLiveTool(data);
+
+  const runningRef = useRef<Map<string, string>>(new Map());
+  const [eventLabel, setEventLabel] = useState<string | null>(null);
+  const [eventsSeen, setEventsSeen] = useState(false);
+
+  useEffect(() => {
+    runningRef.current = new Map();
+    setEventLabel(null);
+    setEventsSeen(false);
+
+    return onEvent((event: string, rawData: unknown) => {
+      if (event !== "part:created" && event !== "part:done") return;
+      const data = rawData as { sessionId?: string; partId?: string; part?: Part };
+      if (data.sessionId !== sessionId || !data.part || !data.partId) return;
+      if (data.part.type !== "TOOL") return;
+
+      const running = runningRef.current;
+      if (isInFlight(data.part)) running.set(data.partId, toolLabel(data.part));
+      else running.delete(data.partId);
+
+      const latest = Array.from(running.values()).pop() ?? null;
+      setEventsSeen(true);
+      setEventLabel(latest);
+    });
+  }, [sessionId]);
+
+  return eventsSeen ? eventLabel : findLiveTool(data);
+}
+
+/** Rendered only while the card is open — one event subscription per open card. */
+function LiveActivityLine({ sessionId }: { sessionId: string }) {
+  const liveTool = useLiveTool(sessionId);
   if (!liveTool) return null;
 
   return (

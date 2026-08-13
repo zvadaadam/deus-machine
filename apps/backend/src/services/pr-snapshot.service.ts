@@ -120,32 +120,36 @@ const BUSY_RETRY_MS = 5_000;
 const MAX_CONCURRENT_REFRESHES = 3;
 
 let activeRefreshes = 0;
-const inFlight = new Set<string>();
 const lastRefreshAt = new Map<string, number>();
 const trailingTimers = new Map<string, ReturnType<typeof setTimeout>>();
-/** Monotonic per-workspace token — a stale fetch never overwrites a newer one. */
-const refreshEpoch = new Map<string, number>();
+/** One gh lookup per workspace at a time — concurrent callers share it. */
+const inFlightFetch = new Map<string, Promise<PrStatusResponse>>();
 
 /**
- * Fetch + persist in one step, epoch-guarded: if a newer fetch for the same
- * workspace started while this one was awaiting gh, its result is dropped
- * instead of overwriting fresher state. Both the route and the background
- * path go through here. Returns the raw response for route consumers.
+ * Fetch + persist in one step, coalesced per workspace: concurrent callers
+ * (route poll + terminal-turn refresh) share a single gh lookup, so ordering
+ * races can't happen and every caller receives the result that was actually
+ * persisted. Both the route and the background path go through here.
  */
-export async function fetchAndApplyPrStatus(
+export function fetchAndApplyPrStatus(
   workspaceId: string,
   workspacePath: string
 ): Promise<PrStatusResponse> {
-  const epoch = (refreshEpoch.get(workspaceId) ?? 0) + 1;
-  refreshEpoch.set(workspaceId, epoch);
+  const existing = inFlightFetch.get(workspaceId);
+  if (existing) return existing;
 
-  const result = await getPrStatus(workspacePath);
-
-  if (refreshEpoch.get(workspaceId) === epoch) {
+  const fetch = (async () => {
+    const result = await getPrStatus(workspacePath);
     lastRefreshAt.set(workspaceId, Date.now());
     applyPrStatusSideEffects(workspaceId, result);
-  }
-  return result;
+    return result;
+  })();
+
+  inFlightFetch.set(
+    workspaceId,
+    fetch.finally(() => inFlightFetch.delete(workspaceId))
+  );
+  return inFlightFetch.get(workspaceId)!;
 }
 
 /** Terminal-turn hook: refresh the PR snapshot for the session's workspace. */
@@ -170,7 +174,7 @@ function scheduleWorkspaceRefresh(workspaceId: string): void {
 
   const last = lastRefreshAt.get(workspaceId) ?? 0;
   const cooldownWait = Math.max(0, last + REFRESH_COOLDOWN_MS - Date.now());
-  const busy = inFlight.has(workspaceId) || activeRefreshes >= MAX_CONCURRENT_REFRESHES;
+  const busy = inFlightFetch.has(workspaceId) || activeRefreshes >= MAX_CONCURRENT_REFRESHES;
   const wait = Math.max(cooldownWait, busy ? BUSY_RETRY_MS : 0);
 
   if (wait > 0) {
@@ -193,14 +197,12 @@ async function runWorkspaceRefresh(workspaceId: string): Promise<void> {
   const workspacePath = computeWorkspacePath(workspace);
   if (!workspacePath) return;
 
-  inFlight.add(workspaceId);
   activeRefreshes++;
   try {
     await fetchAndApplyPrStatus(workspaceId, workspacePath);
   } catch (error) {
     console.error(`[PrSnapshot] Refresh failed for workspace ${workspaceId}:`, error);
   } finally {
-    inFlight.delete(workspaceId);
     activeRefreshes--;
   }
 }
