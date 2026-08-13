@@ -331,11 +331,13 @@ async function scanCursor(home: string): Promise<PortableSessionHead[]> {
     const stale = cursorCopyDirs.shift()!;
     await fsp.rm(stale, { recursive: true, force: true }).catch(() => {});
   }
+  const srcStat = await fsp.stat(src);
   const dbPath = join(copyDir, "cursor-state.vscdb");
   await fsp.copyFile(src, dbPath);
   await fsp.copyFile(`${src}-wal`, `${dbPath}-wal`).catch(() => {});
   const heads = await cursor.scan({
     dbPath,
+    sourceMtimeMs: srcStat.mtimeMs,
     workspaceStorageDir: join(userDir, "workspaceStorage"),
   });
   // Same recency window the other providers apply at scan time.
@@ -469,6 +471,15 @@ function insertImportedSession(
   );
 
   db.transaction(() => {
+    // Re-validate inside the transaction: the pre-parse check happened before
+    // an awaited fullParse, and the target can be archived meanwhile.
+    const target = db.prepare("SELECT state FROM workspaces WHERE id = ?").get(workspaceId) as
+      | { state: string }
+      | undefined;
+    if (!target || target.state !== "ready")
+      throw new Error(
+        `Workspace is no longer ready (state: ${target?.state ?? "missing"}) — pick another target`
+      );
     db.prepare(
       `INSERT INTO sessions (id, workspace_id, agent_harness, agent_session_id, origin_key, title, status, last_user_message_at, updated_at)
        VALUES (?, ?, ?, ?, ?, ?, 'idle', ?, datetime('now'))`

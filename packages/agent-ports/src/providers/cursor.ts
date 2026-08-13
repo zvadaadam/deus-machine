@@ -21,7 +21,7 @@ import { openSqlite, type SqliteDb } from "../sqlite";
 import { mapPool } from "../pool";
 import { promises as fsp } from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import type {
   FullParseStats,
@@ -39,6 +39,9 @@ export type CursorEra = "inline" | "bubbles" | "blob" | "empty";
 export interface CursorScanOptions {
   /** Path to a COPY of state.vscdb (never open the live DB). */
   dbPath: string;
+  /** Mtime of the LIVE source DB — copies carry copy-time mtimes, which would
+   *  make composers without lastUpdatedAt look freshly active. */
+  sourceMtimeMs?: number;
   /** Optional workspaceStorage dir (from a copy or live read-only) for cwd mapping. */
   workspaceStorageDir?: string;
   maxSessions?: number;
@@ -78,6 +81,36 @@ function num(v: unknown): number | undefined {
 
 // --- workspaceStorage: composerId → folder ---------------------------------
 
+const WS_COPY_PREFIX = `agent-ports-ws-${process.pid}-`;
+
+/** Remove ws-copy dirs whose owning process died mid-discovery (a crash
+ *  otherwise strands copied workspace DBs in tmp forever). */
+async function sweepStaleWsCopies(): Promise<void> {
+  let entries: string[];
+  try {
+    entries = await fsp.readdir(tmpdir());
+  } catch {
+    return;
+  }
+  await Promise.all(
+    entries
+      .filter((name) => {
+        if (!name.startsWith("agent-ports-ws-")) return false;
+        const match = /^agent-ports-ws-(\d+)-/.exec(name);
+        if (!match) return true; // legacy unscoped dir
+        const pid = Number(match[1]);
+        if (pid === process.pid) return false;
+        try {
+          process.kill(pid, 0);
+          return false;
+        } catch {
+          return true;
+        }
+      })
+      .map((name) => fsp.rm(join(tmpdir(), name), { recursive: true, force: true }).catch(() => {}))
+  );
+}
+
 export async function buildComposerCwdMap(
   workspaceStorageDir: string
 ): Promise<Map<string, string>> {
@@ -90,18 +123,24 @@ export async function buildComposerCwdMap(
   } catch {
     return map;
   }
-  const copyRoot = await fsp.mkdtemp(join(tmpdir(), "agent-ports-ws-"));
+  await sweepStaleWsCopies();
+  const copyRoot = await fsp.mkdtemp(join(tmpdir(), WS_COPY_PREFIX));
   await mapPool(hashes, 8, async (hash) => {
     const dir = join(workspaceStorageDir, hash);
     let folder: string | undefined;
     try {
       const meta = parseJson(await fsp.readFile(join(dir, "workspace.json"), "utf8"));
-      const raw = str(meta?.folder) ?? str(meta?.workspace);
+      const folderUri = str(meta?.folder);
+      const workspaceUri = str(meta?.workspace);
+      const raw = folderUri ?? workspaceUri;
       if (raw?.startsWith("file://")) {
         try {
           // fileURLToPath handles Windows drive URIs (file:///c%3A/…) and UNC
           // paths correctly; naive prefix-stripping leaves a bogus leading "/".
-          folder = fileURLToPath(raw);
+          const resolved = fileURLToPath(raw);
+          // A `workspace` URI points at a .code-workspace FILE — use its
+          // containing directory as the project cwd.
+          folder = folderUri ? resolved : dirname(resolved);
         } catch {
           /* malformed URI — leave unmapped */
         }
@@ -243,7 +282,7 @@ export async function scan(options: CursorScanOptions): Promise<CursorHead[]> {
           sessionId: composerId,
         },
         sourceFilePath: options.dbPath,
-        sourceMtimeMs: num(data.lastUpdatedAt) ?? stat.mtimeMs,
+        sourceMtimeMs: num(data.lastUpdatedAt) ?? options.sourceMtimeMs ?? stat.mtimeMs,
         sourceSizeBytes: stat.size,
         title: str(data.name),
         firstUserPrompt: str(data.text) || undefined,
