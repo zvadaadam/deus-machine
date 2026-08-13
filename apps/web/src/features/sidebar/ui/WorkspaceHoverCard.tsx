@@ -6,7 +6,6 @@ import { useQuery } from "@tanstack/react-query";
 import { cn } from "@/shared/lib/utils";
 import { formatTimeAgo } from "@/shared/lib/formatters";
 import { HoverCard, HoverCardContent, HoverCardTrigger } from "@/components/ui/hover-card";
-import { queryKeys } from "@/shared/api/queryKeys";
 import { SessionService, type PaginatedMessages } from "@/features/session/api/session.service";
 import type { Workspace, DiffStats } from "@/shared/types";
 import type { DisplayStatus } from "../lib/status";
@@ -30,7 +29,11 @@ function prChipLabel(workspace: Workspace): string | null {
   return label ? `#${workspace.pr_number} ${label}` : null;
 }
 
-/** Latest in-flight tool call from the cached session messages, if any. */
+/**
+ * Latest in-flight tool call from the fetched messages, if any.
+ * Scans every part — with parallel tool calls the newest part can be
+ * completed while an earlier sibling is still running.
+ */
 function findLiveTool(data: PaginatedMessages | undefined): string | null {
   if (!data?.messages?.length) return null;
   for (let m = data.messages.length - 1; m >= 0; m--) {
@@ -44,8 +47,6 @@ function findLiveTool(data: PaginatedMessages | undefined): string | null {
           part.title ?? (part.state.status === "RUNNING" ? part.state.title : undefined);
         return detail ? `${part.toolName} · ${detail}` : part.toolName;
       }
-      // Most recent tool already finished — nothing is in flight.
-      return null;
     }
   }
   return null;
@@ -54,12 +55,16 @@ function findLiveTool(data: PaginatedMessages | undefined): string | null {
 /** Rendered only while the card is open — one cache subscription per open card. */
 function LiveActivityLine({ sessionId }: { sessionId: string }) {
   const { data } = useQuery({
-    queryKey: queryKeys.sessions.messages(sessionId),
-    queryFn: () => SessionService.fetchMessages(sessionId),
+    // Isolated key — never the shared sessions.messages cache. Polling that
+    // cache would overwrite the selected session's live streaming state with
+    // older DB snapshots (part deltas persist only on part.done).
+    queryKey: ["sidebar", "live-activity", sessionId],
+    queryFn: () => SessionService.fetchMessages(sessionId, { limit: 5 }),
     // Unselected sessions receive no part push events, so poll briefly while
     // the card is open — this component only mounts for working workspaces.
     refetchInterval: 2_000,
     refetchOnWindowFocus: false,
+    gcTime: 10_000,
   });
   const liveTool = findLiveTool(data);
   if (!liveTool) return null;
