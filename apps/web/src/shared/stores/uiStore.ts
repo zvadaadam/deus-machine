@@ -14,6 +14,7 @@ interface UIState {
   showNewWorkspaceModal: boolean;
   newWorkspaceMode: NewWorkspaceMode;
   showSystemPromptModal: boolean;
+  showImportSessionsModal: boolean;
 
   // Command palette
   commandPaletteOpen: boolean;
@@ -27,6 +28,8 @@ interface UIState {
   closeNewWorkspaceModal: () => void;
   openSystemPromptModal: () => void;
   closeSystemPromptModal: () => void;
+  openImportSessionsModal: () => void;
+  closeImportSessionsModal: () => void;
 
   // Actions - Command palette
   openCommandPalette: () => void;
@@ -48,6 +51,7 @@ export const useUIStore = create<UIState>()(
       showNewWorkspaceModal: false,
       newWorkspaceMode: "default" as NewWorkspaceMode,
       showSystemPromptModal: false,
+      showImportSessionsModal: false,
       commandPaletteOpen: false,
       settingsOpen: false,
       activeSettingsSection: "general" as SettingsSection,
@@ -72,6 +76,12 @@ export const useUIStore = create<UIState>()(
 
       closeSystemPromptModal: () =>
         set({ showSystemPromptModal: false }, false, "ui/closeSystemPromptModal"),
+
+      openImportSessionsModal: () =>
+        set({ showImportSessionsModal: true }, false, "ui/openImportSessionsModal"),
+
+      closeImportSessionsModal: () =>
+        set({ showImportSessionsModal: false }, false, "ui/closeImportSessionsModal"),
 
       // Command palette actions
       openCommandPalette: () => set({ commandPaletteOpen: true }, false, "ui/openCommandPalette"),
@@ -100,6 +110,7 @@ export const useUIStore = create<UIState>()(
             showNewWorkspaceModal: false,
             newWorkspaceMode: "default" as NewWorkspaceMode,
             showSystemPromptModal: false,
+            showImportSessionsModal: false,
             commandPaletteOpen: false,
             settingsOpen: false,
           },
@@ -129,6 +140,8 @@ export const uiActions = {
   closeNewWorkspaceModal: () => useUIStore.getState().closeNewWorkspaceModal(),
   openSystemPromptModal: () => useUIStore.getState().openSystemPromptModal(),
   closeSystemPromptModal: () => useUIStore.getState().closeSystemPromptModal(),
+  openImportSessionsModal: () => useUIStore.getState().openImportSessionsModal(),
+  closeImportSessionsModal: () => useUIStore.getState().closeImportSessionsModal(),
   openSettings: () => useUIStore.getState().openSettings(),
   closeSettings: () => useUIStore.getState().closeSettings(),
   openCommandPalette: () => useUIStore.getState().openCommandPalette(),

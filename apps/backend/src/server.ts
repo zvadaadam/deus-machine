@@ -20,6 +20,7 @@ import {
   startBackgroundRefresh as startLocalServerDiscovery,
   stopBackgroundRefresh as stopLocalServerDiscovery,
 } from "./services/local-servers.service";
+import { warmImportableSessions } from "./services/session-import.service";
 import { startManagedAgentServer, stopManagedAgentServer } from "./runtime/agent-process";
 
 // Initialize Sentry before anything else.
@@ -145,6 +146,10 @@ async function onListening(port: number): Promise<void> {
   // `local_servers` WS subscribers each time a sweep completes.
   setLocalServerRefreshListener(() => invalidate(["local_servers"]));
   startLocalServerDiscovery();
+
+  // Warm the external-session scan cache off the startup critical path so the
+  // first "Import agent sessions" open shows data instantly.
+  setTimeout(() => warmImportableSessions(), 2_000);
 }
 
 // Bind 0.0.0.0 to accept connections from all interfaces.

@@ -99,6 +99,7 @@ interface HomeViewProps {
   onOpenProject?: () => void;
   onCloneRepository?: () => void;
   onStartNewProject?: () => void;
+  onImportSessions?: () => void;
 }
 
 // ── Agent Logo Helper ───────────────────────────────────────────────
@@ -106,6 +107,16 @@ interface HomeViewProps {
 // static-components rule (dynamic <Logo /> references are flagged).
 function AgentLogo({ type, className }: { type: AgentHarness; className?: string }) {
   const Logo = getAgentLogo(type);
+  if (!Logo) {
+    return <span className={cn("bg-muted-foreground/80 inline-flex rounded-full", className)} />;
+  }
+  return createElement(Logo, { className: cn("flex-shrink-0", className) });
+}
+
+// Provider logo by raw catalog key — used by the import banner where the
+// provider (cursor) is not an AgentHarness.
+function ProviderIcon({ id, className }: { id: string; className?: string }) {
+  const Logo = getAgentLogo(id);
   if (!Logo) {
     return <span className={cn("bg-muted-foreground/80 inline-flex rounded-full", className)} />;
   }
@@ -139,6 +150,7 @@ export function HomeView({
   onOpenProject,
   onCloneRepository,
   onStartNewProject,
+  onImportSessions,
 }: HomeViewProps) {
   const hasRepos = repos.length > 0;
   const isMobile = useIsMobile();
@@ -958,6 +970,39 @@ export function HomeView({
             />
           )}
         </AnimatePresence>
+
+        {/* Import banner — bring existing Claude Code / Codex / Cursor chats in */}
+        {hasRepos && onImportSessions && (
+          <motion.button
+            type="button"
+            onClick={onImportSessions}
+            initial={{ opacity: 0, y: 8 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.24, delay: 0.2, ease: EASE_OUT_QUART }}
+            className="border-border-subtle bg-bg-elevated/60 hover:bg-bg-raised/60 mx-4 mt-4 flex w-full max-w-[700px] items-center gap-3.5 rounded-xl border px-4 py-3 text-left transition-colors duration-150 sm:mx-6"
+          >
+            <span className="flex shrink-0 items-center -space-x-1.5">
+              <span className="bg-bg-muted border-border-subtle flex h-7 w-7 items-center justify-center rounded-full border">
+                <ProviderIcon id="claude-code" className="h-3.5 w-3.5" />
+              </span>
+              <span className="bg-bg-muted border-border-subtle flex h-7 w-7 items-center justify-center rounded-full border">
+                <ProviderIcon id="codex-sdk" className="h-3.5 w-3.5" />
+              </span>
+              <span className="bg-bg-muted border-border-subtle flex h-7 w-7 items-center justify-center rounded-full border">
+                <ProviderIcon id="cursor" className="h-3.5 w-3.5" />
+              </span>
+            </span>
+            <span className="min-w-0 flex-1">
+              <span className="text-text-primary block text-sm font-medium">
+                Import your agent sessions
+              </span>
+              <span className="text-text-muted mt-0.5 block text-xs">
+                Bring Claude Code, Codex, and Cursor conversations into Deus
+              </span>
+            </span>
+            <span className="text-text-muted text-xs">Import</span>
+          </motion.button>
+        )}
 
         {/* Zero-repo state — project action cards replace quick prompts */}
         <AnimatePresence>

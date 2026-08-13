@@ -69,6 +69,8 @@ export const QUERY_RESOURCES = [
   "running_apps",
   // Localhost dev-server discovery (curated port probe + page metadata)
   "local_servers",
+  // Sessions importable from other coding agents (Claude Code / Codex / Cursor)
+  "importable_sessions",
 ] as const;
 export type QueryResource = (typeof QUERY_RESOURCES)[number];
 
@@ -163,6 +165,8 @@ export const COMMAND_NAMES = [
   // (not these commands), but both paths converge on apps.service.launchApp.
   "launchApp",
   "stopApp",
+  // Import a session from another coding agent (Claude Code / Codex / Cursor)
+  "importExternalSession",
 ] as const;
 export type CommandName = (typeof COMMAND_NAMES)[number];
 

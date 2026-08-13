@@ -26,6 +26,7 @@ import * as agentService from "./service";
 import { resolveAapPaths } from "./service";
 import * as simulator from "../simulator-context";
 import { launchApp, stopApp } from "../aap";
+import { importExternalSession } from "../session-import.service";
 import { broadcast as wsBroadcast } from "../ws.service";
 import type { AgentHarness } from "@shared/enums";
 import type { CommandName } from "@shared/types/query-protocol";
@@ -305,6 +306,7 @@ export async function runCommand(
       // ---- AAP (agentic apps protocol) commands ----
       .with("launchApp", () => handleLaunchApp(params))
       .with("stopApp", () => handleStopApp(params))
+      .with("importExternalSession", () => importExternalSession(params))
       .exhaustive()
   );
 }

@@ -25,7 +25,7 @@ export const PRELAUNCH_SCHEMA_RESET_HINT =
 
 export const PRELAUNCH_REQUIRED_COLUMNS = {
   workspaces: ["status"],
-  sessions: ["agent_harness", "error_category"],
+  sessions: ["agent_harness", "error_category", "origin_key"],
   messages: ["stop_reason"],
   parts: ["parent_tool_call_id"],
 } as const satisfies Record<string, readonly string[]>;
@@ -69,6 +69,9 @@ export const SCHEMA_SQL = `
     workspace_id TEXT NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
     agent_harness TEXT NOT NULL DEFAULT 'claude',
     agent_session_id TEXT,
+    -- Stable identity of an imported external session ("provider:{cwd,sessionId}")
+    -- for idempotent re-import; NULL for sessions born in Deus.
+    origin_key TEXT,
     title TEXT,
     status TEXT NOT NULL DEFAULT 'idle',
     message_count INTEGER NOT NULL DEFAULT 0,
@@ -129,6 +132,7 @@ export const SCHEMA_SQL = `
   CREATE INDEX IF NOT EXISTS idx_workspaces_state ON workspaces(state);
   CREATE INDEX IF NOT EXISTS idx_sessions_workspace_id ON sessions(workspace_id);
   CREATE INDEX IF NOT EXISTS idx_sessions_status ON sessions(status);
+  CREATE INDEX IF NOT EXISTS idx_sessions_origin_key ON sessions(origin_key);
   CREATE INDEX IF NOT EXISTS idx_messages_seq ON messages(session_id, seq DESC);
   CREATE INDEX IF NOT EXISTS idx_messages_sent_at ON messages(session_id, sent_at);
   CREATE INDEX IF NOT EXISTS idx_messages_session_role ON messages(session_id, role, id DESC);
