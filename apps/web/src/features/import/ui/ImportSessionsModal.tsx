@@ -56,6 +56,12 @@ function relativeTime(iso?: string): string {
   return `${Math.floor(days / 30)}mo ago`;
 }
 
+function noTargetHint(group: ImportableGroup): string {
+  return group.kind === "unknown"
+    ? "No matching project — add this folder as a repository first"
+    : "No workspace in this project — create one first";
+}
+
 function groupKey(group: ImportableGroup): string {
   return group.repositoryId ?? `${group.projectName}:${group.sessions[0]?.cwd ?? ""}`;
 }
@@ -322,11 +328,7 @@ export function ImportSessionsModal({ open, onClose, onOpenWorkspace }: ImportSe
                         variant="outline"
                         className="h-6 shrink-0 px-2 text-[11px]"
                         disabled={busy || !group.defaultWorkspaceId}
-                        title={
-                          group.defaultWorkspaceId
-                            ? undefined
-                            : "No matching project — add this folder as a repository first"
-                        }
+                        title={group.defaultWorkspaceId ? undefined : noTargetHint(group)}
                         onClick={(e) => {
                           e.stopPropagation();
                           importGroup(group);
@@ -377,7 +379,8 @@ export function ImportSessionsModal({ open, onClose, onOpenWorkspace }: ImportSe
                                   size="sm"
                                   variant={session.imported ? "ghost" : "outline"}
                                   className="h-7 shrink-0 px-2.5 text-xs"
-                                  disabled={session.imported || busy}
+                                  disabled={session.imported || busy || !group.defaultWorkspaceId}
+                                  title={group.defaultWorkspaceId ? undefined : noTargetHint(group)}
                                   onClick={() =>
                                     importOne(session, group.defaultWorkspaceId, group.repositoryId)
                                   }
