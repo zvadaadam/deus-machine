@@ -24,17 +24,15 @@ const rowVariants: Record<SidebarRowVariant, string> = {
   action: "py-1.5 px-3",
 };
 
-export function SidebarRow({
-  variant = "repo",
-  isActive = false,
-  asChild = false,
-  className,
-  ...props
-}: SidebarRowProps) {
+export const SidebarRow = React.forwardRef<HTMLDivElement, SidebarRowProps>(function SidebarRow(
+  { variant = "repo", isActive = false, asChild = false, className, ...props },
+  ref
+) {
   const Comp = asChild ? Slot : "div";
 
   return (
     <Comp
+      ref={ref}
       className={cn(
         "group/sidebar-row relative flex w-full items-center justify-between gap-3 rounded-lg",
         "transition-colors duration-100 ease-out",
@@ -45,7 +43,7 @@ export function SidebarRow({
       {...props}
     />
   );
-}
+});
 
 interface SidebarRowMainProps extends React.ComponentProps<"div"> {
   asChild?: boolean;

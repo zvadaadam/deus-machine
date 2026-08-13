@@ -16,7 +16,7 @@ import type { DisplayStatus } from "../lib/status";
 import { WorkflowStatusIcon } from "./WorkflowStatusIcon";
 
 /** Where the workspace is in its git journey — drives the icon glyph. */
-type GitLifecycle =
+export type GitLifecycle =
   | "merged"
   | "closed"
   | "conflicts"
@@ -27,7 +27,7 @@ type GitLifecycle =
   | "local"
   | "manual";
 
-function deriveGitLifecycle(workspace: Workspace): GitLifecycle {
+export function deriveGitLifecycle(workspace: Workspace): GitLifecycle {
   // Explicit user override (backlog/canceled) keeps its workflow glyph.
   if (workspace.status === "backlog" || workspace.status === "canceled") return "manual";
   if (workspace.pr_state === "merged") return "merged";

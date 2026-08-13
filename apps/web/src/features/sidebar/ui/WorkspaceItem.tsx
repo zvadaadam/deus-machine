@@ -15,6 +15,7 @@ import { getWorkspaceDisplayName, getWorkspaceSecondaryText } from "../lib/utils
 import type { WorkspaceItemProps } from "../model/types";
 import { SidebarRow } from "./SidebarRow";
 import { WorkspaceGitIcon } from "./WorkspaceGitIcon";
+import { WorkspaceHoverCard } from "./WorkspaceHoverCard";
 import { WorkspaceStatusMenu } from "./WorkspaceStatusMenu";
 
 /**
@@ -131,137 +132,152 @@ export const WorkspaceItem = React.memo(function WorkspaceItem({
 
   const canArchive = !isInitializing && workspace.state !== "archived" && !!onArchive;
 
-  return (
-    <div className={cn(isInitializing && "animate-[fadeInUp_0.25s_cubic-bezier(.215,.61,.355,1)]")}>
-      <SidebarRow
-        variant="workspace"
-        isActive={isActive}
-        role="button"
-        tabIndex={isInitializing ? -1 : 0}
-        data-workspace-id={workspace.id}
-        className={cn(isInitializing ? "pointer-events-none" : "cursor-pointer")}
-        aria-current={isActive ? "page" : undefined}
-        aria-label={`Workspace ${displayName}`}
-        aria-busy={isInitializing || undefined}
-        title={secondaryText ?? undefined}
-        onClick={isInitializing ? undefined : () => onClick(workspace)}
-        onMouseEnter={
-          isInitializing
-            ? undefined
-            : () =>
-                prefetchWorkspace(queryClient, workspace, {
-                  activeSessionId: activeChatTabSessionId,
-                  refreshIfCached: shouldRefreshPrefetch,
-                })
+  const row = (
+    <SidebarRow
+      variant="workspace"
+      isActive={isActive}
+      role="button"
+      tabIndex={isInitializing ? -1 : 0}
+      data-workspace-id={workspace.id}
+      className={cn(isInitializing ? "pointer-events-none" : "cursor-pointer")}
+      aria-current={isActive ? "page" : undefined}
+      aria-label={`Workspace ${displayName}`}
+      aria-busy={isInitializing || undefined}
+      title={secondaryText ?? undefined}
+      onClick={isInitializing ? undefined : () => onClick(workspace)}
+      onMouseEnter={
+        isInitializing
+          ? undefined
+          : () =>
+              prefetchWorkspace(queryClient, workspace, {
+                activeSessionId: activeChatTabSessionId,
+                refreshIfCached: shouldRefreshPrefetch,
+              })
+      }
+      onKeyDown={(e) => {
+        // Only when the row itself is focused — child buttons (status menu,
+        // archive) bubble their key events up here.
+        if (e.currentTarget === e.target && e.key === " ") e.preventDefault();
+      }}
+      onKeyUp={(e) => {
+        if (
+          e.currentTarget === e.target &&
+          !isInitializing &&
+          (e.key === "Enter" || e.key === " ")
+        ) {
+          onClick(workspace);
         }
-        onKeyDown={(e) => {
-          // Only when the row itself is focused — child buttons (status menu,
-          // archive) bubble their key events up here.
-          if (e.currentTarget === e.target && e.key === " ") e.preventDefault();
-        }}
-        onKeyUp={(e) => {
-          if (
-            e.currentTarget === e.target &&
-            !isInitializing &&
-            (e.key === "Enter" || e.key === " ")
-          ) {
-            onClick(workspace);
-          }
-        }}
+      }}
+    >
+      {/* Left: icon + name. Icon is flush left, aligned with the repo label. */}
+      <div
+        className={cn(
+          "flex min-w-0 flex-1 items-center gap-1.5",
+          isInitializing && "animate-[shimmer_2s_ease-in-out_infinite]"
+        )}
       >
-        {/* Left: icon + name. Icon is flush left, aligned with the repo label. */}
-        <div
-          className={cn(
-            "flex min-w-0 flex-1 items-center gap-1.5",
-            isInitializing && "animate-[shimmer_2s_ease-in-out_infinite]"
-          )}
+        <WorkspaceStatusMenu
+          currentStatus={workspace.status}
+          onStatusChange={(status) => onStatusChange?.(workspace.id, status)}
         >
-          <WorkspaceStatusMenu
-            currentStatus={workspace.status}
-            onStatusChange={(status) => onStatusChange?.(workspace.id, status)}
-          >
-            <button
-              type="button"
-              onClick={(e) => e.stopPropagation()}
-              className="flex h-5 w-3.5 shrink-0 items-center transition-opacity hover:opacity-80"
-              aria-label={`Status: ${workspace.status}`}
-            >
-              <WorkspaceGitIcon workspace={workspace} displayStatus={displayStatus} />
-            </button>
-          </WorkspaceStatusMenu>
-          <span
-            className={cn(
-              "truncate text-base",
-              isInitializing
-                ? "text-text-disabled font-normal"
-                : isActive
-                  ? "text-text-primary font-medium"
-                  : isAttention
-                    ? "text-text-primary font-normal"
-                    : "text-text-tertiary font-normal"
-            )}
-          >
-            {displayName}
-          </span>
-        </div>
-
-        {/* Right: one signal. Fades out on hover to make room for archive. */}
-        <div
-          className={cn(
-            "flex shrink-0 items-center gap-1.5 text-xs transition-opacity",
-            canArchive && "group-hover/sidebar-row:opacity-0"
-          )}
-        >
-          {showDiff ? (
-            <>
-              {additions > 0 && (
-                <NumberFlow
-                  value={additions}
-                  prefix="+"
-                  className={cn("font-medium", isActive ? "text-accent-green" : "text-text-muted")}
-                />
-              )}
-              {deletions > 0 && (
-                <NumberFlow
-                  value={deletions}
-                  prefix="-"
-                  className={cn("font-medium", isActive ? "text-accent-red" : "text-text-muted")}
-                />
-              )}
-            </>
-          ) : statusDotClass ? (
-            <span
-              className={cn("h-2 w-2 rounded-full", statusDotClass)}
-              title={displayStatus === "error" ? "Error" : "Needs response"}
-              aria-label={displayStatus === "error" ? "Error" : "Unread activity"}
-            />
-          ) : (
-            <span className={cn("flex items-center gap-1", metaClass)}>
-              {isSetupRunning && (
-                <Loader2 className="h-3 w-3 animate-spin motion-reduce:animate-none" />
-              )}
-              {metaText()}
-            </span>
-          )}
-        </div>
-
-        {/* Archive button — hover reveal */}
-        {canArchive && (
           <button
             type="button"
-            onClick={handleArchive}
-            aria-label={`Archive workspace ${displayName}`}
-            title="Archive workspace"
-            className={cn(
-              "text-text-muted hover:text-text-secondary flex h-7 w-7 items-center justify-center rounded-lg",
-              "absolute top-1/2 right-1 -translate-y-1/2 opacity-0 transition-opacity",
-              "group-hover/sidebar-row:opacity-100"
-            )}
+            onClick={(e) => e.stopPropagation()}
+            className="flex h-5 w-3.5 shrink-0 items-center transition-opacity hover:opacity-80"
+            aria-label={`Status: ${workspace.status}`}
           >
-            <Archive className="h-3.5 w-3.5" />
+            <WorkspaceGitIcon workspace={workspace} displayStatus={displayStatus} />
           </button>
+        </WorkspaceStatusMenu>
+        <span
+          className={cn(
+            "truncate text-base",
+            isInitializing
+              ? "text-text-disabled font-normal"
+              : isActive
+                ? "text-text-primary font-medium"
+                : isAttention
+                  ? "text-text-primary font-normal"
+                  : "text-text-tertiary font-normal"
+          )}
+        >
+          {displayName}
+        </span>
+      </div>
+
+      {/* Right: one signal. Fades out on hover to make room for archive. */}
+      <div
+        className={cn(
+          "flex shrink-0 items-center gap-1.5 text-xs transition-opacity",
+          canArchive && "group-hover/sidebar-row:opacity-0"
         )}
-      </SidebarRow>
+      >
+        {showDiff ? (
+          <>
+            {additions > 0 && (
+              <NumberFlow
+                value={additions}
+                prefix="+"
+                className={cn("font-medium", isActive ? "text-accent-green" : "text-text-muted")}
+              />
+            )}
+            {deletions > 0 && (
+              <NumberFlow
+                value={deletions}
+                prefix="-"
+                className={cn("font-medium", isActive ? "text-accent-red" : "text-text-muted")}
+              />
+            )}
+          </>
+        ) : statusDotClass ? (
+          <span
+            className={cn("h-2 w-2 rounded-full", statusDotClass)}
+            title={displayStatus === "error" ? "Error" : "Needs response"}
+            aria-label={displayStatus === "error" ? "Error" : "Unread activity"}
+          />
+        ) : (
+          <span className={cn("flex items-center gap-1", metaClass)}>
+            {isSetupRunning && (
+              <Loader2 className="h-3 w-3 animate-spin motion-reduce:animate-none" />
+            )}
+            {metaText()}
+          </span>
+        )}
+      </div>
+
+      {/* Archive button — hover reveal */}
+      {canArchive && (
+        <button
+          type="button"
+          onClick={handleArchive}
+          aria-label={`Archive workspace ${displayName}`}
+          title="Archive workspace"
+          className={cn(
+            "text-text-muted hover:text-text-secondary flex h-7 w-7 items-center justify-center rounded-lg",
+            "absolute top-1/2 right-1 -translate-y-1/2 opacity-0 transition-opacity",
+            "group-hover/sidebar-row:opacity-100"
+          )}
+        >
+          <Archive className="h-3.5 w-3.5" />
+        </button>
+      )}
+    </SidebarRow>
+  );
+
+  return (
+    <div className={cn(isInitializing && "animate-[fadeInUp_0.25s_cubic-bezier(.215,.61,.355,1)]")}>
+      {isInitializing ? (
+        row
+      ) : (
+        <WorkspaceHoverCard
+          workspace={workspace}
+          displayStatus={displayStatus}
+          diffStats={diffStats}
+          workingDuration={duration > 0 ? formatDuration(duration, false) : null}
+        >
+          {row}
+        </WorkspaceHoverCard>
+      )}
     </div>
   );
 });

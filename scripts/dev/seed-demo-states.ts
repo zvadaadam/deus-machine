@@ -182,6 +182,33 @@ for (const [i, seed] of seeds.entries()) {
   if (pr) prNumber++;
 }
 
+// Live in-flight tool call for the working workspace (luna-9) so the sidebar
+// hover card's activity line has something to show.
+const workingSessionId = "demo-session-000";
+const msgId = "demo-msg-tool-000";
+db.prepare(
+  `INSERT INTO messages (id, session_id, role, content, sent_at) VALUES (?, ?, 'assistant', '', ?)`
+).run(msgId, workingSessionId, new Date().toISOString());
+db.prepare(
+  `INSERT INTO parts (id, message_id, session_id, seq, type, data, tool_call_id, tool_name)
+   VALUES (?, ?, ?, 0, 'TOOL', ?, 'demo-tool-call-0', 'Bash')`
+).run(
+  "demo-part-000",
+  msgId,
+  workingSessionId,
+  JSON.stringify({
+    type: "TOOL",
+    id: "demo-part-000",
+    sessionId: workingSessionId,
+    messageId: msgId,
+    partIndex: 0,
+    toolCallId: "demo-tool-call-0",
+    toolName: "Bash",
+    title: "bun run test:backend",
+    state: { status: "RUNNING", time: { start: new Date().toISOString() } },
+  })
+);
+
 db.close();
 console.log(`Seeded ${seeds.length} workspaces into ${DB_PATH}`);
 console.log(`Demo repo at ${REPO_PATH}`);
