@@ -9,7 +9,7 @@
 // (--heads-only).
 
 import { promises as fsp } from "node:fs";
-import { homedir } from "node:os";
+import { homedir, tmpdir } from "node:os";
 import { join } from "node:path";
 import * as claudeCode from "../src/providers/claude-code.ts";
 import * as codex from "../src/providers/codex.ts";
@@ -272,7 +272,7 @@ async function probeCodex(): Promise<void> {
 async function probeCursor(): Promise<void> {
   console.log("\n═══ CURSOR ═══");
   const src = join(HOME, "Library/Application Support/Cursor/User/globalStorage/state.vscdb");
-  const dbPath = "/tmp/agent-ports-cursor-state.vscdb";
+  const dbPath = join(await fsp.mkdtemp(join(tmpdir(), "agent-ports-probe-")), "state.vscdb");
   try {
     await fsp.copyFile(src, dbPath);
     await fsp.copyFile(`${src}-wal`, `${dbPath}-wal`).catch(() => {});

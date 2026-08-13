@@ -245,7 +245,16 @@ export async function scan(options: ScanOptions): Promise<PortableSessionHead[]>
   await walk(root, 0);
 
   files.sort((a, b) => b.mtimeMs - a.mtimeMs);
-  const parsed = await mapPool(files, 16, (file) => headParse(file.path, file.mtimeMs, file.size));
+  // Per-file resilience: one vanished/corrupt rollout must not blank the scan.
+  const parsed = (
+    await mapPool(files, 16, async (file) => {
+      try {
+        return await headParse(file.path, file.mtimeMs, file.size);
+      } catch {
+        return undefined;
+      }
+    })
+  ).filter((h): h is PortableSessionHead => h !== undefined);
   const heads: PortableSessionHead[] = [];
   for (const head of parsed) {
     if (options.cwdFilters?.length) {
@@ -424,7 +433,7 @@ export async function fullParse(head: PortableSessionHead): Promise<PortableSess
           : str(action?.command);
         const callId = str(payload.call_id) ?? str(payload.id) ?? `shell-${stats.records}`;
         stats.toolNames["local_shell"] = (stats.toolNames["local_shell"] ?? 0) + 1;
-        assistant().parts.push({
+        const part: Extract<PortPart, { type: "TOOL" }> = {
           type: "TOOL",
           toolCallId: callId,
           toolName: "local_shell",
@@ -433,7 +442,11 @@ export async function fullParse(head: PortableSessionHead): Promise<PortableSess
             status: str(payload.status) === "completed" ? "COMPLETED" : "RUNNING",
             input: { command },
           },
-        });
+        };
+        assistant().parts.push(part);
+        // Codex emits the result as function_call_output with the same call_id;
+        // registering here lets the shared output handler complete it.
+        pendingByCallId.set(callId, part);
         break;
       }
       case "web_search_call": {

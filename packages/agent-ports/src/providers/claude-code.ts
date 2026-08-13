@@ -266,7 +266,17 @@ export async function scan(options: ScanOptions): Promise<PortableSessionHead[]>
       }
     }
   });
-  const heads = await mapPool(candidates, 16, (c) => headParse(c.filePath, c.mtimeMs, c.size));
+  // Per-file resilience: one vanished/corrupt transcript must not blank the
+  // whole provider scan.
+  const heads = (
+    await mapPool(candidates, 16, async (c) => {
+      try {
+        return await headParse(c.filePath, c.mtimeMs, c.size);
+      } catch {
+        return undefined;
+      }
+    })
+  ).filter((h): h is PortableSessionHead => h !== undefined);
   let result = heads;
   if (options.cwdFilters?.length) {
     result = result.filter((h) =>
@@ -353,6 +363,14 @@ export async function fullParse(head: PortableSessionHead): Promise<PortableSess
       const message = record.message as Record<string, unknown> | undefined;
       const content = message?.content;
       if (Array.isArray(content)) {
+        // record.toolUseResult is record-level: only trust it when the record
+        // carries exactly one tool_result (parallel calls share one record).
+        const resultBlocks = content.filter(
+          (block) =>
+            typeof block === "object" &&
+            block !== null &&
+            (block as Record<string, unknown>).type === "tool_result"
+        ).length;
         for (const block of content) {
           if (typeof block !== "object" || block === null) continue;
           const b = block as Record<string, unknown>;
@@ -366,7 +384,7 @@ export async function fullParse(head: PortableSessionHead): Promise<PortableSess
           pendingTools.delete(toolUseId!);
           const isError = b.is_error === true;
           // Prefer the structured toolUseResult on the record over raw blocks.
-          const output = record.toolUseResult ?? b.content;
+          const output = resultBlocks === 1 ? (record.toolUseResult ?? b.content) : b.content;
           pending.part.state = isError
             ? { status: "ERROR", input: pending.part.state.input, error: flattenResult(b.content) }
             : { status: "COMPLETED", input: pending.part.state.input, output };

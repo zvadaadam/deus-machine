@@ -135,7 +135,11 @@ export function ImportSessionsModal({ open, onClose, onOpenWorkspace }: ImportSe
     });
   };
 
-  const importOne = async (session: ImportableSessionDTO, workspaceId: string | undefined) => {
+  const importOne = async (
+    session: ImportableSessionDTO,
+    workspaceId: string | undefined,
+    repositoryId?: string
+  ) => {
     if (!workspaceId) {
       toast.error("No workspace to import into — create a workspace first");
       return;
@@ -150,7 +154,7 @@ export function ImportSessionsModal({ open, onClose, onOpenWorkspace }: ImportSe
             ? {
                 label: "Open",
                 onClick: () => {
-                  onOpenWorkspace(ack.workspaceId!);
+                  onOpenWorkspace(ack.workspaceId!, repositoryId);
                   onClose();
                 },
               }
@@ -278,8 +282,12 @@ export function ImportSessionsModal({ open, onClose, onOpenWorkspace }: ImportSe
                     role="button"
                     tabIndex={0}
                     onClick={() => toggleGroup(key)}
-                    onKeyUp={(e) => {
-                      if (e.key === "Enter" || e.key === " ") toggleGroup(key);
+                    onKeyDown={(e) => {
+                      if (e.target !== e.currentTarget) return;
+                      if (e.key === "Enter" || e.key === " ") {
+                        e.preventDefault();
+                        toggleGroup(key);
+                      }
                     }}
                     className="hover:bg-bg-raised/40 group/import-group focus-visible:ring-primary/35 flex w-full cursor-pointer items-center gap-2.5 px-3.5 py-3 text-left transition-colors duration-150 outline-none focus-visible:ring-2 focus-visible:ring-inset"
                   >
@@ -314,6 +322,11 @@ export function ImportSessionsModal({ open, onClose, onOpenWorkspace }: ImportSe
                         variant="outline"
                         className="h-6 shrink-0 px-2 text-[11px]"
                         disabled={busy || !group.defaultWorkspaceId}
+                        title={
+                          group.defaultWorkspaceId
+                            ? undefined
+                            : "No matching project — add this folder as a repository first"
+                        }
                         onClick={(e) => {
                           e.stopPropagation();
                           importGroup(group);
@@ -365,7 +378,9 @@ export function ImportSessionsModal({ open, onClose, onOpenWorkspace }: ImportSe
                                   variant={session.imported ? "ghost" : "outline"}
                                   className="h-7 shrink-0 px-2.5 text-xs"
                                   disabled={session.imported || busy}
-                                  onClick={() => importOne(session, group.defaultWorkspaceId)}
+                                  onClick={() =>
+                                    importOne(session, group.defaultWorkspaceId, group.repositoryId)
+                                  }
                                 >
                                   {busyKey === session.key ? (
                                     <Loader2 className="h-3.5 w-3.5 animate-spin" />

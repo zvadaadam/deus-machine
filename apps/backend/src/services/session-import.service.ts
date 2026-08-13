@@ -79,10 +79,16 @@ export function getImportableSessionsSnapshot(): ImportableSessionsSnapshot {
 async function refreshImportableSessions(): Promise<void> {
   const startedAt = performance.now();
   const home = homedir();
+  const logScanFailure = (provider: string) => (error: unknown) => {
+    console.warn(`[session-import] ${provider} scan failed:`, error);
+    return [];
+  };
   const [claudeHeads, codexHeads, cursorHeads] = await Promise.all([
-    claudeCode.scan({ homeDir: home, maxAgeDays: SCAN_MAX_AGE_DAYS }).catch(() => []),
-    codex.scan({ homeDir: home, maxAgeDays: SCAN_MAX_AGE_DAYS }).catch(() => []),
-    scanCursor(home).catch(() => []),
+    claudeCode
+      .scan({ homeDir: home, maxAgeDays: SCAN_MAX_AGE_DAYS })
+      .catch(logScanFailure("claude-code")),
+    codex.scan({ homeDir: home, maxAgeDays: SCAN_MAX_AGE_DAYS }).catch(logScanFailure("codex")),
+    scanCursor(home).catch(logScanFailure("cursor")),
   ]);
 
   const db = getDatabase();
@@ -138,9 +144,9 @@ async function refreshImportableSessions(): Promise<void> {
     for (const head of heads) {
       if (head.messageCount === 0) continue;
       if (isDeusOwned(head, knownWorkspaces)) continue;
-      if (kept >= MAX_SESSIONS_PER_PROVIDER) break;
-      kept++;
       totals[provider]++;
+      if (kept >= MAX_SESSIONS_PER_PROVIDER) continue;
+      kept++;
       const key = identityKey(head.identity);
       headsByKey.set(key, head);
       const imported = importedByKey.get(key);
@@ -203,12 +209,11 @@ function groupSessions(
         projectName: session.project.projectName,
         kind: session.project.kind,
         repositoryId,
+        // Only matched groups get a default target; unmatched sessions must
+        // never land in an unrelated workspace (esp. via "Import all").
         defaultWorkspaceId:
           (session.project.kind === "workspace" ? session.project.workspaceId : undefined) ??
-          (repositoryId
-            ? workspaces.find((w) => w.repositoryId === repositoryId)?.id
-            : undefined) ??
-          workspaces[0]?.id,
+          (repositoryId ? workspaces.find((w) => w.repositoryId === repositoryId)?.id : undefined),
         sessions: [],
       };
       byGroup.set(groupKey, group);
@@ -229,6 +234,8 @@ function groupSessions(
   return groups;
 }
 
+let cursorCopyDir: string | undefined;
+
 async function scanCursor(home: string): Promise<PortableSessionHead[]> {
   const userDir = join(home, "Library", "Application Support", "Cursor", "User");
   const src = join(userDir, "globalStorage", "state.vscdb");
@@ -237,7 +244,14 @@ async function scanCursor(home: string): Promise<PortableSessionHead[]> {
   } catch {
     return [];
   }
-  const dbPath = join(tmpdir(), "deus-agent-ports-cursor.vscdb");
+  // Private per-scan dir (mkdtemp): unpredictable path, no clashes with other
+  // scans. The copy must outlive the scan — imports full-parse from it later —
+  // so only the previous scan's dir is removed.
+  const previousCopyDir = cursorCopyDir;
+  cursorCopyDir = await fsp.mkdtemp(join(tmpdir(), "deus-agent-ports-"));
+  if (previousCopyDir)
+    await fsp.rm(previousCopyDir, { recursive: true, force: true }).catch(() => {});
+  const dbPath = join(cursorCopyDir, "cursor-state.vscdb");
   await fsp.copyFile(src, dbPath);
   await fsp.copyFile(`${src}-wal`, `${dbPath}-wal`).catch(() => {});
   const heads = await cursor.scan({
@@ -249,9 +263,7 @@ async function scanCursor(home: string): Promise<PortableSessionHead[]> {
 
 // --- Import ----------------------------------------------------------------
 
-export async function importExternalSession(
-  params: QueryParams
-): Promise<{
+export async function importExternalSession(params: QueryParams): Promise<{
   commandId: string;
   sessionId: string;
   workspaceId: string;
@@ -287,12 +299,33 @@ export async function importExternalSession(
         ? await codex.fullParse(head)
         : await cursor.fullParse(head as Parameters<typeof cursor.fullParse>[0]);
 
-  const sessionId = insertImportedSession(db, workspaceId, key, head, parsed);
+  const importableMessages = parsed.messages.filter((m) => !shouldSkipMessage(m));
+  if (importableMessages.length === 0) {
+    throw new Error("Nothing to import — the session's content could not be read from the source");
+  }
 
+  let sessionId: string;
+  try {
+    sessionId = insertImportedSession(db, workspaceId, key, head, parsed);
+  } catch (error) {
+    // Concurrent import of the same key: the UNIQUE origin_key index rejects
+    // the losing insert — return the winner's session.
+    const winner = db
+      .prepare("SELECT id, workspace_id FROM sessions WHERE origin_key = ?")
+      .get(key) as { id: string; workspace_id: string } | undefined;
+    if (!winner) throw error;
+    return {
+      commandId: winner.id,
+      sessionId: winner.id,
+      workspaceId: winner.workspace_id,
+      alreadyImported: true,
+    };
+  }
+
+  markImportedInSnapshot(key, sessionId);
   invalidate(["workspaces", "sessions", "session", "messages", "stats", "importable_sessions"], {
     sessionIds: [sessionId],
   });
-  markImportedInSnapshot(key, sessionId);
   return { commandId: sessionId, sessionId, workspaceId };
 }
 
@@ -356,7 +389,7 @@ function insertImportedSession(
       const sentAt = message.sentAt ?? head.lastTimestamp ?? null;
       // Compaction markers arrive as meta user messages — store as assistant so
       // the COMPACTION part renders in the transcript flow.
-      const role = message.parts.some((p) => p.type === "COMPACTION") ? "assistant" : message.role;
+      const role = message.parts.some((p) => p.type !== "TEXT") ? "assistant" : message.role;
       if (role === "user") {
         insertMessage.run(
           messageId,

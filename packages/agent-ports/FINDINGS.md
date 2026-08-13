@@ -169,3 +169,21 @@ Per Adam's feedback on the long flat list:
 - Env note: parallel Conductor workspaces run their own Vite on 1420+ — always
   read the "Local:" port from your own dev output, never assume, and never
   pkill by pattern (kills sibling workspaces' dev servers).
+
+## Update: PR #306 review round 1 (2026-08-13)
+
+Fixed from bot review (Codex connector + CodeRabbit): UNIQUE `origin_key`
+index + concurrent-import conflict handling; Cursor blob tool-results now
+complete their original call part (no duplicate part / false "Interrupted");
+unmatched-cwd groups no longer fall back to an arbitrary workspace (explicit
+destination required); empty parses are rejected instead of recorded; Cursor
+DB copies use private mkdtemp dirs; snapshot marks imported before the
+invalidate push; provider scan failures are logged and per-file errors no
+longer blank a provider; `local_shell_call` registers for output pairing;
+`toolUseResult` only trusted for single-result records; totals count
+discovered (pre-cap) sessions; modal keyboard/a11y + repo-expand fixes.
+
+Deferred (known v1 gap, documented above): continuing an imported session
+does not yet bridge the imported history into the next turn — that needs the
+handoff/primer mechanism (fork-continue) or cwd-matched native resume, which
+is the planned follow-up, not a patch for this PR.

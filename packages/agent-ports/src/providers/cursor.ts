@@ -20,6 +20,7 @@
 import { openSqlite, type SqliteDb } from "../sqlite.ts";
 import { mapPool } from "../pool.ts";
 import { promises as fsp } from "node:fs";
+import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type {
   FullParseStats,
@@ -88,6 +89,7 @@ export async function buildComposerCwdMap(
   } catch {
     return map;
   }
+  const copyRoot = await fsp.mkdtemp(join(tmpdir(), "agent-ports-ws-"));
   await mapPool(hashes, 8, async (hash) => {
     const dir = join(workspaceStorageDir, hash);
     let folder: string | undefined;
@@ -101,7 +103,7 @@ export async function buildComposerCwdMap(
     if (!folder) return;
     // Copy the workspace DB before reading — Cursor may hold it open.
     const src = join(dir, "state.vscdb");
-    const tmp = `/tmp/agent-ports-ws-${hash}.vscdb`;
+    const tmp = join(copyRoot, `${hash}.vscdb`);
     try {
       await fsp.copyFile(src, tmp);
       await fsp.copyFile(`${src}-wal`, `${tmp}-wal`).catch(() => {});
@@ -128,6 +130,7 @@ export async function buildComposerCwdMap(
       await fsp.unlink(`${tmp}-wal`).catch(() => {});
     }
   });
+  await fsp.rm(copyRoot, { recursive: true, force: true }).catch(() => {});
   return map;
 }
 
@@ -344,13 +347,15 @@ function mapBubble(
  *   assistant → [{type:'text'|'reasoning'|'redacted-reasoning'|'tool-call'}]
  *   tool      → [{type:'tool-result', toolCallId, toolName, result}]
  *   system    → skipped (prompt scaffold)
- * Tool results are emitted as their own COMPLETED tool part keyed by toolCallId;
- * a UI can fold them into the matching assistant tool-call. We do NOT mutate the
- * earlier assistant part because blobs are one-message-per-record.
+ * Tool calls register in `pendingTools` by toolCallId; a later tool-result
+ * COMPLETES the original part in place (blob records are one message each, so
+ * the result arrives in a separate record). Unmatched results become
+ * standalone parts and count as unmatchedToolResults.
  */
 function mapBlobMessage(
   message: Record<string, unknown>,
-  stats: FullParseStats
+  stats: FullParseStats,
+  pendingTools: Map<string, Extract<PortPart, { type: "TOOL" }>>
 ): PortMessage | undefined {
   const role = str(message.role);
   const content = message.content;
@@ -399,13 +404,15 @@ function mapBlobMessage(
           case "tool-call": {
             const toolName = str(b.toolName) ?? "unknown";
             stats.toolNames[toolName] = (stats.toolNames[toolName] ?? 0) + 1;
-            parts.push({
+            const part: Extract<PortPart, { type: "TOOL" }> = {
               type: "TOOL",
               toolCallId: str(b.toolCallId) ?? `blob-${stats.records}`,
               toolName,
               kind: "other",
               state: { status: "RUNNING", input: b.args },
-            });
+            };
+            parts.push(part);
+            pendingTools.set(part.toolCallId, part);
             break;
           }
           default:
@@ -424,18 +431,28 @@ function mapBlobMessage(
       for (const block of content) {
         const b = block as Record<string, unknown>;
         if (str(b.type) !== "tool-result") continue;
-        const toolName = str(b.toolName) ?? "unknown";
+        const toolCallId = str(b.toolCallId);
+        const output = b.result ?? b.experimental_content;
+        const pending = toolCallId ? pendingTools.get(toolCallId) : undefined;
+        if (pending) {
+          // Complete the original call in place — no duplicate part, no
+          // false "Interrupted" conversion downstream.
+          pending.state = { status: "COMPLETED", input: pending.state.input, output };
+          pendingTools.delete(toolCallId!);
+          continue;
+        }
+        stats.unmatchedToolResults++;
         parts.push({
           type: "TOOL",
-          toolCallId: str(b.toolCallId) ?? `blob-result-${stats.records}`,
-          toolName,
+          toolCallId: toolCallId ?? `blob-result-${stats.records}`,
+          toolName: str(b.toolName) ?? "unknown",
           kind: "other",
-          state: { status: "COMPLETED", output: b.result ?? b.experimental_content },
+          state: { status: "COMPLETED", output },
         });
       }
     }
     if (parts.length === 0) return undefined;
-    // Carry tool results on an assistant-role message so parts render inline.
+    // Rare unmatched results still render inline on an assistant-role message.
     return { role: "assistant", parts, isMeta: true };
   }
   stats.skippedRecordTypes[`blob:${role ?? "?"}`] =
@@ -484,6 +501,7 @@ export async function fullParse(head: CursorHead): Promise<PortableSession> {
 
     if (head.era === "blob") {
       const refs = blobRefs(data.conversationState as string);
+      const pendingTools = new Map<string, Extract<PortPart, { type: "TOOL" }>>();
       for (const hash of refs) {
         stats.records++;
         const blobRow = db.row(
@@ -499,7 +517,7 @@ export async function fullParse(head: CursorHead): Promise<PortableSession> {
             (stats.skippedRecordTypes[raw ? "protobuf-blob" : "missing-blob"] ?? 0) + 1;
           continue;
         }
-        const mapped = mapBlobMessage(message, stats);
+        const mapped = mapBlobMessage(message, stats, pendingTools);
         if (mapped) messages.push(mapped);
       }
       return { head, messages, stats: finish(stats, startedAt) };

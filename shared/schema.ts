@@ -132,7 +132,10 @@ export const SCHEMA_SQL = `
   CREATE INDEX IF NOT EXISTS idx_workspaces_state ON workspaces(state);
   CREATE INDEX IF NOT EXISTS idx_sessions_workspace_id ON sessions(workspace_id);
   CREATE INDEX IF NOT EXISTS idx_sessions_status ON sessions(status);
-  CREATE INDEX IF NOT EXISTS idx_sessions_origin_key ON sessions(origin_key);
+  -- UNIQUE backs the import idempotency contract: concurrent imports of the
+  -- same external session race to insert; the loser gets a constraint error
+  -- and returns the winner's row.
+  CREATE UNIQUE INDEX IF NOT EXISTS idx_sessions_origin_key_unique ON sessions(origin_key);
   CREATE INDEX IF NOT EXISTS idx_messages_seq ON messages(session_id, seq DESC);
   CREATE INDEX IF NOT EXISTS idx_messages_sent_at ON messages(session_id, sent_at);
   CREATE INDEX IF NOT EXISTS idx_messages_session_role ON messages(session_id, role, id DESC);
