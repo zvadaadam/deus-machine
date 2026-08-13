@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { CheckCircle2, Globe, Loader2, RefreshCw, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
@@ -67,6 +67,12 @@ export function BrowserSection() {
   const [connectingKey, setConnectingKey] = useState<string | null>(null);
   const [connected, setConnected] = useState<Set<string>>(loadConnected);
 
+  // Persist as a reaction to state changes so the setConnected updater stays
+  // pure (StrictMode may invoke updaters twice in development).
+  useEffect(() => {
+    saveConnected(connected);
+  }, [connected]);
+
   async function onConnect(profile: BrowserProfile): Promise<void> {
     const key = profileKey(profile);
     setConnectingKey(key);
@@ -85,15 +91,11 @@ export function BrowserSection() {
         );
         return;
       }
-      setConnected((prev) => {
-        const next = new Set(prev).add(key);
-        saveConnected(next);
-        return next;
-      });
+      setConnected((prev) => new Set(prev).add(key));
       toast.success(
         `Imported ${result.imported} cookie${result.imported === 1 ? "" : "s"} from ${
           profile.name || profile.browserName
-        }`
+        }` + (result.failed ? ` (${result.failed} skipped)` : "")
       );
     } catch (error) {
       // Surfaces a Keychain denial/cancel or a decrypt failure.
@@ -112,7 +114,6 @@ export function BrowserSection() {
     try {
       await clearSession.mutateAsync();
       setConnected(new Set());
-      saveConnected(new Set());
       toast.success("Browser data cleared");
     } catch (error) {
       toast.error(getErrorMessage(error));
