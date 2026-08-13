@@ -43,28 +43,11 @@ function isInFlight(part: Part): part is Part & { type: "TOOL" } {
 }
 
 /**
- * Latest in-flight tool call from the fetched messages, if any.
- * Scans every part — with parallel tool calls the newest part can be
- * completed while an earlier sibling is still running.
- */
-function findLiveTool(data: PaginatedMessages | undefined): string | null {
-  if (!data?.messages?.length) return null;
-  for (let m = data.messages.length - 1; m >= 0; m--) {
-    const parts = data.messages[m].parts;
-    if (!parts?.length) continue;
-    for (let p = parts.length - 1; p >= 0; p--) {
-      const part = parts[p];
-      if (isInFlight(part)) return toolLabel(part);
-    }
-  }
-  return null;
-}
-
-/**
- * Live tool label: seeded by a one-shot fetch, kept current by the part
- * events the backend already broadcasts to every client — no polling.
- * Once any tool event for this session arrives, events become the source
- * of truth (so a snapshot tool that finished can't linger).
+ * Live tool label: the running-tool map is seeded from a one-shot fetch and
+ * kept current by the part events the backend already broadcasts to every
+ * client — no polling. Snapshot seeding reconciles against completions that
+ * arrived first, so a card opened mid-turn with parallel tools stays correct
+ * when one of them finishes.
  */
 function useLiveTool(sessionId: string): string | null {
   const { data } = useQuery({
@@ -78,31 +61,47 @@ function useLiveTool(sessionId: string): string | null {
   });
 
   const runningRef = useRef<Map<string, string>>(new Map());
-  const [eventLabel, setEventLabel] = useState<string | null>(null);
-  const [eventsSeen, setEventsSeen] = useState(false);
+  const completedRef = useRef<Set<string>>(new Set());
+  const [label, setLabel] = useState<string | null>(null);
 
   useEffect(() => {
     runningRef.current = new Map();
-    setEventLabel(null);
-    setEventsSeen(false);
+    completedRef.current = new Set();
+    setLabel(null);
 
     return onEvent((event: string, rawData: unknown) => {
       if (event !== "part:created" && event !== "part:done") return;
-      const data = rawData as { sessionId?: string; partId?: string; part?: Part };
-      if (data.sessionId !== sessionId || !data.part || !data.partId) return;
-      if (data.part.type !== "TOOL") return;
+      const eventData = rawData as { sessionId?: string; partId?: string; part?: Part };
+      if (eventData.sessionId !== sessionId || !eventData.part || !eventData.partId) return;
+      if (eventData.part.type !== "TOOL") return;
 
       const running = runningRef.current;
-      if (isInFlight(data.part)) running.set(data.partId, toolLabel(data.part));
-      else running.delete(data.partId);
-
-      const latest = Array.from(running.values()).pop() ?? null;
-      setEventsSeen(true);
-      setEventLabel(latest);
+      if (isInFlight(eventData.part)) {
+        running.set(eventData.partId, toolLabel(eventData.part));
+      } else {
+        running.delete(eventData.partId);
+        completedRef.current.add(eventData.partId);
+      }
+      setLabel(Array.from(running.values()).pop() ?? null);
     });
   }, [sessionId]);
 
-  return eventsSeen ? eventLabel : findLiveTool(data);
+  // Seed every in-flight snapshot tool that hasn't already completed via
+  // an event — the card can open with parallel tools mid-run.
+  useEffect(() => {
+    if (!data?.messages?.length) return;
+    const running = runningRef.current;
+    for (const message of data.messages) {
+      for (const part of message.parts ?? []) {
+        if (isInFlight(part) && !completedRef.current.has(part.id) && !running.has(part.id)) {
+          running.set(part.id, toolLabel(part));
+        }
+      }
+    }
+    setLabel(Array.from(running.values()).pop() ?? null);
+  }, [data, sessionId]);
+
+  return label;
 }
 
 /** Rendered only while the card is open — one event subscription per open card. */
