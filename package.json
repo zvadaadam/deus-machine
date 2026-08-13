@@ -92,7 +92,7 @@
     "@hono/node-ws": "^1.3.0",
     "@napi-rs/canvas": "^0.1.97",
     "@number-flow/react": "^0.5.12",
-    "@openai/codex-sdk": "0.130.0",
+    "@openai/codex-sdk": "0.146.1",
     "@pierre/diffs": "^1.1.7",
     "@pierre/trees": "1.0.0-beta.3",
     "@radix-ui/react-avatar": "^1.1.10",
