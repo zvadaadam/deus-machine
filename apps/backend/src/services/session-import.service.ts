@@ -224,10 +224,15 @@ function groupSessions(
 ): ImportableGroup[] {
   const byGroup = new Map<string, ImportableGroup>();
   for (const session of sessions) {
+    // Workspace-matched sessions group per WORKSPACE so a repo with several
+    // worktrees never funnels foreign histories into one target. (Currently
+    // defensive: worktree cwds are excluded as deus-owned upstream.)
     const groupKey =
       session.project.kind === "unknown"
         ? `unknown:${session.project.projectName}:${session.cwd}`
-        : `repo:${session.project.repositoryId}`;
+        : session.project.kind === "workspace"
+          ? `ws:${session.project.workspaceId}`
+          : `repo:${session.project.repositoryId}`;
     let group = byGroup.get(groupKey);
     if (!group) {
       const repositoryId =

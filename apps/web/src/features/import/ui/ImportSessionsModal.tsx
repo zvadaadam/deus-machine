@@ -217,7 +217,12 @@ export function ImportSessionsModal({ open, onClose, onOpenWorkspace }: ImportSe
         className="flex max-h-[80vh] flex-col gap-0 p-0 sm:max-w-[640px]"
         // Don't auto-focus the first chip on open — the ring should only show
         // for real keyboard navigation. Focus lands on the panel (outline-none).
-        onOpenAutoFocus={(e) => e.preventDefault()}
+        onOpenAutoFocus={(e) => {
+          // Focus the panel itself (tabIndex=-1, outline-none): screen readers
+          // announce the dialog without the first chip lighting up a ring.
+          e.preventDefault();
+          (e.target as HTMLElement | null)?.focus?.();
+        }}
       >
         <DialogHeader className="border-border-subtle border-b px-6 pt-5 pb-4">
           <DialogTitle>Import agent sessions</DialogTitle>

@@ -532,13 +532,25 @@ export async function fullParse(head: CursorHead): Promise<PortableSession> {
     const headers = Array.isArray(data.fullConversationHeadersOnly)
       ? (data.fullConversationHeadersOnly as unknown[])
       : [];
-    for (const entry of headers) {
+    let bubbleIds = headers
+      .map((entry) => str((entry as Record<string, unknown>)?.bubbleId))
+      .filter((id): id is string => id !== undefined);
+    stats.parseErrors += headers.length - bubbleIds.length;
+    if (bubbleIds.length === 0 && head.bubbleCount > 0) {
+      // Some composer shapes carry bubble rows without a header array —
+      // enumerate the rows directly (rowid order ≈ chronology) so the
+      // conversation still parses instead of yielding zero messages.
+      bubbleIds = (
+        db.rows(
+          "SELECT key FROM cursorDiskKV WHERE key LIKE ? ORDER BY rowid",
+          `bubbleId:${head.identity.sessionId}:%`
+        ) as { key: string }[]
+      )
+        .map((row) => row.key.split(":")[2])
+        .filter((id): id is string => Boolean(id));
+    }
+    for (const bubbleId of bubbleIds) {
       stats.records++;
-      const bubbleId = str((entry as Record<string, unknown>)?.bubbleId);
-      if (!bubbleId) {
-        stats.parseErrors++;
-        continue;
-      }
       const bubbleRow = db.row(
         "SELECT value FROM cursorDiskKV WHERE key = ?",
         `bubbleId:${head.identity.sessionId}:${bubbleId}`

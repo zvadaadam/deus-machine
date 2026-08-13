@@ -24,7 +24,11 @@ export type ProjectMatch =
   | { kind: "unknown"; projectName: string };
 
 function normalize(p: string): string {
-  return p.replace(/\/+$/, "");
+  // Windows cwds/roots arrive with backslashes and arbitrary drive-letter
+  // casing; fold both so containment checks work cross-platform.
+  let out = p.replace(/\\/g, "/").replace(/\/+$/, "");
+  if (/^[A-Za-z]:/.test(out)) out = out[0].toLowerCase() + out.slice(1);
+  return out;
 }
 
 function isWithin(cwd: string, root: string): boolean {
