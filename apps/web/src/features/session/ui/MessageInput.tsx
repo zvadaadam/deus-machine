@@ -32,7 +32,7 @@ import { GENERATE_HIVE_JSON } from "../lib/sessionPrompts";
 import {
   extractImagesFromClipboard,
   processImageFiles,
-  buildImageBlocks,
+  buildMessageContent,
 } from "../lib/imageAttachments";
 import {
   InputGroup,
@@ -246,7 +246,7 @@ export function MessageInput({
   // Build combined message content from all staged sources.
   // See the big block-comment in the previous revision for ordering rationale
   // (skills first → inspected elements → file mentions → pastes → typed text,
-  // then images appended as Anthropic content blocks).
+  // then images appended as canonical `image` PartInputs).
   const buildCombinedContent = () => {
     const textParts: string[] = [];
     if (skillMentions.length > 0) {
@@ -265,13 +265,7 @@ export function MessageInput({
     if (typed) textParts.push(typed);
     const combinedText = textParts.join("\n\n");
 
-    const imageBlocks = buildImageBlocks(imageAttachments);
-    if (!imageBlocks) return combinedText;
-
-    const blocks: Array<Record<string, unknown>> = [];
-    if (combinedText) blocks.push({ type: "text", text: combinedText });
-    blocks.push(...imageBlocks);
-    return JSON.stringify(blocks);
+    return buildMessageContent(combinedText, imageAttachments);
   };
 
   const hasContent =

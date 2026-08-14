@@ -11,6 +11,7 @@ import { Chat } from "./Chat";
 import { SessionComposer, type SessionComposerRef } from "./SessionComposer";
 import { useAgentEvents } from "../hooks/useAgentEvents";
 import { useAgentRpcHandler } from "../hooks/useAgentRpcHandler";
+import { useSessionContextLostNotice } from "../hooks/useSessionContextLostNotice";
 import { SessionProvider } from "../context";
 import { useSessionWithMessages, useLoadOlderMessages } from "../api/session.queries";
 import { PlanApprovalOverlay } from "./PlanApprovalOverlay";
@@ -107,6 +108,7 @@ export const SessionPanel = forwardRef<SessionPanelRef, SessionPanelProps>(
     const {
       session,
       messages: dbMessages,
+      compactions,
       hasOlder,
       sessionStatus,
       loading,
@@ -116,6 +118,11 @@ export const SessionPanel = forwardRef<SessionPanelRef, SessionPanelProps>(
     // WS part events mutate the TanStack Query cache directly.
     // No parallel store, no merge function. One source of truth.
     useAgentEvents(sessionId);
+
+    // A silent resume failure (session.created → resumed: false) means the
+    // model forgot this conversation. Surfaced once, dismissible, never
+    // persisted — see useSessionContextLostNotice.
+    const { contextLost, dismissContextLost } = useSessionContextLostNotice(sessionId);
 
     // Messages come directly from TanStack cache (populated by DB load + WS mutations)
     const messages = dbMessages;
@@ -324,6 +331,7 @@ export const SessionPanel = forwardRef<SessionPanelRef, SessionPanelProps>(
 
             <Chat
               messages={messages}
+              compactions={compactions}
               loading={loading}
               sessionStatus={sessionStatus}
               errorMessage={session?.error_message}
@@ -339,6 +347,8 @@ export const SessionPanel = forwardRef<SessionPanelRef, SessionPanelProps>(
               workspaceRepoName={workspaceRepoName}
               workspaceParentBranch={workspaceParentBranch}
               isFirstSession={isFirstSession}
+              contextLost={contextLost}
+              onDismissContextLost={dismissContextLost}
               userSendCount={userSendCount}
             />
 
@@ -425,6 +435,7 @@ export const SessionPanel = forwardRef<SessionPanelRef, SessionPanelProps>(
                 <div className={`${CONTENT_WIDTH_CLASSES} mx-auto flex min-h-0 flex-1 flex-col`}>
                   <Chat
                     messages={messages}
+                    compactions={compactions}
                     loading={loading}
                     sessionStatus={sessionStatus}
                     errorMessage={session?.error_message}
@@ -439,6 +450,8 @@ export const SessionPanel = forwardRef<SessionPanelRef, SessionPanelProps>(
                     onRetryInNewChat={handleRetryInNewChat}
                     workspaceRepoName={workspaceRepoName}
                     workspaceParentBranch={workspaceParentBranch}
+                    contextLost={contextLost}
+                    onDismissContextLost={dismissContextLost}
                     userSendCount={userSendCount}
                   />
 

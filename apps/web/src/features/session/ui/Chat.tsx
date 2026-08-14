@@ -1,11 +1,12 @@
 import { match } from "ts-pattern";
-import type { Message, SessionStatus } from "@/shared/types";
+import type { Compaction, Message, SessionStatus } from "@/shared/types";
 import { MessageItem } from "./MessageItem";
 import { AssistantTurn } from "./AssistantTurn";
+import { CompactionChip } from "./CompactionChip";
 import { WorkspaceEmptyState } from "./WorkspaceEmptyState";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Button } from "@/components/ui/button";
-import { ChevronDown, TerminalSquare, MessageSquarePlus } from "lucide-react";
+import { ChevronDown, TerminalSquare, MessageSquarePlus, TriangleAlert, X } from "lucide-react";
 import { cn } from "@/shared/lib/utils";
 
 import { useWorkingDuration } from "@/shared/hooks";
@@ -14,32 +15,25 @@ import { useVirtualizer } from "@tanstack/react-virtual";
 import { useCallback, useMemo, useRef, useEffect } from "react";
 import { AnimatePresence, m } from "framer-motion";
 import { CircularPixelGrid, type CircularPixelGridVariant } from "./CircularPixelGrid";
+import {
+  insertCompactions,
+  type AssistantTurnData,
+  type ChatTimelineItem,
+  type Turn,
+} from "../lib/chatTimeline";
 
 const USER_PADDING_CLASS = "pb-8";
 const TIGHT_PADDING_CLASS = "pb-1";
 
 /**
- * Turn Types
+ * Turn Types (defined in ../lib/chatTimeline so the compaction placement is
+ * testable outside React).
  *
  * A turn = consecutive messages with the same role (user or assistant)
  * - UserTurn: Single user message
  * - AssistantTurn: One or more consecutive assistant messages
+ * - CompactionMarker: a positional divider spliced between turns
  */
-type UserTurn = {
-  type: "user";
-  message: Message;
-  messageIndex: number;
-};
-
-type AssistantTurnData = {
-  type: "assistant";
-  messages: Message[];
-  firstMessageIndex: number;
-  isLatest: boolean;
-  startedAt: string | null;
-};
-
-type Turn = UserTurn | AssistantTurnData;
 
 /**
  * Calculate spacing classes for turns using PADDING (not margin).
@@ -57,26 +51,35 @@ type Turn = UserTurn | AssistantTurnData;
  * - Bottom padding: User turns add pb-8, assistant turns add minimal padding
  */
 function getTurnSpacingClasses(
-  turn: Turn,
-  prevTurn: Turn | null,
-  nextTurn: Turn | null,
+  turn: ChatTimelineItem,
+  prevTurn: ChatTimelineItem | null,
+  nextTurn: ChatTimelineItem | null,
   isFirst: boolean
 ): string {
   const isUser = turn.type === "user";
 
   const topClass = (() => {
+    // Compaction divider: breathing room on both sides, it IS the seam.
+    if (turn.type === "compaction") return isFirst ? "pt-6" : "pt-4";
+
     if (isUser) {
       if (isFirst) return "pt-8";
       if (prevTurn?.type === "user") return "pt-0";
+      if (prevTurn?.type === "compaction") return "pt-4";
       return "pt-8";
     }
 
     // Assistant turn
     if (isFirst) return "pt-1";
+    if (prevTurn?.type === "compaction") return "pt-2";
     return "pt-0";
   })();
 
   const bottomClass = (() => {
+    if (turn.type === "compaction") {
+      return "pb-0";
+    }
+
     if (isUser) {
       return USER_PADDING_CLASS;
     }
@@ -98,6 +101,8 @@ function getTurnSpacingClasses(
 
 interface ChatProps {
   messages: Message[];
+  /** Positional compaction markers, spliced between the turns they belong to. */
+  compactions?: Compaction[];
   loading: boolean;
   sessionStatus: SessionStatus;
   errorMessage?: string | null;
@@ -117,13 +122,19 @@ interface ChatProps {
   workspaceRepoName?: string | null;
   workspaceParentBranch?: string | null;
   isFirstSession?: boolean;
+  /** The harness answered `resumed: false` — this chat's context was lost. */
+  contextLost?: boolean;
+  onDismissContextLost?: () => void;
   /** Incremented by SessionPanel when the human clicks Send. */
   userSendCount?: number;
   className?: string;
 }
 
+const NO_COMPACTIONS: Compaction[] = [];
+
 export function Chat({
   messages,
+  compactions = NO_COMPACTIONS,
   loading,
   sessionStatus,
   errorMessage,
@@ -138,6 +149,8 @@ export function Chat({
   workspaceRepoName,
   workspaceParentBranch,
   isFirstSession,
+  contextLost = false,
+  onDismissContextLost,
   userSendCount = 0,
   className,
 }: ChatProps) {
@@ -301,23 +314,27 @@ export function Chat({
     return turnList;
   }, [renderableMessages]);
 
+  // Compaction markers are positional siblings of turns, not messages — they
+  // splice in AFTER grouping so a divider never lands inside a turn.
+  const timeline = useMemo(() => insertCompactions(turns, compactions), [turns, compactions]);
+
   // Advance maxAnimatedTurnIndex after commit (useEffect runs once per commit,
   // not twice in StrictMode). During render, shouldAnimate reads the ref purely.
   // Without this separation, StrictMode double-render advances the counter on the
   // first invocation, so the second invocation (which produces DOM) never applies
   // the chat-item-enter CSS class.
   useEffect(() => {
-    if (isFirstTurnsRender.current && turns.length > 0) {
+    if (isFirstTurnsRender.current && timeline.length > 0) {
       isFirstTurnsRender.current = false;
       // Only suppress entrance animation for turns loaded from DB (existing
       // conversation). New conversations (started empty) should animate their
       // first turn — skipping the seed lets shouldAnimate fire naturally.
       if (initialMessageCount.current > 0) {
-        maxAnimatedTurnIndex.current = turns.length - 1;
+        maxAnimatedTurnIndex.current = timeline.length - 1;
       }
       return;
     }
-    const newMax = turns.length - 1;
+    const newMax = timeline.length - 1;
     if (newMax > maxAnimatedTurnIndex.current) {
       // Mark this turn for animation. The Set ensures the CSS class persists
       // across re-renders so the 400ms animation isn't interrupted.
@@ -326,20 +343,20 @@ export function Chat({
       // Clean up after animation completes (400ms duration + 100ms buffer).
       setTimeout(() => animatedTurnsRef.current.delete(newMax), 500);
     }
-  }, [turns.length]);
+  }, [timeline.length]);
 
   // Pre-compute spacing for each turn (needed because virtualizer skips
   // off-screen items — can't compute spacing from DOM neighbors).
   const turnSpacings = useMemo(() => {
-    return turns.map((turn, i) =>
+    return timeline.map((item, i) =>
       getTurnSpacingClasses(
-        turn,
-        i > 0 ? turns[i - 1] : null,
-        i < turns.length - 1 ? turns[i + 1] : null,
+        item,
+        i > 0 ? timeline[i - 1] : null,
+        i < timeline.length - 1 ? timeline[i + 1] : null,
         i === 0
       )
     );
-  }, [turns]);
+  }, [timeline]);
 
   // ── Virtualizer ──────────────────────────────────────────────────────────
   // Only renders visible turns + overscan buffer. TanStack Virtual v3 uses
@@ -347,8 +364,9 @@ export function Chat({
   // height changes from expand/collapse — no manual remeasurement needed.
   const estimateSize = useCallback(
     (index: number) => {
-      const turn = turns[index];
+      const turn = timeline[index];
       if (!turn) return 100;
+      if (turn.type === "compaction") return 36;
       if (turn.type === "user") return 60;
       // Scale estimate with message count — collapsed turns with many hidden
       // messages show a compact header + summary, while expanded turns (latest)
@@ -358,20 +376,21 @@ export function Chat({
       if (msgCount <= 3) return 200;
       return 200 + (msgCount - 3) * 40;
     },
-    [turns]
+    [timeline]
   );
 
   const getItemKey = useCallback(
     (index: number) => {
-      const turn = turns[index];
-      if (!turn) return index;
-      return turn.type === "user" ? turn.message.id : turn.messages[0].id;
+      const item = timeline[index];
+      if (!item) return index;
+      if (item.type === "compaction") return `compaction:${item.compaction.compaction_id}`;
+      return item.type === "user" ? item.message.id : item.messages[0].id;
     },
-    [turns]
+    [timeline]
   );
 
   const virtualizer = useVirtualizer({
-    count: turns.length,
+    count: timeline.length,
     getScrollElement: () => messagesContainerRef.current,
     estimateSize,
     overscan: 8,
@@ -444,7 +463,7 @@ export function Chat({
               >
                 {virtualizer.getVirtualItems().map((virtualItem) => {
                   const turnIndex = virtualItem.index;
-                  const turn = turns[turnIndex];
+                  const turn = timeline[turnIndex];
                   if (!turn) return null;
 
                   const spacingClass = turnSpacings[turnIndex];
@@ -456,10 +475,16 @@ export function Chat({
                   // message) — streaming adds messages to the existing turn without
                   // changing turns.length, so no spurious re-animations.
                   const shouldAnimate =
-                    (turnIndex === turns.length - 1 && turnIndex > maxAnimatedTurnIndex.current) ||
+                    (turnIndex === timeline.length - 1 &&
+                      turnIndex > maxAnimatedTurnIndex.current) ||
                     animatedTurnsRef.current.has(turnIndex);
 
-                  const messageId = turn.type === "user" ? turn.message.id : turn.messages[0].id;
+                  // A compaction is not a message — it gets no message id.
+                  const messageId = match(turn)
+                    .with({ type: "user" }, (t) => t.message.id)
+                    .with({ type: "assistant" }, (t) => t.messages[0].id)
+                    .with({ type: "compaction" }, () => undefined)
+                    .exhaustive();
 
                   return (
                     <div
@@ -482,21 +507,64 @@ export function Chat({
                           shouldAnimate && "chat-item-enter"
                         )}
                       >
-                        {turn.type === "user" ? (
-                          <MessageItem message={turn.message} isLastInTurn={true} />
-                        ) : (
-                          <AssistantTurn
-                            messages={turn.messages}
-                            isLatest={turn.isLatest}
-                            isWorking={sessionStatus === "working"}
-                            startedAt={turn.startedAt}
-                          />
-                        )}
+                        {match(turn)
+                          .with({ type: "user" }, (t) => (
+                            <MessageItem message={t.message} isLastInTurn={true} />
+                          ))
+                          .with({ type: "assistant" }, (t) => (
+                            <AssistantTurn
+                              messages={t.messages}
+                              isLatest={t.isLatest}
+                              isWorking={sessionStatus === "working"}
+                              startedAt={t.startedAt}
+                            />
+                          ))
+                          .with({ type: "compaction" }, (t) => (
+                            <CompactionChip compaction={t.compaction} />
+                          ))
+                          .exhaustive()}
                       </div>
                     </div>
                   );
                 })}
               </div>
+              {/* Context lost — the harness silently started a fresh session
+                  instead of resuming. Non-blocking: the composer stays live. */}
+              <AnimatePresence>
+                {contextLost && (
+                  <m.div
+                    key="session-context-lost"
+                    initial={{ opacity: 0 }}
+                    animate={{ opacity: 1 }}
+                    exit={{ opacity: 0 }}
+                    transition={{ duration: 0.15, ease: [0.25, 0.46, 0.45, 0.94] }}
+                    className="mt-1 mr-auto w-fit max-w-[60%]"
+                    role="status"
+                    aria-live="polite"
+                  >
+                    <div className="border-warning/20 border-l-warning bg-warning/5 flex items-center gap-2.5 rounded-lg border border-l-2 px-3 py-2">
+                      <TriangleAlert
+                        className="text-warning/60 h-3.5 w-3.5 shrink-0"
+                        aria-hidden="true"
+                      />
+                      <span className="text-warning text-sm font-medium">
+                        Session context was lost — the agent started fresh instead of resuming.
+                      </span>
+                      {onDismissContextLost && (
+                        <button
+                          type="button"
+                          onClick={onDismissContextLost}
+                          className="text-warning/50 hover:text-warning focus-visible:ring-ring -mr-1 shrink-0 rounded-md p-0.5 transition-colors duration-150 focus-visible:ring-2 focus-visible:outline-none"
+                          aria-label="Dismiss"
+                        >
+                          <X className="h-3.5 w-3.5" />
+                        </button>
+                      )}
+                    </div>
+                  </m.div>
+                )}
+              </AnimatePresence>
+
               {/* Session-level error — rendered inline in the chat flow (law of locality) */}
               <AnimatePresence>
                 {sessionStatus === "error" && errorMessage && (

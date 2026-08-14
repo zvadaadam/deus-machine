@@ -17,6 +17,7 @@ export type {
 
 // Session types
 export type {
+  Compaction,
   Message,
   MessageRole,
   MessageContent,

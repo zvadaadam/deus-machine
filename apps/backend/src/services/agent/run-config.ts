@@ -10,13 +10,16 @@ import type { ThinkingLevel, PermissionMode } from "@shared/protocol";
 import { buildSystemPromptAppend } from "./system-prompt";
 
 /**
- * Attachment-bearing prompts still arrive from the composer as a JSON array of
- * Anthropic content blocks; parse them into canonical `PartInput[]`. Anything
+ * The composer speaks the canonical `PartInput` vocabulary: a text-only send
+ * is a bare string (already an `AgentInput`), an attachment-bearing send is a
+ * JSON-encoded `PartInput[]`. This is a passthrough for both — it only decodes
+ * the JSON envelope and validates the parts.
+ *
+ * The one translation left is TOLERANCE: rows written before the composer was
+ * flipped hold Anthropic content blocks (`{type:"image",source:{…}}`). Those
+ * are converted rather than rejected, so re-sent history still works. Anything
  * unrecognized stays plain text — a prompt that merely starts with "[" must
  * not be mangled.
- *
- * (Once the composer composes PartInput directly this collapses to a
- * passthrough; the wire vocabulary below is already the destination shape.)
  */
 export function toEngineInput(prompt: string): AgentInput {
   if (!prompt.startsWith("[")) return prompt;
@@ -28,34 +31,47 @@ export function toEngineInput(prompt: string): AgentInput {
   }
   if (!Array.isArray(blocks) || blocks.length === 0) return prompt;
   const parts: PartInput[] = [];
-  for (const block of blocks as Array<Record<string, unknown>>) {
-    if (block?.type === "text" && typeof block.text === "string") {
-      // A text part must be non-empty on the wire; an empty block carries
-      // nothing anyway.
-      if (block.text.length > 0) parts.push({ type: "text", text: block.text });
-      continue;
-    }
-    if (block?.type === "image") {
-      const source = block.source as
-        | { type?: string; url?: string; media_type?: string; data?: string }
-        | undefined;
-      if (source?.type === "url" && source.url) {
-        parts.push({ type: "image", url: source.url, mimeType: source.media_type ?? "image/png" });
-        continue;
-      }
-      if (source?.data) {
-        parts.push({
-          type: "image",
-          data: source.data,
-          mimeType: source.media_type ?? "image/png",
-        });
-        continue;
-      }
-    }
-    // Unknown block type — not a content array we understand; keep raw text.
-    return prompt;
+  for (const block of blocks) {
+    const part = toPartInput(block);
+    // Not a parts array we understand (a JSON list of something else) — the
+    // prompt was never structured input, so keep the raw text.
+    if (part === UNRECOGNIZED) return prompt;
+    if (part) parts.push(part);
   }
   return parts.length ? parts : prompt;
+}
+
+/** Distinguishes "drop this part" (null) from "this isn't a parts array". */
+const UNRECOGNIZED = Symbol("unrecognized-block");
+
+function toPartInput(block: unknown): PartInput | null | typeof UNRECOGNIZED {
+  if (!block || typeof block !== "object" || Array.isArray(block)) return UNRECOGNIZED;
+  const record = block as Record<string, unknown>;
+
+  if (record.type === "text" && typeof record.text === "string") {
+    // A text part must be non-empty on the wire; an empty one carries nothing.
+    return record.text.length > 0 ? (record as unknown as PartInput) : null;
+  }
+
+  if (record.type === "image" || record.type === "file") {
+    // LEGACY: Anthropic's nested `source`, flattened to the canonical shape.
+    const source = record.source as
+      | { type?: string; url?: string; media_type?: string; data?: string }
+      | undefined;
+    if (source) {
+      const mimeType = source.media_type ?? "image/png";
+      if (source.url) return { type: "image", url: source.url, mimeType };
+      if (source.data) return { type: "image", data: source.data, mimeType };
+      return UNRECOGNIZED;
+    }
+    // Canonical: flat `data` | `url` + `mimeType` — forwarded verbatim.
+    const hasPayload = typeof record.data === "string" || typeof record.url === "string";
+    if (hasPayload && typeof record.mimeType === "string") {
+      return record as unknown as PartInput;
+    }
+  }
+
+  return UNRECOGNIZED;
 }
 
 /**

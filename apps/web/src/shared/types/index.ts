@@ -8,6 +8,7 @@ export type {
   FileChange,
   FileEdit,
   FileChangeGroup,
+  Compaction,
   Message,
   MessageRole,
   MessageContent,

@@ -162,11 +162,13 @@ export function useSessionWithMessages(sessionId: string | null) {
   const messagesQuery = useMessages(sessionId);
 
   const messages = messagesQuery.data?.messages ?? [];
+  const compactions = messagesQuery.data?.compactions;
   const hasOlder = messagesQuery.data?.has_older ?? false;
 
   return {
     session: sessionQuery.data,
     messages,
+    compactions,
     hasOlder,
     sessionStatus: (sessionQuery.data?.status as SessionStatus) || "idle",
     loading: sessionQuery.isLoading || messagesQuery.isLoading,
@@ -192,6 +194,9 @@ export function useLoadOlderMessages() {
         const newMessages = olderPage.messages.filter((m) => !existingIds.has(m.id));
         return {
           messages: [...newMessages, ...old.messages],
+          // The older page carries the session's full compaction list
+          // (single digits, never paginated) — take the fresher one.
+          compactions: olderPage.compactions ?? old.compactions,
           has_older: olderPage.has_older,
           has_newer: old.has_newer,
         };
@@ -298,7 +303,13 @@ export function useSendMessage() {
       };
 
       queryClient.setQueryData<PaginatedMessages>(queryKeys.sessions.messages(sessionId), (old) => {
-        if (!old) return { messages: [optimisticMessage], has_older: false, has_newer: false };
+        if (!old)
+          return {
+            messages: [optimisticMessage],
+            compactions: [],
+            has_older: false,
+            has_newer: false,
+          };
         return produce(old, (draft) => {
           draft.messages.push(optimisticMessage);
         });

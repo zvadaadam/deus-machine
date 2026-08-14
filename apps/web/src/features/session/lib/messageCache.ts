@@ -35,6 +35,9 @@ export function mergeMessageDelta(
 
   return {
     messages: [...realMessages, ...newMessages],
+    // Compactions are positional siblings of messages, not deltas — a message
+    // delta must never drop the dividers already in the page.
+    compactions: paginated.compactions,
     has_older: paginated.has_older,
     has_newer: false,
   };
