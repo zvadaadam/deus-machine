@@ -4,9 +4,15 @@
  * Imported by backend/src/lib/database.ts.
  * All statements are idempotent (IF NOT EXISTS).
  *
- * Tables: repositories, workspaces, sessions, messages, parts, paired_devices
- * Indexes: 13
+ * Tables: repositories, workspaces, sessions, messages, parts, compactions,
+ *         paired_devices
+ * Indexes: 15
  * Triggers: 5 (3 auto-update updated_at, 2 denormalized message_count + auto-seq)
+ *
+ * The agent-facing tables (messages, parts, compactions) store the
+ * @zvada/agent-server protocol verbatim: `parts.data` is the engine `Part`
+ * (lowercase type, epoch-ms times), `parts.type` is the engine part type, and
+ * `compactions` is the `session.compaction` entity. No deus dialect.
  */
 
 /**
@@ -37,9 +43,22 @@ export const PRELAUNCH_REQUIRED_COLUMNS = {
     "pr_checked_at",
   ],
   sessions: ["agent_harness", "error_category"],
-  messages: ["stop_reason"],
+  // Protocol unification (engine 0.3.0): messages gained turn-level accounting
+  // and the unified parent column; a database without them predates the switch
+  // to canonical protocol vocabulary and must be reset.
+  messages: ["parent_tool_call_id", "tokens", "cost", "turn_stop_reason"],
   parts: ["parent_tool_call_id"],
+  compactions: ["compaction_id"],
 } as const satisfies Record<string, readonly string[]>;
+
+/**
+ * `sessions.agent_harness` values that predate a rename. A row carrying one of
+ * these is a pre-launch database that must be reset rather than migrated.
+ * `codex` was the original single-codex id; `claude`/`codex-server` were the
+ * deus-dialect spellings replaced by the engine ids (`claude-code`,
+ * `codex-app-server`).
+ */
+export const RETIRED_AGENT_HARNESS_VALUES = ["codex", "claude", "codex-server"] as const;
 
 /**
  * Additive columns applied to existing databases via ALTER TABLE at startup.
@@ -100,7 +119,8 @@ export const SCHEMA_SQL = `
   CREATE TABLE IF NOT EXISTS sessions (
     id TEXT PRIMARY KEY NOT NULL,
     workspace_id TEXT NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
-    agent_harness TEXT NOT NULL DEFAULT 'claude',
+    -- Engine harness id (@zvada/agent-server): claude-code | codex-sdk | codex-app-server
+    agent_harness TEXT NOT NULL DEFAULT 'claude-code',
     agent_session_id TEXT,
     title TEXT,
     status TEXT NOT NULL DEFAULT 'idle',
@@ -117,6 +137,14 @@ export const SCHEMA_SQL = `
   -- Chat messages within sessions (id = UUID7, embeds created_at; append-only, no updated_at)
   -- seq is a per-session monotonic integer for reliable cursor pagination.
   -- Auto-assigned by trigger — never set manually in INSERT.
+  --
+  -- One row per engine message.started — INCLUDING the user echo, which is the
+  -- source of truth for user rows (content stays NULL for them; new user
+  -- messages render from their parts, content is a legacy read path only).
+  -- turn_id groups a turn; parent_tool_call_id nests a subagent's output under
+  -- the tool call that spawned it (same spelling as parts.parent_tool_call_id).
+  -- tokens/cost/turn_stop_reason carry the TURN's outcome (turn.ended),
+  -- written onto the turn's last top-level assistant message.
   CREATE TABLE IF NOT EXISTS messages (
     id TEXT PRIMARY KEY NOT NULL,
     session_id TEXT NOT NULL REFERENCES sessions(id) ON DELETE CASCADE,
@@ -125,15 +153,18 @@ export const SCHEMA_SQL = `
     content TEXT,
     turn_id TEXT,
     model TEXT,
-    agent_message_id TEXT,
     sent_at TEXT,
     cancelled_at TEXT,
-    parent_tool_use_id TEXT,
-    stop_reason TEXT
+    parent_tool_call_id TEXT,
+    tokens TEXT,
+    cost REAL,
+    turn_stop_reason TEXT
   );
 
-  -- Parts: individual content units within assistant messages.
-  -- Each part.done event → one INSERT. Append-only, crash-safe.
+  -- Parts: individual content units within a message.
+  -- Each engine message.part snapshot → one UPSERT by part id (the engine's
+  -- own id). data is the engine Part verbatim; type is its lowercase protocol
+  -- type (text | reasoning | tool | image | file).
   CREATE TABLE IF NOT EXISTS parts (
     id TEXT PRIMARY KEY NOT NULL,
     message_id TEXT NOT NULL REFERENCES messages(id) ON DELETE CASCADE,
@@ -144,6 +175,21 @@ export const SCHEMA_SQL = `
     tool_call_id TEXT,
     tool_name TEXT,
     parent_tool_call_id TEXT
+  );
+
+  -- Compactions: the engine's session.compaction entity, an ID-addressed
+  -- POSITIONAL marker rendered between the turn it belongs to and its
+  -- successor. Upserted by compaction_id as status/summary advance.
+  CREATE TABLE IF NOT EXISTS compactions (
+    compaction_id TEXT PRIMARY KEY NOT NULL,
+    session_id TEXT NOT NULL REFERENCES sessions(id) ON DELETE CASCADE,
+    turn_id TEXT NOT NULL,
+    status TEXT NOT NULL,
+    trigger TEXT,
+    pre_tokens INTEGER,
+    post_tokens INTEGER,
+    summary TEXT,
+    created_at TEXT NOT NULL DEFAULT (datetime('now'))
   );
 
   -- Paired devices for remote access authentication
@@ -157,7 +203,7 @@ export const SCHEMA_SQL = `
     created_at TEXT NOT NULL DEFAULT (datetime('now'))
   );
 
-  -- Indexes (10)
+  -- Indexes (15)
   CREATE INDEX IF NOT EXISTS idx_workspaces_repository_id ON workspaces(repository_id);
   CREATE INDEX IF NOT EXISTS idx_workspaces_state ON workspaces(state);
   CREATE INDEX IF NOT EXISTS idx_sessions_workspace_id ON sessions(workspace_id);
@@ -165,11 +211,15 @@ export const SCHEMA_SQL = `
   CREATE INDEX IF NOT EXISTS idx_messages_seq ON messages(session_id, seq DESC);
   CREATE INDEX IF NOT EXISTS idx_messages_sent_at ON messages(session_id, sent_at);
   CREATE INDEX IF NOT EXISTS idx_messages_session_role ON messages(session_id, role, id DESC);
-  CREATE INDEX IF NOT EXISTS idx_messages_turn_id ON messages(session_id, turn_id);
-  CREATE INDEX IF NOT EXISTS idx_messages_parent_tool_use ON messages(parent_tool_use_id);
+  -- turn.ended resolves "the turn's last top-level assistant message" through
+  -- this index (session_id, turn_id, seq DESC) — no scan per completed turn.
+  CREATE INDEX IF NOT EXISTS idx_messages_turn_id ON messages(session_id, turn_id, seq DESC);
+  CREATE INDEX IF NOT EXISTS idx_messages_parent_tool_call ON messages(parent_tool_call_id);
   CREATE INDEX IF NOT EXISTS idx_parts_message_id ON parts(message_id, seq);
   CREATE INDEX IF NOT EXISTS idx_parts_session_type ON parts(session_id, type);
   CREATE INDEX IF NOT EXISTS idx_parts_tool_call_id ON parts(tool_call_id);
+  CREATE INDEX IF NOT EXISTS idx_compactions_session ON compactions(session_id, created_at);
+  CREATE INDEX IF NOT EXISTS idx_compactions_turn ON compactions(session_id, turn_id);
   CREATE INDEX IF NOT EXISTS idx_paired_devices_token_hash ON paired_devices(token_hash);
 
   -- Triggers: auto-update updated_at (3)

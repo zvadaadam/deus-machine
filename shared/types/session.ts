@@ -6,7 +6,7 @@
 // Canonical enum types — defined as Zod schemas in shared/enums.ts,
 // imported here for local use and re-exported for backwards compat.
 import type { MessageRole, SessionStatus } from "../enums";
-import type { Part } from "../messages/types";
+import type { Part, TokenUsage, UnknownPart } from "../protocol-types";
 export type { MessageRole, SessionStatus };
 
 /**
@@ -19,15 +19,39 @@ export interface Message {
   session_id: string;
   seq: number; // Per-session monotonic sequence number (auto-assigned by trigger)
   role: MessageRole;
-  content: string; // JSON-stringified MessageContent
-  turn_id?: string | null; // Conversation turn identifier
-  sent_at?: string | null; // ISO timestamp when message sent to Claude
-  cancelled_at?: string | null; // ISO timestamp when user cancels message
-  model?: string | null; // Claude model used (e.g., 'sonnet')
-  agent_message_id?: string | null; // Agent SDK-provided message identifier
-  parent_tool_use_id?: string | null; // Subagent parent task ID (promoted from JSON envelope)
-  stop_reason?: string | null; // "end_turn", "tool_use", "cancelled", etc. (set by message.done)
-  parts?: Part[]; // Parsed Part objects (attached by backend, mutated by streaming events)
+  /** LEGACY read path: JSON-stringified MessageContent. Rows written by the
+   *  engine echo leave this NULL and render from `parts` instead. */
+  content: string | null;
+  turn_id?: string | null; // The turn this message belongs to (engine turnId)
+  sent_at?: string | null; // ISO timestamp of the engine's message.started
+  cancelled_at?: string | null; // ISO timestamp when the turn was cancelled
+  model?: string | null; // Model that produced the message
+  /** Set when this message is a subagent's output: the toolCallId that spawned it. */
+  parent_tool_call_id?: string | null;
+  /** Turn accounting, written at turn.ended onto the turn's last top-level
+   *  assistant message. `tokens` is the JSON-encoded engine TokenUsage. */
+  tokens?: string | null;
+  cost?: number | null;
+  /** The TURN's terminal stopReason (end_turn, refusal, max_turn_requests, …). */
+  turn_stop_reason?: string | null;
+  /** Engine Part snapshots in stream order (attached by the backend). */
+  parts?: Array<Part | UnknownPart>;
+}
+
+/** `messages.tokens` parsed back into the engine's TokenUsage shape. */
+export type MessageTokenUsage = TokenUsage;
+
+/** One row of the `compactions` table (the engine's session.compaction entity). */
+export interface Compaction {
+  compaction_id: string;
+  session_id: string;
+  turn_id: string;
+  status: string;
+  trigger?: string | null;
+  pre_tokens?: number | null;
+  post_tokens?: number | null;
+  summary?: string | null;
+  created_at: string;
 }
 
 /**
@@ -133,7 +157,7 @@ export interface Session {
   status: SessionStatus;
   message_count: number;
   error_message?: string | null;
-  error_category?: import("../enums").ErrorCategory | null;
+  error_category?: import("../protocol-types").ErrorCategory | null;
   last_user_message_at?: string | null;
   context_token_count: number;
   context_used_percent: number;

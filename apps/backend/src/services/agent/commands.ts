@@ -15,15 +15,14 @@ import { execFile } from "node:child_process";
 import { promisify } from "node:util";
 import { WireRequestError } from "@zvada/agent-server/client";
 import { uuidv7 } from "@shared/lib/uuid";
-import type { ThinkingLevel, PermissionMode } from "@shared/protocol";
+import { readPermissionMode, readThinkingLevel } from "@shared/protocol";
 import { getDatabase } from "../../lib/database";
 import { getSessionRaw, getWorkspaceForMiddleware } from "../../db";
 import { computeWorkspacePath } from "../../middleware/workspace-loader";
-import { writeUserMessage } from "../message-writer";
 import { spawnPty, writeToPty, resizePty, killPty } from "../pty.service";
 import { watchWorkspace, unwatchWorkspace } from "../fs-watcher.service";
 import { delegateToRoute } from "../route-delegate";
-import { persistSessionError } from "./persistence";
+import { persistSessionError, persistSessionWorking } from "./persistence";
 import { invalidate } from "../query-engine";
 import * as agentService from "./service";
 import { resolveAapPaths } from "./service";
@@ -372,9 +371,14 @@ function handleSendMessage(params: QueryParams): CommandResult {
     );
   }
 
-  // 1. Persist the user message
-  const result = writeUserMessage(sessionId, content, model);
-  if (!result.success) throw new Error(result.error);
+  // 1. Flip the session to "working" optimistically. The user's MESSAGE row is
+  // NOT written here: the engine echoes the prompt back as
+  // message.started{role:"user"} and that echo is the single persistence path
+  // for message rows (same turn_id, same parts, one writer). The frontend
+  // renders its own optimistic bubble from cache until the echo lands.
+  const sentAt = new Date().toISOString();
+  const working = persistSessionWorking(sessionId, sentAt);
+  if (!working.ok) throw new Error(working.error);
   invalidate(["workspaces", "sessions", "session", "messages", "stats"], {
     sessionIds: [sessionId],
   });
@@ -392,22 +396,25 @@ function handleSendMessage(params: QueryParams): CommandResult {
     }
   }
 
+  // The turn id is the frontend's correlation key: it seeds the optimistic
+  // bubble and matches the engine's user echo when it arrives.
+  const turnId = readString(params, "turnId") ?? uuidv7();
+
   if (!agentService.isConnected()) {
-    handleAgentError(sessionId, agentHarness, new Error("Agent server is disconnected"));
-    return { commandId: result.messageId };
+    handleAgentError(sessionId, new Error("Agent server is disconnected"));
+    return { commandId: turnId };
   }
   if (!cwd) {
-    handleAgentError(sessionId, agentHarness, new Error("Session has no resolvable workspace"));
-    return { commandId: result.messageId };
+    handleAgentError(sessionId, new Error("Session has no resolvable workspace"));
+    return { commandId: turnId };
   }
 
-  const turnId = readString(params, "turnId") ?? uuidv7();
   agentService
     .startTurn(sessionId, turnId, agentHarness, content, {
       cwd,
       model,
-      thinkingLevel: readString(params, "thinkingLevel") as ThinkingLevel | undefined,
-      permissionMode: readString(params, "permissionMode") as PermissionMode | undefined,
+      thinkingLevel: readThinkingLevel(params.thinkingLevel),
+      permissionMode: readPermissionMode(params.permissionMode),
       maxTurns: readNumber(params, "maxTurns"),
       additionalDirectories: Array.isArray(params.additionalDirectories)
         ? params.additionalDirectories.filter((dir): dir is string => typeof dir === "string")
@@ -428,13 +435,13 @@ function handleSendMessage(params: QueryParams): CommandResult {
         }
         // Other typed rejections (harness unavailable, shutting down,
         // invalid params) — the turn never ran.
-        handleAgentRejection(sessionId, agentHarness, err.message);
+        handleAgentRejection(sessionId, err.message);
         return;
       }
-      handleAgentError(sessionId, agentHarness, err);
+      handleAgentError(sessionId, err);
     });
 
-  return { commandId: result.messageId };
+  return { commandId: turnId };
 }
 
 // ---- stopSession ----
@@ -495,28 +502,16 @@ async function handleStopApp(params: QueryParams): Promise<CommandResult> {
 
 // ---- Helpers ----
 
-function handleAgentRejection(sessionId: string, agentHarness: string, reason?: string): void {
+function handleAgentRejection(sessionId: string, reason?: string): void {
   const msg = reason || "Agent rejected the message";
   console.error(`[CommandHandler] Agent rejected sendMessage for session=${sessionId}: ${msg}`);
-  persistSessionError({
-    type: "session.error",
-    sessionId,
-    agentHarness: agentHarness as AgentHarness,
-    error: msg,
-    category: "internal",
-  });
+  persistSessionError(sessionId, msg, "internal");
   invalidate(["workspaces", "sessions", "session", "stats"], { sessionIds: [sessionId] });
 }
 
-function handleAgentError(sessionId: string, agentHarness: string, err: unknown): void {
+function handleAgentError(sessionId: string, err: unknown): void {
   const errorMsg = err instanceof Error ? err.message : String(err);
   console.error("[CommandHandler] Failed to forward to agent-server:", errorMsg);
-  persistSessionError({
-    type: "session.error",
-    sessionId,
-    agentHarness: agentHarness as AgentHarness,
-    error: `Agent server communication failed: ${errorMsg}`,
-    category: "internal",
-  });
+  persistSessionError(sessionId, `Agent server communication failed: ${errorMsg}`, "internal");
   invalidate(["workspaces", "sessions", "session", "stats"], { sessionIds: [sessionId] });
 }

@@ -5,6 +5,7 @@ import * as path from "path";
 import WebSocket from "ws";
 import { AgentServerClient } from "@zvada/agent-server/client";
 import type { WireEventEnvelope } from "@zvada/agent-server/protocol";
+import { WIRE_PROTOCOL_VERSION } from "@zvada/agent-server/protocol";
 import {
   SIDE_CHANNEL,
   SideChannelEndpoint,
@@ -227,10 +228,10 @@ describe.skipIf(!bundleExists)("E2E: Agent Server Process", () => {
     await killAgentServer(srv);
   });
 
-  it("handshakes on the standard wire (protocolVersion 1, three harnesses)", async () => {
+  it("handshakes on the standard wire (current protocol version, three harnesses)", async () => {
     const conn = await connectBackendStyle(srv.wsUrl);
     const init = await conn.client.initialize();
-    expect(init.protocolVersion).toBe(1);
+    expect(init.protocolVersion).toBe(WIRE_PROTOCOL_VERSION);
     expect(init.server.name).toBe("deus-agent-server");
     expect(Object.keys(init.harnesses).sort()).toEqual([
       "claude-code",
@@ -359,8 +360,11 @@ describe.skipIf(!bundleExists || !claudeCliAvailable)("E2E: Real Claude Integrat
     });
     // Give the turn a moment to actually start before cancelling.
     await new Promise((r) => setTimeout(r, 3_000));
-    const { cancelled } = await conn.client.cancelTurn("e2e-claude-cancel");
-    expect(cancelled).toBe(true);
+    const cancel = await conn.client.cancelTurn("e2e-claude-cancel");
+    // 0.3 reports one outcome: `cancelled` (harness confirmed) or
+    // `unconfirmed` (dispatched best-effort). Either means the interrupt went
+    // out; turn.ended below is the real assertion.
+    expect(["cancelled", "unconfirmed"]).toContain(cancel.outcome);
 
     // The turn.ended for this session must arrive with cancelled.
     await new Promise<void>((resolve, reject) => {

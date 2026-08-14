@@ -8,8 +8,12 @@
 
 import { WebSocket } from "ws";
 import { AgentServerClient } from "@zvada/agent-server/client";
-import type { InitializeResult, WireEventEnvelope } from "@zvada/agent-server/protocol";
-import type { TurnStartParams } from "@zvada/agent-server/protocol";
+import type {
+  InitializeResult,
+  TurnCancelResult,
+  TurnStartParams,
+  WireEventEnvelope,
+} from "@zvada/agent-server/protocol";
 import {
   SIDE_CHANNEL,
   SideChannelEndpoint,
@@ -18,8 +22,8 @@ import {
   type LineTransport,
   type SideChannelTitle,
 } from "@shared/agent-side-channel";
-import { DEUS_HARNESS_BY_ENGINE, type AgentHarness, type EngineHarness } from "@shared/enums";
-import type { AgentInfo } from "@shared/agent-events";
+import { AgentHarnessSchema, type AgentHarness } from "@shared/enums";
+import type { AgentInfo } from "@shared/agent-info";
 
 // ============================================================================
 // Types
@@ -147,10 +151,13 @@ export class AgentLink {
     return this.requireClient().startTurn(params);
   }
 
-  /** Cancel the session's active turn (idempotent — false = nothing running). */
-  async cancelTurn(sessionId: string): Promise<boolean> {
-    const { cancelled } = await this.requireClient().cancelTurn(sessionId);
-    return cancelled;
+  /**
+   * Cancel the session's active turn (idempotent). Returns the wire's single
+   * outcome: `cancelled` (the harness confirmed), `unconfirmed` (dispatched
+   * best-effort — turn.ended stays the source of truth) or `no_active_turn`.
+   */
+  async cancelTurn(sessionId: string): Promise<TurnCancelResult> {
+    return this.requireClient().cancelTurn(sessionId);
   }
 
   // ---- Side channel (backend → agent-server) ----
@@ -242,29 +249,16 @@ function dialWebSocket(url: string): Promise<WebSocket> {
   });
 }
 
-/** Upstream initialize result → deus AgentInfo[] (settings surface). The
- *  capability values mirror what the legacy per-harness handlers advertised. */
+/**
+ * Upstream initialize result → the settings surface. Only harnesses the engine
+ * actually registered appear in `result.harnesses`, and their capabilities are
+ * the NEGOTIATED ones — deus no longer fabricates a feature matrix that could
+ * drift from what the engine will really do. Harnesses deus doesn't offer in
+ * the composer (e.g. `acp`) are filtered out here, not renamed.
+ */
 function toAgentInfos(result: InitializeResult): AgentInfo[] {
-  return Object.keys(result.harnesses).flatMap((engineHarness) => {
-    const type = DEUS_HARNESS_BY_ENGINE[engineHarness as EngineHarness];
-    if (!type) return [];
-    return [
-      {
-        type,
-        capabilities: {
-          // Auth status is a claude-only feature (SDK accountInfo).
-          auth: type === "claude",
-          workspaceInit: false,
-          contextUsage: true,
-          modelSwitch: "in-session" as const,
-          multiTurn: true,
-          sessionResume: true,
-          // Permission-mode changes apply on the NEXT turn (config diff →
-          // engine session restart with resume); no live mid-turn switching.
-          permissionMode: false,
-        },
-        initialized: true,
-      },
-    ];
+  return Object.entries(result.harnesses).flatMap(([harness, capabilities]) => {
+    const parsed = AgentHarnessSchema.safeParse(harness);
+    return parsed.success ? [{ type: parsed.data, capabilities }] : [];
   });
 }

@@ -27,7 +27,7 @@ import { MessageItem } from "./MessageItem";
 import { TurnFooter } from "./TurnFooter";
 import { TurnStatsHeader } from "./TurnStatsHeader";
 import { calculateTurnStats } from "./utils";
-import { Square } from "lucide-react";
+import { Square, TriangleAlert } from "lucide-react";
 
 interface AssistantTurnProps {
   messages: Message[];
@@ -54,13 +54,32 @@ export const AssistantTurn = memo(function AssistantTurn({
 
   const isStreaming = isLatest && isWorking;
 
-  // Detect cancellation via message fields (not content envelope)
+  // Cancellation is a column now: the backend stamps cancelled_at on the
+  // turn's last assistant message at turn.ended{stopReason:"cancelled"}.
   const isCancelled = useMemo(() => {
     const lastMsg = messages[messages.length - 1];
     if (!lastMsg) return false;
     if (lastMsg.cancelled_at) return true;
-    if (lastMsg.stop_reason === "cancelled") return true;
-    return false;
+    return lastMsg.turn_stop_reason === "cancelled";
+  }, [messages]);
+
+  /**
+   * Terminal stop reasons the user has to know about: a content-filter refusal
+   * and a turn that ran out of its request budget both used to end in silence,
+   * because the reason was never persisted.
+   */
+  const stopNotice = useMemo(() => {
+    const lastMsg = messages[messages.length - 1];
+    switch (lastMsg?.turn_stop_reason) {
+      case "refusal":
+        return "The model declined to continue this response.";
+      case "max_turn_requests":
+        return "The agent hit its request limit for this turn — send a follow-up to continue.";
+      case "max_tokens":
+        return "The response hit the model's output limit and was truncated.";
+      default:
+        return null;
+    }
   }, [messages]);
 
   // Split messages: all except the last are hidden (collapsible), last is the summary.
@@ -131,6 +150,12 @@ export const AssistantTurn = memo(function AssistantTurn({
             <div className="border-warning/20 border-l-warning bg-warning/5 mx-2 flex items-center gap-2.5 rounded-lg border border-l-2 px-3 py-2">
               <Square className="text-warning/60 h-3.5 w-3.5 shrink-0 fill-current" />
               <span className="text-warning text-sm font-medium">Response stopped</span>
+            </div>
+          )}
+          {!isCancelled && stopNotice && (
+            <div className="border-warning/20 border-l-warning bg-warning/5 mx-2 flex items-center gap-2.5 rounded-lg border border-l-2 px-3 py-2">
+              <TriangleAlert className="text-warning/60 h-3.5 w-3.5 shrink-0" />
+              <span className="text-warning text-sm font-medium">{stopNotice}</span>
             </div>
           )}
           <TurnFooter messages={messages} startedAt={startedAt} />

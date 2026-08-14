@@ -13,9 +13,16 @@
  * - Threshold: 2+ tools to show group header
  */
 
-import type { Part, ToolPart } from "@shared/messages/types";
+import type { Part, ToolPart } from "@shared/protocol-types";
 
-// ---- Groupable tool names ----
+// ---- Read-only tool detection ----
+
+/**
+ * The protocol classifies what a call DOES (`kind`), so grouping keys off that
+ * instead of a tool-name allowlist — an MCP tool nobody hardcoded still groups
+ * correctly. The name list stays as the fallback for unkinded tools.
+ */
+const READ_ONLY_TOOL_KINDS: ReadonlySet<string> = new Set(["read", "search", "fetch"]);
 
 const GROUPABLE_TOOL_NAMES = new Set([
   "Read",
@@ -47,7 +54,9 @@ export type GroupedPartItem = SinglePartItem | PartToolStreak;
 // ---- Grouping ----
 
 function isGroupableToolPart(part: Part): part is ToolPart {
-  return part.type === "TOOL" && GROUPABLE_TOOL_NAMES.has(part.toolName);
+  if (part.type !== "tool") return false;
+  if (part.kind !== undefined) return READ_ONLY_TOOL_KINDS.has(part.kind);
+  return GROUPABLE_TOOL_NAMES.has(part.toolName);
 }
 
 export function groupPartItems(parts: Part[], isStreamingTurn: boolean): GroupedPartItem[] {

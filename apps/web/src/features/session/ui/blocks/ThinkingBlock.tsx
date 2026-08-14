@@ -6,7 +6,7 @@
  * Click to expand and see the full reasoning as markdown.
  */
 
-import type { ReasoningPart } from "@shared/messages/types";
+import type { ReasoningPart } from "@shared/protocol-types";
 import { useState } from "react";
 import { Brain, ChevronRight } from "lucide-react";
 import { AnimatePresence, motion } from "framer-motion";

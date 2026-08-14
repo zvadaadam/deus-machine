@@ -61,16 +61,41 @@ const UserMessage = memo(function UserMessage({ message }: { message: Message })
   const [shouldCollapse, setShouldCollapse] = useState(false);
   const contentRef = useRef<HTMLDivElement>(null);
 
-  const contentBlocks = useMemo(() => {
+  /**
+   * The engine's user echo is the source of truth for new rows: text and
+   * image parts, same shapes as the assistant side. `content` is the LEGACY
+   * read path for rows the send command wrote before the echo existed — kept
+   * so old conversations still render.
+   */
+  const contentBlocks = useMemo((): (ContentBlock | string)[] => {
+    const parts = message.parts;
+    if (parts && parts.length > 0) {
+      return parts.flatMap((part): (ContentBlock | string)[] => {
+        if ("raw" in part) return [];
+        if (part.type === "text") return [{ type: "text" as const, text: part.text }];
+        if (part.type === "image" && part.data) {
+          return [
+            {
+              type: "image" as const,
+              source: { type: "base64" as const, media_type: part.mimeType, data: part.data },
+            },
+          ];
+        }
+        return [];
+      });
+    }
+
+    const content = message.content;
+    if (content == null) return [];
     try {
-      const parsed = JSON.parse(message.content);
+      const parsed = JSON.parse(content);
       if (Array.isArray(parsed)) return parsed as (ContentBlock | string)[];
       if (typeof parsed === "string") return [{ type: "text" as const, text: parsed }];
-      return [{ type: "text" as const, text: message.content }];
+      return [{ type: "text" as const, text: content }];
     } catch {
-      return [{ type: "text" as const, text: message.content }];
+      return [{ type: "text" as const, text: content }];
     }
-  }, [message.content]);
+  }, [message.content, message.parts]);
 
   const { imageBlocks, textBlocks } = useMemo(() => {
     const images: ContentBlock[] = [];

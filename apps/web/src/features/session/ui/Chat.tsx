@@ -178,7 +178,7 @@ export function Chat({
   const renderableMessages = useMemo(() => {
     return messages.filter((message) => {
       // Skip subagent messages
-      if (message.parent_tool_use_id) return false;
+      if (message.parent_tool_call_id) return false;
       // User messages always render
       if (message.role === "user") return true;
       // Assistant messages with parts render
@@ -193,10 +193,10 @@ export function Chat({
   /**
    * Derive agent sub-state from the last content block in the message stream.
    * Maps to CircularPixelGrid animation variant:
-   * - thinking: last block is ThinkingBlock / REASONING part
-   * - generating: last block is TextBlock / TEXT part
-   * - toolExecuting: last block is ToolUseBlock with no result / TOOL part PENDING/RUNNING
-   * - error: last tool result has is_error / TOOL part ERROR
+   * - thinking: last part is reasoning
+   * - generating: last part is text
+   * - toolExecuting: last part is a tool still pending / in_progress
+   * - error: last part is a failed tool
    */
   const agentSubState = useMemo((): CircularPixelGridVariant => {
     if (sessionStatus !== "working") return "generating";
@@ -206,17 +206,17 @@ export function Chat({
       if (msg.role !== "assistant") continue;
       if (!msg.parts || msg.parts.length === 0) continue;
 
-      const sorted = [...msg.parts].sort((a, b) => (a.partIndex ?? 0) - (b.partIndex ?? 0));
-      const lastPart = sorted[sorted.length - 1];
+      // Parts are already in stream order — they carry no ordering field.
+      const lastPart = msg.parts[msg.parts.length - 1];
       if (!lastPart) return "generating";
 
       return match(lastPart.type)
-        .with("REASONING", () => "thinking" as const)
-        .with("TEXT", () => "generating" as const)
-        .with("TOOL", () => {
-          const status = (lastPart as import("@shared/messages/types").ToolPart).state.status;
-          if (status === "ERROR") return "error" as const;
-          if (status === "PENDING" || status === "RUNNING") return "toolExecuting" as const;
+        .with("reasoning", () => "thinking" as const)
+        .with("text", () => "generating" as const)
+        .with("tool", () => {
+          const status = (lastPart as import("@shared/protocol-types").ToolPart).state.status;
+          if (status === "failed") return "error" as const;
+          if (status === "pending" || status === "in_progress") return "toolExecuting" as const;
           return "generating" as const;
         })
         .otherwise(() => "generating" as const);

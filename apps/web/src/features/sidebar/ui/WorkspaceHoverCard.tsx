@@ -5,7 +5,7 @@ import { useQuery } from "@tanstack/react-query";
 
 import { cn } from "@/shared/lib/utils";
 import { onEvent } from "@/platform/ws";
-import type { Part } from "@shared/messages/types";
+import type { Part, ToolPart, UnknownPart, WireEventEnvelope } from "@shared/protocol-types";
 import { formatTimeAgo } from "@/shared/lib/formatters";
 import { HoverCard, HoverCardContent, HoverCardTrigger } from "@/components/ui/hover-card";
 import { SessionService, type PaginatedMessages } from "@/features/session/api/session.service";
@@ -31,15 +31,14 @@ function prChipLabel(workspace: Workspace): string | null {
   return label ? `#${workspace.pr_number} ${label}` : null;
 }
 
-function toolLabel(part: Part & { type: "TOOL" }): string {
-  const detail = part.title ?? (part.state.status === "RUNNING" ? part.state.title : undefined);
+function toolLabel(part: ToolPart): string {
+  const detail = part.title ?? (part.state.status === "in_progress" ? part.state.title : undefined);
   return detail ? `${part.toolName} · ${detail}` : part.toolName;
 }
 
-function isInFlight(part: Part): part is Part & { type: "TOOL" } {
-  return (
-    part.type === "TOOL" && (part.state.status === "RUNNING" || part.state.status === "PENDING")
-  );
+function isInFlight(part: Part | UnknownPart): part is ToolPart {
+  if ("raw" in part || part.type !== "tool") return false;
+  return part.state.status === "in_progress" || part.state.status === "pending";
 }
 
 /**
@@ -69,18 +68,20 @@ function useLiveTool(sessionId: string): string | null {
     completedRef.current = new Set();
     setLabel(null);
 
-    return onEvent((event: string, rawData: unknown) => {
-      if (event !== "part:created" && event !== "part:done") return;
-      const eventData = rawData as { sessionId?: string; partId?: string; part?: Part };
-      if (eventData.sessionId !== sessionId || !eventData.part || !eventData.partId) return;
-      if (eventData.part.type !== "TOOL") return;
+    return onEvent((name: string, raw: unknown) => {
+      if (name !== "agent:event") return;
+      const envelope = raw as WireEventEnvelope;
+      if (envelope?.sessionId !== sessionId) return;
+      const event = envelope.event;
+      if (event.type !== "message.part" || event.part.type !== "tool") return;
 
       const running = runningRef.current;
-      if (isInFlight(eventData.part)) {
-        running.set(eventData.partId, toolLabel(eventData.part));
+      const partId = event.part.id;
+      if (isInFlight(event.part)) {
+        running.set(partId, toolLabel(event.part));
       } else {
-        running.delete(eventData.partId);
-        completedRef.current.add(eventData.partId);
+        running.delete(partId);
+        completedRef.current.add(partId);
       }
       setLabel(Array.from(running.values()).pop() ?? null);
     });

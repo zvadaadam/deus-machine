@@ -3,6 +3,7 @@
  * Original types moved to shared/types/session.ts
  */
 export type {
+  Compaction,
   Message,
   MessageRole,
   MessageContent,

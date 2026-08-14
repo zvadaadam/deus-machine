@@ -4,17 +4,17 @@ import { describe, expect, it } from "vitest";
 import { SessionProvider } from "@/features/session/context";
 import { SubagentMessageList } from "@/features/session/ui/blocks/SubagentMessageList";
 import type { Message } from "@/shared/types";
-import type { Part } from "@shared/messages/types";
+import type { Part } from "@shared/protocol-types";
 
 function createTextPart(id: string, messageId: string, text: string, partIndex: number): Part {
   return {
-    type: "TEXT",
+    type: "text",
     id,
     sessionId: "session-1",
     messageId,
     partIndex,
     text,
-    state: "DONE",
+    state: "done",
   };
 }
 

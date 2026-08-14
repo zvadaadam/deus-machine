@@ -1,239 +1,266 @@
 // backend/src/services/agent/persistence.ts
-// Database write functions for persisting canonical agent events.
+// Database writes for the canonical @zvada/agent-server lifecycle stream.
 //
-// Adapted from agent-server/db/session-writer.ts. Key differences:
-// - Uses backend's getDatabase() (not agent-server's)
-// - No notifyBackend() calls (backend handles WS push via invalidate())
-// - No FrontendClient calls (backend pushes via query-engine directly)
-// - Takes event objects instead of positional args
+// Every function here takes the engine's own event shape — there is no deus
+// dialect between the wire and SQLite. `parts.data` is the engine `Part`
+// verbatim; `messages` rows are minted from `message.started` (including the
+// user echo); turn accounting lands on `turn.ended`.
 //
-// All functions are synchronous (better-sqlite3 is synchronous).
-// Callers (event-handler.ts) call invalidate() after persistence succeeds.
+// All functions are synchronous (better-sqlite3 is synchronous) and never
+// throw: they return a WriteResult so the caller decides whether to invalidate.
 
-import { getDatabase } from "../../lib/database";
-import { uuidv7 } from "@shared/lib/uuid";
-import { getErrorMessage } from "@shared/lib/errors";
 import type {
-  MessageCancelledEvent,
-  MessageCreatedEvent,
-  PartCreatedEvent,
-  PartDoneEvent,
-  MessageDoneEvent,
-  SessionStartedEvent,
-  SessionIdleEvent,
-  SessionContextUsageEvent,
-  SessionErrorEvent,
-  SessionCancelledEvent,
-  AgentSessionIdEvent,
-  SessionTitleEvent,
-} from "@shared/agent-events";
+  MessagePartEvent,
+  MessageStartedEvent,
+  SessionCompactionEvent,
+  SessionUsageEvent,
+  TurnEndedEvent,
+} from "@zvada/agent-server/protocol";
+import { getDatabase } from "../../lib/database";
+import { getErrorMessage } from "@shared/lib/errors";
 
 // ============================================================================
-// WriteResult type (mirrors agent-server's pattern)
+// WriteResult
 // ============================================================================
 
 export type WriteResult<T = string> = { ok: true; value: T } | { ok: false; error: string };
 
+function failed(what: string, error: unknown): WriteResult<never> {
+  const message = getErrorMessage(error);
+  console.error(`[AgentPersistence] Failed to persist ${what}:`, message);
+  return { ok: false, error: message };
+}
+
+/** Epoch-ms (protocol time) → the ISO strings every timestamp column stores. */
+function iso(epochMs: number): string {
+  return new Date(epochMs).toISOString();
+}
+
 // ============================================================================
-// Message writes
+// Messages + parts
 // ============================================================================
 
 /**
- * Create a message row from a message.created event.
- * This pre-creates the row so that part.done INSERTs have a valid FK target.
+ * Mint the message row for an engine `message.started`.
+ *
+ * This is the ONLY writer of message rows — the user echo included. Deus no
+ * longer inserts the user's message when the composer sends: the engine echoes
+ * it back (role "user", outputIndex 0) and that echo is the persistence source
+ * of truth, so a user row and an assistant row are produced by the same code
+ * path with the same turn grouping.
+ *
+ * INSERT OR REPLACE keeps a replayed event idempotent, but the message id is
+ * the engine's, so a replay rewrites the same row rather than duplicating it.
+ * `content` stays NULL: new rows render from their parts.
  */
-export function persistMessageCreated(event: MessageCreatedEvent): WriteResult {
+export function persistMessageStarted(event: MessageStartedEvent): WriteResult {
   const db = getDatabase();
-  const sentAt = new Date().toISOString();
-
   try {
-    // Check if session exists — if not, we can't create the message
+    // A message for a session we don't know about has no FK target; the parts
+    // that follow would fail too. Skip loudly instead of throwing per part.
     const session = db.prepare(`SELECT id FROM sessions WHERE id = ?`).get(event.sessionId);
     if (!session) {
       console.warn(
-        `[AgentPersistence] message.created: session ${event.sessionId} not found, skipping`
+        `[AgentPersistence] message.started: session ${event.sessionId} not found, skipping`
       );
       return { ok: false, error: "session not found" };
     }
 
     db.prepare(
-      `INSERT OR REPLACE INTO messages (id, session_id, role, sent_at, parent_tool_use_id)
-       VALUES (?, ?, ?, ?, ?)`
-    ).run(event.messageId, event.sessionId, event.role, sentAt, event.parentToolCallId ?? null);
+      `INSERT OR REPLACE INTO messages (id, session_id, role, turn_id, model, sent_at, parent_tool_call_id)
+       VALUES (?, ?, ?, ?, ?, ?, ?)`
+    ).run(
+      event.messageId,
+      event.sessionId,
+      event.role,
+      event.turnId,
+      event.model ?? null,
+      iso(event.timestamp),
+      event.parentToolCallId ?? null
+    );
     return { ok: true, value: event.messageId };
   } catch (error) {
-    const msg = getErrorMessage(error);
-    console.error(`[AgentPersistence] Failed to persist message.created:`, msg);
-    return { ok: false, error: msg };
+    return failed("message.started", error);
   }
 }
 
 /**
- * Persist a cancellation: insert a cancelled assistant message marker
- * and set session status to idle.
+ * Upsert a part snapshot. The engine's `message.part` is authoritative and
+ * idempotent (UPSERT by part id), so INSERT OR REPLACE is the exact match for
+ * its semantics — including a tool part completing after its message ended,
+ * which names its ORIGINAL messageId and lands back there.
  *
- * The cancelled message uses the envelope format so the frontend can detect
- * cancellation on reload (the "Turn interrupted" label in AssistantTurn).
+ * `seq` mirrors the event's `partIndex`: parts carry no ordering field of
+ * their own, position is the event's knowledge.
  */
-export function persistMessageCancelled(event: MessageCancelledEvent): WriteResult {
-  const db = getDatabase();
-  const messageId = uuidv7();
-  const sentAt = new Date().toISOString();
-
-  // Empty cancelled message with envelope so frontend detects cancellation
-  const content = JSON.stringify({
-    message: { stop_reason: "cancelled" },
-    blocks: [],
-  });
-
-  try {
-    db.transaction(() => {
-      db.prepare(
-        `INSERT INTO messages (id, session_id, role, content, sent_at, cancelled_at)
-         VALUES (?, ?, 'assistant', ?, ?, ?)`
-      ).run(messageId, event.sessionId, content, sentAt, sentAt);
-
-      db.prepare(
-        `UPDATE sessions SET status = 'idle', error_message = NULL, error_category = NULL, updated_at = datetime('now') WHERE id = ?`
-      ).run(event.sessionId);
-    })();
-
-    return { ok: true, value: messageId };
-  } catch (error) {
-    const msg = getErrorMessage(error);
-    console.error(`[AgentPersistence] Failed to persist message.cancelled:`, msg);
-    return { ok: false, error: msg };
-  }
-}
-
-/**
- * Persist a finalized part to the parts table.
- *
- * Called on part.done — inserts a row into the `parts` table with the
- * full part data. For TOOL parts, extracts toolCallId and toolName into
- * their own columns for efficient querying.
- */
-export function persistPartDone(event: PartDoneEvent | PartCreatedEvent): WriteResult {
+export function persistPart(event: MessagePartEvent): WriteResult {
   const db = getDatabase();
   const part = event.part;
-
   try {
-    // partIndex is the canonical ordering (assigned by the adapter).
-    // Stored as `seq` column for SQL ORDER BY efficiency.
-    const seq = part.partIndex ?? 0;
-
     db.prepare(
       `INSERT OR REPLACE INTO parts (id, message_id, session_id, seq, type, data, tool_call_id, tool_name, parent_tool_call_id)
        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`
     ).run(
-      event.partId,
+      part.id,
       event.messageId,
       event.sessionId,
-      seq,
+      event.partIndex,
       part.type,
       JSON.stringify(part),
-      part.type === "TOOL" ? part.toolCallId : null,
-      part.type === "TOOL" ? part.toolName : null,
+      part.type === "tool" ? part.toolCallId : null,
+      part.type === "tool" ? part.toolName : null,
       part.parentToolCallId ?? null
     );
-
-    return { ok: true, value: event.partId };
+    return { ok: true, value: part.id };
   } catch (error) {
-    const msg = getErrorMessage(error);
-    // FK constraint failures are expected when part.created arrives before
-    // message.created persistence. The part will be saved on part.done.
-    if (msg.includes("FOREIGN KEY")) {
-      return { ok: true, value: event.partId };
+    const message = getErrorMessage(error);
+    // A part can outrun its message row (the session lookup above rejected it,
+    // or the events crossed). The next snapshot re-upserts, so this is not a
+    // data loss worth shouting about.
+    if (message.includes("FOREIGN KEY")) {
+      return { ok: true, value: part.id };
     }
-    console.error(`[AgentPersistence] Failed to persist part:`, msg);
-    return { ok: false, error: msg };
+    return failed("message.part", error);
   }
 }
 
+// ============================================================================
+// Turn outcome
+// ============================================================================
+
+export interface TurnOutcomeWrite {
+  /** Session status to leave behind. */
+  status: "idle" | "error";
+  /** Set when status is "error". */
+  error?: { message: string; category: string };
+  /** Stamp cancelled_at on the turn's last assistant message. */
+  cancelled: boolean;
+}
+
 /**
- * Set the stop_reason on a completed message.
+ * Persist everything a finished turn leaves behind, in one transaction:
+ * the turn's billing totals + terminal stopReason on its last top-level
+ * assistant message, the cancellation marker, and the session's new status.
  *
- * Called on message.done — updates the messages row with the stop reason
- * (e.g. "end_turn", "tool_use"). The parts are already persisted
- * individually via part.done events.
+ * Tokens and cost used to be computed end-to-end and then dropped on the
+ * floor; they are columns now. `turn_stop_reason` is the TURN's outcome (the
+ * engine's `turn.ended.stopReason`) — not the per-message stop-reason fiction
+ * the old schema carried, which is why `refusal` and `max_turn_requests`
+ * finally survive a reload.
+ *
+ * A turn that produced no assistant message (cancelled before the model
+ * answered) has nothing to mark; the session status is still written.
  */
-export function persistMessageDone(event: MessageDoneEvent): WriteResult {
+export function persistTurnEnded(
+  event: TurnEndedEvent,
+  outcome: TurnOutcomeWrite
+): WriteResult<void> {
   const db = getDatabase();
-
   try {
-    db.prepare(`UPDATE messages SET stop_reason = ? WHERE id = ?`).run(
-      event.stopReason ?? null,
-      event.messageId
-    );
+    db.transaction(() => {
+      const target = db
+        .prepare(
+          `SELECT id FROM messages
+           WHERE session_id = ? AND turn_id = ? AND role = 'assistant' AND parent_tool_call_id IS NULL
+           ORDER BY seq DESC LIMIT 1`
+        )
+        .get(event.sessionId, event.turnId) as { id: string } | undefined;
 
-    return { ok: true, value: event.messageId };
-  } catch (error) {
-    const msg = getErrorMessage(error);
-    console.error(`[AgentPersistence] Failed to persist message.done:`, msg);
-    return { ok: false, error: msg };
-  }
-}
+      if (target) {
+        db.prepare(
+          `UPDATE messages
+             SET tokens = COALESCE(?, tokens),
+                 cost = COALESCE(?, cost),
+                 turn_stop_reason = ?,
+                 cancelled_at = COALESCE(?, cancelled_at)
+           WHERE id = ?`
+        ).run(
+          event.tokens ? JSON.stringify(event.tokens) : null,
+          event.cost ?? null,
+          event.stopReason,
+          outcome.cancelled ? iso(event.timestamp) : null,
+          target.id
+        );
+      }
 
-// ============================================================================
-// Session status writes
-// ============================================================================
-
-/**
- * Update session status to "working" when a turn starts.
- * Only updates if the session is not already working (idempotent).
- */
-export function persistSessionStarted(event: SessionStartedEvent): WriteResult<void> {
-  const db = getDatabase();
-
-  try {
-    db.prepare(
-      `UPDATE sessions SET status = 'working', error_message = NULL, error_category = NULL, updated_at = datetime('now')
-       WHERE id = ? AND status != 'working'`
-    ).run(event.sessionId);
+      if (outcome.status === "error") {
+        // No ErrorInfo means a standalone `error` event already wrote the
+        // specific message — COALESCE keeps it instead of replacing it with
+        // the terminal event's vaguer wording.
+        db.prepare(
+          `UPDATE sessions
+             SET status = 'error',
+                 error_message = COALESCE(?, error_message, 'Agent turn failed'),
+                 error_category = COALESCE(?, error_category, 'internal'),
+                 updated_at = datetime('now')
+           WHERE id = ?`
+        ).run(outcome.error?.message ?? null, outcome.error?.category ?? null, event.sessionId);
+      } else {
+        db.prepare(
+          `UPDATE sessions SET status = 'idle', error_message = NULL, error_category = NULL, updated_at = datetime('now')
+           WHERE id = ?`
+        ).run(event.sessionId);
+      }
+    })();
     return { ok: true, value: undefined };
   } catch (error) {
-    const msg = getErrorMessage(error);
-    console.error(`[AgentPersistence] Failed to persist session.started:`, msg);
-    return { ok: false, error: msg };
+    return failed("turn.ended", error);
+  }
+}
+
+// ============================================================================
+// Session state
+// ============================================================================
+
+/**
+ * Optimistic "the agent is working" flip, written by the send command before
+ * the wire ack. The engine has no event for it (a turn is admitted, not
+ * "started" by the product) — deus owns this transition.
+ */
+export function persistSessionWorking(sessionId: string, sentAt: string): WriteResult<void> {
+  const db = getDatabase();
+  try {
+    db.prepare(
+      `UPDATE sessions
+         SET status = 'working', last_user_message_at = ?, error_message = NULL, error_category = NULL,
+             updated_at = datetime('now')
+       WHERE id = ?`
+    ).run(sentAt, sessionId);
+    return { ok: true, value: undefined };
+  } catch (error) {
+    return failed("session working", error);
   }
 }
 
 /** Update session status to "needs_plan_response" when agent requests plan approval. */
 export function persistSessionNeedsPlanResponse(sessionId: string): WriteResult<void> {
   const db = getDatabase();
-
   try {
     db.prepare(
       `UPDATE sessions SET status = 'needs_plan_response', updated_at = datetime('now') WHERE id = ?`
     ).run(sessionId);
     return { ok: true, value: undefined };
   } catch (error) {
-    const msg = getErrorMessage(error);
-    console.error(`[AgentPersistence] Failed to persist needs_plan_response:`, msg);
-    return { ok: false, error: msg };
+    return failed("needs_plan_response", error);
   }
 }
 
 /** Update session status to "needs_response" when agent asks user a question. */
 export function persistSessionNeedsResponse(sessionId: string): WriteResult<void> {
   const db = getDatabase();
-
   try {
     db.prepare(
       `UPDATE sessions SET status = 'needs_response', updated_at = datetime('now') WHERE id = ?`
     ).run(sessionId);
     return { ok: true, value: undefined };
   } catch (error) {
-    const msg = getErrorMessage(error);
-    console.error(`[AgentPersistence] Failed to persist needs_response:`, msg);
-    return { ok: false, error: msg };
+    return failed("needs_response", error);
   }
 }
 
 /** Restore session status to "working" when a pending request is resolved. */
 export function persistSessionBackToWorking(sessionId: string): WriteResult<void> {
   const db = getDatabase();
-
   try {
     db.prepare(
       `UPDATE sessions SET status = 'working', updated_at = datetime('now')
@@ -241,123 +268,121 @@ export function persistSessionBackToWorking(sessionId: string): WriteResult<void
     ).run(sessionId);
     return { ok: true, value: undefined };
   } catch (error) {
-    const msg = getErrorMessage(error);
-    console.error(`[AgentPersistence] Failed to restore working status:`, msg);
-    return { ok: false, error: msg };
-  }
-}
-
-/** Update session status to "idle" when a turn completes. */
-export function persistSessionIdle(event: SessionIdleEvent): WriteResult<void> {
-  const db = getDatabase();
-
-  try {
-    db.prepare(
-      `UPDATE sessions SET status = 'idle', error_message = NULL, error_category = NULL, updated_at = datetime('now') WHERE id = ?`
-    ).run(event.sessionId);
-    return { ok: true, value: undefined };
-  } catch (error) {
-    const msg = getErrorMessage(error);
-    console.error(`[AgentPersistence] Failed to persist session.idle:`, msg);
-    return { ok: false, error: msg };
+    return failed("working status", error);
   }
 }
 
 /** Persist the live context gauge onto the session row (composer indicator). */
-export function persistSessionContextUsage(event: SessionContextUsageEvent): WriteResult<void> {
+export function persistSessionUsage(event: SessionUsageEvent): WriteResult<void> {
   const db = getDatabase();
-
   try {
     // Claude reports `used` on every model message but `size` only on the
     // final result — a size-less event must not zero the percent mid-turn
-    // (and codex-sdk never reports size at all).
+    // (and codex-sdk never reports size at all). The COALESCE is the whole
+    // sticky merge; there is no second merge in memory anymore.
     const percent = event.size ? Math.min((event.used / event.size) * 100, 100) : null;
     db.prepare(
-      `UPDATE sessions SET context_token_count = ?, context_used_percent = COALESCE(?, context_used_percent), updated_at = datetime('now') WHERE id = ?`
+      `UPDATE sessions
+         SET context_token_count = ?, context_used_percent = COALESCE(?, context_used_percent),
+             updated_at = datetime('now')
+       WHERE id = ?`
     ).run(event.used, percent, event.sessionId);
     return { ok: true, value: undefined };
   } catch (error) {
-    const msg = getErrorMessage(error);
-    console.error(`[AgentPersistence] Failed to persist session.contextUsage:`, msg);
-    return { ok: false, error: msg };
+    return failed("session.usage", error);
   }
 }
 
 /** Update session status to "error" with error details. */
-export function persistSessionError(event: SessionErrorEvent): WriteResult<void> {
+export function persistSessionError(
+  sessionId: string,
+  message: string,
+  category: string
+): WriteResult<void> {
   const db = getDatabase();
-
   try {
     db.prepare(
-      `UPDATE sessions SET status = 'error', error_message = ?, error_category = ?, updated_at = datetime('now') WHERE id = ?`
-    ).run(event.error, event.category, event.sessionId);
+      `UPDATE sessions SET status = 'error', error_message = ?, error_category = ?, updated_at = datetime('now')
+       WHERE id = ?`
+    ).run(message, category, sessionId);
     return { ok: true, value: undefined };
   } catch (error) {
-    const msg = getErrorMessage(error);
-    console.error(`[AgentPersistence] Failed to persist session.error:`, msg);
-    return { ok: false, error: msg };
-  }
-}
-
-/** Update session status after cancellation (back to idle). */
-export function persistSessionCancelled(event: SessionCancelledEvent): WriteResult<void> {
-  const db = getDatabase();
-
-  try {
-    db.prepare(
-      `UPDATE sessions SET status = 'idle', error_message = NULL, error_category = NULL, updated_at = datetime('now') WHERE id = ?`
-    ).run(event.sessionId);
-    return { ok: true, value: undefined };
-  } catch (error) {
-    const msg = getErrorMessage(error);
-    console.error(`[AgentPersistence] Failed to persist session.cancelled:`, msg);
-    return { ok: false, error: msg };
+    return failed("session error", error);
   }
 }
 
 // ============================================================================
-// Metadata writes
+// Metadata
 // ============================================================================
 
-/** Store the agent-provider session ID for resume support. */
-export function persistAgentSessionId(event: AgentSessionIdEvent): WriteResult<void> {
+/** Store the harness-native session id so the next turn can resume it. */
+export function persistAgentSessionId(
+  sessionId: string,
+  nativeSessionId: string
+): WriteResult<void> {
   const db = getDatabase();
-
   try {
     db.prepare(
       `UPDATE sessions SET agent_session_id = ?, updated_at = datetime('now') WHERE id = ?`
-    ).run(event.agentSessionId, event.sessionId);
+    ).run(nativeSessionId, sessionId);
     return { ok: true, value: undefined };
   } catch (error) {
-    const msg = getErrorMessage(error);
-    console.error(`[AgentPersistence] Failed to persist agent.session_id:`, msg);
-    return { ok: false, error: msg };
+    return failed("session.created", error);
   }
 }
 
 /** Update session title and auto-set workspace title if not already set. */
-export function persistSessionTitle(event: SessionTitleEvent): WriteResult<void> {
+export function persistSessionTitle(sessionId: string, title: string): WriteResult<void> {
   const db = getDatabase();
-
   try {
     db.transaction(() => {
-      // Always update session title
       db.prepare(`UPDATE sessions SET title = ?, updated_at = datetime('now') WHERE id = ?`).run(
-        event.title,
-        event.sessionId
+        title,
+        sessionId
       );
-
       // Auto-set workspace title only if not already set (preserves PR titles and user renames)
       db.prepare(
         `UPDATE workspaces SET title = ?
          WHERE id = (SELECT workspace_id FROM sessions WHERE id = ?)
          AND title IS NULL`
-      ).run(event.title, event.sessionId);
+      ).run(title, sessionId);
     })();
     return { ok: true, value: undefined };
   } catch (error) {
-    const msg = getErrorMessage(error);
-    console.error(`[AgentPersistence] Failed to persist session.title:`, msg);
-    return { ok: false, error: msg };
+    return failed("session title", error);
+  }
+}
+
+/**
+ * Upsert the compaction entity. It is ID-addressed and positional: the first
+ * event anchors it (created_at), later upserts advance status/summary/tokens
+ * without moving it, so the divider keeps its place in a replayed transcript.
+ */
+export function persistCompaction(event: SessionCompactionEvent): WriteResult {
+  const db = getDatabase();
+  try {
+    db.prepare(
+      `INSERT INTO compactions (compaction_id, session_id, turn_id, status, trigger, pre_tokens, post_tokens, summary, created_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+       ON CONFLICT(compaction_id) DO UPDATE SET
+         status = excluded.status,
+         trigger = COALESCE(excluded.trigger, compactions.trigger),
+         pre_tokens = COALESCE(excluded.pre_tokens, compactions.pre_tokens),
+         post_tokens = COALESCE(excluded.post_tokens, compactions.post_tokens),
+         summary = COALESCE(excluded.summary, compactions.summary)`
+    ).run(
+      event.compactionId,
+      event.sessionId,
+      event.turnId,
+      event.status,
+      event.trigger ?? null,
+      event.preTokens ?? null,
+      event.postTokens ?? null,
+      event.summary ?? null,
+      iso(event.timestamp)
+    );
+    return { ok: true, value: event.compactionId };
+  } catch (error) {
+    return failed("session.compaction", error);
   }
 }

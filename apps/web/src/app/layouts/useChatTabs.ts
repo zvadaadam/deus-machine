@@ -45,14 +45,14 @@ function createPendingTab(): PendingChatTab {
     kind: "pending",
     id: "tab-default",
     label: NEW_CHAT_LABEL,
-    agentHarness: "claude",
+    agentHarness: "claude-code",
     hasStarted: false,
   };
 }
 
 function createPlaceholderSessionTab(
   sessionId: string,
-  agentHarness: AgentHarness = "claude",
+  agentHarness: AgentHarness = "claude-code",
   initialModel?: string
 ): SessionChatTab {
   return {
@@ -306,7 +306,7 @@ export function useChatTabs({ workspaceId, activeSessionId }: UseChatTabsOptions
     async (initialModel?: string) => {
       try {
         const newSession = await createSessionMutation.mutateAsync(workspaceId);
-        const agentHarness = initialModel ? getAgentHarnessForModel(initialModel) : "claude";
+        const agentHarness = initialModel ? getAgentHarnessForModel(initialModel) : "claude-code";
         const newTab = createPlaceholderSessionTab(newSession.id, agentHarness, initialModel);
         setMainTabs((prevTabs) => [...prevTabs, newTab]);
         setActiveMainTabId(newTab.id);

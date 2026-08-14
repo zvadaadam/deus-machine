@@ -178,16 +178,10 @@ export interface ToolRequestEventData {
   timeoutMs: number;
 }
 
-// ---- Part Lifecycle Event Payloads ----
+// ---- Agent Lifecycle Event Payload ----
 
-/** Payload shape for q:event with event: "part:created".
- *  Pushed by the backend when a new part begins streaming. */
-export type PartCreatedEventData = Omit<import("../agent-events").PartCreatedEvent, "type">;
-
-/** Payload shape for q:event with event: "part:delta".
- *  Pushed by the backend for each streaming text token. High-frequency, not persisted. */
-export type PartDeltaEventData = Omit<import("../agent-events").PartDeltaEvent, "type">;
-
-/** Payload shape for q:event with event: "part:done".
- *  Pushed by the backend when a part is finalized. Also persisted to DB. */
-export type PartDoneEventData = Omit<import("../agent-events").PartDoneEvent, "type">;
+/** Payload for q:event with event: "agent:event" — one sequenced
+ *  @zvada/agent-server lifecycle envelope, forwarded verbatim. Deus reshapes
+ *  nothing: the frontend folds these with the engine's own reducer and gets
+ *  `seq` ordering/dedupe for free. */
+export type AgentEventData = import("../protocol-types").WireEventEnvelope;

@@ -63,29 +63,40 @@ describe("database pre-launch schema bootstrap", () => {
     expect(() => initDatabase()).toThrow("Reset it by deleting deus.db");
   });
 
-  it("throws a reset hint for stale codex harness rows", async () => {
-    vi.spyOn(console, "error").mockImplementation(() => {});
-    vi.spyOn(console, "log").mockImplementation(() => {});
-    const dbPath = path.join(tempDir, "stale-codex.db");
-    const staleDb = new Database(dbPath);
-    staleDb.exec(SCHEMA_SQL);
-    staleDb
-      .prepare("INSERT INTO repositories (id, name, root_path) VALUES ('repo-1', 'Repo', '/repo')")
-      .run();
-    staleDb
-      .prepare("INSERT INTO workspaces (id, repository_id, slug) VALUES ('ws-1', 'repo-1', 'ws-1')")
-      .run();
-    staleDb
-      .prepare(
-        "INSERT INTO sessions (id, workspace_id, agent_harness) VALUES ('sess-1', 'ws-1', 'codex')"
-      )
-      .run();
-    staleDb.close();
-    process.env.DATABASE_PATH = dbPath;
+  // Harness ids are the engine's now (claude-code / codex-app-server); a row
+  // carrying any retired spelling means the DB predates the protocol switch.
+  it.each(["codex", "claude", "codex-server"])(
+    "throws a reset hint for the retired harness value %s",
+    async (retired) => {
+      vi.spyOn(console, "error").mockImplementation(() => {});
+      vi.spyOn(console, "log").mockImplementation(() => {});
+      const dbPath = path.join(tempDir, `stale-${retired}.db`);
+      const staleDb = new Database(dbPath);
+      staleDb.exec(SCHEMA_SQL);
+      staleDb
+        .prepare(
+          "INSERT INTO repositories (id, name, root_path) VALUES ('repo-1', 'Repo', '/repo')"
+        )
+        .run();
+      staleDb
+        .prepare(
+          "INSERT INTO workspaces (id, repository_id, slug) VALUES ('ws-1', 'repo-1', 'ws-1')"
+        )
+        .run();
+      staleDb
+        .prepare(
+          "INSERT INTO sessions (id, workspace_id, agent_harness) VALUES ('sess-1', 'ws-1', ?)"
+        )
+        .run(retired);
+      staleDb.close();
+      process.env.DATABASE_PATH = dbPath;
 
-    const { initDatabase } = await import("../../../src/lib/database");
+      const { initDatabase } = await import("../../../src/lib/database");
 
-    expect(() => initDatabase()).toThrow("Found stale sessions.agent_harness value: codex");
-    expect(() => initDatabase()).toThrow("Reset it by deleting deus.db");
-  });
+      expect(() => initDatabase()).toThrow(
+        `Found retired sessions.agent_harness value: ${retired}`
+      );
+      expect(() => initDatabase()).toThrow("Reset it by deleting deus.db");
+    }
+  );
 });

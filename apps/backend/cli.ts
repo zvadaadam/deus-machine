@@ -7,8 +7,8 @@
 // 2. Spawns the agent-server bundle
 // 3. Connects backend-style (AgentServerClient + deus side channel + hello)
 // 4. Starts a turn with the backend's REAL run-config assembly
-// 5. Feeds every envelope through the backend's REAL LifecycleTranslator and
-//    persists the resulting AgentEvents (mimicking the event handler's SQL)
+// 5. Feeds every envelope through the same persistence decisions the event
+//    handler makes, over the canonical lifecycle stream (no translation)
 // 6. Dumps the DB to verify everything stored correctly
 //
 // Usage:
@@ -28,9 +28,8 @@ import {
   claimSideChannel,
   wsLineTransport,
 } from "@shared/agent-side-channel";
-import type { AgentEvent } from "@shared/agent-events";
 import type { AgentHarness } from "@shared/enums";
-import { LifecycleTranslator } from "./src/services/agent/translate/translator";
+import type { LifecycleEvent } from "@zvada/agent-server/protocol";
 import { buildTurnStartParams } from "./src/services/agent/run-config";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -67,7 +66,13 @@ function banner(text: string) {
 // ---------------------------------------------------------------------------
 
 function getDbPath(): string {
-  return path.join(os.homedir(), "Library", "Application Support", "com.deus.app", "deus.db");
+  // DATABASE_PATH wins, same as the backend — so a verification run can point
+  // at a scratch file instead of the user's real database (which, under the
+  // pre-launch reset policy, may still be on an older schema).
+  return (
+    process.env.DATABASE_PATH ||
+    path.join(os.homedir(), "Library", "Application Support", "com.deus.app", "deus.db")
+  );
 }
 
 function sql(dbPath: string, query: string): string {
@@ -112,13 +117,11 @@ function ensureSchema(dbPath: string) {
   // source schema directly; stale local DBs should be reset rather than migrated.
   const schemaMatch = schemaContent.match(/export const SCHEMA_SQL = `([\s\S]*?)`;/);
   if (schemaMatch) {
-    const schemaSql = schemaMatch[1];
-    try {
-      execSync(`sqlite3 "${dbPath}" "${schemaSql.replace(/"/g, '\\"').replace(/\n/g, " ")}"`, {
-        timeout: 5000,
-      });
-    } catch {
-      /* tables already exist */
+    // Feed it through a file: the schema carries `--` line comments, so
+    // flattening it onto one line would comment the whole thing out.
+    if (!sqlRun(dbPath, schemaMatch[1])) {
+      console.log(`  ${c.red}Schema init failed — delete ${dbPath} and retry${c.reset}`);
+      process.exit(1);
     }
   }
 }
@@ -163,7 +166,7 @@ function parseArgs() {
   }
 
   return {
-    agent: opts.agent || "claude",
+    agent: opts.agent || "claude-code",
     cwd: opts.cwd || process.cwd(),
     prompt: positional.join(" ") || "Say exactly: HELLO WORLD. No skills or agents.",
     dbOnly,
@@ -180,7 +183,7 @@ function dumpSession(dbPath: string, sessionId: string): number {
   console.log(`\n  ${c.bold}Messages${c.reset}`);
   const messages = sql(
     dbPath,
-    `SELECT id, role, stop_reason, seq FROM messages WHERE session_id='${sessionId}' ORDER BY seq;`
+    `SELECT id, role, turn_stop_reason, seq FROM messages WHERE session_id='${sessionId}' ORDER BY seq;`
   );
   if (messages) {
     for (const line of messages.split("\n")) {
@@ -264,23 +267,19 @@ async function main() {
 
   sqlRun(
     dbPath,
-    `INSERT OR IGNORE INTO repositories (id, path, name) VALUES ('${repoId}', '${opts.cwd.replace(/'/g, "''")}', 'cli-test');`
+    `INSERT OR IGNORE INTO repositories (id, name, root_path) VALUES ('${repoId}', 'cli-test', '${opts.cwd.replace(/'/g, "''")}');`
   );
   sqlRun(
     dbPath,
-    `INSERT OR IGNORE INTO workspaces (id, repository_id, name, branch, worktree_path, state) VALUES ('${workspaceId}', '${repoId}', 'cli-test', 'main', '${opts.cwd.replace(/'/g, "''")}', 'ready');`
+    `INSERT OR IGNORE INTO workspaces (id, repository_id, slug, state) VALUES ('${workspaceId}', '${repoId}', 'cli-test', 'ready');`
   );
   sqlRun(
     dbPath,
     `INSERT INTO sessions (id, workspace_id, agent_harness, status) VALUES ('${sessionId}', '${workspaceId}', '${opts.agent}', 'idle');`
   );
 
-  // Insert user message
-  const userMsgId = uuid7();
-  sqlRun(
-    dbPath,
-    `INSERT INTO messages (id, session_id, role, content, sent_at) VALUES ('${userMsgId}', '${sessionId}', 'user', '${opts.prompt.replace(/'/g, "''")}', datetime('now'));`
-  );
+  // No user message row is seeded: the engine echoes the prompt back as
+  // message.started{role:"user"} and THAT is what persists it.
 
   console.log(`  ${c.green}Session created:${c.reset} ${sessionId}`);
 
@@ -337,89 +336,111 @@ async function main() {
     `  ${c.green}Handshake:${c.reset} v${init.protocolVersion} harnesses=[${Object.keys(init.harnesses).join(", ")}]`
   );
 
-  // 5. The backend's REAL translation: LifecycleEvent envelopes → AgentEvents,
-  // persisted with the same SQL shapes the event handler uses.
+  // 5. The canonical stream, persisted with the same SQL shapes the event
+  // handler uses. No translation layer — this is the protocol verbatim.
   let turnDone = false;
-  let partSeq = 0;
 
   banner("Events");
 
-  const handleAgentEvent = (event: AgentEvent): void => {
+  const handleEvent = (event: LifecycleEvent): void => {
     let color = c.cyan;
     if (event.type.startsWith("turn.") || event.type.startsWith("session.")) color = c.magenta;
-    if (event.type.startsWith("part.")) color = c.green;
+    if (event.type.startsWith("message.part")) color = c.green;
     if (event.type.startsWith("message.")) color = c.blue;
-    if (event.type.includes("error")) color = c.red;
+    if (event.type === "error") color = c.red;
 
     let detail = "";
     switch (event.type) {
-      case "message.created":
-        detail = `messageId=${event.messageId}`;
+      case "session.created":
+        detail = `native=${event.nativeSessionId}${event.resumed === false ? " resumed=false" : ""}`;
         sqlRun(
           dbPath,
-          `INSERT OR REPLACE INTO messages (id, session_id, role, sent_at) VALUES ('${event.messageId}', '${sessionId}', 'assistant', datetime('now'));`
+          `UPDATE sessions SET agent_session_id='${event.nativeSessionId}' WHERE id='${sessionId}';`
+        );
+        detail += ` ${c.green}→ DB UPDATE${c.reset}`;
+        break;
+
+      case "message.started": {
+        detail = `${event.role} messageId=${event.messageId}`;
+        const model = event.model ? `'${event.model}'` : "NULL";
+        const parent = event.parentToolCallId ? `'${event.parentToolCallId}'` : "NULL";
+        sqlRun(
+          dbPath,
+          `INSERT OR REPLACE INTO messages (id, session_id, role, turn_id, model, sent_at, parent_tool_call_id) VALUES ('${event.messageId}', '${sessionId}', '${event.role}', '${event.turnId}', ${model}, '${new Date(event.timestamp).toISOString()}', ${parent});`
         );
         detail += ` ${c.green}→ DB INSERT${c.reset}`;
         break;
+      }
 
-      case "part.created":
-        detail = `${event.part.type} partId=${event.partId}`;
-        break;
-
-      case "part.delta":
-        detail = `delta="${(event.delta || "").slice(0, 40)}"`;
-        break;
-
-      case "part.done": {
+      case "message.part": {
         const part = event.part;
         const partData = JSON.stringify(part).replace(/'/g, "''");
-        const toolCallId = part.type === "TOOL" ? part.toolCallId || "" : "";
-        const toolName = part.type === "TOOL" ? part.toolName || "" : "";
-        const parentId = part.parentToolCallId || "";
+        const toolCallId = part.type === "tool" ? `'${part.toolCallId}'` : "NULL";
+        const toolName = part.type === "tool" ? `'${part.toolName}'` : "NULL";
+        const parentId = part.parentToolCallId ? `'${part.parentToolCallId}'` : "NULL";
         const ok = sqlRun(
           dbPath,
-          `INSERT OR REPLACE INTO parts (id, message_id, session_id, seq, type, data, tool_call_id, tool_name, parent_tool_call_id) VALUES ('${event.partId}', '${event.messageId}', '${sessionId}', ${partSeq++}, '${part.type}', '${partData}', '${toolCallId}', '${toolName}', '${parentId}');`
+          `INSERT OR REPLACE INTO parts (id, message_id, session_id, seq, type, data, tool_call_id, tool_name, parent_tool_call_id) VALUES ('${part.id}', '${event.messageId}', '${sessionId}', ${event.partIndex}, '${part.type}', '${partData}', ${toolCallId}, ${toolName}, ${parentId});`
         );
-        detail = `${part.type} partId=${event.partId} ${ok ? `${c.green}→ DB INSERT${c.reset}` : `${c.red}→ DB FAIL${c.reset}`}`;
+        detail = `${part.type} partId=${part.id} ${ok ? `${c.green}→ DB UPSERT${c.reset}` : `${c.red}→ DB FAIL${c.reset}`}`;
         break;
       }
 
-      case "message.done":
-        detail = `stopReason=${event.stopReason || "none"}`;
+      case "message.part.delta":
+        detail = `${event.delta.type} partId=${event.partId}`;
+        break;
+
+      case "message.ended":
+        detail = `messageId=${event.messageId}`;
+        break;
+
+      case "turn.ended": {
+        detail = `stopReason=${event.stopReason}${event.cost !== undefined ? ` cost=${event.cost}` : ""}`;
+        const tokens = event.tokens
+          ? `'${JSON.stringify(event.tokens).replace(/'/g, "''")}'`
+          : "NULL";
+        const cost = event.cost ?? "NULL";
+        const cancelledAt =
+          event.stopReason === "cancelled"
+            ? `'${new Date(event.timestamp).toISOString()}'`
+            : "NULL";
         sqlRun(
           dbPath,
-          `UPDATE messages SET stop_reason='${event.stopReason || ""}' WHERE id='${event.messageId}';`
+          `UPDATE messages SET tokens=COALESCE(${tokens}, tokens), cost=COALESCE(${cost}, cost), turn_stop_reason='${event.stopReason}', cancelled_at=COALESCE(${cancelledAt}, cancelled_at) WHERE id = (SELECT id FROM messages WHERE session_id='${sessionId}' AND turn_id='${event.turnId}' AND role='assistant' AND parent_tool_call_id IS NULL ORDER BY seq DESC LIMIT 1);`
         );
-        detail += ` ${c.green}→ DB UPDATE${c.reset}`;
-        break;
-
-      case "turn.completed":
-        detail = `finishReason=${event.finishReason || "none"}`;
-        break;
-
-      case "agent.session_id":
-        detail = `agentSessionId=${event.agentSessionId}`;
         sqlRun(
           dbPath,
-          `UPDATE sessions SET agent_session_id='${event.agentSessionId}' WHERE id='${sessionId}';`
+          `UPDATE sessions SET status='${event.stopReason === "error" ? "error" : "idle"}' WHERE id='${sessionId}';`
         );
         detail += ` ${c.green}→ DB UPDATE${c.reset}`;
+        turnDone = true;
+        break;
+      }
+
+      case "session.usage":
+        detail = `used=${event.used}${event.size ? `/${event.size}` : ""}`;
         break;
 
-      case "session.idle":
-        sqlRun(dbPath, `UPDATE sessions SET status='idle' WHERE id='${sessionId}';`);
-        turnDone = true;
-        detail = "→ turn complete";
+      case "session.compaction": {
+        detail = `compactionId=${event.compactionId} status=${event.status}`;
+        const summary = event.summary ? `'${event.summary.replace(/'/g, "''")}'` : "NULL";
+        sqlRun(
+          dbPath,
+          `INSERT INTO compactions (compaction_id, session_id, turn_id, status, trigger, pre_tokens, post_tokens, summary, created_at) VALUES ('${event.compactionId}', '${sessionId}', '${event.turnId}', '${event.status}', ${event.trigger ? `'${event.trigger}'` : "NULL"}, ${event.preTokens ?? "NULL"}, ${event.postTokens ?? "NULL"}, ${summary}, '${new Date(event.timestamp).toISOString()}') ON CONFLICT(compaction_id) DO UPDATE SET status=excluded.status, summary=COALESCE(excluded.summary, compactions.summary), post_tokens=COALESCE(excluded.post_tokens, compactions.post_tokens);`
+        );
+        detail += ` ${c.green}→ DB UPSERT${c.reset}`;
         break;
+      }
 
-      case "session.cancelled":
-        turnDone = true;
-        detail = "→ cancelled";
-        break;
-
-      case "session.error":
-        detail = event.error || "unknown";
-        turnDone = true;
+      case "error":
+        detail = `${event.category}${event.recoverable ? " (recoverable)" : ""}: ${event.message}`;
+        if (!event.recoverable) {
+          sqlRun(
+            dbPath,
+            `UPDATE sessions SET status='error', error_message='${event.message.replace(/'/g, "''")}', error_category='${event.category}' WHERE id='${sessionId}';`
+          );
+          turnDone = true;
+        }
         break;
 
       default:
@@ -429,12 +450,7 @@ async function main() {
     console.log(`${ts()} ${c.green}◂${c.reset} ${color}${c.bold}${event.type}${c.reset} ${detail}`);
   };
 
-  const translator = new LifecycleTranslator({
-    emit: handleAgentEvent,
-    // The quick-ack can race the first envelopes; the fallback keeps them.
-    resolveHarness: () => opts.agent as AgentHarness,
-  });
-  client.onEvent((envelope) => translator.handle(envelope));
+  client.onEvent((envelope) => handleEvent(envelope.event));
 
   // 6. Start the turn with the backend's REAL run-config assembly
   banner("Sending Turn");
@@ -444,8 +460,8 @@ async function main() {
   const params = buildTurnStartParams(sessionId, turnId, opts.agent as AgentHarness, opts.prompt, {
     cwd: opts.cwd,
     permissionMode: "default",
+    supportsImages: init.harnesses[opts.agent]?.images ?? false,
   });
-  translator.beginTurn(sessionId, opts.agent as AgentHarness, turnId);
   await client.startTurn(params);
 
   // 7. Wait for completion

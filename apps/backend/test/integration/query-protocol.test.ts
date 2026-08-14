@@ -89,7 +89,7 @@ function seedTestData() {
     .prepare(
       `
     INSERT INTO sessions (id, workspace_id, agent_harness, status)
-    VALUES (?, ?, 'claude', 'idle')
+    VALUES (?, ?, 'claude-code', 'idle')
   `
     )
     .run(SESS_ID, WS_ID);
@@ -762,7 +762,8 @@ describe("q:command → q:command_ack", () => {
             sessionId: SESS_ID,
             content: "command test",
             model: "sonnet",
-            agentHarness: "claude",
+            agentHarness: "claude-code",
+            turnId: "turn-cmd-1",
           },
         },
         "q:command_ack"
@@ -770,20 +771,17 @@ describe("q:command → q:command_ack", () => {
 
       expect(res.id).toBe("cmd-1");
       expect(res.accepted).toBe(true);
-      expect(res.commandId).toEqual(expect.any(String));
+      // The ack carries the TURN id: the user's message row is minted by the
+      // engine's echo (message.started{role:"user"}), not by this command, so
+      // there is no message id to hand back at ack time.
+      expect(res.commandId).toBe("turn-cmd-1");
 
-      // Verify message was persisted
-      const messageRow = testDb
-        .prepare("SELECT session_id, role, content, model FROM messages WHERE id = ?")
-        .get(res.commandId) as
-        | { session_id: string; role: string; content: string; model: string }
-        | undefined;
-      expect(messageRow).toEqual({
-        session_id: SESS_ID,
-        role: "user",
-        content: "command test",
-        model: "sonnet",
-      });
+      // No user message row is written here — the send only flips the session
+      // (the 3 seeded messages are all that remain).
+      const messageCount = testDb
+        .prepare("SELECT count(*) as n FROM messages WHERE session_id = ?")
+        .get(SESS_ID) as { n: number };
+      expect(messageCount.n).toBe(3);
 
       // Verify session status — without a running agent server, the session
       // transitions to "error" because handleSendMessage persists an error
@@ -874,7 +872,7 @@ describe("q:command → q:command_ack", () => {
             sessionId: SESS_ID,
             content: "delta check",
             model: "claude-sonnet-4-6",
-            agentHarness: "claude",
+            agentHarness: "claude-code",
           },
         })
       );

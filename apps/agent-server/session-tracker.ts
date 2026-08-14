@@ -8,10 +8,10 @@
 // Deus's backend always mints sessionId/turnId client-side (uuidv7) and sends
 // both on turn/start — a request without a sessionId is simply not tracked.
 
-import type { EngineHarness } from "@shared/enums";
+import type { AgentHarness } from "@zvada/agent-server/protocol";
 
 export interface TrackedSession {
-  harness: EngineHarness;
+  harness: AgentHarness;
   cwd: string;
   additionalDirectories?: string[];
   /** Set while a turn is running; cleared on turn.ended. */
@@ -34,7 +34,7 @@ export function observeTurnStart(params: {
   const existing = trackedSessions.get(sessionId);
   trackedSessions.set(sessionId, {
     ...existing,
-    harness: config.harness as EngineHarness,
+    harness: config.harness as AgentHarness,
     cwd: config.cwd,
     additionalDirectories: config.additionalDirectories,
     turnId: params.turnId ?? existing?.turnId,

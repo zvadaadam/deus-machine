@@ -35,10 +35,10 @@ export interface AgentConfig {
 }
 
 export const AGENT_CONFIGS = {
-  claude: {
-    id: "claude",
+  "claude-code": {
+    id: "claude-code",
     label: "Claude Code",
-    thinkingLevels: ["LOW", "MEDIUM", "HIGH"],
+    thinkingLevels: ["low", "medium", "high"],
     models: [
       // Claude 5 family (Mythos-class Fable on top). These models require
       // thinking enabled — no NONE level (they 400 on thinking.type.disabled).
@@ -46,39 +46,39 @@ export const AGENT_CONFIGS = {
         model: "claude-fable-5[1m]",
         label: "Fable 5 1M",
         isNew: true,
-        thinkingLevels: ["LOW", "MEDIUM", "HIGH", "XHIGH"],
+        thinkingLevels: ["low", "medium", "high", "xhigh"],
       },
       {
         model: "claude-fable-5",
         label: "Fable 5",
         isNew: true,
-        thinkingLevels: ["LOW", "MEDIUM", "HIGH", "XHIGH"],
+        thinkingLevels: ["low", "medium", "high", "xhigh"],
       },
       {
         model: "claude-opus-5[1m]",
         label: "Opus 5 1M",
-        thinkingLevels: ["LOW", "MEDIUM", "HIGH", "XHIGH"],
+        thinkingLevels: ["low", "medium", "high", "xhigh"],
       },
       {
         model: "claude-opus-5",
         label: "Opus 5",
-        thinkingLevels: ["LOW", "MEDIUM", "HIGH", "XHIGH"],
+        thinkingLevels: ["low", "medium", "high", "xhigh"],
       },
       {
         model: "claude-sonnet-5",
         label: "Sonnet 5",
-        thinkingLevels: ["LOW", "MEDIUM", "HIGH", "XHIGH"],
+        thinkingLevels: ["low", "medium", "high", "xhigh"],
       },
       // Previous generation
       {
         model: "claude-opus-4-7[1m]",
         label: "Opus 4.7 1M",
-        thinkingLevels: ["LOW", "MEDIUM", "HIGH", "XHIGH"],
+        thinkingLevels: ["low", "medium", "high", "xhigh"],
       },
       {
         model: "claude-opus-4-7",
         label: "Opus 4.7",
-        thinkingLevels: ["LOW", "MEDIUM", "HIGH", "XHIGH"],
+        thinkingLevels: ["low", "medium", "high", "xhigh"],
       },
       { model: "claude-sonnet-4-6", label: "Sonnet 4.6" },
       { model: "claude-opus-4-6[1m]", label: "Opus 4.6 1M" },
@@ -88,17 +88,17 @@ export const AGENT_CONFIGS = {
   "codex-sdk": {
     id: "codex-sdk",
     label: "Codex SDK",
-    thinkingLevels: ["LOW", "MEDIUM", "HIGH"],
+    thinkingLevels: ["low", "medium", "high"],
     models: [
       { model: "gpt-5.3-codex", label: "GPT-5.3 Codex", isNew: true },
       { model: "gpt-5.2-codex", label: "GPT-5.2 Codex" },
       { model: "gpt-5.3-codex-spark", label: "Codex Spark" },
     ],
   },
-  "codex-server": {
-    id: "codex-server",
+  "codex-app-server": {
+    id: "codex-app-server",
     label: "Codex",
-    thinkingLevels: ["LOW", "MEDIUM", "HIGH", "XHIGH"],
+    thinkingLevels: ["low", "medium", "high", "xhigh"],
     models: [
       // gpt-5.6-sol is the current Codex flagship (ChatGPT-auth accounts run
       // it as their default; bare "gpt-5.6" and the -codex variants are not
@@ -112,13 +112,13 @@ export const AGENT_CONFIGS = {
 
 // User-facing model picker groups. The legacy `codex-sdk` harness remains
 // registered in AGENT_CONFIGS for CLI/backend compatibility, but new frontend
-// sessions should route through the current Codex harness.
+// sessions should route through the current Codex harness (`codex-app-server`).
 export const MODEL_PICKER_GROUPS = [
-  AGENT_CONFIGS.claude,
-  AGENT_CONFIGS["codex-server"],
+  AGENT_CONFIGS["claude-code"],
+  AGENT_CONFIGS["codex-app-server"],
 ] as const satisfies readonly AgentConfig[];
 
-export const DEFAULT_AGENT_HARNESS = "claude" satisfies AgentHarness;
+export const DEFAULT_AGENT_HARNESS = "claude-code" satisfies AgentHarness;
 export const DEFAULT_MODEL = `${DEFAULT_AGENT_HARNESS}:${AGENT_CONFIGS[DEFAULT_AGENT_HARNESS].models[0].model}`;
 
 export function getKnownAgentConfig(agentHarness: AgentHarness): AgentConfig {

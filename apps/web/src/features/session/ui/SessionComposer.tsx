@@ -30,6 +30,7 @@ import {
   type ThinkingLevel,
 } from "@/shared/agents";
 import { sessionComposerActions, useSessionComposerStore } from "../store/sessionComposerStore";
+import { readThinkingLevel } from "@shared/protocol";
 
 export interface SessionComposerRef {
   /** Send a message bypassing the UI event path. Used by the home-screen
@@ -104,7 +105,10 @@ const ActiveSessionComposer = forwardRef<SessionComposerRef, ActiveProps>(
     ref
   ) {
     const { data: settings } = useSettings();
-    const defaultThinking: ThinkingLevel = settings?.default_thinking_level ?? "HIGH";
+    // Settings written by older builds still hold the retired UPPERCASE
+    // spellings — normalize on read rather than migrating the row.
+    const defaultThinking: ThinkingLevel =
+      readThinkingLevel(settings?.default_thinking_level) ?? "high";
 
     // Session-derived props — everything that needs React Query context.
     // Composer state itself (draft/model/etc.) lives in the store;

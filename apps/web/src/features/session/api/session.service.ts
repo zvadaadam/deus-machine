@@ -7,7 +7,7 @@
  */
 
 import { sendRequest, sendMutate, sendCommand } from "@/platform/ws";
-import type { Session, Message } from "../types";
+import type { Compaction, Session, Message } from "../types";
 import type { AgentHarness } from "@/shared/agents";
 
 /** Pagination params for cursor-based message fetching (seq-based) */
@@ -20,6 +20,8 @@ export interface MessagePaginationParams {
 /** Paginated response shape from GET /sessions/:id/messages */
 export interface PaginatedMessages {
   messages: Message[];
+  /** Compaction markers for the session — positional siblings of messages. */
+  compactions?: Compaction[];
   has_older: boolean;
   has_newer: boolean;
 }

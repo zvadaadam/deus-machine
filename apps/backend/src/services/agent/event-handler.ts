@@ -1,39 +1,73 @@
 // backend/src/services/agent/event-handler.ts
-// Receives canonical AgentEvent notifications from the agent-client and
-// dispatches them to persistence (DB writes) and WS push (query invalidation).
+// The single entry point for agent → backend data flow.
 //
-// This is the single entry point for all agent → backend data flow.
-// Each event is handled: persist first, then invalidate (ordering matters).
+// It consumes the @zvada/agent-server lifecycle stream NATIVELY: one
+// `match(envelope.event)` that persists (DB writes) and pushes (`agent:event`
+// + query invalidation). There is no translation layer — the event that
+// crosses the wire is the event that hits SQLite and the event the frontend
+// folds with the engine's own reducer.
+//
+// Ordering matters: persist first, then invalidate.
 
 import { match } from "ts-pattern";
-import type { AgentEvent } from "@shared/agent-events";
-import type { QueryResource, QServerFrame, ProtocolEvent } from "@shared/types/query-protocol";
+import { classifyError } from "@zvada/agent-server/protocol";
+import type { ErrorEvent, TurnEndedEvent, WireEventEnvelope } from "@zvada/agent-server/protocol";
+import type { QueryResource, QServerFrame } from "@shared/types/query-protocol";
 import { invalidate } from "../query-engine";
 import { broadcast } from "../ws.service";
 import {
-  persistMessageCancelled,
-  persistMessageCreated,
-  persistPartDone,
-  persistMessageDone,
-  persistSessionStarted,
-  persistSessionIdle,
-  persistSessionContextUsage,
-  persistSessionError,
-  persistSessionCancelled,
   persistAgentSessionId,
+  persistCompaction,
+  persistMessageStarted,
+  persistPart,
+  persistSessionError,
   persistSessionTitle,
+  persistSessionUsage,
+  persistTurnEnded,
+  type TurnOutcomeWrite,
   type WriteResult,
 } from "./persistence";
 import { refreshPrSnapshotForSession } from "../pr-snapshot.service";
 
 // ---- Types ----
 
-export type AgentEventHandler = (event: AgentEvent) => void;
+export interface AgentEventHandler {
+  /** Feed one sequenced wire envelope (post-dedupe, in seq order). */
+  handle(envelope: WireEventEnvelope): void;
+  /**
+   * Mirror a turn admission before its quick-ack round-trip, so the handler
+   * knows which turn is live when the first envelopes arrive in the same tick
+   * as the ack. Returns false — touching nothing — when the session already
+   * has a live turn: a concurrent send is about to be rejected with
+   * `turnActive`, and clobbering the running turn's state would lose its error
+   * dedupe. Callers re-register with `force` if the server accepts anyway
+   * (stale local state, e.g. after a backend restart).
+   */
+  beginTurn(sessionId: string, turnId: string, opts?: { force?: boolean }): boolean;
+  /** Roll back a beginTurn whose start was rejected (only if still ours). */
+  abortTurn(sessionId: string, turnId: string): void;
+  /** Side-channel title notification (deus/*, not a lifecycle event). */
+  handleTitle(sessionId: string, title: string): void;
+}
+
+interface SessionState {
+  /** The live turn — cleared at its turn.ended. */
+  turnId?: string;
+  /** One terminal error per turn: turn.ended(error) must not double-report. */
+  errorReported: boolean;
+}
 
 // ---- Resource groups for invalidation ----
 
 const SESSION_RESOURCES: QueryResource[] = ["workspaces", "sessions", "session", "stats"];
 const MESSAGE_RESOURCES: QueryResource[] = ["messages", "session"];
+const TURN_END_RESOURCES: QueryResource[] = [
+  "workspaces",
+  "sessions",
+  "session",
+  "stats",
+  "messages",
+];
 
 // ---- Helpers ----
 
@@ -48,134 +82,211 @@ function persistAndInvalidate(
   }
 }
 
-/** Persist without invalidation. Used for part events where the frontend
- *  receives data via q:event (real-time) — the q:delta system would just
- *  run a wasted DB query since message seq doesn't change on part writes. */
+/** Persist without invalidation — the frontend has the data via agent:event
+ *  already, and a q:delta would just run a wasted query. */
 function persistOnly(result: WriteResult<unknown>): void {
   if (!result.ok) {
     console.warn(`[AgentEvent] Persistence failed:`, result.error);
   }
 }
 
-/** Push a lifecycle event to all frontend connections as a q:event frame.
- *  The frontend filters by sessionId to route events to the correct session view. */
-function pushEvent(event: ProtocolEvent, data: Omit<AgentEvent, "type">): void {
-  const frame: QServerFrame = { type: "q:event", event, data };
+/**
+ * Push one wire envelope to every frontend connection verbatim. The frontend
+ * routes by `sessionId` and orders/dedupes by `seq` — both free because the
+ * envelope is not reshaped on its way through the backend.
+ */
+function pushEnvelope(envelope: WireEventEnvelope): void {
+  const frame: QServerFrame = { type: "q:event", event: "agent:event", data: envelope };
   broadcast(JSON.stringify(frame));
+}
+
+/** The terminal state a stopReason leaves the session in. */
+function turnOutcome(event: TurnEndedEvent, alreadyReported: boolean): TurnOutcomeWrite {
+  if (event.stopReason === "cancelled") {
+    return { status: "idle", cancelled: true };
+  }
+  if (event.stopReason === "error") {
+    // A standalone `error` event already wrote the status + message; the
+    // terminal event must not overwrite it with a vaguer one.
+    if (alreadyReported) return { status: "error", cancelled: false };
+    const message = event.error?.message ?? "Agent turn failed";
+    return {
+      status: "error",
+      cancelled: false,
+      error: { message, category: event.error?.category ?? classifyError(new Error(message)) },
+    };
+  }
+  // end_turn, max_tokens, refusal, max_turn_requests and any adapter
+  // extension: the turn is over and the session is idle. The outcome itself
+  // survives in messages.turn_stop_reason for the UI to explain.
+  return { status: "idle", cancelled: false };
 }
 
 // ---- Factory ----
 
-/** Create the agent event handler: persistence + WS invalidation per event. */
+/** Create the agent event handler: persistence + WS push per lifecycle event. */
 export function createAgentEventHandler(): AgentEventHandler {
-  return function handleAgentEvent(event: AgentEvent): void {
-    match(event)
-      // ── Session lifecycle ─────────────────────────────────────────────
-      .with({ type: "session.started" }, (e) => {
-        console.log(`[AgentEvent] session.started: session=${e.sessionId} agent=${e.agentHarness}`);
-        persistAndInvalidate(persistSessionStarted(e), SESSION_RESOURCES, e.sessionId);
-      })
-      .with({ type: "session.idle" }, (e) => {
-        console.log(`[AgentEvent] session.idle: session=${e.sessionId}`);
-        persistAndInvalidate(persistSessionIdle(e), SESSION_RESOURCES, e.sessionId);
-        // Turn ended — the agent may have created or updated a PR.
-        refreshPrSnapshotForSession(e.sessionId);
-      })
-      .with({ type: "session.contextUsage" }, (e) => {
-        persistAndInvalidate(persistSessionContextUsage(e), SESSION_RESOURCES, e.sessionId);
-      })
-      .with({ type: "session.error" }, (e) => {
-        console.log(`[AgentEvent] session.error: session=${e.sessionId} error=${e.error}`);
-        persistAndInvalidate(persistSessionError(e), SESSION_RESOURCES, e.sessionId);
-        // The agent may have pushed a PR before the turn failed.
-        refreshPrSnapshotForSession(e.sessionId);
-      })
-      .with({ type: "session.cancelled" }, (e) => {
-        console.log(`[AgentEvent] session.cancelled: session=${e.sessionId}`);
-        persistAndInvalidate(persistSessionCancelled(e), SESSION_RESOURCES, e.sessionId);
-        // The agent may have pushed a PR before the turn was stopped.
-        refreshPrSnapshotForSession(e.sessionId);
-      })
+  const sessions = new Map<string, SessionState>();
 
-      .with({ type: "message.cancelled" }, (e) => {
-        console.log(`[AgentEvent] message.cancelled: session=${e.sessionId}`);
-        persistAndInvalidate(
-          persistMessageCancelled(e),
-          ["messages", "sessions", "session", "stats"],
-          e.sessionId
-        );
-      })
-
-      // ── Turn, message & part lifecycle ────────────────────────────────
-      .with({ type: "turn.started" }, (e) => {
-        console.log(
-          `[AgentEvent] turn.started: session=${e.sessionId} turnId=${e.turnId ?? "none"}`
-        );
-      })
-      .with({ type: "message.created" }, (e) => {
-        console.log(
-          `[AgentEvent] message.created: session=${e.sessionId} messageId=${e.messageId}`
-        );
-        persistAndInvalidate(persistMessageCreated(e), MESSAGE_RESOURCES, e.sessionId);
-        // Also push as q:event so frontend creates the message shell
-        // BEFORE part events arrive (avoids race condition).
-        const { type: _, ...data } = e;
-        pushEvent("message:created", data);
-      })
-      .with({ type: "part.created" }, (e) => {
-        console.log(
-          `[AgentEvent] part.created: session=${e.sessionId} partId=${e.partId} type=${e.part.type}`
-        );
-        // Persist on first creation so in-flight parts survive session switches.
-        // Uses INSERT OR REPLACE — safe for repeated part.created (state transitions).
-        persistOnly(persistPartDone(e));
-        const { type: _, ...data } = e;
-        pushEvent("part:created", data);
-      })
-      .with({ type: "part.delta" }, (e) => {
-        // High-frequency streaming event — no log, no persistence, just forward
-        const { type: _, ...data } = e;
-        pushEvent("part:delta", data);
-      })
-      .with({ type: "part.done" }, (e) => {
-        console.log(
-          `[AgentEvent] part.done: session=${e.sessionId} partId=${e.partId} type=${e.part.type}`
-        );
-        // Persist to DB (for page refresh). No invalidation needed —
-        // the frontend receives part data via q:event, not q:delta.
-        persistOnly(persistPartDone(e));
-        const { type: _, ...data } = e;
-        pushEvent("part:done", data);
-      })
-      .with({ type: "message.done" }, (e) => {
-        console.log(
-          `[AgentEvent] message.done: session=${e.sessionId} messageId=${e.messageId} stopReason=${e.stopReason ?? "none"}`
-        );
-        persistOnly(persistMessageDone(e));
-        // Push as q:event so frontend can set stop_reason on the message
-        const { type: _, ...data } = e;
-        pushEvent("message:done", data);
-      })
-      .with({ type: "turn.completed" }, (e) => {
-        console.log(
-          `[AgentEvent] turn.completed: session=${e.sessionId} finishReason=${e.finishReason ?? "none"} cost=${e.cost ?? 0}`
-        );
-        // No message invalidation — all part data already streamed via q:event.
-        // Session status change (session.idle) handles the UI update.
-      })
-
-      // ── Metadata ──────────────────────────────────────────────────────
-      .with({ type: "agent.session_id" }, (e) => {
-        console.log(
-          `[AgentEvent] agent.session_id: session=${e.sessionId} agentSessionId=${e.agentSessionId}`
-        );
-        persistAndInvalidate(persistAgentSessionId(e), SESSION_RESOURCES, e.sessionId);
-      })
-      .with({ type: "session.title" }, (e) => {
-        console.log(`[AgentEvent] session.title: session=${e.sessionId} title="${e.title}"`);
-        persistAndInvalidate(persistSessionTitle(e), SESSION_RESOURCES, e.sessionId);
-      })
-
-      .exhaustive();
+  const stateFor = (sessionId: string): SessionState => {
+    const existing = sessions.get(sessionId);
+    if (existing) return existing;
+    const created: SessionState = { errorReported: false };
+    sessions.set(sessionId, created);
+    return created;
   };
+
+  return {
+    beginTurn(sessionId, turnId, opts = {}) {
+      const existing = sessions.get(sessionId);
+      if (existing?.turnId !== undefined && !opts.force) return false;
+      sessions.set(sessionId, { turnId, errorReported: false });
+      return true;
+    },
+
+    abortTurn(sessionId, turnId) {
+      const state = sessions.get(sessionId);
+      if (state?.turnId === turnId) state.turnId = undefined;
+    },
+
+    handleTitle(sessionId, title) {
+      console.log(`[AgentEvent] deus/title: session=${sessionId} title="${title}"`);
+      persistAndInvalidate(persistSessionTitle(sessionId, title), SESSION_RESOURCES, sessionId);
+    },
+
+    handle(envelope) {
+      // The envelope always carries the session id; some event members (e.g.
+      // `error`) leave it optional in the body.
+      const sessionId = envelope.sessionId;
+      const state = stateFor(sessionId);
+
+      match(envelope.event)
+        // ── Session lifecycle ─────────────────────────────────────────────
+        .with({ type: "session.created" }, (e) => {
+          console.log(
+            `[AgentEvent] session.created: session=${sessionId} native=${e.nativeSessionId} harness=${e.harness}${
+              e.resumed === false ? " resumed=false" : ""
+            }`
+          );
+          if (e.resumed === false) {
+            // The harness was asked to continue a conversation and started a
+            // fresh one instead: the context is gone. Silently swallowing this
+            // is how "the agent forgot everything" becomes invisible — the
+            // envelope carries the flag to the UI, which surfaces the warning.
+            console.warn(
+              `[AgentEvent] session ${sessionId} did NOT resume — the harness started a fresh session (context lost)`
+            );
+          }
+          persistAndInvalidate(
+            persistAgentSessionId(sessionId, e.nativeSessionId),
+            SESSION_RESOURCES,
+            sessionId
+          );
+          pushEnvelope(envelope);
+        })
+        .with({ type: "session.ended" }, (e) => {
+          console.log(`[AgentEvent] session.ended: session=${sessionId} reason=${e.reason}`);
+        })
+        .with({ type: "session.usage" }, (e) => {
+          persistAndInvalidate(persistSessionUsage(e), SESSION_RESOURCES, sessionId);
+        })
+        .with({ type: "session.compaction" }, (e) => {
+          console.log(
+            `[AgentEvent] session.compaction: session=${sessionId} id=${e.compactionId} status=${e.status}`
+          );
+          persistAndInvalidate(persistCompaction(e), MESSAGE_RESOURCES, sessionId);
+          pushEnvelope(envelope);
+        })
+
+        // ── Turn lifecycle ────────────────────────────────────────────────
+        .with({ type: "turn.started" }, (e) => {
+          console.log(`[AgentEvent] turn.started: session=${sessionId} turn=${e.turnId}`);
+          // Nothing to persist: status='working' was written optimistically by
+          // the send command. Keep the admission mirror truthful on the replay
+          // path too (state rebuilt after a backend restart has no turnId).
+          state.turnId = e.turnId;
+        })
+        .with({ type: "turn.ended" }, (e) => {
+          console.log(
+            `[AgentEvent] turn.ended: session=${sessionId} turn=${e.turnId} stopReason=${e.stopReason} cost=${e.cost ?? 0}`
+          );
+          const outcome = turnOutcome(e, state.errorReported);
+          if (state.turnId === e.turnId) state.turnId = undefined;
+          if (outcome.status === "error") state.errorReported = true;
+          persistAndInvalidate(persistTurnEnded(e, outcome), TURN_END_RESOURCES, sessionId);
+          pushEnvelope(envelope);
+          // The agent may have created, updated or pushed a PR during the turn.
+          refreshPrSnapshotForSession(sessionId);
+        })
+
+        // ── Message + part lifecycle ──────────────────────────────────────
+        .with({ type: "message.started" }, (e) => {
+          console.log(
+            `[AgentEvent] message.started: session=${sessionId} message=${e.messageId} role=${e.role} turn=${e.turnId}`
+          );
+          persistAndInvalidate(persistMessageStarted(e), MESSAGE_RESOURCES, sessionId);
+          pushEnvelope(envelope);
+        })
+        .with({ type: "message.part" }, (e) => {
+          // Persist every snapshot so an in-flight turn survives a session
+          // switch or a reload; the frontend gets the data from the push.
+          persistOnly(persistPart(e));
+          pushEnvelope(envelope);
+        })
+        .with({ type: "message.part.delta" }, () => {
+          // High-frequency streaming aid: forward-only, never persisted.
+          // Snapshots are authoritative and reconstruct the same state.
+          pushEnvelope(envelope);
+        })
+        .with({ type: "message.ended" }, (e) => {
+          console.log(`[AgentEvent] message.ended: session=${sessionId} message=${e.messageId}`);
+          // Bracket marker only — the parts are already durable and the turn's
+          // accounting arrives on turn.ended.
+          pushEnvelope(envelope);
+        })
+
+        // ── Diagnostics ───────────────────────────────────────────────────
+        .with({ type: "error" }, (e) => {
+          handleErrorEvent(sessionId, state, e);
+          pushEnvelope(envelope);
+        })
+
+        // ── Not surfaced (yet) ────────────────────────────────────────────
+        .with({ type: "permission.requested" }, { type: "permission.resolved" }, () => {
+          // Tool policy answers permissions in-process (dont_ask + policy), so
+          // there is no prompt to render. The events exist the day deus grows
+          // a permission UI.
+        })
+        .with({ type: "raw" }, () => {
+          // Opt-in passthrough; deus never sets RunConfig.includeRaw.
+        })
+        .exhaustive();
+    },
+  };
+}
+
+/**
+ * A standalone `error` event. Recoverable errors mean the turn CONTINUES
+ * (retry/backoff in flight) — promoting one would flip the UI to an error
+ * state while the agent is still working AND suppress the real terminal error
+ * through the dedupe flag. This swallow is load-bearing.
+ */
+function handleErrorEvent(sessionId: string, state: SessionState, event: ErrorEvent): void {
+  if (event.recoverable) {
+    console.warn(
+      `[AgentEvent] recoverable error (turn continues): session=${sessionId} category=${event.category} ${event.message}`
+    );
+    return;
+  }
+  console.log(
+    `[AgentEvent] error: session=${sessionId} category=${event.category} ${event.message}`
+  );
+  state.errorReported = true;
+  persistAndInvalidate(
+    persistSessionError(sessionId, event.message, event.category),
+    SESSION_RESOURCES,
+    sessionId
+  );
+  // The agent may have pushed a PR before the turn failed.
+  refreshPrSnapshotForSession(sessionId);
 }

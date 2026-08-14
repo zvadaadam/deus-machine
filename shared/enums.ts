@@ -59,39 +59,16 @@ export const STATUS_RANK: Record<WorkspaceStatus, number> = {
 // ── Agent ────────────────────────────────────────────────────────────────
 
 /**
- * The agent harness bound to a session: the SDK/CLI wrapper that owns
- * the agent process lifecycle (Claude Code, legacy Codex SDK, Codex app-server).
+ * The agent harness bound to a session: the SDK/CLI wrapper that owns the
+ * agent process lifecycle. These are the @zvada/agent-server engine ids
+ * verbatim — deus has no alias layer. (The engine also drives `acp`; deus
+ * doesn't offer it in the composer yet, so it stays out of this enum.)
  *
- * Once a session has messages, its harness is fixed — the agent-server
- * binds to a specific runtime on first query and cannot switch mid-session.
- * See the harness-lock guard in apps/backend/src/services/agent/commands.ts.
+ * Once a session has messages, its harness is fixed — the engine binds the
+ * session to a specific runtime and cannot switch mid-session. See the
+ * harness-lock guard in apps/backend/src/services/agent/commands.ts.
+ *
+ * Display names ("Claude", "Codex") are a frontend concern, never wire values.
  */
-export const AgentHarnessSchema = z.enum(["claude", "codex-sdk", "codex-server"]);
+export const AgentHarnessSchema = z.enum(["claude-code", "codex-sdk", "codex-app-server"]);
 export type AgentHarness = z.infer<typeof AgentHarnessSchema>;
-
-/** Deus harness names → @zvada/agent-server engine harness names. */
-export const ENGINE_HARNESS_BY_DEUS = {
-  claude: "claude-code",
-  "codex-sdk": "codex-sdk",
-  "codex-server": "codex-app-server",
-} as const satisfies Record<AgentHarness, string>;
-export type EngineHarness = (typeof ENGINE_HARNESS_BY_DEUS)[AgentHarness];
-
-/** Engine harness names → deus harness names (inverse of the map above). */
-export const DEUS_HARNESS_BY_ENGINE = Object.fromEntries(
-  Object.entries(ENGINE_HARNESS_BY_DEUS).map(([deus, engine]) => [engine, deus])
-) as Record<EngineHarness, AgentHarness>;
-
-/** Structured error categories for agent error responses. */
-export const ErrorCategorySchema = z.enum([
-  "auth",
-  "rate_limit",
-  "context_limit",
-  "network",
-  "abort",
-  "invalid_request",
-  "db_write",
-  "process_exit",
-  "internal",
-]);
-export type ErrorCategory = z.infer<typeof ErrorCategorySchema>;

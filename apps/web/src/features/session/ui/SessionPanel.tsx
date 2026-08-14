@@ -9,7 +9,7 @@ import {
 } from "react";
 import { Chat } from "./Chat";
 import { SessionComposer, type SessionComposerRef } from "./SessionComposer";
-import { usePartEvents } from "../hooks/usePartEvents";
+import { useAgentEvents } from "../hooks/useAgentEvents";
 import { useAgentRpcHandler } from "../hooks/useAgentRpcHandler";
 import { SessionProvider } from "../context";
 import { useSessionWithMessages, useLoadOlderMessages } from "../api/session.queries";
@@ -115,7 +115,7 @@ export const SessionPanel = forwardRef<SessionPanelRef, SessionPanelProps>(
     // ── Part Events → direct cache mutation (single-store model) ──────
     // WS part events mutate the TanStack Query cache directly.
     // No parallel store, no merge function. One source of truth.
-    usePartEvents(sessionId);
+    useAgentEvents(sessionId);
 
     // Messages come directly from TanStack cache (populated by DB load + WS mutations)
     const messages = dbMessages;
@@ -129,15 +129,15 @@ export const SessionPanel = forwardRef<SessionPanelRef, SessionPanelProps>(
       loadOlderMutation.mutate({ sessionId, beforeSeq: firstSeq });
     }, [loadOlderMutation, messages, sessionId]);
 
-    // Subagent groups: derive from message.parent_tool_use_id
+    // Subagent groups: derive from message.parent_tool_call_id
     const subagentMessages = useMemo(() => {
       const map = new Map<string, typeof messages>();
       for (const msg of messages) {
-        if (msg.parent_tool_use_id) {
-          let group = map.get(msg.parent_tool_use_id);
+        if (msg.parent_tool_call_id) {
+          let group = map.get(msg.parent_tool_call_id);
           if (!group) {
             group = [];
-            map.set(msg.parent_tool_use_id, group);
+            map.set(msg.parent_tool_call_id, group);
           }
           group.push(msg);
         }

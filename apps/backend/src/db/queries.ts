@@ -5,7 +5,7 @@
  * Route handlers call these functions instead of inline SQL.
  */
 import type Database from "better-sqlite3";
-import type { Part } from "@shared/messages/types";
+import type { Part, UnknownPart } from "@shared/protocol-types";
 import type {
   RepositoryRow,
   RepositoryWithCountsRow,
@@ -16,6 +16,7 @@ import type {
   MessageRow,
   MessageRowWithParts,
   PartRow,
+  CompactionRow,
   StatsRow,
 } from "./types";
 
@@ -340,9 +341,13 @@ export function getPartsByMessageIds(db: Database.Database, messageIds: string[]
 }
 
 /**
- * Enrich message rows with parsed Part objects from the parts table.
+ * Enrich message rows with the engine `Part` snapshots from the parts table.
  * Parses the JSON `data` field once here so the frontend never sees PartRow.
  * Messages with no parts get an empty array.
+ *
+ * Parts carry NO ordering field of their own (position is the event's
+ * knowledge, stored as `parts.seq`) — the array order IS the order, and the
+ * query above already sorts by it.
  */
 export function attachParts(db: Database.Database, messages: MessageRow[]): MessageRowWithParts[] {
   if (messages.length === 0) return [];
@@ -351,12 +356,10 @@ export function attachParts(db: Database.Database, messages: MessageRow[]): Mess
   const allParts = getPartsByMessageIds(db, messageIds);
 
   // Parse JSON and group by message_id
-  const partsByMessageId = new Map<string, Part[]>();
+  const partsByMessageId = new Map<string, Array<Part | UnknownPart>>();
   for (const row of allParts) {
     try {
       const part = JSON.parse(row.data) as Part;
-      // Backfill partIndex from DB seq for older rows that predate partIndex
-      if (part.partIndex == null) part.partIndex = row.seq;
       const existing = partsByMessageId.get(row.message_id);
       if (existing) {
         existing.push(part);
@@ -372,6 +375,18 @@ export function attachParts(db: Database.Database, messages: MessageRow[]): Mess
     ...msg,
     parts: partsByMessageId.get(msg.id) ?? [],
   }));
+}
+
+/**
+ * Every compaction marker for a session, oldest first. Bounded by the number
+ * of compactions in one conversation (single digits), so no pagination —
+ * it ships alongside the message page and the UI places each marker by its
+ * turn.
+ */
+export function getCompactions(db: Database.Database, sessionId: string): CompactionRow[] {
+  return db
+    .prepare("SELECT * FROM compactions WHERE session_id = ? ORDER BY created_at ASC")
+    .all(sessionId) as CompactionRow[];
 }
 
 // ─── Repository Queries ─────────────────────────────────────

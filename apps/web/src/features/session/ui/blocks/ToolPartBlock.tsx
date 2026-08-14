@@ -1,11 +1,6 @@
 import { createElement, memo, useMemo } from "react";
 import { match, P } from "ts-pattern";
-import type {
-  AgentResultContent,
-  CompletedToolState,
-  ToolPart,
-  ToolOutputContent,
-} from "@shared/messages/types";
+import type { ToolPart, ToolResultContent, ToolStateCompleted } from "@shared/protocol-types";
 import type { ToolUseBlock, ToolResultBlock } from "@/shared/types";
 import { toolRegistry } from "../tools/ToolRegistry";
 import { SubagentGroupBlock } from "./SubagentGroupBlock";
@@ -34,8 +29,8 @@ function parsePartialInput(partialInput: string): Record<string, unknown> {
 
 function toToolUseBlock(part: ToolPart): ToolUseBlock {
   const input = match(part.state)
-    .with({ status: "PENDING" }, (state) => parsePartialInput(state.partialInput))
-    .with({ status: P.union("RUNNING", "COMPLETED", "ERROR") }, (state) =>
+    .with({ status: "pending" }, (state) => parsePartialInput(state.partialInput))
+    .with({ status: P.union("in_progress", "completed", "failed", "cancelled") }, (state) =>
       coerceToolInput(state.input)
     )
     .exhaustive();
@@ -52,52 +47,63 @@ function getToolRendererName(part: ToolPart): string {
   return part.kind === "task" || part.subagent ? "Agent" : part.toolName;
 }
 
+/**
+ * Three-audience doctrine: `content` is the display-grade structured view and
+ * `output` the model-facing factual record. Prefer `content` when the harness
+ * expressed one, and pass image items through as blocks so renderers (e.g.
+ * simulator screenshots) can show them instead of a stringified blob.
+ */
 function getCompletedToolResultContent(
-  state: CompletedToolState
+  state: ToolStateCompleted
 ): string | Record<string, unknown> | unknown[] {
-  if (state.content && state.content.length > 0) {
-    const renderedContent = state.content.map(renderToolOutputContent).filter(Boolean);
-    return renderedContent.join("\n") || JSON.stringify(state.output ?? "");
+  const content = state.content;
+  if (content && content.length > 0) {
+    if (content.some((item) => item.type === "image")) {
+      return content.map(toResultBlock);
+    }
+    const rendered = content.map(renderToolResultContent).filter(Boolean);
+    if (rendered.length > 0) return rendered.join("\n");
   }
-
-  if (state.output != null) {
-    // Pass arrays through so image blocks reach renderers (e.g. simulator
-    // screenshots). Stringifying here would flatten them to plain text.
-    if (typeof state.output === "string") return state.output;
-    if (Array.isArray(state.output)) return state.output;
-    return JSON.stringify(state.output, null, 2);
-  }
-
-  return "";
+  return state.output;
 }
 
-function renderToolOutputContent(content: ToolOutputContent): string {
+/** Anthropic-shaped block for the legacy renderer bridge. */
+function toResultBlock(content: ToolResultContent): Record<string, unknown> {
+  if (content.type === "image") {
+    return {
+      type: "image",
+      source: { type: "base64", media_type: content.mimeType, data: content.data },
+    };
+  }
+  return { type: "text", text: renderToolResultContent(content) };
+}
+
+function renderToolResultContent(content: ToolResultContent): string {
   if (content.type === "text") return content.text;
   if (content.type === "diff") return content.newText;
   if (content.type === "terminal") return `Terminal output: ${content.terminalId}`;
-  if (content.type === "agent_result") return renderAgentResultContent(content);
   return "";
-}
-
-function renderAgentResultContent(content: AgentResultContent): string {
-  if (content.message) return content.message;
-  const label = content.label || content.agentId || "Agent";
-  return `${label}: ${content.status}`;
 }
 
 function toToolResultBlock(part: ToolPart): ToolResultBlock | undefined {
   return match(part.state)
-    .with({ status: "COMPLETED" }, (state) => ({
+    .with({ status: "completed" }, (state) => ({
       type: "tool_result" as const,
       tool_use_id: part.toolCallId,
       content: getCompletedToolResultContent(state),
       is_error: false,
     }))
-    .with({ status: "ERROR" }, (state) => ({
+    .with({ status: "failed" }, (state) => ({
       type: "tool_result" as const,
       tool_use_id: part.toolCallId,
       content: state.error,
       is_error: true,
+    }))
+    .with({ status: "cancelled" }, () => ({
+      type: "tool_result" as const,
+      tool_use_id: part.toolCallId,
+      content: "Cancelled",
+      is_error: false,
     }))
     .otherwise(() => undefined);
 }
@@ -120,7 +126,7 @@ export const ToolPartBlock = memo(function ToolPartBlock({ part }: ToolPartBlock
 
   const toolUse = useMemo(() => toToolUseBlock(part), [part]);
   const toolResult = useMemo(() => toToolResultBlock(part), [part]);
-  const isLoading = part.state.status === "PENDING" || part.state.status === "RUNNING";
+  const isLoading = part.state.status === "pending" || part.state.status === "in_progress";
 
   const isAgentTool = part.kind === "task" || !!part.subagent;
   if (isAgentTool && !insideSubagent && subagentMessages.has(part.toolCallId)) {
@@ -130,6 +136,7 @@ export const ToolPartBlock = memo(function ToolPartBlock({ part }: ToolPartBlock
           toolUse={toolUse}
           toolResult={toolResult}
           childMessages={subagentMessages.get(part.toolCallId)!}
+          subagent={part.subagent}
         />
       </div>
     );

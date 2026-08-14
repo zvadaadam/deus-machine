@@ -56,7 +56,13 @@ export const MODEL_OPTIONS: ModelOption[] = MODEL_PICKER_GROUPS.flatMap((config)
   )
 );
 
-const CODEX_SERVER_DEFAULT_MODEL = `${AGENT_CONFIGS["codex-server"].id}:${AGENT_CONFIGS["codex-server"].models[0].model}`;
+const CODEX_SERVER_DEFAULT_MODEL = `${AGENT_CONFIGS["codex-app-server"].id}:${AGENT_CONFIGS["codex-app-server"].models[0].model}`;
+
+/** Retired harness prefixes in persisted picker values → the engine ids. */
+const RETIRED_HARNESS_PREFIXES: ReadonlyArray<[string, AgentHarness]> = [
+  ["claude:", "claude-code"],
+  ["codex-server:", "codex-app-server"],
+];
 
 // ============================================================================
 // Lookup
@@ -80,11 +86,18 @@ export function resolveModelSelection(model: string): string | undefined {
     return candidate;
   }
 
-  // LocalStorage/tabs can still hold pre-codex-server picker values from older
-  // builds. Treat those as a one-time selection migration to the visible Codex
-  // harness; runtime harness ids are validated separately at the RPC boundary.
+  // LocalStorage/tabs can still hold picker values from older builds: the
+  // pre-codex-server harnesses, and the retired deus harness spellings that
+  // the engine ids replaced (claude → claude-code, codex-server →
+  // codex-app-server). Treat those as a one-time selection migration; runtime
+  // harness ids are validated separately at the RPC boundary.
   if (candidate.startsWith("codex:") || candidate.startsWith("codex-sdk:")) {
     return CODEX_SERVER_DEFAULT_MODEL;
+  }
+  const retired = RETIRED_HARNESS_PREFIXES.find(([prefix]) => candidate.startsWith(prefix));
+  if (retired) {
+    const migrated = `${retired[1]}:${candidate.slice(retired[0].length)}`;
+    return MODEL_OPTIONS.some((option) => option.value === migrated) ? migrated : undefined;
   }
 
   return undefined;
@@ -106,7 +119,7 @@ export function getModelLabel(model: string): string {
 
 export function getAgentHarnessForModel(model: string): AgentHarness {
   const option = getModelOption(model);
-  return option?.agentHarness ?? "claude";
+  return option?.agentHarness ?? "claude-code";
 }
 
 /**
@@ -145,12 +158,12 @@ export function getThinkingLevelsForModel(
 
 /**
  * Computes the next thinking level on click. Walks the model's thinkingLevels
- * array, wrapping at the end. NONE is normalized to the first entry.
+ * array, wrapping at the end. "off" is normalized to the first entry.
  *
- * Opus 4.7: ["LOW", "MEDIUM", "HIGH", "XHIGH"] — full ladder incl. xhigh
- * Claude (default): ["LOW", "MEDIUM", "HIGH"] — shared by Opus 4.6 / Sonnet 4.6
- * Codex: ["LOW", "MEDIUM", "HIGH"] — graduated reasoning
- * Haiku: [] → indicator hidden; callers receive NONE
+ * Opus 4.7: ["low", "medium", "high", "xhigh"] — full ladder incl. xhigh
+ * Claude (default): ["low", "medium", "high"] — shared by Opus 4.6 / Sonnet 4.6
+ * Codex: ["low", "medium", "high"] — graduated reasoning
+ * Haiku: [] → indicator hidden; callers receive "off"
  */
 export function cycleThinkingLevel(
   current: ThinkingLevel,
@@ -158,8 +171,8 @@ export function cycleThinkingLevel(
   model: string
 ): ThinkingLevel {
   const thinkingLevels = getThinkingLevelsForModel(agentHarness, model);
-  if (thinkingLevels.length === 0) return "NONE";
-  const normalized = current === "NONE" ? thinkingLevels[0] : current;
+  if (thinkingLevels.length === 0) return "off";
+  const normalized = current === "off" ? thinkingLevels[0] : current;
   const idx = thinkingLevels.indexOf(normalized);
   const safeIdx = idx === -1 ? 0 : idx;
   return thinkingLevels[(safeIdx + 1) % thinkingLevels.length];
@@ -168,19 +181,19 @@ export function cycleThinkingLevel(
 /**
  * Snap a thinking level into what the target model actually supports.
  *
- * Use on model change: e.g. Opus 4.7 user on XHIGH switches to Opus 4.6,
- * which doesn't expose XHIGH — snap to `fallback` (or the model's top level
- * if the fallback isn't supported either). Returns "NONE" when the model
+ * Use on model change: e.g. Opus 4.7 user on xhigh switches to Opus 4.6,
+ * which doesn't expose xhigh — snap to `fallback` (or the model's top level
+ * if the fallback isn't supported either). Returns "off" when the model
  * declares no thinking levels (Haiku).
  */
 export function clampThinkingLevel(
   current: ThinkingLevel,
   agentHarness: AgentHarness,
   model: string,
-  fallback: ThinkingLevel = "HIGH"
+  fallback: ThinkingLevel = "high"
 ): ThinkingLevel {
   const supported = getThinkingLevelsForModel(agentHarness, model);
-  if (supported.length === 0) return "NONE";
+  if (supported.length === 0) return "off";
   if (supported.includes(current)) return current;
   if (supported.includes(fallback)) return fallback;
   return supported[supported.length - 1];

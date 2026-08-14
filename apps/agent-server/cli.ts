@@ -32,15 +32,14 @@ import * as readline from "readline";
 import { fileURLToPath } from "url";
 import WebSocket from "ws";
 import { AgentServerClient } from "@zvada/agent-server/client";
-import type { LifecycleEvent, TurnStartParams } from "@zvada/agent-server/protocol";
-import { generateUUIDv7 } from "@zvada/agent-server/protocol";
+import type { AgentHarness, LifecycleEvent, TurnStartParams } from "@zvada/agent-server/protocol";
+import { AGENT_HARNESSES, generateUUIDv7, isAgentHarness } from "@zvada/agent-server/protocol";
 import {
   SIDE_CHANNEL,
   SideChannelEndpoint,
   claimSideChannel,
   wsLineTransport,
 } from "@shared/agent-side-channel";
-import { ENGINE_HARNESS_BY_DEUS } from "../../shared/enums";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -75,9 +74,9 @@ function parseArgs() {
     if (arg === "--json" || arg === "--host") continue;
     if (arg.startsWith("--") && i + 1 < args.length) opts[arg.slice(2)] = args[++i];
   }
-  const agent = (opts.agent ?? "claude") as keyof typeof ENGINE_HARNESS_BY_DEUS;
-  if (!ENGINE_HARNESS_BY_DEUS[agent]) {
-    console.error(`Unknown --agent "${agent}" (use claude | codex-sdk | codex-server)`);
+  const agent = (opts.agent ?? "claude-code") as AgentHarness;
+  if (!isAgentHarness(agent)) {
+    console.error(`Unknown --agent "${agent}" (use ${AGENT_HARNESSES.join(" | ")})`);
     process.exit(1);
   }
   return {
@@ -131,10 +130,10 @@ function renderEvent(event: LifecycleEvent, json: boolean): void {
       return;
     case "message.part.delta":
       streamedParts.add(event.partId);
-      if (event.delta.type === "text-delta") {
+      if (event.delta.type === "text") {
         process.stdout.write(event.delta.text);
         midStream = true;
-      } else if (event.delta.type === "reasoning-delta") {
+      } else if (event.delta.type === "reasoning") {
         process.stdout.write(`${c.dim}${event.delta.text}${c.reset}`);
         midStream = true;
       }
@@ -170,8 +169,8 @@ function renderEvent(event: LifecycleEvent, json: boolean): void {
         `${c.dim}◆ usage used=${event.used}${event.size ? `/${event.size}` : ""}${event.cost !== undefined ? ` $${event.cost.toFixed(4)}` : ""}${c.reset}`
       );
       return;
-    case "session.compacted":
-      console.log(`${c.magenta}◆ context compacted${c.reset}`);
+    case "session.compaction":
+      console.log(`${c.magenta}◆ context compacted (${event.status})${c.reset}`);
       return;
     case "turn.ended": {
       const color = event.stopReason === "end_turn" ? c.green : c.red;
@@ -184,7 +183,7 @@ function renderEvent(event: LifecycleEvent, json: boolean): void {
     }
     case "error":
       console.log(
-        `${event.recoverable ? c.yellow : c.red}◆ error${event.recoverable ? " (recoverable)" : ""}: ${event.error}${c.reset}`
+        `${event.recoverable ? c.yellow : c.red}◆ error${event.recoverable ? " (recoverable)" : ""}: ${event.message}${c.reset}`
       );
       return;
     case "permission.requested":
@@ -315,7 +314,7 @@ async function connect(url: string, json: boolean, announceHost: boolean): Promi
 
 interface CliState {
   sessionId: string;
-  agent: keyof typeof ENGINE_HARNESS_BY_DEUS;
+  agent: AgentHarness;
   model?: string;
   cwd: string;
   resume?: string;
@@ -329,7 +328,7 @@ async function runTurn(conn: Connection, state: CliState, prompt: string): Promi
     turnId: generateUUIDv7(),
     input: prompt,
     config: {
-      harness: ENGINE_HARNESS_BY_DEUS[state.agent],
+      harness: state.agent,
       cwd: state.cwd,
       model: state.model,
       permissionMode: state.permissionMode as TurnStartParams["config"]["permissionMode"],
@@ -416,8 +415,8 @@ async function main() {
       return "continue";
     }
     if (input.startsWith(".agent ")) {
-      const agent = input.slice(7).trim() as keyof typeof ENGINE_HARNESS_BY_DEUS;
-      if (ENGINE_HARNESS_BY_DEUS[agent]) {
+      const agent = input.slice(7).trim();
+      if (isAgentHarness(agent)) {
         state.agent = agent;
         state.resume = undefined;
         state.sessionId = generateUUIDv7();

@@ -168,17 +168,11 @@ export type CommandName = (typeof COMMAND_NAMES)[number];
 
 /** Protocol events — ephemeral notifications pushed to all connected clients. */
 export const PROTOCOL_EVENTS = [
-  "session:plan-mode",
-  "session:error",
-  "session:progress",
   "tool:request",
-  // Message lifecycle events
-  "message:created",
-  "message:done",
-  // Part lifecycle events (streaming, high-throughput)
-  "part:created",
-  "part:delta",
-  "part:done",
+  // The agent lifecycle stream: ONE event carrying a sequenced
+  // @zvada/agent-server WireEventEnvelope verbatim (session/turn/message/part/
+  // compaction/error). The frontend folds it with the engine's reducer.
+  "agent:event",
   // PTY events (high-throughput)
   "pty-data",
   "pty-exit",

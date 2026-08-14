@@ -1,6 +1,6 @@
 // toEngineInput: deus's frontend serializes attachment prompts as a JSON array
 // of Anthropic content blocks in the prompt string; the handler must translate
-// them into engine PartInputs (and leave everything else untouched).
+// them into canonical PartInputs (and leave everything else untouched).
 import { describe, expect, it } from "vitest";
 import { toEngineInput } from "../../../src/services/agent/run-config";
 
@@ -22,7 +22,7 @@ describe("toEngineInput", () => {
     ]);
     expect(toEngineInput(prompt)).toEqual([
       { type: "text", text: "what is in this screenshot?" },
-      { type: "image", data: "AAAA", mediaType: "image/jpeg" },
+      { type: "image", data: "AAAA", mimeType: "image/jpeg" },
     ]);
   });
 
@@ -31,7 +31,7 @@ describe("toEngineInput", () => {
       { type: "image", source: { type: "url", url: "https://x/y.png", media_type: "image/png" } },
     ]);
     expect(toEngineInput(prompt)).toEqual([
-      { type: "image", url: "https://x/y.png", mediaType: "image/png" },
+      { type: "image", url: "https://x/y.png", mimeType: "image/png" },
     ]);
   });
 
@@ -46,12 +46,12 @@ describe("toEngineInput", () => {
   });
 });
 
-describe("withoutImageParts (codex harnesses)", () => {
+describe("withoutImageParts (harnesses without negotiated image support)", () => {
   it("replaces image parts with an explicit marker, keeps text", async () => {
     const { withoutImageParts } = await import("../../../src/services/agent/run-config");
     const out = withoutImageParts([
       { type: "text", text: "look:" },
-      { type: "image", data: "AAAA", mediaType: "image/png" },
+      { type: "image", data: "AAAA", mimeType: "image/png" },
     ]);
     expect(out).toEqual([
       { type: "text", text: "look:" },

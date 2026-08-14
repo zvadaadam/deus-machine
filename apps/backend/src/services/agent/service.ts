@@ -1,16 +1,15 @@
 // backend/src/services/agent/service.ts
 // Composition root for agent-server communication.
 //
-// Wires the AgentLink (standard wire + deus side channel), the
-// LifecycleTranslator (engine events → deus AgentEvents), and the event
-// handler (persistence + WS push). No circular imports — this module imports
-// from its dependencies, none of them import back.
+// Wires the AgentLink (standard wire + deus side channel) straight into the
+// event handler: the engine's lifecycle envelopes go to persistence + WS push
+// with nothing in between. No circular imports — this module imports from its
+// dependencies, none of them import back.
 //
 // Dependency graph (all arrows point down, no cycles):
 //
 //   service (this file)
 //       ├── client              (AgentLink: wire + side channel)
-//       ├── translate/          (LifecycleTranslator + shim + classifiers)
 //       ├── event-handler       (factory: createAgentEventHandler)
 //       ├── run-config          (turn params assembly)
 //       └── tool-relay          (frontend RPC relay)
@@ -19,10 +18,9 @@
 
 import path from "path";
 import type { AgentHarness } from "@shared/enums";
-import type { ProviderAuthRequest, AgentInfo } from "@shared/agent-events";
+import type { ProviderAuthRequest, AgentInfo } from "@shared/agent-info";
 import { AgentLink } from "./client";
-import { createAgentEventHandler } from "./event-handler";
-import { LifecycleTranslator } from "./translate/translator";
+import { createAgentEventHandler, type AgentEventHandler } from "./event-handler";
 import { buildTurnStartParams, type DeusTurnOptions } from "./run-config";
 import { relay } from "./tool-relay";
 import {
@@ -41,7 +39,7 @@ import { computeWorkspacePath } from "../../middleware/workspace-loader";
 // ---- Singleton ----
 
 let link: AgentLink | null = null;
-let translator: LifecycleTranslator | null = null;
+let events: AgentEventHandler | null = null;
 let disposed = false;
 
 const RECONNECT_BASE_MS = 1_000;
@@ -50,35 +48,24 @@ const RECONNECT_MAX_MS = 30_000;
 /** Initialize the agent service. Call once at startup. Connects in the
  *  background and keeps retrying — same contract as the legacy client. */
 export function init(agentServerUrl: string): void {
-  if (link || translator) {
+  if (link || events) {
     console.warn("[AgentService] Already initialized, skipping");
     return;
   }
   disposed = false;
 
-  const handleAgentEvent = createAgentEventHandler();
-  translator = new LifecycleTranslator({
-    emit: handleAgentEvent,
-    // Events arriving without a beginTurn (replay after a backend restart)
-    // resolve their harness from the session row.
-    resolveHarness: (sessionId) => {
-      const session = getSessionRaw(getDatabase(), sessionId);
-      return (session?.agent_harness as AgentHarness | undefined) ?? undefined;
-    },
-  });
+  const handler = createAgentEventHandler();
+  events = handler;
 
-  void establishLink(agentServerUrl, handleAgentEvent);
+  void establishLink(agentServerUrl, handler);
 }
 
-async function establishLink(
-  url: string,
-  handleAgentEvent: ReturnType<typeof createAgentEventHandler>
-): Promise<void> {
+async function establishLink(url: string, handler: AgentEventHandler): Promise<void> {
   for (let attempt = 0; !disposed; attempt++) {
     try {
       const connected = await AgentLink.connect({
         url,
-        onEnvelope: (envelope) => translator?.handle(envelope),
+        onEnvelope: (envelope) => handler.handle(envelope),
         onConnected: (agents) => {
           console.log(
             `[AgentService] Connected, agents: [${agents.map((a) => a.type).join(", ")}]`
@@ -88,14 +75,7 @@ async function establishLink(
           console.log("[AgentService] Disconnected from agent-server");
         },
         onToolRequest: (method, params) => handleToolRequest(method, params),
-        onTitle: ({ sessionId, agentHarness, title }) => {
-          handleAgentEvent({
-            type: "session.title",
-            sessionId,
-            agentHarness: agentHarness as AgentHarness,
-            title,
-          });
-        },
+        onTitle: ({ sessionId, title }) => handler.handleTitle(sessionId, title),
       });
       // shutdown() may have run while the connect was in flight — a link
       // assigned now would outlive the service with its reconnect loop alive.
@@ -120,16 +100,15 @@ export function shutdown(): void {
   disposed = true;
   void link?.close();
   link = null;
-  translator = null;
+  events = null;
 }
 
 // ---- Public API ----
 
 /**
- * Start a turn on the agent-server (quick-ack; completion arrives as
- * lifecycle events). Emits the deus session.started once the server accepted
- * the turn — mirroring the legacy accept path. Throws on rejection
- * (WireRequestError with typed codes) or when disconnected.
+ * Start a turn on the agent-server (quick-ack; completion arrives as the
+ * turn.ended lifecycle event). Throws on rejection (WireRequestError with
+ * typed codes) or when disconnected.
  */
 export async function startTurn(
   sessionId: string,
@@ -139,28 +118,38 @@ export async function startTurn(
   options: DeusTurnOptions
 ): Promise<void> {
   if (!link) throw new Error("Agent service not initialized");
-  const params = buildTurnStartParams(sessionId, turnId, agentHarness, prompt, options);
-  // Register the turn BEFORE the quick-ack round-trip: the server can push
+  const params = buildTurnStartParams(sessionId, turnId, agentHarness, prompt, {
+    ...options,
+    // Negotiated at the handshake, not guessed from a harness list.
+    supportsImages:
+      link.getAgents().find((a) => a.type === agentHarness)?.capabilities.images ?? false,
+  });
+  // Mirror the admission BEFORE the quick-ack round-trip: the server can push
   // the first envelopes in the same tick the ack line is processed, and the
-  // translator must already know the session then. beginTurn is a no-op when
-  // the session is locally busy (the server will reject with turnActive) —
-  // the live turn's state must not be clobbered by a doomed registration.
-  const registered = translator?.beginTurn(sessionId, agentHarness, turnId) ?? false;
+  // handler must already know which turn is live then. beginTurn is a no-op
+  // when the session is locally busy (the server will reject with turnActive)
+  // — the live turn's state must not be clobbered by a doomed registration.
+  const registered = events?.beginTurn(sessionId, turnId) ?? false;
   try {
     await link.startTurn(params);
   } catch (err) {
-    if (registered) translator?.abortTurn(sessionId, turnId);
+    if (registered) events?.abortTurn(sessionId, turnId);
     throw err;
   }
   // Server accepted a turn our local state thought was concurrent — the local
   // view was stale (e.g. backend restart); register for real now.
-  if (!registered) translator?.beginTurn(sessionId, agentHarness, turnId, { force: true });
+  if (!registered) events?.beginTurn(sessionId, turnId, { force: true });
 }
 
 /** Cancel a session's active turn (best-effort, idempotent). */
 export async function stopSession(params: { sessionId: string }): Promise<void> {
   if (!link) throw new Error("Agent service not initialized");
-  await link.cancelTurn(params.sessionId);
+  const result = await link.cancelTurn(params.sessionId);
+  if (result.outcome === "unconfirmed") {
+    // Dispatched but unacknowledged: the agent process may still be running,
+    // so turn.ended remains the source of truth for the session's status.
+    console.warn(`[AgentService] cancel unconfirmed for session=${params.sessionId}`);
+  }
 }
 
 /** Check if the agent link is connected. */

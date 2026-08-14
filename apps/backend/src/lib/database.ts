@@ -7,6 +7,7 @@ import {
   ADDITIVE_COLUMNS,
   PRELAUNCH_REQUIRED_COLUMNS,
   PRELAUNCH_SCHEMA_RESET_HINT,
+  RETIRED_AGENT_HARNESS_VALUES,
   SCHEMA_SQL,
 } from "@shared/schema";
 import { openSqliteDatabase } from "./sqlite";
@@ -48,11 +49,16 @@ function assertPrelaunchSchemaCurrent(db: BetterSqlite3.Database): void {
     throw prelaunchSchemaError(`Missing columns/tables: ${missing.join(", ")}`);
   }
 
-  const staleCodexHarness = db
-    .prepare("SELECT 1 FROM sessions WHERE agent_harness = 'codex' LIMIT 1")
-    .get();
-  if (staleCodexHarness) {
-    throw prelaunchSchemaError("Found stale sessions.agent_harness value: codex");
+  // Harness ids are the engine's (claude-code / codex-sdk / codex-app-server).
+  // A row still carrying a retired spelling predates the protocol unification.
+  const placeholders = RETIRED_AGENT_HARNESS_VALUES.map(() => "?").join(", ");
+  const staleHarness = db
+    .prepare(`SELECT agent_harness FROM sessions WHERE agent_harness IN (${placeholders}) LIMIT 1`)
+    .get(...RETIRED_AGENT_HARNESS_VALUES) as { agent_harness: string } | undefined;
+  if (staleHarness) {
+    throw prelaunchSchemaError(
+      `Found retired sessions.agent_harness value: ${staleHarness.agent_harness}`
+    );
   }
 }
 

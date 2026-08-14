@@ -215,7 +215,7 @@ export function MessageInput({
   onCompact,
   onStop,
   onOpenNewTab,
-  defaultThinking = "HIGH",
+  defaultThinking = "high",
   className,
 }: MessageInputProps) {
   const isMobile = useIsMobile();
@@ -241,7 +241,7 @@ export function MessageInput({
   const selectedOption = getModelOption(model);
   const agentHarness: AgentHarness = selectedOption?.agentHarness ?? getAgentHarnessForModel(model);
   const modelId = selectedOption?.model ?? model;
-  const isClaudeAgent = agentHarness === "claude";
+  const isClaudeAgent = agentHarness === "claude-code";
 
   // Build combined message content from all staged sources.
   // See the big block-comment in the previous revision for ordering rationale
@@ -365,7 +365,7 @@ export function MessageInput({
   const showSetupNudge = !hasManifest && !hasMessages;
   const handleSetupEnvironment = () => onSend(GENERATE_HIVE_JSON);
 
-  const planModeDisabled = agentHarness === "codex-sdk" || agentHarness === "codex-server";
+  const planModeDisabled = agentHarness === "codex-sdk" || agentHarness === "codex-app-server";
   return (
     <div className={cn("relative z-20 shrink-0 px-2 pb-2", className)}>
       <AnimatePresence initial={false}>

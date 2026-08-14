@@ -24,6 +24,7 @@ import {
   getWorkspacesBySessionIds,
   getAllRepositorySummaries,
   attachParts,
+  getCompactions,
 } from "../db";
 import { computeWorkspacePath } from "../middleware/workspace-loader";
 import { getConnection } from "./ws.service";
@@ -432,7 +433,14 @@ function runQuery(resource: QueryResource, params: QueryParams): unknown {
 
         const hasOlder = rows.length > 0 ? hasOlderMessages(db, sessionId, rows[0].seq) : false;
 
-        return { messages: attachParts(db, rows), has_older: hasOlder, has_newer: false };
+        return {
+          messages: attachParts(db, rows),
+          // Compactions are positional siblings of messages, not parts — the
+          // transcript needs the divider IN the order after a reload.
+          compactions: getCompactions(db, sessionId),
+          has_older: hasOlder,
+          has_newer: false,
+        };
       })
       // AAP (agentic apps protocol) — real handlers. `apps` is the registry;
       // `running_apps` is workspace-scoped live instances.

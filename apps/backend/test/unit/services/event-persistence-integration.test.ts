@@ -1,16 +1,16 @@
 /**
- * Integration tests for event → persistence → DB pipeline.
+ * Integration tests for the full pipeline: engine lifecycle envelopes → event
+ * handler → persistence → real SQLite.
  *
- * Unlike agent-persistence.test.ts (which mocks the DB), these tests create
- * a real in-memory SQLite database, apply the full schema, and
- * verify the actual row state after feeding events through persistence functions.
- *
- * The goal: confirm that canonical events from the agent-server adapters
- * produce the correct messages and parts rows in the database.
+ * agent-persistence.test.ts pins each write in isolation; this file feeds
+ * whole turns — the exact event scripts the harness adapters emit — and checks
+ * the rows a reload would read back. Only the WS push, query invalidation and
+ * the PR snapshot refresh are mocked; the database is real.
  */
 
 import Database from "better-sqlite3";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import type { LifecycleEvent, WireEventEnvelope } from "@zvada/agent-server/protocol";
 
 // better-sqlite3 may be compiled for Electron's Node ABI — skip if unavailable
 let canUseDatabase = true;
@@ -19,100 +19,66 @@ try {
 } catch {
   canUseDatabase = false;
 }
-
 const describeWithDb = canUseDatabase ? describe : describe.skip;
+
 import { SCHEMA_SQL } from "@shared/schema";
-import { uuidv7 } from "@shared/lib/uuid";
 
-// ============================================================================
-// Mock getDatabase() to return our in-memory DB
-// ============================================================================
-
-const { mockGetDatabase } = vi.hoisted(() => ({
+const { mockGetDatabase, mockInvalidate, mockBroadcast, mockRefreshPr } = vi.hoisted(() => ({
   mockGetDatabase: vi.fn(),
+  mockInvalidate: vi.fn(),
+  mockBroadcast: vi.fn(),
+  mockRefreshPr: vi.fn(),
 }));
 
-vi.mock("../../../src/lib/database", () => ({
-  getDatabase: mockGetDatabase,
+vi.mock("../../../src/lib/database", () => ({ getDatabase: mockGetDatabase }));
+vi.mock("../../../src/services/query-engine", () => ({ invalidate: mockInvalidate }));
+vi.mock("../../../src/services/ws.service", () => ({ broadcast: mockBroadcast }));
+vi.mock("../../../src/services/pr-snapshot.service", () => ({
+  refreshPrSnapshotForSession: mockRefreshPr,
 }));
 
-// ============================================================================
-// Import persistence functions AFTER mocks are set up
-// ============================================================================
-
-import {
-  persistMessageCreated,
-  persistPartDone,
-  persistMessageDone,
-} from "../../../src/services/agent/persistence";
-import type {
-  MessageCreatedEvent,
-  PartDoneEvent,
-  MessageDoneEvent,
-} from "../../../../shared/agent-events";
+import { createAgentEventHandler } from "../../../src/services/agent/event-handler";
+import { getCompactions } from "../../../src/db/queries";
 
 // ============================================================================
 // Helpers
 // ============================================================================
 
-/** Create an in-memory SQLite DB with the full pre-launch schema applied. */
+const SESSION = "sess-integration";
+const TURN = "turn-1";
+const T = Date.parse("2026-08-14T12:00:00.000Z");
+
 function createTestDb(): Database.Database {
   const db = new Database(":memory:");
-  db.pragma("journal_mode = WAL");
   db.pragma("foreign_keys = ON");
-
-  // Apply full schema (tables, indexes, triggers)
   db.exec(SCHEMA_SQL);
-
+  db.prepare(
+    `INSERT INTO repositories (id, name, root_path) VALUES ('r1', 'repo', '/tmp/repo')`
+  ).run();
+  db.prepare(`INSERT INTO workspaces (id, repository_id, slug) VALUES ('w1', 'r1', 'ws')`).run();
+  db.prepare(
+    `INSERT INTO sessions (id, workspace_id, agent_harness, status) VALUES (?, 'w1', 'claude-code', 'working')`
+  ).run(SESSION);
   return db;
 }
 
-/** Seed the minimum FK chain: repository → workspace → session. */
-function seedSession(
-  db: Database.Database,
-  sessionId: string
-): {
-  repositoryId: string;
-  workspaceId: string;
-} {
-  const repositoryId = uuidv7();
-  const workspaceId = uuidv7();
-
-  db.prepare(`INSERT INTO repositories (id, name, root_path) VALUES (?, ?, ?)`).run(
-    repositoryId,
-    "test-repo",
-    `/tmp/test-repo-${repositoryId}`
-  );
-
-  db.prepare(`INSERT INTO workspaces (id, repository_id, slug) VALUES (?, ?, ?)`).run(
-    workspaceId,
-    repositoryId,
-    "test-ws"
-  );
-
-  db.prepare(`INSERT INTO sessions (id, workspace_id, agent_harness) VALUES (?, ?, ?)`).run(
-    sessionId,
-    workspaceId,
-    "claude"
-  );
-
-  return { repositoryId, workspaceId };
-}
-
-// Typed row interfaces for querying
-interface MessageRow {
+interface MessageRowShape {
   id: string;
-  session_id: string;
   role: string;
-  stop_reason: string | null;
-  agent_message_id: string | null;
+  turn_id: string | null;
   seq: number;
+  content: string | null;
+  cancelled_at: string | null;
+  parent_tool_call_id: string | null;
+  tokens: string | null;
+  cost: number | null;
+  turn_stop_reason: string | null;
 }
 
-interface PartRow {
+interface PartRowShape {
   id: string;
   message_id: string;
-  session_id: string;
+  seq: number;
   type: string;
   data: string;
   tool_call_id: string | null;
@@ -120,871 +86,523 @@ interface PartRow {
   parent_tool_call_id: string | null;
 }
 
-// ============================================================================
-// Tests
-// ============================================================================
-
-describeWithDb("event → persistence → DB integration", () => {
+describeWithDb("engine turn → handler → SQLite", () => {
   let db: Database.Database;
-  const sessionId = "sess-integration-1";
+  let handler: ReturnType<typeof createAgentEventHandler>;
+  let seq = 0;
+
+  const feed = (...events: LifecycleEvent[]): void => {
+    for (const event of events) {
+      const envelope: WireEventEnvelope = { sessionId: SESSION, seq: ++seq, event };
+      handler.handle(envelope);
+    }
+  };
+
+  const messages = (): MessageRowShape[] =>
+    db
+      .prepare(`SELECT * FROM messages WHERE session_id = ? ORDER BY seq`)
+      .all(SESSION) as MessageRowShape[];
+
+  const parts = (): PartRowShape[] =>
+    db
+      .prepare(
+        `SELECT p.* FROM parts p JOIN messages m ON p.message_id = m.id
+         WHERE m.session_id = ? ORDER BY m.seq, p.seq`
+      )
+      .all(SESSION) as PartRowShape[];
+
+  const sessionRow = (): Record<string, unknown> =>
+    db.prepare(`SELECT * FROM sessions WHERE id = ?`).get(SESSION) as Record<string, unknown>;
 
   beforeEach(() => {
+    seq = 0;
     db = createTestDb();
-    seedSession(db, sessionId);
     mockGetDatabase.mockReturnValue(db);
+    vi.spyOn(console, "log").mockImplementation(() => {});
+    vi.spyOn(console, "warn").mockImplementation(() => {});
+    handler = createAgentEventHandler();
   });
 
   afterEach(() => {
     db.close();
+    vi.restoreAllMocks();
     vi.clearAllMocks();
   });
 
   // ==========================================================================
-  // Test 1: Simple text response
+  // A plain text turn, echo included
   // ==========================================================================
 
-  describe("simple text response", () => {
-    it("creates 1 assistant message and 1 TEXT part", () => {
-      // 1. message.created
-      const created: MessageCreatedEvent = {
-        type: "message.created",
-        sessionId,
-        agentHarness: "claude",
-        messageId: "msg-1",
-        role: "assistant",
-      };
-      const createResult = persistMessageCreated(created);
-      expect(createResult.ok).toBe(true);
-
-      // 2. part.done (TEXT)
-      const partDone: PartDoneEvent = {
-        type: "part.done",
-        sessionId,
-        agentHarness: "claude",
-        messageId: "msg-1",
-        partId: "p1",
+  it("persists the user echo and the assistant answer as one turn", () => {
+    feed(
+      { type: "turn.started", sessionId: SESSION, turnId: TURN, timestamp: T },
+      {
+        type: "session.created",
+        sessionId: SESSION,
+        nativeSessionId: "native-1",
+        harness: "claude-code",
+        timestamp: T,
+      },
+      // The user echo — this is what makes the user's message durable.
+      {
+        type: "message.started",
+        sessionId: SESSION,
+        turnId: TURN,
+        messageId: "u1",
+        outputIndex: 0,
+        role: "user",
+        timestamp: T,
+      },
+      {
+        type: "message.part",
+        sessionId: SESSION,
+        turnId: TURN,
+        messageId: "u1",
+        outputIndex: 0,
+        partIndex: 0,
         part: {
-          type: "TEXT",
-          id: "p1",
-          sessionId,
-          messageId: "msg-1",
+          type: "text",
+          id: "up1",
+          sessionId: SESSION,
+          messageId: "u1",
+          text: "what is 2+2?",
+        },
+        timestamp: T,
+      },
+      { type: "message.ended", sessionId: SESSION, turnId: TURN, messageId: "u1", timestamp: T },
+      {
+        type: "message.started",
+        sessionId: SESSION,
+        turnId: TURN,
+        messageId: "a1",
+        outputIndex: 1,
+        role: "assistant",
+        model: "claude-opus-5",
+        timestamp: T + 1,
+      },
+      {
+        type: "message.part",
+        sessionId: SESSION,
+        turnId: TURN,
+        messageId: "a1",
+        outputIndex: 1,
+        partIndex: 0,
+        part: {
+          type: "text",
+          id: "ap1",
+          sessionId: SESSION,
+          messageId: "a1",
           text: "Four",
-          state: "DONE",
+          state: "done",
         },
-      };
-      const partResult = persistPartDone(partDone);
-      expect(partResult.ok).toBe(true);
-
-      // 3. message.done
-      const done: MessageDoneEvent = {
-        type: "message.done",
-        sessionId,
-        agentHarness: "claude",
-        messageId: "msg-1",
+        timestamp: T + 2,
+      },
+      {
+        type: "message.ended",
+        sessionId: SESSION,
+        turnId: TURN,
+        messageId: "a1",
+        timestamp: T + 3,
+      },
+      {
+        type: "turn.ended",
+        sessionId: SESSION,
+        turnId: TURN,
         stopReason: "end_turn",
-        parts: [],
-      };
-      const doneResult = persistMessageDone(done);
-      expect(doneResult.ok).toBe(true);
-
-      // ── Verify messages table ──
-      const messages = db
-        .prepare(
-          `SELECT id, session_id, role, stop_reason, agent_message_id, seq FROM messages WHERE session_id = ?`
-        )
-        .all(sessionId) as MessageRow[];
-
-      expect(messages).toHaveLength(1);
-      expect(messages[0].id).toBe("msg-1");
-      expect(messages[0].role).toBe("assistant");
-      expect(messages[0].seq).toBeGreaterThan(0); // trigger-assigned
-
-      // ── Verify parts table ──
-      const parts = db
-        .prepare(
-          `SELECT id, message_id, session_id, type, data, tool_call_id, tool_name FROM parts WHERE session_id = ?`
-        )
-        .all(sessionId) as PartRow[];
-
-      expect(parts).toHaveLength(1);
-      expect(parts[0].id).toBe("p1");
-      expect(parts[0].message_id).toBe("msg-1");
-      expect(parts[0].type).toBe("TEXT");
-      expect(parts[0].tool_call_id).toBeNull();
-      expect(parts[0].tool_name).toBeNull();
-
-      // Verify the JSON data is parseable and contains the text
-      const partData = JSON.parse(parts[0].data);
-      expect(partData.type).toBe("TEXT");
-      expect(partData.text).toBe("Four");
-    });
-  });
-
-  // ==========================================================================
-  // Test 2: Tool call with two messages
-  // ==========================================================================
-
-  describe("tool call producing two assistant messages", () => {
-    it("creates 2 messages with correct stop_reasons and 3 parts", () => {
-      // ── Message 1: reasoning + tool call ──
-      persistMessageCreated({
-        type: "message.created",
-        sessionId,
-        agentHarness: "claude",
-        messageId: "msg-1",
-        role: "assistant",
-      });
-
-      // Part 1: REASONING
-      persistPartDone({
-        type: "part.done",
-        sessionId,
-        agentHarness: "claude",
-        messageId: "msg-1",
-        partId: "p1",
-        part: {
-          type: "REASONING",
-          id: "p1",
-          sessionId,
-          messageId: "msg-1",
-          text: "Let me read the file...",
-          state: "DONE",
-        },
-      });
-
-      // Part 2: TOOL
-      persistPartDone({
-        type: "part.done",
-        sessionId,
-        agentHarness: "claude",
-        messageId: "msg-1",
-        partId: "p2",
-        part: {
-          type: "TOOL",
-          id: "p2",
-          sessionId,
-          messageId: "msg-1",
-          toolCallId: "tc1",
-          toolName: "Read",
-          state: {
-            status: "COMPLETED",
-            input: "/src/main.ts",
-            output: "file contents...",
-            time: { start: "2024-01-01T00:00:00Z", end: "2024-01-01T00:00:01Z" },
-          },
-        },
-      });
-
-      persistMessageDone({
-        type: "message.done",
-        sessionId,
-        agentHarness: "claude",
-        messageId: "msg-1",
-        stopReason: "tool_use",
-        parts: [],
-      });
-
-      // ── Message 2: text response ──
-      persistMessageCreated({
-        type: "message.created",
-        sessionId,
-        agentHarness: "claude",
-        messageId: "msg-2",
-        role: "assistant",
-      });
-
-      persistPartDone({
-        type: "part.done",
-        sessionId,
-        agentHarness: "claude",
-        messageId: "msg-2",
-        partId: "p3",
-        part: {
-          type: "TEXT",
-          id: "p3",
-          sessionId,
-          messageId: "msg-2",
-          text: "The answer",
-          state: "DONE",
-        },
-      });
-
-      persistMessageDone({
-        type: "message.done",
-        sessionId,
-        agentHarness: "claude",
-        messageId: "msg-2",
-        stopReason: "end_turn",
-        parts: [],
-      });
-
-      // ── Verify messages table ──
-      const messages = db
-        .prepare(
-          `SELECT id, session_id, role, stop_reason, seq FROM messages WHERE session_id = ? ORDER BY seq`
-        )
-        .all(sessionId) as MessageRow[];
-
-      expect(messages).toHaveLength(2);
-      expect(messages[0].id).toBe("msg-1");
-      expect(messages[0].role).toBe("assistant");
-      expect(messages[1].id).toBe("msg-2");
-      expect(messages[1].role).toBe("assistant");
-
-      // Verify sequential ordering
-      expect(messages[0].seq).toBeLessThan(messages[1].seq);
-
-      // ── Verify parts table ──
-      const parts = db
-        .prepare(
-          `SELECT id, message_id, type, tool_call_id, tool_name, data FROM parts WHERE session_id = ? ORDER BY id`
-        )
-        .all(sessionId) as PartRow[];
-
-      expect(parts).toHaveLength(3);
-
-      // Part 1: REASONING linked to msg-1
-      const reasoning = parts.find((p) => p.id === "p1")!;
-      expect(reasoning.message_id).toBe("msg-1");
-      expect(reasoning.type).toBe("REASONING");
-      expect(reasoning.tool_call_id).toBeNull();
-
-      // Part 2: TOOL linked to msg-1
-      const tool = parts.find((p) => p.id === "p2")!;
-      expect(tool.message_id).toBe("msg-1");
-      expect(tool.type).toBe("TOOL");
-      expect(tool.tool_call_id).toBe("tc1");
-      expect(tool.tool_name).toBe("Read");
-
-      // Part 3: TEXT linked to msg-2
-      const text = parts.find((p) => p.id === "p3")!;
-      expect(text.message_id).toBe("msg-2");
-      expect(text.type).toBe("TEXT");
-    });
-  });
-
-  // ==========================================================================
-  // Test 3: Multiple tool calls in one message
-  // ==========================================================================
-
-  describe("multiple tool calls in one message", () => {
-    it("creates 2 messages with 5 parts total — 4 on msg-1 and 1 on msg-2", () => {
-      // ── Message 1: REASONING + 3 TOOL parts ──
-      persistMessageCreated({
-        type: "message.created",
-        sessionId,
-        agentHarness: "claude",
-        messageId: "msg-1",
-        role: "assistant",
-      });
-
-      persistPartDone({
-        type: "part.done",
-        sessionId,
-        agentHarness: "claude",
-        messageId: "msg-1",
-        partId: "p1",
-        part: {
-          type: "REASONING",
-          id: "p1",
-          sessionId,
-          messageId: "msg-1",
-          text: "I need to check several files...",
-          state: "DONE",
-        },
-      });
-
-      persistPartDone({
-        type: "part.done",
-        sessionId,
-        agentHarness: "claude",
-        messageId: "msg-1",
-        partId: "p2",
-        part: {
-          type: "TOOL",
-          id: "p2",
-          sessionId,
-          messageId: "msg-1",
-          toolCallId: "tc1",
-          toolName: "Read",
-          state: {
-            status: "COMPLETED",
-            input: "/src/a.ts",
-            output: "...",
-            time: { start: "t0", end: "t1" },
-          },
-        },
-      });
-
-      persistPartDone({
-        type: "part.done",
-        sessionId,
-        agentHarness: "claude",
-        messageId: "msg-1",
-        partId: "p3",
-        part: {
-          type: "TOOL",
-          id: "p3",
-          sessionId,
-          messageId: "msg-1",
-          toolCallId: "tc2",
-          toolName: "Read",
-          state: {
-            status: "COMPLETED",
-            input: "/src/b.ts",
-            output: "...",
-            time: { start: "t0", end: "t1" },
-          },
-        },
-      });
-
-      persistPartDone({
-        type: "part.done",
-        sessionId,
-        agentHarness: "claude",
-        messageId: "msg-1",
-        partId: "p4",
-        part: {
-          type: "TOOL",
-          id: "p4",
-          sessionId,
-          messageId: "msg-1",
-          toolCallId: "tc3",
-          toolName: "Bash",
-          state: {
-            status: "COMPLETED",
-            input: "ls -la",
-            output: "total 0",
-            time: { start: "t0", end: "t1" },
-          },
-        },
-      });
-
-      persistMessageDone({
-        type: "message.done",
-        sessionId,
-        agentHarness: "claude",
-        messageId: "msg-1",
-        stopReason: "tool_use",
-        parts: [],
-      });
-
-      // ── Message 2: TEXT response ──
-      persistMessageCreated({
-        type: "message.created",
-        sessionId,
-        agentHarness: "claude",
-        messageId: "msg-2",
-        role: "assistant",
-      });
-
-      persistPartDone({
-        type: "part.done",
-        sessionId,
-        agentHarness: "claude",
-        messageId: "msg-2",
-        partId: "p5",
-        part: {
-          type: "TEXT",
-          id: "p5",
-          sessionId,
-          messageId: "msg-2",
-          text: "Here are the results...",
-          state: "DONE",
-        },
-      });
-
-      persistMessageDone({
-        type: "message.done",
-        sessionId,
-        agentHarness: "claude",
-        messageId: "msg-2",
-        stopReason: "end_turn",
-        parts: [],
-      });
-
-      // ── Verify messages ──
-      const messages = db
-        .prepare(`SELECT id, role, seq FROM messages WHERE session_id = ? ORDER BY seq`)
-        .all(sessionId) as MessageRow[];
-
-      expect(messages).toHaveLength(2);
-
-      // ── Verify parts ──
-      const allParts = db
-        .prepare(
-          `SELECT id, message_id, type, tool_call_id, tool_name FROM parts WHERE session_id = ?`
-        )
-        .all(sessionId) as PartRow[];
-
-      expect(allParts).toHaveLength(5);
-
-      // msg-1 parts: 1 REASONING + 3 TOOL
-      const msg1Parts = allParts.filter((p) => p.message_id === "msg-1");
-      expect(msg1Parts).toHaveLength(4);
-      expect(msg1Parts.filter((p) => p.type === "REASONING")).toHaveLength(1);
-      expect(msg1Parts.filter((p) => p.type === "TOOL")).toHaveLength(3);
-
-      // msg-2 parts: 1 TEXT
-      const msg2Parts = allParts.filter((p) => p.message_id === "msg-2");
-      expect(msg2Parts).toHaveLength(1);
-      expect(msg2Parts[0].type).toBe("TEXT");
-
-      // All TOOL parts have correct tool_name and tool_call_id
-      const toolParts = allParts.filter((p) => p.type === "TOOL");
-      for (const tp of toolParts) {
-        expect(tp.tool_call_id).toBeTruthy();
-        expect(tp.tool_name).toBeTruthy();
+        tokens: { input: 12, output: 3 },
+        cost: 0.0004,
+        timestamp: T + 4,
       }
+    );
 
-      expect(toolParts.map((p) => p.tool_call_id).sort()).toEqual(["tc1", "tc2", "tc3"]);
-      expect(toolParts.map((p) => p.tool_name).sort()).toEqual(["Bash", "Read", "Read"]);
-    });
+    const rows = messages();
+    expect(rows.map((r) => [r.id, r.role, r.turn_id])).toEqual([
+      ["u1", "user", TURN],
+      ["a1", "assistant", TURN],
+    ]);
+    // The user row carries no legacy JSON envelope — it renders from parts.
+    expect(rows[0].content).toBeNull();
+    expect(parts().map((p) => [p.message_id, p.type])).toEqual([
+      ["u1", "text"],
+      ["a1", "text"],
+    ]);
+
+    // Turn accounting lands on the last top-level assistant message.
+    expect(JSON.parse(rows[1].tokens as string)).toEqual({ input: 12, output: 3 });
+    expect(rows[1].cost).toBe(0.0004);
+    expect(rows[1].turn_stop_reason).toBe("end_turn");
+
+    expect(sessionRow()).toMatchObject({ status: "idle", agent_session_id: "native-1" });
   });
 
   // ==========================================================================
-  // Test 4: FK integrity — parts reference valid messages
+  // Tool call across two assistant messages
   // ==========================================================================
 
-  describe("FK integrity: parts reference valid messages", () => {
-    it("every part.message_id exists in the messages table", () => {
-      // Create two messages with parts
-      persistMessageCreated({
-        type: "message.created",
-        sessionId,
-        agentHarness: "claude",
-        messageId: "msg-1",
+  it("keeps a tool part addressable across messages and completes it late", () => {
+    const toolPart = (status: "pending" | "in_progress" | "completed") => ({
+      type: "tool" as const,
+      id: "tp1",
+      sessionId: SESSION,
+      messageId: "a1",
+      toolCallId: "call-1",
+      toolName: "Bash",
+      kind: "execute",
+      state:
+        status === "pending"
+          ? { status: "pending" as const, partialInput: '{"comm' }
+          : status === "in_progress"
+            ? { status: "in_progress" as const, input: { command: "ls" }, time: { start: T } }
+            : {
+                status: "completed" as const,
+                input: { command: "ls" },
+                output: "a\nb",
+                content: [{ type: "text" as const, text: "a\nb" }],
+                time: { start: T, end: T + 50 },
+              },
+    });
+
+    feed(
+      {
+        type: "message.started",
+        sessionId: SESSION,
+        turnId: TURN,
+        messageId: "a1",
+        outputIndex: 1,
         role: "assistant",
-      });
-      persistPartDone({
-        type: "part.done",
-        sessionId,
-        agentHarness: "claude",
-        messageId: "msg-1",
-        partId: "p1",
-        part: {
-          type: "TEXT",
-          id: "p1",
-          sessionId,
-          messageId: "msg-1",
-          text: "hello",
-          state: "DONE",
-        },
-      });
-
-      persistMessageCreated({
-        type: "message.created",
-        sessionId,
-        agentHarness: "claude",
-        messageId: "msg-2",
+        timestamp: T,
+      },
+      {
+        type: "message.part",
+        sessionId: SESSION,
+        turnId: TURN,
+        messageId: "a1",
+        outputIndex: 1,
+        partIndex: 0,
+        part: toolPart("pending"),
+        timestamp: T,
+      },
+      {
+        type: "message.part",
+        sessionId: SESSION,
+        turnId: TURN,
+        messageId: "a1",
+        outputIndex: 1,
+        partIndex: 0,
+        part: toolPart("in_progress"),
+        timestamp: T + 1,
+      },
+      {
+        type: "message.ended",
+        sessionId: SESSION,
+        turnId: TURN,
+        messageId: "a1",
+        timestamp: T + 2,
+      },
+      {
+        type: "message.started",
+        sessionId: SESSION,
+        turnId: TURN,
+        messageId: "a2",
+        outputIndex: 2,
         role: "assistant",
-      });
-      persistPartDone({
-        type: "part.done",
-        sessionId,
-        agentHarness: "claude",
-        messageId: "msg-2",
-        partId: "p2",
-        part: {
-          type: "REASONING",
-          id: "p2",
-          sessionId,
-          messageId: "msg-2",
-          text: "thinking...",
-          state: "DONE",
-        },
-      });
-
-      // Query all parts and verify each message_id exists in messages
-      const parts = db
-        .prepare(`SELECT id, message_id FROM parts WHERE session_id = ?`)
-        .all(sessionId) as PartRow[];
-
-      const messageIds = new Set(
-        (
-          db.prepare(`SELECT id FROM messages WHERE session_id = ?`).all(sessionId) as MessageRow[]
-        ).map((m) => m.id)
-      );
-
-      for (const part of parts) {
-        expect(messageIds.has(part.message_id)).toBe(true);
+        timestamp: T + 3,
+      },
+      // The tool completes AFTER its message ended — the snapshot names the
+      // original messageId and the upsert must land back there.
+      {
+        type: "message.part",
+        sessionId: SESSION,
+        turnId: TURN,
+        messageId: "a1",
+        outputIndex: 1,
+        partIndex: 0,
+        part: toolPart("completed"),
+        timestamp: T + 4,
       }
-    });
+    );
 
-    it("rejects a part referencing a non-existent message (FK constraint)", () => {
-      const result = persistPartDone({
-        type: "part.done",
-        sessionId,
-        agentHarness: "claude",
-        messageId: "non-existent-msg",
-        partId: "p-orphan",
-        part: {
-          type: "TEXT",
-          id: "p-orphan",
-          sessionId,
-          messageId: "non-existent-msg",
-          text: "orphan",
-          state: "DONE",
-        },
-      });
-
-      // FK constraint failures are silently handled (returns ok: true)
-      // because part.created events can arrive before message.created persistence.
-      // The part will be saved on part.done when the message exists.
-      expect(result.ok).toBe(true);
-
-      // Verify no orphan parts were inserted (FK prevented actual write)
-      const orphans = db.prepare(`SELECT id FROM parts WHERE id = ?`).all("p-orphan");
-      expect(orphans).toHaveLength(0);
-    });
+    const rows = parts();
+    expect(rows).toHaveLength(1);
+    expect(rows[0].message_id).toBe("a1");
+    expect(rows[0].tool_name).toBe("Bash");
+    const stored = JSON.parse(rows[0].data);
+    expect(stored.state.status).toBe("completed");
+    // The display-grade content survives the round trip intact.
+    expect(stored.state.content).toEqual([{ type: "text", text: "a\nb" }]);
   });
 
   // ==========================================================================
-  // Test 5: Codex single-message turn
+  // Subagent nesting
   // ==========================================================================
 
-  describe("Codex single-message turn with mixed parts", () => {
-    it("creates 1 message with 4 parts (REASONING, TEXT, TOOL, TEXT)", () => {
-      persistMessageCreated({
-        type: "message.created",
-        sessionId,
-        agentHarness: "codex-sdk",
-        messageId: "codex-msg-1",
+  it("nests a subagent's message under the tool call that spawned it", () => {
+    feed(
+      {
+        type: "message.started",
+        sessionId: SESSION,
+        turnId: TURN,
+        messageId: "a1",
+        outputIndex: 1,
         role: "assistant",
-      });
-
-      // REASONING
-      persistPartDone({
-        type: "part.done",
-        sessionId,
-        agentHarness: "codex-sdk",
-        messageId: "codex-msg-1",
-        partId: "cp1",
+        timestamp: T,
+      },
+      {
+        type: "message.part",
+        sessionId: SESSION,
+        turnId: TURN,
+        messageId: "a1",
+        outputIndex: 1,
+        partIndex: 0,
         part: {
-          type: "REASONING",
-          id: "cp1",
-          sessionId,
-          messageId: "codex-msg-1",
-          text: "Thinking about the approach...",
-          state: "DONE",
+          type: "tool",
+          id: "tp1",
+          sessionId: SESSION,
+          messageId: "a1",
+          toolCallId: "task-1",
+          toolName: "Task",
+          kind: "task",
+          subagent: { type: "explorer", description: "Find the bug", model: "sonnet" },
+          state: { status: "in_progress", input: {}, time: { start: T } },
         },
-      });
-
-      // TEXT intro
-      persistPartDone({
-        type: "part.done",
-        sessionId,
-        agentHarness: "codex-sdk",
-        messageId: "codex-msg-1",
-        partId: "cp2",
+        timestamp: T,
+      },
+      {
+        type: "message.started",
+        sessionId: SESSION,
+        turnId: TURN,
+        messageId: "sub-1",
+        outputIndex: 2,
+        role: "assistant",
+        parentToolCallId: "task-1",
+        timestamp: T + 1,
+      },
+      {
+        type: "message.part",
+        sessionId: SESSION,
+        turnId: TURN,
+        messageId: "sub-1",
+        outputIndex: 2,
+        partIndex: 0,
         part: {
-          type: "TEXT",
-          id: "cp2",
-          sessionId,
-          messageId: "codex-msg-1",
-          text: "Let me run a command.",
-          state: "DONE",
+          type: "text",
+          id: "sp1",
+          sessionId: SESSION,
+          messageId: "sub-1",
+          text: "found it",
+          parentToolCallId: "task-1",
         },
-      });
-
-      // TOOL (shell)
-      persistPartDone({
-        type: "part.done",
-        sessionId,
-        agentHarness: "codex-sdk",
-        messageId: "codex-msg-1",
-        partId: "cp3",
-        part: {
-          type: "TOOL",
-          id: "cp3",
-          sessionId,
-          messageId: "codex-msg-1",
-          toolCallId: "codex-tc1",
-          toolName: "shell",
-          state: {
-            status: "COMPLETED",
-            input: "npm test",
-            output: "All tests pass",
-            time: { start: "t0", end: "t1" },
-          },
-        },
-      });
-
-      // TEXT response
-      persistPartDone({
-        type: "part.done",
-        sessionId,
-        agentHarness: "codex-sdk",
-        messageId: "codex-msg-1",
-        partId: "cp4",
-        part: {
-          type: "TEXT",
-          id: "cp4",
-          sessionId,
-          messageId: "codex-msg-1",
-          text: "All tests pass.",
-          state: "DONE",
-        },
-      });
-
-      persistMessageDone({
-        type: "message.done",
-        sessionId,
-        agentHarness: "codex-sdk",
-        messageId: "codex-msg-1",
-        stopReason: "end_turn",
-        parts: [],
-      });
-
-      // ── Verify messages ──
-      const messages = db
-        .prepare(`SELECT id, role FROM messages WHERE session_id = ?`)
-        .all(sessionId) as MessageRow[];
-
-      expect(messages).toHaveLength(1);
-      expect(messages[0].id).toBe("codex-msg-1");
-      expect(messages[0].role).toBe("assistant");
-
-      // ── Verify parts: all 4 linked to the single message ──
-      const parts = db
-        .prepare(
-          `SELECT id, message_id, type, tool_call_id, tool_name FROM parts WHERE session_id = ?`
-        )
-        .all(sessionId) as PartRow[];
-
-      expect(parts).toHaveLength(4);
-      for (const part of parts) {
-        expect(part.message_id).toBe("codex-msg-1");
+        timestamp: T + 1,
       }
+    );
 
-      // Verify part types
-      const typeMap = new Map(parts.map((p) => [p.id, p.type]));
-      expect(typeMap.get("cp1")).toBe("REASONING");
-      expect(typeMap.get("cp2")).toBe("TEXT");
-      expect(typeMap.get("cp3")).toBe("TOOL");
-      expect(typeMap.get("cp4")).toBe("TEXT");
-
-      // Verify TOOL part has tool metadata
-      const toolPart = parts.find((p) => p.type === "TOOL")!;
-      expect(toolPart.tool_call_id).toBe("codex-tc1");
-      expect(toolPart.tool_name).toBe("shell");
+    const rows = messages();
+    expect(rows.find((r) => r.id === "sub-1")?.parent_tool_call_id).toBe("task-1");
+    expect(parts().find((p) => p.id === "sp1")?.parent_tool_call_id).toBe("task-1");
+    // The subagent metadata rides on the spawning tool part, not a name list.
+    const tool = JSON.parse(parts().find((p) => p.id === "tp1")!.data);
+    expect(tool.subagent).toEqual({
+      type: "explorer",
+      description: "Find the bug",
+      model: "sonnet",
     });
   });
 
   // ==========================================================================
-  // Test 6: persistMessageDone sets stop_reason
+  // Cancellation
   // ==========================================================================
 
-  describe("persistMessageDone stop_reason update", () => {
-    it("sets stop_reason on the message by id", () => {
-      persistMessageCreated({
-        type: "message.created",
-        sessionId,
-        agentHarness: "claude",
-        messageId: "msg-done-test",
+  it("marks the turn's last assistant message cancelled and goes idle", () => {
+    feed(
+      {
+        type: "message.started",
+        sessionId: SESSION,
+        turnId: TURN,
+        messageId: "u1",
+        outputIndex: 0,
+        role: "user",
+        timestamp: T,
+      },
+      {
+        type: "message.started",
+        sessionId: SESSION,
+        turnId: TURN,
+        messageId: "a1",
+        outputIndex: 1,
         role: "assistant",
-      });
-
-      const result = persistMessageDone({
-        type: "message.done",
-        sessionId,
-        agentHarness: "claude",
-        messageId: "msg-done-test",
-        stopReason: "end_turn",
-        parts: [],
-      });
-      expect(result.ok).toBe(true);
-
-      const msg = db
-        .prepare(`SELECT stop_reason FROM messages WHERE id = ?`)
-        .get("msg-done-test") as { stop_reason: string | null } | undefined;
-
-      expect(msg).toBeDefined();
-      expect(msg!.stop_reason).toBe("end_turn");
-    });
-
-    it("matches on id column (not agent_message_id)", () => {
-      // persistMessageCreated stores the messageId as the row's `id` column.
-      // persistMessageDone uses WHERE id = ? to update stop_reason.
-      persistMessageCreated({
-        type: "message.created",
-        sessionId,
-        agentHarness: "claude",
-        messageId: "msg-id-match",
-        role: "assistant",
-      });
-
-      persistMessageDone({
-        type: "message.done",
-        sessionId,
-        agentHarness: "claude",
-        messageId: "msg-id-match",
-        stopReason: "tool_use",
-        parts: [],
-      });
-
-      const msg = db
-        .prepare(`SELECT id, stop_reason FROM messages WHERE id = ?`)
-        .get("msg-id-match") as MessageRow | undefined;
-
-      expect(msg).toBeDefined();
-      expect(msg!.stop_reason).toBe("tool_use");
-    });
-  });
-
-  // ==========================================================================
-  // Test 7: Session message_count trigger fires correctly
-  // ==========================================================================
-
-  describe("session message_count trigger", () => {
-    it("increments message_count for each inserted message", () => {
-      const before = db
-        .prepare(`SELECT message_count FROM sessions WHERE id = ?`)
-        .get(sessionId) as { message_count: number };
-      expect(before.message_count).toBe(0);
-
-      persistMessageCreated({
-        type: "message.created",
-        sessionId,
-        agentHarness: "claude",
-        messageId: "msg-count-1",
-        role: "assistant",
-      });
-      persistMessageCreated({
-        type: "message.created",
-        sessionId,
-        agentHarness: "claude",
-        messageId: "msg-count-2",
-        role: "assistant",
-      });
-
-      const after = db
-        .prepare(`SELECT message_count FROM sessions WHERE id = ?`)
-        .get(sessionId) as { message_count: number };
-      expect(after.message_count).toBe(2);
-    });
-  });
-
-  // ==========================================================================
-  // Test 8: Part data JSON round-trip
-  // ==========================================================================
-
-  describe("part data JSON round-trip", () => {
-    it("stores and retrieves the full part object faithfully", () => {
-      persistMessageCreated({
-        type: "message.created",
-        sessionId,
-        agentHarness: "claude",
-        messageId: "msg-json",
-        role: "assistant",
-      });
-
-      const toolPart = {
-        type: "TOOL" as const,
-        id: "pj1",
-        sessionId,
-        messageId: "msg-json",
-        toolCallId: "tc-json",
-        toolName: "Edit",
-        state: {
-          status: "COMPLETED" as const,
-          input: { file: "a.ts", changes: [1, 2, 3] },
-          output: "Applied 3 edits",
-          title: "Edit a.ts",
-          time: { start: "2024-01-01T00:00:00Z", end: "2024-01-01T00:00:02Z" },
-        },
-        kind: "write" as const,
-        locations: [{ path: "a.ts", range: { startLine: 10, endLine: 20 } }],
-      };
-
-      persistPartDone({
-        type: "part.done",
-        sessionId,
-        agentHarness: "claude",
-        messageId: "msg-json",
-        partId: "pj1",
-        part: toolPart,
-      });
-
-      const row = db.prepare(`SELECT data FROM parts WHERE id = ?`).get("pj1") as {
-        data: string;
-      };
-      const parsed = JSON.parse(row.data);
-
-      expect(parsed.type).toBe("TOOL");
-      expect(parsed.toolCallId).toBe("tc-json");
-      expect(parsed.toolName).toBe("Edit");
-      expect(parsed.state.status).toBe("COMPLETED");
-      expect(parsed.state.input).toEqual({ file: "a.ts", changes: [1, 2, 3] });
-      expect(parsed.state.output).toBe("Applied 3 edits");
-      expect(parsed.kind).toBe("write");
-      expect(parsed.locations).toHaveLength(1);
-      expect(parsed.locations[0].path).toBe("a.ts");
-    });
-  });
-
-  // ==========================================================================
-  // Test 9: Missing session returns error (not a crash)
-  // ==========================================================================
-
-  describe("missing session FK guard", () => {
-    it("returns ok: false when session does not exist", () => {
-      const result = persistMessageCreated({
-        type: "message.created",
-        sessionId: "no-such-session",
-        agentHarness: "claude",
-        messageId: "msg-orphan",
-        role: "assistant",
-      });
-
-      expect(result.ok).toBe(false);
-      if (!result.ok) {
-        expect(result.error).toContain("session not found");
+        timestamp: T + 1,
+      },
+      {
+        type: "turn.ended",
+        sessionId: SESSION,
+        turnId: TURN,
+        stopReason: "cancelled",
+        timestamp: T + 2,
       }
+    );
 
-      // No row created
-      const messages = db.prepare(`SELECT id FROM messages WHERE id = ?`).all("msg-orphan");
-      expect(messages).toHaveLength(0);
+    const rows = messages();
+    expect(rows).toHaveLength(2);
+    expect(rows[1].cancelled_at).toBe(new Date(T + 2).toISOString());
+    expect(rows[1].turn_stop_reason).toBe("cancelled");
+    expect(sessionRow().status).toBe("idle");
+  });
+
+  // ==========================================================================
+  // Errors
+  // ==========================================================================
+
+  it("swallows a recoverable error and lets the turn finish normally", () => {
+    feed(
+      {
+        type: "message.started",
+        sessionId: SESSION,
+        turnId: TURN,
+        messageId: "a1",
+        outputIndex: 1,
+        role: "assistant",
+        timestamp: T,
+      },
+      {
+        type: "error",
+        sessionId: SESSION,
+        turnId: TURN,
+        category: "rate_limit",
+        message: "429, retrying",
+        recoverable: true,
+        timestamp: T + 1,
+      }
+    );
+
+    // Mid-turn: the session must still look like it is working.
+    expect(sessionRow()).toMatchObject({ status: "working", error_message: null });
+
+    feed({
+      type: "turn.ended",
+      sessionId: SESSION,
+      turnId: TURN,
+      stopReason: "end_turn",
+      timestamp: T + 2,
+    });
+
+    expect(sessionRow()).toMatchObject({ status: "idle", error_message: null });
+  });
+
+  it("records a terminal error once, with the engine's category", () => {
+    feed(
+      {
+        type: "error",
+        sessionId: SESSION,
+        turnId: TURN,
+        category: "auth",
+        message: "not logged in",
+        recoverable: false,
+        timestamp: T,
+      },
+      {
+        type: "turn.ended",
+        sessionId: SESSION,
+        turnId: TURN,
+        stopReason: "error",
+        error: { category: "internal", message: "agent turn failed" },
+        timestamp: T + 1,
+      }
+    );
+
+    // The specific message survives the vaguer terminal one.
+    expect(sessionRow()).toMatchObject({
+      status: "error",
+      error_message: "not logged in",
+      error_category: "auth",
     });
   });
 
   // ==========================================================================
-  // Test 10: parentToolCallId stored on nested parts
+  // Compaction
   // ==========================================================================
 
-  describe("parentToolCallId on nested parts", () => {
-    it("stores parent_tool_call_id for parts nested inside a tool call", () => {
-      persistMessageCreated({
-        type: "message.created",
-        sessionId,
-        agentHarness: "claude",
-        messageId: "msg-nested",
-        role: "assistant",
-      });
+  it("stores the compaction marker and reads it back through the messages query", () => {
+    feed(
+      {
+        type: "session.compaction",
+        sessionId: SESSION,
+        turnId: TURN,
+        compactionId: "cmp-1",
+        status: "in_progress",
+        trigger: "auto",
+        preTokens: 180_000,
+        timestamp: T,
+      },
+      {
+        type: "session.compaction",
+        sessionId: SESSION,
+        turnId: TURN,
+        compactionId: "cmp-1",
+        status: "completed",
+        postTokens: 20_000,
+        summary: "Earlier work summarized.",
+        timestamp: T + 5_000,
+      }
+    );
 
-      // A TEXT part nested under a tool call (subagent output)
-      persistPartDone({
-        type: "part.done",
-        sessionId,
-        agentHarness: "claude",
-        messageId: "msg-nested",
-        partId: "p-nested",
-        part: {
-          type: "TEXT",
-          id: "p-nested",
-          sessionId,
-          messageId: "msg-nested",
-          text: "Subagent response",
-          state: "DONE",
-          parentToolCallId: "tc-parent",
-        },
-      });
-
-      const row = db
-        .prepare(`SELECT parent_tool_call_id FROM parts WHERE id = ?`)
-        .get("p-nested") as PartRow;
-
-      expect(row.parent_tool_call_id).toBe("tc-parent");
+    const rows = getCompactions(db, SESSION);
+    expect(rows).toHaveLength(1);
+    expect(rows[0]).toMatchObject({
+      compaction_id: "cmp-1",
+      turn_id: TURN,
+      status: "completed",
+      trigger: "auto",
+      pre_tokens: 180_000,
+      post_tokens: 20_000,
+      summary: "Earlier work summarized.",
     });
+  });
+
+  // ==========================================================================
+  // Context gauge
+  // ==========================================================================
+
+  it("merges the context gauge stickily across a turn", () => {
+    feed(
+      {
+        type: "session.usage",
+        sessionId: SESSION,
+        turnId: TURN,
+        used: 50_000,
+        size: 200_000,
+        timestamp: T,
+      },
+      { type: "session.usage", sessionId: SESSION, turnId: TURN, used: 60_000, timestamp: T + 1 }
+    );
+
+    expect(sessionRow()).toMatchObject({
+      context_token_count: 60_000,
+      context_used_percent: 25,
+    });
+  });
+
+  // ==========================================================================
+  // FK integrity
+  // ==========================================================================
+
+  it("never writes a part whose message row does not exist", () => {
+    feed({
+      type: "message.part",
+      sessionId: SESSION,
+      turnId: TURN,
+      messageId: "ghost",
+      outputIndex: 1,
+      partIndex: 0,
+      part: { type: "text", id: "p", sessionId: SESSION, messageId: "ghost", text: "x" },
+      timestamp: T,
+    });
+
+    const orphans = db
+      .prepare(
+        `SELECT count(*) as n FROM parts p LEFT JOIN messages m ON p.message_id = m.id
+                WHERE m.id IS NULL`
+      )
+      .get() as { n: number };
+    expect(orphans.n).toBe(0);
   });
 });

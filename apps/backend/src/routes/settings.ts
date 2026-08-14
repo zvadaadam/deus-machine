@@ -37,26 +37,21 @@ app.get("/settings/agent-auth", async (c) => {
     });
   }
 
-  // Which agents had their CLI discovered during startup
+  // Only harnesses the engine actually registered appear in the handshake —
+  // presence IS availability, so there is no separate `initialized` flag.
   const agents = getAgents();
-  const claudeInstalled = agents.some((a) => a.type === "claude" && a.initialized);
-  const codexAgent =
-    agents.find((a) => a.type === "codex-server" && a.initialized) ??
-    agents.find((a) => a.type === "codex-sdk" && a.initialized) ??
-    agents.find((a) => a.type === "codex-server") ??
-    agents.find((a) => a.type === "codex-sdk");
-  const codexInstalled = codexAgent?.initialized ?? false;
+  const claudeInstalled = agents.some((a) => a.type === "claude-code");
 
   const cwd = process.cwd();
   const [claudeResult, codexResult] = await Promise.allSettled([
-    claudeInstalled ? checkAuth({ agentHarness: "claude", cwd }) : Promise.resolve(null),
-    codexInstalled && codexAgent?.capabilities.auth
-      ? checkAuth({ agentHarness: codexAgent.type as AgentHarness, cwd })
-      : Promise.resolve(null),
+    claudeInstalled ? checkAuth({ agentHarness: "claude-code", cwd }) : Promise.resolve(null),
+    // Auth introspection is a Claude-only feature today (the SDK exposes
+    // accountInfo); codex reports nothing to check.
+    Promise.resolve(null),
   ]);
 
   return c.json({
-    agents: agents.map((a) => ({ type: a.type, installed: a.initialized })),
+    agents: agents.map((a) => ({ type: a.type, installed: true })),
     claude:
       claudeResult.status === "fulfilled"
         ? claudeResult.value

@@ -13,6 +13,7 @@ import NumberFlow from "@number-flow/react";
 import { AnimatePresence, motion } from "framer-motion";
 import { cn } from "@/shared/lib/utils";
 import type { Message, ToolUseBlock, ToolResultBlock } from "../../types";
+import type { SubagentMetadata } from "@shared/protocol-types";
 
 import { SubagentMessageList } from "./SubagentMessageList";
 import { useSession, SessionProvider } from "../../context";
@@ -21,6 +22,8 @@ interface SubagentGroupBlockProps {
   toolUse: ToolUseBlock;
   toolResult?: ToolResultBlock;
   childMessages: Message[];
+  /** Normalized subagent metadata from the spawning tool part, when present. */
+  subagent?: SubagentMetadata;
 }
 
 const expandTransition = { duration: 0.15, ease: [0.165, 0.84, 0.44, 1] as const };
@@ -29,10 +32,15 @@ export function SubagentGroupBlock({
   toolUse,
   toolResult,
   childMessages,
+  subagent,
 }: SubagentGroupBlockProps) {
   const { sessionStatus, workspaceId, workspacePath, subagentMessages } = useSession();
+  // The protocol normalizes subagent metadata onto the tool part; the raw
+  // tool input is the fallback for harnesses that report neither.
   const { description, prompt, subagent_type } = toolUse.input ?? {};
   const label =
+    compactAgentLabel(subagent?.description) ||
+    compactAgentLabel(subagent?.type) ||
     compactAgentLabel(description) ||
     compactAgentLabel(subagent_type) ||
     compactAgentLabel(prompt) ||
@@ -43,12 +51,12 @@ export function SubagentGroupBlock({
 
   const [isExpanded, setIsExpanded] = useState(false);
 
-  // Count TOOL parts across child messages
+  // Count tool parts across child messages
   const toolCount = useMemo(() => {
     let count = 0;
     childMessages.forEach((msg) => {
       if (msg.parts) {
-        count += msg.parts.filter((part) => part.type === "TOOL").length;
+        count += msg.parts.filter((part) => !("raw" in part) && part.type === "tool").length;
       }
     });
     return count;

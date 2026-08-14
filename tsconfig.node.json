@@ -11,6 +11,15 @@
     "composite": true,
     "outDir": "./out/types-node",
     "declarationDir": "./out/types-node",
+    // shared/ re-exports the agent protocol's types from @zvada/agent-server,
+    // whose raw TypeScript source imports with .ts extensions. See tsconfig.web.json.
+    "allowImportingTsExtensions": true,
+    "emitDeclarationOnly": true,
+    // @zvada/agent-server's TypeScript source is part of this program (it ships
+    // .ts, not .d.ts), so unused-symbol checks would report ITS nits as ours.
+    // tsconfig.web.json has always been off for the same reason.
+    "noUnusedLocals": false,
+    "noUnusedParameters": false,
     "types": ["electron-vite/node"]
   }
 }

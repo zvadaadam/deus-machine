@@ -6,11 +6,16 @@
  */
 
 import { memo } from "react";
-import type { Part } from "@shared/messages/types";
+import type { Part, UnknownPart } from "@shared/protocol-types";
 import { PartsRenderer } from "./PartsRenderer";
 
 interface SubagentMessageListProps {
-  messages: Array<{ id: string; role: string; parts?: Part[]; content?: string }>;
+  messages: Array<{
+    id: string;
+    role: string;
+    parts?: Array<Part | UnknownPart>;
+    content?: string | null;
+  }>;
 }
 
 export const SubagentMessageList = memo(function SubagentMessageList({

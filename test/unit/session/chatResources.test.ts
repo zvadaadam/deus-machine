@@ -11,31 +11,31 @@ import type { Part } from "../../../shared/messages/types";
 
 function textPart(text: string, partIndex = 0): Part {
   return {
-    type: "TEXT",
+    type: "text",
     id: `text-${partIndex}`,
     sessionId: "session-1",
     messageId: "message-1",
     partIndex,
     text,
-    state: "DONE",
+    state: "done",
   };
 }
 
 function writePart(paths: string[], partIndex = 0): Part {
   return {
-    type: "TOOL",
+    type: "tool",
     id: `tool-${partIndex}`,
     sessionId: "session-1",
     messageId: "message-1",
     partIndex,
     toolCallId: `call-${partIndex}`,
     toolName: "apply_patch",
-    kind: "write",
+    kind: "edit",
     locations: paths.map((path) => ({ path })),
     state: {
-      status: "COMPLETED",
+      status: "completed",
       title: "Edit files",
-      time: { start: "2026-05-09T00:00:00.000Z", end: "2026-05-09T00:00:01.000Z" },
+      time: { start: 1778284800000, end: 1778284801000 },
       content: paths.map((path) => ({ type: "diff" as const, path, newText: "" })),
     },
   };
