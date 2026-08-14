@@ -25,6 +25,8 @@ export interface ImportableSessionDTO {
   imported: boolean;
   importedSessionId?: string;
   project: ImportProjectMatch;
+  /** Git main-repo root the cwd resolved to (worktrees), when not matched. */
+  resolvedRoot?: string;
 }
 
 export interface ImportableGroup {
@@ -43,5 +45,7 @@ export interface ImportableSessionsSnapshot {
   scanMs?: number;
   groups: ImportableGroup[];
   totals: Record<ImportProvider, number>;
+  /** All ready workspaces — destinations for groups without a default target. */
+  workspaceOptions?: { id: string; label: string }[];
   error?: string;
 }

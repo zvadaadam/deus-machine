@@ -79,6 +79,8 @@ export function ImportSessionsModal({ open, onClose, onOpenWorkspace }: ImportSe
     () => new Set(ALL_PROVIDERS)
   );
   const [expandedGroups, setExpandedGroups] = useState<Set<string>>(() => new Set());
+  // Explicit destinations chosen for groups that matched no project.
+  const [chosenTargets, setChosenTargets] = useState<Record<string, string>>({});
   const [busyKey, setBusyKey] = useState<string | null>(null);
   const [bulk, setBulk] = useState<{ done: number; total: number } | null>(null);
   const busy = busyKey !== null || bulk !== null;
@@ -108,14 +110,15 @@ export function ImportSessionsModal({ open, onClose, onOpenWorkspace }: ImportSe
 
   const pendingSessions = useMemo(
     () =>
-      groups.flatMap((group) =>
-        group.defaultWorkspaceId
+      groups.flatMap((group) => {
+        const target = group.defaultWorkspaceId ?? chosenTargets[groupKey(group)];
+        return target
           ? group.sessions
               .filter((s) => !s.imported)
-              .map((s) => ({ session: s, workspaceId: group.defaultWorkspaceId! }))
-          : []
-      ),
-    [groups]
+              .map((s) => ({ session: s, workspaceId: target }))
+          : [];
+      }),
+    [groups, chosenTargets]
   );
   const totalListed = groups.reduce((a, g) => a + g.sessions.length, 0);
   const totalImported = groups.reduce((a, g) => a + g.sessions.filter((s) => s.imported).length, 0);
@@ -203,14 +206,18 @@ export function ImportSessionsModal({ open, onClose, onOpenWorkspace }: ImportSe
     else toast.success(`Imported ${items.length} ${label}`);
   };
 
+  const targetFor = (group: ImportableGroup): string | undefined =>
+    group.defaultWorkspaceId ?? chosenTargets[groupKey(group)];
+
   const importGroup = (group: ImportableGroup) => {
-    if (!group.defaultWorkspaceId) {
-      toast.error("No workspace to import into — create a workspace first");
+    const target = targetFor(group);
+    if (!target) {
+      toast.error("Choose a destination workspace first");
       return;
     }
     const pending = group.sessions
       .filter((s) => !s.imported)
-      .map((s) => ({ session: s, workspaceId: group.defaultWorkspaceId! }));
+      .map((s) => ({ session: s, workspaceId: target }));
     void importMany(pending, `sessions from ${group.projectName}`);
   };
 
@@ -332,13 +339,34 @@ export function ImportSessionsModal({ open, onClose, onOpenWorkspace }: ImportSe
                     <span className="text-text-muted hidden shrink-0 text-[11px] tabular-nums sm:inline">
                       {group.sessions.length} session{group.sessions.length === 1 ? "" : "s"}
                     </span>
+                    {pending > 0 && !group.defaultWorkspaceId && (
+                      <select
+                        value={chosenTargets[key] ?? ""}
+                        onClick={(e) => e.stopPropagation()}
+                        onChange={(e) => {
+                          e.stopPropagation();
+                          setChosenTargets((prev) => ({ ...prev, [key]: e.target.value }));
+                        }}
+                        className="border-border-subtle bg-bg-raised text-text-secondary h-6 max-w-[150px] shrink-0 rounded-md border px-1.5 text-[11px] outline-none"
+                        aria-label={`Destination workspace for ${group.projectName}`}
+                      >
+                        <option value="" disabled>
+                          Import into…
+                        </option>
+                        {(snapshot?.workspaceOptions ?? []).map((option) => (
+                          <option key={option.id} value={option.id}>
+                            {option.label}
+                          </option>
+                        ))}
+                      </select>
+                    )}
                     {pending > 0 && (
                       <Button
                         size="sm"
                         variant="outline"
                         className="h-6 shrink-0 px-2 text-[11px]"
-                        disabled={busy || !group.defaultWorkspaceId}
-                        title={group.defaultWorkspaceId ? undefined : noTargetHint(group)}
+                        disabled={busy || !targetFor(group)}
+                        title={targetFor(group) ? undefined : "Choose a destination workspace"}
                         onClick={(e) => {
                           e.stopPropagation();
                           importGroup(group);

@@ -12,7 +12,7 @@
 
 import { homedir, tmpdir } from "node:os";
 import { promises as fsp } from "node:fs";
-import { join } from "node:path";
+import { basename, join } from "node:path";
 import { getDatabase } from "../lib/database";
 import type { QueryParams } from "../lib/query-params";
 import { requireParam } from "../lib/query-params";
@@ -31,6 +31,7 @@ import {
   identityKey,
   isDeusOwned,
   matchCwd,
+  resolveGitMainRoot,
   type KnownRepo,
   type KnownWorkspace,
   type PortMessage,
@@ -39,8 +40,8 @@ import {
 } from "../../../../packages/agent-ports/src/index";
 
 const SCAN_TTL_MS = 30_000;
-const SCAN_MAX_AGE_DAYS = 180;
-const MAX_SESSIONS_PER_PROVIDER = 120;
+const SCAN_MAX_AGE_DAYS = 365;
+const MAX_SESSIONS_PER_PROVIDER = 300;
 const MAX_TOOL_PAYLOAD_CHARS = 16_384;
 const MAX_USER_CONTENT_CHARS = 65_536;
 const MAX_TEXT_PART_CHARS = 262_144;
@@ -105,7 +106,7 @@ async function refreshImportableSessions(): Promise<void> {
   }));
   const workspaceRows = db
     .prepare(
-      `SELECT w.id, w.repository_id, w.slug, w.title, w.updated_at, r.root_path
+      `SELECT w.id, w.repository_id, w.slug, w.title, w.updated_at, r.root_path, r.name as repo_name
        FROM workspaces w JOIN repositories r ON r.id = w.repository_id
        WHERE w.state = 'ready'
        ORDER BY w.updated_at DESC`
@@ -117,6 +118,7 @@ async function refreshImportableSessions(): Promise<void> {
     title: string | null;
     updated_at: string;
     root_path: string;
+    repo_name: string | null;
   }[];
   const knownWorkspaces: KnownWorkspace[] = workspaceRows.map((w) => ({
     id: w.id,
@@ -155,6 +157,21 @@ async function refreshImportableSessions(): Promise<void> {
         kept++;
       }
       headsByKey.set(key, head);
+      // Direct cwd match first; unknown cwds resolve through git — Conductor/
+      // Codex worktrees live OUTSIDE their repo roots, but their .git file
+      // points at the main checkout, which often IS a registered project.
+      let project = matchCwd(head.identity.cwd, knownRepos, knownWorkspaces);
+      let resolvedRoot: string | undefined;
+      if (project.kind === "unknown") {
+        resolvedRoot = await resolveGitMainRoot(head.identity.cwd);
+        if (resolvedRoot) {
+          const viaRoot = matchCwd(resolvedRoot, knownRepos, knownWorkspaces);
+          project =
+            viaRoot.kind === "unknown"
+              ? { kind: "unknown", projectName: basename(resolvedRoot) }
+              : viaRoot;
+        }
+      }
       sessions.push({
         key,
         provider,
@@ -167,7 +184,8 @@ async function refreshImportableSessions(): Promise<void> {
         model: head.model,
         imported: imported !== undefined,
         importedSessionId: imported?.sessionId,
-        project: matchCwd(head.identity.cwd, knownRepos, knownWorkspaces),
+        project,
+        resolvedRoot,
       });
     }
   }
@@ -179,6 +197,10 @@ async function refreshImportableSessions(): Promise<void> {
     scanMs,
     groups: groupSessions(sessions, knownWorkspaces),
     totals,
+    workspaceOptions: workspaceRows.map((w) => ({
+      id: w.id,
+      label: `${w.repo_name ?? "?"} / ${w.title ?? w.slug}`,
+    })),
   };
   console.log(
     `[session-import] scan completed in ${scanMs}ms (claude=${claudeHeads.length} codex=${codexHeads.length} cursor=${cursorHeads.length} listed=${sessions.length})`
@@ -229,7 +251,7 @@ function groupSessions(
     // defensive: worktree cwds are excluded as deus-owned upstream.)
     const groupKey =
       session.project.kind === "unknown"
-        ? `unknown:${session.project.projectName}:${session.cwd}`
+        ? `unknown:${session.resolvedRoot ?? session.cwd}`
         : session.project.kind === "workspace"
           ? `ws:${session.project.workspaceId}`
           : `repo:${session.project.repositoryId}`;
