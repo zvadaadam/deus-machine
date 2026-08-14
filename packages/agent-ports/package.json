@@ -1,0 +1,10 @@
+{
+  "name": "@deus/agent-ports",
+  "version": "0.0.1",
+  "private": true,
+  "type": "module",
+  "description": "Import ports: read sessions from other coding agents (Claude Code, Codex, Cursor) into Deus's canonical message model.",
+  "scripts": {
+    "probe": "bun probe/run-probe.ts"
+  }
+}

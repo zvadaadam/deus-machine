@@ -167,7 +167,7 @@ describe("shared/events", () => {
       expect(QUERY_RESOURCES).toContain("running_apps");
       // Local server discovery
       expect(QUERY_RESOURCES).toContain("local_servers");
-      expect(QUERY_RESOURCES).toHaveLength(8);
+      expect(QUERY_RESOURCES).toHaveLength(9);
     });
 
     it("MUTATION_NAMES contains the expected mutations", () => {
@@ -215,7 +215,7 @@ describe("shared/events", () => {
       // AAP commands
       expect(COMMAND_NAMES).toContain("launchApp");
       expect(COMMAND_NAMES).toContain("stopApp");
-      expect(COMMAND_NAMES).toHaveLength(30);
+      expect(COMMAND_NAMES).toHaveLength(31);
     });
 
     it("REQUEST_RESOURCES contains the expected request-only resources", () => {

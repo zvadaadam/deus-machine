@@ -32,6 +32,7 @@ import { delegateToRoute } from "./route-delegate";
 import { autoProgressStatus, setWorkspaceStatus } from "./workspace-status.service";
 import { getRunningApps, listApps, stopAppsForWorkspace } from "./aap";
 import { getDiscoveredServers } from "./local-servers.service";
+import { getImportableSessionsSnapshot } from "./session-import.service";
 import {
   runRequest,
   type RequestContext,
@@ -442,6 +443,7 @@ function runQuery(resource: QueryResource, params: QueryParams): unknown {
         return getRunningApps(workspaceId ?? null);
       })
       .with("local_servers", () => getDiscoveredServers())
+      .with("importable_sessions", () => getImportableSessionsSnapshot())
       .exhaustive()
   );
 }

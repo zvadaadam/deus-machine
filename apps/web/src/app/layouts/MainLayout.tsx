@@ -41,6 +41,7 @@ import { CommandPalette } from "@/features/command-palette";
 import { GitHubPickerModal } from "@/features/sidebar/ui/GitHubPickerModal";
 import { useConnectionStateInit } from "@/features/connection";
 import { MainContent } from "./MainContent";
+import { ImportSessionsModal } from "@/features/import/ui/ImportSessionsModal";
 import { useRepoActions } from "./hooks/useRepoActions";
 import { useSystemPrompt, useUpdateSystemPrompt } from "@/features/workspace/api";
 import { toast } from "sonner";
@@ -89,6 +90,9 @@ export function MainLayout() {
   const showNewWorkspaceModal = useUIStore((s) => s.showNewWorkspaceModal);
   const newWorkspaceMode = useUIStore((s) => s.newWorkspaceMode);
   const showSystemPromptModal = useUIStore((s) => s.showSystemPromptModal);
+  const showImportSessionsModal = useUIStore((s) => s.showImportSessionsModal);
+  const openImportSessionsModal = useUIStore((s) => s.openImportSessionsModal);
+  const closeImportSessionsModal = useUIStore((s) => s.closeImportSessionsModal);
   const settingsOpen = useUIStore((s) => s.settingsOpen);
   const openNewWorkspaceModal = useUIStore((s) => s.openNewWorkspaceModal);
   const closeNewWorkspaceModal = useUIStore((s) => s.closeNewWorkspaceModal);
@@ -432,6 +436,7 @@ export function MainLayout() {
           onOpenProject={repoActions.handleOpenProject}
           onCloneRepository={() => repoActions.setShowCloneModal(true)}
           onStartNewProject={() => repoActions.setShowStartNewModal(true)}
+          onImportSessions={openImportSessionsModal}
           repos={repos}
           repoGroups={repoGroups}
           onStartWorkspace={handleStartWorkspace}
@@ -491,6 +496,24 @@ export function MainLayout() {
         onClose={repoActions.closeStartNewModal}
         onCreateProject={repoActions.handleStartNewProject}
         onClearError={repoActions.clearStartNewError}
+      />
+
+      <ImportSessionsModal
+        open={showImportSessionsModal}
+        onClose={closeImportSessionsModal}
+        onOpenWorkspace={(workspaceId, repositoryId, sessionId) => {
+          if (sessionId) {
+            // Persisted tabs shadow the current_session_id fallback — add the
+            // imported session as the active tab so "Open" actually shows it.
+            const layout = workspaceLayoutActions.getLayout(workspaceId);
+            const tabIds = layout.chatTabSessionIds.includes(sessionId)
+              ? layout.chatTabSessionIds
+              : [...layout.chatTabSessionIds, sessionId];
+            workspaceLayoutActions.setChatTabState(workspaceId, tabIds, sessionId);
+          }
+          selectWorkspace(workspaceId);
+          if (repositoryId) expandRepo(repositoryId);
+        }}
       />
 
       <GitHubPickerModal

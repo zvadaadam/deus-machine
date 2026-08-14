@@ -61,6 +61,7 @@ interface MainContentProps {
   onOpenProject: () => void;
   onCloneRepository: () => void;
   onStartNewProject: () => void;
+  onImportSessions: () => void;
   /** Repos for the home screen's repo picker */
   repos: Repository[];
   /** Sidebar workspace groups reused by the home screen recent list. */
@@ -80,6 +81,7 @@ export function MainContent({
   onOpenProject,
   onCloneRepository,
   onStartNewProject,
+  onImportSessions,
   repos,
   repoGroups,
   onStartWorkspace,
@@ -483,6 +485,7 @@ export function MainContent({
               onOpenProject={onOpenProject}
               onCloneRepository={onCloneRepository}
               onStartNewProject={onStartNewProject}
+              onImportSessions={onImportSessions}
             />
           </div>
         )}

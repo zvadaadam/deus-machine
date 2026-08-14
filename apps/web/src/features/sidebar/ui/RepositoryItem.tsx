@@ -142,28 +142,34 @@ export function RepositoryItem({
       </SidebarMenuItem>
       <AnimatePresence initial={false}>
         {!isCollapsed && (
-          <m.ul
+          // Height-animated wrapper must carry NO padding: with border-box,
+          // padding floors the box at 12px (pop at both ends) and skews
+          // framer's measured "auto" target, snapping ~12px on completion.
+          // The padding lives on the inner <ul> instead.
+          <m.div
             key="workspace-list"
             initial={reduceMotion ? false : { height: 0, opacity: 0 }}
             animate={{ height: "auto", opacity: 1 }}
             exit={reduceMotion ? { opacity: 0 } : { height: 0, opacity: 0 }}
             transition={{ duration: 0.22, ease: [0.165, 0.84, 0.44, 1] }}
-            className="flex min-w-0 flex-col overflow-hidden pt-1 pb-2"
+            className="min-w-0 overflow-hidden"
           >
-            {sidebarExpanded && (
-              <RepositoryWorkspaceList
-                repository={repository}
-                isDeus={isDeus}
-                selectedWorkspaceId={selectedWorkspaceId}
-                unreadWorkspaceIds={unreadWorkspaceIds}
-                diffStatsMap={diffStatsMap}
-                onNewWorkspace={onNewWorkspace}
-                onWorkspaceClick={onWorkspaceClick}
-                onArchive={onArchive}
-                onStatusChange={onStatusChange}
-              />
-            )}
-          </m.ul>
+            <ul className="flex min-w-0 flex-col pt-1 pb-2">
+              {sidebarExpanded && (
+                <RepositoryWorkspaceList
+                  repository={repository}
+                  isDeus={isDeus}
+                  selectedWorkspaceId={selectedWorkspaceId}
+                  unreadWorkspaceIds={unreadWorkspaceIds}
+                  diffStatsMap={diffStatsMap}
+                  onNewWorkspace={onNewWorkspace}
+                  onWorkspaceClick={onWorkspaceClick}
+                  onArchive={onArchive}
+                  onStatusChange={onStatusChange}
+                />
+              )}
+            </ul>
+          </m.div>
         )}
       </AnimatePresence>
     </Collapsible>

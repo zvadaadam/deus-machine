@@ -80,25 +80,38 @@ function boundedPreview(value: unknown): string {
   return String(value);
 }
 
+/**
+ * Human summary for arbitrary tool input. Unregistered tools (Codex
+ * apply_patch/exec_command, MCP tools, imports) land here — never stringify
+ * objects ("[object Object]"); prefer well-known keys, then any primitive,
+ * then path-shaped entries of an object array (apply_patch changes), then a
+ * bounded structural preview.
+ */
+function deriveInputSummary(input: Record<string, unknown> | undefined | null): string {
+  if (!input || typeof input !== "object") return "";
+  const preferred = ["path", "file_path", "command", "query", "pattern", "url", "input", "name"];
+  const keys = [...preferred.filter((k) => k in input), ...Object.keys(input)];
+  for (const key of keys) {
+    const value = input[key];
+    if (typeof value === "string" && value.trim()) return value;
+    if (typeof value === "number" || typeof value === "boolean") return String(value);
+    if (Array.isArray(value)) {
+      if (value.every((v) => typeof v === "string")) return value.join(" ");
+      const first = value[0];
+      if (first && typeof first === "object") {
+        const p =
+          (first as Record<string, unknown>).path ?? (first as Record<string, unknown>).file_path;
+        if (typeof p === "string") return value.length > 1 ? `${p} (+${value.length - 1} more)` : p;
+      }
+    }
+  }
+  const firstKey = Object.keys(input)[0];
+  return firstKey ? boundedPreview(input[firstKey]) : "";
+}
+
 export function DefaultToolRenderer({ toolUse, toolResult, isLoading }: ToolRendererProps) {
-  // Prefer the first primitive input value for the summary; objects/arrays
-  // get a bounded structural preview (e.g. codex apply_patch's `changes` →
-  // "[2 items]") — never a full serialization, memoized across renders.
   const input = toolUse.input || {};
-  const firstInputValue = useMemo(() => {
-    const firstPrimitive = Object.values(input).find(
-      (value) =>
-        typeof value === "string" || typeof value === "number" || typeof value === "boolean"
-    );
-    const firstKey = Object.keys(input)[0];
-    const raw =
-      firstPrimitive !== undefined
-        ? String(firstPrimitive)
-        : firstKey
-          ? boundedPreview(input[firstKey])
-          : "";
-    return raw.substring(0, 40);
-  }, [input]);
+  const firstInputValue = useMemo(() => deriveInputSummary(input).substring(0, 60), [input]);
 
   return (
     <BaseToolRenderer

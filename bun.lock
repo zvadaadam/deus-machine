@@ -129,6 +129,10 @@
         "typescript": "^5.7.0",
       },
     },
+    "packages/agent-ports": {
+      "name": "@deus/agent-ports",
+      "version": "0.0.1",
+    },
     "packages/device-use": {
       "name": "device-use",
       "version": "0.1.0",
@@ -275,6 +279,8 @@
     "@chevrotain/types": ["@chevrotain/types@11.0.3", "", {}, "sha512-gsiM3G8b58kZC2HaWR50gu6Y1440cHiJ+i3JUvcp/35JchYejb2+5MVeJK0iKThYpAa/P2PYFV4hoi44HD+aHQ=="],
 
     "@chevrotain/utils": ["@chevrotain/utils@11.0.3", "", {}, "sha512-YslZMgtJUyuMbZ+aKvfF3x1f5liK4mWNxghFRv7jqRR9C3R3fAOGTTKvxXDa2Y1s9zSbcpuO0cAxDYsc9SrXoQ=="],
+
+    "@deus/agent-ports": ["@deus/agent-ports@workspace:packages/agent-ports"],
 
     "@deus/pencil-app": ["@deus/pencil-app@workspace:packages/pencil"],
 

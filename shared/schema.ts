@@ -36,7 +36,7 @@ export const PRELAUNCH_REQUIRED_COLUMNS = {
     "pr_ci_status",
     "pr_checked_at",
   ],
-  sessions: ["agent_harness", "error_category"],
+  sessions: ["agent_harness", "error_category", "origin_key"],
   messages: ["stop_reason"],
   parts: ["parent_tool_call_id"],
 } as const satisfies Record<string, readonly string[]>;
@@ -47,6 +47,10 @@ export const PRELAUNCH_REQUIRED_COLUMNS = {
  * PRELAUNCH_REQUIRED_COLUMNS breaks. Keep in sync with SCHEMA_SQL.
  */
 export const ADDITIVE_COLUMNS = {
+  sessions: {
+    // Imported-session identity (nullable) — see sessions.origin_key comment.
+    origin_key: "TEXT",
+  },
   workspaces: {
     pr_state: "TEXT",
     pr_is_draft: "INTEGER NOT NULL DEFAULT 0",
@@ -102,6 +106,9 @@ export const SCHEMA_SQL = `
     workspace_id TEXT NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
     agent_harness TEXT NOT NULL DEFAULT 'claude',
     agent_session_id TEXT,
+    -- Stable identity of an imported external session ("provider:{cwd,sessionId}")
+    -- for idempotent re-import; NULL for sessions born in Deus.
+    origin_key TEXT,
     title TEXT,
     status TEXT NOT NULL DEFAULT 'idle',
     message_count INTEGER NOT NULL DEFAULT 0,
@@ -198,4 +205,16 @@ export const SCHEMA_SQL = `
   CREATE TRIGGER IF NOT EXISTS dec_session_message_count
     AFTER DELETE ON messages
     BEGIN UPDATE sessions SET message_count = message_count - 1 WHERE id = OLD.session_id; END;
+`;
+
+/**
+ * Index statements that reference ADDITIVE_COLUMNS — executed after
+ * applyAdditiveColumns so databases created before the column existed
+ * gain the column first.
+ * UNIQUE on origin_key backs the import idempotency contract: concurrent
+ * imports of the same external session race to insert; the loser gets a
+ * constraint error and returns the winner's row.
+ */
+export const POST_ADDITIVE_SQL = `
+  CREATE UNIQUE INDEX IF NOT EXISTS idx_sessions_origin_key_unique ON sessions(origin_key);
 `;

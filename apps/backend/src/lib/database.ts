@@ -5,6 +5,7 @@ import os from "os";
 import { resolveDefaultDatabasePath } from "../../../../shared/runtime";
 import {
   ADDITIVE_COLUMNS,
+  POST_ADDITIVE_SQL,
   PRELAUNCH_REQUIRED_COLUMNS,
   PRELAUNCH_SCHEMA_RESET_HINT,
   SCHEMA_SQL,
@@ -111,6 +112,7 @@ function initDatabase(): BetterSqlite3.Database {
     try {
       dbInstance.exec(SCHEMA_SQL);
       applyAdditiveColumns(dbInstance);
+      dbInstance.exec(POST_ADDITIVE_SQL);
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       throw prelaunchSchemaError(`Schema initialization failed: ${message}`);

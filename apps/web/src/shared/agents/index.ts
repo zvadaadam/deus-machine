@@ -17,6 +17,7 @@ import type { AgentConfig, AgentHarness, ThinkingLevel } from "@shared/agent-cat
 export {
   AGENT_CONFIGS,
   DEFAULT_MODEL,
+  defaultModelForHarness,
   MODEL_PICKER_GROUPS,
   type AgentConfig,
   type AgentHarness,
