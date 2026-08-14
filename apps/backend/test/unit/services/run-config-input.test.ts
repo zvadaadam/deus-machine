@@ -2,7 +2,7 @@
 // of Anthropic content blocks in the prompt string; the handler must translate
 // them into engine PartInputs (and leave everything else untouched).
 import { describe, expect, it } from "vitest";
-import { toEngineInput } from "../agents/core/core-handler";
+import { toEngineInput } from "../../../src/services/agent/run-config";
 
 describe("toEngineInput", () => {
   it("passes plain prompts through untouched", () => {
@@ -48,7 +48,7 @@ describe("toEngineInput", () => {
 
 describe("withoutImageParts (codex harnesses)", () => {
   it("replaces image parts with an explicit marker, keeps text", async () => {
-    const { withoutImageParts } = await import("../agents/core/core-handler");
+    const { withoutImageParts } = await import("../../../src/services/agent/run-config");
     const out = withoutImageParts([
       { type: "text", text: "look:" },
       { type: "image", data: "AAAA", mediaType: "image/png" },
@@ -63,7 +63,7 @@ describe("withoutImageParts (codex harnesses)", () => {
   });
 
   it("passes plain strings through", async () => {
-    const { withoutImageParts } = await import("../agents/core/core-handler");
+    const { withoutImageParts } = await import("../../../src/services/agent/run-config");
     expect(withoutImageParts("hi")).toBe("hi");
   });
 });

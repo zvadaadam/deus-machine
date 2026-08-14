@@ -21,9 +21,10 @@ const invalidate = vi.fn();
 const broadcast = vi.fn();
 
 // Mock the agent facade so the mcp-bridge can fire aap/register-mcp and
-// aap/unregister-mcp without a real agent-server. We assert against
-// sendRequestToAgent to verify the bridge wires state transitions correctly.
-const sendRequestToAgent = vi.fn().mockResolvedValue({ added: ["test_fake_app"], errors: {} });
+// aap/unregister-mcp without a real agent-server. We assert against the
+// typed wrappers to verify the bridge wires state transitions correctly.
+const registerAapMcp = vi.fn().mockResolvedValue(undefined);
+const unregisterAapMcp = vi.fn().mockResolvedValue(undefined);
 const isAgentConnected = vi.fn().mockReturnValue(true);
 
 vi.mock("../../src/services/query-engine", () => ({
@@ -35,7 +36,8 @@ vi.mock("../../src/services/ws.service", () => ({
 }));
 
 vi.mock("../../src/services/agent", () => ({
-  sendRequestToAgent: (...args: unknown[]) => sendRequestToAgent(...args),
+  registerAapMcp: (...args: unknown[]) => registerAapMcp(...args),
+  unregisterAapMcp: (...args: unknown[]) => unregisterAapMcp(...args),
   isConnected: () => isAgentConnected(),
 }));
 
@@ -235,7 +237,8 @@ describe("aap/apps.service (integration, in-memory)", () => {
   beforeEach(() => {
     invalidate.mockClear();
     broadcast.mockClear();
-    sendRequestToAgent.mockClear();
+    registerAapMcp.mockClear();
+    unregisterAapMcp.mockClear();
     isAgentConnected.mockReturnValue(true);
   });
 
@@ -349,11 +352,10 @@ describe("aap/apps.service (integration, in-memory)", () => {
     // Register fires after "ready". Expect exactly one register call, with
     // serverName = "test_fake_app" (dashes+dots → underscores) and url =
     // manifest's agent.tools.url substituted.
-    const registerCalls = sendRequestToAgent.mock.calls.filter((c) => c[0] === "aap/register-mcp");
-    expect(registerCalls).toHaveLength(1);
-    const [, params] = registerCalls[0] as [string, { serverName: string; url: string }];
-    expect(params.serverName).toBe("test_fake_app");
-    expect(params.url).toMatch(/^http:\/\/127\.0\.0\.1:\d+\/mcp$/);
+    expect(registerAapMcp).toHaveBeenCalledTimes(1);
+    const [serverName, url] = registerAapMcp.mock.calls[0] as [string, string];
+    expect(serverName).toBe("test_fake_app");
+    expect(url).toMatch(/^http:\/\/127\.0\.0\.1:\d+\/mcp$/);
 
     await stopApp(result.runningAppId);
   });
@@ -365,7 +367,8 @@ describe("aap/apps.service (integration, in-memory)", () => {
       workspacePath: fakeAppDir,
       userDataDir: fakeAppDir,
     });
-    sendRequestToAgent.mockClear();
+    registerAapMcp.mockClear();
+    unregisterAapMcp.mockClear();
 
     await stopApp(result.runningAppId);
 
@@ -380,12 +383,10 @@ describe("aap/apps.service (integration, in-memory)", () => {
     // microtask queue right after the entry is removed. Give it a brief
     // window, then assert.
     await waitForCondition(
-      () => sendRequestToAgent.mock.calls.filter((c) => c[0] === "aap/unregister-mcp"),
+      () => unregisterAapMcp.mock.calls,
       (calls) => calls.length >= 1
     );
-    const unregister = sendRequestToAgent.mock.calls.find((c) => c[0] === "aap/unregister-mcp");
-    expect(unregister).toBeDefined();
-    expect(unregister![1]).toEqual({ serverName: "test_fake_app" });
+    expect(unregisterAapMcp).toHaveBeenCalledWith("test_fake_app");
   });
 
   it("mcp-bridge: launch succeeds even when agent-server is NOT connected", async () => {
@@ -404,9 +405,8 @@ describe("aap/apps.service (integration, in-memory)", () => {
 
     expect(result.runningAppId).toBeTruthy();
     expect(getRunningApps("ws-bridge-disconnected")).toHaveLength(1);
-    // sendRequestToAgent never called — the bridge early-returned on
-    // !isConnected() before attempting the RPC.
-    expect(sendRequestToAgent).not.toHaveBeenCalled();
+    // The bridge early-returned on !isConnected() before attempting the RPC.
+    expect(registerAapMcp).not.toHaveBeenCalled();
 
     await stopApp(result.runningAppId);
   });
@@ -421,17 +421,14 @@ describe("aap/apps.service (integration, in-memory)", () => {
     // the tool's pending result. Awaiting register → CLI cross-process
     // control request → CLI waits for tool_result → tool_result waits for
     // register → deadlock. Fire-and-forget breaks the cycle.
-    sendRequestToAgent.mockClear();
+    registerAapMcp.mockClear();
+    unregisterAapMcp.mockClear();
     let resolveRegister!: () => void;
     const registerGate = new Promise<void>((r) => {
       resolveRegister = r;
     });
-    sendRequestToAgent.mockImplementation(async (method: string) => {
-      if (method === "aap/register-mcp") {
-        await registerGate;
-        return { added: ["test_fake_app"], errors: {} };
-      }
-      return { removed: ["test_fake_app"] };
+    registerAapMcp.mockImplementation(async () => {
+      await registerGate;
     });
 
     const start = Date.now();
@@ -452,8 +449,7 @@ describe("aap/apps.service (integration, in-memory)", () => {
 
     // Register was SYNCHRONOUSLY invoked (before returning) — fire-and-
     // forget means the call is made, just not awaited.
-    const registerCalls = sendRequestToAgent.mock.calls.filter((c) => c[0] === "aap/register-mcp");
-    expect(registerCalls).toHaveLength(1);
+    expect(registerAapMcp).toHaveBeenCalledTimes(1);
 
     resolveRegister();
     await stopApp(result.runningAppId);

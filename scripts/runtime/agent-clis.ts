@@ -290,11 +290,12 @@ async function extractPackageArtifact(
 async function resolvePackageRoot(
   projectRoot: string,
   lockedPackage: LockedPackage,
-  expectedEntry: string,
+  expectedEntry: string | string[],
   log: (line: string) => void
 ): Promise<{ packageRoot: string; cleanup: () => void; sourceDescription: string }> {
+  const expectedEntries = Array.isArray(expectedEntry) ? expectedEntry : [expectedEntry];
   const installedPackageRoot = nodeModulesPackagePath(projectRoot, lockedPackage.lockKey);
-  if (existsSync(path.join(installedPackageRoot, expectedEntry))) {
+  if (expectedEntries.some((entry) => existsSync(path.join(installedPackageRoot, entry)))) {
     return {
       packageRoot: installedPackageRoot,
       cleanup: () => undefined,
@@ -303,6 +304,17 @@ async function resolvePackageRoot(
   }
 
   return extractPackageArtifact(lockedPackage, log);
+}
+
+/** Pick the first entry that exists under the package root (layouts vary by version). */
+function resolvePackageEntry(packageRoot: string, candidates: string[]): string {
+  for (const candidate of candidates) {
+    const absolute = path.join(packageRoot, candidate);
+    if (existsSync(absolute)) return absolute;
+  }
+  throw new Error(
+    `Missing source executable: tried ${candidates.map((c) => path.join(packageRoot, c)).join(", ")}`
+  );
 }
 
 function copyExecutable(source: string, destination: string): void {
@@ -641,14 +653,27 @@ export async function prepareAgentClis(
 
     const lockedCodex = readLockedPackage(projectRoot, target.codexAliasPackage);
     assertCodexAppServerCompatible(lockedCodex.version, target.runtimeKey);
-    const codexEntry = path.join("vendor", target.codexTriple, "codex", "codex");
-    const rgEntry = path.join("vendor", target.codexTriple, "path", "rg");
-    const codexPackage = await resolvePackageRoot(projectRoot, lockedCodex, codexEntry, log);
+    // @openai/codex moved its vendor layout in 0.146: bin/codex + codex-path/rg
+    // (previously codex/codex + path/rg). Support both so pin bumps in either
+    // direction keep staging.
+    const codexEntries = [
+      path.join("vendor", target.codexTriple, "bin", "codex"),
+      path.join("vendor", target.codexTriple, "codex", "codex"),
+    ];
+    const rgEntries = [
+      path.join("vendor", target.codexTriple, "codex-path", "rg"),
+      path.join("vendor", target.codexTriple, "path", "rg"),
+    ];
+    const codexPackage = await resolvePackageRoot(projectRoot, lockedCodex, codexEntries, log);
     try {
       const stagedCodex = resolveStagedAgentCliPath(projectRoot, target.runtimeKey, "codex");
       const stagedRg = resolveStagedAgentCliPath(projectRoot, target.runtimeKey, "rg");
-      copyExecutable(path.join(codexPackage.packageRoot, codexEntry), stagedCodex);
-      copyExecutable(path.join(codexPackage.packageRoot, rgEntry), stagedRg);
+      const codexSource = resolvePackageEntry(codexPackage.packageRoot, codexEntries);
+      const rgSource = resolvePackageEntry(codexPackage.packageRoot, rgEntries);
+      copyExecutable(codexSource, stagedCodex);
+      copyExecutable(rgSource, stagedRg);
+      const codexEntry = path.relative(codexPackage.packageRoot, codexSource);
+      const rgEntry = path.relative(codexPackage.packageRoot, rgSource);
       const codexInspection = inspectStaticExecutable(
         projectRoot,
         stagedCodex,

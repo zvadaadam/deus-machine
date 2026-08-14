@@ -69,6 +69,19 @@ export const STATUS_RANK: Record<WorkspaceStatus, number> = {
 export const AgentHarnessSchema = z.enum(["claude", "codex-sdk", "codex-server"]);
 export type AgentHarness = z.infer<typeof AgentHarnessSchema>;
 
+/** Deus harness names → @zvada/agent-server engine harness names. */
+export const ENGINE_HARNESS_BY_DEUS = {
+  claude: "claude-code",
+  "codex-sdk": "codex-sdk",
+  "codex-server": "codex-app-server",
+} as const satisfies Record<AgentHarness, string>;
+export type EngineHarness = (typeof ENGINE_HARNESS_BY_DEUS)[AgentHarness];
+
+/** Engine harness names → deus harness names (inverse of the map above). */
+export const DEUS_HARNESS_BY_ENGINE = Object.fromEntries(
+  Object.entries(ENGINE_HARNESS_BY_DEUS).map(([deus, engine]) => [engine, deus])
+) as Record<EngineHarness, AgentHarness>;
+
 /** Structured error categories for agent error responses. */
 export const ErrorCategorySchema = z.enum([
   "auth",

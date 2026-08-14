@@ -1,8 +1,9 @@
-// agent-server/agents/lifecycle.ts
-// Error classification and query lifecycle reporting helpers.
+// backend/src/services/agent/translate/classify.ts
+// Error classification for agent failures, keyed on provider error text.
+// Moved verbatim from the agent-server (agents/lifecycle.ts) when event
+// translation moved backend-side.
 
-import { EventBroadcaster } from "../event-broadcaster";
-import type { AgentHarness, ErrorCategory } from "../protocol";
+import type { ErrorCategory } from "@shared/enums";
 
 export interface ClassifiedError {
   category: ErrorCategory;
@@ -144,53 +145,4 @@ export function classifyStopReason(stopReason: string | undefined): ClassifiedEr
     default:
       return null;
   }
-}
-
-/**
- * Emits the canonical cancellation sequence. The backend persists the
- * cancelled message and session status from these events.
- */
-export function persistCancellation(sessionId: string, agentHarness: AgentHarness): void {
-  EventBroadcaster.emitSessionCancelled(sessionId, agentHarness);
-  EventBroadcaster.emitMessageCancelled(sessionId, agentHarness);
-}
-
-/**
- * Emits a canonical session.error. `enrichMessage` lets providers append
- * context without changing the classifier.
- */
-export function notifyAndRecordError(
-  sessionId: string,
-  agentHarness: AgentHarness,
-  classified: ClassifiedError,
-  enrichMessage?: (classified: ClassifiedError) => string
-): void {
-  const errorMessage = enrichMessage ? enrichMessage(classified) : classified.message;
-
-  EventBroadcaster.emitSessionError(
-    sessionId,
-    agentHarness,
-    errorMessage,
-    classified.category as ErrorCategory
-  );
-}
-
-export function handleCancellation(
-  sessionId: string,
-  agentHarness: AgentHarness,
-  wasCancelled: boolean
-): boolean {
-  if (!wasCancelled) return false;
-  persistCancellation(sessionId, agentHarness);
-  return true;
-}
-
-export function handleQueryError(
-  sessionId: string,
-  agentHarness: AgentHarness,
-  error: unknown,
-  enrichMessage?: (classified: ClassifiedError) => string
-): void {
-  const classified = classifyError(error);
-  notifyAndRecordError(sessionId, agentHarness, classified, enrichMessage);
 }

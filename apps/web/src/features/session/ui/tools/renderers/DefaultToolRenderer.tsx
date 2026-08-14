@@ -1,3 +1,4 @@
+import { useMemo } from "react";
 import { match } from "ts-pattern";
 import { Wrench } from "lucide-react";
 import { BaseToolRenderer } from "../components";
@@ -67,11 +68,24 @@ function ContentBlockRenderer({ block }: { block: ContentBlock }) {
     .exhaustive();
 }
 
+/** Bounded preview of a non-primitive input value — never serializes the
+ *  whole payload (codex apply_patch inputs can be megabytes). */
+function boundedPreview(value: unknown): string {
+  if (value == null) return "";
+  if (Array.isArray(value)) return `[${value.length} item${value.length === 1 ? "" : "s"}]`;
+  if (typeof value === "object") {
+    const keys = Object.keys(value);
+    return `{${keys.slice(0, 3).join(", ")}${keys.length > 3 ? ", …" : ""}}`;
+  }
+  return String(value);
+}
+
 /**
  * Human summary for arbitrary tool input. Unregistered tools (Codex
  * apply_patch/exec_command, MCP tools, imports) land here — never stringify
  * objects ("[object Object]"); prefer well-known keys, then any primitive,
- * then path-shaped entries of an object array (apply_patch changes).
+ * then path-shaped entries of an object array (apply_patch changes), then a
+ * bounded structural preview.
  */
 function deriveInputSummary(input: Record<string, unknown> | undefined | null): string {
   if (!input || typeof input !== "object") return "";
@@ -91,11 +105,13 @@ function deriveInputSummary(input: Record<string, unknown> | undefined | null): 
       }
     }
   }
-  return "";
+  const firstKey = Object.keys(input)[0];
+  return firstKey ? boundedPreview(input[firstKey]) : "";
 }
 
 export function DefaultToolRenderer({ toolUse, toolResult, isLoading }: ToolRendererProps) {
-  const firstInputValue = deriveInputSummary(toolUse.input).substring(0, 60);
+  const input = toolUse.input || {};
+  const firstInputValue = useMemo(() => deriveInputSummary(input).substring(0, 60), [input]);
 
   return (
     <BaseToolRenderer

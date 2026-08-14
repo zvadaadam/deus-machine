@@ -1,6 +1,7 @@
 const WebSocket = require("ws");
 
-const DEFAULT_REQUIRED_AGENTS = ["claude", "codex-sdk", "codex-server"];
+// Engine harness names on the standard @zvada/agent-server wire.
+const DEFAULT_REQUIRED_HARNESSES = ["claude-code", "codex-sdk", "codex-app-server"];
 const JSON_RPC_TIMEOUT_MS = 5_000;
 
 function requestJsonRpc(listenUrl, method, params) {
@@ -55,23 +56,22 @@ function requestJsonRpc(listenUrl, method, params) {
   });
 }
 
-async function assertInitializedAgents(listenUrl, requiredAgents = DEFAULT_REQUIRED_AGENTS) {
-  const result = await requestJsonRpc(listenUrl, "agent/list", {});
-  const agents = Array.isArray(result?.agents) ? result.agents : [];
-  const initialized = new Set(
-    agents
-      .filter((agent) => agent && agent.initialized === true && typeof agent.type === "string")
-      .map((agent) => agent.type)
-  );
-  const missing = requiredAgents.filter((agent) => !initialized.has(agent));
+async function assertInitializedAgents(listenUrl, requiredHarnesses = DEFAULT_REQUIRED_HARNESSES) {
+  const result = await requestJsonRpc(listenUrl, "initialize", {
+    protocolVersion: 1,
+    client: { name: "runtime-smoke" },
+  });
+  const harnesses =
+    result?.harnesses && typeof result.harnesses === "object" ? Object.keys(result.harnesses) : [];
+  const missing = requiredHarnesses.filter((harness) => !harnesses.includes(harness));
   if (missing.length > 0) {
     throw new Error(
-      `Agent-server did not report initialized bundled agents: missing=${missing.join(
+      `Agent-server did not report available harnesses: missing=${missing.join(
         ", "
       )} result=${JSON.stringify(result)}`
     );
   }
-  return agents;
+  return harnesses;
 }
 
 function readAgentServerListenUrl(output) {

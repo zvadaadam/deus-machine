@@ -16,7 +16,7 @@
 import { idToServerName } from "@shared/aap/manifest";
 import { getErrorMessage } from "@shared/lib/errors";
 
-import { sendRequestToAgent, isConnected } from "../agent";
+import { registerAapMcp, unregisterAapMcp, isConnected } from "../agent";
 
 /** What the bridge needs to know about a running app to register its MCP.
  *  Kept separate from the internal RunningAppEntry so this file doesn't
@@ -42,10 +42,7 @@ export async function registerMcpForRunningApp(app: McpBridgeApp): Promise<void>
   }
 
   try {
-    await sendRequestToAgent("aap/register-mcp", {
-      serverName,
-      url: app.mcpUrl,
-    });
+    await registerAapMcp(serverName, app.mcpUrl);
     console.log(`[AAP-Bridge] Registered ${serverName} → ${app.mcpUrl}`);
   } catch (err) {
     console.warn(`[AAP-Bridge] aap/register-mcp failed for ${serverName}: ${getErrorMessage(err)}`);
@@ -66,7 +63,7 @@ export async function unregisterMcpForRunningApp(app: McpBridgeApp): Promise<voi
   }
 
   try {
-    await sendRequestToAgent("aap/unregister-mcp", { serverName });
+    await unregisterAapMcp(serverName);
     console.log(`[AAP-Bridge] Unregistered ${serverName}`);
   } catch (err) {
     console.warn(

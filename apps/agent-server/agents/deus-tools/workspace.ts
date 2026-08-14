@@ -3,7 +3,7 @@
 
 import type { SdkMcpToolDefinition } from "@anthropic-ai/claude-agent-sdk";
 import { z } from "zod";
-import { EventBroadcaster } from "../../event-broadcaster";
+import { HostRpc } from "../../host-link";
 import { tool } from "./sdk-tool";
 
 /**
@@ -44,7 +44,7 @@ export function createWorkspaceTools(sessionId: string): SdkMcpToolDefinition<an
 
         let answers: (string | string[])[];
         try {
-          const response = await EventBroadcaster.requestAskUserQuestion({
+          const response = await HostRpc.requestAskUserQuestion({
             sessionId,
             questions: args.questions,
           });
@@ -115,7 +115,7 @@ With stat: true, returns git diff --stat style output showing per-file statistic
       async (args) => {
         console.log(`[deusMCPServer] getDiff invoked for session ${sessionId}`);
 
-        const response = await EventBroadcaster.requestGetDiff({
+        const response = await HostRpc.requestGetDiff({
           sessionId,
           file: args.file,
           stat: args.stat,
@@ -151,7 +151,7 @@ With stat: true, returns git diff --stat style output showing per-file statistic
       async (args) => {
         console.log(`[deusMCPServer] DiffComment invoked for session ${sessionId}`);
 
-        const { success } = await EventBroadcaster.requestDiffComment({
+        const { success } = await HostRpc.requestDiffComment({
           sessionId,
           comments: args.comments,
         });
@@ -196,7 +196,7 @@ Returns the terminal output along with information about what type of terminal i
       async (args) => {
         console.log(`[deusMCPServer] GetTerminalOutput invoked for session ${sessionId}`);
 
-        const response = await EventBroadcaster.requestGetTerminalOutput({
+        const response = await HostRpc.requestGetTerminalOutput({
           sessionId,
           source: args.source,
           maxLines: args.maxLines,
