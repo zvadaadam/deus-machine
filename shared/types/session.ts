@@ -6,7 +6,7 @@
 // Canonical enum types — defined as Zod schemas in shared/enums.ts,
 // imported here for local use and re-exported for backwards compat.
 import type { MessageRole, SessionStatus } from "../enums";
-import type { Part, TokenUsage, UnknownPart } from "../protocol-types";
+import type { Part, UnknownPart } from "../protocol-types";
 export type { MessageRole, SessionStatus };
 
 /**
@@ -38,8 +38,18 @@ export interface Message {
   parts?: Array<Part | UnknownPart>;
 }
 
-/** `messages.tokens` parsed back into the engine's TokenUsage shape. */
-export type MessageTokenUsage = TokenUsage;
+/**
+ * The id of the marker row a cancelled turn leaves behind when the model never
+ * produced a message of its own (Stop pressed before the first token).
+ *
+ * Derived from the turn id on purpose: the backend writes this row and the
+ * frontend mirrors it into the cache, so both are the SAME row — a replayed
+ * `turn.ended` upserts it, and the q:delta carrying the persisted copy
+ * deduplicates against the mirrored one instead of doubling the divider.
+ */
+export function cancelledTurnMessageId(turnId: string): string {
+  return `cancelled-${turnId}`;
+}
 
 /** One row of the `compactions` table (the engine's session.compaction entity). */
 export interface Compaction {

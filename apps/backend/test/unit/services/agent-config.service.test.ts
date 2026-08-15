@@ -6,13 +6,13 @@ import os from "os";
 // outside the factory. Use vi.hoisted() to create mock functions that are
 // available at hoist time.
 const mockFs = vi.hoisted(() => ({
-  existsSync: vi.fn(() => true),
-  readFileSync: vi.fn(() => "{}"),
-  writeFileSync: vi.fn(),
-  mkdirSync: vi.fn(),
-  readdirSync: vi.fn(() => [] as string[]),
-  unlinkSync: vi.fn(),
-  rmSync: vi.fn(),
+  existsSync: vi.fn<(...args: any[]) => any>(() => true),
+  readFileSync: vi.fn<(...args: any[]) => any>(() => "{}"),
+  writeFileSync: vi.fn<(...args: any[]) => any>(),
+  mkdirSync: vi.fn<(...args: any[]) => any>(),
+  readdirSync: vi.fn<(...args: any[]) => any>(() => [] as string[]),
+  unlinkSync: vi.fn<(...args: any[]) => any>(),
+  rmSync: vi.fn<(...args: any[]) => any>(),
 }));
 
 vi.mock("fs", () => ({
@@ -104,7 +104,7 @@ describe("saveMcpServers", () => {
 
     expect(mockFs.writeFileSync).toHaveBeenCalledTimes(1);
     const [, content] = mockFs.writeFileSync.mock.calls[0];
-    const parsed = JSON.parse(content as string);
+    const parsed = JSON.parse(String(content));
     expect(parsed.mcpServers["my-server"]).toEqual({
       command: "node",
       args: ["index.js"],
@@ -251,22 +251,26 @@ describe("saveHooks", () => {
     mockFs.existsSync.mockReturnValue(true);
     mockFs.readFileSync.mockReturnValue(JSON.stringify({ theme: "dark" }));
 
-    saveHooks({ preCommit: "lint" });
+    saveHooks({ preCommit: [{ hooks: [{ type: "command", command: "lint" }] }] });
 
     const [, content] = mockFs.writeFileSync.mock.calls[0];
-    const parsed = JSON.parse(content as string);
+    const parsed = JSON.parse(String(content));
     expect(parsed.theme).toBe("dark");
-    expect(parsed.hooks).toEqual({ preCommit: "lint" });
+    expect(parsed.hooks).toEqual({
+      preCommit: [{ hooks: [{ type: "command", command: "lint" }] }],
+    });
   });
 
   it("creates new settings file when none exists", () => {
     mockFs.existsSync.mockReturnValue(false);
 
-    saveHooks({ prePush: "test" });
+    saveHooks({ prePush: [{ hooks: [{ type: "command", command: "test" }] }] });
 
     const [, content] = mockFs.writeFileSync.mock.calls[0];
-    const parsed = JSON.parse(content as string);
-    expect(parsed.hooks).toEqual({ prePush: "test" });
+    const parsed = JSON.parse(String(content));
+    expect(parsed.hooks).toEqual({
+      prePush: [{ hooks: [{ type: "command", command: "test" }] }],
+    });
   });
 });
 

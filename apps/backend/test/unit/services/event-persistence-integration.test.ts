@@ -86,6 +86,78 @@ interface PartRowShape {
   parent_tool_call_id: string | null;
 }
 
+/** One complete text turn, echo included — the script an adapter emits. */
+function plainTurn(): LifecycleEvent[] {
+  return [
+    { type: "turn.started", sessionId: SESSION, turnId: TURN, timestamp: T },
+    {
+      type: "session.created",
+      sessionId: SESSION,
+      nativeSessionId: "native-1",
+      harness: "claude-code",
+      timestamp: T,
+    },
+    // The user echo — this is what makes the user's message durable.
+    {
+      type: "message.started",
+      sessionId: SESSION,
+      turnId: TURN,
+      messageId: "u1",
+      outputIndex: 0,
+      role: "user",
+      timestamp: T,
+    },
+    {
+      type: "message.part",
+      sessionId: SESSION,
+      turnId: TURN,
+      messageId: "u1",
+      outputIndex: 0,
+      partIndex: 0,
+      part: { type: "text", id: "up1", sessionId: SESSION, messageId: "u1", text: "what is 2+2?" },
+      timestamp: T,
+    },
+    { type: "message.ended", sessionId: SESSION, turnId: TURN, messageId: "u1", timestamp: T },
+    {
+      type: "message.started",
+      sessionId: SESSION,
+      turnId: TURN,
+      messageId: "a1",
+      outputIndex: 1,
+      role: "assistant",
+      model: "claude-opus-5",
+      timestamp: T + 1,
+    },
+    {
+      type: "message.part",
+      sessionId: SESSION,
+      turnId: TURN,
+      messageId: "a1",
+      outputIndex: 1,
+      partIndex: 0,
+      part: {
+        type: "text",
+        id: "ap1",
+        sessionId: SESSION,
+        messageId: "a1",
+        text: "Four",
+        state: "done",
+      },
+      timestamp: T + 2,
+    },
+    { type: "message.ended", sessionId: SESSION, turnId: TURN, messageId: "a1", timestamp: T + 3 },
+    {
+      type: "turn.ended",
+      sessionId: SESSION,
+      turnId: TURN,
+      stopReason: "end_turn",
+      tokens: { input: 12, output: 3 },
+      cost: 0.0004,
+      timestamp: T + 4,
+    },
+  ];
+}
+
 describeWithDb("engine turn → handler → SQLite", () => {
   let db: Database.Database;
   let handler: ReturnType<typeof createAgentEventHandler>;
@@ -134,86 +206,7 @@ describeWithDb("engine turn → handler → SQLite", () => {
   // ==========================================================================
 
   it("persists the user echo and the assistant answer as one turn", () => {
-    feed(
-      { type: "turn.started", sessionId: SESSION, turnId: TURN, timestamp: T },
-      {
-        type: "session.created",
-        sessionId: SESSION,
-        nativeSessionId: "native-1",
-        harness: "claude-code",
-        timestamp: T,
-      },
-      // The user echo — this is what makes the user's message durable.
-      {
-        type: "message.started",
-        sessionId: SESSION,
-        turnId: TURN,
-        messageId: "u1",
-        outputIndex: 0,
-        role: "user",
-        timestamp: T,
-      },
-      {
-        type: "message.part",
-        sessionId: SESSION,
-        turnId: TURN,
-        messageId: "u1",
-        outputIndex: 0,
-        partIndex: 0,
-        part: {
-          type: "text",
-          id: "up1",
-          sessionId: SESSION,
-          messageId: "u1",
-          text: "what is 2+2?",
-        },
-        timestamp: T,
-      },
-      { type: "message.ended", sessionId: SESSION, turnId: TURN, messageId: "u1", timestamp: T },
-      {
-        type: "message.started",
-        sessionId: SESSION,
-        turnId: TURN,
-        messageId: "a1",
-        outputIndex: 1,
-        role: "assistant",
-        model: "claude-opus-5",
-        timestamp: T + 1,
-      },
-      {
-        type: "message.part",
-        sessionId: SESSION,
-        turnId: TURN,
-        messageId: "a1",
-        outputIndex: 1,
-        partIndex: 0,
-        part: {
-          type: "text",
-          id: "ap1",
-          sessionId: SESSION,
-          messageId: "a1",
-          text: "Four",
-          state: "done",
-        },
-        timestamp: T + 2,
-      },
-      {
-        type: "message.ended",
-        sessionId: SESSION,
-        turnId: TURN,
-        messageId: "a1",
-        timestamp: T + 3,
-      },
-      {
-        type: "turn.ended",
-        sessionId: SESSION,
-        turnId: TURN,
-        stopReason: "end_turn",
-        tokens: { input: 12, output: 3 },
-        cost: 0.0004,
-        timestamp: T + 4,
-      }
-    );
+    feed(...plainTurn());
 
     const rows = messages();
     expect(rows.map((r) => [r.id, r.role, r.turn_id])).toEqual([
@@ -233,6 +226,24 @@ describeWithDb("engine turn → handler → SQLite", () => {
     expect(rows[1].turn_stop_reason).toBe("end_turn");
 
     expect(sessionRow()).toMatchObject({ status: "idle", agent_session_id: "native-1" });
+  });
+
+  // ==========================================================================
+  // Replay (PROTOCOL §7.3-8)
+  // ==========================================================================
+
+  it("re-delivering the whole turn changes nothing (gap heal / events.replay)", () => {
+    feed(...plainTurn());
+
+    const before = { messages: messages(), parts: parts(), session: sessionRow() };
+
+    // A reconnected client whose in-memory lastSeq restarted at 0 asks the wire
+    // for the buffered history; every envelope arrives a second time.
+    feed(...plainTurn());
+
+    expect(messages()).toEqual(before.messages);
+    expect(parts()).toEqual(before.parts);
+    expect(sessionRow()).toEqual(before.session);
   });
 
   // ==========================================================================

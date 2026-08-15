@@ -1,14 +1,14 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const { mockTransaction, mockPrepare, mockRun, mockDb, mockGetSessionRaw } = vi.hoisted(() => {
-  const mockRun = vi.fn(() => ({ changes: 1 }));
-  const mockPrepare = vi.fn(() => ({ run: mockRun }));
-  const mockTransaction = vi.fn((fn: () => void) => fn);
+  const mockRun = vi.fn<(...args: any[]) => any>(() => ({ changes: 1 }));
+  const mockPrepare = vi.fn<(...args: any[]) => any>(() => ({ run: mockRun }));
+  const mockTransaction = vi.fn<(...args: any[]) => any>((fn: () => void) => fn);
   const mockDb = {
     prepare: mockPrepare,
     transaction: mockTransaction,
   };
-  const mockGetSessionRaw = vi.fn();
+  const mockGetSessionRaw = vi.fn<(...args: any[]) => any>();
   return {
     mockTransaction,
     mockPrepare,
@@ -19,7 +19,7 @@ const { mockTransaction, mockPrepare, mockRun, mockDb, mockGetSessionRaw } = vi.
 });
 
 vi.mock("../../../src/lib/database", () => ({
-  getDatabase: vi.fn(() => mockDb),
+  getDatabase: vi.fn<(...args: any[]) => any>(() => mockDb),
 }));
 
 vi.mock("../../../src/db", () => ({
@@ -40,6 +40,7 @@ describe("writeUserMessage", () => {
     const result = writeUserMessage("sess-123", "hello world", "sonnet");
 
     expect(result).toEqual({ success: true, messageId: expect.any(String) });
+    if (!result.success) throw new Error("expected a successful write");
     expect(mockTransaction).toHaveBeenCalledTimes(1);
     expect(mockPrepare).toHaveBeenNthCalledWith(1, expect.stringContaining("INSERT INTO messages"));
     expect(mockRun).toHaveBeenNthCalledWith(

@@ -4,29 +4,31 @@ import { vi, describe, it, expect, beforeEach } from "vitest";
 
 const { mockStmt, mockDb, mockExecFileAsync, mockFs } = vi.hoisted(() => {
   const mockStmt = {
-    run: vi.fn(() => ({ changes: 1 })),
-    get: vi.fn(),
-    all: vi.fn(() => []),
+    run: vi.fn<(...args: any[]) => any>(() => ({ changes: 1 })),
+    get: vi.fn<(...args: any[]) => any>(),
+    all: vi.fn<(...args: any[]) => any>(() => []),
   };
   const mockDb = {
-    prepare: vi.fn(() => mockStmt),
-    transaction: vi.fn((fn: Function) => fn),
+    prepare: vi.fn<(...args: any[]) => any>(() => mockStmt),
+    transaction: vi.fn<(...args: any[]) => any>((fn: Function) => fn),
   };
-  const mockExecFileAsync = vi.fn(() => Promise.resolve({ stdout: "", stderr: "" }));
+  const mockExecFileAsync = vi.fn<(...args: any[]) => any>(() =>
+    Promise.resolve({ stdout: "", stderr: "" })
+  );
   const mockFs = {
-    existsSync: vi.fn(() => false),
-    rmSync: vi.fn(),
-    copyFileSync: vi.fn(),
+    existsSync: vi.fn<(...args: any[]) => any>(() => false),
+    rmSync: vi.fn<(...args: any[]) => any>(),
+    copyFileSync: vi.fn<(...args: any[]) => any>(),
   };
   return { mockStmt, mockDb, mockExecFileAsync, mockFs };
 });
 
 vi.mock("../../../src/lib/database", () => ({
-  getDatabase: vi.fn(() => mockDb),
+  getDatabase: vi.fn<(...args: any[]) => any>(() => mockDb),
 }));
 
 vi.mock("child_process", () => ({
-  execFile: vi.fn(),
+  execFile: vi.fn<(...args: any[]) => any>(),
 }));
 
 vi.mock("util", () => ({
@@ -34,7 +36,7 @@ vi.mock("util", () => ({
 }));
 
 vi.mock("@shared/lib/uuid", () => ({
-  uuidv7: vi.fn(() => "test-session-uuid"),
+  uuidv7: vi.fn<(...args: any[]) => any>(() => "test-session-uuid"),
 }));
 
 vi.mock("fs", () => ({
@@ -43,7 +45,7 @@ vi.mock("fs", () => ({
 }));
 
 vi.mock("../../../src/services/query-engine", () => ({
-  invalidate: vi.fn(),
+  invalidate: vi.fn<(...args: any[]) => any>(),
 }));
 
 import {

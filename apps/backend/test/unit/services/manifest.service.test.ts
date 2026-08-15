@@ -4,10 +4,12 @@ import path from "path";
 // ─── Hoisted mocks (vi.mock factories run before imports) ─────────
 
 const mockFs = vi.hoisted(() => ({
-  existsSync: vi.fn(() => false),
-  readFileSync: vi.fn(() => "{}"),
-  writeFileSync: vi.fn(),
-  createWriteStream: vi.fn(() => ({ end: vi.fn() })),
+  existsSync: vi.fn<(...args: any[]) => any>(() => false),
+  readFileSync: vi.fn<(...args: any[]) => any>(() => "{}"),
+  writeFileSync: vi.fn<(...args: any[]) => any>(),
+  createWriteStream: vi.fn<(...args: any[]) => any>(() => ({
+    end: vi.fn<(...args: any[]) => any>(),
+  })),
 }));
 
 vi.mock("fs", () => ({
@@ -20,17 +22,17 @@ vi.mock("fs", () => ({
 
 // Mock spawn (used by runSetupScript, imported transitively)
 vi.mock("child_process", () => ({
-  spawn: vi.fn(() => ({
-    stdout: { pipe: vi.fn() },
-    stderr: { pipe: vi.fn() },
-    on: vi.fn(),
-    kill: vi.fn(),
+  spawn: vi.fn<(...args: any[]) => any>(() => ({
+    stdout: { pipe: vi.fn<(...args: any[]) => any>() },
+    stderr: { pipe: vi.fn<(...args: any[]) => any>() },
+    on: vi.fn<(...args: any[]) => any>(),
+    kill: vi.fn<(...args: any[]) => any>(),
   })),
 }));
 
 // Mock workspace-init.service (emitProgress is imported by manifest.service)
 vi.mock("../../../src/services/workspace-init.service", () => ({
-  emitProgress: vi.fn(),
+  emitProgress: vi.fn<(...args: any[]) => any>(),
 }));
 
 import { detectManifestFromProject } from "../../../src/services/manifest.service";

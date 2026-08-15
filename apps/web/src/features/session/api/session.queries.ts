@@ -10,6 +10,8 @@ import type { PaginatedMessages } from "./session.service";
 import { queryKeys } from "@/shared/api/queryKeys";
 import { useQuerySubscription } from "@/shared/hooks/useQuerySubscription";
 import { mergeMessageDelta } from "../lib/messageCache";
+import { createOptimisticUserMessage, dropOptimisticMessage } from "../lib/optimisticMessage";
+import { uuidv7 } from "@shared/lib/uuid";
 import type { Message, Session, SessionStatus } from "../types";
 import type { RepoGroup } from "@shared/types/workspace";
 import { useEffect, useMemo, useRef } from "react";
@@ -205,11 +207,34 @@ export function useLoadOlderMessages() {
   });
 }
 
+/** A send's correlation key: the optimistic bubble and the engine's echo. */
+export function newTurnId(): string {
+  return uuidv7();
+}
+
+export interface SendMessageVariables {
+  sessionId: string;
+  content: string;
+  model: string;
+  agentHarness: AgentHarness;
+  /** Minted by the caller with `newTurnId()` — see useSessionActions. */
+  turnId: string;
+  permissionMode?: string;
+  thinkingLevel?: string;
+}
+
+/** A rejection the server understood — resending it would only reject again. */
+class SendRejectedError extends Error {}
+
 /**
- * Send message mutation with optimistic update
+ * Send message mutation with optimistic update.
  *
- * Shows user message immediately in the chat while request is in flight.
- * The optimistic message has a temporary ID that gets replaced on refetch.
+ * The caller mints the turn id and it travels BOTH ways: into the command
+ * params (the backend uses it as the engine's `turnId`) and onto the optimistic
+ * bubble's `turn_id`. That is what lets the engine's user echo
+ * (`message.started{role:"user"}`) replace the bubble in place instead of
+ * appending a second one — the reconciliation is keyed on that id, so it has
+ * to exist before the send, not after.
  */
 export function useSendMessage() {
   const queryClient = useQueryClient();
@@ -220,17 +245,11 @@ export function useSendMessage() {
       content,
       model,
       agentHarness,
+      turnId,
       permissionMode,
       thinkingLevel,
-    }: {
-      sessionId: string;
-      content: string;
-      model: string;
-      agentHarness: AgentHarness;
-      permissionMode?: string;
-      thinkingLevel?: string;
-    }): Promise<Message | void> => {
-      // Send message via WS command: backend saves user message to DB,
+    }: SendMessageVariables): Promise<Message | void> => {
+      // Send message via WS command: backend flips the session to working,
       // forwards to agent-server, and pushes q:delta to subscribers.
       try {
         if (!isConnected()) await connect();
@@ -239,18 +258,26 @@ export function useSendMessage() {
           content,
           model,
           agentHarness,
+          turnId,
           permissionMode,
           thinkingLevel,
         });
         if (!ack.accepted) {
-          throw new Error(ack.error || "Agent rejected the query");
+          // A business rejection ("the agent is still working"). The HTTP
+          // fallback below would send the SAME command down the SAME socket
+          // and be rejected identically — or, if the status raced, actually
+          // start a second turn. Fail here so onError rolls the bubble back
+          // deterministically instead of leaving it for an unrelated delta.
+          throw new SendRejectedError(ack.error || "Agent rejected the query");
         }
         // No return value needed — WS q:delta handles message reconciliation.
         return;
-      } catch {
-        // Fallback through the legacy service wrapper; keep the same runtime
-        // routing fields so backend validation behaves identically.
-        return SessionService.sendMessage(sessionId, content, model, agentHarness);
+      } catch (error) {
+        if (error instanceof SendRejectedError) throw error;
+        // Transport failure only: fall back through the legacy service wrapper,
+        // keeping the same runtime routing fields so backend validation
+        // behaves identically.
+        return SessionService.sendMessage(sessionId, content, model, agentHarness, turnId);
       }
     },
 
@@ -258,14 +285,10 @@ export function useSendMessage() {
     // Status indicators (tab spinner, sidebar) are updated by the workspaces
     // WS subscription — the agent-server notifies the backend, which pushes fresh
     // workspace snapshots within ~50ms.
-    onMutate: async ({ sessionId, content, model }) => {
+    onMutate: async ({ sessionId, content, model, turnId }) => {
       await queryClient.cancelQueries({
         queryKey: queryKeys.sessions.messages(sessionId),
       });
-
-      const previousMessages = queryClient.getQueryData<PaginatedMessages>(
-        queryKeys.sessions.messages(sessionId)
-      );
 
       // Snapshot workspace-by-repo cache before optimistic update so we can
       // restore the exact prior status on error (instead of hardcoding "idle").
@@ -273,34 +296,14 @@ export function useSendMessage() {
         queryKey: ["workspaces", "by-repo"],
       });
 
-      // Create optimistic user message
-      const optimisticId =
-        typeof crypto !== "undefined" && "randomUUID" in crypto
-          ? `optimistic-${crypto.randomUUID()}`
-          : `optimistic-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
-
-      // Content may be plain text or a JSON-stringified content blocks array (when images attached).
-      let optimisticContentJson: string;
-      try {
-        const parsed = JSON.parse(content);
-        if (Array.isArray(parsed)) {
-          optimisticContentJson = JSON.stringify(parsed);
-        } else {
-          optimisticContentJson = JSON.stringify([{ type: "text", text: content }]);
-        }
-      } catch {
-        optimisticContentJson = JSON.stringify([{ type: "text", text: content }]);
-      }
-
-      const optimisticMessage: Message = {
-        id: optimisticId,
-        session_id: sessionId,
-        seq: Number.MAX_SAFE_INTEGER,
-        role: "user",
-        content: optimisticContentJson,
-        sent_at: new Date().toISOString(),
-        model: model ?? null,
-      };
+      // The bubble carries the send's turn id and engine `Part`s — the same
+      // shapes the echo will restate, through the same render path.
+      const optimisticMessage = createOptimisticUserMessage({
+        sessionId,
+        turnId,
+        content,
+        model,
+      });
 
       queryClient.setQueryData<PaginatedMessages>(queryKeys.sessions.messages(sessionId), (old) => {
         if (!old)
@@ -330,7 +333,7 @@ export function useSendMessage() {
         }));
       });
 
-      return { previousMessages, previousWorkspaceByRepo };
+      return { previousWorkspaceByRepo };
     },
 
     onError: (_err, variables, context) => {
@@ -349,18 +352,9 @@ export function useSendMessage() {
           emitSendAttemptFailed();
         }
       }
-      // Roll back optimistic message
-      if (context?.previousMessages) {
-        queryClient.setQueryData(
-          queryKeys.sessions.messages(variables.sessionId),
-          context.previousMessages
-        );
-      } else {
-        // No snapshot (first send on empty cache) — invalidate to clear the ghost optimistic message
-        queryClient.invalidateQueries({
-          queryKey: queryKeys.sessions.messages(variables.sessionId),
-        });
-      }
+      // Retire THIS send's bubble, and only it — the toast above is the user's
+      // notice, and the row must not linger pretending the prompt was sent.
+      dropOptimisticMessage(queryClient, variables.sessionId, variables.turnId);
       // Roll back optimistic workspace status from snapshot
       if (context?.previousWorkspaceByRepo?.length) {
         context.previousWorkspaceByRepo.forEach(([key, data]) => {

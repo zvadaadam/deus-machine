@@ -15,11 +15,15 @@
     // whose raw TypeScript source imports with .ts extensions. See tsconfig.web.json.
     "allowImportingTsExtensions": true,
     "emitDeclarationOnly": true,
-    // @zvada/agent-server's TypeScript source is part of this program (it ships
-    // .ts, not .d.ts), so unused-symbol checks would report ITS nits as ours.
-    // tsconfig.web.json has always been off for the same reason.
-    "noUnusedLocals": false,
-    "noUnusedParameters": false,
+    // ON. Turning these off was justified by "@zvada/agent-server's TypeScript
+    // source is part of this program, so unused-symbol checks would report ITS
+    // nits as ours" — that is not what happens: the package is clean and the
+    // only thing the check reported was deus's own dead import. This project
+    // covers shared/**, which is exactly where dead re-exports accumulate
+    // (Law 7 — dead schema reads as capability), so it is where the check earns
+    // its keep. tsconfig.web.json stays off: the renderer's own program.
+    "noUnusedLocals": true,
+    "noUnusedParameters": true,
     "types": ["electron-vite/node"]
   }
 }

@@ -4,7 +4,7 @@ import * as fs from "fs";
 import * as path from "path";
 import WebSocket from "ws";
 import { AgentServerClient } from "@zvada/agent-server/client";
-import type { WireEventEnvelope } from "@zvada/agent-server/protocol";
+import type { AnyWireEventEnvelope } from "@shared/protocol-types";
 import { WIRE_PROTOCOL_VERSION } from "@zvada/agent-server/protocol";
 import {
   SIDE_CHANNEL,
@@ -178,7 +178,7 @@ function waitForMessage(
 interface BackendStyleConnection {
   client: AgentServerClient;
   sideChannel: SideChannelEndpoint;
-  envelopes: WireEventEnvelope[];
+  envelopes: AnyWireEventEnvelope[];
   close(): Promise<void>;
 }
 
@@ -199,7 +199,7 @@ async function connectBackendStyle(
   sideChannel.notify(SIDE_CHANNEL.hello, {});
 
   const client = await AgentServerClient.attach(claimSideChannel(transport, sideChannel));
-  const envelopes: WireEventEnvelope[] = [];
+  const envelopes: AnyWireEventEnvelope[] = [];
   client.onEvent((envelope) => envelopes.push(envelope));
 
   return {
@@ -373,7 +373,7 @@ describe.skipIf(!bundleExists || !claudeCliAvailable)("E2E: Real Claude Integrat
         if (envelope.sessionId === "e2e-claude-cancel" && envelope.event.type === "turn.ended") {
           clearTimeout(timer);
           off();
-          expect(envelope.event.stopReason).toBe("cancelled");
+          expect((envelope.event as { stopReason?: string }).stopReason).toBe("cancelled");
           resolve();
         }
       });
@@ -442,7 +442,7 @@ describe.skipIf(!bundleExists || !codexIntegrationEnabled)("E2E: Real Codex Inte
     await conn.client.cancelTurn("e2e-codex-cancel");
     await new Promise<void>((resolve, reject) => {
       const timer = setTimeout(() => reject(new Error("no turn.ended after cancel")), 30_000);
-      const check = (envelope: WireEventEnvelope) => {
+      const check = (envelope: AnyWireEventEnvelope) => {
         if (envelope.sessionId === "e2e-codex-cancel" && envelope.event.type === "turn.ended") {
           clearTimeout(timer);
           off();

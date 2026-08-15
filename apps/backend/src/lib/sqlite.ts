@@ -19,8 +19,16 @@ type BunSqliteDatabaseConstructor = new (
   transaction<T extends (...args: never[]) => unknown>(fn: T): T;
 };
 
+/**
+ * Bun, in any shape: the packaged deus-runtime executable AND `bun` running
+ * backend code directly (the verification CLI). better-sqlite3 is a V8-API
+ * native addon — under Bun it does not fail to load, it HARD-CRASHES the
+ * process on construction, so "am I on Bun" is the whole question. Gating this
+ * on DEUS_RUNTIME as well meant every other Bun entry point took the branch
+ * that crashes.
+ */
 function isBunRuntime(): boolean {
-  return process.env.DEUS_RUNTIME === "1" && Boolean(process.versions.bun);
+  return Boolean(process.versions.bun);
 }
 
 function loadBetterSqlite3(): BetterSqlite3Constructor {

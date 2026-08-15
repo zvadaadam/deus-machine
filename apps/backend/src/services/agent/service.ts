@@ -18,6 +18,7 @@
 
 import path from "path";
 import type { AgentHarness } from "@shared/enums";
+import type { TurnCancelResult } from "@zvada/agent-server/protocol";
 import type { ProviderAuthRequest, AgentInfo } from "@shared/agent-info";
 import { AgentLink } from "./client";
 import { createAgentEventHandler, type AgentEventHandler } from "./event-handler";
@@ -141,15 +142,22 @@ export async function startTurn(
   if (!registered) events?.beginTurn(sessionId, turnId, { force: true });
 }
 
-/** Cancel a session's active turn (best-effort, idempotent). */
-export async function stopSession(params: { sessionId: string }): Promise<void> {
+/**
+ * Cancel a session's active turn (best-effort, idempotent).
+ *
+ * The outcome is RETURNED, not swallowed: `unconfirmed` means the interrupt
+ * was dispatched but never acknowledged, so the agent may still be writing
+ * files. PROTOCOL §8 is explicit that this is not a cancel, and the caller has
+ * to decide what the session's status becomes — `turn.ended` stays the source
+ * of truth.
+ */
+export async function stopSession(params: { sessionId: string }): Promise<TurnCancelResult> {
   if (!link) throw new Error("Agent service not initialized");
   const result = await link.cancelTurn(params.sessionId);
   if (result.outcome === "unconfirmed") {
-    // Dispatched but unacknowledged: the agent process may still be running,
-    // so turn.ended remains the source of truth for the session's status.
     console.warn(`[AgentService] cancel unconfirmed for session=${params.sessionId}`);
   }
+  return result;
 }
 
 /** Check if the agent link is connected. */

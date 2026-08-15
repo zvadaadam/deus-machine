@@ -1,21 +1,27 @@
 #!/usr/bin/env bun
 // backend/cli.ts
 // Self-contained CLI that tests the full event → persistence pipeline
-// WITHOUT the frontend: the standard wire + the backend's REAL translation.
+// WITHOUT the frontend: the standard wire + the backend's REAL persistence.
 //
-// 1. Creates a workspace + session in the real DB (via sqlite3 CLI)
+// 1. Creates a workspace + session in the DB (the backend's own connection)
 // 2. Spawns the agent-server bundle
 // 3. Connects backend-style (AgentServerClient + deus side channel + hello)
 // 4. Starts a turn with the backend's REAL run-config assembly
-// 5. Feeds every envelope through the same persistence decisions the event
-//    handler makes, over the canonical lifecycle stream (no translation)
+// 5. Feeds every envelope through `services/agent/persistence.ts` — the SAME
+//    functions the event handler calls, not a copy of their SQL. A harness
+//    that verifies a re-implementation verifies nothing: the clone drifted
+//    (it carried the INSERT OR REPLACE that cascade-deleted parts on replay
+//    long after persistence.ts was fixed).
 // 6. Dumps the DB to verify everything stored correctly
+//
+// Runs on Bun, so the DB goes through bun:sqlite (see lib/sqlite.ts) —
+// better-sqlite3's native addon crashes the Bun process.
 //
 // Usage:
 //   bun run cli:backend -- "Say hello"
 //   bun run cli:backend --db-only           # just dump latest session
 
-import { spawn, execSync, type ChildProcess } from "child_process";
+import { spawn, type ChildProcess } from "child_process";
 import * as path from "path";
 import * as fs from "fs";
 import * as os from "os";
@@ -29,8 +35,19 @@ import {
   wsLineTransport,
 } from "@shared/agent-side-channel";
 import type { AgentHarness } from "@shared/enums";
-import type { LifecycleEvent } from "@zvada/agent-server/protocol";
+import { isUnknownLifecycleEvent, type AnyLifecycleEvent } from "@shared/protocol-types";
 import { buildTurnStartParams } from "./src/services/agent/run-config";
+import { turnOutcome } from "./src/services/agent/event-handler";
+import { uuidv7 } from "@shared/lib/uuid";
+import { DB_PATH, closeDatabase, getDatabase, initDatabase } from "./src/lib/database";
+import {
+  persistAgentSessionId,
+  persistCompaction,
+  persistMessageStarted,
+  persistPart,
+  persistSessionError,
+  persistTurnEnded,
+} from "./src/services/agent/persistence";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -62,79 +79,21 @@ function banner(text: string) {
 }
 
 // ---------------------------------------------------------------------------
-// DB via sqlite3 CLI (avoids better-sqlite3 Node version mismatch)
+// DB — the backend's own connection, schema and writes
+//
+// No sqlite3 subprocess and no hand-rolled SQL: `initDatabase()` applies
+// SCHEMA_SQL, the additive columns and the pre-launch assertions exactly as the
+// server does, and DATABASE_PATH points a verification run at a scratch file.
 // ---------------------------------------------------------------------------
 
-function getDbPath(): string {
-  // DATABASE_PATH wins, same as the backend — so a verification run can point
-  // at a scratch file instead of the user's real database (which, under the
-  // pre-launch reset policy, may still be on an older schema).
-  return (
-    process.env.DATABASE_PATH ||
-    path.join(os.homedir(), "Library", "Application Support", "com.deus.app", "deus.db")
-  );
-}
-
-function sql(dbPath: string, query: string): string {
+function openDatabase() {
   try {
-    return execSync(`sqlite3 "${dbPath}" "${query.replace(/"/g, '\\"')}"`, {
-      encoding: "utf-8",
-      timeout: 5000,
-    }).trim();
-  } catch {
-    return "";
+    initDatabase();
+  } catch (err) {
+    console.log(`  ${c.red}${err instanceof Error ? err.message : String(err)}${c.reset}`);
+    process.exit(1);
   }
-}
-
-function sqlRun(dbPath: string, query: string): boolean {
-  // Write SQL to temp file to avoid shell escaping issues with JSON data
-  const tmpFile = path.join(os.tmpdir(), `deus-cli-${Date.now()}.sql`);
-  try {
-    fs.writeFileSync(tmpFile, query);
-    execSync(`sqlite3 "${dbPath}" < "${tmpFile}"`, { timeout: 5000 });
-    return true;
-  } catch (err: any) {
-    console.log(`  ${c.red}DB ERROR: ${err.message?.split("\n")[0]}${c.reset}`);
-    return false;
-  } finally {
-    try {
-      fs.unlinkSync(tmpFile);
-    } catch {
-      /* ignore */
-    }
-  }
-}
-
-function ensureSchema(dbPath: string) {
-  const dir = path.dirname(dbPath);
-  if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
-
-  // Import schema from shared
-  const schemaPath = path.resolve(__dirname, "../../shared/schema.ts");
-  const schemaContent = fs.readFileSync(schemaPath, "utf-8");
-
-  // Extract SCHEMA_SQL from the file. Pre-launch schema changes update the
-  // source schema directly; stale local DBs should be reset rather than migrated.
-  const schemaMatch = schemaContent.match(/export const SCHEMA_SQL = `([\s\S]*?)`;/);
-  if (schemaMatch) {
-    // Feed it through a file: the schema carries `--` line comments, so
-    // flattening it onto one line would comment the whole thing out.
-    if (!sqlRun(dbPath, schemaMatch[1])) {
-      console.log(`  ${c.red}Schema init failed — delete ${dbPath} and retry${c.reset}`);
-      process.exit(1);
-    }
-  }
-}
-
-// ---------------------------------------------------------------------------
-// UUID7 (simple timestamp-based)
-// ---------------------------------------------------------------------------
-
-function uuid7(): string {
-  const now = Date.now();
-  const hex = now.toString(16).padStart(12, "0");
-  const rand = Math.random().toString(16).slice(2, 14);
-  return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-7${rand.slice(0, 3)}-${rand.slice(3, 7)}-${rand.slice(7, 19).padEnd(12, "0")}`;
+  return getDatabase();
 }
 
 // ---------------------------------------------------------------------------
@@ -177,56 +136,73 @@ function parseArgs() {
 // DB dump
 // ---------------------------------------------------------------------------
 
-function dumpSession(dbPath: string, sessionId: string): number {
+interface MessageRow {
+  id: string;
+  role: string;
+  turn_stop_reason: string | null;
+  seq: number;
+  cancelled_at: string | null;
+  tokens: string | null;
+}
+
+interface PartRow {
+  type: string;
+  tool_name: string | null;
+  seq: number;
+  data: string;
+}
+
+function dumpSession(sessionId: string): number {
+  const db = getDatabase();
   banner("Database State");
 
   console.log(`\n  ${c.bold}Messages${c.reset}`);
-  const messages = sql(
-    dbPath,
-    `SELECT id, role, turn_stop_reason, seq FROM messages WHERE session_id='${sessionId}' ORDER BY seq;`
-  );
-  if (messages) {
-    for (const line of messages.split("\n")) {
-      const [id, role, stopReason, seq] = line.split("|");
-      const stop = stopReason ? ` ${c.yellow}stop=${stopReason}${c.reset}` : "";
-      console.log(`  ${c.cyan}${role}${c.reset} seq=${seq}${stop} ${c.dim}${id}${c.reset}`);
+  const messages = db
+    .prepare(
+      `SELECT id, role, turn_stop_reason, seq, cancelled_at, tokens
+         FROM messages WHERE session_id = ? ORDER BY seq`
+    )
+    .all(sessionId) as MessageRow[];
+  if (messages.length) {
+    for (const row of messages) {
+      const stop = row.turn_stop_reason ? ` ${c.yellow}stop=${row.turn_stop_reason}${c.reset}` : "";
+      const cancelled = row.cancelled_at ? ` ${c.red}cancelled${c.reset}` : "";
+      const tokens = row.tokens ? ` ${c.dim}tokens=${row.tokens}${c.reset}` : "";
+      console.log(
+        `  ${c.cyan}${row.role}${c.reset} seq=${row.seq}${stop}${cancelled}${tokens} ${c.dim}${row.id}${c.reset}`
+      );
     }
   } else {
     console.log(`  ${c.red}No messages${c.reset}`);
   }
 
   console.log(`\n  ${c.bold}Parts${c.reset}`);
-  const parts = sql(
-    dbPath,
-    `SELECT p.type, p.tool_name, p.seq, substr(p.data, 1, 80) FROM parts p JOIN messages m ON p.message_id=m.id WHERE m.session_id='${sessionId}' ORDER BY m.seq, p.seq;`
-  );
-  if (parts) {
-    for (const line of parts.split("\n")) {
-      const [type, toolName, seq, data] = line.split("|");
-      const tool = toolName ? ` ${c.yellow}${toolName}${c.reset}` : "";
-      console.log(`  ${c.green}${type}${c.reset}${tool} seq=${seq}`);
-      console.log(`    ${c.dim}${data}${c.reset}`);
+  const parts = db
+    .prepare(
+      `SELECT p.type, p.tool_name, p.seq, p.data FROM parts p JOIN messages m ON p.message_id = m.id
+        WHERE m.session_id = ? ORDER BY m.seq, p.seq`
+    )
+    .all(sessionId) as PartRow[];
+  if (parts.length) {
+    for (const row of parts) {
+      const tool = row.tool_name ? ` ${c.yellow}${row.tool_name}${c.reset}` : "";
+      console.log(`  ${c.green}${row.type}${c.reset}${tool} seq=${row.seq}`);
+      console.log(`    ${c.dim}${row.data.slice(0, 80)}${c.reset}`);
     }
   } else {
     console.log(`  ${c.red}No parts${c.reset}`);
   }
 
-  const partCount = parseInt(
-    sql(dbPath, `SELECT count(*) FROM parts WHERE session_id='${sessionId}';`) || "0",
-    10
-  );
-  const msgCount = parseInt(
-    sql(dbPath, `SELECT count(*) FROM messages WHERE session_id='${sessionId}';`) || "0",
-    10
-  );
-  const partTypes = sql(
-    dbPath,
-    `SELECT type || '×' || count(*) FROM parts WHERE session_id='${sessionId}' GROUP BY type;`
-  );
+  const byType = db
+    .prepare(`SELECT type, count(*) as n FROM parts WHERE session_id = ? GROUP BY type`)
+    .all(sessionId) as Array<{ type: string; n: number }>;
+  const partCount = byType.reduce((total, row) => total + row.n, 0);
 
-  console.log(`\n  Messages: ${c.bold}${msgCount}${c.reset}`);
+  console.log(`\n  Messages: ${c.bold}${messages.length}${c.reset}`);
   console.log(
-    `  Parts:    ${c.bold}${partCount}${c.reset}${partTypes ? ` (${partTypes.split("\n").join(", ")})` : ""}`
+    `  Parts:    ${c.bold}${partCount}${c.reset}${
+      byType.length ? ` (${byType.map((r) => `${r.type}×${r.n}`).join(", ")})` : ""
+    }`
   );
 
   return partCount;
@@ -238,48 +214,49 @@ function dumpSession(dbPath: string, sessionId: string): number {
 
 async function main() {
   const opts = parseArgs();
-  const dbPath = getDbPath();
 
   // DB-only mode
   if (opts.dbOnly) {
-    const lastSession = sql(dbPath, `SELECT id FROM sessions ORDER BY updated_at DESC LIMIT 1;`);
-    if (!lastSession) {
+    const db = openDatabase();
+    const last = db.prepare(`SELECT id FROM sessions ORDER BY updated_at DESC LIMIT 1`).get() as
+      | { id: string }
+      | undefined;
+    if (!last) {
       console.log(`${c.red}No sessions in DB${c.reset}`);
       process.exit(1);
     }
-    console.log(`  ${c.dim}Session: ${lastSession}${c.reset}`);
-    const pc = dumpSession(dbPath, lastSession);
+    console.log(`  ${c.dim}Session: ${last.id}${c.reset}`);
+    const pc = dumpSession(last.id);
     process.exit(pc > 0 ? 0 : 1);
   }
 
   banner("Backend Integration CLI");
   console.log(`  agent:  ${c.bold}${opts.agent}${c.reset}`);
   console.log(`  prompt: ${c.dim}${opts.prompt}${c.reset}`);
-  console.log(`  db:     ${c.dim}${dbPath}${c.reset}`);
+  console.log(`  db:     ${c.dim}${DB_PATH}${c.reset}`);
 
-  // 1. Ensure DB schema
-  ensureSchema(dbPath);
+  // 1. Open the DB the way the backend does (schema + assertions included)
+  const db = openDatabase();
 
   // 2. Create workspace + session
-  const repoId = uuid7();
-  const workspaceId = uuid7();
+  const repoId = uuidv7();
+  const workspaceId = uuidv7();
   const sessionId = `cli-${Date.now()}`;
 
-  sqlRun(
-    dbPath,
-    `INSERT OR IGNORE INTO repositories (id, name, root_path) VALUES ('${repoId}', 'cli-test', '${opts.cwd.replace(/'/g, "''")}');`
-  );
-  sqlRun(
-    dbPath,
-    `INSERT OR IGNORE INTO workspaces (id, repository_id, slug, state) VALUES ('${workspaceId}', '${repoId}', 'cli-test', 'ready');`
-  );
-  sqlRun(
-    dbPath,
-    `INSERT INTO sessions (id, workspace_id, agent_harness, status) VALUES ('${sessionId}', '${workspaceId}', '${opts.agent}', 'idle');`
-  );
+  db.prepare(
+    `INSERT OR IGNORE INTO repositories (id, name, root_path) VALUES (?, 'cli-test', ?)`
+  ).run(repoId, opts.cwd);
+  db.prepare(
+    `INSERT OR IGNORE INTO workspaces (id, repository_id, slug, state) VALUES (?, ?, 'cli-test', 'ready')`
+  ).run(workspaceId, repoId);
+  db.prepare(
+    `INSERT INTO sessions (id, workspace_id, agent_harness, status) VALUES (?, ?, ?, 'working')`
+  ).run(sessionId, workspaceId, opts.agent);
 
   // No user message row is seeded: the engine echoes the prompt back as
-  // message.started{role:"user"} and THAT is what persists it.
+  // message.started{role:"user"} and THAT is what persists it. The session
+  // starts 'working' for the same reason the send command flips it there —
+  // turn.ended is what settles it.
 
   console.log(`  ${c.green}Session created:${c.reset} ${sessionId}`);
 
@@ -336,13 +313,15 @@ async function main() {
     `  ${c.green}Handshake:${c.reset} v${init.protocolVersion} harnesses=[${Object.keys(init.harnesses).join(", ")}]`
   );
 
-  // 5. The canonical stream, persisted with the same SQL shapes the event
-  // handler uses. No translation layer — this is the protocol verbatim.
+  // 5. The canonical stream, through the backend's REAL persistence functions.
+  // Not a copy of their SQL — the functions themselves, so this harness cannot
+  // pass while the shipped writes are broken.
   let turnDone = false;
+  let errorReported = false;
 
   banner("Events");
 
-  const handleEvent = (event: LifecycleEvent): void => {
+  const handleEvent = (event: AnyLifecycleEvent): void => {
     let color = c.cyan;
     if (event.type.startsWith("turn.") || event.type.startsWith("session.")) color = c.magenta;
     if (event.type.startsWith("message.part")) color = c.green;
@@ -350,101 +329,68 @@ async function main() {
     if (event.type === "error") color = c.red;
 
     let detail = "";
-    switch (event.type) {
-      case "session.created":
-        detail = `native=${event.nativeSessionId}${event.resumed === false ? " resumed=false" : ""}`;
-        sqlRun(
-          dbPath,
-          `UPDATE sessions SET agent_session_id='${event.nativeSessionId}' WHERE id='${sessionId}';`
-        );
-        detail += ` ${c.green}→ DB UPDATE${c.reset}`;
-        break;
+    const wrote = (result: { ok: boolean; error?: string }) =>
+      result.ok ? ` ${c.green}→ DB${c.reset}` : ` ${c.red}→ DB FAIL: ${result.error}${c.reset}`;
 
-      case "message.started": {
-        detail = `${event.role} messageId=${event.messageId}`;
-        const model = event.model ? `'${event.model}'` : "NULL";
-        const parent = event.parentToolCallId ? `'${event.parentToolCallId}'` : "NULL";
-        sqlRun(
-          dbPath,
-          `INSERT OR REPLACE INTO messages (id, session_id, role, turn_id, model, sent_at, parent_tool_call_id) VALUES ('${event.messageId}', '${sessionId}', '${event.role}', '${event.turnId}', ${model}, '${new Date(event.timestamp).toISOString()}', ${parent});`
-        );
-        detail += ` ${c.green}→ DB INSERT${c.reset}`;
-        break;
-      }
+    if (isUnknownLifecycleEvent(event)) {
+      // Law 6: preserved, never dropped — the backend forwards it too.
+      detail = `${c.yellow}unknown type${c.reset} ${JSON.stringify(event.raw).slice(0, 50)}`;
+    } else {
+      switch (event.type) {
+        case "session.created":
+          detail =
+            `native=${event.nativeSessionId}${event.resumed === false ? " resumed=false" : ""}` +
+            wrote(persistAgentSessionId(sessionId, event.nativeSessionId));
+          break;
 
-      case "message.part": {
-        const part = event.part;
-        const partData = JSON.stringify(part).replace(/'/g, "''");
-        const toolCallId = part.type === "tool" ? `'${part.toolCallId}'` : "NULL";
-        const toolName = part.type === "tool" ? `'${part.toolName}'` : "NULL";
-        const parentId = part.parentToolCallId ? `'${part.parentToolCallId}'` : "NULL";
-        const ok = sqlRun(
-          dbPath,
-          `INSERT OR REPLACE INTO parts (id, message_id, session_id, seq, type, data, tool_call_id, tool_name, parent_tool_call_id) VALUES ('${part.id}', '${event.messageId}', '${sessionId}', ${event.partIndex}, '${part.type}', '${partData}', ${toolCallId}, ${toolName}, ${parentId});`
-        );
-        detail = `${part.type} partId=${part.id} ${ok ? `${c.green}→ DB UPSERT${c.reset}` : `${c.red}→ DB FAIL${c.reset}`}`;
-        break;
-      }
+        case "message.started":
+          detail =
+            `${event.role} messageId=${event.messageId}` + wrote(persistMessageStarted(event));
+          break;
 
-      case "message.part.delta":
-        detail = `${event.delta.type} partId=${event.partId}`;
-        break;
+        case "message.part":
+          detail = `${event.part.type} partId=${event.part.id}` + wrote(persistPart(event));
+          break;
 
-      case "message.ended":
-        detail = `messageId=${event.messageId}`;
-        break;
+        case "message.part.delta":
+          detail = `${event.delta.type} partId=${event.partId}`;
+          break;
 
-      case "turn.ended": {
-        detail = `stopReason=${event.stopReason}${event.cost !== undefined ? ` cost=${event.cost}` : ""}`;
-        const tokens = event.tokens
-          ? `'${JSON.stringify(event.tokens).replace(/'/g, "''")}'`
-          : "NULL";
-        const cost = event.cost ?? "NULL";
-        const cancelledAt =
-          event.stopReason === "cancelled"
-            ? `'${new Date(event.timestamp).toISOString()}'`
-            : "NULL";
-        sqlRun(
-          dbPath,
-          `UPDATE messages SET tokens=COALESCE(${tokens}, tokens), cost=COALESCE(${cost}, cost), turn_stop_reason='${event.stopReason}', cancelled_at=COALESCE(${cancelledAt}, cancelled_at) WHERE id = (SELECT id FROM messages WHERE session_id='${sessionId}' AND turn_id='${event.turnId}' AND role='assistant' AND parent_tool_call_id IS NULL ORDER BY seq DESC LIMIT 1);`
-        );
-        sqlRun(
-          dbPath,
-          `UPDATE sessions SET status='${event.stopReason === "error" ? "error" : "idle"}' WHERE id='${sessionId}';`
-        );
-        detail += ` ${c.green}→ DB UPDATE${c.reset}`;
-        turnDone = true;
-        break;
-      }
+        case "message.ended":
+          detail = `messageId=${event.messageId}`;
+          break;
 
-      case "session.usage":
-        detail = `used=${event.used}${event.size ? `/${event.size}` : ""}`;
-        break;
-
-      case "session.compaction": {
-        detail = `compactionId=${event.compactionId} status=${event.status}`;
-        const summary = event.summary ? `'${event.summary.replace(/'/g, "''")}'` : "NULL";
-        sqlRun(
-          dbPath,
-          `INSERT INTO compactions (compaction_id, session_id, turn_id, status, trigger, pre_tokens, post_tokens, summary, created_at) VALUES ('${event.compactionId}', '${sessionId}', '${event.turnId}', '${event.status}', ${event.trigger ? `'${event.trigger}'` : "NULL"}, ${event.preTokens ?? "NULL"}, ${event.postTokens ?? "NULL"}, ${summary}, '${new Date(event.timestamp).toISOString()}') ON CONFLICT(compaction_id) DO UPDATE SET status=excluded.status, summary=COALESCE(excluded.summary, compactions.summary), post_tokens=COALESCE(excluded.post_tokens, compactions.post_tokens);`
-        );
-        detail += ` ${c.green}→ DB UPSERT${c.reset}`;
-        break;
-      }
-
-      case "error":
-        detail = `${event.category}${event.recoverable ? " (recoverable)" : ""}: ${event.message}`;
-        if (!event.recoverable) {
-          sqlRun(
-            dbPath,
-            `UPDATE sessions SET status='error', error_message='${event.message.replace(/'/g, "''")}', error_category='${event.category}' WHERE id='${sessionId}';`
-          );
+        case "turn.ended":
+          detail =
+            `stopReason=${event.stopReason}${event.cost !== undefined ? ` cost=${event.cost}` : ""}` +
+            wrote(persistTurnEnded(event, turnOutcome(event, errorReported)));
           turnDone = true;
-        }
-        break;
+          break;
 
-      default:
-        detail = JSON.stringify(event).slice(0, 50);
+        case "session.usage":
+          detail = `used=${event.used}${event.size ? `/${event.size}` : ""}`;
+          break;
+
+        case "session.compaction":
+          detail =
+            `compactionId=${event.compactionId} status=${event.status}` +
+            wrote(persistCompaction(event));
+          break;
+
+        case "error":
+          detail = `${event.category}${event.recoverable ? " (recoverable)" : ""}: ${event.message}`;
+          if (!event.recoverable) {
+            // Same swallow the event handler applies: a recoverable error means
+            // the turn CONTINUES, and promoting it would suppress the real one.
+            errorReported = true;
+            detail += wrote(persistSessionError(sessionId, event.message, event.category));
+            turnDone = true;
+          }
+          break;
+
+        default:
+          detail = JSON.stringify(event).slice(0, 50);
+      }
     }
 
     console.log(`${ts()} ${c.green}◂${c.reset} ${color}${c.bold}${event.type}${c.reset} ${detail}`);
@@ -456,7 +402,7 @@ async function main() {
   banner("Sending Turn");
   console.log(`  ${c.dim}${opts.prompt}${c.reset}\n`);
 
-  const turnId = uuid7();
+  const turnId = uuidv7();
   const params = buildTurnStartParams(sessionId, turnId, opts.agent as AgentHarness, opts.prompt, {
     cwd: opts.cwd,
     permissionMode: "default",
@@ -480,7 +426,7 @@ async function main() {
   await new Promise((r) => setTimeout(r, 1500));
 
   // 8. Dump DB
-  const partCount = dumpSession(dbPath, sessionId);
+  const partCount = dumpSession(sessionId);
 
   // 9. Verdict
   banner("Result");
@@ -493,6 +439,7 @@ async function main() {
   await client.close();
   ws.close();
   proc.kill("SIGTERM");
+  closeDatabase();
   process.exit(partCount > 0 ? 0 : 1);
 }
 

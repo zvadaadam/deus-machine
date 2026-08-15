@@ -26,17 +26,17 @@ const {
   mockBroadcast,
   mockRefreshPr,
 } = vi.hoisted(() => ({
-  mockPersistAgentSessionId: vi.fn(() => ({ ok: true, value: undefined })),
-  mockPersistCompaction: vi.fn(() => ({ ok: true, value: "cmp-1" })),
-  mockPersistMessageStarted: vi.fn(() => ({ ok: true, value: "msg-1" })),
-  mockPersistPart: vi.fn(() => ({ ok: true, value: "part-1" })),
-  mockPersistSessionError: vi.fn(() => ({ ok: true, value: undefined })),
-  mockPersistSessionTitle: vi.fn(() => ({ ok: true, value: undefined })),
-  mockPersistSessionUsage: vi.fn(() => ({ ok: true, value: undefined })),
-  mockPersistTurnEnded: vi.fn(() => ({ ok: true, value: undefined })),
-  mockInvalidate: vi.fn(),
-  mockBroadcast: vi.fn(),
-  mockRefreshPr: vi.fn(),
+  mockPersistAgentSessionId: vi.fn<(...args: any[]) => any>(() => ({ ok: true, value: undefined })),
+  mockPersistCompaction: vi.fn<(...args: any[]) => any>(() => ({ ok: true, value: "cmp-1" })),
+  mockPersistMessageStarted: vi.fn<(...args: any[]) => any>(() => ({ ok: true, value: "msg-1" })),
+  mockPersistPart: vi.fn<(...args: any[]) => any>(() => ({ ok: true, value: "part-1" })),
+  mockPersistSessionError: vi.fn<(...args: any[]) => any>(() => ({ ok: true, value: undefined })),
+  mockPersistSessionTitle: vi.fn<(...args: any[]) => any>(() => ({ ok: true, value: undefined })),
+  mockPersistSessionUsage: vi.fn<(...args: any[]) => any>(() => ({ ok: true, value: undefined })),
+  mockPersistTurnEnded: vi.fn<(...args: any[]) => any>(() => ({ ok: true, value: undefined })),
+  mockInvalidate: vi.fn<(...args: any[]) => any>(),
+  mockBroadcast: vi.fn<(...args: any[]) => any>(),
+  mockRefreshPr: vi.fn<(...args: any[]) => any>(),
 }));
 
 vi.mock("../../../src/services/agent/persistence", () => ({
@@ -552,6 +552,82 @@ describe("agent event handler (canonical lifecycle stream)", () => {
     for (const event of events) {
       expect(() => handler.handle(envelope(event))).not.toThrow();
     }
+  });
+
+  // ==========================================================================
+  // Law 6 — tolerant of the unknown
+  // ==========================================================================
+
+  describe("an event type this build does not know", () => {
+    // The wire decoder preserves it; `.exhaustive()` alone would THROW on it,
+    // which is a crash per envelope the day the engine adds a member.
+    const future = {
+      type: "session.checkpoint",
+      sessionId: SESSION,
+      raw: { type: "session.checkpoint", sessionId: SESSION, checkpointId: "c1" },
+    } as unknown as LifecycleEvent;
+
+    it("forwards it verbatim instead of throwing or dropping it", () => {
+      expect(() => handler.handle(envelope(future))).not.toThrow();
+
+      expect(pushedEnvelopes().map((e) => e.event.type)).toEqual(["session.checkpoint"]);
+    });
+
+    it("persists nothing — there are no columns for a shape it cannot read", () => {
+      handler.handle(envelope(future));
+
+      expect(mockPersistMessageStarted).not.toHaveBeenCalled();
+      expect(mockPersistTurnEnded).not.toHaveBeenCalled();
+      expect(mockInvalidate).not.toHaveBeenCalled();
+    });
+  });
+
+  // ==========================================================================
+  // Per-turn state
+  // ==========================================================================
+
+  describe("session state", () => {
+    it("turn.started clears the previous turn's error-dedupe flag", () => {
+      // A turn deus did not admit via beginTurn (replay, engine-initiated)
+      // would otherwise inherit `errorReported` and have its terminal error
+      // silently downgraded to "already reported".
+      handler.handle(
+        envelope({
+          type: "error",
+          sessionId: SESSION,
+          turnId: TURN,
+          category: "auth",
+          message: "not logged in",
+          recoverable: false,
+          timestamp: T,
+        })
+      );
+      handler.handle(
+        envelope({ type: "turn.started", sessionId: SESSION, turnId: "turn-2", timestamp: T })
+      );
+      handler.handle(envelope(turnEnded({ turnId: "turn-2", stopReason: "error" })));
+
+      expect(mockPersistTurnEnded).toHaveBeenCalledWith(
+        expect.objectContaining({ turnId: "turn-2" }),
+        expect.objectContaining({
+          status: "error",
+          error: expect.objectContaining({ message: "Agent turn failed" }),
+        })
+      );
+    });
+
+    it("session.ended drops the session's entry — the map is otherwise unbounded", () => {
+      handler.handle(
+        envelope({ type: "turn.started", sessionId: SESSION, turnId: TURN, timestamp: T })
+      );
+      handler.handle(
+        envelope({ type: "session.ended", sessionId: SESSION, reason: "idle", timestamp: T })
+      );
+
+      // A fresh entry means the old one is gone: beginTurn only refuses when a
+      // live turn is still registered.
+      expect(handler.beginTurn(SESSION, "turn-3")).toBe(true);
+    });
   });
 
   // ==========================================================================

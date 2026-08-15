@@ -13,5 +13,10 @@
       "@shared/*": ["../shared/*"]
     }
   },
-  "include": ["src", "cli.ts", "../../shared"]
+  // `test` is in the program on purpose: without it, a test could import a
+  // module that no longer exists and nothing would notice — vitest/esbuild
+  // strips type-only imports at runtime, so it passed green while pointing at
+  // a deleted file (shared/agent-events) and at columns renamed out of the
+  // schema.
+  "include": ["src", "cli.ts", "test", "../../shared"]
 }

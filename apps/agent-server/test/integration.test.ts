@@ -6,7 +6,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { createServer as createHttpServer, type Server } from "http";
 import { WebSocketServer, WebSocket } from "ws";
 import { AgentServerClient } from "@zvada/agent-server/client";
-import type { LifecycleEvent, WireEventEnvelope } from "@zvada/agent-server/protocol";
+import type { LifecycleEvent } from "@zvada/agent-server/protocol";
+import type { AnyWireEventEnvelope } from "@shared/protocol-types";
 import { WIRE_PROTOCOL_VERSION } from "@zvada/agent-server/protocol";
 import {
   SIDE_CHANNEL,
@@ -170,7 +171,7 @@ describe("Integration: standard wire + deus side channel over a real WebSocket",
 
   it("runs a quick-ack turn and streams sequenced events in order", async () => {
     const c = await connectBackendStyle();
-    const envelopes: WireEventEnvelope[] = [];
+    const envelopes: AnyWireEventEnvelope[] = [];
     c.onEvent((envelope) => envelopes.push(envelope));
 
     const turn = await c.runTurn({

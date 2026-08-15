@@ -50,19 +50,25 @@ export const SessionService = {
   },
 
   /**
-   * Send a message to a session
+   * Send a message to a session.
+   *
+   * `turnId` is not optional in practice: it is the key the engine's user echo
+   * comes back with, and the composer already stamped it on the optimistic
+   * bubble. Dropping it here would leave that bubble beside its own echo.
    */
   sendMessage: async (
     id: string,
     content: string,
     model: string,
-    agentHarness: AgentHarness
+    agentHarness: AgentHarness,
+    turnId?: string
   ): Promise<Message> => {
     const result = await sendCommand("sendMessage", {
       sessionId: id,
       content,
       model,
       agentHarness,
+      ...(turnId ? { turnId } : {}),
     });
     if (!result.accepted) throw new Error(result.error || "Failed to send message");
     return result as unknown as Message;

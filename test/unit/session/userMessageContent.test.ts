@@ -2,9 +2,10 @@
  * The composer↔bubble round trip.
  *
  * The composer emits the canonical `PartInput` vocabulary; the bubble renders
- * three producers (engine echo parts, canonical `content` JSON, LEGACY
- * Anthropic block `content`) through one normalizer. These tests pin both ends
- * so a shape drift on either side fails here rather than in the UI.
+ * two producers (engine `Part`s — the echo AND the composer's own optimistic
+ * bubble — plus LEGACY Anthropic block `content`) through one normalizer.
+ * These tests pin both ends so a shape drift on either side fails here rather
+ * than in the UI.
  */
 import { describe, expect, it } from "vitest";
 
@@ -13,6 +14,7 @@ import {
   buildMessageContent,
   type ImageAttachment,
 } from "../../../apps/web/src/features/session/lib/imageAttachments";
+import { createOptimisticUserMessage } from "../../../apps/web/src/features/session/lib/optimisticMessage";
 import { readUserMessageContent } from "../../../apps/web/src/features/session/lib/userMessageContent";
 import type { Part } from "../../../shared/protocol-types";
 
@@ -129,15 +131,35 @@ describe("readUserMessageContent — engine echo parts (new rows)", () => {
   });
 });
 
-describe("readUserMessageContent — content JSON", () => {
-  it("renders the canonical PartInput array the composer now writes", () => {
+describe("readUserMessageContent — the composer's optimistic bubble", () => {
+  it("renders through `parts`, not a JSON content blob — one producer, not two", () => {
     const content = buildMessageContent("what is this?", [attachment({ type: "image/jpeg" })]);
-    expect(readUserMessageContent({ content })).toEqual({
+    const bubble = createOptimisticUserMessage({ sessionId: "s1", turnId: "t1", content });
+
+    expect(bubble.content).toBeNull();
+    expect(readUserMessageContent(bubble)).toEqual({
       texts: ["what is this?"],
       images: ["data:image/jpeg;base64,AAAA"],
     });
   });
 
+  it("renders a text-only send (the composer sends a bare string)", () => {
+    const bubble = createOptimisticUserMessage({
+      sessionId: "s1",
+      turnId: "t1",
+      content: "just a prompt",
+    });
+    expect(readUserMessageContent(bubble)).toEqual({ texts: ["just a prompt"], images: [] });
+  });
+
+  it("carries the send's turn id, so the echo can replace it", () => {
+    const bubble = createOptimisticUserMessage({ sessionId: "s1", turnId: "t-7", content: "hi" });
+    expect(bubble.turn_id).toBe("t-7");
+    expect(bubble.role).toBe("user");
+  });
+});
+
+describe("readUserMessageContent — content JSON", () => {
   it("still renders LEGACY Anthropic blocks from rows written before the flip", () => {
     const content = JSON.stringify([
       { type: "text", text: "old row" },

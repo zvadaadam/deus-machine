@@ -2,16 +2,16 @@ import { vi, describe, it, expect, beforeEach } from "vitest";
 import { createHash } from "crypto";
 
 const mockStmt = {
-  all: vi.fn(() => []),
-  get: vi.fn(),
-  run: vi.fn(() => ({ changes: 1 })),
+  all: vi.fn<(...args: any[]) => any>(() => []),
+  get: vi.fn<(...args: any[]) => any>(),
+  run: vi.fn<(...args: any[]) => any>(() => ({ changes: 1 })),
 };
 const mockDb = {
-  prepare: vi.fn(() => mockStmt),
+  prepare: vi.fn<(...args: any[]) => any>(() => mockStmt),
 };
 
 vi.mock("../../../src/lib/database", () => ({
-  getDatabase: vi.fn(() => mockDb),
+  getDatabase: vi.fn<(...args: any[]) => any>(() => mockDb),
   DB_PATH: "/tmp/deus-test-unit-auth/deus.db",
 }));
 

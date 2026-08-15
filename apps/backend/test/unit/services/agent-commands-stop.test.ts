@@ -1,0 +1,141 @@
+/**
+ * stopSession and the cancel outcome union.
+ *
+ * PROTOCOL §8: "unconfirmed" is NOT a cancel — the interrupt was dispatched but
+ * never acknowledged, so the agent may still be writing files. Forcing the
+ * session to "idle" there showed a finished session while work continued, and
+ * the real turn.ended then flipped it back. Runs against a real in-memory
+ * SQLite: the command's whole observable effect is one UPDATE.
+ */
+
+import Database from "better-sqlite3";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+
+let canUseDatabase = true;
+try {
+  new Database(":memory:").close();
+} catch {
+  canUseDatabase = false;
+}
+const describeWithDb = canUseDatabase ? describe : describe.skip;
+
+import { SCHEMA_SQL } from "@shared/schema";
+
+const { mockGetDatabase, mockInvalidate } = vi.hoisted(() => ({
+  mockGetDatabase: vi.fn(),
+  mockInvalidate: vi.fn(),
+}));
+
+vi.mock("../../../src/lib/database", () => ({ getDatabase: mockGetDatabase }));
+vi.mock("../../../src/services/query-engine", () => ({ invalidate: mockInvalidate }));
+
+import { runCommand } from "../../../src/services/agent/commands";
+import * as agentService from "../../../src/services/agent/service";
+
+const SESSION = "sess-stop";
+
+function createTestDb(): Database.Database {
+  const db = new Database(":memory:");
+  db.pragma("foreign_keys = ON");
+  db.exec(SCHEMA_SQL);
+  db.prepare(
+    `INSERT INTO repositories (id, name, root_path) VALUES ('r1', 'repo', '/tmp/repo')`
+  ).run();
+  db.prepare(`INSERT INTO workspaces (id, repository_id, slug) VALUES ('w1', 'r1', 'ws')`).run();
+  db.prepare(
+    `INSERT INTO sessions (id, workspace_id, agent_harness, status) VALUES (?, 'w1', 'claude-code', 'working')`
+  ).run(SESSION);
+  return db;
+}
+
+describeWithDb("stopSession", () => {
+  let db: Database.Database;
+
+  const status = (): string =>
+    (db.prepare(`SELECT status FROM sessions WHERE id = ?`).get(SESSION) as { status: string })
+      .status;
+
+  beforeEach(() => {
+    db = createTestDb();
+    mockGetDatabase.mockReturnValue(db);
+    vi.spyOn(agentService, "isConnected").mockReturnValue(true);
+    vi.spyOn(console, "warn").mockImplementation(() => {});
+    vi.spyOn(console, "error").mockImplementation(() => {});
+    vi.useFakeTimers();
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+    db.close();
+    vi.restoreAllMocks();
+    vi.clearAllMocks();
+  });
+
+  it("goes idle when the harness CONFIRMED the interrupt", async () => {
+    vi.spyOn(agentService, "stopSession").mockResolvedValue({
+      outcome: "cancelled",
+      turnId: "turn-1",
+    });
+
+    await runCommand("stopSession", { sessionId: SESSION });
+
+    expect(status()).toBe("idle");
+  });
+
+  it("goes idle when there was no active turn to cancel", async () => {
+    vi.spyOn(agentService, "stopSession").mockResolvedValue({ outcome: "no_active_turn" });
+
+    await runCommand("stopSession", { sessionId: SESSION });
+
+    expect(status()).toBe("idle");
+  });
+
+  it("leaves an UNCONFIRMED cancel working — turn.ended is the source of truth", async () => {
+    vi.spyOn(agentService, "stopSession").mockResolvedValue({
+      outcome: "unconfirmed",
+      turnId: "turn-1",
+    });
+
+    const result = await runCommand("stopSession", { sessionId: SESSION });
+
+    expect(result).toEqual({ unconfirmed: true });
+    expect(status()).toBe("working");
+  });
+
+  it("the unconfirmed watchdog settles a session no turn.ended ever reached", async () => {
+    vi.spyOn(agentService, "stopSession").mockResolvedValue({
+      outcome: "unconfirmed",
+      turnId: "turn-1",
+    });
+
+    await runCommand("stopSession", { sessionId: SESSION });
+    await vi.advanceTimersByTimeAsync(20_000);
+
+    expect(status()).toBe("error");
+    expect(
+      db.prepare(`SELECT error_message FROM sessions WHERE id = ?`).get(SESSION)
+    ).toMatchObject({ error_message: expect.stringContaining("never confirmed") });
+  });
+
+  it("the watchdog never stomps on a status turn.ended already settled", async () => {
+    vi.spyOn(agentService, "stopSession").mockResolvedValue({
+      outcome: "unconfirmed",
+      turnId: "turn-1",
+    });
+
+    await runCommand("stopSession", { sessionId: SESSION });
+    // turn.ended lands while the watchdog is pending.
+    db.prepare(`UPDATE sessions SET status = 'idle' WHERE id = ?`).run(SESSION);
+    await vi.advanceTimersByTimeAsync(20_000);
+
+    expect(status()).toBe("idle");
+  });
+
+  it("still goes idle when the wire call itself fails — nothing will report a turn.ended", async () => {
+    vi.spyOn(agentService, "stopSession").mockRejectedValue(new Error("socket closed"));
+
+    await runCommand("stopSession", { sessionId: SESSION });
+
+    expect(status()).toBe("idle");
+  });
+});

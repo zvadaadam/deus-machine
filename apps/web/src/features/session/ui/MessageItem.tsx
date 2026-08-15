@@ -61,11 +61,10 @@ const UserMessage = memo(function UserMessage({ message }: { message: Message })
   const contentRef = useRef<HTMLDivElement>(null);
 
   /**
-   * The engine's user echo is the source of truth for new rows: text and
-   * image parts, same shapes as the assistant side. `content` is the read
-   * path for the optimistic bubble (canonical PartInput JSON) and for LEGACY
-   * rows the send command wrote before the echo existed — both normalized in
-   * `readUserMessageContent`.
+   * `parts` is the source of truth for new rows — the engine's user echo, and
+   * the composer's optimistic bubble, which builds the same shapes locally.
+   * `content` is a read-only path for LEGACY rows the send command wrote
+   * before the echo existed; both are normalized in `readUserMessageContent`.
    */
   const { images, texts } = useMemo(() => readUserMessageContent(message), [message]);
 

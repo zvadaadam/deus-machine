@@ -446,6 +446,29 @@ function handleSendMessage(params: QueryParams): CommandResult {
 
 // ---- stopSession ----
 
+/**
+ * How long to let an UNCONFIRMED cancel settle itself before giving up.
+ *
+ * The turn is still nominally running, so `turn.ended` is expected within a
+ * few seconds. If it never comes, the session would sit on "working" forever
+ * with no agent behind it — the watchdog converts that into an error the user
+ * can act on, and only if the status is still exactly where we left it.
+ */
+const UNCONFIRMED_CANCEL_GRACE_MS = 15_000;
+
+/**
+ * Stop the session's active turn.
+ *
+ * The cancel outcome is a union and it MATTERS (PROTOCOL §8):
+ *   cancelled / no_active_turn — the turn is provably over; go idle now.
+ *   unconfirmed                — dispatched but unacknowledged. The agent may
+ *                                still be writing files, so forcing "idle"
+ *                                here would show a finished session while work
+ *                                continues and then flip back when the real
+ *                                turn.ended lands. Leave the status alone and
+ *                                let turn.ended settle it, with a bounded
+ *                                fallback so it cannot hang forever.
+ */
 async function handleStopSession(params: QueryParams): Promise<CommandResult> {
   const sessionId = requireParam(params, "sessionId", "stopSession");
 
@@ -453,20 +476,59 @@ async function handleStopSession(params: QueryParams): Promise<CommandResult> {
   const session = getSessionRaw(db, sessionId);
   if (!session) throw new Error("Session not found");
 
+  let confirmed = true;
   if (agentService.isConnected()) {
     try {
-      await agentService.stopSession({ sessionId });
+      const result = await agentService.stopSession({ sessionId });
+      confirmed = result.outcome !== "unconfirmed";
     } catch (err) {
       console.error("[CommandHandler] Failed to stop on agent-server:", err);
-      // Still mark idle locally — best effort
+      // The wire itself failed; nothing is going to deliver a turn.ended.
     }
   }
 
-  db.prepare("UPDATE sessions SET status = 'idle', updated_at = datetime('now') WHERE id = ?").run(
-    sessionId
+  if (confirmed) {
+    db.prepare(
+      "UPDATE sessions SET status = 'idle', updated_at = datetime('now') WHERE id = ?"
+    ).run(sessionId);
+    invalidate(["workspaces", "sessions", "session", "stats"], { sessionIds: [sessionId] });
+    return {};
+  }
+
+  console.warn(
+    `[CommandHandler] stopSession unconfirmed: session=${sessionId} — waiting for turn.ended`
   );
-  invalidate(["workspaces", "sessions", "session", "stats"], { sessionIds: [sessionId] });
-  return {};
+  scheduleUnconfirmedCancelWatchdog(sessionId);
+  return { unconfirmed: true };
+}
+
+/** Bounded fallback for an unconfirmed cancel that no turn.ended ever settles. */
+function scheduleUnconfirmedCancelWatchdog(sessionId: string): void {
+  const timer = setTimeout(() => {
+    try {
+      const db = getDatabase();
+      // Only if turn.ended never arrived: any status change means it did (or
+      // the user started something else), and this must not stomp on it.
+      const result = db
+        .prepare(
+          `UPDATE sessions
+             SET status = 'error',
+                 error_message = 'The agent never confirmed the stop request.',
+                 error_category = 'internal',
+                 updated_at = datetime('now')
+           WHERE id = ? AND status = 'working'`
+        )
+        .run(sessionId);
+      if (result.changes > 0) {
+        console.warn(`[CommandHandler] unconfirmed cancel never settled: session=${sessionId}`);
+        invalidate(["workspaces", "sessions", "session", "stats"], { sessionIds: [sessionId] });
+      }
+    } catch (err) {
+      console.error("[CommandHandler] cancel watchdog failed:", err);
+    }
+  }, UNCONFIRMED_CANCEL_GRACE_MS);
+  // A pending watchdog must never hold the process open at shutdown.
+  timer.unref?.();
 }
 
 // ---- AAP (agentic apps protocol) ----

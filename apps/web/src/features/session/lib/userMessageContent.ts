@@ -1,16 +1,19 @@
 /**
  * What a user bubble renders.
  *
- * Three producers write a user message, and the bubble must render all three
- * without branching in the component:
+ * Two producers write a user message, and the bubble must render both without
+ * branching in the component:
  *
- *   1. `parts`   — the engine's user echo. Authoritative for every new row.
- *   2. `content` — canonical `PartInput[]` JSON, written by the composer and
- *                  mirrored into the optimistic bubble before the echo lands.
- *   3. `content` — LEGACY Anthropic content blocks (`{type:"image",source:…}`),
- *                  held by rows written before the composer spoke PartInput.
+ *   1. `parts`   — engine `Part`s. Authoritative for every new row: the user
+ *                  echo, and the composer's optimistic bubble, which builds
+ *                  the same shapes locally (see `optimisticMessage.ts`) so
+ *                  there is one render path, not one per producer.
+ *   2. `content` — LEGACY Anthropic content blocks (`{type:"image",source:…}`,
+ *                  `{type:"text",text}`) or a bare string, held by rows the
+ *                  send command wrote before the echo existed. Read-only
+ *                  tolerance: nothing writes this shape anymore.
  *
- * All three collapse to the same render shape here: ordered text runs plus
+ * Both collapse to the same render shape here: ordered text runs plus
  * ready-to-use image `src` values. Inline XML (`<inspect>`, `<diff-comment>`)
  * stays untouched inside the text — TextBlock parses it downstream.
  */
@@ -53,7 +56,7 @@ function fromEngineParts(parts: Array<Part | UnknownPart>): UserMessageContent {
   return out;
 }
 
-/** `messages.content` — canonical PartInput JSON, or the legacy block array. */
+/** `messages.content` — the legacy Anthropic block array, or a bare string. */
 function fromContentJson(content: string | null): UserMessageContent {
   if (content == null) return EMPTY;
 
@@ -82,11 +85,10 @@ function fromContentJson(content: string | null): UserMessageContent {
     }
     if (block.type !== "image") continue;
 
-    // LEGACY: Anthropic's nested `source`. Canonical: flat data/url + mimeType.
+    // Anthropic's nested `source` — the only image shape this path ever held.
     const source = block.source as Record<string, unknown> | undefined;
-    const src = source
-      ? imageSrc(source.data, source.url, source.media_type)
-      : imageSrc(block.data, block.url, block.mimeType);
+    if (!source) continue;
+    const src = imageSrc(source.data, source.url, source.media_type);
     if (src) out.images.push(src);
   }
   return out;

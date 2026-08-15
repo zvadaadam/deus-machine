@@ -10,14 +10,17 @@
 // throw: they return a WriteResult so the caller decides whether to invalidate.
 
 import type {
-  MessagePartEvent,
   MessageStartedEvent,
+  Part,
   SessionCompactionEvent,
   SessionUsageEvent,
   TurnEndedEvent,
+  UnknownPart,
 } from "@zvada/agent-server/protocol";
+import { isUnknownPart, type AnyMessagePartEvent } from "@shared/protocol-types";
 import { getDatabase } from "../../lib/database";
 import { getErrorMessage } from "@shared/lib/errors";
+import { cancelledTurnMessageId } from "@shared/types/session";
 
 // ============================================================================
 // WriteResult
@@ -49,8 +52,16 @@ function iso(epochMs: number): string {
  * of truth, so a user row and an assistant row are produced by the same code
  * path with the same turn grouping.
  *
- * INSERT OR REPLACE keeps a replayed event idempotent, but the message id is
- * the engine's, so a replay rewrites the same row rather than duplicating it.
+ * The upsert is ON CONFLICT, never INSERT OR REPLACE: SQLite's REPLACE is
+ * DELETE + INSERT, which would cascade-delete the message's parts, reassign
+ * its `seq` (AFTER INSERT trigger) to the end of the transcript, inflate
+ * `message_count` (the AFTER DELETE trigger does not fire under REPLACE) and
+ * wipe every column written after the message started — tokens, cost,
+ * turn_stop_reason, cancelled_at. A replayed `message.started` is expected
+ * (PROTOCOL §7.3-8: the wire re-delivers buffered history to heal a seq gap),
+ * so it has to be a true no-op on everything it does not own. COALESCE guards
+ * the fields a thinner replay might omit.
+ *
  * `content` stays NULL: new rows render from their parts.
  */
 export function persistMessageStarted(event: MessageStartedEvent): WriteResult {
@@ -67,8 +78,14 @@ export function persistMessageStarted(event: MessageStartedEvent): WriteResult {
     }
 
     db.prepare(
-      `INSERT OR REPLACE INTO messages (id, session_id, role, turn_id, model, sent_at, parent_tool_call_id)
-       VALUES (?, ?, ?, ?, ?, ?, ?)`
+      `INSERT INTO messages (id, session_id, role, turn_id, model, sent_at, parent_tool_call_id)
+       VALUES (?, ?, ?, ?, ?, ?, ?)
+       ON CONFLICT(id) DO UPDATE SET
+         role = excluded.role,
+         turn_id = excluded.turn_id,
+         model = COALESCE(excluded.model, messages.model),
+         sent_at = COALESCE(excluded.sent_at, messages.sent_at),
+         parent_tool_call_id = COALESCE(excluded.parent_tool_call_id, messages.parent_tool_call_id)`
     ).run(
       event.messageId,
       event.sessionId,
@@ -85,18 +102,34 @@ export function persistMessageStarted(event: MessageStartedEvent): WriteResult {
 }
 
 /**
+ * The tool columns, promoted out of `data` for indexed lookups. An UNKNOWN
+ * part (Law 6) has no known fields to promote — it is stored verbatim and
+ * queried by nothing.
+ */
+function toolColumns(part: Part | UnknownPart): {
+  toolCallId: string | null;
+  toolName: string | null;
+} {
+  if (isUnknownPart(part) || part.type !== "tool") return { toolCallId: null, toolName: null };
+  return { toolCallId: part.toolCallId, toolName: part.toolName };
+}
+
+/**
  * Upsert a part snapshot. The engine's `message.part` is authoritative and
  * idempotent (UPSERT by part id), so INSERT OR REPLACE is the exact match for
  * its semantics — including a tool part completing after its message ended,
- * which names its ORIGINAL messageId and lands back there.
+ * which names its ORIGINAL messageId and lands back there. Unlike `messages`,
+ * a `parts` row owns every one of its columns, so REPLACE has nothing to lose
+ * and nothing cascades off it.
  *
  * `seq` mirrors the event's `partIndex`: parts carry no ordering field of
  * their own, position is the event's knowledge.
  */
-export function persistPart(event: MessagePartEvent): WriteResult {
+export function persistPart(event: AnyMessagePartEvent): WriteResult {
   const db = getDatabase();
   const part = event.part;
   try {
+    const tool = toolColumns(part);
     db.prepare(
       `INSERT OR REPLACE INTO parts (id, message_id, session_id, seq, type, data, tool_call_id, tool_name, parent_tool_call_id)
        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`
@@ -107,8 +140,8 @@ export function persistPart(event: MessagePartEvent): WriteResult {
       event.partIndex,
       part.type,
       JSON.stringify(part),
-      part.type === "tool" ? part.toolCallId : null,
-      part.type === "tool" ? part.toolName : null,
+      tool.toolCallId,
+      tool.toolName,
       part.parentToolCallId ?? null
     );
     return { ok: true, value: part.id };
@@ -148,8 +181,13 @@ export interface TurnOutcomeWrite {
  * the old schema carried, which is why `refusal` and `max_turn_requests`
  * finally survive a reload.
  *
- * A turn that produced no assistant message (cancelled before the model
- * answered) has nothing to mark; the session status is still written.
+ * A turn cancelled before the model answered has no message to mark, so this
+ * mints one: a zero-part assistant row carrying only `cancelled_at` and the
+ * stop reason. Session status alone cannot say it — `idle` after an interrupt
+ * is indistinguishable from `idle` after nothing happened, and the transcript
+ * would be silent about a turn the user explicitly stopped. The id is derived
+ * from the turn id (`cancelledTurnMessageId`), so a replayed `turn.ended`
+ * upserts the same divider instead of stacking new ones.
  */
 export function persistTurnEnded(
   event: TurnEndedEvent,
@@ -180,6 +218,25 @@ export function persistTurnEnded(
           event.stopReason,
           outcome.cancelled ? iso(event.timestamp) : null,
           target.id
+        );
+      } else if (outcome.cancelled) {
+        db.prepare(
+          `INSERT INTO messages (id, session_id, role, turn_id, sent_at, cancelled_at, turn_stop_reason, tokens, cost)
+           VALUES (?, ?, 'assistant', ?, ?, ?, ?, ?, ?)
+           ON CONFLICT(id) DO UPDATE SET
+             cancelled_at = excluded.cancelled_at,
+             turn_stop_reason = excluded.turn_stop_reason,
+             tokens = COALESCE(excluded.tokens, messages.tokens),
+             cost = COALESCE(excluded.cost, messages.cost)`
+        ).run(
+          cancelledTurnMessageId(event.turnId),
+          event.sessionId,
+          event.turnId,
+          iso(event.timestamp),
+          iso(event.timestamp),
+          event.stopReason,
+          event.tokens ? JSON.stringify(event.tokens) : null,
+          event.cost ?? null
         );
       }
 

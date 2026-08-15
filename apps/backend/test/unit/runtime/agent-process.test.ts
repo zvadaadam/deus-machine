@@ -101,7 +101,7 @@ describe("managed agent-server process", () => {
       "$NODE_PATH",
       "$PORT",
     ]
-      .map(JSON.stringify)
+      .map((value) => JSON.stringify(value))
       .join(" ");
     mkdirSync(path.dirname(runtimePath), { recursive: true });
     writeExecutable(

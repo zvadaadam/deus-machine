@@ -182,6 +182,10 @@ export interface ToolRequestEventData {
 
 /** Payload for q:event with event: "agent:event" — one sequenced
  *  @zvada/agent-server lifecycle envelope, forwarded verbatim. Deus reshapes
- *  nothing: the frontend folds these with the engine's own reducer and gets
- *  `seq` ordering/dedupe for free. */
-export type AgentEventData = import("../protocol-types").WireEventEnvelope;
+ *  nothing, so `seq` ordering/dedupe is free. The frontend folds these with
+ *  deus's own fold (features/session/lib/agentEventFold), NOT the engine's
+ *  `reduceConversation`: the reducer's output is a ConversationState and the
+ *  cache holds paginated SQLite rows. Adopting reducer + projection is a
+ *  tracked follow-up; until then nothing here may claim it is in use.
+ *  Law 6 decoded — an unknown event type arrives preserved. */
+export type AgentEventData = import("../protocol-types").AnyWireEventEnvelope;

@@ -5,13 +5,15 @@
 // `match(envelope.event)` that persists (DB writes) and pushes (`agent:event`
 // + query invalidation). There is no translation layer — the event that
 // crosses the wire is the event that hits SQLite and the event the frontend
-// folds with the engine's own reducer.
+// folds (with deus's own fold, `lib/agentEventFold` — not the engine's
+// `reduceConversation`; see that file for why).
 //
 // Ordering matters: persist first, then invalidate.
 
 import { match } from "ts-pattern";
 import { classifyError } from "@zvada/agent-server/protocol";
-import type { ErrorEvent, TurnEndedEvent, WireEventEnvelope } from "@zvada/agent-server/protocol";
+import type { ErrorEvent, TurnEndedEvent } from "@zvada/agent-server/protocol";
+import { isUnknownLifecycleEvent, type AnyWireEventEnvelope } from "@shared/protocol-types";
 import type { QueryResource, QServerFrame } from "@shared/types/query-protocol";
 import { invalidate } from "../query-engine";
 import { broadcast } from "../ws.service";
@@ -33,7 +35,7 @@ import { refreshPrSnapshotForSession } from "../pr-snapshot.service";
 
 export interface AgentEventHandler {
   /** Feed one sequenced wire envelope (post-dedupe, in seq order). */
-  handle(envelope: WireEventEnvelope): void;
+  handle(envelope: AnyWireEventEnvelope): void;
   /**
    * Mirror a turn admission before its quick-ack round-trip, so the handler
    * knows which turn is live when the first envelopes arrive in the same tick
@@ -95,13 +97,14 @@ function persistOnly(result: WriteResult<unknown>): void {
  * routes by `sessionId` and orders/dedupes by `seq` — both free because the
  * envelope is not reshaped on its way through the backend.
  */
-function pushEnvelope(envelope: WireEventEnvelope): void {
+function pushEnvelope(envelope: AnyWireEventEnvelope): void {
   const frame: QServerFrame = { type: "q:event", event: "agent:event", data: envelope };
   broadcast(JSON.stringify(frame));
 }
 
-/** The terminal state a stopReason leaves the session in. */
-function turnOutcome(event: TurnEndedEvent, alreadyReported: boolean): TurnOutcomeWrite {
+/** The terminal state a stopReason leaves the session in. Exported so the
+ *  verification CLI decides it the same way instead of re-deriving it. */
+export function turnOutcome(event: TurnEndedEvent, alreadyReported: boolean): TurnOutcomeWrite {
   if (event.stopReason === "cancelled") {
     return { status: "idle", cancelled: true };
   }
@@ -160,6 +163,18 @@ export function createAgentEventHandler(): AgentEventHandler {
       const sessionId = envelope.sessionId;
       const state = stateFor(sessionId);
 
+      if (isUnknownLifecycleEvent(envelope.event)) {
+        // Law 6: an event type this build does not know. Forward it verbatim —
+        // dropping it would be a hole in the frontend's transcript and a
+        // fabricated seq gap for anything counting envelopes. Nothing to
+        // persist: deus knows no columns for a shape it cannot read.
+        console.warn(
+          `[AgentEvent] unknown event type: session=${sessionId} ${envelope.event.type}`
+        );
+        pushEnvelope(envelope);
+        return;
+      }
+
       match(envelope.event)
         // ── Session lifecycle ─────────────────────────────────────────────
         .with({ type: "session.created" }, (e) => {
@@ -186,6 +201,9 @@ export function createAgentEventHandler(): AgentEventHandler {
         })
         .with({ type: "session.ended" }, (e) => {
           console.log(`[AgentEvent] session.ended: session=${sessionId} reason=${e.reason}`);
+          // The session is over — drop its state. This is the event that
+          // exists for exactly that; without it the map only grows.
+          sessions.delete(sessionId);
         })
         .with({ type: "session.usage" }, (e) => {
           persistAndInvalidate(persistSessionUsage(e), SESSION_RESOURCES, sessionId);
@@ -205,6 +223,10 @@ export function createAgentEventHandler(): AgentEventHandler {
           // the send command. Keep the admission mirror truthful on the replay
           // path too (state rebuilt after a backend restart has no turnId).
           state.turnId = e.turnId;
+          // A turn deus did NOT admit via beginTurn (replay, engine-initiated)
+          // would otherwise inherit the previous turn's dedupe flag, and its
+          // terminal error message would be dropped as "already reported".
+          state.errorReported = false;
         })
         .with({ type: "turn.ended" }, (e) => {
           console.log(

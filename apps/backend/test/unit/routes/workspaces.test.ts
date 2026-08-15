@@ -7,17 +7,19 @@ import { errorHandler } from "../../../src/middleware/error-handler";
 const { mockStmt, mockDb, mockExecFileAsync, mockInitializeWorkspace, mockInvalidate } = vi.hoisted(
   () => {
     const mockStmt = {
-      all: vi.fn(() => []),
-      get: vi.fn(),
-      run: vi.fn(() => ({ changes: 1 })),
+      all: vi.fn<(...args: any[]) => any>(() => []),
+      get: vi.fn<(...args: any[]) => any>(),
+      run: vi.fn<(...args: any[]) => any>(() => ({ changes: 1 })),
     };
     const mockDb = {
-      prepare: vi.fn(() => mockStmt),
-      transaction: vi.fn((fn: Function) => fn),
+      prepare: vi.fn<(...args: any[]) => any>(() => mockStmt),
+      transaction: vi.fn<(...args: any[]) => any>((fn: Function) => fn),
     };
-    const mockExecFileAsync = vi.fn(() => Promise.resolve({ stdout: "", stderr: "" }));
-    const mockInitializeWorkspace = vi.fn(() => Promise.resolve());
-    const mockInvalidate = vi.fn();
+    const mockExecFileAsync = vi.fn<(...args: any[]) => any>(() =>
+      Promise.resolve({ stdout: "", stderr: "" })
+    );
+    const mockInitializeWorkspace = vi.fn<(...args: any[]) => any>(() => Promise.resolve());
+    const mockInvalidate = vi.fn<(...args: any[]) => any>();
     return {
       mockStmt,
       mockDb,
@@ -29,11 +31,11 @@ const { mockStmt, mockDb, mockExecFileAsync, mockInitializeWorkspace, mockInvali
 );
 
 vi.mock("../../../src/lib/database", () => ({
-  getDatabase: vi.fn(() => mockDb),
+  getDatabase: vi.fn<(...args: any[]) => any>(() => mockDb),
 }));
 
 vi.mock("../../../src/services/workspace.service", () => ({
-  generateUniqueName: vi.fn(() => "europa"),
+  generateUniqueName: vi.fn<(...args: any[]) => any>(() => "europa"),
 }));
 
 vi.mock("../../../src/services/workspace-init.service", () => ({
@@ -45,19 +47,23 @@ vi.mock("../../../src/services/query-engine", () => ({
 }));
 
 vi.mock("../../../src/services/git.service", () => ({
-  detectDefaultBranch: vi.fn(() => "main"),
-  getDiffStats: vi.fn(() => ({ additions: 0, deletions: 0 })),
-  getDiffFiles: vi.fn(() => ({ files: [], truncated: false, total_count: 0 })),
-  getMergeBase: vi.fn(() => "abc123"),
-  getGitFileContent: vi.fn(() => null),
-  resolveWorkspaceRelativePath: vi.fn((p: string) => p),
-  getOpenCommand: vi.fn(() => "open"),
+  detectDefaultBranch: vi.fn<(...args: any[]) => any>(() => "main"),
+  getDiffStats: vi.fn<(...args: any[]) => any>(() => ({ additions: 0, deletions: 0 })),
+  getDiffFiles: vi.fn<(...args: any[]) => any>(() => ({
+    files: [],
+    truncated: false,
+    total_count: 0,
+  })),
+  getMergeBase: vi.fn<(...args: any[]) => any>(() => "abc123"),
+  getGitFileContent: vi.fn<(...args: any[]) => any>(() => null),
+  resolveWorkspaceRelativePath: vi.fn<(...args: any[]) => any>((p: string) => p),
+  getOpenCommand: vi.fn<(...args: any[]) => any>(() => "open"),
 }));
 
 vi.mock("child_process", () => ({
-  execSync: vi.fn(() => "testuser"),
-  execFile: vi.fn(),
-  spawn: vi.fn(),
+  execSync: vi.fn<(...args: any[]) => any>(() => "testuser"),
+  execFile: vi.fn<(...args: any[]) => any>(),
+  spawn: vi.fn<(...args: any[]) => any>(),
 }));
 
 vi.mock("util", () => ({
@@ -65,33 +71,45 @@ vi.mock("util", () => ({
 }));
 
 vi.mock("@shared/lib/uuid", () => ({
-  uuidv7: vi.fn(() => "ws-test-uuid"),
+  uuidv7: vi.fn<(...args: any[]) => any>(() => "ws-test-uuid"),
 }));
 
 vi.mock("fs", () => ({
   default: {
-    existsSync: vi.fn(() => false),
-    createWriteStream: vi.fn(() => ({ on: vi.fn(), end: vi.fn() })),
-    mkdirSync: vi.fn(),
-    realpathSync: vi.fn((p: string) => p),
-    readFileSync: vi.fn(() => ""),
-    writeFileSync: vi.fn(),
-    statSync: vi.fn(() => ({ isDirectory: () => true, isFile: () => false })),
+    existsSync: vi.fn<(...args: any[]) => any>(() => false),
+    createWriteStream: vi.fn<(...args: any[]) => any>(() => ({
+      on: vi.fn<(...args: any[]) => any>(),
+      end: vi.fn<(...args: any[]) => any>(),
+    })),
+    mkdirSync: vi.fn<(...args: any[]) => any>(),
+    realpathSync: vi.fn<(...args: any[]) => any>((p: string) => p),
+    readFileSync: vi.fn<(...args: any[]) => any>(() => ""),
+    writeFileSync: vi.fn<(...args: any[]) => any>(),
+    statSync: vi.fn<(...args: any[]) => any>(() => ({
+      isDirectory: () => true,
+      isFile: () => false,
+    })),
     constants: { R_OK: 4, X_OK: 1 },
   },
-  existsSync: vi.fn(() => false),
-  createWriteStream: vi.fn(() => ({ on: vi.fn(), end: vi.fn() })),
-  mkdirSync: vi.fn(),
-  realpathSync: vi.fn((p: string) => p),
-  readFileSync: vi.fn(() => ""),
-  writeFileSync: vi.fn(),
-  statSync: vi.fn(() => ({ isDirectory: () => true, isFile: () => false })),
+  existsSync: vi.fn<(...args: any[]) => any>(() => false),
+  createWriteStream: vi.fn<(...args: any[]) => any>(() => ({
+    on: vi.fn<(...args: any[]) => any>(),
+    end: vi.fn<(...args: any[]) => any>(),
+  })),
+  mkdirSync: vi.fn<(...args: any[]) => any>(),
+  realpathSync: vi.fn<(...args: any[]) => any>((p: string) => p),
+  readFileSync: vi.fn<(...args: any[]) => any>(() => ""),
+  writeFileSync: vi.fn<(...args: any[]) => any>(),
+  statSync: vi.fn<(...args: any[]) => any>(() => ({
+    isDirectory: () => true,
+    isFile: () => false,
+  })),
   constants: { R_OK: 4, X_OK: 1 },
 }));
 
 vi.mock("os", () => ({
-  default: { tmpdir: vi.fn(() => "/tmp") },
-  tmpdir: vi.fn(() => "/tmp"),
+  default: { tmpdir: vi.fn<(...args: any[]) => any>(() => "/tmp") },
+  tmpdir: vi.fn<(...args: any[]) => any>(() => "/tmp"),
 }));
 
 import workspacesRoutes from "../../../src/routes/workspaces";

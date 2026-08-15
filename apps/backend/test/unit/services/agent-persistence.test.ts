@@ -162,14 +162,65 @@ describeWithDb("agent persistence (canonical events → SQLite)", () => {
       expect(row).toEqual({ role: "user", turn_id: TURN });
     });
 
-    it("is idempotent on replay (same id rewrites the same row)", () => {
-      persistMessageStarted(started());
-      persistMessageStarted(started());
+    it("is idempotent on replay: parts, seq and turn accounting all survive", () => {
+      // A whole turn, as the wire delivers it the first time.
+      persistMessageStarted(started({ messageId: "m1" }));
+      persistMessageStarted(started({ messageId: "m2" }));
+      persistPart(part({ messageId: "m1" }));
+      persistTurnEnded(
+        ended({ tokens: { input: 10, output: 2 }, cost: 0.5, stopReason: "cancelled" }),
+        { status: "idle", cancelled: true }
+      );
 
-      const count = db
-        .prepare(`SELECT count(*) as n FROM messages WHERE session_id = ?`)
-        .get(SESSION) as { n: number };
-      expect(count.n).toBe(1);
+      const before = db
+        .prepare(
+          `SELECT id, seq, tokens, cost, turn_stop_reason, cancelled_at, model, sent_at
+             FROM messages WHERE id = 'm2'`
+        )
+        .get();
+
+      // The engine re-delivers the whole buffered history after a gap heal
+      // (events/replay). REPLACE would cascade-delete the parts, reassign seq
+      // and wipe every update-only column.
+      persistMessageStarted(started({ messageId: "m1" }));
+      persistMessageStarted(started({ messageId: "m2" }));
+
+      expect(
+        db.prepare(`SELECT count(*) as n FROM messages WHERE session_id = ?`).get(SESSION)
+      ).toEqual({ n: 2 });
+      // The turn's parts are still attached (no ON DELETE CASCADE fired).
+      expect(db.prepare(`SELECT count(*) as n FROM parts WHERE message_id = 'm1'`).get()).toEqual({
+        n: 1,
+      });
+      // seq is stable, so the message keeps its place in the transcript.
+      expect(
+        db.prepare(`SELECT id FROM messages WHERE session_id = ? ORDER BY seq`).all(SESSION)
+      ).toEqual([{ id: "m1" }, { id: "m2" }]);
+      // Every update-only column written after message.started survives.
+      expect(
+        db
+          .prepare(
+            `SELECT id, seq, tokens, cost, turn_stop_reason, cancelled_at, model, sent_at
+               FROM messages WHERE id = 'm2'`
+          )
+          .get()
+      ).toEqual(before);
+      // The AFTER DELETE trigger never fires under REPLACE, so a cascade would
+      // leave message_count permanently inflated.
+      expect(db.prepare(`SELECT message_count FROM sessions WHERE id = ?`).get(SESSION)).toEqual({
+        message_count: 2,
+      });
+    });
+
+    it("a replay does not null out columns the first delivery filled in", () => {
+      persistMessageStarted(started({ model: "claude-opus-5", parentToolCallId: "tool-7" }));
+      // A replayed envelope can be thinner than the original (an adapter that
+      // stopped reporting the model, a re-emitted shell) — COALESCE keeps ours.
+      persistMessageStarted(started({ model: undefined, parentToolCallId: undefined }));
+
+      expect(
+        db.prepare(`SELECT model, parent_tool_call_id FROM messages WHERE id = 'msg-1'`).get()
+      ).toEqual({ model: "claude-opus-5", parent_tool_call_id: "tool-7" });
     });
 
     it("refuses a message for an unknown session instead of throwing", () => {
@@ -368,6 +419,51 @@ describeWithDb("agent persistence (canonical events → SQLite)", () => {
       expect(db.prepare(`SELECT status FROM sessions WHERE id = ?`).get(SESSION)).toEqual({
         status: "idle",
       });
+    });
+
+    it("mints a marker row when the turn was cancelled before the model answered", () => {
+      db.prepare(`DELETE FROM messages WHERE role = 'assistant'`).run();
+
+      persistTurnEnded(ended({ stopReason: "cancelled", timestamp: T + 30 }), {
+        status: "idle",
+        cancelled: true,
+      });
+
+      const marker = db
+        .prepare(
+          `SELECT id, role, turn_id, cancelled_at, turn_stop_reason FROM messages WHERE role = 'assistant'`
+        )
+        .get();
+      expect(marker).toEqual({
+        id: `cancelled-${TURN}`,
+        role: "assistant",
+        turn_id: TURN,
+        cancelled_at: "2026-08-14T12:00:00.030Z",
+        turn_stop_reason: "cancelled",
+      });
+    });
+
+    it("the cancelled marker is id-addressed, so a replayed turn.ended does not stack dividers", () => {
+      db.prepare(`DELETE FROM messages WHERE role = 'assistant'`).run();
+      const cancel = () =>
+        persistTurnEnded(ended({ stopReason: "cancelled" }), { status: "idle", cancelled: true });
+
+      cancel();
+      cancel();
+
+      expect(
+        db.prepare(`SELECT count(*) as n FROM messages WHERE role = 'assistant'`).get()
+      ).toEqual({ n: 1 });
+    });
+
+    it("a turn that simply produced nothing leaves no marker", () => {
+      db.prepare(`DELETE FROM messages WHERE role = 'assistant'`).run();
+
+      persistTurnEnded(ended({ stopReason: "end_turn" }), { status: "idle", cancelled: false });
+
+      expect(
+        db.prepare(`SELECT count(*) as n FROM messages WHERE role = 'assistant'`).get()
+      ).toEqual({ n: 0 });
     });
 
     it("writes the error status with the engine's category", () => {
