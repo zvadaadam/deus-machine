@@ -607,6 +607,37 @@ describe("turn.ended — accounting mirror", () => {
 // I4: sessions the user is not looking at
 // ===========================================================================
 
+describe("mid-stream attach — the fold is a fragment, the page is the truth", () => {
+  it("merges the fold's parts into the cached row by id instead of replacing them", () => {
+    // Opening a session mid-turn: the page came from SQLite with the turn's
+    // earlier parts; the fold has only seen the stream from the attach point.
+    // A wholesale `parts` write from that fragment would erase p1/p2.
+    const h = harness();
+    seed(h.qc, SESSION, [
+      {
+        id: "a1",
+        session_id: SESSION,
+        seq: 7,
+        role: "assistant",
+        turn_id: TURN,
+        sent_at: new Date(T).toISOString(),
+        parts: [textPart("p1", "from the db"), textPart("p2", "also db")],
+      } as Message,
+    ]);
+
+    h.feed(partEvent(textPart("p3", "live"), { partIndex: 2 }), { seq: 42 });
+
+    const parts = h.page()!.messages[0].parts!;
+    expect(parts.map((p) => p.id)).toEqual(["p1", "p2", "p3"]);
+    expect((parts[2] as { text: string }).text).toBe("live");
+
+    // And a re-stated part the fold DOES know replaces in place, not appends.
+    h.feed(partEvent(textPart("p3", "live (final)"), { partIndex: 2 }), { seq: 43 });
+    expect(h.page()!.messages[0].parts!.map((p) => p.id)).toEqual(["p1", "p2", "p3"]);
+    expect((h.page()!.messages[0].parts![2] as { text: string }).text).toBe("live (final)");
+  });
+});
+
 describe("background sessions", () => {
   it("delivers turn accounting to a session whose panel is not mounted", () => {
     // Active session is SESSION; the turn that ends belongs to OTHER, whose

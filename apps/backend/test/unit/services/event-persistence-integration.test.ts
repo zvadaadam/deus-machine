@@ -618,4 +618,67 @@ describeWithDb("engine turn → handler → SQLite", () => {
       .get() as { n: number };
     expect(orphans.n).toBe(0);
   });
+
+  // ==========================================================================
+  // Deltas are forward-only (spec 04 §C2): no row write per token
+  // ==========================================================================
+
+  it("writes nothing for a text delta — the DB stays at snapshot granularity", () => {
+    feed(
+      { type: "turn.started", sessionId: SESSION, turnId: TURN, timestamp: T },
+      {
+        type: "message.started",
+        sessionId: SESSION,
+        turnId: TURN,
+        messageId: "a1",
+        outputIndex: 1,
+        role: "assistant",
+        timestamp: T,
+      },
+      {
+        type: "message.part",
+        sessionId: SESSION,
+        turnId: TURN,
+        messageId: "a1",
+        outputIndex: 1,
+        partIndex: 0,
+        part: { type: "text", id: "p1", sessionId: SESSION, messageId: "a1", text: "" },
+        timestamp: T,
+      }
+    );
+    const before = db.prepare(`SELECT data FROM parts WHERE id = 'p1'`).get() as { data: string };
+
+    for (let i = 0; i < 50; i++) {
+      feed({
+        type: "message.part.delta",
+        sessionId: SESSION,
+        turnId: TURN,
+        messageId: "a1",
+        partId: "p1",
+        outputIndex: 1,
+        partIndex: 0,
+        delta: { type: "text", text: `token-${i} ` },
+        timestamp: T + i,
+      });
+    }
+
+    // The row still holds the last SNAPSHOT — 50 deltas caused 0 part writes.
+    // (Their text is not lost: the fold carries it, the frontend renders it,
+    // and the settling `message.part` snapshot persists it.)
+    const after = db.prepare(`SELECT data FROM parts WHERE id = 'p1'`).get() as { data: string };
+    expect(after.data).toBe(before.data);
+
+    feed({
+      type: "message.part",
+      sessionId: SESSION,
+      turnId: TURN,
+      messageId: "a1",
+      outputIndex: 1,
+      partIndex: 0,
+      part: { type: "text", id: "p1", sessionId: SESSION, messageId: "a1", text: "the answer" },
+      timestamp: T + 99,
+    });
+    const settled = db.prepare(`SELECT data FROM parts WHERE id = 'p1'`).get() as { data: string };
+    expect(JSON.parse(settled.data)).toMatchObject({ text: "the answer" });
+  });
 });

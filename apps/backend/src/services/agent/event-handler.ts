@@ -85,8 +85,11 @@ const TURN_END_RESOURCES: QueryResource[] = [
  * five reach the UI another way or not at all: the context gauge and the
  * session's terminal state are session COLUMNS (q:delta carries them), the
  * "working" flip is written optimistically by the send command before
- * `turn.started` could arrive, tool policy answers permissions in-process so
- * there is no prompt to render, and deus never sets `RunConfig.includeRaw`.
+ * `turn.started` could arrive, the ClaudeToolPolicy in
+ * apps/agent-server/agents/core/tool-policy.ts answers every tool-use
+ * question in-process (deus has no interactive permission UI, so nothing may
+ * fall through to the engine's broker), and deus never sets
+ * `RunConfig.includeRaw`.
  */
 const NOT_PUSHED = new Set([
   "session.ended",
@@ -221,14 +224,24 @@ export function createAgentEventHandler(): AgentEventHandler {
       }
 
       // ── The rows the conversation moved ─────────────────────────────────
-      const writes = persistChanges(sessionId, conversation, changes, (turn) => {
-        // Deciding (and recording) the outcome here keeps the dedupe flag in
-        // step with the write it guards, whichever event ended the turn.
-        const outcome = turnOutcome(turn, state.errorReported);
-        if (state.turnId === turn.turnId) state.turnId = undefined;
-        if (outcome.status === "error") state.errorReported = true;
-        return outcome;
-      });
+      // Deltas are forward-only (§04-C2): the fold keeps them current in
+      // `state`, the frontend batches them per animation frame, and the DB
+      // stays at snapshot granularity — the authoritative `message.part` that
+      // follows carries the settled value. Persisting the part-upserted a
+      // delta reports would be one full-JSON row write PER TOKEN on the WS
+      // hot path (measured: 200 deltas → 200 writes, ~169 KB for a 1.7 KB
+      // message), for durability the protocol explicitly does not promise.
+      const isDelta = envelope.event.type === "message.part.delta";
+      const writes = isDelta
+        ? []
+        : persistChanges(sessionId, conversation, changes, (turn) => {
+            // Deciding (and recording) the outcome here keeps the dedupe flag in
+            // step with the write it guards, whichever event ended the turn.
+            const outcome = turnOutcome(turn, state.errorReported);
+            if (state.turnId === turn.turnId) state.turnId = undefined;
+            if (outcome.status === "error") state.errorReported = true;
+            return outcome;
+          });
 
       const stale = new Set<QueryResource>();
       for (const write of writes) {
@@ -313,9 +326,9 @@ export function createAgentEventHandler(): AgentEventHandler {
           { type: "raw" },
           () => {
             // Fully described by the changes above, or — for permission.* and
-            // raw — nothing deus surfaces: tool policy answers permissions
-            // in-process (dont_ask + policy) so there is no prompt to render,
-            // and deus never sets RunConfig.includeRaw.
+            // raw — nothing deus surfaces: the ClaudeToolPolicy answers every
+            // tool-use question in-process (see NOT_PUSHED), and deus never
+            // sets RunConfig.includeRaw.
           }
         )
         .exhaustive();

@@ -254,6 +254,28 @@ export function flushDeltas(qc: QueryClient, sessionId: string, fold: SessionFol
  * (a part outran its `message.started`, or deus attached mid-message) knows
  * neither, and writing null would erase what the DB snapshot already had.
  */
+/**
+ * Upsert the fold's parts into the cached row's, by part id — the same
+ * append-only-by-id rule the pre-fold cache used. `next` wins for a part both
+ * sides know (the fold is fresher); parts only the cache knows survive.
+ */
+function mergePartsById(previous: Message["parts"], next: Message["parts"]): Message["parts"] {
+  if (!previous?.length) return next;
+  if (!next?.length) return previous;
+  const merged = [...previous];
+  const indexById = new Map(merged.map((part, index) => [part.id, index]));
+  for (const part of next) {
+    const at = indexById.get(part.id);
+    if (at === undefined) {
+      indexById.set(part.id, merged.length);
+      merged.push(part);
+    } else {
+      merged[at] = part;
+    }
+  }
+  return merged;
+}
+
 function toMessageRow(sessionId: string, message: ConversationMessage): Message {
   return {
     id: message.messageId,
@@ -321,12 +343,13 @@ function writeMessage(
       // re-stamps it at admission; keeping the first stops the turn-duration
       // clock jumping backwards when the echo lands.
       sent_at: previous.sent_at ?? row.sent_at,
-      // A `message.started` opens a shell with NO parts — it says nothing
-      // about parts, so it must not blank the ones already rendered. (The
-      // reducer only ever upserts parts, so an empty list is always "none
-      // known yet", never "they were removed".) Without this the predicted
-      // echo bubble blinks empty in the gap before its own parts arrive.
-      parts: row.parts?.length ? row.parts : (previous.parts ?? row.parts),
+      // BY ID, never wholesale: the fold may hold only a mid-stream FRAGMENT
+      // of this message (attach mid-turn, tab switch resetting the fold, a
+      // seq gap) while the cached page carries the full DB row — replacing
+      // the array would erase every part the fold never saw. The reducer only
+      // ever upserts parts, so merging is always safe, and an empty fold list
+      // is always "none known yet", never "they were removed".
+      parts: mergePartsById(previous.parts, row.parts),
     };
     return { ...old, messages };
   });

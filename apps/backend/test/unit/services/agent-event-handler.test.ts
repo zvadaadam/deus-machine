@@ -310,9 +310,11 @@ describe("agent event handler (canonical lifecycle stream)", () => {
         })
       );
 
-      // No open snapshot for the part yet, so the fold has nothing to extend
-      // and reports nothing at all.
-      expect(mockPersistChanges.mock.calls[0][2]).toEqual([]);
+      // Deltas are forward-only (spec 04 §C2): the fold keeps them current in
+      // state, but persistence is skipped wholesale — a part-row write per
+      // token would be quadratic on the WS hot path, for durability the
+      // protocol does not promise. The settling message.part snapshot writes.
+      expect(mockPersistChanges).not.toHaveBeenCalled();
       expect(mockInvalidate).not.toHaveBeenCalled();
       expect(pushedEnvelopes()).toHaveLength(1);
     });

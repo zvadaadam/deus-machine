@@ -86,7 +86,7 @@ When debugging agent-server behavior (event shapes, turn admission, cancel seman
 
 - `node_modules/@zvada/agent-server/src/` — the package ships readable TypeScript source, not compiled JS. This is the fastest reference and always matches the installed version.
 - Local clone at `~/Developer/agent/agent-server` (Conductor-managed; work lives on branches/origin, the main checkout is a stale empty worktree) and https://github.com/zvadaadam/agent-server for history, DESIGN.md, and plans/.
-- Engine bugs belong upstream (branch + PR there, then bump the pin here); consumer-side hardening belongs in the backend's `translate/` shim or the agent-server's wire bridge.
+- Engine bugs belong upstream (branch + PR there, then bump the pin here); deus consumes the engine protocol natively (no translate layer) — consumer-side behavior lives in the backend's `services/agent/` fold-and-persist path and the frontend's `agentEventFold` projection.
 
 ### WebSocket Query Protocol
 

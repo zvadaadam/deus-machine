@@ -171,10 +171,9 @@ export const PROTOCOL_EVENTS = [
   "tool:request",
   // The agent lifecycle stream: ONE event carrying a sequenced
   // @zvada/agent-server WireEventEnvelope verbatim (session/turn/message/part/
-  // compaction/error). The frontend folds it with its OWN fold
-  // (features/session/lib/agentEventFold), not the engine's reduceConversation
-  // — that reducer produces a ConversationState, the cache holds paginated
-  // SQLite rows. Swapping to reducer + projection is a tracked follow-up.
+  // compaction/error). The frontend folds it with the ENGINE's
+  // reduceConversationWithChanges and projects the reported changes onto the
+  // paginated SQLite-row cache (features/session/lib/agentEventFold).
   "agent:event",
   // PTY events (high-throughput)
   "pty-data",
