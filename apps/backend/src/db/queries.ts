@@ -302,10 +302,6 @@ export function hasNewerMessages(db: Database.Database, sessionId: string, seq: 
     .get(sessionId, seq);
 }
 
-export function getMessageById(db: Database.Database, id: string): MessageRow | undefined {
-  return db.prepare("SELECT * FROM messages WHERE id = ?").get(id) as MessageRow | undefined;
-}
-
 /** Get the highest seq for a session (cursor initialization for real-time streaming). */
 export function getMaxMessageSeq(db: Database.Database, sessionId: string): number {
   const row = db

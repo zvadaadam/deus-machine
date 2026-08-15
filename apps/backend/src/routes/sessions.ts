@@ -1,7 +1,6 @@
 import { Hono } from "hono";
 import { getDatabase } from "../lib/database";
 import { NotFoundError } from "../lib/errors";
-import { parseBody, CreateMessageBody } from "../lib/schemas";
 import {
   getAllSessions,
   getSessionById,
@@ -9,11 +8,9 @@ import {
   getMessages,
   hasOlderMessages,
   hasNewerMessages,
-  getMessageById,
   attachParts,
 } from "../db";
 import { invalidate } from "../services/query-engine";
-import { writeUserMessage } from "../services/message-writer";
 
 /**
  * Session Routes
@@ -21,10 +18,11 @@ import { writeUserMessage } from "../services/message-writer";
  * Sessions are associated with workspaces. Agent runtime (Claude SDK)
  * is managed by the agent-server (agent-server). This route handles:
  * - Session CRUD
- * - User message persistence
  * - Session status updates
  *
- * Frontend communicates with the agent-server via WebSocket JSON-RPC.
+ * User messages are written by the agent event pipeline (the engine's user
+ * echo), not by a route. Frontend communicates with the agent-server via
+ * WebSocket JSON-RPC.
  */
 
 const app = new Hono();
@@ -63,28 +61,6 @@ app.get("/sessions/:id/messages", (c) => {
   const has_newer = newestSeq != null ? hasNewerMessages(db, sessionId, newestSeq) : false;
 
   return c.json({ messages: attachParts(db, messages), has_older, has_newer });
-});
-
-/**
- * POST /sessions/:id/messages
- *
- * Gateway/web fallback for saving user messages. The primary desktop path
- * now uses the agent-server socket (saveUserMessage in agent-server/db/session-writer.ts)
- * which atomically persists the message + dispatches the agent in one call.
- * This endpoint is kept for non-desktop clients (cloud relay, web gateway).
- */
-app.post("/sessions/:id/messages", async (c) => {
-  const sessionId = c.req.param("id");
-  const { content, model } = parseBody(CreateMessageBody, await c.req.json());
-
-  const result = writeUserMessage(sessionId, content, model);
-  if (!result.success) throw new NotFoundError(result.error);
-
-  invalidate(["workspaces", "sessions", "messages", "stats"]);
-
-  const db = getDatabase();
-  const createdMessage = getMessageById(db, result.messageId);
-  return c.json(createdMessage);
 });
 
 /**

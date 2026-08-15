@@ -6,10 +6,8 @@
  * engine's user echo arrives with (`message.started{role:"user", turnId}`), so
  * the echo replaces this row in place instead of appending a second bubble.
  *
- * The row carries engine `Part`s, not a JSON `content` blob: the bubble then
- * renders through exactly the same path as the echo it is standing in for
- * (`readUserMessageContent` → parts), and `messages.content` stays what it is
- * on disk — a legacy read path, nothing the frontend writes.
+ * The row carries engine `Part`s: the bubble renders through exactly the same
+ * path as the echo it is standing in for (`readUserMessageContent` → parts).
  *
  * Everything local is id-prefixed. The prefix is a marker, never a licence to
  * bulk-delete: a local row is dropped when ITS echo arrives (matched by
@@ -62,7 +60,6 @@ export function createOptimisticUserMessage(args: {
     session_id: args.sessionId,
     seq: Number.MAX_SAFE_INTEGER,
     role: "user",
-    content: null,
     turn_id: args.turnId,
     sent_at: new Date().toISOString(),
     model: args.model ?? null,

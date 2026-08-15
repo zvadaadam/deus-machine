@@ -32,25 +32,19 @@ const AssistantMessage = memo(function AssistantMessage({
   isLastInTurn = false,
   isStreamingTurn = false,
 }: MessageItemProps) {
-  const hasParts = message.parts && message.parts.length > 0;
+  if (!message.parts || message.parts.length === 0) return null;
 
-  if (!hasParts && !message.content) return null;
-
-  if (hasParts) {
-    return (
-      <div
-        className={cn(
-          "relative",
-          "mr-auto w-full max-w-full",
-          "flex min-w-0 flex-col gap-1 overflow-x-hidden"
-        )}
-      >
-        <PartsRenderer parts={message.parts!} isStreamingTurn={isStreamingTurn && isLastInTurn} />
-      </div>
-    );
-  }
-
-  return <div className="mr-auto max-w-full px-2 py-1.5 text-sm opacity-60">{message.content}</div>;
+  return (
+    <div
+      className={cn(
+        "relative",
+        "mr-auto w-full max-w-full",
+        "flex min-w-0 flex-col gap-1 overflow-x-hidden"
+      )}
+    >
+      <PartsRenderer parts={message.parts} isStreamingTurn={isStreamingTurn && isLastInTurn} />
+    </div>
+  );
 });
 
 /** User message — iMessage-style bubble. */
@@ -61,10 +55,8 @@ const UserMessage = memo(function UserMessage({ message }: { message: Message })
   const contentRef = useRef<HTMLDivElement>(null);
 
   /**
-   * `parts` is the source of truth for new rows — the engine's user echo, and
-   * the composer's optimistic bubble, which builds the same shapes locally.
-   * `content` is a read-only path for LEGACY rows the send command wrote
-   * before the echo existed; both are normalized in `readUserMessageContent`.
+   * `parts` is the source of truth — the engine's user echo, and the composer's
+   * optimistic bubble, which builds the same shapes locally.
    */
   const { images, texts } = useMemo(() => readUserMessageContent(message), [message]);
 

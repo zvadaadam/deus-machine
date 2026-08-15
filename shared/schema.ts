@@ -52,13 +52,19 @@ export const PRELAUNCH_REQUIRED_COLUMNS = {
 } as const satisfies Record<string, readonly string[]>;
 
 /**
- * `sessions.agent_harness` values that predate a rename. A row carrying one of
- * these is a pre-launch database that must be reset rather than migrated.
- * `codex` was the original single-codex id; `claude`/`codex-server` were the
- * deus-dialect spellings replaced by the engine ids (`claude-code`,
- * `codex-app-server`).
+ * Columns a current database must NOT have. The mirror image of
+ * PRELAUNCH_REQUIRED_COLUMNS: that catches a database too OLD to have gained a
+ * column, this catches one too old to have SHED one. SQLite cannot drop a
+ * column without a table rebuild, and pre-launch we reset rather than migrate.
+ *
+ * `messages.content` was the pre-parts render path, retired when messages moved
+ * to engine `parts`. Any database that still has it also predates the engine
+ * harness ids (`claude-code`/`codex-app-server` replacing `claude`/`codex`/
+ * `codex-server`), so this one marker forces the reset that clears both.
  */
-export const RETIRED_AGENT_HARNESS_VALUES = ["codex", "claude", "codex-server"] as const;
+export const PRELAUNCH_RETIRED_COLUMNS = {
+  messages: ["content"],
+} as const satisfies Record<string, readonly string[]>;
 
 /**
  * Additive columns applied to existing databases via ALTER TABLE at startup.
@@ -139,8 +145,7 @@ export const SCHEMA_SQL = `
   -- Auto-assigned by trigger — never set manually in INSERT.
   --
   -- One row per engine message.started — INCLUDING the user echo, which is the
-  -- source of truth for user rows (content stays NULL for them; new user
-  -- messages render from their parts, content is a legacy read path only).
+  -- source of truth for user rows. Every message renders from its parts.
   -- turn_id groups a turn; parent_tool_call_id nests a subagent's output under
   -- the tool call that spawned it (same spelling as parts.parent_tool_call_id).
   -- tokens/cost/turn_stop_reason carry the TURN's outcome (turn.ended),
@@ -150,7 +155,6 @@ export const SCHEMA_SQL = `
     session_id TEXT NOT NULL REFERENCES sessions(id) ON DELETE CASCADE,
     seq INTEGER NOT NULL DEFAULT 0,
     role TEXT NOT NULL,
-    content TEXT,
     turn_id TEXT,
     model TEXT,
     sent_at TEXT,

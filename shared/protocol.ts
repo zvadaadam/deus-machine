@@ -5,10 +5,10 @@
 // edge; that dialect is gone, so a composer value travels unchanged from the
 // picker to the engine's RunConfig.
 //
-// The `read*` helpers below absorb values persisted by older builds (settings
-// rows, in-flight q:command payloads) — read-time normalization, no migration.
+// `readThinkingLevel` still absorbs the retired UPPERCASE spellings, because
+// `default_thinking_level` lives in preferences.json — a file the pre-launch
+// database reset does NOT clear. Read-time normalization, no migration.
 
-import { z } from "zod";
 import {
   PermissionModeSchema as EnginePermissionModeSchema,
   ThinkingLevelSchema as EngineThinkingLevelSchema,
@@ -22,12 +22,6 @@ export const ThinkingLevelSchema = EngineThinkingLevelSchema;
 export type { ThinkingLevel };
 
 /** Retired deus spellings → engine values. Read-time only; never written. */
-const RETIRED_PERMISSION_MODES: Record<string, PermissionMode> = {
-  acceptEdits: "accept_edits",
-  bypassPermissions: "bypass_permissions",
-  dontAsk: "dont_ask",
-};
-
 const RETIRED_THINKING_LEVELS: Record<string, ThinkingLevel> = {
   NONE: "off",
   LOW: "low",
@@ -36,11 +30,9 @@ const RETIRED_THINKING_LEVELS: Record<string, ThinkingLevel> = {
   XHIGH: "xhigh",
 };
 
-/** Normalize a stored/incoming permission mode; undefined when unrecognized. */
+/** Validate an incoming permission mode; undefined when unrecognized. */
 export function readPermissionMode(value: unknown): PermissionMode | undefined {
-  if (typeof value !== "string") return undefined;
-  const migrated = RETIRED_PERMISSION_MODES[value] ?? value;
-  const parsed = PermissionModeSchema.safeParse(migrated);
+  const parsed = PermissionModeSchema.safeParse(value);
   return parsed.success ? parsed.data : undefined;
 }
 
@@ -51,11 +43,3 @@ export function readThinkingLevel(value: unknown): ThinkingLevel | undefined {
   const parsed = ThinkingLevelSchema.safeParse(migrated);
   return parsed.success ? parsed.data : undefined;
 }
-
-/** Runtime guard for settings validation (`default_thinking_level`). */
-export const StoredThinkingLevelSchema = z
-  .string()
-  .transform((value) => readThinkingLevel(value))
-  .refine((value): value is ThinkingLevel => value !== undefined, {
-    message: "unknown thinking level",
-  });

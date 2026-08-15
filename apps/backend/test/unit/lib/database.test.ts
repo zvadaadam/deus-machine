@@ -63,40 +63,24 @@ describe("database pre-launch schema bootstrap", () => {
     expect(() => initDatabase()).toThrow("Reset it by deleting deus.db");
   });
 
-  // Harness ids are the engine's now (claude-code / codex-app-server); a row
-  // carrying any retired spelling means the DB predates the protocol switch.
-  it.each(["codex", "claude", "codex-server"])(
-    "throws a reset hint for the retired harness value %s",
-    async (retired) => {
-      vi.spyOn(console, "error").mockImplementation(() => {});
-      vi.spyOn(console, "log").mockImplementation(() => {});
-      const dbPath = path.join(tempDir, `stale-${retired}.db`);
-      const staleDb = new Database(dbPath);
-      staleDb.exec(SCHEMA_SQL);
-      staleDb
-        .prepare(
-          "INSERT INTO repositories (id, name, root_path) VALUES ('repo-1', 'Repo', '/repo')"
-        )
-        .run();
-      staleDb
-        .prepare(
-          "INSERT INTO workspaces (id, repository_id, slug) VALUES ('ws-1', 'repo-1', 'ws-1')"
-        )
-        .run();
-      staleDb
-        .prepare(
-          "INSERT INTO sessions (id, workspace_id, agent_harness) VALUES ('sess-1', 'ws-1', ?)"
-        )
-        .run(retired);
-      staleDb.close();
-      process.env.DATABASE_PATH = dbPath;
+  // The other direction: a database old enough to still CARRY a column the
+  // current schema dropped. CREATE TABLE IF NOT EXISTS never alters an existing
+  // table, so only this check forces the reset.
+  it("throws a reset hint for a database that still has a retired column", async () => {
+    vi.spyOn(console, "error").mockImplementation(() => {});
+    vi.spyOn(console, "log").mockImplementation(() => {});
+    const dbPath = path.join(tempDir, "retired-column.db");
+    const staleDb = new Database(dbPath);
+    staleDb.exec(SCHEMA_SQL);
+    // `messages.content` was the pre-parts render path. Re-add it to simulate a
+    // database created before it was dropped.
+    staleDb.exec("ALTER TABLE messages ADD COLUMN content TEXT");
+    staleDb.close();
+    process.env.DATABASE_PATH = dbPath;
 
-      const { initDatabase } = await import("../../../src/lib/database");
+    const { initDatabase } = await import("../../../src/lib/database");
 
-      expect(() => initDatabase()).toThrow(
-        `Found retired sessions.agent_harness value: ${retired}`
-      );
-      expect(() => initDatabase()).toThrow("Reset it by deleting deus.db");
-    }
-  );
+    expect(() => initDatabase()).toThrow("Found retired columns: messages.content");
+    expect(() => initDatabase()).toThrow("Reset it by deleting deus.db");
+  });
 });

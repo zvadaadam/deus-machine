@@ -67,7 +67,6 @@ interface MessageRowShape {
   role: string;
   turn_id: string | null;
   seq: number;
-  content: string | null;
   cancelled_at: string | null;
   parent_tool_call_id: string | null;
   tokens: string | null;
@@ -213,8 +212,7 @@ describeWithDb("engine turn → handler → SQLite", () => {
       ["u1", "user", TURN],
       ["a1", "assistant", TURN],
     ]);
-    // The user row carries no legacy JSON envelope — it renders from parts.
-    expect(rows[0].content).toBeNull();
+    // The user row renders from parts — there is no message-level content.
     expect(parts().map((p) => [p.message_id, p.type])).toEqual([
       ["u1", "text"],
       ["a1", "text"],

@@ -16,11 +16,3 @@ export type {
   Session,
   SessionStatus,
 } from "@shared/types/session";
-
-export {
-  isTextBlock,
-  isImageBlock,
-  isToolUseBlock,
-  isToolResultBlock,
-  isThinkingBlock,
-} from "@shared/types/session";

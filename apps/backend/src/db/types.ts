@@ -126,8 +126,6 @@ export interface MessageRow {
   session_id: string;
   seq: number;
   role: string;
-  /** Legacy read path — engine-written rows leave this NULL (parts render). */
-  content: string | null;
   turn_id: string | null;
   model: string | null;
   sent_at: string | null;

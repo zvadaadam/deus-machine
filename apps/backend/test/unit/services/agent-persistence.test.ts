@@ -151,8 +151,8 @@ describeWithDb("agent persistence (canonical events → SQLite)", () => {
         parent_tool_call_id: "tool-7",
         sent_at: "2026-08-14T12:00:00.000Z",
       });
-      // New rows render from parts; `content` is a legacy read path only.
-      expect(row.content).toBeNull();
+      // Rows render from parts — the table has no message-level content column.
+      expect(row).not.toHaveProperty("content");
     });
 
     it("persists the engine's user echo — the send command writes no row", () => {

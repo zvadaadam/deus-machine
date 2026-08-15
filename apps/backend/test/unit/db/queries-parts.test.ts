@@ -22,7 +22,6 @@ function makeMessage(overrides: Partial<MessageRow> = {}): MessageRow {
     session_id: "sess-1",
     seq: 1,
     role: "assistant",
-    content: null,
     turn_id: null,
     model: "opus",
     sent_at: "2026-01-01T00:00:00Z",
@@ -184,7 +183,6 @@ describe("attachParts", () => {
     const messages = [
       makeMessage({
         id: "msg-1",
-        content: '{"text":"hello"}',
         model: "opus",
         turn_stop_reason: "end_turn",
         parent_tool_call_id: "tool-123",
@@ -193,7 +191,6 @@ describe("attachParts", () => {
 
     const result = attachParts(mockDb, messages);
 
-    expect(result[0].content).toBe('{"text":"hello"}');
     expect(result[0].model).toBe("opus");
     expect(result[0].turn_stop_reason).toBe("end_turn");
     expect(result[0].parent_tool_call_id).toBe("tool-123");

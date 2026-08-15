@@ -99,19 +99,19 @@ function seedTestData() {
 
 function seedMessages() {
   const msgs = [
-    { id: "msg-q-001", role: "user", content: "hello" },
-    { id: "msg-q-002", role: "assistant", content: "world" },
-    { id: "msg-q-003", role: "user", content: "!" },
+    { id: "msg-q-001", role: "user" },
+    { id: "msg-q-002", role: "assistant" },
+    { id: "msg-q-003", role: "user" },
   ];
   for (const m of msgs) {
     testDb
       .prepare(
         `
-      INSERT INTO messages (id, session_id, role, content, sent_at)
-      VALUES (?, ?, ?, ?, datetime('now'))
+      INSERT INTO messages (id, session_id, role, sent_at)
+      VALUES (?, ?, ?, datetime('now'))
     `
       )
-      .run(m.id, SESS_ID, m.role, m.content);
+      .run(m.id, SESS_ID, m.role);
   }
 }
 
@@ -568,8 +568,8 @@ describe("q:subscribe → q:delta for messages", () => {
       testDb
         .prepare(
           `
-        INSERT INTO messages (id, session_id, role, content, sent_at)
-        VALUES ('msg-q-new-1', ?, 'user', 'delta test', datetime('now'))
+        INSERT INTO messages (id, session_id, role, sent_at)
+        VALUES ('msg-q-new-1', ?, 'user', datetime('now'))
       `
         )
         .run(SESS_ID);
@@ -581,7 +581,7 @@ describe("q:subscribe → q:delta for messages", () => {
 
       expect(delta.id).toBe("sub_delta_1");
       expect(delta.upserted).toHaveLength(1);
-      expect(delta.upserted[0].content).toBe("delta test");
+      expect(delta.upserted[0].id).toBe("msg-q-new-1");
       expect(delta.cursor).toBeGreaterThan(0);
     } finally {
       ws.close();
@@ -607,8 +607,8 @@ describe("q:subscribe → q:delta for messages", () => {
       testDb
         .prepare(
           `
-        INSERT INTO messages (id, session_id, role, content, sent_at)
-        VALUES ('msg-q-cur-1', ?, 'user', 'first new', datetime('now'))
+        INSERT INTO messages (id, session_id, role, sent_at)
+        VALUES ('msg-q-cur-1', ?, 'user', datetime('now'))
       `
         )
         .run(SESS_ID);
@@ -622,8 +622,8 @@ describe("q:subscribe → q:delta for messages", () => {
       testDb
         .prepare(
           `
-        INSERT INTO messages (id, session_id, role, content, sent_at)
-        VALUES ('msg-q-cur-2', ?, 'assistant', 'second new', datetime('now'))
+        INSERT INTO messages (id, session_id, role, sent_at)
+        VALUES ('msg-q-cur-2', ?, 'assistant', datetime('now'))
       `
         )
         .run(SESS_ID);
@@ -632,7 +632,7 @@ describe("q:subscribe → q:delta for messages", () => {
       const delta2 = await delta2Promise;
 
       expect(delta2.upserted).toHaveLength(1);
-      expect(delta2.upserted[0].content).toBe("second new");
+      expect(delta2.upserted[0].id).toBe("msg-q-cur-2");
       expect(delta2.cursor).toBeGreaterThan(cursor1);
     } finally {
       ws.close();

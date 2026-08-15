@@ -1,6 +1,5 @@
 import type { Message } from "@/shared/types";
 import type { TokenUsage } from "@shared/protocol-types";
-import type { ContentBlock } from "@/features/session/types";
 
 export interface TurnFooterData {
   copyText: string | null;
@@ -47,19 +46,11 @@ function getTurnAccounting(messages: Message[]): {
 
 function getLastTextContent(messages: Message[]): string | null {
   for (let index = messages.length - 1; index >= 0; index--) {
-    const text = extractTextFromMessage(messages[index]);
+    const text = extractTextFromParts(messages[index].parts);
     if (text) return text;
   }
 
   return null;
-}
-
-function extractTextFromMessage(message: Message): string | null {
-  const fromParts = extractTextFromParts(message.parts);
-  if (fromParts) return fromParts;
-
-  // Legacy rows only: engine-written messages render from their parts.
-  return message.content == null ? null : extractTextFromContent(message.content);
 }
 
 function extractTextFromParts(parts?: Message["parts"]): string | null {
@@ -73,49 +64,6 @@ function extractTextFromParts(parts?: Message["parts"]): string | null {
     .trim();
 
   return text.length > 0 ? text : null;
-}
-
-function extractTextFromContent(content: string): string | null {
-  if (!content) return null;
-
-  try {
-    const parsed = JSON.parse(content) as unknown;
-    const blocks = getContentBlocks(parsed);
-    const text = blocks
-      .flatMap((block) => {
-        if (typeof block === "string") return [block.trim()];
-        if (isTextBlock(block)) return [block.text.trim()];
-        return [];
-      })
-      .filter(Boolean)
-      .join("\n")
-      .trim();
-
-    return text.length > 0 ? text : null;
-  } catch {
-    const trimmed = content.trim();
-    return trimmed.length > 0 ? trimmed : null;
-  }
-}
-
-function getContentBlocks(parsed: unknown): Array<ContentBlock | string> {
-  if (typeof parsed === "string") return [parsed];
-  if (Array.isArray(parsed)) return parsed as Array<ContentBlock | string>;
-
-  if (
-    parsed &&
-    typeof parsed === "object" &&
-    "blocks" in parsed &&
-    Array.isArray((parsed as { blocks?: unknown }).blocks)
-  ) {
-    return (parsed as { blocks: Array<ContentBlock | string> }).blocks;
-  }
-
-  return [];
-}
-
-function isTextBlock(block: unknown): block is Extract<ContentBlock, { type: "text" }> {
-  return typeof block === "object" && block !== null && "type" in block && block.type === "text";
 }
 
 function getTurnDurationMs(messages: Message[], startedAt?: string | null): number | null {

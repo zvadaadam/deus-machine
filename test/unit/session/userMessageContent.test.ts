@@ -2,10 +2,9 @@
  * The composer↔bubble round trip.
  *
  * The composer emits the canonical `PartInput` vocabulary; the bubble renders
- * two producers (engine `Part`s — the echo AND the composer's own optimistic
- * bubble — plus LEGACY Anthropic block `content`) through one normalizer.
- * These tests pin both ends so a shape drift on either side fails here rather
- * than in the UI.
+ * both producers of engine `Part`s — the echo AND the composer's own optimistic
+ * bubble — through one normalizer. These tests pin both ends so a shape drift
+ * on either side fails here rather than in the UI.
  */
 import { describe, expect, it } from "vitest";
 
@@ -122,12 +121,9 @@ describe("readUserMessageContent — engine echo parts (new rows)", () => {
     });
   });
 
-  it("prefers parts over content when both are present", () => {
-    const row = {
-      parts: [textPart("from the echo")],
-      content: JSON.stringify([{ type: "text", text: "from the composer" }]),
-    };
-    expect(readUserMessageContent(row).texts).toEqual(["from the echo"]);
+  it("renders nothing for a row with no parts", () => {
+    expect(readUserMessageContent({})).toEqual({ texts: [], images: [] });
+    expect(readUserMessageContent({ parts: [] })).toEqual({ texts: [], images: [] });
   });
 });
 
@@ -136,7 +132,6 @@ describe("readUserMessageContent — the composer's optimistic bubble", () => {
     const content = buildMessageContent("what is this?", [attachment({ type: "image/jpeg" })]);
     const bubble = createOptimisticUserMessage({ sessionId: "s1", turnId: "t1", content });
 
-    expect(bubble.content).toBeNull();
     expect(readUserMessageContent(bubble)).toEqual({
       texts: ["what is this?"],
       images: ["data:image/jpeg;base64,AAAA"],
@@ -156,45 +151,5 @@ describe("readUserMessageContent — the composer's optimistic bubble", () => {
     const bubble = createOptimisticUserMessage({ sessionId: "s1", turnId: "t-7", content: "hi" });
     expect(bubble.turn_id).toBe("t-7");
     expect(bubble.role).toBe("user");
-  });
-});
-
-describe("readUserMessageContent — content JSON", () => {
-  it("still renders LEGACY Anthropic blocks from rows written before the flip", () => {
-    const content = JSON.stringify([
-      { type: "text", text: "old row" },
-      { type: "image", source: { type: "base64", media_type: "image/gif", data: "CCCC" } },
-    ]);
-    expect(readUserMessageContent({ content })).toEqual({
-      texts: ["old row"],
-      images: ["data:image/gif;base64,CCCC"],
-    });
-  });
-
-  it("still renders LEGACY url-sourced image blocks", () => {
-    const content = JSON.stringify([
-      { type: "image", source: { type: "url", url: "https://x/y.png" } },
-    ]);
-    expect(readUserMessageContent({ content }).images).toEqual(["https://x/y.png"]);
-  });
-
-  it("treats non-JSON content as a single text run", () => {
-    expect(readUserMessageContent({ content: "just a prompt" })).toEqual({
-      texts: ["just a prompt"],
-      images: [],
-    });
-  });
-
-  it("does not mistake a markdown link for a blocks array", () => {
-    const content = "[see this](https://example.com) — thoughts?";
-    expect(readUserMessageContent({ content }).texts).toEqual([content]);
-  });
-
-  it("renders nothing for an absent content and no parts", () => {
-    expect(readUserMessageContent({})).toEqual({ texts: [], images: [] });
-    expect(readUserMessageContent({ content: null, parts: [] })).toEqual({
-      texts: [],
-      images: [],
-    });
   });
 });

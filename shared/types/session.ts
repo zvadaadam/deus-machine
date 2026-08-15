@@ -19,9 +19,6 @@ export interface Message {
   session_id: string;
   seq: number; // Per-session monotonic sequence number (auto-assigned by trigger)
   role: MessageRole;
-  /** LEGACY read path: JSON-stringified MessageContent. Rows written by the
-   *  engine echo leave this NULL and render from `parts` instead. */
-  content: string | null;
   turn_id?: string | null; // The turn this message belongs to (engine turnId)
   sent_at?: string | null; // ISO timestamp of the engine's message.started
   cancelled_at?: string | null; // ISO timestamp when the turn was cancelled
@@ -115,31 +112,6 @@ export interface ToolResultBlock {
   // Renderers use extractText / extractImage to pull the right piece.
   content: string | Record<string, any> | unknown[];
   is_error?: boolean;
-}
-
-export function isTextBlock(block: ContentBlock | string): block is TextBlock {
-  return typeof block === "object" && block !== null && block.type === "text";
-}
-
-export function isImageBlock(block: ContentBlock | string): block is ImageBlock {
-  return typeof block === "object" && block !== null && block.type === "image";
-}
-
-export function isToolUseBlock(block: ContentBlock | string): block is ToolUseBlock {
-  return typeof block === "object" && block !== null && block.type === "tool_use";
-}
-
-export function isToolResultBlock(block: ContentBlock | string): block is ToolResultBlock {
-  return (
-    typeof block === "object" &&
-    block !== null &&
-    block.type === "tool_result" &&
-    "tool_use_id" in block
-  );
-}
-
-export function isThinkingBlock(block: ContentBlock | string): block is ThinkingBlock {
-  return typeof block === "object" && block !== null && block.type === "thinking";
 }
 
 /**
