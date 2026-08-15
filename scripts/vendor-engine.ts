@@ -68,7 +68,7 @@ const probeFile = "package/src/protocol/reduce.ts";
 const fromTarball = await $`tar -xzOf ${VENDORED} ${probeFile}`.text();
 const candidates = [
   "node_modules/@zvada/agent-server/src/protocol/reduce.ts",
-  ...readdirSync("node_modules/.bun", { recursive: false })
+  ...(existsSync("node_modules/.bun") ? readdirSync("node_modules/.bun", { recursive: false }) : [])
     .filter((name) => String(name).startsWith("@zvada+agent-server@"))
     .map((name) =>
       join(

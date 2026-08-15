@@ -258,6 +258,16 @@ export function flushDeltas(qc: QueryClient, sessionId: string, fold: SessionFol
  * Upsert the fold's parts into the cached row's, by part id — the same
  * append-only-by-id rule the pre-fold cache used. `next` wins for a part both
  * sides know (the fold is fresher); parts only the cache knows survive.
+ *
+ * CONSIDERED AND REJECTED: seeding the fold from the DB page instead (the way
+ * agnt seeds from `session.snapshot`), which would make the cache a pure
+ * projection and delete this merge. agnt's snapshot arrives ON the event
+ * channel, ordered ahead of the events by the server; deus's page is a
+ * separate query RACING the WS stream, so seeding here needs an
+ * envelope-buffering protocol around page arrival plus pagination re-seeding —
+ * strictly more machinery than these ~20 self-healing lines, with new failure
+ * modes in exactly the interleavings that bit this file before. Two genuinely
+ * independent sources want a merge, not a fake ordering.
  */
 function mergePartsById(previous: Message["parts"], next: Message["parts"]): Message["parts"] {
   if (!previous?.length) return next;
