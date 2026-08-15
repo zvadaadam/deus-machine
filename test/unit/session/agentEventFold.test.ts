@@ -545,10 +545,22 @@ describe("turn.ended — accounting mirror", () => {
     expect(h.page()!.messages[0].cancelled_at).toBe(new Date(T + 5).toISOString());
   });
 
-  it("I5: a cancel before the first assistant message still leaves a marker", () => {
+  it("I5: a cancel before the first assistant message still leaves a marker — the backend's row", () => {
+    // The marker is minted from `shared/conversation-rows.ts`, the same
+    // function the backend INSERTs, so the mirrored row and the persisted one
+    // are the SAME row: same derived id, same accounting. Tokens and cost used
+    // to be dropped here, which meant the q:delta carrying the persisted copy
+    // silently changed the divider's footer on arrival.
     const h = harness();
     h.feed(started({ messageId: "u1", role: "user", outputIndex: 0 }));
-    h.feed(turnEnded({ stopReason: "cancelled", timestamp: T + 5 }));
+    h.feed(
+      turnEnded({
+        stopReason: "cancelled",
+        tokens: { input: 9, output: 1 },
+        cost: 0.02,
+        timestamp: T + 5,
+      })
+    );
 
     const marker = h.page()!.messages[1];
     expect(marker).toMatchObject({
@@ -557,7 +569,11 @@ describe("turn.ended — accounting mirror", () => {
       turn_id: TURN,
       turn_stop_reason: "cancelled",
       cancelled_at: new Date(T + 5).toISOString(),
+      sent_at: new Date(T + 5).toISOString(),
+      tokens: JSON.stringify({ input: 9, output: 1 }),
+      cost: 0.02,
     });
+    expect(marker.parts).toEqual([]);
   });
 
   it("a clean turn with no assistant message adds nothing", () => {

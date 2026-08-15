@@ -8,10 +8,8 @@
     "apps/desktop/preload/browser-preload.ts",
     "shared/types/index.ts",
     "shared/events.ts",
-    "shared/agent-events.ts",
     "shared/protocol.ts",
     "shared/schema.ts",
-    "shared/session-events.ts",
     "shared/enums.ts",
     "shared/lib/*.ts",
     "apps/cli/src/cli.ts",
@@ -59,7 +57,6 @@
   "ignoreUnresolved": [
     "../../../src/features/simulator/machine",
     "../../../src/features/simulator/types",
-    "../../../../shared/agent-events",
     "./test/setup.ts"
   ],
   "ignoreIssues": {

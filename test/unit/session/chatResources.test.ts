@@ -7,7 +7,7 @@ import {
   extractSingleLocalUrl,
   normalizeResourcePath,
 } from "../../../apps/web/src/features/session/lib/chatResources";
-import type { Part } from "../../../shared/messages/types";
+import type { Part } from "../../../shared/protocol-types";
 
 function textPart(text: string, partIndex = 0): Part {
   return {
@@ -15,7 +15,6 @@ function textPart(text: string, partIndex = 0): Part {
     id: `text-${partIndex}`,
     sessionId: "session-1",
     messageId: "message-1",
-    partIndex,
     text,
     state: "done",
   };
@@ -27,7 +26,6 @@ function writePart(paths: string[], partIndex = 0): Part {
     id: `tool-${partIndex}`,
     sessionId: "session-1",
     messageId: "message-1",
-    partIndex,
     toolCallId: `call-${partIndex}`,
     toolName: "apply_patch",
     kind: "edit",

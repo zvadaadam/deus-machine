@@ -96,14 +96,7 @@ function renderPart(part: Part, lastTextPartId: string | null, isStreamingTurn: 
         if (isActivelyStreaming) {
           return <BufferedTextBlock key={p.id} text={p.text} isStreaming={true} />;
         }
-        return (
-          <TextBlock
-            key={p.id}
-            block={{ type: "text", text: p.text }}
-            role="assistant"
-            weight="normal"
-          />
-        );
+        return <TextBlock key={p.id} block={p.text} role="assistant" weight="normal" />;
       })
       .with({ type: "reasoning" }, (p: ReasoningPart) => {
         const isActivelyStreaming = isStreamingTurn && p.state === "streaming";

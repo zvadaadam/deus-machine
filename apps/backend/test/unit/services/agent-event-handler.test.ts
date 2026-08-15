@@ -6,6 +6,7 @@
 // covered against a real database in agent-persistence.test.ts.
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type {
+  ConversationChange,
   ConversationState,
   ConversationTurn,
   LifecycleEvent,
@@ -62,7 +63,7 @@ vi.mock("../../../src/services/pr-snapshot.service", () => ({
 function stubPersistChanges(
   _sessionId: string,
   state: ConversationState,
-  changes: Array<{ kind: ChangeWrite["kind"]; turnId?: string }>,
+  changes: ConversationChange[],
   outcomeFor: (turn: ConversationTurn) => TurnOutcomeWrite
 ): ChangeWrite[] {
   const writes: ChangeWrite[] = [];
@@ -73,7 +74,7 @@ function stubPersistChanges(
       outcomes.push({ turn, outcome: outcomeFor(turn) });
     }
     if (change.kind === "usage-updated" && !state.usage) continue;
-    writes.push({ kind: change.kind, detail: "", result: { ok: true, value: null } });
+    writes.push({ change, result: { ok: true, value: null } });
   }
   return writes;
 }
@@ -243,7 +244,10 @@ describe("agent event handler (canonical lifecycle stream)", () => {
 
     it("skips invalidation when the write failed", () => {
       mockPersistChanges.mockReturnValueOnce([
-        { kind: "message-upserted", detail: "", result: { ok: false, error: "no session" } },
+        {
+          change: { kind: "message-upserted", messageId: "msg-1", turnId: TURN },
+          result: { ok: false, error: "no session" },
+        },
       ] as never);
 
       handler.handle(envelope(messageStarted()));

@@ -178,13 +178,8 @@ export interface ToolRequestEventData {
   timeoutMs: number;
 }
 
-// ---- Agent Lifecycle Event Payload ----
-
-/** Payload for q:event with event: "agent:event" — one sequenced
- *  @zvada/agent-server lifecycle envelope, forwarded verbatim. Deus reshapes
- *  nothing, so `seq` ordering/dedupe is free. The frontend folds these with
- *  the engine's `reduceConversationWithChanges` and projects the reported
- *  changes onto the paginated SQLite-row cache
- *  (features/session/lib/agentEventFold).
- *  Law 6 decoded — an unknown event type arrives preserved. */
-export type AgentEventData = import("../protocol-types").DecodedWireEventEnvelope;
+// The payload of q:event with event "agent:event" is one sequenced
+// @zvada/agent-server lifecycle envelope, forwarded verbatim: deus reshapes
+// nothing, so `seq` ordering/dedupe is free, and both sides name the shape
+// `DecodedWireEventEnvelope` (shared/protocol-types) rather than aliasing it
+// here — Law 7, an alias with no consumer reads as a capability.

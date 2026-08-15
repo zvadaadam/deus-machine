@@ -16,20 +16,7 @@ export type {
 } from "./workspace";
 
 // Session types
-export type {
-  Compaction,
-  Message,
-  MessageRole,
-  MessageContent,
-  ContentBlock,
-  TextBlock,
-  ImageBlock,
-  ToolUseBlock,
-  ToolResultBlock,
-  ThinkingBlock,
-  Session,
-  SessionStatus,
-} from "./session";
+export type { Compaction, Message, MessageRole, Session, SessionStatus } from "./session";
 
 // Repository types
 export type { Repository, Stats } from "./repository";

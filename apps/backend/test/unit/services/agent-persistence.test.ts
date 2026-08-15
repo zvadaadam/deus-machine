@@ -778,7 +778,7 @@ describeWithDb("agent persistence (canonical events → SQLite)", () => {
           const folded = reduceConversationWithChanges(state, event);
           state = folded.state;
           kinds.push(
-            ...persistChanges(SESSION, state, folded.changes, () => IDLE).map((w) => w.kind)
+            ...persistChanges(SESSION, state, folded.changes, () => IDLE).map((w) => w.change.kind)
           );
         }
         return kinds;
@@ -862,7 +862,7 @@ describeWithDb("agent persistence (canonical events → SQLite)", () => {
         timestamp: T,
       });
 
-      expect(writes.map((w) => w.kind)).toEqual(["compaction-upserted"]);
+      expect(writes.map((w) => w.change.kind)).toEqual(["compaction-upserted"]);
       expect(
         db
           .prepare(`SELECT status, trigger, pre_tokens FROM compactions WHERE compaction_id='c1'`)
@@ -883,7 +883,7 @@ describeWithDb("agent persistence (canonical events → SQLite)", () => {
           outputIndex: 1,
           partIndex: 0,
           partId: "t1",
-          delta: { type: "tool_input", input: '{"a' },
+          delta: { type: "tool_input", toolCallId: "tc-t1", toolName: "Bash", input: '{"a' },
           timestamp: T,
         },
         {
@@ -899,7 +899,7 @@ describeWithDb("agent persistence (canonical events → SQLite)", () => {
 
       // turn.started and message.started are rows; the bracket marker, the
       // buffered tool input and the permission are not.
-      expect(writes.map((w) => w.kind)).toEqual(["message-upserted"]);
+      expect(writes.map((w) => w.change.kind)).toEqual(["message-upserted"]);
     });
   });
 });

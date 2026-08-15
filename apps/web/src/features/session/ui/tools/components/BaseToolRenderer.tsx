@@ -17,7 +17,7 @@ import { useCallback, useState, type KeyboardEvent, type ReactNode } from "react
 import { ChevronRight, X } from "lucide-react";
 import { AnimatePresence, motion } from "framer-motion";
 import { cn } from "@/shared/lib/utils";
-import type { ToolUseBlock, ToolResultBlock } from "@/shared/types";
+import type { ToolUseBlock, ToolResultBlock } from "../types";
 import { ToolError } from "./ToolError";
 
 export interface BaseToolRendererProps {

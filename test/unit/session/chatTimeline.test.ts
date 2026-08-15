@@ -9,9 +9,11 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  buildChatTimeline,
   compactionLabel,
   compactionTokenLabel,
   insertCompactions,
+  type AssistantTurnData,
   type Turn,
 } from "../../../apps/web/src/features/session/lib/chatTimeline";
 import type { Compaction, Message } from "../../../shared/types/session";
@@ -199,5 +201,95 @@ describe("compactionTokenLabel", () => {
   it("returns null when the engine did not report token counts", () => {
     expect(compactionTokenLabel(compaction({ turn_id: "t1" }))).toBeNull();
     expect(compactionTokenLabel(compaction({ turn_id: "t1", pre_tokens: 78_000 }))).toBeNull();
+  });
+});
+
+// ===========================================================================
+// The whole derivation, out of React
+// ===========================================================================
+
+describe("buildChatTimeline", () => {
+  const withText = (over: Partial<Message> & { id: string; turn_id: string }): Message =>
+    message({
+      parts: [
+        {
+          type: "text",
+          id: `p-${over.id}`,
+          sessionId: "session-1",
+          messageId: over.id,
+          text: "hi",
+          state: "done",
+        },
+      ] as Message["parts"],
+      ...over,
+    });
+
+  const assistantIds = (item: Turn | { type: "compaction" }): string[] =>
+    (item as AssistantTurnData).messages.map((m) => m.id);
+
+  it("groups consecutive rows into turns, each holding exactly its own messages", () => {
+    const { items } = buildChatTimeline(
+      [
+        withText({ id: "u1", turn_id: "t1", role: "user" }),
+        withText({ id: "a1", turn_id: "t1" }),
+        withText({ id: "a2", turn_id: "t1" }),
+        withText({ id: "u2", turn_id: "t2", role: "user" }),
+        withText({ id: "a3", turn_id: "t2" }),
+      ],
+      [],
+      false
+    );
+
+    expect(shape(items)).toEqual(["user:t1", "assistant:t1", "user:t2", "assistant:t2"]);
+    expect(assistantIds(items[1])).toEqual(["a1", "a2"]);
+    expect(assistantIds(items[3])).toEqual(["a3"]);
+  });
+
+  it("a filtered-out row never shifts a turn's slice", () => {
+    // The invariant that used to be a comment inside the component: each group
+    // is a contiguous slice of the RENDERED rows, so anything dropped before
+    // grouping — a subagent child (it renders nested under its Task block) or
+    // a part-less shell whose parts have not landed — must not offset the
+    // slices that follow it.
+    const { items } = buildChatTimeline(
+      [
+        withText({ id: "u1", turn_id: "t1", role: "user" }),
+        withText({ id: "sub", turn_id: "t1", parent_tool_call_id: "task-1" }),
+        message({ id: "shell", turn_id: "t1", parts: [] }),
+        withText({ id: "a1", turn_id: "t1" }),
+        withText({ id: "u2", turn_id: "t2", role: "user" }),
+        withText({ id: "a2", turn_id: "t2" }),
+      ],
+      [],
+      false
+    );
+
+    expect(shape(items)).toEqual(["user:t1", "assistant:t1", "user:t2", "assistant:t2"]);
+    expect(assistantIds(items[1])).toEqual(["a1"]);
+    expect(assistantIds(items[3])).toEqual(["a2"]);
+  });
+
+  it("keeps a cancelled shell, spaces every slot and answers what the indicator needs", () => {
+    const { items, spacings, activity, lastRole } = buildChatTimeline(
+      [
+        withText({ id: "u1", turn_id: "t1", role: "user" }),
+        message({
+          id: "cancelled-t1",
+          turn_id: "t1",
+          parts: [],
+          cancelled_at: "2026-08-14T10:00:01.000Z",
+        }),
+      ],
+      [],
+      false
+    );
+
+    // The zero-part marker survives the filter — it is the "Response stopped"
+    // divider, and dropping it would make an interrupted turn look untouched.
+    expect(shape(items)).toEqual(["user:t1", "assistant:t1"]);
+    expect(spacings).toHaveLength(items.length);
+    expect(lastRole).toBe("assistant");
+    // Nothing is running: no turn is active, so the selector has one answer.
+    expect(activity).toBe("idle");
   });
 });

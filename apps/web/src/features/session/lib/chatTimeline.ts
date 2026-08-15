@@ -1,14 +1,28 @@
 /**
- * The chat timeline: turns, plus the compaction markers between them.
+ * The chat timeline: everything `<Chat>` renders, derived from the rows it was
+ * given. Turns, the compaction markers between them, the padding each slot
+ * gets, and what the agent is doing right now.
  *
  * A compaction is not a message and not a part — it is a positional entity
  * (protocol §5) that belongs BETWEEN the turn it was emitted during and that
  * turn's successor. Placement is by `turn_id`, so a reload lands the divider
  * in the same slot the live stream did.
+ *
+ * All of it used to be a four-stage `useMemo` chain inside the component —
+ * pure functions of props, held in the reader's head, and untestable without
+ * React. `buildChatTimeline` is that chain, once: Chat renders, this derives.
  */
 
 import { match } from "ts-pattern";
-import type { Compaction, Message } from "../types";
+import {
+  agentActivity,
+  groupIntoTurns,
+  type AgentActivity,
+} from "@zvada/agent-server/protocol/selectors";
+import type { ConversationState } from "@shared/protocol-types";
+import { cn } from "@/shared/lib/utils";
+import { conversationView } from "./conversationView";
+import type { Compaction, Message, MessageRole } from "../types";
 
 export type UserTurn = {
   type: "user";
@@ -32,6 +46,156 @@ export type CompactionMarker = {
 };
 
 export type ChatTimelineItem = Turn | CompactionMarker;
+
+/** Everything the chat needs to render one session's transcript. */
+export interface ChatTimeline {
+  /** Turns and compaction markers, in render order. */
+  items: ChatTimelineItem[];
+  /** The padding class for each slot, index-aligned with `items`. */
+  spacings: string[];
+  /** What the agent is doing right now — the activity indicator's variant. */
+  activity: AgentActivity;
+  /** The last RENDERED message's role, for the indicator's top margin. */
+  lastRole: MessageRole | null;
+}
+
+/**
+ * Rows → the timeline, in the four steps the component used to hold:
+ * filter what renders, read it back as the engine's conversation, group it
+ * into turns, splice the compactions in and pre-compute the spacing.
+ *
+ * `working` is deus's, not the stream's: it comes from `sessions.status`, and
+ * `conversationView` needs it to mark the last turn active — without it every
+ * turn reads as ended and `agentActivity` can only ever answer "idle".
+ */
+export function buildChatTimeline(
+  messages: Message[],
+  compactions: readonly Compaction[],
+  working: boolean
+): ChatTimeline {
+  const rendered = renderableMessages(messages);
+  const conversation = conversationView(rendered, working);
+  const items = insertCompactions(groupTurns(conversation, rendered), compactions);
+
+  return {
+    items,
+    spacings: items.map((item, i) =>
+      turnSpacingClasses(item, items[i - 1] ?? null, items[i + 1] ?? null, i === 0)
+    ),
+    activity: agentActivity(conversation),
+    lastRole: rendered.length ? rendered[rendered.length - 1].role : null,
+  };
+}
+
+/** Subagent children render nested under their Task tool block, never inline. */
+function renderableMessages(messages: Message[]): Message[] {
+  return messages.filter((message) => {
+    if (message.parent_tool_call_id) return false;
+    // User messages always render.
+    if (message.role === "user") return true;
+    // Assistant messages with parts render.
+    if (message.parts && message.parts.length > 0) return true;
+    // Keep cancelled messages for the "Response stopped" badge.
+    if (message.cancelled_at) return true;
+    // Skip empty ones: `message.started` arrived but no parts yet — the row
+    // appears as soon as one does.
+    return false;
+  });
+}
+
+/**
+ * Group consecutive messages into turns.
+ *
+ * The boundaries are the engine's: a run breaks when the speaker or the turn
+ * changes, and `isLatest` is set on the FINAL group only — the guard that
+ * keeps a finished turn out of streaming mode in the gap between "user sends"
+ * and "first assistant part arrives" (without it, the completed answer above
+ * visibly reverts to "working").
+ *
+ * The groups come back in order, so each is a contiguous SLICE of `rendered`
+ * and the rows themselves never round-trip through the projection.
+ */
+function groupTurns(conversation: ConversationState, rendered: Message[]): Turn[] {
+  const turns: Turn[] = [];
+  let index = 0;
+  let latestUserSentAt: string | null = null;
+
+  for (const group of groupIntoTurns(conversation)) {
+    const start = index;
+    index += group.entries.length;
+    const slice = rendered.slice(start, index);
+
+    if (group.role === "user") {
+      // One row per user turn: the engine emits exactly one echo per turn, so
+      // a run of user entries can only be one message.
+      slice.forEach((message, offset) => {
+        latestUserSentAt = message.sent_at ?? null;
+        turns.push({ type: "user", message, messageIndex: start + offset });
+      });
+      continue;
+    }
+
+    turns.push({
+      type: "assistant",
+      messages: slice,
+      firstMessageIndex: start,
+      isLatest: group.isLatest,
+      // The clock starts when the user asked, which is the turn before this.
+      startedAt: latestUserSentAt,
+    });
+  }
+
+  return turns;
+}
+
+const USER_PADDING_CLASS = "pb-8";
+const TIGHT_PADDING_CLASS = "pb-1";
+
+/**
+ * Spacing between turns, as PADDING rather than margin.
+ *
+ * Virtual items are absolutely positioned, so margins do not affect layout.
+ * Padding is included in getBoundingClientRect().height, which is what the
+ * virtualizer's measureElement reads — and it has to be pre-computed per index
+ * because the virtualizer skips off-screen items, so a turn cannot ask its DOM
+ * neighbours who they are.
+ */
+function turnSpacingClasses(
+  turn: ChatTimelineItem,
+  prevTurn: ChatTimelineItem | null,
+  nextTurn: ChatTimelineItem | null,
+  isFirst: boolean
+): string {
+  const isUser = turn.type === "user";
+
+  const topClass = (() => {
+    // Compaction divider: breathing room on both sides, it IS the seam.
+    if (turn.type === "compaction") return isFirst ? "pt-6" : "pt-4";
+
+    if (isUser) {
+      if (isFirst) return "pt-8";
+      if (prevTurn?.type === "user") return "pt-0";
+      if (prevTurn?.type === "compaction") return "pt-4";
+      return "pt-8";
+    }
+
+    // Assistant turn
+    if (isFirst) return "pt-1";
+    if (prevTurn?.type === "compaction") return "pt-2";
+    return "pt-0";
+  })();
+
+  const bottomClass = (() => {
+    if (turn.type === "compaction") return "pb-0";
+    if (isUser) return USER_PADDING_CLASS;
+    // Assistant turn
+    if (nextTurn?.type === "user") return "pb-0";
+    if (nextTurn) return TIGHT_PADDING_CLASS;
+    return "pb-0";
+  })();
+
+  return cn(topClass, bottomClass);
+}
 
 /**
  * Splice compaction markers into the turn list at their anchor position.

@@ -7,11 +7,14 @@
 // 2. Spawns the agent-server bundle
 // 3. Connects backend-style (AgentServerClient + deus side channel + hello)
 // 4. Starts a turn with the backend's REAL run-config assembly
-// 5. Feeds every envelope through `services/agent/persistence.ts` — the SAME
-//    functions the event handler calls, not a copy of their SQL. A harness
-//    that verifies a re-implementation verifies nothing: the clone drifted
-//    (it carried the INSERT OR REPLACE that cascade-deleted parts on replay
-//    long after persistence.ts was fixed).
+// 5. Feeds every envelope through `services/agent/persistence.ts` and
+//    `services/agent/event-facts.ts` — the SAME functions the event handler
+//    calls, not a copy of their SQL and not a copy of the dispatch around it.
+//    A harness that verifies a re-implementation verifies nothing: both clones
+//    drifted (the SQL one carried an INSERT OR REPLACE that cascade-deleted
+//    parts on replay long after persistence.ts was fixed; the dispatch one
+//    never reset the per-turn error dedupe at turn.started, so it could not
+//    exercise the multi-turn path at all and would report PASS regardless).
 // 6. Dumps the DB to verify everything stored correctly
 //
 // Runs on Bun, so the DB goes through bun:sqlite (see lib/sqlite.ts) —
@@ -37,14 +40,16 @@ import {
 import type { AgentHarness } from "@shared/enums";
 import { isUnknownEvent, type AnyLifecycleEvent } from "@shared/protocol-types";
 import { buildTurnStartParams } from "./src/services/agent/run-config";
-import { turnOutcome } from "./src/services/agent/event-handler";
+import {
+  applySessionFacts,
+  describeEvent,
+  turnOutcomeFor,
+  type SessionFacts,
+} from "./src/services/agent/event-facts";
 import { uuidv7 } from "@shared/lib/uuid";
 import { DB_PATH, closeDatabase, getDatabase, initDatabase } from "./src/lib/database";
-import {
-  persistAgentSessionId,
-  persistChanges,
-  persistSessionError,
-} from "./src/services/agent/persistence";
+import { persistChanges } from "./src/services/agent/persistence";
+import type { ConversationChange } from "@zvada/agent-server/protocol";
 import { emptyConversation, reduceConversationWithChanges } from "@zvada/agent-server/protocol";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -311,15 +316,24 @@ async function main() {
     `  ${c.green}Handshake:${c.reset} v${init.protocolVersion} harnesses=[${Object.keys(init.harnesses).join(", ")}]`
   );
 
-  // 5. The canonical stream, through the backend's REAL fold and persistence.
-  // Not a copy of their SQL, and no longer a second dispatch either: the same
-  // `reduceConversationWithChanges` → `persistChanges` path the event handler
-  // runs, so this harness cannot pass while the shipped writes are broken.
+  // 5. The canonical stream, through the backend's REAL fold, persistence and
+  // dispatch. Not a copy of their SQL and not a second switch either: the same
+  // `reduceConversationWithChanges` → `persistChanges` → `applySessionFacts`
+  // path the event handler runs, described by the same `describeEvent`. What
+  // is left below is colouring and the harness's own "am I done yet".
   let turnDone = false;
-  let errorReported = false;
+  const facts: SessionFacts = { errorReported: false };
   let conversation = emptyConversation();
 
   banner("Events");
+
+  /** The label for one row write — from the typed change, not a preformatted
+   *  string the persistence layer builds on every production write. */
+  const describeChange = (change: ConversationChange): string =>
+    Object.entries(change)
+      .filter(([key]) => key !== "kind")
+      .map(([key, value]) => `${key}=${String(value)}`)
+      .join(" ");
 
   const handleEvent = (event: AnyLifecycleEvent): void => {
     let color = c.cyan;
@@ -334,51 +348,33 @@ async function main() {
     const folded = reduceConversationWithChanges(conversation, event);
     conversation = folded.state;
 
-    let detail = "";
-    if (isUnknownEvent(event)) {
-      // Law 6: preserved, never dropped — the backend forwards it too.
-      detail = `${c.yellow}unknown type${c.reset} ${JSON.stringify(event.raw).slice(0, 50)}`;
-    } else {
-      switch (event.type) {
-        case "session.created":
-          detail =
-            `native=${event.nativeSessionId}${event.resumed === false ? " resumed=false" : ""}` +
-            wrote(persistAgentSessionId(sessionId, event.nativeSessionId));
-          break;
-        case "message.part.delta":
-          detail = `${event.delta.type} partId=${event.partId}`;
-          break;
-        case "message.ended":
-          detail = `messageId=${event.messageId}`;
-          break;
-        case "turn.ended":
-          detail = `stopReason=${event.stopReason}${event.cost !== undefined ? ` cost=${event.cost}` : ""}`;
-          turnDone = true;
-          break;
-        case "error":
-          detail = `${event.category}${event.recoverable ? " (recoverable)" : ""}: ${event.message}`;
-          if (!event.recoverable) {
-            // Same swallow the event handler applies: a recoverable error means
-            // the turn CONTINUES, and promoting it would suppress the real one.
-            errorReported = true;
-            detail += wrote(persistSessionError(sessionId, event.message, event.category));
-            turnDone = true;
-          }
-          break;
-        default:
-          break;
-      }
+    // Deltas fold but never persist (spec 04 §C2) — the same skip the event
+    // handler applies; without it this harness would verify a write path the
+    // server does not run.
+    const isDelta = !isUnknownEvent(event) && event.type === "message.part.delta";
+    const writes = isDelta
+      ? []
+      : persistChanges(sessionId, folded.state, folded.changes, (turn) =>
+          turnOutcomeFor(facts, turn)
+        );
+    const factWrites = applySessionFacts(facts, sessionId, event);
+
+    // The harness stops when the turn is over, or when an error ended it.
+    // `isUnknownEvent` first: `UnknownEvent.type` is an open string, so
+    // matching on `type` alone would not narrow `recoverable` into existence.
+    if (
+      !isUnknownEvent(event) &&
+      (event.type === "turn.ended" || (event.type === "error" && !event.recoverable))
+    ) {
+      turnDone = true;
     }
 
+    const detail = describeEvent(event) + factWrites.map((w) => wrote(w.result)).join("");
     console.log(`${ts()} ${c.green}◂${c.reset} ${color}${c.bold}${event.type}${c.reset} ${detail}`);
 
-    for (const write of persistChanges(sessionId, folded.state, folded.changes, (turn) => {
-      const outcome = turnOutcome(turn, errorReported);
-      if (outcome.status === "error") errorReported = true;
-      return outcome;
-    })) {
+    for (const write of writes) {
       console.log(
-        `${ts()}   ${c.dim}${write.kind}${c.reset} ${write.detail}${wrote(write.result)}`
+        `${ts()}   ${c.dim}${write.change.kind}${c.reset} ${describeChange(write.change)}${wrote(write.result)}`
       );
     }
   };

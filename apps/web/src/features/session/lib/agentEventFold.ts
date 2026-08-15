@@ -36,21 +36,26 @@
  */
 
 import type { QueryClient } from "@tanstack/react-query";
-import {
-  createSeqCursor,
-  emptyConversation,
-  reduceConversationWithChanges,
-  type SeqCursor,
-} from "@zvada/agent-server/protocol";
+// The reducer is the one value the renderer takes from the protocol BARREL,
+// because `reduce.ts` imports zod and the package ships no zod-free subpath
+// for it. Everything else here comes from a narrow subpath. See the note in
+// shared/protocol-types.ts.
+// eslint-disable-next-line no-restricted-imports -- reduce has no zod-free subpath
+import { emptyConversation, reduceConversationWithChanges } from "@zvada/agent-server/protocol";
+import { createSeqCursor, type SeqCursor } from "@zvada/agent-server/protocol/seq-cursor";
 import { queryKeys } from "@/shared/api/queryKeys";
-import { cancelledTurnMessageId, type Message } from "@shared/types/session";
+import type { Message } from "@shared/types/session";
+import {
+  cancelledTurnRow,
+  findConversationMessage,
+  turnAccountingRow,
+} from "@shared/conversation-rows";
 import {
   isUnknownEvent,
   type AnyLifecycleEvent,
   type ConversationChange,
   type ConversationMessage,
   type ConversationState,
-  type ConversationTurn,
   type DecodedWireEventEnvelope,
 } from "@shared/protocol-types";
 import type { PaginatedMessages } from "../api/session.service";
@@ -302,15 +307,6 @@ function toMessageRow(sessionId: string, message: ConversationMessage): Message 
   };
 }
 
-function findMessage(state: ConversationState, messageId: string): ConversationMessage | undefined {
-  // From the end: the message being written is almost always the recent one.
-  for (let i = state.timeline.length - 1; i >= 0; i--) {
-    const entry = state.timeline[i];
-    if (entry.kind === "message" && entry.messageId === messageId) return entry;
-  }
-  return undefined;
-}
-
 /**
  * Write one folded message into the cached page, upserting BY ID.
  *
@@ -330,7 +326,7 @@ function writeMessage(
   messageId: string,
   opts: { seed: boolean }
 ): void {
-  const message = findMessage(state, messageId);
+  const message = findConversationMessage(state, messageId);
   if (!message) return;
   const row = toMessageRow(sessionId, message);
 
@@ -370,11 +366,18 @@ function writeMessage(
 /**
  * Turn accounting, mirrored into the cache so the footer updates without
  * waiting for a refetch. It lands on the turn's last top-level assistant
- * message — the same row the backend writes.
+ * message — the same row the backend writes, from the same `turnAccountingRow`
+ * in `shared/conversation-rows.ts`. A turn cancelled before the model said
+ * anything has no such row, so this mints the SAME marker the backend does,
+ * under the same derived id, and the "Response stopped" divider appears live.
  *
- * A turn cancelled before the model said anything has no such row; the backend
- * mints a marker row for it, and this mirrors that row under the same
- * deterministic id so the "Response stopped" divider appears live too.
+ * The four fields are applied the way the backend's SQL applies them, which is
+ * a deliberate ALIGNMENT rather than the cache's previous behaviour: null
+ * tokens/cost/cancelled_at leave the cached value alone (the SQL's
+ * `COALESCE(?, col)`) and `turn_stop_reason` is written whatever it is (the
+ * SQL's plain `= ?`). The cache used to skip tokens/cost on a minted marker
+ * and substitute "cancelled" for a missing stop reason; SQLite is the durable
+ * truth these rows deduplicate against, so the cache converges to it.
  */
 function writeTurnAccounting(
   qc: QueryClient,
@@ -386,8 +389,7 @@ function writeTurnAccounting(
   // `turn-updated` also reports a turn OPENING, and a non-terminal error
   // attributed to a turn — neither has accounting to mirror yet.
   if (!turn || turn.status !== "ended") return;
-  const cancelled = turn.stopReason === "cancelled";
-  const endedAt = new Date(turn.endedAt ?? Date.now()).toISOString();
+  const accounting = turnAccountingRow(turn);
 
   qc.setQueryData<PaginatedMessages>(messagesKey(sessionId), (old) => {
     if (!old) return old;
@@ -395,40 +397,19 @@ function writeTurnAccounting(
       (m) => m.turn_id === turnId && m.role === "assistant" && !m.parent_tool_call_id
     );
     if (index === -1) {
-      return cancelled
-        ? { ...old, messages: [...old.messages, cancelledMarker(sessionId, turnId, endedAt, turn)] }
+      return turn.stopReason === "cancelled"
+        ? { ...old, messages: [...old.messages, cancelledTurnRow(sessionId, turn)] }
         : old;
     }
 
     const messages = [...old.messages];
     messages[index] = {
       ...messages[index],
-      turn_stop_reason: turn.stopReason,
-      ...(turn.tokens ? { tokens: JSON.stringify(turn.tokens) } : {}),
-      ...(turn.cost !== undefined ? { cost: turn.cost } : {}),
-      ...(cancelled ? { cancelled_at: endedAt } : {}),
+      turn_stop_reason: accounting.turn_stop_reason,
+      ...(accounting.tokens !== null && { tokens: accounting.tokens }),
+      ...(accounting.cost !== null && { cost: accounting.cost }),
+      ...(accounting.cancelled_at !== null && { cancelled_at: accounting.cancelled_at }),
     };
     return { ...old, messages };
   });
-}
-
-/** The zero-part assistant row that says "this turn was interrupted". */
-function cancelledMarker(
-  sessionId: string,
-  turnId: string,
-  at: string,
-  turn: ConversationTurn
-): Message {
-  return {
-    id: cancelledTurnMessageId(turnId),
-    session_id: sessionId,
-    seq: 0,
-    role: "assistant",
-    turn_id: turnId,
-    model: null,
-    sent_at: at,
-    cancelled_at: at,
-    turn_stop_reason: turn.stopReason ?? "cancelled",
-    parts: [],
-  };
 }

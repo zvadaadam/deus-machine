@@ -7,7 +7,7 @@ import {
   forwardRef,
   useImperativeHandle,
 } from "react";
-import { subagentGroups } from "@zvada/agent-server/protocol";
+import { subagentGroups } from "@zvada/agent-server/protocol/selectors";
 import { Chat } from "./Chat";
 import { conversationView } from "../lib/conversationView";
 import type { Message } from "../types";

@@ -15,86 +15,7 @@ import { useVirtualizer } from "@tanstack/react-virtual";
 import { useCallback, useMemo, useRef, useEffect } from "react";
 import { AnimatePresence, m } from "framer-motion";
 import { CircularPixelGrid, type CircularPixelGridVariant } from "./CircularPixelGrid";
-import { agentActivity, groupIntoTurns } from "@zvada/agent-server/protocol";
-import { conversationView } from "../lib/conversationView";
-import { insertCompactions, type ChatTimelineItem, type Turn } from "../lib/chatTimeline";
-
-const USER_PADDING_CLASS = "pb-8";
-const TIGHT_PADDING_CLASS = "pb-1";
-
-/**
- * Turn Types (defined in ../lib/chatTimeline so the compaction placement is
- * testable outside React).
- *
- * A turn = consecutive messages with the same role (user or assistant)
- * - UserTurn: Single user message
- * - AssistantTurn: One or more consecutive assistant messages
- * - CompactionMarker: a positional divider spliced between turns
- */
-
-/**
- * Calculate spacing classes for turns using PADDING (not margin).
- *
- * Padding is used instead of margin because virtual items are absolutely
- * positioned — margins don't affect layout. Padding is included in
- * getBoundingClientRect().height, so the virtualizer's measureElement
- * captures spacing correctly.
- *
- * Spacing logic:
- * - First turn: Top padding (pt-8 for user, pt-1 for assistant)
- * - User turn after assistant: Generous top padding (pt-8)
- * - User turn after user: No extra padding
- * - Assistant turn: No top padding
- * - Bottom padding: User turns add pb-8, assistant turns add minimal padding
- */
-function getTurnSpacingClasses(
-  turn: ChatTimelineItem,
-  prevTurn: ChatTimelineItem | null,
-  nextTurn: ChatTimelineItem | null,
-  isFirst: boolean
-): string {
-  const isUser = turn.type === "user";
-
-  const topClass = (() => {
-    // Compaction divider: breathing room on both sides, it IS the seam.
-    if (turn.type === "compaction") return isFirst ? "pt-6" : "pt-4";
-
-    if (isUser) {
-      if (isFirst) return "pt-8";
-      if (prevTurn?.type === "user") return "pt-0";
-      if (prevTurn?.type === "compaction") return "pt-4";
-      return "pt-8";
-    }
-
-    // Assistant turn
-    if (isFirst) return "pt-1";
-    if (prevTurn?.type === "compaction") return "pt-2";
-    return "pt-0";
-  })();
-
-  const bottomClass = (() => {
-    if (turn.type === "compaction") {
-      return "pb-0";
-    }
-
-    if (isUser) {
-      return USER_PADDING_CLASS;
-    }
-
-    // Assistant turn
-    if (nextTurn?.type === "user") {
-      return "pb-0";
-    }
-
-    if (nextTurn) {
-      return TIGHT_PADDING_CLASS;
-    }
-
-    return "pb-0";
-  })();
-
-  return cn(topClass, bottomClass);
-}
+import { buildChatTimeline } from "../lib/chatTimeline";
 
 interface ChatProps {
   messages: Message[];
@@ -183,30 +104,17 @@ export function Chat({
     latestMessageSentAt,
   });
 
-  // Memoize message filtering to avoid re-parsing JSON on every render
-  // Filter messages: skip subagent children (they render nested under Task tool blocks)
-  const renderableMessages = useMemo(() => {
-    return messages.filter((message) => {
-      // Skip subagent messages
-      if (message.parent_tool_call_id) return false;
-      // User messages always render
-      if (message.role === "user") return true;
-      // Assistant messages with parts render
-      if (message.parts && message.parts.length > 0) return true;
-      // Keep cancelled messages for "Response stopped" badge
-      if (message.cancelled_at) return true;
-      // Skip empty messages (message.created arrived but no parts yet — will appear once parts come)
-      return false;
-    });
-  }, [messages]);
-
-  /**
-   * The rows the engine's read-only projections are asked about. One adapter,
-   * three selectors — see `lib/conversationView`.
-   */
-  const conversation = useMemo(
-    () => conversationView(renderableMessages, sessionStatus === "working"),
-    [renderableMessages, sessionStatus]
+  // Everything derived from the rows: which ones render, the turns they group
+  // into, the compaction markers between them, each slot's padding, and what
+  // the agent is doing. All pure — see `lib/chatTimeline`.
+  const {
+    items: timeline,
+    spacings: turnSpacings,
+    activity,
+    lastRole,
+  } = useMemo(
+    () => buildChatTimeline(messages, compactions, sessionStatus === "working"),
+    [messages, compactions, sessionStatus]
   );
 
   /**
@@ -219,61 +127,12 @@ export function Chat({
    */
   const agentSubState = useMemo((): CircularPixelGridVariant => {
     if (sessionStatus !== "working") return "generating";
-    return match(agentActivity(conversation))
+    return match(activity)
       .with("thinking", () => "thinking" as const)
       .with("tool_running", () => "toolExecuting" as const)
       .with("tool_failed", () => "error" as const)
       .otherwise(() => "generating" as const);
-  }, [sessionStatus, conversation]);
-
-  /**
-   * Group consecutive messages into turns.
-   *
-   * The boundaries are the engine's: a run breaks when the speaker or the turn
-   * changes, and `isLatest` is set on the FINAL group only — the guard that
-   * keeps a finished turn out of streaming mode in the gap between "user sends"
-   * and "first assistant part arrives" (without it, the completed answer above
-   * visibly reverts to "working").
-   *
-   * The groups come back in order, so each is a contiguous slice of
-   * `renderableMessages` and the rows themselves never round-trip.
-   */
-  const turns = useMemo(() => {
-    const turnList: Turn[] = [];
-    let index = 0;
-    let latestUserSentAt: string | null = null;
-
-    for (const group of groupIntoTurns(conversation)) {
-      const start = index;
-      index += group.entries.length;
-      const slice = renderableMessages.slice(start, index);
-
-      if (group.role === "user") {
-        // One row per user turn: the engine emits exactly one echo per turn, so
-        // a run of user entries can only be one message.
-        slice.forEach((message, offset) => {
-          latestUserSentAt = message.sent_at ?? null;
-          turnList.push({ type: "user", message, messageIndex: start + offset });
-        });
-        continue;
-      }
-
-      turnList.push({
-        type: "assistant",
-        messages: slice,
-        firstMessageIndex: start,
-        isLatest: group.isLatest,
-        // The clock starts when the user asked, which is the turn before this.
-        startedAt: latestUserSentAt,
-      });
-    }
-
-    return turnList;
-  }, [conversation, renderableMessages]);
-
-  // Compaction markers are positional siblings of turns, not messages — they
-  // splice in AFTER grouping so a divider never lands inside a turn.
-  const timeline = useMemo(() => insertCompactions(turns, compactions), [turns, compactions]);
+  }, [sessionStatus, activity]);
 
   // Advance maxAnimatedTurnIndex after commit (useEffect runs once per commit,
   // not twice in StrictMode). During render, shouldAnimate reads the ref purely.
@@ -301,19 +160,6 @@ export function Chat({
       setTimeout(() => animatedTurnsRef.current.delete(newMax), 500);
     }
   }, [timeline.length]);
-
-  // Pre-compute spacing for each turn (needed because virtualizer skips
-  // off-screen items — can't compute spacing from DOM neighbors).
-  const turnSpacings = useMemo(() => {
-    return timeline.map((item, i) =>
-      getTurnSpacingClasses(
-        item,
-        i > 0 ? timeline[i - 1] : null,
-        i < timeline.length - 1 ? timeline[i + 1] : null,
-        i === 0
-      )
-    );
-  }, [timeline]);
 
   // ── Virtualizer ──────────────────────────────────────────────────────────
   // Only renders visible turns + overscan buffer. TanStack Virtual v3 uses
@@ -354,13 +200,9 @@ export function Chat({
     getItemKey,
   });
 
-  // Calculate indicator margin based on last message role
-  const indicatorMarginClass = useMemo(() => {
-    const lastRenderableRole = renderableMessages.length
-      ? renderableMessages[renderableMessages.length - 1].role
-      : null;
-    return lastRenderableRole === "user" ? "mt-0" : "mt-1";
-  }, [renderableMessages]);
+  // The working indicator sits tighter under a user message than under a
+  // finished assistant turn.
+  const indicatorMarginClass = lastRole === "user" ? "mt-0" : "mt-1";
 
   return (
     <div className={cn("relative min-h-0 flex-1", className)}>

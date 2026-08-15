@@ -5,14 +5,32 @@
 // in SQLite (`parts.data` is the engine `Part` verbatim) and render in the UI.
 //
 // This file exists for exactly one consumer: the RENDERER. The package ships
-// readable TypeScript source, so importing the protocol BARREL for a value
-// pulls zod (and the whole part/event union) into the browser bundle. Type
-// imports are erased and cost nothing; the two runtime guards come from
-// `@zvada/agent-server/protocol/guards`, the subpath the package keeps
-// zod-free for exactly this reason. The backend and the agent-server have no
-// such constraint and import "@zvada/agent-server/protocol" directly —
-// including for runtime behaviour (`classifyError`, `parseAgentInput`, the
-// zod schemas).
+// readable TypeScript source, so a VALUE imported from the protocol BARREL
+// drags whatever that module graph pulls — zod included — into the browser
+// bundle. Type imports are erased and cost nothing, which is why everything
+// below is `export type`.
+//
+// The rule for the renderer, then, is: a value comes from the NARROWEST
+// subpath that exports it. `@zvada/agent-server/protocol/guards` (the two
+// runtime guards re-exported at the bottom of this file),
+// `.../protocol/selectors` (groupIntoTurns, subagentGroups, agentActivity),
+// `.../protocol/seq-cursor` (createSeqCursor), `.../protocol/factories`
+// (echoMessageId, createUserEchoParts) — all four are zod-free at runtime and
+// enforced by `no-restricted-imports` on apps/web in eslint.config.mjs.
+//
+// One deliberate exception, annotated at its import: the FOLD.
+// `reduceConversationWithChanges` and `emptyConversation` live in
+// `protocol/reduce.ts`, which imports zod for the schemas beside them and has
+// no subpath of its own — so `features/session/lib/agentEventFold.ts` carries
+// zod into the renderer bundle no matter how it is spelled. That is a known,
+// accepted cost of folding with the engine's reducer instead of a hand-written
+// one, tracked for a future engine split (a zod-free `protocol/reduce`
+// subpath, or schemas moved out of it). Do not "fix" it by re-exporting the
+// reducer from here — that hides the cost without removing it.
+//
+// The backend and the agent-server have no such constraint and import
+// "@zvada/agent-server/protocol" directly, including for runtime behaviour
+// (`classifyError`, `parseAgentInput`, the zod schemas).
 //
 // So the list below is not "the vocabulary": it is the subset the frontend
 // actually imports, plus the Law-6 decoded shapes both sides need. Law 7 —

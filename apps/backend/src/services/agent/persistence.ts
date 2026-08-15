@@ -31,7 +31,11 @@ import type {
 import { isUnknownPart } from "@shared/protocol-types";
 import { getDatabase } from "../../lib/database";
 import { getErrorMessage } from "@shared/lib/errors";
-import { cancelledTurnMessageId } from "@shared/types/session";
+import {
+  cancelledTurnRow,
+  findConversationMessage,
+  turnAccountingRow,
+} from "@shared/conversation-rows";
 
 // ============================================================================
 // WriteResult
@@ -194,12 +198,10 @@ export interface TurnOutcomeWrite {
  * finally survive a reload.
  *
  * A turn cancelled before the model answered has no message to mark, so this
- * mints one: a zero-part assistant row carrying only `cancelled_at` and the
- * stop reason. Session status alone cannot say it — `idle` after an interrupt
- * is indistinguishable from `idle` after nothing happened, and the transcript
- * would be silent about a turn the user explicitly stopped. The id is derived
- * from the turn id (`cancelledTurnMessageId`), so a replayed `turn.ended`
- * upserts the same divider instead of stacking new ones.
+ * mints one — the marker `shared/conversation-rows.ts` defines, which is the
+ * same row the frontend mirrors into its cache under the same derived id. The
+ * accounting bindings come from there too: this file owns the SQL (which
+ * columns COALESCE, which are overwritten), not what the values are.
  */
 export function persistTurnEnded(
   sessionId: string,
@@ -207,7 +209,6 @@ export function persistTurnEnded(
   outcome: TurnOutcomeWrite
 ): WriteResult<void> {
   const db = getDatabase();
-  const endedAt = iso(turn.endedAt ?? Date.now());
   try {
     db.transaction(() => {
       const target = db
@@ -219,6 +220,7 @@ export function persistTurnEnded(
         .get(sessionId, turn.turnId) as { id: string } | undefined;
 
       if (target) {
+        const accounting = turnAccountingRow(turn);
         db.prepare(
           `UPDATE messages
              SET tokens = COALESCE(?, tokens),
@@ -227,30 +229,32 @@ export function persistTurnEnded(
                  cancelled_at = COALESCE(?, cancelled_at)
            WHERE id = ?`
         ).run(
-          turn.tokens ? JSON.stringify(turn.tokens) : null,
-          turn.cost ?? null,
-          turn.stopReason ?? null,
-          outcome.cancelled ? endedAt : null,
+          accounting.tokens,
+          accounting.cost,
+          accounting.turn_stop_reason,
+          accounting.cancelled_at,
           target.id
         );
       } else if (outcome.cancelled) {
+        const marker = cancelledTurnRow(sessionId, turn);
         db.prepare(
           `INSERT INTO messages (id, session_id, role, turn_id, sent_at, cancelled_at, turn_stop_reason, tokens, cost)
-           VALUES (?, ?, 'assistant', ?, ?, ?, ?, ?, ?)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
            ON CONFLICT(id) DO UPDATE SET
              cancelled_at = excluded.cancelled_at,
              turn_stop_reason = excluded.turn_stop_reason,
              tokens = COALESCE(excluded.tokens, messages.tokens),
              cost = COALESCE(excluded.cost, messages.cost)`
         ).run(
-          cancelledTurnMessageId(turn.turnId),
-          sessionId,
-          turn.turnId,
-          endedAt,
-          endedAt,
-          turn.stopReason ?? null,
-          turn.tokens ? JSON.stringify(turn.tokens) : null,
-          turn.cost ?? null
+          marker.id,
+          marker.session_id,
+          marker.role,
+          marker.turn_id,
+          marker.sent_at,
+          marker.cancelled_at,
+          marker.turn_stop_reason,
+          marker.tokens,
+          marker.cost
         );
       }
 
@@ -472,11 +476,17 @@ export function persistCompaction(
 // The change loop
 // ============================================================================
 
-/** One row write the fold's changes implied, for a caller that logs or counts. */
+/**
+ * One row write the fold's changes implied, for a caller that logs or counts.
+ *
+ * The change is handed back whole rather than pre-formatted: the shipped
+ * handler keys off `change.kind`, and the verification CLI writes its own log
+ * label from the typed change. A pre-rendered `detail` string used to be built
+ * on every production write — per part, on the WS hot path — for that one CLI
+ * line.
+ */
 export interface ChangeWrite {
-  kind: ConversationChange["kind"];
-  /** Human-readable subject, for the verification CLI's log line. */
-  detail: string;
+  change: ConversationChange;
   result: WriteResult<unknown>;
 }
 
@@ -505,22 +515,17 @@ export function persistChanges(
   for (const change of changes) {
     switch (change.kind) {
       case "message-upserted": {
-        const message = findMessage(state, change.messageId);
+        const message = findConversationMessage(state, change.messageId);
         if (!message) break;
-        writes.push({
-          kind: change.kind,
-          detail: `${message.role} messageId=${message.messageId}`,
-          result: persistMessage(sessionId, message),
-        });
+        writes.push({ change, result: persistMessage(sessionId, message) });
         break;
       }
       case "part-upserted": {
-        const message = findMessage(state, change.messageId);
+        const message = findConversationMessage(state, change.messageId);
         const part = message?.parts.find((p) => p.id === change.partId);
         if (!part) break;
         writes.push({
-          kind: change.kind,
-          detail: `${part.type} partId=${part.id}`,
+          change,
           result: persistPart(sessionId, change.messageId, part, change.partIndex),
         });
         break;
@@ -530,22 +535,14 @@ export function persistChanges(
         // `turn-updated` also reports a turn OPENING and a non-terminal error
         // attributed to one — neither leaves accounting behind.
         if (!turn || turn.status !== "ended") break;
-        writes.push({
-          kind: change.kind,
-          detail: `turn=${turn.turnId} stopReason=${turn.stopReason ?? "?"}`,
-          result: persistTurnEnded(sessionId, turn, outcomeFor(turn)),
-        });
+        writes.push({ change, result: persistTurnEnded(sessionId, turn, outcomeFor(turn)) });
         break;
       }
       case "usage-updated": {
         // Also emitted when an ended turn's billing rolls into the totals,
         // which moves no session column.
         if (!state.usage) break;
-        writes.push({
-          kind: change.kind,
-          detail: `used=${state.usage.used}${state.usage.size ? `/${state.usage.size}` : ""}`,
-          result: persistSessionUsage(sessionId, state.usage),
-        });
+        writes.push({ change, result: persistSessionUsage(sessionId, state.usage) });
         break;
       }
       case "compaction-upserted": {
@@ -554,11 +551,7 @@ export function persistChanges(
             e.kind === "compaction" && e.compactionId === change.compactionId
         );
         if (!entry) break;
-        writes.push({
-          kind: change.kind,
-          detail: `compactionId=${entry.compactionId} status=${entry.status}`,
-          result: persistCompaction(sessionId, entry),
-        });
+        writes.push({ change, result: persistCompaction(sessionId, entry) });
         break;
       }
       default:
@@ -566,12 +559,4 @@ export function persistChanges(
     }
   }
   return writes;
-}
-
-function findMessage(state: ConversationState, messageId: string): ConversationMessage | undefined {
-  for (let i = state.timeline.length - 1; i >= 0; i--) {
-    const entry = state.timeline[i];
-    if (entry.kind === "message" && entry.messageId === messageId) return entry;
-  }
-  return undefined;
 }

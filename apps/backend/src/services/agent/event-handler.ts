@@ -10,30 +10,22 @@
 // What is NOT change-driven is the small set of facts that are deus's rather
 // than the conversation's: which turn is admitted, whether an error was already
 // reported for it, and the session STATUS that results. The fold has no opinion
-// about any of those, so they stay an explicit switch.
+// about any of those, so they live in `event-facts.ts` — with the log line —
+// where `apps/backend/cli.ts` drives the same dispatch instead of a copy of it.
+// What is left here is the plumbing only the server has: invalidation, the WS
+// push, the PR snapshot and the session map.
 //
 // Ordering matters: persist first, then invalidate, then push.
 
 import { match } from "ts-pattern";
-import {
-  classifyError,
-  emptyConversation,
-  reduceConversationWithChanges,
-} from "@zvada/agent-server/protocol";
-import type { ConversationState, ConversationTurn, ErrorEvent } from "@zvada/agent-server/protocol";
+import { emptyConversation, reduceConversationWithChanges } from "@zvada/agent-server/protocol";
+import type { ConversationChange, ConversationState } from "@zvada/agent-server/protocol";
 import { isUnknownEvent, type DecodedWireEventEnvelope } from "@shared/protocol-types";
 import type { QueryResource, QServerFrame } from "@shared/types/query-protocol";
 import { invalidate } from "../query-engine";
 import { broadcast } from "../ws.service";
-import {
-  persistAgentSessionId,
-  persistChanges,
-  persistSessionError,
-  persistSessionTitle,
-  type ChangeWrite,
-  type TurnOutcomeWrite,
-  type WriteResult,
-} from "./persistence";
+import { persistChanges, persistSessionTitle, type WriteResult } from "./persistence";
+import { applySessionFacts, describeEvent, turnOutcomeFor, type SessionFacts } from "./event-facts";
 import { refreshPrSnapshotForSession } from "../pr-snapshot.service";
 
 // ---- Types ----
@@ -57,11 +49,7 @@ export interface AgentEventHandler {
   handleTitle(sessionId: string, title: string): void;
 }
 
-interface SessionState {
-  /** The live turn — cleared at its turn.ended. */
-  turnId?: string;
-  /** One terminal error per turn: turn.ended(error) must not double-report. */
-  errorReported: boolean;
+interface SessionState extends SessionFacts {
   /** The folded conversation — the source of every row this session writes. */
   conversation: ConversationState;
 }
@@ -105,8 +93,21 @@ const NOT_PUSHED = new Set([
  *
  * `part-upserted` is deliberately absent: the frontend already has the part
  * from the pushed envelope, so a q:delta would only run a wasted query.
+ *
+ * `message-upserted` KEEPS `messages` even though the same argument nearly
+ * applies (the fold projects `message.started` from the pushed envelope for
+ * the live session and for every background one with a cached page). Reviewed
+ * and left in place deliberately: the two paths have not been shown equivalent
+ * at runtime for a client that reconnects mid-turn or subscribes before its
+ * page resolves, and `mergeMessageDelta` dedupes by id, so the redundant case
+ * costs a query and a frame while the missing case would cost a lost row.
+ * Whoever exercises those two paths can drop `"messages"` here and make the
+ * fold the single writer of message rows — note that `invalidate` fans a
+ * `messages` push out to EVERY subscribed session, not just the changed one
+ * (query-engine.ts: the `ctx.sessionIds` filter covers `session`/`workspaces`,
+ * not `messages`), so the saving is per subscription, not per client.
  */
-const INVALIDATED_BY: Partial<Record<ChangeWrite["kind"], QueryResource[]>> = {
+const INVALIDATED_BY: Partial<Record<ConversationChange["kind"], QueryResource[]>> = {
   "message-upserted": MESSAGE_RESOURCES,
   "turn-updated": TURN_END_RESOURCES,
   "usage-updated": SESSION_RESOURCES,
@@ -134,29 +135,6 @@ function persistAndInvalidate(
 function pushEnvelope(envelope: DecodedWireEventEnvelope): void {
   const frame: QServerFrame = { type: "q:event", event: "agent:event", data: envelope };
   broadcast(JSON.stringify(frame));
-}
-
-/** The terminal state an ended turn leaves the session in. Exported so the
- *  verification CLI decides it the same way instead of re-deriving it. */
-export function turnOutcome(turn: ConversationTurn, alreadyReported: boolean): TurnOutcomeWrite {
-  if (turn.stopReason === "cancelled") {
-    return { status: "idle", cancelled: true };
-  }
-  if (turn.stopReason === "error") {
-    // A standalone `error` event already wrote the status + message; the
-    // terminal event must not overwrite it with a vaguer one.
-    if (alreadyReported) return { status: "error", cancelled: false };
-    const message = turn.error?.message ?? "Agent turn failed";
-    return {
-      status: "error",
-      cancelled: false,
-      error: { message, category: turn.error?.category ?? classifyError(new Error(message)) },
-    };
-  }
-  // end_turn, max_tokens, refusal, max_turn_requests and any adapter
-  // extension: the turn is over and the session is idle. The outcome itself
-  // survives in messages.turn_stop_reason for the UI to explain.
-  return { status: "idle", cancelled: false };
 }
 
 // ---- Factory ----
@@ -223,6 +201,16 @@ export function createAgentEventHandler(): AgentEventHandler {
         return;
       }
 
+      // One line per envelope, from the same describer the verification CLI
+      // prints. Parts are the exception: `message.part` is already accounted
+      // for by the change log below, and `message.part.delta` arrives per
+      // TOKEN — describing either would drown the log it belongs to.
+      if (envelope.event.type !== "message.part" && envelope.event.type !== "message.part.delta") {
+        console.log(
+          `[AgentEvent] ${envelope.event.type}: session=${sessionId} ${describeEvent(envelope.event)}`
+        );
+      }
+
       // ── The rows the conversation moved ─────────────────────────────────
       // Deltas are forward-only (§04-C2): the fold keeps them current in
       // `state`, the frontend batches them per animation frame, and the DB
@@ -234,132 +222,52 @@ export function createAgentEventHandler(): AgentEventHandler {
       const isDelta = envelope.event.type === "message.part.delta";
       const writes = isDelta
         ? []
-        : persistChanges(sessionId, conversation, changes, (turn) => {
-            // Deciding (and recording) the outcome here keeps the dedupe flag in
-            // step with the write it guards, whichever event ended the turn.
-            const outcome = turnOutcome(turn, state.errorReported);
-            if (state.turnId === turn.turnId) state.turnId = undefined;
-            if (outcome.status === "error") state.errorReported = true;
-            return outcome;
-          });
+        : persistChanges(sessionId, conversation, changes, (turn) => turnOutcomeFor(state, turn));
 
       const stale = new Set<QueryResource>();
       for (const write of writes) {
         if (!write.result.ok) {
-          console.warn(`[AgentEvent] Persistence failed (${write.kind}):`, write.result.error);
+          console.warn(
+            `[AgentEvent] Persistence failed (${write.change.kind}):`,
+            write.result.error
+          );
           continue;
         }
-        for (const resource of INVALIDATED_BY[write.kind] ?? []) stale.add(resource);
+        for (const resource of INVALIDATED_BY[write.change.kind] ?? []) stale.add(resource);
       }
       if (stale.size > 0) invalidate([...stale], { sessionIds: [sessionId] });
 
       // ── The facts that are deus's, not the conversation's ───────────────
+      // The session columns and the per-turn flags are `applySessionFacts`'s,
+      // shared verbatim with the verification CLI. What is left below is the
+      // product plumbing only this process has.
+      for (const write of applySessionFacts(state, sessionId, envelope.event)) {
+        persistAndInvalidate(write.result, SESSION_RESOURCES, sessionId);
+      }
+
       match(envelope.event)
-        .with({ type: "session.created" }, (e) => {
-          console.log(
-            `[AgentEvent] session.created: session=${sessionId} native=${e.nativeSessionId} harness=${e.harness}${
-              e.resumed === false ? " resumed=false" : ""
-            }`
-          );
-          if (e.resumed === false) {
-            // The harness was asked to continue a conversation and started a
-            // fresh one instead: the context is gone. Silently swallowing this
-            // is how "the agent forgot everything" becomes invisible — the
-            // envelope carries the flag to the UI, which surfaces the warning.
-            console.warn(
-              `[AgentEvent] session ${sessionId} did NOT resume — the harness started a fresh session (context lost)`
-            );
-          }
-          persistAndInvalidate(
-            persistAgentSessionId(sessionId, e.nativeSessionId),
-            SESSION_RESOURCES,
-            sessionId
-          );
-        })
-        .with({ type: "session.ended" }, (e) => {
-          console.log(`[AgentEvent] session.ended: session=${sessionId} reason=${e.reason}`);
+        .with({ type: "session.ended" }, () => {
           // The session is over — drop its state, folded transcript included.
           // This is the event that exists for exactly that; without it the map
           // only grows, and now each entry costs a conversation.
           sessions.delete(sessionId);
         })
-        .with({ type: "turn.started" }, (e) => {
-          console.log(`[AgentEvent] turn.started: session=${sessionId} turn=${e.turnId}`);
-          // Nothing to persist: status='working' was written optimistically by
-          // the send command. Keep the admission mirror truthful on the replay
-          // path too (state rebuilt after a backend restart has no turnId).
-          state.turnId = e.turnId;
-          // A turn deus did NOT admit via beginTurn (replay, engine-initiated)
-          // would otherwise inherit the previous turn's dedupe flag, and its
-          // terminal error message would be dropped as "already reported".
-          state.errorReported = false;
-        })
-        .with({ type: "turn.ended" }, (e) => {
-          console.log(
-            `[AgentEvent] turn.ended: session=${sessionId} turn=${e.turnId} stopReason=${e.stopReason} cost=${e.cost ?? 0}`
-          );
+        .with({ type: "turn.ended" }, () => {
           // The agent may have created, updated or pushed a PR during the turn.
           refreshPrSnapshotForSession(sessionId);
         })
-        .with({ type: "message.started" }, (e) => {
-          console.log(
-            `[AgentEvent] message.started: session=${sessionId} message=${e.messageId} role=${e.role} turn=${e.turnId}`
-          );
-        })
-        .with({ type: "message.ended" }, (e) => {
-          console.log(`[AgentEvent] message.ended: session=${sessionId} message=${e.messageId}`);
-        })
-        .with({ type: "session.compaction" }, (e) => {
-          console.log(
-            `[AgentEvent] session.compaction: session=${sessionId} id=${e.compactionId} status=${e.status}`
-          );
-        })
         .with({ type: "error" }, (e) => {
-          handleErrorEvent(sessionId, state, e);
+          // A recoverable error means the turn is still running (and
+          // `applySessionFacts` swallowed it) — there is nothing new to look at
+          // yet. A terminal one may have followed a PR push.
+          if (!e.recoverable) refreshPrSnapshotForSession(sessionId);
         })
-        .with(
-          { type: "message.part" },
-          { type: "message.part.delta" },
-          { type: "session.usage" },
-          { type: "permission.requested" },
-          { type: "permission.resolved" },
-          { type: "raw" },
-          () => {
-            // Fully described by the changes above, or — for permission.* and
-            // raw — nothing deus surfaces: the ClaudeToolPolicy answers every
-            // tool-use question in-process (see NOT_PUSHED), and deus never
-            // sets RunConfig.includeRaw.
-          }
-        )
-        .exhaustive();
+        // Everything else is fully described by the changes above. No
+        // `.exhaustive()`: the tripwire for a new event member is
+        // `describeEvent`, which must name every one of them.
+        .otherwise(() => {});
 
       if (!NOT_PUSHED.has(envelope.event.type)) pushEnvelope(envelope);
     },
   };
-}
-
-/**
- * A standalone `error` event. Recoverable errors mean the turn CONTINUES
- * (retry/backoff in flight) — promoting one would flip the UI to an error
- * state while the agent is still working AND suppress the real terminal error
- * through the dedupe flag. This swallow is load-bearing.
- */
-function handleErrorEvent(sessionId: string, state: SessionState, event: ErrorEvent): void {
-  if (event.recoverable) {
-    console.warn(
-      `[AgentEvent] recoverable error (turn continues): session=${sessionId} category=${event.category} ${event.message}`
-    );
-    return;
-  }
-  console.log(
-    `[AgentEvent] error: session=${sessionId} category=${event.category} ${event.message}`
-  );
-  state.errorReported = true;
-  persistAndInvalidate(
-    persistSessionError(sessionId, event.message, event.category),
-    SESSION_RESOURCES,
-    sessionId
-  );
-  // The agent may have pushed a PR before the turn failed.
-  refreshPrSnapshotForSession(sessionId);
 }

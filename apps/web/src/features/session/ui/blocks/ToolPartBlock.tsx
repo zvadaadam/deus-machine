@@ -1,7 +1,7 @@
 import { createElement, memo, useMemo } from "react";
 import { match, P } from "ts-pattern";
 import type { ToolPart, ToolResultContent, ToolStateCompleted } from "@shared/protocol-types";
-import type { ToolUseBlock, ToolResultBlock } from "@/shared/types";
+import type { ToolUseBlock, ToolResultBlock } from "../tools/types";
 import { toolRegistry } from "../tools/ToolRegistry";
 import { SubagentGroupBlock } from "./SubagentGroupBlock";
 import { useSession } from "../../context";

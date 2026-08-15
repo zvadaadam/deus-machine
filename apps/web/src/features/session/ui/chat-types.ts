@@ -4,7 +4,7 @@
  * Type definitions for chat components and tool renderers
  */
 
-import type { ToolUseBlock, ToolResultBlock } from "@/shared/types";
+import type { ToolUseBlock, ToolResultBlock } from "./tools/types";
 
 /**
  * Props for tool renderer components

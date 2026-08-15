@@ -12,7 +12,8 @@ import { ChevronRight, Cpu, Loader2 } from "lucide-react";
 import NumberFlow from "@number-flow/react";
 import { AnimatePresence, motion } from "framer-motion";
 import { cn } from "@/shared/lib/utils";
-import type { Message, ToolUseBlock, ToolResultBlock } from "../../types";
+import type { Message } from "../../types";
+import type { ToolUseBlock, ToolResultBlock } from "../tools/types";
 import type { SubagentMetadata } from "@shared/protocol-types";
 
 import { SubagentMessageList } from "./SubagentMessageList";
