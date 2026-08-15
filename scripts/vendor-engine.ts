@@ -48,7 +48,11 @@ if (previous === sha512) {
 // -- 2. purge every place bun may have kept the OLD extraction ---------------
 const cache = join(homedir(), ".bun", "install", "cache");
 rmSync(join(cache, "@zvada"), { recursive: true, force: true });
-for (const dir of readdirSync(cache).filter((name) => name.startsWith("@T@"))) {
+// A machine that has never run `bun install` has no cache dir at all, and
+// readdirSync would ENOENT the script dead before it ever reinstalls. Same
+// guard the .bun store scan below already carries.
+const cacheEntries = existsSync(cache) ? readdirSync(cache) : [];
+for (const dir of cacheEntries.filter((name) => name.startsWith("@T@"))) {
   try {
     const pkg = JSON.parse(readFileSync(join(cache, dir, "package.json"), "utf8")) as {
       name?: string;

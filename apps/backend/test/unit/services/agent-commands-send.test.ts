@@ -1,0 +1,146 @@
+/**
+ * sendMessage and the "no turn was admitted" paths.
+ *
+ * The user's prompt is NOT written by this command. The engine echoes it back
+ * as message.started{role:"user"} and that echo is the single persistence path
+ * for the row — so between the send and the echo, the prompt exists in exactly
+ * one place: the frontend's optimistic bubble, keyed by the send's turn id.
+ *
+ * That makes the command's RESULT load-bearing. `handleCommand` (query-engine)
+ * answers `accepted: true` when this function returns and `accepted: false`
+ * when it throws, and only the false answer runs the composer's rollback. A
+ * path that flips the session to "error" but still returns normally leaves the
+ * bubble on screen for a turn that never ran and is durable nowhere — which is
+ * why the two no-turn guards below must reject, not return.
+ *
+ * Runs against a real in-memory SQLite, like the stopSession suite.
+ */
+
+import Database from "better-sqlite3";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+
+let canUseDatabase = true;
+try {
+  new Database(":memory:").close();
+} catch {
+  canUseDatabase = false;
+}
+const describeWithDb = canUseDatabase ? describe : describe.skip;
+
+import { SCHEMA_SQL } from "@shared/schema";
+
+const { mockGetDatabase, mockInvalidate } = vi.hoisted(() => ({
+  mockGetDatabase: vi.fn(),
+  mockInvalidate: vi.fn(),
+}));
+
+vi.mock("../../../src/lib/database", () => ({ getDatabase: mockGetDatabase }));
+vi.mock("../../../src/services/query-engine", () => ({ invalidate: mockInvalidate }));
+
+import { runCommand } from "../../../src/services/agent/commands";
+import * as agentService from "../../../src/services/agent/service";
+
+const SESSION = "sess-send";
+/** A session whose workspace row is gone — the worktree-deleted case. */
+const ORPHAN = "sess-orphan";
+
+function createTestDb(): Database.Database {
+  const db = new Database(":memory:");
+  db.exec(SCHEMA_SQL);
+  db.prepare(
+    `INSERT INTO repositories (id, name, root_path) VALUES ('r1', 'repo', '/tmp/repo')`
+  ).run();
+  db.prepare(`INSERT INTO workspaces (id, repository_id, slug) VALUES ('w1', 'r1', 'ws')`).run();
+  db.prepare(
+    `INSERT INTO sessions (id, workspace_id, agent_harness, status) VALUES (?, 'w1', 'claude-code', 'idle')`
+  ).run(SESSION);
+  // Seeded with foreign keys OFF on purpose: the scenario IS a dangling
+  // workspace_id (the row deleted out from under a live session, or a
+  // half-torn-down worktree), which a database with FKs enforced cannot be
+  // asked to represent. Enforcement goes straight back on.
+  db.pragma("foreign_keys = OFF");
+  db.prepare(
+    `INSERT INTO sessions (id, workspace_id, agent_harness, status) VALUES (?, 'gone', 'claude-code', 'idle')`
+  ).run(ORPHAN);
+  db.pragma("foreign_keys = ON");
+  return db;
+}
+
+const send = (sessionId: string, turnId = "turn-1") =>
+  runCommand("sendMessage", {
+    sessionId,
+    content: "hello",
+    model: "claude-opus-4-6",
+    agentHarness: "claude-code",
+    turnId,
+  });
+
+describeWithDb("sendMessage", () => {
+  let db: Database.Database;
+
+  const row = (id: string): { status: string; error_message: string | null } =>
+    db.prepare(`SELECT status, error_message FROM sessions WHERE id = ?`).get(id) as {
+      status: string;
+      error_message: string | null;
+    };
+
+  beforeEach(() => {
+    db = createTestDb();
+    mockGetDatabase.mockReturnValue(db);
+    vi.spyOn(console, "warn").mockImplementation(() => {});
+    vi.spyOn(console, "error").mockImplementation(() => {});
+  });
+
+  afterEach(() => {
+    db.close();
+    vi.restoreAllMocks();
+    vi.clearAllMocks();
+  });
+
+  it("admits the turn and answers with the caller's turn id", async () => {
+    vi.spyOn(agentService, "isConnected").mockReturnValue(true);
+    const startTurn = vi.spyOn(agentService, "startTurn").mockResolvedValue(undefined as never);
+
+    await expect(send(SESSION)).resolves.toEqual({ commandId: "turn-1" });
+
+    expect(startTurn).toHaveBeenCalledOnce();
+    // The turn id the caller minted, not a fresh one — it is the key the
+    // engine's user echo will come back under.
+    expect(startTurn.mock.calls[0][1]).toBe("turn-1");
+    expect(row(SESSION).status).toBe("working");
+  });
+
+  it("REJECTS the send when the agent server is disconnected", async () => {
+    vi.spyOn(agentService, "isConnected").mockReturnValue(false);
+    const startTurn = vi.spyOn(agentService, "startTurn");
+
+    // Rejecting is what makes the ack `accepted: false`; returning normally
+    // here is the bug — an accepted send for a turn nothing will ever run.
+    await expect(send(SESSION)).rejects.toThrow(/disconnected/i);
+
+    expect(startTurn).not.toHaveBeenCalled();
+    expect(row(SESSION)).toMatchObject({ status: "error" });
+  });
+
+  it("REJECTS the send when the workspace path cannot be resolved", async () => {
+    vi.spyOn(agentService, "isConnected").mockReturnValue(true);
+    const startTurn = vi.spyOn(agentService, "startTurn");
+
+    await expect(send(ORPHAN)).rejects.toThrow(/workspace/i);
+
+    expect(startTurn).not.toHaveBeenCalled();
+    expect(row(ORPHAN)).toMatchObject({ status: "error" });
+  });
+
+  it("still refuses a send while a turn is running, from every active status", async () => {
+    vi.spyOn(agentService, "isConnected").mockReturnValue(true);
+    vi.spyOn(agentService, "startTurn").mockResolvedValue(undefined as never);
+
+    for (const status of ["working", "needs_plan_response", "needs_response"]) {
+      db.prepare(`UPDATE sessions SET status = ? WHERE id = ?`).run(status, SESSION);
+      await expect(send(SESSION)).rejects.toThrow();
+      // Refused, not errored — the running turn is untouched.
+      expect(row(SESSION).status).toBe(status);
+    }
+  });
+});

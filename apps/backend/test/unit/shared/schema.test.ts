@@ -39,7 +39,14 @@ describe("shared/schema pre-launch policy", () => {
   it("tracks retired columns the current schema must no longer carry", () => {
     // Messages render from `parts`; `content` was the pre-parts read path.
     expect(PRELAUNCH_RETIRED_COLUMNS.messages).toContain("content");
-    expect(SCHEMA_SQL).not.toMatch(/^\s*content TEXT,?\s*$/m);
+    // Any DECLARATION of the column, not one exact spelling. The old pattern
+    // demanded the literal "content TEXT" alone on its line, so re-adding the
+    // column as `content TEXT NOT NULL` or `content  TEXT DEFAULT ''` sailed
+    // past the guard — a retired column back in the schema with a green test.
+    // Anchored to line start so the word inside SCHEMA_SQL's own comments
+    // ("individual content units") is not a hit, and `\bcontent\b` so a real
+    // column like `content_hash` is not one either.
+    expect(SCHEMA_SQL).not.toMatch(/^\s*\bcontent\b\s+TEXT\b/im);
   });
 
   it("keeps the required and retired column sets disjoint", () => {

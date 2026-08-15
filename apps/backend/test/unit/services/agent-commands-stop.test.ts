@@ -117,6 +117,28 @@ describeWithDb("stopSession", () => {
     ).toMatchObject({ error_message: expect.stringContaining("never confirmed") });
   });
 
+  it.each(["needs_plan_response", "needs_response"])(
+    "the watchdog also settles an unconfirmed cancel issued from %s",
+    async (startingStatus) => {
+      // A stop is legal from every status that means "a turn is running", and
+      // the overlay statuses are where users hit it most — cancelling a plan
+      // approval or a question. Matching only 'working' left those sessions
+      // parked forever behind an overlay with no agent to answer it.
+      db.prepare(`UPDATE sessions SET status = ? WHERE id = ?`).run(startingStatus, SESSION);
+      vi.spyOn(agentService, "stopSession").mockResolvedValue({
+        outcome: "unconfirmed",
+        turnId: "turn-1",
+      });
+
+      await runCommand("stopSession", { sessionId: SESSION });
+      expect(status()).toBe(startingStatus);
+
+      await vi.advanceTimersByTimeAsync(20_000);
+
+      expect(status()).toBe("error");
+    }
+  );
+
   it("the watchdog never stomps on a status turn.ended already settled", async () => {
     vi.spyOn(agentService, "stopSession").mockResolvedValue({
       outcome: "unconfirmed",

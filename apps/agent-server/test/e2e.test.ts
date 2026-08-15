@@ -231,7 +231,15 @@ describe.skipIf(!bundleExists)("E2E: Agent Server Process", () => {
   it("handshakes on the standard wire (current protocol version, three harnesses)", async () => {
     const conn = await connectBackendStyle(srv.wsUrl);
     const init = await conn.client.initialize();
-    expect(init.protocolVersion).toBe(WIRE_PROTOCOL_VERSION);
+    // The LITERAL deus targets, not the package constant. Comparing the
+    // constant to itself passed no matter what the server answered — and, more
+    // to the point, it would keep passing through an engine bump that moved
+    // the wire version out from under the backend client. A deliberate bump is
+    // a one-line edit here plus a look at what changed; a silent one is what
+    // this pins against.
+    expect(init.protocolVersion).toBe(2);
+    // Sanity: the installed package agrees with what deus targets.
+    expect(WIRE_PROTOCOL_VERSION).toBe(2);
     expect(init.server.name).toBe("deus-agent-server");
     expect(Object.keys(init.harnesses).sort()).toEqual([
       "claude-code",
@@ -310,7 +318,7 @@ describe.skipIf(!bundleExists || !claudeCliAvailable)("E2E: Real Claude Integrat
     const result = await conn.sideChannel.request<{
       accountInfo?: unknown;
       error?: string;
-    }>(SIDE_CHANNEL.providerAuth, { agentHarness: "claude", cwd: WORKSPACE_ROOT }, 30_000);
+    }>(SIDE_CHANNEL.providerAuth, { agentHarness: "claude-code", cwd: WORKSPACE_ROOT }, 30_000);
     expect(result).toHaveProperty("accountInfo");
     expect((result as { error?: string }).error).toBeUndefined();
   }, 30_000);

@@ -52,23 +52,26 @@ export const SessionService = {
   /**
    * Send a message to a session.
    *
-   * `turnId` is not optional in practice: it is the key the engine's user echo
-   * comes back with, and the composer already stamped it on the optimistic
-   * bubble. Dropping it here would leave that bubble beside its own echo.
+   * `turnId` is REQUIRED, and the type now says so. It is the key the engine's
+   * user echo comes back with, and the composer already stamped it on the
+   * optimistic bubble; omitting it makes the backend mint a different one, so
+   * the echo lands under an id nothing is holding and the bubble sits beside
+   * its own echo. The old optional signature documented the requirement in
+   * prose while letting the compiler wave through the one call that breaks it.
    */
   sendMessage: async (
     id: string,
     content: string,
     model: string,
     agentHarness: AgentHarness,
-    turnId?: string
+    turnId: string
   ): Promise<Message> => {
     const result = await sendCommand("sendMessage", {
       sessionId: id,
       content,
       model,
       agentHarness,
-      ...(turnId ? { turnId } : {}),
+      turnId,
     });
     if (!result.accepted) throw new Error(result.error || "Failed to send message");
     return result as unknown as Message;

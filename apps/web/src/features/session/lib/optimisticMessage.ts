@@ -22,11 +22,19 @@
  */
 
 import type { QueryClient } from "@tanstack/react-query";
+// The engine's own input decoder, taken from the protocol BARREL: `parseAgentInput`
+// lives in `protocol/part-input.ts`, which the package exposes no subpath for,
+// and which imports zod for the schemas it validates against. That cost is
+// already paid in this bundle by the fold (see shared/protocol-types.ts) —
+// and the alternative, a second hand-written predicate, is the very bug this
+// import fixes. Same rule as agentEventFold.ts.
+// eslint-disable-next-line no-restricted-imports -- part-input has no zod-free subpath
+import { parseAgentInput } from "@zvada/agent-server/protocol";
 import { createUserEchoParts, echoMessageId } from "@zvada/agent-server/protocol/factories";
 import { queryKeys } from "@/shared/api/queryKeys";
 import type { PaginatedMessages } from "../api/session.service";
 import type { Message } from "../types";
-import type { AgentInput, PartInput } from "@shared/protocol-types";
+import type { AgentInput } from "@shared/protocol-types";
 
 /**
  * The bubble the composer shows while the send is in flight: the engine's own
@@ -86,6 +94,16 @@ export function dropOptimisticMessage(
  * carries the prompt as one string, so an attachment-bearing send is a
  * JSON-encoded `PartInput[]` and a text-only send is the text. Anything that
  * does not decode as parts is what the user typed.
+ *
+ * The accept/reject decision is DELEGATED to `parseAgentInput` — the same
+ * function the backend hands the decoded value to — because a bubble that
+ * disagrees with the backend about structured-vs-text is not the echo, and the
+ * whole design rests on it being the echo byte for byte. A hand-rolled "every
+ * entry is an object with a string `type`" predicate is looser than the zod
+ * schema: it accepted `[{"type":"text"}]` (no `text` field) and
+ * `[{"type":"nope"}]`, which the backend rejects and sends as TEXT. Result was
+ * a bubble rendering one empty part, an echo carrying the user's literal JSON,
+ * and no id collision to reconcile them — two rows for one prompt.
  */
 function readAgentInput(content: string): AgentInput {
   if (!content.startsWith("[")) return content;
@@ -95,10 +113,15 @@ function readAgentInput(content: string): AgentInput {
   } catch {
     return content;
   }
+  // An empty array carries nothing; the literal "[]" is what the user typed.
   if (!Array.isArray(parsed) || parsed.length === 0) return content;
-  const parts = parsed.filter(
-    (entry): entry is PartInput =>
-      !!entry && typeof entry === "object" && typeof (entry as PartInput).type === "string"
-  );
-  return parts.length === parsed.length ? parts : content;
+  try {
+    return parseAgentInput(parsed);
+  } catch {
+    // Not canonical parts — so it is prose that happens to start with "[".
+    // Unlike the backend twin this stays silent: the backend's warn is there
+    // because IT is the last stop before the model sees the string, whereas a
+    // mispredicted bubble is corrected by the echo's upsert.
+    return content;
+  }
 }

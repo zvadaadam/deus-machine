@@ -158,7 +158,13 @@ export function getThinkingLevelsForModel(
 
 /**
  * Computes the next thinking level on click. Walks the model's thinkingLevels
- * array, wrapping at the end. "off" is normalized to the first entry.
+ * array, wrapping at the end.
+ *
+ * "off" enters the ladder AT the first entry rather than one past it: turning
+ * thinking on is a click that should land on the lowest level, and skipping
+ * "low" left no way to reach it from off without wrapping the whole ladder.
+ * (The old code normalized "off" to `thinkingLevels[0]` and then advanced,
+ * yielding the SECOND entry — the doc above it always claimed otherwise.)
  *
  * Opus 4.7: ["low", "medium", "high", "xhigh"] — full ladder incl. xhigh
  * Claude (default): ["low", "medium", "high"] — shared by Opus 4.6 / Sonnet 4.6
@@ -172,10 +178,12 @@ export function cycleThinkingLevel(
 ): ThinkingLevel {
   const thinkingLevels = getThinkingLevelsForModel(agentHarness, model);
   if (thinkingLevels.length === 0) return "off";
-  const normalized = current === "off" ? thinkingLevels[0] : current;
-  const idx = thinkingLevels.indexOf(normalized);
-  const safeIdx = idx === -1 ? 0 : idx;
-  return thinkingLevels[(safeIdx + 1) % thinkingLevels.length];
+  if (current === "off") return thinkingLevels[0];
+  const idx = thinkingLevels.indexOf(current);
+  // A level the model does not expose (a stale pick carried across a model
+  // switch) is treated as off — enter at the first entry.
+  if (idx === -1) return thinkingLevels[0];
+  return thinkingLevels[(idx + 1) % thinkingLevels.length];
 }
 
 /**

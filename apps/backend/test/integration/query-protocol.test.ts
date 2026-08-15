@@ -770,11 +770,14 @@ describe("q:command → q:command_ack", () => {
       );
 
       expect(res.id).toBe("cmd-1");
-      expect(res.accepted).toBe(true);
-      // The ack carries the TURN id: the user's message row is minted by the
-      // engine's echo (message.started{role:"user"}), not by this command, so
-      // there is no message id to hand back at ack time.
-      expect(res.commandId).toBe("turn-cmd-1");
+      // There is no agent server behind this test, so NO turn was admitted and
+      // the ack must say so. `accepted: true` here used to be the assertion —
+      // it is the exact bug: the frontend's optimistic bubble is the only copy
+      // of the user's prompt until the engine echoes it (this command writes
+      // no message row, see the count below), and only a rejected ack runs the
+      // rollback. An accepted one strands the bubble for a turn that never ran.
+      expect(res.accepted).toBe(false);
+      expect(res.error).toMatch(/disconnected/i);
 
       // No user message row is written here — the send only flips the session
       // (the 3 seeded messages are all that remain).
@@ -783,9 +786,8 @@ describe("q:command → q:command_ack", () => {
         .get(SESS_ID) as { n: number };
       expect(messageCount.n).toBe(3);
 
-      // Verify session status — without a running agent server, the session
-      // transitions to "error" because handleSendMessage persists an error
-      // when the agent transport is disconnected (prevents silent stalls).
+      // The session still lands on "error": the rejected ack tells the caller,
+      // the status tells every other subscriber.
       const sessionRow = testDb
         .prepare("SELECT status FROM sessions WHERE id = ?")
         .get(SESS_ID) as { status: string };
@@ -880,7 +882,11 @@ describe("q:command → q:command_ack", () => {
       // Wait for both the command ack and the delta push
       const [ack, delta] = await Promise.all([waitForMessage(ws, "q:command_ack"), deltaPromise]);
 
-      expect(ack.accepted).toBe(true);
+      // Rejected (no agent server in this test) — but the point here is the
+      // INVALIDATION, which fires on the optimistic "working" flip before the
+      // no-turn guard is reached. Subscribers see the flip either way; the
+      // caller learns separately that its turn was refused.
+      expect(ack.accepted).toBe(false);
       expect(delta.id).toBe("sub_ws_delta");
       expect(delta.upserted).toHaveLength(1);
       expect(delta.upserted[0].id).toBe(WS_ID);

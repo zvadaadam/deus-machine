@@ -8,7 +8,12 @@ export async function providerAuth(params: unknown): Promise<unknown> {
   const { agentHarness, cwd } = (params ?? {}) as { agentHarness?: string; cwd?: string };
   if (!agentHarness || !cwd) throw new Error("provider-auth requires agentHarness and cwd");
 
-  if (agentHarness !== "claude") {
+  // "claude-code" is the harness id, the engine's and the settings route's
+  // alike — deus keeps no alias map. The legacy "claude" spelling is gone from
+  // every caller, so matching it here only made the settings screen report
+  // "unsupported" (rendered as not-connected) for the one harness that IS
+  // supported.
+  if (agentHarness !== "claude-code") {
     return { type: "claude_auth_output", agentHarness, error: "unsupported" };
   }
   try {
@@ -35,14 +40,14 @@ export async function providerAuth(params: unknown): Promise<unknown> {
           setTimeout(() => reject(new Error("auth check timed out")), 15_000)
         ),
       ]);
-      return { type: "claude_auth_output", agentHarness: "claude", accountInfo };
+      return { type: "claude_auth_output", agentHarness: "claude-code", accountInfo };
     } finally {
       void query.interrupt().catch(() => {});
     }
   } catch (error) {
     return {
       type: "claude_auth_output",
-      agentHarness: "claude",
+      agentHarness: "claude-code",
       error: error instanceof Error ? error.message : String(error),
     };
   }

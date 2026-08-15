@@ -311,6 +311,22 @@ export async function runCommand(
   );
 }
 
+/**
+ * The statuses that mean "a turn is running" — the RUNNING turn is the thing
+ * both sends and stops key off, so the two must read the same list or they
+ * disagree about whether one exists.
+ *
+ * "Needs input" belongs here: plan approval and questions park the running
+ * turn behind an overlay, they do not end it. A send is refused from these
+ * (the wire would reject it with turnActive), and a stop IS legal from them —
+ * which is why the unconfirmed-cancel watchdog matches this same set.
+ */
+const ACTIVE_TURN_STATUSES: readonly string[] = [
+  "working",
+  "needs_plan_response",
+  "needs_response",
+];
+
 // ---- sendMessage ----
 
 function handleSendMessage(params: QueryParams): CommandResult {
@@ -362,7 +378,6 @@ function handleSendMessage(params: QueryParams): CommandResult {
   // approval and questions park the RUNNING turn while the overlay waits.
   // Reject up front — the q:command error surfaces in the UI. The wire guard
   // stays as the backstop for the status race.
-  const ACTIVE_TURN_STATUSES = ["working", "needs_plan_response", "needs_response"];
   if (session && ACTIVE_TURN_STATUSES.includes(session.status)) {
     throw new Error(
       session.status === "working"
@@ -383,7 +398,10 @@ function handleSendMessage(params: QueryParams): CommandResult {
     sessionIds: [sessionId],
   });
 
-  // 2. Forward to agent-server (fire-and-forget — ACK already sent)
+  // 2. Forward to agent-server. The startTurn call itself is fire-and-forget
+  // (a turn outlives any ack), but the ACK is NOT out yet: handleCommand sends
+  // it from THIS function's outcome, which is what lets the guards below
+  // reject the send instead of half-accepting it.
   const existingAgentSessionId = session?.agent_session_id ?? null;
 
   // Resolve cwd server-side from session → workspace → repo.
@@ -400,13 +418,23 @@ function handleSendMessage(params: QueryParams): CommandResult {
   // bubble and matches the engine's user echo when it arrives.
   const turnId = readString(params, "turnId") ?? uuidv7();
 
+  // No engine turn can be admitted from here. Flipping the session to "error"
+  // is only half the job: this handler's return value IS the q:command_ack, so
+  // returning normally would answer `accepted: true` for a turn that never ran.
+  // The user's prompt exists in exactly one place at this moment — the
+  // frontend's optimistic bubble — because the backend never writes the user
+  // row (the engine's echo is the single persistence path). A false accept
+  // therefore strands that bubble on screen forever, durable nowhere. Throw so
+  // handleCommand answers `accepted: false` and the composer's rollback runs.
   if (!agentService.isConnected()) {
-    handleAgentError(sessionId, new Error("Agent server is disconnected"));
-    return { commandId: turnId };
+    const err = new Error("Agent server is disconnected");
+    handleAgentError(sessionId, err);
+    throw err;
   }
   if (!cwd) {
-    handleAgentError(sessionId, new Error("Session has no resolvable workspace"));
-    return { commandId: turnId };
+    const err = new Error("Session has no resolvable workspace");
+    handleAgentError(sessionId, err);
+    throw err;
   }
 
   agentService
@@ -509,6 +537,13 @@ function scheduleUnconfirmedCancelWatchdog(sessionId: string): void {
       const db = getDatabase();
       // Only if turn.ended never arrived: any status change means it did (or
       // the user started something else), and this must not stomp on it.
+      //
+      // Matching 'working' alone was too narrow. A stop is legal from every
+      // ACTIVE_TURN_STATUS — cancelling a plan-approval or question overlay is
+      // the common case — and an unconfirmed cancel from one of those left the
+      // session parked on needs_plan_response / needs_response with no agent
+      // behind it and no overlay the user could dismiss. Same set the send
+      // path calls active, so "there is a turn to give up on" means one thing.
       const result = db
         .prepare(
           `UPDATE sessions
@@ -516,9 +551,9 @@ function scheduleUnconfirmedCancelWatchdog(sessionId: string): void {
                  error_message = 'The agent never confirmed the stop request.',
                  error_category = 'internal',
                  updated_at = datetime('now')
-           WHERE id = ? AND status = 'working'`
+           WHERE id = ? AND status IN (${ACTIVE_TURN_STATUSES.map(() => "?").join(", ")})`
         )
-        .run(sessionId);
+        .run(sessionId, ...ACTIVE_TURN_STATUSES);
       if (result.changes > 0) {
         console.warn(`[CommandHandler] unconfirmed cancel never settled: session=${sessionId}`);
         invalidate(["workspaces", "sessions", "session", "stats"], { sessionIds: [sessionId] });
