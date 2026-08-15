@@ -35,19 +35,17 @@ import {
   wsLineTransport,
 } from "@shared/agent-side-channel";
 import type { AgentHarness } from "@shared/enums";
-import { isUnknownLifecycleEvent, type AnyLifecycleEvent } from "@shared/protocol-types";
+import { isUnknownEvent, type AnyLifecycleEvent } from "@shared/protocol-types";
 import { buildTurnStartParams } from "./src/services/agent/run-config";
 import { turnOutcome } from "./src/services/agent/event-handler";
 import { uuidv7 } from "@shared/lib/uuid";
 import { DB_PATH, closeDatabase, getDatabase, initDatabase } from "./src/lib/database";
 import {
   persistAgentSessionId,
-  persistCompaction,
-  persistMessageStarted,
-  persistPart,
+  persistChanges,
   persistSessionError,
-  persistTurnEnded,
 } from "./src/services/agent/persistence";
+import { emptyConversation, reduceConversationWithChanges } from "@zvada/agent-server/protocol";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -313,11 +311,13 @@ async function main() {
     `  ${c.green}Handshake:${c.reset} v${init.protocolVersion} harnesses=[${Object.keys(init.harnesses).join(", ")}]`
   );
 
-  // 5. The canonical stream, through the backend's REAL persistence functions.
-  // Not a copy of their SQL — the functions themselves, so this harness cannot
-  // pass while the shipped writes are broken.
+  // 5. The canonical stream, through the backend's REAL fold and persistence.
+  // Not a copy of their SQL, and no longer a second dispatch either: the same
+  // `reduceConversationWithChanges` → `persistChanges` path the event handler
+  // runs, so this harness cannot pass while the shipped writes are broken.
   let turnDone = false;
   let errorReported = false;
+  let conversation = emptyConversation();
 
   banner("Events");
 
@@ -328,11 +328,14 @@ async function main() {
     if (event.type.startsWith("message.")) color = c.blue;
     if (event.type === "error") color = c.red;
 
-    let detail = "";
     const wrote = (result: { ok: boolean; error?: string }) =>
       result.ok ? ` ${c.green}→ DB${c.reset}` : ` ${c.red}→ DB FAIL: ${result.error}${c.reset}`;
 
-    if (isUnknownLifecycleEvent(event)) {
+    const folded = reduceConversationWithChanges(conversation, event);
+    conversation = folded.state;
+
+    let detail = "";
+    if (isUnknownEvent(event)) {
       // Law 6: preserved, never dropped — the backend forwards it too.
       detail = `${c.yellow}unknown type${c.reset} ${JSON.stringify(event.raw).slice(0, 50)}`;
     } else {
@@ -342,41 +345,16 @@ async function main() {
             `native=${event.nativeSessionId}${event.resumed === false ? " resumed=false" : ""}` +
             wrote(persistAgentSessionId(sessionId, event.nativeSessionId));
           break;
-
-        case "message.started":
-          detail =
-            `${event.role} messageId=${event.messageId}` + wrote(persistMessageStarted(event));
-          break;
-
-        case "message.part":
-          detail = `${event.part.type} partId=${event.part.id}` + wrote(persistPart(event));
-          break;
-
         case "message.part.delta":
           detail = `${event.delta.type} partId=${event.partId}`;
           break;
-
         case "message.ended":
           detail = `messageId=${event.messageId}`;
           break;
-
         case "turn.ended":
-          detail =
-            `stopReason=${event.stopReason}${event.cost !== undefined ? ` cost=${event.cost}` : ""}` +
-            wrote(persistTurnEnded(event, turnOutcome(event, errorReported)));
+          detail = `stopReason=${event.stopReason}${event.cost !== undefined ? ` cost=${event.cost}` : ""}`;
           turnDone = true;
           break;
-
-        case "session.usage":
-          detail = `used=${event.used}${event.size ? `/${event.size}` : ""}`;
-          break;
-
-        case "session.compaction":
-          detail =
-            `compactionId=${event.compactionId} status=${event.status}` +
-            wrote(persistCompaction(event));
-          break;
-
         case "error":
           detail = `${event.category}${event.recoverable ? " (recoverable)" : ""}: ${event.message}`;
           if (!event.recoverable) {
@@ -387,13 +365,22 @@ async function main() {
             turnDone = true;
           }
           break;
-
         default:
-          detail = JSON.stringify(event).slice(0, 50);
+          break;
       }
     }
 
     console.log(`${ts()} ${c.green}◂${c.reset} ${color}${c.bold}${event.type}${c.reset} ${detail}`);
+
+    for (const write of persistChanges(sessionId, folded.state, folded.changes, (turn) => {
+      const outcome = turnOutcome(turn, errorReported);
+      if (outcome.status === "error") errorReported = true;
+      return outcome;
+    })) {
+      console.log(
+        `${ts()}   ${c.dim}${write.kind}${c.reset} ${write.detail}${wrote(write.result)}`
+      );
+    }
   };
 
   client.onEvent((envelope) => handleEvent(envelope.event));

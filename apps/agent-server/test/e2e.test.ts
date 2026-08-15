@@ -4,7 +4,7 @@ import * as fs from "fs";
 import * as path from "path";
 import WebSocket from "ws";
 import { AgentServerClient } from "@zvada/agent-server/client";
-import type { AnyWireEventEnvelope } from "@shared/protocol-types";
+import type { DecodedWireEventEnvelope } from "@shared/protocol-types";
 import { WIRE_PROTOCOL_VERSION } from "@zvada/agent-server/protocol";
 import {
   SIDE_CHANNEL,
@@ -178,7 +178,7 @@ function waitForMessage(
 interface BackendStyleConnection {
   client: AgentServerClient;
   sideChannel: SideChannelEndpoint;
-  envelopes: AnyWireEventEnvelope[];
+  envelopes: DecodedWireEventEnvelope[];
   close(): Promise<void>;
 }
 
@@ -199,7 +199,7 @@ async function connectBackendStyle(
   sideChannel.notify(SIDE_CHANNEL.hello, {});
 
   const client = await AgentServerClient.attach(claimSideChannel(transport, sideChannel));
-  const envelopes: AnyWireEventEnvelope[] = [];
+  const envelopes: DecodedWireEventEnvelope[] = [];
   client.onEvent((envelope) => envelopes.push(envelope));
 
   return {
@@ -442,7 +442,7 @@ describe.skipIf(!bundleExists || !codexIntegrationEnabled)("E2E: Real Codex Inte
     await conn.client.cancelTurn("e2e-codex-cancel");
     await new Promise<void>((resolve, reject) => {
       const timer = setTimeout(() => reject(new Error("no turn.ended after cancel")), 30_000);
-      const check = (envelope: AnyWireEventEnvelope) => {
+      const check = (envelope: DecodedWireEventEnvelope) => {
         if (envelope.sessionId === "e2e-codex-cancel" && envelope.event.type === "turn.ended") {
           clearTimeout(timer);
           off();

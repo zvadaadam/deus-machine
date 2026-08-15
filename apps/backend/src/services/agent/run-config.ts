@@ -4,74 +4,46 @@
 // config assembly: prompt → engine input conversion, thinking-level mapping,
 // system-prompt append, resume plumbing.
 
-import type { AgentInput, PartInput, TurnStartParams } from "@zvada/agent-server/protocol";
+import { parseAgentInput } from "@zvada/agent-server/protocol";
+import type { AgentInput, TurnStartParams } from "@zvada/agent-server/protocol";
 import type { AgentHarness } from "@shared/enums";
 import type { ThinkingLevel, PermissionMode } from "@shared/protocol";
 import { buildSystemPromptAppend } from "./system-prompt";
 
 /**
- * The composer speaks the canonical `PartInput` vocabulary: a text-only send
- * is a bare string (already an `AgentInput`), an attachment-bearing send is a
- * JSON-encoded `PartInput[]`. This is a passthrough for both — it only decodes
- * the JSON envelope and validates the parts.
+ * The composer speaks the canonical `PartInput` vocabulary: a text-only send is
+ * a bare string (already an `AgentInput`), an attachment-bearing send is a
+ * JSON-encoded `PartInput[]`. The parts themselves are the engine's own — the
+ * schema decides whether they are valid, not a decoder in front of it.
  *
- * The one translation left is TOLERANCE: rows written before the composer was
- * flipped hold Anthropic content blocks (`{type:"image",source:{…}}`). Those
- * are converted rather than rejected, so re-sent history still works. Anything
- * unrecognized stays plain text — a prompt that merely starts with "[" must
- * not be mangled.
+ * What is left here is not translation but DISAMBIGUATION, which the engine
+ * cannot do for us: deus's wire carries the prompt as one `string`, so "a JSON
+ * array of parts" and "prose that happens to start with `[`" arrive
+ * identically. A markdown link (`[see this](…)`), a typed `[1, 2, 3]`, an
+ * empty `[]` — each is text the user wants the model to read, and mangling it
+ * into structured input (or refusing the send) is worse than sending it
+ * verbatim. Only a `[`-prefixed value that parses as JSON AND validates as
+ * `AgentInput` is treated as structured; everything else is the prompt.
  */
 export function toEngineInput(prompt: string): AgentInput {
   if (!prompt.startsWith("[")) return prompt;
-  let blocks: unknown;
+  let decoded: unknown;
   try {
-    blocks = JSON.parse(prompt);
+    decoded = JSON.parse(prompt);
   } catch {
     return prompt;
   }
-  if (!Array.isArray(blocks) || blocks.length === 0) return prompt;
-  const parts: PartInput[] = [];
-  for (const block of blocks) {
-    const part = toPartInput(block);
-    // Not a parts array we understand (a JSON list of something else) — the
-    // prompt was never structured input, so keep the raw text.
-    if (part === UNRECOGNIZED) return prompt;
-    if (part) parts.push(part);
+  // An empty array carries nothing; the literal "[]" is what the user typed.
+  if (!Array.isArray(decoded) || decoded.length === 0) return prompt;
+  try {
+    return parseAgentInput(decoded);
+  } catch (error) {
+    // Logged, not swallowed: prose is the common case, but a composer bug that
+    // emits almost-canonical parts would otherwise ship JSON to the model with
+    // nothing written anywhere.
+    console.warn(`[RunConfig] '['-prefixed prompt is not AgentInput, sending as text:`, error);
+    return prompt;
   }
-  return parts.length ? parts : prompt;
-}
-
-/** Distinguishes "drop this part" (null) from "this isn't a parts array". */
-const UNRECOGNIZED = Symbol("unrecognized-block");
-
-function toPartInput(block: unknown): PartInput | null | typeof UNRECOGNIZED {
-  if (!block || typeof block !== "object" || Array.isArray(block)) return UNRECOGNIZED;
-  const record = block as Record<string, unknown>;
-
-  if (record.type === "text" && typeof record.text === "string") {
-    // A text part must be non-empty on the wire; an empty one carries nothing.
-    return record.text.length > 0 ? (record as unknown as PartInput) : null;
-  }
-
-  if (record.type === "image" || record.type === "file") {
-    // LEGACY: Anthropic's nested `source`, flattened to the canonical shape.
-    const source = record.source as
-      | { type?: string; url?: string; media_type?: string; data?: string }
-      | undefined;
-    if (source) {
-      const mimeType = source.media_type ?? "image/png";
-      if (source.url) return { type: "image", url: source.url, mimeType };
-      if (source.data) return { type: "image", data: source.data, mimeType };
-      return UNRECOGNIZED;
-    }
-    // Canonical: flat `data` | `url` + `mimeType` — forwarded verbatim.
-    const hasPayload = typeof record.data === "string" || typeof record.url === "string";
-    if (hasPayload && typeof record.mimeType === "string") {
-      return record as unknown as PartInput;
-    }
-  }
-
-  return UNRECOGNIZED;
 }
 
 /**

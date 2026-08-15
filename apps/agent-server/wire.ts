@@ -15,19 +15,13 @@
 
 import type { WebSocket } from "ws";
 import type { AgentServer } from "./upstream-server";
-import {
-  channelTransport,
-  decodeWireMessage,
-  encodeRequest,
-  WireEventEnvelopeSchema,
-} from "@zvada/agent-server/protocol";
+import { decodeWireMessage, encodeRequest } from "@zvada/agent-server/protocol";
 import {
   SIDE_CHANNEL,
   SideChannelEndpoint,
   filterClaimedLines,
   wsLineTransport,
 } from "@shared/agent-side-channel";
-import type { LineTransport } from "@shared/agent-side-channel";
 import { registerAppMcp, unregisterAppMcp } from "./app-registrar";
 import { createCheckpoint } from "./agents/core/checkpoint";
 import { currentAapServers } from "./agents/core/engine";
@@ -168,47 +162,36 @@ export function bridgeWsConnection(ws: WebSocket, agentServer: AgentServer): voi
 }
 
 /**
- * An in-memory transport attached to the server purely to observe the event
- * broadcast (transports receive every envelope via send). Feeds the session
- * tracker and the title watcher. The substring pre-filter skips the hot
- * delta stream without parsing; the parsed type check keeps correctness when
- * a delta happens to contain one of the literals.
+ * Watch the turn boundaries on the server's own broadcast. Feeds the session
+ * tracker (cwd/harness for the embed-tier seams, native session ids) and the
+ * title watcher; returns an unsubscribe.
+ *
+ * `onEvent` hands over the decoded envelope post-log-append, so there is no
+ * fake transport to attach and no NDJSON to re-parse back into the objects the
+ * server just serialized.
  */
-export function createEventObserverTransport(): LineTransport {
-  const { transport } = channelTransport({
-    send: (line) => {
-      if (
-        !line.includes('"session.created"') &&
-        !line.includes('"turn.started"') &&
-        !line.includes('"turn.ended"')
-      ) {
-        return;
-      }
-      const msg = decodeWireMessage(line);
-      if (msg.kind !== "notification" || msg.method !== "event") return;
-      const envelope = WireEventEnvelopeSchema.safeParse(msg.params);
-      if (!envelope.success) return;
-      const event = envelope.data.event;
-      if (
-        event.type !== "session.created" &&
-        event.type !== "turn.started" &&
-        event.type !== "turn.ended"
-      ) {
-        return;
-      }
-      observeLifecycleEvent({
-        type: event.type,
-        sessionId: event.sessionId,
-        turnId: "turnId" in event ? event.turnId : undefined,
-        nativeSessionId: "nativeSessionId" in event ? event.nativeSessionId : undefined,
-      });
-      if (event.type === "turn.ended") {
-        // Successful turns kick the title fetch; errors/cancels don't.
-        if (event.stopReason !== "error" && event.stopReason !== "cancelled") {
-          maybeFetchTitle(event.sessionId);
-        }
-      }
-    },
+export function observeEvents(agentServer: AgentServer): () => void {
+  return agentServer.onEvent(({ event }) => {
+    if (
+      event.type !== "session.created" &&
+      event.type !== "turn.started" &&
+      event.type !== "turn.ended"
+    ) {
+      return;
+    }
+    observeLifecycleEvent({
+      type: event.type,
+      sessionId: event.sessionId,
+      turnId: "turnId" in event ? event.turnId : undefined,
+      nativeSessionId: "nativeSessionId" in event ? event.nativeSessionId : undefined,
+    });
+    // Successful turns kick the title fetch; errors/cancels don't.
+    if (
+      event.type === "turn.ended" &&
+      event.stopReason !== "error" &&
+      event.stopReason !== "cancelled"
+    ) {
+      maybeFetchTitle(event.sessionId);
+    }
   });
-  return transport as LineTransport;
 }

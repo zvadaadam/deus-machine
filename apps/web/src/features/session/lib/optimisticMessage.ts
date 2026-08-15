@@ -1,51 +1,36 @@
 /**
- * The composer's optimistic user bubble.
+ * The composer's optimistic user bubble — PREDICTED, not reconciled.
  *
  * A send mints its own `turnId` (see `useSendMessage`) and hands the SAME id to
- * the backend command and to this row. That id is the correlation key the
- * engine's user echo arrives with (`message.started{role:"user", turnId}`), so
- * the echo replaces this row in place instead of appending a second bubble.
+ * the backend command and to this row. The engine derives the ids of the user
+ * echo it will emit for that turn from the turn id, so a caller that minted the
+ * turn id can build the echo before the engine sends it:
  *
- * The row carries engine `Part`s: the bubble renders through exactly the same
- * path as the echo it is standing in for (`readUserMessageContent` → parts).
+ *   echoMessageId(turnId)          → the row id  (`echo-${turnId}`)
+ *   createUserEchoParts(in, turn)  → the parts   (`echo-${turnId}-${i}`)
  *
- * Everything local is id-prefixed. The prefix is a marker, never a licence to
- * bulk-delete: a local row is dropped when ITS echo arrives (matched by
- * `turn_id`) and at no other time, so a rejected send leaves the typed message
- * on screen instead of silently evaporating on the next unrelated delta.
+ * The bubble IS the echo, byte for byte. When the real one arrives the fold
+ * upserts it onto the same row by id — nothing to find by turn id, nothing to
+ * swap, no frame where the prompt renders twice, and multimodal parts survive
+ * (the swap-a-look-alike approach is where image and file parts got dropped,
+ * because the look-alike had to be built a second time by hand).
+ *
+ * Consequently there is no "local" id space any more. A bubble is retired
+ * exactly once — by `dropOptimisticMessage` when the send is REJECTED — so a
+ * failed send leaves the typed message on screen instead of evaporating on the
+ * next unrelated delta.
  */
 
 import type { QueryClient } from "@tanstack/react-query";
+import { createUserEchoParts, echoMessageId } from "@zvada/agent-server/protocol/factories";
 import { queryKeys } from "@/shared/api/queryKeys";
 import type { PaginatedMessages } from "../api/session.service";
 import type { Message } from "../types";
-import type { Part, PartInput, UnknownPart } from "@shared/protocol-types";
-
-const LOCAL_PREFIX = "optimistic-";
-
-/** True for the composer's own rows/parts — never for anything the engine sent. */
-export function isLocalId(id: string): boolean {
-  return id.startsWith(LOCAL_PREFIX);
-}
-
-export function isLocalMessage(message: { id: string }): boolean {
-  return isLocalId(message.id);
-}
-
-export function isLocalPart(part: Part | UnknownPart): boolean {
-  return isLocalId(part.id);
-}
-
-/** The local row id for a send — derived from its turn id, so it is findable. */
-export function optimisticMessageId(turnId: string): string {
-  return `${LOCAL_PREFIX}${turnId}`;
-}
+import type { AgentInput, PartInput } from "@shared/protocol-types";
 
 /**
- * The bubble the composer shows while the send is in flight.
- *
- * `seq` is MAX_SAFE_INTEGER so nothing mistakes it for a real cursor position;
- * the chat renders in array order and the row is appended last.
+ * The bubble the composer shows while the send is in flight: the engine's own
+ * echo, built early.
  */
 export function createOptimisticUserMessage(args: {
   sessionId: string;
@@ -54,59 +39,19 @@ export function createOptimisticUserMessage(args: {
   content: string;
   model?: string | null;
 }): Message {
-  const messageId = optimisticMessageId(args.turnId);
+  const input = readAgentInput(args.content);
   return {
-    id: messageId,
+    id: echoMessageId(args.turnId),
     session_id: args.sessionId,
-    seq: Number.MAX_SAFE_INTEGER,
+    seq: 0,
     role: "user",
     turn_id: args.turnId,
     sent_at: new Date().toISOString(),
     model: args.model ?? null,
-    parts: buildOptimisticParts({
-      sessionId: args.sessionId,
-      messageId,
-      content: args.content,
-    }),
+    // The engine stamps sessionId/messageId at emit time; the renderer reads
+    // neither off a part, and the echo's upsert restates them regardless.
+    parts: createUserEchoParts(input, args.turnId),
   };
-}
-
-/**
- * The composer's `content` → engine `Part`s.
- *
- * `AgentInput` is `string | PartInput[]`, so the composer sends either a bare
- * string or JSON-encoded `PartInput[]` (`buildMessageContent`). Both shapes
- * become the parts the echo will restate.
- */
-export function buildOptimisticParts(args: {
-  sessionId: string;
-  messageId: string;
-  content: string;
-}): Part[] {
-  const inputs = readPartInputs(args.content);
-  const parts: Part[] = [];
-  inputs.forEach((input, index) => {
-    const base = {
-      id: `${LOCAL_PREFIX}${args.messageId}-${index}`,
-      sessionId: args.sessionId,
-      messageId: args.messageId,
-    };
-    if (input.type === "text") {
-      parts.push({ ...base, type: "text", text: input.text, state: "done" });
-      return;
-    }
-    if (input.type === "image") {
-      parts.push({
-        ...base,
-        type: "image",
-        mimeType: input.mimeType,
-        ...(input.data ? { data: input.data } : {}),
-        ...(input.url ? { url: input.url } : {}),
-      });
-    }
-    // `file` inputs have no bubble representation yet — the echo will bring one.
-  });
-  return parts;
 }
 
 /**
@@ -123,7 +68,7 @@ export function dropOptimisticMessage(
   sessionId: string,
   turnId: string
 ): void {
-  const id = optimisticMessageId(turnId);
+  const id = echoMessageId(turnId);
   queryClient.setQueryData<PaginatedMessages>(
     queryKeys.sessions.messages(sessionId),
     (old): PaginatedMessages | undefined => {
@@ -134,16 +79,26 @@ export function dropOptimisticMessage(
   );
 }
 
-function readPartInputs(content: string): PartInput[] {
+/**
+ * The composer's `content` → the `AgentInput` the backend will forward.
+ *
+ * Mirrors `toEngineInput` on the backend, and for the same reason: deus's send
+ * carries the prompt as one string, so an attachment-bearing send is a
+ * JSON-encoded `PartInput[]` and a text-only send is the text. Anything that
+ * does not decode as parts is what the user typed.
+ */
+function readAgentInput(content: string): AgentInput {
+  if (!content.startsWith("[")) return content;
   let parsed: unknown;
   try {
     parsed = JSON.parse(content);
   } catch {
-    return [{ type: "text", text: content }];
+    return content;
   }
-  if (!Array.isArray(parsed)) return [{ type: "text", text: content }];
-  return parsed.filter(
+  if (!Array.isArray(parsed) || parsed.length === 0) return content;
+  const parts = parsed.filter(
     (entry): entry is PartInput =>
       !!entry && typeof entry === "object" && typeof (entry as PartInput).type === "string"
   );
+  return parts.length === parsed.length ? parts : content;
 }

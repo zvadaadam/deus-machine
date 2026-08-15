@@ -4,13 +4,21 @@
  * only pin the strings, not the behaviour (COALESCE merges, ON CONFLICT
  * upserts, FK guards, triggers).
  *
- * Every function here takes an engine event verbatim: there is no deus dialect
- * between the wire and the row.
+ * Every writer takes a value the ENGINE's fold produced, so the fixtures below
+ * are engine events run through the real reducer rather than hand-built rows:
+ * a test that invented its own `ConversationMessage` would pass while the fold
+ * produced something else. There is still no deus dialect anywhere in between.
  */
 
 import Database from "better-sqlite3";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { emptyConversation, reduceConversationWithChanges } from "@zvada/agent-server/protocol";
 import type {
+  ConversationCompaction,
+  ConversationMessage,
+  ConversationState,
+  ConversationTurn,
+  LifecycleEvent,
   MessagePartEvent,
   MessageStartedEvent,
   SessionCompactionEvent,
@@ -34,14 +42,16 @@ vi.mock("../../../src/lib/database", () => ({ getDatabase: mockGetDatabase }));
 
 import {
   persistAgentSessionId,
+  persistChanges,
   persistCompaction,
-  persistMessageStarted,
+  persistMessage,
   persistPart,
   persistSessionError,
   persistSessionTitle,
   persistSessionUsage,
   persistSessionWorking,
   persistTurnEnded,
+  type TurnOutcomeWrite,
 } from "../../../src/services/agent/persistence";
 
 // ============================================================================
@@ -111,6 +121,28 @@ function ended(over: Partial<TurnEndedEvent> = {}): TurnEndedEvent {
   };
 }
 
+/** One event through the real reducer — the values the writers below consume. */
+function fold(...events: LifecycleEvent[]): ConversationState {
+  let state = emptyConversation();
+  for (const event of events) state = reduceConversationWithChanges(state, event).state;
+  return state;
+}
+
+const IDLE: TurnOutcomeWrite = { status: "idle", cancelled: false };
+
+// The writers take folded values; these adapters keep the fixtures event-shaped
+// (which is what the wire actually delivers) without re-deriving the fold.
+const writeMessage = (e: MessageStartedEvent) =>
+  persistMessage(e.sessionId, fold(e).timeline[0] as ConversationMessage);
+const writePart = (e: MessagePartEvent) =>
+  persistPart(e.sessionId, e.messageId, e.part, e.partIndex);
+const writeTurnEnded = (e: TurnEndedEvent, outcome: TurnOutcomeWrite) =>
+  persistTurnEnded(e.sessionId, fold(e).turns[0] as ConversationTurn, outcome);
+const writeUsage = (e: SessionUsageEvent) =>
+  persistSessionUsage(e.sessionId, fold(e).usage as NonNullable<ConversationState["usage"]>);
+const writeCompaction = (e: SessionCompactionEvent) =>
+  persistCompaction(e.sessionId, fold(e).timeline[0] as ConversationCompaction);
+
 // ============================================================================
 
 describeWithDb("agent persistence (canonical events → SQLite)", () => {
@@ -132,11 +164,9 @@ describeWithDb("agent persistence (canonical events → SQLite)", () => {
   // messages
   // --------------------------------------------------------------------------
 
-  describe("persistMessageStarted", () => {
+  describe("persistMessage", () => {
     it("writes the turn id, model, parent tool call and the event's timestamp", () => {
-      const result = persistMessageStarted(
-        started({ model: "claude-opus-5", parentToolCallId: "tool-7" })
-      );
+      const result = writeMessage(started({ model: "claude-opus-5", parentToolCallId: "tool-7" }));
 
       expect(result).toEqual({ ok: true, value: "msg-1" });
       const row = db.prepare(`SELECT * FROM messages WHERE id = 'msg-1'`).get() as Record<
@@ -156,7 +186,7 @@ describeWithDb("agent persistence (canonical events → SQLite)", () => {
     });
 
     it("persists the engine's user echo — the send command writes no row", () => {
-      persistMessageStarted(started({ role: "user", outputIndex: 0, messageId: "user-1" }));
+      writeMessage(started({ role: "user", outputIndex: 0, messageId: "user-1" }));
 
       const row = db.prepare(`SELECT role, turn_id FROM messages WHERE id = 'user-1'`).get();
       expect(row).toEqual({ role: "user", turn_id: TURN });
@@ -164,10 +194,10 @@ describeWithDb("agent persistence (canonical events → SQLite)", () => {
 
     it("is idempotent on replay: parts, seq and turn accounting all survive", () => {
       // A whole turn, as the wire delivers it the first time.
-      persistMessageStarted(started({ messageId: "m1" }));
-      persistMessageStarted(started({ messageId: "m2" }));
-      persistPart(part({ messageId: "m1" }));
-      persistTurnEnded(
+      writeMessage(started({ messageId: "m1" }));
+      writeMessage(started({ messageId: "m2" }));
+      writePart(part({ messageId: "m1" }));
+      writeTurnEnded(
         ended({ tokens: { input: 10, output: 2 }, cost: 0.5, stopReason: "cancelled" }),
         { status: "idle", cancelled: true }
       );
@@ -182,8 +212,8 @@ describeWithDb("agent persistence (canonical events → SQLite)", () => {
       // The engine re-delivers the whole buffered history after a gap heal
       // (events/replay). REPLACE would cascade-delete the parts, reassign seq
       // and wipe every update-only column.
-      persistMessageStarted(started({ messageId: "m1" }));
-      persistMessageStarted(started({ messageId: "m2" }));
+      writeMessage(started({ messageId: "m1" }));
+      writeMessage(started({ messageId: "m2" }));
 
       expect(
         db.prepare(`SELECT count(*) as n FROM messages WHERE session_id = ?`).get(SESSION)
@@ -213,10 +243,10 @@ describeWithDb("agent persistence (canonical events → SQLite)", () => {
     });
 
     it("a replay does not null out columns the first delivery filled in", () => {
-      persistMessageStarted(started({ model: "claude-opus-5", parentToolCallId: "tool-7" }));
+      writeMessage(started({ model: "claude-opus-5", parentToolCallId: "tool-7" }));
       // A replayed envelope can be thinner than the original (an adapter that
       // stopped reporting the model, a re-emitted shell) — COALESCE keeps ours.
-      persistMessageStarted(started({ model: undefined, parentToolCallId: undefined }));
+      writeMessage(started({ model: undefined, parentToolCallId: undefined }));
 
       expect(
         db.prepare(`SELECT model, parent_tool_call_id FROM messages WHERE id = 'msg-1'`).get()
@@ -224,13 +254,13 @@ describeWithDb("agent persistence (canonical events → SQLite)", () => {
     });
 
     it("refuses a message for an unknown session instead of throwing", () => {
-      const result = persistMessageStarted(started({ sessionId: "nope" }));
+      const result = writeMessage(started({ sessionId: "nope" }));
       expect(result).toEqual({ ok: false, error: "session not found" });
     });
 
     it("lets the trigger assign seq and bump the denormalized message_count", () => {
-      persistMessageStarted(started({ messageId: "m1", role: "user", outputIndex: 0 }));
-      persistMessageStarted(started({ messageId: "m2" }));
+      writeMessage(started({ messageId: "m1", role: "user", outputIndex: 0 }));
+      writeMessage(started({ messageId: "m2" }));
 
       const rows = db
         .prepare(`SELECT id, seq FROM messages WHERE session_id = ? ORDER BY seq`)
@@ -248,10 +278,10 @@ describeWithDb("agent persistence (canonical events → SQLite)", () => {
   // --------------------------------------------------------------------------
 
   describe("persistPart", () => {
-    beforeEach(() => persistMessageStarted(started()));
+    beforeEach(() => writeMessage(started()));
 
     it("stores the engine Part verbatim with lowercase type and partIndex as seq", () => {
-      persistPart(part({ partIndex: 3 }));
+      writePart(part({ partIndex: 3 }));
 
       const row = db.prepare(`SELECT * FROM parts WHERE id = 'p1'`).get() as Record<
         string,
@@ -269,7 +299,7 @@ describeWithDb("agent persistence (canonical events → SQLite)", () => {
     });
 
     it("promotes toolCallId/toolName to columns for tool parts", () => {
-      persistPart(
+      writePart(
         part({
           part: {
             type: "tool",
@@ -294,7 +324,7 @@ describeWithDb("agent persistence (canonical events → SQLite)", () => {
     });
 
     it("upserts by part id — a later snapshot replaces the earlier state", () => {
-      persistPart(
+      writePart(
         part({
           part: {
             type: "tool",
@@ -307,7 +337,7 @@ describeWithDb("agent persistence (canonical events → SQLite)", () => {
           },
         })
       );
-      persistPart(
+      writePart(
         part({
           part: {
             type: "tool",
@@ -334,7 +364,7 @@ describeWithDb("agent persistence (canonical events → SQLite)", () => {
     });
 
     it("keeps subagent parts linked to the tool call that spawned them", () => {
-      persistPart(
+      writePart(
         part({
           part: {
             type: "text",
@@ -352,7 +382,7 @@ describeWithDb("agent persistence (canonical events → SQLite)", () => {
     });
 
     it("swallows a part whose message row never landed (FK) — the next snapshot retries", () => {
-      const result = persistPart(part({ messageId: "ghost", part: { ...part().part, id: "p5" } }));
+      const result = writePart(part({ messageId: "ghost", part: { ...part().part, id: "p5" } }));
 
       expect(result.ok).toBe(true);
       expect(db.prepare(`SELECT count(*) as n FROM parts WHERE id = 'p5'`).get()).toEqual({ n: 0 });
@@ -365,15 +395,15 @@ describeWithDb("agent persistence (canonical events → SQLite)", () => {
 
   describe("persistTurnEnded", () => {
     beforeEach(() => {
-      persistMessageStarted(started({ messageId: "u1", role: "user", outputIndex: 0 }));
-      persistMessageStarted(started({ messageId: "a1" }));
-      persistMessageStarted(started({ messageId: "a2" }));
+      writeMessage(started({ messageId: "u1", role: "user", outputIndex: 0 }));
+      writeMessage(started({ messageId: "a1" }));
+      writeMessage(started({ messageId: "a2" }));
       // A subagent message must never be mistaken for the turn's last output.
-      persistMessageStarted(started({ messageId: "sub", parentToolCallId: "task-1" }));
+      writeMessage(started({ messageId: "sub", parentToolCallId: "task-1" }));
     });
 
     it("writes tokens, cost and the stop reason onto the turn's last top-level assistant message", () => {
-      persistTurnEnded(
+      writeTurnEnded(
         ended({
           tokens: { input: 100, output: 20, cache: { read: 5, write: 1 } },
           cost: 0.25,
@@ -405,7 +435,7 @@ describeWithDb("agent persistence (canonical events → SQLite)", () => {
     });
 
     it("stamps cancelled_at instead of inserting a synthetic cancelled message", () => {
-      persistTurnEnded(ended({ stopReason: "cancelled" }), { status: "idle", cancelled: true });
+      writeTurnEnded(ended({ stopReason: "cancelled" }), { status: "idle", cancelled: true });
 
       const row = db.prepare(`SELECT cancelled_at FROM messages WHERE id = 'a2'`).get() as {
         cancelled_at: string;
@@ -424,7 +454,7 @@ describeWithDb("agent persistence (canonical events → SQLite)", () => {
     it("mints a marker row when the turn was cancelled before the model answered", () => {
       db.prepare(`DELETE FROM messages WHERE role = 'assistant'`).run();
 
-      persistTurnEnded(ended({ stopReason: "cancelled", timestamp: T + 30 }), {
+      writeTurnEnded(ended({ stopReason: "cancelled", timestamp: T + 30 }), {
         status: "idle",
         cancelled: true,
       });
@@ -446,7 +476,7 @@ describeWithDb("agent persistence (canonical events → SQLite)", () => {
     it("the cancelled marker is id-addressed, so a replayed turn.ended does not stack dividers", () => {
       db.prepare(`DELETE FROM messages WHERE role = 'assistant'`).run();
       const cancel = () =>
-        persistTurnEnded(ended({ stopReason: "cancelled" }), { status: "idle", cancelled: true });
+        writeTurnEnded(ended({ stopReason: "cancelled" }), { status: "idle", cancelled: true });
 
       cancel();
       cancel();
@@ -459,7 +489,7 @@ describeWithDb("agent persistence (canonical events → SQLite)", () => {
     it("a turn that simply produced nothing leaves no marker", () => {
       db.prepare(`DELETE FROM messages WHERE role = 'assistant'`).run();
 
-      persistTurnEnded(ended({ stopReason: "end_turn" }), { status: "idle", cancelled: false });
+      writeTurnEnded(ended({ stopReason: "end_turn" }), { status: "idle", cancelled: false });
 
       expect(
         db.prepare(`SELECT count(*) as n FROM messages WHERE role = 'assistant'`).get()
@@ -467,7 +497,7 @@ describeWithDb("agent persistence (canonical events → SQLite)", () => {
     });
 
     it("writes the error status with the engine's category", () => {
-      persistTurnEnded(ended({ stopReason: "error" }), {
+      writeTurnEnded(ended({ stopReason: "error" }), {
         status: "error",
         cancelled: false,
         error: { message: "429 slow down", category: "rate_limit" },
@@ -482,7 +512,7 @@ describeWithDb("agent persistence (canonical events → SQLite)", () => {
 
     it("clears a stale error when the next turn ends cleanly", () => {
       persistSessionError(SESSION, "boom", "internal");
-      persistTurnEnded(ended(), { status: "idle", cancelled: false });
+      writeTurnEnded(ended(), { status: "idle", cancelled: false });
 
       expect(
         db.prepare(`SELECT status, error_message FROM sessions WHERE id = ?`).get(SESSION)
@@ -492,7 +522,7 @@ describeWithDb("agent persistence (canonical events → SQLite)", () => {
     it("still flips the session when the turn produced no assistant message", () => {
       db.prepare(`DELETE FROM messages WHERE role = 'assistant'`).run();
 
-      const result = persistTurnEnded(ended(), { status: "idle", cancelled: false });
+      const result = writeTurnEnded(ended(), { status: "idle", cancelled: false });
 
       expect(result.ok).toBe(true);
       expect(db.prepare(`SELECT status FROM sessions WHERE id = ?`).get(SESSION)).toEqual({
@@ -516,14 +546,14 @@ describeWithDb("agent persistence (canonical events → SQLite)", () => {
         ...over,
       });
 
-      persistSessionUsage(usage({ used: 100_000, size: 200_000 }));
+      writeUsage(usage({ used: 100_000, size: 200_000 }));
       expect(
         db.prepare(`SELECT context_used_percent FROM sessions WHERE id = ?`).get(SESSION)
       ).toEqual({ context_used_percent: 50 });
 
       // Claude reports `size` only on the final result — a size-less update
       // must not zero the gauge mid-turn.
-      persistSessionUsage(usage({ used: 120_000 }));
+      writeUsage(usage({ used: 120_000 }));
       expect(
         db
           .prepare(`SELECT context_token_count, context_used_percent FROM sessions WHERE id = ?`)
@@ -532,7 +562,7 @@ describeWithDb("agent persistence (canonical events → SQLite)", () => {
     });
 
     it("clamps the percent at 100", () => {
-      persistSessionUsage({
+      writeUsage({
         type: "session.usage",
         sessionId: SESSION,
         turnId: TURN,
@@ -617,7 +647,7 @@ describeWithDb("agent persistence (canonical events → SQLite)", () => {
     });
 
     it("inserts the marker row", () => {
-      persistCompaction(compaction({ trigger: "auto", preTokens: 180_000 }));
+      writeCompaction(compaction({ trigger: "auto", preTokens: 180_000 }));
 
       expect(db.prepare(`SELECT * FROM compactions WHERE compaction_id = 'cmp-1'`).get()).toEqual({
         compaction_id: "cmp-1",
@@ -633,8 +663,8 @@ describeWithDb("agent persistence (canonical events → SQLite)", () => {
     });
 
     it("advances status in place, keeping its anchored position and earlier fields", () => {
-      persistCompaction(compaction({ trigger: "auto", preTokens: 180_000 }));
-      persistCompaction(
+      writeCompaction(compaction({ trigger: "auto", preTokens: 180_000 }));
+      writeCompaction(
         compaction({
           status: "completed",
           postTokens: 20_000,
@@ -666,9 +696,9 @@ describeWithDb("agent persistence (canonical events → SQLite)", () => {
       db.close();
 
       expect(persistSessionError(SESSION, "x", "internal").ok).toBe(false);
-      expect(persistTurnEnded(ended(), { status: "idle", cancelled: false }).ok).toBe(false);
+      expect(writeTurnEnded(ended(), { status: "idle", cancelled: false }).ok).toBe(false);
       expect(
-        persistCompaction({
+        writeCompaction({
           type: "session.compaction",
           sessionId: SESSION,
           turnId: TURN,
@@ -680,6 +710,196 @@ describeWithDb("agent persistence (canonical events → SQLite)", () => {
 
       // Re-open so afterEach's close() is a no-op on an already-closed handle.
       db = createTestDb();
+    });
+  });
+
+  // --------------------------------------------------------------------------
+  // The change loop — the whole path, as the handler runs it
+  // --------------------------------------------------------------------------
+
+  describe("persistChanges", () => {
+    /** Fold events into the same conversation and write what moved. */
+    function stream(...events: LifecycleEvent[]) {
+      let state = emptyConversation();
+      const writes = [];
+      for (const event of events) {
+        const folded = reduceConversationWithChanges(state, event);
+        state = folded.state;
+        writes.push(...persistChanges(SESSION, state, folded.changes, () => IDLE));
+      }
+      return { state, writes };
+    }
+
+    const turnStarted: LifecycleEvent = {
+      type: "turn.started",
+      sessionId: SESSION,
+      turnId: TURN,
+      timestamp: T,
+    };
+
+    it("writes a whole turn: echo, assistant message, parts, accounting", () => {
+      stream(
+        turnStarted,
+        started({ messageId: "u1", role: "user", outputIndex: 0 }),
+        part({ messageId: "u1", part: { ...part().part, id: "up1", messageId: "u1" } }),
+        started({ messageId: "a1" }),
+        part({ messageId: "a1", part: { ...part().part, messageId: "a1" } }),
+        ended({ tokens: { input: 10, output: 2 }, cost: 0.5 })
+      );
+
+      expect(db.prepare(`SELECT id FROM messages ORDER BY seq`).all()).toEqual([
+        { id: "u1" },
+        { id: "a1" },
+      ]);
+      expect(db.prepare(`SELECT id, message_id FROM parts ORDER BY id`).all()).toEqual([
+        { id: "p1", message_id: "a1" },
+        { id: "up1", message_id: "u1" },
+      ]);
+      expect(
+        db.prepare(`SELECT tokens, cost, turn_stop_reason FROM messages WHERE id = 'a1'`).get()
+      ).toEqual({
+        tokens: JSON.stringify({ input: 10, output: 2 }),
+        cost: 0.5,
+        turn_stop_reason: "end_turn",
+      });
+    });
+
+    it("a redelivered turn converges: no new rows, no stacked dividers, no doubled cost", () => {
+      const events: LifecycleEvent[] = [
+        turnStarted,
+        started({ messageId: "a1" }),
+        part({ messageId: "a1", part: { ...part().part, messageId: "a1" } }),
+        ended({ stopReason: "cancelled", tokens: { input: 10, output: 2 }, cost: 0.5 }),
+      ];
+      let state = emptyConversation();
+      const run = () => {
+        const kinds: string[] = [];
+        for (const event of events) {
+          const folded = reduceConversationWithChanges(state, event);
+          state = folded.state;
+          kinds.push(
+            ...persistChanges(SESSION, state, folded.changes, () => IDLE).map((w) => w.kind)
+          );
+        }
+        return kinds;
+      };
+
+      // turn.started reports a `turn-updated` too, but an OPEN turn has no
+      // accounting to write — only the ended one produces a row.
+      expect(run()).toEqual(["message-upserted", "part-upserted", "turn-updated"]);
+      const before = db.prepare(`SELECT * FROM messages ORDER BY seq`).all();
+      const parts = db.prepare(`SELECT * FROM parts ORDER BY id`).all();
+
+      // The wire re-delivers buffered history to heal a seq gap.
+      const second = run();
+
+      // The identity and bracket events dedupe to nothing. A part SNAPSHOT does
+      // not — the reducer never compares snapshots, it upserts them — so the
+      // row is written again with identical content. That is why the parts
+      // upsert has to be idempotent SQL and not an INSERT.
+      expect(second).toEqual(["part-upserted"]);
+      expect(db.prepare(`SELECT * FROM messages ORDER BY seq`).all()).toEqual(before);
+      expect(db.prepare(`SELECT * FROM parts ORDER BY id`).all()).toEqual(parts);
+    });
+
+    it("stores a part the reducer closed itself when the turn was cancelled", () => {
+      // No harness event says the tool was cancelled — the fold's closure
+      // reports it as a part-upserted, and that is what reaches SQLite.
+      stream(
+        turnStarted,
+        started({ messageId: "a1" }),
+        part({
+          messageId: "a1",
+          part: {
+            type: "tool",
+            id: "t1",
+            sessionId: SESSION,
+            messageId: "a1",
+            toolCallId: "call-1",
+            toolName: "Bash",
+            state: { status: "in_progress", input: {}, time: { start: T } },
+          },
+        }),
+        ended({ stopReason: "cancelled", timestamp: T + 10 })
+      );
+
+      const row = db.prepare(`SELECT data FROM parts WHERE id = 't1'`).get() as { data: string };
+      expect(JSON.parse(row.data).state.status).toBe("cancelled");
+    });
+
+    it("keeps the partial tool input a cancel would otherwise erase", () => {
+      stream(
+        turnStarted,
+        started({ messageId: "a1" }),
+        part({
+          messageId: "a1",
+          part: {
+            type: "tool",
+            id: "t1",
+            sessionId: SESSION,
+            messageId: "a1",
+            toolCallId: "call-1",
+            toolName: "Read",
+            state: { status: "pending", partialInput: '{"path":"/x' },
+          },
+        }),
+        ended({ stopReason: "cancelled", timestamp: T + 10 })
+      );
+
+      const row = db.prepare(`SELECT data FROM parts WHERE id = 't1'`).get() as { data: string };
+      expect(JSON.parse(row.data).state._meta["agent-server/partialInput"]).toBe('{"path":"/x');
+    });
+
+    it("upserts the compaction entity and reports it", () => {
+      const { writes } = stream({
+        type: "session.compaction",
+        sessionId: SESSION,
+        turnId: TURN,
+        compactionId: "c1",
+        status: "completed",
+        trigger: "auto",
+        preTokens: 180_000,
+        timestamp: T,
+      });
+
+      expect(writes.map((w) => w.kind)).toEqual(["compaction-upserted"]);
+      expect(
+        db
+          .prepare(`SELECT status, trigger, pre_tokens FROM compactions WHERE compaction_id='c1'`)
+          .get()
+      ).toEqual({ status: "completed", trigger: "auto", pre_tokens: 180_000 });
+    });
+
+    it("reports nothing for the changes that are not rows", () => {
+      const { writes } = stream(
+        turnStarted,
+        started({ messageId: "a1" }),
+        { type: "message.ended", sessionId: SESSION, turnId: TURN, messageId: "a1", timestamp: T },
+        {
+          type: "message.part.delta",
+          sessionId: SESSION,
+          turnId: TURN,
+          messageId: "a1",
+          outputIndex: 1,
+          partIndex: 0,
+          partId: "t1",
+          delta: { type: "tool_input", input: '{"a' },
+          timestamp: T,
+        },
+        {
+          type: "permission.requested",
+          sessionId: SESSION,
+          turnId: TURN,
+          requestId: "r1",
+          title: "Allow?",
+          options: [],
+          timestamp: T,
+        }
+      );
+
+      // turn.started and message.started are rows; the bracket marker, the
+      // buffered tool input and the permission are not.
+      expect(writes.map((w) => w.kind)).toEqual(["message-upserted"]);
     });
   });
 });

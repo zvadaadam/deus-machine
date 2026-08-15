@@ -188,4 +188,4 @@ export interface ToolRequestEventData {
  *  cache holds paginated SQLite rows. Adopting reducer + projection is a
  *  tracked follow-up; until then nothing here may claim it is in use.
  *  Law 6 decoded — an unknown event type arrives preserved. */
-export type AgentEventData = import("../protocol-types").AnyWireEventEnvelope;
+export type AgentEventData = import("../protocol-types").DecodedWireEventEnvelope;

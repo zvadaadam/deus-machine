@@ -2,15 +2,22 @@
  * The fold: one @zvada/agent-server lifecycle envelope → the `messages` cache.
  *
  *   agent:event ──┐
- *                 ├─→ setQueryData() → TanStack cache → React renders
+ *                 ├─→ reduceConversationWithChanges ─→ setQueryData() → React
  *   DB snapshot ──┘
  *
- * This is deus's OWN fold, not the engine's `reduceConversation`. The engine's
- * reducer produces a `ConversationState`; the cache holds a paginated
- * `Message[]` with SQLite row shapes (seq, turn_id, tokens, cancelled_at), so
- * projecting one onto the other costs more than folding directly. Swapping to
- * `reduceConversation` + a projection is tracked as a follow-up — until then no
- * comment in this repo may claim the reducer is in use.
+ * The fold is the ENGINE's, not deus's. What lives here is only the
+ * PROJECTION: a `ConversationState` per session, and the SQLite-row writes its
+ * `changes` imply. Every consumption rule the reducer encodes — upsert by part
+ * id, snapshots beating deltas, a tool part landing back on the message that
+ * already ended, cancellation closure, replay convergence — arrives with it and
+ * stops being deus's to get right.
+ *
+ * `changes` is what makes the projection possible without diffing: the reducer
+ * reports each mutation it performs, addressed by the ids the wire carries. A
+ * redelivered identity or bracket event (message.started, turn.*, message.ended)
+ * reports nothing at all; a redelivered part SNAPSHOT is reported and re-written,
+ * because the reducer upserts snapshots rather than comparing them — which is
+ * exactly what makes it safe to write it again.
  *
  * It lives outside the hook so the fold is testable without React, a DOM or a
  * socket: every entry point takes a `QueryClient` and returns nothing.
@@ -21,42 +28,58 @@
  *                included, and the page may be seeded before the first fetch
  *                resolves.
  *   background — any other session that already has a cached page. Only the
- *                DURABLE events (message.started / message.part / turn.ended):
- *                the `messages` subscription is delta-only with its cursor
- *                jumped to MAX(seq), so an UPDATE-shaped change (tokens, cost,
- *                turn_stop_reason, cancelled_at) has no other way in. Deltas
- *                are skipped — nobody is looking, and the snapshot restates
- *                them.
+ *                DURABLE events: the `messages` subscription is delta-only with
+ *                its cursor jumped to MAX(seq), so an UPDATE-shaped change
+ *                (tokens, cost, turn_stop_reason, cancelled_at) has no other
+ *                way in. Deltas are skipped — nobody is looking, and the next
+ *                snapshot restates them.
  */
 
 import type { QueryClient } from "@tanstack/react-query";
+import {
+  createSeqCursor,
+  emptyConversation,
+  reduceConversationWithChanges,
+  type SeqCursor,
+} from "@zvada/agent-server/protocol";
 import { queryKeys } from "@/shared/api/queryKeys";
 import { cancelledTurnMessageId, type Message } from "@shared/types/session";
 import {
-  isUnknownLifecycleEvent,
-  isUnknownPart,
+  isUnknownEvent,
   type AnyLifecycleEvent,
-  type AnyMessagePartEvent,
-  type AnyWireEventEnvelope,
-  type MessageStartedEvent,
-  type Part,
-  type TurnEndedEvent,
-  type UnknownPart,
+  type ConversationChange,
+  type ConversationMessage,
+  type ConversationState,
+  type ConversationTurn,
+  type DecodedWireEventEnvelope,
 } from "@shared/protocol-types";
 import type { PaginatedMessages } from "../api/session.service";
-import { isLocalMessage, isLocalPart } from "./optimisticMessage";
 
-export type AnyPart = Part | UnknownPart;
+// ---- Per-session fold ----
 
-// ---- Delta buffer ----
-
-/** Text/reasoning deltas accumulated between two animation frames. */
-export interface DeltaBuffer {
-  pending: Map<string, string>;
+/**
+ * One session's folded conversation, plus the messages whose parts moved since
+ * the last animation frame.
+ *
+ * The dirty set is all that is left of deus's delta bookkeeping. The reducer
+ * already applies text/reasoning deltas into their part (and accumulates
+ * streamed tool input in `state.toolInputJson`), so there is nothing to
+ * accumulate here — only a reason to BATCH: a delta arrives per token, and one
+ * `setQueryData` per token is one React render per token. The frame flush
+ * copies out the parts the state already holds.
+ */
+export interface SessionFold {
+  state: ConversationState;
+  dirtyMessages: Set<string>;
 }
 
-export function createDeltaBuffer(): DeltaBuffer {
-  return { pending: new Map() };
+export function createSessionFold(): SessionFold {
+  return { state: emptyConversation(), dirtyMessages: new Set() };
+}
+
+/** The per-session `seq` bookkeeping — the engine's own, not a fourth copy. */
+export function createStreamCursor(): SeqCursor {
+  return createSeqCursor();
 }
 
 // ---- Stream context ----
@@ -65,9 +88,10 @@ export interface AgentStreamContext {
   queryClient: QueryClient;
   /** The session whose panel is mounted — the only one that streams deltas. */
   activeSessionId: string;
-  buffer: DeltaBuffer;
+  /** Folded conversation per session; the source of every cache write. */
+  folds: Map<string, SessionFold>;
   /** Per-session wire cursor, for gap and reset detection. */
-  cursors: Map<string, number>;
+  cursor: SeqCursor;
   /** Ask for a delta flush on the next frame. */
   scheduleFlush: () => void;
   /** Ask for a debounced refetch of one session's message page. */
@@ -78,153 +102,205 @@ export function messagesKey(sessionId: string) {
   return queryKeys.sessions.messages(sessionId);
 }
 
-// ---- Sequence cursor ----
-
-/**
- * What one envelope's `seq` says about the stream.
- *
- *   ok        — the expected next envelope (or the first one seen).
- *   duplicate — already folded; re-applying would double-count a delta.
- *   gap       — envelopes were missed (reconnect, backend restart).
- *   reset     — `seq` went BACKWARDS: the session's log restarted (the
- *               agent-server process was replaced and numbers from 1 again).
- *               Clamping with Math.max here would freeze the cursor above
- *               every future envelope and disable gap detection for the rest
- *               of the session's life, silently.
- *
- * `gap` and `reset` both move the cursor to the envelope actually received —
- * detection stays live either way — and both ask for a refetch, because
- * snapshots are durable but the deltas in the hole are not.
- */
-export type SeqVerdict = "ok" | "duplicate" | "gap" | "reset";
-
-export function advanceCursor(
-  cursors: Map<string, number>,
-  sessionId: string,
-  seq: number
-): SeqVerdict {
-  const last = cursors.get(sessionId);
-  if (last === undefined) {
-    cursors.set(sessionId, seq);
-    return "ok";
-  }
-  if (seq === last) return "duplicate";
-
-  cursors.set(sessionId, seq);
-  if (seq < last) return "reset";
-  if (seq > last + 1) return "gap";
-  return "ok";
-}
-
 // ---- Routing ----
 
 /** Fold one envelope. The single entry point the hook calls per WS frame. */
-export function routeEnvelope(ctx: AgentStreamContext, envelope: AnyWireEventEnvelope): void {
+export function routeEnvelope(ctx: AgentStreamContext, envelope: DecodedWireEventEnvelope): void {
   const sessionId = envelope?.sessionId;
   if (!sessionId) return;
 
-  const verdict = advanceCursor(ctx.cursors, sessionId, envelope.seq);
-  if (verdict === "duplicate") return;
-  if (verdict !== "ok") ctx.requestRefetch(sessionId);
+  // Deus joins a live stream mid-flight — the page comes from SQLite, the
+  // socket from wherever the turn already is — so the FIRST envelope seen for
+  // a session is never a hole. Seek to just before it and let the cursor's own
+  // arithmetic run from there.
+  if (ctx.cursor.last(sessionId) === 0) ctx.cursor.seek(sessionId, envelope.seq - 1);
 
-  if (sessionId === ctx.activeSessionId) {
-    applyLiveEvent(ctx, envelope.event);
+  let verdict = ctx.cursor.advance(sessionId, envelope.seq);
+  if (verdict === "duplicate" && envelope.seq !== ctx.cursor.last(sessionId)) {
+    // Backwards beyond the last frame. The engine cursor only calls it a
+    // reset when a fresh log is seen FROM seq 1; here the log was replaced
+    // and this client first sees it mid-stream (its own reconnect overlapped
+    // the restart, or a restarted backend re-forwards from a healed log).
+    // A real redelivery is only ever the immediately-last frame — anything
+    // further back is a dead watermark, and honoring it would silently drop
+    // every envelope until the new counter catches up.
+    ctx.cursor.seek(sessionId, envelope.seq);
+    verdict = "reset";
+  }
+
+  switch (verdict) {
+    case "duplicate":
+      // Already folded. (The reducer would report no changes for it anyway —
+      // this only saves the work.)
+      return;
+    case "reset":
+      // The agent-server was replaced and its session log starts at 1 again.
+      // Everything folded belongs to the dead log: drop it, and refetch,
+      // because the new log will not restate what the old one already wrote.
+      ctx.folds.delete(sessionId);
+      ctx.requestRefetch(sessionId);
+      break;
+    case "gap":
+      // Envelopes were missed. Nothing in the browser can replay them, so the
+      // hole is accepted as lost — leaving the cursor put (the engine client
+      // does, because it CAN replay) would make every following envelope read
+      // as another gap. Refetch: the snapshots in the hole are durable in
+      // SQLite, the deltas are not.
+      ctx.cursor.seek(sessionId, envelope.seq);
+      ctx.requestRefetch(sessionId);
+      break;
+    case "deliver":
+      break;
+  }
+
+  const live = sessionId === ctx.activeSessionId;
+  // Never fold for a session nobody has opened: seeding a page from a
+  // mid-stream fragment would invent a `has_older: false` transcript.
+  if (!live && !ctx.queryClient.getQueryData<PaginatedMessages>(messagesKey(sessionId))) return;
+
+  applyEvent(ctx, sessionId, envelope.event, live);
+}
+
+function foldFor(ctx: AgentStreamContext, sessionId: string): SessionFold {
+  const existing = ctx.folds.get(sessionId);
+  if (existing) return existing;
+  const created = createSessionFold();
+  ctx.folds.set(sessionId, created);
+  return created;
+}
+
+function applyEvent(
+  ctx: AgentStreamContext,
+  sessionId: string,
+  event: AnyLifecycleEvent,
+  live: boolean
+): void {
+  const fold = foldFor(ctx, sessionId);
+  const { state, changes } = reduceConversationWithChanges(fold.state, event);
+  fold.state = state;
+  if (changes.length === 0) return;
+
+  // A delta's part write is the hot path: batched to one cache write per frame
+  // for the mounted session, and skipped entirely for every other one.
+  if (!isUnknownEvent(event) && event.type === "message.part.delta") {
+    if (!live) return;
+    for (const change of changes) {
+      if (change.kind === "part-upserted") fold.dirtyMessages.add(change.messageId);
+    }
+    if (fold.dirtyMessages.size > 0) ctx.scheduleFlush();
     return;
   }
-  applyBackgroundEvent(ctx.queryClient, sessionId, envelope.event);
+
+  applyChanges(ctx, sessionId, fold, changes, live);
 }
 
-/** The mounted session: the whole stream, deltas included. */
-export function applyLiveEvent(ctx: AgentStreamContext, event: AnyLifecycleEvent): void {
-  // Law 6: an unknown event type is preserved in the stream but carries no
-  // cache state by definition — there is nothing here to fold.
-  if (isUnknownLifecycleEvent(event)) return;
-  const { queryClient: qc, activeSessionId: sessionId } = ctx;
-  switch (event.type) {
-    case "message.started":
-      upsertMessageRow(qc, sessionId, event, { seed: true });
-      return;
-    case "message.part":
-      // The snapshot's content is authoritative — drop anything buffered for it.
-      ctx.buffer.pending.delete(event.part.id);
-      upsertPart(qc, sessionId, event);
-      return;
-    case "message.part.delta":
-      if (event.delta.type === "text" || event.delta.type === "reasoning") {
-        const partId = event.partId;
-        ctx.buffer.pending.set(partId, (ctx.buffer.pending.get(partId) ?? "") + event.delta.text);
-        ctx.scheduleFlush();
-      }
-      return;
-    case "turn.ended":
-      patchTurnAccounting(qc, sessionId, event);
-      return;
-    case "session.compaction":
-      // The marker lives in its own table, alongside the message page.
-      ctx.requestRefetch(sessionId);
-      return;
-    default:
-      // message.ended is a bracket marker; session.*/permission.*/error/raw
-      // carry no message-cache state (session status arrives via q:delta).
-      return;
+/** Project one event's changes onto the cached page. */
+function applyChanges(
+  ctx: AgentStreamContext,
+  sessionId: string,
+  fold: SessionFold,
+  changes: ConversationChange[],
+  live: boolean
+): void {
+  for (const change of changes) {
+    switch (change.kind) {
+      case "message-upserted":
+        // Causally ordered before the part that forced the shell, so a row
+        // always exists by the time its parts land.
+        writeMessage(ctx.queryClient, sessionId, fold.state, change.messageId, { seed: live });
+        break;
+      case "part-upserted":
+        // The folded message carries its parts, so the row write IS the part
+        // write — no splicing a part into a copy of an array the state has.
+        writeMessage(ctx.queryClient, sessionId, fold.state, change.messageId, { seed: false });
+        // An authoritative snapshot supersedes whatever the frame was about to
+        // flush for this message.
+        fold.dirtyMessages.delete(change.messageId);
+        break;
+      case "turn-updated":
+        writeTurnAccounting(ctx.queryClient, sessionId, fold.state, change.turnId);
+        break;
+      case "compaction-upserted":
+        // Compactions live in a table of their own beside the message page.
+        ctx.requestRefetch(sessionId);
+        break;
+      default:
+        // message-ended (a bracket marker), delta-buffered (tool input, read
+        // from state.toolInputJson), permission-updated, usage-updated,
+        // session-meta-updated, session-ended, unknown-event-recorded — none
+        // of them is a `messages` row.
+        break;
+    }
   }
 }
 
-/**
- * A session the user is not looking at. Durable events only, and never for a
- * session that has no cached page — seeding one would invent a `has_older:
- * false` page for a transcript nobody has loaded.
- */
-export function applyBackgroundEvent(
-  qc: QueryClient,
-  sessionId: string,
-  event: AnyLifecycleEvent
-): void {
-  // Law 6: an unknown event type is preserved in the stream but carries no
-  // cache state by definition — there is nothing here to fold.
-  if (isUnknownLifecycleEvent(event)) return;
-  if (!qc.getQueryData<PaginatedMessages>(messagesKey(sessionId))) return;
-  switch (event.type) {
-    case "message.started":
-      upsertMessageRow(qc, sessionId, event, { seed: false });
-      return;
-    case "message.part":
-      upsertPart(qc, sessionId, event);
-      return;
-    case "turn.ended":
-      patchTurnAccounting(qc, sessionId, event);
-      return;
-    default:
-      return;
+/** Apply the frame's dirty messages. Called from the hook's animation frame. */
+export function flushDeltas(qc: QueryClient, sessionId: string, fold: SessionFold): void {
+  if (fold.dirtyMessages.size === 0) return;
+  const dirty = [...fold.dirtyMessages];
+  fold.dirtyMessages.clear();
+  for (const messageId of dirty) {
+    writeMessage(qc, sessionId, fold.state, messageId, { seed: false });
   }
 }
 
 // ---- Message rows ----
 
 /**
- * Open (or reconcile) the row for a message. This covers the USER echo: the
- * send command writes no message row, the engine echoes the prompt back and
- * that echo is the persistence source of truth. The composer's optimistic
- * bubble carries the same `turn_id`, so it is replaced in place — never left
- * beside its own echo as a second bubble.
+ * The engine's folded message → the SQLite row shape the cache holds.
+ *
+ * `model` and `parentToolCallId` are OMITTED when the fold does not know them
+ * rather than written as null: a message the fold only ever saw as a shell
+ * (a part outran its `message.started`, or deus attached mid-message) knows
+ * neither, and writing null would erase what the DB snapshot already had.
  */
-function upsertMessageRow(
-  qc: QueryClient,
-  sessionId: string,
-  event: MessageStartedEvent,
-  opts: { seed: boolean }
-): void {
-  const row: Message = {
-    id: event.messageId,
+function toMessageRow(sessionId: string, message: ConversationMessage): Message {
+  return {
+    id: message.messageId,
     session_id: sessionId,
     seq: 0,
-    role: event.role,
-    turn_id: event.turnId,
-    model: event.model ?? null,
-    sent_at: new Date(event.timestamp).toISOString(),
-    parent_tool_call_id: event.parentToolCallId ?? null,
-    parts: [],
+    role: message.role,
+    turn_id: message.turnId,
+    sent_at: new Date(message.startedAt).toISOString(),
+    ...(message.model !== undefined && { model: message.model }),
+    ...(message.parentToolCallId !== undefined && {
+      parent_tool_call_id: message.parentToolCallId,
+    }),
+    parts: message.parts,
   };
+}
+
+function findMessage(state: ConversationState, messageId: string): ConversationMessage | undefined {
+  // From the end: the message being written is almost always the recent one.
+  for (let i = state.timeline.length - 1; i >= 0; i--) {
+    const entry = state.timeline[i];
+    if (entry.kind === "message" && entry.messageId === messageId) return entry;
+  }
+  return undefined;
+}
+
+/**
+ * Write one folded message into the cached page, upserting BY ID.
+ *
+ * That is also how the composer's optimistic bubble is absorbed: it is minted
+ * with `echoMessageId(turnId)` and `createUserEchoParts`, so the engine's echo
+ * for that turn IS the same row with the same part ids and the upsert lands on
+ * it. No look-alike to find by turn id, no swap, and no window where the
+ * prompt renders twice or loses its attachments in the swap.
+ *
+ * Columns SQLite owns and the stream knows nothing about survive the write:
+ * `seq`, and the turn accounting stamped at `turn.ended`.
+ */
+function writeMessage(
+  qc: QueryClient,
+  sessionId: string,
+  state: ConversationState,
+  messageId: string,
+  opts: { seed: boolean }
+): void {
+  const message = findMessage(state, messageId);
+  if (!message) return;
+  const row = toMessageRow(sessionId, message);
 
   qc.setQueryData<PaginatedMessages>(messagesKey(sessionId), (old) => {
     if (!old) {
@@ -232,114 +308,27 @@ function upsertMessageRow(
         ? { messages: [row], compactions: [], has_older: false, has_newer: false }
         : old;
     }
-    const messages = reconcileEcho(old.messages, row);
-    return messages === old.messages ? old : { ...old, messages };
-  });
-}
+    const index = old.messages.findIndex((m) => m.id === row.id);
+    if (index === -1) return { ...old, messages: [...old.messages, row] };
 
-/**
- * Merge an engine message row into the page, absorbing the composer's local
- * bubble for the same turn.
- *
- * Both orderings have to converge, because the backend invalidates (→ q:delta
- * with the real row) BEFORE it pushes the envelope:
- *   delta first  → the real row is already here; drop the local twin.
- *   event first  → swap the local twin for the real row, keeping its rendered
- *                  parts so the bubble does not blink empty until the echo's
- *                  own parts arrive.
- */
-export function reconcileEcho(messages: Message[], row: Message): Message[] {
-  const existing = messages.findIndex((m) => m.id === row.id);
-  const local =
-    row.role === "user" && row.turn_id
-      ? messages.findIndex((m) => isLocalMessage(m) && m.turn_id === row.turn_id)
-      : -1;
-
-  if (existing !== -1) {
-    if (local === -1) return messages;
-    const next = [...messages];
-    next.splice(local, 1);
-    return next;
-  }
-
-  if (local !== -1) {
-    const next = [...messages];
-    const previous = next[local];
-    next[local] = { ...row, seq: previous.seq, parts: previous.parts };
-    return next;
-  }
-
-  return [...messages, row];
-}
-
-// ---- Parts ----
-
-/** Replace one message's parts. No-op when the message isn't cached yet. */
-function mutateParts(
-  qc: QueryClient,
-  sessionId: string,
-  messageId: string,
-  updater: (parts: AnyPart[]) => AnyPart[]
-): void {
-  qc.setQueryData<PaginatedMessages>(messagesKey(sessionId), (old) => {
-    if (!old) return old;
-    const index = old.messages.findIndex((m) => m.id === messageId);
-    if (index === -1) return old;
-
-    const message = old.messages[index];
-    const parts = updater(message.parts ?? []);
-    if (parts === message.parts) return old;
-
+    const previous = old.messages[index];
     const messages = [...old.messages];
-    messages[index] = { ...message, parts };
+    messages[index] = {
+      ...previous,
+      ...row,
+      seq: previous.seq,
+      // The optimistic bubble stamps `sent_at` at send time and the echo
+      // re-stamps it at admission; keeping the first stops the turn-duration
+      // clock jumping backwards when the echo lands.
+      sent_at: previous.sent_at ?? row.sent_at,
+      // A `message.started` opens a shell with NO parts — it says nothing
+      // about parts, so it must not blank the ones already rendered. (The
+      // reducer only ever upserts parts, so an empty list is always "none
+      // known yet", never "they were removed".) Without this the predicted
+      // echo bubble blinks empty in the gap before its own parts arrive.
+      parts: row.parts?.length ? row.parts : (previous.parts ?? row.parts),
+    };
     return { ...old, messages };
-  });
-}
-
-/** Snapshots are authoritative: upsert by part id, replacing whatever is there. */
-function upsertPart(qc: QueryClient, sessionId: string, event: AnyMessagePartEvent): void {
-  mutateParts(qc, sessionId, event.messageId, (parts) => {
-    // The first authoritative part evicts the composer's placeholders: they
-    // rendered the same text under a local id and would otherwise double it.
-    const base = parts.some(isLocalPart) ? parts.filter((p) => !isLocalPart(p)) : parts;
-    const index = base.findIndex((p) => p.id === event.part.id);
-    if (index === -1) return [...base, event.part];
-    const next = [...base];
-    next[index] = event.part;
-    return next;
-  });
-}
-
-/** Apply the buffered deltas. Called from the hook's animation frame. */
-export function flushDeltas(qc: QueryClient, sessionId: string, buffer: DeltaBuffer): void {
-  if (buffer.pending.size === 0) return;
-
-  const deltas = new Map(buffer.pending);
-  buffer.pending.clear();
-
-  qc.setQueryData<PaginatedMessages>(messagesKey(sessionId), (old) => {
-    if (!old) return old;
-
-    let mutated = false;
-    const messages = old.messages.map((message) => {
-      if (!message.parts) return message;
-
-      let partsChanged = false;
-      const parts = message.parts.map((part): AnyPart => {
-        const delta = deltas.get(part.id);
-        if (!delta) return part;
-        if (isUnknownPart(part)) return part;
-        if (part.type !== "text" && part.type !== "reasoning") return part;
-        partsChanged = true;
-        return { ...part, text: part.text + delta };
-      });
-
-      if (!partsChanged) return message;
-      mutated = true;
-      return { ...message, parts };
-    });
-
-    return mutated ? { ...old, messages } : old;
   });
 }
 
@@ -354,45 +343,59 @@ export function flushDeltas(qc: QueryClient, sessionId: string, buffer: DeltaBuf
  * mints a marker row for it, and this mirrors that row under the same
  * deterministic id so the "Response stopped" divider appears live too.
  */
-function patchTurnAccounting(qc: QueryClient, sessionId: string, event: TurnEndedEvent): void {
+function writeTurnAccounting(
+  qc: QueryClient,
+  sessionId: string,
+  state: ConversationState,
+  turnId: string
+): void {
+  const turn = state.turns.find((t) => t.turnId === turnId);
+  // `turn-updated` also reports a turn OPENING, and a non-terminal error
+  // attributed to a turn — neither has accounting to mirror yet.
+  if (!turn || turn.status !== "ended") return;
+  const cancelled = turn.stopReason === "cancelled";
+  const endedAt = new Date(turn.endedAt ?? Date.now()).toISOString();
+
   qc.setQueryData<PaginatedMessages>(messagesKey(sessionId), (old) => {
     if (!old) return old;
     const index = old.messages.findLastIndex(
-      (m) => m.turn_id === event.turnId && m.role === "assistant" && !m.parent_tool_call_id
+      (m) => m.turn_id === turnId && m.role === "assistant" && !m.parent_tool_call_id
     );
     if (index === -1) {
-      return event.stopReason === "cancelled"
-        ? { ...old, messages: [...old.messages, cancelledMarker(sessionId, event)] }
+      return cancelled
+        ? { ...old, messages: [...old.messages, cancelledMarker(sessionId, turnId, endedAt, turn)] }
         : old;
     }
 
     const messages = [...old.messages];
     messages[index] = {
       ...messages[index],
-      turn_stop_reason: event.stopReason,
-      ...(event.tokens ? { tokens: JSON.stringify(event.tokens) } : {}),
-      ...(event.cost !== undefined ? { cost: event.cost } : {}),
-      ...(event.stopReason === "cancelled"
-        ? { cancelled_at: new Date(event.timestamp).toISOString() }
-        : {}),
+      turn_stop_reason: turn.stopReason,
+      ...(turn.tokens ? { tokens: JSON.stringify(turn.tokens) } : {}),
+      ...(turn.cost !== undefined ? { cost: turn.cost } : {}),
+      ...(cancelled ? { cancelled_at: endedAt } : {}),
     };
     return { ...old, messages };
   });
 }
 
 /** The zero-part assistant row that says "this turn was interrupted". */
-function cancelledMarker(sessionId: string, event: TurnEndedEvent): Message {
-  const at = new Date(event.timestamp).toISOString();
+function cancelledMarker(
+  sessionId: string,
+  turnId: string,
+  at: string,
+  turn: ConversationTurn
+): Message {
   return {
-    id: cancelledTurnMessageId(event.turnId),
+    id: cancelledTurnMessageId(turnId),
     session_id: sessionId,
     seq: 0,
     role: "assistant",
-    turn_id: event.turnId,
+    turn_id: turnId,
     model: null,
     sent_at: at,
     cancelled_at: at,
-    turn_stop_reason: "cancelled",
+    turn_stop_reason: turn.stopReason ?? "cancelled",
     parts: [],
   };
 }

@@ -1,31 +1,36 @@
 // backend/src/services/agent/event-handler.ts
 // The single entry point for agent → backend data flow.
 //
-// It consumes the @zvada/agent-server lifecycle stream NATIVELY: one
-// `match(envelope.event)` that persists (DB writes) and pushes (`agent:event`
-// + query invalidation). There is no translation layer — the event that
-// crosses the wire is the event that hits SQLite and the event the frontend
-// folds (with deus's own fold, `lib/agentEventFold` — not the engine's
-// `reduceConversation`; see that file for why).
+// It consumes the @zvada/agent-server lifecycle stream NATIVELY: the envelope
+// goes into the engine's own fold, the fold reports what moved, and
+// `persistChanges` turns that into rows. There is no translation layer — the
+// event that crosses the wire is the event the frontend folds, with the SAME
+// reducer, projecting onto the TanStack cache instead of SQLite.
 //
-// Ordering matters: persist first, then invalidate.
+// What is NOT change-driven is the small set of facts that are deus's rather
+// than the conversation's: which turn is admitted, whether an error was already
+// reported for it, and the session STATUS that results. The fold has no opinion
+// about any of those, so they stay an explicit switch.
+//
+// Ordering matters: persist first, then invalidate, then push.
 
 import { match } from "ts-pattern";
-import { classifyError } from "@zvada/agent-server/protocol";
-import type { ErrorEvent, TurnEndedEvent } from "@zvada/agent-server/protocol";
-import { isUnknownLifecycleEvent, type AnyWireEventEnvelope } from "@shared/protocol-types";
+import {
+  classifyError,
+  emptyConversation,
+  reduceConversationWithChanges,
+} from "@zvada/agent-server/protocol";
+import type { ConversationState, ConversationTurn, ErrorEvent } from "@zvada/agent-server/protocol";
+import { isUnknownEvent, type DecodedWireEventEnvelope } from "@shared/protocol-types";
 import type { QueryResource, QServerFrame } from "@shared/types/query-protocol";
 import { invalidate } from "../query-engine";
 import { broadcast } from "../ws.service";
 import {
   persistAgentSessionId,
-  persistCompaction,
-  persistMessageStarted,
-  persistPart,
+  persistChanges,
   persistSessionError,
   persistSessionTitle,
-  persistSessionUsage,
-  persistTurnEnded,
+  type ChangeWrite,
   type TurnOutcomeWrite,
   type WriteResult,
 } from "./persistence";
@@ -35,7 +40,7 @@ import { refreshPrSnapshotForSession } from "../pr-snapshot.service";
 
 export interface AgentEventHandler {
   /** Feed one sequenced wire envelope (post-dedupe, in seq order). */
-  handle(envelope: AnyWireEventEnvelope): void;
+  handle(envelope: DecodedWireEventEnvelope): void;
   /**
    * Mirror a turn admission before its quick-ack round-trip, so the handler
    * knows which turn is live when the first envelopes arrive in the same tick
@@ -57,6 +62,8 @@ interface SessionState {
   turnId?: string;
   /** One terminal error per turn: turn.ended(error) must not double-report. */
   errorReported: boolean;
+  /** The folded conversation — the source of every row this session writes. */
+  conversation: ConversationState;
 }
 
 // ---- Resource groups for invalidation ----
@@ -71,9 +78,41 @@ const TURN_END_RESOURCES: QueryResource[] = [
   "messages",
 ];
 
+/**
+ * The events the frontend does NOT receive.
+ *
+ * Everything else is pushed verbatim, because the frontend folds it. These
+ * five reach the UI another way or not at all: the context gauge and the
+ * session's terminal state are session COLUMNS (q:delta carries them), the
+ * "working" flip is written optimistically by the send command before
+ * `turn.started` could arrive, tool policy answers permissions in-process so
+ * there is no prompt to render, and deus never sets `RunConfig.includeRaw`.
+ */
+const NOT_PUSHED = new Set([
+  "session.ended",
+  "session.usage",
+  "turn.started",
+  "permission.requested",
+  "permission.resolved",
+  "raw",
+]);
+
+/**
+ * What a successful write of each change kind makes stale.
+ *
+ * `part-upserted` is deliberately absent: the frontend already has the part
+ * from the pushed envelope, so a q:delta would only run a wasted query.
+ */
+const INVALIDATED_BY: Partial<Record<ChangeWrite["kind"], QueryResource[]>> = {
+  "message-upserted": MESSAGE_RESOURCES,
+  "turn-updated": TURN_END_RESOURCES,
+  "usage-updated": SESSION_RESOURCES,
+  "compaction-upserted": MESSAGE_RESOURCES,
+};
+
 // ---- Helpers ----
 
-/** Persist an event and invalidate subscriptions if the write succeeded. */
+/** Persist a write and invalidate subscriptions if it succeeded. */
 function persistAndInvalidate(
   result: WriteResult<unknown>,
   resources: QueryResource[],
@@ -84,39 +123,31 @@ function persistAndInvalidate(
   }
 }
 
-/** Persist without invalidation — the frontend has the data via agent:event
- *  already, and a q:delta would just run a wasted query. */
-function persistOnly(result: WriteResult<unknown>): void {
-  if (!result.ok) {
-    console.warn(`[AgentEvent] Persistence failed:`, result.error);
-  }
-}
-
 /**
  * Push one wire envelope to every frontend connection verbatim. The frontend
  * routes by `sessionId` and orders/dedupes by `seq` — both free because the
  * envelope is not reshaped on its way through the backend.
  */
-function pushEnvelope(envelope: AnyWireEventEnvelope): void {
+function pushEnvelope(envelope: DecodedWireEventEnvelope): void {
   const frame: QServerFrame = { type: "q:event", event: "agent:event", data: envelope };
   broadcast(JSON.stringify(frame));
 }
 
-/** The terminal state a stopReason leaves the session in. Exported so the
+/** The terminal state an ended turn leaves the session in. Exported so the
  *  verification CLI decides it the same way instead of re-deriving it. */
-export function turnOutcome(event: TurnEndedEvent, alreadyReported: boolean): TurnOutcomeWrite {
-  if (event.stopReason === "cancelled") {
+export function turnOutcome(turn: ConversationTurn, alreadyReported: boolean): TurnOutcomeWrite {
+  if (turn.stopReason === "cancelled") {
     return { status: "idle", cancelled: true };
   }
-  if (event.stopReason === "error") {
+  if (turn.stopReason === "error") {
     // A standalone `error` event already wrote the status + message; the
     // terminal event must not overwrite it with a vaguer one.
     if (alreadyReported) return { status: "error", cancelled: false };
-    const message = event.error?.message ?? "Agent turn failed";
+    const message = turn.error?.message ?? "Agent turn failed";
     return {
       status: "error",
       cancelled: false,
-      error: { message, category: event.error?.category ?? classifyError(new Error(message)) },
+      error: { message, category: turn.error?.category ?? classifyError(new Error(message)) },
     };
   }
   // end_turn, max_tokens, refusal, max_turn_requests and any adapter
@@ -134,7 +165,7 @@ export function createAgentEventHandler(): AgentEventHandler {
   const stateFor = (sessionId: string): SessionState => {
     const existing = sessions.get(sessionId);
     if (existing) return existing;
-    const created: SessionState = { errorReported: false };
+    const created: SessionState = { errorReported: false, conversation: emptyConversation() };
     sessions.set(sessionId, created);
     return created;
   };
@@ -143,7 +174,13 @@ export function createAgentEventHandler(): AgentEventHandler {
     beginTurn(sessionId, turnId, opts = {}) {
       const existing = sessions.get(sessionId);
       if (existing?.turnId !== undefined && !opts.force) return false;
-      sessions.set(sessionId, { turnId, errorReported: false });
+      sessions.set(sessionId, {
+        turnId,
+        errorReported: false,
+        // The transcript outlives the turn: a new send continues the session's
+        // conversation, it does not start a second one.
+        conversation: existing?.conversation ?? emptyConversation(),
+      });
       return true;
     },
 
@@ -163,11 +200,19 @@ export function createAgentEventHandler(): AgentEventHandler {
       const sessionId = envelope.sessionId;
       const state = stateFor(sessionId);
 
-      if (isUnknownLifecycleEvent(envelope.event)) {
-        // Law 6: an event type this build does not know. Forward it verbatim —
-        // dropping it would be a hole in the frontend's transcript and a
-        // fabricated seq gap for anything counting envelopes. Nothing to
-        // persist: deus knows no columns for a shape it cannot read.
+      // The fold takes the union as-is, unknown types included (they land in
+      // `state.unknownEvents`, in arrival order) and reports no row changes for
+      // them: deus knows no columns for a shape it cannot read.
+      const { state: conversation, changes } = reduceConversationWithChanges(
+        state.conversation,
+        envelope.event
+      );
+      state.conversation = conversation;
+
+      if (isUnknownEvent(envelope.event)) {
+        // Law 6: forward it verbatim. Dropping it would be a hole in the
+        // frontend's transcript and a fabricated seq gap for anything counting
+        // envelopes.
         console.warn(
           `[AgentEvent] unknown event type: session=${sessionId} ${envelope.event.type}`
         );
@@ -175,8 +220,28 @@ export function createAgentEventHandler(): AgentEventHandler {
         return;
       }
 
+      // ── The rows the conversation moved ─────────────────────────────────
+      const writes = persistChanges(sessionId, conversation, changes, (turn) => {
+        // Deciding (and recording) the outcome here keeps the dedupe flag in
+        // step with the write it guards, whichever event ended the turn.
+        const outcome = turnOutcome(turn, state.errorReported);
+        if (state.turnId === turn.turnId) state.turnId = undefined;
+        if (outcome.status === "error") state.errorReported = true;
+        return outcome;
+      });
+
+      const stale = new Set<QueryResource>();
+      for (const write of writes) {
+        if (!write.result.ok) {
+          console.warn(`[AgentEvent] Persistence failed (${write.kind}):`, write.result.error);
+          continue;
+        }
+        for (const resource of INVALIDATED_BY[write.kind] ?? []) stale.add(resource);
+      }
+      if (stale.size > 0) invalidate([...stale], { sessionIds: [sessionId] });
+
+      // ── The facts that are deus's, not the conversation's ───────────────
       match(envelope.event)
-        // ── Session lifecycle ─────────────────────────────────────────────
         .with({ type: "session.created" }, (e) => {
           console.log(
             `[AgentEvent] session.created: session=${sessionId} native=${e.nativeSessionId} harness=${e.harness}${
@@ -197,26 +262,14 @@ export function createAgentEventHandler(): AgentEventHandler {
             SESSION_RESOURCES,
             sessionId
           );
-          pushEnvelope(envelope);
         })
         .with({ type: "session.ended" }, (e) => {
           console.log(`[AgentEvent] session.ended: session=${sessionId} reason=${e.reason}`);
-          // The session is over — drop its state. This is the event that
-          // exists for exactly that; without it the map only grows.
+          // The session is over — drop its state, folded transcript included.
+          // This is the event that exists for exactly that; without it the map
+          // only grows, and now each entry costs a conversation.
           sessions.delete(sessionId);
         })
-        .with({ type: "session.usage" }, (e) => {
-          persistAndInvalidate(persistSessionUsage(e), SESSION_RESOURCES, sessionId);
-        })
-        .with({ type: "session.compaction" }, (e) => {
-          console.log(
-            `[AgentEvent] session.compaction: session=${sessionId} id=${e.compactionId} status=${e.status}`
-          );
-          persistAndInvalidate(persistCompaction(e), MESSAGE_RESOURCES, sessionId);
-          pushEnvelope(envelope);
-        })
-
-        // ── Turn lifecycle ────────────────────────────────────────────────
         .with({ type: "turn.started" }, (e) => {
           console.log(`[AgentEvent] turn.started: session=${sessionId} turn=${e.turnId}`);
           // Nothing to persist: status='working' was written optimistically by
@@ -232,57 +285,42 @@ export function createAgentEventHandler(): AgentEventHandler {
           console.log(
             `[AgentEvent] turn.ended: session=${sessionId} turn=${e.turnId} stopReason=${e.stopReason} cost=${e.cost ?? 0}`
           );
-          const outcome = turnOutcome(e, state.errorReported);
-          if (state.turnId === e.turnId) state.turnId = undefined;
-          if (outcome.status === "error") state.errorReported = true;
-          persistAndInvalidate(persistTurnEnded(e, outcome), TURN_END_RESOURCES, sessionId);
-          pushEnvelope(envelope);
           // The agent may have created, updated or pushed a PR during the turn.
           refreshPrSnapshotForSession(sessionId);
         })
-
-        // ── Message + part lifecycle ──────────────────────────────────────
         .with({ type: "message.started" }, (e) => {
           console.log(
             `[AgentEvent] message.started: session=${sessionId} message=${e.messageId} role=${e.role} turn=${e.turnId}`
           );
-          persistAndInvalidate(persistMessageStarted(e), MESSAGE_RESOURCES, sessionId);
-          pushEnvelope(envelope);
-        })
-        .with({ type: "message.part" }, (e) => {
-          // Persist every snapshot so an in-flight turn survives a session
-          // switch or a reload; the frontend gets the data from the push.
-          persistOnly(persistPart(e));
-          pushEnvelope(envelope);
-        })
-        .with({ type: "message.part.delta" }, () => {
-          // High-frequency streaming aid: forward-only, never persisted.
-          // Snapshots are authoritative and reconstruct the same state.
-          pushEnvelope(envelope);
         })
         .with({ type: "message.ended" }, (e) => {
           console.log(`[AgentEvent] message.ended: session=${sessionId} message=${e.messageId}`);
-          // Bracket marker only — the parts are already durable and the turn's
-          // accounting arrives on turn.ended.
-          pushEnvelope(envelope);
         })
-
-        // ── Diagnostics ───────────────────────────────────────────────────
+        .with({ type: "session.compaction" }, (e) => {
+          console.log(
+            `[AgentEvent] session.compaction: session=${sessionId} id=${e.compactionId} status=${e.status}`
+          );
+        })
         .with({ type: "error" }, (e) => {
           handleErrorEvent(sessionId, state, e);
-          pushEnvelope(envelope);
         })
-
-        // ── Not surfaced (yet) ────────────────────────────────────────────
-        .with({ type: "permission.requested" }, { type: "permission.resolved" }, () => {
-          // Tool policy answers permissions in-process (dont_ask + policy), so
-          // there is no prompt to render. The events exist the day deus grows
-          // a permission UI.
-        })
-        .with({ type: "raw" }, () => {
-          // Opt-in passthrough; deus never sets RunConfig.includeRaw.
-        })
+        .with(
+          { type: "message.part" },
+          { type: "message.part.delta" },
+          { type: "session.usage" },
+          { type: "permission.requested" },
+          { type: "permission.resolved" },
+          { type: "raw" },
+          () => {
+            // Fully described by the changes above, or — for permission.* and
+            // raw — nothing deus surfaces: tool policy answers permissions
+            // in-process (dont_ask + policy) so there is no prompt to render,
+            // and deus never sets RunConfig.includeRaw.
+          }
+        )
         .exhaustive();
+
+      if (!NOT_PUSHED.has(envelope.event.type)) pushEnvelope(envelope);
     },
   };
 }

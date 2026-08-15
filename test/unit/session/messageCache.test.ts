@@ -2,14 +2,15 @@
  * The other two writers of the message cache: the q:delta merge and the
  * composer's own rollback.
  *
- * Both used to key on an id prefix — "any row called optimistic-* dies on the
- * next delta" — which made a REJECTED send silently disappear: the backend
- * writes no user row (the engine echo does), so the typed message existed only
- * in this cache. Retirement is keyed on the send's `turn_id` now, and a
- * rejection removes exactly its own bubble.
+ * The bubble carries the id the engine's echo will carry, so the persisted row
+ * arriving over q:delta IS that row and dedupes against it. Nothing retires a
+ * bubble by looking for a look-alike; a rejection removes exactly its own,
+ * which is what keeps a REJECTED send on screen (the backend writes no user
+ * row — the engine echo does — so the typed message exists only in this cache).
  */
 
 import { QueryClient } from "@tanstack/react-query";
+import { echoMessageId } from "@zvada/agent-server/protocol/factories";
 import { describe, expect, it } from "vitest";
 
 import { mergeMessageDelta } from "../../../apps/web/src/features/session/lib/messageCache";
@@ -32,35 +33,35 @@ function bubble(turnId = TURN, content = "hello") {
   return createOptimisticUserMessage({ sessionId: SESSION, turnId, content });
 }
 
-function echo(turnId = TURN, id = "u-engine"): Message {
+function echo(turnId = TURN, id = echoMessageId(turnId)): Message {
   return {
     id,
     session_id: SESSION,
     seq: 7,
     role: "user",
-    content: null,
     turn_id: turnId,
   };
 }
 
 describe("mergeMessageDelta", () => {
-  it("retires the bubble whose echo just arrived", () => {
+  it("dedupes the persisted echo against the bubble that predicted it", () => {
+    // Same turn → same id → one row. This is the whole reconciliation now.
     const merged = mergeMessageDelta(page([bubble()]), [echo()]) as PaginatedMessages;
 
-    expect(merged.messages.map((m) => m.id)).toEqual(["u-engine"]);
+    expect(merged.messages.map((m) => m.id)).toEqual([echoMessageId(TURN)]);
   });
 
   it("leaves an unrelated turn's bubble alone — a rejected send must not vanish", () => {
     const rejected = bubble("turn-rejected", "never sent");
     const merged = mergeMessageDelta(page([rejected]), [
-      { ...echo(), id: "a1", role: "assistant", turn_id: "turn-other" },
+      { ...echo("turn-other"), id: "a1", role: "assistant" },
     ]) as PaginatedMessages;
 
     expect(merged.messages.map((m) => m.id)).toEqual([rejected.id, "a1"]);
   });
 
   it("deduplicates by id", () => {
-    const existing = echo(TURN, "u-engine");
+    const existing = echo(TURN);
     const merged = mergeMessageDelta(page([existing]), [existing]) as PaginatedMessages;
 
     expect(merged.messages).toHaveLength(1);
@@ -110,7 +111,7 @@ describe("dropOptimisticMessage (the rejection path)", () => {
     dropOptimisticMessage(qc, SESSION, TURN);
     expect(qc.getQueryData(messagesKey(SESSION))).toBeUndefined();
 
-    const settled = page([echo()]);
+    const settled = page([echo("turn-0")]);
     qc.setQueryData(messagesKey(SESSION), settled);
     dropOptimisticMessage(qc, SESSION, TURN);
     expect(qc.getQueryData(messagesKey(SESSION))).toBe(settled);

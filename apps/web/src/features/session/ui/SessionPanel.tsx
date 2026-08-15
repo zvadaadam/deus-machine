@@ -7,7 +7,10 @@ import {
   forwardRef,
   useImperativeHandle,
 } from "react";
+import { subagentGroups } from "@zvada/agent-server/protocol";
 import { Chat } from "./Chat";
+import { conversationView } from "../lib/conversationView";
+import type { Message } from "../types";
 import { SessionComposer, type SessionComposerRef } from "./SessionComposer";
 import { useAgentEvents } from "../hooks/useAgentEvents";
 import { useAgentRpcHandler } from "../hooks/useAgentRpcHandler";
@@ -136,20 +139,19 @@ export const SessionPanel = forwardRef<SessionPanelRef, SessionPanelProps>(
       loadOlderMutation.mutate({ sessionId, beforeSeq: firstSeq });
     }, [loadOlderMutation, messages, sessionId]);
 
-    // Subagent groups: derive from message.parent_tool_call_id
+    // Subagent output, keyed by the toolCallId that spawned it — the engine's
+    // own grouping, resolved back to rows by id (a parented message is not
+    // top-level output: rendering it in the main flow prints it twice).
     const subagentMessages = useMemo(() => {
-      const map = new Map<string, typeof messages>();
-      for (const msg of messages) {
-        if (msg.parent_tool_call_id) {
-          let group = map.get(msg.parent_tool_call_id);
-          if (!group) {
-            group = [];
-            map.set(msg.parent_tool_call_id, group);
-          }
-          group.push(msg);
-        }
+      const byId = new Map(messages.map((message) => [message.id, message]));
+      const groups = new Map<string, typeof messages>();
+      for (const [toolCallId, group] of subagentGroups(conversationView(messages, false))) {
+        groups.set(
+          toolCallId,
+          group.map((entry) => byId.get(entry.messageId)).filter((m): m is Message => m != null)
+        );
       }
-      return map;
+      return groups;
     }, [messages]);
 
     // Latest user message sent_at for turn duration tracking

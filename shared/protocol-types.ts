@@ -4,26 +4,26 @@
 // ToolState / LifecycleEvent shapes ARE the shapes that cross the wire, land
 // in SQLite (`parts.data` is the engine `Part` verbatim) and render in the UI.
 //
-// Type-only on purpose, and this file exists for exactly one consumer: the
-// RENDERER. The package ships readable TypeScript source, so a value import
-// would pull zod (and the whole protocol module graph) into the browser
-// bundle. The backend and the agent-server have no such constraint and import
-// "@zvada/agent-server/protocol" directly — including for runtime behaviour
-// (`classifyError`, the zod schemas).
+// This file exists for exactly one consumer: the RENDERER. The package ships
+// readable TypeScript source, so importing the protocol BARREL for a value
+// pulls zod (and the whole part/event union) into the browser bundle. Type
+// imports are erased and cost nothing; the two runtime guards come from
+// `@zvada/agent-server/protocol/guards`, the subpath the package keeps
+// zod-free for exactly this reason. The backend and the agent-server have no
+// such constraint and import "@zvada/agent-server/protocol" directly —
+// including for runtime behaviour (`classifyError`, `parseAgentInput`, the
+// zod schemas).
 //
 // So the list below is not "the vocabulary": it is the subset the frontend
 // actually imports, plus the Law-6 decoded shapes both sides need. Law 7 —
 // advertise nothing you don't deliver; a re-export with no consumer reads as
 // a capability. Need another type? Add it here when you import it, not before.
+//
+// Nothing in this file may RE-DERIVE an engine shape. A structural restatement
+// (`Omit<…> & { part: Part | UnknownPart }`) reads as a safety net and is the
+// opposite: it silently diverges the day the engine's own shape changes.
 
-import type {
-  LifecycleEvent,
-  MessagePartEvent,
-  Part,
-  UnknownEvent,
-  UnknownPart,
-  WireEventEnvelope,
-} from "@zvada/agent-server/protocol";
+import type { DecodedLifecycleEvent, UnknownEvent } from "@zvada/agent-server/protocol";
 
 export type {
   // ---- events ----
@@ -32,6 +32,12 @@ export type {
   MessageStartedEvent,
   MessagePartEvent,
   TurnEndedEvent,
+  // ---- events, decoded the Law-6 way (unknowns preserved, never dropped) ----
+  // `Decoded*` is what a SINK receives; the strict `LifecycleEvent` /
+  // `WireEventEnvelope` above is what an ADAPTER emits.
+  DecodedLifecycleEvent,
+  DecodedMessagePartEvent,
+  DecodedWireEventEnvelope,
   // ---- parts ----
   Part,
   UnknownPart,
@@ -42,9 +48,11 @@ export type {
   FilePart,
   SubagentMetadata,
   // ---- tool state ----
+  ToolState,
   ToolStateCompleted,
   ToolResultContent,
   // ---- input ----
+  AgentInput,
   PartInput,
   ImagePartInput,
   // ---- config ----
@@ -52,49 +60,35 @@ export type {
   // ---- accounting + errors ----
   TokenUsage,
   ErrorCategory,
+  // ---- conversation fold ----
+  ConversationState,
+  ConversationChange,
+  ConversationMessage,
+  ConversationTurn,
+  TimelineEntry,
   // ---- wire ----
   WireEventEnvelope,
 } from "@zvada/agent-server/protocol";
 
 /**
- * Law 6 — tolerant of the unknown, strict about the known.
- *
- * The wire decoder preserves an event type this build does not know, and an
- * unknown PART inside a known `message.part`, instead of dropping them: a
- * dropped event is a hole in the transcript AND a fabricated seq gap for every
- * consumer counting envelopes. These aliases are what a consumer of the
- * decoded stream actually receives — `LifecycleEvent` is the strict shape an
- * ADAPTER emits, not the shape a sink reads.
- *
- * Written structurally rather than re-exported so a package bump cannot
- * silently narrow deus's sinks back to the strict union.
+ * The union a decoder yields: a known event, or one this build has never heard
+ * of. The engine writes it inline everywhere (`DecodedLifecycleEvent |
+ * UnknownEvent`) and never names it; deus names it once because it is the
+ * parameter type of every sink in the repo.
  */
-export type AnyMessagePartEvent = Omit<MessagePartEvent, "part"> & { part: Part | UnknownPart };
-
-export type AnyLifecycleEvent =
-  | Exclude<LifecycleEvent, MessagePartEvent>
-  | AnyMessagePartEvent
-  | UnknownEvent;
-
-export type AnyWireEventEnvelope = Omit<WireEventEnvelope, "event"> & { event: AnyLifecycleEvent };
+export type AnyLifecycleEvent = DecodedLifecycleEvent | UnknownEvent;
 
 /**
- * Narrow a decoded event to the known union.
+ * Law 6 — tolerant of the unknown, strict about the known.
  *
- * `raw` is the structural discriminator: no known member declares it. Matching
- * on `type` alone is NOT enough — `UnknownEvent.type` is an open `string`, so
+ * `isUnknownEvent` narrows a decoded event to the unknown case, `isUnknownPart`
+ * does the same for a PART inside a known `message.part`. Matching on `type`
+ * alone is NOT enough: `UnknownEvent.type` is an open `string`, so
  * `{ type: "session.created" }` matches the unknown shape too and every field
  * access after it stops compiling.
  *
- * The one value export here on purpose: it is a two-line predicate with no
- * imports, so it costs the renderer bundle nothing (the reason this file is
- * otherwise type-only is zod, not values).
+ * Re-exported (not reimplemented) from the zod-free guards subpath: the engine
+ * decides membership against ITS frozen list, so a package that learns a new
+ * event type stops calling it unknown here on the same bump.
  */
-export function isUnknownLifecycleEvent(event: AnyLifecycleEvent): event is UnknownEvent {
-  return "raw" in event;
-}
-
-/** The same narrowing for a PART inside a known `message.part`. */
-export function isUnknownPart(part: Part | UnknownPart): part is UnknownPart {
-  return "raw" in part;
-}
+export { isUnknownEvent, isUnknownPart } from "@zvada/agent-server/protocol/guards";

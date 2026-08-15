@@ -584,9 +584,13 @@ describeWithDb("engine turn → handler → SQLite", () => {
       { type: "session.usage", sessionId: SESSION, turnId: TURN, used: 60_000, timestamp: T + 1 }
     );
 
+    // Claude reports `size` only on the final result, so the second event has
+    // none. The fold remembers it, which is why the percent now RECOMPUTES
+    // (60k/200k) instead of freezing at the first event's 25 while the token
+    // count moved on — the two used to disagree on screen for a whole turn.
     expect(sessionRow()).toMatchObject({
       context_token_count: 60_000,
-      context_used_percent: 25,
+      context_used_percent: 30,
     });
   });
 

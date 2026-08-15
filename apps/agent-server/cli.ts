@@ -33,11 +33,7 @@ import { fileURLToPath } from "url";
 import WebSocket from "ws";
 import { AgentServerClient } from "@zvada/agent-server/client";
 import type { AgentHarness, TurnStartParams } from "@zvada/agent-server/protocol";
-import {
-  isUnknownLifecycleEvent,
-  isUnknownPart,
-  type AnyLifecycleEvent,
-} from "@shared/protocol-types";
+import { isUnknownEvent, isUnknownPart, type AnyLifecycleEvent } from "@shared/protocol-types";
 import { AGENT_HARNESSES, generateUUIDv7, isAgentHarness } from "@zvada/agent-server/protocol";
 import {
   SIDE_CHANNEL,
@@ -119,7 +115,7 @@ function renderEvent(event: AnyLifecycleEvent, json: boolean): void {
     console.log(JSON.stringify(event));
     return;
   }
-  if (isUnknownLifecycleEvent(event)) {
+  if (isUnknownEvent(event)) {
     // Law 6: a type this build does not know still gets a line — silence is
     // how a newer server's events become invisible.
     breakLine();
@@ -357,7 +353,7 @@ async function runTurn(conn: Connection, state: CliState, prompt: string): Promi
   const off = conn.client.onEvent((envelope) => {
     if (envelope.sessionId !== state.sessionId) return;
     const event = envelope.event;
-    if (isUnknownLifecycleEvent(event) || event.type !== "session.created") return;
+    if (isUnknownEvent(event) || event.type !== "session.created") return;
     state.nativeSessionId = event.nativeSessionId;
     // Follow-up turns resume the warm conversation automatically.
     state.resume = event.nativeSessionId;

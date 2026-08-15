@@ -7,7 +7,7 @@ import { createServer as createHttpServer, type Server } from "http";
 import { WebSocketServer, WebSocket } from "ws";
 import { AgentServerClient } from "@zvada/agent-server/client";
 import type { LifecycleEvent } from "@zvada/agent-server/protocol";
-import type { AnyWireEventEnvelope } from "@shared/protocol-types";
+import type { DecodedWireEventEnvelope } from "@shared/protocol-types";
 import { WIRE_PROTOCOL_VERSION } from "@zvada/agent-server/protocol";
 import {
   SIDE_CHANNEL,
@@ -16,7 +16,7 @@ import {
   wsLineTransport,
 } from "@shared/agent-side-channel";
 import { AgentServer } from "../upstream-server";
-import { bridgeWsConnection, createEventObserverTransport } from "../wire";
+import { bridgeWsConnection, observeEvents } from "../wire";
 import { HostRpc } from "../host-link";
 import { trackedSessions } from "../session-tracker";
 
@@ -105,7 +105,7 @@ describe("Integration: standard wire + deus side channel over a real WebSocket",
     });
     // Production wiring: the observer feeds the session tracker from the
     // event broadcast (native ids, turn boundaries).
-    wireServer.attach(createEventObserverTransport());
+    observeEvents(wireServer);
     httpServer = createHttpServer();
     wss = new WebSocketServer({ server: httpServer });
     wss.on("connection", (ws) => bridgeWsConnection(ws, wireServer));
@@ -171,7 +171,7 @@ describe("Integration: standard wire + deus side channel over a real WebSocket",
 
   it("runs a quick-ack turn and streams sequenced events in order", async () => {
     const c = await connectBackendStyle();
-    const envelopes: AnyWireEventEnvelope[] = [];
+    const envelopes: DecodedWireEventEnvelope[] = [];
     c.onEvent((envelope) => envelopes.push(envelope));
 
     const turn = await c.runTurn({

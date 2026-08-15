@@ -7,7 +7,6 @@
 
 import type { PaginatedMessages } from "../api/session.service";
 import type { Message } from "../types";
-import { isLocalMessage } from "./optimisticMessage";
 
 /**
  * Custom delta merge for PaginatedMessages cache.
@@ -15,11 +14,12 @@ import { isLocalMessage } from "./optimisticMessage";
  * merge correctly into the { messages, has_older, has_newer } shape
  * instead of treating the cache as a flat array.
  *
- * Deduplicates by message id, and retires the composer's optimistic bubble
- * against the echo it was standing in for — matched by `turn_id`, never by
- * "some delta arrived". A blanket strip made a rejected send disappear without
- * a trace: the backend writes no user row, so the typed message existed ONLY
- * here and the next unrelated delta deleted it.
+ * Deduplicating by message id is the whole of it. The composer's optimistic
+ * bubble carries the id the engine's echo will carry (`echoMessageId`), so the
+ * persisted row arriving here IS that row — it dedupes, rather than needing to
+ * be matched against a look-alike by `turn_id` and swapped in. A bubble is
+ * retired only by `dropOptimisticMessage`, so a rejected send never disappears
+ * on the next unrelated delta.
  */
 export function mergeMessageDelta(
   old: unknown,
@@ -32,14 +32,7 @@ export function mergeMessageDelta(
   if (!upserted || upserted.length === 0) return old;
 
   const incoming = upserted as Message[];
-
-  // Turns whose real user row just arrived — their local bubbles are done.
-  const echoedTurns = new Set(
-    incoming.filter((m) => m.role === "user" && m.turn_id).map((m) => m.turn_id)
-  );
-  const kept = paginated.messages.filter(
-    (m) => !(isLocalMessage(m) && m.turn_id && echoedTurns.has(m.turn_id))
-  );
+  const kept = paginated.messages;
 
   // Deduplicate: don't add messages that already exist
   const existingIds = new Set(kept.map((m) => m.id));

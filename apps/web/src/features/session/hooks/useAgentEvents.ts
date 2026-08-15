@@ -17,13 +17,14 @@
 import { useEffect, useRef } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { onEvent } from "@/platform/ws";
-import type { AnyWireEventEnvelope } from "@shared/protocol-types";
+import type { DecodedWireEventEnvelope } from "@shared/protocol-types";
 import {
-  createDeltaBuffer,
+  createStreamCursor,
   flushDeltas,
   messagesKey,
   routeEnvelope,
   type AgentStreamContext,
+  type SessionFold,
 } from "../lib/agentEventFold";
 
 /** A burst of gaps must not become a burst of full-page refetches. */
@@ -31,27 +32,28 @@ const REFETCH_DEBOUNCE_MS = 250;
 
 export function useAgentEvents(sessionId: string | null): void {
   const queryClient = useQueryClient();
-  const bufferRef = useRef(createDeltaBuffer());
-  const cursorsRef = useRef(new Map<string, number>());
+  const foldsRef = useRef(new Map<string, SessionFold>());
+  const cursorRef = useRef(createStreamCursor());
 
   useEffect(() => {
     if (!sessionId) return;
 
-    const buffer = bufferRef.current;
-    const cursors = cursorsRef.current;
+    const folds = foldsRef.current;
+    const cursor = cursorRef.current;
     let frame: number | null = null;
     const refetchTimers = new Map<string, ReturnType<typeof setTimeout>>();
 
     const ctx: AgentStreamContext = {
       queryClient,
       activeSessionId: sessionId,
-      buffer,
-      cursors,
+      folds,
+      cursor,
       scheduleFlush: () => {
         if (frame !== null) return;
         frame = requestAnimationFrame(() => {
           frame = null;
-          flushDeltas(queryClient, sessionId, buffer);
+          const fold = folds.get(sessionId);
+          if (fold) flushDeltas(queryClient, sessionId, fold);
         });
       },
       requestRefetch: (target) => {
@@ -68,7 +70,7 @@ export function useAgentEvents(sessionId: string | null): void {
 
     const unsub = onEvent((name: string, raw: unknown) => {
       if (name !== "agent:event") return;
-      routeEnvelope(ctx, raw as AnyWireEventEnvelope);
+      routeEnvelope(ctx, raw as DecodedWireEventEnvelope);
     });
 
     return () => {
@@ -76,8 +78,13 @@ export function useAgentEvents(sessionId: string | null): void {
       if (frame !== null) cancelAnimationFrame(frame);
       refetchTimers.forEach((timer) => clearTimeout(timer));
       refetchTimers.clear();
-      buffer.pending.clear();
-      cursors.clear();
+      // The folded conversations and their cursors go with the subscription:
+      // a remount re-reads the durable page from SQLite and joins the live
+      // stream wherever it now is, so keeping a half-folded state (or a
+      // watermark from the old subscription) would only make the first
+      // envelope after the remount look like a gap.
+      folds.clear();
+      cursor.sessions().forEach((id) => cursor.reset(id));
     };
   }, [sessionId, queryClient]);
 }

@@ -13,7 +13,7 @@ import type {
   TurnCancelResult,
   TurnStartParams,
 } from "@zvada/agent-server/protocol";
-import type { AnyWireEventEnvelope } from "@shared/protocol-types";
+import type { DecodedWireEventEnvelope } from "@shared/protocol-types";
 import {
   SIDE_CHANNEL,
   SideChannelEndpoint,
@@ -37,7 +37,7 @@ export interface AgentLinkOptions {
    * decoded: an event type — or a part — this build does not know arrives
    * preserved, not dropped, so the sink decides what to do with it.
    */
-  onEnvelope: (envelope: AnyWireEventEnvelope) => void;
+  onEnvelope: (envelope: DecodedWireEventEnvelope) => void;
   onConnected?: (agents: AgentInfo[]) => void;
   onDisconnected?: () => void;
   /** Tool round-trips from the agent's in-process deus MCP suite. The method

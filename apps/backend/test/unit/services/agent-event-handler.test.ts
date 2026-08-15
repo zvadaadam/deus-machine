@@ -1,13 +1,19 @@
-// The backend consumes the @zvada/agent-server lifecycle stream natively:
-// these tests pin the persistence + push decisions per engine event, with the
-// persistence layer mocked (agent-persistence.test.ts covers the SQL).
+// The backend consumes the @zvada/agent-server lifecycle stream natively: the
+// engine's fold says what moved, `persistChanges` writes the rows. These tests
+// pin what is left for the HANDLER to decide — which pushes go out, which
+// resources each change kind invalidates, the turn admission mirror and the
+// error dedupe. The rows themselves (and the fold that produces them) are
+// covered against a real database in agent-persistence.test.ts.
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type {
+  ConversationState,
+  ConversationTurn,
   LifecycleEvent,
   MessageStartedEvent,
   TurnEndedEvent,
   WireEventEnvelope,
 } from "@zvada/agent-server/protocol";
+import type { ChangeWrite, TurnOutcomeWrite } from "../../../src/services/agent/persistence";
 
 // ============================================================================
 // Mocks (vi.hoisted so they're available in vi.mock factories)
@@ -15,39 +21,29 @@ import type {
 
 const {
   mockPersistAgentSessionId,
-  mockPersistCompaction,
-  mockPersistMessageStarted,
-  mockPersistPart,
+  mockPersistChanges,
   mockPersistSessionError,
   mockPersistSessionTitle,
-  mockPersistSessionUsage,
-  mockPersistTurnEnded,
   mockInvalidate,
   mockBroadcast,
   mockRefreshPr,
+  outcomes,
 } = vi.hoisted(() => ({
   mockPersistAgentSessionId: vi.fn<(...args: any[]) => any>(() => ({ ok: true, value: undefined })),
-  mockPersistCompaction: vi.fn<(...args: any[]) => any>(() => ({ ok: true, value: "cmp-1" })),
-  mockPersistMessageStarted: vi.fn<(...args: any[]) => any>(() => ({ ok: true, value: "msg-1" })),
-  mockPersistPart: vi.fn<(...args: any[]) => any>(() => ({ ok: true, value: "part-1" })),
+  mockPersistChanges: vi.fn<(...args: any[]) => any>(),
   mockPersistSessionError: vi.fn<(...args: any[]) => any>(() => ({ ok: true, value: undefined })),
   mockPersistSessionTitle: vi.fn<(...args: any[]) => any>(() => ({ ok: true, value: undefined })),
-  mockPersistSessionUsage: vi.fn<(...args: any[]) => any>(() => ({ ok: true, value: undefined })),
-  mockPersistTurnEnded: vi.fn<(...args: any[]) => any>(() => ({ ok: true, value: undefined })),
   mockInvalidate: vi.fn<(...args: any[]) => any>(),
   mockBroadcast: vi.fn<(...args: any[]) => any>(),
   mockRefreshPr: vi.fn<(...args: any[]) => any>(),
+  outcomes: [] as Array<{ turn: ConversationTurn; outcome: TurnOutcomeWrite }>,
 }));
 
 vi.mock("../../../src/services/agent/persistence", () => ({
   persistAgentSessionId: mockPersistAgentSessionId,
-  persistCompaction: mockPersistCompaction,
-  persistMessageStarted: mockPersistMessageStarted,
-  persistPart: mockPersistPart,
+  persistChanges: mockPersistChanges,
   persistSessionError: mockPersistSessionError,
   persistSessionTitle: mockPersistSessionTitle,
-  persistSessionUsage: mockPersistSessionUsage,
-  persistTurnEnded: mockPersistTurnEnded,
 }));
 
 vi.mock("../../../src/services/query-engine", () => ({ invalidate: mockInvalidate }));
@@ -55,6 +51,42 @@ vi.mock("../../../src/services/ws.service", () => ({ broadcast: mockBroadcast })
 vi.mock("../../../src/services/pr-snapshot.service", () => ({
   refreshPrSnapshotForSession: mockRefreshPr,
 }));
+
+/**
+ * A `persistChanges` that writes nothing and reports everything as written.
+ *
+ * It still calls `outcomeFor` for an ended turn, because deciding the outcome
+ * is what advances the handler's dedupe flag — the ONE piece of session state
+ * that lives on the write path rather than beside it.
+ */
+function stubPersistChanges(
+  _sessionId: string,
+  state: ConversationState,
+  changes: Array<{ kind: ChangeWrite["kind"]; turnId?: string }>,
+  outcomeFor: (turn: ConversationTurn) => TurnOutcomeWrite
+): ChangeWrite[] {
+  const writes: ChangeWrite[] = [];
+  for (const change of changes) {
+    if (change.kind === "turn-updated") {
+      const turn = state.turns.find((t) => t.turnId === change.turnId);
+      if (!turn || turn.status !== "ended") continue;
+      outcomes.push({ turn, outcome: outcomeFor(turn) });
+    }
+    if (change.kind === "usage-updated" && !state.usage) continue;
+    writes.push({ kind: change.kind, detail: "", result: { ok: true, value: null } });
+  }
+  return writes;
+}
+
+/** The outcome the handler decided for the turn that just ended. */
+function lastOutcome(turnId = TURN): TurnOutcomeWrite | undefined {
+  return outcomes.filter((o) => o.turn.turnId === turnId).at(-1)?.outcome;
+}
+
+/** Which resources the handler invalidated, flattened and deduplicated. */
+function invalidated(): string[] {
+  return [...new Set(mockInvalidate.mock.calls.flatMap(([resources]) => resources as string[]))];
+}
 
 // ============================================================================
 // Import after mocks
@@ -95,6 +127,24 @@ function turnEnded(over: Partial<TurnEndedEvent> = {}): TurnEndedEvent {
   };
 }
 
+const partEvent: LifecycleEvent = {
+  type: "message.part",
+  sessionId: SESSION,
+  turnId: TURN,
+  messageId: "msg-1",
+  outputIndex: 1,
+  partIndex: 0,
+  part: {
+    type: "text",
+    id: "part-1",
+    sessionId: SESSION,
+    messageId: "msg-1",
+    text: "hello",
+    state: "done",
+  },
+  timestamp: T,
+};
+
 /** Every agent:event frame the handler pushed, decoded. */
 function pushedEnvelopes(): WireEventEnvelope[] {
   return mockBroadcast.mock.calls
@@ -108,6 +158,8 @@ describe("agent event handler (canonical lifecycle stream)", () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
+    outcomes.length = 0;
+    mockPersistChanges.mockImplementation(stubPersistChanges as never);
     vi.spyOn(console, "log").mockImplementation(() => {});
     vi.spyOn(console, "warn").mockImplementation(() => {});
     handler = createAgentEventHandler();
@@ -158,15 +210,15 @@ describe("agent event handler (canonical lifecycle stream)", () => {
   // ==========================================================================
 
   describe("message.started", () => {
-    it("persists the engine's user echo as the user message row", () => {
+    it("folds the engine's user echo into a message row and invalidates the page", () => {
       const echo = messageStarted({ role: "user", outputIndex: 0, messageId: "user-msg" });
 
       handler.handle(envelope(echo));
 
-      expect(mockPersistMessageStarted).toHaveBeenCalledWith(echo);
-      // Matching by turnId is what lets the frontend reconcile its optimistic
-      // bubble with this row.
-      expect(mockPersistMessageStarted.mock.calls[0][0]).toMatchObject({
+      const [, state, changes] = mockPersistChanges.mock.calls[0];
+      expect(changes).toEqual([{ kind: "message-upserted", messageId: "user-msg", turnId: TURN }]);
+      expect((state as ConversationState).timeline[0]).toMatchObject({
+        messageId: "user-msg",
         role: "user",
         turnId: TURN,
       });
@@ -175,23 +227,50 @@ describe("agent event handler (canonical lifecycle stream)", () => {
       });
     });
 
-    it("persists assistant messages with turn, parent tool call and model", () => {
-      const event = messageStarted({ parentToolCallId: "tool-7", model: "claude-opus-5" });
+    it("carries turn, parent tool call and model into the folded message", () => {
+      handler.handle(
+        envelope(messageStarted({ parentToolCallId: "tool-7", model: "claude-opus-5" }))
+      );
 
-      handler.handle(envelope(event));
-
-      expect(mockPersistMessageStarted).toHaveBeenCalledWith(event);
+      const [, state] = mockPersistChanges.mock.calls[0];
+      expect((state as ConversationState).timeline[0]).toMatchObject({
+        turnId: TURN,
+        parentToolCallId: "tool-7",
+        model: "claude-opus-5",
+      });
       expect(pushedEnvelopes().at(-1)?.event).toMatchObject({ type: "message.started" });
     });
 
     it("skips invalidation when the write failed", () => {
-      mockPersistMessageStarted.mockReturnValueOnce({ ok: false, error: "no session" } as never);
+      mockPersistChanges.mockReturnValueOnce([
+        { kind: "message-upserted", detail: "", result: { ok: false, error: "no session" } },
+      ] as never);
 
       handler.handle(envelope(messageStarted()));
 
       expect(mockInvalidate).not.toHaveBeenCalled();
       // The push still happens: live rendering must not depend on the write.
       expect(pushedEnvelopes()).toHaveLength(1);
+    });
+
+    it("reports only the part when its message is already known, and does not re-invalidate", () => {
+      // The page is not stale for a part: the frontend already has it from the
+      // pushed envelope, so a q:delta would only run a wasted query.
+      handler.handle(envelope(messageStarted()));
+      mockInvalidate.mockClear();
+
+      handler.handle(envelope(partEvent));
+
+      expect(mockPersistChanges.mock.calls.at(-1)![2]).toEqual([
+        {
+          kind: "part-upserted",
+          messageId: "msg-1",
+          partId: "part-1",
+          outputIndex: 1,
+          partIndex: 0,
+        },
+      ]);
+      expect(mockInvalidate).not.toHaveBeenCalled();
     });
   });
 
@@ -200,29 +279,19 @@ describe("agent event handler (canonical lifecycle stream)", () => {
   // ==========================================================================
 
   describe("message.part / message.part.delta", () => {
-    const partEvent: LifecycleEvent = {
-      type: "message.part",
-      sessionId: SESSION,
-      turnId: TURN,
-      messageId: "msg-1",
-      outputIndex: 1,
-      partIndex: 0,
-      part: {
-        type: "text",
-        id: "part-1",
-        sessionId: SESSION,
-        messageId: "msg-1",
-        text: "hello",
-        state: "done",
-      },
-      timestamp: T,
-    };
-
-    it("persists the snapshot and pushes it without invalidating", () => {
+    it("shells in the message a part outran, then writes the part", () => {
       handler.handle(envelope(partEvent));
 
-      expect(mockPersistPart).toHaveBeenCalledWith(partEvent);
-      expect(mockInvalidate).not.toHaveBeenCalled();
+      expect(mockPersistChanges.mock.calls[0][2]).toEqual([
+        { kind: "message-upserted", messageId: "msg-1", turnId: TURN },
+        {
+          kind: "part-upserted",
+          messageId: "msg-1",
+          partId: "part-1",
+          outputIndex: 1,
+          partIndex: 0,
+        },
+      ]);
       expect(pushedEnvelopes()).toHaveLength(1);
     });
 
@@ -241,7 +310,9 @@ describe("agent event handler (canonical lifecycle stream)", () => {
         })
       );
 
-      expect(mockPersistPart).not.toHaveBeenCalled();
+      // No open snapshot for the part yet, so the fold has nothing to extend
+      // and reports nothing at all.
+      expect(mockPersistChanges.mock.calls[0][2]).toEqual([]);
       expect(mockInvalidate).not.toHaveBeenCalled();
       expect(pushedEnvelopes()).toHaveLength(1);
     });
@@ -252,28 +323,31 @@ describe("agent event handler (canonical lifecycle stream)", () => {
   // ==========================================================================
 
   describe("turn.ended", () => {
-    it("persists tokens and cost (they used to be computed and dropped)", () => {
-      const event = turnEnded({
+    it("carries tokens and cost into the folded turn, and refreshes the PR snapshot", () => {
+      handler.handle(
+        envelope(
+          turnEnded({
+            tokens: { input: 100, output: 20, cache: { read: 5, write: 0 } },
+            cost: 0.0123,
+          })
+        )
+      );
+
+      const [, state] = mockPersistChanges.mock.calls[0];
+      expect((state as ConversationState).turns[0]).toMatchObject({
+        turnId: TURN,
+        status: "ended",
         tokens: { input: 100, output: 20, cache: { read: 5, write: 0 } },
         cost: 0.0123,
       });
-
-      handler.handle(envelope(event));
-
-      expect(mockPersistTurnEnded).toHaveBeenCalledWith(event, {
-        status: "idle",
-        cancelled: false,
-      });
+      expect(lastOutcome()).toEqual({ status: "idle", cancelled: false });
       expect(mockRefreshPr).toHaveBeenCalledWith(SESSION);
     });
 
     it("marks a cancelled turn instead of inserting a synthetic message", () => {
       handler.handle(envelope(turnEnded({ stopReason: "cancelled" })));
 
-      expect(mockPersistTurnEnded).toHaveBeenCalledWith(expect.anything(), {
-        status: "idle",
-        cancelled: true,
-      });
+      expect(lastOutcome()).toEqual({ status: "idle", cancelled: true });
     });
 
     it.each(["refusal", "max_turn_requests"])(
@@ -281,10 +355,7 @@ describe("agent event handler (canonical lifecycle stream)", () => {
       (stopReason) => {
         handler.handle(envelope(turnEnded({ stopReason })));
 
-        expect(mockPersistTurnEnded).toHaveBeenCalledWith(expect.objectContaining({ stopReason }), {
-          status: "idle",
-          cancelled: false,
-        });
+        expect(lastOutcome()).toEqual({ status: "idle", cancelled: false });
       }
     );
 
@@ -298,7 +369,7 @@ describe("agent event handler (canonical lifecycle stream)", () => {
         )
       );
 
-      expect(mockPersistTurnEnded).toHaveBeenCalledWith(expect.anything(), {
+      expect(lastOutcome()).toEqual({
         status: "error",
         cancelled: false,
         error: { message: "429 slow down", category: "rate_limit" },
@@ -308,7 +379,7 @@ describe("agent event handler (canonical lifecycle stream)", () => {
     it("classifies the message when the engine reported no ErrorInfo", () => {
       handler.handle(envelope(turnEnded({ stopReason: "error" })));
 
-      expect(mockPersistTurnEnded).toHaveBeenCalledWith(expect.anything(), {
+      expect(lastOutcome()).toEqual({
         status: "error",
         cancelled: false,
         error: { message: "Agent turn failed", category: "internal" },
@@ -333,10 +404,16 @@ describe("agent event handler (canonical lifecycle stream)", () => {
 
       // Status still error, but the vaguer terminal message must not clobber
       // the specific one already persisted.
-      expect(mockPersistTurnEnded).toHaveBeenCalledWith(expect.anything(), {
-        status: "error",
-        cancelled: false,
-      });
+      expect(lastOutcome()).toEqual({ status: "error", cancelled: false });
+    });
+
+    it("a replayed turn.ended folds to nothing, so nothing is written twice", () => {
+      const event = turnEnded({ stopReason: "cancelled" });
+      handler.handle(envelope(event));
+      handler.handle({ sessionId: SESSION, seq: 99, event });
+
+      expect(mockPersistChanges.mock.calls.at(-1)![2]).toEqual([]);
+      expect(outcomes).toHaveLength(1);
     });
   });
 
@@ -357,11 +434,38 @@ describe("agent event handler (canonical lifecycle stream)", () => {
 
       handler.handle(envelope(event));
 
-      expect(mockPersistSessionUsage).toHaveBeenCalledWith(event);
+      const [, state, changes] = mockPersistChanges.mock.calls[0];
+      expect(changes).toEqual([{ kind: "usage-updated" }]);
+      expect((state as ConversationState).usage).toMatchObject({ used: 1234, size: 200_000 });
       expect(mockInvalidate).toHaveBeenCalledWith(["workspaces", "sessions", "session", "stats"], {
         sessionIds: [SESSION],
       });
       expect(pushedEnvelopes()).toHaveLength(0);
+    });
+
+    it("the fold makes the window size sticky when the harness stops reporting it", () => {
+      handler.handle(
+        envelope({
+          type: "session.usage",
+          sessionId: SESSION,
+          turnId: TURN,
+          used: 1000,
+          size: 200_000,
+          timestamp: T,
+        })
+      );
+      handler.handle(
+        envelope({
+          type: "session.usage",
+          sessionId: SESSION,
+          turnId: TURN,
+          used: 1200,
+          timestamp: T + 1,
+        })
+      );
+
+      const [, state] = mockPersistChanges.mock.calls.at(-1)!;
+      expect((state as ConversationState).usage).toMatchObject({ used: 1200, size: 200_000 });
     });
   });
 
@@ -381,7 +485,13 @@ describe("agent event handler (canonical lifecycle stream)", () => {
 
       handler.handle(envelope(event));
 
-      expect(mockPersistCompaction).toHaveBeenCalledWith(event);
+      const [, state, changes] = mockPersistChanges.mock.calls[0];
+      expect(changes).toEqual([{ kind: "compaction-upserted", compactionId: "cmp-1" }]);
+      expect((state as ConversationState).timeline[0]).toMatchObject({
+        kind: "compaction",
+        compactionId: "cmp-1",
+        status: "completed",
+      });
       expect(mockInvalidate).toHaveBeenCalledWith(["messages", "session"], {
         sessionIds: [SESSION],
       });
@@ -404,7 +514,7 @@ describe("agent event handler (canonical lifecycle stream)", () => {
       );
 
       expect(mockPersistSessionError).not.toHaveBeenCalled();
-      expect(mockInvalidate).not.toHaveBeenCalled();
+      expect(invalidated()).toEqual([]);
       // Still forwarded as a diagnostic.
       expect(pushedEnvelopes()).toHaveLength(1);
     });
@@ -423,7 +533,7 @@ describe("agent event handler (canonical lifecycle stream)", () => {
       );
       handler.handle(envelope(turnEnded({ stopReason: "error" })));
 
-      expect(mockPersistTurnEnded).toHaveBeenCalledWith(expect.anything(), {
+      expect(lastOutcome()).toEqual({
         status: "error",
         cancelled: false,
         error: { message: "Agent turn failed", category: "internal" },
@@ -576,8 +686,7 @@ describe("agent event handler (canonical lifecycle stream)", () => {
     it("persists nothing — there are no columns for a shape it cannot read", () => {
       handler.handle(envelope(future));
 
-      expect(mockPersistMessageStarted).not.toHaveBeenCalled();
-      expect(mockPersistTurnEnded).not.toHaveBeenCalled();
+      expect(mockPersistChanges).not.toHaveBeenCalled();
       expect(mockInvalidate).not.toHaveBeenCalled();
     });
   });
@@ -607,13 +716,10 @@ describe("agent event handler (canonical lifecycle stream)", () => {
       );
       handler.handle(envelope(turnEnded({ turnId: "turn-2", stopReason: "error" })));
 
-      expect(mockPersistTurnEnded).toHaveBeenCalledWith(
-        expect.objectContaining({ turnId: "turn-2" }),
-        expect.objectContaining({
-          status: "error",
-          error: expect.objectContaining({ message: "Agent turn failed" }),
-        })
-      );
+      expect(lastOutcome("turn-2")).toMatchObject({
+        status: "error",
+        error: { message: "Agent turn failed" },
+      });
     });
 
     it("session.ended drops the session's entry — the map is otherwise unbounded", () => {

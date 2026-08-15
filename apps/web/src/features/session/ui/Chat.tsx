@@ -15,12 +15,9 @@ import { useVirtualizer } from "@tanstack/react-virtual";
 import { useCallback, useMemo, useRef, useEffect } from "react";
 import { AnimatePresence, m } from "framer-motion";
 import { CircularPixelGrid, type CircularPixelGridVariant } from "./CircularPixelGrid";
-import {
-  insertCompactions,
-  type AssistantTurnData,
-  type ChatTimelineItem,
-  type Turn,
-} from "../lib/chatTimeline";
+import { agentActivity, groupIntoTurns } from "@zvada/agent-server/protocol";
+import { conversationView } from "../lib/conversationView";
+import { insertCompactions, type ChatTimelineItem, type Turn } from "../lib/chatTimeline";
 
 const USER_PADDING_CLASS = "pb-8";
 const TIGHT_PADDING_CLASS = "pb-1";
@@ -204,115 +201,75 @@ export function Chat({
   }, [messages]);
 
   /**
-   * Derive agent sub-state from the last content block in the message stream.
-   * Maps to CircularPixelGrid animation variant:
-   * - thinking: last part is reasoning
-   * - generating: last part is text
-   * - toolExecuting: last part is a tool still pending / in_progress
-   * - error: last part is a failed tool
+   * The rows the engine's read-only projections are asked about. One adapter,
+   * three selectors — see `lib/conversationView`.
+   */
+  const conversation = useMemo(
+    () => conversationView(renderableMessages, sessionStatus === "working"),
+    [renderableMessages, sessionStatus]
+  );
+
+  /**
+   * What the agent is doing right now → the CircularPixelGrid variant.
+   *
+   * `idle` DURING an active turn means "between observable activities" (a tool
+   * just completed, the model is about to speak but the stream has not said so
+   * yet), not "finished" — so it maps to the default working animation, which
+   * is also what a non-working session shows.
    */
   const agentSubState = useMemo((): CircularPixelGridVariant => {
     if (sessionStatus !== "working") return "generating";
-
-    for (let i = renderableMessages.length - 1; i >= 0; i--) {
-      const msg = renderableMessages[i];
-      if (msg.role !== "assistant") continue;
-      if (!msg.parts || msg.parts.length === 0) continue;
-
-      // Parts are already in stream order — they carry no ordering field.
-      const lastPart = msg.parts[msg.parts.length - 1];
-      if (!lastPart) return "generating";
-
-      return match(lastPart.type)
-        .with("reasoning", () => "thinking" as const)
-        .with("text", () => "generating" as const)
-        .with("tool", () => {
-          const status = (lastPart as import("@shared/protocol-types").ToolPart).state.status;
-          if (status === "failed") return "error" as const;
-          if (status === "pending" || status === "in_progress") return "toolExecuting" as const;
-          return "generating" as const;
-        })
-        .otherwise(() => "generating" as const);
-    }
-
-    return "generating";
-  }, [sessionStatus, renderableMessages]);
+    return match(agentActivity(conversation))
+      .with("thinking", () => "thinking" as const)
+      .with("tool_running", () => "toolExecuting" as const)
+      .with("tool_failed", () => "error" as const)
+      .otherwise(() => "generating" as const);
+  }, [sessionStatus, conversation]);
 
   /**
-   * Group consecutive messages into turns
+   * Group consecutive messages into turns.
    *
-   * A turn = consecutive messages with the same role
-   * - User messages: Each user message is its own turn
-   * - Assistant messages: Consecutive assistant messages form a single turn
+   * The boundaries are the engine's: a run breaks when the speaker or the turn
+   * changes, and `isLatest` is set on the FINAL group only — the guard that
+   * keeps a finished turn out of streaming mode in the gap between "user sends"
+   * and "first assistant part arrives" (without it, the completed answer above
+   * visibly reverts to "working").
    *
-   * This enables turn-level collapsing (hide intermediate messages, show summary)
+   * The groups come back in order, so each is a contiguous slice of
+   * `renderableMessages` and the rows themselves never round-trip.
    */
   const turns = useMemo(() => {
     const turnList: Turn[] = [];
-    let currentAssistantTurn: Message[] | null = null;
-    let currentAssistantTurnStartedAt: string | null = null;
+    let index = 0;
     let latestUserSentAt: string | null = null;
-    let firstAssistantIndex = -1;
 
-    renderableMessages.forEach((message, index) => {
-      if (message.role === "assistant") {
-        // Start or continue assistant turn
-        if (!currentAssistantTurn) {
-          currentAssistantTurn = [message];
-          currentAssistantTurnStartedAt = latestUserSentAt;
-          firstAssistantIndex = index;
-        } else {
-          currentAssistantTurn.push(message);
-        }
-      } else {
-        // User message - close any open assistant turn first
-        if (currentAssistantTurn) {
-          turnList.push({
-            type: "assistant",
-            messages: currentAssistantTurn,
-            firstMessageIndex: firstAssistantIndex,
-            isLatest: false, // Will be updated later
-            startedAt: currentAssistantTurnStartedAt,
-          });
-          currentAssistantTurn = null;
-          currentAssistantTurnStartedAt = null;
-        }
+    for (const group of groupIntoTurns(conversation)) {
+      const start = index;
+      index += group.entries.length;
+      const slice = renderableMessages.slice(start, index);
 
-        latestUserSentAt = message.sent_at ?? null;
-
-        // Add user turn
-        turnList.push({
-          type: "user",
-          message,
-          messageIndex: index,
+      if (group.role === "user") {
+        // One row per user turn: the engine emits exactly one echo per turn, so
+        // a run of user entries can only be one message.
+        slice.forEach((message, offset) => {
+          latestUserSentAt = message.sent_at ?? null;
+          turnList.push({ type: "user", message, messageIndex: start + offset });
         });
+        continue;
       }
-    });
 
-    // Close any remaining assistant turn
-    if (currentAssistantTurn) {
       turnList.push({
         type: "assistant",
-        messages: currentAssistantTurn,
-        firstMessageIndex: firstAssistantIndex,
-        isLatest: false, // Will be updated later
-        startedAt: currentAssistantTurnStartedAt,
+        messages: slice,
+        firstMessageIndex: start,
+        isLatest: group.isLatest,
+        // The clock starts when the user asked, which is the turn before this.
+        startedAt: latestUserSentAt,
       });
     }
 
-    // Mark the latest assistant turn — but ONLY if it's the very last turn
-    // in the conversation (no user message after it). A turn followed by a
-    // user message is completed and must NOT enter streaming mode. Without
-    // this guard, the gap between "user sends message" and "first assistant
-    // response arrives" causes the previous completed turn to re-enter
-    // streaming mode (expanded, dimmed) because isLatest && isWorking = true.
-    const lastTurn = turnList[turnList.length - 1];
-    if (lastTurn?.type === "assistant") {
-      (lastTurn as AssistantTurnData).isLatest = true;
-    }
-
     return turnList;
-  }, [renderableMessages]);
+  }, [conversation, renderableMessages]);
 
   // Compaction markers are positional siblings of turns, not messages — they
   // splice in AFTER grouping so a divider never lands inside a turn.
