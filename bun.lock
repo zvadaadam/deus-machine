@@ -1368,7 +1368,7 @@
 
     "@xtuc/long": ["@xtuc/long@4.2.2", "", {}, "sha512-NuHqBY1PB/D8xU6s/thBgOAiAP7HOYDQ32+BFZILJ8ivkUkAHQnWfn6WhL79Owj1qmUnoN/YPhktdIoucipkAQ=="],
 
-    "@zvada/agent-server": ["@zvada/agent-server@./vendor/zvada-agent-server-0.3.0.tgz", { "dependencies": { "zod": "^4.0.0" }, "peerDependencies": { "@agentclientprotocol/sdk": ">=1.2.0", "@anthropic-ai/claude-agent-sdk": ">=0.2.0", "@openai/codex-sdk": ">=0.40.0" }, "optionalPeers": ["@agentclientprotocol/sdk", "@anthropic-ai/claude-agent-sdk", "@openai/codex-sdk"], "bin": { "agent-server": "./src/server/bin.ts" } }, "sha512-ZmBEMoSIdsh0JACj/oN4kSoSXN1d5BDegoIbYH/M9fX4DDKCi2lWgMbiNoUwhmY/8hYmY7HcqYKzQkcVOEpNag=="],
+    "@zvada/agent-server": ["@zvada/agent-server@./vendor/zvada-agent-server-0.3.0.tgz", { "dependencies": { "zod": "^4.0.0" }, "peerDependencies": { "@agentclientprotocol/sdk": ">=1.2.0", "@anthropic-ai/claude-agent-sdk": ">=0.2.0", "@openai/codex-sdk": ">=0.40.0" }, "optionalPeers": ["@agentclientprotocol/sdk", "@anthropic-ai/claude-agent-sdk", "@openai/codex-sdk"], "bin": { "agent-server": "./src/server/bin.ts" } }, "sha512-n2sewpBrpoVE0aHgT0whiDfpPg4DVHHcqDnb/JzZGXr77a7NjgOp8RsL7bmITZcF67RqtBmjXqqfskPhWMSTOQ=="],
 
     "abbrev": ["abbrev@3.0.1", "", {}, "sha512-AO2ac6pjRB3SJmGJo+v5/aK6Omggp6fsLrs6wN9bd35ulu4cCwaAU9+7ZhXjeqHVkaHThLuzH0nZr0YpCDhygg=="],
 
