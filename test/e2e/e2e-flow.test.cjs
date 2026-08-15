@@ -315,7 +315,10 @@ async function testSendMessage() {
     // prompt was never persisted — there is nothing to wait for after it.
     if (ack.accepted) {
       logSuccess('Message accepted (turn admitted)');
-      logInfo(`Turn ID: ${ack.commandId}`);
+      // The ack echoes the turn id we minted back as `commandId`; print both,
+      // because a mismatch here is a broken correlation key and this log is
+      // the only place it would show.
+      logInfo(`Turn ID: ${turnId} | ack commandId: ${ack.commandId}`);
       return true;
     }
 

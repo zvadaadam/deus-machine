@@ -181,6 +181,73 @@ describeWithDb("sendMessage", () => {
     });
   });
 
+  // The harness column is a session-lifetime binding, so WHEN it moves matters
+  // as much as whether it may. The first turn opens an echo-only window: the
+  // status is already "working" while `message_count` is still 0, because the
+  // user row is written by the engine's echo and not by this command.
+  describe("the harness binding", () => {
+    const sendWith = (harness: string, turnId: string) =>
+      runCommand("sendMessage", {
+        sessionId: SESSION,
+        content: "hello",
+        model: "gpt-5.5-codex",
+        agentHarness: harness,
+        turnId,
+      });
+
+    const harness = (): string =>
+      (
+        db.prepare(`SELECT agent_harness FROM sessions WHERE id = ?`).get(SESSION) as {
+          agent_harness: string;
+        }
+      ).agent_harness;
+
+    it("moves to the harness of a send that is admitted", async () => {
+      vi.spyOn(agentService, "isConnected").mockReturnValue(true);
+      const startTurn = vi.spyOn(agentService, "startTurn").mockResolvedValue(undefined as never);
+
+      await expect(sendWith("codex-sdk", "turn-1")).resolves.toEqual({ commandId: "turn-1" });
+
+      expect(harness()).toBe("codex-sdk");
+      expect(startTurn.mock.calls[0][2]).toBe("codex-sdk");
+    });
+
+    it("does NOT move for a second client's send inside the echo-only window", async () => {
+      vi.spyOn(agentService, "isConnected").mockReturnValue(true);
+      const startTurn = vi.spyOn(agentService, "startTurn").mockResolvedValue(undefined as never);
+
+      // Client A's send is admitted and running under claude-code. Its user
+      // row does not exist yet — the echo has not landed — so the session is
+      // exactly what a second client sees: working, with 0 messages.
+      await sendWith("claude-code", "turn-a");
+      expect(harness()).toBe("claude-code");
+      expect(db.prepare(`SELECT message_count FROM sessions WHERE id = ?`).get(SESSION)).toEqual({
+        message_count: 0,
+      });
+
+      // Client B sends a different harness. The harness lock cannot stop it
+      // (0 messages, nothing locked); the active-turn guard has to.
+      await expect(sendWith("codex-sdk", "turn-b")).rejects.toThrow(/still working/i);
+
+      // The row still describes the turn that is actually running. Rebinding
+      // here would strand the session on a harness that never ran, and the
+      // lock would then reject every follow-up send under the real one.
+      expect(harness()).toBe("claude-code");
+      expect(startTurn).toHaveBeenCalledOnce();
+    });
+
+    it("is locked once the session has messages", async () => {
+      vi.spyOn(agentService, "isConnected").mockReturnValue(true);
+      const startTurn = vi.spyOn(agentService, "startTurn").mockResolvedValue(undefined as never);
+      db.prepare(`UPDATE sessions SET message_count = 2 WHERE id = ?`).run(SESSION);
+
+      await expect(sendWith("codex-sdk", "turn-1")).rejects.toThrow(/Cannot switch agent/i);
+
+      expect(harness()).toBe("claude-code");
+      expect(startTurn).not.toHaveBeenCalled();
+    });
+  });
+
   it("still refuses a send while a turn is running, from every active status", async () => {
     vi.spyOn(agentService, "isConnected").mockReturnValue(true);
     vi.spyOn(agentService, "startTurn").mockResolvedValue(undefined as never);

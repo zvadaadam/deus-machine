@@ -97,10 +97,41 @@ function renderableMessages(messages: Message[]): Message[] {
     if (message.parts && message.parts.length > 0) return true;
     // Keep cancelled messages for the "Response stopped" badge.
     if (message.cancelled_at) return true;
+    // Keep a row whose TURN ended with something to say. A model can open an
+    // assistant message and end on `refusal` / `max_tokens` /
+    // `max_turn_requests` without emitting a single part: that row is the only
+    // record of the outcome, so dropping it renders a refusal as a prompt
+    // followed by a silently idle session.
+    if (turnStopNotice(message.turn_stop_reason)) return true;
     // Skip empty ones: `message.started` arrived but no parts yet — the row
     // appears as soon as one does.
     return false;
   });
+}
+
+/**
+ * The one line a terminal stop reason owes the reader, or null when the turn
+ * ended the ordinary way (`end_turn`) and needs no explanation.
+ *
+ * This is the SAME predicate the filter above uses to keep an empty row and
+ * `AssistantTurn` uses to render the notice on it — one rule, so a reason can
+ * never be retained with nothing to show, or shown on a row that was dropped.
+ *
+ * `cancelled` is deliberately absent: it has its own "Response stopped" badge,
+ * anchored on `cancelled_at`. `error` is too — the session goes to the error
+ * status and the error surface owns that story. Stop reasons are an OPEN
+ * vocabulary (protocol §3), so an unrecognized one falls through to null
+ * rather than inventing copy for an outcome this build cannot interpret.
+ */
+export function turnStopNotice(reason: string | null | undefined): string | null {
+  return match(reason)
+    .with("refusal", () => "The model declined to continue this response.")
+    .with(
+      "max_turn_requests",
+      () => "The agent hit its request limit for this turn — send a follow-up to continue."
+    )
+    .with("max_tokens", () => "The response hit the model's output limit and was truncated.")
+    .otherwise(() => null);
 }
 
 /**

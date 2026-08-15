@@ -133,7 +133,7 @@ const insertWorkspace = db.prepare(
 );
 const insertSession = db.prepare(
   `INSERT INTO sessions (id, workspace_id, agent_harness, title, status, message_count, last_user_message_at, updated_at)
-   VALUES (?, ?, 'claude', ?, ?, 3, ?, ?)`
+   VALUES (?, ?, 'claude-code', ?, ?, 3, ?, ?)`
 );
 
 let prNumber = 100;

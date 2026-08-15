@@ -43,7 +43,7 @@ describe("maybeFetchTitle", () => {
     await vi.waitFor(() =>
       expect(mockNotifyHost).toHaveBeenCalledWith("deus/title", {
         sessionId: "s1",
-        agentHarness: "claude",
+        agentHarness: "claude-code",
         title: "Fix login flow",
       })
     );

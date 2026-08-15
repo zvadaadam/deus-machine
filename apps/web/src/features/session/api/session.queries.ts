@@ -8,13 +8,14 @@ import { produce } from "immer";
 import { SessionService } from "./session.service";
 import type { PaginatedMessages } from "./session.service";
 import { queryKeys } from "@/shared/api/queryKeys";
+import { reconnectListener } from "@/shared/lib/reconnect";
 import { useQuerySubscription } from "@/shared/hooks/useQuerySubscription";
 import { mergeMessageDelta } from "../lib/messageCache";
 import { createOptimisticUserMessage, dropOptimisticMessage } from "../lib/optimisticMessage";
 import { uuidv7 } from "@shared/lib/uuid";
 import type { Message, Session, SessionStatus } from "../types";
 import type { RepoGroup } from "@shared/types/workspace";
-import { useEffect, useMemo, useRef } from "react";
+import { useEffect, useMemo } from "react";
 import { track } from "@/platform/analytics";
 
 import { sendCommand, connect, isConnected, subscribe, onConnectionChange } from "@/platform/ws";
@@ -127,21 +128,25 @@ export function useMessages(sessionId: string | null) {
     mergeDelta: mergeMessageDelta,
   });
 
-  // On WS reconnect, refetch messages to catch up on anything missed
-  // while disconnected. The delta-only subscription resets its cursor
-  // to MAX(seq) on re-subscribe, so messages written during downtime
-  // would be permanently skipped without this.
-  const hasConnectedOnce = useRef(false);
+  // On WS reconnect, refetch messages to catch up on anything missed while
+  // disconnected. The delta-only subscription resets its cursor to MAX(seq) on
+  // re-subscribe and only ever carries INSERTs, so two durable changes written
+  // during downtime are otherwise skipped for good: a turn.ended's accounting
+  // (tokens, cost, turn_stop_reason, cancelled_at — an UPDATE, which does not
+  // move `seq`) and compaction rows (a different table entirely, delivered
+  // only by the full page).
+  //
+  // `reconnectListener` is seeded with the socket's state AT SUBSCRIBE, which
+  // is the load-bearing part: this hook usually mounts onto an already-open
+  // socket, and a listener that starts from "never connected" reads the first
+  // real re-connect as its first connect and skips this refetch entirely.
   useEffect(() => {
     if (!sessionId) return;
-    return onConnectionChange((connected) => {
-      if (connected) {
-        if (hasConnectedOnce.current) {
-          queryClient.invalidateQueries({ queryKey: queryKeys.sessions.messages(sessionId) });
-        }
-        hasConnectedOnce.current = true;
-      }
-    });
+    return onConnectionChange(
+      reconnectListener(isConnected(), () => {
+        queryClient.invalidateQueries({ queryKey: queryKeys.sessions.messages(sessionId) });
+      })
+    );
   }, [sessionId, queryClient]);
 
   const query = useQuery({

@@ -23,6 +23,7 @@
 import { useMemo, useState, memo } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import type { Message } from "@/shared/types";
+import { turnStopNotice } from "../lib/chatTimeline";
 import { MessageItem } from "./MessageItem";
 import { TurnFooter } from "./TurnFooter";
 import { TurnStatsHeader } from "./TurnStatsHeader";
@@ -67,20 +68,15 @@ export const AssistantTurn = memo(function AssistantTurn({
    * Terminal stop reasons the user has to know about: a content-filter refusal
    * and a turn that ran out of its request budget both used to end in silence,
    * because the reason was never persisted.
+   *
+   * The copy lives beside the timeline filter that KEEPS such a row when it
+   * carries no parts — the two have to agree, or the notice renders on a row
+   * the timeline already dropped.
    */
-  const stopNotice = useMemo(() => {
-    const lastMsg = messages[messages.length - 1];
-    switch (lastMsg?.turn_stop_reason) {
-      case "refusal":
-        return "The model declined to continue this response.";
-      case "max_turn_requests":
-        return "The agent hit its request limit for this turn — send a follow-up to continue.";
-      case "max_tokens":
-        return "The response hit the model's output limit and was truncated.";
-      default:
-        return null;
-    }
-  }, [messages]);
+  const stopNotice = useMemo(
+    () => turnStopNotice(messages[messages.length - 1]?.turn_stop_reason),
+    [messages]
+  );
 
   // Split messages: all except the last are hidden (collapsible), last is the summary.
   const { summaryMessage, hiddenMessages } = useMemo(() => {

@@ -13,6 +13,7 @@ import {
   compactionLabel,
   compactionTokenLabel,
   insertCompactions,
+  turnStopNotice,
   type AssistantTurnData,
   type Turn,
 } from "../../../apps/web/src/features/session/lib/chatTimeline";
@@ -291,5 +292,79 @@ describe("buildChatTimeline", () => {
     expect(lastRole).toBe("assistant");
     // Nothing is running: no turn is active, so the selector has one answer.
     expect(activity).toBe("idle");
+  });
+
+  // A model can open an assistant message and end the turn without emitting a
+  // single part. The stop reason on that empty row is then the ONLY record of
+  // what happened, so the filter has to let it through — otherwise a refusal
+  // renders as a prompt followed by a silently idle session.
+  describe("a part-less row that carries a terminal stop reason", () => {
+    const endedWith = (reason: string): Message[] => [
+      withText({ id: "u1", turn_id: "t1", role: "user" }),
+      message({ id: "a1", turn_id: "t1", parts: [], turn_stop_reason: reason }),
+    ];
+
+    it.each(["refusal", "max_tokens", "max_turn_requests"])("survives the filter: %s", (reason) => {
+      const { items, spacings, lastRole } = buildChatTimeline(endedWith(reason), [], false);
+
+      expect(shape(items)).toEqual(["user:t1", "assistant:t1"]);
+      // AssistantTurn reads the reason off the turn's LAST message.
+      expect(assistantIds(items[1])).toEqual(["a1"]);
+      expect(spacings).toHaveLength(items.length);
+      expect(lastRole).toBe("assistant");
+    });
+
+    it.each(["end_turn", "error", "_adapter_extension"])("is still dropped: %s", (reason) => {
+      // `end_turn` is the ordinary ending and has nothing to say; `error` is
+      // the error surface's story, not the transcript's; an unrecognized
+      // reason has no copy this build can honestly render. All three would
+      // leave a blank turn slot on screen.
+      const { items } = buildChatTimeline(endedWith(reason), [], false);
+
+      expect(shape(items)).toEqual(["user:t1"]);
+    });
+
+    it("does not shift the slices of the turns that follow it", () => {
+      const { items } = buildChatTimeline(
+        [
+          withText({ id: "u1", turn_id: "t1", role: "user" }),
+          message({ id: "a1", turn_id: "t1", parts: [], turn_stop_reason: "refusal" }),
+          withText({ id: "u2", turn_id: "t2", role: "user" }),
+          withText({ id: "a2", turn_id: "t2" }),
+        ],
+        [],
+        false
+      );
+
+      expect(shape(items)).toEqual(["user:t1", "assistant:t1", "user:t2", "assistant:t2"]);
+      expect(assistantIds(items[1])).toEqual(["a1"]);
+      expect(assistantIds(items[3])).toEqual(["a2"]);
+    });
+  });
+});
+
+describe("turnStopNotice", () => {
+  // The retained-row rule and the rendered notice are the same predicate on
+  // purpose: a reason kept by the filter with no copy to show would render as
+  // an empty turn, and copy for a reason the filter drops would never render.
+  it("answers for exactly the reasons the timeline keeps a part-less row for", () => {
+    for (const reason of ["refusal", "max_tokens", "max_turn_requests"]) {
+      expect(turnStopNotice(reason)).toBeTruthy();
+    }
+  });
+
+  it("stays silent for the ordinary ending, the error surface's own, and unknowns", () => {
+    // Stop reasons are an OPEN vocabulary — a newer engine's value reaches
+    // this build unchanged and must not be given invented copy.
+    for (const reason of [
+      "end_turn",
+      "cancelled",
+      "error",
+      "_adapter_extension",
+      null,
+      undefined,
+    ]) {
+      expect(turnStopNotice(reason)).toBeNull();
+    }
   });
 });

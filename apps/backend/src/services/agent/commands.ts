@@ -349,9 +349,38 @@ async function handleSendMessage(params: QueryParams): Promise<CommandResult> {
     );
   }
 
+  // A send against an active turn would persist a user message that no agent
+  // will ever answer (the wire rejects the turn with turnActive and the
+  // composer shows nothing). "Needs input" counts as active too: plan
+  // approval and questions park the RUNNING turn while the overlay waits.
+  // Reject up front — the q:command error surfaces in the UI. The wire guard
+  // stays as the backstop for the status race.
+  if (session && ACTIVE_TURN_STATUSES.includes(session.status)) {
+    throw new Error(
+      session.status === "working"
+        ? "The agent is still working — wait for the current turn to finish."
+        : "The agent is waiting for your response — answer the pending prompt first."
+    );
+  }
+
   // New sessions default to Claude at creation time because the user may pick
   // the actual harness in the composer before the first send. Persist that
   // first-send choice so follow-up turns route to the same agent process.
+  //
+  // AFTER the active-turn guard, and that ordering is the whole point: the
+  // harness column must only move for a send that is actually going to run.
+  // The first turn of a session opens an ECHO-ONLY window — the status is
+  // already "working" while `message_count` is still 0, because the user row
+  // is written by the engine's echo, not by this handler. A second client
+  // sending a DIFFERENT harness inside that window passes the lock above
+  // (0 messages, nothing to lock), and rebinding there would point the row at
+  // harness B while the admitted turn runs under A — after which the echo
+  // lands and the lock rejects every follow-up send under A. The guard above
+  // now rejects that second send before it can write anything.
+  //
+  // Nothing awaits between the read at the top of this function and this
+  // write, so within the one process that owns this database the guard and the
+  // write cannot be interleaved by another send.
   if (session && session.message_count === 0 && session.agent_harness !== agentHarness) {
     const result = db
       .prepare(
@@ -371,20 +400,6 @@ async function handleSendMessage(params: QueryParams): Promise<CommandResult> {
         );
       }
     }
-  }
-
-  // A send against an active turn would persist a user message that no agent
-  // will ever answer (the wire rejects the turn with turnActive and the
-  // composer shows nothing). "Needs input" counts as active too: plan
-  // approval and questions park the RUNNING turn while the overlay waits.
-  // Reject up front — the q:command error surfaces in the UI. The wire guard
-  // stays as the backstop for the status race.
-  if (session && ACTIVE_TURN_STATUSES.includes(session.status)) {
-    throw new Error(
-      session.status === "working"
-        ? "The agent is still working — wait for the current turn to finish."
-        : "The agent is waiting for your response — answer the pending prompt first."
-    );
   }
 
   // 1. Flip the session to "working" optimistically. The user's MESSAGE row is
