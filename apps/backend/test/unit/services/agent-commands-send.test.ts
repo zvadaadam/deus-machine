@@ -37,6 +37,8 @@ const { mockGetDatabase, mockInvalidate } = vi.hoisted(() => ({
 vi.mock("../../../src/lib/database", () => ({ getDatabase: mockGetDatabase }));
 vi.mock("../../../src/services/query-engine", () => ({ invalidate: mockInvalidate }));
 
+import { WireRequestError } from "@zvada/agent-server/client";
+import { WIRE_ERROR_CODES } from "@zvada/agent-server/protocol";
 import { runCommand } from "../../../src/services/agent/commands";
 import * as agentService from "../../../src/services/agent/service";
 
@@ -130,6 +132,53 @@ describeWithDb("sendMessage", () => {
 
     expect(startTurn).not.toHaveBeenCalled();
     expect(row(ORPHAN)).toMatchObject({ status: "error" });
+  });
+
+  // The guards above are the SYNCHRONOUS half. Admission is a round-trip, and
+  // it can refuse the turn after every local check has passed — another client
+  // won the race to the wire, the server is shutting down, the harness will
+  // not spawn. Those verdicts have to reach the ack, which means the send has
+  // to await admission. `turn/start` acks the moment the turn is admitted
+  // (before the harness runs a step), so awaiting costs a hop, not a turn.
+  describe("when the wire refuses admission", () => {
+    it("REJECTS the send on turnActive without disturbing the running turn", async () => {
+      vi.spyOn(agentService, "isConnected").mockReturnValue(true);
+      vi.spyOn(agentService, "startTurn").mockRejectedValue(
+        new WireRequestError(
+          WIRE_ERROR_CODES.turnActive,
+          `session ${SESSION} already has an active turn`
+        )
+      );
+
+      // Not accepted: returning normally here would ack `accepted: true` for a
+      // turn the server refused, stranding the optimistic bubble.
+      await expect(send(SESSION)).rejects.toThrow(/still working/i);
+
+      // The turn that IS running belongs to somebody — it must not be
+      // flipped to an error status just because our send lost the race.
+      expect(row(SESSION)).toMatchObject({ status: "working", error_message: null });
+    });
+
+    it("REJECTS the send and errors the session when no turn was admitted", async () => {
+      vi.spyOn(agentService, "isConnected").mockReturnValue(true);
+      vi.spyOn(agentService, "startTurn").mockRejectedValue(
+        new WireRequestError(WIRE_ERROR_CODES.shuttingDown, "server is shutting down")
+      );
+
+      await expect(send(SESSION)).rejects.toThrow(/shutting down/i);
+
+      // Nothing is running, so "working" would be a lie that never resolves.
+      expect(row(SESSION)).toMatchObject({ status: "error" });
+    });
+
+    it("REJECTS the send when the transport dies mid-admission", async () => {
+      vi.spyOn(agentService, "isConnected").mockReturnValue(true);
+      vi.spyOn(agentService, "startTurn").mockRejectedValue(new Error("socket hang up"));
+
+      await expect(send(SESSION)).rejects.toThrow(/socket hang up/i);
+
+      expect(row(SESSION)).toMatchObject({ status: "error" });
+    });
   });
 
   it("still refuses a send while a turn is running, from every active status", async () => {

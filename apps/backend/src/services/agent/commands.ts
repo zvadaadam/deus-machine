@@ -14,6 +14,7 @@ import { match } from "ts-pattern";
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
 import { WireRequestError } from "@zvada/agent-server/client";
+import { WIRE_ERROR_CODES } from "@zvada/agent-server/protocol";
 import { uuidv7 } from "@shared/lib/uuid";
 import { readPermissionMode, readThinkingLevel } from "@shared/protocol";
 import { getDatabase } from "../../lib/database";
@@ -329,7 +330,7 @@ const ACTIVE_TURN_STATUSES: readonly string[] = [
 
 // ---- sendMessage ----
 
-function handleSendMessage(params: QueryParams): CommandResult {
+async function handleSendMessage(params: QueryParams): Promise<CommandResult> {
   const sessionId = requireParam(params, "sessionId", "sendMessage");
   const content = requireParam(params, "content", "sendMessage");
   const model = requireParam(params, "model", "sendMessage");
@@ -398,10 +399,10 @@ function handleSendMessage(params: QueryParams): CommandResult {
     sessionIds: [sessionId],
   });
 
-  // 2. Forward to agent-server. The startTurn call itself is fire-and-forget
-  // (a turn outlives any ack), but the ACK is NOT out yet: handleCommand sends
-  // it from THIS function's outcome, which is what lets the guards below
-  // reject the send instead of half-accepting it.
+  // 2. Forward to agent-server. The ACK is NOT out yet: handleCommand sends it
+  // from THIS function's outcome, which is what lets the guards below — and
+  // the admission round-trip itself — reject the send instead of
+  // half-accepting it.
   const existingAgentSessionId = session?.agent_session_id ?? null;
 
   // Resolve cwd server-side from session → workspace → repo.
@@ -437,8 +438,26 @@ function handleSendMessage(params: QueryParams): CommandResult {
     throw err;
   }
 
-  agentService
-    .startTurn(sessionId, turnId, agentHarness, content, {
+  // Admission is AWAITED, and that is the whole point. `turn/start` is a
+  // quick-ack: the server answers the moment it admits the turn — before the
+  // harness has run a step (it acks, then `void executeTurn`) — so this waits
+  // for a verdict, never for the turn. The streaming half stays where it
+  // belongs, on the event channel.
+  //
+  // The guards above only close the SYNCHRONOUS half of the lost-prompt hole.
+  // Admission can also fail asynchronously: a turnActive race with a second
+  // client, a server shutting down, a harness that will not spawn. Answering
+  // the command before that verdict arrives reports `accepted: true` for a
+  // turn the server then refuses — and the prompt exists in exactly one place
+  // right now, the frontend's optimistic bubble, because the backend never
+  // writes the user row (the engine's echo is the single persistence path).
+  // So every rejection rethrows: handleCommand turns a throw into
+  // `accepted: false`, which is the only answer that runs the composer's
+  // rollback. Nothing can arrive here AFTER admission — the promise settles on
+  // the ack — so there is no post-ack failure left to handle in the
+  // background.
+  try {
+    await agentService.startTurn(sessionId, turnId, agentHarness, content, {
       cwd,
       model,
       thinkingLevel: readThinkingLevel(params.thinkingLevel),
@@ -449,25 +468,27 @@ function handleSendMessage(params: QueryParams): CommandResult {
         : undefined,
       resume: existingAgentSessionId || readString(params, "resume"),
       resumeSessionAt: readString(params, "resumeSessionAt"),
-    })
-    .catch((err) => {
-      if (err instanceof WireRequestError) {
-        // turnActive (-32002): the session is legitimately mid-turn — the
-        // running turn must NOT be flipped to an error status. The send is
-        // dropped (UI guards against double-send; this is the backstop).
-        if (err.code === -32002) {
-          console.warn(
-            `[CommandHandler] sendMessage rejected, turn already active: session=${sessionId}`
-          );
-          return;
-        }
-        // Other typed rejections (harness unavailable, shutting down,
-        // invalid params) — the turn never ran.
-        handleAgentRejection(sessionId, err.message);
-        return;
-      }
-      handleAgentError(sessionId, err);
     });
+  } catch (err) {
+    if (err instanceof WireRequestError && err.code === WIRE_ERROR_CODES.turnActive) {
+      // The session is legitimately mid-turn — another client won the race
+      // between the status guard above and the wire. That RUNNING turn is
+      // fine, it just is not ours, so the session must NOT be flipped to an
+      // error status. Reject the send and leave the status alone; the wording
+      // matches the synchronous guard, since to the user it is the same "wait
+      // your turn" and the wire's own message leaks a session id.
+      console.warn(
+        `[CommandHandler] sendMessage rejected, turn already active: session=${sessionId}`
+      );
+      throw new Error("The agent is still working — wait for the current turn to finish.");
+    }
+    // Every other rejection — harness unavailable, shutting down, invalid
+    // params, a transport that died mid-request — means no turn was admitted,
+    // so the session must not be left sitting on "working".
+    if (err instanceof WireRequestError) handleAgentRejection(sessionId, err.message);
+    else handleAgentError(sessionId, err);
+    throw err;
+  }
 
   return { commandId: turnId };
 }

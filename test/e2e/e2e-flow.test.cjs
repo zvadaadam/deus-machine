@@ -18,12 +18,23 @@ const Database = require('better-sqlite3');
 // Configuration
 const BACKEND_PORT = process.env.BACKEND_PORT || process.env.VITE_BACKEND_PORT || 60068;
 const BACKEND_URL = `http://localhost:${BACKEND_PORT}`;
+const BACKEND_WS_URL = `ws://localhost:${BACKEND_PORT}/ws`;
 const DB_PATH = process.env.DATABASE_PATH || (() => {
   if (!process.env.HOME) {
     throw new Error('HOME environment variable is not set. Please set DATABASE_PATH explicitly.');
   }
   return require('path').join(process.env.HOME, 'Library/Application Support/com.deus.app/deus.db');
 })();
+
+// The wire wants a BARE runtime model id plus the harness as its own field —
+// the frontend splits its "harness:modelId" picker value into the two before
+// sending. Mirrors AGENT_CONFIGS[harness].models[0] in shared/agent-catalog.ts
+// (the source of truth); this script is plain CommonJS and cannot import it.
+const DEFAULT_MODEL_BY_HARNESS = {
+  'claude-code': 'claude-fable-5[1m]',
+  'codex-sdk': 'gpt-5.3-codex',
+  'codex-app-server': 'gpt-5.6-sol',
+};
 
 // Test state
 let testWorkspaceId = null;
@@ -106,6 +117,62 @@ function request(method, path, data = null) {
   });
 }
 
+// WebSocket command helper.
+//
+// Async actions (sendMessage, stopSession) are NOT REST — they ride the
+// `q:command` frame on the single /ws connection, and the backend answers with
+// a `q:command_ack` carrying `accepted`. This mirrors sendCommand() in
+// apps/web/src/platform/ws/query-protocol-client.ts, which is the only send
+// path the app has. Localhost connections are auto-authenticated by the
+// backend, so no initialize/token frame is needed here.
+//
+// One connection per call: this script sends a single command, and a socket
+// that outlives it would keep the process alive.
+function sendCommand(command, params, timeoutMs = 30000) {
+  return new Promise((resolve, reject) => {
+    const ws = new WebSocket(BACKEND_WS_URL);
+    const id = `e2e_${Date.now()}`;
+    let settled = false;
+
+    const finish = (fn, arg) => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timer);
+      try { ws.close(); } catch { /* already closing */ }
+      fn(arg);
+    };
+
+    const timer = setTimeout(
+      () => finish(reject, new Error(`Command ${command} timed out after ${timeoutMs}ms`)),
+      timeoutMs
+    );
+
+    ws.addEventListener('message', (evt) => {
+      let msg;
+      try {
+        msg = JSON.parse(typeof evt.data === 'string' ? evt.data : String(evt.data));
+      } catch {
+        return; // Ignore malformed frames
+      }
+      // The backend greets localhost clients with { type: "connected" }; only
+      // then is the socket registered and able to dispatch commands.
+      if (msg.type === 'connected') {
+        ws.send(JSON.stringify({ type: 'q:command', id, command, params }));
+        return;
+      }
+      if (msg.type === 'q:command_ack' && msg.id === id) finish(resolve, msg);
+      if (msg.type === 'q:error' && msg.id === id) {
+        finish(reject, new Error(msg.message || 'Query protocol error'));
+      }
+    });
+
+    ws.addEventListener('error', () => finish(reject, new Error('WebSocket error')));
+    ws.addEventListener('close', () =>
+      finish(reject, new Error('WebSocket closed before command_ack'))
+    );
+  });
+}
+
 // Wait helper
 function wait(ms) {
   return new Promise(resolve => setTimeout(resolve, ms));
@@ -159,7 +226,7 @@ async function testCreateWorkspace() {
     if (createResponse.status === 201 || createResponse.status === 200) {
       testWorkspaceId = createResponse.body.id;
 
-      logSuccess(`Workspace created: ${createResponse.body.directory_name}`);
+      logSuccess(`Workspace created: ${createResponse.body.slug}`);
       logInfo(`Workspace ID: ${testWorkspaceId}`);
       logInfo(`State: ${createResponse.body.state} (will become 'ready' after git worktree completes)`);
 
@@ -215,22 +282,45 @@ async function testSendMessage() {
   try {
     const testMessage = 'Hello from E2E test - please respond with just "TEST OK"';
 
-    logInfo(`Sending message: "${testMessage}"`);
-
-    const response = await request('POST', `/api/sessions/${testSessionId}/messages`, {
-      content: testMessage
-    });
-
-    if (response.status === 201 || response.status === 200) {
-      logSuccess('Message sent successfully');
-      logInfo(`Message ID: ${response.body.id}`);
-      logInfo(`Created at: ${response.body.created_at}`);
-      return true;
-    } else {
-      logError(`Failed to send message: ${response.status}`);
-      logError(JSON.stringify(response.body, null, 2));
+    // The harness is the session's own — it is bound at session creation and
+    // the backend refuses to switch it once a session has messages.
+    const sessionResponse = await request('GET', `/api/sessions/${testSessionId}`);
+    if (sessionResponse.status !== 200) {
+      logError(`Failed to read session before sending: ${sessionResponse.status}`);
       return false;
     }
+    const agentHarness = sessionResponse.body.agent_harness || 'claude-code';
+    const model = DEFAULT_MODEL_BY_HARNESS[agentHarness];
+    if (!model) {
+      logError(`No default model known for harness "${agentHarness}"`);
+      return false;
+    }
+
+    logInfo(`Sending message: "${testMessage}"`);
+    logInfo(`Harness: ${agentHarness} | Model: ${model}`);
+
+    // `turnId` is the correlation key: the frontend stamps it on the
+    // optimistic bubble and the engine echoes the user message back under it.
+    const turnId = `e2e-turn-${Date.now()}`;
+    const ack = await sendCommand('sendMessage', {
+      sessionId: testSessionId,
+      content: testMessage,
+      model,
+      agentHarness,
+      turnId,
+    });
+
+    // `accepted` is the whole answer. The backend awaits the engine's turn
+    // admission before acking, so `accepted: false` means no turn ran and the
+    // prompt was never persisted — there is nothing to wait for after it.
+    if (ack.accepted) {
+      logSuccess('Message accepted (turn admitted)');
+      logInfo(`Turn ID: ${ack.commandId}`);
+      return true;
+    }
+
+    logError(`Send rejected: ${ack.error || 'unknown reason'}`);
+    return false;
   } catch (error) {
     logError(`Send message error: ${error.message}`);
     return false;
@@ -279,7 +369,7 @@ async function testVerifyDatabaseStorage() {
     const workspace = db.prepare('SELECT * FROM workspaces WHERE id = ?').get(testWorkspaceId);
 
     if (workspace) {
-      logSuccess(`Workspace found in database: ${workspace.directory_name}`);
+      logSuccess(`Workspace found in database: ${workspace.slug}`);
       logInfo(`State: ${workspace.state}`);
     } else {
       logError('Workspace not found in database');
@@ -293,7 +383,7 @@ async function testVerifyDatabaseStorage() {
     if (session) {
       logSuccess(`Session found in database`);
       logInfo(`Status: ${session.status}`);
-      logInfo(`Claude session ID: ${session.claude_session_id || 'N/A'}`);
+      logInfo(`Agent session ID: ${session.agent_session_id || 'N/A'}`);
     } else {
       logError('Session not found in database');
       db.close();
@@ -334,18 +424,23 @@ async function testWaitForResponse() {
       const response = await request('GET', `/api/sessions/${testSessionId}/messages`);
 
       if (response.status === 200) {
-        const messages = response.body;
+        // The route answers { messages, has_older, has_newer } — reading the
+        // body as a bare array made this poll silently vacuous.
+        const messages = response.body.messages || [];
         const lastMessage = messages[messages.length - 1];
 
         if (lastMessage && lastMessage.role === 'assistant') {
           logSuccess('Claude responded!');
 
-          try {
-            const content = JSON.parse(lastMessage.content);
-            const text = content.content[0].text;
+          // Messages render from `parts`; the retired `content` column is gone.
+          const text = (lastMessage.parts || [])
+            .filter((part) => part.type === 'text')
+            .map((part) => part.text)
+            .join('');
+          if (text) {
             logInfo(`Response: "${text.substring(0, 100)}${text.length > 100 ? '...' : ''}"`);
-          } catch (e) {
-            logInfo('Response received (parsing failed)');
+          } else {
+            logInfo('Response received (no text parts)');
           }
 
           return true;
