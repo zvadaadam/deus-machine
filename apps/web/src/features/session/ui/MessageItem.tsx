@@ -7,8 +7,7 @@
  */
 
 import type { Message } from "@/shared/types";
-import type { ContentBlock } from "@/features/session/types";
-import { isImageBlock, isTextBlock } from "@/features/session/types";
+import { readUserMessageContent } from "../lib/userMessageContent";
 import { PartsRenderer } from "./blocks";
 import { TextBlock } from "./blocks/TextBlock";
 
@@ -33,25 +32,19 @@ const AssistantMessage = memo(function AssistantMessage({
   isLastInTurn = false,
   isStreamingTurn = false,
 }: MessageItemProps) {
-  const hasParts = message.parts && message.parts.length > 0;
+  if (!message.parts || message.parts.length === 0) return null;
 
-  if (!hasParts && !message.content) return null;
-
-  if (hasParts) {
-    return (
-      <div
-        className={cn(
-          "relative",
-          "mr-auto w-full max-w-full",
-          "flex min-w-0 flex-col gap-1 overflow-x-hidden"
-        )}
-      >
-        <PartsRenderer parts={message.parts!} isStreamingTurn={isStreamingTurn && isLastInTurn} />
-      </div>
-    );
-  }
-
-  return <div className="mr-auto max-w-full px-2 py-1.5 text-sm opacity-60">{message.content}</div>;
+  return (
+    <div
+      className={cn(
+        "relative",
+        "mr-auto w-full max-w-full",
+        "flex min-w-0 flex-col gap-1 overflow-x-hidden"
+      )}
+    >
+      <PartsRenderer parts={message.parts} isStreamingTurn={isStreamingTurn && isLastInTurn} />
+    </div>
+  );
 });
 
 /** User message — iMessage-style bubble. */
@@ -61,49 +54,21 @@ const UserMessage = memo(function UserMessage({ message }: { message: Message })
   const [shouldCollapse, setShouldCollapse] = useState(false);
   const contentRef = useRef<HTMLDivElement>(null);
 
-  const contentBlocks = useMemo(() => {
-    try {
-      const parsed = JSON.parse(message.content);
-      if (Array.isArray(parsed)) return parsed as (ContentBlock | string)[];
-      if (typeof parsed === "string") return [{ type: "text" as const, text: parsed }];
-      return [{ type: "text" as const, text: message.content }];
-    } catch {
-      return [{ type: "text" as const, text: message.content }];
-    }
-  }, [message.content]);
+  /**
+   * `parts` is the source of truth — the engine's user echo, and the composer's
+   * optimistic bubble, which builds the same shapes locally.
+   */
+  const { images, texts } = useMemo(() => readUserMessageContent(message), [message]);
 
-  const { imageBlocks, textBlocks } = useMemo(() => {
-    const images: ContentBlock[] = [];
-    const texts: (ContentBlock | string)[] = [];
-    for (const block of contentBlocks) {
-      if (isImageBlock(block)) {
-        images.push(block);
-      } else {
-        texts.push(block);
-      }
-    }
-    return { imageBlocks: images, textBlocks: texts };
-  }, [contentBlocks]);
-
-  const hasTextContent = textBlocks.length > 0;
+  const hasTextContent = texts.length > 0;
 
   useEffect(() => {
     if (contentRef.current) {
       setShouldCollapse(contentRef.current.scrollHeight > COLLAPSE_MAX_HEIGHT);
     }
-  }, [contentBlocks]);
+  }, [images, texts]);
 
-  const extractTextContent = (): string => {
-    return contentBlocks
-      .map((block) => {
-        if (typeof block === "string") return block;
-        if (isTextBlock(block)) return block.text;
-        return "";
-      })
-      .join("\n");
-  };
-
-  const handleCopy = () => copy(extractTextContent());
+  const handleCopy = () => copy(texts.join("\n"));
 
   return (
     <div className="group relative flex flex-col items-end">
@@ -127,23 +92,16 @@ const UserMessage = memo(function UserMessage({ message }: { message: Message })
           />
         </div>
 
-        {imageBlocks.length > 0 && (
+        {images.length > 0 && (
           <div className={cn("flex flex-wrap gap-1.5", hasTextContent && "mb-2")}>
-            {imageBlocks.map((block, idx) => {
-              if (!isImageBlock(block)) return null;
-              return (
-                <div
-                  key={`${message.id}:img:${idx}`}
-                  className="border-border/60 h-[80px] w-[80px] shrink-0 overflow-hidden rounded-lg border"
-                >
-                  <img
-                    src={`data:${block.source.media_type};base64,${block.source.data}`}
-                    alt="Pasted image"
-                    className="h-full w-full object-cover"
-                  />
-                </div>
-              );
-            })}
+            {images.map((src, idx) => (
+              <div
+                key={`${message.id}:img:${idx}`}
+                className="border-border/60 h-[80px] w-[80px] shrink-0 overflow-hidden rounded-lg border"
+              >
+                <img src={src} alt="Pasted image" className="h-full w-full object-cover" />
+              </div>
+            ))}
           </div>
         )}
 
@@ -160,10 +118,9 @@ const UserMessage = memo(function UserMessage({ message }: { message: Message })
             initial={false}
             transition={{ duration: 0.2, ease: [0.165, 0.84, 0.44, 1] }}
           >
-            {textBlocks.map((block, idx) => {
-              const text = typeof block === "string" ? block : isTextBlock(block) ? block.text : "";
-              return <TextBlock key={`${message.id}:text:${idx}`} block={text} role="user" />;
-            })}
+            {texts.map((text, idx) => (
+              <TextBlock key={`${message.id}:text:${idx}`} block={text} role="user" />
+            ))}
 
             {shouldCollapse && !isExpanded && (
               <div className="from-accent via-accent/60 pointer-events-none absolute right-0 bottom-0 left-0 h-12 bg-gradient-to-t to-transparent" />

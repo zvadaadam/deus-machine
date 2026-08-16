@@ -1,12 +1,12 @@
 import { vi, describe, it, expect, beforeEach } from "vitest";
 
 // Mock auth service
-const mockGeneratePairCode = vi.fn(() => ({
+const mockGeneratePairCode = vi.fn<(...args: any[]) => any>(() => ({
   code: "SOFT TIGER",
   expiresAt: Date.now() + 900_000,
 }));
-const mockValidatePairCode = vi.fn(() => true);
-const mockCreateDeviceToken = vi.fn(() => ({
+const mockValidatePairCode = vi.fn<(...args: any[]) => any>(() => true);
+const mockCreateDeviceToken = vi.fn<(...args: any[]) => any>(() => ({
   token: "raw-token-hex",
   device: {
     id: "dev1",
@@ -18,7 +18,7 @@ const mockCreateDeviceToken = vi.fn(() => ({
     created_at: "2025-01-01",
   },
 }));
-const mockListDevices = vi.fn(() => [
+const mockListDevices = vi.fn<(...args: any[]) => any>(() => [
   {
     id: "dev1",
     name: "Phone",
@@ -28,10 +28,10 @@ const mockListDevices = vi.fn(() => [
     created_at: "2025-01-01",
   },
 ]);
-const mockRevokeDevice = vi.fn(() => true);
-const mockCheckRateLimit = vi.fn(() => 0);
-const mockRecordFailure = vi.fn();
-const mockResetRateLimit = vi.fn();
+const mockRevokeDevice = vi.fn<(...args: any[]) => any>(() => true);
+const mockCheckRateLimit = vi.fn<(...args: any[]) => any>(() => 0);
+const mockRecordFailure = vi.fn<(...args: any[]) => any>();
+const mockResetRateLimit = vi.fn<(...args: any[]) => any>();
 
 vi.mock("../../../src/services/remote-auth.service", () => ({
   generatePairCode: (...args: unknown[]) => mockGeneratePairCode(...args),

@@ -23,13 +23,18 @@ import {
   getPendingCount,
   clearAll,
 } from "../../../src/services/agent/tool-relay";
-import type { ToolRequestEvent } from "../../../../shared/agent-events";
+// The live payload type. `shared/agent-events` was the deus dialect and is
+// deleted; this test kept importing it because the backend tests were not in
+// any tsconfig, so nothing checked the reference.
+import type { ToolRequestEventData } from "@shared/types/query-protocol";
 
 // ============================================================================
 // Helpers
 // ============================================================================
 
-function makeToolRequestEvent(overrides?: Partial<ToolRequestEvent>): ToolRequestEvent {
+function makeToolRequestEvent(
+  overrides?: Partial<ToolRequestEventData>
+): ToolRequestEventData & { type: string } {
   return {
     type: "tool.request",
     requestId: "req-1",

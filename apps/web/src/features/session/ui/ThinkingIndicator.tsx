@@ -19,20 +19,20 @@ import type { ThinkingLevel } from "@/shared/agents";
 
 /** Display label for each level */
 const LEVEL_DISPLAY: Record<ThinkingLevel, string> = {
-  NONE: "Low",
-  LOW: "Low",
-  MEDIUM: "Med",
-  HIGH: "High",
-  XHIGH: "X-High",
+  off: "Low",
+  low: "Low",
+  medium: "Med",
+  high: "High",
+  xhigh: "X-High",
 };
 
 /** Visual treatment per level — font weight and opacity */
 const LEVEL_STYLE: Record<ThinkingLevel, { weight: number; opacity: number }> = {
-  NONE: { weight: 400, opacity: 0.4 },
-  LOW: { weight: 400, opacity: 0.6 },
-  MEDIUM: { weight: 500, opacity: 0.75 },
-  HIGH: { weight: 600, opacity: 0.9 },
-  XHIGH: { weight: 700, opacity: 1 },
+  off: { weight: 400, opacity: 0.4 },
+  low: { weight: 400, opacity: 0.6 },
+  medium: { weight: 500, opacity: 0.75 },
+  high: { weight: 600, opacity: 0.9 },
+  xhigh: { weight: 700, opacity: 1 },
 };
 
 interface ThinkingIndicatorProps {
@@ -44,7 +44,7 @@ interface ThinkingIndicatorProps {
 export function ThinkingIndicator({ level, onClick, className }: ThinkingIndicatorProps) {
   const style = LEVEL_STYLE[level];
   const displayLabel = LEVEL_DISPLAY[level];
-  const isXHigh = level === "XHIGH";
+  const isXHigh = level === "xhigh";
 
   return (
     <Tooltip delayDuration={200}>

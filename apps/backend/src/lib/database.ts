@@ -6,6 +6,7 @@ import { resolveDefaultDatabasePath } from "../../../../shared/runtime";
 import {
   ADDITIVE_COLUMNS,
   PRELAUNCH_REQUIRED_COLUMNS,
+  PRELAUNCH_RETIRED_COLUMNS,
   PRELAUNCH_SCHEMA_RESET_HINT,
   SCHEMA_SQL,
 } from "@shared/schema";
@@ -48,11 +49,25 @@ function assertPrelaunchSchemaCurrent(db: BetterSqlite3.Database): void {
     throw prelaunchSchemaError(`Missing columns/tables: ${missing.join(", ")}`);
   }
 
-  const staleCodexHarness = db
-    .prepare("SELECT 1 FROM sessions WHERE agent_harness = 'codex' LIMIT 1")
-    .get();
-  if (staleCodexHarness) {
-    throw prelaunchSchemaError("Found stale sessions.agent_harness value: codex");
+  // The other direction: a column the current schema has SHED. CREATE TABLE IF
+  // NOT EXISTS leaves an existing table alone, so a database predating the drop
+  // keeps the column (and its stale rows) unless we fail the boot here.
+  const retired: string[] = [];
+
+  for (const [table, retiredColumns] of Object.entries(PRELAUNCH_RETIRED_COLUMNS)) {
+    const rows = db.pragma(`table_info(${table})`) as TableInfoRow[];
+    if (rows.length === 0) continue;
+
+    const actualColumns = new Set(rows.map((row) => row.name));
+    for (const column of retiredColumns) {
+      if (actualColumns.has(column)) {
+        retired.push(`${table}.${column}`);
+      }
+    }
+  }
+
+  if (retired.length > 0) {
+    throw prelaunchSchemaError(`Found retired columns: ${retired.join(", ")}`);
   }
 }
 

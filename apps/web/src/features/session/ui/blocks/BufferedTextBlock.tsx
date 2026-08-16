@@ -21,10 +21,6 @@ export function BufferedTextBlock({ text, isStreaming }: BufferedTextBlockProps)
   const displayText = useTextBuffer(text, isStreaming);
 
   return (
-    <TextBlock
-      block={{ type: "text", text: displayText }}
-      role="assistant"
-      weight={isStreaming ? "muted" : "normal"}
-    />
+    <TextBlock block={displayText} role="assistant" weight={isStreaming ? "muted" : "normal"} />
   );
 }

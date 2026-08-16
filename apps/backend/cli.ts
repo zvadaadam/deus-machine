@@ -1,21 +1,30 @@
 #!/usr/bin/env bun
 // backend/cli.ts
 // Self-contained CLI that tests the full event → persistence pipeline
-// WITHOUT the frontend: the standard wire + the backend's REAL translation.
+// WITHOUT the frontend: the standard wire + the backend's REAL persistence.
 //
-// 1. Creates a workspace + session in the real DB (via sqlite3 CLI)
+// 1. Creates a workspace + session in the DB (the backend's own connection)
 // 2. Spawns the agent-server bundle
 // 3. Connects backend-style (AgentServerClient + deus side channel + hello)
 // 4. Starts a turn with the backend's REAL run-config assembly
-// 5. Feeds every envelope through the backend's REAL LifecycleTranslator and
-//    persists the resulting AgentEvents (mimicking the event handler's SQL)
+// 5. Feeds every envelope through `services/agent/persistence.ts` and
+//    `services/agent/event-facts.ts` — the SAME functions the event handler
+//    calls, not a copy of their SQL and not a copy of the dispatch around it.
+//    A harness that verifies a re-implementation verifies nothing: both clones
+//    drifted (the SQL one carried an INSERT OR REPLACE that cascade-deleted
+//    parts on replay long after persistence.ts was fixed; the dispatch one
+//    never reset the per-turn error dedupe at turn.started, so it could not
+//    exercise the multi-turn path at all and would report PASS regardless).
 // 6. Dumps the DB to verify everything stored correctly
+//
+// Runs on Bun, so the DB goes through bun:sqlite (see lib/sqlite.ts) —
+// better-sqlite3's native addon crashes the Bun process.
 //
 // Usage:
 //   bun run cli:backend -- "Say hello"
 //   bun run cli:backend --db-only           # just dump latest session
 
-import { spawn, execSync, type ChildProcess } from "child_process";
+import { spawn, type ChildProcess } from "child_process";
 import * as path from "path";
 import * as fs from "fs";
 import * as os from "os";
@@ -28,10 +37,20 @@ import {
   claimSideChannel,
   wsLineTransport,
 } from "@shared/agent-side-channel";
-import type { AgentEvent } from "@shared/agent-events";
 import type { AgentHarness } from "@shared/enums";
-import { LifecycleTranslator } from "./src/services/agent/translate/translator";
+import { isUnknownEvent, type AnyLifecycleEvent } from "@shared/protocol-types";
 import { buildTurnStartParams } from "./src/services/agent/run-config";
+import {
+  applySessionFacts,
+  describeEvent,
+  turnOutcomeFor,
+  type SessionFacts,
+} from "./src/services/agent/event-facts";
+import { uuidv7 } from "@shared/lib/uuid";
+import { DB_PATH, closeDatabase, getDatabase, initDatabase } from "./src/lib/database";
+import { persistChanges } from "./src/services/agent/persistence";
+import type { ConversationChange } from "@zvada/agent-server/protocol";
+import { emptyConversation, reduceConversationWithChanges } from "@zvada/agent-server/protocol";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -63,75 +82,21 @@ function banner(text: string) {
 }
 
 // ---------------------------------------------------------------------------
-// DB via sqlite3 CLI (avoids better-sqlite3 Node version mismatch)
+// DB — the backend's own connection, schema and writes
+//
+// No sqlite3 subprocess and no hand-rolled SQL: `initDatabase()` applies
+// SCHEMA_SQL, the additive columns and the pre-launch assertions exactly as the
+// server does, and DATABASE_PATH points a verification run at a scratch file.
 // ---------------------------------------------------------------------------
 
-function getDbPath(): string {
-  return path.join(os.homedir(), "Library", "Application Support", "com.deus.app", "deus.db");
-}
-
-function sql(dbPath: string, query: string): string {
+function openDatabase() {
   try {
-    return execSync(`sqlite3 "${dbPath}" "${query.replace(/"/g, '\\"')}"`, {
-      encoding: "utf-8",
-      timeout: 5000,
-    }).trim();
-  } catch {
-    return "";
+    initDatabase();
+  } catch (err) {
+    console.log(`  ${c.red}${err instanceof Error ? err.message : String(err)}${c.reset}`);
+    process.exit(1);
   }
-}
-
-function sqlRun(dbPath: string, query: string): boolean {
-  // Write SQL to temp file to avoid shell escaping issues with JSON data
-  const tmpFile = path.join(os.tmpdir(), `deus-cli-${Date.now()}.sql`);
-  try {
-    fs.writeFileSync(tmpFile, query);
-    execSync(`sqlite3 "${dbPath}" < "${tmpFile}"`, { timeout: 5000 });
-    return true;
-  } catch (err: any) {
-    console.log(`  ${c.red}DB ERROR: ${err.message?.split("\n")[0]}${c.reset}`);
-    return false;
-  } finally {
-    try {
-      fs.unlinkSync(tmpFile);
-    } catch {
-      /* ignore */
-    }
-  }
-}
-
-function ensureSchema(dbPath: string) {
-  const dir = path.dirname(dbPath);
-  if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
-
-  // Import schema from shared
-  const schemaPath = path.resolve(__dirname, "../../shared/schema.ts");
-  const schemaContent = fs.readFileSync(schemaPath, "utf-8");
-
-  // Extract SCHEMA_SQL from the file. Pre-launch schema changes update the
-  // source schema directly; stale local DBs should be reset rather than migrated.
-  const schemaMatch = schemaContent.match(/export const SCHEMA_SQL = `([\s\S]*?)`;/);
-  if (schemaMatch) {
-    const schemaSql = schemaMatch[1];
-    try {
-      execSync(`sqlite3 "${dbPath}" "${schemaSql.replace(/"/g, '\\"').replace(/\n/g, " ")}"`, {
-        timeout: 5000,
-      });
-    } catch {
-      /* tables already exist */
-    }
-  }
-}
-
-// ---------------------------------------------------------------------------
-// UUID7 (simple timestamp-based)
-// ---------------------------------------------------------------------------
-
-function uuid7(): string {
-  const now = Date.now();
-  const hex = now.toString(16).padStart(12, "0");
-  const rand = Math.random().toString(16).slice(2, 14);
-  return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-7${rand.slice(0, 3)}-${rand.slice(3, 7)}-${rand.slice(7, 19).padEnd(12, "0")}`;
+  return getDatabase();
 }
 
 // ---------------------------------------------------------------------------
@@ -163,7 +128,7 @@ function parseArgs() {
   }
 
   return {
-    agent: opts.agent || "claude",
+    agent: opts.agent || "claude-code",
     cwd: opts.cwd || process.cwd(),
     prompt: positional.join(" ") || "Say exactly: HELLO WORLD. No skills or agents.",
     dbOnly,
@@ -174,56 +139,73 @@ function parseArgs() {
 // DB dump
 // ---------------------------------------------------------------------------
 
-function dumpSession(dbPath: string, sessionId: string): number {
+interface MessageRow {
+  id: string;
+  role: string;
+  turn_stop_reason: string | null;
+  seq: number;
+  cancelled_at: string | null;
+  tokens: string | null;
+}
+
+interface PartRow {
+  type: string;
+  tool_name: string | null;
+  seq: number;
+  data: string;
+}
+
+function dumpSession(sessionId: string): number {
+  const db = getDatabase();
   banner("Database State");
 
   console.log(`\n  ${c.bold}Messages${c.reset}`);
-  const messages = sql(
-    dbPath,
-    `SELECT id, role, stop_reason, seq FROM messages WHERE session_id='${sessionId}' ORDER BY seq;`
-  );
-  if (messages) {
-    for (const line of messages.split("\n")) {
-      const [id, role, stopReason, seq] = line.split("|");
-      const stop = stopReason ? ` ${c.yellow}stop=${stopReason}${c.reset}` : "";
-      console.log(`  ${c.cyan}${role}${c.reset} seq=${seq}${stop} ${c.dim}${id}${c.reset}`);
+  const messages = db
+    .prepare(
+      `SELECT id, role, turn_stop_reason, seq, cancelled_at, tokens
+         FROM messages WHERE session_id = ? ORDER BY seq`
+    )
+    .all(sessionId) as MessageRow[];
+  if (messages.length) {
+    for (const row of messages) {
+      const stop = row.turn_stop_reason ? ` ${c.yellow}stop=${row.turn_stop_reason}${c.reset}` : "";
+      const cancelled = row.cancelled_at ? ` ${c.red}cancelled${c.reset}` : "";
+      const tokens = row.tokens ? ` ${c.dim}tokens=${row.tokens}${c.reset}` : "";
+      console.log(
+        `  ${c.cyan}${row.role}${c.reset} seq=${row.seq}${stop}${cancelled}${tokens} ${c.dim}${row.id}${c.reset}`
+      );
     }
   } else {
     console.log(`  ${c.red}No messages${c.reset}`);
   }
 
   console.log(`\n  ${c.bold}Parts${c.reset}`);
-  const parts = sql(
-    dbPath,
-    `SELECT p.type, p.tool_name, p.seq, substr(p.data, 1, 80) FROM parts p JOIN messages m ON p.message_id=m.id WHERE m.session_id='${sessionId}' ORDER BY m.seq, p.seq;`
-  );
-  if (parts) {
-    for (const line of parts.split("\n")) {
-      const [type, toolName, seq, data] = line.split("|");
-      const tool = toolName ? ` ${c.yellow}${toolName}${c.reset}` : "";
-      console.log(`  ${c.green}${type}${c.reset}${tool} seq=${seq}`);
-      console.log(`    ${c.dim}${data}${c.reset}`);
+  const parts = db
+    .prepare(
+      `SELECT p.type, p.tool_name, p.seq, p.data FROM parts p JOIN messages m ON p.message_id = m.id
+        WHERE m.session_id = ? ORDER BY m.seq, p.seq`
+    )
+    .all(sessionId) as PartRow[];
+  if (parts.length) {
+    for (const row of parts) {
+      const tool = row.tool_name ? ` ${c.yellow}${row.tool_name}${c.reset}` : "";
+      console.log(`  ${c.green}${row.type}${c.reset}${tool} seq=${row.seq}`);
+      console.log(`    ${c.dim}${row.data.slice(0, 80)}${c.reset}`);
     }
   } else {
     console.log(`  ${c.red}No parts${c.reset}`);
   }
 
-  const partCount = parseInt(
-    sql(dbPath, `SELECT count(*) FROM parts WHERE session_id='${sessionId}';`) || "0",
-    10
-  );
-  const msgCount = parseInt(
-    sql(dbPath, `SELECT count(*) FROM messages WHERE session_id='${sessionId}';`) || "0",
-    10
-  );
-  const partTypes = sql(
-    dbPath,
-    `SELECT type || '×' || count(*) FROM parts WHERE session_id='${sessionId}' GROUP BY type;`
-  );
+  const byType = db
+    .prepare(`SELECT type, count(*) as n FROM parts WHERE session_id = ? GROUP BY type`)
+    .all(sessionId) as Array<{ type: string; n: number }>;
+  const partCount = byType.reduce((total, row) => total + row.n, 0);
 
-  console.log(`\n  Messages: ${c.bold}${msgCount}${c.reset}`);
+  console.log(`\n  Messages: ${c.bold}${messages.length}${c.reset}`);
   console.log(
-    `  Parts:    ${c.bold}${partCount}${c.reset}${partTypes ? ` (${partTypes.split("\n").join(", ")})` : ""}`
+    `  Parts:    ${c.bold}${partCount}${c.reset}${
+      byType.length ? ` (${byType.map((r) => `${r.type}×${r.n}`).join(", ")})` : ""
+    }`
   );
 
   return partCount;
@@ -235,52 +217,49 @@ function dumpSession(dbPath: string, sessionId: string): number {
 
 async function main() {
   const opts = parseArgs();
-  const dbPath = getDbPath();
 
   // DB-only mode
   if (opts.dbOnly) {
-    const lastSession = sql(dbPath, `SELECT id FROM sessions ORDER BY updated_at DESC LIMIT 1;`);
-    if (!lastSession) {
+    const db = openDatabase();
+    const last = db.prepare(`SELECT id FROM sessions ORDER BY updated_at DESC LIMIT 1`).get() as
+      | { id: string }
+      | undefined;
+    if (!last) {
       console.log(`${c.red}No sessions in DB${c.reset}`);
       process.exit(1);
     }
-    console.log(`  ${c.dim}Session: ${lastSession}${c.reset}`);
-    const pc = dumpSession(dbPath, lastSession);
+    console.log(`  ${c.dim}Session: ${last.id}${c.reset}`);
+    const pc = dumpSession(last.id);
     process.exit(pc > 0 ? 0 : 1);
   }
 
   banner("Backend Integration CLI");
   console.log(`  agent:  ${c.bold}${opts.agent}${c.reset}`);
   console.log(`  prompt: ${c.dim}${opts.prompt}${c.reset}`);
-  console.log(`  db:     ${c.dim}${dbPath}${c.reset}`);
+  console.log(`  db:     ${c.dim}${DB_PATH}${c.reset}`);
 
-  // 1. Ensure DB schema
-  ensureSchema(dbPath);
+  // 1. Open the DB the way the backend does (schema + assertions included)
+  const db = openDatabase();
 
   // 2. Create workspace + session
-  const repoId = uuid7();
-  const workspaceId = uuid7();
+  const repoId = uuidv7();
+  const workspaceId = uuidv7();
   const sessionId = `cli-${Date.now()}`;
 
-  sqlRun(
-    dbPath,
-    `INSERT OR IGNORE INTO repositories (id, path, name) VALUES ('${repoId}', '${opts.cwd.replace(/'/g, "''")}', 'cli-test');`
-  );
-  sqlRun(
-    dbPath,
-    `INSERT OR IGNORE INTO workspaces (id, repository_id, name, branch, worktree_path, state) VALUES ('${workspaceId}', '${repoId}', 'cli-test', 'main', '${opts.cwd.replace(/'/g, "''")}', 'ready');`
-  );
-  sqlRun(
-    dbPath,
-    `INSERT INTO sessions (id, workspace_id, agent_harness, status) VALUES ('${sessionId}', '${workspaceId}', '${opts.agent}', 'idle');`
-  );
+  db.prepare(
+    `INSERT OR IGNORE INTO repositories (id, name, root_path) VALUES (?, 'cli-test', ?)`
+  ).run(repoId, opts.cwd);
+  db.prepare(
+    `INSERT OR IGNORE INTO workspaces (id, repository_id, slug, state) VALUES (?, ?, 'cli-test', 'ready')`
+  ).run(workspaceId, repoId);
+  db.prepare(
+    `INSERT INTO sessions (id, workspace_id, agent_harness, status) VALUES (?, ?, ?, 'working')`
+  ).run(sessionId, workspaceId, opts.agent);
 
-  // Insert user message
-  const userMsgId = uuid7();
-  sqlRun(
-    dbPath,
-    `INSERT INTO messages (id, session_id, role, content, sent_at) VALUES ('${userMsgId}', '${sessionId}', 'user', '${opts.prompt.replace(/'/g, "''")}', datetime('now'));`
-  );
+  // No user message row is seeded: the engine echoes the prompt back as
+  // message.started{role:"user"} and THAT is what persists it. The session
+  // starts 'working' for the same reason the send command flips it there —
+  // turn.ended is what settles it.
 
   console.log(`  ${c.green}Session created:${c.reset} ${sessionId}`);
 
@@ -337,115 +316,81 @@ async function main() {
     `  ${c.green}Handshake:${c.reset} v${init.protocolVersion} harnesses=[${Object.keys(init.harnesses).join(", ")}]`
   );
 
-  // 5. The backend's REAL translation: LifecycleEvent envelopes → AgentEvents,
-  // persisted with the same SQL shapes the event handler uses.
+  // 5. The canonical stream, through the backend's REAL fold, persistence and
+  // dispatch. Not a copy of their SQL and not a second switch either: the same
+  // `reduceConversationWithChanges` → `persistChanges` → `applySessionFacts`
+  // path the event handler runs, described by the same `describeEvent`. What
+  // is left below is colouring and the harness's own "am I done yet".
   let turnDone = false;
-  let partSeq = 0;
+  const facts: SessionFacts = { errorReported: false };
+  let conversation = emptyConversation();
 
   banner("Events");
 
-  const handleAgentEvent = (event: AgentEvent): void => {
+  /** The label for one row write — from the typed change, not a preformatted
+   *  string the persistence layer builds on every production write. */
+  const describeChange = (change: ConversationChange): string =>
+    Object.entries(change)
+      .filter(([key]) => key !== "kind")
+      .map(([key, value]) => `${key}=${String(value)}`)
+      .join(" ");
+
+  const handleEvent = (event: AnyLifecycleEvent): void => {
     let color = c.cyan;
     if (event.type.startsWith("turn.") || event.type.startsWith("session.")) color = c.magenta;
-    if (event.type.startsWith("part.")) color = c.green;
+    if (event.type.startsWith("message.part")) color = c.green;
     if (event.type.startsWith("message.")) color = c.blue;
-    if (event.type.includes("error")) color = c.red;
+    if (event.type === "error") color = c.red;
 
-    let detail = "";
-    switch (event.type) {
-      case "message.created":
-        detail = `messageId=${event.messageId}`;
-        sqlRun(
-          dbPath,
-          `INSERT OR REPLACE INTO messages (id, session_id, role, sent_at) VALUES ('${event.messageId}', '${sessionId}', 'assistant', datetime('now'));`
+    const wrote = (result: { ok: boolean; error?: string }) =>
+      result.ok ? ` ${c.green}→ DB${c.reset}` : ` ${c.red}→ DB FAIL: ${result.error}${c.reset}`;
+
+    const folded = reduceConversationWithChanges(conversation, event);
+    conversation = folded.state;
+
+    // Deltas fold but never persist (spec 04 §C2) — the same skip the event
+    // handler applies; without it this harness would verify a write path the
+    // server does not run.
+    const isDelta = !isUnknownEvent(event) && event.type === "message.part.delta";
+    const writes = isDelta
+      ? []
+      : persistChanges(sessionId, folded.state, folded.changes, (turn) =>
+          turnOutcomeFor(facts, turn)
         );
-        detail += ` ${c.green}→ DB INSERT${c.reset}`;
-        break;
+    const factWrites = applySessionFacts(facts, sessionId, event);
 
-      case "part.created":
-        detail = `${event.part.type} partId=${event.partId}`;
-        break;
-
-      case "part.delta":
-        detail = `delta="${(event.delta || "").slice(0, 40)}"`;
-        break;
-
-      case "part.done": {
-        const part = event.part;
-        const partData = JSON.stringify(part).replace(/'/g, "''");
-        const toolCallId = part.type === "TOOL" ? part.toolCallId || "" : "";
-        const toolName = part.type === "TOOL" ? part.toolName || "" : "";
-        const parentId = part.parentToolCallId || "";
-        const ok = sqlRun(
-          dbPath,
-          `INSERT OR REPLACE INTO parts (id, message_id, session_id, seq, type, data, tool_call_id, tool_name, parent_tool_call_id) VALUES ('${event.partId}', '${event.messageId}', '${sessionId}', ${partSeq++}, '${part.type}', '${partData}', '${toolCallId}', '${toolName}', '${parentId}');`
-        );
-        detail = `${part.type} partId=${event.partId} ${ok ? `${c.green}→ DB INSERT${c.reset}` : `${c.red}→ DB FAIL${c.reset}`}`;
-        break;
-      }
-
-      case "message.done":
-        detail = `stopReason=${event.stopReason || "none"}`;
-        sqlRun(
-          dbPath,
-          `UPDATE messages SET stop_reason='${event.stopReason || ""}' WHERE id='${event.messageId}';`
-        );
-        detail += ` ${c.green}→ DB UPDATE${c.reset}`;
-        break;
-
-      case "turn.completed":
-        detail = `finishReason=${event.finishReason || "none"}`;
-        break;
-
-      case "agent.session_id":
-        detail = `agentSessionId=${event.agentSessionId}`;
-        sqlRun(
-          dbPath,
-          `UPDATE sessions SET agent_session_id='${event.agentSessionId}' WHERE id='${sessionId}';`
-        );
-        detail += ` ${c.green}→ DB UPDATE${c.reset}`;
-        break;
-
-      case "session.idle":
-        sqlRun(dbPath, `UPDATE sessions SET status='idle' WHERE id='${sessionId}';`);
-        turnDone = true;
-        detail = "→ turn complete";
-        break;
-
-      case "session.cancelled":
-        turnDone = true;
-        detail = "→ cancelled";
-        break;
-
-      case "session.error":
-        detail = event.error || "unknown";
-        turnDone = true;
-        break;
-
-      default:
-        detail = JSON.stringify(event).slice(0, 50);
+    // The harness stops when the turn is over, or when an error ended it.
+    // `isUnknownEvent` first: `UnknownEvent.type` is an open string, so
+    // matching on `type` alone would not narrow `recoverable` into existence.
+    if (
+      !isUnknownEvent(event) &&
+      (event.type === "turn.ended" || (event.type === "error" && !event.recoverable))
+    ) {
+      turnDone = true;
     }
 
+    const detail = describeEvent(event) + factWrites.map((w) => wrote(w.result)).join("");
     console.log(`${ts()} ${c.green}◂${c.reset} ${color}${c.bold}${event.type}${c.reset} ${detail}`);
+
+    for (const write of writes) {
+      console.log(
+        `${ts()}   ${c.dim}${write.change.kind}${c.reset} ${describeChange(write.change)}${wrote(write.result)}`
+      );
+    }
   };
 
-  const translator = new LifecycleTranslator({
-    emit: handleAgentEvent,
-    // The quick-ack can race the first envelopes; the fallback keeps them.
-    resolveHarness: () => opts.agent as AgentHarness,
-  });
-  client.onEvent((envelope) => translator.handle(envelope));
+  client.onEvent((envelope) => handleEvent(envelope.event));
 
   // 6. Start the turn with the backend's REAL run-config assembly
   banner("Sending Turn");
   console.log(`  ${c.dim}${opts.prompt}${c.reset}\n`);
 
-  const turnId = uuid7();
+  const turnId = uuidv7();
   const params = buildTurnStartParams(sessionId, turnId, opts.agent as AgentHarness, opts.prompt, {
     cwd: opts.cwd,
     permissionMode: "default",
+    supportsImages: init.harnesses[opts.agent]?.images ?? false,
   });
-  translator.beginTurn(sessionId, opts.agent as AgentHarness, turnId);
   await client.startTurn(params);
 
   // 7. Wait for completion
@@ -464,7 +409,7 @@ async function main() {
   await new Promise((r) => setTimeout(r, 1500));
 
   // 8. Dump DB
-  const partCount = dumpSession(dbPath, sessionId);
+  const partCount = dumpSession(sessionId);
 
   // 9. Verdict
   banner("Result");
@@ -477,6 +422,7 @@ async function main() {
   await client.close();
   ws.close();
   proc.kill("SIGTERM");
+  closeDatabase();
   process.exit(partCount > 0 ? 0 : 1);
 }
 

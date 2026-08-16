@@ -86,7 +86,7 @@ When debugging agent-server behavior (event shapes, turn admission, cancel seman
 
 - `node_modules/@zvada/agent-server/src/` — the package ships readable TypeScript source, not compiled JS. This is the fastest reference and always matches the installed version.
 - Local clone at `~/Developer/agent/agent-server` (Conductor-managed; work lives on branches/origin, the main checkout is a stale empty worktree) and https://github.com/zvadaadam/agent-server for history, DESIGN.md, and plans/.
-- Engine bugs belong upstream (branch + PR there, then bump the pin here); consumer-side hardening belongs in the backend's `translate/` shim or the agent-server's wire bridge.
+- Engine bugs belong upstream (branch + PR there, then bump the pin here); deus consumes the engine protocol natively (no translate layer) — consumer-side behavior lives in the backend's `services/agent/` fold-and-persist path and the frontend's `agentEventFold` projection.
 
 ### WebSocket Query Protocol
 
@@ -111,13 +111,14 @@ Resources, mutations, commands, and events are all defined in `shared/events.ts`
 
 ## Database
 
-Own SQLite at `~/Library/Application Support/com.deus.app/deus.db`. Schema in `shared/schema.ts` — 5 tables: `repositories`, `workspaces`, `sessions`, `messages`, `paired_devices`.
+Own SQLite at `~/Library/Application Support/com.deus.app/deus.db`. Schema in `shared/schema.ts` — 7 tables: `repositories`, `workspaces`, `sessions`, `messages`, `parts`, `compactions`, `paired_devices`.
 
 - Only the backend writes to DB
 - All indexes/triggers defined in `shared/schema.ts`
 - Use `sessions.last_user_message_at` instead of correlated subqueries
 - No N+1 queries — batch or denormalize
-- Column deprecation: rename with `DEPRECATED_` prefix, never drop
+- Column changes, pre-launch (now): destructive resets are sanctioned. There are no users to migrate, and `shared/schema.ts` is the fresh schema rather than a migration replay — a stale local DB is detected via the `PRELAUNCH_REQUIRED_COLUMNS` / `PRELAUNCH_RETIRED_COLUMNS` markers and reset with the `PRELAUNCH_SCHEMA_RESET_HINT`. Drop the column and add it to the markers.
+- Column changes, post-launch: the above stops applying. Deprecate by renaming with a `DEPRECATED_` prefix, never drop.
 
 ## Testing
 

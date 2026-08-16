@@ -1,7 +1,7 @@
 import { vi, describe, it, expect, beforeEach } from "vitest";
 
 vi.mock("child_process", () => ({
-  execFileSync: vi.fn(),
+  execFileSync: vi.fn<(...args: any[]) => any>(),
 }));
 
 import { execFileSync } from "child_process";
@@ -277,13 +277,13 @@ describe("exec-dependent functions", () => {
         .mockImplementationOnce(() => {
           throw new Error("not found");
         })
-        .mockImplementationOnce(() => undefined);
+        .mockImplementationOnce(() => "");
       const result = verifyBranchExists("/workspace", "feature");
       expect(result).toBe("main");
     });
 
     it("returns the branch if first ref succeeds", () => {
-      mockExecFileSync.mockReturnValue(undefined);
+      mockExecFileSync.mockReturnValue("");
       const result = verifyBranchExists("/workspace", "develop");
       expect(result).toBe("develop");
     });
@@ -300,13 +300,13 @@ describe("exec-dependent functions", () => {
   describe("detectDefaultBranch", () => {
     it("uses origin HEAD strategy and verifies branch", () => {
       // First call: symbolic-ref returns origin/develop ref
-      mockExecFileSync.mockImplementation((cmd: string, args: string[]) => {
+      mockExecFileSync.mockImplementation((_cmd: string, args: readonly string[] = []) => {
         if (args[0] === "symbolic-ref") {
           return "refs/remotes/origin/develop";
         }
         // verifyBranchExists: first check (refs/heads/develop) succeeds
         if (args[0] === "show-ref") {
-          return undefined;
+          return "";
         }
         return "";
       });

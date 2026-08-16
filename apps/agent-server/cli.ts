@@ -32,15 +32,15 @@ import * as readline from "readline";
 import { fileURLToPath } from "url";
 import WebSocket from "ws";
 import { AgentServerClient } from "@zvada/agent-server/client";
-import type { LifecycleEvent, TurnStartParams } from "@zvada/agent-server/protocol";
-import { generateUUIDv7 } from "@zvada/agent-server/protocol";
+import type { AgentHarness, TurnStartParams } from "@zvada/agent-server/protocol";
+import { isUnknownEvent, isUnknownPart, type AnyLifecycleEvent } from "@shared/protocol-types";
+import { AGENT_HARNESSES, generateUUIDv7, isAgentHarness } from "@zvada/agent-server/protocol";
 import {
   SIDE_CHANNEL,
   SideChannelEndpoint,
   claimSideChannel,
   wsLineTransport,
 } from "@shared/agent-side-channel";
-import { ENGINE_HARNESS_BY_DEUS } from "../../shared/enums";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -75,9 +75,9 @@ function parseArgs() {
     if (arg === "--json" || arg === "--host") continue;
     if (arg.startsWith("--") && i + 1 < args.length) opts[arg.slice(2)] = args[++i];
   }
-  const agent = (opts.agent ?? "claude") as keyof typeof ENGINE_HARNESS_BY_DEUS;
-  if (!ENGINE_HARNESS_BY_DEUS[agent]) {
-    console.error(`Unknown --agent "${agent}" (use claude | codex-sdk | codex-server)`);
+  const agent = (opts.agent ?? "claude-code") as AgentHarness;
+  if (!isAgentHarness(agent)) {
+    console.error(`Unknown --agent "${agent}" (use ${AGENT_HARNESSES.join(" | ")})`);
     process.exit(1);
   }
   return {
@@ -110,9 +110,16 @@ function breakLine(): void {
   }
 }
 
-function renderEvent(event: LifecycleEvent, json: boolean): void {
+function renderEvent(event: AnyLifecycleEvent, json: boolean): void {
   if (json) {
     console.log(JSON.stringify(event));
+    return;
+  }
+  if (isUnknownEvent(event)) {
+    // Law 6: a type this build does not know still gets a line — silence is
+    // how a newer server's events become invisible.
+    breakLine();
+    console.log(`${c.dim}◆ ${event.type} (unknown to this build)${c.reset}`);
     return;
   }
   if (event.type !== "message.part.delta" && event.type !== "message.part") breakLine();
@@ -131,16 +138,22 @@ function renderEvent(event: LifecycleEvent, json: boolean): void {
       return;
     case "message.part.delta":
       streamedParts.add(event.partId);
-      if (event.delta.type === "text-delta") {
+      if (event.delta.type === "text") {
         process.stdout.write(event.delta.text);
         midStream = true;
-      } else if (event.delta.type === "reasoning-delta") {
+      } else if (event.delta.type === "reasoning") {
         process.stdout.write(`${c.dim}${event.delta.text}${c.reset}`);
         midStream = true;
       }
       return;
     case "message.part": {
       const part = event.part;
+      // Law 6: an unknown part type has no fields to render, only a name.
+      if (isUnknownPart(part)) {
+        breakLine();
+        console.log(`${c.dim}▸ ${part.type} part (unknown to this build)${c.reset}`);
+        return;
+      }
       // Short outputs can arrive as one finished part with no delta stream.
       if (part.type === "text" && part.state === "done" && !streamedParts.has(part.id)) {
         streamedParts.add(part.id);
@@ -170,8 +183,8 @@ function renderEvent(event: LifecycleEvent, json: boolean): void {
         `${c.dim}◆ usage used=${event.used}${event.size ? `/${event.size}` : ""}${event.cost !== undefined ? ` $${event.cost.toFixed(4)}` : ""}${c.reset}`
       );
       return;
-    case "session.compacted":
-      console.log(`${c.magenta}◆ context compacted${c.reset}`);
+    case "session.compaction":
+      console.log(`${c.magenta}◆ context compacted (${event.status})${c.reset}`);
       return;
     case "turn.ended": {
       const color = event.stopReason === "end_turn" ? c.green : c.red;
@@ -184,7 +197,7 @@ function renderEvent(event: LifecycleEvent, json: boolean): void {
     }
     case "error":
       console.log(
-        `${event.recoverable ? c.yellow : c.red}◆ error${event.recoverable ? " (recoverable)" : ""}: ${event.error}${c.reset}`
+        `${event.recoverable ? c.yellow : c.red}◆ error${event.recoverable ? " (recoverable)" : ""}: ${event.message}${c.reset}`
       );
       return;
     case "permission.requested":
@@ -315,7 +328,7 @@ async function connect(url: string, json: boolean, announceHost: boolean): Promi
 
 interface CliState {
   sessionId: string;
-  agent: keyof typeof ENGINE_HARNESS_BY_DEUS;
+  agent: AgentHarness;
   model?: string;
   cwd: string;
   resume?: string;
@@ -329,7 +342,7 @@ async function runTurn(conn: Connection, state: CliState, prompt: string): Promi
     turnId: generateUUIDv7(),
     input: prompt,
     config: {
-      harness: ENGINE_HARNESS_BY_DEUS[state.agent],
+      harness: state.agent,
       cwd: state.cwd,
       model: state.model,
       permissionMode: state.permissionMode as TurnStartParams["config"]["permissionMode"],
@@ -338,11 +351,12 @@ async function runTurn(conn: Connection, state: CliState, prompt: string): Promi
     },
   };
   const off = conn.client.onEvent((envelope) => {
-    if (envelope.sessionId === state.sessionId && envelope.event.type === "session.created") {
-      state.nativeSessionId = envelope.event.nativeSessionId;
-      // Follow-up turns resume the warm conversation automatically.
-      state.resume = envelope.event.nativeSessionId;
-    }
+    if (envelope.sessionId !== state.sessionId) return;
+    const event = envelope.event;
+    if (isUnknownEvent(event) || event.type !== "session.created") return;
+    state.nativeSessionId = event.nativeSessionId;
+    // Follow-up turns resume the warm conversation automatically.
+    state.resume = event.nativeSessionId;
   });
   try {
     const handle = await conn.client.runTurn(params);
@@ -416,8 +430,8 @@ async function main() {
       return "continue";
     }
     if (input.startsWith(".agent ")) {
-      const agent = input.slice(7).trim() as keyof typeof ENGINE_HARNESS_BY_DEUS;
-      if (ENGINE_HARNESS_BY_DEUS[agent]) {
+      const agent = input.slice(7).trim();
+      if (isAgentHarness(agent)) {
         state.agent = agent;
         state.resume = undefined;
         state.sessionId = generateUUIDv7();

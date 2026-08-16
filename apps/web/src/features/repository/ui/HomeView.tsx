@@ -157,7 +157,7 @@ export function HomeView({
     removeAttachment,
     clearAttachments,
     extractImagesFromClipboard,
-    buildImageBlocks,
+    buildMessageContent,
   } = useImageAttachments();
 
   const handlePaste = useCallback(
@@ -171,19 +171,12 @@ export function HomeView({
     [extractImagesFromClipboard, processFiles]
   );
 
-  // Build content with images in Anthropic content blocks format
-  const buildCombinedContent = useCallback(() => {
-    const typed = message.trim();
-    const imageBlocks = buildImageBlocks();
-    if (!imageBlocks) return typed;
-
-    const blocks: Array<Record<string, unknown>> = [];
-    if (typed) {
-      blocks.push({ type: "text", text: typed });
-    }
-    blocks.push(...imageBlocks);
-    return JSON.stringify(blocks);
-  }, [message, buildImageBlocks]);
+  // Build content in the canonical PartInput vocabulary (text-only stays a
+  // bare string; attachments promote it to a JSON-encoded PartInput[]).
+  const buildCombinedContent = useCallback(
+    () => buildMessageContent(message.trim()),
+    [message, buildMessageContent]
+  );
 
   // ── Repo selection ──────────────────────────────────────────────
   // User-chosen repo ID — null means "use derived default"
@@ -765,7 +758,7 @@ export function HomeView({
                   className="text-text-muted hover:text-text-secondary flex items-center gap-1.5 rounded-lg px-2 py-1.5 text-xs transition-colors duration-150"
                 >
                   <AgentLogo
-                    type={selectedModelOption?.agentHarness ?? "claude"}
+                    type={selectedModelOption?.agentHarness ?? "claude-code"}
                     className="h-3 w-3"
                   />
                   <span className="font-medium">{modelLabel}</span>

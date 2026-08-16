@@ -20,7 +20,7 @@
  */
 
 import { useCallback, useMemo } from "react";
-import type { TextBlock as TextBlockType, MessageRole } from "@/shared/types";
+import type { MessageRole } from "@/shared/types";
 import type { MarkdownFileLinkResolution } from "@/components/markdown/MarkdownRenderer";
 
 import { ChatMarkdown } from "@/components/markdown";
@@ -41,15 +41,15 @@ import { getBaseURL } from "@/shared/config/api.config";
 export type TextWeight = "muted" | "normal";
 
 interface TextBlockProps {
-  block: TextBlockType | string;
+  /** The markdown to render. Every caller holds a string: the engine's
+   *  `TextPart.text`, or one of a user message's text parts. */
+  block: string;
   role?: MessageRole;
   weight?: TextWeight;
 }
 
-export function TextBlock({ block, role = "assistant", weight = "normal" }: TextBlockProps) {
+export function TextBlock({ block: text, role = "assistant", weight = "normal" }: TextBlockProps) {
   const { workspaceId, workspacePath } = useSession();
-  // Handle both TextBlock objects and plain strings
-  const text = typeof block === "string" ? block : block.text;
 
   const referenceSegments = useMemo(
     () =>

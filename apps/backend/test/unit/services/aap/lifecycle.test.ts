@@ -33,7 +33,7 @@ function shManifest(script: string, env: Record<string, string> = {}): Manifest 
     storage: {},
     lifecycle: { scope: "workspace", stopTimeoutMs: 2_000 },
     requires: [],
-  } as Manifest;
+  } as unknown as Manifest;
 }
 
 /** Start a throwaway HTTP server on an ephemeral port for probe tests. */

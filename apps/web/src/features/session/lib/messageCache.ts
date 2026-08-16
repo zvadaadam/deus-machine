@@ -14,7 +14,12 @@ import type { Message } from "../types";
  * merge correctly into the { messages, has_older, has_newer } shape
  * instead of treating the cache as a flat array.
  *
- * Strips optimistic placeholders and deduplicates by message ID.
+ * Deduplicating by message id is the whole of it. The composer's optimistic
+ * bubble carries the id the engine's echo will carry (`echoMessageId`), so the
+ * persisted row arriving here IS that row — it dedupes, rather than needing to
+ * be matched against a look-alike by `turn_id` and swapped in. A bubble is
+ * retired only by `dropOptimisticMessage`, so a rejected send never disappears
+ * on the next unrelated delta.
  */
 export function mergeMessageDelta(
   old: unknown,
@@ -26,15 +31,18 @@ export function mergeMessageDelta(
   const paginated = old as PaginatedMessages;
   if (!upserted || upserted.length === 0) return old;
 
-  // Remove optimistic placeholders — real messages replace them
-  const realMessages = paginated.messages.filter((m) => !m.id.startsWith("optimistic-"));
+  const incoming = upserted as Message[];
+  const kept = paginated.messages;
 
   // Deduplicate: don't add messages that already exist
-  const existingIds = new Set(realMessages.map((m) => m.id));
-  const newMessages = (upserted as Message[]).filter((m) => !existingIds.has(m.id));
+  const existingIds = new Set(kept.map((m) => m.id));
+  const newMessages = incoming.filter((m) => !existingIds.has(m.id));
 
   return {
-    messages: [...realMessages, ...newMessages],
+    messages: [...kept, ...newMessages],
+    // Compactions are positional siblings of messages, not deltas — a message
+    // delta must never drop the dividers already in the page.
+    compactions: paginated.compactions,
     has_older: paginated.has_older,
     has_newer: false,
   };

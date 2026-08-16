@@ -22,14 +22,14 @@ function makeMessage(overrides: Partial<MessageRow> = {}): MessageRow {
     session_id: "sess-1",
     seq: 1,
     role: "assistant",
-    content: null,
     turn_id: null,
     model: "opus",
-    agent_message_id: "sdk-msg-1",
     sent_at: "2026-01-01T00:00:00Z",
     cancelled_at: null,
-    parent_tool_use_id: null,
-    stop_reason: "end_turn",
+    parent_tool_call_id: null,
+    tokens: null,
+    cost: null,
+    turn_stop_reason: "end_turn",
     ...overrides,
   };
 }
@@ -183,18 +183,16 @@ describe("attachParts", () => {
     const messages = [
       makeMessage({
         id: "msg-1",
-        content: '{"text":"hello"}',
         model: "opus",
-        stop_reason: "end_turn",
-        parent_tool_use_id: "tool-123",
+        turn_stop_reason: "end_turn",
+        parent_tool_call_id: "tool-123",
       }),
     ];
 
     const result = attachParts(mockDb, messages);
 
-    expect(result[0].content).toBe('{"text":"hello"}');
     expect(result[0].model).toBe("opus");
-    expect(result[0].stop_reason).toBe("end_turn");
-    expect(result[0].parent_tool_use_id).toBe("tool-123");
+    expect(result[0].turn_stop_reason).toBe("end_turn");
+    expect(result[0].parent_tool_call_id).toBe("tool-123");
   });
 });

@@ -126,14 +126,16 @@ export interface MessageRow {
   session_id: string;
   seq: number;
   role: string;
-  content: string | null;
   turn_id: string | null;
   model: string | null;
-  agent_message_id: string | null;
   sent_at: string | null;
   cancelled_at: string | null;
-  parent_tool_use_id: string | null;
-  stop_reason: string | null;
+  parent_tool_call_id: string | null;
+  /** JSON-encoded engine TokenUsage for the turn (last assistant message). */
+  tokens: string | null;
+  cost: number | null;
+  /** The turn's terminal stopReason (end_turn, refusal, max_turn_requests, …). */
+  turn_stop_reason: string | null;
 }
 
 export interface PartRow {
@@ -148,9 +150,24 @@ export interface PartRow {
   parent_tool_call_id: string | null;
 }
 
-/** MessageRow enriched with parsed Part objects from the parts table. */
+/** One row of the compactions table (engine `session.compaction` entity). */
+export interface CompactionRow {
+  compaction_id: string;
+  session_id: string;
+  turn_id: string;
+  status: string;
+  trigger: string | null;
+  pre_tokens: number | null;
+  post_tokens: number | null;
+  summary: string | null;
+  created_at: string;
+}
+
+/** MessageRow enriched with the engine Part snapshots from the parts table. */
 export interface MessageRowWithParts extends MessageRow {
-  parts: import("@shared/messages/types").Part[];
+  parts: Array<
+    import("@shared/protocol-types").Part | import("@shared/protocol-types").UnknownPart
+  >;
 }
 
 // ─── stats ───────────────────────────────────────────────────

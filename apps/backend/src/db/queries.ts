@@ -5,7 +5,8 @@
  * Route handlers call these functions instead of inline SQL.
  */
 import type Database from "better-sqlite3";
-import type { Part } from "@shared/messages/types";
+import { decodePart } from "@zvada/agent-server/protocol";
+import type { Part, UnknownPart } from "@shared/protocol-types";
 import type {
   RepositoryRow,
   RepositoryWithCountsRow,
@@ -16,6 +17,7 @@ import type {
   MessageRow,
   MessageRowWithParts,
   PartRow,
+  CompactionRow,
   StatsRow,
 } from "./types";
 
@@ -301,10 +303,6 @@ export function hasNewerMessages(db: Database.Database, sessionId: string, seq: 
     .get(sessionId, seq);
 }
 
-export function getMessageById(db: Database.Database, id: string): MessageRow | undefined {
-  return db.prepare("SELECT * FROM messages WHERE id = ?").get(id) as MessageRow | undefined;
-}
-
 /** Get the highest seq for a session (cursor initialization for real-time streaming). */
 export function getMaxMessageSeq(db: Database.Database, sessionId: string): number {
   const row = db
@@ -340,9 +338,45 @@ export function getPartsByMessageIds(db: Database.Database, messageIds: string[]
 }
 
 /**
- * Enrich message rows with parsed Part objects from the parts table.
- * Parses the JSON `data` field once here so the frontend never sees PartRow.
+ * One stored `parts.data` payload → the runtime shape.
+ *
+ * The column holds the WIRE part (`persistPart` stores an unknown part's own
+ * payload, not the `UnknownPart` wrapper the writing build decoded it into), so
+ * the decode belongs HERE rather than being inherited from whoever wrote the
+ * row. That is what makes the round trip honest in both directions: a type this
+ * build still cannot read is re-wrapped into an `UnknownPart` with `raw`
+ * intact — which is what every `"raw" in part` consumer narrows on — and a type
+ * a LATER build learns is decoded properly out of rows an older one wrote.
+ *
+ * A decode failure is not a reason to lose the row. Parts carry no ordering
+ * field, position IS the array index, so dropping one silently reorders
+ * everything after it. Fall back to the parsed value — exactly what this read
+ * path returned before it decoded anything.
+ */
+function decodeStoredPart(row: PartRow): Part | UnknownPart | undefined {
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(row.data);
+  } catch {
+    console.error(`[attachParts] Failed to parse part ${row.id}:`, row.data?.slice(0, 100));
+    return undefined;
+  }
+  try {
+    return decodePart(parsed);
+  } catch (error) {
+    console.warn(`[attachParts] Part ${row.id} (${row.type}) did not decode:`, error);
+    return parsed as Part;
+  }
+}
+
+/**
+ * Enrich message rows with the engine `Part` snapshots from the parts table.
+ * Decodes the JSON `data` field once here so the frontend never sees PartRow.
  * Messages with no parts get an empty array.
+ *
+ * Parts carry NO ordering field of their own (position is the event's
+ * knowledge, stored as `parts.seq`) — the array order IS the order, and the
+ * query above already sorts by it.
  */
 export function attachParts(db: Database.Database, messages: MessageRow[]): MessageRowWithParts[] {
   if (messages.length === 0) return [];
@@ -350,21 +384,16 @@ export function attachParts(db: Database.Database, messages: MessageRow[]): Mess
   const messageIds = messages.map((m) => m.id);
   const allParts = getPartsByMessageIds(db, messageIds);
 
-  // Parse JSON and group by message_id
-  const partsByMessageId = new Map<string, Part[]>();
+  // Decode and group by message_id
+  const partsByMessageId = new Map<string, Array<Part | UnknownPart>>();
   for (const row of allParts) {
-    try {
-      const part = JSON.parse(row.data) as Part;
-      // Backfill partIndex from DB seq for older rows that predate partIndex
-      if (part.partIndex == null) part.partIndex = row.seq;
-      const existing = partsByMessageId.get(row.message_id);
-      if (existing) {
-        existing.push(part);
-      } else {
-        partsByMessageId.set(row.message_id, [part]);
-      }
-    } catch {
-      console.error(`[attachParts] Failed to parse part ${row.id}:`, row.data?.slice(0, 100));
+    const part = decodeStoredPart(row);
+    if (!part) continue;
+    const existing = partsByMessageId.get(row.message_id);
+    if (existing) {
+      existing.push(part);
+    } else {
+      partsByMessageId.set(row.message_id, [part]);
     }
   }
 
@@ -372,6 +401,18 @@ export function attachParts(db: Database.Database, messages: MessageRow[]): Mess
     ...msg,
     parts: partsByMessageId.get(msg.id) ?? [],
   }));
+}
+
+/**
+ * Every compaction marker for a session, oldest first. Bounded by the number
+ * of compactions in one conversation (single digits), so no pagination —
+ * it ships alongside the message page and the UI places each marker by its
+ * turn.
+ */
+export function getCompactions(db: Database.Database, sessionId: string): CompactionRow[] {
+  return db
+    .prepare("SELECT * FROM compactions WHERE session_id = ? ORDER BY created_at ASC")
+    .all(sessionId) as CompactionRow[];
 }
 
 // ─── Repository Queries ─────────────────────────────────────

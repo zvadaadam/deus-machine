@@ -16,6 +16,7 @@ import { Separator } from "@/components/ui/separator";
 import { useAgentAuth } from "../../api/settings.queries";
 import type { SettingsSectionProps } from "./types";
 import type { AgentProviderAuth } from "../../types";
+import { readThinkingLevel } from "@shared/protocol";
 
 function AuthBadge({
   auth,
@@ -75,9 +76,9 @@ export function AISection({ settings, saveSetting }: SettingsSectionProps) {
   const claudeAuth = agentAuthQuery.data?.claude;
   const codexAuth = agentAuthQuery.data?.codex;
   const agents = agentAuthQuery.data?.agents ?? [];
-  const claudeInstalled = agents.find((a) => a.type === "claude")?.installed;
+  const claudeInstalled = agents.find((a) => a.type === "claude-code")?.installed;
   const codexInstalled =
-    agents.some((a) => a.type === "codex-server" && a.installed) ||
+    agents.some((a) => a.type === "codex-app-server" && a.installed) ||
     agents.some((a) => a.type === "codex-sdk" && a.installed);
   const claudeConnected = claudeAuth && !claudeAuth.error && claudeAuth.accountInfo;
   const codexConnected = codexAuth && !codexAuth.error && codexAuth.accountInfo;
@@ -265,16 +266,16 @@ export function AISection({ settings, saveSetting }: SettingsSectionProps) {
             the thinking indicator next to the model picker.
           </p>
           <Select
-            value={settings.default_thinking_level ?? "HIGH"}
+            value={readThinkingLevel(settings.default_thinking_level) ?? "high"}
             onValueChange={(value) => saveSetting("default_thinking_level", value)}
           >
             <SelectTrigger id="thinking-level" className="w-full">
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="LOW">Low</SelectItem>
-              <SelectItem value="MEDIUM">Medium</SelectItem>
-              <SelectItem value="HIGH">High</SelectItem>
+              <SelectItem value="low">Low</SelectItem>
+              <SelectItem value="medium">Medium</SelectItem>
+              <SelectItem value="high">High</SelectItem>
             </SelectContent>
           </Select>
         </div>

@@ -55,15 +55,6 @@ export const SaveSkillBody = z.object({
 });
 
 // ============================================================================
-// Session Schemas
-// ============================================================================
-
-export const CreateMessageBody = z.object({
-  content: z.string().min(1, "content is required"),
-  model: z.string().trim().min(1, "model is required"),
-});
-
-// ============================================================================
 // Repo Schemas
 // ============================================================================
 
@@ -169,7 +160,9 @@ export const PreferencesFile = z
     claude_provider: z.string().optional(),
     claude_model: z.string().optional(),
     custom_endpoint: z.string().optional(),
-    default_thinking_level: z.enum(["LOW", "MEDIUM", "HIGH"]).optional(),
+    // Engine vocabulary (lowercase). Files written by older builds carry the
+    // retired UPPERCASE spellings — normalized on read, see readThinkingLevel.
+    default_thinking_level: z.string().optional(),
     experimental_simulator: z.boolean().optional(),
     experimental_browser: z.boolean().optional(),
     experimental_design: z.boolean().optional(),

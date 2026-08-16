@@ -14,10 +14,19 @@ interface TurnFooterProps {
 
 export const TurnFooter = memo(function TurnFooter({ messages, startedAt }: TurnFooterProps) {
   const { copy, copied } = useCopyToClipboard({ resetDelay: 1600 });
-  const { copyText, durationMs } = useMemo(
+  const { copyText, durationMs, tokens, cost } = useMemo(
     () => getTurnFooterData(messages, startedAt),
     [messages, startedAt]
   );
+
+  // Billed tokens = non-cached input + cache reads/writes + output (the three
+  // input buckets are disjoint by protocol invariant, so this never double-counts).
+  const tokenLabel = useMemo(() => {
+    if (!tokens) return null;
+    const total =
+      tokens.input + tokens.output + (tokens.cache?.read ?? 0) + (tokens.cache?.write ?? 0);
+    return total > 0 ? formatTokenCount(total) : null;
+  }, [tokens]);
 
   const handleCopy = useCallback(() => {
     if (!copyText) return;
@@ -46,7 +55,10 @@ export const TurnFooter = memo(function TurnFooter({ messages, startedAt }: Turn
     };
   }, [durationMs, startedAt]);
 
-  if (!copyText && durationMs == null) return null;
+  const costLabel =
+    cost != null && cost > 0 ? `$${cost < 0.01 ? cost.toFixed(4) : cost.toFixed(2)}` : null;
+
+  if (!copyText && durationMs == null && !tokenLabel && !costLabel) return null;
 
   return (
     <div className="text-muted-foreground/70 flex items-center gap-1 px-2 py-1 text-xs">
@@ -79,7 +91,31 @@ export const TurnFooter = memo(function TurnFooter({ messages, startedAt }: Turn
           </span>
         ))}
 
-      {durationMs != null && copyText && (
+      {durationMs != null && (tokenLabel || costLabel || copyText) && (
+        <span className="text-muted-foreground/30" aria-hidden="true">
+          •
+        </span>
+      )}
+
+      {tokenLabel && (
+        <span className="font-mono tracking-tight tabular-nums" title="Tokens billed this turn">
+          {tokenLabel}
+        </span>
+      )}
+
+      {tokenLabel && costLabel && (
+        <span className="text-muted-foreground/30" aria-hidden="true">
+          •
+        </span>
+      )}
+
+      {costLabel && (
+        <span className="font-mono tracking-tight tabular-nums" title="Cost of this turn">
+          {costLabel}
+        </span>
+      )}
+
+      {(tokenLabel || costLabel) && copyText && (
         <span className="text-muted-foreground/30" aria-hidden="true">
           •
         </span>
@@ -104,3 +140,10 @@ export const TurnFooter = memo(function TurnFooter({ messages, startedAt }: Turn
     </div>
   );
 });
+
+/** 1234 → "1.2k", 1_234_567 → "1.2M" — the footer is a glance, not a ledger. */
+function formatTokenCount(total: number): string {
+  if (total < 1_000) return `${total} tok`;
+  if (total < 1_000_000) return `${(total / 1_000).toFixed(1)}k tok`;
+  return `${(total / 1_000_000).toFixed(1)}M tok`;
+}

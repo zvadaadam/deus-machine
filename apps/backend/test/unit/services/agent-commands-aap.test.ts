@@ -39,7 +39,6 @@ vi.mock("../../../src/middleware/workspace-loader", () => ({
 
 // Every import below is unrelated to the AAP path but gets dragged in by
 // commands.ts — mock to no-ops so the module loads cleanly.
-vi.mock("../../../src/services/message-writer", () => ({ writeUserMessage: vi.fn() }));
 vi.mock("../../../src/services/pty.service", () => ({
   spawnPty: vi.fn(),
   writeToPty: vi.fn(),

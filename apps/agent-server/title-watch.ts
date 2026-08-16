@@ -31,7 +31,7 @@ export function maybeFetchTitle(sessionId: string): void {
         // must not burn the only attempt — the next turn end retries.
         const delivered = notifyHost(SIDE_CHANNEL.title, {
           sessionId,
-          agentHarness: "claude",
+          agentHarness: "claude-code",
           title,
         });
         if (delivered) state.titleFetched = true;

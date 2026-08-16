@@ -16,8 +16,8 @@
 
 import { useCallback } from "react";
 import { toast } from "sonner";
-import { useSendMessage, useStopSession } from "../api/session.queries";
-import { sendCommand, connect, isConnected } from "@/platform/ws";
+import { newTurnId, useSendMessage, useStopSession } from "../api/session.queries";
+import { connect, isConnected } from "@/platform/ws";
 import { track } from "@/platform/analytics";
 import { getAgentHarnessForModel, getModelId } from "@/shared/agents";
 import { COMPACT_CONVERSATION, createPRPrompt } from "../lib/sessionPrompts";
@@ -81,6 +81,9 @@ export function useSessionActions({
           content,
           model: effectiveModel,
           agentHarness: effectiveHarness,
+          // The send's correlation key: it seeds the optimistic bubble AND
+          // becomes the engine's turnId, so the user echo comes back matchable.
+          turnId: newTurnId(),
           permissionMode: composer.planModeEnabled ? "plan" : undefined,
           thinkingLevel: composer.thinkingLevel,
         });
@@ -101,13 +104,11 @@ export function useSessionActions({
 
   const stopSession = useCallback(async () => {
     try {
-      // Cancel the agent first so it stops consuming API tokens.
-      try {
-        if (!isConnected()) await connect();
-        await sendCommand("stopSession", { sessionId });
-      } catch (cancelError) {
-        console.error("[useSessionActions] Cancel query failed:", cancelError);
-      }
+      // ONE stopSession command. This used to fire the command directly and
+      // then run the mutation, which sends the same command again — the second
+      // cancel lands on a turn the first already stopped and its
+      // `no_active_turn` outcome masks whether the first was ever confirmed.
+      if (!isConnected()) await connect();
       await stopSessionMutation.mutateAsync(sessionId);
     } catch (error) {
       console.error("Failed to stop session:", error);

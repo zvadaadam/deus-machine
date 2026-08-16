@@ -219,7 +219,7 @@ export function AgentQuestionOverlay({
           {/* Question text with agent logo */}
           <div className="mb-3 flex items-start gap-2.5">
             {(() => {
-              const Logo = getAgentLogo(agentHarness || "claude");
+              const Logo = getAgentLogo(agentHarness || "claude-code");
               return Logo ? <Logo className="mt-0.5 h-4 w-4 shrink-0" aria-hidden="true" /> : null;
             })()}
             <p className="text-foreground min-w-0 text-sm font-medium">

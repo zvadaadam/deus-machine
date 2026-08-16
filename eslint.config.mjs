@@ -73,6 +73,24 @@ export default tseslint.config(
     rules: {
       ...reactHookWarnings,
       "react-refresh/only-export-components": ["warn", { allowConstantExport: true }],
+      // A VALUE from the protocol barrel drags that whole module graph — zod
+      // included — into the browser bundle. Values come from the narrowest
+      // subpath (guards / selectors / seq-cursor / factories); TYPES come from
+      // @shared/protocol-types, which is erased. The one module that has no
+      // zod-free subpath available (the fold) disables this on its import line
+      // with the reason. See shared/protocol-types.ts.
+      "no-restricted-imports": [
+        "error",
+        {
+          paths: [
+            {
+              name: "@zvada/agent-server/protocol",
+              message:
+                "Renderer: import values from the narrowest subpath (@zvada/agent-server/protocol/{guards,selectors,seq-cursor,factories}) and types from @shared/protocol-types.",
+            },
+          ],
+        },
+      ],
     },
   },
   {

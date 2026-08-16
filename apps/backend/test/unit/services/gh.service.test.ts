@@ -6,13 +6,15 @@ import { vi, describe, it, expect, beforeEach, afterAll } from "vitest";
 // ─── Hoisted mocks (vi.mock factories run before imports) ─────────
 
 const { mockExecFileAsync, mockGetGitRemoteUrl } = vi.hoisted(() => {
-  const mockExecFileAsync = vi.fn(() => Promise.resolve({ stdout: "", stderr: "" }));
-  const mockGetGitRemoteUrl = vi.fn();
+  const mockExecFileAsync = vi.fn<(...args: any[]) => any>(() =>
+    Promise.resolve({ stdout: "", stderr: "" })
+  );
+  const mockGetGitRemoteUrl = vi.fn<(...args: any[]) => any>();
   return { mockExecFileAsync, mockGetGitRemoteUrl };
 });
 
 vi.mock("child_process", () => ({
-  execFile: vi.fn(),
+  execFile: vi.fn<(...args: any[]) => any>(),
 }));
 
 vi.mock("util", () => ({

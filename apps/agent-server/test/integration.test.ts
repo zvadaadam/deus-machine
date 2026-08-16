@@ -6,7 +6,9 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { createServer as createHttpServer, type Server } from "http";
 import { WebSocketServer, WebSocket } from "ws";
 import { AgentServerClient } from "@zvada/agent-server/client";
-import type { LifecycleEvent, WireEventEnvelope } from "@zvada/agent-server/protocol";
+import type { LifecycleEvent } from "@zvada/agent-server/protocol";
+import type { DecodedWireEventEnvelope } from "@shared/protocol-types";
+import { WIRE_PROTOCOL_VERSION } from "@zvada/agent-server/protocol";
 import {
   SIDE_CHANNEL,
   SideChannelEndpoint,
@@ -14,7 +16,7 @@ import {
   wsLineTransport,
 } from "@shared/agent-side-channel";
 import { AgentServer } from "../upstream-server";
-import { bridgeWsConnection, createEventObserverTransport } from "../wire";
+import { bridgeWsConnection, observeEvents } from "../wire";
 import { HostRpc } from "../host-link";
 import { trackedSessions } from "../session-tracker";
 
@@ -65,6 +67,7 @@ function defaultScript(sessionId: string, turnId: string): LifecycleEvent[] {
     },
     {
       type: "message.started",
+      sessionId,
       turnId,
       messageId: "m1",
       outputIndex: 0,
@@ -73,6 +76,7 @@ function defaultScript(sessionId: string, turnId: string): LifecycleEvent[] {
     },
     {
       type: "message.part",
+      sessionId,
       turnId,
       messageId: "m1",
       outputIndex: 0,
@@ -80,7 +84,7 @@ function defaultScript(sessionId: string, turnId: string): LifecycleEvent[] {
       part: { type: "text", id: "p1", sessionId, messageId: "m1", text: "Hi", state: "done" },
       timestamp: T,
     },
-    { type: "message.ended", turnId, messageId: "m1", timestamp: T },
+    { type: "message.ended", sessionId, turnId, messageId: "m1", timestamp: T },
     { type: "turn.ended", sessionId, turnId, stopReason: "end_turn", timestamp: T },
   ];
 }
@@ -101,7 +105,7 @@ describe("Integration: standard wire + deus side channel over a real WebSocket",
     });
     // Production wiring: the observer feeds the session tracker from the
     // event broadcast (native ids, turn boundaries).
-    wireServer.attach(createEventObserverTransport());
+    observeEvents(wireServer);
     httpServer = createHttpServer();
     wss = new WebSocketServer({ server: httpServer });
     wss.on("connection", (ws) => bridgeWsConnection(ws, wireServer));
@@ -167,7 +171,7 @@ describe("Integration: standard wire + deus side channel over a real WebSocket",
 
   it("runs a quick-ack turn and streams sequenced events in order", async () => {
     const c = await connectBackendStyle();
-    const envelopes: WireEventEnvelope[] = [];
+    const envelopes: DecodedWireEventEnvelope[] = [];
     c.onEvent((envelope) => envelopes.push(envelope));
 
     const turn = await c.runTurn({
@@ -341,6 +345,6 @@ describe("Integration: standard wire + deus side channel over a real WebSocket",
     // An upstream request still works after side-channel traffic interleaves.
     await HostRpc.requestGetDiff({ sessionId: "s" }).catch(() => {});
     const init = await c.initialize();
-    expect(init.protocolVersion).toBe(1);
+    expect(init.protocolVersion).toBe(WIRE_PROTOCOL_VERSION);
   });
 });

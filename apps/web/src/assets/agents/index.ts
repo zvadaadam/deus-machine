@@ -37,6 +37,7 @@ export const agentLogos: Record<string, AgentLogoComponent> = {
   clawdbot: Clawdbot,
   cline: Cline,
   "codex-sdk": Codex,
+  "codex-app-server": Codex,
   "codex-server": Codex,
   copilot: Copilot,
   "github-copilot": Copilot,

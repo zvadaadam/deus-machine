@@ -4,7 +4,8 @@ import * as fs from "fs";
 import * as path from "path";
 import WebSocket from "ws";
 import { AgentServerClient } from "@zvada/agent-server/client";
-import type { WireEventEnvelope } from "@zvada/agent-server/protocol";
+import type { DecodedWireEventEnvelope } from "@shared/protocol-types";
+import { WIRE_PROTOCOL_VERSION } from "@zvada/agent-server/protocol";
 import {
   SIDE_CHANNEL,
   SideChannelEndpoint,
@@ -177,7 +178,7 @@ function waitForMessage(
 interface BackendStyleConnection {
   client: AgentServerClient;
   sideChannel: SideChannelEndpoint;
-  envelopes: WireEventEnvelope[];
+  envelopes: DecodedWireEventEnvelope[];
   close(): Promise<void>;
 }
 
@@ -198,7 +199,7 @@ async function connectBackendStyle(
   sideChannel.notify(SIDE_CHANNEL.hello, {});
 
   const client = await AgentServerClient.attach(claimSideChannel(transport, sideChannel));
-  const envelopes: WireEventEnvelope[] = [];
+  const envelopes: DecodedWireEventEnvelope[] = [];
   client.onEvent((envelope) => envelopes.push(envelope));
 
   return {
@@ -227,10 +228,18 @@ describe.skipIf(!bundleExists)("E2E: Agent Server Process", () => {
     await killAgentServer(srv);
   });
 
-  it("handshakes on the standard wire (protocolVersion 1, three harnesses)", async () => {
+  it("handshakes on the standard wire (current protocol version, three harnesses)", async () => {
     const conn = await connectBackendStyle(srv.wsUrl);
     const init = await conn.client.initialize();
-    expect(init.protocolVersion).toBe(1);
+    // The LITERAL deus targets, not the package constant. Comparing the
+    // constant to itself passed no matter what the server answered — and, more
+    // to the point, it would keep passing through an engine bump that moved
+    // the wire version out from under the backend client. A deliberate bump is
+    // a one-line edit here plus a look at what changed; a silent one is what
+    // this pins against.
+    expect(init.protocolVersion).toBe(2);
+    // Sanity: the installed package agrees with what deus targets.
+    expect(WIRE_PROTOCOL_VERSION).toBe(2);
     expect(init.server.name).toBe("deus-agent-server");
     expect(Object.keys(init.harnesses).sort()).toEqual([
       "claude-code",
@@ -309,7 +318,7 @@ describe.skipIf(!bundleExists || !claudeCliAvailable)("E2E: Real Claude Integrat
     const result = await conn.sideChannel.request<{
       accountInfo?: unknown;
       error?: string;
-    }>(SIDE_CHANNEL.providerAuth, { agentHarness: "claude", cwd: WORKSPACE_ROOT }, 30_000);
+    }>(SIDE_CHANNEL.providerAuth, { agentHarness: "claude-code", cwd: WORKSPACE_ROOT }, 30_000);
     expect(result).toHaveProperty("accountInfo");
     expect((result as { error?: string }).error).toBeUndefined();
   }, 30_000);
@@ -359,8 +368,11 @@ describe.skipIf(!bundleExists || !claudeCliAvailable)("E2E: Real Claude Integrat
     });
     // Give the turn a moment to actually start before cancelling.
     await new Promise((r) => setTimeout(r, 3_000));
-    const { cancelled } = await conn.client.cancelTurn("e2e-claude-cancel");
-    expect(cancelled).toBe(true);
+    const cancel = await conn.client.cancelTurn("e2e-claude-cancel");
+    // 0.3 reports one outcome: `cancelled` (harness confirmed) or
+    // `unconfirmed` (dispatched best-effort). Either means the interrupt went
+    // out; turn.ended below is the real assertion.
+    expect(["cancelled", "unconfirmed"]).toContain(cancel.outcome);
 
     // The turn.ended for this session must arrive with cancelled.
     await new Promise<void>((resolve, reject) => {
@@ -369,7 +381,7 @@ describe.skipIf(!bundleExists || !claudeCliAvailable)("E2E: Real Claude Integrat
         if (envelope.sessionId === "e2e-claude-cancel" && envelope.event.type === "turn.ended") {
           clearTimeout(timer);
           off();
-          expect(envelope.event.stopReason).toBe("cancelled");
+          expect((envelope.event as { stopReason?: string }).stopReason).toBe("cancelled");
           resolve();
         }
       });
@@ -438,7 +450,7 @@ describe.skipIf(!bundleExists || !codexIntegrationEnabled)("E2E: Real Codex Inte
     await conn.client.cancelTurn("e2e-codex-cancel");
     await new Promise<void>((resolve, reject) => {
       const timer = setTimeout(() => reject(new Error("no turn.ended after cancel")), 30_000);
-      const check = (envelope: WireEventEnvelope) => {
+      const check = (envelope: DecodedWireEventEnvelope) => {
         if (envelope.sessionId === "e2e-codex-cancel" && envelope.event.type === "turn.ended") {
           clearTimeout(timer);
           off();

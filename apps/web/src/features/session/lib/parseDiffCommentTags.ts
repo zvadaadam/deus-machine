@@ -7,8 +7,6 @@ export interface DiffCommentReference {
   text: string;
 }
 
-export type DiffCommentSegment = string | DiffCommentReference;
-
 export function serializeDiffCommentReference(reference: DiffCommentReference): string {
   return `<diff-comment file="${escapeTagValue(reference.file)}" line="${reference.line}" side="${reference.side}">${escapeTagValue(reference.text)}</diff-comment>`;
 }
@@ -52,36 +50,4 @@ export function parseLegacyDiffCommentReference(text: string):
       text: lines.slice(3).join("\n").trimStart(),
     },
   };
-}
-
-export function parseDiffCommentTags(text: string): DiffCommentSegment[] {
-  const tagRegex = /<diff-comment\s+((?:[^"'>]|"[^"]*")*)>([\s\S]*?)<\/diff-comment>/g;
-  const segments: DiffCommentSegment[] = [];
-  let lastIndex = 0;
-  let match: RegExpExecArray | null;
-
-  while ((match = tagRegex.exec(text)) !== null) {
-    if (match.index > lastIndex) {
-      segments.push(text.slice(lastIndex, match.index));
-    }
-
-    segments.push(diffCommentReferenceFromTag(match[1], match[2]));
-
-    lastIndex = match.index + match[0].length;
-  }
-
-  if (segments.length === 0) {
-    const legacyDiffComment = parseLegacyDiffCommentReference(text);
-    if (!legacyDiffComment) return [];
-
-    const legacySegments: DiffCommentSegment[] = [];
-    if (legacyDiffComment.before) legacySegments.push(legacyDiffComment.before);
-    legacySegments.push(legacyDiffComment.comment);
-    return legacySegments;
-  }
-
-  if (lastIndex < text.length) {
-    segments.push(text.slice(lastIndex));
-  }
-  return segments;
 }

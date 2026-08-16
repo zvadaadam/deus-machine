@@ -1,4 +1,4 @@
-import type { Part, ToolPart } from "@shared/messages/types";
+import type { Part, ToolPart } from "@shared/protocol-types";
 import { normalizeWorkspaceRelativePath } from "@/features/workspace/lib/normalizeWorkspaceRelativePath";
 
 export type ChatResourceType = "website" | "file";
@@ -62,6 +62,9 @@ const DOCUMENT_EXTENSIONS = new Set(["doc", "docx", "md", "mdx", "pdf"]);
 const SPREADSHEET_EXTENSIONS = new Set(["csv", "tsv", "xls", "xlsm", "xlsx"]);
 const SLIDE_EXTENSIONS = new Set(["ppt", "pptx"]);
 
+/** Tool kinds that mean "this call changed a file" (display grouping). */
+const WRITE_TOOL_KINDS: ReadonlySet<string> = new Set(["edit", "delete", "move"]);
+
 const URL_RE = /\bhttps?:\/\/[^\s<>)"'`]+/gi;
 const TRAILING_URL_PUNCTUATION_RE = /[.,;!?]+$/u;
 const URL_BRACKET_RE = /[()[\]]/u;
@@ -74,9 +77,10 @@ export function extractChatResources({
 }: ExtractChatResourcesOptions): ChatResource[] {
   if (!isComplete) return [];
 
-  const sortedParts = [...parts].sort((a, b) => (a.partIndex ?? 0) - (b.partIndex ?? 0));
+  // Parts arrive in order (position is the event's knowledge, not a field).
+  const sortedParts = parts;
   const assistantContent = sortedParts
-    .filter((part) => part.type === "TEXT")
+    .filter((part): part is Extract<Part, { type: "text" }> => part.type === "text")
     .map((part) => part.text)
     .join("\n");
 
@@ -265,7 +269,8 @@ function extractEditedPaths(parts: Part[], workspacePath?: string | null): strin
   const paths: string[] = [];
 
   for (const part of parts) {
-    if (part.type !== "TOOL" || part.kind !== "write") continue;
+    // "write" is a consumer grouping over the protocol's kinds, not a wire value.
+    if (part.type !== "tool" || !WRITE_TOOL_KINDS.has(part.kind ?? "")) continue;
     collectToolPaths(part, paths, workspacePath);
   }
 
@@ -276,7 +281,7 @@ function extractReferencedPaths(parts: Part[], workspacePath?: string | null): s
   const paths: string[] = [];
 
   for (const part of parts) {
-    if (part.type !== "TOOL") continue;
+    if (part.type !== "tool") continue;
     collectToolPaths(part, paths, workspacePath);
   }
 
@@ -293,7 +298,7 @@ function collectToolPaths(
     if (path) paths.push(path);
   }
 
-  if (part.state.status !== "COMPLETED") return;
+  if (part.state.status !== "completed") return;
   for (const content of part.state.content ?? []) {
     if (content.type !== "diff") continue;
     const path = normalizeResourcePath(content.path, workspacePath);

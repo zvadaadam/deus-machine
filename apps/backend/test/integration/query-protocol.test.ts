@@ -89,7 +89,7 @@ function seedTestData() {
     .prepare(
       `
     INSERT INTO sessions (id, workspace_id, agent_harness, status)
-    VALUES (?, ?, 'claude', 'idle')
+    VALUES (?, ?, 'claude-code', 'idle')
   `
     )
     .run(SESS_ID, WS_ID);
@@ -99,19 +99,19 @@ function seedTestData() {
 
 function seedMessages() {
   const msgs = [
-    { id: "msg-q-001", role: "user", content: "hello" },
-    { id: "msg-q-002", role: "assistant", content: "world" },
-    { id: "msg-q-003", role: "user", content: "!" },
+    { id: "msg-q-001", role: "user" },
+    { id: "msg-q-002", role: "assistant" },
+    { id: "msg-q-003", role: "user" },
   ];
   for (const m of msgs) {
     testDb
       .prepare(
         `
-      INSERT INTO messages (id, session_id, role, content, sent_at)
-      VALUES (?, ?, ?, ?, datetime('now'))
+      INSERT INTO messages (id, session_id, role, sent_at)
+      VALUES (?, ?, ?, datetime('now'))
     `
       )
-      .run(m.id, SESS_ID, m.role, m.content);
+      .run(m.id, SESS_ID, m.role);
   }
 }
 
@@ -568,8 +568,8 @@ describe("q:subscribe → q:delta for messages", () => {
       testDb
         .prepare(
           `
-        INSERT INTO messages (id, session_id, role, content, sent_at)
-        VALUES ('msg-q-new-1', ?, 'user', 'delta test', datetime('now'))
+        INSERT INTO messages (id, session_id, role, sent_at)
+        VALUES ('msg-q-new-1', ?, 'user', datetime('now'))
       `
         )
         .run(SESS_ID);
@@ -581,7 +581,7 @@ describe("q:subscribe → q:delta for messages", () => {
 
       expect(delta.id).toBe("sub_delta_1");
       expect(delta.upserted).toHaveLength(1);
-      expect(delta.upserted[0].content).toBe("delta test");
+      expect(delta.upserted[0].id).toBe("msg-q-new-1");
       expect(delta.cursor).toBeGreaterThan(0);
     } finally {
       ws.close();
@@ -607,8 +607,8 @@ describe("q:subscribe → q:delta for messages", () => {
       testDb
         .prepare(
           `
-        INSERT INTO messages (id, session_id, role, content, sent_at)
-        VALUES ('msg-q-cur-1', ?, 'user', 'first new', datetime('now'))
+        INSERT INTO messages (id, session_id, role, sent_at)
+        VALUES ('msg-q-cur-1', ?, 'user', datetime('now'))
       `
         )
         .run(SESS_ID);
@@ -622,8 +622,8 @@ describe("q:subscribe → q:delta for messages", () => {
       testDb
         .prepare(
           `
-        INSERT INTO messages (id, session_id, role, content, sent_at)
-        VALUES ('msg-q-cur-2', ?, 'assistant', 'second new', datetime('now'))
+        INSERT INTO messages (id, session_id, role, sent_at)
+        VALUES ('msg-q-cur-2', ?, 'assistant', datetime('now'))
       `
         )
         .run(SESS_ID);
@@ -632,7 +632,7 @@ describe("q:subscribe → q:delta for messages", () => {
       const delta2 = await delta2Promise;
 
       expect(delta2.upserted).toHaveLength(1);
-      expect(delta2.upserted[0].content).toBe("second new");
+      expect(delta2.upserted[0].id).toBe("msg-q-cur-2");
       expect(delta2.cursor).toBeGreaterThan(cursor1);
     } finally {
       ws.close();
@@ -762,32 +762,32 @@ describe("q:command → q:command_ack", () => {
             sessionId: SESS_ID,
             content: "command test",
             model: "sonnet",
-            agentHarness: "claude",
+            agentHarness: "claude-code",
+            turnId: "turn-cmd-1",
           },
         },
         "q:command_ack"
       );
 
       expect(res.id).toBe("cmd-1");
-      expect(res.accepted).toBe(true);
-      expect(res.commandId).toEqual(expect.any(String));
+      // There is no agent server behind this test, so NO turn was admitted and
+      // the ack must say so. `accepted: true` here used to be the assertion —
+      // it is the exact bug: the frontend's optimistic bubble is the only copy
+      // of the user's prompt until the engine echoes it (this command writes
+      // no message row, see the count below), and only a rejected ack runs the
+      // rollback. An accepted one strands the bubble for a turn that never ran.
+      expect(res.accepted).toBe(false);
+      expect(res.error).toMatch(/disconnected/i);
 
-      // Verify message was persisted
-      const messageRow = testDb
-        .prepare("SELECT session_id, role, content, model FROM messages WHERE id = ?")
-        .get(res.commandId) as
-        | { session_id: string; role: string; content: string; model: string }
-        | undefined;
-      expect(messageRow).toEqual({
-        session_id: SESS_ID,
-        role: "user",
-        content: "command test",
-        model: "sonnet",
-      });
+      // No user message row is written here — the send only flips the session
+      // (the 3 seeded messages are all that remain).
+      const messageCount = testDb
+        .prepare("SELECT count(*) as n FROM messages WHERE session_id = ?")
+        .get(SESS_ID) as { n: number };
+      expect(messageCount.n).toBe(3);
 
-      // Verify session status — without a running agent server, the session
-      // transitions to "error" because handleSendMessage persists an error
-      // when the agent transport is disconnected (prevents silent stalls).
+      // The session still lands on "error": the rejected ack tells the caller,
+      // the status tells every other subscriber.
       const sessionRow = testDb
         .prepare("SELECT status FROM sessions WHERE id = ?")
         .get(SESS_ID) as { status: string };
@@ -874,7 +874,7 @@ describe("q:command → q:command_ack", () => {
             sessionId: SESS_ID,
             content: "delta check",
             model: "claude-sonnet-4-6",
-            agentHarness: "claude",
+            agentHarness: "claude-code",
           },
         })
       );
@@ -882,7 +882,11 @@ describe("q:command → q:command_ack", () => {
       // Wait for both the command ack and the delta push
       const [ack, delta] = await Promise.all([waitForMessage(ws, "q:command_ack"), deltaPromise]);
 
-      expect(ack.accepted).toBe(true);
+      // Rejected (no agent server in this test) — but the point here is the
+      // INVALIDATION, which fires on the optimistic "working" flip before the
+      // no-turn guard is reached. Subscribers see the flip either way; the
+      // caller learns separately that its turn was refused.
+      expect(ack.accepted).toBe(false);
       expect(delta.id).toBe("sub_ws_delta");
       expect(delta.upserted).toHaveLength(1);
       expect(delta.upserted[0].id).toBe(WS_ID);

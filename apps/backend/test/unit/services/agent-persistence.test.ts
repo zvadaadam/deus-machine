@@ -1,470 +1,921 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
+/**
+ * Unit tests for the persistence layer, against a REAL in-memory SQLite with
+ * the full schema applied — the writes are SQL, so mocking the database would
+ * only pin the strings, not the behaviour (COALESCE merges, ON CONFLICT
+ * upserts, FK guards, triggers).
+ *
+ * Every writer takes a value the ENGINE's fold produced, so the fixtures below
+ * are engine events run through the real reducer rather than hand-built rows:
+ * a test that invented its own `ConversationMessage` would pass while the fold
+ * produced something else. There is still no deus dialect anywhere in between.
+ */
 
-// ============================================================================
-// Mocks (vi.hoisted so they're available in vi.mock factories)
-// ============================================================================
+import Database from "better-sqlite3";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { emptyConversation, reduceConversationWithChanges } from "@zvada/agent-server/protocol";
+import type {
+  ConversationCompaction,
+  ConversationMessage,
+  ConversationState,
+  ConversationTurn,
+  LifecycleEvent,
+  MessagePartEvent,
+  MessageStartedEvent,
+  SessionCompactionEvent,
+  SessionUsageEvent,
+  TurnEndedEvent,
+} from "@zvada/agent-server/protocol";
 
-const { mockRun, mockPrepare, mockTransaction, mockDb } = vi.hoisted(() => {
-  const mockRun = vi.fn(() => ({ changes: 1 }));
-  const mockPrepare = vi.fn(() => ({ run: mockRun }));
-  const mockTransaction = vi.fn((fn: () => void) => fn);
-  const mockDb = {
-    prepare: mockPrepare,
-    transaction: mockTransaction,
-  };
-  return { mockRun, mockPrepare, mockTransaction, mockDb };
-});
+// better-sqlite3 may be compiled for Electron's Node ABI — skip if unavailable
+let canUseDatabase = true;
+try {
+  new Database(":memory:").close();
+} catch {
+  canUseDatabase = false;
+}
+const describeWithDb = canUseDatabase ? describe : describe.skip;
 
-vi.mock("../../../src/lib/database", () => ({
-  getDatabase: vi.fn(() => mockDb),
-}));
+import { SCHEMA_SQL } from "@shared/schema";
 
-// ============================================================================
-// Import after mocks
-// ============================================================================
+const { mockGetDatabase } = vi.hoisted(() => ({ mockGetDatabase: vi.fn() }));
+vi.mock("../../../src/lib/database", () => ({ getDatabase: mockGetDatabase }));
 
 import {
-  persistMessageCancelled,
-  persistPartDone,
-  persistMessageDone,
-  persistSessionStarted,
-  persistSessionIdle,
-  persistSessionError,
-  persistSessionCancelled,
   persistAgentSessionId,
+  persistChanges,
+  persistCompaction,
+  persistMessage,
+  persistPart,
+  persistSessionError,
   persistSessionTitle,
+  persistSessionUsage,
+  persistLastUserMessageAt,
+  persistSessionWorking,
+  persistTurnEnded,
+  type TurnOutcomeWrite,
 } from "../../../src/services/agent/persistence";
-import type {
-  MessageCancelledEvent,
-  PartDoneEvent,
-  MessageDoneEvent,
-  SessionStartedEvent,
-  SessionIdleEvent,
-  SessionErrorEvent,
-  SessionCancelledEvent,
-  AgentSessionIdEvent,
-  SessionTitleEvent,
-} from "../../../../shared/agent-events";
 
 // ============================================================================
-// Tests
+// Fixtures
 // ============================================================================
 
-describe("agent-persistence", () => {
+const SESSION = "sess-1";
+const TURN = "turn-1";
+const T = Date.parse("2026-08-14T12:00:00.000Z");
+
+function createTestDb(): Database.Database {
+  const db = new Database(":memory:");
+  db.pragma("foreign_keys = ON");
+  db.exec(SCHEMA_SQL);
+  db.prepare(
+    `INSERT INTO repositories (id, name, root_path) VALUES ('r1', 'repo', '/tmp/repo')`
+  ).run();
+  db.prepare(`INSERT INTO workspaces (id, repository_id, slug) VALUES ('w1', 'r1', 'ws')`).run();
+  db.prepare(
+    `INSERT INTO sessions (id, workspace_id, agent_harness) VALUES (?, 'w1', 'claude-code')`
+  ).run(SESSION);
+  return db;
+}
+
+function started(over: Partial<MessageStartedEvent> = {}): MessageStartedEvent {
+  return {
+    type: "message.started",
+    sessionId: SESSION,
+    turnId: TURN,
+    messageId: "msg-1",
+    outputIndex: 1,
+    role: "assistant",
+    timestamp: T,
+    ...over,
+  };
+}
+
+function part(over: Partial<MessagePartEvent> = {}): MessagePartEvent {
+  return {
+    type: "message.part",
+    sessionId: SESSION,
+    turnId: TURN,
+    messageId: "msg-1",
+    outputIndex: 1,
+    partIndex: 0,
+    part: {
+      type: "text",
+      id: "p1",
+      sessionId: SESSION,
+      messageId: "msg-1",
+      text: "hello",
+      state: "done",
+    },
+    timestamp: T,
+    ...over,
+  };
+}
+
+function ended(over: Partial<TurnEndedEvent> = {}): TurnEndedEvent {
+  return {
+    type: "turn.ended",
+    sessionId: SESSION,
+    turnId: TURN,
+    stopReason: "end_turn",
+    timestamp: T,
+    ...over,
+  };
+}
+
+/** One event through the real reducer — the values the writers below consume. */
+function fold(...events: LifecycleEvent[]): ConversationState {
+  let state = emptyConversation();
+  for (const event of events) state = reduceConversationWithChanges(state, event).state;
+  return state;
+}
+
+const IDLE: TurnOutcomeWrite = { status: "idle", cancelled: false };
+
+// The writers take folded values; these adapters keep the fixtures event-shaped
+// (which is what the wire actually delivers) without re-deriving the fold.
+const writeMessage = (e: MessageStartedEvent) =>
+  persistMessage(e.sessionId, fold(e).timeline[0] as ConversationMessage);
+const writePart = (e: MessagePartEvent) =>
+  persistPart(e.sessionId, e.messageId, e.part, e.partIndex);
+const writeTurnEnded = (e: TurnEndedEvent, outcome: TurnOutcomeWrite) =>
+  persistTurnEnded(e.sessionId, fold(e).turns[0] as ConversationTurn, outcome);
+const writeUsage = (e: SessionUsageEvent) =>
+  persistSessionUsage(e.sessionId, fold(e).usage as NonNullable<ConversationState["usage"]>);
+const writeCompaction = (e: SessionCompactionEvent) =>
+  persistCompaction(e.sessionId, fold(e).timeline[0] as ConversationCompaction);
+
+// ============================================================================
+
+describeWithDb("agent persistence (canonical events → SQLite)", () => {
+  let db: Database.Database;
+
   beforeEach(() => {
-    vi.clearAllMocks();
-    mockPrepare.mockReturnValue({ run: mockRun });
-    mockTransaction.mockImplementation((fn: () => void) => fn);
+    db = createTestDb();
+    mockGetDatabase.mockReturnValue(db);
+    vi.spyOn(console, "warn").mockImplementation(() => {});
+    vi.spyOn(console, "error").mockImplementation(() => {});
   });
 
-  // ==========================================================================
-  // Message writes
-  // ==========================================================================
+  afterEach(() => {
+    db.close();
+    vi.restoreAllMocks();
+  });
 
-  describe("persistMessageCancelled", () => {
-    const event: MessageCancelledEvent = {
-      type: "message.cancelled",
-      sessionId: "sess-1",
-      agentHarness: "claude",
-    };
+  // --------------------------------------------------------------------------
+  // messages
+  // --------------------------------------------------------------------------
 
-    it("inserts a cancelled message marker and sets session to idle", () => {
-      const result = persistMessageCancelled(event);
+  describe("persistMessage", () => {
+    it("writes the turn id, model, parent tool call and the event's timestamp", () => {
+      const result = writeMessage(started({ model: "claude-opus-5", parentToolCallId: "tool-7" }));
 
-      expect(result.ok).toBe(true);
-      expect(mockTransaction).toHaveBeenCalledTimes(1);
-
-      // First prepare: INSERT message
-      expect(mockPrepare).toHaveBeenNthCalledWith(
-        1,
-        expect.stringContaining("INSERT INTO messages")
-      );
-
-      // Second prepare: UPDATE session status to idle
-      expect(mockPrepare).toHaveBeenNthCalledWith(
-        2,
-        expect.stringContaining("UPDATE sessions SET status = 'idle'")
-      );
+      expect(result).toEqual({ ok: true, value: "msg-1" });
+      const row = db.prepare(`SELECT * FROM messages WHERE id = 'msg-1'`).get() as Record<
+        string,
+        unknown
+      >;
+      expect(row).toMatchObject({
+        session_id: SESSION,
+        role: "assistant",
+        turn_id: TURN,
+        model: "claude-opus-5",
+        parent_tool_call_id: "tool-7",
+        sent_at: "2026-08-14T12:00:00.000Z",
+      });
+      // Rows render from parts — the table has no message-level content column.
+      expect(row).not.toHaveProperty("content");
     });
 
-    it("inserts cancelled envelope content", () => {
-      persistMessageCancelled(event);
+    it("persists the engine's user echo — the send command writes no row", () => {
+      writeMessage(started({ role: "user", outputIndex: 0, messageId: "user-1" }));
 
-      const contentArg = mockRun.mock.calls[0][2] as string;
-      const parsed = JSON.parse(contentArg);
-      expect(parsed).toEqual({
-        message: { stop_reason: "cancelled" },
-        blocks: [],
+      const row = db.prepare(`SELECT role, turn_id FROM messages WHERE id = 'user-1'`).get();
+      expect(row).toEqual({ role: "user", turn_id: TURN });
+    });
+
+    it("is idempotent on replay: parts, seq and turn accounting all survive", () => {
+      // A whole turn, as the wire delivers it the first time.
+      writeMessage(started({ messageId: "m1" }));
+      writeMessage(started({ messageId: "m2" }));
+      writePart(part({ messageId: "m1" }));
+      writeTurnEnded(
+        ended({ tokens: { input: 10, output: 2 }, cost: 0.5, stopReason: "cancelled" }),
+        { status: "idle", cancelled: true }
+      );
+
+      const before = db
+        .prepare(
+          `SELECT id, seq, tokens, cost, turn_stop_reason, cancelled_at, model, sent_at
+             FROM messages WHERE id = 'm2'`
+        )
+        .get();
+
+      // The engine re-delivers the whole buffered history after a gap heal
+      // (events/replay). REPLACE would cascade-delete the parts, reassign seq
+      // and wipe every update-only column.
+      writeMessage(started({ messageId: "m1" }));
+      writeMessage(started({ messageId: "m2" }));
+
+      expect(
+        db.prepare(`SELECT count(*) as n FROM messages WHERE session_id = ?`).get(SESSION)
+      ).toEqual({ n: 2 });
+      // The turn's parts are still attached (no ON DELETE CASCADE fired).
+      expect(db.prepare(`SELECT count(*) as n FROM parts WHERE message_id = 'm1'`).get()).toEqual({
+        n: 1,
+      });
+      // seq is stable, so the message keeps its place in the transcript.
+      expect(
+        db.prepare(`SELECT id FROM messages WHERE session_id = ? ORDER BY seq`).all(SESSION)
+      ).toEqual([{ id: "m1" }, { id: "m2" }]);
+      // Every update-only column written after message.started survives.
+      expect(
+        db
+          .prepare(
+            `SELECT id, seq, tokens, cost, turn_stop_reason, cancelled_at, model, sent_at
+               FROM messages WHERE id = 'm2'`
+          )
+          .get()
+      ).toEqual(before);
+      // The AFTER DELETE trigger never fires under REPLACE, so a cascade would
+      // leave message_count permanently inflated.
+      expect(db.prepare(`SELECT message_count FROM sessions WHERE id = ?`).get(SESSION)).toEqual({
+        message_count: 2,
       });
     });
 
-    it("returns error on DB failure", () => {
-      mockTransaction.mockImplementation(() => {
-        throw new Error("transaction failed");
-      });
+    it("a replay does not null out columns the first delivery filled in", () => {
+      writeMessage(started({ model: "claude-opus-5", parentToolCallId: "tool-7" }));
+      // A replayed envelope can be thinner than the original (an adapter that
+      // stopped reporting the model, a re-emitted shell) — COALESCE keeps ours.
+      writeMessage(started({ model: undefined, parentToolCallId: undefined }));
 
-      const result = persistMessageCancelled(event);
+      expect(
+        db.prepare(`SELECT model, parent_tool_call_id FROM messages WHERE id = 'msg-1'`).get()
+      ).toEqual({ model: "claude-opus-5", parent_tool_call_id: "tool-7" });
+    });
 
-      expect(result.ok).toBe(false);
-      if (!result.ok) expect(result.error).toContain("transaction failed");
+    it("refuses a message for an unknown session instead of throwing", () => {
+      const result = writeMessage(started({ sessionId: "nope" }));
+      expect(result).toEqual({ ok: false, error: "session not found" });
+    });
+
+    it("lets the trigger assign seq and bump the denormalized message_count", () => {
+      writeMessage(started({ messageId: "m1", role: "user", outputIndex: 0 }));
+      writeMessage(started({ messageId: "m2" }));
+
+      const rows = db
+        .prepare(`SELECT id, seq FROM messages WHERE session_id = ? ORDER BY seq`)
+        .all(SESSION) as Array<{ id: string; seq: number }>;
+      expect(rows.map((r) => r.id)).toEqual(["m1", "m2"]);
+      expect(rows[0].seq).toBeLessThan(rows[1].seq);
+
+      const session = db.prepare(`SELECT message_count FROM sessions WHERE id = ?`).get(SESSION);
+      expect(session).toEqual({ message_count: 2 });
     });
   });
 
-  describe("persistPartDone", () => {
-    const textEvent: PartDoneEvent = {
-      type: "part.done",
-      sessionId: "sess-1",
-      agentHarness: "claude",
-      messageId: "msg-1",
-      partId: "p1",
-      part: {
-        type: "TEXT",
+  // --------------------------------------------------------------------------
+  // parts
+  // --------------------------------------------------------------------------
+
+  describe("persistPart", () => {
+    beforeEach(() => writeMessage(started()));
+
+    it("stores the engine Part verbatim with lowercase type and partIndex as seq", () => {
+      writePart(part({ partIndex: 3 }));
+
+      const row = db.prepare(`SELECT * FROM parts WHERE id = 'p1'`).get() as Record<
+        string,
+        unknown
+      >;
+      expect(row).toMatchObject({ message_id: "msg-1", session_id: SESSION, seq: 3, type: "text" });
+      expect(JSON.parse(row.data as string)).toEqual({
+        type: "text",
         id: "p1",
-        sessionId: "sess-1",
+        sessionId: SESSION,
         messageId: "msg-1",
-        text: "Hello!",
-      },
-    };
-
-    it("inserts a part row with correct parameters", () => {
-      const result = persistPartDone(textEvent);
-
-      expect(result.ok).toBe(true);
-      if (result.ok) expect(result.value).toBe("p1");
-      expect(mockPrepare).toHaveBeenCalledWith(
-        expect.stringContaining("INSERT OR REPLACE INTO parts")
-      );
-      expect(mockRun).toHaveBeenCalledWith(
-        "p1", // id
-        "msg-1", // message_id
-        "sess-1", // session_id
-        0, // seq
-        "TEXT", // type
-        expect.any(String), // data (JSON)
-        null, // tool_call_id (not a TOOL part)
-        null, // tool_name (not a TOOL part)
-        null // parent_tool_call_id
-      );
+        text: "hello",
+        state: "done",
+      });
     });
 
-    it("stores the full part as JSON in data column", () => {
-      persistPartDone(textEvent);
-
-      const dataArg = mockRun.mock.calls[0][5] as string;
-      const parsed = JSON.parse(dataArg);
-      expect(parsed.type).toBe("TEXT");
-      expect(parsed.text).toBe("Hello!");
-      expect(parsed.id).toBe("p1");
-    });
-
-    it("extracts toolCallId and toolName for TOOL parts", () => {
-      const toolEvent: PartDoneEvent = {
-        type: "part.done",
-        sessionId: "sess-1",
-        agentHarness: "claude",
-        messageId: "msg-1",
-        partId: "p2",
-        part: {
-          type: "TOOL",
-          id: "p2",
-          sessionId: "sess-1",
-          messageId: "msg-1",
-          toolCallId: "tc-1",
-          toolName: "bash",
-          state: {
-            status: "COMPLETED",
-            input: "ls",
-            output: "file.ts",
-            time: { start: "t0", end: "t1" },
+    it("promotes toolCallId/toolName to columns for tool parts", () => {
+      writePart(
+        part({
+          part: {
+            type: "tool",
+            id: "p2",
+            sessionId: SESSION,
+            messageId: "msg-1",
+            toolCallId: "call-1",
+            toolName: "Bash",
+            kind: "execute",
+            state: {
+              status: "completed",
+              input: { command: "ls" },
+              output: "a\nb",
+              time: { start: T, end: T + 10 },
+            },
           },
-        },
-      };
-
-      persistPartDone(toolEvent);
-
-      expect(mockRun).toHaveBeenCalledWith(
-        "p2", // id
-        "msg-1", // message_id
-        "sess-1", // session_id
-        0, // seq
-        "TOOL", // type
-        expect.any(String), // data
-        "tc-1", // tool_call_id
-        "bash", // tool_name
-        null // parent_tool_call_id
+        })
       );
+
+      const row = db.prepare(`SELECT tool_call_id, tool_name FROM parts WHERE id = 'p2'`).get();
+      expect(row).toEqual({ tool_call_id: "call-1", tool_name: "Bash" });
     });
 
-    it("stores parentToolCallId when present", () => {
-      const nestedEvent: PartDoneEvent = {
-        type: "part.done",
-        sessionId: "sess-1",
-        agentHarness: "claude",
-        messageId: "msg-1",
-        partId: "p3",
-        part: {
-          type: "TEXT",
-          id: "p3",
-          sessionId: "sess-1",
-          messageId: "msg-1",
-          text: "nested text",
-          parentToolCallId: "tc-parent",
-        },
-      };
-
-      persistPartDone(nestedEvent);
-
-      // parent_tool_call_id is the last argument
-      expect(mockRun).toHaveBeenCalledWith(
-        "p3",
-        "msg-1",
-        "sess-1",
-        0,
-        "TEXT",
-        expect.any(String),
-        null,
-        null,
-        "tc-parent"
+    it("upserts by part id — a later snapshot replaces the earlier state", () => {
+      writePart(
+        part({
+          part: {
+            type: "tool",
+            id: "p3",
+            sessionId: SESSION,
+            messageId: "msg-1",
+            toolCallId: "call-2",
+            toolName: "Read",
+            state: { status: "pending", partialInput: '{"pa' },
+          },
+        })
       );
+      writePart(
+        part({
+          part: {
+            type: "tool",
+            id: "p3",
+            sessionId: SESSION,
+            messageId: "msg-1",
+            toolCallId: "call-2",
+            toolName: "Read",
+            state: {
+              status: "completed",
+              input: { path: "/x" },
+              output: "file body",
+              time: { start: T, end: T + 5 },
+            },
+          },
+        })
+      );
+
+      const rows = db.prepare(`SELECT data FROM parts WHERE id = 'p3'`).all() as Array<{
+        data: string;
+      }>;
+      expect(rows).toHaveLength(1);
+      expect(JSON.parse(rows[0].data).state.status).toBe("completed");
     });
 
-    it("returns error on DB failure", () => {
-      mockPrepare.mockReturnValue({
-        run: vi.fn(() => {
-          throw new Error("DB locked");
+    it("keeps subagent parts linked to the tool call that spawned them", () => {
+      writePart(
+        part({
+          part: {
+            type: "text",
+            id: "p4",
+            sessionId: SESSION,
+            messageId: "msg-1",
+            text: "from the subagent",
+            parentToolCallId: "task-1",
+          },
+        })
+      );
+
+      const row = db.prepare(`SELECT parent_tool_call_id FROM parts WHERE id = 'p4'`).get();
+      expect(row).toEqual({ parent_tool_call_id: "task-1" });
+    });
+
+    it("swallows a part whose message row never landed (FK) — the next snapshot retries", () => {
+      const result = writePart(part({ messageId: "ghost", part: { ...part().part, id: "p5" } }));
+
+      expect(result.ok).toBe(true);
+      expect(db.prepare(`SELECT count(*) as n FROM parts WHERE id = 'p5'`).get()).toEqual({ n: 0 });
+    });
+  });
+
+  // --------------------------------------------------------------------------
+  // turn.ended
+  // --------------------------------------------------------------------------
+
+  describe("persistTurnEnded", () => {
+    beforeEach(() => {
+      writeMessage(started({ messageId: "u1", role: "user", outputIndex: 0 }));
+      writeMessage(started({ messageId: "a1" }));
+      writeMessage(started({ messageId: "a2" }));
+      // A subagent message must never be mistaken for the turn's last output.
+      writeMessage(started({ messageId: "sub", parentToolCallId: "task-1" }));
+    });
+
+    it("writes tokens, cost and the stop reason onto the turn's last top-level assistant message", () => {
+      writeTurnEnded(
+        ended({
+          tokens: { input: 100, output: 20, cache: { read: 5, write: 1 } },
+          cost: 0.25,
+          stopReason: "refusal",
         }),
+        { status: "idle", cancelled: false }
+      );
+
+      const row = db
+        .prepare(`SELECT tokens, cost, turn_stop_reason FROM messages WHERE id='a2'`)
+        .get() as {
+        tokens: string;
+        cost: number;
+        turn_stop_reason: string;
+      };
+      expect(JSON.parse(row.tokens)).toEqual({
+        input: 100,
+        output: 20,
+        cache: { read: 5, write: 1 },
+      });
+      expect(row.cost).toBe(0.25);
+      expect(row.turn_stop_reason).toBe("refusal");
+
+      // Nothing lands on the subagent message or the earlier assistant message.
+      const others = db.prepare(`SELECT id FROM messages WHERE tokens IS NOT NULL`).all() as Array<{
+        id: string;
+      }>;
+      expect(others.map((r) => r.id)).toEqual(["a2"]);
+    });
+
+    it("stamps cancelled_at instead of inserting a synthetic cancelled message", () => {
+      writeTurnEnded(ended({ stopReason: "cancelled" }), { status: "idle", cancelled: true });
+
+      const row = db.prepare(`SELECT cancelled_at FROM messages WHERE id = 'a2'`).get() as {
+        cancelled_at: string;
+      };
+      expect(row.cancelled_at).toBe("2026-08-14T12:00:00.000Z");
+      // No extra row, and no raw JSON envelope in `content`.
+      const count = db
+        .prepare(`SELECT count(*) as n FROM messages WHERE session_id = ?`)
+        .get(SESSION);
+      expect(count).toEqual({ n: 4 });
+      expect(db.prepare(`SELECT status FROM sessions WHERE id = ?`).get(SESSION)).toEqual({
+        status: "idle",
+      });
+    });
+
+    it("mints a marker row when the turn was cancelled before the model answered", () => {
+      db.prepare(`DELETE FROM messages WHERE role = 'assistant'`).run();
+
+      writeTurnEnded(ended({ stopReason: "cancelled", timestamp: T + 30 }), {
+        status: "idle",
+        cancelled: true,
       });
 
-      const result = persistPartDone(textEvent);
-
-      expect(result.ok).toBe(false);
-      if (!result.ok) expect(result.error).toContain("DB locked");
-    });
-  });
-
-  describe("persistMessageDone", () => {
-    const event: MessageDoneEvent = {
-      type: "message.done",
-      sessionId: "sess-1",
-      agentHarness: "claude",
-      messageId: "msg-1",
-      stopReason: "end_turn",
-      parts: [],
-    };
-
-    it("updates stop_reason on the message row", () => {
-      const result = persistMessageDone(event);
-
-      expect(result.ok).toBe(true);
-      if (result.ok) expect(result.value).toBe("msg-1");
-      expect(mockPrepare).toHaveBeenCalledWith(
-        expect.stringContaining("UPDATE messages SET stop_reason")
-      );
-      expect(mockRun).toHaveBeenCalledWith("end_turn", "msg-1");
+      const marker = db
+        .prepare(
+          `SELECT id, role, turn_id, cancelled_at, turn_stop_reason FROM messages WHERE role = 'assistant'`
+        )
+        .get();
+      expect(marker).toEqual({
+        id: `cancelled-${TURN}`,
+        role: "assistant",
+        turn_id: TURN,
+        cancelled_at: "2026-08-14T12:00:00.030Z",
+        turn_stop_reason: "cancelled",
+      });
     });
 
-    it("matches on id column", () => {
-      persistMessageDone(event);
+    it("the cancelled marker is id-addressed, so a replayed turn.ended does not stack dividers", () => {
+      db.prepare(`DELETE FROM messages WHERE role = 'assistant'`).run();
+      const cancel = () =>
+        writeTurnEnded(ended({ stopReason: "cancelled" }), { status: "idle", cancelled: true });
 
-      const sql = mockPrepare.mock.calls[0][0] as string;
-      expect(sql).toContain("WHERE id =");
+      cancel();
+      cancel();
+
+      expect(
+        db.prepare(`SELECT count(*) as n FROM messages WHERE role = 'assistant'`).get()
+      ).toEqual({ n: 1 });
     });
 
-    it("stores null when stopReason is absent", () => {
-      const noReasonEvent: MessageDoneEvent = {
-        type: "message.done",
-        sessionId: "sess-1",
-        agentHarness: "claude",
-        messageId: "msg-2",
-        parts: [],
-      };
+    it("a turn that simply produced nothing leaves no marker", () => {
+      db.prepare(`DELETE FROM messages WHERE role = 'assistant'`).run();
 
-      persistMessageDone(noReasonEvent);
+      writeTurnEnded(ended({ stopReason: "end_turn" }), { status: "idle", cancelled: false });
 
-      expect(mockRun).toHaveBeenCalledWith(null, "msg-2");
+      expect(
+        db.prepare(`SELECT count(*) as n FROM messages WHERE role = 'assistant'`).get()
+      ).toEqual({ n: 0 });
     });
 
-    it("returns error on DB failure", () => {
-      mockPrepare.mockReturnValue({
-        run: vi.fn(() => {
-          throw new Error("DB locked");
-        }),
+    it("writes the error status with the engine's category", () => {
+      writeTurnEnded(ended({ stopReason: "error" }), {
+        status: "error",
+        cancelled: false,
+        error: { message: "429 slow down", category: "rate_limit" },
       });
 
-      const result = persistMessageDone(event);
+      expect(
+        db
+          .prepare(`SELECT status, error_message, error_category FROM sessions WHERE id = ?`)
+          .get(SESSION)
+      ).toEqual({ status: "error", error_message: "429 slow down", error_category: "rate_limit" });
+    });
 
-      expect(result.ok).toBe(false);
-      if (!result.ok) expect(result.error).toContain("DB locked");
+    it("clears a stale error when the next turn ends cleanly", () => {
+      persistSessionError(SESSION, "boom", "internal");
+      writeTurnEnded(ended(), { status: "idle", cancelled: false });
+
+      expect(
+        db.prepare(`SELECT status, error_message FROM sessions WHERE id = ?`).get(SESSION)
+      ).toEqual({ status: "idle", error_message: null });
+    });
+
+    it("still flips the session when the turn produced no assistant message", () => {
+      db.prepare(`DELETE FROM messages WHERE role = 'assistant'`).run();
+
+      const result = writeTurnEnded(ended(), { status: "idle", cancelled: false });
+
+      expect(result.ok).toBe(true);
+      expect(db.prepare(`SELECT status FROM sessions WHERE id = ?`).get(SESSION)).toEqual({
+        status: "idle",
+      });
     });
   });
 
-  // ==========================================================================
-  // Session status writes
-  // ==========================================================================
+  // --------------------------------------------------------------------------
+  // session state
+  // --------------------------------------------------------------------------
 
-  describe("persistSessionStarted", () => {
-    const event: SessionStartedEvent = {
-      type: "session.started",
-      sessionId: "sess-1",
-      agentHarness: "claude",
-    };
-
-    it("updates session to working status (idempotent)", () => {
-      const result = persistSessionStarted(event);
-
-      expect(result.ok).toBe(true);
-      expect(mockPrepare).toHaveBeenCalledWith(expect.stringContaining("status = 'working'"));
-      // Should include idempotency guard
-      expect(mockPrepare).toHaveBeenCalledWith(expect.stringContaining("status != 'working'"));
-      expect(mockRun).toHaveBeenCalledWith("sess-1");
-    });
-
-    it("returns error on DB failure", () => {
-      mockPrepare.mockReturnValue({
-        run: vi.fn(() => {
-          throw new Error("DB error");
-        }),
+  describe("persistSessionUsage", () => {
+    it("keeps the last known percent when the harness reports no window size", () => {
+      const usage = (over: Partial<SessionUsageEvent>): SessionUsageEvent => ({
+        type: "session.usage",
+        sessionId: SESSION,
+        turnId: TURN,
+        used: 0,
+        timestamp: T,
+        ...over,
       });
 
-      const result = persistSessionStarted(event);
+      writeUsage(usage({ used: 100_000, size: 200_000 }));
+      expect(
+        db.prepare(`SELECT context_used_percent FROM sessions WHERE id = ?`).get(SESSION)
+      ).toEqual({ context_used_percent: 50 });
 
-      expect(result.ok).toBe(false);
+      // Claude reports `size` only on the final result — a size-less update
+      // must not zero the gauge mid-turn.
+      writeUsage(usage({ used: 120_000 }));
+      expect(
+        db
+          .prepare(`SELECT context_token_count, context_used_percent FROM sessions WHERE id = ?`)
+          .get(SESSION)
+      ).toEqual({ context_token_count: 120_000, context_used_percent: 50 });
+    });
+
+    it("clamps the percent at 100", () => {
+      writeUsage({
+        type: "session.usage",
+        sessionId: SESSION,
+        turnId: TURN,
+        used: 300_000,
+        size: 200_000,
+        timestamp: T,
+      });
+      expect(
+        db.prepare(`SELECT context_used_percent FROM sessions WHERE id = ?`).get(SESSION)
+      ).toEqual({ context_used_percent: 100 });
     });
   });
 
-  describe("persistSessionIdle", () => {
-    it("updates session to idle status", () => {
-      const event: SessionIdleEvent = {
-        type: "session.idle",
-        sessionId: "sess-1",
-        agentHarness: "claude",
-      };
+  describe("persistSessionWorking", () => {
+    it("flips to working and clears the previous failure", () => {
+      persistSessionError(SESSION, "old failure", "network");
 
-      const result = persistSessionIdle(event);
+      persistSessionWorking(SESSION);
 
-      expect(result.ok).toBe(true);
-      expect(mockPrepare).toHaveBeenCalledWith(expect.stringContaining("status = 'idle'"));
-      expect(mockRun).toHaveBeenCalledWith("sess-1");
+      expect(
+        db
+          .prepare(`SELECT status, error_message, error_category FROM sessions WHERE id = ?`)
+          .get(SESSION)
+      ).toEqual({
+        status: "working",
+        error_message: null,
+        error_category: null,
+      });
+    });
+
+    it("leaves last_user_message_at alone — the flip runs before admission", () => {
+      persistSessionWorking(SESSION);
+
+      expect(
+        db.prepare(`SELECT last_user_message_at FROM sessions WHERE id = ?`).get(SESSION)
+      ).toEqual({ last_user_message_at: null });
     });
   });
 
-  describe("persistSessionError", () => {
-    it("updates session to error status with error details", () => {
-      const event: SessionErrorEvent = {
-        type: "session.error",
-        sessionId: "sess-1",
-        agentHarness: "claude",
-        error: "Rate limit exceeded",
-        category: "rate_limit",
-      };
+  describe("persistLastUserMessageAt", () => {
+    it("stamps the send time for sidebar ordering", () => {
+      persistLastUserMessageAt(SESSION, "2026-08-14T12:00:00.000Z");
 
-      const result = persistSessionError(event);
-
-      expect(result.ok).toBe(true);
-      expect(mockPrepare).toHaveBeenCalledWith(expect.stringContaining("status = 'error'"));
-      expect(mockRun).toHaveBeenCalledWith("Rate limit exceeded", "rate_limit", "sess-1");
+      expect(
+        db.prepare(`SELECT last_user_message_at FROM sessions WHERE id = ?`).get(SESSION)
+      ).toEqual({ last_user_message_at: "2026-08-14T12:00:00.000Z" });
     });
   });
-
-  describe("persistSessionCancelled", () => {
-    it("updates session to idle status (cancelled = back to idle)", () => {
-      const event: SessionCancelledEvent = {
-        type: "session.cancelled",
-        sessionId: "sess-1",
-        agentHarness: "claude",
-      };
-
-      const result = persistSessionCancelled(event);
-
-      expect(result.ok).toBe(true);
-      expect(mockPrepare).toHaveBeenCalledWith(expect.stringContaining("status = 'idle'"));
-      expect(mockRun).toHaveBeenCalledWith("sess-1");
-    });
-  });
-
-  // ==========================================================================
-  // Metadata writes
-  // ==========================================================================
 
   describe("persistAgentSessionId", () => {
-    it("stores the agent session ID for resume support", () => {
-      const event: AgentSessionIdEvent = {
-        type: "agent.session_id",
-        sessionId: "sess-1",
-        agentSessionId: "claude-sdk-session-abc",
-      };
-
-      const result = persistAgentSessionId(event);
-
-      expect(result.ok).toBe(true);
-      expect(mockPrepare).toHaveBeenCalledWith(expect.stringContaining("agent_session_id"));
-      expect(mockRun).toHaveBeenCalledWith("claude-sdk-session-abc", "sess-1");
-    });
-
-    it("returns error on DB failure", () => {
-      mockPrepare.mockReturnValue({
-        run: vi.fn(() => {
-          throw new Error("DB error");
-        }),
-      });
-
-      const event: AgentSessionIdEvent = {
-        type: "agent.session_id",
-        sessionId: "sess-1",
-        agentSessionId: "abc",
-      };
-
-      const result = persistAgentSessionId(event);
-
-      expect(result.ok).toBe(false);
+    it("stores the harness-native id for the next resume", () => {
+      persistAgentSessionId(SESSION, "native-abc");
+      expect(db.prepare(`SELECT agent_session_id FROM sessions WHERE id = ?`).get(SESSION)).toEqual(
+        {
+          agent_session_id: "native-abc",
+        }
+      );
     });
   });
 
   describe("persistSessionTitle", () => {
-    const event: SessionTitleEvent = {
-      type: "session.title",
-      sessionId: "sess-1",
-      agentHarness: "claude",
-      title: "Fix login page CSS",
+    it("sets the session title and adopts it for an untitled workspace", () => {
+      persistSessionTitle(SESSION, "Fix login");
+
+      expect(db.prepare(`SELECT title FROM sessions WHERE id = ?`).get(SESSION)).toEqual({
+        title: "Fix login",
+      });
+      expect(db.prepare(`SELECT title FROM workspaces WHERE id = 'w1'`).get()).toEqual({
+        title: "Fix login",
+      });
+    });
+
+    it("never overwrites a workspace title the user or a PR already set", () => {
+      db.prepare(`UPDATE workspaces SET title = 'Mine' WHERE id = 'w1'`).run();
+
+      persistSessionTitle(SESSION, "Auto title");
+
+      expect(db.prepare(`SELECT title FROM workspaces WHERE id = 'w1'`).get()).toEqual({
+        title: "Mine",
+      });
+    });
+  });
+
+  // --------------------------------------------------------------------------
+  // compactions
+  // --------------------------------------------------------------------------
+
+  describe("persistCompaction", () => {
+    const compaction = (over: Partial<SessionCompactionEvent> = {}): SessionCompactionEvent => ({
+      type: "session.compaction",
+      sessionId: SESSION,
+      turnId: TURN,
+      compactionId: "cmp-1",
+      status: "in_progress",
+      timestamp: T,
+      ...over,
+    });
+
+    it("inserts the marker row", () => {
+      writeCompaction(compaction({ trigger: "auto", preTokens: 180_000 }));
+
+      expect(db.prepare(`SELECT * FROM compactions WHERE compaction_id = 'cmp-1'`).get()).toEqual({
+        compaction_id: "cmp-1",
+        session_id: SESSION,
+        turn_id: TURN,
+        status: "in_progress",
+        trigger: "auto",
+        pre_tokens: 180_000,
+        post_tokens: null,
+        summary: null,
+        created_at: "2026-08-14T12:00:00.000Z",
+      });
+    });
+
+    it("advances status in place, keeping its anchored position and earlier fields", () => {
+      writeCompaction(compaction({ trigger: "auto", preTokens: 180_000 }));
+      writeCompaction(
+        compaction({
+          status: "completed",
+          postTokens: 20_000,
+          summary: "…",
+          timestamp: T + 60_000,
+        })
+      );
+
+      const rows = db.prepare(`SELECT * FROM compactions`).all() as Array<Record<string, unknown>>;
+      expect(rows).toHaveLength(1);
+      expect(rows[0]).toMatchObject({
+        status: "completed",
+        trigger: "auto",
+        pre_tokens: 180_000,
+        post_tokens: 20_000,
+        summary: "…",
+        // First appearance anchors the entity — it never moves.
+        created_at: "2026-08-14T12:00:00.000Z",
+      });
+    });
+  });
+
+  // --------------------------------------------------------------------------
+  // failure surface
+  // --------------------------------------------------------------------------
+
+  describe("write failures", () => {
+    it("returns ok:false instead of throwing when the database is gone", () => {
+      db.close();
+
+      expect(persistSessionError(SESSION, "x", "internal").ok).toBe(false);
+      expect(writeTurnEnded(ended(), { status: "idle", cancelled: false }).ok).toBe(false);
+      expect(
+        writeCompaction({
+          type: "session.compaction",
+          sessionId: SESSION,
+          turnId: TURN,
+          compactionId: "c",
+          status: "completed",
+          timestamp: T,
+        }).ok
+      ).toBe(false);
+
+      // Re-open so afterEach's close() is a no-op on an already-closed handle.
+      db = createTestDb();
+    });
+  });
+
+  // --------------------------------------------------------------------------
+  // The change loop — the whole path, as the handler runs it
+  // --------------------------------------------------------------------------
+
+  describe("persistChanges", () => {
+    /** Fold events into the same conversation and write what moved. */
+    function stream(...events: LifecycleEvent[]) {
+      let state = emptyConversation();
+      const writes = [];
+      for (const event of events) {
+        const folded = reduceConversationWithChanges(state, event);
+        state = folded.state;
+        writes.push(...persistChanges(SESSION, state, folded.changes, () => IDLE));
+      }
+      return { state, writes };
+    }
+
+    const turnStarted: LifecycleEvent = {
+      type: "turn.started",
+      sessionId: SESSION,
+      turnId: TURN,
+      timestamp: T,
     };
 
-    it("updates session title and workspace title in a transaction", () => {
-      const result = persistSessionTitle(event);
-
-      expect(result.ok).toBe(true);
-      expect(mockTransaction).toHaveBeenCalledTimes(1);
-
-      // First prepare: UPDATE sessions SET title
-      expect(mockPrepare).toHaveBeenNthCalledWith(
-        1,
-        expect.stringContaining("UPDATE sessions SET title")
+    it("writes a whole turn: echo, assistant message, parts, accounting", () => {
+      stream(
+        turnStarted,
+        started({ messageId: "u1", role: "user", outputIndex: 0 }),
+        part({ messageId: "u1", part: { ...part().part, id: "up1", messageId: "u1" } }),
+        started({ messageId: "a1" }),
+        part({ messageId: "a1", part: { ...part().part, messageId: "a1" } }),
+        ended({ tokens: { input: 10, output: 2 }, cost: 0.5 })
       );
-      expect(mockRun).toHaveBeenNthCalledWith(1, "Fix login page CSS", "sess-1");
 
-      // Second prepare: UPDATE workspaces SET title ... AND title IS NULL
-      expect(mockPrepare).toHaveBeenNthCalledWith(
-        2,
-        expect.stringContaining("UPDATE workspaces SET title")
-      );
-      expect(mockRun).toHaveBeenNthCalledWith(2, "Fix login page CSS", "sess-1");
+      expect(db.prepare(`SELECT id FROM messages ORDER BY seq`).all()).toEqual([
+        { id: "u1" },
+        { id: "a1" },
+      ]);
+      expect(db.prepare(`SELECT id, message_id FROM parts ORDER BY id`).all()).toEqual([
+        { id: "p1", message_id: "a1" },
+        { id: "up1", message_id: "u1" },
+      ]);
+      expect(
+        db.prepare(`SELECT tokens, cost, turn_stop_reason FROM messages WHERE id = 'a1'`).get()
+      ).toEqual({
+        tokens: JSON.stringify({ input: 10, output: 2 }),
+        cost: 0.5,
+        turn_stop_reason: "end_turn",
+      });
     });
 
-    it("only sets workspace title when it is NULL (preserves user renames)", () => {
-      persistSessionTitle(event);
+    it("a redelivered turn converges: no new rows, no stacked dividers, no doubled cost", () => {
+      const events: LifecycleEvent[] = [
+        turnStarted,
+        started({ messageId: "a1" }),
+        part({ messageId: "a1", part: { ...part().part, messageId: "a1" } }),
+        ended({ stopReason: "cancelled", tokens: { input: 10, output: 2 }, cost: 0.5 }),
+      ];
+      let state = emptyConversation();
+      const run = () => {
+        const kinds: string[] = [];
+        for (const event of events) {
+          const folded = reduceConversationWithChanges(state, event);
+          state = folded.state;
+          kinds.push(
+            ...persistChanges(SESSION, state, folded.changes, () => IDLE).map((w) => w.change.kind)
+          );
+        }
+        return kinds;
+      };
 
-      // The second SQL statement should include AND title IS NULL
-      expect(mockPrepare).toHaveBeenNthCalledWith(2, expect.stringContaining("AND title IS NULL"));
+      // turn.started reports a `turn-updated` too, but an OPEN turn has no
+      // accounting to write — only the ended one produces a row.
+      expect(run()).toEqual(["message-upserted", "part-upserted", "turn-updated"]);
+      const before = db.prepare(`SELECT * FROM messages ORDER BY seq`).all();
+      const parts = db.prepare(`SELECT * FROM parts ORDER BY id`).all();
+
+      // The wire re-delivers buffered history to heal a seq gap.
+      const second = run();
+
+      // The identity and bracket events dedupe to nothing. A part SNAPSHOT does
+      // not — the reducer never compares snapshots, it upserts them — so the
+      // row is written again with identical content. That is why the parts
+      // upsert has to be idempotent SQL and not an INSERT.
+      expect(second).toEqual(["part-upserted"]);
+      expect(db.prepare(`SELECT * FROM messages ORDER BY seq`).all()).toEqual(before);
+      expect(db.prepare(`SELECT * FROM parts ORDER BY id`).all()).toEqual(parts);
     });
 
-    it("returns error on DB failure", () => {
-      mockTransaction.mockImplementation(() => {
-        throw new Error("transaction failed");
+    it("stores a part the reducer closed itself when the turn was cancelled", () => {
+      // No harness event says the tool was cancelled — the fold's closure
+      // reports it as a part-upserted, and that is what reaches SQLite.
+      stream(
+        turnStarted,
+        started({ messageId: "a1" }),
+        part({
+          messageId: "a1",
+          part: {
+            type: "tool",
+            id: "t1",
+            sessionId: SESSION,
+            messageId: "a1",
+            toolCallId: "call-1",
+            toolName: "Bash",
+            state: { status: "in_progress", input: {}, time: { start: T } },
+          },
+        }),
+        ended({ stopReason: "cancelled", timestamp: T + 10 })
+      );
+
+      const row = db.prepare(`SELECT data FROM parts WHERE id = 't1'`).get() as { data: string };
+      expect(JSON.parse(row.data).state.status).toBe("cancelled");
+    });
+
+    it("keeps the partial tool input a cancel would otherwise erase", () => {
+      stream(
+        turnStarted,
+        started({ messageId: "a1" }),
+        part({
+          messageId: "a1",
+          part: {
+            type: "tool",
+            id: "t1",
+            sessionId: SESSION,
+            messageId: "a1",
+            toolCallId: "call-1",
+            toolName: "Read",
+            state: { status: "pending", partialInput: '{"path":"/x' },
+          },
+        }),
+        ended({ stopReason: "cancelled", timestamp: T + 10 })
+      );
+
+      const row = db.prepare(`SELECT data FROM parts WHERE id = 't1'`).get() as { data: string };
+      expect(JSON.parse(row.data).state._meta["agent-server/partialInput"]).toBe('{"path":"/x');
+    });
+
+    it("upserts the compaction entity and reports it", () => {
+      const { writes } = stream({
+        type: "session.compaction",
+        sessionId: SESSION,
+        turnId: TURN,
+        compactionId: "c1",
+        status: "completed",
+        trigger: "auto",
+        preTokens: 180_000,
+        timestamp: T,
       });
 
-      const result = persistSessionTitle(event);
+      expect(writes.map((w) => w.change.kind)).toEqual(["compaction-upserted"]);
+      expect(
+        db
+          .prepare(`SELECT status, trigger, pre_tokens FROM compactions WHERE compaction_id='c1'`)
+          .get()
+      ).toEqual({ status: "completed", trigger: "auto", pre_tokens: 180_000 });
+    });
 
-      expect(result.ok).toBe(false);
-      if (!result.ok) expect(result.error).toContain("transaction failed");
+    it("reports nothing for the changes that are not rows", () => {
+      const { writes } = stream(
+        turnStarted,
+        started({ messageId: "a1" }),
+        { type: "message.ended", sessionId: SESSION, turnId: TURN, messageId: "a1", timestamp: T },
+        {
+          type: "message.part.delta",
+          sessionId: SESSION,
+          turnId: TURN,
+          messageId: "a1",
+          outputIndex: 1,
+          partIndex: 0,
+          partId: "t1",
+          delta: { type: "tool_input", toolCallId: "tc-t1", toolName: "Bash", input: '{"a' },
+          timestamp: T,
+        },
+        {
+          type: "permission.requested",
+          sessionId: SESSION,
+          turnId: TURN,
+          requestId: "r1",
+          title: "Allow?",
+          options: [],
+          timestamp: T,
+        }
+      );
+
+      // turn.started and message.started are rows; the bracket marker, the
+      // buffered tool input and the permission are not.
+      expect(writes.map((w) => w.change.kind)).toEqual(["message-upserted"]);
     });
   });
 });

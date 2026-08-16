@@ -2,17 +2,21 @@ import { vi, describe, it, expect, beforeEach } from "vitest";
 import { Hono } from "hono";
 import { errorHandler } from "../../../src/middleware/error-handler";
 
-const mockStmt = { get: vi.fn() };
-const mockDb = { prepare: vi.fn(() => mockStmt) };
+const mockStmt = { get: vi.fn<(...args: any[]) => any>() };
+const mockDb = { prepare: vi.fn<(...args: any[]) => any>(() => mockStmt) };
 
 vi.mock("../../../src/lib/database", () => ({
-  getDatabase: vi.fn(() => mockDb),
+  getDatabase: vi.fn<(...args: any[]) => any>(() => mockDb),
 }));
 
 import { withWorkspace, computeWorkspacePath } from "../../../src/middleware/workspace-loader";
 
+// The middleware sets these on the context; Hono needs the Variables map
+// declared to type c.get()/c.set().
+type TestEnv = { Variables: { workspace: unknown; workspacePath: string } };
+
 const createTestApp = () => {
-  const app = new Hono();
+  const app = new Hono<TestEnv>();
   app.get("/test/:id", withWorkspace, (c) => {
     return c.json({
       workspace: c.get("workspace"),

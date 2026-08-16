@@ -9,7 +9,7 @@ import { useState, useMemo, memo } from "react";
 import { ChevronRight, Layers } from "lucide-react";
 import { AnimatePresence, m } from "framer-motion";
 import { cn } from "@/shared/lib/utils";
-import type { ToolPart } from "@shared/messages/types";
+import type { ToolPart } from "@shared/protocol-types";
 
 import { ToolPartBlock } from "./ToolPartBlock";
 

@@ -7,10 +7,14 @@ import {
   forwardRef,
   useImperativeHandle,
 } from "react";
+import { subagentGroups } from "@zvada/agent-server/protocol/selectors";
 import { Chat } from "./Chat";
+import { conversationView } from "../lib/conversationView";
+import type { Message } from "../types";
 import { SessionComposer, type SessionComposerRef } from "./SessionComposer";
-import { usePartEvents } from "../hooks/usePartEvents";
+import { useAgentEvents } from "../hooks/useAgentEvents";
 import { useAgentRpcHandler } from "../hooks/useAgentRpcHandler";
+import { useSessionContextLostNotice } from "../hooks/useSessionContextLostNotice";
 import { SessionProvider } from "../context";
 import { useSessionWithMessages, useLoadOlderMessages } from "../api/session.queries";
 import { PlanApprovalOverlay } from "./PlanApprovalOverlay";
@@ -107,6 +111,7 @@ export const SessionPanel = forwardRef<SessionPanelRef, SessionPanelProps>(
     const {
       session,
       messages: dbMessages,
+      compactions,
       hasOlder,
       sessionStatus,
       loading,
@@ -115,7 +120,12 @@ export const SessionPanel = forwardRef<SessionPanelRef, SessionPanelProps>(
     // ── Part Events → direct cache mutation (single-store model) ──────
     // WS part events mutate the TanStack Query cache directly.
     // No parallel store, no merge function. One source of truth.
-    usePartEvents(sessionId);
+    useAgentEvents(sessionId);
+
+    // A silent resume failure (session.created → resumed: false) means the
+    // model forgot this conversation. Surfaced once, dismissible, never
+    // persisted — see useSessionContextLostNotice.
+    const { contextLost, dismissContextLost } = useSessionContextLostNotice(sessionId);
 
     // Messages come directly from TanStack cache (populated by DB load + WS mutations)
     const messages = dbMessages;
@@ -129,20 +139,19 @@ export const SessionPanel = forwardRef<SessionPanelRef, SessionPanelProps>(
       loadOlderMutation.mutate({ sessionId, beforeSeq: firstSeq });
     }, [loadOlderMutation, messages, sessionId]);
 
-    // Subagent groups: derive from message.parent_tool_use_id
+    // Subagent output, keyed by the toolCallId that spawned it — the engine's
+    // own grouping, resolved back to rows by id (a parented message is not
+    // top-level output: rendering it in the main flow prints it twice).
     const subagentMessages = useMemo(() => {
-      const map = new Map<string, typeof messages>();
-      for (const msg of messages) {
-        if (msg.parent_tool_use_id) {
-          let group = map.get(msg.parent_tool_use_id);
-          if (!group) {
-            group = [];
-            map.set(msg.parent_tool_use_id, group);
-          }
-          group.push(msg);
-        }
+      const byId = new Map(messages.map((message) => [message.id, message]));
+      const groups = new Map<string, typeof messages>();
+      for (const [toolCallId, group] of subagentGroups(conversationView(messages, false))) {
+        groups.set(
+          toolCallId,
+          group.map((entry) => byId.get(entry.messageId)).filter((m): m is Message => m != null)
+        );
       }
-      return map;
+      return groups;
     }, [messages]);
 
     // Latest user message sent_at for turn duration tracking
@@ -324,6 +333,7 @@ export const SessionPanel = forwardRef<SessionPanelRef, SessionPanelProps>(
 
             <Chat
               messages={messages}
+              compactions={compactions}
               loading={loading}
               sessionStatus={sessionStatus}
               errorMessage={session?.error_message}
@@ -339,6 +349,8 @@ export const SessionPanel = forwardRef<SessionPanelRef, SessionPanelProps>(
               workspaceRepoName={workspaceRepoName}
               workspaceParentBranch={workspaceParentBranch}
               isFirstSession={isFirstSession}
+              contextLost={contextLost}
+              onDismissContextLost={dismissContextLost}
               userSendCount={userSendCount}
             />
 
@@ -425,6 +437,7 @@ export const SessionPanel = forwardRef<SessionPanelRef, SessionPanelProps>(
                 <div className={`${CONTENT_WIDTH_CLASSES} mx-auto flex min-h-0 flex-1 flex-col`}>
                   <Chat
                     messages={messages}
+                    compactions={compactions}
                     loading={loading}
                     sessionStatus={sessionStatus}
                     errorMessage={session?.error_message}
@@ -439,6 +452,8 @@ export const SessionPanel = forwardRef<SessionPanelRef, SessionPanelProps>(
                     onRetryInNewChat={handleRetryInNewChat}
                     workspaceRepoName={workspaceRepoName}
                     workspaceParentBranch={workspaceParentBranch}
+                    contextLost={contextLost}
+                    onDismissContextLost={dismissContextLost}
                     userSendCount={userSendCount}
                   />
 

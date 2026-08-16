@@ -14,16 +14,20 @@ import { match } from "ts-pattern";
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
 import { WireRequestError } from "@zvada/agent-server/client";
+import { WIRE_ERROR_CODES } from "@zvada/agent-server/protocol";
 import { uuidv7 } from "@shared/lib/uuid";
-import type { ThinkingLevel, PermissionMode } from "@shared/protocol";
+import { readPermissionMode, readThinkingLevel } from "@shared/protocol";
 import { getDatabase } from "../../lib/database";
 import { getSessionRaw, getWorkspaceForMiddleware } from "../../db";
 import { computeWorkspacePath } from "../../middleware/workspace-loader";
-import { writeUserMessage } from "../message-writer";
 import { spawnPty, writeToPty, resizePty, killPty } from "../pty.service";
 import { watchWorkspace, unwatchWorkspace } from "../fs-watcher.service";
 import { delegateToRoute } from "../route-delegate";
-import { persistSessionError } from "./persistence";
+import {
+  persistLastUserMessageAt,
+  persistSessionError,
+  persistSessionWorking,
+} from "./persistence";
 import { invalidate } from "../query-engine";
 import * as agentService from "./service";
 import { resolveAapPaths } from "./service";
@@ -312,9 +316,25 @@ export async function runCommand(
   );
 }
 
+/**
+ * The statuses that mean "a turn is running" — the RUNNING turn is the thing
+ * both sends and stops key off, so the two must read the same list or they
+ * disagree about whether one exists.
+ *
+ * "Needs input" belongs here: plan approval and questions park the running
+ * turn behind an overlay, they do not end it. A send is refused from these
+ * (the wire would reject it with turnActive), and a stop IS legal from them —
+ * which is why the unconfirmed-cancel watchdog matches this same set.
+ */
+const ACTIVE_TURN_STATUSES: readonly string[] = [
+  "working",
+  "needs_plan_response",
+  "needs_response",
+];
+
 // ---- sendMessage ----
 
-function handleSendMessage(params: QueryParams): CommandResult {
+async function handleSendMessage(params: QueryParams): Promise<CommandResult> {
   const sessionId = requireParam(params, "sessionId", "sendMessage");
   const content = requireParam(params, "content", "sendMessage");
   const model = requireParam(params, "model", "sendMessage");
@@ -333,9 +353,38 @@ function handleSendMessage(params: QueryParams): CommandResult {
     );
   }
 
+  // A send against an active turn would persist a user message that no agent
+  // will ever answer (the wire rejects the turn with turnActive and the
+  // composer shows nothing). "Needs input" counts as active too: plan
+  // approval and questions park the RUNNING turn while the overlay waits.
+  // Reject up front — the q:command error surfaces in the UI. The wire guard
+  // stays as the backstop for the status race.
+  if (session && ACTIVE_TURN_STATUSES.includes(session.status)) {
+    throw new Error(
+      session.status === "working"
+        ? "The agent is still working — wait for the current turn to finish."
+        : "The agent is waiting for your response — answer the pending prompt first."
+    );
+  }
+
   // New sessions default to Claude at creation time because the user may pick
   // the actual harness in the composer before the first send. Persist that
   // first-send choice so follow-up turns route to the same agent process.
+  //
+  // AFTER the active-turn guard, and that ordering is the whole point: the
+  // harness column must only move for a send that is actually going to run.
+  // The first turn of a session opens an ECHO-ONLY window — the status is
+  // already "working" while `message_count` is still 0, because the user row
+  // is written by the engine's echo, not by this handler. A second client
+  // sending a DIFFERENT harness inside that window passes the lock above
+  // (0 messages, nothing to lock), and rebinding there would point the row at
+  // harness B while the admitted turn runs under A — after which the echo
+  // lands and the lock rejects every follow-up send under A. The guard above
+  // now rejects that second send before it can write anything.
+  //
+  // Nothing awaits between the read at the top of this function and this
+  // write, so within the one process that owns this database the guard and the
+  // write cannot be interleaved by another send.
   if (session && session.message_count === 0 && session.agent_harness !== agentHarness) {
     const result = db
       .prepare(
@@ -357,29 +406,25 @@ function handleSendMessage(params: QueryParams): CommandResult {
     }
   }
 
-  // A send against an active turn would persist a user message that no agent
-  // will ever answer (the wire rejects the turn with turnActive and the
-  // composer shows nothing). "Needs input" counts as active too: plan
-  // approval and questions park the RUNNING turn while the overlay waits.
-  // Reject up front — the q:command error surfaces in the UI. The wire guard
-  // stays as the backstop for the status race.
-  const ACTIVE_TURN_STATUSES = ["working", "needs_plan_response", "needs_response"];
-  if (session && ACTIVE_TURN_STATUSES.includes(session.status)) {
-    throw new Error(
-      session.status === "working"
-        ? "The agent is still working — wait for the current turn to finish."
-        : "The agent is waiting for your response — answer the pending prompt first."
-    );
-  }
-
-  // 1. Persist the user message
-  const result = writeUserMessage(sessionId, content, model);
-  if (!result.success) throw new Error(result.error);
+  // 1. Flip the session to "working" optimistically. The user's MESSAGE row is
+  // NOT written here: the engine echoes the prompt back as
+  // message.started{role:"user"} and that echo is the single persistence path
+  // for message rows (same turn_id, same parts, one writer). The frontend
+  // renders its own optimistic bubble from cache until the echo lands.
+  //
+  // The STATUS is all that moves optimistically. `sentAt` is the send's own
+  // clock reading, but it is not written until the turn is admitted, below.
+  const sentAt = new Date().toISOString();
+  const working = persistSessionWorking(sessionId);
+  if (!working.ok) throw new Error(working.error);
   invalidate(["workspaces", "sessions", "session", "messages", "stats"], {
     sessionIds: [sessionId],
   });
 
-  // 2. Forward to agent-server (fire-and-forget — ACK already sent)
+  // 2. Forward to agent-server. The ACK is NOT out yet: handleCommand sends it
+  // from THIS function's outcome, which is what lets the guards below — and
+  // the admission round-trip itself — reject the send instead of
+  // half-accepting it.
   const existingAgentSessionId = session?.agent_session_id ?? null;
 
   // Resolve cwd server-side from session → workspace → repo.
@@ -392,53 +437,122 @@ function handleSendMessage(params: QueryParams): CommandResult {
     }
   }
 
+  // The turn id is the frontend's correlation key: it seeds the optimistic
+  // bubble and matches the engine's user echo when it arrives.
+  const turnId = readString(params, "turnId") ?? uuidv7();
+
+  // No engine turn can be admitted from here. Flipping the session to "error"
+  // is only half the job: this handler's return value IS the q:command_ack, so
+  // returning normally would answer `accepted: true` for a turn that never ran.
+  // The user's prompt exists in exactly one place at this moment — the
+  // frontend's optimistic bubble — because the backend never writes the user
+  // row (the engine's echo is the single persistence path). A false accept
+  // therefore strands that bubble on screen forever, durable nowhere. Throw so
+  // handleCommand answers `accepted: false` and the composer's rollback runs.
   if (!agentService.isConnected()) {
-    handleAgentError(sessionId, agentHarness, new Error("Agent server is disconnected"));
-    return { commandId: result.messageId };
+    const err = new Error("Agent server is disconnected");
+    handleAgentError(sessionId, err);
+    throw err;
   }
   if (!cwd) {
-    handleAgentError(sessionId, agentHarness, new Error("Session has no resolvable workspace"));
-    return { commandId: result.messageId };
+    const err = new Error("Session has no resolvable workspace");
+    handleAgentError(sessionId, err);
+    throw err;
   }
 
-  const turnId = readString(params, "turnId") ?? uuidv7();
-  agentService
-    .startTurn(sessionId, turnId, agentHarness, content, {
+  // Admission is AWAITED, and that is the whole point. `turn/start` is a
+  // quick-ack: the server answers the moment it admits the turn — before the
+  // harness has run a step (it acks, then `void executeTurn`) — so this waits
+  // for a verdict, never for the turn. The streaming half stays where it
+  // belongs, on the event channel.
+  //
+  // The guards above only close the SYNCHRONOUS half of the lost-prompt hole.
+  // Admission can also fail asynchronously: a turnActive race with a second
+  // client, a server shutting down, a harness that will not spawn. Answering
+  // the command before that verdict arrives reports `accepted: true` for a
+  // turn the server then refuses — and the prompt exists in exactly one place
+  // right now, the frontend's optimistic bubble, because the backend never
+  // writes the user row (the engine's echo is the single persistence path).
+  // So every rejection rethrows: handleCommand turns a throw into
+  // `accepted: false`, which is the only answer that runs the composer's
+  // rollback. Nothing can arrive here AFTER admission — the promise settles on
+  // the ack — so there is no post-ack failure left to handle in the
+  // background.
+  try {
+    await agentService.startTurn(sessionId, turnId, agentHarness, content, {
       cwd,
       model,
-      thinkingLevel: readString(params, "thinkingLevel") as ThinkingLevel | undefined,
-      permissionMode: readString(params, "permissionMode") as PermissionMode | undefined,
+      thinkingLevel: readThinkingLevel(params.thinkingLevel),
+      permissionMode: readPermissionMode(params.permissionMode),
       maxTurns: readNumber(params, "maxTurns"),
       additionalDirectories: Array.isArray(params.additionalDirectories)
         ? params.additionalDirectories.filter((dir): dir is string => typeof dir === "string")
         : undefined,
       resume: existingAgentSessionId || readString(params, "resume"),
       resumeSessionAt: readString(params, "resumeSessionAt"),
-    })
-    .catch((err) => {
-      if (err instanceof WireRequestError) {
-        // turnActive (-32002): the session is legitimately mid-turn — the
-        // running turn must NOT be flipped to an error status. The send is
-        // dropped (UI guards against double-send; this is the backstop).
-        if (err.code === -32002) {
-          console.warn(
-            `[CommandHandler] sendMessage rejected, turn already active: session=${sessionId}`
-          );
-          return;
-        }
-        // Other typed rejections (harness unavailable, shutting down,
-        // invalid params) — the turn never ran.
-        handleAgentRejection(sessionId, agentHarness, err.message);
-        return;
-      }
-      handleAgentError(sessionId, agentHarness, err);
     });
+  } catch (err) {
+    if (err instanceof WireRequestError && err.code === WIRE_ERROR_CODES.turnActive) {
+      // The session is legitimately mid-turn — another client won the race
+      // between the status guard above and the wire. That RUNNING turn is
+      // fine, it just is not ours, so the session must NOT be flipped to an
+      // error status. Reject the send and leave the status alone; the wording
+      // matches the synchronous guard, since to the user it is the same "wait
+      // your turn" and the wire's own message leaks a session id.
+      console.warn(
+        `[CommandHandler] sendMessage rejected, turn already active: session=${sessionId}`
+      );
+      throw new Error("The agent is still working — wait for the current turn to finish.");
+    }
+    // Every other rejection — harness unavailable, shutting down, invalid
+    // params, a transport that died mid-request — means no turn was admitted,
+    // so the session must not be left sitting on "working".
+    if (err instanceof WireRequestError) handleAgentRejection(sessionId, err.message);
+    else handleAgentError(sessionId, err);
+    throw err;
+  }
 
-  return { commandId: result.messageId };
+  // 3. The turn is admitted, so the send is real — and only now is the send
+  // timestamp true. Everything above this line can still reject, and a rejected
+  // send that had already stamped `last_user_message_at` left the workspace
+  // looking permanently prompted: no `git checkout -- .` cleanup on init, and
+  // `isFirstSession` false for a workspace nobody ever prompted. The status
+  // flip stays optimistic because every rejection path moves it back; the
+  // timestamp has no such undo, so it waits instead.
+  // `failed()` logs its own error — a stamp that misses is a stale sidebar
+  // ordering, not a reason to reject a turn the engine is already running.
+  if (persistLastUserMessageAt(sessionId, sentAt).ok) {
+    invalidate(["workspaces", "sessions"], { sessionIds: [sessionId] });
+  }
+
+  return { commandId: turnId };
 }
 
 // ---- stopSession ----
 
+/**
+ * How long to let an UNCONFIRMED cancel settle itself before giving up.
+ *
+ * The turn is still nominally running, so `turn.ended` is expected within a
+ * few seconds. If it never comes, the session would sit on "working" forever
+ * with no agent behind it — the watchdog converts that into an error the user
+ * can act on, and only if the status is still exactly where we left it.
+ */
+const UNCONFIRMED_CANCEL_GRACE_MS = 15_000;
+
+/**
+ * Stop the session's active turn.
+ *
+ * The cancel outcome is a union and it MATTERS (PROTOCOL §8):
+ *   cancelled / no_active_turn — the turn is provably over; go idle now.
+ *   unconfirmed                — dispatched but unacknowledged. The agent may
+ *                                still be writing files, so forcing "idle"
+ *                                here would show a finished session while work
+ *                                continues and then flip back when the real
+ *                                turn.ended lands. Leave the status alone and
+ *                                let turn.ended settle it, with a bounded
+ *                                fallback so it cannot hang forever.
+ */
 async function handleStopSession(params: QueryParams): Promise<CommandResult> {
   const sessionId = requireParam(params, "sessionId", "stopSession");
 
@@ -446,20 +560,87 @@ async function handleStopSession(params: QueryParams): Promise<CommandResult> {
   const session = getSessionRaw(db, sessionId);
   if (!session) throw new Error("Session not found");
 
+  let confirmed = true;
   if (agentService.isConnected()) {
     try {
-      await agentService.stopSession({ sessionId });
+      const result = await agentService.stopSession({ sessionId });
+      confirmed = result.outcome !== "unconfirmed";
     } catch (err) {
       console.error("[CommandHandler] Failed to stop on agent-server:", err);
-      // Still mark idle locally — best effort
+      // The wire itself failed; nothing is going to deliver a turn.ended.
     }
   }
 
-  db.prepare("UPDATE sessions SET status = 'idle', updated_at = datetime('now') WHERE id = ?").run(
-    sessionId
+  if (confirmed) {
+    db.prepare(
+      "UPDATE sessions SET status = 'idle', updated_at = datetime('now') WHERE id = ?"
+    ).run(sessionId);
+    invalidate(["workspaces", "sessions", "session", "stats"], { sessionIds: [sessionId] });
+    return {};
+  }
+
+  console.warn(
+    `[CommandHandler] stopSession unconfirmed: session=${sessionId} — waiting for turn.ended`
   );
-  invalidate(["workspaces", "sessions", "session", "stats"], { sessionIds: [sessionId] });
-  return {};
+  // Armed for the turn being cancelled, not for the session — see below.
+  scheduleUnconfirmedCancelWatchdog(sessionId, agentService.liveTurnId(sessionId));
+  return { unconfirmed: true };
+}
+
+/** Bounded fallback for an unconfirmed cancel that no turn.ended ever settles. */
+function scheduleUnconfirmedCancelWatchdog(
+  sessionId: string,
+  cancelledTurnId: string | undefined
+): void {
+  const timer = setTimeout(() => {
+    try {
+      // The watchdog belongs to ONE turn, and the status cannot identify it:
+      // consecutive turns are both "working". An unconfirmed cancel usually
+      // does settle — turn.ended lands, the session goes idle, the user sends
+      // again — and all of that fits inside the 15s grace window, after which
+      // a status-only check reads the NEW turn's "working" as the old turn's
+      // stuck cancel and fails a perfectly healthy run mid-flight.
+      //
+      // So bail only on POSITIVE evidence that a different turn is live now.
+      // `liveTurnId` returning undefined is not that evidence: it also means
+      // the handler is gone (link dropped, shutdown), which is precisely when
+      // a session is most likely to be stranded on "working" with no agent
+      // behind it — the case this watchdog exists for. The status guard below
+      // covers the remaining "it ended and nothing replaced it" case, since
+      // that session is no longer in an active status.
+      const live = agentService.liveTurnId(sessionId);
+      if (live !== undefined && live !== cancelledTurnId) return;
+
+      const db = getDatabase();
+      // Only if turn.ended never arrived: any status change means it did (or
+      // the user started something else), and this must not stomp on it.
+      //
+      // Matching 'working' alone was too narrow. A stop is legal from every
+      // ACTIVE_TURN_STATUS — cancelling a plan-approval or question overlay is
+      // the common case — and an unconfirmed cancel from one of those left the
+      // session parked on needs_plan_response / needs_response with no agent
+      // behind it and no overlay the user could dismiss. Same set the send
+      // path calls active, so "there is a turn to give up on" means one thing.
+      const result = db
+        .prepare(
+          `UPDATE sessions
+             SET status = 'error',
+                 error_message = 'The agent never confirmed the stop request.',
+                 error_category = 'internal',
+                 updated_at = datetime('now')
+           WHERE id = ? AND status IN (${ACTIVE_TURN_STATUSES.map(() => "?").join(", ")})`
+        )
+        .run(sessionId, ...ACTIVE_TURN_STATUSES);
+      if (result.changes > 0) {
+        console.warn(`[CommandHandler] unconfirmed cancel never settled: session=${sessionId}`);
+        invalidate(["workspaces", "sessions", "session", "stats"], { sessionIds: [sessionId] });
+      }
+    } catch (err) {
+      console.error("[CommandHandler] cancel watchdog failed:", err);
+    }
+  }, UNCONFIRMED_CANCEL_GRACE_MS);
+  // A pending watchdog must never hold the process open at shutdown.
+  timer.unref?.();
 }
 
 // ---- AAP (agentic apps protocol) ----
@@ -495,28 +676,16 @@ async function handleStopApp(params: QueryParams): Promise<CommandResult> {
 
 // ---- Helpers ----
 
-function handleAgentRejection(sessionId: string, agentHarness: string, reason?: string): void {
+function handleAgentRejection(sessionId: string, reason?: string): void {
   const msg = reason || "Agent rejected the message";
   console.error(`[CommandHandler] Agent rejected sendMessage for session=${sessionId}: ${msg}`);
-  persistSessionError({
-    type: "session.error",
-    sessionId,
-    agentHarness: agentHarness as AgentHarness,
-    error: msg,
-    category: "internal",
-  });
+  persistSessionError(sessionId, msg, "internal");
   invalidate(["workspaces", "sessions", "session", "stats"], { sessionIds: [sessionId] });
 }
 
-function handleAgentError(sessionId: string, agentHarness: string, err: unknown): void {
+function handleAgentError(sessionId: string, err: unknown): void {
   const errorMsg = err instanceof Error ? err.message : String(err);
   console.error("[CommandHandler] Failed to forward to agent-server:", errorMsg);
-  persistSessionError({
-    type: "session.error",
-    sessionId,
-    agentHarness: agentHarness as AgentHarness,
-    error: `Agent server communication failed: ${errorMsg}`,
-    category: "internal",
-  });
+  persistSessionError(sessionId, `Agent server communication failed: ${errorMsg}`, "internal");
   invalidate(["workspaces", "sessions", "session", "stats"], { sessionIds: [sessionId] });
 }

@@ -6,13 +6,13 @@
  * store instead of this hook.
  *
  * The pure utilities (type whitelist, FileReader → preview, clipboard
- * extraction, Anthropic block building) live in `lib/imageAttachments.ts`
+ * extraction, canonical PartInput building) live in `lib/imageAttachments.ts`
  * so both call-sites share them.
  */
 
 import { useState, useCallback } from "react";
 import {
-  buildImageBlocks as buildBlocksFromAttachments,
+  buildMessageContent as buildContentFromAttachments,
   extractImagesFromClipboard as extractFromClipboard,
   processImageFiles,
   SUPPORTED_IMAGE_TYPES,
@@ -42,8 +42,9 @@ export function useImageAttachments() {
     []
   );
 
-  const buildImageBlocks = useCallback(
-    (): Array<Record<string, unknown>> | null => buildBlocksFromAttachments(attachments),
+  /** Text + staged images → the canonical `content` the composer sends. */
+  const buildMessageContent = useCallback(
+    (text: string): string => buildContentFromAttachments(text, attachments),
     [attachments]
   );
 
@@ -54,6 +55,6 @@ export function useImageAttachments() {
     removeAttachment,
     clearAttachments,
     extractImagesFromClipboard,
-    buildImageBlocks,
+    buildMessageContent,
   };
 }

@@ -9,7 +9,7 @@
  */
 
 import type { Message } from "@/shared/types";
-import type { ToolPart } from "@shared/messages/types";
+import type { ToolPart } from "@shared/protocol-types";
 
 export interface TurnStats {
   toolCount: number;
@@ -34,15 +34,15 @@ export function calculateTurnStats(messages: Message[]): TurnStats {
     if (!message.parts) continue;
 
     for (const part of message.parts) {
-      if (part.type !== "TOOL") continue;
+      if ("raw" in part || part.type !== "tool") continue;
       toolCount++;
 
-      const toolPart = part as ToolPart;
+      const toolPart: ToolPart = part;
       if (toolPart.kind === "task" || toolPart.subagent) {
         subagentCount++;
       }
 
-      if (FILE_MODIFYING_TOOLS.has(toolPart.toolName) && toolPart.state.status === "COMPLETED") {
+      if (FILE_MODIFYING_TOOLS.has(toolPart.toolName) && toolPart.state.status === "completed") {
         const filePath = getToolInputFilePath(toolPart.state.input);
         if (filePath) {
           fileSet.add(filePath);

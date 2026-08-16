@@ -4,59 +4,53 @@
 // config assembly: prompt → engine input conversion, thinking-level mapping,
 // system-prompt append, resume plumbing.
 
+import { parseAgentInput } from "@zvada/agent-server/protocol";
 import type { AgentInput, TurnStartParams } from "@zvada/agent-server/protocol";
-import { ENGINE_HARNESS_BY_DEUS, type AgentHarness } from "@shared/enums";
+import type { AgentHarness } from "@shared/enums";
 import type { ThinkingLevel, PermissionMode } from "@shared/protocol";
 import { buildSystemPromptAppend } from "./system-prompt";
 
 /**
- * Deus's frontend serializes attachment-bearing prompts as a JSON array of
- * Anthropic content blocks (text / image with base64 or URL source). The
- * engine speaks its own PartInput vocabulary, so translate. Anything
- * unrecognized stays text.
+ * The composer speaks the canonical `PartInput` vocabulary: a text-only send is
+ * a bare string (already an `AgentInput`), an attachment-bearing send is a
+ * JSON-encoded `PartInput[]`. The parts themselves are the engine's own — the
+ * schema decides whether they are valid, not a decoder in front of it.
+ *
+ * What is left here is not translation but DISAMBIGUATION, which the engine
+ * cannot do for us: deus's wire carries the prompt as one `string`, so "a JSON
+ * array of parts" and "prose that happens to start with `[`" arrive
+ * identically. A markdown link (`[see this](…)`), a typed `[1, 2, 3]`, an
+ * empty `[]` — each is text the user wants the model to read, and mangling it
+ * into structured input (or refusing the send) is worse than sending it
+ * verbatim. Only a `[`-prefixed value that parses as JSON AND validates as
+ * `AgentInput` is treated as structured; everything else is the prompt.
  */
 export function toEngineInput(prompt: string): AgentInput {
   if (!prompt.startsWith("[")) return prompt;
-  let blocks: unknown;
+  let decoded: unknown;
   try {
-    blocks = JSON.parse(prompt);
+    decoded = JSON.parse(prompt);
   } catch {
     return prompt;
   }
-  if (!Array.isArray(blocks) || blocks.length === 0) return prompt;
-  const parts: Extract<AgentInput, unknown[]> = [];
-  for (const block of blocks as Array<Record<string, unknown>>) {
-    if (block?.type === "text" && typeof block.text === "string") {
-      parts.push({ type: "text", text: block.text });
-      continue;
-    }
-    if (block?.type === "image") {
-      const source = block.source as
-        | { type?: string; url?: string; media_type?: string; data?: string }
-        | undefined;
-      if (source?.type === "url" && source.url) {
-        parts.push({ type: "image", url: source.url, mediaType: source.media_type ?? "image/png" });
-        continue;
-      }
-      if (source?.data) {
-        parts.push({
-          type: "image",
-          data: source.data,
-          mediaType: source.media_type ?? "image/png",
-        });
-        continue;
-      }
-    }
-    // Unknown block type — not a content array we understand; keep raw text.
+  // An empty array carries nothing; the literal "[]" is what the user typed.
+  if (!Array.isArray(decoded) || decoded.length === 0) return prompt;
+  try {
+    return parseAgentInput(decoded);
+  } catch (error) {
+    // Logged, not swallowed: prose is the common case, but a composer bug that
+    // emits almost-canonical parts would otherwise ship JSON to the model with
+    // nothing written anywhere.
+    console.warn(`[RunConfig] '['-prefixed prompt is not AgentInput, sending as text:`, error);
     return prompt;
   }
-  return parts.length ? parts : prompt;
 }
 
 /**
- * The codex harnesses take text-only input (the engine's codex adapters drop
- * image parts) — replace images with an explicit marker so the model knows an
- * attachment existed instead of it vanishing silently.
+ * Drop image parts for harnesses that can't accept them, replacing each with
+ * an explicit marker so the model knows an attachment existed instead of it
+ * vanishing silently. Keyed off the negotiated `capabilities.images`, never a
+ * hardcoded harness list.
  */
 export function withoutImageParts(input: AgentInput): AgentInput {
   if (typeof input === "string") return input;
@@ -70,26 +64,6 @@ export function withoutImageParts(input: AgentInput): AgentInput {
   );
 }
 
-/** deus UPPERCASE thinking levels → engine lowercase. */
-export function toEngineThinking(
-  level: ThinkingLevel | undefined
-): "off" | "low" | "medium" | "high" | "xhigh" | undefined {
-  switch (level) {
-    case "NONE":
-      return "off";
-    case "LOW":
-      return "low";
-    case "MEDIUM":
-      return "medium";
-    case "HIGH":
-      return "high";
-    case "XHIGH":
-      return "xhigh";
-    default:
-      return undefined;
-  }
-}
-
 export interface DeusTurnOptions {
   cwd: string;
   model?: string;
@@ -101,6 +75,8 @@ export interface DeusTurnOptions {
   resume?: string;
   /** Checkpoint revert: fork the resumed session at a specific message. */
   resumeSessionAt?: string;
+  /** From the initialize handshake — whether this harness accepts image parts. */
+  supportsImages?: boolean;
 }
 
 /** Assemble the wire params for one turn (ids are minted by the caller). */
@@ -115,15 +91,17 @@ export function buildTurnStartParams(
   return {
     sessionId,
     turnId,
-    input: agentHarness === "claude" ? input : withoutImageParts(input),
+    input: options.supportsImages ? input : withoutImageParts(input),
     config: {
-      harness: ENGINE_HARNESS_BY_DEUS[agentHarness],
+      // The harness id IS the engine's — no alias map in between.
+      harness: agentHarness,
       cwd: options.cwd,
       model: options.model,
-      thinkingLevel: toEngineThinking(options.thinkingLevel),
+      thinkingLevel: options.thinkingLevel,
       systemPromptAppend: buildSystemPromptAppend(agentHarness, options.cwd),
-      // Verbatim — the engine speaks dontAsk natively (never-prompt without
-      // the dangerous bypass, which also disables Claude extended thinking).
+      // Verbatim — deus and the engine speak the same permission vocabulary
+      // (dont_ask = never prompt, without the dangerous bypass that also
+      // disables Claude extended thinking).
       permissionMode: options.permissionMode,
       maxTurns: options.maxTurns ?? 1000,
       additionalDirectories: options.additionalDirectories,

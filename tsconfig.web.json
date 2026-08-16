@@ -11,6 +11,12 @@
     "composite": true,
     "outDir": "./out/types-web",
     "declarationDir": "./out/types-web",
+    // The renderer imports the agent protocol's types straight from
+    // @zvada/agent-server, which ships raw TypeScript source whose internal
+    // imports carry .ts extensions. Vite/esbuild does the real build; this
+    // project only typechecks, so declaration-only emit is all we need.
+    "allowImportingTsExtensions": true,
+    "emitDeclarationOnly": true,
     "jsx": "react-jsx",
     "baseUrl": ".",
     "paths": {

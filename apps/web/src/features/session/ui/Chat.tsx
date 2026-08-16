@@ -1,11 +1,12 @@
 import { match } from "ts-pattern";
-import type { Message, SessionStatus } from "@/shared/types";
+import type { Compaction, Message, SessionStatus } from "@/shared/types";
 import { MessageItem } from "./MessageItem";
 import { AssistantTurn } from "./AssistantTurn";
+import { CompactionChip } from "./CompactionChip";
 import { WorkspaceEmptyState } from "./WorkspaceEmptyState";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Button } from "@/components/ui/button";
-import { ChevronDown, TerminalSquare, MessageSquarePlus } from "lucide-react";
+import { ChevronDown, TerminalSquare, MessageSquarePlus, TriangleAlert, X } from "lucide-react";
 import { cn } from "@/shared/lib/utils";
 
 import { useWorkingDuration } from "@/shared/hooks";
@@ -14,90 +15,12 @@ import { useVirtualizer } from "@tanstack/react-virtual";
 import { useCallback, useMemo, useRef, useEffect } from "react";
 import { AnimatePresence, m } from "framer-motion";
 import { CircularPixelGrid, type CircularPixelGridVariant } from "./CircularPixelGrid";
-
-const USER_PADDING_CLASS = "pb-8";
-const TIGHT_PADDING_CLASS = "pb-1";
-
-/**
- * Turn Types
- *
- * A turn = consecutive messages with the same role (user or assistant)
- * - UserTurn: Single user message
- * - AssistantTurn: One or more consecutive assistant messages
- */
-type UserTurn = {
-  type: "user";
-  message: Message;
-  messageIndex: number;
-};
-
-type AssistantTurnData = {
-  type: "assistant";
-  messages: Message[];
-  firstMessageIndex: number;
-  isLatest: boolean;
-  startedAt: string | null;
-};
-
-type Turn = UserTurn | AssistantTurnData;
-
-/**
- * Calculate spacing classes for turns using PADDING (not margin).
- *
- * Padding is used instead of margin because virtual items are absolutely
- * positioned — margins don't affect layout. Padding is included in
- * getBoundingClientRect().height, so the virtualizer's measureElement
- * captures spacing correctly.
- *
- * Spacing logic:
- * - First turn: Top padding (pt-8 for user, pt-1 for assistant)
- * - User turn after assistant: Generous top padding (pt-8)
- * - User turn after user: No extra padding
- * - Assistant turn: No top padding
- * - Bottom padding: User turns add pb-8, assistant turns add minimal padding
- */
-function getTurnSpacingClasses(
-  turn: Turn,
-  prevTurn: Turn | null,
-  nextTurn: Turn | null,
-  isFirst: boolean
-): string {
-  const isUser = turn.type === "user";
-
-  const topClass = (() => {
-    if (isUser) {
-      if (isFirst) return "pt-8";
-      if (prevTurn?.type === "user") return "pt-0";
-      return "pt-8";
-    }
-
-    // Assistant turn
-    if (isFirst) return "pt-1";
-    return "pt-0";
-  })();
-
-  const bottomClass = (() => {
-    if (isUser) {
-      return USER_PADDING_CLASS;
-    }
-
-    // Assistant turn
-    if (nextTurn?.type === "user") {
-      return "pb-0";
-    }
-
-    if (nextTurn) {
-      return TIGHT_PADDING_CLASS;
-    }
-
-    return "pb-0";
-  })();
-
-  return cn(topClass, bottomClass);
-}
+import { buildChatTimeline } from "../lib/chatTimeline";
 
 interface ChatProps {
   messages: Message[];
+  /** Positional compaction markers, spliced between the turns they belong to. */
+  compactions?: Compaction[];
   loading: boolean;
   sessionStatus: SessionStatus;
   errorMessage?: string | null;
@@ -117,13 +40,19 @@ interface ChatProps {
   workspaceRepoName?: string | null;
   workspaceParentBranch?: string | null;
   isFirstSession?: boolean;
+  /** The harness answered `resumed: false` — this chat's context was lost. */
+  contextLost?: boolean;
+  onDismissContextLost?: () => void;
   /** Incremented by SessionPanel when the human clicks Send. */
   userSendCount?: number;
   className?: string;
 }
 
+const NO_COMPACTIONS: Compaction[] = [];
+
 export function Chat({
   messages,
+  compactions = NO_COMPACTIONS,
   loading,
   sessionStatus,
   errorMessage,
@@ -138,6 +67,8 @@ export function Chat({
   workspaceRepoName,
   workspaceParentBranch,
   isFirstSession,
+  contextLost = false,
+  onDismissContextLost,
   userSendCount = 0,
   className,
 }: ChatProps) {
@@ -173,133 +104,35 @@ export function Chat({
     latestMessageSentAt,
   });
 
-  // Memoize message filtering to avoid re-parsing JSON on every render
-  // Filter messages: skip subagent children (they render nested under Task tool blocks)
-  const renderableMessages = useMemo(() => {
-    return messages.filter((message) => {
-      // Skip subagent messages
-      if (message.parent_tool_use_id) return false;
-      // User messages always render
-      if (message.role === "user") return true;
-      // Assistant messages with parts render
-      if (message.parts && message.parts.length > 0) return true;
-      // Keep cancelled messages for "Response stopped" badge
-      if (message.cancelled_at) return true;
-      // Skip empty messages (message.created arrived but no parts yet — will appear once parts come)
-      return false;
-    });
-  }, [messages]);
+  // Everything derived from the rows: which ones render, the turns they group
+  // into, the compaction markers between them, each slot's padding, and what
+  // the agent is doing. All pure — see `lib/chatTimeline`.
+  const {
+    items: timeline,
+    spacings: turnSpacings,
+    activity,
+    lastRole,
+  } = useMemo(
+    () => buildChatTimeline(messages, compactions, sessionStatus === "working"),
+    [messages, compactions, sessionStatus]
+  );
 
   /**
-   * Derive agent sub-state from the last content block in the message stream.
-   * Maps to CircularPixelGrid animation variant:
-   * - thinking: last block is ThinkingBlock / REASONING part
-   * - generating: last block is TextBlock / TEXT part
-   * - toolExecuting: last block is ToolUseBlock with no result / TOOL part PENDING/RUNNING
-   * - error: last tool result has is_error / TOOL part ERROR
+   * What the agent is doing right now → the CircularPixelGrid variant.
+   *
+   * `idle` DURING an active turn means "between observable activities" (a tool
+   * just completed, the model is about to speak but the stream has not said so
+   * yet), not "finished" — so it maps to the default working animation, which
+   * is also what a non-working session shows.
    */
   const agentSubState = useMemo((): CircularPixelGridVariant => {
     if (sessionStatus !== "working") return "generating";
-
-    for (let i = renderableMessages.length - 1; i >= 0; i--) {
-      const msg = renderableMessages[i];
-      if (msg.role !== "assistant") continue;
-      if (!msg.parts || msg.parts.length === 0) continue;
-
-      const sorted = [...msg.parts].sort((a, b) => (a.partIndex ?? 0) - (b.partIndex ?? 0));
-      const lastPart = sorted[sorted.length - 1];
-      if (!lastPart) return "generating";
-
-      return match(lastPart.type)
-        .with("REASONING", () => "thinking" as const)
-        .with("TEXT", () => "generating" as const)
-        .with("TOOL", () => {
-          const status = (lastPart as import("@shared/messages/types").ToolPart).state.status;
-          if (status === "ERROR") return "error" as const;
-          if (status === "PENDING" || status === "RUNNING") return "toolExecuting" as const;
-          return "generating" as const;
-        })
-        .otherwise(() => "generating" as const);
-    }
-
-    return "generating";
-  }, [sessionStatus, renderableMessages]);
-
-  /**
-   * Group consecutive messages into turns
-   *
-   * A turn = consecutive messages with the same role
-   * - User messages: Each user message is its own turn
-   * - Assistant messages: Consecutive assistant messages form a single turn
-   *
-   * This enables turn-level collapsing (hide intermediate messages, show summary)
-   */
-  const turns = useMemo(() => {
-    const turnList: Turn[] = [];
-    let currentAssistantTurn: Message[] | null = null;
-    let currentAssistantTurnStartedAt: string | null = null;
-    let latestUserSentAt: string | null = null;
-    let firstAssistantIndex = -1;
-
-    renderableMessages.forEach((message, index) => {
-      if (message.role === "assistant") {
-        // Start or continue assistant turn
-        if (!currentAssistantTurn) {
-          currentAssistantTurn = [message];
-          currentAssistantTurnStartedAt = latestUserSentAt;
-          firstAssistantIndex = index;
-        } else {
-          currentAssistantTurn.push(message);
-        }
-      } else {
-        // User message - close any open assistant turn first
-        if (currentAssistantTurn) {
-          turnList.push({
-            type: "assistant",
-            messages: currentAssistantTurn,
-            firstMessageIndex: firstAssistantIndex,
-            isLatest: false, // Will be updated later
-            startedAt: currentAssistantTurnStartedAt,
-          });
-          currentAssistantTurn = null;
-          currentAssistantTurnStartedAt = null;
-        }
-
-        latestUserSentAt = message.sent_at ?? null;
-
-        // Add user turn
-        turnList.push({
-          type: "user",
-          message,
-          messageIndex: index,
-        });
-      }
-    });
-
-    // Close any remaining assistant turn
-    if (currentAssistantTurn) {
-      turnList.push({
-        type: "assistant",
-        messages: currentAssistantTurn,
-        firstMessageIndex: firstAssistantIndex,
-        isLatest: false, // Will be updated later
-        startedAt: currentAssistantTurnStartedAt,
-      });
-    }
-
-    // Mark the latest assistant turn — but ONLY if it's the very last turn
-    // in the conversation (no user message after it). A turn followed by a
-    // user message is completed and must NOT enter streaming mode. Without
-    // this guard, the gap between "user sends message" and "first assistant
-    // response arrives" causes the previous completed turn to re-enter
-    // streaming mode (expanded, dimmed) because isLatest && isWorking = true.
-    const lastTurn = turnList[turnList.length - 1];
-    if (lastTurn?.type === "assistant") {
-      (lastTurn as AssistantTurnData).isLatest = true;
-    }
-
-    return turnList;
-  }, [renderableMessages]);
+    return match(activity)
+      .with("thinking", () => "thinking" as const)
+      .with("tool_running", () => "toolExecuting" as const)
+      .with("tool_failed", () => "error" as const)
+      .otherwise(() => "generating" as const);
+  }, [sessionStatus, activity]);
 
   // Advance maxAnimatedTurnIndex after commit (useEffect runs once per commit,
   // not twice in StrictMode). During render, shouldAnimate reads the ref purely.
@@ -307,17 +140,17 @@ export function Chat({
   // first invocation, so the second invocation (which produces DOM) never applies
   // the chat-item-enter CSS class.
   useEffect(() => {
-    if (isFirstTurnsRender.current && turns.length > 0) {
+    if (isFirstTurnsRender.current && timeline.length > 0) {
       isFirstTurnsRender.current = false;
       // Only suppress entrance animation for turns loaded from DB (existing
       // conversation). New conversations (started empty) should animate their
       // first turn — skipping the seed lets shouldAnimate fire naturally.
       if (initialMessageCount.current > 0) {
-        maxAnimatedTurnIndex.current = turns.length - 1;
+        maxAnimatedTurnIndex.current = timeline.length - 1;
       }
       return;
     }
-    const newMax = turns.length - 1;
+    const newMax = timeline.length - 1;
     if (newMax > maxAnimatedTurnIndex.current) {
       // Mark this turn for animation. The Set ensures the CSS class persists
       // across re-renders so the 400ms animation isn't interrupted.
@@ -326,20 +159,7 @@ export function Chat({
       // Clean up after animation completes (400ms duration + 100ms buffer).
       setTimeout(() => animatedTurnsRef.current.delete(newMax), 500);
     }
-  }, [turns.length]);
-
-  // Pre-compute spacing for each turn (needed because virtualizer skips
-  // off-screen items — can't compute spacing from DOM neighbors).
-  const turnSpacings = useMemo(() => {
-    return turns.map((turn, i) =>
-      getTurnSpacingClasses(
-        turn,
-        i > 0 ? turns[i - 1] : null,
-        i < turns.length - 1 ? turns[i + 1] : null,
-        i === 0
-      )
-    );
-  }, [turns]);
+  }, [timeline.length]);
 
   // ── Virtualizer ──────────────────────────────────────────────────────────
   // Only renders visible turns + overscan buffer. TanStack Virtual v3 uses
@@ -347,8 +167,9 @@ export function Chat({
   // height changes from expand/collapse — no manual remeasurement needed.
   const estimateSize = useCallback(
     (index: number) => {
-      const turn = turns[index];
+      const turn = timeline[index];
       if (!turn) return 100;
+      if (turn.type === "compaction") return 36;
       if (turn.type === "user") return 60;
       // Scale estimate with message count — collapsed turns with many hidden
       // messages show a compact header + summary, while expanded turns (latest)
@@ -358,33 +179,30 @@ export function Chat({
       if (msgCount <= 3) return 200;
       return 200 + (msgCount - 3) * 40;
     },
-    [turns]
+    [timeline]
   );
 
   const getItemKey = useCallback(
     (index: number) => {
-      const turn = turns[index];
-      if (!turn) return index;
-      return turn.type === "user" ? turn.message.id : turn.messages[0].id;
+      const item = timeline[index];
+      if (!item) return index;
+      if (item.type === "compaction") return `compaction:${item.compaction.compaction_id}`;
+      return item.type === "user" ? item.message.id : item.messages[0].id;
     },
-    [turns]
+    [timeline]
   );
 
   const virtualizer = useVirtualizer({
-    count: turns.length,
+    count: timeline.length,
     getScrollElement: () => messagesContainerRef.current,
     estimateSize,
     overscan: 8,
     getItemKey,
   });
 
-  // Calculate indicator margin based on last message role
-  const indicatorMarginClass = useMemo(() => {
-    const lastRenderableRole = renderableMessages.length
-      ? renderableMessages[renderableMessages.length - 1].role
-      : null;
-    return lastRenderableRole === "user" ? "mt-0" : "mt-1";
-  }, [renderableMessages]);
+  // The working indicator sits tighter under a user message than under a
+  // finished assistant turn.
+  const indicatorMarginClass = lastRole === "user" ? "mt-0" : "mt-1";
 
   return (
     <div className={cn("relative min-h-0 flex-1", className)}>
@@ -444,7 +262,7 @@ export function Chat({
               >
                 {virtualizer.getVirtualItems().map((virtualItem) => {
                   const turnIndex = virtualItem.index;
-                  const turn = turns[turnIndex];
+                  const turn = timeline[turnIndex];
                   if (!turn) return null;
 
                   const spacingClass = turnSpacings[turnIndex];
@@ -456,10 +274,16 @@ export function Chat({
                   // message) — streaming adds messages to the existing turn without
                   // changing turns.length, so no spurious re-animations.
                   const shouldAnimate =
-                    (turnIndex === turns.length - 1 && turnIndex > maxAnimatedTurnIndex.current) ||
+                    (turnIndex === timeline.length - 1 &&
+                      turnIndex > maxAnimatedTurnIndex.current) ||
                     animatedTurnsRef.current.has(turnIndex);
 
-                  const messageId = turn.type === "user" ? turn.message.id : turn.messages[0].id;
+                  // A compaction is not a message — it gets no message id.
+                  const messageId = match(turn)
+                    .with({ type: "user" }, (t) => t.message.id)
+                    .with({ type: "assistant" }, (t) => t.messages[0].id)
+                    .with({ type: "compaction" }, () => undefined)
+                    .exhaustive();
 
                   return (
                     <div
@@ -482,21 +306,64 @@ export function Chat({
                           shouldAnimate && "chat-item-enter"
                         )}
                       >
-                        {turn.type === "user" ? (
-                          <MessageItem message={turn.message} isLastInTurn={true} />
-                        ) : (
-                          <AssistantTurn
-                            messages={turn.messages}
-                            isLatest={turn.isLatest}
-                            isWorking={sessionStatus === "working"}
-                            startedAt={turn.startedAt}
-                          />
-                        )}
+                        {match(turn)
+                          .with({ type: "user" }, (t) => (
+                            <MessageItem message={t.message} isLastInTurn={true} />
+                          ))
+                          .with({ type: "assistant" }, (t) => (
+                            <AssistantTurn
+                              messages={t.messages}
+                              isLatest={t.isLatest}
+                              isWorking={sessionStatus === "working"}
+                              startedAt={t.startedAt}
+                            />
+                          ))
+                          .with({ type: "compaction" }, (t) => (
+                            <CompactionChip compaction={t.compaction} />
+                          ))
+                          .exhaustive()}
                       </div>
                     </div>
                   );
                 })}
               </div>
+              {/* Context lost — the harness silently started a fresh session
+                  instead of resuming. Non-blocking: the composer stays live. */}
+              <AnimatePresence>
+                {contextLost && (
+                  <m.div
+                    key="session-context-lost"
+                    initial={{ opacity: 0 }}
+                    animate={{ opacity: 1 }}
+                    exit={{ opacity: 0 }}
+                    transition={{ duration: 0.15, ease: [0.25, 0.46, 0.45, 0.94] }}
+                    className="mt-1 mr-auto w-fit max-w-[60%]"
+                    role="status"
+                    aria-live="polite"
+                  >
+                    <div className="border-warning/20 border-l-warning bg-warning/5 flex items-center gap-2.5 rounded-lg border border-l-2 px-3 py-2">
+                      <TriangleAlert
+                        className="text-warning/60 h-3.5 w-3.5 shrink-0"
+                        aria-hidden="true"
+                      />
+                      <span className="text-warning text-sm font-medium">
+                        Session context was lost — the agent started fresh instead of resuming.
+                      </span>
+                      {onDismissContextLost && (
+                        <button
+                          type="button"
+                          onClick={onDismissContextLost}
+                          className="text-warning/50 hover:text-warning focus-visible:ring-ring -mr-1 shrink-0 rounded-md p-0.5 transition-colors duration-150 focus-visible:ring-2 focus-visible:outline-none"
+                          aria-label="Dismiss"
+                        >
+                          <X className="h-3.5 w-3.5" />
+                        </button>
+                      )}
+                    </div>
+                  </m.div>
+                )}
+              </AnimatePresence>
+
               {/* Session-level error — rendered inline in the chat flow (law of locality) */}
               <AnimatePresence>
                 {sessionStatus === "error" && errorMessage && (

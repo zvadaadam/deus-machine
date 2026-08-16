@@ -5,6 +5,7 @@
 // recording tools live in the in-process deus MCP suite); the codex harnesses
 // got workspace context only (they run without the deus tool suite).
 
+import type { AgentHarness } from "@shared/enums";
 import { buildWorkspaceContext } from "./workspace-context";
 
 const FALLBACK_CONTEXT =
@@ -29,11 +30,8 @@ The camera engine automatically creates cinematic zoom/pan effects: 2x zoom on t
 `;
 
 /** The per-harness append: claude gets the recording briefing, codex does not. */
-export function buildSystemPromptAppend(
-  harness: "claude" | "codex-sdk" | "codex-server",
-  cwd?: string
-): string {
+export function buildSystemPromptAppend(harness: AgentHarness, cwd?: string): string {
   const workspaceContext = buildWorkspaceContext(cwd) || FALLBACK_CONTEXT;
-  if (harness !== "claude") return workspaceContext;
+  if (harness !== "claude-code") return workspaceContext;
   return `${workspaceContext}\n${SCREEN_RECORDING}`.trim();
 }

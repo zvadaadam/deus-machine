@@ -27,7 +27,7 @@ import { applyShellEnvironment } from "./agents/environment";
 import { getRuntime } from "./agents/core/engine";
 import { installFileLogger } from "./logging";
 import { killChildProcesses } from "./process-cleanup";
-import { bridgeWsConnection, createEventObserverTransport } from "./wire";
+import { bridgeWsConnection, observeEvents } from "./wire";
 
 const logger = installFileLogger();
 export const logFilePath = logger.logFilePath;
@@ -46,7 +46,7 @@ async function start(): Promise<void> {
 
   const runtime = getRuntime();
   const wireServer = new WireServer(runtime, { info: { name: "deus-agent-server" } });
-  wireServer.attach(createEventObserverTransport());
+  observeEvents(wireServer);
 
   // Binding to 127.0.0.1 — agent-server only accepts local connections.
   const httpServer = createHttpServer((_req, res) => {

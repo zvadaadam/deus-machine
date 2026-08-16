@@ -7,7 +7,7 @@
  */
 
 import { sendRequest, sendMutate, sendCommand } from "@/platform/ws";
-import type { Session, Message } from "../types";
+import type { Compaction, Session, Message } from "../types";
 import type { AgentHarness } from "@/shared/agents";
 
 /** Pagination params for cursor-based message fetching (seq-based) */
@@ -17,9 +17,22 @@ export interface MessagePaginationParams {
   after?: number; // seq cursor for newer messages
 }
 
-/** Paginated response shape from GET /sessions/:id/messages */
+/**
+ * Paginated response shape from the `messages` query — the WS resource and its
+ * HTTP fallback `GET /sessions/:id/messages` both answer exactly this.
+ */
 export interface PaginatedMessages {
   messages: Message[];
+  /**
+   * Compaction markers for the session — positional siblings of messages.
+   *
+   * REQUIRED, not optional. Both producers always send the list (empty when
+   * there are none), and while the type said `?` a producer that forgot it was
+   * indistinguishable from a session that has never compacted: every divider
+   * vanished from the transcript and nothing in the types objected. The HTTP
+   * fallback route was exactly that producer.
+   */
+  compactions: Compaction[];
   has_older: boolean;
   has_newer: boolean;
 }
@@ -48,19 +61,28 @@ export const SessionService = {
   },
 
   /**
-   * Send a message to a session
+   * Send a message to a session.
+   *
+   * `turnId` is REQUIRED, and the type now says so. It is the key the engine's
+   * user echo comes back with, and the composer already stamped it on the
+   * optimistic bubble; omitting it makes the backend mint a different one, so
+   * the echo lands under an id nothing is holding and the bubble sits beside
+   * its own echo. The old optional signature documented the requirement in
+   * prose while letting the compiler wave through the one call that breaks it.
    */
   sendMessage: async (
     id: string,
     content: string,
     model: string,
-    agentHarness: AgentHarness
+    agentHarness: AgentHarness,
+    turnId: string
   ): Promise<Message> => {
     const result = await sendCommand("sendMessage", {
       sessionId: id,
       content,
       model,
       agentHarness,
+      turnId,
     });
     if (!result.accepted) throw new Error(result.error || "Failed to send message");
     return result as unknown as Message;

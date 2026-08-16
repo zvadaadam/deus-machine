@@ -2,9 +2,9 @@ import { vi, describe, it, expect, beforeEach } from "vitest";
 import { Hono } from "hono";
 
 // Mock auth service
-const mockValidateDeviceToken = vi.fn();
-const mockUpdateLastSeen = vi.fn();
-const mockCheckRateLimit = vi.fn(() => 0);
+const mockValidateDeviceToken = vi.fn<(...args: any[]) => any>();
+const mockUpdateLastSeen = vi.fn<(...args: any[]) => any>();
+const mockCheckRateLimit = vi.fn<(...args: any[]) => any>(() => 0);
 
 vi.mock("../../../src/services/remote-auth.service", () => ({
   validateDeviceToken: (...args: unknown[]) => mockValidateDeviceToken(...args),
@@ -13,7 +13,7 @@ vi.mock("../../../src/services/remote-auth.service", () => ({
 }));
 
 // Mock settings service for remote-gate
-const mockGetAllSettings = vi.fn(() => ({}));
+const mockGetAllSettings = vi.fn<(...args: any[]) => any>(() => ({}));
 
 vi.mock("../../../src/services/settings.service", () => ({
   getAllSettings: () => mockGetAllSettings(),

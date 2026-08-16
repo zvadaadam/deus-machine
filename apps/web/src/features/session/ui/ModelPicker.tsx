@@ -38,7 +38,7 @@ export function ModelPicker({ model, hasMessages, onModelChange, onOpenNewTab }:
   const modelLabel = getModelLabel(model);
   const selectedOption = getModelOption(model);
   const selectedOptionValue = selectedOption?.value;
-  const currentGroup = selectedOption?.agentHarness ?? "claude";
+  const currentGroup = selectedOption?.agentHarness ?? "claude-code";
 
   return (
     <DropdownMenu>
@@ -50,7 +50,7 @@ export function ModelPicker({ model, hasMessages, onModelChange, onOpenNewTab }:
           aria-label={`Select model, currently ${modelLabel}`}
           className="group gap-1.5 rounded-lg focus-visible:ring-0"
         >
-          {renderAgentLogo(selectedOption?.agentHarness ?? "claude", "h-3.5 w-3.5")}
+          {renderAgentLogo(selectedOption?.agentHarness ?? "claude-code", "h-3.5 w-3.5")}
           <span className="text-text-muted text-xs font-medium">{modelLabel}</span>
           <ChevronDown className="text-text-disabled size-3 transition-transform duration-200 group-data-[state=open]:rotate-180" />
         </Button>

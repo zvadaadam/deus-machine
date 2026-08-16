@@ -249,17 +249,9 @@ describe("shared/events", () => {
     });
 
     it("PROTOCOL_EVENTS contains the expected events", () => {
-      expect(PROTOCOL_EVENTS).toContain("session:plan-mode");
-      expect(PROTOCOL_EVENTS).toContain("session:error");
-      expect(PROTOCOL_EVENTS).toContain("session:progress");
       expect(PROTOCOL_EVENTS).toContain("tool:request");
-      // Message lifecycle events
-      expect(PROTOCOL_EVENTS).toContain("message:created");
-      expect(PROTOCOL_EVENTS).toContain("message:done");
-      // Part lifecycle events
-      expect(PROTOCOL_EVENTS).toContain("part:created");
-      expect(PROTOCOL_EVENTS).toContain("part:delta");
-      expect(PROTOCOL_EVENTS).toContain("part:done");
+      // ONE agent event carries the whole lifecycle stream.
+      expect(PROTOCOL_EVENTS).toContain("agent:event");
       expect(PROTOCOL_EVENTS).toContain("pty-data");
       expect(PROTOCOL_EVENTS).toContain("pty-exit");
       expect(PROTOCOL_EVENTS).toContain("fs:changed");
@@ -276,7 +268,22 @@ describe("shared/events", () => {
       // AAP events
       expect(PROTOCOL_EVENTS).toContain("apps:launched");
       expect(PROTOCOL_EVENTS).toContain("apps:stopped");
-      expect(PROTOCOL_EVENTS).toHaveLength(23);
+      expect(PROTOCOL_EVENTS).toHaveLength(16);
+    });
+
+    it("has no deus-dialect part/message event names left", () => {
+      for (const dead of [
+        "part:created",
+        "part:delta",
+        "part:done",
+        "message:created",
+        "message:done",
+        "session:plan-mode",
+        "session:error",
+        "session:progress",
+      ]) {
+        expect(PROTOCOL_EVENTS).not.toContain(dead);
+      }
     });
   });
 });

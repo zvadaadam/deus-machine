@@ -1,9 +1,4 @@
-import {
-  escapeTagValue,
-  normalizeEscapedInspectTags,
-  parseTagAttributes,
-  unescapeTagValue,
-} from "./messageTagCodec";
+import { escapeTagValue, parseTagAttributes, unescapeTagValue } from "./messageTagCodec";
 
 /**
  * Parse <inspect> XML tags in message text into structured segments.
@@ -12,7 +7,8 @@ import {
  *   Local:    <inspect ref="ref-abc" tag="button" path="body > div" context="local" react="Component" file="src/ui/Button.tsx" line="42">Label</inspect>
  *   External: <inspect ref="ref-abc" tag="button" path="body > div" context="external" styles="background-color: #635bff; border-radius: 8px; font-size: 16px">Label</inspect>
  *
- * Returns an array of plain text strings interspersed with InspectElement objects.
+ * `parseUserMessageReferences` does the splitting; this module owns the
+ * element shape plus its tag codec.
  */
 
 export interface InspectElement {
@@ -37,8 +33,6 @@ export interface InspectElement {
   innerHTML?: string;
 }
 
-export type InspectSegment = string | InspectElement;
-
 export function inspectElementFromTag(attrString: string, encodedText: string): InspectElement {
   const attrs = parseTagAttributes(attrString);
   return {
@@ -55,39 +49,6 @@ export function inspectElementFromTag(attrString: string, encodedText: string): 
     attributes: attrs.attributes || undefined,
     innerHTML: attrs.innerHTML || undefined,
   };
-}
-
-/**
- * Split text into segments of plain text and InspectElement objects.
- * Returns empty array if no <inspect> tags found — caller should render raw text.
- */
-export function parseInspectTags(text: string): InspectSegment[] {
-  const source = normalizeEscapedInspectTags(text);
-  const tagRegex = /<inspect\s+((?:[^"'>]|"[^"]*")*)>([\s\S]*?)<\/inspect>/g;
-  const segments: InspectSegment[] = [];
-  let lastIndex = 0;
-  let match: RegExpExecArray | null;
-
-  while ((match = tagRegex.exec(source)) !== null) {
-    // Add text before the tag
-    if (match.index > lastIndex) {
-      segments.push(source.slice(lastIndex, match.index));
-    }
-
-    segments.push(inspectElementFromTag(match[1], match[2]));
-
-    lastIndex = match.index + match[0].length;
-  }
-
-  // No tags found — caller should render raw text (not this empty array)
-  if (segments.length === 0) return [];
-
-  // Add remaining text after last tag
-  if (lastIndex < source.length) {
-    segments.push(source.slice(lastIndex));
-  }
-
-  return segments;
 }
 
 /** Serialize an InspectElement into the <inspect> XML tag format.

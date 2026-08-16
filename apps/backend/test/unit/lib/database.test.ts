@@ -63,29 +63,24 @@ describe("database pre-launch schema bootstrap", () => {
     expect(() => initDatabase()).toThrow("Reset it by deleting deus.db");
   });
 
-  it("throws a reset hint for stale codex harness rows", async () => {
+  // The other direction: a database old enough to still CARRY a column the
+  // current schema dropped. CREATE TABLE IF NOT EXISTS never alters an existing
+  // table, so only this check forces the reset.
+  it("throws a reset hint for a database that still has a retired column", async () => {
     vi.spyOn(console, "error").mockImplementation(() => {});
     vi.spyOn(console, "log").mockImplementation(() => {});
-    const dbPath = path.join(tempDir, "stale-codex.db");
+    const dbPath = path.join(tempDir, "retired-column.db");
     const staleDb = new Database(dbPath);
     staleDb.exec(SCHEMA_SQL);
-    staleDb
-      .prepare("INSERT INTO repositories (id, name, root_path) VALUES ('repo-1', 'Repo', '/repo')")
-      .run();
-    staleDb
-      .prepare("INSERT INTO workspaces (id, repository_id, slug) VALUES ('ws-1', 'repo-1', 'ws-1')")
-      .run();
-    staleDb
-      .prepare(
-        "INSERT INTO sessions (id, workspace_id, agent_harness) VALUES ('sess-1', 'ws-1', 'codex')"
-      )
-      .run();
+    // `messages.content` was the pre-parts render path. Re-add it to simulate a
+    // database created before it was dropped.
+    staleDb.exec("ALTER TABLE messages ADD COLUMN content TEXT");
     staleDb.close();
     process.env.DATABASE_PATH = dbPath;
 
     const { initDatabase } = await import("../../../src/lib/database");
 
-    expect(() => initDatabase()).toThrow("Found stale sessions.agent_harness value: codex");
+    expect(() => initDatabase()).toThrow("Found retired columns: messages.content");
     expect(() => initDatabase()).toThrow("Reset it by deleting deus.db");
   });
 });

@@ -5,65 +5,67 @@ import { vi, describe, it, expect, beforeEach } from "vitest";
 import { errorHandler } from "../../../src/middleware/error-handler";
 
 const mockStmt = {
-  all: vi.fn(() => []),
-  get: vi.fn(),
-  run: vi.fn(),
+  all: vi.fn<(...args: any[]) => any>(() => []),
+  get: vi.fn<(...args: any[]) => any>(),
+  run: vi.fn<(...args: any[]) => any>(),
 };
 const mockDb = {
-  prepare: vi.fn(() => mockStmt),
-  transaction: vi.fn((fn: Function) => fn),
+  prepare: vi.fn<(...args: any[]) => any>(() => mockStmt),
+  transaction: vi.fn<(...args: any[]) => any>((fn: Function) => fn),
 };
 
 vi.mock("../../../src/lib/database", () => ({
-  getDatabase: vi.fn(() => mockDb),
+  getDatabase: vi.fn<(...args: any[]) => any>(() => mockDb),
 }));
 
 vi.mock("../../../src/services/git.service", () => ({
-  detectDefaultBranch: vi.fn(() => "main"),
+  detectDefaultBranch: vi.fn<(...args: any[]) => any>(() => "main"),
 }));
 
 vi.mock("child_process", () => ({
-  execFileSync: vi.fn((cmd: string, args: string[], opts?: { cwd?: string; encoding?: string }) => {
-    if (cmd === "git" && args?.includes("--show-toplevel")) {
-      return Buffer.from((opts?.cwd ?? "") + "\n");
+  execFileSync: vi.fn<(...args: any[]) => any>(
+    (cmd: string, args: string[], opts?: { cwd?: string; encoding?: string }) => {
+      if (cmd === "git" && args?.includes("--show-toplevel")) {
+        return Buffer.from((opts?.cwd ?? "") + "\n");
+      }
+      if (cmd === "git" && args?.[0] === "remote" && args?.[1] === "get-url") {
+        return opts?.encoding
+          ? "https://github.com/zvadaadam/deus.git"
+          : Buffer.from("https://github.com/zvadaadam/deus.git\n");
+      }
+      return Buffer.from("");
     }
-    if (cmd === "git" && args?.[0] === "remote" && args?.[1] === "get-url") {
-      return opts?.encoding
-        ? "https://github.com/zvadaadam/deus.git"
-        : Buffer.from("https://github.com/zvadaadam/deus.git\n");
-    }
-    return Buffer.from("");
-  }),
-  execFile: vi.fn(),
+  ),
+  execFile: vi.fn<(...args: any[]) => any>(),
 }));
 
 const { mockFsExistsSync, mockFsMkdirSync } = vi.hoisted(() => ({
-  mockFsExistsSync: vi.fn(() => false),
-  mockFsMkdirSync: vi.fn(),
+  mockFsExistsSync: vi.fn<(...args: any[]) => any>(() => false),
+  mockFsMkdirSync: vi.fn<(...args: any[]) => any>(),
 }));
 
 vi.mock("fs", () => ({
   default: {
-    realpathSync: vi.fn((p: string) => p),
-    accessSync: vi.fn(),
-    statSync: vi.fn(() => ({ isDirectory: () => true })),
+    realpathSync: vi.fn<(...args: any[]) => any>((p: string) => p),
+    accessSync: vi.fn<(...args: any[]) => any>(),
+    statSync: vi.fn<(...args: any[]) => any>(() => ({ isDirectory: () => true })),
     existsSync: mockFsExistsSync,
     mkdirSync: mockFsMkdirSync,
     constants: { R_OK: 4, X_OK: 1 },
   },
-  realpathSync: vi.fn((p: string) => p),
-  accessSync: vi.fn(),
-  statSync: vi.fn(() => ({ isDirectory: () => true })),
+  realpathSync: vi.fn<(...args: any[]) => any>((p: string) => p),
+  accessSync: vi.fn<(...args: any[]) => any>(),
+  statSync: vi.fn<(...args: any[]) => any>(() => ({ isDirectory: () => true })),
   existsSync: mockFsExistsSync,
   mkdirSync: mockFsMkdirSync,
   constants: { R_OK: 4, X_OK: 1 },
 }));
 
 vi.mock("@shared/lib/uuid", () => ({
-  uuidv7: vi.fn(() => "test-uuid-1234"),
+  uuidv7: vi.fn<(...args: any[]) => any>(() => "test-uuid-1234"),
 }));
 
-const mockInvalidate = vi.fn();
+const mockInvalidate = vi.fn<(...args: any[]) => any>();
 vi.mock("../../../src/services/query-engine", () => ({
   invalidate: (...args: unknown[]) => mockInvalidate(...args),
 }));
