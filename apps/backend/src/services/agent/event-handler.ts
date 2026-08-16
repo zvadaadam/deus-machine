@@ -45,6 +45,13 @@ export interface AgentEventHandler {
   beginTurn(sessionId: string, turnId: string, opts?: { force?: boolean }): boolean;
   /** Roll back a beginTurn whose start was rejected (only if still ours). */
   abortTurn(sessionId: string, turnId: string): void;
+  /**
+   * The turn this handler currently believes is running, if any — set at
+   * admission (or at `turn.started` on the replay path) and cleared at its
+   * `turn.ended`. Read by anything that has to tell one turn from the next,
+   * which a session STATUS cannot do: two consecutive turns are both "working".
+   */
+  liveTurnId(sessionId: string): string | undefined;
   /** Side-channel title notification (deus/*, not a lifecycle event). */
   handleTitle(sessionId: string, title: string): void;
 }
@@ -168,6 +175,10 @@ export function createAgentEventHandler(): AgentEventHandler {
     abortTurn(sessionId, turnId) {
       const state = sessions.get(sessionId);
       if (state?.turnId === turnId) state.turnId = undefined;
+    },
+
+    liveTurnId(sessionId) {
+      return sessions.get(sessionId)?.turnId;
     },
 
     handleTitle(sessionId, title) {

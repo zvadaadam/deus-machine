@@ -562,14 +562,35 @@ async function handleStopSession(params: QueryParams): Promise<CommandResult> {
   console.warn(
     `[CommandHandler] stopSession unconfirmed: session=${sessionId} — waiting for turn.ended`
   );
-  scheduleUnconfirmedCancelWatchdog(sessionId);
+  // Armed for the turn being cancelled, not for the session — see below.
+  scheduleUnconfirmedCancelWatchdog(sessionId, agentService.liveTurnId(sessionId));
   return { unconfirmed: true };
 }
 
 /** Bounded fallback for an unconfirmed cancel that no turn.ended ever settles. */
-function scheduleUnconfirmedCancelWatchdog(sessionId: string): void {
+function scheduleUnconfirmedCancelWatchdog(
+  sessionId: string,
+  cancelledTurnId: string | undefined
+): void {
   const timer = setTimeout(() => {
     try {
+      // The watchdog belongs to ONE turn, and the status cannot identify it:
+      // consecutive turns are both "working". An unconfirmed cancel usually
+      // does settle — turn.ended lands, the session goes idle, the user sends
+      // again — and all of that fits inside the 15s grace window, after which
+      // a status-only check reads the NEW turn's "working" as the old turn's
+      // stuck cancel and fails a perfectly healthy run mid-flight.
+      //
+      // So bail only on POSITIVE evidence that a different turn is live now.
+      // `liveTurnId` returning undefined is not that evidence: it also means
+      // the handler is gone (link dropped, shutdown), which is precisely when
+      // a session is most likely to be stranded on "working" with no agent
+      // behind it — the case this watchdog exists for. The status guard below
+      // covers the remaining "it ended and nothing replaced it" case, since
+      // that session is no longer in an active status.
+      const live = agentService.liveTurnId(sessionId);
+      if (live !== undefined && live !== cancelledTurnId) return;
+
       const db = getDatabase();
       // Only if turn.ended never arrived: any status change means it did (or
       // the user started something else), and this must not stomp on it.

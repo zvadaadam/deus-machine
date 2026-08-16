@@ -12,6 +12,7 @@ import { reconnectListener } from "@/shared/lib/reconnect";
 import { useQuerySubscription } from "@/shared/hooks/useQuerySubscription";
 import { mergeMessageDelta } from "../lib/messageCache";
 import { createOptimisticUserMessage, dropOptimisticMessage } from "../lib/optimisticMessage";
+import { SendRejectedError, rollbackSendStatus } from "../lib/sendRollback";
 import { uuidv7 } from "@shared/lib/uuid";
 import type { Message, Session, SessionStatus } from "../types";
 import type { RepoGroup } from "@shared/types/workspace";
@@ -228,9 +229,6 @@ export interface SendMessageVariables {
   thinkingLevel?: string;
 }
 
-/** A rejection the server understood — resending it would only reject again. */
-class SendRejectedError extends Error {}
-
 /**
  * Send message mutation with optimistic update.
  *
@@ -360,14 +358,11 @@ export function useSendMessage() {
       // Retire THIS send's bubble, and only it — the toast above is the user's
       // notice, and the row must not linger pretending the prompt was sent.
       dropOptimisticMessage(queryClient, variables.sessionId, variables.turnId);
-      // Roll back optimistic workspace status from snapshot
-      if (context?.previousWorkspaceByRepo?.length) {
-        context.previousWorkspaceByRepo.forEach(([key, data]) => {
-          queryClient.setQueryData(key, data);
-        });
-      } else {
-        queryClient.invalidateQueries({ queryKey: ["workspaces", "by-repo"] });
-      }
+      // Put the sidebar's status back — by REFETCH after a server rejection,
+      // whose authoritative status the backend already pushed ahead of the
+      // rejecting ack, and by snapshot only when the transport died and no such
+      // push could have happened. See sendRollback.ts.
+      rollbackSendStatus(queryClient, _err, context?.previousWorkspaceByRepo);
     },
 
     onSettled: async (_, error, variables) => {

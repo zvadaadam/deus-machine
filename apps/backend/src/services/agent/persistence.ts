@@ -127,6 +127,28 @@ function toolColumns(part: Part | UnknownPart): {
 }
 
 /**
+ * What `parts.data` stores: the part as it came off the WIRE.
+ *
+ * For a known type the decoded value and the wire payload are the same shape,
+ * so this is a no-op. For an UNKNOWN one they are not: `decodePart` wraps a
+ * payload this build cannot read into `{type, id, ..., raw: <the payload>}`,
+ * and that wrapper is THIS build's ignorance, not the engine's message.
+ * Persisting it would freeze today's ignorance into the row — a later build
+ * that LEARNS the type would load a `raw`-bearing wrapper, fail its own
+ * `"raw" in part` checks and keep the content hidden forever, for a part it is
+ * now perfectly able to render.
+ *
+ * So the row keeps the payload and `attachParts` re-derives the runtime shape
+ * with `decodePart` on the way out: still-unknown re-wraps identically, and
+ * newly-known decodes properly. Law 6 is "forward what you cannot read", and a
+ * row that outlives the build that wrote it has to forward it to the FUTURE
+ * too, not just to the frontend.
+ */
+function storedPartData(part: Part | UnknownPart): string {
+  return JSON.stringify(isUnknownPart(part) ? part.raw : part);
+}
+
+/**
  * Upsert a part. The folded part is authoritative and idempotent (UPSERT by
  * part id), so INSERT OR REPLACE is the exact match for its semantics —
  * including a tool part completing after its message ended, which names its
@@ -136,6 +158,8 @@ function toolColumns(part: Part | UnknownPart): {
  *
  * `seq` mirrors the change's `partIndex`: parts carry no ordering field of
  * their own, position is the stream's knowledge.
+ *
+ * `data` holds the WIRE part — see `storedPartData`.
  */
 export function persistPart(
   sessionId: string,
@@ -155,7 +179,7 @@ export function persistPart(
       sessionId,
       partIndex,
       part.type,
-      JSON.stringify(part),
+      storedPartData(part),
       tool.toolCallId,
       tool.toolName,
       part.parentToolCallId ?? null

@@ -5,6 +5,7 @@
  * Route handlers call these functions instead of inline SQL.
  */
 import type Database from "better-sqlite3";
+import { decodePart } from "@zvada/agent-server/protocol";
 import type { Part, UnknownPart } from "@shared/protocol-types";
 import type {
   RepositoryRow,
@@ -337,8 +338,40 @@ export function getPartsByMessageIds(db: Database.Database, messageIds: string[]
 }
 
 /**
+ * One stored `parts.data` payload → the runtime shape.
+ *
+ * The column holds the WIRE part (`persistPart` stores an unknown part's own
+ * payload, not the `UnknownPart` wrapper the writing build decoded it into), so
+ * the decode belongs HERE rather than being inherited from whoever wrote the
+ * row. That is what makes the round trip honest in both directions: a type this
+ * build still cannot read is re-wrapped into an `UnknownPart` with `raw`
+ * intact — which is what every `"raw" in part` consumer narrows on — and a type
+ * a LATER build learns is decoded properly out of rows an older one wrote.
+ *
+ * A decode failure is not a reason to lose the row. Parts carry no ordering
+ * field, position IS the array index, so dropping one silently reorders
+ * everything after it. Fall back to the parsed value — exactly what this read
+ * path returned before it decoded anything.
+ */
+function decodeStoredPart(row: PartRow): Part | UnknownPart | undefined {
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(row.data);
+  } catch {
+    console.error(`[attachParts] Failed to parse part ${row.id}:`, row.data?.slice(0, 100));
+    return undefined;
+  }
+  try {
+    return decodePart(parsed);
+  } catch (error) {
+    console.warn(`[attachParts] Part ${row.id} (${row.type}) did not decode:`, error);
+    return parsed as Part;
+  }
+}
+
+/**
  * Enrich message rows with the engine `Part` snapshots from the parts table.
- * Parses the JSON `data` field once here so the frontend never sees PartRow.
+ * Decodes the JSON `data` field once here so the frontend never sees PartRow.
  * Messages with no parts get an empty array.
  *
  * Parts carry NO ordering field of their own (position is the event's
@@ -351,19 +384,16 @@ export function attachParts(db: Database.Database, messages: MessageRow[]): Mess
   const messageIds = messages.map((m) => m.id);
   const allParts = getPartsByMessageIds(db, messageIds);
 
-  // Parse JSON and group by message_id
+  // Decode and group by message_id
   const partsByMessageId = new Map<string, Array<Part | UnknownPart>>();
   for (const row of allParts) {
-    try {
-      const part = JSON.parse(row.data) as Part;
-      const existing = partsByMessageId.get(row.message_id);
-      if (existing) {
-        existing.push(part);
-      } else {
-        partsByMessageId.set(row.message_id, [part]);
-      }
-    } catch {
-      console.error(`[attachParts] Failed to parse part ${row.id}:`, row.data?.slice(0, 100));
+    const part = decodeStoredPart(row);
+    if (!part) continue;
+    const existing = partsByMessageId.get(row.message_id);
+    if (existing) {
+      existing.push(part);
+    } else {
+      partsByMessageId.set(row.message_id, [part]);
     }
   }
 

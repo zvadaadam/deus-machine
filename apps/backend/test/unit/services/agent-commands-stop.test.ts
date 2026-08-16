@@ -153,6 +153,60 @@ describeWithDb("stopSession", () => {
     expect(status()).toBe("idle");
   });
 
+  it("the watchdog leaves a turn that STARTED AFTER the cancelled one alone", async () => {
+    // The whole cycle fits inside the 15s grace window: cancel goes
+    // unconfirmed, the turn ends anyway, the user sends again. Status alone
+    // cannot tell the new turn from the old one — both are "working" — so a
+    // status-only watchdog fails a healthy run 15 seconds into it.
+    vi.spyOn(agentService, "stopSession").mockResolvedValue({
+      outcome: "unconfirmed",
+      turnId: "turn-1",
+    });
+    const liveTurn = vi.spyOn(agentService, "liveTurnId").mockReturnValue("turn-1");
+
+    await runCommand("stopSession", { sessionId: SESSION });
+
+    // turn-1 ends, turn-2 is admitted, and the session is working again.
+    liveTurn.mockReturnValue("turn-2");
+    db.prepare(`UPDATE sessions SET status = 'working' WHERE id = ?`).run(SESSION);
+
+    await vi.advanceTimersByTimeAsync(20_000);
+
+    expect(status()).toBe("working");
+    expect(mockInvalidate).not.toHaveBeenCalled();
+  });
+
+  it("the watchdog still fires when the cancelled turn is the one still live", async () => {
+    vi.spyOn(agentService, "stopSession").mockResolvedValue({
+      outcome: "unconfirmed",
+      turnId: "turn-1",
+    });
+    vi.spyOn(agentService, "liveTurnId").mockReturnValue("turn-1");
+
+    await runCommand("stopSession", { sessionId: SESSION });
+    await vi.advanceTimersByTimeAsync(20_000);
+
+    expect(status()).toBe("error");
+  });
+
+  it("the watchdog still fires when the handler is GONE (link dropped)", async () => {
+    // `liveTurnId` returns undefined for "no live turn" AND for "no handler to
+    // ask". The second is exactly when a session gets stranded on 'working'
+    // with no agent behind it, so absence of evidence must not suppress the
+    // fallback — only a positively DIFFERENT live turn does.
+    vi.spyOn(agentService, "stopSession").mockResolvedValue({
+      outcome: "unconfirmed",
+      turnId: "turn-1",
+    });
+    const liveTurn = vi.spyOn(agentService, "liveTurnId").mockReturnValue("turn-1");
+
+    await runCommand("stopSession", { sessionId: SESSION });
+    liveTurn.mockReturnValue(undefined);
+    await vi.advanceTimersByTimeAsync(20_000);
+
+    expect(status()).toBe("error");
+  });
+
   it("still goes idle when the wire call itself fails — nothing will report a turn.ended", async () => {
     vi.spyOn(agentService, "stopSession").mockRejectedValue(new Error("socket closed"));
 

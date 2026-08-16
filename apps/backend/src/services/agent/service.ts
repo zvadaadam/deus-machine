@@ -165,6 +165,17 @@ export function isConnected(): boolean {
   return link?.isConnected() ?? false;
 }
 
+/**
+ * The turn the event handler believes is running for a session, if any.
+ *
+ * `undefined` means BOTH "no turn is live" and "there is no handler to ask"
+ * (never initialized, or shut down) — callers must treat it as absence of
+ * evidence, not as evidence of absence.
+ */
+export function liveTurnId(sessionId: string): string | undefined {
+  return events?.liveTurnId(sessionId);
+}
+
 /** Check authentication status for an agent provider. */
 export async function checkAuth(params: ProviderAuthRequest): Promise<unknown> {
   if (!link) throw new Error("Agent service not initialized");
