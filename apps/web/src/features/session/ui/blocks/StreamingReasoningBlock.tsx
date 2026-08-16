@@ -32,30 +32,35 @@ export function StreamingReasoningBlock({ text }: StreamingReasoningBlockProps) 
     if (el) el.scrollTop = el.scrollHeight;
   }, [text]);
 
-  if (!text.trim()) return null;
+  const header = (
+    <div className="flex items-center gap-2 px-2 py-1">
+      <motion.span
+        className="bg-primary/70 h-1.5 w-1.5 shrink-0 rounded-full"
+        animate={reduceMotion ? undefined : { opacity: [0.45, 1], scale: [0.92, 1] }}
+        transition={
+          reduceMotion
+            ? undefined
+            : {
+                duration: 1,
+                repeat: Infinity,
+                repeatType: "reverse",
+                ease: [0.37, 0, 0.63, 1],
+              }
+        }
+      />
+      <span className="text-muted-foreground tool-loading-shimmer text-sm font-medium">
+        Thinking
+      </span>
+    </div>
+  );
+
+  // Withheld thinking streams no text — keep the pulsing header so a long
+  // silent think doesn't read as dead air.
+  if (!text.trim()) return <div className="flex flex-col gap-1">{header}</div>;
 
   return (
     <div className="flex flex-col gap-1">
-      {/* Header: pulsing dot + shimmering label */}
-      <div className="flex items-center gap-2 px-2 py-1">
-        <motion.span
-          className="bg-primary/70 h-1.5 w-1.5 shrink-0 rounded-full"
-          animate={reduceMotion ? undefined : { opacity: [0.45, 1], scale: [0.92, 1] }}
-          transition={
-            reduceMotion
-              ? undefined
-              : {
-                  duration: 1,
-                  repeat: Infinity,
-                  repeatType: "reverse",
-                  ease: [0.37, 0, 0.63, 1],
-                }
-          }
-        />
-        <span className="text-muted-foreground tool-loading-shimmer text-sm font-medium">
-          Thinking
-        </span>
-      </div>
+      {header}
 
       {/* Preview window with top fade */}
       <div

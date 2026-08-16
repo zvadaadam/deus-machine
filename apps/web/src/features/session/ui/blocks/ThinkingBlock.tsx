@@ -28,6 +28,27 @@ export function ThinkingBlock({ part, durationSec }: ThinkingBlockProps) {
 
   const durationLabel = durationSec != null && durationSec > 0 ? `for ${durationSec}s` : undefined;
 
+  // Withheld reasoning (Fable-class default, redacted blocks): the thought
+  // happened but no text arrived — a static summary line beats an expandable
+  // empty body. estimatedThinkingTokens is the placeholder size when present.
+  if (!part.text.trim()) {
+    const estTokens = part.providerMetadata?.estimatedThinkingTokens;
+    const sizeLabel =
+      typeof estTokens === "number" && estTokens > 0 ? `~${estTokens} tokens` : undefined;
+    const detail = [durationLabel, sizeLabel].filter(Boolean).join(" · ");
+    return (
+      <div className="flex items-center gap-2 px-2 py-1.5 text-sm opacity-70">
+        <Brain className="text-muted-foreground/70 h-3.5 w-3.5 flex-shrink-0" />
+        <span className="text-foreground/70 flex-shrink-0 font-medium">Thought</span>
+        {detail && (
+          <span className="text-muted-foreground/50 flex-shrink-0 text-sm font-normal tabular-nums">
+            {detail}
+          </span>
+        )}
+      </div>
+    );
+  }
+
   return (
     <div className="flex flex-col gap-0.5">
       {/* Header — collapsed: Brain icon, "Thought for Xs", chevron on hover */}
