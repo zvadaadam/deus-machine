@@ -107,6 +107,39 @@ export function messagesKey(sessionId: string) {
   return queryKeys.sessions.messages(sessionId);
 }
 
+/**
+ * Reload one session's message page — the fold's escape hatch, for the changes
+ * it cannot project itself (a compaction row, a seq hole, a replaced log).
+ *
+ * It reaches a BACKGROUND session, and that is the whole requirement: a
+ * compaction usually lands on a session whose panel is not mounted, its page
+ * has no observer, and `staleTime: Infinity` means re-opening the tab will
+ * never refetch on its own. `refetchQueries` covers it — called directly, its
+ * `type` filter defaults to "all", not to "active" (only `invalidateQueries`
+ * injects "active", as its `refetchType`), so an observer-less page that has
+ * fetched at least once is refetched here and is already fresh when the tab
+ * comes back. It lives beside the fold rather than inline in the hook so that
+ * property is pinned by a test instead of by this paragraph.
+ */
+export function refetchMessages(qc: QueryClient, sessionId: string): Promise<void> {
+  return qc.refetchQueries({ queryKey: messagesKey(sessionId), exact: true });
+}
+
+/**
+ * Drop folds for sessions the message cache no longer holds a page for.
+ *
+ * `routeEnvelope` refuses to fold a session with no cached page, so such a fold
+ * is unreachable state: the page was garbage-collected out from under it and
+ * nothing will project it again. Pruning ties the fold set to the cache it
+ * writes into, which is what bounds folds that outlive a panel — see the note
+ * in `useAgentEvents`.
+ */
+export function pruneFolds(qc: QueryClient, folds: Map<string, SessionFold>): void {
+  for (const sessionId of [...folds.keys()]) {
+    if (!qc.getQueryData<PaginatedMessages>(messagesKey(sessionId))) folds.delete(sessionId);
+  }
+}
+
 // ---- Routing ----
 
 /** Fold one envelope. The single entry point the hook calls per WS frame. */

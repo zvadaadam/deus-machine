@@ -181,6 +181,63 @@ describeWithDb("sendMessage", () => {
     });
   });
 
+  // `last_user_message_at` is read everywhere as "this workspace has been
+  // prompted": the sidebar orders by it, `isFirstSession` tests it for null,
+  // and workspace init skips its `git checkout -- .` cleanup while it is set
+  // (a prompt sent mid-install must not have the agent's edits wiped). Nothing
+  // rolls it back, so a send that never became a turn must never write it.
+  describe("the send timestamp", () => {
+    const stampOf = (id: string): string | null =>
+      (
+        db.prepare(`SELECT last_user_message_at FROM sessions WHERE id = ?`).get(id) as {
+          last_user_message_at: string | null;
+        }
+      ).last_user_message_at;
+
+    it("lands once the turn is admitted", async () => {
+      vi.spyOn(agentService, "isConnected").mockReturnValue(true);
+      vi.spyOn(agentService, "startTurn").mockResolvedValue(undefined as never);
+
+      await send(SESSION);
+
+      expect(stampOf(SESSION)).not.toBeNull();
+    });
+
+    it("stays unwritten when the send is rejected before the wire", async () => {
+      vi.spyOn(agentService, "isConnected").mockReturnValue(false);
+
+      await expect(send(SESSION)).rejects.toThrow(/disconnected/i);
+
+      // The optimistic "working" flip ran and was undone. A timestamp written
+      // beside it had no such undo: the workspace read as permanently
+      // prompted, so its init cleanup never ran again.
+      expect(stampOf(SESSION)).toBeNull();
+    });
+
+    it("stays unwritten when the workspace path cannot be resolved", async () => {
+      vi.spyOn(agentService, "isConnected").mockReturnValue(true);
+
+      await expect(send(ORPHAN)).rejects.toThrow(/workspace/i);
+
+      expect(stampOf(ORPHAN)).toBeNull();
+    });
+
+    it("leaves the previous turn's stamp alone when admission is refused", async () => {
+      db.prepare(`UPDATE sessions SET last_user_message_at = ? WHERE id = ?`).run(
+        "2026-08-14T12:00:00.000Z",
+        SESSION
+      );
+      vi.spyOn(agentService, "isConnected").mockReturnValue(true);
+      vi.spyOn(agentService, "startTurn").mockRejectedValue(
+        new WireRequestError(WIRE_ERROR_CODES.shuttingDown, "server is shutting down")
+      );
+
+      await expect(send(SESSION)).rejects.toThrow(/shutting down/i);
+
+      expect(stampOf(SESSION)).toBe("2026-08-14T12:00:00.000Z");
+    });
+  });
+
   // The harness column is a session-lifetime binding, so WHEN it moves matters
   // as much as whether it may. The first turn opens an echo-only window: the
   // status is already "working" while `message_count` is still 0, because the

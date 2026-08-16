@@ -41,7 +41,10 @@ describe("toEngineInput", () => {
         text: "look at @src/app.ts",
         elements: [{ byteRange: [8, 19], placeholder: "src/app.ts" }],
       },
-      { type: "image", data: "AAAA", mimeType: "image/png", filename: "shot.png" },
+      // `filename` lives on FILE inputs only — the engine dropped it from the
+      // image input schema (ImagePartSchema has no such field; accepting it
+      // validated a value the echo then silently discarded).
+      { type: "file", data: "AAAA", mimeType: "image/png", filename: "shot.png" },
     ];
     expect(toEngineInput(JSON.stringify(parts))).toEqual(parts);
   });

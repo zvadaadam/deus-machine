@@ -17,11 +17,22 @@ export interface MessagePaginationParams {
   after?: number; // seq cursor for newer messages
 }
 
-/** Paginated response shape from GET /sessions/:id/messages */
+/**
+ * Paginated response shape from the `messages` query — the WS resource and its
+ * HTTP fallback `GET /sessions/:id/messages` both answer exactly this.
+ */
 export interface PaginatedMessages {
   messages: Message[];
-  /** Compaction markers for the session — positional siblings of messages. */
-  compactions?: Compaction[];
+  /**
+   * Compaction markers for the session — positional siblings of messages.
+   *
+   * REQUIRED, not optional. Both producers always send the list (empty when
+   * there are none), and while the type said `?` a producer that forgot it was
+   * indistinguishable from a session that has never compacted: every divider
+   * vanished from the transcript and nothing in the types objected. The HTTP
+   * fallback route was exactly that producer.
+   */
+  compactions: Compaction[];
   has_older: boolean;
   has_newer: boolean;
 }

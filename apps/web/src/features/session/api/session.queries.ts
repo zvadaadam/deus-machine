@@ -203,8 +203,8 @@ export function useLoadOlderMessages() {
         return {
           messages: [...newMessages, ...old.messages],
           // The older page carries the session's full compaction list
-          // (single digits, never paginated) — take the fresher one.
-          compactions: olderPage.compactions ?? old.compactions,
+          // (single digits, never paginated), so it is simply the fresher one.
+          compactions: olderPage.compactions,
           has_older: olderPage.has_older,
           has_newer: old.has_newer,
         };

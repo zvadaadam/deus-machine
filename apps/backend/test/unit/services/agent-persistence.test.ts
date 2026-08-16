@@ -49,6 +49,7 @@ import {
   persistSessionError,
   persistSessionTitle,
   persistSessionUsage,
+  persistLastUserMessageAt,
   persistSessionWorking,
   persistTurnEnded,
   type TurnOutcomeWrite,
@@ -577,23 +578,38 @@ describeWithDb("agent persistence (canonical events → SQLite)", () => {
   });
 
   describe("persistSessionWorking", () => {
-    it("flips to working and stamps last_user_message_at for sidebar ordering", () => {
+    it("flips to working and clears the previous failure", () => {
       persistSessionError(SESSION, "old failure", "network");
 
-      persistSessionWorking(SESSION, "2026-08-14T12:00:00.000Z");
+      persistSessionWorking(SESSION);
 
       expect(
         db
-          .prepare(
-            `SELECT status, last_user_message_at, error_message, error_category FROM sessions WHERE id = ?`
-          )
+          .prepare(`SELECT status, error_message, error_category FROM sessions WHERE id = ?`)
           .get(SESSION)
       ).toEqual({
         status: "working",
-        last_user_message_at: "2026-08-14T12:00:00.000Z",
         error_message: null,
         error_category: null,
       });
+    });
+
+    it("leaves last_user_message_at alone — the flip runs before admission", () => {
+      persistSessionWorking(SESSION);
+
+      expect(
+        db.prepare(`SELECT last_user_message_at FROM sessions WHERE id = ?`).get(SESSION)
+      ).toEqual({ last_user_message_at: null });
+    });
+  });
+
+  describe("persistLastUserMessageAt", () => {
+    it("stamps the send time for sidebar ordering", () => {
+      persistLastUserMessageAt(SESSION, "2026-08-14T12:00:00.000Z");
+
+      expect(
+        db.prepare(`SELECT last_user_message_at FROM sessions WHERE id = ?`).get(SESSION)
+      ).toEqual({ last_user_message_at: "2026-08-14T12:00:00.000Z" });
     });
   });
 

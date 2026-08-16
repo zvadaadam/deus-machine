@@ -23,7 +23,11 @@ import { computeWorkspacePath } from "../../middleware/workspace-loader";
 import { spawnPty, writeToPty, resizePty, killPty } from "../pty.service";
 import { watchWorkspace, unwatchWorkspace } from "../fs-watcher.service";
 import { delegateToRoute } from "../route-delegate";
-import { persistSessionError, persistSessionWorking } from "./persistence";
+import {
+  persistLastUserMessageAt,
+  persistSessionError,
+  persistSessionWorking,
+} from "./persistence";
 import { invalidate } from "../query-engine";
 import * as agentService from "./service";
 import { resolveAapPaths } from "./service";
@@ -407,8 +411,11 @@ async function handleSendMessage(params: QueryParams): Promise<CommandResult> {
   // message.started{role:"user"} and that echo is the single persistence path
   // for message rows (same turn_id, same parts, one writer). The frontend
   // renders its own optimistic bubble from cache until the echo lands.
+  //
+  // The STATUS is all that moves optimistically. `sentAt` is the send's own
+  // clock reading, but it is not written until the turn is admitted, below.
   const sentAt = new Date().toISOString();
-  const working = persistSessionWorking(sessionId, sentAt);
+  const working = persistSessionWorking(sessionId);
   if (!working.ok) throw new Error(working.error);
   invalidate(["workspaces", "sessions", "session", "messages", "stats"], {
     sessionIds: [sessionId],
@@ -503,6 +510,19 @@ async function handleSendMessage(params: QueryParams): Promise<CommandResult> {
     if (err instanceof WireRequestError) handleAgentRejection(sessionId, err.message);
     else handleAgentError(sessionId, err);
     throw err;
+  }
+
+  // 3. The turn is admitted, so the send is real — and only now is the send
+  // timestamp true. Everything above this line can still reject, and a rejected
+  // send that had already stamped `last_user_message_at` left the workspace
+  // looking permanently prompted: no `git checkout -- .` cleanup on init, and
+  // `isFirstSession` false for a workspace nobody ever prompted. The status
+  // flip stays optimistic because every rejection path moves it back; the
+  // timestamp has no such undo, so it waits instead.
+  // `failed()` logs its own error — a stamp that misses is a stale sidebar
+  // ordering, not a reason to reject a turn the engine is already running.
+  if (persistLastUserMessageAt(sessionId, sentAt).ok) {
+    invalidate(["workspaces", "sessions"], { sessionIds: [sessionId] });
   }
 
   return { commandId: turnId };

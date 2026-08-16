@@ -5,6 +5,7 @@ import {
   getAllSessions,
   getSessionById,
   getSessionRaw,
+  getCompactions,
   getMessages,
   hasOlderMessages,
   hasNewerMessages,
@@ -60,7 +61,17 @@ app.get("/sessions/:id/messages", (c) => {
   const has_older = oldestSeq != null ? hasOlderMessages(db, sessionId, oldestSeq) : false;
   const has_newer = newestSeq != null ? hasNewerMessages(db, sessionId, newestSeq) : false;
 
-  return c.json({ messages: attachParts(db, messages), has_older, has_newer });
+  return c.json({
+    messages: attachParts(db, messages),
+    // The same list the WS `messages` query returns, and for the same reason:
+    // compactions are positional siblings of messages, not parts, so a page
+    // without them renders a transcript with every "context compacted" divider
+    // missing. This route is the HTTP fallback for that query — it has to
+    // answer the same shape, or the fallback silently degrades the transcript.
+    compactions: getCompactions(db, sessionId),
+    has_older,
+    has_newer,
+  });
 });
 
 /**

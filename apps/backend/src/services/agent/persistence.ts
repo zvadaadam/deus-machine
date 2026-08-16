@@ -315,19 +315,47 @@ export function persistTurnEnded(
  * Optimistic "the agent is working" flip, written by the send command before
  * the wire ack. The engine has no event for it (a turn is admitted, not
  * "started" by the product) — deus owns this transition.
+ *
+ * The STATUS only. `last_user_message_at` used to ride along here, and could
+ * not: this runs before admission, and every rejection path already flips the
+ * status back (or to "error"), while nothing rolls a timestamp back. See
+ * `persistLastUserMessageAt`.
  */
-export function persistSessionWorking(sessionId: string, sentAt: string): WriteResult<void> {
+export function persistSessionWorking(sessionId: string): WriteResult<void> {
   const db = getDatabase();
   try {
     db.prepare(
       `UPDATE sessions
-         SET status = 'working', last_user_message_at = ?, error_message = NULL, error_category = NULL,
+         SET status = 'working', error_message = NULL, error_category = NULL,
              updated_at = datetime('now')
        WHERE id = ?`
-    ).run(sentAt, sessionId);
+    ).run(sessionId);
     return { ok: true, value: undefined };
   } catch (error) {
     return failed("session working", error);
+  }
+}
+
+/**
+ * Stamp a send's timestamp — called only once the engine has ADMITTED the turn.
+ *
+ * The column is not decoration. The sidebar orders by it, `isFirstSession`
+ * reads a null as "this workspace has never been prompted", and workspace init
+ * skips its `git checkout -- .` cleanup while it is set (a prompt sent during
+ * dependency install must not have the agent's edits wiped). A rejected send —
+ * agent-server disconnected, no resolvable cwd, a `turn/start` the wire refused
+ * — therefore left all three asserting a turn that never ran, with nothing to
+ * undo it: the workspace never got its clean, forever.
+ */
+export function persistLastUserMessageAt(sessionId: string, sentAt: string): WriteResult<void> {
+  const db = getDatabase();
+  try {
+    db.prepare(
+      `UPDATE sessions SET last_user_message_at = ?, updated_at = datetime('now') WHERE id = ?`
+    ).run(sentAt, sessionId);
+    return { ok: true, value: undefined };
+  } catch (error) {
+    return failed("last_user_message_at", error);
   }
 }
 

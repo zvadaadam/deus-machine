@@ -12,7 +12,7 @@
  * writes, so mocking setQueryData would only pin the call shape.
  */
 
-import { QueryClient } from "@tanstack/react-query";
+import { QueryClient, QueryObserver } from "@tanstack/react-query";
 import { createUserEchoParts, echoMessageId } from "@zvada/agent-server/protocol/factories";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -21,6 +21,8 @@ import {
   createStreamCursor,
   flushDeltas,
   messagesKey,
+  pruneFolds,
+  refetchMessages,
   routeEnvelope,
   type AgentStreamContext,
   type SessionFold,
@@ -154,6 +156,18 @@ function delta(partId: string, text: string): LifecycleEvent {
     delta: { type: "text", text },
     timestamp: T,
   } as LifecycleEvent;
+}
+
+function toolPart(id: string, status: "in_progress" | "completed"): Part {
+  return {
+    type: "tool",
+    id,
+    sessionId: SESSION,
+    messageId: "a1",
+    toolCallId: `call-${id}`,
+    toolName: "Bash",
+    state: { status, input: {}, time: { start: T } },
+  } as unknown as Part;
 }
 
 function turnEnded(over: Partial<Record<string, unknown>> = {}): LifecycleEvent {
@@ -600,17 +614,7 @@ describe("turn.ended — accounting mirror", () => {
   it("a cancelled turn closes its open tool parts in the cache too", () => {
     const h = harness();
     h.feed(started({ messageId: "a1" }));
-    h.feed(
-      partEvent({
-        type: "tool",
-        id: "t1",
-        sessionId: SESSION,
-        messageId: "a1",
-        toolCallId: "call-1",
-        toolName: "Bash",
-        state: { status: "in_progress", input: {}, time: { start: T } },
-      } as unknown as Part)
-    );
+    h.feed(partEvent(toolPart("t1", "in_progress")));
 
     h.feed(turnEnded({ stopReason: "cancelled", timestamp: T + 5 }));
 
@@ -734,5 +738,152 @@ describe("background sessions", () => {
 
     expect((h.page(OTHER)!.messages[0].parts![0] as { text: string }).text).toBe("snap");
     expect(h.scheduleFlush).not.toHaveBeenCalled();
+  });
+});
+
+// ===========================================================================
+// Why the fold outlives the panel
+// ===========================================================================
+
+/**
+ * `SessionPanel` is rendered `key={sessionId}`, so switching tabs unmounts it
+ * and remounts a new one — which is why `useAgentEvents` keeps its folds and
+ * cursor in MODULE state rather than in a ref. The cost of not doing so is not
+ * abstract: the two tests below feed the same stream, once with the fold kept
+ * across the switch and once dropped, as a per-panel ref would have been.
+ */
+describe("across a tab switch", () => {
+  const toolStatus = (h: Harness) =>
+    (h.page()!.messages[0].parts![0] as { state: { status: string } }).state.status;
+
+  const openATool = (h: Harness) => {
+    h.feed(started({ messageId: "a1" }));
+    h.feed(partEvent(toolPart("t1", "in_progress")));
+    expect(toolStatus(h)).toBe("in_progress");
+  };
+
+  it("a cancel arriving after the switch still closes the tool the fold opened", () => {
+    const h = harness();
+    openATool(h);
+
+    // The new panel folds against the SAME state, which is why nothing about
+    // the ctx is reset here. A kept cursor also means the first envelope after
+    // the switch reads as contiguous rather than as a hole.
+    h.feed(turnEnded({ stopReason: "cancelled", timestamp: T + 5 }));
+
+    expect(toolStatus(h)).toBe("cancelled");
+    expect(h.requestRefetch).not.toHaveBeenCalled();
+  });
+
+  it("and could not have, if the switch had dropped the fold", () => {
+    const h = harness();
+    openATool(h);
+
+    h.ctx.folds.clear();
+
+    h.feed(turnEnded({ stopReason: "cancelled", timestamp: T + 5 }));
+
+    // The reducer closes open tool parts on a cancel, and an empty conversation
+    // has none to close. That part write is an UPDATE, so it cannot arrive by
+    // the insert-only `messages` delta either, and the cached page is fresh
+    // forever under `staleTime: Infinity` — the tool spins until something
+    // unrelated forces a reload.
+    expect(toolStatus(h)).toBe("in_progress");
+  });
+});
+
+// ===========================================================================
+// The reload request
+// ===========================================================================
+
+describe("refetchMessages", () => {
+  const client = () => new QueryClient({ defaultOptions: { queries: { retry: false } } });
+  const emptyPage = (): PaginatedMessages => ({
+    messages: [],
+    compactions: [],
+    has_older: false,
+    has_newer: false,
+  });
+
+  /** A panel that mounted, loaded its page, and is still mounted. */
+  const mountedPanel = async (qc: QueryClient, sessionId: string) => {
+    const queryFn = vi.fn().mockResolvedValue(emptyPage());
+    const options = { queryKey: messagesKey(sessionId), queryFn, staleTime: Infinity };
+    await qc.fetchQuery(options);
+    const observer = new QueryObserver(qc, options);
+    const unsubscribe = observer.subscribe(() => {});
+    // Mounted onto a page that is fresh forever — no fetch of its own.
+    expect(queryFn).toHaveBeenCalledTimes(1);
+    return { queryFn, unsubscribe };
+  };
+
+  it("reloads a BACKGROUND session's page, though nothing is observing it", async () => {
+    // The compaction case: a compaction usually lands on a session whose panel
+    // is not mounted, and `staleTime: Infinity` means its next mount will not
+    // refetch on its own — so if this call skipped observer-less pages, the
+    // divider would only appear after some unrelated reload.
+    //
+    // It does not skip them: `refetchQueries` filters by `type` only when asked
+    // to, and this call does not ask. (It is `invalidateQueries` that defaults
+    // `refetchType` to "active" — a different function, and the reason this one
+    // is worth pinning.)
+    const qc = client();
+    const { queryFn, unsubscribe } = await mountedPanel(qc, OTHER);
+    unsubscribe(); // the tab goes to the background
+    expect(
+      qc
+        .getQueryCache()
+        .find({ queryKey: messagesKey(OTHER) })!
+        .isActive()
+    ).toBe(false);
+
+    await refetchMessages(qc, OTHER);
+
+    expect(queryFn).toHaveBeenCalledTimes(2);
+  });
+
+  it("reloads the MOUNTED session too", async () => {
+    const qc = client();
+    const { queryFn, unsubscribe } = await mountedPanel(qc, SESSION);
+
+    await refetchMessages(qc, SESSION);
+
+    expect(queryFn).toHaveBeenCalledTimes(2);
+    unsubscribe();
+  });
+
+  it("touches only the session it was asked about", async () => {
+    const qc = client();
+    const asked = await mountedPanel(qc, OTHER);
+    const untouched = await mountedPanel(qc, SESSION);
+
+    await refetchMessages(qc, OTHER);
+
+    expect(asked.queryFn).toHaveBeenCalledTimes(2);
+    expect(untouched.queryFn).toHaveBeenCalledTimes(1);
+    asked.unsubscribe();
+    untouched.unsubscribe();
+  });
+});
+
+// ===========================================================================
+// pruneFolds: the fold set cannot outgrow the cache it writes into
+// ===========================================================================
+
+describe("pruneFolds", () => {
+  it("drops folds for sessions the message cache no longer holds a page for", () => {
+    const h = harness(SESSION);
+    seed(h.qc, OTHER, []);
+    h.feed(started({ messageId: "a1" }));
+    h.feed(started({ sessionId: OTHER, messageId: "b1" }), { sessionId: OTHER });
+    expect([...h.ctx.folds.keys()].sort()).toEqual([SESSION, OTHER].sort());
+
+    // OTHER's page ages out of the cache (gcTime); SESSION's is still there.
+    h.qc.removeQueries({ queryKey: messagesKey(OTHER), exact: true });
+    pruneFolds(h.qc, h.ctx.folds);
+
+    // `routeEnvelope` already refuses to fold a session with no cached page, so
+    // that fold could only ever have grown stale in place.
+    expect([...h.ctx.folds.keys()]).toEqual([SESSION]);
   });
 });
