@@ -21,6 +21,7 @@ import type { AgentHarness } from "@shared/enums";
 import type { TurnCancelResult } from "@zvada/agent-server/protocol";
 import type { ProviderAuthRequest, AgentInfo } from "@shared/agent-info";
 import { AgentLink } from "./client";
+import { initCloudDriver, shutdownCloudDriver } from "./cloud/driver";
 import { createAgentEventHandler, type AgentEventHandler } from "./event-handler";
 import { buildTurnStartParams, type DeusTurnOptions } from "./run-config";
 import { relay } from "./tool-relay";
@@ -57,6 +58,9 @@ export function init(agentServerUrl: string): void {
 
   const handler = createAgentEventHandler();
   events = handler;
+  // Cloud sessions feed the SAME handler — one fold, one persistence path,
+  // two transports.
+  initCloudDriver(handler);
 
   void establishLink(agentServerUrl, handler);
 }
@@ -99,6 +103,7 @@ async function establishLink(url: string, handler: AgentEventHandler): Promise<v
 /** Gracefully shut down the agent link. */
 export function shutdown(): void {
   disposed = true;
+  shutdownCloudDriver();
   void link?.close();
   link = null;
   events = null;

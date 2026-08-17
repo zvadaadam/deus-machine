@@ -21,6 +21,7 @@ import {
   isManifestCommandSafe,
 } from "../services/manifest.service";
 import { initializeWorkspace } from "../services/workspace-init.service";
+import { createCloudWorkspace } from "../services/cloud-workspace-init.service";
 import { autoProgressStatus, setWorkspaceStatus } from "../services/workspace-status.service";
 import {
   getAllWorkspaces,
@@ -130,13 +131,23 @@ app.patch("/workspaces/:id", async (c) => {
 // Create workspace
 app.post("/workspaces", async (c) => {
   const db = getDatabase();
-  const { repository_id, source_branch, pr_number, pr_url, pr_title, target_branch } = parseBody(
-    CreateWorkspaceBody,
-    await c.req.json()
-  );
+  const { repository_id, location, source_branch, pr_number, pr_url, pr_title, target_branch } =
+    parseBody(CreateWorkspaceBody, await c.req.json());
 
   const repo = getRepositoryById(db, repository_id);
   if (!repo) throw new NotFoundError("Repository not found");
+
+  // Cloud lane: row now, agnt sandbox in the background; progress rides
+  // workspace.state events through the cloud driver instead of the local
+  // worktree pipeline below.
+  if (location === "cloud") {
+    const { workspaceId } = createCloudWorkspace({
+      repositoryId: repository_id,
+      sourceBranch: source_branch,
+    });
+    const created = getWorkspaceById(db, workspaceId);
+    return c.json(created, 201);
+  }
 
   const workspace_name = generateUniqueName(db);
   const parent_branch = source_branch || repo.git_default_branch || "main";

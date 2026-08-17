@@ -93,6 +93,9 @@ export const PatchWorkspaceBody = z.object({
 
 export const CreateWorkspaceBody = z.object({
   repository_id: z.string().min(1, "repository_id is required"),
+  /** Where the workspace's files live: local git worktree (default) or an
+   *  agnt cloud sandbox. */
+  location: z.enum(["local", "cloud"]).optional(),
   source_branch: z
     .string()
     .refine((s) => !s.startsWith("-"), "Branch name must not start with a dash")
