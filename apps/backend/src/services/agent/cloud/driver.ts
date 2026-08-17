@@ -254,7 +254,7 @@ export async function ensureCloudSession(deusSessionId: string): Promise<CloudSe
   const { token } = await createSessionToken(row.provider_session_id, {
     apiKey: config.apiKey,
     baseUrl: config.baseUrl,
-    expiresIn: "24h",
+    expiresIn: 24 * 60 * 60,
   });
 
   const session: CloudSession = {

@@ -61,8 +61,10 @@ export function useRepoActions({
   }
 
   /** Create a workspace for the given repo, select it, and expand the sidebar. */
-  async function createWorkspaceAndSelect(repoId: string) {
-    const workspace = await createWorkspaceMutation.mutateAsync(repoId);
+  async function createWorkspaceAndSelect(repoId: string, location?: "local" | "cloud") {
+    const workspace = await createWorkspaceMutation.mutateAsync(
+      location === "cloud" ? { repositoryId: repoId, location } : repoId
+    );
     selectWorkspace(workspace.id);
     expandRepo(workspace.repository_id);
   }
@@ -85,10 +87,10 @@ export function useRepoActions({
 
   /** Create a workspace with loading state and error handling. */
   const createAndSelectWorkspace = useCallback(
-    async (repoId: string) => {
+    async (repoId: string, location?: "local" | "cloud") => {
       setCreating(true);
       try {
-        await createWorkspaceAndSelect(repoId);
+        await createWorkspaceAndSelect(repoId, location);
       } catch (error) {
         selectWorkspace(null);
         console.error("Error creating workspace:", error);
@@ -101,7 +103,7 @@ export function useRepoActions({
   );
 
   /** Create workspace from the new-workspace modal (validates repo selection). */
-  async function createWorkspaceFromModal() {
+  async function createWorkspaceFromModal(location?: "local" | "cloud") {
     if (!selectedRepoId) {
       toast.error("Please select a repository");
       return;
@@ -109,7 +111,7 @@ export function useRepoActions({
     const repoIdToCreate = selectedRepoId;
     setSelectedRepoId("");
     closeNewWorkspaceModal();
-    await createAndSelectWorkspace(repoIdToCreate);
+    await createAndSelectWorkspace(repoIdToCreate, location);
   }
 
   /** Handle "New Workspace" — if repoId is provided, create directly; otherwise open modal. */

@@ -1,6 +1,6 @@
 import React from "react";
 import { match } from "ts-pattern";
-import { Archive, Loader2 } from "lucide-react";
+import { Archive, Cloud, Loader2 } from "lucide-react";
 import NumberFlow from "@number-flow/react";
 import { useQueryClient } from "@tanstack/react-query";
 
@@ -203,6 +203,9 @@ export const WorkspaceItem = React.memo(function WorkspaceItem({
         >
           {displayName}
         </span>
+        {workspace.kind === "cloud" && (
+          <Cloud className="text-text-tertiary h-3 w-3 shrink-0" aria-label="Cloud workspace" />
+        )}
       </div>
 
       {/* Right: one signal. Fades out on hover to make room for archive. */}

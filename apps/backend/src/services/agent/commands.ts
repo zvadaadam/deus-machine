@@ -147,6 +147,8 @@ export async function runCommand(
       .with("createWorkspace", async () => {
         const repositoryId = requireParam(params, "repository_id", "createWorkspace");
         const body: Record<string, unknown> = { repository_id: repositoryId };
+        const location = readString(params, "location");
+        if (location) body.location = location;
         const sourceBranch = readString(params, "source_branch");
         const prUrl = readString(params, "pr_url");
         const prTitle = readString(params, "pr_title");
