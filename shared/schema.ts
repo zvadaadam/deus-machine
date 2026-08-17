@@ -79,6 +79,13 @@ export const ADDITIVE_COLUMNS = {
     pr_has_conflicts: "INTEGER NOT NULL DEFAULT 0",
     pr_ci_status: "TEXT",
     pr_checked_at: "TEXT",
+    // Cloud workspaces: where the files live + the agnt workspace backing them.
+    kind: "TEXT NOT NULL DEFAULT 'worktree'",
+    provider_workspace_id: "TEXT",
+  },
+  sessions: {
+    // agnt session id for cloud-workspace sessions (null for local).
+    provider_session_id: "TEXT",
   },
 } as const satisfies Record<string, Record<string, string>>;
 
@@ -118,6 +125,8 @@ export const SCHEMA_SQL = `
     setup_status TEXT NOT NULL DEFAULT 'none',
     init_stage TEXT,
     error_message TEXT,
+    kind TEXT NOT NULL DEFAULT 'worktree',
+    provider_workspace_id TEXT,
     updated_at TEXT NOT NULL DEFAULT (datetime('now'))
   );
 
@@ -128,6 +137,7 @@ export const SCHEMA_SQL = `
     -- Engine harness id (@zvada/agent-server): claude-code | codex-sdk | codex-app-server
     agent_harness TEXT NOT NULL DEFAULT 'claude-code',
     agent_session_id TEXT,
+    provider_session_id TEXT,
     title TEXT,
     status TEXT NOT NULL DEFAULT 'idle',
     message_count INTEGER NOT NULL DEFAULT 0,
