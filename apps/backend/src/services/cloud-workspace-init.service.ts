@@ -24,6 +24,22 @@ import { ensureCloudSession } from "./agent/cloud/driver";
 
 const WORKSPACE_RESOURCES = ["workspaces", "sessions", "session", "stats"] as const;
 
+/**
+ * Normalize a git origin for sandbox cloning: ssh/scp forms → https.
+ * Sandboxes carry no ssh keys — https clones work anonymously for public
+ * repos and via the org's `github_token` secret for private ones (agnt's
+ * git-auth step writes https credentials and already rewrites ssh→https,
+ * but only WHEN a token exists; normalizing here makes public ssh-origin
+ * repos work with no token at all).
+ */
+export function httpsOrigin(url: string): string {
+  const scp = /^git@([^:]+):(.+?)(?:\.git)?$/.exec(url);
+  if (scp) return `https://${scp[1]}/${scp[2]}`;
+  const ssh = /^ssh:\/\/(?:git@)?([^/]+)\/(.+?)(?:\.git)?$/.exec(url);
+  if (ssh) return `https://${ssh[1]}/${ssh[2]}`;
+  return url;
+}
+
 export interface CreateCloudWorkspaceParams {
   repositoryId: string;
   /** Branch the sandbox checks out; defaults to the repo's default branch. */
@@ -69,7 +85,7 @@ export function createCloudWorkspace(params: CreateCloudWorkspaceParams): {
 
   void provisionInBackground(
     workspaceId,
-    repo.git_origin_url,
+    httpsOrigin(repo.git_origin_url),
     branch,
     config.baseUrl,
     config.apiKey
