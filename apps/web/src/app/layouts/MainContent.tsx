@@ -67,7 +67,13 @@ interface MainContentProps {
   repoGroups: RepoGroup[];
   /** Handler for sending the first message from the home screen.
    *  Creates workspace + selects it + queues the first message. */
-  onStartWorkspace: (repoId: string, message: string, model: string, branch?: string) => void;
+  onStartWorkspace: (
+    repoId: string,
+    message: string,
+    model: string,
+    branch?: string,
+    location?: "local" | "cloud"
+  ) => void;
   onWorkspaceClick: (workspace: Workspace) => void;
 }
 

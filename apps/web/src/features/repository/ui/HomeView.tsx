@@ -4,9 +4,11 @@ import {
   ArrowUp,
   ChevronDown,
   Check,
+  Cloud,
   FolderGit2,
   FolderOpen,
   GitBranch,
+  Laptop,
   Search,
   Upload,
 } from "lucide-react";
@@ -32,6 +34,7 @@ import {
   SheetTitle,
   SheetDescription,
 } from "@/components/ui/sheet";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { useIsMobile } from "@/shared/hooks/use-mobile";
 import type { RepoGroup, Workspace } from "@/shared/types";
 import type { Repository } from "../types";
@@ -94,7 +97,13 @@ interface HomeViewProps {
   repos: Repository[];
   repoGroups?: RepoGroup[];
   selectedWorkspaceId?: string | null;
-  onSendMessage: (repoId: string, message: string, model: string, branch?: string) => void;
+  onSendMessage: (
+    repoId: string,
+    message: string,
+    model: string,
+    branch?: string,
+    location?: "local" | "cloud"
+  ) => void;
   onWorkspaceClick?: (workspace: Workspace) => void;
   onOpenProject?: () => void;
   onCloneRepository?: () => void;
@@ -204,6 +213,9 @@ export function HomeView({
 
   // ── Branch selection ──────────────────────────────────────────────
   // Tracks the repo the branch was chosen for — resets when repo changes
+  // Where the new workspace runs: local worktree (default) or agnt cloud
+  // sandbox. Cloud needs a git remote for the sandbox to clone.
+  const [location, setLocation] = useState<"local" | "cloud">("local");
   const [branchSelection, setBranchSelection] = useState<{ repoId: string; branch: string } | null>(
     null
   );
@@ -281,7 +293,7 @@ export function HomeView({
     if (!content) return;
     setIsSubmitting(true);
     try {
-      onSendMessage(selectedRepoId, content, model, selectedBranch ?? undefined);
+      onSendMessage(selectedRepoId, content, model, selectedBranch ?? undefined, location);
       clearAttachments();
       setMessage("");
     } finally {
@@ -293,6 +305,7 @@ export function HomeView({
     buildCombinedContent,
     model,
     selectedBranch,
+    location,
     onSendMessage,
     clearAttachments,
     isSubmitting,
@@ -695,6 +708,39 @@ export function HomeView({
                   <ChevronDown className="size-2.5" />
                 </button>
               </BranchSelector>
+            )}
+
+            {/* Local/Cloud toggle — where the new workspace runs */}
+            {hasRepos && (
+              <Tooltip delayDuration={200}>
+                <TooltipTrigger asChild>
+                  <button
+                    type="button"
+                    onClick={() => setLocation((l) => (l === "local" ? "cloud" : "local"))}
+                    aria-label={`Runs ${location === "cloud" ? "in the cloud" : "locally"} — click to switch`}
+                    className={cn(
+                      "flex items-center gap-1 rounded-lg px-2 py-1.5 text-xs transition-colors duration-150",
+                      location === "cloud"
+                        ? "text-text-secondary"
+                        : "text-text-disabled hover:text-text-muted"
+                    )}
+                  >
+                    {location === "cloud" ? (
+                      <Cloud className="size-3 shrink-0" />
+                    ) : (
+                      <Laptop className="size-3 shrink-0" />
+                    )}
+                    <span>{location === "cloud" ? "Cloud" : "Local"}</span>
+                  </button>
+                </TooltipTrigger>
+                <TooltipContent side="bottom">
+                  <p className="text-xs">
+                    {location === "cloud"
+                      ? "Runs in a cloud sandbox (clones the repo's origin)"
+                      : "Runs in a git worktree on this Mac"}
+                  </p>
+                </TooltipContent>
+              </Tooltip>
             )}
           </div>
 

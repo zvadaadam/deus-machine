@@ -173,10 +173,18 @@ export function MainLayout() {
   } | null>(null);
 
   const handleStartWorkspace = useCallback(
-    async (repoId: string, message: string, model: string, branch?: string) => {
+    async (
+      repoId: string,
+      message: string,
+      model: string,
+      branch?: string,
+      location?: "local" | "cloud"
+    ) => {
       try {
         const workspace = await welcomeCreateMutation.mutateAsync(
-          branch ? { repositoryId: repoId, source_branch: branch } : repoId
+          branch || location === "cloud"
+            ? { repositoryId: repoId, source_branch: branch, location }
+            : repoId
         );
         // Store pending message — will be sent when workspace gets a session
         pendingWelcomeMessageRef.current = {
