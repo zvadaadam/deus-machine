@@ -8,7 +8,6 @@ import {
   FolderGit2,
   FolderOpen,
   GitBranch,
-  Laptop,
   Search,
   Upload,
 } from "lucide-react";
@@ -34,6 +33,7 @@ import {
   SheetTitle,
   SheetDescription,
 } from "@/components/ui/sheet";
+import { Switch } from "@/components/ui/switch";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { useIsMobile } from "@/shared/hooks/use-mobile";
 import type { RepoGroup, Workspace } from "@/shared/types";
@@ -61,7 +61,7 @@ function setStoredRepoId(id: string) {
   }
 }
 
-function getStoredModel(): string {
+export function getStoredModel(): string {
   // Validate against the catalog — stale localStorage (old aliases like
   // "claude:sonnet", removed models, renamed formats) falls back to the
   // current default instead of silently sending an unknown model.
@@ -421,176 +421,66 @@ export function HomeView({
               <p className="text-sm font-medium text-white/70">Drop images here</p>
             </div>
           )}
-          {/* Context bar — repo picker + branch picker, on tray surface above the inner card */}
+          {/* Context bar — repo + branch grouped left, cloud toggle right */}
           <div className="flex items-center justify-between px-1 py-0.5">
-            {/* Repo picker trigger */}
-            {hasRepos ? (
-              <div ref={repoPickerRef} className="relative">
-                <button
-                  type="button"
-                  onClick={() => setRepoPickerOpen(!repoPickerOpen)}
-                  className="text-text-muted hover:text-text-secondary group flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-xs transition-colors duration-150"
-                >
-                  {/* Green glow dot — active project indicator */}
-                  <span className="relative flex h-1.5 w-1.5 shrink-0" aria-hidden>
-                    <span className="bg-accent-green/30 absolute -inset-0.5 rounded-full blur-[2px]" />
-                    <span className="bg-accent-green relative h-1.5 w-1.5 rounded-full" />
-                  </span>
-                  <span className="max-w-[200px] truncate font-medium">
-                    {selectedRepo?.name ?? "Select repo"}
-                  </span>
-                  <ChevronDown
-                    className={cn(
-                      "text-text-disabled size-3 transition-transform duration-200",
-                      repoPickerOpen && "rotate-180"
-                    )}
-                  />
-                </button>
-
-                {/* Mobile: bottom sheet */}
-                {isMobile ? (
-                  <Sheet
-                    open={repoPickerOpen}
-                    onOpenChange={(v) => {
-                      setRepoPickerOpen(v);
-                      if (!v) setRepoFilter("");
-                    }}
+            <div className="flex min-w-0 items-center">
+              {/* Repo picker trigger */}
+              {hasRepos ? (
+                <div ref={repoPickerRef} className="relative">
+                  <button
+                    type="button"
+                    onClick={() => setRepoPickerOpen(!repoPickerOpen)}
+                    className="text-text-muted hover:text-text-secondary group flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-xs transition-colors duration-150"
                   >
-                    <SheetContent side="bottom" className="rounded-t-xl px-0">
-                      <SheetHeader className="px-4 pb-0">
-                        <SheetTitle className="text-sm">Select repository</SheetTitle>
-                        <SheetDescription className="sr-only">
-                          Choose a repository for your workspace
-                        </SheetDescription>
-                      </SheetHeader>
+                    {/* Green glow dot — active project indicator */}
+                    <span className="relative flex h-1.5 w-1.5 shrink-0" aria-hidden>
+                      <span className="bg-accent-green/30 absolute -inset-0.5 rounded-full blur-[2px]" />
+                      <span className="bg-accent-green relative h-1.5 w-1.5 rounded-full" />
+                    </span>
+                    <span className="max-w-[200px] truncate font-medium">
+                      {selectedRepo?.name ?? "Select repo"}
+                    </span>
+                    <ChevronDown
+                      className={cn(
+                        "text-text-disabled size-3 transition-transform duration-200",
+                        repoPickerOpen && "rotate-180"
+                      )}
+                    />
+                  </button>
 
-                      {/* Filter input */}
-                      <div className="border-border-subtle flex items-center gap-2 border-b px-3 py-2">
-                        <Search className="text-text-disabled size-3.5 shrink-0" />
-                        <input
-                          type="text"
-                          value={repoFilter}
-                          onChange={(e) => setRepoFilter(e.target.value)}
-                          placeholder="Search repos..."
-                          className="text-text-primary placeholder:text-text-disabled w-full bg-transparent text-sm outline-none"
-                        />
-                      </div>
+                  {/* Mobile: bottom sheet */}
+                  {isMobile ? (
+                    <Sheet
+                      open={repoPickerOpen}
+                      onOpenChange={(v) => {
+                        setRepoPickerOpen(v);
+                        if (!v) setRepoFilter("");
+                      }}
+                    >
+                      <SheetContent side="bottom" className="rounded-t-xl px-0">
+                        <SheetHeader className="px-4 pb-0">
+                          <SheetTitle className="text-sm">Select repository</SheetTitle>
+                          <SheetDescription className="sr-only">
+                            Choose a repository for your workspace
+                          </SheetDescription>
+                        </SheetHeader>
 
-                      {/* Repo list */}
-                      <div className="max-h-[50vh] overflow-y-auto py-1">
-                        {filteredRepos.length === 0 && (
-                          <div className="text-text-disabled px-3 py-3 text-center text-sm">
-                            No repos match
-                          </div>
-                        )}
-                        {filteredRepos.map((repo) => {
-                          const isSelected = repo.id === selectedRepoId;
-                          return (
-                            <button
-                              key={repo.id}
-                              type="button"
-                              onClick={() => handleSelectRepo(repo.id)}
-                              className={cn(
-                                "flex w-full items-center justify-between px-3 py-2.5 text-left text-sm transition-colors duration-100",
-                                "hover:bg-bg-raised/45",
-                                isSelected ? "text-text-primary" : "text-text-secondary"
-                              )}
-                            >
-                              <div className="flex items-center gap-2 overflow-hidden">
-                                {isSelected ? (
-                                  <span className="relative flex h-1.5 w-1.5 shrink-0" aria-hidden>
-                                    <span className="bg-accent-green/25 absolute -inset-px rounded-full blur-[1.5px]" />
-                                    <span className="bg-accent-green relative h-1.5 w-1.5 rounded-full" />
-                                  </span>
-                                ) : (
-                                  <span className="h-1.5 w-1.5 shrink-0" />
-                                )}
-                                <span className="truncate font-medium">{repo.name}</span>
-                              </div>
-                              {isSelected && (
-                                <Check className="text-text-primary size-3.5 shrink-0" />
-                              )}
-                            </button>
-                          );
-                        })}
-                      </div>
-
-                      {/* Add repo actions */}
-                      <div className="border-border-subtle border-t py-1">
-                        {onStartNewProject && (
-                          <button
-                            type="button"
-                            onClick={() => {
-                              closeRepoPicker();
-                              onStartNewProject();
-                            }}
-                            className="text-text-muted hover:text-text-secondary hover:bg-bg-raised/45 flex w-full items-center gap-2 px-3 py-2.5 text-sm transition-colors duration-100"
-                          >
-                            <FolderGit2 className="size-4 shrink-0" />
-                            <span>Start new project</span>
-                          </button>
-                        )}
-                        {onCloneRepository && (
-                          <button
-                            type="button"
-                            onClick={() => {
-                              closeRepoPicker();
-                              onCloneRepository();
-                            }}
-                            className="text-text-muted hover:text-text-secondary hover:bg-bg-raised/45 flex w-full items-center gap-2 px-3 py-2.5 text-sm transition-colors duration-100"
-                          >
-                            <GitBranch className="size-4 shrink-0" />
-                            <span>Clone from GitHub</span>
-                          </button>
-                        )}
-                        {capabilities.nativeFolderPicker && onOpenProject && (
-                          <button
-                            type="button"
-                            onClick={() => {
-                              closeRepoPicker();
-                              onOpenProject();
-                            }}
-                            className="text-text-muted hover:text-text-secondary hover:bg-bg-raised/45 flex w-full items-center gap-2 px-3 py-2.5 text-sm transition-colors duration-100"
-                          >
-                            <FolderOpen className="size-4 shrink-0" />
-                            <span>Open local...</span>
-                          </button>
-                        )}
-                      </div>
-                    </SheetContent>
-                  </Sheet>
-                ) : (
-                  /* Desktop: animated dropdown */
-                  <AnimatePresence>
-                    {repoPickerOpen && (
-                      <motion.div
-                        initial={{ opacity: 0, scale: 0.96, y: -4 }}
-                        animate={{ opacity: 1, scale: 1, y: 0 }}
-                        exit={{ opacity: 0, scale: 0.96, y: -4 }}
-                        transition={{ duration: 0.15, ease: [0.215, 0.61, 0.355, 1] }}
-                        className={cn(
-                          "absolute top-full left-0 z-50 mt-1 w-72 max-w-[calc(100vw-2rem)] overflow-hidden rounded-xl border",
-                          "border-border/55 from-bg-overlay/95 to-bg-elevated/94 bg-linear-to-b backdrop-blur-2xl",
-                          "shadow-[var(--shadow-elevated)]"
-                        )}
-                      >
                         {/* Filter input */}
                         <div className="border-border-subtle flex items-center gap-2 border-b px-3 py-2">
                           <Search className="text-text-disabled size-3.5 shrink-0" />
                           <input
-                            ref={filterInputRef}
                             type="text"
                             value={repoFilter}
                             onChange={(e) => setRepoFilter(e.target.value)}
                             placeholder="Search repos..."
-                            className="text-text-primary placeholder:text-text-disabled w-full bg-transparent text-xs outline-none"
+                            className="text-text-primary placeholder:text-text-disabled w-full bg-transparent text-sm outline-none"
                           />
                         </div>
 
                         {/* Repo list */}
-                        <div className="max-h-[224px] overflow-y-auto py-1">
+                        <div className="max-h-[50vh] overflow-y-auto py-1">
                           {filteredRepos.length === 0 && (
-                            <div className="text-text-disabled px-3 py-3 text-center text-xs">
+                            <div className="text-text-disabled px-3 py-3 text-center text-sm">
                               No repos match
                             </div>
                           )}
@@ -602,30 +492,28 @@ export function HomeView({
                                 type="button"
                                 onClick={() => handleSelectRepo(repo.id)}
                                 className={cn(
-                                  "flex w-full items-center justify-between px-3 py-1.5 text-left text-xs transition-colors duration-100",
+                                  "flex w-full items-center justify-between px-3 py-2.5 text-left text-sm transition-colors duration-100",
                                   "hover:bg-bg-raised/45",
                                   isSelected ? "text-text-primary" : "text-text-secondary"
                                 )}
                               >
                                 <div className="flex items-center gap-2 overflow-hidden">
                                   {isSelected ? (
-                                    <span className="relative flex h-1 w-1 shrink-0" aria-hidden>
+                                    <span
+                                      className="relative flex h-1.5 w-1.5 shrink-0"
+                                      aria-hidden
+                                    >
                                       <span className="bg-accent-green/25 absolute -inset-px rounded-full blur-[1.5px]" />
-                                      <span className="bg-accent-green relative h-1 w-1 rounded-full" />
+                                      <span className="bg-accent-green relative h-1.5 w-1.5 rounded-full" />
                                     </span>
                                   ) : (
                                     <span className="h-1.5 w-1.5 shrink-0" />
                                   )}
                                   <span className="truncate font-medium">{repo.name}</span>
                                 </div>
-                                <div className="flex items-center gap-2">
-                                  <span className="text-text-disabled text-2xs max-w-[120px] truncate">
-                                    {abbreviatePath(repo.root_path)}
-                                  </span>
-                                  {isSelected && (
-                                    <Check className="text-text-primary size-3 shrink-0" />
-                                  )}
-                                </div>
+                                {isSelected && (
+                                  <Check className="text-text-primary size-3.5 shrink-0" />
+                                )}
                               </button>
                             );
                           })}
@@ -640,9 +528,9 @@ export function HomeView({
                                 closeRepoPicker();
                                 onStartNewProject();
                               }}
-                              className="text-text-muted hover:text-text-secondary hover:bg-bg-raised/45 flex w-full items-center gap-2 px-3 py-1.5 text-xs transition-colors duration-100"
+                              className="text-text-muted hover:text-text-secondary hover:bg-bg-raised/45 flex w-full items-center gap-2 px-3 py-2.5 text-sm transition-colors duration-100"
                             >
-                              <FolderGit2 className="size-3 shrink-0" />
+                              <FolderGit2 className="size-4 shrink-0" />
                               <span>Start new project</span>
                             </button>
                           )}
@@ -653,9 +541,9 @@ export function HomeView({
                                 closeRepoPicker();
                                 onCloneRepository();
                               }}
-                              className="text-text-muted hover:text-text-secondary hover:bg-bg-raised/45 flex w-full items-center gap-2 px-3 py-1.5 text-xs transition-colors duration-100"
+                              className="text-text-muted hover:text-text-secondary hover:bg-bg-raised/45 flex w-full items-center gap-2 px-3 py-2.5 text-sm transition-colors duration-100"
                             >
-                              <GitBranch className="size-3 shrink-0" />
+                              <GitBranch className="size-4 shrink-0" />
                               <span>Clone from GitHub</span>
                             </button>
                           )}
@@ -666,78 +554,194 @@ export function HomeView({
                                 closeRepoPicker();
                                 onOpenProject();
                               }}
-                              className="text-text-muted hover:text-text-secondary hover:bg-bg-raised/45 flex w-full items-center gap-2 px-3 py-1.5 text-xs transition-colors duration-100"
+                              className="text-text-muted hover:text-text-secondary hover:bg-bg-raised/45 flex w-full items-center gap-2 px-3 py-2.5 text-sm transition-colors duration-100"
                             >
-                              <FolderOpen className="size-3 shrink-0" />
+                              <FolderOpen className="size-4 shrink-0" />
                               <span>Open local...</span>
                             </button>
                           )}
                         </div>
-                      </motion.div>
-                    )}
-                  </AnimatePresence>
-                )}
-              </div>
-            ) : (
-              /* Zero repos — "Add a project" label */
-              <span className="text-text-muted flex items-center gap-1.5 px-2.5 py-1.5 text-xs">
-                <FolderOpen className="size-3" />
-                <span className="font-medium">Add a project</span>
-              </span>
-            )}
+                      </SheetContent>
+                    </Sheet>
+                  ) : (
+                    /* Desktop: animated dropdown */
+                    <AnimatePresence>
+                      {repoPickerOpen && (
+                        <motion.div
+                          initial={{ opacity: 0, scale: 0.96, y: -4 }}
+                          animate={{ opacity: 1, scale: 1, y: 0 }}
+                          exit={{ opacity: 0, scale: 0.96, y: -4 }}
+                          transition={{ duration: 0.15, ease: [0.215, 0.61, 0.355, 1] }}
+                          className={cn(
+                            "absolute top-full left-0 z-50 mt-1 w-72 max-w-[calc(100vw-2rem)] overflow-hidden rounded-xl border",
+                            "border-border/55 from-bg-overlay/95 to-bg-elevated/94 bg-linear-to-b backdrop-blur-2xl",
+                            "shadow-[var(--shadow-elevated)]"
+                          )}
+                        >
+                          {/* Filter input */}
+                          <div className="border-border-subtle flex items-center gap-2 border-b px-3 py-2">
+                            <Search className="text-text-disabled size-3.5 shrink-0" />
+                            <input
+                              ref={filterInputRef}
+                              type="text"
+                              value={repoFilter}
+                              onChange={(e) => setRepoFilter(e.target.value)}
+                              placeholder="Search repos..."
+                              className="text-text-primary placeholder:text-text-disabled w-full bg-transparent text-xs outline-none"
+                            />
+                          </div>
 
-            {/* Branch picker (right side) — only when repos exist */}
-            {hasRepos && (
-              <BranchSelector
-                repoId={selectedRepoId}
-                currentBranch={displayBranch}
-                onBranchSelect={(name) => {
-                  if (name === selectedRepo?.git_default_branch) {
-                    setBranchSelection(null);
-                  } else if (selectedRepoId) {
-                    setBranchSelection({ repoId: selectedRepoId, branch: name });
-                  }
-                }}
-              >
-                <button
-                  type="button"
-                  className="text-text-disabled hover:text-text-muted flex items-center gap-1 rounded-lg px-2 py-1.5 text-xs transition-colors duration-150"
+                          {/* Repo list */}
+                          <div className="max-h-[224px] overflow-y-auto py-1">
+                            {filteredRepos.length === 0 && (
+                              <div className="text-text-disabled px-3 py-3 text-center text-xs">
+                                No repos match
+                              </div>
+                            )}
+                            {filteredRepos.map((repo) => {
+                              const isSelected = repo.id === selectedRepoId;
+                              return (
+                                <button
+                                  key={repo.id}
+                                  type="button"
+                                  onClick={() => handleSelectRepo(repo.id)}
+                                  className={cn(
+                                    "flex w-full items-center justify-between px-3 py-1.5 text-left text-xs transition-colors duration-100",
+                                    "hover:bg-bg-raised/45",
+                                    isSelected ? "text-text-primary" : "text-text-secondary"
+                                  )}
+                                >
+                                  <div className="flex items-center gap-2 overflow-hidden">
+                                    {isSelected ? (
+                                      <span className="relative flex h-1 w-1 shrink-0" aria-hidden>
+                                        <span className="bg-accent-green/25 absolute -inset-px rounded-full blur-[1.5px]" />
+                                        <span className="bg-accent-green relative h-1 w-1 rounded-full" />
+                                      </span>
+                                    ) : (
+                                      <span className="h-1.5 w-1.5 shrink-0" />
+                                    )}
+                                    <span className="truncate font-medium">{repo.name}</span>
+                                  </div>
+                                  <div className="flex items-center gap-2">
+                                    <span className="text-text-disabled text-2xs max-w-[120px] truncate">
+                                      {abbreviatePath(repo.root_path)}
+                                    </span>
+                                    {isSelected && (
+                                      <Check className="text-text-primary size-3 shrink-0" />
+                                    )}
+                                  </div>
+                                </button>
+                              );
+                            })}
+                          </div>
+
+                          {/* Add repo actions */}
+                          <div className="border-border-subtle border-t py-1">
+                            {onStartNewProject && (
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  closeRepoPicker();
+                                  onStartNewProject();
+                                }}
+                                className="text-text-muted hover:text-text-secondary hover:bg-bg-raised/45 flex w-full items-center gap-2 px-3 py-1.5 text-xs transition-colors duration-100"
+                              >
+                                <FolderGit2 className="size-3 shrink-0" />
+                                <span>Start new project</span>
+                              </button>
+                            )}
+                            {onCloneRepository && (
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  closeRepoPicker();
+                                  onCloneRepository();
+                                }}
+                                className="text-text-muted hover:text-text-secondary hover:bg-bg-raised/45 flex w-full items-center gap-2 px-3 py-1.5 text-xs transition-colors duration-100"
+                              >
+                                <GitBranch className="size-3 shrink-0" />
+                                <span>Clone from GitHub</span>
+                              </button>
+                            )}
+                            {capabilities.nativeFolderPicker && onOpenProject && (
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  closeRepoPicker();
+                                  onOpenProject();
+                                }}
+                                className="text-text-muted hover:text-text-secondary hover:bg-bg-raised/45 flex w-full items-center gap-2 px-3 py-1.5 text-xs transition-colors duration-100"
+                              >
+                                <FolderOpen className="size-3 shrink-0" />
+                                <span>Open local...</span>
+                              </button>
+                            )}
+                          </div>
+                        </motion.div>
+                      )}
+                    </AnimatePresence>
+                  )}
+                </div>
+              ) : (
+                /* Zero repos — "Add a project" label */
+                <span className="text-text-muted flex items-center gap-1.5 px-2.5 py-1.5 text-xs">
+                  <FolderOpen className="size-3" />
+                  <span className="font-medium">Add a project</span>
+                </span>
+              )}
+
+              {/* Branch picker — beside the repo it belongs to */}
+              {hasRepos && (
+                <BranchSelector
+                  repoId={selectedRepoId}
+                  currentBranch={displayBranch}
+                  onBranchSelect={(name) => {
+                    if (name === selectedRepo?.git_default_branch) {
+                      setBranchSelection(null);
+                    } else if (selectedRepoId) {
+                      setBranchSelection({ repoId: selectedRepoId, branch: name });
+                    }
+                  }}
                 >
-                  <GitBranch className="size-3 shrink-0" />
-                  <span className="max-w-[120px] truncate">{displayBranch}</span>
-                  <ChevronDown className="size-2.5" />
-                </button>
-              </BranchSelector>
-            )}
+                  <button
+                    type="button"
+                    className="text-text-disabled hover:text-text-muted flex items-center gap-1 rounded-lg px-2 py-1.5 text-xs transition-colors duration-150"
+                  >
+                    <GitBranch className="size-3 shrink-0" />
+                    <span className="max-w-[120px] truncate">{displayBranch}</span>
+                    <ChevronDown className="size-2.5" />
+                  </button>
+                </BranchSelector>
+              )}
+            </div>
 
-            {/* Local/Cloud toggle — where the new workspace runs */}
+            {/* Cloud toggle (right) — off by default; on = agnt sandbox */}
             {hasRepos && (
               <Tooltip delayDuration={200}>
                 <TooltipTrigger asChild>
-                  <button
-                    type="button"
-                    onClick={() => setLocation((l) => (l === "local" ? "cloud" : "local"))}
-                    aria-label={`Runs ${location === "cloud" ? "in the cloud" : "locally"} — click to switch`}
+                  <label
                     className={cn(
-                      "flex items-center gap-1 rounded-lg px-2 py-1.5 text-xs transition-colors duration-150",
+                      "flex cursor-pointer items-center gap-1.5 rounded-lg px-2 py-1.5 text-xs transition-colors duration-150 select-none",
                       location === "cloud"
                         ? "text-text-secondary"
                         : "text-text-disabled hover:text-text-muted"
                     )}
                   >
-                    {location === "cloud" ? (
-                      <Cloud className="size-3 shrink-0" />
-                    ) : (
-                      <Laptop className="size-3 shrink-0" />
-                    )}
-                    <span>{location === "cloud" ? "Cloud" : "Local"}</span>
-                  </button>
+                    <Cloud className="size-3 shrink-0" />
+                    <span>Cloud</span>
+                    <Switch
+                      checked={location === "cloud"}
+                      onCheckedChange={(on) => setLocation(on ? "cloud" : "local")}
+                      className="scale-75"
+                      aria-label="Run in a cloud sandbox"
+                    />
+                  </label>
                 </TooltipTrigger>
                 <TooltipContent side="bottom">
                   <p className="text-xs">
                     {location === "cloud"
                       ? "Runs in a cloud sandbox (clones the repo's origin)"
-                      : "Runs in a git worktree on this Mac"}
+                      : "Off — runs in a git worktree on this Mac"}
                   </p>
                 </TooltipContent>
               </Tooltip>

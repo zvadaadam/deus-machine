@@ -114,18 +114,15 @@ export function useRepoActions({
     await createAndSelectWorkspace(repoIdToCreate, location);
   }
 
-  /** Handle "New Workspace" — if repoId is provided, quick-create a local
-   *  worktree (the fast path); otherwise open the modal. Cloud creation lives
-   *  in the Home composer's Local/Cloud toggle — one surface, no modal detour. */
+  /** Handle "New Workspace" — open the prompt-first modal (repo preselected
+   *  when opened from a repo row). Same surface as the Home composer: prompt,
+   *  branch, and the cloud toggle, with the prompt riding as turn one. */
   const handleNewWorkspace = useCallback(
     async (repoId?: string) => {
-      if (repoId) {
-        await createAndSelectWorkspace(repoId);
-        return;
-      }
+      if (repoId) setSelectedRepoId(repoId);
       openNewWorkspaceModal();
     },
-    [openNewWorkspaceModal, createAndSelectWorkspace]
+    [openNewWorkspaceModal]
   );
 
   // ── Open local project ───────────────────────────────────────
@@ -182,6 +179,7 @@ export function useRepoActions({
     setSelectedRepoId,
     creating,
     createWorkspaceFromModal,
+    createAndSelectWorkspace,
     handleNewWorkspace,
     handleNewWorkspaceFromGitHub,
 

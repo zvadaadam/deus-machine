@@ -2,9 +2,11 @@ import { useState, useEffect, useRef, useCallback, useMemo } from "react";
 import type { SessionPanelRef } from "@/features/session";
 import {
   NewWorkspaceModal,
+  NewWorkspacePromptModal,
   CloneRepositoryModal,
   StartNewProjectModal,
 } from "@/features/repository";
+import { getStoredModel } from "@/features/repository/ui/HomeView";
 import { SystemPromptModal } from "@/features/session";
 import { SettingsSidebar, SettingsPage } from "@/features/settings";
 import {
@@ -448,24 +450,40 @@ export function MainLayout() {
       )}
 
       {/* Modals */}
-      <NewWorkspaceModal
-        show={showNewWorkspaceModal}
-        repos={repos}
-        selectedRepoId={repoActions.selectedRepoId}
-        creating={repoActions.creating}
-        onClose={closeNewWorkspaceModal}
-        onRepoChange={repoActions.setSelectedRepoId}
-        onCreate={
-          newWorkspaceMode === "from-github"
-            ? () => {
-                const repoId = repoActions.selectedRepoId;
-                closeNewWorkspaceModal();
-                if (repoId) setGithubPickerRepoId(repoId);
-              }
-            : repoActions.createWorkspaceFromModal
-        }
-        mode={newWorkspaceMode}
-      />
+      {newWorkspaceMode === "from-github" ? (
+        <NewWorkspaceModal
+          show={showNewWorkspaceModal}
+          repos={repos}
+          selectedRepoId={repoActions.selectedRepoId}
+          creating={repoActions.creating}
+          onClose={closeNewWorkspaceModal}
+          onRepoChange={repoActions.setSelectedRepoId}
+          onCreate={() => {
+            const repoId = repoActions.selectedRepoId;
+            closeNewWorkspaceModal();
+            if (repoId) setGithubPickerRepoId(repoId);
+          }}
+          mode="from-github"
+        />
+      ) : (
+        <NewWorkspacePromptModal
+          show={showNewWorkspaceModal}
+          repos={repos}
+          selectedRepoId={repoActions.selectedRepoId}
+          creating={repoActions.creating}
+          onClose={closeNewWorkspaceModal}
+          onRepoChange={repoActions.setSelectedRepoId}
+          onSubmit={({ repoId, prompt, branch, location }) => {
+            closeNewWorkspaceModal();
+            if (prompt) {
+              // Composer semantics: create, then the prompt rides as turn one.
+              void handleStartWorkspace(repoId, prompt, getStoredModel(), branch, location);
+            } else {
+              void repoActions.createAndSelectWorkspace(repoId, location);
+            }
+          }}
+        />
+      )}
 
       <SystemPromptModal
         show={showSystemPromptModal && !!selectedWorkspace}
