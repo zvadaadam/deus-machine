@@ -10,6 +10,7 @@ import {
   Sparkles,
   Copy,
   Check,
+  Cloud as CloudIcon,
 } from "lucide-react";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import {
@@ -50,6 +51,8 @@ interface WorkspaceHeaderProps {
   tasks?: NormalizedTask[];
   hasManifest?: boolean;
   onRunTask?: (taskName: string) => void;
+  /** Where the files live — 'cloud' renders the sandbox chip. */
+  kind?: string;
   /** Compact mode for mobile -- always show hamburger, hide Open button, tighter truncation */
   mobile?: boolean;
 }
@@ -75,6 +78,7 @@ export function WorkspaceHeader({
   tasks,
   hasManifest,
   onRunTask,
+  kind,
   mobile,
 }: WorkspaceHeaderProps) {
   const { state: sidebarState, toggleSidebar } = useSidebar();
@@ -131,6 +135,22 @@ export function WorkspaceHeader({
           >
             {title}
           </span>
+        )}
+
+        {kind === "cloud" && (
+          <Tooltip delayDuration={200}>
+            <TooltipTrigger asChild>
+              <span className="text-text-tertiary border-border-secondary mr-0.5 flex flex-shrink-0 items-center gap-1 rounded-full border px-1.5 py-px text-[11px] font-medium">
+                <CloudIcon className="h-3 w-3" />
+                Cloud
+              </span>
+            </TooltipTrigger>
+            <TooltipContent side="bottom">
+              <p className="text-xs">
+                Runs in a cloud sandbox — files live remotely; the Changes tab shows the live diff
+              </p>
+            </TooltipContent>
+          </Tooltip>
         )}
 
         {subtitle && (

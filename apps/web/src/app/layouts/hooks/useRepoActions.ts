@@ -114,16 +114,15 @@ export function useRepoActions({
     await createAndSelectWorkspace(repoIdToCreate, location);
   }
 
-  /** Handle "New Workspace" — if repoId is provided, create directly; otherwise open modal. */
+  /** Handle "New Workspace" — open the modal (preselecting the repo when
+   *  given). The modal owns the Local/Cloud choice, so the repo-row "+" must
+   *  route through it: quick-create would silently hardcode local. */
   const handleNewWorkspace = useCallback(
     async (repoId?: string) => {
-      if (repoId) {
-        await createAndSelectWorkspace(repoId);
-        return;
-      }
+      if (repoId) setSelectedRepoId(repoId);
       openNewWorkspaceModal();
     },
-    [openNewWorkspaceModal, createAndSelectWorkspace]
+    [openNewWorkspaceModal]
   );
 
   // ── Open local project ───────────────────────────────────────

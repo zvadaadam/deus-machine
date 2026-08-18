@@ -373,6 +373,7 @@ export function MainContent({
                         repositoryName={selectedWorkspace.repo_name}
                         branch={selectedWorkspace.git_branch ?? undefined}
                         workspacePath={selectedWorkspace.workspace_path}
+                        kind={selectedWorkspace.kind}
                         setupStatus={selectedWorkspace.setup_status}
                         setupError={selectedWorkspace.error_message}
                         onSendAgentMessage={
