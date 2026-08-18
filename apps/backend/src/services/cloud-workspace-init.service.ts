@@ -193,8 +193,18 @@ async function provisionInBackground(
     invalidate([...WORKSPACE_RESOURCES], {});
 
     // Open the session socket now: workspace.state events drive init_stage →
-    // 'ready', and the first user send needs the channel anyway.
-    await ensureCloudSession(sessionId);
+    // 'ready', and the first user send needs the channel anyway. A socket
+    // failure here is NOT a provisioning failure — the workspace and session
+    // exist and the sandbox keeps provisioning; the next send (or the wake
+    // button) reconnects. Marking the row 'error' would report a dead
+    // workspace for a transient connect problem.
+    try {
+      await ensureCloudSession(sessionId);
+    } catch (err) {
+      console.warn(
+        `[CloudInit] session channel connect failed for ${workspaceId} (send/wake will retry): ${err}`
+      );
+    }
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
     console.error(`[CloudInit] provisioning failed for ${workspaceId}: ${message}`);

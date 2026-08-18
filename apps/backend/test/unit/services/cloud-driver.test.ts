@@ -13,12 +13,14 @@ const mockSend = vi.fn();
 const mockClose = vi.fn();
 let capturedOnFrame: ((frame: Record<string, unknown>) => void) | null = null;
 let capturedOnDown: ((reason: string) => void) | null = null;
+let connectCount = 0;
 
 vi.mock("../../../src/services/agent/cloud/session-socket", () => ({
   connectSessionSocket: (options: {
     onFrame: (frame: Record<string, unknown>) => void;
     onDown?: (reason: string) => void;
   }) => {
+    connectCount += 1;
     capturedOnFrame = options.onFrame;
     capturedOnDown = options.onDown ?? null;
     return {
@@ -176,6 +178,23 @@ describe("cloud driver frame → fold contract", () => {
     capturedOnFrame!({ type: "workspace.state", data: { status: "running" } });
     expect(mockRun).toHaveBeenCalledWith("deus-ws-1");
     expect(mockInvalidate).toHaveBeenCalled();
+  });
+});
+
+describe("cloud driver session lifecycle", () => {
+  it("dedupes concurrent connects — a lost race would double-deliver frames", async () => {
+    // Fresh driver state, then race two ensures for the same session: they
+    // must share ONE socket connect (createSessionToken awaits, so the
+    // check-then-connect window is real).
+    shutdownCloudDriver();
+    initCloudDriver(handler);
+    connectCount = 0;
+    const [a, b] = await Promise.all([
+      ensureCloudSession("deus-session-1"),
+      ensureCloudSession("deus-session-1"),
+    ]);
+    expect(a).toBe(b);
+    expect(connectCount).toBe(1);
   });
 });
 

@@ -79,6 +79,11 @@ app.post("/workspaces/:id/cloud-wake", async (c) => {
   if (workspace.kind !== "cloud" || !workspace.provider_workspace_id) {
     throw new ValidationError("Not a cloud workspace");
   }
+  if (workspace.state === "archived") {
+    // Archive already stopped the sandbox; waking it would silently restart
+    // the meter on a workspace the UI presents as closed.
+    throw new ValidationError("Workspace is archived — unarchive it first");
+  }
   try {
     await wakeCloudWorkspace(workspace.provider_workspace_id);
   } catch (err) {

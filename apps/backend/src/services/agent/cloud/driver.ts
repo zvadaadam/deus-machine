@@ -275,8 +275,27 @@ function extractAnswers(response: unknown): string[] {
 
 // ---- Session lifecycle ----
 
-/** Open (or return) the live socket for a cloud session. */
+const connecting = new Map<string, Promise<CloudSession>>();
+
+/** Open (or return) the live socket for a cloud session. Concurrent callers
+ *  (create pipeline vs. a fast first send, diff polls vs. wake) share one
+ *  in-flight connect — a lost race would leak a second socket that
+ *  double-delivers every frame to the fold. */
 export async function ensureCloudSession(deusSessionId: string): Promise<CloudSession> {
+  const existing = sessions.get(deusSessionId);
+  if (existing?.socket.isOpen()) return existing;
+
+  const inFlight = connecting.get(deusSessionId);
+  if (inFlight) return inFlight;
+
+  const attempt = connectCloudSession(deusSessionId).finally(() => {
+    connecting.delete(deusSessionId);
+  });
+  connecting.set(deusSessionId, attempt);
+  return attempt;
+}
+
+async function connectCloudSession(deusSessionId: string): Promise<CloudSession> {
   const existing = sessions.get(deusSessionId);
   if (existing?.socket.isOpen()) return existing;
   existing?.socket.close();

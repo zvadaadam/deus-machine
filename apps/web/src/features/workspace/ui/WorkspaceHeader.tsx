@@ -26,7 +26,7 @@ import { native } from "@/platform";
 import type { InstalledApp } from "@/platform";
 import { track } from "@/platform/analytics";
 import type { SetupStatus } from "@/shared/types";
-import type { WorkspaceStatus } from "@shared/enums";
+import type { WorkspaceKind, WorkspaceStatus } from "@shared/enums";
 import type { NormalizedTask } from "../api/workspace.service";
 import { HeaderRunButton } from "./HeaderRunButton";
 import { WorkflowStatusIcon } from "@/features/sidebar/ui/WorkflowStatusIcon";
@@ -52,7 +52,7 @@ interface WorkspaceHeaderProps {
   hasManifest?: boolean;
   onRunTask?: (taskName: string) => void;
   /** Where the files live — 'cloud' renders the sandbox chip. */
-  kind?: string;
+  kind?: WorkspaceKind;
   /** Compact mode for mobile -- always show hamburger, hide Open button, tighter truncation */
   mobile?: boolean;
 }
