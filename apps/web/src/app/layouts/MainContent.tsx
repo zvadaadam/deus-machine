@@ -383,9 +383,11 @@ export function MainContent({
                         kind={selectedWorkspace.kind}
                         cloudAsleep={
                           selectedWorkspace.kind === "cloud" &&
-                          ["paused", "stopped", "resuming"].includes(
-                            selectedWorkspace.init_stage ?? ""
-                          )
+                          ["paused", "stopped"].includes(selectedWorkspace.init_stage ?? "")
+                        }
+                        cloudWaking={
+                          selectedWorkspace.kind === "cloud" &&
+                          selectedWorkspace.init_stage === "resuming"
                         }
                         onCloudWake={() => {
                           void apiClient

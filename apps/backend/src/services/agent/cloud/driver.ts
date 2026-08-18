@@ -98,20 +98,22 @@ function updateCloudWorkspace(workspaceId: string, data: { status?: string; step
   invalidate(["workspaces", "stats"], {});
 }
 
-/** Push the environment event to connected clients (q:event "cloud:env").
+/** Push an environment event to connected clients (q:event "cloud:env").
  *  Ephemeral on purpose: the chat shows a live provisioning/wake progress
  *  stack from these; nothing is persisted and a refresh clears them.
  *  Validated at this seam — a malformed platform frame is dropped here, not
- *  shipped to the UI (the workspace-row update above has its own tolerance). */
-function broadcastCloudEnv(session: CloudSession, data: unknown): void {
+ *  shipped to the UI (the workspace-row update has its own tolerance).
+ *  Exported so routes (cloud-wake) can announce synthetic states — e.g. the
+ *  optimistic "resuming" line — through the same pipe as real frames. */
+export function announceCloudEnv(workspaceId: string, sessionId: string, data: unknown): void {
   const parsed = CloudEnvStateSchema.safeParse(data);
   if (!parsed.success) return;
-  const payload: CloudEnvEvent = {
-    workspaceId: session.deusWorkspaceId,
-    sessionId: session.deusSessionId,
-    data: parsed.data,
-  };
+  const payload: CloudEnvEvent = { workspaceId, sessionId, data: parsed.data };
   broadcast(JSON.stringify({ type: "q:event", event: "cloud:env", data: payload }));
+}
+
+function broadcastCloudEnv(session: CloudSession, data: unknown): void {
+  announceCloudEnv(session.deusWorkspaceId, session.deusSessionId, data);
 }
 
 // ---- Frame dispatch ----
@@ -167,6 +169,12 @@ function dispatchFrame(session: CloudSession, frame: Record<string, unknown>): v
       if (sessionStatus === "paused" || sessionStatus === "stopped") {
         updateCloudWorkspace(session.deusWorkspaceId, { status: sessionStatus });
         broadcastCloudEnv(session, { status: sessionStatus });
+      } else if (sessionStatus === "provisioning") {
+        // Connected mid-setup (fresh create attaches while the sandbox is
+        // still building) — show the stack immediately; the step events
+        // that follow append to it.
+        updateCloudWorkspace(session.deusWorkspaceId, { status: "provisioning" });
+        broadcastCloudEnv(session, { status: "provisioning" });
       } else if (sessionStatus === "ready" || sessionStatus === "running") {
         updateCloudWorkspace(session.deusWorkspaceId, { status: "running" });
       }

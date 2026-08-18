@@ -56,6 +56,8 @@ interface WorkspaceHeaderProps {
   kind?: WorkspaceKind;
   /** Cloud only: the sandbox is paused/stopped — dim the chip, click wakes it. */
   cloudAsleep?: boolean;
+  /** Cloud only: a wake is in flight — spinner chip, not clickable. */
+  cloudWaking?: boolean;
   /** Cloud only: manual unpause (the chip is the wake affordance — no separate button). */
   onCloudWake?: () => void;
   /** Compact mode for mobile -- always show hamburger, hide Open button, tighter truncation */
@@ -85,6 +87,7 @@ export function WorkspaceHeader({
   onRunTask,
   kind,
   cloudAsleep,
+  cloudWaking,
   onCloudWake,
   mobile,
 }: WorkspaceHeaderProps) {
@@ -145,7 +148,12 @@ export function WorkspaceHeader({
         )}
 
         {kind === "cloud" &&
-          (cloudAsleep ? (
+          (cloudWaking ? (
+            <span className="text-text-muted border-border-secondary mr-0.5 flex flex-shrink-0 items-center gap-1 rounded-full border border-dashed px-1.5 py-px text-[11px] font-medium">
+              <Loader2 className="h-3 w-3 animate-spin" />
+              Waking
+            </span>
+          ) : cloudAsleep ? (
             <Tooltip delayDuration={200}>
               <TooltipTrigger asChild>
                 <button

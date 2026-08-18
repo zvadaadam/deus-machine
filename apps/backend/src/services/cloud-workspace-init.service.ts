@@ -14,6 +14,7 @@ import {
   createSession as agntCreateSession,
   stopWorkspace as agntStopWorkspace,
   resumeWorkspace as agntResumeWorkspace,
+  getWorkspace as agntGetWorkspace,
   createSecret as agntCreateSecret,
   listSecrets as agntListSecrets,
   Environment,
@@ -105,6 +106,21 @@ export async function stopCloudWorkspace(providerWorkspaceId: string): Promise<v
     baseUrl: config.baseUrl,
     apiKey: config.apiKey,
   });
+}
+
+/** Platform-truth status of the sandbox ("paused" | "stopped" | "running" | ...), null if unreachable. */
+export async function getCloudWorkspaceStatus(providerWorkspaceId: string): Promise<string | null> {
+  const config = getCloudConfig();
+  if (!config) return null;
+  try {
+    const summary = await agntGetWorkspace(providerWorkspaceId, {
+      baseUrl: config.baseUrl,
+      apiKey: config.apiKey,
+    });
+    return typeof summary?.status === "string" ? summary.status : null;
+  } catch {
+    return null;
+  }
 }
 
 /** Wake a paused sandbox (explicit resume; sends also auto-resume). */

@@ -25,8 +25,9 @@ import {
   createCloudWorkspace,
   stopCloudWorkspace,
   wakeCloudWorkspace,
+  getCloudWorkspaceStatus,
 } from "../services/cloud-workspace-init.service";
-import { ensureCloudSession } from "../services/agent/cloud/driver";
+import { ensureCloudSession, announceCloudEnv } from "../services/agent/cloud/driver";
 import { autoProgressStatus, setWorkspaceStatus } from "../services/workspace-status.service";
 import {
   getAllWorkspaces,
@@ -84,16 +85,49 @@ app.post("/workspaces/:id/cloud-wake", async (c) => {
     // the meter on a workspace the UI presents as closed.
     throw new ValidationError("Workspace is archived — unarchive it first");
   }
-  try {
-    await wakeCloudWorkspace(workspace.provider_workspace_id);
-  } catch (err) {
-    // Resume of an already-running sandbox can reject — the reconnect below
-    // still refreshes the truth, so a failed resume is not fatal.
-    console.warn(`[WORKSPACE] cloud wake resume failed (continuing): ${err}`);
+
+  // Every outcome below must be VISIBLE — a wake click that does nothing
+  // reads as broken. announceCloudEnv rides the same ephemeral chat pipe as
+  // real platform frames; the row's init_stage drives the header chip.
+  const sessionId = workspace.current_session_id;
+  const announce = (data: Record<string, unknown>) => {
+    if (sessionId) announceCloudEnv(workspace.id, sessionId, data);
+  };
+  const setStage = (stage: string | null) => {
+    db.prepare("UPDATE workspaces SET init_stage = ? WHERE id = ?").run(stage, workspace.id);
+    invalidate(["workspaces", "stats"]);
+  };
+
+  // Platform truth first: agnt's resume endpoint only accepts PAUSED
+  // workspaces — a stopped sandbox is gone and only a message-send
+  // re-provisions it. Blind resume would reject and the click would look dead.
+  const status = await getCloudWorkspaceStatus(workspace.provider_workspace_id);
+
+  if (status === "stopped") {
+    setStage("stopped");
+    announce({ status: "stopped", reason: "send a message to restart it" });
+    return c.json({ ok: true, status: "stopped" });
   }
-  if (workspace.current_session_id) {
+
+  if (status === "paused" || status === null) {
+    setStage("resuming");
+    announce({ status: "resuming" });
     try {
-      await ensureCloudSession(workspace.current_session_id);
+      await wakeCloudWorkspace(workspace.provider_workspace_id);
+    } catch (err) {
+      // Honest revert: the sandbox is still asleep — say so instead of
+      // leaving a "Waking sandbox" spinner that never resolves.
+      console.warn(`[WORKSPACE] cloud wake resume failed: ${err}`);
+      setStage("paused");
+      announce({ status: "paused", reason: "resume failed — try again or send a message" });
+      return c.json({ ok: false, status: "paused" });
+    }
+  }
+  // running/provisioning: nothing to resume — the reconnect below refreshes truth.
+
+  if (sessionId) {
+    try {
+      await ensureCloudSession(sessionId);
     } catch (err) {
       // The resume may have succeeded; the channel reconnects on the next
       // send — a transient connect failure must not fail the wake.
@@ -101,7 +135,7 @@ app.post("/workspaces/:id/cloud-wake", async (c) => {
     }
   }
   invalidate(["workspaces", "stats"]);
-  return c.json({ ok: true });
+  return c.json({ ok: true, status: status ?? "unknown" });
 });
 
 // Open the session channel WITHOUT waking the sandbox. The channel terminates
