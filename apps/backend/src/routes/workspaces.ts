@@ -21,7 +21,7 @@ import {
   isManifestCommandSafe,
 } from "../services/manifest.service";
 import { initializeWorkspace } from "../services/workspace-init.service";
-import { createCloudWorkspace } from "../services/cloud-workspace-init.service";
+import { createCloudWorkspace, stopCloudWorkspace } from "../services/cloud-workspace-init.service";
 import { autoProgressStatus, setWorkspaceStatus } from "../services/workspace-status.service";
 import {
   getAllWorkspaces,
@@ -78,6 +78,16 @@ app.patch("/workspaces/:id", async (c) => {
 
     if (state === "archived") {
       autoProgressStatus(id, "done", { force: true });
+
+      // Cloud workspace: stop the sandbox (best-effort) so archiving ends the
+      // meter instead of waiting out the idle TTL. The mirror/checkpoint story
+      // (Sprint 2) is what makes this safe to do eagerly.
+      const archived = getWorkspaceById(db, id);
+      if (archived?.kind === "cloud" && archived.provider_workspace_id) {
+        void stopCloudWorkspace(archived.provider_workspace_id).catch((err) => {
+          console.warn(`[WORKSPACE] cloud stop failed for ${id} (continuing):`, err);
+        });
+      }
 
       // Run archive lifecycle hook (best-effort)
       try {

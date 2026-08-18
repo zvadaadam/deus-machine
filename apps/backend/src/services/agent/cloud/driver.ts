@@ -28,12 +28,20 @@ import { getSessionRaw } from "../../../db";
 
 const LIFECYCLE_TYPES: ReadonlySet<string> = new Set(LIFECYCLE_EVENT_TYPES);
 
+interface PendingDiff {
+  resolve: (data: Record<string, unknown>) => void;
+  reject: (err: Error) => void;
+  timer: ReturnType<typeof setTimeout>;
+}
+
 interface CloudSession {
   deusSessionId: string;
   deusWorkspaceId: string;
   providerSessionId: string;
   socket: SessionSocket;
   seq: number;
+  /** In-flight diff.request round-trips, keyed by requestId. */
+  pendingDiffs: Map<string, PendingDiff>;
 }
 
 let handler: AgentEventHandler | null = null;
@@ -44,8 +52,19 @@ export function initCloudDriver(eventHandler: AgentEventHandler): void {
   handler = eventHandler;
 }
 
+function rejectPendingDiffs(session: CloudSession, reason: string): void {
+  for (const pending of session.pendingDiffs.values()) {
+    clearTimeout(pending.timer);
+    pending.reject(new Error(reason));
+  }
+  session.pendingDiffs.clear();
+}
+
 export function shutdownCloudDriver(): void {
-  for (const s of sessions.values()) s.socket.close();
+  for (const s of sessions.values()) {
+    rejectPendingDiffs(s, "cloud driver shutting down");
+    s.socket.close();
+  }
   sessions.clear();
   handler = null;
 }
@@ -79,18 +98,41 @@ function updateCloudWorkspace(workspaceId: string, data: { status?: string; step
 
 // ---- Frame dispatch ----
 
+/** Wrap one event under the deus session id and feed the shared fold. */
+function pushToFold(session: CloudSession, event: Record<string, unknown>): void {
+  if (!handler) return;
+  const envelope: DecodedWireEventEnvelope = {
+    sessionId: session.deusSessionId,
+    seq: ++session.seq,
+    event: { ...event, sessionId: session.deusSessionId } as DecodedWireEventEnvelope["event"],
+  };
+  handler.handle(envelope);
+}
+
+/** agnt error envelopes (code/message) → the engine's error event, so the
+ *  existing error plumbing (facts, dedupe, status flip) runs unchanged. */
+function pushCloudError(session: CloudSession, code: unknown, message: unknown): void {
+  pushToFold(session, {
+    type: "error",
+    category: "internal",
+    message: `${typeof code === "string" ? code : "cloud_error"}: ${
+      typeof message === "string" ? message : "Cloud session error"
+    }`,
+    recoverable: false,
+    timestamp: Date.now(),
+  });
+}
+
 function dispatchFrame(session: CloudSession, frame: Record<string, unknown>): void {
   const type = typeof frame.type === "string" ? frame.type : "";
   if (!type || !handler) return;
 
   // Engine lifecycle events pass through verbatim under the deus session id.
-  if (LIFECYCLE_TYPES.has(type)) {
-    const envelope: DecodedWireEventEnvelope = {
-      sessionId: session.deusSessionId,
-      seq: ++session.seq,
-      event: { ...frame, sessionId: session.deusSessionId } as DecodedWireEventEnvelope["event"],
-    };
-    handler.handle(envelope);
+  // agnt's published set omits the engine `error` member (it re-wraps errors
+  // in its own envelopes below), but a frame that IS engine-shaped — carrying
+  // `category` — passes through as-is.
+  if (LIFECYCLE_TYPES.has(type) || (type === "error" && typeof frame.category === "string")) {
+    pushToFold(session, frame);
     return;
   }
 
@@ -129,37 +171,36 @@ function dispatchFrame(session: CloudSession, frame: Record<string, unknown>): v
     case "workspace.lifecycle":
       return; // step chatter — workspace.state carries the row-level truth
 
-    case "session.error": {
-      // agnt's terminal error envelope → the engine's error event, so the
-      // existing error plumbing (facts, dedupe, status flip) runs unchanged.
-      const code = typeof frame.code === "string" ? frame.code : "cloud_error";
-      const message = typeof frame.message === "string" ? frame.message : "Cloud session error";
-      dispatchFrame(session, {
-        type: "error",
-        sessionId: session.providerSessionId,
-        category: "internal",
-        message: `${code}: ${message}`,
-        recoverable: false,
-        timestamp: Date.now(),
-      });
+    case "diff.response": {
+      const data = (frame.data ?? {}) as { requestId?: string };
+      if (!data.requestId) return;
+      const pending = session.pendingDiffs.get(data.requestId);
+      if (!pending) return;
+      session.pendingDiffs.delete(data.requestId);
+      clearTimeout(pending.timer);
+      pending.resolve(data as Record<string, unknown>);
       return;
     }
 
-    case "error": {
-      // Channel-level command rejection (e.g. MESSAGE_SEND_FAILED).
-      const code = typeof frame.code === "string" ? frame.code : "cloud_channel_error";
-      const message = typeof frame.message === "string" ? frame.message : "Cloud channel error";
-      console.warn(`[CloudDriver] channel error session=${session.deusSessionId} ${code}`);
-      dispatchFrame(session, {
-        type: "error",
-        sessionId: session.providerSessionId,
-        category: "internal",
-        message: `${code}: ${message}`,
-        recoverable: false,
-        timestamp: Date.now(),
-      });
+    case "diff.update":
+      // Live dirty-file push. The Changes panel polls the diff routes on
+      // working sessions (same cadence as local), so the push is advisory
+      // here — Sprint 2 turns it into an invalidation signal.
       return;
-    }
+
+    case "session.error":
+      pushCloudError(session, frame.code, frame.message);
+      return;
+
+    case "error":
+      // Channel-level command rejection (e.g. MESSAGE_SEND_FAILED). Engine-
+      // shaped error events (with `category`) never reach here — the
+      // passthrough above claims them.
+      console.warn(
+        `[CloudDriver] channel error session=${session.deusSessionId} ${String(frame.code ?? "")}`
+      );
+      pushCloudError(session, frame.code, frame.message);
+      return;
 
     case "mcp.question": {
       const data = (frame.data ?? {}) as {
@@ -262,6 +303,7 @@ export async function ensureCloudSession(deusSessionId: string): Promise<CloudSe
     deusWorkspaceId: row.workspace_id,
     providerSessionId: row.provider_session_id,
     seq: 0,
+    pendingDiffs: new Map(),
     // Assigned below — the frame callback closes over the session object.
     socket: undefined as unknown as SessionSocket,
   };
@@ -272,6 +314,7 @@ export async function ensureCloudSession(deusSessionId: string): Promise<CloudSe
     onFrame: (frame) => dispatchFrame(session, frame),
     onDown: (reason) => {
       console.warn(`[CloudDriver] socket down session=${deusSessionId}: ${reason}`);
+      rejectPendingDiffs(session, reason);
       sessions.delete(deusSessionId);
     },
   });
@@ -339,4 +382,72 @@ export function isCloudSession(deusSessionId: string): boolean {
   const db = getDatabase();
   const row = getSessionRaw(db, deusSessionId);
   return Boolean(row?.provider_session_id);
+}
+
+// ---- Diff channel (sandbox worktree diffs over the session socket) ----
+
+const DIFF_TIMEOUT_MS = 20_000;
+
+export type CloudDiffRequest =
+  | { scope: "SUMMARY" }
+  | { scope: "FILE"; path: string; format: "DIFF" | "CONTENT" };
+
+export interface CloudDiffSummary {
+  files: Array<{
+    type: string;
+    path: string;
+    oldPath?: string;
+    additions?: number;
+    deletions?: number;
+  }>;
+  error?: string;
+}
+
+export interface CloudDiffFile {
+  path: string;
+  content?: string;
+  diff?: string;
+  error?: string;
+}
+
+/** One diff.request round-trip against the sandbox's live worktree. */
+export async function requestCloudDiff(
+  deusSessionId: string,
+  request: CloudDiffRequest
+): Promise<Record<string, unknown>> {
+  const session = await ensureCloudSession(deusSessionId);
+  const requestId = crypto.randomUUID();
+  const response = new Promise<Record<string, unknown>>((resolve, reject) => {
+    const timer = setTimeout(() => {
+      session.pendingDiffs.delete(requestId);
+      reject(new Error("cloud diff request timed out"));
+    }, DIFF_TIMEOUT_MS);
+    session.pendingDiffs.set(requestId, { resolve, reject, timer });
+  });
+  session.socket.send({ type: "diff.request", data: { ...request, requestId } });
+  return response;
+}
+
+/** SUMMARY: which files differ in the sandbox worktree right now. */
+export async function getCloudDiffSummary(deusSessionId: string): Promise<CloudDiffSummary> {
+  const data = await requestCloudDiff(deusSessionId, { scope: "SUMMARY" });
+  return {
+    files: Array.isArray(data.files) ? (data.files as CloudDiffSummary["files"]) : [],
+    ...(typeof data.error === "string" ? { error: data.error } : {}),
+  };
+}
+
+/** FILE: unified diff or full content for one sandbox path. */
+export async function getCloudDiffFile(
+  deusSessionId: string,
+  path: string,
+  format: "DIFF" | "CONTENT"
+): Promise<CloudDiffFile> {
+  const data = await requestCloudDiff(deusSessionId, { scope: "FILE", path, format });
+  return {
+    path,
+    ...(typeof data.content === "string" ? { content: data.content } : {}),
+    ...(typeof data.diff === "string" ? { diff: data.diff } : {}),
+    ...(typeof data.error === "string" ? { error: data.error } : {}),
+  };
 }

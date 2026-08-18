@@ -12,6 +12,7 @@ import { v7 as uuidv7 } from "uuid";
 import {
   createWorkspace as agntCreateWorkspace,
   createSession as agntCreateSession,
+  stopWorkspace as agntStopWorkspace,
   Environment,
 } from "@deus-hq/sdk";
 import { getDatabase } from "../lib/database";
@@ -75,6 +76,16 @@ export function createCloudWorkspace(params: CreateCloudWorkspaceParams): {
   );
 
   return { workspaceId, slug };
+}
+
+/** Stop the agnt sandbox behind an archived cloud workspace (best-effort). */
+export async function stopCloudWorkspace(providerWorkspaceId: string): Promise<void> {
+  const config = getCloudConfig();
+  if (!config) return;
+  await agntStopWorkspace(providerWorkspaceId, {
+    baseUrl: config.baseUrl,
+    apiKey: config.apiKey,
+  });
 }
 
 async function provisionInBackground(
