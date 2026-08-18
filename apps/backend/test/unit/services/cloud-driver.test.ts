@@ -42,7 +42,7 @@ vi.mock("@deus-hq/sdk", () => ({
   createSessionToken: vi.fn(async () => ({ token: "session-jwt" })),
 }));
 
-const mockRelay = vi.fn(async () => ({ answers: ["yes"] }));
+const mockRelay = vi.fn(async (..._args: unknown[]) => ({ answers: ["yes"] }));
 vi.mock("../../../src/services/agent/tool-relay", () => ({
   relay: (...args: unknown[]) => mockRelay(...args),
 }));

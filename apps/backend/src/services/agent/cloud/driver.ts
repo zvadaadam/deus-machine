@@ -16,7 +16,7 @@ import { createSessionToken } from "@deus-hq/sdk";
 import { LIFECYCLE_EVENT_TYPES } from "@deus-hq/api";
 import type { TurnCancelResult } from "@zvada/agent-server/protocol";
 import type { DecodedWireEventEnvelope } from "@shared/protocol-types";
-import type { ThinkingLevel } from "@shared/agent-info";
+import type { ThinkingLevel } from "@shared/protocol";
 import { getCloudConfig } from "./config";
 import { connectSessionSocket, type SessionSocket } from "./session-socket";
 import type { AgentEventHandler } from "../event-handler";
