@@ -23,6 +23,7 @@ import type { AgentEventHandler } from "../event-handler";
 import { relay } from "../tool-relay";
 import { persistSessionNeedsResponse, persistSessionBackToWorking } from "../persistence";
 import { invalidate } from "../../query-engine";
+import { broadcast } from "../../ws.service";
 import { getDatabase } from "../../../lib/database";
 import { getSessionRaw } from "../../../db";
 
@@ -96,6 +97,23 @@ function updateCloudWorkspace(workspaceId: string, data: { status?: string; step
   invalidate(["workspaces", "stats"], {});
 }
 
+/** Push the raw environment event to connected clients (q:event "cloud:env").
+ *  Ephemeral on purpose: the chat shows a live provisioning/wake progress
+ *  stack from these; nothing is persisted and a refresh clears them. */
+function broadcastCloudEnv(session: CloudSession, data: Record<string, unknown>): void {
+  broadcast(
+    JSON.stringify({
+      type: "q:event",
+      event: "cloud:env",
+      data: {
+        workspaceId: session.deusWorkspaceId,
+        sessionId: session.deusSessionId,
+        data,
+      },
+    })
+  );
+}
+
 // ---- Frame dispatch ----
 
 /** Wrap one event under the deus session id and feed the shared fold. */
@@ -165,6 +183,7 @@ function dispatchFrame(session: CloudSession, frame: Record<string, unknown>): v
     case "workspace.state": {
       const data = (frame.data ?? {}) as { status?: string; step?: string };
       updateCloudWorkspace(session.deusWorkspaceId, data);
+      broadcastCloudEnv(session, data);
       return;
     }
 

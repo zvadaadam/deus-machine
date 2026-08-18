@@ -59,6 +59,11 @@ vi.mock("../../../src/services/query-engine", () => ({
   invalidate: (...args: unknown[]) => mockInvalidate(...args),
 }));
 
+const mockBroadcast = vi.fn();
+vi.mock("../../../src/services/ws.service", () => ({
+  broadcast: (...args: unknown[]) => mockBroadcast(...args),
+}));
+
 const mockRun = vi.fn();
 vi.mock("../../../src/lib/database", () => ({
   getDatabase: () => ({ prepare: () => ({ run: mockRun }) }),
@@ -178,6 +183,25 @@ describe("cloud driver frame → fold contract", () => {
     capturedOnFrame!({ type: "workspace.state", data: { status: "running" } });
     expect(mockRun).toHaveBeenCalledWith("deus-ws-1");
     expect(mockInvalidate).toHaveBeenCalled();
+  });
+
+  it("broadcasts workspace.state as an ephemeral cloud:env q:event", () => {
+    mockBroadcast.mockClear();
+    capturedOnFrame!({
+      type: "workspace.state",
+      data: { status: "provisioning", step: "cloning_repository" },
+    });
+    expect(mockBroadcast).toHaveBeenCalledTimes(1);
+    const frame = JSON.parse(mockBroadcast.mock.calls[0][0] as string);
+    expect(frame).toEqual({
+      type: "q:event",
+      event: "cloud:env",
+      data: {
+        workspaceId: "deus-ws-1",
+        sessionId: "deus-session-1",
+        data: { status: "provisioning", step: "cloning_repository" },
+      },
+    });
   });
 });
 

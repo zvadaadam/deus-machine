@@ -15,6 +15,7 @@ import { useVirtualizer } from "@tanstack/react-virtual";
 import { useCallback, useMemo, useRef, useEffect } from "react";
 import { AnimatePresence, m } from "framer-motion";
 import { CircularPixelGrid, type CircularPixelGridVariant } from "./CircularPixelGrid";
+import { CloudEnvProgress } from "./CloudEnvProgress";
 import { buildChatTimeline } from "../lib/chatTimeline";
 
 interface ChatProps {
@@ -45,6 +46,8 @@ interface ChatProps {
   onDismissContextLost?: () => void;
   /** Incremented by SessionPanel when the human clicks Send. */
   userSendCount?: number;
+  /** Enables the ephemeral cloud environment progress stack (cloud lane). */
+  workspaceId?: string | null;
   className?: string;
 }
 
@@ -70,6 +73,7 @@ export function Chat({
   contextLost = false,
   onDismissContextLost,
   userSendCount = 0,
+  workspaceId,
   className,
 }: ChatProps) {
   // Chat owns its scroll behavior entirely — refs, hook, and button.
@@ -488,6 +492,7 @@ export function Chat({
                   </m.div>
                 )}
               </AnimatePresence>
+              <CloudEnvProgress workspaceId={workspaceId} />
               <AnimatePresence>
                 {sessionStatus === "working" && (
                   <m.div

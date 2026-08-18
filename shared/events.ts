@@ -199,6 +199,12 @@ export const PROTOCOL_EVENTS = [
   //   apps:stopped  — tabs pointing at the url are closed (the port is dead)
   "apps:launched",
   "apps:stopped",
+  // Cloud sandbox environment progress (workspace.state passthrough from the
+  // agnt session socket). Ephemeral by design: the chat renders these as a
+  // live provisioning/wake progress stack and nothing is persisted — a
+  // refresh clears them. Payload: { workspaceId, sessionId, data } where data
+  // is agnt's WorkspaceStateData ({ status, step?, reason?, ... }).
+  "cloud:env",
 ] as const;
 export type ProtocolEvent = (typeof PROTOCOL_EVENTS)[number];
 

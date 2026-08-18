@@ -268,7 +268,9 @@ describe("shared/events", () => {
       // AAP events
       expect(PROTOCOL_EVENTS).toContain("apps:launched");
       expect(PROTOCOL_EVENTS).toContain("apps:stopped");
-      expect(PROTOCOL_EVENTS).toHaveLength(16);
+      // Cloud sandbox environment progress (ephemeral chat stack)
+      expect(PROTOCOL_EVENTS).toContain("cloud:env");
+      expect(PROTOCOL_EVENTS).toHaveLength(17);
     });
 
     it("has no deus-dialect part/message event names left", () => {
