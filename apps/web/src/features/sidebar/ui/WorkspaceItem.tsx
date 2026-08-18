@@ -5,6 +5,7 @@ import NumberFlow from "@number-flow/react";
 import { useQueryClient } from "@tanstack/react-query";
 
 import { cn } from "@/shared/lib/utils";
+import { apiClient } from "@/shared/api/client";
 import { formatTimeAgo } from "@/shared/lib/formatters";
 import { useWorkingDuration, formatDuration } from "@/shared/hooks";
 import { useUnreadStore } from "@/features/session/store/unreadStore";
@@ -32,6 +33,34 @@ import { WorkspaceStatusMenu } from "./WorkspaceStatusMenu";
  * stats or relative time. Hover swaps meta for the archive button; the
  * slug hides in the row title attribute.
  */
+/**
+ * Cloud sandbox liveness dot. The cloud driver mirrors agnt's workspace.state
+ * into init_stage (paused/stopped/resuming while the row stays ready), so the
+ * icon shows green = online, dimmed = asleep. Click wakes the sandbox and
+ * reopens its channel; sending a message also wakes it.
+ */
+function CloudLivenessIcon({ workspace }: { workspace: WorkspaceItemProps["workspace"] }) {
+  const asleep = ["paused", "stopped", "resuming"].includes(workspace.init_stage ?? "");
+  return (
+    <button
+      type="button"
+      onClick={(e) => {
+        e.stopPropagation();
+        void apiClient.post(`/workspaces/${workspace.id}/cloud-wake`).catch(() => {});
+      }}
+      title={
+        asleep
+          ? `Cloud sandbox ${workspace.init_stage} — click to wake (a message also wakes it)`
+          : "Cloud sandbox online — click to refresh"
+      }
+      aria-label="Cloud workspace status"
+      className="flex shrink-0 cursor-pointer items-center"
+    >
+      <Cloud className={cn("h-3 w-3", asleep ? "text-text-disabled" : "text-accent-green")} />
+    </button>
+  );
+}
+
 export const WorkspaceItem = React.memo(function WorkspaceItem({
   workspace,
   isActive,
@@ -203,9 +232,7 @@ export const WorkspaceItem = React.memo(function WorkspaceItem({
         >
           {displayName}
         </span>
-        {workspace.kind === "cloud" && (
-          <Cloud className="text-text-tertiary h-3 w-3 shrink-0" aria-label="Cloud workspace" />
-        )}
+        {workspace.kind === "cloud" && <CloudLivenessIcon workspace={workspace} />}
       </div>
 
       {/* Right: one signal. Fades out on hover to make room for archive. */}

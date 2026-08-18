@@ -15,6 +15,7 @@ import {
   GitHubSection,
   BrowserSection,
   AISection,
+  CloudSection,
   EnvironmentSection,
   ExperimentalSection,
   AccessSection,
@@ -97,6 +98,7 @@ export function SettingsPage() {
       .with("github", () => <GitHubSection />)
       .with("browser", () => <BrowserSection />)
       .with("ai", () => <AISection {...sectionProps} />)
+      .with("cloud", () => <CloudSection />)
       .with("environment", () => <EnvironmentSection />)
       .with("experimental", () => <ExperimentalSection {...sectionProps} />)
       .with("access", () => <AccessSection {...sectionProps} />)

@@ -21,7 +21,12 @@ import {
   isManifestCommandSafe,
 } from "../services/manifest.service";
 import { initializeWorkspace } from "../services/workspace-init.service";
-import { createCloudWorkspace, stopCloudWorkspace } from "../services/cloud-workspace-init.service";
+import {
+  createCloudWorkspace,
+  stopCloudWorkspace,
+  wakeCloudWorkspace,
+} from "../services/cloud-workspace-init.service";
+import { ensureCloudSession } from "../services/agent/cloud/driver";
 import { autoProgressStatus, setWorkspaceStatus } from "../services/workspace-status.service";
 import {
   getAllWorkspaces,
@@ -62,6 +67,30 @@ app.get("/workspaces/:id", (c) => {
   const workspace = getWorkspaceById(db, c.req.param("id"));
   if (!workspace) throw new NotFoundError("Workspace not found");
   return c.json({ ...workspace, workspace_path: computeWorkspacePath(workspace) });
+});
+
+// Wake a paused cloud sandbox and reopen its session channel. Sends also
+// auto-resume; this is the explicit "click the cloud icon" path, and the
+// reconnected socket's workspace.state events refresh the row's truth.
+app.post("/workspaces/:id/cloud-wake", async (c) => {
+  const db = getDatabase();
+  const workspace = getWorkspaceById(db, c.req.param("id"));
+  if (!workspace) throw new NotFoundError("Workspace not found");
+  if (workspace.kind !== "cloud" || !workspace.provider_workspace_id) {
+    throw new ValidationError("Not a cloud workspace");
+  }
+  try {
+    await wakeCloudWorkspace(workspace.provider_workspace_id);
+  } catch (err) {
+    // Resume of an already-running sandbox can reject — the reconnect below
+    // still refreshes the truth, so a failed resume is not fatal.
+    console.warn(`[WORKSPACE] cloud wake resume failed (continuing): ${err}`);
+  }
+  if (workspace.current_session_id) {
+    await ensureCloudSession(workspace.current_session_id);
+  }
+  invalidate(["workspaces", "stats"]);
+  return c.json({ ok: true });
 });
 
 app.patch("/workspaces/:id", async (c) => {

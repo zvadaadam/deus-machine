@@ -13,6 +13,9 @@ import {
   createWorkspace as agntCreateWorkspace,
   createSession as agntCreateSession,
   stopWorkspace as agntStopWorkspace,
+  resumeWorkspace as agntResumeWorkspace,
+  createSecret as agntCreateSecret,
+  listSecrets as agntListSecrets,
   Environment,
 } from "@deus-hq/sdk";
 import { getDatabase } from "../lib/database";
@@ -101,6 +104,63 @@ export async function stopCloudWorkspace(providerWorkspaceId: string): Promise<v
   await agntStopWorkspace(providerWorkspaceId, {
     baseUrl: config.baseUrl,
     apiKey: config.apiKey,
+  });
+}
+
+/** Wake a paused sandbox (explicit resume; sends also auto-resume). */
+export async function wakeCloudWorkspace(providerWorkspaceId: string): Promise<void> {
+  const config = getCloudConfig();
+  if (!config) throw new Error("Cloud workspaces are not configured");
+  await agntResumeWorkspace(providerWorkspaceId, {
+    baseUrl: config.baseUrl,
+    apiKey: config.apiKey,
+  });
+}
+
+/** Settings surface: connection + secret status for the Cloud section. */
+export async function getCloudSettingsStatus(): Promise<{
+  enabled: boolean;
+  baseUrl: string | null;
+  hasAnthropicKey: boolean;
+  hasGithubToken: boolean;
+}> {
+  const config = getCloudConfig();
+  if (!config) {
+    return { enabled: false, baseUrl: null, hasAnthropicKey: false, hasGithubToken: false };
+  }
+  let hasGithubToken = false;
+  try {
+    for await (const secret of agntListSecrets({
+      baseUrl: config.baseUrl,
+      apiKey: config.apiKey,
+    })) {
+      const name =
+        (secret as { keyName?: string; name?: string }).keyName ??
+        (secret as { name?: string }).name;
+      if (name?.toLowerCase() === "github_token") {
+        hasGithubToken = true;
+        break;
+      }
+    }
+  } catch (err) {
+    console.warn(`[CloudSettings] listSecrets failed: ${err instanceof Error ? err.message : err}`);
+  }
+  return {
+    enabled: true,
+    baseUrl: config.baseUrl,
+    hasAnthropicKey: Boolean(config.anthropicApiKey),
+    hasGithubToken,
+  };
+}
+
+/** Store the org github_token secret (unlocks private repos in sandboxes). */
+export async function saveCloudGithubToken(token: string): Promise<void> {
+  const config = getCloudConfig();
+  if (!config) throw new Error("Cloud workspaces are not configured");
+  await agntCreateSecret("github_token", token, {
+    baseUrl: config.baseUrl,
+    apiKey: config.apiKey,
+    appliesToAll: true,
   });
 }
 
