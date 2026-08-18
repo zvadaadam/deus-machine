@@ -479,7 +479,7 @@ export function MainLayout() {
               // Composer semantics: create, then the prompt rides as turn one.
               void handleStartWorkspace(repoId, prompt, getStoredModel(), branch, location);
             } else {
-              void repoActions.createAndSelectWorkspace(repoId, location);
+              void repoActions.createAndSelectWorkspace(repoId, location, branch);
             }
           }}
         />

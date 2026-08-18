@@ -451,7 +451,11 @@ async function handleSendMessage(params: QueryParams): Promise<CommandResult> {
     // answers `accepted: false` — the same rejection contract as the wire path
     // below, for the same lost-prompt reason.
     try {
+      // permissionMode/maxTurns/additionalDirectories/resume have no cloud
+      // channel equivalent (permissions auto-allow like the local policy;
+      // resume is agnt-internal) — model and thinking DO travel.
       await startCloudTurn(sessionId, turnId, content, {
+        model,
         thinkingLevel: readThinkingLevel(params.thinkingLevel),
       });
     } catch (err) {

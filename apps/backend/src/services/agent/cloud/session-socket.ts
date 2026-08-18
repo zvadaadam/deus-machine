@@ -34,6 +34,12 @@ const PING_INTERVAL_MS = 30_000;
 const MAX_RETRIES = 8;
 const BACKOFF_BASE_MS = 500;
 const BACKOFF_MAX_MS = 15_000;
+/** A stalled WS handshake (TCP up, no open/close event) fires neither
+ *  handler — without a deadline the attempt hangs instead of retrying. */
+const HANDSHAKE_DEADLINE_MS = 10_000;
+/** Bound on ready(): callers (sendMessage) need a verdict, not a background
+ *  retry loop — the socket keeps retrying after this rejects. */
+const READY_DEADLINE_MS = 30_000;
 
 export function connectSessionSocket(options: SessionSocketOptions): SessionSocket {
   const { baseUrl, providerSessionId, token } = options;
@@ -58,8 +64,15 @@ export function connectSessionSocket(options: SessionSocketOptions): SessionSock
   const open = () => {
     if (closed) return;
     ws = new WebSocket(wsUrl);
+    const socket = ws;
+
+    // Stalled handshake → force-close so the close handler owns retry policy.
+    const handshakeTimer = setTimeout(() => {
+      if (socket.readyState === WebSocket.CONNECTING) socket.close();
+    }, HANDSHAKE_DEADLINE_MS);
 
     ws.addEventListener("open", () => {
+      clearTimeout(handshakeTimer);
       attempt = 0;
       stopPing();
       pingTimer = setInterval(() => {
@@ -81,6 +94,7 @@ export function connectSessionSocket(options: SessionSocketOptions): SessionSock
     });
 
     ws.addEventListener("close", () => {
+      clearTimeout(handshakeTimer);
       stopPing();
       if (closed) return;
       if (attempt >= MAX_RETRIES) {
@@ -102,8 +116,23 @@ export function connectSessionSocket(options: SessionSocketOptions): SessionSock
 
   open();
 
+  // Callers awaiting ready() need a bounded verdict even while the retry loop
+  // keeps working in the background (a later reconnect still delivers events).
+  const readyWithDeadline = Promise.race([
+    readyPromise,
+    new Promise<void>((_, reject) => {
+      const t = setTimeout(
+        () => reject(new Error("cloud session socket connect timed out")),
+        READY_DEADLINE_MS
+      );
+      void readyPromise.finally(() => clearTimeout(t)).catch(() => {});
+    }),
+  ]);
+  // A deadline rejection with no other listener must not crash the process.
+  readyWithDeadline.catch(() => {});
+
   return {
-    ready: () => readyPromise,
+    ready: () => readyWithDeadline,
     send(frame) {
       if (!ws || ws.readyState !== WebSocket.OPEN) {
         throw new Error("Cloud session socket is not connected");

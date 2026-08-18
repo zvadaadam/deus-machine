@@ -88,6 +88,9 @@ app.get("/workspaces/:id/diff-file", withWorkspace, async (c) => {
         getCloudDiffFile(sessionId, file, "DIFF"),
         getCloudDiffFile(sessionId, file, "CONTENT"),
       ]);
+      if (diffPart.error || contentPart.error) {
+        throw new Error(diffPart.error ?? contentPart.error);
+      }
       // old_content is not reconstructable from the live channel (Sprint 3
       // serves it from fetched checkpoint objects); the diff text carries the
       // change either way, and the viewer already tolerates null contents

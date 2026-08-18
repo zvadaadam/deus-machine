@@ -213,7 +213,10 @@ export function FileBrowserPanel({
   const searchInputRef = useRef<HTMLInputElement>(null);
 
   const workspaceId = selectedWorkspace?.id ?? null;
-  const { data, isLoading, error, refetch } = useFiles(workspaceId);
+  // Cloud workspaces have no local tree — do not run the scan query at all.
+  const { data, isLoading, error, refetch } = useFiles(
+    selectedWorkspace?.kind === "cloud" ? null : workspaceId
+  );
 
   const handleFileClick = (path: string) => {
     onFileClickProp?.(path);

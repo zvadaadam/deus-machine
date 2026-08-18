@@ -61,9 +61,15 @@ export function useRepoActions({
   }
 
   /** Create a workspace for the given repo, select it, and expand the sidebar. */
-  async function createWorkspaceAndSelect(repoId: string, location?: "local" | "cloud") {
+  async function createWorkspaceAndSelect(
+    repoId: string,
+    location?: "local" | "cloud",
+    branch?: string
+  ) {
     const workspace = await createWorkspaceMutation.mutateAsync(
-      location === "cloud" ? { repositoryId: repoId, location } : repoId
+      location === "cloud" || branch
+        ? { repositoryId: repoId, location, source_branch: branch }
+        : repoId
     );
     selectWorkspace(workspace.id);
     expandRepo(workspace.repository_id);
@@ -87,10 +93,10 @@ export function useRepoActions({
 
   /** Create a workspace with loading state and error handling. */
   const createAndSelectWorkspace = useCallback(
-    async (repoId: string, location?: "local" | "cloud") => {
+    async (repoId: string, location?: "local" | "cloud", branch?: string) => {
       setCreating(true);
       try {
-        await createWorkspaceAndSelect(repoId, location);
+        await createWorkspaceAndSelect(repoId, location, branch);
       } catch (error) {
         selectWorkspace(null);
         console.error("Error creating workspace:", error);

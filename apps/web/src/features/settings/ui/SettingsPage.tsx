@@ -27,6 +27,7 @@ const SECTION_LABELS: Record<string, string> = {
   github: "GitHub",
   browser: "Browser",
   ai: "AI Providers",
+  cloud: "Cloud",
   environment: "Environment",
   experimental: "Experimental",
   access: "Remote Access",

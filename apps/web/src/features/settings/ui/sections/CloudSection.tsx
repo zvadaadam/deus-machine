@@ -94,6 +94,7 @@ export function CloudSection() {
         </p>
         <div className="flex items-center gap-2">
           <Input
+            aria-label="GitHub token for private repositories"
             type="password"
             value={token}
             onChange={(e) => setToken(e.target.value)}

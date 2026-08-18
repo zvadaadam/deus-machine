@@ -345,6 +345,8 @@ async function connectCloudSession(deusSessionId: string): Promise<CloudSession>
 // ---- Turn API (mirrors the local agentService surface) ----
 
 export interface CloudTurnOptions {
+  /** Model override — agnt's sidecar honors options.model (else its default). */
+  model?: string;
   thinkingLevel?: ThinkingLevel;
 }
 
@@ -370,6 +372,7 @@ export async function startCloudTurn(
   try {
     const wsOptions: Record<string, unknown> = {};
     if (config.anthropicApiKey) wsOptions.apiKey = config.anthropicApiKey;
+    if (options.model) wsOptions.model = options.model;
     if (options.thinkingLevel) wsOptions.thinkingLevel = options.thinkingLevel;
     session.socket.send({
       type: "message.send",

@@ -92,7 +92,13 @@ app.post("/workspaces/:id/cloud-wake", async (c) => {
     console.warn(`[WORKSPACE] cloud wake resume failed (continuing): ${err}`);
   }
   if (workspace.current_session_id) {
-    await ensureCloudSession(workspace.current_session_id);
+    try {
+      await ensureCloudSession(workspace.current_session_id);
+    } catch (err) {
+      // The resume may have succeeded; the channel reconnects on the next
+      // send — a transient connect failure must not fail the wake.
+      console.warn(`[WORKSPACE] cloud wake reconnect failed (continuing): ${err}`);
+    }
   }
   invalidate(["workspaces", "stats"]);
   return c.json({ ok: true });

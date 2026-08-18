@@ -140,7 +140,10 @@ export function WorkspaceHeader({
         {kind === "cloud" && (
           <Tooltip delayDuration={200}>
             <TooltipTrigger asChild>
-              <span className="text-text-tertiary border-border-secondary mr-0.5 flex flex-shrink-0 items-center gap-1 rounded-full border px-1.5 py-px text-[11px] font-medium">
+              <span
+                tabIndex={0}
+                className="text-text-tertiary border-border-secondary focus-visible:ring-ring mr-0.5 flex flex-shrink-0 items-center gap-1 rounded-full border px-1.5 py-px text-[11px] font-medium focus-visible:ring-2 focus-visible:outline-none"
+              >
                 <CloudIcon className="h-3 w-3" />
                 Cloud
               </span>
