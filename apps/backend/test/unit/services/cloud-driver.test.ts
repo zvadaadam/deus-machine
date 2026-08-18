@@ -212,6 +212,27 @@ describe("cloud driver frame → fold contract", () => {
     // The row update has its own tolerance and still runs.
     expect(mockRun).toHaveBeenCalled();
   });
+
+  it("learns an asleep sandbox from the connect snapshot (row + chat line)", () => {
+    // After a backend restart no workspace.state ever fires for an
+    // already-paused VM — the snapshot's session status is the only truth.
+    mockBroadcast.mockClear();
+    mockRun.mockClear();
+    capturedOnFrame!({ type: "session.snapshot", state: { status: "paused" } });
+    expect(mockRun).toHaveBeenCalled();
+    const frame = JSON.parse(mockBroadcast.mock.calls[0][0] as string);
+    expect(frame.event).toBe("cloud:env");
+    expect(frame.data.data).toEqual({ status: "paused" });
+  });
+
+  it("snapshot with an awake status refreshes the row silently", () => {
+    mockBroadcast.mockClear();
+    mockRun.mockClear();
+    capturedOnFrame!({ type: "session.snapshot", state: { status: "ready" } });
+    expect(mockRun).toHaveBeenCalled();
+    // No "Environment ready" noise pushed at the chat on every reconnect.
+    expect(mockBroadcast).not.toHaveBeenCalled();
+  });
 });
 
 describe("cloud driver session lifecycle", () => {

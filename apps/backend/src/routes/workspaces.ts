@@ -104,6 +104,28 @@ app.post("/workspaces/:id/cloud-wake", async (c) => {
   return c.json({ ok: true });
 });
 
+// Open the session channel WITHOUT waking the sandbox. The channel terminates
+// on the platform's Durable Object — reachable while the VM sleeps — and its
+// snapshot carries the session status, which is how deus learns "paused"
+// after a backend restart. The VM itself only wakes on a send or an explicit
+// cloud-wake; attaching a client is free. Fire-and-forget: the snapshot's
+// truth lands via invalidation, not this response.
+app.post("/workspaces/:id/cloud-connect", (c) => {
+  const db = getDatabase();
+  const workspace = getWorkspaceById(db, c.req.param("id"));
+  if (!workspace) throw new NotFoundError("Workspace not found");
+  if (workspace.kind !== "cloud" || workspace.state === "archived") {
+    return c.json({ ok: false });
+  }
+  const sessionId = workspace.current_session_id;
+  if (sessionId) {
+    void ensureCloudSession(sessionId).catch((err) => {
+      console.warn(`[WORKSPACE] cloud channel connect failed for ${workspace.id}: ${err}`);
+    });
+  }
+  return c.json({ ok: true });
+});
+
 app.patch("/workspaces/:id", async (c) => {
   const db = getDatabase();
   const id = c.req.param("id");

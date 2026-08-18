@@ -156,13 +156,27 @@ function dispatchFrame(session: CloudSession, frame: Record<string, unknown>): v
 
   switch (type) {
     case "session.snapshot": {
+      const state = (frame.state ?? {}) as Record<string, unknown>;
+
+      // Truth refresh on (re)connect: the snapshot's session status is the
+      // only way to learn the sandbox is asleep after a backend restart —
+      // no workspace.state event fires for an already-paused VM. Asleep
+      // states hit the row AND the chat stack ("paused — wakes on your next
+      // message"); awake ones just clear a stale asleep marker, silently.
+      const sessionStatus = typeof state.status === "string" ? state.status : "";
+      if (sessionStatus === "paused" || sessionStatus === "stopped") {
+        updateCloudWorkspace(session.deusWorkspaceId, { status: sessionStatus });
+        broadcastCloudEnv(session, { status: sessionStatus });
+      } else if (sessionStatus === "ready" || sessionStatus === "running") {
+        updateCloudWorkspace(session.deusWorkspaceId, { status: "running" });
+      }
+
       // Reconnect gap-heal: if the turn deus believes is live already settled
       // server-side, the snapshot's turns[] carries its outcome — synthesize
       // the turn.ended the socket gap swallowed. (Snapshot history backfill is
       // the phone-phase reconciliation work; live sessions only need this.)
       const live = handler.liveTurnId(session.deusSessionId);
       if (!live) return;
-      const state = (frame.state ?? {}) as Record<string, unknown>;
       if (state.currentTurnId === live) return;
       const turns = Array.isArray(state.turns) ? (state.turns as Record<string, unknown>[]) : [];
       const outcome = turns.find((t) => t.turnId === live);

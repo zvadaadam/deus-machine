@@ -18,6 +18,7 @@
  */
 
 import { useRef, useCallback, useMemo, useEffect } from "react";
+import { apiClient } from "@/shared/api/client";
 import type { ImperativePanelHandle } from "react-resizable-panels";
 import type { SessionPanelRef } from "@/features/session";
 import { HomeView, type Repository } from "@/features/repository";
@@ -380,6 +381,17 @@ export function MainContent({
                         branch={selectedWorkspace.git_branch ?? undefined}
                         workspacePath={selectedWorkspace.workspace_path}
                         kind={selectedWorkspace.kind}
+                        cloudAsleep={
+                          selectedWorkspace.kind === "cloud" &&
+                          ["paused", "stopped", "resuming"].includes(
+                            selectedWorkspace.init_stage ?? ""
+                          )
+                        }
+                        onCloudWake={() => {
+                          void apiClient
+                            .post(`/workspaces/${selectedWorkspace.id}/cloud-wake`)
+                            .catch(() => {});
+                        }}
                         setupStatus={selectedWorkspace.setup_status}
                         setupError={selectedWorkspace.error_message}
                         onSendAgentMessage={

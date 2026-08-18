@@ -1,5 +1,6 @@
 import { match } from "ts-pattern";
 import type { Compaction, Message, SessionStatus } from "@/shared/types";
+import type { WorkspaceKind } from "@shared/enums";
 import { MessageItem } from "./MessageItem";
 import { AssistantTurn } from "./AssistantTurn";
 import { CompactionChip } from "./CompactionChip";
@@ -48,6 +49,8 @@ interface ChatProps {
   userSendCount?: number;
   /** Enables the ephemeral cloud environment progress stack (cloud lane). */
   workspaceId?: string | null;
+  /** Cloud workspaces get sandbox copy in the empty state. */
+  workspaceKind?: WorkspaceKind;
   className?: string;
 }
 
@@ -74,6 +77,7 @@ export function Chat({
   onDismissContextLost,
   userSendCount = 0,
   workspaceId,
+  workspaceKind,
   className,
 }: ChatProps) {
   // Chat owns its scroll behavior entirely — refs, hook, and button.
@@ -226,11 +230,19 @@ export function Chat({
             <Skeleton className="h-4 w-[80%]" />
           </div>
         ) : messages.length === 0 ? (
-          <WorkspaceEmptyState
-            repoName={workspaceRepoName}
-            parentBranch={workspaceParentBranch}
-            isFirstSession={isFirstSession}
-          />
+          // Column so the cloud env progress stack can ride below the empty
+          // state — a fresh cloud workspace provisions before any message
+          // exists, and that setup must be visible (renders null for local).
+          <div className="flex h-full flex-col">
+            <WorkspaceEmptyState
+              repoName={workspaceRepoName}
+              parentBranch={workspaceParentBranch}
+              isFirstSession={isFirstSession}
+              kind={workspaceKind}
+              className="min-h-0 flex-1"
+            />
+            <CloudEnvProgress workspaceId={workspaceId} />
+          </div>
         ) : (
           <>
             <div className="flex min-h-0 min-w-0 flex-col pb-32">

@@ -130,6 +130,7 @@ export function ChatArea({
             ref={workspaceChatPanelRef}
             sessionId={tabSessionId}
             workspaceId={workspace.id}
+            workspaceKind={workspace.kind}
             workspacePath={workspace.workspace_path}
             workspaceRepoName={workspace.repo_name}
             workspaceParentBranch={workspace.git_target_branch}

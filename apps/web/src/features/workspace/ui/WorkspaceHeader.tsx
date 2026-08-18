@@ -11,6 +11,7 @@ import {
   Copy,
   Check,
   Cloud as CloudIcon,
+  CloudOff,
 } from "lucide-react";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import {
@@ -53,6 +54,10 @@ interface WorkspaceHeaderProps {
   onRunTask?: (taskName: string) => void;
   /** Where the files live — 'cloud' renders the sandbox chip. */
   kind?: WorkspaceKind;
+  /** Cloud only: the sandbox is paused/stopped — dim the chip, click wakes it. */
+  cloudAsleep?: boolean;
+  /** Cloud only: manual unpause (the chip is the wake affordance — no separate button). */
+  onCloudWake?: () => void;
   /** Compact mode for mobile -- always show hamburger, hide Open button, tighter truncation */
   mobile?: boolean;
 }
@@ -79,6 +84,8 @@ export function WorkspaceHeader({
   hasManifest,
   onRunTask,
   kind,
+  cloudAsleep,
+  onCloudWake,
   mobile,
 }: WorkspaceHeaderProps) {
   const { state: sidebarState, toggleSidebar } = useSidebar();
@@ -137,24 +144,41 @@ export function WorkspaceHeader({
           </span>
         )}
 
-        {kind === "cloud" && (
-          <Tooltip delayDuration={200}>
-            <TooltipTrigger asChild>
-              <span
-                tabIndex={0}
-                className="text-text-tertiary border-border-secondary focus-visible:ring-ring mr-0.5 flex flex-shrink-0 items-center gap-1 rounded-full border px-1.5 py-px text-[11px] font-medium focus-visible:ring-2 focus-visible:outline-none"
-              >
-                <CloudIcon className="h-3 w-3" />
-                Cloud
-              </span>
-            </TooltipTrigger>
-            <TooltipContent side="bottom">
-              <p className="text-xs">
-                Runs in a cloud sandbox — files live remotely; the Changes tab shows the live diff
-              </p>
-            </TooltipContent>
-          </Tooltip>
-        )}
+        {kind === "cloud" &&
+          (cloudAsleep ? (
+            <Tooltip delayDuration={200}>
+              <TooltipTrigger asChild>
+                <button
+                  type="button"
+                  onClick={onCloudWake}
+                  className="text-text-disabled border-border-secondary hover:text-text-muted focus-visible:ring-ring mr-0.5 flex flex-shrink-0 cursor-pointer items-center gap-1 rounded-full border border-dashed px-1.5 py-px text-[11px] font-medium transition-colors duration-150 focus-visible:ring-2 focus-visible:outline-none"
+                >
+                  <CloudOff className="h-3 w-3" />
+                  Asleep
+                </button>
+              </TooltipTrigger>
+              <TooltipContent side="bottom">
+                <p className="text-xs">Sandbox asleep — click to wake it, or just send a message</p>
+              </TooltipContent>
+            </Tooltip>
+          ) : (
+            <Tooltip delayDuration={200}>
+              <TooltipTrigger asChild>
+                <span
+                  tabIndex={0}
+                  className="text-text-tertiary border-border-secondary focus-visible:ring-ring mr-0.5 flex flex-shrink-0 items-center gap-1 rounded-full border px-1.5 py-px text-[11px] font-medium focus-visible:ring-2 focus-visible:outline-none"
+                >
+                  <CloudIcon className="h-3 w-3" />
+                  Cloud
+                </span>
+              </TooltipTrigger>
+              <TooltipContent side="bottom">
+                <p className="text-xs">
+                  Runs in a cloud sandbox — files live remotely; the Changes tab shows the live diff
+                </p>
+              </TooltipContent>
+            </Tooltip>
+          ))}
 
         {subtitle && (
           <span

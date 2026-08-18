@@ -75,7 +75,7 @@ export function getStoredModel(): string {
   return DEFAULT_MODEL;
 }
 
-function setStoredModel(model: string) {
+export function setStoredModel(model: string) {
   try {
     localStorage.setItem(LAST_MODEL_KEY, model);
   } catch {

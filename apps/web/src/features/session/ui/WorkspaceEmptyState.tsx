@@ -3,6 +3,7 @@ import { cn } from "@/shared/lib/utils";
 import { match } from "ts-pattern";
 import { getCleanRepoName } from "@/features/sidebar/lib/utils";
 import { DeusEmptyState } from "./DeusEmptyState";
+import type { WorkspaceKind } from "@shared/enums";
 
 interface WorkspaceEmptyStateProps {
   repoName?: string | null;
@@ -13,6 +14,8 @@ interface WorkspaceEmptyStateProps {
   initializing?: boolean;
   /** Current init pipeline step (worktree, dependencies, hooks, session) */
   initStep?: string | null;
+  /** Cloud workspaces live in a sandbox, not a local safe copy — different subtitle. */
+  kind?: WorkspaceKind;
   className?: string;
 }
 
@@ -27,8 +30,17 @@ const STEPS = [
  * - "branched from" introduces the concept of branching
  * - the parent branch name appears naturally without explanation
  */
-function subtitle(repoName?: string | null, parentBranch?: string | null): string {
+function subtitle(
+  repoName?: string | null,
+  parentBranch?: string | null,
+  kind?: WorkspaceKind
+): string {
   const project = repoName ?? "your project";
+  if (kind === "cloud") {
+    return parentBranch
+      ? `A cloud sandbox running ${project}, cloned from ${parentBranch}.`
+      : `A cloud sandbox running ${project}.`;
+  }
   if (parentBranch) {
     return `A safe copy of ${project}, branched from ${parentBranch}.`;
   }
@@ -41,6 +53,7 @@ export function WorkspaceEmptyState({
   isFirstSession = false,
   initializing = false,
   initStep,
+  kind,
   className,
 }: WorkspaceEmptyStateProps) {
   // New tab in active workspace — minimal prompt
@@ -86,7 +99,7 @@ export function WorkspaceEmptyState({
           </h2>
           {!initializing && (
             <p className="text-muted-foreground/45 mt-1.5 text-sm">
-              {subtitle(repoName, parentBranch)}
+              {subtitle(repoName, parentBranch, kind)}
             </p>
           )}
         </div>

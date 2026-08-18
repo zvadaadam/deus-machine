@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef, useCallback, useMemo } from "react";
+import { apiClient } from "@/shared/api/client";
 import type { SessionPanelRef } from "@/features/session";
 import {
   NewWorkspaceModal,
@@ -6,7 +7,6 @@ import {
   CloneRepositoryModal,
   StartNewProjectModal,
 } from "@/features/repository";
-import { getStoredModel } from "@/features/repository/ui/HomeView";
 import { SystemPromptModal } from "@/features/session";
 import { SettingsSidebar, SettingsPage } from "@/features/settings";
 import {
@@ -118,6 +118,19 @@ export function MainLayout() {
   useEffect(() => {
     selectedWorkspaceIdRef.current = selectedWorkspaceId;
   });
+
+  // Opening a cloud workspace attaches its session channel (Durable Object
+  // side — does NOT wake the VM). The snapshot that comes back is how deus
+  // learns an old sandbox is paused: the row updates and the chat shows
+  // "Sandbox paused — wakes on your next message". Idempotent server-side.
+  const selectedCloudWorkspaceId =
+    selectedWorkspace?.kind === "cloud" ? selectedWorkspace.id : null;
+  useEffect(() => {
+    if (!selectedCloudWorkspaceId) return;
+    apiClient.post(`/workspaces/${selectedCloudWorkspaceId}/cloud-connect`).catch(() => {
+      // Best-effort — an unreachable platform just means no truth refresh.
+    });
+  }, [selectedCloudWorkspaceId]);
 
   // Bulk-fetch diff stats for all workspaces (replaces per-item useDiffStats in sidebar)
   const bulkDiffStatsQuery = useBulkDiffStats(repoGroups);
@@ -473,11 +486,11 @@ export function MainLayout() {
           creating={repoActions.creating}
           onClose={closeNewWorkspaceModal}
           onRepoChange={repoActions.setSelectedRepoId}
-          onSubmit={({ repoId, prompt, branch, location }) => {
+          onSubmit={({ repoId, prompt, branch, location, model }) => {
             closeNewWorkspaceModal();
             if (prompt) {
               // Composer semantics: create, then the prompt rides as turn one.
-              void handleStartWorkspace(repoId, prompt, getStoredModel(), branch, location);
+              void handleStartWorkspace(repoId, prompt, model, branch, location);
             } else {
               void repoActions.createAndSelectWorkspace(repoId, location, branch);
             }

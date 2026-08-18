@@ -22,6 +22,7 @@ import { AgentQuestionOverlay } from "./AgentQuestionOverlay";
 import { Button } from "@/components/ui/button";
 import { X, Upload } from "lucide-react";
 import type { AgentHarness } from "@/shared/agents";
+import type { WorkspaceKind } from "@shared/enums";
 import { workspaceLayoutActions } from "@/features/workspace/store";
 import { sessionComposerActions } from "../store/sessionComposerStore";
 import { processImageFiles } from "../lib/imageAttachments";
@@ -32,6 +33,8 @@ interface SessionPanelProps {
   sessionId: string;
   workspacePath: string;
   workspaceId?: string;
+  /** Discriminates the cloud lane (sandbox copy + env progress) from worktree. */
+  workspaceKind?: WorkspaceKind;
   workspaceRepoName?: string | null;
   workspaceParentBranch?: string | null;
   /** Default branch of the repo (e.g. "main"). Used for getDiff RPC auto-response. */
@@ -65,6 +68,7 @@ export const SessionPanel = forwardRef<SessionPanelRef, SessionPanelProps>(
       sessionId,
       workspacePath,
       workspaceId,
+      workspaceKind,
       workspaceRepoName,
       workspaceParentBranch,
       workspaceDefaultBranch,
@@ -353,6 +357,7 @@ export const SessionPanel = forwardRef<SessionPanelRef, SessionPanelProps>(
               onDismissContextLost={dismissContextLost}
               userSendCount={userSendCount}
               workspaceId={workspaceId ?? null}
+              workspaceKind={workspaceKind}
             />
 
             {/* Agent-initiated interaction overlays — appear above the
